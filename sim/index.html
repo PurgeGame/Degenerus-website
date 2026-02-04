@@ -231,11 +231,25 @@
             urls.push(`/specials/${name}`);
           });
 
-          urls.forEach((src) => {
-            const img = new Image();
-            img.decoding = 'async';
-            img.src = src;
-          });
+          let i = 0;
+          const batchSize = 24;
+          const loadBatch = (deadline) => {
+            let count = 0;
+            while (i < urls.length && count < batchSize) {
+              if (deadline && deadline.timeRemaining && deadline.timeRemaining() < 4) {
+                break;
+              }
+              const img = new Image();
+              img.decoding = 'async';
+              img.src = urls[i];
+              i += 1;
+              count += 1;
+            }
+            if (i < urls.length) {
+              schedule(loadBatch);
+            }
+          };
+          loadBatch();
         }
 
         function scrollQuadrant(quadrant, useColor) {
@@ -285,14 +299,23 @@
         window.__DEGEN__.preloadBadges = preloadBadges;
 
         const schedule = window.requestIdleCallback || ((fn) => setTimeout(fn, 0));
+        const autoRandomize = (retries = 10) => {
+          const player = document.getElementById('ft-player');
+          if (player) {
+            randomize();
+            return;
+          }
+          if (retries <= 0) return;
+          setTimeout(() => autoRandomize(retries - 1), 200);
+        };
         if (document.readyState === 'loading') {
           document.addEventListener('DOMContentLoaded', () => {
             schedule(preloadBadges);
-            setTimeout(randomize, 600);
+            autoRandomize();
           }, { once: true });
         } else {
           schedule(preloadBadges);
-          setTimeout(randomize, 600);
+          autoRandomize();
         }
       })();
     </script>
