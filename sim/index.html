@@ -9,6 +9,15 @@
     <link rel="stylesheet" crossorigin href="/assets/index-Cm-1x7xL.css">
     <link rel="stylesheet" href="/sim/enhanced-animations.css">
     <script src="/sim/animation-controller.js" defer></script>
+    <style>
+      .wallet-address.compact-hidden {
+        display: none !important;
+      }
+      .connect-button.wallet-connected .btn-text {
+        letter-spacing: 0.02em;
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
   </head>
   <body>
     <div id="app">
@@ -429,6 +438,35 @@
         } else {
           toggleVisibility();
         }
+      })();
+    </script>
+
+    <script>
+      (function () {
+        const walletBtn = document.getElementById('wallet-connect-btn');
+        const walletText = walletBtn?.querySelector('.btn-text');
+        const walletAddress = document.getElementById('wallet-address');
+        if (!walletBtn || !walletText || !walletAddress) return;
+
+        function updateWalletCompact() {
+          const addr = (walletAddress.textContent || '').trim();
+          if (addr && addr !== 'Not connected') {
+            walletText.textContent = addr;
+            walletBtn.classList.add('wallet-connected');
+            walletAddress.classList.add('compact-hidden');
+            walletBtn.title = `Disconnect ${addr}`;
+          } else {
+            walletText.textContent = 'Connect Wallet';
+            walletBtn.classList.remove('wallet-connected');
+            walletAddress.classList.remove('compact-hidden');
+            walletBtn.title = '';
+          }
+        }
+
+        const observer = new MutationObserver(updateWalletCompact);
+        observer.observe(walletAddress, { childList: true, characterData: true, subtree: true });
+        observer.observe(walletBtn, { childList: true, characterData: true, subtree: true });
+        updateWalletCompact();
       })();
     </script>
 
