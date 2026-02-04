@@ -296,18 +296,9 @@
         window.__DEGEN__.preloadBadges = preloadBadges;
 
         const schedule = (fn) => setTimeout(fn, 0);
-        const autoRandomize = (retries = 10) => {
-          const player = document.getElementById('ft-player');
-          if (player) {
-            randomize();
-            return;
-          }
-          if (retries <= 0) return;
-          setTimeout(() => autoRandomize(retries - 1), 200);
-        };
         const startBackgroundTasks = () => {
-          setTimeout(() => preloadBadges(), 1500);
-          setTimeout(() => autoRandomize(), 1200);
+          // Disabled for stability; can be re-enabled later if needed.
+          // setTimeout(() => preloadBadges(), 1500);
         };
         if (document.readyState === 'loading') {
           document.addEventListener('DOMContentLoaded', () => {
