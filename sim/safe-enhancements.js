@@ -25,7 +25,7 @@
     },
     randomize: {
       delayMs: 1200,       // Wait for app to settle (increased)
-      enabled: true,       // Auto-randomize on load
+      enabled: false,      // App now randomizes at init
     },
     audio: {
       enabled: true,
