@@ -159,6 +159,103 @@
 
     <script>
       (function () {
+        window.__DEGEN__ = window.__DEGEN__ || {};
+
+        const colors = ['pink', 'purple', 'green', 'red', 'blue', 'orange', 'silver', 'gold'];
+        const categories = {
+          crypto: ['xrp', 'tron', 'sui', 'monero', 'solana', 'chainlink', 'ethereum', 'bitcoin'],
+          zodiac: ['aries', 'taurus', 'gemini', 'cancer', 'leo', 'libra', 'sagittarius', 'aquarius'],
+          cards: ['club', 'diamond', 'heart', 'spade', 'horseshoe', 'cashsack', 'king', 'ace'],
+          dice: ['1', '2', '3', '4', '5', '6', '7', '8'],
+        };
+        const cardOrder = [3, 4, 5, 6, 0, 2, 1, 7];
+        const specials = [
+          'special_eth.svg',
+          'special_burnie.svg',
+          'special_burnie_static.svg',
+          'special_dgnrs.svg',
+          'special_none.svg',
+        ];
+
+        function preloadBadges() {
+          const urls = [];
+          Object.keys(categories).forEach((category) => {
+            categories[category].forEach((symbol, idx) => {
+              const mapped = category === 'cards' ? cardOrder[idx] : idx;
+              const idxStr = `0${mapped}`;
+              colors.forEach((color) => {
+                urls.push(`/badges-circular/${category}_${idxStr}_${symbol}_${color}.svg`);
+              });
+            });
+          });
+          specials.forEach((name) => {
+            urls.push(`/specials/${name}`);
+          });
+
+          urls.forEach((src) => {
+            const img = new Image();
+            img.decoding = 'async';
+            img.src = src;
+          });
+        }
+
+        function scrollQuadrant(quadrant, useColor) {
+          const q = document.querySelector(`.gp-quadrant[data-quadrant="${quadrant}"]`);
+          if (!q) return;
+          const rect = q.getBoundingClientRect();
+          const x = useColor ? rect.right - 6 : rect.left + rect.width * 0.3;
+          const y = rect.top + rect.height / 2;
+          q.dispatchEvent(new WheelEvent('wheel', {
+            deltaY: 100,
+            clientX: x,
+            clientY: y,
+            bubbles: true,
+          }));
+        }
+
+        function setSpecial(target) {
+          const special = document.querySelector('#ft-player .gamepiece-special-container');
+          if (!special) return;
+          special.click();
+          setTimeout(() => {
+            const selector = document.getElementById('quick-selector');
+            if (!selector) return;
+            const btn = selector.querySelector(`button[data-special="${target}"]`);
+            if (btn) btn.click();
+          }, 40);
+        }
+
+        function randomize() {
+          const ftPlayer = document.getElementById('ft-player');
+          if (!ftPlayer) return;
+          for (let qIdx = 0; qIdx < 4; qIdx += 1) {
+            const colorScrolls = 1 + Math.floor(Math.random() * 7);
+            const symbolScrolls = 1 + Math.floor(Math.random() * 7);
+            for (let i = 0; i < colorScrolls; i += 1) {
+              scrollQuadrant(qIdx, true);
+            }
+            for (let i = 0; i < symbolScrolls; i += 1) {
+              scrollQuadrant(qIdx, false);
+            }
+          }
+          const targetSpecial = 1 + Math.floor(Math.random() * 3);
+          setTimeout(() => setSpecial(targetSpecial), 60);
+        }
+
+        window.__DEGEN__.randomize = randomize;
+        window.__DEGEN__.preloadBadges = preloadBadges;
+
+        const schedule = window.requestIdleCallback || ((fn) => setTimeout(fn, 0));
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', () => schedule(preloadBadges), { once: true });
+        } else {
+          schedule(preloadBadges);
+        }
+      })();
+    </script>
+
+    <script>
+      (function () {
         const netResultValue = document.getElementById('net-result-value');
         const netTokenValue = document.getElementById('net-result-token-value');
         const resultsContainer = document.getElementById('results-container');
