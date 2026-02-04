@@ -304,6 +304,7 @@
 
         const apiBase = 'https://api.degener.us';
         let lastPlayerFetch = 0;
+        let affiliateConfigured = false;
 
         function walletConnected() {
           const walletEl = document.getElementById('wallet-address');
@@ -334,14 +335,20 @@
 
         function applyPlayer(player) {
           if (!player) return;
-          if (player.referral_code) {
-            codeInput.value = player.referral_code;
+          const code = player.referral_code?.toString().trim().toUpperCase();
+          affiliateConfigured = Boolean(code && /^[A-Z0-9]{3,12}$/.test(code));
+          if (code) {
+            codeInput.value = code;
             setReferralLink(player);
           }
           if (typeof player.affiliate_rakeback_bps === 'number') {
             rakeSelect.value = String(player.affiliate_rakeback_bps);
           }
-          if (player.referral_locked) {
+          const showConfig = walletConnected() && discordConnected() && !affiliateConfigured;
+          affiliateRow.classList.toggle('hidden', !showConfig);
+          if (status) status.classList.toggle('hidden', !showConfig);
+
+          if (player.referral_locked && !affiliateConfigured) {
             codeInput.disabled = true;
             rakeSelect.disabled = true;
             saveBtn.disabled = true;
@@ -372,8 +379,9 @@
 
         function toggleVisibility() {
           const ready = walletConnected() && discordConnected();
-          affiliateRow.classList.toggle('hidden', !ready);
-          if (status) status.classList.toggle('hidden', !ready);
+          const showConfig = ready && !affiliateConfigured;
+          affiliateRow.classList.toggle('hidden', !showConfig);
+          if (status) status.classList.toggle('hidden', !showConfig);
           if (ready) fetchPlayer();
         }
 
