@@ -86,6 +86,28 @@
                   />
                   <button id="referral-action" class="secondary-button referral-action" type="button">Create</button>
                 </div>
+                <div id="affiliate-config" class="referral-row hidden">
+                  <span class="referral-label">Affiliate</span>
+                  <input
+                    id="affiliate-code"
+                    class="referral-input"
+                    type="text"
+                    maxlength="12"
+                    placeholder="Choose code"
+                    inputmode="text"
+                    autocomplete="off"
+                  />
+                  <select id="affiliate-rakeback" class="referral-input">
+                    <option value="0">Rakeback 0%</option>
+                    <option value="500">Rakeback 5%</option>
+                    <option value="1000">Rakeback 10%</option>
+                    <option value="1500">Rakeback 15%</option>
+                    <option value="2000">Rakeback 20%</option>
+                    <option value="2500">Rakeback 25%</option>
+                  </select>
+                  <button id="affiliate-save" class="secondary-button" type="button">Save</button>
+                </div>
+                <div id="affiliate-status" class="wallet-address hidden"></div>
               </div>
             </div>
           </section>
@@ -250,6 +272,156 @@
           document.addEventListener('DOMContentLoaded', () => schedule(preloadBadges), { once: true });
         } else {
           schedule(preloadBadges);
+        }
+      })();
+    </script>
+
+    <script>
+      (function () {
+        const affiliateRow = document.getElementById('affiliate-config');
+        const status = document.getElementById('affiliate-status');
+        const codeInput = document.getElementById('affiliate-code');
+        const rakeSelect = document.getElementById('affiliate-rakeback');
+        const saveBtn = document.getElementById('affiliate-save');
+        const referralInput = document.getElementById('referral-link');
+        const referralAction = document.getElementById('referral-action');
+        if (!affiliateRow || !codeInput || !rakeSelect || !saveBtn) return;
+
+        const apiBase = 'https://api.degener.us';
+        let lastPlayerFetch = 0;
+
+        function walletConnected() {
+          const walletEl = document.getElementById('wallet-address');
+          const text = walletEl?.textContent?.trim();
+          return Boolean(text && text !== 'Not connected');
+        }
+
+        function discordConnected() {
+          const discordEl = document.getElementById('discord-user');
+          return Boolean(discordEl && !discordEl.classList.contains('hidden'));
+        }
+
+        function showStatus(message) {
+          if (!status) return;
+          status.textContent = message;
+        }
+
+        function setReferralLink(player) {
+          if (!player?.referral_code || !referralInput) return;
+          const link = `${window.location.origin}${window.location.pathname}?ref=${player.referral_code}`;
+          referralInput.value = link;
+          referralInput.placeholder = 'Affiliate link';
+          if (referralAction) {
+            referralAction.textContent = 'Copy';
+            referralAction.dataset.mode = 'copy';
+          }
+        }
+
+        function applyPlayer(player) {
+          if (!player) return;
+          if (player.referral_code) {
+            codeInput.value = player.referral_code;
+            setReferralLink(player);
+          }
+          if (typeof player.affiliate_rakeback_bps === 'number') {
+            rakeSelect.value = String(player.affiliate_rakeback_bps);
+          }
+          if (player.referral_locked) {
+            codeInput.disabled = true;
+            rakeSelect.disabled = true;
+            saveBtn.disabled = true;
+            showStatus('Affiliate settings locked');
+          } else {
+            codeInput.disabled = false;
+            rakeSelect.disabled = false;
+            saveBtn.disabled = false;
+            showStatus('');
+          }
+        }
+
+        async function fetchPlayer() {
+          const now = Date.now();
+          if (now - lastPlayerFetch < 1000) return;
+          lastPlayerFetch = now;
+          try {
+            const res = await fetch(`${apiBase}/api/player`, {
+              credentials: 'include',
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            applyPlayer(data.player);
+          } catch {
+            // ignore
+          }
+        }
+
+        function toggleVisibility() {
+          const ready = walletConnected() && discordConnected();
+          affiliateRow.classList.toggle('hidden', !ready);
+          if (status) status.classList.toggle('hidden', !ready);
+          if (ready) fetchPlayer();
+        }
+
+        saveBtn.addEventListener('click', async (event) => {
+          event.preventDefault();
+          const code = codeInput.value.trim().toUpperCase();
+          const rakebackBps = Number(rakeSelect.value);
+          if (!/^[A-Z0-9]{3,12}$/.test(code)) {
+            showStatus('Code must be 3-12 letters or numbers');
+            return;
+          }
+          if (!Number.isInteger(rakebackBps)) {
+            showStatus('Invalid rakeback selection');
+            return;
+          }
+          showStatus('Saving...');
+          try {
+            const res = await fetch(`${apiBase}/api/affiliate/config`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code, rakebackBps }),
+            });
+            if (!res.ok) {
+              const text = await res.text();
+              let message = 'Unable to save affiliate settings';
+              try {
+                const parsed = JSON.parse(text);
+                if (parsed?.error) message = parsed.error;
+              } catch {
+                if (text) message = text;
+              }
+              showStatus(message);
+              return;
+            }
+            const data = await res.json();
+            applyPlayer(data.player);
+            showStatus('Affiliate settings saved');
+          } catch {
+            showStatus('Unable to save affiliate settings');
+          }
+        });
+
+        const walletEl = document.getElementById('wallet-address');
+        const discordEl = document.getElementById('discord-user');
+        if (walletEl) {
+          new MutationObserver(toggleVisibility).observe(walletEl, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
+        }
+        if (discordEl) {
+          new MutationObserver(toggleVisibility).observe(discordEl, {
+            attributes: true,
+            attributeFilter: ['class'],
+          });
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', toggleVisibility, { once: true });
+        } else {
+          toggleVisibility();
         }
       })();
     </script>
