@@ -120,93 +120,36 @@
   window.__DEGEN__.preloadBadges = preloadBadgesChunked;
 
   // ===========================================
-  // Randomizer (Non-blocking)
+  // Randomizer - calls app's native randomize
   // ===========================================
 
   /**
-   * Randomize player selection by dispatching wheel events.
-   * Synchronous for instant response.
+   * Randomize player selection by calling the app's exposed randomize function.
+   * This directly sets the ticket state variable - no wheel event hacks needed.
    */
   function randomize() {
-    const ftPlayer = $('#ft-player');
-    if (!ftPlayer) {
-      console.debug('[degen] randomize: #ft-player not found');
-      return Promise.resolve();
+    // Wait for app to expose its randomize function
+    if (typeof window.__DEGEN__?.randomize === 'function' && window.__DEGEN__.randomize !== randomize) {
+      window.__DEGEN__.randomize();
+      console.debug('[degen] Randomized via app');
+    } else {
+      console.debug('[degen] App randomize not available yet');
     }
-
-    // Wait for main app to render gamepiece (has .gp-quadrant elements)
-    if (!ftPlayer.querySelector('.gp-quadrant')) {
-      console.debug('[degen] randomize: waiting for app to render...');
-      return Promise.resolve();
-    }
-
-    // Randomize all quadrants synchronously (instant)
-    for (let qIdx = 0; qIdx < 4; qIdx++) {
-      const q = ftPlayer.querySelector(`.gp-quadrant[data-quadrant="${qIdx}"]`);
-      if (!q) continue;
-
-      const rect = q.getBoundingClientRect();
-      const colorScrolls = 1 + Math.floor(Math.random() * 7);
-      const symbolScrolls = 1 + Math.floor(Math.random() * 7);
-
-      // Color scrolls (outer area)
-      for (let i = 0; i < colorScrolls; i++) {
-        dispatchWheelEvent(q, rect, true);
-      }
-
-      // Symbol scrolls (inner area)
-      for (let i = 0; i < symbolScrolls; i++) {
-        dispatchWheelEvent(q, rect, false);
-      }
-    }
-
-    // Randomize special after a tiny delay
-    setTimeout(randomizeSpecial, 60);
-
-    console.debug('[degen] Randomized player selection');
     return Promise.resolve();
   }
 
-  function dispatchWheelEvent(element, rect, isColor) {
-    const x = isColor ? rect.right - 6 : rect.left + rect.width * 0.3;
-    const y = rect.top + rect.height / 2;
-
-    element.dispatchEvent(new WheelEvent('wheel', {
-      deltaY: 100,
-      clientX: x,
-      clientY: y,
-      bubbles: true,
-    }));
-  }
-
-  function randomizeSpecial() {
-    const special = $('#ft-player .gamepiece-special-container');
-    if (!special) return;
-
-    special.click();
-
-    setTimeout(() => {
-      const selector = $('#quick-selector');
-      if (!selector || selector.classList.contains('hidden')) return;
-
-      const targetSpecial = 1 + Math.floor(Math.random() * 3);
-      const btn = selector.querySelector(`button[data-special="${targetSpecial}"]`);
-      if (btn) btn.click();
-    }, 40);
-  }
-
-  // Expose for manual use
-  window.__DEGEN__.randomize = randomize;
+  // Store our randomize as a fallback, but prefer the app's version
+  const enhancementsRandomize = randomize;
 
   // Wire up randomize button
   function initRandomizeButton() {
     const btn = $('#randomize-btn');
     if (!btn) return;
     btn.addEventListener('click', () => {
-      btn.disabled = true;
-      randomize().finally(() => {
-        btn.disabled = false;
-      });
+      // Call the app's native randomize function directly
+      if (typeof window.__DEGEN__?.randomize === 'function') {
+        window.__DEGEN__.randomize();
+      }
     });
   }
 
