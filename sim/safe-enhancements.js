@@ -24,8 +24,8 @@
       enabled: true,       // Master switch
     },
     randomize: {
-      delayMs: 800,        // Wait for app to settle
-      enabled: true,
+      delayMs: 1200,       // Wait for app to settle (increased)
+      enabled: true,       // Auto-randomize on load
     },
     audio: {
       enabled: true,
@@ -128,11 +128,15 @@
    * via wheel events, but throttled and yielding between each.
    */
   async function randomize() {
-    if (!CONFIG.randomize.enabled) return;
-
     const ftPlayer = $('#ft-player');
     if (!ftPlayer) {
       console.debug('[degen] randomize: #ft-player not found');
+      return;
+    }
+
+    // Wait for main app to render gamepiece (has .gp-quadrant elements)
+    if (!ftPlayer.querySelector('.gp-quadrant')) {
+      console.debug('[degen] randomize: waiting for app to render...');
       return;
     }
 
