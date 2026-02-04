@@ -450,8 +450,17 @@
           if (audioCtx) return;
           audioCtx = new AudioCtx();
           masterGain = audioCtx.createGain();
-          masterGain.gain.value = 0.035;
+          masterGain.gain.value = 0.06;
           masterGain.connect(audioCtx.destination);
+        }
+
+        async function resumeAudio() {
+          if (!audioCtx || audioCtx.state !== 'suspended') return;
+          try {
+            await audioCtx.resume();
+          } catch {
+            // ignore
+          }
         }
 
         function playTone(freq, duration, type, gain, when) {
@@ -519,9 +528,12 @@
           handleSpinUpdate();
         });
         observer.observe(resultsContainer, { childList: true, subtree: true });
+        observer.observe(netResultValue, { childList: true, characterData: true, subtree: true });
+        observer.observe(netTokenValue, { childList: true, characterData: true, subtree: true });
 
         const unlock = () => {
           initAudio();
+          resumeAudio();
           document.removeEventListener('pointerdown', unlock);
           document.removeEventListener('keydown', unlock);
         };
