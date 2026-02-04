@@ -248,5 +248,103 @@
         <p>Degenerette Simulator - For UI Development Only</p>
       </footer>
     </div>
+
+    <script>
+      (function () {
+        const netResultValue = document.getElementById('net-result-value');
+        const netTokenValue = document.getElementById('net-result-token-value');
+        const resultsContainer = document.getElementById('results-container');
+        if (!netResultValue || !netTokenValue || !resultsContainer) return;
+
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+
+        let audioCtx = null;
+        let masterGain = null;
+        let lastSignature = '';
+
+        function initAudio() {
+          if (audioCtx) return;
+          audioCtx = new AudioCtx();
+          masterGain = audioCtx.createGain();
+          masterGain.gain.value = 0.035;
+          masterGain.connect(audioCtx.destination);
+        }
+
+        function playTone(freq, duration, type, gain, when) {
+          if (!audioCtx || !masterGain) return;
+          const osc = audioCtx.createOscillator();
+          const amp = audioCtx.createGain();
+          osc.type = type || 'sine';
+          osc.frequency.value = freq;
+          amp.gain.value = 0;
+          osc.connect(amp);
+          amp.connect(masterGain);
+          const start = audioCtx.currentTime + (when || 0);
+          amp.gain.setValueAtTime(0, start);
+          amp.gain.linearRampToValueAtTime(gain || 0.2, start + 0.01);
+          amp.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+          osc.start(start);
+          osc.stop(start + duration + 0.03);
+        }
+
+        function playMatchTicks(matchCount) {
+          const count = Math.min(Math.max(matchCount, 0), 8);
+          if (count <= 0) return;
+          const base = 320;
+          const step = 70;
+          for (let i = 0; i < count; i += 1) {
+            playTone(base + step * i, 0.06, 'square', 0.18, i * 0.08);
+          }
+        }
+
+        function playWinChime() {
+          playTone(660, 0.12, 'triangle', 0.22, 0.0);
+          playTone(880, 0.12, 'triangle', 0.20, 0.12);
+          playTone(1320, 0.16, 'triangle', 0.18, 0.24);
+        }
+
+        function handleSpinUpdate() {
+          const matchesText = (netResultValue.textContent || '').trim();
+          if (!matchesText || matchesText === '—') return;
+
+          const netText = (netTokenValue.textContent || '').trim();
+          const historyCount = resultsContainer.querySelectorAll('.history-item').length;
+          const signature = `${matchesText}|${netText}|${historyCount}`;
+          if (signature === lastSignature) return;
+          lastSignature = signature;
+
+          let matches = 0;
+          let specialMatch = false;
+          if (/special/i.test(matchesText)) {
+            specialMatch = true;
+            matches = 1;
+          } else {
+            const parsed = parseInt(matchesText, 10);
+            matches = Number.isNaN(parsed) ? 0 : parsed;
+          }
+
+          playMatchTicks(matches);
+
+          const isWin = netText.startsWith('+');
+          if (isWin || specialMatch) {
+            playWinChime();
+          }
+        }
+
+        const observer = new MutationObserver(() => {
+          handleSpinUpdate();
+        });
+        observer.observe(resultsContainer, { childList: true, subtree: true });
+
+        const unlock = () => {
+          initAudio();
+          document.removeEventListener('pointerdown', unlock);
+          document.removeEventListener('keydown', unlock);
+        };
+        document.addEventListener('pointerdown', unlock, { once: true });
+        document.addEventListener('keydown', unlock, { once: true });
+      })();
+    </script>
   </body>
 </html>
