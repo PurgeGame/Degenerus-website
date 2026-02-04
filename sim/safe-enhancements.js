@@ -271,15 +271,27 @@
 
       // Fallback tones for win/lose/click
       if (name === 'win') {
-        // Quick arpeggio up
+        // Victory fanfare - ascending arpeggio with chord
         [0, 2, 4, 7].forEach((n, i) => {
-          setTimeout(() => playTone(MATCH_FREQUENCIES[n] * 2, 0.15), i * 80);
+          setTimeout(() => {
+            playTone(MATCH_FREQUENCIES[n] * 2, 0.2, 'square');
+            if (i === 3) {
+              // Final chord
+              setTimeout(() => {
+                playTone(MATCH_FREQUENCIES[0] * 2, 0.4, 'square');
+                playTone(MATCH_FREQUENCIES[2] * 2, 0.4, 'square');
+                playTone(MATCH_FREQUENCIES[4] * 2, 0.4, 'square');
+              }, 100);
+            }
+          }, i * 100);
         });
       } else if (name === 'lose') {
-        // Descending sad tone
-        playTone(200, 0.4, 'sawtooth');
+        // Sad descending tone
+        playTone(300, 0.15, 'sawtooth');
+        setTimeout(() => playTone(200, 0.3, 'sawtooth'), 150);
       } else if (name === 'click') {
-        playTone(800, 0.05, 'square');
+        // Quick click for non-match lock
+        playTone(400, 0.05, 'triangle');
       }
     } catch {
       // Silently fail
