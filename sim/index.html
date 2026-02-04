@@ -465,7 +465,6 @@
 
         const observer = new MutationObserver(updateWalletCompact);
         observer.observe(walletAddress, { childList: true, characterData: true, subtree: true });
-        observer.observe(walletBtn, { childList: true, characterData: true, subtree: true });
         updateWalletCompact();
       })();
     </script>
