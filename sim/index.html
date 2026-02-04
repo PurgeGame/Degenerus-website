@@ -232,13 +232,10 @@
           });
 
           let i = 0;
-          const batchSize = 24;
-          const loadBatch = (deadline) => {
+          const batchSize = 6;
+          const loadBatch = () => {
             let count = 0;
             while (i < urls.length && count < batchSize) {
-              if (deadline && deadline.timeRemaining && deadline.timeRemaining() < 4) {
-                break;
-              }
               const img = new Image();
               img.decoding = 'async';
               img.src = urls[i];
@@ -246,7 +243,7 @@
               count += 1;
             }
             if (i < urls.length) {
-              schedule(loadBatch);
+              setTimeout(loadBatch, 200);
             }
           };
           loadBatch();
@@ -298,7 +295,7 @@
         window.__DEGEN__.randomize = randomize;
         window.__DEGEN__.preloadBadges = preloadBadges;
 
-        const schedule = window.requestIdleCallback || ((fn) => setTimeout(fn, 0));
+        const schedule = (fn) => setTimeout(fn, 0);
         const autoRandomize = (retries = 10) => {
           const player = document.getElementById('ft-player');
           if (player) {
@@ -308,14 +305,16 @@
           if (retries <= 0) return;
           setTimeout(() => autoRandomize(retries - 1), 200);
         };
+        const startBackgroundTasks = () => {
+          setTimeout(() => preloadBadges(), 1500);
+          setTimeout(() => autoRandomize(), 1200);
+        };
         if (document.readyState === 'loading') {
           document.addEventListener('DOMContentLoaded', () => {
-            schedule(preloadBadges);
-            autoRandomize();
+            schedule(startBackgroundTasks);
           }, { once: true });
         } else {
-          schedule(preloadBadges);
-          autoRandomize();
+          schedule(startBackgroundTasks);
         }
       })();
     </script>
