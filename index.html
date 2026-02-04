@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Degenerus Protocol</title>
+    <meta
+      name="description"
+      content="Degenerus Protocol: on-chain games, Degenerette sim, and the upcoming whitepaper."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">DG</span>
+        <span class="brand-title">Degenerus Protocol</span>
+      </div>
+      <nav class="nav-links">
+        <a href="/economics.html">Economics</a>
+        <a href="#whitepaper">Whitepaper</a>
+        <a href="/sim/">Degenerette Sim</a>
+        <a href="#web3">Web3</a>
+      </nav>
+      <div class="header-cta">
+        <a class="button ghost" href="/sim/">Launch Sim</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Protocol Preview</p>
+          <h1>
+            A high-voltage on-chain game stack, now shipping its first public
+            surfaces.
+          </h1>
+          <p class="lead">
+            This site will host the Degenerus whitepaper (in progress) and the
+            Degenerette simulator. For now: text, graphics, and some live web3
+            hooks.
+          </p>
+          <div class="hero-actions">
+            <a class="button" href="#whitepaper">Read the Draft</a>
+            <a class="button ghost" href="/sim/">Open Degenerette</a>
+          </div>
+          <div class="hero-meta">
+            <div>
+              <span class="meta-label">Status</span>
+              <span class="meta-value">Drafting whitepaper</span>
+            </div>
+            <div>
+              <span class="meta-label">Network</span>
+              <span class="meta-value">Mainnet + testnet ready</span>
+            </div>
+            <div>
+              <span class="meta-label">Focus</span>
+              <span class="meta-value">Mechanics, odds, transparency</span>
+            </div>
+          </div>
+        </div>
+        <div class="hero-graphic" aria-hidden="true">
+          <div class="signal-ring"></div>
+          <div class="signal-grid"></div>
+          <div class="signal-pulse"></div>
+          <div class="signal-badge">SIM</div>
+        </div>
+      </section>
+
+      <section id="whitepaper" class="section reveal">
+        <div class="section-header">
+          <h2>Whitepaper (Draft)</h2>
+          <span class="tag">Coming soon</span>
+        </div>
+        <div class="paper">
+          <div class="paper-column">
+            <h3>Premise</h3>
+            <p>
+              Degenerus is a layered on-chain game loop built on transparent
+              odds, composable modules, and a zero-rake economic engine.
+              This whitepaper will lay out the trust model, game flow, and
+              why the protocol is designed to last.
+            </p>
+            <a class="button ghost" href="/economics.html" style="margin-top: 1rem;">Read the Economics Primer</a>
+          </div>
+          <div class="paper-column">
+            <h3>Outline</h3>
+            <ol>
+              <li>Protocol Overview</li>
+              <li>Degenerette Mechanics</li>
+              <li>Token Flow + Incentives</li>
+              <li>Security + Assumptions</li>
+              <li>Roadmap</li>
+            </ol>
+          </div>
+          <div class="paper-column">
+            <h3>Notes</h3>
+            <p>
+              The full draft is being written. This slot will host the
+              completed paper and downloadable PDF. Until then, expect
+              iteration and raw notes.
+            </p>
+            <div class="paper-callout">
+              <span>Want the draft drop?</span>
+              <button class="button ghost" type="button">Join the list</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section split reveal">
+        <div>
+          <h2>Degenerette Simulator</h2>
+          <p>
+            The simulator is live and runs as a separate page. It mirrors core
+            Degenerette mechanics for quick testing, visual odds checks, and
+            demo sessions.
+          </p>
+          <div class="stat-grid">
+            <div class="stat">
+              <span class="stat-label">Modes</span>
+              <span class="stat-value">Quadrants + Specials</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">RTP Curve</span>
+              <span class="stat-value">90% to 99.9%</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Output</span>
+              <span class="stat-value">Live visual results</span>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Launch the Sim</h3>
+          <p>
+            Use the sim for quick tests and shareable visuals. The UI will be
+            expanded later, but the core logic is intact now.
+          </p>
+          <a class="button" href="/sim/">Open Degenerette</a>
+        </div>
+      </section>
+
+      <section id="web3" class="section reveal">
+        <div class="section-header">
+          <h2>Web3 Hooks</h2>
+          <span class="tag">Optional</span>
+        </div>
+        <div class="web3-panel">
+          <div>
+            <p>
+              Minimal wallet checks for now. When you connect, this will surface
+              address + chain metadata.
+            </p>
+            <div class="wallet-meta">
+              <span class="meta-label">Wallet</span>
+              <span class="meta-value" data-wallet-status>Not connected</span>
+            </div>
+            <div class="wallet-meta">
+              <span class="meta-label">Chain</span>
+              <span class="meta-value" data-wallet-chain>n/a</span>
+            </div>
+          </div>
+          <div class="web3-actions">
+            <button class="button" type="button" data-wallet-connect>
+              Connect Wallet
+            </button>
+            <button class="button ghost" type="button" data-wallet-check>
+              Check Provider
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div>
+        <span class="brand-title">Degenerus Protocol</span>
+        <p class="footer-note">
+          Built for on-chain degenerates. Whitepaper forthcoming.
+        </p>
+      </div>
+      <div class="footer-links">
+        <a href="/economics.html">Economics</a>
+        <a href="/sim/">Simulator</a>
+        <a href="#whitepaper">Whitepaper</a>
+      </div>
+    </footer>
+
+    <script src="main.js"></script>
+  </body>
+</html>
