@@ -124,23 +124,23 @@
   // ===========================================
 
   /**
-   * Randomize player selection by directly manipulating the app state
-   * via wheel events, but throttled and yielding between each.
+   * Randomize player selection by dispatching wheel events.
+   * Synchronous for instant response.
    */
-  async function randomize() {
+  function randomize() {
     const ftPlayer = $('#ft-player');
     if (!ftPlayer) {
       console.debug('[degen] randomize: #ft-player not found');
-      return;
+      return Promise.resolve();
     }
 
     // Wait for main app to render gamepiece (has .gp-quadrant elements)
     if (!ftPlayer.querySelector('.gp-quadrant')) {
       console.debug('[degen] randomize: waiting for app to render...');
-      return;
+      return Promise.resolve();
     }
 
-    // Randomize each quadrant with yields between
+    // Randomize all quadrants synchronously (instant)
     for (let qIdx = 0; qIdx < 4; qIdx++) {
       const q = ftPlayer.querySelector(`.gp-quadrant[data-quadrant="${qIdx}"]`);
       if (!q) continue;
@@ -152,24 +152,19 @@
       // Color scrolls (outer area)
       for (let i = 0; i < colorScrolls; i++) {
         dispatchWheelEvent(q, rect, true);
-        await yieldToMain(10); // Small yield between scrolls
       }
 
       // Symbol scrolls (inner area)
       for (let i = 0; i < symbolScrolls; i++) {
         dispatchWheelEvent(q, rect, false);
-        await yieldToMain(10);
       }
-
-      // Yield between quadrants
-      await yieldToMain(20);
     }
 
-    // Randomize special (after quadrants settle)
-    await yieldToMain(50);
-    await randomizeSpecial();
+    // Randomize special after a tiny delay
+    setTimeout(randomizeSpecial, 60);
 
     console.debug('[degen] Randomized player selection');
+    return Promise.resolve();
   }
 
   function dispatchWheelEvent(element, rect, isColor) {
@@ -184,19 +179,20 @@
     }));
   }
 
-  async function randomizeSpecial() {
+  function randomizeSpecial() {
     const special = $('#ft-player .gamepiece-special-container');
     if (!special) return;
 
     special.click();
-    await yieldToMain(50);
 
-    const selector = $('#quick-selector');
-    if (!selector || selector.classList.contains('hidden')) return;
+    setTimeout(() => {
+      const selector = $('#quick-selector');
+      if (!selector || selector.classList.contains('hidden')) return;
 
-    const targetSpecial = 1 + Math.floor(Math.random() * 3);
-    const btn = selector.querySelector(`button[data-special="${targetSpecial}"]`);
-    if (btn) btn.click();
+      const targetSpecial = 1 + Math.floor(Math.random() * 3);
+      const btn = selector.querySelector(`button[data-special="${targetSpecial}"]`);
+      if (btn) btn.click();
+    }, 40);
   }
 
   // Expose for manual use
