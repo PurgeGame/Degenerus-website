@@ -198,6 +198,18 @@
   // Expose for manual use
   window.__DEGEN__.randomize = randomize;
 
+  // Wire up randomize button
+  function initRandomizeButton() {
+    const btn = $('#randomize-btn');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      randomize().finally(() => {
+        btn.disabled = false;
+      });
+    });
+  }
+
   // ===========================================
   // Audio (Lazy-loaded on user gesture)
   // ===========================================
@@ -206,8 +218,20 @@
   let audioBuffers = {};
   let audioInitialized = false;
 
+  // Sound scheme:
+  // - match1-match8: Progressive coin sounds (like Mario dragon coins)
+  // - win: Victory fanfare
+  // - lose: Sad trombone / fail sound
+  // - click: UI lock-in click
   const SOUNDS = {
-    spin: '/sounds/spin.mp3',
+    match1: '/sounds/match1.mp3',
+    match2: '/sounds/match2.mp3',
+    match3: '/sounds/match3.mp3',
+    match4: '/sounds/match4.mp3',
+    match5: '/sounds/match5.mp3',
+    match6: '/sounds/match6.mp3',
+    match7: '/sounds/match7.mp3',
+    match8: '/sounds/match8.mp3',
     win: '/sounds/win.mp3',
     lose: '/sounds/lose.mp3',
     click: '/sounds/click.mp3',
@@ -247,30 +271,98 @@
     }
   }
 
+  // Fallback tones for match progression (C major scale ascending)
+  const MATCH_FREQUENCIES = [262, 294, 330, 349, 392, 440, 494, 523]; // C4 to C5
+
+  function playTone(frequency, duration = 0.15, type = 'square') {
+    if (!audioContext) return;
+    try {
+      if (audioContext.state === 'suspended') audioContext.resume();
+
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+
+      osc.type = type;
+      osc.frequency.value = frequency;
+      gain.gain.value = CONFIG.audio.volume * 0.3;
+      gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      osc.start();
+      osc.stop(audioContext.currentTime + duration);
+    } catch {
+      // Silently fail
+    }
+  }
+
   function playSound(name) {
-    if (!audioContext || !audioBuffers[name]) return;
+    if (!audioContext) return;
 
     try {
       if (audioContext.state === 'suspended') {
         audioContext.resume();
       }
 
-      const source = audioContext.createBufferSource();
-      const gain = audioContext.createGain();
+      // Check for loaded buffer first
+      if (audioBuffers[name]) {
+        const source = audioContext.createBufferSource();
+        const gain = audioContext.createGain();
+        source.buffer = audioBuffers[name];
+        gain.gain.value = CONFIG.audio.volume;
+        source.connect(gain);
+        gain.connect(audioContext.destination);
+        source.start(0);
+        return;
+      }
 
-      source.buffer = audioBuffers[name];
-      gain.gain.value = CONFIG.audio.volume;
+      // Fallback: generate tones for match sounds
+      const matchNum = name.match(/^match(\d)$/);
+      if (matchNum) {
+        const idx = parseInt(matchNum[1], 10) - 1;
+        if (idx >= 0 && idx < MATCH_FREQUENCIES.length) {
+          playTone(MATCH_FREQUENCIES[idx], 0.2, 'square');
+        }
+        return;
+      }
 
-      source.connect(gain);
-      gain.connect(audioContext.destination);
-      source.start(0);
+      // Fallback tones for win/lose/click
+      if (name === 'win') {
+        // Quick arpeggio up
+        [0, 2, 4, 7].forEach((n, i) => {
+          setTimeout(() => playTone(MATCH_FREQUENCIES[n] * 2, 0.15), i * 80);
+        });
+      } else if (name === 'lose') {
+        // Descending sad tone
+        playTone(200, 0.4, 'sawtooth');
+      } else if (name === 'click') {
+        playTone(800, 0.05, 'square');
+      }
     } catch {
       // Silently fail
     }
   }
 
+  /**
+   * Play progressive match sounds (like Mario dragon coins)
+   * @param {number} matchCount - Number of matches (1-8)
+   * @param {number} delayMs - Delay between each sound
+   */
+  async function playMatchSequence(matchCount, delayMs = 120) {
+    if (!audioContext || matchCount < 1) return;
+
+    const count = Math.min(matchCount, 8);
+    for (let i = 1; i <= count; i++) {
+      playSound(`match${i}`);
+      if (i < count) {
+        await yieldToMain(delayMs);
+      }
+    }
+  }
+
   // Expose for manual use
   window.__DEGEN__.playSound = playSound;
+  window.__DEGEN__.playMatchSequence = playMatchSequence;
   window.__DEGEN__.initAudio = initAudio;
 
   // ===========================================
@@ -278,6 +370,9 @@
   // ===========================================
 
   function safeInit() {
+    // 0. Wire up UI buttons
+    initRandomizeButton();
+
     // 1. Audio: Initialize on first user interaction only
     if (CONFIG.audio.enabled) {
       const initOnce = () => {
