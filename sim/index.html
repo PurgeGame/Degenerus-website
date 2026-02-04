@@ -13,9 +13,15 @@
       .wallet-address.compact-hidden {
         display: none !important;
       }
+      .discord-user.compact-hidden {
+        display: none !important;
+      }
       .connect-button.wallet-connected .btn-text {
         letter-spacing: 0.02em;
         font-variant-numeric: tabular-nums;
+      }
+      .connect-button.discord-connected .btn-text {
+        letter-spacing: 0.01em;
       }
     </style>
   </head>
@@ -474,6 +480,43 @@
         const observer = new MutationObserver(updateWalletCompact);
         observer.observe(walletAddress, { childList: true, characterData: true, subtree: true });
         updateWalletCompact();
+      })();
+    </script>
+
+    <script>
+      (function () {
+        const discordBtn = document.getElementById('discord-connect-btn');
+        const discordText = document.getElementById('discord-connect-text');
+        const discordUser = document.getElementById('discord-user');
+        const discordName = document.getElementById('discord-name');
+        if (!discordBtn || !discordText || !discordUser || !discordName) return;
+
+        function updateDiscordCompact() {
+          const name = (discordName.textContent || '').trim();
+          const connected = Boolean(name) && !discordUser.classList.contains('hidden');
+          if (connected) {
+            discordText.textContent = name;
+            discordBtn.classList.add('discord-connected');
+            discordUser.classList.add('compact-hidden');
+            discordBtn.title = `Disconnect ${name}`;
+          } else {
+            discordText.textContent = 'Connect Discord';
+            discordBtn.classList.remove('discord-connected');
+            discordUser.classList.remove('compact-hidden');
+            discordBtn.title = '';
+          }
+        }
+
+        new MutationObserver(updateDiscordCompact).observe(discordUser, {
+          attributes: true,
+          attributeFilter: ['class'],
+        });
+        new MutationObserver(updateDiscordCompact).observe(discordName, {
+          childList: true,
+          characterData: true,
+          subtree: true,
+        });
+        updateDiscordCompact();
       })();
     </script>
 
