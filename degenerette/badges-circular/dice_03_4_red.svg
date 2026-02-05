@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102">
+  
+  
+  <g >
+    <circle cx="0" cy="0" r="35.2" fill="#ed0e11"/>
+    <circle cx="0" cy="0" r="27.5" fill="#111"/>
+    <circle cx="0" cy="0" r="19.8" fill="#fff"/>
+    <g transform="matrix(0.055107 0 0 0.055107 -14.108 -14.108)">
+      <g fill="#ed0e11" stroke="#ed0e11" style="vector-effect:non-scaling-stroke"><g transform="translate(0 0) scale(3.938462)"><g id="ico"><rect width="120" height="120" x="5" y="5" rx="18"/><circle cx="39.8" cy="39.8" r="10" fill="#fff"/><circle cx="90.2" cy="39.8" r="10" fill="#fff"/><circle cx="39.8" cy="90.2" r="10" fill="#fff"/><circle cx="90.2" cy="90.2" r="10" fill="#fff"/></g></g></g>
+    </g>
+  </g>
+</svg>
