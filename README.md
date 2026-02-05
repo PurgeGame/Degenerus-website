@@ -1,13 +1,12 @@
 # Degenerus Website
 
-Static site shell for the Degenerus Protocol, with the Degenerette simulator mounted at `/sim/`.
+Static site shell for the Degenerus Protocol, with the Degenerette simulator mounted at `/degenerette/`.
 
 ## Structure
 
-- `index.html` - main landing page (whitepaper placeholder)
-- `sim/index.html` - Degenerette simulator entry
-- `assets/`, `badges*/`, `specials/` - simulator assets copied from the sim build
-- `styles.css`, `main.js` - landing page styling + minimal web3 hooks
+- `index.html` - redirect to the simulator
+- `degenerette/index.html` - Degenerette simulator entry
+- `degenerette/` - simulator assets copied from the sim build
 
 ## Local preview
 
@@ -26,8 +25,7 @@ To refresh it:
 
 1. Build the simulator (`npm run build` in the simulator repo).
 2. Copy `dist/` contents into this repo:
-   - `dist/index.html` -> `sim/index.html`
-   - `dist/assets`, `dist/badges*`, `dist/specials`, `dist/vite.svg` -> repo root
+   - `dist/` -> `degenerette/`
 
 ## Scaling + deployment notes
 
