@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102">
+  <defs>
+    <clipPath id="corner-clip">
+      <path d="M50 -38 A12 12 0 0 0 38 -50 H-50 V19 L-19 50 H50 Z"/>
+    </clipPath>
+  </defs>
+  <path d="M50 -38 A12 12 0 0 0 38 -50 H-50 V19 L-19 50 H50 Z" fill="#d9d9d9" stroke="#f7931a" stroke-width="4.5" stroke-linejoin="round"/>
+  <g clip-path="url(#corner-clip)">
+    <circle cx="0" cy="0" r="35.2" fill="#f7931a"/>
+    <circle cx="0" cy="0" r="27.5" fill="#111"/>
+    <circle cx="0" cy="0" r="19.8" fill="#fff"/>
+    <g transform="matrix(0.055107 0 0 0.055107 -14.108 -14.108)">
+      <g fill="#f7931a" stroke="#f7931a" style="vector-effect:non-scaling-stroke"><g id="ico"><path d="M431.68 252.94C391.11 220.16 281.06 67.62 260.12 5.54 258.9 1.9 257.85 0 256 0c-1.83 0-2.9 1.91-4.11 5.54-20.96 62.08-130.99 214.62-171.57 247.4-1.06.84-1.95 2.44-1.95 3.06s.9 2.22 1.95 3.06c40.58 32.78 150.61 185.32 171.57 247.4 1.21 3.63 2.28 5.54 4.1 5.54 1.87 0 2.92-1.91 4.14-5.54 20.94-62.08 130.99-214.62 171.56-247.4 1.05-.84 1.96-2.43 1.96-3.06s-.91-2.22-1.96-3.06"/></g></g>
+    </g>
+  </g>
+</svg>
