@@ -1,0 +1,17 @@
+/index.html
+  Cache-Control: no-store
+
+/
+  Cache-Control: no-store
+
+/degenerette
+  Cache-Control: no-store
+
+/degenerette/
+  Cache-Control: no-store
+
+/degenerette/index.html
+  Cache-Control: no-store
+
+/degenerette/assets/*
+  Cache-Control: public, max-age=31536000, immutable
