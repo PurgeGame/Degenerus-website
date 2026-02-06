@@ -16,12 +16,14 @@
       </div>
     `}).join("");t.innerHTML=n}function ne(t){if(!t)return null;try{const n=JSON.parse(t);return!n||!Array.isArray(n.traits)?null:n}catch{return null}}function Gn(){const t=document.getElementById("biggest-wins-list");if(!t)return;if(!Tt.length){t.innerHTML='<p class="placeholder">No wins yet</p>';return}const n=Tt.map(e=>{const s=e.eth_address?`${e.eth_address.slice(0,6)}...${e.eth_address.slice(-4)}`:"Unknown",o=e.discord_name||s,a=e.discord_avatar?`<img src="${e.discord_avatar}" alt="${o}" />`:'<div class="leaderboard-avatar"></div>',i=Math.max(0,Math.round(e.bet_amount||0)),c=Math.max(0,Math.round(e.payout||0)),l=i>0?Math.max(1,Math.round(c/i)):0,r=i.toLocaleString(void 0,{maximumFractionDigits:0}),u=c.toLocaleString(void 0,{maximumFractionDigits:0}),d=r.length>9?"num-xlong":r.length>6?"num-long":"",m=u.length>9?"num-xlong":u.length>6?"num-long":"",f=`x${l}`,p=f.length>7?"num-long":"",w=ne(e.player_ticket),E=ne(e.house_ticket),b="win",R=w?x(w,"small",E??void 0,!1,b,!0,!1):tt("small"),_=E?x(E,"small",w??void 0,!1,b,!0,!0):tt("small");return`
       <div class="history-item win biggest-win-item">
+        <div class="biggest-win-header">
+          <div class="biggest-win-user">
+            ${a}
+            <span class="biggest-win-name" title="${o}">${o}</span>
+          </div>
+        </div>
         <div class="biggest-win-compare">
           <div class="mini-col">
-            <div class="biggest-win-user">
-              ${a}
-              <span class="biggest-win-name" title="${o}">${o}</span>
-            </div>
             ${R}
           </div>
           <div class="biggest-win-metrics">
@@ -30,7 +32,6 @@
             <div class="biggest-win-metric paid ${m}">${u}</div>
           </div>
           <div class="mini-col">
-            <div class="biggest-win-spacer"></div>
             ${_}
           </div>
         </div>
