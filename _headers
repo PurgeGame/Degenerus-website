@@ -15,3 +15,12 @@
 
 /degenerette/assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+/lootbox
+  Cache-Control: no-store
+
+/lootbox/
+  Cache-Control: no-store
+
+/lootbox/index.html
+  Cache-Control: no-store

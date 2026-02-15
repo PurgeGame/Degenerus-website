@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Degenerus Lootbox Simulator</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #12121c;
+    --bg3: #1a1a2e;
+    --border: #2a2a44;
+    --text: #e0e0e0;
+    --dim: #888;
+    --accent: #f5a623;
+    --green: #4cff8b;
+    --red: #ff4c6a;
+    --blue: #4cc9ff;
+    --purple: #b44cff;
+    --pink: #ff4cad;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+    min-height: 100vh;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 20px; }
+  /* Nav bar */
+  .nav-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8em;
+  }
+  .nav-links { display: flex; gap: 16px; align-items: center; }
+  .nav-links a {
+    color: var(--dim);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .nav-links a:hover { color: var(--accent); }
+  .nav-links a.active { color: var(--accent); }
+  .discord-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: #5865F2;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 1em;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+  .discord-btn:hover { background: #4752c4; }
+  .discord-btn svg { width: 18px; height: 18px; }
+  h1 {
+    text-align: center;
+    font-size: 1.6em;
+    color: var(--accent);
+    margin-bottom: 4px;
+    letter-spacing: 2px;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--dim);
+    font-size: 0.8em;
+    margin-bottom: 24px;
+  }
+
+  /* Controls */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .control-group {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .control-group label {
+    display: block;
+    font-size: 0.75em;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .control-group input, .control-group select {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 1em;
+  }
+  .control-group input:focus, .control-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .control-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .control-row label { margin-bottom: 0; }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.85em;
+    padding: 6px 0;
+  }
+  .toggle input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent);
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 12px 28px;
+    border: 2px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 1em;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 1px;
+  }
+  .btn:hover {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .btn.primary {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .btn.primary:hover {
+    background: #ffc04d;
+  }
+  .btn.small {
+    padding: 8px 16px;
+    font-size: 0.85em;
+  }
+  .btn.danger {
+    border-color: var(--red);
+    color: var(--red);
+  }
+  .btn.danger:hover {
+    background: var(--red);
+    color: var(--bg);
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .stat {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+  .stat .value {
+    font-size: 1.3em;
+    font-weight: bold;
+    color: var(--accent);
+  }
+  .stat .label {
+    font-size: 0.7em;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+
+  /* Results feed */
+  .results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .results-header h2 {
+    font-size: 1em;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+  #results {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 600px;
+    overflow-y: auto;
+    padding-right: 8px;
+  }
+  #results::-webkit-scrollbar { width: 6px; }
+  #results::-webkit-scrollbar-track { background: var(--bg); }
+  #results::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .result-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    animation: slideIn 0.25s ease-out;
+    display: grid;
+    grid-template-columns: 50px 1fr auto;
+    gap: 12px;
+    align-items: center;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .result-card.tickets { border-left: 3px solid var(--green); }
+  .result-card.burnie { border-left: 3px solid var(--accent); }
+  .result-card.dgnrs { border-left: 3px solid var(--purple); }
+  .result-card.wwxrp { border-left: 3px solid var(--blue); }
+  .result-card.boon { border-left: 3px solid var(--pink); }
+  .result-card.jackpot {
+    border: 2px solid var(--accent);
+    background: linear-gradient(135deg, #1a1a2e, #2a1a10);
+  }
+
+  .result-icon {
+    font-size: 1.8em;
+    text-align: center;
+  }
+  .result-body { min-width: 0; }
+  .result-type {
+    font-size: 0.7em;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .result-main {
+    font-size: 1.1em;
+    font-weight: bold;
+    margin: 2px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .result-detail {
+    font-size: 0.75em;
+    color: var(--dim);
+  }
+  .result-value {
+    text-align: right;
+    font-size: 0.85em;
+    white-space: nowrap;
+  }
+  .result-value .eth {
+    color: var(--accent);
+    font-weight: bold;
+  }
+
+  .highlight-green { color: var(--green); }
+  .highlight-accent { color: var(--accent); }
+  .highlight-purple { color: var(--purple); }
+  .highlight-blue { color: var(--blue); }
+  .highlight-pink { color: var(--pink); }
+  .highlight-red { color: var(--red); }
+
+  /* Tabs */
+  .tab-row {
+    display: flex;
+    gap: 0;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--border);
+  }
+  .tab {
+    padding: 10px 20px;
+    cursor: pointer;
+    color: var(--dim);
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Box dividers */
+  .box-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 0;
+  }
+  .box-divider::before, .box-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .box-divider span {
+    font-size: 0.65em;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+
+  /* Distribution chart */
+  .dist-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+    font-size: 0.85em;
+  }
+  .dist-label {
+    width: 120px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .dist-bar-wrap {
+    flex: 1;
+    height: 20px;
+    background: var(--bg3);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .dist-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+  .dist-pct {
+    width: 60px;
+    text-align: right;
+    flex-shrink: 0;
+    color: var(--dim);
+  }
+
+  /* Number inputs */
+  .num-input {
+    width: 80px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 1.1em;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-align: right;
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+  .num-input::-webkit-inner-spin-button,
+  .num-input::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
+  .num-input:focus { outline: none; border-color: var(--accent); }
+
+  /* Sliders */
+  .slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: var(--bg3);
+    border-radius: 3px;
+    outline: none;
+    border: none;
+    margin: 10px 0 0;
+  }
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 6px rgba(245,166,35,0.4);
+  }
+  .slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 6px rgba(245,166,35,0.4);
+  }
+  .slider::-webkit-slider-runnable-track { height: 6px; }
+  .slider::-moz-range-track { height: 6px; background: var(--bg3); border-radius: 3px; border: none; }
+
+  @media (max-width: 640px) {
+    .controls { grid-template-columns: 1fr; }
+    .result-card { grid-template-columns: 40px 1fr; }
+    .result-value { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <nav class="nav-bar">
+    <div class="nav-links">
+      <a href="/degenerette/">Degenerette</a>
+      <a href="/lootbox/" class="active">Lootbox Sim</a>
+    </div>
+    <a href="https://api.degener.us/auth/discord" class="discord-btn" id="discord-btn">
+      <svg viewBox="0 0 245 240" role="img"><path fill="currentColor" d="M104.4 104.9c-5.7 0-10.2 5-10.2 11.1 0 6.1 4.6 11.1 10.2 11.1 5.7 0 10.2-5 10.2-11.1.1-6.1-4.5-11.1-10.2-11.1zm36.2 0c-5.7 0-10.2 5-10.2 11.1 0 6.1 4.6 11.1 10.2 11.1 5.7 0 10.2-5 10.2-11.1 0-6.1-4.6-11.1-10.2-11.1z"/><path fill="currentColor" d="M189.5 20h-134C24.9 20 10 34.9 10 53.5v126.9C10 199 24.9 214 43.5 214h113.4l-5.3-18.5 12.8 11.9 12.1 11.2 21.4 19V53.5c0-18.6-14.9-33.5-33.4-33.5zM163 149.7s-4.6-5.5-8.4-10.3c16.7-4.7 23.1-15.1 23.1-15.1-5.2 3.4-10.1 5.8-14.5 7.4-6.3 2.7-12.3 4.5-18.2 5.5-12.2 2.3-23.4 1.7-33.1-.1-7.3-1.4-13.6-3.3-18.9-5.5-3-1.1-6.2-2.5-9.4-4.3-.4-.2-.8-.4-1.2-.6-.2-.1-.3-.2-.5-.3-2.2-1.2-3.4-2-3.4-2s6.2 10.2 22.6 15c-3.8 4.8-8.5 10.5-8.5 10.5-28.1-.9-38.8-19.3-38.8-19.3 0-41 18.4-74.2 18.4-74.2 18.4-13.8 35.9-13.4 35.9-13.4l1.3 1.5c-23 6.6-33.6 16.6-33.6 16.6s2.8-1.5 7.5-3.6c13.6-6 24.4-7.6 28.8-8 .7-.1 1.3-.2 2-.2 7.2-1 15.3-1.3 23.7-.3 11.1 1.3 23 4.7 35.2 11.8 0 0-10-9.5-31.5-16.1l1.8-2c0 .1 17.5-.4 35.9 13.4 0 0 18.4 33.2 18.4 74.2 0 0-10.8 18.4-38.9 19.3z"/></svg>
+      <span id="discord-text">Discord</span>
+    </a>
+  </nav>
+  <h1>DEGENERUS LOOTBOX SIMULATOR</h1>
+  <p class="subtitle">Try your luck with fake money. No ETH required.</p>
+
+  <!-- Hidden defaults -->
+  <input type="hidden" id="level" value="0">
+  <input type="hidden" id="burniePrice" value="0.01">
+  <input type="hidden" id="dgnrsPool" value="114300000000">
+  <!-- Controls -->
+  <div class="controls" style="grid-template-columns:1fr">
+    <div class="control-group">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <label>Lootbox Amount</label>
+        <div style="display:flex;align-items:baseline;gap:4px">
+          <input type="number" id="amountInput" min="0.01" max="100" step="0.01" value="0.1" class="num-input">
+          <span style="font-size:0.85em;color:var(--dim)">ETH</span>
+        </div>
+      </div>
+      <input type="range" id="amount" min="0.01" max="10" step="0.01" value="0.1" class="slider">
+      <div style="position:relative;height:14px;font-size:0.65em;color:var(--dim);margin-top:2px">
+        <span style="position:absolute;left:0">0.01</span>
+        <span style="position:absolute;left:50%;transform:translateX(-50%)">5</span>
+        <span style="position:absolute;right:0">10 ETH</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <label>Activity Score</label>
+        <div style="display:flex;align-items:baseline;gap:4px">
+          <input type="number" id="activityInput" min="0" max="305" step="1" value="60" class="num-input" style="width:60px">
+          <span style="font-size:0.85em;color:var(--dim)">%</span>
+        </div>
+      </div>
+      <input type="range" id="activity" min="0" max="305" step="5" value="60" class="slider">
+      <div style="position:relative;height:28px;font-size:0.6em;color:var(--dim);margin-top:2px">
+        <span style="position:absolute;left:0">0%</span>
+        <span style="position:absolute;left:27.9%;transform:translateX(-50%);text-align:center;color:var(--blue)">|<br>Lazy 85%</span>
+        <span style="position:absolute;left:37.7%;transform:translateX(-50%);text-align:center;color:var(--purple)">|<br>Whale 115%</span>
+        <span style="position:absolute;left:50.8%;transform:translateX(-50%);text-align:center;color:var(--accent)">|<br>Deity 155%</span>
+        <span style="position:absolute;right:0">305%</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;padding:8px 0 0">
+      <label class="toggle"><input type="checkbox" id="presale" checked> Presale (+62% BURNIE bonus)</label>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn primary" onclick="buyOne()">BUY 1 LOOTBOX</button>
+    <button class="btn" onclick="buyBatch(10)">BUY 10</button>
+    <button class="btn" onclick="buyBatch(100)">BUY 100</button>
+    <button class="btn" onclick="buyBatch(1000)">BUY 1000</button>
+    <button class="btn danger small" onclick="resetAll()">RESET</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="stat"><div class="value" id="statSpent">0</div><div class="label">ETH In</div></div>
+    <div class="stat"><div class="value" id="statValueOut">0</div><div class="label">ETH Value Out</div></div>
+    <div class="stat"><div class="value" id="statBoxes">0</div><div class="label">Boxes</div></div>
+    <div class="stat"><div class="value highlight-green" id="statTickets">0</div><div class="label">Tickets</div></div>
+    <div class="stat"><div class="value highlight-accent" id="statBurnie">0</div><div class="label">BURNIE</div></div>
+    <div class="stat"><div class="value highlight-purple" id="statDgnrs">0</div><div class="label">DGNRS</div><div class="label" id="statDgnrsPct" style="color:var(--purple)"></div></div>
+    <div class="stat"><div class="value highlight-blue" id="statWwxrp">0</div><div class="label">WWXRP</div></div>
+    <div class="stat"><div class="value highlight-pink" id="statBoons">0</div><div class="label">Boons</div></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tab-row">
+    <div class="tab active" data-tab="feed">Live Feed</div>
+    <div class="tab" data-tab="dist">Distribution</div>
+    <div class="tab" data-tab="ev">EV Analysis</div>
+  </div>
+
+  <div id="tab-feed" class="tab-panel active">
+    <div class="results-header">
+      <h2>Results</h2>
+      <button class="btn small" onclick="clearFeed()">Clear</button>
+    </div>
+    <div id="results"></div>
+  </div>
+
+  <div id="tab-dist" class="tab-panel">
+    <h2 style="font-size:1em;color:var(--dim);text-transform:uppercase;letter-spacing:2px;margin-bottom:16px">Reward Distribution</h2>
+    <div id="distribution"></div>
+  </div>
+
+  <div id="tab-ev" class="tab-panel">
+    <h2 style="font-size:1em;color:var(--dim);text-transform:uppercase;letter-spacing:2px;margin-bottom:16px">EV Analysis</h2>
+    <div id="evAnalysis" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;font-size:0.9em;line-height:1.8"></div>
+  </div>
+</div>
+
+<script>
+// ========== RNG ==========
+// Simple seeded PRNG (xoshiro128** for browser use)
+let rngState = new Uint32Array(4);
+function seedRng() {
+  const buf = new Uint32Array(4);
+  crypto.getRandomValues(buf);
+  rngState.set(buf);
+}
+function rngNext() {
+  let s = rngState;
+  let result = Math.imul(s[1] * 5, 9);
+  result = (result << 7 | result >>> 25) * 9;
+  let t = s[1] << 9;
+  s[2] ^= s[0]; s[3] ^= s[1]; s[1] ^= s[2]; s[0] ^= s[3];
+  s[2] ^= t;
+  s[3] = s[3] << 11 | s[3] >>> 21;
+  return result >>> 0;
+}
+function rngFloat() { return rngNext() / 4294967296; }
+function rngRange(max) { return rngNext() % max; }
+seedRng();
+
+// ========== Price Lookup (mirrors PriceLookupLib.sol) ==========
+function priceForLevel(lvl) {
+  if (lvl < 5) return 0.01;
+  if (lvl < 10) return 0.02;
+  if (lvl < 30) return 0.04;
+  if (lvl < 60) return 0.08;
+  if (lvl < 80) return 0.12;
+  if (lvl < 100) return 0.16;
+  const c = lvl % 100;
+  if (c === 0) return 0.24;
+  if (c < 30) return 0.04;
+  if (c < 60) return 0.08;
+  if (c < 80) return 0.12;
+  return 0.16;
+}
+
+// ========== EV Multiplier (mirrors contract) ==========
+function evMultiplierBps(activityPct) {
+  const score = activityPct * 100; // convert % to bps
+  const NEUTRAL = 6000, MAX = 30500;
+  const EV_MIN = 8000, EV_NEUTRAL = 10000, EV_MAX = 13500;
+  if (score <= NEUTRAL) {
+    return EV_MIN + (score * (EV_NEUTRAL - EV_MIN)) / NEUTRAL;
+  }
+  if (score >= MAX) return EV_MAX;
+  const excess = score - NEUTRAL;
+  const maxExcess = MAX - NEUTRAL;
+  return EV_NEUTRAL + (excess * (EV_MAX - EV_NEUTRAL)) / maxExcess;
+}
+
+// ========== Ticket Variance (mirrors contract exactly) ==========
+function rollTicketVarianceBps() {
+  const roll = rngRange(10000);
+  if (roll < 100) return 46000;   // 1%: 4.6x
+  if (roll < 500) return 23000;   // 4%: 2.3x
+  if (roll < 2500) return 11000;  // 20%: 1.1x
+  if (roll < 7000) return 6510;   // 45%: 0.651x
+  return 4500;                     // 30%: 0.45x
+}
+
+// ========== DGNRS tier (mirrors contract) ==========
+function rollDgnrsTier() {
+  const roll = rngRange(1000);
+  if (roll < 795) return { tier: 'Small', ppm: 10 };
+  if (roll < 945) return { tier: 'Medium', ppm: 390 };
+  if (roll < 995) return { tier: 'Large', ppm: 800 };
+  return { tier: 'MEGA', ppm: 8000 };
+}
+
+// ========== BURNIE variance (mirrors contract) ==========
+function rollBurnieBps() {
+  const varianceRoll = rngRange(20);
+  if (varianceRoll < 16) {
+    // Low path (80%): 42.5% - 95%
+    return { bps: 5050 + varianceRoll * 415, path: 'low' };
+  }
+  // High path (20%): 267% - 432%
+  return { bps: 26700 + (varianceRoll - 16) * 8200, path: 'high' };
+}
+
+// ========== Target Level Roll ==========
+function rollTargetLevel(baseLevel) {
+  const rangeRoll = rngRange(100);
+  if (rangeRoll < 5) {
+    // 5%: 5-50 levels ahead
+    return baseLevel + (rngRange(46) + 5);
+  }
+  // 95%: 0-5 levels ahead
+  return baseLevel + rngRange(6);
+}
+
+// ========== Boon System (simplified - mirrors weights exactly) ==========
+const BOON_TYPES = [
+  { id: 1, name: 'Coinflip +5%', weight: 200, cat: 'Coinflip' },
+  { id: 2, name: 'Coinflip +10%', weight: 40, cat: 'Coinflip' },
+  { id: 3, name: 'Coinflip +25%', weight: 8, cat: 'Coinflip' },
+  { id: 5, name: 'Lootbox Boost +5%', weight: 200, cat: 'Lootbox' },
+  { id: 6, name: 'Lootbox Boost +15%', weight: 30, cat: 'Lootbox' },
+  { id: 22, name: 'Lootbox Boost +25%', weight: 8, cat: 'Lootbox' },
+  { id: 7, name: 'Purchase Boost +5%', weight: 400, cat: 'Purchase' },
+  { id: 8, name: 'Purchase Boost +15%', weight: 80, cat: 'Purchase' },
+  { id: 9, name: 'Purchase Boost +25%', weight: 16, cat: 'Purchase' },
+  { id: 16, name: 'Whale Discount 10%', weight: 28, cat: 'Whale' },
+  { id: 23, name: 'Whale Discount 25%', weight: 10, cat: 'Whale' },
+  { id: 24, name: 'Whale Discount 50%', weight: 2, cat: 'Whale' },
+  { id: 25, name: 'Deity Pass Discount 10%', weight: 28, cat: 'DeityPass' },
+  { id: 26, name: 'Deity Pass Discount 25%', weight: 10, cat: 'DeityPass' },
+  { id: 27, name: 'Deity Pass Discount 50%', weight: 2, cat: 'DeityPass' },
+  { id: 17, name: 'Activity +10 pts', weight: 100, cat: 'Activity' },
+  { id: 18, name: 'Activity +25 pts', weight: 30, cat: 'Activity' },
+  { id: 19, name: 'Activity +50 pts', weight: 8, cat: 'Activity' },
+  { id: 28, name: 'WHALE PASS', weight: 8, cat: 'WhalePass' },
+  { id: 29, name: 'Lazy Pass', weight: 40, cat: 'LazyPass' },
+];
+
+function rollBoon(boonBudget) {
+  // Simplified boon chance: budget / expected per boon, capped at 100%
+  // Using ~0.25 ETH as avg expected boon value (rough estimate for sim)
+  const avgExpected = 0.125; // 50% utilization of ~0.25 avg max
+  let chance = boonBudget / avgExpected;
+  if (chance > 1) chance = 1;
+  if (rngFloat() >= chance) return null;
+
+  const totalWeight = BOON_TYPES.reduce((s, b) => s + b.weight, 0);
+  let roll = rngRange(totalWeight);
+  let cursor = 0;
+  for (const b of BOON_TYPES) {
+    cursor += b.weight;
+    if (roll < cursor) return b;
+  }
+  return BOON_TYPES[BOON_TYPES.length - 1];
+}
+
+// ========== Core Lootbox Resolution ==========
+function resolveLootbox(amount, currentLevel, activityPct, presale, burniePrice) {
+  const results = [];
+  const ev = evMultiplierBps(activityPct);
+  const scaledAmount = (amount * ev) / 10000;
+
+  // Boon budget: 10% of amount, capped at 1 ETH
+  const boonBudget = Math.min(scaledAmount * 0.10, 1.0);
+  const mainAmount = scaledAmount - boonBudget;
+
+  // Split if > 0.5 ETH
+  const rolls = mainAmount > 0.5
+    ? [mainAmount / 2, mainAmount - mainAmount / 2]
+    : [mainAmount];
+
+  for (const rollAmt of rolls) {
+    const targetLevel = rollTargetLevel(currentLevel);
+    const targetPrice = priceForLevel(targetLevel);
+    const roll20 = rngRange(20);
+
+    if (roll20 < 11) {
+      // 55%: Tickets
+      const ticketBudget = rollAmt * 1.4; // 140% of roll amount (14,000 bps)
+      const varianceBps = rollTicketVarianceBps();
+      const adjustedBudget = (ticketBudget * varianceBps) / 10000;
+      const ticketsScaled = Math.floor((adjustedBudget / targetPrice) * 100);
+      const tickets = ticketsScaled / 100;
+      const tierName = varianceBps >= 46000 ? 'JACKPOT 4.6x' :
+                       varianceBps >= 23000 ? 'Great 2.3x' :
+                       varianceBps >= 11000 ? 'Good 1.1x' :
+                       varianceBps >= 6510 ? 'Normal 0.65x' : 'Low 0.45x';
+      results.push({
+        type: 'tickets',
+        tickets: tickets,
+        targetLevel: targetLevel,
+        tier: tierName,
+        varianceBps: varianceBps,
+        ethValue: tickets * targetPrice,
+        rollAmount: rollAmt,
+      });
+    } else if (roll20 < 13) {
+      // 10%: DGNRS
+      const { tier, ppm } = rollDgnrsTier();
+      const poolBalance = parseFloat(document.getElementById('dgnrsPool').value) || 100000;
+      const unit = 1; // 1 ETH per unit
+      let dgnrsAmount = (poolBalance * ppm * rollAmt) / (1000000 * unit);
+      if (dgnrsAmount > poolBalance) dgnrsAmount = poolBalance;
+      results.push({
+        type: 'dgnrs',
+        amount: dgnrsAmount,
+        tier: tier,
+        ppm: ppm,
+        poolSize: poolBalance,
+        rollAmount: rollAmt,
+      });
+    } else if (roll20 < 15) {
+      // 10%: WWXRP (always 1 token)
+      results.push({
+        type: 'wwxrp',
+        amount: 1,
+        rollAmount: rollAmt,
+      });
+    } else {
+      // 25%: Large BURNIE
+      const { bps, path } = rollBurnieBps();
+      const burnieBudget = (rollAmt * bps) / 10000;
+      // PRICE_COIN_UNIT = 1000 (1000 BURNIE per ETH at price)
+      const currentPrice = priceForLevel(currentLevel);
+      const burnieAmount = (burnieBudget * 1000) / currentPrice;
+      let bonus = 0;
+      if (presale) {
+        bonus = burnieAmount * 0.62; // 62% presale bonus
+      }
+      const ethEquiv = ((burnieAmount + bonus) / 1000) * currentPrice;
+      results.push({
+        type: 'burnie',
+        amount: burnieAmount,
+        bonus: bonus,
+        total: burnieAmount + bonus,
+        path: path,
+        bps: bps,
+        ethValue: ethEquiv,
+        rollAmount: rollAmt,
+      });
+    }
+  }
+
+  // Boon roll
+  const boon = rollBoon(boonBudget);
+  if (boon) {
+    results.push({ type: 'boon', boon: boon });
+  }
+
+  return results;
+}
+
+// ========== State ==========
+let state = {
+  totalSpent: 0,
+  totalBoxes: 0,
+  totalTickets: 0,
+  totalBurnie: 0,
+  totalDgnrsHits: 0,
+  totalDgnrsAmount: 0,
+  totalWwxrp: 0,
+  totalBoons: 0,
+  totalBurnieEthValue: 0,
+  totalTicketEthValue: 0,
+  rewardCounts: { tickets: 0, burnie: 0, dgnrs: 0, wwxrp: 0 },
+  ticketTierCounts: { 'JACKPOT 4.6x': 0, 'Great 2.3x': 0, 'Good 1.1x': 0, 'Normal 0.65x': 0, 'Low 0.45x': 0 },
+  burniePathCounts: { high: 0, low: 0 },
+  boonCatCounts: {},
+  ticketsByLevel: {},
+};
+
+// ========== UI Helpers ==========
+function fmt(n, decimals=2) {
+  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if (n >= 10000) return (n/1000).toFixed(1) + 'K';
+  return n.toFixed(decimals);
+}
+
+function updateStats() {
+  const valueOut = state.totalTicketEthValue + state.totalBurnieEthValue;
+  document.getElementById('statSpent').textContent = fmt(state.totalSpent, 3);
+  const voEl = document.getElementById('statValueOut');
+  voEl.textContent = fmt(valueOut, 3);
+  voEl.className = 'value ' + (state.totalSpent > 0 ? (valueOut >= state.totalSpent ? 'highlight-green' : 'highlight-red') : '');
+  document.getElementById('statBoxes').textContent = state.totalBoxes;
+  document.getElementById('statTickets').textContent = fmt(state.totalTickets);
+  document.getElementById('statBurnie').textContent = fmt(state.totalBurnie);
+  document.getElementById('statDgnrs').textContent = fmt(state.totalDgnrsAmount, 2);
+  const pool = parseFloat(document.getElementById('dgnrsPool').value) || 100000;
+  const dgnrsPct = pool > 0 ? (state.totalDgnrsAmount / pool * 100) : 0;
+  document.getElementById('statDgnrsPct').textContent = state.totalDgnrsAmount > 0 ? `${dgnrsPct.toFixed(2)}% of pool` : '';
+  document.getElementById('statWwxrp').textContent = state.totalWwxrp;
+  document.getElementById('statBoons').textContent = state.totalBoons;
+  updateDistribution();
+  updateEv();
+}
+
+function updateDistribution() {
+  const el = document.getElementById('distribution');
+  const total = state.rewardCounts.tickets + state.rewardCounts.burnie +
+                state.rewardCounts.dgnrs + state.rewardCounts.wwxrp;
+  if (total === 0) { el.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px">Open some lootboxes first</div>'; return; }
+
+  let html = '<div style="margin-bottom:20px">';
+  html += '<div style="font-size:0.8em;color:var(--dim);margin-bottom:12px">PRIMARY REWARDS (per roll)</div>';
+  const rewardTypes = [
+    { name: 'Tickets', count: state.rewardCounts.tickets, color: 'var(--green)', expected: '55%' },
+    { name: 'BURNIE', count: state.rewardCounts.burnie, color: 'var(--accent)', expected: '25%' },
+    { name: 'DGNRS', count: state.rewardCounts.dgnrs, color: 'var(--purple)', expected: '10%' },
+    { name: 'WWXRP', count: state.rewardCounts.wwxrp, color: 'var(--blue)', expected: '10%' },
+  ];
+  for (const r of rewardTypes) {
+    const pct = (r.count / total * 100);
+    html += `<div class="dist-row">
+      <div class="dist-label">${r.name} <span style="color:var(--dim)">(${r.expected})</span></div>
+      <div class="dist-bar-wrap"><div class="dist-bar" style="width:${pct}%;background:${r.color}"></div></div>
+      <div class="dist-pct">${pct.toFixed(1)}%</div>
+    </div>`;
+  }
+  html += '</div>';
+
+  // Tickets by level
+  const levelEntries = Object.entries(state.ticketsByLevel).sort((a,b) => Number(a[0]) - Number(b[0]));
+  if (levelEntries.length > 0) {
+    html += '<div style="margin-bottom:20px">';
+    html += '<div style="font-size:0.8em;color:var(--dim);margin-bottom:8px">TICKETS BY LEVEL</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    for (const [lvl, count] of levelEntries) {
+      html += `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:0.8em"><span style="color:var(--dim)">Lv${lvl}</span> <span style="color:var(--green);font-weight:bold">${fmt(count)}</span></div>`;
+    }
+    html += '</div></div>';
+  }
+
+  // Ticket variance tiers
+  const ticketTotal = Object.values(state.ticketTierCounts).reduce((s,v)=>s+v,0);
+  if (ticketTotal > 0) {
+    html += '<div style="margin-bottom:20px">';
+    html += '<div style="font-size:0.8em;color:var(--dim);margin-bottom:12px">TICKET VARIANCE TIERS</div>';
+    const tiers = [
+      { name: 'Jackpot 4.6x', key: 'JACKPOT 4.6x', expected: '1%' },
+      { name: 'Great 2.3x', key: 'Great 2.3x', expected: '4%' },
+      { name: 'Good 1.1x', key: 'Good 1.1x', expected: '20%' },
+      { name: 'Normal 0.65x', key: 'Normal 0.65x', expected: '45%' },
+      { name: 'Low 0.45x', key: 'Low 0.45x', expected: '30%' },
+    ];
+    for (const t of tiers) {
+      const pct = ((state.ticketTierCounts[t.key] || 0) / ticketTotal * 100);
+      html += `<div class="dist-row">
+        <div class="dist-label">${t.name} <span style="color:var(--dim)">(${t.expected})</span></div>
+        <div class="dist-bar-wrap"><div class="dist-bar" style="width:${pct}%;background:var(--green)"></div></div>
+        <div class="dist-pct">${pct.toFixed(1)}%</div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  // BURNIE paths
+  const burnieTotal = state.burniePathCounts.high + state.burniePathCounts.low;
+  if (burnieTotal > 0) {
+    html += '<div style="margin-bottom:20px">';
+    html += '<div style="font-size:0.8em;color:var(--dim);margin-bottom:12px">BURNIE VARIANCE PATHS</div>';
+    const lowPct = (state.burniePathCounts.low / burnieTotal * 100);
+    const highPct = (state.burniePathCounts.high / burnieTotal * 100);
+    html += `<div class="dist-row">
+      <div class="dist-label">Low 42-95% <span style="color:var(--dim)">(80%)</span></div>
+      <div class="dist-bar-wrap"><div class="dist-bar" style="width:${lowPct}%;background:var(--accent)"></div></div>
+      <div class="dist-pct">${lowPct.toFixed(1)}%</div>
+    </div>`;
+    html += `<div class="dist-row">
+      <div class="dist-label">High 267-432% <span style="color:var(--dim)">(20%)</span></div>
+      <div class="dist-bar-wrap"><div class="dist-bar" style="width:${highPct}%;background:var(--red)"></div></div>
+      <div class="dist-pct">${highPct.toFixed(1)}%</div>
+    </div>`;
+    html += '</div>';
+  }
+
+  // Boon categories
+  const boonTotal = Object.values(state.boonCatCounts).reduce((s,v)=>s+v,0);
+  if (boonTotal > 0) {
+    html += '<div>';
+    html += '<div style="font-size:0.8em;color:var(--dim);margin-bottom:12px">BOON CATEGORIES</div>';
+    const sorted = Object.entries(state.boonCatCounts).sort((a,b) => b[1] - a[1]);
+    for (const [cat, count] of sorted) {
+      const pct = (count / boonTotal * 100);
+      html += `<div class="dist-row">
+        <div class="dist-label">${cat}</div>
+        <div class="dist-bar-wrap"><div class="dist-bar" style="width:${pct}%;background:var(--pink)"></div></div>
+        <div class="dist-pct">${pct.toFixed(1)}%</div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function updateEv() {
+  const el = document.getElementById('evAnalysis');
+  if (state.totalBoxes === 0) {
+    el.innerHTML = '<div style="color:var(--dim);text-align:center">Open some lootboxes to see EV analysis</div>';
+    return;
+  }
+  const activityPct = parseFloat(document.getElementById('activity').value);
+  const evMult = evMultiplierBps(activityPct);
+  const totalRewardValue = state.totalTicketEthValue + state.totalBurnieEthValue;
+  const actualEv = state.totalSpent > 0 ? (totalRewardValue / state.totalSpent * 100) : 0;
+  const avgTicketsPerBox = state.totalTickets / state.totalBoxes;
+  const avgBurniePerBox = state.totalBurnie / state.totalBoxes;
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">EV Multiplier</div>
+        <div style="font-size:1.3em;font-weight:bold;color:${evMult >= 10000 ? 'var(--green)' : 'var(--red)'}">${(evMult/100).toFixed(1)}%</div>
+      </div>
+      <div>
+        <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">Ticket+BURNIE Return Rate</div>
+        <div style="font-size:1.3em;font-weight:bold;color:${actualEv >= 100 ? 'var(--green)' : 'var(--red)'}">${actualEv.toFixed(1)}%</div>
+      </div>
+      <div>
+        <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">Avg Tickets/Box</div>
+        <div style="font-size:1.3em;font-weight:bold;color:var(--green)">${avgTicketsPerBox.toFixed(2)}</div>
+      </div>
+      <div>
+        <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">Avg BURNIE/Box</div>
+        <div style="font-size:1.3em;font-weight:bold;color:var(--accent)">${fmt(avgBurniePerBox)}</div>
+      </div>
+      <div>
+        <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">Total Ticket ETH Value</div>
+        <div style="font-size:1.3em;font-weight:bold">${fmt(state.totalTicketEthValue, 4)} ETH</div>
+      </div>
+      <div>
+        <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">Total BURNIE ETH Value</div>
+        <div style="font-size:1.3em;font-weight:bold">${fmt(state.totalBurnieEthValue, 4)} ETH</div>
+      </div>
+    </div>
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);color:var(--dim);font-size:0.8em">
+      Note: Ticket value = tickets x level price. BURNIE value = BURNIE x price setting.
+      DGNRS and WWXRP not included in ETH value calc. Boon value not tracked (too context-dependent).
+      The contract also has a 10 ETH/level EV benefit cap not modeled here.
+    </div>
+  `;
+}
+
+function addResultCard(r) {
+  const feed = document.getElementById('results');
+  const card = document.createElement('div');
+  card.className = 'result-card';
+
+  if (r.type === 'tickets') {
+    const isJackpot = r.varianceBps >= 46000;
+    card.className += isJackpot ? ' jackpot' : ' tickets';
+    card.innerHTML = `
+      <div class="result-icon">${isJackpot ? '&#x1f4a5;' : '&#x1f3ab;'}</div>
+      <div class="result-body">
+        <div class="result-type">Tickets &mdash; ${r.tier}</div>
+        <div class="result-main highlight-green">${fmt(r.tickets)} tickets @ level ${r.targetLevel}</div>
+        <div class="result-detail">14% budget x ${(r.varianceBps/10000).toFixed(3)}x variance</div>
+      </div>
+      <div class="result-value"><span class="eth">${fmt(r.ethValue, 4)} ETH</span><br>value</div>
+    `;
+  } else if (r.type === 'burnie') {
+    const isHigh = r.path === 'high';
+    card.className += isHigh ? ' jackpot' : ' burnie';
+    card.innerHTML = `
+      <div class="result-icon">${isHigh ? '&#x1f525;' : '&#x1fa99;'}</div>
+      <div class="result-body">
+        <div class="result-type">BURNIE &mdash; ${isHigh ? 'HIGH PATH' : 'Low Path'} (${(r.bps/100).toFixed(1)}%)</div>
+        <div class="result-main highlight-accent">${fmt(r.total)} BURNIE${r.bonus > 0 ? ` (+${fmt(r.bonus)} presale)` : ''}</div>
+        <div class="result-detail">${(r.bps/100).toFixed(1)}% of ${fmt(r.rollAmount, 4)} ETH roll</div>
+      </div>
+      <div class="result-value"><span class="eth">${fmt(r.ethValue, 4)} ETH</span><br>value</div>
+    `;
+  } else if (r.type === 'dgnrs') {
+    card.className += ' dgnrs';
+    const poolPct = r.poolSize > 0 ? (r.amount / r.poolSize * 100).toFixed(4) : '?';
+    card.innerHTML = `
+      <div class="result-icon">&#x1f48e;</div>
+      <div class="result-body">
+        <div class="result-type">DGNRS Token &mdash; ${r.tier} Tier</div>
+        <div class="result-main highlight-purple">${fmt(r.amount, 4)} DGNRS</div>
+        <div class="result-detail">${r.ppm} ppm of pool from ${fmt(r.rollAmount, 4)} ETH</div>
+      </div>
+      <div class="result-value"><span class="eth">${poolPct}%</span><br>of pool</div>
+    `;
+  } else if (r.type === 'wwxrp') {
+    card.className += ' wwxrp';
+    card.innerHTML = `
+      <div class="result-icon">&#x1f30a;</div>
+      <div class="result-body">
+        <div class="result-type">WWXRP Prize Token</div>
+        <div class="result-main highlight-blue">1 WWXRP</div>
+        <div class="result-detail">Fixed 1 token per hit</div>
+      </div>
+      <div class="result-value"></div>
+    `;
+  } else if (r.type === 'boon') {
+    card.className += ' boon';
+    const isPass = r.boon.cat === 'WhalePass' || r.boon.cat === 'LazyPass';
+    card.innerHTML = `
+      <div class="result-icon">${isPass ? '&#x1f451;' : '&#x2728;'}</div>
+      <div class="result-body">
+        <div class="result-type">Boon &mdash; ${r.boon.cat}</div>
+        <div class="result-main highlight-pink">${r.boon.name}</div>
+        <div class="result-detail">Weight ${r.boon.weight}/${BOON_TYPES.reduce((s,b)=>s+b.weight,0)}</div>
+      </div>
+      <div class="result-value"></div>
+    `;
+  }
+
+  feed.prepend(card);
+
+  // Keep feed manageable
+  while (feed.children.length > 200) {
+    feed.removeChild(feed.lastChild);
+  }
+}
+
+// ========== Main Actions ==========
+function getParams() {
+  return {
+    amount: parseFloat(document.getElementById('amountInput').value) || 0.1,
+    level: 0,
+    activity: parseFloat(document.getElementById('activityInput').value) || 60,
+    presale: document.getElementById('presale').checked,
+    burniePrice: priceForLevel(0),
+  };
+}
+
+function openOne(showCard) {
+  const p = getParams();
+  if (p.amount < 0.01) return;
+
+  const results = resolveLootbox(p.amount, p.level, p.activity, p.presale, p.burniePrice);
+  state.totalSpent += p.amount;
+  state.totalBoxes += 1;
+
+  for (const r of results) {
+    if (r.type === 'tickets') {
+      state.totalTickets += r.tickets;
+      state.totalTicketEthValue += r.ethValue;
+      state.rewardCounts.tickets++;
+      state.ticketTierCounts[r.tier] = (state.ticketTierCounts[r.tier] || 0) + 1;
+      state.ticketsByLevel[r.targetLevel] = (state.ticketsByLevel[r.targetLevel] || 0) + r.tickets;
+    } else if (r.type === 'burnie') {
+      state.totalBurnie += r.total;
+      state.totalBurnieEthValue += r.ethValue;
+      state.rewardCounts.burnie++;
+      state.burniePathCounts[r.path]++;
+    } else if (r.type === 'dgnrs') {
+      state.totalDgnrsHits++;
+      state.totalDgnrsAmount += r.amount;
+      state.rewardCounts.dgnrs++;
+    } else if (r.type === 'wwxrp') {
+      state.totalWwxrp += 1;
+      state.rewardCounts.wwxrp++;
+    } else if (r.type === 'boon') {
+      state.totalBoons++;
+      state.boonCatCounts[r.boon.cat] = (state.boonCatCounts[r.boon.cat] || 0) + 1;
+    }
+    if (showCard) addResultCard(r);
+  }
+  if (showCard) {
+    const feed = document.getElementById('results');
+    const div = document.createElement('div');
+    div.className = 'box-divider';
+    div.innerHTML = `<span>BOX #${state.totalBoxes} &mdash; ${p.amount} ETH</span>`;
+    feed.prepend(div);
+  }
+}
+
+function buyOne() {
+  openOne(true);
+  updateStats();
+}
+
+function buyBatch(count) {
+  const showCards = count <= 10;
+  for (let i = 0; i < count; i++) {
+    openOne(showCards);
+  }
+  if (!showCards) {
+    // Show summary card
+    const feed = document.getElementById('results');
+    const card = document.createElement('div');
+    card.className = 'result-card';
+    card.style.borderLeft = '3px solid var(--dim)';
+    card.innerHTML = `
+      <div class="result-icon" style="font-size:1.2em">&#x1f4e6;</div>
+      <div class="result-body">
+        <div class="result-type">Batch Complete</div>
+        <div class="result-main">${count} lootboxes opened</div>
+        <div class="result-detail">Check Distribution and EV tabs for analysis</div>
+      </div>
+      <div class="result-value"></div>
+    `;
+    feed.prepend(card);
+  }
+  updateStats();
+}
+
+function resetAll() {
+  state = {
+    totalSpent: 0, totalBoxes: 0, totalTickets: 0, totalBurnie: 0,
+    totalDgnrsHits: 0, totalDgnrsAmount: 0, totalWwxrp: 0, totalBoons: 0,
+    totalBurnieEthValue: 0, totalTicketEthValue: 0,
+    rewardCounts: { tickets: 0, burnie: 0, dgnrs: 0, wwxrp: 0 },
+    ticketTierCounts: { 'JACKPOT 4.6x': 0, 'Great 2.3x': 0, 'Good 1.1x': 0, 'Normal 0.65x': 0, 'Low 0.45x': 0 },
+    burniePathCounts: { high: 0, low: 0 },
+    boonCatCounts: {},
+  };
+  document.getElementById('results').innerHTML = '';
+  seedRng();
+  updateStats();
+}
+
+function clearFeed() {
+  document.getElementById('results').innerHTML = '';
+}
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// Bidirectional slider <-> input sync
+const amtSlider = document.getElementById('amount');
+const amtInput = document.getElementById('amountInput');
+const actSlider = document.getElementById('activity');
+const actInput = document.getElementById('activityInput');
+amtSlider.addEventListener('input', () => { amtInput.value = amtSlider.value; });
+amtInput.addEventListener('input', () => {
+  const v = parseFloat(amtInput.value);
+  if (!isNaN(v) && v >= 0.01) amtSlider.value = Math.min(v, 10);
+});
+
+actSlider.addEventListener('input', () => { actInput.value = actSlider.value; });
+actInput.addEventListener('input', () => {
+  const v = parseFloat(actInput.value);
+  if (!isNaN(v) && v >= 0) actSlider.value = Math.min(v, 305);
+});
+
+// Discord auth check
+(async function checkDiscord() {
+  try {
+    const res = await fetch('https://api.degener.us/auth/discord/status', { credentials: 'include' });
+    const data = await res.json();
+    if (data?.user) {
+      const btn = document.getElementById('discord-btn');
+      const txt = document.getElementById('discord-text');
+      txt.textContent = data.user.discord_name || data.user.username || 'Connected';
+      btn.style.background = 'var(--bg3)';
+      btn.style.color = 'var(--green)';
+      btn.style.border = '1px solid var(--green)';
+      btn.removeAttribute('href');
+      btn.style.cursor = 'default';
+    }
+  } catch {}
+})();
+
+// Init
+updateStats();
+</script>
+</body>
+</html>
