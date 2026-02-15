@@ -24,3 +24,12 @@
 
 /lootbox/index.html
   Cache-Control: no-store
+
+/whitepaper
+  Cache-Control: no-store
+
+/whitepaper/
+  Cache-Control: no-store
+
+/whitepaper/index.html
+  Cache-Control: no-store

@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Degenerus - Why the Economics Work</title>
+  <meta name="description" content="Three products. One flywheel. Zero rake. How Degenerus aligns incentives so every participant's self-interest feeds the others." />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+    :root {
+      --bg-primary: #0f0f1a;
+      --bg-secondary: #1a1a2e;
+      --bg-tertiary: #252542;
+      --text-primary: #ffffff;
+      --text-secondary: #a0a0c0;
+      --text-dim: #6b6b8d;
+      --accent-primary: #8b5cf6;
+      --accent-secondary: #06b6d4;
+      --success: #22c55e;
+      --error: #ef4444;
+      --warning: #eab308;
+      --border-color: #3a3a5c;
+      --border-subtle: #2a2a44;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.65;
+      min-height: 100vh;
+    }
+
+    /* ---- Layout ---- */
+    .page {
+      max-width: 740px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    /* ---- Header ---- */
+    .hero {
+      text-align: center;
+      padding: 1.5rem 0 1.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 2rem;
+    }
+
+    .hero-logo {
+      width: 52px;
+      height: 52px;
+      margin-bottom: 0.75rem;
+      filter: drop-shadow(0 0 20px rgba(139, 92, 246, 0.3));
+    }
+
+    .hero h1 {
+      font-size: clamp(1.6rem, 5vw, 2.2rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+      line-height: 1.15;
+    }
+
+    .hero-sub {
+      font-size: clamp(0.9rem, 2.5vw, 1.05rem);
+      color: var(--text-secondary);
+      max-width: 520px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    /* ---- Sections ---- */
+    section {
+      margin-bottom: 3rem;
+      padding-bottom: 3rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    section:last-of-type {
+      border-bottom: none;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0;
+    }
+
+    h2 {
+      font-size: clamp(1.2rem, 3.5vw, 1.5rem);
+      font-weight: 700;
+      margin-bottom: 1rem;
+      letter-spacing: -0.01em;
+    }
+
+    p {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    em { font-style: italic; }
+
+    a {
+      color: var(--accent-secondary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.15s;
+    }
+
+    a:hover {
+      border-bottom-color: var(--accent-secondary);
+    }
+
+    /* ---- Product Cards ---- */
+    .product-showcase {
+      margin: 1.5rem 0 2rem;
+    }
+
+    .product-cards {
+      display: grid;
+      gap: 0.75rem;
+      margin: 1.25rem 0;
+    }
+
+    .product-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .product-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, transparent 0%, transparent 85%, rgba(139, 92, 246, 0.03) 100%);
+      pointer-events: none;
+    }
+
+    .product-card h3 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-bottom: 0.35rem;
+      color: var(--text-primary);
+    }
+
+    .product-card p {
+      font-size: 0.88rem;
+      margin-bottom: 0;
+      line-height: 1.55;
+    }
+
+    .product-card.lottery {
+      border-left: 3px solid var(--error);
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.03) 0%, var(--bg-secondary) 50%);
+    }
+
+    .product-card.affiliate {
+      border-left: 3px solid var(--warning);
+      background: linear-gradient(135deg, rgba(234, 179, 8, 0.03) 0%, var(--bg-secondary) 50%);
+    }
+
+    .product-card.lp {
+      border-left: 3px solid var(--success);
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.03) 0%, var(--bg-secondary) 50%);
+    }
+
+    .product-hero {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.5rem 1.5rem 1.25rem;
+      margin-bottom: 1rem;
+      position: relative;
+      overflow: hidden;
+      border-left: 3px solid var(--error);
+    }
+
+    .product-hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, transparent 40%);
+      pointer-events: none;
+    }
+
+    .product-hero h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text-primary);
+    }
+
+    .product-hero p {
+      font-size: 0.92rem;
+      margin-bottom: 0;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    .secondary-products {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .economy-callout {
+      background: rgba(139, 92, 246, 0.06);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .economy-callout p {
+      font-size: 0.9rem;
+      line-height: 1.65;
+      margin-bottom: 0.85rem;
+    }
+
+    .economy-callout p:last-child {
+      margin-bottom: 0;
+    }
+
+    @media (max-width: 600px) {
+      .secondary-products {
+        grid-template-columns: 1fr;
+      }
+
+      .product-hero {
+        padding: 1.25rem 1.25rem 1rem;
+      }
+    }
+
+    /* ---- Tables ---- */
+    .table-wrap {
+      overflow-x: auto;
+      margin: 1.25rem 0;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    th, td {
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    th {
+      color: var(--text-dim);
+      font-weight: 500;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+
+    td {
+      color: var(--text-secondary);
+    }
+
+    td strong {
+      color: var(--text-primary);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    /* ---- Blockquote ---- */
+    blockquote {
+      border-left: 3px solid var(--accent-primary);
+      padding: 0.9rem 1.2rem;
+      margin: 1.5rem 0;
+      background: rgba(139, 92, 246, 0.05);
+      border-radius: 0 8px 8px 0;
+    }
+
+    blockquote p {
+      color: var(--text-secondary);
+      font-size: 0.92rem;
+      font-style: italic;
+      margin-bottom: 0;
+    }
+
+    /* ---- Anti-stall list ---- */
+    .mechanism-list {
+      list-style: none;
+      display: grid;
+      gap: 0.6rem;
+      margin: 1.25rem 0;
+    }
+
+    .mechanism-list li {
+      padding: 0.7rem 1rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .mechanism-list li strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* ---- Doc links ---- */
+    .doc-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1.25rem;
+    }
+
+    .doc-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.4rem 0.85rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .doc-link:hover {
+      border-color: var(--accent-primary);
+      color: var(--text-primary);
+    }
+
+    .doc-link::after {
+      content: '\2192';
+      font-size: 0.85em;
+    }
+
+    /* ---- Closing ---- */
+    .closing {
+      text-align: center;
+      padding-top: 1rem;
+    }
+
+    .closing p {
+      font-size: 1.05rem;
+      color: var(--text-primary);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+
+    .closing .punchline {
+      font-size: 0.92rem;
+      color: var(--text-secondary);
+      font-weight: 400;
+      margin-top: 0.5rem;
+    }
+
+    /* ---- Footer ---- */
+    footer {
+      text-align: center;
+      padding: 2rem 0 1rem;
+      margin-top: 2rem;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    footer a {
+      color: var(--text-dim);
+      font-size: 0.8rem;
+      border-bottom: none;
+    }
+
+    footer a:hover { color: var(--text-secondary); }
+
+    /* ---- Nav link back ---- */
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      text-decoration: none;
+      margin-bottom: 1rem;
+    }
+
+    .back-link:hover { color: var(--text-secondary); }
+    .back-link::before { content: '\2190'; }
+
+    /* ---- Example Ticket ---- */
+    .ticket-example {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin: 0.75rem 0 0;
+      flex-wrap: wrap;
+    }
+
+    .ticket-token {
+      width: 100px;
+      height: 100px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      position: relative;
+      background: #d9d9d9;
+      border: 3px solid #521da8;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .ticket-token::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 2px;
+      height: 100%;
+      background: #521da8;
+      transform: translateX(-50%);
+      z-index: 2;
+    }
+
+    .ticket-token::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: #521da8;
+      transform: translateY(-50%);
+      z-index: 2;
+    }
+
+    .ticket-token .tq {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1;
+      overflow: hidden;
+    }
+
+    .ticket-token .tq img {
+      width: 120%;
+      height: 120%;
+      object-fit: contain;
+    }
+
+    .ticket-token .tq:nth-child(1) img { transform: translate(-3%, -3%); }
+    .ticket-token .tq:nth-child(2) img { transform: translate(3%, -3%); }
+    .ticket-token .tq:nth-child(3) img { transform: translate(-3%, 3%); }
+    .ticket-token .tq:nth-child(4) img { transform: translate(3%, 3%); }
+
+    .ticket-token .ticket-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(45deg);
+      width: 30%;
+      height: 30%;
+      background: #fff;
+      border: 2px solid #521da8;
+      border-radius: 3px;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ticket-token .ticket-center img {
+      width: 95%;
+      height: 95%;
+      transform: rotate(-45deg);
+      object-fit: contain;
+    }
+
+    /* ---- Responsive ---- */
+    @media (max-width: 520px) {
+      .page { padding: 1.25rem 1rem 3rem; }
+      .hero { padding: 1.25rem 0 1rem; }
+      .hero-logo { width: 40px; height: 40px; }
+      table { font-size: 0.78rem; }
+      th, td { padding: 0.5rem 0.55rem; }
+      .mechanism-list li { font-size: 0.82rem; padding: 0.6rem 0.85rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+  <a href="/degenerette/" class="back-link">Degenerette Demo</a>
+
+  <header class="hero">
+    <img src="flame-logo.svg" alt="Degenerus" class="hero-logo" />
+    <h1>Degenerus Protocol</h1>
+    <p class="hero-sub">A lottery game where the house takes nothing. The more you play, the better your odds. Earn from every player you bring in, forever. Invest in the game's future and profit as it grows.</p>
+  </header>
+
+  <!-- Section 0: What is this -->
+  <section>
+    <h2>What Is Degenerus?</h2>
+
+    <div class="product-showcase">
+      <!-- Hero: Lottery -->
+      <div class="product-hero">
+        <h3>A Lottery</h3>
+        <p>A verifiably fair lottery that returns more than 100% of buyins to participants. Buy tickets to increase your odds of winning the nightly drawings. There's no house edge and the jackpots continuously increase.</p>
+        <div class="ticket-example">
+          <div class="ticket-token">
+            <div class="tq"><img src="badge-tl.svg" alt="Bitcoin Orange" /></div>
+            <div class="tq"><img src="badge-tr.svg" alt="Leo Purple" /></div>
+            <div class="tq"><img src="badge-bl.svg" alt="Heart Red" /></div>
+            <div class="tq"><img src="badge-br.svg" alt="Dice 3 Green" /></div>
+            <div class="ticket-center"><img src="flame-center.svg" alt="" /></div>
+          </div>
+          <div class="ticket-token">
+            <div class="tq"><img src="badge-t2-tl.svg" alt="Ethereum Blue" /></div>
+            <div class="tq"><img src="badge-t2-tr.svg" alt="Aries Pink" /></div>
+            <div class="tq"><img src="badge-t2-bl.svg" alt="Club Gold" /></div>
+            <div class="tq"><img src="badge-t2-br.svg" alt="Dice 6 Silver" /></div>
+            <div class="ticket-center"><img src="flame-center.svg" alt="" /></div>
+          </div>
+          <div class="ticket-token">
+            <div class="tq"><img src="badge-t3-tl.svg" alt="Solana Green" /></div>
+            <div class="tq"><img src="badge-t3-tr.svg" alt="Cancer Red" /></div>
+            <div class="tq"><img src="badge-t3-bl.svg" alt="Diamond Purple" /></div>
+            <div class="tq"><img src="badge-t3-br.svg" alt="Dice 1 Orange" /></div>
+            <div class="ticket-center"><img src="flame-center.svg" alt="" /></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Secondary Products: Side by Side -->
+      <div class="secondary-products">
+        <div class="product-card affiliate">
+          <h3>An Affiliate Marketing System</h3>
+          <p>Affiliates earn commissions proportional to the ETH their referrals deposit, in perpetuity, three tiers deep. As long as your referrals keep playing, you keep earning.</p>
+        </div>
+        <div class="product-card lp">
+          <h3>An Investment for Degenerates</h3>
+          <p>Collectively play the role of the "house", while still individually experiencing the thrill and risks of gambling. Returns are proportional to the speed of the game and length of investment (but primarily determined by LUCK). The variance is intentional; it's what keeps yield farming nits out and reserves the profits for investors who enjoy gambling.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <p>Degenerus Protocol creates value by bringing two types of gamblers together. Lottery players want a shot at tomorrow's big jackpot and accept the vig. Degen investors want to gamble with a positive expectation over a longer time period and are willing to provide capital. Affiliates drive deposits from both sides and earn a share. The largest edges go to players who work all three angles.</p>
+    <p>The game advances cyclically through levels, with drawings that pay out ticket holders every night. Once the prize pool surpasses the previous level, the Luckbox Jackpots are unlocked, unleashing five days of massive prizes, and restarting the cycle with a higher target.</p>
+  </section>
+
+  <!-- Section 1: Core Thesis -->
+  <section>
+    <h2>Profit Is Gated by Contribution</h2>
+    <p>You cannot reliably extract value from Degenerus without first strengthening it. The only paths to profit are bringing in new players, supplying the game with liquidity, or getting lucky. Because this is a solo project with no insiders, everyone is subject to this constraint, equally.</p>
+    <p>Affiliates only earn when they bring in players who spend. Liquidity providers only profit if the game keeps advancing. Gamblers only reach the next jackpot when the current level fills. Every role's individual rewards scale with the collective pace of level completion.</p>
+    <p>There is no move a player can make that drains the system. Anyone who leaves a winner already earned their returns. The future value they forfeit by quitting rather than reinvesting accrues to the players who stay. Every incentive points in the same, productive direction.</p>
+  </section>
+
+  <!-- Section 3: Zero Rake -->
+  <section>
+    <h2>Zero Rake. Actually, Negative Rake.</h2>
+    <p>Degenerus Protocol has no "house edge" because the role traditionally played by the house is available to anyone willing to invest.</p>
+    <p>But it goes further. All pooled ETH is staked into Lido stETH, earning ~2.5% APR. The staking yield doesn't just go to the protocol. Half of it flows back into the prize pools. Free external yield flows into the pools that pay players. Total payouts will eventually exceed total deposits. That's negative rake.</p>
+  </section>
+
+  <!-- Section: Security Model -->
+  <section>
+    <h2>Trustless by Design</h2>
+    <p>The code is law. All contract logic is open-source and immutably deployed on the Ethereum blockchain. Every drawing is determined by a cryptographically secure random number delivered by <a href="https://chain.link/vrf">Chainlink VRF</a>. Altering the rules of the game is absolutely impossible and the admin has no meaningful powers.</p>
+    <p>Ensuring that every aspect of Degenerus Protocol is 100% fair, transparent and trustless is my top priority.</p>
+  </section>
+
+  <!--
+  <!-- Section 4: Variance Filter -->
+  <section>
+    <h2>Variance Filters Out Mercenary Capital</h2>
+    <p>Every DeFi yield protocol faces the same death spiral: launch with attractive APR, mercenary capital floods in, returns compress to near-zero, capital leaves, TVL collapses.</p>
+    <p>Degenerus LP returns come as <strong>lottery tickets</strong>, not stablecoins. A lootbox at 135% EV doesn't pay you 1.35 ETH per ETH deposited. It gives you 1.35 ETH worth of tickets at a future level, subject to jackpot variance. You might win 10x. You might win nothing. The expected value is positive, but any given period could go either way.</p>
+    <p>Those tickets are also illiquid. They can't be sold, transferred, or converted to ETH. They sit on-chain, inert, until the game reaches their target level. If the game stalls at level 40 and your tickets are at level 55, your position is worth zero until 15 more levels complete. Every LP is a hostage to the game's continued success. That makes every LP an active participant in ensuring it.</p>
+    <p>The variance scares off capital that needs predictable cash flows. The illiquidity scares off capital that needs an exit. What's left is committed players who enjoy the game and will push it forward to unlock their own value. Fewer LPs competing means higher returns for each one.</p>
+
+    <div class="doc-links">
+      <a href="/docs/ACTIVITY_AND_LOYALTY.md" class="doc-link">How activity scoring works</a>
+    </div>
+  </section>
+
+  <!-- Section 5: BURNIE -->
+  <section>
+    <h2>BURNIE: A Token That Has to Appreciate</h2>
+    <p>BURNIE is the protocol's utility token. 1,000 BURNIE always mints one ticket, regardless of level. But the ETH price of a ticket rises on a fixed schedule within each 100-level cycle.</p>
+    <p>That makes game progression a built-in price ratchet. As levels advance, BURNIE's ETH floor rises with the ticket price. At level 50, 1,000 BURNIE is worth more ETH than at level 5. The price resets when the cycle rolls over at level 100, then ratchets up again.</p>
+  </section>
+
+  <!-- Section 7: Game Keeps Moving -->
+  <section>
+    <h2>Why the Game Keeps Moving</h2>
+    <p>A +EV player's time-adjusted returns depend on how fast the game progresses. Lootbox and pass purchases grant tickets at future levels. Those tickets enter daily jackpot draws immediately, but their full value unlocks only when the game reaches their level. Faster progression means faster payouts. Every +EV player is individually incentivized to push the game forward as fast as possible.</p>
+    <p>Meanwhile, the ETH from those purchases enters prize pools <em>now</em>. Someone sitting on a large position of unrealized future tickets will happily spend a fraction of that value on current-level purchases to help meet the pool target. Faster progression means their future tickets pay out sooner. A single committed player can fund a level alone.</p>
+    <p>It compounds. Each completed level creates <em>more</em> future ticket holders from lootbox rewards, early bird jackpots, and auto-reinvest. The number of stakeholders in future levels grows monotonically. Level 50 has more people pushing for it than level 5.</p>
+    <p>For the game to permanently stall, every future ticket holder would have to simultaneously decide to abandon real money. All of them. At once. Each making the individually irrational decision to walk away from locked value.</p>
+    <p>Even then, mechanical safeguards keep the game alive:</p>
+
+    <ul class="mechanism-list">
+      <li><strong>Reserve drip:</strong> 20% of future reserves auto-transfer to the active pool each level. The game self-fills even with zero new purchases.</li>
+      <li><strong>Quest streak pressure:</strong> Missing a day resets weeks of activity score. Daily participation is the rational default.</li>
+      <li><strong>Auto-reinvest:</strong> Jackpot winnings auto-convert to future tickets at a 45% bonus. The vault and DGNRS contract do this every level forever, generating 16 tickets per level with no manual action.</li>
+      <li><strong>Purchase-phase rewards:</strong> Every 3 days, 1% of reserves are distributed as tickets and ETH. The game doesn't sit idle during long purchase phases.</li>
+      <li><strong>Degenerette:</strong> The on-chain roulette funnels value back into future tickets rather than letting it leave the system.</li>
+    </ul>
+
+    <p>If participation ever truly collapses, a 365-day liveness timeout triggers clean fund distribution. No zombie state. No locked funds. The game either progresses or it terminates honestly.</p>
+
+    <div class="doc-links">
+      <a href="/docs/MONEY_FLOW.md" class="doc-link">Full money flow</a>
+      <a href="/docs/PURCHASE_ECONOMICS.md" class="doc-link">LP economics</a>
+      <a href="/docs/ACTIVITY_AND_LOYALTY.md" class="doc-link">Activity scoring</a>
+    </div>
+  </section>
+
+  <!-- Closing -->
+  <section class="closing">
+    <p>Every participant acts in self-interest, and the aggregate effect is a flywheel that accelerates with scale. No coordination required. No trust required.</p>
+    <p class="punchline">It's a gambling protocol that's honest about being a gambling protocol. That honesty is what makes the economics work.</p>
+  </section>
+  -->
+
+  <footer>
+    <a href="/degenerette/">Play the Degenerette Demo</a>
+  </footer>
+</div>
+
+</body>
+</html>
