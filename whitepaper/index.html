@@ -21,39 +21,39 @@
       padding: clamp(0.5rem, 2vw, 1rem);
     }
 
-    .hero {
+    .page-header {
       text-align: center;
-      padding: clamp(1.25rem, 3vw, 2rem);
+      padding: clamp(1rem, 3vw, 1.5rem);
       border: 1px solid var(--border-color);
       border-radius: 12px;
       background: var(--bg-secondary);
-      margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+      margin-bottom: 1.5rem;
     }
 
-    .hero-logo {
+    .page-header-logo {
       width: 52px;
       height: 52px;
-      margin-bottom: 0.75rem;
+      margin-bottom: 0.65rem;
       filter: drop-shadow(0 0 20px rgba(245, 166, 35, 0.35));
     }
 
-    .hero h1 {
+    .page-header h1 {
       text-align: center;
       font-size: clamp(1.4rem, 4vw, 1.9rem);
       color: var(--accent-primary);
-      margin-bottom: 0.65rem;
+      margin-bottom: 0.5rem;
       font-weight: 800;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       line-height: 1;
     }
 
-    .hero-sub {
+    .page-header .subtitle {
       font-size: 0.9rem;
       color: var(--text-secondary);
-      max-width: 760px;
+      max-width: 620px;
       margin: 0 auto;
-      line-height: 1.55;
+      line-height: 1.5;
     }
 
     section {
@@ -69,11 +69,30 @@
     }
 
     h2 {
-      font-size: 1rem;
-      color: var(--text-secondary);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      font-size: clamp(1.15rem, 2.8vw, 1.55rem);
+      color: var(--text-primary);
       text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 1rem;
+      letter-spacing: 0.07em;
+      font-weight: 800;
+      margin-bottom: 1.1rem;
+      padding: 0.45rem 0.9rem;
+      border-radius: 8px;
+      border: 1px solid rgba(245, 166, 35, 0.35);
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.18) 0%, rgba(245, 166, 35, 0.06) 45%, transparent 100%);
+      box-shadow: inset 0 0 0 1px rgba(245, 166, 35, 0.08);
+    }
+
+    h2::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent-primary);
+      box-shadow: 0 0 12px rgba(245, 166, 35, 0.65);
+      flex-shrink: 0;
     }
 
     p {
@@ -455,8 +474,14 @@
 
     @media (max-width: 520px) {
       .page { padding: 0.55rem; }
-      .hero { padding: 1.1rem 0.9rem; }
-      .hero-logo { width: 40px; height: 40px; }
+      .page-header { padding: 1rem 0.85rem; }
+      .page-header-logo { width: 40px; height: 40px; }
+      h2 {
+        width: 100%;
+        justify-content: center;
+        font-size: 1.03rem;
+        padding: 0.45rem 0.7rem;
+      }
       table { font-size: 0.78rem; }
       th, td { padding: 0.5rem 0.55rem; }
       .mechanism-list li { font-size: 0.82rem; padding: 0.6rem 0.85rem; }
@@ -466,10 +491,10 @@
 <body>
 
 <div class="page">
-  <header class="hero">
-    <img src="flame-logo.svg" alt="Degenerus" class="hero-logo" />
-    <h1>Degenerus Protocol</h1>
-    <p class="hero-sub">A lottery game where the house takes nothing. The more you play, the better your odds. Earn from every player you bring in, forever. Invest in the game's future and profit as it grows.</p>
+  <header class="page-header">
+    <img src="flame-logo.svg" alt="Degenerus" class="page-header-logo" />
+    <h1>DEGENERUS WHITEPAPER</h1>
+    <p class="subtitle">A lottery game where the house takes nothing. The more you play, the better your odds. Earn from every player you bring in, forever. Invest in the game's future and profit as it grows.</p>
   </header>
 
   <!-- Section 0: What is this -->
@@ -480,7 +505,7 @@
       <!-- Hero: Lottery -->
       <div class="product-hero">
         <h3>A Lottery</h3>
-        <p>A verifiably fair lottery that returns more than 100% of buyins to participants. Buy tickets to increase your odds of winning the nightly drawings. There's no house edge and the jackpots continuously increase.</p>
+        <p>A verifiably fair lottery system designed to return more than 100% of buy-ins to participants over time. Buy tickets and lootboxes to increase your share of each nightly drawing. Major jackpots run once they exceed the previous cycle's deposits, ensuring that every level produces an even bigger winner.</p>
         <div class="ticket-example">
           <div class="ticket-token">
             <div class="tq"><img src="badge-tl.svg" alt="Bitcoin Orange" /></div>
