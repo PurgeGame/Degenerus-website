@@ -7,70 +7,79 @@
   <meta name="description" content="Three products. One flywheel. Zero rake. How Degenerus aligns incentives so every participant's self-interest feeds the others." />
   <link rel="stylesheet" href="/shared/nav.css">
   <style>
-    body { line-height: 1.65; }
-
-    /* ---- Layout ---- */
-    .page {
-      max-width: 740px;
-      margin: 0 auto;
-      padding: 2rem 1.5rem 4rem;
+    :root {
+      --accent-primary: #f5a623;
+      --accent-secondary: #ffc04d;
+      --ticket-grid: #7b4f16;
     }
 
-    /* ---- Header ---- */
+    body { line-height: 1.65; }
+
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: clamp(0.5rem, 2vw, 1rem);
+    }
+
     .hero {
       text-align: center;
-      padding: 1.5rem 0 1.5rem;
-      border-bottom: 1px solid var(--border-subtle);
-      margin-bottom: 2rem;
+      padding: clamp(1.25rem, 3vw, 2rem);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      background: var(--bg-secondary);
+      margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
     }
 
     .hero-logo {
       width: 52px;
       height: 52px;
       margin-bottom: 0.75rem;
-      filter: drop-shadow(0 0 20px rgba(139, 92, 246, 0.3));
+      filter: drop-shadow(0 0 20px rgba(245, 166, 35, 0.35));
     }
 
     .hero h1 {
-      font-size: clamp(1.6rem, 5vw, 2.2rem);
+      text-align: center;
+      font-size: clamp(1.4rem, 4vw, 1.9rem);
+      color: var(--accent-primary);
+      margin-bottom: 0.65rem;
       font-weight: 800;
-      letter-spacing: -0.02em;
-      margin-bottom: 0.5rem;
-      line-height: 1.15;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      line-height: 1;
     }
 
     .hero-sub {
-      font-size: clamp(0.9rem, 2.5vw, 1.05rem);
+      font-size: 0.9rem;
       color: var(--text-secondary);
-      max-width: 520px;
+      max-width: 760px;
       margin: 0 auto;
-      line-height: 1.5;
+      line-height: 1.55;
     }
 
-    /* ---- Sections ---- */
     section {
-      margin-bottom: 3rem;
-      padding-bottom: 3rem;
-      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+      padding: clamp(1rem, 3vw, 1.5rem);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
     }
 
     section:last-of-type {
-      border-bottom: none;
-      margin-bottom: 1.5rem;
-      padding-bottom: 0;
+      margin-bottom: 0;
     }
 
     h2 {
-      font-size: clamp(1.2rem, 3.5vw, 1.5rem);
-      font-weight: 700;
+      font-size: 1rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
       margin-bottom: 1rem;
-      letter-spacing: -0.01em;
     }
 
     p {
       color: var(--text-secondary);
       margin-bottom: 1rem;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
     }
 
     p:last-child { margin-bottom: 0; }
@@ -83,29 +92,29 @@
     em { font-style: italic; }
 
     a {
-      color: var(--accent-secondary);
+      color: var(--accent-primary);
       text-decoration: none;
       border-bottom: 1px solid transparent;
-      transition: border-color 0.15s;
+      transition: border-color 0.15s, color 0.15s;
     }
 
     a:hover {
-      border-bottom-color: var(--accent-secondary);
+      color: #ffd08f;
+      border-bottom-color: var(--accent-primary);
     }
 
-    /* ---- Product Cards ---- */
     .product-showcase {
-      margin: 1.5rem 0 2rem;
+      margin: 1.25rem 0 1.5rem;
     }
 
     .product-cards {
       display: grid;
       gap: 0.75rem;
-      margin: 1.25rem 0;
+      margin: 1rem 0;
     }
 
     .product-card {
-      background: var(--bg-secondary);
+      background: var(--bg-tertiary);
       border: 1px solid var(--border-color);
       border-radius: 10px;
       padding: 1rem 1.25rem;
@@ -120,7 +129,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: linear-gradient(135deg, transparent 0%, transparent 85%, rgba(139, 92, 246, 0.03) 100%);
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.08) 0%, transparent 50%);
       pointer-events: none;
     }
 
@@ -137,30 +146,19 @@
       line-height: 1.55;
     }
 
-    .product-card.lottery {
-      border-left: 3px solid var(--error);
-      background: linear-gradient(135deg, rgba(239, 68, 68, 0.03) 0%, var(--bg-secondary) 50%);
-    }
-
-    .product-card.affiliate {
-      border-left: 3px solid var(--warning);
-      background: linear-gradient(135deg, rgba(234, 179, 8, 0.03) 0%, var(--bg-secondary) 50%);
-    }
-
-    .product-card.lp {
-      border-left: 3px solid var(--success);
-      background: linear-gradient(135deg, rgba(34, 197, 94, 0.03) 0%, var(--bg-secondary) 50%);
-    }
+    .product-card.lottery { border-left: 3px solid var(--accent-primary); }
+    .product-card.affiliate { border-left: 3px solid var(--warning); }
+    .product-card.lp { border-left: 3px solid var(--success); }
 
     .product-hero {
-      background: var(--bg-secondary);
+      background: var(--bg-tertiary);
       border: 1px solid var(--border-color);
       border-radius: 12px;
       padding: 1.5rem 1.5rem 1.25rem;
-      margin-bottom: 1rem;
+      margin-bottom: 0.75rem;
       position: relative;
       overflow: hidden;
-      border-left: 3px solid var(--error);
+      border-left: 3px solid var(--accent-primary);
     }
 
     .product-hero::before {
@@ -170,7 +168,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, transparent 40%);
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.12) 0%, transparent 45%);
       pointer-events: none;
     }
 
@@ -192,15 +190,15 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 0.75rem;
-      margin-bottom: 1.5rem;
+      margin-bottom: 0.75rem;
     }
 
     .economy-callout {
-      background: rgba(139, 92, 246, 0.06);
-      border: 1px solid rgba(139, 92, 246, 0.2);
+      background: rgba(245, 166, 35, 0.08);
+      border: 1px solid rgba(245, 166, 35, 0.3);
       border-radius: 10px;
       padding: 1.25rem 1.5rem;
-      margin-top: 1.5rem;
+      margin-top: 1rem;
     }
 
     .economy-callout p {
@@ -213,17 +211,6 @@
       margin-bottom: 0;
     }
 
-    @media (max-width: 600px) {
-      .secondary-products {
-        grid-template-columns: 1fr;
-      }
-
-      .product-hero {
-        padding: 1.25rem 1.25rem 1rem;
-      }
-    }
-
-    /* ---- Tables ---- */
     .table-wrap {
       overflow-x: auto;
       margin: 1.25rem 0;
@@ -234,20 +221,24 @@
       width: 100%;
       border-collapse: collapse;
       font-size: 0.85rem;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--bg-tertiary);
     }
 
     th, td {
       padding: 0.6rem 0.75rem;
       text-align: left;
-      border-bottom: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-color);
     }
 
     th {
-      color: var(--text-dim);
-      font-weight: 500;
-      font-size: 0.75rem;
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 0.72rem;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.08em;
       white-space: nowrap;
     }
 
@@ -261,12 +252,11 @@
 
     tr:last-child td { border-bottom: none; }
 
-    /* ---- Blockquote ---- */
     blockquote {
       border-left: 3px solid var(--accent-primary);
       padding: 0.9rem 1.2rem;
-      margin: 1.5rem 0;
-      background: rgba(139, 92, 246, 0.05);
+      margin: 1.25rem 0;
+      background: rgba(245, 166, 35, 0.08);
       border-radius: 0 8px 8px 0;
     }
 
@@ -277,7 +267,6 @@
       margin-bottom: 0;
     }
 
-    /* ---- Anti-stall list ---- */
     .mechanism-list {
       list-style: none;
       display: grid;
@@ -287,7 +276,7 @@
 
     .mechanism-list li {
       padding: 0.7rem 1rem;
-      background: var(--bg-secondary);
+      background: var(--bg-tertiary);
       border: 1px solid var(--border-color);
       border-radius: 8px;
       font-size: 0.88rem;
@@ -300,7 +289,6 @@
       font-weight: 600;
     }
 
-    /* ---- Doc links ---- */
     .doc-links {
       display: flex;
       flex-wrap: wrap;
@@ -313,18 +301,21 @@
       align-items: center;
       gap: 0.3rem;
       padding: 0.4rem 0.85rem;
-      background: var(--bg-secondary);
+      background: var(--bg-tertiary);
       border: 1px solid var(--border-color);
       border-radius: 6px;
-      font-size: 0.78rem;
+      font-size: 0.76rem;
       color: var(--text-secondary);
       text-decoration: none;
-      transition: border-color 0.15s, color 0.15s;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: all 0.15s ease;
     }
 
     .doc-link:hover {
       border-color: var(--accent-primary);
       color: var(--text-primary);
+      transform: translateY(-1px);
     }
 
     .doc-link::after {
@@ -332,7 +323,6 @@
       font-size: 0.85em;
     }
 
-    /* ---- Closing ---- */
     .closing {
       text-align: center;
       padding-top: 1rem;
@@ -352,23 +342,21 @@
       margin-top: 0.5rem;
     }
 
-    /* ---- Footer ---- */
     footer {
       text-align: center;
-      padding: 2rem 0 1rem;
-      margin-top: 2rem;
-      border-top: 1px solid var(--border-subtle);
+      padding: 1.25rem 0 0.5rem;
+      margin-top: 1rem;
+      border-top: 1px solid var(--border-color);
     }
 
     footer a {
-      color: var(--text-dim);
+      color: var(--text-secondary);
       font-size: 0.8rem;
       border-bottom: none;
     }
 
-    footer a:hover { color: var(--text-secondary); }
+    footer a:hover { color: var(--text-primary); }
 
-    /* ---- Example Ticket ---- */
     .ticket-example {
       display: flex;
       justify-content: center;
@@ -384,7 +372,7 @@
       grid-template-columns: 1fr 1fr;
       position: relative;
       background: #d9d9d9;
-      border: 3px solid #521da8;
+      border: 3px solid var(--ticket-grid);
       border-radius: 16px;
       overflow: hidden;
     }
@@ -396,7 +384,7 @@
       left: 50%;
       width: 2px;
       height: 100%;
-      background: #521da8;
+      background: var(--ticket-grid);
       transform: translateX(-50%);
       z-index: 2;
     }
@@ -408,7 +396,7 @@
       left: 0;
       width: 100%;
       height: 2px;
-      background: #521da8;
+      background: var(--ticket-grid);
       transform: translateY(-50%);
       z-index: 2;
     }
@@ -440,7 +428,7 @@
       width: 30%;
       height: 30%;
       background: #fff;
-      border: 2px solid #521da8;
+      border: 2px solid var(--ticket-grid);
       border-radius: 3px;
       z-index: 5;
       display: flex;
@@ -455,10 +443,19 @@
       object-fit: contain;
     }
 
-    /* ---- Responsive ---- */
+    @media (max-width: 760px) {
+      .secondary-products {
+        grid-template-columns: 1fr;
+      }
+
+      .product-hero {
+        padding: 1.25rem 1.25rem 1rem;
+      }
+    }
+
     @media (max-width: 520px) {
-      .page { padding: 1.25rem 1rem 3rem; }
-      .hero { padding: 1.25rem 0 1rem; }
+      .page { padding: 0.55rem; }
+      .hero { padding: 1.1rem 0.9rem; }
       .hero-logo { width: 40px; height: 40px; }
       table { font-size: 0.78rem; }
       th, td { padding: 0.5rem 0.55rem; }

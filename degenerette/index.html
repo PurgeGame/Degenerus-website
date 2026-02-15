@@ -7,6 +7,67 @@
     <title>Degenerette Demo</title>
     <script type="module" crossorigin src="/degenerette/assets/index-fzigwBXR.js"></script>
     <link rel="stylesheet" crossorigin href="/degenerette/assets/index-i84xaYuE.css">
+    <style>
+      :root {
+        --accent-primary: #f5a623;
+        --accent-secondary: #ffc04d;
+      }
+
+      body {
+        background: linear-gradient(135deg, var(--bg-primary) 0%, #24130a 100%);
+      }
+
+      .app-title .nav-link:hover {
+        background: rgba(245, 166, 35, 0.15);
+        border-color: rgba(245, 166, 35, 0.35);
+      }
+
+      .app-title .nav-link.active {
+        color: var(--accent-primary);
+        background: rgba(245, 166, 35, 0.12);
+        border-color: rgba(245, 166, 35, 0.35);
+      }
+
+      .spin-button {
+        background: linear-gradient(135deg, var(--accent-primary), #ffc04d);
+        color: #0a0a0f;
+      }
+
+      .spin-button:hover {
+        box-shadow: 0 8px 20px rgba(245, 166, 35, 0.4);
+      }
+
+      .special-btn.selected {
+        box-shadow: 0 0 10px rgba(245, 166, 35, 0.4);
+      }
+
+      .symbol-btn:hover {
+        filter: drop-shadow(0 2px 6px rgba(245, 166, 35, 0.35));
+      }
+
+      .symbol-btn.selected {
+        filter: drop-shadow(0 0 8px rgba(245, 166, 35, 0.55));
+      }
+
+      .quick-selector button:hover {
+        box-shadow: 0 4px 10px rgba(245, 166, 35, 0.35);
+      }
+
+      .quick-selector .hero-toggle-btn {
+        background: rgba(245, 166, 35, 0.2);
+        border-color: rgba(245, 166, 35, 0.45);
+        color: #f6efe1;
+      }
+
+      .quick-selector .hero-toggle-btn:hover {
+        background: rgba(245, 166, 35, 0.35);
+        border-color: rgba(245, 166, 35, 0.65);
+      }
+
+      .gamepiece-result .gp-quadrant.q-hero .gamepiece-badge {
+        filter: drop-shadow(0 0 4px rgba(245, 166, 35, 0.55));
+      }
+    </style>
   </head>
   <body>
     <div id="app">
