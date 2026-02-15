@@ -18,19 +18,66 @@
       }
 
       .panel.top-bar {
-        padding: 0.45rem 0.6rem;
+        padding: clamp(1rem, 3vw, 1.5rem);
+        text-align: center;
+      }
+
+      .top-left {
+        display: none !important;
+      }
+
+      .top-metrics {
+        display: flex !important;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.65rem;
+      }
+
+      .app-title {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.35rem;
       }
 
       .app-title > span {
         color: var(--accent-primary);
-        font-size: clamp(1.1rem, 3vw, 1.5rem);
+        font-size: clamp(1.4rem, 4vw, 1.9rem);
+        font-weight: 800;
         letter-spacing: 0.08em;
         text-transform: uppercase;
         line-height: 1;
       }
 
+      .app-title .app-subtitle {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        line-height: 1.5;
+        max-width: 620px;
+      }
+
       .app-title .title-badge {
+        width: 52px;
+        height: 52px;
         filter: drop-shadow(0 0 18px rgba(245, 166, 35, 0.35));
+      }
+
+      .app-title .nav-links {
+        margin-left: 0;
+      }
+
+      .connect-group {
+        justify-self: auto;
+        align-items: center;
+      }
+
+      .connect-buttons {
+        justify-content: center;
+      }
+
+      .referral-row {
+        justify-content: center;
       }
 
       .app-title .nav-link:hover {
@@ -84,15 +131,72 @@
         filter: drop-shadow(0 0 4px rgba(245, 166, 35, 0.55));
       }
 
+      .balance-hud {
+        position: fixed;
+        right: max(1rem, env(safe-area-inset-right));
+        bottom: max(1rem, env(safe-area-inset-bottom));
+        z-index: 1200;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 0.55rem 0.8rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+      }
+
+      .balance-hud .metric-label {
+        margin: 0;
+        font-size: 0.65rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .balance-hud .metric-value {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--accent-primary);
+        line-height: 1;
+      }
+
       @media (max-width: 920px) {
         .app-title > span {
-          font-size: 0.95rem;
+          font-size: 1.2rem;
+        }
+
+        .app-title .app-subtitle {
+          font-size: 0.82rem;
         }
       }
 
       @media (max-width: 520px) {
+        .panel.top-bar {
+          padding: 1rem 0.85rem;
+        }
+
         .app-title > span {
-          font-size: 0.8rem;
+          font-size: 1rem;
+        }
+
+        .app-title .app-subtitle {
+          font-size: 0.75rem;
+        }
+
+        .app-title .title-badge {
+          width: 40px;
+          height: 40px;
+        }
+
+        .balance-hud {
+          right: 0.65rem;
+          bottom: 0.65rem;
+          padding: 0.5rem 0.7rem;
+        }
+
+        .balance-hud .metric-value {
+          font-size: 0.9rem;
         }
       }
     </style>
@@ -103,23 +207,10 @@
         <main class="main-column">
           <section class="panel top-bar">
             <div class="top-metrics">
-              <div class="top-left">
-                <div class="metric-group">
-                  <div class="metric">
-                    <span class="metric-label">Balance</span>
-                    <span class="metric-value metric-value-with-icon">
-                      <span id="currency-balance">0</span>
-                    </span>
-                  </div>
-                  <div class="metric">
-                    <span class="metric-label">Score</span>
-                    <span class="metric-value has-tooltip" id="activity-score">0%</span>
-                  </div>
-                </div>
-              </div>
               <div class="app-title">
                 <img class="title-badge" src="/degenerette/badges-circular/flame_red.svg" alt="Flame badge" />
                 <span>DEGENERETTE DEMO</span>
+                <p class="app-subtitle">Build your ticket. Spin the demo wheel. No wallet risk.</p>
                 <div class="nav-links">
                   <a href="/degenerette/" class="nav-link active">Degenerette</a>
                   <a href="/lootbox/" class="nav-link">Lootbox Sim</a>
@@ -289,6 +380,13 @@
       <footer>
         <p>Degenerette Simulator - Degenerus Protocol Preview</p>
       </footer>
+
+      <div class="balance-hud" aria-live="polite">
+        <span class="metric-label">Balance</span>
+        <span class="metric-value metric-value-with-icon">
+          <span id="currency-balance">0</span>
+        </span>
+      </div>
     </div>
   </body>
 </html>
