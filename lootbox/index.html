@@ -615,11 +615,11 @@ function rollDgnrsTier() {
 function rollBurnieBps() {
   const varianceRoll = rngRange(20);
   if (varianceRoll < 16) {
-    // Low path (80%): 42.5% - 95%
-    return { bps: 5050 + varianceRoll * 415, path: 'low' };
+    // Low path (80%): 58% - 130%
+    return { bps: 5808 + varianceRoll * 477, path: 'low' };
   }
-  // High path (20%): 267% - 432%
-  return { bps: 26700 + (varianceRoll - 16) * 8200, path: 'high' };
+  // High path (20%): 307% - 590%
+  return { bps: 30705 + (varianceRoll - 16) * 9430, path: 'high' };
 }
 
 // ========== Target Level Roll ==========
@@ -700,7 +700,7 @@ function resolveLootbox(amount, currentLevel, activityPct, presale, burniePrice)
 
     if (roll20 < 11) {
       // 55%: Tickets
-      const ticketBudget = rollAmt * 1.4; // 140% of roll amount (14,000 bps)
+      const ticketBudget = rollAmt * 1.61; // 161% of roll amount (16,100 bps)
       const varianceBps = rollTicketVarianceBps();
       const adjustedBudget = (ticketBudget * varianceBps) / 10000;
       const ticketsScaled = Math.floor((adjustedBudget / targetPrice) * 100);
@@ -886,12 +886,12 @@ function updateDistribution() {
     const lowPct = (state.burniePathCounts.low / burnieTotal * 100);
     const highPct = (state.burniePathCounts.high / burnieTotal * 100);
     html += `<div class="dist-row">
-      <div class="dist-label">Low 42-95% <span style="color:var(--dim)">(80%)</span></div>
+      <div class="dist-label">Low 58-130% <span style="color:var(--dim)">(80%)</span></div>
       <div class="dist-bar-wrap"><div class="dist-bar" style="width:${lowPct}%;background:var(--accent)"></div></div>
       <div class="dist-pct">${lowPct.toFixed(1)}%</div>
     </div>`;
     html += `<div class="dist-row">
-      <div class="dist-label">High 267-432% <span style="color:var(--dim)">(20%)</span></div>
+      <div class="dist-label">High 307-590% <span style="color:var(--dim)">(20%)</span></div>
       <div class="dist-bar-wrap"><div class="dist-bar" style="width:${highPct}%;background:var(--red)"></div></div>
       <div class="dist-pct">${highPct.toFixed(1)}%</div>
     </div>`;
@@ -979,7 +979,7 @@ function addResultCard(r) {
       <div class="result-body">
         <div class="result-type">Tickets &mdash; ${r.tier}</div>
         <div class="result-main highlight-green">${fmt(r.tickets)} tickets @ level ${r.targetLevel}</div>
-        <div class="result-detail">14% budget x ${(r.varianceBps/10000).toFixed(3)}x variance</div>
+        <div class="result-detail">161% budget x ${(r.varianceBps/10000).toFixed(3)}x variance</div>
       </div>
       <div class="result-value"><span class="eth">${fmt(r.ethValue, 4)} ETH</span><br>value</div>
     `;
