@@ -462,12 +462,12 @@
       </div>
       <input type="range" id="amount" min="0.01" max="10" step="0.01" value="0.1" class="slider">
       <div style="position:relative;height:14px;font-size:0.65em;color:var(--dim);margin-top:2px">
-        <span style="position:absolute;left:0;cursor:pointer" onclick="snapAmount(0.01)">0.01</span>
-        <span style="position:absolute;left:9.9%;transform:translateX(-50%);cursor:pointer" onclick="snapAmount(1)">1</span>
-        <span style="position:absolute;left:24.9%;transform:translateX(-50%);cursor:pointer" onclick="snapAmount(2.5)">2.5</span>
-        <span style="position:absolute;left:49.9%;transform:translateX(-50%);cursor:pointer" onclick="snapAmount(5)">5</span>
-        <span style="position:absolute;left:74.9%;transform:translateX(-50%);cursor:pointer" onclick="snapAmount(7.5)">7.5</span>
-        <span style="position:absolute;right:0;cursor:pointer" onclick="snapAmount(10)">10 ETH</span>
+        <span style="position:absolute;left:10px;cursor:pointer" onclick="snapAmount(0.01)">0.01</span>
+        <span style="position:absolute;left:calc(10px + (100% - 20px) * 0.099);transform:translateX(-50%);cursor:pointer" onclick="snapAmount(1)">1</span>
+        <span style="position:absolute;left:calc(10px + (100% - 20px) * 0.249);transform:translateX(-50%);cursor:pointer" onclick="snapAmount(2.5)">2.5</span>
+        <span style="position:absolute;left:calc(10px + (100% - 20px) * 0.5);transform:translateX(-50%);cursor:pointer" onclick="snapAmount(5)">5</span>
+        <span style="position:absolute;left:calc(10px + (100% - 20px) * 0.749);transform:translateX(-50%);cursor:pointer" onclick="snapAmount(7.5)">7.5</span>
+        <span style="position:absolute;right:10px;cursor:pointer" onclick="snapAmount(10)">10 ETH</span>
       </div>
     </div>
     <div class="control-group">
@@ -480,12 +480,12 @@
       </div>
       <input type="range" id="activity" min="0" max="305" step="5" value="60" class="slider">
       <div style="position:relative;height:28px;font-size:0.6em;color:var(--dim);margin-top:2px">
-        <span style="position:absolute;left:0;cursor:pointer" onclick="snapActivity(0)">0%</span>
-        <span style="position:absolute;left:19.7%;transform:translateX(-50%);cursor:pointer" onclick="snapActivity(60)">|<br>60%</span>
-        <span style="position:absolute;left:27.9%;transform:translateX(-50%);text-align:center;color:var(--blue);cursor:pointer" onclick="snapActivity(85)">|<br>Lazy 85%</span>
-        <span style="position:absolute;left:37.7%;transform:translateX(-50%);text-align:center;color:var(--purple);cursor:pointer" onclick="snapActivity(115)">|<br>Whale 115%</span>
-        <span style="position:absolute;left:50.8%;transform:translateX(-50%);text-align:center;color:var(--accent);cursor:pointer" onclick="snapActivity(155)">|<br>Deity 155%</span>
-        <span style="position:absolute;right:0;cursor:pointer" onclick="snapActivity(305)">305%</span>
+        <span style="position:absolute;left:10px;cursor:pointer" onclick="snapActivity(0)">0%</span>
+        <span style="position:absolute;left:calc(10px + (100% - 20px) * 0.197);transform:translateX(-50%);cursor:pointer" onclick="snapActivity(60)">|<br>60%</span>
+        <span style="position:absolute;left:calc(10px + (100% - 20px) * 0.279);transform:translateX(-50%);text-align:center;color:var(--blue);cursor:pointer" onclick="snapActivity(85)">|<br>Lazy 85%</span>
+        <span style="position:absolute;left:calc(10px + (100% - 20px) * 0.377);transform:translateX(-50%);text-align:center;color:var(--purple);cursor:pointer" onclick="snapActivity(115)">|<br>Whale 115%</span>
+        <span style="position:absolute;left:calc(10px + (100% - 20px) * 0.508);transform:translateX(-50%);text-align:center;color:var(--accent);cursor:pointer" onclick="snapActivity(155)">|<br>Deity 155%</span>
+        <span style="position:absolute;right:10px;cursor:pointer" onclick="snapActivity(305)">305%</span>
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:16px;padding:8px 0 0">
