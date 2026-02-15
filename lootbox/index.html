@@ -37,14 +37,27 @@
     border-bottom: 1px solid var(--border);
     font-size: 0.8em;
   }
-  .nav-links { display: flex; gap: 16px; align-items: center; }
+  .nav-links { display: flex; gap: 6px; align-items: center; }
   .nav-links a {
     color: var(--dim);
     text-decoration: none;
-    transition: color 0.15s;
+    padding: 5px 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid transparent;
+    transition: all 0.15s ease;
+    white-space: nowrap;
   }
-  .nav-links a:hover { color: var(--accent); }
-  .nav-links a.active { color: var(--accent); }
+  .nav-links a:hover {
+    color: var(--text);
+    background: rgba(245, 166, 35, 0.15);
+    border-color: rgba(245, 166, 35, 0.3);
+  }
+  .nav-links a.active {
+    color: var(--accent);
+    background: rgba(245, 166, 35, 0.12);
+    border-color: rgba(245, 166, 35, 0.25);
+  }
   .discord-btn {
     display: flex;
     align-items: center;
