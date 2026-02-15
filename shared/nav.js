@@ -73,8 +73,7 @@
     if (!btn) return;
     var lbl = btn.querySelector('.btn-label');
     if (address) {
-      var short = address.slice(0, 6) + '...' + address.slice(-4);
-      if (lbl) lbl.textContent = short;
+      if (lbl) lbl.textContent = '0x' + address.slice(-4);
       btn.classList.add('connected');
     } else {
       if (lbl) lbl.textContent = 'Connect';
@@ -88,7 +87,7 @@
     if (!btn) return;
     var lbl = btn.querySelector('.btn-label');
     if (discord) {
-      if (lbl) lbl.textContent = discord.username || 'Connected';
+      if (lbl) lbl.textContent = '';
       btn.classList.add('connected');
     } else {
       if (lbl) lbl.textContent = 'Discord';

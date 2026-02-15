@@ -1,14 +1,52 @@
-/* Unified navigation bar */
+/* ---- Shared base: design tokens, reset, body ---- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --bg-primary: #0f0f1a;
+  --bg-secondary: #1a1a2e;
+  --bg-tertiary: #252542;
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0c0;
+  --text-dim: #6b6b8d;
+  --accent-primary: #8b5cf6;
+  --accent-secondary: #06b6d4;
+  --success: #22c55e;
+  --error: #ef4444;
+  --warning: #eab308;
+  --border-color: #3a3a5c;
+  --border-subtle: #2a2a44;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: linear-gradient(135deg, var(--bg-primary) 0%, #1a0a2e 100%);
+  color: var(--text-primary);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+a {
+  color: var(--accent-secondary);
+  text-decoration: none;
+}
+
+/* ---- Unified navigation bar ---- */
 .unified-nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem 0.6rem;
   margin-bottom: 1rem;
-  background: #1a1a2e;
+  background: var(--bg-secondary);
   border-radius: 12px;
-  border: 1px solid #3a3a5c;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  border: 1px solid var(--border-color);
   gap: 0.5rem;
   flex-wrap: wrap;
 }
@@ -34,7 +72,7 @@
 }
 
 .nav-links a {
-  color: #a0a0c0;
+  color: var(--text-secondary);
   text-decoration: none;
   padding: 0.35em 0.65em;
   border-radius: 6px;
@@ -48,13 +86,13 @@
 }
 
 .nav-links a:hover {
-  color: #fff;
+  color: var(--text-primary);
   background: rgba(139, 92, 246, 0.15);
   border-color: rgba(139, 92, 246, 0.3);
 }
 
 .nav-links a.active {
-  color: #8b5cf6;
+  color: var(--accent-primary);
   background: rgba(139, 92, 246, 0.12);
   border-color: rgba(139, 92, 246, 0.25);
 }
@@ -107,9 +145,9 @@
 .nav-btn-discord:hover { background: #6d78f5; }
 
 .nav-btn-discord.connected {
-  background: #252542;
-  color: #22c55e;
-  border: 1px solid #22c55e;
+  background: var(--bg-tertiary);
+  color: var(--success);
+  border: 1px solid var(--success);
   box-shadow: none;
 }
 
@@ -122,9 +160,9 @@
 .nav-btn-wallet:hover { background: #ff9a2e; }
 
 .nav-btn-wallet.connected {
-  background: #252542;
-  color: #22c55e;
-  border: 1px solid #22c55e;
+  background: var(--bg-tertiary);
+  color: var(--success);
+  border: 1px solid var(--success);
   box-shadow: none;
 }
 
@@ -145,23 +183,23 @@
   width: 130px;
   padding: 0 0.5rem;
   border-radius: 6px;
-  border: 1px solid #3a3a5c;
-  background: #252542;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
   color: #fff;
   font-family: inherit;
   font-size: 0.72rem;
 }
 
 .nav-affiliate input::placeholder {
-  color: #6b6b8d;
+  color: var(--text-dim);
 }
 
 .nav-affiliate select {
   height: 26px;
   padding: 0 0.3rem;
   border-radius: 6px;
-  border: 1px solid #3a3a5c;
-  background: #252542;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
   color: #fff;
   font-family: inherit;
   font-size: 0.7rem;
@@ -172,8 +210,8 @@
   height: 26px;
   padding: 0 0.5rem;
   border-radius: 6px;
-  border: 1px solid #3a3a5c;
-  background: #252542;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
   color: #fff;
   font-family: inherit;
   font-size: 0.7rem;
@@ -183,27 +221,27 @@
 }
 
 .nav-affiliate button:hover {
-  border-color: #8b5cf6;
+  border-color: var(--accent-primary);
 }
 
 .nav-affiliate .aff-status {
   font-size: 0.68rem;
-  color: #a0a0c0;
+  color: var(--text-secondary);
 }
 
-.nav-affiliate .aff-status.success { color: #22c55e; }
-.nav-affiliate .aff-status.error { color: #ef4444; }
+.nav-affiliate .aff-status.success { color: var(--success); }
+.nav-affiliate .aff-status.error { color: var(--error); }
 
 .nav-affiliate .aff-display {
   display: flex;
   align-items: center;
   gap: 0.4rem;
   font-size: 0.78rem;
-  color: #a0a0c0;
+  color: var(--text-secondary);
 }
 
 .nav-affiliate .aff-display strong {
-  color: #fff;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
