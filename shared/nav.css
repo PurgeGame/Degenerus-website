@@ -136,6 +136,14 @@ a {
   flex-shrink: 0;
 }
 
+/* GitHub */
+.nav-btn-github {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+.nav-btn-github:hover { color: #fff; background: rgba(255, 255, 255, 0.15); }
+
 /* Discord */
 .nav-btn-discord {
   background: #5865f2;
