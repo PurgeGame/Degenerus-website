@@ -523,6 +523,14 @@
     <p>Ensuring that every aspect of Degenerus Protocol is 100% fair, transparent and trustless is my top priority.</p>
   </section>
 
+  <!-- Simulation -->
+  <section>
+    <h2>Simulation</h2>
+    <div style="margin: 0.5rem 0;">
+      <canvas id="simChart" style="max-height: 420px;"></canvas>
+    </div>
+  </section>
+
   <footer>
     <a href="/degenerette/">Play the Degenerette Simulator</a>
   </footer>
@@ -530,5 +538,138 @@
 
 <script src="/shared/nav.js"></script>
 <script>initNav({ currentPage: 'whitepaper' });</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  const SIM = {"pools":[{"next":3.79,"future":8.45,"cy":0,"lvl":0},{"next":4.76,"future":8.84,"cy":0,"lvl":0},{"next":6.24,"future":9.69,"cy":0,"lvl":0},{"next":7.78,"future":10.56,"cy":0,"lvl":0},{"next":20.66,"future":12.68,"cy":0,"lvl":0},{"next":35.99,"future":14.87,"cy":0,"lvl":0},{"next":53.03,"future":17.38,"cy":0,"lvl":0},{"next":7.32,"future":32.35,"cy":0,"lvl":1},{"next":7.92,"future":32.56,"cy":0,"lvl":1},{"next":8.87,"future":32.6,"cy":0.01,"lvl":1},{"next":9.71,"future":32.72,"cy":0.01,"lvl":1},{"next":15.5,"future":31.7,"cy":0.01,"lvl":1},{"next":16.37,"future":32.11,"cy":0.01,"lvl":1},{"next":17.8,"future":32.87,"cy":0.01,"lvl":1},{"next":19.44,"future":33.13,"cy":0.02,"lvl":1},{"next":21.02,"future":33.48,"cy":0.02,"lvl":1},{"next":32.13,"future":35.33,"cy":0.02,"lvl":1},{"next":45.91,"future":36.9,"cy":0.03,"lvl":1},{"next":58.94,"future":39,"cy":0.03,"lvl":1},{"next":11.93,"future":52.92,"cy":0.03,"lvl":2},{"next":12.85,"future":52.79,"cy":0.03,"lvl":2},{"next":13.93,"future":52.68,"cy":0.26,"lvl":2},{"next":14.95,"future":52.44,"cy":0.27,"lvl":2},{"next":21.18,"future":51.23,"cy":0.27,"lvl":2},{"next":23.67,"future":52.11,"cy":0.28,"lvl":2},{"next":42.06,"future":54.39,"cy":0.28,"lvl":2},{"next":62.45,"future":56.69,"cy":0.29,"lvl":2},{"next":13.72,"future":60.36,"cy":0.29,"lvl":3},{"next":15.19,"future":60.17,"cy":0.29,"lvl":3},{"next":16.32,"future":60.2,"cy":0.34,"lvl":3},{"next":17.76,"future":60.08,"cy":0.61,"lvl":3},{"next":26.96,"future":58.82,"cy":0.62,"lvl":3},{"next":29.79,"future":59.44,"cy":0.62,"lvl":3},{"next":47.54,"future":62.33,"cy":0.63,"lvl":3},{"next":68.38,"future":65.54,"cy":0.63,"lvl":3},{"next":77.3,"future":66.79,"cy":0.64,"lvl":3},{"next":17.76,"future":77.79,"cy":0.64,"lvl":4},{"next":18.92,"future":77.58,"cy":0.92,"lvl":4},{"next":20.74,"future":77.31,"cy":0.93,"lvl":4},{"next":22.38,"future":76.94,"cy":1.05,"lvl":4},{"next":32.09,"future":76.55,"cy":1.06,"lvl":4},{"next":35.08,"future":76.99,"cy":1.07,"lvl":4},{"next":37.55,"future":78.27,"cy":1.08,"lvl":4},{"next":62.73,"future":82.1,"cy":1.09,"lvl":4},{"next":83.75,"future":84.52,"cy":1.09,"lvl":4},{"next":22.19,"future":99.78,"cy":1.09,"lvl":5},{"next":23.78,"future":99.5,"cy":1.18,"lvl":5},{"next":25.02,"future":98.88,"cy":1.53,"lvl":5},{"next":26.61,"future":98.38,"cy":1.88,"lvl":5},{"next":36.98,"future":96.5,"cy":1.88,"lvl":5},{"next":39.01,"future":96.45,"cy":1.89,"lvl":5},{"next":40.65,"future":98.09,"cy":1.9,"lvl":5},{"next":42.68,"future":99.5,"cy":1.91,"lvl":5},{"next":45.5,"future":100.22,"cy":1.92,"lvl":5},{"next":59.59,"future":103.08,"cy":1.93,"lvl":5},{"next":78.8,"future":106.74,"cy":1.94,"lvl":5},{"next":94.22,"future":108.64,"cy":1.95,"lvl":5},{"next":25.77,"future":112.66,"cy":1.95,"lvl":6},{"next":28.14,"future":111.99,"cy":2.44,"lvl":6},{"next":30.09,"future":111.48,"cy":2.46,"lvl":6},{"next":32.02,"future":111.24,"cy":2.48,"lvl":6},{"next":44.26,"future":108.96,"cy":2.49,"lvl":6},{"next":46.48,"future":108.82,"cy":2.5,"lvl":6},{"next":48.73,"future":110.5,"cy":2.51,"lvl":6},{"next":51.24,"future":112.17,"cy":2.52,"lvl":6},{"next":67.44,"future":114.27,"cy":2.53,"lvl":6},{"next":86.96,"future":117.99,"cy":2.55,"lvl":6},{"next":103.59,"future":121.28,"cy":2.56,"lvl":6},{"next":29.64,"future":133.35,"cy":2.56,"lvl":7},{"next":31.23,"future":133.14,"cy":2.57,"lvl":7},{"next":33.57,"future":133.01,"cy":2.59,"lvl":7},{"next":34.97,"future":132.58,"cy":2.61,"lvl":7},{"next":49.6,"future":130.85,"cy":2.62,"lvl":7},{"next":51.03,"future":131.9,"cy":2.64,"lvl":7},{"next":54.15,"future":132.52,"cy":2.66,"lvl":7},{"next":56.63,"future":134.33,"cy":2.67,"lvl":7},{"next":73.53,"future":137.76,"cy":2.68,"lvl":7},{"next":97.79,"future":140.43,"cy":2.69,"lvl":7},{"next":117.67,"future":144.25,"cy":2.71,"lvl":7},{"next":32.71,"future":142.54,"cy":2.71,"lvl":8},{"next":35.47,"future":144.56,"cy":2.73,"lvl":8},{"next":37.73,"future":145.6,"cy":2.78,"lvl":8},{"next":40.27,"future":145.84,"cy":2.84,"lvl":8},{"next":60.36,"future":142.51,"cy":2.86,"lvl":8},{"next":64.14,"future":144.34,"cy":2.87,"lvl":8},{"next":68.21,"future":146.14,"cy":2.88,"lvl":8},{"next":102.89,"future":149.86,"cy":2.9,"lvl":8},{"next":132.55,"future":154.7,"cy":2.91,"lvl":8},{"next":36.96,"future":162.83,"cy":2.91,"lvl":9},{"next":40.35,"future":162.12,"cy":3.58,"lvl":9},{"next":42.62,"future":160.6,"cy":4.25,"lvl":9},{"next":45.58,"future":160.05,"cy":4.27,"lvl":9},{"next":62.51,"future":158.59,"cy":4.29,"lvl":9},{"next":68.88,"future":160.74,"cy":4.3,"lvl":9},{"next":155.49,"future":171.93,"cy":4.32,"lvl":9},{"next":43.14,"future":195.46,"cy":4.32,"lvl":10},{"next":46.51,"future":194.04,"cy":5.15,"lvl":10},{"next":49.55,"future":193.28,"cy":5.17,"lvl":10},{"next":52.18,"future":194.88,"cy":6.16,"lvl":10},{"next":72.12,"future":183.57,"cy":6.98,"lvl":10},{"next":79.41,"future":186.96,"cy":7,"lvl":10},{"next":184.99,"future":199.56,"cy":7.02,"lvl":10},{"next":53.81,"future":231.15,"cy":7.02,"lvl":11},{"next":57.48,"future":230.21,"cy":8.19,"lvl":11},{"next":61.15,"future":228.36,"cy":8.37,"lvl":11},{"next":64.43,"future":229.78,"cy":9.37,"lvl":11},{"next":86.64,"future":232.41,"cy":9.4,"lvl":11},{"next":96.66,"future":234.07,"cy":9.42,"lvl":11},{"next":204.01,"future":249.91,"cy":9.44,"lvl":11},{"next":65.8,"future":286.55,"cy":9.44,"lvl":12},{"next":71.23,"future":287.1,"cy":9.72,"lvl":12},{"next":74.26,"future":284.81,"cy":10.94,"lvl":12},{"next":77.93,"future":283.06,"cy":10.96,"lvl":12},{"next":104.69,"future":279.93,"cy":10.98,"lvl":12},{"next":107.44,"future":281.47,"cy":11.01,"lvl":12},{"next":111.88,"future":284.35,"cy":11.04,"lvl":12},{"next":118.3,"future":284.49,"cy":11.06,"lvl":12},{"next":150.59,"future":290.92,"cy":11.09,"lvl":12},{"next":190.83,"future":297.89,"cy":11.11,"lvl":12},{"next":244.39,"future":303.33,"cy":11.14,"lvl":12},{"next":76.21,"future":342.12,"cy":11.14,"lvl":13},{"next":80.27,"future":344.29,"cy":11.17,"lvl":13},{"next":84.89,"future":347.7,"cy":12.67,"lvl":13},{"next":89.28,"future":346.49,"cy":12.96,"lvl":13},{"next":121.08,"future":396.2,"cy":12.99,"lvl":13},{"next":126.76,"future":394.3,"cy":13.03,"lvl":13},{"next":131.04,"future":396.98,"cy":13.06,"lvl":13},{"next":135.02,"future":399.86,"cy":13.1,"lvl":13},{"next":143.05,"future":398.87,"cy":13.13,"lvl":13},{"next":177.22,"future":405.13,"cy":13.17,"lvl":13},{"next":223.25,"future":413.12,"cy":13.2,"lvl":13},{"next":265.13,"future":415.76,"cy":13.24,"lvl":13},{"next":97.1,"future":440.61,"cy":13.24,"lvl":14},{"next":102.45,"future":437.96,"cy":14.93,"lvl":14},{"next":108.66,"future":436.55,"cy":14.96,"lvl":14},{"next":113.15,"future":437.93,"cy":16.24,"lvl":14},{"next":150.01,"future":432.31,"cy":16.28,"lvl":14},{"next":161.43,"future":432.14,"cy":16.32,"lvl":14},{"next":219.12,"future":441.46,"cy":16.36,"lvl":14},{"next":291.43,"future":452.22,"cy":16.4,"lvl":14},{"next":104.99,"future":456.45,"cy":16.4,"lvl":15},{"next":111.26,"future":460.61,"cy":16.44,"lvl":15},{"next":119.2,"future":467.1,"cy":16.89,"lvl":15},{"next":124.4,"future":466.34,"cy":17.39,"lvl":15},{"next":175.4,"future":456.97,"cy":17.43,"lvl":15},{"next":182.31,"future":460.51,"cy":17.47,"lvl":15},{"next":194.2,"future":459.09,"cy":17.52,"lvl":15},{"next":265.49,"future":469.24,"cy":17.56,"lvl":15},{"next":328.47,"future":479.76,"cy":17.61,"lvl":15},{"next":105.15,"future":480.36,"cy":17.61,"lvl":16},{"next":113.37,"future":479.1,"cy":17.65,"lvl":16},{"next":120.18,"future":487.56,"cy":18.15,"lvl":16},{"next":125.79,"future":485.98,"cy":18.21,"lvl":16},{"next":184.06,"future":488.85,"cy":18.25,"lvl":16},{"next":194.82,"future":492.58,"cy":18.3,"lvl":16},{"next":268.45,"future":499.28,"cy":18.34,"lvl":16},{"next":364.69,"future":513.33,"cy":18.39,"lvl":16},{"next":121.11,"future":555.26,"cy":18.39,"lvl":17},{"next":128.53,"future":552.3,"cy":18.43,"lvl":17},{"next":134.75,"future":549.95,"cy":19.81,"lvl":17},{"next":141.99,"future":551.35,"cy":19.86,"lvl":17},{"next":195.57,"future":543.51,"cy":19.91,"lvl":17},{"next":205.94,"future":548.35,"cy":19.96,"lvl":17},{"next":287.39,"future":560.64,"cy":20.01,"lvl":17},{"next":434.41,"future":575.79,"cy":20.07,"lvl":17},{"next":134.44,"future":601.04,"cy":20.07,"lvl":18},{"next":143.38,"future":599.13,"cy":20.12,"lvl":18},{"next":157.39,"future":598.36,"cy":20.19,"lvl":18},{"next":166.39,"future":596.11,"cy":20.24,"lvl":18},{"next":225.82,"future":592.44,"cy":20.3,"lvl":18},{"next":235.04,"future":589.09,"cy":20.35,"lvl":18},{"next":242.79,"future":592.34,"cy":20.41,"lvl":18},{"next":251.74,"future":596.26,"cy":20.46,"lvl":18},{"next":315.69,"future":599.84,"cy":20.52,"lvl":18},{"next":392.86,"future":611.08,"cy":20.58,"lvl":18},{"next":466.82,"future":622.44,"cy":20.63,"lvl":18},{"next":156.24,"future":697.54,"cy":20.63,"lvl":19},{"next":164.98,"future":696.55,"cy":22.44,"lvl":19},{"next":176.24,"future":693.77,"cy":22.5,"lvl":19},{"next":184.65,"future":690.22,"cy":24.28,"lvl":19},{"next":245.03,"future":760.15,"cy":24.34,"lvl":19},{"next":249.06,"future":762.16,"cy":24.41,"lvl":19},{"next":261.62,"future":758.49,"cy":24.48,"lvl":19},{"next":268.28,"future":761.52,"cy":24.55,"lvl":19},{"next":276.62,"future":765.24,"cy":24.62,"lvl":19},{"next":351.21,"future":768.25,"cy":24.69,"lvl":19},{"next":439.63,"future":780.77,"cy":24.76,"lvl":19},{"next":516.89,"future":792.06,"cy":24.83,"lvl":19},{"next":183.53,"future":815.42,"cy":24.83,"lvl":20},{"next":194.69,"future":812.77,"cy":24.9,"lvl":20},{"next":203.59,"future":809.58,"cy":25.73,"lvl":20},{"next":213.31,"future":809.71,"cy":25.81,"lvl":20},{"next":287.39,"future":759.95,"cy":30.49,"lvl":20},{"next":300.58,"future":765.67,"cy":30.56,"lvl":20},{"next":551.79,"future":789.92,"cy":30.64,"lvl":20},{"next":193.74,"future":865.32,"cy":30.64,"lvl":21},{"next":210.52,"future":867.09,"cy":30.72,"lvl":21},{"next":221.01,"future":861.97,"cy":32.83,"lvl":21},{"next":234.89,"future":857.98,"cy":32.91,"lvl":21},{"next":317.8,"future":839.34,"cy":32.98,"lvl":21},{"next":329.29,"future":833.83,"cy":33.06,"lvl":21},{"next":337.1,"future":838.09,"cy":33.14,"lvl":21},{"next":344.56,"future":841.52,"cy":33.22,"lvl":21},{"next":359.52,"future":836.69,"cy":33.3,"lvl":21},{"next":431.18,"future":848.33,"cy":33.38,"lvl":21},{"next":537.48,"future":861.43,"cy":33.46,"lvl":21},{"next":623.14,"future":865.1,"cy":33.54,"lvl":21},{"next":202.73,"future":921.21,"cy":33.54,"lvl":22},{"next":214.53,"future":924.53,"cy":33.63,"lvl":22},{"next":228.38,"future":922.82,"cy":33.72,"lvl":22},{"next":238.75,"future":921.23,"cy":34.69,"lvl":22},{"next":336.62,"future":908.44,"cy":34.78,"lvl":22},{"next":343.71,"future":899.78,"cy":34.86,"lvl":22},{"next":343.71,"future":899.78,"cy":34.95,"lvl":22},{"next":343.96,"future":900.13,"cy":35.03,"lvl":22},{"next":351.18,"future":892.66,"cy":35.12,"lvl":22},{"next":351.55,"future":892.92,"cy":35.21,"lvl":22},{"next":353.32,"future":894.43,"cy":35.29,"lvl":22},{"next":361.91,"future":888.35,"cy":35.38,"lvl":22},{"next":363.46,"future":889.87,"cy":35.46,"lvl":22},{"next":365.27,"future":891.14,"cy":35.55,"lvl":22},{"next":374.43,"future":884.96,"cy":35.63,"lvl":22},{"next":376.92,"future":887.32,"cy":35.72,"lvl":22},{"next":379.21,"future":889.78,"cy":35.8,"lvl":22},{"next":388.22,"future":883.14,"cy":35.89,"lvl":22},{"next":390.94,"future":885.29,"cy":35.97,"lvl":22},{"next":393.49,"future":887.39,"cy":36.06,"lvl":22},{"next":402.66,"future":881,"cy":36.14,"lvl":22},{"next":405.11,"future":883.58,"cy":36.23,"lvl":22},{"next":408.01,"future":885.66,"cy":36.31,"lvl":22},{"next":440.47,"future":881.8,"cy":36.4,"lvl":22},{"next":466,"future":886.68,"cy":36.48,"lvl":22},{"next":491.71,"future":891.55,"cy":36.57,"lvl":22},{"next":525.2,"future":888.36,"cy":36.66,"lvl":22},{"next":551.04,"future":893.45,"cy":36.74,"lvl":22},{"next":588.84,"future":899.62,"cy":36.83,"lvl":22},{"next":632.66,"future":897.29,"cy":36.91,"lvl":22},{"next":664.4,"future":902.9,"cy":37,"lvl":22},{"next":211.28,"future":945.71,"cy":37,"lvl":23},{"next":226.23,"future":946.79,"cy":37.1,"lvl":23},{"next":252.17,"future":944.34,"cy":37.19,"lvl":23},{"next":271.61,"future":937.44,"cy":37.28,"lvl":23},{"next":358.3,"future":922.52,"cy":37.36,"lvl":23},{"next":364.43,"future":924.95,"cy":37.45,"lvl":23},{"next":372.99,"future":928.57,"cy":37.54,"lvl":23},{"next":389.38,"future":922.8,"cy":37.62,"lvl":23},{"next":398.68,"future":927.28,"cy":37.71,"lvl":23},{"next":489.1,"future":940.29,"cy":37.8,"lvl":23},{"next":618.72,"future":947.45,"cy":37.89,"lvl":23},{"next":726.89,"future":963.09,"cy":37.97,"lvl":23},{"next":229.85,"future":1034.72,"cy":37.97,"lvl":24},{"next":268.51,"future":1029.98,"cy":39.07,"lvl":24},{"next":283.37,"future":1023.31,"cy":39.17,"lvl":24},{"next":297.01,"future":1016.54,"cy":39.26,"lvl":24},{"next":393.73,"future":998.97,"cy":39.35,"lvl":24},{"next":405.29,"future":1004.06,"cy":39.44,"lvl":24},{"next":417.96,"future":1008.79,"cy":39.54,"lvl":24},{"next":623.61,"future":1025.21,"cy":39.63,"lvl":24},{"next":777.5,"future":1046.87,"cy":39.73,"lvl":24},{"next":238.46,"future":1072.18,"cy":39.73,"lvl":25},{"next":257.12,"future":1068.65,"cy":39.82,"lvl":25},{"next":274.9,"future":1061.4,"cy":39.92,"lvl":25},{"next":289.22,"future":1068.2,"cy":44.37,"lvl":25},{"next":410.33,"future":1255.7,"cy":44.47,"lvl":25},{"next":423.58,"future":1261.7,"cy":44.58,"lvl":25},{"next":590.7,"future":1285.64,"cy":44.7,"lvl":25},{"next":873.93,"future":1307.96,"cy":44.81,"lvl":25},{"next":291.96,"future":1314.19,"cy":44.81,"lvl":26},{"next":307.62,"future":1305.94,"cy":48.02,"lvl":26},{"next":341.61,"future":1297.77,"cy":48.38,"lvl":26},{"next":355.81,"future":1289.12,"cy":49.53,"lvl":26},{"next":488.3,"future":1287.13,"cy":49.74,"lvl":26},{"next":511.3,"future":1280.7,"cy":49.87,"lvl":26},{"next":523.1,"future":1285.58,"cy":49.99,"lvl":26},{"next":534.89,"future":1291.87,"cy":50.11,"lvl":26},{"next":785.68,"future":1310,"cy":50.23,"lvl":26},{"next":947.29,"future":1332.5,"cy":50.35,"lvl":26},{"next":312.27,"future":1389.79,"cy":50.35,"lvl":27},{"next":336.07,"future":1381.16,"cy":50.48,"lvl":27},{"next":356.4,"future":1375.46,"cy":50.92,"lvl":27},{"next":378.44,"future":1370.33,"cy":51.3,"lvl":27},{"next":509.52,"future":1381.78,"cy":51.66,"lvl":27},{"next":516.91,"future":1384.53,"cy":51.79,"lvl":27},{"next":527.18,"future":1389.57,"cy":51.92,"lvl":27},{"next":548.99,"future":1380.33,"cy":52.05,"lvl":27},{"next":559.65,"future":1384.54,"cy":52.18,"lvl":27},{"next":688.82,"future":1402.3,"cy":52.31,"lvl":27},{"next":911.21,"future":1415.2,"cy":52.44,"lvl":27},{"next":1055.38,"future":1434.29,"cy":52.57,"lvl":27},{"next":332.1,"future":1489.74,"cy":52.57,"lvl":28},{"next":366.54,"future":1478.28,"cy":52.79,"lvl":28},{"next":395.3,"future":1467.32,"cy":54.13,"lvl":28},{"next":415.04,"future":1458.78,"cy":57.93,"lvl":28},{"next":562,"future":1449.09,"cy":58.39,"lvl":28},{"next":568.73,"future":1452.75,"cy":58.53,"lvl":28},{"next":577.27,"future":1456.96,"cy":58.66,"lvl":28},{"next":598.47,"future":1448.59,"cy":58.82,"lvl":28},{"next":608.03,"future":1453.28,"cy":58.95,"lvl":28},{"next":750.67,"future":1472.54,"cy":59.09,"lvl":28},{"next":975.89,"future":1484.41,"cy":59.23,"lvl":28},{"next":1202.29,"future":1512.67,"cy":59.37,"lvl":28},{"next":354.76,"future":1517.4,"cy":59.37,"lvl":29},{"next":354.76,"future":1517.58,"cy":59.5,"lvl":29},{"next":407.16,"future":1530.12,"cy":65.75,"lvl":29},{"next":432.8,"future":1554.78,"cy":65.91,"lvl":29},{"next":432.8,"future":1554.96,"cy":66.04,"lvl":29},{"next":618.35,"future":1566.91,"cy":66.19,"lvl":29},{"next":889.54,"future":1603.36,"cy":66.34,"lvl":29},{"next":1350.89,"future":1640.52,"cy":66.49,"lvl":29},{"next":383.48,"future":1689.7,"cy":66.49,"lvl":30},{"next":383.48,"future":1689.7,"cy":66.49,"lvl":30}],"maxJP":[{"l":1,"v":11.6},{"l":2,"v":11.16},{"l":3,"v":16.95},{"l":4,"v":17.15},{"l":5,"v":17.98},{"l":6,"v":21.55},{"l":7,"v":24.87},{"l":8,"v":30.57},{"l":9,"v":29.23},{"l":10,"v":31.12},{"l":11,"v":35.99},{"l":12,"v":41.12},{"l":13,"v":51.95},{"l":14,"v":54.79},{"l":15,"v":68.96},{"l":16,"v":89.38},{"l":17,"v":83.18},{"l":18,"v":98.45},{"l":19,"v":88.34},{"l":20,"v":114.53},{"l":21,"v":106.52},{"l":22,"v":144.59},{"l":23,"v":142.64},{"l":24,"v":160.04},{"l":25,"v":203.11},{"l":26,"v":219.94},{"l":27,"v":218.65},{"l":28,"v":225.11},{"l":29,"v":305.05},{"l":30,"v":301.2}],"lt":[6,18,26,35,44,56,67,78,87,94,101,108,119,131,139,148,156,164,175,187,194,206,237,249,258,266,276,288,300,308]};
+
+  const pools = SIM.pools;
+  const lt = SIM.lt;
+  const labels = pools.map((_, i) => String(i + 1));
+
+  // Level labels (skip 0)
+  const bounds = [0, ...lt, pools.length - 1];
+  const levelLabels = [];
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const dayIdx = i === 0 ? bounds[i] : Math.min(bounds[i] + 1, pools.length - 1);
+    const lvl = pools[dayIdx].lvl;
+    levelLabels.push(lvl === 0 ? null : lvl);
+  }
+
+  // Map maxJP to day indices (payout at level transition)
+  const maxJP = SIM.maxJP;
+  const jpBars = maxJP.map(j => ({
+    dayIdx: j.l < lt.length ? lt[j.l] : pools.length - 1,
+    value: j.v
+  }));
+
+  function fmtETH(v) { return Math.abs(v) < 0.01 ? v.toFixed(4) : v.toFixed(2); }
+
+  const txtColor = '#a0a0c0';
+  const gridColor = 'rgba(160,160,192,0.1)';
+
+  new Chart(document.getElementById('simChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Next Pool', data: pools.map(p => p.next), borderColor: '#4a9eff', borderWidth: 2, pointRadius: 0, tension: 0.1 },
+        { label: 'Future Pool', data: pools.map(p => p.future), borderColor: '#4ade80', borderWidth: 2, pointRadius: 0, tension: 0.1 },
+        { label: 'Cumulative Yield', data: pools.map(p => p.cy), borderColor: '#f9a825', backgroundColor: 'rgba(249,168,37,0.12)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true },
+        { label: 'Largest Jackpot', data: [], borderColor: '#d32f2f', backgroundColor: 'rgba(211,47,47,0.45)', borderWidth: 2, pointRadius: 0, pointStyle: 'rect' }
+      ]
+    },
+    plugins: [
+      {
+        id: 'levelLines',
+        beforeDraw(chart) {
+          const { ctx, chartArea, scales } = chart;
+          const xScale = scales.x;
+          ctx.save();
+          // Transition lines
+          for (const idx of lt) {
+            const x = xScale.getPixelForValue(idx);
+            ctx.strokeStyle = 'rgba(128,128,128,0.35)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(x, chartArea.top);
+            ctx.lineTo(x, chartArea.bottom);
+            ctx.stroke();
+          }
+          // "Level" axis label
+          ctx.setLineDash([]);
+          ctx.fillStyle = txtColor;
+          ctx.font = '600 12px -apple-system, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText('Level', chartArea.left, chartArea.top - 6);
+          // Level numbers
+          ctx.font = '10px -apple-system, sans-serif';
+          ctx.textAlign = 'center';
+          for (let i = 0; i < bounds.length - 1; i++) {
+            const mid = (bounds[i] + bounds[i + 1]) / 2;
+            const xMid = xScale.getPixelForValue(mid);
+            if (levelLabels[i] != null) ctx.fillText(String(levelLabels[i]), xMid, chartArea.top - 6);
+          }
+          ctx.restore();
+        }
+      },
+      {
+        id: 'jackpotBars',
+        beforeDraw(chart) {
+          const { ctx, chartArea, scales } = chart;
+          const xScale = scales.x;
+          const yScale = scales.y;
+          const bottom = yScale.getPixelForValue(0);
+          ctx.save();
+          for (const j of jpBars) {
+            const x = xScale.getPixelForValue(j.dayIdx);
+            const yTop = yScale.getPixelForValue(j.value);
+            const w = 4;
+            ctx.fillStyle = 'rgba(211, 47, 47, 0.45)';
+            ctx.fillRect(x - w / 2, yTop, w, bottom - yTop);
+          }
+          ctx.restore();
+        }
+      }
+    ],
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      layout: { padding: { top: 18 } },
+      scales: {
+        y: {
+          ticks: { color: txtColor, font: { size: 11 } },
+          grid: { color: gridColor },
+          title: { display: true, text: 'ETH', color: txtColor, font: { size: 12, weight: '600' } }
+        },
+        x: {
+          title: { display: true, text: 'Day', color: txtColor, font: { size: 12, weight: '600' } },
+          ticks: { color: txtColor, font: { size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 20 },
+          grid: { display: false }
+        }
+      },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: txtColor, font: { size: 12 }, padding: 12, usePointStyle: true }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          borderColor: 'rgba(255,255,255,0.2)',
+          borderWidth: 1,
+          padding: 10,
+          displayColors: true,
+          callbacks: {
+            label: (ctx) => ctx.dataset.label + ': ' + fmtETH(ctx.parsed.y) + ' ETH'
+          }
+        }
+      }
+    }
+  });
+})();
+</script>
 </body>
 </html>
