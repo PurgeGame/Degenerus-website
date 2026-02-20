@@ -272,6 +272,7 @@
     nav.className = 'unified-nav';
 
     var pages = [
+      { key: 'beta', label: 'Beta', href: '/beta/' },
       { key: 'degenerette', label: 'Degenerette', href: '/degenerette/' },
       { key: 'lootbox', label: 'Lootbox Sim', href: '/lootbox/' },
       { key: 'whitepaper', label: 'Whitepaper', href: '/whitepaper/' },

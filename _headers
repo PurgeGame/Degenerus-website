@@ -34,5 +34,14 @@
 /whitepaper/index.html
   Cache-Control: no-store
 
+/beta
+  Cache-Control: no-store
+
+/beta/
+  Cache-Control: no-store
+
+/beta/index.html
+  Cache-Control: no-store
+
 /shared/*
   Cache-Control: no-store
