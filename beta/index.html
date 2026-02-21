@@ -523,19 +523,6 @@
       flex: 1;
     }
 
-    .pass-price-row {
-      display: flex;
-      align-items: baseline;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    .pass-price {
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: var(--accent-primary);
-    }
-
     .pass-lootbox-badge {
       font-size: 0.7rem;
       font-weight: 700;
@@ -795,12 +782,9 @@
         <div class="pass-icon">&#x1f634;</div>
         <h3>Lazy Pass</h3>
         <p class="pass-desc">One ticket per level for the next 10 levels and a small score boost.</p>
-        <div class="pass-price-row">
-          <span class="pass-price" id="lazy-price">0.24 ETH</span>
-          <span class="pass-lootbox-badge" id="lazy-lootbox">+ free 0.048 ETH lootbox (20%)</span>
-        </div>
+        <span class="pass-lootbox-badge" id="lazy-lootbox">+ free 0.048 ETH lootbox (20%)</span>
         <div class="pass-status" id="player-lazy-status"></div>
-        <button class="btn-primary btn-small" onclick="Mint.purchaseLazyPass()">BUY PASS</button>
+        <button class="btn-primary btn-small" onclick="Mint.purchaseLazyPass()">BUY — <span id="lazy-price">0.24</span> ETH</button>
       </div>
 
       <!-- Whale Bundle -->
@@ -808,14 +792,11 @@
         <div class="pass-icon">&#x1f433;</div>
         <h3>Whale Bundle</h3>
         <p class="pass-desc">Two entries (1/2 ticket) per level for the next 100 levels at a large discount and a score boost for the duration of the pass.</p>
-        <div class="pass-price-row">
-          <span class="pass-price" id="whale-price">2.4 ETH</span>
-          <span class="pass-lootbox-badge" id="whale-lootbox">+ free 0.48 ETH lootbox (20%)</span>
-        </div>
+        <span class="pass-lootbox-badge" id="whale-lootbox">+ free 0.48 ETH lootbox (20%)</span>
         <div class="pass-controls">
           <label for="whale-qty">Qty</label>
           <input type="number" id="whale-qty" value="1" min="1" max="100" step="1">
-          <button class="btn-primary btn-small" onclick="Mint.purchaseWhaleBundle()">BUY</button>
+          <button class="btn-primary btn-small" onclick="Mint.purchaseWhaleBundle()">BUY — <span id="whale-price">2.4</span> ETH</button>
         </div>
       </div>
 
@@ -824,10 +805,7 @@
         <div class="pass-icon">&#x1f451;</div>
         <h3>Deity Pass</h3>
         <p class="pass-desc">Become the immortal deity of a symbol. Deity pass holders receive 16 entries (or a minimum of 2% of entries) for their symbol every drawing and a huge score boost. Unlike the other passes, this one is transferrable (for a fee).</p>
-        <div class="pass-price-row">
-          <span class="pass-price" id="deity-price">24 ETH</span>
-          <span class="pass-lootbox-badge" id="deity-lootbox">+ free 4.8 ETH lootbox (20%)</span>
-        </div>
+        <span class="pass-lootbox-badge" id="deity-lootbox">+ free 4.8 ETH lootbox (20%)</span>
         <div class="pass-controls" style="flex-wrap: wrap; gap: 0.4rem;">
           <label for="deity-symbol" style="width:100%">Symbol</label>
           <select id="deity-symbol" style="flex:1; min-width: 0;">
@@ -872,7 +850,7 @@
               <option value="31">Eight</option>
             </optgroup>
           </select>
-          <button class="btn-primary btn-small" onclick="Mint.purchaseDeityPass()">BUY</button>
+          <button class="btn-primary btn-small" onclick="Mint.purchaseDeityPass()">BUY — <span id="deity-price">24</span> ETH</button>
         </div>
       </div>
 

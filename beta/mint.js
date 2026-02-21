@@ -228,25 +228,25 @@
 
     // Whale bundle: 2.4 ETH at levels 0-3, 4 ETH otherwise
     var whaleWei = lvl <= 3 ? eth.parseEther('2.4') : eth.parseEther('4');
-    setEl('whale-price', formatEth(whaleWei) + ' ETH');
+    setEl('whale-price', formatEth(whaleWei));
     setEl('whale-lootbox', lootboxBadge(whaleWei));
 
     // Lazy pass: flat 0.24 ETH at levels 0-2, 10 × mintPrice otherwise
     var lazyWei = lvl <= 2
       ? eth.parseEther('0.24')
       : (currentMintPrice ? currentMintPrice * 10n : eth.parseEther('0.4'));
-    setEl('lazy-price', formatEth(lazyWei) + ' ETH');
+    setEl('lazy-price', formatEth(lazyWei));
     setEl('lazy-lootbox', lootboxBadge(lazyWei));
 
     // Deity pass: 24 + T(k) where T(k) = k*(k+1)/2, k = issued count
     var deityBaseWei = eth.parseEther('24');
-    setEl('deity-price', formatEth(deityBaseWei) + '+ ETH');
+    setEl('deity-price', formatEth(deityBaseWei) + '+');
     setEl('deity-lootbox', lootboxBadge(deityBaseWei));
     if (contract) {
       contract.deityPassTotalIssuedCount().then(function (issued) {
         var tri = (issued * (issued + 1n)) / 2n * eth.parseEther('1');
         var deityWei = deityBaseWei + tri;
-        setEl('deity-price', formatEth(deityWei) + ' ETH');
+        setEl('deity-price', formatEth(deityWei));
         setEl('deity-lootbox', lootboxBadge(deityWei));
       }).catch(function () {});
     }
