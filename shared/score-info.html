@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Player Score — Degenerus Protocol</title>
+  <link rel="stylesheet" href="/shared/nav.css">
+  <style>
+    :root {
+      --accent-primary: #f5a623;
+      --accent-secondary: #ffc04d;
+    }
+
+    body {
+      background: var(--bg-primary);
+    }
+
+    .score-page {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: clamp(1rem, 4vw, 2rem);
+    }
+
+    /* Close button for popup mode */
+    .close-btn {
+      position: fixed;
+      top: 0.75rem;
+      right: 0.75rem;
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--bg-secondary);
+      color: var(--text-dim);
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s, border-color 0.15s;
+      z-index: 10;
+    }
+
+    .close-btn:hover {
+      color: var(--text-primary);
+      border-color: var(--accent-primary);
+    }
+
+    h1 {
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent-primary);
+      margin-bottom: 0.5rem;
+    }
+
+    .lead {
+      color: var(--text-secondary);
+      font-size: 0.88rem;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+
+    /* Score meter */
+    .meter {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 1rem 1.2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .meter-bar-track {
+      height: 8px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      margin-bottom: 0.6rem;
+      overflow: hidden;
+    }
+
+    .meter-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #ef4444 0%, #eab308 30%, #22c55e 60%, var(--accent-primary) 100%);
+      transition: width 0.4s ease;
+    }
+
+    .meter-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-dim);
+    }
+
+    .meter-labels span:last-child { color: var(--accent-primary); }
+
+    /* Component grid */
+    .components {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .comp {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+    }
+
+    .comp-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 0.3rem;
+    }
+
+    .comp-name {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .comp-max {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--accent-primary);
+      white-space: nowrap;
+    }
+
+    .comp-desc {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    /* Effects section */
+    .effects {
+      margin-bottom: 1.5rem;
+    }
+
+    .effects h2 {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-dim);
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .effect {
+      display: flex;
+      gap: 0.75rem;
+      padding: 0.6rem 0;
+    }
+
+    .effect + .effect {
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .effect-icon {
+      font-size: 1.1rem;
+      line-height: 1;
+      flex-shrink: 0;
+      margin-top: 0.1rem;
+    }
+
+    .effect-body {
+      flex: 1;
+    }
+
+    .effect-name {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 0.15rem;
+    }
+
+    .effect-desc {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    .effect-desc strong {
+      color: var(--text-secondary);
+    }
+
+    /* TL;DR */
+    .tldr {
+      background: rgba(245, 166, 35, 0.06);
+      border: 1px solid rgba(245, 166, 35, 0.2);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    .tldr strong {
+      color: var(--accent-primary);
+    }
+  </style>
+</head>
+<body>
+<div class="score-page">
+  <button class="close-btn" onclick="window.close()" title="Close">&times;</button>
+
+  <h1>Player Score</h1>
+  <p class="lead">Your activity score tracks how actively you're playing. Higher scores improve lootbox returns and decimator burn power. It's calculated on-chain from six components.</p>
+
+  <!-- Visual meter -->
+  <div class="meter">
+    <div class="meter-bar-track">
+      <div class="meter-bar-fill" style="width: 60%"></div>
+    </div>
+    <div class="meter-labels">
+      <span>0% &mdash; 80% EV</span>
+      <span>60% &mdash; Neutral</span>
+      <span>305% &mdash; 135% EV</span>
+    </div>
+  </div>
+
+  <!-- Components -->
+  <div class="components">
+    <div class="comp">
+      <div class="comp-header">
+        <span class="comp-name">Mint Streak</span>
+        <span class="comp-max">max 50%</span>
+      </div>
+      <p class="comp-desc">+1% per consecutive level you mint with ETH. Resets if you skip a level.</p>
+    </div>
+
+    <div class="comp">
+      <div class="comp-header">
+        <span class="comp-name">Mint Participation</span>
+        <span class="comp-max">max 25%</span>
+      </div>
+      <p class="comp-desc">Scales with how many levels you've minted vs. current level. 100% participation = full 25%.</p>
+    </div>
+
+    <div class="comp">
+      <div class="comp-header">
+        <span class="comp-name">Quest Streak</span>
+        <span class="comp-max">max 100%</span>
+      </div>
+      <p class="comp-desc">+1% per consecutive quest completed. The biggest single component.</p>
+    </div>
+
+    <div class="comp">
+      <div class="comp-header">
+        <span class="comp-name">Affiliate Bonus</span>
+        <span class="comp-max">max 50%</span>
+      </div>
+      <p class="comp-desc">Earned from referral activity. Scales with your affiliate earnings.</p>
+    </div>
+
+    <div class="comp">
+      <div class="comp-header">
+        <span class="comp-name">Whale Bundle</span>
+        <span class="comp-max">+10% or +40%</span>
+      </div>
+      <p class="comp-desc">Active while your bundle is frozen. 10-level bundle gives +10%, 100-level gives +40%. Also floors your streak and participation at max.</p>
+    </div>
+
+    <div class="comp">
+      <div class="comp-header">
+        <span class="comp-name">Deity Pass</span>
+        <span class="comp-max">+80%</span>
+      </div>
+      <p class="comp-desc">Flat +80% bonus, always active. Replaces whale bundle bonus (not cumulative). Also floors streak and participation at max.</p>
+    </div>
+  </div>
+
+  <!-- What it does -->
+  <div class="effects">
+    <h2>What your score does</h2>
+
+    <div class="effect">
+      <div class="effect-icon">&#x1f4e6;</div>
+      <div class="effect-body">
+        <div class="effect-name">Lootbox EV</div>
+        <p class="effect-desc">Below 60% score your lootbox expected value is <strong>penalized down to 80%</strong>. Above 60% it's <strong>boosted up to 135%</strong>. Score is locked at time of purchase, so build it before you buy. Capped at 10 ETH of benefit per level.</p>
+      </div>
+    </div>
+
+    <div class="effect">
+      <div class="effect-icon">&#x1f525;</div>
+      <div class="effect-body">
+        <div class="effect-name">Decimator Burns</div>
+        <p class="effect-desc">Higher score increases your burn multiplier (up to ~1.8x at 235%) and improves your bucket placement for better decimator odds.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="tldr">
+    <strong>TL;DR:</strong> Mint every level, do your quests, refer friends, and hold a pass. Your score compounds &mdash; the more active you are, the more the protocol rewards you.
+  </div>
+</div>
+</body>
+</html>

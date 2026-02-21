@@ -503,10 +503,28 @@
       flex: 1;
     }
 
+    .pass-price-row {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
     .pass-price {
       font-size: 0.85rem;
       font-weight: 700;
       color: var(--accent-primary);
+    }
+
+    .pass-lootbox-badge {
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: var(--success);
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      border-radius: 4px;
+      padding: 0.1rem 0.4rem;
+      white-space: nowrap;
     }
 
     .pass-controls {
@@ -696,7 +714,6 @@
           <h3>Tickets</h3>
           <label for="ticket-qty">Quantity</label>
           <input type="number" id="ticket-qty" value="1" min="0" step="1">
-          <div class="cost-line">Cost: <span id="ticket-cost">0.01</span> ETH</div>
         </div>
         <div class="purchase-col">
           <h3>Lootbox</h3>
@@ -705,6 +722,7 @@
           <div class="presale-badge" id="presale-badge">PRESALE ACTIVE</div>
         </div>
       </div>
+      <div class="cost-line">Total: <span id="eth-total-cost">0.01</span> ETH</div>
       <div class="purchase-controls">
         <div class="control-group" style="max-width: 280px;">
           <label for="affiliate-code">Affiliate Code</label>
@@ -722,15 +740,14 @@
           <h3>Tickets</h3>
           <label for="burnie-ticket-qty">Quantity</label>
           <input type="number" id="burnie-ticket-qty" value="0" min="0" step="1">
-          <div class="cost-line">Cost: 1,000 BURNIE per ticket</div>
         </div>
         <div class="purchase-col">
           <h3>Lootbox</h3>
           <label for="burnie-lootbox-amount">BURNIE Amount</label>
           <input type="number" id="burnie-lootbox-amount" value="0" min="0" step="100">
-          <div class="cost-line">Min: 1,000 BURNIE</div>
         </div>
       </div>
+      <div class="cost-line">Total: <span id="burnie-total-cost">0</span> BURNIE</div>
       <div class="purchase-controls">
         <button class="btn-primary" onclick="Mint.purchaseBurnie()">PURCHASE WITH BURNIE</button>
       </div>
@@ -747,12 +764,28 @@
     <h2>Passes</h2>
     <div class="passes-grid">
 
+      <!-- Lazy Pass -->
+      <div class="pass-card">
+        <div class="pass-icon">&#x1f634;</div>
+        <h3>Lazy Pass</h3>
+        <p class="pass-desc">One ticket per level for the next 10 levels and a small score boost.</p>
+        <div class="pass-price-row">
+          <span class="pass-price" id="lazy-price">0.24 ETH</span>
+          <span class="pass-lootbox-badge">+ 10-20% lootbox</span>
+        </div>
+        <div class="pass-status" id="player-lazy-status"></div>
+        <button class="btn-primary btn-small" onclick="Mint.purchaseLazyPass()">BUY PASS</button>
+      </div>
+
       <!-- Whale Bundle -->
       <div class="pass-card">
         <div class="pass-icon">&#x1f433;</div>
         <h3>Whale Bundle</h3>
-        <p class="pass-desc">Lock in 100 levels of tickets at today's price with frozen stats. Includes a 1 ETH lootbox deposit. The bulk play for high-conviction degens.</p>
-        <div class="pass-price" id="whale-price">2.4 ETH</div>
+        <p class="pass-desc">Two entries per level for the next 100 levels at a large discount and a score boost for the duration of the pass.</p>
+        <div class="pass-price-row">
+          <span class="pass-price" id="whale-price">2.4 ETH</span>
+          <span class="pass-lootbox-badge">+ 10-20% lootbox</span>
+        </div>
         <div class="pass-controls">
           <label for="whale-qty">Qty</label>
           <input type="number" id="whale-qty" value="1" min="1" max="100" step="1">
@@ -760,22 +793,15 @@
         </div>
       </div>
 
-      <!-- Lazy Pass -->
-      <div class="pass-card">
-        <div class="pass-icon">&#x1f634;</div>
-        <h3>Lazy Pass</h3>
-        <p class="pass-desc">Auto-mints a ticket for you every level for the next 10 levels. Set it, forget it, and let the protocol do the work.</p>
-        <div class="pass-price" id="lazy-price">0.24 ETH</div>
-        <div class="pass-status" id="player-lazy-status"></div>
-        <button class="btn-primary btn-small" onclick="Mint.purchaseLazyPass()">BUY PASS</button>
-      </div>
-
       <!-- Deity Pass -->
       <div class="pass-card">
         <div class="pass-icon">&#x1f451;</div>
         <h3>Deity Pass</h3>
-        <p class="pass-desc">Claim permanent ownership of a symbol. Your name on it forever, plus a cut of every ticket minted under your symbol. Price rises with each pass sold.</p>
-        <div class="pass-price" id="deity-price">24 ETH</div>
+        <p class="pass-desc">Become the immortal deity of a symbol. Deity pass holders receive 16 entries (or a minimum of 2% of entries) for their symbol every drawing and a huge score boost. Unlike the other passes, this one is transferrable (for a fee).</p>
+        <div class="pass-price-row">
+          <span class="pass-price" id="deity-price">24 ETH</span>
+          <span class="pass-lootbox-badge">+ 10-20% lootbox</span>
+        </div>
         <div class="pass-controls" style="flex-wrap: wrap; gap: 0.4rem;">
           <label for="deity-symbol" style="width:100%">Symbol</label>
           <select id="deity-symbol" style="flex:1; min-width: 0;">
@@ -786,7 +812,7 @@
               <option value="3">Monero</option>
               <option value="4">Solana</option>
               <option value="5">Chainlink</option>
-              <option value="6">Ethereum</option>
+              <option value="6" selected>Ethereum</option>
               <option value="7">Bitcoin</option>
             </optgroup>
             <optgroup label="Zodiac">

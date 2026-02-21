@@ -177,22 +177,35 @@
     if (badge) badge.style.display = active ? 'block' : 'none';
   }
 
-  function updateTicketCost() {
-    var qtyEl = $('ticket-qty');
-    var costEl = $('ticket-cost');
-    if (!qtyEl || !costEl) return;
-    if (!currentMintPrice) {
-      costEl.textContent = '—';
-      return;
-    }
-    var qty = parseInt(qtyEl.value, 10) || 0;
-    if (qty <= 0) {
-      costEl.textContent = '0';
-      return;
-    }
+  function weiToStr(wei) {
+    var eth = ethers();
+    return eth ? eth.formatEther(wei) : (Number(wei) / 1e18).toString();
+  }
+
+  function updateEthTotal() {
+    var costEl = $('eth-total-cost');
+    if (!costEl) return;
     try {
-      var total = currentMintPrice * BigInt(qty);
-      costEl.textContent = formatEth(total);
+      var qty = parseInt(($('ticket-qty') || {}).value, 10) || 0;
+      var lootbox = parseFloat(($('lootbox-amount') || {}).value) || 0;
+      var ticketWei = currentMintPrice ? currentMintPrice * BigInt(Math.max(qty, 0)) : 0n;
+      var lootboxWei = BigInt(Math.round(Math.max(lootbox, 0) * 1e18));
+      costEl.textContent = weiToStr(ticketWei + lootboxWei);
+    } catch (e) {
+      costEl.textContent = '—';
+    }
+  }
+
+  var PRICE_COIN_UNIT = 1000; // 1000 BURNIE per ticket
+
+  function updateBurnieTotal() {
+    var costEl = $('burnie-total-cost');
+    if (!costEl) return;
+    try {
+      var qty = parseInt(($('burnie-ticket-qty') || {}).value, 10) || 0;
+      var lootbox = parseFloat(($('burnie-lootbox-amount') || {}).value) || 0;
+      var total = Math.max(qty, 0) * PRICE_COIN_UNIT + Math.max(lootbox, 0);
+      costEl.textContent = total.toLocaleString();
     } catch (e) {
       costEl.textContent = '—';
     }
@@ -311,7 +324,7 @@
       setEl('status-price', formatEth(priceWei) + ' ETH');
       setPhase(inJackpot, rngLocked);
       setPresale(presale);
-      updateTicketCost();
+      updateEthTotal();
       refreshPassPrices();
 
     } catch (err) {
@@ -627,18 +640,43 @@
   // ---------------------------------------------------------------------------
 
   function attachListeners() {
-    var qtyEl = $('ticket-qty');
-    if (qtyEl) {
-      qtyEl.addEventListener('input', updateTicketCost);
-      qtyEl.addEventListener('change', updateTicketCost);
-    }
-    // Pre-fill affiliate code from localStorage into the form input on load
+    // ETH total: tickets + lootbox
+    ['ticket-qty', 'lootbox-amount'].forEach(function (id) {
+      var el = $(id);
+      if (el) {
+        el.addEventListener('input', updateEthTotal);
+        el.addEventListener('change', updateEthTotal);
+      }
+    });
+    // BURNIE total: tickets + lootbox
+    ['burnie-ticket-qty', 'burnie-lootbox-amount'].forEach(function (id) {
+      var el = $(id);
+      if (el) {
+        el.addEventListener('input', updateBurnieTotal);
+        el.addEventListener('change', updateBurnieTotal);
+      }
+    });
+    // Pre-fill affiliate code from URL param or localStorage
     var affInput = $('affiliate-code');
-    if (affInput && !affInput.value) {
-      try {
-        var stored = localStorage.getItem(REFERRER_KEY) || '';
-        if (stored) affInput.value = stored;
-      } catch (e) {}
+    if (affInput) {
+      var params = new URLSearchParams(window.location.search);
+      var urlRef = (params.get('ref') || params.get('referral') || params.get('code') || '').trim().toUpperCase();
+      if (urlRef) {
+        affInput.value = urlRef;
+        try { localStorage.setItem(REFERRER_KEY, urlRef); } catch (e) {}
+      } else if (!affInput.value) {
+        try {
+          var stored = localStorage.getItem(REFERRER_KEY) || '';
+          if (stored) affInput.value = stored;
+        } catch (e) {}
+      }
+      // Persist any manually entered code
+      affInput.addEventListener('change', function () {
+        var val = affInput.value.trim().toUpperCase();
+        if (val) {
+          try { localStorage.setItem(REFERRER_KEY, val); } catch (e) {}
+        }
+      });
     }
   }
 

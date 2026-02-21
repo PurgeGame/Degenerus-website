@@ -423,4 +423,8 @@
     checkDiscord();
     checkSession();
   };
+
+  window.openScoreInfo = function () {
+    window.open('/shared/score-info.html', 'scoreInfo', 'width=680,height=760,scrollbars=yes');
+  };
 })();
