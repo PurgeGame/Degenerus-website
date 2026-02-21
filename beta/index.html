@@ -101,6 +101,39 @@
       line-height: 1.2;
     }
 
+    .status-item--tip {
+      position: relative;
+      cursor: help;
+    }
+
+    .status-tooltip {
+      display: none;
+      position: absolute;
+      left: 0;
+      top: 100%;
+      margin-top: 0.4rem;
+      width: 260px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 0.9rem 1rem;
+      font-size: 0.72rem;
+      font-weight: 400;
+      line-height: 1.5;
+      color: var(--text-secondary);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      z-index: 100;
+      white-space: normal;
+    }
+
+    .status-tooltip strong {
+      color: var(--text-primary);
+    }
+
+    .status-item--tip:hover .status-tooltip {
+      display: block;
+    }
+
     .status-input {
       background: var(--bg-tertiary);
       border: 1px solid var(--border-color);
@@ -928,9 +961,25 @@
       <span class="status-label">Level</span>
       <span class="status-value" id="status-level">0</span>
     </div>
-    <div class="status-item">
+    <div class="status-item status-item--tip">
       <span class="status-label">Mint Price</span>
       <span class="status-value" id="status-price">0.01 ETH</span>
+      <div class="status-tooltip">
+        <strong>Price Schedule</strong><br><br>
+        <strong>Intro tiers:</strong><br>
+        Levels 0-4: 0.01 ETH<br>
+        Levels 5-9: 0.02 ETH<br>
+        Levels 10-29: 0.04 ETH<br>
+        Levels 30-59: 0.08 ETH<br>
+        Levels 60-99: 0.12 ETH<br><br>
+        <strong>Level 100+ (repeating cycle):</strong><br>
+        x01-x29: 0.04 ETH<br>
+        x30-x59: 0.08 ETH<br>
+        x60-x99: 0.12 ETH<br>
+        x00: 0.24 ETH<br><br>
+        Price resets each 100-level cycle.<br>
+        1 ticket = 1,000 BURNIE at any price.
+      </div>
     </div>
     <div class="status-item">
       <span class="status-label">Phase</span>
