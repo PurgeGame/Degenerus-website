@@ -17,7 +17,12 @@
     COIN: '0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1',
     AFFILIATE: '0xc6e7DF5E7b4f2A278906862b61205850344D4e7d',
     QUESTS: '0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1',
+    DEITY_PASS: '0x322813Fd9A801c5507c9de605d63CEA4f2CE6c44',
   };
+
+  var DEITY_PASS_ABI = [
+    'function ownerOf(uint256 tokenId) view returns (address)',
+  ];
 
   var CHAIN_ID = 31337; // localhost / Hardhat
 
@@ -261,10 +266,12 @@
     var levelEl = $('status-level');
     var lvl = levelEl ? parseInt(levelEl.textContent || '0', 10) : 0;
 
-    // Whale bundle: 2.4 ETH at levels 0-3, 4 ETH otherwise
-    var whaleWei = lvl <= 3 ? eth.parseEther('2.4') : eth.parseEther('4');
+    // Whale pass: 2.4 ETH at levels 0-3, 4 ETH otherwise, × qty
+    var whaleUnitWei = lvl <= 3 ? eth.parseEther('2.4') : eth.parseEther('4');
+    var whaleQty = parseInt(($('whale-qty') || {}).value || '1', 10) || 1;
+    var whaleWei = whaleUnitWei * BigInt(Math.max(whaleQty, 1));
     setEl('whale-price', formatEth(whaleWei));
-    setEl('whale-lootbox', lootboxBadge(whaleWei));
+    setEl('whale-lootbox', lootboxBadge(whaleUnitWei));
 
     // Lazy pass: flat 0.24 ETH at levels 0-2, 10 × mintPrice otherwise
     var lazyWei = lvl <= 2
@@ -285,6 +292,40 @@
         setEl('deity-lootbox', lootboxBadge(deityWei));
       }).catch(function () {});
     }
+
+    // Check if selected deity symbol is taken
+    checkDeitySymbol();
+  }
+
+  var deityPassContract = null;
+
+  function checkDeitySymbol() {
+    var select = $('deity-symbol');
+    var btn = select ? select.closest('.pass-controls').querySelector('.btn-primary') : null;
+    if (!select || !btn) return;
+
+    var symbolId = parseInt(select.value, 10);
+    var eth = ethers();
+    if (!eth || !provider) {
+      btn.disabled = false;
+      return;
+    }
+
+    if (!deityPassContract) {
+      deityPassContract = new eth.Contract(CONTRACTS.DEITY_PASS, DEITY_PASS_ABI, provider);
+    }
+
+    deityPassContract.ownerOf(symbolId).then(function (owner) {
+      // Token exists = symbol taken
+      btn.disabled = true;
+      btn.textContent = 'TAKEN';
+    }).catch(function () {
+      // ownerOf reverts = not minted = available
+      btn.disabled = false;
+      // Restore price text
+      var priceEl = $('deity-price');
+      btn.innerHTML = 'BUY - <span id="deity-price">' + (priceEl ? priceEl.textContent : '24+') + '</span> ETH';
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -775,6 +816,20 @@
         el.addEventListener('change', updateBurnieTotal);
       }
     });
+    // Whale qty updates price
+    var whaleQtyEl = $('whale-qty');
+    if (whaleQtyEl) {
+      whaleQtyEl.addEventListener('input', refreshPassPrices);
+      whaleQtyEl.addEventListener('change', refreshPassPrices);
+    }
+
+    // Deity symbol selection checks availability
+    var deitySelect = $('deity-symbol');
+    if (deitySelect) {
+      deitySelect.addEventListener('change', checkDeitySymbol);
+      deitySelect.addEventListener('input', checkDeitySymbol);
+    }
+
     // Pre-fill affiliate code from URL param or localStorage
     var affInput = $('affiliate-code');
     if (affInput) {
