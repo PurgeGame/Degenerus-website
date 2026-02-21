@@ -185,7 +185,7 @@
     if (!el) return;
     el.className = 'status-value';
     if (active) {
-      el.textContent = '62% Bonus BURNIE from Lootboxes';
+      el.textContent = '62% Bonus BURNIE';
       el.classList.add('presale--active');
     } else {
       el.textContent = 'Inactive';
@@ -779,6 +779,30 @@
         var val = affInput.value.trim().toUpperCase();
         if (val) {
           try { localStorage.setItem(REFERRER_KEY, val); } catch (e) {}
+        }
+      });
+    }
+
+    // Deity symbol preview
+    var SYMBOL_SVGS = [
+      'crypto_00_xrp', 'crypto_01_tron', 'crypto_02_sui', 'crypto_03_monero',
+      'crypto_04_solana', 'crypto_05_chainlink', 'crypto_06_ethereum', 'crypto_07_bitcoin',
+      'zodiac_00_aries', 'zodiac_01_taurus', 'zodiac_02_gemini', 'zodiac_03_cancer',
+      'zodiac_04_leo', 'zodiac_05_libra', 'zodiac_06_sagittarius', 'zodiac_07_aquarius',
+      'cards_00_horseshoe', 'cards_01_king', 'cards_02_cashsack', 'cards_03_club',
+      'cards_04_diamond', 'cards_05_heart', 'cards_06_spade', 'cards_07_ace',
+      'dice_00_1', 'dice_01_2', 'dice_02_3', 'dice_03_4',
+      'dice_04_5', 'dice_05_6', 'dice_06_7', 'dice_07_8',
+    ];
+    var deitySelect = $('deity-symbol');
+    var deityPreview = $('deity-symbol-preview');
+    if (deitySelect && deityPreview) {
+      deitySelect.addEventListener('change', function () {
+        var idx = parseInt(deitySelect.value, 10);
+        var svg = SYMBOL_SVGS[idx];
+        if (svg) {
+          deityPreview.src = '/symbols/' + svg + '_gold.svg';
+          deityPreview.alt = deitySelect.options[deitySelect.selectedIndex].text;
         }
       });
     }

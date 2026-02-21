@@ -626,6 +626,19 @@
       padding-right: 1.4rem;
     }
 
+    .deity-symbol-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
+    }
+
+    .deity-symbol-preview {
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+    }
+
     .pass-card .btn-primary.btn-small {
       padding: 0.6rem 1.2rem;
       font-size: 0.88rem;
@@ -844,7 +857,7 @@
     </div>
     <div class="status-item">
       <span class="status-label">Presale</span>
-      <span class="status-value presale--active" id="status-presale">62% Bonus BURNIE from Lootboxes</span>
+      <span class="status-value presale--active" id="status-presale">62% Bonus BURNIE</span>
     </div>
     <div class="status-item">
       <span class="status-label">Score</span>
@@ -909,48 +922,51 @@ afKing mode locks on for 5 levels once activated — commit to the grind.
         <span class="pass-lootbox-badge" id="deity-lootbox">+ free 4.8 ETH lootbox (20%)</span>
         <div class="pass-controls" style="flex-wrap: wrap; gap: 0.4rem;">
           <label for="deity-symbol" style="width:100%">Symbol</label>
-          <select id="deity-symbol" style="flex:1; min-width: 0;">
-            <optgroup label="Crypto">
-              <option value="0">💧 XRP</option>
-              <option value="1">⚡ Tron</option>
-              <option value="2">🌊 Sui</option>
-              <option value="3">🔒 Monero</option>
-              <option value="4">☀️ Solana</option>
-              <option value="5">🔗 Chainlink</option>
-              <option value="6" selected>⟠ Ethereum</option>
-              <option value="7">₿ Bitcoin</option>
-            </optgroup>
-            <optgroup label="Zodiac">
-              <option value="8">♈ Aries</option>
-              <option value="9">♉ Taurus</option>
-              <option value="10">♊ Gemini</option>
-              <option value="11">♋ Cancer</option>
-              <option value="12">♌ Leo</option>
-              <option value="13">♍ Virgo</option>
-              <option value="14">♏ Scorpio</option>
-              <option value="15">♒ Aquarius</option>
-            </optgroup>
-            <optgroup label="Cards">
-              <option value="16">🧲 Horseshoe</option>
-              <option value="17">👑 King</option>
-              <option value="18">💰 Cash Sack</option>
-              <option value="19">♣ Club</option>
-              <option value="20">♦ Diamond</option>
-              <option value="21">♥ Heart</option>
-              <option value="22">♠ Spade</option>
-              <option value="23">🂡 Ace</option>
-            </optgroup>
-            <optgroup label="Dice">
-              <option value="24">⚀ One</option>
-              <option value="25">⚁ Two</option>
-              <option value="26">⚂ Three</option>
-              <option value="27">⚃ Four</option>
-              <option value="28">⚄ Five</option>
-              <option value="29">⚅ Six</option>
-              <option value="30">🎲 Seven</option>
-              <option value="31">🎲 Eight</option>
-            </optgroup>
-          </select>
+          <div class="deity-symbol-row">
+            <img id="deity-symbol-preview" class="deity-symbol-preview" src="/symbols/crypto_06_ethereum_gold.svg" alt="Ethereum">
+            <select id="deity-symbol" style="flex:1; min-width: 0;">
+              <optgroup label="Crypto">
+                <option value="0">XRP</option>
+                <option value="1">Tron</option>
+                <option value="2">Sui</option>
+                <option value="3">Monero</option>
+                <option value="4">Solana</option>
+                <option value="5">Chainlink</option>
+                <option value="6" selected>Ethereum</option>
+                <option value="7">Bitcoin</option>
+              </optgroup>
+              <optgroup label="Zodiac">
+                <option value="8">Aries</option>
+                <option value="9">Taurus</option>
+                <option value="10">Gemini</option>
+                <option value="11">Cancer</option>
+                <option value="12">Leo</option>
+                <option value="13">Virgo</option>
+                <option value="14">Scorpio</option>
+                <option value="15">Aquarius</option>
+              </optgroup>
+              <optgroup label="Cards">
+                <option value="16">Horseshoe</option>
+                <option value="17">King</option>
+                <option value="18">Cash Sack</option>
+                <option value="19">Club</option>
+                <option value="20">Diamond</option>
+                <option value="21">Heart</option>
+                <option value="22">Spade</option>
+                <option value="23">Ace</option>
+              </optgroup>
+              <optgroup label="Dice">
+                <option value="24">One</option>
+                <option value="25">Two</option>
+                <option value="26">Three</option>
+                <option value="27">Four</option>
+                <option value="28">Five</option>
+                <option value="29">Six</option>
+                <option value="30">Seven</option>
+                <option value="31">Eight</option>
+              </optgroup>
+            </select>
+          </div>
           <button class="btn-primary btn-small" onclick="Mint.purchaseDeityPass()">BUY — <span id="deity-price">24</span> ETH</button>
         </div>
       </div>
