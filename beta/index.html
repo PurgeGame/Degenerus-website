@@ -377,21 +377,20 @@
     }
 
     .incr-btn {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
+      background: rgba(245, 166, 35, 0.15);
+      border: 1px solid rgba(245, 166, 35, 0.4);
       border-radius: 5px;
-      color: var(--text-secondary);
-      font-size: 0.62rem;
-      font-weight: 600;
-      padding: 0.25rem 0.35rem;
+      color: var(--accent-primary);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.35rem 0.5rem;
       cursor: pointer;
       line-height: 1;
       white-space: nowrap;
     }
 
     .incr-btn:hover {
-      background: var(--bg-tertiary);
-      color: var(--accent-primary);
+      background: rgba(245, 166, 35, 0.3);
       border-color: var(--accent-primary);
     }
 
@@ -953,6 +952,8 @@ BURNIE coinflip rebets get a <em>+1.6% bonus</em>. Deity pass holders scale up t
 Your activity score is floored at 75% (50% streak + 25% participation) while any pass is active — you can't lose your score momentum.<br><br>
 <strong>Pass Bonuses</strong><br>
 Lazy +10% &bull; Whale +40% &bull; Deity +80% added directly to your activity score.<br><br>
+<strong>Take-Profit</strong><br>
+Set a keep-multiple to automatically take profit. Winnings above your keep amount get auto-reinvested; the rest stays claimable. Min <em>5 ETH</em> / <em>20k BURNIE</em>, or 0 to rebuy everything.<br><br>
 <strong>5-Level Lock</strong><br>
 afKing mode locks on for 5 levels once activated — commit to the grind.
 </span></span></h2>
@@ -1070,6 +1071,7 @@ afKing mode locks on for 5 levels once activated — commit to the grind.
             <div class="incr-btns">
               <button class="incr-btn" onclick="incrInput('ticket-qty',1)">+1</button>
               <button class="incr-btn" onclick="incrInput('ticket-qty',10)">+10</button>
+              <button class="incr-btn" onclick="incrInput('ticket-qty',100)">+100</button>
             </div>
           </div>
           <div class="coin-reward" id="eth-coin-reward"></div>
@@ -1105,6 +1107,7 @@ afKing mode locks on for 5 levels once activated — commit to the grind.
             <div class="incr-btns">
               <button class="incr-btn" onclick="incrInput('burnie-ticket-qty',1)">+1</button>
               <button class="incr-btn" onclick="incrInput('burnie-ticket-qty',10)">+10</button>
+              <button class="incr-btn" onclick="incrInput('burnie-ticket-qty',100)">+100</button>
             </div>
           </div>
         </div>
