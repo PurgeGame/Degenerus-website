@@ -1170,8 +1170,10 @@ afKing mode locks on for 5 levels once activated — commit to the grind.
 function incrInput(id, amt) {
   var el = document.getElementById(id);
   if (!el) return;
+  var step = el.step ? parseFloat(el.step) : 1;
+  var decimals = (step.toString().split('.')[1] || '').length;
   var cur = parseFloat(el.value) || 0;
-  el.value = +(cur + amt).toFixed(4);
+  el.value = (cur + amt).toFixed(decimals);
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 

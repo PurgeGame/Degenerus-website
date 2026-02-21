@@ -204,14 +204,23 @@
     return eth ? eth.formatEther(wei) : (Number(wei) / 1e18).toString();
   }
 
+  function parseEthInput(str) {
+    str = (str || '0').trim();
+    if (parseFloat(str) < 0) return 0n;
+    var parts = str.split('.');
+    var whole = parts[0] || '0';
+    var frac = (parts[1] || '').slice(0, 18).padEnd(18, '0');
+    return BigInt(whole) * 1000000000000000000n + BigInt(frac);
+  }
+
   function updateEthTotal() {
     var costEl = $('eth-total-cost');
     if (!costEl) return;
     try {
       var qty = parseInt(($('ticket-qty') || {}).value, 10) || 0;
-      var lootbox = parseFloat(($('lootbox-amount') || {}).value) || 0;
+      var lootboxStr = ($('lootbox-amount') || {}).value || '0';
       var ticketWei = currentMintPrice ? currentMintPrice * BigInt(Math.max(qty, 0)) : 0n;
-      var lootboxWei = BigInt(Math.round(Math.max(lootbox, 0) * 1e18));
+      var lootboxWei = parseEthInput(lootboxStr);
       costEl.textContent = weiToStr(ticketWei + lootboxWei);
       var rewardEl = $('eth-coin-reward');
       if (rewardEl) {
