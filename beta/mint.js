@@ -89,9 +89,55 @@
   // Helpers
   // ---------------------------------------------------------------------------
 
+  var CACHE_KEY = 'degenerus_beta_cache';
+
   function $(id) { return document.getElementById(id); }
 
   function ethers() { return window.ethers; }
+
+  function saveCache(data) {
+    try {
+      var existing = loadCache();
+      var merged = {};
+      for (var k in existing) merged[k] = existing[k];
+      for (var k2 in data) merged[k2] = data[k2];
+      merged._ts = Date.now();
+      localStorage.setItem(CACHE_KEY, JSON.stringify(merged));
+    } catch (e) {}
+  }
+
+  function loadCache() {
+    try {
+      var raw = localStorage.getItem(CACHE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) { return {}; }
+  }
+
+  function restoreFromCache() {
+    var c = loadCache();
+    if (!c._ts) return;
+    // Only use cache less than 1 hour old
+    if (Date.now() - c._ts > 3600000) return;
+
+    if (c.level != null) {
+      setEl('status-level', c.level.toString());
+      setEl('ticket-level', c.level.toString());
+      setEl('burnie-ticket-level', c.level.toString());
+    }
+    if (c.price) setEl('status-price', c.price);
+    if (c.priceWei) currentMintPrice = BigInt(c.priceWei);
+    if (c.presale != null) {
+      isPresale = c.presale;
+      setPresale(c.presale);
+    }
+    if (c.phase) {
+      setPhase(c.phase === 'Jackpot', c.phase === 'RNG Locked');
+    }
+    if (c.takenSymbols) applyTakenSymbols(c.takenSymbols);
+
+    refreshPassPrices();
+    updateEthTotal();
+  }
 
   function getAffiliateCode() {
     var raw = '';
@@ -295,6 +341,29 @@
 
   }
 
+  function applyTakenSymbols(taken) {
+    var select = $('deity-symbol');
+    if (!select) return;
+    var opts = select.querySelectorAll('option');
+    for (var j = 0; j < opts.length; j++) {
+      var val = parseInt(opts[j].value, 10);
+      var isTaken = taken.indexOf(val) !== -1;
+      opts[j].disabled = isTaken;
+      opts[j].textContent = opts[j].textContent.replace(/ \(taken\)$/, '') + (isTaken ? ' (taken)' : '');
+    }
+    // If current selection is taken, pick first available
+    var cur = parseInt(select.value, 10);
+    if (taken.indexOf(cur) !== -1) {
+      for (var k = 0; k < 32; k++) {
+        if (taken.indexOf(k) === -1) {
+          select.value = k.toString();
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          break;
+        }
+      }
+    }
+  }
+
   var deityPassContract = null;
 
   function refreshDeitySymbols() {
@@ -317,30 +386,12 @@
         return { id: id, taken: false };
       });
     })).then(function (results) {
-      var opts = select.querySelectorAll('option');
-      for (var j = 0; j < opts.length; j++) {
-        var val = parseInt(opts[j].value, 10);
-        var result = results[val];
-        if (result && result.taken) {
-          opts[j].disabled = true;
-          opts[j].textContent = opts[j].textContent.replace(/ \(taken\)$/, '') + ' (taken)';
-        } else {
-          opts[j].disabled = false;
-          opts[j].textContent = opts[j].textContent.replace(/ \(taken\)$/, '');
-        }
+      var taken = [];
+      for (var r = 0; r < results.length; r++) {
+        if (results[r].taken) taken.push(results[r].id);
       }
-      // If current selection is taken, pick first available
-      var cur = parseInt(select.value, 10);
-      var curResult = results[cur];
-      if (curResult && curResult.taken) {
-        for (var k = 0; k < results.length; k++) {
-          if (!results[k].taken) {
-            select.value = results[k].id.toString();
-            select.dispatchEvent(new Event('change', { bubbles: true }));
-            break;
-          }
-        }
-      }
+      applyTakenSymbols(taken);
+      saveCache({ takenSymbols: taken });
     });
   }
 
@@ -434,10 +485,19 @@
       setEl('ticket-level', lvl.toString());
       setEl('burnie-ticket-level', lvl.toString());
       setEl('status-price', formatEth(priceWei) + ' ETH');
+      var phaseName = rngLocked ? 'RNG Locked' : (inJackpot ? 'Jackpot' : 'Normal');
       setPhase(inJackpot, rngLocked);
       setPresale(presale);
       updateEthTotal();
       refreshPassPrices();
+
+      saveCache({
+        level: Number(lvl),
+        price: formatEth(priceWei) + ' ETH',
+        priceWei: priceWei.toString(),
+        presale: presale,
+        phase: phaseName,
+      });
 
     } catch (err) {
       console.error('refreshState error:', err);
@@ -891,9 +951,13 @@
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', attachListeners);
+    document.addEventListener('DOMContentLoaded', function () {
+      attachListeners();
+      restoreFromCache();
+    });
   } else {
     attachListeners();
+    restoreFromCache();
   }
 
   // ---------------------------------------------------------------------------
