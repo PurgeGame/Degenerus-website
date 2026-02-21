@@ -185,7 +185,7 @@
     if (!el) return;
     el.className = 'status-value';
     if (active) {
-      el.textContent = 'Active';
+      el.textContent = '62% Bonus BURNIE from Lootboxes';
       el.classList.add('presale--active');
     } else {
       el.textContent = 'Inactive';
@@ -193,7 +193,10 @@
     }
     // Also show/hide the badge in the purchase panel
     var badge = $('presale-badge');
-    if (badge) badge.style.display = active ? 'block' : 'none';
+    if (badge) {
+      badge.style.display = active ? 'block' : 'none';
+      badge.textContent = active ? 'PRESALE — 62% BONUS BURNIE' : '';
+    }
   }
 
   function weiToStr(wei) {
@@ -416,9 +419,25 @@
       setEl('player-mint-streak', mintStats.streak.toString());
       setEl('player-level-count', mintStats.levelCount.toString());
 
+      // Green/orange row backgrounds
+      var gameLevel = parseInt($('status-level').textContent || '0', 10);
+      var activeLevel = gameLevel + 2;
+      var mintedThisLevel = Number(mintStats.lvl) >= activeLevel;
+
+      var mintRow = $('row-mint-streak');
+      if (mintRow) mintRow.className = 'info-row' + (mintedThisLevel ? ' info-row--good' : ' info-row--warn');
+
+      var levelRow = $('row-level-count');
+      if (levelRow) levelRow.className = 'info-row' + (mintedThisLevel ? ' info-row--good' : ' info-row--warn');
+
       // Quests
       if (questView) {
         setEl('player-quest-streak', questView.baseStreak.toString());
+
+        // Quest streak row: green if both quests done today, orange if not
+        var allQuestsDone = questView.completed[0] && questView.completed[1];
+        var questRow = $('row-quest-streak');
+        if (questRow) questRow.className = 'info-row' + (allQuestsDone ? ' info-row--good' : ' info-row--warn');
         for (var q = 0; q < 2; q++) {
           var quest = questView.quests[q];
           var typeName = QUEST_NAMES[quest.questType] || ('Type ' + quest.questType);
