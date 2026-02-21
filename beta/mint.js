@@ -342,6 +342,8 @@
       isPresale = presale;
 
       setEl('status-level', lvl.toString());
+      setEl('ticket-level', lvl.toString());
+      setEl('burnie-ticket-level', lvl.toString());
       setEl('status-price', formatEth(priceWei) + ' ETH');
       setPhase(inJackpot, rngLocked);
       setPresale(presale);

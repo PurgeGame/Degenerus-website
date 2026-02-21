@@ -326,9 +326,9 @@
 
     .purchase-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1rem;
-      margin-bottom: 1.25rem;
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
     }
 
     .purchase-col {
@@ -339,6 +339,13 @@
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
+    }
+
+    .ticket-level {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin-left: 0.3rem;
     }
 
     .cost-line {
@@ -477,15 +484,15 @@
     /* ------------------------------------------------------------------ */
     .main-layout {
       display: grid;
-      grid-template-columns: 1fr 320px;
+      grid-template-columns: 320px 1fr;
       gap: clamp(0.75rem, 2vw, 1.25rem);
       align-items: start;
     }
 
     /* ------------------------------------------------------------------ */
-    /* Passes sidebar                                                      */
+    /* Purchase sidebar                                                    */
     /* ------------------------------------------------------------------ */
-    .passes-sidebar .panel {
+    .purchase-sidebar .panel {
       position: sticky;
       top: 1rem;
     }
@@ -628,7 +635,7 @@
         grid-template-columns: 1fr;
       }
 
-      .passes-sidebar .panel {
+      .purchase-sidebar .panel {
         position: static;
       }
 
@@ -712,11 +719,11 @@
     </div>
   </div>
 
-  <!-- Two-column layout: main + passes sidebar -->
+  <!-- Two-column layout: purchase sidebar + passes main -->
   <div class="main-layout">
-  <div class="main-col">
 
-  <!-- SECTION: Purchase -->
+  <!-- SIDEBAR: Purchase -->
+  <div class="purchase-sidebar">
   <section class="panel purchase-panel">
     <div class="purchase-header">
       <h2>Purchase</h2>
@@ -730,9 +737,9 @@
     <div class="pay-mode" id="pay-eth">
       <div class="purchase-grid">
         <div class="purchase-col">
-          <h3>Tickets</h3>
+          <h3>Tickets <span class="ticket-level">Level <span id="ticket-level">0</span></span></h3>
           <label for="ticket-qty">Quantity</label>
-          <input type="number" id="ticket-qty" value="1" min="0" step="1">
+          <input type="number" id="ticket-qty" value="0" min="0" step="1">
         </div>
         <div class="purchase-col">
           <h3>Lootbox</h3>
@@ -742,7 +749,7 @@
         </div>
       </div>
       <div class="purchase-controls">
-        <button class="btn-primary" onclick="Mint.purchase()">PURCHASE — <span id="eth-total-cost">0.01</span> ETH</button>
+        <button class="btn-primary" onclick="Mint.purchase()">PURCHASE — <span id="eth-total-cost">0</span> ETH</button>
       </div>
     </div>
 
@@ -751,9 +758,9 @@
       <div class="burnie-balance-line">Balance: <span id="burnie-balance">—</span></div>
       <div class="purchase-grid">
         <div class="purchase-col">
-          <h3>Tickets</h3>
+          <h3>Tickets <span class="ticket-level">Level <span id="burnie-ticket-level">0</span></span></h3>
           <label for="burnie-ticket-qty">Quantity</label>
-          <input type="number" id="burnie-ticket-qty" value="1" min="0" step="1">
+          <input type="number" id="burnie-ticket-qty" value="0" min="0" step="1">
         </div>
         <div class="purchase-col">
           <h3>Lootbox</h3>
@@ -762,19 +769,18 @@
         </div>
       </div>
       <div class="purchase-controls">
-        <button class="btn-primary" onclick="Mint.purchaseBurnie()">PURCHASE — <span id="burnie-total-cost">1,000</span> BURNIE</button>
+        <button class="btn-primary" onclick="Mint.purchaseBurnie()">PURCHASE — <span id="burnie-total-cost">0</span> BURNIE</button>
       </div>
     </div>
 
     <div id="tx-status" class="tx-status"></div>
   </section>
+  </div><!-- /.purchase-sidebar -->
 
-  </div><!-- /.main-col -->
-
-  <!-- SIDEBAR: Passes -->
-  <div class="passes-sidebar">
+  <!-- MAIN: Passes -->
+  <div class="main-col">
   <section class="panel">
-    <h2>Passes</h2>
+    <h2>afKing Passes</h2>
     <div class="passes-grid">
 
       <!-- Lazy Pass -->
@@ -856,7 +862,7 @@
 
     </div>
   </section>
-  </div><!-- /.passes-sidebar -->
+  </div><!-- /.main-col -->
 
   </div><!-- /.main-layout -->
 
