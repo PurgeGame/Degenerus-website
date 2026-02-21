@@ -345,7 +345,7 @@
     }
 
     .presale-badge {
-      display: none;
+      display: block;
       align-self: flex-start;
       padding: 0.2rem 0.6rem;
       border-radius: 4px;
@@ -517,14 +517,22 @@
     }
 
     .pass-lootbox-badge {
-      font-size: 0.65rem;
-      font-weight: 600;
-      color: var(--success);
-      background: rgba(34, 197, 94, 0.1);
-      border: 1px solid rgba(34, 197, 94, 0.25);
-      border-radius: 4px;
-      padding: 0.1rem 0.4rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #22c55e;
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.35);
+      border-radius: 5px;
+      padding: 0.15rem 0.5rem;
       white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      animation: lootbox-glow 2s ease-in-out infinite alternate;
+    }
+
+    @keyframes lootbox-glow {
+      from { box-shadow: 0 0 3px rgba(34, 197, 94, 0.15); }
+      to   { box-shadow: 0 0 8px rgba(34, 197, 94, 0.3); }
     }
 
     .pass-controls {
@@ -689,7 +697,7 @@
     </div>
     <div class="status-item">
       <span class="status-label">Presale</span>
-      <span class="status-value" id="status-presale">—</span>
+      <span class="status-value presale--active" id="status-presale">Active</span>
     </div>
   </div>
 
@@ -725,8 +733,7 @@
       <div class="cost-line">Total: <span id="eth-total-cost">0.01</span> ETH</div>
       <div class="purchase-controls">
         <div class="control-group" style="max-width: 280px;">
-          <label for="affiliate-code">Affiliate Code</label>
-          <input type="text" id="affiliate-code" placeholder="Optional" maxlength="12" style="text-transform:uppercase">
+          <input type="text" id="affiliate-code" placeholder="Affiliate Code" maxlength="12" style="text-transform:uppercase">
         </div>
         <button class="btn-primary" onclick="Mint.purchase()">PURCHASE</button>
       </div>
@@ -739,7 +746,7 @@
         <div class="purchase-col">
           <h3>Tickets</h3>
           <label for="burnie-ticket-qty">Quantity</label>
-          <input type="number" id="burnie-ticket-qty" value="0" min="0" step="1">
+          <input type="number" id="burnie-ticket-qty" value="1" min="0" step="1">
         </div>
         <div class="purchase-col">
           <h3>Lootbox</h3>
@@ -747,7 +754,7 @@
           <input type="number" id="burnie-lootbox-amount" value="0" min="0" step="100">
         </div>
       </div>
-      <div class="cost-line">Total: <span id="burnie-total-cost">0</span> BURNIE</div>
+      <div class="cost-line">Total: <span id="burnie-total-cost">1,000</span> BURNIE</div>
       <div class="purchase-controls">
         <button class="btn-primary" onclick="Mint.purchaseBurnie()">PURCHASE WITH BURNIE</button>
       </div>
@@ -771,7 +778,7 @@
         <p class="pass-desc">One ticket per level for the next 10 levels and a small score boost.</p>
         <div class="pass-price-row">
           <span class="pass-price" id="lazy-price">0.24 ETH</span>
-          <span class="pass-lootbox-badge">+ 10-20% lootbox</span>
+          <span class="pass-lootbox-badge" id="lazy-lootbox">+ free 0.048 ETH lootbox (20%)</span>
         </div>
         <div class="pass-status" id="player-lazy-status"></div>
         <button class="btn-primary btn-small" onclick="Mint.purchaseLazyPass()">BUY PASS</button>
@@ -784,7 +791,7 @@
         <p class="pass-desc">Two entries per level for the next 100 levels at a large discount and a score boost for the duration of the pass.</p>
         <div class="pass-price-row">
           <span class="pass-price" id="whale-price">2.4 ETH</span>
-          <span class="pass-lootbox-badge">+ 10-20% lootbox</span>
+          <span class="pass-lootbox-badge" id="whale-lootbox">+ free 0.48 ETH lootbox (20%)</span>
         </div>
         <div class="pass-controls">
           <label for="whale-qty">Qty</label>
@@ -800,7 +807,7 @@
         <p class="pass-desc">Become the immortal deity of a symbol. Deity pass holders receive 16 entries (or a minimum of 2% of entries) for their symbol every drawing and a huge score boost. Unlike the other passes, this one is transferrable (for a fee).</p>
         <div class="pass-price-row">
           <span class="pass-price" id="deity-price">24 ETH</span>
-          <span class="pass-lootbox-badge">+ 10-20% lootbox</span>
+          <span class="pass-lootbox-badge" id="deity-lootbox">+ free 4.8 ETH lootbox (20%)</span>
         </div>
         <div class="pass-controls" style="flex-wrap: wrap; gap: 0.4rem;">
           <label for="deity-symbol" style="width:100%">Symbol</label>

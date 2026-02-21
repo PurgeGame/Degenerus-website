@@ -59,6 +59,7 @@
   var coinContract = null;
   var currentAddress = null;
   var currentMintPrice = 10000000000000000n; // BigInt — default 0.01 ETH, updated by refreshState
+  var isPresale = true; // default to presale until contract says otherwise
   var pollTimer = null;
 
   // ---------------------------------------------------------------------------
@@ -211,6 +212,13 @@
     }
   }
 
+  function lootboxBadge(priceWei) {
+    var bps = isPresale ? 2000n : 1000n;
+    var lootWei = (priceWei * bps) / 10000n;
+    var pct = isPresale ? '20%' : '10%';
+    return '+ free ' + formatEth(lootWei) + ' ETH lootbox (' + pct + ')';
+  }
+
   function refreshPassPrices() {
     var eth = ethers();
     if (!eth) return;
@@ -221,21 +229,25 @@
     // Whale bundle: 2.4 ETH at levels 0-3, 4 ETH otherwise
     var whaleWei = lvl <= 3 ? eth.parseEther('2.4') : eth.parseEther('4');
     setEl('whale-price', formatEth(whaleWei) + ' ETH');
+    setEl('whale-lootbox', lootboxBadge(whaleWei));
 
     // Lazy pass: flat 0.24 ETH at levels 0-2, 10 × mintPrice otherwise
     var lazyWei = lvl <= 2
       ? eth.parseEther('0.24')
       : (currentMintPrice ? currentMintPrice * 10n : eth.parseEther('0.4'));
     setEl('lazy-price', formatEth(lazyWei) + ' ETH');
+    setEl('lazy-lootbox', lootboxBadge(lazyWei));
 
     // Deity pass: 24 + T(k) where T(k) = k*(k+1)/2, k = issued count
-    // Updated async below if contract is available
-    setEl('deity-price', formatEth(eth.parseEther('24')) + '+ ETH');
+    var deityBaseWei = eth.parseEther('24');
+    setEl('deity-price', formatEth(deityBaseWei) + '+ ETH');
+    setEl('deity-lootbox', lootboxBadge(deityBaseWei));
     if (contract) {
       contract.deityPassTotalIssuedCount().then(function (issued) {
-        var base = eth.parseEther('24');
         var tri = (issued * (issued + 1n)) / 2n * eth.parseEther('1');
-        setEl('deity-price', formatEth(base + tri) + ' ETH');
+        var deityWei = deityBaseWei + tri;
+        setEl('deity-price', formatEth(deityWei) + ' ETH');
+        setEl('deity-lootbox', lootboxBadge(deityWei));
       }).catch(function () {});
     }
   }
@@ -319,6 +331,7 @@
       var priceWei = info[4];
 
       currentMintPrice = priceWei;
+      isPresale = presale;
 
       setEl('status-level', lvl.toString());
       setEl('status-price', formatEth(priceWei) + ' ETH');
