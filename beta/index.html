@@ -359,6 +359,48 @@
       font-weight: 600;
     }
 
+    .input-with-btns {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .input-with-btns input {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .incr-btns {
+      display: flex;
+      gap: 0.2rem;
+      flex-shrink: 0;
+    }
+
+    .incr-btn {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+      color: var(--text-secondary);
+      font-size: 0.62rem;
+      font-weight: 600;
+      padding: 0.25rem 0.35rem;
+      cursor: pointer;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .incr-btn:hover {
+      background: var(--bg-tertiary);
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+
+    .coin-reward {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #22c55e;
+    }
+
     .burnie-balance-line {
       font-size: 0.82rem;
       color: var(--text-secondary);
@@ -1023,12 +1065,26 @@ afKing mode locks on for 5 levels once activated — commit to the grind.
         <div class="purchase-col">
           <h3>Tickets <span class="ticket-level">Level <span id="ticket-level">0</span></span></h3>
           <label for="ticket-qty">Quantity</label>
-          <input type="number" id="ticket-qty" value="0" min="0" step="1">
+          <div class="input-with-btns">
+            <input type="number" id="ticket-qty" value="0" min="0" step="1">
+            <div class="incr-btns">
+              <button class="incr-btn" onclick="incrInput('ticket-qty',1)">+1</button>
+              <button class="incr-btn" onclick="incrInput('ticket-qty',10)">+10</button>
+            </div>
+          </div>
+          <div class="coin-reward" id="eth-coin-reward"></div>
         </div>
         <div class="purchase-col">
           <h3>Lootbox</h3>
           <label for="lootbox-amount">ETH Amount</label>
-          <input type="number" id="lootbox-amount" value="0" min="0" step="0.01">
+          <div class="input-with-btns">
+            <input type="number" id="lootbox-amount" value="0" min="0" step="0.01">
+            <div class="incr-btns">
+              <button class="incr-btn" onclick="incrInput('lootbox-amount',0.01)">+.01</button>
+              <button class="incr-btn" onclick="incrInput('lootbox-amount',0.1)">+.1</button>
+              <button class="incr-btn" onclick="incrInput('lootbox-amount',1)">+1</button>
+            </div>
+          </div>
           <div class="presale-badge" id="presale-badge">PRESALE — 62% BONUS BURNIE</div>
         </div>
       </div>
@@ -1044,12 +1100,25 @@ afKing mode locks on for 5 levels once activated — commit to the grind.
         <div class="purchase-col">
           <h3>Tickets <span class="ticket-level">Level <span id="burnie-ticket-level">0</span></span></h3>
           <label for="burnie-ticket-qty">Quantity</label>
-          <input type="number" id="burnie-ticket-qty" value="0" min="0" step="1">
+          <div class="input-with-btns">
+            <input type="number" id="burnie-ticket-qty" value="0" min="0" step="1">
+            <div class="incr-btns">
+              <button class="incr-btn" onclick="incrInput('burnie-ticket-qty',1)">+1</button>
+              <button class="incr-btn" onclick="incrInput('burnie-ticket-qty',10)">+10</button>
+            </div>
+          </div>
         </div>
         <div class="purchase-col">
           <h3>Lootbox</h3>
           <label for="burnie-lootbox-amount">BURNIE Amount</label>
-          <input type="number" id="burnie-lootbox-amount" value="0" min="0" step="100">
+          <div class="input-with-btns">
+            <input type="number" id="burnie-lootbox-amount" value="0" min="0" step="100">
+            <div class="incr-btns">
+              <button class="incr-btn" onclick="incrInput('burnie-lootbox-amount',100)">+100</button>
+              <button class="incr-btn" onclick="incrInput('burnie-lootbox-amount',1000)">+1k</button>
+              <button class="incr-btn" onclick="incrInput('burnie-lootbox-amount',10000)">+10k</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="purchase-controls">
@@ -1098,6 +1167,14 @@ afKing mode locks on for 5 levels once activated — commit to the grind.
 </div>
 
 <script>
+function incrInput(id, amt) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var cur = parseFloat(el.value) || 0;
+  el.value = +(cur + amt).toFixed(4);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 function togglePayMode(mode) {
   document.getElementById('pay-eth').style.display = mode === 'eth' ? '' : 'none';
   document.getElementById('pay-burnie').style.display = mode === 'burnie' ? '' : 'none';

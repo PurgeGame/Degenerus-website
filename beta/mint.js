@@ -213,6 +213,11 @@
       var ticketWei = currentMintPrice ? currentMintPrice * BigInt(Math.max(qty, 0)) : 0n;
       var lootboxWei = BigInt(Math.round(Math.max(lootbox, 0) * 1e18));
       costEl.textContent = weiToStr(ticketWei + lootboxWei);
+      var rewardEl = $('eth-coin-reward');
+      if (rewardEl) {
+        var burnie = Math.max(qty, 0) * PRICE_COIN_UNIT;
+        rewardEl.textContent = burnie > 0 ? '+ ' + burnie.toLocaleString() + ' free BURNIE' : '';
+      }
     } catch (e) {
       costEl.textContent = '—';
     }
