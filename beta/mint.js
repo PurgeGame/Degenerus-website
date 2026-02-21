@@ -293,38 +293,54 @@
       }).catch(function () {});
     }
 
-    // Check if selected deity symbol is taken
-    checkDeitySymbol();
   }
 
   var deityPassContract = null;
 
-  function checkDeitySymbol() {
+  function refreshDeitySymbols() {
     var select = $('deity-symbol');
-    var btn = select ? select.closest('.pass-controls').querySelector('.btn-primary') : null;
-    if (!select || !btn) return;
-
-    var symbolId = parseInt(select.value, 10);
     var eth = ethers();
-    if (!eth || !provider) {
-      btn.disabled = false;
-      return;
-    }
+    if (!select || !eth || !provider) return;
 
     if (!deityPassContract) {
       deityPassContract = new eth.Contract(CONTRACTS.DEITY_PASS, DEITY_PASS_ABI, provider);
     }
 
-    deityPassContract.ownerOf(symbolId).then(function (owner) {
-      // Token exists = symbol taken
-      btn.disabled = true;
-      btn.textContent = 'TAKEN';
-    }).catch(function () {
-      // ownerOf reverts = not minted = available
-      btn.disabled = false;
-      // Restore price text
-      var priceEl = $('deity-price');
-      btn.innerHTML = 'BUY - <span id="deity-price">' + (priceEl ? priceEl.textContent : '24+') + '</span> ETH';
+    var checks = [];
+    for (var i = 0; i < 32; i++) checks.push(i);
+
+    var selectedBefore = select.value;
+    Promise.all(checks.map(function (id) {
+      return deityPassContract.ownerOf(id).then(function () {
+        return { id: id, taken: true };
+      }).catch(function () {
+        return { id: id, taken: false };
+      });
+    })).then(function (results) {
+      var opts = select.querySelectorAll('option');
+      for (var j = 0; j < opts.length; j++) {
+        var val = parseInt(opts[j].value, 10);
+        var result = results[val];
+        if (result && result.taken) {
+          opts[j].disabled = true;
+          opts[j].textContent = opts[j].textContent.replace(/ \(taken\)$/, '') + ' (taken)';
+        } else {
+          opts[j].disabled = false;
+          opts[j].textContent = opts[j].textContent.replace(/ \(taken\)$/, '');
+        }
+      }
+      // If current selection is taken, pick first available
+      var cur = parseInt(select.value, 10);
+      var curResult = results[cur];
+      if (curResult && curResult.taken) {
+        for (var k = 0; k < results.length; k++) {
+          if (!results[k].taken) {
+            select.value = results[k].id.toString();
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            break;
+          }
+        }
+      }
     });
   }
 
@@ -359,6 +375,7 @@
 
       await refreshState();
       await refreshPlayer(currentAddress);
+      refreshDeitySymbols();
 
       // Listen for account changes
       window.ethereum.on('accountsChanged', async function (accounts) {
@@ -823,12 +840,6 @@
       whaleQtyEl.addEventListener('change', refreshPassPrices);
     }
 
-    // Deity symbol selection checks availability
-    var deitySelect = $('deity-symbol');
-    if (deitySelect) {
-      deitySelect.addEventListener('change', checkDeitySymbol);
-      deitySelect.addEventListener('input', checkDeitySymbol);
-    }
 
     // Pre-fill affiliate code from URL param or localStorage
     var affInput = $('affiliate-code');
