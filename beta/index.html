@@ -71,7 +71,7 @@
     /* ------------------------------------------------------------------ */
     .status-bar {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(6, 1fr);
       gap: clamp(0.5rem, 2vw, 0.75rem);
       margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
     }
@@ -492,9 +492,12 @@
     /* ------------------------------------------------------------------ */
     /* Purchase sidebar                                                    */
     /* ------------------------------------------------------------------ */
-    .purchase-sidebar .panel {
+    .purchase-sidebar {
       position: sticky;
       top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: clamp(0.75rem, 2vw, 1rem);
     }
 
     .passes-grid {
@@ -626,6 +629,67 @@
     }
 
     /* ------------------------------------------------------------------ */
+    /* Player info panel (sidebar)                                         */
+    /* ------------------------------------------------------------------ */
+    .player-info h3 {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      margin-bottom: 0.5rem;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.35rem 0;
+      font-size: 0.8rem;
+    }
+
+    .info-row + .info-row {
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .info-label {
+      color: var(--text-dim);
+    }
+
+    .info-value {
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .info-value--good { color: var(--success); }
+    .info-value--warn { color: var(--warning); }
+
+    .quest-item {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 0.5rem 0.6rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .quest-type {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 0.2rem;
+    }
+
+    .quest-progress {
+      font-size: 0.68rem;
+      color: var(--text-dim);
+    }
+
+    .quest-done {
+      color: var(--success);
+      font-weight: 700;
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Responsive                                                           */
     /* ------------------------------------------------------------------ */
 
@@ -635,7 +699,7 @@
         grid-template-columns: 1fr;
       }
 
-      .purchase-sidebar .panel {
+      .purchase-sidebar {
         position: static;
       }
 
@@ -712,6 +776,10 @@
     <div class="status-item">
       <span class="status-label">Presale</span>
       <span class="status-value presale--active" id="status-presale">Active</span>
+    </div>
+    <div class="status-item">
+      <span class="status-label">Score</span>
+      <span class="status-value" id="status-score">—</span>
     </div>
     <div class="status-item">
       <span class="status-label">Referral</span>
@@ -861,6 +929,35 @@
     </div>
 
     <div id="tx-status" class="tx-status"></div>
+  </section>
+
+  <!-- Player Streaks & Quests -->
+  <section class="panel player-info" id="player-info-panel" style="display:none">
+    <h3>Streaks</h3>
+    <div class="info-row">
+      <span class="info-label">Mint Streak</span>
+      <span class="info-value" id="player-mint-streak">—</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Quest Streak</span>
+      <span class="info-value" id="player-quest-streak">—</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Levels Minted</span>
+      <span class="info-value" id="player-level-count">—</span>
+    </div>
+
+    <h3 style="margin-top: 0.75rem">Daily Quests</h3>
+    <div id="quest-list">
+      <div class="quest-item">
+        <div class="quest-type" id="quest-0-type">—</div>
+        <div class="quest-progress" id="quest-0-progress"></div>
+      </div>
+      <div class="quest-item">
+        <div class="quest-type" id="quest-1-type">—</div>
+        <div class="quest-progress" id="quest-1-progress"></div>
+      </div>
+    </div>
   </section>
   </div><!-- /.purchase-sidebar -->
 

@@ -16,6 +16,7 @@
     GAME: '0x68B1D87F95878fE05B998F19b66F4baba5De1aed',
     COIN: '0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1',
     AFFILIATE: '0xc6e7DF5E7b4f2A278906862b61205850344D4e7d',
+    QUESTS: '0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1',
   };
 
   var CHAIN_ID = 31337; // localhost / Hardhat
@@ -37,6 +38,7 @@
     'function deityPassCountFor(address player) view returns (uint16)',
     'function gameOver() view returns (bool)',
     'function playerActivityScore(address player) view returns (uint256)',
+    'function ethMintStats(address player) view returns (uint24 lvl, uint24 levelCount, uint24 streak)',
     // Write
     'function purchase(address buyer, uint256 ticketQuantity, uint256 lootBoxAmount, bytes32 affiliateCode, uint8 payKind) payable',
     'function purchaseCoin(address buyer, uint256 ticketQuantity, uint256 lootBoxBurnieAmount)',
@@ -54,6 +56,15 @@
     'function getReferrer(address player) view returns (address)',
   ];
 
+  var QUESTS_ABI = [
+    'function getPlayerQuestView(address player) view returns (tuple(tuple(uint48 day, uint8 questType, bool highDifficulty, tuple(uint32 mints, uint256 tokenAmount) requirements)[2] quests, uint128[2] progress, bool[2] completed, uint32 lastCompletedDay, uint32 baseStreak))',
+  ];
+
+  var QUEST_NAMES = [
+    'Mint (BURNIE)', 'Mint (ETH)', 'Coinflip', 'Affiliate',
+    'Reserved', 'Decimator', 'Lootbox', 'Degenerette (ETH)', 'Degenerette (BURNIE)'
+  ];
+
   // ---------------------------------------------------------------------------
   // Module state
   // ---------------------------------------------------------------------------
@@ -63,6 +74,7 @@
   var contract = null;
   var coinContract = null;
   var affiliateContract = null;
+  var questsContract = null;
   var currentAddress = null;
   var currentMintPrice = 10000000000000000n; // BigInt — default 0.01 ETH, updated by refreshState
   var isPresale = true; // default to presale until contract says otherwise
@@ -277,6 +289,7 @@
       contract = new eth.Contract(CONTRACTS.GAME, ABI, signer);
       coinContract = new eth.Contract(CONTRACTS.COIN, COIN_ABI, provider);
       affiliateContract = new eth.Contract(CONTRACTS.AFFILIATE, AFFILIATE_ABI, provider);
+      questsContract = new eth.Contract(CONTRACTS.QUESTS, QUESTS_ABI, provider);
 
       // Pre-fill affiliate code from localStorage
       var storedCode = '';
@@ -297,6 +310,7 @@
           contract = new eth.Contract(CONTRACTS.GAME, ABI, signer);
           coinContract = new eth.Contract(CONTRACTS.COIN, COIN_ABI, provider);
           affiliateContract = new eth.Contract(CONTRACTS.AFFILIATE, AFFILIATE_ABI, provider);
+          questsContract = new eth.Contract(CONTRACTS.QUESTS, QUESTS_ABI, provider);
           await refreshState();
           await refreshPlayer(currentAddress);
         } else {
@@ -365,17 +379,25 @@
     try {
       var promises = [
         contract.hasActiveLazyPass(address),
+        contract.playerActivityScore(address),
+        contract.ethMintStats(address),
       ];
-      if (coinContract) {
-        promises.push(coinContract.balanceOf(address));
-      }
-      if (affiliateContract) {
-        promises.push(affiliateContract.getReferrer(address));
-      }
+      if (coinContract) promises.push(coinContract.balanceOf(address));
+      if (affiliateContract) promises.push(affiliateContract.getReferrer(address));
+      if (questsContract) promises.push(questsContract.getPlayerQuestView(address));
+
       var results = await Promise.all(promises);
-      var hasLazy = results[0];
-      var burnieBalance = results[1] || 0n;
-      var referrer = results[2] || '0x0000000000000000000000000000000000000000';
+      var idx = 0;
+      var hasLazy = results[idx++];
+      var scoreBps = results[idx++];
+      var mintStats = results[idx++];
+      var burnieBalance = coinContract ? results[idx++] : 0n;
+      var referrer = affiliateContract ? results[idx++] : '0x0000000000000000000000000000000000000000';
+      var questView = questsContract ? results[idx++] : null;
+
+      // Score in status bar (bps → percentage)
+      var scorePct = (Number(scoreBps) / 100).toFixed(0);
+      setEl('status-score', scorePct + '%');
 
       setEl('burnie-balance', formatBurnie(burnieBalance) + ' BURNIE');
 
@@ -385,6 +407,35 @@
         var hasReferrer = referrer !== '0x0000000000000000000000000000000000000000';
         var affParent = affItem.closest('.status-item');
         if (affParent) affParent.style.display = hasReferrer ? 'none' : '';
+      }
+
+      // Streaks panel
+      var infoPanel = $('player-info-panel');
+      if (infoPanel) infoPanel.style.display = '';
+
+      setEl('player-mint-streak', mintStats.streak.toString());
+      setEl('player-level-count', mintStats.levelCount.toString());
+
+      // Quests
+      if (questView) {
+        setEl('player-quest-streak', questView.baseStreak.toString());
+        for (var q = 0; q < 2; q++) {
+          var quest = questView.quests[q];
+          var typeName = QUEST_NAMES[quest.questType] || ('Type ' + quest.questType);
+          if (quest.highDifficulty) typeName += ' (Hard)';
+          setEl('quest-' + q + '-type', typeName);
+
+          var progEl = $('quest-' + q + '-progress');
+          if (progEl) {
+            if (questView.completed[q]) {
+              progEl.innerHTML = '<span class="quest-done">Completed</span>';
+            } else if (quest.requirements.mints > 0) {
+              progEl.textContent = questView.progress[q].toString() + ' / ' + quest.requirements.mints.toString() + ' mints';
+            } else {
+              progEl.textContent = 'In progress';
+            }
+          }
+        }
       }
 
       var lazyEl = $('player-lazy-status');
