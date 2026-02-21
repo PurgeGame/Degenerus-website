@@ -360,8 +360,9 @@
 
     .purchase-controls {
       display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
     }
 
     .control-row {
@@ -731,9 +732,7 @@
         </div>
       </div>
       <div class="purchase-controls">
-        <div class="control-group" style="max-width: 280px;">
-          <input type="text" id="affiliate-code" placeholder="Affiliate Code" maxlength="12" style="text-transform:uppercase">
-        </div>
+        <input type="text" id="affiliate-code" placeholder="Affiliate Code" maxlength="12" style="text-transform:uppercase">
         <button class="btn-primary" onclick="Mint.purchase()">PURCHASE — <span id="eth-total-cost">0.01</span> ETH</button>
       </div>
     </div>
@@ -754,6 +753,7 @@
         </div>
       </div>
       <div class="purchase-controls">
+        <input type="text" id="burnie-affiliate-code" placeholder="Affiliate Code" maxlength="12" style="text-transform:uppercase">
         <button class="btn-primary" onclick="Mint.purchaseBurnie()">PURCHASE — <span id="burnie-total-cost">1,000</span> BURNIE</button>
       </div>
     </div>
