@@ -797,14 +797,16 @@
     var deitySelect = $('deity-symbol');
     var deityPreview = $('deity-symbol-preview');
     if (deitySelect && deityPreview) {
-      deitySelect.addEventListener('change', function () {
+      function updateDeityPreview() {
         var idx = parseInt(deitySelect.value, 10);
         var svg = SYMBOL_SVGS[idx];
         if (svg) {
           deityPreview.src = '/symbols/' + svg + '_gold.svg';
           deityPreview.alt = deitySelect.options[deitySelect.selectedIndex].text;
         }
-      });
+      }
+      deitySelect.addEventListener('change', updateDeityPreview);
+      deitySelect.addEventListener('input', updateDeityPreview);
     }
   }
 

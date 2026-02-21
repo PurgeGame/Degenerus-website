@@ -562,10 +562,19 @@
       gap: 0.5rem;
     }
 
+    .pass-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
     .pass-icon {
       font-size: 1.8rem;
       line-height: 1;
-      margin-bottom: 0.1rem;
+    }
+
+    .pass-header .pass-lootbox-badge {
+      margin: 0;
     }
 
     .pass-card h3 {
@@ -644,6 +653,22 @@
       font-size: 0.88rem;
       width: 100%;
       margin-top: 0.25rem;
+    }
+
+    .pass-controls--compact {
+      flex-wrap: nowrap;
+      gap: 0.35rem;
+    }
+
+    .pass-controls--compact input[type="number"] {
+      width: 3.5rem;
+      flex: 0 0 auto;
+    }
+
+    .pass-controls--compact .btn-primary.btn-small {
+      width: auto;
+      flex: 1;
+      margin-top: 0;
     }
 
     .pass-status {
@@ -893,21 +918,25 @@ afKing mode locks on for 5 levels once activated — commit to the grind.
 
       <!-- Lazy Pass -->
       <div class="pass-card">
-        <div class="pass-icon">&#x1f634;</div>
+        <div class="pass-header">
+          <div class="pass-icon">&#x1f634;</div>
+          <span class="pass-lootbox-badge" id="lazy-lootbox">+ free 0.048 ETH lootbox (20%)</span>
+        </div>
         <h3>Lazy Pass</h3>
         <p class="pass-desc">One ticket per level for the next 10 levels and a small score boost.</p>
-        <span class="pass-lootbox-badge" id="lazy-lootbox">+ free 0.048 ETH lootbox (20%)</span>
         <div class="pass-status" id="player-lazy-status"></div>
         <button class="btn-primary btn-small" onclick="Mint.purchaseLazyPass()">BUY — <span id="lazy-price">0.24</span> ETH</button>
       </div>
 
-      <!-- Whale Bundle -->
+      <!-- Whale Pass -->
       <div class="pass-card">
-        <div class="pass-icon">&#x1f433;</div>
-        <h3>Whale Bundle</h3>
+        <div class="pass-header">
+          <div class="pass-icon">&#x1f433;</div>
+          <span class="pass-lootbox-badge" id="whale-lootbox">+ free 0.48 ETH lootbox (20%)</span>
+        </div>
+        <h3>Whale Pass</h3>
         <p class="pass-desc">Two entries (1/2 ticket) per level for the next 100 levels at a large discount and a score boost for the duration of the pass.</p>
-        <span class="pass-lootbox-badge" id="whale-lootbox">+ free 0.48 ETH lootbox (20%)</span>
-        <div class="pass-controls">
+        <div class="pass-controls pass-controls--compact">
           <label for="whale-qty">Qty</label>
           <input type="number" id="whale-qty" value="1" min="1" max="100" step="1">
           <button class="btn-primary btn-small" onclick="Mint.purchaseWhaleBundle()">BUY — <span id="whale-price">2.4</span> ETH</button>
@@ -916,10 +945,12 @@ afKing mode locks on for 5 levels once activated — commit to the grind.
 
       <!-- Deity Pass -->
       <div class="pass-card">
-        <div class="pass-icon">&#x1f451;</div>
+        <div class="pass-header">
+          <div class="pass-icon">&#x1f451;</div>
+          <span class="pass-lootbox-badge" id="deity-lootbox">+ free 4.8 ETH lootbox (20%)</span>
+        </div>
         <h3>Deity Pass</h3>
         <p class="pass-desc">Become the immortal deity of a symbol. Deity pass holders receive 16 entries (or a minimum of 2% of entries) for their symbol every drawing and a huge score boost. Unlike the other passes, this one is transferrable (for a fee).</p>
-        <span class="pass-lootbox-badge" id="deity-lootbox">+ free 4.8 ETH lootbox (20%)</span>
         <div class="pass-controls" style="flex-wrap: wrap; gap: 0.4rem;">
           <label for="deity-symbol" style="width:100%">Symbol</label>
           <div class="deity-symbol-row">
