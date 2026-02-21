@@ -257,6 +257,52 @@
     /* ------------------------------------------------------------------ */
     /* Purchase section                                                     */
     /* ------------------------------------------------------------------ */
+    .purchase-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 0.6rem;
+      margin-bottom: 1rem;
+    }
+
+    .purchase-header h2 {
+      margin: 0;
+      border: none;
+      padding: 0;
+    }
+
+    .pay-toggle {
+      display: flex;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .pay-toggle-btn {
+      padding: 0.35rem 0.9rem;
+      font-family: inherit;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      border: none;
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .pay-toggle-btn.active {
+      background: var(--accent-primary);
+      color: #0a0a0f;
+    }
+
+    .pay-toggle-btn:not(.active):hover {
+      color: var(--text-primary);
+    }
+
     .purchase-panel {}
 
     .purchase-grid {
@@ -509,46 +555,6 @@
     }
 
     /* ------------------------------------------------------------------ */
-    /* Claims section                                                       */
-    /* ------------------------------------------------------------------ */
-    .claims-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .claim-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      padding: 0.85rem 1rem;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 10px;
-    }
-
-    .claim-row > div {
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-
-    .claim-label {
-      font-size: 0.72rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      color: var(--text-dim);
-    }
-
-    .claim-value {
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--accent-primary);
-    }
-
-    /* ------------------------------------------------------------------ */
     /* Footer                                                               */
     /* ------------------------------------------------------------------ */
     footer {
@@ -623,16 +629,6 @@
       .passes-grid {
         grid-template-columns: 1fr;
       }
-
-      .claim-row {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      .claim-row .btn-secondary {
-        align-self: stretch;
-        justify-content: center;
-      }
     }
 
     @media (max-width: 400px) {
@@ -663,11 +659,11 @@
   <div class="status-bar">
     <div class="status-item">
       <span class="status-label">Level</span>
-      <span class="status-value" id="status-level">—</span>
+      <span class="status-value" id="status-level">0</span>
     </div>
     <div class="status-item">
       <span class="status-label">Mint Price</span>
-      <span class="status-value" id="status-price">—</span>
+      <span class="status-value" id="status-price">0.01 ETH</span>
     </div>
     <div class="status-item">
       <span class="status-label">Phase</span>
@@ -683,75 +679,64 @@
   <div class="main-layout">
   <div class="main-col">
 
-  <!-- SECTION: ETH Purchase -->
+  <!-- SECTION: Purchase -->
   <section class="panel purchase-panel">
-    <h2>Purchase with ETH</h2>
-    <div class="purchase-grid">
-      <div class="purchase-col">
-        <h3>Tickets</h3>
-        <label for="ticket-qty">Quantity</label>
-        <input type="number" id="ticket-qty" value="1" min="0" step="1">
-        <div class="cost-line">Cost: <span id="ticket-cost">—</span> ETH</div>
-      </div>
-      <div class="purchase-col">
-        <h3>Lootbox</h3>
-        <label for="lootbox-amount">ETH Amount</label>
-        <input type="number" id="lootbox-amount" value="0" min="0" step="0.01">
-        <div class="presale-badge" id="presale-badge">PRESALE ACTIVE</div>
+    <div class="purchase-header">
+      <h2>Purchase</h2>
+      <div class="pay-toggle" id="pay-toggle">
+        <button class="pay-toggle-btn active" data-mode="eth" onclick="togglePayMode('eth')">ETH</button>
+        <button class="pay-toggle-btn" data-mode="burnie" onclick="togglePayMode('burnie')">BURNIE</button>
       </div>
     </div>
-    <div class="purchase-controls">
-      <div class="control-group" style="max-width: 280px;">
-        <label for="affiliate-code">Affiliate Code</label>
-        <input type="text" id="affiliate-code" placeholder="Optional" maxlength="12" style="text-transform:uppercase">
-      </div>
-      <button class="btn-primary" onclick="Mint.purchase()">PURCHASE</button>
-      <div id="tx-status" class="tx-status"></div>
-    </div>
-  </section>
 
-  <!-- SECTION: BURNIE Purchase -->
-  <section class="panel purchase-panel">
-    <h2>Purchase with BURNIE</h2>
-    <div class="burnie-balance-line">Balance: <span id="burnie-balance">—</span></div>
-    <div class="purchase-grid">
-      <div class="purchase-col">
-        <h3>Tickets</h3>
-        <label for="burnie-ticket-qty">Quantity</label>
-        <input type="number" id="burnie-ticket-qty" value="0" min="0" step="1">
-        <div class="cost-line">Cost: 1,000 BURNIE per ticket</div>
+    <!-- ETH mode -->
+    <div class="pay-mode" id="pay-eth">
+      <div class="purchase-grid">
+        <div class="purchase-col">
+          <h3>Tickets</h3>
+          <label for="ticket-qty">Quantity</label>
+          <input type="number" id="ticket-qty" value="1" min="0" step="1">
+          <div class="cost-line">Cost: <span id="ticket-cost">0.01</span> ETH</div>
+        </div>
+        <div class="purchase-col">
+          <h3>Lootbox</h3>
+          <label for="lootbox-amount">ETH Amount</label>
+          <input type="number" id="lootbox-amount" value="0" min="0" step="0.01">
+          <div class="presale-badge" id="presale-badge">PRESALE ACTIVE</div>
+        </div>
       </div>
-      <div class="purchase-col">
-        <h3>Lootbox</h3>
-        <label for="burnie-lootbox-amount">BURNIE Amount</label>
-        <input type="number" id="burnie-lootbox-amount" value="0" min="0" step="100">
-        <div class="cost-line">Min: 1,000 BURNIE</div>
+      <div class="purchase-controls">
+        <div class="control-group" style="max-width: 280px;">
+          <label for="affiliate-code">Affiliate Code</label>
+          <input type="text" id="affiliate-code" placeholder="Optional" maxlength="12" style="text-transform:uppercase">
+        </div>
+        <button class="btn-primary" onclick="Mint.purchase()">PURCHASE</button>
       </div>
     </div>
-    <div class="purchase-controls">
-      <button class="btn-primary" onclick="Mint.purchaseBurnie()">PURCHASE WITH BURNIE</button>
-    </div>
-  </section>
 
-  <!-- SECTION: Claims -->
-  <section class="panel">
-    <h2>Claims</h2>
-    <div class="claims-grid">
-      <div class="claim-row">
-        <div>
-          <span class="claim-label">Claimable Winnings</span>
-          <span class="claim-value" id="claim-winnings-amount">—</span>
+    <!-- BURNIE mode -->
+    <div class="pay-mode" id="pay-burnie" style="display:none">
+      <div class="burnie-balance-line">Balance: <span id="burnie-balance">—</span></div>
+      <div class="purchase-grid">
+        <div class="purchase-col">
+          <h3>Tickets</h3>
+          <label for="burnie-ticket-qty">Quantity</label>
+          <input type="number" id="burnie-ticket-qty" value="0" min="0" step="1">
+          <div class="cost-line">Cost: 1,000 BURNIE per ticket</div>
         </div>
-        <button class="btn-secondary" onclick="Mint.claimWinnings()">Claim</button>
+        <div class="purchase-col">
+          <h3>Lootbox</h3>
+          <label for="burnie-lootbox-amount">BURNIE Amount</label>
+          <input type="number" id="burnie-lootbox-amount" value="0" min="0" step="100">
+          <div class="cost-line">Min: 1,000 BURNIE</div>
+        </div>
       </div>
-      <div class="claim-row">
-        <div>
-          <span class="claim-label">Whale Pass Claim</span>
-          <span class="claim-value" id="claim-whale-amount">—</span>
-        </div>
-        <button class="btn-secondary" onclick="Mint.claimWhalePass()">Claim</button>
+      <div class="purchase-controls">
+        <button class="btn-primary" onclick="Mint.purchaseBurnie()">PURCHASE WITH BURNIE</button>
       </div>
     </div>
+
+    <div id="tx-status" class="tx-status"></div>
   </section>
 
   </div><!-- /.main-col -->
@@ -766,8 +751,8 @@
       <div class="pass-card">
         <div class="pass-icon">&#x1f433;</div>
         <h3>Whale Bundle</h3>
-        <p class="pass-desc">100-level ticket bundle with frozen stats + 1 ETH lootbox.</p>
-        <div class="pass-price">2.4 &ndash; 4 ETH</div>
+        <p class="pass-desc">Lock in 100 levels of tickets at today's price with frozen stats. Includes a 1 ETH lootbox deposit. The bulk play for high-conviction degens.</p>
+        <div class="pass-price" id="whale-price">2.4 ETH</div>
         <div class="pass-controls">
           <label for="whale-qty">Qty</label>
           <input type="number" id="whale-qty" value="1" min="1" max="100" step="1">
@@ -779,7 +764,8 @@
       <div class="pass-card">
         <div class="pass-icon">&#x1f634;</div>
         <h3>Lazy Pass</h3>
-        <p class="pass-desc">10-level auto-ticket pass. Available at levels 0&ndash;3 or &times;9 multiples.</p>
+        <p class="pass-desc">Auto-mints a ticket for you every level for the next 10 levels. Set it, forget it, and let the protocol do the work.</p>
+        <div class="pass-price" id="lazy-price">0.24 ETH</div>
         <div class="pass-status" id="player-lazy-status"></div>
         <button class="btn-primary btn-small" onclick="Mint.purchaseLazyPass()">BUY PASS</button>
       </div>
@@ -788,7 +774,8 @@
       <div class="pass-card">
         <div class="pass-icon">&#x1f451;</div>
         <h3>Deity Pass</h3>
-        <p class="pass-desc">Permanent symbol ownership. Quadratic pricing from 24 ETH.</p>
+        <p class="pass-desc">Claim permanent ownership of a symbol. Your name on it forever, plus a cut of every ticket minted under your symbol. Price rises with each pass sold.</p>
+        <div class="pass-price" id="deity-price">24 ETH</div>
         <div class="pass-controls" style="flex-wrap: wrap; gap: 0.4rem;">
           <label for="deity-symbol" style="width:100%">Symbol</label>
           <select id="deity-symbol" style="flex:1; min-width: 0;">
@@ -848,6 +835,16 @@
   </footer>
 </div>
 
+<script>
+function togglePayMode(mode) {
+  document.getElementById('pay-eth').style.display = mode === 'eth' ? '' : 'none';
+  document.getElementById('pay-burnie').style.display = mode === 'burnie' ? '' : 'none';
+  var btns = document.querySelectorAll('.pay-toggle-btn');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('active', btns[i].dataset.mode === mode);
+  }
+}
+</script>
 <script src="/shared/nav.js"></script>
 <script>initNav({ currentPage: 'beta' });</script>
 <script type="module">

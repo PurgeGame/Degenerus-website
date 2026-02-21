@@ -31,8 +31,6 @@
     'function mintPrice() view returns (uint256)',
     'function level() view returns (uint24)',
     'function lootboxPresaleActiveFlag() view returns (bool)',
-    'function claimableWinningsOf(address player) view returns (uint256)',
-    'function whalePassClaimAmount(address player) view returns (uint256)',
     'function hasActiveLazyPass(address player) view returns (bool)',
     'function deityPassTotalIssuedCount() view returns (uint32)',
     'function deityPassCountFor(address player) view returns (uint16)',
@@ -45,8 +43,6 @@
     'function purchaseWhaleBundle(address buyer, uint256 quantity) payable',
     'function purchaseLazyPass(address buyer) payable',
     'function purchaseDeityPass(address buyer, uint8 symbolId) payable',
-    'function claimWinnings(address player)',
-    'function claimWhalePass(address player)',
   ];
 
   var COIN_ABI = [
@@ -62,7 +58,7 @@
   var contract = null;
   var coinContract = null;
   var currentAddress = null;
-  var currentMintPrice = null; // BigInt — cached from last refreshState
+  var currentMintPrice = 10000000000000000n; // BigInt — default 0.01 ETH, updated by refreshState
   var pollTimer = null;
 
   // ---------------------------------------------------------------------------
@@ -202,6 +198,35 @@
     }
   }
 
+  function refreshPassPrices() {
+    var eth = ethers();
+    if (!eth) return;
+
+    var levelEl = $('status-level');
+    var lvl = levelEl ? parseInt(levelEl.textContent || '0', 10) : 0;
+
+    // Whale bundle: 2.4 ETH at levels 0-3, 4 ETH otherwise
+    var whaleWei = lvl <= 3 ? eth.parseEther('2.4') : eth.parseEther('4');
+    setEl('whale-price', formatEth(whaleWei) + ' ETH');
+
+    // Lazy pass: flat 0.24 ETH at levels 0-2, 10 × mintPrice otherwise
+    var lazyWei = lvl <= 2
+      ? eth.parseEther('0.24')
+      : (currentMintPrice ? currentMintPrice * 10n : eth.parseEther('0.4'));
+    setEl('lazy-price', formatEth(lazyWei) + ' ETH');
+
+    // Deity pass: 24 + T(k) where T(k) = k*(k+1)/2, k = issued count
+    // Updated async below if contract is available
+    setEl('deity-price', formatEth(eth.parseEther('24')) + '+ ETH');
+    if (contract) {
+      contract.deityPassTotalIssuedCount().then(function (issued) {
+        var base = eth.parseEther('24');
+        var tri = (issued * (issued + 1n)) / 2n * eth.parseEther('1');
+        setEl('deity-price', formatEth(base + tri) + ' ETH');
+      }).catch(function () {});
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // init
   // ---------------------------------------------------------------------------
@@ -287,6 +312,7 @@
       setPhase(inJackpot, rngLocked);
       setPresale(presale);
       updateTicketCost();
+      refreshPassPrices();
 
     } catch (err) {
       console.error('refreshState error:', err);
@@ -302,21 +328,15 @@
 
     try {
       var promises = [
-        contract.claimableWinningsOf(address),
-        contract.whalePassClaimAmount(address),
         contract.hasActiveLazyPass(address),
       ];
       if (coinContract) {
         promises.push(coinContract.balanceOf(address));
       }
       var results = await Promise.all(promises);
-      var winnings = results[0];
-      var whaleAmt = results[1];
-      var hasLazy = results[2];
-      var burnieBalance = results[3] || 0n;
+      var hasLazy = results[0];
+      var burnieBalance = results[1] || 0n;
 
-      setEl('claim-winnings-amount', formatEth(winnings) + ' ETH');
-      setEl('claim-whale-amount', formatEth(whaleAmt) + ' ETH');
       setEl('burnie-balance', formatBurnie(burnieBalance) + ' BURNIE');
 
       var lazyEl = $('player-lazy-status');
@@ -603,62 +623,6 @@
   // ---------------------------------------------------------------------------
   // claimWinnings
   // ---------------------------------------------------------------------------
-
-  async function claimWinnings() {
-    if (!signer || !contract) {
-      setTxStatus('error', 'Connect your wallet first');
-      return;
-    }
-
-    try {
-      clearTxStatus();
-      setTxStatus('pending', 'Confirming...');
-
-      var addr = currentAddress || await signer.getAddress();
-      var tx = await contract.claimWinnings(addr);
-      var receipt = await tx.wait();
-      setTxStatus('confirmed', 'Claimed!', receipt.hash);
-
-      await refreshState();
-      if (currentAddress) await refreshPlayer(currentAddress);
-
-    } catch (err) {
-      console.error('claimWinnings error:', err);
-      var msg = err.reason || err.shortMessage || err.message || 'Transaction failed';
-      setTxStatus('error', msg);
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // claimWhalePass
-  // ---------------------------------------------------------------------------
-
-  async function claimWhalePass() {
-    if (!signer || !contract) {
-      setTxStatus('error', 'Connect your wallet first');
-      return;
-    }
-
-    try {
-      clearTxStatus();
-      setTxStatus('pending', 'Confirming...');
-
-      var addr = currentAddress || await signer.getAddress();
-      var tx = await contract.claimWhalePass(addr);
-      var receipt = await tx.wait();
-      setTxStatus('confirmed', 'Claimed!', receipt.hash);
-
-      await refreshState();
-      if (currentAddress) await refreshPlayer(currentAddress);
-
-    } catch (err) {
-      console.error('claimWhalePass error:', err);
-      var msg = err.reason || err.shortMessage || err.message || 'Transaction failed';
-      setTxStatus('error', msg);
-    }
-  }
-
-  // ---------------------------------------------------------------------------
   // Attach qty change listener after DOM ready
   // ---------------------------------------------------------------------------
 
@@ -697,8 +661,6 @@
     purchaseWhaleBundle: purchaseWhaleBundle,
     purchaseLazyPass: purchaseLazyPass,
     purchaseDeityPass: purchaseDeityPass,
-    claimWinnings: claimWinnings,
-    claimWhalePass: claimWhalePass,
   };
 
 })();
