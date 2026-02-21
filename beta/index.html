@@ -484,7 +484,7 @@
     /* ------------------------------------------------------------------ */
     .main-layout {
       display: grid;
-      grid-template-columns: 320px 1fr;
+      grid-template-columns: 1fr 320px;
       gap: clamp(0.75rem, 2vw, 1.25rem);
       align-items: start;
     }
@@ -719,63 +719,8 @@
     </div>
   </div>
 
-  <!-- Two-column layout: purchase sidebar + passes main -->
+  <!-- Two-column layout: passes main + purchase sidebar -->
   <div class="main-layout">
-
-  <!-- SIDEBAR: Purchase -->
-  <div class="purchase-sidebar">
-  <section class="panel purchase-panel">
-    <div class="purchase-header">
-      <h2>Purchase</h2>
-      <div class="pay-toggle" id="pay-toggle">
-        <button class="pay-toggle-btn active" data-mode="eth" onclick="togglePayMode('eth')">ETH</button>
-        <button class="pay-toggle-btn" data-mode="burnie" onclick="togglePayMode('burnie')">BURNIE</button>
-      </div>
-    </div>
-
-    <!-- ETH mode -->
-    <div class="pay-mode" id="pay-eth">
-      <div class="purchase-grid">
-        <div class="purchase-col">
-          <h3>Tickets <span class="ticket-level">Level <span id="ticket-level">0</span></span></h3>
-          <label for="ticket-qty">Quantity</label>
-          <input type="number" id="ticket-qty" value="0" min="0" step="1">
-        </div>
-        <div class="purchase-col">
-          <h3>Lootbox</h3>
-          <label for="lootbox-amount">ETH Amount</label>
-          <input type="number" id="lootbox-amount" value="0" min="0" step="0.01">
-          <div class="presale-badge" id="presale-badge">PRESALE ACTIVE</div>
-        </div>
-      </div>
-      <div class="purchase-controls">
-        <button class="btn-primary" onclick="Mint.purchase()">PURCHASE — <span id="eth-total-cost">0</span> ETH</button>
-      </div>
-    </div>
-
-    <!-- BURNIE mode -->
-    <div class="pay-mode" id="pay-burnie" style="display:none">
-      <div class="burnie-balance-line">Balance: <span id="burnie-balance">—</span></div>
-      <div class="purchase-grid">
-        <div class="purchase-col">
-          <h3>Tickets <span class="ticket-level">Level <span id="burnie-ticket-level">0</span></span></h3>
-          <label for="burnie-ticket-qty">Quantity</label>
-          <input type="number" id="burnie-ticket-qty" value="0" min="0" step="1">
-        </div>
-        <div class="purchase-col">
-          <h3>Lootbox</h3>
-          <label for="burnie-lootbox-amount">BURNIE Amount</label>
-          <input type="number" id="burnie-lootbox-amount" value="0" min="0" step="100">
-        </div>
-      </div>
-      <div class="purchase-controls">
-        <button class="btn-primary" onclick="Mint.purchaseBurnie()">PURCHASE — <span id="burnie-total-cost">0</span> BURNIE</button>
-      </div>
-    </div>
-
-    <div id="tx-status" class="tx-status"></div>
-  </section>
-  </div><!-- /.purchase-sidebar -->
 
   <!-- MAIN: Passes -->
   <div class="main-col">
@@ -863,6 +808,61 @@
     </div>
   </section>
   </div><!-- /.main-col -->
+
+  <!-- SIDEBAR: Purchase -->
+  <div class="purchase-sidebar">
+  <section class="panel purchase-panel">
+    <div class="purchase-header">
+      <h2>Purchase</h2>
+      <div class="pay-toggle" id="pay-toggle">
+        <button class="pay-toggle-btn active" data-mode="eth" onclick="togglePayMode('eth')">ETH</button>
+        <button class="pay-toggle-btn" data-mode="burnie" onclick="togglePayMode('burnie')">BURNIE</button>
+      </div>
+    </div>
+
+    <!-- ETH mode -->
+    <div class="pay-mode" id="pay-eth">
+      <div class="purchase-grid">
+        <div class="purchase-col">
+          <h3>Tickets <span class="ticket-level">Level <span id="ticket-level">0</span></span></h3>
+          <label for="ticket-qty">Quantity</label>
+          <input type="number" id="ticket-qty" value="0" min="0" step="1">
+        </div>
+        <div class="purchase-col">
+          <h3>Lootbox</h3>
+          <label for="lootbox-amount">ETH Amount</label>
+          <input type="number" id="lootbox-amount" value="0" min="0" step="0.01">
+          <div class="presale-badge" id="presale-badge">PRESALE ACTIVE</div>
+        </div>
+      </div>
+      <div class="purchase-controls">
+        <button class="btn-primary" onclick="Mint.purchase()">PURCHASE — <span id="eth-total-cost">0</span> ETH</button>
+      </div>
+    </div>
+
+    <!-- BURNIE mode -->
+    <div class="pay-mode" id="pay-burnie" style="display:none">
+      <div class="burnie-balance-line">Balance: <span id="burnie-balance">—</span></div>
+      <div class="purchase-grid">
+        <div class="purchase-col">
+          <h3>Tickets <span class="ticket-level">Level <span id="burnie-ticket-level">0</span></span></h3>
+          <label for="burnie-ticket-qty">Quantity</label>
+          <input type="number" id="burnie-ticket-qty" value="0" min="0" step="1">
+        </div>
+        <div class="purchase-col">
+          <h3>Lootbox</h3>
+          <label for="burnie-lootbox-amount">BURNIE Amount</label>
+          <input type="number" id="burnie-lootbox-amount" value="0" min="0" step="100">
+        </div>
+      </div>
+      <div class="purchase-controls">
+        <button class="btn-primary" onclick="Mint.purchaseBurnie()">PURCHASE — <span id="burnie-total-cost">0</span> BURNIE</button>
+      </div>
+    </div>
+
+    <div id="tx-status" class="tx-status"></div>
+  </section>
+  </div><!-- /.purchase-sidebar -->
 
   </div><!-- /.main-layout -->
 
