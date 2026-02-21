@@ -72,13 +72,10 @@
 
   function getAffiliateCode() {
     var raw = '';
-    // 1. Check both form fields (ETH + BURNIE mode)
-    var input = $('affiliate-code') || $('burnie-affiliate-code');
-    var input2 = $('burnie-affiliate-code') || $('affiliate-code');
+    // 1. Check the form field
+    var input = $('affiliate-code');
     if (input && input.value.trim()) {
       raw = input.value.trim().toUpperCase();
-    } else if (input2 && input2.value.trim()) {
-      raw = input2.value.trim().toUpperCase();
     }
     // 2. Fall back to localStorage
     if (!raw) {
@@ -672,27 +669,27 @@
         el.addEventListener('change', updateBurnieTotal);
       }
     });
-    // Pre-fill affiliate codes from URL param or localStorage, keep in sync
-    var affInputs = [$('affiliate-code'), $('burnie-affiliate-code')].filter(Boolean);
-    var params = new URLSearchParams(window.location.search);
-    var urlRef = (params.get('ref') || params.get('referral') || params.get('code') || '').trim().toUpperCase();
-    var stored = '';
-    try { stored = localStorage.getItem(REFERRER_KEY) || ''; } catch (e) {}
-    var prefill = urlRef || stored;
-    if (urlRef) {
-      try { localStorage.setItem(REFERRER_KEY, urlRef); } catch (e) {}
-    }
-    affInputs.forEach(function (el) {
-      if (prefill && !el.value) el.value = prefill;
-      el.addEventListener('change', function () {
-        var val = el.value.trim().toUpperCase();
-        // Sync the other input
-        affInputs.forEach(function (other) { if (other !== el) other.value = val; });
+    // Pre-fill affiliate code from URL param or localStorage
+    var affInput = $('affiliate-code');
+    if (affInput) {
+      var params = new URLSearchParams(window.location.search);
+      var urlRef = (params.get('ref') || params.get('referral') || params.get('code') || '').trim().toUpperCase();
+      if (urlRef) {
+        affInput.value = urlRef;
+        try { localStorage.setItem(REFERRER_KEY, urlRef); } catch (e) {}
+      } else if (!affInput.value) {
+        try {
+          var stored = localStorage.getItem(REFERRER_KEY) || '';
+          if (stored) affInput.value = stored;
+        } catch (e) {}
+      }
+      affInput.addEventListener('change', function () {
+        var val = affInput.value.trim().toUpperCase();
         if (val) {
           try { localStorage.setItem(REFERRER_KEY, val); } catch (e) {}
         }
       });
-    });
+    }
   }
 
   if (document.readyState === 'loading') {
