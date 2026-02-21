@@ -15,6 +15,7 @@
   var CONTRACTS = {
     GAME: '0x68B1D87F95878fE05B998F19b66F4baba5De1aed',
     COIN: '0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1',
+    AFFILIATE: '0xc6e7DF5E7b4f2A278906862b61205850344D4e7d',
   };
 
   var CHAIN_ID = 31337; // localhost / Hardhat
@@ -49,6 +50,10 @@
     'function balanceOf(address account) view returns (uint256)',
   ];
 
+  var AFFILIATE_ABI = [
+    'function getReferrer(address player) view returns (address)',
+  ];
+
   // ---------------------------------------------------------------------------
   // Module state
   // ---------------------------------------------------------------------------
@@ -57,6 +62,7 @@
   var signer = null;
   var contract = null;
   var coinContract = null;
+  var affiliateContract = null;
   var currentAddress = null;
   var currentMintPrice = 10000000000000000n; // BigInt — default 0.01 ETH, updated by refreshState
   var isPresale = true; // default to presale until contract says otherwise
@@ -270,6 +276,7 @@
 
       contract = new eth.Contract(CONTRACTS.GAME, ABI, signer);
       coinContract = new eth.Contract(CONTRACTS.COIN, COIN_ABI, provider);
+      affiliateContract = new eth.Contract(CONTRACTS.AFFILIATE, AFFILIATE_ABI, provider);
 
       // Pre-fill affiliate code from localStorage
       var storedCode = '';
@@ -289,6 +296,7 @@
           currentAddress = await signer.getAddress();
           contract = new eth.Contract(CONTRACTS.GAME, ABI, signer);
           coinContract = new eth.Contract(CONTRACTS.COIN, COIN_ABI, provider);
+          affiliateContract = new eth.Contract(CONTRACTS.AFFILIATE, AFFILIATE_ABI, provider);
           await refreshState();
           await refreshPlayer(currentAddress);
         } else {
@@ -359,11 +367,23 @@
       if (coinContract) {
         promises.push(coinContract.balanceOf(address));
       }
+      if (affiliateContract) {
+        promises.push(affiliateContract.getReferrer(address));
+      }
       var results = await Promise.all(promises);
       var hasLazy = results[0];
       var burnieBalance = results[1] || 0n;
+      var referrer = results[2] || '0x0000000000000000000000000000000000000000';
 
       setEl('burnie-balance', formatBurnie(burnieBalance) + ' BURNIE');
+
+      // Hide referral input if player already has a referrer on-chain
+      var affItem = $('affiliate-code');
+      if (affItem) {
+        var hasReferrer = referrer !== '0x0000000000000000000000000000000000000000';
+        var affParent = affItem.closest('.status-item');
+        if (affParent) affParent.style.display = hasReferrer ? 'none' : '';
+      }
 
       var lazyEl = $('player-lazy-status');
       if (lazyEl) {
