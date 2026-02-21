@@ -730,12 +730,11 @@
           <div class="presale-badge" id="presale-badge">PRESALE ACTIVE</div>
         </div>
       </div>
-      <div class="cost-line">Total: <span id="eth-total-cost">0.01</span> ETH</div>
       <div class="purchase-controls">
         <div class="control-group" style="max-width: 280px;">
           <input type="text" id="affiliate-code" placeholder="Affiliate Code" maxlength="12" style="text-transform:uppercase">
         </div>
-        <button class="btn-primary" onclick="Mint.purchase()">PURCHASE</button>
+        <button class="btn-primary" onclick="Mint.purchase()">PURCHASE — <span id="eth-total-cost">0.01</span> ETH</button>
       </div>
     </div>
 
@@ -754,9 +753,8 @@
           <input type="number" id="burnie-lootbox-amount" value="0" min="0" step="100">
         </div>
       </div>
-      <div class="cost-line">Total: <span id="burnie-total-cost">1,000</span> BURNIE</div>
       <div class="purchase-controls">
-        <button class="btn-primary" onclick="Mint.purchaseBurnie()">PURCHASE WITH BURNIE</button>
+        <button class="btn-primary" onclick="Mint.purchaseBurnie()">PURCHASE — <span id="burnie-total-cost">1,000</span> BURNIE</button>
       </div>
     </div>
 
