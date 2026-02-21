@@ -195,7 +195,7 @@
     var badge = $('presale-badge');
     if (badge) {
       badge.style.display = active ? 'block' : 'none';
-      badge.textContent = active ? 'PRESALE — 62% BONUS BURNIE' : '';
+      badge.textContent = active ? 'PRESALE - 62% BONUS BURNIE' : '';
     }
   }
 
