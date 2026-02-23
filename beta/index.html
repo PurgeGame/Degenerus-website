@@ -579,6 +579,130 @@
     }
 
     /* ------------------------------------------------------------------ */
+    /* Jackpot token widget (beta only)                                    */
+    /* ------------------------------------------------------------------ */
+    .jackpot-widget {
+      text-align: center;
+    }
+
+    .jackpot-controls {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .jackpot-controls .control-group {
+      min-width: 120px;
+    }
+
+    .jackpot-controls select {
+      width: 100%;
+    }
+
+    .jackpot-token-wrap {
+      display: flex;
+      justify-content: center;
+    }
+
+    .jp-token {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      width: 180px;
+      height: 180px;
+      position: relative;
+      background: #d9d9d9;
+      border: 3px solid #8a8d8f;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .jp-token::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 2px;
+      height: 100%;
+      background: #8a8d8f;
+      transform: translateX(-50%);
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .jp-token::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: #8a8d8f;
+      transform: translateY(-50%);
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .jp-quadrant {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1;
+      width: 100%;
+      height: 100%;
+      transition: background-color 0.3s;
+    }
+
+    .jp-quadrant.q-has-tickets {
+      background: rgba(34, 197, 94, 0.4);
+    }
+
+    .jp-quadrant.q-no-tickets {
+      background: rgba(239, 68, 68, 0.35);
+    }
+
+    .jp-badge {
+      object-fit: contain;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    .jp-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      pointer-events: none;
+      width: 31%;
+      height: 31%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .jp-center::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: calc(100% / 1.4142);
+      height: calc(100% / 1.4142);
+      background: #fff;
+      border: 2px solid #8a8d8f;
+      box-sizing: border-box;
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+
+    .jp-flame {
+      position: relative;
+      width: 66%;
+      height: 66%;
+      object-fit: contain;
+      z-index: 1;
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Purchase sidebar                                                    */
     /* ------------------------------------------------------------------ */
     .purchase-sidebar {
@@ -1004,6 +1128,33 @@
 
   <!-- MAIN: Passes -->
   <div class="main-col">
+
+  <!-- Jackpot Preview (beta only) -->
+  <section class="panel jackpot-widget" id="jackpot-widget">
+    <h2>Jackpot Preview</h2>
+    <div class="jackpot-controls">
+      <div class="control-group">
+        <label for="jp-player">Player</label>
+        <select id="jp-player"></select>
+      </div>
+      <div class="control-group">
+        <label for="jp-day">Day</label>
+        <select id="jp-day"></select>
+      </div>
+    </div>
+    <div class="jackpot-token-wrap">
+      <div class="jp-token" id="jp-token">
+        <div class="jp-quadrant" data-q="0"><img class="jp-badge" src="" alt="" /></div>
+        <div class="jp-quadrant" data-q="1"><img class="jp-badge" src="" alt="" /></div>
+        <div class="jp-quadrant" data-q="2"><img class="jp-badge" src="" alt="" /></div>
+        <div class="jp-quadrant" data-q="3"><img class="jp-badge" src="" alt="" /></div>
+        <div class="jp-center">
+          <img src="/specials/special_none.svg" alt="Flame" class="jp-flame" />
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="panel">
     <h2 class="afking-heading">afKing Passes <span class="afking-info">&#x2139;&#xFE0F;<span class="afking-tooltip">
 <strong>afKing Mode</strong> - AFK like a King<br><br>
@@ -1284,5 +1435,185 @@ function togglePayMode(mode) {
   });
 </script>
 <script src="/beta/mint.js"></script>
+<script>
+// ===== Jackpot Preview Widget (beta only) =====
+(function () {
+  var JP_CATEGORIES = ['crypto', 'zodiac', 'cards', 'dice'];
+  var JP_SYMBOLS = {
+    crypto: ['xrp', 'tron', 'sui', 'monero', 'solana', 'chainlink', 'ethereum', 'bitcoin'],
+    zodiac: ['aries', 'taurus', 'gemini', 'cancer', 'leo', 'libra', 'sagittarius', 'aquarius'],
+    cards: ['club', 'diamond', 'heart', 'spade', 'horseshoe', 'cashsack', 'king', 'ace'],
+    dice: ['1', '2', '3', '4', '5', '6', '7', '8'],
+  };
+  var JP_COLORS = ['pink', 'purple', 'green', 'red', 'blue', 'orange', 'silver', 'gold'];
+  var JP_CARD_IDX = [3, 4, 5, 6, 0, 2, 1, 7];
+  var JP_WEIGHTS = [10, 10, 10, 10, 9, 9, 9, 8];
+  var JP_TOTAL_W = 75;
+
+  var jpData = null;
+  var jpAnimId = 0; // cancel previous animations
+
+  function jpBadgePath(q, sym, col) {
+    var cat = JP_CATEGORIES[q];
+    var idx = cat === 'cards' ? JP_CARD_IDX[sym] : sym;
+    return '/badges-circular/' + cat + '_0' + idx + '_' + JP_SYMBOLS[cat][sym] + '_' + JP_COLORS[col] + '.svg';
+  }
+
+  function jpWeightedBucket() {
+    var r = Math.floor(Math.random() * JP_TOTAL_W);
+    var cum = 0;
+    for (var i = 0; i < JP_WEIGHTS.length; i++) {
+      cum += JP_WEIGHTS[i];
+      if (r < cum) return i;
+    }
+    return 7;
+  }
+
+  function jpRandomTicket() {
+    return [
+      { q: 0, sym: jpWeightedBucket(), col: jpWeightedBucket() },
+      { q: 1, sym: jpWeightedBucket(), col: jpWeightedBucket() },
+      { q: 2, sym: jpWeightedBucket(), col: jpWeightedBucket() },
+      { q: 3, sym: jpWeightedBucket(), col: jpWeightedBucket() },
+    ];
+  }
+
+  function jpRenderBadges(ticket) {
+    var quads = document.querySelectorAll('#jp-token .jp-quadrant');
+    for (var i = 0; i < 4; i++) {
+      var img = quads[i].querySelector('.jp-badge');
+      if (img) img.src = jpBadgePath(ticket[i].q, ticket[i].sym, ticket[i].col);
+    }
+  }
+
+  function jpSetQuadrantColors(hasTickets) {
+    var quads = document.querySelectorAll('#jp-token .jp-quadrant');
+    var cls = hasTickets ? 'q-has-tickets' : 'q-no-tickets';
+    for (var i = 0; i < 4; i++) {
+      quads[i].classList.remove('q-has-tickets', 'q-no-tickets');
+      quads[i].classList.add(cls);
+    }
+  }
+
+  function jpClearColors() {
+    var quads = document.querySelectorAll('#jp-token .jp-quadrant');
+    for (var i = 0; i < 4; i++) {
+      quads[i].classList.remove('q-has-tickets', 'q-no-tickets');
+    }
+  }
+
+  function jpAnimate(hasTickets) {
+    var animId = ++jpAnimId;
+    var target = jpRandomTicket();
+    var locked = [false, false, false, false];
+    var lockOrder = [0, 1, 2, 3].sort(function () { return Math.random() - 0.5; });
+    var lockIdx = 0;
+    var idleCount = 2 + Math.floor(Math.random() * 3);
+    var frame = 0;
+
+    jpClearColors();
+
+    function step() {
+      if (animId !== jpAnimId) return;
+
+      // Generate display ticket: locked quadrants show target, others random
+      var display = jpRandomTicket();
+      for (var i = 0; i < 4; i++) {
+        if (locked[i]) display[i] = target[i];
+      }
+      jpRenderBadges(display);
+
+      // Check if time to lock next quadrant
+      if (idleCount <= 0 && lockIdx < 4) {
+        locked[lockOrder[lockIdx]] = true;
+        lockIdx++;
+        idleCount = 2 + Math.floor(Math.random() * 3);
+      } else {
+        idleCount--;
+      }
+
+      frame++;
+
+      if (lockIdx >= 4) {
+        // Final: render target and apply colors
+        jpRenderBadges(target);
+        jpSetQuadrantColors(hasTickets);
+        return;
+      }
+
+      setTimeout(step, 100);
+    }
+
+    step();
+  }
+
+  function jpLevelForDay(day) {
+    if (!jpData) return 1;
+    return Math.min(Math.floor((day - 1) / jpData.daysPerLevel) + 1, jpData.mainLevels);
+  }
+
+  function jpHasTickets(player, day) {
+    if (!jpData || !jpData.tickets[player]) return false;
+    var level = jpLevelForDay(day);
+    return jpData.tickets[player].indexOf(level) !== -1;
+  }
+
+  function jpOnChange() {
+    var playerSel = document.getElementById('jp-player');
+    var daySel = document.getElementById('jp-day');
+    if (!playerSel || !daySel || !jpData) return;
+
+    var player = playerSel.value;
+    var day = parseInt(daySel.value, 10);
+    if (!player || !day) return;
+
+    var has = jpHasTickets(player, day);
+    jpAnimate(has);
+  }
+
+  function jpInit(data) {
+    jpData = data;
+    var playerSel = document.getElementById('jp-player');
+    var daySel = document.getElementById('jp-day');
+    if (!playerSel || !daySel) return;
+
+    // Populate players
+    playerSel.innerHTML = '';
+    data.players.forEach(function (addr, i) {
+      var opt = document.createElement('option');
+      opt.value = addr;
+      opt.textContent = 'P' + i + ' ' + addr.slice(0, 6) + '...' + addr.slice(-4);
+      playerSel.appendChild(opt);
+    });
+
+    // Populate days
+    daySel.innerHTML = '';
+    for (var d = 1; d <= data.totalDays; d++) {
+      var lvl = jpLevelForDay(d);
+      var opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = 'Day ' + d + ' (L' + lvl + ')';
+      daySel.appendChild(opt);
+    }
+
+    playerSel.addEventListener('change', jpOnChange);
+    daySel.addEventListener('change', jpOnChange);
+
+    // Initial render
+    jpRenderBadges(jpRandomTicket());
+    jpOnChange();
+  }
+
+  // Load data
+  fetch('/beta/jackpot-data.json')
+    .then(function (r) { return r.json(); })
+    .then(jpInit)
+    .catch(function (e) {
+      console.warn('[jp] Failed to load jackpot data:', e);
+      var widget = document.getElementById('jackpot-widget');
+      if (widget) widget.style.display = 'none';
+    });
+})();
+</script>
 </body>
 </html>
