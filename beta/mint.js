@@ -13,18 +13,18 @@
   // ---------------------------------------------------------------------------
 
   var CONTRACTS = {
-    GAME: '0x68B1D87F95878fE05B998F19b66F4baba5De1aed',
-    COIN: '0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1',
-    AFFILIATE: '0xc6e7DF5E7b4f2A278906862b61205850344D4e7d',
-    QUESTS: '0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1',
-    DEITY_PASS: '0x322813Fd9A801c5507c9de605d63CEA4f2CE6c44',
+    GAME: '0xbe521215e26e35DAD3209c236CC895332655561E',
+    COIN: '0x3eD5651a8f519BAD6F835E60e73DBFbbFbB98692',
+    AFFILIATE: '0x0Ae1644C2eD118fdd7a6012ba7aceB3177d01af2',
+    QUESTS: '0x1a0c05e52E3b791BD2cFa2D4c4a5890FF8D5AfF3',
+    DEITY_PASS: '0x10716B5b030DA0821a150b4E7e5F60556F8DA178',
   };
 
   var DEITY_PASS_ABI = [
     'function ownerOf(uint256 tokenId) view returns (address)',
   ];
 
-  var CHAIN_ID = 31337; // localhost / Hardhat
+  var CHAIN_ID = 11155111; // Sepolia testnet
 
   var REFERRER_KEY = 'degenerette_referrer_code';
 
@@ -202,7 +202,7 @@
       el.innerHTML =
         '<span class="tx-icon tx-icon--ok">&#x2713;</span>' +
         '<span>' + message + ' </span>' +
-        '<a href="https://etherscan.io/tx/' + hash + '" target="_blank" rel="noopener" class="tx-hash">' + truncated + '</a>';
+        '<a href="https://sepolia.etherscan.io/tx/' + hash + '" target="_blank" rel="noopener" class="tx-hash">' + truncated + '</a>';
     } else if (state === 'error') {
       el.innerHTML = '<span class="tx-icon tx-icon--err">&#x2715;</span><span>' + message + '</span>';
     } else {
@@ -419,6 +419,22 @@
     try {
       var eth = ethers();
       provider = new eth.BrowserProvider(window.ethereum);
+
+      // Ensure wallet is on the correct chain
+      var network = await provider.getNetwork();
+      if (Number(network.chainId) !== CHAIN_ID) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x' + CHAIN_ID.toString(16) }],
+          });
+          provider = new eth.BrowserProvider(window.ethereum);
+        } catch (switchErr) {
+          setTxStatus('error', 'Please switch to Sepolia testnet');
+          return;
+        }
+      }
+
       signer = await provider.getSigner();
       currentAddress = await signer.getAddress();
 
@@ -438,6 +454,9 @@
       await refreshState();
       await refreshPlayer(currentAddress);
       refreshDeitySymbols();
+
+      // Reload on chain change
+      window.ethereum.on('chainChanged', function () { window.location.reload(); });
 
       // Listen for account changes
       window.ethereum.on('accountsChanged', async function (accounts) {
