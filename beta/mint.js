@@ -13,11 +13,11 @@
   // ---------------------------------------------------------------------------
 
   var CONTRACTS = {
-    GAME: '0xbe521215e26e35DAD3209c236CC895332655561E',
-    COIN: '0x3eD5651a8f519BAD6F835E60e73DBFbbFbB98692',
-    AFFILIATE: '0x0Ae1644C2eD118fdd7a6012ba7aceB3177d01af2',
-    QUESTS: '0x1a0c05e52E3b791BD2cFa2D4c4a5890FF8D5AfF3',
-    DEITY_PASS: '0x10716B5b030DA0821a150b4E7e5F60556F8DA178',
+    GAME: '0xA8fd804c44e27f66C6398f55263f0771D56733C0',
+    COIN: '0xB3eCEf2eA4B40Bf305B936d1fBBa912195331843',
+    AFFILIATE: '0x719c54dC1E076C2EB34f1290A06C4dfA3742bd79',
+    QUESTS: '0x52cEA3FE5AD287d58b0f131c87dE8f2233Ecc321',
+    DEITY_PASS: '0x020abAc2f2adFDeC99Da460A6592C9485cdF817a',
   };
 
   var DEITY_PASS_ABI = [
@@ -94,7 +94,8 @@
   var affiliateContract = null;
   var questsContract = null;
   var currentAddress = null;
-  var currentMintPrice = 10000000000000000n; // BigInt — default 0.01 ETH, updated by refreshState
+  var TESTNET_DIVISOR = 1000000n; // All ETH prices divided by 1M on testnet
+  var currentMintPrice = 10000000000000000n / TESTNET_DIVISOR; // BigInt — default 0.01 ETH / 1M, updated by refreshState
   var isPresale = true; // default to presale until contract says otherwise
   var pollTimer = null;
 
@@ -334,27 +335,27 @@
     var levelEl = $('status-level');
     var lvl = levelEl ? parseInt(levelEl.textContent || '0', 10) : 0;
 
-    // Whale pass: 2.4 ETH at levels 0-3, 4 ETH otherwise, × qty
-    var whaleUnitWei = lvl <= 3 ? eth.parseEther('2.4') : eth.parseEther('4');
+    // Whale pass: 2.4 ETH at levels 0-3, 4 ETH otherwise, × qty (÷ testnet divisor)
+    var whaleUnitWei = lvl <= 3 ? eth.parseEther('2.4') / TESTNET_DIVISOR : eth.parseEther('4') / TESTNET_DIVISOR;
     var whaleQty = parseInt(($('whale-qty') || {}).value || '1', 10) || 1;
     var whaleWei = whaleUnitWei * BigInt(Math.max(whaleQty, 1));
     setEl('whale-price', formatEth(whaleWei));
     setEl('whale-lootbox', lootboxBadge(whaleUnitWei));
 
-    // Lazy pass: flat 0.24 ETH at levels 0-2, 10 × mintPrice otherwise
+    // Lazy pass: flat 0.24 ETH at levels 0-2, 10 × mintPrice otherwise (÷ testnet divisor)
     var lazyWei = lvl <= 2
-      ? eth.parseEther('0.24')
-      : (currentMintPrice ? currentMintPrice * 10n : eth.parseEther('0.4'));
+      ? eth.parseEther('0.24') / TESTNET_DIVISOR
+      : (currentMintPrice ? currentMintPrice * 10n : eth.parseEther('0.4') / TESTNET_DIVISOR);
     setEl('lazy-price', formatEth(lazyWei));
     setEl('lazy-lootbox', lootboxBadge(lazyWei));
 
-    // Deity pass: 24 + T(k) where T(k) = k*(k+1)/2, k = issued count
-    var deityBaseWei = eth.parseEther('24');
+    // Deity pass: 24 + T(k) where T(k) = k*(k+1)/2, k = issued count (÷ testnet divisor)
+    var deityBaseWei = eth.parseEther('24') / TESTNET_DIVISOR;
     setEl('deity-price', formatEth(deityBaseWei) + '+');
     setEl('deity-lootbox', lootboxBadge(deityBaseWei));
     if (contract) {
       contract.deityPassTotalIssuedCount().then(function (issued) {
-        var tri = (issued * (issued + 1n)) / 2n * eth.parseEther('1');
+        var tri = (issued * (issued + 1n)) / 2n * (eth.parseEther('1') / TESTNET_DIVISOR);
         var deityWei = deityBaseWei + tri;
         setEl('deity-price', formatEth(deityWei));
         setEl('deity-lootbox', lootboxBadge(deityWei));
@@ -790,13 +791,13 @@
 
       var eth = ethers();
 
-      // Price: 2.4 ETH at levels 0-3, 4 ETH at x49/x99 levels.
+      // Price: 2.4 ETH at levels 0-3, 4 ETH at x49/x99 levels (÷ testnet divisor).
       // Contract validates exact pricing; this is a best-effort estimate.
       var levelEl = $('status-level');
       var currentLevel = levelEl ? parseInt(levelEl.textContent || '0', 10) : 0;
       var bundlePrice = currentLevel <= 3
-        ? eth.parseEther('2.4')
-        : eth.parseEther('4');
+        ? eth.parseEther('2.4') / TESTNET_DIVISOR
+        : eth.parseEther('4') / TESTNET_DIVISOR;
 
       var msgValue = bundlePrice * BigInt(qty);
 
@@ -845,8 +846,8 @@
       var levelEl = $('status-level');
       var currentLevel = levelEl ? parseInt(levelEl.textContent || '0', 10) : 0;
       var lazyPrice = (currentLevel <= 2)
-        ? eth.parseEther('0.24')
-        : (currentMintPrice ? currentMintPrice * 10n : eth.parseEther('0.4'));
+        ? eth.parseEther('0.24') / TESTNET_DIVISOR
+        : (currentMintPrice ? currentMintPrice * 10n : eth.parseEther('0.4') / TESTNET_DIVISOR);
 
       var tx = await contract.purchaseLazyPass(
         eth.ZeroAddress,
@@ -890,10 +891,10 @@
         issued = await contract.deityPassTotalIssuedCount();
       } catch (e) { /* default 0 */ }
 
-      var basePrice = eth.parseEther('24');
-      // T(k) = k*(k+1)/2 in ETH
+      var basePrice = eth.parseEther('24') / TESTNET_DIVISOR;
+      // T(k) = k*(k+1)/2 in ETH (÷ testnet divisor)
       var triangular = (issued * (issued + 1n)) / 2n;
-      var msgValue = basePrice + triangular * eth.parseEther('1');
+      var msgValue = basePrice + triangular * (eth.parseEther('1') / TESTNET_DIVISOR);
 
       setTxStatus('pending', 'Confirming...');
 

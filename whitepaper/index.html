@@ -447,18 +447,28 @@
     <img src="flame-logo.svg" alt="Degenerus" class="page-header-logo" />
     <h1>DEGENERUS PROTOCOL WHITEPAPER</h1>
     <p class="subtitle" style="font-size:0.78rem; margin-bottom:0.3rem; color:var(--text-dim);">by Burnie Degenerus</p>
-    <p class="subtitle">A lottery game where the house takes nothing. The more you play, the better your odds. Earn from every player you bring in, forever. Invest in the protocol's future and profit as it expands.</p>
+    <p class="subtitle">A gambling protocol where the house takes nothing, every player's self-interest pushes the game forward, and the system is designed so it can never be stopped.</p>
   </header>
 
-  <!-- Section 0: What is this -->
+  <!-- ========== Section 1: The Point ========== -->
   <section>
-    <h2>What Is Degenerus?</h2>
+    <h2>The Point</h2>
+    <p>Degenerus is a gambling protocol on Ethereum. There is no house. There is no rake. Every ETH deposited goes into on-chain prize pools that pay out to players. The protocol makes money from stETH yield on the pooled deposits, not by skimming your bets.</p>
+    <p>That means total payouts to players will exceed total deposits over time. The pie grows. It's positive-sum.</p>
+    <p>But here's the part that matters: <strong>once the game is running, every participant (gamblers, investors, affiliates) is individually incentivized to push it forward.</strong> Not because they're cooperating. Not because they're altruistic. Because pushing the game forward is how they make money. Their self-interest IS the system's fuel.</p>
+    <p>And the rewards they earn? Mostly illiquid. Future tickets. Tokens you burn for utility. Commissions you have to gamble to claim. Value enters the system and stays in the system. The only way to realize it is to keep playing.</p>
+    <p>The result is a self-reinforcing machine with multiple redundant mechanisms that keep it running. It doesn't need coordination. It doesn't need trust. It doesn't need a team to keep the lights on. The contracts are immutable and the incentives do the rest.</p>
+    <p>The rest of this paper explains why.</p>
+  </section>
+
+  <!-- ========== Section 2: What Is Degenerus ========== -->
+  <section>
+    <h2>Three Products, One Economy</h2>
 
     <div class="product-showcase">
-      <!-- Hero: Lottery -->
       <div class="product-hero">
         <h3>A Progressive Jackpot Lottery</h3>
-        <p>The core of the protocol is a verifiably fair lottery system designed to return more than 100% of buy-ins to participants over time. Players buy tickets and lootboxes, increasing their chances to win in each nightly drawing, as well as their longterm player score. The biggest prizes unlock only when deposits exceed the previous level's total, so every cycle is guaranteed to be more spectacular than the last.</p>
+        <p>Buy tickets with ETH. Each ticket has four randomly assigned traits. Every night, Chainlink VRF picks winning traits and pays ETH jackpots to holders. The biggest prizes unlock only when deposits exceed the previous level's total, so every cycle is guaranteed to be bigger than the last. For casual players it's honest gambling with fat tails. For engaged players who build activity score and reinvest, the jackpots are a core part of a +EV system. Both ways to play are valid.</p>
         <div class="ticket-example">
           <div class="ticket-token">
             <div class="tq"><img src="badge-tl.svg" alt="Bitcoin Orange" /></div>
@@ -484,50 +494,183 @@
         </div>
       </div>
 
-      <!-- Secondary Products: Side by Side -->
       <div class="secondary-products">
         <div class="product-card affiliate">
-          <h3>An Affiliate Marketing System</h3>
-          <p>Affiliates earn commissions proportional to the ETH their referrals deposit, in perpetuity, three tiers deep. As long as your referrals keep playing, you keep earning.</p>
+          <h3>An Affiliate Network</h3>
+          <p>Three tiers deep, in perpetuity. Every ETH your referrals deposit earns you commissions, paid as coinflip entries instead of guaranteed income. Affiliates who love variance earn at full value. Risk-averse affiliates self-select out. Fewer promoters, but the right ones.</p>
         </div>
         <div class="product-card lp">
           <h3>An Investment for Degenerates</h3>
-          <p>Collectively play the role of the "house", while still individually experiencing the thrill and agony of gambling. Returns are proportional to the speed of the game and level of commitment (but primarily determined by LUCK). The artificial risk and illiquidity are intentional; it's what keeps yield farming nits out. This reserves the profits for degenius investors who enjoy the variance and demonstrate faith in the protocol.</p>
+          <p>Lootboxes, bundles, and passes let you fund the prize pools that generate jackpots. Returns come back as tickets and tokens, not guaranteed yield. You are required to gamble your returns. The artificial risk and illiquidity are intentional; it's what keeps yield farming nits out and reserves the profits for degens who enjoy the variance.</p>
         </div>
       </div>
-
     </div>
 
-    <p>Degenerus Protocol creates value by incentivizing affiliate marketers to bring together two types of gamblers with complementary preferences. Lottery players want a shot at tomorrow's big jackpot and accept the vig. Degen investors seek positive-expectation gambling over a longer horizon and are willing to supply capital. Affiliates drive deposits from both sides, accelerating the rate of returns in exchange for their share of them. The largest edges go to players who work all three angles.</p>
+    <p>These three products share one on-chain economy. Lottery players fill the prize pools. Investors fund the jackpots that attract them. Affiliates drive traffic from both sides. The biggest edges go to players who work all three angles, and every angle requires making the game stronger.</p>
   </section>
 
-  <!-- Section 1: Core Thesis -->
-  <section>
-    <h2>Profit is Gatekept by Contribution</h2>
-    <p>You cannot reliably extract value from Degenerus without first strengthening it. The only paths to profit are bringing in new players, supplying the game with liquidity, or getting lucky. Because this is a solo project with no insiders, everyone is subject to this constraint, equally.</p>
-    <p>Affiliates only earn when they bring in players who spend. Liquidity providers only profit if the game keeps advancing. Gamblers only reach the next jackpot when the current level fills. Every role's individual rewards scale with the collective pace of level completion.</p>
-    <p>There is no move a player can make that drains the system. Anyone who leaves a winner already earned their returns. The future value they forfeit by quitting rather than reinvesting accrues to the players who stay. Every incentive points in the same, productive direction.</p>
-  </section>
-
-  <!-- Section 3: Zero Rake -->
+  <!-- ========== Section 3: Negative Rake ========== -->
   <section>
     <h2><s>Zero Rake.</s> Negative Rake.</h2>
-    <p>Degenerus Protocol has no "house edge" because the roles traditionally played by the house are available to anyone willing to invest or advertise.</p>
-    <p>But it goes further. All pooled ETH is staked into Lido stETH, earning ~2.5% APR. The staking yield doesn't just go to the creator's vault. Half of it flows back into the prize pools. Half the rest is paid to the $DGNRS community wallet. Free external yield flows into the pools that pay players. Total payouts will eventually exceed total deposits. That's negative rake.</p>
+    <p>There is no house edge. The protocol takes nothing from your deposits. Every wei of ETH enters on-chain pools with published, immutable splits. There is no admin wallet. There is no fee extraction. The protocol has no revenue model because it doesn't need one.</p>
+    <p>But it goes further. All pooled ETH is staked into Lido stETH, earning ~2.5% APR. That yield, which comes from Ethereum staking rewards and not from other players, gets distributed: roughly half flows back into the prize pools, and the rest goes to the vault and the $DGNRS community wallet. Free external money flows into the pools that pay players.</p>
+    <p>Over the lifetime of the protocol, total ETH paid out to all players will exceed total ETH deposited by all players. That's not a promise. That's an accounting identity. When the system is positive-sum, and there are losers (there will be), there <em>must</em> be winners who collectively received more than they put in.</p>
+
+    <blockquote>
+      <p>Casino: players deposit 100 ETH, house takes 5, players split 95. Degenerus: players deposit 100 ETH, protocol takes 0, players split 100 + stETH yield.</p>
+    </blockquote>
+
+    <p>The question isn't whether the surplus exists. It does, provably, on-chain. The question is who captures it. The answer: the luckiest and the most engaged.</p>
   </section>
 
-  <!-- Section: Security Model -->
+  <!-- ========== Section 4: Profit is Gatekept ========== -->
+  <section>
+    <h2>Profit is Gatekept by Contribution</h2>
+    <p>You cannot reliably extract value from Degenerus without first strengthening it. The only paths to profit require actions that make the game healthier for everyone:</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Participant</th><th>What they do</th><th>Why it helps the system</th></tr>
+        <tr><td><strong>Lottery players</strong></td><td>Buy tickets</td><td>Fill the prize pools that fund jackpots</td></tr>
+        <tr><td><strong>Affiliates</strong></td><td>Bring in new players</td><td>More deposits, faster level progression</td></tr>
+        <tr><td><strong>Lootbox buyers</strong></td><td>Fund future prize pools</td><td>Seed jackpots for upcoming levels</td></tr>
+        <tr><td><strong>Whale bundle holders</strong></td><td>Buy tickets across 100 levels</td><td>Massive upfront capital injection</td></tr>
+        <tr><td><strong>Quest grinders</strong></td><td>Buy in daily to maintain streaks</td><td>Consistent daily deposit pressure</td></tr>
+        <tr><td><strong>afKing players</strong></td><td>Auto-reinvest all winnings</td><td>Automatic capital recycling</td></tr>
+      </table>
+    </div>
+
+    <p>There is no extractive move. You can't drain the system. You can't profit at the protocol's expense, only at other players' expense, within a positive-sum envelope. Claiming your winnings is fine; the system already captured the value your participation created. Anyone who leaves as a winner already earned it. And the future value they forfeit by quitting? It accrues to the players who stay.</p>
+    <p>This is a solo project with no insiders. Everyone is subject to this constraint, equally.</p>
+  </section>
+
+  <!-- ========== Section 5: Illiquidity ========== -->
+  <section>
+    <h2>What Enters, Stays</h2>
+    <p>This is the most important economic mechanism in the protocol, and the primary reason the game can't stall.</p>
+    <p>When someone buys a lootbox, a whale bundle, or a lazy pass, they receive tickets for <strong>future levels that don't exist yet</strong>. Those tickets are worthless until the game reaches those levels. They can't be redeemed, sold, or transferred. But the ETH those buyers paid enters the prize pools <em>now</em>.</p>
+    <p>This creates a powerful asymmetry. Your money is in the system today. Your tickets activate later. The only way to realize value from those tickets is for the game to progress to their level. Every future ticket holder is personally motivated to push the game forward. Not because someone told them to, but because their money is locked in levels that haven't happened yet.</p>
+    <p>A whale with 5 ETH of unrealized future tickets will happily spend 0.1 ETH on current-level purchases to help the level complete. The alternative is writing off the entire 5 ETH position. That's individually rational, not coordinated.</p>
+    <p>And here's where it compounds: <strong>each level that completes creates more future ticket holders than the previous one.</strong> Jackpot auto-rebuys issue tickets for the next level. Lootbox rewards issue tickets for levels +1 through +50. Early bird prizes distribute tickets to the next 5 levels. The number of people with money locked in the future grows monotonically. Level 50 has more stakeholders pushing for it than level 5.</p>
+    <p>There's also a time-value component. Future tickets don't just sit there waiting. They're eligible for BURNIE jackpots at the levels they're assigned to, even before those levels start paying out ETH. The earlier you acquire a future ticket, the more BURNIE jackpot draws it participates in before the level arrives. Early buyers accumulate more value from their tickets than late buyers do, which further incentivizes getting in early and pushing the game forward.</p>
+
+    <blockquote>
+      <p>In DeFi, yield is liquid. You claim it and leave. In Degenerus, your rewards are tickets for a future that requires your presence to arrive.</p>
+    </blockquote>
+
+    <p>The illiquidity also blocks a class of extractive behavior. If future tickets were tradeable, sophisticated players could buy them at a discount from desperate sellers, capture the value, and leave. Non-transferable tickets mean the only way to benefit is to be here when the game gets there, which means being part of the ecosystem that pushes levels forward.</p>
+    <p>Players who go dormant get pulled back in when their forgotten tickets activate months later. You win 0.3 ETH from a daily jackpot on tickets you bought six months ago and forgot about. Now you're back, with fresh claimable ETH and a reinvestment bonus incentivizing you to roll it into new tickets. The game reached out and re-engaged you with value you already paid for. No marketing spend required.</p>
+  </section>
+
+  <!-- ========== Section 6: Variance ========== -->
+  <section>
+    <h2>Variance Keeps the Wrong People Out</h2>
+    <p>Every DeFi yield protocol dies the same way. It launches with attractive returns. Mercenary capital floods in: yield optimizers, treasury managers, bots. Returns compress as more capital competes for the same pool. The original participants earn less. The mercenary capital leaves for the next protocol. TVL collapses.</p>
+    <p>The root cause: guaranteed yield attracts people who are purely optimizing for returns. They have zero loyalty. They will leave the instant a better option appears. Their presence compresses yields for everyone else while providing no engagement or network effects.</p>
+    <p>Degenerus doesn't have this problem because LP returns are paid as <strong>lottery tickets and tokens</strong>, not predictable cash flows. Even at maximum activity score, your returns arrive as high-variance entries into future jackpots. You might win 10x. You might win nothing. The expected value is positive, but the realized value is noisy.</p>
+    <p>Variance-averse capital, the kind that compressed yields in every DeFi farm you've ever seen, won't touch this. They need predictable cash flows for their models. They can't tolerate a +EV position that might pay zero in a given period. They self-select out. No governance vote required, no lockup period, no whitelist. The mechanism does the selection.</p>
+    <p>The result: fewer LPs competing for the same pool of returns. Each remaining LP earns more. And because these LPs genuinely enjoy gambling, they don't leave when variance hits because a losing streak is part of the experience, not a reason to withdraw. This is a fundamentally more stable equilibrium than any guaranteed-yield protocol can achieve.</p>
+
+    <div class="economy-callout">
+      <p>Think of it like options trading. Options traders earn higher risk-adjusted returns than bond holders because they accept variance that others won't, and the market compensates them for it. Degenerus LP positions work the same way. You accept the noise, and the market gives you the edge, precisely because most capital won't.</p>
+    </div>
+  </section>
+
+  <!-- ========== Section 7: The Flywheel ========== -->
+  <section>
+    <h2>The Flywheel</h2>
+    <p>The three products form a self-reinforcing cycle:</p>
+
+    <ul class="mechanism-list">
+      <li><strong>Investors</strong> buy lootboxes and bundles, funding the future prize pools</li>
+      <li><strong>Prize pools grow,</strong> making jackpots bigger and more visible</li>
+      <li><strong>Bigger jackpots attract lottery players</strong> whose ticket purchases fill the current prize pool</li>
+      <li><strong>When the pool target is met,</strong> jackpots fire, paying both lottery players and investors</li>
+      <li><strong>Winners reinvest</strong> (auto-rebuy gives a 45% bonus), refilling the pools</li>
+      <li><strong>Affiliates drive traffic</strong> from both sides, accelerating the cycle for their share of commissions</li>
+    </ul>
+
+    <p>This is self-reinforcing, not circular. Each revolution adds external value: new players attracted by jackpot size, new investor capital attracted by realized returns, new affiliates attracted by commission volume. And the stETH yield layer adds a net positive-sum input that doesn't depend on new entrants at all.</p>
+    <p>Some of this cycle is mechanical. Players in afKing mode automatically convert jackpot winnings into future tickets. The vault and $DGNRS contract each receive 16 tickets per level forever and operate in auto-reinvest mode. Their winnings compound without any human making a decision. The flywheel has an engine that runs on its own.</p>
+  </section>
+
+  <!-- ========== Section 8: Can't Stall ========== -->
+  <section>
+    <h2>Why the Game Can't Stall</h2>
+    <p>For the game to permanently stall, every single future ticket holder would have to simultaneously abandon their position. Every whale bundle buyer writes off their 6+ ETH investment. Every lootbox holder with future tickets writes off their pending value. Every deity pass holder who paid 24+ ETH walks away from permanent jackpot eligibility. Every auto-rebuy player disables their reinvestment. Every affiliate stops driving traffic. All at the same time. All making individually irrational decisions.</p>
+    <p>This will not happen. A single whale can fund a level alone. One rational actor with sufficient exposure in future levels can keep the game alive even if every other participant vanishes. The cost of funding a level is a fraction of the value locked in future tickets. It's trivially worth it to protect your position.</p>
+    <p>But the protocol doesn't rely on participant rationality alone. Multiple independent mechanical safeguards ensure progression even if humans stop making decisions:</p>
+
+    <ul class="mechanism-list">
+      <li><strong>Quest streak pressure:</strong> Power users maintaining quest streaks must buy tickets daily. Missing a day resets the streak, destroying weeks of accumulated activity score. The cost of not buying today is real.</li>
+      <li><strong>afKing auto-reinvest:</strong> Players in afKing mode automatically convert jackpot winnings to next-level tickets at a 45% bonus. No manual action required.</li>
+      <li><strong>Affiliate incentives:</strong> Affiliates earn commissions on every referred purchase. They have direct financial incentive to drive traffic continuously.</li>
+      <li><strong>Future pool drip:</strong> At each level transition, 20% of the future prize pool moves to the next prize pool automatically. Even with zero new purchases, the pools self-fill.</li>
+      <li><strong>Vault + $DGNRS perpetual tickets:</strong> Both addresses receive 16 tickets per level forever and operate in afKing mode. Their jackpot winnings auto-reinvest, creating constant buy pressure that never stops.</li>
+      <li><strong>Purchase-phase rewards:</strong> Every 3 days during the purchase phase, 1% of the future pool is distributed as tickets and ETH, keeping engagement alive during slower periods.</li>
+    </ul>
+
+    <p>The future prize pool acts as a <strong>flywheel battery</strong>. It charges during active periods and discharges through the drip mechanisms during quiet ones. After dozens of active levels, the future pool will be vastly larger than the ratchet target. If the future pool is 100 ETH and the level target is 2 ETH, the 20% transition drip alone (20 ETH) exceeds the target by 10x. The game can self-sustain for many consecutive levels with zero new deposits before the drip alone can't cover the target.</p>
+    <p>And if all of the above somehow fails, if every human and every mechanism simultaneously stops, the protocol has terminal safeguards. A 365-day inactivity timeout triggers a clean wind-down: remaining funds are distributed through final jackpots, then swept to the vault and $DGNRS. No funds are locked forever. There is no zombie state. The game either progresses or it terminates cleanly.</p>
+  </section>
+
+  <!-- ========== Section 9: Trustless ========== -->
   <section>
     <h2><a href="https://trustlessness.eth.limo/general/2025/11/11/the-trustless-manifesto.html">Trustless</a> by Design</h2>
-    <p>The code is law. All protocol logic is <a href="https://github.com/PurgeGame/degenerus-contracts">open-source</a> and immutably deployed on the Ethereum blockchain. Every drawing is determined by a cryptographically secure random number delivered by <a href="https://chain.link/vrf">Chainlink VRF</a>. Altering the rules of the game or the distribution of funds is absolutely impossible because the admin has no meaningful privileges.</p>
-    <p>Ensuring that every aspect of Degenerus Protocol is 100% fair, transparent and trustless is my top priority.</p>
+    <p>The code is law. All protocol logic is <a href="https://github.com/PurgeGame/degenerus-contracts">open-source</a> and immutably deployed on the Ethereum blockchain. No proxy. No admin keys. No upgrade path. Every drawing is determined by a cryptographically secure random number delivered by <a href="https://chain.link/vrf">Chainlink VRF</a>.</p>
+    <p>The admin cannot withdraw from prize pools. Cannot modify split percentages. Cannot ban players or restrict withdrawals. The only admin operations are staking ETH to stETH (bounded by the solvency floor) and rotating the VRF coordinator (only possible if it fails). Everything else is deterministic smart contract logic that no one, including the creator, can alter.</p>
+    <p>The creator's allocation is in $DGNRS tokens and vault shares, both of which only have value if the game succeeds and attracts players. The creator's incentives are aligned with yours. If the game dies, the creator loses too. There is no exit scam because there is no privileged exit.</p>
   </section>
 
-  <!-- Simulation -->
+  <!-- ========== Section 10: Comparison ========== -->
+  <section>
+    <h2>Why This and Not Something Else</h2>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Dimension</th><th>Casinos</th><th>Sports Betting</th><th>Shitcoins</th><th>DeFi Yield</th><th>Degenerus</th></tr>
+        <tr><td><strong>House edge</strong></td><td>2-15%</td><td>5-10% hidden in vig</td><td>100% (insiders dump)</td><td>0% (transparent)</td><td>0%, negative after yield</td></tr>
+        <tr><td><strong>Transparency</strong></td><td>Opaque</td><td>Partially disclosed</td><td>Lies</td><td>On-chain</td><td>Fully on-chain + VRF</td></tr>
+        <tr><td><strong>Winner treatment</strong></td><td>Bans, withdrawal limits</td><td>Sharp limits</td><td>N/A</td><td>N/A</td><td>No restrictions. Claim everything.</td></tr>
+        <tr><td><strong>Rug risk</strong></td><td>Regulated but centralized</td><td>Offshore = real risk</td><td>Extreme</td><td>Smart contract risk</td><td>Immutable. No admin withdrawal.</td></tr>
+        <tr><td><strong>Yield source</strong></td><td>N/A</td><td>N/A</td><td>Token inflation</td><td>Protocol fees</td><td>stETH staking yield</td></tr>
+        <tr><td><strong>LP opportunity</strong></td><td>None</td><td>None</td><td>Bag-hold the token</td><td>Deposit for yield (mercenary-vulnerable)</td><td>Activity-gated, variance-filtered</td></tr>
+        <tr><td><strong>Sustainability</strong></td><td>Marketing + regulation</td><td>Same</td><td>None</td><td>Yield compression</td><td>Variance filter prevents compression</td></tr>
+      </table>
+    </div>
+
+    <p>Casinos, sportsbooks, and shitcoins all have the same fundamental problem: there's an insider extracting value at your expense. DeFi yield protocols solve the insider problem but create the mercenary capital problem. Anyone can deposit, and yields compress to near-zero.</p>
+    <p>Degenerus solves both. No insider extraction. No mercenary capital compression. Fair to players AND sustainable for investors. It doesn't even need to be +EV to compete. It just needs to be less -EV than the alternatives while being more fun. And it is actually +EV.</p>
+  </section>
+
+  <!-- ========== Section 11: Risk ========== -->
+  <section>
+    <h2>Risks</h2>
+    <p>Being honest about risks is how you build trust. Here's what can go wrong:</p>
+
+    <ul class="mechanism-list">
+      <li><strong>Smart contract risk.</strong> Immutable contracts mean bugs can't be patched. Mitigated by open-source code, audits, and extensive testing, but the risk is real and inherent to immutable systems.</li>
+      <li><strong>Lido / stETH risk.</strong> The yield layer depends on Lido. If Lido fails or stETH depegs, yield stops and the negative-rake property weakens. The protocol continues to function, it just loses the positive-sum subsidy.</li>
+      <li><strong>Ethereum systemic risk.</strong> If Ethereum itself fails, everything fails. This is a risk shared by every project on the chain.</li>
+      <li><strong>Adoption risk.</strong> The flywheel needs initial momentum. Mitigated by redundant progression mechanisms, but the first levels require real players buying real tickets.</li>
+      <li><strong>Individual loss.</strong> Positive-sum does not mean everyone wins. You can lose money playing Degenerus. Some players will lose. The system guarantees that winners exist as a group, not that you're one of them.</li>
+    </ul>
+  </section>
+
+  <!-- ========== Simulation ========== -->
   <section>
     <h2>Simulation</h2>
+    <p>A Monte Carlo simulation of 30 levels with realistic player behavior. The blue line (Next Pool) shows each level's prize pool accumulating to its target. The green line (Future Pool) shows the reserve battery growing over time, the stored energy that keeps the game running. Red bars mark the largest jackpot per level. The gold area is cumulative stETH yield, free external value entering the system.</p>
     <div style="margin: 0.5rem 0;">
       <canvas id="simChart" style="max-height: 420px;"></canvas>
+    </div>
+  </section>
+
+  <!-- ========== Closing ========== -->
+  <section>
+    <div class="closing">
+      <p>The system generates more value than enters it. That value is locked forward. Every participant pushes it forward. Multiple independent mechanisms ensure it keeps moving. Variance immunizes it against the actors that kill other protocols. And you don't have to trust anyone for this to work. Verify it yourself.</p>
+      <p class="punchline">It's a gambling protocol that's honest about being a gambling protocol. And that honesty, paradoxically, is what makes the economics work.</p>
     </div>
   </section>
 
