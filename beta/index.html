@@ -101,39 +101,6 @@
       line-height: 1.2;
     }
 
-    .status-item--tip {
-      position: relative;
-      cursor: help;
-    }
-
-    .status-tooltip {
-      display: none;
-      position: absolute;
-      left: 0;
-      top: 100%;
-      margin-top: 0.4rem;
-      width: 260px;
-      background: var(--bg-primary);
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      padding: 0.9rem 1rem;
-      font-size: 0.72rem;
-      font-weight: 400;
-      line-height: 1.5;
-      color: var(--text-secondary);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-      z-index: 100;
-      white-space: normal;
-    }
-
-    .status-tooltip strong {
-      color: var(--text-primary);
-    }
-
-    .status-item--tip:hover .status-tooltip {
-      display: block;
-    }
-
     .status-input {
       background: var(--bg-tertiary);
       border: 1px solid var(--border-color);
@@ -569,6 +536,285 @@
     .tx-hash:hover { opacity: 1; }
 
     /* ------------------------------------------------------------------ */
+    /* Degenerette panel                                                    */
+    /* ------------------------------------------------------------------ */
+
+    .degen-panel { position: relative; }
+
+    .degen-diamond-wrap {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      margin: 0.6rem 0 0.8rem;
+    }
+
+    .degen-diamond {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      width: 160px;
+      height: 160px;
+      position: relative;
+      background: #d9d9d9;
+      border: 2px solid #8a8d8f;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .degen-diamond::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 50%;
+      width: 1px; height: 100%;
+      background: #8a8d8f;
+      transform: translateX(-50%);
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .degen-diamond::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 0;
+      width: 100%; height: 1px;
+      background: #8a8d8f;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .degen-quad {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .degen-quad:hover {
+      background: rgba(245, 166, 35, 0.12);
+    }
+
+    .degen-quad.degen-q-match { background: rgba(160, 200, 230, 0.65); }
+    .degen-quad.degen-q-miss  { background: rgba(239, 120, 120, 0.5); }
+    .degen-quad.degen-q-hero::after {
+      content: '';
+      position: absolute;
+      inset: 2px;
+      border: 2px solid var(--accent-primary);
+      border-radius: 3px;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .degen-badge {
+      width: 85%;
+      height: 85%;
+      object-fit: contain;
+      pointer-events: none;
+    }
+
+    .degen-center {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      width: 28%;
+      height: 28%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .degen-center::before {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      width: calc(100% / 1.4142);
+      height: calc(100% / 1.4142);
+      background: #fff;
+      border: 1px solid #8a8d8f;
+      box-sizing: border-box;
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+
+    .degen-flame {
+      position: relative;
+      width: 60%;
+      height: 60%;
+      object-fit: contain;
+      z-index: 1;
+    }
+
+    /* Quick selector popup (matches degenerette sim) */
+    .degen-quick-sel {
+      display: none;
+      position: absolute;
+      z-index: 1000;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 0.15rem;
+      grid-template-columns: repeat(4, max-content);
+      justify-content: center;
+      gap: 0.1rem;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+    }
+
+    .degen-quick-sel.visible { display: grid; }
+
+    .degen-quick-sel button {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      border-radius: 8px;
+      padding: 1px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      width: auto;
+      height: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .degen-quick-sel button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(245, 166, 35, 0.35);
+    }
+
+    .degen-quick-sel .color-swatch {
+      width: 34px;
+      height: 10px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .degen-quick-sel .symbol-swatch {
+      width: 52px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+      border-radius: 50%;
+    }
+
+    .degen-quick-sel .symbol-swatch img {
+      width: 100%;
+      height: 100%;
+    }
+
+    .degen-quick-sel .hero-toggle-btn {
+      grid-column: 1 / -1;
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #f6efe1;
+      background: rgba(245, 166, 35, 0.2);
+      border: 1px solid rgba(245, 166, 35, 0.45);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .degen-quick-sel .hero-toggle-btn:hover {
+      background: rgba(245, 166, 35, 0.35);
+      border-color: rgba(245, 166, 35, 0.65);
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* Currency toggle (reuse pay-toggle) */
+    .degen-currency {
+      display: flex;
+      justify-content: center;
+      gap: 0;
+      margin-bottom: 0.6rem;
+    }
+
+    /* Fields */
+    .degen-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .degen-field-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .degen-field-row label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      min-width: 3rem;
+    }
+
+    .degen-field-row select {
+      flex: 1;
+      min-width: 0;
+      font-family: inherit;
+      font-size: 0.82rem;
+      padding: 0.35rem 0.5rem;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+    }
+
+    .degen-cost-line {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      margin-bottom: 0.5rem;
+      text-align: center;
+    }
+
+    .degen-cost-line span {
+      color: var(--accent-primary);
+      font-weight: 700;
+    }
+
+    .degen-queue {
+      display: none;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-top: 0.6rem;
+      padding-top: 0.6rem;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .degen-queue.has-items { display: flex; }
+
+    .degen-queue-status {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+
+    .degen-spin-btn {
+      font-size: 0.82rem;
+    }
+
+    .degen-spin-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .degen-result {
+      margin-top: 0.5rem;
+      font-size: 0.82rem;
+      text-align: center;
+      min-height: 1.2em;
+    }
+
+    .degen-result .degen-win  { color: #4caf50; font-weight: 700; }
+    .degen-result .degen-loss { color: #e57373; font-weight: 700; }
+    .degen-result .degen-matches { color: var(--text-secondary); }
+
+    /* ------------------------------------------------------------------ */
     /* Main layout (two-column with sidebar)                               */
     /* ------------------------------------------------------------------ */
     .main-layout {
@@ -608,8 +854,8 @@
     .jp-token {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      width: 180px;
-      height: 180px;
+      width: 360px;
+      height: 360px;
       position: relative;
       background: #d9d9d9;
       border: 3px solid #8a8d8f;
@@ -650,21 +896,278 @@
       aspect-ratio: 1;
       width: 100%;
       height: 100%;
-      transition: background-color 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .jp-quadrant.q-scratchable {
+      background: #7ca8c4;
+    }
+
+    .jp-quadrant.q-has-trait {
+      background: rgba(160, 200, 230, 0.65);
     }
 
     .jp-quadrant.q-has-tickets {
-      background: rgba(34, 197, 94, 0.4);
+      background: rgba(22, 163, 74, 0.6);
     }
 
     .jp-quadrant.q-no-tickets {
-      background: rgba(239, 68, 68, 0.35);
+      background: rgba(239, 120, 120, 0.5);
     }
 
     .jp-badge {
       object-fit: contain;
-      max-width: 100%;
-      max-height: 100%;
+      max-width: 92%;
+      max-height: 92%;
+      display: block;
+      position: relative;
+      z-index: 1;
+    }
+
+    .jp-trait-count {
+      position: absolute;
+      z-index: 6;
+      font-size: 0.65rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      padding: 1px 5px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.55);
+      color: #fff;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    /* Outer corners — away from center diamond */
+    .jp-quadrant[data-q="0"] .jp-trait-count { top: 4px; left: 4px; }
+    .jp-quadrant[data-q="1"] .jp-trait-count { top: 4px; right: 4px; }
+    .jp-quadrant[data-q="2"] .jp-trait-count { bottom: 4px; left: 4px; }
+    .jp-quadrant[data-q="3"] .jp-trait-count { bottom: 4px; right: 4px; }
+
+    .jp-trait-count.visible {
+      opacity: 1;
+    }
+
+    /* Scratch canvas sits on top of badge content */
+    .jp-scratch-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    /* Prize reveal overlay — shown when quadrant scratched */
+    .jp-prize-reveal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: stretch;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
+    }
+
+    .jp-prize-reveal.visible {
+      opacity: 1;
+    }
+
+    /* Bottom bar: centered total */
+    .jp-prize-bar {
+      padding: 4px 0;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(2px);
+    }
+
+    .jp-prize-bar .jp-prize-total {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+      line-height: 1.2;
+    }
+
+    /* Scattered win badges behind scratch */
+    .jp-badge-wrap {
+      position: absolute;
+      pointer-events: none;
+      z-index: 1;
+      text-align: center;
+    }
+    .jp-scattered-badge {
+      width: 100%;
+      display: block;
+      opacity: 0.85;
+      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.25));
+      object-fit: contain;
+    }
+
+
+    /* Hint text underneath token */
+    .jp-hint {
+      margin-top: 0.6rem;
+      font-size: 0.72rem;
+      color: var(--text-muted, #888);
+      letter-spacing: 0.04em;
+      min-height: 1.2em;
+      transition: opacity 0.3s;
+    }
+
+    /* Claim button */
+    .jp-claim-wrap {
+      margin-top: 0.85rem;
+      display: flex;
+      justify-content: center;
+    }
+
+    #jp-claim-btn {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(6px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+      letter-spacing: 0.12em;
+      padding: 0.55rem 2.2rem;
+      font-size: 1rem;
+    }
+
+    #jp-claim-btn.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    /* Coinflip — compact status-bar item */
+    .cf-status {
+      overflow: visible;
+    }
+    .cf-row {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .cf-coin-area {
+      flex-shrink: 0;
+      perspective: 300px;
+    }
+    .cf-value {
+      font-size: 0.72rem;
+      font-weight: 700;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--accent-primary);
+    }
+    .cf-value.cf-win { color: #4caf50; }
+    .cf-value.cf-loss { color: #e57373; }
+    .cf-value.cf-no-bet { color: var(--text-secondary); font-weight: 400; }
+    .cf-claim-btn {
+      padding: 0.15rem 0.5rem;
+      font-size: 0.6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border: 1px solid var(--accent-primary);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--accent-primary);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .cf-claim-btn:hover {
+      background: var(--accent-primary);
+      color: var(--bg-primary);
+    }
+    .cf-slider-track {
+      position: relative;
+      width: 100%;
+      height: 4px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      margin-top: 0.35rem;
+      overflow: visible;
+    }
+    .cf-slider-fill {
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, #e57373 0%, #ffd700 48.5%, #4caf50 100%);
+      width: 0%;
+      transition: width 0.5s ease-out;
+    }
+    .cf-slider-thumb {
+      position: absolute;
+      top: 50%; left: 0%;
+      width: 10px; height: 10px;
+      background: #fff;
+      border: 1.5px solid var(--accent-primary);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      transition: left 0.5s ease-out;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+      z-index: 1;
+    }
+    .cf-slider-thumb.shuffling { transition: none; }
+    .cf-slider-fill.shuffling { transition: none; }
+
+    .jp-coin {
+      width: 28px;
+      height: 28px;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.5s ease-out;
+    }
+
+    .jp-coin.spinning {
+      animation: jp-coin-spin 0.4s linear infinite;
+    }
+
+    .jp-coin.landed-eth {
+      transform: rotateY(0deg);
+    }
+
+    .jp-coin.landed-wwxrp {
+      transform: rotateY(180deg);
+    }
+
+    .jp-coin-face {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      border-radius: 50%;
+      overflow: hidden;
+    }
+
+    .jp-coin-face img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .jp-coin-back {
+      transform: rotateY(180deg);
+    }
+
+    @keyframes jp-coin-spin {
+      0%   { transform: rotateY(0deg); }
+      100% { transform: rotateY(360deg); }
     }
 
     .jp-center {
@@ -672,8 +1175,9 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      z-index: 10;
-      pointer-events: none;
+      z-index: 20;
+      pointer-events: auto;
+      cursor: pointer;
       width: 31%;
       height: 31%;
       display: flex;
@@ -702,12 +1206,19 @@
       z-index: 1;
     }
 
+    .jp-center.spinning .jp-flame {
+      animation: flame-pulse 0.6s ease-in-out infinite;
+    }
+
+    @keyframes flame-pulse {
+      0%, 100% { filter: brightness(1) sepia(0) saturate(1) hue-rotate(0deg); }
+      50% { filter: brightness(1.4) sepia(1) saturate(5) hue-rotate(-30deg); }
+    }
+
     /* ------------------------------------------------------------------ */
     /* Purchase sidebar                                                    */
     /* ------------------------------------------------------------------ */
     .purchase-sidebar {
-      position: sticky;
-      top: 1rem;
       display: flex;
       flex-direction: column;
       gap: clamp(0.75rem, 2vw, 1rem);
@@ -1085,24 +1596,25 @@
       <span class="status-label">Level</span>
       <span class="status-value" id="status-level">0</span>
     </div>
-    <div class="status-item status-item--tip">
-      <span class="status-label">Mint Price</span>
-      <span class="status-value" id="status-price">0.01 ETH</span>
-      <div class="status-tooltip">
-        <strong>Price Schedule</strong><br><br>
-        <strong>Intro tiers:</strong><br>
-        Levels 0-4: 0.01 ETH<br>
-        Levels 5-9: 0.02 ETH<br>
-        Levels 10-29: 0.04 ETH<br>
-        Levels 30-59: 0.08 ETH<br>
-        Levels 60-99: 0.12 ETH<br><br>
-        <strong>Level 100+ (repeating cycle):</strong><br>
-        x01-x29: 0.04 ETH<br>
-        x30-x59: 0.08 ETH<br>
-        x60-x99: 0.12 ETH<br>
-        x00: 0.24 ETH<br><br>
-        Price resets each 100-level cycle.<br>
-        1 ticket = 1,000 BURNIE at any price.
+    <div class="status-item cf-status" id="coinflip-widget">
+      <span class="status-label">Coinflip</span>
+      <div class="cf-row">
+        <div class="cf-coin-area">
+          <div class="jp-coin" id="jp-coin">
+            <div class="jp-coin-face jp-coin-front">
+              <img src="/badges-circular/crypto_06_ethereum_green.svg" alt="ETH" />
+            </div>
+            <div class="jp-coin-face jp-coin-back">
+              <img src="/badges-circular/crypto_00_xrp_red.svg" alt="WWXRP" />
+            </div>
+          </div>
+        </div>
+        <span class="cf-value" id="cf-amount">&mdash;</span>
+        <button class="cf-claim-btn" id="cf-claim-btn">Claim</button>
+      </div>
+      <div class="cf-slider-track" id="cf-slider-track">
+        <div class="cf-slider-fill" id="cf-slider-fill"></div>
+        <div class="cf-slider-thumb" id="cf-slider-thumb"></div>
       </div>
     </div>
     <div class="status-item">
@@ -1144,14 +1656,38 @@
     </div>
     <div class="jackpot-token-wrap">
       <div class="jp-token" id="jp-token">
-        <div class="jp-quadrant" data-q="0"><img class="jp-badge" src="" alt="" /></div>
-        <div class="jp-quadrant" data-q="1"><img class="jp-badge" src="" alt="" /></div>
-        <div class="jp-quadrant" data-q="2"><img class="jp-badge" src="" alt="" /></div>
-        <div class="jp-quadrant" data-q="3"><img class="jp-badge" src="" alt="" /></div>
+        <div class="jp-quadrant" data-q="0">
+          <img class="jp-badge" src="" alt="" />
+          <span class="jp-trait-count" data-q="0"></span>
+          <div class="jp-prize-reveal" data-q="0"></div>
+          <canvas class="jp-scratch-canvas" data-q="0"></canvas>
+        </div>
+        <div class="jp-quadrant" data-q="1">
+          <img class="jp-badge" src="" alt="" />
+          <span class="jp-trait-count" data-q="1"></span>
+          <div class="jp-prize-reveal" data-q="1"></div>
+          <canvas class="jp-scratch-canvas" data-q="1"></canvas>
+        </div>
+        <div class="jp-quadrant" data-q="2">
+          <img class="jp-badge" src="" alt="" />
+          <span class="jp-trait-count" data-q="2"></span>
+          <div class="jp-prize-reveal" data-q="2"></div>
+          <canvas class="jp-scratch-canvas" data-q="2"></canvas>
+        </div>
+        <div class="jp-quadrant" data-q="3">
+          <img class="jp-badge" src="" alt="" />
+          <span class="jp-trait-count" data-q="3"></span>
+          <div class="jp-prize-reveal" data-q="3"></div>
+          <canvas class="jp-scratch-canvas" data-q="3"></canvas>
+        </div>
         <div class="jp-center">
           <img src="/specials/special_none.svg" alt="Flame" class="jp-flame" />
         </div>
       </div>
+    </div>
+    <p class="jp-hint" id="jp-hint">Scratch each quadrant to reveal your prizes</p>
+    <div class="jp-claim-wrap">
+      <button class="btn-primary" id="jp-claim-btn">CLAIM</button>
     </div>
   </section>
 
@@ -1215,7 +1751,7 @@ afKing mode locks on for 5 levels once activated. Commit to the grind.
             <img id="deity-symbol-preview" class="deity-symbol-preview" src="/symbols/crypto_06_ethereum_gold.svg" alt="Ethereum">
             <select id="deity-symbol" style="flex:1; min-width: 0;">
               <optgroup label="Crypto">
-                <option value="0">XRP</option>
+                <option value="0">WWXRP</option>
                 <option value="1">Tron</option>
                 <option value="2">Sui</option>
                 <option value="3">Monero</option>
@@ -1355,6 +1891,69 @@ afKing mode locks on for 5 levels once activated. Commit to the grind.
     <div id="tx-status" class="tx-status"></div>
   </section>
 
+  <!-- Degenerette Entry -->
+  <section class="panel degen-panel" id="degen-panel">
+    <div class="purchase-header">
+      <h2>Degenerette</h2>
+      <button class="incr-btn" id="degen-randomize" onclick="degenRandomize()">Random</button>
+    </div>
+
+    <div class="degen-diamond-wrap">
+      <div class="degen-diamond" id="degen-diamond">
+        <div class="degen-quad" data-q="0"><img class="degen-badge" data-q="0" alt="" /></div>
+        <div class="degen-quad" data-q="1"><img class="degen-badge" data-q="1" alt="" /></div>
+        <div class="degen-quad" data-q="2"><img class="degen-badge" data-q="2" alt="" /></div>
+        <div class="degen-quad" data-q="3"><img class="degen-badge" data-q="3" alt="" /></div>
+        <div class="degen-center"><img src="/specials/special_none.svg" alt="" class="degen-flame" /></div>
+      </div>
+      <div class="degen-quick-sel" id="degen-quick-sel"></div>
+    </div>
+
+    <div class="pay-toggle degen-currency" id="degen-currency">
+      <button class="pay-toggle-btn active" data-cur="0" onclick="degenSetCurrency(0)">ETH</button>
+      <button class="pay-toggle-btn" data-cur="1" onclick="degenSetCurrency(1)">BURNIE</button>
+      <button class="pay-toggle-btn" data-cur="3" onclick="degenSetCurrency(3)">WWXRP</button>
+    </div>
+
+    <div class="degen-fields">
+      <div class="degen-field-row">
+        <label>Bet</label>
+        <div class="input-with-btns">
+          <input type="number" id="degen-bet" value="0.01" min="0" step="0.001" placeholder="Amount">
+          <div class="incr-btns">
+            <button class="incr-btn" onclick="incrInput('degen-bet',0.01)">+.01</button>
+            <button class="incr-btn" onclick="incrInput('degen-bet',0.1)">+.1</button>
+          </div>
+        </div>
+      </div>
+      <div class="degen-field-row">
+        <label>Spins</label>
+        <div class="input-with-btns">
+          <input type="number" id="degen-spins" value="1" min="1" max="10" step="1">
+          <div class="incr-btns">
+            <button class="incr-btn" onclick="incrInput('degen-spins',1)">+1</button>
+            <button class="incr-btn" onclick="incrInput('degen-spins',5)">+5</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="degen-cost-line">Total: <span id="degen-total-cost">0.01 ETH</span></div>
+
+    <button class="btn-primary" id="degen-place-btn" onclick="degenSubmit()">
+      PLACE BET &mdash; <span id="degen-btn-cost">0.01 ETH</span>
+    </button>
+
+    <div class="degen-queue" id="degen-queue">
+      <span class="degen-queue-status" id="degen-queue-status"></span>
+      <button class="btn-primary degen-spin-btn" id="degen-spin-btn" onclick="degenSpin()" disabled>
+        SPIN
+      </button>
+    </div>
+
+    <div class="degen-result" id="degen-result"></div>
+  </section>
+
   <!-- Player Streaks & Quests -->
   <section class="panel player-info" id="player-info-panel" style="display:none">
     <h3>Streaks</h3>
@@ -1450,8 +2049,228 @@ function togglePayMode(mode) {
   var JP_WEIGHTS = [10, 10, 10, 10, 9, 9, 9, 8];
   var JP_TOTAL_W = 75;
 
+  // Scratch brush radius in CSS pixels
+  var JP_BRUSH_R = 22;
+  // Fraction of pixels that must be cleared to auto-complete a quadrant
+  var JP_REVEAL_THRESHOLD = 0.75;
+
   var jpData = null;
-  var jpAnimId = 0; // cancel previous animations
+  // Per-quadrant scratch state
+  var jpScratched = [false, false, false, false];
+  var jpHasTicketsState = false;
+  var jpAnimId = 0;
+  var jpQuadPrizes = [false, false, false, false];
+  var jpQuadWinInfo = [null, null, null, null]; // { count, total } per quadrant
+  var jpQuadWinArrays = [[], [], [], []]; // individual win amounts per quadrant
+  var jpFinalTicket = null; // the locked-in spin ticket [{q,sym,col}, ...]
+  var jpAnimTarget = null;  // target ticket for current animation (set at start)
+  var jpAnimArgs = null;    // [hasTickets, player, day] for skip handler
+  var jpQuadBadgeBounds = [null, null, null, null]; // array of {cx,cy,r} circles in % per quadrant
+  var jpGreenRevealed = [false, false, false, false]; // per-quadrant: has scratch hit the badge?
+  var jpQuadOwned = [false, false, false, false]; // per-quadrant: player owns a ticket matching final trait
+
+  // ---- sound effects (Web Audio API, no files) ----------------------------
+
+  var jpAudioCtx = null;
+
+  function jpGetAudio() {
+    if (!jpAudioCtx) jpAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (jpAudioCtx.state === 'suspended') jpAudioCtx.resume();
+    return jpAudioCtx;
+  }
+
+  // Spin tick — short click, rising pitch each lock
+  function jpSfxTick(lockCount) {
+    var ctx = jpGetAudio();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    // Rise from 400Hz to 900Hz as locks progress (0-8)
+    osc.frequency.value = 400 + (lockCount / 8) * 500;
+    osc.type = 'square';
+    gain.gain.setValueAtTime(0.06, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.06);
+  }
+
+  // Lock-in — good (owned) or bad (unowned)
+  function jpSfxLock(owned) {
+    var ctx = jpGetAudio();
+    if (owned) {
+      // Bright confirmed chime — two quick ascending notes
+      var o1 = ctx.createOscillator();
+      var g1 = ctx.createGain();
+      o1.connect(g1); g1.connect(ctx.destination);
+      o1.frequency.value = 660; // E5
+      o1.type = 'sine';
+      g1.gain.setValueAtTime(0.12, ctx.currentTime);
+      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      o1.start(ctx.currentTime);
+      o1.stop(ctx.currentTime + 0.15);
+      var o2 = ctx.createOscillator();
+      var g2 = ctx.createGain();
+      o2.connect(g2); g2.connect(ctx.destination);
+      o2.frequency.value = 880; // A5
+      o2.type = 'sine';
+      g2.gain.setValueAtTime(0.12, ctx.currentTime + 0.08);
+      g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+      o2.start(ctx.currentTime + 0.08);
+      o2.stop(ctx.currentTime + 0.22);
+    } else {
+      // Dull clunk — low hit
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(180, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.12);
+      osc.type = 'triangle';
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.15);
+    }
+  }
+
+  // All locked — final slam (good if any owned, bad if all red)
+  function jpSfxAllLocked(anyOwned) {
+    var ctx = jpGetAudio();
+    if (anyOwned) {
+      // Satisfying impact + shimmer
+      var osc1 = ctx.createOscillator();
+      var g1 = ctx.createGain();
+      osc1.connect(g1); g1.connect(ctx.destination);
+      osc1.frequency.setValueAtTime(200, ctx.currentTime);
+      osc1.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.15);
+      osc1.type = 'sine';
+      g1.gain.setValueAtTime(0.18, ctx.currentTime);
+      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+      osc1.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + 0.2);
+      // Shimmer overtone
+      var osc2 = ctx.createOscillator();
+      var g2 = ctx.createGain();
+      osc2.connect(g2); g2.connect(ctx.destination);
+      osc2.frequency.value = 1320; // E6
+      osc2.type = 'sine';
+      g2.gain.setValueAtTime(0.06, ctx.currentTime + 0.05);
+      g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc2.start(ctx.currentTime + 0.05);
+      osc2.stop(ctx.currentTime + 0.5);
+    } else {
+      // Heavy thud + buzz — all dead
+      var osc1 = ctx.createOscillator();
+      var g1 = ctx.createGain();
+      osc1.connect(g1); g1.connect(ctx.destination);
+      osc1.frequency.setValueAtTime(120, ctx.currentTime);
+      osc1.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.3);
+      osc1.type = 'sawtooth';
+      g1.gain.setValueAtTime(0.1, ctx.currentTime);
+      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc1.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + 0.35);
+    }
+  }
+
+  // Scratch — continuous noise (call once, returns stop function)
+  var jpScratchNode = null;
+  function jpSfxScratchStart() {
+    if (jpScratchNode) return; // already playing
+    var ctx = jpGetAudio();
+    var buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    var data = buf.getChannelData(0);
+    for (var i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
+    var noise = ctx.createBufferSource();
+    var filter = ctx.createBiquadFilter();
+    var gain = ctx.createGain();
+    noise.buffer = buf;
+    noise.loop = true;
+    filter.type = 'bandpass';
+    filter.frequency.value = 3000;
+    filter.Q.value = 0.5;
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    gain.gain.value = 0.04;
+    noise.start();
+    jpScratchNode = { noise: noise, gain: gain };
+  }
+
+  function jpSfxScratchStop() {
+    if (!jpScratchNode) return;
+    try { jpScratchNode.noise.stop(); } catch (e) {}
+    jpScratchNode = null;
+  }
+
+  // Green reveal — bright ding
+  function jpSfxGreenReveal() {
+    var ctx = jpGetAudio();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.05);
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  }
+
+  // Full quadrant reveal — whoosh
+  function jpSfxReveal(isWin) {
+    var ctx = jpGetAudio();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    if (isWin) {
+      // Rising sparkle
+      osc.frequency.setValueAtTime(600, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1400, ctx.currentTime + 0.25);
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.35);
+    } else {
+      // Sad descending minor third — womp womp
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.setValueAtTime(349, ctx.currentTime + 0.2);  // F4 — minor third down
+      osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.6);
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime + 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.6);
+    }
+  }
+
+  // All scratched / claim ready — fanfare
+  function jpSfxFanfare() {
+    var ctx = jpGetAudio();
+    var notes = [523, 659, 784, 1047]; // C5 E5 G5 C6
+    for (var i = 0; i < notes.length; i++) {
+      (function (freq, delay) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+        gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + delay + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.4);
+        osc.start(ctx.currentTime + delay);
+        osc.stop(ctx.currentTime + delay + 0.4);
+      })(notes[i], i * 0.12);
+    }
+  }
+
+  // ---- badge helpers -------------------------------------------------------
 
   function jpBadgePath(q, sym, col) {
     var cat = JP_CATEGORIES[q];
@@ -1478,6 +2297,43 @@ function togglePayMode(mode) {
     ];
   }
 
+  // Smart target: pick traits the player actually owns in each quadrant.
+  // Falls back to random for quadrants where the player has no traits.
+  // Generate a target ticket for the spin animation.
+  // Quadrants with assigned wins (quadrant >= 0) MUST match a player-owned trait
+  // so the prize displays correctly. Other quadrants get a random trait — the
+  // player may or may not own it, giving a realistic blue/red mix.
+  // Get the actual ticket drawn by the game for this day.
+  // Same result for every player — it's the game's draw, not per-player.
+  var jpDrawLevels = []; // levels the current day's jackpot drew from
+  function jpDailyTarget(level, dayIdx) {
+    if (jpData && jpData.dailyDraw && jpData.dailyDraw[level] && jpData.dailyDraw[level][dayIdx]) {
+      var entry = jpData.dailyDraw[level][dayIdx];
+      jpDrawLevels = entry.levels || [level];
+      var ticket = [];
+      for (var q = 0; q < 4; q++) {
+        ticket.push({ q: q, sym: entry.traits[q][0], col: entry.traits[q][1] });
+      }
+      return ticket;
+    }
+    jpDrawLevels = [level];
+    return jpRandomTicket();
+  }
+
+  // Check trait ownership at only the levels this day's jackpot drew from
+  function jpTraitCountDrawLevels(player, qIdx, symIdx, colIdx) {
+    if (!jpData || !jpData.traitCounts) return 0;
+    var t = jpData.traitCounts[player];
+    if (!t) return 0;
+    var traitId = qIdx * 64 + symIdx * 8 + colIdx;
+    var total = 0;
+    for (var i = 0; i < jpDrawLevels.length; i++) {
+      var lv = jpDrawLevels[i];
+      if (t[lv] && t[lv][traitId]) total += t[lv][traitId];
+    }
+    return total;
+  }
+
   function jpRenderBadges(ticket) {
     var quads = document.querySelectorAll('#jp-token .jp-quadrant');
     for (var i = 0; i < 4; i++) {
@@ -1486,76 +2342,931 @@ function togglePayMode(mode) {
     }
   }
 
-  function jpSetQuadrantColors(hasTickets) {
-    var quads = document.querySelectorAll('#jp-token .jp-quadrant');
-    var cls = hasTickets ? 'q-has-tickets' : 'q-no-tickets';
-    for (var i = 0; i < 4; i++) {
-      quads[i].classList.remove('q-has-tickets', 'q-no-tickets');
-      quads[i].classList.add(cls);
-    }
-  }
-
   function jpClearColors() {
     var quads = document.querySelectorAll('#jp-token .jp-quadrant');
     for (var i = 0; i < 4; i++) {
-      quads[i].classList.remove('q-has-tickets', 'q-no-tickets');
+      quads[i].classList.remove('q-has-trait', 'q-has-tickets', 'q-no-tickets', 'q-scratchable');
     }
   }
 
-  function jpAnimate(hasTickets) {
-    var animId = ++jpAnimId;
-    var target = jpRandomTicket();
-    var locked = [false, false, false, false];
-    var lockOrder = [0, 1, 2, 3].sort(function () { return Math.random() - 0.5; });
-    var lockIdx = 0;
-    var idleCount = 2 + Math.floor(Math.random() * 3);
-    var frame = 0;
+  function jpClearScatteredBadges() {
+    var els = document.querySelectorAll('#jp-token .jp-badge-wrap, #jp-token .jp-scattered-badge, #jp-token .jp-win-count');
+    for (var i = 0; i < els.length; i++) els[i].remove();
+  }
 
-    jpClearColors();
+  function jpUpdateTraitCounts(player, level, display) {
+    var badges = document.querySelectorAll('#jp-token .jp-trait-count');
+    for (var i = 0; i < 4; i++) {
+      var count = jpTraitCountDrawLevels(player, i, display[i].sym, display[i].col);
+      badges[i].textContent = count > 0 ? count + 'x' : '0';
+      badges[i].classList.add('visible');
+    }
+  }
 
-    function step() {
-      if (animId !== jpAnimId) return;
+  function jpClearTraitCounts() {
+    var badges = document.querySelectorAll('#jp-token .jp-trait-count');
+    for (var i = 0; i < badges.length; i++) {
+      badges[i].classList.remove('visible');
+      badges[i].textContent = '';
+    }
+  }
 
-      // Generate display ticket: locked quadrants show target, others random
-      var display = jpRandomTicket();
-      for (var i = 0; i < 4; i++) {
-        if (locked[i]) display[i] = target[i];
+  function jpPlaceWinBadges(qIdx) {
+    var quad = document.querySelectorAll('#jp-token .jp-quadrant')[qIdx];
+    var wins = jpQuadWinArrays[qIdx];
+    if (!wins || wins.length <= 0) return;
+
+    // Use the winning trait's symbol and color
+    var sym = jpFinalTicket ? jpFinalTicket[qIdx].sym : jpWeightedBucket();
+    var col = jpFinalTicket ? jpFinalTicket[qIdx].col : jpWeightedBucket();
+    var path = jpBadgePath(qIdx, sym, col);
+
+    // Size badges: normalize different types to ETH-equivalent for visual sizing
+    // ETH=1, BURNIE≈0.00001, tickets≈0.001
+    function winToEthEquiv(w) {
+      if (w[1] === 'burnie') return w[0] * 0.00001;
+      if (w[1] === 'tickets') return w[0] * 0.001;
+      return w[0]; // eth
+    }
+    var allEquiv = [];
+    for (var qi = 0; qi < 4; qi++) {
+      for (var wi = 0; wi < jpQuadWinArrays[qi].length; wi++) {
+        allEquiv.push(winToEthEquiv(jpQuadWinArrays[qi][wi]));
       }
-      jpRenderBadges(display);
+    }
+    allEquiv.sort(function (a, b) { return a - b; });
+    var minWin = allEquiv[0] || 0;
+    var maxWin = allEquiv[allEquiv.length - 1] || 1;
+    var range = maxWin - minWin;
 
-      // Check if time to lock next quadrant
-      if (idleCount <= 0 && lockIdx < 4) {
-        locked[lockOrder[lockIdx]] = true;
-        lockIdx++;
-        idleCount = 2 + Math.floor(Math.random() * 3);
-      } else {
-        idleCount--;
+    // Scale down max size when many badges share a quadrant
+    var count = wins.length;
+    var maxSize, minSize;
+    if (count === 1) { minSize = 30; maxSize = 70; }
+    else if (count <= 3) { minSize = 25; maxSize = 55; }
+    else if (count <= 6) { minSize = 20; maxSize = 42; }
+    else { minSize = 15; maxSize = 30; }
+
+    // Place each winning ticket as a separate badge
+    var placed = []; // { cx, cy, size } for collision avoidance
+    // Collect all badge bounds for green detection
+    var allBounds = [];
+
+    for (var w = 0; w < wins.length; w++) {
+      // Linear scale: smallest win → minSize, biggest → maxSize
+      var eqVal = winToEthEquiv(wins[w]);
+      var t = range > 0 ? (eqVal - minWin) / range : 0.5;
+      var sizePct = minSize + t * (maxSize - minSize);
+
+      // Try to find a non-overlapping random position
+      var bestLeft = null, bestTop = null, bestOverlap = Infinity;
+      var attempts = 50;
+      for (var a = 0; a < attempts; a++) {
+        var tryLeft = Math.random() * (100 - sizePct);
+        var tryTop = Math.random() * (90 - sizePct); // leave bottom 10% for prize bar
+        var tryCX = tryLeft + sizePct / 2;
+        var tryCY = tryTop + sizePct / 2;
+
+        // Measure total overlap with already-placed badges
+        var overlap = 0;
+        for (var p = 0; p < placed.length; p++) {
+          var dx = tryCX - placed[p].cx;
+          var dy = tryCY - placed[p].cy;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          var minDist = (sizePct + placed[p].size) / 2;
+          if (dist < minDist) overlap += (minDist - dist);
+        }
+        if (overlap < bestOverlap) {
+          bestOverlap = overlap;
+          bestLeft = tryLeft;
+          bestTop = tryTop;
+        }
+        if (overlap === 0) break; // perfect fit, stop early
       }
 
-      frame++;
+      placed.push({ cx: bestLeft + sizePct / 2, cy: bestTop + sizePct / 2, size: sizePct });
+      allBounds.push({ left: bestLeft, top: bestTop, right: bestLeft + sizePct, bottom: bestTop + sizePct });
 
-      if (lockIdx >= 4) {
-        // Final: render target and apply colors
-        jpRenderBadges(target);
-        jpSetQuadrantColors(hasTickets);
-        return;
-      }
-
-      setTimeout(step, 100);
+      var wrap = document.createElement('div');
+      wrap.className = 'jp-badge-wrap';
+      wrap.style.width = sizePct + '%';
+      wrap.style.left = bestLeft + '%';
+      wrap.style.top = bestTop + '%';
+      var img = document.createElement('img');
+      img.src = path;
+      img.className = 'jp-scattered-badge';
+      img.alt = '';
+      wrap.appendChild(img);
+      quad.appendChild(wrap);
     }
 
-    step();
+    // Store individual badge circles for green detection
+    var circles = [];
+    for (var b = 0; b < allBounds.length; b++) {
+      var bb = allBounds[b];
+      circles.push({
+        cx: (bb.left + bb.right) / 2,
+        cy: (bb.top + bb.bottom) / 2,
+        r: (bb.right - bb.left) / 2
+      });
+    }
+    jpQuadBadgeBounds[qIdx] = circles;
   }
+
+  // ---- canvas / scratch helpers -------------------------------------------
+
+  function jpGetCanvas(quadIdx) {
+    return document.querySelector('#jp-token .jp-scratch-canvas[data-q="' + quadIdx + '"]');
+  }
+
+  function jpGetPrize(quadIdx) {
+    return document.querySelector('#jp-token .jp-prize-reveal[data-q="' + quadIdx + '"]');
+  }
+
+  // Draw the opaque silver cover onto a canvas
+  function jpDrawCover(canvas) {
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width;
+    var h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Metallic silver gradient
+    var grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0,   '#d0d0d0');
+    grad.addColorStop(0.3, '#c8c8c8');
+    grad.addColorStop(0.6, '#b0b0b0');
+    grad.addColorStop(1,   '#c0c0c0');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle noise lines to give a coin texture feel
+    ctx.globalAlpha = 0.07;
+    for (var y = 0; y < h; y += 4) {
+      ctx.strokeStyle = (y % 8 === 0) ? '#fff' : '#888';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Resize canvas to its CSS-rendered pixel size, then draw cover
+  function jpInitCanvas(canvas) {
+    var quad = canvas.parentElement;
+    var rect = quad.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.round(rect.width  * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width  = rect.width  + 'px';
+    canvas.style.height = rect.height + 'px';
+    jpDrawCover(canvas);
+  }
+
+  // Draw blue bg + badge onto canvas as the scratchable surface
+  function jpDrawBadgeCover(canvas, badgeSrc) {
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width;
+    var h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Blue scratchable surface — matches the "owned trait" color
+    ctx.fillStyle = '#b8d4e8';
+    ctx.fillRect(0, 0, w, h);
+
+    var img = new Image();
+    img.onload = function () {
+      var size = Math.min(w, h) * 0.92;
+      var x = (w - size) / 2;
+      var y = (h - size) / 2;
+      ctx.drawImage(img, x, y, size, size);
+    };
+    img.src = badgeSrc;
+  }
+
+  // Size canvas + draw badge cover (for winning quadrants)
+  function jpInitCanvasWithBadge(canvas, badgeSrc) {
+    var quad = canvas.parentElement;
+    var rect = quad.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.round(rect.width  * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width  = rect.width  + 'px';
+    canvas.style.height = rect.height + 'px';
+    jpDrawBadgeCover(canvas, badgeSrc);
+  }
+
+  // Erase a circular area at canvas-space (cx, cy)
+  function jpScratchAt(canvas, cx, cy) {
+    var dpr = window.devicePixelRatio || 1;
+    var r = JP_BRUSH_R * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // Return fraction of canvas that has been cleared (alpha == 0)
+  function jpClearedFraction(canvas) {
+    var ctx = canvas.getContext('2d');
+    var data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    var total = canvas.width * canvas.height;
+    var cleared = 0;
+    // alpha channel is every 4th byte
+    for (var i = 3; i < data.length; i += 4) {
+      if (data[i] < 20) cleared++;
+    }
+    return cleared / total;
+  }
+
+  // Fade the canvas out, reveal what's underneath
+  function jpRevealQuadrant(qIdx) {
+    if (jpScratched[qIdx]) return;
+    jpScratched[qIdx] = true;
+    jpSfxScratchStop();
+
+    var canvas = jpGetCanvas(qIdx);
+    var prize  = jpGetPrize(qIdx);
+
+    // Fade canvas away
+    canvas.style.transition = 'opacity 0.35s ease';
+    canvas.style.opacity = '0';
+    canvas.style.pointerEvents = 'none';
+
+    // Apply final bg color on reveal
+    var isWin = jpQuadPrizes[qIdx];
+    jpSfxReveal(isWin);
+    var quad = document.querySelectorAll('#jp-token .jp-quadrant')[qIdx];
+    quad.classList.remove('q-scratchable');
+    if (isWin) {
+      // Green should already be set by scratch detection, but ensure it
+      quad.classList.add('q-has-tickets');
+    } else {
+      // No prize — red
+      quad.classList.add('q-no-tickets');
+      var mainBadge = quad.querySelector('.jp-badge');
+      if (mainBadge) mainBadge.style.display = '';
+    }
+
+    // Show prize bar with multi-type summary for winning quadrants
+    if (prize && isWin) {
+      var lines = jpSummarizeWins(jpQuadWinArrays[qIdx]);
+      prize.innerHTML = '<div class="jp-prize-bar">' +
+        lines.map(function (l) { return '<span class="jp-prize-total">' + l + '</span>'; }).join('') +
+        '</div>';
+      prize.classList.remove('visible');
+      setTimeout(function () { prize.classList.add('visible'); }, 200);
+    }
+
+    jpCheckAllScratched();
+  }
+
+  function jpCheckAllScratched() {
+    var all = jpScratched[0] && jpScratched[1] && jpScratched[2] && jpScratched[3];
+    var hint = document.getElementById('jp-hint');
+    var claimBtn = document.getElementById('jp-claim-btn');
+
+    if (all) {
+      if (hint) hint.textContent = '';
+      // Only show claim if player actually has tickets (green quadrants)
+      if (claimBtn && jpHasTicketsState) {
+        claimBtn.classList.add('visible');
+        jpSfxFanfare();
+      }
+    } else {
+      var remaining = jpScratched.filter(function (s) { return !s; }).length;
+      if (hint) hint.textContent = remaining + ' quadrant' + (remaining !== 1 ? 's' : '') + ' left to scratch';
+    }
+  }
+
+  // ---- scratch event wiring ------------------------------------------------
+
+  function jpGetCanvasPos(canvas, clientX, clientY) {
+    var rect = canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    return {
+      x: (clientX - rect.left) * dpr,
+      y: (clientY - rect.top)  * dpr,
+    };
+  }
+
+  function jpWireCanvas(canvas, qIdx) {
+    var lastPos = null;
+
+    function onScratch(cx, cy) {
+      if (jpScratched[qIdx]) return;
+      jpSfxScratchStart();
+      jpScratchAt(canvas, cx, cy);
+
+      // Turn green when scratch hits any hidden badge circle behind
+      if (!jpGreenRevealed[qIdx] && jpQuadPrizes[qIdx] && jpQuadBadgeBounds[qIdx]) {
+        var pctX = (cx / canvas.width) * 100;
+        var pctY = (cy / canvas.height) * 100;
+        var circles = jpQuadBadgeBounds[qIdx];
+        for (var ci = 0; ci < circles.length; ci++) {
+          var ddx = pctX - circles[ci].cx;
+          var ddy = pctY - circles[ci].cy;
+          if (ddx * ddx + ddy * ddy <= circles[ci].r * circles[ci].r) {
+            jpGreenRevealed[qIdx] = true;
+            jpSfxGreenReveal();
+            var quad = document.querySelectorAll('#jp-token .jp-quadrant')[qIdx];
+            quad.classList.remove('q-scratchable');
+            quad.classList.add('q-has-tickets');
+            break;
+          }
+        }
+      }
+
+      // Interpolate between last and current for smooth lines
+      if (lastPos) {
+        var dx = cx - lastPos.x;
+        var dy = cy - lastPos.y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        var steps = Math.max(1, Math.floor(dist / 4));
+        for (var s = 1; s < steps; s++) {
+          jpScratchAt(canvas, lastPos.x + dx * s / steps, lastPos.y + dy * s / steps);
+        }
+      }
+      lastPos = { x: cx, y: cy };
+
+      // Check threshold every few events (sampling to avoid heavy reads)
+      if (Math.random() < 0.15) {
+        var frac = jpClearedFraction(canvas);
+        if (frac >= JP_REVEAL_THRESHOLD) {
+          jpRevealQuadrant(qIdx);
+        }
+      }
+    }
+
+    // Mouse — scratch on hover, no click needed
+    canvas.addEventListener('mousemove', function (e) {
+      if (jpScratched[qIdx]) return;
+      var p = jpGetCanvasPos(canvas, e.clientX, e.clientY);
+      onScratch(p.x, p.y);
+    });
+
+    canvas.addEventListener('mouseleave', function () {
+      lastPos = null;
+      jpSfxScratchStop();
+    });
+
+    // Touch
+    canvas.addEventListener('touchstart', function (e) {
+      if (jpScratched[qIdx]) return;
+      e.preventDefault();
+      lastPos = null;
+      var t = e.touches[0];
+      var p = jpGetCanvasPos(canvas, t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', function (e) {
+      if (jpScratched[qIdx]) return;
+      e.preventDefault();
+      var t = e.touches[0];
+      var p = jpGetCanvasPos(canvas, t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', function () {
+      lastPos = null;
+      jpSfxScratchStop();
+    });
+  }
+
+  // ---- data helpers --------------------------------------------------------
 
   function jpLevelForDay(day) {
     if (!jpData) return 1;
-    return Math.min(Math.floor((day - 1) / jpData.daysPerLevel) + 1, jpData.mainLevels);
+    return Math.min(Math.floor((day - 1) / jpData.daysPerLevel) + 1, jpData.maxWinLevel);
+  }
+
+  function jpDayInLevel(day) {
+    if (!jpData) return 1;
+    return ((day - 1) % jpData.daysPerLevel) + 1;
   }
 
   function jpHasTickets(player, day) {
     if (!jpData || !jpData.tickets[player]) return false;
     var level = jpLevelForDay(day);
     return jpData.tickets[player].indexOf(level) !== -1;
+  }
+
+  // Check if player owns at least one ticket matching symbol symIdx
+  // in quadrant qIdx at the given level. Uses real trait bitmask data.
+  // traitOwnership[player][level] = [q0_mask, q1_mask, q2_mask, q3_mask]
+  // Bit i set = player has ≥1 ticket with symbol i in that quadrant.
+  function jpOwnsSymbol(player, level, qIdx, symIdx) {
+    if (!jpData || !jpData.traitOwnership) return false;
+    var t = jpData.traitOwnership[player];
+    if (!t || !t[level]) return false;
+    return (t[level][qIdx] & (1 << symIdx)) !== 0;
+  }
+
+  // Return number of tickets matching exact trait (quadrant + symbol + color)
+  function jpTraitCount(player, level, qIdx, symIdx, colIdx) {
+    if (!jpData || !jpData.traitCounts) return 0;
+    var t = jpData.traitCounts[player];
+    if (!t || !t[level]) return 0;
+    var traitId = qIdx * 64 + symIdx * 8 + colIdx;
+    return t[level][traitId] || 0;
+  }
+
+
+  // Get real jackpot wins for a player on a specific day
+  function jpGetDayWins(player, day) {
+    var level = jpLevelForDay(day);
+    var dayIdx = jpDayInLevel(day);
+    var totalTickets = 0;
+    if (jpData.ticketCounts[player] && jpData.ticketCounts[player][level]) {
+      totalTickets = jpData.ticketCounts[player][level];
+    }
+    var wins = [];
+    if (jpData.jackpotWins && jpData.jackpotWins[player] &&
+        jpData.jackpotWins[player][level] && jpData.jackpotWins[player][level][dayIdx]) {
+      wins = jpData.jackpotWins[player][level][dayIdx];
+    }
+    return { totalTickets: totalTickets, wins: wins };
+  }
+
+  // Assign win tuples [amount, type, quadrant] to their real quadrants.
+  // Wins with quadrant 0-3 go to that quadrant directly.
+  // Wins with quadrant -1 (unassigned) go round-robin to owned quadrants.
+  // Returns { counts: [counts], winArrays: [[[amt,type,q],...], ...] }
+  function jpDistributeWins(wins, ownedQuads) {
+    var counts = [0, 0, 0, 0];
+    var winArrays = [[], [], [], []];
+    if (wins.length <= 0) return { counts: counts, winArrays: winArrays };
+
+    // Owned quadrant indices for distributing unassigned wins
+    var ownedIdxs = [];
+    for (var i = 0; i < 4; i++) {
+      if (ownedQuads[i]) ownedIdxs.push(i);
+    }
+    if (ownedIdxs.length === 0) ownedIdxs = [0, 1, 2, 3];
+
+    var unassigned = [];
+    for (var i = 0; i < wins.length; i++) {
+      var q = wins[i][2];
+      if (q >= 0 && q <= 3) {
+        counts[q]++;
+        winArrays[q].push(wins[i]);
+      } else {
+        unassigned.push(wins[i]);
+      }
+    }
+
+    // Distribute unassigned wins round-robin to owned quadrants
+    var shuffled = unassigned.sort(function () { return Math.random() - 0.5; });
+    for (var i = 0; i < shuffled.length; i++) {
+      var q = ownedIdxs[i % ownedIdxs.length];
+      counts[q]++;
+      winArrays[q].push(shuffled[i]);
+    }
+
+    return { counts: counts, winArrays: winArrays };
+  }
+
+  // Format a win amount by type
+  function jpFormatWin(amount, type) {
+    if (type === 'burnie') {
+      if (amount >= 1000) return Math.round(amount).toLocaleString() + ' BURNIE';
+      if (amount >= 1) return amount.toFixed(2).replace(/\.?0+$/, '') + ' BURNIE';
+      return amount.toFixed(4).replace(/\.?0+$/, '') + ' BURNIE';
+    }
+    if (type === 'tickets') {
+      return amount + ' ticket' + (amount !== 1 ? 's' : '');
+    }
+    // Default: ETH
+    var s;
+    if (amount >= 1) s = amount.toFixed(2);
+    else if (amount >= 0.01) s = amount.toFixed(4);
+    else s = amount.toFixed(6);
+    s = s.replace(/\.?0+$/, '');
+    return s + ' ETH';
+  }
+
+  // Summarize an array of [amount, type, quadrant, ?level] tuples into grouped display lines
+  function jpSummarizeWins(wins) {
+    var totals = {};
+    var ticketsByLevel = {};
+    for (var i = 0; i < wins.length; i++) {
+      var type = wins[i][1];
+      if (!totals[type]) totals[type] = 0;
+      totals[type] += wins[i][0];
+      // Group ticket wins by future level
+      if (type === 'tickets' && wins[i].length > 3) {
+        var lv = wins[i][3];
+        if (!ticketsByLevel[lv]) ticketsByLevel[lv] = 0;
+        ticketsByLevel[lv] += wins[i][0];
+      }
+    }
+    var lines = [];
+    if (totals.eth) lines.push(jpFormatWin(totals.eth, 'eth'));
+    if (totals.burnie) lines.push(jpFormatWin(totals.burnie, 'burnie'));
+    // Show ticket wins broken out by level if we have level info
+    var lvKeys = Object.keys(ticketsByLevel).sort(function (a, b) { return a - b; });
+    if (lvKeys.length > 0) {
+      for (var li = 0; li < lvKeys.length; li++) {
+        var amt = ticketsByLevel[lvKeys[li]];
+        lines.push(amt + ' tix \u2192 L' + lvKeys[li]);
+      }
+    } else if (totals.tickets) {
+      lines.push(jpFormatWin(totals.tickets, 'tickets'));
+    }
+    return lines;
+  }
+
+  // ---- prize generation from real data --------------------------------------
+
+  function jpGeneratePrizes(player, day) {
+    var info = jpGetDayWins(player, day);
+    var dist = jpDistributeWins(info.wins, jpQuadOwned);
+    for (var i = 0; i < 4; i++) {
+      jpQuadPrizes[i] = dist.counts[i] > 0;
+      jpQuadWinInfo[i] = { count: dist.counts[i] };
+      jpQuadWinArrays[i] = dist.winArrays[i];
+    }
+  }
+
+  // ---- spin animation (degenerette runout) ---------------------------------
+
+  // ---- coinflip helpers -----------------------------------------------------
+
+  var cfSliderRaf = null;
+  var cfSliderStart = 0;
+
+  function cfPercentToPos(pct) {
+    return Math.max(0, Math.min(100, (pct - 50) / (153 - 50) * 100));
+  }
+
+  function cfFmtBurnie(n) {
+    if (Math.abs(n) >= 1000) return Math.round(n).toLocaleString();
+    return n.toFixed(1).replace(/\.0$/, '');
+  }
+
+  function cfSliderSweep(ts) {
+    // Smooth sine sweep across the track, ~1.2s per cycle
+    var elapsed = ts - cfSliderStart;
+    var pos = 50 + 50 * Math.sin(elapsed * 0.005);
+    var thumb = document.getElementById('cf-slider-thumb');
+    var fill = document.getElementById('cf-slider-fill');
+    if (thumb) thumb.style.left = pos + '%';
+    if (fill) fill.style.width = pos + '%';
+    cfSliderRaf = requestAnimationFrame(cfSliderSweep);
+  }
+
+  function jpCoinStart(player, day) {
+    var coin = document.getElementById('jp-coin');
+    if (!coin) return;
+    coin.classList.remove('landed-eth', 'landed-wwxrp');
+    coin.classList.add('spinning');
+
+    // Show stake amount immediately
+    var amtEl = document.getElementById('cf-amount');
+    if (amtEl) {
+      var stake = cfGetStake(player, day);
+      if (stake > 0) {
+        amtEl.textContent = cfFmtBurnie(stake) + ' B';
+        amtEl.className = 'cf-value';
+      } else {
+        amtEl.textContent = 'No bet';
+        amtEl.className = 'cf-value cf-no-bet';
+      }
+    }
+
+    // Start smooth slider sweep
+    var thumb = document.getElementById('cf-slider-thumb');
+    var fill = document.getElementById('cf-slider-fill');
+    if (thumb && fill) {
+      thumb.classList.add('shuffling');
+      fill.classList.add('shuffling');
+      if (cfSliderRaf) cancelAnimationFrame(cfSliderRaf);
+      cfSliderStart = performance.now();
+      cfSliderRaf = requestAnimationFrame(cfSliderSweep);
+    }
+  }
+
+  function cfGetStake(player, day) {
+    if (!jpData || !jpData.coinflipResults) return 0;
+    var level = jpLevelForDay(day);
+    var dayIdx = jpDayInLevel(day);
+    var cf = jpData.coinflipResults[player];
+    if (!cf || !cf[level] || !cf[level][dayIdx]) return 0;
+    return cf[level][dayIdx][0];
+  }
+
+  function cfIsWin(player, day) {
+    if (!jpData || !jpData.coinflipResults) return false;
+    var level = jpLevelForDay(day);
+    var dayIdx = jpDayInLevel(day);
+    var cf = jpData.coinflipResults[player];
+    if (!cf || !cf[level] || !cf[level][dayIdx]) return false;
+    return cf[level][dayIdx][1] > 0;
+  }
+
+  function jpCoinLand(isWin) {
+    var coin = document.getElementById('jp-coin');
+    if (!coin) return;
+    coin.classList.remove('spinning');
+    coin.classList.add(isWin ? 'landed-eth' : 'landed-wwxrp');
+  }
+
+  function jpUpdateCoinflipResult(player, day) {
+    // Stop slider sweep
+    if (cfSliderRaf) { cancelAnimationFrame(cfSliderRaf); cfSliderRaf = null; }
+    var thumb = document.getElementById('cf-slider-thumb');
+    var fill = document.getElementById('cf-slider-fill');
+    var amtEl = document.getElementById('cf-amount');
+
+    if (!jpData || !jpData.coinflipResults) {
+      cfSliderNeutral(thumb, fill);
+      return;
+    }
+    var level = jpLevelForDay(day);
+    var dayIdx = jpDayInLevel(day);
+    var cf = jpData.coinflipResults[player];
+    if (!cf || !cf[level] || !cf[level][dayIdx]) {
+      cfSliderNeutral(thumb, fill);
+      return;
+    }
+
+    var stake = cf[level][dayIdx][0];
+    var payout = cf[level][dayIdx][1];
+    var rewardPct = cf[level][dayIdx][2];
+    var isWin = payout > 0;
+
+    // Animate slider to actual reward percent
+    if (thumb && fill) {
+      setTimeout(function () {
+        thumb.classList.remove('shuffling');
+        fill.classList.remove('shuffling');
+        var pos = cfPercentToPos(rewardPct);
+        thumb.style.left = pos + '%';
+        fill.style.width = pos + '%';
+      }, 50);
+    }
+
+    // Morph stake → result after a beat
+    // Win: show new total (stake + payout), Loss: show payout (-stake)
+    if (amtEl) {
+      setTimeout(function () {
+        var display = isWin ? stake + payout : 0;
+        amtEl.textContent = cfFmtBurnie(display) + ' B';
+        amtEl.className = 'cf-value ' + (isWin ? 'cf-win' : 'cf-loss');
+      }, 500);
+    }
+  }
+
+  function cfSliderNeutral(thumb, fill) {
+    var mid = cfPercentToPos(100);
+    if (thumb) { thumb.classList.remove('shuffling'); thumb.style.left = mid + '%'; }
+    if (fill) { fill.classList.remove('shuffling'); fill.style.width = mid + '%'; }
+  }
+
+  // ---- spin animation (degenerette runout) ---------------------------------
+
+  function jpAnimate(hasTickets, player, day) {
+    var animId = ++jpAnimId;
+    var level = jpLevelForDay(day);
+
+    // Use the actual game draw for this day (same for all players)
+    var dayIdx = jpDayInLevel(day);
+    var target = jpDailyTarget(level, dayIdx);
+
+    // Degenerette-style: 8 locks total (color first, then symbol per quadrant)
+    var lockedColors = [false, false, false, false];
+    var lockedSymbols = [false, false, false, false];
+    var locksDone = 0;
+    var totalLocks = 8;
+    var idleCount = 2 + Math.floor(Math.random() * 3);
+
+    // Per-quadrant ownership: does the player own this exact trait across draw pool levels?
+    // Draw pool = game level through game level + 4 (BURNIE can pull from future levels)
+    jpQuadOwned = [false, false, false, false];
+    if (hasTickets) {
+      for (var i = 0; i < 4; i++) {
+        jpQuadOwned[i] = jpTraitCountDrawLevels(player, i, target[i].sym, target[i].col) > 0;
+      }
+    }
+
+    // Reset state
+    jpHasTicketsState = hasTickets;
+    jpScratched = [false, false, false, false];
+    jpGreenRevealed = [false, false, false, false];
+    jpQuadBadgeBounds = [null, null, null, null];
+    jpClearColors();
+    jpClearTraitCounts();
+    jpSfxScratchStop();
+
+    // Flame pulse during spin
+    var flameCenter = document.querySelector('.jp-center');
+    if (flameCenter) flameCenter.classList.add('spinning');
+
+    // Start coinflip spinning (show stake amount immediately)
+    jpCoinStart(player, day);
+
+    // Pre-sample prizes so we know final win/lose per quadrant during spin
+    if (hasTickets) {
+      jpGeneratePrizes(player, day);
+    }
+
+    // Store for skip handler
+    jpAnimTarget = target;
+    jpAnimArgs = [hasTickets, player, day];
+
+    // Hide scratch canvases, prizes, and reset badge opacity
+    var hint = document.getElementById('jp-hint');
+    var claimBtn = document.getElementById('jp-claim-btn');
+    if (hint) hint.textContent = '';
+    if (claimBtn) claimBtn.classList.remove('visible');
+
+    // Clean up previous round: scattered badges, restore main badges
+    jpClearScatteredBadges();
+    var mainBadges = document.querySelectorAll('#jp-token .jp-badge');
+    for (var mb = 0; mb < mainBadges.length; mb++) mainBadges[mb].style.display = '';
+
+    var quads = document.querySelectorAll('#jp-token .jp-quadrant');
+    for (var i = 0; i < 4; i++) {
+      quads[i].classList.remove('jp-revealed');
+      var canvas = jpGetCanvas(i);
+      canvas.style.transition = 'none';
+      canvas.style.opacity = '0';
+      canvas.style.pointerEvents = 'none';
+      var prize = jpGetPrize(i);
+      if (prize) {
+        prize.classList.remove('visible', 'jp-prize-win', 'jp-prize-zero', 'jp-prize-lose');
+        prize.innerHTML = '';
+      }
+    }
+
+    function step() {
+      if (animId !== jpAnimId) return;
+      jpSfxTick(locksDone);
+
+      // Build display ticket: locked parts show target, unlocked show random
+      var display = jpRandomTicket();
+      for (var i = 0; i < 4; i++) {
+        if (lockedColors[i]) display[i].col = target[i].col;
+        if (lockedSymbols[i]) display[i].sym = target[i].sym;
+      }
+      jpRenderBadges(display);
+
+      // Flash quadrant backgrounds: blue if player owns exact displayed trait, red if 0
+      for (var i = 0; i < 4; i++) {
+        quads[i].classList.remove('q-has-trait', 'q-no-tickets');
+        if (lockedSymbols[i]) {
+          // Symbol locked — use pre-rolled ownership result
+          quads[i].classList.add(jpQuadOwned[i] ? 'q-has-trait' : 'q-no-tickets');
+        } else if (hasTickets) {
+          // Still spinning — flash based on exact trait count of displayed badge
+          var count = jpTraitCountDrawLevels(player, i, display[i].sym, display[i].col);
+          quads[i].classList.add(count > 0 ? 'q-has-trait' : 'q-no-tickets');
+        } else {
+          quads[i].classList.add('q-no-tickets');
+        }
+      }
+
+      // Show trait counts during spin
+      if (hasTickets) {
+        jpUpdateTraitCounts(player, level, display);
+      }
+
+      // Pick next lock when idle expires
+      if (idleCount <= 0 && locksDone < totalLocks) {
+        // Build available locks: color must lock before symbol per quadrant
+        var available = [];
+        for (var q = 0; q < 4; q++) {
+          if (!lockedColors[q]) {
+            available.push({ q: q, type: 'color' });
+          } else if (!lockedSymbols[q]) {
+            available.push({ q: q, type: 'symbol' });
+          }
+        }
+        if (available.length > 0) {
+          var pick = available[Math.floor(Math.random() * available.length)];
+          if (pick.type === 'color') {
+            lockedColors[pick.q] = true;
+          } else {
+            lockedSymbols[pick.q] = true;
+          }
+          locksDone++;
+          // Symbol lock → good/bad sound; color lock → neutral tick
+          if (pick.type === 'symbol') {
+            jpSfxLock(jpQuadOwned[pick.q]);
+          } else {
+            jpSfxTick(locksDone);
+          }
+          idleCount = 2 + Math.floor(Math.random() * 3);
+        }
+      } else {
+        idleCount--;
+      }
+
+      if (locksDone >= totalLocks) {
+        // All 8 locked — show final target
+        var anyOwned = jpQuadOwned[0] || jpQuadOwned[1] || jpQuadOwned[2] || jpQuadOwned[3];
+        jpSfxAllLocked(anyOwned);
+        jpRenderBadges(target);
+        jpFinalTicket = target;
+        // Update counts for the final locked-in symbols
+        if (hasTickets) {
+          jpUpdateTraitCounts(player, level, target);
+        }
+        // Transition from spin flash to final state:
+        // owned quads stay blue (q-has-trait), unowned stay red (q-no-tickets)
+        // jpAfterSpin will replace q-has-trait with q-scratchable + canvas
+        jpAfterSpin(hasTickets, player, day);
+        return;
+      }
+      // Slow down as more locks are done: 80ms → 200ms over 8 locks
+      var delay = 80 + Math.floor((locksDone / totalLocks) * 120);
+      setTimeout(step, delay);
+    }
+    step();
+  }
+
+  function jpSkipAnim() {
+    if (jpAnimArgs && jpAnimTarget) {
+      // Cancel running animation
+      jpAnimId++;
+      var hasTickets = jpAnimArgs[0], player = jpAnimArgs[1], day = jpAnimArgs[2];
+      var level = jpLevelForDay(day);
+      // Jump to final state
+      jpRenderBadges(jpAnimTarget);
+      jpFinalTicket = jpAnimTarget;
+      if (hasTickets) jpUpdateTraitCounts(player, level, jpAnimTarget);
+      // Run post-spin (coinflip land, scratch canvases)
+      jpAfterSpin(hasTickets, player, day);
+      jpAnimArgs = null;
+    }
+    // Reveal any unscratched quadrants
+    for (var i = 0; i < 4; i++) jpRevealQuadrant(i);
+  }
+
+  function jpAfterSpin(hasTickets, player, day) {
+    var quads = document.querySelectorAll('#jp-token .jp-quadrant');
+    var hint = document.getElementById('jp-hint');
+
+    // Stop flame pulse
+    var flameCenter = document.querySelector('.jp-center');
+    if (flameCenter) flameCenter.classList.remove('spinning');
+
+    // Land the coinflip — use actual coinflip result, not jackpot prizes
+    jpCoinLand(cfIsWin(player, day));
+    jpUpdateCoinflipResult(player, day);
+
+    if (!hasTickets) {
+      // No tickets at all — all red, not scratchable
+      jpScratched = [true, true, true, true];
+      for (var i = 0; i < 4; i++) {
+        quads[i].classList.remove('q-has-trait');
+        quads[i].classList.add('q-no-tickets');
+      }
+      if (hint) hint.textContent = 'No tickets for this level';
+      return;
+    }
+
+    var anyOwned = false;
+    // First pass: cover all owned quadrants with scratch canvas
+    for (var i = 0; i < 4; i++) {
+      quads[i].classList.remove('q-has-trait');
+      if (jpQuadOwned[i]) {
+        anyOwned = true;
+        quads[i].classList.remove('q-no-tickets');
+        quads[i].classList.add('q-scratchable');
+        var canvas = jpGetCanvas(i);
+        var badgeSrc = quads[i].querySelector('.jp-badge').src;
+        jpInitCanvasWithBadge(canvas, badgeSrc);
+        canvas.style.transition = 'none';
+        canvas.style.opacity = '1';
+        canvas.style.pointerEvents = 'auto';
+      } else {
+        // Player doesn't own this trait — red, not scratchable
+        jpScratched[i] = true;
+        quads[i].classList.add('q-no-tickets');
+      }
+    }
+    // Second pass: hide spin badges on owned quads, place hidden prize badges behind winners
+    for (var i = 0; i < 4; i++) {
+      if (jpQuadOwned[i]) {
+        var mainBadge = quads[i].querySelector('.jp-badge');
+        mainBadge.style.display = 'none';
+        if (jpQuadPrizes[i]) {
+          jpPlaceWinBadges(i);
+        }
+      }
+    }
+    if (anyOwned) {
+      if (hint) hint.textContent = 'Scratch to find your winners!';
+    } else {
+      if (hint) hint.textContent = 'No matching tickets this round';
+    }
+    // Clear skip target so flame click doesn't re-trigger after spin ends
+    jpAnimArgs = null;
   }
 
   function jpOnChange() {
@@ -1568,7 +3279,7 @@ function togglePayMode(mode) {
     if (!player || !day) return;
 
     var has = jpHasTickets(player, day);
-    jpAnimate(has);
+    jpAnimate(has, player, day);
   }
 
   function jpInit(data) {
@@ -1586,22 +3297,91 @@ function togglePayMode(mode) {
       playerSel.appendChild(opt);
     });
 
-    // Populate days
-    daySel.innerHTML = '';
-    for (var d = 1; d <= data.totalDays; d++) {
-      var lvl = jpLevelForDay(d);
-      var opt = document.createElement('option');
-      opt.value = d;
-      opt.textContent = 'Day ' + d + ' (L' + lvl + ')';
-      daySel.appendChild(opt);
+    function jpPopulateDays() {
+      var player = playerSel.value;
+      var prevDay = daySel.value;
+      daySel.innerHTML = '';
+      for (var d = 1; d <= data.totalDays; d++) {
+        var lvl = jpLevelForDay(d);
+        var dayIdx = jpDayInLevel(d);
+        var totals = {};
+        if (data.jackpotWins && data.jackpotWins[player] &&
+            data.jackpotWins[player][lvl] && data.jackpotWins[player][lvl][dayIdx]) {
+          var wins = data.jackpotWins[player][lvl][dayIdx];
+          for (var w = 0; w < wins.length; w++) {
+            var type = wins[w][1];
+            if (!totals[type]) totals[type] = 0;
+            totals[type] += wins[w][0];
+          }
+        }
+        var opt = document.createElement('option');
+        opt.value = d;
+        var label = 'Day ' + d + ' (L' + lvl + ')';
+        var parts = [];
+        if (totals.eth) parts.push(totals.eth.toFixed(4).replace(/0+$/, '').replace(/\.$/, '') + ' ETH');
+        if (totals.burnie) parts.push(Math.round(totals.burnie) + ' BURNIE');
+        if (totals.tickets) {
+          // Show ticket counts by future level
+          var tixByLvl = {};
+          var dayWins = data.jackpotWins[player][lvl][dayIdx];
+          for (var tw = 0; tw < dayWins.length; tw++) {
+            if (dayWins[tw][1] === 'tickets' && dayWins[tw].length > 3) {
+              var fl = dayWins[tw][3];
+              if (!tixByLvl[fl]) tixByLvl[fl] = 0;
+              tixByLvl[fl] += dayWins[tw][0];
+            }
+          }
+          var tixKeys = Object.keys(tixByLvl).sort(function (a, b) { return a - b; });
+          if (tixKeys.length > 0) {
+            for (var ti = 0; ti < tixKeys.length; ti++) {
+              parts.push(tixByLvl[tixKeys[ti]] + ' tix\u2192L' + tixKeys[ti]);
+            }
+          } else {
+            parts.push(totals.tickets + ' tix');
+          }
+        }
+        if (parts.length > 0) label += ' — ' + parts.join(' + ');
+        opt.textContent = label;
+        daySel.appendChild(opt);
+      }
+      // Restore previous selection if still valid
+      if (prevDay) daySel.value = prevDay;
     }
 
-    playerSel.addEventListener('change', jpOnChange);
+    jpPopulateDays();
+
+    playerSel.addEventListener('change', function () {
+      jpPopulateDays();
+      jpOnChange();
+    });
     daySel.addEventListener('change', jpOnChange);
 
-    // Initial render
-    jpRenderBadges(jpRandomTicket());
-    jpOnChange();
+    // Wire up scratch canvases
+    for (var i = 0; i < 4; i++) {
+      (function (qIdx) {
+        var canvas = jpGetCanvas(qIdx);
+        if (canvas) jpWireCanvas(canvas, qIdx);
+      })(i);
+    }
+
+    // Wire claim button (placeholder alert for now)
+    var claimBtn = document.getElementById('jp-claim-btn');
+    if (claimBtn) {
+      claimBtn.addEventListener('click', function () {
+        alert('Claim functionality coming soon!');
+      });
+    }
+
+    // Wire flame center — click to skip animation and reveal all
+    var flameCenter = document.querySelector('.jp-center');
+    if (flameCenter) {
+      flameCenter.addEventListener('click', jpSkipAnim);
+    }
+
+    // Initial render — rAF so DOM is laid out for canvas sizing
+    requestAnimationFrame(function () {
+      jpOnChange();
+    });
   }
 
   // Load data
@@ -1613,6 +3393,621 @@ function togglePayMode(mode) {
       var widget = document.getElementById('jackpot-widget');
       if (widget) widget.style.display = 'none';
     });
+})();
+</script>
+
+<!-- Degenerette entry widget -->
+<script>
+(function () {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  // Constants (reuse jackpot badge system)
+  // ---------------------------------------------------------------------------
+
+  var DG_CATEGORIES = ['crypto', 'zodiac', 'cards', 'dice'];
+  var DG_SYMBOLS = {
+    crypto: ['xrp', 'tron', 'sui', 'monero', 'solana', 'chainlink', 'ethereum', 'bitcoin'],
+    zodiac: ['aries', 'taurus', 'gemini', 'cancer', 'leo', 'libra', 'sagittarius', 'aquarius'],
+    cards: ['club', 'diamond', 'heart', 'spade', 'horseshoe', 'cashsack', 'king', 'ace'],
+    dice: ['1', '2', '3', '4', '5', '6', '7', '8'],
+  };
+  var DG_COLORS = ['pink', 'purple', 'green', 'red', 'blue', 'orange', 'silver', 'gold'];
+  var DG_COLOR_HEX = ['#e91e8c', '#9b59b6', '#22c55e', '#e74c3c', '#3498db', '#f39c12', '#95a5a6', '#f1c40f'];
+  var DG_CARD_IDX = [3, 4, 5, 6, 0, 2, 1, 7];
+  var DG_WEIGHTS = [10, 10, 10, 10, 9, 9, 9, 8];
+  var DG_TOTAL_W = 75;
+
+  var DG_MIN_BET = { 0: 0.01, 1: 100, 3: 1 };
+  var DG_CURRENCY_LABEL = { 0: 'ETH', 1: 'BURNIE', 3: 'WWXRP' };
+  var DG_BET_INCREMENTS = {
+    0: [[0.01, '+.01'], [0.1, '+.1']],
+    1: [[100, '+100'], [1000, '+1k']],
+    3: [[1, '+1'], [10, '+10']],
+  };
+
+  // ---------------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------------
+
+  var degenTicket = [
+    { q: 0, sym: 0, col: 0 },
+    { q: 1, sym: 0, col: 0 },
+    { q: 2, sym: 0, col: 0 },
+    { q: 3, sym: 0, col: 0 },
+  ];
+  var degenHero = 0xFF;
+  var degenCurrency = 0;
+  var degenPending = []; // { betId, rngIndex, status: 'pending'|'ready', result? }
+  var degenSelOpen = -1; // which quadrant has selector open, -1 = closed
+  var degenSpinning = false;
+  var degenPollTimer = null;
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  function dgBadgePath(q, sym, col) {
+    var cat = DG_CATEGORIES[q];
+    var idx = cat === 'cards' ? DG_CARD_IDX[sym] : sym;
+    return '/badges-circular/' + cat + '_0' + idx + '_' + DG_SYMBOLS[cat][sym] + '_' + DG_COLORS[col] + '.svg';
+  }
+
+  function dgSymbolPath(q, sym, col) {
+    var cat = DG_CATEGORIES[q];
+    var idx = cat === 'cards' ? DG_CARD_IDX[sym] : sym;
+    return '/badges/' + cat + '_0' + idx + '_' + DG_SYMBOLS[cat][sym] + '_' + DG_COLORS[col] + '.svg';
+  }
+
+  function dgWeightedBucket() {
+    var r = Math.floor(Math.random() * DG_TOTAL_W);
+    var cum = 0;
+    for (var i = 0; i < DG_WEIGHTS.length; i++) {
+      cum += DG_WEIGHTS[i];
+      if (r < cum) return i;
+    }
+    return 7;
+  }
+
+  function dgPackTrait(t) {
+    return ((t.q & 3) << 6) | ((t.col & 7) << 3) | (t.sym & 7);
+  }
+
+  function dgUnpackTrait(packed, q) {
+    return { q: q, col: (packed >> 3) & 7, sym: packed & 7 };
+  }
+
+  function dgPackTicket() {
+    return (dgPackTrait(degenTicket[3]) << 24) |
+           (dgPackTrait(degenTicket[2]) << 16) |
+           (dgPackTrait(degenTicket[1]) << 8) |
+           dgPackTrait(degenTicket[0]);
+  }
+
+  function dgUnpackTicket(packed) {
+    return [
+      dgUnpackTrait(packed & 0xFF, 0),
+      dgUnpackTrait((packed >> 8) & 0xFF, 1),
+      dgUnpackTrait((packed >> 16) & 0xFF, 2),
+      dgUnpackTrait((packed >> 24) & 0xFF, 3),
+    ];
+  }
+
+  // Build a synthetic house ticket that yields the given match count (0-8)
+  // against a player ticket. Matches are distributed: color matches first, then symbol.
+  function dgSyntheticHouse(playerPacked, matchCount) {
+    var player = dgUnpackTicket(playerPacked);
+    // 8 trait slots: [col0, col1, col2, col3, sym0, sym1, sym2, sym3]
+    // Randomly pick which slots match
+    var slots = [0,1,2,3,4,5,6,7];
+    // Shuffle
+    for (var i = slots.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = slots[i]; slots[i] = slots[j]; slots[j] = tmp;
+    }
+    var matchSet = {};
+    for (var m = 0; m < Math.min(matchCount, 8); m++) matchSet[slots[m]] = true;
+
+    var house = [];
+    for (var q = 0; q < 4; q++) {
+      var col = matchSet[q] ? player[q].col : (player[q].col + 1 + Math.floor(Math.random() * 7)) % 8;
+      var sym = matchSet[4 + q] ? player[q].sym : (player[q].sym + 1 + Math.floor(Math.random() * 7)) % 8;
+      house.push({ q: q, col: col, sym: sym });
+    }
+    // Pack back
+    return (dgPackTrait(house[3]) << 24) | (dgPackTrait(house[2]) << 16) |
+           (dgPackTrait(house[1]) << 8) | dgPackTrait(house[0]);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+
+  function degenRenderDiamond() {
+    var imgs = document.querySelectorAll('#degen-diamond .degen-badge');
+    for (var i = 0; i < 4; i++) {
+      imgs[i].src = dgBadgePath(i, degenTicket[i].sym, degenTicket[i].col);
+    }
+    // Hero highlight
+    var quads = document.querySelectorAll('#degen-diamond .degen-quad');
+    for (var i = 0; i < 4; i++) {
+      quads[i].classList.toggle('degen-q-hero', i === degenHero);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Quick selector
+  // ---------------------------------------------------------------------------
+
+  function degenOpenSelector(qIdx) {
+    var popup = document.getElementById('degen-quick-sel');
+    if (!popup) return;
+
+    if (degenSelOpen === qIdx) {
+      degenCloseSelector();
+      return;
+    }
+    degenSelOpen = qIdx;
+
+    var color = degenTicket[qIdx].col;
+    var html = '';
+
+    // Color buttons (8 rectangular swatches in 4-column grid = 2 rows)
+    for (var c = 0; c < 8; c++) {
+      html += '<button data-type="color" data-val="' + c + '" title="' + DG_COLORS[c] + '">' +
+        '<span class="color-swatch" style="background:' + DG_COLOR_HEX[c] + '"></span></button>';
+    }
+
+    // Symbol buttons (8 circular badge previews = 2 rows)
+    for (var s = 0; s < 8; s++) {
+      var path = dgSymbolPath(qIdx, s, color);
+      html += '<button data-type="symbol" data-val="' + s + '">' +
+        '<span class="symbol-swatch"><img src="' + path + '" alt=""></span></button>';
+    }
+
+    // Hero button (only if not already hero)
+    if (degenHero !== qIdx) {
+      html += '<button data-type="hero" class="hero-toggle-btn">Set as Hero</button>';
+    }
+
+    popup.innerHTML = html;
+    popup.classList.add('visible');
+
+    // Position near the clicked quadrant
+    var quad = document.querySelectorAll('#degen-diamond .degen-quad')[qIdx];
+    var diamondWrap = document.querySelector('.degen-diamond-wrap');
+    var qr = quad.getBoundingClientRect();
+    var wr = diamondWrap.getBoundingClientRect();
+    var left = qr.left - wr.left;
+    var top = qr.bottom - wr.top + 8;
+    // Keep within bounds
+    var maxLeft = wr.width - popup.offsetWidth - 8;
+    if (left > maxLeft) left = Math.max(0, maxLeft);
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+
+    // Event listeners
+    popup.querySelectorAll('button').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var type = btn.dataset.type;
+        if (type === 'color') {
+          degenTicket[qIdx].col = parseInt(btn.dataset.val);
+          degenRenderDiamond();
+          degenOpenSelector(qIdx); // re-render to update symbol previews
+        } else if (type === 'symbol') {
+          degenTicket[qIdx].sym = parseInt(btn.dataset.val);
+          degenRenderDiamond();
+          degenCloseSelector();
+        } else if (type === 'hero') {
+          degenHero = qIdx;
+          degenRenderDiamond();
+          degenCloseSelector();
+        }
+      });
+    });
+  }
+
+  function degenCloseSelector() {
+    degenSelOpen = -1;
+    var popup = document.getElementById('degen-quick-sel');
+    if (popup) popup.classList.remove('visible');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Randomize
+  // ---------------------------------------------------------------------------
+
+  window.degenRandomize = function () {
+    for (var i = 0; i < 4; i++) {
+      degenTicket[i].sym = dgWeightedBucket();
+      degenTicket[i].col = dgWeightedBucket();
+    }
+    degenRenderDiamond();
+    degenCloseSelector();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Currency toggle
+  // ---------------------------------------------------------------------------
+
+  window.degenSetCurrency = function (cur) {
+    degenCurrency = cur;
+    var btns = document.querySelectorAll('#degen-currency .pay-toggle-btn');
+    btns.forEach(function (b) {
+      b.classList.toggle('active', parseInt(b.dataset.cur) === cur);
+    });
+
+    // Update bet input min/step and increment buttons
+    var betInput = document.getElementById('degen-bet');
+    if (betInput) {
+      betInput.value = DG_MIN_BET[cur];
+      betInput.min = DG_MIN_BET[cur];
+      betInput.step = cur === 0 ? '0.001' : '1';
+    }
+
+    // Update increment buttons
+    var incrs = DG_BET_INCREMENTS[cur];
+    var incrContainer = betInput ? betInput.parentElement.querySelector('.incr-btns') : null;
+    if (incrContainer && incrs) {
+      incrContainer.innerHTML = '';
+      incrs.forEach(function (pair) {
+        var btn = document.createElement('button');
+        btn.className = 'incr-btn';
+        btn.textContent = pair[1];
+        btn.addEventListener('click', function () { incrInput('degen-bet', pair[0]); });
+        incrContainer.appendChild(btn);
+      });
+    }
+
+    degenUpdateCost();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Cost calculation
+  // ---------------------------------------------------------------------------
+
+  function degenUpdateCost() {
+    var betInput = document.getElementById('degen-bet');
+    var spinInput = document.getElementById('degen-spins');
+    var bet = parseFloat(betInput ? betInput.value : '0') || 0;
+    var spins = parseInt(spinInput ? spinInput.value : '1') || 1;
+    var total = bet * spins;
+    var label = DG_CURRENCY_LABEL[degenCurrency] || 'ETH';
+
+    var fmt = degenCurrency === 0 ? total.toFixed(4).replace(/0+$/, '').replace(/\.$/, '') : Math.round(total).toLocaleString();
+    var costEl = document.getElementById('degen-total-cost');
+    var btnCostEl = document.getElementById('degen-btn-cost');
+    if (costEl) costEl.textContent = fmt + ' ' + label;
+    if (btnCostEl) btnCostEl.textContent = fmt + ' ' + label;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Submit bet
+  // ---------------------------------------------------------------------------
+
+  window.degenSubmit = async function () {
+    if (!window.Mint || !window.Mint.playDegenerette) {
+      alert('Wallet not connected or contract not ready');
+      return;
+    }
+
+    var betInput = document.getElementById('degen-bet');
+    var spinInput = document.getElementById('degen-spins');
+
+    var bet = parseFloat(betInput ? betInput.value : '0') || 0;
+    var spins = parseInt(spinInput ? spinInput.value : '1') || 1;
+    var hero = degenHero;
+    var minBet = DG_MIN_BET[degenCurrency] || 0;
+
+    if (bet < minBet) {
+      alert('Minimum bet: ' + minBet + ' ' + DG_CURRENCY_LABEL[degenCurrency]);
+      return;
+    }
+    if (spins < 1 || spins > 10) {
+      alert('Spins must be 1-10');
+      return;
+    }
+
+    var packed = dgPackTicket();
+
+    try {
+      var result = await window.Mint.playDegenerette(
+        degenCurrency, bet, spins, packed, hero
+      );
+      if (result && result.betId) {
+        degenPending.push({
+          betId: result.betId,
+          rngIndex: result.rngIndex,
+          status: 'pending',
+          playerTicket: packed,
+          spins: spins,
+        });
+        degenUpdateQueue();
+        degenStartPolling();
+      }
+    } catch (err) {
+      console.error('[degen] bet error:', err);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Queue display & polling
+  // ---------------------------------------------------------------------------
+
+  function degenUpdateQueue() {
+    var queueEl = document.getElementById('degen-queue');
+    var statusEl = document.getElementById('degen-queue-status');
+    var spinBtn = document.getElementById('degen-spin-btn');
+
+    var pending = 0, ready = 0;
+    degenPending.forEach(function (e) {
+      if (e.status === 'pending') pending++;
+      if (e.status === 'ready') ready++;
+    });
+
+    if (pending + ready === 0) {
+      if (queueEl) queueEl.classList.remove('has-items');
+      return;
+    }
+
+    if (queueEl) queueEl.classList.add('has-items');
+    if (statusEl) {
+      var parts = [];
+      if (pending > 0) parts.push('Pending: ' + pending);
+      if (ready > 0) parts.push('Ready: ' + ready);
+      statusEl.textContent = parts.join(' | ');
+    }
+    if (spinBtn) {
+      spinBtn.disabled = ready === 0 || degenSpinning;
+      spinBtn.textContent = ready > 0 ? 'SPIN (' + ready + ' ready)' : 'SPIN';
+    }
+  }
+
+  function degenStartPolling() {
+    if (degenPollTimer) return;
+    degenPollTimer = setInterval(degenPoll, 10000);
+    // Also poll immediately
+    degenPoll();
+  }
+
+  async function degenPoll() {
+    if (!window.Mint || !window.Mint.checkBetReady) return;
+
+    var anyPending = false;
+    for (var i = 0; i < degenPending.length; i++) {
+      var entry = degenPending[i];
+      if (entry.status !== 'pending') continue;
+
+      try {
+        var word = await window.Mint.checkBetReady(entry.rngIndex);
+        if (word && word !== '0' && word !== 0n) {
+          entry.status = 'ready';
+          entry.rngWord = word;
+        } else {
+          anyPending = true;
+        }
+      } catch (err) {
+        anyPending = true;
+      }
+    }
+
+    degenUpdateQueue();
+
+    if (!anyPending && degenPollTimer) {
+      clearInterval(degenPollTimer);
+      degenPollTimer = null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Spin / resolve
+  // ---------------------------------------------------------------------------
+
+  window.degenSpin = async function () {
+    if (degenSpinning) return;
+
+    // Find first ready entry
+    var entry = null;
+    for (var i = 0; i < degenPending.length; i++) {
+      if (degenPending[i].status === 'ready') { entry = degenPending[i]; break; }
+    }
+    if (!entry) return;
+
+    degenSpinning = true;
+    degenUpdateQueue();
+
+    var resultEl = document.getElementById('degen-result');
+    if (resultEl) resultEl.innerHTML = '';
+
+    try {
+      // Resolve on-chain
+      var results = await window.Mint.resolveDegenerette([entry.betId]);
+
+      // Remove from queue
+      degenPending.splice(degenPending.indexOf(entry), 1);
+
+      if (results && results.length > 0) {
+        var r = results[0];
+        // Build a synthetic house ticket that produces the correct match count
+        var houseTicket = dgSyntheticHouse(entry.playerTicket, r.matches);
+        await degenAnimateReveal(entry.playerTicket, houseTicket, r.matches, r.payout);
+      }
+    } catch (err) {
+      console.error('[degen] resolve error:', err);
+      if (resultEl) resultEl.innerHTML = '<span class="degen-loss">Error resolving bet</span>';
+    }
+
+    degenSpinning = false;
+    degenUpdateQueue();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Spin animation (simplified house reveal)
+  // ---------------------------------------------------------------------------
+
+  function degenAnimateReveal(playerPacked, housePacked, matches, payout) {
+    return new Promise(function (resolve) {
+      var playerTicket = dgUnpackTicket(playerPacked);
+      var houseTicket = dgUnpackTicket(housePacked);
+
+      var quads = document.querySelectorAll('#degen-diamond .degen-quad');
+      var imgs = document.querySelectorAll('#degen-diamond .degen-badge');
+
+      // Track which attributes are locked
+      var lockedColors = [false, false, false, false];
+      var lockedSymbols = [false, false, false, false];
+      var locksDone = 0;
+      var totalLocks = 8;
+      var idleCount = 2 + Math.floor(Math.random() * 2);
+
+      function step() {
+        // Build display: locked parts show house, unlocked show random
+        for (var i = 0; i < 4; i++) {
+          var dSym = lockedSymbols[i] ? houseTicket[i].sym : dgWeightedBucket();
+          var dCol = lockedColors[i] ? houseTicket[i].col : dgWeightedBucket();
+          imgs[i].src = dgBadgePath(i, dSym, dCol);
+
+          // Color quadrant on match status
+          quads[i].classList.remove('degen-q-match', 'degen-q-miss');
+          if (lockedSymbols[i]) {
+            var symMatch = playerTicket[i].sym === houseTicket[i].sym;
+            var colMatch = playerTicket[i].col === houseTicket[i].col;
+            if (symMatch && colMatch) quads[i].classList.add('degen-q-match');
+            else quads[i].classList.add('degen-q-miss');
+          }
+        }
+
+        if (idleCount > 0) {
+          idleCount--;
+        } else if (locksDone < totalLocks) {
+          // Pick next lock
+          var available = [];
+          for (var q = 0; q < 4; q++) {
+            if (!lockedColors[q]) available.push({ q: q, type: 'color' });
+            else if (!lockedSymbols[q]) available.push({ q: q, type: 'symbol' });
+          }
+          if (available.length > 0) {
+            var pick = available[Math.floor(Math.random() * available.length)];
+            if (pick.type === 'color') lockedColors[pick.q] = true;
+            else lockedSymbols[pick.q] = true;
+            locksDone++;
+          }
+          idleCount = 1 + Math.floor(Math.random() * 2);
+        }
+
+        if (locksDone < totalLocks) {
+          setTimeout(step, 180);
+        } else {
+          // Final render
+          for (var i = 0; i < 4; i++) {
+            imgs[i].src = dgBadgePath(i, houseTicket[i].sym, houseTicket[i].col);
+            quads[i].classList.remove('degen-q-match', 'degen-q-miss');
+            var sm = playerTicket[i].sym === houseTicket[i].sym;
+            var cm = playerTicket[i].col === houseTicket[i].col;
+            if (sm && cm) quads[i].classList.add('degen-q-match');
+            else quads[i].classList.add('degen-q-miss');
+          }
+
+          // Show result
+          var resultEl = document.getElementById('degen-result');
+          if (resultEl) {
+            var isWin = payout > 0;
+            var label = DG_CURRENCY_LABEL[degenCurrency] || 'ETH';
+            var fmtPayout = degenCurrency === 0
+              ? (payout / 1e18).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
+              : Math.round(payout / 1e18).toLocaleString();
+            resultEl.innerHTML =
+              '<span class="degen-matches">' + matches + '/8 matches</span> &mdash; ' +
+              '<span class="' + (isWin ? 'degen-win' : 'degen-loss') + '">' +
+              (isWin ? '+' + fmtPayout : '-' + fmtPayout) + ' ' + label + '</span>';
+          }
+
+          // Restore player's ticket after a delay
+          setTimeout(function () {
+            degenRenderDiamond();
+            for (var i = 0; i < 4; i++) {
+              quads[i].classList.remove('degen-q-match', 'degen-q-miss');
+            }
+          }, 3000);
+
+          resolve();
+        }
+      }
+
+      step();
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------------
+
+  function degenInit() {
+    // Randomize initial ticket + hero
+    degenHero = Math.floor(Math.random() * 4);
+    window.degenRandomize();
+
+    // Wire quadrant clicks
+    var quads = document.querySelectorAll('#degen-diamond .degen-quad');
+    quads.forEach(function (quad, i) {
+      // Left-click: open trait selector
+      quad.addEventListener('click', function (e) {
+        e.stopPropagation();
+        degenOpenSelector(i);
+      });
+      // Right-click: set hero quadrant
+      quad.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        degenHero = i;
+        degenRenderDiamond();
+        degenCloseSelector();
+      });
+      // Scroll wheel: outer area = color, inner area = symbol
+      quad.addEventListener('wheel', function (e) {
+        if (degenSpinning) return;
+        e.preventDefault();
+        var rect = quad.getBoundingClientRect();
+        var dx = e.clientX - rect.left - rect.width / 2;
+        var dy = e.clientY - rect.top - rect.height / 2;
+        var dist = Math.hypot(dx, dy);
+        var ratio = dist / (rect.width / 2);
+        var delta = e.deltaY > 0 ? 1 : -1;
+        if (ratio >= 0.55) {
+          degenTicket[i].col = (degenTicket[i].col + delta + 8) % 8;
+        } else {
+          degenTicket[i].sym = (degenTicket[i].sym + delta + 8) % 8;
+        }
+        degenRenderDiamond();
+        degenCloseSelector();
+      }, { passive: false });
+    });
+
+    // Close selector on outside click
+    document.addEventListener('click', function (e) {
+      if (degenSelOpen >= 0) {
+        var popup = document.getElementById('degen-quick-sel');
+        if (popup && !popup.contains(e.target)) {
+          degenCloseSelector();
+        }
+      }
+    });
+
+    // Wire bet/spin inputs for cost updates
+    var betInput = document.getElementById('degen-bet');
+    var spinInput = document.getElementById('degen-spins');
+    if (betInput) betInput.addEventListener('input', degenUpdateCost);
+    if (spinInput) spinInput.addEventListener('input', degenUpdateCost);
+
+    degenUpdateCost();
+  }
+
+  // Run init when DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', degenInit);
+  } else {
+    degenInit();
+  }
 })();
 </script>
 </body>

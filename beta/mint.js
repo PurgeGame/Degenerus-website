@@ -51,6 +51,14 @@
     'function purchaseWhaleBundle(address buyer, uint256 quantity) payable',
     'function purchaseLazyPass(address buyer) payable',
     'function purchaseDeityPass(address buyer, uint8 symbolId) payable',
+    // Degenerette
+    'function placeFullTicketBets(address player, uint8 currency, uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant) payable',
+    'function resolveDegeneretteBets(address player, uint64[] betIds)',
+    'function degeneretteBetInfo(address player, uint64 betId) view returns (uint256 packed)',
+    'function lootboxRngWord(uint48 lootboxIndex) view returns (uint256 word)',
+    'function lootboxRngIndexView() view returns (uint48 index)',
+    'event BetPlaced(address indexed player, uint48 indexed rngIndex, uint64 betId, uint256 packed)',
+    'event FullTicketResult(address indexed player, uint64 indexed betId, uint8 spinIdx, uint32 playerTicket, uint8 matches, uint256 payout)',
   ];
 
   var COIN_ABI = [
@@ -961,6 +969,108 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Degenerette — place bet
+  // ---------------------------------------------------------------------------
+
+  async function playDegenerette(currency, betAmount, ticketCount, customTicket, heroQuadrant) {
+    if (!signer || !contract) {
+      setTxStatus('error', 'Connect your wallet first');
+      throw new Error('Not connected');
+    }
+
+    var eth = ethers();
+
+    clearTxStatus();
+    setTxStatus('pending', 'Placing degenerette bet...');
+
+    // Convert bet to wei
+    var amountWei = eth.parseEther(betAmount.toString());
+    var totalWei = amountWei * BigInt(ticketCount);
+
+    var opts = {};
+    if (currency === 0) {
+      // ETH bet — send value
+      opts.value = totalWei;
+    }
+
+    var tx = await contract.placeFullTicketBets(
+      eth.ZeroAddress,
+      currency,
+      amountWei,
+      ticketCount,
+      customTicket,
+      heroQuadrant,
+      opts
+    );
+
+    var receipt = await tx.wait();
+    setTxStatus('confirmed', 'Bet placed!', receipt.hash);
+
+    // Parse BetPlaced event
+    var betId = null;
+    var rngIndex = null;
+    for (var i = 0; i < receipt.logs.length; i++) {
+      try {
+        var parsed = contract.interface.parseLog(receipt.logs[i]);
+        if (parsed && parsed.name === 'BetPlaced') {
+          betId = parsed.args.betId;
+          rngIndex = parsed.args.rngIndex;
+          break;
+        }
+      } catch (e) { /* skip non-matching logs */ }
+    }
+
+    return { betId: betId, rngIndex: rngIndex };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Degenerette — resolve bets
+  // ---------------------------------------------------------------------------
+
+  async function resolveDegenerette(betIds) {
+    if (!signer || !contract) {
+      throw new Error('Not connected');
+    }
+
+    var eth = ethers();
+
+    setTxStatus('pending', 'Resolving degenerette...');
+
+    var tx = await contract.resolveDegeneretteBets(eth.ZeroAddress, betIds);
+    var receipt = await tx.wait();
+    setTxStatus('confirmed', 'Resolved!', receipt.hash);
+
+    // Parse FullTicketResult events
+    var results = [];
+    for (var i = 0; i < receipt.logs.length; i++) {
+      try {
+        var parsed = contract.interface.parseLog(receipt.logs[i]);
+        if (parsed && parsed.name === 'FullTicketResult') {
+          results.push({
+            betId: parsed.args.betId,
+            spinIdx: parsed.args.spinIdx,
+            playerTicket: Number(parsed.args.playerTicket),
+            matches: Number(parsed.args.matches),
+            payout: parsed.args.payout,
+            resultTicket: 0, // Will derive from RNG if needed
+          });
+        }
+      } catch (e) { /* skip */ }
+    }
+
+    return results;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Degenerette — check if RNG word is ready
+  // ---------------------------------------------------------------------------
+
+  async function checkBetReady(rngIndex) {
+    if (!contract) return 0n;
+    return await contract.lootboxRngWord(rngIndex);
+  }
+
+  // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
 
@@ -973,6 +1083,9 @@
     purchaseWhaleBundle: purchaseWhaleBundle,
     purchaseLazyPass: purchaseLazyPass,
     purchaseDeityPass: purchaseDeityPass,
+    playDegenerette: playDegenerette,
+    resolveDegenerette: resolveDegenerette,
+    checkBetReady: checkBetReady,
   };
 
 })();
