@@ -777,42 +777,202 @@
       font-weight: 700;
     }
 
-    .degen-queue {
-      display: none;
+    /* Tab toggle */
+    .degen-tab-toggle {
+      display: flex;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .degen-tab-btn {
+      padding: 0.3rem 0.75rem;
+      font-family: inherit;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      border: none;
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .degen-tab-btn.active {
+      background: var(--accent-primary);
+      color: #0a0a0f;
+    }
+
+    .degen-tab-btn:not(.active):hover {
+      color: var(--text-primary);
+    }
+
+    .degen-results-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--error);
+      color: #fff;
+      font-size: 0.58rem;
+      font-weight: 700;
+      min-width: 15px;
+      height: 15px;
+      border-radius: 8px;
+      padding: 0 3px;
+      margin-left: 3px;
+      vertical-align: middle;
+    }
+
+    /* Results tab entries */
+    .degen-pending-list,
+    .degen-ready-list {
+      display: flex;
       flex-direction: column;
-      gap: 0.4rem;
-      margin-top: 0.6rem;
-      padding-top: 0.6rem;
-      border-top: 1px solid var(--border-subtle);
+      gap: 0.3rem;
     }
 
-    .degen-queue.has-items { display: flex; }
+    .degen-pending-list:not(:empty),
+    .degen-ready-list:not(:empty) {
+      margin-bottom: 0.5rem;
+    }
 
-    .degen-queue-status {
-      font-size: 0.72rem;
+    .degen-pending-item,
+    .degen-ready-item {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.4rem 0.55rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      font-size: 0.75rem;
+    }
+
+    .degen-pending-item { border-left: 3px solid var(--warning); }
+    .degen-ready-item   { border-left: 3px solid var(--success); }
+
+    .degen-bet-ticket-preview {
+      display: flex;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .degen-bet-ticket-preview img {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+    }
+
+    .degen-bet-label {
+      flex: 1;
       color: var(--text-secondary);
+    }
+
+    .degen-vrf-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border-color);
+      border-top-color: var(--warning);
+      border-radius: 50%;
+      animation: degen-vrf-spin 0.8s linear infinite;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+
+    @keyframes degen-vrf-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .degen-ready-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--success);
+      background: rgba(0, 200, 83, 0.12);
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    /* Spin controls */
+    .degen-spin-controls {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .degen-spin-controls .btn-primary,
+    .degen-spin-controls .btn-secondary { flex: 1; }
+
+    /* Results history */
+    .degen-results-history {
+      max-height: 300px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .degen-result-card {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.55rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      font-size: 0.75rem;
+    }
+
+    .degen-result-card.win  { border-left: 3px solid var(--success); }
+    .degen-result-card.loss { border-left: 3px solid var(--error); }
+
+    .degen-result-matches {
+      color: var(--text-secondary);
+      font-weight: 600;
+      min-width: 3rem;
+    }
+
+    .degen-result-payout {
+      font-weight: 700;
+      margin-left: auto;
+    }
+
+    .degen-result-payout.win  { color: var(--success); }
+    .degen-result-payout.loss { color: var(--error); }
+
+    .degen-results-empty {
       text-align: center;
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      padding: 1.2rem 0;
     }
 
-    .degen-spin-btn {
-      font-size: 0.82rem;
+    /* Claim bar */
+    .degen-claim-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.45rem 0.6rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--success);
+      border-radius: 8px;
+      margin-bottom: 0.6rem;
     }
 
-    .degen-spin-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
+    .degen-claim-amount {
+      flex: 1;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--success);
     }
 
-    .degen-result {
-      margin-top: 0.5rem;
-      font-size: 0.82rem;
-      text-align: center;
-      min-height: 1.2em;
+    .degen-claim-bar .btn-primary {
+      padding: 0.3rem 0.8rem;
+      font-size: 0.72rem;
     }
-
-    .degen-result .degen-win  { color: #4caf50; font-weight: 700; }
-    .degen-result .degen-loss { color: #e57373; font-weight: 700; }
-    .degen-result .degen-matches { color: var(--text-secondary); }
 
     /* ------------------------------------------------------------------ */
     /* Main layout (two-column with sidebar)                               */
@@ -1895,9 +2055,13 @@ afKing mode locks on for 5 levels once activated. Commit to the grind.
   <section class="panel degen-panel" id="degen-panel">
     <div class="purchase-header">
       <h2>Degenerette</h2>
-      <button class="incr-btn" id="degen-randomize" onclick="degenRandomize()">Random</button>
+      <div class="degen-tab-toggle">
+        <button class="degen-tab-btn active" data-tab="bet" onclick="degenSwitchTab('bet')">BET</button>
+        <button class="degen-tab-btn" data-tab="results" onclick="degenSwitchTab('results')">RESULTS <span class="degen-results-badge" id="degen-results-badge" style="display:none">0</span></button>
+      </div>
     </div>
 
+    <!-- Diamond: always visible, shared between tabs -->
     <div class="degen-diamond-wrap">
       <div class="degen-diamond" id="degen-diamond">
         <div class="degen-quad" data-q="0"><img class="degen-badge" data-q="0" alt="" /></div>
@@ -1909,49 +2073,64 @@ afKing mode locks on for 5 levels once activated. Commit to the grind.
       <div class="degen-quick-sel" id="degen-quick-sel"></div>
     </div>
 
-    <div class="pay-toggle degen-currency" id="degen-currency">
-      <button class="pay-toggle-btn active" data-cur="0" onclick="degenSetCurrency(0)">ETH</button>
-      <button class="pay-toggle-btn" data-cur="1" onclick="degenSetCurrency(1)">BURNIE</button>
-      <button class="pay-toggle-btn" data-cur="3" onclick="degenSetCurrency(3)">WWXRP</button>
-    </div>
+    <!-- TAB: Bet -->
+    <div class="degen-tab-content" id="degen-tab-bet">
+      <button class="incr-btn" style="display:block;margin:0 auto 0.6rem" onclick="degenRandomize()">Random</button>
 
-    <div class="degen-fields">
-      <div class="degen-field-row">
-        <label>Bet</label>
-        <div class="input-with-btns">
-          <input type="number" id="degen-bet" value="0.01" min="0" step="0.001" placeholder="Amount">
-          <div class="incr-btns">
-            <button class="incr-btn" onclick="incrInput('degen-bet',0.01)">+.01</button>
-            <button class="incr-btn" onclick="incrInput('degen-bet',0.1)">+.1</button>
+      <div class="pay-toggle degen-currency" id="degen-currency">
+        <button class="pay-toggle-btn active" data-cur="0" onclick="degenSetCurrency(0)">ETH</button>
+        <button class="pay-toggle-btn" data-cur="1" onclick="degenSetCurrency(1)">BURNIE</button>
+        <button class="pay-toggle-btn" data-cur="3" onclick="degenSetCurrency(3)">WWXRP</button>
+      </div>
+
+      <div class="degen-fields">
+        <div class="degen-field-row">
+          <label>Bet</label>
+          <div class="input-with-btns">
+            <input type="number" id="degen-bet" value="0.01" min="0" step="0.001" placeholder="Amount">
+            <div class="incr-btns">
+              <button class="incr-btn" onclick="incrInput('degen-bet',0.01)">+.01</button>
+              <button class="incr-btn" onclick="incrInput('degen-bet',0.1)">+.1</button>
+            </div>
+          </div>
+        </div>
+        <div class="degen-field-row">
+          <label>Spins</label>
+          <div class="input-with-btns">
+            <input type="number" id="degen-spins" value="1" min="1" max="10" step="1">
+            <div class="incr-btns">
+              <button class="incr-btn" onclick="incrInput('degen-spins',1)">+1</button>
+              <button class="incr-btn" onclick="incrInput('degen-spins',5)">+5</button>
+            </div>
           </div>
         </div>
       </div>
-      <div class="degen-field-row">
-        <label>Spins</label>
-        <div class="input-with-btns">
-          <input type="number" id="degen-spins" value="1" min="1" max="10" step="1">
-          <div class="incr-btns">
-            <button class="incr-btn" onclick="incrInput('degen-spins',1)">+1</button>
-            <button class="incr-btn" onclick="incrInput('degen-spins',5)">+5</button>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <div class="degen-cost-line">Total: <span id="degen-total-cost">0.01 ETH</span></div>
+      <div class="degen-cost-line">Total: <span id="degen-total-cost">0.01 ETH</span></div>
 
-    <button class="btn-primary" id="degen-place-btn" onclick="degenSubmit()">
-      PLACE BET &mdash; <span id="degen-btn-cost">0.01 ETH</span>
-    </button>
-
-    <div class="degen-queue" id="degen-queue">
-      <span class="degen-queue-status" id="degen-queue-status"></span>
-      <button class="btn-primary degen-spin-btn" id="degen-spin-btn" onclick="degenSpin()" disabled>
-        SPIN
+      <button class="btn-primary" id="degen-place-btn" onclick="degenSubmit()">
+        PLACE BET &mdash; <span id="degen-btn-cost">0.01 ETH</span>
       </button>
     </div>
 
-    <div class="degen-result" id="degen-result"></div>
+    <!-- TAB: Results -->
+    <div class="degen-tab-content" id="degen-tab-results" style="display:none">
+      <!-- Claimable winnings bar -->
+      <div class="degen-claim-bar" id="degen-claim-bar" style="display:none">
+        <span class="degen-claim-amount" id="degen-claim-amount">0 ETH claimable</span>
+        <button class="btn-primary" onclick="degenClaim()">CLAIM</button>
+      </div>
+
+      <div class="degen-pending-list" id="degen-pending-list"></div>
+      <div class="degen-ready-list" id="degen-ready-list"></div>
+      <div class="degen-spin-controls" id="degen-spin-controls" style="display:none">
+        <button class="btn-primary" id="degen-spin-next-btn" onclick="degenSpin()">SPIN NEXT</button>
+        <button class="btn-secondary" id="degen-spin-all-btn" onclick="degenSpinAll()" style="display:none">SPIN ALL (<span id="degen-ready-count">0</span>)</button>
+      </div>
+      <div class="degen-results-history" id="degen-results-history">
+        <div class="degen-results-empty">No results yet</div>
+      </div>
+    </div>
   </section>
 
   <!-- Player Streaks & Quests -->
@@ -3442,6 +3621,9 @@ function togglePayMode(mode) {
   var degenSelOpen = -1; // which quadrant has selector open, -1 = closed
   var degenSpinning = false;
   var degenPollTimer = null;
+  var degenActiveTab = 'bet';
+  var degenResults = [];
+  var DEGEN_RESULTS_KEY = 'degen_results_v1';
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -3682,6 +3864,183 @@ function togglePayMode(mode) {
   }
 
   // ---------------------------------------------------------------------------
+  // Tab switching
+  // ---------------------------------------------------------------------------
+
+  window.degenSwitchTab = function (tab) {
+    degenActiveTab = tab;
+    var betPane = document.getElementById('degen-tab-bet');
+    var resultsPane = document.getElementById('degen-tab-results');
+    var btns = document.querySelectorAll('.degen-tab-btn');
+
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('active', btns[i].getAttribute('data-tab') === tab);
+    }
+
+    if (betPane) betPane.style.display = tab === 'bet' ? '' : 'none';
+    if (resultsPane) resultsPane.style.display = tab === 'results' ? '' : 'none';
+
+    // Disable diamond interaction on results tab
+    var diamondWrap = document.querySelector('.degen-diamond-wrap');
+    if (diamondWrap) diamondWrap.style.pointerEvents = tab === 'results' ? 'none' : '';
+
+    // Close quick-selector when switching
+    degenCloseSelector();
+
+    if (tab === 'results') degenRenderResultsTab();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Results tab rendering
+  // ---------------------------------------------------------------------------
+
+  function degenTicketPreviewHtml(packedTicket) {
+    var traits = dgUnpackTicket(packedTicket);
+    var html = '<span class="degen-bet-ticket-preview">';
+    for (var i = 0; i < 4; i++) {
+      html += '<img src="' + dgBadgePath(i, traits[i].sym, traits[i].col) + '" width="20" height="20">';
+    }
+    html += '</span>';
+    return html;
+  }
+
+  function degenUpdateBadge() {
+    var badge = document.getElementById('degen-results-badge');
+    if (!badge) return;
+    var count = 0;
+    for (var i = 0; i < degenPending.length; i++) {
+      if (degenPending[i].status === 'pending' || degenPending[i].status === 'ready') count++;
+    }
+    badge.textContent = count;
+    badge.style.display = count > 0 ? '' : 'none';
+  }
+
+  function degenRenderResultsTab() {
+    var pendingEl = document.getElementById('degen-pending-list');
+    var readyEl = document.getElementById('degen-ready-list');
+    var controlsEl = document.getElementById('degen-spin-controls');
+    var historyEl = document.getElementById('degen-results-history');
+    var spinAllBtn = document.getElementById('degen-spin-all-btn');
+    var spinNextBtn = document.getElementById('degen-spin-next-btn');
+    var readyCountEl = document.getElementById('degen-ready-count');
+
+    // Pending list
+    var pendingHtml = '';
+    var readyHtml = '';
+    var readyCount = 0;
+
+    for (var i = 0; i < degenPending.length; i++) {
+      var entry = degenPending[i];
+      var preview = degenTicketPreviewHtml(entry.playerTicket);
+      if (entry.status === 'pending') {
+        pendingHtml += '<div class="degen-pending-item">' +
+          preview +
+          '<span>Awaiting VRF...</span>' +
+          '<span class="degen-vrf-spinner"></span>' +
+          '</div>';
+      } else if (entry.status === 'ready') {
+        readyCount++;
+        readyHtml += '<div class="degen-ready-item">' +
+          preview +
+          '<span>Ready to spin</span>' +
+          '<span class="degen-ready-badge">READY</span>' +
+          '</div>';
+      }
+    }
+
+    if (pendingEl) pendingEl.innerHTML = pendingHtml;
+    if (readyEl) readyEl.innerHTML = readyHtml;
+
+    // Spin controls
+    if (controlsEl) controlsEl.style.display = readyCount > 0 ? '' : 'none';
+    if (spinNextBtn) spinNextBtn.disabled = readyCount === 0 || degenSpinning;
+    if (spinAllBtn) spinAllBtn.style.display = readyCount > 1 ? '' : 'none';
+    if (readyCountEl) readyCountEl.textContent = readyCount;
+
+    // Results history
+    if (historyEl) {
+      if (degenResults.length === 0) {
+        historyEl.innerHTML = '<div class="degen-results-empty">No results yet</div>';
+      } else {
+        var html = '';
+        for (var j = 0; j < degenResults.length; j++) {
+          var r = degenResults[j];
+          var isWin = r.payout > 0;
+          var label = DG_CURRENCY_LABEL[r.currency] || 'ETH';
+          var fmtPayout = r.currency === 0
+            ? (r.payout / 1e18).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
+            : Math.round(r.payout / 1e18).toLocaleString();
+          var preview = degenTicketPreviewHtml(r.playerTicket);
+          html += '<div class="degen-result-card ' + (isWin ? 'win' : 'loss') + '">' +
+            preview +
+            '<span class="degen-result-matches">' + r.matches + '/8</span>' +
+            '<span class="degen-result-payout ' + (isWin ? 'win' : 'loss') + '">' +
+            (isWin ? '+' : '-') + fmtPayout + ' ' + label + '</span>' +
+            '</div>';
+        }
+        historyEl.innerHTML = html;
+      }
+    }
+
+    degenUpdateBadge();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Claim winnings
+  // ---------------------------------------------------------------------------
+
+  window.degenClaim = async function () {
+    if (!window.Mint || !window.Mint.claimWinnings) {
+      alert('Wallet not connected');
+      return;
+    }
+    try {
+      await window.Mint.claimWinnings();
+      degenCheckClaimable();
+    } catch (err) {
+      console.error('[degen] claim error:', err);
+    }
+  };
+
+  async function degenCheckClaimable() {
+    if (!window.Mint || !window.Mint.getClaimable) return;
+    try {
+      var amount = await window.Mint.getClaimable();
+      var bar = document.getElementById('degen-claim-bar');
+      var amountEl = document.getElementById('degen-claim-amount');
+      if (bar && amountEl) {
+        if (amount > 0n) {
+          var eth = Number(amount) / 1e18;
+          amountEl.textContent = eth.toFixed(4).replace(/0+$/, '').replace(/\.$/, '') + ' ETH claimable';
+          bar.style.display = '';
+        } else {
+          bar.style.display = 'none';
+        }
+      }
+    } catch (err) {
+      // Silently ignore claim check errors
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // localStorage persistence
+  // ---------------------------------------------------------------------------
+
+  function degenSaveResults() {
+    try {
+      var capped = degenResults.slice(0, 50);
+      localStorage.setItem(DEGEN_RESULTS_KEY, JSON.stringify(capped));
+    } catch (e) { /* quota exceeded — ignore */ }
+  }
+
+  function degenLoadResults() {
+    try {
+      var raw = localStorage.getItem(DEGEN_RESULTS_KEY);
+      if (raw) degenResults = JSON.parse(raw);
+    } catch (e) { degenResults = []; }
+  }
+
+  // ---------------------------------------------------------------------------
   // Submit bet
   // ---------------------------------------------------------------------------
 
@@ -3724,6 +4083,7 @@ function togglePayMode(mode) {
         });
         degenUpdateQueue();
         degenStartPolling();
+        degenSwitchTab('results');
       }
     } catch (err) {
       console.error('[degen] bet error:', err);
@@ -3735,32 +4095,8 @@ function togglePayMode(mode) {
   // ---------------------------------------------------------------------------
 
   function degenUpdateQueue() {
-    var queueEl = document.getElementById('degen-queue');
-    var statusEl = document.getElementById('degen-queue-status');
-    var spinBtn = document.getElementById('degen-spin-btn');
-
-    var pending = 0, ready = 0;
-    degenPending.forEach(function (e) {
-      if (e.status === 'pending') pending++;
-      if (e.status === 'ready') ready++;
-    });
-
-    if (pending + ready === 0) {
-      if (queueEl) queueEl.classList.remove('has-items');
-      return;
-    }
-
-    if (queueEl) queueEl.classList.add('has-items');
-    if (statusEl) {
-      var parts = [];
-      if (pending > 0) parts.push('Pending: ' + pending);
-      if (ready > 0) parts.push('Ready: ' + ready);
-      statusEl.textContent = parts.join(' | ');
-    }
-    if (spinBtn) {
-      spinBtn.disabled = ready === 0 || degenSpinning;
-      spinBtn.textContent = ready > 0 ? 'SPIN (' + ready + ' ready)' : 'SPIN';
-    }
+    degenUpdateBadge();
+    if (degenActiveTab === 'results') degenRenderResultsTab();
   }
 
   function degenStartPolling() {
@@ -3814,10 +4150,10 @@ function togglePayMode(mode) {
     if (!entry) return;
 
     degenSpinning = true;
+    // Re-enable diamond for spin animation
+    var diamondWrap = document.querySelector('.degen-diamond-wrap');
+    if (diamondWrap) diamondWrap.style.pointerEvents = 'none';
     degenUpdateQueue();
-
-    var resultEl = document.getElementById('degen-result');
-    if (resultEl) resultEl.innerHTML = '';
 
     try {
       // Resolve on-chain
@@ -3828,17 +4164,86 @@ function togglePayMode(mode) {
 
       if (results && results.length > 0) {
         var r = results[0];
-        // Build a synthetic house ticket that produces the correct match count
         var houseTicket = dgSyntheticHouse(entry.playerTicket, r.matches);
         await degenAnimateReveal(entry.playerTicket, houseTicket, r.matches, r.payout);
+
+        // Track result
+        degenResults.unshift({
+          betId: entry.betId,
+          matches: r.matches,
+          payout: r.payout,
+          playerTicket: entry.playerTicket,
+          currency: degenCurrency,
+          timestamp: Date.now(),
+        });
+        degenSaveResults();
       }
     } catch (err) {
       console.error('[degen] resolve error:', err);
-      if (resultEl) resultEl.innerHTML = '<span class="degen-loss">Error resolving bet</span>';
     }
 
     degenSpinning = false;
     degenUpdateQueue();
+    degenCheckClaimable();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Spin All — batch resolve
+  // ---------------------------------------------------------------------------
+
+  window.degenSpinAll = async function () {
+    if (degenSpinning) return;
+
+    // Collect all ready entries
+    var readyEntries = [];
+    for (var i = 0; i < degenPending.length; i++) {
+      if (degenPending[i].status === 'ready') readyEntries.push(degenPending[i]);
+    }
+    if (readyEntries.length === 0) return;
+
+    degenSpinning = true;
+    var diamondWrap = document.querySelector('.degen-diamond-wrap');
+    if (diamondWrap) diamondWrap.style.pointerEvents = 'none';
+    degenUpdateQueue();
+
+    try {
+      // Batch resolve all ready bet IDs in a single TX
+      var betIds = readyEntries.map(function (e) { return e.betId; });
+      var results = await window.Mint.resolveDegenerette(betIds);
+
+      // Remove all resolved entries from pending
+      for (var j = 0; j < readyEntries.length; j++) {
+        var idx = degenPending.indexOf(readyEntries[j]);
+        if (idx >= 0) degenPending.splice(idx, 1);
+      }
+
+      // Animate each result sequentially
+      if (results && results.length > 0) {
+        for (var k = 0; k < results.length; k++) {
+          var r = results[k];
+          var entry = readyEntries[k] || readyEntries[0];
+          var houseTicket = dgSyntheticHouse(entry.playerTicket, r.matches);
+          await degenAnimateReveal(entry.playerTicket, houseTicket, r.matches, r.payout);
+
+          degenResults.unshift({
+            betId: entry.betId,
+            matches: r.matches,
+            payout: r.payout,
+            playerTicket: entry.playerTicket,
+            currency: degenCurrency,
+            timestamp: Date.now(),
+          });
+          degenSaveResults();
+          degenRenderResultsTab();
+        }
+      }
+    } catch (err) {
+      console.error('[degen] batch resolve error:', err);
+    }
+
+    degenSpinning = false;
+    degenUpdateQueue();
+    degenCheckClaimable();
   };
 
   // ---------------------------------------------------------------------------
@@ -3908,27 +4313,13 @@ function togglePayMode(mode) {
             else quads[i].classList.add('degen-q-miss');
           }
 
-          // Show result
-          var resultEl = document.getElementById('degen-result');
-          if (resultEl) {
-            var isWin = payout > 0;
-            var label = DG_CURRENCY_LABEL[degenCurrency] || 'ETH';
-            var fmtPayout = degenCurrency === 0
-              ? (payout / 1e18).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
-              : Math.round(payout / 1e18).toLocaleString();
-            resultEl.innerHTML =
-              '<span class="degen-matches">' + matches + '/8 matches</span> &mdash; ' +
-              '<span class="' + (isWin ? 'degen-win' : 'degen-loss') + '">' +
-              (isWin ? '+' + fmtPayout : '-' + fmtPayout) + ' ' + label + '</span>';
-          }
-
           // Restore player's ticket after a delay
           setTimeout(function () {
             degenRenderDiamond();
             for (var i = 0; i < 4; i++) {
               quads[i].classList.remove('degen-q-match', 'degen-q-miss');
             }
-          }, 3000);
+          }, 2000);
 
           resolve();
         }
@@ -4000,6 +4391,13 @@ function togglePayMode(mode) {
     if (spinInput) spinInput.addEventListener('input', degenUpdateCost);
 
     degenUpdateCost();
+
+    // Load persisted results and update badge
+    degenLoadResults();
+    degenUpdateBadge();
+
+    // Check claimable balance once wallet is ready
+    setTimeout(degenCheckClaimable, 3000);
   }
 
   // Run init when DOM ready

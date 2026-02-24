@@ -59,6 +59,9 @@
     'function lootboxRngIndexView() view returns (uint48 index)',
     'event BetPlaced(address indexed player, uint48 indexed rngIndex, uint64 betId, uint256 packed)',
     'event FullTicketResult(address indexed player, uint64 indexed betId, uint8 spinIdx, uint32 playerTicket, uint8 matches, uint256 payout)',
+    // Claim
+    'function claimableWinningsOf(address player) view returns (uint256)',
+    'function claimWinnings(address player)',
   ];
 
   var COIN_ABI = [
@@ -1071,6 +1074,32 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Claim winnings
+  // ---------------------------------------------------------------------------
+
+  async function getClaimable() {
+    if (!contract || !currentAddress) return 0n;
+    return await contract.claimableWinningsOf(currentAddress);
+  }
+
+  async function claimWinnings() {
+    if (!signer || !contract) {
+      setTxStatus('error', 'Connect your wallet first');
+      throw new Error('Not connected');
+    }
+
+    var eth = ethers();
+    setTxStatus('pending', 'Claiming winnings...');
+
+    var tx = await contract.claimWinnings(eth.ZeroAddress);
+    var receipt = await tx.wait();
+    setTxStatus('confirmed', 'Claimed!', receipt.hash);
+
+    if (currentAddress) await refreshPlayer(currentAddress);
+    return receipt;
+  }
+
+  // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
 
@@ -1086,6 +1115,8 @@
     playDegenerette: playDegenerette,
     resolveDegenerette: resolveDegenerette,
     checkBetReady: checkBetReady,
+    getClaimable: getClaimable,
+    claimWinnings: claimWinnings,
   };
 
 })();
