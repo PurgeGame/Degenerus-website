@@ -605,7 +605,7 @@
       <li><strong>Purchase-phase rewards:</strong> During the purchase phase, the future pool periodically distributes tickets and ETH, keeping engagement alive during slower periods.</li>
     </ul>
 
-    <p>The future prize pool acts as a <strong>flywheel battery</strong>. It charges during active periods and discharges through drip mechanisms during quiet ones. After dozens of active levels, the future pool will be vastly larger than the level target. The game can self-sustain for many consecutive levels with zero new deposits before the drip alone can't cover it.</p>
+    <p>The future prize pool acts as a <strong>flywheel battery</strong>. It charges during active periods and discharges through drip mechanisms during quiet ones. The future pool is designed to stay around 1.5x the level target, enough to cover at least one full level where nobody plays. The drip alone can fill a prize pool without any new deposits.</p>
     <p>And if all of the above somehow fails, the protocol has terminal safeguards. A 365-day inactivity timeout triggers a clean wind-down: remaining funds are distributed through final jackpots, then swept to the vault and $DGNRS. No funds are locked forever. There is no zombie state. The game either progresses or it terminates cleanly.</p>
   </section>
 
@@ -629,6 +629,13 @@
       <li><strong>Adoption risk.</strong> The flywheel needs initial momentum. Mitigated by redundant progression mechanisms, but the first levels require real players buying real tickets.</li>
       <li><strong>Individual loss.</strong> Positive-sum does not mean everyone wins. You can lose money playing Degenerus. Some players will lose. The system guarantees that winners exist as a group, not that you're one of them.</li>
     </ul>
+  </section>
+
+  <!-- ========== Section 11: Level 100 ========== -->
+  <section>
+    <h2>The Hundred-Level Cycle</h2>
+    <p>The game doesn't reset at level 100. The level counter keeps going: 100, 101, 102. But every hundredth level, the future pool gets raided for a massive jackpot event. A dice roll dumps roughly half the future pool into daily jackpots. Then the BAF and Decimator fire back to back, distributing another 50% of the future pool across top bettors, affiliates, and random ticket holders. Smaller versions of both fire every 10 levels, but the x00 events are the crescendo that rewards longtime players: the payoff for everyone who pushed the game to get there.</p>
+    <p>After the dust settles, the next level's target resets lower and the cycle begins again. The future pool rebuilds. Level 200 will be bigger than level 100, because the same compounding mechanisms are still running with more participants and more momentum.</p>
   </section>
 
   <!-- ========== Simulation ========== -->
