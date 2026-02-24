@@ -15,6 +15,13 @@
 
   var WALLET_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="22" height="14" rx="2"/><path d="M1 10h22"/><circle cx="18" cy="14" r="1"/><path d="M5 6V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2"/></svg>';
 
+  var LINK_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L4.63 4.25v8.5L12 17l7.37-4.25v-8.5L12 0zm4.9 11.32L12 14.07l-4.9-2.75V6.68L12 3.93l4.9 2.75v4.64z"/></svg>';
+
+  // LINK donation config
+  var LINK_TOKEN = '0x779877A7B0D9E8603169DdbD7836e478b4624789'; // Sepolia
+  var ADMIN_CONTRACT = '0x6E06c14A14dEbAd37A5DCBCB532aABCd9eEB1b85';
+  var CHAIN_ID_HEX = '0xaa36a7'; // Sepolia 11155111
+
   // --- Helpers ---
 
   function api(path, opts) {
@@ -265,6 +272,71 @@
     }).catch(function () {});
   }
 
+  // --- LINK donation ---
+
+  function donateLINK() {
+    var ethereum = window.ethereum;
+    if (!ethereum) {
+      alert('No Ethereum wallet detected. Install MetaMask to connect.');
+      return;
+    }
+
+    var amount = prompt('Donate LINK to fund VRF (earns BURNIE credit).\nHow much LINK?');
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return;
+
+    // Convert to wei (18 decimals)
+    var parts = amount.split('.');
+    var whole = parts[0] || '0';
+    var frac = (parts[1] || '').padEnd(18, '0').slice(0, 18);
+    var wei = BigInt(whole) * BigInt('1000000000000000000') + BigInt(frac);
+    var amountHex = '0x' + wei.toString(16);
+
+    // transferAndCall(address,uint256,bytes) selector = 0x4000aea0
+    // Encode: selector + address (padded) + uint256 + bytes offset + bytes length + bytes data
+    var adminPadded = ADMIN_CONTRACT.slice(2).toLowerCase().padStart(64, '0');
+    var amountPadded = wei.toString(16).padStart(64, '0');
+    var data = '0x4000aea0'
+      + adminPadded
+      + amountPadded
+      + '0000000000000000000000000000000000000000000000000000000000000060' // bytes offset
+      + '0000000000000000000000000000000000000000000000000000000000000000'; // bytes length (empty)
+
+    var btn = $('unav-donate');
+    if (btn) btn.disabled = true;
+
+    ethereum.request({ method: 'eth_chainId' })
+      .then(function (chainId) {
+        if (chainId !== CHAIN_ID_HEX) {
+          return ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: CHAIN_ID_HEX }],
+          });
+        }
+      })
+      .then(function () {
+        return ethereum.request({ method: 'eth_requestAccounts' });
+      })
+      .then(function (accounts) {
+        return ethereum.request({
+          method: 'eth_sendTransaction',
+          params: [{
+            from: accounts[0],
+            to: LINK_TOKEN,
+            data: data,
+          }],
+        });
+      })
+      .then(function (txHash) {
+        alert('LINK donated! Tx: ' + txHash);
+      })
+      .catch(function (err) {
+        if (err.code !== 4001) alert('Donation failed: ' + (err.message || err));
+      })
+      .finally(function () {
+        if (btn) btn.disabled = false;
+      });
+  }
+
   // --- DOM creation ---
 
   function buildNav(currentPage) {
@@ -304,6 +376,15 @@
 
     var auth = document.createElement('div');
     auth.className = 'nav-auth';
+
+    // LINK donate button
+    var donateBtn = document.createElement('button');
+    donateBtn.id = 'unav-donate';
+    donateBtn.className = 'nav-btn nav-btn-donate';
+    donateBtn.innerHTML = LINK_SVG + '<span class="btn-label">Fund VRF</span>';
+    donateBtn.title = 'Donate LINK to fund Chainlink VRF — earn BURNIE credit';
+    donateBtn.addEventListener('click', donateLINK);
+    auth.appendChild(donateBtn);
 
     // GitHub button
     var ghBtn = document.createElement('a');

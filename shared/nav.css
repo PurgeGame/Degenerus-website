@@ -144,6 +144,14 @@ a {
 }
 .nav-btn-github:hover { color: #fff; background: rgba(255, 255, 255, 0.15); }
 
+/* LINK Donate */
+.nav-btn-donate {
+  background: rgba(43, 108, 176, 0.2);
+  color: #4a90d9;
+  border: 1px solid rgba(43, 108, 176, 0.4);
+}
+.nav-btn-donate:hover { background: rgba(43, 108, 176, 0.35); color: #6ab0ff; }
+
 /* Discord */
 .nav-btn-discord {
   background: #5865f2;
