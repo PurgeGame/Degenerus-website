@@ -33,6 +33,8 @@
   // ---------------------------------------------------------------------------
 
   var ABI = [
+    // Errors
+    'error E()',
     // View
     'function purchaseInfo() view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay, bool rngLocked, uint256 priceWei)',
     'function mintPrice() view returns (uint256)',
@@ -105,6 +107,15 @@
   function $(id) { return document.getElementById(id); }
 
   function ethers() { return window.ethers; }
+
+  async function assertChain() {
+    if (!provider) return;
+    var network = await provider.getNetwork();
+    if (Number(network.chainId) !== CHAIN_ID) {
+      setTxStatus('error', 'Wrong network — please switch to Sepolia');
+      throw new Error('Wrong chain: expected ' + CHAIN_ID + ', got ' + network.chainId);
+    }
+  }
 
   function saveCache(data) {
     try {
@@ -648,6 +659,7 @@
 
     try {
       clearTxStatus();
+      await assertChain();
 
       var ticketQty = parseInt(($('ticket-qty') || {}).value || '0', 10);
       var lootboxRaw = parseFloat(($('lootbox-amount') || {}).value || '0');
@@ -709,6 +721,7 @@
 
     try {
       clearTxStatus();
+      await assertChain();
 
       var ticketQty = parseInt(($('burnie-ticket-qty') || {}).value || '0', 10);
       var lootboxRaw = parseFloat(($('burnie-lootbox-amount') || {}).value || '0');
@@ -770,6 +783,7 @@
 
     try {
       clearTxStatus();
+      await assertChain();
 
       var qty = parseInt(($('whale-qty') || {}).value || '1', 10);
       if (qty < 1) qty = 1;
@@ -819,6 +833,7 @@
 
     try {
       clearTxStatus();
+      await assertChain();
       setTxStatus('pending', 'Confirming...');
 
       var eth = ethers();
@@ -863,6 +878,7 @@
 
     try {
       clearTxStatus();
+      await assertChain();
 
       var symbolId = parseInt(($('deity-symbol') || {}).value || '0', 10);
       var eth = ethers();
@@ -1003,6 +1019,7 @@
     var eth = ethers();
 
     clearTxStatus();
+    await assertChain();
     setTxStatus('pending', 'Placing degenerette bet...');
 
     // Convert bet to wei
