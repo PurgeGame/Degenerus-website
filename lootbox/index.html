@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Degenerus Lootbox Simulator</title>
+<title>Degenerus Luckbox Simulator</title>
 <link rel="stylesheet" href="/shared/nav.css">
 <style>
   :root {
-    /* Lootbox accent override */
+    /* Luckbox accent override */
     --accent-primary: #f5a623;
     /* Reward colors */
     --green: #22c55e;
@@ -445,7 +445,7 @@
   <div class="controls" style="grid-template-columns:1fr">
     <div class="control-group">
       <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <label>Lootbox Amount</label>
+        <label>Luckbox Amount</label>
         <div style="display:flex;align-items:baseline;gap:4px">
           <input type="number" id="amountInput" min="0.01" max="100" step="0.01" value="0.1" class="num-input">
           <span style="font-size:0.85em;color:var(--dim)">ETH</span>
@@ -632,9 +632,9 @@ const BOON_TYPES = [
   { id: 1, name: 'Coinflip +5%', weight: 200, cat: 'Coinflip' },
   { id: 2, name: 'Coinflip +10%', weight: 40, cat: 'Coinflip' },
   { id: 3, name: 'Coinflip +25%', weight: 8, cat: 'Coinflip' },
-  { id: 5, name: 'Lootbox Boost +5%', weight: 200, cat: 'Lootbox' },
-  { id: 6, name: 'Lootbox Boost +15%', weight: 30, cat: 'Lootbox' },
-  { id: 22, name: 'Lootbox Boost +25%', weight: 8, cat: 'Lootbox' },
+  { id: 5, name: 'Luckbox Boost +5%', weight: 200, cat: 'Luckbox' },
+  { id: 6, name: 'Luckbox Boost +15%', weight: 30, cat: 'Luckbox' },
+  { id: 22, name: 'Luckbox Boost +25%', weight: 8, cat: 'Luckbox' },
   { id: 7, name: 'Purchase Boost +5%', weight: 400, cat: 'Purchase' },
   { id: 8, name: 'Purchase Boost +15%', weight: 80, cat: 'Purchase' },
   { id: 9, name: 'Purchase Boost +25%', weight: 16, cat: 'Purchase' },
@@ -814,7 +814,7 @@ function updateDistribution() {
   const el = document.getElementById('distribution');
   const total = state.rewardCounts.tickets + state.rewardCounts.burnie +
                 state.rewardCounts.dgnrs + state.rewardCounts.wwxrp;
-  if (total === 0) { el.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px">Open some lootboxes first</div>'; return; }
+  if (total === 0) { el.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px">Open some luckboxes first</div>'; return; }
 
   let html = '<div style="margin-bottom:20px">';
   html += '<div style="font-size:0.8em;color:var(--dim);margin-bottom:12px">PRIMARY REWARDS (per roll)</div>';
@@ -912,7 +912,7 @@ function updateDistribution() {
 function updateEv() {
   const el = document.getElementById('evAnalysis');
   if (state.totalBoxes === 0) {
-    el.innerHTML = '<div style="color:var(--dim);text-align:center">Open some lootboxes to see EV analysis</div>';
+    el.innerHTML = '<div style="color:var(--dim);text-align:center">Open some luckboxes to see EV analysis</div>';
     return;
   }
   const activityPct = parseFloat(document.getElementById('activity').value);
@@ -1104,7 +1104,7 @@ function buyBatch(count) {
       <div class="result-icon" style="font-size:1.2em">&#x1f4e6;</div>
       <div class="result-body">
         <div class="result-type">Batch Complete</div>
-        <div class="result-main">${count} lootboxes opened</div>
+        <div class="result-main">${count} luckboxes opened</div>
         <div class="result-detail">Check Distribution and EV tabs for analysis</div>
       </div>
       <div class="result-value"></div>

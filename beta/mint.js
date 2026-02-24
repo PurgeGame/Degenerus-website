@@ -80,7 +80,7 @@
 
   var QUEST_NAMES = [
     'Mint (BURNIE)', 'Mint (ETH)', 'Coinflip', 'Affiliate',
-    'Reserved', 'Decimator', 'Lootbox', 'Degenerette (ETH)', 'Degenerette (BURNIE)'
+    'Reserved', 'Decimator', 'Luckbox', 'Degenerette (ETH)', 'Degenerette (BURNIE)'
   ];
 
   // ---------------------------------------------------------------------------
@@ -325,7 +325,7 @@
     var bps = isPresale ? 2000n : 1000n;
     var lootWei = (priceWei * bps) / 10000n;
     var pct = isPresale ? '20%' : '10%';
-    return '+ free ' + formatEth(lootWei) + ' ETH lootbox (' + pct + ')';
+    return '+ free ' + formatEth(lootWei) + ' ETH luckbox (' + pct + ')';
   }
 
   function refreshPassPrices() {
@@ -730,7 +730,7 @@
       if (ticketQty < 0) ticketQty = 0;
       if (lootboxRaw < 0) lootboxRaw = 0;
       if (ticketQty === 0 && lootboxRaw <= 0) {
-        setTxStatus('error', 'Enter a ticket quantity or BURNIE lootbox amount');
+        setTxStatus('error', 'Enter a ticket quantity or BURNIE luckbox amount');
         return;
       }
 

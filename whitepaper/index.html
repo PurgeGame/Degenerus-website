@@ -456,7 +456,7 @@
     <p>Degenerus is a gambling protocol on Ethereum. There is no house. There is no rake. Every ETH deposited goes into on-chain prize pools that pay out to players. The protocol makes money from stETH yield on the pooled deposits, not by skimming your bets.</p>
     <p>That means total payouts to players will exceed total deposits over time. The pie grows. It's positive-sum.</p>
     <p>But here's the part that matters: <strong>once the game is running, every participant (gamblers, investors, affiliates) is individually incentivized to push it forward.</strong> Not because they're cooperating. Not because they're altruistic. Because pushing the game forward is how they make money. Their self-interest IS the system's fuel.</p>
-    <p>And the rewards they earn? Mostly illiquid. Future tickets. Tokens you burn for utility. Commissions you have to gamble to claim. Value enters the system and stays in the system. The only way to realize it is to keep playing.</p>
+    <p>Jackpot winnings are liquid, you can withdraw anytime. But reinvesting them is so heavily incentivized that most players do. And for investors, the rewards are structurally illiquid: future tickets, tokens you burn for utility, commissions you have to gamble to claim. Value enters the system and stays in the system.</p>
     <p>The result is a self-reinforcing machine with multiple redundant mechanisms that keep it running. It doesn't need coordination. It doesn't need trust. It doesn't need a team to keep the lights on. The contracts are immutable and the incentives do the rest.</p>
     <p>The rest of this paper explains why.</p>
   </section>
@@ -501,7 +501,7 @@
         </div>
         <div class="product-card lp">
           <h3>An Investment for Degenerates</h3>
-          <p>Lootboxes, bundles, and passes let you fund the prize pools that generate jackpots. Returns come back as tickets and tokens, not guaranteed yield. You are required to gamble your returns. The artificial risk and illiquidity are intentional; it's what keeps yield farming nits out and reserves the profits for degens who enjoy the variance.</p>
+          <p>Luckboxes, bundles, and passes let you fund the prize pools that generate jackpots. Returns come back as tickets and tokens, not guaranteed yield. You are required to gamble your returns. The artificial risk and illiquidity are intentional; it's what keeps yield farming nits out and reserves the profits for degens who enjoy the variance.</p>
         </div>
       </div>
     </div>
@@ -533,10 +533,9 @@
         <tr><th>Participant</th><th>What they do</th><th>Why it helps the system</th></tr>
         <tr><td><strong>Lottery players</strong></td><td>Buy tickets</td><td>Fill the prize pools that fund jackpots</td></tr>
         <tr><td><strong>Affiliates</strong></td><td>Bring in new players</td><td>More deposits, faster level progression</td></tr>
-        <tr><td><strong>Lootbox buyers</strong></td><td>Fund future prize pools</td><td>Seed jackpots for upcoming levels</td></tr>
+        <tr><td><strong>Luckbox buyers</strong></td><td>Fund future prize pools</td><td>Seed jackpots for upcoming levels</td></tr>
         <tr><td><strong>Whale bundle holders</strong></td><td>Buy tickets across 100 levels</td><td>Massive upfront capital injection</td></tr>
         <tr><td><strong>Quest grinders</strong></td><td>Buy in daily to maintain streaks</td><td>Consistent daily deposit pressure</td></tr>
-        <tr><td><strong>afKing players</strong></td><td>Auto-reinvest all winnings</td><td>Automatic capital recycling</td></tr>
       </table>
     </div>
 
@@ -548,18 +547,18 @@
   <section>
     <h2>What Enters, Stays</h2>
     <p>This is the most important economic mechanism in the protocol, and the primary reason the game can't stall.</p>
-    <p>When someone buys a lootbox, a whale bundle, or a lazy pass, they receive tickets for <strong>future levels that don't exist yet</strong>. Those tickets are worthless until the game reaches those levels. They can't be redeemed, sold, or transferred. But the ETH those buyers paid enters the prize pools <em>now</em>.</p>
+    <p>When someone buys a luckbox, a whale bundle, or a lazy pass, they receive tickets for <strong>future levels that don't exist yet</strong>. Those tickets are worthless until the game reaches those levels. They can't be redeemed, sold, or transferred. But the ETH those buyers paid enters the prize pools <em>now</em>.</p>
     <p>This creates a powerful asymmetry. Your money is in the system today. Your tickets activate later. The only way to realize value from those tickets is for the game to progress to their level. Every future ticket holder is personally motivated to push the game forward. Not because someone told them to, but because their money is locked in levels that haven't happened yet.</p>
     <p>A whale with 5 ETH of unrealized future tickets will happily spend 0.1 ETH on current-level purchases to help the level complete. The alternative is writing off the entire 5 ETH position. That's individually rational, not coordinated.</p>
-    <p>And here's where it compounds: <strong>each level that completes creates more future ticket holders than the previous one.</strong> Jackpot auto-rebuys issue tickets for the next level. Lootbox rewards issue tickets for levels +1 through +50. Early bird prizes distribute tickets to the next 5 levels. The number of people with money locked in the future grows monotonically. Level 50 has more stakeholders pushing for it than level 5.</p>
-    <p>There's also a time-value component. Future tickets don't just sit there waiting. They're eligible for BURNIE jackpots at the levels they're assigned to, even before those levels start paying out ETH. The earlier you acquire a future ticket, the more BURNIE jackpot draws it participates in before the level arrives. Early buyers accumulate more value from their tickets than late buyers do, which further incentivizes getting in early and pushing the game forward.</p>
+    <p>And here's where it compounds: <strong>each level that completes creates more future ticket holders than the previous one.</strong> Auto-rebuys issue tickets for the next level. Luckbox rewards issue tickets across dozens of future levels. The number of people with money locked in the future grows monotonically. Level 50 has more stakeholders pushing for it than level 5.</p>
+    <p>Future tickets also have time-value. They're eligible for BURNIE jackpots at the levels they're assigned to, even before those levels start paying ETH. The earlier you acquire one, the more draws it participates in before the level arrives. This further incentivizes getting in early and pushing the game forward.</p>
 
     <blockquote>
       <p>In DeFi, yield is liquid. You claim it and leave. In Degenerus, your rewards are tickets for a future that requires your presence to arrive.</p>
     </blockquote>
 
     <p>The illiquidity also blocks a class of extractive behavior. If future tickets were tradeable, sophisticated players could buy them at a discount from desperate sellers, capture the value, and leave. Non-transferable tickets mean the only way to benefit is to be here when the game gets there, which means being part of the ecosystem that pushes levels forward.</p>
-    <p>Players who go dormant get pulled back in when their forgotten tickets activate months later. You win 0.3 ETH from a daily jackpot on tickets you bought six months ago and forgot about. Now you're back, with fresh claimable ETH and a reinvestment bonus incentivizing you to roll it into new tickets. The game reached out and re-engaged you with value you already paid for. No marketing spend required.</p>
+    <p>Players who go dormant get pulled back in when forgotten tickets activate months later. You win ETH from a jackpot on tickets you forgot about, and now you're back with claimable value and a bonus for rolling it into new tickets. The game re-engages you with value you already paid for. No marketing spend required.</p>
   </section>
 
   <!-- ========== Section 6: Variance ========== -->
@@ -582,36 +581,34 @@
     <p>The three products form a self-reinforcing cycle:</p>
 
     <ul class="mechanism-list">
-      <li><strong>Investors</strong> buy lootboxes and bundles, funding the future prize pools</li>
+      <li><strong>Investors</strong> buy luckboxes and bundles, funding the future prize pools</li>
       <li><strong>Prize pools grow,</strong> making jackpots bigger and more visible</li>
       <li><strong>Bigger jackpots attract lottery players</strong> whose ticket purchases fill the current prize pool</li>
       <li><strong>When the pool target is met,</strong> jackpots fire, paying both lottery players and investors</li>
-      <li><strong>Winners reinvest</strong> (auto-rebuy gives a 45% bonus), refilling the pools</li>
+      <li><strong>Winners reinvest</strong> with a bonus for auto-rebuying, refilling the pools</li>
       <li><strong>Affiliates drive traffic</strong> from both sides, accelerating the cycle for their share of commissions</li>
     </ul>
 
     <p>This is self-reinforcing, not circular. Each revolution adds external value: new players attracted by jackpot size, new investor capital attracted by realized returns, new affiliates attracted by commission volume. And the stETH yield layer adds a net positive-sum input that doesn't depend on new entrants at all.</p>
-    <p>Some of this cycle is mechanical. Players in afKing mode automatically convert jackpot winnings into future tickets. The vault and $DGNRS contract each receive 16 tickets per level forever and operate in auto-reinvest mode. Their winnings compound without any human making a decision. The flywheel has an engine that runs on its own.</p>
+    <p>Parts of this cycle are mechanical. The vault and $DGNRS contract are permanent players that auto-reinvest their winnings every level. Players in afKing mode do the same. No human decisions required. The flywheel has an engine that runs on its own.</p>
   </section>
 
   <!-- ========== Section 8: Can't Stall ========== -->
   <section>
     <h2>Why the Game Can't Stall</h2>
-    <p>For the game to permanently stall, every single future ticket holder would have to simultaneously abandon their position. Every whale bundle buyer writes off their 6+ ETH investment. Every lootbox holder with future tickets writes off their pending value. Every deity pass holder who paid 24+ ETH walks away from permanent jackpot eligibility. Every auto-rebuy player disables their reinvestment. Every affiliate stops driving traffic. All at the same time. All making individually irrational decisions.</p>
-    <p>This will not happen. A single whale can fund a level alone. One rational actor with sufficient exposure in future levels can keep the game alive even if every other participant vanishes. The cost of funding a level is a fraction of the value locked in future tickets. It's trivially worth it to protect your position.</p>
-    <p>But the protocol doesn't rely on participant rationality alone. Multiple independent mechanical safeguards ensure progression even if humans stop making decisions:</p>
+    <p>For the game to permanently stall, every future ticket holder would have to simultaneously abandon their position. Every whale writes off their investment. Every luckbox holder forfeits their pending value. Every deity pass holder walks away from permanent jackpot eligibility. Every affiliate stops driving traffic. All at the same time. All making individually irrational decisions.</p>
+    <p>This will not happen. A single whale can fund a level alone. The cost of pushing a level through is a fraction of the value locked in future tickets. It's trivially worth it to protect your position.</p>
+    <p>But the protocol doesn't rely on participant rationality alone. Multiple independent mechanisms ensure progression even if humans stop making decisions:</p>
 
     <ul class="mechanism-list">
-      <li><strong>Quest streak pressure:</strong> Power users maintaining quest streaks must buy tickets daily. Missing a day resets the streak, destroying weeks of accumulated activity score. The cost of not buying today is real.</li>
-      <li><strong>afKing auto-reinvest:</strong> Players in afKing mode automatically convert jackpot winnings to next-level tickets at a 45% bonus. No manual action required.</li>
-      <li><strong>Affiliate incentives:</strong> Affiliates earn commissions on every referred purchase. They have direct financial incentive to drive traffic continuously.</li>
-      <li><strong>Future pool drip:</strong> At each level transition, 20% of the future prize pool moves to the next prize pool automatically. Even with zero new purchases, the pools self-fill.</li>
-      <li><strong>Vault + $DGNRS perpetual tickets:</strong> Both addresses receive 16 tickets per level forever and operate in afKing mode. Their jackpot winnings auto-reinvest, creating constant buy pressure that never stops.</li>
-      <li><strong>Purchase-phase rewards:</strong> Every 3 days during the purchase phase, 1% of the future pool is distributed as tickets and ETH, keeping engagement alive during slower periods.</li>
+      <li><strong>Quest streak pressure:</strong> Power users must buy tickets daily or lose weeks of accumulated activity score.</li>
+      <li><strong>Auto-reinvest:</strong> Players in afKing mode, plus the vault and $DGNRS contracts, automatically convert jackpot winnings into next-level tickets. No human action required.</li>
+      <li><strong>Future pool drip:</strong> At each level transition, a chunk of the future prize pool moves to the next prize pool automatically. Even with zero new purchases, the pools self-fill.</li>
+      <li><strong>Purchase-phase rewards:</strong> During the purchase phase, the future pool periodically distributes tickets and ETH, keeping engagement alive during slower periods.</li>
     </ul>
 
-    <p>The future prize pool acts as a <strong>flywheel battery</strong>. It charges during active periods and discharges through the drip mechanisms during quiet ones. After dozens of active levels, the future pool will be vastly larger than the ratchet target. If the future pool is 100 ETH and the level target is 2 ETH, the 20% transition drip alone (20 ETH) exceeds the target by 10x. The game can self-sustain for many consecutive levels with zero new deposits before the drip alone can't cover the target.</p>
-    <p>And if all of the above somehow fails, if every human and every mechanism simultaneously stops, the protocol has terminal safeguards. A 365-day inactivity timeout triggers a clean wind-down: remaining funds are distributed through final jackpots, then swept to the vault and $DGNRS. No funds are locked forever. There is no zombie state. The game either progresses or it terminates cleanly.</p>
+    <p>The future prize pool acts as a <strong>flywheel battery</strong>. It charges during active periods and discharges through drip mechanisms during quiet ones. After dozens of active levels, the future pool will be vastly larger than the level target. The game can self-sustain for many consecutive levels with zero new deposits before the drip alone can't cover it.</p>
+    <p>And if all of the above somehow fails, the protocol has terminal safeguards. A 365-day inactivity timeout triggers a clean wind-down: remaining funds are distributed through final jackpots, then swept to the vault and $DGNRS. No funds are locked forever. There is no zombie state. The game either progresses or it terminates cleanly.</p>
   </section>
 
   <!-- ========== Section 9: Trustless ========== -->
