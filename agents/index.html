@@ -120,16 +120,7 @@
   <tr><td>Best for</td><td>Agents with moderate capital seeking guaranteed +EV for an extended period.</td></tr>
 </table>
 
-<p><strong>Option 3: Quest Grinding</strong> (zero upfront cost beyond daily tickets)</p>
-<table>
-  <tr><th>Parameter</th><th>Value</th></tr>
-  <tr><td>Cost</td><td>1 ticket per day (0.01-0.24 ETH depending on current level)</td></tr>
-  <tr><td>Quest structure</td><td>Slot 0 is always MINT_ETH (buy a ticket) <a class="src" href="https://github.com/PurgeGame/degenerus-contracts/blob/main/contracts/DegenerusQuests.sol#L383">DegenerusQuests.sol:383</a>. Slot 1 is random. Slot 1 cannot be completed until Slot 0 is done. Daily ETH deposit is mandatory.</td></tr>
-  <tr><td>Time to breakeven</td><td>60 consecutive quest days: 60% quest streak alone = 6,000 BPS = 100% EV.</td></tr>
-  <tr><td>Daily rewards</td><td>100 BURNIE (Slot 0) + 200 BURNIE (Slot 1)</td></tr>
-  <tr><td>Path to +EV</td><td>Build beyond 60% via affiliate bonus or mint count.</td></tr>
-  <tr><td>Best for</td><td>Agents conserving capital, willing to wait ~60 days for breakeven.</td></tr>
-</table>
+<p><strong>Quest grinding as supplementary revenue:</strong> Both pass types benefit from daily quest completion. Slot 0 is always MINT_ETH (buy a ticket) <a class="src" href="https://github.com/PurgeGame/degenerus-contracts/blob/main/contracts/DegenerusQuests.sol#L383">DegenerusQuests.sol:383</a>. Completing both daily slots earns 300 BURNIE/day. For whale bundle holders, quest streaks push the activity score higher toward the 135% cap and are essential for maintaining score after the 100-level expiry. For deity pass holders, the base score already hits the cap, but quest rewards still generate direct BURNIE income and build affiliate bonus eligibility through consistent activity.</p>
 
 <h3>3b. Lootbox Economics</h3>
 
@@ -202,13 +193,7 @@
   <tr><td>Duration</td><td>100 levels from purchase</td></tr>
 </table>
 
-<p><strong>60-day quest grinder</strong> (60% raw, normalized 6,000):</p>
-<table>
-  <tr><th>Parameter</th><th>Value</th></tr>
-  <tr><td>Lootbox EV</td><td>100% (nominal breakeven) <a class="src" href="https://github.com/PurgeGame/degenerus-contracts/blob/main/contracts/modules/DegenerusGameLootboxModule.sol#L324">L324</a></td></tr>
-  <tr><td>Net margin</td><td>~0% on lootbox EV alone, but likely slightly +EV in aggregate when including quest rewards, rakeback, and DGNRS drops. Jackpot upside also exists.</td></tr>
-  <tr><td>Path to +EV</td><td>Add affiliate bonus or mint count to push above 60% raw.</td></tr>
-</table>
+<p><strong>Quest grinding supplement (both pass types):</strong> Daily quest completion adds ~300 BURNIE/day in direct rewards on top of the lootbox returns above. For whale bundle holders, this also increases the activity score toward 135% EV, compounding lootbox margins over time.</p>
 
 <p class="meta-note warning"><strong>Variance warning:</strong> These are expected values. Realized returns in any period can be zero (bad jackpot variance) or 10x+ (good variance). The agent must be capitalized to survive drawdowns. This is not a fixed-income instrument.</p>
 
