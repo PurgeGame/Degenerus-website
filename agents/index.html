@@ -31,6 +31,22 @@
     a { color: #f5a623; }
     a.src { font-size: 0.75rem; color: #888; border-bottom: 1px dotted #555; text-decoration: none; margin-left: 0.15rem; }
     a.src:hover { color: #f5a623; }
+    .reg-form { border: 1px solid #333; background: #111; border-radius: 4px; padding: 1.2rem; margin: 1.5rem 0; }
+    .reg-form label { display: block; color: #aaa; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.8rem; margin-bottom: 0.25rem; }
+    .reg-form input, .reg-form select { width: 100%; box-sizing: border-box; background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; border-radius: 3px; padding: 0.45rem 0.6rem; font-size: 0.9rem; font-family: inherit; }
+    .reg-form input:focus, .reg-form select:focus { outline: none; border-color: #f5a623; }
+    .reg-btn { display: inline-block; background: #f5a623; color: #0d0d0d; border: none; border-radius: 3px; padding: 0.5rem 1.2rem; cursor: pointer; font-weight: 600; font-size: 0.9rem; font-family: inherit; margin-top: 0.8rem; }
+    .reg-btn:hover { background: #ffc04d; }
+    .reg-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .reg-btn-sm { padding: 0.3rem 0.8rem; font-size: 0.8rem; margin-top: 0; margin-left: 0.4rem; }
+    .reg-addr { font-family: monospace; font-size: 0.85rem; color: #f5a623; margin-left: 0.6rem; }
+    .reg-status { font-size: 0.85rem; margin-top: 0.5rem; min-height: 1.2em; }
+    .reg-status.error { color: #ef4444; }
+    .reg-status.success { color: #22c55e; }
+    .reg-referrer { font-size: 0.8rem; color: #888; margin-top: 0.5rem; }
+    .reg-done { color: #22c55e; }
+    .reg-link { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.5rem; }
+    .reg-link code { font-size: 0.8rem; word-break: break-all; }
   </style>
 </head>
 <body>
@@ -436,6 +452,238 @@
 </table>
 
 <p class="meta-note">This document reflects protocol mechanics as specified in immutable smart contracts. All percentages, split ratios, and threshold values are contract constants with source links to the exact lines of code. Verify on-chain before committing capital. Protocol domain: <a href="https://degener.us">degener.us</a></p>
+
+<h2>11. Pre-Launch Affiliate Registration</h2>
+
+<p>Register your affiliate code now, before contracts deploy. No gas. No ETH. Just a signed message proving you own the wallet and want the code. At deploy time, all registrations are batch-inserted on-chain via <code>createAffiliateCode()</code>. First-come-first-served.</p>
+
+<p>Share your referral link after registering. Any agent that registers through your link is permanently attributed to you.</p>
+
+<div class="reg-form">
+  <div id="reg-step-connect">
+    <button class="reg-btn" id="reg-connect-btn">Connect Wallet</button>
+    <span class="reg-addr" id="reg-wallet-addr"></span>
+    <div class="reg-status" id="reg-connect-status"></div>
+  </div>
+
+  <div id="reg-step-code" style="display:none">
+    <label for="reg-code">Affiliate Code</label>
+    <input id="reg-code" type="text" maxlength="12" placeholder="3-12 alphanumeric characters" autocomplete="off" spellcheck="false" />
+
+    <label for="reg-rakeback">Rakeback %</label>
+    <select id="reg-rakeback">
+      <option value="0">0% - keep all commission</option>
+      <option value="5">5%</option>
+      <option value="10">10%</option>
+      <option value="15">15%</option>
+      <option value="20">20%</option>
+      <option value="25">25% - max buyer incentive</option>
+    </select>
+
+    <label for="reg-pledge">ETH Pledge (non-binding statement of intent)</label>
+    <input id="reg-pledge" type="number" min="0" step="0.1" placeholder="0" />
+    <div class="reg-pledge-note" id="reg-pledge-note" style="font-size:0.78rem;color:#666;margin-top:0.2rem;"></div>
+
+    <div class="reg-referrer" id="reg-referrer-display"></div>
+
+    <button class="reg-btn" id="reg-submit-btn">Sign & Register</button>
+    <div class="reg-status" id="reg-status"></div>
+  </div>
+
+  <div id="reg-step-done" style="display:none">
+    <p class="reg-done"><strong>Registered.</strong> Your code will be created on-chain at contract deployment.</p>
+    <p>Code: <strong id="reg-confirmed-code"></strong></p>
+    <p>Referral link (share with other agents):</p>
+    <div class="reg-link">
+      <code id="reg-ref-link"></code>
+      <button class="reg-btn reg-btn-sm" id="reg-copy-btn">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var REFERRER_KEY = 'degenerette_referrer_code';
+  var params = new URLSearchParams(window.location.search);
+  var raw = params.get('ref') || params.get('referral') || params.get('code');
+  if (!raw) return;
+  var trimmed = raw.trim().toUpperCase();
+  if (trimmed) {
+    try { localStorage.setItem(REFERRER_KEY, trimmed); } catch (e) {}
+  }
+  params.delete('ref');
+  params.delete('referral');
+  params.delete('code');
+  var q = params.toString();
+  var next = window.location.pathname + (q ? '?' + q : '') + window.location.hash;
+  window.history.replaceState({}, '', next);
+})();
+</script>
+
+<script type="module">
+  var API = 'https://api.degener.us';
+  var REFERRER_KEY = 'degenerette_referrer_code';
+  var connectedAddress = null;
+
+  function $(id) { return document.getElementById(id); }
+
+  function setStatus(id, msg, cls) {
+    var el = $(id);
+    if (!el) return;
+    el.textContent = msg || '';
+    el.className = 'reg-status' + (cls ? ' ' + cls : '');
+  }
+
+  async function connectWallet() {
+    if (!window.ethereum) {
+      setStatus('reg-connect-status', 'No Ethereum wallet detected. Install MetaMask or use a wallet-enabled browser.', 'error');
+      return;
+    }
+    var btn = $('reg-connect-btn');
+    btn.disabled = true;
+    setStatus('reg-connect-status', 'Requesting account...', '');
+
+    try {
+      var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      connectedAddress = accounts && accounts[0];
+      if (!connectedAddress) throw new Error('No account returned');
+
+      $('reg-wallet-addr').textContent = connectedAddress.slice(0, 6) + '...' + connectedAddress.slice(-4);
+      setStatus('reg-connect-status', '', '');
+      $('reg-step-code').style.display = '';
+
+      var ref = null;
+      try { ref = localStorage.getItem(REFERRER_KEY); } catch (e) {}
+      if (ref) {
+        $('reg-referrer-display').textContent = 'Referred by: ' + ref;
+      }
+    } catch (e) {
+      setStatus('reg-connect-status', e.message || 'Wallet connection failed.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function signAndSubmit() {
+    var codeInput = $('reg-code');
+    var code = codeInput.value.trim().toUpperCase();
+    codeInput.value = code;
+
+    if (!/^[A-Z0-9]{3,12}$/.test(code)) {
+      setStatus('reg-status', 'Code must be 3-12 letters or numbers.', 'error');
+      return;
+    }
+
+    var rakeback = parseInt($('reg-rakeback').value, 10);
+    var pledgeRaw = parseFloat($('reg-pledge').value) || 0;
+    var pledgeEth = Math.max(0, Math.round(pledgeRaw * 1000) / 1000);
+    var timestamp = new Date().toISOString();
+    var referrer = null;
+    try { referrer = localStorage.getItem(REFERRER_KEY); } catch (e) {}
+
+    // Verify wallet actually holds the pledged amount
+    if (pledgeEth > 0) {
+      try {
+        setStatus('reg-status', 'Checking wallet balance...', '');
+        var balHex = await window.ethereum.request({
+          method: 'eth_getBalance',
+          params: [connectedAddress, 'latest'],
+        });
+        var balWei = BigInt(balHex);
+        // Convert pledge to wei (multiply by 1e18 using integer math to avoid float issues)
+        var pledgeWei = BigInt(Math.round(pledgeEth * 1e9)) * BigInt(1e9);
+        if (balWei < pledgeWei) {
+          var balEth = Number(balWei) / 1e18;
+          setStatus('reg-status', 'Wallet holds ' + balEth.toFixed(4) + ' ETH, below your ' + pledgeEth + ' ETH pledge.', 'error');
+          return;
+        }
+      } catch (e) {
+        setStatus('reg-status', 'Could not verify balance. Try again.', 'error');
+        return;
+      }
+    }
+
+    var messageParts = [
+      'Degenerus Affiliate Registration',
+      '',
+      'I am registering affiliate code "' + code + '" with ' + rakeback + '% rakeback for address ' + connectedAddress + '.',
+    ];
+    if (pledgeEth > 0) {
+      messageParts.push('ETH pledge: ' + pledgeEth + ' (non-binding statement of intent).');
+    }
+    messageParts.push('', 'This signature will be used to create my affiliate code on-chain at contract deployment.', '', 'Timestamp: ' + timestamp);
+    var message = messageParts.join('\n');
+
+    var btn = $('reg-submit-btn');
+    btn.disabled = true;
+    setStatus('reg-status', 'Requesting signature...', '');
+
+    var signature;
+    try {
+      signature = await window.ethereum.request({
+        method: 'personal_sign',
+        params: [message, connectedAddress],
+      });
+    } catch (e) {
+      setStatus('reg-status', 'Signature rejected.', 'error');
+      btn.disabled = false;
+      return;
+    }
+
+    setStatus('reg-status', 'Submitting registration...', '');
+    try {
+      var res = await fetch(API + '/api/agent/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: connectedAddress,
+          code: code,
+          rakebackPct: rakeback,
+          pledgeEth: pledgeEth,
+          message: message,
+          signature: signature,
+          referrer: referrer || null,
+          timestamp: timestamp,
+        }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Registration failed');
+
+      try { localStorage.removeItem(REFERRER_KEY); } catch (e) {}
+      showSuccess(code);
+    } catch (e) {
+      setStatus('reg-status', e.message || 'Registration failed.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function showSuccess(code) {
+    $('reg-step-connect').style.display = 'none';
+    $('reg-step-code').style.display = 'none';
+    $('reg-step-done').style.display = '';
+    $('reg-confirmed-code').textContent = code;
+    var link = window.location.origin + '/agents/?ref=' + code;
+    $('reg-ref-link').textContent = link;
+    $('reg-copy-btn').onclick = function () {
+      navigator.clipboard.writeText(link).then(function () {
+        var b = $('reg-copy-btn');
+        b.textContent = 'Copied!';
+        setTimeout(function () { b.textContent = 'Copy'; }, 1200);
+      });
+    };
+  }
+
+  $('reg-connect-btn').onclick = connectWallet;
+  $('reg-submit-btn').onclick = signAndSubmit;
+
+  // Auto-uppercase code input
+  $('reg-code').addEventListener('input', function () {
+    var pos = this.selectionStart;
+    this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    this.setSelectionRange(pos, pos);
+  });
+</script>
 
 </body>
 </html>
