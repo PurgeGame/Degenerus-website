@@ -13,11 +13,11 @@
   // ---------------------------------------------------------------------------
 
   var CONTRACTS = {
-    GAME: '0xA8fd804c44e27f66C6398f55263f0771D56733C0',
-    COIN: '0xB3eCEf2eA4B40Bf305B936d1fBBa912195331843',
-    AFFILIATE: '0x719c54dC1E076C2EB34f1290A06C4dfA3742bd79',
-    QUESTS: '0x52cEA3FE5AD287d58b0f131c87dE8f2233Ecc321',
-    DEITY_PASS: '0x020abAc2f2adFDeC99Da460A6592C9485cdF817a',
+    GAME: '0x4A2DEE00dF7261c52302165693cbDDEf7c8D89b7',
+    COIN: '0xa65EaDF94aaEb0a1F3448664100beb0546296D43',
+    AFFILIATE: '0x28cA06FA1D3b9F0C0b270efE2326823A1665ac38',
+    QUESTS: '0x8d33232F02fF96c86D566899E94596c52Ad408b1',
+    DEITY_PASS: '0x194480037e1FdbD31e5Df076516302eCc1Cd0798',
   };
 
   var DEITY_PASS_ABI = [
@@ -64,6 +64,9 @@
     // Claim
     'function claimableWinningsOf(address player) view returns (uint256)',
     'function claimWinnings(address player)',
+    // Utilities
+    'function advanceGame()',
+    'function requestLootboxRng()',
   ];
 
   var COIN_ABI = [
@@ -97,6 +100,8 @@
   var TESTNET_DIVISOR = 1000000n; // All ETH prices divided by 1M on testnet
   var currentMintPrice = 10000000000000000n / TESTNET_DIVISOR; // BigInt — default 0.01 ETH / 1M, updated by refreshState
   var isPresale = true; // default to presale until contract says otherwise
+  var isRngLocked = false;
+  var isGameOver = false;
   var pollTimer = null;
 
   // ---------------------------------------------------------------------------
@@ -254,6 +259,54 @@
     }
   }
 
+  async function updateUtilButtons() {
+    var advBtn = $('btn-advance-game');
+    var rngBtn = $('btn-request-rng');
+    if (!advBtn || !rngBtn) return;
+
+    if (!currentAddress || !contract) {
+      advBtn.disabled = true;
+      advBtn.title = 'Connect wallet first';
+      rngBtn.disabled = true;
+      rngBtn.title = 'Connect wallet first';
+      return;
+    }
+
+    // Static-call advanceGame to check if it would succeed
+    try {
+      await contract.advanceGame.staticCall();
+      advBtn.disabled = false;
+      advBtn.title = 'Process daily jackpots. Earns 500 BURNIE.';
+    } catch (err) {
+      advBtn.disabled = true;
+      var reason = err.reason || err.shortMessage || '';
+      if (/NotTimeYet/i.test(reason)) {
+        advBtn.title = 'Already advanced today';
+      } else if (/MustMintToday/i.test(reason)) {
+        advBtn.title = 'Must mint today (or hold a pass) to advance';
+      } else if (/game.?over/i.test(reason)) {
+        advBtn.title = 'Game is over';
+      } else {
+        advBtn.title = reason || 'Not available right now';
+      }
+    }
+
+    // Static-call requestLootboxRng to check if it would succeed
+    try {
+      await contract.requestLootboxRng.staticCall();
+      rngBtn.disabled = false;
+      rngBtn.title = 'Trigger Chainlink VRF for pending Degenerette bets';
+    } catch (err) {
+      rngBtn.disabled = true;
+      var reason = err.reason || err.shortMessage || '';
+      if (isRngLocked) {
+        rngBtn.title = 'RNG is locked (jackpot VRF in flight)';
+      } else {
+        rngBtn.title = 'Not enough pending bets to trigger RNG';
+      }
+    }
+  }
+
   function setPresale(active) {
     var el = $('status-presale');
     if (!el) return;
@@ -306,7 +359,7 @@
     }
   }
 
-  var PRICE_COIN_UNIT = 1000; // 1000 BURNIE per ticket
+  var PRICE_COIN_UNIT = 100; // 100 BURNIE per ticket
 
   function updateBurnieTotal() {
     var costEl = $('burnie-total-cost');
@@ -483,6 +536,7 @@
           await refreshPlayer(currentAddress);
         } else {
           currentAddress = null;
+          updateUtilButtons();
         }
       });
 
@@ -509,9 +563,10 @@
     if (!contract) return;
 
     try {
-      var [info, presale] = await Promise.all([
+      var [info, presale, gameOverFlag] = await Promise.all([
         contract.purchaseInfo(),
         contract.lootboxPresaleActiveFlag(),
+        contract.gameOver(),
       ]);
 
       // purchaseInfo returns: (lvl, inJackpotPhase, lastPurchaseDay, rngLocked, priceWei)
@@ -522,6 +577,8 @@
 
       currentMintPrice = priceWei;
       isPresale = presale;
+      isRngLocked = rngLocked;
+      isGameOver = gameOverFlag;
 
       setEl('status-level', lvl.toString());
       setEl('ticket-level', lvl.toString());
@@ -532,6 +589,7 @@
       setPresale(presale);
       updateEthTotal();
       refreshPassPrices();
+      updateUtilButtons();
 
       saveCache({
         level: Number(lvl),
@@ -1137,6 +1195,48 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Game utilities
+  // ---------------------------------------------------------------------------
+
+  async function advanceGame() {
+    if (!signer || !contract) {
+      setTxStatus('error', 'Connect your wallet first');
+      throw new Error('Not connected');
+    }
+    setTxStatus('pending', 'Advancing game...');
+    try {
+      var tx = await contract.advanceGame();
+      var receipt = await tx.wait();
+      setTxStatus('confirmed', 'Game advanced!', receipt.hash);
+      await refreshState();
+      if (currentAddress) await refreshPlayer(currentAddress);
+      return receipt;
+    } catch (err) {
+      var msg = err.reason || err.shortMessage || err.message || 'Transaction failed';
+      setTxStatus('error', msg);
+      throw err;
+    }
+  }
+
+  async function requestLootboxRng() {
+    if (!signer || !contract) {
+      setTxStatus('error', 'Connect your wallet first');
+      throw new Error('Not connected');
+    }
+    setTxStatus('pending', 'Requesting lootbox RNG...');
+    try {
+      var tx = await contract.requestLootboxRng();
+      var receipt = await tx.wait();
+      setTxStatus('confirmed', 'Lootbox RNG requested!', receipt.hash);
+      return receipt;
+    } catch (err) {
+      var msg = err.reason || err.shortMessage || err.message || 'Transaction failed';
+      setTxStatus('error', msg);
+      throw err;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
 
@@ -1154,6 +1254,8 @@
     checkBetReady: checkBetReady,
     getClaimable: getClaimable,
     claimWinnings: claimWinnings,
+    advanceGame: advanceGame,
+    requestLootboxRng: requestLootboxRng,
   };
 
 })();

@@ -2133,6 +2133,19 @@ afKing mode locks on for 5 levels once activated. Commit to the grind.
     </div>
   </section>
 
+  <!-- Game Utilities -->
+  <section class="panel" id="game-utils-panel">
+    <h3>Game Utilities</h3>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+      <button class="btn-primary btn-small" id="btn-advance-game" disabled title="Connect wallet first" onclick="Mint.advanceGame()">ADVANCE GAME</button>
+      <button class="btn-primary btn-small" id="btn-request-rng" disabled title="Connect wallet first" onclick="Mint.requestLootboxRng()">REQUEST LOOTBOX RNG</button>
+    </div>
+    <p style="font-size:0.78rem;color:var(--text-secondary);margin-top:0.5rem">
+      Advance Game: process daily jackpots (must have minted today or hold a pass). Earns 500 BURNIE.<br>
+      Request Lootbox RNG: trigger Chainlink VRF for pending Degenerette bets.
+    </p>
+  </section>
+
   <!-- Player Streaks & Quests -->
   <section class="panel player-info" id="player-info-panel" style="display:none">
     <h3>Streaks</h3>
@@ -4087,6 +4100,8 @@ function togglePayMode(mode) {
       }
     } catch (err) {
       console.error('[degen] bet error:', err);
+      var msg = err.reason || err.shortMessage || err.message || 'Bet failed';
+      alert(msg);
     }
   };
 
