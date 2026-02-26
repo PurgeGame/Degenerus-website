@@ -19,7 +19,7 @@
 
   // LINK donation config
   var LINK_TOKEN = '0x779877A7B0D9E8603169DdbD7836e478b4624789'; // Sepolia
-  var ADMIN_CONTRACT = '0x6E06c14A14dEbAd37A5DCBCB532aABCd9eEB1b85';
+  var ADMIN_CONTRACT = '0xdd2BeE0d2e74F8f81739107Df9fdE1395c0cce1E';
   var CHAIN_ID_HEX = '0xaa36a7'; // Sepolia 11155111
 
   // --- Helpers ---
@@ -169,6 +169,8 @@
         address = player.eth_address;
         if (player.referrer_code) setRef(null);
         updateWalletBtn();
+        // Init Mint module if available (beta page)
+        if (window.Mint && window.Mint.init) window.Mint.init().catch(function () {});
       })
       .catch(function (err) {
         console.warn('Wallet connect failed', err);

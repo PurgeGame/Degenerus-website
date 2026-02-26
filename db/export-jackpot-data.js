@@ -8,7 +8,7 @@ const { execSync } = require('child_process');
 const { writeFileSync } = require('fs');
 const path = require('path');
 
-const RUNS_DIR = path.join(__dirname, '..', '..', 'degenerus-contracts', 'runs', 'latest');
+const RUNS_DIR = process.argv[2] || __dirname;
 const ANALYSIS_DB = path.join(RUNS_DIR, 'analysis.db');
 const EVENTS_DB = path.join(RUNS_DIR, 'events.db');
 const OUT = path.join(__dirname, '..', 'beta', 'jackpot-data.json');
