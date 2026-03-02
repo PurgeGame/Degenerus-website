@@ -350,6 +350,7 @@
       { key: 'degenerette', label: 'Degenerette', href: '/degenerette/' },
       { key: 'lootbox', label: 'Luckbox Sim', href: '/lootbox/' },
       { key: 'whitepaper', label: 'Whitepaper', href: '/whitepaper/' },
+      { key: 'analysis', label: 'Game Theory', href: '/analysis/' },
     ];
 
     // Left side

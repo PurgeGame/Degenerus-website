@@ -1,0 +1,2451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Mechanism Design of Resilient Games</title>
+<link rel="stylesheet" href="/shared/nav.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});"></script>
+<style>
+:root{--text:#1a1a1a;--bg:#fefefe;--accent:#2c3e50;--theorem-bg:#f0f4f8;--theorem-border:#3498db;--proof-bg:#fafafa;--proof-border:#95a5a6;--def-bg:#fdf6e3;--def-border:#e67e22;--prop-bg:#f0fff0;--prop-border:#27ae60;--corollary-bg:#f5f0ff;--corollary-border:#8e44ad;--claim-bg:#f0f7f7;--claim-border:#0097a7;--design-property-bg:#f5f2ee;--design-property-border:#795548;--link:#2980b9}
+*{box-sizing:border-box;margin:0;padding:0}
+.page{font-family:'Latin Modern Roman','Computer Modern','CMU Serif',Georgia,'Times New Roman',serif;font-size:17px;line-height:1.65;color:var(--text);background:var(--bg);max-width:740px;margin:0 auto;padding:2rem 1.5rem 4rem;text-align:justify;hyphens:auto}
+.page h1{font-size:1.9rem;text-align:center;margin:2rem 0 .5rem;line-height:1.3;letter-spacing:-.01em}
+.page h2{font-size:1.4rem;margin:2.5rem 0 1rem;padding-bottom:.3rem;border-bottom:1px solid #ddd;color:var(--accent)}
+.page h3{font-size:1.15rem;margin:1.8rem 0 .8rem;color:var(--accent)}
+.page h4{font-size:1.05rem;margin:1.3rem 0 .6rem;font-style:italic}
+.page p{margin:.8rem 0}
+.page ul,.page ol{margin:.6rem 0 .6rem 1.8rem}
+.page li{margin:.25rem 0}
+.page a{color:var(--link);text-decoration:none}
+.page a:hover{text-decoration:underline}
+.page hr{border:none;border-top:1px solid #ddd;margin:2.5rem 0}
+.page table{width:100%;border-collapse:collapse;margin:1.2rem 0;font-size:.92rem;line-height:1.5}
+.page thead{border-top:2px solid #333;border-bottom:1px solid #333}
+.page th{font-weight:600;text-align:left;padding:.5rem .6rem}
+.page td{padding:.4rem .6rem;border-bottom:1px solid #eee;vertical-align:top}
+.page tbody tr:last-child td{border-bottom:2px solid #333}
+.theorem,.proposition,.definition,.corollary,.lemma,.claim,.design-property{margin:1.5rem 0;padding:1rem 1.2rem;border-left:4px solid;border-radius:0 4px 4px 0;page-break-inside:avoid}
+.theorem{background:var(--theorem-bg);border-color:var(--theorem-border)}
+.proposition{background:var(--prop-bg);border-color:var(--prop-border)}
+.definition{background:var(--def-bg);border-color:var(--def-border)}
+.corollary{background:var(--corollary-bg);border-color:var(--corollary-border)}
+.lemma{background:var(--theorem-bg);border-color:var(--theorem-border)}
+.claim{background:var(--claim-bg);border-color:var(--claim-border)}
+.design-property{background:var(--design-property-bg);border-color:var(--design-property-border)}
+.theorem p,.proposition p,.definition p,.corollary p,.lemma p,.claim p,.design-property p{margin:.4rem 0}
+.proof{margin:1rem 0 1.5rem;padding:.8rem 1.2rem;border-left:3px solid var(--proof-border);background:var(--proof-bg);font-size:.96rem}
+.proof p{margin:.4rem 0}
+.page blockquote{border-left:3px solid #ccc;padding-left:1rem;margin:1rem 0;color:#555;font-style:italic}
+.page code{font-family:'Fira Code',Consolas,monospace;font-size:.88em;background:#f4f4f4;padding:.15em .35em;border-radius:3px}
+.page pre{background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto;margin:1rem 0;font-size:.88rem;line-height:1.5}
+.page pre code{background:none;padding:0}
+.toc{background:#f8f9fa;border:1px solid #e0e0e0;border-radius:4px;padding:1.2rem 1.5rem;margin:1.5rem 0 2.5rem}
+.toc h2{font-size:1.1rem;margin:0 0 .8rem;border:none;padding:0}
+.toc ul{list-style:none;margin:0;padding:0}
+.toc li{margin:.2rem 0;font-size:.95rem}
+.toc li.toc-sub{margin-left:1.5rem;font-size:.9rem}
+.katex-display{margin:1rem 0;overflow-x:auto;overflow-y:hidden}
+@media(max-width:780px){.page{padding:1rem;font-size:16px}.page table{font-size:.85rem}.katex-display{font-size:.9rem}}
+@media print{.page{max-width:none;padding:0}.toc{page-break-after:always}.page h2{page-break-before:always}.theorem,.proof,.proposition,.definition,.claim,.design-property{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Why This Game Doesn't Die: A Game-Theoretic Analysis of Degenerus Protocol</h1>
+<nav class="toc"><h2>Table of Contents</h2><ul>
+<li><a href="#section-1">Abstract</a></li>
+<li><a href="#section-2">1. Introduction</a></li>
+<li><a href="#section-3">2. The Core Idea: Cross-Subsidy Structure</a></li>
+<li class="toc-sub"><a href="#section-4">2.1 Heterogeneous Reward Structures</a></li>
+<li class="toc-sub"><a href="#section-5">2.2 Non-Monetary Utility</a></li>
+<li class="toc-sub"><a href="#section-6">2.3 The Cross-Subsidy Mechanism</a></li>
+<li class="toc-sub"><a href="#section-7">2.4 Non-Depletion of Cross-Subsidies</a></li>
+<li class="toc-sub"><a href="#section-8">2.5 Implications for the Analysis</a></li>
+<li class="toc-sub"><a href="#section-9">2.6 The Poker Ecosystem Analogy</a></li>
+<li><a href="#section-10">3. Player Types and Strategies</a></li>
+<li class="toc-sub"><a href="#section-11">3.1 The Degen</a></li>
+<li class="toc-sub"><a href="#section-12">3.2 The EV Maximizer</a></li>
+<li class="toc-sub"><a href="#section-13">3.3 The Whale</a></li>
+<li class="toc-sub"><a href="#section-14">3.4 The Affiliate</a></li>
+<li class="toc-sub"><a href="#section-15">3.5 The Hybrid</a></li>
+<li class="toc-sub"><a href="#section-16">3.6 Budget Constraints and the Poverty Trap</a></li>
+<li><a href="#section-17">4. Mechanism Design Properties</a></li>
+<li class="toc-sub"><a href="#section-18">4.1 Accounting Solvency</a></li>
+<li class="toc-sub"><a href="#section-19">4.2 The Zero-Rake Property</a></li>
+<li><a href="#section-20">5. Equilibrium Analysis and Commitment Devices</a></li>
+<li class="toc-sub"><a href="#section-21">5.1 The Active Participation Equilibrium</a></li>
+<li class="toc-sub"><a href="#section-22">5.2 The Inactive Equilibrium and Why It Is Unstable</a></li>
+<li class="toc-sub"><a href="#section-23">5.3 Why Active Play Wins</a></li>
+<li class="toc-sub"><a href="#section-24">5.4 The Repeated Game Structure</a></li>
+<li class="toc-sub"><a href="#section-25">5.5 Commitment Devices</a></li>
+<li><a href="#section-26">6. BURNIE Economics and the 100-Level Cycle</a></li>
+<li class="toc-sub"><a href="#section-27">6.1 The BURNIE Price Ratchet</a></li>
+<li class="toc-sub"><a href="#section-28">6.2 The Decimator</a></li>
+<li class="toc-sub"><a href="#section-29">6.3 The 100-Level Cycle</a></li>
+<li><a href="#section-30">7. Robustness and Attack Vectors</a></li>
+<li class="toc-sub"><a href="#section-31">7.1 Coordination-Free Design</a></li>
+<li class="toc-sub"><a href="#section-32">7.2 Coalitional Robustness</a></li>
+<li class="toc-sub"><a href="#section-33">7.3 Griefer Analysis</a></li>
+<li><a href="#section-34">8. Failure Modes and Resilience</a></li>
+<li class="toc-sub"><a href="#section-35">8.1 What a Death Spiral Looks Like</a></li>
+<li class="toc-sub"><a href="#section-36">8.2 Why the Protocol Resists Death Spirals</a></li>
+<li class="toc-sub"><a href="#section-37">8.3 The Whale Departure Paradox</a></li>
+<li class="toc-sub"><a href="#section-38">8.4 BURNIE Token Stability</a></li>
+<li class="toc-sub"><a href="#section-39">8.5 The Bear Market Stress Test</a></li>
+<li class="toc-sub"><a href="#section-40">8.6 Conditions for Protocol Failure</a></li>
+<li class="toc-sub"><a href="#section-41">8.7 Endgame Distribution</a></li>
+<li><a href="#section-42">9. Comparisons</a></li>
+<li><a href="#section-43">10. Conclusion: The Resilience Thesis</a></li>
+<li class="toc-sub"><a href="#section-44">10.1 The Resilience Thesis</a></li>
+<li class="toc-sub"><a href="#section-45">10.2 Limitations</a></li>
+<li><a href="#section-46">Appendix A: Parameter Summary</a></li>
+<li><a href="#section-47">Appendix B: BAF Jackpot Distribution Detail</a></li>
+<li><a href="#section-48">Appendix C: Model Detail</a></li>
+<li class="toc-sub"><a href="#section-49">Key Parameter Summary</a></li>
+<li class="toc-sub"><a href="#section-50">Model and Notation</a></li>
+<li class="toc-sub"><a href="#section-51">Prize Pool Dynamics</a></li>
+<li class="toc-sub"><a href="#section-52">Ticket Pricing</a></li>
+<li class="toc-sub"><a href="#section-53">Activity Score and EV Multipliers</a></li>
+<li class="toc-sub"><a href="#section-54">Protocol Architecture</a></li>
+<li class="toc-sub"><a href="#section-55">The Stage Game at Level $\ell$</a></li>
+<li class="toc-sub"><a href="#section-56">Trait Assignment: No Strategic Selection</a></li>
+<li class="toc-sub"><a href="#section-57">Hero Symbol Override</a></li>
+<li class="toc-sub"><a href="#section-58">Liveness Guarantee</a></li>
+<li><a href="#section-59">Appendix D: Attack Vector Analysis</a></li>
+<li class="toc-sub"><a href="#section-60">Attack 1: Sybil Attack on Activity Score</a></li>
+<li class="toc-sub"><a href="#section-61">Attack 2: Degenerette Pool Drain</a></li>
+<li class="toc-sub"><a href="#section-62">Attack 3: Affiliate Self-Referral Loop</a></li>
+<li class="toc-sub"><a href="#section-63">Attack 4: stETH Depeg Event</a></li>
+</ul></nav>
+
+<p><strong>Working Paper, Draft for Review</strong></p>
+<hr />
+<h2 id="section-1">Abstract</h2>
+<p>Different player types in Degenerus Protocol pursue different rewards and, in doing so, generate positive externalities for each other. Entertainment seekers fund prize pools through lootbox and Degenerette purchases. Strategic players optimize engagement to extract monetary value. Whales inject capital through passes and earn compounding returns. Affiliates recruit players for commission income. This cross-subsidy structure, combined with commitment devices (future tickets, streaks, auto-compounding) and a prize pool that can only grow, creates structural resistance to death spirals. The protocol is zero-rake: player deposits are locked, converted to stETH (~2.5% APR yield), and redistributed as prizes. No outside entity extracts an ongoing percentage. This paper formalizes these dynamics, characterizes equilibria, and identifies the conditions under which the system's resilience holds.</p>
+<hr />
+<h2 id="section-2">1. Introduction</h2>
+<p>Traditional gambling systems operate under a well-understood extractive model: the operator takes a large cut of every dollar wagered (40-60% in state lotteries, 2-15% in casinos), and players accept deeply negative expected value in exchange for entertainment and variance. This model is sustainable but adversarial: the operator profits from player losses, creating a negative-sum dynamic for participants.</p>
+<p>Degenerus Protocol proposes a structural alternative: a <em>zero-rake</em> gaming system where no outside entity extracts value from player deposits. Deposits are locked, converted to Lido staked ETH (stETH), and redistributed entirely as prizes to other players. The stETH earns approximately 2.5% annual yield, which is the only external value entering the system. Prizes are funded primarily by other players' deposits, with yield providing a small positive-sum margin. This architectural choice transforms the underlying game from negative-sum to slightly positive-sum for the player pool as a whole, introducing fundamentally different strategic dynamics.</p>
+<p>This paper analyzes these dynamics. We are interested in three central questions:</p>
+<ol>
+<li>
+<p><strong>Dominant strategies and stability.</strong> Does the game possess dominant strategies? Are they stable under perturbation? What strategy profiles constitute equilibria?</p>
+</li>
+<li>
+<p><strong>Incentive alignment.</strong> Does the mechanism design ensure that individually rational behavior by each player type strengthens rather than weakens the system? Under what conditions might incentives become misaligned?</p>
+</li>
+<li>
+<p><strong>Robustness and resilience.</strong> How does the system withstand adversarial behavior, coordinated attacks, player exodus, and extreme market conditions? What structural properties make it resistant to death spirals?</p>
+</li>
+</ol>
+<p>Before diving into formalism, here is the paper's central argument in plain language: <strong>Degenerus Protocol works because different types of players want different things, and getting what they want individually produces collective goods.</strong> Entertainment seekers buy lottery tickets and lootboxes for the thrill, funding the prize pools in the process. Strategic players optimize their engagement to extract monetary value from those pools. Whales lock large capital into passes that only pay out over time, publicly demonstrating long-term commitment to the system in exchange for compounding returns. Affiliates recruit and retain players, growing the participant base for commission income. Each group's self-interested behavior produces something the others need: degens fund profitability for the rest of the ecosystem, strategists drive progression, whales seed jackpots and lock capital that stabilizes the prize pools, and affiliates bring in the new players the system needs to grow. The yield from stETH injects external value that makes the whole system positive-sum. And the commitment devices (future tickets, quest streaks, auto-compounding) create a ratchet that makes continued participation the dominant strategy for anyone already engaged.</p>
+<p>That is the thesis. The rest of this paper formalizes it, stress-tests it, and maps its limitations.</p>
+<p><strong>Try it yourself.</strong> The demo below shows four consecutive daily jackpot draws. Click "Next Day" to cycle through scenarios. Each day, four random traits are drawn and lock into a 4-quadrant grid. If you hold tickets matching those traits, scratch to reveal your prizes (ETH, future tickets, or BURNIE). Click the center flame to skip the animation. This is a beta mockup for illustration only; the final UX will differ.</p>
+<!-- Interactive Jackpot Demo Widget -->
+<style>
+  .demo-wrap {
+    background: #14141a;
+    border-radius: 12px;
+    padding: 1.5rem 1rem 1rem;
+    margin: 2rem auto;
+    max-width: 420px;
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #e0e0e0;
+  }
+  .demo-wrap * { box-sizing: border-box; }
+
+  .demo-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #f5a623;
+    margin-bottom: 0.15rem;
+    letter-spacing: 0.03em;
+  }
+  .demo-scenario {
+    font-size: 0.72rem;
+    color: #aaa;
+    margin-bottom: 0.8rem;
+    height: 3.1em;
+    line-height: 1.4;
+    overflow: hidden;
+  }
+
+  /* Token grid */
+  .demo-token-wrap { display: flex; justify-content: center; }
+  .demo-token {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    width: 300px;
+    height: 300px;
+    position: relative;
+    background: #d9d9d9;
+    border: 3px solid #8a8d8f;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .demo-token::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    width: 2px; height: 100%;
+    background: #8a8d8f;
+    transform: translateX(-50%);
+    z-index: 5;
+    pointer-events: none;
+  }
+  .demo-token::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 0;
+    width: 100%; height: 2px;
+    background: #8a8d8f;
+    transform: translateY(-50%);
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  /* Quadrants */
+  .demo-quad {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+  .demo-quad.q-scratchable { background: #7ca8c4; }
+  .demo-quad.q-has-trait { background: rgba(160, 200, 230, 0.65); }
+  .demo-quad.q-has-tickets { background: rgba(22, 163, 74, 0.6); }
+  .demo-quad.q-no-tickets { background: rgba(239, 120, 120, 0.5); }
+
+  .demo-badge {
+    object-fit: contain;
+    width: 92%;
+    height: 92%;
+    display: block;
+    position: relative;
+    z-index: 1;
+  }
+
+
+  /* Scratch canvas */
+  .demo-scratch-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 2;
+    cursor: crosshair;
+    touch-action: none;
+  }
+
+  /* Prize reveal overlay */
+  .demo-prize-reveal {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: stretch;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+  }
+  .demo-prize-reveal.visible { opacity: 1; }
+  .demo-prize-bar {
+    padding: 4px 0;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+  }
+  .demo-prize-bar .demo-prize-total {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    line-height: 1.2;
+  }
+
+  /* Scattered win badges */
+  .demo-badge-wrap {
+    position: absolute;
+    pointer-events: none;
+    z-index: 1;
+    text-align: center;
+  }
+  .demo-scattered-badge {
+    width: 100%;
+    display: block;
+    opacity: 0.85;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.25));
+    object-fit: contain;
+  }
+
+  /* Center diamond */
+  .demo-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+    pointer-events: auto;
+    cursor: pointer;
+    width: 31%;
+    height: 31%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .demo-center::before {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    width: calc(100% / 1.4142);
+    height: calc(100% / 1.4142);
+    background: #fff;
+    border: 2px solid #8a8d8f;
+    box-sizing: border-box;
+    transform: translate(-50%, -50%) rotate(45deg);
+    transition: background 0.4s ease, border-color 0.4s ease;
+  }
+  .demo-center.revealed::before {
+    background: linear-gradient(135deg, #2a1a08, #3d2a10, #2a1a08);
+    border-color: #c9943a;
+  }
+  .demo-flame {
+    position: relative;
+    width: 66%;
+    height: 66%;
+    object-fit: contain;
+    z-index: 1;
+  }
+  .demo-center.spinning .demo-flame {
+    animation: demo-flame-pulse 0.6s ease-in-out infinite;
+  }
+  @keyframes demo-flame-pulse {
+    0%, 100% { filter: brightness(1) sepia(0) saturate(1) hue-rotate(0deg); }
+    50% { filter: brightness(1.4) sepia(1) saturate(5) hue-rotate(-30deg); }
+  }
+
+  /* Center scratch canvas */
+  .demo-center-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 5;
+    display: none;
+    cursor: pointer;
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  }
+  .demo-center-prize {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 3;
+    text-align: center;
+    font-weight: 700;
+    line-height: 1.2;
+    display: none;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  .demo-center-prize.visible { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 1; }
+  .demo-center-prize .ff-amount {
+    font-size: 0.7rem;
+    display: block;
+    color: #fff;
+    text-shadow: 0 0 8px rgba(245, 166, 35, 0.8), 0 1px 2px rgba(0,0,0,0.5);
+    letter-spacing: 0.02em;
+  }
+  .demo-center-prize .ff-label {
+    font-size: 0.48rem;
+    color: rgba(255,255,255,0.7);
+    display: block;
+    margin-top: 1px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* Hint text */
+  .demo-hint {
+    margin-top: 0.6rem;
+    font-size: 0.68rem;
+    color: #888;
+    letter-spacing: 0.04em;
+    height: 1.2em;
+    overflow: hidden;
+    transition: opacity 0.3s;
+  }
+
+  /* Next Day button */
+  .demo-controls {
+    margin-top: 0.8rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  .demo-next-btn {
+    padding: 0.45rem 1.4rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    border: 1px solid #f5a623;
+    border-radius: 6px;
+    background: rgba(245, 166, 35, 0.15);
+    color: #f5a623;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .demo-next-btn:hover {
+    background: rgba(245, 166, 35, 0.3);
+    transform: translateY(-1px);
+  }
+  .demo-next-btn:active { transform: translateY(0); }
+  .demo-next-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+</style>
+
+<div class="demo-wrap" id="demo-wrap">
+  <div class="demo-title" id="demo-title">Jackpot Preview</div>
+  <div class="demo-scenario" id="demo-scenario">Press Next Day to start the demo.</div>
+  <div class="demo-token-wrap">
+    <div class="demo-token" id="demo-token">
+      <div class="demo-quad" data-q="0">
+        <img class="demo-badge" src="" alt="" />
+        <div class="demo-prize-reveal" data-q="0"></div>
+        <canvas class="demo-scratch-canvas" data-q="0"></canvas>
+      </div>
+      <div class="demo-quad" data-q="1">
+        <img class="demo-badge" src="" alt="" />
+        <div class="demo-prize-reveal" data-q="1"></div>
+        <canvas class="demo-scratch-canvas" data-q="1"></canvas>
+      </div>
+      <div class="demo-quad" data-q="2">
+        <img class="demo-badge" src="" alt="" />
+        <div class="demo-prize-reveal" data-q="2"></div>
+        <canvas class="demo-scratch-canvas" data-q="2"></canvas>
+      </div>
+      <div class="demo-quad" data-q="3">
+        <img class="demo-badge" src="" alt="" />
+        <div class="demo-prize-reveal" data-q="3"></div>
+        <canvas class="demo-scratch-canvas" data-q="3"></canvas>
+      </div>
+      <div class="demo-center" id="demo-center">
+        <img src="specials/special_none.svg" alt="Flame" class="demo-flame" />
+        <div class="demo-center-prize" id="demo-center-prize"></div>
+        <canvas class="demo-center-canvas" id="demo-center-canvas"></canvas>
+      </div>
+    </div>
+  </div>
+  <p class="demo-hint" id="demo-hint"></p>
+  <div class="demo-controls">
+    <button class="demo-next-btn" id="demo-next-btn">Next Day &#x2192;</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ---- Constants ----
+  var CATEGORIES = ['crypto', 'zodiac', 'cards', 'dice'];
+  var SYMBOLS = {
+    crypto: ['xrp', 'tron', 'sui', 'monero', 'solana', 'chainlink', 'ethereum', 'bitcoin'],
+    zodiac: ['aries', 'taurus', 'gemini', 'cancer', 'leo', 'libra', 'sagittarius', 'aquarius'],
+    cards: ['club', 'diamond', 'heart', 'spade', 'horseshoe', 'cashsack', 'king', 'ace'],
+    dice: ['1', '2', '3', '4', '5', '6', '7', '8']
+  };
+  var COLORS = ['pink', 'purple', 'green', 'red', 'blue', 'orange', 'silver', 'gold'];
+  var CARD_IDX = [3, 4, 5, 6, 0, 2, 1, 7];
+  var BRUSH_R = 22;
+  var REVEAL_THRESHOLD = 0.75;
+
+  // ---- Scenario Data ----
+  // Each scenario: { title, desc, target: [{q,sym,col}x4], owned: [bool x4],
+  //                  prizes: [[amt,type,q],...], centerWins: [...] }
+  var SCENARIOS = [
+    {
+      title: 'Day 1 of 4: Big Win',
+      desc: 'You own tickets matching 3 of 4 drawn traits. Scratch to reveal your prizes.',
+      // drawn: bitcoin_gold, gemini_pink, spade_blue, dice6_red
+      target: [
+        { q: 0, sym: 7, col: 7 },  // bitcoin gold
+        { q: 1, sym: 2, col: 0 },  // gemini pink
+        { q: 2, sym: 3, col: 4 },  // spade blue
+        { q: 3, sym: 5, col: 3 }   // dice6 red
+      ],
+      owned: [true, true, false, true],
+      // prizes: [amount, type, quadrant]
+      prizes: [
+        [1.24, 'eth', 0],
+        [0.87, 'eth', 0],
+        [3, 'tickets', 0, 4],
+        [0.52, 'eth', 1],
+        [2, 'tickets', 1, 5],
+        [0.31, 'eth', 3],
+        [2, 'tickets', 3, 6],
+        [1, 'tickets', 3, 7]
+      ],
+      centerWins: []
+    },
+    {
+      title: 'Day 2 of 4: Scratch, But No Luck',
+      desc: 'You own matching tickets in 2 quadrants, but the jackpot did not pick yours this draw.',
+      // drawn: ethereum_blue, leo_gold, heart_red, dice3_green
+      target: [
+        { q: 0, sym: 6, col: 4 },  // ethereum blue
+        { q: 1, sym: 4, col: 7 },  // leo gold
+        { q: 2, sym: 2, col: 3 },  // heart red
+        { q: 3, sym: 2, col: 2 }   // dice3 green
+      ],
+      owned: [true, false, true, false],
+      prizes: [],  // no wins this draw
+      centerWins: []
+    },
+    {
+      title: 'Day 3 of 4: No Matching Traits',
+      desc: 'You have tickets, but none of your traits match what the jackpot drew today. All red.',
+      // drawn: solana_purple, aries_red, ace_gold, dice8_silver
+      target: [
+        { q: 0, sym: 4, col: 1 },  // solana purple
+        { q: 1, sym: 0, col: 3 },  // aries red
+        { q: 2, sym: 7, col: 7 },  // ace gold
+        { q: 3, sym: 7, col: 6 }   // dice8 silver
+      ],
+      owned: [false, false, false, false],
+      prizes: [],
+      centerWins: []
+    },
+    {
+      title: 'Day 4 of 4: Future Tickets + BURNIE',
+      desc: 'You match 2 quadrants. Prizes include future level tickets. Your far-future tickets earned a BURNIE draw in the center diamond.',
+      // drawn: xrp_pink, aquarius_blue, diamond_orange, dice1_silver
+      target: [
+        { q: 0, sym: 0, col: 0 },  // xrp pink
+        { q: 1, sym: 7, col: 4 },  // aquarius blue
+        { q: 2, sym: 1, col: 5 },  // diamond orange
+        { q: 3, sym: 0, col: 6 }   // dice1 silver
+      ],
+      owned: [true, false, true, false],
+      prizes: [
+        [3, 'tickets', 0, 5],
+        [1, 'tickets', 0, 8],
+        [2, 'tickets', 2, 6]
+      ],
+      centerWins: [
+        [247, 'burnie', -2, 12]
+      ]
+    }
+  ];
+
+  var currentDay = 0;
+  var animId = 0;
+  var scratched = [false, false, false, false];
+  var greenRevealed = [false, false, false, false];
+  var badgesRevealed = [[], [], [], []]; // per-badge tracking within each quadrant
+  var quadPrizes = [false, false, false, false];
+  var quadWinArrays = [[], [], [], []];
+  var mouseIsDown = false;
+  // Grid-based scratch coverage tracking (avoids double-counting overlapping strokes)
+  var GRID_RES = 40; // 40x40 cells per quadrant
+  var CENTER_GRID_RES = 20;
+  var scratchGrids = [null, null, null, null];
+  var centerScratchGrid = null;
+
+  function makeScratchGrid(res) { return new Uint8Array(res * res); }
+
+  function markGridCells(grid, res, canvasW, canvasH, cx, cy, brushR) {
+    // Map canvas coords to grid coords and mark cells within brush radius
+    var cellW = canvasW / res, cellH = canvasH / res;
+    var gridCX = cx / cellW, gridCY = cy / cellH;
+    var gridR = brushR / Math.min(cellW, cellH);
+    var minGX = Math.max(0, Math.floor(gridCX - gridR));
+    var maxGX = Math.min(res - 1, Math.ceil(gridCX + gridR));
+    var minGY = Math.max(0, Math.floor(gridCY - gridR));
+    var maxGY = Math.min(res - 1, Math.ceil(gridCY + gridR));
+    for (var gy = minGY; gy <= maxGY; gy++) {
+      for (var gx = minGX; gx <= maxGX; gx++) {
+        var dx = gx + 0.5 - gridCX, dy = gy + 0.5 - gridCY;
+        if (dx * dx + dy * dy <= gridR * gridR) {
+          grid[gy * res + gx] = 1;
+        }
+      }
+    }
+  }
+
+  function gridCoverage(grid) {
+    var cleared = 0;
+    for (var i = 0; i < grid.length; i++) { if (grid[i]) cleared++; }
+    return cleared / grid.length;
+  }
+  var quadBadgeBounds = [null, null, null, null];
+  var quadOwned = [false, false, false, false];
+  var finalTicket = null;
+  var centerWins = [];
+  var centerScratched = false;
+  var hasTicketsState = false;
+  var scratchNode = null;
+  var audioCtx = null;
+  var spinning = false;
+
+  // ---- Badge path helper ----
+  function badgePath(q, sym, col) {
+    var cat = CATEGORIES[q];
+    var idx = cat === 'cards' ? CARD_IDX[sym] : sym;
+    return 'badges-circular/' + cat + '_0' + idx + '_' + SYMBOLS[cat][sym] + '_' + COLORS[col] + '.svg';
+  }
+
+  function randomTrait() {
+    return { sym: Math.floor(Math.random() * 8), col: Math.floor(Math.random() * 8) };
+  }
+
+  // ---- Sound effects (Web Audio) ----
+  function getAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function sfxTick(lockCount) {
+    var ctx = getAudio();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 400 + (lockCount / 8) * 500;
+    osc.type = 'square';
+    gain.gain.setValueAtTime(0.06, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.06);
+  }
+
+  function sfxLock(owned) {
+    var ctx = getAudio();
+    if (owned) {
+      var o1 = ctx.createOscillator(), g1 = ctx.createGain();
+      o1.connect(g1); g1.connect(ctx.destination);
+      o1.frequency.value = 660; o1.type = 'sine';
+      g1.gain.setValueAtTime(0.12, ctx.currentTime);
+      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.15);
+      var o2 = ctx.createOscillator(), g2 = ctx.createGain();
+      o2.connect(g2); g2.connect(ctx.destination);
+      o2.frequency.value = 880; o2.type = 'sine';
+      g2.gain.setValueAtTime(0.12, ctx.currentTime + 0.08);
+      g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+      o2.start(ctx.currentTime + 0.08); o2.stop(ctx.currentTime + 0.22);
+    } else {
+      var osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(180, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.12);
+      osc.type = 'triangle';
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15);
+    }
+  }
+
+  function sfxAllLocked(anyOwned) {
+    var ctx = getAudio();
+    if (anyOwned) {
+      var o1 = ctx.createOscillator(), g1 = ctx.createGain();
+      o1.connect(g1); g1.connect(ctx.destination);
+      o1.frequency.setValueAtTime(200, ctx.currentTime);
+      o1.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.15);
+      o1.type = 'sine';
+      g1.gain.setValueAtTime(0.18, ctx.currentTime);
+      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+      o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.2);
+      var o2 = ctx.createOscillator(), g2 = ctx.createGain();
+      o2.connect(g2); g2.connect(ctx.destination);
+      o2.frequency.value = 1320; o2.type = 'sine';
+      g2.gain.setValueAtTime(0.06, ctx.currentTime + 0.05);
+      g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      o2.start(ctx.currentTime + 0.05); o2.stop(ctx.currentTime + 0.5);
+    } else {
+      var o1 = ctx.createOscillator(), g1 = ctx.createGain();
+      o1.connect(g1); g1.connect(ctx.destination);
+      o1.frequency.setValueAtTime(120, ctx.currentTime);
+      o1.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.3);
+      o1.type = 'sawtooth';
+      g1.gain.setValueAtTime(0.1, ctx.currentTime);
+      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.35);
+    }
+  }
+
+  function sfxScratchStart() {
+    if (scratchNode) return;
+    var ctx = getAudio();
+    var buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    var data = buf.getChannelData(0);
+    for (var i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    var noise = ctx.createBufferSource();
+    var filter = ctx.createBiquadFilter();
+    var gain = ctx.createGain();
+    noise.buffer = buf; noise.loop = true;
+    filter.type = 'bandpass'; filter.frequency.value = 3000; filter.Q.value = 0.5;
+    noise.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+    gain.gain.value = 0.04;
+    noise.start();
+    scratchNode = { noise: noise, gain: gain };
+  }
+
+  function sfxScratchStop() {
+    if (!scratchNode) return;
+    try { scratchNode.noise.stop(); } catch (e) {}
+    scratchNode = null;
+  }
+
+  function sfxGreenReveal() {
+    var ctx = getAudio();
+    var osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.05);
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.3);
+  }
+
+  function sfxReveal(isWin) {
+    var ctx = getAudio();
+    var osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    if (isWin) {
+      osc.frequency.setValueAtTime(600, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1400, ctx.currentTime + 0.25);
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.35);
+    } else {
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.setValueAtTime(349, ctx.currentTime + 0.2);
+      osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.6);
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime + 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.6);
+    }
+  }
+
+  function sfxFanfare() {
+    var ctx = getAudio();
+    var notes = [523, 659, 784, 1047];
+    for (var i = 0; i < notes.length; i++) {
+      (function (freq, delay) {
+        var osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = freq; osc.type = 'sine';
+        gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+        gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + delay + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.4);
+        osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + 0.4);
+      })(notes[i], i * 0.12);
+    }
+  }
+
+  // ---- DOM helpers ----
+  function $(id) { return document.getElementById(id); }
+  function getQuads() { return document.querySelectorAll('#demo-token .demo-quad'); }
+  function getCanvas(qi) { return document.querySelector('#demo-token .demo-scratch-canvas[data-q="' + qi + '"]'); }
+  function getPrize(qi) { return document.querySelector('#demo-token .demo-prize-reveal[data-q="' + qi + '"]'); }
+
+  function renderBadges(ticket) {
+    var quads = getQuads();
+    for (var i = 0; i < 4; i++) {
+      var img = quads[i].querySelector('.demo-badge');
+      if (img) img.src = badgePath(ticket[i].q, ticket[i].sym, ticket[i].col);
+    }
+  }
+
+  function clearColors() {
+    var quads = getQuads();
+    for (var i = 0; i < 4; i++) {
+      quads[i].classList.remove('q-has-trait', 'q-has-tickets', 'q-no-tickets', 'q-scratchable');
+    }
+  }
+
+  function clearScatteredBadges() {
+    var els = document.querySelectorAll('#demo-token .demo-badge-wrap');
+    for (var i = 0; i < els.length; i++) els[i].remove();
+  }
+
+
+  // ---- Prize display ----
+  function formatWin(amount, type) {
+    if (type === 'burnie') {
+      if (amount >= 1000) return Math.round(amount).toLocaleString() + ' BURNIE';
+      if (amount >= 1) return amount.toFixed(2).replace(/\.?0+$/, '') + ' BURNIE';
+      return amount.toFixed(4).replace(/\.?0+$/, '') + ' BURNIE';
+    }
+    if (type === 'tickets') return amount + ' ticket' + (amount !== 1 ? 's' : '');
+    var s;
+    if (amount >= 1) s = amount.toFixed(2);
+    else if (amount >= 0.01) s = amount.toFixed(4);
+    else s = amount.toFixed(6);
+    return s.replace(/\.?0+$/, '') + ' ETH';
+  }
+
+  function summarizeWins(wins) {
+    var totals = {};
+    var ticketsByLevel = {};
+    for (var i = 0; i < wins.length; i++) {
+      var type = wins[i][1];
+      if (!totals[type]) totals[type] = 0;
+      totals[type] += wins[i][0];
+      if (type === 'tickets' && wins[i].length > 3) {
+        var lv = wins[i][3];
+        if (!ticketsByLevel[lv]) ticketsByLevel[lv] = 0;
+        ticketsByLevel[lv] += wins[i][0];
+      }
+    }
+    var lines = [];
+    if (totals.eth) lines.push(formatWin(totals.eth, 'eth'));
+    if (totals.burnie) lines.push(formatWin(totals.burnie, 'burnie'));
+    var lvKeys = Object.keys(ticketsByLevel).sort(function (a, b) { return a - b; });
+    if (lvKeys.length > 0) {
+      for (var li = 0; li < lvKeys.length; li++) {
+        lines.push(ticketsByLevel[lvKeys[li]] + ' tix \u2192 L' + lvKeys[li]);
+      }
+    } else if (totals.tickets) {
+      lines.push(formatWin(totals.tickets, 'tickets'));
+    }
+    return lines;
+  }
+
+  function distributePrizes(scenario) {
+    var counts = [0, 0, 0, 0];
+    var winArrays = [[], [], [], []];
+    var regular = [];
+    centerWins = [];
+    for (var i = 0; i < scenario.prizes.length; i++) {
+      if (scenario.prizes[i][2] === -2) {
+        centerWins.push(scenario.prizes[i]);
+      } else {
+        regular.push(scenario.prizes[i]);
+      }
+    }
+    if (scenario.centerWins) {
+      for (var i = 0; i < scenario.centerWins.length; i++) {
+        centerWins.push(scenario.centerWins[i]);
+      }
+    }
+    for (var i = 0; i < regular.length; i++) {
+      var q = regular[i][2];
+      if (q >= 0 && q <= 3) {
+        counts[q]++;
+        winArrays[q].push(regular[i]);
+      }
+    }
+    for (var i = 0; i < 4; i++) {
+      quadPrizes[i] = counts[i] > 0;
+      quadWinArrays[i] = winArrays[i];
+    }
+  }
+
+  function placeWinBadges(qIdx) {
+    var quad = getQuads()[qIdx];
+    var wins = quadWinArrays[qIdx];
+    if (!wins || wins.length <= 0) return;
+    var sym = finalTicket ? finalTicket[qIdx].sym : 0;
+    var col = finalTicket ? finalTicket[qIdx].col : 0;
+    var path = badgePath(qIdx, sym, col);
+    var count = wins.length;
+    var maxSize, minSize;
+    if (count === 1) { minSize = 30; maxSize = 65; }
+    else if (count <= 3) { minSize = 25; maxSize = 50; }
+    else { minSize = 20; maxSize = 40; }
+
+    var placed = [];
+    var allBounds = [];
+    for (var w = 0; w < wins.length; w++) {
+      var sizePct = minSize + (w / Math.max(1, wins.length - 1)) * (maxSize - minSize);
+      if (wins.length === 1) sizePct = maxSize;
+      var bestLeft = null, bestTop = null, bestOverlap = Infinity;
+      for (var a = 0; a < 50; a++) {
+        var tryLeft = Math.random() * (100 - sizePct);
+        var tryTop = Math.random() * (90 - sizePct);
+        var tryCX = tryLeft + sizePct / 2;
+        var tryCY = tryTop + sizePct / 2;
+        var overlap = 0;
+        for (var p = 0; p < placed.length; p++) {
+          var dx = tryCX - placed[p].cx, dy = tryCY - placed[p].cy;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          var minDist = (sizePct + placed[p].size) / 2;
+          if (dist < minDist) overlap += minDist - dist;
+        }
+        if (overlap < bestOverlap) { bestOverlap = overlap; bestLeft = tryLeft; bestTop = tryTop; }
+        if (overlap === 0) break;
+      }
+      placed.push({ cx: bestLeft + sizePct / 2, cy: bestTop + sizePct / 2, size: sizePct });
+      allBounds.push({ left: bestLeft, top: bestTop, right: bestLeft + sizePct, bottom: bestTop + sizePct });
+      var wrap = document.createElement('div');
+      wrap.className = 'demo-badge-wrap';
+      wrap.style.width = sizePct + '%';
+      wrap.style.left = bestLeft + '%';
+      wrap.style.top = bestTop + '%';
+      var img = document.createElement('img');
+      img.src = path; img.className = 'demo-scattered-badge'; img.alt = '';
+      wrap.appendChild(img);
+      quad.appendChild(wrap);
+    }
+    var circles = [];
+    for (var b = 0; b < allBounds.length; b++) {
+      var bb = allBounds[b];
+      circles.push({ cx: (bb.left + bb.right) / 2, cy: (bb.top + bb.bottom) / 2, r: (bb.right - bb.left) / 2 });
+    }
+    quadBadgeBounds[qIdx] = circles;
+  }
+
+  // ---- Canvas scratch ----
+  function drawCover(canvas) {
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    var grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, '#d0d0d0'); grad.addColorStop(0.3, '#c8c8c8');
+    grad.addColorStop(0.6, '#b0b0b0'); grad.addColorStop(1, '#c0c0c0');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+    ctx.globalAlpha = 0.07;
+    for (var y = 0; y < h; y += 4) {
+      ctx.strokeStyle = (y % 8 === 0) ? '#fff' : '#888';
+      ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawBadgeCover(canvas, badgeSrc) {
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#b8d4e8';
+    ctx.fillRect(0, 0, w, h);
+    var img = new Image();
+    img.onload = function () {
+      var size = Math.min(w, h) * 0.92;
+      var x = (w - size) / 2, y = (h - size) / 2;
+      ctx.drawImage(img, x, y, size, size);
+    };
+    img.src = badgeSrc;
+  }
+
+  function initCanvas(canvas) {
+    var quad = canvas.parentElement;
+    var rect = quad.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    drawCover(canvas);
+  }
+
+  function initCanvasWithBadge(canvas, badgeSrc) {
+    var quad = canvas.parentElement;
+    var rect = quad.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    drawBadgeCover(canvas, badgeSrc);
+  }
+
+  function scratchAt(canvas, cx, cy) {
+    var dpr = window.devicePixelRatio || 1;
+    var r = BRUSH_R * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function clearedFraction(canvas) {
+    var ctx = canvas.getContext('2d');
+    var data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    var total = canvas.width * canvas.height;
+    var cleared = 0;
+    for (var i = 3; i < data.length; i += 4) { if (data[i] < 20) cleared++; }
+    return cleared / total;
+  }
+
+  function revealQuadrant(qIdx) {
+    if (scratched[qIdx]) return;
+    scratched[qIdx] = true;
+    sfxScratchStop();
+    var canvas = getCanvas(qIdx);
+    var prize = getPrize(qIdx);
+    canvas.style.transition = 'opacity 0.35s ease';
+    canvas.style.opacity = '0';
+    canvas.style.pointerEvents = 'none';
+    var isWin = quadPrizes[qIdx];
+    sfxReveal(isWin);
+    var quad = getQuads()[qIdx];
+    quad.classList.remove('q-scratchable');
+    if (isWin) {
+      quad.classList.add('q-has-tickets');
+    } else {
+      quad.classList.add('q-no-tickets');
+      var mainBadge = quad.querySelector('.demo-badge');
+      if (mainBadge) mainBadge.style.display = '';
+    }
+    if (prize && isWin) {
+      var lines = summarizeWins(quadWinArrays[qIdx]);
+      prize.innerHTML = '<div class="demo-prize-bar">' +
+        lines.map(function (l) { return '<span class="demo-prize-total">' + l + '</span>'; }).join('') +
+        '</div>';
+      prize.classList.remove('visible');
+      setTimeout(function () { prize.classList.add('visible'); }, 200);
+    }
+    checkAllScratched();
+  }
+
+  // ---- Center scratch ----
+  function hideCenterScratch() {
+    var canvas = $('demo-center-canvas');
+    var prize = $('demo-center-prize');
+    var flame = document.querySelector('.demo-flame');
+    var center = $('demo-center');
+    if (canvas) { canvas.style.display = 'none'; canvas.style.opacity = '1'; canvas.style.pointerEvents = 'auto'; }
+    if (prize) { prize.style.display = 'none'; prize.innerHTML = ''; prize.classList.remove('visible'); }
+    if (flame) { flame.style.display = ''; flame.style.filter = ''; }
+    if (center) { center.classList.remove('revealed'); }
+  }
+
+  function showCenterScratch() {
+    var canvas = $('demo-center-canvas');
+    if (!canvas) return;
+    var center = canvas.parentElement;
+    var rect = center.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    var flame = document.querySelector('.demo-flame');
+    if (flame) flame.style.display = 'none';
+
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width, h = canvas.height;
+    // Dark background
+    ctx.fillStyle = '#0a1e1a';
+    ctx.fillRect(0, 0, w, h);
+    // Draw the flame (same SVG as degenerette win center) with green tint
+    var img = new Image();
+    img.onload = function () {
+      var size = Math.min(w, h) * 0.7;
+      // Draw flame with green colorization
+      ctx.filter = 'sepia(1) saturate(3) hue-rotate(120deg) brightness(1.4)';
+      ctx.drawImage(img, (w - size) / 2, (h - size) / 2, size, size);
+      ctx.filter = 'none';
+    };
+    img.src = 'specials/special_none.svg';
+    canvas.style.display = 'block';
+  }
+
+  function revealCenter() {
+    if (centerScratched || centerWins.length === 0) return;
+    centerScratched = true;
+    sfxGreenReveal();
+    var canvas = $('demo-center-canvas');
+    var prize = $('demo-center-prize');
+    // Darken diamond background so prize text is readable
+    var center = $('demo-center');
+    if (center) center.classList.add('revealed');
+    if (canvas) {
+      canvas.style.transition = 'opacity 0.35s ease';
+      canvas.style.opacity = '0';
+      canvas.style.pointerEvents = 'none';
+    }
+    if (prize) {
+      var totalBurnie = 0;
+      var levels = [];
+      for (var i = 0; i < centerWins.length; i++) {
+        totalBurnie += centerWins[i][0];
+        if (centerWins[i].length > 3 && levels.indexOf(centerWins[i][3]) === -1) levels.push(centerWins[i][3]);
+      }
+      var amountStr = formatWin(totalBurnie, 'burnie');
+      var levelStr = levels.length > 0 ? 'L' + levels.sort(function (a, b) { return a - b; }).join(', L') : 'Far Future';
+      prize.innerHTML = '<span class="ff-amount">' + amountStr + '</span><span class="ff-label">' + levelStr + '</span>';
+      prize.style.display = 'block';
+      prize.classList.remove('visible');
+      setTimeout(function () { prize.classList.add('visible'); }, 200);
+    }
+    checkAllScratched();
+  }
+
+  function checkAllScratched() {
+    var centerPending = centerWins.length > 0 && !centerScratched;
+    var all = scratched[0] && scratched[1] && scratched[2] && scratched[3] && !centerPending;
+    var hint = $('demo-hint');
+    if (all) {
+      if (hint) hint.textContent = '';
+      if (hasTicketsState) sfxFanfare();
+    } else {
+      var remaining = scratched.filter(function (s) { return !s; }).length;
+      if (centerPending) remaining++;
+      if (hint) hint.textContent = remaining + ' area' + (remaining !== 1 ? 's' : '') + ' left to scratch';
+    }
+  }
+
+  // ---- Scratch event wiring ----
+  function getCanvasPos(canvas, clientX, clientY) {
+    var rect = canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    return { x: (clientX - rect.left) * dpr, y: (clientY - rect.top) * dpr };
+  }
+
+  function wireCanvas(canvas, qIdx) {
+    var lastPos = null;
+    function onScratch(cx, cy) {
+      if (scratched[qIdx]) return;
+      sfxScratchStart();
+      var dpr = window.devicePixelRatio || 1;
+      var brushR = BRUSH_R * dpr;
+      scratchAt(canvas, cx, cy);
+      if (!scratchGrids[qIdx]) scratchGrids[qIdx] = makeScratchGrid(GRID_RES);
+      markGridCells(scratchGrids[qIdx], GRID_RES, canvas.width, canvas.height, cx, cy, brushR);
+      if (quadPrizes[qIdx] && quadBadgeBounds[qIdx]) {
+        var pctX = (cx / canvas.width) * 100;
+        var pctY = (cy / canvas.height) * 100;
+        var circles = quadBadgeBounds[qIdx];
+        for (var ci = 0; ci < circles.length; ci++) {
+          if (badgesRevealed[qIdx].indexOf(ci) !== -1) continue;
+          var ddx = pctX - circles[ci].cx, ddy = pctY - circles[ci].cy;
+          if (ddx * ddx + ddy * ddy <= circles[ci].r * circles[ci].r) {
+            badgesRevealed[qIdx].push(ci);
+            sfxGreenReveal();
+            if (!greenRevealed[qIdx]) {
+              greenRevealed[qIdx] = true;
+              var quad = getQuads()[qIdx];
+              quad.classList.remove('q-scratchable');
+              quad.classList.add('q-has-tickets');
+            }
+          }
+        }
+      }
+      if (lastPos) {
+        var dx = cx - lastPos.x, dy = cy - lastPos.y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        var steps = Math.max(1, Math.floor(dist / 4));
+        for (var s = 1; s < steps; s++) {
+          var ix = lastPos.x + dx * s / steps, iy = lastPos.y + dy * s / steps;
+          scratchAt(canvas, ix, iy);
+          markGridCells(scratchGrids[qIdx], GRID_RES, canvas.width, canvas.height, ix, iy, brushR);
+        }
+      }
+      lastPos = { x: cx, y: cy };
+      if (gridCoverage(scratchGrids[qIdx]) >= REVEAL_THRESHOLD) {
+        revealQuadrant(qIdx);
+      }
+    }
+    canvas.addEventListener('mousemove', function (e) {
+      if (scratched[qIdx]) return;
+      var p = getCanvasPos(canvas, e.clientX, e.clientY);
+      onScratch(p.x, p.y);
+    });
+    canvas.addEventListener('mouseleave', function () { lastPos = null; sfxScratchStop(); });
+    canvas.addEventListener('touchstart', function (e) {
+      if (scratched[qIdx]) return;
+      e.preventDefault(); lastPos = null;
+      var t = e.touches[0], p = getCanvasPos(canvas, t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchmove', function (e) {
+      if (scratched[qIdx]) return;
+      e.preventDefault();
+      var t = e.touches[0], p = getCanvasPos(canvas, t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchend', function () { lastPos = null; sfxScratchStop(); });
+  }
+
+  // Wire center scratch
+  function wireCenterCanvas() {
+    var canvas = $('demo-center-canvas');
+    if (!canvas) return;
+    var lastPos = null;
+    function onScratch(cx, cy) {
+      if (centerScratched) return;
+      sfxScratchStart();
+      var dpr = window.devicePixelRatio || 1;
+      var brushR = BRUSH_R * dpr;
+      scratchAt(canvas, cx, cy);
+      if (!centerScratchGrid) centerScratchGrid = makeScratchGrid(CENTER_GRID_RES);
+      markGridCells(centerScratchGrid, CENTER_GRID_RES, canvas.width, canvas.height, cx, cy, brushR);
+      if (lastPos) {
+        var dx = cx - lastPos.x, dy = cy - lastPos.y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        var steps = Math.max(1, Math.floor(dist / 4));
+        for (var s = 1; s < steps; s++) {
+          var ix = lastPos.x + dx * s / steps, iy = lastPos.y + dy * s / steps;
+          scratchAt(canvas, ix, iy);
+          markGridCells(centerScratchGrid, CENTER_GRID_RES, canvas.width, canvas.height, ix, iy, brushR);
+        }
+      }
+      lastPos = { x: cx, y: cy };
+      if (gridCoverage(centerScratchGrid) >= 0.5) {
+        revealCenter();
+      }
+    }
+    canvas.addEventListener('mousemove', function (e) {
+      if (centerScratched) return;
+      var p = getCanvasPos(canvas, e.clientX, e.clientY);
+      onScratch(p.x, p.y);
+    });
+    canvas.addEventListener('mouseleave', function () { lastPos = null; sfxScratchStop(); });
+    canvas.addEventListener('touchstart', function (e) {
+      if (centerScratched) return;
+      e.preventDefault(); lastPos = null;
+      var t = e.touches[0], p = getCanvasPos(canvas, t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchmove', function (e) {
+      if (centerScratched) return;
+      e.preventDefault();
+      var t = e.touches[0], p = getCanvasPos(canvas, t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchend', function () { lastPos = null; sfxScratchStop(); });
+  }
+
+  // ---- Spin animation ----
+  function animate(scenario) {
+    var myId = ++animId;
+    spinning = true;
+    $('demo-next-btn').disabled = true;
+    var target = scenario.target;
+    var lockedColors = [false, false, false, false];
+    var lockedSymbols = [false, false, false, false];
+    var locksDone = 0;
+    var totalLocks = 8;
+    var idleCount = 2 + Math.floor(Math.random() * 3);
+    var hasTickets = !scenario.noTickets;
+
+    quadOwned = scenario.owned.slice();
+    hasTicketsState = hasTickets;
+    scratched = [false, false, false, false];
+    greenRevealed = [false, false, false, false];
+    badgesRevealed = [[], [], [], []];
+    quadBadgeBounds = [null, null, null, null];
+    centerWins = [];
+    centerScratched = false;
+    scratchGrids = [null, null, null, null];
+    centerScratchGrid = null;
+    hideCenterScratch();
+    clearColors();
+    sfxScratchStop();
+
+    var flameCenter = $('demo-center');
+    if (flameCenter) flameCenter.classList.add('spinning');
+
+    if (hasTickets) distributePrizes(scenario);
+
+    // Reset canvases and prizes
+    var hint = $('demo-hint');
+    if (hint) hint.textContent = '';
+    clearScatteredBadges();
+    var mainBadges = document.querySelectorAll('#demo-token .demo-badge');
+    for (var mb = 0; mb < mainBadges.length; mb++) mainBadges[mb].style.display = '';
+
+    var quads = getQuads();
+    for (var i = 0; i < 4; i++) {
+      var canvas = getCanvas(i);
+      canvas.style.transition = 'none';
+      canvas.style.opacity = '0';
+      canvas.style.pointerEvents = 'none';
+      var prize = getPrize(i);
+      if (prize) { prize.classList.remove('visible'); prize.innerHTML = ''; }
+    }
+
+    function step() {
+      if (myId !== animId) return;
+      sfxTick(locksDone);
+      var display = [];
+      for (var i = 0; i < 4; i++) {
+        var r = randomTrait();
+        display.push({
+          q: i,
+          sym: lockedSymbols[i] ? target[i].sym : r.sym,
+          col: lockedColors[i] ? target[i].col : r.col
+        });
+      }
+      renderBadges(display);
+      for (var i = 0; i < 4; i++) {
+        quads[i].classList.remove('q-has-trait', 'q-no-tickets');
+        if (lockedSymbols[i]) {
+          quads[i].classList.add(quadOwned[i] ? 'q-has-trait' : 'q-no-tickets');
+        } else {
+          quads[i].classList.add(Math.random() < 0.5 ? 'q-has-trait' : 'q-no-tickets');
+        }
+      }
+      if (idleCount <= 0 && locksDone < totalLocks) {
+        var available = [];
+        for (var q = 0; q < 4; q++) {
+          if (!lockedColors[q]) available.push({ q: q, type: 'color' });
+          else if (!lockedSymbols[q]) available.push({ q: q, type: 'symbol' });
+        }
+        if (available.length > 0) {
+          var pick = available[Math.floor(Math.random() * available.length)];
+          if (pick.type === 'color') lockedColors[pick.q] = true;
+          else lockedSymbols[pick.q] = true;
+          locksDone++;
+          if (pick.type === 'symbol') sfxLock(quadOwned[pick.q]);
+          else sfxTick(locksDone);
+          idleCount = 2 + Math.floor(Math.random() * 3);
+        }
+      } else {
+        idleCount--;
+      }
+      if (locksDone >= totalLocks) {
+        var anyOwned = quadOwned[0] || quadOwned[1] || quadOwned[2] || quadOwned[3];
+        sfxAllLocked(anyOwned);
+        renderBadges(target);
+        finalTicket = target;
+        afterSpin(scenario);
+        return;
+      }
+      var delay = 80 + Math.floor((locksDone / totalLocks) * 120);
+      setTimeout(step, delay);
+    }
+    step();
+  }
+
+  function afterSpin(scenario) {
+    var quads = getQuads();
+    var hint = $('demo-hint');
+    var hasTickets = !scenario.noTickets;
+    var flameCenter = $('demo-center');
+    if (flameCenter) flameCenter.classList.remove('spinning');
+    spinning = false;
+    $('demo-scenario').textContent = scenario.desc;
+
+    if (!hasTickets) {
+      scratched = [true, true, true, true];
+      for (var i = 0; i < 4; i++) {
+        quads[i].classList.remove('q-has-trait');
+        quads[i].classList.add('q-no-tickets');
+      }
+      if (hint) hint.textContent = 'No tickets for this level';
+      $('demo-next-btn').disabled = false;
+      return;
+    }
+
+    var anyOwned = false;
+    for (var i = 0; i < 4; i++) {
+      quads[i].classList.remove('q-has-trait');
+      if (quadOwned[i]) {
+        anyOwned = true;
+        quads[i].classList.remove('q-no-tickets');
+        quads[i].classList.add('q-scratchable');
+        var canvas = getCanvas(i);
+        var badgeSrc = quads[i].querySelector('.demo-badge').src;
+        initCanvasWithBadge(canvas, badgeSrc);
+        canvas.style.transition = 'none';
+        canvas.style.opacity = '1';
+        canvas.style.pointerEvents = 'auto';
+      } else {
+        scratched[i] = true;
+        quads[i].classList.add('q-no-tickets');
+      }
+    }
+    for (var i = 0; i < 4; i++) {
+      if (quadOwned[i]) {
+        var mainBadge = quads[i].querySelector('.demo-badge');
+        mainBadge.style.display = 'none';
+        if (quadPrizes[i]) placeWinBadges(i);
+      }
+    }
+    if (centerWins.length > 0) {
+      showCenterScratch();
+      anyOwned = true;
+    }
+    if (anyOwned) {
+      if (hint) hint.textContent = 'Scratch to find your winners!';
+    } else {
+      if (hint) hint.textContent = 'No matching tickets this round';
+    }
+    // Enable next button after a short delay to let user scratch
+    setTimeout(function () { $('demo-next-btn').disabled = false; }, 500);
+  }
+
+  // ---- Init ----
+  function runDay(dayIndex) {
+    currentDay = dayIndex;
+    var scenario = SCENARIOS[dayIndex];
+    $('demo-title').textContent = scenario.title;
+    $('demo-scenario').textContent = '';
+    animate(scenario);
+  }
+
+  // Wire up events
+  for (var i = 0; i < 4; i++) wireCanvas(getCanvas(i), i);
+  wireCenterCanvas();
+
+  // Hide badge images on initial blank state
+  var initBadges = document.querySelectorAll('#demo-token .demo-badge');
+  for (var ib = 0; ib < initBadges.length; ib++) initBadges[ib].style.display = 'none';
+
+  // Global mouse button state tracking and AudioContext warm-up on first interaction
+  document.addEventListener('mousedown', function () {
+    mouseIsDown = true;
+    // Resume suspended AudioContext on any mouse press (required in some browsers)
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  });
+  document.addEventListener('mouseup', function () {
+    mouseIsDown = false;
+    sfxScratchStop();
+  });
+
+  // Skip animation on flame click
+  $('demo-center').addEventListener('click', function () {
+    if (!spinning) return;
+    animId++;
+    var scenario = SCENARIOS[currentDay];
+    var hasTickets = !scenario.noTickets;
+    spinning = false;
+    renderBadges(scenario.target);
+    finalTicket = scenario.target;
+    if (hasTickets) {
+      distributePrizes(scenario);
+    }
+    afterSpin(scenario);
+    // Auto-reveal all
+    for (var i = 0; i < 4; i++) revealQuadrant(i);
+    revealCenter();
+  });
+
+  // Next Day button
+  var started = false;
+  $('demo-next-btn').addEventListener('click', function () {
+    if (spinning) return;
+    if (!started) {
+      started = true;
+      runDay(0);
+    } else {
+      runDay((currentDay + 1) % SCENARIOS.length);
+    }
+  });
+})();
+</script>
+
+
+<p>The scenarios above illustrate <em>what happens</em>. The rest of this paper explains <em>why this structure is stable</em>.</p>
+<p><strong>The critical assumption.</strong> State lotteries and memecoins prove that people pay for gambling entertainment at massive scale, even with terrible odds. Degenerus offers this audience verifiably fair odds, 0% rake, and the possibility of positive EV through engagement. The affiliate program (Section 3.4) can bring players to the door, but it cannot make them stay if the product is not fun. Whether <em>this specific product</em> captures enough of that demand is an empirical question. The analysis that follows takes the entertainment condition as given: enough people find the game entertaining enough to play.</p>
+<p><strong>A note on source of returns.</strong> The surface similarities to a memecoin launch are real: degens chasing excitement, whales deploying capital, early participants with structural advantages, a creator holding a token allocation. But the source of returns is fundamentally different. A shitcoin's returns come from later buyers' capital; when the music stops, late entrants hold worthless tokens. Degenerus Protocol's returns come from stETH yield (external, real, perpetual) and from the voluntary spending of entertainment-seeking players getting a product they value. The prize pool cannot decrease. There is no rug to pull because funds are locked in a contract with no admin withdrawal function (the admin's only power is emergency VRF coordinator migration after a 3-day stall; see Section 7.3). Players who end up net negative lost to math and luck, not to fraud. The protocol does need ongoing deposits to keep advancing levels, and without them the game eventually ends. But the failure mode is fundamentally different: a shitcoin that stops growing leaves latecomers holding worthless tokens with no recourse. A Degenerus game that stops growing triggers a terminal distribution where all remaining funds are redistributed to participants through one last round of fair, high-variance jackpots (Section 8.7). Players may lose money, but they are never rugged. Section 9 explores these comparisons in detail.</p>
+<hr />
+<h2 id="section-3">2. The Core Idea: Cross-Subsidy Structure</h2>
+<h3 id="section-4">2.1 Heterogeneous Reward Structures</h3>
+<p>A critical departure from standard mechanism design: player types in this system optimize for <em>fundamentally different reward currencies</em>. Traditional game-theoretic analysis assumes a common utility denominator (typically money). In Degenerus Protocol, this assumption fails, and its failure is the engine of the system's sustainability.</p>
+<p>Each player's utility is a mix of two components: <strong>monetary payoff</strong> ($M$, net ETH. All other protocol assets are ultimately claims on future ETH) and <strong>non-monetary payoff</strong> ($\Psi$, primarily gambling entertainment: excitement, variance preference, near-miss dopamine, with secondary contributions from status, narrative participation, and community standing). Different player types weight these differently:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Monetary</th>
+<th>Non-monetary</th>
+<th>Primary Reward Currency</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Degen</td>
+<td>Low</td>
+<td><strong>High</strong></td>
+<td>Dopamine, excitement, the rush</td>
+</tr>
+<tr>
+<td>EV Maximizer</td>
+<td><strong>High</strong></td>
+<td>Low</td>
+<td>ETH returns</td>
+</tr>
+<tr>
+<td>Hybrid</td>
+<td>Medium</td>
+<td><strong>Medium</strong></td>
+<td>Thinks ETH returns, actually the rush</td>
+</tr>
+<tr>
+<td>Whale</td>
+<td>High</td>
+<td>Varies</td>
+<td>Status + returns</td>
+</tr>
+<tr>
+<td>Affiliate</td>
+<td><strong>High</strong></td>
+<td>Low</td>
+<td>Commission income</td>
+</tr>
+<tr>
+<td>Griefer</td>
+<td>Low</td>
+<td><strong>High</strong></td>
+<td>Protocol destruction</td>
+</tr>
+</tbody>
+</table>
+<p>Each type is rational <em>within their own weighting</em>: a degen who loses 0.01 ETH but gets a rush worth more than 0.01 ETH to them has made a rational decision. The Griefer is addressed in the robustness analysis (Sections 7–8).</p>
+<h3 id="section-5">2.2 Non-Monetary Utility</h3>
+<p>The critical assumption (Section 1) established that the system depends on entertainment value. Here we note what contributes to it. The primary source is gambling entertainment: lootbox anticipation, jackpot draws, near-miss excitement, Degenerette variance. The protocol also provides BURNIE, a token with a structural price ratchet (Section 6.1) that gives participants the "number go up" experience that drives memecoin engagement, backed by actual utility rather than hype. Status, narrative participation, and community belonging provide additional $\Psi$ for whales and engaged players. These are real but secondary.</p>
+<h3 id="section-6">2.3 The Cross-Subsidy Mechanism</h3>
+<p>The heterogeneous utility structure creates what we term a <strong>cross-subsidy structure</strong>: each actor type's pursuit of their primary reward currency generates positive externalities in a different reward dimension that benefits other types.</p>
+<div class="definition"><p><strong>Definition 2.1</strong> (Cross-Subsidy Structure). <em>A system has cross-subsidy structure when each player type, by doing what is best for themselves, produces something valuable for the other types as a side effect.</em></p>
+<p>The flow table below describes the cross-subsidy structure under the assumption that each type plays their type-optimal strategy (characterized in Section 3). Section 5.1 verifies that this constitutes a dominant strategy: no player type benefits from unilateral deviation, regardless of what other players do.</p>
+<p>Degenerus Protocol exhibits the following cross-subsidy flows:</p></div>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Player Gets</th>
+<th>System Gets</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Degenerette (ETH)</td>
+<td>$\Psi$ (thrill)</td>
+<td>ETH locked in pools</td>
+</tr>
+<tr>
+<td>Degenerette (BURNIE)</td>
+<td>$\Psi$ (thrill)</td>
+<td>BURNIE deflation</td>
+</tr>
+<tr>
+<td>Lootbox (degen)</td>
+<td>$\Psi$ (surprise)</td>
+<td>Sub-breakeven EV funds pool</td>
+</tr>
+<tr>
+<td>Lootbox (grinder)</td>
+<td>$M$ (+EV at max activity)</td>
+<td>ETH locked in pools</td>
+</tr>
+<tr>
+<td>Ticket purchase</td>
+<td>$\Psi$ (jackpot dream)</td>
+<td>ETH locked in pools</td>
+</tr>
+<tr>
+<td>Score maintenance</td>
+<td>Deferred $M$ (higher EV)</td>
+<td>ETH locked every level</td>
+</tr>
+<tr>
+<td>Deity pass</td>
+<td>$\Psi$ (status) + deferred $M$</td>
+<td>24+ ETH locked in pools</td>
+</tr>
+<tr>
+<td>BAF leaderboard</td>
+<td>$\Psi$ (competition) + $M$</td>
+<td>BURNIE deflation</td>
+</tr>
+<tr>
+<td>Affiliate referral</td>
+<td>Deferred $M$ (commissions)</td>
+<td>ETH via referred players</td>
+</tr>
+<tr>
+<td>Daily coinflip</td>
+<td>$\Psi$ (ritual) + deferred $M$</td>
+<td>BURNIE deflation</td>
+</tr>
+<tr>
+<td>Quest streak</td>
+<td>Deferred $M$ (score growth)</td>
+<td>ETH locked every day</td>
+</tr>
+<tr>
+<td>Deity boon</td>
+<td>$\Psi$ (patronage)</td>
+<td>ETH via boon recipients</td>
+</tr>
+</tbody>
+</table>
+<p><strong>A concrete example.</strong> Player A (a degen) spends 0.1 ETH on a Degenerette spin at zero activity score. At the protocol's configured 90% ROI for that activity level, they lose 0.01 ETH in expectation. That 0.01 ETH flows into the prize pool system. They receive entertainment in return: the 8-trait match resolution, the near-miss excitement, the 100,000x jackpot dream. Player B (an EV maximizer) has a 3.05 activity score and opens a 1 ETH lootbox. The protocol applies a 1.35x multiplier, so B's nominal expected value is 1.35 ETH from the pool (much of it as future tickets and tokens that pay out over time, not immediately). Whether B actually realizes this depends on pool composition (see aggregate constraint below). Player A got entertainment. Player B got profit. Neither depleted the other's reward: Player A's thrill is undiminished by Player B's extraction, and Player B's monetary return is funded by the prize pool (which Player A's spin helped fill), not by Player A's wallet directly. The system is not creating value from nothing. B's surplus comes from the aggregate pool, which is funded by deposits from players like A (plus stETH yield). If fewer A-type players deposit, B's pool shrinks accordingly.</p>
+<p><strong>The aggregate constraint.</strong> Each player has an <strong>activity score</strong> from 0 (new) to 3.05 (maximum), computed from engagement metrics (purchase consistency, quest streaks, affiliate activity, pass bonuses; formula in Appendix C). The score determines EV multipliers across all products: lootbox purchases range from below 1.0x at low activity to above 1.0x at high activity. The 1.35x multiplier at maximum activity score is a protocol parameter, not a guaranteed realized return. What a player actually receives depends on pool composition. There is an equilibrium activity score at which lootboxes become +EV. In a world where every player is a GTO maximizer and the only system yield is stETH, this breakeven point would be close to the maximum score (since the only surplus is yield). The more non-GTO players in the system, the further down the breakeven point falls, and the more profitable things are for everyone in the +EV cohort. What matters is the ETH volume on each side of this line, not the number of players. A single whale buying 10 ETH of lootboxes at low activity contributes more surplus than ten players buying 0.1 ETH each.</p>
+<p>The equilibrium self-corrects. If too many grinders extract above breakeven, the pool's surplus shrinks and realized returns decline. Some grinders leave (they are money-sensitive), which restores returns for those who remain. When a +EV player exits, their share of future profits is returned to the system, lowering the breakeven bar for everyone else. The equilibrium point shifts, but never breaks, because the entertainment-seeking side is largely insensitive to the grinder population. A degen's lootbox is just as fun to open regardless of how many extractors are in the pool. Throughout this paper, specific EV figures (like the 1.35x lootbox multiplier) refer to protocol multipliers at the stated activity levels. Realized returns are always equilibrium-dependent.</p>
+<p>This is structurally different from casinos, where the house extracts from players. Here, there is no house, only a community of differently-motivated actors whose interactions produce mutual benefit. The cross-subsidy is <em>mutualistic</em>, not adversarial.</p>
+<p>A critical pattern in the flow table above: <strong>the system receives ETH now, while the player's monetary rewards are deferred and contingent on continued participation.</strong> Deity pass value compounds over future levels. Activity score EV advantages require daily maintenance. BAF leaderboard positions pay out at milestone levels. Affiliate commissions must survive a coinflip. In every case, the player has already paid, and their return arrives gradually through ongoing engagement. This is not exploitative (the deferred rewards are real and often substantial), but it creates a natural retention mechanism where the rational response to having invested is to keep playing to realize the maximum return. Additionally, anything that increases the speed of level progression increases the effective rate of return on deferred rewards. A player holding future tickets for level $\ell + 10$ gets paid faster if levels advance quickly, which means their rational interest is not just to keep playing but to actively accelerate progression through purchases and engagement. This creates a double incentive for affiliate activity among invested players: referring new players earns commission income <em>and</em> speeds up level progression, which increases the rate of return on the referrer's own deferred rewards. An invested player who recruits a whale is not just earning BURNIE commissions. They are accelerating the arrival of every future ticket payout and every BAF milestone they hold a position in.</p>
+<h3 id="section-7">2.4 Non-Depletion of Cross-Subsidies</h3>
+<p><strong>Observation 2.1</strong> (Non-Depletion of Cross-Subsidies). <em>In the cross-subsidy equilibrium, no actor type's extraction catastrophically depletes the reward supply for other types. Non-monetary rewards ($\Psi$) are mostly non-rivalrous (one player's excitement does not reduce another's), though positional goods (deity passes, BAF leaderboard) are rivalrous and bounded (24 passes, 10-level resets). Monetary rewards ($M$) are funded by external yield ($r \cdot S$) plus the zero-rake recycling of player deposits, but high-activity players' above-1.0 multipliers are funded by low-activity players' below-1.0 multipliers (see Section 2.3). If the ratio of high-activity extractors to low-activity donors shifts, the equilibrium adjusts as described above: more extractors means lower returns per extractor, not system failure. The ratio self-corrects because the money-sensitive side (grinders) adjusts while the money-insensitive side (degens) provides a stable base.</em></p>
+<h3 id="section-8">2.5 Implications for the Analysis</h3>
+<p>The heterogeneous utility model has two important implications:</p>
+<ol>
+<li>
+<p><strong>The active participation equilibrium is more robust than monetary analysis alone suggests.</strong> A degen has multiple ways to play at different EVs (lootboxes, Degenerette spins, ticket purchases, coinflips), all of which are monetarily negative at low activity scores. Under pure monetary utility, this violates individual rationality. But degens do not care about money. They care about excitement. The protocol is designed to maximize $\Psi$ delivery: lootbox rewards arrive as <em>more gambling products</em> (future tickets, BURNIE for Degenerette, boons), so a single lootbox open produces a cascade of further gambling opportunities. This is double the entertainment per dollar compared to a casino, where winnings arrive as cash and the gambling is over. If the entertainment value exceeds the monetary loss, participation remains individually rational. The gambling industry proves this condition holds at population scale for products with far worse odds and far less entertaining reward structures.</p>
+</li>
+<li>
+<p><strong>Player retention has a ratchet effect.</strong> As engagement deepens (longer streaks, higher activity scores, more future tickets), the non-monetary switching cost ($\Delta\Psi$ from breaking streaks, abandoning progression, losing status) compounds on top of the monetary switching cost ($\Delta M$ from forfeiting future tickets and EV multipliers). The total switching cost (monetary + non-monetary) grows faster than either component alone.</p>
+</li>
+</ol>
+<h3 id="section-9">2.6 The Poker Ecosystem Analogy</h3>
+<p>The player type ecosystem maps closely to poker. In poker, <strong>recreational players</strong> deposit money for entertainment and lose at varying rates. <strong>Professional grinders</strong> extract monetary value through disciplined play. <strong>Competitive recreationals</strong> genuinely enjoy the game but wouldn't play if winning weren't possible. Their entertainment <em>is</em> the competition: skill matters, outcomes have real stakes, and meaningful competition requires meaningful consequences. This is the broadest category: some lean toward gambling excitement, some toward competitive strategy or profit, some toward the social experience, and many enjoy all three at once.</p>
+<p>The critical insight from poker: <strong>the ecosystem is healthy when recreational players have a good time.</strong> If the fish are miserable, they leave. If the fish leave, the grinders have no one to extract from. If the grinders leave, the games die. Poker ecosystems characteristically die by catering to grinders: rooms offer 50-70% rakeback to high-volume pros, optimizing for volume over fun, and fun is the only reason recreational players show up. Taken to its logical conclusion, some sites tried eliminating rake entirely. They never gained traction. Fish do not choose rooms based on rake. They choose based on fun, brand recognition, and where their friends play. Removing rake attracted grinders but did nothing to attract fish, and without rake revenue there was no marketing budget to acquire fish through other channels. The result was a few tables of grinders playing each other near breakeven, where the worst grinders lose a little, notice immediately (because they are there for money), and leave, shrinking the pool until nobody is left. The lesson: rake is not inherently bad. What matters is where the money goes. Operator profit does nothing for the ecosystem. Player acquisition and retention do everything.</p>
+<p>Degenerus Protocol solves both problems. It is zero-rake, but the player acquisition function that rake normally funds is built into the protocol. The affiliate program pays 20-25% commission on referred players' purchases, funded by BURNIE mechanics rather than by skimming deposits. Affiliates extract value, but only in direct proportion to the new money they bring in. Every player is a potential recruiter with multiple financial incentives to grow the game. Rake-free poker had no way to pay for acquisition; Degenerus pays for it out of protocol mechanics that exist whether or not anyone is recruiting. And the protocol is structurally resistant to grinder takeover: every avenue for profit requires high variance (jackpots are lotteries, coinflips are 50/50, Degenerette spins are high-volatility), so the variance-minimizing nit that kills poker ecosystems has no viable strategy here. Variance functions as a defensive moat against extractive capital (formalized in Observation 9.1).</p>
+<p>The cross-subsidy structure (Section 2.3) is the formal version of this dynamic: different player types, extracting different kinds of value, sustaining each other's presence at the table.</p>
+<hr />
+<h2 id="section-10">3. Player Types and Strategies</h2>
+<h3 id="section-11">3.1 The Degen</h3>
+<p>The degen's utility is dominated by entertainment, not monetary returns.</p>
+<p><strong>Dominant actions:</strong> Degenerette spins, daily coinflip participation, lootbox opens regardless of activity score (the anticipation is the product), and irregular ticket purchases.</p>
+<p><strong>Individual rationality check:</strong> The degen participates when the entertainment value exceeds the monetary loss. For a degen spending 0.1 ETH on Degenerette at 90% ROI (activity score 0), the expected loss is 0.01 ETH. The required entertainment value is 0.01 ETH-equivalent, the price of a few seconds of genuine excitement. This threshold is trivially met (see Section 2.2).</p>
+<p>Low-engagement degens are the <em>primary EV donors</em> to the system, but they are not victims. They are compensated in their preferred currency. Their acceptance of monetarily sub-optimal strategies creates the surplus that funds higher $M$ returns for engaged players.</p>
+<p><strong>Important nuance:</strong> Ticket purchases have the same EV for all player classes at any given time, but that EV is typically below the equilibrium return available through lootboxes at high activity scores. This means ticket purchases are themselves a source of cross-subsidy: EV maximizers avoid them (preferring lootboxes where their score multiplies returns), while degens buy them freely. The cross-subsidy also flows through lootboxes, Degenerette, and other activity-score-weighted products. The degen who buys lootboxes at a low activity score is donating surplus to the pool that high-score lootbox buyers extract from.</p>
+<h3 id="section-12">3.2 The EV Maximizer</h3>
+<p>The EV maximizer cares only about expected net payout. They are <strong>bankroll-constrained</strong>: unlike the whale, they do not have unlimited capital.</p>
+<p><strong>Observation 3.1</strong> (Best-Response Policy). <em>Under sufficient bankroll and a pool with enough low-activity depositors to fund the multipliers, a high-scoring EV maximizer's best-response policy is:</em></p>
+<ol>
+<li><em>Buy a ticket every day</em> to maintain quest streak and purchase streak, the two largest activity score components</li>
+<li><em>Maximize activity score</em> $a_i \rightarrow 3.05$ (quest streak, purchase streak, affiliate engagement, pass bonus)</li>
+<li><em>Purchase ETH lootboxes at maximum activity score</em> (protocol multiplier $\mu = 1.35$, capped at 10 ETH of lootbox purchases per level)</li>
+<li><em>Place ETH Degenerette bets at max activity</em> (protocol ROI $\rho = 0.999$, with an additional +5% EV bonus on ETH bets concentrated in higher-match payouts, giving ~104.9% effective returns before accounting for lootbox delivery at 1.35x)</li>
+<li><em>Play enough Degenerette to consume the full 10 ETH lootbox EV benefit</em> through Degenerette lootbox wins, maximizing the compounding EV advantage</li>
+<li><em>Enable afKing auto-rebuy</em> (1.6% base + deity bonus compounding on wins)</li>
+<li><em>Acquire deity pass early if bankroll permits</em> (permanent +80% activity bonus, but 24+ ETH upfront)</li>
+</ol>
+<p><em>Argument.</em> Activity score $a_i$ is monotonically increasing in streak lengths and participation breadth. Higher $a_i$ increases $\mu(a_i)$ and $\rho(a_i)$, both of which increase the player's weight in prize distribution. At $a_i = 3.05$, Degenerette is genuinely positive EV for players who would buy lootboxes anyway (see Appendix C for the lootbox delivery mechanism). All of these returns draw from the same aggregate pool, so the strategy's profitability depends on sufficient pool inflows from other participants.</p>
+<p>One subtlety on afKing auto-rebuy: it converts winnings to random near-future level tickets at 130-145% face value, but does <em>not</em> award BURNIE on auto-rebuy purchases (unlike manual purchases which do). The real advantage over manual reinvestment is convenience and a somewhat better deal than buying tickets directly, though the 130-145% headline overstates the benefit since it forgoes BURNIE rewards.</p>
+<h3 id="section-13">3.3 The Whale</h3>
+<p>Whales can participate profitably on monetary returns alone. Status is an additional payoff for those who value it, not a requirement.</p>
+<p><strong>High-payoff actions:</strong> Early deity pass acquisition (quadratic pricing favors early buyers: cost = $24 + T(n)$ ETH where $T(n) = n(n+1)/2$, which simultaneously maximizes $\Psi$ via scarce status and $M$ via permanent +80% activity bonus), whale bundle purchases at early levels (~2.5x face value coverage), BAF leaderboard domination through large coinflip stakes, stacking deity pass with afKing mode for enhanced recycling, and issuing deity boons to other players (up to 3/day). Boons are not transferable assets. They can only be granted directly to another player, which means deity status produces social interaction and dealmaking rather than impersonal market transactions.</p>
+<p><strong>Observation 3.2</strong> (Whale Extraction Is Bounded). <em>Whale extraction is bounded by explicit per-mechanism caps (lootbox EV-benefit cap, Degenerette per-spin payout caps, and finite BAF slices). Extraction analysis should use mechanism-specific upper bounds rather than a single aggregate constant.</em></p>
+<p><strong>Deity pass EV clarification.</strong> Deity passes receive virtual jackpot entries equal to 2% of their symbol's bucket size (minimum 2 entries per draw). Their share scales proportionally with ticket volume, so they cannot dominate jackpots as the game grows. Their EV advantage comes from three sources: the permanent +80% activity score bonus (which non-deity players can match through other components at maximum engagement), perpetuity (deity entries are drawn automatically every level, forever, requiring no further purchases), and a 25% bonus on all affiliate commissions paid at the end of each level. A deity holder who goes inactive still accumulates jackpot entries and BURNIE draws indefinitely. The affiliate bonus compounds the value of referral networks for deity holders, adding a revenue stream that scales with the game's growth. The 24-pass cap limits concentration.</p>
+<h3 id="section-14">3.4 The Affiliate</h3>
+<p>Affiliates earn 20–25% commission on referred players' ETH purchases, paid as FLIP credits that must pass through a 50/50 coinflip to convert to BURNIE tokens. The effective extraction is denominated in BURNIE, not ETH, and subject to both coinflip variance and BURNIE price risk. The nominal commission rate overstates the actual ETH-equivalent extraction, since the coinflip conversion has slightly negative EV (~98.5% of nominal value in expectation).</p>
+<p><strong>Best-response heuristic:</strong> Build referral network early, set rakeback to balance volume vs. margin (competitive pressure drives rakeback toward 25%, analogous to Bertrand price competition).</p>
+<p><strong>The affiliate's hidden contribution.</strong> The formal model captures affiliates as commission-earning referrers. But affiliates produce something harder to measure: they convert people who would not have otherwise participated into active players. Through marketing, social influence, education, community building, or simple persuasion, affiliates reduce the activation energy for new participation. This is a genuine and substantial positive externality for the entire system. Every player an affiliate brings in adds deposits to the pool, draws to the jackpots, and liquidity to the BURNIE market. The affiliate is compensated in BURNIE commissions, but the system-level value of the players they recruit far exceeds that commission. This makes affiliates the primary solution to the cold-start problem (Section 10.2, Limitation #5).</p>
+<p><strong>Observation 3.3</strong> (FLIP Variance Filter). <em>The coinflip payout mechanism acts as a self-selection filter: sufficiently variance-averse affiliates rationally select out, while variance-neutral or variance-seeking affiliates remain.</em> Affiliates who prefer certainty can opt for "nit mode": 50% reduced commission with no coinflip. This halves the nominal rate but eliminates variance entirely, letting risk-averse affiliates participate without the FLIP filter selecting them out.</p>
+<h3 id="section-15">3.5 The Hybrid</h3>
+<p>The typology above presents clean archetypes. Reality is messier. Most players are not pure degens or pure grinders but somewhere in between. The <strong>hybrid</strong> is anyone on this spectrum: a broad category spanning from near-degen (plays for fun, likes that winning is possible) to near-grinder (plays to win, likes that it's fun). Some play near-optimally with occasional leaks. Others intend to play optimally but are underbankrolled, miss quest days, open lootboxes below breakeven activity score, or play Degenerette for entertainment when they "should" be waiting. Many are slight winners over meaningful samples. As a population, they are probably slight losers on aggregate, but the distribution is wide. Crucially, when a hybrid wins, it feels <em>earned</em>. A lottery winner got lucky. A hybrid who maintained their activity score, timed their lootbox purchases, and built their streak knows their decisions contributed to the outcome. That sense of agency is a distinct source of entertainment value that pure gambling cannot provide.</p>
+<p><strong>Why hybrids matter for the system:</strong> Their competitive motivation keeps them engaged more reliably than a pure degen would stay, while imperfect execution contributes surplus to the pool. They are getting real value in return: real entertainment, real monetary returns, and real progression. All math is on-chain and transparent.</p>
+<h3 id="section-16">3.6 Budget Constraints and the Poverty Trap</h3>
+<p>The EV-maximizing strategies described above assume players can execute them without resource constraints. In practice, <strong>budget constraints</strong> fundamentally alter the viability of EV-maximizing play.</p>
+<p><strong>Observation 3.4</strong> (Increasing Capital Requirements). <em>The EV-maximizing strategy requires increasing liquid capital commitment over time: ticket prices escalate with level progression, quest streak maintenance requires one full ticket per day at current prices, and lootbox purchases require additional ETH. The daily liquid capital requirement for EV-maximizing play is strictly increasing in level.</em></p>
+<p><strong>The daily deposit requirement.</strong> The fully optimal EV path involves depositing fresh ETH every day, not just reinvesting winnings. Quest completion requires a new ETH ticket purchase, which maintains the quest streak. A player <em>can</em> withdraw claimable ETH first and use it to buy the quest ticket, but this negates the auto-rebuy bonus on those funds, sacrificing some EV to maintain the streak. The optimal play is to deposit new ETH for the daily quest while letting winnings compound through afKing auto-rebuy. This creates a continuous external capital requirement on top of the escalating ticket prices, compounding the budget constraint for truly optimal play.</p>
+<p><strong>Observation 3.5</strong> (Bankroll Ruin under EV-Maximizing Play). <em>Even a player following a theoretically +EV strategy faces a non-zero probability of ruin. This occurs because: (a) jackpot payoffs are high-variance with potentially long dry spells, (b) future tickets and streak value are illiquid: they contribute to paper wealth but not to meeting tomorrow's costs, (c) quest streak maintenance is a daily fixed cost that cannot be deferred (missing one day resets the streak to zero, destroying accumulated value), and (d) the player may simultaneously hold significant illiquid wealth while being unable to meet the next day's liquid cost requirement.</em></p>
+<p><em>This creates a degraded position: a player who loses their quest streak drops to a lower activity score and a worse protocol multiplier. In practice, a broken streak is unlikely to push a player from +EV to -EV entirely. The other components of activity score (purchase streak, purchase count, affiliate bonus, pass bonus) still contribute. But the lost streak represents a significant reduction in expected returns, and rebuilding it requires weeks of uninterrupted daily play. The player remains in the +EV cohort, but much less so than before.</em></p>
+<p><strong>Pass bootstrapping.</strong> The breakeven grind from 0.00 to 0.60 activity score is the period where the protocol is most vulnerable to churn. 100-level whale passes (+0.40 activity bonus) and 10-level whale passes (+0.10) provide an immediate score boost that shortcuts this grind. A new player who buys a 100-level whale pass starts at 0.40 activity score rather than 0.00, reaching breakeven with only a modest quest streak. Passes also boost the other activity score components (purchase streak, purchase count), so the compounding effect is larger than the base bonus alone. Most importantly, this pushes the player past the 0.60 lootbox breakeven threshold immediately, making lootbox purchases better-than-ticket EV from day one rather than after weeks of grinding. (The 0.60 threshold is breakeven relative to buying tickets directly, not necessarily overall profitability, which depends on pool composition per the aggregate constraint in Section 2.3.) The pass system is not just a whale product. It is an onramp that eliminates the lootbox breakeven grind entirely for any player willing to pay upfront.</p>
+<p><strong>The skill gap (Corollary 3.1).</strong> Degenerus Protocol can be played at various levels of optimization, with an equilibrium breakeven point determined by activity score. Players who mismanage their bankroll, break streaks, or fail to optimize their activity score get worse returns than the theoretical maximum. Note that sub-optimal play can still be +EV. The surplus from below-equilibrium play (the difference between what a player extracts and what they would extract at optimal engagement) flows to the prize pools, benefiting players closer to the optimum. The returns of the most optimized players are funded by -EV players and players who are not trying to maximize returns at all.</p>
+<hr />
+<h2 id="section-17">4. Mechanism Design Properties</h2>
+<p>Behavioral incentive compatibility (selfish play producing system-positive outcomes) was established in Section 2.3 via the cross-subsidy flow table. Individual rationality for each player type was verified in Section 3. This section covers the two mechanism properties that require independent treatment: solvency and the zero-rake structure.</p>
+<h3 id="section-18">4.1 Accounting Solvency</h3>
+<div class="proposition"><p><strong>Proposition 4.1</strong> (Solvency Invariant). <em>The protocol maintains the solvency relation as a contract invariant:</em></p>
+<p>$$\underbrace{\text{claimablePool}}_{\text{owed to players}} \;\leq\; \underbrace{\text{ETH balance} \;+\; \text{stETH balance}}_{\text{total assets held by contract}}$$</p>
+<p><em>Every state transition in the contract preserves this inequality. It is not a design goal or aspiration. It is an accounting identity enforced by the structure of every function that modifies balances.</em></p>
+<p><strong>Why it holds.</strong> The contract maintains four logical ETH pools: <code>nextPrizePool</code>, <code>futurePrizePool</code>, <code>currentPrizePool</code>, and <code>claimablePool</code>. Only <code>claimablePool</code> represents an obligation to players. The other three are game state with no withdrawal rights attached. The solvency invariant is preserved because every category of state transition maintains it:</p>
+<ul>
+<li><strong>Deposits</strong> increase <code>totalBalance</code> and increment prize pools. <code>claimablePool</code> is unchanged. The inequality grows wider.</li>
+<li><strong>Jackpot payouts</strong> move ETH from prize pools into <code>claimablePool</code> (crediting individual winners). Total balance is unchanged, and <code>claimablePool</code> increases by exactly the amount leaving prize pools. The inequality is preserved.</li>
+<li><strong>Claims</strong> decrement both <code>claimablePool</code> and total balance by the same amount (the claim payout). The inequality is preserved. The contract uses the checks-effects-interactions pattern: <code>claimablePool</code> is decremented before the ETH transfer, preventing reentrancy.</li>
+<li><strong>Yield distribution</strong> computes surplus as <code>totalBalance - (nextPrizePool + futurePrizePool + currentPrizePool + claimablePool)</code>. Only this surplus is distributed. Credits from yield increase <code>claimablePool</code> by at most the surplus amount, which is by definition the margin above all obligations.</li>
+</ul>
+<p>The result is that no valid transaction sequence can cause <code>claimablePool</code> to exceed total balance. Every inflow either widens the margin (deposits) or redistributes within it (jackpots, yield). Every outflow reduces both sides equally (claims). Staking ETH to stETH is a conversion between two assets that both count toward total balance, so it has no effect on solvency.</p></div>
+<h3 id="section-19">4.2 The Zero-Rake Property</h3>
+<p><strong>What the creator extracts.</strong> The creator is the only insider. There are no VCs, team allocations, or privileged parties. Here is exactly what they get:</p>
+<ul>
+<li><strong>During presale:</strong> 20% of lootbox ETH goes to the vault. This ends automatically after a fixed number of levels or 200 ETH of lootbox purchases, whichever comes first. This is real extraction that compensates development completed before launch.</li>
+<li><strong>20% of the DGNRS token supply.</strong> DGNRS is a fixed-supply token that receives 25% of system stETH yield and 4 tickets per level with an activity score boost. Holders can burn DGNRS to extract their pro-rata share but forfeit all future yield. The remaining DGNRS is distributed to players over time. The creator's allocation is entirely dependent on the protocol's long-term success.</li>
+<li><strong>The vault</strong> receives: 25% of all stETH yield, 4 tickets per level with an activity score boost, the presale lootbox revenue above, 2 million BURNIE, and affiliate commissions from unaffiliated players.</li>
+</ul>
+<p>In concrete terms, the creator's in-game position is roughly equivalent to one deity pass with a 25% yield share, 2 million BURNIE, and up to 40 ETH from presale revenue. This is not nothing, but it is a defined, bounded allocation. The difference from traditional gambling: none of this is an ongoing rake on deposits. After presale, 100% of every ETH deposited goes into the prize pool system, along with 50% of stETH yield. The creator's upside is tied to protocol success, not to player losses.</p>
+<div class="definition"><p><strong>Definition 4.2</strong> (Zero-Rake). <em>A gaming mechanism is zero-rake if no entity extracts a guaranteed percentage of player deposits as ongoing profit.</em></p>
+<p><strong>Observation 4.3</strong> (Zero-Rake). <em>Degenerus Protocol is zero-rake after presale: 100% of player ETH deposits remain in the prize pool system. No percentage of any deposit is skimmed by a house or operator.</em></p></div>
+<div class="corollary"><p><strong>Corollary 4.4</strong> (Positive-Sum Game). <em>For the player pool as a whole, Degenerus Protocol is a positive-sum game:</em></p>
+<p>$$\sum_{i \in \mathcal{N}} \mathbb{E}[\text{gross payout}_i] = \sum_{i \in \mathcal{N}} \text{deposits}_i + 0.50 \cdot r \cdot S \cdot T > \sum_{i \in \mathcal{N}} \text{deposits}_i$$</p>
+<p><em>where $T$ is the time horizon, $r \cdot S \cdot T$ is total stETH yield generated, and the coefficient $0.50$ reflects the yield split: 25% to the vault, 25% to DGNRS holders, and 50% to the prize pool system. Only the prize pool share flows back to players.</em></p>
+<p><strong>Caveat:</strong> The game is positive-sum <em>in aggregate</em>. Individual players, especially low-activity degens, face negative monetary EV. Calling it "positive-sum" is accurate for the pool; individual experience varies.</p>
+<p><strong>Reality check:</strong> The game is primarily redistributive. The vast majority of what any player receives came from other players' deposits. The yield component makes the total payout exceed total deposits, but the dominant dynamic is redistribution from low-activity to high-activity players, and from unlucky to lucky ones. This is not a magic money machine. It is a well-structured game where the house edge is zero and a small external subsidy makes the aggregate slightly positive.</p>
+<p>There is a second, arguably more important sense in which the game is positive-sum: <em>total utility</em> exceeds total deposits even ignoring yield. A degen who loses 0.01 ETH but gets genuine entertainment worth more than 0.01 ETH to them has a positive-utility outcome despite a negative-monetary one. An EV maximizer who extracts 0.01 ETH profit has a positive-monetary outcome. Both players are better off than they were before, drawing from the same pool of deposits. The complementary preferences of different player types mean that value is not merely redistributed but <em>created</em> through the act of playing. This is the same dynamic that makes poker positive-sum for the table (even before considering the house): the recreational player and the professional are both getting what they came for.</p></div>
+<hr />
+<h2 id="section-20">5. Equilibrium Analysis and Commitment Devices</h2>
+<p>For any player who chooses to participate, the dominant strategy is to maximize activity score and cap out benefits every level. This is not a conjecture. Activity score monotonically increases returns on every protocol product. Deviation in any direction (lower engagement, broken streaks, sub-optimal timing) strictly reduces expected returns regardless of what other players do. Even in the extreme case where all players are perfectly optimized EV-maximizers, the system remains positive-sum from stETH yield, and each player's best response is still to maintain maximum activity score (because deviating gives a worse share of the yield). The returns at that extreme may not be attractive enough to retain all players, but for anyone who stays, full optimization is strictly dominant.</p>
+<h3 id="section-21">5.1 The Active Participation Equilibrium</h3>
+<p>The participation decision and the strategy decision are separate questions with different answers.</p>
+<p><strong>The participation decision</strong> depends on opportunity cost and pool composition. With zero non-GTO players, returns converge to stETH yield, which may not justify the opportunity cost of locked capital. In practice, some players will always play sub-optimally, and any GTO player who exits increases returns for those who remain. This establishes a natural equilibrium point: the game sustains as many GTO players as the non-GTO deposit base (plus yield) can fund at returns exceeding their opportunity cost. GTO play also requires long-term commitment (streaks, future tickets, activity score), so even players who stop adding new capital remain connected to the game and incentivized to help it progress.</p>
+<p><strong>The strategy decision</strong>, given participation, is unconditional.</p>
+<p><strong>Observation 5.1</strong> (Active Participation Dominant Strategy). <em>If an EV maximizer chooses to participate and has sufficient bankroll to sustain engagement, the strategy that maximizes activity score and caps out protocol benefits every level is a dominant strategy. No unilateral deviation from max-activity play improves expected returns. This holds regardless of what other players do: reducing engagement always reduces the deviator's share. The bankroll constraint is real (see Section 3.6 on ruin risk), but conditional on having the capital, the strategy dominance is unconditional.</em></p>
+<p><em>Verification that no player type benefits from unilateral deviation from max activity:</em></p>
+<p><strong>EV Maximizer deviates to minimal participation:</strong> Reducing engagement reduces $a_i$, which reduces $\mu(a_i)$ and $\rho(a_i)$. The marginal cost of maintaining streaks (one ticket per day) is dominated by the marginal benefit of higher EV multipliers on all subsequent actions.</p>
+<p><strong>Whale deviates to exit:</strong> Forfeits accumulated activity score (non-transferable), deity pass benefits (pass is transferable but costs 5 ETH in BURNIE to transfer), future ticket holdings, and BAF leaderboard position. The ongoing returns from their position (maximum lootbox multiplier, positive-EV Degenerette, auto-rebuy compounding) provide continuing positive returns so long as the pool remains sufficiently funded by other participants.</p>
+<p><strong>Affiliate deviates to stop referring:</strong> Commission flow ceases. Since referral is the affiliate's only value proposition, cessation is equivalent to exit.</p>
+<p><strong>Degen deviates to non-participation:</strong> If the entertainment value is less than the monetary loss, the degen was never in the individually rational set and would not have participated in the first place. For degens within the IR set, continued play is preferred.</p>
+<h3 id="section-22">5.2 The Inactive Equilibrium and Why It Is Unstable</h3>
+<p><strong>Observation 5.2</strong> (Inactive Profile as Conditional Equilibrium). <em>The strategy profile where all players choose no participation can be an equilibrium if deviation incentives are sufficiently weak. However, the inactive equilibrium is unstable for four reasons:</em></p>
+<p><strong>First-mover advantage.</strong> The earliest players gain the most accumulated ticket positions across the most levels. This creates a race-to-deviate dynamic: knowing the game will eventually start, earlier deviators are structurally advantaged. The rational response is to deviate early.</p>
+<p><strong>BURNIE appreciation subsidy.</strong> Early levels give out BURNIE cheaply (tickets cost 0.01 ETH at level 0). If the game reaches even level 10 (0.04 ETH tickets), early BURNIE has quadrupled in utility value. By the first century milestone (0.24 ETH), early BURNIE is worth 24x its acquisition cost. Presale lootboxes are even more generous with bonus BURNIE. This makes early participation strictly more attractive than waiting.</p>
+<p><strong>Yield accumulation.</strong> Once any deposits exist, stETH yield accrues regardless of further activity, growing total assets and making participation increasingly attractive.</p>
+<p><strong>Passes as equilibrium-breaking devices.</strong> Deity passes (24+ ETH) and whale passes inject large up-front capital into the prize pool. Pass holders receive activity score bonuses valuable <em>only if the game advances through levels</em>. A deity holder has 24+ ETH locked into a system that rewards them as long as levels progress, with a full refund if the game never starts. Their rational response is to actively drive progression. The pass system converts a coordination problem (who goes first?) into a paid commitment (pass holders go first, and are compensated for doing so).</p>
+<p><strong>Important assumption:</strong> This instability requires that potential participants are <em>monitoring on-chain state</em>. If the game enters a truly dormant phase where no one tracks pool sizes, the signal that makes deviation attractive may not reach anyone.</p>
+<h3 id="section-23">5.3 Why Active Play Wins</h3>
+<p>For an EV maximizer with sufficient bankroll, the choice is binary: maximize activity or do not participate. There is no profitable middle ground because activity score monotonically increases returns on every protocol product. Partial engagement means strictly worse multipliers for the same capital deployed. The unlimited-bankroll player either goes all-in on activity or stays out entirely.</p>
+<p><strong>Bankroll-constrained players face a different problem.</strong> A player who cannot afford to cap out every protocol benefit each level still has a clear optimization: be as active as their bankroll allows, prioritizing the highest-ROI actions first (quest streak maintenance costs one ticket per day and has the highest marginal return, followed by lootbox purchases at the activity level where they cross into +EV territory). Activity score is still monotonically increasing in returns, so more engagement is always better than less. The question for the constrained player is not "how active should I be?" (answer: as active as possible) but "is my bankroll large enough that participation is +EV at all?" Below some threshold, the capital required to maintain streaks and reach the +EV activity breakeven may exceed the expected returns. That threshold depends on pool composition and is lower when more non-GTO players are present.</p>
+<p><strong>The downside is bounded.</strong> The worst case for a participating player is that they spend ETH on entertainment and receive only their share of stETH yield as monetary return. The zero-rake property means their deposits remain in the prize pool (not extracted by a house), but from the individual player's perspective, unrecovered deposits beyond yield are a real cost. There is no scenario where a player loses more than they deposited.</p>
+<p><strong>Active play is self-reinforcing.</strong> As long as stETH yield is positive and at least one player participates, the active pool generates positive net prize flows. Each additional participant makes the game more attractive (larger pools, faster progression), not less. The inactive equilibrium is unstable: a single player who starts playing improves conditions for everyone else, pulling more players in.</p>
+<h3 id="section-24">5.4 The Repeated Game Structure</h3>
+<p>The protocol defines a repeated game where each level is a stage game. A player's total value at any level is their current-level payoff plus the discounted value of all future levels. The critical structural feature: activity score carries forward across levels. This means engagement at the current level directly increases the value of every future level. A player who maintains their quest streak today improves their lootbox multiplier tomorrow.</p>
+<p>The game has no known finite horizon (GAMEOVER is triggered by an inactivity timeout, not a pre-specified terminal level). This means players cannot reason backward from a known endpoint. Instead, the incentive structure relies on the persistent value of activity score: at every level, the best response is to maintain engagement because it compounds forward indefinitely.</p>
+<h3 id="section-25">5.5 Commitment Devices</h3>
+<p>The protocol employs several commitment devices that transform the payoff structure. We should be direct about what these are: <strong>they are retention mechanics designed to make leaving costly.</strong> The question is not whether they create lock-in (they do) but whether the lock-in is compensated by real deferred value. We argue yes: the sunk costs are matched by genuine future payoffs, but the reader should judge.</p>
+<p><strong>Device 1: Future Tickets.</strong> Lootbox prizes frequently award tickets for future levels ($\ell + k$ for $k \in [0, 50]$). These tickets are non-transferable and non-refundable. They pay out automatically when the game reaches their target level, so a player who holds them doesn't need to actively play to collect. But they do have a strictly positive incentive to help the game reach those levels, whether through their own purchases or by recruiting other players who accelerate progression.</p>
+<p>Crucially, future tickets also have <strong>time-value</strong>: they earn BURNIE jackpot draw entries <em>before</em> their target level arrives. Earlier acquisition means more cumulative BURNIE draw opportunities, making the time of purchase economically relevant.</p>
+<p><strong>Observation 5.3</strong> (Future Tickets as Commitment Device). <em>A player holding future tickets has a strictly positive incentive to help the game reach those levels. The expected payoff is their share of the target level's prize pool (proportional to their ticket count relative to total tickets) plus all BURNIE jackpot draws accumulated while waiting.</em></p>
+<p><strong>Device 2: Quest Streaks.</strong> A quest streak of length $q$ contributes $\min(q, 100)\%$ to the activity score. Breaking the streak (missing one day) resets $q$ to 0.</p>
+<p><strong>Observation 5.4</strong> (Streak Lock-In). <em>The cost of breaking a quest streak grows roughly quadratically with streak length. A 50-day streak contributes 50% to activity score, and rebuilding it requires 50 consecutive days of purchases. The longer the streak, the more painful it is to lose, creating increasingly powerful retention.</em> For a player with a 50-day streak, the daily cost of maintaining the streak (one ticket at current level price) is far exceeded by the EV uplift from the 50% activity score contribution. Streaks also provide a direct BURNIE FLIP bonus at milestones (every 10 levels, with an escalating, capped amount), adding a concrete monetary reward on top of the activity score benefit.</p>
+<p><strong>Device 3: afKing Auto-Rebuy.</strong> When enabled, jackpot winnings are automatically converted to random near-future level tickets at 130–145% value, converting liquid ETH winnings into illiquid future participation and compounding the player's stake. The ticket selection is designed to be an optimal allocation path for the player, spreading value across upcoming levels.</p>
+<p><strong>Device 4: BURNIE Burn-on-Use.</strong> BURNIE tokens are destroyed when used for tickets, Degenerette bets, and decimator entries. Their value is realized only through gameplay actions that contribute to the system.</p>
+<p>These commitment devices are powerful. The difference from exploitative gambling design is that the deferred rewards here are <em>real, substantial, and transparently calculable</em>. A player can compute exactly what their streak is worth, what their future tickets will earn, and what their activity score does to their EV. The underlying psychological mechanism (making it costly to leave) is the same as casino loyalty programs, but the rewards are on-chain, verifiable, and actually worth what they claim to be. The contract is immutable and ownerless. No regulator, operator, or adversary can modify, pause, or kill it.</p>
+<hr />
+<h2 id="section-26">6. BURNIE Economics and the 100-Level Cycle</h2>
+<h3 id="section-27">6.1 The BURNIE Price Ratchet</h3>
+<p>BURNIE has a built-in appreciation mechanism against ETH. ETH ticket prices escalate with level progression (Appendix C), but BURNIE ticket purchases always cost 1,000 BURNIE per ticket (4 entries) regardless of level. Since a ticket at level x00 costs 0.24 ETH but still costs 1,000 BURNIE, the utility value of 1 BURNIE in ETH terms rises monotonically as the game progresses:</p>
+<table>
+<thead>
+<tr>
+<th>Level Range</th>
+<th>ETH Ticket Price</th>
+<th>BURNIE Ticket Price</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0–4 (intro)</td>
+<td>0.01 ETH</td>
+<td>1,000 BURNIE</td>
+</tr>
+<tr>
+<td>5–9 (intro)</td>
+<td>0.02 ETH</td>
+<td>1,000 BURNIE</td>
+</tr>
+<tr>
+<td>x01–x29</td>
+<td>0.04 ETH</td>
+<td>1,000 BURNIE</td>
+</tr>
+<tr>
+<td>x30–x59</td>
+<td>0.08 ETH</td>
+<td>1,000 BURNIE</td>
+</tr>
+<tr>
+<td>x60–x79</td>
+<td>0.12 ETH</td>
+<td>1,000 BURNIE</td>
+</tr>
+<tr>
+<td>x80–x99</td>
+<td>0.16 ETH</td>
+<td>1,000 BURNIE</td>
+</tr>
+<tr>
+<td>x00 (century)</td>
+<td>0.24 ETH</td>
+<td>1,000 BURNIE</td>
+</tr>
+</tbody>
+</table>
+<p>The initial levels show the steepest appreciation: BURNIE earned at level 0 (when tickets cost 0.01 ETH) has 24x the purchasing power by the first century milestone (0.24 ETH). Within each subsequent 100-level cycle, BURNIE's utility value increases 6x from x01 to x00. This is a structural appreciation mechanism: as long as the game progresses through levels, patient BURNIE holders see their tokens' purchasing power increase.</p>
+<p><strong>The time-preference cross-subsidy.</strong> Players who earn BURNIE early and hold it benefit from this appreciation. Players who immediately spend BURNIE at Degenerette or buy tickets at low-price levels get entertainment now but at lower ETH-equivalent value. This creates a cross-subsidy between time preferences: impatient BURNIE use reduces circulating supply (all BURNIE sinks are permanent burns), which benefits patient holders through both reduced supply and higher future utility value. The degen who burns 1,000 BURNIE on Degenerette at level x05 (when those BURNIE could buy 10 tickets worth 0.04 ETH each = 0.4 ETH of tickets) is giving up future value for present entertainment. That value doesn't disappear; it accrues to the remaining BURNIE supply and, indirectly, to all ticket holders, since BURNIE can be converted to tickets in a way that draws value from the same pools.</p>
+<p>This connects to the structural price floor (Observation 8.3 in Section 8): the floor itself ratchets upward with level progression, since the ticket-price arbitrage opportunity grows as ETH ticket prices increase.</p>
+<h3 id="section-28">6.2 The Decimator</h3>
+<p>The decimator is a BURNIE-burn-to-win-ETH mechanism that provides an alternative sink for BURNIE tokens. Players permanently destroy BURNIE to buy weighted entries in a pro-rata ETH distribution drawn from the futurepool. It fires at milestone levels throughout each 100-level cycle at 10% of the futurepool, and at century milestones (x00) at 30%.</p>
+<p>Activity score determines both bucket assignment (better odds) and burn weight multiplier (1.0x at zero activity to 1.767x at maximum). A max-activity player at a x00 level gets bucket 2 and 1.767x weight, competing for 30% of the futurepool. A zero-activity player gets bucket 12 and 1.0x weight at 10%. The difference in expected ETH per BURNIE burned is dramatic.</p>
+<p><strong>Strategic choice: tickets vs decimator.</strong> BURNIE holders face a real decision: burn for tickets (1,000 BURNIE per ticket, 4 lottery entries each) or burn in the decimator (minimum 1,000 BURNIE, pro-rata ETH from futurepool). Neither is strictly dominant; the optimal choice depends on the player's activity score, futurepool size, competition from other burners, and whether it's a normal or x00 level. This dual-sink structure drives the BURNIE price floor (Section 8.4): the ticket floor is universal, while the decimator floor is player-specific and rewards engagement. BURNIE is worth more in skilled hands.</p>
+<h3 id="section-29">6.3 The 100-Level Cycle</h3>
+<p>Ticket prices escalate within each 100-level cycle from 0.04 ETH at x01 to 0.24 ETH at x00, then reset. Century milestones (x00) are crescendo events where the futurepool dump, dual bonus BAF jackpot (20% vs 10% at normal milestones), dual bonus decimator (30% vs 10%), and dual bonus daily jackpots all fire at their highest rates simultaneously, distributing a massive fraction of accumulated rewards across multiple channels. After the crescendo, prices reset to 0.04 ETH, lowering barriers for all bankroll sizes. Each cycle's pools tend to be larger than the last because deposits are permanent and the futurepool grows net across each 100-level cycle (despite periodic drains from the drip, decimator, and BAF). This is not strictly guaranteed: a sufficiently slow cycle could see growth that fails to compensate for the natural prize pool reduction between x00 and the following x01. But the structural trend is upward as long as new deposits continue. This creates a recruitment flywheel: bigger jackpots attract more degens, whose deposits make the next cycle's jackpots bigger still. The on-chain visibility of a growing, non-decreasing pool is itself a marketing asset that compounds over time.</p>
+<hr />
+<h2 id="section-30">7. Robustness and Attack Vectors</h2>
+<h3 id="section-31">7.1 Coordination-Free Design</h3>
+<p>Degenerus Protocol eliminates all non-trivial coordination problems from the core game. Trait assignment is deterministic from VRF entropy (players cannot coordinate on traits). The only strategic choices are: (a) how much to invest, (b) which products to use, and (c) whether to maintain engagement streaks. None require coordination with or knowledge of other players' specific strategies.</p>
+<p>The affiliate system creates a mild coordination game (affiliates compete by offering rakeback). In theory, Bertrand competition would drive rakeback to the maximum (25%). In practice, affiliates primarily refer degens who are less price-sensitive and less likely to comparison-shop referral codes. Affiliates can also create multiple codes with different rakeback rates, price-discriminating between informed players (who seek maximum rakeback) and casual ones (who use whatever link they find first). The affiliate market is unlikely to reach a single competitive equilibrium.</p>
+<h3 id="section-32">7.2 Coalitional Robustness</h3>
+<p><strong>Observation 7.1</strong> (Coalitional Robustness). <em>The active-participation profile appears robust to small coalitions, but robustness depends on payout parameters, participation elasticity, and monitoring intensity rather than a universal fixed threshold.</em></p>
+<p>A deviating coalition can at most:
+1. <strong>Withdraw participation:</strong> Reduces pool growth rate but does not prevent progression (remaining players and the four progression guarantors sustain the game).
+2. <strong>Coordinate ticket timing:</strong> Cannot influence trait assignment or VRF outcomes.
+3. <strong>Dominate BAF leaderboard:</strong> A well-funded coalition (or single whale) can outflip anyone by simply staking more BURNIE in coinflips. There is no cap on coinflip volume, so a sufficiently capitalized player can take the top BAF position by brute force. However, total extraction remains bounded by finite BAF payout math, and every BURNIE flipped feeds the coinflip burn (net ~1.6% destruction per cycle), so dominating the leaderboard has a real cost.
+4. <strong>Dump BURNIE:</strong> Creates temporary sell pressure, but the utility floor (ticket purchases, decimator entries) provides a structural price floor.</p>
+<p>The coalition's maximum extraction is bounded, and their departure increases per-capita EV for remaining players (the "whale departure paradox," Section 8.3).</p>
+<h3 id="section-33">7.3 Griefer Analysis</h3>
+<p><strong>Well-funded griefers face structural futility.</strong> The Griefer is the strongest adversary we model: a well-funded actor (competitor, state-backed regulator, or ideological opponent) willing to spend money purely to break the game or force GAMEOVER. The problem for the griefer is that there is no venue for griefing. The protocol's mechanisms (RNG locks, VRF commitment, 3-day emergency recovery) deny any lever to <em>mechanically</em> break the game. What can a griefer actually do? The most plausible attack is to massively inflate the prize pool at the current level, advancing it quickly and setting a high target for the next level that the non-griefer population may struggle to cover. But this is self-defeating: the inflated pool creates a massive jackpot, which is exactly the kind of event that attracts new players and re-engages lapsed ones. The griefer spends money to make the game more exciting for everyone else. And players cannot be priced out by escalating ticket costs: partial tickets are available at any level, and lootbox prices remain constant regardless of level. GAMEOVER requires 365 days of insufficient purchasing activity to meet the current level's target, not just the griefer's departure. The griefer cannot force other players to stop. At best, they can waste money participating, then leave. Their deposits remain in the pool, benefiting everyone else.</p>
+<p><strong>Even coercing the creator is futile.</strong> Suppose a state-level adversary compels the creator to destroy the game under threat of force. The creator <em>cannot comply</em>. The contract is immutable and ownerless in the relevant sense: the vault's admin privileges are granted to any address holding &gt;30% of vault ownership and are limited to emergency VRF recovery (a Chainlink failsafe). The admin has no power to pause the game, extract funds, modify rules, or trigger GAMEOVER. There is no multisig, no governance vote, no upgrade proxy. The creator could burn every private key they hold and the game would continue operating identically. The only path to GAMEOVER is 365 consecutive days where purchasing activity fails to meet the current level's target, and no amount of coercion applied to any single party can produce that outcome.</p>
+<p><strong>The theoretical attack scenario.</strong> The only path to fund misappropriation requires an attacker who simultaneously holds the admin key <em>and</em> causes a sustained Chainlink VRF failure lasting over 3 days. Under normal operation, the admin cannot touch the VRF coordinator at all. The 3-day stall window only opens if Chainlink VRF is genuinely non-functional <em>or</em> no eligible player requests a new VRF word (a permissionless call that pays the caller directly and triggers jackpot payouts).</p>
+<p>Given a VRF failure, three outcomes are possible: (1) the admin is alive and honest, rotates the coordinator, and service resumes. This is the entire reason the admin power exists. (2) The admin is dead or unreachable, and the game eventually reaches GAMEOVER with full fund distribution to participants. No theft. (3) An attacker has compromised the admin key and migrates to a hostile coordinator that rigs jackpot outcomes. This is the only theft path, and it is a necessary design tradeoff: the power to fix a broken VRF is the same power that could theoretically be abused. The conditions required (Chainlink failure + compromised admin key) cannot arise under ordinary circumstances. Chainlink VRF is battle-tested infrastructure securing billions in DeFi; treating its sustained failure as a realistic attack vector rather than a theoretical bound would be alarmist.</p>
+<p>The game's resilience is a property of the contract, not of any person. Even the front-end is not a single point of failure: anyone can build and host an alternative interface.</p>
+<p>Detailed analysis of specific attack vectors (Sybil attacks, Degenerette pool drain, affiliate self-referral loops, stETH depeg events) is in Appendix D. None present existential threats to the protocol.</p>
+<hr />
+<p>The preceding analysis addresses how the protocol sustains itself under normal and adversarial conditions. We now turn to the harder question: what happens when things go genuinely wrong?</p>
+<h2 id="section-34">8. Failure Modes and Resilience</h2>
+<h3 id="section-35">8.1 What a Death Spiral Looks Like</h3>
+<div class="definition"><p><strong>Definition 8.1</strong> (Death Spiral). <em>A death spiral is a sequence of states where: (a) player count is monotonically decreasing, (b) prize pool growth rate is negative (the system distributes more than it accumulates), and (c) the process is self-reinforcing (declining participation causes further decline).</em></p></div>
+<h3 id="section-36">8.2 Why the Protocol Resists Death Spirals</h3>
+<p><strong>Observation 8.1</strong> (Death Spiral Resistance). <em>Degenerus Protocol resists death spirals through three independent mechanisms:</em></p>
+<p><strong>(a) Prize pool concentration and jackpot accumulation.</strong> As players exit, the per-capita prize pool share increases for remaining players. Fewer competitors for the same pool means higher expected value per participant. This creates a natural "buy low" attractor: the worse the exodus, the better the deal for anyone who stays or enters. Players who remain active (or are earliest to return) capture a disproportionate share of rewards: daily BURNIE jackpots and the every-third-day ETH/ticket jackpots continue firing regardless of population size. Fewer active players means fewer draw entries, so each remaining participant's probability of winning increases. The longer others stay away, the more draws the active players accumulate.</p>
+<p><strong>(b) Yield independence.</strong> stETH yield continues regardless of player activity, growing total assets. While yield does not directly fill the nextpool target (progression still requires player purchases), it increases the value of accumulated jackpot pools. During a player exodus, jackpot attractiveness continues growing passively, strengthening the incentive for remaining or new players to participate.</p>
+<p><strong>(c) Locked liquidity.</strong> Prize pools are not withdrawable. Player exit does not reduce prize pool assets; it only reduces competition for those assets. This is structurally different from DeFi protocols where whale departure causes liquidity crises.</p>
+<p><em>Argument.</em> A death spiral requires condition (c): self-reinforcing decline. Player departure has two effects:</p>
+<ul>
+<li>Effect A (negative): Reduced prize pool <em>growth rate</em> (fewer deposits).</li>
+<li>Effect B (positive): Increased per-capita <em>share</em> of existing pools (fewer competitors).</li>
+</ul>
+<p>For remaining players, Effect B dominates Effect A once the accumulated pool is large relative to any single player's annual contribution. Since the pool accumulates over the entire game history and cannot decrease (locked liquidity), this condition is satisfied after a few levels of active play.</p>
+<p>Therefore, condition (c) of Definition 8.1 fails on the monetary dimension so long as a sufficient fraction of remaining players respond to monetary incentives. It does not require <em>all</em> players to be rational, only that enough EV-sensitive capital remains to keep the system above its breakeven threshold. The "spiral" breaks because the monetary incentive to stay <em>increases</em> as others leave.</p>
+<p><strong>Progression is also guaranteed at least once (once the game is established).</strong> The death spiral argument above addresses per-capita pool share, but a skeptic might ask: does the game still <em>advance levels</em> when players leave? The futurepool drip mechanism answers this. Every 3 days, a portion of the future prize pool drains into the next-level prize pool, awarding the equity in tickets to current ticket holders. During any period of low activity, the futurepool (which accumulates from all prior levels) continues draining. Once futurepool exceeds a sufficient multiple of the next level's target, the drip alone will fill the target without any new player purchases. This mechanically guarantees at least one more level completion. This guarantee only applies once the game has progressed enough for the futurepool to substantially exceed the nextpool target, which happens naturally as deposits and lootbox purchases accumulate over multiple levels. (This is a one-shot guarantee: if activity remains zero after that level completes, the now-depleted futurepool may not cover the following level's target.) But a single guaranteed level completion is psychologically significant. It means the game visibly advances even during a drought, jackpots fire, winners are drawn, and the on-chain evidence of continued activity can re-engage lapsed players.</p>
+<p><strong>Simulation evidence.</strong> A Monte Carlo simulation of 30 levels with realistic player behavior demonstrates these dynamics concretely. Most levels complete in 7-12 days. Level 22, however, takes 31 days: organic buying slowed and the pool barely moved for weeks, grinding from 340 ETH to 410 ETH on auto-mechanisms alone (quest streak pressure, afKing rebuys, futurepool drips). Then momentum picked up and the level completed normally. That is what a "slow period" looks like in this system. Not a stall. Not a death spiral. Just a longer grind where the mechanical floor kept the pool growing until human activity resumed. The futurepool drained slightly to feed the drip, and players holding tickets kept winning smaller daily jackpots the whole time. Over the 30-level run (308 simulated days), the futurepool grew from 8 ETH to 1,690 ETH, the largest single jackpot grew from 11 ETH to 305 ETH, and cumulative stETH yield reached 67 ETH.</p>
+<!-- Simulation Chart (extracted from whitepaper) -->
+<div style="margin: 1.5rem 0; background: #14141a; border-radius: 12px; padding: 1rem 1rem 0.5rem;">
+  <canvas id="gta-simChart" style="max-height: 380px;"></canvas>
+  <p style="font-size: 0.72rem; color: #888; text-align: center; margin: 0.4rem 0 0.2rem; line-height: 1.4;">
+    Blue: next-level prize pool filling to target. Green: future pool reserve growing over time. Red bars: largest jackpot per level. Gold: cumulative stETH yield. Note level 22's 31-day grind.
+  </p>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  var SIM = {"pools":[{"next":3.79,"future":8.45,"cy":0,"lvl":0},{"next":4.76,"future":8.84,"cy":0,"lvl":0},{"next":6.24,"future":9.69,"cy":0,"lvl":0},{"next":7.78,"future":10.56,"cy":0,"lvl":0},{"next":20.66,"future":12.68,"cy":0,"lvl":0},{"next":35.99,"future":14.87,"cy":0,"lvl":0},{"next":53.03,"future":17.38,"cy":0,"lvl":0},{"next":7.32,"future":32.35,"cy":0,"lvl":1},{"next":7.92,"future":32.56,"cy":0,"lvl":1},{"next":8.87,"future":32.6,"cy":0.01,"lvl":1},{"next":9.71,"future":32.72,"cy":0.01,"lvl":1},{"next":15.5,"future":31.7,"cy":0.01,"lvl":1},{"next":16.37,"future":32.11,"cy":0.01,"lvl":1},{"next":17.8,"future":32.87,"cy":0.01,"lvl":1},{"next":19.44,"future":33.13,"cy":0.02,"lvl":1},{"next":21.02,"future":33.48,"cy":0.02,"lvl":1},{"next":32.13,"future":35.33,"cy":0.02,"lvl":1},{"next":45.91,"future":36.9,"cy":0.03,"lvl":1},{"next":58.94,"future":39,"cy":0.03,"lvl":1},{"next":11.93,"future":52.92,"cy":0.03,"lvl":2},{"next":12.85,"future":52.79,"cy":0.03,"lvl":2},{"next":13.93,"future":52.68,"cy":0.26,"lvl":2},{"next":14.95,"future":52.44,"cy":0.27,"lvl":2},{"next":21.18,"future":51.23,"cy":0.27,"lvl":2},{"next":23.67,"future":52.11,"cy":0.28,"lvl":2},{"next":42.06,"future":54.39,"cy":0.28,"lvl":2},{"next":62.45,"future":56.69,"cy":0.29,"lvl":2},{"next":13.72,"future":60.36,"cy":0.29,"lvl":3},{"next":15.19,"future":60.17,"cy":0.29,"lvl":3},{"next":16.32,"future":60.2,"cy":0.34,"lvl":3},{"next":17.76,"future":60.08,"cy":0.61,"lvl":3},{"next":26.96,"future":58.82,"cy":0.62,"lvl":3},{"next":29.79,"future":59.44,"cy":0.62,"lvl":3},{"next":47.54,"future":62.33,"cy":0.63,"lvl":3},{"next":68.38,"future":65.54,"cy":0.63,"lvl":3},{"next":77.3,"future":66.79,"cy":0.64,"lvl":3},{"next":17.76,"future":77.79,"cy":0.64,"lvl":4},{"next":18.92,"future":77.58,"cy":0.92,"lvl":4},{"next":20.74,"future":77.31,"cy":0.93,"lvl":4},{"next":22.38,"future":76.94,"cy":1.05,"lvl":4},{"next":32.09,"future":76.55,"cy":1.06,"lvl":4},{"next":35.08,"future":76.99,"cy":1.07,"lvl":4},{"next":37.55,"future":78.27,"cy":1.08,"lvl":4},{"next":62.73,"future":82.1,"cy":1.09,"lvl":4},{"next":83.75,"future":84.52,"cy":1.09,"lvl":4},{"next":22.19,"future":99.78,"cy":1.09,"lvl":5},{"next":23.78,"future":99.5,"cy":1.18,"lvl":5},{"next":25.02,"future":98.88,"cy":1.53,"lvl":5},{"next":26.61,"future":98.38,"cy":1.88,"lvl":5},{"next":36.98,"future":96.5,"cy":1.88,"lvl":5},{"next":39.01,"future":96.45,"cy":1.89,"lvl":5},{"next":40.65,"future":98.09,"cy":1.9,"lvl":5},{"next":42.68,"future":99.5,"cy":1.91,"lvl":5},{"next":45.5,"future":100.22,"cy":1.92,"lvl":5},{"next":59.59,"future":103.08,"cy":1.93,"lvl":5},{"next":78.8,"future":106.74,"cy":1.94,"lvl":5},{"next":94.22,"future":108.64,"cy":1.95,"lvl":5},{"next":25.77,"future":112.66,"cy":1.95,"lvl":6},{"next":28.14,"future":111.99,"cy":2.44,"lvl":6},{"next":30.09,"future":111.48,"cy":2.46,"lvl":6},{"next":32.02,"future":111.24,"cy":2.48,"lvl":6},{"next":44.26,"future":108.96,"cy":2.49,"lvl":6},{"next":46.48,"future":108.82,"cy":2.5,"lvl":6},{"next":48.73,"future":110.5,"cy":2.51,"lvl":6},{"next":51.24,"future":112.17,"cy":2.52,"lvl":6},{"next":67.44,"future":114.27,"cy":2.53,"lvl":6},{"next":86.96,"future":117.99,"cy":2.55,"lvl":6},{"next":103.59,"future":121.28,"cy":2.56,"lvl":6},{"next":29.64,"future":133.35,"cy":2.56,"lvl":7},{"next":31.23,"future":133.14,"cy":2.57,"lvl":7},{"next":33.57,"future":133.01,"cy":2.59,"lvl":7},{"next":34.97,"future":132.58,"cy":2.61,"lvl":7},{"next":49.6,"future":130.85,"cy":2.62,"lvl":7},{"next":51.03,"future":131.9,"cy":2.64,"lvl":7},{"next":54.15,"future":132.52,"cy":2.66,"lvl":7},{"next":56.63,"future":134.33,"cy":2.67,"lvl":7},{"next":73.53,"future":137.76,"cy":2.68,"lvl":7},{"next":97.79,"future":140.43,"cy":2.69,"lvl":7},{"next":117.67,"future":144.25,"cy":2.71,"lvl":7},{"next":32.71,"future":142.54,"cy":2.71,"lvl":8},{"next":35.47,"future":144.56,"cy":2.73,"lvl":8},{"next":37.73,"future":145.6,"cy":2.78,"lvl":8},{"next":40.27,"future":145.84,"cy":2.84,"lvl":8},{"next":60.36,"future":142.51,"cy":2.86,"lvl":8},{"next":64.14,"future":144.34,"cy":2.87,"lvl":8},{"next":68.21,"future":146.14,"cy":2.88,"lvl":8},{"next":102.89,"future":149.86,"cy":2.9,"lvl":8},{"next":132.55,"future":154.7,"cy":2.91,"lvl":8},{"next":36.96,"future":162.83,"cy":2.91,"lvl":9},{"next":40.35,"future":162.12,"cy":3.58,"lvl":9},{"next":42.62,"future":160.6,"cy":4.25,"lvl":9},{"next":45.58,"future":160.05,"cy":4.27,"lvl":9},{"next":62.51,"future":158.59,"cy":4.29,"lvl":9},{"next":68.88,"future":160.74,"cy":4.3,"lvl":9},{"next":155.49,"future":171.93,"cy":4.32,"lvl":9},{"next":43.14,"future":195.46,"cy":4.32,"lvl":10},{"next":46.51,"future":194.04,"cy":5.15,"lvl":10},{"next":49.55,"future":193.28,"cy":5.17,"lvl":10},{"next":52.18,"future":194.88,"cy":6.16,"lvl":10},{"next":72.12,"future":183.57,"cy":6.98,"lvl":10},{"next":79.41,"future":186.96,"cy":7,"lvl":10},{"next":184.99,"future":199.56,"cy":7.02,"lvl":10},{"next":53.81,"future":231.15,"cy":7.02,"lvl":11},{"next":57.48,"future":230.21,"cy":8.19,"lvl":11},{"next":61.15,"future":228.36,"cy":8.37,"lvl":11},{"next":64.43,"future":229.78,"cy":9.37,"lvl":11},{"next":86.64,"future":232.41,"cy":9.4,"lvl":11},{"next":96.66,"future":234.07,"cy":9.42,"lvl":11},{"next":204.01,"future":249.91,"cy":9.44,"lvl":11},{"next":65.8,"future":286.55,"cy":9.44,"lvl":12},{"next":71.23,"future":287.1,"cy":9.72,"lvl":12},{"next":74.26,"future":284.81,"cy":10.94,"lvl":12},{"next":77.93,"future":283.06,"cy":10.96,"lvl":12},{"next":104.69,"future":279.93,"cy":10.98,"lvl":12},{"next":107.44,"future":281.47,"cy":11.01,"lvl":12},{"next":111.88,"future":284.35,"cy":11.04,"lvl":12},{"next":118.3,"future":284.49,"cy":11.06,"lvl":12},{"next":150.59,"future":290.92,"cy":11.09,"lvl":12},{"next":190.83,"future":297.89,"cy":11.11,"lvl":12},{"next":244.39,"future":303.33,"cy":11.14,"lvl":12},{"next":76.21,"future":342.12,"cy":11.14,"lvl":13},{"next":80.27,"future":344.29,"cy":11.17,"lvl":13},{"next":84.89,"future":347.7,"cy":12.67,"lvl":13},{"next":89.28,"future":346.49,"cy":12.96,"lvl":13},{"next":121.08,"future":396.2,"cy":12.99,"lvl":13},{"next":126.76,"future":394.3,"cy":13.03,"lvl":13},{"next":131.04,"future":396.98,"cy":13.06,"lvl":13},{"next":135.02,"future":399.86,"cy":13.1,"lvl":13},{"next":143.05,"future":398.87,"cy":13.13,"lvl":13},{"next":177.22,"future":405.13,"cy":13.17,"lvl":13},{"next":223.25,"future":413.12,"cy":13.2,"lvl":13},{"next":265.13,"future":415.76,"cy":13.24,"lvl":13},{"next":97.1,"future":440.61,"cy":13.24,"lvl":14},{"next":102.45,"future":437.96,"cy":14.93,"lvl":14},{"next":108.66,"future":436.55,"cy":14.96,"lvl":14},{"next":113.15,"future":437.93,"cy":16.24,"lvl":14},{"next":150.01,"future":432.31,"cy":16.28,"lvl":14},{"next":161.43,"future":432.14,"cy":16.32,"lvl":14},{"next":219.12,"future":441.46,"cy":16.36,"lvl":14},{"next":291.43,"future":452.22,"cy":16.4,"lvl":14},{"next":104.99,"future":456.45,"cy":16.4,"lvl":15},{"next":111.26,"future":460.61,"cy":16.44,"lvl":15},{"next":119.2,"future":467.1,"cy":16.89,"lvl":15},{"next":124.4,"future":466.34,"cy":17.39,"lvl":15},{"next":175.4,"future":456.97,"cy":17.43,"lvl":15},{"next":182.31,"future":460.51,"cy":17.47,"lvl":15},{"next":194.2,"future":459.09,"cy":17.52,"lvl":15},{"next":265.49,"future":469.24,"cy":17.56,"lvl":15},{"next":328.47,"future":479.76,"cy":17.61,"lvl":15},{"next":105.15,"future":480.36,"cy":17.61,"lvl":16},{"next":113.37,"future":479.1,"cy":17.65,"lvl":16},{"next":120.18,"future":487.56,"cy":18.15,"lvl":16},{"next":125.79,"future":485.98,"cy":18.21,"lvl":16},{"next":184.06,"future":488.85,"cy":18.25,"lvl":16},{"next":194.82,"future":492.58,"cy":18.3,"lvl":16},{"next":268.45,"future":499.28,"cy":18.34,"lvl":16},{"next":364.69,"future":513.33,"cy":18.39,"lvl":16},{"next":121.11,"future":555.26,"cy":18.39,"lvl":17},{"next":128.53,"future":552.3,"cy":18.43,"lvl":17},{"next":134.75,"future":549.95,"cy":19.81,"lvl":17},{"next":141.99,"future":551.35,"cy":19.86,"lvl":17},{"next":195.57,"future":543.51,"cy":19.91,"lvl":17},{"next":205.94,"future":548.35,"cy":19.96,"lvl":17},{"next":287.39,"future":560.64,"cy":20.01,"lvl":17},{"next":434.41,"future":575.79,"cy":20.07,"lvl":17},{"next":134.44,"future":601.04,"cy":20.07,"lvl":18},{"next":143.38,"future":599.13,"cy":20.12,"lvl":18},{"next":157.39,"future":598.36,"cy":20.19,"lvl":18},{"next":166.39,"future":596.11,"cy":20.24,"lvl":18},{"next":225.82,"future":592.44,"cy":20.3,"lvl":18},{"next":235.04,"future":589.09,"cy":20.35,"lvl":18},{"next":242.79,"future":592.34,"cy":20.41,"lvl":18},{"next":251.74,"future":596.26,"cy":20.46,"lvl":18},{"next":315.69,"future":599.84,"cy":20.52,"lvl":18},{"next":392.86,"future":611.08,"cy":20.58,"lvl":18},{"next":466.82,"future":622.44,"cy":20.63,"lvl":18},{"next":156.24,"future":697.54,"cy":20.63,"lvl":19},{"next":164.98,"future":696.55,"cy":22.44,"lvl":19},{"next":176.24,"future":693.77,"cy":22.5,"lvl":19},{"next":184.65,"future":690.22,"cy":24.28,"lvl":19},{"next":245.03,"future":760.15,"cy":24.34,"lvl":19},{"next":249.06,"future":762.16,"cy":24.41,"lvl":19},{"next":261.62,"future":758.49,"cy":24.48,"lvl":19},{"next":268.28,"future":761.52,"cy":24.55,"lvl":19},{"next":276.62,"future":765.24,"cy":24.62,"lvl":19},{"next":351.21,"future":768.25,"cy":24.69,"lvl":19},{"next":439.63,"future":780.77,"cy":24.76,"lvl":19},{"next":516.89,"future":792.06,"cy":24.83,"lvl":19},{"next":183.53,"future":815.42,"cy":24.83,"lvl":20},{"next":194.69,"future":812.77,"cy":24.9,"lvl":20},{"next":203.59,"future":809.58,"cy":25.73,"lvl":20},{"next":213.31,"future":809.71,"cy":25.81,"lvl":20},{"next":287.39,"future":759.95,"cy":30.49,"lvl":20},{"next":300.58,"future":765.67,"cy":30.56,"lvl":20},{"next":551.79,"future":789.92,"cy":30.64,"lvl":20},{"next":193.74,"future":865.32,"cy":30.64,"lvl":21},{"next":210.52,"future":867.09,"cy":30.72,"lvl":21},{"next":221.01,"future":861.97,"cy":32.83,"lvl":21},{"next":234.89,"future":857.98,"cy":32.91,"lvl":21},{"next":317.8,"future":839.34,"cy":32.98,"lvl":21},{"next":329.29,"future":833.83,"cy":33.06,"lvl":21},{"next":337.1,"future":838.09,"cy":33.14,"lvl":21},{"next":344.56,"future":841.52,"cy":33.22,"lvl":21},{"next":359.52,"future":836.69,"cy":33.3,"lvl":21},{"next":431.18,"future":848.33,"cy":33.38,"lvl":21},{"next":537.48,"future":861.43,"cy":33.46,"lvl":21},{"next":623.14,"future":865.1,"cy":33.54,"lvl":21},{"next":202.73,"future":921.21,"cy":33.54,"lvl":22},{"next":214.53,"future":924.53,"cy":33.63,"lvl":22},{"next":228.38,"future":922.82,"cy":33.72,"lvl":22},{"next":238.75,"future":921.23,"cy":34.69,"lvl":22},{"next":336.62,"future":908.44,"cy":34.78,"lvl":22},{"next":343.71,"future":899.78,"cy":34.86,"lvl":22},{"next":343.71,"future":899.78,"cy":34.95,"lvl":22},{"next":343.96,"future":900.13,"cy":35.03,"lvl":22},{"next":351.18,"future":892.66,"cy":35.12,"lvl":22},{"next":351.55,"future":892.92,"cy":35.21,"lvl":22},{"next":353.32,"future":894.43,"cy":35.29,"lvl":22},{"next":361.91,"future":888.35,"cy":35.38,"lvl":22},{"next":363.46,"future":889.87,"cy":35.46,"lvl":22},{"next":365.27,"future":891.14,"cy":35.55,"lvl":22},{"next":374.43,"future":884.96,"cy":35.63,"lvl":22},{"next":376.92,"future":887.32,"cy":35.72,"lvl":22},{"next":379.21,"future":889.78,"cy":35.8,"lvl":22},{"next":388.22,"future":883.14,"cy":35.89,"lvl":22},{"next":390.94,"future":885.29,"cy":35.97,"lvl":22},{"next":393.49,"future":887.39,"cy":36.06,"lvl":22},{"next":402.66,"future":881,"cy":36.14,"lvl":22},{"next":405.11,"future":883.58,"cy":36.23,"lvl":22},{"next":408.01,"future":885.66,"cy":36.31,"lvl":22},{"next":440.47,"future":881.8,"cy":36.4,"lvl":22},{"next":466,"future":886.68,"cy":36.48,"lvl":22},{"next":491.71,"future":891.55,"cy":36.57,"lvl":22},{"next":525.2,"future":888.36,"cy":36.66,"lvl":22},{"next":551.04,"future":893.45,"cy":36.74,"lvl":22},{"next":588.84,"future":899.62,"cy":36.83,"lvl":22},{"next":632.66,"future":897.29,"cy":36.91,"lvl":22},{"next":664.4,"future":902.9,"cy":37,"lvl":22},{"next":211.28,"future":945.71,"cy":37,"lvl":23},{"next":226.23,"future":946.79,"cy":37.1,"lvl":23},{"next":252.17,"future":944.34,"cy":37.19,"lvl":23},{"next":271.61,"future":937.44,"cy":37.28,"lvl":23},{"next":358.3,"future":922.52,"cy":37.36,"lvl":23},{"next":364.43,"future":924.95,"cy":37.45,"lvl":23},{"next":372.99,"future":928.57,"cy":37.54,"lvl":23},{"next":389.38,"future":922.8,"cy":37.62,"lvl":23},{"next":398.68,"future":927.28,"cy":37.71,"lvl":23},{"next":489.1,"future":940.29,"cy":37.8,"lvl":23},{"next":618.72,"future":947.45,"cy":37.89,"lvl":23},{"next":726.89,"future":963.09,"cy":37.97,"lvl":23},{"next":229.85,"future":1034.72,"cy":37.97,"lvl":24},{"next":268.51,"future":1029.98,"cy":39.07,"lvl":24},{"next":283.37,"future":1023.31,"cy":39.17,"lvl":24},{"next":297.01,"future":1016.54,"cy":39.26,"lvl":24},{"next":393.73,"future":998.97,"cy":39.35,"lvl":24},{"next":405.29,"future":1004.06,"cy":39.44,"lvl":24},{"next":417.96,"future":1008.79,"cy":39.54,"lvl":24},{"next":623.61,"future":1025.21,"cy":39.63,"lvl":24},{"next":777.5,"future":1046.87,"cy":39.73,"lvl":24},{"next":238.46,"future":1072.18,"cy":39.73,"lvl":25},{"next":257.12,"future":1068.65,"cy":39.82,"lvl":25},{"next":274.9,"future":1061.4,"cy":39.92,"lvl":25},{"next":289.22,"future":1068.2,"cy":44.37,"lvl":25},{"next":410.33,"future":1255.7,"cy":44.47,"lvl":25},{"next":423.58,"future":1261.7,"cy":44.58,"lvl":25},{"next":590.7,"future":1285.64,"cy":44.7,"lvl":25},{"next":873.93,"future":1307.96,"cy":44.81,"lvl":25},{"next":291.96,"future":1314.19,"cy":44.81,"lvl":26},{"next":307.62,"future":1305.94,"cy":48.02,"lvl":26},{"next":341.61,"future":1297.77,"cy":48.38,"lvl":26},{"next":355.81,"future":1289.12,"cy":49.53,"lvl":26},{"next":488.3,"future":1287.13,"cy":49.74,"lvl":26},{"next":511.3,"future":1280.7,"cy":49.87,"lvl":26},{"next":523.1,"future":1285.58,"cy":49.99,"lvl":26},{"next":534.89,"future":1291.87,"cy":50.11,"lvl":26},{"next":785.68,"future":1310,"cy":50.23,"lvl":26},{"next":947.29,"future":1332.5,"cy":50.35,"lvl":26},{"next":312.27,"future":1389.79,"cy":50.35,"lvl":27},{"next":336.07,"future":1381.16,"cy":50.48,"lvl":27},{"next":356.4,"future":1375.46,"cy":50.92,"lvl":27},{"next":378.44,"future":1370.33,"cy":51.3,"lvl":27},{"next":509.52,"future":1381.78,"cy":51.66,"lvl":27},{"next":516.91,"future":1384.53,"cy":51.79,"lvl":27},{"next":527.18,"future":1389.57,"cy":51.92,"lvl":27},{"next":548.99,"future":1380.33,"cy":52.05,"lvl":27},{"next":559.65,"future":1384.54,"cy":52.18,"lvl":27},{"next":688.82,"future":1402.3,"cy":52.31,"lvl":27},{"next":911.21,"future":1415.2,"cy":52.44,"lvl":27},{"next":1055.38,"future":1434.29,"cy":52.57,"lvl":27},{"next":332.1,"future":1489.74,"cy":52.57,"lvl":28},{"next":366.54,"future":1478.28,"cy":52.79,"lvl":28},{"next":395.3,"future":1467.32,"cy":54.13,"lvl":28},{"next":415.04,"future":1458.78,"cy":57.93,"lvl":28},{"next":562,"future":1449.09,"cy":58.39,"lvl":28},{"next":568.73,"future":1452.75,"cy":58.53,"lvl":28},{"next":577.27,"future":1456.96,"cy":58.66,"lvl":28},{"next":598.47,"future":1448.59,"cy":58.82,"lvl":28},{"next":608.03,"future":1453.28,"cy":58.95,"lvl":28},{"next":750.67,"future":1472.54,"cy":59.09,"lvl":28},{"next":975.89,"future":1484.41,"cy":59.23,"lvl":28},{"next":1202.29,"future":1512.67,"cy":59.37,"lvl":28},{"next":354.76,"future":1517.4,"cy":59.37,"lvl":29},{"next":354.76,"future":1517.58,"cy":59.5,"lvl":29},{"next":407.16,"future":1530.12,"cy":65.75,"lvl":29},{"next":432.8,"future":1554.78,"cy":65.91,"lvl":29},{"next":432.8,"future":1554.96,"cy":66.04,"lvl":29},{"next":618.35,"future":1566.91,"cy":66.19,"lvl":29},{"next":889.54,"future":1603.36,"cy":66.34,"lvl":29},{"next":1350.89,"future":1640.52,"cy":66.49,"lvl":29},{"next":383.48,"future":1689.7,"cy":66.49,"lvl":30},{"next":383.48,"future":1689.7,"cy":66.49,"lvl":30}],"maxJP":[{"l":1,"v":11.6},{"l":2,"v":11.16},{"l":3,"v":16.95},{"l":4,"v":17.15},{"l":5,"v":17.98},{"l":6,"v":21.55},{"l":7,"v":24.87},{"l":8,"v":30.57},{"l":9,"v":29.23},{"l":10,"v":31.12},{"l":11,"v":35.99},{"l":12,"v":41.12},{"l":13,"v":51.95},{"l":14,"v":54.79},{"l":15,"v":68.96},{"l":16,"v":89.38},{"l":17,"v":83.18},{"l":18,"v":98.45},{"l":19,"v":88.34},{"l":20,"v":114.53},{"l":21,"v":106.52},{"l":22,"v":144.59},{"l":23,"v":142.64},{"l":24,"v":160.04},{"l":25,"v":203.11},{"l":26,"v":219.94},{"l":27,"v":218.65},{"l":28,"v":225.11},{"l":29,"v":305.05},{"l":30,"v":301.2}],"lt":[6,18,26,35,44,56,67,78,87,94,101,108,119,131,139,148,156,164,175,187,194,206,237,249,258,266,276,288,300,308]};
+
+  var pools = SIM.pools;
+  var lt = SIM.lt;
+  var labels = pools.map(function(_, i) { return String(i + 1); });
+
+  var bounds = [0].concat(lt, [pools.length - 1]);
+  var levelLabels = [];
+  for (var i = 0; i < bounds.length - 1; i++) {
+    var dayIdx = i === 0 ? bounds[i] : Math.min(bounds[i] + 1, pools.length - 1);
+    var lvl = pools[dayIdx].lvl;
+    levelLabels.push(lvl === 0 ? null : lvl);
+  }
+
+  var maxJP = SIM.maxJP;
+  var jpBars = maxJP.map(function(j) {
+    return { dayIdx: j.l < lt.length ? lt[j.l] : pools.length - 1, value: j.v };
+  });
+
+  var txtColor = '#a0a0c0';
+  var gridColor = 'rgba(160,160,192,0.1)';
+
+  new Chart(document.getElementById('gta-simChart'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Next Pool', data: pools.map(function(p) { return p.next; }), borderColor: '#4a9eff', borderWidth: 2, pointRadius: 0, tension: 0.1 },
+        { label: 'Future Pool', data: pools.map(function(p) { return p.future; }), borderColor: '#4ade80', borderWidth: 2, pointRadius: 0, tension: 0.1 },
+        { label: 'Cumulative Yield', data: pools.map(function(p) { return p.cy; }), borderColor: '#f9a825', backgroundColor: 'rgba(249,168,37,0.12)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true },
+        { label: 'Largest Jackpot', data: [], borderColor: '#d32f2f', backgroundColor: 'rgba(211,47,47,0.45)', borderWidth: 2, pointRadius: 0, pointStyle: 'rect' }
+      ]
+    },
+    plugins: [
+      {
+        id: 'levelLines',
+        beforeDraw: function(chart) {
+          var ctx = chart.ctx, chartArea = chart.chartArea, xScale = chart.scales.x;
+          ctx.save();
+          for (var k = 0; k < lt.length; k++) {
+            var x = xScale.getPixelForValue(lt[k]);
+            ctx.strokeStyle = 'rgba(128,128,128,0.35)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(x, chartArea.top);
+            ctx.lineTo(x, chartArea.bottom);
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+          ctx.fillStyle = txtColor;
+          ctx.font = '600 12px -apple-system, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText('Level', chartArea.left, chartArea.top - 6);
+          ctx.font = '10px -apple-system, sans-serif';
+          ctx.textAlign = 'center';
+          for (var i = 0; i < bounds.length - 1; i++) {
+            var mid = (bounds[i] + bounds[i + 1]) / 2;
+            var xMid = xScale.getPixelForValue(mid);
+            if (levelLabels[i] != null) ctx.fillText(String(levelLabels[i]), xMid, chartArea.top - 6);
+          }
+          ctx.restore();
+        }
+      },
+      {
+        id: 'jackpotBars',
+        beforeDraw: function(chart) {
+          var ctx = chart.ctx, chartArea = chart.chartArea, xScale = chart.scales.x, yScale = chart.scales.y;
+          var bottom = yScale.getPixelForValue(0);
+          ctx.save();
+          for (var k = 0; k < jpBars.length; k++) {
+            var j = jpBars[k];
+            var x = xScale.getPixelForValue(j.dayIdx);
+            var yTop = yScale.getPixelForValue(j.value);
+            ctx.fillStyle = 'rgba(211, 47, 47, 0.45)';
+            ctx.fillRect(x - 2, yTop, 4, bottom - yTop);
+          }
+          ctx.restore();
+        }
+      }
+    ],
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      layout: { padding: { top: 18 } },
+      scales: {
+        y: {
+          ticks: { color: txtColor, font: { size: 11 } },
+          grid: { color: gridColor },
+          title: { display: true, text: 'ETH', color: txtColor, font: { size: 12, weight: '600' } }
+        },
+        x: {
+          title: { display: true, text: 'Day', color: txtColor, font: { size: 12, weight: '600' } },
+          ticks: { color: txtColor, font: { size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 20 },
+          grid: { display: false }
+        }
+      },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: txtColor, font: { size: 11 }, padding: 10, usePointStyle: true }
+        },
+        tooltip: { enabled: false }
+      }
+    }
+  });
+})();
+</script>
+
+
+<p><strong>The gameover backstop.</strong> Even if the game does die and reach GAMEOVER status, the remaining funds are not lost. They are distributed to players who have been continually building BAF score over the inactivity period and to BURNIE holders who burn for the final decimator draw. Players who stayed active during the decline, accumulating tickets and winning BURNIE jackpots throughout, have a substantial edge in capturing the terminal distribution. This means staying active during a downturn is rewarded not just by ongoing jackpots but by a favorable position in the endgame payout. The worst-case outcome for loyal players is not "lose everything" but "collect a disproportionate share of the final pool."</p>
+<p><strong>The Ψ problem.</strong> This argument has an important gap. The death spiral resistance argument above is purely monetary. What happens to $\Psi$ during player exodus? The primary source of $\Psi$ is gambling entertainment, which is rock-solid human nature and does not degrade with fewer participants. A lootbox is just as fun to open with 10 players as with 10,000, and the fun scales with the prize pool, which can only increase over time (locked liquidity means player exits do not reduce it). That said, a slow-moving game where the big jackpot is far away in time would reduce the appeal for gamblers who want a large payout soon. But this is ultimately secondary: the monetary argument is sufficient to retain the +EV class during low-activity periods, and a growing prize pool will always attract the gambling class later in the level when the jackpot becomes large and imminent. The +EV players sustain progression; the gamblers provide the -EV backing that funds the system when the prizes get big enough to draw them in.</p>
+<h3 id="section-37">8.3 The Whale Departure Paradox</h3>
+<p><strong>Observation 8.2</strong> (Whale Departure Has Mixed Effects). <em>When a whale exits, remaining players experience two competing effects: increased per-capita pool share (positive) and reduced progression velocity (negative). The net impact depends on the whale's contribution-to-extraction ratio and the time-sensitivity of remaining players' positions.</em></p>
+<p>A whale with activity score $a_W = 3.05$ has a protocol multiplier above 1.0 on lootboxes, positive-EV Degenerette, and BAF prize eligibility. In a sufficiently funded pool, they extract more than they deposit in expectation. When they exit:</p>
+<ol>
+<li>Their deposits cease: pool growth decreases by $c_W$ per level.</li>
+<li>Their extractions cease: the net extraction that was flowing to the whale now remains in the pool for everyone else.</li>
+</ol>
+<p>Since the whale has above-breakeven multipliers, the <em>static pool effect</em> is positive for remaining players: one net extractor has left.</p>
+<p>However, the <strong>velocity effect</strong> works against remaining players. Whales drive faster level progression through large purchases. Slower progression delays when everyone's future tickets activate, increasing the time-value discount on illiquid positions:</p>
+<p>$$V_{future}(\ell+k) = \delta^{t(\ell+k)} \cdot V_{tickets}(\ell+k)$$</p>
+<p>where $t(\ell+k)$ is the calendar time until level $\ell+k$ is reached. Higher whale spending reduces $t(\ell+k)$, increasing $V_{future}$ for all holders.</p>
+<p>The net effect depends on context: remaining players get a larger share of each jackpot (positive) but may wait longer between jackpots if the whale was a significant driver of progression (negative). If progression velocity is maintained despite the whale's departure (because other players or the four progression guarantors fill the gap), then whale departure is unambiguously positive for remaining players: pure reduction in extraction with no velocity cost. If the whale was the dominant contributor, the velocity loss is real but temporary. The futurepool drip, quest streak pressure, and auto-rebuy mechanisms continue to push the nextpool toward its target regardless of who left. Whale departure slows the game. It does not stop it.</p>
+<h3 id="section-38">8.4 BURNIE Token Stability</h3>
+<p><strong>Observation 8.3</strong> (BURNIE Price Floor). <em>The BURNIE token has a structural price floor driven by the ticket-purchase comparison. 1,000 BURNIE buys a ticket at any level. An ETH ticket purchase at level $\ell$ costs $p(\ell)$ but also awards 100 BURNIE, so the net cost of a BURNIE ticket is 900 BURNIE. Given that players are actively buying tickets at full ETH price, the floor should be near:</em></p>
+<p>$$p_{BURNIE}^{floor} \approx \frac{p(\ell)}{900}$$</p>
+<p>If market price falls significantly below this, rational players buy BURNIE on the open market and use it for ticket purchases instead of paying ETH. This arbitrage creates buy pressure that supports the price.</p>
+<p>The decimator provides a second floor, but it is not a single number. Decimator EV per BURNIE burned varies dramatically by player: activity score determines both bucket assignment (odds) and burn weight multiplier (Section 6.2). A max-activity player at a x00 level (bucket 2, 1.767x weight) gets far more ETH per BURNIE than a zero-activity player (bucket 12, 1.0x weight) burning at a normal level. The ticket floor is universal and clean; the decimator floor is player-specific and hard to calculate, but for high-activity players it can exceed the ticket floor substantially.</p>
+<p><strong>Future-value component.</strong> The ticket floor $p(\ell)/900$ rises monotonically within each 100-level cycle (6x from x01 to x00). BURNIE held today will be worth more at future levels, and the holder knows this. Unlike conventional assets where future value is discounted by calendar time, BURNIE's discount rate is tied to <em>level progression speed</em>, which depends on player activity rather than a fixed clock. This makes the present-value calculation unusually complex: a fast-progressing game compresses the discount window and pulls future value forward, while a slow game stretches it. The net effect is that the price floor at any moment reflects not just current-level utility but a discounted sum of all future-level utility within the cycle, weighted by the market's expectation of progression speed.</p>
+<p><strong>Caveat:</strong> The arbitrage mechanism is most efficient with liquid BURNIE markets, but the floor does not depend on a DEX listing. BURNIE has direct utility: it buys tickets, plays Degenerette, and enters the decimator without ever touching an exchange. The price floor exists through this direct utility whether or not an LP exists. A liquid market simply makes the arbitrage more convenient, and providing that liquidity is profitable, so someone will. During a severe bear market (Section 8.5), these dynamics weaken. However, the floor has a hard backstop: even in GAMEOVER, BURNIE is the primary method of terminal payout distribution (Section 8.7). The decimator jackpot, which distributes the bulk of remaining assets after the BAF payout, requires BURNIE to enter. A player holding BURNIE when the game dies holds the key to claiming their share of the terminal distribution. This means the price floor is not merely a normal-conditions artifact. It is structurally embedded in the endgame itself.</p>
+<h3 id="section-39">8.5 The Bear Market Stress Test</h3>
+<p>The reviewers of this paper correctly identified the sustained bear market scenario as the most plausible failure mode. It deserves serious treatment, not a dismissive paragraph.</p>
+<p><strong>The scenario:</strong> A prolonged crypto winter suppresses participation. ETH price drops 80%+. stETH yield compresses. New player acquisition stalls. Existing players face real-world financial pressure and reduce discretionary gambling spending. The game reaches a later level where prize pool targets are higher and ticket prices have escalated.</p>
+<p><strong>Why it's dangerous:</strong> At higher levels, the daily cost of maintaining a quest streak is higher (tickets cost 0.04–0.24 ETH). The prize pool targets are larger. The progression guarantors may all weaken simultaneously, because they are not truly independent: they are all driven by player spending, which is driven by crypto market sentiment. A severe bear market is exactly the scenario where all guarantors fail together, because they share a common cause (market-wide risk aversion).</p>
+<p><strong>Structural defenses:</strong>
+- stETH yield continues (at reduced rates, but positive). This does not directly fill the nextpool target, but it grows total assets and increases the attractiveness of jackpots for anyone considering participation.
+- Prize pool concentration accelerates as players leave, making remaining pools increasingly attractive to any remaining or returning participants.
+- The 365-day timeout is long. A year of near-zero activity is required for game death. Even during the 2022 crypto winter, on-chain activity never went to zero.
+- Future pool drip continues regardless of new deposits, providing mechanical progression support.</p>
+<p><strong>Honest assessment:</strong> A 365-day period of insufficient activity to advance one level is unlikely during early levels (targets are small, tickets are cheap). At later levels with 0.16–0.24 ETH tickets and larger targets, a sustained bear market could plausibly trigger the timeout. However, by the time the game reaches later levels, the futurepool will be substantially larger than any single level's nextpool requirement. The every-3-days futurepool drain mechanically guarantees at least one more level completion even at zero new activity. This is psychologically significant: players and potential entrants can see on-chain that the next level <em>will</em> fire regardless, removing the coordination fear of "what if nobody else plays." The protocol's anti-stall mechanisms mitigate but do not eliminate the long-term risk. This is the most realistic path to game death, and players with large illiquid positions at high levels during a bear market face real risk of stranding. If the game truly dies, stranded funds are locked for up to 365 days until the GAMEOVER timeout triggers. During that period, the futurepool drip will fire the next level's jackpot (a large payout to current ticket holders), but after that the remaining funds sit idle until the timeout expires and the terminal distribution begins. Two years of illiquidity in the worst case (the final active level's duration plus the 365-day timeout) is a real cost that players should understand before committing capital they cannot afford to lose.</p>
+<h3 id="section-40">8.6 Conditions for Protocol Failure</h3>
+<div class="design-property"><p><strong>Design Property 8.4</strong> (Game Death). <em>The protocol reaches GAMEOVER if and only if:</em></p>
+<p>$$\text{time since last level start} \geq \begin{cases} 912 \text{ days} & \text{if } \ell = 0 \\ 365 \text{ days} & \text{if } \ell \geq 1 \end{cases}$$</p>
+<p>This requires that for 365 consecutive days (or 912 at level 0), insufficient purchasing activity occurs to meet the current level's prize pool target and trigger a new level start. A single transaction does not suffice: cumulative deposits must reach $\bar{P}_\ell$, which requires meaningful economic activity.</p>
+<p>For any non-trivial accumulated pool (e.g., $P > 10$ ETH), the "buy low" attractor (increasing per-capita value as players leave) makes failure to reach the target improbable under standard rational actor assumptions. But "improbable" is not "impossible," especially at higher levels during bear markets.</p>
+<p><strong>The terminal growth problem.</strong> There is a second, more exotic failure mode: the game succeeds <em>too well</em>. Since deposits are permanent and prize pools can only grow, a sufficiently long-running game accumulates an ever-increasing fraction of available ETH. At some distant level, the ETH required to start the next level exceeds the ETH that remains outside the system. This is terminal by construction. If the game ever reaches this point, it represents the greatest success in the history of gaming, but it is still terminal. The practical relevance is negligible (this requires the protocol to absorb a substantial fraction of all circulating ETH), but the theoretical completeness matters: the system has a hard upper bound on lifespan even under maximally favorable conditions.</p></div>
+<h3 id="section-41">8.7 Endgame Distribution</h3>
+<p>Even in the GAMEOVER state, the protocol provides well-defined terminal payoffs:</p>
+<ol>
+<li><strong>Deity pass refunds:</strong> Level 0 → full refund; levels 1–9 → 20 ETH/pass; level 10+ → no refund</li>
+<li><strong>BAF jackpot:</strong> 50% of remaining assets distributed to past-level ticket holders, weighted by BAF score accumulated during the inactivity period</li>
+<li><strong>Decimator jackpot:</strong> Remaining surplus to decimator participants</li>
+<li><strong>Final sweep:</strong> After 30 days, unclaimed funds → vault and DGNRS reserves</li>
+</ol>
+<p>This ensures that accumulated value is distributed rather than destroyed.</p>
+<p><strong>Could someone profit from game death?</strong> In theory, a player could buy BURNIE cheaply during a decline and burn it for the decimator jackpot at GAMEOVER. But this strategy has limited upside: BURNIE is a liquid token, so it must be purchased at competitive market prices (the utility floor prevents true fire-sale pricing). GAMEOVER requires 365 consecutive days of insufficient activity, meaning the speculator must hold for years with no guarantee of success. And their existence further incentivizes active players to prevent GAMEOVER, since letting the game die would dilute their own share of the terminal distribution. The active player class will always be larger and better positioned than the death-betting class. A few players wanting the game to end is not an existential threat. There will always be haters and competitors who would prefer it dies.</p>
+<hr />
+<h2 id="section-42">9. Comparisons</h2>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>DeFi Yield</th>
+<th>Speculative Token</th>
+<th>Degenerus Protocol</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Yield source</td>
+<td>Staking, lending</td>
+<td>New buyers (ponzi dynamics)</td>
+<td>Redistribution from degens (individual); stETH yield (protocol-level)</td>
+</tr>
+<tr>
+<td>Variance</td>
+<td>Low (predictable APY)</td>
+<td>Extreme (token price)</td>
+<td>High (jackpots, lotteries)</td>
+</tr>
+<tr>
+<td>Engagement</td>
+<td>Passive deposits</td>
+<td>Buy and hold/shill</td>
+<td>Active participation rewarded</td>
+</tr>
+<tr>
+<td>Token dynamics</td>
+<td>Often inflationary</td>
+<td>Inflationary (vesting, farming)</td>
+<td>BURNIE: deflationary; DGNRS: fixed</td>
+</tr>
+<tr>
+<td>Growth dependency</td>
+<td>Moderate</td>
+<td>Fatal (requires perpetual growth)</td>
+<td>Eventually fatal, but graceful (terminal distribution, not rug)</td>
+</tr>
+<tr>
+<td>Liquidity</td>
+<td>Withdrawable</td>
+<td>Liquid (sell anytime)</td>
+<td>Non-withdrawable (deposits permanent)</td>
+</tr>
+<tr>
+<td>Terminal value</td>
+<td>Yield stream</td>
+<td>Zero</td>
+<td>Non-zero (game utility, yield claims)</td>
+</tr>
+<tr>
+<td>Risk of ruin</td>
+<td>Low</td>
+<td>Total (token goes to zero)</td>
+<td>Moderate (individual outcomes vary)</td>
+</tr>
+<tr>
+<td>Loser outcome</td>
+<td>Opportunity cost</td>
+<td>Worthless tokens, no recourse</td>
+<td>Fair VRF-verified chances, lost to math not fraud</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation 9.1</strong> (Variance as Defensive Moat). <em>A system with high variance and moderate expected value will tend to attract entertainment-motivated participants (who value variance positively) and repel pure extractors (who discount variance and see only moderate EV after accounting for opportunity cost). The illiquid reward structure (level-gated payouts, non-transferable future tickets) further limits hedging options.</em> This was introduced intuitively through the poker analogy (Section 2.6): the variance-minimizing nit that kills poker ecosystems has no viable strategy in Degenerus, because every avenue for profit requires high variance. Reward velocity is tied to <em>progression</em>, not calendar time: rewards unlock as levels are reached, and levels require ETH to enter the system.</p>
+<p>The source-of-returns distinction (Section 1) is what separates this from speculative tokens structurally. A memecoin's returns depend on later buyers' capital. This protocol's returns depend on entertainment spending plus yield. The protocol needs ongoing deposits to advance levels, and without them it eventually ends. But the failure mode is a fair terminal distribution, not a rug.</p>
+<hr />
+<h2 id="section-43">10. Conclusion: The Resilience Thesis</h2>
+<h3 id="section-44">10.1 The Resilience Thesis</h3>
+<p>The preceding sections built an argument through interlocking mechanisms: cross-subsidy between heterogeneous player types (Section 2), commitment devices that make continued participation dominant (Section 5.5), structural death spiral resistance through locked liquidity and prize concentration (Section 8), and BURNIE economics with a built-in price ratchet (Section 6). We now state the central claim.</p>
+<p><strong>Thesis (Structural Resilience).</strong> <em>Once Degenerus Protocol has reached a state with positive prize pools and at least one rational participant, the game has structural incentives to continue advancing through levels.</em> These mechanisms are correlated under adverse market conditions, so independence should not be assumed.</p>
+<p><strong>Where the thesis holds:</strong>
+- stETH yield rate $r > 0$ (Lido continues functioning)
+- At least one rational actor monitors and acts on prize pool opportunities
+- Ethereum remains operational
+- Smart contract code is free of critical bugs</p>
+<p><strong>Where the thesis fails:</strong>
+- Lido staking yield goes to zero permanently (systemic ETH staking failure)
+- A prolonged crypto bear market suppresses participation below the level target for 365+ consecutive days, the most plausible failure mode, especially at higher levels where targets are larger (Section 8.5)
+- All participants simultaneously cease to value the entertainment product
+- A critical smart contract vulnerability is discovered
+- Regulatory action prevents all participation globally</p>
+<p>We do not claim the protocol is indestructible. We claim it is <em>structurally resilient</em>: that its incentive design makes continued operation the default outcome under a wide range of conditions, and that failure requires sustained adverse conditions rather than the simple absence of growth.</p>
+<p><strong>What this means for each participant.</strong> For an EV maximizer, the question is whether the equilibrium point delivers returns that justify the opportunity cost of locked capital. For a degen, the question is whether this is more fun per dollar than alternatives. For an affiliate, the question is whether they can recruit enough players across all types. For a whale, the question is whether the game will progress through enough levels to justify the capital commitment. The protocol cannot answer these questions by design. It can only ensure that if the answers are yes, the incentives align to keep the game running.</p>
+<p><strong>What would confirm or falsify this thesis.</strong> Post-deployment, watch for: (1) the fish-to-grinder ratio stabilizing above the aggregate constraint threshold (Section 2.3), confirming sufficient entertainment demand to fund positive-EV play; (2) quest streak distribution showing genuine daily engagement across accounts; (3) the futurepool growing net across 100-level cycles; (4) BURNIE maintaining its ticket-price floor (Section 8.4); and (5) level completion times staying under 30 days at higher levels. Note that GTO play is always +EV before opportunity cost and risk aversion, since stETH yield sets the floor. The question is not whether positive returns exist, but whether they are large enough to attract and retain capital. The protocol is indifferent to whether participants are humans or autonomous agents. Bots and AIs that play optimally are economically identical to human grinders, and the protocol is designed to welcome them as affiliates and active players. If these metrics hold through the first 100-level cycle, the resilience thesis has survived its first real test. If level completion times grow unbounded or the active player count trends to zero despite growing pools, the entertainment assumption has failed and no amount of incentive design will save it.</p>
+<h3 id="section-45">10.2 Limitations</h3>
+<ol>
+<li>
+<p><strong>Smart contract risk is the dominant existential threat.</strong> The protocol holds all player deposits in stETH with no withdrawal mechanism. The same locked liquidity that protects against death spirals means a critical contract exploit has no recovery path. A single exploitable bug could drain the entire prize pool permanently. This is an endogenous consequence of the design choice to make deposits irrevocable. The protocol also has two external dependencies: Chainlink VRF is a soft dependency (the creator can migrate to a new VRF coordinator if it breaks), but Lido stETH is a hard dependency (there is no migration path if stETH itself fails).</p>
+</li>
+<li>
+<p><strong>No empirical validation.</strong> All results are theoretical. A Monte Carlo simulation of 30 levels with realistic player behavior supports the theoretical predictions (Section 8.2), but simulated agents are not real players with real money. Post-deployment observation is needed to confirm predictions.</p>
+</li>
+<li>
+<p><strong>Correlated failure modes are acknowledged but not fully quantified.</strong> The four progression guarantors share exposure to crypto market sentiment, and the bear market stress test (Section 8.5) is qualitative rather than probabilistic.</p>
+</li>
+<li>
+<p><strong>The utility model is assumed, not measured.</strong> The non-monetary utility parameters are justified by analogy to the gambling industry, not by direct measurement of this protocol's users. Actual player behavior may diverge.</p>
+</li>
+<li>
+<p><strong>Cold-start problem is partially addressed.</strong> The cross-subsidy structure requires multiple player types to be present simultaneously. The affiliate program (Section 3.4) is the intended bootstrap mechanism, giving external marketers a financial incentive to recruit the degen player class the game needs. But whether affiliate incentives are sufficient to reach critical mass from zero is an empirical question this analysis cannot answer.</p>
+</li>
+<li>
+<p><strong>stETH yield is exogenous.</strong> We treat stETH yield as a fixed external parameter (~2.5% APR). A sustained decline in Ethereum staking rewards would not break the protocol, but would reduce minimum returns under GTO play, since yield is the source of value injection that makes the game positive-sum.</p>
+</li>
+</ol>
+<hr />
+<h2 id="section-46">Appendix A: Parameter Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Symbol</th>
+<th>Value</th>
+<th>Role in Analysis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>stETH yield rate</td>
+<td>$r$</td>
+<td>~0.025 (2.5% APR)</td>
+<td>External value injection</td>
+</tr>
+<tr>
+<td>stETH yield split</td>
+<td>—</td>
+<td>50% prize pool, 25% vault, 25% DGNRS</td>
+<td>Value distribution</td>
+</tr>
+<tr>
+<td>Activity score range</td>
+<td>$a_i$</td>
+<td>[0, 3.05]</td>
+<td>Incentive multiplier</td>
+</tr>
+<tr>
+<td>Lootbox EV range</td>
+<td>$\mu(a)$</td>
+<td>[0.80, 1.35]</td>
+<td>Engagement reward</td>
+</tr>
+<tr>
+<td>Degenerette ROI range</td>
+<td>$\rho(a)$</td>
+<td>[0.90, 0.999]</td>
+<td>Engagement reward</td>
+</tr>
+<tr>
+<td>Lootbox EV cap</td>
+<td>—</td>
+<td>10 ETH/level/account</td>
+<td>Extraction bound</td>
+</tr>
+<tr>
+<td>Degenerette ETH cap</td>
+<td>—</td>
+<td>10% of future pool</td>
+<td>Solvency guarantee</td>
+</tr>
+<tr>
+<td>Coinflip win rate</td>
+<td>—</td>
+<td>0.50</td>
+<td>Fair game</td>
+</tr>
+<tr>
+<td>Coinflip reward mean</td>
+<td>—</td>
+<td>0.9685</td>
+<td>Slight negative EV</td>
+</tr>
+<tr>
+<td>Affiliate commission</td>
+<td>—</td>
+<td>0.20–0.25</td>
+<td>Referral incentive</td>
+</tr>
+<tr>
+<td>Ticket price range</td>
+<td>$p(\ell)$</td>
+<td>0.01–0.24 ETH</td>
+<td>Entry cost scaling</td>
+</tr>
+<tr>
+<td>Whale bundle price</td>
+<td>—</td>
+<td>2.4–4 ETH</td>
+<td>Catch-up mechanism</td>
+</tr>
+<tr>
+<td>Deity pass base price</td>
+<td>—</td>
+<td>24 ETH + $T(n)$</td>
+<td>Whale commitment</td>
+</tr>
+<tr>
+<td>Deity pass cap</td>
+<td>—</td>
+<td>24 total</td>
+<td>Concentration limit</td>
+</tr>
+<tr>
+<td>Pre-game timeout</td>
+<td>—</td>
+<td>912 days</td>
+<td>Liveness guard</td>
+</tr>
+<tr>
+<td>Post-game timeout</td>
+<td>—</td>
+<td>365 days</td>
+<td>Liveness guard</td>
+</tr>
+<tr>
+<td>VRF retry timeout</td>
+<td>—</td>
+<td>18 hours</td>
+<td>RNG liveness</td>
+</tr>
+<tr>
+<td>Emergency stall gate</td>
+<td>—</td>
+<td>3 days</td>
+<td>VRF recovery</td>
+</tr>
+<tr>
+<td>Quest daily reward</td>
+<td>—</td>
+<td>300 BURNIE</td>
+<td>Engagement incentive</td>
+</tr>
+<tr>
+<td>Bootstrap prize pool</td>
+<td>—</td>
+<td>50 ETH</td>
+<td>Minimum pool guarantee</td>
+</tr>
+<tr>
+<td>BAF leaderboard reset</td>
+<td>—</td>
+<td>Every 10 levels</td>
+<td>Anti-concentration</td>
+</tr>
+<tr>
+<td>Jackpots per level</td>
+<td>—</td>
+<td>5 daily</td>
+<td>Distribution frequency</td>
+</tr>
+<tr>
+<td>Scatter share of BAF jackpot</td>
+<td>—</td>
+<td>60% (40% + 20%)</td>
+<td>Broad distribution</td>
+</tr>
+<tr>
+<td>Auto-rebuy ticket bonus</td>
+<td>—</td>
+<td>30%/45%</td>
+<td>Compounding incentive</td>
+</tr>
+</tbody>
+</table>
+<h2 id="section-47">Appendix B: BAF Jackpot Distribution Detail</h2>
+<p>The BAF (Big-Ass Flip) jackpot, triggered every 10 levels from the future prize pool, distributes as follows:</p>
+<ul>
+<li><strong>Top BAF slot:</strong> $10\%$ of pool</li>
+<li><strong>Top Daily Flip slot:</strong> $10\%$ of pool</li>
+<li><strong>Random pick slot:</strong> $5\%$ of pool</li>
+<li><strong>Affiliate draw slice:</strong> $10\%$ of pool</li>
+<li><strong>Future ticket holder slot:</strong> $5\%$ of pool (selects 2 winners from 4 far-future ticket holder candidates, ranked by BAF score: 3% to 1st, 2% to 2nd)</li>
+<li><strong>Scatter slices:</strong> $40\%$ and $20\%$ of pool</li>
+</ul>
+<p>Daily jackpot distribution:
+- Days 1–4: a random 6–14% slice of the current prize pool is drawn.
+- Day 5: the remaining current prize pool is fully distributed.
+- Days 1–4 use equal trait-bucket shares (20/20/20/20) with the solo bucket taking the remainder; day 5 uses level-jackpot shares (60/13.33/13.33/13.34 with rotation of the 60% solo bucket).
+- A 20% ticket-conversion budget is applied to the daily ETH slice.
+- Carryover flow is conditional and implementation-specific: on eligible non-day-1 draws, ~1% of <code>futurePrizePool</code> may be pulled, with 50% converted to tickets and 50% paid as ETH.</p>
+<hr />
+<h2 id="section-48">Appendix C: Model Detail</h2>
+<p><em>Full mathematical formalization of the protocol's parameters and game structure.</em></p>
+<h3 id="section-49">Key Parameter Summary</h3>
+<p><strong>Lootbox EV quick reference:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Activity Score</th>
+<th>Lootbox EV Multiplier</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0 (new player)</td>
+<td>0.80x</td>
+</tr>
+<tr>
+<td>0.60 (breakeven)</td>
+<td>1.00x</td>
+</tr>
+<tr>
+<td>3.05 (maximum)</td>
+<td>1.35x</td>
+</tr>
+</tbody>
+</table>
+<p>The activity score EV benefit on lootboxes caps at 10 ETH per level per account. Activity score also stratifies returns on Degenerette spins (90%-99.9% base ROI) and decimator burns (bucket assignment and burn weight multiplier). The pattern is the same across all products: higher engagement produces better returns.</p>
+<p><strong>Ticket pricing and prize pools.</strong> Ticket prices escalate with level progression in a repeating 100-level cycle, from 0.01 ETH at the earliest levels to 0.24 ETH at century milestones (full pricing table below). Each ticket purchase splits: 90% to the next-level prize pool ($P^{next}$) and 10% to the future prize pool ($P^{fut}$). When the next pool reaches its level target, the level advances.</p>
+<p>stETH yield ($r \approx 0.025$ annual) accrues continuously on all locked deposits, the only external value entering the system.</p>
+<p><strong>Transaction costs.</strong> Typical user interactions cost roughly $0.05 in gas at current prices, negligible relative to ticket and lootbox amounts. The protocol consumes more gas during jackpot resolution phases, but players who bear this cost are rewarded with BURNIE and must have made a purchase in the previous day to be eligible. Gas is a background cost that does not meaningfully alter the strategic analysis.</p>
+<p><strong>Decimator trigger schedule:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Levels</th>
+<th>Pool Source</th>
+<th>Pool Percentage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>x5 (5, 15, 25, 35, 45, 55, 65, 75, 85)</td>
+<td>futurePrizePool</td>
+<td>10%</td>
+</tr>
+<tr>
+<td>x00 (100, 200, 300...)</td>
+<td>futurePrizePool</td>
+<td>30%</td>
+</tr>
+</tbody>
+</table>
+<p>The decimator is not triggered at level x95. The sequence skips from x85 to x00, where the pool percentage triples. Minimum burn is 1,000 BURNIE. Bucket assignment: default 12, drops to 5 at max activity on normal levels, drops to 2 at max activity on x00 levels. Lower buckets have higher weight per BURNIE burned in the pro-rata distribution.</p>
+<h3 id="section-50">Model and Notation</h3>
+<h4 id="section-51">Prize Pool Dynamics</h4>
+<p>The prize pool evolves according to deterministic accumulation and stochastic distribution:</p>
+<p><strong>Accumulation (Purchase Phase):</strong>
+For each ticket purchase of cost $c$ at level $\ell$:
+$$P^{next}_\ell \leftarrow P^{next}_\ell + 0.9c$$
+$$P^{fut}_\ell \leftarrow P^{fut}_\ell + 0.1c$$</p>
+<p>For each lootbox purchase of cost $c$, the split is reversed:
+$$P^{next}_\ell \leftarrow P^{next}_\ell + 0.1c$$
+$$P^{fut}_\ell \leftarrow P^{fut}_\ell + 0.9c$$</p>
+<p><strong>Level transition:</strong> When $P^{next}_\ell \geq \bar{P}_\ell$ (the level target):
+$$P^{curr}_{\ell+1} \leftarrow f(P^{fut}_\ell, t)$$</p>
+<p>where $f$ is a time-dependent extraction function with a U-shaped profile: extraction is highest (~20%+) if the level completes very quickly (under 1 day) or very slowly (over 28 days), and lowest (~3%) around the 14-day sweet spot. Additional adjustments apply for milestone levels, pool ratio imbalances, and random variance. The design incentivizes steady progression velocity.</p>
+<p><strong>Yield accrual (continuous):</strong>
+$$\frac{dP^{total}}{dt} = r \cdot S$$</p>
+<p>where $r \approx 0.025$ is the stETH annual yield rate (approximately 2.5% APR as of 2024–2025) and $S$ is total staked ETH.</p>
+<h4 id="section-52">Ticket Pricing</h4>
+<p>Ticket prices follow a deterministic schedule that escalates with level progression:</p>
+<table>
+<thead>
+<tr>
+<th>Level Range</th>
+<th>Price (ETH)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0–4</td>
+<td>0.01</td>
+</tr>
+<tr>
+<td>5–9</td>
+<td>0.02</td>
+</tr>
+<tr>
+<td>10+, within each 100-level cycle: levels 1–29</td>
+<td>0.04</td>
+</tr>
+<tr>
+<td>10+, within each 100-level cycle: levels 30–59</td>
+<td>0.08</td>
+</tr>
+<tr>
+<td>10+, within each 100-level cycle: levels 60–79</td>
+<td>0.12</td>
+</tr>
+<tr>
+<td>10+, within each 100-level cycle: levels 80–99</td>
+<td>0.16</td>
+</tr>
+<tr>
+<td>10+, century milestones (100, 200, ...)</td>
+<td>0.24</td>
+</tr>
+</tbody>
+</table>
+<p>The cycle repeats every 100 levels after level 10, creating a predictable cost escalation that players can plan around. The strategic implications of this cycle, including its interaction with BURNIE economics and the crescendo events at century milestones, are analyzed in Section 6.</p>
+<h4 id="section-53">Activity Score and EV Multipliers</h4>
+<p>The activity score $a_i \in [0, 3.05]$ is computed as:</p>
+<p>$$a_i = \min\left(\frac{m_i}{50}, 1\right) \cdot 0.50 + \min\left(\frac{c_i}{\ell}, 1\right) \cdot 0.25 + \min\left(\frac{q_i}{100}, 1\right) \cdot 1.00 + \phi_i \cdot 0.50 + \gamma_i$$</p>
+<p>where:
+- $m_i$ is the purchase streak (consecutive levels with ETH purchases)
+- $c_i$ is the purchase count (total levels with purchases)
+- $q_i$ is the quest streak (consecutive daily quest completions)
+- $\phi_i \in [0, 1]$ is the normalized affiliate bonus
+- $\gamma_i \in \{0, 0.10, 0.40, 0.80\}$ is the pass bonus (none, 10-level whale, 100-level whale, deity)</p>
+<p>The activity score maps to an EV multiplier $\mu: [0, 3.05] \rightarrow [0.80, 1.35]$ for lootboxes:</p>
+<p>$$\mu(a) = \begin{cases}
+0.80 + \frac{a}{3} & \text{if } a \leq 0.60 \\
+0.80 + 0.20 + \frac{(a - 0.60) \cdot 0.35}{2.45} & \text{if } a > 0.60
+\end{cases}$$</p>
+<p>And to a Degenerette ROI $\rho: [0, 3.05] \rightarrow [0.90, 0.999]$:</p>
+<p>$$\rho(a) \approx 0.90 + \frac{0.099 \cdot \min(a, 3.05)}{3.05}$$</p>
+<p>The key thresholds: at $a_i = 0.60$, lootbox EV reaches 1.00 (break-even). Above 0.60, lootboxes are positive EV. At $a_i = 3.05$, lootboxes return 1.35x and Degenerette approaches 99.9% base ROI. Note that the Degenerette base ROI understates the effective return for high-activity players in two ways. First, 75% of the ETH payout is delivered as lootboxes, and lootboxes are worth 1.35x at max activity, so a player who would buy lootboxes anyway receives more than face value on that component. Second, ETH Degenerette bets receive a +5% ETH bonus on high-match outcomes, which is not reflected in $\rho(a)$. Together, these make Degenerette ETH bets individually +EV for high-activity players, not merely near-zero edge.</p>
+<p><strong>Additional lootbox value.</strong> The $\mu$ multiplier accounts for ticket and BURNIE-equivalent value from lootbox rewards. Lootboxes also award DGNRS tokens (from a reward pool, scaled by lootbox size) and boons (random bonuses including purchase boosts, coinflip boosts, activity score points, and occasionally whale passes or deity pass discounts). These components are harder to quantify because DGNRS value depends on market price and boon value depends on whether the player uses them optimally. They represent additional upside beyond the multiplier, but we omit them from the formal EV calculations to keep the analysis conservative.</p>
+<p>See Section 2.3 for the aggregate constraint on these multipliers.</p>
+<hr />
+<h3 id="section-54">Protocol Architecture</h3>
+<h4 id="section-55">The Stage Game at Level $\ell$</h4>
+<p>Each level $\ell$ defines a stage game with two phases:</p>
+<p><strong>Phase 1: Purchase (variable duration).</strong> Players simultaneously choose actions from their action sets. The purchase phase continues until the prize pool target is met: $P^{next}_\ell \geq \bar{P}_\ell$.</p>
+<p><strong>Phase 2: Jackpot (fixed 5-day duration).</strong> Prize distribution occurs over 5 daily draws. On days 1–4, a random 6–14% of $P^{curr}_\ell$ is distributed to winners selected by VRF from the trait-ticket pool; on day 5, 100% of the remaining $P^{curr}_\ell$ is distributed.</p>
+<p><strong>Transition:</strong> After the jackpot phase completes, $\ell \leftarrow \ell + 1$ and Phase 1 begins for the next level.</p>
+<p>For the BAF (Big-Ass Flip) jackpot, triggered every 10 levels from the future prize pool, 100% of the draw is distributed across top BAF and daily flip leaderboard positions, random leaderboard slots, affiliate draws, future ticket holder slots, and scatter slices. (Exact slice percentages are in Appendix B.)</p>
+<p><strong>Ticket timing and EV.</strong> Not all tickets at a given level have equal expected value. A ticket purchased early in the purchase phase is eligible for purchase-phase reward jackpots (every 3 days, drawing ~1% of the future pool as tickets and ETH to trait holders), all 5 daily jackpot draws during the burn phase, and any future-level BURNIE draws it accumulates while waiting. A ticket purchased just before the level target is met catches all 5 burn-phase draws but misses the purchase-phase rewards. And tickets purchased mid-jackpot phase only participate in the remaining daily draws. Since day 5 distributes 100% of the remaining current prize pool, all tickets share in the largest single payout regardless of timing. But the cumulative expected value of early tickets is strictly higher than late tickets at the same level, because they are eligible for more drawings. This creates an incentive to purchase early in a level rather than waiting, which in turn accelerates pool growth and level completion. It also means that the per-ticket EV varies within a single level depending on when the ticket was acquired, further complicating any attempt to assign a single "EV per ticket" number.</p>
+<p>This timing differential is itself a cross-subsidy mechanism. A degen buying tickets late in a level is making a clearly worse-EV choice compared to buying early. But the degen is not optimizing for EV. They want a shot at the jackpot <em>today</em>. The protocol satisfies that preference: you can always buy a ticket and immediately be eligible for the next draw. The cost of that immediacy (fewer total draw opportunities per ticket) is a surplus that benefits early buyers and the system as a whole. The degen gets what they want ($\Psi$ from an imminent jackpot shot), and the system gets what it needs (late-arriving deposits that grow the pool for remaining draws).</p>
+<h4 id="section-56">Trait Assignment: No Strategic Selection</h4>
+<p>The trait-ticket system assigns each ticket to one of 256 traits (4 quadrants × 64 trait values). Jackpot distributions select winning traits, meaning players benefit from holding tickets with traits that match winning draws.</p>
+<p>Critically, trait assignment is <em>deterministic from VRF entropy</em>: players cannot choose their traits. Trait generation is a pure function of the player's position in the ticket queue and a VRF-derived entropy seed committed in a prior block. Neither can be influenced by the purchasing player at the time of their transaction. This eliminates the coordination problem that would otherwise arise (players clustering on popular traits) and converts what could be a complex coordination game into a simple lottery with equal per-ticket odds.</p>
+<h4 id="section-57">Hero Symbol Override</h4>
+<p>There is one partial exception to pure-VRF trait selection. Each daily jackpot draw, the system identifies the <strong>hero symbol</strong>: the symbol that received the most ETH wagered in Degenerette bets that day. This symbol auto-wins its own quadrant in the jackpot draw (with a random color still determined by VRF), replacing only that one quadrant's outcome.</p>
+<p>This creates a direct feedback loop between Degenerette betting and jackpot outcomes. But the influence is narrowly bounded:</p>
+<ul>
+<li>It affects only 1 of 4 quadrants (the hero symbol's category).</li>
+<li>Within that quadrant, it fixes only the symbol (1 of 8), not the color (1 of 8). So the hero override constrains the winning trait to 1/8 of the quadrant's possible outcomes, not a single trait.</li>
+<li>Players cannot choose which traits their tickets receive (trait assignment is VRF-deterministic), so knowing which symbol will win a quadrant does not let you concentrate tickets on it.</li>
+<li>Degenerette bet placement is itself a coordination problem with no dominant strategy: the hero symbol is determined by aggregate wagering, and any individual bettor's influence on the outcome is diluted by total volume.</li>
+</ul>
+<p>The net effect is that Degenerette activity injects a small amount of predictable structure into the otherwise random draw, rewarding the most-wagered symbol's holders. Like most edges in Degenerus Protocol, this rewards engaged players who track hero symbol trends, but the edge is small, competitive (other players see the same information), and bounded by VRF trait assignment they cannot control. The -EV trap is playing Degenerette specifically to push a symbol to hero status when the expected jackpot edge doesn't justify the Degenerette bet, or when another player outbids you and you end up with a losing Degenerette position and no hero influence at all. The mechanism offers real but modest upside to those who use it well, not a loophole.</p>
+<h4 id="section-58">Liveness Guarantee</h4>
+<div class="design-property"><p><strong>Design Property</strong> (Liveness). <em>The game satisfies liveness under the assumption that sufficient purchasing activity occurs to meet the level's prize pool target and trigger a new level start within 365 days of the previous level's start (912 days at level 0). The following mechanisms support this:</em></p>
+<ol>
+<li><em>Multiple independent progression guarantors</em> (quest streaks, afKing auto-rebuy, affiliate referrals, and the 15% futurepool dump each level that compensates preexisting ticket holders) all contribute independently to nextpool growth. Note: stETH yield grows total assets and increases jackpot attractiveness, but does not directly contribute to the nextpool target.</li>
+<li><em>Futurepool drain:</em> Every three days, a portion of the futurepool drains into the nextpool, awarding the equity in tickets to current ticket holders. Once the futurepool reaches a sufficient multiple of the nextpool requirement, this mechanism alone guarantees the next level will fire even with zero new player activity. However, this is a one-shot guarantee: if activity remains at zero, the futurepool will be insufficient to cover subsequent levels.</li>
+<li><em>VRF retry timeout:</em> If the VRF callback is not received within 18 hours, any player can request a new VRF word, preventing permanent VRF stalls.</li>
+<li><em>Emergency VRF recovery:</em> After a 3-day stall, the admin can migrate to a new VRF coordinator.</li>
+<li><em>Graceful termination:</em> If no new level starts within the timeout, the game transitions to GAMEOVER, a well-defined terminal state with full prize distribution.</li>
+</ol></div>
+<hr />
+<h2 id="section-59">Appendix D: Attack Vector Analysis</h2>
+<h4 id="section-60">Attack 1: Sybil Attack on Activity Score</h4>
+<p><strong>Vector:</strong> Single entity creates multiple wallets to farm activity score bonuses.
+<strong>Analysis:</strong> Each wallet must independently purchase tickets, complete quests, and maintain streaks, all with real ETH cost. The marginal cost of maintaining $k$ sybil accounts scales linearly, while the marginal benefit (activity score EV benefit caps at 10 ETH/level/account) also scales linearly. No superlinear advantage exists.
+<strong>Verdict:</strong> Not economically advantageous.</p>
+<h4 id="section-61">Attack 2: Degenerette Pool Drain</h4>
+<p><strong>Vector:</strong> High-activity player places maximum ETH wagers, exploiting near-parity ROI.
+<strong>Analysis:</strong> ETH payouts are hard-capped at 10% of the future prize pool per spin. The 8-match jackpot is astronomically rare. Even at the maximum configured ROI, net extraction per spin is marginal. The 75% lootbox payout component converts extraction into future game participation.
+<strong>Verdict:</strong> Not a threat. Caps and lootbox conversion prevent meaningful pool drain.</p>
+<h4 id="section-62">Attack 3: Affiliate Self-Referral Loop</h4>
+<p><strong>Vector:</strong> Player refers themselves to capture commission on their own purchases.
+<strong>Analysis:</strong> The protocol explicitly blocks self-referral (locks referral to VAULT sentinel permanently). Cross-referral between colluding accounts (A refers B, B refers A) is costless to set up. The benefit is limited to BURNIE commissions (no activity score boost unless both accounts are active players), and extraction comes from the affiliate BURNIE emission pool rather than ETH prize pools.
+<strong>Verdict:</strong> Moderate impact. Non-trivial leak from the affiliate incentive budget that should be acknowledged. Does not threaten ETH solvency.</p>
+<h4 id="section-63">Attack 4: stETH Depeg Event</h4>
+<p><strong>Vector:</strong> Lido stETH trades at discount to ETH (as occurred briefly in June 2022 at ~0.93:1).
+<strong>Analysis:</strong> The auto-stake mechanism only stakes ETH <em>above</em> <code>claimablePool</code>, meaning the ETH floor for claims is maintained. The stETH exposure is in the "surplus" portion (prize pools, future pools), not the solvency floor. Early claimers get ETH; late claimers during a depeg receive discounted stETH, creating a mild bank-run incentive.
+<strong>Verdict:</strong> Low-to-moderate risk. A severe depeg (&gt;20%) would reduce real prize pool value but not threaten claimable funds.</p>
+</div>
+<script src="/shared/nav.js"></script>
+<script>initNav({ currentPage: 'analysis' });</script>
+</body>
+</html>

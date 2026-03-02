@@ -1,0 +1,1299 @@
+<!-- Interactive Jackpot Demo Widget -->
+<style>
+  .demo-wrap {
+    background: #14141a;
+    border-radius: 12px;
+    padding: 1.5rem 1rem 1rem;
+    margin: 2rem auto;
+    max-width: 420px;
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #e0e0e0;
+  }
+  .demo-wrap * { box-sizing: border-box; }
+
+  .demo-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #f5a623;
+    margin-bottom: 0.15rem;
+    letter-spacing: 0.03em;
+  }
+  .demo-scenario {
+    font-size: 0.72rem;
+    color: #aaa;
+    margin-bottom: 0.8rem;
+    height: 3.1em;
+    line-height: 1.4;
+    overflow: hidden;
+  }
+
+  /* Token grid */
+  .demo-token-wrap { display: flex; justify-content: center; }
+  .demo-token {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    width: 300px;
+    height: 300px;
+    position: relative;
+    background: #d9d9d9;
+    border: 3px solid #8a8d8f;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .demo-token::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    width: 2px; height: 100%;
+    background: #8a8d8f;
+    transform: translateX(-50%);
+    z-index: 5;
+    pointer-events: none;
+  }
+  .demo-token::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 0;
+    width: 100%; height: 2px;
+    background: #8a8d8f;
+    transform: translateY(-50%);
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  /* Quadrants */
+  .demo-quad {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+  .demo-quad.q-scratchable { background: #7ca8c4; }
+  .demo-quad.q-has-trait { background: rgba(160, 200, 230, 0.65); }
+  .demo-quad.q-has-tickets { background: rgba(22, 163, 74, 0.6); }
+  .demo-quad.q-no-tickets { background: rgba(239, 120, 120, 0.5); }
+
+  .demo-badge {
+    object-fit: contain;
+    width: 92%;
+    height: 92%;
+    display: block;
+    position: relative;
+    z-index: 1;
+  }
+
+
+  /* Scratch canvas */
+  .demo-scratch-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 2;
+    cursor: crosshair;
+    touch-action: none;
+  }
+
+  /* Prize reveal overlay */
+  .demo-prize-reveal {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: stretch;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+  }
+  .demo-prize-reveal.visible { opacity: 1; }
+  .demo-prize-bar {
+    padding: 4px 0;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+  }
+  .demo-prize-bar .demo-prize-total {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    line-height: 1.2;
+  }
+
+  /* Scattered win badges */
+  .demo-badge-wrap {
+    position: absolute;
+    pointer-events: none;
+    z-index: 1;
+    text-align: center;
+  }
+  .demo-scattered-badge {
+    width: 100%;
+    display: block;
+    opacity: 0.85;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.25));
+    object-fit: contain;
+  }
+
+  /* Center diamond */
+  .demo-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+    pointer-events: auto;
+    cursor: pointer;
+    width: 31%;
+    height: 31%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .demo-center::before {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    width: calc(100% / 1.4142);
+    height: calc(100% / 1.4142);
+    background: #fff;
+    border: 2px solid #8a8d8f;
+    box-sizing: border-box;
+    transform: translate(-50%, -50%) rotate(45deg);
+    transition: background 0.4s ease, border-color 0.4s ease;
+  }
+  .demo-center.revealed::before {
+    background: linear-gradient(135deg, #2a1a08, #3d2a10, #2a1a08);
+    border-color: #c9943a;
+  }
+  .demo-flame {
+    position: relative;
+    width: 66%;
+    height: 66%;
+    object-fit: contain;
+    z-index: 1;
+  }
+  .demo-center.spinning .demo-flame {
+    animation: demo-flame-pulse 0.6s ease-in-out infinite;
+  }
+  @keyframes demo-flame-pulse {
+    0%, 100% { filter: brightness(1) sepia(0) saturate(1) hue-rotate(0deg); }
+    50% { filter: brightness(1.4) sepia(1) saturate(5) hue-rotate(-30deg); }
+  }
+
+  /* Center scratch canvas */
+  .demo-center-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 5;
+    display: none;
+    cursor: pointer;
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  }
+  .demo-center-prize {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 3;
+    text-align: center;
+    font-weight: 700;
+    line-height: 1.2;
+    display: none;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  .demo-center-prize.visible { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 1; }
+  .demo-center-prize .ff-amount {
+    font-size: 0.7rem;
+    display: block;
+    color: #fff;
+    text-shadow: 0 0 8px rgba(245, 166, 35, 0.8), 0 1px 2px rgba(0,0,0,0.5);
+    letter-spacing: 0.02em;
+  }
+  .demo-center-prize .ff-label {
+    font-size: 0.48rem;
+    color: rgba(255,255,255,0.7);
+    display: block;
+    margin-top: 1px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* Hint text */
+  .demo-hint {
+    margin-top: 0.6rem;
+    font-size: 0.68rem;
+    color: #888;
+    letter-spacing: 0.04em;
+    height: 1.2em;
+    overflow: hidden;
+    transition: opacity 0.3s;
+  }
+
+  /* Next Day button */
+  .demo-controls {
+    margin-top: 0.8rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  .demo-next-btn {
+    padding: 0.45rem 1.4rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    border: 1px solid #f5a623;
+    border-radius: 6px;
+    background: rgba(245, 166, 35, 0.15);
+    color: #f5a623;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .demo-next-btn:hover {
+    background: rgba(245, 166, 35, 0.3);
+    transform: translateY(-1px);
+  }
+  .demo-next-btn:active { transform: translateY(0); }
+  .demo-next-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+</style>
+
+<div class="demo-wrap" id="demo-wrap">
+  <div class="demo-title" id="demo-title">Jackpot Preview</div>
+  <div class="demo-scenario" id="demo-scenario">Press Next Day to start the demo.</div>
+  <div class="demo-token-wrap">
+    <div class="demo-token" id="demo-token">
+      <div class="demo-quad" data-q="0">
+        <img class="demo-badge" src="" alt="" />
+        <div class="demo-prize-reveal" data-q="0"></div>
+        <canvas class="demo-scratch-canvas" data-q="0"></canvas>
+      </div>
+      <div class="demo-quad" data-q="1">
+        <img class="demo-badge" src="" alt="" />
+        <div class="demo-prize-reveal" data-q="1"></div>
+        <canvas class="demo-scratch-canvas" data-q="1"></canvas>
+      </div>
+      <div class="demo-quad" data-q="2">
+        <img class="demo-badge" src="" alt="" />
+        <div class="demo-prize-reveal" data-q="2"></div>
+        <canvas class="demo-scratch-canvas" data-q="2"></canvas>
+      </div>
+      <div class="demo-quad" data-q="3">
+        <img class="demo-badge" src="" alt="" />
+        <div class="demo-prize-reveal" data-q="3"></div>
+        <canvas class="demo-scratch-canvas" data-q="3"></canvas>
+      </div>
+      <div class="demo-center" id="demo-center">
+        <img src="specials/special_none.svg" alt="Flame" class="demo-flame" />
+        <div class="demo-center-prize" id="demo-center-prize"></div>
+        <canvas class="demo-center-canvas" id="demo-center-canvas"></canvas>
+      </div>
+    </div>
+  </div>
+  <p class="demo-hint" id="demo-hint"></p>
+  <div class="demo-controls">
+    <button class="demo-next-btn" id="demo-next-btn">Next Day &#x2192;</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ---- Constants ----
+  var CATEGORIES = ['crypto', 'zodiac', 'cards', 'dice'];
+  var SYMBOLS = {
+    crypto: ['xrp', 'tron', 'sui', 'monero', 'solana', 'chainlink', 'ethereum', 'bitcoin'],
+    zodiac: ['aries', 'taurus', 'gemini', 'cancer', 'leo', 'libra', 'sagittarius', 'aquarius'],
+    cards: ['club', 'diamond', 'heart', 'spade', 'horseshoe', 'cashsack', 'king', 'ace'],
+    dice: ['1', '2', '3', '4', '5', '6', '7', '8']
+  };
+  var COLORS = ['pink', 'purple', 'green', 'red', 'blue', 'orange', 'silver', 'gold'];
+  var CARD_IDX = [3, 4, 5, 6, 0, 2, 1, 7];
+  var BRUSH_R = 22;
+  var REVEAL_THRESHOLD = 0.75;
+
+  // ---- Scenario Data ----
+  // Each scenario: { title, desc, target: [{q,sym,col}x4], owned: [bool x4],
+  //                  prizes: [[amt,type,q],...], centerWins: [...] }
+  var SCENARIOS = [
+    {
+      title: 'Day 1 of 4: Big Win',
+      desc: 'You own tickets matching 3 of 4 drawn traits. Scratch to reveal your prizes.',
+      // drawn: bitcoin_gold, gemini_pink, spade_blue, dice6_red
+      target: [
+        { q: 0, sym: 7, col: 7 },  // bitcoin gold
+        { q: 1, sym: 2, col: 0 },  // gemini pink
+        { q: 2, sym: 3, col: 4 },  // spade blue
+        { q: 3, sym: 5, col: 3 }   // dice6 red
+      ],
+      owned: [true, true, false, true],
+      // prizes: [amount, type, quadrant]
+      prizes: [
+        [1.24, 'eth', 0],
+        [0.87, 'eth', 0],
+        [3, 'tickets', 0, 4],
+        [0.52, 'eth', 1],
+        [2, 'tickets', 1, 5],
+        [0.31, 'eth', 3],
+        [2, 'tickets', 3, 6],
+        [1, 'tickets', 3, 7]
+      ],
+      centerWins: []
+    },
+    {
+      title: 'Day 2 of 4: Scratch, But No Luck',
+      desc: 'You own matching tickets in 2 quadrants, but the jackpot did not pick yours this draw.',
+      // drawn: ethereum_blue, leo_gold, heart_red, dice3_green
+      target: [
+        { q: 0, sym: 6, col: 4 },  // ethereum blue
+        { q: 1, sym: 4, col: 7 },  // leo gold
+        { q: 2, sym: 2, col: 3 },  // heart red
+        { q: 3, sym: 2, col: 2 }   // dice3 green
+      ],
+      owned: [true, false, true, false],
+      prizes: [],  // no wins this draw
+      centerWins: []
+    },
+    {
+      title: 'Day 3 of 4: No Matching Traits',
+      desc: 'You have tickets, but none of your traits match what the jackpot drew today. All red.',
+      // drawn: solana_purple, aries_red, ace_gold, dice8_silver
+      target: [
+        { q: 0, sym: 4, col: 1 },  // solana purple
+        { q: 1, sym: 0, col: 3 },  // aries red
+        { q: 2, sym: 7, col: 7 },  // ace gold
+        { q: 3, sym: 7, col: 6 }   // dice8 silver
+      ],
+      owned: [false, false, false, false],
+      prizes: [],
+      centerWins: []
+    },
+    {
+      title: 'Day 4 of 4: Future Tickets + BURNIE',
+      desc: 'You match 2 quadrants. Prizes include future level tickets. Your far-future tickets earned a BURNIE draw in the center diamond.',
+      // drawn: xrp_pink, aquarius_blue, diamond_orange, dice1_silver
+      target: [
+        { q: 0, sym: 0, col: 0 },  // xrp pink
+        { q: 1, sym: 7, col: 4 },  // aquarius blue
+        { q: 2, sym: 1, col: 5 },  // diamond orange
+        { q: 3, sym: 0, col: 6 }   // dice1 silver
+      ],
+      owned: [true, false, true, false],
+      prizes: [
+        [3, 'tickets', 0, 5],
+        [1, 'tickets', 0, 8],
+        [2, 'tickets', 2, 6]
+      ],
+      centerWins: [
+        [247, 'burnie', -2, 12]
+      ]
+    }
+  ];
+
+  var currentDay = 0;
+  var animId = 0;
+  var scratched = [false, false, false, false];
+  var greenRevealed = [false, false, false, false];
+  var badgesRevealed = [[], [], [], []]; // per-badge tracking within each quadrant
+  var quadPrizes = [false, false, false, false];
+  var quadWinArrays = [[], [], [], []];
+  var mouseIsDown = false;
+  // Grid-based scratch coverage tracking (avoids double-counting overlapping strokes)
+  var GRID_RES = 40; // 40x40 cells per quadrant
+  var CENTER_GRID_RES = 20;
+  var scratchGrids = [null, null, null, null];
+  var centerScratchGrid = null;
+
+  function makeScratchGrid(res) { return new Uint8Array(res * res); }
+
+  function markGridCells(grid, res, canvasW, canvasH, cx, cy, brushR) {
+    // Map canvas coords to grid coords and mark cells within brush radius
+    var cellW = canvasW / res, cellH = canvasH / res;
+    var gridCX = cx / cellW, gridCY = cy / cellH;
+    var gridR = brushR / Math.min(cellW, cellH);
+    var minGX = Math.max(0, Math.floor(gridCX - gridR));
+    var maxGX = Math.min(res - 1, Math.ceil(gridCX + gridR));
+    var minGY = Math.max(0, Math.floor(gridCY - gridR));
+    var maxGY = Math.min(res - 1, Math.ceil(gridCY + gridR));
+    for (var gy = minGY; gy <= maxGY; gy++) {
+      for (var gx = minGX; gx <= maxGX; gx++) {
+        var dx = gx + 0.5 - gridCX, dy = gy + 0.5 - gridCY;
+        if (dx * dx + dy * dy <= gridR * gridR) {
+          grid[gy * res + gx] = 1;
+        }
+      }
+    }
+  }
+
+  function gridCoverage(grid) {
+    var cleared = 0;
+    for (var i = 0; i < grid.length; i++) { if (grid[i]) cleared++; }
+    return cleared / grid.length;
+  }
+  var quadBadgeBounds = [null, null, null, null];
+  var quadOwned = [false, false, false, false];
+  var finalTicket = null;
+  var centerWins = [];
+  var centerScratched = false;
+  var hasTicketsState = false;
+  var scratchNode = null;
+  var audioCtx = null;
+  var spinning = false;
+
+  // ---- Badge path helper ----
+  function badgePath(q, sym, col) {
+    var cat = CATEGORIES[q];
+    var idx = cat === 'cards' ? CARD_IDX[sym] : sym;
+    return 'badges-circular/' + cat + '_0' + idx + '_' + SYMBOLS[cat][sym] + '_' + COLORS[col] + '.svg';
+  }
+
+  function randomTrait() {
+    return { sym: Math.floor(Math.random() * 8), col: Math.floor(Math.random() * 8) };
+  }
+
+  // ---- Sound effects (Web Audio) ----
+  function getAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function sfxTick(lockCount) {
+    var ctx = getAudio();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 400 + (lockCount / 8) * 500;
+    osc.type = 'square';
+    gain.gain.setValueAtTime(0.06, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.06);
+  }
+
+  function sfxLock(owned) {
+    var ctx = getAudio();
+    if (owned) {
+      var o1 = ctx.createOscillator(), g1 = ctx.createGain();
+      o1.connect(g1); g1.connect(ctx.destination);
+      o1.frequency.value = 660; o1.type = 'sine';
+      g1.gain.setValueAtTime(0.12, ctx.currentTime);
+      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.15);
+      var o2 = ctx.createOscillator(), g2 = ctx.createGain();
+      o2.connect(g2); g2.connect(ctx.destination);
+      o2.frequency.value = 880; o2.type = 'sine';
+      g2.gain.setValueAtTime(0.12, ctx.currentTime + 0.08);
+      g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+      o2.start(ctx.currentTime + 0.08); o2.stop(ctx.currentTime + 0.22);
+    } else {
+      var osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(180, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.12);
+      osc.type = 'triangle';
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15);
+    }
+  }
+
+  function sfxAllLocked(anyOwned) {
+    var ctx = getAudio();
+    if (anyOwned) {
+      var o1 = ctx.createOscillator(), g1 = ctx.createGain();
+      o1.connect(g1); g1.connect(ctx.destination);
+      o1.frequency.setValueAtTime(200, ctx.currentTime);
+      o1.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.15);
+      o1.type = 'sine';
+      g1.gain.setValueAtTime(0.18, ctx.currentTime);
+      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+      o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.2);
+      var o2 = ctx.createOscillator(), g2 = ctx.createGain();
+      o2.connect(g2); g2.connect(ctx.destination);
+      o2.frequency.value = 1320; o2.type = 'sine';
+      g2.gain.setValueAtTime(0.06, ctx.currentTime + 0.05);
+      g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      o2.start(ctx.currentTime + 0.05); o2.stop(ctx.currentTime + 0.5);
+    } else {
+      var o1 = ctx.createOscillator(), g1 = ctx.createGain();
+      o1.connect(g1); g1.connect(ctx.destination);
+      o1.frequency.setValueAtTime(120, ctx.currentTime);
+      o1.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.3);
+      o1.type = 'sawtooth';
+      g1.gain.setValueAtTime(0.1, ctx.currentTime);
+      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.35);
+    }
+  }
+
+  function sfxScratchStart() {
+    if (scratchNode) return;
+    var ctx = getAudio();
+    var buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    var data = buf.getChannelData(0);
+    for (var i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    var noise = ctx.createBufferSource();
+    var filter = ctx.createBiquadFilter();
+    var gain = ctx.createGain();
+    noise.buffer = buf; noise.loop = true;
+    filter.type = 'bandpass'; filter.frequency.value = 3000; filter.Q.value = 0.5;
+    noise.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+    gain.gain.value = 0.04;
+    noise.start();
+    scratchNode = { noise: noise, gain: gain };
+  }
+
+  function sfxScratchStop() {
+    if (!scratchNode) return;
+    try { scratchNode.noise.stop(); } catch (e) {}
+    scratchNode = null;
+  }
+
+  function sfxGreenReveal() {
+    var ctx = getAudio();
+    var osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.05);
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.3);
+  }
+
+  function sfxReveal(isWin) {
+    var ctx = getAudio();
+    var osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    if (isWin) {
+      osc.frequency.setValueAtTime(600, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1400, ctx.currentTime + 0.25);
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.35);
+    } else {
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.setValueAtTime(349, ctx.currentTime + 0.2);
+      osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.6);
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime + 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.6);
+    }
+  }
+
+  function sfxFanfare() {
+    var ctx = getAudio();
+    var notes = [523, 659, 784, 1047];
+    for (var i = 0; i < notes.length; i++) {
+      (function (freq, delay) {
+        var osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = freq; osc.type = 'sine';
+        gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+        gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + delay + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.4);
+        osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + 0.4);
+      })(notes[i], i * 0.12);
+    }
+  }
+
+  // ---- DOM helpers ----
+  function $(id) { return document.getElementById(id); }
+  function getQuads() { return document.querySelectorAll('#demo-token .demo-quad'); }
+  function getCanvas(qi) { return document.querySelector('#demo-token .demo-scratch-canvas[data-q="' + qi + '"]'); }
+  function getPrize(qi) { return document.querySelector('#demo-token .demo-prize-reveal[data-q="' + qi + '"]'); }
+
+  function renderBadges(ticket) {
+    var quads = getQuads();
+    for (var i = 0; i < 4; i++) {
+      var img = quads[i].querySelector('.demo-badge');
+      if (img) img.src = badgePath(ticket[i].q, ticket[i].sym, ticket[i].col);
+    }
+  }
+
+  function clearColors() {
+    var quads = getQuads();
+    for (var i = 0; i < 4; i++) {
+      quads[i].classList.remove('q-has-trait', 'q-has-tickets', 'q-no-tickets', 'q-scratchable');
+    }
+  }
+
+  function clearScatteredBadges() {
+    var els = document.querySelectorAll('#demo-token .demo-badge-wrap');
+    for (var i = 0; i < els.length; i++) els[i].remove();
+  }
+
+
+  // ---- Prize display ----
+  function formatWin(amount, type) {
+    if (type === 'burnie') {
+      if (amount >= 1000) return Math.round(amount).toLocaleString() + ' BURNIE';
+      if (amount >= 1) return amount.toFixed(2).replace(/\.?0+$/, '') + ' BURNIE';
+      return amount.toFixed(4).replace(/\.?0+$/, '') + ' BURNIE';
+    }
+    if (type === 'tickets') return amount + ' ticket' + (amount !== 1 ? 's' : '');
+    var s;
+    if (amount >= 1) s = amount.toFixed(2);
+    else if (amount >= 0.01) s = amount.toFixed(4);
+    else s = amount.toFixed(6);
+    return s.replace(/\.?0+$/, '') + ' ETH';
+  }
+
+  function summarizeWins(wins) {
+    var totals = {};
+    var ticketsByLevel = {};
+    for (var i = 0; i < wins.length; i++) {
+      var type = wins[i][1];
+      if (!totals[type]) totals[type] = 0;
+      totals[type] += wins[i][0];
+      if (type === 'tickets' && wins[i].length > 3) {
+        var lv = wins[i][3];
+        if (!ticketsByLevel[lv]) ticketsByLevel[lv] = 0;
+        ticketsByLevel[lv] += wins[i][0];
+      }
+    }
+    var lines = [];
+    if (totals.eth) lines.push(formatWin(totals.eth, 'eth'));
+    if (totals.burnie) lines.push(formatWin(totals.burnie, 'burnie'));
+    var lvKeys = Object.keys(ticketsByLevel).sort(function (a, b) { return a - b; });
+    if (lvKeys.length > 0) {
+      for (var li = 0; li < lvKeys.length; li++) {
+        lines.push(ticketsByLevel[lvKeys[li]] + ' tix \u2192 L' + lvKeys[li]);
+      }
+    } else if (totals.tickets) {
+      lines.push(formatWin(totals.tickets, 'tickets'));
+    }
+    return lines;
+  }
+
+  function distributePrizes(scenario) {
+    var counts = [0, 0, 0, 0];
+    var winArrays = [[], [], [], []];
+    var regular = [];
+    centerWins = [];
+    for (var i = 0; i < scenario.prizes.length; i++) {
+      if (scenario.prizes[i][2] === -2) {
+        centerWins.push(scenario.prizes[i]);
+      } else {
+        regular.push(scenario.prizes[i]);
+      }
+    }
+    if (scenario.centerWins) {
+      for (var i = 0; i < scenario.centerWins.length; i++) {
+        centerWins.push(scenario.centerWins[i]);
+      }
+    }
+    for (var i = 0; i < regular.length; i++) {
+      var q = regular[i][2];
+      if (q >= 0 && q <= 3) {
+        counts[q]++;
+        winArrays[q].push(regular[i]);
+      }
+    }
+    for (var i = 0; i < 4; i++) {
+      quadPrizes[i] = counts[i] > 0;
+      quadWinArrays[i] = winArrays[i];
+    }
+  }
+
+  function placeWinBadges(qIdx) {
+    var quad = getQuads()[qIdx];
+    var wins = quadWinArrays[qIdx];
+    if (!wins || wins.length <= 0) return;
+    var sym = finalTicket ? finalTicket[qIdx].sym : 0;
+    var col = finalTicket ? finalTicket[qIdx].col : 0;
+    var path = badgePath(qIdx, sym, col);
+    var count = wins.length;
+    var maxSize, minSize;
+    if (count === 1) { minSize = 30; maxSize = 65; }
+    else if (count <= 3) { minSize = 25; maxSize = 50; }
+    else { minSize = 20; maxSize = 40; }
+
+    var placed = [];
+    var allBounds = [];
+    for (var w = 0; w < wins.length; w++) {
+      var sizePct = minSize + (w / Math.max(1, wins.length - 1)) * (maxSize - minSize);
+      if (wins.length === 1) sizePct = maxSize;
+      var bestLeft = null, bestTop = null, bestOverlap = Infinity;
+      for (var a = 0; a < 50; a++) {
+        var tryLeft = Math.random() * (100 - sizePct);
+        var tryTop = Math.random() * (90 - sizePct);
+        var tryCX = tryLeft + sizePct / 2;
+        var tryCY = tryTop + sizePct / 2;
+        var overlap = 0;
+        for (var p = 0; p < placed.length; p++) {
+          var dx = tryCX - placed[p].cx, dy = tryCY - placed[p].cy;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          var minDist = (sizePct + placed[p].size) / 2;
+          if (dist < minDist) overlap += minDist - dist;
+        }
+        if (overlap < bestOverlap) { bestOverlap = overlap; bestLeft = tryLeft; bestTop = tryTop; }
+        if (overlap === 0) break;
+      }
+      placed.push({ cx: bestLeft + sizePct / 2, cy: bestTop + sizePct / 2, size: sizePct });
+      allBounds.push({ left: bestLeft, top: bestTop, right: bestLeft + sizePct, bottom: bestTop + sizePct });
+      var wrap = document.createElement('div');
+      wrap.className = 'demo-badge-wrap';
+      wrap.style.width = sizePct + '%';
+      wrap.style.left = bestLeft + '%';
+      wrap.style.top = bestTop + '%';
+      var img = document.createElement('img');
+      img.src = path; img.className = 'demo-scattered-badge'; img.alt = '';
+      wrap.appendChild(img);
+      quad.appendChild(wrap);
+    }
+    var circles = [];
+    for (var b = 0; b < allBounds.length; b++) {
+      var bb = allBounds[b];
+      circles.push({ cx: (bb.left + bb.right) / 2, cy: (bb.top + bb.bottom) / 2, r: (bb.right - bb.left) / 2 });
+    }
+    quadBadgeBounds[qIdx] = circles;
+  }
+
+  // ---- Canvas scratch ----
+  function drawCover(canvas) {
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    var grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, '#d0d0d0'); grad.addColorStop(0.3, '#c8c8c8');
+    grad.addColorStop(0.6, '#b0b0b0'); grad.addColorStop(1, '#c0c0c0');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+    ctx.globalAlpha = 0.07;
+    for (var y = 0; y < h; y += 4) {
+      ctx.strokeStyle = (y % 8 === 0) ? '#fff' : '#888';
+      ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawBadgeCover(canvas, badgeSrc) {
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#b8d4e8';
+    ctx.fillRect(0, 0, w, h);
+    var img = new Image();
+    img.onload = function () {
+      var size = Math.min(w, h) * 0.92;
+      var x = (w - size) / 2, y = (h - size) / 2;
+      ctx.drawImage(img, x, y, size, size);
+    };
+    img.src = badgeSrc;
+  }
+
+  function initCanvas(canvas) {
+    var quad = canvas.parentElement;
+    var rect = quad.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    drawCover(canvas);
+  }
+
+  function initCanvasWithBadge(canvas, badgeSrc) {
+    var quad = canvas.parentElement;
+    var rect = quad.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    drawBadgeCover(canvas, badgeSrc);
+  }
+
+  function scratchAt(canvas, cx, cy) {
+    var dpr = window.devicePixelRatio || 1;
+    var r = BRUSH_R * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function clearedFraction(canvas) {
+    var ctx = canvas.getContext('2d');
+    var data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    var total = canvas.width * canvas.height;
+    var cleared = 0;
+    for (var i = 3; i < data.length; i += 4) { if (data[i] < 20) cleared++; }
+    return cleared / total;
+  }
+
+  function revealQuadrant(qIdx) {
+    if (scratched[qIdx]) return;
+    scratched[qIdx] = true;
+    sfxScratchStop();
+    var canvas = getCanvas(qIdx);
+    var prize = getPrize(qIdx);
+    canvas.style.transition = 'opacity 0.35s ease';
+    canvas.style.opacity = '0';
+    canvas.style.pointerEvents = 'none';
+    var isWin = quadPrizes[qIdx];
+    sfxReveal(isWin);
+    var quad = getQuads()[qIdx];
+    quad.classList.remove('q-scratchable');
+    if (isWin) {
+      quad.classList.add('q-has-tickets');
+    } else {
+      quad.classList.add('q-no-tickets');
+      var mainBadge = quad.querySelector('.demo-badge');
+      if (mainBadge) mainBadge.style.display = '';
+    }
+    if (prize && isWin) {
+      var lines = summarizeWins(quadWinArrays[qIdx]);
+      prize.innerHTML = '<div class="demo-prize-bar">' +
+        lines.map(function (l) { return '<span class="demo-prize-total">' + l + '</span>'; }).join('') +
+        '</div>';
+      prize.classList.remove('visible');
+      setTimeout(function () { prize.classList.add('visible'); }, 200);
+    }
+    checkAllScratched();
+  }
+
+  // ---- Center scratch ----
+  function hideCenterScratch() {
+    var canvas = $('demo-center-canvas');
+    var prize = $('demo-center-prize');
+    var flame = document.querySelector('.demo-flame');
+    var center = $('demo-center');
+    if (canvas) { canvas.style.display = 'none'; canvas.style.opacity = '1'; canvas.style.pointerEvents = 'auto'; }
+    if (prize) { prize.style.display = 'none'; prize.innerHTML = ''; prize.classList.remove('visible'); }
+    if (flame) { flame.style.display = ''; flame.style.filter = ''; }
+    if (center) { center.classList.remove('revealed'); }
+  }
+
+  function showCenterScratch() {
+    var canvas = $('demo-center-canvas');
+    if (!canvas) return;
+    var center = canvas.parentElement;
+    var rect = center.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    var flame = document.querySelector('.demo-flame');
+    if (flame) flame.style.display = 'none';
+
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width, h = canvas.height;
+    // Dark background
+    ctx.fillStyle = '#0a1e1a';
+    ctx.fillRect(0, 0, w, h);
+    // Draw the flame (same SVG as degenerette win center) with green tint
+    var img = new Image();
+    img.onload = function () {
+      var size = Math.min(w, h) * 0.7;
+      // Draw flame with green colorization
+      ctx.filter = 'sepia(1) saturate(3) hue-rotate(120deg) brightness(1.4)';
+      ctx.drawImage(img, (w - size) / 2, (h - size) / 2, size, size);
+      ctx.filter = 'none';
+    };
+    img.src = 'specials/special_none.svg';
+    canvas.style.display = 'block';
+  }
+
+  function revealCenter() {
+    if (centerScratched || centerWins.length === 0) return;
+    centerScratched = true;
+    sfxGreenReveal();
+    var canvas = $('demo-center-canvas');
+    var prize = $('demo-center-prize');
+    // Darken diamond background so prize text is readable
+    var center = $('demo-center');
+    if (center) center.classList.add('revealed');
+    if (canvas) {
+      canvas.style.transition = 'opacity 0.35s ease';
+      canvas.style.opacity = '0';
+      canvas.style.pointerEvents = 'none';
+    }
+    if (prize) {
+      var totalBurnie = 0;
+      var levels = [];
+      for (var i = 0; i < centerWins.length; i++) {
+        totalBurnie += centerWins[i][0];
+        if (centerWins[i].length > 3 && levels.indexOf(centerWins[i][3]) === -1) levels.push(centerWins[i][3]);
+      }
+      var amountStr = formatWin(totalBurnie, 'burnie');
+      var levelStr = levels.length > 0 ? 'L' + levels.sort(function (a, b) { return a - b; }).join(', L') : 'Far Future';
+      prize.innerHTML = '<span class="ff-amount">' + amountStr + '</span><span class="ff-label">' + levelStr + '</span>';
+      prize.style.display = 'block';
+      prize.classList.remove('visible');
+      setTimeout(function () { prize.classList.add('visible'); }, 200);
+    }
+    checkAllScratched();
+  }
+
+  function checkAllScratched() {
+    var centerPending = centerWins.length > 0 && !centerScratched;
+    var all = scratched[0] && scratched[1] && scratched[2] && scratched[3] && !centerPending;
+    var hint = $('demo-hint');
+    if (all) {
+      if (hint) hint.textContent = '';
+      if (hasTicketsState) sfxFanfare();
+    } else {
+      var remaining = scratched.filter(function (s) { return !s; }).length;
+      if (centerPending) remaining++;
+      if (hint) hint.textContent = remaining + ' area' + (remaining !== 1 ? 's' : '') + ' left to scratch';
+    }
+  }
+
+  // ---- Scratch event wiring ----
+  function getCanvasPos(canvas, clientX, clientY) {
+    var rect = canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    return { x: (clientX - rect.left) * dpr, y: (clientY - rect.top) * dpr };
+  }
+
+  function wireCanvas(canvas, qIdx) {
+    var lastPos = null;
+    function onScratch(cx, cy) {
+      if (scratched[qIdx]) return;
+      sfxScratchStart();
+      var dpr = window.devicePixelRatio || 1;
+      var brushR = BRUSH_R * dpr;
+      scratchAt(canvas, cx, cy);
+      if (!scratchGrids[qIdx]) scratchGrids[qIdx] = makeScratchGrid(GRID_RES);
+      markGridCells(scratchGrids[qIdx], GRID_RES, canvas.width, canvas.height, cx, cy, brushR);
+      if (quadPrizes[qIdx] && quadBadgeBounds[qIdx]) {
+        var pctX = (cx / canvas.width) * 100;
+        var pctY = (cy / canvas.height) * 100;
+        var circles = quadBadgeBounds[qIdx];
+        for (var ci = 0; ci < circles.length; ci++) {
+          if (badgesRevealed[qIdx].indexOf(ci) !== -1) continue;
+          var ddx = pctX - circles[ci].cx, ddy = pctY - circles[ci].cy;
+          if (ddx * ddx + ddy * ddy <= circles[ci].r * circles[ci].r) {
+            badgesRevealed[qIdx].push(ci);
+            sfxGreenReveal();
+            if (!greenRevealed[qIdx]) {
+              greenRevealed[qIdx] = true;
+              var quad = getQuads()[qIdx];
+              quad.classList.remove('q-scratchable');
+              quad.classList.add('q-has-tickets');
+            }
+          }
+        }
+      }
+      if (lastPos) {
+        var dx = cx - lastPos.x, dy = cy - lastPos.y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        var steps = Math.max(1, Math.floor(dist / 4));
+        for (var s = 1; s < steps; s++) {
+          var ix = lastPos.x + dx * s / steps, iy = lastPos.y + dy * s / steps;
+          scratchAt(canvas, ix, iy);
+          markGridCells(scratchGrids[qIdx], GRID_RES, canvas.width, canvas.height, ix, iy, brushR);
+        }
+      }
+      lastPos = { x: cx, y: cy };
+      if (gridCoverage(scratchGrids[qIdx]) >= REVEAL_THRESHOLD) {
+        revealQuadrant(qIdx);
+      }
+    }
+    canvas.addEventListener('mousemove', function (e) {
+      if (scratched[qIdx]) return;
+      var p = getCanvasPos(canvas, e.clientX, e.clientY);
+      onScratch(p.x, p.y);
+    });
+    canvas.addEventListener('mouseleave', function () { lastPos = null; sfxScratchStop(); });
+    canvas.addEventListener('touchstart', function (e) {
+      if (scratched[qIdx]) return;
+      e.preventDefault(); lastPos = null;
+      var t = e.touches[0], p = getCanvasPos(canvas, t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchmove', function (e) {
+      if (scratched[qIdx]) return;
+      e.preventDefault();
+      var t = e.touches[0], p = getCanvasPos(canvas, t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchend', function () { lastPos = null; sfxScratchStop(); });
+  }
+
+  // Wire center scratch
+  function wireCenterCanvas() {
+    var canvas = $('demo-center-canvas');
+    if (!canvas) return;
+    var lastPos = null;
+    function onScratch(cx, cy) {
+      if (centerScratched) return;
+      sfxScratchStart();
+      var dpr = window.devicePixelRatio || 1;
+      var brushR = BRUSH_R * dpr;
+      scratchAt(canvas, cx, cy);
+      if (!centerScratchGrid) centerScratchGrid = makeScratchGrid(CENTER_GRID_RES);
+      markGridCells(centerScratchGrid, CENTER_GRID_RES, canvas.width, canvas.height, cx, cy, brushR);
+      if (lastPos) {
+        var dx = cx - lastPos.x, dy = cy - lastPos.y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        var steps = Math.max(1, Math.floor(dist / 4));
+        for (var s = 1; s < steps; s++) {
+          var ix = lastPos.x + dx * s / steps, iy = lastPos.y + dy * s / steps;
+          scratchAt(canvas, ix, iy);
+          markGridCells(centerScratchGrid, CENTER_GRID_RES, canvas.width, canvas.height, ix, iy, brushR);
+        }
+      }
+      lastPos = { x: cx, y: cy };
+      if (gridCoverage(centerScratchGrid) >= 0.5) {
+        revealCenter();
+      }
+    }
+    canvas.addEventListener('mousemove', function (e) {
+      if (centerScratched) return;
+      var p = getCanvasPos(canvas, e.clientX, e.clientY);
+      onScratch(p.x, p.y);
+    });
+    canvas.addEventListener('mouseleave', function () { lastPos = null; sfxScratchStop(); });
+    canvas.addEventListener('touchstart', function (e) {
+      if (centerScratched) return;
+      e.preventDefault(); lastPos = null;
+      var t = e.touches[0], p = getCanvasPos(canvas, t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchmove', function (e) {
+      if (centerScratched) return;
+      e.preventDefault();
+      var t = e.touches[0], p = getCanvasPos(canvas, t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchend', function () { lastPos = null; sfxScratchStop(); });
+  }
+
+  // ---- Spin animation ----
+  function animate(scenario) {
+    var myId = ++animId;
+    spinning = true;
+    $('demo-next-btn').disabled = true;
+    var target = scenario.target;
+    var lockedColors = [false, false, false, false];
+    var lockedSymbols = [false, false, false, false];
+    var locksDone = 0;
+    var totalLocks = 8;
+    var idleCount = 2 + Math.floor(Math.random() * 3);
+    var hasTickets = !scenario.noTickets;
+
+    quadOwned = scenario.owned.slice();
+    hasTicketsState = hasTickets;
+    scratched = [false, false, false, false];
+    greenRevealed = [false, false, false, false];
+    badgesRevealed = [[], [], [], []];
+    quadBadgeBounds = [null, null, null, null];
+    centerWins = [];
+    centerScratched = false;
+    scratchGrids = [null, null, null, null];
+    centerScratchGrid = null;
+    hideCenterScratch();
+    clearColors();
+    sfxScratchStop();
+
+    var flameCenter = $('demo-center');
+    if (flameCenter) flameCenter.classList.add('spinning');
+
+    if (hasTickets) distributePrizes(scenario);
+
+    // Reset canvases and prizes
+    var hint = $('demo-hint');
+    if (hint) hint.textContent = '';
+    clearScatteredBadges();
+    var mainBadges = document.querySelectorAll('#demo-token .demo-badge');
+    for (var mb = 0; mb < mainBadges.length; mb++) mainBadges[mb].style.display = '';
+
+    var quads = getQuads();
+    for (var i = 0; i < 4; i++) {
+      var canvas = getCanvas(i);
+      canvas.style.transition = 'none';
+      canvas.style.opacity = '0';
+      canvas.style.pointerEvents = 'none';
+      var prize = getPrize(i);
+      if (prize) { prize.classList.remove('visible'); prize.innerHTML = ''; }
+    }
+
+    function step() {
+      if (myId !== animId) return;
+      sfxTick(locksDone);
+      var display = [];
+      for (var i = 0; i < 4; i++) {
+        var r = randomTrait();
+        display.push({
+          q: i,
+          sym: lockedSymbols[i] ? target[i].sym : r.sym,
+          col: lockedColors[i] ? target[i].col : r.col
+        });
+      }
+      renderBadges(display);
+      for (var i = 0; i < 4; i++) {
+        quads[i].classList.remove('q-has-trait', 'q-no-tickets');
+        if (lockedSymbols[i]) {
+          quads[i].classList.add(quadOwned[i] ? 'q-has-trait' : 'q-no-tickets');
+        } else {
+          quads[i].classList.add(Math.random() < 0.5 ? 'q-has-trait' : 'q-no-tickets');
+        }
+      }
+      if (idleCount <= 0 && locksDone < totalLocks) {
+        var available = [];
+        for (var q = 0; q < 4; q++) {
+          if (!lockedColors[q]) available.push({ q: q, type: 'color' });
+          else if (!lockedSymbols[q]) available.push({ q: q, type: 'symbol' });
+        }
+        if (available.length > 0) {
+          var pick = available[Math.floor(Math.random() * available.length)];
+          if (pick.type === 'color') lockedColors[pick.q] = true;
+          else lockedSymbols[pick.q] = true;
+          locksDone++;
+          if (pick.type === 'symbol') sfxLock(quadOwned[pick.q]);
+          else sfxTick(locksDone);
+          idleCount = 2 + Math.floor(Math.random() * 3);
+        }
+      } else {
+        idleCount--;
+      }
+      if (locksDone >= totalLocks) {
+        var anyOwned = quadOwned[0] || quadOwned[1] || quadOwned[2] || quadOwned[3];
+        sfxAllLocked(anyOwned);
+        renderBadges(target);
+        finalTicket = target;
+        afterSpin(scenario);
+        return;
+      }
+      var delay = 80 + Math.floor((locksDone / totalLocks) * 120);
+      setTimeout(step, delay);
+    }
+    step();
+  }
+
+  function afterSpin(scenario) {
+    var quads = getQuads();
+    var hint = $('demo-hint');
+    var hasTickets = !scenario.noTickets;
+    var flameCenter = $('demo-center');
+    if (flameCenter) flameCenter.classList.remove('spinning');
+    spinning = false;
+    $('demo-scenario').textContent = scenario.desc;
+
+    if (!hasTickets) {
+      scratched = [true, true, true, true];
+      for (var i = 0; i < 4; i++) {
+        quads[i].classList.remove('q-has-trait');
+        quads[i].classList.add('q-no-tickets');
+      }
+      if (hint) hint.textContent = 'No tickets for this level';
+      $('demo-next-btn').disabled = false;
+      return;
+    }
+
+    var anyOwned = false;
+    for (var i = 0; i < 4; i++) {
+      quads[i].classList.remove('q-has-trait');
+      if (quadOwned[i]) {
+        anyOwned = true;
+        quads[i].classList.remove('q-no-tickets');
+        quads[i].classList.add('q-scratchable');
+        var canvas = getCanvas(i);
+        var badgeSrc = quads[i].querySelector('.demo-badge').src;
+        initCanvasWithBadge(canvas, badgeSrc);
+        canvas.style.transition = 'none';
+        canvas.style.opacity = '1';
+        canvas.style.pointerEvents = 'auto';
+      } else {
+        scratched[i] = true;
+        quads[i].classList.add('q-no-tickets');
+      }
+    }
+    for (var i = 0; i < 4; i++) {
+      if (quadOwned[i]) {
+        var mainBadge = quads[i].querySelector('.demo-badge');
+        mainBadge.style.display = 'none';
+        if (quadPrizes[i]) placeWinBadges(i);
+      }
+    }
+    if (centerWins.length > 0) {
+      showCenterScratch();
+      anyOwned = true;
+    }
+    if (anyOwned) {
+      if (hint) hint.textContent = 'Scratch to find your winners!';
+    } else {
+      if (hint) hint.textContent = 'No matching tickets this round';
+    }
+    // Enable next button after a short delay to let user scratch
+    setTimeout(function () { $('demo-next-btn').disabled = false; }, 500);
+  }
+
+  // ---- Init ----
+  function runDay(dayIndex) {
+    currentDay = dayIndex;
+    var scenario = SCENARIOS[dayIndex];
+    $('demo-title').textContent = scenario.title;
+    $('demo-scenario').textContent = '';
+    animate(scenario);
+  }
+
+  // Wire up events
+  for (var i = 0; i < 4; i++) wireCanvas(getCanvas(i), i);
+  wireCenterCanvas();
+
+  // Hide badge images on initial blank state
+  var initBadges = document.querySelectorAll('#demo-token .demo-badge');
+  for (var ib = 0; ib < initBadges.length; ib++) initBadges[ib].style.display = 'none';
+
+  // Global mouse button state tracking and AudioContext warm-up on first interaction
+  document.addEventListener('mousedown', function () {
+    mouseIsDown = true;
+    // Resume suspended AudioContext on any mouse press (required in some browsers)
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  });
+  document.addEventListener('mouseup', function () {
+    mouseIsDown = false;
+    sfxScratchStop();
+  });
+
+  // Skip animation on flame click
+  $('demo-center').addEventListener('click', function () {
+    if (!spinning) return;
+    animId++;
+    var scenario = SCENARIOS[currentDay];
+    var hasTickets = !scenario.noTickets;
+    spinning = false;
+    renderBadges(scenario.target);
+    finalTicket = scenario.target;
+    if (hasTickets) {
+      distributePrizes(scenario);
+    }
+    afterSpin(scenario);
+    // Auto-reveal all
+    for (var i = 0; i < 4; i++) revealQuadrant(i);
+    revealCenter();
+  });
+
+  // Next Day button
+  var started = false;
+  $('demo-next-btn').addEventListener('click', function () {
+    if (spinning) return;
+    if (!started) {
+      started = true;
+      runDay(0);
+    } else {
+      runDay((currentDay + 1) % SCENARIOS.length);
+    }
+  });
+})();
+</script>
