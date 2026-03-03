@@ -152,6 +152,36 @@ for (const p of players) {
   }
 }
 
+// Far-future BURNIE jackpot wins (quadrant = -2, shown in center of token)
+// FarFutureCoinJackpotWinner: winner, currentLevel, winnerLevel, amount
+// Table may not exist in older dbs — check first
+let ffAdded = 0;
+try {
+  const ffTableCheck = qa("SELECT name FROM sqlite_master WHERE type='table' AND name='far_future_coin_jackpots'");
+  if (ffTableCheck.length > 0) {
+    const ffRows = qa(
+      `SELECT LOWER(winner) as player, current_level, winner_level,
+        CAST(amount_wei AS REAL)/1e18 as burnie_amount, block_number
+       FROM far_future_coin_jackpots
+       WHERE CAST(amount_wei AS REAL) > 0`
+    );
+    for (const r of ffRows) {
+      const ld = blockToLevelDay(r.block_number);
+      if (!ld) continue;
+      const p = players.find(pl => pl.toLowerCase() === r.player);
+      if (!p) continue;
+      const amount = parseFloat(r.burnie_amount.toFixed(2));
+      if (amount <= 0) continue;
+      // quadrant = -2 signals "far future, show in center"
+      // 4th element = the far-future level where the ticket lives
+      addWin(p, ld.level, ld.day, amount, 'burnie', -2, r.winner_level);
+      ffAdded++;
+    }
+  }
+} catch (e) {
+  // Table doesn't exist yet — skip silently
+}
+
 // Lootbox prizes (all types, quadrant = -1)
 // Ticket wins include future_level as 4th tuple element: [amount, 'tickets', -1, futureLevel]
 const lootboxRows = qa(
@@ -433,4 +463,4 @@ for (const p in jackpotWins) {
   }
 }
 const traitPlayers = Object.keys(traitOwnership).length;
-console.log(`Exported ${players.length} players, ${maxWinLevel} levels, ${totalWinEntries} wins (${ethCount} ETH, ${burnieCount} BURNIE, ${ticketsCount} tickets), ${withQuad} with quadrant, ${noQuad} unassigned (${jrFallback} jr-fallback, ${lootboxAdded} lootbox, ${ticketPrizesAdded} ticket-prizes), ${backfilled} trait backfills, ${traitPlayers} trait players to ${OUT}`);
+console.log(`Exported ${players.length} players, ${maxWinLevel} levels, ${totalWinEntries} wins (${ethCount} ETH, ${burnieCount} BURNIE, ${ticketsCount} tickets), ${withQuad} with quadrant, ${noQuad} unassigned (${jrFallback} jr-fallback, ${lootboxAdded} lootbox, ${ticketPrizesAdded} ticket-prizes, ${ffAdded} far-future), ${backfilled} trait backfills, ${traitPlayers} trait players to ${OUT}`);

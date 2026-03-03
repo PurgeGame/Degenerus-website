@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Badge Size Mockup — Pre-Scratch</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: system-ui, -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+    gap: 2rem;
+  }
+  h1 { font-size: 1.1rem; font-weight: 600; opacity: 0.8; }
+  h2 { font-size: 0.85rem; font-weight: 500; opacity: 0.6; margin-bottom: 0.5rem; }
+
+  .compare {
+    display: flex;
+    gap: 3rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .token-label { text-align: center; }
+
+  /* ---- Token (matches beta) ---- */
+  .jp-token {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    width: 360px;
+    height: 360px;
+    position: relative;
+    background: #d9d9d9;
+    border: 3px solid #8a8d8f;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .jp-token::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    width: 2px; height: 100%;
+    background: #8a8d8f;
+    transform: translateX(-50%);
+    z-index: 5;
+    pointer-events: none;
+  }
+  .jp-token::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 0;
+    width: 100%; height: 2px;
+    background: #8a8d8f;
+    transform: translateY(-50%);
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  .jp-quadrant {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    cursor: crosshair;
+  }
+
+  .jp-quadrant.q-scratchable { background: #7ca8c4; }
+  .jp-quadrant.q-no-tickets  { background: rgba(239, 120, 120, 0.5); cursor: default; }
+
+  .jp-badge {
+    object-fit: contain;
+    display: block;
+    position: relative;
+    z-index: 1;
+    transition: all 0.3s ease;
+  }
+
+  /* Trait count badges in outer corners */
+  .jp-trait-count {
+    position: absolute;
+    z-index: 6;
+    font-size: 0.65rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    padding: 1px 5px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+  }
+  .jp-quadrant[data-q="0"] .jp-trait-count { top: 4px; left: 4px; }
+  .jp-quadrant[data-q="1"] .jp-trait-count { top: 4px; right: 4px; }
+  .jp-quadrant[data-q="2"] .jp-trait-count { bottom: 4px; left: 4px; }
+  .jp-quadrant[data-q="3"] .jp-trait-count { bottom: 4px; right: 4px; }
+
+  /* Center diamond */
+  .jp-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+    pointer-events: auto;
+    cursor: pointer;
+    width: 31%;
+    height: 31%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .jp-center::before {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    width: calc(100% / 1.4142);
+    height: calc(100% / 1.4142);
+    background: #fff;
+    border: 2px solid #8a8d8f;
+    box-sizing: border-box;
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+  .jp-flame {
+    position: relative;
+    width: 66%; height: 66%;
+    object-fit: contain;
+    z-index: 1;
+  }
+
+  /* Scratch canvas overlay */
+  .jp-scratch-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 2;
+    cursor: crosshair;
+    touch-action: none;
+  }
+
+  /* Prize reveal (hidden in pre-scratch) */
+  .jp-prize-reveal {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: stretch;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .hint {
+    font-size: 0.72rem;
+    opacity: 0.5;
+    margin-top: 0.6rem;
+  }
+
+  .note {
+    max-width: 700px;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    opacity: 0.6;
+    text-align: center;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+  }
+  .slider-row label { min-width: 100px; text-align: right; opacity: 0.7; }
+  .slider-row input[type=range] { width: 200px; }
+  .slider-row .val { min-width: 40px; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<h1>Pre-Scratch Badge Size ~ Individual Payout Size</h1>
+
+<div class="compare">
+  <!-- CURRENT: uniform sizing -->
+  <div class="token-label">
+    <h2>Current (uniform 92%)</h2>
+    <div class="jp-token" id="token-current">
+      <div class="jp-quadrant q-scratchable" data-q="0">
+        <img class="jp-badge" style="max-width:92%;max-height:92%" src="/badges-circular/cards_02_cashsack_gold.svg" alt="">
+        <span class="jp-trait-count">1x</span>
+        <canvas class="jp-scratch-canvas"></canvas>
+      </div>
+      <div class="jp-quadrant q-scratchable" data-q="1">
+        <img class="jp-badge" style="max-width:92%;max-height:92%" src="/badges-circular/crypto_06_ethereum_green.svg" alt="">
+        <span class="jp-trait-count">3x</span>
+        <canvas class="jp-scratch-canvas"></canvas>
+      </div>
+      <div class="jp-quadrant q-scratchable" data-q="2">
+        <img class="jp-badge" style="max-width:92%;max-height:92%" src="/badges-circular/cards_01_king_purple.svg" alt="">
+        <span class="jp-trait-count">6x</span>
+        <canvas class="jp-scratch-canvas"></canvas>
+      </div>
+      <div class="jp-quadrant q-scratchable" data-q="3">
+        <img class="jp-badge" style="max-width:92%;max-height:92%" src="/badges-circular/crypto_00_xrp_red.svg" alt="">
+        <span class="jp-trait-count">12x</span>
+        <canvas class="jp-scratch-canvas"></canvas>
+      </div>
+      <div class="jp-center">
+        <img src="/specials/special_none.svg" alt="Flame" class="jp-flame" />
+      </div>
+    </div>
+    <p class="hint">Scratch to find your winners!</p>
+  </div>
+
+  <!-- NEW: payout-proportional sizing -->
+  <div class="token-label">
+    <h2>Payout-proportional sizing</h2>
+    <div class="jp-token" id="token-scaled">
+      <div class="jp-quadrant q-scratchable" data-q="0" data-payout="0.48" data-count="1">
+        <img class="jp-badge" src="/badges-circular/cards_02_cashsack_gold.svg" alt="">
+        <span class="jp-trait-count">1x</span>
+        <canvas class="jp-scratch-canvas"></canvas>
+      </div>
+      <div class="jp-quadrant q-scratchable" data-q="1" data-payout="0.06" data-count="3">
+        <img class="jp-badge" src="/badges-circular/crypto_06_ethereum_green.svg" alt="">
+        <span class="jp-trait-count">3x</span>
+        <canvas class="jp-scratch-canvas"></canvas>
+      </div>
+      <div class="jp-quadrant q-scratchable" data-q="2" data-payout="0.008" data-count="6">
+        <img class="jp-badge" src="/badges-circular/cards_01_king_purple.svg" alt="">
+        <span class="jp-trait-count">6x</span>
+        <canvas class="jp-scratch-canvas"></canvas>
+      </div>
+      <div class="jp-quadrant q-scratchable" data-q="3" data-payout="0.002" data-count="12">
+        <img class="jp-badge" src="/badges-circular/crypto_00_xrp_red.svg" alt="">
+        <span class="jp-trait-count">12x</span>
+        <canvas class="jp-scratch-canvas"></canvas>
+      </div>
+      <div class="jp-center">
+        <img src="/specials/special_none.svg" alt="Flame" class="jp-flame" />
+      </div>
+    </div>
+    <p class="hint">Scratch to find your winners!</p>
+  </div>
+</div>
+
+<div class="slider-row">
+  <label>Min badge %</label>
+  <input type="range" id="slider-min" min="20" max="60" value="45">
+  <span class="val" id="val-min">45%</span>
+</div>
+<div class="slider-row">
+  <label>Max badge %</label>
+  <input type="range" id="slider-max" min="70" max="98" value="92">
+  <span class="val" id="val-max">92%</span>
+</div>
+<div class="slider-row">
+  <label>Scale curve</label>
+  <input type="range" id="slider-curve" min="10" max="100" value="50">
+  <span class="val" id="val-curve">log</span>
+</div>
+
+<p class="note">
+  Left: current uniform 92% badges on scratchable surface. Right: badge size reflects individual payout value.<br>
+  Big badge = big per-win payout. Small badge = small per-win payout (many wins).
+</p>
+
+<script>
+  // Draw blue scratch surface + badge onto canvas (matches beta jpDrawBadgeCover)
+  function drawBadgeCover(canvas, badgeImg, sizeFraction) {
+    var rect = canvas.parentElement.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Blue scratchable surface
+    ctx.fillStyle = '#b8d4e8';
+    ctx.fillRect(0, 0, w, h);
+
+    // Draw badge centered at sizeFraction of the quadrant
+    var size = Math.min(w, h) * sizeFraction;
+    var x = (w - size) / 2;
+    var y = (h - size) / 2;
+    ctx.drawImage(badgeImg, x, y, size, size);
+  }
+
+  // Preload all badge images, then draw canvases
+  function initToken(tokenId, getSizeFraction) {
+    var token = document.getElementById(tokenId);
+    var quads = token.querySelectorAll('.jp-quadrant');
+
+    quads.forEach(function(quad, i) {
+      var canvas = quad.querySelector('.jp-scratch-canvas');
+      if (!canvas) return;
+      var badge = quad.querySelector('.jp-badge');
+      if (!badge) return;
+
+      var img = new Image();
+      img.onload = function() {
+        quad._badgeImg = img;
+        quad._canvas = canvas;
+        drawBadgeCover(canvas, img, getSizeFraction(i));
+      };
+      img.src = badge.src;
+    });
+  }
+
+  // Current: always 0.92
+  initToken('token-current', function() { return 0.92; });
+
+  // Scaled: payout-proportional
+  var quads = document.querySelectorAll('#token-scaled .jp-quadrant[data-payout]');
+  var payouts = [];
+  quads.forEach(function(q) { payouts.push(parseFloat(q.dataset.payout)); });
+
+  var sliderMin = document.getElementById('slider-min');
+  var sliderMax = document.getElementById('slider-max');
+  var sliderCurve = document.getElementById('slider-curve');
+
+  function getScaledFraction(i) {
+    var minPct = parseInt(sliderMin.value) / 100;
+    var maxPct = parseInt(sliderMax.value) / 100;
+    var curveFactor = parseInt(sliderCurve.value) / 100;
+
+    var minP = Math.min.apply(null, payouts);
+    var maxP = Math.max.apply(null, payouts);
+    var p = payouts[i];
+
+    var tLinear = maxP > minP ? (p - minP) / (maxP - minP) : 0.5;
+    var tLog = maxP > minP ? (Math.log(p) - Math.log(minP)) / (Math.log(maxP) - Math.log(minP)) : 0.5;
+    var t = tLinear * (1 - curveFactor) + tLog * curveFactor;
+    return minPct + t * (maxPct - minPct);
+  }
+
+  function rescale() {
+    document.getElementById('val-min').textContent = sliderMin.value + '%';
+    document.getElementById('val-max').textContent = sliderMax.value + '%';
+    var cf = parseInt(sliderCurve.value) / 100;
+    document.getElementById('val-curve').textContent = cf < 0.3 ? 'linear' : cf < 0.7 ? 'log' : 'strong log';
+
+    // Update the underlying badge element sizes
+    quads.forEach(function(q, i) {
+      var frac = getScaledFraction(i);
+      var badge = q.querySelector('.jp-badge');
+      badge.style.maxWidth = (frac * 100) + '%';
+      badge.style.maxHeight = (frac * 100) + '%';
+    });
+
+    // Redraw canvases with new sizes
+    quads.forEach(function(q, i) {
+      if (q._badgeImg && q._canvas) {
+        drawBadgeCover(q._canvas, q._badgeImg, getScaledFraction(i));
+      }
+    });
+  }
+
+  // Init scaled token, then wire up sliders
+  initToken('token-scaled', getScaledFraction);
+
+  sliderMin.addEventListener('input', rescale);
+  sliderMax.addEventListener('input', rescale);
+  sliderCurve.addEventListener('input', rescale);
+
+  // Also redraw on resize
+  window.addEventListener('resize', function() {
+    initToken('token-current', function() { return 0.92; });
+    initToken('token-scaled', getScaledFraction);
+  });
+</script>
+
+</body>
+</html>

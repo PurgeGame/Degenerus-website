@@ -349,7 +349,7 @@
       { key: 'beta', label: 'Beta', href: '/beta/' },
       { key: 'degenerette', label: 'Degenerette', href: '/degenerette/' },
       { key: 'whitepaper', label: 'Whitepaper', href: '/whitepaper/' },
-      { key: 'analysis', label: 'Game Theory', href: '/analysis/' },
+      { key: 'theory', label: 'Game Theory', href: '/theory/' },
     ];
 
     // Left side
