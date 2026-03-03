@@ -453,10 +453,10 @@
   <!-- ========== Section 1: The Point ========== -->
   <section>
     <h2>The Point</h2>
-    <p>Degenerus is a gambling protocol on Ethereum. There is no house. There is no rake. Every ETH deposited goes into on-chain prize pools that pay out to players. The protocol makes money from stETH yield on the pooled deposits, not by skimming your bets.</p>
-    <p>That means total payouts to players will exceed total deposits over time. The pie grows. It's positive-sum.</p>
+    <p>Degenerus is a gambling protocol on Ethereum. The role of the house is open to anyone; there is no external rake. Every ETH deposited goes into on-chain prize pools that pay out to players. The protocol makes money from a fraction of the stETH yield on the pooled deposits, not by skimming your bets.</p>
+    <p>That means total payouts to players will exceed total deposits over time. The system is positive-sum.</p>
     <p>But here's the part that matters: <strong>once the game is running, every participant (gamblers, investors, affiliates) is individually incentivized to push it forward.</strong> Not because they're cooperating. Not because they're altruistic. Because pushing the game forward is how they make money. Their self-interest IS the system's fuel.</p>
-    <p>Jackpot winnings are liquid, you can withdraw anytime, but reinvesting them is heavily incentivized. And for investors, the rewards are structurally illiquid: future tickets, tokens you burn for utility, commissions you have to gamble to claim. Value enters the system and stays in the system.</p>
+    <p>Jackpot winnings are liquid, you can withdraw anytime, but reinvesting them is heavily incentivized. And for investors, the core reward is structurally illiquid: future tickets that only pay out when the game reaches their level. Value enters the system and stays in the system.</p>
     <p>The result is a self-reinforcing machine with multiple redundant mechanisms that keep it running. It doesn't need coordination. It doesn't need trust. It doesn't need a team to keep the lights on. The contracts are immutable and the incentives do the rest.</p>
     <p>The rest of this paper explains why.</p>
   </section>
@@ -573,7 +573,48 @@
     </div>
   </section>
 
-  <!-- ========== Section 7: The Flywheel ========== -->
+  <!-- ========== Section 7: Nash Equilibrium ========== -->
+  <section>
+    <h2>The Nash Equilibrium</h2>
+
+    <p>The protocol takes zero rake. The only external value entering the system is stETH yield (~2.5% APR on total deposits). This means the aggregate return across all players is slightly positive by exactly the yield amount. But individual returns depend entirely on what everyone else does.</p>
+
+    <h3>The GTO Ceiling</h3>
+    <p>Imagine every player plays optimally. Everyone maximizes their activity score, maintains quest streaks, runs afKing, uses BURNIE for tickets when the implied rate favors it, burns into every decimator at max score, and builds a full affiliate chain. In this world, nobody has an edge over anyone else. Activity scores converge. Bucket advantages disappear. Affiliate commissions get competed away. The profit margin for the entire player base collapses to the stETH yield: ~2.5% APR split across all depositors.</p>
+    <p>But look at what optimal play actually requires. Daily ticket purchases to maintain quest streaks. afKing mode locking your BURNIE into compounding coinflips. Future tickets across dozens of levels that only pay out if the game gets there. An affiliate network that only earns if new players keep joining. The Nash equilibrium player is the most invested participant in the system. They have the most skin in the game, the most to lose from a stall, and the strongest incentive to push every level forward. GTO play and maximum commitment to the protocol's future are the same thing.</p>
+
+    <h3>The Actual Game</h3>
+    <p>Not everyone optimizes. The protocol deliberately offers a spectrum of options with different EV profiles, and players self-sort by what they value:</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Option</th><th>Approximate EV</th><th>Who Takes It</th></tr>
+        <tr><td>Tickets (day 1 of a level)</td><td>~100%</td><td>Strategic players who buy early and catch every draw</td></tr>
+        <tr><td>Tickets (last jackpot day)</td><td>~65%</td><td>Impulsive buyers chasing the biggest jackpot of the level</td></tr>
+        <tr><td>Luckbox (max activity score)</td><td>~128%</td><td>Engaged players converting score into value</td></tr>
+        <tr><td>Coinflip (hold + compound)</td><td>~98.4% per cycle</td><td>Players building a BURNIE position</td></tr>
+        <tr><td>Degenerette</td><td>~95%</td><td>Players who want roulette-style action</td></tr>
+        <tr><td>Luckbox (low activity score)</td><td>~60%</td><td>New or casual players gambling for upside</td></tr>
+        <tr><td>Nit mode affiliate</td><td>50% of full commission</td><td>Affiliates who prefer certainty over variance</td></tr>
+      </table>
+    </div>
+
+    <p>And it goes deeper than product choice. Even within the same product, timing creates massive EV differences. A ticket bought on the first day of a level participates in every daily jackpot draw for that level. A ticket bought on the last jackpot day catches only the final draw. Both cost the same ETH. The early ticket captured roughly 50% more jackpot exposure. Luckbox tickets are even better: they're issued across dozens of future levels, earning BURNIE jackpot draws long before those levels start paying ETH. Players who buy impulsively on the last day of a level are voluntarily leaving most of the ticket's value on the table.</p>
+
+    <p>Every sub-optimal choice creates surplus that flows to the players who optimize. A casual player buying luckboxes at 60% EV is voluntarily transferring 40% of that value into the prize pools. A last-day ticket buyer subsidizes the early buyers who showed up when the level started. An affiliate choosing nit mode discards half their commission. A player who drops their quest streak forfeits the activity score that would have improved their decimator bucket, their luckbox EV, and their degenerette returns.</p>
+
+    <p>This surplus is what pushes individual returns above the stETH yield floor. Optimizers don't profit from exploiting anyone. They profit because other players, knowingly and voluntarily, choose convenience and excitement over EV maximization.</p>
+
+    <h3>Why This Is Stable</h3>
+    <p>The variance-seeking players are not being deceived. The odds are on-chain. The EV for every action is calculable from public contract code. They are choosing high-variance entertainment over spreadsheet optimization, the same way a poker player sits down knowing they are not the best at the table.</p>
+    <p>The optimizers need the non-optimizers. Without them, returns collapse to the yield floor. The non-optimizers need the system to be trustworthy and fun, which the zero-rake structure and on-chain transparency provide. Neither group has reason to leave. Neither group can exploit the other beyond what the contracts publicly allow.</p>
+
+    <div class="economy-callout">
+      <p><strong>The floor is real yield. The ceiling is other people's choices.</strong> In the worst case, everyone plays perfectly and the system returns stETH yield to all players. In the actual case, some players choose variance and entertainment over optimization, and their surplus flows to those who don't. Both groups get exactly what they came for.</p>
+    </div>
+  </section>
+
+  <!-- ========== Section 8: The Flywheel ========== -->
   <section>
     <h2>The Flywheel</h2>
     <p>The three products form a self-reinforcing cycle:</p>

@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BURNIE Token Whitepaper</title>
+  <meta name="description" content="One source. Many sinks. Every BURNIE in existence was minted because someone won a coinflip. Technical documentation for the BURNIE utility token." />
+  <link rel="stylesheet" href="/shared/nav.css">
+  <style>
+    :root {
+      --accent-primary: #f5a623;
+      --accent-secondary: #ffc04d;
+    }
+
+    body { line-height: 1.65; }
+
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: clamp(0.5rem, 2vw, 1rem);
+    }
+
+    .page-header {
+      text-align: center;
+      padding: clamp(1rem, 3vw, 1.5rem);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      background: var(--bg-secondary);
+      margin-bottom: 1.5rem;
+    }
+
+    .page-header-logo {
+      width: 52px;
+      height: 52px;
+      margin-bottom: 0.65rem;
+      filter: drop-shadow(0 0 20px rgba(245, 166, 35, 0.35));
+    }
+
+    .page-header h1 {
+      text-align: center;
+      font-size: clamp(1.4rem, 4vw, 1.9rem);
+      color: var(--accent-primary);
+      margin-bottom: 0.5rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+
+    .page-header .subtitle {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      max-width: 700px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    section {
+      margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+      padding: clamp(1rem, 3vw, 1.5rem);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+    }
+
+    section:last-of-type { margin-bottom: 0; }
+
+    h2 {
+      font-size: clamp(1.2rem, 3.4vw, 1.5rem);
+      color: var(--text-primary);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 0.95rem;
+      text-transform: none;
+    }
+
+    h3 {
+      font-size: 0.95rem;
+      color: var(--text-primary);
+      font-weight: 600;
+      margin-top: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+
+    p {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+      font-size: 0.92rem;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    strong { color: var(--text-primary); font-weight: 600; }
+    em { font-style: italic; }
+
+    a {
+      color: var(--accent-primary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    a:hover {
+      color: #ffd08f;
+      border-bottom-color: var(--accent-primary);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin: 1.25rem 0;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--bg-tertiary);
+    }
+
+    th, td {
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    th {
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+
+    td { color: var(--text-secondary); }
+    td strong { color: var(--text-primary); }
+    tr:last-child td { border-bottom: none; }
+
+    blockquote {
+      border-left: 3px solid var(--accent-primary);
+      padding: 0.9rem 1.2rem;
+      margin: 1.25rem 0;
+      background: rgba(245, 166, 35, 0.08);
+      border-radius: 0 8px 8px 0;
+    }
+
+    blockquote p {
+      color: var(--text-secondary);
+      font-size: 0.92rem;
+      font-style: italic;
+      margin-bottom: 0;
+    }
+
+    .mechanism-list {
+      list-style: none;
+      display: grid;
+      gap: 0.6rem;
+      margin: 1.25rem 0;
+    }
+
+    .mechanism-list li {
+      padding: 0.7rem 1rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .mechanism-list li strong { color: var(--text-primary); font-weight: 600; }
+
+    .callout {
+      background: rgba(245, 166, 35, 0.08);
+      border: 1px solid rgba(245, 166, 35, 0.3);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      margin: 1.25rem 0;
+    }
+
+    .callout p { font-size: 0.9rem; line-height: 1.65; margin-bottom: 0.85rem; }
+    .callout p:last-child { margin-bottom: 0; }
+
+    .meta-note {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      line-height: 1.55;
+    }
+
+    footer {
+      text-align: center;
+      padding: 1.25rem 0 0.5rem;
+      margin-top: 1rem;
+      border-top: 1px solid var(--border-color);
+    }
+
+    footer a { color: var(--text-secondary); font-size: 0.8rem; border-bottom: none; }
+    footer a:hover { color: var(--text-primary); }
+
+    @media (max-width: 520px) {
+      .page { padding: 0.55rem; }
+      .page-header { padding: 1rem 0.85rem; }
+      .page-header-logo { width: 40px; height: 40px; }
+      h2 { font-size: 1.1rem; }
+      table { font-size: 0.78rem; }
+      th, td { padding: 0.5rem 0.55rem; }
+      .mechanism-list li { font-size: 0.82rem; padding: 0.6rem 0.85rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+  <header class="page-header">
+    <img src="/whitepaper/flame-logo.svg" alt="BURNIE" class="page-header-logo" />
+    <h1>BURNIE</h1>
+    <p class="subtitle" style="font-size:0.78rem; margin-bottom:0.3rem; color:var(--text-dim);">by Burnie Degenerus</p>
+    <p class="subtitle">One source. Many sinks. Every BURNIE in existence was minted because someone won a coinflip.</p>
+  </header>
+
+  <div class="meta-note">
+    This document is a technical companion to the <a href="/whitepaper/">Degenerus Protocol Whitepaper</a>. All constants are taken from immutable smart contract code. Source: <a href="https://github.com/PurgeGame/degenerus-contracts">github.com/PurgeGame/degenerus-contracts</a>
+  </div>
+
+  <!-- ========== 1. What BURNIE Is ========== -->
+  <section>
+    <h2>What BURNIE Is</h2>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Property</th><th>Value</th></tr>
+        <tr><td>Name</td><td><strong>Burnies</strong></td></tr>
+        <tr><td>Symbol</td><td><strong>BURNIE</strong></td></tr>
+        <tr><td>Standard</td><td>ERC-20 (18 decimals)</td></tr>
+        <tr><td>Initial circulating supply</td><td><strong>0</strong></td></tr>
+        <tr><td>Pre-mine / team allocation</td><td>2,000,000 BURNIE (vault virtual reserve)</td></tr>
+        <tr><td>Bonding curve</td><td>None</td></tr>
+        <tr><td>Passive farming</td><td>None</td></tr>
+      </table>
+    </div>
+
+    <p>BURNIE is a utility token that cannot be bought from a curve, minted by the team, or farmed passively. Every circulating BURNIE was created through one channel: winning a daily coinflip. The token's entire supply trajectory is downstream of player engagement and randomness.</p>
+
+    <p>The only allocation is the 2,000,000 BURNIE virtual reserve seeded into the vault at deployment. This is the team's position: it only has value if the game succeeds and players engage. Beyond that, the circulating supply starts at zero and grows only when players participate in the game and survive coinflips. The contracts are immutable.</p>
+  </section>
+
+  <!-- ========== 2. The Mint Gate: Coinflip ========== -->
+  <section>
+    <h2>The Mint Gate: The Coinflip</h2>
+
+    <p>Every day, BURNIE holders can stake into a 50/50 daily coinflip. Chainlink VRF determines the outcome. If you win, you get your principal back plus a bonus. If you lose, your principal is burned permanently and you receive 1 WWXRP as a consolation.</p>
+
+    <h3>Win Bonus Distribution</h3>
+
+    <p>The bonus on wins is rolled from VRF entropy, not fixed:</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Outcome</th><th>Probability</th><th>Bonus</th><th>Total Payout</th></tr>
+        <tr><td>Unlucky</td><td>5%</td><td>50%</td><td><strong>1.5x</strong> principal</td></tr>
+        <tr><td>Normal</td><td>90%</td><td>78% to 115%</td><td><strong>1.78x to 2.15x</strong> principal</td></tr>
+        <tr><td>Lucky</td><td>5%</td><td>150%</td><td><strong>2.5x</strong> principal</td></tr>
+      </table>
+    </div>
+
+    <h3>Expected Value</h3>
+
+    <p>The mean reward on a win is 96.85%. With a 50% win probability:</p>
+
+    <blockquote><p>E[outcome] = 0.50 x (1 + 0.9685) + 0.50 x 0 = 0.984</p></blockquote>
+
+    <p><strong>Base coinflip EV: 98.4%.</strong> The coinflip is intentionally slightly negative-EV in BURNIE terms. The ~1.6% expected loss is a structural burn. But participation is the point: coinflip deposits build BAF (Big-Ass Flip) jackpot eligibility, and BAF jackpots pay in ETH.</p>
+
+    <p>During presale, winners receive an additional +6% bonus, pushing EV closer to break-even.</p>
+
+    <h3>Minimum Stake</h3>
+    <p>100 BURNIE per deposit. Deposits always target the next day's window. You cannot deposit and resolve in the same VRF cycle. This index-based separation makes it impossible to front-run the coinflip outcome.</p>
+
+    <h3>Claim Windows</h3>
+    <p>Winnings must be claimed within <strong>90 days</strong> (30 days for the first ever claim). Unclaimed winnings expire. Players with auto-rebuy enabled have no expiry as long as auto-rebuy remains active.</p>
+  </section>
+
+  <!-- ========== 3. FLIP Credits ========== -->
+  <section>
+    <h2>FLIP Credits: The Gateway</h2>
+
+    <p>FLIP is not BURNIE. FLIP is an entry ticket to tomorrow's coinflip. When you earn FLIP credits, they are queued for the next daily coinflip window. If the coinflip wins, those FLIP credits become fresh BURNIE at the win multiplier (1.5x to 2.5x). If it loses, they are burned.</p>
+
+    <p>Most BURNIE earned from gameplay enters as FLIP, meaning it must survive a 50/50 coinflip before it exists as a transferable token. But because wins pay 1.5x to 2.5x (mean ~1.97x), the expected output of 1,000 FLIP is ~984 BURNIE. The coinflip filters FLIP into BURNIE at roughly 1:1, with a small ~1.6% structural burn.</p>
+
+    <h3>Sources of FLIP Credits</h3>
+
+    <ul class="mechanism-list">
+      <li><strong>ETH ticket purchases:</strong> 100 BURNIE in FLIP per ticket (10% of face value). Doubles to 200 when buying 10+ tickets. An additional 200 per ticket on the last purchase day of endgame levels (90+).</li>
+      <li><strong>BURNIE ticket purchases:</strong> No FLIP credit. Buying with BURNIE is a pure burn.</li>
+      <li><strong>Jackpot wins:</strong> Daily BURNIE jackpots are credited as FLIP, not liquid BURNIE.</li>
+      <li><strong>Lootbox BURNIE prizes:</strong> The BURNIE component of lootbox prizes enters as FLIP.</li>
+      <li><strong>Affiliate commissions:</strong> All affiliate payouts are FLIP by default. Affiliates can choose "nit mode" for 50% guaranteed BURNIE, but the other 50% is discarded.</li>
+      <li><strong>Advance bounty:</strong> The player who calls <code>advanceGame()</code> daily earns 500 BURNIE as FLIP.</li>
+      <li><strong>Quest rewards:</strong> Daily quest slot pays 100 BURNIE as FLIP. Random quest slot pays 200. Up to 300 BURNIE in FLIP per day if both are completed.</li>
+      <li><strong>Claimable drain bonus:</strong> Spending all your claimable winnings (minimum 3 tickets' worth) on new purchases earns a 10% bonus in FLIP.</li>
+    </ul>
+
+    <div class="callout">
+      <p>Every one of these sources is filtered through the coinflip before reaching circulation. The 50/50 coin toss eliminates half of all FLIP, but the variable win bonus (mean ~1.97x) nearly compensates. Net pass-through rate: ~98.4% of the FLIP value survives as circulating BURNIE.</p>
+    </div>
+  </section>
+
+  <!-- ========== 4. Where BURNIE Burns ========== -->
+  <section>
+    <h2>Where BURNIE Burns</h2>
+
+    <p>BURNIE has many sinks. Each one removes tokens from circulation permanently.</p>
+
+    <ul class="mechanism-list">
+      <li><strong>Coinflip losses:</strong> 50% of all staked BURNIE is burned every day. Net burn rate per cycle: ~1.6% of total staked (accounting for the win bonus on the other half).</li>
+      <li><strong>BURNIE ticket purchases:</strong> Players can buy tickets with BURNIE at a base rate of <strong>1,000 BURNIE per ticket</strong> (250 per entry, 4 entries per ticket). Available during both the purchase and jackpot phases. The BURNIE is burned completely, and the burned amount is added to the vault's virtual allowance.</li>
+      <li><strong>BURNIE lootboxes:</strong> Minimum 1,000 BURNIE. The entire amount is burned on purchase. Prizes resolve at 80% of the BURNIE's face value in ETH-equivalent, rolled across tickets (55%), BURNIE as FLIP (25%), DGNRS tokens (10%), and WWXRP (10%).</li>
+      <li><strong>Decimator burns:</strong> Minimum 1,000 BURNIE. Burned to enter weighted ETH jackpot drawings at x4 and x99 levels (4, 14, 24, 34, 44, 54, 64, 74, 84, 99, etc.). Activity score determines bucket placement: higher score means better odds.</li>
+      <li><strong>ReverseFlip nudge:</strong> Costs 100 BURNIE base, escalating 1.5x per queued nudge (100, 150, 225, ...). Burns BURNIE to attempt a VRF reroll during daily jackpot resolution.</li>
+    </ul>
+  </section>
+
+  <!-- ========== 5. The Decimator ========== -->
+  <section>
+    <h2>The Decimator</h2>
+
+    <p>The decimator is a weighted ETH jackpot funded by the future prize pool. Players burn BURNIE to enter. The more you burn, the larger your share of the pot if your bucket wins.</p>
+
+    <h3>When It Fires</h3>
+    <p>The decimator window opens at levels ending in 4 (except 94) and 99. Burns are accepted during the window. The jackpot resolves at the next level transition (x5 or x00). Specific prize pools:</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Resolution Level</th><th>Pool Source</th></tr>
+        <tr><td>x5, x15, x25 ... x85</td><td>10% of the current futurePrizePool</td></tr>
+        <tr><td>x00 milestones (100, 200, ...)</td><td>30% of the futurePrizePool</td></tr>
+      </table>
+    </div>
+
+    <h3>The Bucket System</h3>
+    <p>When you burn, you are assigned a <strong>bucket</strong> (denominator) based on your activity score. Each bucket is divided into that many sub-buckets. VRF selects one winning sub-bucket per bucket. Lower bucket number = fewer sub-buckets = better odds.</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Activity Score</th><th>Bucket</th><th>Win Probability</th></tr>
+        <tr><td>0 (no score)</td><td>12</td><td>1 in 12 (8.3%)</td></tr>
+        <tr><td>Max (23,500 BPS)</td><td>5 (normal levels)</td><td>1 in 5 (20%)</td></tr>
+        <tr><td>Max (23,500 BPS)</td><td>2 (x00 levels)</td><td>1 in 2 (50%)</td></tr>
+      </table>
+    </div>
+
+    <p>Your sub-bucket is deterministically assigned from a hash of your address, level, and bucket. You cannot choose it. You can improve your bucket mid-window by increasing your activity score, but you cannot worsen it.</p>
+
+    <h3>Burn Weight</h3>
+    <p>Minimum burn: <strong>1,000 BURNIE</strong>. Within a winning sub-bucket, the prize is split pro-rata by burn amount. Your share = (your burn / total burn across all winning sub-buckets) x pool. Activity score also gives a burn multiplier: base 1x plus one-third of your activity bonus (capped at 200 tickets' worth of multiplied burn).</p>
+
+    <h3>Prize Split</h3>
+    <p>During normal play, decimator winnings are split <strong>50% claimable ETH</strong> and <strong>50% lootbox tickets</strong>. During gameover, the split is 100% ETH. If auto-rebuy is enabled, the ETH portion converts to tickets at 130% value (145% for afKing).</p>
+
+    <p>Claims expire when the next decimator fires. Only the most recent round is claimable.</p>
+  </section>
+
+  <!-- ========== 6. The Price Ratchet ========== -->
+  <section>
+    <h2>The Price Ratchet</h2>
+
+    <p>Ticket prices in ETH rise as the game progresses through levels. Ticket prices in BURNIE stay fixed at <strong>1,000 BURNIE per ticket</strong> (with minor modifiers at certain levels). This creates a natural price floor that ratchets upward with game progression.</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Level Range</th><th>ETH Price per Ticket</th><th>BURNIE Price</th><th>Implied Rate</th></tr>
+        <tr><td>0 to 4</td><td>0.01 ETH</td><td>1,000 BURNIE</td><td><strong>1 BURNIE = 0.00001 ETH</strong></td></tr>
+        <tr><td>5 to 9</td><td>0.02 ETH</td><td>1,000 BURNIE</td><td><strong>1 BURNIE = 0.00002 ETH</strong></td></tr>
+        <tr><td>10 to 29</td><td>0.04 ETH</td><td>1,000 BURNIE</td><td><strong>1 BURNIE = 0.00004 ETH</strong></td></tr>
+        <tr><td>30 to 59</td><td>0.08 ETH</td><td>1,000 BURNIE</td><td><strong>1 BURNIE = 0.00008 ETH</strong></td></tr>
+        <tr><td>60 to 89</td><td>0.12 ETH</td><td>1,000 BURNIE</td><td><strong>1 BURNIE = 0.00012 ETH</strong></td></tr>
+        <tr><td>90 to 99</td><td>0.16 ETH</td><td>1,000 BURNIE</td><td><strong>1 BURNIE = 0.00016 ETH</strong></td></tr>
+        <tr><td>x00 milestones</td><td>0.24 ETH</td><td>1,000 BURNIE</td><td><strong>1 BURNIE = 0.00024 ETH</strong></td></tr>
+      </table>
+    </div>
+
+    <p>The price schedule repeats every 100 levels (level 101 resets to 0.04 ETH, level 200 spikes to 0.24 ETH, etc.). At certain levels, BURNIE ticket costs are modified: 1.5x at levels where <code>level % 20 == 13</code> (1,500 BURNIE per ticket), and 0.9x at levels where <code>level % 20 == 18</code> (900 BURNIE per ticket).</p>
+
+    <p>This is not an AMM or an oracle price. It is a <strong>utility floor</strong>. As long as the game progresses, a BURNIE can always buy a ticket at the 1,000 base rate. Since the ETH cost of that same ticket escalates with levels, the real-terms value of one BURNIE can only go up.</p>
+  </section>
+
+  <!-- ========== 6. BURNIE Jackpots ========== -->
+  <section>
+    <h2>BURNIE Jackpots</h2>
+
+    <h3>Daily BURNIE Jackpot</h3>
+    <p>During every daily jackpot draw, a portion of the prize pool (converted to BURNIE at the current price) is distributed as FLIP credits to random trait-matched ticket winners.</p>
+
+    <h3>Far-Future Jackpots</h3>
+    <p>Tickets at levels far ahead of the current game level (5 to 99 levels ahead) cannot win ETH jackpots yet. But they do participate in BURNIE jackpot draws. These drawings select random ticket holders at those far-future levels and pay BURNIE as FLIP credits.</p>
+
+    <p>This gives future tickets <strong>time-value</strong>. The earlier you acquire a ticket at a distant level, the more BURNIE draws it participates in before that level's ETH jackpots begin. A ticket at level 80 bought during level 10 earns 70 levels worth of daily BURNIE draw eligibility that a ticket bought at level 75 would not.</p>
+
+    <h3>BAF Eligibility</h3>
+    <p>The Big-Ass Flip jackpot (every 10 levels) pays ETH, not BURNIE. Eligibility requires an <strong>ETH mint streak of at least 8</strong> consecutive levels. Deity pass holders are always eligible (their streak count equals the current level). BAF prizes are distributed across top bettors, top coinflip bettors, affiliate draws, and two tiers of scatter rounds where your BAF score determines your odds.</p>
+  </section>
+
+  <!-- ========== 7. afKing Mode ========== -->
+  <section>
+    <h2>afKing Mode</h2>
+
+    <p>afKing mode is automatic coinflip compounding. When auto-rebuy is enabled, coinflip winnings are not withdrawn as liquid BURNIE. Instead, the payout rolls forward as your stake for the next day's coinflip. Your balance compounds day over day, with optional take-profit thresholds that skim ETH or BURNIE off the top when the rolling stake exceeds a set amount.</p>
+
+    <p>afKing requires a lazy pass and locks for 5 levels after activation. Take-profit minimums are 5 ETH or 20,000 BURNIE (or zero for full compounding).</p>
+
+    <h3>Recycling Bonuses</h3>
+
+    <p>Each time auto-rebuy rolls winnings forward, a recycling bonus is added to the carry:</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Mode</th><th>Recycling Bonus</th><th>Notes</th></tr>
+        <tr><td>Auto-rebuy (no afKing)</td><td>1%</td><td>Capped at 1,000 BURNIE per cycle</td></tr>
+        <tr><td>afKing</td><td>1.6%</td><td>No cap</td></tr>
+        <tr><td>afKing + Deity Pass</td><td>Up to 3.1%</td><td>+1.5% deity bonus, scales with levels active (deity portion capped at 1M BURNIE of carry)</td></tr>
+      </table>
+    </div>
+
+    <p>The result: afKing creates a compounding loop. Coinflip winnings re-stake automatically, earning recycling bonuses each cycle. The longer you stay in, the larger your rolling position grows. BURNIE never leaves the system unless you hit a take-profit threshold or turn off auto-rebuy.</p>
+  </section>
+
+  <!-- ========== 8. BURNIE in the Vault ========== -->
+  <section>
+    <h2>BURNIE in the Vault</h2>
+
+    <p>The Degenerus Vault issues two share classes. DGVE (Vault Eth) claims ETH and stETH reserves. <strong>DGVB (Vault Burnie)</strong> claims BURNIE reserves.</p>
+
+    <h3>Virtual Deposit Mechanism</h3>
+    <p>BURNIE deposits into the vault are <strong>virtual</strong>. No BURNIE tokens are transferred. Instead, the vault tracks a mint allowance on the BurnieCoin contract. When DGVB holders burn shares to claim, BURNIE is minted from this allowance on demand. Every BURNIE burned through ticket purchases or other game sinks adds to this vault allowance, growing the reserves backing DGVB.</p>
+
+    <p>The initial vault virtual reserve is <strong>2,000,000 BURNIE</strong>. This is the pre-mine and team allocation. It gives the vault BURNIE reserves from day one without requiring any tokens to be in circulation, and its value is entirely dependent on the game succeeding.</p>
+
+    <h3>The Vault as Player</h3>
+    <p>The vault itself operates as a player in the game. It holds a deity-equivalent activity score, receives 16 tickets per level for levels 1 through 100, operates in afKing mode (auto-reinvesting all winnings), and is the default affiliate for unaffiliated players. All affiliate FLIP credits earned by the vault feed into its BURNIE reserves, growing the value backing each DGVB share.</p>
+  </section>
+
+  <!-- ========== 9. Affiliate System ========== -->
+  <section>
+    <h2>BURNIE in the Affiliate System</h2>
+
+    <p>All affiliate commissions in Degenerus are paid as <strong>FLIP credits</strong> by default, not liquid BURNIE. This means affiliate income must survive a coinflip before becoming transferable tokens.</p>
+
+    <h3>Why FLIP Instead of Direct Payment</h3>
+    <p>This is an intentional variance filter. Professional affiliates who expect guaranteed income self-select out. Affiliates who enjoy gambling and match the protocol's target audience self-select in. Fewer affiliates, but the right ones.</p>
+
+    <h3>Commission Rates</h3>
+    <p>Affiliate rewards are calculated as a percentage of the ETH-equivalent transaction value, converted to BURNIE:</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>Source</th><th>Rate</th></tr>
+        <tr><td>Fresh ETH (levels 1-3)</td><td>25% of transaction value</td></tr>
+        <tr><td>Fresh ETH (levels 4+)</td><td>20% of transaction value</td></tr>
+        <tr><td>Recycled ETH (claimable)</td><td>5% of transaction value</td></tr>
+      </table>
+    </div>
+
+    <p>The direct affiliate receives the full scaled reward. Upline 1 receives an additional 20% of the same base. Upline 2 receives an additional 4%. These are additive payments, not nested splits.</p>
+
+    <h3>Payout Modes</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Mode</th><th>Mechanism</th></tr>
+        <tr><td>Coinflip (default)</td><td>100% as FLIP credits. Enters tomorrow's coinflip.</td></tr>
+        <tr><td>Degenerette</td><td>100% as degenerette betting credit. Stored until used.</td></tr>
+        <tr><td>Nit Mode</td><td>50% minted as liquid BURNIE. Other 50% discarded (never minted).</td></tr>
+      </table>
+    </div>
+
+    <p>Nit mode is a 50% haircut for certainty. The discarded 50% is value that never enters circulation at all. Affiliates choosing this mode are paying for predictability with half their commission.</p>
+  </section>
+
+  <!-- ========== 10. Supply Dynamics ========== -->
+  <section>
+    <h2>Supply Dynamics</h2>
+
+    <p>There is no emission schedule, no inflation rate, no farming. BURNIE supply is determined entirely by the balance between minting (coinflip wins) and many sinks. That balance shifts depending on the current game level and how players choose to use their BURNIE.</p>
+
+    <h3>The Equilibrium</h3>
+    <p>The coinflip produces a ~1.6% net burn per cycle. On its own, this is a slow drain. But the sinks pulling BURNIE out of circulation vary with player behavior:</p>
+    <ul class="mechanism-list">
+      <li>Every BURNIE ticket purchase (1,000 per ticket) is a permanent burn</li>
+      <li>Every BURNIE lootbox purchase (100% burned, resolves at 80% face value) is a permanent burn</li>
+      <li>Every decimator entry (1,000+ BURNIE) is a permanent burn</li>
+      <li>Every ReverseFlip nudge (100+ BURNIE, escalating) is a permanent burn</li>
+      <li>Every nit mode affiliate payout discards 50%</li>
+    </ul>
+
+    <p>Meanwhile, FLIP credits flow in from ETH ticket purchases, quest rewards, jackpots, affiliate commissions, and advance bounties. The rate of FLIP generation depends on how much ETH is being spent, how many quests are completed, and how many jackpots fire. The coinflip converts FLIP to BURNIE at ~98.4% efficiency.</p>
+
+    <p>The result is a dynamic equilibrium. At lower levels where ticket prices are cheap and activity is high, FLIP generation can outpace burns, growing the supply. At higher levels where ETH prices rise (and BURNIE ticket purchases become more attractive relative to ETH), the burn sinks intensify. The supply contracts or expands based on the collective behavior of all players at any given moment.</p>
+
+    <div class="callout">
+      <p><strong>The supply curve depends entirely on player behavior.</strong> More sink usage means less circulating supply. Less supply with constant or growing utility demand means the price ratchet tightens. A tighter ratchet makes BURNIE more valuable as a game input. But more valuable BURNIE also means more incentive to earn it through FLIP sources. The equilibrium point shifts with every level and every player decision.</p>
+    </div>
+  </section>
+
+  <!-- ========== 11. Trust Model ========== -->
+  <section>
+    <h2>Trust Model</h2>
+    <p>BurnieCoin is an immutable contract. There are no admin keys, no proxy upgrades, no owner functions. The mint paths are hardcoded to specific contract addresses set at deployment. No address can mint BURNIE outside the coinflip mechanism. No address can change the burn mechanics or the supply constants.</p>
+    <p>All randomness is sourced from Chainlink VRF. The index-based separation between deposits and resolution makes it impossible for any participant (including the contract deployer) to predict or influence coinflip outcomes.</p>
+    <p>Verify on-chain. The contracts are open source.</p>
+  </section>
+
+  <footer>
+    <a href="/whitepaper/">Back to main whitepaper</a>
+  </footer>
+</div>
+
+<script src="/shared/nav.js"></script>
+<script>initNav({ currentPage: 'burnie' });</script>
+</body>
+</html>

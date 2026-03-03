@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Glossary — Degenerus Protocol</title>
+  <meta name="description" content="Definitions of terms and mechanics used in the Degenerus Protocol whitepapers." />
+  <link rel="stylesheet" href="/shared/nav.css">
+  <style>
+    :root {
+      --accent-primary: #f5a623;
+      --accent-secondary: #ffc04d;
+    }
+
+    body { line-height: 1.65; }
+
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: clamp(0.5rem, 2vw, 1rem);
+    }
+
+    .page-header {
+      text-align: center;
+      padding: clamp(1rem, 3vw, 1.5rem);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      background: var(--bg-secondary);
+      margin-bottom: 1.5rem;
+    }
+
+    .page-header-logo {
+      width: 52px;
+      height: 52px;
+      margin-bottom: 0.65rem;
+      filter: drop-shadow(0 0 20px rgba(245, 166, 35, 0.35));
+    }
+
+    .page-header h1 {
+      text-align: center;
+      font-size: clamp(1.4rem, 4vw, 1.9rem);
+      color: var(--accent-primary);
+      margin-bottom: 0.5rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+
+    .page-header .subtitle {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      max-width: 700px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    section {
+      margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+      padding: clamp(1rem, 3vw, 1.5rem);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+    }
+
+    section:last-of-type { margin-bottom: 0; }
+
+    h2 {
+      font-size: clamp(1.2rem, 3.4vw, 1.5rem);
+      color: var(--text-primary);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 0.95rem;
+      text-transform: none;
+    }
+
+    p {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+      font-size: 0.92rem;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    strong { color: var(--text-primary); font-weight: 600; }
+
+    a {
+      color: var(--accent-primary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    a:hover {
+      color: #ffd08f;
+      border-bottom-color: var(--accent-primary);
+    }
+
+    dl {
+      margin: 0;
+    }
+
+    dt {
+      color: var(--text-primary);
+      font-weight: 600;
+      font-size: 0.92rem;
+      padding-top: 0.75rem;
+    }
+
+    dt:first-child { padding-top: 0; }
+
+    dd {
+      color: var(--text-secondary);
+      font-size: 0.88rem;
+      line-height: 1.55;
+      margin: 0.25rem 0 0.75rem 0;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    dd:last-child { border-bottom: none; padding-bottom: 0; }
+
+    footer {
+      text-align: center;
+      padding: 1.25rem 0 0.5rem;
+      margin-top: 1rem;
+      border-top: 1px solid var(--border-color);
+    }
+
+    footer a { color: var(--text-secondary); font-size: 0.8rem; border-bottom: none; }
+    footer a:hover { color: var(--text-primary); }
+    footer .footer-links { display: flex; justify-content: center; gap: 1.5rem; }
+
+    @media (max-width: 520px) {
+      dt { font-size: 0.88rem; }
+      dd { font-size: 0.84rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <header class="page-header">
+    <img src="/badges-circular/flame_red.svg" alt="Degenerus" class="page-header-logo" />
+    <h1>Glossary</h1>
+    <p class="subtitle">Terms and mechanics referenced in the <a href="/whitepaper/">Degenerus Protocol whitepaper</a> and <a href="/whitepaper/burnie/">BURNIE token whitepaper</a>.</p>
+  </header>
+
+  <!-- ========== Tokens ========== -->
+  <section>
+    <h2>Tokens</h2>
+    <dl>
+      <dt>BURNIE</dt>
+      <dd>ERC-20 utility token. Every circulating BURNIE was minted by winning a daily coinflip. Used to buy tickets, enter the decimator, purchase lootboxes, and wager in the coinflip. Burned permanently on most uses. No bonding curve, no farming, no team pre-mine. See the <a href="/whitepaper/burnie/">BURNIE whitepaper</a>.</dd>
+
+      <dt>FLIP</dt>
+      <dd>Credit that enters the next daily coinflip automatically. Most BURNIE rewards are paid as FLIP rather than liquid BURNIE. If the coinflip wins, FLIP converts to BURNIE at a variable multiplier (1.5x to 2.5x principal). If it loses, the FLIP is burned. Expected pass-through rate: ~98.4%.</dd>
+
+      <dt>DGNRS</dt>
+      <dd>Long-term investment token with its own ETH, stETH, and BURNIE reserves. Receives a share of stETH yield. The DGNRS contract is a permanent player in the game: it holds tickets, runs in afKing mode, and auto-reinvests winnings every level.</dd>
+
+      <dt>DGVE</dt>
+      <dd>Vault share class. Redeemable for a pro-rata claim on the vault's ETH and stETH reserves.</dd>
+
+      <dt>DGVB</dt>
+      <dd>Vault share class. Redeemable for a pro-rata claim on the vault's BURNIE reserves (minted on demand from the vault's virtual allowance).</dd>
+
+      <dt>WWXRP</dt>
+      <dd>Consolation token. Awarded when you lose a coinflip (1 WWXRP per loss). Also appears as a lootbox prize category.</dd>
+
+      <dt>stETH</dt>
+      <dd>Lido staked ETH. All deposited ETH is converted to stETH, earning ~2.5% APR from Ethereum staking rewards. This yield is the protocol's positive-sum subsidy layer.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Game Structure ========== -->
+  <section>
+    <h2>Game Structure</h2>
+    <dl>
+      <dt>Levels</dt>
+      <dd>The game progresses through numbered levels. Each level has a deposit target that must be met before the game advances. Ticket prices rise with level. The price schedule repeats every 100 levels.</dd>
+
+      <dt>Tickets</dt>
+      <dd>Primary gambling instrument. Each ticket has four randomly assigned traits. Tickets enter daily jackpot draws during the jackpot phase. Non-transferable. Can be purchased with ETH or BURNIE.</dd>
+
+      <dt>Traits</dt>
+      <dd>Four attributes on each ticket (e.g. flower type, color, pattern). Chainlink VRF selects winning traits nightly. Tickets matching winning traits share the daily jackpot.</dd>
+
+      <dt>Current Prize Pool</dt>
+      <dd>The active pool of ETH funding jackpots for the current level. Filled by ticket purchases and stETH yield. Paid out across daily jackpots until exhausted.</dd>
+
+      <dt>Future Prize Pool</dt>
+      <dd>Separate ETH reserve funded by lootbox and pass purchases. Drips into the current prize pool at level transitions. Holds roughly 1.5x the current level target. Can fill a prize pool without any new player deposits.</dd>
+
+      <dt>Deposit Phase</dt>
+      <dd>Period when players can buy tickets for the current level. Prize pool accumulates from purchases.</dd>
+
+      <dt>Jackpot Phase</dt>
+      <dd>Period after ticket sales close. VRF draws winning traits nightly and jackpots pay out daily. Five daily jackpots per level.</dd>
+
+      <dt>Level Transition</dt>
+      <dd>When the prize pool target is met, the game advances. A chunk of the future prize pool moves into the next level's pool. Triggers drip mechanisms and resets the jackpot counter.</dd>
+
+      <dt>Hundred-Level Cycle</dt>
+      <dd>Every 100 levels the price schedule resets. Level 101 matches level 1 pricing, level 200 matches level 100 pricing, and so on.</dd>
+
+      <dt>Gameover</dt>
+      <dd>365 days of inactivity triggers a clean wind-down. Remaining funds are distributed through final jackpots, then swept to the vault and DGNRS contract. No funds are locked forever.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Jackpots ========== -->
+  <section>
+    <h2>Jackpots</h2>
+    <dl>
+      <dt>Daily ETH Jackpot</dt>
+      <dd>Nightly draw during the jackpot phase. Days 1-4 pay out 6-14% of the remaining current prize pool (rolled from VRF). Day 5 pays out the entire remainder. Winning tickets share the payout proportionally.</dd>
+
+      <dt>Daily BURNIE Jackpot</dt>
+      <dd>Daily draw paying BURNIE (as FLIP). Available to all ticket holders, including those holding tickets at far-future levels. This is what gives future tickets time-value.</dd>
+
+      <dt>Far-Future Jackpot Draws</dt>
+      <dd>Tickets at levels 5-99 levels ahead of the current level are eligible for daily BURNIE draws even though they can't win ETH yet. Earlier acquisition means more draws before the level arrives.</dd>
+
+      <dt>Big-Ass Flip (BAF)</dt>
+      <dd>Major jackpot event every 10 levels. Funded from the future prize pool (1.5-2x normal jackpot size). Requires an ETH mint streak of at least 8 consecutive levels to be eligible. Deity pass holders are always eligible. Distributes prizes across top bettors, top coinflip bettors, affiliate draws, and two-tier scatter rounds.</dd>
+
+      <dt>Decimator</dt>
+      <dd>Weighted ETH jackpot. Players burn BURNIE (minimum 1,000) to enter. Opens at levels ending in 4 (except 94) and 99. Prize pool: 10% of future prize pool at x5 milestones, 30% at x00 milestones. Players are assigned to buckets based on activity score. Lower bucket number = better odds. VRF selects winning sub-buckets. Prizes split 50% claimable ETH / 50% lootbox tickets. See the <a href="/whitepaper/burnie/">BURNIE whitepaper</a> for full mechanics.</dd>
+
+      <dt>Scatter Rounds</dt>
+      <dd>Two-tier random draw within BAF jackpots. Odds depend on your BAF score (accumulated from prior BAF wins and coinflip activity).</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Daily Mechanics ========== -->
+  <section>
+    <h2>Daily Mechanics</h2>
+    <dl>
+      <dt>Coinflip</dt>
+      <dd>Daily 50/50 BURNIE wager. Stake BURNIE, Chainlink VRF determines the outcome. Win: principal back plus a bonus (1.5x to 2.5x). Lose: principal burned, receive 1 WWXRP. Minimum stake: 100 BURNIE. Deposits lock into the next day's window, preventing front-running.</dd>
+
+      <dt>Quest Streak</dt>
+      <dd>Daily participation system. Complete daily quests to build your activity score. Missing a day resets the streak and forfeits accumulated score benefits. Creates consistent daily deposit pressure from power users.</dd>
+
+      <dt>Activity Score</dt>
+      <dd>Accumulated metric from quest streaks, ticket purchases, affiliate bonuses, trophies, and pass ownership. Higher score improves lootbox EV, decimator bucket assignment, and degenerette returns. Maximum: 23,500 basis points. Deity pass holders receive maximum score automatically.</dd>
+
+      <dt>Advance Game Bounty</dt>
+      <dd>Any player can call <code>advanceGame()</code> to process daily jackpots and push the game forward. The caller earns 500 BURNIE (as FLIP) as a bounty.</dd>
+
+      <dt>Chainlink VRF</dt>
+      <dd>Verifiable Random Function providing provably fair randomness for all draws. Used for coinflips, trait selection, decimator bucket selection, and all jackpot outcomes. No participant can predict or influence results.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Products ========== -->
+  <section>
+    <h2>Products</h2>
+    <dl>
+      <dt>Lootbox (Luckbox)</dt>
+      <dd>High-variance investment product. Costs 1,000+ BURNIE (burned entirely). Prizes resolve at 80% of face value in ETH-equivalent, split across tickets (55%), BURNIE as FLIP (25%), DGNRS (10%), and WWXRP (10%). EV scales with activity score: ~60% at zero score, ~128% at maximum.</dd>
+
+      <dt>Whale Pass</dt>
+      <dd>Large investment product granting tickets across 100 consecutive levels. Provides jackpot eligibility and activity score boost across all covered levels. Massive upfront capital injection into future prize pools. Non-transferable.</dd>
+
+      <dt>Lazy Pass</dt>
+      <dd>Required to enable auto-rebuy mode. Locks the player for 5 levels after activation.</dd>
+
+      <dt>Deity Pass</dt>
+      <dd>Premium pass with maximum activity score (23,500 BPS), permanent BAF eligibility, enhanced afKing recycling bonus (up to 3.1% vs. 1.6% base), and +20% affiliate commissions. Refunds: full if the game never reaches level 1; partial if it stalls before level 10.</dd>
+
+      <dt>Degenerette</dt>
+      <dd>Roulette-style betting. Match 0-8 points (color + symbol per trait) against VRF outcomes. EV-normalized across trait rarities. Approximate EV: ~95%. Accepts ETH, BURNIE, and WWXRP.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Player Modes ========== -->
+  <section>
+    <h2>Player Modes</h2>
+    <dl>
+      <dt>Auto-Rebuy</dt>
+      <dd>Automatic reinvestment of jackpot winnings into next-level tickets at 130% value instead of withdrawing. Requires a lazy pass. Locks for 5 levels after activation. Optional take-profit thresholds. No expiry on winnings while active.</dd>
+
+      <dt>afKing</dt>
+      <dd>Automatic coinflip compounding. Coinflip winnings re-stake for the next day instead of sitting idle. Balance compounds day-over-day. Auto-rebuy converts only complete ticket-price multiples; fractional remainder stays claimable. Recycling bonus: 1.6% (no deity), up to 3.1% (with deity pass).</dd>
+
+      <dt>Nit Mode</dt>
+      <dd>Optional affiliate payout mode. Instead of receiving full commission as FLIP (which must survive a coinflip), the affiliate receives 50% as liquid BURNIE immediately. The other 50% is discarded. A certainty-for-value trade-off.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Affiliate System ========== -->
+  <section>
+    <h2>Affiliate System</h2>
+    <dl>
+      <dt>Affiliate Tiers</dt>
+      <dd>Three-tier commission structure. Direct affiliate earns the base rate. Upline 1 (their referrer) earns an additional percentage. Upline 2 (referrer's referrer) earns a smaller addition. Payments are additive, not nested splits.</dd>
+
+      <dt>Commission Rates</dt>
+      <dd>Fresh ETH, levels 1-3: 25%. Fresh ETH, levels 4+: 20%. Recycled ETH (from claimable winnings): 5%. All paid as FLIP by default.</dd>
+
+      <dt>FLIP Commissions</dt>
+      <dd>Affiliate earnings are paid as FLIP credits that must survive a coinflip to become BURNIE. This is the variance filter: professional affiliates expecting guaranteed income self-select out. Gambling-native affiliates who match the target audience stay.</dd>
+
+      <dt>Upline</dt>
+      <dd>Your referrer (upline 1) and their referrer (upline 2). Both earn additive commissions from your referrals' transactions, in perpetuity.</dd>
+
+      <dt>Default Affiliate</dt>
+      <dd>Players without a referral code are assigned the vault as their default affiliate. The vault also serves as upline 1 and upline 2 for incomplete chains. FLIP earned by the vault feeds into its BURNIE reserves.</dd>
+    </dl>
+  </section>
+
+  <!-- ========== Economic Concepts ========== -->
+  <section>
+    <h2>Economic Concepts</h2>
+    <dl>
+      <dt>Positive-Sum</dt>
+      <dd>Total ETH paid out to players exceeds total deposited over time. Guaranteed by the stETH yield subsidy (~2.5% APR on pooled deposits). Losers exist, but the aggregate pool of winners received more than was put in.</dd>
+
+      <dt>Zero Rake</dt>
+      <dd>The protocol takes nothing from player deposits. Every ETH enters on-chain pools with immutable splits. Revenue comes from a fraction of the stETH yield, not from skimming bets.</dd>
+
+      <dt>Price Ratchet</dt>
+      <dd>ETH ticket prices rise as levels progress, but the BURNIE ticket price stays fixed at 1,000 BURNIE. As the game advances, the implicit BURNIE/ETH exchange rate tightens. This creates a utility floor: BURNIE always buys a ticket, and the real-terms value of that ticket keeps increasing.</dd>
+
+      <dt>Utility Floor</dt>
+      <dd>BURNIE's minimum value is anchored to the price ratchet. 1,000 BURNIE always buys one ticket regardless of level. As the ETH price of a ticket rises, the floor value of BURNIE rises with it.</dd>
+
+      <dt>Expected Value (EV)</dt>
+      <dd>Probability-weighted average outcome. Positive EV means the option returns more than it costs on average. Different products and strategies have different EVs, ranging from ~60% (low-score lootbox) to ~128% (max-score lootbox).</dd>
+
+      <dt>GTO (Game Theory Optimal)</dt>
+      <dd>The theoretically optimal strategy where every decision maximizes expected value. In Degenerus, GTO play requires maximum commitment: daily quest streaks, afKing compounding, full affiliate chains, early ticket purchases. If all players played GTO, returns would collapse to ~2.5% APR (the stETH yield). The GTO player is the most invested participant in the system.</dd>
+
+      <dt>Nash Equilibrium</dt>
+      <dd>A stable state where no player can improve their outcome by changing strategy alone. In Degenerus, the floor is stETH yield and the ceiling is surplus from sub-optimal players. Both casual and optimizing players coexist because both get what they came for.</dd>
+
+      <dt>Flywheel</dt>
+      <dd>The self-reinforcing cycle: investors buy luckboxes/passes, prize pools grow, bigger jackpots attract lottery players, ticket purchases fill pools, pools meet targets, jackpots fire, winners reinvest, affiliates drive traffic. Mechanical participants (vault, DGNRS, afKing players) keep it turning without human decisions.</dd>
+
+      <dt>Variance Filter</dt>
+      <dd>Deliberate use of high variance to repel extractive capital. Yield farmers, MEV bots, and risk-averse LPs self-select out because returns are unpredictable. Only players who accept variance remain, and their continued participation sustains the system.</dd>
+    </dl>
+  </section>
+
+  <footer>
+    <div class="footer-links">
+      <a href="/whitepaper/">Main whitepaper</a>
+      <a href="/whitepaper/burnie/">BURNIE whitepaper</a>
+    </div>
+  </footer>
+</div>
+
+<script src="/shared/nav.js"></script>
+<script>initNav({ currentPage: 'whitepaper' });</script>
+</body>
+</html>

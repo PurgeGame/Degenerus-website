@@ -1375,6 +1375,31 @@
       50% { filter: brightness(1.4) sepia(1) saturate(5) hue-rotate(-30deg); }
     }
 
+    .jp-center-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 5;
+      display: none;
+      cursor: pointer;
+    }
+
+    .jp-center-prize {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 3;
+      text-align: center;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #f5a623;
+      line-height: 1.25;
+      display: none;
+      pointer-events: none;
+    }
+    .jp-center-prize .ff-amount { font-size: 0.85rem; display: block; }
+    .jp-center-prize .ff-label { font-size: 0.55rem; color: #ccc; display: block; margin-top: 2px; }
+
     /* ------------------------------------------------------------------ */
     /* Purchase sidebar                                                    */
     /* ------------------------------------------------------------------ */
@@ -1842,6 +1867,8 @@
         </div>
         <div class="jp-center">
           <img src="/specials/special_none.svg" alt="Flame" class="jp-flame" />
+          <div class="jp-center-prize" id="jp-center-prize"></div>
+          <canvas class="jp-center-canvas" id="jp-center-canvas"></canvas>
         </div>
       </div>
     </div>
@@ -1904,7 +1931,7 @@ afKing mode locks on for 5 levels once activated. Commit to the grind.
           <span class="pass-lootbox-badge" id="deity-lootbox">+ free 4.8 ETH luckbox (20%)</span>
         </div>
         <h3>Deity Pass</h3>
-        <p class="pass-desc">Become the immortal deity of a symbol. Deity pass holders receive 16 entries (or a minimum of 2% of entries) for their symbol every drawing and a huge score boost. Unlike the other passes, this one is transferrable (for a fee).</p>
+        <p class="pass-desc">Become the immortal deity of a symbol: 16 entries (or 2% minimum) every drawing, a huge score boost, and +20% affiliate commissions. Refunds: full if the game never reaches level 1, partial if it stalls before level 10. Transferable (fee).</p>
         <div class="pass-controls" style="flex-wrap: wrap; gap: 0.4rem;">
           <label for="deity-symbol" style="width:100%">Symbol</label>
           <div class="deity-symbol-row">
@@ -2260,6 +2287,8 @@ function togglePayMode(mode) {
   var jpQuadBadgeBounds = [null, null, null, null]; // array of {cx,cy,r} circles in % per quadrant
   var jpGreenRevealed = [false, false, false, false]; // per-quadrant: has scratch hit the badge?
   var jpQuadOwned = [false, false, false, false]; // per-quadrant: player owns a ticket matching final trait
+  var jpCenterWins = []; // far-future BURNIE wins shown in center
+  var jpCenterScratched = false;
 
   // ---- sound effects (Web Audio API, no files) ----------------------------
 
@@ -2816,8 +2845,89 @@ function togglePayMode(mode) {
     jpCheckAllScratched();
   }
 
+  // ---- center scratch for far-future BURNIE wins ----------------------------
+
+  function jpHideCenterScratch() {
+    var canvas = document.getElementById('jp-center-canvas');
+    var prize = document.getElementById('jp-center-prize');
+    var flame = document.querySelector('.jp-flame');
+    if (canvas) { canvas.style.display = 'none'; canvas.style.opacity = '1'; canvas.style.pointerEvents = 'auto'; }
+    if (prize) { prize.style.display = 'none'; prize.innerHTML = ''; }
+    if (flame) { flame.style.display = ''; }
+  }
+
+  function jpShowCenterScratch() {
+    var canvas = document.getElementById('jp-center-canvas');
+    if (!canvas) return;
+    var center = canvas.parentElement;
+    var rect = center.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+
+    // Draw golden scratchable surface
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width, h = canvas.height;
+    var grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, '#f5a623');
+    grad.addColorStop(0.5, '#d4911a');
+    grad.addColorStop(1, '#f5a623');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    // Subtle texture
+    ctx.globalAlpha = 0.08;
+    for (var y = 0; y < h; y += 3) {
+      ctx.strokeStyle = (y % 6 === 0) ? '#fff' : '#a06800';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Hide flame, show canvas
+    var flame = document.querySelector('.jp-flame');
+    if (flame) flame.style.display = 'none';
+    canvas.style.display = 'block';
+  }
+
+  function jpRevealCenter() {
+    if (jpCenterScratched || jpCenterWins.length === 0) return;
+    jpCenterScratched = true;
+    jpSfxGreenReveal();
+
+    var canvas = document.getElementById('jp-center-canvas');
+    var prize = document.getElementById('jp-center-prize');
+    if (canvas) {
+      canvas.style.transition = 'opacity 0.35s ease';
+      canvas.style.opacity = '0';
+      canvas.style.pointerEvents = 'none';
+    }
+    if (prize) {
+      var totalBurnie = 0;
+      var levels = [];
+      for (var i = 0; i < jpCenterWins.length; i++) {
+        totalBurnie += jpCenterWins[i][0];
+        if (jpCenterWins[i].length > 3 && levels.indexOf(jpCenterWins[i][3]) === -1) {
+          levels.push(jpCenterWins[i][3]);
+        }
+      }
+      var amountStr = jpFormatWin(totalBurnie, 'burnie');
+      var levelStr = levels.length > 0 ? 'L' + levels.sort(function (a, b) { return a - b; }).join(', L') : 'Far Future';
+      prize.innerHTML = '<span class="ff-amount">' + amountStr + '</span><span class="ff-label">' + levelStr + '</span>';
+      prize.style.display = '';
+      prize.classList.remove('visible');
+      setTimeout(function () { prize.classList.add('visible'); }, 200);
+    }
+    jpCheckAllScratched();
+  }
+
   function jpCheckAllScratched() {
-    var all = jpScratched[0] && jpScratched[1] && jpScratched[2] && jpScratched[3];
+    var centerPending = jpCenterWins.length > 0 && !jpCenterScratched;
+    var all = jpScratched[0] && jpScratched[1] && jpScratched[2] && jpScratched[3] && !centerPending;
     var hint = document.getElementById('jp-hint');
     var claimBtn = document.getElementById('jp-claim-btn');
 
@@ -2830,7 +2940,8 @@ function togglePayMode(mode) {
       }
     } else {
       var remaining = jpScratched.filter(function (s) { return !s; }).length;
-      if (hint) hint.textContent = remaining + ' quadrant' + (remaining !== 1 ? 's' : '') + ' left to scratch';
+      if (centerPending) remaining++;
+      if (hint) hint.textContent = remaining + ' area' + (remaining !== 1 ? 's' : '') + ' left to scratch';
     }
   }
 
@@ -3076,7 +3187,17 @@ function togglePayMode(mode) {
 
   function jpGeneratePrizes(player, day) {
     var info = jpGetDayWins(player, day);
-    var dist = jpDistributeWins(info.wins, jpQuadOwned);
+    // Separate far-future wins (quadrant -2) from regular wins
+    var regular = [];
+    jpCenterWins = [];
+    for (var w = 0; w < info.wins.length; w++) {
+      if (info.wins[w][2] === -2) {
+        jpCenterWins.push(info.wins[w]);
+      } else {
+        regular.push(info.wins[w]);
+      }
+    }
+    var dist = jpDistributeWins(regular, jpQuadOwned);
     for (var i = 0; i < 4; i++) {
       jpQuadPrizes[i] = dist.counts[i] > 0;
       jpQuadWinInfo[i] = { count: dist.counts[i] };
@@ -3250,6 +3371,9 @@ function togglePayMode(mode) {
     jpScratched = [false, false, false, false];
     jpGreenRevealed = [false, false, false, false];
     jpQuadBadgeBounds = [null, null, null, null];
+    jpCenterWins = [];
+    jpCenterScratched = false;
+    jpHideCenterScratch();
     jpClearColors();
     jpClearTraitCounts();
     jpSfxScratchStop();
@@ -3397,6 +3521,7 @@ function togglePayMode(mode) {
     }
     // Reveal any unscratched quadrants
     for (var i = 0; i < 4; i++) jpRevealQuadrant(i);
+    jpRevealCenter();
   }
 
   function jpAfterSpin(hasTickets, player, day) {
@@ -3452,6 +3577,12 @@ function togglePayMode(mode) {
         }
       }
     }
+    // Set up center scratch if there are far-future BURNIE wins
+    if (jpCenterWins.length > 0) {
+      jpShowCenterScratch();
+      anyOwned = true;
+    }
+
     if (anyOwned) {
       if (hint) hint.textContent = 'Scratch to find your winners!';
     } else {
@@ -3556,6 +3687,49 @@ function togglePayMode(mode) {
       })(i);
     }
 
+    // Wire center scratch canvas for far-future BURNIE wins
+    var centerCanvas = document.getElementById('jp-center-canvas');
+    if (centerCanvas) {
+      var ccLastPos = null;
+      function ccOnScratch(cx, cy) {
+        if (jpCenterScratched) return;
+        jpSfxScratchStart();
+        jpScratchAt(centerCanvas, cx, cy);
+        if (ccLastPos) {
+          var dx = cx - ccLastPos.x, dy = cy - ccLastPos.y;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          var steps = Math.max(1, Math.floor(dist / 4));
+          for (var s = 1; s < steps; s++) {
+            jpScratchAt(centerCanvas, ccLastPos.x + dx * s / steps, ccLastPos.y + dy * s / steps);
+          }
+        }
+        ccLastPos = { x: cx, y: cy };
+        if (Math.random() < 0.15) {
+          var frac = jpClearedFraction(centerCanvas);
+          if (frac >= JP_REVEAL_THRESHOLD) jpRevealCenter();
+        }
+      }
+      centerCanvas.addEventListener('mousemove', function (e) {
+        if (jpCenterScratched) return;
+        var p = jpGetCanvasPos(centerCanvas, e.clientX, e.clientY);
+        ccOnScratch(p.x, p.y);
+      });
+      centerCanvas.addEventListener('mouseleave', function () { ccLastPos = null; jpSfxScratchStop(); });
+      centerCanvas.addEventListener('touchstart', function (e) {
+        if (jpCenterScratched) return;
+        e.preventDefault(); ccLastPos = null;
+        var t = e.touches[0];
+        ccOnScratch(jpGetCanvasPos(centerCanvas, t.clientX, t.clientY).x, jpGetCanvasPos(centerCanvas, t.clientX, t.clientY).y);
+      }, { passive: false });
+      centerCanvas.addEventListener('touchmove', function (e) {
+        if (jpCenterScratched) return;
+        e.preventDefault();
+        var t = e.touches[0];
+        ccOnScratch(jpGetCanvasPos(centerCanvas, t.clientX, t.clientY).x, jpGetCanvasPos(centerCanvas, t.clientX, t.clientY).y);
+      }, { passive: false });
+      centerCanvas.addEventListener('touchend', function () { ccLastPos = null; jpSfxScratchStop(); });
+    }
+
     // Wire claim button (placeholder alert for now)
     var claimBtn = document.getElementById('jp-claim-btn');
     if (claimBtn) {
@@ -3564,10 +3738,15 @@ function togglePayMode(mode) {
       });
     }
 
-    // Wire flame center — click to skip animation and reveal all
+    // Wire flame center — click to skip animation and reveal all (only when not scratchable)
     var flameCenter = document.querySelector('.jp-center');
     if (flameCenter) {
-      flameCenter.addEventListener('click', jpSkipAnim);
+      flameCenter.addEventListener('click', function (e) {
+        // If center canvas is active and visible, don't skip — let scratch handle it
+        var cc = document.getElementById('jp-center-canvas');
+        if (cc && cc.style.display === 'block' && !jpCenterScratched) return;
+        jpSkipAnim(e);
+      });
     }
 
     // Initial render — rAF so DOM is laid out for canvas sizing
