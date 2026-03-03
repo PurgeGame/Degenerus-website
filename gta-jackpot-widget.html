@@ -173,6 +173,10 @@
     background: linear-gradient(135deg, #2a1a08, #3d2a10, #2a1a08);
     border-color: #c9943a;
   }
+  .demo-wrap.center-win-mode .demo-center.revealed::before {
+    background: linear-gradient(135deg, #003087, #046A38, #003087);
+    border-color: #8a8d8f;
+  }
   .demo-flame {
     position: relative;
     width: 66%;
@@ -218,6 +222,9 @@
     color: #fff;
     text-shadow: 0 0 8px rgba(245, 166, 35, 0.8), 0 1px 2px rgba(0,0,0,0.5);
     letter-spacing: 0.02em;
+  }
+  .demo-wrap.center-win-mode .demo-center-prize .ff-amount {
+    text-shadow: 0 0 8px rgba(4, 106, 56, 0.8), 0 1px 2px rgba(0,0,0,0.5);
   }
   .demo-center-prize .ff-label {
     font-size: 0.48rem;
@@ -332,6 +339,7 @@
     {
       title: 'Day 1 of 4: Big Win',
       desc: 'You own tickets matching 3 of 4 drawn traits. Scratch to reveal your prizes.',
+      degenWinCenter: false,
       // drawn: bitcoin_gold, gemini_pink, spade_blue, dice6_red
       target: [
         { q: 0, sym: 7, col: 7 },  // bitcoin gold
@@ -356,6 +364,7 @@
     {
       title: 'Day 2 of 4: Scratch, But No Luck',
       desc: 'You own matching tickets in 2 quadrants, but the jackpot did not pick yours this draw.',
+      degenWinCenter: false,
       // drawn: ethereum_blue, leo_gold, heart_red, dice3_green
       target: [
         { q: 0, sym: 6, col: 4 },  // ethereum blue
@@ -370,6 +379,7 @@
     {
       title: 'Day 3 of 4: No Matching Traits',
       desc: 'You have tickets, but none of your traits match what the jackpot drew today. All red.',
+      degenWinCenter: false,
       // drawn: solana_purple, aries_red, ace_gold, dice8_silver
       target: [
         { q: 0, sym: 4, col: 1 },  // solana purple
@@ -384,6 +394,7 @@
     {
       title: 'Day 4 of 4: Future Tickets + BURNIE',
       desc: 'You match 2 quadrants. Prizes include future level tickets. Your far-future tickets earned a BURNIE draw in the center diamond.',
+      degenWinCenter: true,
       // drawn: xrp_pink, aquarius_blue, diamond_orange, dice1_silver
       target: [
         { q: 0, sym: 0, col: 0 },  // xrp pink
@@ -881,10 +892,18 @@
     if (center) { center.classList.remove('revealed'); }
   }
 
+  function setCenterWinMode(enabled) {
+    var wrap = $('demo-wrap');
+    if (!wrap) return;
+    wrap.classList.toggle('center-win-mode', !!enabled);
+  }
+
   function showCenterScratch() {
     var canvas = $('demo-center-canvas');
     if (!canvas) return;
     var center = canvas.parentElement;
+    var wrap = $('demo-wrap');
+    var isDegeneretteWinCenter = !!(wrap && wrap.classList.contains('center-win-mode'));
     var rect = center.getBoundingClientRect();
     var dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(rect.width * dpr);
@@ -896,15 +915,30 @@
 
     var ctx = canvas.getContext('2d');
     var w = canvas.width, h = canvas.height;
-    // Dark background
-    ctx.fillStyle = '#0a1e1a';
-    ctx.fillRect(0, 0, w, h);
-    // Draw the flame (same SVG as degenerette win center) with green tint
+    if (isDegeneretteWinCenter) {
+      // Resolved Day 4 center uses Degenerette win-center palette
+      ctx.fillStyle = '#003087';
+      ctx.fillRect(0, 0, w, h);
+      var winGrad = ctx.createRadialGradient(w * 0.5, h * 0.5, w * 0.08, w * 0.5, h * 0.5, w * 0.65);
+      winGrad.addColorStop(0, 'rgba(4, 106, 56, 0.42)');
+      winGrad.addColorStop(1, 'rgba(4, 106, 56, 0)');
+      ctx.fillStyle = winGrad;
+      ctx.fillRect(0, 0, w, h);
+    } else {
+      // Default center scratch palette
+      ctx.fillStyle = '#0a1e1a';
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    // Draw flame tint based on current example
     var img = new Image();
     img.onload = function () {
       var size = Math.min(w, h) * 0.7;
-      // Draw flame with green colorization
-      ctx.filter = 'sepia(1) saturate(3) hue-rotate(120deg) brightness(1.4)';
+      if (isDegeneretteWinCenter) {
+        ctx.filter = 'brightness(0) saturate(100%) invert(52%) sepia(79%) saturate(594%) hue-rotate(83deg) brightness(93%) contrast(96%)';
+      } else {
+        ctx.filter = 'sepia(1) saturate(3) hue-rotate(120deg) brightness(1.4)';
+      }
       ctx.drawImage(img, (w - size) / 2, (h - size) / 2, size, size);
       ctx.filter = 'none';
     };
@@ -1101,6 +1135,7 @@
     centerScratched = false;
     scratchGrids = [null, null, null, null];
     centerScratchGrid = null;
+    setCenterWinMode(false);
     hideCenterScratch();
     clearColors();
     sfxScratchStop();
@@ -1226,6 +1261,7 @@
       }
     }
     if (centerWins.length > 0) {
+      setCenterWinMode(!!scenario.degenWinCenter);
       showCenterScratch();
       anyOwned = true;
     }
