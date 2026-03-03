@@ -1,5 +1,7 @@
 # Why This Game Doesn't Die: A Game-Theoretic Analysis of Degenerus Protocol
 
+*Burnie Degenerus*
+
 **Working Paper, Draft for Review**
 
 ---
@@ -24,7 +26,7 @@ This paper analyzes these dynamics. We are interested in three central questions
 
 3. **Robustness and resilience.** How does the system withstand adversarial behavior, coordinated attacks, player exodus, and extreme market conditions? What structural properties make it resistant to death spirals?
 
-Before diving into formalism, here is the paper's central argument in plain language: **Degenerus Protocol works because different types of players want different things, and getting what they want individually produces collective goods.** Entertainment seekers buy lottery tickets and lootboxes for the thrill, funding the prize pools in the process. Strategic players optimize their engagement to extract monetary value from those pools. Whales lock large capital into passes that only pay out over time, publicly demonstrating long-term commitment to the system in exchange for compounding returns. Affiliates recruit and retain players, growing the participant base for commission income. Each group's self-interested behavior produces something the others need: degens fund profitability for the rest of the ecosystem, strategists drive progression, whales seed jackpots and lock capital that stabilizes the prize pools, and affiliates bring in the new players the system needs to grow. The yield from stETH injects external value that makes the whole system positive-sum. And the commitment devices (future tickets, quest streaks, auto-compounding) create a ratchet that makes continued participation the dominant strategy for anyone already engaged.
+Before diving into formalism, here is the paper's central argument in plain language: **Degenerus Protocol works because different types of players want different things, and getting what they want individually produces collective goods.** Entertainment seekers buy lottery tickets and lootboxes for the thrill, funding the prize pools in the process. Strategic players optimize their engagement to extract monetary value from those pools. Whales lock large capital into passes that only pay out over time, publicly demonstrating long-term commitment to the system in exchange for compounding returns. Affiliates recruit and retain players, growing the participant base for commission income. Each group's self-interest produces something the others need: degens fund the pools, strategists drive progression, whales stabilize capital, and affiliates grow the player base. The yield from stETH injects external value that makes the whole system positive-sum. And the commitment devices (future tickets, quest streaks, auto-compounding) create a ratchet that makes continued participation the dominant strategy for anyone already engaged.
 
 That is the thesis. The rest of this paper formalizes it, stress-tests it, and maps its limitations.
 
@@ -34,13 +36,34 @@ That is the thesis. The rest of this paper formalizes it, stress-tests it, and m
 
 The scenarios above illustrate *what happens*. The rest of this paper explains *why this structure is stable*.
 
-**The critical assumption.** State lotteries and memecoins prove that people pay for gambling entertainment at massive scale, even with terrible odds. Degenerus offers this audience verifiably fair odds, 0% rake, and the possibility of positive EV through engagement. The affiliate program (Section 3.4) can bring players to the door, but it cannot make them stay if the product is not fun. Whether *this specific product* captures enough of that demand is an empirical question. The analysis that follows takes the entertainment condition as given: enough people find the game entertaining enough to play.
+**The critical assumption.** State lotteries and memecoins prove that people pay for gambling entertainment at massive scale, even with terrible odds. Degenerus offers this audience verifiably fair odds, 0% rake, and the possibility of positive EV through engagement. The affiliate program (Section 3.4) can bring players to the door, but it cannot make them stay if the product is not fun. Whether *this specific product* captures enough of that demand is an empirical question. The analysis that follows takes the entertainment condition as given: enough people find the game entertaining enough to play. That condition strengthens as jackpot sizes grow, since larger prizes make the game more attractive to exactly the entertainment-seeking players who sustain it.
 
 **A note on source of returns.** The surface similarities to a memecoin launch are real: degens chasing excitement, whales deploying capital, early participants with structural advantages, a creator holding a token allocation. But the source of returns is fundamentally different. A shitcoin's returns come from later buyers' capital; when the music stops, late entrants hold worthless tokens. Degenerus Protocol's returns come from stETH yield (external, real, perpetual) and from the voluntary spending of entertainment-seeking players getting a product they value. The prize pool cannot decrease. There is no rug to pull because funds are locked in a contract with no admin withdrawal function (the admin's only power is emergency VRF coordinator migration after a 3-day stall; see Section 7.3). Players who end up net negative lost to math and luck, not to fraud. The protocol does need ongoing deposits to keep advancing levels, and without them the game eventually ends. But the failure mode is fundamentally different: a shitcoin that stops growing leaves latecomers holding worthless tokens with no recourse. A Degenerus game that stops growing triggers a terminal distribution where all remaining funds are redistributed to participants through one last round of fair, high-variance jackpots (Section 8.7). Players may lose money, but they are never rugged. Section 9 explores these comparisons in detail.
 
 ---
 
 ## 2. The Core Idea: Cross-Subsidy Structure
+
+**Definition 2.0 (The Entry).** *One entry is one-quarter of a ticket: the atomic unit of participation, representing a single jackpot draw for the upcoming level. Its face-value cost is $P_\ell / 4$ ETH or 250 BURNIE. The BURNIE price is fixed permanently regardless of level progression; as ETH ticket prices escalate, BURNIE's ETH-equivalent entry cost rises monotonically (Section 6.1). FLIP credit converts to BURNIE at approximately face value (~98.4% EV) and is treated as equivalent throughout.*
+
+*An EV multiplier of $\mu$ means $\mu$ entries of expected value returned per face-value entry of ETH spent. The baseline is one entry purchased with no rebates, no activity score bonus, and no lootbox multiplier. BURNIE rebates are valued at 250 BURNIE = 1 entry — a floor; BURNIE deployed toward higher-value uses than tickets returns more.*
+
+*Entry acquisition rates for common purchase strategies:*
+
+| Strategy | EV multiplier |
+|---|---|
+| BURNIE ticket | 1.00 |
+| New ETH ticket | 1.10 |
+| Recycled ETH, partial reinvestment | 1.20 |
+| Recycled ETH, full reinvestment | 1.30 |
+| Lootbox, zero activity score | ~0.80 |
+| Lootbox, breakeven activity score | ~1.00 |
+| Lootbox, maximum activity score | ~1.35 |
+| Lootbox, max activity + full reinvestment | ~1.45 |
+| Standard auto-rebuy | 1.30 |
+| afKing auto-rebuy | 1.45 |
+
+*Lootbox rates reflect ticket EV at the stated activity levels. Additional EV sources (DGNRS rewards, deity boons) are not included. ETH ticket purchases include FLIP rebates: 100 for new deposits, 200 for partial recycling, and 300 for full recycling. The full-reinvestment bonus adds +0.1 entries by the same mechanic as the full-rebuy ticket bonus. Auto-rebuy multipliers (1.30 standard, 1.45 with lazy pass) are fixed; both forgo the BURNIE rebate that manual purchases receive.*
 
 ### 2.1 Heterogeneous Reward Structures
 
@@ -61,7 +84,7 @@ Each type is rational *within their own weighting*: a degen who loses 0.01 ETH b
 
 ### 2.2 Non-Monetary Utility
 
-The critical assumption (Section 1) established that the system depends on entertainment value. Here we note what contributes to it. The primary source is gambling entertainment: lootbox anticipation, jackpot draws, near-miss excitement, Degenerette variance. The protocol also provides BURNIE, a token with a structural price ratchet (Section 6.1) that gives participants the "number go up" experience that drives memecoin engagement, backed by actual utility rather than hype. Status, narrative participation, and community belonging provide additional $\Psi$ for whales and engaged players. These are real but secondary.
+The critical assumption (Section 1) established that the system depends on entertainment value. Here we note what contributes to it. The primary source is gambling entertainment: lootbox anticipation, jackpot draws, near-miss excitement, Degenerette variance. The protocol also provides BURNIE, a token with a structural price ratchet (Section 6.1) that gives participants the "number go up" experience that drives memecoin engagement, backed by actual utility rather than hype. Status, narrative participation, community belonging, and the satisfaction of contributing to meaningful collective goals provide additional $\Psi$ for whales and engaged players. These are real but secondary.
 
 ### 2.3 The Cross-Subsidy Mechanism
 
@@ -73,34 +96,36 @@ The flow table below describes the cross-subsidy structure under the assumption 
 
 Degenerus Protocol exhibits the following cross-subsidy flows:
 
-| Action | Player Gets | System Gets |
-|--------|-------------|-------------|
-| Degenerette (ETH) | $\Psi$ (thrill) | ETH locked in pools |
-| Degenerette (BURNIE) | $\Psi$ (thrill) | BURNIE deflation |
-| Lootbox (degen) | $\Psi$ (surprise) | Sub-breakeven EV funds pool |
-| Lootbox (grinder) | $M$ (+EV at max activity) | ETH locked in pools |
-| Ticket purchase | $\Psi$ (jackpot dream) | ETH locked in pools |
-| Score maintenance | Deferred $M$ (higher EV) | ETH locked every level |
-| Deity pass | $\Psi$ (status) + deferred $M$ | 24+ ETH locked in pools |
-| BAF leaderboard | $\Psi$ (competition) + $M$ | BURNIE deflation |
-| Affiliate referral | Deferred $M$ (commissions) | ETH via referred players |
-| Daily coinflip | $\Psi$ (ritual) + deferred $M$ | BURNIE deflation |
-| Quest streak | Deferred $M$ (score growth) | ETH locked every day |
-| Deity boon | $\Psi$ (patronage) | ETH via boon recipients |
+| Action | Actor Gets | Who Else Benefits |
+|--------|------------|-------------------|
+| Degenerette (ETH) | $\Psi$ (thrill) | **Grinders:** deeper extraction pool. **Everyone:** ETH added to future prize pools. |
+| Degenerette (BURNIE) | $\Psi$ (thrill) | **BURNIE holders:** deflationary pressure raises the price floor. |
+| Lootbox (below breakeven) | $\Psi$ (surprise) | **Grinders:** the lost margin is the surplus that funds their +EV extraction. |
+| Lootbox (above breakeven) | $M$ (+EV return) | **Degens:** grinder deposits fund a prize pool large enough for real jackpots. |
+| Ticket purchase | $\Psi$ (jackpot entry) | **All pool participants:** the primary mechanism filling the current level's prize pool target. **Grinders:** tickets are -EV and activity score doesn't change that, so every ticket purchase contributes margin to the surplus pool that high-activity players extract from lootboxes. |
+| Score maintenance | Deferred $M$ (higher EV) | **Affiliates:** active high-scorers generate more commissions per referral. |
+| Deity pass | $\Psi$ (status) + deferred $M$ | **Everyone:** 24+ ETH injected into pools at once; fastest single lever for pool growth. |
+| BAF leaderboard | $\Psi$ (competition) + $M$ | **BURNIE holders:** heavy coinflip volume burns supply, supporting the price floor. |
+| Affiliate referral | Deferred $M$ (commissions) | **Everyone:** each recruited player adds ETH deposits to all shared pools. |
+| Daily coinflip | $\Psi$ (ritual) + deferred $M$ | **BURNIE holders:** sustained daily burn compounds deflationary pressure. |
+| Quest streak | Deferred $M$ (score growth) | **Everyone:** consistent daily volume anchors level progression for all pool participants. |
+| Deity boon | $\Psi$ (patronage, social capital) | **Boon recipients:** discounted purchases and special benefits granted directly by the deity. Non-transferable and capped at 3/day — deity status becomes a social role with real dealmaking power that no automated mechanism produces. |
 
-**A concrete example.** Player A (a degen) spends 0.1 ETH on a Degenerette spin at zero activity score. At the protocol's configured 90% ROI for that activity level, they lose 0.01 ETH in expectation. That 0.01 ETH flows into the prize pool system. They receive entertainment in return: the 8-trait match resolution, the near-miss excitement, the 100,000x jackpot dream. Player B (an EV maximizer) has a 3.05 activity score and opens a 1 ETH lootbox. The protocol applies a 1.35x multiplier, so B's nominal expected value is 1.35 ETH from the pool (much of it as future tickets and tokens that pay out over time, not immediately). Whether B actually realizes this depends on pool composition (see aggregate constraint below). Player A got entertainment. Player B got profit. Neither depleted the other's reward: Player A's thrill is undiminished by Player B's extraction, and Player B's monetary return is funded by the prize pool (which Player A's spin helped fill), not by Player A's wallet directly. The system is not creating value from nothing. B's surplus comes from the aggregate pool, which is funded by deposits from players like A (plus stETH yield). If fewer A-type players deposit, B's pool shrinks accordingly.
+**A concrete example.** Player A (a degen) spends 0.1 ETH on a Degenerette spin at zero activity score. At the protocol's configured 90% ROI for that activity level — 0.90x multiplier — they lose 0.01 ETH in expectation. That 0.01 ETH flows into the prize pool system. They receive entertainment in return: the 8-trait match resolution, the near-miss excitement, the 100,000x jackpot dream. Player B (an EV maximizer) has a 3.05 activity score and opens a 1 ETH lootbox. The protocol applies a 1.35x multiplier (1.35x), so B's nominal expected value is 1.35 ETH from the pool (much of it as future tickets and tokens that pay out over time, not immediately). Whether B actually realizes this fully depends on pool composition (see aggregate constraint below). Player A got entertainment. Player B got profit. Neither depleted the other's reward: Player A's thrill is undiminished by Player B's extraction, and Player B's monetary return is funded by the prize pool (which Player A's spin helped fill), not by Player A's wallet directly. The system is not creating value from nothing. B's surplus comes from the aggregate pool, which is funded by deposits from players like A (plus stETH yield). If fewer A-type players deposit, B's pool shrinks accordingly.
 
-**The aggregate constraint.** Each player has an **activity score** from 0 (new) to 3.05 (maximum), computed from engagement metrics (purchase consistency, quest streaks, affiliate activity, pass bonuses; formula in Appendix C). The score determines EV multipliers across all products: lootbox purchases range from below 1.0x at low activity to above 1.0x at high activity. The 1.35x multiplier at maximum activity score is a protocol parameter, not a guaranteed realized return. What a player actually receives depends on pool composition. There is an equilibrium activity score at which lootboxes become +EV. In a world where every player is a GTO maximizer and the only system yield is stETH, this breakeven point would be close to the maximum score (since the only surplus is yield). The more non-GTO players in the system, the further down the breakeven point falls, and the more profitable things are for everyone in the +EV cohort. What matters is the ETH volume on each side of this line, not the number of players. A single whale buying 10 ETH of lootboxes at low activity contributes more surplus than ten players buying 0.1 ETH each.
+**The aggregate constraint.** Each player has an **activity score** from 0 (new) to 3.05 (maximum), computed from engagement metrics (purchase consistency, quest streaks, affiliate activity, pass bonuses; formula in Appendix C). The score determines EV multipliers across all products: lootbox purchases range from 0.80x at zero activity (below face value) to 1.35x at maximum activity (above face value). The 1.35x multiplier at maximum activity score is a protocol parameter, not a guaranteed realized return. What a player actually receives depends on pool composition. There is an equilibrium activity score at which lootboxes become +EV. In a world where every player is a GTO maximizer and the only system yield is stETH, this breakeven point would be close to the maximum score (since the only surplus is yield). The more non-GTO players in the system, the further down the breakeven point falls, and the more profitable things are for everyone in the +EV cohort. What matters is the ETH volume on each side of this line, not the number of players. A single whale buying 10 ETH of lootboxes at low activity contributes more surplus than ten players buying 0.1 ETH each.
 
 The equilibrium self-corrects. If too many grinders extract above breakeven, the pool's surplus shrinks and realized returns decline. Some grinders leave (they are money-sensitive), which restores returns for those who remain. When a +EV player exits, their share of future profits is returned to the system, lowering the breakeven bar for everyone else. The equilibrium point shifts, but never breaks, because the entertainment-seeking side is largely insensitive to the grinder population. A degen's lootbox is just as fun to open regardless of how many extractors are in the pool. Throughout this paper, specific EV figures (like the 1.35x lootbox multiplier) refer to protocol multipliers at the stated activity levels. Realized returns are always equilibrium-dependent.
 
 This is structurally different from casinos, where the house extracts from players. Here, there is no house, only a community of differently-motivated actors whose interactions produce mutual benefit. The cross-subsidy is *mutualistic*, not adversarial.
 
-A critical pattern in the flow table above: **the system receives ETH now, while the player's monetary rewards are deferred and contingent on continued participation.** Deity pass value compounds over future levels. Activity score EV advantages require daily maintenance. BAF leaderboard positions pay out at milestone levels. Affiliate commissions must survive a coinflip. In every case, the player has already paid, and their return arrives gradually through ongoing engagement. This is not exploitative (the deferred rewards are real and often substantial), but it creates a natural retention mechanism where the rational response to having invested is to keep playing to realize the maximum return. Additionally, anything that increases the speed of level progression increases the effective rate of return on deferred rewards. A player holding future tickets for level $\ell + 10$ gets paid faster if levels advance quickly, which means their rational interest is not just to keep playing but to actively accelerate progression through purchases and engagement. This creates a double incentive for affiliate activity among invested players: referring new players earns commission income *and* speeds up level progression, which increases the rate of return on the referrer's own deferred rewards. An invested player who recruits a whale is not just earning BURNIE commissions. They are accelerating the arrival of every future ticket payout and every BAF milestone they hold a position in.
+A critical pattern in the flow table above is temporal: **the system receives ETH now, while most player rewards are deferred and contingent on continued participation.** Deity pass value compounds over future levels, activity score EV advantages require daily upkeep, BAF positions pay out only at milestone levels, and affiliate commissions must still survive a coinflip. Players therefore pay upfront and realize value gradually. This is not exploitative (the deferred rewards are real and often substantial), but it creates a retention ratchet where the rational response to having invested is to keep playing and maximize realization. It also creates three distinct incentives for affiliate activity among invested players: commissions arrive as BURNIE income, new deposits accelerate level progression (pulling forward the referrer's own future ticket and BAF payouts), and a third that is harder to price. Degenerus is simultaneously a ruthless competition and a cooperative project. Every player benefits when the level advances, and recruiting new players is the single highest-leverage action any individual can take toward that shared goal. Players who internalize this find affiliate activity self-motivating in a way no financial incentive can replicate. The protocol cannot manufacture that sense of shared mission, but it can be cultivated.
+
+The competitive nature of Degenerus underlies everything without being socially front-and-center. Much of the competition is indirect: a fellow EV maximizer who misses a quest day and resets their streak benefits you, but you had no hand in it. At the same time, many incentives are fully aligned even between the most self-interested participants. A new player entering the pool is good for everyone. The communal goals carry weight precisely because of the competitive foundation beneath them. Pure cooperative projects, untethered from real stakes, do not sustain belief. Everyone winning forever with no losers is not a premise serious players entertain. Players recognize the artifice. When cooperation emerges from a system where everyone has genuine self-interest and real skin in the game, the alignment feels earned rather than engineered. Contributing to the collective goals in a tangible and public way, bringing in a new player, advancing the level, carries a satisfaction that sits outside the financial calculus entirely.
 
 ### 2.4 Non-Depletion of Cross-Subsidies
 
-**Observation 2.1** (Non-Depletion of Cross-Subsidies). *In the cross-subsidy equilibrium, no actor type's extraction catastrophically depletes the reward supply for other types. Non-monetary rewards ($\Psi$) are mostly non-rivalrous (one player's excitement does not reduce another's), though positional goods (deity passes, BAF leaderboard) are rivalrous and bounded (24 passes, 10-level resets). Monetary rewards ($M$) are funded by external yield ($r \cdot S$) plus the zero-rake recycling of player deposits, but high-activity players' above-1.0 multipliers are funded by low-activity players' below-1.0 multipliers (see Section 2.3). If the ratio of high-activity extractors to low-activity donors shifts, the equilibrium adjusts as described above: more extractors means lower returns per extractor, not system failure. The ratio self-corrects because the money-sensitive side (grinders) adjusts while the money-insensitive side (degens) provides a stable base.*
+**Observation 2.1** (Non-Depletion of Cross-Subsidies). *In the cross-subsidy equilibrium, no actor type's extraction catastrophically depletes the reward supply for other types. Non-monetary rewards ($\Psi$) are mostly non-rivalrous (one player's excitement does not reduce another's), though positional goods (deity passes, BAF leaderboard) are rivalrous and bounded (32 passes, 10-level resets). Monetary rewards ($M$) are funded by external yield ($r \cdot S$) plus the zero-rake recycling of player deposits, but high-activity players' above-1.0 multipliers are funded by low-activity players' below-1.0 multipliers (see Section 2.3). If the ratio of high-activity extractors to low-activity donors shifts, the equilibrium adjusts as described above: more extractors means lower returns per extractor, not system failure. The ratio self-corrects because the money-sensitive side (grinders) adjusts while the money-insensitive side (degens) provides a stable base.*
 
 ### 2.5 Implications for the Analysis
 
@@ -130,7 +155,7 @@ The degen's utility is dominated by entertainment, not monetary returns.
 
 **Dominant actions:** Degenerette spins, daily coinflip participation, lootbox opens regardless of activity score (the anticipation is the product), and irregular ticket purchases.
 
-**Individual rationality check:** The degen participates when the entertainment value exceeds the monetary loss. For a degen spending 0.1 ETH on Degenerette at 90% ROI (activity score 0), the expected loss is 0.01 ETH. The required entertainment value is 0.01 ETH-equivalent, the price of a few seconds of genuine excitement. This threshold is trivially met (see Section 2.2).
+**Individual rationality check:** The degen participates when the entertainment value exceeds the monetary loss. For a degen spending 0.1 ETH on Degenerette at 90% ROI (activity score 0), the expected loss is 0.01 ETH (0.10 entry-equivalent). The required entertainment value is 0.01 ETH-equivalent, the price of a few seconds of genuine excitement. This threshold is trivially met (see Section 2.2).
 
 Low-engagement degens are the *primary EV donors* to the system, but they are not victims. They are compensated in their preferred currency. Their acceptance of monetarily sub-optimal strategies creates the surplus that funds higher $M$ returns for engaged players.
 
@@ -144,25 +169,25 @@ The EV maximizer cares only about expected net payout. They are **bankroll-const
 
 1. *Buy a ticket every day* to maintain quest streak and purchase streak, the two largest activity score components
 2. *Maximize activity score* $a_i \rightarrow 3.05$ (quest streak, purchase streak, affiliate engagement, pass bonus)
-3. *Purchase ETH lootboxes at maximum activity score* (protocol multiplier $\mu = 1.35$, capped at 10 ETH of lootbox purchases per level)
-4. *Place ETH Degenerette bets at max activity* (protocol ROI $\rho = 0.999$, with an additional +5% EV bonus on ETH bets concentrated in higher-match payouts, giving ~104.9% effective returns before accounting for lootbox delivery at 1.35x)
+3. *Purchase ETH lootboxes at maximum activity score using full reinvestment* (protocol multiplier $\mu = 1.35$ plus a +0.1 full-claimable bonus — 1.45x total — capped at 10 ETH of lootbox purchases per level)
+4. *Place ETH Degenerette bets at max activity* (protocol ROI $\rho = 0.999$ — 0.999x at base — with an additional +5% EV bonus on ETH bets concentrated in higher-match payouts, giving ~104.9% effective returns (~1.049x) before accounting for lootbox delivery at 1.35x)
 5. *Play enough Degenerette to consume the full 10 ETH lootbox EV benefit* through Degenerette lootbox wins, maximizing the compounding EV advantage
 6. *Enable afKing auto-rebuy* (1.6% base + deity bonus compounding on wins)
 7. *Acquire deity pass early if bankroll permits* (permanent +80% activity bonus, but 24+ ETH upfront)
 
 *Argument.* Activity score $a_i$ is monotonically increasing in streak lengths and participation breadth. Higher $a_i$ increases $\mu(a_i)$ and $\rho(a_i)$, both of which increase the player's weight in prize distribution. At $a_i = 3.05$, Degenerette is genuinely positive EV for players who would buy lootboxes anyway (see Appendix C for the lootbox delivery mechanism). All of these returns draw from the same aggregate pool, so the strategy's profitability depends on sufficient pool inflows from other participants.
 
-One subtlety on afKing auto-rebuy: it converts winnings to random near-future level tickets at 130-145% face value, but does *not* award BURNIE on auto-rebuy purchases (unlike manual purchases which do). The real advantage over manual reinvestment is convenience and a somewhat better deal than buying tickets directly, though the 130-145% headline overstates the benefit since it forgoes BURNIE rewards.
+One subtlety on afKing auto-rebuy: it converts winnings to random near-future level tickets at 130% face value (standard) or 145% with a lazy pass (1.30x and 1.45x respectively), but does *not* award BURNIE on auto-rebuy purchases (unlike manual purchases which do). The real advantage over manual reinvestment is convenience and a better ticket rate, though the headline entry rate overstates the net benefit since it forgoes the BURNIE rebate — which manual ticket purchases convert to an additional ~0.10x at the floor rate.
 
 ### 3.3 The Whale
 
 Whales can participate profitably on monetary returns alone. Status is an additional payoff for those who value it, not a requirement.
 
-**High-payoff actions:** Early deity pass acquisition (quadratic pricing favors early buyers: cost = $24 + T(n)$ ETH where $T(n) = n(n+1)/2$, which simultaneously maximizes $\Psi$ via scarce status and $M$ via permanent +80% activity bonus), whale bundle purchases at early levels (~2.5x face value coverage), BAF leaderboard domination through large coinflip stakes, stacking deity pass with afKing mode for enhanced recycling, and issuing deity boons to other players (up to 3/day). Boons are not transferable assets. They can only be granted directly to another player, which means deity status produces social interaction and dealmaking rather than impersonal market transactions.
+**High-payoff actions:** Early deity pass acquisition (quadratic pricing favors early buyers: cost = $24 + T(n)$ ETH where $T(n) = n(n+1)/2$, which simultaneously maximizes $\Psi$ via scarce status and $M$ via permanent +80% activity bonus), whale bundle purchases at early levels (~2.5x face value coverage), BAF leaderboard domination through large coinflip stakes, stacking deity pass with afKing mode for enhanced recycling, and issuing deity boons to other players (up to 3/day). Boons provide discounted purchases and special benefits; they cannot be sold or transferred, only granted directly, so deity status produces social interaction and dealmaking rather than impersonal market transactions.
 
 **Observation 3.2** (Whale Extraction Is Bounded). *Whale extraction is bounded by explicit per-mechanism caps (lootbox EV-benefit cap, Degenerette per-spin payout caps, and finite BAF slices). Extraction analysis should use mechanism-specific upper bounds rather than a single aggregate constant.*
 
-**Deity pass EV clarification.** Deity passes receive virtual jackpot entries equal to 2% of their symbol's bucket size (minimum 2 entries per draw). Their share scales proportionally with ticket volume, so they cannot dominate jackpots as the game grows. Their EV advantage comes from three sources: the permanent +80% activity score bonus (which non-deity players can match through other components at maximum engagement), perpetuity (deity entries are drawn automatically every level, forever, requiring no further purchases), and a 25% bonus on all affiliate commissions paid at the end of each level. A deity holder who goes inactive still accumulates jackpot entries and BURNIE draws indefinitely. The affiliate bonus compounds the value of referral networks for deity holders, adding a revenue stream that scales with the game's growth. The 24-pass cap limits concentration.
+**Deity pass EV clarification.** Deity passes receive virtual jackpot entries equal to 2% of their symbol's bucket size (minimum 2 entries per draw). Their share scales proportionally with ticket volume, so they cannot dominate jackpots as the game grows. Their EV advantage comes from three sources: the permanent +80% activity score bonus (which non-deity players can match through other components at maximum engagement), perpetuity (deity entries are drawn automatically every level, forever, requiring no further purchases), and a 25% bonus on all affiliate commissions paid at the end of each level. A deity holder who goes inactive still accumulates jackpot entries and BURNIE draws indefinitely. The affiliate bonus compounds the value of referral networks for deity holders, adding a revenue stream that scales with the game's growth. The 32-pass cap limits concentration.
 
 ### 3.4 The Affiliate
 
@@ -206,11 +231,11 @@ Behavioral incentive compatibility (selfish play producing system-positive outco
 
 **Proposition 4.1** (Solvency Invariant). *The protocol maintains the solvency relation as a contract invariant:*
 
-$$\underbrace{\text{claimablePool}}_{\text{owed to players}} \;\leq\; \underbrace{\text{ETH balance} \;+\; \text{stETH balance}}_{\text{total assets held by contract}}$$
+$$\underbrace{\text{claimablePool}}_{\text{current obligations}} \;\leq\; \underbrace{\text{ETH balance} \;+\; \text{stETH balance}}_{\text{total assets held by contract}}$$
 
 *Every state transition in the contract preserves this inequality. It is not a design goal or aspiration. It is an accounting identity enforced by the structure of every function that modifies balances.*
 
-**Why it holds.** The contract maintains four logical ETH pools: `nextPrizePool`, `futurePrizePool`, `currentPrizePool`, and `claimablePool`. Only `claimablePool` represents an obligation to players. The other three are game state with no withdrawal rights attached. The solvency invariant is preserved because every category of state transition maintains it:
+**Why it holds.** The contract maintains four logical ETH pools: `nextPrizePool`, `futurePrizePool`, `currentPrizePool`, and `claimablePool`. Only `claimablePool` represents current obligations. The other three are game state with no withdrawal rights attached. The solvency invariant is preserved because every category of state transition maintains it:
 
 - **Deposits** increase `totalBalance` and increment prize pools. `claimablePool` is unchanged. The inequality grows wider.
 - **Jackpot payouts** move ETH from prize pools into `claimablePool` (crediting individual winners). Total balance is unchanged, and `claimablePool` increases by exactly the amount leaving prize pools. The inequality is preserved.
@@ -221,13 +246,15 @@ The result is that no valid transaction sequence can cause `claimablePool` to ex
 
 ### 4.2 The Zero-Rake Property
 
-**What the creator extracts.** The creator is the only insider. There are no VCs, team allocations, or privileged parties. Here is exactly what they get:
+**What the creator extracts.** The creator is a solo dev and the only insider. There are no VCs, team allocations, privileged parties or bro deals. Here is exactly what he gets:
 
 - **During presale:** 20% of lootbox ETH goes to the vault. This ends automatically after a fixed number of levels or 200 ETH of lootbox purchases, whichever comes first. This is real extraction that compensates development completed before launch.
 - **20% of the DGNRS token supply.** DGNRS is a fixed-supply token that receives 25% of system stETH yield and 4 tickets per level with an activity score boost. Holders can burn DGNRS to extract their pro-rata share but forfeit all future yield. The remaining DGNRS is distributed to players over time. The creator's allocation is entirely dependent on the protocol's long-term success.
 - **The vault** receives: 25% of all stETH yield, 4 tickets per level with an activity score boost, the presale lootbox revenue above, 2 million BURNIE, and affiliate commissions from unaffiliated players.
 
 In concrete terms, the creator's in-game position is roughly equivalent to one deity pass with a 25% yield share, 2 million BURNIE, and up to 40 ETH from presale revenue. This is not nothing, but it is a defined, bounded allocation. The difference from traditional gambling: none of this is an ongoing rake on deposits. After presale, 100% of every ETH deposited goes into the prize pool system, along with 50% of stETH yield. The creator's upside is tied to protocol success, not to player losses.
+
+**A note on origins.** The creator's revenue streams above are not a rake in the traditional sense. They are delayed compensation for prior contributions, internalized into the system on the same terms as all other rewards: contingent on its success. What sustained his efforts through years of significant opportunity cost and zero revenue was the same $\Psi$ this paper identifies as the engine of the system: genuine fascination with the design problem and a desire to build something unique. To make the opportunity cost concrete: the creator is a professional poker player whose income funded this project, eliminating the need for outside investment and any obligations that come with it. An EV maximizer with that outside option would never have started this, and if they had, would have structured it very differently.
 
 **Definition 4.2** (Zero-Rake). *A gaming mechanism is zero-rake if no entity extracts a guaranteed percentage of player deposits as ongoing profit.*
 
@@ -249,13 +276,15 @@ There is a second, arguably more important sense in which the game is positive-s
 
 ## 5. Equilibrium Analysis and Commitment Devices
 
-For any player who chooses to participate, the dominant strategy is to maximize activity score and cap out benefits every level. This is not a conjecture. Activity score monotonically increases returns on every protocol product. Deviation in any direction (lower engagement, broken streaks, sub-optimal timing) strictly reduces expected returns regardless of what other players do. Even in the extreme case where all players are perfectly optimized EV-maximizers, the system remains positive-sum from stETH yield, and each player's best response is still to maintain maximum activity score (because deviating gives a worse share of the yield). The returns at that extreme may not be attractive enough to retain all players, but for anyone who stays, full optimization is strictly dominant.
+For any player with unlimited bankroll who chooses to participate, the dominant strategy is to maximize activity score and cap out benefits every level. This is not a conjecture. Activity score monotonically increases returns on every protocol product, and deviation in any direction strictly reduces expected returns regardless of what other players do.
+
+Bankroll constraints change the implementation, not the direction. Forced exit resets streaks to zero, erasing the accumulated activity score contribution that drives future EV. Outcome distributions depend on the actions of others in ways that resist precise risk-of-ruin analysis. The dominant strategy is maximum sustainable engagement.
 
 ### 5.1 The Active Participation Equilibrium
 
 The participation decision and the strategy decision are separate questions with different answers.
 
-**The participation decision** depends on opportunity cost and pool composition. With zero non-GTO players, returns converge to stETH yield, which may not justify the opportunity cost of locked capital. In practice, some players will always play sub-optimally, and any GTO player who exits increases returns for those who remain. This establishes a natural equilibrium point: the game sustains as many GTO players as the non-GTO deposit base (plus yield) can fund at returns exceeding their opportunity cost. GTO play also requires long-term commitment (streaks, future tickets, activity score), so even players who stop adding new capital remain connected to the game and incentivized to help it progress.
+**The participation decision** depends on opportunity cost and pool composition. With no sub-optimal players, returns converge to stETH yield, which may not justify the opportunity cost of locked capital. In practice, some players will always play sub-optimally, and any optimizer who exits increases returns for those who remain. This establishes a natural equilibrium: the game sustains as many optimizers as the sub-optimal deposit base (plus yield) can fund at returns exceeding their opportunity cost. GTO play also requires long-term commitment (streaks, future tickets, activity score), so even players who stop adding new capital remain connected to the game and incentivized to help it progress.
 
 **The strategy decision**, given participation, is unconditional.
 
@@ -265,7 +294,7 @@ The participation decision and the strategy decision are separate questions with
 
 **EV Maximizer deviates to minimal participation:** Reducing engagement reduces $a_i$, which reduces $\mu(a_i)$ and $\rho(a_i)$. The marginal cost of maintaining streaks (one ticket per day) is dominated by the marginal benefit of higher EV multipliers on all subsequent actions.
 
-**Whale deviates to exit:** Forfeits accumulated activity score (non-transferable), deity pass benefits (pass is transferable but costs 5 ETH in BURNIE to transfer), future ticket holdings, and BAF leaderboard position. The ongoing returns from their position (maximum lootbox multiplier, positive-EV Degenerette, auto-rebuy compounding) provide continuing positive returns so long as the pool remains sufficiently funded by other participants.
+**Whale deviates to exit:** Forfeits accumulated activity score (non-transferable) and deity pass benefits (pass is transferable but costs 5 ETH in BURNIE to transfer). The ongoing returns from their position (maximum lootbox multiplier, positive-EV Degenerette, auto-rebuy compounding) provide continuing positive returns so long as the pool remains sufficiently funded by other participants.
 
 **Affiliate deviates to stop referring:** Commission flow ceases. Since referral is the affiliate's only value proposition, cessation is equivalent to exit.
 
@@ -275,7 +304,7 @@ The participation decision and the strategy decision are separate questions with
 
 **Observation 5.2** (Inactive Profile as Conditional Equilibrium). *The strategy profile where all players choose no participation can be an equilibrium if deviation incentives are sufficiently weak. However, the inactive equilibrium is unstable for four reasons:*
 
-**First-mover advantage.** The earliest players gain the most accumulated ticket positions across the most levels. This creates a race-to-deviate dynamic: knowing the game will eventually start, earlier deviators are structurally advantaged. The rational response is to deviate early.
+**First-mover advantage.** The earliest players hold ticket positions across the most levels, giving them the most jackpot draw opportunities from their holdings. This creates a race-to-deviate dynamic: knowing the game will eventually start, earlier deviators are structurally advantaged. The rational response is to deviate early.
 
 **BURNIE appreciation subsidy.** Early levels give out BURNIE cheaply (tickets cost 0.01 ETH at level 0). If the game reaches even level 10 (0.04 ETH tickets), early BURNIE has quadrupled in utility value. By the first century milestone (0.24 ETH), early BURNIE is worth 24x its acquisition cost. Presale lootboxes are even more generous with bonus BURNIE. This makes early participation strictly more attractive than waiting.
 
@@ -289,9 +318,9 @@ The participation decision and the strategy decision are separate questions with
 
 For an EV maximizer with sufficient bankroll, the choice is binary: maximize activity or do not participate. There is no profitable middle ground because activity score monotonically increases returns on every protocol product. Partial engagement means strictly worse multipliers for the same capital deployed. The unlimited-bankroll player either goes all-in on activity or stays out entirely.
 
-**Bankroll-constrained players face a different problem.** A player who cannot afford to cap out every protocol benefit each level still has a clear optimization: be as active as their bankroll allows, prioritizing the highest-ROI actions first (quest streak maintenance costs one ticket per day and has the highest marginal return, followed by lootbox purchases at the activity level where they cross into +EV territory). Activity score is still monotonically increasing in returns, so more engagement is always better than less. The question for the constrained player is not "how active should I be?" (answer: as active as possible) but "is my bankroll large enough that participation is +EV at all?" Below some threshold, the capital required to maintain streaks and reach the +EV activity breakeven may exceed the expected returns. That threshold depends on pool composition and is lower when more non-GTO players are present.
+**Bankroll-constrained players face a different problem.** A player who cannot afford to cap out every protocol benefit each level still has a clear optimization: be as active as their bankroll allows, prioritizing the highest-ROI actions first (quest streak maintenance costs one ticket per day and has the highest marginal return, followed by lootbox purchases at the activity level where they cross into +EV territory). Activity score is still monotonically increasing in returns, so more engagement is always better than less. The question for the constrained player is not "how active should I be?" (answer: as active as possible) but "is my bankroll large enough that participation is +EV at all?" Below some threshold, the capital required to maintain streaks and reach the +EV activity breakeven may exceed the expected returns. That threshold depends on pool composition and is lower when more degens are present.
 
-**The downside is bounded.** The worst case for a participating player is that they spend ETH on entertainment and receive only their share of stETH yield as monetary return. The zero-rake property means their deposits remain in the prize pool (not extracted by a house), but from the individual player's perspective, unrecovered deposits beyond yield are a real cost. There is no scenario where a player loses more than they deposited.
+**The EV floor for GTO play is positive.** Because there is no rake, stETH yield accumulates entirely within the prize pool rather than being extracted by a house. By maximizing activity score, they capture more than their proportional share of that yield in expectation. Realized outcomes are another matter. The worst case is running badly and recovering nothing.
 
 **Active play is self-reinforcing.** As long as stETH yield is positive and at least one player participates, the active pool generates positive net prize flows. Each additional participant makes the game more attractive (larger pools, faster progression), not less. The inactive equilibrium is unstable: a single player who starts playing improves conditions for everyone else, pulling more players in.
 
@@ -315,7 +344,7 @@ Crucially, future tickets also have **time-value**: they earn BURNIE jackpot dra
 
 **Observation 5.4** (Streak Lock-In). *The cost of breaking a quest streak grows roughly quadratically with streak length. A 50-day streak contributes 50% to activity score, and rebuilding it requires 50 consecutive days of purchases. The longer the streak, the more painful it is to lose, creating increasingly powerful retention.* For a player with a 50-day streak, the daily cost of maintaining the streak (one ticket at current level price) is far exceeded by the EV uplift from the 50% activity score contribution. Streaks also provide a direct BURNIE FLIP bonus at milestones (every 10 levels, with an escalating, capped amount), adding a concrete monetary reward on top of the activity score benefit.
 
-**Device 3: afKing Auto-Rebuy.** When enabled, jackpot winnings are automatically converted to random near-future level tickets at 130–145% value, converting liquid ETH winnings into illiquid future participation and compounding the player's stake. The ticket selection is designed to be an optimal allocation path for the player, spreading value across upcoming levels.
+**Device 3: afKing Auto-Rebuy.** When enabled, jackpot winnings are automatically converted to random near-future level tickets at 130% face value (standard) or 145% with a lazy pass (1.30x and 1.45x, before accounting for forfeited BURNIE rebate), converting liquid ETH winnings into illiquid future participation and compounding the player's stake. The ticket selection is designed to be an optimal allocation path for the player, spreading value across upcoming levels.
 
 **Device 4: BURNIE Burn-on-Use.** BURNIE tokens are destroyed when used for tickets, Degenerette bets, and decimator entries. Their value is realized only through gameplay actions that contribute to the system.
 
@@ -329,17 +358,17 @@ These commitment devices are powerful. The difference from exploitative gambling
 
 BURNIE has a built-in appreciation mechanism against ETH. ETH ticket prices escalate with level progression (Appendix C), but BURNIE ticket purchases always cost 1,000 BURNIE per ticket (4 entries) regardless of level. Since a ticket at level x00 costs 0.24 ETH but still costs 1,000 BURNIE, the utility value of 1 BURNIE in ETH terms rises monotonically as the game progresses:
 
-| Level Range | ETH Ticket Price | BURNIE Ticket Price |
-|-------------|-----------------|---------------------|
-| 0–4 (intro) | 0.01 ETH | 1,000 BURNIE |
-| 5–9 (intro) | 0.02 ETH | 1,000 BURNIE |
-| x01–x29 | 0.04 ETH | 1,000 BURNIE |
-| x30–x59 | 0.08 ETH | 1,000 BURNIE |
-| x60–x79 | 0.12 ETH | 1,000 BURNIE |
-| x80–x99 | 0.16 ETH | 1,000 BURNIE |
-| x00 (century) | 0.24 ETH | 1,000 BURNIE |
+| Level Range | ETH Ticket Price | BURNIE Ticket Price | ETH per entry | BURNIE per entry |
+|-------------|-----------------|---------------------|---------------|-----------------|
+| 0–4 (intro) | 0.01 ETH | 1,000 BURNIE | 0.0025 ETH | 250 BURNIE |
+| 5–9 (intro) | 0.02 ETH | 1,000 BURNIE | 0.005 ETH | 250 BURNIE |
+| x01–x29 | 0.04 ETH | 1,000 BURNIE | 0.01 ETH | 250 BURNIE |
+| x30–x59 | 0.08 ETH | 1,000 BURNIE | 0.02 ETH | 250 BURNIE |
+| x60–x79 | 0.12 ETH | 1,000 BURNIE | 0.03 ETH | 250 BURNIE |
+| x80–x99 | 0.16 ETH | 1,000 BURNIE | 0.04 ETH | 250 BURNIE |
+| x00 (century) | 0.24 ETH | 1,000 BURNIE | 0.06 ETH | 250 BURNIE |
 
-The initial levels show the steepest appreciation: BURNIE earned at level 0 (when tickets cost 0.01 ETH) has 24x the purchasing power by the first century milestone (0.24 ETH). Within each subsequent 100-level cycle, BURNIE's utility value increases 6x from x01 to x00. This is a structural appreciation mechanism: as long as the game progresses through levels, patient BURNIE holders see their tokens' purchasing power increase.
+The initial levels show the steepest appreciation: BURNIE earned at level 0 (when one entry costs 0.0025 ETH) has 24x the purchasing power by the first century milestone (where one entry costs 0.06 ETH). 250 BURNIE always buys the same one entry; it is the ETH price of that entry that rises. Within each subsequent 100-level cycle, BURNIE's utility value increases 6x from x01 to x00. This is a structural appreciation mechanism: as long as the game progresses through levels, patient BURNIE holders see their tokens' purchasing power increase.
 
 **The time-preference cross-subsidy.** Players who earn BURNIE early and hold it benefit from this appreciation. Players who immediately spend BURNIE at Degenerette or buy tickets at low-price levels get entertainment now but at lower ETH-equivalent value. This creates a cross-subsidy between time preferences: impatient BURNIE use reduces circulating supply (all BURNIE sinks are permanent burns), which benefits patient holders through both reduced supply and higher future utility value. The degen who burns 1,000 BURNIE on Degenerette at level x05 (when those BURNIE could buy 10 tickets worth 0.04 ETH each = 0.4 ETH of tickets) is giving up future value for present entertainment. That value doesn't disappear; it accrues to the remaining BURNIE supply and, indirectly, to all ticket holders, since BURNIE can be converted to tickets in a way that draws value from the same pools.
 
@@ -457,7 +486,7 @@ The net effect depends on context: remaining players get a larger share of each 
 
 $$p_{BURNIE}^{floor} \approx \frac{p(\ell)}{900}$$
 
-If market price falls significantly below this, rational players buy BURNIE on the open market and use it for ticket purchases instead of paying ETH. This arbitrage creates buy pressure that supports the price.
+The pure entry-parity rate is $p(\ell)/1000$ per BURNIE (since 250 BURNIE = 1 entry = $p(\ell)/4$ ETH, so 1 BURNIE = $p(\ell)/1000$ ETH). The floor formula $p(\ell)/900$ is slightly lower than this parity rate, because ETH ticket purchases return 100 BURNIE; accounting for that rebate, the ETH-savings arbitrage only activates below the adjusted threshold. If market price falls significantly below $p(\ell)/900$, rational players buy BURNIE on the open market and use it for ticket purchases instead of paying ETH, saving cost per entry. This arbitrage creates buy pressure that supports the price.
 
 The decimator provides a second floor, but it is not a single number. Decimator EV per BURNIE burned varies dramatically by player: activity score determines both bucket assignment (odds) and burn weight multiplier (Section 6.2). A max-activity player at a x00 level (bucket 2, 1.767x weight) gets far more ETH per BURNIE than a zero-activity player (bucket 12, 1.0x weight) burning at a normal level. The ticket floor is universal and clean; the decimator floor is player-specific and hard to calculate, but for high-activity players it can exceed the ticket floor substantially.
 
@@ -588,7 +617,7 @@ We do not claim the protocol is indestructible. We claim it is *structurally res
 | Ticket price range | $p(\ell)$ | 0.01–0.24 ETH | Entry cost scaling |
 | Whale bundle price | — | 2.4–4 ETH | Catch-up mechanism |
 | Deity pass base price | — | 24 ETH + $T(n)$ | Whale commitment |
-| Deity pass cap | — | 24 total | Concentration limit |
+| Deity pass cap | — | 32 total | Concentration limit |
 | Pre-game timeout | — | 912 days | Liveness guard |
 | Post-game timeout | — | 365 days | Liveness guard |
 | VRF retry timeout | — | 18 hours | RNG liveness |
@@ -628,17 +657,17 @@ Daily jackpot distribution:
 
 **Lootbox EV quick reference:**
 
-| Activity Score | Lootbox EV Multiplier |
-|---------------|----------------------|
-| 0 (new player) | 0.80x |
-| 0.60 (breakeven) | 1.00x |
-| 3.05 (maximum) | 1.35x |
+| Activity Score | Lootbox EV Multiplier | Entries per entry of ETH spent |
+|---------------|----------------------|-------------------------------|
+| 0 (new player) | 0.80x | 0.80 (below face value) |
+| 0.60 (breakeven) | 1.00x | 1.00 (at face value) |
+| 3.05 (maximum) | 1.35x | 1.35 (above face value) |
 
 The activity score EV benefit on lootboxes caps at 10 ETH per level per account. Activity score also stratifies returns on Degenerette spins (90%-99.9% base ROI) and decimator burns (bucket assignment and burn weight multiplier). The pattern is the same across all products: higher engagement produces better returns.
 
 **Ticket pricing and prize pools.** Ticket prices escalate with level progression in a repeating 100-level cycle, from 0.01 ETH at the earliest levels to 0.24 ETH at century milestones (full pricing table below). Each ticket purchase splits: 90% to the next-level prize pool ($P^{next}$) and 10% to the future prize pool ($P^{fut}$). When the next pool reaches its level target, the level advances.
 
-stETH yield ($r \approx 0.025$ annual) accrues continuously on all locked deposits, the only external value entering the system.
+stETH yield ($r \approx 0.025$ annual) accrues continuously on all locked deposits, the only external monetary value entering the system.
 
 **Transaction costs.** Typical user interactions cost roughly $0.05 in gas at current prices, negligible relative to ticket and lootbox amounts. The protocol consumes more gas during jackpot resolution phases, but players who bear this cost are rewarded with BURNIE and must have made a purchase in the previous day to be eligible. Gas is a background cost that does not meaningfully alter the strategic analysis.
 
@@ -794,4 +823,3 @@ The net effect is that Degenerette activity injects a small amount of predictabl
 **Vector:** Lido stETH trades at discount to ETH (as occurred briefly in June 2022 at ~0.93:1).
 **Analysis:** The auto-stake mechanism only stakes ETH *above* `claimablePool`, meaning the ETH floor for claims is maintained. The stETH exposure is in the "surplus" portion (prize pools, future pools), not the solvency floor. Early claimers get ETH; late claimers during a depeg receive discounted stETH, creating a mild bank-run incentive.
 **Verdict:** Low-to-moderate risk. A severe depeg (>20%) would reduce real prize pool value but not threaten claimable funds.
-
