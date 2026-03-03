@@ -2329,7 +2329,7 @@
 <li><strong>Days 1–4:</strong> A random 6–14% slice of the remaining <code>currentPrizePool</code> is drawn each day.</li>
 <li><strong>Day 5:</strong> The remaining <code>currentPrizePool</code> is fully distributed.</li>
 </ul>
-<p><strong>Trait-bucket shares:</strong> Days 1–4 allocate 20% to each of the four trait buckets, with the solo bucket receiving the remaining 20%. Day 5 shifts to a weighted distribution: 60% to the leading trait bucket (rotating across days), with the remaining 40% split equally across the other three (~13.3% each). A 20% ticket-conversion budget is applied to each day's ETH slice; the remainder is paid as ETH to trait-matched ticket holders. At the end of the jackpot phase the level advances and a new purchase phase begins.</p>
+<p><strong>Trait-bucket shares:</strong> Days 1–4 allocate 20% to each of the four trait buckets, with the remaining 20% assigned randomly. Day 5 shifts to a weighted distribution: 60% to the leading trait bucket (rotating across days), with the remaining 40% split equally across the other three (~13.3% each). A 20% ticket-conversion budget is applied to each day's ETH slice; the remainder is paid as ETH to trait-matched ticket holders. At the end of the jackpot phase the level advances and a new purchase phase begins.</p>
 <h3>B.2 Purchase-Phase Daily Jackpot</h3>
 <p>During the purchase phase a jackpot fires each day <code>advanceGame</code> is called. Each day may trigger one or more of the following draws, depending on conditions:</p>
 <p><strong>Early-bird jackpot (day 1 of each new purchase phase only):</strong> 3% of <code>futurePrizePool</code> is drawn and distributed to lootbox buyers and trait-matched holders as an opening draw for the new level.</p>
