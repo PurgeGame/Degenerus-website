@@ -453,8 +453,8 @@
   <!-- ========== Section 1: The Point ========== -->
   <section>
     <h2>The Point</h2>
-    <p>Degenerus is a gambling protocol on Ethereum. The role of the house is open to anyone; there is no external rake. Every ETH deposited goes into on-chain prize pools that pay out to players. The protocol makes money from a fraction of the stETH yield on the pooled deposits, not by skimming your bets.</p>
-    <p>That means total payouts to players will exceed total deposits over time. The system is positive-sum.</p>
+    <p>Degenerus is a gambling protocol on Ethereum. Traditional gambling takes 40-60% of deposits in lotteries, 2-15% in casinos. Degenerus takes zero. Every ETH deposited goes into on-chain prize pools that pay out to players. The protocol makes money from a fraction of the stETH yield on the pooled deposits, not by skimming your bets.</p>
+    <p>That means total payouts to players will exceed total deposits over time. The system is positive-sum. And if the game ever stops growing, remaining funds are distributed through fair, VRF-verified jackpots. The failure mode is a terminal distribution, not a rug.</p>
     <p>But here's the part that matters: <strong>once the game is running, every participant (gamblers, investors, affiliates) is individually incentivized to push it forward.</strong> Not because they're cooperating. Not because they're altruistic. Because pushing the game forward is how they make money. Their self-interest IS the system's fuel.</p>
     <p>Jackpot winnings are liquid, you can withdraw anytime, but reinvesting them is heavily incentivized. And for investors, the core reward is structurally illiquid: future tickets that only pay out when the game reaches their level. Value enters the system and stays in the system.</p>
     <p>The result is a self-reinforcing machine with multiple redundant mechanisms that keep it running. It doesn't need coordination. It doesn't need trust. It doesn't need a team to keep the lights on. The contracts are immutable and the incentives do the rest.</p>
@@ -506,16 +506,17 @@
       </div>
     </div>
 
-    <p>These three products share one on-chain economy. Lottery players fill the prize pools. Investors fund the jackpots that attract them. Affiliates drive traffic from both sides. The biggest edges go to players who work all three angles, and every angle requires making the game stronger.</p>
+    <p>These three products share one on-chain economy. Entertainment-seeking actions produce monetary externalities, and monetary-seeking actions produce entertainment externalities. Lottery players fill the prize pools. Investors fund the jackpots that attract them. Affiliates drive traffic from both sides. The biggest edges go to players who work all three angles, and every angle requires making the game stronger.</p>
   </section>
 
   <!-- ========== Section 3: Negative Rake ========== -->
   <section>
     <h2><s>Zero Rake.</s> Negative Rake.</h2>
-    <p>There is no house edge. The protocol takes nothing from your deposits. Every wei of ETH enters on-chain pools with published, immutable splits. There is no fee extraction and no privileged access to funds.</p>
+    <p>Zero-rake means no entity extracts a guaranteed percentage of player deposits as ongoing profit. Not a small percentage. Zero. Every wei of ETH enters on-chain pools with published, immutable splits. There is no fee extraction and no privileged access to funds.</p>
     <p>But it goes further. All pooled ETH is staked into Lido stETH, earning ~2.5% APR. That yield comes from Ethereum staking rewards, not from other players. It gets distributed across the prize pools, the vault, and the $DGNRS contract. A share goes to the creator through those same channels. Free external money flows into the system that pays everyone.</p>
     <p>Over the lifetime of the protocol, total ETH paid out to all players will exceed total ETH deposited by all players. That's not a promise. That's an accounting identity. When the system is positive-sum, and there are losers (there will be), there <em>must</em> be winners who collectively received more than they put in.</p>
 
+    <p>A reality check: the game is primarily redistributive. Most of what any player receives came from other players' deposits. The yield component makes total payouts exceed total deposits, but the dominant dynamic is redistribution from low-activity to high-activity players, and from unlucky to lucky ones. This is not a magic money machine. It is a well-structured game where the house edge is zero and a small external subsidy makes the aggregate slightly positive.</p>
     <p>The question isn't whether the surplus exists. It does, provably, on-chain. The question is who captures it. The answer: the luckiest and the most engaged.</p>
   </section>
 
@@ -535,7 +536,7 @@
       </table>
     </div>
 
-    <p>There is no extractive move. You can't drain the system. You can't profit at the protocol's expense, only at other players' expense, within a positive-sum envelope. Claiming your winnings is fine; the system already captured the value your participation created. Anyone who leaves as a winner already earned it. And the future value they forfeit by quitting? It accrues to the players who stay.</p>
+    <p>There is no extractive move. You can't drain the system. There is no house, only differently-motivated actors whose interactions produce mutual benefit. You can't profit at the protocol's expense, only at other players' expense, within a positive-sum envelope. Claiming your winnings is fine; the system already captured the value your participation created. Anyone who leaves as a winner already earned it. And the future value they forfeit by quitting? It accrues to the players who stay.</p>
     <p>This is a solo project with no insiders. Everyone is subject to this constraint, equally.</p>
   </section>
 
@@ -555,7 +556,7 @@
     </blockquote>
 
     <p>The illiquidity also blocks a class of extractive behavior. If future tickets were tradeable, sophisticated players could buy them at a discount from desperate sellers, capture the value, and leave. Non-transferable tickets mean the only way to benefit is to be here when the game gets there, which means being part of the ecosystem that pushes levels forward.</p>
-    <p>Players who go dormant or broke get pulled back in when forgotten tickets activate months later. You win ETH from a jackpot on tickets you forgot about, and now you're back with claimable value and a bonus for rolling it into new tickets. The game re-engages you with value you already paid for. No marketing spend required.</p>
+    <p>The capital flow has a structural asymmetry worth noting. Ticket purchases split 90/10 to the current prize pool and future pool. Luckbox purchases split the opposite way: 90% to the futurepool. EV maximizers, who buy the most luckboxes, are structurally locking their capital into longer-duration pools. The degen's ticket money cycles quickly through the current jackpot. The grinder's luckbox money sits in the futurepool, generating yield and funding future jackpots. The people trying hardest to extract value end up locking their capital the longest.</p>
   </section>
 
   <!-- ========== Section 6: Variance ========== -->
@@ -564,7 +565,7 @@
     <p>Every DeFi yield protocol dies the same way. It launches with attractive returns. Mercenary capital floods in: yield optimizers, treasury managers, bots. Returns compress as more capital competes for the same pool. The original participants earn less. The mercenary capital leaves for the next protocol. TVL collapses.</p>
     <p>The root cause: guaranteed yield attracts people who are purely optimizing for returns. They have zero loyalty. They will leave the instant a better option appears. Their presence compresses yields for everyone else while providing no engagement or network effects.</p>
     <p>Degenerus doesn't have this problem because LP returns are paid as <strong>lottery tickets and tokens</strong>, not predictable cash flows. Even at maximum activity score, your returns arrive as high-variance entries into future jackpots. You might win 10x. You might win nothing. The expected value is positive, but the realized value is noisy.</p>
-    <p>Variance-averse capital, the kind that compressed yields in every DeFi farm you've ever seen, won't touch this. They need predictable cash flows for their models. They can't tolerate a +EV position that might pay zero in a given period. They self-select out. No governance vote required, no lockup period, no whitelist. The mechanism does the selection.</p>
+    <p>Variance-averse capital, the kind that compressed yields in every DeFi farm you've ever seen, won't touch this. A system with high variance and moderate expected value repels pure extractors who discount variance and see only moderate EV. They self-select out. No governance vote required, no lockup period, no whitelist. The mechanism does the selection. The variance-minimizing nit that kills poker ecosystems has no viable strategy here, because every avenue for profit requires high variance.</p>
     <p>The result: fewer LPs competing for the same pool of returns. Each remaining LP earns more. And because these LPs genuinely enjoy gambling, they don't leave when variance hits because a losing streak is part of the experience, not a reason to withdraw. This is a fundamentally more stable equilibrium than any guaranteed-yield protocol can achieve.</p>
 
     <div class="economy-callout">
@@ -603,7 +604,8 @@
 
     <p>Every sub-optimal choice creates surplus that flows to the players who optimize. A casual player buying luckboxes at 60% EV is voluntarily transferring 40% of that value into the prize pools. A last-day ticket buyer subsidizes the early buyers who showed up when the level started. An affiliate choosing nit mode discards half their commission. A player who drops their quest streak forfeits the activity score that would have improved their decimator bucket, their luckbox EV, and their degenerette returns.</p>
 
-    <p>This surplus is what pushes individual returns above the stETH yield floor. Optimizers don't profit from exploiting anyone. They profit because other players, knowingly and voluntarily, choose convenience and excitement over EV maximization.</p>
+    <p>What matters is the ETH volume on each side of the breakeven line, not the number of players. A single whale buying luckboxes at low activity contributes more surplus than ten players buying at high activity. The system's health depends on the ratio of below-breakeven ETH to above-breakeven ETH. And the equilibrium self-corrects: if too many grinders extract above breakeven, surplus shrinks, some leave, and returns restore for those who remain.</p>
+    <p>Optimizers don't profit from exploiting anyone. They profit because other players, knowingly and voluntarily, choose convenience and excitement over EV maximization.</p>
 
     <h3>Why This Is Stable</h3>
     <p>The variance-seeking players are not being deceived. The odds are on-chain. The EV for every action is calculable from public contract code. They are choosing high-variance entertainment over spreadsheet optimization, the same way a poker player sits down knowing they are not the best at the table.</p>
@@ -628,7 +630,7 @@
       <li><strong>Affiliates drive traffic</strong> from both sides, accelerating the cycle for their share of commissions</li>
     </ul>
 
-    <p>This is self-reinforcing, not circular. Each revolution adds external value: new players attracted by jackpot size, new investor capital attracted by realized returns, new affiliates attracted by commission volume. And the stETH yield layer adds a net positive-sum input that doesn't depend on new entrants at all.</p>
+    <p>This is self-reinforcing, not circular. Each revolution adds external value: new players attracted by jackpot size, new investor capital attracted by realized returns, new affiliates attracted by commission volume. And the stETH yield layer adds a net positive-sum input that doesn't depend on new entrants at all. If the flywheel slows, per-capita returns increase for remaining participants, attracting new capital. The system self-corrects rather than spiraling.</p>
     <p>Parts of this cycle are mechanical. The vault and $DGNRS contract are permanent players that auto-reinvest their winnings every level. Players in afKing mode do the same. No human decisions required. The flywheel has an engine that runs on its own, and the momentum to carry through slow periods.</p>
   </section>
 
@@ -647,6 +649,7 @@
     </ul>
 
     <p>The future prize pool acts as a <strong>flywheel battery</strong>. It charges during active periods and discharges through drip mechanisms during quiet ones. The future pool is designed to stay around 1.5x the level target, enough to cover at least one full level where nobody plays. The drip alone can fill a prize pool without any new deposits.</p>
+    <p>Honest assessment: at early levels with cheap tickets, a year-long stall is implausible. At higher levels with 0.16-0.24 ETH tickets, a sustained bear market could plausibly trigger the timeout. Two years of illiquidity in the worst case is a real cost that players should understand before committing capital they cannot afford to lose.</p>
     <p>And if all of the above somehow fails, the protocol has terminal safeguards. A 365-day inactivity timeout triggers a clean wind-down: remaining funds are distributed through final jackpots, then swept to the vault and $DGNRS. No funds are locked forever. There is no zombie state. The game either progresses or it terminates cleanly.</p>
   </section>
 
@@ -667,8 +670,10 @@
       <li><strong>Smart contract risk.</strong> Immutable contracts mean bugs can't be patched. Mitigated by open-source code, audits, and extensive testing, but the risk is real and inherent to immutable systems.</li>
       <li><strong>Lido / stETH risk.</strong> The yield layer depends on Lido. If Lido fails or stETH depegs, yield stops and the negative-rake property weakens. The protocol continues to function, it just loses the positive-sum subsidy.</li>
       <li><strong>Ethereum systemic risk.</strong> If Ethereum itself fails, everything fails. This is a risk shared by every project on the chain.</li>
-      <li><strong>Adoption risk.</strong> The flywheel needs initial momentum. Mitigated by redundant progression mechanisms, but the first levels require real players buying real tickets.</li>
-      <li><strong>Individual loss.</strong> Positive-sum does not mean everyone wins. You can lose money playing Degenerus. Some players will lose. The system guarantees that winners exist as a group, not that you're one of them.</li>
+      <li><strong>Adoption risk.</strong> The cross-subsidy structure requires multiple player types present simultaneously. The affiliate program is the intended bootstrap, but whether it reaches critical mass from zero is an empirical question.</li>
+      <li><strong>Illiquidity risk.</strong> Future tickets, BURNIE positions, and pass benefits are structurally illiquid. If the game stalls at higher levels, your capital may be locked for up to two years before the terminal distribution fires.</li>
+      <li><strong>Lock-in is real.</strong> Quest streaks, future tickets, and auto-compounding are retention mechanics designed to make leaving costly. The lock-in is compensated by real deferred value, but the reader should judge.</li>
+      <li><strong>Individual loss.</strong> You can lose money playing Degenerus. The system guarantees that winners exist as a group, not that you're one of them. The losers lost to math, not fraud, but they still lost.</li>
     </ul>
   </section>
 
@@ -692,7 +697,7 @@
   <!-- ========== Closing ========== -->
   <section>
     <div class="closing">
-      <p>The system pays out everything players put in, plus yield on top. Rewards are locked forward. Every participant pushes it forward. Multiple independent mechanisms ensure it keeps moving. Variance immunizes it against the actors that kill other protocols. And you don't have to trust anyone for this to work. Verify it yourself.</p>
+      <p>A memecoin's returns depend on later buyers' capital. This protocol's returns depend on entertainment spending plus yield. The system pays out everything players put in, plus yield on top. Rewards are locked forward. Every participant pushes it forward. Multiple independent mechanisms ensure it keeps moving. Variance immunizes it against the actors that kill other protocols. And you don't have to trust anyone for this to work. Verify it yourself.</p>
       <p class="punchline">It's a gambling protocol that's honest about being a gambling protocol. And that honesty, paradoxically, is what makes the economics work.</p>
     </div>
   </section>
