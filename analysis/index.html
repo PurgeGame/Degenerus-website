@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Mechanism Design of Resilient Games</title>
-<link rel="stylesheet" href="/shared/nav.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
@@ -443,7 +442,7 @@
         <canvas class="demo-scratch-canvas" data-q="3"></canvas>
       </div>
       <div class="demo-center" id="demo-center">
-        <img src="specials/special_none.svg" alt="Flame" class="demo-flame" />
+        <img src="/specials/special_none.svg" alt="Flame" class="demo-flame" />
         <div class="demo-center-prize" id="demo-center-prize"></div>
         <canvas class="demo-center-canvas" id="demo-center-canvas"></canvas>
       </div>
@@ -604,7 +603,7 @@
   function badgePath(q, sym, col) {
     var cat = CATEGORIES[q];
     var idx = cat === 'cards' ? CARD_IDX[sym] : sym;
-    return 'badges-circular/' + cat + '_0' + idx + '_' + SYMBOLS[cat][sym] + '_' + COLORS[col] + '.svg';
+    return '/badges-circular/' + cat + '_0' + idx + '_' + SYMBOLS[cat][sym] + '_' + COLORS[col] + '.svg';
   }
 
   function randomTrait() {
@@ -1055,7 +1054,7 @@
       ctx.drawImage(img, (w - size) / 2, (h - size) / 2, size, size);
       ctx.filter = 'none';
     };
-    img.src = 'specials/special_none.svg';
+    img.src = '/specials/special_none.svg';
     canvas.style.display = 'block';
   }
 
@@ -2445,7 +2444,5 @@ $$\frac{dP^{total}}{dt} = r \cdot S$$</p>
 <strong>Analysis:</strong> The auto-stake mechanism only stakes ETH <em>above</em> <code>claimablePool</code>, meaning the ETH floor for claims is maintained. The stETH exposure is in the "surplus" portion (prize pools, future pools), not the solvency floor. Early claimers get ETH; late claimers during a depeg receive discounted stETH, creating a mild bank-run incentive.
 <strong>Verdict:</strong> Low-to-moderate risk. A severe depeg (&gt;20%) would reduce real prize pool value but not threaten claimable funds.</p>
 </div>
-<script src="/shared/nav.js"></script>
-<script>initNav({ currentPage: 'analysis' });</script>
 </body>
 </html>

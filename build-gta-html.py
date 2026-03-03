@@ -163,7 +163,6 @@ full_html = f"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Mechanism Design of Resilient Games</title>
-<link rel="stylesheet" href="/shared/nav.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
@@ -216,8 +215,6 @@ full_html = f"""<!DOCTYPE html>
 <div class="page">
 {html_body}
 </div>
-<script src="/shared/nav.js"></script>
-<script>initNav({{ currentPage: 'analysis' }});</script>
 </body>
 </html>"""
 

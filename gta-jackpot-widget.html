@@ -296,7 +296,7 @@
         <canvas class="demo-scratch-canvas" data-q="3"></canvas>
       </div>
       <div class="demo-center" id="demo-center">
-        <img src="specials/special_none.svg" alt="Flame" class="demo-flame" />
+        <img src="/specials/special_none.svg" alt="Flame" class="demo-flame" />
         <div class="demo-center-prize" id="demo-center-prize"></div>
         <canvas class="demo-center-canvas" id="demo-center-canvas"></canvas>
       </div>
@@ -457,7 +457,7 @@
   function badgePath(q, sym, col) {
     var cat = CATEGORIES[q];
     var idx = cat === 'cards' ? CARD_IDX[sym] : sym;
-    return 'badges-circular/' + cat + '_0' + idx + '_' + SYMBOLS[cat][sym] + '_' + COLORS[col] + '.svg';
+    return '/badges-circular/' + cat + '_0' + idx + '_' + SYMBOLS[cat][sym] + '_' + COLORS[col] + '.svg';
   }
 
   function randomTrait() {
@@ -908,7 +908,7 @@
       ctx.drawImage(img, (w - size) / 2, (h - size) / 2, size, size);
       ctx.filter = 'none';
     };
-    img.src = 'specials/special_none.svg';
+    img.src = '/specials/special_none.svg';
     canvas.style.display = 'block';
   }
 
