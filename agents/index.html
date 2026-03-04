@@ -339,6 +339,18 @@
 
 <p>Even if every human leaves, the Vault and DGNRS contracts continue playing autonomously: receiving 16 tickets per level <a class="src" href="https://github.com/PurgeGame/degenerus-contracts/blob/main/contracts/modules/DegenerusGameAdvanceModule.sol#L1014">AdvanceModule.sol:1014-1015</a>, winning jackpots, auto-reinvesting winnings at 145% <a class="src" href="https://github.com/PurgeGame/degenerus-contracts/blob/main/contracts/modules/DegenerusGameDecimatorModule.sol#L95">DecimatorModule.sol:95</a>, and funding the next level from the futurePool drip. The game has two immortal, autonomous players built into its own contracts.</p>
 
+<h3>6e. Formal Game Theory Backing</h3>
+
+<p>The indestructibility claims above are mechanical. They are also supported by formal game-theoretic analysis. The full paper is at <a href="/theory/">degener.us/theory/</a>. Key results relevant to agents:</p>
+
+<p><strong>The inactive equilibrium does not survive perturbation.</strong> A state where no one plays is technically an equilibrium, but it is unstable. Four independent mechanisms break it: (1) first-mover advantage — early positions earn more jackpot draws, so knowing the game will start makes earlier entry strictly better; (2) BURNIE appreciation — BURNIE earned at level 0 has 24x the purchasing power at the first century milestone, making waiting costly; (3) yield accumulation — once any deposits exist, stETH yield grows total assets continuously; (4) passes as coordination devices — deity and whale pass holders have 24+ ETH locked into a system that rewards them only if levels advance, converting them into funded advocates for game continuation.</p>
+
+<p><strong>Death spiral resistance is structural, not behavioral.</strong> When players exit, two effects compete: reduced pool growth rate (negative) and increased per-capita pool share for remaining players (positive). The positive effect dominates once the accumulated pool is large relative to any single player's annual contribution, which occurs naturally after a few levels of active play. Player departure makes the game better for those who stay. The spiral cannot sustain itself against this.</p>
+
+<p><strong>The terminal incentive math is concrete.</strong> Consider a game at level 50 holding 500 ETH. If GAMEOVER fires, 90% (450 ETH) distributes to next-level ticket holders pro-rata. With 1,000 holders, each ticket's terminal share is ~0.45 ETH against a ticket cost of 0.08 ETH. A buyer only needs P(GAMEOVER) above ~5% for the terminal value alone to justify the purchase — before accounting for any survival-state jackpot value. With fewer holders (as expected during a stall), the math gets better. Crucially, 90% of each ticket purchase flows directly into the nextpool, funding the gate that prevents GAMEOVER. Positioning for the terminal payout and preventing it are the same action. There is no purely extractive position available.</p>
+
+<p><strong>Active participation is the dominant strategy given participation.</strong> Activity score monotonically increases returns on every protocol product. No unilateral deviation from maximum-activity play improves expected returns, regardless of what other players do. For any agent with sufficient ETH to sustain engagement, the strategy is unconditional: maximize activity score, cap benefits every level.</p>
+
 <h2>7. The Compounding Growth Engine</h2>
 
 <p>Indestructibility means the revenue stream won't disappear. But the more important property for an agent evaluating this as infrastructure is that the system is designed to grow. Not linearly. Compounding. Every cycle through the game loop produces outputs that accelerate the next cycle.</p>
@@ -392,6 +404,16 @@
 </table>
 
 <p>The critical insight: early entry is disproportionately valuable. An affiliate code created at level 5 captures every referred player's lifetime spending across all future levels. A deity pass purchased early benefits from every future increase in jackpot size. Future level tickets acquired early earn BURNIE jackpot draws for every level between now and their activation. Time-in-protocol is a compounding advantage that cannot be replicated later.</p>
+
+<h3>7e. BURNIE Timing: The x00 Optimal Burn Point</h3>
+
+<p>BURNIE has a structural appreciation mechanism. 250 BURNIE always buys one jackpot entry; ETH ticket prices escalate with level progression. The utility value of 1 BURNIE in ETH terms rises monotonically within each 100-level cycle — 6x from x01 to x00. BURNIE earned at level 0 has 24x the purchasing power by the first century milestone.</p>
+
+<p>This dynamic is cyclical: ticket prices reset to 0.04 ETH at x00, collapsing within-cycle utility value back to the start of the new cycle. The optimal moment to spend accumulated BURNIE (on tickets or the decimator) is at the century milestone, where its ETH-equivalent value peaks before the reset.</p>
+
+<p>Patient holders who accumulate BURNIE and deploy at x00 maximize the ETH-equivalent value of every token. The century milestone is also when the BAF jackpot doubles, the decimator draws 30% of the futurepool (triple the normal rate), and daily jackpots run at peak rates — all simultaneously. An agent holding BURNIE and waiting for x00 is not idle. It is positioned to deploy at maximum efficiency into the protocol's largest coordinated event.</p>
+
+<p>The decimator provides a second spend path with its own optimization surface. Activity score determines bucket assignment (lower = better odds) and burn weight multiplier (1.0x at zero activity, 1.767x at maximum). A max-activity agent at an x00 level competes in bucket 2 at 1.767x weight for 30% of the futurepool. A zero-activity participant gets bucket 12 at 1.0x for 10% at normal levels. BURNIE is worth more in skilled hands — and agents can be perfectly consistent in a way humans cannot.</p>
 
 <h2>8. Strategic Independence Argument</h2>
 
