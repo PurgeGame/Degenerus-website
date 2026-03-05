@@ -63,7 +63,7 @@
 </head>
 <body>
 <div class="page">
-<h1>Why <a href="https://github.com/PurgeGame/degenerus-contracts">Degenerus Protocol</a> Refuses to Die: A Game-Theoretic Analysis</h1>
+<h1>Why <a href="https://github.com/PurgeGame/degenerus-contracts">Degenerus Protocol</a> Refuses to Die:<br>A Game-Theoretic Analysis</h1>
 <p style="text-align:center;margin:.25rem 0 1.5rem;font-style:italic;color:#555;">Burnie Degenerus</p>
 <nav class="toc"><h2>Table of Contents</h2><ul>
 <li><a href="#section-2">1. Introduction</a></li>
@@ -1766,16 +1766,16 @@
 <p><strong>What I extract.</strong> I am a self-funded solo dev and the only insider. There are no VCs, team allocations, or privileged parties. Here is exactly what I get:</p>
 <ul>
 <li><strong>During presale:</strong> 20% of lootbox ETH goes to the vault. This ends automatically after a fixed number of levels or 200 ETH of lootbox purchases, whichever comes first. This is real extraction that compensates development completed before launch.</li>
-<li><strong>20% of the <a href="#section-dgnrs">DGNRS</a> token supply.</strong> DGNRS is a fixed-supply token that receives 25% of system stETH yield and 4 tickets per level with an activity score boost. Holders can burn DGNRS to extract their pro-rata share but forfeit all future yield. The remaining DGNRS is distributed to players over time. My allocation is entirely dependent on the protocol's long-term success.</li>
-<li><strong>The vault</strong> (the protocol's treasury contract, with no discretionary withdrawal) receives: 25% of all stETH yield, 4 tickets per level with an activity score boost, the presale lootbox revenue above, 2 million BURNIE, and affiliate commissions from unaffiliated players.</li>
+<li><strong>20% of the <a href="#section-dgnrs">DGNRS</a> token supply.</strong> DGNRS is a fixed-supply token that receives 23% of system stETH yield (effectively 25% of extracted yield) and 4 tickets per level with an activity score boost. Holders can burn DGNRS to extract their pro-rata share but forfeit all future yield. The remaining DGNRS is distributed to players over time. My allocation is entirely dependent on the protocol's long-term success.</li>
+<li><strong>The vault</strong> (the protocol's treasury contract, with no discretionary withdrawal) receives: 23% of all stETH yield (effectively 25% of extracted yield), 4 tickets per level with an activity score boost, the presale lootbox revenue above, 2 million BURNIE, and affiliate commissions from unaffiliated players.</li>
 </ul>
-<p>In concrete terms, my in-game position is roughly equivalent to one deity pass with a 25% yield share, 2 million BURNIE, and up to 40 ETH from presale revenue. This is not nothing, but it is a defined, bounded allocation. The key difference from traditional gambling is that none of this is an ongoing rake on deposits. After presale, 100% of every ETH deposited goes into the prize pool system, along with 50% of stETH yield. My upside is tied to protocol success, not to player losses.</p>
+<p>In concrete terms, my in-game position is roughly equivalent to one deity pass with a 23% yield share, 2 million BURNIE, and up to 40 ETH from presale revenue. This is not nothing, but it is a defined, bounded allocation. The key difference from traditional gambling is that none of this is an ongoing rake on deposits. After presale, 100% of every ETH deposited goes into the prize pool system, along with 46% of stETH yield (the remaining 54% is split between the vault, DGNRS holders, and an unextracted buffer). My upside is tied to protocol success, not to player losses.</p>
 <div class="definition"><p><strong>Definition 4.2</strong> (Zero-Rake). <em>A gaming mechanism is zero-rake if no entity extracts a guaranteed percentage of player deposits as ongoing profit.</em></p>
 <p><strong>Observation 4.3</strong> (Zero-Rake). <em>Degenerus Protocol is zero-rake after presale: 100% of player ETH deposits remain in the prize pool system. No percentage of any deposit is skimmed by a house or operator.</em></p></div>
 <p><strong>Reality check:</strong> The game is primarily redistributive. The vast majority of what any player receives came from other players' deposits. The yield component makes the total payout exceed total deposits, but the dominant dynamic is redistribution from low-activity to high-activity players, and from unlucky to lucky ones. This is not a magic money machine. It is a well-structured game where the house edge is zero and a small external subsidy makes the aggregate slightly positive.</p>
 <div class="corollary"><p><strong>Corollary 4.4</strong> (Positive-Sum Game). <em>For the player pool as a whole, Degenerus Protocol is a positive-sum game:</em></p>
-<p>$$\sum_{i \in \mathcal{N}} \mathbb{E}[\text{gross payout}_i] = \sum_{i \in \mathcal{N}} \text{deposits}_i + 0.50 \cdot r \cdot S \cdot T > \sum_{i \in \mathcal{N}} \text{deposits}_i$$</p>
-<p><em>where $T$ is the time horizon, $r \cdot S \cdot T$ is total stETH yield generated, and the coefficient $0.50$ reflects the yield split: 25% to the vault, 25% to DGNRS holders, and 50% to the prize pool system. Only the prize pool share flows back to players.</em></p>
+<p>$$\sum_{i \in \mathcal{N}} \mathbb{E}[\text{gross payout}_i] = \sum_{i \in \mathcal{N}} \text{deposits}_i + 0.46 \cdot r \cdot S \cdot T > \sum_{i \in \mathcal{N}} \text{deposits}_i$$</p>
+<p><em>where $T$ is the time horizon, $r \cdot S \cdot T$ is total stETH yield generated, and the coefficient $0.46$ reflects the yield split: 23% to the vault, 23% to DGNRS holders, 46% to the prize pool system, and ~8% unextracted buffer. Only the prize pool share flows back to players.</em></p>
 <p><strong>Caveat:</strong> The game is positive-sum <em>in aggregate</em>. Individual players, especially low-activity degens, face negative monetary EV. Calling it "positive-sum" is accurate for the pool; individual experience varies.</p>
 <p>There is a second, arguably more important sense in which the game is positive-sum: <em>total utility</em> exceeds total deposits even ignoring yield. A degen who loses 0.01 ETH but gets genuine entertainment worth more than 0.01 ETH to them has a positive-utility outcome despite a negative-monetary one. An EV maximizer who extracts 0.01 ETH profit has a positive-monetary outcome. Both players are better off than they were before, drawing from the same pool of deposits. The complementary preferences of different player types mean that value is not merely redistributed but <em>created</em> through the act of playing. This is the same dynamic that makes poker positive-sum for the table (even before considering the house): the recreational player and the professional are both getting what they came for.</p></div>
 <hr />
@@ -1797,7 +1797,7 @@
 <p><strong>First-mover advantage.</strong> The earliest players hold ticket positions across the most levels, giving them the most jackpot draw opportunities from their holdings. This creates a race-to-deviate dynamic: knowing the game will eventually start, earlier deviators are structurally advantaged. The rational response is to deviate early.</p>
 <p><strong>BURNIE appreciation subsidy.</strong> Early levels give out BURNIE cheaply (tickets cost 0.01 ETH at level 0). If the game reaches even level 10 (0.04 ETH tickets), early BURNIE has quadrupled in utility value. By the first century milestone (0.24 ETH), early BURNIE is worth 24x its acquisition cost. Presale lootboxes are even more generous with bonus BURNIE. This makes early participation strictly more attractive than waiting.</p>
 <p><strong>Yield accumulation.</strong> Once any deposits exist, stETH yield accrues regardless of further activity, growing total assets and making participation increasingly attractive.</p>
-<p><strong>Passes as equilibrium-breaking devices.</strong> Deity passes (24+ ETH) and whale passes inject large up-front capital into the prize pool. Pass holders receive activity score bonuses valuable <em>only if the game advances through levels</em>. A deity holder has 24+ ETH locked into a system that rewards them as long as levels progress, with a full refund if the game never starts. Their rational response is to actively drive progression. The pass system converts a coordination problem (who goes first?) into a paid commitment (pass holders go first, and are compensated for doing so).</p>
+<p><strong>Passes as equilibrium-breaking devices.</strong> Deity passes (24+ ETH) and whale passes inject large up-front capital into the prize pool. Pass holders receive activity score bonuses valuable <em>only if the game advances through levels</em>. A deity holder has 24+ ETH locked into a system that rewards them as long as levels progress, with a 20 ETH refund if the game stalls before level 10. Their rational response is to actively drive progression. The pass system converts a coordination problem (who goes first?) into a paid commitment (pass holders go first, and are compensated for doing so).</p>
 <p><strong>The bootstrap sequence.</strong> These four mechanisms collectively define the bootstrap order. Smart money enters first for BURNIE appreciation and positional advantage, with presale lootboxes offering even more generous BURNIE allocations. They do not need degens present to justify participation. Their deposits build prize pools and start firing jackpots. Degens can enter at any point in this sequence. Daily prize pools and lootbox draws fire from the first level regardless of scale, and degens play for entertainment value, not pool size. But the larger the accumulated pools grow, the more affiliates have concrete outcomes to point at when recruiting additional players, which accelerates the flywheel. The cold-start problem is easier than it appears because the first player type required is the easiest to acquire, not the hardest.</p>
 <p><strong>Active play is self-reinforcing.</strong> As long as stETH yield is positive and at least one player participates, the active pool generates positive net prize flows. Each additional participant makes the game more attractive (larger pools, faster progression), not less. The inactive equilibrium does not survive perturbation: a single player who starts playing improves conditions for everyone else, pulling more players in.</p>
 <h3 id="section-23">5.3 Active Play Under Budget Constraints</h3>
@@ -1862,14 +1862,14 @@
 <td>250 BURNIE</td>
 </tr>
 <tr>
-<td>x60–x79</td>
+<td>x60–x89</td>
 <td>0.12 ETH</td>
 <td>1,000 BURNIE</td>
 <td>0.03 ETH</td>
 <td>250 BURNIE</td>
 </tr>
 <tr>
-<td>x80–x99</td>
+<td>x90–x99</td>
 <td>0.16 ETH</td>
 <td>1,000 BURNIE</td>
 <td>0.04 ETH</td>
@@ -1885,10 +1885,10 @@
 </tbody>
 </table>
 <p>The initial levels show the steepest appreciation: BURNIE earned at level 0 (when one entry costs 0.0025 ETH) has 24x the purchasing power by the first century milestone (where one entry costs 0.06 ETH). <strong>250 BURNIE always buys the same one entry; it is the ETH price of that entry that rises.</strong> Within each subsequent 100-level cycle, BURNIE's utility value increases 6x from x01 to x00. This is a structural appreciation mechanism: as long as the game progresses through levels, patient BURNIE holders see their tokens' purchasing power increase.</p>
-<p><strong>The time-preference cross-subsidy.</strong> Players who earn BURNIE early and hold it benefit from this appreciation. Players who immediately burn BURNIE to buy tickets at low-price levels get entertainment now but at lower ETH-equivalent value. This creates a cross-subsidy between time preferences: impatient BURNIE use reduces circulating supply (all BURNIE sinks are permanent burns), which benefits patient holders through both reduced supply and higher future utility value. The player who burns 1,000 BURNIE on a ticket at level x05 (worth 0.04 ETH) could have waited until level x80 where the same 1,000 BURNIE buys a ticket worth 0.16 ETH. That value doesn't disappear; it accrues to the remaining BURNIE supply and to the structural price floor (Observation 8.3 in Section 8), which ratchets upward with level progression as the ticket-price arbitrage opportunity grows. This dynamic is cyclical: ticket prices reset to 0.04 ETH at x00, collapsing within-cycle utility value back to the start of the new cycle. The optimal moment to spend accumulated BURNIE (on tickets or the decimator) is at the century milestone, where its ETH-equivalent value peaks before the reset.</p>
+<p><strong>The time-preference cross-subsidy.</strong> Players who earn BURNIE early and hold it benefit from this appreciation. Players who immediately burn BURNIE to buy tickets at low-price levels get entertainment now but at lower ETH-equivalent value. This creates a cross-subsidy between time preferences: impatient BURNIE use reduces circulating supply (all BURNIE sinks are permanent burns), which benefits patient holders through both reduced supply and higher future utility value. The player who burns 1,000 BURNIE on a ticket at level x05 (worth 0.04 ETH) could have waited until level x90 where the same 1,000 BURNIE buys a ticket worth 0.16 ETH. That value doesn't disappear; it accrues to the remaining BURNIE supply and to the structural price floor (Observation 8.3 in Section 8), which ratchets upward with level progression as the ticket-price arbitrage opportunity grows. This dynamic is cyclical: ticket prices reset to 0.04 ETH at x00, collapsing within-cycle utility value back to the start of the new cycle. The optimal moment to spend accumulated BURNIE (on tickets or the decimator) is at the century milestone, where its ETH-equivalent value peaks before the reset.</p>
 <h3 id="section-28">6.2 The Decimator</h3>
 <p>The decimator is a BURNIE-burn-to-win-ETH mechanism that provides an alternative sink for BURNIE tokens. Players permanently destroy BURNIE to buy weighted entries in a pro-rata ETH distribution drawn from the futurepool. It fires at milestone levels throughout each 100-level cycle at 10% of the futurepool, and at century milestones (x00) at 30%.</p>
-<p>Activity score determines both bucket assignment (win probability is 1/bucket, so lower is better) and burn weight multiplier (1.0x at zero activity to 1.767x at maximum). A max-activity player at a x00 level gets bucket 2 and 1.767x weight, competing for 30% of the futurepool. A zero-activity player gets bucket 12 and 1.0x weight at 10%. The difference in expected ETH per BURNIE burned is dramatic.</p>
+<p>Activity score determines both bucket assignment (win probability is 1/bucket, so lower is better) and burn weight multiplier (1.0x at zero activity to 1.783x at maximum). A max-activity player at a x00 level gets bucket 2 and 1.783x weight, competing for 30% of the futurepool. A zero-activity player gets bucket 12 and 1.0x weight at 10%. The difference in expected ETH per BURNIE burned is dramatic.</p>
 <p><strong>Strategic choice: tickets vs decimator.</strong> BURNIE holders face a real decision: burn for tickets (1,000 BURNIE per ticket, 4 lottery entries each) or burn in the decimator (minimum 1,000 BURNIE, pro-rata ETH from futurepool). Neither is strictly dominant; the optimal choice depends on the player's activity score, futurepool size, competition from other burners, and whether it's a normal or x00 level. This dual-sink structure drives the BURNIE price floor (Section 8.4): the ticket floor is universal, while the decimator floor is player-specific and rewards engagement. BURNIE is worth more in skilled hands.</p>
 <h3 id="section-29">6.3 The 100-Level Cycle</h3>
 <p>Ticket prices escalate within each 100-level cycle from 0.04 ETH at x01 to 0.24 ETH at x00, then reset. Century milestones (x00) are crescendo events where the futurepool transfer, dual bonus BAF jackpot (20% vs 10% at normal milestones), dual bonus decimator (30% vs 10%), and dual bonus daily jackpots all fire at their highest rates simultaneously, distributing a massive fraction of accumulated rewards across multiple channels. After the crescendo, prices reset to 0.04 ETH, lowering barriers for all bankroll sizes.</p>
@@ -2107,7 +2107,7 @@
 <h3 id="section-41">8.7 Endgame Distribution</h3>
 <p>Even in the GAMEOVER state, the protocol provides well-defined terminal payoffs:</p>
 <ol>
-<li><strong>Deity pass refunds:</strong> Level 0 → full refund; levels 1–9 → 20 ETH/pass; level 10+ → no refund</li>
+<li><strong>Deity pass refunds:</strong> 20 ETH/pass if GAMEOVER triggers before level 10; no refund at level 10+</li>
 <li><strong>Terminal jackpot (90%):</strong> 90% of all remaining assets run through a final jackpot draw among next-level ticket holders, where a single winner takes 60% and the remaining 40% is distributed via further draws across all holders. The only way to become eligible is to hold tickets for the stalling level.</li>
 <li><strong>Terminal decimator (10%):</strong> 10% of remaining assets distributed via decimator, weighted by activity score. Since activity score depends on quest streak, and quest completion requires daily ticket purchases, a player who maintained their streak through the stall will have both a strong decimator position and a large stack of tickets that are each individually +EV through the terminal jackpot.</li>
 <li><strong>Final sweep:</strong> After 30 days, unclaimed funds → vault and DGNRS reserves</li>
@@ -2266,7 +2266,7 @@
 <tr>
 <td>stETH yield split</td>
 <td>—</td>
-<td>50% prize pool, 25% vault, 25% DGNRS</td>
+<td>46/23/23% pool/vault/DGNRS (~8% unextracted buffer; effective split of extracted yield is 50/25/25)</td>
 <td>Value distribution</td>
 </tr>
 <tr>
@@ -2419,7 +2419,7 @@
 <p><strong>futurepool drip (days 1–4, if near-future ticket holders exist):</strong> ~1% of <code>futurePrizePool</code> is added to the jackpot: 50% as tickets credited directly to <code>nextPrizePool</code>, 50% as ETH to near-future ticket holders.</p>
 <p><strong>Daily BURNIE jackpot (all days):</strong> A separate BURNIE draw runs every day, awarding tokens to trait-matched ticket holders. Every third draw the budget is redirected to far-future ticket holders (levels +2 to +50) rather than current-level trait winners.</p>
 <h3 id="section-baf">B.3 BAF (Big-Ass Flip) Jackpot</h3>
-<p>The BAF jackpot fires at the end of each 10-level cycle from the futurepool. The BAF leaderboard tracks cumulative coinflip volume over the 10-level window and resets after each payout. At normal milestones the jackpot draws 10% of <code>futurePrizePool</code>; at century milestones (x00) this doubles to 20% as part of the crescendo event. Internal allocation of the drawn pool:</p>
+<p>The BAF jackpot fires at the end of each 10-level cycle from the futurepool. The BAF leaderboard tracks cumulative coinflip volume over the 10-level window and resets after each payout. At normal milestones the jackpot draws 10% of <code>futurePrizePool</code> (25% at the level 50 midpoint); at century milestones (x00) this doubles to 20% as part of the crescendo event. Internal allocation of the drawn pool:</p>
 <ul>
 <li><strong>Top BAF slot:</strong> $10\%$ (highest coinflip volume over the window)</li>
 <li><strong>Top Daily Flip slot:</strong> $10\%$ (highest single-day coinflip volume)</li>
@@ -2435,7 +2435,7 @@
 <li><strong>Terminal BAF (GAMEOVER):</strong> No scatter. The terminal distribution runs 90% of remaining assets through a final jackpot among next-level ticket holders, with 10% to a decimator weighted by quest streak over the last 100 days (Section 8.7).</li>
 </ul>
 <h3 id="section-decimator">B.4 Decimator</h3>
-<p>The decimator is a BURNIE-burn-to-ETH event that fires at milestone levels. Players permanently burn BURNIE to buy weighted pro-rata entries in an ETH distribution from <code>futurePrizePool</code>. Activity score determines bucket assignment (lower bucket = better odds) and burn weight multiplier (1.0x at zero activity to 1.767x at maximum), making the decimator strictly more valuable to engaged players. Trigger schedule and pool percentages are in Appendix C. At x00 levels the decimator draws 30% of <code>futurePrizePool</code> (triple the normal 10%), contributing to the century crescendo alongside the doubled BAF and the futurepool transfer.</p>
+<p>The decimator is a BURNIE-burn-to-ETH event that fires at milestone levels. Players permanently burn BURNIE to buy weighted pro-rata entries in an ETH distribution from <code>futurePrizePool</code>. Activity score determines bucket assignment (lower bucket = better odds) and burn weight multiplier (1.0x at zero activity to 1.783x at maximum), making the decimator strictly more valuable to engaged players. Trigger schedule and pool percentages are in Appendix C. At x00 levels the decimator draws 30% of <code>futurePrizePool</code> (triple the normal 10%), contributing to the century crescendo alongside the doubled BAF and the futurepool transfer.</p>
 <hr />
 <h2 id="section-48">Appendix C: Model Detail</h2>
 <p><em>Full mathematical formalization of the protocol's parameters and game structure.</em></p>
@@ -2528,8 +2528,7 @@ $$\frac{dP^{total}}{dt} = r \cdot S$$</p>
 1.00 + \frac{(a - 0.60) \cdot 0.35}{1.95} & \text{if } 0.60 < a \leq 2.55 \\
 1.35 & \text{if } a > 2.55
 \end{cases}$$</p>
-<p>And to a Degenerette ROI $\rho: [0, 3.05] \rightarrow [0.90, 0.999]$:</p>
-<p>$$\rho(a) \approx 0.90 + \frac{0.099 \cdot \min(a, 3.05)}{3.05}$$</p>
+<p>And to a Degenerette ROI $\rho: [0, 3.05] \rightarrow [0.90, 0.999]$, mapped piecewise (quadratic near zero, linear at higher scores).</p>
 <p>The key thresholds: at $a_i = 0.60$, lootbox EV reaches 1.00 (break-even). Above 0.60, lootboxes are positive EV. At $a_i = 2.55$, lootboxes reach the 1.35x cap. Scores above 2.55 continue to improve Degenerette ROI (which runs to 3.05) but yield no further lootbox benefit. Note that the Degenerette base ROI understates the effective return for high-activity players in two ways. First, 75% of the ETH payout is delivered as lootboxes, and lootboxes are worth 1.35x at max activity, so a player who would buy lootboxes anyway receives more than face value on that component. Second, ETH Degenerette bets receive a +5% ETH bonus on high-match outcomes, which is not reflected in $\rho(a)$. Together, these make Degenerette ETH bets individually +EV for high-activity players, not merely near-zero edge.</p>
 <p><strong>Additional lootbox value.</strong> The $\mu$ multiplier accounts for ticket and BURNIE-equivalent value from lootbox rewards. Lootboxes also award DGNRS tokens (from a reward pool, scaled by lootbox size) and boons (random bonuses including purchase boosts, coinflip boosts, activity score points, and occasionally whale passes or deity pass discounts). These components are harder to quantify because DGNRS value depends on market price and boon value depends on whether the player uses them optimally. They represent additional upside beyond the multiplier, but we omit them from the formal EV calculations to keep the analysis conservative.</p>
 <p>See Section 2.3 for the aggregate constraint on these multipliers.</p>
@@ -2568,7 +2567,7 @@ $$\frac{dP^{total}}{dt} = r \cdot S$$</p>
 <li><em>Graceful termination:</em> If no new level starts within the timeout, the game transitions to GAMEOVER, a well-defined terminal state with full prize distribution.</li>
 </ol></div>
 <h4 id="section-dgnrs">The DGNRS Token</h4>
-<p>DGNRS is a fixed-supply token that represents a claim on protocol yield. Holders receive 25% of all stETH yield generated by the protocol, plus 4 tickets per level with an activity score boost. Holders can burn DGNRS to extract their pro-rata share of accumulated yield, but doing so forfeits all future yield from those tokens permanently. 20% of the total DGNRS supply is allocated to the creator (see <a href="#section-19">Section 4.2</a>); the remaining 80% is distributed to players over time through lootbox rewards. DGNRS value is entirely dependent on the protocol's long-term success and yield generation.</p>
+<p>DGNRS is a fixed-supply token that represents a claim on protocol yield. Holders receive 23% of all stETH yield generated by the protocol (effectively 25% of extracted yield), plus 4 tickets per level with an activity score boost. Holders can burn DGNRS to extract their pro-rata share of accumulated yield, but doing so forfeits all future yield from those tokens permanently. 20% of the total DGNRS supply is allocated to the creator (see <a href="#section-19">Section 4.2</a>); the remaining 80% is distributed to players over time through lootbox rewards. DGNRS value is entirely dependent on the protocol's long-term success and yield generation.</p>
 <hr />
 <h2 id="section-59">Appendix D: Attack Vector Analysis</h2>
 <h4 id="section-60">Attack 1: Sybil Attack on Activity Score</h4>
