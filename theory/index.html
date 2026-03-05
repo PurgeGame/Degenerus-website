@@ -1523,6 +1523,7 @@
   var started = false;
   $('demo-next-btn').addEventListener('click', function () {
     if (spinning) return;
+    getAudio();
     if (!started) {
       started = true;
       runDay(0);
