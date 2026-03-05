@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Degenerette Embed</title>
+    <script type="module" crossorigin src="/degenerette/assets/index-fzigwBXR.js"></script>
+    <link rel="stylesheet" crossorigin href="/degenerette/assets/index-i84xaYuE.css">
+    <style>
+      :root {
+        --accent-primary: #f5a623;
+        --accent-secondary: #ffc04d;
+      }
+
+      html, body {
+        background: transparent;
+        margin: 0;
+        padding: 0;
+      }
+
+      /* Remove container max-width constraints */
+      .container {
+        max-width: none;
+        width: 100%;
+        padding: 0;
+      }
+
+      .app-layout {
+        display: block;
+      }
+
+      .main-column {
+        width: 100%;
+        max-width: none;
+      }
+
+      /* Spin button gold gradient */
+      .spin-button {
+        background: linear-gradient(135deg, #f5a623, #ffc04d);
+        color: #0a0a0f;
+      }
+
+      .spin-button:hover {
+        box-shadow: 0 8px 20px rgba(245, 166, 35, 0.4);
+      }
+
+      /* Hide bet-inline entirely */
+      .bet-inline {
+        display: none;
+      }
+
+      /* Hide the Matches label text, keep value visible */
+      .net-label {
+        display: none;
+      }
+
+      /* Quick-selector accent tints */
+      .special-btn.selected {
+        box-shadow: 0 0 10px rgba(245, 166, 35, 0.4);
+      }
+
+      .symbol-btn:hover {
+        filter: drop-shadow(0 2px 6px rgba(245, 166, 35, 0.35));
+      }
+
+      .symbol-btn.selected {
+        filter: drop-shadow(0 0 8px rgba(245, 166, 35, 0.55));
+      }
+
+      .quick-selector button:hover {
+        box-shadow: 0 4px 10px rgba(245, 166, 35, 0.35);
+      }
+
+      .quick-selector .hero-toggle-btn {
+        background: rgba(245, 166, 35, 0.2);
+        border-color: rgba(245, 166, 35, 0.45);
+        color: #f6efe1;
+      }
+
+      .quick-selector .hero-toggle-btn:hover {
+        background: rgba(245, 166, 35, 0.35);
+        border-color: rgba(245, 166, 35, 0.65);
+      }
+
+      .gamepiece-result .gp-quadrant.q-hero .gamepiece-badge {
+        filter: drop-shadow(0 0 4px rgba(245, 166, 35, 0.55));
+      }
+
+      /* Balance HUD */
+      .balance-hud {
+        position: fixed;
+        right: max(1rem, env(safe-area-inset-right));
+        bottom: max(1rem, env(safe-area-inset-bottom));
+        z-index: 1200;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 0.55rem 0.8rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+      }
+
+      .balance-hud .metric-label {
+        margin: 0;
+        font-size: 0.65rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .balance-hud .metric-value {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--accent-primary);
+        line-height: 1;
+      }
+
+      /* Roll-pop: override to linger longer */
+      .roll-pop.roll-pop--show {
+        animation: roll-pop-linger 2.5s ease-out forwards;
+      }
+
+      @keyframes roll-pop-linger {
+        0%   { opacity: 0; transform: translate(-50%, -35%) scale(calc(var(--pop-scale, 1) * .45)); }
+        15%  { opacity: 1; transform: translate(-50%, -55%) scale(calc(var(--pop-scale, 1) * 1.1)); }
+        60%  { opacity: 1; transform: translate(-50%, -60%) scale(calc(var(--pop-scale, 1) * 1.0)); }
+        100% { opacity: 0; transform: translate(-50%, -95%) scale(calc(var(--pop-scale, 1) * .9)); filter: blur(1px); }
+      }
+
+      @media (max-width: 520px) {
+        .balance-hud {
+          right: 0.65rem;
+          bottom: 0.65rem;
+          padding: 0.5rem 0.7rem;
+        }
+
+        .balance-hud .metric-value {
+          font-size: 0.9rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" class="container">
+      <div class="app-layout">
+        <main class="main-column">
+
+          <section id="selection-panel" class="panel selection-panel">
+            <div class="selection-compare">
+              <div class="compare-col">
+                <span class="compare-label">You</span>
+                <div id="ft-player"><span class="placeholder">Loading...</span></div>
+                <span class="selection-hint">
+                  Click or scroll to edit
+                  <span class="randomize-controls">
+                    <button id="randomize-btn" class="secondary-button" type="button">Randomize</button>
+                    <label class="randomize-toggle" title="Re-roll ticket before each spin">
+                      <input id="rerand-on-spin" type="checkbox" />
+                      <span>Auto</span>
+                    </label>
+                  </span>
+                </span>
+              </div>
+              <div id="roll-pop" class="roll-pop" aria-live="polite"></div>
+              <div class="compare-col">
+                <span class="compare-label">House</span>
+                <div id="ft-house"></div>
+                <span class="selection-hint speed-hint">
+                  <span class="speed-controls">
+                    <label class="speed-label" for="spin-speed">Speed</label>
+                    <input type="range" id="spin-speed" min="0.5" max="3" step="0.1" value="2.5" />
+                    <span class="speed-value" id="spin-speed-value">1.7x</span>
+                  </span>
+                </span>
+              </div>
+            </div>
+            <div class="selection-actions">
+              <div class="center-actions">
+                <div class="bet-inline">
+                  <span class="metric-label">Bet</span>
+                  <input
+                    type="number"
+                    id="ft-amount"
+                    class="metric-input-field bet-input"
+                    value="10"
+                    step="1"
+                    min="1"
+                    inputmode="numeric"
+                  />
+                </div>
+                <button id="spin-full" class="spin-button">SPIN</button>
+              </div>
+              <div class="net-result-box" id="net-result-box">
+                <span class="net-label">Matches:</span>
+                <span class="net-value" id="net-result-value">—</span>
+                <span class="net-token" id="net-result-token">
+                  <span class="net-token-value" id="net-result-token-value">—</span>
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <div id="quick-selector" class="quick-selector hidden"></div>
+
+          <!-- Hidden container the JS needs to write history into -->
+          <div id="results-container" style="display:none"></div>
+
+        </main>
+      </div>
+
+      <div class="balance-hud" aria-live="polite">
+        <span class="metric-label">Balance</span>
+        <span class="metric-value metric-value-with-icon">
+          <span id="currency-balance">1000</span>
+        </span>
+      </div>
+    </div>
+  </body>
+</html>
