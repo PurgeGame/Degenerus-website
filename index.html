@@ -45,18 +45,40 @@ body {
 }
 
 .checkbox-box {
+  -webkit-appearance: none;
+  appearance: none;
   width: 26px;
   height: 26px;
   border: 2px solid #555;
   border-radius: 3px;
   background: #0f0f1a;
   flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+}
+
+.checkbox-box:checked {
+  background: #f5a623;
+  border-color: #f5a623;
+}
+
+.checkbox-box:checked::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 3px;
+  width: 6px;
+  height: 12px;
+  border: solid #0f0f1a;
+  border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg);
 }
 
 .checkbox-label {
   color: rgba(255, 255, 255, 0.8);
   font-size: 0.85rem;
   font-weight: 500;
+  cursor: pointer;
 }
 
 .checkbox-brand {
@@ -231,8 +253,8 @@ body {
 
 <div class="captcha-wrapper">
   <div class="captcha-checkbox-bar">
-    <div class="checkbox-box"></div>
-    <span class="checkbox-label">I'm a Degen</span>
+    <input type="checkbox" class="checkbox-box" id="degen-check">
+    <label for="degen-check" class="checkbox-label">I'm a Degen</label>
     <div class="checkbox-brand">
       <img src="/whitepaper/flame-logo.svg" alt="">
       <span>Degenerus</span>
