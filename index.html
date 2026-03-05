@@ -1,13 +1,274 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Degenerus Protocol</title>
-    <meta http-equiv="refresh" content="0; url=/whitepaper/" />
-    <link rel="canonical" href="/whitepaper/" />
-  </head>
-  <body>
-    <p>Redirecting to <a href="/whitepaper/">/whitepaper/</a>…</p>
-  </body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Degenerus Protocol</title>
+<meta property="og:title" content="Degenerus Protocol">
+<meta property="og:description" content="Zero-rake on-chain lottery. No house. No rug. Just ETH.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://degener.us/">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0f0f1a;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ==============================
+   CAPTCHA CONTAINER
+============================== */
+.captcha-wrapper {
+  width: 340px;
+  max-width: 92vw;
+}
+
+/* Checkbox bar */
+.captcha-checkbox-bar {
+  background: #1a1a2e;
+  border: 2px solid #2a2a40;
+  border-radius: 4px 4px 0 0;
+  border-bottom: none;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: default;
+}
+
+.checkbox-box {
+  width: 26px;
+  height: 26px;
+  border: 2px solid #555;
+  border-radius: 3px;
+  background: #0f0f1a;
+  flex-shrink: 0;
+}
+
+.checkbox-label {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.checkbox-brand {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.checkbox-brand img {
+  width: 26px;
+  height: 26px;
+  filter: drop-shadow(0 0 4px rgba(245, 166, 35, 0.3));
+}
+
+.checkbox-brand span {
+  font-size: 0.45rem;
+  color: rgba(255, 255, 255, 0.25);
+  letter-spacing: 0.02em;
+}
+
+/* Challenge area */
+.captcha-challenge {
+  border: 2px solid #2a2a40;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  overflow: hidden;
+  background: #1a1a2e;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Header bar */
+.captcha-header {
+  background: #f5a623;
+  padding: 14px 16px;
+  color: #0f0f1a;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* Image grid */
+.captcha-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  padding: 2px;
+  background: #12121f;
+}
+
+.captcha-cell {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  cursor: pointer;
+  background: #1e1e30;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  display: block;
+  text-decoration: none;
+}
+
+.captcha-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(0.85);
+  transition: filter 0.2s ease;
+}
+
+.captcha-cell:hover {
+  transform: scale(1.04);
+  box-shadow: 0 0 0 3px #f5a623, 0 0 20px rgba(245, 166, 35, 0.3);
+  z-index: 1;
+}
+
+.captcha-cell:hover img {
+  filter: saturate(1) brightness(1.1);
+}
+
+.captcha-cell:active {
+  transform: scale(0.97);
+}
+
+/* Cell label on hover */
+.captcha-cell .cell-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 6px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.captcha-cell:hover .cell-label {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Footer */
+.captcha-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #15152a;
+  border-top: 1px solid #2a2a40;
+}
+
+.captcha-footer-links {
+  display: flex;
+  gap: 10px;
+}
+
+.captcha-footer-links a {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.58rem;
+  text-decoration: none;
+}
+
+.captcha-footer-links a:hover {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.captcha-brand {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.captcha-brand img {
+  width: 18px;
+  height: 18px;
+  filter: drop-shadow(0 0 4px rgba(245, 166, 35, 0.3));
+}
+
+.captcha-brand span {
+  font-size: 0.58rem;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* ==============================
+   RESPONSIVE
+============================== */
+@media (max-width: 380px) {
+  .captcha-wrapper {
+    width: 100%;
+    max-width: 100vw;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .captcha-header {
+    font-size: 0.85rem;
+    padding: 12px 14px;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="captcha-wrapper">
+  <div class="captcha-checkbox-bar">
+    <div class="checkbox-box"></div>
+    <span class="checkbox-label">I'm a Degen</span>
+    <div class="checkbox-brand">
+      <img src="/whitepaper/flame-logo.svg" alt="">
+      <span>Degenerus</span>
+    </div>
+  </div>
+
+  <div class="captcha-challenge">
+  <div class="captcha-header">
+    Select the image that looks like YOU
+  </div>
+
+  <div class="captcha-grid">
+    <a href="/wtf/" class="captcha-cell">
+      <img src="/captcha/nobrain.png" alt="Simple">
+      <div class="cell-label">Just ape in</div>
+    </a>
+    <a href="/whitepaper/" class="captcha-cell">
+      <img src="/captcha/midbrain.png" alt="Midwit">
+      <div class="cell-label">Read the docs</div>
+    </a>
+    <a href="/theory/" class="captcha-cell">
+      <img src="/captcha/gigabrain.png" alt="Gigabrain">
+      <div class="cell-label">Game theory</div>
+    </a>
+  </div>
+
+  <div class="captcha-footer">
+    <div class="captcha-footer-links">
+      <a href="https://discord.gg/HQ8YdfgczU" target="_blank" rel="noopener">Discord</a>
+    </div>
+    <div class="captcha-brand">
+      <span>Degenerus Protocol</span>
+    </div>
+  </div>
+  </div>
+</div>
+
+</body>
 </html>
