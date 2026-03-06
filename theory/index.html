@@ -3464,11 +3464,11 @@
         non-participation.</li>
     </ul>
     <p><strong>The concrete math.</strong> A game at level 50 holding 500 ETH puts 450 ETH into the terminal jackpot if
-      GAMEOVER fires. Even with 1,000 other tickets already eligible, expected value per ticket is ~0.45 ETH against a cost of 0.08 ETH.
-      The buyer only needs P(GAMEOVER) above ~5% for the terminal value alone to justify the purchase. The ticket also
-      has value in the survival state (jackpot draws, activity score), so the actual threshold is lower. For an active
-      player whose survival-state ticket value roughly equals the ticket cost, buying is approximately weakly dominant:
-      +EV regardless of outcome. With fewer eligible tickets (as expected during a stall), the math gets even better.</p>
+      GAMEOVER fires. Even with 1,000 other tickets already eligible, expected value per ticket is ~0.45 ETH against a
+      cost of 0.08 ETH. An active player's ticket is already worth roughly its cost in the survival state (jackpot draws,
+      activity score). Even a ~5% probability of GAMEOVER is enough for the terminal component to cover the remaining gap
+      between that survival value and the ticket cost. For such a player, buying is approximately weakly dominant: +EV
+      regardless of outcome. With fewer eligible tickets (as expected during a stall), the math gets even better.</p>
     <p><strong>The convergence paradox.</strong> The terminal mechanism creates a productive self-reference. Buying is
       dominant if GAMEOVER will fire but marginally negative for a pure outsider if it doesn't. If enough actors buy to
       prevent GAMEOVER, buying was -EV, so they should not have bought. But if they don't buy, GAMEOVER becomes likely
