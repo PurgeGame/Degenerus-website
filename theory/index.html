@@ -3456,7 +3456,7 @@
       <li><strong>GAMEOVER fires:</strong> The buyer's tickets are entered into a terminal jackpot funded by 90% of all
         ETH locked in the protocol. At any non-trivial game age, this pool dwarfs the cost of the tickets. A game that
         has run for 50+ levels may hold hundreds or thousands of ETH. The expected payout per ticket, even diluted
-        across other next-level holders, vastly exceeds the ticket cost.</li>
+        across other next-level tickets, vastly exceeds the ticket cost.</li>
       <li><strong>GAMEOVER is averted:</strong> The buyer holds tickets in a live, continuing game. These tickets
         participate in the next level's jackpot phase normally. For a player already engaged, buying earlier was
         strictly better than waiting (more accumulated draws). For a new entrant, this is a standard ticket purchase in
@@ -3464,11 +3464,11 @@
         non-participation.</li>
     </ul>
     <p><strong>The concrete math.</strong> A game at level 50 holding 500 ETH puts 450 ETH into the terminal jackpot if
-      GAMEOVER fires. Even with 1,000 other holders, expected value per ticket is ~0.45 ETH against a cost of 0.08 ETH.
+      GAMEOVER fires. Even with 1,000 other tickets already eligible, expected value per ticket is ~0.45 ETH against a cost of 0.08 ETH.
       The buyer only needs P(GAMEOVER) above ~5% for the terminal value alone to justify the purchase. The ticket also
       has value in the survival state (jackpot draws, activity score), so the actual threshold is lower. For an active
       player whose survival-state ticket value roughly equals the ticket cost, buying is approximately weakly dominant:
-      +EV regardless of outcome. With fewer holders (as expected during a stall), the math gets even better.</p>
+      +EV regardless of outcome. With fewer eligible tickets (as expected during a stall), the math gets even better.</p>
     <p><strong>The convergence paradox.</strong> The terminal mechanism creates a productive self-reference. Buying is
       dominant if GAMEOVER will fire but marginally negative for a pure outsider if it doesn't. If enough actors buy to
       prevent GAMEOVER, buying was -EV, so they should not have bought. But if they don't buy, GAMEOVER becomes likely
@@ -3476,8 +3476,8 @@
     <p>The paradox dissolves at the individual level. No single buyer is pivotal: each buyer's nextpool contribution is
       a small fraction of the total gap. No buyer needs to solve the coordination problem. They only need the expected
       value across both states to exceed the ticket cost, and as shown above, it does under a wide range of assumptions.
-      With fewer holders (as expected during a stall), the math gets more favorable, not less: at 100 holders, even a
-      0.5% chance of GAMEOVER justifies buying on terminal value alone.</p>
+      With fewer eligible tickets (as expected during a stall), the math gets more favorable, not less: at 100 eligible
+      tickets, even a 0.5% chance of GAMEOVER justifies buying on terminal value alone.</p>
     <p>Many individually-rational purchases collectively fill the pool. If arb capital alone is insufficient, future
       ticket holders complete the defense. They have locked equity that only unlocks if the game continues, giving them
       additional motivation beyond the terminal payout arithmetic. For these players, buying has three possible
