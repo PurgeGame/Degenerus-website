@@ -342,7 +342,7 @@
       <p style="margin:0 0 4px;"><strong style="color:#777;">On admin keys:</strong> The contracts are immutable with no upgrade
       mechanism or pause function. Scoped admin operations exist for: staking ETH to stETH, rotating the VRF coordinator
       (only possible after a 3-day VRF stall, meaning Chainlink is genuinely non-functional),
-      and setting the LINK/ETH price feed. These are enumerated in the contract source.
+      and setting the LINK/ETH price feed (only if the current feed becomes stale or deprecated). These are enumerated in the contract source.
       "No admin keys" means no ability to alter game rules, extract funds, modify payouts, pause the game, or trigger shutdown.</p>
       <p style="margin:0 0 4px;"><strong style="color:#777;">On Ponzi/MLM:</strong> The system fails all three Ponzi criteria
       (no guaranteed returns, no ongoing operator extraction, fully transparent on-chain). The affiliate system has a three-tier
