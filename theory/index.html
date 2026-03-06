@@ -2375,6 +2375,9 @@
     <p><em>Lootbox rates reflect ticket EV at the stated activity level. ETH ticket purchases include FLIP rebates (100
         for new deposits, 200 for partial recycling, 300 for full recycling). Auto-rebuy multipliers are fixed and forgo
         the BURNIE rebate that manual purchases receive.</em></p>
+    <p><em>These figures are gameplay-only returns and exclude <a href="#section-14">affiliate</a> commission income.
+        Most engaged players will earn some commission from casual referrals; dedicated recruiters earn substantially
+        more.</em></p>
     <p><strong>Within-level timing advantage.</strong> A ticket bought on day 1 of the jackpot phase qualifies for all 5
       draws; a ticket bought on day 5 qualifies for one. Tickets bought during the preceding purchase phase earn
       additional draws on top of that: daily BURNIE draws and ETH/ticket draws every 3 days, plus all 5 jackpot draws
@@ -2449,6 +2452,11 @@
       level's inflows push the price up. The structural advantage of early entry is not just more draws but more BURNIE
       per draw, at the lowest price it will ever be.</p>
     <h3 id="section-14">3.4 The Affiliate</h3>
+    <p>Affiliate activity is a spectrum, not a distinct player type. Most engaged players will refer at least a few
+      friends and earn some commission income as a natural byproduct. Dedicated affiliates who treat recruitment as
+      their primary strategy sit at one end; a player who casually refers a friend sits at the other. The
+      archetype below describes the dedicated end of the spectrum, but the commission mechanics apply to everyone
+      with at least one referral.</p>
     <p>Affiliates earn 20–25% commission on referred players' ETH purchases, paid as FLIP credits (non-transferable
       balances that convert to BURNIE through a mandatory 50/50 coinflip: win = 2x BURNIE, lose = 0). The effective
       extraction is denominated in BURNIE, not ETH, and subject to both coinflip variance and BURNIE price risk. An
@@ -2462,7 +2470,12 @@
     <p><strong>Best-response heuristic:</strong> Build referral network early and set rakeback to balance volume vs.
       margin. Concentrate activation pushes on day 5 of each jackpot phase: the 10% bonus commission on fresh-ETH
       purchases, combined with the largest jackpot of the level, makes day-5 messaging the highest-yield moment in every
-      cycle.</p>
+      cycle. Referral activity also improves gameplay returns directly: the affiliate component of <a
+        href="#section-53">activity score</a> ($\phi_i$, up to 0.50) is required for non-deity players to approach the
+      lootbox EV cap. Without it, a fully engaged no-pass player peaks at ~1.21x rather than ~1.30x, and even
+      100-level whale pass holders fall short of the 1.35x cap. Deity holders reach the lootbox cap without affiliate
+      activity but still benefit: scores above 2.55 continue improving Degenerette ROI, and deity holders receive a
+      <a href="#section-13">25% bonus</a> on all affiliate commissions.</p>
     <p><strong>Observation 3.3</strong> (FLIP Variance Filter). <em>The coinflip payout mechanism acts as a
         self-selection filter: sufficiently variance-averse affiliates rationally select out, while variance-neutral or
         variance-seeking affiliates remain.</em> Affiliates who prefer certainty can opt for "nit mode": 50% reduced
