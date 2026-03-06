@@ -340,7 +340,7 @@
       wagers, post-presale. During presale, 20% of lootbox ETH goes to the vault, capped at 200 ETH. This is itemized in
       Section 4.2. Gas costs are Ethereum network fees paid to validators, not protocol revenue.</p>
       <p style="margin:0 0 4px;"><strong style="color:#777;">On admin keys:</strong> The contracts are immutable with no upgrade
-      mechanism or pause function. Scoped admin operations exist for: staking ETH to stETH, rotating the VRF coordinator
+      mechanism or pause function. Scoped admin operations exist for: staking ETH to stETH (only the surplus above current claimable obligations), rotating the VRF coordinator
       (only possible after a 3-day VRF stall, meaning Chainlink is genuinely non-functional),
       and setting the LINK/ETH price feed (only if the current feed becomes stale or deprecated). These are enumerated in the contract source.
       "No admin keys" means no ability to alter game rules, extract funds, modify payouts, pause the game, or trigger shutdown.</p>
