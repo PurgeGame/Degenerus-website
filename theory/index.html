@@ -4724,8 +4724,8 @@
       behavior crypto degens already exhibit. Memecoin tourists ape into whatever is trending this week. A
       protocol approaching a level completion with a large prize pool is exactly the kind of event that trends.
       The degen does not need a quest streak, an activity score, or a deep understanding of the mechanism. They
-      need a wallet and a lootbox button. The game is designed so that the simplest possible degen action (buy
-      a lootbox because the jackpot looks big) is the action that funds the system. Short attention spans are
+      need a wallet and a ticket button. The game is designed so that the simplest possible degen action (buy
+      a ticket because the jackpot looks big) is the action that funds the system. Short attention spans are
       not a problem when the required action takes thirty seconds.</p>
 
     <h3>F.21 "The player base will shift to hardcore over time, eroding the degen surplus"</h3>
@@ -4758,17 +4758,19 @@
     <h3>F.23 "Terminal buying has a free-rider problem"</h3>
     <p>This is addressed extensively in Section 8.7 (the convergence paradox) and Appendix E (formal fixed-point
       analysis). The short version: no single buyer is pivotal. Each buyer's nextpool contribution is a small fraction of
-      the total gap. The free-rider problem dissolves because buying is individually +EV across both states. If GAMEOVER
+      the total gap. The free-rider problem dissolves because the blended EV across both states is positive. If GAMEOVER
       fires, the terminal payout dwarfs the ticket cost. If GAMEOVER is averted, the ticket participates in normal jackpot
-      draws. No coordination is needed. Many individually rational purchases collectively fill the pool.</p>
+      draws and recovers most of its cost, making the survival state only slightly -EV. The massive terminal upside
+      means even a low probability of GAMEOVER is enough to make buying +EV overall.
+      No coordination is needed. Many individually rational purchases collectively fill the pool.</p>
     <p>The math is developed formally in Appendix E with fixed-point equations, stability analysis, dilution checks,
       and threshold conditions. The equilibrium is unique and globally stable under continuous-time dynamics. The free-rider
       symmetry is exact: every buyer faces the same "my purchase might be unnecessary" concern, every buyer faces the same
-      +EV calculation across both states, and the outcome is that enough buyers act to make the concern irrelevant. This is
+      blended +EV calculation, and the outcome is that enough buyers act to make the concern irrelevant. This is
       not actually a public goods dilemma. Free-rider problems arise when the private return from contribution is less
-      than the cost. Here the private return exceeds the cost in both states. Each buyer's expected payoff is positive
-      whether or not their specific purchase is the one that closes the gap, because the terminal payout exceeds the ticket
-      cost in the failure state and the survival value covers the ticket cost in the success state. The result is a private
+      than the cost. Here the terminal payout so far exceeds the ticket cost that even a small probability of GAMEOVER
+      makes the expected payoff positive. As Section 8.7 notes, buying is approximately weakly dominant for engaged
+      players and the equilibrium drives P(GAMEOVER) toward zero. The result is a private
       goods opportunity that incidentally produces a public good. Read Section 8.7 and Appendix E before raising this
       objection.</p>
 
@@ -4782,11 +4784,11 @@
       That is not regression. It is the basic structure of every economic system. The activity score formula is transparent,
       calculable in advance, and documented in full. Every player can compute their expected returns before spending
       anything. The floor scores for each pass tier are published in Section 5. Importantly, activity score is not
-      pay-only: quest streaks (free daily actions) contribute up to 1.00, and affiliate referrals contribute up to 0.50.
+      pay-only: quest streaks (daily purchases) contribute up to 1.00, and affiliate referrals contribute up to 0.50.
       A player with no pass but a strong streak and active referral network reaches 1.50, which is above the lootbox
-      breakeven threshold of 0.60 and nearly matches the deity pass starting floor of 1.55. A free player with even a
-      moderate quest streak (a few weeks) clears the breakeven threshold for the primary extraction product without
-      spending anything.</p>
+      breakeven threshold of 0.60 and nearly matches the deity pass starting floor of 1.55. Affiliate score is the
+      only component that improves without direct spending, meaning a player with an active referral network can
+      clear the breakeven threshold through the activity of their referrals alone.</p>
     <p>The relevant comparison is traditional gambling, where the house edge is hidden, comp tiers are opaque, and the
       relationship between spend and return is deliberately obscured. In Degenerus, the math is public and the code is
       open-source. Calling transparency "regressive" because it reveals that investment produces returns is a strange
