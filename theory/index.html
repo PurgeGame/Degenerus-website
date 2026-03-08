@@ -2313,7 +2313,7 @@
       grinder takeover: every avenue for profit requires high variance (jackpots are lotteries, coinflips are 50/50,
       Degenerette spins are high-volatility), so the boring, risk-averse grinder (the "nit" in poker) that kills poker
       ecosystems has no viable strategy here. Variance functions as a defensive moat against extractive capital
-      (formalized in Observation 9.1).</p>
+      (formalized in Observation 10.1).</p>
     <p>The cross-subsidy structure (Section 2.3) is the formal version of this dynamic: different player types,
       extracting different kinds of value, sustaining each other's presence at the table.</p>
 
@@ -3571,7 +3571,7 @@
         <tr>
           <th>Property</th>
           <th>DeFi Yield</th>
-          <th>Speculative Token</th>
+          <th>Lottery (e.g. Powerball)</th>
           <th>Degenerus Protocol</th>
         </tr>
       </thead>
@@ -3579,60 +3579,72 @@
         <tr>
           <td>Yield source</td>
           <td>Staking, lending</td>
-          <td>New buyers (ponzi dynamics)</td>
+          <td>Ticket sales minus ~50% rake</td>
           <td>Redistribution from degens (individual); stETH yield (protocol-level)</td>
         </tr>
         <tr>
           <td>Variance</td>
           <td>Low (predictable APY)</td>
-          <td>Extreme (token price)</td>
+          <td>Extreme (winner-take-most, most tickets pay zero)</td>
           <td>High (jackpots, lotteries)</td>
         </tr>
         <tr>
           <td>Engagement</td>
           <td>Passive deposits</td>
-          <td>Buy and hold/shill</td>
+          <td>Buy ticket, check numbers</td>
           <td>Active participation rewarded</td>
-        </tr>
-        <tr>
-          <td>Token dynamics</td>
-          <td>Often inflationary</td>
-          <td>Inflationary (vesting, farming)</td>
-          <td>BURNIE: deflationary; DGNRS: fixed</td>
         </tr>
         <tr>
           <td>Growth dependency</td>
           <td>Moderate</td>
-          <td>Fatal (requires perpetual growth)</td>
+          <td>Low (established brand, physical retail)</td>
           <td>Long-run dependent, but terminal payout makes death individually irrational (Section 8.7)</td>
         </tr>
         <tr>
           <td>Liquidity</td>
           <td>Withdrawable</td>
-          <td>Liquid (sell anytime)</td>
-          <td>Non-withdrawable (deposits permanent)</td>
+          <td>Ticket is sunk cost</td>
+          <td>Illiquid</td>
         </tr>
         <tr>
           <td>Terminal value</td>
           <td>Yield stream</td>
-          <td>Zero</td>
+          <td>Zero (ticket expires after draw)</td>
           <td>Non-zero (game utility, yield claims)</td>
         </tr>
         <tr>
           <td>Risk of ruin</td>
           <td>Low</td>
-          <td>Total (token goes to zero)</td>
+          <td>Per-ticket (trivial cost, total loss)</td>
           <td>Moderate (individual outcomes vary)</td>
         </tr>
         <tr>
           <td>Loser outcome</td>
           <td>Opportunity cost</td>
-          <td>Worthless tokens, no recourse</td>
+          <td>Lost ticket price, unverifiable draw process</td>
           <td>Fair VRF-verified chances, lost to math not fraud</td>
+        </tr>
+        <tr>
+          <td>Jackpot reset</td>
+          <td>N/A</td>
+          <td>Resets to minimum after winner</td>
+          <td>Ratchets upward, never resets</td>
+        </tr>
+        <tr>
+          <td>Payout guarantee</td>
+          <td>Yield accrues continuously</td>
+          <td>Draw may produce no winner</td>
+          <td>Entire pool distributes every level</td>
+        </tr>
+        <tr>
+          <td>Rake</td>
+          <td>Protocol fees vary</td>
+          <td>~50% to operators/states</td>
+          <td>Zero (after presale)</td>
         </tr>
       </tbody>
     </table>
-    <p><strong>Observation 9.1</strong> (Variance as Defensive Moat). <em>A system with high variance and moderate
+    <p><strong>Observation 10.1</strong> (Variance as Defensive Moat). <em>A system with high variance and moderate
         expected value will tend to attract entertainment-motivated participants (who value variance positively) and
         repel pure extractors (who discount variance and see only moderate EV after accounting for opportunity cost).
         The illiquid reward structure (level-gated payouts, non-transferable future tickets) further limits hedging
