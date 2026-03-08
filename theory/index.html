@@ -395,10 +395,11 @@
         <li class="toc-sub"><a href="#section-39">8.5 The Bear Market Stress Test</a></li>
         <li class="toc-sub"><a href="#section-40">8.6 Conditions for Protocol Failure</a></li>
         <li class="toc-sub"><a href="#section-41">8.7 Endgame Distribution</a></li>
-        <li><a href="#section-42">9. Comparisons</a></li>
-        <li><a href="#section-43">10. Conclusion: The Resilience Thesis</a></li>
-        <li class="toc-sub"><a href="#section-44">10.1 Limitations</a></li>
-        <li class="toc-sub"><a href="#section-45">10.2 The Resilience Thesis</a></li>
+        <li><a href="#section-growth">9. The Growth Scenario</a></li>
+        <li><a href="#section-42">10. Comparisons</a></li>
+        <li><a href="#section-43">11. Conclusion: The Resilience Thesis</a></li>
+        <li class="toc-sub"><a href="#section-44">11.1 Limitations</a></li>
+        <li class="toc-sub"><a href="#section-45">11.2 The Resilience Thesis</a></li>
         <li><a href="#section-46">Appendix A: Parameter Summary</a></li>
         <li><a href="#section-47">Appendix B: Jackpot Distribution Detail</a></li>
         <li><a href="#section-48">Appendix C: Model Detail</a></li>
@@ -3508,7 +3509,63 @@
     <p>This ensures that accumulated value is distributed rather than destroyed, and that the distribution mechanism
       itself makes destruction maximally unlikely.</p>
     <hr />
-    <h2 id="section-42">9. Comparisons</h2>
+    <h2 id="section-growth">9. The Growth Scenario</h2>
+    <p>The preceding section analyzed failure in detail. This section considers the opposite: what happens when
+      the flywheel works.</p>
+    <p>The pool target is a ratchet. Each level's target equals the previous level's actual prize pool at completion. It
+      enforcing monotonic growth. Century milestones re-anchor from the accumulated futurepool, which in a growth
+      environment will be larger still. In that environment, deposits routinely overshoot the target, the futurepool
+      swells from lootbox purchases, and stETH yield compounds on all locked capital. Each level's jackpot phase
+      distributes more ETH than the last. This is not a design aspiration. It is an accounting consequence of the
+      ratchet. Jackpots cycle
+      within the 100-level structure and peak at century milestones, but the floor ratchets upward. There is no event
+      that returns the pools to zero and starts over.</p>
+    <p>The closest real-world analogy is Powerball. When Powerball's jackpot reached 1.5 billion USD in January 2016,
+      Americans spent approximately 1.3 billion USD on tickets in the final week alone. At a baseline 20 million USD
+      jackpot, weekly sales run roughly 100 million USD. Jackpot size drove a 13x increase in participation. People who
+      would never
+      set foot in a casino, people who consider themselves risk-averse, will buy a single Powerball ticket when the
+      number is large enough. The ticket cost is trivial. The potential outcome is life-changing. That calculation does
+      not require a gambling personality. At extreme jackpot sizes, even professional gamblers enter the market because
+      the accumulated rollover pushes the nominal expected value above the ticket price. Taxes and jackpot-splitting
+      probability pull the practical math back down, but the point stands: at sufficient scale, even gamblers who care
+      about expected value find a reason to buy in.</p>
+    <p>Degenerus differs from Powerball in three structural ways. First, the jackpot never resets. Powerball drops to 20 million USD after a winner. Here, the ratchet ensures the next level's jackpot is at least as large as the last.
+      Second, the jackpot is guaranteed to fire every level. There is no "nobody matched all six numbers" outcome. The
+      entire prize pool distributes across the jackpot draws. Third, engaged players with high activity scores are buying into a positive expected value
+      proposition.</p>
+    <p>A guaranteed, ever-growing jackpot on a recurring schedule, where participation is potentially positive
+      expected value. No existing gambling product has this property.</p>
+    <p>At sufficient scale, the game stops competing for crypto-native degens and starts attracting an entirely new
+      population: people who would never buy a lootbox, never grind activity score, never touch DeFi, but will buy a
+      single ticket when the jackpot is large enough and the ticket cost is trivial relative to the potential outcome.
+      This population does not exist at small scale. It activates at large scale. What happens next is genuinely unknown.
+      Some may buy one ticket and never return. Some may keep buying one ticket per level once the jackpot has crossed
+      whatever psychological threshold brought them in. Some may discover they enjoy the game and convert into hybrids
+      (Section 3.5). There is no precedent for a guaranteed, ever-growing jackpot at this scale, so the paper will not
+      pretend to predict the behavior. What can be said is that every one of those tickets feeds the ratchet.</p>
+    <p>The affiliate program (Section 3.4) provides the bridge. At sufficient jackpot scale, the commission opportunity
+      for anyone who can deliver this new audience becomes enormous. Anyone who builds a front end that accepts dollars, handles the crypto plumbing behind the scenes, and acts as
+      an agent on behalf of players who never touch a wallet directly captures that commission. Poker apps already work
+      this way. The protocol is permissionless. The affiliate incentive to solve the
+      accessibility problem scales with the jackpot.</p>
+    <p>This also provides an independent answer to a concern raised earlier in the paper. The grinder-dominance
+      scenario (Section 2.3) asks what happens if the degen-to-grinder ratio falls too low. The jackpot ratchet is a
+      continuous corrective: larger jackpots disproportionately attract entertainment-seeking players, not grinders. This
+      is not a theoretical prediction. It is the single most replicated finding in lottery economics. The scenario where
+      degens quit requires the argument that entertainment-seeking participants will lose interest in ever-larger
+      guaranteed jackpots. No empirical evidence supports this. All available evidence points in the opposite
+      direction.</p>
+    <p>The same locked-capital structure that makes death spirals hard to start (Section 8.2) is what makes the growth
+      flywheel hard to stop. Bigger jackpots attract more participants. Their deposits raise the next level's target. The
+      futurepool absorbs the surplus and amplifies the next cycle. Future tickets appreciate as expected jackpot size at
+      their target level grows. Each of these effects feeds the others.</p>
+    <p>This paper does not model the growth scenario in detail. The growth rate is unknowable, and projecting specific
+      numbers would be speculation. What can be stated structurally is that the ratchet has no ceiling, the flywheel has
+      no endogenous brake, and the empirical evidence from traditional lotteries is unambiguous about what large jackpots do to
+      participation. The reader can extrapolate the implications.</p>
+    <hr />
+    <h2 id="section-42">10. Comparisons</h2>
     <table>
       <thead>
         <tr>
@@ -3586,8 +3643,8 @@
       yield. The protocol needs ongoing deposits to advance levels, and without them it eventually ends, but the
       terminal jackpot (Section 8.7) makes that ending self-preventing.</p>
     <hr />
-    <h2 id="section-43">10. Conclusion: The Resilience Thesis</h2>
-    <h3 id="section-44">10.1 Limitations</h3>
+    <h2 id="section-43">11. Conclusion: The Resilience Thesis</h2>
+    <h3 id="section-44">11.1 Limitations</h3>
     <ol>
       <li>
         <p><strong>Smart contract risk is the dominant existential threat.</strong> The protocol holds all player
@@ -3635,7 +3692,7 @@
           under GTO play, since yield is the source of value injection that makes the game positive-sum.</p>
       </li>
     </ol>
-    <h3 id="section-45">10.2 The Resilience Thesis</h3>
+    <h3 id="section-45">11.2 The Resilience Thesis</h3>
     <p>The preceding sections built an argument through interlocking mechanisms: cross-subsidy between heterogeneous
       player types (Section 2), commitment devices that make continued participation dominant (Section 5.5), structural
       death spiral resistance through locked liquidity and prize concentration (Section 8), BURNIE economics with a
