@@ -343,7 +343,8 @@
       <p style="margin:0 0 4px;"><strong style="color:#777;">On admin keys:</strong> The contracts are immutable with no upgrade
       mechanism or pause function. Scoped admin operations exist for: staking ETH to stETH (only the surplus above current claimable obligations), rotating the VRF coordinator
       (only possible after a 3-day VRF stall, meaning Chainlink is genuinely non-functional),
-      and setting the LINK/ETH price feed (only if the current feed becomes stale or deprecated). These are enumerated in the contract source.
+      setting the LINK/ETH price feed (only if the current feed becomes stale or deprecated),
+      and setting the lootbox VRF batch threshold (controls when accumulated lootbox purchases trigger a Chainlink VRF request; a cost-optimization parameter that does not affect payouts or game rules). These are enumerated in the contract source.
       "No admin keys" means no ability to alter game rules, extract funds, modify payouts, pause the game, or trigger shutdown.</p>
       <p style="margin:0 0 4px;"><strong style="color:#777;">On Ponzi/MLM:</strong> The system fails all three Ponzi criteria
       (no guaranteed returns, no ongoing operator extraction, fully transparent on-chain). The affiliate system has a three-tier
@@ -2942,7 +2943,7 @@
       (<a href="#section-41">Section 8.7</a>). The griefer's exit is self-defeating: it makes the game harder to kill, not easier.</p>
     <p><strong>Even coercing the creator is futile.</strong> Suppose a state-level adversary compels the creator to
       destroy the game under threat of force. The creator <em>cannot comply</em>. The contract is immutable and
-      ownerless in the relevant sense: the vault's admin privileges are granted to any address holding &gt;30% of vault
+      ownerless in the relevant sense: the vault's admin privileges are granted to any address holding &gt;50.1% of vault
       ownership and are limited to emergency VRF recovery (a Chainlink failsafe). The admin has no power to pause the
       game, extract funds, modify rules, or trigger GAMEOVER. There is no multisig, no governance vote, no upgrade
       proxy. The creator could burn every private key they hold and the game would continue operating identically. The
@@ -3321,7 +3322,7 @@
       The total prize pools represent obligations toward both current-level and future-level ticket holders. In the
       failure state, all of the equity owed to future ticket holders is redirected to next-level holders, divided among
       however many next-level tickets exist. For it to be rational not to buy, that per-ticket share of the redirected
-      equity would have to be worth less than a ticket. At any non-trivial game age, this is essentially impossible:
+      equity would have to be worth less than a ticket. Once even a single level has completed, this is essentially impossible:
       the future-ticket equity spans potentially dozens of levels of accumulated play and dwarfs the total cost of all
       tickets that would need to be sold to complete the level.</p>
     <p>And terminal arbitrageurs do not need to complete the level by themselves. Future ticket holders have locked
@@ -3343,7 +3344,7 @@
       the gap by $0.9 c_\ell \cdot B(p)$, and returns the updated probability of GAMEOVER given the reduced gap.
       Because $\Phi$ is decreasing (higher perceived risk triggers more buying, which reduces actual risk), and the
       identity function $p \mapsto p$ is increasing, the fixed point $p^*$ is unique.</p>
-    <p>At any non-trivial game age, $p^*$ is very small. Even a $p^*$ of 5% makes terminal buying massively +EV, which
+    <p>Once the first level has completed, $p^*$ is very small. Even a $p^*$ of 5% makes terminal buying massively +EV, which
       drives purchases that push $p^*$ well below 5%. The basin of attraction is wide because the asymmetry between
       terminal payout and ticket cost is extreme. The game does not sit on a knife-edge. It sits in a deep well.</p>
     <p>This is not circular reasoning. It is an equilibrium property. No individual buyer intends to save the game.
@@ -3392,7 +3393,7 @@
       on rational capital allocation, which is <em>strengthened</em> by the same conditions that weaken 3 and 4. The
       cross-cluster correlation is negative: the worse the bear market gets, the stronger the rational and competitive
       mechanisms become. Requiring all six to fail simultaneously for an unbroken year, with this correlation structure,
-      produces a composite probability that is vanishingly small at any non-trivial game age.</p>
+      produces a composite probability that is vanishingly small once even a single level has completed.</p>
     <p><strong>The last line of defense.</strong> Even if every active community decays, every frontend goes offline, and
       every human player quits, the terminal arbitrage remains visible on a public blockchain. Any agent capable of
       reading contract state and submitting a transaction can evaluate the trade: buy tickets at $c_\ell$, receive
@@ -3421,7 +3422,7 @@
       <p>This requires that for 365 consecutive days (or 912 at level 0), insufficient purchasing activity occurs to
         meet the current level's prize pool target and trigger a new level start. A single transaction does not suffice:
         cumulative deposits must reach $\bar{P}_\ell$, which requires meaningful economic activity.</p>
-      <p>For any non-trivial accumulated pool (e.g., $P > 10$ ETH), the "buy low" attractor (increasing per-capita value
+      <p>Once the first level has completed and the pool holds meaningful capital, the "buy low" attractor (increasing per-capita value
         as players leave) makes failure to reach the target improbable under standard rational actor assumptions. The
         terminal jackpot (<a href="#section-41">Section 8.7</a>) strengthens this further, making buying individually +EV as the deadline
         approaches. But "improbable" is not "impossible," especially at higher levels during bear markets.</p>
@@ -3445,7 +3446,7 @@
         draws across all holders. The only way to become eligible is to hold tickets for the stalling level.</li>
       <li><strong>Terminal decimator (10%):</strong> 10% of remaining assets distributed via decimator, weighted by
         activity score. Since activity score depends on quest streak, and quest completion requires daily ticket
-        purchases, a player who maintained their streak through the stall will have both a strong decimator position and
+        or lootbox purchases, a player who maintained their streak through the stall will have both a strong decimator position and
         a large stack of tickets that are each individually +EV through the terminal jackpot.</li>
       <li><strong>Final sweep:</strong> After 30 days, unclaimed funds → vault and DGNRS reserves</li>
     </ol>
@@ -3459,16 +3460,16 @@
     <p><strong>Observation 8.4</strong> (Terminal Incentive Alignment). <em>For players already in the game, buying
         tickets for the stalling level dominates waiting throughout the stall (earlier purchases accumulate more jackpot
         draws). As the GAMEOVER deadline approaches with the pool underfilled, buying becomes individually +EV for any
-        actor with capital: the expected terminal payout per ticket vastly exceeds the ticket cost at any non-trivial
-        game age, and the probability of this payout materializing rises as the deadline nears. This is not a dominant
+        actor with capital: once the first level has completed, the expected terminal payout per ticket vastly exceeds
+        the ticket cost, and the probability of this payout materializing rises as the deadline nears. This is not a dominant
         strategy in the strict sense, since a buyer whose purchase was unnecessary (the game would have continued
         without them) is worse off than a non-buyer. But the expected value is positive under any assumption where
-        P(GAMEOVER) is non-trivial, and the asymmetry between terminal payout and ticket cost means "non-trivial" is a
+        P(GAMEOVER) is non-negligible, and the asymmetry between terminal payout and ticket cost means "non-negligible" is a
         very low bar.</em></p>
     <p>Consider the two outcomes:</p>
     <ul>
       <li><strong>GAMEOVER fires:</strong> The buyer's tickets are entered into a terminal jackpot funded by 90% of all
-        ETH locked in the protocol. At any non-trivial game age, this pool dwarfs the cost of the tickets. A game that
+        ETH locked in the protocol. Once the first level has completed, this pool dwarfs the cost of the tickets. A game that
         has run for 50+ levels may hold hundreds or thousands of ETH. The expected payout per ticket, even diluted
         across other next-level tickets, vastly exceeds the ticket cost.</li>
       <li><strong>GAMEOVER is averted:</strong> The buyer holds tickets in a live, continuing game. These tickets
@@ -4314,8 +4315,8 @@
     <p><strong>Uniqueness.</strong> Strict monotonicity of $\Phi$ guarantees uniqueness: a strictly decreasing function
       crosses the increasing identity $p \mapsto p$ at most once. With a finite population and step-function $B(p)$,
       the fixed-point set could be an interval rather than a singleton. However, if all fixed points lie within $[0,
-      \epsilon]$ for small $\epsilon$, the qualitative conclusion (p* is very small) survives. At any non-trivial game
-      age, the terminal payout asymmetry ensures this: even at $p = \epsilon$ for small $\epsilon$, the terminal
+      \epsilon]$ for small $\epsilon$, the qualitative conclusion (p* is very small) survives. Once the first level has completed,
+      the terminal payout asymmetry ensures this: even at $p = \epsilon$ for small $\epsilon$, the terminal
       component of $\pi_i$ may exceed $c_\ell$ for position holders with substantial $V^{surv}$, driving buying that
       keeps the fixed-point region close to zero.</p>
     <p><strong>Stability.</strong> The natural model for a 365-day window is continuous-time dynamics $dp/dt \propto
@@ -4331,9 +4332,9 @@
     <p>$$\frac{0.9 \cdot P^{total}}{N} + V^{surv} < c_\ell$$</p>
     <p>Since $V^{surv} > 0$ for any ticket (jackpot participation is unconditional), the binding constraint is:</p>
     <p>$$P^{total} < \frac{(c_\ell - V^{surv}) \cdot N}{0.9}$$</p>
-    <p>At any non-trivial game age, $P^{total}$ includes all historical deposits from all players, stETH yield
+    <p>Once the first level has completed, $P^{total}$ includes all historical deposits from all players, stETH yield
       accumulation, and locked futurepool capital. This dwarfs the right-hand side. The threshold is only binding at
-      very early levels (0-4) where $P^{total}$ is single-digit ETH and ticket prices are 0.01 ETH. At those levels,
+      the earliest levels (0-4) where $P^{total}$ is single-digit ETH and ticket prices are 0.01 ETH. At those levels,
       the entire pool can be filled by a single motivated buyer, making the bear market threat independently
       negligible.</p>
     <p><strong>Dilution check.</strong> Does the gap close before buying becomes -EV due to dilution? The gap requires
