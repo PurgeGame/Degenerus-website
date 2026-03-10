@@ -2334,7 +2334,8 @@
       incentives to grow the game. Rake-free poker had no way to pay for acquisition; Degenerus pays for it out of
       protocol mechanics that exist whether or not anyone is recruiting. And the protocol is structurally resistant to
       grinder takeover: every avenue for profit requires high variance (jackpots are lotteries, coinflips are 50/50,
-      Degenerette spins are high-volatility), so the boring, risk-averse grinder (the "nit") that kills poker ecosystems has no viable strategy here. Variance functions as a defensive moat against extractive capital
+      Degenerette spins are high-volatility), so the boring, risk-averse grinder (the "nit") that kills poker ecosystems
+      has no viable strategy here. Variance functions as a defensive moat against extractive capital
       (formalized in Observation 10.1).</p>
     <p>The cross-subsidy structure (<a href="#section-6">Section 2.3</a>) is the formal version of this dynamic:
       different player types,
@@ -2461,7 +2462,8 @@
     <p>Their EV advantage comes from three sources: the permanent +80% activity score bonus (which non-deity players can
       match through other components at maximum engagement), perpetuity (deity entries are drawn automatically every
       level, forever, requiring no further purchases), and a 20% bonus on all affiliate commissions paid at the end of
-      each level (capped at 5 ETH per level). A deity holder who goes inactive still accumulates jackpot entries and BURNIE draws indefinitely. The
+      each level (capped at 5 ETH per level). A deity holder who goes inactive still accumulates jackpot entries and
+      BURNIE draws indefinitely. The
       32-pass cap limits concentration.</p>
     <p><strong>Temporal capital injection.</strong> Deity and whale pass purchases deposit 25% into the current level's
       nextpool and 75% into the futurepool. Their returns (jackpot draws, BAF eligibility, free tickets per level,
@@ -2532,7 +2534,8 @@
         maintenance requires one full ticket per day at current prices.
         The daily liquid capital requirement for EV-maximizing play is strictly increasing in level.</em></p>
     <p><strong>The daily deposit requirement.</strong> The fully optimal EV path requires depositing fresh ETH every
-      day. Quest completion requires a new ETH purchase (ticket or lootbox) to maintain the streak, and withdrawing claimable ETH to
+      day. Quest completion requires a new ETH purchase (ticket or lootbox) to maintain the streak, and withdrawing
+      claimable ETH to
       cover it negates the rebuy bonus on those funds. This creates a continuous external capital requirement on top of
       escalating ticket prices, compounding the budget constraint for truly optimal play.</p>
     <p><strong>Observation 3.5</strong> (Bankroll Ruin under EV-Maximizing Play). <em>Even a player following a
@@ -2547,17 +2550,18 @@
         rebuilding it requires weeks of uninterrupted daily play.</em></p>
     <p><strong>Pass bootstrapping.</strong> New players start at 0.00 activity score and grind up from there. This early
       period, before score is high enough to meaningfully improve returns, is where the protocol is most vulnerable to
-      churn. Passes eliminate it. A pass does two things: it adds a direct bonus, and it guarantees floor-maximum credit
-      on the streak and purchase count components that a new player would otherwise earn over weeks of play. The
+      churn. Passes eliminate it. A pass does two things: it adds a direct bonus, and it guarantees maximum value
+      on the level streak and purchase count components that a new player would otherwise earn over months of play. The
       combined effect is substantial. A lazy pass (10-level bundle) puts a new player at 0.85 on day one. A 100-level
       whale bundle puts them at 1.15. A deity pass puts them at 1.55. All before any quest streak or affiliate bonus.
       The pass system is not just a whale product. It is an onramp that skips the grind entirely.</p>
     <p><strong>The skill gap (Corollary 3.1).</strong> Degenerus Protocol can be played at various levels of
       optimization, with an equilibrium breakeven point determined by activity score. Players who mismanage their
-      bankroll, break streaks, or fail to optimize their activity score get worse returns than the theoretical maximum.
-      Note that sub-optimal play can still be +EV. The surplus from sub-optimal play flows to the prize pools,
-      benefiting players closer to the optimum. The returns of the most optimized players are funded by +EV players'
-      mistakes and players who are not trying to maximize returns at all.</p>
+      bankroll, break streaks and recruit nobody fail to optimize their activity score, thus get worse returns than the
+      theoretical maximum.
+      Note that sub-optimal play can still be +EV. The surplus from sub-breakeven play flows to the prize pools,
+      benefiting players closer to the optimum. The returns of the most optimized players are enhanced by +EV players'
+      mistakes and funded by players who are not trying to maximize returns at all.</p>
     <hr />
     <h2 id="section-17">4. Mechanism Design Properties</h2>
     <p>Individual rationality for each player type was verified in <a href="#section-10">Section 3</a>, and the
@@ -2610,7 +2614,7 @@
       <li><strong>20% of the <a href="#section-dgnrs">DGNRS</a> token supply.</strong> DGNRS is a fixed-supply token
         that receives 25% of system stETH yield and 4 tickets per level with an activity score boost. Holders can burn
         DGNRS to extract their pro-rata share of accumulated yield and prizes. The remaining DGNRS is distributed to
-        players over time. My allocation is entirely dependent on the protocol's long-term success.</li>
+        players over time. The value of this coin is entirely dependent on the protocol's long-term success.</li>
       <li><strong>The vault</strong> (the protocol's treasury contract, with no discretionary withdrawal) receives: 25%
         of all stETH yield, 4 tickets per level with an activity score boost, the presale lootbox revenue above, 2
         million BURNIE, and affiliate commissions from unaffiliated players.</li>
@@ -4327,11 +4331,22 @@
       </ol>
     </div>
     <h4 id="section-dgnrs">The DGNRS Token</h4>
-    <p>DGNRS is a fixed-supply token that represents a claim on protocol yield. Holders receive 25% of all stETH yield
-      generated by the protocol, plus 4 tickets per level with an activity score boost. Holders can burn DGNRS to
-      extract their pro-rata share of accumulated yield and prizes. 20% of the total DGNRS supply is allocated to the
-      creator (see <a href="#section-19">Section 4.2</a>); the remaining 80% is distributed to players over time through
-      lootbox rewards. DGNRS value is entirely dependent on the protocol's long-term success and yield generation.</p>
+    <p>DGNRS is a fixed-supply token with no minting after deployment. 20% of supply is allocated to the creator at
+      deployment (see <a href="#section-19">Section 4.2</a>); the remaining 80% is distributed to players from
+      pre-allocated pools over time. Distribution sources span the full activity surface of the protocol:</p>
+    <ul>
+      <li><strong>Earlybird pool:</strong> bonding-curve bonuses to early purchasers during mints.</li>
+      <li><strong>Reward pool:</strong> coinflip bounty to the biggest BURNIE flip record holder; day-5 jackpot solo
+        bucket winners; trait bucket solo winners.</li>
+      <li><strong>Affiliate pool:</strong> per-level claims for qualifying affiliates (scaled by affiliate score); top
+        affiliate reward at each level transition; direct and upline commissions on whale bundle and deity pass
+        purchases.</li>
+      <li><strong>Whale pool:</strong> buyer rewards on whale bundle and deity pass purchases.</li>
+      <li><strong>Lootbox pool:</strong> 10% chance roll on every lootbox open, amount scaling with spend.</li>
+    </ul>
+    <p>Holders receive 25% of all stETH yield generated by the protocol and can burn DGNRS to extract their pro-rata
+      share of accumulated yield. All pools deplete over time with no replenishment. DGNRS value is entirely dependent
+      on the protocol's long-term success and yield generation.</p>
     <hr />
     <h2 id="section-59">Appendix D: Attack Vector Analysis</h2>
     <h4 id="section-60">Attack 1: Sybil Attack on Activity Score</h4>
@@ -4893,7 +4908,8 @@
                         that stress."
                         The paper develops this anti-correlation argument in detail. Read <a href="#section-39">Section
                           8.5</a> before concluding the mechanisms
-                        are redundant.</p>
+                        are redundant.
+                      </p>
                       <p>The composite failure probability estimates are explicitly described as "illustrative rather
                         than empirically
                         calibrated." The paper does not claim this probability is zero. It claims it is small relative
