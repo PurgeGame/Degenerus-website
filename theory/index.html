@@ -2907,17 +2907,16 @@
       doesn't disappear; it accrues to the remaining BURNIE supply and to the structural price floor (Observation 8.3 in
       <a href="#section-34">Section 8</a>), which ratchets upward with level progression as the ticket-price arbitrage
       opportunity grows. This
-      dynamic is cyclical: ticket prices reset to 0.04 ETH at x01, restarting the cycle. BURNIE utility peaks just before x00, which makes holding until then the obvious strategy. The actual optimum is equilibrium-dependent: if all players wait for x00, a mid-cycle decimator entry with low competition can yield more per BURNIE.
+      dynamic is cyclical: ticket prices reset to 0.04 ETH at x01, restarting the cycle. BURNIE utility peaks just
+      before x00, which makes holding until then the obvious strategy. The actual optimum is equilibrium-dependent: if
+      all players wait for x00, a mid-cycle decimator entry with low competition can yield more ETH per BURNIE.
     </p>
     <h3 id="section-28">6.2 The Decimator</h3>
     <p>The decimator is a BURNIE-burn-to-win-ETH mechanism that provides an alternative sink for BURNIE tokens. Players
       permanently destroy BURNIE to buy weighted entries in a pro-rata ETH distribution drawn from the futurepool. It
       fires at milestone levels throughout each 100-level cycle at 10% of the futurepool, and at century milestones
       (x00) at 30%.</p>
-    <p>Activity score determines both bucket assignment (win probability is 1/bucket, so lower is better) and burn
-      weight multiplier (1.0x at zero activity to 1.783x at maximum). A max-activity player at a x00 level gets bucket 2
-      and 1.783x weight, competing for 30% of the futurepool. A zero-activity player gets bucket 12 and 1.0x weight at
-      10%. The difference in expected ETH per BURNIE burned is dramatic.</p>
+    <p>Activity score determines both bucket assignment (win probability is 1/bucket) and burn weight multiplier. At a normal milestone, a max-activity player gets bucket 5 and ~1.8x weight; a zero-activity player gets bucket 12 and 1.0x weight. Both compete for 10% of the futurepool. This makes BURNIE's value to any individual player hard to calculate, as it depends on activity score and the actions of other players. Low-activity players who enter the decimator are effectively donating EV to higher-activity players. Both the complexity and the cross-subsidy are profit centers for the expert player.</p>
     <p><strong>Strategic choice: tickets vs decimator.</strong> BURNIE holders face a real decision: burn for tickets
       (1,000 BURNIE per ticket, 4 lottery entries each) or burn in the decimator (minimum 1,000 BURNIE, pro-rata ETH
       from futurepool). Neither is strictly dominant; the optimal choice depends on the player's activity score,
