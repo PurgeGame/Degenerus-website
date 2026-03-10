@@ -386,8 +386,8 @@
         <li class="toc-sub"><a href="#section-11">3.1 The Degen</a></li>
         <li class="toc-sub"><a href="#section-12">3.2 The Grinder</a></li>
         <li class="toc-sub"><a href="#section-13">3.3 The Whale</a></li>
-        <li class="toc-sub"><a href="#section-14">3.4 The Affiliate</a></li>
-        <li class="toc-sub"><a href="#section-15">3.5 The Hybrid</a></li>
+        <li class="toc-sub"><a href="#section-14">3.4 The Hybrid</a></li>
+        <li class="toc-sub"><a href="#section-15">3.5 The Affiliate</a></li>
         <li class="toc-sub"><a href="#section-16">3.6 Budget Constraints and Bankroll Risk</a></li>
         <li><a href="#section-17">4. Mechanism Design Properties</a></li>
         <li class="toc-sub"><a href="#section-18">4.1 Accounting Solvency</a></li>
@@ -2399,7 +2399,7 @@
     <p><em>Lootbox rates reflect ticket EV at the stated activity level. ETH ticket purchases include FLIP rebates (100
         for new deposits, 200 for partial recycling, 300 for full recycling). Auto-rebuy multipliers are fixed and forgo
         the BURNIE rebate that manual purchases receive.</em></p>
-    <p><em>These figures are gameplay-only returns and exclude <a href="#section-14">affiliate</a> commission income.
+    <p><em>These figures are gameplay-only returns and exclude <a href="#section-15">affiliate</a> commission income.
         Most engaged players will earn some commission from casual referrals; dedicated recruiters earn substantially
         more.</em></p>
     <p><strong>Within-level timing advantage.</strong> A ticket bought on day 1 of the jackpot phase qualifies for all 5
@@ -2475,7 +2475,25 @@
       not yet appreciated. That early BURNIE is cheap by design: supply is low, price is low, and every subsequent
       level's inflows push the price up. The structural advantage of early entry is not just more draws but more BURNIE
       per draw, at the lowest price it will ever be.</p>
-    <h3 id="section-14">3.4 The Affiliate</h3>
+    <h3 id="section-14">3.4 The Hybrid</h3>
+    <p>The typology above presents clean archetypes. Reality is messier. Most players are not pure degens or pure
+      grinders but somewhere in between. The <strong>hybrid</strong> is anyone on this spectrum: a broad category
+      spanning from near-degen (plays for fun, likes that winning is possible) to near-grinder (plays to win, likes that
+      it's fun). Some play near-optimally with occasional leaks. Others intend to play optimally but are
+      underbankrolled, miss quest days, open lootboxes below breakeven activity score, or play Degenerette for
+      entertainment when they "should" be waiting. As a population they are probably slightly negative on aggregate, but
+      the distribution is wide and many are consistent winners over meaningful samples.</p>
+    <p>Crucially, when a hybrid wins, it feels <em>earned</em>. A lottery winner got lucky. A hybrid who maintained
+      their activity score, timed their lootbox purchases, and built their streak knows their decisions contributed to
+      the outcome. That sense of agency is a distinct source of entertainment value that pure gambling cannot provide.
+    </p>
+    <p><strong>Why hybrids matter for the system:</strong> A large portion will cluster near breakeven: engaged enough
+      to play consistently but not optimized enough to extract meaningfully. These are the ideal participants. They
+      contribute volume and pool deposits while taking little out, and they stay because the game feels fair and
+      genuinely enjoyable. Their competitive motivation keeps them engaged more reliably than a pure degen, while
+      imperfect execution contributes surplus to the pool. They are getting real value in return: real entertainment,
+      real monetary returns, and real progression.</p>
+    <h3 id="section-15">3.5 The Affiliate</h3>
     <p>Affiliate activity is a spectrum, not a distinct player type. Most engaged players will refer at least a few
       friends and earn some commission income as a natural byproduct. Dedicated affiliates who treat recruitment as
       their primary strategy sit at one end; a player who casually refers a friend sits at the other. The
@@ -2506,24 +2524,6 @@
         variance-seeking affiliates remain.</em> Affiliates who prefer certainty can opt for "nit mode": 50% reduced
       commission with no coinflip. This halves the nominal rate but eliminates variance entirely, letting risk-averse
       affiliates participate without the FLIP filter selecting them out.</p>
-    <h3 id="section-15">3.5 The Hybrid</h3>
-    <p>The typology above presents clean archetypes. Reality is messier. Most players are not pure degens or pure
-      grinders but somewhere in between. The <strong>hybrid</strong> is anyone on this spectrum: a broad category
-      spanning from near-degen (plays for fun, likes that winning is possible) to near-grinder (plays to win, likes that
-      it's fun). Some play near-optimally with occasional leaks. Others intend to play optimally but are
-      underbankrolled, miss quest days, open lootboxes below breakeven activity score, or play Degenerette for
-      entertainment when they "should" be waiting. As a population they are probably slightly negative on aggregate, but
-      the distribution is wide and many are consistent winners over meaningful samples.</p>
-    <p>Crucially, when a hybrid wins, it feels <em>earned</em>. A lottery winner got lucky. A hybrid who maintained
-      their activity score, timed their lootbox purchases, and built their streak knows their decisions contributed to
-      the outcome. That sense of agency is a distinct source of entertainment value that pure gambling cannot provide.
-    </p>
-    <p><strong>Why hybrids matter for the system:</strong> A large portion will cluster near breakeven: engaged enough
-      to play consistently but not optimized enough to extract meaningfully. These are the ideal participants. They
-      contribute volume and pool deposits while taking little out, and they stay because the game feels fair and
-      genuinely enjoyable. Their competitive motivation keeps them engaged more reliably than a pure degen, while
-      imperfect execution contributes surplus to the pool. They are getting real value in return: real entertainment,
-      real monetary returns, and real progression.</p>
     <h3 id="section-16">3.6 Budget Constraints and Bankroll Risk</h3>
     <p>The EV-maximizing strategies described above assume players can execute them without resource constraints. In
       practice, <strong>budget constraints</strong> fundamentally alter the viability of EV-maximizing play.</p>
@@ -3625,10 +3625,10 @@
       unknown.
       Some may buy one ticket and never return. Some may keep buying one ticket per level once the jackpot has crossed
       whatever psychological threshold brought them in. Some may discover they enjoy the game and convert into hybrids
-      (<a href="#section-15">Section 3.5</a>). There is no precedent for a guaranteed, ever-growing jackpot at this
+      (<a href="#section-14">Section 3.4</a>). There is no precedent for a guaranteed, ever-growing jackpot at this
       scale, so the paper will not
       pretend to predict the behavior. What can be said is that every one of those tickets feeds the ratchet.</p>
-    <p>The affiliate program (<a href="#section-14">Section 3.4</a>) provides the bridge. At sufficient jackpot scale,
+    <p>The affiliate program (<a href="#section-15">Section 3.5</a>) provides the bridge. At sufficient jackpot scale,
       the commission opportunity
       for anyone who can deliver this new audience becomes enormous. Anyone who builds a front end that accepts dollars,
       handles the crypto plumbing behind the scenes, and acts as
@@ -5419,7 +5419,7 @@
 
                       <h3>F.27 "The affiliate day-5 bonus creates incentive misalignment"</h3>
                       <p>Affiliates earn a 10% bonus commission on day-5 ticket purchases, which <a
-                          href="#section-14">Section 3.4</a> explicitly identifies as
+                          href="#section-15">Section 3.5</a> explicitly identifies as
                         "the lowest-EV decision you can make in the game." The objection is that affiliates are
                         incentivized to push the
                         worst possible action on their referrals. This is correctly aligned incentives from a system
