@@ -161,7 +161,7 @@
 
 <table>
   <tr><th>Factor Not Captured in Lootbox EV</th><th>Effect</th></tr>
-  <tr><td><strong>Affiliate rakeback</strong></td><td>If the agent used an affiliate code with rakeback > 0%, a portion of the affiliate commission is returned to the buyer as BURNIE FLIP credits. This is value on top of the lootbox contents.</td></tr>
+  <tr><td><strong>Affiliate kickback</strong></td><td>If the agent used an affiliate code with kickback > 0%, a portion of the affiliate commission is returned to the buyer as BURNIE FLIP credits. This is value on top of the lootbox contents.</td></tr>
   <tr><td><strong>Quest rewards</strong></td><td>Every ticket purchase can complete a quest (Slot 0 = MINT_ETH <a class="src" href="https://github.com/PurgeGame/degenerus-contracts/blob/main/contracts/DegenerusQuests.sol#L383">L383</a>), awarding 100-200 BURNIE per day. This BURNIE has value independent of the lootbox EV calculation.</td></tr>
   <tr><td><strong>DGNRS drops</strong></td><td>Lootboxes can award DGNRS tokens. DGNRS is backed by ETH + stETH + BURNIE + WWXRP reserves and its market value fluctuates. The lootbox EV calculation uses a fixed internal valuation for DGNRS, which may be higher or lower than its actual trading or backing value at any given time.</td></tr>
   <tr><td><strong>Boon utility value</strong></td><td>Boons (quest shields, deity pass discounts, stat boosts) have real economic value that is difficult to price precisely. Shields alone prevent streak resets worth weeks of activity score.</td></tr>
@@ -195,7 +195,7 @@
   <tr><th>Parameter</th><th>Value</th></tr>
   <tr><td>Lootbox EV</td><td>135% <a class="src" href="https://github.com/PurgeGame/degenerus-contracts/blob/main/contracts/modules/DegenerusGameLootboxModule.sol#L480">L480</a></td></tr>
   <tr><td>Per 1 ETH spent on lootboxes</td><td>1.35 ETH expected return in game assets</td></tr>
-  <tr><td>Net margin</td><td>35%+ per lootbox cycle (lootbox EV only; higher in aggregate with rakeback, quest rewards, DGNRS drops)</td></tr>
+  <tr><td>Net margin</td><td>35%+ per lootbox cycle (lootbox EV only; higher in aggregate with kickback, quest rewards, DGNRS drops)</td></tr>
   <tr><td>Daily cost</td><td>~0.01-0.24 ETH ticket + lootbox spend + gas</td></tr>
   <tr><td>Return form</td><td>Future tickets subject to jackpot variance. Enable afKing mode for automatic compounding at 45% bonus.</td></tr>
 </table>
@@ -220,7 +220,7 @@
 <h3>4a. Setup</h3>
 <table>
   <tr><th>Step</th><th>Detail</th></tr>
-  <tr><td>Create affiliate code</td><td>Call <code>createAffiliateCode(bytes32 code, uint8 rakebackPct)</code> <a class="src" href="https://github.com/PurgeGame/degenerus-contracts/blob/main/contracts/DegenerusAffiliate.sol#L288">DegenerusAffiliate.sol:288</a>. One-time, permanent, one per address. <strong>Pre-launch, code creation is free: no gas, no ETH required.</strong> Post-launch, the transaction requires ETH for L1 gas (the function itself has no protocol fee).</td></tr>
+  <tr><td>Create affiliate code</td><td>Call <code>createAffiliateCode(bytes32 code, uint8 kickbackPct)</code> <a class="src" href="https://github.com/PurgeGame/degenerus-contracts/blob/main/contracts/DegenerusAffiliate.sol#L288">DegenerusAffiliate.sol:288</a>. One-time, permanent, one per address. <strong>Pre-launch, code creation is free: no gas, no ETH required.</strong> Post-launch, the transaction requires ETH for L1 gas (the function itself has no protocol fee).</td></tr>
   <tr><td>Capital requirement</td><td><strong>Pre-launch: zero.</strong> Post-launch: enough ETH for gas on a single L1 transaction. Once commissions start accruing, a small amount of ETH is needed to claim initial rewards and become self-sustaining, or the agent can borrow a small amount to bootstrap. No protocol-level deposit or stake. No ongoing capital needed beyond gas.</td></tr>
   <tr><td>Lock-in</td><td>Once a human uses your code, ALL their future ETH purchases generate commission for you forever. The referral assignment is permanent and cannot be changed.</td></tr>
 </table>
@@ -241,7 +241,7 @@
 <h3>4c. Tier Distribution</h3>
 <table>
   <tr><th>Tier</th><th>Recipient</th><th>Share of Scaled Amount</th></tr>
-  <tr><td>Direct</td><td>Code owner</td><td>76-100% (base minus rakeback)</td></tr>
+  <tr><td>Direct</td><td>Code owner</td><td>76-100% (base minus kickback)</td></tr>
   <tr><td>Upline 1</td><td>Your referrer</td><td>20%</td></tr>
   <tr><td>Upline 2</td><td>Your referrer's referrer</td><td>4%</td></tr>
 </table>
@@ -492,8 +492,8 @@
     <label for="reg-code">Affiliate Code</label>
     <input id="reg-code" type="text" maxlength="12" placeholder="3-12 alphanumeric characters" autocomplete="off" spellcheck="false" />
 
-    <label for="reg-rakeback">Rakeback %</label>
-    <select id="reg-rakeback">
+    <label for="reg-kickback">Kickback %</label>
+    <select id="reg-kickback">
       <option value="0">0% - keep all commission</option>
       <option value="5">5%</option>
       <option value="10">10%</option>
@@ -596,7 +596,7 @@
       return;
     }
 
-    var rakeback = parseInt($('reg-rakeback').value, 10);
+    var kickback = parseInt($('reg-kickback').value, 10);
     var pledgeRaw = parseFloat($('reg-pledge').value) || 0;
     var pledgeEth = Math.max(0, Math.round(pledgeRaw * 1000) / 1000);
     var timestamp = new Date().toISOString();
@@ -628,7 +628,7 @@
     var messageParts = [
       'Degenerus Affiliate Registration',
       '',
-      'I am registering affiliate code "' + code + '" with ' + rakeback + '% rakeback for address ' + connectedAddress + '.',
+      'I am registering affiliate code "' + code + '" with ' + kickback + '% kickback for address ' + connectedAddress + '.',
     ];
     if (pledgeEth > 0) {
       messageParts.push('ETH pledge: ' + pledgeEth + ' (non-binding statement of intent).');
@@ -660,7 +660,7 @@
         body: JSON.stringify({
           address: connectedAddress,
           code: code,
-          rakebackPct: rakeback,
+          kickbackPct: kickback,
           pledgeEth: pledgeEth,
           message: message,
           signature: signature,

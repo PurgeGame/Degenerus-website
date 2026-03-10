@@ -224,7 +224,7 @@
 
   function createAffiliate() {
     var input = $('unav-aff-input');
-    var select = $('unav-aff-rakeback');
+    var select = $('unav-aff-kickback');
     if (!input) return;
 
     if (!address || !discord) {
@@ -243,7 +243,7 @@
     if (btn) btn.disabled = true;
     setAffStatus('Saving...', '');
 
-    api('/api/affiliate/config', { method: 'POST', body: { code: code, rakebackBps: bps } })
+    api('/api/affiliate/config', { method: 'POST', body: { code: code, kickbackBps: bps } })
       .then(function (resp) {
         if (player && resp.player) {
           player.referral_code = resp.player.referral_code;
@@ -441,7 +441,7 @@
     createDiv.appendChild(inp);
 
     var sel = document.createElement('select');
-    sel.id = 'unav-aff-rakeback';
+    sel.id = 'unav-aff-kickback';
     [0, 500, 1000, 1500, 2000, 2500].forEach(function (bps) {
       var opt = document.createElement('option');
       opt.value = bps;
