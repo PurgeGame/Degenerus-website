@@ -3306,8 +3306,8 @@
       discretionary gambling spending. The game reaches a later level where prize pool targets are higher and ticket
       prices have escalated. Community channels thin out.
       Affiliates stop recruiting. The narrative shifts from "innovative game" to "relic of the last cycle."</p>
-    <p><strong>Why it's dangerous.</strong> At higher levels, the daily cost of maintaining a quest streak is higher
-      (tickets cost 0.04–0.16 ETH at non-milestone levels). The prize pool targets are larger. The progression
+    <p><strong>Why it's dangerous.</strong> At higher levels, the daily cost of maintaining a quest streak (in ETH) is
+      higher. The prize pool targets are larger. The progression
       guarantors may all weaken simultaneously, because they are not truly independent: they are all driven by player
       spending, which correlates with crypto market sentiment. A severe bear market is exactly the scenario where all
       guarantors fail together, due to a common cause. This is not a paranoid edge case. It is the most natural failure
@@ -3329,7 +3329,7 @@
       365-day GAMEOVER window expires: the game completes the level on autopilot, with literal zero participation, and
       the clock resets. The next level starts with a substantially drained futurepool, weakening the autopilot for the
       following cycle. But the first cycle bought an entire year. In a mature game where the futurepool comfortably
-      exceeds 1.5x the level target, even total abandonment by every human player takes at least two years to produce
+      exceeds 1.5x the level target, even total abandonment by every human player takes nearly two years to produce
       GAMEOVER: one year consumed by the autopilot completing a level, then a second year where the depleted futurepool
       can no longer close the gap alone. This is the floor. Any human activity at all extends it further.</p>
     <p><strong>Who actually leaves?</strong> The bear market scenario implicitly assumes that Degenerus players exit en
@@ -3360,81 +3360,36 @@
       capital can recover in the
       worst case.</p>
     <p><strong>The probability equilibrium.</strong> Standard finite-game theory predicts unraveling: if players know
-      the game ends at round $T$, defection dominates at $T$, therefore at $T-1$, cascading backward to round 1. Three
+      the game ends at round $T$, defection dominates at $T$, therefore at $T-1$, cascading backward to round 1. Two
       structural features prevent this cascade in Degenerus.</p>
     <p><em>The terminal round is not common knowledge.</em> GAMEOVER is triggered by a state condition (365 days without
       level completion), not a fixed round number. No player can identify the "last round" in advance. The probability
       of upcoming GAMEOVER at any block depends on observable, on-chain state variables: time elapsed since level start,
-      current
-      nextpool fill percentage, futurepool drip rate, and number of active ticket holders. You cannot backward-induct
-      from a round whose identity is unknown.</p>
-    <p><em>The dominant action near the endpoint is cooperation, not defection.</em> In a standard finite game, the
-      rational move in the last round is to defect. In Degenerus, the rational move as GAMEOVER approaches is to buy
-      tickets, because the terminal jackpot (<a href="#section-41">Section 8.7</a>) pays 90% of all locked ETH to
-      next-level ticket holders.
-      The total prize pools represent obligations toward both current-level and future-level ticket holders. In the
-      failure state, all of the equity owed to future ticket holders is redirected to next-level holders, divided among
-      however many next-level tickets exist. For it to be rational not to buy, that per-ticket share of the redirected
-      equity would have to be worth less than a ticket. Once even a single level has completed, this is essentially
-      impossible:
-      the future-ticket equity spans potentially dozens of levels of accumulated play and dwarfs the total cost of all
-      tickets that would need to be sold to complete the level.</p>
-    <p>And terminal arbitrageurs do not need to complete the level by themselves. Future ticket holders have locked
-      equity that only pays out if the game continues past their target levels. Once the stall becomes visible enough
-      to threaten that equity, they step in and defend it with real current-level purchases. They do not even need to
-      buy tickets to do so: lootboxes are +EV for engaged players, and a portion of each lootbox purchase flows into
-      the nextpool. Future ticket holders can defend their equity while playing a +EV game the entire time. The
-      terminal arbitrageurs only need to buy enough to close the gap to the point where this defense activates.</p>
-    <p>In both cases, buying is the "selfish" response, and it is simultaneously the cooperative action: 90% of each
-      ticket purchase flows into the nextpool, which is the pool that must reach its target to avert GAMEOVER.</p>
-    <p><em>The terminal action is self-negating.</em> Buying tickets to claim terminal value funds the pool that
-      prevents the terminal event. The act of preparing for the end prevents the end. This creates a self-correcting
-      equilibrium. Define $p(t)$ as the probability of GAMEOVER at time $t$, conditional on the current state. If $p$
-      rises, more agents buy tickets (the terminal EV increases), which reduces the gap to the level target, which
-      pushes $p$ back down. If $p$ falls, fewer agents buy for terminal reasons, but mechanical flows and normal play
-      continue filling the pool. The equilibrium maps through a continuous, decreasing function:</p>
-    <p>$$p^* = \Phi(p^*)$$</p>
-    <p>where $\Phi$ takes the current probability $p$, computes the best-response purchasing behavior $B(p)$, reduces
-      the gap by $0.9 c_\ell \cdot B(p)$, and returns the updated probability of GAMEOVER given the reduced gap.
-      Because $\Phi$ is decreasing (higher perceived risk triggers more buying, which reduces actual risk), and the
-      identity function $p \mapsto p$ is increasing, the fixed point $p^*$ is unique.</p>
-    <p>Once the first level has completed, $p^*$ is very small. Even a $p^*$ of 5% makes terminal buying massively +EV,
-      which
-      drives purchases that push $p^*$ well below 5%. The basin of attraction is wide because the asymmetry between
-      terminal payout and ticket cost is extreme. The game does not sit on a knife-edge. It sits in a deep well.</p>
-    <p>This is not circular reasoning. It is an equilibrium property. No individual buyer intends to save the game.
-      Each buys because the trade is +EV in expectation: if GAMEOVER fires, the terminal payout dwarfs the ticket
-      cost; if GAMEOVER is averted, the ticket participates in normal jackpot draws. No single buyer is pivotal. Each
-      buyer's contribution to the nextpool is a small fraction of the total gap. The coordination problem dissolves
-      because no coordination is needed. Many individually rational purchases collectively fill the pool. The terminal
-      jackpot functions as a coordination device whose primary value is that it never needs to be exercised.</p>
-    <p>For completeness: this equilibrium breaks down only when the accumulated pool is so small that terminal payouts
-      per ticket do not exceed ticket costs even at $p = 1$. This requires $P^{total} &lt; c_\ell \cdot N / 0.9$, which
-      is satisfied only at very early levels (0–4) with trivially small pools and trivially low ticket prices. At those
-      levels, the bear market threat is independently negligible because a single motivated buyer can fill the entire
-      pool. At any level where the bear market poses a genuine threat, the accumulated pool is large enough for the
-      self-referential equilibrium to hold with force. (<a href="#appendix-e">Appendix E</a> develops the formal
-      details: fixed-point
-      properties, stability analysis, threshold conditions, and edge cases including the BURNIE dilution scenario.)</p>
+      current nextpool fill percentage, futurepool drip rate, and number of active ticket holders. You cannot
+      backward-induct from a round whose identity is unknown.</p>
+    <p><em>The dominant action near the endpoint is cooperation, not defection.</em> As GAMEOVER approaches, buying
+      tickets is individually rational: the terminal jackpot (<a href="#section-41">Section 8.7</a>) pays 90% of all
+      locked ETH to next-level ticket holders, and the act of positioning for that payout is the act that funds the
+      pool and prevents the event. Section 8.7 develops the full equilibrium analysis and the math.</p>
     <p><strong>The conjunction requirement.</strong> For GAMEOVER to occur, every mechanism that could close the gap
       between the nextpool and its target must fail simultaneously for 365 consecutive days. These mechanisms operate on
       different economic drivers:</p>
     <ol>
       <li><strong>Mechanical flows</strong> (futurepool drip, 15% transfer, ticket conversion carryover). Driver:
-        accumulated capital. Fails only if the futurepool has been depleted below ~1.5x the level target before the
+        accumulated capital. Sufficient to prevent failure on its own unless the futurepool has been depleted below
+        ~1.5x the level target before the
         stall begins.</li>
-      <li><strong>Terminal arbitrage</strong> (rational buying as GAMEOVER approaches, as developed above). Driver:
+      <li><strong>Terminal arbitrage</strong> (rational buying as GAMEOVER approaches; see <a href="#section-41">Section
+          8.7</a>). Driver:
         rational capital with blockchain access. The expected value of buying increases as P(GAMEOVER) rises over the
         course of the stall. Fails only if no actor on the Ethereum network responds to an increasingly attractive
         trade as the deadline approaches.</li>
       <li><strong>Entertainment demand</strong> (degens gambling for fun). Driver: behavioral persistence of gambling.
-        Fails only if every entertainment-motivated player quits simultaneously for 365 consecutive days.</li>
+        This is a basic fact of human nature. The failure case is that some other gambling venue attracts our players.
+      </li>
       <li><strong>Affiliate recruitment</strong> (new player acquisition). Driver: social networks and referral
-        incentives. Fails only if zero new players enter for a full year, despite affiliates having an increasingly
+        incentives. Fails only if all affiliates simultaneously fail at their jobs, despite having an increasingly
         compelling pitch: hundreds of ETH locked, almost nobody competing for it.</li>
-      <li><strong>Passive yield growth</strong> (stETH accruing on locked ETH). Driver: Ethereum staking demand. Fails
-        only if ETH staking yield permanently reaches zero, which is incompatible with the continued operation of the
-        Ethereum network.</li>
       <li><strong>Competitive dynamics</strong> (alternatives collapsing, raising Degenerus's relative attractiveness).
         Driver: bear market attrition of competing products. Most on-chain alternatives depend on token emissions,
         leverage, or growth assumptions that collapse reflexively in downturns. Degenerus pools are funded by deposits
@@ -3443,21 +3398,13 @@
         considerably. Fails only if superior on-chain alternatives emerge and thrive during the same bear market that
         is supposed to be killing Degenerus.</li>
     </ol>
-    <p>These cluster into three groups with different drivers. Mechanisms 1 and 5 depend on accumulated capital, not
-      current human activity. They operate as long as the smart contract is deployed and Ethereum produces blocks.
-      Mechanisms 3 and 4 depend on player spending, which correlates with market sentiment. Mechanisms 2 and 6 depend
-      on rational capital allocation, which is <em>strengthened</em> by the same conditions that weaken 3 and 4. The
-      cross-cluster correlation is negative: the worse the bear market gets, the stronger the rational and competitive
-      mechanisms become. Requiring all six to fail simultaneously for an unbroken year, with this correlation structure,
-      produces a composite probability that is vanishingly small once even a single level has completed.</p>
-    <p><strong>The last line of defense.</strong> Even if every active community decays, every frontend goes offline,
-      and
-      every human player quits, the terminal arbitrage remains visible on a public blockchain. Any agent capable of
-      reading contract state and submitting a transaction can evaluate the trade: buy tickets at $c_\ell$, receive
-      expected terminal value of $0.9 \cdot P^{total} / N$. The game's final defense is not community sentiment. It
-      is a transparent, growing arbitrage opportunity on an immutable contract, visible to anyone with a block explorer.
-      For the game to die, this opportunity must grow more attractive by the day and never be taken, on a public,
-      permissionless blockchain, for the duration of the stall.</p>
+    <p>These cluster into three groups with different drivers. Mechanism 1 depends on accumulated capital, not current
+      human activity. It operates as long as the smart contract is deployed and Ethereum produces blocks. Mechanisms 3
+      and 4 depend on player spending, which correlates with market sentiment. Mechanisms 2 and 5 depend on rational
+      capital allocation, which is <em>strengthened</em> by the same conditions that weaken 3 and 4. The cross-cluster
+      correlation is negative: the worse the bear market gets, the stronger the rational and competitive mechanisms
+      become. Requiring all five to fail simultaneously for an unbroken year, with this correlation structure, produces
+      a composite probability that is vanishingly small once even a single level has completed.</p>
     <p><strong>Honest assessment.</strong> A prolonged bear market stall is uncomfortable. Players with future tickets
       watch their locked value sit idle. Progression slows to mechanical drip speed. The community thins. This is a
       real cost of participation, and we do not minimize it. Temporary illiquidity during a stall is a genuine risk for
@@ -3490,11 +3437,12 @@
     </div>
     <p><strong>The terminal growth problem.</strong> There is a second, more exotic failure mode: the game succeeds
       <em>too well</em>. A sufficiently long-running game accumulates an ever-increasing fraction of available ETH. At
-      some distant level, the ETH required to start the next level exceeds the ETH that remains outside the system. This
+      some distant level, the ETH required to start the next level exceeds the ETH that will remain outside the system.
+      This
       is terminal by construction. If the game ever reaches this point, it represents the greatest success in the
       history of gaming, but it is still terminal. The practical relevance is negligible (this requires the protocol to
-      absorb a substantial fraction of all circulating ETH), but the theoretical completeness matters: the system has a
-      theoretical upper bound on lifespan even under maximally favorable conditions. At that scale, Ethereum
+      absorb a substantial fraction of all circulating ETH), but the theoretical completeness matters. At that scale,
+      Ethereum
       protocol-level interventions would probably occur first.
     </p>
     <h3 id="section-41">8.7 Endgame Distribution</h3>
@@ -3568,27 +3516,58 @@
       survival value) as long as total protocol ETH exceeds ~1,333 ETH, requiring the futurepool to be just 0.46x the
       level target. At P(GAMEOVER) = 20%, which is plausible deep into a stall, the required futurepool drops to
       near zero. The simulation's actual 1.2x-1.6x range is 2.5-3.5x what the math requires at P = 10%.</p>
-    <p><strong>The convergence paradox.</strong> The terminal mechanism creates a productive self-reference. Buying is
-      dominant if GAMEOVER will fire but marginally negative for a pure outsider if it doesn't. If enough actors buy to
-      prevent GAMEOVER, buying was -EV, so they should not have bought. But if they don't buy, GAMEOVER becomes likely
-      and buying becomes massively +EV.</p>
-    <p>The paradox dissolves at the individual level. No single buyer is pivotal: each buyer's nextpool contribution is
-      a small fraction of the total gap. No buyer needs to solve the coordination problem. They only need the expected
-      value across both states to exceed the ticket cost, and as shown above, it does under a wide range of assumptions.
-      With fewer eligible tickets (as expected during a stall), the math gets more favorable, not less: at 100 eligible
-      tickets, even a 0.5% chance of GAMEOVER justifies buying on terminal value alone.</p>
-    <p>Many individually-rational purchases collectively fill the pool. If arb capital alone is insufficient, future
-      ticket holders complete the defense. They have locked equity that only unlocks if the game continues, giving them
-      additional motivation beyond the terminal payout arithmetic. For these players, buying has three possible
-      outcomes: (1) GAMEOVER fires and their new tickets pay out via terminal distribution (the new purchase is +EV by
-      the same math that attracted arbs, even though their locked equity from earlier levels is lost); (2) their
-      purchase was marginal and prevented GAMEOVER, saving their locked equity; (3) the game would have continued
-      without them, making the purchase unnecessary. States (1) and (2) are +EV. State (3) is the only negative, but the
-      more likely it is, the less danger existed to begin with.</p>
-    <p>The resulting equilibrium has P(GAMEOVER) very low but not zero. The protocol does not guarantee survival. But
-      the incentive to buy is strongest precisely when the game most needs buyers, so the equilibrium settles with heavy
-      buying and a residual GAMEOVER probability near zero. Each buyer profits individually. No coordination is
-      required.</p>
+    <p><em>The dominant action near the endpoint is cooperation, not defection.</em> In a standard finite game, the
+      rational move in the last round is to defect. In Degenerus, the rational move as GAMEOVER approaches is to buy
+      tickets: the terminal jackpot pays 90% of all locked ETH to next-level ticket holders. In the failure state, all
+      equity owed to future ticket holders is redirected to next-level holders, divided among however many next-level
+      tickets exist. For it to be rational not to buy, that per-ticket share would have to be worth less than a ticket.
+      Once even a single level has completed, this is essentially impossible: the future-ticket equity spans potentially
+      dozens of levels of accumulated play and dwarfs the total cost of tickets that would need to be sold to complete
+      the level.</p>
+    <p>And terminal arbitrageurs do not need to complete the level by themselves. Future ticket holders have locked
+      equity that only pays out if the game continues past their target levels. Once the stall becomes visible enough
+      to threaten that equity, they step in and defend it with real current-level purchases. They do not even need to
+      buy tickets: lootboxes are +EV for engaged players, and a portion of each lootbox purchase flows into the
+      nextpool. Future ticket holders can defend their equity while playing a +EV game the entire time. The terminal
+      arbitrageurs only need to buy enough to close the gap to the point where this defense activates.</p>
+    <p>In both cases, buying is the "selfish" response, and it is simultaneously the cooperative action: 90% of each
+      ticket purchase flows into the nextpool, which is the pool that must reach its target to avert GAMEOVER.</p>
+    <p><strong>The convergence paradox.</strong> Buying is dominant if GAMEOVER will fire but marginally negative for a
+      pure outsider if it doesn't. If enough actors buy to prevent GAMEOVER, buying was -EV, so they should not have
+      bought. But if they don't buy, GAMEOVER becomes likely and buying becomes massively +EV.</p>
+    <p><em>The terminal action is self-negating.</em> Buying to claim terminal value funds the pool that prevents the
+      terminal event. The act of preparing for the end prevents the end. This creates a self-correcting equilibrium.
+      Define $p(t)$ as the probability of GAMEOVER at time $t$, conditional on the current state. If $p$ rises, more
+      agents buy tickets (the terminal EV increases), which reduces the gap to the level target, which pushes $p$ back
+      down. If $p$ falls, fewer agents buy for terminal reasons, but mechanical flows and normal play continue filling
+      the pool. The equilibrium maps through a continuous, decreasing function:</p>
+    <p>$$p^* = \Phi(p^*)$$</p>
+    <p>where $\Phi$ takes the current probability $p$, computes the best-response purchasing behavior $B(p)$, reduces
+      the gap by $0.9 c_\ell \cdot B(p)$, and returns the updated probability of GAMEOVER given the reduced gap.
+      Because $\Phi$ is decreasing (higher perceived risk triggers more buying, which reduces actual risk), and the
+      identity function $p \mapsto p$ is increasing, the fixed point $p^*$ is unique.</p>
+    <p>Once the first level has completed, $p^*$ is very small. Even a $p^*$ of 5% makes terminal buying massively +EV,
+      which drives purchases that push $p^*$ well below 5%. The basin of attraction is wide because the asymmetry
+      between terminal payout and ticket cost is extreme. The game does not sit on a knife-edge. It sits in a deep
+      well.</p>
+    <p>This is not circular reasoning. It is an equilibrium property. No individual buyer intends to save the game.
+      Each buys because the trade is +EV in expectation: if GAMEOVER fires, the terminal payout dwarfs the ticket
+      cost; if GAMEOVER is averted, the ticket participates in normal jackpot draws. No single buyer is pivotal. Each
+      buyer's contribution to the nextpool is a small fraction of the total gap. The coordination problem dissolves
+      because no coordination is needed. Many individually rational purchases collectively fill the pool. The terminal
+      jackpot functions as a coordination device whose primary value is that it never needs to be exercised.</p>
+    <p>For completeness: this equilibrium breaks down only when the accumulated pool is so small that terminal payouts
+      per ticket do not exceed ticket costs even at $p = 1$. This requires $P^{total} &lt; c_\ell \cdot N / 0.9$,
+      satisfied only at very early levels (0–4) where a single motivated buyer can fill the entire pool anyway.
+      (<a href="#appendix-e">Appendix E</a> develops the formal details: fixed-point properties, stability analysis,
+      threshold conditions, and edge cases including the BURNIE dilution scenario.)</p>
+    <p>If arb capital alone is insufficient, future ticket holders complete the defense. They have locked equity that
+      only unlocks if the game continues, giving them additional motivation beyond the terminal payout arithmetic. For
+      these players, buying has three possible outcomes: (1) GAMEOVER fires and their new tickets pay out via terminal
+      distribution (the new purchase is +EV by the same math that attracted arbs, even though their locked equity from
+      earlier levels is lost); (2) their purchase was marginal and prevented GAMEOVER, saving their locked equity;
+      (3) the game would have continued without them, making the purchase unnecessary. States (1) and (2) are +EV.
+      State (3) is the only negative, but the more likely it is, the less danger existed to begin with.</p>
     <p>The terminal decimator plays a supporting role. Players competing for better decimator positioning must maintain
       quest streaks, which requires daily ticket purchases, which funds the nextpool. Players chasing the 10% decimator
       payout are simultaneously closing the gap that would trigger it.</p>
