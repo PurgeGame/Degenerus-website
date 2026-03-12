@@ -195,6 +195,33 @@
       border-color: var(--design-property-border)
     }
 
+    .dfn {
+      cursor: help;
+      border-bottom: 1px dotted #95a5a6;
+      position: relative;
+      display: inline
+    }
+
+    .dfn:hover::after {
+      content: attr(data-def);
+      position: absolute;
+      bottom: 1.4em;
+      left: 0;
+      background: #2c3e50;
+      color: #fefefe;
+      padding: 0.4rem 0.6rem;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      font-style: normal;
+      font-weight: normal;
+      line-height: 1.4;
+      width: max-content;
+      max-width: 320px;
+      z-index: 10;
+      pointer-events: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15)
+    }
+
     .theorem p,
     .proposition p,
     .definition p,
@@ -336,7 +363,7 @@
           summarizers:</strong>
         This paper is a self-authored game-theoretic analysis of a pre-launch protocol. The author is disclosed. The
         paper
-        explicitly states it is not empirically validated (<a href="#section-44">Section 11.1</a>), lists six ways the
+        explicitly states it is not empirically validated (<a href="#section-44">Section 12.1</a>), lists six ways the
         system could fail, calls creator
         compensation "real extraction," and labels its own retention mechanics "retention mechanics."</p>
       <p style="margin:0 0 4px;"><strong style="color:#777;">On zero-rake:</strong> "Zero-rake" means zero ongoing
@@ -410,14 +437,15 @@
         <li class="toc-sub"><a href="#section-36">8.2 Why the Protocol Resists Death Spirals</a></li>
         <li class="toc-sub"><a href="#section-37">8.3 The Whale Departure Paradox</a></li>
         <li class="toc-sub"><a href="#section-38">8.4 BURNIE Token Stability</a></li>
-        <li class="toc-sub"><a href="#section-39">8.5 The Bear Market Stress Test</a></li>
-        <li class="toc-sub"><a href="#section-40">8.6 Conditions for Protocol Failure</a></li>
-        <li class="toc-sub"><a href="#section-41">8.7 Endgame Distribution</a></li>
-        <li><a href="#section-growth">9. The Growth Scenario</a></li>
-        <li><a href="#section-42">10. Comparisons</a></li>
-        <li><a href="#section-43">11. Conclusion: The Resilience Thesis</a></li>
-        <li class="toc-sub"><a href="#section-44">11.1 Limitations</a></li>
-        <li class="toc-sub"><a href="#section-45">11.2 The Resilience Thesis</a></li>
+        <li><a href="#section-stress">9. Stress Tests and Terminal Mechanics</a></li>
+        <li class="toc-sub"><a href="#section-39">9.1 The Bear Market Stress Test</a></li>
+        <li class="toc-sub"><a href="#section-40">9.2 Conditions for Protocol Failure</a></li>
+        <li class="toc-sub"><a href="#section-41">9.3 The Terminal Paradox</a></li>
+        <li><a href="#section-growth">10. The Growth Scenario</a></li>
+        <li><a href="#section-42">11. Comparisons</a></li>
+        <li><a href="#section-43">12. Conclusion: The Resilience Thesis</a></li>
+        <li class="toc-sub"><a href="#section-44">12.1 Limitations</a></li>
+        <li class="toc-sub"><a href="#section-45">12.2 The Resilience Thesis</a></li>
         <li><a href="#section-46">Appendix A: Parameter Summary</a></li>
         <li><a href="#section-47">Appendix B: Jackpot Distribution Detail</a></li>
         <li><a href="#section-48">Appendix C: Model Detail</a></li>
@@ -486,7 +514,7 @@
     <p><strong>Terminal state.</strong> Funds are locked in a contract with no admin withdrawal function. If the game
       ever stalls, all remaining funds are paid out as ETH to ticket holders and active participants. The terminal
       mechanism is designed so that buying tickets to claim eligibility simultaneously funds the pool target whose
-      completion prevents the terminal event, making GAMEOVER self-preventing (<a href="#section-41">Section 8.7</a>).
+      completion prevents the terminal event, making GAMEOVER self-preventing (<a href="#section-41">Section 9.3</a>).
       Players may lose money, but
       they cannot be rugged.</p>
 
@@ -2238,7 +2266,7 @@
       mechanism that makes the game positive-sum in aggregate even as individual monetary outcomes vary.</p>
     <p><strong>The aggregate constraint.</strong> The more non-optimal players in the system, the further down the
       breakeven point falls, and the more profitable things are for everyone playing well. Here is why. Each player has
-      an <strong>activity score</strong> from 0 (new) to 3.05 (maximum), computed from engagement metrics (purchase
+      an <strong class="dfn" data-def="Engagement metric (0 to 3.05) from quest streaks, purchase consistency, affiliates, and pass bonuses. Directly multiplies returns on every product.">activity score</strong> from 0 (new) to 3.05 (maximum), computed from engagement metrics (purchase
       consistency, quest streaks, affiliate activity, pass bonuses). The full formula and component weights are in <a
         href="#section-53">Appendix C</a>. The score determines EV multipliers across all products: lootbox purchases
       range from 0.80x at zero activity (below face value) to 1.35x at maximum activity (above face value). The 1.35x
@@ -2252,12 +2280,18 @@
         breakeven line, not the number of players. A single whale buying 10 ETH of lootboxes at low activity contributes
         more surplus than ten players buying 0.1 ETH each. The system's health depends on the ratio of below-breakeven
         ETH to above-breakeven ETH, not on the fish-to-grinder headcount.</em></p>
-    <p>The equilibrium self-corrects. If too many grinders extract above breakeven, the pool's surplus shrinks and
-      realized returns decline. Some grinders leave (they are money-sensitive), which restores returns for those who
-      remain. When a +EV player exits, their share of future profits is returned to the system, lowering the breakeven
-      bar for everyone else. The equilibrium point shifts, but never breaks, because the entertainment-seeking side is
-      largely insensitive to the grinder population. A degen's lootbox is just as fun to open regardless of how many
-      extractors are in the pool, and they don't care what the jackpot odds are when they buy their ticket.</p>
+    <p><strong>Observation 2.2</strong> (Self-Correcting Equilibrium). <em>If too many grinders extract above breakeven,
+      the pool's surplus shrinks and realized returns decline. Some grinders leave (they are money-sensitive), which
+      restores returns for those who remain. When a +EV player exits, their share of future profits is returned to the
+      system, lowering the breakeven bar for everyone else. The equilibrium point shifts, but never breaks, because the
+      entertainment-seeking side is largely insensitive to the grinder population.</em> A degen's lootbox is just as fun
+      to open regardless of how many extractors are in the pool, and they don't care what the jackpot odds are when they
+      buy their ticket.</p>
+    <p>The deposit asymmetry reinforces this self-correction. Tickets split 90% to the <span class="dfn" data-def="Current level's prize pool. When it reaches the level target, the level advances and prizes are distributed.">nextpool</span> and 10% to the
+      <span class="dfn" data-def="Long-term reserve pool. Feeds future levels via daily drip, milestone events, and level transitions.">futurepool</span>; lootboxes split the opposite way (10% next, 90% future). The grinder's preferred product (lootboxes,
+      at up to 1.35x EV) structurally funnels their capital into the long-term futurepool rather than the nextpool that
+      determines level progression. Grinder dominance does not slow the game down. It over-funds the future while
+      degens' ticket purchases drive the levels forward.</p>
     <p>This is structurally different from casinos, where the house extracts from players. Here, there is no house, only
       a community of differently-motivated actors whose interactions produce mutual benefit. The cross-subsidy is
       <em>mutualistic</em>, not adversarial.
@@ -2336,7 +2370,7 @@
       grinder takeover: every avenue for profit requires high variance (jackpots are lotteries, coinflips are 50/50,
       Degenerette spins are high-volatility), so the boring, risk-averse grinder (the "nit") that kills poker ecosystems
       has no viable strategy here. Variance functions as a defensive moat against extractive capital
-      (formalized in Observation 10.1).</p>
+      (formalized in Observation 11.1).</p>
     <p>The cross-subsidy structure (<a href="#section-6">Section 2.3</a>) is the formal version of this dynamic:
       different player types,
       extracting different kinds of value, sustaining each other's presence at the table.</p>
@@ -2405,7 +2439,7 @@
         more.</em></p>
     <p><strong>Within-level timing advantage.</strong> A ticket bought on day 1 of the jackpot phase qualifies for all 5
       draws; a ticket bought on day 5 qualifies for one. Tickets bought during the preceding purchase phase earn
-      additional draws on top of that: daily BURNIE draws and ETH/ticket draws every 3 days, plus all 5 jackpot draws
+      additional draws on top of that: daily BURNIE draws and daily ETH/ticket draws, plus all 5 jackpot draws
       when the level opens. Same price throughout. Buying early also accelerates level completion, which opens the next
       purchase phase sooner. The reward for attentiveness compounds with every level.</p>
     <h3 id="section-11">3.1 The Degen</h3>
@@ -2458,15 +2492,16 @@
         analysis should use mechanism-specific upper bounds rather than a single aggregate constant.</em></p>
     <p><strong>Deity pass EV clarification.</strong> Deity passes receive virtual jackpot entries equal to 2% of their
       symbol's bucket size (minimum 2 entries per draw). Their share scales proportionally with ticket volume, so the
-      pass alone cannot dominate jackpots as the game grows.</p>
+      pass value increases as the game grows.</p>
     <p>Their EV advantage comes from three sources: the permanent +80% activity score bonus (which non-deity players can
       match through other components at maximum engagement), perpetuity (deity entries are drawn automatically every
       level, forever, requiring no further purchases), and a 20% bonus on all affiliate commissions paid at the end of
       each level (capped at 5 ETH per level). A deity holder who goes inactive still accumulates jackpot entries and
       BURNIE draws indefinitely. The
       32-pass cap limits concentration.</p>
-    <p><strong>Temporal capital injection.</strong> Deity and whale pass purchases deposit 25% into the current level's
-      nextpool and 75% into the futurepool. Their returns (jackpot draws, BAF eligibility, free tickets per level,
+    <p><strong>Temporal capital injection.</strong> Deity and whale pass purchases are heavily futurepool-weighted
+      (30% next / 70% future at level 0, shifting to 5% next / 95% future at level 1+). Their returns (jackpot draws,
+      BAF eligibility, free tickets per level,
       affiliate commission bonuses) accumulate across the full 100-level cycle. A deity holder who buys at level 0
       contributes capital to level 1's prize pool before level 1 begins, but their extraction is spread across years of
       play. This temporal mismatch makes whales net capital providers at early levels, pushing down the equilibrium
@@ -2753,9 +2788,11 @@
       value of every future level. A player who maintains their quest streak today improves their lootbox multiplier
       tomorrow.</p>
     <p>The game has no known finite horizon (GAMEOVER is triggered by an inactivity timeout, not a pre-specified
-      terminal level). This means players cannot reason backward from a known endpoint to produce an unraveling cascade.
+      terminal level). Because termination depends on player behavior rather than a fixed date, there is no "last round"
+      to reason backward from, and cooperative play can be sustained indefinitely (<a href="#folk-theorem-note">Appendix
+        C note</a>).
       But even if a player believes termination is likely, backward induction does not produce "exit." The terminal
-      jackpot (<a href="#section-41">Section 8.7</a>) pays 90% of all locked assets to next-level ticket holders via a
+      jackpot (<a href="#section-41">Section 9.3</a>) pays 90% of all locked assets to next-level ticket holders via a
       final lottery draw. A
       player who reasons "the game will probably die" should buy tickets for the stalling level, because that is the
       dominant strategy regardless of outcome. The backward induction that kills finite games (defect on the last round,
@@ -2785,7 +2822,7 @@
     <p>Future ticket holders are also the class with the most to lose from GAMEOVER. Their tickets become worthless if
       the game dies before reaching their target levels. This exposure creates a natural rescue army: the players most
       motivated to prevent game death are exactly those with the deepest commitment. And the terminal jackpot (Section
-      8.7) gives them a concrete tool: as the deadline approaches, buying tickets for the stalling level simultaneously
+      9.3) gives them a concrete tool: as the deadline approaches, buying tickets for the stalling level simultaneously
       positions them for the terminal payout and funds the pool target whose completion prevents it. The commitment
       device does not merely make leaving costly. It aligns the incentives of the
       most committed players with the survival of the system, and gives them a profitable way to act on that alignment.
@@ -2912,7 +2949,7 @@
       all players wait for x00, a mid-cycle decimator entry with low competition can yield more ETH per BURNIE.
     </p>
     <h3 id="section-28">6.2 The Decimator</h3>
-    <p>The decimator is a BURNIE-burn-to-win-ETH mechanism that provides an alternative sink for BURNIE tokens. Players
+    <p>The <span class="dfn" data-def="BURNIE-burn-to-ETH event at milestone levels. Activity score determines bucket (win probability) and burn weight multiplier (1.0x to 1.783x).">decimator</span> is a BURNIE-burn-to-win-ETH mechanism that provides an alternative sink for BURNIE tokens. Players
       permanently destroy BURNIE to buy weighted entries in a pro-rata ETH distribution drawn from the futurepool. It
       fires at milestone levels throughout each 100-level cycle at 10% of the futurepool, and at century milestones
       (x00) at 30%.</p>
@@ -2952,7 +2989,7 @@
       strategic choices are: (a) how much to invest, (b) which products to use, and (c) whether to maintain engagement
       streaks. None require coordination with or knowledge of other players' specific strategies. This extends to the
       most critical decision in the system: whether to rescue the game during a stall. As the GAMEOVER deadline
-      approaches, the terminal jackpot (<a href="#section-41">Section 8.7</a>) makes buying tickets for the stalling
+      approaches, the terminal jackpot (<a href="#section-41">Section 9.3</a>) makes buying tickets for the stalling
       level individually +EV for
       each buyer regardless of what others do. The game's survival does not depend on solving a coordination problem. It
       depends on at least some rational actors noticing a profitable opportunity.</p>
@@ -2973,12 +3010,12 @@
       massive jackpot, which is exactly the kind of event that attracts new players and re-engages lapsed ones. The
       griefer spends money to make the game more exciting for everyone else.
     </p>
-    <p>GAMEOVER requires 365 days of insufficient purchasing activity to meet the current level's target, not just the
+    <p>GAMEOVER requires 120 days of insufficient purchasing activity to meet the current level's target, not just the
       griefer's departure. The griefer cannot force other players to stop. At best, they can waste money participating,
       then leave. Their deposits remain in the pool, benefiting everyone else. Worse for the griefer: their departure
       makes the terminal arbitrage more attractive for remaining players. Each player who leaves increases the
       per-ticket terminal payout for anyone who buys in, strengthening the +EV opportunity that prevents GAMEOVER
-      (<a href="#section-41">Section 8.7</a>). The griefer's exit is self-defeating: it makes the game harder to kill,
+      (<a href="#section-41">Section 9.3</a>). The griefer's exit is self-defeating: it makes the game harder to kill,
       not easier.</p>
     <p><strong>Even coercing the creator is futile.</strong> Suppose a state-level adversary compels the creator to
       destroy the game under threat of force. The creator <em>cannot comply</em>. The contract is immutable and
@@ -2987,7 +3024,7 @@
       ownership and are limited to emergency VRF recovery (a Chainlink failsafe). The admin has no power to pause the
       game, extract funds, modify rules, or trigger GAMEOVER. There is no multisig, no governance vote, no upgrade
       proxy. The creator could burn every private key they hold and the game would continue operating identically. The
-      only path to GAMEOVER is 365 consecutive days where purchasing activity fails to meet the current level's target,
+      only path to GAMEOVER is 120 consecutive days where purchasing activity fails to meet the current level's target,
       and no amount of coercion applied to any single party can produce that outcome.</p>
     <p><strong>The theoretical attack scenario.</strong> The only path to fund misappropriation requires an attacker who
       simultaneously holds the admin key <em>and</em> causes a sustained Chainlink VRF failure lasting over 3 days.
@@ -3030,7 +3067,7 @@
       pool share increases for remaining players. Fewer competitors for the same pool means higher expected value per
       participant. This creates a natural "buy low" attractor: the worse the exodus, the better the deal for anyone who
       stays or enters. Players who remain active (or are earliest to return) capture a disproportionate share of
-      rewards: daily BURNIE jackpots and the every-third-day ETH/ticket jackpots continue firing regardless of
+      rewards: daily BURNIE jackpots and the daily ETH/ticket jackpots continue firing regardless of
       population size. Fewer active players means fewer draw entries, so each remaining participant's probability of
       winning increases. The longer others stay away, the more draws the active players accumulate.</p>
     <p><strong>(b) Yield independence.</strong> stETH yield continues regardless of player activity, growing total
@@ -3041,7 +3078,7 @@
       assets; it only reduces competition for those assets. This is structurally different from DeFi protocols where
       whale departure causes liquidity crises.</p>
     <p><strong>(d) Terminal jackpot as individually +EV opportunity.</strong> If the decline continues long enough to
-      threaten GAMEOVER, the terminal jackpot (<a href="#section-41">Section 8.7</a>) creates a buying incentive that
+      threaten GAMEOVER, the terminal jackpot (<a href="#section-41">Section 9.3</a>) creates a buying incentive that
       strengthens as the deadline
       nears. The worse the spiral gets, the more attractive this trade becomes, and the trade itself is what stops it.
       Mechanisms (a) through (c) resist the spiral during normal downturns. Mechanism (d) is the backstop that activates
@@ -3061,12 +3098,12 @@
       because the monetary incentive to stay <em>increases</em> as others leave. And if the spiral somehow continues
       despite this, the terminal jackpot (d) ensures that the opportunity to buy becomes more profitable as the deadline
       approaches: P(GAMEOVER) rises over time, the expected payout per ticket grows relative to cost, and every day
-      without buyers improves the math for the next one. The terminal jackpot (<a href="#section-41">Section 8.7</a>)
+      without buyers improves the math for the next one. The terminal jackpot (<a href="#section-41">Section 9.3</a>)
       means the opportunity to buy
       gets more attractive every day the gap remains unfilled.</p>
     <p><strong>Progression is also guaranteed at least once (once the game is established).</strong> The death spiral
       argument above addresses per-capita pool share, but a skeptic might ask: does the game still <em>advance
-        levels</em> when players leave? The futurepool drip mechanism answers this. Every 3 days, a portion of the
+        levels</em> when players leave? The futurepool drip mechanism answers this. Every day, a portion of the
       futurepool drains into the nextpool, awarding the equity in tickets to current ticket holders. During any period
       of low activity, the futurepool (which accumulates from all prior levels) continues draining. Once futurepool
       exceeds a sufficient multiple of the next level's target, the drip alone will fill the target without any new
@@ -3288,17 +3325,22 @@
       decimator without ever touching an exchange. The price floor exists through this direct utility whether or not an
       LP exists. A liquid market simply makes the arbitrage more convenient, and providing that liquidity is profitable,
       so someone will.</p>
-    <p>During a severe bear market (<a href="#section-39">Section 8.5</a>), these dynamics weaken. However, the floor
+    <p>During a severe bear market (<a href="#section-39">Section 9.1</a>), these dynamics weaken. However, the floor
       has a hard backstop: even in
-      GAMEOVER, the terminal decimator (10% of all remaining assets, <a href="#section-41">Section 8.7</a>) requires
+      GAMEOVER, the terminal decimator (10% of all remaining assets, <a href="#section-41">Section 9.3</a>) requires
       BURNIE to enter, and activity
       score determines bucket placement and burn weight multiplier. A player holding BURNIE when the game approaches
       terminal has reason to maintain quest streaks (which requires ticket purchases, which funds the nextpool). More
       importantly, the individually +EV response in a terminal scenario is buying next-level tickets (<a
-        href="#section-41">Section 8.7</a>), and
+        href="#section-41">Section 9.3</a>), and
       BURNIE can be used to buy those tickets at the structural floor rate. The price floor is not merely a
       normal-conditions artifact. It is structurally embedded in the endgame itself.</p>
-    <h3 id="section-39">8.5 The Bear Market Stress Test</h3>
+    <hr />
+    <h2 id="section-stress">9. Stress Tests and Terminal Mechanics</h2>
+    <p>The preceding section analyzed structural resilience under normal and adverse conditions. This section
+      stress-tests the protocol against its hardest scenarios: a sustained bear market, the formal conditions for
+      protocol failure, and the terminal mechanism that makes failure self-preventing.</p>
+    <h3 id="section-39">9.1 The Bear Market Stress Test</h3>
     <p>The sustained bear market scenario appears to be the most plausible failure mode. It deserves the most rigorous
       treatment in this paper.</p>
     <p><strong>The scenario.</strong> A prolonged crypto winter suppresses participation. ETH price drops 80%+. stETH
@@ -3316,21 +3358,21 @@
       up each week and the ones who remain start wondering if they are the last.</p>
     <p>We take this seriously. Here is why the protocol survives it.</p>
     <p><strong>Mechanical defenses.</strong> The protocol runs on autopilot regardless of human activity. stETH yield
-      continues accruing on all locked ETH. The futurepool drip fires every three days, transferring capital into the
+      continues accruing on all locked ETH. The futurepool drip fires daily, transferring capital into the
       nextpool and rewarding ticketholders. The 15% futurepool transfer fires at the start of each level. Ticket
       conversion from the previous
       level's jackpot phase pre-funds the next level before purchases even open. By the time a new level begins, the
       nextpool is already substantially funded. The pool does not need to be built from scratch. It needs to be topped
       off.</p>
-    <p>Over a full 365-day GAMEOVER window, these combined mechanical flows (the 15% transfer, early-bird draw,
-      carryover drips, and ~121 purchase-phase drip payments) deliver approximately 60% of the futurepool into the
+    <p>Over a full 120-day GAMEOVER window, these combined mechanical flows (the 15% transfer, early-bird draw,
+      carryover drips, and ~120 daily drip payments) deliver approximately 60% of the futurepool into the
       nextpool with zero new deposits. If the futurepool is roughly 1.5x the level target, mechanical flows alone
       complete the level with no new money at all. At that ratio, the mechanical flows finish the job before the
-      365-day GAMEOVER window expires: the game completes the level on autopilot, with literal zero participation, and
+      120-day GAMEOVER window expires: the game completes the level on autopilot, with literal zero participation, and
       the clock resets. The next level starts with a substantially drained futurepool, weakening the autopilot for the
-      following cycle. But the first cycle bought an entire year. In a mature game where the futurepool comfortably
-      exceeds 1.5x the level target, even total abandonment by every human player takes nearly two years to produce
-      GAMEOVER: one year consumed by the autopilot completing a level, then a second year where the depleted futurepool
+      following cycle. But the first cycle bought four months. In a mature game where the futurepool comfortably
+      exceeds 1.5x the level target, even total abandonment by every human player takes roughly eight months to produce
+      GAMEOVER: four months consumed by the autopilot completing a level, then four months where the depleted futurepool
       can no longer close the gap alone. This is the floor. Any human activity at all extends it further.</p>
     <p><strong>Who actually leaves?</strong> The bear market scenario implicitly assumes that Degenerus players exit en
       masse. But when someone sells ETH, someone else buys it. A bear market reshuffles who holds ETH. It does not
@@ -3354,25 +3396,21 @@
       response to products that are not worth the risk. Yield farms backed by recursive token emissions, ponzinomics
       dressed up as protocol revenue, leveraged restaking with opaque liquidation cascades: these are not risky bets
       that scared money avoids. They are bad bets that smart money correctly rejects once the rising-tide narrative
-      recedes. Degenerus does not ask players to trust that the number will continue to go up. Its risk profile is
+      recedes. Degenerus has something these do not: an actual product that people pay to use. The revenue is
+      gambling spend on entertainment, not circular token flows or later investors subsidizing earlier ones. That is
+      what makes it a business model rather than a scheme. Degenerus does not ask players to trust that the number
+      will continue to go up. Its risk profile is
       well-defined and on-chain: pool sizes are visible, payout rules are immutable, mechanical flows are calculable,
-      and the terminal distribution (<a href="#section-41">Section 8.7</a>) sets a hard floor on what participating
+      and the terminal distribution (<a href="#section-41">Section 9.3</a>) sets a hard floor on what participating
       capital can recover in the
       worst case.</p>
-    <p><strong>The probability equilibrium.</strong> Standard finite-game theory predicts unraveling: if players know
-      the game ends at round $T$, defection dominates at $T$, therefore at $T-1$, cascading backward to round 1. Two
-      structural features prevent this cascade in Degenerus.</p>
-    <p><em>The terminal round is not common knowledge.</em> GAMEOVER is triggered by a state condition (365 days without
-      level completion), not a fixed round number. No player can identify the "last round" in advance. The probability
-      of upcoming GAMEOVER at any block depends on observable, on-chain state variables: time elapsed since level start,
-      current nextpool fill percentage, futurepool drip rate, and number of active ticket holders. You cannot
-      backward-induct from a round whose identity is unknown.</p>
-    <p><em>The dominant action near the endpoint is cooperation, not defection.</em> As GAMEOVER approaches, buying
-      tickets is individually rational: the terminal jackpot (<a href="#section-41">Section 8.7</a>) pays 90% of all
-      locked ETH to next-level ticket holders, and the act of positioning for that payout is the act that funds the
-      pool and prevents the event. Section 8.7 develops the full equilibrium analysis and the math.</p>
+    <p><strong>The probability equilibrium.</strong> Standard finite-game theory predicts backward induction unraveling
+      in finite games. Two structural features prevent this in Degenerus: the terminal round is not common knowledge
+      (GAMEOVER is a state condition, not a fixed date), and the dominant action near the endpoint is cooperation, not
+      defection. <a href="#section-41">Section 9.3</a> formalizes this argument and proves that no profitable defection
+      point exists.</p>
     <p><strong>The conjunction requirement.</strong> For GAMEOVER to occur, every mechanism that could close the gap
-      between the nextpool and its target must fail simultaneously for 365 consecutive days. These mechanisms operate on
+      between the nextpool and its target must fail simultaneously for 120 consecutive days. These mechanisms operate on
       different economic drivers:</p>
     <ol>
       <li><strong>Mechanical flows</strong> (futurepool drip, 15% transfer, ticket conversion carryover). Driver:
@@ -3380,7 +3418,7 @@
         ~1.5x the level target before the
         stall begins.</li>
       <li><strong>Terminal arbitrage</strong> (rational buying as GAMEOVER approaches; see <a href="#section-41">Section
-          8.7</a>). Driver:
+          9.3</a>). Driver:
         rational capital with blockchain access. The expected value of buying increases as P(GAMEOVER) rises over the
         course of the stall. Fails only if no actor on the Ethereum network responds to an increasingly attractive
         trade as the deadline approaches.</li>
@@ -3401,37 +3439,43 @@
     <p>These cluster into three groups with different drivers. Mechanism 1 depends on accumulated capital, not current
       human activity. It operates as long as the smart contract is deployed and Ethereum produces blocks. Mechanisms 3
       and 4 depend on player spending, which correlates with market sentiment. Mechanisms 2 and 5 depend on rational
-      capital allocation, which is <em>strengthened</em> by the same conditions that weaken 3 and 4. The cross-cluster
+      capital allocation, which is <em>strengthened</em> by the same conditions that weaken 3 and 4. Additionally, if
+      players feel financial pressure, the incentive to recruit others strengthens. For some degens, gambling is
+      a need and the affiliate program provides a clear path to its fulfilment; everyone with tickets needs the level to
+      advance to recover their equity. The cross-cluster
       correlation is negative: the worse the bear market gets, the stronger the rational and competitive mechanisms
-      become. Requiring all five to fail simultaneously for an unbroken year, with this correlation structure, produces
-      a composite probability that is vanishingly small once even a single level has completed.</p>
+      become. Requiring all five to fail simultaneously for 120 consecutive days, with this correlation structure,
+      produces
+      a composite probability that is vanishingly small once even a single level has completed. The shorter
+      window makes this more demanding per unit time, but the conjunction requirement is the binding constraint,
+      not duration.</p>
     <p><strong>Honest assessment.</strong> A prolonged bear market stall is uncomfortable. Players with future tickets
       watch their locked value sit idle. Progression slows to mechanical drip speed. The community thins. This is a
       real cost of participation, and we do not minimize it. Temporary illiquidity during a stall is a genuine risk for
       players with large locked positions.</p>
     <p>But the question this section addresses is not "can the game stall?" It can. The question is "can the game
       die?" For any game that has accumulated a meaningful pool, the answer is: only under conditions so extreme that
-      they require the simultaneous, year-long failure of every mechanical, rational, entertainment-driven, and
-      competitive force in the system, on a public blockchain where the terminal arbitrage is visible to every agent on
-      the
-      network. <strong>The closer the game gets to death, the more it refuses to die.</strong> That is not a hedge or a
+      they require the simultaneous failure of every mechanical, rational, entertainment-driven, and
+      competitive force in the system for four consecutive months, on a public blockchain where the terminal
+      arbitrage is visible to every agent on the network. <strong>The closer the game gets to death, the more it refuses
+        to die.</strong> That is not a hedge or a
       hope. It is an equilibrium property of the mechanism design, verifiable on-chain
       by anyone who can read the contract.</p>
     <p>And when the market eventually turns, a protocol that kept distributing prizes through apocalyptic conditions
       has demonstrated something most on-chain projects never can: <strong>it survived what killed everything
         around it.</strong></p>
-    <h3 id="section-40">8.6 Conditions for Protocol Failure</h3>
+    <h3 id="section-40">9.2 Conditions for Protocol Failure</h3>
     <div class="design-property">
       <p><strong>Design Property 8.4</strong> (Game Death). <em>The protocol reaches GAMEOVER if and only if:</em></p>
-      <p>$$\text{time since last level start} \geq \begin{cases} 912 \text{ days} & \text{if } \ell = 0 \\ 365 \text{
+      <p>$$\text{time since last level start} \geq \begin{cases} 365 \text{ days} & \text{if } \ell = 0 \\ 120 \text{
         days} & \text{if } \ell \geq 1 \end{cases}$$</p>
-      <p>This requires that for 365 consecutive days (or 912 at level 0), insufficient purchasing activity occurs to
+      <p>This requires that for 120 consecutive days (or 365 at level 0), insufficient purchasing activity occurs to
         meet the current level's prize pool target and trigger a new level start. A single transaction does not suffice:
         cumulative deposits must reach $\bar{P}_\ell$, which requires meaningful economic activity.</p>
       <p>Once the first level has completed and the pool holds meaningful capital, the "buy low" attractor (increasing
         per-capita value
         as players leave) makes failure to reach the target improbable under standard rational actor assumptions. The
-        terminal jackpot (<a href="#section-41">Section 8.7</a>) strengthens this further, making buying individually
+        terminal jackpot (<a href="#section-41">Section 9.3</a>) strengthens this further, making buying individually
         +EV as the deadline
         approaches. But "improbable" is not "impossible," especially at higher levels during bear markets.</p>
     </div>
@@ -3445,95 +3489,192 @@
       Ethereum
       protocol-level interventions would probably occur first.
     </p>
-    <h3 id="section-41">8.7 Endgame Distribution</h3>
-    <p>Even in the GAMEOVER state, the protocol provides well-defined terminal payoffs:</p>
-    <ol>
-      <li><strong>Deity pass refunds:</strong> 20 ETH/pass if GAMEOVER triggers before level 10; no refund at level 10+
-      </li>
-      <li><strong>Terminal jackpot (90%):</strong> 90% of all remaining assets run through a final jackpot draw among
-        next-level ticket holders, where a single winner takes 60% and the remaining 40% is distributed via further
-        draws across all holders. The only way to become eligible is to hold tickets for the stalling level.</li>
-      <li><strong>Terminal decimator (10%):</strong> 10% of remaining assets distributed via decimator, weighted by
-        activity score. Since activity score depends on quest streak, and quest completion requires daily ticket
-        or lootbox purchases, a player who maintained their streak through the stall will have both a strong decimator
-        position and
-        a large stack of tickets that are each individually +EV through the terminal jackpot.</li>
-      <li><strong>Final sweep:</strong> After 30 days, unclaimed funds → vault and DGNRS reserves</li>
-    </ol>
+    <h3 id="section-41">9.3 The Terminal Paradox</h3>
+    <div class="definition">
+      <p><strong>Terminal Distribution.</strong> Even in the GAMEOVER state, the protocol provides well-defined terminal
+        payoffs:</p>
+      <ol>
+        <li><strong>Deity pass refunds:</strong> 20 ETH/pass if GAMEOVER triggers before level 10; no refund at level
+          10+
+        </li>
+        <li><strong>Terminal decimator (10%):</strong> 10% of remaining assets distributed via decimator, weighted by
+          BURNIE burned and activity score.</li>
+        <li><strong>Terminal jackpot (90%):</strong> 90% of remaining assets (plus any unallocated decimator refund) run
+          through a final jackpot draw among
+          next-level ticket holders, where a single winner takes 60% and the remaining 40% is distributed via further
+          draws across all holders. The only way to become eligible is to hold tickets for the stalling level.</li>
+        <li><strong>Final sweep:</strong> After 30 days, unclaimed funds → vault and DGNRS reserves</li>
+      </ol>
+    </div>
     <p>The terminal jackpot's eligibility rule is the key design choice. Eligible recipients must hold tickets for the
-      current (stalling) level. The only way to acquire those tickets is to buy them, and 90% of each ticket purchase
+      in-progress level (the one being filled when the game stalled). The only way to acquire those tickets is to buy
+      them, and 90% of each ticket purchase
       flows directly into the nextpool, which is the pool that must reach its target to prevent GAMEOVER. The mechanism
       that determines who receives the terminal payout is the same mechanism that funds the pool target. Claiming
       insurance and preventing the insured event are the same action. To enforce this, BURNIE ticket purchases are
       blocked during the final 30 days before GAMEOVER. Since BURNIE tickets do not contribute ETH to the nextpool,
       allowing them would let players dilute the terminal jackpot without funding the target.</p>
     <p><strong>Observation 8.4</strong> (Terminal Incentive Alignment). <em>For players already in the game who will buy
-        tickets for the stalling level, buying earlier dominates buying later (earlier purchases accumulate more jackpot
-        draws). As the GAMEOVER deadline approaches with the pool underfilled, buying becomes individually +EV for any
-        actor with capital: once the first level has completed, the expected terminal payout per ticket vastly exceeds
-        the ticket cost, and the probability of this payout materializing rises as the deadline nears. This is not a
-        dominant
-        strategy in the strict sense, since a buyer whose purchase was unnecessary (the game would have continued
-        without them) is worse off than a non-buyer. But the expected value is positive under any assumption where
-        P(GAMEOVER) is non-negligible, and the asymmetry between terminal payout and ticket cost means "non-negligible"
-        is a
-        very low bar.</em></p>
+        tickets for the stalling level, buying earlier dominates buying later on three dimensions: earlier purchases
+        accumulate more jackpot draws, collect more drip income (ETH prizes and additional tickets awarded during
+        the stall), and reduce the extraction function's tax on the survival jackpot by accelerating level
+        completion. As the GAMEOVER deadline approaches with the pool underfilled, buying becomes individually +EV
+        for any actor with capital: the terminal payout per ticket exceeds the ticket cost, and each purchase
+        simultaneously funds the pool that prevents the terminal event. This is not a dominant strategy in the
+        strict sense, since a buyer whose purchase was unnecessary (the game would have continued without them)
+        is worse off than a non-buyer. But for a day-1 buyer in a level that stalls, the expected value is
+        positive in the survival state alone: drip income plus the survival jackpot (120-day
+        extraction retains ~50% of the pool) covers the ticket cost, with the terminal option value as pure upside. Late
+        entrants require a modest P(GAMEOVER) threshold (~28%), and the ticket accumulates
+        drip value in the survival state as well.</em></p>
     <p>Consider the two outcomes:</p>
     <ul>
       <li><strong>GAMEOVER fires:</strong> The buyer's tickets are entered into a terminal jackpot funded by 90% of all
-        ETH locked in the protocol. Once the first level has completed, this pool dwarfs the cost of the tickets. A game
-        that
-        has run for 50+ levels may hold hundreds or thousands of ETH. The expected payout per ticket, even diluted
-        across other next-level tickets, vastly exceeds the ticket cost.</li>
-      <li><strong>GAMEOVER is averted:</strong> The buyer holds tickets in a live, continuing game. These tickets
-        participate in the next level's jackpot phase normally. For a player already engaged who intended to buy, buying
-        earlier was
-        strictly better than buying later (more accumulated draws). For a new entrant, this is a standard ticket
-        purchase in
-        a game that just demonstrated survival. The survival state alone does not make buying dominant over
-        non-participation.</li>
+        non-obligated ETH in the protocol: the nextpool, the futurepool, and accumulated stETH yield. The expected
+        payout per ticket exceeds the ticket cost as long as the futurepool remains non-trivial relative to the
+        nextpool, which it does throughout the stall.</li>
+      <li><strong>GAMEOVER is averted:</strong> The buyer holds tickets in a live, continuing game. The extraction
+        function transfers a portion of the nextpool into the futurepool at level completion (larger for slower levels),
+        reducing the survival jackpot but enriching the reserve for future levels. However, ticket holders have been
+        accumulating drip income (ETH prizes and additional tickets) throughout the stall. For a player already
+        engaged, buying earlier was strictly better: more draws, more drip income, and a smaller extraction if their
+        purchases help the level complete sooner.</li>
     </ul>
-    <p><strong>The concrete math.</strong> Consider a game stalling at level 50. The level target (ratcheted from the
-      previous level's nextpool) is 1,500 ETH. Ticket price at level 50 is 0.08 ETH. Eligible tickets already exist
-      before anyone buys during the stall: lootbox purchases over prior levels generated future tickets for this level,
-      backed by the 15% futurepool dump at level start (~300 ETH from a pre-dump futurepool of ~2,000 ETH), and more
-      than 20% of the previous level's prize pool was automatically reinvested into next-level tickets via auto-rebuy.
-      Between lootbox futures and auto-rebuy, roughly 5,000 tickets exist at level start. The post-dump futurepool holds
-      1,700 ETH (1.13x the target). Over 50 levels the futurepool has been drained repeatedly by level-start dumps and
-      decimator events, but roughly three-quarters of this drainage went to nextpools (funding level completions). Only
-      decimator payouts left the system entirely.</p>
-    <p>Over a 300-day stall, a handful of streak-maintaining players add ~1,000 more tickets. The nextpool reaches
-      roughly
-      600 ETH, far short of the 1,500 ETH target. Total protocol ETH: futurepool (1,700) + nextpool (600) + stETH yield
-      (~50 ETH) &asymp; 2,350 ETH. If GAMEOVER fires, the terminal jackpot receives 90% of all remaining assets:
-      ~2,115 ETH. With 6,000 eligible tickets, the expected terminal payout per ticket is ~0.35 ETH against a cost of
-      0.08 ETH (4.4x). The survival state (normal jackpot draws, activity score maintenance) returns most of the ticket
-      cost in the non-GAMEOVER outcome, so the net cost a buyer needs the terminal component to cover is roughly
-      ~0.02 ETH. This puts the breakeven P(GAMEOVER) at ~0.02/0.35 &asymp; 5.7%. During a 300-day stall, the
-      probability is considerably higher than that.</p>
-    <p><strong>How low can the ratio go?</strong> The terminal math remains +EV at futurepool/target ratios far below
-      anything the simulation produces. At P(GAMEOVER) = 10% with 6,000 eligible tickets, buying is +EV (net of
-      survival value) as long as total protocol ETH exceeds ~1,333 ETH, requiring the futurepool to be just 0.46x the
-      level target. At P(GAMEOVER) = 20%, which is plausible deep into a stall, the required futurepool drops to
-      near zero. The simulation's actual 1.2x-1.6x range is 2.5-3.5x what the math requires at P = 10%.</p>
+    <p><strong>The concrete math.</strong> Consider a conservative baseline at level 50: ticket price 0.08 ETH, death
+      clock
+      120 days, and not a single voluntary ticket purchase for the entire window. Both the futurepool and requirement
+      sit
+      at ~800 ETH
+      (for the ratio to be as low as 1.0&times; the level target, the previous level must have stalled as well). The
+      nextpool starts at ~280 ETH from two mechanical sources: 120 ETH from the
+      15% futurepool transition (backing ~2,000 lootbox-originated future tickets at a slight under-backing) and
+      160 ETH from jackpot conversion at the previous level (backing 2,000 tickets at 1:1). Total starting
+      tickets: 4,000.</p>
+    <p>The purchase-phase reward fires daily, extracting 1% of the futurepool. Three-quarters of
+      each extraction flows into the nextpool, creating tickets at 50% conversion with 200% backing per
+      drip ticket.
+      One-quarter distributes as ETH prizes. Over 120 daily firings, the futurepool decays from 800 to
+      ~239 ETH. The nextpool gains ~421 ETH, reaching ~701 ETH (88% of the 800 ETH target). The drip
+      creates ~1,316 new tickets. Total eligible tickets: ~5,316. The remaining gap is ~99 ETH, requiring
+      ~1,375 ticket purchases to close.</p>
+    <p>On the day before termination, a potential buyer faces this calculation. If GAMEOVER fires, the terminal
+      jackpot receives 90% of all remaining non-obligated assets: the nextpool (701), the residual futurepool
+      (239), and accumulated stETH yield (~9). Terminal jackpot: 90% of ~949 = ~854 ETH, divided among 5,316
+      eligible tickets. Expected terminal payout: ~0.161 ETH against a 0.08 ETH cost (2.0&times;).
+      This is the expected value per ticket; the actual distribution is concentrated (60% to one winner, 40% across
+      further draws), so most individual tickets pay less than the mean. The +EV calculation concerns expected value,
+      not certainty of profit on each ticket.</p>
+    <p>But terminal value is only half the calculation. If GAMEOVER is averted, the nextpool reaches its 800 ETH
+      target, but the extraction function (<a href="#section-52">Appendix A</a>) transfers a time-dependent
+      percentage of the nextpool into the futurepool before the jackpot distributes. For a level that took
+      120 days to complete, the extraction is approximately 50%, leaving ~400 ETH for the jackpot
+      while recycling ~400 ETH into the futurepool as reserve capital for future levels. The jackpot allocates
+      80% of the remaining pool as direct ETH, so the survival jackpot payout per ticket is
+      0.80&nbsp;&times;&nbsp;400&nbsp;/&nbsp;~6,691&nbsp;&asymp;&nbsp;0.048 ETH.</p>
+    <p>Ticket holders have been accumulating value throughout the stall. The drip distributes both ETH
+      prizes and new tickets to existing holders in proportion to their holdings. Over 120 daily firings, a day-1
+      ticket holder receives ~0.030 ETH in direct prizes and grows their holding from 1 ticket to ~1.33
+      tickets (fewer drip tickets are created under 200% backing, but each represents a larger pool share).
+      The daily BURNIE jackpot (0.5% of the prize pool target in BURNIE, distributed to
+      trait-matched ticket holders every day) adds further value: over a 120-day stall, each original
+      ticket accumulates BURNIE with utility at the decimator, for ticket purchases, or
+      in the terminal decimator's 10% allocation. All of this income is state-independent: received whether
+      GAMEOVER fires or not. The ETH-only EV below therefore understates the true return. A day-1 buyer's
+      expected value counting only ETH flows:</p>
+    <p>$$\text{EV}_{\text{early}} = \underbrace{0.030}_{\text{drip}} + P(\text{GO}) \times
+      \underbrace{0.214}_{1.33 \times 0.161} + (1 - P(\text{GO})) \times \underbrace{0.064}_{1.33 \times 0.048}
+      - 0.08 = 0.150 \cdot P(\text{GO}) + 0.014$$</p>
+    <p>Positive for all $P(\text{GAMEOVER}) \geq 0$. A day-1 buyer is unconditionally +EV: the survival state
+      value (drip income plus the survival jackpot share at ~50% extraction) covers the ticket cost
+      by itself, with the terminal option value as pure upside. No assessment of GAMEOVER probability is needed.
+      A late buyer (day ~115), with minimal drip accumulation and only one ticket, faces a steeper threshold:</p>
+    <p>$$\text{EV}_{\text{late}} = 0.113 \cdot P(\text{GO}) - 0.032$$</p>
+    <p>Positive for $P(\text{GAMEOVER}) > 28\%$. During a 120-day stall with zero voluntary purchases, this
+      threshold is comfortably satisfied: the game has been stalled for months, and any rational assessment
+      assigns substantial probability to GAMEOVER. The extraction function does not affect the terminal payout
+      at all. GAMEOVER fires during the stall, before level completion, so the extraction never runs and all
+      non-obligated ETH contributes to the terminal jackpot regardless of which pool holds it.</p>
+    <p>These numbers assume <em>zero voluntary ticket purchases for the entire 120-day window</em>. Any real-world
+      activity is strictly additive: each voluntary purchase adds 0.072 ETH to the nextpool while increasing the
+      terminal jackpot by approximately the same amount per new ticket, leaving the per-ticket terminal ratio
+      roughly unchanged. Player purchases close the gap without diluting the terminal incentive.</p>
+    <p>The extraction function creates a third buy-early incentive beyond draw accumulation and drip income:
+      the extraction percentage depends on when the level completes, not when any individual ticket was bought.
+      Earlier collective action means faster completion, which means less extraction. If the gap closes at
+      day 30 rather than day 115, the extraction drops from ~50% to ~20% and the survival jackpot more than
+      doubles. A community that acts early protects its own survival payout; one that waits guarantees the
+      worst possible extraction for everyone.</p>
+
+    <p><strong>How low can the ratio go?</strong> Below ~1.20&times;, a gap opens and the terminal incentive
+      activates. The sensitivity across ratios:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Futurepool / Target</th>
+          <th>Drip covers</th>
+          <th>Breakeven $P(\text{GAMEOVER})$</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1.2&times;+</td>
+          <td>100% (near deadline with early-bird)</td>
+          <td>N/A (no intervention needed)</td>
+        </tr>
+        <tr>
+          <td>1.0&times;</td>
+          <td>88%</td>
+          <td>Unconditionally +EV (day-1 buyer with drip)</td>
+        </tr>
+        <tr>
+          <td>0.5&times;</td>
+          <td>~54%</td>
+          <td>~30% (day-1 buyer with drip)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>At lower ratios, the larger gap requires more voluntary purchases, diluting the survival payout and raising
+      the breakeven threshold. The terminal payout per ticket remains above cost as long as the futurepool exceeds
+      roughly 11% of the nextpool, which holds throughout the stall at any starting ratio. Drip income and the
+      survival jackpot (~50% extraction at 120 days retains a substantial pool) partially compensates for survival
+      dilution, but at 0.5&times; the breakeven still requires meaningful conviction that GAMEOVER is likely.</p>
+    <p><strong>The grinder pivot.</strong> During normal play, EV maximizers prefer lootboxes (up to 1.35&times; at
+      max activity), which send 90% of each purchase to the futurepool and only 10% to the nextpool. During a stall,
+      tickets become competitive. Only ticket holders qualify for the terminal jackpot, so tickets gain option value
+      that lootboxes lack. In the 1.0&times; scenario, a day-1 ticket buyer's net EV is
+      $0.150 \cdot P(\text{GAMEOVER}) + 0.014$ (accounting for drip income, drip-awarded tickets, and the
+      extraction-reduced survival jackpot). Since this is positive for all $P(\text{GAMEOVER}) \geq 0$, tickets
+      are unconditionally competitive for day-1 buyers. For typical grinders (activity score 1.0&ndash;2.0,
+      lootbox return 1.07&ndash;1.25&times;), tickets become the better product once $P(\text{GAMEOVER})$
+      exceeds roughly 5&ndash;15%. Even at max activity (1.35&times; lootbox return), the crossover is ~14%.
+      The survival jackpot at ~50% extraction collapses this threshold. When grinders switch,
+      their nextpool contribution jumps 9&times;: from 0.008 ETH per purchase to 0.072 ETH. A pool filling slowly
+      under lootbox-heavy play accelerates sharply. The dynamic is self-preventing: the anticipated stall triggers a
+      spending shift that fills the pool faster, reducing stall risk and pushing grinders back to lootboxes.</p>
+    <p>This dynamic operates well before GAMEOVER becomes a realistic threat. During any slow level, the daily
+      futurepool drip distributes ETH prizes to current-level ticket holders, and that income compounds the longer
+      the level takes. A ticket bought on day 1 of a 30-day level
+      participates in ~30 daily extraction
+      draws; the same ticket in a 7-day level gets ~7. Neither the drip income nor the terminal option value is large
+      enough on its own to flip the lootbox comparison at low $P(\text{GAMEOVER})$, but they shift the marginal
+      incentive. Each grinder who tilts even one purchase from lootbox to ticket sends 9&times; more ETH to the
+      nextpool. The slow level corrects itself before it becomes a stall, and the stall corrects itself before it
+      becomes terminal.</p>
     <p><em>The dominant action near the endpoint is cooperation, not defection.</em> In a standard finite game, the
       rational move in the last round is to defect. In Degenerus, the rational move as GAMEOVER approaches is to buy
-      tickets: the terminal jackpot pays 90% of all locked ETH to next-level ticket holders. In the failure state, all
-      equity owed to future ticket holders is redirected to next-level holders, divided among however many next-level
-      tickets exist. For it to be rational not to buy, that per-ticket share would have to be worth less than a ticket.
-      Once even a single level has completed, this is essentially impossible: the future-ticket equity spans potentially
-      dozens of levels of accumulated play and dwarfs the total cost of tickets that would need to be sold to complete
-      the level.</p>
+      tickets: the terminal jackpot pays 90% of all locked ETH to next-level ticket holders. As the concrete math
+      above shows, the per-ticket terminal payout exceeds ticket cost throughout the stall. The future-ticket equity
+      redirected to next-level holders in the failure state spans potentially dozens of levels of accumulated play and
+      dwarfs the total cost of tickets that would need to be sold to complete the level.</p>
     <p>And terminal arbitrageurs do not need to complete the level by themselves. Future ticket holders have locked
       equity that only pays out if the game continues past their target levels. Once the stall becomes visible enough
       to threaten that equity, they step in and defend it with real current-level purchases. They do not even need to
       buy tickets: lootboxes are +EV for engaged players, and a portion of each lootbox purchase flows into the
       nextpool. Future ticket holders can defend their equity while playing a +EV game the entire time. The terminal
       arbitrageurs only need to buy enough to close the gap to the point where this defense activates.</p>
-    <p>In both cases, buying is the "selfish" response, and it is simultaneously the cooperative action: 90% of each
-      ticket purchase flows into the nextpool, which is the pool that must reach its target to avert GAMEOVER.</p>
     <p><strong>The convergence paradox.</strong> Buying is dominant if GAMEOVER will fire but marginally negative for a
-      pure outsider if it doesn't. If enough actors buy to prevent GAMEOVER, buying was -EV, so they should not have
+      pure outsider if it doesn't. If enough actors buy to prevent GAMEOVER, buying was (possibly) -EV, so they should
+      not have
       bought. But if they don't buy, GAMEOVER becomes likely and buying becomes massively +EV.</p>
     <p><em>The terminal action is self-negating.</em> Buying to claim terminal value funds the pool that prevents the
       terminal event. The act of preparing for the end prevents the end. This creates a self-correcting equilibrium.
@@ -3545,20 +3686,18 @@
     <p>where $\Phi$ takes the current probability $p$, computes the best-response purchasing behavior $B(p)$, reduces
       the gap by $0.9 c_\ell \cdot B(p)$, and returns the updated probability of GAMEOVER given the reduced gap.
       Because $\Phi$ is decreasing (higher perceived risk triggers more buying, which reduces actual risk), and the
-      identity function $p \mapsto p$ is increasing, the fixed point $p^*$ is unique.</p>
-    <p>Once the first level has completed, $p^*$ is very small. Even a $p^*$ of 5% makes terminal buying massively +EV,
-      which drives purchases that push $p^*$ well below 5%. The basin of attraction is wide because the asymmetry
-      between terminal payout and ticket cost is extreme. The game does not sit on a knife-edge. It sits in a deep
-      well.</p>
+      identity function $p \mapsto p$ is increasing, the fixed point $p^*$ is unique. The basin of attraction is wide:
+      each purchase simultaneously reduces the gap (lowering $p$) without materially diluting either the terminal or
+      survival ratio, so $p^*$ is small once even one level has completed.</p>
     <p>This is not circular reasoning. It is an equilibrium property. No individual buyer intends to save the game.
-      Each buys because the trade is +EV in expectation: if GAMEOVER fires, the terminal payout dwarfs the ticket
+      Each buys because the trade is +EV in expectation: if GAMEOVER fires, the terminal payout exceeds the ticket
       cost; if GAMEOVER is averted, the ticket participates in normal jackpot draws. No single buyer is pivotal. Each
       buyer's contribution to the nextpool is a small fraction of the total gap. The coordination problem dissolves
       because no coordination is needed. Many individually rational purchases collectively fill the pool. The terminal
       jackpot functions as a coordination device whose primary value is that it never needs to be exercised.</p>
     <p>For completeness: this equilibrium breaks down only when the accumulated pool is so small that terminal payouts
       per ticket do not exceed ticket costs even at $p = 1$. This requires $P^{total} &lt; c_\ell \cdot N / 0.9$,
-      satisfied only at very early levels (0–4) where a single motivated buyer can fill the entire pool anyway.
+      satisfied only at very early levels or after a level with a long stall that drains the futurepool.
       (<a href="#appendix-e">Appendix E</a> develops the formal details: fixed-point properties, stability analysis,
       threshold conditions, and edge cases including the BURNIE dilution scenario.)</p>
     <p>If arb capital alone is insufficient, future ticket holders complete the defense. They have locked equity that
@@ -3569,12 +3708,27 @@
       (3) the game would have continued without them, making the purchase unnecessary. States (1) and (2) are +EV.
       State (3) is the only negative, but the more likely it is, the less danger existed to begin with.</p>
     <p>The terminal decimator plays a supporting role. Players competing for better decimator positioning must maintain
-      quest streaks, which requires daily ticket purchases, which funds the nextpool. Players chasing the 10% decimator
-      payout are simultaneously closing the gap that would trigger it.</p>
+      quest streaks, which requires daily ticket or lootbox purchases, which funds the nextpool. A player who maintained
+      their streak through the stall will have both a strong decimator position and a large stack of tickets that are
+      each individually +EV through the terminal jackpot. Players chasing the 10% decimator payout are simultaneously
+      closing the gap that would trigger it.</p>
+    <p><strong>Distress-mode lootboxes.</strong> In the final six hours before GAMEOVER would trigger, lootbox
+      purchases switch to 100% nextpool allocation (from the normal 10/90 next/future split) and any future-level
+      tickets rolled receive a 25% bonus. The reallocation is the primary mechanism: with GAMEOVER six hours away,
+      routing 90% of lootbox spend into the futurepool is wasting capital on levels that will never exist.
+      Redirecting it all to the nextpool makes every lootbox purchase maximally productive at closing the gap.
+      The future ticket bonus rewards players who buy during distress with additional equity that only pays off if
+      the game survives, deepening their stake in the outcome they are helping to produce.</p>
+    <p>Critically, distress-mode lootboxes do not penalize early ticket buyers. Players who purchased tickets for
+      the stalling level weeks or months earlier retain their full terminal jackpot eligibility and accumulated
+      draws. The mechanism is purely additive: it creates a new incentive for engaged players whose habitual
+      lootbox purchases would otherwise be 90% futurepool-directed and therefore nearly useless for closing the gap.
+      Engaged players with high activity scores, future-level equity, and active quest streaks already have
+      every reason to prevent GAMEOVER. Distress mode makes their existing behavior count.</p>
     <p>This ensures that accumulated value is distributed rather than destroyed, and that the distribution mechanism
       itself makes destruction maximally unlikely.</p>
     <hr />
-    <h2 id="section-growth">9. The Growth Scenario</h2>
+    <h2 id="section-growth">10. The Growth Scenario</h2>
     <p>The preceding section analyzed failure in detail. This section considers the opposite: what happens when
       the flywheel works.</p>
     <p>The pool target is a ratchet. Each level's target equals the previous level's actual prize pool at completion. It
@@ -3641,7 +3795,7 @@
       jackpots do to
       participation. The reader can extrapolate the implications.</p>
     <hr />
-    <h2 id="section-42">10. Comparisons</h2>
+    <h2 id="section-42">11. Comparisons</h2>
     <table>
       <thead>
         <tr>
@@ -3675,7 +3829,7 @@
           <td>Moderate</td>
           <td>Low (established brand, physical retail)</td>
           <td>Long-run dependent, but terminal payout makes death individually irrational (<a href="#section-41">Section
-              8.7</a>)</td>
+              9.3</a>)</td>
         </tr>
         <tr>
           <td>Liquidity</td>
@@ -3721,7 +3875,7 @@
         </tr>
       </tbody>
     </table>
-    <p><strong>Observation 10.1</strong> (Variance as Defensive Moat). <em>A system with high variance and moderate
+    <p><strong>Observation 11.1</strong> (Variance as Defensive Moat). <em>A system with high variance and moderate
         expected value will tend to attract entertainment-motivated participants (who value variance positively) and
         repel pure extractors (who discount variance and see only moderate EV after accounting for opportunity cost).
         The illiquid reward structure (level-gated payouts, non-transferable future tickets) further limits hedging
@@ -3732,10 +3886,10 @@
       tokens structurally. A
       memecoin's returns depend on later buyers' capital. This protocol's returns depend on entertainment spending plus
       yield. The protocol needs ongoing deposits to advance levels, and without them it eventually ends, but the
-      terminal jackpot (<a href="#section-41">Section 8.7</a>) makes that ending self-preventing.</p>
+      terminal jackpot (<a href="#section-41">Section 9.3</a>) makes that ending self-preventing.</p>
     <hr />
-    <h2 id="section-43">11. Conclusion: The Resilience Thesis</h2>
-    <h3 id="section-44">11.1 Limitations</h3>
+    <h2 id="section-43">12. Conclusion: The Resilience Thesis</h2>
+    <h3 id="section-44">12.1 Limitations</h3>
     <ol>
       <li>
         <p><strong>Smart contract risk is the dominant existential threat.</strong> The protocol holds all player
@@ -3747,26 +3901,22 @@
           itself fails).</p>
       </li>
       <li>
-        <p><strong>Results are not empirically validated.</strong> All results are theoretical. A Monte Carlo simulation
-          of 30 levels with realistic player behavior supports the theoretical predictions (<a
-            href="#section-36">Section 8.2</a>), but simulated
-          agents are not real players with real money. Post-deployment observation is needed to confirm predictions.</p>
+        <p><strong>Results are not empirically validated.</strong> All results are theoretical, and the non-monetary
+          utility parameters are justified by analogy to the gambling industry, not by direct measurement of this
+          protocol's users. A Monte Carlo simulation of 30 levels with realistic player behavior supports the
+          theoretical predictions (<a href="#section-36">Section 8.2</a>), but simulated agents are not real players
+          with real money. Post-deployment observation is needed to confirm predictions.</p>
       </li>
       <li>
         <p><strong>Correlated failure modes are acknowledged but not fully quantified.</strong> The progression
           guarantors are not independent: quest streak maintenance, afKing auto-rebuy, and affiliate recruitment all
           depend on player spending, which correlates with crypto market sentiment. <a href="#section-39">Section
-            8.5</a> develops a structural
+            9.1</a> develops a structural
           argument (six mechanisms in three clusters with negative cross-cluster correlation) and a self-referential
           equilibrium model for why simultaneous failure is improbable, but precise probability estimates for the
           individual mechanism failure rates remain illustrative rather than empirically calibrated. The qualitative
           conclusion (vanishingly small composite probability) is robust to order-of-magnitude changes in the inputs,
           but it is not a computed number.</p>
-      </li>
-      <li>
-        <p><strong>The utility model is assumed rather than empirically measured.</strong> The non-monetary utility
-          parameters are justified by analogy to the gambling industry, not by direct measurement of this protocol's
-          users. Actual player behavior may diverge.</p>
       </li>
       <li>
         <p><strong>Cold-start problem is mitigated but not eliminated.</strong> The cross-subsidy structure requires
@@ -3780,13 +3930,8 @@
           cross-subsidy activates. Whether this sequence reaches full critical mass remains an empirical question, but
           the first player type required is the easiest to acquire, not the hardest.</p>
       </li>
-      <li>
-        <p><strong>stETH yield is exogenous.</strong> We treat stETH yield as a fixed external parameter (~2.5% APR). A
-          sustained decline in Ethereum staking rewards would not break the protocol, but would reduce minimum returns
-          under GTO play, since yield is the source of value injection that makes the game positive-sum.</p>
-      </li>
     </ol>
-    <h3 id="section-45">11.2 The Resilience Thesis</h3>
+    <h3 id="section-45">12.2 The Resilience Thesis</h3>
     <p>The preceding sections built an argument through interlocking mechanisms: cross-subsidy between heterogeneous
       player types (<a href="#section-3">Section 2</a>), commitment devices that make continued participation dominant
       (<a href="#section-25">Section 5.5</a>), structural
@@ -3794,21 +3939,18 @@
       BURNIE economics with a
       built-in price ratchet (<a href="#section-26">Section 6</a>), and a terminal distribution where game death
       requires that, as the terminal
-      payout's expected value grows from marginal to overwhelming over 365 days, no rational actor with capital acts on
-      it at any point (<a href="#section-41">Section 8.7</a>). We now state the central claim.</p>
+      payout's expected value grows from marginal to overwhelming over 120 days, no rational actor with capital acts on
+      it at any point (<a href="#section-41">Section 9.3</a>). We now state the central claim.</p>
     <p><strong>Thesis (Structural Resilience).</strong> <em>Once Degenerus Protocol has reached a state with positive
         prize pools and at least one rational participant, the game has structural incentives to continue advancing
-        through levels.</em> These mechanisms are correlated under adverse market conditions, so independence should not
-      be assumed.</p>
+        through levels.</em></p>
     <p><strong>Where the thesis holds:</strong>
-      - stETH yield rate $r > 0$ (Lido continues functioning)
       - At least one rational actor monitors and acts on prize pool opportunities
       - Ethereum remains operational
       - Smart contract code is free of critical bugs</p>
     <p><strong>Where the thesis fails:</strong>
-      - Lido staking yield goes to zero permanently (systemic ETH staking failure)
-      - A prolonged crypto bear market suppresses participation below the level target for 365+ consecutive days AND the
-      terminal jackpot's increasingly +EV opportunity (<a href="#section-41">Section 8.7</a>) fails to attract any
+      - A prolonged crypto bear market suppresses participation below the level target for 120+ consecutive days AND the
+      terminal jackpot's increasingly +EV opportunity (<a href="#section-41">Section 9.3</a>) fails to attract any
       rational capital as the
       deadline approaches. This is the most plausible failure mode at higher levels, but it requires not just
       insufficient organic play but the collective failure of all actors to respond to a growing arbitrage opportunity
@@ -3819,7 +3961,7 @@
     <p>We do not claim the protocol is indestructible. We claim it is <em>structurally resilient</em>: that its
       incentive design makes continued operation the default outcome under a wide range of conditions, and that failure
       requires sustained collective irrationality rather than the simple absence of growth. The terminal distribution
-      mechanism (<a href="#section-41">Section 8.7</a>) is the strongest expression of this: the endgame payout is
+      mechanism (<a href="#section-41">Section 9.3</a>) is the strongest expression of this: the endgame payout is
       designed so that positioning to
       profit from game death simultaneously prevents it.</p>
     <p><strong>What this means for each participant.</strong> For an EV maximizer, the question is whether the
@@ -3909,10 +4051,10 @@
           <td>Fair game</td>
         </tr>
         <tr>
-          <td>Coinflip reward mean</td>
+          <td>Coinflip win payout mean</td>
           <td>—</td>
-          <td>0.9685</td>
-          <td>Slight negative EV</td>
+          <td>1.9685×</td>
+          <td>Overall EV per flip: 0.984 (1.575% edge)</td>
         </tr>
         <tr>
           <td>Affiliate commission</td>
@@ -3947,13 +4089,13 @@
         <tr>
           <td>Pre-game timeout</td>
           <td>—</td>
-          <td>912 days</td>
+          <td>365 days</td>
           <td>Liveness guard</td>
         </tr>
         <tr>
           <td>Post-game timeout</td>
           <td>—</td>
-          <td>365 days</td>
+          <td>120 days</td>
           <td>Liveness guard</td>
         </tr>
         <tr>
@@ -4028,10 +4170,10 @@
       or more of the following draws, depending on conditions:</p>
     <p><strong>Early-bird jackpot (day 1 of each new jackpot phase only):</strong> 3% of <code>futurePrizePool</code> is
       drawn and distributed to lootbox buyers and trait-matched holders as an opening draw for the new level.</p>
-    <p><strong>ETH days (every 3rd purchase day):</strong> 1% of <code>futurePrizePool</code> is drawn. Part is
-      converted to tickets and credited directly to <code>nextPrizePool</code>; the remainder is paid as ETH to
-      trait-matched ticket holders. This is the primary mechanism by which the futurepool contributes to filling the
-      nextpool during a live purchase phase.</p>
+    <p><strong>Daily futurepool extraction:</strong> 1% of <code>futurePrizePool</code> is drawn each day. 75% flows
+      to <code>nextPrizePool</code> (at 50% ticket conversion with 200% backing per drip ticket); the remaining 25%
+      is paid as ETH prizes to trait-matched ticket holders. This is the primary mechanism by which the futurepool
+      contributes to filling the nextpool during a live purchase phase.</p>
     <p><strong>futurepool drip (days 1–4, if near-future ticket holders exist):</strong> ~1% of
       <code>futurePrizePool</code> is added to the jackpot: 50% as tickets credited directly to
       <code>nextPrizePool</code>, 50% as ETH to near-future ticket holders.
@@ -4046,13 +4188,12 @@
       to 20% as part of the crescendo event. Internal allocation of the drawn pool:</p>
     <ul>
       <li><strong>Top BAF slot:</strong> $10\%$ (highest coinflip volume over the window)</li>
-      <li><strong>Top Daily Flip slot:</strong> $10\%$ (highest single-day coinflip volume)</li>
-      <li><strong>Random pick slot:</strong> $5\%$ (randomly selected eligible player)</li>
-      <li><strong>Affiliate draw slice:</strong> $10\%$ (distributed to active affiliates)</li>
-      <li><strong>Future ticket holder slot:</strong> $5\%$ (2 winners from 4 far-future ticket holder candidates ranked
-        by BAF score: 3% to 1st, 2% to 2nd)</li>
-      <li><strong>Random draw slot:</strong> $40\%$ + $20\%$: 4 tickets are drawn randomly; the top 2 by BAF score
-        receive 40% and 20% respectively; the other 2 receive nothing</li>
+      <li><strong>Top coinflip slot:</strong> $5\%$ (highest single-day coinflip volume)</li>
+      <li><strong>Random pick slot:</strong> $5\%$ (randomly selected from #3 or #4 BAF leaderboard)</li>
+      <li><strong>Far-future ticket holder draws:</strong> $5\%$ + $5\%$: two independent draws from far-future ticket
+        holders ranked by BAF score (3% to 1st, 2% to 2nd per draw)</li>
+      <li><strong>Scatter:</strong> $45\%$ + $25\%$: 50 rounds of trait-ticket sampling; 1st-place winners from each
+        round share the 45% pool, 2nd-place winners share the 25% pool</li>
     </ul>
     <p><strong>Scatter source by BAF type.</strong> The ticket pool from which scatter recipients are drawn varies by
       milestone type:</p>
@@ -4064,8 +4205,8 @@
         100-level cycle (season finale payout), while the forward-looking minority creates a FOMO bridge into the next
         cycle.</li>
       <li><strong>Terminal BAF (GAMEOVER):</strong> No scatter. The terminal distribution runs 90% of remaining assets
-        through a final jackpot among next-level ticket holders, with 10% to a decimator weighted by quest streak over
-        the last 100 days (<a href="#section-41">Section 8.7</a>).</li>
+        through a final jackpot among next-level ticket holders, with 10% to a decimator weighted by BURNIE burned
+        and activity score (<a href="#section-41">Section 9.3</a>).</li>
     </ul>
     <h3 id="section-decimator">B.4 Decimator</h3>
     <p>The decimator is a BURNIE-burn-to-ETH event that fires at milestone levels. Players permanently burn BURNIE to
@@ -4074,10 +4215,26 @@
       maximum), making the decimator strictly more valuable to engaged players. Trigger schedule and pool percentages
       are in <a href="#section-48">Appendix C</a>. At x00 levels the decimator draws 30% of <code>futurePrizePool</code>
       (triple the normal 10%),
-      contributing to the century crescendo alongside the doubled BAF and the futurepool transfer.</p>
+      contributing to the century crescendo alongside the doubled BAF and the futurepool transfer.
+      At x00 levels the minimum bucket also drops to 2 (from 5 at normal milestones), giving top-activity players
+      a 50% win probability compared to 20% normally. Combined with the tripled pool allocation and burn weight
+      multiplier (up to 1.783x), century decimators are designed to reward the most committed players during the
+      period when ticket prices are highest and the grind is toughest. The massive payouts also attract less
+      experienced players, whose sub-optimal burn timing and lower activity scores systematically transfer value
+      to the veterans.</p>
     <hr />
     <h2 id="section-48">Appendix C: Model Detail</h2>
     <p><em>Full mathematical formalization of the protocol's parameters and game structure.</em></p>
+    <h3 id="folk-theorem-note">Note: Strategic Infinity and the Folk Theorem</h3>
+    <p>In game theory, the <strong>folk theorem</strong> establishes that cooperative equilibria are sustainable in
+      infinitely repeated games. In a finitely repeated game with a known endpoint, backward induction unravels
+      cooperation: players defect in the last round because there is no future punishment, then in the second-to-last
+      round for the same reason, cascading to round one. The folk theorem says this cascade cannot start when there is
+      no known final round. Degenerus satisfies this condition because GAMEOVER is triggered by a state variable
+      (120 days of insufficient activity), not by a pre-specified terminal level. The game's horizon is
+      <em>endogenous</em>: it ends only when players collectively cause it to end. No player can identify the "last
+      round" in advance, so the backward induction that kills finite games has no starting point. This is what
+      <a href="#section-24">Section 5.4</a> means by "cooperative play can be sustained indefinitely."</p>
     <h3 id="section-49">Key Parameter Summary</h3>
     <p><strong>Lootbox EV quick reference:</strong></p>
     <table>
@@ -4235,7 +4392,7 @@
       ticket holder slots, and scatter slices. (Exact slice percentages are in <a href="#section-47">Appendix B</a>.)
     </p>
     <p><strong>Ticket timing and EV.</strong> Not all tickets at a given level have equal expected value. A ticket
-      purchased early in the purchase phase is eligible for purchase-phase reward jackpots (every 3 days, drawing ~1% of
+      purchased early in the purchase phase is eligible for daily purchase-phase reward jackpots (drawing ~1% of
       the futurepool as tickets and ETH to trait holders), all 3–5 daily jackpot draws during the jackpot phase
       (depending on whether the compressed or standard schedule applies), and any future-level BURNIE draws it
       accumulates while waiting. A ticket purchased just before the level target is met catches all jackpot-phase draws
@@ -4292,14 +4449,14 @@
     <div class="design-property">
       <p><strong>Design Property</strong> (Liveness). <em>The game satisfies liveness under the assumption that
           sufficient purchasing activity occurs to meet the level's prize pool target and trigger a new level start
-          within 365 days of the previous level's start (912 days at level 0). The following mechanisms support
+          within 120 days of the previous level's start (365 days at level 0). The following mechanisms support
           this:</em></p>
       <ol>
         <li><em>Multiple independent progression guarantors</em> (quest streaks, afKing auto-rebuy, affiliate referrals,
           and the 15% futurepool transfer each level that compensates preexisting ticket holders) all contribute
           independently to nextpool growth. Note: stETH yield grows total assets and increases jackpot attractiveness,
           but does not directly contribute to the nextpool target.</li>
-        <li><em>futurepool drain:</em> Every three days, a portion of the futurepool drains into the nextpool, awarding
+        <li><em>futurepool drain:</em> Daily, a portion of the futurepool drains into the nextpool, awarding
           the equity in tickets to current ticket holders. Once the futurepool reaches a sufficient multiple of the
           nextpool requirement, this mechanism alone guarantees the next level will fire even with zero new player
           activity. However, this is a one-shot guarantee: if activity remains at zero, the futurepool will be
@@ -4374,7 +4531,8 @@
       90% of their spend directly into the nextpool, funding the pool target that prevents GAMEOVER. The attack is
       self-defeating by construction: the act of positioning for terminal payout is the act of preventing it. A
       BURNIE-based strategy (accumulating cheaply and burning for the 10% terminal decimator) faces the structural price
-      floor from direct ticket-purchase utility, and the decimator is weighted by 100-day quest streak, requiring
+      floor from direct ticket-purchase utility, and the decimator is weighted by BURNIE burned and activity score,
+      requiring
       sustained active play (and therefore ticket purchases, which also fund the target). There is no way to position
       for GAMEOVER without simultaneously working to prevent it.
       <strong>Verdict:</strong> Not a viable attack. The terminal distribution is designed so that the only way to claim
@@ -4383,7 +4541,7 @@
 
     <h2 id="appendix-e">Appendix E: Bear Market Equilibrium (Formal Details)</h2>
     <p>This appendix provides the formal treatment supporting the probability equilibrium argument in <a
-        href="#section-39">Section 8.5</a>. The
+        href="#section-39">Section 9.1</a>. The
       main section presents the intuition; this appendix develops the mathematical structure, stability analysis,
       threshold conditions, and edge cases.</p>
 
@@ -4424,7 +4582,7 @@
           the terminal payout asymmetry ensures this: even at $p = \epsilon$ for small $\epsilon$, the terminal
           component of $\pi_i$ may exceed $c_\ell$ for position holders with substantial $V^{surv}$, driving buying that
           keeps the fixed-point region close to zero.</p>
-        <p><strong>Stability.</strong> The natural model for a 365-day window is continuous-time dynamics $dp/dt \propto
+        <p><strong>Stability.</strong> The natural model for a 120-day window is continuous-time dynamics $dp/dt \propto
           \Phi(p) - p$. Since $\Phi$ is decreasing and the identity is increasing, whenever $p > p^*$ we have $\Phi(p) <
             p$ (the system pushes $p$ down), and whenever $p < p^*$ we have $\Phi(p)> p$ (the system pushes $p$ up). The
             fixed point is globally stable under continuous-time dynamics. Under discrete-time best-response dynamics,
@@ -4459,7 +4617,7 @@
                         incentive.</p>
 
                       <h3>E.4 The BURNIE Ticket Dilution Scenario</h3>
-                      <p>A potential concern: before the 30-day BURNIE ticket freeze (day 335 of the 365-day window),
+                      <p>A potential concern: before the 30-day BURNIE ticket freeze (day 90 of the 120-day window),
                         players could mass
                         purchase BURNIE tickets. These tickets create next-level entries (and therefore terminal jackpot
                         eligibility) but
@@ -4492,15 +4650,15 @@
                         their position if needed.</p>
 
                       <h3>E.5 Path-Dependent Dynamics</h3>
-                      <p>The fixed-point equation is a steady-state characterization. The actual game evolves over 365
+                      <p>The fixed-point equation is a steady-state characterization. The actual game evolves over 120
                         days. A concern:
                         could rational agents procrastinate, waiting until $p$ rises high enough to justify buying, only
                         to find the
                         remaining time is insufficient for enough purchases to close the gap?</p>
                       <p>Several features mitigate the procrastination equilibrium:</p>
                       <ul>
-                        <li><strong>Mechanical flows are time-independent.</strong> The futurepool drip fires every
-                          three days regardless
+                        <li><strong>Mechanical flows are time-independent.</strong> The futurepool drip fires daily
+                          regardless
                           of human activity. These flows continuously reduce $G(t)$ without requiring any agent to act.
                           Even if human
                           buying is delayed, the mechanical floor keeps working.</li>
@@ -4514,18 +4672,18 @@
                           not require high $p$. The threat to their locked equity becomes salient once the stall is
                           visible, well before
                           $p$ rises to levels that attract pure terminal arbitrageurs.</li>
-                        <li><strong>The BURNIE freeze at day 335 creates early urgency.</strong> BURNIE holders who want
+                        <li><strong>The BURNIE freeze at day 90 creates early urgency.</strong> BURNIE holders who want
                           current-level
-                          positioning must act before day 335, pulling some buying forward.</li>
+                          positioning must act before day 90, pulling some buying forward.</li>
                         <li><strong>Sequential observability.</strong> On-chain transactions are visible in real time.
                           An agent can
                           observe others buying (or not buying) and update their estimate of $G(t)$ and $p(t)$ block by
                           block. There is
-                          no information blackout that could cause a sudden surprise at day 350.</li>
+                          no information blackout that could cause a sudden surprise at day 110.</li>
                       </ul>
                       <p>The residual risk is a scenario where the gap $G$ is very large relative to mechanical flows,
                         the stall persists
-                        for 300+ days with no human buying, and the final 65 days are insufficient for enough purchases
+                        for 100+ days with no human buying, and the final 20 days are insufficient for enough purchases
                         to close the gap.
                         But in this scenario, the terminal payout per ticket is enormous (few competitors for a large
                         pool), and the
@@ -4533,7 +4691,7 @@
                         ETH and
                         blockchain access must ignore a growing, transparent, +EV opportunity for the duration. The
                         conjunction
-                        requirement (<a href="#section-39">Section 8.5</a>) applies: this requires the simultaneous
+                        requirement (<a href="#section-39">Section 9.1</a>) applies: this requires the simultaneous
                         failure of all six mechanisms.</p>
 
                       <h3>E.6 Repeated Stall Erosion</h3>
@@ -4675,7 +4833,7 @@
 
                       <h3>F.4 "The paper is written by the creator, so it is a sales document"</h3>
                       <p>The author is disclosed. The paper says "Burnie Degenerus" on the front. The Limitations
-                        section (<a href="#section-44">11.1</a>) opens
+                        section (<a href="#section-44">12.1</a>) opens
                         with "smart contract risk is the dominant existential threat," states that results are not
                         empirically validated,
                         acknowledges correlated failure modes, and lists six specific ways the system could fail. <a
@@ -4812,7 +4970,7 @@
                         type definition
                         for the cross-subsidy to function at scale (<a href="#section-5">Section 2.2</a>). The paper
                         does not claim this is settled. It scopes
-                        entertainment demand as an assumption (<a href="#section-44">Section 11.1</a>, limitation 4) and
+                        entertainment demand as an assumption (<a href="#section-44">Section 12.1</a>, limitation 4) and
                         states that "post-deployment observation
                         is needed." The definitions structure the analysis; the empirical question of player composition
                         is left open.
@@ -4829,13 +4987,13 @@
                         target of 5 ETH costs $20,000 to fill at $4,000/ETH and $4,000 to fill at $800/ETH. Player
                         wealth declined,
                         but so did the cost of the thing they are buying. The paper addresses this explicitly in <a
-                          href="#section-39">Section 8.5</a>.</p>
+                          href="#section-39">Section 9.1</a>.</p>
                       <p>On "degens run out of money": this is a real constraint that the paper does not deny. Bear
                         markets thin the
                         player base. The paper's argument is not that bear markets are painless, but that the protocol
                         has six
                         structural mechanisms that continue operating under reduced activity and that GAMEOVER requires
-                        365 consecutive
+                        120 consecutive
                         days of near-total inactivity. The question is whether the protocol can survive a thinned player
                         base, not
                         whether the player base thins.</p>
@@ -4849,7 +5007,7 @@
                         player wealth.
                         The relevant question is not "will ETH be worth less?" but "will existing ETH move toward or
                         away from
-                        Degenerus?" The paper's argument (<a href="#section-39">Section 8.5</a>) is that a bear market
+                        Degenerus?" The paper's argument (<a href="#section-39">Section 9.1</a>) is that a bear market
                         makes the protocol relatively more
                         attractive: per-capita pool share increases as players leave, terminal arbitrage becomes more
                         profitable,
@@ -4874,9 +5032,9 @@
                         durations.</p>
                       <p>The paper acknowledges the common cause: "share a common cause: player spending, market
                         sentiment" (<a href="#section-39">Section
-                          8.5</a>). It does not claim independence. What it claims is that several mechanisms are
+                          9.1</a>). It does not claim independence. What it claims is that several mechanisms are
                         <em>anti-correlated</em>
-                        with the ones most likely to fail in a bear market. <a href="#section-39">Section 8.5</a>
+                        with the ones most likely to fail in a bear market. <a href="#section-39">Section 9.1</a>
                         develops this explicitly: when entertainment
                         demand (mechanism 3) and affiliate recruitment (mechanism 4) weaken during a downturn, terminal
                         arbitrage
@@ -4889,7 +5047,7 @@
                         together." It is "some mechanisms weaken under stress while others activate precisely because of
                         that stress."
                         The paper develops this anti-correlation argument in detail. Read <a href="#section-39">Section
-                          8.5</a> before concluding the mechanisms
+                          9.1</a> before concluding the mechanisms
                         are redundant.
                       </p>
                       <p>The composite failure probability estimates are explicitly described as "illustrative rather
@@ -4900,11 +5058,11 @@
                         simultaneous failure
                         qualitatively different from correlated failure.</p>
 
-                      <h3>F.10 "GAMEOVER self-prevention is unrealistic because nobody will be watching during a 365-day
+                      <h3>F.10 "GAMEOVER self-prevention is unrealistic because nobody will be watching during a 120-day
                         stall"</h3>
                       <p>A "stall" does not mean the protocol goes silent. During a stall, the contract continues to
                         operate
-                        mechanically: the futurepool drip fires every three days, moving ETH into the next prize pool.
+                        mechanically: the futurepool drip fires daily, moving ETH into the next prize pool.
                         Jackpot draws
                         continue to run on every ticket purchase, paying ETH to winners. BURNIE distributions continue
                         daily. Any player
@@ -4921,14 +5079,15 @@
                         with blockchain
                         access. The paper's claim is not that a vibrant community will heroically save the game. It is
                         that a
-                        transparent, growing, +EV arbitrage opportunity visible on a public blockchain for up to a year
+                        transparent, growing, +EV arbitrage opportunity visible on a public blockchain for up to 120
+                        days
                         will attract at
                         least one rational actor. MEV bots, arbitrage scanners, and on-chain monitors operate
                         continuously regardless of
                         community sentiment.</p>
-                      <p>The terminal payout math (<a href="#section-41">Section 8.7</a>): at level 50 with 500 ETH
-                        locked, terminal share per ticket is
-                        approximately 0.45 ETH against a ticket cost of 0.08 ETH. This is a 5.6x payout ratio. The
+                      <p>The terminal payout math (<a href="#section-41">Section 9.3</a>): at level 50 with ~949 ETH
+                        in non-obligated assets, terminal share per ticket is
+                        approximately 0.16 ETH against a ticket cost of 0.08 ETH. This is a 2.0x payout ratio. The
                         opportunity does not
                         require community engagement, Discord activity, or social media presence. It requires one wallet
                         submitting one
@@ -4943,25 +5102,25 @@
                         person, anywhere in
                         the world, to notice that a smart contract holds hundreds of ETH in a publicly readable state
                         where buying a
-                        0.08 ETH ticket gives a claim on 0.45 ETH. For this to fail, every rational actor with ETH and
+                        0.08 ETH ticket gives a claim on 0.16 ETH. For this to fail, every rational actor with ETH and
                         blockchain
-                        access must ignore a visible, growing, on-chain profit opportunity for an entire year. That is
+                        access must ignore a visible, growing, on-chain profit opportunity for four months. That is
                         not a
                         behavioral assumption. It is a requirement that the entire crypto ecosystem collectively ignores
                         free money.
                         The history of on-chain finance suggests this does not happen.</p>
                       <p>Separately, the terminal arbitrage is not even the strongest bear market defense. The
                         futurepool mechanical
-                        drip fires every three days regardless of human activity. If the futurepool holds approximately
+                        drip fires daily regardless of human activity. If the futurepool holds approximately
                         1.5x the
                         current level target, mechanical flows alone (15% dump + ticket conversion + drip) move roughly
                         60% of the
-                        futurepool into the nextpool over 365 days with zero human participation. No rational actors
+                        futurepool into the nextpool over 120 days with zero human participation. No rational actors
                         need to notice
                         anything. No bots need to monitor the contract. The level completes on autopilot through
                         accumulated capital
                         redistribution. The terminal arbitrage is the backup for when the autopilot is insufficient. <a
-                          href="#section-39">Section 8.5</a>
+                          href="#section-39">Section 9.1</a>
                         develops this in full.</p>
 
                       <h3>F.11 "The affiliate system is MLM"</h3>
@@ -5039,7 +5198,7 @@
                         jurisdictions to
                         find and use the protocol. This would thin the player base, which is a real effect addressed by
                         the bear market
-                        analysis (<a href="#section-39">Section 8.5</a>). But it cannot shut the protocol down, drain
+                        analysis (<a href="#section-39">Section 9.1</a>). But it cannot shut the protocol down, drain
                         its funds, or alter its rules. The economic
                         incentives for existing participants remain intact even if the creator and all of the creator's
                         infrastructure
@@ -5077,9 +5236,9 @@
                         before launch,
                         and saying so is not a limitation of the analysis. It is a limitation of reality. The paper
                         scopes this
-                        explicitly (<a href="#section-2">Section 1</a>, <a href="#section-44">Section 11.1</a>) and
+                        explicitly (<a href="#section-2">Section 1</a>, <a href="#section-44">Section 12.1</a>) and
                         identifies the observable metrics that will answer it post-launch
-                        (<a href="#section-45">Section 11.2</a>). Demanding empirical proof before any empirical data
+                        (<a href="#section-45">Section 12.2</a>). Demanding empirical proof before any empirical data
                         can exist is not a criticism. It is a
                         tautology.</p>
 
@@ -5117,7 +5276,7 @@
                         button as the
                         primary risk misidentifies the mechanism as the danger. The danger is that the game could fail
                         to attract
-                        players or that a smart contract bug could drain funds (<a href="#section-44">Section 11.1</a>).
+                        players or that a smart contract bug could drain funds (<a href="#section-44">Section 12.1</a>).
                         Those are real risks. "Permanent
                         deposit" is not a risk. It is how every prize pool in history works.</p>
 
@@ -5299,7 +5458,7 @@
                         exploit.</p>
 
                       <h3>F.23 "Terminal buying has a free-rider problem"</h3>
-                      <p>This is addressed extensively in <a href="#section-41">Section 8.7</a> (the convergence
+                      <p>This is addressed extensively in <a href="#section-41">Section 9.3</a> (the convergence
                         paradox) and <a href="#appendix-e">Appendix E</a> (formal fixed-point
                         analysis). The short version: no single buyer is pivotal. Each buyer's nextpool contribution is
                         a small fraction of
@@ -5323,11 +5482,11 @@
                         contribution is less
                         than the cost. Here the terminal payout so far exceeds the ticket cost that even a small
                         probability of GAMEOVER
-                        makes the expected payoff positive. As <a href="#section-41">Section 8.7</a> notes, buying is
+                        makes the expected payoff positive. As <a href="#section-41">Section 9.3</a> notes, buying is
                         approximately weakly dominant for engaged
                         players and the equilibrium drives P(GAMEOVER) toward zero. The result is a private
                         goods opportunity that incidentally produces a public good. Read <a href="#section-41">Section
-                          8.7</a> and <a href="#appendix-e">Appendix E</a> before raising this
+                          9.3</a> and <a href="#appendix-e">Appendix E</a> before raising this
                         objection.</p>
 
                       <h3>F.24 "Activity score is regressive / pay-to-win"</h3>
@@ -5375,23 +5534,23 @@
                         that takes three months instead of two weeks is not a crisis. It is the system adjusting to
                         reduced input.</p>
                       <p>The mechanisms that fill pools during slowdowns are documented in <a href="#section-39">Section
-                          8.5</a>: futurepool mechanical drip (fires
-                        every three days regardless of human activity), stETH yield accumulation on locked capital,
+                          9.1</a>: futurepool mechanical drip (fires daily
+                        regardless of human activity), stETH yield accumulation on locked capital,
                         terminal arbitrage
-                        incentives that strengthen as stalls lengthen (<a href="#section-41">Section 8.7</a>), and
+                        incentives that strengthen as stalls lengthen (<a href="#section-41">Section 9.3</a>), and
                         future ticket holder portfolio defense. These
                         mechanisms can sustain level progression at dramatically reduced activity rates.</p>
                       <p>The specific math: if the futurepool holds approximately 1.5x the current level target,
                         mechanical flows alone
                         (15% dump + ticket conversion + drip) move approximately 60% of the futurepool into the nextpool
-                        over 365 days
+                        over 120 days
                         with zero human activity. Growth is required level-over-level, but the rate of new money
                         entering the system can
                         slow dramatically without system failure or death spiral. "Requires growth" and "requires
                         perpetual exponential
                         growth" are very different claims. This system requires the former. It does not require the
                         latter. The paper
-                        addresses this distinction explicitly in <a href="#section-39">Section 8.5</a>.</p>
+                        addresses this distinction explicitly in <a href="#section-39">Section 9.1</a>.</p>
 
                       <h3>F.26 "On-chain gambling might be a fad"</h3>
                       <p>Gambling is one of the oldest and most persistent human behaviors. Archaeological evidence for
@@ -5476,7 +5635,7 @@
                         all players (that is
                         a values question). It does not rebut the argument that player composition is untested before
                         launch (the paper
-                        says so explicitly in <a href="#section-44">Section 11.1</a>). If your criticism survives a
+                        says so explicitly in <a href="#section-44">Section 12.1</a>). If your criticism survives a
                         reading of the actual mechanism, this appendix
                         will not stop you from making it. If your criticism is contradicted by the smart contract code,
                         this appendix
