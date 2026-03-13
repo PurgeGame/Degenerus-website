@@ -515,7 +515,8 @@
       outside the model's scope (addressed qualitatively in <a href="#section-9">Section 2.5</a>). Every section was
       subjected to adversarial review by specialized agents with full access to the contract source code, designed to
       attack the protocol's claims. The methodology and common misreadings are documented in
-      <a href="#appendix-f">Appendix F</a>.</p>
+      <a href="#appendix-f">Appendix F</a>.
+    </p>
     <p><strong>Terminal state.</strong> Funds are locked in a contract with no admin withdrawal function. If the game
       ever stalls, all remaining funds are paid out as ETH to ticket holders and active participants. The terminal
       mechanism is designed so that buying tickets to claim eligibility simultaneously funds the pool target whose
@@ -714,7 +715,8 @@
           </tr>
         </tbody>
       </table>
-      <p><em>BURNIE price is constant; ETH price escalates. This is why BURNIE earned early appreciates in purchasing power as levels progress. Full breakdown in <a href="#section-27">Section 6.1</a>.</em></p>
+      <p><em>BURNIE price is constant; ETH price escalates. This is why BURNIE earned early appreciates in purchasing
+          power as levels progress. Full breakdown in <a href="#section-27">Section 6.1</a>.</em></p>
     </div>
 
     <p>The demo below shows four consecutive daily jackpot draws to illustrate the core mechanic. Click "Next Day" to
@@ -2314,7 +2316,8 @@
         score</strong> from 0 (new) to 3.05 (maximum), computed from engagement metrics (purchase
       consistency, quest streaks, affiliate activity, pass bonuses). In brief: activity score = quest streak (up to
       1.0) + purchase streak (0.5) + purchase count (0.25) + affiliate (0.5) + pass/deity bonus (0.8). Max 3.05. The
-      full formula and component weights are in <a href="#section-53">Appendix C</a>. The score determines relative EVs across all products: lootbox purchases
+      full formula and component weights are in <a href="#section-53">Appendix C</a>. The score determines relative EVs
+      across all products: lootbox purchases
       range from 0.80x at zero activity (below face value) to 1.35x at maximum activity (above face value). The 1.35x
       multiplier at maximum activity score is a protocol parameter, not a guaranteed realized return. What a player
       actually receives depends on pool composition and luck.</p>
@@ -2328,8 +2331,10 @@
         ETH to above-breakeven ETH, not on the fish-to-grinder headcount.</em></p>
     <p><strong>Observation 2.2</strong> (Self-Correcting Equilibrium). <em>If too many grinders extract above breakeven,
         the pool's surplus shrinks and realized returns decline. Some grinders leave (they are money-sensitive), which
-        restores returns for those who remain. When a +EV player exits, the pool they would have extracted from retains that
-        surplus: fewer above-breakeven draws against the same pool. This lowers the breakeven bar for everyone else. The equilibrium point shifts, but never breaks, because
+        restores returns for those who remain. When a +EV player exits, the pool they would have extracted from retains
+        that
+        surplus: fewer above-breakeven draws against the same pool. This lowers the breakeven bar for everyone else. The
+        equilibrium point shifts, but never breaks, because
         the
         entertainment-seeking side is largely insensitive to the grinder population.</em> A degen's lootbox is just as
       fun
@@ -2535,11 +2540,14 @@
       same aggregate pool, so the strategy's profitability depends on sufficient pool inflows from other participants.
       The grinder class is self-limiting: too many grinders deplete the surplus, returns fall, and the least efficient
       grinders exit. In practice, this correction is noisier than the theory suggests, in a way that strengthens it.
-      Players cannot exactly calculate their true EV, which depends on unknowable factors out of their control.
+      Players cannot perfectly calculate their true EV because it depends on unknowable factors out of their control.
       Actual people are results-oriented: a grinder who plays optimally but runs bad may quit feeling the game is
-      unprofitable, while a fishy hybrid on a heater stays convinced they have an edge. Variance and bankroll
-      pressure thin the grinder field faster than pure skill sorting would. Every
-      grinder departure, whether rational or not, releases their share of future surplus back to those who remain.</p>
+      unprofitable, while a fishy hybrid on a heater stays convinced they have an edge. The variance is high enough
+      that an overextended grinder will hit a drawdown that forces them out, and going broke doesn't just
+      cost ETH. It costs quest streaks, activity score, and the compounding advantages that made the strategy
+      profitable. Variance and bankroll pressure thin the grinder field faster than pure skill
+      sorting would. Every grinder departure, whether rational or not, releases their share of future surplus back
+      to those who remain.</p>
     <h3 id="section-13">3.3 The Whale</h3>
     <p>Whales can participate profitably on monetary returns alone. Status is an additional payoff for those who value
       it, not a requirement.</p>
@@ -2717,7 +2725,8 @@
     <ul>
       <li><strong>Presale revenue:</strong> 20% of lootbox ETH goes to the vault, ending automatically after a fixed
         number of levels or 200 ETH of lootbox purchases, whichever comes first. Capped at 40 ETH maximum
-        (i.e. max 200 ETH &times; 20%). This is real extraction that compensates development completed before launch.</li>
+        (i.e. max 200 ETH &times; 20%). This is real extraction that compensates development completed before launch.
+      </li>
       <li><strong>20% of the <a href="#section-dgnrs">DGNRS</a> token supply.</strong> DGNRS is a fixed-supply token
         that receives 25% of system stETH yield and 4 tickets per level with an activity score boost. Holders can burn
         DGNRS to extract their pro-rata share of accumulated yield and prizes. The remaining 80% is distributed to
@@ -2818,7 +2827,8 @@
       level 0). If the game reaches even level 10 (0.04 ETH tickets), early BURNIE has quadrupled in utility value. By
       the first century milestone (0.24 ETH), early BURNIE is worth 24x its acquisition cost. Presale lootboxes are even
       more generous with bonus BURNIE. This makes early participation strictly more attractive than waiting.</p>
-    <p><strong>Reserve accumulation.</strong> Once any deposits exist, stETH yield accrues regardless of further activity,
+    <p><strong>Reserve accumulation.</strong> Once any deposits exist, stETH yield accrues regardless of further
+      activity,
       growing total assets. The segregated accumulator (funded by both yield and the 1% level-completion skim) compounds
       unopposed during inactivity, making the next century milestone distribution and terminal insurance larger with
       every passing day.</p>
@@ -4107,7 +4117,8 @@
           <td>stETH yield split</td>
           <td>—</td>
           <td>50/25/25% accumulator/vault/DGNRS</td>
-          <td>50% to segregated accumulator (also receives 1% of prize pool at each level completion; half distributed at x00, half retained as terminal insurance)</td>
+          <td>50% to segregated accumulator (also receives 1% of prize pool at each level completion; half distributed
+            at x00, half retained as terminal insurance)</td>
         </tr>
         <tr>
           <td>Activity score range</td>
@@ -4471,7 +4482,8 @@
     <p><strong>Additional lootbox value.</strong> The $\mu$ multiplier accounts for ticket and BURNIE-equivalent value
       from lootbox rewards. Lootboxes also award DGNRS tokens (from a reward pool, scaled by lootbox size) and boons
       (random bonuses including purchase boosts, coinflip boosts, activity score points, and occasionally whale passes
-      or deity pass discounts). These components are harder to quantify because DGNRS value depends on accumulated yield at
+      or deity pass discounts). These components are harder to quantify because DGNRS value depends on accumulated yield
+      at
       the time of burn (the token is soulbound and can only be burned for pro-rata backing, not traded) and
       boon value depends on whether the player uses them optimally. They represent additional upside beyond the
       multiplier, but we omit them from the formal EV calculations to keep the analysis conservative.</p>
@@ -4634,7 +4646,8 @@
     <p><strong>Vector:</strong> Lido stETH trades at discount to ETH (as occurred briefly in June 2022 at ~0.93:1).
       <strong>Analysis:</strong> The auto-stake mechanism only stakes ETH <em>above</em> <code>claimablePool</code>,
       meaning the ETH floor for claims is maintained. The stETH exposure is in the "surplus" portion (prize pools,
-      futurepools, and the segregated accumulator), not the solvency floor. Early claimers get ETH; late claimers during a depeg receive discounted
+      futurepools, and the segregated accumulator), not the solvency floor. Early claimers get ETH; late claimers during
+      a depeg receive discounted
       stETH, creating a mild bank-run incentive.
       <strong>Verdict:</strong> Low-to-moderate risk. A severe depeg (&gt;20%) would reduce real prize pool value but
       not threaten claimable funds.
@@ -4832,7 +4845,8 @@
                         historical
                         deposits and the segregated accumulator. $P^{total}$ continues to grow regardless of
                         futurepool depletion (deposits
-                        are irreversible, yield and deposit insurance accrue into the accumulator). The mechanical defense weakens under repeated stalls, but the
+                        are irreversible, yield and deposit insurance accrue into the accumulator). The mechanical
+                        defense weakens under repeated stalls, but the
                         incentive-based
                         defenses strengthen (larger $P^{total}$ means higher terminal payout per ticket). The game could
                         theoretically
@@ -5652,7 +5666,8 @@
                         reduced input.</p>
                       <p>The mechanisms that fill pools during slowdowns are documented in <a href="#section-39">Section
                           9.1</a>: futurepool mechanical drip (fires daily
-                        regardless of human activity), terminal insurance accumulation in the segregated accumulator (growing
+                        regardless of human activity), terminal insurance accumulation in the segregated accumulator
+                        (growing
                         from both stETH yield and historical deposit insurance),
                         terminal arbitrage
                         incentives that strengthen as stalls lengthen (<a href="#section-41">Section 9.3</a>), and
