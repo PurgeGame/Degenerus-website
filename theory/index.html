@@ -512,7 +512,10 @@
 
     <p><strong>Scope.</strong> The analysis takes entertainment demand as given: that enough players find this game
       engaging enough to participate and return. Whether this specific product achieves that is an empirical question
-      outside the model's scope (addressed qualitatively in <a href="#section-9">Section 2.5</a>).</p>
+      outside the model's scope (addressed qualitatively in <a href="#section-9">Section 2.5</a>). Every section was
+      subjected to adversarial review by specialized agents with full access to the contract source code, designed to
+      attack the protocol's claims. The methodology and common misreadings are documented in
+      <a href="#appendix-f">Appendix F</a>.</p>
     <p><strong>Terminal state.</strong> Funds are locked in a contract with no admin withdrawal function. If the game
       ever stalls, all remaining funds are paid out as ETH to ticket holders and active participants. The terminal
       mechanism is designed so that buying tickets to claim eligibility simultaneously funds the pool target whose
@@ -665,6 +668,53 @@
           engagement: maintaining a <strong>quest streak</strong> (one ticket or lootbox purchase per day; missing a day
           resets the streak to zero), purchase consistency, affiliate referrals, and pass bonuses. Higher scores
           improve returns across products, with different mechanics capping at different thresholds.</em></p>
+      <table>
+        <thead>
+          <tr>
+            <th>Level Range</th>
+            <th>ETH Ticket Price</th>
+            <th>BURNIE Ticket Price</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0–4 (intro)</td>
+            <td>0.01 ETH</td>
+            <td>1,000 BURNIE</td>
+          </tr>
+          <tr>
+            <td>5–9 (intro)</td>
+            <td>0.02 ETH</td>
+            <td>1,000 BURNIE</td>
+          </tr>
+          <tr>
+            <td>x01–x29</td>
+            <td>0.04 ETH</td>
+            <td>1,000 BURNIE</td>
+          </tr>
+          <tr>
+            <td>x30–x59</td>
+            <td>0.08 ETH</td>
+            <td>1,000 BURNIE</td>
+          </tr>
+          <tr>
+            <td>x60–x89</td>
+            <td>0.12 ETH</td>
+            <td>1,000 BURNIE</td>
+          </tr>
+          <tr>
+            <td>x90–x99</td>
+            <td>0.16 ETH</td>
+            <td>1,000 BURNIE</td>
+          </tr>
+          <tr>
+            <td>x00 (century)</td>
+            <td>0.24 ETH</td>
+            <td>1,000 BURNIE</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><em>BURNIE price is constant; ETH price escalates. This is why BURNIE earned early appreciates in purchasing power as levels progress. Full breakdown in <a href="#section-27">Section 6.1</a>.</em></p>
     </div>
 
     <p>The demo below shows four consecutive daily jackpot draws to illustrate the core mechanic. Click "Next Day" to
@@ -2262,8 +2312,9 @@
       an <strong class="dfn"
         data-def="Engagement metric (0 to 3.05) from quest streaks, purchase consistency, affiliates, and pass bonuses. Directly multiplies returns on every product.">activity
         score</strong> from 0 (new) to 3.05 (maximum), computed from engagement metrics (purchase
-      consistency, quest streaks, affiliate activity, pass bonuses). The full formula and component weights are in <a
-        href="#section-53">Appendix C</a>. The score determines relative EVs across all products: lootbox purchases
+      consistency, quest streaks, affiliate activity, pass bonuses). In brief: activity score = quest streak (up to
+      1.0) + purchase streak (0.5) + purchase count (0.25) + affiliate (0.5) + pass/deity bonus (0.8). Max 3.05. The
+      full formula and component weights are in <a href="#section-53">Appendix C</a>. The score determines relative EVs across all products: lootbox purchases
       range from 0.80x at zero activity (below face value) to 1.35x at maximum activity (above face value). The 1.35x
       multiplier at maximum activity score is a protocol parameter, not a guaranteed realized return. What a player
       actually receives depends on pool composition and luck.</p>
@@ -2277,8 +2328,8 @@
         ETH to above-breakeven ETH, not on the fish-to-grinder headcount.</em></p>
     <p><strong>Observation 2.2</strong> (Self-Correcting Equilibrium). <em>If too many grinders extract above breakeven,
         the pool's surplus shrinks and realized returns decline. Some grinders leave (they are money-sensitive), which
-        restores returns for those who remain. When a +EV player exits, their share of future profits is returned to the
-        system, lowering the breakeven bar for everyone else. The equilibrium point shifts, but never breaks, because
+        restores returns for those who remain. When a +EV player exits, the pool they would have extracted from retains that
+        surplus: fewer above-breakeven draws against the same pool. This lowers the breakeven bar for everyone else. The equilibrium point shifts, but never breaks, because
         the
         entertainment-seeking side is largely insensitive to the grinder population.</em> A degen's lootbox is just as
       fun
@@ -2410,7 +2461,7 @@
           <td>1.10</td>
         </tr>
         <tr>
-          <td>Recycled ETH, partial reinvestment</td>
+          <td>Recycled winnings, partial reinvestment</td>
           <td>1.20</td>
         </tr>
         <tr>
@@ -2418,7 +2469,7 @@
           <td>1.30</td>
         </tr>
         <tr>
-          <td>Recycled ETH, full reinvestment</td>
+          <td>Recycled winnings, full reinvestment</td>
           <td>1.30</td>
         </tr>
         <tr>
@@ -2447,7 +2498,8 @@
       accelerates level completion, compounding the advantage across levels.</p>
     <h3 id="section-11">3.1 The Degen</h3>
     <p>The degen's utility is dominated by entertainment, not monetary returns.</p>
-    <p><strong>Typical behavior:</strong> Degenerette spins, daily coinflip participation, lootbox opens regardless of
+    <p><strong>Typical behavior:</strong> Degenerette spins, daily coinflip participation, lootbox opens or decimator
+      burns regardless of
       activity score (the anticipation is the product), and irregular ticket purchases.</p>
     <p><strong>Individual rationality check:</strong> The degen participates when the entertainment value exceeds the
       monetary loss. For a degen spending 0.1 ETH on Degenerette at 90% ROI (0.90x; activity score 0), the expected loss
@@ -2457,11 +2509,12 @@
       compensated in their preferred currency. Their acceptance of monetarily sub-optimal strategies creates the surplus
       that funds higher monetary returns for engaged players.</p>
     <p><strong>Important nuance:</strong> Ticket purchases have the same EV for all player classes at any given time,
-      but that EV is below the equilibrium return available through lootboxes at high activity scores. This means ticket
+      but that EV is, under typical circumstances, below the equilibrium return available through lootboxes at high
+      activity scores. This means ticket
       purchases are themselves a source of cross-subsidy: EV maximizers avoid them (preferring lootboxes where their
       score multiplies returns), while degens buy them freely. The cross-subsidy also flows through lootboxes,
       Degenerette, and the Decimator. The degen who buys lootboxes at a low activity score is
-      donating surplus to the pool that high-score lootbox buyers extract from.</p>
+      donating surplus to the pool that high-score buyers extract from.</p>
     <p><strong>The final-day ticket.</strong> Day 5 is the biggest jackpot of the level: 100% of the remaining prize
       pool in a single payout. A ticket purchased on day 5 is also the lowest-EV decision you can make in the game. The
       degen buys it anyway because they want that shot right now and don't care about the value they missed by not
@@ -2474,14 +2527,19 @@
         low-activity depositors to fund the multipliers, a high-scoring EV maximizer's best-response policy is to
         maximize activity score through daily engagement and reinvest aggressively.</em></p>
     <p>The core loop is straightforward: maintain daily engagement (quest streaks, lootbox purchases) to push activity
-      score toward its maximum, then use that score to extract above-breakeven returns from lootboxes and other
+      score toward its maximum, then use that score to extract above-breakeven returns from protocol
       products. Passes accelerate this by granting immediate activity score bonuses. The lootbox EV benefit caps at $a_i
       = 2.55$, so a grinder without a deity pass can still capture the full multiplier through disciplined play.</p>
     <p>The grinder's strategic choices (reinvestment mode, pass acquisition, lootbox timing) affect their individual
       returns but not the system's structure. What matters for the analysis is that all of these returns draw from the
       same aggregate pool, so the strategy's profitability depends on sufficient pool inflows from other participants.
       The grinder class is self-limiting: too many grinders deplete the surplus, returns fall, and the least efficient
-      grinders exit.</p>
+      grinders exit. In practice, this correction is noisier than the theory suggests, in a way that strengthens it.
+      Players cannot exactly calculate their true EV, which depends on unknowable factors out of their control.
+      Actual people are results-oriented: a grinder who plays optimally but runs bad may quit feeling the game is
+      unprofitable, while a fishy hybrid on a heater stays convinced they have an edge. Variance and bankroll
+      pressure thin the grinder field faster than pure skill sorting would. Every
+      grinder departure, whether rational or not, releases their share of future surplus back to those who remain.</p>
     <h3 id="section-13">3.3 The Whale</h3>
     <p>Whales can participate profitably on monetary returns alone. Status is an additional payoff for those who value
       it, not a requirement.</p>
@@ -2500,15 +2558,20 @@
       match through other components at maximum engagement), perpetuity (deity entries are drawn automatically every
       level, forever, requiring no further purchases), and a 20% bonus on all affiliate commissions paid at the end of
       each level (capped at 5 ETH per level). A deity holder who goes inactive still accumulates jackpot entries and
-      BURNIE draws indefinitely. The
-      32-pass cap limits concentration.</p>
+      BURNIE draws indefinitely. The 32-pass cap limits concentration.</p>
+    <p>Deity holders also have a unique angle on the Degenerette <a href="#section-57">hero symbol</a> mechanic: the
+      most-wagered symbol each day auto-wins its quadrant in the jackpot draw. Since deity entries cover every color of
+      their symbol, a deity holder whose symbol becomes the hero is guaranteed representation in the winning quadrant.
+      This creates a natural competition among deities to push their symbol to hero status through Degenerette wagering,
+      generating game activity and entertainment as a side effect of self-interested play.</p>
     <p><strong>Temporal capital injection.</strong> Deity and whale pass purchases are heavily futurepool-weighted
       (30% next / 70% future at level 0, shifting to 5% next / 95% future at level 1+). Their returns (jackpot draws,
       BAF eligibility, free tickets per level,
       affiliate commission bonuses) accumulate across the full 100-level cycle. A deity holder who buys at level 0
       contributes capital to level 1's prize pool before level 1 begins, but their extraction is spread across years of
       play. This temporal mismatch makes whales net capital providers at early levels, pushing down the equilibrium
-      breakeven point (Observation 2.1) and making lootboxes +EV at lower activity scores than they would be without
+      breakeven point (Observation 2.1) and making lootboxes (and potentially even tickets) +EV at lower activity scores
+      than they would be without
       whale deposits.</p>
     <p>The practical consequence is that early prize pools are partially pre-funded before play begins. Early
       participants earn BURNIE from jackpot draws on pools funded partly by whale deposits, at a point when BURNIE has
@@ -2531,10 +2594,10 @@
       to play consistently but not optimized enough to extract meaningfully. These are the ideal participants. They
       contribute volume and pool deposits while taking little out, and they stay because the game feels fair and
       genuinely enjoyable. Their competitive motivation keeps them engaged more reliably than a pure degen, while
-      imperfect execution contributes surplus to the pool. They are getting real value in return: real entertainment,
-      real monetary returns, and real progression.</p>
+      imperfect execution contributes surplus to the pool. They are getting real value in return from whatever sources
+      they enjoy most.</p>
     <h3 id="section-15">3.5 The Affiliate</h3>
-    <p>Affiliate activity is a spectrum, not a distinct player type. Most engaged players will refer at least a few
+    <p>Affiliate activity is also a spectrum, not a distinct player type. Most engaged players will refer at least a few
       friends and earn some commission income as a natural byproduct. Dedicated affiliates who treat recruitment as
       their primary strategy sit at one end; a player who casually refers a friend sits at the other. The
       archetype below describes the dedicated end of the spectrum, but the commission mechanics apply to everyone
@@ -2566,7 +2629,7 @@
       affiliates participate without the FLIP filter selecting them out.</p>
     <h3 id="section-16">3.6 Budget Constraints and Bankroll Risk</h3>
     <p>The EV-maximizing strategies described above assume players can execute them without resource constraints. In
-      practice, <strong>budget constraints</strong> fundamentally alter the viability of EV-maximizing play.</p>
+      practice, <strong>budget constraints</strong> fundamentally alter the viability of optimal play.</p>
     <p><strong>Observation 3.4</strong> (Increasing Capital Requirements). <em>The EV-maximizing strategy requires
         increasing liquid capital commitment over time: ticket prices escalate with level progression, and quest streak
         maintenance requires one full ticket per day at current prices.
@@ -2615,9 +2678,10 @@
         \text{stETH balance}}_{\text{total assets held by contract}}$$</p>
       <p><em>Every state transition in the contract preserves this inequality. It is not a design goal or aspiration. It
           is an accounting identity enforced by the structure of every function that modifies balances.</em></p>
-      <p><strong>Why it holds.</strong> The contract maintains four logical ETH pools: <code>nextPrizePool</code>,
-        <code>futurePrizePool</code>, <code>currentPrizePool</code>, and <code>claimablePool</code>. Only
-        <code>claimablePool</code> represents current obligations. The other three are game state with no withdrawal
+      <p><strong>Why it holds.</strong> The contract maintains five logical ETH pools: <code>nextPrizePool</code>,
+        <code>futurePrizePool</code>, <code>currentPrizePool</code>, <code>claimablePool</code>, and the
+        segregated accumulator. Only
+        <code>claimablePool</code> represents current obligations. The other four are game state with no withdrawal
         rights attached. The solvency invariant is preserved because every category of state transition maintains it:
       </p>
       <ul>
@@ -2631,10 +2695,15 @@
           claim payout). The inequality is preserved. The contract uses the checks-effects-interactions pattern:
           <code>claimablePool</code> is decremented before the ETH transfer, preventing reentrancy.
         </li>
-        <li><strong>Yield distribution</strong> computes surplus as
-          <code>totalBalance - (nextPrizePool + futurePrizePool + currentPrizePool + claimablePool)</code>. Only this
-          surplus is distributed. Credits from yield increase <code>claimablePool</code> by at most the surplus amount,
-          which is by definition the margin above all obligations.
+        <li><strong>Yield routing</strong> directs stETH yield to three destinations: 25% to the vault, 25% to
+          DGNRS holders, and 50% to a segregated accumulator. The accumulator is a fifth logical pool with
+          no withdrawal rights. It does not participate in daily drip or BAF calculations. It receives two
+          inflows: 50% of stETH yield (continuous) and 1% of each completed level's prize pool (at level
+          transition). At century milestones (x00), 50% of the accumulator distributes as a milestone event;
+          the retained 50% serves as terminal insurance. The accumulator balance is included in
+          <code>totalBalance</code>, so the solvency invariant is unaffected: neither yield routing nor the
+          level-transition skim can cause <code>claimablePool</code> to exceed total balance, because both
+          move ETH between non-obligated pools.
         </li>
       </ul>
       <p>The result is that no valid transaction sequence can cause <code>claimablePool</code> to exceed total balance.
@@ -2646,22 +2715,22 @@
     <p><strong>What I extract.</strong> I am a self-funded solo dev and the only insider. There are no VCs, team
       allocations, or privileged parties. Here is exactly what I get:</p>
     <ul>
-      <li><strong>During presale:</strong> 20% of lootbox ETH goes to the vault. This ends automatically after a fixed
-        number of levels or 200 ETH of lootbox purchases, whichever comes first. This is real extraction that
-        compensates development completed before launch.</li>
+      <li><strong>Presale revenue:</strong> 20% of lootbox ETH goes to the vault, ending automatically after a fixed
+        number of levels or 200 ETH of lootbox purchases, whichever comes first. Capped at 40 ETH maximum
+        (i.e. max 200 ETH &times; 20%). This is real extraction that compensates development completed before launch.</li>
       <li><strong>20% of the <a href="#section-dgnrs">DGNRS</a> token supply.</strong> DGNRS is a fixed-supply token
         that receives 25% of system stETH yield and 4 tickets per level with an activity score boost. Holders can burn
-        DGNRS to extract their pro-rata share of accumulated yield and prizes. The remaining DGNRS is distributed to
-        players over time. The value of this coin is entirely dependent on the protocol's long-term success.</li>
-      <li><strong>The vault</strong> (the protocol's treasury contract, with no discretionary withdrawal) receives: 25%
-        of all stETH yield, 4 tickets per level with an activity score boost, the presale lootbox revenue above, 2
-        million BURNIE, and affiliate commissions from unaffiliated players.</li>
+        DGNRS to extract their pro-rata share of accumulated yield and prizes. The remaining 80% is distributed to
+        players over time. The value of this allocation is entirely dependent on the protocol's long-term success.</li>
+      <li><strong>The vault</strong> receives 25% of all stETH yield, a nerfed deity pass (4 tickets per level with
+        activity score boost, but no size scaling and no boons),
+        2 million BURNIE, and affiliate commissions from unaffiliated players.</li>
     </ul>
-    <p>In concrete terms, my in-game position is roughly equivalent to one deity pass with a 25% yield share, 2 million
-      BURNIE, and up to 40 ETH from presale revenue. This is not nothing, but it is a defined, bounded allocation. The
-      key difference from traditional gambling is that none of this is an ongoing rake on deposits. After presale, 100%
-      of every ETH deposited goes into the prize pool system, along with 50% of stETH yield (the remaining 50% is split
-      between the vault and DGNRS holders). My upside is tied to protocol success, not to player losses.</p>
+    <p>After presale, 100% of every ETH deposited goes into the prize pool system. At each level completion,
+      1% of the prize pool routes to a segregated accumulator that serves as terminal insurance and century
+      milestone reserves. stETH yield is split 50/25/25: 50% accrues in the same accumulator, 25% to the vault,
+      25% to DGNRS holders. The accumulator distributes half at century milestones (x00) and retains half as
+      terminal insurance. My upside is tied to protocol success, not to player losses.</p>
     <div class="definition">
       <p><strong>Definition 4.2</strong> (Zero-Rake). <em>A gaming mechanism is zero-rake if no entity extracts a
           guaranteed percentage of player deposits as ongoing profit.</em></p>
@@ -2680,8 +2749,10 @@
       <p>$$\sum_{i \in \mathcal{N}} \mathbb{E}[\text{gross payout}_i] = \sum_{i \in \mathcal{N}} \text{deposits}_i +
         0.50 \cdot r \cdot S \cdot T > \sum_{i \in \mathcal{N}} \text{deposits}_i$$</p>
       <p><em>where $T$ is the time horizon, $r \cdot S \cdot T$ is total stETH yield generated, and the coefficient
-          $0.50$ reflects the yield split: 25% to the vault, 25% to DGNRS holders, 50% to the prize pool system. Only
-          the prize pool share flows back to players.</em></p>
+          $0.50$ reflects the player-facing yield share. This 50% accrues in a segregated accumulator alongside
+          1% of each completed level's prize pool. Half the accumulator distributes at century milestones (x00),
+          half is retained as terminal insurance. The remaining 50% of yield is split between the vault (25%)
+          and DGNRS holders (25%).</em></p>
       <p><strong>Caveat:</strong> The game is positive-sum <em>in aggregate</em>. Individual players, especially
         low-activity degens, face negative monetary EV. Calling it "positive-sum" is accurate for the pool; individual
         experience varies.</p>
@@ -2747,8 +2818,10 @@
       level 0). If the game reaches even level 10 (0.04 ETH tickets), early BURNIE has quadrupled in utility value. By
       the first century milestone (0.24 ETH), early BURNIE is worth 24x its acquisition cost. Presale lootboxes are even
       more generous with bonus BURNIE. This makes early participation strictly more attractive than waiting.</p>
-    <p><strong>Yield accumulation.</strong> Once any deposits exist, stETH yield accrues regardless of further activity,
-      growing total assets and making participation increasingly attractive.</p>
+    <p><strong>Reserve accumulation.</strong> Once any deposits exist, stETH yield accrues regardless of further activity,
+      growing total assets. The segregated accumulator (funded by both yield and the 1% level-completion skim) compounds
+      unopposed during inactivity, making the next century milestone distribution and terminal insurance larger with
+      every passing day.</p>
     <p><strong>Passes as equilibrium-breaking devices.</strong> Deity passes (24+ ETH) and whale passes inject large
       up-front capital into the prize pool. Pass holders receive activity score bonuses valuable <em>only if the game
         advances through levels</em>. A deity holder has 24+ ETH locked into a system that rewards them as long as
@@ -2780,8 +2853,9 @@
       reach the +EV activity breakeven may exceed the expected returns. That threshold depends on pool composition and
       is lower when more degens are present.
     </p>
-    <p><strong>The EV floor for GTO play is positive.</strong> Because there is no rake, stETH yield accumulates
-      entirely within the prize pool rather than being extracted by a house. By maximizing activity score, they capture
+    <p><strong>The EV floor for GTO play is positive.</strong> Because there is no rake, stETH yield accrues in
+      the segregated accumulator and is distributed to players at century milestones and in the terminal payout,
+      rather than being extracted by a house. By maximizing activity score, they capture
       more than their proportional share of that yield in expectation. Realized outcomes are another matter. The worst
       case is running badly and recovering nothing.</p>
     <h3 id="section-24">5.4 The Repeated Game Structure</h3>
@@ -2971,9 +3045,12 @@
     <h3 id="section-29">6.3 The 100-Level Cycle</h3>
     <p>Ticket prices escalate within each 100-level cycle from 0.04 ETH at x01 to 0.24 ETH at x00, then reset. Century
       milestones (x00) are crescendo events where the futurepool transfer, dual bonus BAF jackpot (20% vs 10% at normal
-      milestones), dual bonus decimator (30% vs 10%), and dual bonus daily jackpots all fire at their highest rates
-      simultaneously, distributing a massive fraction of accumulated rewards across multiple channels. After the
-      crescendo, prices reset to 0.04 ETH, lowering barriers for all bankroll sizes.</p>
+      milestones), dual bonus decimator (30% vs 10%), dual bonus daily jackpots, and the segregated accumulator
+      distribution (50% of accumulated yield and deposit insurance) all fire at their highest rates
+      simultaneously, distributing a massive fraction of accumulated rewards across multiple channels. The
+      accumulator distribution grows with both time (yield) and historical activity (deposit insurance), adding
+      components that scale independently of current deposit volume. After the crescendo, prices reset to 0.04 ETH,
+      lowering barriers for all bankroll sizes.</p>
     <p>Each cycle's pools tend to be larger than the last because original deposits cannot be directly withdrawn and the
       futurepool grows net across each 100-level cycle (despite periodic drains from the drip, decimator, and BAF). The
       structural trend is upward as long as new deposits continue. This creates a recruitment flywheel: bigger
@@ -3075,10 +3152,19 @@
       rewards: daily BURNIE jackpots and the daily ETH/ticket jackpots continue firing regardless of
       population size. Fewer active players means fewer draw entries, so each remaining participant's probability of
       winning increases. The longer others stay away, the more draws the active players accumulate.</p>
-    <p><strong>(b) Yield independence.</strong> stETH yield continues regardless of player activity, growing total
-      assets. While yield does not directly fill the nextpool target (progression still requires player purchases), it
-      increases the value of accumulated jackpot pools. During a player exodus, jackpot attractiveness continues growing
-      passively, strengthening the incentive for remaining or new players to participate.</p>
+    <p><strong>(b) Terminal insurance accumulation.</strong> The segregated accumulator receives two inflows:
+      50% of stETH yield (continuous, regardless of player activity) and 1% of each completed level's prize pool
+      (at level transition). The yield component grows with time. The deposit component grows with activity.
+      Together they produce countercyclical insurance: during a player exodus, yield continues accruing unopposed,
+      and the deposit insurance accumulated during healthier levels persists untouched (it does not participate in
+      daily drip, BAF, or decimator extractions). The accumulator's full balance
+      contributes to the terminal jackpot if GAMEOVER fires, and half distributes as a bonus event if the game
+      reaches the next century milestone. This creates a self-reinforcing resilience loop: the longer a stall
+      persists, the more yield accumulates, the larger the terminal payout becomes, and the more attractive the
+      terminal arbitrage trade (<a href="#section-41">Section 9.3</a>) becomes for rational capital. The
+      accumulator turns time-without-activity from a pure negative (death clock ticking down) into a partial
+      positive (terminal insurance growing). At early levels where yield is negligible, the deposit-funded
+      component provides the bulk of the insurance.</p>
     <p><strong>(c) Locked liquidity.</strong> Prize pools are not withdrawable. Player exit does not reduce prize pool
       assets; it only reduces competition for those assets. This is structurally different from DeFi protocols where
       whale departure causes liquidity crises.</p>
@@ -3363,7 +3449,8 @@
       up each week and the ones who remain start wondering if they are the last.</p>
     <p>We take this seriously. Here is why the protocol survives it.</p>
     <p><strong>Mechanical defenses.</strong> The protocol runs on autopilot regardless of human activity. stETH yield
-      continues accruing on all locked ETH. The futurepool drip fires daily, transferring capital into the
+      continues accruing on all locked ETH, with the player-facing 50% accumulating in the segregated accumulator
+      alongside deposit insurance from prior levels. The futurepool drip fires daily, transferring capital into the
       nextpool and rewarding ticketholders. The 15% futurepool transfer fires at the start of each level. Ticket
       conversion from the previous
       level's jackpot phase pre-funds the next level before purchases even open. By the time a new level begins, the
@@ -3379,41 +3466,6 @@
       exceeds 1.5x the level target, even total abandonment by every human player takes roughly eight months to produce
       GAMEOVER: four months consumed by the autopilot completing a level, then four months where the depleted futurepool
       can no longer close the gap alone. This is the floor. Any human activity at all extends it further.</p>
-    <p><strong>Who actually leaves?</strong> The bear market scenario implicitly assumes that Degenerus players exit en
-      masse. But when someone sells ETH, someone else buys it. A bear market reshuffles who holds ETH. It does not
-      reduce the total amount of ETH in the ecosystem. For a bear market to drain Degenerus specifically, its players
-      would have to be more predisposed than the average ETH holder to exit the ecosystem entirely.</p>
-    <p>The opposite is more plausible. Degenerus players are self-selected for on-chain entertainment. They have locked
-      capital, accumulated activity scores, future tickets that only pay out if the game continues. The people who exit
-      ETH in bear markets are speculators and leveraged traders chasing momentum. Not entertainment-seeking gamblers
-      with illiquid game positions and daily quest streaks. Degens do not stop gambling because the market is down.
-      Loss-chasing is one of the strongest drivers of continued play, and discretionary gambling budgets are among the
-      last things this population cuts. Hybrids keep playing because they enjoy it enough that the non-monetary utility
-      sustains participation even when returns compress.</p>
-    <p>The only rational reason for an EV maximizer to leave Degenerus during a bear market is to exit the ETH
-      ecosystem entirely. For anyone who stays on-chain, where exactly do they go? DeFi lending yields compress toward
-      zero as borrowing demand unwinds. Yield farms backed by token emissions collapse reflexively. Speculative tokens
-      drop 90-99%. The "risk-off" option (stablecoins, idle ETH) earns nothing. Pure stETH staking captures the same
-      ~2.5% yield that accrues inside Degenerus, but without the jackpot, lootbox, or decimator redistribution layer.
-      The opportunity cost of Degenerus participation does not rise during a bear market. It falls, because the
-      alternatives fail faster than the protocol does.</p>
-    <p>Much of what gets labeled "risk aversion" in a bear market is not aversion to risk at all. It is a rational
-      response to products that are not worth the risk. Yield farms backed by recursive token emissions, ponzinomics
-      dressed up as protocol revenue, leveraged restaking with opaque liquidation cascades: these are not risky bets
-      that scared money avoids. They are bad bets that smart money correctly rejects once the rising-tide narrative
-      recedes. Degenerus has something these do not: an actual product that people pay to use. The revenue is
-      gambling spend on entertainment, not circular token flows or later investors subsidizing earlier ones. That is
-      what makes it a business model rather than a scheme. Degenerus does not ask players to trust that the number
-      will continue to go up. Its risk profile is
-      well-defined and on-chain: pool sizes are visible, payout rules are immutable, mechanical flows are calculable,
-      and the terminal distribution (<a href="#section-41">Section 9.3</a>) sets a hard floor on what participating
-      capital can recover in the
-      worst case.</p>
-    <p><strong>The probability equilibrium.</strong> Standard finite-game theory predicts backward induction unraveling
-      in finite games. Two structural features prevent this in Degenerus: the terminal round is not common knowledge
-      (GAMEOVER is a state condition, not a fixed date), and the dominant action near the endpoint is cooperation, not
-      defection. <a href="#section-41">Section 9.3</a> formalizes this argument and proves that no profitable defection
-      point exists.</p>
     <p><strong>The conjunction requirement.</strong> For GAMEOVER to occur, every mechanism that could close the gap
       between the nextpool and its target must fail simultaneously for 120 consecutive days. These mechanisms operate on
       different economic drivers:</p>
@@ -3454,6 +3506,34 @@
       a composite probability that is vanishingly small once even a single level has completed. The shorter
       window makes this more demanding per unit time, but the conjunction requirement is the binding constraint,
       not duration.</p>
+    <p>The conjunction requirement is the structural argument. The empirical question is whether the underlying
+      assumption of mass exit holds at all.</p>
+    <p><strong>Who actually leaves?</strong> The bear market scenario implicitly assumes that Degenerus players exit en
+      masse. But when someone sells ETH, someone else buys it. A bear market reshuffles who holds ETH. It does not
+      reduce the total amount of ETH in the ecosystem. For a bear market to drain Degenerus specifically, its players
+      would have to be more predisposed than the average ETH holder to exit the ecosystem entirely.</p>
+    <p>The opposite is more plausible. Degenerus players are self-selected for on-chain entertainment. They have locked
+      capital, accumulated activity scores, future tickets that only pay out if the game continues. The people who exit
+      ETH in bear markets are speculators and leveraged traders chasing momentum. Not entertainment-seeking gamblers
+      with illiquid game positions and daily quest streaks. Degens do not stop gambling because the market is down.
+      Loss-chasing is one of the strongest drivers of continued play, and discretionary gambling budgets are among the
+      last things this population cuts. Hybrids keep playing because they enjoy it enough that the non-monetary utility
+      sustains participation even when returns compress.</p>
+    <p>The only rational reason for an EV maximizer to leave Degenerus during a bear market is to exit the ETH
+      ecosystem entirely. For anyone who stays on-chain, alternatives are worse: DeFi yields compress, emission-backed
+      farms collapse reflexively, speculative tokens drop 90-99%, and pure stETH staking captures the same ~2.5% yield
+      that accrues inside Degenerus but without the redistribution layer. The opportunity cost of participation falls,
+      because the alternatives fail faster than the protocol does. Most on-chain products that die in bear markets
+      depend on circular token flows or later investors subsidizing earlier ones. Degenerus revenue is gambling spend
+      on entertainment. That is what makes it a business model rather than a scheme: pool sizes are visible, payout
+      rules are immutable, mechanical flows are calculable, and the terminal distribution
+      (<a href="#section-41">Section 9.3</a>) sets a hard floor on what participating capital can recover in the
+      worst case.</p>
+    <p><strong>The probability equilibrium.</strong> Standard finite-game theory predicts backward induction unraveling
+      in finite games. Two structural features prevent this in Degenerus: the terminal round is not common knowledge
+      (GAMEOVER is a state condition, not a fixed date), and the dominant action near the endpoint is cooperation, not
+      defection. <a href="#section-41">Section 9.3</a> formalizes this argument and proves that no profitable defection
+      point exists.</p>
     <p><strong>Honest assessment.</strong> A prolonged bear market stall is uncomfortable. Players with future tickets
       watch their locked value sit idle. Progression slows to mechanical drip speed. The community thins. This is a
       real cost of participation, and we do not minimize it. Temporary illiquidity during a stall is a genuine risk for
@@ -3504,7 +3584,7 @@
         </li>
         <li><strong>Terminal decimator (10%):</strong> 10% of remaining assets distributed via decimator, weighted by
           BURNIE burned and activity score.</li>
-        <li><strong>Terminal jackpot (90%):</strong> 90% of remaining assets (plus any unallocated decimator refund) run
+        <li><strong>Terminal jackpot (90%):</strong> 90% of remaining assets run
           through a final jackpot draw among
           next-level ticket holders, where a single winner takes 60% and the remaining 40% is distributed via further
           draws across all holders. The only way to become eligible is to hold tickets for the stalling level.</li>
@@ -3530,14 +3610,16 @@
         is worse off than a non-buyer. But for a day-1 buyer in a level that stalls, the expected value is
         positive in the survival state alone: drip income plus the survival jackpot (120-day
         extraction retains ~50% of the pool) covers the ticket cost, with the terminal option value as pure upside. Late
-        entrants require a modest P(GAMEOVER) threshold (~28%), and the ticket accumulates
+        entrants require a modest P(GAMEOVER) threshold (~25%), and the ticket accumulates
         drip value in the survival state as well.</em></p>
     <p>Consider the two outcomes:</p>
     <ul>
       <li><strong>GAMEOVER fires:</strong> The buyer's tickets are entered into a terminal jackpot funded by 90% of all
-        non-obligated ETH in the protocol: the nextpool, the futurepool, and accumulated stETH yield. The expected
+        non-obligated ETH in the protocol: the nextpool, the futurepool, and the segregated accumulator
+        (including all retained terminal insurance from both yield and deposit sources). The expected
         payout per ticket exceeds the ticket cost as long as the futurepool remains non-trivial relative to the
-        nextpool, which it does throughout the stall.</li>
+        nextpool, which it does throughout the stall. The accumulator adds meaningfully at all levels: at
+        early levels through deposit insurance, at later levels through compounding yield.</li>
       <li><strong>GAMEOVER is averted:</strong> The buyer holds tickets in a live, continuing game. The extraction
         function transfers a portion of the nextpool into the futurepool at level completion (larger for slower levels),
         reducing the survival jackpot but enriching the reserve for future levels. However, ticket holders have been
@@ -3564,8 +3646,13 @@
       ~1,375 ticket purchases to close.</p>
     <p>On the day before termination, a potential buyer faces this calculation. If GAMEOVER fires, the terminal
       jackpot receives 90% of all remaining non-obligated assets: the nextpool (701), the residual futurepool
-      (239), and accumulated stETH yield (~9). Terminal jackpot: 90% of ~949 = ~854 ETH, divided among 5,316
-      eligible tickets. Expected terminal payout: ~0.161 ETH against a 0.08 ETH cost (2.0&times;).
+      (239), and the segregated accumulator. At level 50 (before any x00 distribution), the accumulator
+      holds the full player-facing yield since inception (~9 ETH at conservative staking levels) plus
+      ~78 ETH in deposit insurance (1% of each prior level's prize pool). Terminal
+      jackpot: 90% of ~1,027 = ~924 ETH, divided among 5,316
+      eligible tickets. Expected terminal payout: ~0.174 ETH against a 0.08 ETH cost (2.2&times;).
+      At higher levels, the retained half of the accumulator (after x00 distributions) compounds across
+      centuries, adding progressively more to the terminal pool.
       This is the expected value per ticket; the actual distribution is concentrated (60% to one winner, 40% across
       further draws), so most individual tickets pay less than the mean. The +EV calculation concerns expected value,
       not certainty of profit on each ticket.</p>
@@ -3587,14 +3674,14 @@
       GAMEOVER fires or not. The ETH-only EV below therefore understates the true return. A day-1 buyer's
       expected value counting only ETH flows:</p>
     <p>$$\text{EV}_{\text{early}} = \underbrace{0.030}_{\text{drip}} + P(\text{GO}) \times
-      \underbrace{0.214}_{1.33 \times 0.161} + (1 - P(\text{GO})) \times \underbrace{0.064}_{1.33 \times 0.048}
-      - 0.08 = 0.150 \cdot P(\text{GO}) + 0.014$$</p>
+      \underbrace{0.231}_{1.33 \times 0.174} + (1 - P(\text{GO})) \times \underbrace{0.064}_{1.33 \times 0.048}
+      - 0.08 = 0.167 \cdot P(\text{GO}) + 0.014$$</p>
     <p>Positive for all $P(\text{GAMEOVER}) \geq 0$. A day-1 buyer is unconditionally +EV: the survival state
       value (drip income plus the survival jackpot share at ~50% extraction) covers the ticket cost
       by itself, with the terminal option value as pure upside. No assessment of GAMEOVER probability is needed.
       A late buyer (day ~115), with minimal drip accumulation and only one ticket, faces a steeper threshold:</p>
-    <p>$$\text{EV}_{\text{late}} = 0.113 \cdot P(\text{GO}) - 0.032$$</p>
-    <p>Positive for $P(\text{GAMEOVER}) > 28\%$. During a 120-day stall with zero voluntary purchases, this
+    <p>$$\text{EV}_{\text{late}} = 0.126 \cdot P(\text{GO}) - 0.032$$</p>
+    <p>Positive for $P(\text{GAMEOVER}) > 25\%$. During a 120-day stall with zero voluntary purchases, this
       threshold is comfortably satisfied: the game has been stalled for months, and any rational assessment
       assigns substantial probability to GAMEOVER. The extraction function does not affect the terminal payout
       at all. GAMEOVER fires during the stall, before level completion, so the extraction never runs and all
@@ -3647,7 +3734,7 @@
       max activity), which send 90% of each purchase to the futurepool and only 10% to the nextpool. During a stall,
       tickets become competitive. Only ticket holders qualify for the terminal jackpot, so tickets gain option value
       that lootboxes lack. In the 1.0&times; scenario, a day-1 ticket buyer's net EV is
-      $0.150 \cdot P(\text{GAMEOVER}) + 0.014$ (accounting for drip income, drip-awarded tickets, and the
+      $0.167 \cdot P(\text{GAMEOVER}) + 0.014$ (accounting for drip income, drip-awarded tickets, and the
       extraction-reduced survival jackpot). Since this is positive for all $P(\text{GAMEOVER}) \geq 0$, tickets
       are unconditionally competitive for day-1 buyers. For typical grinders (activity score 1.0&ndash;2.0,
       lootbox return 1.07&ndash;1.25&times;), tickets become the better product once $P(\text{GAMEOVER})$
@@ -3738,8 +3825,10 @@
       the flywheel works.</p>
     <p>The pool target is a ratchet. Each level's target equals the previous level's actual prize pool at completion. It
       enforcing monotonic growth. Century milestones re-anchor from the accumulated futurepool, which in a growth
-      environment will be larger still. In that environment, deposits routinely overshoot the target, the futurepool
-      swells from lootbox purchases, and stETH yield compounds on all locked capital. Each level's jackpot phase
+      environment will be larger still. In that environment, deposits routinely overshoot the target and the futurepool
+      swells from lootbox purchases. The segregated accumulator grows from both stETH yield and the 1% level-completion
+      skim, making each successive century milestone distribution larger and deepening the terminal insurance reserve.
+      Each level's jackpot phase
       distributes more ETH than the last. This is not a design aspiration. It is an accounting consequence of the
       ratchet. Jackpots cycle
       within the 100-level structure and peak at century milestones, but the floor ratchets upward. There is no event
@@ -3987,7 +4076,8 @@
       <li>BURNIE maintaining its ticket-price floor (<a href="#section-38">Section 8.4</a>).</li>
       <li>Level completion times staying under 30 days at higher levels.</li>
     </ol>
-    <p>Note that GTO play is always +EV before opportunity cost and risk aversion, since stETH yield sets the floor. The
+    <p>Note that GTO play is always +EV before opportunity cost and risk aversion, since stETH yield (distributed at
+      century milestones and in the terminal payout) sets the floor. The
       question is not whether positive returns exist, but whether they are large enough to attract and retain capital.
       The protocol is indifferent to whether participants are humans or autonomous agents. Bots and AIs that play
       optimally are economically identical to human grinders, and the protocol is designed to welcome them as affiliates
@@ -4016,8 +4106,8 @@
         <tr>
           <td>stETH yield split</td>
           <td>—</td>
-          <td>50/25/25% pool/vault/DGNRS</td>
-          <td>Value distribution</td>
+          <td>50/25/25% accumulator/vault/DGNRS</td>
+          <td>50% to segregated accumulator (also receives 1% of prize pool at each level completion; half distributed at x00, half retained as terminal insurance)</td>
         </tr>
         <tr>
           <td>Activity score range</td>
@@ -4189,7 +4279,7 @@
     <h3 id="section-baf">B.3 BAF (Big-Ass Flip) Jackpot</h3>
     <p>The BAF jackpot fires at the end of each 10-level cycle from the futurepool. The BAF leaderboard tracks
       cumulative coinflip volume over the 10-level window and resets after each payout. At normal milestones the jackpot
-      draws 10% of <code>futurePrizePool</code> (25% at the level 50 midpoint); at century milestones (x00) this doubles
+      draws 10% of <code>futurePrizePool</code> (20% at the level 50 midpoint); at century milestones (x00) this doubles
       to 20% as part of the crescendo event. Internal allocation of the drawn pool:</p>
     <ul>
       <li><strong>Top BAF slot:</strong> $10\%$ (highest coinflip volume over the window)</li>
@@ -4319,9 +4409,11 @@
       $$P^{next}_\ell \leftarrow P^{next}_\ell + 0.1c$$
       $$P^{fut}_\ell \leftarrow P^{fut}_\ell + 0.9c$$
       Unlike ticket purchases, lootbox proceeds flow primarily to the futurepool. This means EV maximizers (the heaviest
-      lootbox buyers) are structurally locking their capital into longer-duration pools, compounding both the yield
-      generated and their own commitment to future levels. The degen's ticket money cycles quickly through the current
-      level's jackpot; the grinder's lootbox money sits in the futurepool, generating yield and funding future jackpots.
+      lootbox buyers) are structurally locking their capital into longer-duration pools, deepening their commitment to
+      future levels. The degen's ticket money cycles quickly through the current
+      level's jackpot; the grinder's lootbox money sits in the futurepool, funding future jackpots. Yield on all
+      locked capital flows to the segregated accumulator via yield, and 1% of each completed level's prize pool
+      flows there directly, compounding into milestone distributions and terminal insurance.
     </p>
     <p><strong>Level transition:</strong> When $P^{next}_\ell \geq \bar{P}_\ell$ (the level target):
       $$P^{curr}_{\ell+1} \leftarrow f(P^{fut}_\ell, t)$$</p>
@@ -4332,7 +4424,18 @@
     <p><strong>Yield accrual (continuous):</strong>
       $$\frac{dP^{total}}{dt} = r \cdot S$$</p>
     <p>where $r \approx 0.025$ is the stETH annual yield rate (approximately 2.5% APR at time of writing) and $S$ is
-      total staked ETH.</p>
+      total staked ETH. Of this yield, 50% accrues to the segregated accumulator $Y^{acc}$, 25% to the vault,
+      and 25% to DGNRS holders:</p>
+    <p>$$\frac{dY^{acc}}{dt} = 0.50 \cdot r \cdot S$$</p>
+    <p><strong>Deposit insurance (at level transition):</strong> At each level completion, 1% of the prize pool
+      routes to the same accumulator:</p>
+    <p>$$Y^{acc}_{\ell^+} = Y^{acc}_{\ell^-} + 0.01 \cdot P^{curr}_\ell$$</p>
+    <p>The yield component grows with time. The deposit component grows with activity. Together they produce
+      countercyclical insurance: yield accrues during stalls, while deposit insurance accumulated during active
+      periods persists through drawdowns untouched by drip, BAF, or decimator extractions.</p>
+    <p>At century milestone $k$ (level $100k$), half the accumulator distributes as a milestone event and half is
+      retained as terminal insurance: $Y^{acc}_{k^+} = 0.50 \cdot Y^{acc}_{k^-}$. The retained balance compounds
+      into the next century, creating monotonically growing terminal insurance.</p>
     <h4 id="section-52">Ticket Pricing</h4>
     <p>Ticket prices follow a deterministic schedule that escalates with level progression, from 0.01 ETH at
       introductory levels to 0.24 ETH at century milestones. The cycle repeats every 100 levels after level 10. See
@@ -4368,7 +4471,8 @@
     <p><strong>Additional lootbox value.</strong> The $\mu$ multiplier accounts for ticket and BURNIE-equivalent value
       from lootbox rewards. Lootboxes also award DGNRS tokens (from a reward pool, scaled by lootbox size) and boons
       (random bonuses including purchase boosts, coinflip boosts, activity score points, and occasionally whale passes
-      or deity pass discounts). These components are harder to quantify because DGNRS value depends on market price and
+      or deity pass discounts). These components are harder to quantify because DGNRS value depends on accumulated yield at
+      the time of burn (the token is soulbound and can only be burned for pro-rata backing, not traded) and
       boon value depends on whether the player uses them optimally. They represent additional upside beyond the
       multiplier, but we omit them from the formal EV calculations to keep the analysis conservative.</p>
     <p>See <a href="#section-6">Section 2.3</a> for the aggregate constraint on these multipliers.</p>
@@ -4460,8 +4564,9 @@
       <ol>
         <li><em>Multiple independent progression guarantors</em> (quest streaks, afKing auto-rebuy, affiliate referrals,
           and the 15% futurepool transfer each level that compensates preexisting ticket holders) all contribute
-          independently to nextpool growth. Note: stETH yield grows total assets and increases jackpot attractiveness,
-          but does not directly contribute to the nextpool target.</li>
+          independently to nextpool growth. Note: stETH yield and the 1% level-completion skim accrue in the
+          segregated accumulator (distributed at century milestones and in the terminal payout) and do not directly
+          contribute to the nextpool target.</li>
         <li><em>futurepool drain:</em> Daily, a portion of the futurepool drains into the nextpool, awarding
           the equity in tickets to current ticket holders. Once the futurepool reaches a sufficient multiple of the
           nextpool requirement, this mechanism alone guarantees the next level will fire even with zero new player
@@ -4488,10 +4593,15 @@
       <li><strong>Whale pool:</strong> buyer rewards on whale bundle and deity pass purchases.</li>
       <li><strong>Lootbox pool:</strong> 10% chance roll on every lootbox open, amount scaling with spend.</li>
     </ul>
-    <p>Holders receive 25% of all stETH yield generated by the protocol, plus the returns from 4 tickets per level, and
-      can burn DGNRS to extract their pro-rata
-      share of accumulated yield. All pools deplete over time with no replenishment. DGNRS value is entirely dependent
-      on the protocol's long-term success and yield generation.</p>
+    <p>Holders receive 25% of all stETH yield generated by the protocol, plus the returns from 4 tickets per level
+      (with a whale pass activity boost). The DGNRS contract runs in afKing mode (set at deployment), so jackpot
+      winnings from those tickets are automatically reinvested as future tickets at the afKing premium. Each level
+      transition also credits the DGNRS contract with a BURNIE coinflip proportional to the prize pool, which enters
+      the auto-flip cycle. Holders can burn DGNRS to extract their pro-rata share of accumulated ETH, stETH, and
+      BURNIE (including unclaimed coinflip winnings). This creates a timing question for burns: the DGNRS backing
+      spikes after each level's BURNIE credit, but waiting through a few flip wins could compound that further. All
+      pools deplete over time with no replenishment. DGNRS value is entirely dependent on the protocol's long-term
+      success and yield generation.</p>
     <hr />
     <h2 id="section-59">Appendix D: Attack Vector Analysis</h2>
     <h4 id="section-60">Attack 1: Sybil Attack on Activity Score</h4>
@@ -4524,7 +4634,7 @@
     <p><strong>Vector:</strong> Lido stETH trades at discount to ETH (as occurred briefly in June 2022 at ~0.93:1).
       <strong>Analysis:</strong> The auto-stake mechanism only stakes ETH <em>above</em> <code>claimablePool</code>,
       meaning the ETH floor for claims is maintained. The stETH exposure is in the "surplus" portion (prize pools,
-      futurepools), not the solvency floor. Early claimers get ETH; late claimers during a depeg receive discounted
+      futurepools, and the segregated accumulator), not the solvency floor. Early claimers get ETH; late claimers during a depeg receive discounted
       stETH, creating a mild bank-run incentive.
       <strong>Verdict:</strong> Low-to-moderate risk. A severe depeg (&gt;20%) would reduce real prize pool value but
       not threaten claimable funds.
@@ -4604,8 +4714,8 @@
                     constraint is:</p>
                   <p>$$P^{total} < \frac{(c_\ell - V^{surv}) \cdot N}{0.9}$$</p>
                       <p>Once the first level has completed, $P^{total}$ includes all historical deposits from all
-                        players, stETH yield
-                        accumulation, and locked futurepool capital. This dwarfs the right-hand side. The threshold is
+                        players, the segregated accumulator,
+                        and locked futurepool capital. This dwarfs the right-hand side. The threshold is
                         only binding at
                         the earliest levels (0-4) where $P^{total}$ is single-digit ETH and ticket prices are 0.01 ETH.
                         At those levels,
@@ -4720,9 +4830,9 @@
                         depend on the
                         futurepool. They depend on $P^{total}$, the total locked ETH in the contract, which includes all
                         historical
-                        deposits and accumulated stETH yield. $P^{total}$ continues to grow regardless of futurepool
-                        depletion (deposits
-                        are irreversible, yield accrues). The mechanical defense weakens under repeated stalls, but the
+                        deposits and the segregated accumulator. $P^{total}$ continues to grow regardless of
+                        futurepool depletion (deposits
+                        are irreversible, yield and deposit insurance accrue into the accumulator). The mechanical defense weakens under repeated stalls, but the
                         incentive-based
                         defenses strengthen (larger $P^{total}$ means higher terminal payout per ticket). The game could
                         theoretically
@@ -4774,9 +4884,9 @@
                         That is what
                         zero-rake means.</p>
                       <p><a href="#section-19">Section 4.2</a> of this paper itemizes exactly what the creator receives:
-                        presale revenue (capped at 200 ETH), a
-                        DGNRS token allocation (20% of supply, receiving a share of stETH yield), vault allocations, and
-                        BURNIE. The
+                        presale revenue (20% of up to 200 ETH in lootbox purchases, i.e. max 40 ETH), a
+                        DGNRS token allocation (20% of supply, receiving a share of stETH yield), the vault (25% of
+                        stETH yield, a nerfed deity pass, BURNIE, and unaffiliated player commissions). The
                         paper calls the presale cut "real extraction" in those exact words. Nothing is hidden. This is a
                         one-time,
                         capped development payment for approximately 5,000 hours of solo design, engineering, and
@@ -4791,7 +4901,8 @@
                         external value that
                         would not exist without the protocol. The yield the creator receives does not reduce player
                         deposits or
-                        winnings. Over time, the stETH yield flowing to the player prize pool (50% of total yield) will
+                        winnings. Over time, the stETH yield flowing to players (50% of total yield, via the segregated
+                        accumulator's century milestone distributions and terminal insurance) will
                         far exceed the
                         total presale extraction, meaning the protocol returns more external value to players than the
                         creator ever took
@@ -4815,11 +4926,11 @@
                         player's favor. The stETH is not the steak. It is gravy on top of a steak that is already better
                         than anything
                         else on the menu.</p>
-                      <p>Separately: 50% of stETH yield goes to the vault and DGNRS holders. This is disclosed in <a
-                          href="#section-19">Section 4.2</a>. The
-                        remaining 50% flows to the prize pool. This yield split is part of the creator's compensation
-                        structure, not
-                        hidden extraction.</p>
+                      <p>Separately: 50% of stETH yield goes to the vault (25%) and DGNRS holders (25%). This is
+                        disclosed in <a href="#section-19">Section 4.2</a>. The
+                        remaining 50% accrues in a segregated accumulator (which also receives 1% of each completed
+                        level's prize pool), distributed to players at century milestones and in the terminal payout.
+                        This yield split is part of the creator's compensation structure, not hidden extraction.</p>
 
                       <h3>F.3 "This is a Ponzi scheme / new money pays old players"</h3>
                       <p>Every prize pool in history is funded by participant deposits. The World Series of Poker, state
@@ -5091,9 +5202,9 @@
                         least one rational actor. MEV bots, arbitrage scanners, and on-chain monitors operate
                         continuously regardless of
                         community sentiment.</p>
-                      <p>The terminal payout math (<a href="#section-41">Section 9.3</a>): at level 50 with ~949 ETH
-                        in non-obligated assets, terminal share per ticket is
-                        approximately 0.16 ETH against a ticket cost of 0.08 ETH. This is a 2.0x payout ratio. The
+                      <p>The terminal payout math (<a href="#section-41">Section 9.3</a>): at level 50 with ~1,027 ETH
+                        in non-obligated assets (including ~78 ETH in deposit insurance), terminal share per ticket is
+                        approximately 0.17 ETH against a ticket cost of 0.08 ETH. This is a 2.2x payout ratio. The
                         opportunity does not
                         require community engagement, Discord activity, or social media presence. It requires one wallet
                         submitting one
@@ -5541,7 +5652,8 @@
                         reduced input.</p>
                       <p>The mechanisms that fill pools during slowdowns are documented in <a href="#section-39">Section
                           9.1</a>: futurepool mechanical drip (fires daily
-                        regardless of human activity), stETH yield accumulation on locked capital,
+                        regardless of human activity), terminal insurance accumulation in the segregated accumulator (growing
+                        from both stETH yield and historical deposit insurance),
                         terminal arbitrage
                         incentives that strengthen as stalls lengthen (<a href="#section-41">Section 9.3</a>), and
                         future ticket holder portfolio defense. These
