@@ -219,7 +219,7 @@
       max-width: 320px;
       z-index: 10;
       pointer-events: none;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15)
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15)
     }
 
     .theorem p,
@@ -477,9 +477,10 @@
       player losses, creating a negative-sum dynamic for participants.</p>
     <p>Degenerus Protocol proposes a structural alternative: a <em>zero-rake</em> gaming system where no outside entity
       extracts value from player deposits. Deposits are locked, partially converted to Lido staked ETH (stETH), and
-      redistributed entirely as prizes to other players. The stETH earns approximately 2.5% annual yield, which is the
-      only external monetary value entering the system. Prizes are funded primarily by other players' deposits, with
-      yield providing a small positive-sum margin. This architectural choice transforms the underlying game from
+      redistributed entirely as prizes to other players. The stETH earns approximately 2.5% annual yield, which is
+      the only value entering the system that does not come from another player's deposit. Prizes are funded primarily
+      by redistribution, with yield providing a small positive-sum margin. This architectural choice transforms the
+      underlying game from
       negative-sum to slightly positive-sum for the player pool as a whole, introducing fundamentally different
       strategic dynamics.</p>
     <p>This paper analyzes these dynamics. We are interested in three central questions:</p>
@@ -502,7 +503,8 @@
     <p>The central argument: <strong>Degenerus Protocol works because different player types want different things, and
         getting what they want individually produces collective goods.</strong> Entertainment seekers pay for the
       thrill of jackpots and lootboxes, and the surplus from their bets is the main source of equity; strategic
-      players extract monetary value from that equity; whales lock capital that stabilizes jackpots; affiliates bring
+      players and whales extract monetary value from that equity while locking capital that stabilizes jackpots;
+      affiliates bring
       in the players the system needs. stETH yield makes the whole system positive-sum. Commitment devices (future
       tickets, quest streaks, auto-compounding) create a ratchet that makes continued participation the dominant
       strategy for anyone already engaged. The rest of this paper formalizes that argument, stress-tests it, and maps
@@ -662,7 +664,7 @@
           that feeds future levels). Players build an <strong>activity score</strong> (0 to 3.05) through daily
           engagement: maintaining a <strong>quest streak</strong> (one ticket or lootbox purchase per day; missing a day
           resets the streak to zero), purchase consistency, affiliate referrals, and pass bonuses. Higher scores
-          directly multiply returns on every product.</em></p>
+          improve returns across products, with different mechanics capping at different thresholds.</em></p>
     </div>
 
     <p>The demo below shows four consecutive daily jackpot draws to illustrate the core mechanic. Click "Next Day" to
@@ -2084,11 +2086,6 @@
 
     <hr />
     <h2 id="section-3">2. The Core Idea: Cross-Subsidy Structure</h2>
-    <div class="definition">
-      <p><strong>Definition 2.0</strong> (The Entry). <em>One entry is one-quarter of a ticket: the atomic unit of
-          participation, representing one slot in the jackpot draws for the upcoming level. Its face-value cost is
-          $P_\ell/4$ ETH or 250 BURNIE.</em></p>
-    </div>
     <h3 id="section-4">2.1 Heterogeneous Reward Structures</h3>
     <p>A critical departure from standard mechanism design: player types in this system optimize for <em>fundamentally
         different reward currencies</em>. Traditional game-theoretic analysis assumes a common utility denominator
@@ -2161,9 +2158,6 @@
       These are real but secondary. The specific mechanics that generate this utility (the communal coinflip, BAF, nudge
       mechanic, and daily rhythm of participation) are developed in <a href="#section-8">Section 2.4</a>.</p>
     <h3 id="section-6">2.3 The Cross-Subsidy Mechanism</h3>
-    <p>The heterogeneous utility structure creates what we term a <strong>cross-subsidy structure</strong>: each actor
-      type's pursuit of their primary reward currency generates positive externalities in a different reward dimension
-      that benefits other types.</p>
     <div class="definition">
       <p><strong>Definition 2.1</strong> (Cross-Subsidy Structure). <em>A system has cross-subsidy structure when each
           player type, by doing what is best for themselves, produces something valuable for the other types as a side
@@ -2262,13 +2256,14 @@
       non-rivalrous, and the maximizer's return is funded by aggregate pool inflows, not by any individual's wallet
       directly. The system creates no monetary value from nothing; the extractable surplus comes from other players'
       deposits plus stETH yield. It does, however, create utility value from nothing: the degen's entertainment is worth
-      more to them than their monetary loss, generating real surplus with no on-chain representation. This is the
-      mechanism that makes the game positive-sum in aggregate even as individual monetary outcomes vary.</p>
+      more to them than their monetary loss, generating real surplus with no on-chain representation.</p>
     <p><strong>The aggregate constraint.</strong> The more non-optimal players in the system, the further down the
       breakeven point falls, and the more profitable things are for everyone playing well. Here is why. Each player has
-      an <strong class="dfn" data-def="Engagement metric (0 to 3.05) from quest streaks, purchase consistency, affiliates, and pass bonuses. Directly multiplies returns on every product.">activity score</strong> from 0 (new) to 3.05 (maximum), computed from engagement metrics (purchase
+      an <strong class="dfn"
+        data-def="Engagement metric (0 to 3.05) from quest streaks, purchase consistency, affiliates, and pass bonuses. Directly multiplies returns on every product.">activity
+        score</strong> from 0 (new) to 3.05 (maximum), computed from engagement metrics (purchase
       consistency, quest streaks, affiliate activity, pass bonuses). The full formula and component weights are in <a
-        href="#section-53">Appendix C</a>. The score determines EV multipliers across all products: lootbox purchases
+        href="#section-53">Appendix C</a>. The score determines relative EVs across all products: lootbox purchases
       range from 0.80x at zero activity (below face value) to 1.35x at maximum activity (above face value). The 1.35x
       multiplier at maximum activity score is a protocol parameter, not a guaranteed realized return. What a player
       actually receives depends on pool composition and luck.</p>
@@ -2281,17 +2276,24 @@
         more surplus than ten players buying 0.1 ETH each. The system's health depends on the ratio of below-breakeven
         ETH to above-breakeven ETH, not on the fish-to-grinder headcount.</em></p>
     <p><strong>Observation 2.2</strong> (Self-Correcting Equilibrium). <em>If too many grinders extract above breakeven,
-      the pool's surplus shrinks and realized returns decline. Some grinders leave (they are money-sensitive), which
-      restores returns for those who remain. When a +EV player exits, their share of future profits is returned to the
-      system, lowering the breakeven bar for everyone else. The equilibrium point shifts, but never breaks, because the
-      entertainment-seeking side is largely insensitive to the grinder population.</em> A degen's lootbox is just as fun
+        the pool's surplus shrinks and realized returns decline. Some grinders leave (they are money-sensitive), which
+        restores returns for those who remain. When a +EV player exits, their share of future profits is returned to the
+        system, lowering the breakeven bar for everyone else. The equilibrium point shifts, but never breaks, because
+        the
+        entertainment-seeking side is largely insensitive to the grinder population.</em> A degen's lootbox is just as
+      fun
       to open regardless of how many extractors are in the pool, and they don't care what the jackpot odds are when they
       buy their ticket.</p>
-    <p>The deposit asymmetry reinforces this self-correction. Tickets split 90% to the <span class="dfn" data-def="Current level's prize pool. When it reaches the level target, the level advances and prizes are distributed.">nextpool</span> and 10% to the
-      <span class="dfn" data-def="Long-term reserve pool. Feeds future levels via daily drip, milestone events, and level transitions.">futurepool</span>; lootboxes split the opposite way (10% next, 90% future). The grinder's preferred product (lootboxes,
-      at up to 1.35x EV) structurally funnels their capital into the long-term futurepool rather than the nextpool that
+    <p>The deposit asymmetry reinforces this self-correction. Tickets split 90% to the <span class="dfn"
+        data-def="Current level's prize pool. When it reaches the level target, the level advances and prizes are distributed.">nextpool</span>
+      and 10% to the
+      <span class="dfn"
+        data-def="Long-term reserve pool. Feeds future levels via daily drip, milestone events, and level transitions.">futurepool</span>;
+      lootboxes split the opposite way (10% next, 90% future). The grinder's preferred product (lootboxes,
+      at up to 1.35x EV) funnels their capital into the long-term futurepool rather than the nextpool that
       determines level progression. Grinder dominance does not slow the game down. It over-funds the future while
-      degens' ticket purchases drive the levels forward.</p>
+      degens' ticket purchases drive the levels forward.
+    </p>
     <p>This is structurally different from casinos, where the house extracts from players. Here, there is no house, only
       a community of differently-motivated actors whose interactions produce mutual benefit. The cross-subsidy is
       <em>mutualistic</em>, not adversarial.
@@ -2312,7 +2314,7 @@
     <p><strong>The active participation equilibrium is more robust than monetary analysis alone suggests.</strong> A
       degen has multiple ways to play at different EVs (lootboxes, Degenerette spins, ticket purchases, coinflips), all
       of which are monetarily negative at low activity scores. Under pure monetary utility, this violates individual
-      rationality. But degens do not care about money. They care about excitement. The protocol is designed to maximize
+      rationality. But degens do not care about money, they care about excitement. The protocol is designed to maximize
       entertainment delivery: lootbox rewards arrive as <em>more gambling products</em> (future tickets, BURNIE for
       Degenerette, boons), so a single lootbox open produces a cascade of further gambling opportunities. If the
       entertainment value exceeds the monetary loss, participation remains individually rational. The gambling industry
@@ -2337,10 +2339,10 @@
       and random draws weighted by score. It is both the craps table and the tournament, running on the same clock.</p>
     <p><strong>Player retention has a ratchet effect.</strong> As engagement deepens (longer streaks, higher activity
       scores, more future tickets), the non-monetary switching cost (breaking streaks, abandoning progression, losing
-      status) compounds on top of the monetary switching cost (forfeiting EV multipliers). The total
+      status) compounds on top of the monetary switching cost (forfeiting relative EVs). The total
       switching cost (monetary + non-monetary) grows faster than either component alone.</p>
     <h3 id="section-9">2.5 The Poker Ecosystem Analogy</h3>
-    <p>The player type ecosystem maps closely to poker. In poker, <strong>recreational players</strong> deposit money
+    <p>The player type ecosystem maps closely to poker. In poker, <strong>recreational players</strong> spend money
       for entertainment and lose at varying rates. <strong>Professional grinders</strong> extract monetary value through
       disciplined play. <strong>Competitive recreationals</strong> genuinely enjoy the game but many wouldn't play if
       winning
@@ -2351,26 +2353,28 @@
     <p>The critical insight from poker: <strong>the ecosystem is healthy when recreational players have a good
         time.</strong> If the fish (recreational players, in poker parlance) are miserable, they leave. If the fish
       leave, the grinders have no one to extract from. If the grinders leave, the games die. Poker ecosystems
-      characteristically die by catering to grinders: rooms offer 50-70% kickback (returning a share of fees to the
+      characteristically die by catering to grinders: rooms offer 50-70% rakeback (returning a share of fees to the
       player) to high-volume pros, optimizing for volume over fun, and fun is the only reason recreational players show
       up.</p>
-    <p>Taken to its logical conclusion, some sites tried eliminating rake entirely. They never gained traction. Fish do
-      not choose rooms based on rake. They choose based on fun, brand recognition, and where their friends play.
-      Removing rake attracted grinders but did nothing to attract fish, and without rake revenue there was no marketing
+    <p>Taken to its logical conclusion, some sites tried eliminating rake entirely. They never gained traction because
+      fish do
+      not choose rooms based on rake. They choose based on fun, brand recognition, and where their friends play:
+      the things that advertising and word-of-mouth produce.
+      Removing rake attracted grinders but did nothing to attract fish, and without rake revenue there was no
       budget to acquire fish through other channels. The result was a few tables of grinders playing each other near
       breakeven, where the worst grinders lose a little, notice immediately (because they are there for money), and
       leave, shrinking the pool until nobody is left. The lesson: rake is not inherently bad. What matters is where the
       money goes. Operator profit does nothing for the ecosystem. Player acquisition and retention do everything.</p>
-    <p>Degenerus Protocol solves both problems. It is zero-rake, but the player acquisition function that rake normally
-      funds is built into the protocol. The affiliate program pays 20-25% commission on referred players' purchases,
-      funded by BURNIE mechanics rather than by skimming deposits. Affiliates extract value, but only in direct
-      proportion to the new money they bring in. Every player is a potential recruiter with multiple financial
-      incentives to grow the game. Rake-free poker had no way to pay for acquisition; Degenerus pays for it out of
-      protocol mechanics that exist whether or not anyone is recruiting. And the protocol is structurally resistant to
-      grinder takeover: every avenue for profit requires high variance (jackpots are lotteries, coinflips are 50/50,
-      Degenerette spins are high-volatility), so the boring, risk-averse grinder (the "nit") that kills poker ecosystems
-      has no viable strategy here. Variance functions as a defensive moat against extractive capital
-      (formalized in Observation 11.1).</p>
+    <p>Degenerus is zero-rake, but unlike rake-free poker it has a built-in acquisition engine. The affiliate
+      program pays 20-25% commission on referred players' purchases, funded by BURNIE mechanics rather than deposit
+      skimming. Affiliates extract value only in proportion to the new money they bring in.</p>
+    <p>The protocol is also structurally resistant to grinder takeover. The grinder's best product, lootboxes,
+      sends the vast majority of each purchase to the futurepool, locking capital into future levels with uncertain
+      returns on uncertain timelines. Capital lock plus variance repels mercenary DeFi capital. But the same
+      barriers that filter out risk-averse participants concentrate rewards among grinders and profitable hybrids (for
+      whom the variance is a feature)
+      willing to accept
+      the terms.</p>
     <p>The cross-subsidy structure (<a href="#section-6">Section 2.3</a>) is the formal version of this dynamic:
       different player types,
       extracting different kinds of value, sustaining each other's presence at the table.</p>
@@ -2378,14 +2382,14 @@
     <hr />
     <h2 id="section-10">3. Player Types and Strategies</h2>
     <p>The cross-subsidy structure depends on different player types pursuing different strategies. This section
-      characterizes each type's dominant strategy and the externalities it produces. All EV figures reference the
-      multiplier from Definition 2.0: $\mu$ entries of expected value returned per face-value entry of ETH spent at
-      baseline.</p>
+      characterizes each type's dominant strategy and the externalities it produces. EV figures ($\mu$) are
+      relative: they determine your share of the pool compared to other players, not absolute returns. Actual EV
+      depends on the population's composition and where the breakeven point falls.</p>
     <table>
       <thead>
         <tr>
           <th>Strategy</th>
-          <th>EV multiplier ($\mu$)</th>
+          <th>Relative EV ($\mu$)</th>
         </tr>
       </thead>
       <tbody>
@@ -2437,11 +2441,10 @@
     <p><em>These figures are gameplay-only returns and exclude <a href="#section-15">affiliate</a> commission income.
         Most engaged players will earn some commission from casual referrals; dedicated recruiters earn substantially
         more.</em></p>
-    <p><strong>Within-level timing advantage.</strong> A ticket bought on day 1 of the jackpot phase qualifies for all 5
-      draws; a ticket bought on day 5 qualifies for one. Tickets bought during the preceding purchase phase earn
-      additional draws on top of that: daily BURNIE draws and daily ETH/ticket draws, plus all 5 jackpot draws
-      when the level opens. Same price throughout. Buying early also accelerates level completion, which opens the next
-      purchase phase sooner. The reward for attentiveness compounds with every level.</p>
+    <p><strong>Within-level timing advantage.</strong> Every ticket is eligible for daily jackpot drawings from the
+      moment it is purchased until its level is complete.
+      Earlier tickets accumulate more draws at the same price, so buying early is strictly better. Buying early also
+      accelerates level completion, compounding the advantage across levels.</p>
     <h3 id="section-11">3.1 The Degen</h3>
     <p>The degen's utility is dominated by entertainment, not monetary returns.</p>
     <p><strong>Typical behavior:</strong> Degenerette spins, daily coinflip participation, lootbox opens regardless of
@@ -2721,7 +2724,7 @@
     <p><em>Verification that no player type benefits from unilateral deviation from max activity:</em></p>
     <p><strong>Grinder deviates to minimal participation:</strong> Reducing engagement reduces $a_i$, which reduces
       $\mu(a_i)$ and $\rho(a_i)$. For a player who intends to continue participating, the marginal cost of maintaining
-      streaks (one ticket per day) is dominated by the marginal benefit of higher EV multipliers on all subsequent
+      streaks (one ticket per day) is dominated by the marginal benefit of higher relative EVs on all subsequent
       actions.</p>
     <p><strong>Whale deviates to exit:</strong> Forfeits accumulated activity score (non-transferable) and deity pass
       benefits (pass is transferable but costs 5 ETH in BURNIE to transfer). The ongoing returns from their position
@@ -2949,7 +2952,9 @@
       all players wait for x00, a mid-cycle decimator entry with low competition can yield more ETH per BURNIE.
     </p>
     <h3 id="section-28">6.2 The Decimator</h3>
-    <p>The <span class="dfn" data-def="BURNIE-burn-to-ETH event at milestone levels. Activity score determines bucket (win probability) and burn weight multiplier (1.0x to 1.783x).">decimator</span> is a BURNIE-burn-to-win-ETH mechanism that provides an alternative sink for BURNIE tokens. Players
+    <p>The <span class="dfn"
+        data-def="BURNIE-burn-to-ETH event at milestone levels. Activity score determines bucket (win probability) and burn weight multiplier (1.0x to 1.783x).">decimator</span>
+      is a BURNIE-burn-to-win-ETH mechanism that provides an alternative sink for BURNIE tokens. Players
       permanently destroy BURNIE to buy weighted entries in a pro-rata ETH distribution drawn from the futurepool. It
       fires at milestone levels throughout each 100-level cycle at 10% of the futurepool, and at century milestones
       (x00) at 30%.</p>
@@ -4234,7 +4239,8 @@
       (120 days of insufficient activity), not by a pre-specified terminal level. The game's horizon is
       <em>endogenous</em>: it ends only when players collectively cause it to end. No player can identify the "last
       round" in advance, so the backward induction that kills finite games has no starting point. This is what
-      <a href="#section-24">Section 5.4</a> means by "cooperative play can be sustained indefinitely."</p>
+      <a href="#section-24">Section 5.4</a> means by "cooperative play can be sustained indefinitely."
+    </p>
     <h3 id="section-49">Key Parameter Summary</h3>
     <p><strong>Lootbox EV quick reference:</strong></p>
     <table>
@@ -4343,7 +4349,7 @@
       - $q_i$ is the quest streak (consecutive daily quest completions)
       - $\phi_i \in [0, 1]$ is the normalized affiliate bonus
       - $\gamma_i \in \{0, 0.10, 0.40, 0.80\}$ is the pass bonus (none, 10-level whale, 100-level whale, deity)</p>
-    <p>The activity score maps to an EV multiplier $\mu: [0, 2.55] \rightarrow [0.80, 1.35]$ for lootboxes (capped at $a
+    <p>The activity score maps to an relative EV $\mu: [0, 2.55] \rightarrow [0.80, 1.35]$ for lootboxes (capped at $a
       = 2.55$; higher scores improve Degenerette ROI but not lootbox EV):</p>
     <p>$$\mu(a) = \begin{cases}
       0.80 + \frac{a}{3} & \text{if } a \leq 0.60 \\
