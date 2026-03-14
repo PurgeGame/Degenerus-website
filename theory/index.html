@@ -2304,32 +2304,33 @@
       actions produce entertainment externalities.</p>
     <p><strong>The cross-subsidy in practice.</strong> An entertainment-seeking player accepts a sub-1.0 multiplier: the
       monetary loss funds the prize pool while they receive the entertainment they came for. An EV maximizer at high
-      activity draws from the same pool at a multiplied rate. Neither depletes the other's reward: entertainment is
+      activity draws from the same pool over time as a reward for locking capital. Neither depletes the other's reward:
+      entertainment is
       non-rivalrous, and the maximizer's return is funded by aggregate pool inflows, not by any individual's wallet
       directly. The system creates no monetary value from nothing; the extractable surplus comes from other players'
       deposits plus stETH yield. It does, however, create utility value from nothing: the degen's entertainment is worth
       more to them than their monetary loss, generating real surplus with no on-chain representation.</p>
     <p><strong>The aggregate constraint.</strong> The more non-optimal players in the system, the further down the
-      breakeven point falls, and the more profitable things are for everyone playing well. Here is why. Each player has
+      breakeven point falls, and the more profitable things are for everyone playing well. Each player has
       an <strong class="dfn"
         data-def="Engagement metric (0 to 3.05) from quest streaks, purchase consistency, affiliates, and pass bonuses. Directly multiplies returns on every product.">activity
-        score</strong> from 0 (new) to 3.05 (maximum), computed from engagement metrics (purchase
-      consistency, quest streaks, affiliate activity, pass bonuses). In brief: activity score = quest streak (up to
-      1.0) + purchase streak (0.5) + purchase count (0.25) + affiliate (0.5) + pass/deity bonus (0.8). Max 3.05. The
-      full formula and component weights are in <a href="#section-53">Appendix C</a>. The score determines relative EVs
-      across all products: lootbox purchases
-      range from 0.80x at zero activity (below face value) to 1.35x at maximum activity (above face value). The 1.35x
-      multiplier at maximum activity score is a protocol parameter, not a guaranteed realized return. What a player
-      actually receives depends on pool composition and luck.</p>
+        score</strong> from 0 to 3.05, built from quest streaks, purchase consistency, affiliate activity, and
+      pass bonuses (<a href="#section-53">Appendix C</a>). The score determines relative EVs across all products:
+      lootbox purchases range from 0.80x at zero activity to 1.35x at maximum. The 1.35x multiplier is a protocol
+      parameter, not a guaranteed realized return. What a player actually receives depends on pool composition and
+      luck.</p>
     <p>There is an equilibrium activity score at which lootboxes become +EV. In a world where every player is a GTO
       (Game Theory Optimal) maximizer and the only system yield is stETH, this breakeven point would be close to the
       maximum score (since the only surplus is yield). The more entertainment-seeking players in the system, the more
       surplus they generate, and the lower that breakeven threshold drops.</p>
-    <p><strong>Observation 2.1</strong> (Volume Over Headcount). <em>What matters is the ETH volume on each side of the
-        breakeven line, not the number of players. A single whale buying 10 ETH of lootboxes at low activity contributes
-        more surplus than ten players buying 0.1 ETH each. The system's health depends on the ratio of below-breakeven
-        ETH to above-breakeven ETH, not on the fish-to-grinder headcount.</em></p>
-    <p><strong>Observation 2.2</strong> (Self-Correcting Equilibrium). <em>If too many grinders extract above breakeven,
+    <p><strong>Observation 2.1</strong> (Absolute Volume). <em>What matters is the absolute volume of
+        entertainment-seeking ETH entering the system, not the ratio of player types. A single whale buying 10 ETH of
+        lootboxes at low activity contributes more surplus than ten players buying 0.1 ETH each. The grinder population
+        adjusts itself to whatever surplus that volume creates (<a href="#obs-self-correcting">Observation 2.2</a>).
+        The system's health depends on sustained entertainment demand, not on maintaining a particular
+        composition.</em></p>
+    <p id="obs-self-correcting"><strong>Observation 2.2</strong> (Self-Correcting Equilibrium). <em>If too many grinders
+        extract above breakeven,
         the pool's surplus shrinks and realized returns decline. Some grinders leave (they are money-sensitive), which
         restores returns for those who remain. When a +EV player exits, the pool they would have extracted from retains
         that
@@ -2424,7 +2425,7 @@
     <p>Degenerus is zero-rake, but unlike rake-free poker it has a built-in acquisition engine. The affiliate
       program pays 20-25% commission on referred players' purchases, funded by BURNIE mechanics rather than deposit
       skimming. Affiliates extract value only in proportion to the new money they bring in.</p>
-    <p>The protocol is also structurally resistant to grinder takeover. The grinder's best product, lootboxes,
+    <p>The protocol is also structurally resistant to grinder takeover. The grinder's best product, the lootbox,
       sends the vast majority of each purchase to the futurepool, locking capital into future levels with uncertain
       returns on uncertain timelines. Capital lock plus variance repels mercenary DeFi capital. But the same
       barriers that filter out risk-averse participants concentrate rewards among grinders and profitable hybrids (for
@@ -2505,7 +2506,7 @@
     <p>The degen's utility is dominated by entertainment, not monetary returns.</p>
     <p><strong>Typical behavior:</strong> Degenerette spins, daily coinflip participation, lootbox opens or decimator
       burns regardless of
-      activity score (the anticipation is the product), and irregular ticket purchases.</p>
+      activity score, and irregular ticket purchases.</p>
     <p><strong>Individual rationality check:</strong> The degen participates when the entertainment value exceeds the
       monetary loss. For a degen spending 0.1 ETH on Degenerette at 90% ROI (0.90x; activity score 0), the expected loss
       is 0.01 ETH. The required entertainment value is 0.01 ETH-equivalent, the price of a few seconds of genuine
@@ -2516,7 +2517,7 @@
     <p><strong>Important nuance:</strong> Ticket purchases have the same EV for all player classes at any given time,
       but that EV is, under typical circumstances, below the equilibrium return available through lootboxes at high
       activity scores. This means ticket
-      purchases are themselves a source of cross-subsidy: EV maximizers avoid them (preferring lootboxes where their
+      purchases are themselves a source of cross-subsidy: grinders avoid them (preferring lootboxes where their
       score multiplies returns), while degens buy them freely. The cross-subsidy also flows through lootboxes,
       Degenerette, and the Decimator. The degen who buys lootboxes at a low activity score is
       donating surplus to the pool that high-score buyers extract from.</p>
@@ -2528,9 +2529,11 @@
     <p>Grinders try to play GTO: maximizing expected returns through disciplined execution at scale. They are
       <strong>bankroll-constrained</strong>: unlike the whale, they do not have unlimited capital.
     </p>
-    <p><strong>Observation 3.1</strong> (Best-Response Policy). <em>Under sufficient bankroll and a pool with enough
-        low-activity depositors to fund the multipliers, a high-scoring EV maximizer's best-response policy is to
-        maximize activity score through daily engagement and reinvest aggressively.</em></p>
+    <p><strong>Observation 3.1</strong> (Best-Response Policy). <em>For a grinder who has decided to play, the
+        best-response policy is to maximize activity score through daily engagement and reinvest as aggressively
+        as bankroll allows. This is dominant regardless of pool composition. Whether to play at all is a
+        separate decision that depends on returns large enough to justify the opportunity cost of locked
+        capital.</em></p>
     <p>The core loop is straightforward: maintain daily engagement (quest streaks, lootbox purchases) to push activity
       score toward its maximum, then use that score to extract above-breakeven returns from protocol
       products. Passes accelerate this by granting immediate activity score bonuses. The lootbox EV benefit caps at $a_i
@@ -2555,7 +2558,8 @@
       it, not a requirement.</p>
     <p><strong>High-payoff actions:</strong> Early deity pass acquisition (each pass costs more than the last, so early
       buyers get the best deal), whale bundle purchases at early levels, BAF leaderboard domination through large
-      coinflip stakes, and issuing deity boons to other players (up to 3/day, non-transferable, granted directly). Deity
+      coinflip stakes, and issuing deity <a href="#section-boons">boons</a> to other players (three random bonuses
+      per day they may grant to a player of their choice). Deity
       passes grant a permanent +80% activity score bonus and perpetual jackpot entries. Boons give the deity a social
       role with real dealmaking power: discounted purchases and special benefits granted at the deity's discretion.</p>
     <p><strong>Observation 3.2</strong> (Whale Extraction Is Bounded). <em>Whale extraction is bounded by explicit
@@ -2776,6 +2780,21 @@
         poker positive-sum for the table (even before considering the house): the recreational player and the
         professional are both getting what they came for.</p>
     </div>
+    <h3 id="section-permissionless-execution">4.3 Permissionless Execution</h3>
+    <p>The protocol has no operator. Daily game logic (jackpot draws, drip distributions, coinflip resolution,
+      level transitions) executes when any player calls the permissionless <code>advanceGame()</code> function.
+      The caller receives a BURNIE bounty scaled to approximately 0.01 ETH at the current level's ticket
+      price, escalating to 2x after one hour and capping at 3x (~0.03 ETH) after two hours if unclaimed.
+      In practice, the bounty is secondary: the caller is typically a player with pending jackpot payouts,
+      active tickets, or coinflip stakes who wants the daily processing to happen regardless. The escalation
+      ensures that even during low-activity periods or high gas conditions, the bounty eventually exceeds
+      the cost of calling.</p>
+    <p>The primary calling path requires the caller to have made a purchase in the current or previous day.
+      Deity pass holders bypass this requirement entirely. After 30 minutes past the day boundary, anyone can
+      call regardless of purchase history, and pass holders can call after 15 minutes. These fallbacks ensure
+      the game advances even if no active player calls immediately, but the primary path ties the protocol's
+      heartbeat to real economic activity: someone has to have bought a ticket or lootbox today for the game
+      to tick forward on its fastest schedule.</p>
     <hr />
     <h2 id="section-20">5. Equilibrium Analysis and Commitment Devices</h2>
     <p>For any player with unlimited bankroll who chooses to participate, the dominant strategy is to maximize activity
@@ -2934,8 +2953,8 @@
     <p><strong>Device 4: Forced Long-Term Equity on Large Wins.</strong> The largest single jackpot winners do not
       receive their full payout in liquid ETH. Solo bucket winners in the daily jackpot draws receive 75% ETH and
       25% as whale passes (100-level ticket bundles), activating when the payout exceeds 9 ETH. BAF large winners
-      (payouts exceeding 5% of the BAF pool) receive 50% ETH and 50% as lootbox tickets, which convert to whale
-      passes when the lootbox portion exceeds 5 ETH. The winner does not need to spend another cent, but they now
+      receive 50% ETH and 50% as lootbox tickets, which convert to whale passes when the lootbox portion is
+      large enough. The winner does not need to spend another cent, but they now
       hold equity across future levels that only pays out through continued game progression. This captures their
       <em>attention</em>, not their wallet. They will check back to see how their position is developing, track
       level completions, and notice when jackpots are large. Jackpot wins are proportional to ticket share,
@@ -2946,7 +2965,8 @@
       The pass also grants an immediate activity score bonus, improving their returns on everything else. Combined
       with the liquid ETH from the other portion of their win and the results-oriented conviction that they've
       figured the game out, the winner has every incentive to reinvest aggressively at a moment when they feel
-      like a genius for playing.</p>
+      like a genius for playing.
+    </p>
     <p>These commitment devices are powerful. The difference from exploitative gambling design is that the deferred
       rewards here are <em>real, substantial, and transparently calculable</em>. A player can estimate what their
       streak is worth, what their future tickets will earn, and what their activity score does to their EV. The
@@ -3924,12 +3944,10 @@
       an agent on behalf of players who never touch a wallet directly captures that commission. Poker apps already work
       this way. The protocol is permissionless. The affiliate incentive to solve the
       accessibility problem scales with the jackpot.</p>
-    <p>This also provides an independent answer to a concern raised earlier in the paper. The grinder-dominance
-      scenario (<a href="#section-6">Section 2.3</a>) asks what happens if the degen-to-grinder ratio falls too low. The
-      jackpot ratchet is a
-      continuous corrective: larger jackpots disproportionately attract entertainment-seeking players, not grinders.
-      This
-      is not a theoretical prediction. It is the single most replicated finding in lottery economics. The scenario where
+    <p>The jackpot ratchet also reinforces entertainment-seeking volume, the load-bearing variable
+      (<a href="#section-6">Section 2.3</a>). Larger jackpots disproportionately attract entertainment-seeking
+      players, not grinders. This is not a theoretical prediction. It is the single most replicated finding in
+      lottery economics. The scenario where
       degens quit requires the argument that entertainment-seeking participants will lose interest in ever-larger
       guaranteed jackpots. No empirical evidence supports this. All available evidence points in the opposite
       direction.</p>
@@ -4114,7 +4132,7 @@
       mechanism (<a href="#section-41">Section 9.3</a>) is the strongest expression of this: the endgame payout is
       designed so that positioning to
       profit from game death simultaneously prevents it.</p>
-    <p><strong>What this means for each participant.</strong> For an EV maximizer, the question is whether the
+    <p><strong>What this means for each participant.</strong> For a grinder, the question is whether the
       equilibrium point delivers returns that justify the opportunity cost of locked capital. For a degen, the question
       is whether this is more fun per dollar than alternatives. For an affiliate, the question is whether they can
       recruit enough players to be worth their time. For a whale, the question is whether the game will progress through
@@ -4124,9 +4142,8 @@
       incentives align to keep the game running.</p>
     <p><strong>What would confirm or falsify this thesis.</strong> Post-deployment, watch for:</p>
     <ol>
-      <li>The fish-to-grinder ratio stabilizing above the aggregate constraint threshold (<a href="#section-6">Section
-          2.3</a>), confirming
-        sufficient entertainment demand to fund positive-EV play.</li>
+      <li>Sustained entertainment-seeking ETH volume across multiple level cycles, confirming that
+        entertainment demand exists at scale (<a href="#section-6">Section 2.3</a>).</li>
       <li>Quest streak distribution showing genuine daily engagement across accounts.</li>
       <li>The futurepool growing net across 100-level cycles.</li>
       <li>BURNIE maintaining its ticket-price floor (<a href="#section-38">Section 8.4</a>).</li>
@@ -4544,8 +4561,7 @@
       activity score points (a one-time score increment), and rare high-value drops including whale passes or deity pass
       discounts. Boons are non-transferable and must be used by the recipient. Deity pass holders can also grant boons
       directly to other players (up to 3 per day), giving deities a social role with real dealmaking power. Boon value
-      is difficult to quantify in the formal EV model because it depends on whether the player uses them optimally and
-      at the right time.</p>
+      is difficult to quantify in the formal EV model because it depends on whether the player uses them optimally.</p>
     <hr />
     <h3 id="section-54">Protocol Architecture</h3>
     <h4 id="section-55">The Stage Game at Level $\ell$</h4>
@@ -5633,15 +5649,12 @@
                         Powerball participation spikes when jackpots are large, not when the game is new. The game's
                         maturity
                         works in favor of degen recruitment, not against it.</p>
-                      <p>Separately, grinder self-limiting (<a href="#section-6">Section 2.3</a>) is a continuous
-                        equilibrium correction, not a one-time
-                        event. If the degen population temporarily thins, grinder returns fall, marginal grinders exit,
-                        and the
-                        system rebalances at a lower but stable player count. The cross-subsidy does not require a fixed
-                        ratio
-                        of player types. It requires that the ratio stays above the aggregate breakeven threshold, which
-                        the
-                        self-limiting dynamic enforces by definition.</p>
+                      <p>Separately, grinder self-limiting (<a href="#section-6">Section 2.3</a>) is definitional,
+                        not a fragile equilibrium that needs protecting. Grinders are price-sensitive by definition. If
+                        returns fall below their opportunity cost, grinders leave. The ratio of player types is an
+                        output of entertainment-seeking
+                        volume, not an independent variable. The only empirical question is whether enough people want
+                        to gamble for entertainment. The grinder population takes care of itself.</p>
 
                       <h3>F.22 "Publishing the breakeven threshold teaches degens to optimize, undermining the
                         cross-subsidy"</h3>
