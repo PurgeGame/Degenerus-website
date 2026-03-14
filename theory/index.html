@@ -2542,7 +2542,9 @@
       grinders exit. In practice, this correction is noisier than the theory suggests, in a way that strengthens it.
       Players cannot perfectly calculate their true EV because it depends on unknowable factors out of their control.
       Actual people are results-oriented: a grinder who plays optimally but runs bad may quit feeling the game is
-      unprofitable, while a fishy hybrid on a heater stays convinced they have an edge. The variance is high enough
+      unprofitable, while a fishy hybrid on a heater stays convinced they have an edge. Poker is notoriously
+      hard to learn by playing, for exactly this reason: short-term results are dominated by variance, not skill,
+      and the game never tells you which one you're experiencing. The variance is high enough
       that an overextended grinder will hit a drawdown that forces them out, and going broke doesn't just
       cost ETH. It costs quest streaks, activity score, and the compounding advantages that made the strategy
       profitable. Variance and bankroll pressure thin the grinder field faster than pure skill
@@ -2929,14 +2931,30 @@
       into illiquid future participation and
       compounding the player's stake. The ticket selection is designed to be an optimal allocation path for the player,
       spreading value across upcoming levels.</p>
+    <p><strong>Device 4: Forced Long-Term Equity on Large Wins.</strong> The largest single jackpot winners do not
+      receive their full payout in liquid ETH. Solo bucket winners in the daily jackpot draws receive 75% ETH and
+      25% as whale passes (100-level ticket bundles), activating when the payout exceeds 9 ETH. BAF large winners
+      (payouts exceeding 5% of the BAF pool) receive 50% ETH and 50% as lootbox tickets, which convert to whale
+      passes when the lootbox portion exceeds 5 ETH. The winner does not need to spend another cent, but they now
+      hold equity across future levels that only pays out through continued game progression. This captures their
+      <em>attention</em>, not their wallet. They will check back to see how their position is developing, track
+      level completions, and notice when jackpots are large. Jackpot wins are proportional to ticket share,
+      so the mechanism does not target any player type. But the practical effect is asymmetric: grinders and whales
+      already hold future-level positions. Degens typically do not. For a degen who hits a big win, this may be
+      their first and only long-term equity in the system, converting a player who would otherwise take the ETH
+      and disappear into a stakeholder with a reason to watch every daily jackpot drawing for the next 100 levels.
+      The pass also grants an immediate activity score bonus, improving their returns on everything else. Combined
+      with the liquid ETH from the other portion of their win and the results-oriented conviction that they've
+      figured the game out, the winner has every incentive to reinvest aggressively at a moment when they feel
+      like a genius for playing.</p>
     <p>These commitment devices are powerful. The difference from exploitative gambling design is that the deferred
-      rewards here are <em>real, substantial, and transparently calculable</em>. A player can compute exactly what their
+      rewards here are <em>real, substantial, and transparently calculable</em>. A player can estimate what their
       streak is worth, what their future tickets will earn, and what their activity score does to their EV. The
+      exact returns depend on the actions of other players and cannot be known in advance, but the formulas are
+      public, the parameters are immutable, and the range of outcomes is bounded. The
       underlying psychological mechanism (making it costly to leave) is the same as casino loyalty programs, but the
-      rewards are guaranteed by immutable code: their value is calculable in advance and cannot be modified, cancelled,
-      or diluted after the fact. The enforceability of these commitment devices is itself a structural property: the
-      contract is immutable and ownerless, so no regulator, operator, or adversary can modify, pause, or kill the system
-      in which the deferred value is held.</p>
+      contract is immutable and ownerless: no operator, regulator, or adversary can modify the rules, cancel the
+      rewards, or kill the system in which the deferred value is held.</p>
     <p>The commitment devices also serve a structural role in the repeated game (<a href="#section-24">Section 5.4</a>).
       An infinite-horizon
       repeated game generally supports many equilibria, including cooperative ones where all players engage actively and
@@ -3632,8 +3650,7 @@
         10% decimator distribution. Total non-obligated ETH shrinks slowly during a stall (daily drip pays a fraction as
         ETH to
         winners), but mostly consolidates across pools rather than leaving the protocol.
-        Expected payout per ticket exceeds ticket cost whenever historical pool accumulation is large relative
-        to the ticket population. The concrete math is in the worked example below.</li>
+        Expected payout per ticket exceeds ticket cost under almost any circumstances.</li>
       <li><strong>GAMEOVER is averted:</strong> The buyer holds tickets in a live, continuing game. The stall
         was not dead time: drip income accumulated throughout. Early buyers captured the most value; late buyers
         received fewer draws but still hold live tickets in a continuing game.</li>
@@ -3819,7 +3836,8 @@
       A score that was merely profitable in a crowded field becomes highly profitable in a thin one, and that
       advantage persists across every future level until the field recovers.
       <a href="#appendix-e">Appendix E</a> develops the formal details: fixed-point properties, stability analysis,
-      threshold conditions, and edge cases including the BURNIE dilution scenario.</p>
+      threshold conditions, and edge cases including the BURNIE dilution scenario.
+    </p>
     <p>The analysis above is purely monetary, but the protocol's player base self-selects for variance
       preference. A looming GAMEOVER deadline is not just a financial event. It is the highest-stakes moment
       in the game. Players who enjoy gambling derive entertainment value from the possibility that the game
