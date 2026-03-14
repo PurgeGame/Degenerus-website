@@ -3602,10 +3602,13 @@
       </ol>
     </div>
     <p>The terminal jackpot's eligibility rule is the key design choice. Eligible recipients must hold tickets for the
-      in-progress level (the one being filled when the game stalled). The only way to acquire those tickets is to buy
-      them, and 90% of each ticket purchase
-      flows directly into the nextpool, which is the pool that must reach its target to prevent GAMEOVER. The mechanism
-      that determines who receives the terminal payout is the same mechanism that funds the pool target. Claiming
+      in-progress level (the one being filled when the game stalled). Direct ticket purchases are the most
+      efficient way to acquire them. Lootboxes can also produce stalling-level tickets,
+      but at fewer of tickets per ETH. A player who believes GAMEOVER is likely wants maximum tickets per ETH
+      and buys directly. A
+      player who believes the game continues prefers lootboxes for their multiplied returns across future levels.
+      Either way, the mechanism that funds the pool target overlaps heavily with the mechanism that determines
+      terminal eligibility. Claiming
       insurance and preventing the insured event are the same action. To enforce this, BURNIE ticket purchases are
       blocked during the final 30 days before GAMEOVER. Since BURNIE tickets do not contribute ETH to the nextpool,
       allowing them would let players dilute the terminal jackpot without funding the target.</p>
@@ -3624,18 +3627,16 @@
         drip value in the survival state as well.</em></p>
     <p>Consider the two outcomes:</p>
     <ul>
-      <li><strong>GAMEOVER fires:</strong> The buyer's tickets are entered into a terminal jackpot funded by 90% of all
-        non-obligated ETH in the protocol: the nextpool, the futurepool, and the segregated accumulator
-        (including all retained terminal insurance from both yield and deposit sources). The expected
-        payout per ticket exceeds the ticket cost as long as the futurepool remains non-trivial relative to the
-        nextpool, which it does throughout the stall. The accumulator adds meaningfully at all levels: at
-        early levels through deposit insurance, at later levels through compounding yield.</li>
-      <li><strong>GAMEOVER is averted:</strong> The buyer holds tickets in a live, continuing game. The extraction
-        function transfers a portion of the nextpool into the futurepool at level completion (larger for slower levels),
-        reducing the survival jackpot but enriching the reserve for future levels. However, ticket holders have been
-        accumulating drip income (ETH prizes and additional tickets) throughout the stall. For a player already
-        engaged, buying earlier was strictly better: more draws, more drip income, and a smaller extraction if their
-        purchases help the level complete sooner.</li>
+      <li><strong>GAMEOVER fires:</strong> The buyer's tickets enter a terminal jackpot funded by all
+        non-obligated ETH in the protocol (nextpool, futurepool, and the full segregated accumulator), less a
+        10% decimator distribution. Total non-obligated ETH shrinks slowly during a stall (daily drip pays a fraction as
+        ETH to
+        winners), but mostly consolidates across pools rather than leaving the protocol.
+        Expected payout per ticket exceeds ticket cost whenever historical pool accumulation is large relative
+        to the ticket population. The concrete math is in the worked example below.</li>
+      <li><strong>GAMEOVER is averted:</strong> The buyer holds tickets in a live, continuing game. The stall
+        was not dead time: drip income accumulated throughout. Early buyers captured the most value; late buyers
+        received fewer draws but still hold live tickets in a continuing game.</li>
     </ul>
     <p><strong>The concrete math.</strong> Consider a conservative baseline at level 50: ticket price 0.08 ETH, death
       clock
@@ -3676,36 +3677,41 @@
     <p>Ticket holders have been accumulating value throughout the stall. The drip distributes both ETH
       prizes and new tickets to existing holders in proportion to their holdings. Over 120 daily firings, a day-1
       ticket holder receives ~0.030 ETH in direct prizes and grows their holding from 1 ticket to ~1.33
-      tickets (fewer drip tickets are created under 200% backing, but each represents a larger pool share).
-      The daily BURNIE jackpot (0.5% of the prize pool target in BURNIE, distributed to
-      trait-matched ticket holders every day) adds further value: over a 120-day stall, each original
-      ticket accumulates BURNIE with utility at the decimator, for ticket purchases, or
-      in the terminal decimator's 10% allocation. All of this income is state-independent: received whether
+      tickets.
+      The daily BURNIE jackpot (0.5% of the previous level's target in BURNIE) adds further value,
+      though most of it flows to near-future (levels +1 to +4, 75% of budget) and far-future (+5 to +99,
+      25%) ticket holders rather than current-level holders. Current-level holders receive roughly 15% of the
+      daily BURNIE budget. Over a 120-day stall this still accumulates meaningful BURNIE with utility at the
+      decimator, for ticket purchases, or in the terminal decimator's 10% allocation. All of this income is
+      state-independent: received whether
       GAMEOVER fires or not. The ETH-only EV below therefore understates the true return. A day-1 buyer's
       expected value counting only ETH flows:</p>
-    <p>$$\text{EV}_{\text{early}} = \underbrace{0.030}_{\text{drip}} + P(\text{GO}) \times
-      \underbrace{0.231}_{1.33 \times 0.174} + (1 - P(\text{GO})) \times \underbrace{0.064}_{1.33 \times 0.048}
-      - 0.08 = 0.167 \cdot P(\text{GO}) + 0.014$$</p>
-    <p>Positive for all $P(\text{GAMEOVER}) \geq 0$. A day-1 buyer is unconditionally +EV: the survival state
-      value (drip income plus the survival jackpot share at ~50% extraction) covers the ticket cost
-      by itself, with the terminal option value as pure upside. No assessment of GAMEOVER probability is needed.
-      A late buyer (day ~115), with minimal drip accumulation and only one ticket, faces a steeper threshold:</p>
+    <p>$$\text{EV}_{\text{early}} = \underbrace{0.030}_{\text{drip}}
+      + P(\text{GO}) \cdot \underbrace{0.231}_{1.33 \times 0.174}
+      + (1 - P(\text{GO})) \cdot \underbrace{0.064}_{1.33 \times 0.048}
+      - 0.08$$</p>
+    <p>$$= 0.167 \cdot P(\text{GO}) + 0.014$$</p>
+    <p>Positive for all $P(\text{GAMEOVER}) \geq 0$. Under these worst-case assumptions (zero voluntary
+      purchases, full 120-day window), a day-1 buyer is +EV regardless of outcome: the survival state value
+      (drip income plus the survival jackpot share at ~50% extraction) covers the 0.08 ETH ticket cost by
+      itself, with the terminal option as pure upside. A late buyer (day ~115), with minimal drip accumulation
+      and only one ticket, faces a steeper threshold:</p>
     <p>$$\text{EV}_{\text{late}} = 0.126 \cdot P(\text{GO}) - 0.032$$</p>
     <p>Positive for $P(\text{GAMEOVER}) > 25\%$. During a 120-day stall with zero voluntary purchases, this
       threshold is comfortably satisfied: the game has been stalled for months, and any rational assessment
       assigns substantial probability to GAMEOVER. The extraction function does not affect the terminal payout
       at all. GAMEOVER fires during the stall, before level completion, so the extraction never runs and all
       non-obligated ETH contributes to the terminal jackpot regardless of which pool holds it.</p>
-    <p>These numbers assume <em>zero voluntary ticket purchases for the entire 120-day window</em>. Any real-world
-      activity is strictly additive: each voluntary purchase adds 0.072 ETH to the nextpool while increasing the
-      terminal jackpot by approximately the same amount per new ticket, leaving the per-ticket terminal ratio
-      roughly unchanged. Player purchases close the gap without diluting the terminal incentive.</p>
-    <p>The extraction function creates a third buy-early incentive beyond draw accumulation and drip income:
-      the extraction percentage depends on when the level completes, not when any individual ticket was bought.
-      Earlier collective action means faster completion, which means less extraction. If the gap closes at
-      day 30 rather than day 115, the extraction drops from ~50% to ~20% and the survival jackpot more than
-      doubles. A community that acts early protects its own survival payout; one that waits guarantees the
-      worst possible extraction for everyone.</p>
+    <p>These numbers assume <em>zero voluntary ticket purchases for the entire 120-day window</em>. Real-world
+      purchases add 0.072 ETH to the nextpool per ticket but dilute every existing holder's share of the full
+      terminal jackpot (which includes the futurepool and accumulator, far more than 0.072 ETH). Each new
+      entrant modestly dilutes the per-ticket terminal payout while simultaneously reducing the probability
+      that GAMEOVER fires at all.</p>
+    <p>If GAMEOVER is averted and the level completes, a time-based skim transfers a portion of the nextpool
+      back to the futurepool before the survival jackpot is distributed. The skim percentage grows with how
+      long the level took to complete: ~20% if it fills in 30 days, ~50% if it drags to day 115. This creates
+      a collective early-action incentive. If ticket buyers fill the level quickly, more of the nextpool stays
+      in the survival jackpot. If they wait, half the pool gets skimmed before anyone sees it.</p>
 
     <p><strong>How low can the ratio go?</strong> Below ~1.20&times;, a gap opens and the terminal incentive
       activates. The sensitivity across ratios:</p>
@@ -3720,24 +3726,25 @@
       <tbody>
         <tr>
           <td>1.2&times;+</td>
-          <td>100% (near deadline with early-bird)</td>
-          <td>N/A (no intervention needed)</td>
+          <td>100% near deadline</td>
+          <td>N/A, drip alone fills the level</td>
         </tr>
         <tr>
           <td>1.0&times;</td>
           <td>88%</td>
-          <td>Unconditionally +EV (day-1 buyer with drip)</td>
+          <td>+EV at any P(GAMEOVER) for day-1 buyers</td>
         </tr>
         <tr>
           <td>0.5&times;</td>
           <td>~54%</td>
-          <td>~30% (day-1 buyer with drip)</td>
+          <td>~30% for day-1 buyers</td>
         </tr>
       </tbody>
     </table>
     <p>At lower ratios, the larger gap requires more voluntary purchases, diluting the survival payout and raising
-      the breakeven threshold. The terminal payout per ticket remains above cost as long as the futurepool exceeds
-      roughly 11% of the nextpool, which holds throughout the stall at any starting ratio. Drip income and the
+      the breakeven threshold. The terminal payout per ticket remains above cost as long as the futurepool
+      plus the segregated accumulator exceeds roughly 11% of the nextpool, a threshold that holds
+      comfortably at any starting ratio. Drip income and the
       survival jackpot (~50% extraction at 120 days retains a substantial pool) partially compensates for survival
       dilution, but at 0.5&times; the breakeven still requires meaningful conviction that GAMEOVER is likely.</p>
     <p><strong>The grinder pivot.</strong> During normal play, EV maximizers prefer lootboxes (up to 1.35&times; at
@@ -3761,7 +3768,8 @@
       enough on its own to flip the lootbox comparison at low $P(\text{GAMEOVER})$, but they shift the marginal
       incentive. Each grinder who tilts even one purchase from lootbox to ticket sends 9&times; more ETH to the
       nextpool. The slow level corrects itself before it becomes a stall, and the stall corrects itself before it
-      becomes terminal.</p>
+      becomes terminal. Lootbox resolution tickets also benefit: they land at future levels before those levels
+      begin, making them effectively day-1 holders who collect drip from the start.</p>
     <p><em>The dominant action near the endpoint is cooperation, not defection.</em> In a standard finite game, the
       rational move in the last round is to defect. In Degenerus, the rational move as GAMEOVER approaches is to buy
       tickets: the terminal jackpot pays 90% of all locked ETH to next-level ticket holders. As the concrete math
@@ -3791,17 +3799,37 @@
       identity function $p \mapsto p$ is increasing, the fixed point $p^*$ is unique. The basin of attraction is wide:
       each purchase simultaneously reduces the gap (lowering $p$) without materially diluting either the terminal or
       survival ratio, so $p^*$ is small once even one level has completed.</p>
-    <p>This is not circular reasoning. It is an equilibrium property. No individual buyer intends to save the game.
-      Each buys because the trade is +EV in expectation: if GAMEOVER fires, the terminal payout exceeds the ticket
+    <p>This is not circular reasoning, it is an equilibrium property. No individual buyer needs to intend to save the
+      game. Each buys because the trade is +EV in expectation: if GAMEOVER fires, the terminal payout exceeds the ticket
       cost; if GAMEOVER is averted, the ticket participates in normal jackpot draws. No single buyer is pivotal. Each
       buyer's contribution to the nextpool is a small fraction of the total gap. The coordination problem dissolves
       because no coordination is needed. Many individually rational purchases collectively fill the pool. The terminal
       jackpot functions as a coordination device whose primary value is that it never needs to be exercised.</p>
-    <p>For completeness: this equilibrium breaks down only when the accumulated pool is so small that terminal payouts
-      per ticket do not exceed ticket costs even at $p = 1$. This requires $P^{total} &lt; c_\ell \cdot N / 0.9$,
-      satisfied only at very early levels or after a level with a long stall that drains the futurepool.
-      (<a href="#appendix-e">Appendix E</a> develops the formal details: fixed-point properties, stability analysis,
-      threshold conditions, and edge cases including the BURNIE dilution scenario.)</p>
+    <p>The terminal decimator reinforces this: 10% of the terminal pool is distributed to BURNIE burners
+      weighted by activity score. Players who anticipate GAMEOVER want high activity scores to maximize their
+      decimator share, and the only way to build activity score is to buy tickets or lootboxes in order to maintain
+      streaks,
+      which
+      funds the nextpool. A stall is the best possible time to have a high score. The fact that the game
+      stalled necessarily means other players have dropped out and lost their streaks, lowering the average activity
+      score
+      across the population. The breakeven threshold shifts down, and the remaining high-score players capture
+      a larger share of every payout channel. This is especially true if the game continues: the surplus
+      that was previously split among many competing grinders is now concentrated among the few who remained.
+      A score that was merely profitable in a crowded field becomes highly profitable in a thin one, and that
+      advantage persists across every future level until the field recovers.
+      <a href="#appendix-e">Appendix E</a> develops the formal details: fixed-point properties, stability analysis,
+      threshold conditions, and edge cases including the BURNIE dilution scenario.</p>
+    <p>The analysis above is purely monetary, but the protocol's player base self-selects for variance
+      preference. A looming GAMEOVER deadline is not just a financial event. It is the highest-stakes moment
+      in the game. Players who enjoy gambling derive entertainment value from the possibility that the game
+      might end, even as their participation pushes that probability toward zero. And the terminal jackpot
+      would be <strong>enormous</strong>: every ETH in the protocol not already distributed to prior winners,
+      with 60% going to a single winner.
+      That is exactly the kind of event this player base shows up for. The typical degen is not running
+      fixed-point equilibrium calculations to conclude that P(GAMEOVER) is near zero. They see a massive
+      jackpot, a ticking clock, and a cheap ticket. They buy. The formal analysis shows why this behavior is
+      individually rational, but the players themselves don't need the analysis to act on it.</p>
     <p>If arb capital alone is insufficient, future ticket holders complete the defense. They have locked equity that
       only unlocks if the game continues, giving them additional motivation beyond the terminal payout arithmetic. For
       these players, buying has three possible outcomes: (1) GAMEOVER fires and their new tickets pay out via terminal
@@ -4259,12 +4287,16 @@
       for winner selection.</p>
     <h3>B.1 Level Jackpot (Jackpot Phase)</h3>
     <p>After <code>nextPrizePool</code> meets the level target, the game enters a jackpot phase distributing the prize
-      pool. If the purchase phase lasted fewer than 3 days, the jackpot phase compresses to 3 days; otherwise it runs
-      for 5 days.</p>
+      pool. The jackpot always covers 5 logical days of draws, but the number of physical days depends on how fast
+      the level filled:</p>
     <ul>
-      <li><strong>Days 1–4:</strong> A random 6–14% slice of the remaining <code>currentPrizePool</code> is drawn each
-        day.</li>
-      <li><strong>Day 5:</strong> The remaining <code>currentPrizePool</code> is fully distributed.</li>
+      <li><strong>Normal (purchase phase > 2 days):</strong> 5 physical days. Days 1–4 each draw a random 6–14%
+        slice of the remaining <code>currentPrizePool</code>. Day 5 distributes everything remaining.</li>
+      <li><strong>Compressed (purchase phase ≤ 2 days):</strong> 3 physical days. Day 1 runs normally.
+        Days 2 and 3 each cover two logical days at double the draw rate. The final physical day distributes
+        everything remaining.</li>
+      <li><strong>Turbo (purchase phase ≤ 1 day):</strong> 1 physical day. All 5 logical days execute at once
+        and the entire <code>currentPrizePool</code> is distributed immediately.</li>
     </ul>
     <p><strong>Trait-bucket shares:</strong> Days 1–4 allocate 20% to each of the four trait buckets, with the remaining
       20% assigned randomly. Day 5 shifts to a weighted distribution: 60% to the leading trait bucket (rotating across
@@ -4685,6 +4717,17 @@
       draws, activity score contribution). Crucially, $V^{surv}$ does not depend on activity score: a ticket is a
       ticket, and every ticket has the same probability of winning jackpot draws regardless of who holds it. Activity
       score affects lootbox EV and decimator positioning, not ticket jackpot value.</p>
+    <p>This understates the terminal incentive. The terminal decimator distributes 10% of $P^{total}$ to BURNIE
+      burners weighted by activity score. An agent with burn weight $w_i$ facing total burn weight $W$ receives an
+      additional $0.1 \cdot P^{total} \cdot w_i / W$ in the terminal state. The full payoff is:</p>
+    <p>$$\pi_i(t) = p(t) \cdot \left[\frac{0.9 \cdot P^{total}}{N + 1} + \frac{0.1 \cdot P^{total} \cdot w_i}{W}
+      \right] + (1 - p(t)) \cdot V^{surv}_i(t) - c_\ell$$</p>
+    <p>The decimator component is zero for agents with no BURNIE to burn, but strictly positive for any active
+      participant. Building the activity score that maximizes the decimator share requires buying tickets and
+      maintaining quest streaks, both of which fund the nextpool. In the survival state, that same activity score
+      improves lootbox returns, regular decimator payouts, and jackpot positioning. The score-building actions
+      are +EV in both states, which is why the terminal decimator strengthens the self-prevention property:
+      preparing for GAMEOVER requires the same behavior that prevents it.</p>
     <p>Agent $i$ buys if $\pi_i(t) > 0$. Each purchase simultaneously increases $N$ by 1, increases $P^{next}_\ell$ by
       $0.9 c_\ell$, and decreases $p(t)$.</p>
     <p>The mapping $\Phi: [0,1] \to [0,1]$ is defined by:</p>
@@ -4763,6 +4806,9 @@
                         tickets therefore:</p>
                       <ul>
                         <li>Weakens mechanism A (terminal arbitrage) by diluting the per-ticket terminal payout.</li>
+                        <li>Weakens the burner's own terminal decimator position: the BURNIE burned for tickets is no
+                          longer available to burn in the terminal decimator, which distributes 10% of the terminal
+                          pool weighted by activity score.</li>
                         <li>Strengthens mechanism B (future ticket holder defense) by permanently destroying the BURNIE
                           supply that would
                           compete with future ticket holders' equity at later levels.</li>
@@ -4986,6 +5032,19 @@
                         have an objection
                         that this paper does not address, the author wants to hear it: <a
                           href="mailto:burnie@degener.us">burnie@degener.us</a>.</p>
+                      <p>On contributions: the terminal paradox analysis (<a href="#section-41">Section 9.3</a> and
+                        <a href="#appendix-e">Appendix E</a>) did not exist before this paper was written. The
+                        original GAMEOVER mechanism paid mostly future-level ticket holders rather than next-level
+                        ones, which meant terminal eligibility and level completion were largely decoupled. The
+                        analysis revealed that coupling them (paying next-level ticket holders) creates the
+                        self-prevention property: claiming terminal eligibility and funding the pool that prevents
+                        GAMEOVER become the same action. This redesign, the formal fixed-point equilibrium analysis,
+                        and the self-prevention proof were all products of the paper's development process.
+                        The terminal paradox is one of the paper's most valuable contributions. It transforms the
+                        resilience thesis from "the protocol has mechanical defenses against stalls" to "the
+                        protocol's incentive structure makes terminal failure self-preventing." The contracts were
+                        updated to reflect this analysis.
+                      </p>
                       <p>On methodology: while the creator is the named author, the majority of this paper's content was
                         reviewed and edited through adversarial multi-agent
                         analysis. Specialized AI agents designed to be hostile to the protocol's claims
