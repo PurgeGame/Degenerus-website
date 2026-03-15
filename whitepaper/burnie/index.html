@@ -304,7 +304,7 @@
       <li><strong>BURNIE ticket purchases:</strong> No FLIP credit. Buying with BURNIE is a pure burn.</li>
       <li><strong>Jackpot wins:</strong> Daily BURNIE jackpots are credited as FLIP, not liquid BURNIE.</li>
       <li><strong>Lootbox BURNIE prizes:</strong> The BURNIE component of lootbox prizes enters as FLIP.</li>
-      <li><strong>Affiliate commissions:</strong> All affiliate payouts are FLIP by default. Affiliates can choose "nit mode" for 50% guaranteed BURNIE, but the other 50% is discarded.</li>
+      <li><strong>Affiliate commissions:</strong> All affiliate payouts are FLIP by default, subject to a mandatory coinflip. Commissions on high-activity lootbox referrals taper to 25% of the base rate.</li>
       <li><strong>Advance bounty:</strong> The player who calls <code>advanceGame()</code> daily earns 500 BURNIE as FLIP.</li>
       <li><strong>Quest rewards:</strong> Daily quest slot pays 100 BURNIE as FLIP. Random quest slot pays 200. Up to 300 BURNIE in FLIP per day if both are completed.</li>
       <li><strong>Claimable drain bonus:</strong> Spending all your claimable winnings (minimum 3 tickets' worth) on new purchases earns a 10% bonus in FLIP.</li>
@@ -478,11 +478,8 @@
         <tr><th>Mode</th><th>Mechanism</th></tr>
         <tr><td>Coinflip (default)</td><td>100% as FLIP credits. Enters tomorrow's coinflip.</td></tr>
         <tr><td>Degenerette</td><td>100% as degenerette betting credit. Stored until used.</td></tr>
-        <tr><td>Nit Mode</td><td>50% minted as liquid BURNIE. Other 50% discarded (never minted).</td></tr>
       </table>
     </div>
-
-    <p>Nit mode is a 50% haircut for certainty. The discarded 50% is value that never enters circulation at all. Affiliates choosing this mode are paying for predictability with half their commission.</p>
   </section>
 
   <!-- ========== 10. Supply Dynamics ========== -->
@@ -498,7 +495,7 @@
       <li>Every BURNIE lootbox purchase (100% burned, resolves at 80% face value) is a permanent burn</li>
       <li>Every decimator entry (1,000+ BURNIE) is a permanent burn</li>
       <li>Every ReverseFlip nudge (100+ BURNIE, escalating) is a permanent burn</li>
-      <li>Every nit mode affiliate payout discards 50%</li>
+      <li>Lootbox taper reduces affiliate commission to 25% at high activity scores</li>
     </ul>
 
     <p>Meanwhile, FLIP credits flow in from ETH ticket purchases, quest rewards, jackpots, affiliate commissions, and advance bounties. The rate of FLIP generation depends on how much ETH is being spent, how many quests are completed, and how many jackpots fire. The coinflip converts FLIP to BURNIE at ~98.4% efficiency.</p>

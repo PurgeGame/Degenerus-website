@@ -512,7 +512,7 @@
   <!-- ========== Section 3: Negative Rake ========== -->
   <section>
     <h2><s>Zero Rake.</s> Negative Rake.</h2>
-    <p>Zero-rake means no entity extracts a guaranteed percentage of player deposits as ongoing profit. Not a small percentage. Zero. Every wei of ETH enters on-chain pools with published, immutable splits. There is no fee extraction and no privileged access to funds.</p>
+    <p>Zero-rake means no entity extracts a guaranteed percentage of player deposits as ongoing profit. Not a small percentage. Zero. Every wei of ETH enters on-chain pools with published, immutable splits. There is no fee extraction and no privileged access to funds. (One carve-out: during the bootstrap presale, 20% of lootbox ETH routes to the vault, capped at 200 ETH. After presale ends, zero.)</p>
     <p>But it goes further. All pooled ETH is staked into Lido stETH, earning ~2.5% APR. That yield comes from Ethereum staking rewards, not from other players. It gets distributed across the prize pools, the vault, and the $DGNRS contract. A share goes to the creator through those same channels. Free external money flows into the system that pays everyone.</p>
     <p>Over the lifetime of the protocol, total ETH paid out to all players will exceed total ETH deposited by all players. That's not a promise. That's an accounting identity. When the system is positive-sum, and there are losers (there will be), there <em>must</em> be winners who collectively received more than they put in.</p>
 
@@ -556,7 +556,7 @@
     </blockquote>
 
     <p>The illiquidity also blocks a class of extractive behavior. If future tickets were tradeable, sophisticated players could buy them at a discount from desperate sellers, capture the value, and leave. Non-transferable tickets mean the only way to benefit is to be here when the game gets there, which means being part of the ecosystem that pushes levels forward.</p>
-    <p>The capital flow has a structural asymmetry worth noting. Ticket purchases split 90/10 to the current prize pool and future pool. Luckbox purchases split the opposite way: 90% to the futurepool. EV maximizers, who buy the most luckboxes, are structurally locking their capital into longer-duration pools. The degen's ticket money cycles quickly through the current jackpot. The grinder's luckbox money sits in the futurepool, generating yield and funding future jackpots. The people trying hardest to extract value end up locking their capital the longest.</p>
+    <p>The capital flow has a structural asymmetry worth noting. Ticket purchases split 90/10 to the next prize pool and future pool. Luckbox purchases split the opposite way: 90% to the futurepool. EV maximizers, who buy the most luckboxes, are structurally locking their capital into longer-duration pools. The degen's ticket money cycles quickly through the next jackpot. The grinder's luckbox money sits in the futurepool, generating yield and funding future jackpots. The people trying hardest to extract value end up locking their capital the longest.</p>
   </section>
 
   <!-- ========== Section 6: Variance ========== -->
@@ -592,17 +592,17 @@
         <tr><th>Option</th><th>Approximate EV</th><th>Who Takes It</th></tr>
         <tr><td>Tickets (day 1 of a level)</td><td>~100%</td><td>Strategic players who buy early and catch every draw</td></tr>
         <tr><td>Tickets (last jackpot day)</td><td>~65%</td><td>Impulsive buyers chasing the biggest jackpot of the level</td></tr>
-        <tr><td>Luckbox (max activity score)</td><td>~128%</td><td>Engaged players converting score into value</td></tr>
+        <tr><td>Luckbox (max activity score)</td><td>~135%</td><td>Engaged players converting score into value</td></tr>
         <tr><td>Coinflip (hold + compound)</td><td>~98.4% per cycle</td><td>Players building a BURNIE position</td></tr>
         <tr><td>Degenerette</td><td>~95%</td><td>Players who want roulette-style action</td></tr>
         <tr><td>Luckbox (low activity score)</td><td>~80%</td><td>New or casual players gambling for upside</td></tr>
-        <tr><td>Nit mode affiliate</td><td>50% of full commission</td><td>Affiliates who prefer certainty over variance</td></tr>
+        <tr><td>High-activity lootbox (tapered)</td><td>~25% of full commission</td><td>Retained players whose volume no longer needs affiliate incentive</td></tr>
       </table>
     </div>
 
     <p>And it goes deeper than product choice. Even within the same product, timing creates massive EV differences. A ticket bought on the first day of a level participates in every daily jackpot draw for that level. A ticket bought on the last jackpot day catches only the final draw. Both cost the same ETH. The early ticket captured roughly 50% more jackpot exposure. Luckbox tickets are even better: they're issued across dozens of future levels, earning BURNIE jackpot draws long before those levels start paying ETH. Players who buy impulsively on the last day of a level are voluntarily leaving most of the ticket's value on the table.</p>
 
-    <p>Every sub-optimal choice creates surplus that flows to the players who optimize. A casual player buying luckboxes at 60% EV is voluntarily transferring 40% of that value into the prize pools. A last-day ticket buyer subsidizes the early buyers who showed up when the level started. An affiliate choosing nit mode discards half their commission. A player who drops their quest streak forfeits the activity score that would have improved their decimator bucket, their luckbox EV, and their degenerette returns.</p>
+    <p>Every sub-optimal choice creates surplus that flows to the players who optimize. A casual player buying luckboxes at 60% EV is voluntarily transferring 40% of that value into the prize pools. A last-day ticket buyer subsidizes the early buyers who showed up when the level started. An affiliate's commission tapers as their referrals become more engaged, because the game's own retention mechanics take over. A player who drops their quest streak forfeits the activity score that would have improved their decimator bucket, their luckbox EV, and their degenerette returns.</p>
 
     <p>What matters is the ETH volume on each side of the breakeven line, not the number of players. A single whale buying luckboxes at low activity contributes more surplus than ten players buying at high activity. The system's health depends on the ratio of below-breakeven ETH to above-breakeven ETH. And the equilibrium self-corrects: if too many grinders extract above breakeven, surplus shrinks, some leave, and returns restore for those who remain.</p>
     <p>Optimizers don't profit from exploiting anyone. They profit because other players, knowingly and voluntarily, choose convenience and excitement over EV maximization.</p>
@@ -637,20 +637,19 @@
   <!-- ========== Section 8: Can't Stall ========== -->
   <section>
     <h2>Why the Game Can't Stall</h2>
-    <p>Consider what a stall actually requires. A level just completed, meaning there was enough momentum to finish the previous one. Jackpots just paid out. Winners just received ETH. Auto-reinvest players just converted their winnings into next-level tickets. And now, somehow, nobody buys enough tickets for 365 days. Not the whales with future positions worth multiples of the ticket price. Not the quest players who lose weeks of accumulated score if they stop. Not the affiliates earning commissions on every purchase. Not the auto-reinvest mechanisms that don't require human decisions at all.</p>
+    <p>Consider what a stall actually requires. A level just completed, meaning there was enough momentum to finish the previous one. Jackpots just paid out. Winners just received ETH. Auto-reinvest players just converted their winnings into next-level tickets. And now, somehow, nobody buys enough tickets for 120 days (the death clock at level 1+). Not the whales with future positions worth multiples of the ticket price. Not the quest players who lose weeks of accumulated score if they stop. Not the affiliates earning commissions on every purchase. Not the auto-reinvest mechanisms that don't require human decisions at all.</p>
     <p>The cost of pushing a level through is a fraction of the value locked in future tickets. A single whale can fund a level alone, and doing so is trivially worth it to protect their position.</p>
     <p>But the protocol doesn't rely on participant rationality alone. Multiple independent mechanisms ensure progression even if humans stop making decisions:</p>
 
     <ul class="mechanism-list">
       <li><strong>Quest streak pressure:</strong> Power users must buy tickets daily or lose weeks of accumulated activity score.</li>
       <li><strong>Auto-reinvest:</strong> Players in afKing mode, plus the vault and $DGNRS contracts, automatically convert jackpot winnings into next-level tickets. No human action required.</li>
-      <li><strong>Future pool drip:</strong> At each level transition, a chunk of the future prize pool moves to the next prize pool automatically. Even with zero new purchases, the pools self-fill.</li>
-      <li><strong>Purchase-phase rewards:</strong> During the purchase phase, the future pool periodically distributes tickets and ETH, keeping engagement alive during slower periods.</li>
+      <li><strong>Future pool drip:</strong> Every day during the purchase phase, 1% of the future prize pool is extracted: 25% distributed as ETH prizes to ticketholders, 75% converted into lootbox tickets that flow into the next prize pool. Even with zero new purchases, the pools self-fill.</li>
     </ul>
 
-    <p>The future prize pool acts as a <strong>flywheel battery</strong>. It charges during active periods and discharges through drip mechanisms during quiet ones. The future pool is designed to stay around 1.5x the level target, enough to cover at least one full level where nobody plays. The drip alone can fill a prize pool without any new deposits.</p>
+    <p>The future prize pool acts as a <strong>flywheel battery</strong>. It charges during active periods and discharges through drip mechanisms during quiet ones. In practice, the future pool tends to accumulate well above the level target, enough to cover at least one full level where nobody plays. The drip alone can fill a prize pool without any new deposits.</p>
     <p>Honest assessment: at early levels with cheap tickets, a year-long stall is implausible. At higher levels with 0.16-0.24 ETH tickets, a sustained bear market could plausibly trigger the timeout. Two years of illiquidity in the worst case is a real cost that players should understand before committing capital they cannot afford to lose.</p>
-    <p>And if all of the above somehow fails, the protocol has terminal safeguards. A 365-day inactivity timeout triggers a clean wind-down: remaining funds are distributed through final jackpots, then swept to the vault and $DGNRS. No funds are locked forever. There is no zombie state. The game either progresses or it terminates cleanly.</p>
+    <p>And if all of the above somehow fails, the protocol has terminal safeguards. An inactivity timeout (365 days at level 0, 120 days at level 1+) triggers a clean wind-down: remaining funds are distributed through final jackpots to next-level ticketholders, then swept to the vault and $DGNRS. No funds are locked forever. There is no zombie state. The game either progresses or it terminates cleanly.</p>
   </section>
 
   <!-- ========== Section 9: Trustless ========== -->
@@ -658,7 +657,7 @@
     <h2><a href="https://trustlessness.eth.limo/general/2025/11/11/the-trustless-manifesto.html">Trustless</a> by Design</h2>
     <p>The code is law. All protocol logic is <a href="https://github.com/PurgeGame/degenerus-contracts">open-source</a> and immutably deployed on the Ethereum blockchain. No proxy. No admin keys. No upgrade path. Every drawing is determined by a cryptographically secure random number delivered by <a href="https://chain.link/vrf">Chainlink VRF</a>.</p>
     <p>The admin cannot withdraw from prize pools. Cannot modify split percentages. Cannot ban players or restrict withdrawals. The only admin operations are staking ETH to stETH (bounded by the solvency floor) and rotating the VRF coordinator (only possible if it fails). Everything else is deterministic smart contract logic that no one, including the creator, can alter.</p>
-    <p>The creator's allocation is in $DGNRS tokens and vault shares, both of which only have value if the game succeeds and attracts players. The creator's incentives are aligned with yours. If the game dies, the creator loses too. There is no exit scam because there is no privileged exit.</p>
+    <p>The creator's allocation is in $DGNRS tokens, vault shares, and a fraction of the stETH yield, all of which only have value if the game succeeds and attracts players. The creator's incentives are aligned with yours. If the game dies, the creator loses too. There is no exit scam because there is no privileged exit.</p>
   </section>
 
   <!-- ========== Section 10: Risk ========== -->
@@ -680,7 +679,7 @@
   <!-- ========== Section 11: Level 100 ========== -->
   <section>
     <h2>The Hundred-Level Cycle</h2>
-    <p>The game doesn't reset at level 100. The level counter keeps going: 100, 101, 102. But every hundredth level, the future pool gets raided for a massive jackpot event. A dice roll dumps roughly half the future pool into daily jackpots. Then the BAF and Decimator fire back to back, distributing another 50% of the future pool across top bettors, affiliates, and random ticket holders. Smaller versions of both fire every 10 levels, but the x00 events are the crescendo that rewards longtime players: the payoff for everyone who pushed the game to get there.</p>
+    <p>The game doesn't reset at level 100. The level counter keeps going: 100, 101, 102. But every hundredth level, the future pool gets raided for a massive payout event. The BAF draws 20% of the future pool and distributes it across ticketholders. The Decimator draws 30%, distributed to players who burn BURNIE to compete for a pro-rata share. Combined, up to 50% of the future pool pays out in a single level transition. Smaller versions of both fire every 10 levels, but the x00 events are the crescendo that rewards longtime players: the payoff for everyone who pushed the game to get there.</p>
     <p>After the dust settles, the next level's target resets lower and the cycle begins again. The future pool rebuilds. Level 200 will be bigger than level 100, because the same compounding mechanisms are still running with more participants and more momentum.</p>
   </section>
 
