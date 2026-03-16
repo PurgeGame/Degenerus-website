@@ -119,3 +119,118 @@ Phase 2-4 auditors: Before auditing any section, check the Pitfalls section belo
 - **SS4.1 Accounting Solvency** (lines 2865-2905): Solvency invariant discussion includes yield routing. Lines 2903-2904 state "Staking ETH to stETH is a conversion between two assets that both count toward total balance, so it has no effect on solvency." This is correct at the macro level but ignores wei-level rounding. Verify whether this simplification is acceptable for the paper's level of abstraction.
 - **Appendix C Yield Accrual** (lines 4602-4616): Formal yield equations. The continuous-time equation dP/dt = r * S ignores discrete rounding. At the paper's level of abstraction this is appropriate, but verify no worked example requires wei-level precision.
 **Severity if wrong:** LOW. Rounding errors are at wei scale (fractions of a cent) and are unlikely to appear in the paper's prose or worked examples. The paper operates at ETH-level precision where rounding is irrelevant.
+
+---
+
+## Paper Structure Map
+
+### Counting Methodology
+
+- Count rendered prose content, not HTML/CSS/SVG markup
+- Tables: count per cell (each verifiable value is a separate numerical claim)
+- LaTeX formulas: mechanism claim if definitional, worked example if plugging in numbers
+- Cross-references to numbers stated elsewhere still count as numerical claims at the point of citation
+- Formal blocks (propositions, definitions, corollaries, design properties) are audited with same rigor as prose
+
+### Section-by-Section Density
+
+| Section | Subsection | Lines | Num | Mech | Ex | Notes |
+|---------|------------|-------|-----|------|----|-------|
+| **1. Introduction** | | 535-2187 | 12 | 7 | 0 | ~1400 lines are CSS/SVG for interactive ticket demo. Prose content: stETH 2.5%, rake ranges (40-60%, 2-15%), 120/365 day timeouts, 120 ETH purchase target, 0.01 ETH ticket, pool splits, 50 ETH bootstrap. Mechanism: pool flow, VRF traits, jackpot structure, terminal distribution overview. No worked examples. |
+| **2. Cross-Subsidy** | 2.1 Heterogeneous Reward | 2189-2248 | 2 | 1 | 0 | Player type taxonomy table (6 rows, descriptive not numerical). Minimal verifiable numbers. |
+| | 2.2 Non-Monetary Utility | 2249-2275 | 2 | 1 | 0 | BURNIE price ratchet reference, affiliate engagement references. Light. |
+| | 2.3 Cross-Subsidy Mechanism | 2276-2428 | 11 | 5 | 0 | Cross-subsidy flow table (11 rows). Activity score range 0-3.05, breakeven 0.60, cap 1.35x, 0.80x floor. Lootbox EV range. 90/10 and 10/90 pool splits. Observation 2.1, 2.2. |
+| | 2.4 Structural Barriers | 2429-2495 | 6 | 3 | 0 | Variance/complexity/illiquidity/moral hazard discussion. Activity score references, EV curves. |
+| | 2.5 Entertainment Mechanics | 2496-2542 | 4 | 4 | 0 | BAF mechanics (10-level cycle, 10% futurepool), nudge cost (100 BURNIE, 1.5x scaling), shared multiplier (50-150%). Commitment device references. |
+| | 2.6 Poker Ecosystem Analogy | 2543-2576 | 3 | 1 | 0 | Affiliate commission (20-25%), rakeback comparison (50-70%). Mostly argumentative. |
+| **3. Player Types** | 3.1 The Degen | 2642-2673 | 4 | 2 | 0 | Degenerette ROI 0.90x at activity 0, 0.01 ETH loss, day-5 ticket behavior, 100% final payout. |
+| | 3.2 The Grinder | 2674-2703 | 5 | 3 | 0 | Lootbox EV cap a=2.55, 1.35x max, self-limiting argument. Best-response Observation 3.1. |
+| | 3.3 The Hybrid | 2704-2721 | 1 | 1 | 0 | Breakeven clustering concept. Very light on verifiable claims. |
+| | 3.4 The Whale | 2722-2776 | 8 | 5 | 0 | Whale bundle 2.4/4 ETH, deity 24+T(k) ETH, 32 cap, +80% activity, 2% bucket entries (min 2), 30/70 and 5/95 pool splits, 10% BAF futurepool (20% milestone), leaderboard splits (10%/5%/5%), 75/25 ETH/pass payout split, 20% affiliate bonus (5 ETH cap), deity transfer 5 ETH. |
+| | 3.5 The Affiliate | 2777-2814 | 8 | 4 | 0 | Commission 20-25%, FLIP 50/50 coinflip, 10% day-5 bonus, 3-tier (75/20/5), lootbox taper (25-100% on 10K-25.5K), DGNRS 35% affiliate pool, 1% top affiliate bonus, 5 ETH deity affiliate cap. |
+| | 3.6 Budget Constraints | 2815-2858 | 4 | 2 | 0 | Activity score starting floors: 0.85 lazy, 1.15 whale, 1.55 deity. Observations 3.4, 3.5. Corollary 3.1. |
+| **4. Mechanism Design** | 4.1 Accounting Solvency | 2865-2905 | 5 | 8 | 0 | Proposition 4.1. Five logical pools. Yield routing 50/25/25. Insurance skim 1%. State transitions for deposit, jackpot, claim, yield. **Mechanism-dense.** |
+| | 4.2 Zero-Rake Property | 2906-2960 | 9 | 4 | 0 | Presale 20% of 200 ETH = 40 ETH max, DGNRS 20%, vault 25% yield, stETH 50/25/25, insurance 1%. Definition 4.2, Observation 4.3, Corollary 4.4 with formula. |
+| | 4.3 Permissionless Execution | 2961-2976 | 5 | 3 | 0 | BURNIE bounty ~0.01 ETH, 2x/3x escalation, 30-min/15-min fallback, purchase requirement. |
+| **5. Equilibrium** | 5.1 Active Participation | 2986-3016 | 2 | 3 | 0 | Observation 5.1. Deviation analysis per type. Mostly argumentative. |
+| | 5.2 Inactive Equilibrium | 3017-3051 | 5 | 4 | 0 | BURNIE 24x appreciation, 0.01 ETH at L0, 0.04 at L10, 0.24 at century, 20 ETH deity refund. Bootstrap sequence. Observation 5.2. |
+| | 5.3 Budget Constraints | 3052-3069 | 1 | 1 | 0 | EV floor argument. Very light. |
+| | 5.4 Repeated Game | 3070-3086 | 2 | 2 | 0 | 120-day timeout, 90% terminal payout reference. Folk theorem structure. |
+| | 5.5 Commitment Devices | 3087-3164 | 10 | 7 | 0 | Future tickets k in [0,50], streak min(q,100)%, 130%/145% auto-rebuy, 75%/25% large-win split, 9 ETH threshold, 50% lootbox BAF split, 5 ETH deity transfer, Observations 5.3, 5.4. |
+| **6. BURNIE Economics** | 6.1 Price Ratchet | 3167-3253 | 18 | 3 | 0 | **Number-dense.** Full pricing table (7 level ranges x columns: ETH price, entries, BURNIE per entry, BURNIE ticket price). 6x within-cycle appreciation. 24x L0 to century. 1000 BURNIE/ticket. |
+| | 6.2 Decimator | 3254-3270 | 6 | 4 | 0 | 10%/30% futurepool, bucket 5/12, ~1.783x weight, 200K BURNIE cap. |
+| | 6.3 100-Level Cycle | 3271-3290 | 4 | 3 | 0 | Price reset 0.04 ETH, century crescendo 20%+30%, BAF leaderboard reset. |
+| **7. Robustness** | 7.1 Coordination-Free | 3294-3309 | 1 | 2 | 0 | VRF trait assignment, affiliate coordination. Mostly argumentative. |
+| | 7.2 Griefer Analysis | 3310-3362 | 5 | 6 | 0 | 120 days, 3-day stall, 50.1% vault ownership, VRF recovery mechanics, admin power limits. |
+| **8. Failure Modes** | 8.1 Death Spiral Definition | 3364-3370 | 0 | 1 | 0 | Definition 8.1 only. |
+| | 8.2 Death Spiral Resistance | 3371-3582 | 10 | 7 | 1 | Observation 8.1. Four resistance mechanisms. 50% yield to accumulator, 1% skim. Monte Carlo (30 levels). Futurepool extraction U-shape reference. The worked example is a partial calculation of pool concentration effects. |
+| | 8.3 Whale Departure | 3583-3612 | 3 | 2 | 0 | Effect A vs B argument. Pool share arithmetic. Time-value discount formula. |
+| | 8.4 BURNIE Price Floor | 3613-3656 | 7 | 4 | 0 | Observation 8.3. Floor formula p(l)/900. Entry parity p(l)/1000. 6x within-cycle rise. Decimator as second floor. |
+| **9. Stress Tests** | 9.1 Bear Market | 3661-3788 | 18 | 7 | 2 | **High density.** Futurepool drip 1%/day, 15% dump, ~60% transfer over 120 days, 1.5x ratio, ~35 players x 0.08 ETH, 8-month runway. Six defense mechanisms. Five conjunctive requirements. Two worked examples: (1) autopilot runway calculation, (2) 35-player gap-closing calculation. |
+| | 9.2 Conditions for Failure | 3789-3813 | 3 | 2 | 0 | Design Property 8.4 with death clock formula (365/120 days). Terminal growth problem. |
+| | 9.3 Terminal Paradox | 3814-4090 | 32 | 8 | 3 | **Highest density section. KNOWN PRE-DRAWDOWN ERROR in drip math. HIGHEST PRIORITY for Phase 2.** Terminal distribution rules (20 ETH refund, 10%/90% split, 60/40 winner split, 30-day sweep). Worked example at L50: 800 ETH pool, 280 ETH starting nextpool (120+160), 4,000 starting tickets, 1%/day extraction, 239 ETH residual, 421 ETH drip, 701 ETH nextpool, 2,631 drip tickets, 6,631 total, 99 ETH gap, 1,375 tickets to close, 134 ETH accumulator (9 yield + 125 insurance), 967 ETH terminal jackpot, 0.146 ETH/ticket, 1.8x ratio. Day-1 EV formula. Late-buyer EV formula. 38% P(GAMEOVER) threshold. Survival jackpot: 50% extraction, 400 ETH, 0.040 ETH/ticket, 8,006 tickets. Drip: 0.035 ETH, 1.66 tickets. Skim-drip table (3 rows x 3 columns). Distress mode. |
+| **10. Growth Scenario** | | 4092-4157 | 6 | 2 | 0 | Powerball reference ($1.5B, $1.3B weekly, 13x, $20M baseline). Ratchet mechanics. Mostly argumentative. |
+| **11. Conclusion** | 11.1 Limitations | 4160-4201 | 4 | 3 | 0 | Smart contract risk, stETH dependency, 30-level Monte Carlo, 0.01 ETH at L0, 24x BURNIE. |
+| | 11.2 Resilience Thesis | 4202-4260 | 2 | 2 | 0 | Observable metrics list. Summary prose. |
+| **Appendix A** | Parameter Summary | 4262-4419 | 24 | 2 | 0 | **Pure parameter table.** 20+ rows: stETH 2.5%, activity [0,3.05], lootbox [0.80,1.35], degenerette [0.90,0.999], 10 ETH/level cap, 10% futurepool degen cap, coinflip 0.50/1.9685x/1.575%, affiliate 0.20-0.25, ticket 0.01-0.24, whale 2.4-4, deity 24+T(n)/32 cap, 365/120 days, 18h VRF, 3-day stall, 300 BURNIE quest, 50 ETH bootstrap, 10-level BAF, 3-5 jackpots, 60% scatter, 30%/45% auto-rebuy. |
+| **Appendix B** | B.1 Level Jackpot | 4420-4440 | 8 | 4 | 0 | 5/3/1-day modes, 6-14% daily slice, day 5 = 100%, 20% ticket conversion, trait-bucket shares (20%/60%/13.3%). |
+| | B.2 Purchase-Phase Jackpot | 4441-4456 | 7 | 4 | 0 | 1%/day futurepool, 75%/25% split, 50% ticket conversion, 200% backing, 3% earlybird, BURNIE draw mechanics. |
+| | B.3 BAF | 4457-4483 | 10 | 4 | 0 | 10%/20% futurepool, internal splits (10/5/5/5+5/45+25%), scatter sources by type (normal/century/terminal). |
+| | B.4 Decimator | 4484-4498 | 7 | 3 | 0 | 10%/30%, 1.783x max weight, bucket 5/2, 1000 BURNIE min, 200K cap. Century decimator details. |
+| **Appendix C** | Key Parameters | 4499-4542 | 6 | 2 | 0 | Folk theorem note. Lootbox EV at 3 activity levels table (3 rows). |
+| | Model/Notation | 4543-4578 | 4 | 3 | 0 | Decimator trigger schedule table (2 rows). Ticket pricing reference. Bucket defaults (12/5/2). |
+| | Prize Pool Dynamics | 4580-4616 | 6 | 6 | 0 | Accumulation formulas (90/10, 10/90). Level transition function. Yield accrual continuous formula. Deposit insurance 1%. Century milestone 50/50 distribution. Extraction U-shape (3%/20%+/50% at different durations). |
+| | Ticket Pricing | 4617-4622 | 1 | 1 | 0 | Back-reference to SS6.1 table. |
+| | Activity Score + EV | 4623-4657 | 8 | 5 | 0 | Activity score formula with 5 components and coefficients. Piecewise lootbox EV function (3 cases with thresholds). Degenerette ROI piecewise. Breakeven 0.60, cap 2.55/1.35x. Additional lootbox value discussion. |
+| | Boons | 4658-4664 | 1 | 2 | 0 | Boon types, deity grants (3/day). Non-transferable. |
+| | Protocol Architecture | 4665-4700 | 3 | 5 | 0 | Stage game structure. Jackpot phase 3/5 days. Compressed schedule. Draw percentages (6-14%, 100%). Ticket timing EV discussion. |
+| | Trait Assignment | 4701-4735 | 1 | 3 | 0 | 256 traits (4x64). VRF-deterministic. Hero symbol override. |
+| | Liveness Guarantee | 4736-4758 | 3 | 5 | 0 | Design Property. Five liveness mechanisms. 18h VRF retry, 3-day recovery, GAMEOVER terminal. |
+| | DGNRS Token | 4760-4793 | 8 | 6 | 0 | Pool percentages (20/10/35/20/5/10). Five distribution sources with specifics. sDGNRS soulbound mechanics. afKing mode (10 ETH takeProfit). Burn-for-backing mechanics. |
+| **Appendix D** | Attack Vectors | 4795-4848 | 9 | 7 | 0 | 5 attack analyses. Sybil: 10 ETH/level cap. Degenerette: 10% futurepool cap. Affiliate: 0.5 ETH/level cap, 25% taper. stETH depeg: 0.93:1. Death-bet: 90%/10% terminal split. |
+| **Appendix E** | Bear Market Formal | 4849-5086 | 10 | 5 | 2 | Fixed-point equations. Payoff formula. Stability analysis. Threshold conditions. BURNIE dilution scenario. Path-dependent dynamics. Repeated stall erosion. Grinder pivot: 1.07-1.25x lootbox range, 1.35x max, 4% P(GO) threshold. Two worked examples: (1) fixed-point payoff calculation, (2) grinder ticket-vs-lootbox comparison during stall. |
+| **Appendix F** | Misreadings (F.1-F.28) | 5087-6016 | 14 | 8 | 0 | 28 entries. Key numbers re-cited: F.1: 40 ETH max presale, 200 ETH lootbox cap. F.2: 2.5% yield. F.10: 1.8x terminal ratio. F.11: 75/20/5 affiliate tiers. F.6: 75/25 large-win split, 5 ETH deity transfer. F.22: breakeven 0.60. F.25: 1.5x futurepool, 60% mechanical transfer. Most entries re-state numbers from earlier sections. |
+
+### Density Summary by Phase Cluster
+
+| Cluster | Sections | Total Num | Total Mech | Total Ex | Assigned Phase |
+|---------|----------|-----------|------------|----------|----------------|
+| Number-Heavy | SS6 (28), SS8 (20), SS9 (53), App A (24), App B (32), App C (41), App E (10) | 208 | 63 | 8 | Phase 2 |
+| Mechanism-Heavy | SS4 (19), SS5 (20), App D (9) | 48 | 36 | 0 | Phase 3 |
+| Prose/Framing | SS1 (12), SS2 (28), SS3 (30), SS7 (6), SS10 (6), SS11 (6), App F (14) | 102 | 42 | 0 | Phase 4 |
+| **Totals** | | **358** | **141** | **8** | |
+
+### Phase 2-4 Assignment Validation
+
+**Phase 2: Number-Heavy Sections (SS6, SS8, SS9, App A/B/C/E)** -- **CONFIRMED**
+
+Phase 2 contains 208 numerical claims, 63 mechanism claims, and all 8 worked examples. This is approximately 2.5x the numerical density of Phase 4 and 4x that of Phase 3. The roadmap assigns 3 plans to Phase 2, partially compensating for this load. The highest-priority item is SS9.3 (32 numerical claims, 3 worked examples, known pre-drawdown error). Appendix C sits correctly in Phase 2: it contains the formal parameter tables and EV formulas that must be verified against the parameter reference, even though its mechanism descriptions overlap with Phase 3's territory. Phase 2 auditors should verify the formulas against contract source; Phase 3 auditors will verify the prose mechanism descriptions independently.
+
+**Phase 3: Mechanism-Heavy Sections (SS4, SS5, App D)** -- **CONFIRMED**
+
+Phase 3 contains 48 numerical claims and 36 mechanism claims. The mechanism-to-numerical ratio is highest here (0.75), confirming this is the mechanism-focused cluster. SS4 has the densest mechanism content (Proposition 4.1, pool architecture, yield routing, solvency invariant). SS5 is more argumentative but includes commitment device mechanics with verifiable parameters. Appendix D is compact (5 attacks) but each requires mechanism verification. Two plans is appropriate: one for SS4 (mechanism design properties), one for SS5 + App D (equilibrium and attacks).
+
+**Phase 4: Prose and Framing Sections (SS1-SS3, SS7, SS10-SS11, App F)** -- **CONFIRMED**
+
+Phase 4 contains 102 numerical claims and 42 mechanism claims. While the absolute numerical count is substantial, these are predominantly cross-references to numbers defined in Phase 2/3 sections (the Introduction cites stETH 2.5%, pool splits, and timeouts that are formally defined in Appendix A/C). Phase 4's primary audit task is confirming these cross-references match their source, not independently verifying against contracts. Appendix F has 28 entries that re-cite numbers from the main paper. Two plans is appropriate: one for the denser sections (SS1-SS3 with the cross-subsidy table and player type numbers), one for the lighter sections (SS7, SS10-SS11, App F).
+
+**No section reassignment is needed.** The density data confirms the roadmap assignments. Phase 2's 3-plan allocation partially compensates for its 2-4x higher claim density compared to Phases 3-4.
+
+### High-Priority Verification Targets
+
+The following numbers are most load-bearing for the paper's arguments. Phase 2 auditors should prioritize these.
+
+1. **2,631 drip tickets** (SS9.3, line ~3883): Derived from 120 daily extractions of 1% futurepool at 50% ticket conversion with 2x backing. Verify against contract's `<<2` entry conversion logic. KNOWN PRE-DRAWDOWN ERROR: the worked example may calculate futurepool drip amounts without properly accounting for the drawdown at level transition. Phase 2 must confirm.
+2. **0.146 ETH/ticket terminal payout** (SS9.3, line ~3890): Derived from 967 ETH / 6,631 tickets. Verify the 967 ETH figure (90% of ~1,074 non-obligated assets) and ticket count.
+3. **38% P(GAMEOVER) threshold** (SS9.3, line ~3929): Derived from late-buyer EV formula 0.106*P(GO) - 0.040 = 0. Check the formula components.
+4. **1.66 ticket growth over 120 days** (SS9.3, line ~3908): Drip tickets distributed proportionally to existing holders. Verify the compounding math.
+5. **~60% futurepool to nextpool over 120 days** (SS9.1, line ~3687): 15% dump + ticket conversion + 120 x 1% drip. Verify the combined percentage accounting for exponential decay of the 1% daily extraction.
+6. **0.040 ETH survival jackpot per ticket** (SS9.3, line ~3905): 0.80 x 400 / ~8,006. Verify the 80% distribution, the 400 ETH (50% extraction of 800), and the 8,006 ticket count.
+7. **1.9685x coinflip win payout** (App A, line ~4325): Average payout across all win tiers. Verify against v1.1-burnie-coinflip.md payout tier structure.
+8. **1.783x decimator burn weight at max activity** (App B.4, line ~4487): Verify against v1.1-transition-jackpots.md and activity score formula in contract.
+9. **Activity score formula coefficients** (App C, line ~4626): Five components with specific weights (0.50, 0.25, 1.00, 0.50, gamma). Verify each coefficient against contract source.
+10. **Lootbox EV piecewise function** (App C, line ~4636): Three cases with thresholds (0.60, 2.55) and slopes. Verify breakpoints and slopes against v1.1-endgame-and-activity.md.
+11. **DGNRS pool percentages** (App C, line ~4766): 20/10/35/20/5/10 across creator/whale/affiliate/lootbox/reward/earlybird. Verify against v1.1-dgnrs-tokenomics.md.
+12. **BURNIE pricing table** (SS6.1, lines ~3167-3253): 7 level ranges with ETH prices, entries per ticket, BURNIE equivalents. Verify against v1.1-level-progression.md price curve.
+13. **Terminal distribution splits** (SS9.3, lines 3817-3829): 20 ETH/pass refund (L0-9 only), 10% decimator, 90% jackpot, 60/40 winner split, 30-day sweep. Verify against v1.1-endgame-and-activity.md terminal mechanics.
+14. **Futurepool extraction U-shape** (App C, line ~4599): ~3% at 14-day sweet spot, ~20%+ at extremes (fast/slow). Verify the shape and specific percentages against contract extraction function.
