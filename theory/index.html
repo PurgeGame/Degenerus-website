@@ -533,9 +533,16 @@
 
     <hr />
     <h2 id="section-2">1. Introduction</h2>
+    <p>The central argument: <strong>Degenerus is engineered so that every possible interaction by every participant
+        strengthens the protocol by providing what another player type demands.</strong> Greed feeds off degeneracy and
+      degeneracy feeds off greed. Every player can either deposit more ETH that strengthens the feedback loop or stop
+      depositing. The incentive structure strongly favors the former, and either way, existing capital is held in
+      non-refundable lottery tickets that can only resolve on the game's schedule.
+      These properties, and game mechanics designed for resilience, make the protocol nearly impossible to kill.
+      This paper stress-tests that argument under the harshest adversarial conditions and maps its limitations.</p>
     <p>Traditional gambling systems operate under a well-understood extractive model: the operator takes a large cut of
-      every dollar wagered (40-60% in state lotteries, 2-15% in casinos). Players accept deeply negative expected value
-      in exchange for entertainment and variance. This model is sustainable but adversarial: the operator profits from
+      every dollar wagered (40-60% in state lotteries, 2-15% in casinos). Players are willing to spend money in exchange
+      for entertainment and variance. This model is sustainable but adversarial: the operator profits from
       player losses, creating a negative-sum dynamic for participants.</p>
     <p>Degenerus Protocol proposes a structural alternative: a <em>zero-rake</em> gaming system where no outside entity
       extracts value from player deposits. Deposits are locked, partially converted to Lido staked ETH (stETH), and
@@ -545,18 +552,10 @@
       underlying game from
       negative-sum to slightly positive-sum for the player pool as a whole, introducing fundamentally different
       strategic dynamics.</p>
-    <p>The central argument: <strong>Degenerus is engineered so that every possible interaction by every participant
-        strengthens the protocol by providing what another player type demands.</strong> Greed feeds off degeneracy and
-      degeneracy feeds off greed. Every player can either deposit more ETH that strengthens the feedback loop or stop
-      depositing. The incentive structure strongly favors the former, and either way, existing capital is held in
-      non-refundable lottery tickets that can only resolve on the game's schedule.
-      These properties, and game mechanics designed for resilience, make the protocol nearly impossible to kill.</p>
     <p>Entertainment seekers pay for the thrill of jackpots, and the surplus from their bets is the main source of
-      equity. Strategic players and whales extract monetary value from that equity while locking capital that stabilizes
-      jackpots. Affiliates bring in the players the system needs, and stETH yield makes the whole system positive-sum.
-      Commitment devices create a ratchet that makes continued participation the dominant strategy for anyone already
-      engaged. The rest of this paper stress-tests that argument under the harshest adversarial conditions and maps
-      its limitations.</p>
+      equity. Strategic players and whales extract monetary value from that equity while locking capital that grows and
+      accelerates jackpots. Affiliates attract the new players the system requires. Each type's selfish actions satisfy
+      the demands of others, producing reliable economic value.</p>
 
     <p><strong>Scope.</strong> The analysis takes entertainment demand as given. Whether enough players find this game
       engaging enough to participate is an empirical question outside the model's scope.</p>
@@ -696,24 +695,25 @@
           (crypto, zodiac, cards, dice) contains one badge. If that color and symbol is drawn, all tickets with that
           badge have an equal chance to win.</em></p>
       <p>Degenerus Protocol is a progressive jackpot on-chain lottery. Each level of the game has a prize pool
-          target denominated in ETH. Players buy <strong>tickets</strong> (which enter them into jackpot draws),
-          <strong><a href="/lootbox/">lootboxes</a></strong> (randomized reward packages containing future tickets,
-          BURNIE tokens, and <a href="#section-boons">boons</a>, with value scaled by the buyer's engagement), and <a
-            href="#section-13"><strong>passes</strong></a> (one-time purchases that grant permanent score boosts and
-          ticket bundles). Their deposits fill the pool. When the target is met, the level advances and the accumulated
-          pool is distributed as prizes over a series of daily jackpot draws. Then the next level begins with a higher
-          target, so each cycle's jackpots are larger than the last.</p>
+        target denominated in ETH. Players buy <strong>tickets</strong> (which enter them into jackpot draws),
+        <strong>lootboxes</strong> (randomized reward packages containing future tickets,
+        BURNIE tokens, and <a href="#section-boons">boons</a>, with value scaled by the buyer's engagement), and <a
+          href="#section-13"><strong>passes</strong></a>. Their deposits fill the pool. When the target is met, the
+        level advances and the accumulated
+        pool is distributed as prizes over a series of daily jackpot draws. Then the next level begins with a higher
+        target, so each cycle's jackpots are larger than the last.
+      </p>
+      <p>Players build an <strong>activity score</strong> through daily engagement: maintaining a
+        <strong>quest streak</strong>, purchase consistency, affiliate
+        referrals, and pass bonuses. Higher scores improve returns across products.
+      </p>
       <p><strong>BURNIE</strong> is the protocol's deflationary utility token, earned through gameplay (jackpot
-          draws, quest rewards, affiliate payments) and permanently burned to buy tickets, play <strong><a
-              href="/degenerette/">Degenerette</a></strong> (an on-chain slot machine), wager on a daily communal
-          <strong>coinflip</strong> (one flip, everyone wins or loses together), compete on the <strong><a
-              href="#section-baf">BAF</a></strong> (Big-Ass Flip) leaderboard for milestone jackpots, or enter the <a
-            href="#section-decimator">decimator</a> (a burn-to-win-ETH event). Deposits are split between two pools: the
-          <strong>nextpool</strong> (funding the current level's prize) and the <strong>futurepool</strong> (a reserve
-          that feeds future levels). Players build an <strong>activity score</strong> (0 to 3.05) through daily
-          engagement: maintaining a <strong>quest streak</strong> (one ticket or lootbox purchase per day; missing a day
-          resets the streak to zero), purchase consistency, affiliate referrals, and pass bonuses. Higher scores
-          improve returns across products, with different mechanics capping at different thresholds.</p>
+        draws, quest rewards, affiliate payments) and permanently burned to buy tickets, play
+        <strong>Degenerette</strong> (an on-chain slot machine), wager on a daily communal
+        <strong>coinflip</strong> (one flip, everyone wins or loses together), compete on the <strong><a
+            href="#section-baf">BAF</a></strong> (Big-Ass Flip) leaderboard for milestone jackpots, or enter the <a
+          href="#section-decimator">decimator</a> (a burn-to-win-ETH event).
+      </p>
       <table>
         <thead>
           <tr>
@@ -761,7 +761,7 @@
         </tbody>
       </table>
       <p>BURNIE price is constant; ETH price escalates. This is why BURNIE earned early appreciates in purchasing
-          power as levels progress. Full breakdown in <a href="#section-27">Section 6.1</a>.</p>
+        power as levels progress. Full breakdown in <a href="#section-27">Section 6.1</a>.</p>
     </div>
 
     <p>The demo below shows four consecutive daily jackpot draws to illustrate the core mechanic. Click "Next Day" to
