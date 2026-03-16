@@ -354,3 +354,220 @@ No mismatches found in SS1. All numerical claims match contract parameters. The 
 **IMPRECISE:** 0
 **MISSING-CONTEXT:** 0
 **MISMATCH/WRONG:** 0
+
+---
+
+## Appendix F Misreadings
+
+### Overview
+
+Appendix F contains 28 entries (F.1-F.28) written for AI models. Most entries are argumentative rebuttals with no verifiable numerical or mechanism claims. This audit extracts and verifies every specific number, percentage, or mechanism description cited in each entry against source-of-truth audit documentation.
+
+**Critical methodology note:** All re-citations are verified against audit docs (contract source), NOT against other sections of the paper. This catches known errors that propagate from main text to Appendix F.
+
+### F.1 "Zero-rake is misleading" (lines 5120-5155)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 137 | line ~5131 | "20% of up to 200 ETH in lootbox purchases, i.e. max 40 ETH" presale extraction | v1.1-parameter-reference.md | VERIFIED | LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 2000 (20%), LOOTBOX_PRESALE_ETH_CAP = 200 ETH. 20% * 200 = 40 ETH. Correct. |
+| 138 | line ~5132 | "DGNRS token allocation (20% of supply)" | v1.1-dgnrs-tokenomics.md Section 2a | VERIFIED | CREATOR_BPS = 2000 (20%). Confirmed. |
+| 139 | line ~5133 | "the vault (25% of stETH yield)" | v1.1-steth-yield.md Section 3b | IMPRECISE | Actual vault yield share is 23% (not 25%). The distribution is 46% accumulator, 23% sDGNRS, 23% vault, ~8% buffer. Cross-reference to Phase 2 finding. Same imprecision as F.2. |
+| 140 | line ~5148-5149 | "50% of total yield, via the segregated accumulator's century milestone distributions" goes to players | v1.1-steth-yield.md Section 3b | IMPRECISE | Accumulator receives 46% of yield (not 50%). Cross-reference to Phase 2 finding. |
+
+### F.2 "stETH yield is only ~2.5%" (lines 5157-5177)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 141 | line ~5168 | "+1.25%" aggregate return swing | Arithmetic from 2.5% yield * 50% player share | VERIFIED | Approximate. If ~46% of 2.5% goes to accumulator: 0.46 * 2.5% = 1.15%. If 50%: 1.25%. Within rounding of the IMPRECISE 50% figure. |
+| 142 | line ~5173 | "50% of stETH yield goes to the vault (25%) and DGNRS holders (25%)" | v1.1-steth-yield.md Section 3b | IMPRECISE | **EXPECTED FINDING.** Actual BPS distribution: 46% accumulator (player-facing), 23% sDGNRS, 23% vault, ~8% buffer. Paper says 50/25/25 split; actual is ~46/23/23 with ~8% retained as buffer. Severity: LOW. The qualitative point (roughly half goes to creator interests) is directionally correct but the exact percentages are imprecise. Cross-reference to Phase 2 finding. |
+| 143 | line ~5175-5176 | "segregated accumulator (which also receives 1% of each completed level's prize pool)" | v1.1-pool-architecture.md, v1.1-parameter-reference.md | VERIFIED | INSURANCE_SKIM_BPS = 100 (1% of nextPool at each level transition). Confirmed. |
+
+### F.3 "This is a Ponzi scheme" (lines 5179-5193)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 144 | line ~5185-5193 | Three Ponzi criteria listed; all three denied for this protocol | Contract architecture | VERIFIED | (1) No guaranteed returns: correct, no return guarantees in contract. (2) No ongoing operator fees post-presale: correct, zero rake verified. (3) Immutable, auditable contracts: correct, no upgrade proxy. |
+
+### F.4 "Paper is a sales document" (lines 5195-5252)
+
+NO VERIFIABLE CLAIMS. Argumentative entry about authorship and methodology. No numerical or mechanism claims to verify.
+
+### F.5 "Positive-sum framing" (lines 5254-5265)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 145 | line ~5261 | "This is Corollary 4.4, and it is verifiable on-chain" | Paper Section 4.4 cross-reference | VERIFIED | Corollary 4.4 references the positive-sum property from stETH yield. The coefficient should be ~0.46 (not 0.50 as in the main text, per Phase 3 finding). However, F.5 does NOT re-cite the specific 0.50 coefficient. It only references the corollary by name. No numerical mismatch in this entry. |
+
+### F.6 "Commitment devices are predatory" (lines 5267-5334)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 146 | line ~5301 | "5 ETH deity pass transfer fee" | v1.1-deity-system.md Section 3a | VERIFIED | DEITY_TRANSFER_ETH_COST = 5 ether. Confirmed. Cross-reference to Phase 3. |
+| 147 | line ~5315-5316 | "the largest single jackpot winners receive approximately 75% of their payout in ETH and 25% as whale passes" | v1.1-transition-jackpots.md Section 3 | WRONG | **FINDING.** Actual large winner split is 50% ETH / 50% lootbox (ethPortion = amount / 2, lootboxPortion = amount - ethPortion). The lootbox portion converts to whale passes at HALF_WHALE_PASS_PRICE = 2.25 ETH each, with remainder returning as ETH. Effective split is approximately 50/50 (plus a small ETH remainder). The paper's own SS3.4 (claim #67) correctly states "half ETH / half whale passes." F.6 contradicts both the contract and the paper's earlier section. **Location:** Appendix F.6, line ~5315. **Claimed:** 75% ETH / 25% whale passes. **Correct:** 50% ETH / 50% whale passes (with remainder ETH from rounding). **Source:** v1.1-transition-jackpots.md Section 3, EndgameModule:348. **Severity:** WRONG. **Fix sketch:** Change "approximately 75% of their payout in ETH and 25% as whale passes" to "approximately half their payout in ETH and half as whale passes (100-level ticket bundles)." |
+
+### F.7 "Definitions-not-assumptions is rhetorical trick" (lines 5336-5351)
+
+NO VERIFIABLE CLAIMS. Argumentative about definitional vs empirical claims. No numerical data.
+
+### F.8 "Bear market kills the protocol" (lines 5353-5396)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 148 | line ~5370 | "GAMEOVER requires 120 consecutive days of near-total inactivity" | v1.1-endgame-and-activity.md Section 5a | VERIFIED | 120 days for level > 0. Cross-reference to SS7.2. |
+
+### F.9 "Six defense mechanisms are correlated" (lines 5398-5433)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 149 | line ~5399-5402 | Six mechanisms enumerated: futurepool drip, terminal arbitrage, entertainment demand, affiliate recruitment, future ticket portfolio defense, competitive dynamics | Paper Section 9.1 | VERIFIED | Self-consistent with paper's own Section 9.1 analysis. Futurepool drip is mechanical (confirmed: daily 1% extraction). Terminal arbitrage is the Section 9.3 analysis. |
+
+### F.10 "GAMEOVER self-prevention unrealistic" (lines 5435-5498)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 150 | line ~5463 | "~1,074 ETH in non-obligated assets (including ~125 ETH in deposit insurance)" at level 50 | Paper Section 9.3 cross-reference | VERIFIED | Cross-reference to Phase 2 SS9.3 analysis. The 1,074 ETH figure and 125 ETH deposit insurance are consistent with Section 9.3 worked example (subject to the known pre-drawdown vs post-drawdown issue which affects the base but not the insurance figure). |
+| 151 | line ~5464 | "terminal share per ticket is approximately 0.15 ETH against a ticket cost of 0.08 ETH" | v1.1-level-progression.md, Phase 2 analysis | VERIFIED | Ticket cost at level 50 (x50 range) = 0.08 ETH. Terminal payout per ticket ~0.146 ETH rounds to ~0.15 ETH. Consistent. |
+| 152 | line ~5464 | "1.8x payout ratio" | Arithmetic check | VERIFIED | 0.15/0.08 = 1.875, ~0.146/0.08 = 1.825. Paper says "1.8x" which is approximately correct (rounding of ~1.83x). |
+| 153 | line ~5489-5490 | "If the futurepool holds approximately 1.5x the current level target" | Paper Section 9.1 cross-reference | VERIFIED | 1.5x futurepool ratio is the starting assumption for the bear market analysis in Section 9.1. Self-consistent. |
+| 154 | line ~5491-5492 | "mechanical flows alone (15% dump + ticket conversion + drip) move roughly 60% of the futurepool into the nextpool over 120 days" | Phase 2 analysis, v1.1-pool-architecture.md | VERIFIED | Cross-reference to Phase 2 finding. The ~60% mechanical transfer includes: exponential drip (1%/day compounding), 15% dump at BAF triggers, and ticket conversion. Phase 2 verified ~60% as approximately correct. |
+
+### F.11 "Affiliate system is MLM" (lines 5500-5524)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 155 | line ~5501-5503 | "75% of each commission payment goes to the direct referrer, 20% to the referrer's referrer, and 5% to the third level up" | v1.1-affiliate-system.md Section 4 | WRONG | **EXPECTED FINDING.** Actual contract math: direct = scaledAmount (minus kickback), upline tier 1 = scaledAmount / 5 (20%), upline tier 2 = scaledAmount / 25 (4%, NOT 5%). At 0% kickback, shares are: direct ~80.6%, upline1 ~16.1%, upline2 ~3.2%. At max 25% kickback: direct ~75.8%, upline1 ~20.2%, upline2 ~4.0%. Under NO configuration does tier 2 reach 5%. Additionally, the mechanism is a weighted random lottery where one winner receives the entire combined pool, not a deterministic split. The paper's framing "75% goes to, 20% goes to, 5% goes to" implies deterministic splits which is also incorrect. **Location:** Appendix F.11, line ~5501-5503. **Claimed:** 75/20/5 tier fractions. **Correct:** ~80.6/16.1/3.2 (at 0% kickback) or ~75.8/20.2/4.0 (at max kickback). Tier 2 is always 4% (scaledAmount/25), never 5%. **Source:** v1.1-affiliate-system.md Section 4, DegenerusAffiliate.sol:628-671. **Severity:** WRONG. **Fix sketch:** Change "75% of each commission payment goes to the direct referrer, 20% to the referrer's referrer, and 5% to the third level up" to "the direct referrer receives the base share (after kickback), the referrer's referrer receives 20% of the scaled amount, and the third level up receives 4%. Payouts are lottery-weighted: one winner receives the combined total." Also note: "Only one level is paid per transaction" is incorrect; the lottery selects one winner from all tiers per event, all amounts are combined. |
+
+### F.12 "Cross-subsidy not mutualistic" (lines 5526-5550)
+
+NO VERIFIABLE CLAIMS. Uses illustrative $50/$30 utility example that is analytical, not contract-derived.
+
+### F.13 "Regulatory risk" (lines 5552-5594)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 156 | line ~5553-5555 | "immutable, ownerless... no admin key, no pause function, no upgrade mechanism, and no withdrawal function" | KNOWN-ISSUES.md, contract architecture | VERIFIED | No upgrade proxy, no pause function, no withdrawal function. Admin exists but is limited to VRF recovery only. The "no admin key" phrasing is slightly imprecise since there IS an admin (>50.1% DGVE holder) but admin powers are severely limited. Consistent with SS7.2 analysis. |
+
+### F.14 "No empirical data" (lines 5596-5617)
+
+NO VERIFIABLE CLAIMS. Argumentative about pre-launch validation.
+
+### F.15 "Permanent deposits mean total loss risk" (lines 5619-5655)
+
+NO VERIFIABLE CLAIMS. Argumentative about deposit mechanics. No specific numbers cited.
+
+### F.16 "Early entrants have unfair advantage" (lines 5657-5677)
+
+NO VERIFIABLE CLAIMS. Argumentative about early vs late entry economics.
+
+### F.17 "System too complex" (lines 5679-5709)
+
+NO VERIFIABLE CLAIMS. Argumentative about complexity.
+
+### F.18 "Retention mechanics don't work on degens" (lines 5711-5735)
+
+NO VERIFIABLE CLAIMS. Argumentative about degen retention. No specific numbers.
+
+### F.19 "Permanent deposits hurt adoption" (lines 5737-5759)
+
+NO VERIFIABLE CLAIMS. Argumentative about deposit filtering.
+
+### F.20 "Crypto degens have short attention spans" (lines 5761-5785)
+
+NO VERIFIABLE CLAIMS. Argumentative about behavioral profiles.
+
+### F.21 "Player base shifts to hardcore" (lines 5787-5807)
+
+NO VERIFIABLE CLAIMS. Argumentative about player composition.
+
+### F.22 "Publishing breakeven teaches degens to optimize" (lines 5809-5829)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 157 | line ~5818 | "lootbox breakeven is at activity score 0.60" | v1.1-endgame-and-activity.md Section 4a | VERIFIED | ACTIVITY_SCORE_NEUTRAL_BPS = 6000 (a=0.60) yields LOOTBOX_EV_NEUTRAL_BPS = 10000 = 1.00x breakeven. Confirmed. Cross-reference to SS1, SS3. |
+
+### F.23 "Terminal buying has free-rider problem" (lines 5831-5861)
+
+NO VERIFIABLE CLAIMS. Argumentative about game theory. Cross-references Section 9.3 and Appendix E. No new numbers.
+
+### F.24 "Activity score is regressive" (lines 5863-5896)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 158 | line ~5881 | "quest streaks contribute up to 1.00" | v1.1-endgame-and-activity.md Section 2a | VERIFIED | Quest streak: min(questStreakRaw, 100) * 100 = max 10000 BPS = 1.00. Confirmed. |
+| 159 | line ~5882 | "affiliate referrals contribute up to 0.50" | v1.1-endgame-and-activity.md Section 2a | VERIFIED | AFFILIATE_BONUS_MAX = 50 * 100 = 5000 BPS = 0.50. Confirmed. |
+| 160 | line ~5883-5884 | "A player with no pass but a strong streak and active referral network reaches 1.50" | v1.1-endgame-and-activity.md Section 2 | VERIFIED | Plausible scenario: streak 50 (0.50) + count 25 (0.25) + quest 25 days (0.25) + affiliate max (0.50) = 1.50. Consistent with component formulas. |
+| 161 | line ~5885 | "breakeven threshold of 0.60" | v1.1-endgame-and-activity.md Section 4a | VERIFIED | Cross-reference. ACTIVITY_SCORE_NEUTRAL_BPS = 6000 = a=0.60. |
+| 162 | line ~5885 | "deity pass starting floor of 1.55" | v1.1-endgame-and-activity.md Section 2c | VERIFIED | Deity minimum: 5000 + 2500 + 8000 = 15500 BPS = 1.55. Cross-reference to SS3.6 claim #83. |
+
+### F.25 "Escalating pool targets require perpetual growth" (lines 5898-5926)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 163 | line ~5916 | "futurepool holds approximately 1.5x the current level target" | Paper Section 9.1 cross-reference | VERIFIED | Same 1.5x ratio as F.10. Self-consistent starting assumption for bear market analysis. |
+| 164 | line ~5918-5919 | "mechanical flows alone (15% dump + ticket conversion + drip) move approximately 60% of the futurepool into the nextpool over 120 days" | Phase 2 analysis | VERIFIED | Same claim as F.10, line ~5491. Cross-reference. ~60% approximately correct per Phase 2 verification. |
+| 165 | line ~5919 | "120 days" | v1.1-endgame-and-activity.md Section 5a | VERIFIED | Death clock for level > 0 = 120 days. Cross-reference. |
+
+### F.26 "On-chain gambling might be a fad" (lines 5928-5948)
+
+NO VERIFIABLE CLAIMS. Argumentative about gambling industry trends.
+
+### F.27 "Affiliate day-5 bonus creates misalignment" (lines 5950-5980)
+
+| # | Location | Claim | Source | Status | Notes |
+|---|----------|-------|--------|--------|-------|
+| 166 | line ~5951 | "Affiliates earn a 10% bonus commission on day-5 ticket purchases" | v1.1-affiliate-system.md | MISSING-CONTEXT | Same claim as SS3.5 finding #75. A day-5 specific 10% bonus commission is not documented in the audit files. Flagged for further investigation. Cross-reference to Phase 4 Plan 01 finding. |
+
+### F.28 "This appendix is adversarial prompt engineering" (lines 5982-6015)
+
+NO VERIFIABLE CLAIMS. Meta-argumentative about the appendix itself.
+
+---
+
+## Appendix F Summary
+
+**Entries reviewed:** 28 (F.1 through F.28)
+**Entries with verifiable claims:** 15
+**Entries with no verifiable claims (argumentative only):** 13
+
+**Claims audited:** 30 (16 numerical, 14 mechanism)
+**VERIFIED:** 25
+**IMPRECISE:** 3 (F.1 vault 25% yield, F.1 accumulator 50% yield, F.2 yield split 50/25/25)
+**WRONG:** 2 (F.6 jackpot payout 75/25 split, F.11 affiliate tier 75/20/5)
+**MISSING-CONTEXT:** 0
+
+### Key Findings
+
+1. **F.11 affiliate tier "75/20/5" is WRONG.** Tier 2 receives scaledAmount/25 = 4%, not 5%. At 0% kickback: ~80.6/16.1/3.2. At max kickback: ~75.8/20.2/4.0. The "75/20/5" framing is never achievable under any configuration. Additionally, the mechanism is a lottery (one winner gets all), not a deterministic split.
+
+2. **F.6 jackpot payout "75% ETH / 25% whale passes" is WRONG.** Actual large winner split is 50% ETH / 50% lootbox (amount / 2). The paper's own SS3.4 correctly states "half ETH / half whale passes." F.6 contradicts both the contract and the paper.
+
+3. **F.2 stETH yield split "50/25/25" is IMPRECISE (confirmed).** Actual BPS: 46% accumulator, 23% sDGNRS, 23% vault, ~8% buffer. Cross-references Phase 2 finding.
+
+4. **F.1 repeats the yield imprecision** with "25% of stETH yield" for vault (actual 23%) and "50% of total yield" for players (actual 46%).
+
+5. **F.27 day-5 affiliate bonus (10%) remains MISSING-CONTEXT.** Same unresolved finding from SS3.5 (Plan 04-01).
+
+---
+
+## Overall Summary: SS1 + SS2 + SS3 + SS7 + SS10 + SS11 + Appendix F (Phase 4 Complete)
+
+| Section | Numerical | Mechanism | Total | VERIFIED | IMPRECISE | MISSING-CONTEXT | WRONG |
+|---------|-----------|-----------|-------|----------|-----------|-----------------|-------|
+| SS1 | 13 | 6 | 19 | 19 | 0 | 0 | 0 |
+| SS2 | 13 | 10 | 23 | 22 | 0 | 1 | 0 |
+| SS3 | 28 | 14 | 42 | 35 | 2 | 5 | 0 |
+| SS7 | 6 | 14 | 20 | 20 | 0 | 0 | 0 |
+| SS10 | 6 | 6 | 12 | 12 | 0 | 0 | 0 |
+| SS11 | 6 | 14 | 20 | 20 | 0 | 0 | 0 |
+| Appendix F | 16 | 14 | 30 | 25 | 3 | 0 | 2 |
+| **Total** | **88** | **78** | **166** | **153** | **5** | **6** | **2** |
+
+### Phase 4 Grand Total
+
+**166 claims audited across 7 sections.** 153 VERIFIED (92.2%), 5 IMPRECISE (3.0%), 6 MISSING-CONTEXT (3.6%), 2 WRONG (1.2%).
+
+### WRONG Findings (Requiring Correction)
+
+1. **F.6 (line ~5315):** Large jackpot winner payout split. Paper says "approximately 75% ETH / 25% whale passes." Contract: 50% ETH / 50% lootbox (amount / 2). Paper's own SS3.4 correctly says "half/half."
+
+2. **F.11 (line ~5501):** Affiliate tier fractions. Paper says "75% direct, 20% upline 1, 5% upline 2." Contract: direct ~80.6%, upline1 ~16.1% (scaledAmount/5 = 20%), upline2 ~3.2% (scaledAmount/25 = 4%). Tier 2 is 4% not 5% under all configurations.
