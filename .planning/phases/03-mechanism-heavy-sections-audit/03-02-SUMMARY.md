@@ -34,7 +34,7 @@ decisions:
   - "Self-referral blocked: DegenerusAffiliate.sol requires affiliateAddr != sender"
   - "Affiliate cap 0.5 ETH per referrer per level verified: MAX_COMMISSION_PER_REFERRER_PER_LEVEL = 0.5 ether"
 metrics:
-  duration: TBD
+  duration: 15min
   completed: 2026-03-16
 ---
 
@@ -460,3 +460,10 @@ No MISMATCH, IMPRECISE, or MISSING-CONTEXT items found. All 53 claims verified a
 ## Deviations from Plan
 
 None. Plan executed exactly as written.
+
+## Self-Check: PASSED
+
+- [x] 03-02-SUMMARY.md exists on disk
+- [x] Commit c0a84b0 exists in git history
+- [x] Verification count: 52 tags (threshold: >= 30)
+- [x] All 53 claims accounted for (29 numerical + 24 mechanism)
