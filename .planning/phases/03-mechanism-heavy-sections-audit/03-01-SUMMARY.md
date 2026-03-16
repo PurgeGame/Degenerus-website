@@ -114,3 +114,223 @@ The paper claims deposits, jackpot payouts, claims, and yield routing are the ex
 | 3 | SS4.1 line 2891 | 50% yield to accumulator | 46% | v1.1-steth-yield.md S3b | LOW | Change "50%" to "~46%". Cross-ref Phase 2. |
 | 4 | SS4.1 line 2892 | 50% of stETH yield (continuous) | 46% of yield surplus (at level transitions) | v1.1-steth-yield.md S3b | LOW | "Continuous" is a simplification; yield accrues continuously but distributes at transitions. |
 
+---
+
+## SS4.2 Zero-Rake Property (lines 2906-2960)
+
+### Numerical Claims
+
+**N6: "20% of lootbox ETH goes to the vault" during presale**
+Per v1.1-parameter-reference.md: `LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 2000` (MintModule.sol:111) = 20%.
+**VERIFIED** -- 20% presale vault extraction confirmed.
+
+**N7: "ending after fixed number of levels or 200 ETH"**
+Per contract source (AdvanceModule.sol:316): `if (lootboxPresaleActive && (lvl >= 3 || lootboxPresaleMintEth >= LOOTBOX_PRESALE_ETH_CAP)) lootboxPresaleActive = false;`
+`LOOTBOX_PRESALE_ETH_CAP = 200 ether` (AdvanceModule.sol:110).
+Presale ends at level 3 (after levels 0, 1, 2) or after 200 ETH of lootbox purchases, whichever comes first.
+**VERIFIED** -- fixed number of levels (3) and 200 ETH cap both confirmed.
+
+**N8: "Capped at 40 ETH maximum"**
+Arithmetic: 200 ETH * 20% = 40 ETH maximum vault extraction during presale. This is a derived cap, not a separate contract constant, but follows directly from N6 and N7.
+**VERIFIED** -- 40 ETH maximum is correct arithmetic.
+
+**N9: "20% of DGNRS token supply" to creator**
+Per v1.1-dgnrs-tokenomics.md Section 2a: Creator pool = 2000 BPS = 20.00% of INITIAL_SUPPLY. Minted to DGNRS wrapper contract, then distributed to CREATOR.
+**VERIFIED** -- 20% creator allocation confirmed.
+
+**N10: "25% of all stETH yield" to vault**
+Actual: 23% (per v1.1-steth-yield.md Section 3b).
+**IMPRECISE** -- Cross-reference Phase 2 and SS4.1 N2. Same finding as yield split throughout.
+
+**N11: "nerfed deity pass: 4 tickets per level"**
+Per contract: `VAULT_PERPETUAL_TICKETS = 16` (AdvanceModule.sol:99). Both VAULT and SDGNRS receive 16 tickets per level advance via `_queueTickets(ContractAddresses.VAULT, targetLevel, VAULT_PERPETUAL_TICKETS)`.
+The `_queueTickets` function operates in whole ticket units (not scaled/entry units), so 16 = 16 actual tickets, not 4.
+**MISMATCH** -- Paper says 4 tickets per level, contract gives 16 tickets per level.
+
+| # | Location | Claimed | Correct | Source | Severity | Fix |
+|---|----------|---------|---------|--------|----------|-----|
+| 5 | SS4.2 line 2919 | 4 tickets per level (vault deity pass) | 16 tickets per level | AdvanceModule.sol:99,1109-1110 | MEDIUM | Update "4 tickets" to "16 tickets" (VAULT_PERPETUAL_TICKETS = 16). |
+
+**N11b: "with activity score boost, but no size scaling and no boons"**
+Per v1.1-deity-system.md Section 7d: VAULT gets virtual deity status (`deityPassCount[VAULT] = 1`) in the constructor, granting deity activity score bonus floors (50% streak, 25% count, +80% deity bonus). However, the vault has no actual deity pass NFT, so it receives no boons and no size scaling from the deity pass mechanics.
+**VERIFIED** -- activity boost confirmed, no boons confirmed, no size scaling confirmed. Only the ticket count is wrong.
+
+**N12: "2 million BURNIE" to vault**
+Per v1.1-burnie-supply.md: `_supply.vaultAllowance = uint128(2_000_000 ether)` (BurnieCoin.sol:202). Initial vault BURNIE allowance = 2,000,000 BURNIE.
+**VERIFIED** -- 2 million BURNIE confirmed.
+
+**N13: "affiliate commissions from unaffiliated players" go to vault**
+Per contract source (DegenerusAffiliate.sol:184,245,419,429,451): `AFFILIATE_CODE_VAULT = bytes32("VAULT")`. When a player has no referral code set, or their affiliate is invalid/self-referral, the system falls back to `AFFILIATE_CODE_VAULT`, routing commissions to `ContractAddresses.VAULT`.
+**VERIFIED** -- unaffiliated player commissions route to vault address.
+
+**N14: "100% of every ETH deposited goes into prize pool system" after presale**
+Post-presale, all purchase types route ETH exclusively to pool splits:
+- Tickets: 90% next / 10% future (PURCHASE_TO_FUTURE_BPS = 1000, rest to next)
+- Lootboxes: 10% next / 90% future (LOOTBOX_SPLIT_NEXT_BPS = 1000, LOOTBOX_SPLIT_FUTURE_BPS = 9000)
+- Whale bundles: post-presale lootbox share = 10% (WHALE_LOOTBOX_POST_BPS = 1000)
+- Deity passes: post-presale lootbox share = 10% (DEITY_LOOTBOX_POST_BPS = 1000)
+- Lazy passes: post-presale lootbox share = 10% (LAZY_PASS_LOOTBOX_POST_BPS = 1000)
+No vault extraction in any post-presale purchase path. All ETH enters the prize pool system (split between next and future pools).
+**VERIFIED** -- 100% of post-presale deposits go to prize pools.
+
+### Mechanism Claims
+
+**M8: "1% of prize pool routes to segregated accumulator"**
+Cross-reference SS4.1 N4 and Phase 2: INSURANCE_SKIM_BPS = 100 = 1%, skimmed from nextPool at each level transition to yieldAccumulator.
+**VERIFIED** -- Cross-reference. Already verified in Task 1 and Phase 2.
+
+**M9: Definition 4.2 (Zero-Rake)**
+Paper defines: "A gaming mechanism is zero-rake if no entity extracts a guaranteed percentage of player deposits as ongoing profit."
+This is a self-contained definition. It is internally consistent and requires no contract verification. The supporting claims (N14, Observation 4.3) verify the empirical basis for applying this definition to Degenerus.
+**VERIFIED** -- definition is internally consistent.
+
+**M10: Observation 4.3 -- "100% of player ETH deposits remain in the prize pool system"**
+Same verification as N14. After presale, no percentage of any deposit is extracted by the house or operator. All ETH enters next/future prize pools.
+**VERIFIED** -- same basis as N14.
+
+**M11: Corollary 4.4 formula -- E[payout] = deposits + 0.50 * r * S * T**
+
+**Formula stated:** `sum(E[gross payout_i]) = sum(deposits_i) + 0.50 * r * S * T > sum(deposits_i)`
+
+**Variable mapping:**
+- `deposits_i` = total ETH deposited by player i (verifiable from purchase functions)
+- `r` = stETH yield rate (annualized, ~2.5% APR per Lido)
+- `S` = total staked ETH (steth.balanceOf(address(this)))
+- `T` = time horizon
+- `0.50` = player-facing yield share (accumulator's share)
+
+**Coefficient check:** The paper says "the coefficient 0.50 reflects the player-facing yield share." The actual accumulator share is 46%, not 50%. This is the same imprecision as the yield split throughout the paper.
+**IMPRECISE** -- coefficient should be 0.46, not 0.50. Cross-reference Phase 2 and SS4.1 findings.
+
+**Formula structure check:** The formula correctly expresses: total expected payouts = total deposits (zero-rake property) + player-facing yield (accumulator distributions). The yield component (r * S * T) is scaled by the accumulator's share to get the player-facing portion. The inequality is correct: since r * S * T > 0 when stETH is staked, total payouts exceed total deposits, making the game positive-sum in aggregate.
+
+**Note:** The formula is an approximation. It assumes all yield flows through the accumulator to players, which is approximately true (accumulator distributes at x00 milestones and terminal). In practice, the accumulator retains 50% as terminal insurance, which only distributes if GAMEOVER triggers. The formula represents the theoretical maximum player-facing yield over infinite time. At the paper's level of abstraction, this is appropriate.
+
+| # | Location | Claimed | Correct | Source | Severity | Fix |
+|---|----------|---------|---------|--------|----------|-----|
+| 6 | SS4.2 line 2943 | coefficient 0.50 | 0.46 | v1.1-steth-yield.md S3b | LOW | Change 0.50 to ~0.46. Same yield split imprecision. |
+
+**M11 Verdict: IMPRECISE** -- formula structure correct, coefficient 0.50 should be ~0.46.
+
+### DGNRS Claim in SS4.2
+
+**N9b: "DGNRS receives 25% of system stETH yield and 4 tickets per level with an activity score boost"**
+The 25% yield is IMPRECISE (actual 23%, same yield split finding). The "4 tickets per level" for DGNRS (sDGNRS contract) has the same issue as vault: contract gives `VAULT_PERPETUAL_TICKETS = 16` tickets to sDGNRS per level advance (AdvanceModule.sol:1109).
+**MISMATCH** on ticket count (4 vs 16). **IMPRECISE** on yield percentage (25% vs 23%).
+
+| # | Location | Claimed | Correct | Source | Severity | Fix |
+|---|----------|---------|---------|--------|----------|-----|
+| 7 | SS4.2 line 2915 | DGNRS receives 4 tickets per level | 16 tickets per level | AdvanceModule.sol:99,1109 | MEDIUM | Update "4 tickets" to "16 tickets". Same constant VAULT_PERPETUAL_TICKETS = 16 applies to both SDGNRS and VAULT. |
+
+---
+
+## SS4.3 Permissionless Execution (lines 2961-2976)
+
+### Numerical Claims
+
+**N15: "BURNIE bounty scaled to approximately 0.01 ETH"**
+Per parameter reference: `ADVANCE_BOUNTY_ETH = 0.01 ether` (AdvanceModule.sol:114).
+Per contract: `advanceBounty = (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price` (AdvanceModule.sol:124). This computes BURNIE equivalent of 0.01 ETH at the current BURNIE price.
+**VERIFIED** -- 0.01 ETH base bounty confirmed.
+
+**N16: "escalating to 2x after one hour"**
+Per contract (AdvanceModule.sol:207): `else if (elapsed >= 1 hours) { advanceBounty *= 2; }`
+**VERIFIED** -- 2x multiplier after 1 hour confirmed.
+
+**N17: "capping at 3x (~0.03 ETH) after two hours"**
+Per contract (AdvanceModule.sol:205-206): `if (elapsed >= 2 hours) { advanceBounty *= 3; }`
+Arithmetic: 0.01 ETH * 3 = 0.03 ETH. Cap is implicit (no further escalation beyond 3x).
+**VERIFIED** -- 3x cap after 2 hours confirmed, 0.03 ETH arithmetic correct.
+
+**N18: "30 minutes past day boundary, anyone can call"**
+Per contract (AdvanceModule.sol:652): `if (elapsed >= 30 minutes) return;`
+This is inside the purchase-gating check. If 30 minutes have elapsed since the day boundary, the function returns without reverting, allowing anyone to call.
+**VERIFIED** -- 30-minute public fallback confirmed.
+
+**N19: "pass holders can call after 15 minutes"**
+Per contract (AdvanceModule.sol:655-661): `if (elapsed >= 15 minutes) { if (frozenUntilLevel > lvl) return; }`
+The check uses `frozenUntilLevel > lvl`, which is set by whale bundle and lazy pass purchases (these "freeze" the player's account for future levels, effectively marking them as a pass holder). This is not deity pass holders (who bypass entirely at line 645), but whale/lazy pass holders.
+Paper says "pass holders" without specifying which pass type. The contract distinguishes: deity pass holders bypass the gate entirely (no time restriction), whale/lazy pass holders can call after 15 minutes.
+**VERIFIED** -- 15-minute pass holder fallback confirmed. The paper's "pass holders" implicitly means whale/lazy pass holders (distinct from deity holders who have no time restriction).
+
+### Mechanism Claims
+
+**M12: "primary calling path requires purchase in current or previous day"**
+Per contract (AdvanceModule.sol:642-643): `lastEthDay` is extracted from `mintData` and compared against `gateIdx`. If `lastEthDay + 1 < gateIdx`, the caller has not made a purchase recently enough. The check allows purchases from the current day or the previous day.
+**VERIFIED** -- purchase-gating mechanism correctly described.
+
+**M13: "Deity pass holders bypass this requirement"**
+Per contract (AdvanceModule.sol:644-645): `if (deityPassCount[caller] != 0) return;` inside the gating block. If the caller holds any deity pass, they bypass the entire purchase gate, including time restrictions.
+**VERIFIED** -- deity pass bypass confirmed.
+
+**M14: "ties the protocol's heartbeat to real economic activity"**
+This is an argumentative claim about the purchase-gating mechanism. The underlying mechanism (M12) is correctly described: the primary path requires a recent purchase, meaning the game only advances on its fastest schedule when someone has made an economic commitment. This is a correct characterization of the incentive structure.
+**VERIFIED** -- argumentative claim supported by correctly described mechanism.
+
+### SS4.3 Discrepancy Table
+
+No discrepancies found in SS4.3. All timing constants and mechanism descriptions match the contract source.
+
+---
+
+## Summary
+
+### Total Claims by Section
+
+| Section | Numerical | Mechanism | VERIFIED | IMPRECISE | MISMATCH |
+|---------|-----------|-----------|----------|-----------|----------|
+| SS4.1 | 5 | 8 | 9 | 4 | 0 |
+| SS4.2 | 9 (+1 sub-claim) | 4 | 9 | 3 | 2 |
+| SS4.3 | 5 | 3 | 8 | 0 | 0 |
+| **Total** | **19 (+1)** | **15** | **26** | **7** | **2** |
+
+Note: The plan counted 19 mechanism claims total. After detailed verification, some mechanism claims mapped to sub-claims or were folded into related items. The actual audited count is 15 distinct mechanism claims plus 4 sub-claims within M3 (state transitions). All planned items are covered.
+
+### Severity Breakdown
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| MEDIUM | 2 | Vault/DGNRS ticket count (4 vs 16 per level) |
+| LOW | 5 | Yield split percentages (46/23/23 not 50/25/25), "continuous" simplification |
+
+### Formulas Verified
+
+**Proposition 4.1 (Solvency Invariant):**
+- Formula: `claimablePool <= ETH balance + stETH balance`
+- Each variable mapped to contract equivalent
+- All four state transition categories verified as exhaustive
+- Result: **VERIFIED**
+
+**Corollary 4.4 (Positive-Sum Game):**
+- Formula: `E[payout] = deposits + 0.50 * r * S * T`
+- Each variable defined and mapped
+- Coefficient 0.50 should be ~0.46 (accumulator share)
+- Formula structure correct (deposits + player-facing yield)
+- Result: **IMPRECISE** (coefficient only)
+
+### Pitfalls Checked
+
+| Pitfall | Status | Notes |
+|---------|--------|-------|
+| Pitfall 8 (x00 50% drain) | N/A for SS4 | Relevant to SS6.3/SS8/SS9, not mechanism design section |
+| Pitfall 12 (stETH rounding) | Checked, acceptable | Paper correctly ignores wei-level rounding at its abstraction level |
+
+### Cross-References to Phase 2 Findings
+
+| Finding | Phase 2 Source | SS4 Instances |
+|---------|---------------|---------------|
+| Yield split 46/23/23 not 50/25/25 | 02-02-SUMMARY.md (Claim 2), 02-03-SUMMARY.md | N1, N2, N3, N10, M3d, M11 (Corollary 4.4) |
+| Insurance skim 1% (INSURANCE_SKIM_BPS=100) | 02-03-SUMMARY.md | N4, M8 |
+
+### All Discrepancies
+
+| # | Location | Claimed | Correct | Source | Severity | Fix |
+|---|----------|---------|---------|--------|----------|-----|
+| 1 | SS4.1 line 2890 | 25% yield to vault | 23% | v1.1-steth-yield.md S3b | LOW | Change "25%" to "~23%" or footnote |
+| 2 | SS4.1 line 2890 | 25% yield to DGNRS | 23% | v1.1-steth-yield.md S3b | LOW | Change "25%" to "~23%" |
+| 3 | SS4.1 line 2891 | 50% yield to accumulator | 46% | v1.1-steth-yield.md S3b | LOW | Change "50%" to "~46%" |
+| 4 | SS4.1 line 2892 | 50% yield continuous | 46% at transitions | v1.1-steth-yield.md S3b | LOW | Minor simplification, acceptable |
+| 5 | SS4.2 line 2919 | Vault: 4 tickets/level | 16 tickets/level | AdvanceModule.sol:99,1109-1110 | MEDIUM | Update to 16 tickets |
+| 6 | SS4.2 line 2943 | Corollary 4.4 coefficient 0.50 | ~0.46 | v1.1-steth-yield.md S3b | LOW | Update coefficient |
+| 7 | SS4.2 line 2915 | DGNRS: 4 tickets/level | 16 tickets/level | AdvanceModule.sol:99,1109 | MEDIUM | Update to 16 tickets |
+
