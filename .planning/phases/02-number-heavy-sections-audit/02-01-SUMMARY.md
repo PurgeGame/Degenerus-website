@@ -23,8 +23,8 @@ decisions:
   - "Decimator claim expiry not mentioned in SS6.2 prose, logged as MISSING-CONTEXT per Pitfall 4"
   - "BAF leaderboard reset not explicitly claimed in SS6.3 prose, no claim to verify"
 metrics:
-  duration: TBD
-  completed: TBD
+  duration: 4min
+  completed: 2026-03-16
 ---
 
 # Phase 02 Plan 01: SS6 BURNIE Economics Audit Summary
@@ -202,3 +202,16 @@ No WRONG or STALE mismatches found. Two MISSING-CONTEXT items and one IMPRECISE 
 | Pitfall 3 (coinflip burns permanent) | SS6.1 line 3243 | CLEAR. Paper states "all BURNIE sinks are permanent burns." |
 | Pitfall 4 (decimator claim expiry) | SS6.2 | MISSING. Paper does not mention claim expiry. LOW severity. |
 | Pitfall 8 (x00 50% drain) | SS6.3 lines 3273-3274 | CLEAR. Both percentages correct (20% BAF, 30% decimator). Both use baseFuturePool. Combined 50% is implied correctly, not stated as sequential deduction. |
+
+## Deviations from Plan
+
+None. Plan executed exactly as written. Both tasks completed in a single pass since SS6.1-6.3 findings were written together into the same output file.
+
+## Self-Check: PASSED
+
+- 02-01-SUMMARY.md exists: YES
+- Task 1 commit b17850e exists: YES
+- VERIFIED/MISMATCH count: 46 (threshold: >= 20): PASS
+- SS6.1, SS6.2, SS6.3 sections present: YES
+- Summary section with totals: YES
+- All MISSING-CONTEXT entries have 6 discrepancy fields: YES
