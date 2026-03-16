@@ -545,42 +545,24 @@
       underlying game from
       negative-sum to slightly positive-sum for the player pool as a whole, introducing fundamentally different
       strategic dynamics.</p>
-    <p>This paper analyzes these dynamics. We are interested in three central questions:</p>
-    <ol>
-      <li>
-        <p><strong>Dominant strategies and stability.</strong> Does the game possess dominant strategies? Are they
-          stable under perturbation? What strategy profiles constitute equilibria?</p>
-      </li>
-      <li>
-        <p><strong>Incentive alignment.</strong> Does the mechanism design ensure that individually rational behavior by
-          each player type strengthens rather than weakens the system? Under what conditions might incentives become
-          misaligned?</p>
-      </li>
-      <li>
-        <p><strong>Robustness and resilience.</strong> How does the system withstand adversarial behavior, coordinated
-          attacks, player exodus, and extreme market conditions? What structural properties make it resistant to death
-          spirals?</p>
-      </li>
-    </ol>
-    <p>The central argument: <strong>Degenerus Protocol works because different player types want different things, and
-        getting what they want individually produces collective goods.</strong> Entertainment seekers pay for the
-      thrill of jackpots and lootboxes, and the surplus from their bets is the main source of equity; strategic
-      players and whales extract monetary value from that equity while locking capital that stabilizes jackpots;
-      affiliates bring
-      in the players the system needs. stETH yield makes the whole system positive-sum. Commitment devices (future
-      tickets, quest streaks, auto-compounding) create a ratchet that makes continued participation the dominant
-      strategy for anyone already engaged. The rest of this paper formalizes that argument, stress-tests it, and maps
+    <p>The central argument: <strong>Degenerus is engineered so that every possible interaction by every participant
+        strengthens the protocol by providing what another player type demands.</strong> Greed feeds off degeneracy and
+      degeneracy feeds off greed. Every player can either deposit more ETH that strengthens the feedback loop or stop
+      depositing. The incentive structure strongly favors the former, and either way, existing capital is held in
+      non-refundable lottery tickets that can only resolve on the game's schedule.
+      These properties, and game mechanics designed for resilience, make the protocol nearly impossible to kill.</p>
+    <p>Entertainment seekers pay for the thrill of jackpots, and the surplus from their bets is the main source of
+      equity. Strategic players and whales extract monetary value from that equity while locking capital that stabilizes
+      jackpots. Affiliates bring in the players the system needs, and stETH yield makes the whole system positive-sum.
+      Commitment devices create a ratchet that makes continued participation the dominant strategy for anyone already
+      engaged. The rest of this paper stress-tests that argument under the harshest adversarial conditions and maps
       its limitations.</p>
 
-    <p><strong>Scope.</strong> The analysis takes entertainment demand as given: that enough players find this game
-      engaging enough to participate and return. Whether this specific product achieves that is an empirical question
-      outside the model's scope (addressed qualitatively in <a href="#section-9">Section 2.6</a>). Every section was
-      subjected to adversarial review by specialized agents with full access to the contract source code, designed to
-      attack the protocol's claims. The methodology and common misreadings are documented in
-      <a href="#appendix-f">Appendix F</a>.
-    </p>
+    <p><strong>Scope.</strong> The analysis takes entertainment demand as given. Whether enough players find this game
+      engaging enough to participate is an empirical question outside the model's scope.</p>
     <p><strong>Terminal state.</strong> Funds are locked in a contract with no admin withdrawal function. If the game
-      ever stalls, all remaining funds are paid out as ETH to ticket holders and active participants. The terminal
+      stalls for more than 120 days, all remaining funds are paid out as ETH to ticket holders and active participants.
+      The terminal
       mechanism is designed so that buying tickets to claim eligibility simultaneously funds the pool target whose
       completion prevents the terminal event, making GAMEOVER self-preventing (<a href="#section-41">Section 9.3</a>).
       Players may lose money, but
@@ -713,15 +695,15 @@
           quadrant
           (crypto, zodiac, cards, dice) contains one badge. If that color and symbol is drawn, all tickets with that
           badge have an equal chance to win.</em></p>
-      <p><em>Degenerus Protocol is a progressive jackpot on-chain lottery. Each level of the game has a prize pool
+      <p>Degenerus Protocol is a progressive jackpot on-chain lottery. Each level of the game has a prize pool
           target denominated in ETH. Players buy <strong>tickets</strong> (which enter them into jackpot draws),
           <strong><a href="/lootbox/">lootboxes</a></strong> (randomized reward packages containing future tickets,
           BURNIE tokens, and <a href="#section-boons">boons</a>, with value scaled by the buyer's engagement), and <a
             href="#section-13"><strong>passes</strong></a> (one-time purchases that grant permanent score boosts and
           ticket bundles). Their deposits fill the pool. When the target is met, the level advances and the accumulated
           pool is distributed as prizes over a series of daily jackpot draws. Then the next level begins with a higher
-          target, so each cycle's jackpots are larger than the last.</em></p>
-      <p><em><strong>BURNIE</strong> is the protocol's deflationary utility token, earned through gameplay (jackpot
+          target, so each cycle's jackpots are larger than the last.</p>
+      <p><strong>BURNIE</strong> is the protocol's deflationary utility token, earned through gameplay (jackpot
           draws, quest rewards, affiliate payments) and permanently burned to buy tickets, play <strong><a
               href="/degenerette/">Degenerette</a></strong> (an on-chain slot machine), wager on a daily communal
           <strong>coinflip</strong> (one flip, everyone wins or loses together), compete on the <strong><a
@@ -731,7 +713,7 @@
           that feeds future levels). Players build an <strong>activity score</strong> (0 to 3.05) through daily
           engagement: maintaining a <strong>quest streak</strong> (one ticket or lootbox purchase per day; missing a day
           resets the streak to zero), purchase consistency, affiliate referrals, and pass bonuses. Higher scores
-          improve returns across products, with different mechanics capping at different thresholds.</em></p>
+          improve returns across products, with different mechanics capping at different thresholds.</p>
       <table>
         <thead>
           <tr>
@@ -778,8 +760,8 @@
           </tr>
         </tbody>
       </table>
-      <p><em>BURNIE price is constant; ETH price escalates. This is why BURNIE earned early appreciates in purchasing
-          power as levels progress. Full breakdown in <a href="#section-27">Section 6.1</a>.</em></p>
+      <p>BURNIE price is constant; ETH price escalates. This is why BURNIE earned early appreciates in purchasing
+          power as levels progress. Full breakdown in <a href="#section-27">Section 6.1</a>.</p>
     </div>
 
     <p>The demo below shows four consecutive daily jackpot draws to illustrate the core mechanic. Click "Next Day" to
@@ -2429,89 +2411,111 @@
       affiliate whose own referrals compound the effect.</p>
     <h3 id="section-6b">2.4 Structural Barriers to Arbitrage</h3>
     <p>The cross-subsidy generates real returns. The question is why those returns stay high rather than being competed
-      away. Four structural barriers prevent the return compression that plagues simpler systems designed to attract as
+      away by ubiquitous blockchain arbitrageurs. Four structural barriers prevent the return compression that plagues
+      simpler systems designed to attract as
       much capital as possible.</p>
-    <p>Variance is the first: realized returns are determined primarily by luck, and individual results range from total
-      loss to massive jackpot wins. The monetary variance is risk: the odds are roughly calculable. The temporal
-      variance is
-      uncertainty: when those returns arrive depends on collective behavior that no individual can be sure of. This
-      makes
-      annualized return modeling impossible, which is precisely the tool that arbitrage capital uses to identify and
-      exploit opportunities.</p>
+    <p>The first barrier is variance. Realized returns are determined primarily by luck, and individual results range
+      from total loss to massive jackpot wins. The monetary variance is risk: the odds of every bet are roughly
+      calculable. The temporal variance is uncertainty: when those returns arrive depends on collective behavior that
+      no individual can anticipate with confidence. This makes annualized return modeling impossible, which is precisely
+      the tool that arbitrage capital uses to identify and exploit opportunities.</p>
     <p>Complexity is the second barrier. Optimizing returns requires understanding activity scores, quest streaks,
       BURNIE dynamics, pool composition, and the interaction between products. Understanding is necessary but not
       sufficient: execution matters. Quest streaks break if you miss a day. Bankroll management is ongoing. Activity
-      score can be botted, but it can also be mismanaged. And like variance, complexity contains genuine uncertainty:
-      your optimal moves depend on other players' actions, which you cannot predict. The learning is a form of
-      investment that casual extractors will not make, and the execution is a daily commitment they will not
-      sustain.</p>
-    <p>Illiquidity is the third, and the foundation of the protocol's resilience. Tickets cannot be refunded. This
-      inverts the death spiral: when players leave a liquid protocol, they drain the pool on the way out. Here, players
+      score can be botted, but it can also be mismanaged. Day-to-day optimal play is straightforward: maximize
+      activity score. But at the margins where extractive returns are determined, genuine uncertainty emerges: BURNIE
+      valuation, decimator timing, bankroll allocation, and reinvestment strategy all depend on other players' actions,
+      which no individual can predict. The learning is a form of
+      investment that casual extractors will not make, and the execution is a daily commitment they will not sustain.
+    </p>
+
+    <p>Illiquidity is the third barrier, and the foundation of the protocol's resilience. Tickets cannot be refunded.
+      This inverts the death spiral: when players leave a liquid protocol, they drain the pool on the way out. Here,
+      players
       can only extract value through the game's own payout mechanisms, so the pools never shrink from exits. Players who
       stop participating cannot withdraw what they have already deposited. Their unrealized returns only materialize if
       the game continues, which requires other players' activity. All an exiting player can do is stop depositing,
-      which frees up the future returns they would have extracted to those who remain. It is also
-      what makes the locked
-      capital productive: pooled ETH earns stETH yield, funding the positive-sum surplus that the rest of the system
+      which frees up the future returns they would have extracted to those who remain. It is also what makes the
+      locked capital productive: pooled ETH earns stETH yield, funding the positive-sum surplus that the rest of the
+      system
       distributes.</p>
-    <p>Perceived moral hazard is the fourth barrier. Describe this product to someone: a crypto scheme with complex
-      mechanics, high variance, and illiquid deposits. Almost everyone will respond "that's a scam!" The market attaches
-      a skepticism premium to anything that looks like this. The source of this premium is the
-      completely justified fear of moral hazard: that the operator will someday disappear with all the money. This
-      protocol carries no such risk. The
-      operator is the decentralized Ethereum blockchain, and insolvency is verifiably impossible. The distribution rules
+    <p><b>
+        Crucially, for degens, the variance is
+        desirable, the game is not much more complex than buying a lotto
+        ticket and they are not required to lock capital to play.</b></p>
+    <p>Perceived moral hazard is the fourth barrier. Describe this product to someone: a crypto gambling scheme with
+      illiquid deposits and complex mechanics. Almost everyone will respond "that's a scam!" The market attaches a
+      skepticism premium to anything that looks like this. This premium exists because the fear of moral hazard is
+      completely justified: the most likely outcome
+      is that the operator disappears with the money. <strong>This protocol carries no such
+        risk.</strong> The operator is the decentralized Ethereum blockchain, and insolvency is verifiably impossible.
+      The
+      distribution rules
       are immutable code, public and auditable. Smart contract risk exists, but it is transparent and the creator is
       highly incentivized to eliminate it. Operator fraud is the exact opposite on both counts.</p>
     <p>Yet still, "that's a scam!" is the most rational initial response, and this fact filters out everyone
       except fools, degens, and the kind of mad genius who actually reads a 60-page game theory paper about a crypto
       game. This protocol is designed to repel extractive capital that isn't greedy, curious, and determined enough to
-      read past the first page. <strong>Investors who recognize the difference effectively get paid a risk premium for
-        their
-        perceptiveness.</strong></p>
+      read past the first page. <strong>Investors who recognize the difference effectively get paid a risk premium
+        for their perceptiveness.</strong></p>
     <p>All four barriers are structural properties of the product. Variance, complexity, and illiquidity are intentional
       design choices whose benefits accrue transparently to savvy participants, not opaquely to an operator. Perceived
       moral hazard is a consequence of the other three and the most likely to erode as the protocol proves itself, but
-      few will ever bother checking. The competitors for
-      these returns are kept artificially scarce by the same perceived moral hazard that creates the discount in the
-      first place. The returns themselves are an equilibrium property: they persist at the level where the barriers
-      balance grinder competition against degen volume. Combined with the absolute volume principle (<a
-        href="#obs-self-correcting">Observation 2.1</a>),
-      even modest entertainment demand sustains attractive returns because the barriers prevent the capital flood that
-      would compress them.</p>
+      few will ever bother checking. The competitors for these returns are kept artificially scarce by the same
+      perceived moral hazard that creates the discount in the first place. The returns themselves are an equilibrium
+      property: grinder population self-corrects against degen
+      volume, and the barriers keep that equilibrium elevated. Combined
+      with the absolute volume principle (<a href="#obs-self-correcting">Observation 2.1</a>), even modest
+      entertainment demand sustains attractive returns because these barriers prevent the capital flood that would
+      compress them.</p>
     <p>The one form of extraction the protocol only lightly repels is the affiliate. Affiliates are essential: they are
       the channel through which degens, or anyone else, find the game. The commissions are lucrative, but paid through
       a daily coinflip wager. Anyone unwilling to gamble does not belong here in any capacity. This filters
       affiliate competition the same way the other barriers filter capital, increasing the revenue stream for those who
-      do belong. The affiliate program is also open to all players, not just promoters, and offers the lowest-variance
+      align with the ethos of the protocol. The affiliate program is also open to all players, not just promoters, and
+      offers the lowest-variance
       revenue path in the game for anyone willing to recruit.</p>
     <h3 id="section-8">2.5 Entertainment Mechanics and Retention</h3>
     <p>The heterogeneous utility model has two important implications for the stability analysis.</p>
     <p><strong>The active participation equilibrium is more robust than monetary analysis alone suggests.</strong> A
-      degen has multiple ways to play at different EVs (lootboxes, Degenerette spins, ticket purchases, coinflips), all
-      of which are monetarily negative at low activity scores. Under pure monetary utility, this violates individual
-      rationality. But degens do not care about money, they care about excitement. The protocol is designed to maximize
+      degen has multiple ways to play (lootboxes, Degenerette spins, ticket purchases, coinflips), all
+      -<span>$</span>EV at low activity scores. Under pure monetary utility, this violates individual
+      rationality. But degens do not care about <span>$</span>EV, they care about excitement. The protocol is designed
+      to maximize
       entertainment delivery: lootbox rewards arrive as <em>more gambling products</em> (future tickets, BURNIE for
       Degenerette, boons), so a single lootbox open produces a cascade of further gambling opportunities. If the
       entertainment value exceeds the monetary loss, participation remains individually rational. The gambling industry
-      proves this condition holds at population scale for products with far worse odds and far less entertaining reward
+      proves this condition holds at population scale for products with far worse odds and less entertaining reward
       structures.</p>
-    <p>The daily coinflip reinforces this through communal structure. One coin is flipped and every participant wins or
-      loses together. This is designed to induce the craps table effect: craps is the loudest table in the casino
-      because shared outcomes turn strangers into a group with a common stake. The daily jackpot draws add a competitive
-      counterpart (individual winners drawn from the pool). Together, the coinflip and jackpot create a daily rhythm of
-      cooperative and competitive events that generates social engagement independent of monetary outcomes.</p>
+    <p>The protocol layers additional mechanics on top of the jackpot draws to deepen engagement. The daily coinflip is
+      communal: one coin is flipped and every participant wins or loses together. A shared multiplier roll (50-150%)
+      scales every payout for the day, adding a second communal outcome that amplifies or dampens the entire pool's
+      results. Craps is the loudest table in the casino because shared outcomes turn strangers into a group with a
+      common stake. The protocol seeks to replicate this effect every night on Discord. The jackpot draws add a
+      competitive
+      counterpart, with individual winners drawn from the pool. Together they create a daily rhythm of cooperative and
+      competitive events that generates engagement independent of monetary outcomes.</p>
+    <p>The BAF (Big-Ass Flip) escalates this to its logical extreme. Players accumulate BAF score through cumulative
+      BURNIE wagered on coinflips over each 10-level cycle. At the milestone, a single communal coinflip determines
+      whether a large jackpot pays out. A loss means the jackpot is not distributed and ten levels of accumulated score
+      evaporates (score resets every cycle regardless). The flip is communal, but the payout is competitive: leaderboard
+      positions and random draws weighted by score and ticket holdings.</p>
     <p>Players can also burn BURNIE to <strong>nudge the RNG</strong>: each nudge guarantees the next coinflip outcome
       is reversed from what it would otherwise have been and reshuffles jackpot payouts completely. The cost starts at
       100 BURNIE and scales by 1.5x per queued nudge, so competitive nudging rapidly becomes expensive. The mechanic is
       unexploitable (the nudger knows outcomes will differ, but never knew what either outcome would be), and it gives
       players a way to act on the shared outcome rather than passively accept it. It is another BURNIE sink, another
       source of communal drama, and another reason to pay attention to the daily flip.</p>
-    <p>The BAF (Big-Ass Flip) escalates this to its logical extreme. Players accumulate BAF score through cumulative
-      BURNIE
-      wagered on coinflips over each 10-level cycle. At the milestone, a single communal coinflip determines whether a
-      large jackpot pays out. A loss means the jackpot is not distributed and ten levels of accumulated score evaporates
-      (score resets every cycle regardless). The flip is communal, but the payout is competitive: leaderboard positions
-      and random draws weighted by score. It is both the craps table and the tournament, running on the same clock.</p>
+    <p>Imagine being the last to nudge
+      the RNG that
+      would have otherwise resulted in a whale booking a hundred-ETH win, earned by topping the leaderboard through
+      millions of
+      BURNIE flipped over the course of ten levels, as well as distributed 900 ETH among a hundred other players. The
+      nudger knows
+      exactly what he did, and he might even be that
+      whale himself. Of course, the opposite scenario is just as likely. Gamblers routinely lose their composure at
+      dealers who have no agency whatsoever over the cards. The nudger has real agency but no control, and that
+      distinction will not matter to anyone who just lost a hundred ETH.</p>
     <p><strong>Player retention has a ratchet effect.</strong> As engagement deepens (longer streaks, higher activity
       scores, more future tickets), the non-monetary switching cost (breaking streaks, abandoning progression, losing
       status) compounds on top of the monetary switching cost (forfeiting relative EVs). The total
@@ -2529,10 +2533,14 @@
       three at once.</p>
     <p>The critical insight from poker: <strong>the ecosystem is healthy when recreational players have a good
         time.</strong> If the fish (recreational players, in poker parlance) are miserable, they leave. If the fish
-      leave, the grinders have no one to extract from. If the grinders leave, the games die. Poker ecosystems
+      leave, the grinders have no one to extract from. If the grinders leave, the games die. Online poker ecosystems
       characteristically die by catering to grinders: rooms offer 50-70% rakeback (returning a share of fees to the
-      player) to high-volume pros, optimizing for volume over fun, and fun is the only reason recreational players show
-      up.</p>
+      player) to high-volume pros who, in order to maintain "VIP" status, must play 25 tables simultaneously for hours
+      every day. This both makes them ubiquitous and requires them to play a boring, low-variance style that drives
+      the true VIPs to the blackjack table. The casino prefers this outcome. Fish have limited budgets and lose
+      quickly. Every dollar
+      lost
+      to poker pros is one less dollar they can lose to the house.</p>
     <p>Taken to its logical conclusion, some sites tried eliminating rake entirely. They never gained traction because
       fish do
       not choose rooms based on rake. They choose based on fun, brand recognition, and where their friends play:
@@ -2541,20 +2549,11 @@
       budget to acquire fish through other channels. The result was a few tables of grinders playing each other near
       breakeven, where the worst grinders lose a little, notice immediately (because they are there for money), and
       leave, shrinking the pool until nobody is left. The lesson: rake is not inherently bad. What matters is where the
-      money goes. Operator profit does nothing for the ecosystem. Player acquisition and retention do everything.</p>
+      money goes. Operator profit does nothing for the ecosystem. Acquiring and retaining fish does everything. Grinders
+      show up on their own.</p>
     <p>Degenerus is zero-rake, but unlike rake-free poker it has a built-in acquisition engine. The affiliate
       program pays 20-25% commission on referred players' purchases, funded by BURNIE mechanics rather than deposit
       skimming. Affiliates extract value only in proportion to the new money they bring in.</p>
-    <p>The protocol is also structurally resistant to grinder takeover. The grinder's best product, the lootbox,
-      sends the vast majority of each purchase to the futurepool, locking capital into future levels with uncertain
-      returns on uncertain timelines. Capital lock plus variance repels mercenary DeFi capital. But the same
-      barriers that filter out risk-averse participants concentrate rewards among grinders and profitable hybrids (for
-      whom the variance is a feature)
-      willing to accept
-      the terms.</p>
-    <p>The cross-subsidy structure (<a href="#section-6">Section 2.3</a>) is the formal version of this dynamic:
-      different player types,
-      extracting different kinds of value, sustaining each other's presence at the table.</p>
 
     <hr />
     <h2 id="section-10">3. Player Types and Strategies</h2>
