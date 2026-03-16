@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
-status: in-progress
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-16T23:37:59Z"
-last_activity: "2026-03-16 -- Completed 04-01-PLAN.md (SS1-SS3 prose audit: 84 claims, 76 verified, 0 wrong)"
+status: completed
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-16T23:55:30.359Z"
+last_activity: "2026-03-16 -- Completed 04-02-PLAN.md (SS7+SS10+SS11+Appendix F: 82 claims, 73 verified, 2 WRONG)"
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
-  completed_plans: 7
-  percent: 88
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-16)
 
 **Core value:** Every number and mechanism claim in the game theory paper is verifiably correct
-**Current focus:** Phase 4 in progress (1/2 plans complete)
+**Current focus:** Phase 4 complete (2/2 plans), Phase 5 synthesis pending
 
 ## Current Position
 
-Phase: 4 of 5 (Prose and Framing Sections Audit)
-Plan: 1 of 2 in current phase
-Status: 04-01 complete (SS1-SS3 prose audit), 04-02 pending (SS7 + Appendix A-C)
-Last activity: 2026-03-16 -- Completed 04-01-PLAN.md (SS1-SS3 prose audit: 84 claims, 76 verified, 0 wrong)
+Phase: 5 of 5 (Synthesis and Final Report)
+Plan: 0 of 1 in current phase (pending)
+Status: Phase 4 complete. 04-02 audited SS7, SS10, SS11, Appendix F (82 claims, 2 WRONG). All audit phases done.
+Last activity: 2026-03-16 -- Completed 04-02-PLAN.md (SS7+SS10+SS11+Appendix F: 82 claims, 73 verified, 2 WRONG)
 
-Progress: [█████████░] 88%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 9.7min
-- Total execution time: 68min
+- Total plans completed: 8
+- Average duration: 10.4min
+- Total execution time: 83min
 
 **By Phase:**
 
@@ -46,11 +46,11 @@ Progress: [█████████░] 88%
 | 01-preparation | 1 | 7min | 7min |
 | 02-number-heavy-sections-audit | 3 | 31min | 10.3min |
 | 03-mechanism-heavy-sections-audit | 2 | 23min | 11.5min |
-| 04-prose-and-framing-sections-audit | 1 | 7min | 7min |
+| 04-prose-and-framing-sections-audit | 2 | 22min | 11min |
 
 **Recent Trend:**
-- Last 5 plans: 02-03 (18min), 03-01 (8min), 03-02 (15min), 04-01 (7min)
-- Trend: Consistent, 04-01 fastest yet (prose sections have lower claim density)
+- Last 5 plans: 03-01 (8min), 03-02 (15min), 04-01 (7min), 04-02 (15min)
+- Trend: Consistent execution. Appendix F took longer due to 28-entry re-citation verification.
 
 *Updated after each plan completion*
 | Phase 01 P01 | 7min | 2 tasks | 1 files |
@@ -60,6 +60,7 @@ Progress: [█████████░] 88%
 | Phase 03 P01 | 8min | 2 tasks | 1 files |
 | Phase 03 P02 | 15min | 2 tasks | 1 files |
 | Phase 04 P01 | 7min | 2 tasks | 1 files |
+| Phase 04 P02 | 15min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,10 @@ Recent decisions affecting current work:
 - [Phase 04]: Day-5 affiliate 10% bonus commission not found in audit docs, flagged MISSING-CONTEXT
 - [Phase 04]: Coinflip "2x" payout is IMPRECISE: actual mean ~1.97x with tiers 1.50x/2.50x/[1.78x-2.15x]
 - [Phase 04]: EV table composite values (1.10, 1.20, 1.30, 1.45) mix of contract params and illustrative composites; ordering correct
+- [Phase 04]: F.6 jackpot large winner split WRONG: paper says 75/25 (ETH/whale passes), actual is 50/50 (ethPortion = amount / 2)
+- [Phase 04]: F.11 affiliate tier fractions WRONG: paper says 75/20/5, tier 2 is actually 4% (scaledAmount/25), not 5%
+- [Phase 04]: stETH yield 50/25/25 re-cited in F.1 and F.2, confirmed IMPRECISE (actual 46/23/23) cross-reference to Phase 2
+- [Phase 04]: SS10 Powerball references ($1.5B, $1.3B, 13x, $20M) classified as EXTERNAL (real-world facts, not contract-verifiable)
 
 ### Pending Todos
 
@@ -110,10 +115,11 @@ None yet.
 ### Blockers/Concerns
 
 - Paper is large (~5000+ lines). Claim density map from Phase 1 may shift section assignments for Phases 2-4.
-- Section 9.3 terminal paradox drip math already known to have pre-drawdown error (found in prior conversation). Phase 2 will confirm.
+- Section 9.3 terminal paradox drip math already known to have pre-drawdown error (found in prior conversation). Phase 2 confirmed.
+- Phase 4 found 2 WRONG in Appendix F (F.6 jackpot split, F.11 affiliate tiers) requiring paper corrections in Phase 5.
 
 ## Session Continuity
 
-Last session: 2026-03-16T23:37:59Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-03-16T23:55:30.357Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
