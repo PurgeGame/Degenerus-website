@@ -75,11 +75,11 @@ Plans:
   2. Every affiliate, deity, whale pass, and lootbox mechanic referenced in SS2/SS3 matches v1.1-affiliate-system.md, v1.1-deity-system.md, v1.1-level-progression.md, v1.1-quest-rewards.md
   3. Every claim in SS7 (Robustness 7.1-7.2), SS10 (Growth), SS11 (Conclusion), and Appendix F (Misreadings) that cites specific numbers or mechanisms is verified against the stated source
   4. All discrepancies found are logged with section location, claimed value/mechanism, correct value/mechanism, source of truth, and severity
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: Audit SS1-SS3 (Intro, Cross-Subsidy, Player Types)
-- [ ] 04-02: Audit SS7, SS10-SS11, Appendix F (Robustness, Growth, Conclusion, Misreadings)
+- [ ] 04-01-PLAN.md — Audit SS1-SS3 (Intro, Cross-Subsidy, Player Types) with MECH-05 core verification
+- [ ] 04-02-PLAN.md — Audit SS7, SS10-SS11, Appendix F (Robustness, Growth, Conclusion, Misreadings)
 
 ### Phase 5: Cross-Section Consistency and Report
 **Goal**: Internal consistency across all sections is validated and the complete audit report is compiled at theory/AUDIT-REPORT.md
