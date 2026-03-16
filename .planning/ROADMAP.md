@@ -107,5 +107,5 @@ Note: Phases 2, 3, and 4 depend only on Phase 1 (not on each other) and could ru
 | 1. Preparation | 1/1 | Complete | 2026-03-16 |
 | 2. Number-Heavy Sections Audit | 3/3 | Complete | 2026-03-16 |
 | 3. Mechanism-Heavy Sections Audit | 0/2 | Not started | - |
-| 4. Prose and Framing Sections Audit | 0/2 | Not started | - |
+| 4. Prose and Framing Sections Audit | 1/2 | In Progress|  |
 | 5. Cross-Section Consistency and Report | 0/2 | Not started | - |

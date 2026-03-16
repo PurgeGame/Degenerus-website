@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
-status: completed
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-16T23:04:47.932Z"
-last_activity: "2026-03-16 -- Completed 03-02-PLAN.md (SS5 + Appendix D audit: 53 claims verified, 0 mismatch)"
+status: in-progress
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-16T23:37:59Z"
+last_activity: "2026-03-16 -- Completed 04-01-PLAN.md (SS1-SS3 prose audit: 84 claims, 76 verified, 0 wrong)"
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
-  percent: 86
+  total_plans: 8
+  completed_plans: 7
+  percent: 88
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-16)
 
 **Core value:** Every number and mechanism claim in the game theory paper is verifiably correct
-**Current focus:** Phase 3 complete (2/2 plans), ready for Phase 4
+**Current focus:** Phase 4 in progress (1/2 plans complete)
 
 ## Current Position
 
-Phase: 3 of 5 (Mechanism-Heavy Sections Audit) -- COMPLETE
-Plan: 2 of 2 in current phase -- ALL COMPLETE
-Status: Phase 3 fully complete (03-01 SS4 mechanism design, 03-02 SS5 equilibrium + Appendix D)
-Last activity: 2026-03-16 -- Completed 03-02-PLAN.md (SS5 + Appendix D audit: 53 claims verified, 0 mismatch)
+Phase: 4 of 5 (Prose and Framing Sections Audit)
+Plan: 1 of 2 in current phase
+Status: 04-01 complete (SS1-SS3 prose audit), 04-02 pending (SS7 + Appendix A-C)
+Last activity: 2026-03-16 -- Completed 04-01-PLAN.md (SS1-SS3 prose audit: 84 claims, 76 verified, 0 wrong)
 
-Progress: [████████--] 86%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 10.2min
-- Total execution time: 61min
+- Total plans completed: 7
+- Average duration: 9.7min
+- Total execution time: 68min
 
 **By Phase:**
 
@@ -46,10 +46,11 @@ Progress: [████████--] 86%
 | 01-preparation | 1 | 7min | 7min |
 | 02-number-heavy-sections-audit | 3 | 31min | 10.3min |
 | 03-mechanism-heavy-sections-audit | 2 | 23min | 11.5min |
+| 04-prose-and-framing-sections-audit | 1 | 7min | 7min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02 (9min), 02-03 (18min), 03-01 (8min), 03-02 (15min)
-- Trend: Consistent (03-02 larger scope: 53 claims across SS5.1-5.5 + Appendix D)
+- Last 5 plans: 02-03 (18min), 03-01 (8min), 03-02 (15min), 04-01 (7min)
+- Trend: Consistent, 04-01 fastest yet (prose sections have lower claim density)
 
 *Updated after each plan completion*
 | Phase 01 P01 | 7min | 2 tasks | 1 files |
@@ -58,7 +59,7 @@ Progress: [████████--] 86%
 | Phase 02 P03 | 18min | 2 tasks | 1 files |
 | Phase 03 P01 | 8min | 2 tasks | 1 files |
 | Phase 03 P02 | 15min | 2 tasks | 1 files |
-| Phase 03 P02 | 15min | 2 tasks | 1 files |
+| Phase 04 P01 | 7min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,11 @@ Recent decisions affecting current work:
 - [Phase 03]: Activity score monotonicity verified for both mu(a) and rho(a): non-decreasing in activity score
 - [Phase 03]: All SS5.5 numerical claims verified in Phase 3 as planned (Pitfall 5 addressed)
 - [Phase 03]: Death-bet attack self-defeating: 90% of ticket spend funds nextpool, simultaneously preventing GAMEOVER
+- [Phase 04]: Affiliate 75/20/5 tier fractions not cited in SS3; expected finding does not apply to these sections
+- [Phase 04]: Deity activity score claim IMPRECISE: non-deity max is 2.65 not 3.05, but lootbox EV cap (a=2.55) reachable without deity
+- [Phase 04]: Day-5 affiliate 10% bonus commission not found in audit docs, flagged MISSING-CONTEXT
+- [Phase 04]: Coinflip "2x" payout is IMPRECISE: actual mean ~1.97x with tiers 1.50x/2.50x/[1.78x-2.15x]
+- [Phase 04]: EV table composite values (1.10, 1.20, 1.30, 1.45) mix of contract params and illustrative composites; ordering correct
 
 ### Pending Todos
 
@@ -108,6 +114,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T23:04:33.341Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-16T23:37:59Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None

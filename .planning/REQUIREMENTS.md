@@ -23,7 +23,7 @@
 - [x] **MECH-02**: Jackpot/prize distribution mechanics verified (daily drip, 5-day draws, BAF, decimator)
 - [x] **MECH-03**: BURNIE economics verified (coinflip, supply, ticket conversion, price floor)
 - [x] **MECH-04**: Activity score mechanics verified (components, EV curves, thresholds)
-- [ ] **MECH-05**: Affiliate, deity, whale pass, and lootbox mechanics verified
+- [x] **MECH-05**: Affiliate, deity, whale pass, and lootbox mechanics verified
 - [x] **MECH-06**: Death clock, endgame, and terminal distribution mechanics verified
 
 ### Arithmetic
@@ -66,7 +66,7 @@ None. This is a one-shot audit.
 | MECH-02 | Phase 3: Mechanism-Heavy Sections Audit | Complete |
 | MECH-03 | Phase 2: Number-Heavy Sections Audit | Complete |
 | MECH-04 | Phase 3: Mechanism-Heavy Sections Audit | Complete |
-| MECH-05 | Phase 4: Prose and Framing Sections Audit | Pending |
+| MECH-05 | Phase 4: Prose and Framing Sections Audit | Complete |
 | MECH-06 | Phase 2: Number-Heavy Sections Audit | Complete |
 | ARITH-01 | Phase 2: Number-Heavy Sections Audit | Complete |
 | ARITH-02 | Phase 3: Mechanism-Heavy Sections Audit | Complete |
