@@ -14,7 +14,7 @@
 
 - [x] **NUM-01**: All BPS/percentage values verified against parameter reference
 - [x] **NUM-02**: All ETH amounts, pool targets, and price curve values verified
-- [ ] **NUM-03**: All timing constants verified (death clock, drip frequency, jackpot phases)
+- [x] **NUM-03**: All timing constants verified (death clock, drip frequency, jackpot phases)
 - [ ] **NUM-04**: All ratios, multipliers, and score thresholds verified
 
 ### Mechanism Claims
@@ -24,11 +24,11 @@
 - [x] **MECH-03**: BURNIE economics verified (coinflip, supply, ticket conversion, price floor)
 - [ ] **MECH-04**: Activity score mechanics verified (components, EV curves, thresholds)
 - [ ] **MECH-05**: Affiliate, deity, whale pass, and lootbox mechanics verified
-- [ ] **MECH-06**: Death clock, endgame, and terminal distribution mechanics verified
+- [x] **MECH-06**: Death clock, endgame, and terminal distribution mechanics verified
 
 ### Arithmetic
 
-- [ ] **ARITH-01**: All worked examples re-derived (terminal paradox, bear market, extraction)
+- [x] **ARITH-01**: All worked examples re-derived (terminal paradox, bear market, extraction)
 - [ ] **ARITH-02**: All formulas/equations checked against contract implementation
 
 ### Consistency & Report
@@ -60,15 +60,15 @@ None. This is a one-shot audit.
 | PREP-02 | Phase 1: Preparation | Complete |
 | NUM-01 | Phase 2: Number-Heavy Sections Audit | Complete |
 | NUM-02 | Phase 2: Number-Heavy Sections Audit | Complete |
-| NUM-03 | Phase 2: Number-Heavy Sections Audit | Pending |
+| NUM-03 | Phase 2: Number-Heavy Sections Audit | Complete |
 | NUM-04 | Phase 3: Mechanism-Heavy Sections Audit | Pending |
 | MECH-01 | Phase 3: Mechanism-Heavy Sections Audit | Pending |
 | MECH-02 | Phase 3: Mechanism-Heavy Sections Audit | Pending |
 | MECH-03 | Phase 2: Number-Heavy Sections Audit | Complete |
 | MECH-04 | Phase 3: Mechanism-Heavy Sections Audit | Pending |
 | MECH-05 | Phase 4: Prose and Framing Sections Audit | Pending |
-| MECH-06 | Phase 2: Number-Heavy Sections Audit | Pending |
-| ARITH-01 | Phase 2: Number-Heavy Sections Audit | Pending |
+| MECH-06 | Phase 2: Number-Heavy Sections Audit | Complete |
+| ARITH-01 | Phase 2: Number-Heavy Sections Audit | Complete |
 | ARITH-02 | Phase 3: Mechanism-Heavy Sections Audit | Pending |
 | XREF-01 | Phase 5: Cross-Section Consistency and Report | Pending |
 | XREF-02 | Phase 5: Cross-Section Consistency and Report | Pending |

@@ -13,7 +13,7 @@ Systematic audit of every numerical claim, mechanism description, and worked exa
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Preparation** - Internalize pitfalls and map paper structure with claim density per section
-- [ ] **Phase 2: Number-Heavy Sections Audit** - Audit SS6, SS8, SS9, Appendix A/B/C/E (BPS, ETH amounts, timing, BURNIE, endgame, worked examples)
+- [x] **Phase 2: Number-Heavy Sections Audit** - Audit SS6, SS8, SS9, Appendix A/B/C/E (BPS, ETH amounts, timing, BURNIE, endgame, worked examples)
 - [ ] **Phase 3: Mechanism-Heavy Sections Audit** - Audit SS4, SS5, Appendix D (pool architecture, jackpots, activity score, formulas)
 - [ ] **Phase 4: Prose and Framing Sections Audit** - Audit SS1-SS3, SS7, SS10-SS11, Appendix F (cross-subsidy claims, player type numbers, affiliate/deity/pass mechanics)
 - [ ] **Phase 5: Cross-Section Consistency and Report** - Validate internal consistency, compile theory/AUDIT-REPORT.md
@@ -46,9 +46,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Audit SS6 BURNIE Economics (pricing table, decimator, 100-level cycle)
-- [ ] 02-02-PLAN.md — Audit SS8 Failure Modes and SS9 Stress Tests (death spiral resistance, bear market, terminal paradox re-derivation)
-- [ ] 02-03-PLAN.md — Audit Appendix A, B, C, E (parameter summary, jackpot distribution, model detail, bear market formal)
+- [x] 02-01-PLAN.md — Audit SS6 BURNIE Economics (pricing table, decimator, 100-level cycle)
+- [x] 02-02-PLAN.md — Audit SS8 Failure Modes and SS9 Stress Tests (death spiral resistance, bear market, terminal paradox re-derivation)
+- [x] 02-03-PLAN.md — Audit Appendix A, B, C, E (parameter summary, jackpot distribution, model detail, bear market formal)
 
 ### Phase 3: Mechanism-Heavy Sections Audit
 **Goal**: Every mechanism description and formula in the mechanism design and equilibrium sections is verified against contract implementation
@@ -105,7 +105,7 @@ Note: Phases 2, 3, and 4 depend only on Phase 1 (not on each other) and could ru
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Preparation | 1/1 | Complete | 2026-03-16 |
-| 2. Number-Heavy Sections Audit | 0/3 | Planned | - |
+| 2. Number-Heavy Sections Audit | 3/3 | Complete | 2026-03-16 |
 | 3. Mechanism-Heavy Sections Audit | 0/2 | Not started | - |
 | 4. Prose and Framing Sections Audit | 0/2 | Not started | - |
 | 5. Cross-Section Consistency and Report | 0/2 | Not started | - |
