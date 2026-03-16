@@ -19,8 +19,8 @@
 
 ### Mechanism Claims
 
-- [ ] **MECH-01**: Pool architecture claims verified (flow, transitions, freeze, drawdown)
-- [ ] **MECH-02**: Jackpot/prize distribution mechanics verified (daily drip, 5-day draws, BAF, decimator)
+- [x] **MECH-01**: Pool architecture claims verified (flow, transitions, freeze, drawdown)
+- [x] **MECH-02**: Jackpot/prize distribution mechanics verified (daily drip, 5-day draws, BAF, decimator)
 - [x] **MECH-03**: BURNIE economics verified (coinflip, supply, ticket conversion, price floor)
 - [ ] **MECH-04**: Activity score mechanics verified (components, EV curves, thresholds)
 - [ ] **MECH-05**: Affiliate, deity, whale pass, and lootbox mechanics verified
@@ -29,7 +29,7 @@
 ### Arithmetic
 
 - [x] **ARITH-01**: All worked examples re-derived (terminal paradox, bear market, extraction)
-- [ ] **ARITH-02**: All formulas/equations checked against contract implementation
+- [x] **ARITH-02**: All formulas/equations checked against contract implementation
 
 ### Consistency & Report
 
@@ -62,14 +62,14 @@ None. This is a one-shot audit.
 | NUM-02 | Phase 2: Number-Heavy Sections Audit | Complete |
 | NUM-03 | Phase 2: Number-Heavy Sections Audit | Complete |
 | NUM-04 | Phase 3: Mechanism-Heavy Sections Audit | Pending |
-| MECH-01 | Phase 3: Mechanism-Heavy Sections Audit | Pending |
-| MECH-02 | Phase 3: Mechanism-Heavy Sections Audit | Pending |
+| MECH-01 | Phase 3: Mechanism-Heavy Sections Audit | Complete |
+| MECH-02 | Phase 3: Mechanism-Heavy Sections Audit | Complete |
 | MECH-03 | Phase 2: Number-Heavy Sections Audit | Complete |
 | MECH-04 | Phase 3: Mechanism-Heavy Sections Audit | Pending |
 | MECH-05 | Phase 4: Prose and Framing Sections Audit | Pending |
 | MECH-06 | Phase 2: Number-Heavy Sections Audit | Complete |
 | ARITH-01 | Phase 2: Number-Heavy Sections Audit | Complete |
-| ARITH-02 | Phase 3: Mechanism-Heavy Sections Audit | Pending |
+| ARITH-02 | Phase 3: Mechanism-Heavy Sections Audit | Complete |
 | XREF-01 | Phase 5: Cross-Section Consistency and Report | Pending |
 | XREF-02 | Phase 5: Cross-Section Consistency and Report | Pending |
 | RPT-01 | Phase 5: Cross-Section Consistency and Report | Pending |

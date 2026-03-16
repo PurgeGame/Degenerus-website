@@ -60,11 +60,11 @@ Plans:
   3. Every activity score component, EV curve, threshold, ratio, and multiplier in SS5 (Equilibrium 5.1-5.5) matches v1.1-endgame-and-activity.md and contracts
   4. Every formula and equation in SS4/SS5 is checked against the equivalent contract logic, with any simplifications or approximations flagged
   5. All discrepancies found are logged with section location, claimed mechanism, correct mechanism, source of truth, and severity
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: Audit SS4 Mechanism Design
-- [ ] 03-02: Audit SS5 Equilibrium and Appendix D Attacks
+- [ ] 03-01-PLAN.md — Audit SS4 Mechanism Design (solvency invariant, zero-rake property, permissionless execution)
+- [ ] 03-02-PLAN.md — Audit SS5 Equilibrium Analysis and Appendix D Attack Vectors (active participation, commitment devices, five attack vectors)
 
 ### Phase 4: Prose and Framing Sections Audit
 **Goal**: Every numerical claim and mechanism reference in the framing/argument sections is verified, even where prose dominates

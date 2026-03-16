@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: completed
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-03-16T22:30:33.067Z"
-last_activity: "2026-03-16 -- Completed 02-03-PLAN.md (Appendix audit: 86 claims, 75 verified, 10 imprecise, 1 mismatch)"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-16T23:03:25.704Z"
+last_activity: "2026-03-16 -- Completed 03-01-PLAN.md (SS4 mechanism audit: 34 claims, 26 verified, 7 imprecise, 2 mismatch)"
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
-  percent: 40
+  completed_phases: 3
+  total_plans: 6
+  completed_plans: 6
+  percent: 71
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-16)
 
 **Core value:** Every number and mechanism claim in the game theory paper is verifiably correct
-**Current focus:** Phase 2 complete, ready for Phase 3
+**Current focus:** Phase 3 in progress (mechanism-heavy sections audit)
 
 ## Current Position
 
-Phase: 2 of 5 (Number-Heavy Sections Audit) -- COMPLETE
-Plan: 3 of 3 in current phase -- ALL COMPLETE
-Status: Phase 2 fully complete (02-01 SS6, 02-02 SS8+SS9, 02-03 Appendices A/B/C/E)
-Last activity: 2026-03-16 -- Completed 02-03-PLAN.md (Appendix audit: 86 claims, 75 verified, 10 imprecise, 1 mismatch)
+Phase: 3 of 5 (Mechanism-Heavy Sections Audit) -- IN PROGRESS
+Plan: 1 of 2 in current phase -- COMPLETE
+Status: 03-01 complete (SS4 mechanism design), 03-02 remaining (SS5 + App D)
+Last activity: 2026-03-16 -- Completed 03-01-PLAN.md (SS4 mechanism audit: 34 claims, 26 verified, 7 imprecise, 2 mismatch)
 
-Progress: [████------] 40%
+Progress: [███████---] 71%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 9.5min
-- Total execution time: 38min
+- Total plans completed: 5
+- Average duration: 9.2min
+- Total execution time: 46min
 
 **By Phase:**
 
@@ -45,16 +45,18 @@ Progress: [████------] 40%
 |-------|-------|-------|----------|
 | 01-preparation | 1 | 7min | 7min |
 | 02-number-heavy-sections-audit | 3 | 31min | 10.3min |
+| 03-mechanism-heavy-sections-audit | 1 | 8min | 8min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (7min), 02-01 (4min), 02-02 (9min), 02-03 (18min)
-- Trend: Consistent (02-03 larger scope: 86 claims across 4 appendices)
+- Last 5 plans: 02-01 (4min), 02-02 (9min), 02-03 (18min), 03-01 (8min)
+- Trend: Consistent (03-01 lighter scope: 34 claims in SS4 only)
 
 *Updated after each plan completion*
 | Phase 01 P01 | 7min | 2 tasks | 1 files |
 | Phase 02 P01 | 4min | 2 tasks | 1 files |
 | Phase 02 P02 | 9min | 2 tasks | 1 files |
 | Phase 02 P03 | 18min | 2 tasks | 1 files |
+| Phase 03 P01 | 8min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -79,6 +81,9 @@ Recent decisions affecting current work:
 - [Phase 02]: stETH yield split 50/25/25 marked IMPRECISE: actual BPS are 46/23/23 with ~8% buffer
 - [Phase 02]: BAF scatter percentage MISMATCH: paper says 60% (40%+20%) but actual is 70% (45%+25%) per v1.1-transition-jackpots.md
 - [Phase 02]: Grinder pivot 4% threshold accepted as shorthand for a more complex comparison
+- [Phase 03]: Vault/DGNRS ticket count is 16 per level (VAULT_PERPETUAL_TICKETS=16), not 4 as paper states (MEDIUM severity)
+- [Phase 03]: Corollary 4.4 coefficient 0.50 should be ~0.46 (accumulator yield share), formula structure otherwise correct
+- [Phase 03]: stETH rounding (Pitfall 12) does not affect solvency argument at paper's abstraction level
 
 ### Pending Todos
 
@@ -91,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T22:30:33.065Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-03-16T23:03:25.702Z
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None

@@ -1,6 +1,93 @@
+---
+phase: 03-mechanism-heavy-sections-audit
+plan: 01
+subsystem: audit
+tags: [game-theory, mechanism-design, solvency, zero-rake, permissionless, formula-verification]
+
+requires:
+  - phase: 01-preparation
+    provides: "AUDIT-PREP.md with pitfall reference and claim density map"
+  - phase: 02-number-heavy-sections-audit
+    provides: "Yield split finding (46/23/23 not 50/25/25), insurance skim verification"
+provides:
+  - "Complete VERIFIED/MISMATCH audit of SS4.1-4.3 mechanism design claims"
+  - "Proposition 4.1 solvency invariant verified with variable mapping"
+  - "Corollary 4.4 positive-sum formula verified (coefficient imprecise)"
+  - "MISMATCH: vault/DGNRS perpetual tickets = 16, paper says 4"
+affects: [03-02, phase-05-final-corrections]
+
+tech-stack:
+  added: []
+  patterns: [mechanism-verification, formula-term-mapping, cross-phase-reference]
+
+key-files:
+  created:
+    - .planning/phases/03-mechanism-heavy-sections-audit/03-01-SUMMARY.md
+  modified: []
+
+key-decisions:
+  - "Vault/DGNRS ticket count is 16 per level (VAULT_PERPETUAL_TICKETS=16), not 4 as paper states"
+  - "Yield split 50/25/25 confirmed IMPRECISE throughout SS4 (actual 46/23/23), consistent with Phase 2"
+  - "Corollary 4.4 coefficient 0.50 should be ~0.46, formula structure otherwise correct"
+  - "stETH rounding (Pitfall 12) does not affect solvency argument at paper's abstraction level"
+
+patterns-established:
+  - "Mechanism claims verified against audit docs and contract source, not just parameter values"
+  - "Formula verification: each term mapped to contract variable, structure validated"
+
+requirements-completed: [MECH-01, MECH-02, ARITH-02]
+
+duration: 8min
+completed: 2026-03-16
+---
+
 # Phase 3 Plan 01: SS4 Mechanism Design Audit Summary
 
 **Claim-by-claim mechanism and numerical audit of SS4.1 Accounting Solvency, SS4.2 Zero-Rake Property, and SS4.3 Permissionless Execution with formula verification for Proposition 4.1 and Corollary 4.4**
+
+## Performance
+
+- **Duration:** 8 min
+- **Started:** 2026-03-16T22:52:22Z
+- **Completed:** 2026-03-16T23:00:22Z
+- **Tasks:** 2
+- **Files modified:** 1
+
+## Accomplishments
+- All 19 numerical + 15 mechanism claims in SS4 individually verified
+- Proposition 4.1 solvency invariant confirmed with variable mapping and exhaustive state transition coverage
+- Corollary 4.4 formula structure verified, coefficient imprecision flagged
+- Found MISMATCH: vault/DGNRS get 16 tickets per level, paper says 4 (MEDIUM severity)
+- 7 imprecise claims identified (all yield split related, consistent with Phase 2 findings)
+
+## Task Commits
+
+1. **Task 1: SS4.1 Accounting Solvency** - `b0625ed` (feat)
+2. **Task 2: SS4.2 Zero-Rake + SS4.3 Permissionless** - `66c13d0` (feat)
+
+## Files Created/Modified
+- `.planning/phases/03-mechanism-heavy-sections-audit/03-01-SUMMARY.md` - Full audit results for SS4.1-4.3
+
+## Decisions Made
+- Vault/DGNRS perpetual tickets = 16 (VAULT_PERPETUAL_TICKETS=16), not 4 as paper states
+- stETH rounding per Pitfall 12 is immaterial at the paper's abstraction level
+- "Continuous" yield accrual is an acceptable simplification (accrues via rebasing, distributes at transitions)
+
+## Deviations from Plan
+
+None - plan executed exactly as written.
+
+## Issues Encountered
+
+None.
+
+## User Setup Required
+
+None - no external service configuration required.
+
+## Next Phase Readiness
+- SS4 mechanism claims fully audited, ready for SS5 + Appendix D (03-02-PLAN.md)
+- Two MISMATCH items (vault/DGNRS ticket count) should be queued for Phase 5 corrections
 
 ---
 
@@ -334,3 +421,14 @@ Note: The plan counted 19 mechanism claims total. After detailed verification, s
 | 6 | SS4.2 line 2943 | Corollary 4.4 coefficient 0.50 | ~0.46 | v1.1-steth-yield.md S3b | LOW | Update coefficient |
 | 7 | SS4.2 line 2915 | DGNRS: 4 tickets/level | 16 tickets/level | AdvanceModule.sol:99,1109 | MEDIUM | Update to 16 tickets |
 
+## Self-Check: PASSED
+
+- 03-01-SUMMARY.md: FOUND
+- Commit b0625ed (Task 1): FOUND
+- Commit 66c13d0 (Task 2): FOUND
+- VERIFIED/MISMATCH/IMPRECISE count: 45 (requirement: >= 25)
+- All 7 discrepancies have 6 fields (Location, Claimed, Correct, Source, Severity, Fix)
+
+---
+*Phase: 03-mechanism-heavy-sections-audit*
+*Completed: 2026-03-16*
