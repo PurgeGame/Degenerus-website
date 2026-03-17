@@ -33,8 +33,8 @@
 
 ### Consistency & Report
 
-- [ ] **XREF-01**: Cross-section consistency validated (assumptions match stated facts)
-- [ ] **XREF-02**: Appendix parameter tables match in-text claims
+- [x] **XREF-01**: Cross-section consistency validated (assumptions match stated facts)
+- [x] **XREF-02**: Appendix parameter tables match in-text claims
 - [ ] **RPT-01**: Discrepancy report written to theory/AUDIT-REPORT.md with severity ratings
 - [ ] **RPT-02**: Every finding includes location, source of truth, severity, and sketched fix
 
@@ -70,8 +70,8 @@ None. This is a one-shot audit.
 | MECH-06 | Phase 2: Number-Heavy Sections Audit | Complete |
 | ARITH-01 | Phase 2: Number-Heavy Sections Audit | Complete |
 | ARITH-02 | Phase 3: Mechanism-Heavy Sections Audit | Complete |
-| XREF-01 | Phase 5: Cross-Section Consistency and Report | Pending |
-| XREF-02 | Phase 5: Cross-Section Consistency and Report | Pending |
+| XREF-01 | Phase 5: Cross-Section Consistency and Report | Complete |
+| XREF-02 | Phase 5: Cross-Section Consistency and Report | Complete |
 | RPT-01 | Phase 5: Cross-Section Consistency and Report | Pending |
 | RPT-02 | Phase 5: Cross-Section Consistency and Report | Pending |
 

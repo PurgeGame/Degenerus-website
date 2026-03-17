@@ -78,8 +78,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Audit SS1-SS3 (Intro, Cross-Subsidy, Player Types) with MECH-05 core verification
-- [ ] 04-02-PLAN.md — Audit SS7, SS10-SS11, Appendix F (Robustness, Growth, Conclusion, Misreadings)
+- [x] 04-01-PLAN.md — Audit SS1-SS3 (Intro, Cross-Subsidy, Player Types) with MECH-05 core verification
+- [x] 04-02-PLAN.md — Audit SS7, SS10-SS11, Appendix F (Robustness, Growth, Conclusion, Misreadings)
 
 ### Phase 5: Cross-Section Consistency and Report
 **Goal**: Internal consistency across all sections is validated and the complete audit report is compiled at theory/AUDIT-REPORT.md
@@ -90,11 +90,11 @@ Plans:
   2. Appendix parameter tables are confirmed consistent with every in-text citation of those parameters
   3. theory/AUDIT-REPORT.md exists with every finding organized by section, each including: location (section + paragraph), claimed value/mechanism, correct value/mechanism per source of truth, severity (WRONG/STALE/IMPRECISE/MISSING-CONTEXT), and sketched fix
   4. Report includes a summary table with finding counts by severity and by section
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: Cross-section consistency check
-- [ ] 05-02: Compile and write AUDIT-REPORT.md
+- [ ] 05-01-PLAN.md — Cross-reference consistency check across 8 identified inter-section clusters
+- [ ] 05-02-PLAN.md — Compile complete AUDIT-REPORT.md with all phases, executive summary, and master table
 
 ## Progress
 
