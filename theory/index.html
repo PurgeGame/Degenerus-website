@@ -436,8 +436,8 @@
         with no
         upgrade
         mechanism or pause function. Scoped admin operations exist for: staking ETH to stETH (only the surplus above
-        current claimable obligations), rotating the VRF coordinator
-        (only possible after a 3-day VRF stall, meaning Chainlink is genuinely non-functional),
+        current claimable obligations), proposing a VRF coordinator swap
+        (only possible after a 20-hour VRF stall, requires sDGNRS holder governance approval to execute),
         setting the LINK/ETH price feed (only if the current feed becomes stale or deprecated),
         and setting the lootbox VRF batch threshold (controls when accumulated lootbox purchases trigger a Chainlink VRF
         request; a cost-optimization parameter that does not affect payouts or game rules). These are enumerated in the
@@ -3015,7 +3015,7 @@
       streaks (one ticket per day) is dominated by the marginal benefit of higher relative EVs on all subsequent
       actions.</p>
     <p><strong>Whale deviates to exit:</strong> Forfeits accumulated activity score (non-transferable) and deity pass
-      benefits (pass is transferable but costs 5 ETH in BURNIE to transfer). The ongoing returns from their position
+      benefits (pass is non-transferable and cannot be resold). The ongoing returns from their position
       (maximum lootbox multiplier, positive-EV Degenerette, auto-rebuy compounding) provide continuing positive returns
       so long as the pool remains sufficiently funded by other participants.</p>
     <p><strong>Affiliate deviates to stop referring:</strong> Commission flow ceases. Since referral is the affiliate's
@@ -3099,8 +3099,8 @@
         for engaged players.</strong> The deeper the engagement, the more future value a departing player leaves behind.
       A departing player's streak hard-resets immediately, and if they return, they re-enter at a lower activity score
       with worse or potentially negative EV until they rebuild it.
-      Players leave money on the table when they quit, not because the protocol penalizes exit (deity pass transfers
-      excepted), but because it rewards staying.</p>
+      Players leave money on the table when they quit, not because the protocol penalizes exit,
+      but because it rewards staying.</p>
     <p><strong>Device 1: Future Tickets.</strong> Lootbox prizes frequently award tickets for future levels ($\ell + k$
       for $k \in [0, 50]$). These tickets are non-transferable and non-refundable. They pay out automatically when the
       game reaches their target level, so a player who holds them doesn't need to actively play to collect. But they do
@@ -3320,7 +3320,7 @@
     <p><strong>Well-funded griefers face structural futility.</strong> The Griefer is the strongest adversary we model:
       a well-funded actor (competitor, state-backed regulator, or ideological opponent) willing to spend money purely to
       break the game or force GAMEOVER. The problem for the griefer is that there is no venue for griefing. The
-      protocol's mechanisms (RNG locks, VRF commitment, 3-day emergency recovery) deny any lever to
+      protocol's mechanisms (RNG locks, VRF commitment, governance-gated emergency recovery) deny any lever to
       <em>mechanically</em> break the game. What can a griefer actually do? The most plausible attack is to massively
       inflate the prize pool at the current level, advancing it quickly and setting a high target for the next level
       that the non-griefer population may struggle to cover. But this is self-defeating: the inflated pool creates a
@@ -3338,29 +3338,31 @@
       destroy the game under threat of force. The creator <em>cannot comply</em>. The contract is immutable and
       ownerless in the relevant sense: the vault's admin privileges are granted to any address holding &gt;50.1% of
       vault
-      ownership and are limited to emergency VRF recovery (a Chainlink failsafe). The admin has no power to pause the
-      game, extract funds, modify rules, or trigger GAMEOVER. There is no multisig, no governance vote, no upgrade
-      proxy. The creator could burn every private key they hold and the game would continue operating identically. The
+      ownership and are limited to proposing emergency VRF recovery (a Chainlink failsafe), which requires
+      sDGNRS holder governance approval to execute. The admin has no power to pause the
+      game, extract funds, modify rules, or trigger GAMEOVER. There is no upgrade proxy. The creator could burn every private key they hold and the game would continue operating identically. The
       only path to GAMEOVER is 120 consecutive days where purchasing activity fails to meet the current level's target,
       and no amount of coercion applied to any single party can produce that outcome.</p>
-    <p><strong>The theoretical attack scenario.</strong> The only path to fund misappropriation requires an attacker who
-      simultaneously holds the admin key <em>and</em> causes a sustained Chainlink VRF failure lasting over 3 days.
-      Under normal operation, the admin cannot touch the VRF coordinator at all. The 3-day stall window only opens if
-      Chainlink VRF is genuinely non-functional <em>or</em> no eligible player requests a new VRF word (a permissionless
-      call that pays the caller directly and triggers jackpot payouts).</p>
+    <p><strong>The theoretical attack scenario.</strong> Under the previous design, the only path to fund misappropriation
+      required an attacker who simultaneously held the admin key and caused a sustained Chainlink VRF failure. The
+      governance mechanism eliminates this vector. The admin can only <em>propose</em> a VRF coordinator swap after a
+      20-hour stall. Execution requires sDGNRS holder approval exceeding rejection, with a threshold starting at 60%
+      and decaying over days. sDGNRS tokens are soulbound (non-transferable, non-purchasable), so governance capture
+      via flash loans or market accumulation is impossible. The creator's 20% DGNRS allocation cannot vote (unwrapping
+      is disabled during VRF stalls).</p>
     <p>Given a VRF failure, three outcomes are possible:</p>
     <ol>
-      <li><strong>Admin is alive and honest:</strong> rotates the coordinator, service resumes. This is the entire
-        reason the admin power exists.</li>
-      <li><strong>Admin is dead or unreachable:</strong> the game eventually reaches GAMEOVER with full fund
-        distribution to participants. No theft.</li>
-      <li><strong>Attacker has compromised the admin key:</strong> migrates to a hostile coordinator that rigs jackpot
-        outcomes. This is the only theft path, and it is a necessary design tradeoff: the power to fix a broken VRF is
-        the same power that could theoretically be abused.</li>
+      <li><strong>Admin proposes, community approves:</strong> coordinator is swapped, service resumes. The death clock
+        pauses during the stall, so there is no time pressure on voters.</li>
+      <li><strong>Admin is dead or unreachable:</strong> after 7 days, any sDGNRS holder with 1%+ of circulating supply
+        can propose. The community path is independent of admin activity.</li>
+      <li><strong>Attacker has compromised the admin key:</strong> proposes a hostile coordinator. sDGNRS holders
+        reject. The proposal dies. No unilateral path to a malicious swap exists.</li>
     </ol>
-    <p>The conditions required (Chainlink failure + compromised admin key) cannot arise under ordinary circumstances.
-      Chainlink VRF is battle-tested infrastructure securing billions in DeFi; treating its sustained failure as a
-      realistic attack vector rather than a theoretical bound overstates the risk.</p>
+    <p>The compound vulnerability (Chainlink failure + compromised admin key) that previously represented a theoretical
+      theft path is now mitigated by governance. An attacker would need to compromise the admin key, cause a VRF failure,
+      <em>and</em> convince a majority of soulbound token holders to approve a malicious coordinator. Chainlink VRF
+      remains battle-tested infrastructure securing billions in DeFi; the governance layer is defense in depth.</p>
     <p>The game's resilience is a property of the contract, not of any person. Even the front-end is not a single point
       of failure: anyone can build and host an alternative interface.</p>
     <p>Detailed analysis of specific attack vectors (Sybil attacks, Degenerette pool drain, affiliate self-referral
@@ -4163,7 +4165,7 @@
           deposits in stETH with no withdrawal mechanism. The same locked liquidity that protects against death spirals
           means a critical contract exploit has no recovery path. A single exploitable bug could drain the entire prize
           pool permanently. This is an endogenous consequence of the design choice to make deposits irrevocable. The
-          protocol also has two external dependencies: Chainlink VRF is a soft dependency (the creator can migrate to a
+          protocol also has two external dependencies: Chainlink VRF is a soft dependency (sDGNRS holders can vote to migrate to a
           new VRF coordinator if it breaks), but Lido stETH is a hard dependency (there is no migration path if stETH
           itself fails).</p>
       </li>
@@ -4367,15 +4369,15 @@
           <td>Liveness guard</td>
         </tr>
         <tr>
-          <td>VRF retry timeout</td>
+          <td>VRF re-request</td>
           <td>—</td>
-          <td>18 hours</td>
+          <td>12 hours</td>
           <td>RNG liveness</td>
         </tr>
         <tr>
-          <td>Emergency stall gate</td>
+          <td>Governance proposal gate</td>
           <td>—</td>
-          <td>3 days</td>
+          <td>20 hours</td>
           <td>VRF recovery</td>
         </tr>
         <tr>
@@ -4749,9 +4751,11 @@
           nextpool requirement, this mechanism alone guarantees the next level will fire even with zero new player
           activity. However, this is a one-shot guarantee: if activity remains at zero, the futurepool will be
           insufficient to cover subsequent levels.</li>
-        <li><em>VRF retry timeout:</em> If the VRF callback is not received within 18 hours, any player can request a
-          new VRF word, preventing permanent VRF stalls.</li>
-        <li><em>Emergency VRF recovery:</em> After a 3-day stall, the admin can migrate to a new VRF coordinator.</li>
+        <li><em>VRF re-request:</em> If the VRF callback is not received within 12 hours, any player can re-request a
+          VRF word, preventing transient stalls.</li>
+        <li><em>Emergency VRF recovery:</em> After a 20-hour stall, the admin can propose a VRF coordinator swap.
+          Execution requires sDGNRS holder governance approval. After 7 days, any sDGNRS holder with 1%+ of
+          circulating supply can propose independently.</li>
         <li><em>Graceful termination:</em> If no new level starts within the timeout, the game transitions to GAMEOVER,
           a well-defined terminal state with full prize distribution.</li>
       </ol>
@@ -5297,9 +5301,10 @@
                         investment. It
                         is the opportunity cost of leaving any system where engagement compounds. The only genuinely
                         high exit cost in
-                        the system is the 5 ETH deity pass transfer fee, which applies to a premium product designed for
-                        the most
-                        committed players, not the average participant. Calling opportunity cost "aggressive" sets a
+                        the system is the deity pass, which is non-transferable. The holder continues earning
+                        perpetual tickets and benefits but cannot resell the pass or recover the upfront cost directly.
+                        This applies to a premium product designed for
+                        the most committed players, not the average participant. Calling opportunity cost "aggressive" sets a
                         standard where any
                         product that rewards continued use is predatory. On the streak reset specifically: a player who
                         stops playing
