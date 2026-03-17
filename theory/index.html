@@ -395,7 +395,7 @@
       contract
       exists, so they lack sufficient incentive to build one that even functions.
       In the rare case that low bar is crossed, the game theory underlying these "games" is typically so
-      poorly conceived that a smart five-year-old could foresee their inevitable conclusion. This paper, and
+      poorly conceived that a sharp five-year-old could foresee their inevitable conclusion. This paper, and
       <a href="https://github.com/PurgeGame/degenerus-protocol">this contract</a>, both written and
       self-financed by a 20-year veteran professional gambler, prove that Degenerus Protocol is different.
     </p>
@@ -533,41 +533,43 @@
 
     <hr />
     <h2 id="section-2">1. Introduction</h2>
-    <p>The central argument: <strong>Degenerus is engineered so that every possible interaction by every participant
-        strengthens the protocol by providing what another player type demands.</strong> Greed feeds off degeneracy and
-      degeneracy feeds off greed. Every player can either deposit more ETH that strengthens the feedback loop or stop
-      depositing. The incentive structure strongly favors the former, and either way, existing capital is held in
-      non-refundable lottery tickets that can only resolve on the game's schedule.
-      These properties, and game mechanics designed for resilience, make the protocol nearly impossible to kill.
-      This paper stress-tests that argument under the harshest adversarial conditions and maps its limitations.</p>
-    <p>Traditional gambling systems operate under a well-understood extractive model: the operator takes a large cut of
-      every dollar wagered (40-60% in state lotteries, 2-15% in casinos). Players are willing to spend money in exchange
-      for entertainment and variance. This model is sustainable but adversarial: the operator profits from
-      player losses, creating a negative-sum dynamic for participants.</p>
-    <p>Degenerus Protocol proposes a structural alternative: a <em>zero-rake</em> gaming system where no outside entity
-      extracts value from player deposits. Deposits are locked, partially converted to Lido staked ETH (stETH), and
-      redistributed entirely as prizes to other players. The stETH earns approximately 2.5% annual yield, which is
-      the only value entering the system that does not come from another player's deposit. Prizes are funded primarily
-      by redistribution, with yield providing a small margin to players, as well as generating revenue for
-      the creator
-      in a way that clearly aligns his incentives with system growth.
-      This architectural choice transforms the
-      underlying game from
-      negative-sum to slightly positive-sum for the player pool as a whole, introducing fundamentally different
-      strategic dynamics.</p>
+    <p>The traditional gambling model has two roles: the house attracts degens and
+      collects their entertainment budget. Many people like gambling, but everyone
+      loves free money. The blockchain allows for gambling venues that are verifiably
+      fair, without the costs of onerous regulation or a physical presence. This
+      theoretically allows anyone to take on the role of the house, but attracting
+      degens is actual work and the money is not as free as it might seem.</p>
+    <p>Degenerus Protocol is the blueprint for an ownerless house with zero rake. External yield allows
+      payouts to exceed deposits, and a positive expectation is possible for any player willing to help build it. A
+      decentralized lottery is not a
+      novel or particularly creative concept. The innovation is how the incentives are engineered to align. Every path
+      to extracting
+      revenue from internal "degen yield" requires variance tolerance and real work, either marketing the system
+      or locking capital and playing a complex game well.
+      Passive, risk-averse capital is structurally excluded from capturing this yield.</p>
+    <p>The rules of the game are immutable code. The house can never be sold, gutted, or enshittified. Profit rights are
+      soulbound: a player can walk away and extract their earned share, but only by sacrificing
+      all future distributions. These rights cannot be sold to someone who did not help build the protocol,
+      and when forfeited, those profits accrue to those who did.</p>
     <p>Entertainment seekers pay for the thrill of jackpots, and the surplus from their bets is the main source of
       equity. Strategic players and whales extract monetary value from that equity while locking capital that grows and
-      accelerates jackpots. Affiliates attract the new players the system requires. Each type's selfish actions satisfy
-      the demands of others, producing reliable economic value.</p>
+      accelerates jackpots. Affiliates attract the new players the system requires. Each type's selfish actions
+      produce what the others demand. It is a collective that selects for those who love gambling,
+      structurally rejects those who would diminish it, and only expects selfishness from its members.</p>
+    <p>Every player can either deposit more ETH that strengthens the feedback loop or stop
+      depositing. The incentive structure strongly favors the former, and either way, existing capital is held in
+      non-refundable lottery tickets that can only resolve on the game's schedule.
+      These properties, and game mechanics designed for resilience, make the protocol nearly impossible to kill.</p>
 
-    <p><strong>Scope.</strong> The analysis takes entertainment demand as given. Whether enough players find this game
+    <p><strong>Scope.</strong> This paper stress-tests that argument under the harshest adversarial conditions and
+      maps its limitations. The analysis takes entertainment demand as given. Whether enough players find this game
       engaging enough to participate is an empirical question outside the model's scope.</p>
     <p><strong>Terminal state.</strong> Funds are locked in a contract with no admin withdrawal function. If the game
       stalls for more than 120 days, all remaining funds are paid out as ETH to ticket holders and active participants.
       The terminal
       mechanism is designed so that buying tickets to claim eligibility simultaneously funds the pool target whose
       completion prevents the terminal event, making GAMEOVER self-preventing (<a href="#section-41">Section 9.3</a>).
-      Players may lose money, but
+      Players may lose money (most will), but
       they cannot be rugged.</p>
 
     <div class="definition">
