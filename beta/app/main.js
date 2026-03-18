@@ -5,6 +5,8 @@
 // Import components (side-effect: registers Custom Elements)
 import '../components/status-bar.js';
 import '../components/connect-prompt.js';
+import '../components/purchase-panel.js';
+import '../components/tx-status-list.js';
 
 // Import modules
 import { update, get } from './store.js';

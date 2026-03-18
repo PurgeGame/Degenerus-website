@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="styles/buttons.css">
   <link rel="stylesheet" href="styles/forms.css">
   <link rel="stylesheet" href="styles/tx-status.css">
+  <link rel="stylesheet" href="styles/purchase.css">
   <link rel="stylesheet" href="styles/status-bar.css">
   <script type="importmap">
   {
@@ -42,8 +43,12 @@
 
     <!-- Phase-dependent panels -->
     <div data-panel="purchase" class="main-layout">
-      <!-- Purchase panel content added in Phase 7 -->
-      <div class="panel"><p class="text-dim">Purchase panel (Phase 7)</p></div>
+      <div>
+        <purchase-panel></purchase-panel>
+      </div>
+      <div>
+        <tx-status-list></tx-status-list>
+      </div>
     </div>
 
     <div data-panel="jackpot" class="main-layout" hidden>

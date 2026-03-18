@@ -1,0 +1,149 @@
+/* purchase.css -- Purchase panel styles */
+
+.purchase-panel {
+  /* inherits .panel from panels.css */
+}
+
+/* Pool fill progress bar */
+.pool-fill {
+  margin-bottom: 1rem;
+}
+
+.pool-fill-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+  font-size: 0.78rem;
+}
+
+.pool-fill-track {
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.pool-fill-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+  border-radius: 4px;
+  transition: width 0.4s ease;
+  min-width: 0;
+}
+
+.pool-fill-amounts {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-top: 0.25rem;
+  text-align: right;
+}
+
+/* Purchase rows */
+.purchase-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.purchase-row label {
+  min-width: 80px;
+  margin-bottom: 0;
+}
+
+.purchase-cost {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  min-width: 80px;
+  text-align: right;
+}
+
+/* Purchase total */
+.purchase-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  margin: 0.5rem 0;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Buy buttons full width */
+.purchase-panel .btn-primary {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+/* Pay section spacing */
+.pay-section {
+  margin-top: 0.75rem;
+}
+
+/* Lootbox badge */
+.lootbox-badge {
+  font-size: 0.72rem;
+  color: var(--success);
+  font-weight: 600;
+}
+
+/* EV indicator */
+.ev-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.ev-positive {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--success);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.ev-negative {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--error);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.ev-capped {
+  background: rgba(245, 166, 35, 0.12);
+  color: var(--accent-primary);
+  border: 1px solid rgba(245, 166, 35, 0.3);
+}
+
+/* Error display */
+.purchase-error {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: var(--error);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .purchase-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+  }
+
+  .purchase-cost {
+    text-align: left;
+  }
+}
