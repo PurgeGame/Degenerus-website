@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="styles/passes.css">
   <link rel="stylesheet" href="styles/status-bar.css">
   <link rel="stylesheet" href="styles/death-clock.css">
+  <link rel="stylesheet" href="styles/jackpot.css">
   <script type="importmap">
   {
     "imports": {
@@ -58,8 +59,12 @@
     </div>
 
     <div data-panel="jackpot" class="main-layout" hidden>
-      <!-- Jackpot display content added in Phase 8 -->
-      <div class="panel"><p class="text-dim">Jackpot display (Phase 8)</p></div>
+      <div>
+        <jackpot-panel></jackpot-panel>
+      </div>
+      <div>
+        <tx-status-list></tx-status-list>
+      </div>
     </div>
 
     <div data-panel="gameover" class="main-layout" hidden>

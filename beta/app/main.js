@@ -9,6 +9,7 @@ import '../components/purchase-panel.js';
 import '../components/tx-status-list.js';
 import '../components/pass-section.js';
 import '../components/death-clock.js';
+import '../components/jackpot-panel.js';
 
 // Import modules
 import { update, get } from './store.js';

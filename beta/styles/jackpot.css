@@ -1,0 +1,135 @@
+/* jackpot.css -- Jackpot panel, trait card grid, reveal animation, winner glow, confetti backdrop */
+
+.jackpot-panel {
+  /* inherits .panel */
+}
+
+.jackpot-stats {
+  display: flex;
+  justify-content: center;
+  gap: clamp(1rem, 4vw, 2rem);
+  margin-bottom: 1rem;
+}
+
+.jackpot-stats .stat {
+  text-align: center;
+}
+
+.jackpot-stats .stat-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+  margin-bottom: 0.2rem;
+}
+
+.jackpot-stats .stat-value {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.jackpot-day {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  padding: 0.2rem 0.6rem;
+  background: rgba(139, 92, 246, 0.12);
+  border-radius: 6px;
+}
+
+.jackpot-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  max-width: 400px;
+  margin: 0 auto 1rem;
+}
+
+.trait-card {
+  aspect-ratio: 1;
+  perspective: 600px;
+  cursor: default;
+}
+
+.trait-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+}
+
+.trait-card-front,
+.trait-card-back {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 2px solid var(--border-color);
+  background: var(--bg-tertiary);
+  backface-visibility: hidden;
+}
+
+.trait-card-back {
+  transform: rotateY(180deg);
+}
+
+.trait-card[data-winner="true"] .trait-card-back {
+  border-color: var(--success);
+  box-shadow: 0 0 25px rgba(34, 197, 94, 0.4);
+}
+
+.trait-q-label {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-dim);
+}
+
+.badge-img {
+  width: 60%;
+  height: auto;
+  max-width: 80px;
+}
+
+.trait-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  text-transform: capitalize;
+}
+
+.jackpot-result {
+  text-align: center;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.jackpot-result-text {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--success);
+  margin-bottom: 0.25rem;
+}
+
+.jackpot-prize-amount {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--success);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trait-card-inner {
+    transition: none !important;
+  }
+}
