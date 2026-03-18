@@ -171,6 +171,10 @@
         updateWalletBtn();
         // Init Mint module if available (beta page)
         if (window.Mint && window.Mint.init) window.Mint.init().catch(function () {});
+        // Bridge to ES module architecture
+        document.dispatchEvent(new CustomEvent('wallet-connected', {
+          detail: { address: player.eth_address }
+        }));
       })
       .catch(function (err) {
         console.warn('Wallet connect failed', err);
@@ -187,6 +191,8 @@
     api('/api/wallet/logout', { method: 'POST' }).catch(function () {});
     address = null;
     player = null;
+    // Bridge to ES module architecture
+    document.dispatchEvent(new CustomEvent('wallet-disconnected'));
     updateWalletBtn();
   }
 
