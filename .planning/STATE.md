@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Game Frontend
 status: in-progress
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-03-18T16:20:26.915Z"
-last_activity: 2026-03-18 -- Plan 09-01 complete (degenerette + shared Phase 9 infrastructure)
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-03-18T16:26:18.180Z"
+last_activity: 2026-03-18 -- Plan 09-02 complete (quest tracking + unified claims)
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 12
-  completed_plans: 9
-  percent: 75
+  completed_plans: 10
+  percent: 83
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 9 of 11 (Phase 9: Supporting Features)
-Plan: 1 of 4
-Status: Plan 09-01 complete
-Last activity: 2026-03-18 -- Plan 09-01 complete (degenerette + shared Phase 9 infrastructure)
+Plan: 2 of 4
+Status: Plan 09-02 complete
+Last activity: 2026-03-18 -- Plan 09-02 complete (quest tracking + unified claims)
 
-Progress: [████████░░] 75%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [████████░░] 75%
 | Phase 08 P02 | 3min | 2 tasks | 5 files |
 | Phase 08 P03 | 3min | 2 tasks | 5 files |
 | Phase 09 P01 | 5min | 2 tasks | 5 files |
+| Phase 09 P02 | 2min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,9 @@ Recent decisions affecting current work:
 - [Phase 09]: VRF-pending bets persisted in localStorage keyed by player address with betId+rngIndex pairs
 - [Phase 09]: Store extended with 5 Phase 9 slices (degenerette, quest, claims, affiliate, baf) in Plan 01
 - [Phase 09]: GSAP preloaded on degenerette panel mount (same pattern as jackpot panel)
+- [Phase 09]: Quest progress uses different calc paths for mint quests (count) vs token quests (amount)
+- [Phase 09]: Claims panel subscribes to ui.connectionState for button disable states
+- [Phase 09]: Shield count read from player.shields (API-polled) not separate contract read
 
 ### Pending Todos
 
@@ -111,6 +115,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T16:20:26.914Z
-Stopped at: Completed 09-01-PLAN.md
+Last session: 2026-03-18T16:24:33Z
+Stopped at: Completed 09-02-PLAN.md
 Resume file: None

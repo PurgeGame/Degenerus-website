@@ -52,9 +52,9 @@
 
 ### Quests
 
-- [ ] **QUEST-01**: Daily quest slots display with progress bars (slot 0 prerequisite enforced in UI)
-- [ ] **QUEST-02**: Streak counter shows consecutive days, shield count, and milestone progress
-- [ ] **QUEST-03**: Quest panel shows contextually when quests are active
+- [x] **QUEST-01**: Daily quest slots display with progress bars (slot 0 prerequisite enforced in UI)
+- [x] **QUEST-02**: Streak counter shows consecutive days, shield count, and milestone progress
+- [x] **QUEST-03**: Quest panel shows contextually when quests are active
 
 ### Decimator
 
@@ -75,8 +75,8 @@
 
 ### Claims
 
-- [ ] **CLAIM-01**: Unified claims panel aggregates all claimable winnings across game systems
-- [ ] **CLAIM-02**: Player can claim with single transaction, shows claimed amount and tx confirmation
+- [x] **CLAIM-01**: Unified claims panel aggregates all claimable winnings across game systems
+- [x] **CLAIM-02**: Player can claim with single transaction, shows claimed amount and tx confirmation
 
 ### Affiliate
 
@@ -163,11 +163,11 @@
 | DEGEN-02 | Phase 9 | Complete |
 | DEGEN-03 | Phase 9 | Complete |
 | DEGEN-04 | Phase 9 | Complete |
-| QUEST-01 | Phase 9 | Pending |
-| QUEST-02 | Phase 9 | Pending |
-| QUEST-03 | Phase 9 | Pending |
-| CLAIM-01 | Phase 9 | Pending |
-| CLAIM-02 | Phase 9 | Pending |
+| QUEST-01 | Phase 9 | Complete |
+| QUEST-02 | Phase 9 | Complete |
+| QUEST-03 | Phase 9 | Complete |
+| CLAIM-01 | Phase 9 | Complete |
+| CLAIM-02 | Phase 9 | Complete |
 | AFFIL-01 | Phase 9 | Pending |
 | AFFIL-02 | Phase 9 | Pending |
 | AFFIL-03 | Phase 9 | Pending |
