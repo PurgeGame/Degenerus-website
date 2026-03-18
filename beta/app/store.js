@@ -10,6 +10,9 @@ const _state = {
     price: null,               // wei string or null
     pools: { future: '0', next: '0', current: '0', claimable: '0' },
     decWindowOpen: false,
+    levelStartTime: null,
+    jackpotDay: 0,
+    phaseTransitionActive: false,
   },
   player: {
     address: null,
@@ -18,6 +21,13 @@ const _state = {
     currentStreak: 0,
     shields: 0,
     claimable: '0',
+  },
+  coinflip: {
+    playerStake: '0',
+    claimable: '0',
+    autoRebuy: { enabled: false, stop: '0', carry: '0' },
+    bounty: { pool: '0', recordHolder: null, recordAmount: '0' },
+    lastResult: null,
   },
   ui: {
     connectionState: 'disconnected', // disconnected | connecting | connected | wrong-chain

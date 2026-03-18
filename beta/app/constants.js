@@ -50,3 +50,26 @@ export function badgePath(category, color) {
 export function badgeCircularPath(category, index, color) {
   return `/badges-circular/${category}_${String(index).padStart(2, '0')}_${color}.svg`;
 }
+
+export const DEATH_CLOCK = {
+  TIMEOUT_LEVEL_0: 365 * 86400,   // 365 days in seconds
+  TIMEOUT_DEFAULT: 120 * 86400,   // 120 days in seconds
+  IMMINENT_THRESHOLD: 5 * 86400,  // 5 days in seconds
+  DISTRESS_THRESHOLD: 6 * 3600,   // 6 hours in seconds
+};
+
+export const COINFLIP_ABI = [
+  'function depositCoinflip(address player, uint256 amount) external',
+  'function claimCoinflips(address player, address to) external',
+  'function previewClaimCoinflips(address player) external view returns (uint256)',
+  'function coinflipAmount(address player) external view returns (uint256)',
+  'function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stopAmount, uint256 carryAmount, uint48 startDay)',
+  'function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external',
+  'function currentBounty() external view returns (uint128)',
+  'function biggestFlipEver() external view returns (uint128)',
+];
+
+export const COINFLIP = {
+  MIN_DEPOSIT: '100',       // 100 BURNIE minimum (whole tokens, not wei)
+  RECYCLING_BONUS_PCT: 1.6, // 1.6% recycling bonus
+};
