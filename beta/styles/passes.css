@@ -1,0 +1,187 @@
+/* passes.css -- Pass card styles */
+
+/* ------------------------------------------------------------------ */
+/* Details element styling                                              */
+/* ------------------------------------------------------------------ */
+.pass-details {
+  margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+}
+
+.pass-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 0.6rem 0.9rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  list-style: none;
+  user-select: none;
+}
+
+.pass-summary::-webkit-details-marker {
+  display: none;
+}
+
+.pass-summary .pass-title {
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+
+.pass-expand-hint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.pass-details[open] .pass-expand-hint {
+  display: none;
+}
+
+.pass-details[open] .pass-summary {
+  border-radius: 8px 8px 0 0;
+  border-bottom-color: var(--border-subtle);
+}
+
+/* ------------------------------------------------------------------ */
+/* Pass card grid                                                       */
+/* ------------------------------------------------------------------ */
+.pass-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: clamp(0.5rem, 2vw, 0.75rem);
+  padding: clamp(0.5rem, 2vw, 0.75rem);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Individual pass card                                                 */
+/* ------------------------------------------------------------------ */
+.pass-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: clamp(0.6rem, 2vw, 1rem);
+}
+
+.pass-card-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--accent-primary);
+  margin: 0 0 0.5rem;
+}
+
+.pass-card-desc {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 0 0 0.65rem;
+}
+
+.pass-card .btn-primary {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Deity card special styling                                           */
+/* ------------------------------------------------------------------ */
+.pass-card--deity {
+  border-color: rgba(245, 166, 35, 0.25);
+}
+
+/* ------------------------------------------------------------------ */
+/* Symbol grid                                                          */
+/* ------------------------------------------------------------------ */
+.deity-symbol-section {
+  margin: 0.75rem 0 0.5rem;
+}
+
+.deity-symbol-section label {
+  margin-bottom: 0.5rem;
+}
+
+.symbol-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.3rem;
+}
+
+.symbol-btn {
+  padding: 0.3rem 0.2rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.symbol-btn:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.symbol-btn.symbol-selected {
+  background: rgba(245, 166, 35, 0.2);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 700;
+}
+
+.symbol-btn.symbol-taken {
+  opacity: 0.3;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.selected-symbol {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ */
+/* Pass error                                                           */
+/* ------------------------------------------------------------------ */
+.pass-error {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: var(--error);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                           */
+/* ------------------------------------------------------------------ */
+@media (max-width: 640px) {
+  .pass-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .symbol-grid {
+    grid-template-columns: repeat(4, 1fr);
+    font-size: 0.6rem;
+  }
+}
