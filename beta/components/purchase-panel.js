@@ -23,9 +23,25 @@ class PurchasePanel extends HTMLElement {
   #payMode = 'eth';
   #currentPrice = null;
   #errorTimeout = null;
+  #loaded = false;
+
+  #showContent() {
+    if (this.#loaded) return;
+    this.#loaded = true;
+    this.querySelector('[data-bind="skeleton"]')?.remove();
+    const el = this.querySelector('[data-bind="content"]');
+    if (el) el.style.display = '';
+  }
 
   connectedCallback() {
     this.innerHTML = `
+      <div data-bind="skeleton" class="panel purchase-panel">
+        <div class="skeleton-header"><div class="skeleton-line skeleton-shimmer" style="width:40%"></div></div>
+        <div class="skeleton-row"><div class="skeleton-line skeleton-shimmer" style="width:60%"></div><div class="skeleton-line skeleton-shimmer" style="width:30%"></div></div>
+        <div class="skeleton-row"><div class="skeleton-line skeleton-shimmer" style="width:50%"></div><div class="skeleton-line skeleton-shimmer" style="width:40%"></div></div>
+        <div class="skeleton-block skeleton-shimmer" style="height:48px;margin-top:0.5rem"></div>
+      </div>
+      <div data-bind="content" style="display:none">
       <div class="panel purchase-panel">
         <div class="panel-header">
           <h2>Purchase</h2>
@@ -108,6 +124,7 @@ class PurchasePanel extends HTMLElement {
         <!-- Error display -->
         <div class="purchase-error" data-bind="error" hidden></div>
       </div>
+      </div>
     `;
 
     // Wire pay-toggle buttons
@@ -145,7 +162,10 @@ class PurchasePanel extends HTMLElement {
 
     // Subscribe to store paths
     this.#unsubs.push(
-      subscribe('game.price', (v) => this.#updatePrice(v)),
+      subscribe('game.price', (v) => {
+        if (v !== null && v !== undefined) this.#showContent();
+        this.#updatePrice(v);
+      }),
       subscribe('game.level', () => this.#refreshPoolTarget()),
       subscribe('game.pools.next', (v) => this.#updatePoolProgress(v)),
       subscribe('player.balances.burnie', (v) => {

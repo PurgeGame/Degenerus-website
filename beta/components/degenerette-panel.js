@@ -20,9 +20,24 @@ class DegenerettePanel extends HTMLElement {
   #errorTimeout = null;
   #selectedCurrency = DEGENERETTE.CURRENCY.ETH;
   #gsapLoaded = false;
+  #loaded = false;
+
+  #showContent() {
+    if (this.#loaded) return;
+    this.#loaded = true;
+    this.querySelector('[data-bind="skeleton"]')?.remove();
+    const el = this.querySelector('[data-bind="content"]');
+    if (el) el.style.display = '';
+  }
 
   connectedCallback() {
     this.innerHTML = `
+      <div data-bind="skeleton" class="panel degenerette-panel">
+        <div class="skeleton-header"><div class="skeleton-line skeleton-shimmer" style="width:40%"></div></div>
+        <div class="skeleton-row"><div class="skeleton-block skeleton-shimmer" style="width:60px;height:28px"></div><div class="skeleton-block skeleton-shimmer" style="width:60px;height:28px"></div><div class="skeleton-block skeleton-shimmer" style="width:60px;height:28px"></div></div>
+        <div class="skeleton-row"><div class="skeleton-line skeleton-shimmer" style="width:70%"></div><div class="skeleton-block skeleton-shimmer" style="width:80px;height:36px"></div></div>
+      </div>
+      <div data-bind="content" style="display:none">
       <div class="panel degenerette-panel">
         <div class="panel-header">
           <h2>DEGENERETTE</h2>
@@ -58,6 +73,7 @@ class DegenerettePanel extends HTMLElement {
           <div class="slot-reels" data-bind="slot-reels"></div>
           <div class="result-summary" data-bind="result-summary"></div>
         </div>
+      </div>
       </div>
     `;
 
@@ -99,6 +115,7 @@ class DegenerettePanel extends HTMLElement {
     this.#unsubs.push(
       subscribe('degenerette', (degen) => {
         if (!degen) return;
+        this.#showContent();
         this.#renderPending(degen.pendingBets);
         this.#updateResolveButton(degen.pendingBets);
       })

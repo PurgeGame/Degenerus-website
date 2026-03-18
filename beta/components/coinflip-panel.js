@@ -19,9 +19,25 @@ class CoinflipPanel extends HTMLElement {
   #unsubs = [];
   #bountyLoaded = false;
   #errorTimeout = null;
+  #loaded = false;
+
+  #showContent() {
+    if (this.#loaded) return;
+    this.#loaded = true;
+    this.querySelector('[data-bind="skeleton"]')?.remove();
+    const el = this.querySelector('[data-bind="content"]');
+    if (el) el.style.display = '';
+  }
 
   connectedCallback() {
     this.innerHTML = `
+      <div data-bind="skeleton" class="panel coinflip-panel">
+        <div class="skeleton-header"><div class="skeleton-line skeleton-shimmer" style="width:40%"></div></div>
+        <div class="skeleton-row"><div class="skeleton-line skeleton-shimmer" style="width:60%"></div><div class="skeleton-block skeleton-shimmer" style="width:80px;height:36px"></div></div>
+        <div class="skeleton-row"><div class="skeleton-line skeleton-shimmer" style="width:50%"></div></div>
+        <div class="skeleton-row"><div class="skeleton-line skeleton-shimmer" style="width:30%"></div><div class="skeleton-line skeleton-shimmer" style="width:70%"></div></div>
+      </div>
+      <div data-bind="content" style="display:none">
       <div class="panel coinflip-panel">
         <div class="panel-header">
           <h2>BURNIE COINFLIP</h2>
@@ -85,6 +101,7 @@ class CoinflipPanel extends HTMLElement {
           </div>
         </div>
       </div>
+      </div>
     `;
 
     // -- Event Listeners --
@@ -129,6 +146,7 @@ class CoinflipPanel extends HTMLElement {
     this.#unsubs.push(
       subscribe('coinflip', (cf) => {
         if (!cf) return;
+        this.#showContent();
 
         // Claimable section
         const claimSection = this.querySelector('[data-bind="claim-section"]');

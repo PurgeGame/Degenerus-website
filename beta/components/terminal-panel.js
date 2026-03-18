@@ -17,9 +17,24 @@ class TerminalPanel extends HTMLElement {
   #unsubs = [];
   #errorTimeout = null;
   #dataLoaded = false;
+  #loaded = false;
+
+  #showContent() {
+    if (this.#loaded) return;
+    this.#loaded = true;
+    this.querySelector('[data-bind="skeleton"]')?.remove();
+    const el = this.querySelector('[data-bind="content"]');
+    if (el) el.style.display = '';
+  }
 
   connectedCallback() {
     this.innerHTML = `
+      <div data-bind="skeleton" class="panel terminal-panel">
+        <div class="skeleton-header"><div class="skeleton-line skeleton-shimmer" style="width:50%"></div></div>
+        <div class="skeleton-row"><div class="skeleton-line skeleton-shimmer" style="width:45%"></div><div class="skeleton-line skeleton-shimmer" style="width:35%"></div></div>
+        <div class="skeleton-block skeleton-shimmer" style="height:24px;margin-top:0.5rem"></div>
+      </div>
+      <div data-bind="content" style="display:none">
       <div class="panel terminal-panel">
         <div class="panel-header">
           <h2>TERMINAL</h2>
@@ -80,6 +95,7 @@ class TerminalPanel extends HTMLElement {
           <button class="btn-primary terminal-claim-btn" data-action="claim-terminal-dec">Claim</button>
         </div>
       </div>
+      </div>
     `;
 
     // -- Event Listeners --
@@ -109,6 +125,7 @@ class TerminalPanel extends HTMLElement {
     // Terminal dec window availability
     this.#unsubs.push(
       subscribe('terminal.decWindowOpen', (open) => {
+        if (open !== undefined) this.#showContent();
         // Terminal dec is almost always open (except lastPurchaseDay/gameOver).
         // When closed, hide burn section inputs but still show payout preview.
         const burnSection = this.querySelector('.terminal-dec-section');

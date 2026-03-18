@@ -12,6 +12,15 @@ class JackpotPanel extends HTMLElement {
   #revealPlayed = false;
   #currentRngWord = null;
   #timeline = null;
+  #loaded = false;
+
+  #showContent() {
+    if (this.#loaded) return;
+    this.#loaded = true;
+    this.querySelector('[data-bind="skeleton"]')?.remove();
+    const el = this.querySelector('[data-bind="content"]');
+    if (el) el.style.display = '';
+  }
 
   connectedCallback() {
     // Build 4 trait cards programmatically
@@ -25,6 +34,12 @@ class JackpotPanel extends HTMLElement {
     `).join('');
 
     this.innerHTML = `
+      <div data-bind="skeleton" class="panel jackpot-panel">
+        <div class="skeleton-header"><div class="skeleton-line skeleton-shimmer" style="width:40%"></div></div>
+        <div class="skeleton-row"><div class="skeleton-line skeleton-shimmer" style="width:50%"></div><div class="skeleton-line skeleton-shimmer" style="width:40%"></div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem"><div class="skeleton-block skeleton-shimmer" style="height:80px"></div><div class="skeleton-block skeleton-shimmer" style="height:80px"></div><div class="skeleton-block skeleton-shimmer" style="height:80px"></div><div class="skeleton-block skeleton-shimmer" style="height:80px"></div></div>
+      </div>
+      <div data-bind="content" style="display:none">
       <div class="panel jackpot-panel">
         <div class="panel-header">
           <h2>JACKPOT DRAW</h2>
@@ -45,6 +60,7 @@ class JackpotPanel extends HTMLElement {
           <span class="jackpot-result-text"></span>
           <span class="jackpot-prize-amount"></span>
         </div>
+      </div>
       </div>
     `;
 
@@ -75,6 +91,8 @@ class JackpotPanel extends HTMLElement {
 
   #onGameUpdate(game) {
     if (!game) return;
+
+    if (game.jackpotDay !== undefined) this.#showContent();
 
     // Update day counter
     const day = game.jackpotDay || 0;

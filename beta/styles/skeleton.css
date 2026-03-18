@@ -1,0 +1,92 @@
+/* skeleton.css -- Loading skeleton shimmer states for panels */
+
+.skeleton-line {
+  height: 0.8rem;
+  border-radius: 4px;
+  background: var(--bg-tertiary, #1a1a2e);
+}
+
+.skeleton-block {
+  border-radius: 8px;
+  background: var(--bg-tertiary, #1a1a2e);
+}
+
+.skeleton-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.skeleton-header {
+  margin-bottom: 1rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border-subtle, #2a2a3e);
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+
+.skeleton-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.04) 20%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 80%,
+    transparent 100%
+  );
+  background-size: 200px 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: none;
+  }
+}
+
+/* Error fallback state for panels */
+.panel-error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-muted, #888);
+}
+
+.panel-error-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--bg-tertiary, #1a1a2e);
+  color: var(--text-warning, #eab308);
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.panel-error-msg {
+  font-size: 0.85rem;
+}
+
+.panel-error-retry {
+  background: none;
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  color: var(--text-secondary, #aaa);
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.panel-error-retry:hover {
+  border-color: var(--text-secondary, #aaa);
+  color: var(--text-primary, #eee);
+}
