@@ -1,0 +1,108 @@
+/* death-clock.css -- Death clock stage colors, pulse animation, bonus badge */
+
+/* ------------------------------------------------------------------ */
+/* Clock bar layout                                                     */
+/* ------------------------------------------------------------------ */
+.death-clock {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  font-family: inherit;
+  margin-bottom: 1rem;
+  transition: border-color 0.3s, background 0.3s;
+}
+
+/* ------------------------------------------------------------------ */
+/* Stage colors                                                         */
+/* ------------------------------------------------------------------ */
+.death-clock[data-stage="normal"] {
+  border-color: var(--success);
+}
+.death-clock[data-stage="normal"] .death-clock-time {
+  color: var(--success);
+}
+
+.death-clock[data-stage="imminent"] {
+  border-color: var(--warning);
+}
+.death-clock[data-stage="imminent"] .death-clock-time {
+  color: var(--warning);
+  animation: death-pulse 1.5s ease-in-out infinite;
+}
+
+.death-clock[data-stage="distress"] {
+  border-color: var(--error);
+  background: rgba(239, 68, 68, 0.08);
+}
+.death-clock[data-stage="distress"] .death-clock-time {
+  color: var(--error);
+  animation: death-pulse 0.8s ease-in-out infinite;
+}
+
+/* ------------------------------------------------------------------ */
+/* Pulse animation                                                      */
+/* ------------------------------------------------------------------ */
+@keyframes death-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Clock elements                                                       */
+/* ------------------------------------------------------------------ */
+.death-clock-icon {
+  font-size: 1.1rem;
+}
+
+.death-clock-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+
+.death-clock-time {
+  font-size: 1.1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+/* ------------------------------------------------------------------ */
+/* Stage badge                                                          */
+/* ------------------------------------------------------------------ */
+.death-clock-stage {
+  display: none;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+}
+
+.death-clock[data-stage="imminent"] .death-clock-stage {
+  display: inline-block;
+  background: rgba(234, 179, 8, 0.15);
+  color: var(--warning);
+}
+
+.death-clock[data-stage="distress"] .death-clock-stage {
+  display: inline-block;
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--error);
+}
+
+/* ------------------------------------------------------------------ */
+/* Reduced motion                                                       */
+/* ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  .death-clock-time {
+    animation: none !important;
+  }
+}

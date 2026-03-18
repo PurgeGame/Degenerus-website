@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="styles/purchase.css">
   <link rel="stylesheet" href="styles/passes.css">
   <link rel="stylesheet" href="styles/status-bar.css">
+  <link rel="stylesheet" href="styles/death-clock.css">
   <script type="importmap">
   {
     "imports": {
@@ -41,6 +42,9 @@
 
     <!-- Status Bar (Custom Element, registered in Phase 6 Plan 03) -->
     <game-status-bar></game-status-bar>
+
+    <!-- Death clock (always visible, outside data-panel divs) -->
+    <death-clock></death-clock>
 
     <!-- Phase-dependent panels -->
     <div data-panel="purchase" class="main-layout">
