@@ -63,6 +63,28 @@ const _state = {
     top4: [],             // Array of { player, score, rank }
     prominence: 'low',    // 'high' | 'medium' | 'low'
   },
+  decimator: {
+    windowOpen: false,
+    windowLevel: 0,
+    playerBurnTotal: '0',
+    playerBucket: 0,
+    activityMultiplier: 1.0,
+    burnPool: '0',
+    claimable: '0',
+    isWinner: false,
+  },
+  terminal: {
+    decWindowOpen: false,
+    decLevel: 0,
+    playerBurnTotal: '0',
+    timeMultiplier: 1.0,
+    daysRemaining: 0,
+    yieldAccumulator: '0',
+    futurePool: '0',
+    playerTicketsNextLevel: 0,
+    claimable: '0',
+    isWinner: false,
+  },
 };
 
 // Shallow Proxy wrapping the top-level state object.

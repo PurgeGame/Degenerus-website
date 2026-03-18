@@ -103,6 +103,39 @@ export const DEGENERETTE = {
   PENDING_BETS_KEY: 'degenerus_pending_bets',
 };
 
+export const DECIMATOR_ABI = [
+  'function decimatorBurn(address player, uint256 amount) external',
+  'function terminalDecimatorBurn(address player, uint256 amount) external',
+];
+
+export const DECIMATOR_VIEW_ABI = [
+  'function decWindow() view returns (bool on, uint24 lvl)',
+  'function decWindowOpenFlag() view returns (bool)',
+  'function terminalDecWindow() view returns (bool open, uint24 lvl)',
+  'function decClaimable(address player, uint24 lvl) view returns (uint256 amountWei, bool winner)',
+  'function terminalDecClaimable(address player) view returns (uint256 amountWei, bool winner)',
+  'function yieldAccumulatorView() view returns (uint256)',
+  'function playerActivityScore(address player) view returns (uint256)',
+  'function futurePrizePoolTotalView() view returns (uint256)',
+  'function ticketsOwedView(uint24 lvl, address player) view returns (uint32)',
+];
+
+export const DECIMATOR_CLAIM_ABI = [
+  'function claimDecimatorJackpot(uint24 lvl) external',
+  'function claimTerminalDecimatorJackpot() external',
+];
+
+export const DECIMATOR = {
+  MIN_BURN: '1000',             // 1,000 BURNIE minimum (whole tokens, not wei)
+  BUCKET_BASE: 12,              // Starting bucket (worst odds)
+  MIN_BUCKET_NORMAL: 5,         // Best bucket for non-x00 levels
+  MIN_BUCKET_100: 2,            // Best bucket for x00 levels
+  ACTIVITY_CAP_BPS: 23500,      // Activity score cap for bucket/multiplier calc
+  MULTIPLIER_CAP_BURNIE: 200000, // After 200k BURNIE, burns count at 1x
+  POOL_SHARE_NORMAL: 0.10,      // 10% of futurepool at x5 levels
+  POOL_SHARE_100: 0.30,         // 30% of futurepool at x00 levels
+};
+
 export const QUEST_TYPE_LABELS = {
   0: 'Mint BURNIE Tickets',
   1: 'Mint ETH Tickets',
