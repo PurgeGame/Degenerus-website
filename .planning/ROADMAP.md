@@ -74,7 +74,12 @@ Plans:
   3. Player can stake BURNIE in the daily coinflip; result displays the multiplier tier (1.50x/2.50x/range) with visual breakdown
   4. Coinflip bounty tracker shows current pool, record holder, and armed status; auto-rebuy toggle and recycling bonus are visible
   5. Death clock countdown is always visible with green/yellow/red stage coloring; imminent stage (5 days) pulses; distress stage (6 hours) shows bonus indicator
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 08-01-PLAN.md -- Store/API/constants extensions + death clock component (always-visible countdown with urgency stages)
+- [ ] 08-02-PLAN.md -- Jackpot data logic + panel with GSAP trait reveal animation and confetti celebration
+- [ ] 08-03-PLAN.md -- Coinflip business logic + panel with BURNIE staking, multiplier tiers, bounty tracker, auto-rebuy
 
 ### Phase 9: Supporting Features
 **Goal**: Degenerette betting, quest tracking, unified claims, affiliate infrastructure, and BAF scores are all functional -- covering every game action not handled by purchasing or hero displays.
@@ -119,7 +124,7 @@ Plans:
 | 5. Cross-Section Consistency and Report | v1.0 | 2/2 | Complete | 2026-03-17 |
 | 6. Foundation | v2.0 | 3/3 | Complete | 2026-03-18 |
 | 7. Purchasing & Core UI | v2.0 | 0/2 | Planned | - |
-| 8. Hero Displays | v2.0 | 0/TBD | Not started | - |
+| 8. Hero Displays | v2.0 | 0/3 | Planned | - |
 | 9. Supporting Features | v2.0 | 0/TBD | Not started | - |
 | 10. Decimator & Terminal | v2.0 | 0/TBD | Not started | - |
 | 11. Audio & Polish | v2.0 | 0/TBD | Not started | - |

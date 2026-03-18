@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Game Frontend
 status: completed
-stopped_at: Completed 07-02-PLAN.md (Phase 07 complete)
-last_updated: "2026-03-18T14:54:53.336Z"
-last_activity: 2026-03-18 -- Plan 07-02 complete (pass-section, deity symbol grid, pass pricing)
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-03-18T15:21:34.812Z"
+last_activity: 2026-03-18 -- Plan 08-01 complete (store/API extension, death clock)
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_plans: 8
+  completed_plans: 6
+  percent: 75
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** Phase 7 — Purchasing Core UI (purchase panel, tx status, pass cards)
+**Current focus:** Phase 8 — Hero Displays (death clock, jackpot panel, coinflip panel)
 
 ## Current Position
 
-Phase: 7 of 11 (Phase 7: Purchasing Core UI)
-Plan: 2 of 2
-Status: Phase 07 complete
-Last activity: 2026-03-18 -- Plan 07-02 complete (pass-section, deity symbol grid, pass pricing)
+Phase: 8 of 11 (Phase 8: Hero Displays)
+Plan: 1 of 3
+Status: Plan 08-01 complete
+Last activity: 2026-03-18 -- Plan 08-01 complete (store/API extension, death clock)
 
-Progress: [██████████] 100%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Progress: [██████████] 100%
 | 07-purchasing-core-ui | 2 | 8min | 4min |
 
 *Updated after each plan completion*
+| Phase 08 P01 | 3min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,9 @@ Recent decisions affecting current work:
 - Deity pricing uses getReadProvider() so it displays before wallet connection
 - Symbol grid lazy-loaded on first details open (not page load) to avoid 32 unnecessary ownerOf RPC calls
 - Deity buy button requires both wallet connection AND symbol selection before enabling
+- [Phase 08]: Death clock computation is client-side from levelStartTime (no timer polling)
+- [Phase 08]: Store coinflip slice added in Plan 01 for Plan 03 reuse
+- [Phase 08]: API field mappings use safe fallbacks for graceful degradation when DB API not yet extended
 
 ### Pending Todos
 
@@ -94,6 +98,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T14:49:26.015Z
-Stopped at: Completed 07-02-PLAN.md (Phase 07 complete)
+Last session: 2026-03-18T15:21:34.810Z
+Stopped at: Completed 08-01-PLAN.md
 Resume file: None

@@ -64,9 +64,9 @@
 
 ### Death Timer
 
-- [ ] **DEATH-01**: Death clock countdown always visible with stage coloring (green/yellow/red)
-- [ ] **DEATH-02**: Imminent stage (5 days) triggers visual urgency with pulsing animation
-- [ ] **DEATH-03**: Distress stage (6 hours) shows bonus indicator for distress-window purchases
+- [x] **DEATH-01**: Death clock countdown always visible with stage coloring (green/yellow/red)
+- [x] **DEATH-02**: Imminent stage (5 days) triggers visual urgency with pulsing animation
+- [x] **DEATH-03**: Distress stage (6 hours) shows bonus indicator for distress-window purchases
 
 ### Terminal
 
@@ -156,9 +156,9 @@
 | FLIP-02 | Phase 8 | Pending |
 | FLIP-03 | Phase 8 | Pending |
 | FLIP-04 | Phase 8 | Pending |
-| DEATH-01 | Phase 8 | Pending |
-| DEATH-02 | Phase 8 | Pending |
-| DEATH-03 | Phase 8 | Pending |
+| DEATH-01 | Phase 8 | Complete |
+| DEATH-02 | Phase 8 | Complete |
+| DEATH-03 | Phase 8 | Complete |
 | DEGEN-01 | Phase 9 | Pending |
 | DEGEN-02 | Phase 9 | Pending |
 | DEGEN-03 | Phase 9 | Pending |
