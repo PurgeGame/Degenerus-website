@@ -70,8 +70,8 @@
 
 ### Terminal
 
-- [ ] **TERM-01**: Terminal decimator display shows payout preview for level+1 ticketholders
-- [ ] **TERM-02**: Terminal insurance bar shows accumulated stETH yield backup
+- [x] **TERM-01**: Terminal decimator display shows payout preview for level+1 ticketholders
+- [x] **TERM-02**: Terminal insurance bar shows accumulated stETH yield backup
 
 ### Claims
 
@@ -176,8 +176,8 @@
 | DECI-01 | Phase 10 | Complete |
 | DECI-02 | Phase 10 | Complete |
 | DECI-03 | Phase 10 | Complete |
-| TERM-01 | Phase 10 | Pending |
-| TERM-02 | Phase 10 | Pending |
+| TERM-01 | Phase 10 | Complete |
+| TERM-02 | Phase 10 | Complete |
 | AUD-01 | Phase 11 | Pending |
 | AUD-02 | Phase 11 | Pending |
 | AUD-03 | Phase 11 | Pending |

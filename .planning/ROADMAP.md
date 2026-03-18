@@ -26,7 +26,7 @@
 - [ ] **Phase 7: Purchasing & Core UI** - Tickets, lootboxes, BURNIE tickets, transaction lifecycle, purchase panel, pass cards
 - [ ] **Phase 8: Hero Displays** - Jackpot resolution animation, coinflip hero display, death timer with urgency stages
 - [ ] **Phase 9: Supporting Features** - Degenerette, quests, unified claims, affiliate, BAF leaderboard
-- [ ] **Phase 10: Decimator & Terminal** - BURNIE burn submissions, decimator display, terminal payout, GAMEOVER state
+- [x] **Phase 10: Decimator & Terminal** - BURNIE burn submissions, decimator display, terminal payout, GAMEOVER state (completed 2026-03-18)
 - [ ] **Phase 11: Audio & Polish** - Sound effects, visual polish, error states, loading skeletons
 
 ## Phase Details
@@ -107,7 +107,7 @@ Plans:
   1. Player can submit BURNIE burns with bucket and sub-bucket selection; current burn pool, player burn total, and activity-score multiplier are displayed
   2. Decimator panel appears only when the decimator window is open; it is hidden at all other times
   3. Terminal decimator panel shows payout preview for level+1 ticketholders; terminal insurance bar shows accumulated stETH yield backup
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 10-01-PLAN.md -- Infrastructure (store slices, ABIs, constants) + decimator business logic, component, and CSS
@@ -136,5 +136,5 @@ Plans:
 | 7. Purchasing & Core UI | v2.0 | 0/2 | Planned | - |
 | 8. Hero Displays | v2.0 | 0/3 | Planned | - |
 | 9. Supporting Features | v2.0 | 0/4 | Planned | - |
-| 10. Decimator & Terminal | 1/2 | In Progress|  | - |
+| 10. Decimator & Terminal | 2/2 | Complete   | 2026-03-18 | - |
 | 11. Audio & Polish | v2.0 | 0/TBD | Not started | - |

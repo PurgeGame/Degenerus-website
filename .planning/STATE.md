@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Game Frontend
-status: in-progress
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-03-18T17:06:56.474Z"
-last_activity: 2026-03-18 -- Plan 10-01 complete (Decimator infrastructure)
+status: completed
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-03-18T17:14:11.294Z"
+last_activity: 2026-03-18 -- Phase 10 complete (Decimator & Terminal)
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 14
-  completed_plans: 13
-  percent: 93
+  completed_plans: 14
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** Phase 10 in progress. Plan 01 (Decimator infrastructure) complete. Next: Plan 02 (Terminal)
+**Current focus:** Phase 10 complete. All decimator and terminal components built and wired. Next: Phase 11 (polish)
 
 ## Current Position
 
 Phase: 10 of 11 (Phase 10: Decimator & Terminal)
-Plan: 1 of 2
-Status: Plan 10-01 complete
-Last activity: 2026-03-18 -- Plan 10-01 complete (Decimator infrastructure)
+Plan: 2 of 2
+Status: Phase 10 complete
+Last activity: 2026-03-18 -- Phase 10 complete (Decimator & Terminal)
 
-Progress: [█████████░] 93%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Progress: [█████████░] 93%
 | Phase 09 P03 | 2min | 2 tasks | 6 files |
 | Phase 09 P04 | 1min | 2 tasks | 2 files |
 | Phase 10 P01 | 3min | 2 tasks | 5 files |
+| Phase 10 P02 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -109,6 +110,8 @@ Recent decisions affecting current work:
 - [Phase 10]: Burn pool computed client-side as futurepool share (10% x5, 30% x00) via futurePrizePoolTotalView
 - [Phase 10]: DecBurnRecorded event parsed from receipt logs for immediate burn total/bucket UI update
 - [Phase 10]: Terminal store slice pre-populated in Plan 01 for Plan 02 reuse
+- [Phase 10]: Time multiplier computed client-side from levelStartTime + DEATH_CLOCK constants (two regimes)
+- [Phase 10]: Insurance bar percentage as yieldAccumulator/futurePool BigInt ratio, capped at 100%
 
 ### Pending Todos
 
@@ -123,6 +126,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T17:06:01Z
-Stopped at: Completed 10-01-PLAN.md
+Last session: 2026-03-18T17:14:11.292Z
+Stopped at: Completed 10-02-PLAN.md
 Resume file: None
