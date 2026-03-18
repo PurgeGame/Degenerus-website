@@ -11,6 +11,11 @@ import '../components/pass-section.js';
 import '../components/death-clock.js';
 import '../components/jackpot-panel.js';
 import '../components/coinflip-panel.js';
+import '../components/degenerette-panel.js';
+import '../components/quest-panel.js';
+import '../components/claims-panel.js';
+import '../components/affiliate-panel.js';
+import '../components/baf-panel.js';
 
 // Import modules
 import { update, get } from './store.js';

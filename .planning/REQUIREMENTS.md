@@ -80,14 +80,14 @@
 
 ### Affiliate
 
-- [ ] **AFFIL-01**: Player can create affiliate referral code
-- [ ] **AFFIL-02**: Player can input referral code (from URL param or manual entry)
-- [ ] **AFFIL-03**: Affiliate earnings display shows cumulative ETH earned
+- [x] **AFFIL-01**: Player can create affiliate referral code
+- [x] **AFFIL-02**: Player can input referral code (from URL param or manual entry)
+- [x] **AFFIL-03**: Affiliate earnings display shows cumulative ETH earned
 
 ### BAF
 
-- [ ] **BAF-01**: Player's BAF score displayed with current ranking context
-- [ ] **BAF-02**: Top 4 BAF leaderboard shown (prominent on pre-BAF levels, subtle otherwise)
+- [x] **BAF-01**: Player's BAF score displayed with current ranking context
+- [x] **BAF-02**: Top 4 BAF leaderboard shown (prominent on pre-BAF levels, subtle otherwise)
 
 ### Audio
 
@@ -168,11 +168,11 @@
 | QUEST-03 | Phase 9 | Complete |
 | CLAIM-01 | Phase 9 | Complete |
 | CLAIM-02 | Phase 9 | Complete |
-| AFFIL-01 | Phase 9 | Pending |
-| AFFIL-02 | Phase 9 | Pending |
-| AFFIL-03 | Phase 9 | Pending |
-| BAF-01 | Phase 9 | Pending |
-| BAF-02 | Phase 9 | Pending |
+| AFFIL-01 | Phase 9 | Complete |
+| AFFIL-02 | Phase 9 | Complete |
+| AFFIL-03 | Phase 9 | Complete |
+| BAF-01 | Phase 9 | Complete |
+| BAF-02 | Phase 9 | Complete |
 | DECI-01 | Phase 10 | Pending |
 | DECI-02 | Phase 10 | Pending |
 | DECI-03 | Phase 10 | Pending |

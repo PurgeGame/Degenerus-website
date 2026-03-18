@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Game Frontend
 status: in-progress
-stopped_at: Completed 09-02-PLAN.md
-last_updated: "2026-03-18T16:26:18.180Z"
-last_activity: 2026-03-18 -- Plan 09-02 complete (quest tracking + unified claims)
+stopped_at: Completed 09-03-PLAN.md
+last_updated: "2026-03-18T16:30:00Z"
+last_activity: 2026-03-18 -- Plan 09-03 complete (affiliate + BAF panels)
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 12
-  completed_plans: 10
-  percent: 83
+  completed_plans: 11
+  percent: 92
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 9 of 11 (Phase 9: Supporting Features)
-Plan: 2 of 4
-Status: Plan 09-02 complete
-Last activity: 2026-03-18 -- Plan 09-02 complete (quest tracking + unified claims)
+Plan: 3 of 4
+Status: Plan 09-03 complete
+Last activity: 2026-03-18 -- Plan 09-03 complete (affiliate + BAF panels)
 
-Progress: [████████░░] 83%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [████████░░] 83%
 | Phase 08 P03 | 3min | 2 tasks | 5 files |
 | Phase 09 P01 | 5min | 2 tasks | 5 files |
 | Phase 09 P02 | 2min | 2 tasks | 6 files |
+| Phase 09 P03 | 2min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,8 @@ Recent decisions affecting current work:
 - [Phase 09]: Quest progress uses different calc paths for mint quests (count) vs token quests (amount)
 - [Phase 09]: Claims panel subscribes to ui.connectionState for button disable states
 - [Phase 09]: Shield count read from player.shields (API-polled) not separate contract read
+- [Phase 09]: Affiliate module owns URL referral capture (replaces purchases.js getAffiliateCode pattern)
+- [Phase 09]: BAF leaderboard from DB API only (bafTotals mapping is private, no contract reads needed)
 
 ### Pending Todos
 
@@ -115,6 +118,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T16:24:33Z
-Stopped at: Completed 09-02-PLAN.md
+Last session: 2026-03-18T16:30:00Z
+Stopped at: Completed 09-03-PLAN.md
 Resume file: None
