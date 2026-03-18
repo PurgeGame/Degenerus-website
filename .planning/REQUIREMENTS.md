@@ -39,10 +39,10 @@
 
 ### Degenerette
 
-- [ ] **DEGEN-01**: Player can place bets with currency selector (ETH/BURNIE/WWXRP) and amount input
-- [ ] **DEGEN-02**: VRF-pending bets persisted across page refresh (localStorage)
-- [ ] **DEGEN-03**: Bet results display with win/loss indication and claimable winnings
-- [ ] **DEGEN-04**: Slot-style animation for result reveal
+- [x] **DEGEN-01**: Player can place bets with currency selector (ETH/BURNIE/WWXRP) and amount input
+- [x] **DEGEN-02**: VRF-pending bets persisted across page refresh (localStorage)
+- [x] **DEGEN-03**: Bet results display with win/loss indication and claimable winnings
+- [x] **DEGEN-04**: Slot-style animation for result reveal
 
 ### Passes
 
@@ -159,10 +159,10 @@
 | DEATH-01 | Phase 8 | Complete |
 | DEATH-02 | Phase 8 | Complete |
 | DEATH-03 | Phase 8 | Complete |
-| DEGEN-01 | Phase 9 | Pending |
-| DEGEN-02 | Phase 9 | Pending |
-| DEGEN-03 | Phase 9 | Pending |
-| DEGEN-04 | Phase 9 | Pending |
+| DEGEN-01 | Phase 9 | Complete |
+| DEGEN-02 | Phase 9 | Complete |
+| DEGEN-03 | Phase 9 | Complete |
+| DEGEN-04 | Phase 9 | Complete |
 | QUEST-01 | Phase 9 | Pending |
 | QUEST-02 | Phase 9 | Pending |
 | QUEST-03 | Phase 9 | Pending |

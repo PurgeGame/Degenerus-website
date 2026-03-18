@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Game Frontend
-status: completed
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-03-18T15:33:15.023Z"
-last_activity: 2026-03-18 -- Plan 08-03 complete (coinflip panel, BURNIE staking, bounty tracker)
+status: in-progress
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-03-18T16:20:26.915Z"
+last_activity: 2026-03-18 -- Plan 09-01 complete (degenerette + shared Phase 9 infrastructure)
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_plans: 12
+  completed_plans: 9
+  percent: 75
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** Phase 8 — Hero Displays (death clock, jackpot panel, coinflip panel)
+**Current focus:** Phase 9 — Supporting Features (degenerette, quests, claims, affiliate, BAF)
 
 ## Current Position
 
-Phase: 8 of 11 (Phase 8: Hero Displays)
-Plan: 3 of 3
-Status: Phase 08 complete
-Last activity: 2026-03-18 -- Plan 08-03 complete (coinflip panel, BURNIE staking, bounty tracker)
+Phase: 9 of 11 (Phase 9: Supporting Features)
+Plan: 1 of 4
+Status: Plan 09-01 complete
+Last activity: 2026-03-18 -- Plan 09-01 complete (degenerette + shared Phase 9 infrastructure)
 
-Progress: [██████████] 100%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Progress: [██████████] 100%
 | Phase 08 P01 | 3min | 2 tasks | 7 files |
 | Phase 08 P02 | 3min | 2 tasks | 5 files |
 | Phase 08 P03 | 3min | 2 tasks | 5 files |
+| Phase 09 P01 | 5min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,10 @@ Recent decisions affecting current work:
 - [Phase 08]: Contract reads used for all player coinflip data (stake, claimable, auto-rebuy) instead of API endpoints
 - [Phase 08]: Bounty state from contract public getters; record holder address left as null until DB endpoint available
 - [Phase 08]: Coinflip business logic centralized in coinflip.js mirroring purchases.js pattern
+- [Phase 09]: Parse BetPlaced events by topic hash from all receipt logs (delegatecall emits from GAME address)
+- [Phase 09]: VRF-pending bets persisted in localStorage keyed by player address with betId+rngIndex pairs
+- [Phase 09]: Store extended with 5 Phase 9 slices (degenerette, quest, claims, affiliate, baf) in Plan 01
+- [Phase 09]: GSAP preloaded on degenerette panel mount (same pattern as jackpot panel)
 
 ### Pending Todos
 
@@ -106,6 +111,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T15:33:15.021Z
-Stopped at: Completed 08-03-PLAN.md
+Last session: 2026-03-18T16:20:26.914Z
+Stopped at: Completed 09-01-PLAN.md
 Resume file: None

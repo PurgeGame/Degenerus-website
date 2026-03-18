@@ -1,0 +1,93 @@
+/* quests.css -- Quest panel, quest slots, progress bars, streak counter */
+
+.quest-panel {
+  /* inherits .panel from panels.css */
+}
+
+.quest-streak {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.streak-count {
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.streak-shields {
+  color: var(--text-secondary);
+}
+
+.quest-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.quest-slot {
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.quest-slot-primary {
+  border-left: 3px solid var(--accent-primary);
+}
+
+.quest-slot-secondary {
+  border-left: 3px solid var(--text-dim);
+}
+
+.quest-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.quest-type {
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.quest-difficulty {
+  font-size: 0.75rem;
+  color: var(--color-red, #ef4444);
+  font-weight: 700;
+}
+
+.quest-progress-bar {
+  height: 8px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.25rem;
+}
+
+.quest-progress-fill {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.quest-target {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.quest-slot0-note {
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.quest-slot.completed .quest-progress-fill {
+  background: var(--color-green, #22c55e);
+}
+
+.quest-slot.completed .quest-type::after {
+  content: ' \2713';
+  color: var(--color-green, #22c55e);
+}

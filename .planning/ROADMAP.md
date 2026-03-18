@@ -91,7 +91,13 @@ Plans:
   3. Unified claims panel aggregates all claimable winnings across all game systems; player can claim with a single transaction and sees the claimed amount with tx confirmation
   4. Player can create an affiliate referral code and input one (from URL param or manual entry); cumulative ETH earned is displayed
   5. Player's BAF score shows with ranking context; top-4 leaderboard is prominent on pre-BAF levels and subtle on others
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+- [ ] 09-01-PLAN.md -- Shared infrastructure extensions (store slices, ABIs, constants) + degenerette business logic, component, and CSS
+- [ ] 09-02-PLAN.md -- Quest business logic, component, and CSS + Claims business logic, component, and CSS
+- [ ] 09-03-PLAN.md -- Affiliate business logic, component, and CSS + BAF leaderboard business logic, component, and CSS
+- [ ] 09-04-PLAN.md -- Wire all 5 components into index.html and main.js + browser verification checkpoint
 
 ### Phase 10: Decimator & Terminal
 **Goal**: Players can participate in decimator burns and view terminal payout information, with GAMEOVER state fully surfaced -- these require new contract ABI integration not present in the beta.
@@ -125,6 +131,6 @@ Plans:
 | 6. Foundation | v2.0 | 3/3 | Complete | 2026-03-18 |
 | 7. Purchasing & Core UI | v2.0 | 0/2 | Planned | - |
 | 8. Hero Displays | v2.0 | 0/3 | Planned | - |
-| 9. Supporting Features | v2.0 | 0/TBD | Not started | - |
+| 9. Supporting Features | v2.0 | 0/4 | Planned | - |
 | 10. Decimator & Terminal | v2.0 | 0/TBD | Not started | - |
 | 11. Audio & Polish | v2.0 | 0/TBD | Not started | - |
