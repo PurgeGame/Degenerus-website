@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Game Frontend
-status: executing
-stopped_at: Completed 06-03-PLAN.md (Phase 6 complete)
-last_updated: "2026-03-18T14:06:35Z"
-last_activity: 2026-03-18 -- Plan 06-03 complete (app shell, Custom Elements, router, main.js)
+status: in-progress
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-03-18T14:41:00.000Z"
+last_activity: 2026-03-18 -- Plan 07-01 complete (purchase panel, tx-status-list, purchases.js)
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 5
+  completed_plans: 4
   percent: 100
 ---
 
@@ -21,29 +21,30 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** Phase 6 — Foundation (ES modules, store, wallet, API client)
+**Current focus:** Phase 7 — Purchasing Core UI (purchase panel, tx status, pass cards)
 
 ## Current Position
 
-Phase: 6 of 11 (Phase 6: Foundation)
-Plan: 3 of 3 (complete)
-Status: Phase 6 complete
-Last activity: 2026-03-18 -- Plan 06-03 complete (app shell, Custom Elements, router, main.js)
+Phase: 7 of 11 (Phase 7: Purchasing Core UI)
+Plan: 1 of 2
+Status: Plan 07-01 complete
+Last activity: 2026-03-18 -- Plan 07-01 complete (purchase panel, tx-status-list, purchases.js)
 
-Progress: [██████████] 100%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: 3min
-- Total execution time: 8min
+- Total execution time: 12min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 06-foundation | 3 | 8min | 3min |
+| 07-purchasing-core-ui | 1 | 4min | 4min |
 
 *Updated after each plan completion*
 
@@ -73,6 +74,9 @@ Recent decisions affecting current work:
 - Activity score shows total only in Phase 6; breakdown deferred until per-component contract reads available
 - main.js bootstrap sequence: discoverWallets -> initRouter -> checkHealth -> startPolling -> autoReconnect
 - Transaction lifecycle events wired to ui.pendingTxs store path for future tx status components
+- Purchase business logic (contract calls, price calc, EV indicators) centralized in purchases.js; components never import ethers
+- getReadProvider() returns wallet BrowserProvider if connected, else lazily creates JsonRpcProvider from CHAIN.rpcUrl
+- User wallet rejections (ACTION_REJECTED / code 4001) silently dismissed from purchase error display
 
 ### Pending Todos
 
@@ -87,6 +91,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T14:06:35Z
-Stopped at: Completed 06-03-PLAN.md (Phase 6 complete)
-Resume file: Next phase planning needed
+Last session: 2026-03-18T14:41:00Z
+Stopped at: Completed 07-01-PLAN.md
+Resume file: .planning/phases/07-purchasing-core-ui/07-02-PLAN.md

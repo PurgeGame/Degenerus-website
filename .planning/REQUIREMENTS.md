@@ -31,11 +31,11 @@
 
 ### Purchasing
 
-- [ ] **PURCH-01**: Player can buy tickets (ETH) with quantity input and price display
-- [ ] **PURCH-02**: Player can buy lootboxes with activity-score-dependent EV indicator
-- [ ] **PURCH-03**: Player can buy BURNIE tickets (1,000 BURNIE per ticket)
-- [ ] **PURCH-04**: Purchase panel shows current level price and pool fill progress toward target
-- [ ] **PURCH-05**: Transaction lifecycle displays pending/confirmed/failed states with tx hash link
+- [x] **PURCH-01**: Player can buy tickets (ETH) with quantity input and price display
+- [x] **PURCH-02**: Player can buy lootboxes with activity-score-dependent EV indicator
+- [x] **PURCH-03**: Player can buy BURNIE tickets (1,000 BURNIE per ticket)
+- [x] **PURCH-04**: Purchase panel shows current level price and pool fill progress toward target
+- [x] **PURCH-05**: Transaction lifecycle displays pending/confirmed/failed states with tx hash link
 
 ### Degenerette
 
@@ -99,7 +99,7 @@
 
 - [x] **STATE-01**: UI switches between purchase phase and jackpot phase display automatically
 - [x] **STATE-02**: GAMEOVER state shows terminal information and disables game actions
-- [x] **STATE-03**: Activity score breakdown visible (quest streak, mint count, affiliate, passes)
+- [x] **STATE-03**: Activity score total visible; breakdown by component (quest streak, mint count, affiliate, passes) deferred to phase with contract read integration
 
 ## v2 Requirements
 
@@ -139,12 +139,12 @@
 | ARCH-07 | Phase 6 | Complete |
 | STATE-01 | Phase 6 | Complete |
 | STATE-02 | Phase 6 | Complete |
-| STATE-03 | Phase 6 | Complete |
-| PURCH-01 | Phase 7 | Pending |
-| PURCH-02 | Phase 7 | Pending |
-| PURCH-03 | Phase 7 | Pending |
-| PURCH-04 | Phase 7 | Pending |
-| PURCH-05 | Phase 7 | Pending |
+| STATE-03 | Phase 6 | Partial (total only, breakdown deferred) |
+| PURCH-01 | Phase 7 | Complete |
+| PURCH-02 | Phase 7 | Complete |
+| PURCH-03 | Phase 7 | Complete |
+| PURCH-04 | Phase 7 | Complete |
+| PURCH-05 | Phase 7 | Complete |
 | PASS-01 | Phase 7 | Pending |
 | PASS-02 | Phase 7 | Pending |
 | PASS-03 | Phase 7 | Pending |

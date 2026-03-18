@@ -58,7 +58,11 @@ Plans:
   3. Every transaction shows pending/confirmed/failed status with a tx hash link to etherscan
   4. Pass cards (lazy, whale, deity) display status and pricing; deity card shows symbol selector and boon status
   5. Pass section is accessible but not prominent (collapsed or secondary nav position)
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 07-01-PLAN.md -- Purchase business logic, purchase panel, tx-status-list, pool fill progress, EV indicator
+- [ ] 07-02-PLAN.md -- Pass section with lazy/whale/deity cards, deity symbol selector, collapsible layout
 
 ### Phase 8: Hero Displays
 **Goal**: Jackpot resolution, coinflip, and the death timer are visually compelling hero experiences that communicate game state with clarity and dramatic impact.
@@ -113,8 +117,8 @@ Plans:
 | 3. Mechanism-Heavy Sections Audit | v1.0 | 2/2 | Complete | 2026-03-16 |
 | 4. Prose and Framing Sections Audit | v1.0 | 2/2 | Complete | 2026-03-16 |
 | 5. Cross-Section Consistency and Report | v1.0 | 2/2 | Complete | 2026-03-17 |
-| 6. Foundation | 1/3 | In Progress|  | - |
-| 7. Purchasing & Core UI | v2.0 | 0/TBD | Not started | - |
+| 6. Foundation | v2.0 | 3/3 | Complete | 2026-03-18 |
+| 7. Purchasing & Core UI | v2.0 | 0/2 | Planned | - |
 | 8. Hero Displays | v2.0 | 0/TBD | Not started | - |
 | 9. Supporting Features | v2.0 | 0/TBD | Not started | - |
 | 10. Decimator & Terminal | v2.0 | 0/TBD | Not started | - |
