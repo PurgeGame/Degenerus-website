@@ -22,6 +22,17 @@ const PURCHASE_ABI = [
   'function prizePoolTargetView() view returns (uint256)',
   'function lootboxPresaleActiveFlag() view returns (bool)',
   'function purchaseInfo() view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay, bool rngLocked, uint256 priceWei)',
+  'function purchaseWhaleBundle(address buyer, uint256 quantity) payable',
+  'function purchaseLazyPass(address buyer) payable',
+  'function purchaseDeityPass(address buyer, uint8 symbolId) payable',
+  'function hasActiveLazyPass(address player) view returns (bool)',
+  'function deityPassTotalIssuedCount() view returns (uint32)',
+  'function deityPassCountFor(address player) view returns (uint16)',
+];
+
+// ABI for deity pass NFT (separate contract for ownerOf checks)
+const DEITY_PASS_ABI = [
+  'function ownerOf(uint256 tokenId) view returns (address)',
 ];
 
 // -- Purchase Functions --
@@ -192,4 +203,166 @@ export function getAffiliateCode() {
   } catch {
     return ethers.ZeroHash;
   }
+}
+
+// -- Deity Symbols (4 groups of 8, 32 total) --
+
+export const DEITY_SYMBOLS = [
+  { group: 'Crypto', symbols: ['WWXRP','Tron','Sui','Monero','Solana','Chainlink','Ethereum','Bitcoin'] },
+  { group: 'Zodiac', symbols: ['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Scorpio','Aquarius'] },
+  { group: 'Cards', symbols: ['Horseshoe','King','Cash Sack','Club','Diamond','Heart','Spade','Ace'] },
+  { group: 'Dice', symbols: ['One','Two','Three','Four','Five','Six','Seven','Eight'] },
+];
+
+// -- Pass Pricing Functions --
+
+/**
+ * Calculate lazy pass price.
+ * Level <= 2: flat 0.24 ETH. Otherwise: 10x current ticket price, or 0.4 ETH fallback.
+ * @param {number} level - Current game level
+ * @param {string|bigint|null} mintPriceWei - Current ticket price in wei, or null
+ * @returns {bigint} Price in wei
+ */
+export function calcLazyPassPrice(level, mintPriceWei) {
+  if (level <= 2) {
+    return ethers.parseEther('0.24') / TESTNET_DIVISOR;
+  }
+  if (mintPriceWei) {
+    return BigInt(mintPriceWei) * 10n;
+  }
+  return ethers.parseEther('0.4') / TESTNET_DIVISOR;
+}
+
+/**
+ * Calculate whale bundle total price.
+ * Level <= 3: 2.4 ETH per bundle. Otherwise: 4 ETH per bundle.
+ * @param {number} level - Current game level
+ * @param {number} qty - Number of bundles
+ * @returns {bigint} Total price in wei
+ */
+export function calcWhaleBundlePrice(level, qty) {
+  const unitWei = level <= 3
+    ? ethers.parseEther('2.4') / TESTNET_DIVISOR
+    : ethers.parseEther('4') / TESTNET_DIVISOR;
+  return unitWei * BigInt(Math.max(qty, 1));
+}
+
+/**
+ * Calculate deity pass price using triangular pricing curve.
+ * Base price 24 ETH + triangular(issued) * 1 ETH.
+ * Uses read-only provider so it works before wallet connection.
+ * @returns {Promise<bigint>} Price in wei
+ */
+export async function calcDeityPassPrice() {
+  const basePrice = ethers.parseEther('24') / TESTNET_DIVISOR;
+  try {
+    const contract = new ethers.Contract(CONTRACTS.GAME, PURCHASE_ABI, getReadProvider());
+    const issued = await contract.deityPassTotalIssuedCount();
+    const triangular = (BigInt(issued) * (BigInt(issued) + 1n)) / 2n;
+    return basePrice + triangular * (ethers.parseEther('1') / TESTNET_DIVISOR);
+  } catch {
+    return basePrice;
+  }
+}
+
+// -- Pass Status Readers --
+
+/**
+ * Check whether the given address has an active lazy pass.
+ * @param {string} address - Player wallet address
+ * @returns {Promise<boolean>}
+ */
+export async function fetchHasLazyPass(address) {
+  try {
+    const contract = new ethers.Contract(CONTRACTS.GAME, PURCHASE_ABI, getReadProvider());
+    return await contract.hasActiveLazyPass(address);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetch deity pass count for the given address.
+ * @param {string} address - Player wallet address
+ * @returns {Promise<number>}
+ */
+export async function fetchDeityPassCount(address) {
+  try {
+    const contract = new ethers.Contract(CONTRACTS.GAME, PURCHASE_ABI, getReadProvider());
+    return Number(await contract.deityPassCountFor(address));
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Check all 32 deity symbol token IDs and return which are taken.
+ * A symbol is taken if ownerOf(tokenId) resolves without revert.
+ * @returns {Promise<Set<number>>} Set of taken token IDs (0-31)
+ */
+export async function fetchTakenSymbols() {
+  const taken = new Set();
+  try {
+    const deityContract = new ethers.Contract(CONTRACTS.DEITY_PASS, DEITY_PASS_ABI, getReadProvider());
+    const checks = Array.from({ length: 32 }, (_, i) => i);
+    await Promise.allSettled(checks.map(async (id) => {
+      try {
+        await deityContract.ownerOf(id);
+        taken.add(id);
+      } catch {
+        // Token not minted = symbol available
+      }
+    }));
+  } catch {
+    // Contract read failed entirely; return empty set
+  }
+  return taken;
+}
+
+// -- Pass Purchase Functions --
+
+/**
+ * Buy a lazy pass. Routes through CONTRACTS.GAME facade.
+ * @param {string} affiliateCode - bytes32 affiliate code or ZeroHash
+ */
+export async function buyLazyPass(affiliateCode) {
+  const level = get('game.level') || 0;
+  const price = get('game.price');
+  const priceWei = calcLazyPassPrice(level, price);
+  const contract = getContract(CONTRACTS.GAME, PURCHASE_ABI);
+  await sendTx(
+    contract.purchaseLazyPass(ethers.ZeroAddress, { value: priceWei }),
+    'Purchase Lazy Pass'
+  );
+  await refreshAfterAction();
+}
+
+/**
+ * Buy whale bundle(s). Routes through CONTRACTS.GAME facade.
+ * @param {number} qty - Number of bundles
+ * @param {string} affiliateCode - bytes32 affiliate code or ZeroHash
+ */
+export async function buyWhaleBundle(qty, affiliateCode) {
+  const level = get('game.level') || 0;
+  const totalWei = calcWhaleBundlePrice(level, qty);
+  const contract = getContract(CONTRACTS.GAME, PURCHASE_ABI);
+  await sendTx(
+    contract.purchaseWhaleBundle(ethers.ZeroAddress, BigInt(qty), { value: totalWei }),
+    'Purchase Whale Bundle'
+  );
+  await refreshAfterAction();
+}
+
+/**
+ * Buy a deity pass with the chosen symbol. Routes through CONTRACTS.GAME facade.
+ * @param {number} symbolId - Symbol token ID (0-31)
+ */
+export async function buyDeityPass(symbolId) {
+  const priceWei = await calcDeityPassPrice();
+  const contract = getContract(CONTRACTS.GAME, PURCHASE_ABI);
+  await sendTx(
+    contract.purchaseDeityPass(ethers.ZeroAddress, symbolId, { value: priceWei }),
+    'Purchase Deity Pass'
+  );
+  await refreshAfterAction();
 }
