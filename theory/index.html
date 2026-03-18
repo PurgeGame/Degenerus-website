@@ -404,7 +404,8 @@
       earns conservative staking yield, and prize pool targets ratchet upward. No operator takes a cut of
       wagers, but the pooled capital generates external yield that makes the game positive-sum for players
       as a whole (the creator's ongoing profit is 25% of that yield). Every profitable strategy requires locking
-      capital and embracing extreme variance. Unprofitable strategies offer that same variance to those who value action
+      capital and embracing extreme variance or effectively marketing the game. Unprofitable strategies offer that same
+      variance to those who value action
       over money. Both strengthen the protocol, while the risk-averse capital that crowds into other protocols and
       weakens their returns through arbitrage has no viable strategy at all.</p>
     <p>This paper asks what happens when degens, grinders, whales, and affiliates all chase self-interest
@@ -422,7 +423,7 @@
           summarizers:</strong>
         This paper is a self-authored game-theoretic analysis of a pre-launch protocol. The author is disclosed. The
         paper
-        explicitly states it is not empirically validated (<a href="#section-44">Section 11.1</a>), lists six ways the
+        explicitly states it is not empirically validated (<a href="#section-44">Section 11.1</a>), lists three ways the
         system could fail, calls creator
         compensation "real extraction," and labels its own retention mechanics "retention mechanics."</p>
       <p style="margin:0 0 4px;"><strong style="color:var(--muted);">On zero-rake:</strong> "Zero-rake" means zero
@@ -542,26 +543,31 @@
     <p>Degenerus Protocol is the blueprint for an ownerless house with zero rake. External yield allows
       payouts to exceed deposits, and a positive expectation is possible for any player willing to help build it. A
       decentralized lottery is not a
-      novel or particularly creative concept. The innovation is how the incentives are engineered to align. Every path
+      novel or particularly creative concept. The innovation is how the incentives are engineered to align the
+      self-interest of players with the strength of the protocol. Every path
       to extracting
-      revenue from internal "degen yield" requires variance tolerance and real work, either marketing the system
-      or locking capital and playing a complex game well.
+      revenue from internal, redistributive "degen yield" requires variance tolerance and real work, either marketing
+      the system
+      or both locking capital and playing a complex game well.
       Passive, risk-averse capital is structurally excluded from capturing this yield.</p>
     <p>The rules of the game are immutable code. The house can never be sold, gutted, or enshittified. Profit rights are
       soulbound: a player can walk away and extract their earned share, but only by sacrificing
       all future distributions. These rights cannot be sold to someone who did not help build the protocol,
-      and when forfeited, those profits accrue to those who did.</p>
+      and the forfeited profits accrue to those who did.</p>
     <p>Entertainment seekers pay for the thrill of jackpots, and the surplus from their bets is the main source of
       equity. Strategic players and whales extract monetary value from that equity while locking capital that grows and
       accelerates jackpots. Affiliates attract the new players the system requires. Each type's selfish actions
       produce what the others demand. It is a collective that selects for those who love gambling,
       structurally rejects those who would diminish it, and only expects selfishness from its members.</p>
-    <p>Every player can either deposit more ETH that strengthens the feedback loop or stop
-      depositing. The incentive structure strongly favors the former, and either way, existing capital is held in
+    <p>The fundamental choice facing a player is to either deposit more ETH that strengthens the feedback loop or stop
+      depositing and exit. The incentive structure strongly favors the former, and either way, existing capital is held
+      in
       non-refundable lottery tickets that can only resolve on the game's schedule.
       These properties, and game mechanics designed for resilience, make the protocol nearly impossible to kill.</p>
 
-    <p><strong>Scope.</strong> This paper stress-tests that argument under the harshest adversarial conditions and
+    <p><strong>Scope.</strong> This paper stress-tests the <a href="#section-45">resilience thesis</a> under the
+      harshest adversarial conditions
+      and
       maps its limitations. The analysis takes entertainment demand as given. Whether enough players find this game
       engaging enough to participate is an empirical question outside the model's scope.</p>
     <p><strong>Terminal state.</strong> Funds are locked in a contract with no admin withdrawal function. If the game
@@ -2735,7 +2741,7 @@
       <a href="#section-boons">boons</a>. The only thing that makes a whale a whale is that capital is not the
       binding constraint. What they do with that capital varies, but the whale-specific products are deity
       passes (permanent +80% activity score, perpetual jackpot entries, up to 3 boons granted daily to other
-      players), whale bundles (40+ tickets plus future-level coverage), and the
+      players) and the
       <a href="#section-baf">BAF</a> (Big-Ass Flip) leaderboard.
     </p>
     <p><strong>The BAF as a whale product.</strong> The BAF fires every
@@ -2743,8 +2749,9 @@
       single communal coinflip. If the flip loses, the full amount returns to the futurepool and nobody wins
       anything. Ten levels of leaderboard competition, resolved by one coin. If the flip wins, 20% of the
       allocated pool goes to leaderboard positions: 10% to the highest cumulative coinflip volume over the
-      10-level window, 5% to the highest volume on the previous day, and 5% to a random draw between the
-      3rd and 4th place cumulative leaders. The remaining 80% of the prizes is distributed through mechanisms that do
+      10-level window, 5% to a random draw between the
+      3rd and 4th place on the leaderboard, and 5% to the highest flip volume on the previous day. The remaining 80% of
+      the prizes is distributed through mechanisms that do
       not require
       whale-scale capital. The leaderboard dynamics are
       deliberately adversarial: 1st place gets 10%, but 2nd place is guaranteed nothing while 3rd or 4th
@@ -3123,7 +3130,12 @@
       most committed players with the survival of the system, and gives them a profitable way to act on that alignment.
     </p>
     <p><strong>Device 2: Quest Streaks.</strong> A quest streak of length $q$ contributes $\min(q, 100)\%$ to the
-      activity score. Breaking the streak (missing one day) resets $q$ to 0.</p>
+      activity score. Breaking the streak (missing one day) resets $q$ to 0. Each day has two quest slots: slot 0 is
+      always "deposit new ETH" (buy a ticket or lootbox with ETH), which is the streak requirement. A second
+      slot rolls a VRF-random bonus quest from the remaining types (BURNIE minting, coinflip, decimator, lootbox,
+      affiliate, or Degenerette). The primary quest pays 100 BURNIE; the bonus pays 200 BURNIE. The bonus quest gives
+      players a reason to engage with a different product each day, broadening participation across the protocol's
+      mechanisms beyond the ETH deposit that maintains the streak.</p>
     <p><strong>Observation 5.4</strong> (Streak Lock-In). The cost of breaking a quest streak grows roughly
       quadratically with streak length. A 50-day streak contributes 50% to activity score, and rebuilding it requires
       50 consecutive days of purchases. The longer the streak, the more painful it is to lose, creating increasingly
@@ -3340,29 +3352,28 @@
       vault
       ownership and are limited to proposing emergency VRF recovery (a Chainlink failsafe), which requires
       sDGNRS holder governance approval to execute. The admin has no power to pause the
-      game, extract funds, modify rules, or trigger GAMEOVER. There is no upgrade proxy. The creator could burn every private key they hold and the game would continue operating identically. The
+      game, extract funds, modify rules, or trigger GAMEOVER. There is no upgrade proxy. The creator could burn every
+      private key they hold and the game would continue operating identically. The
       only path to GAMEOVER is 120 consecutive days where purchasing activity fails to meet the current level's target,
       and no amount of coercion applied to any single party can produce that outcome.</p>
-    <p><strong>The theoretical attack scenario.</strong> Under the previous design, the only path to fund misappropriation
-      required an attacker who simultaneously held the admin key and caused a sustained Chainlink VRF failure. The
-      governance mechanism eliminates this vector. The admin can only <em>propose</em> a VRF coordinator swap after a
-      20-hour stall. Execution requires sDGNRS holder approval exceeding rejection, with a threshold starting at 60%
+    <p><strong>Chainlink VRF failure.</strong> VRF is the protocol's only external dependency with a recovery
+      path. If Chainlink stops delivering randomness, the admin can propose a VRF coordinator swap after a
+      20-hour stall. Execution requires sDGNRS holder approval exceeding rejection, with a threshold starting at 50%
       and decaying over days. sDGNRS tokens are soulbound (non-transferable, non-purchasable), so governance capture
       via flash loans or market accumulation is impossible. The creator's 20% DGNRS allocation cannot vote (unwrapping
       is disabled during VRF stalls).</p>
-    <p>Given a VRF failure, three outcomes are possible:</p>
+    <p>Three outcomes are possible:</p>
     <ol>
-      <li><strong>Admin proposes, community approves:</strong> coordinator is swapped, service resumes. The death clock
-        pauses during the stall, so there is no time pressure on voters.</li>
-      <li><strong>Admin is dead or unreachable:</strong> after 7 days, any sDGNRS holder with 1%+ of circulating supply
+      <li><strong>Admin proposes, community approves:</strong> coordinator is swapped, service resumes.</li>
+      <li><strong>Admin is dead or unreachable:</strong> after 7 days, any sDGNRS holder with 0.5%+ of circulating supply
         can propose. The community path is independent of admin activity.</li>
-      <li><strong>Attacker has compromised the admin key:</strong> proposes a hostile coordinator. sDGNRS holders
+      <li><strong>Attacker proposes a hostile coordinator:</strong> sDGNRS holders
         reject. The proposal dies. No unilateral path to a malicious swap exists.</li>
     </ol>
-    <p>The compound vulnerability (Chainlink failure + compromised admin key) that previously represented a theoretical
-      theft path is now mitigated by governance. An attacker would need to compromise the admin key, cause a VRF failure,
-      <em>and</em> convince a majority of soulbound token holders to approve a malicious coordinator. Chainlink VRF
-      remains battle-tested infrastructure securing billions in DeFi; the governance layer is defense in depth.</p>
+    <p>Fund misappropriation via VRF swap requires compromising the admin key, causing a VRF
+      failure, <em>and</em> convincing a majority of soulbound token holders to approve a malicious coordinator.
+      Chainlink VRF remains battle-tested infrastructure securing billions in DeFi; the governance layer is
+      defense in depth.</p>
     <p>The game's resilience is a property of the contract, not of any person. Even the front-end is not a single point
       of failure: anyone can build and host an alternative interface.</p>
     <p>Detailed analysis of specific attack vectors (Sybil attacks, Degenerette pool drain, affiliate self-referral
@@ -3382,34 +3393,32 @@
     <h3 id="section-36">8.2 Why the Protocol Resists Death Spirals</h3>
     <p><strong>Observation 8.1</strong> (Death Spiral Resistance). Degenerus Protocol resists death spirals through
       four mechanisms:</p>
-    <p><strong>(a) Prize pool concentration and jackpot accumulation.</strong> As players exit, the per-capita prize
-      pool share increases for remaining players. Fewer competitors for the same pool means higher expected value per
-      participant. This creates a natural "buy low" attractor: the worse the exodus, the better the deal for anyone who
-      stays or enters. Players who remain active (or are earliest to return) capture a disproportionate share of
-      rewards: daily BURNIE jackpots and the daily ETH/ticket jackpots continue firing regardless of
-      population size. Fewer active players means fewer draw entries, so each remaining participant's probability of
-      winning increases. The longer others stay away, the more draws the active players accumulate.</p>
-    <p><strong>(b) Terminal insurance accumulation.</strong> The segregated accumulator receives two inflows:
-      50% of stETH yield (continuous, regardless of player activity) and 1% of each completed level's prize pool
-      (at level transition). The yield component grows with time. The deposit component grows with activity.
-      Together they produce countercyclical insurance: during a player exodus, yield continues accruing unopposed,
-      and the deposit insurance accumulated during healthier levels persists untouched (it does not participate in
-      daily drip, BAF, or decimator extractions). The accumulator's full balance
-      contributes to the terminal jackpot if GAMEOVER fires, and half distributes as a bonus event if the game
-      reaches the next century milestone. This creates a self-reinforcing resilience loop: the longer a stall
-      persists, the more yield accumulates, the larger the terminal payout becomes, and the more attractive the
-      terminal arbitrage trade (<a href="#section-41">Section 9.3</a>) becomes for rational capital. The
-      accumulator turns time-without-activity from a pure negative (death clock ticking down) into a partial
-      positive (terminal insurance growing). At early levels where yield is negligible, the deposit-funded
-      component provides the bulk of the insurance.</p>
-    <p><strong>(c) Locked liquidity.</strong> Prize pools are not withdrawable. Player exit does not reduce prize pool
+    <p><strong>(i) Early positioning advantage.</strong> The protocol rewards being early in any level cycle.
+      Daily BURNIE and ETH jackpot draws fire regardless of population size, so fewer
+      active players means higher win probability per participant. Futurepool drip tickets are awarded to existing
+      holders, so players present during a slow period receive equity that latecomers do not. This creates a
+      forward-looking incentive: a player who anticipates a stall has <em>more</em> reason to buy before it, not
+      less. Every day of low activity with tickets already in hand means more draws, more drip equity, and a larger
+      share of whatever resolution occurs. The rational response to expecting a downturn is to position early and
+      wait, which is exactly the purchasing activity that delays or prevents the downturn.</p>
+    <p><strong>(ii) Grinder self-correction.</strong> A stall requires grinder exit (grinders buy daily by definition;
+      if they are still buying, there is no stall). But grinder exit shifts the equilibrium breakeven point downward:
+      fewer competing lootbox buyers with high activity scores means higher EV per lootbox, so remaining grinders become more profitable and
+      marginal hybrids who were below breakeven cross into profitability. The very condition that defines a stall
+      is the condition that improves returns for whoever stays.</p>
+    <p><strong>(iii) Locked liquidity.</strong> Prize pools are not withdrawable. Player exit does not reduce prize pool
       assets; it only reduces competition for those assets. This is structurally different from DeFi protocols where
       whale departure causes liquidity crises.</p>
-    <p><strong>(d) Terminal jackpot as individually +EV opportunity.</strong> If the decline continues long enough to
-      threaten GAMEOVER, the terminal jackpot creates a buying incentive that
-      strengthens as the deadline
-      nears. The worse the spiral gets, the more attractive this trade becomes, and the trade itself is what stops it.
-      Mechanisms (a) through (c) resist the spiral during normal downturns. Mechanism (d) is the backstop that activates
+    <p><strong>(iv) Terminal insurance as self-correcting backstop.</strong> The segregated accumulator receives
+      50% of stETH yield (continuous, regardless of player activity) and 1% of each completed level's prize pool
+      (at level transition). During a player exodus, yield continues accruing unopposed,
+      and the deposit insurance accumulated during healthier levels persists untouched (it does not participate in
+      daily drip, BAF, or decimator extractions). The accumulator turns time-without-activity from a pure negative
+      (death clock ticking down) into a partial positive (terminal insurance growing). If the decline continues
+      long enough to threaten GAMEOVER, the growing accumulator makes the terminal jackpot individually +EV to buy
+      into, and buying is what prevents GAMEOVER. The worse the spiral gets, the more attractive this trade becomes,
+      and the trade itself is what stops it.
+      Mechanisms (i) through (iii) resist the spiral during normal downturns. Mechanism (iv) is the backstop that activates
       when the others prove insufficient.</p>
     <p><em>Argument.</em> A death spiral requires condition (c): self-reinforcing decline. Player departure has two
       effects:</p>
@@ -3424,7 +3433,7 @@
       remaining players respond to monetary incentives. It does not require <em>all</em> players to be rational, only
       that enough EV-sensitive capital remains to keep the system above its breakeven threshold. The "spiral" breaks
       because the monetary incentive to stay <em>increases</em> as others leave. And if the spiral somehow continues
-      despite this, the terminal jackpot (d) ensures that the opportunity to buy becomes more profitable as the deadline
+      despite this, the terminal jackpot (iv) ensures that the opportunity to buy becomes more profitable as the deadline
       approaches: P(GAMEOVER) rises over time, the expected payout per ticket grows relative to cost, and every day
       without buyers improves the math for the next one.</p>
     <p><strong>Progression is also guaranteed at least once (once the game is established).</strong> The death spiral
@@ -4094,7 +4103,7 @@
     <p>The preceding section analyzed failure in detail. This section considers the opposite: what happens when
       the flywheel works.</p>
     <p>The pool target is a ratchet. Each level's target equals the previous level's actual prize pool at completion. It
-      enforcing monotonic growth. Century milestones re-anchor from the accumulated futurepool, which in a growth
+      enforces monotonic growth. Century milestones re-anchor from the accumulated futurepool, which in a growth
       environment will be larger still. In that environment, deposits routinely overshoot the target and the futurepool
       swells from lootbox purchases. The segregated accumulator grows from both stETH yield and the 1% level-completion
       skim, making each successive century milestone distribution larger and deepening the terminal insurance reserve.
@@ -4165,7 +4174,8 @@
           deposits in stETH with no withdrawal mechanism. The same locked liquidity that protects against death spirals
           means a critical contract exploit has no recovery path. A single exploitable bug could drain the entire prize
           pool permanently. This is an endogenous consequence of the design choice to make deposits irrevocable. The
-          protocol also has two external dependencies: Chainlink VRF is a soft dependency (sDGNRS holders can vote to migrate to a
+          protocol also has two external dependencies: Chainlink VRF is a soft dependency (sDGNRS holders can vote to
+          migrate to a
           new VRF coordinator if it breaks), but Lido stETH is a hard dependency (there is no migration path if stETH
           itself fails).</p>
       </li>
@@ -4175,17 +4185,6 @@
           protocol's users. A Monte Carlo simulation of 30 levels with realistic player behavior supports the
           theoretical predictions (<a href="#section-36">Section 8.2</a>), but simulated agents are not real players
           with real money. Post-deployment observation is needed to confirm predictions.</p>
-      </li>
-      <li>
-        <p><strong>Correlated failure modes are acknowledged but not fully quantified.</strong> The progression
-          guarantors are not independent: quest streak maintenance, afKing auto-rebuy, and affiliate recruitment all
-          depend on player spending, which correlates with crypto market sentiment. <a href="#section-39">Section
-            9.1</a> develops a structural
-          argument (six mechanisms in three clusters with negative cross-cluster correlation) and a self-referential
-          equilibrium model for why simultaneous failure is improbable, but precise probability estimates for the
-          individual mechanism failure rates remain illustrative rather than empirically calibrated. The qualitative
-          conclusion (vanishingly small composite probability) is robust to order-of-magnitude changes in the inputs,
-          but it is not a computed number.</p>
       </li>
       <li>
         <p><strong>Cold-start problem is mitigated but not eliminated.</strong> The cross-subsidy structure requires
@@ -4210,28 +4209,31 @@
       requires that, as the terminal
       payout's expected value grows from marginal to overwhelming over 120 days, no rational actor with capital acts on
       it at any point (<a href="#section-41">Section 9.3</a>). We now state the central claim.</p>
-    <p><strong>Thesis (Structural Resilience).</strong> <em>Once Degenerus Protocol has reached a state with positive
-        prize pools and at least one rational participant, the game has structural incentives to continue advancing
-        through levels.</em></p>
-    <p><strong>Where the thesis holds:</strong>
-      - At least one rational actor monitors and acts on prize pool opportunities
-      - Ethereum remains operational
-      - Smart contract code is free of critical bugs</p>
-    <p><strong>Where the thesis fails:</strong>
-      - A prolonged crypto bear market suppresses participation below the level target for 120+ consecutive days AND the
-      terminal jackpot's increasingly +EV opportunity (<a href="#section-41">Section 9.3</a>) fails to attract any
-      rational capital as the
-      deadline approaches. This is the most plausible failure mode at higher levels, but it requires not just
-      insufficient organic play but the collective failure of all actors to respond to a growing arbitrage opportunity
-      over the full duration of the stall.
-      - All participants simultaneously cease to value the entertainment product
-      - A critical smart contract vulnerability is discovered
-      - Regulatory action prevents all participation globally</p>
+    <p><strong>Thesis (Structural Resilience).</strong> <em>Once Degenerus Protocol has completed its first level,
+        continued level advancement is the equilibrium outcome. The rational response to the game's decline is
+        participation, not exit, and the closer it gets to death, the more individually profitable it becomes to
+        prevent it.</em></p>
+    <p><strong>Where the thesis holds:</strong></p>
+    <ul>
+      <li>Enough degens find the game worth playing</li>
+      <li>Sufficient rational capital responds to +EV opportunities as they arise</li>
+      <li>Ethereum remains operational</li>
+      <li>Smart contract code is free of critical bugs</li>
+    </ul>
+    <p><strong>Where the thesis fails:</strong></p>
+    <ul>
+      <li>A critical smart contract vulnerability is discovered or a dependancy fails</li>
+      <li>All participants simultaneously cease to value the entertainment product or Ethereum</li>
+      <li>A prolonged bear market suppresses participation below the level target for 120+ consecutive days and the
+        terminal jackpot's increasingly +EV opportunity fails to attract sufficient rational capital as
+        the deadline
+        approaches</li>
+      <li>Level targets eventually exceed what external capital can possibly fund</li>
+    </ul>
     <p>We do not claim the protocol is indestructible. We claim it is <em>structurally resilient</em>: that its
       incentive design makes continued operation the default outcome under a wide range of conditions, and that failure
       requires sustained collective irrationality rather than the simple absence of growth. The terminal distribution
-      mechanism (<a href="#section-41">Section 9.3</a>) is the strongest expression of this: the endgame payout is
-      designed so that positioning to
+      mechanism is the strongest expression of this: the endgame payout is designed so that positioning to
       profit from game death simultaneously prevents it.</p>
     <p><strong>What this means for each participant.</strong> For a grinder, the question is whether the
       equilibrium point delivers returns that justify the opportunity cost of locked capital. For a degen, the question
@@ -4478,9 +4480,6 @@
         with ~15% from next-century ticket holders. The backward-looking majority rewards participants in the completed
         100-level cycle (season finale payout), while the forward-looking minority creates a FOMO bridge into the next
         cycle.</li>
-      <li><strong>Terminal BAF (GAMEOVER):</strong> No scatter. The terminal distribution runs 90% of remaining assets
-        through a final jackpot among next-level ticket holders, with 10% to a decimator weighted by BURNIE burned
-        and activity score (<a href="#section-41">Section 9.3</a>).</li>
     </ul>
     <h3 id="section-decimator">B.4 Decimator</h3>
     <p>The decimator is a BURNIE-burn-to-ETH event that fires at milestone levels. Players permanently burn BURNIE to
@@ -5304,7 +5303,8 @@
                         the system is the deity pass, which is non-transferable. The holder continues earning
                         perpetual tickets and benefits but cannot resell the pass or recover the upfront cost directly.
                         This applies to a premium product designed for
-                        the most committed players, not the average participant. Calling opportunity cost "aggressive" sets a
+                        the most committed players, not the average participant. Calling opportunity cost "aggressive"
+                        sets a
                         standard where any
                         product that rewards continued use is predatory. On the streak reset specifically: a player who
                         stops playing

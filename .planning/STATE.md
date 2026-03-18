@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Game Frontend
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-03-18T14:01:13Z"
-last_activity: 2026-03-18 -- Plan 06-02 complete (API client, contracts, wallet)
+stopped_at: Completed 06-03-PLAN.md (Phase 6 complete)
+last_updated: "2026-03-18T14:06:35Z"
+last_activity: 2026-03-18 -- Plan 06-03 complete (app shell, Custom Elements, router, main.js)
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 67
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State
@@ -26,24 +26,24 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 6 of 11 (Phase 6: Foundation)
-Plan: 3 of 3 (next: 06-03 app shell)
-Status: Executing
-Last activity: 2026-03-18 -- Plan 06-02 complete (API client, contracts, wallet)
+Plan: 3 of 3 (complete)
+Status: Phase 6 complete
+Last activity: 2026-03-18 -- Plan 06-03 complete (app shell, Custom Elements, router, main.js)
 
-Progress: [███████░░░] 67%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
+- Total plans completed: 3
 - Average duration: 3min
-- Total execution time: 6min
+- Total execution time: 8min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 06-foundation | 2 | 6min | 3min |
+| 06-foundation | 3 | 8min | 3min |
 
 *Updated after each plan completion*
 
@@ -68,6 +68,11 @@ Recent decisions affecting current work:
 - Auto-reconnect uses silent eth_accounts (no popup), not eth_requestAccounts
 - nav.js bridge is additive-only: CustomEvents alongside existing Mint.init()
 - sendTx() emits lifecycle events on internal bus, not document CustomEvents
+- Custom Element pattern: #unsubs array, subscribe in connectedCallback, cleanup in disconnectedCallback
+- Connect prompt is a self-managing Custom Element (not router-managed); keeps wallet state separate from phase routing
+- Activity score shows total only in Phase 6; breakdown deferred until per-component contract reads available
+- main.js bootstrap sequence: discoverWallets -> initRouter -> checkHealth -> startPolling -> autoReconnect
+- Transaction lifecycle events wired to ui.pendingTxs store path for future tx status components
 
 ### Pending Todos
 
@@ -82,6 +87,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T14:01:13Z
-Stopped at: Completed 06-02-PLAN.md
-Resume file: .planning/phases/06-foundation/06-03-PLAN.md
+Last session: 2026-03-18T14:06:35Z
+Stopped at: Completed 06-03-PLAN.md (Phase 6 complete)
+Resume file: Next phase planning needed

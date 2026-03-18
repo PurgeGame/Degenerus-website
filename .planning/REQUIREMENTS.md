@@ -9,7 +9,7 @@
 
 - [x] **ARCH-01**: App uses ES modules with import map for dependency resolution (no bundler)
 - [x] **ARCH-02**: Game state managed via reactive proxy store with subscription pattern
-- [ ] **ARCH-03**: UI built with Custom Elements (no Shadow DOM) sharing global CSS design system
+- [x] **ARCH-03**: UI built with Custom Elements (no Shadow DOM) sharing global CSS design system
 - [x] **ARCH-04**: API client handles all REST reads with polling, caching, and lag detection
 - [x] **ARCH-05**: Contract writes go direct via ethers.js with receipt status verification
 - [x] **ARCH-06**: CSS extracted from monolith into modular files with shared design tokens
@@ -97,9 +97,9 @@
 
 ### State Management
 
-- [ ] **STATE-01**: UI switches between purchase phase and jackpot phase display automatically
-- [ ] **STATE-02**: GAMEOVER state shows terminal information and disables game actions
-- [ ] **STATE-03**: Activity score breakdown visible (quest streak, mint count, affiliate, passes)
+- [x] **STATE-01**: UI switches between purchase phase and jackpot phase display automatically
+- [x] **STATE-02**: GAMEOVER state shows terminal information and disables game actions
+- [x] **STATE-03**: Activity score breakdown visible (quest streak, mint count, affiliate, passes)
 
 ## v2 Requirements
 
@@ -132,14 +132,14 @@
 |-------------|-------|--------|
 | ARCH-01 | Phase 6 | Complete |
 | ARCH-02 | Phase 6 | Complete |
-| ARCH-03 | Phase 6 | Pending |
+| ARCH-03 | Phase 6 | Complete |
 | ARCH-04 | Phase 6 | Complete |
 | ARCH-05 | Phase 6 | Complete |
 | ARCH-06 | Phase 6 | Complete |
 | ARCH-07 | Phase 6 | Complete |
-| STATE-01 | Phase 6 | Pending |
-| STATE-02 | Phase 6 | Pending |
-| STATE-03 | Phase 6 | Pending |
+| STATE-01 | Phase 6 | Complete |
+| STATE-02 | Phase 6 | Complete |
+| STATE-03 | Phase 6 | Complete |
 | PURCH-01 | Phase 7 | Pending |
 | PURCH-02 | Phase 7 | Pending |
 | PURCH-03 | Phase 7 | Pending |
