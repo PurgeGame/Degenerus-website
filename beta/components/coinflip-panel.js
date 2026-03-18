@@ -53,6 +53,7 @@ class CoinflipPanel extends HTMLElement {
 
         <div class="coinflip-bounty-section">
           <div class="coinflip-section-header">Bounty Tracker</div>
+          <div class="coinflip-bounty-armed" data-bind="bounty-armed" data-armed="false">NOT ARMED</div>
           <div class="coinflip-bounty-stats">
             <div class="stat">
               <div class="stat-label">Bounty Pool</div>
@@ -61,6 +62,10 @@ class CoinflipPanel extends HTMLElement {
             <div class="stat">
               <div class="stat-label">Record Flip</div>
               <div class="stat-value" data-bind="bounty-record">--</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Record Holder</div>
+              <div class="stat-value" data-bind="bounty-holder">--</div>
             </div>
           </div>
         </div>
@@ -145,11 +150,20 @@ class CoinflipPanel extends HTMLElement {
 
         // Bounty display
         if (cf.bounty) {
-          if (cf.bounty.pool && cf.bounty.pool !== '0') {
+          const armed = cf.bounty.pool && cf.bounty.pool !== '0';
+          const armedEl = this.querySelector('[data-bind="bounty-armed"]');
+          if (armedEl) {
+            armedEl.dataset.armed = armed ? 'true' : 'false';
+            armedEl.textContent = armed ? 'ARMED' : 'NOT ARMED';
+          }
+          if (armed) {
             this.#setTextContent('bounty-pool', formatBurnie(cf.bounty.pool) + ' BURNIE');
           }
           if (cf.bounty.recordAmount && cf.bounty.recordAmount !== '0') {
             this.#setTextContent('bounty-record', formatBurnie(cf.bounty.recordAmount) + ' BURNIE');
+          }
+          if (cf.bounty.recordHolder) {
+            this.#setTextContent('bounty-holder', truncateAddress(cf.bounty.recordHolder));
           }
         }
       })

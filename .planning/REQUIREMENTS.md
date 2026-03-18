@@ -24,10 +24,10 @@
 
 ### Coinflip
 
-- [ ] **FLIP-01**: Player can stake BURNIE in daily coinflip with amount input
-- [ ] **FLIP-02**: Coinflip result displays multiplier tier with visual breakdown (1.50x/2.50x/range)
-- [ ] **FLIP-03**: Bounty tracker shows current pool, record holder, and armed status
-- [ ] **FLIP-04**: Auto-rebuy toggle and recycling bonus displayed
+- [x] **FLIP-01**: Player can stake BURNIE in daily coinflip with amount input
+- [x] **FLIP-02**: Coinflip result displays multiplier tier with visual breakdown (1.50x/2.50x/range)
+- [x] **FLIP-03**: Bounty tracker shows current pool, record holder, and armed status
+- [x] **FLIP-04**: Auto-rebuy toggle and recycling bonus displayed
 
 ### Purchasing
 
@@ -152,10 +152,10 @@
 | JACK-02 | Phase 8 | Complete |
 | JACK-03 | Phase 8 | Complete |
 | JACK-04 | Phase 8 | Complete |
-| FLIP-01 | Phase 8 | Pending |
-| FLIP-02 | Phase 8 | Pending |
-| FLIP-03 | Phase 8 | Pending |
-| FLIP-04 | Phase 8 | Pending |
+| FLIP-01 | Phase 8 | Complete |
+| FLIP-02 | Phase 8 | Complete |
+| FLIP-03 | Phase 8 | Complete |
+| FLIP-04 | Phase 8 | Complete |
 | DEATH-01 | Phase 8 | Complete |
 | DEATH-02 | Phase 8 | Complete |
 | DEATH-03 | Phase 8 | Complete |

@@ -144,10 +144,35 @@
   flex: 1;
 }
 
+.coinflip-bounty-armed {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  background: rgba(100, 100, 100, 0.2);
+  color: var(--text-dim);
+}
+
+.coinflip-bounty-armed[data-armed="true"] {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--error);
+  animation: armed-pulse 2s ease-in-out infinite;
+}
+
+@keyframes armed-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 .coinflip-bounty-stats {
   display: flex;
   justify-content: center;
   gap: clamp(1rem, 4vw, 2rem);
+  flex-wrap: wrap;
 }
 
 .coinflip-toggle-row {
