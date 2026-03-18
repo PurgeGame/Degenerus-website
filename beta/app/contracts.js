@@ -8,6 +8,15 @@ import { CHAIN, CONTRACTS, ETHERSCAN_BASE } from './constants.js';
 
 let provider = null;
 let signer = null;
+let readOnlyProvider = null;
+
+export function getReadProvider() {
+  if (provider) return provider;
+  if (!readOnlyProvider) {
+    readOnlyProvider = new ethers.JsonRpcProvider(CHAIN.rpcUrl);
+  }
+  return readOnlyProvider;
+}
 
 export function initProvider(walletProvider) {
   provider = new ethers.BrowserProvider(walletProvider, {
