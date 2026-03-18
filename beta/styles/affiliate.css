@@ -1,0 +1,76 @@
+/* Affiliate panel styles */
+.affiliate-panel { /* inherits .panel */ }
+
+.affiliate-earnings {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.affiliate-earned-amount {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--color-green);
+}
+
+.affiliate-code-section,
+.affiliate-referral-section {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.affiliate-form-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.affiliate-form-row label {
+  min-width: 80px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.affiliate-form-row input {
+  flex: 1;
+}
+
+.affiliate-code-display {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.affiliate-code-display code {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+}
+
+.affiliate-referrer-addr {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.affiliate-create-btn {
+  margin-top: 0.5rem;
+}
+
+.affiliate-error,
+.affiliate-refer-error {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-red, #e74c3c);
+}
