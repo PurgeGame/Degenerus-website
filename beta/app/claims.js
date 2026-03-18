@@ -92,14 +92,3 @@ export async function claimBurnie() {
   return receipt;
 }
 
-// -- Pure Helpers --
-
-/**
- * Check if the player has any claimable winnings.
- * @returns {boolean} True if either ETH or BURNIE claimable is non-zero
- */
-export function hasAnyClaim() {
-  const eth = get('claims.eth');
-  const burnie = get('claims.burnie');
-  return (eth && eth !== '0') || (burnie && burnie !== '0');
-}

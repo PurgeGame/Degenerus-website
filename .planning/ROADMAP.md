@@ -3,7 +3,7 @@
 ## Milestones
 
 - v1.0 **Paper Audit** - Phases 1-5 (shipped 2026-03-18)
-- v2.0 **Game Frontend** - Phases 6-11 (in progress)
+- v2.0 **Game Frontend** - Phases 6-12 (in progress)
 
 ## Phases
 
@@ -28,6 +28,7 @@
 - [ ] **Phase 9: Supporting Features** - Degenerette, quests, unified claims, affiliate, BAF leaderboard
 - [x] **Phase 10: Decimator & Terminal** - BURNIE burn submissions, decimator display, terminal payout, GAMEOVER state (completed 2026-03-18)
 - [x] **Phase 11: Audio & Polish** - Sound effects, visual polish, error states, loading skeletons (completed 2026-03-18)
+- [ ] **Phase 12: Integration Fixes & Cleanup** - Affiliate key mismatch, GAMEOVER trigger consolidation, orphaned code removal, CLAIM-02 text fix (gap closure)
 
 ## Phase Details
 
@@ -88,7 +89,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Player can place degenerette bets with currency selector (ETH/BURNIE/WWXRP); VRF-pending bets survive a page refresh; results show win/loss and claimable winnings with slot-style reveal animation
   2. Quest panel shows daily slot progress bars with slot-0 prerequisite enforced; streak counter shows consecutive days, shield count, and milestone progress; panel appears contextually when quests are active
-  3. Unified claims panel aggregates all claimable winnings across all game systems; player can claim with a single transaction and sees the claimed amount with tx confirmation
+  3. Unified claims panel aggregates all claimable winnings across all game systems; player can claim ETH and BURNIE with separate per-contract transactions (ETH from GAME, BURNIE from COINFLIP) and sees the claimed amount with tx confirmation
   4. Player can create an affiliate referral code and input one (from URL param or manual entry); cumulative ETH earned is displayed
   5. Player's BAF score shows with ranking context; top-4 leaderboard is prominent on pre-BAF levels and subtle on others
 **Plans:** 4 plans
@@ -127,6 +128,21 @@ Plans:
 - [ ] 11-01-PLAN.md -- Audio module (preload, autoplay unlock, playSound) + wire sound triggers to jackpot, coinflip, degenerette, death clock
 - [ ] 11-02-PLAN.md -- Skeleton CSS + loading skeleton states for 8 panels + error fallback pattern for minor panels
 
+### Phase 12: Integration Fixes & Cleanup
+**Goal**: Close all integration gaps found by milestone audit: fix the affiliate referral localStorage key mismatch so referral codes flow through to purchases, consolidate the dual GAMEOVER trigger, remove orphaned code, and correct the CLAIM-02 requirements text.
+**Depends on**: Phase 9, Phase 11
+**Requirements**: AFFIL-02
+**Gap Closure:** Closes gaps from v2.0-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. Affiliate referral code captured from URL is applied to all purchase transactions (tickets, lootboxes, passes)
+  2. GAMEOVER panel activation uses a single code path (no dual-trigger race)
+  3. No orphaned imports, exports, or store writes remain in milestone code
+  4. CLAIM-02 requirements text accurately describes the two-transaction architecture
+**Plans:** 0/1
+
+Plans:
+- [ ] 12-01-PLAN.md -- Fix localStorage key, consolidate GAMEOVER trigger, remove orphaned code, update CLAIM-02 text
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -141,4 +157,5 @@ Plans:
 | 8. Hero Displays | v2.0 | 0/3 | Planned | - |
 | 9. Supporting Features | v2.0 | 0/4 | Planned | - |
 | 10. Decimator & Terminal | 2/2 | Complete    | 2026-03-18 | - |
-| 11. Audio & Polish | 2/2 | Complete   | 2026-03-18 | - |
+| 11. Audio & Polish | 2/2 | Complete    | 2026-03-18 | - |
+| 12. Integration Fixes & Cleanup | v2.0 | 0/1 | Planned | - |

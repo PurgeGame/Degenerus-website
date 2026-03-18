@@ -3,7 +3,7 @@
 // All data transformation delegated to jackpot-data.js.
 
 import { subscribe, get } from '../app/store.js';
-import { deriveWinningTraits, traitToBadge, estimateAllocation, quadrantLabel } from '../app/jackpot-data.js';
+import { deriveWinningTraits, traitToBadge, estimateAllocation } from '../app/jackpot-data.js';
 import { formatEth } from '../app/utils.js';
 import { playSound } from '../app/audio.js';
 

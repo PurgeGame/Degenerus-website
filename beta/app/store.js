@@ -18,7 +18,6 @@ const _state = {
     address: null,
     balances: { eth: '0', burnie: '0', dgnrs: '0', wwxrp: '0' },
     activityScore: { total: 0, quest: 0, mint: 0, affiliate: 0, pass: 0 },
-    currentStreak: 0,
     shields: 0,
     claimable: '0',
   },

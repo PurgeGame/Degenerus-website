@@ -63,7 +63,6 @@ export async function pollPlayerData() {
       ['player.balances.dgnrs', data.dgnrsBalance],
       ['player.balances.wwxrp', data.wwxrpBalance],
       ['player.claimable', data.claimableEth],
-      ['player.currentStreak', data.currentStreak],
       ['player.shields', data.shields],
     ]);
   } catch {
