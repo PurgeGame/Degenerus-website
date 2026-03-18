@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Game Frontend
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-03-18T13:55:31Z"
-last_activity: 2026-03-18 -- Plan 06-01 complete (core modules + CSS extraction)
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-03-18T14:01:13Z"
+last_activity: 2026-03-18 -- Plan 06-02 complete (API client, contracts, wallet)
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -26,24 +26,24 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 6 of 11 (Phase 6: Foundation)
-Plan: 2 of 3 (next: 06-02 API client, contracts, wallet)
+Plan: 3 of 3 (next: 06-03 app shell)
 Status: Executing
-Last activity: 2026-03-18 -- Plan 06-01 complete (core modules + CSS extraction)
+Last activity: 2026-03-18 -- Plan 06-02 complete (API client, contracts, wallet)
 
-Progress: [███░░░░░░░] 33%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 4min
-- Total execution time: 4min
+- Total plans completed: 2
+- Average duration: 3min
+- Total execution time: 6min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 06-foundation | 1 | 4min | 4min |
+| 06-foundation | 2 | 6min | 3min |
 
 *Updated after each plan completion*
 
@@ -64,6 +64,10 @@ Recent decisions affecting current work:
 - Shallow Proxy on top-level state; nested updates via explicit update(path, value) on raw _state
 - CSS organized by concern (base, panels, buttons, forms, tx-status, status-bar) not by component
 - esm.sh CDN for all import map entries
+- API field normalization at polling layer (rngLockedFlag -> game.rngLocked)
+- Auto-reconnect uses silent eth_accounts (no popup), not eth_requestAccounts
+- nav.js bridge is additive-only: CustomEvents alongside existing Mint.init()
+- sendTx() emits lifecycle events on internal bus, not document CustomEvents
 
 ### Pending Todos
 
@@ -78,6 +82,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T13:55:31Z
-Stopped at: Completed 06-01-PLAN.md
-Resume file: .planning/phases/06-foundation/06-02-PLAN.md
+Last session: 2026-03-18T14:01:13Z
+Stopped at: Completed 06-02-PLAN.md
+Resume file: .planning/phases/06-foundation/06-03-PLAN.md

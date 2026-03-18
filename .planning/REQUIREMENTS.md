@@ -10,10 +10,10 @@
 - [x] **ARCH-01**: App uses ES modules with import map for dependency resolution (no bundler)
 - [x] **ARCH-02**: Game state managed via reactive proxy store with subscription pattern
 - [ ] **ARCH-03**: UI built with Custom Elements (no Shadow DOM) sharing global CSS design system
-- [ ] **ARCH-04**: API client handles all REST reads with polling, caching, and lag detection
-- [ ] **ARCH-05**: Contract writes go direct via ethers.js with receipt status verification
+- [x] **ARCH-04**: API client handles all REST reads with polling, caching, and lag detection
+- [x] **ARCH-05**: Contract writes go direct via ethers.js with receipt status verification
 - [x] **ARCH-06**: CSS extracted from monolith into modular files with shared design tokens
-- [ ] **ARCH-07**: Wallet connection supports EIP-6963 (multi-wallet discovery) with MetaMask fallback
+- [x] **ARCH-07**: Wallet connection supports EIP-6963 (multi-wallet discovery) with MetaMask fallback
 
 ### Jackpot Display
 
@@ -133,10 +133,10 @@
 | ARCH-01 | Phase 6 | Complete |
 | ARCH-02 | Phase 6 | Complete |
 | ARCH-03 | Phase 6 | Pending |
-| ARCH-04 | Phase 6 | Pending |
-| ARCH-05 | Phase 6 | Pending |
+| ARCH-04 | Phase 6 | Complete |
+| ARCH-05 | Phase 6 | Complete |
 | ARCH-06 | Phase 6 | Complete |
-| ARCH-07 | Phase 6 | Pending |
+| ARCH-07 | Phase 6 | Complete |
 | STATE-01 | Phase 6 | Pending |
 | STATE-02 | Phase 6 | Pending |
 | STATE-03 | Phase 6 | Pending |
