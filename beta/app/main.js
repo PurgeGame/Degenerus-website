@@ -20,7 +20,8 @@ import '../components/decimator-panel.js';
 import '../components/terminal-panel.js';
 
 // Import modules
-import { update, get } from './store.js';
+import { update, get, subscribe } from './store.js';
+import { playSound } from './audio.js';
 import { on } from './events.js';
 import { startPolling, checkHealth } from './api.js';
 import { discoverWallets, autoReconnect } from './wallet.js';
@@ -79,6 +80,30 @@ async function init() {
   on('tx:error', ({ txId }) => {
     updateTxStatus(txId, 'error', null);
     setTimeout(() => removeTx(txId), 10000);
+  });
+
+  // 7. Wire audio triggers to game events
+
+  // Audio: coinflip result sounds (AUD-02 + AUD-01)
+  let lastCoinflipResultId = null;
+  subscribe('coinflip.lastResult', (result) => {
+    if (!result) return;
+    const resultId = result.timestamp || result.rewardPercent;
+    if (resultId === lastCoinflipResultId) return;
+    lastCoinflipResultId = resultId;
+    playSound('flip');
+    if (result.rewardPercent > 0) {
+      setTimeout(() => playSound('win'), 300);
+    }
+  });
+
+  // Audio: degenerette win sound (AUD-01)
+  let lastDegenResultsRef = null;
+  subscribe('degenerette.lastResults', (results) => {
+    if (!results || results.length === 0 || results === lastDegenResultsRef) return;
+    lastDegenResultsRef = results;
+    const hasWin = results.some(r => r.matches > 0 && r.payout !== '0');
+    if (hasWin) playSound('win');
   });
 
   console.log('[Degenerus] Initialization complete.');

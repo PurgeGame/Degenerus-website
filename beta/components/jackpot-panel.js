@@ -5,6 +5,7 @@
 import { subscribe, get } from '../app/store.js';
 import { deriveWinningTraits, traitToBadge, estimateAllocation, quadrantLabel } from '../app/jackpot-data.js';
 import { formatEth } from '../app/utils.js';
+import { playSound } from '../app/audio.js';
 
 class JackpotPanel extends HTMLElement {
   #unsubs = [];
@@ -187,6 +188,7 @@ class JackpotPanel extends HTMLElement {
   }
 
   async #celebrate() {
+    playSound('win');
     try {
       const { default: confetti } = await import('canvas-confetti');
 

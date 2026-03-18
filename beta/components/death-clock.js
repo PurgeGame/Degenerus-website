@@ -4,6 +4,7 @@
 
 import { subscribe } from '../app/store.js';
 import { DEATH_CLOCK } from '../app/constants.js';
+import { playSound } from '../app/audio.js';
 
 class DeathClock extends HTMLElement {
   #unsubs = [];
@@ -12,6 +13,7 @@ class DeathClock extends HTMLElement {
   #lastRenderedSecond = -1;
   #gameData = null;
   #onVisibilityChange = null;
+  #initialLoad = true;
 
   connectedCallback() {
     this.innerHTML = `
@@ -141,8 +143,16 @@ class DeathClock extends HTMLElement {
 
       const el = this.querySelector('.death-clock');
       if (el && el.getAttribute('data-stage') !== stage) {
+        const prevStage = this.#stage;
         el.setAttribute('data-stage', stage);
         this.#stage = stage;
+        // Play urgency sound on stage transitions (not on initial page load)
+        if (!this.#initialLoad &&
+            ((stage === 'imminent' && prevStage === 'normal') ||
+             (stage === 'distress' && prevStage !== 'distress'))) {
+          playSound('urgency');
+        }
+        this.#initialLoad = false;
       }
 
       // Stage badge
@@ -157,6 +167,7 @@ class DeathClock extends HTMLElement {
     }
 
     this.#rafId = requestAnimationFrame(() => this.#tick());
+    if (this.#initialLoad) this.#initialLoad = false;
   }
 
   #startTick() {
