@@ -1,0 +1,250 @@
+/* degenerette.css -- Degenerette panel, currency selector, slot reels, pending bets, results */
+
+.degenerette-panel {
+  /* inherits .panel from panels.css */
+}
+
+/* Currency Selector */
+
+.currency-selector {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.currency-selector button {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.currency-selector button:hover {
+  background: var(--bg-tertiary);
+}
+
+.currency-selector button.active {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+}
+
+/* Bet Form */
+
+.degen-bet-form {
+  padding-bottom: 0.75rem;
+}
+
+.bet-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.bet-input-row label {
+  min-width: 60px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.bet-input-row input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.bet-input-row input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.degen-min-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.degen-bet-btn {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.degen-error {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--error);
+  margin-top: 0.25rem;
+}
+
+/* Section Headers */
+
+.degen-section-header {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+
+/* Pending Bets */
+
+.degen-pending {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.pending-bet {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.pending-bet-id {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pending-bet-detail {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pending-bet-status {
+  color: var(--warning);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.degen-resolve-btn {
+  width: 100%;
+}
+
+/* Results / Slot Reels */
+
+.degen-results {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.slot-reels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.slot-reel {
+  height: 80px;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  gap: 0.25rem;
+}
+
+.slot-reel .reel-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+
+.slot-reel .reel-value {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.slot-reel.winner {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.3);
+}
+
+.slot-reel.winner .reel-value {
+  color: var(--accent-primary);
+}
+
+/* Result Summary */
+
+.result-summary {
+  text-align: center;
+  padding: 0.75rem;
+}
+
+.result-summary.win {
+  color: var(--success);
+}
+
+.result-summary.loss {
+  color: var(--text-dim);
+}
+
+.result-matches {
+  font-size: 1.1rem;
+  font-weight: 800;
+  margin-bottom: 0.25rem;
+}
+
+.result-payout {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.result-summary.win .result-payout {
+  color: var(--success);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Responsive */
+
+@media (max-width: 480px) {
+  .slot-reels {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .pending-bet {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .pending-bet-status {
+    width: 100%;
+    text-align: right;
+  }
+}
