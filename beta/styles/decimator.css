@@ -1,0 +1,115 @@
+/* decimator.css -- Decimator panel, burn input, info stats, claim section */
+
+.decimator-panel {
+  /* inherits .panel from panels.css */
+}
+
+.decimator-panel .panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.decimator-window-badge {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.decimator-info-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.decimator-info-row .stat {
+  text-align: center;
+}
+
+.decimator-info-row .stat-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.decimator-info-row .stat-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 0.25rem;
+}
+
+.decimator-burn-section {
+  margin: 1rem 0;
+}
+
+.decimator-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+
+.decimator-input-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.decimator-input {
+  flex: 1;
+}
+
+.decimator-burn-btn {
+  white-space: nowrap;
+}
+
+.decimator-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 0.25rem;
+}
+
+.decimator-error {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--danger);
+  margin-top: 0.25rem;
+}
+
+.decimator-claim-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.decimator-claim-label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.decimator-claimable-value {
+  font-weight: 700;
+  color: var(--accent-primary);
+  flex: 1;
+}
+
+.decimator-winner {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 12px rgba(245, 166, 35, 0.15);
+}
+
+@media (max-width: 480px) {
+  .decimator-info-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+}
