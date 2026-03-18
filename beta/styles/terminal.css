@@ -1,0 +1,156 @@
+/* Terminal panel */
+.terminal-panel .panel-header h2 {
+  color: var(--danger);
+}
+
+.terminal-payout-section,
+.terminal-insurance-section,
+.terminal-dec-section {
+  margin: 1.25rem 0;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-payout-section:last-of-type,
+.terminal-dec-section:last-of-type {
+  border-bottom: none;
+}
+
+.terminal-payout-section h3,
+.terminal-insurance-section h3,
+.terminal-dec-section h3 {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.terminal-payout-desc,
+.terminal-insurance-desc {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+
+.terminal-tickets-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.terminal-tickets-label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.terminal-tickets-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+/* Insurance bar */
+.terminal-insurance-bar-wrap {
+  background: var(--bg-secondary);
+  border-radius: 0.5rem;
+  height: 1.5rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.terminal-insurance-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-primary), #4ade80);
+  border-radius: 0.5rem;
+  transition: width 0.6s ease;
+  min-width: 0;
+}
+
+.terminal-insurance-stats {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* Terminal decimator */
+.terminal-dec-info-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin: 0.75rem 0;
+}
+
+.terminal-dec-info-row .stat {
+  text-align: center;
+}
+
+.terminal-dec-info-row .stat-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.terminal-dec-info-row .stat-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 0.25rem;
+}
+
+.terminal-burn-input-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.terminal-burn-input {
+  flex: 1;
+}
+
+.terminal-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 0.25rem;
+}
+
+.terminal-error {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--danger);
+  margin-top: 0.25rem;
+}
+
+.terminal-blocked-msg {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--danger);
+  margin-top: 0.25rem;
+  font-weight: 600;
+}
+
+.terminal-claim-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.terminal-claim-label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.terminal-claimable-value {
+  font-weight: 700;
+  color: var(--accent-primary);
+  flex: 1;
+}

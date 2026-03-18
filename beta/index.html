@@ -21,6 +21,8 @@
   <link rel="stylesheet" href="styles/claims.css">
   <link rel="stylesheet" href="styles/affiliate.css">
   <link rel="stylesheet" href="styles/baf.css">
+  <link rel="stylesheet" href="styles/decimator.css">
+  <link rel="stylesheet" href="styles/terminal.css">
   <script type="importmap">
   {
     "imports": {
@@ -63,6 +65,7 @@
         <claims-panel></claims-panel>
         <affiliate-panel></affiliate-panel>
         <baf-panel></baf-panel>
+        <decimator-panel></decimator-panel>
         <pass-section></pass-section>
       </div>
       <div>
@@ -80,8 +83,12 @@
     </div>
 
     <div data-panel="gameover" class="main-layout" hidden>
-      <!-- GAMEOVER terminal info added in Phase 10 -->
-      <div class="panel"><p class="text-dim">Game Over (Phase 10)</p></div>
+      <div>
+        <terminal-panel></terminal-panel>
+      </div>
+      <div>
+        <tx-status-list></tx-status-list>
+      </div>
     </div>
 
     <!-- Stale data indicator -->

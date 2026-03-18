@@ -16,6 +16,8 @@ import '../components/quest-panel.js';
 import '../components/claims-panel.js';
 import '../components/affiliate-panel.js';
 import '../components/baf-panel.js';
+import '../components/decimator-panel.js';
+import '../components/terminal-panel.js';
 
 // Import modules
 import { update, get } from './store.js';
