@@ -8,9 +8,25 @@ import { truncateAddress } from '../app/utils.js';
 
 class BafPanel extends HTMLElement {
   #unsubs = [];
+  #loaded = false;
+  #errorShown = false;
+
+  #showContent() {
+    if (this.#loaded) return;
+    this.#loaded = true;
+    this.querySelector('[data-bind="skeleton"]')?.remove();
+    const el = this.querySelector('[data-bind="content"]');
+    if (el) el.style.display = '';
+  }
 
   connectedCallback() {
     this.innerHTML = `
+      <div data-bind="skeleton" class="panel baf-panel">
+        <div class="skeleton-header"><div class="skeleton-line skeleton-shimmer" style="width:40%"></div></div>
+        <div class="skeleton-row"><div class="skeleton-line skeleton-shimmer" style="width:50%"></div></div>
+        <div class="skeleton-row"><div class="skeleton-block skeleton-shimmer" style="width:48px;height:28px"></div><div class="skeleton-block skeleton-shimmer" style="width:48px;height:28px"></div><div class="skeleton-block skeleton-shimmer" style="width:48px;height:28px"></div><div class="skeleton-block skeleton-shimmer" style="width:48px;height:28px"></div></div>
+      </div>
+      <div data-bind="content" style="display:none">
       <div class="panel baf-panel" data-prominence="low">
         <h3>BAF Leaderboard</h3>
         <div class="baf-context">
@@ -30,6 +46,7 @@ class BafPanel extends HTMLElement {
           </div>
         </div>
       </div>
+      </div>
     `;
 
     // -- Store Subscriptions --
@@ -48,6 +65,7 @@ class BafPanel extends HTMLElement {
     this.#unsubs.push(
       subscribe('baf', (baf) => {
         if (!baf) return;
+        this.#showContent();
         this.#renderLeaderboard(baf);
         this.#renderProminence(baf);
       })
@@ -59,6 +77,30 @@ class BafPanel extends HTMLElement {
         const level = get('game.level');
         if (level > 0) {
           fetchBafLeaderboard(level);
+        }
+      })
+    );
+
+    // Error fallback on API failure
+    this.#unsubs.push(
+      subscribe('ui', (ui) => {
+        if (!ui) return;
+        if (ui.apiHealthy === false && ui.staleData === true && this.#loaded && !this.#errorShown) {
+          this.#errorShown = true;
+          const content = this.querySelector('[data-bind="content"]');
+          if (content) content.style.display = 'none';
+          const errorDiv = document.createElement('div');
+          errorDiv.setAttribute('data-bind', 'error-state');
+          errorDiv.innerHTML = `<div class="panel-error-state"><span class="panel-error-icon">!</span><span class="panel-error-msg">Unable to load BAF data</span><button class="panel-error-retry">Retry</button></div>`;
+          errorDiv.querySelector('.panel-error-retry').addEventListener('click', () => {
+            import('../app/api.js').then(m => m.startPolling());
+          });
+          this.appendChild(errorDiv);
+        } else if (ui.apiHealthy === true && this.#errorShown) {
+          this.#errorShown = false;
+          this.querySelector('[data-bind="error-state"]')?.remove();
+          const content = this.querySelector('[data-bind="content"]');
+          if (content) content.style.display = '';
         }
       })
     );
