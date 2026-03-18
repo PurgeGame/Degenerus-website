@@ -1,0 +1,87 @@
+/* tx-status.css -- Transaction status indicator */
+
+/* ------------------------------------------------------------------ */
+/* Container                                                            */
+/* ------------------------------------------------------------------ */
+.tx-status {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  animation: txFadeIn 0.2s ease;
+}
+
+.tx-status:not(:empty) {
+  display: flex;
+}
+
+@keyframes txFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ------------------------------------------------------------------ */
+/* State variants                                                       */
+/* ------------------------------------------------------------------ */
+.tx-pending {
+  background: rgba(245, 166, 35, 0.08);
+  border-color: rgba(245, 166, 35, 0.25);
+  color: var(--accent-primary);
+}
+
+.tx-confirmed {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.25);
+  color: var(--success);
+}
+
+.tx-failed {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: var(--error);
+}
+
+/* ------------------------------------------------------------------ */
+/* Spinner                                                              */
+/* ------------------------------------------------------------------ */
+.tx-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(245, 166, 35, 0.3);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Icon and hash link                                                   */
+/* ------------------------------------------------------------------ */
+.tx-icon {
+  font-style: normal;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tx-hash {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  opacity: 0.8;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+}
+
+.tx-hash:hover {
+  opacity: 1;
+}

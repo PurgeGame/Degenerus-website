@@ -1,0 +1,174 @@
+/* panels.css -- Panel/card container patterns */
+
+/* ------------------------------------------------------------------ */
+/* Panel (shared card style)                                            */
+/* ------------------------------------------------------------------ */
+.panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: clamp(0.75rem, 3vw, 1.25rem);
+  margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+}
+
+.panel h2 {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0.6rem;
+}
+
+.panel h3 {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-secondary);
+  margin-bottom: 0.65rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Section title                                                        */
+/* ------------------------------------------------------------------ */
+.section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--accent-primary);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Panel header (flex row with title and actions)                       */
+/* ------------------------------------------------------------------ */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.panel-header h2 {
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Connect prompt                                                       */
+/* ------------------------------------------------------------------ */
+.connect-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.2rem;
+  background: rgba(245, 166, 35, 0.06);
+  border: 1px solid rgba(245, 166, 35, 0.2);
+  border-radius: 10px;
+  margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+}
+
+.connect-prompt p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Tab bar                                                              */
+/* ------------------------------------------------------------------ */
+.tab-bar {
+  display: flex;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.tab-btn {
+  padding: 0.35rem 0.9rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab-btn.active {
+  background: var(--accent-primary);
+  color: #0a0a0f;
+}
+
+.tab-btn:not(.active):hover {
+  color: var(--text-primary);
+}
+
+/* ------------------------------------------------------------------ */
+/* Info rows                                                            */
+/* ------------------------------------------------------------------ */
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0;
+  font-size: 0.8rem;
+}
+
+.info-row + .info-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.info-label {
+  color: var(--text-dim);
+}
+
+.info-value {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.info-row--good {
+  background: rgba(34, 197, 94, 0.12);
+  border-radius: 6px;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.info-row--good .info-value {
+  color: var(--success);
+}
+
+.info-row--warn {
+  background: rgba(245, 166, 35, 0.12);
+  border-radius: 6px;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.info-row--warn .info-value {
+  color: var(--warning);
+}
+
+/* ------------------------------------------------------------------ */
+/* Divider                                                              */
+/* ------------------------------------------------------------------ */
+.divider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 0.75rem 0;
+}
