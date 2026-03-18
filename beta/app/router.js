@@ -41,23 +41,14 @@ function applyPhase(phase) {
     const name = panel.dataset.panel;
     panel.hidden = !activeNames.includes(name);
   });
+
+  if (phase === 'GAMEOVER') disableAllActions();
 }
 
 function disableAllActions() {
-  // Disable all primary action buttons when GAMEOVER
   const buttons = document.querySelectorAll('.btn-primary, .btn-action, [data-action]');
   buttons.forEach(btn => {
     btn.disabled = true;
     btn.title = 'Game Over -- actions disabled';
   });
-
-  // Show gameover panel
-  const gameoverPanel = document.querySelector('[data-panel="gameover"]');
-  if (gameoverPanel) gameoverPanel.hidden = false;
-
-  // Hide purchase and jackpot panels
-  const purchasePanel = document.querySelector('[data-panel="purchase"]');
-  if (purchasePanel) purchasePanel.hidden = true;
-  const jackpotPanel = document.querySelector('[data-panel="jackpot"]');
-  if (jackpotPanel) jackpotPanel.hidden = true;
 }

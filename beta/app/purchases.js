@@ -12,7 +12,7 @@ const TICKET_UNIT = 400n;           // 1 user ticket = 400 contract units
 const TESTNET_DIVISOR = 1000000n;   // Sepolia price divisor
 const BURNIE_PER_TICKET = 1000;     // Display constant: 1000 BURNIE per ticket
 
-const REFERRER_KEY = 'degenerette_referrer_code';
+const REFERRER_KEY = 'degenerus_referrer_code';
 
 // ABI fragments for purchase-related contract calls
 const PURCHASE_ABI = [
