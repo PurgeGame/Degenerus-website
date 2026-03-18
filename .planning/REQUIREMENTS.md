@@ -76,7 +76,7 @@
 ### Claims
 
 - [x] **CLAIM-01**: Unified claims panel aggregates all claimable winnings across game systems
-- [x] **CLAIM-02**: Player can claim with single transaction, shows claimed amount and tx confirmation
+- [x] **CLAIM-02**: Player can claim ETH and BURNIE with separate per-contract transactions, shows claimed amount and tx confirmation
 
 ### Affiliate
 
@@ -169,7 +169,7 @@
 | CLAIM-01 | Phase 9 | Complete |
 | CLAIM-02 | Phase 9 | Complete |
 | AFFIL-01 | Phase 9 | Complete |
-| AFFIL-02 | Phase 9 | Complete |
+| AFFIL-02 | Phase 12 | Complete |
 | AFFIL-03 | Phase 9 | Complete |
 | BAF-01 | Phase 9 | Complete |
 | BAF-02 | Phase 9 | Complete |
@@ -184,6 +184,8 @@
 
 **Coverage:**
 - v1 requirements: 51 total
+- Satisfied: 50
+- Pending: 1 (AFFIL-02, Phase 12 gap closure)
 - Mapped to phases: 51
 - Unmapped: 0
 

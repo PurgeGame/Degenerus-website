@@ -28,7 +28,7 @@
 - [ ] **Phase 9: Supporting Features** - Degenerette, quests, unified claims, affiliate, BAF leaderboard
 - [x] **Phase 10: Decimator & Terminal** - BURNIE burn submissions, decimator display, terminal payout, GAMEOVER state (completed 2026-03-18)
 - [x] **Phase 11: Audio & Polish** - Sound effects, visual polish, error states, loading skeletons (completed 2026-03-18)
-- [ ] **Phase 12: Integration Fixes & Cleanup** - Affiliate key mismatch, GAMEOVER trigger consolidation, orphaned code removal, CLAIM-02 text fix (gap closure)
+- [x] **Phase 12: Integration Fixes & Cleanup** - Affiliate key mismatch, GAMEOVER trigger consolidation, orphaned code removal, CLAIM-02 text fix (gap closure) (completed 2026-03-18)
 
 ## Phase Details
 
@@ -138,7 +138,7 @@ Plans:
   2. GAMEOVER panel activation uses a single code path (no dual-trigger race)
   3. No orphaned imports, exports, or store writes remain in milestone code
   4. CLAIM-02 requirements text accurately describes the two-transaction architecture
-**Plans:** 0/1
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 12-01-PLAN.md -- Fix localStorage key, consolidate GAMEOVER trigger, remove orphaned code, update CLAIM-02 text
@@ -158,4 +158,4 @@ Plans:
 | 9. Supporting Features | v2.0 | 0/4 | Planned | - |
 | 10. Decimator & Terminal | 2/2 | Complete    | 2026-03-18 | - |
 | 11. Audio & Polish | 2/2 | Complete    | 2026-03-18 | - |
-| 12. Integration Fixes & Cleanup | v2.0 | 0/1 | Planned | - |
+| 12. Integration Fixes & Cleanup | 1/1 | Complete   | 2026-03-18 | - |
