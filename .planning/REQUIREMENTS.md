@@ -91,9 +91,9 @@
 
 ### Audio
 
-- [ ] **AUD-01**: Win sounds on jackpot reveal, coinflip win, and degenerette win
-- [ ] **AUD-02**: Flip sound on coinflip resolution
-- [ ] **AUD-03**: Urgency tone on death timer entering imminent/distress stage
+- [x] **AUD-01**: Win sounds on jackpot reveal, coinflip win, and degenerette win
+- [x] **AUD-02**: Flip sound on coinflip resolution
+- [x] **AUD-03**: Urgency tone on death timer entering imminent/distress stage
 
 ### State Management
 
@@ -178,9 +178,9 @@
 | DECI-03 | Phase 10 | Complete |
 | TERM-01 | Phase 10 | Complete |
 | TERM-02 | Phase 10 | Complete |
-| AUD-01 | Phase 11 | Pending |
-| AUD-02 | Phase 11 | Pending |
-| AUD-03 | Phase 11 | Pending |
+| AUD-01 | Phase 11 | Complete |
+| AUD-02 | Phase 11 | Complete |
+| AUD-03 | Phase 11 | Complete |
 
 **Coverage:**
 - v1 requirements: 51 total

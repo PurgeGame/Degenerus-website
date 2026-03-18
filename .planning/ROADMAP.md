@@ -121,7 +121,11 @@ Plans:
   1. Win sounds play on jackpot reveal, coinflip win, and degenerette win; flip sound plays on coinflip resolution
   2. Urgency tone sounds when death timer enters imminent or distress stage
   3. All panels have loading skeleton states and error fallback states; no panel shows a broken or empty UI during data fetch
-**Plans**: TBD
+**Plans:** 1/2 plans executed
+
+Plans:
+- [ ] 11-01-PLAN.md -- Audio module (preload, autoplay unlock, playSound) + wire sound triggers to jackpot, coinflip, degenerette, death clock
+- [ ] 11-02-PLAN.md -- Skeleton CSS + loading skeleton states for 8 panels + error fallback pattern for minor panels
 
 ## Progress
 
@@ -136,5 +140,5 @@ Plans:
 | 7. Purchasing & Core UI | v2.0 | 0/2 | Planned | - |
 | 8. Hero Displays | v2.0 | 0/3 | Planned | - |
 | 9. Supporting Features | v2.0 | 0/4 | Planned | - |
-| 10. Decimator & Terminal | 2/2 | Complete   | 2026-03-18 | - |
-| 11. Audio & Polish | v2.0 | 0/TBD | Not started | - |
+| 10. Decimator & Terminal | 2/2 | Complete    | 2026-03-18 | - |
+| 11. Audio & Polish | 1/2 | In Progress|  | - |

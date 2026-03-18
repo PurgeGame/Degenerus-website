@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Game Frontend
-status: completed
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-03-18T17:14:11.294Z"
-last_activity: 2026-03-18 -- Phase 10 complete (Decimator & Terminal)
+status: in-progress
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-03-18T17:40:17Z"
+last_activity: 2026-03-18 -- Phase 11 Plan 01 complete (Audio system + triggers)
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 14
-  completed_plans: 14
+  total_plans: 16
+  completed_plans: 15
   percent: 100
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** Phase 10 complete. All decimator and terminal components built and wired. Next: Phase 11 (polish)
+**Current focus:** Phase 11 in progress. Audio system created and wired. Next: Plan 02 (volume/mute controls)
 
 ## Current Position
 
-Phase: 10 of 11 (Phase 10: Decimator & Terminal)
-Plan: 2 of 2
-Status: Phase 10 complete
-Last activity: 2026-03-18 -- Phase 10 complete (Decimator & Terminal)
+Phase: 11 of 11 (Phase 11: Audio Polish)
+Plan: 1 of 2
+Status: Plan 01 complete
+Last activity: 2026-03-18 -- Phase 11 Plan 01 complete (Audio system + triggers)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [██████████] 100%
 | Phase 09 P04 | 1min | 2 tasks | 2 files |
 | Phase 10 P01 | 3min | 2 tasks | 5 files |
 | Phase 10 P02 | 3min | 2 tasks | 5 files |
+| Phase 11 P01 | 2min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,9 @@ Recent decisions affecting current work:
 - [Phase 10]: Terminal store slice pre-populated in Plan 01 for Plan 02 reuse
 - [Phase 10]: Time multiplier computed client-side from levelStartTime + DEATH_CLOCK constants (two regimes)
 - [Phase 10]: Insurance bar percentage as yieldAccumulator/futurePool BigInt ratio, capped at 100%
+- [Phase 11]: HTML5 Audio API only (no Web Audio API); autoplay unlock via capture-phase click/keydown listeners
+- [Phase 11]: Death clock #initialLoad flag prevents urgency sound on page load
+- [Phase 11]: Duplicate-play guards via reference/ID tracking in store subscriptions
 
 ### Pending Todos
 
@@ -126,6 +130,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T17:14:11.292Z
-Stopped at: Completed 10-02-PLAN.md
+Last session: 2026-03-18T17:40:17Z
+Stopped at: Completed 11-01-PLAN.md
 Resume file: None
