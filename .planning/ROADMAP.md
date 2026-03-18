@@ -107,7 +107,11 @@ Plans:
   1. Player can submit BURNIE burns with bucket and sub-bucket selection; current burn pool, player burn total, and activity-score multiplier are displayed
   2. Decimator panel appears only when the decimator window is open; it is hidden at all other times
   3. Terminal decimator panel shows payout preview for level+1 ticketholders; terminal insurance bar shows accumulated stETH yield backup
-**Plans**: TBD
+**Plans:** 1/2 plans executed
+
+Plans:
+- [ ] 10-01-PLAN.md -- Infrastructure (store slices, ABIs, constants) + decimator business logic, component, and CSS
+- [ ] 10-02-PLAN.md -- Terminal business logic, component, CSS + wire both components into index.html and main.js
 
 ### Phase 11: Audio & Polish
 **Goal**: Sound effects are wired to game events and all UI states (loading, error, empty) are handled gracefully, making the product feel complete and production-ready.
@@ -132,5 +136,5 @@ Plans:
 | 7. Purchasing & Core UI | v2.0 | 0/2 | Planned | - |
 | 8. Hero Displays | v2.0 | 0/3 | Planned | - |
 | 9. Supporting Features | v2.0 | 0/4 | Planned | - |
-| 10. Decimator & Terminal | v2.0 | 0/TBD | Not started | - |
+| 10. Decimator & Terminal | 1/2 | In Progress|  | - |
 | 11. Audio & Polish | v2.0 | 0/TBD | Not started | - |

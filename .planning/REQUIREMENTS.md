@@ -58,9 +58,9 @@
 
 ### Decimator
 
-- [ ] **DECI-01**: Player can submit BURNIE burns with bucket/sub-bucket selection
-- [ ] **DECI-02**: Display shows current burn pool, player's burn total, and activity-score multiplier
-- [ ] **DECI-03**: Decimator panel appears contextually only when decimator window is open
+- [x] **DECI-01**: Player can submit BURNIE burns with bucket/sub-bucket selection
+- [x] **DECI-02**: Display shows current burn pool, player's burn total, and activity-score multiplier
+- [x] **DECI-03**: Decimator panel appears contextually only when decimator window is open
 
 ### Death Timer
 
@@ -173,9 +173,9 @@
 | AFFIL-03 | Phase 9 | Complete |
 | BAF-01 | Phase 9 | Complete |
 | BAF-02 | Phase 9 | Complete |
-| DECI-01 | Phase 10 | Pending |
-| DECI-02 | Phase 10 | Pending |
-| DECI-03 | Phase 10 | Pending |
+| DECI-01 | Phase 10 | Complete |
+| DECI-02 | Phase 10 | Complete |
+| DECI-03 | Phase 10 | Complete |
 | TERM-01 | Phase 10 | Pending |
 | TERM-02 | Phase 10 | Pending |
 | AUD-01 | Phase 11 | Pending |

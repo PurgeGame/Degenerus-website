@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Game Frontend
-status: completed
-stopped_at: Completed 09-04-PLAN.md
-last_updated: "2026-03-18T16:34:25.016Z"
-last_activity: 2026-03-18 -- Plan 09-04 complete (Phase 9 wiring)
+status: in-progress
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-03-18T17:06:56.474Z"
+last_activity: 2026-03-18 -- Plan 10-01 complete (Decimator infrastructure)
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
+  total_plans: 14
+  completed_plans: 13
+  percent: 93
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** Phase 9 complete. Next: Phase 10 (Decimator) or Phase 11 (Polish)
+**Current focus:** Phase 10 in progress. Plan 01 (Decimator infrastructure) complete. Next: Plan 02 (Terminal)
 
 ## Current Position
 
-Phase: 9 of 11 (Phase 9: Supporting Features)
-Plan: 4 of 4
-Status: Phase 9 complete
-Last activity: 2026-03-18 -- Plan 09-04 complete (Phase 9 wiring)
+Phase: 10 of 11 (Phase 10: Decimator & Terminal)
+Plan: 1 of 2
+Status: Plan 10-01 complete
+Last activity: 2026-03-18 -- Plan 10-01 complete (Decimator infrastructure)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [██████████] 100%
 | Phase 09 P02 | 2min | 2 tasks | 6 files |
 | Phase 09 P03 | 2min | 2 tasks | 6 files |
 | Phase 09 P04 | 1min | 2 tasks | 2 files |
+| Phase 10 P01 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,9 @@ Recent decisions affecting current work:
 - [Phase 09]: Shield count read from player.shields (API-polled) not separate contract read
 - [Phase 09]: Affiliate module owns URL referral capture (replaces purchases.js getAffiliateCode pattern)
 - [Phase 09]: BAF leaderboard from DB API only (bafTotals mapping is private, no contract reads needed)
+- [Phase 10]: Burn pool computed client-side as futurepool share (10% x5, 30% x00) via futurePrizePoolTotalView
+- [Phase 10]: DecBurnRecorded event parsed from receipt logs for immediate burn total/bucket UI update
+- [Phase 10]: Terminal store slice pre-populated in Plan 01 for Plan 02 reuse
 
 ### Pending Todos
 
@@ -113,12 +117,12 @@ None.
 ### Blockers/Concerns
 
 - Database API not yet tested (separate repo at /home/zak/Dev/PurgeGame/database/)
-- Decimator contract ABI not integrated in beta — needs mapping before Phase 10 planning
+- Decimator contract ABI now integrated in beta (DECIMATOR_ABI, DECIMATOR_VIEW_ABI, DECIMATOR_CLAIM_ABI in constants.js)
 - VRF callback timing on Sepolia needs observed measurements before finalizing UX thresholds
 - ES modules require a dev server (file:// will not work); document python3 -m http.server 8080 on day one
 
 ## Session Continuity
 
-Last session: 2026-03-18T16:34:25.014Z
-Stopped at: Completed 09-04-PLAN.md
+Last session: 2026-03-18T17:06:01Z
+Stopped at: Completed 10-01-PLAN.md
 Resume file: None
