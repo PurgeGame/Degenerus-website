@@ -46,9 +46,9 @@
 
 ### Passes
 
-- [ ] **PASS-01**: Pass cards display status, pricing, and purchase button for lazy/whale/deity passes
-- [ ] **PASS-02**: Deity pass shows symbol selector and boon status
-- [ ] **PASS-03**: Pass section is accessible but not prominent (secondary navigation or collapsed panel)
+- [x] **PASS-01**: Pass cards display status, pricing, and purchase button for lazy/whale/deity passes
+- [x] **PASS-02**: Deity pass shows symbol selector and boon status
+- [x] **PASS-03**: Pass section is accessible but not prominent (secondary navigation or collapsed panel)
 
 ### Quests
 
@@ -145,9 +145,9 @@
 | PURCH-03 | Phase 7 | Complete |
 | PURCH-04 | Phase 7 | Complete |
 | PURCH-05 | Phase 7 | Complete |
-| PASS-01 | Phase 7 | Pending |
-| PASS-02 | Phase 7 | Pending |
-| PASS-03 | Phase 7 | Pending |
+| PASS-01 | Phase 7 | Complete |
+| PASS-02 | Phase 7 | Complete |
+| PASS-03 | Phase 7 | Complete |
 | JACK-01 | Phase 8 | Pending |
 | JACK-02 | Phase 8 | Pending |
 | JACK-03 | Phase 8 | Pending |

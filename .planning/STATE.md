@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Game Frontend
-status: in-progress
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-03-18T14:41:00.000Z"
-last_activity: 2026-03-18 -- Plan 07-01 complete (purchase panel, tx-status-list, purchases.js)
+status: completed
+stopped_at: Completed 07-02-PLAN.md (Phase 07 complete)
+last_updated: "2026-03-18T14:54:53.336Z"
+last_activity: 2026-03-18 -- Plan 07-02 complete (pass-section, deity symbol grid, pass pricing)
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
   percent: 100
 ---
 
@@ -26,25 +26,25 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 ## Current Position
 
 Phase: 7 of 11 (Phase 7: Purchasing Core UI)
-Plan: 1 of 2
-Status: Plan 07-01 complete
-Last activity: 2026-03-18 -- Plan 07-01 complete (purchase panel, tx-status-list, purchases.js)
+Plan: 2 of 2
+Status: Phase 07 complete
+Last activity: 2026-03-18 -- Plan 07-02 complete (pass-section, deity symbol grid, pass pricing)
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
+- Total plans completed: 5
 - Average duration: 3min
-- Total execution time: 12min
+- Total execution time: 16min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 06-foundation | 3 | 8min | 3min |
-| 07-purchasing-core-ui | 1 | 4min | 4min |
+| 07-purchasing-core-ui | 2 | 8min | 4min |
 
 *Updated after each plan completion*
 
@@ -77,6 +77,9 @@ Recent decisions affecting current work:
 - Purchase business logic (contract calls, price calc, EV indicators) centralized in purchases.js; components never import ethers
 - getReadProvider() returns wallet BrowserProvider if connected, else lazily creates JsonRpcProvider from CHAIN.rpcUrl
 - User wallet rejections (ACTION_REJECTED / code 4001) silently dismissed from purchase error display
+- Deity pricing uses getReadProvider() so it displays before wallet connection
+- Symbol grid lazy-loaded on first details open (not page load) to avoid 32 unnecessary ownerOf RPC calls
+- Deity buy button requires both wallet connection AND symbol selection before enabling
 
 ### Pending Todos
 
@@ -91,6 +94,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-18T14:41:00Z
-Stopped at: Completed 07-01-PLAN.md
-Resume file: .planning/phases/07-purchasing-core-ui/07-02-PLAN.md
+Last session: 2026-03-18T14:49:26.015Z
+Stopped at: Completed 07-02-PLAN.md (Phase 07 complete)
+Resume file: None
