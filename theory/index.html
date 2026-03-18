@@ -2397,6 +2397,133 @@
       parameter, not a guaranteed realized return. What a player actually receives depends on luck in the short term and
       pool composition in the
       long run.</p>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <div style="margin:1.5rem 0">
+      <canvas id="activity-ev-chart" style="max-height:380px"></canvas>
+      <p style="margin:0.4rem 0 0;font-size:0.82rem;color:#888;display:flex;justify-content:space-between">
+        <span><span style="color:#4ade80">&mdash;</span> Lootbox EV multiplier</span>
+        <span>Dashed lines: pass starting scores</span>
+      </p>
+    </div>
+    <script>
+      (function () {
+        var pts = 306;
+        var scores = [], evs = [];
+        for (var i = 0; i <= pts; i++) {
+          var a = i / 100;
+          scores.push(a.toFixed(2));
+          var mu;
+          if (a <= 0.60) mu = 0.80 + a / 3;
+          else if (a <= 2.55) mu = 1.00 + (a - 0.60) * 0.35 / 1.95;
+          else mu = 1.35;
+          evs.push(+mu.toFixed(4));
+        }
+        var passTiers = [
+          { label: 'No pass', score: 0.00, color: '#888' },
+          { label: 'Lazy pass', score: 0.85, color: '#60a5fa' },
+          { label: 'Whale pass', score: 1.15, color: '#a78bfa' },
+          { label: 'Deity pass', score: 1.55, color: '#fbbf24' }
+        ];
+        new Chart(document.getElementById('activity-ev-chart'), {
+          type: 'line',
+          data: {
+            labels: scores,
+            datasets: [
+              {
+                label: 'Lootbox EV multiplier',
+                data: evs,
+                borderColor: '#4ade80',
+                borderWidth: 2.5,
+                pointRadius: 0,
+                tension: 0,
+                fill: false
+              },
+              {
+                label: 'Breakeven (1.00x)',
+                data: scores.map(function () { return 1.00; }),
+                borderColor: 'rgba(160,160,192,0.7)',
+                borderWidth: 2,
+                borderDash: [8, 4],
+                pointRadius: 0
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              title: {
+                display: true,
+                text: 'Activity Score vs Lootbox EV Multiplier',
+                color: '#a0a0c0',
+                font: { size: 14, family: "'Source Serif 4', Georgia, serif" }
+              },
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function (ctx) {
+                    if (ctx.datasetIndex === 1) return null;
+                    return 'Score ' + ctx.label + ': ' + ctx.parsed.y.toFixed(2) + 'x';
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                title: { display: true, text: 'Activity Score', color: '#a0a0c0' },
+                ticks: {
+                  color: '#888',
+                  autoSkip: true,
+                  maxTicksLimit: 7,
+                  callback: function (val) {
+                    var v = parseFloat(this.getLabelForValue(val));
+                    if (v % 0.50 === 0) return v.toFixed(1);
+                    return null;
+                  }
+                },
+                grid: { color: 'rgba(160,160,192,0.1)' }
+              },
+              y: {
+                title: { display: true, text: 'EV Multiplier', color: '#a0a0c0' },
+                ticks: { color: '#888' },
+                grid: { color: 'rgba(160,160,192,0.1)' },
+                min: 0.70,
+                max: 1.45
+              }
+            }
+          },
+          plugins: [{
+            id: 'passTiers',
+            afterDraw: function (chart) {
+              var ctx = chart.ctx, xScale = chart.scales.x, yScale = chart.scales.y;
+              var tiers = [
+                { s: 85, label: 'Lazy', c: '#60a5fa' },
+                { s: 115, label: 'Whale', c: '#a78bfa' },
+                { s: 155, label: 'Deity', c: '#fbbf24' }
+              ];
+              ctx.save();
+              tiers.forEach(function (t) {
+                var x = xScale.getPixelForValue(t.s);
+                var yTop = (yScale.getPixelForValue(1.30) + yScale.getPixelForValue(yScale.max)) / 2;
+                var yBot = yScale.getPixelForValue(yScale.min);
+                ctx.strokeStyle = t.c;
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(x, yTop);
+                ctx.lineTo(x, yBot);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = t.c;
+                ctx.font = '10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(t.label, x, yTop - 4);
+              });
+              ctx.restore();
+            }
+          }]
+        });
+      })();
+    </script>
     <p>There is an equilibrium activity score at which lootboxes become +EV. In a world where every player is a GTO
       (Game Theory Optimal) maximizer and the only system yield is stETH, this breakeven point would be close to the
       maximum score (since the only surplus is yield). The more entertainment-seeking players in the system, the more
@@ -2449,15 +2576,32 @@
       affiliate whose own referrals compound the effect.</p>
     <h3 id="section-6b">2.4 Structural Barriers to Arbitrage</h3>
     <p>The cross-subsidy generates real returns. The question is why those returns stay high rather than being competed
-      away by ubiquitous blockchain arbitrageurs. Four structural barriers prevent the return compression that plagues
-      simpler systems designed to attract as
-      much capital as possible.</p>
-    <p>The first barrier is variance. Realized returns are determined primarily by luck, and individual results range
+      away by ubiquitous blockchain arbitrageurs.</p>
+    <div class="observation">
+      <p><strong>Observation 2.3</strong> (Arbitrage Resistance). Four structural barriers prevent the return
+        compression that plagues simpler systems:</p>
+      <ol type="i">
+        <li><strong>Variance.</strong> Returns are luck-dominated and temporally unpredictable, making annualized
+          return modeling impossible.</li>
+        <li><strong>Complexity.</strong> Optimizing requires daily execution across multiple interacting systems
+          that casual extractors will not sustain.</li>
+        <li><strong>Illiquidity.</strong> Capital lockup means exiting players cannot drain the pool; their
+          unrealized returns accrue to those who stay.</li>
+        <li><strong>Perceived moral hazard.</strong> The product looks like a scam to anyone who doesn't read
+          the code. This skepticism premium filters out most capital.</li>
+      </ol>
+      <p>Crucially, for degens, the variance is desirable, the game is not much more complex than buying a
+        lottery ticket, they are not required to lock capital to play, and they routinely buy into obvious scams.</p>
+      <p>
+        These barriers selectively exclude extractive arbitrage capital while remaining permeable to
+        entertainment demand.</p>
+    </div>
+    <p><strong>(i) Variance.</strong> Realized returns are determined primarily by luck, and individual results range
       from total loss to massive jackpot wins. The monetary variance is risk: the odds of every bet are roughly
       calculable. The temporal variance is uncertainty: when those returns arrive depends on collective behavior that
       no individual can anticipate with confidence. This makes annualized return modeling impossible, which is precisely
       the tool that arbitrage capital uses to identify and exploit opportunities.</p>
-    <p>Complexity is the second barrier. Optimizing returns requires understanding activity scores, quest streaks,
+    <p><strong>(ii) Complexity.</strong> Optimizing returns requires understanding activity scores, quest streaks,
       BURNIE dynamics, pool composition, and the interaction between products. Understanding is necessary but not
       sufficient: execution matters. Quest streaks break if you miss a day. Bankroll management is ongoing. Activity
       score can be botted, but it can also be mismanaged. Day-to-day optimal play is straightforward: maximize
@@ -2467,7 +2611,7 @@
       investment that casual extractors will not make, and the execution is a daily commitment they will not sustain.
     </p>
 
-    <p>The third barrier is illiquidity. Requiring capital lockup is the foundation of the protocol's resilience.
+    <p><strong>(iii) Illiquidity.</strong> Requiring capital lockup is the foundation of the protocol's resilience.
       Tickets cannot be refunded.
       This inverts the death spiral: when players leave a liquid protocol, they drain the pool on the way out. Here,
       players
@@ -2478,11 +2622,7 @@
       locked capital is productive: pooled ETH earns stETH yield, funding the positive-sum surplus that the rest of the
       system
       distributes.</p>
-    <p><b>
-        Crucially, for degens, the variance is
-        desirable, the game is not much more complex than buying a lotto
-        ticket and they are not required to lock capital to play.</b> These barriers do not exclude them.</p>
-    <p>Perceived moral hazard is the fourth barrier. Describe this product to someone: a crypto gambling scheme with
+    <p><strong>(iv) Perceived moral hazard.</strong> Describe this product to someone: a crypto gambling scheme with
       illiquid deposits and complex mechanics. Almost everyone will respond "that's a scam!" The market attaches a
       skepticism premium to anything that looks like this. This premium exists because the fear of moral hazard is
       completely justified: the most likely outcome
@@ -2703,13 +2843,12 @@
     <p>Grinders try to play GTO: maximizing expected returns through disciplined execution at scale. They are
       <strong>bankroll-constrained</strong>: unlike the whale, they do not have unlimited capital.
     </p>
-    <div class="observation">
-      <p><strong>Observation 3.1</strong> (Best-Response Policy). For a grinder who has decided to play, the
-        best-response policy is to maximize activity score through daily engagement and reinvest as aggressively
-        as bankroll allows. This is dominant regardless of pool composition. Whether to play at all is a
-        separate decision that depends on returns large enough to justify the opportunity cost of locked
-        capital.</p>
-    </div>
+    <p><strong>Best-response policy.</strong> For a grinder who has decided to play, the
+      best-response policy is to maximize activity score through daily engagement and reinvest as aggressively
+      as bankroll allows. This is dominant regardless of pool composition (<a href="#section-20">Section 5</a>
+      formalizes this for all player types). Whether to play at all is a
+      separate decision that depends on returns large enough to justify the opportunity cost of locked
+      capital.</p>
     <p>The core loop is straightforward: maintain daily engagement (quest streaks, lootbox purchases) to push activity
       score toward its maximum, then use that score to extract above-breakeven returns from protocol
       products. Passes accelerate this by granting immediate activity score bonuses. The lootbox EV benefit caps at $a_i
@@ -2852,7 +2991,7 @@
       cover it negates the rebuy bonus on those funds. This creates a continuous external capital requirement on top of
       escalating ticket prices, compounding the budget constraint for truly optimal play.</p>
     <div class="observation">
-      <p><strong>Observation 3.2</strong> (Bankroll Ruin under EV-Maximizing Play). Even a player following a
+      <p><strong>Observation 3.1</strong> (Bankroll Ruin under EV-Maximizing Play). Even a player following a
         theoretically +EV strategy faces a non-zero probability of ruin. This occurs because: (a) jackpot payoffs are
         high-variance with potentially long dry spells, (b) future tickets and streak value are illiquid: they
         contribute to paper wealth but not to meeting tomorrow's costs, (c) quest streak maintenance is a daily fixed
@@ -2877,7 +3016,7 @@
       queues tickets across ten future levels. The degen who buys one gains a clear edge, but it requires spending
       outside their usual
       pattern.</p>
-    <p><strong>The skill gap (Corollary 3.3).</strong> Degenerus Protocol can be played at various levels of
+    <p><strong>The skill gap (Corollary 3.2).</strong> Degenerus Protocol can be played at various levels of
       optimization, with an equilibrium breakeven point determined by activity score. Players who mismanage their
       bankroll, break streaks and recruit nobody fail to optimize their activity score, thus get worse returns than the
       theoretical maximum.
@@ -2999,11 +3138,11 @@
       ensures that even during low-activity periods or high gas conditions, the bounty eventually exceeds
       the cost of calling.</p>
     <p>The primary calling path requires the caller to have made a purchase in the current or previous day.
-      Deity pass holders bypass this requirement entirely. After 30 minutes past the day boundary, anyone can
-      call regardless of purchase history, and pass holders can call after 15 minutes. These fallbacks ensure
-      the game advances even if no active player calls immediately, but the primary path ties the protocol's
-      heartbeat to real economic activity: someone has to have bought a ticket or lootbox today for the game
-      to tick forward on its fastest schedule.</p>
+      Deity pass holders bypass this requirement entirely. If no one calls immediately, pass holders can
+      trigger advancement after 15 minutes, and after 30 minutes the call opens to anyone regardless of
+      purchase history. The primary path ties the protocol's heartbeat to real economic activity: someone
+      has to have bought a ticket or lootbox today for the game to tick forward on its fastest schedule.
+      The fallbacks ensure it advances regardless.</p>
     <hr />
     <h2 id="section-20">5. Equilibrium Analysis and Commitment Devices</h2>
     <p>For any player with unlimited bankroll who chooses to participate, the dominant strategy is to maximize activity
@@ -3173,7 +3312,8 @@
       into illiquid future participation and
       compounding the player's stake. afKing mode is designed to be a near-optimal allocation path for the
       player, that
-      spreads value across upcoming levels similar to lootboxes, while not requiring the attention of maintaing a daily
+      spreads value across upcoming levels similar to lootboxes, while not requiring the attention of maintaining a
+      daily
       quest streak.</p>
     <p><strong>Device 4: Forced Long-Term Equity on Large Wins.</strong> The largest single jackpot winners do not
       receive their full payout in liquid ETH. Solo bucket winners in the daily jackpot draws receive 75% ETH and
@@ -3215,72 +3355,90 @@
     <h2 id="section-26">6. BURNIE Economics and the 100-Level Cycle</h2>
     <h3 id="section-27">6.1 The BURNIE Price Ratchet</h3>
     <p>BURNIE has a built-in appreciation mechanism against ETH. ETH ticket prices escalate with level progression
-      (<a href="#section-48">Appendix C</a>), but BURNIE ticket purchases always cost 1,000 BURNIE per ticket (4
-      entries) regardless of level.
+      (<a href="#section-48">Appendix C</a>), but BURNIE ticket purchases always cost 1,000 BURNIE per ticket regardless
+      of level.
       Since a ticket at level x00 (century milestones: 100, 200, 300, etc.) costs 0.24 ETH but still costs 1,000 BURNIE,
-      the utility value of 1 BURNIE in ETH terms rises monotonically as the game progresses:</p>
-    <table>
-      <thead>
-        <tr>
-          <th>Level Range</th>
-          <th>ETH Ticket Price</th>
-          <th>BURNIE Ticket Price</th>
-          <th>ETH per entry</th>
-          <th>BURNIE per entry</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>0–4 (intro)</td>
-          <td>0.01 ETH</td>
-          <td>1,000 BURNIE</td>
-          <td>0.0025 ETH</td>
-          <td>250 BURNIE</td>
-        </tr>
-        <tr>
-          <td>5–9 (intro)</td>
-          <td>0.02 ETH</td>
-          <td>1,000 BURNIE</td>
-          <td>0.005 ETH</td>
-          <td>250 BURNIE</td>
-        </tr>
-        <tr>
-          <td>x01–x29</td>
-          <td>0.04 ETH</td>
-          <td>1,000 BURNIE</td>
-          <td>0.01 ETH</td>
-          <td>250 BURNIE</td>
-        </tr>
-        <tr>
-          <td>x30–x59</td>
-          <td>0.08 ETH</td>
-          <td>1,000 BURNIE</td>
-          <td>0.02 ETH</td>
-          <td>250 BURNIE</td>
-        </tr>
-        <tr>
-          <td>x60–x89</td>
-          <td>0.12 ETH</td>
-          <td>1,000 BURNIE</td>
-          <td>0.03 ETH</td>
-          <td>250 BURNIE</td>
-        </tr>
-        <tr>
-          <td>x90–x99</td>
-          <td>0.16 ETH</td>
-          <td>1,000 BURNIE</td>
-          <td>0.04 ETH</td>
-          <td>250 BURNIE</td>
-        </tr>
-        <tr>
-          <td>x00 (century)</td>
-          <td>0.24 ETH</td>
-          <td>1,000 BURNIE</td>
-          <td>0.06 ETH</td>
-          <td>250 BURNIE</td>
-        </tr>
-      </tbody>
-    </table>
+      the utility value of 1 BURNIE in ETH terms ratchets upward within each century, resets at x01, then climbs again:
+    </p>
+    <div style="margin:1.5rem 0">
+      <canvas id="burnie-ratchet-chart" style="max-height:340px"></canvas>
+      <p style="margin:0.4rem 0 0;font-size:0.82rem;color:#888">
+        ETH value of 1 ticket (1,000 BURNIE) at each level.
+    </div>
+    <script>
+      (function () {
+        function ticketPrice(level) {
+          if (level <= 4) return 0.01;
+          if (level <= 9) return 0.02;
+          var pos = level % 100;
+          if (pos === 0) return 0.24;
+          if (pos <= 29) return 0.04;
+          if (pos <= 59) return 0.08;
+          if (pos <= 89) return 0.12;
+          return 0.16;
+        }
+        var levels = [], prices = [];
+        for (var l = 0; l <= 209; l++) {
+          levels.push(l);
+          prices.push(ticketPrice(l));
+        }
+        new Chart(document.getElementById('burnie-ratchet-chart'), {
+          type: 'line',
+          data: {
+            labels: levels,
+            datasets: [{
+              label: '1,000 BURNIE value (ETH)',
+              data: prices,
+              borderColor: '#fbbf24',
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0,
+              stepped: true
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              title: {
+                display: true,
+                text: 'BURNIE Utility Value Ratchet',
+                color: '#a0a0c0',
+                font: { size: 14, family: "'Source Serif 4', Georgia, serif" }
+              },
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function (ctx) {
+                    return 'Level ' + ctx.label + ': ' + ctx.parsed.y.toFixed(2) + ' ETH';
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                title: { display: true, text: 'Level', color: '#a0a0c0' },
+                ticks: {
+                  color: '#888',
+                  maxTicksLimit: 11,
+                  callback: function (val) {
+                    var v = parseInt(this.getLabelForValue(val));
+                    if (v % 50 === 0 || v === 0) return v;
+                    return null;
+                  }
+                },
+                grid: { color: 'rgba(160,160,192,0.1)' }
+              },
+              y: {
+                title: { display: true, text: 'ETH per ticket', color: '#a0a0c0' },
+                ticks: { color: '#888' },
+                grid: { color: 'rgba(160,160,192,0.1)' },
+                min: 0
+              }
+            }
+          }
+        });
+      })();
+    </script>
     <p>The initial levels show the steepest appreciation: BURNIE earned at level 0 (when one entry costs 0.0025 ETH) has
       24x the purchasing power by the first century milestone (where one entry costs 0.06 ETH). <strong>250 BURNIE
         always buys the same one entry; it is the ETH price of that entry that rises.</strong> Within each subsequent
@@ -3423,6 +3581,18 @@
     <div class="observation">
       <p><strong>Observation 8.1</strong> (Death Spiral Resistance). Degenerus Protocol resists death spirals through
         four mechanisms:</p>
+      <ol type="i">
+        <li><strong>Early positioning advantage.</strong> Buying before a stall is rational; the downturn itself
+          rewards those already positioned.</li>
+        <li><strong>Grinder self-correction.</strong> Grinder exit shifts the breakeven point downward, improving
+          returns for whoever stays.</li>
+        <li><strong>Locked liquidity.</strong> Player exit does not reduce prize pool assets, only competition
+          for them.</li>
+        <li><strong>Terminal insurance as self-correcting backstop.</strong> Buying tickets to profit from
+          GAMEOVER is the same action that prevents it.</li>
+      </ol>
+      <p>Mechanisms (i) through (iii) resist the spiral during normal downturns. Mechanism (iv) is the backstop that
+        activates when the others prove insufficient.</p>
     </div>
     <p><strong>(i) Early positioning advantage.</strong> The protocol rewards being early in any level cycle.
       Daily BURNIE and ETH jackpot draws fire regardless of population size, so fewer
@@ -3434,10 +3604,111 @@
       wait, which is exactly the purchasing activity that delays or prevents the downturn.</p>
     <p><strong>(ii) Grinder self-correction.</strong> A stall requires grinder exit (grinders buy daily by definition;
       if they are still buying, there is no stall). But grinder exit shifts the equilibrium breakeven point downward:
-      fewer competing lootbox buyers with high activity scores means higher EV per lootbox, so remaining grinders become
-      more profitable and
+      fewer competing lootbox buyers with high activity scores means higher EV per lootbox, so remaining grinders
+      become more profitable and
       marginal hybrids who were below breakeven cross into profitability. The very condition that defines a stall
       is the condition that improves returns for whoever stays.</p>
+    <div style="margin:1.5rem 0">
+      <canvas id="grinder-exit-chart" style="max-height:340px"></canvas>
+      <p style="margin:0.4rem 0 0;font-size:0.82rem;color:#888">
+        Simplified model: degens buy tickets (1.0x + 100 BURNIE). Grinders buy lootboxes at max activity (1.35x).
+      </p>
+    </div>
+    <script>
+      (function () {
+        // Tickets are ~1.0x redistribution + 100 BURNIE (~0.1x bonus).
+        // Degens fund the prize pool via tickets; grinders extract via lootboxes.
+        // Lootbox EV is relative: 1.35x at max activity means you get 1.35x your
+        // weighted share. More grinders = more high-weight claims on the same pool.
+        // Pool = degen ticket deposits + grinder lootbox deposits + yield.
+        // X axis: grinder ETH as % of total deposits.
+        // At low grinder share, fewer grinders compete for degen-funded pool.
+        var yieldRate = 0.025 / 12; // ~2.5% APR, monthly slice
+        var mu = 1.35; // max activity protocol multiplier
+        var labels = [], roi = [], breakeven = [];
+        for (var pct = 5; pct <= 95; pct += 1) {
+          labels.push(pct);
+          var grinderShare = pct / 100;
+          var degenShare = 1 - grinderShare;
+          // Normalize to 100 ETH total deposits
+          var grindPool = grinderShare * 100;
+          var degenPool = degenShare * 100;
+          var totalPool = 100;
+          var yieldBonus = totalPool * yieldRate;
+          var totalWeight = grindPool * mu + degenPool * 1.0;
+          var grindExtract = (grindPool * mu / totalWeight) * (totalPool + yieldBonus);
+          var realized = grindExtract / grindPool;
+          roi.push(+realized.toFixed(3));
+          breakeven.push(1.00);
+        }
+        new Chart(document.getElementById('grinder-exit-chart'), {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: 'Max-activity grinder ROI',
+                data: roi,
+                borderColor: '#4ade80',
+                borderWidth: 2.5,
+                pointRadius: 0,
+                tension: 0.3,
+                fill: {
+                  target: 1,
+                  above: 'rgba(74,222,128,0.12)'
+                }
+              },
+              {
+                label: 'Breakeven',
+                data: breakeven,
+                borderColor: 'rgba(160,160,192,0.7)',
+                borderWidth: 2,
+                borderDash: [8, 4],
+                pointRadius: 0
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              title: {
+                display: true,
+                text: 'Grinder ROI vs Degen Share of Deposits',
+                color: '#a0a0c0',
+                font: { size: 14, family: "'Source Serif 4', Georgia, serif" }
+              },
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function (ctx) {
+                    if (ctx.datasetIndex === 1) return null;
+                    return ctx.label + '% grinder: ' + ctx.parsed.y.toFixed(2) + 'x ROI';
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                title: { display: true, text: 'Degen share of deposits (%)', color: '#a0a0c0' },
+                ticks: {
+                  color: '#888', maxTicksLimit: 10,
+                  callback: function (val) { return (100 - parseInt(this.getLabelForValue(val))) + '%'; }
+                },
+                grid: { color: 'rgba(160,160,192,0.1)' },
+                reverse: true,
+                afterFit: function (axis) { axis.paddingRight = 15; }
+              },
+              y: {
+                title: { display: true, text: 'Realized lootbox ROI', color: '#a0a0c0' },
+                ticks: { color: '#888' },
+                grid: { color: 'rgba(160,160,192,0.1)' },
+                min: 1.0
+              }
+            }
+          }
+        });
+      })();
+    </script>
     <p><strong>(iii) Locked liquidity.</strong> Prize pools are not withdrawable. Player exit does not reduce prize pool
       assets; it only reduces competition for those assets. This is structurally different from DeFi protocols where
       whale departure causes liquidity crises.</p>
@@ -3449,10 +3720,7 @@
       (death clock ticking down) into a partial positive (terminal insurance growing). If the decline continues
       long enough to threaten GAMEOVER, the growing accumulator makes the terminal jackpot individually +EV to buy
       into, and buying is what prevents GAMEOVER. The worse the spiral gets, the more attractive this trade becomes,
-      and the trade itself is what stops it.
-      Mechanisms (i) through (iii) resist the spiral during normal downturns. Mechanism (iv) is the backstop that
-      activates
-      when the others prove insufficient.</p>
+      and the trade itself is what stops it.</p>
     <p><em>Argument.</em> Condition (c) of Definition 8.1 (self-reinforcing decline) fails on the monetary
       dimension because mechanisms (i) through (iii) ensure that player departure improves returns for those who
       remain. This does not require <em>all</em> players to be rational, only that enough EV-sensitive capital
@@ -3497,7 +3765,6 @@
         level. Gold: cumulative stETH yield. Note level 22's 31-day grind.
       </p>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script>
       (function () {
         var SIM = { "pools": [{ "next": 3.79, "future": 8.45, "cy": 0, "lvl": 0 }, { "next": 4.76, "future": 8.84, "cy": 0, "lvl": 0 }, { "next": 6.24, "future": 9.69, "cy": 0, "lvl": 0 }, { "next": 7.78, "future": 10.56, "cy": 0, "lvl": 0 }, { "next": 20.66, "future": 12.68, "cy": 0, "lvl": 0 }, { "next": 35.99, "future": 14.87, "cy": 0, "lvl": 0 }, { "next": 53.03, "future": 17.38, "cy": 0, "lvl": 0 }, { "next": 7.32, "future": 32.35, "cy": 0, "lvl": 1 }, { "next": 7.92, "future": 32.56, "cy": 0, "lvl": 1 }, { "next": 8.87, "future": 32.6, "cy": 0.01, "lvl": 1 }, { "next": 9.71, "future": 32.72, "cy": 0.01, "lvl": 1 }, { "next": 15.5, "future": 31.7, "cy": 0.01, "lvl": 1 }, { "next": 16.37, "future": 32.11, "cy": 0.01, "lvl": 1 }, { "next": 17.8, "future": 32.87, "cy": 0.01, "lvl": 1 }, { "next": 19.44, "future": 33.13, "cy": 0.02, "lvl": 1 }, { "next": 21.02, "future": 33.48, "cy": 0.02, "lvl": 1 }, { "next": 32.13, "future": 35.33, "cy": 0.02, "lvl": 1 }, { "next": 45.91, "future": 36.9, "cy": 0.03, "lvl": 1 }, { "next": 58.94, "future": 39, "cy": 0.03, "lvl": 1 }, { "next": 11.93, "future": 52.92, "cy": 0.03, "lvl": 2 }, { "next": 12.85, "future": 52.79, "cy": 0.03, "lvl": 2 }, { "next": 13.93, "future": 52.68, "cy": 0.26, "lvl": 2 }, { "next": 14.95, "future": 52.44, "cy": 0.27, "lvl": 2 }, { "next": 21.18, "future": 51.23, "cy": 0.27, "lvl": 2 }, { "next": 23.67, "future": 52.11, "cy": 0.28, "lvl": 2 }, { "next": 42.06, "future": 54.39, "cy": 0.28, "lvl": 2 }, { "next": 62.45, "future": 56.69, "cy": 0.29, "lvl": 2 }, { "next": 13.72, "future": 60.36, "cy": 0.29, "lvl": 3 }, { "next": 15.19, "future": 60.17, "cy": 0.29, "lvl": 3 }, { "next": 16.32, "future": 60.2, "cy": 0.34, "lvl": 3 }, { "next": 17.76, "future": 60.08, "cy": 0.61, "lvl": 3 }, { "next": 26.96, "future": 58.82, "cy": 0.62, "lvl": 3 }, { "next": 29.79, "future": 59.44, "cy": 0.62, "lvl": 3 }, { "next": 47.54, "future": 62.33, "cy": 0.63, "lvl": 3 }, { "next": 68.38, "future": 65.54, "cy": 0.63, "lvl": 3 }, { "next": 77.3, "future": 66.79, "cy": 0.64, "lvl": 3 }, { "next": 17.76, "future": 77.79, "cy": 0.64, "lvl": 4 }, { "next": 18.92, "future": 77.58, "cy": 0.92, "lvl": 4 }, { "next": 20.74, "future": 77.31, "cy": 0.93, "lvl": 4 }, { "next": 22.38, "future": 76.94, "cy": 1.05, "lvl": 4 }, { "next": 32.09, "future": 76.55, "cy": 1.06, "lvl": 4 }, { "next": 35.08, "future": 76.99, "cy": 1.07, "lvl": 4 }, { "next": 37.55, "future": 78.27, "cy": 1.08, "lvl": 4 }, { "next": 62.73, "future": 82.1, "cy": 1.09, "lvl": 4 }, { "next": 83.75, "future": 84.52, "cy": 1.09, "lvl": 4 }, { "next": 22.19, "future": 99.78, "cy": 1.09, "lvl": 5 }, { "next": 23.78, "future": 99.5, "cy": 1.18, "lvl": 5 }, { "next": 25.02, "future": 98.88, "cy": 1.53, "lvl": 5 }, { "next": 26.61, "future": 98.38, "cy": 1.88, "lvl": 5 }, { "next": 36.98, "future": 96.5, "cy": 1.88, "lvl": 5 }, { "next": 39.01, "future": 96.45, "cy": 1.89, "lvl": 5 }, { "next": 40.65, "future": 98.09, "cy": 1.9, "lvl": 5 }, { "next": 42.68, "future": 99.5, "cy": 1.91, "lvl": 5 }, { "next": 45.5, "future": 100.22, "cy": 1.92, "lvl": 5 }, { "next": 59.59, "future": 103.08, "cy": 1.93, "lvl": 5 }, { "next": 78.8, "future": 106.74, "cy": 1.94, "lvl": 5 }, { "next": 94.22, "future": 108.64, "cy": 1.95, "lvl": 5 }, { "next": 25.77, "future": 112.66, "cy": 1.95, "lvl": 6 }, { "next": 28.14, "future": 111.99, "cy": 2.44, "lvl": 6 }, { "next": 30.09, "future": 111.48, "cy": 2.46, "lvl": 6 }, { "next": 32.02, "future": 111.24, "cy": 2.48, "lvl": 6 }, { "next": 44.26, "future": 108.96, "cy": 2.49, "lvl": 6 }, { "next": 46.48, "future": 108.82, "cy": 2.5, "lvl": 6 }, { "next": 48.73, "future": 110.5, "cy": 2.51, "lvl": 6 }, { "next": 51.24, "future": 112.17, "cy": 2.52, "lvl": 6 }, { "next": 67.44, "future": 114.27, "cy": 2.53, "lvl": 6 }, { "next": 86.96, "future": 117.99, "cy": 2.55, "lvl": 6 }, { "next": 103.59, "future": 121.28, "cy": 2.56, "lvl": 6 }, { "next": 29.64, "future": 133.35, "cy": 2.56, "lvl": 7 }, { "next": 31.23, "future": 133.14, "cy": 2.57, "lvl": 7 }, { "next": 33.57, "future": 133.01, "cy": 2.59, "lvl": 7 }, { "next": 34.97, "future": 132.58, "cy": 2.61, "lvl": 7 }, { "next": 49.6, "future": 130.85, "cy": 2.62, "lvl": 7 }, { "next": 51.03, "future": 131.9, "cy": 2.64, "lvl": 7 }, { "next": 54.15, "future": 132.52, "cy": 2.66, "lvl": 7 }, { "next": 56.63, "future": 134.33, "cy": 2.67, "lvl": 7 }, { "next": 73.53, "future": 137.76, "cy": 2.68, "lvl": 7 }, { "next": 97.79, "future": 140.43, "cy": 2.69, "lvl": 7 }, { "next": 117.67, "future": 144.25, "cy": 2.71, "lvl": 7 }, { "next": 32.71, "future": 142.54, "cy": 2.71, "lvl": 8 }, { "next": 35.47, "future": 144.56, "cy": 2.73, "lvl": 8 }, { "next": 37.73, "future": 145.6, "cy": 2.78, "lvl": 8 }, { "next": 40.27, "future": 145.84, "cy": 2.84, "lvl": 8 }, { "next": 60.36, "future": 142.51, "cy": 2.86, "lvl": 8 }, { "next": 64.14, "future": 144.34, "cy": 2.87, "lvl": 8 }, { "next": 68.21, "future": 146.14, "cy": 2.88, "lvl": 8 }, { "next": 102.89, "future": 149.86, "cy": 2.9, "lvl": 8 }, { "next": 132.55, "future": 154.7, "cy": 2.91, "lvl": 8 }, { "next": 36.96, "future": 162.83, "cy": 2.91, "lvl": 9 }, { "next": 40.35, "future": 162.12, "cy": 3.58, "lvl": 9 }, { "next": 42.62, "future": 160.6, "cy": 4.25, "lvl": 9 }, { "next": 45.58, "future": 160.05, "cy": 4.27, "lvl": 9 }, { "next": 62.51, "future": 158.59, "cy": 4.29, "lvl": 9 }, { "next": 68.88, "future": 160.74, "cy": 4.3, "lvl": 9 }, { "next": 155.49, "future": 171.93, "cy": 4.32, "lvl": 9 }, { "next": 43.14, "future": 195.46, "cy": 4.32, "lvl": 10 }, { "next": 46.51, "future": 194.04, "cy": 5.15, "lvl": 10 }, { "next": 49.55, "future": 193.28, "cy": 5.17, "lvl": 10 }, { "next": 52.18, "future": 194.88, "cy": 6.16, "lvl": 10 }, { "next": 72.12, "future": 183.57, "cy": 6.98, "lvl": 10 }, { "next": 79.41, "future": 186.96, "cy": 7, "lvl": 10 }, { "next": 184.99, "future": 199.56, "cy": 7.02, "lvl": 10 }, { "next": 53.81, "future": 231.15, "cy": 7.02, "lvl": 11 }, { "next": 57.48, "future": 230.21, "cy": 8.19, "lvl": 11 }, { "next": 61.15, "future": 228.36, "cy": 8.37, "lvl": 11 }, { "next": 64.43, "future": 229.78, "cy": 9.37, "lvl": 11 }, { "next": 86.64, "future": 232.41, "cy": 9.4, "lvl": 11 }, { "next": 96.66, "future": 234.07, "cy": 9.42, "lvl": 11 }, { "next": 204.01, "future": 249.91, "cy": 9.44, "lvl": 11 }, { "next": 65.8, "future": 286.55, "cy": 9.44, "lvl": 12 }, { "next": 71.23, "future": 287.1, "cy": 9.72, "lvl": 12 }, { "next": 74.26, "future": 284.81, "cy": 10.94, "lvl": 12 }, { "next": 77.93, "future": 283.06, "cy": 10.96, "lvl": 12 }, { "next": 104.69, "future": 279.93, "cy": 10.98, "lvl": 12 }, { "next": 107.44, "future": 281.47, "cy": 11.01, "lvl": 12 }, { "next": 111.88, "future": 284.35, "cy": 11.04, "lvl": 12 }, { "next": 118.3, "future": 284.49, "cy": 11.06, "lvl": 12 }, { "next": 150.59, "future": 290.92, "cy": 11.09, "lvl": 12 }, { "next": 190.83, "future": 297.89, "cy": 11.11, "lvl": 12 }, { "next": 244.39, "future": 303.33, "cy": 11.14, "lvl": 12 }, { "next": 76.21, "future": 342.12, "cy": 11.14, "lvl": 13 }, { "next": 80.27, "future": 344.29, "cy": 11.17, "lvl": 13 }, { "next": 84.89, "future": 347.7, "cy": 12.67, "lvl": 13 }, { "next": 89.28, "future": 346.49, "cy": 12.96, "lvl": 13 }, { "next": 121.08, "future": 396.2, "cy": 12.99, "lvl": 13 }, { "next": 126.76, "future": 394.3, "cy": 13.03, "lvl": 13 }, { "next": 131.04, "future": 396.98, "cy": 13.06, "lvl": 13 }, { "next": 135.02, "future": 399.86, "cy": 13.1, "lvl": 13 }, { "next": 143.05, "future": 398.87, "cy": 13.13, "lvl": 13 }, { "next": 177.22, "future": 405.13, "cy": 13.17, "lvl": 13 }, { "next": 223.25, "future": 413.12, "cy": 13.2, "lvl": 13 }, { "next": 265.13, "future": 415.76, "cy": 13.24, "lvl": 13 }, { "next": 97.1, "future": 440.61, "cy": 13.24, "lvl": 14 }, { "next": 102.45, "future": 437.96, "cy": 14.93, "lvl": 14 }, { "next": 108.66, "future": 436.55, "cy": 14.96, "lvl": 14 }, { "next": 113.15, "future": 437.93, "cy": 16.24, "lvl": 14 }, { "next": 150.01, "future": 432.31, "cy": 16.28, "lvl": 14 }, { "next": 161.43, "future": 432.14, "cy": 16.32, "lvl": 14 }, { "next": 219.12, "future": 441.46, "cy": 16.36, "lvl": 14 }, { "next": 291.43, "future": 452.22, "cy": 16.4, "lvl": 14 }, { "next": 104.99, "future": 456.45, "cy": 16.4, "lvl": 15 }, { "next": 111.26, "future": 460.61, "cy": 16.44, "lvl": 15 }, { "next": 119.2, "future": 467.1, "cy": 16.89, "lvl": 15 }, { "next": 124.4, "future": 466.34, "cy": 17.39, "lvl": 15 }, { "next": 175.4, "future": 456.97, "cy": 17.43, "lvl": 15 }, { "next": 182.31, "future": 460.51, "cy": 17.47, "lvl": 15 }, { "next": 194.2, "future": 459.09, "cy": 17.52, "lvl": 15 }, { "next": 265.49, "future": 469.24, "cy": 17.56, "lvl": 15 }, { "next": 328.47, "future": 479.76, "cy": 17.61, "lvl": 15 }, { "next": 105.15, "future": 480.36, "cy": 17.61, "lvl": 16 }, { "next": 113.37, "future": 479.1, "cy": 17.65, "lvl": 16 }, { "next": 120.18, "future": 487.56, "cy": 18.15, "lvl": 16 }, { "next": 125.79, "future": 485.98, "cy": 18.21, "lvl": 16 }, { "next": 184.06, "future": 488.85, "cy": 18.25, "lvl": 16 }, { "next": 194.82, "future": 492.58, "cy": 18.3, "lvl": 16 }, { "next": 268.45, "future": 499.28, "cy": 18.34, "lvl": 16 }, { "next": 364.69, "future": 513.33, "cy": 18.39, "lvl": 16 }, { "next": 121.11, "future": 555.26, "cy": 18.39, "lvl": 17 }, { "next": 128.53, "future": 552.3, "cy": 18.43, "lvl": 17 }, { "next": 134.75, "future": 549.95, "cy": 19.81, "lvl": 17 }, { "next": 141.99, "future": 551.35, "cy": 19.86, "lvl": 17 }, { "next": 195.57, "future": 543.51, "cy": 19.91, "lvl": 17 }, { "next": 205.94, "future": 548.35, "cy": 19.96, "lvl": 17 }, { "next": 287.39, "future": 560.64, "cy": 20.01, "lvl": 17 }, { "next": 434.41, "future": 575.79, "cy": 20.07, "lvl": 17 }, { "next": 134.44, "future": 601.04, "cy": 20.07, "lvl": 18 }, { "next": 143.38, "future": 599.13, "cy": 20.12, "lvl": 18 }, { "next": 157.39, "future": 598.36, "cy": 20.19, "lvl": 18 }, { "next": 166.39, "future": 596.11, "cy": 20.24, "lvl": 18 }, { "next": 225.82, "future": 592.44, "cy": 20.3, "lvl": 18 }, { "next": 235.04, "future": 589.09, "cy": 20.35, "lvl": 18 }, { "next": 242.79, "future": 592.34, "cy": 20.41, "lvl": 18 }, { "next": 251.74, "future": 596.26, "cy": 20.46, "lvl": 18 }, { "next": 315.69, "future": 599.84, "cy": 20.52, "lvl": 18 }, { "next": 392.86, "future": 611.08, "cy": 20.58, "lvl": 18 }, { "next": 466.82, "future": 622.44, "cy": 20.63, "lvl": 18 }, { "next": 156.24, "future": 697.54, "cy": 20.63, "lvl": 19 }, { "next": 164.98, "future": 696.55, "cy": 22.44, "lvl": 19 }, { "next": 176.24, "future": 693.77, "cy": 22.5, "lvl": 19 }, { "next": 184.65, "future": 690.22, "cy": 24.28, "lvl": 19 }, { "next": 245.03, "future": 760.15, "cy": 24.34, "lvl": 19 }, { "next": 249.06, "future": 762.16, "cy": 24.41, "lvl": 19 }, { "next": 261.62, "future": 758.49, "cy": 24.48, "lvl": 19 }, { "next": 268.28, "future": 761.52, "cy": 24.55, "lvl": 19 }, { "next": 276.62, "future": 765.24, "cy": 24.62, "lvl": 19 }, { "next": 351.21, "future": 768.25, "cy": 24.69, "lvl": 19 }, { "next": 439.63, "future": 780.77, "cy": 24.76, "lvl": 19 }, { "next": 516.89, "future": 792.06, "cy": 24.83, "lvl": 19 }, { "next": 183.53, "future": 815.42, "cy": 24.83, "lvl": 20 }, { "next": 194.69, "future": 812.77, "cy": 24.9, "lvl": 20 }, { "next": 203.59, "future": 809.58, "cy": 25.73, "lvl": 20 }, { "next": 213.31, "future": 809.71, "cy": 25.81, "lvl": 20 }, { "next": 287.39, "future": 759.95, "cy": 30.49, "lvl": 20 }, { "next": 300.58, "future": 765.67, "cy": 30.56, "lvl": 20 }, { "next": 551.79, "future": 789.92, "cy": 30.64, "lvl": 20 }, { "next": 193.74, "future": 865.32, "cy": 30.64, "lvl": 21 }, { "next": 210.52, "future": 867.09, "cy": 30.72, "lvl": 21 }, { "next": 221.01, "future": 861.97, "cy": 32.83, "lvl": 21 }, { "next": 234.89, "future": 857.98, "cy": 32.91, "lvl": 21 }, { "next": 317.8, "future": 839.34, "cy": 32.98, "lvl": 21 }, { "next": 329.29, "future": 833.83, "cy": 33.06, "lvl": 21 }, { "next": 337.1, "future": 838.09, "cy": 33.14, "lvl": 21 }, { "next": 344.56, "future": 841.52, "cy": 33.22, "lvl": 21 }, { "next": 359.52, "future": 836.69, "cy": 33.3, "lvl": 21 }, { "next": 431.18, "future": 848.33, "cy": 33.38, "lvl": 21 }, { "next": 537.48, "future": 861.43, "cy": 33.46, "lvl": 21 }, { "next": 623.14, "future": 865.1, "cy": 33.54, "lvl": 21 }, { "next": 202.73, "future": 921.21, "cy": 33.54, "lvl": 22 }, { "next": 214.53, "future": 924.53, "cy": 33.63, "lvl": 22 }, { "next": 228.38, "future": 922.82, "cy": 33.72, "lvl": 22 }, { "next": 238.75, "future": 921.23, "cy": 34.69, "lvl": 22 }, { "next": 336.62, "future": 908.44, "cy": 34.78, "lvl": 22 }, { "next": 343.71, "future": 899.78, "cy": 34.86, "lvl": 22 }, { "next": 343.71, "future": 899.78, "cy": 34.95, "lvl": 22 }, { "next": 343.96, "future": 900.13, "cy": 35.03, "lvl": 22 }, { "next": 351.18, "future": 892.66, "cy": 35.12, "lvl": 22 }, { "next": 351.55, "future": 892.92, "cy": 35.21, "lvl": 22 }, { "next": 353.32, "future": 894.43, "cy": 35.29, "lvl": 22 }, { "next": 361.91, "future": 888.35, "cy": 35.38, "lvl": 22 }, { "next": 363.46, "future": 889.87, "cy": 35.46, "lvl": 22 }, { "next": 365.27, "future": 891.14, "cy": 35.55, "lvl": 22 }, { "next": 374.43, "future": 884.96, "cy": 35.63, "lvl": 22 }, { "next": 376.92, "future": 887.32, "cy": 35.72, "lvl": 22 }, { "next": 379.21, "future": 889.78, "cy": 35.8, "lvl": 22 }, { "next": 388.22, "future": 883.14, "cy": 35.89, "lvl": 22 }, { "next": 390.94, "future": 885.29, "cy": 35.97, "lvl": 22 }, { "next": 393.49, "future": 887.39, "cy": 36.06, "lvl": 22 }, { "next": 402.66, "future": 881, "cy": 36.14, "lvl": 22 }, { "next": 405.11, "future": 883.58, "cy": 36.23, "lvl": 22 }, { "next": 408.01, "future": 885.66, "cy": 36.31, "lvl": 22 }, { "next": 440.47, "future": 881.8, "cy": 36.4, "lvl": 22 }, { "next": 466, "future": 886.68, "cy": 36.48, "lvl": 22 }, { "next": 491.71, "future": 891.55, "cy": 36.57, "lvl": 22 }, { "next": 525.2, "future": 888.36, "cy": 36.66, "lvl": 22 }, { "next": 551.04, "future": 893.45, "cy": 36.74, "lvl": 22 }, { "next": 588.84, "future": 899.62, "cy": 36.83, "lvl": 22 }, { "next": 632.66, "future": 897.29, "cy": 36.91, "lvl": 22 }, { "next": 664.4, "future": 902.9, "cy": 37, "lvl": 22 }, { "next": 211.28, "future": 945.71, "cy": 37, "lvl": 23 }, { "next": 226.23, "future": 946.79, "cy": 37.1, "lvl": 23 }, { "next": 252.17, "future": 944.34, "cy": 37.19, "lvl": 23 }, { "next": 271.61, "future": 937.44, "cy": 37.28, "lvl": 23 }, { "next": 358.3, "future": 922.52, "cy": 37.36, "lvl": 23 }, { "next": 364.43, "future": 924.95, "cy": 37.45, "lvl": 23 }, { "next": 372.99, "future": 928.57, "cy": 37.54, "lvl": 23 }, { "next": 389.38, "future": 922.8, "cy": 37.62, "lvl": 23 }, { "next": 398.68, "future": 927.28, "cy": 37.71, "lvl": 23 }, { "next": 489.1, "future": 940.29, "cy": 37.8, "lvl": 23 }, { "next": 618.72, "future": 947.45, "cy": 37.89, "lvl": 23 }, { "next": 726.89, "future": 963.09, "cy": 37.97, "lvl": 23 }, { "next": 229.85, "future": 1034.72, "cy": 37.97, "lvl": 24 }, { "next": 268.51, "future": 1029.98, "cy": 39.07, "lvl": 24 }, { "next": 283.37, "future": 1023.31, "cy": 39.17, "lvl": 24 }, { "next": 297.01, "future": 1016.54, "cy": 39.26, "lvl": 24 }, { "next": 393.73, "future": 998.97, "cy": 39.35, "lvl": 24 }, { "next": 405.29, "future": 1004.06, "cy": 39.44, "lvl": 24 }, { "next": 417.96, "future": 1008.79, "cy": 39.54, "lvl": 24 }, { "next": 623.61, "future": 1025.21, "cy": 39.63, "lvl": 24 }, { "next": 777.5, "future": 1046.87, "cy": 39.73, "lvl": 24 }, { "next": 238.46, "future": 1072.18, "cy": 39.73, "lvl": 25 }, { "next": 257.12, "future": 1068.65, "cy": 39.82, "lvl": 25 }, { "next": 274.9, "future": 1061.4, "cy": 39.92, "lvl": 25 }, { "next": 289.22, "future": 1068.2, "cy": 44.37, "lvl": 25 }, { "next": 410.33, "future": 1255.7, "cy": 44.47, "lvl": 25 }, { "next": 423.58, "future": 1261.7, "cy": 44.58, "lvl": 25 }, { "next": 590.7, "future": 1285.64, "cy": 44.7, "lvl": 25 }, { "next": 873.93, "future": 1307.96, "cy": 44.81, "lvl": 25 }, { "next": 291.96, "future": 1314.19, "cy": 44.81, "lvl": 26 }, { "next": 307.62, "future": 1305.94, "cy": 48.02, "lvl": 26 }, { "next": 341.61, "future": 1297.77, "cy": 48.38, "lvl": 26 }, { "next": 355.81, "future": 1289.12, "cy": 49.53, "lvl": 26 }, { "next": 488.3, "future": 1287.13, "cy": 49.74, "lvl": 26 }, { "next": 511.3, "future": 1280.7, "cy": 49.87, "lvl": 26 }, { "next": 523.1, "future": 1285.58, "cy": 49.99, "lvl": 26 }, { "next": 534.89, "future": 1291.87, "cy": 50.11, "lvl": 26 }, { "next": 785.68, "future": 1310, "cy": 50.23, "lvl": 26 }, { "next": 947.29, "future": 1332.5, "cy": 50.35, "lvl": 26 }, { "next": 312.27, "future": 1389.79, "cy": 50.35, "lvl": 27 }, { "next": 336.07, "future": 1381.16, "cy": 50.48, "lvl": 27 }, { "next": 356.4, "future": 1375.46, "cy": 50.92, "lvl": 27 }, { "next": 378.44, "future": 1370.33, "cy": 51.3, "lvl": 27 }, { "next": 509.52, "future": 1381.78, "cy": 51.66, "lvl": 27 }, { "next": 516.91, "future": 1384.53, "cy": 51.79, "lvl": 27 }, { "next": 527.18, "future": 1389.57, "cy": 51.92, "lvl": 27 }, { "next": 548.99, "future": 1380.33, "cy": 52.05, "lvl": 27 }, { "next": 559.65, "future": 1384.54, "cy": 52.18, "lvl": 27 }, { "next": 688.82, "future": 1402.3, "cy": 52.31, "lvl": 27 }, { "next": 911.21, "future": 1415.2, "cy": 52.44, "lvl": 27 }, { "next": 1055.38, "future": 1434.29, "cy": 52.57, "lvl": 27 }, { "next": 332.1, "future": 1489.74, "cy": 52.57, "lvl": 28 }, { "next": 366.54, "future": 1478.28, "cy": 52.79, "lvl": 28 }, { "next": 395.3, "future": 1467.32, "cy": 54.13, "lvl": 28 }, { "next": 415.04, "future": 1458.78, "cy": 57.93, "lvl": 28 }, { "next": 562, "future": 1449.09, "cy": 58.39, "lvl": 28 }, { "next": 568.73, "future": 1452.75, "cy": 58.53, "lvl": 28 }, { "next": 577.27, "future": 1456.96, "cy": 58.66, "lvl": 28 }, { "next": 598.47, "future": 1448.59, "cy": 58.82, "lvl": 28 }, { "next": 608.03, "future": 1453.28, "cy": 58.95, "lvl": 28 }, { "next": 750.67, "future": 1472.54, "cy": 59.09, "lvl": 28 }, { "next": 975.89, "future": 1484.41, "cy": 59.23, "lvl": 28 }, { "next": 1202.29, "future": 1512.67, "cy": 59.37, "lvl": 28 }, { "next": 354.76, "future": 1517.4, "cy": 59.37, "lvl": 29 }, { "next": 354.76, "future": 1517.58, "cy": 59.5, "lvl": 29 }, { "next": 407.16, "future": 1530.12, "cy": 65.75, "lvl": 29 }, { "next": 432.8, "future": 1554.78, "cy": 65.91, "lvl": 29 }, { "next": 432.8, "future": 1554.96, "cy": 66.04, "lvl": 29 }, { "next": 618.35, "future": 1566.91, "cy": 66.19, "lvl": 29 }, { "next": 889.54, "future": 1603.36, "cy": 66.34, "lvl": 29 }, { "next": 1350.89, "future": 1640.52, "cy": 66.49, "lvl": 29 }, { "next": 383.48, "future": 1689.7, "cy": 66.49, "lvl": 30 }, { "next": 383.48, "future": 1689.7, "cy": 66.49, "lvl": 30 }], "maxJP": [{ "l": 1, "v": 11.6 }, { "l": 2, "v": 11.16 }, { "l": 3, "v": 16.95 }, { "l": 4, "v": 17.15 }, { "l": 5, "v": 17.98 }, { "l": 6, "v": 21.55 }, { "l": 7, "v": 24.87 }, { "l": 8, "v": 30.57 }, { "l": 9, "v": 29.23 }, { "l": 10, "v": 31.12 }, { "l": 11, "v": 35.99 }, { "l": 12, "v": 41.12 }, { "l": 13, "v": 51.95 }, { "l": 14, "v": 54.79 }, { "l": 15, "v": 68.96 }, { "l": 16, "v": 89.38 }, { "l": 17, "v": 83.18 }, { "l": 18, "v": 98.45 }, { "l": 19, "v": 88.34 }, { "l": 20, "v": 114.53 }, { "l": 21, "v": 106.52 }, { "l": 22, "v": 144.59 }, { "l": 23, "v": 142.64 }, { "l": 24, "v": 160.04 }, { "l": 25, "v": 203.11 }, { "l": 26, "v": 219.94 }, { "l": 27, "v": 218.65 }, { "l": 28, "v": 225.11 }, { "l": 29, "v": 305.05 }, { "l": 30, "v": 301.2 }], "lt": [6, 18, 26, 35, 44, 56, 67, 78, 87, 94, 101, 108, 119, 131, 139, 148, 156, 164, 175, 187, 194, 206, 237, 249, 258, 266, 276, 288, 300, 308] };
@@ -3826,7 +4093,7 @@
       <p>Once the first level has completed and the pool holds meaningful capital, the "buy low" attractor (increasing
         per-capita value
         as players leave) makes failure to reach the target improbable under standard rational actor assumptions. The
-        terminal jackpot (<a href="#section-41">Section 9.3</a>) strengthens this further, making buying individually
+        terminal jackpot strengthens this further, making buying individually
         +EV as the deadline
         approaches. But "improbable" is not "impossible," especially at higher levels during bear markets.</p>
     </div>
@@ -3834,11 +4101,11 @@
       <em>too well</em>. A sufficiently long-running game accumulates an ever-increasing fraction of available ETH. At
       some distant level, the ETH required to start the next level exceeds the ETH that will remain outside the system.
       This
-      is terminal by construction. If the game ever reaches this point, it represents the greatest success in the
-      history of gaming, but it is still terminal. The practical relevance is negligible (this requires the protocol to
-      absorb a substantial fraction of all circulating ETH), but the theoretical completeness matters. At that scale,
-      Ethereum
-      protocol-level interventions would probably occur first.
+      is terminal by construction. If the game ever reaches this point, it would be considered the greatest success in
+      the
+      history of gaming, but it is still a failure mode. The practical relevance is negligible (this requires the
+      protocol to
+      absorb a substantial fraction of all circulating ETH), but the theoretical completeness matters.
     </p>
     <h3 id="section-41">9.3 The Terminal Paradox</h3>
     <div class="definition">
@@ -3869,18 +4136,17 @@
       blocked during the final 30 days before GAMEOVER. Since BURNIE tickets do not contribute ETH to the nextpool,
       allowing them would let players dilute the terminal jackpot without funding the target.</p>
     <div class="observation">
-      <p><strong>Observation 8.3</strong> (Terminal Incentive Alignment). For players already in the game who will buy
-        tickets for the stalling level, buying earlier dominates buying later on three dimensions: earlier purchases
-        accumulate more jackpot draws, collect more drip income (ETH prizes and additional tickets awarded during
-        the stall), and reduce the extraction function's tax on the survival jackpot by accelerating level
-        completion. As the GAMEOVER deadline approaches with the pool underfilled, buying becomes individually +EV
-        for any actor with capital: the terminal payout per ticket exceeds the ticket cost, and each purchase
-        simultaneously funds the pool that prevents the terminal event. This is not a dominant strategy in the
-        strict sense, since a buyer whose purchase was unnecessary (the game would have continued without them)
-        is worse off than a non-buyer. But for a day-1 buyer in a level that stalls, the expected value is
-        positive in the survival state alone: drip income plus the survival jackpot (120-day
-        extraction retains ~50% of the pool) covers the ticket cost, with the terminal option value as pure upside. Late
-        entrants require P(GAMEOVER) above ~38%, a threshold comfortably satisfied during a months-long stall.</p>
+      <p><strong>Observation 8.3</strong> (Terminal Incentive Alignment).</p>
+      <ul>
+        <li><strong>Earlier dominates later</strong> on three dimensions: more jackpot draws, more drip income,
+          and lower extraction tax on the survival jackpot.</li>
+        <li><strong>Day-1 buyer is +EV at any P(GAMEOVER)</strong>, including zero. Drip income plus the survival
+          jackpot alone cover the ticket cost. Terminal value is pure upside.</li>
+        <li><strong>Late buyer (day ~115) needs P(GAMEOVER) > 38%</strong>, a threshold comfortably satisfied
+          during a months-long stall.</li>
+        <li><strong>Buying to profit from GAMEOVER funds the pool that prevents it.</strong> Not dominant in the
+          strict sense (unnecessary purchases are -EV), but the blended EV across both states is positive.</li>
+      </ul>
     </div>
     <p>Consider the two outcomes:</p>
     <ul>
@@ -3961,6 +4227,45 @@
       assigns substantial probability to GAMEOVER. The extraction function does not affect the terminal payout
       at all. GAMEOVER fires during the stall, before level completion, so the extraction never runs and all
       non-obligated ETH contributes to the terminal jackpot regardless of which pool holds it.</p>
+    <div style="margin:1.5rem 0">
+      <canvas id="terminal-ev-chart" style="max-height:380px"></canvas>
+    </div>
+    <script>
+      (function () {
+        var pts = 101;
+        var pGO = [], evEarly = [], evLate = [];
+        for (var i = 0; i < pts; i++) {
+          var p = i / (pts - 1);
+          pGO.push(Math.round(p * 100));
+          evEarly.push(+(0.176 * p + 0.021).toFixed(4));
+          evLate.push(+(0.106 * p - 0.040).toFixed(4));
+        }
+        new Chart(document.getElementById('terminal-ev-chart'), {
+          type: 'line',
+          data: {
+            labels: pGO,
+            datasets: [
+              { label: 'Day-1 buyer', data: evEarly, borderColor: '#4ade80', borderWidth: 2.5, pointRadius: 0, tension: 0 },
+              { label: 'Day-115 buyer', data: evLate, borderColor: '#f87171', borderWidth: 2.5, pointRadius: 0, tension: 0 },
+              { label: 'Breakeven', data: pGO.map(function () { return 0; }), borderColor: 'rgba(160,160,192,0.7)', borderWidth: 2, borderDash: [8, 4], pointRadius: 0 }
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              title: { display: true, text: 'EV per Ticket vs P(GAMEOVER) (120-day stall)', color: '#a0a0c0', font: { size: 14, family: "'Source Serif 4', Georgia, serif" } },
+              legend: { labels: { color: '#a0a0c0', font: { size: 12 }, filter: function (item) { return item.text !== 'Breakeven'; } } },
+              tooltip: { callbacks: { label: function (ctx) { if (ctx.datasetIndex === 2) return null; return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(3) + ' ETH'; } } }
+            },
+            scales: {
+              x: { title: { display: true, text: 'P(GAMEOVER) %', color: '#a0a0c0' }, ticks: { color: '#888', maxTicksLimit: 11 }, grid: { color: 'rgba(160,160,192,0.1)' } },
+              y: { title: { display: true, text: 'EV (ETH)', color: '#a0a0c0' }, ticks: { color: '#888' }, grid: { color: 'rgba(160,160,192,0.1)' } }
+            }
+          }
+        });
+      })();
+    </script>
+    <h4>Dilution, Skim, and Ratio Sensitivity</h4>
     <p>These numbers assume <em>zero voluntary ticket purchases for the entire 120-day window</em>. Real-world
       purchases add 0.072 ETH to the nextpool per ticket but dilute every existing holder's share of the full
       terminal jackpot (which includes the futurepool and accumulator, far more than 0.072 ETH). Each new
@@ -4024,6 +4329,51 @@
       comfortably at any starting ratio. Drip income and the
       survival jackpot (~50% extraction at 120 days retains a substantial pool) partially compensates for survival
       dilution, but at 0.5&times; the breakeven still requires meaningful conviction that GAMEOVER is likely.</p>
+    <div style="margin:1.5rem 0">
+      <canvas id="terminal-timing-chart" style="max-height:380px"></canvas>
+    </div>
+    <script>
+      (function () {
+        var D = 120, cost = 0.08;
+        var days = [];
+        for (var d = 1; d <= D; d++) days.push(d);
+        var probs = [0, 0.25, 0.50, 0.75, 1.0];
+        var colors = ['#60a5fa', '#a78bfa', '#fbbf24', '#fb923c', '#f87171'];
+        var datasets = probs.map(function (p, i) {
+          return {
+            label: 'P(GO) = ' + Math.round(p * 100) + '%',
+            data: days.map(function (d) {
+              var rem = (D - d) / D;
+              var drip = 0.035 * rem;
+              var tickets = 1 + 0.66 * rem;
+              var ev = drip + p * tickets * 0.146 + (1 - p) * tickets * 0.040 - cost;
+              return +ev.toFixed(4);
+            }),
+            borderColor: colors[i],
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.3
+          };
+        });
+        datasets.push({ label: 'Breakeven', data: days.map(function () { return 0; }), borderColor: 'rgba(160,160,192,0.7)', borderWidth: 2, borderDash: [8, 4], pointRadius: 0 });
+        new Chart(document.getElementById('terminal-timing-chart'), {
+          type: 'line',
+          data: { labels: days, datasets: datasets },
+          options: {
+            responsive: true,
+            plugins: {
+              title: { display: true, text: 'EV per Ticket by Buy Day (120-day stall)', color: '#a0a0c0', font: { size: 14, family: "'Source Serif 4', Georgia, serif" } },
+              legend: { labels: { color: '#a0a0c0', font: { size: 11 }, filter: function (item) { return item.text !== 'Breakeven'; } } },
+              tooltip: { callbacks: { label: function (ctx) { if (ctx.datasetIndex === datasets.length - 1) return null; return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(3) + ' ETH'; } } }
+            },
+            scales: {
+              x: { title: { display: true, text: 'Buy Day', color: '#a0a0c0' }, ticks: { color: '#888', maxTicksLimit: 12 }, grid: { color: 'rgba(160,160,192,0.1)' } },
+              y: { title: { display: true, text: 'EV (ETH)', color: '#a0a0c0' }, ticks: { color: '#888' }, grid: { color: 'rgba(160,160,192,0.1)' } }
+            }
+          }
+        });
+      })();
+    </script>
     <p><strong>The grinder pivot.</strong> During normal play, EV maximizers prefer lootboxes, which send 90% of
       each purchase to the futurepool and only 10% to the nextpool. During a stall, tickets provide far more
       terminal jackpot exposure per ETH than lootboxes, and the drip makes day-1 tickets +EV in
@@ -4042,7 +4392,8 @@
       buy tickets: lootboxes are +EV for engaged players, and a portion of each lootbox purchase flows into the
       nextpool. Future ticket holders can defend their equity while playing a +EV game the entire time. The terminal
       arbitrageurs only need to buy enough to close the gap to the point where this defense activates.</p>
-    <p><strong>The convergence paradox.</strong> Buying is dominant if GAMEOVER will fire but marginally negative for a
+    <h4>The Convergence Paradox</h4>
+    <p>Buying is dominant if GAMEOVER will fire but marginally negative for a
       pure outsider if it doesn't. If enough actors buy to prevent GAMEOVER, buying was (possibly) -EV, so they should
       not have
       bought. But if they don't buy, GAMEOVER becomes likely and buying becomes massively +EV.</p>
@@ -4242,7 +4593,7 @@
     </ul>
     <p><strong>Where the thesis fails:</strong></p>
     <ul>
-      <li>A critical smart contract vulnerability is discovered or a dependancy fails</li>
+      <li>A critical smart contract vulnerability is discovered or a dependency fails</li>
       <li>All participants simultaneously cease to value the entertainment product or Ethereum</li>
       <li>A prolonged bear market suppresses participation below the level target for 120+ consecutive days and the
         terminal jackpot's increasingly +EV opportunity fails to attract sufficient rational capital as
