@@ -73,3 +73,44 @@ export const COINFLIP = {
   MIN_DEPOSIT: '100',       // 100 BURNIE minimum (whole tokens, not wei)
   RECYCLING_BONUS_PCT: 1.6, // 1.6% recycling bonus
 };
+
+export const DEGENERETTE_ABI = [
+  'function placeFullTicketBets(address player, uint8 currency, uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant) payable',
+  'function resolveBets(address player, uint64[] betIds) external',
+  'function degeneretteBetNonce(address player) view returns (uint64)',
+];
+
+export const CLAIMS_ABI = [
+  'function claimWinnings(address player) external',
+  'function claimableWinningsOf(address player) view returns (uint256)',
+];
+
+export const QUEST_ABI = [
+  'function getPlayerQuestView(address player) view returns (tuple(tuple(uint48 day, uint8 questType, bool highDifficulty, tuple(uint32 mints, uint256 tokenAmount) requirements)[2] quests, uint128[2] progress, bool[2] completed, uint32 lastCompletedDay, uint32 baseStreak))',
+];
+
+export const AFFILIATE_ABI = [
+  'function createAffiliateCode(bytes32 code, uint8 kickbackPct) external',
+  'function referPlayer(bytes32 code) external',
+  'function getReferrer(address player) view returns (address)',
+  'function affiliateCode(bytes32 code) view returns (address owner, uint8 kickback)',
+];
+
+export const DEGENERETTE = {
+  CURRENCY: { ETH: 0, BURNIE: 1, WWXRP: 3 },
+  MIN_BET: { ETH: '0.005', BURNIE: '100', WWXRP: '1' },
+  MAX_SPINS: 10,
+  PENDING_BETS_KEY: 'degenerus_pending_bets',
+};
+
+export const QUEST_TYPE_LABELS = {
+  0: 'Mint BURNIE Tickets',
+  1: 'Mint ETH Tickets',
+  2: 'Coinflip',
+  3: 'Affiliate Earnings',
+  4: 'Reserved',
+  5: 'Decimator Burns',
+  6: 'Lootbox',
+  7: 'Degenerette (ETH)',
+  8: 'Degenerette (BURNIE)',
+};

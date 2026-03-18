@@ -36,6 +36,33 @@ const _state = {
     staleData: false,
     apiHealthy: true,
   },
+  degenerette: {
+    pendingBets: [],      // Array of { betId, rngIndex, currency, amount, ticketCount, timestamp }
+    lastResults: [],      // Array of resolved bet results { betId, matches, payout, currency }
+    playerNonce: 0,       // Current bet nonce from contract
+  },
+  quest: {
+    slots: [null, null],  // QuestInfo[2] from getPlayerQuestView
+    progress: [0, 0],     // uint128[2] progress values
+    completed: [false, false],
+    baseStreak: 0,
+    lastCompletedDay: 0,
+    shields: 0,
+  },
+  claims: {
+    eth: '0',             // ETH claimable (after 1 wei sentinel subtraction)
+    burnie: '0',          // BURNIE claimable from coinflip
+  },
+  affiliate: {
+    code: null,           // Player's own affiliate code (string or null)
+    referredBy: null,     // Address of referrer (or null)
+    totalEarned: '0',     // Cumulative ETH earned (wei string)
+  },
+  baf: {
+    playerScore: '0',     // Player's BAF score for current level
+    top4: [],             // Array of { player, score, rank }
+    prominence: 'low',    // 'high' | 'medium' | 'low'
+  },
 };
 
 // Shallow Proxy wrapping the top-level state object.
