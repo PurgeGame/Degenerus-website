@@ -2,7 +2,7 @@
 
 **Source:** /home/zak/Dev/PurgeGame/degenerus-audit/contracts/
 **Scope:** DegenerusGame.sol (main dispatcher) + 12 delegatecall modules
-**Status:** Part 1 of 2 (Plan 01 covers DegenerusGame + 6 smaller modules; Plan 02 covers 6 larger modules)
+**Status:** Complete
 
 ---
 
@@ -363,4 +363,260 @@ None. All functions are internal utilities.
 
 ---
 
-<!-- Plan 02 continues with: AdvanceModule, DecimatorModule, DegeneretteModule, JackpotModule, LootboxModule, MintModule -->
+### DegenerusGameMintModule.sol (Module)
+
+**Lines:** 1,193 | **Delegatecall from:** DegenerusGame
+**Purpose:** Ticket purchasing (ETH, BURNIE, free ticket redemption), lootbox purchasing, affiliate commission routing, mint data recording, and future ticket activation via trait generation.
+
+#### Player-Facing Functions
+
+| Function | Visibility | Parameters | What It Does | Key Effects |
+|----------|-----------|------------|--------------|-------------|
+| `purchase(address, uint256, uint256, bytes32, MintPaymentKind)` | external payable | buyer, ticketQuantity (scaled by 100), lootBoxAmount (wei), affiliateCode, payKind | Purchase tickets and/or ETH lootboxes | Routes ticket payment via recordMint (90/10 next/future split), records lootbox ETH (10/90 next/future split, or 40/40/20 next/future/vault during presale), pays affiliate commissions as BURNIE flip credit, applies purchase boost boon, awards century bonus at x00 levels, notifies quest system |
+| `purchaseCoin(address, uint256, uint256)` | external | buyer, ticketQuantity, lootBoxBurnieAmount | Purchase tickets with BURNIE and/or BURNIE lootboxes | Burns BURNIE for tickets (1000 BURNIE = 1 ticket = 4 entries). Blocked within 30 days of liveness guard timeout (90 days at level 1+, 335 days at level 0). BURNIE lootboxes use current lootbox RNG index |
+| `purchaseBurnieLootbox(address, uint256)` | external | buyer, burnieAmount | Purchase a low-EV BURNIE lootbox | Burns BURNIE (minimum 1000), assigns to current lootbox RNG index, accumulates toward RNG threshold |
+
+#### System/Internal Functions
+
+| Function | Visibility | Called By | What It Does |
+|----------|-----------|-----------|--------------|
+| `recordMintData(address, uint24, uint32)` | external payable | DegenerusGame.recordMint (via delegatecall) | Track per-player mint history in mintPacked_ bit fields: update lastLevel, levelCount, levelUnits, mintDay. New level with <4 units only tracks units without incrementing lifetime count. Respects whale bundle freeze (skips total increment while frozen). Clears frozen flag when frozenUntilLevel reached |
+| `processFutureTicketBatch(uint24)` | external | AdvanceModule (via delegatecall) | Activate queued future tickets into trait burn tickets. Processes ticketQueue entries in gas-budgeted batches (550 writes safe limit, 65% cold scaling on first batch). For each player: resolve fractional remainders probabilistically, generate traits via LCG-based PRNG in groups of 16, batch-write to traitBurnTicket storage using assembly |
+| `_purchaseFor(...)` | private | purchase | Core ETH purchase logic: validate amounts, calculate ticket cost, handle lootbox payment (msg.value first, claimable shortfall if Combined), route ticket purchase, record lootbox entry with affiliate, apply purchase boost boon, award century bonus, credit BURNIE flip bonus (10% of ticket equivalent + bulk bonus for 10+ tickets) |
+| `_purchaseCoinFor(...)` | private | purchaseCoin | Core BURNIE purchase logic: enforce cutoff timer, burn BURNIE for tickets, optionally purchase BURNIE lootbox |
+| `_purchaseBurnieLootboxFor(...)` | private | purchaseBurnieLootbox, _purchaseCoinFor | Burn BURNIE, record lootbox entry at current RNG index, accumulate pendingBurnie for RNG threshold |
+| `_callTicketPurchase(...)` | private | _purchaseFor, _purchaseCoinFor | Route ticket purchase: apply purchase boost boon (5/15/25% bonus capped at 10 ETH), apply x00 century bonus (up to 2x based on activity score, 10 ETH cap per player per level), record mint via DegenerusGame.recordMint, pay affiliates, credit BURNIE flip bonuses |
+| `_raritySymbolBatch(...)` | private | processFutureTicketBatch | Generate trait tickets using LCG PRNG. Groups of 16 with deterministic seed from VRF entropy. Weighted trait distribution via DegenerusTraitUtils.traitFromWord. Quadrant offset from ticket index (i & 3). Batch-writes to storage via inline assembly for gas efficiency |
+| `_applyLootboxBoostOnPurchase(...)` | private | _purchaseFor | Consume lootbox boost boons in priority order (25% > 15% > 5%). Boost capped at 10 ETH base, 2-day expiry |
+| `_rollRemainder(...)` | private pure | processFutureTicketBatch | Probabilistic resolution of fractional ticket remainders (0-99 scale) |
+
+#### Key Mechanics (non-function)
+
+- **Ticket pricing:** Tickets cost `price * quantity / (4 * TICKET_SCALE)` where TICKET_SCALE = 100. Each purchase of 1 ticket buys 4 entries. Minimum buy-in: 0.0025 ETH.
+- **BURNIE ticket conversion:** 1000 BURNIE = 1 ticket = 4 entries. BURNIE is burned on purchase. Subject to 30-day liveness cutoff.
+- **Lootbox pool split:** Normal: 10% next / 90% future. Presale: 40% next / 40% future / 20% vault. Distress mode: 100% next pool.
+- **Century bonus (x00 levels):** Up to 2x bonus tickets scaling with activity score. Per-player 10 ETH equivalent cap across all purchases at that x00 level.
+- **Lootbox boost boons:** 5/15/25% bonus on lootbox ETH deposits (capped at 10 ETH base). Consumed in priority order (25% first). 2-day expiry from deity/lootbox grant.
+- **Trait generation:** LCG multiplier 6364136223846793005. Traits assigned to quadrants deterministically (ticket index mod 4). Weighted distribution produces non-uniform rarity within each 8-symbol quadrant.
+- **Gas-budgeted ticket activation:** 550 write budget (65% scaling on cold first batch). Processes queue entries iteratively, advancing cursor between advanceGame calls.
+- **BURNIE flip credit bonuses:** 10% of ticket equivalent cost as base, plus 2.5% bulk bonus for 10+ ticket purchases, plus extra 10% on final jackpot day at x91-x99 levels.
+- **Affiliate commission:** Paid via affiliate.payAffiliate on both fresh ETH and recycled claimable portions separately. Returned as BURNIE flip credit to buyer.
+
+---
+
+### DegenerusGameLootboxModule.sol (Module)
+
+**Lines:** 1,778 | **Delegatecall from:** DegenerusGame
+**Purpose:** Lootbox opening and reward resolution (ETH and BURNIE), deity boon system (3 daily slots per deity pass holder), activity-score EV scaling, and boon roll mechanics.
+
+#### Player-Facing Functions
+
+| Function | Visibility | Parameters | What It Does | Key Effects |
+|----------|-----------|------------|--------------|-------------|
+| `openLootBox(address, uint48)` | external | player, index | Open an ETH lootbox once RNG is available | Applies activity-score EV multiplier (80-135%, 10 ETH cap per level). Resolves reward paths: 55% tickets (5-tier variance), 10% DGNRS, 10% WWXRP, 25% BURNIE. Splits lootboxes >0.5 ETH into two rolls. Awards distress ticket bonus (25%). Grants presale BURNIE bonus (62%). Rolls boon from remaining EV budget (10% of amount, capped 1 ETH) |
+| `openBurnieLootBox(address, uint48)` | external | player, index | Open a BURNIE lootbox | Lower EV than ETH lootboxes. Awards tickets at target level + small BURNIE reward. No EV multiplier (BURNIE lootboxes use fixed reward schedule) |
+| `resolveLootboxDirect(address, uint256, uint256)` | external | player, amount, rngWord | Resolve a lootbox directly using provided RNG (for decimator claims) | Same reward logic as openLootBox but uses provided entropy instead of stored index. Presale always false |
+| `issueDeityBoon(address, address, uint8, uint8)` | external | deity, recipient, slot (0-2), boonType (1-31) | Deity pass holder issues a boon to another player | 3 slots per deity per day. Validates deity pass ownership, slot freshness (same day = reuse OK), boon type validity. Sets boon state with same-day deity expiry. 31 boon types across 12 categories |
+| `deityBoonSlots(address)` | external view | deity | View deity boon slot status for today | Returns 3-element array of (recipient, boonType, day) for each slot |
+
+#### System/Internal Functions
+
+| Function | Visibility | Called By | What It Does |
+|----------|-----------|-----------|--------------|
+| `_resolveLootbox(...)` | private | openLootBox, resolveLootboxDirect | Core lootbox resolution: compute EV-scaled amount, split >0.5 ETH into two rolls, determine reward path (tickets/DGNRS/WWXRP/BURNIE), apply ticket variance tiers, roll boon from budget, handle whale pass jackpot for >4.5 ETH lootboxes |
+| `_rollRewardPath(...)` | private | _resolveLootbox | Select reward type from weighted random: 55% tickets, 10% DGNRS, 10% WWXRP, 25% BURNIE |
+| `_rollTicketReward(...)` | private | _resolveLootbox | Apply 5-tier ticket variance: 1% chance 4.6x, 4% chance 2.3x, 20% chance 1.1x, 45% chance 0.651x, 30% chance 0.45x. Base budget: 161% of lootbox value |
+| `_rollBoon(...)` | private | _resolveLootbox | Weighted boon selection from 31 types (total weight 1298). Categories: coinflip (5/10/25%), lootbox boost (5/15/25%), purchase boost (5/15/25%), decimator boost (10/25/50%), whale discount (10/25/50%), deity pass discount (10/25/50%), activity (10/25/50 levels), whale pass, lazy pass discount (10/25/50%). Decimator boons excluded during jackpot phase |
+| `_applyEvMultiplierWithCap(...)` | private | openLootBox | Apply EV multiplier with per-account per-level 10 ETH cap. Tracks benefit used, applies neutral (100%) EV to remainder beyond cap |
+| `_lootboxEvMultiplierBps(...)` | private view | openLootBox | Calculate EV multiplier from activity score: 0% activity = 80% EV, 60% = 100% EV (breakeven), 255%+ = 135% EV (max). Linear interpolation between thresholds |
+
+#### Key Mechanics (non-function)
+
+- **EV scaling:** Activity score 0 = 80% EV (house edge), score 60 = 100% EV (breakeven), score 255+ = 135% EV (player edge). 10 ETH benefit cap per account per level prevents unlimited extraction.
+- **Reward path probabilities:** 55% tickets (highest variance), 10% DGNRS (pool-proportional), 10% WWXRP (fixed 1 token), 25% BURNIE (low/high path based on random roll).
+- **Ticket variance tiers:** Tier 1 (1%): 4.6x multiplier. Tier 2 (4%): 2.3x. Tier 3 (20%): 1.1x. Tier 4 (45%): 0.651x. Tier 5 (30%): 0.45x. Base budget: 161% of lootbox value.
+- **BURNIE reward paths:** Low path (58.1% base + 4.77% per step) vs high path (307% base + 94.3% per step). Presale adds 62% bonus.
+- **Lootbox split:** Amounts >0.5 ETH split into two independent rolls for variance amplification.
+- **Distress ticket bonus:** 25% extra tickets when purchased during distress mode (tracked via lootboxDistressEth).
+- **Boon EV budget:** 10% of lootbox amount (capped at 1 ETH), reduced by estimated utilization (50%). Boons with active existing boon in same category are skipped. Boon budget scaled down by 50% assumed utilization rate.
+- **Deity boon system:** 3 daily slots per deity pass holder. Can target any player. Weighted random selection from 31 boon types. Same-day deity expiry (stricter than lootbox-granted boons).
+- **DGNRS reward tiers:** Small (0.001% pool/ETH), medium (0.039%), large (0.08%), mega (0.8%). Tier selected by random roll.
+- **Whale pass jackpot:** Lootboxes >4.5 ETH have a chance to award whale passes (100-level ticket bundles).
+
+---
+
+### DegenerusGameDegeneretteModule.sol (Module)
+
+**Lines:** 1,179 | **Delegatecall from:** DegenerusGame
+**Purpose:** Degenerette symbol-roll betting: full-ticket 4-trait match betting with 3 currency types (ETH, BURNIE, WWXRP), payout multipliers from 1.90x to 100,000x, and hero quadrant override mechanics.
+
+#### Player-Facing Functions
+
+| Function | Visibility | Parameters | What It Does | Key Effects |
+|----------|-----------|------------|--------------|-------------|
+| `placeFullTicketBets(address, uint256, uint8, uint8)` | external | player, packed bet spec, ticketCount (1-4), currency (0=ETH, 1=BURNIE, 2=WWXRP) | Place full-ticket Degenerette bets (4 traits per ticket) | Validates bet spec (4 symbol selections, one per quadrant). For ETH bets: deducts from claimableWinnings. For BURNIE: burns via coin.burnCoin. For WWXRP: burns via wwxrp.burnForGame. Records packed bet data at current lootbox RNG index. Tracks hero wager (most-wagered symbol per quadrant per day). Records mint streak |
+| `resolveBets(address, uint64)` | external | player, betId | Resolve placed bets once RNG is available | Unpacks bet, retrieves RNG word, computes match count (0-8) per ticket via EV-normalized product-of-ratios. Awards payout based on match multiplier table. ETH payouts: 25% direct ETH (from currentPrizePool) + 75% lootbox. BURNIE/WWXRP payouts: 100% in original currency. Consolation prize: 1 WWXRP for 0-match losing bets. Awards DGNRS for 6+ matches |
+
+#### System/Internal Functions
+
+| Function | Visibility | Called By | What It Does |
+|----------|-----------|-----------|--------------|
+| `_resolveFullTicketBet(...)` | private | resolveBets | Core resolution: generate result ticket from VRF entropy (weighted trait selection per quadrant), apply hero override (most-wagered symbol auto-wins its quadrant), count matches (0-8), look up payout multiplier |
+| `_calculatePayout(...)` | private | _resolveFullTicketBet | Compute raw payout from wager and multiplier. Apply ROI scaling from activity score (90% at score 0, 99.9% at score 305). Apply EV normalization: product of per-quadrant ratios compensates for non-uniform trait distribution |
+| `_payoutEth(...)` | private | resolveBets | ETH payout: 25% credited as claimable ETH (from currentPrizePool), 75% resolved as lootbox via delegatecall to LootboxModule. Large payouts >5 ETH: deferred to whale pass claim. Amounts exceeding pool cap are converted to lootbox |
+| `_payoutCoin(...)` | private | resolveBets | BURNIE payout: mint via coin.creditFlip |
+| `_payoutWwxrp(...)` | private | resolveBets | WWXRP payout: mint via wwxrp.mintPrize |
+| `_evNormalize(...)` | private pure | _calculatePayout | Product-of-ratios EV normalization per quadrant. Each quadrant contributes matchRatio or (1 - matchRatio) depending on whether the symbol matched, ensuring uniform EV across all symbol combinations despite weighted trait distribution |
+
+#### Key Mechanics (non-function)
+
+- **Full-ticket betting:** Each ticket has 4 traits (one per quadrant). Player selects 4 symbols. Matches are counted per quadrant (0-8 total: symbol match + color match per quadrant).
+- **Payout multiplier table:** 0 matches: 0x (consolation 1 WWXRP). 1 match: 1.90x. 2 matches: 4.75x. 3 matches: 17.5x. 4 matches: 90x. 5 matches: 700x. 6 matches: 8,000x. 7 matches: 40,000x. 8 matches: 100,000x.
+- **ROI from activity score:** Base ROI scales linearly 90% (score 0) to 99% (score 75) to 99.9% (score 305). This is the house edge on Degenerette specifically.
+- **EV normalization:** Product-of-ratios per quadrant compensates for non-uniform trait rarity. Ensures every symbol combination has equal expected value despite different probabilities of appearing.
+- **Hero quadrant override:** The most-wagered symbol per quadrant per day automatically wins its quadrant in the result ticket. Creates positive externality: large wagers boost win probability for all players who picked the popular symbol. Tracked via dailyHeroWager mapping.
+- **3 currency modes:** ETH (from claimableWinnings), BURNIE (burned), WWXRP (burned). ETH payouts split 25% direct ETH / 75% lootbox. BURNIE/WWXRP payouts are 100% in original currency.
+- **Consolation prize:** 1 WWXRP minted to losing players (0 matches) as participation reward.
+- **DGNRS rewards:** 6+ matches award DGNRS tokens from the reward pool.
+- **Bet packing:** Bet data packed into uint256: currency, ticketCount, wager amount, 4 symbol selections, RNG index. Unpacked at resolution time.
+
+---
+
+### DegenerusGameAdvanceModule.sol (Module)
+
+**Lines:** 1,383 | **Delegatecall from:** DegenerusGame
+**Purpose:** FSM controller for the game loop: daily advanceGame processing, VRF lifecycle (Chainlink V2.5), prize pool consolidation, level transitions, liveness guards, and delegatecall orchestration of jackpot/endgame modules.
+
+#### Player-Facing Functions
+
+| Function | Visibility | Parameters | What It Does | Key Effects |
+|----------|-----------|------------|--------------|-------------|
+| `advanceGame()` | external | none | Advance game state (called daily by any participant) | Multi-stage FSM: check liveness guard, enforce daily mint gate, drain ticket queues, request/consume VRF, process daily jackpots (ETH + BURNIE), detect pool target reached, consolidate prize pools at level transition, enter jackpot phase, process 5-day jackpot draws, trigger BAF/Decimator reward jackpots, end phase. Caller receives ~0.01 ETH equivalent BURNIE bounty (2-3x escalation if stalled >1-2 hours) |
+| `requestLootboxRng()` | external | none | Request mid-day lootbox RNG when activity threshold is met | Cannot be called while daily RNG is locked. Checks LINK balance (minimum 40 LINK). Validates ETH/BURNIE threshold. Swaps ticket write buffer to freeze snapshot. Requests Chainlink VRF V2.5 with 3 confirmations |
+| `reverseFlip()` | external | none | Reverse pending coinflip queue by paying escalating BURNIE cost | Base cost 100 BURNIE + 50% compound per queued flip. Burns BURNIE from caller. Triggers coinflip processing reversal |
+
+#### System/Internal Functions
+
+| Function | Visibility | Called By | What It Does |
+|----------|-----------|-----------|--------------|
+| `wireVrf(address, uint256, bytes32)` | external | ADMIN constructor (deploy-only) | Wire VRF coordinator, subscription ID, and key hash. One-time setup |
+| `updateVrfCoordinatorAndSub(address, uint256)` | external | ADMIN only | Emergency VRF coordinator rotation. Updates coordinator address and subscription ID |
+| `rawFulfillRandomWords(uint256, uint256[])` | external | VRF Coordinator callback | Receive VRF random word. Stores in rngWordCurrent. Finalizes lootbox RNG if mid-day request |
+| `_handleGameOverPath(...)` | private | advanceGame | Check liveness guards (365d level 0, 120d level 1+). If triggered: delegate to GameOverModule.handleGameOverDrain or handleFinalSweep (30d post-gameover). Safety: skips gameover if nextPool already meets target |
+| `rngGate(...)` | internal | advanceGame | VRF lifecycle gate: return existing word, process fresh VRF (apply daily RNG, process coinflip payouts, finalize lootbox RNG), request new VRF, or handle 12-hour timeout retry |
+| `_requestRng(...)` | private | rngGate | Request Chainlink VRF V2.5 with 10 confirmations. Increments level on lastPurchaseDay. Sets rngLockedFlag, freezes pools, reserves lootbox RNG index |
+| `_applyDailyRng(...)` | private | rngGate | Apply RNG nudges: XOR accumulated nudge entropy into VRF word. Record final word in rngWordByDay. Update lastVrfProcessedTimestamp |
+| `_consolidatePrizePools(...)` | private | advanceGame | Delegatecall to JackpotModule.consolidatePrizePools: merge nextPool into currentPrizePool, rebalance future/current, credit BURNIE coinflip, distribute stETH yield |
+| `_drawDownFuturePrizePool(...)` | private | advanceGame | Release 15% of futurePool into nextPool at level transition. Skipped at x00 levels (century boundary preserves future pool) |
+| `_applyTimeBasedFutureTake(...)` | private | advanceGame | Time-adaptive next-to-future skim: 30% base for fast levels (<=1 day), decays to 13% min over 14 days, rises again for slow levels. Adjusts +/-2% for future/next ratio and growth rate. Random variance +/-10% |
+| `_enforceDailyMintGate(...)` | private view | advanceGame | Require caller minted recently. Bypass tiers: deity pass (always), anyone (30+ min past day boundary), pass holder (15+ min), DGVE vault owner (always) |
+| `_prepareFutureTickets(...)` | private | advanceGame | Process near-future ticket queues (+2 to +6 levels ahead) before daily draws to include fresh lootbox-driven tickets |
+| `_gameOverEntropy(...)` | private | _handleGameOverPath | Gameover RNG with fallback: try VRF, after 3-day timeout use historical VRF words (up to 5 early words hashed with prevrandao) as secure fallback |
+
+#### Key Mechanics (non-function)
+
+- **FSM stages:** GAMEOVER(0), RNG_REQUESTED(1), TRANSITION_WORKING(2), TRANSITION_DONE(3), FUTURE_TICKETS_WORKING(4), TICKETS_WORKING(5), PURCHASE_DAILY(6), ENTERED_JACKPOT(7), JACKPOT_ETH_RESUME(8), JACKPOT_COIN_TICKETS(9), JACKPOT_PHASE_ENDED(10), JACKPOT_DAILY_STARTED(11). Each advanceGame call processes one stage and exits.
+- **VRF lifecycle:** Request with 10 confirmations (3 for mid-day lootbox). 12-hour timeout triggers retry. 3-day stall triggers historical VRF fallback for gameover. RNG nudge system: 100 BURNIE base + 50% compound per nudge, XORed into final word.
+- **Pool consolidation at level transition:** nextPool becomes currentPrizePool (jackpots paid from this). FuturePool contributes via 15% drawdown (skipped at x00). Time-based skim transfers 13-30%+ of nextPool to futurePool based on level completion speed.
+- **Compressed/turbo jackpots:** Flag set when pool target met within 2 days (compressed = 3-day jackpot) or 1 day (turbo = 1-day jackpot). Reduces jackpot phase duration.
+- **Liveness guard:** Level 0: 365 days. Level 1+: 120 days since levelStartTime. Safety: resets timer if nextPool already meets target.
+- **Decimator window:** Opens at levels x4 (not x94) and x99. Closed during RNG lock.
+- **Presale auto-end:** Triggers at first level transition (level 3+) or when lootbox presale ETH reaches 200 ETH cap.
+- **Bounty escalation:** 2x after 1 hour past day boundary, 3x after 2 hours. Incentivizes timely advanceGame calls.
+- **Pool freeze:** Pools frozen during VRF request period. Purchases during freeze route to pending pools, merged on unfreeze.
+- **Ticket buffer double-buffering:** Read/write slot swap ensures tickets purchased after VRF request don't participate in current round's trait generation.
+
+---
+
+### DegenerusGameDecimatorModule.sol (Module)
+
+**Lines:** 1,027 | **Delegatecall from:** DegenerusGame
+**Purpose:** Decimator burn tracking, jackpot resolution, and claim distribution. Includes both the regular decimator (periodic during gameplay) and the terminal decimator (death bet for GAMEOVER).
+
+#### Player-Facing Functions
+
+| Function | Visibility | Parameters | What It Does | Key Effects |
+|----------|-----------|------------|--------------|-------------|
+| `claimDecimatorJackpot(uint24)` | external | lvl | Claim regular decimator jackpot winnings | Validates winner (correct subbucket match), marks claimed, splits 50/50 ETH/lootbox (100% ETH during GAMEOVER). ETH portion goes through auto-rebuy if enabled. Claims blocked during pool freeze. Claims expire when next decimator runs |
+| `claimTerminalDecimatorJackpot()` | external | none | Claim terminal decimator jackpot (post-GAMEOVER) | 100% ETH payout (no lootbox split). Uses weightedBurn for pro-rata share (time multiplier already applied). Marks claimed by zeroing weightedBurn |
+
+#### System/Internal Functions
+
+| Function | Visibility | Called By | What It Does |
+|----------|-----------|-----------|--------------|
+| `creditDecJackpotClaimBatch(address[], uint256[], uint256)` | external | JACKPOTS contract | Credit decimator jackpot claims to multiple accounts in batch. GAMEOVER: 100% ETH. Normal: 50/50 ETH/lootbox split. Lootbox portion aggregated and added to futurePool once at end |
+| `creditDecJackpotClaim(address, uint256, uint256)` | external | JACKPOTS contract | Credit single decimator jackpot claim. Same split logic as batch version |
+| `recordDecBurn(address, uint24, uint8, uint256, uint256)` | external | COIN contract | Record BURNIE burn for decimator eligibility. First burn sets bucket (denominator 2-12) and deterministic subbucket from hash(player, lvl, bucket). Subsequent burns accumulate. Can migrate to lower (better) bucket. Effective amount computed with activity-score multiplier (capped at 200 mints worth) |
+| `runDecimatorJackpot(uint256, uint24, uint256)` | external | DegenerusGame (via delegatecall) | Snapshot regular decimator winners. Selects winning subbucket per denominator (2-12) from VRF. Stores packed offsets and claim round data. Returns pool if no qualifying burns or already snapshotted |
+| `consumeDecClaim(address, uint24)` | external | DegenerusGame (via delegatecall) | Validate and mark regular decimator claim. Pro-rata share: (pool * playerBurn) / totalBurn |
+| `decClaimable(address, uint24)` | external view | UI/frontend | View claimable amount and winner status for regular decimator |
+| `recordTerminalDecBurn(address, uint24, uint256)` | external | COIN contract | Record terminal decimator burn. Bucket/subbucket from activity score (level 100 rules, min bucket 2). Applies activity multiplier + time multiplier (30x at 120 days down to 1x at 2 days). Burns blocked at <=1 day remaining |
+| `runTerminalDecimatorJackpot(uint256, uint24, uint256)` | external | DegenerusGame (via delegatecall) | Resolve terminal decimator at GAMEOVER. Same subbucket selection as regular. Uses weightedBurn (time-multiplied) for pro-rata distribution |
+| `terminalDecClaimable(address)` | external view | UI/frontend | View terminal decimator claimable amount and winner status |
+| `_decEffectiveAmount(...)` | private pure | recordDecBurn, recordTerminalDecBurn | Apply activity-score multiplier with 200-mint cap. Once cap reached, additional burns counted at 1x |
+| `_decSubbucketFor(...)` | private pure | recordDecBurn, recordTerminalDecBurn | Deterministic subbucket: hash(player, lvl, bucket) mod bucket |
+| `_creditDecJackpotClaimCore(...)` | private | creditDecJackpotClaimBatch, creditDecJackpotClaim, claimDecimatorJackpot | Split 50/50: half as claimable ETH (through auto-rebuy), half as lootbox (resolved via LootboxModule delegatecall). Lootbox portion removed from claimablePool, added to futurePool |
+| `_awardDecimatorLootbox(...)` | private | _creditDecJackpotClaimCore | Resolve lootbox: amounts >5 ETH deferred to whale pass claim, smaller amounts resolved via LootboxModule.resolveLootboxDirect delegatecall |
+
+#### Key Mechanics (non-function)
+
+- **Bucket system:** Denominators 2-12. Lower denominator = better odds (1/2 vs 1/12) but shared with more players. Activity score determines bucket assignment. Subbucket is deterministic from hash(player, level, bucket).
+- **Activity-score multiplier:** 1.0x (score 0) to 1.767x (score 235, cap). Applied to first 200 mints worth of burns; excess at 1x. "BURNIE is worth more in skilled hands."
+- **Bucket migration:** If player provides a strictly lower denominator on subsequent burn, previous burn migrates to new subbucket. Old subbucket aggregate decremented.
+- **Claim expiration:** Claims expire when the next decimator runs (lastDecClaimRound overwritten). Only one active decimator round at a time.
+- **50/50 ETH/lootbox split:** Normal play: half credited as claimable ETH, half resolved as lootbox tickets. GAMEOVER: 100% ETH.
+- **Terminal decimator (death bet):** Always-open burn for GAMEOVER prediction. Time multiplier rewards early conviction: 30x at 120 days remaining, linear decay to 2.75x at 11 days, regime change to 2x at 10 days, linear to 1x at 2 days. Burns blocked at <=1 day (24h cooldown before GAMEOVER triggers).
+- **Terminal time multiplier formula:** >10 days: daysRemaining * 2500 BPS (i.e., daysRemaining/4 as multiplier). <=10 days: 10000 + (daysRemaining-2) * 10000/8 BPS. Intentional discontinuity at day 10 boundary (2.75x to 2x regime change).
+- **Terminal bucket assignment:** Uses level 100 rules regardless of actual level. Activity score capped at 235 for bucket calculation. Minimum bucket 2.
+- **Pro-rata distribution:** Winner's share = (pool * playerBurn) / totalWinnerBurn across all winning subbuckets. Terminal uses weightedBurn (time-multiplied) instead of raw burn.
+
+---
+
+### DegenerusGameJackpotModule.sol (Module)
+
+**Lines:** 2,795 | **Delegatecall from:** DegenerusGame
+**Purpose:** All jackpot mechanics: daily ETH jackpots (purchase and jackpot phases), daily BURNIE jackpots, 5-day jackpot-phase sequence, prize pool consolidation, terminal jackpots, trait-based winner selection, yield distribution, and gas-safe chunked distribution.
+
+#### Player-Facing Functions
+
+| Function | Visibility | Parameters | What It Does | Key Effects |
+|----------|-----------|------------|--------------|-------------|
+| `runTerminalJackpot(uint48)` | external | day | Execute terminal jackpot at GAMEOVER | Day-5-style distribution: 100% of currentPrizePool distributed to next-level ticketholders via 4 trait buckets (60/13/13/13 split). Solo bucket winner gets 75% ETH / 25% whale passes |
+
+#### System/Internal Functions
+
+| Function | Visibility | Called By | What It Does |
+|----------|-----------|-----------|--------------|
+| `payDailyJackpot(bool, uint24, uint256)` | external | AdvanceModule (daily during both phases) | Multi-phase ETH jackpot distribution. Purchase phase: early-burn payout from futurePool. Jackpot phase days 1-4: random 6-14% of currentPrizePool. Day 5: 100% remaining currentPrizePool. 4 trait buckets with daily/final bucket splits. Chunked distribution (gas-safe, resumes across multiple advanceGame calls). Carryover from near-future levels (1% futurePool budget) |
+| `payDailyJackpotCoinAndTickets(uint256)` | external | AdvanceModule (after ETH distribution) | Complete the daily jackpot: distribute BURNIE jackpot + process ticket rewards. Called as separate transaction for gas management |
+| `consolidatePrizePools(uint24, uint256)` | external | AdvanceModule (at level transition) | Merge nextPool into currentPrizePool. At x00 levels: 5-dice consolidation (keep 30-65% of futurePool based on 5 independent dice rolls). Distribute stETH yield (23% DGNRS / 23% vault / 46% accumulator + 8% buffer). Credit BURNIE coinflip pool. Award early-bird lootbox (3% futurePool on day 1) |
+| `processTicketBatch(uint24)` | external | AdvanceModule (via delegatecall) | Gas-budgeted trait ticket generation from ticketQueue. Same algorithm as MintModule.processFutureTicketBatch: LCG-based PRNG, assembly batch writes, fractional remainder rolls |
+| `awardFinalDayDgnrsReward(uint24, uint256)` | external | AdvanceModule (after final jackpot day) | Award DGNRS reward to the solo bucket winner after the 5th daily jackpot |
+| `payDailyCoinJackpot(uint24, uint256)` | external | AdvanceModule (daily during purchase phase) | Daily BURNIE jackpot: 0.5% of prize pool target in BURNIE. 75% to near-future trait-matched winners ([lvl, lvl+4]). 25% to far-future ticketQueue holders ([lvl+5, lvl+99]) |
+| `_rollWinningTraits(...)` | private | payDailyJackpot, payDailyCoinJackpot | Generate 4 winning traits (one per quadrant). During jackpot phase: uses burn-count-weighted selection with hero override. During purchase phase: pure VRF random |
+| `_randTraitTicket(...)` | private view | payDailyJackpot | Select random winners from trait ticket pool. Duplicates allowed (more tickets = more chances). Virtual deity entries: floor(2% of bucket tickets, minimum 2) if deity exists for the symbol |
+| `_randTraitTicketWithIndices(...)` | private view | payDailyCoinJackpot | Same as _randTraitTicket but also returns ticket indices for event logging |
+| `_dailyCurrentPoolBps(...)` | private pure | payDailyJackpot | Days 1-4: random 6-14% (uniform). Day 5: 100%. Determines ETH budget per jackpot day |
+| `_selectCarryoverSourceOffset(...)` | private view | payDailyJackpot | Select random eligible carryover source offset in [1..4] for near-future ticket distribution. Probes from random start, skips levels with no winning-trait tickets |
+| `_awardFarFutureCoinJackpot(...)` | private | payDailyCoinJackpot | Awards 25% of BURNIE budget to random ticketQueue holders on far-future levels [lvl+5, lvl+99]. Samples up to 10 random levels, 1 winner per level |
+| `_awardDailyCoinToTraitWinners(...)` | private | payDailyCoinJackpot | Awards BURNIE to trait-matched winners at a target level. Batched creditFlipBatch calls (3 per batch) |
+| `_clearDailyEthState()` | private | payDailyJackpot | Reset all daily distribution state after jackpot day completes |
+| `_raritySymbolBatch(...)` | private | processTicketBatch | Identical LCG trait generation as MintModule (shared algorithm, separate copy for module isolation) |
+| `_generateTicketBatch(...)` | private | processTicketBatch | Wrapper for _raritySymbolBatch to reduce stack usage |
+| `_computeBucketCounts(...)` | private view | payDailyJackpot, payDailyCoinJackpot | Compute winner counts per trait bucket. Daily splits: 20/20/20/20 (equal). Final day splits: 60/13/13/13 (solo bucket gets 60%). Solo bucket is the trait with the most tickets |
+
+#### Key Mechanics (non-function)
+
+- **5-day jackpot phase:** Days 1-4 distribute 6-14% of currentPrizePool (random within range). Day 5 distributes 100% remaining. Compressed mode (3 days) and turbo mode (1 day) available for fast levels.
+- **Trait-based bucket distribution:** 4 winning traits selected per day (one per quadrant). Winners are random ticket holders matching winning traits. Daily bucket split: 20/20/20/20 (equal). Final day: 60/13/13/13 (solo bucket = trait with most tickets gets 60%).
+- **Solo bucket winner:** Final day solo bucket (60% share) distributed to a single winner. Gets 75% as ETH, 25% as whale passes. Also receives DGNRS reward.
+- **Hero override in winning traits:** During jackpot phase, uses burn-count-weighted trait selection with hero override (most-wagered Degenerette symbol auto-wins its quadrant). During purchase phase: pure VRF random.
+- **Virtual deity entries:** Deity pass holders get virtual tickets in their symbol's trait bucket: floor(2% of bucket size, minimum 2). These represent deity pass holders' chance to win jackpots without explicit ticket purchases.
+- **Carryover system:** Each daily jackpot includes 1% of futurePool as carryover budget, distributed to trait-matched winners on near-future levels [lvl+1..lvl+4]. Ensures future ticket holders receive ongoing jackpot participation.
+- **Pool lock at RNG:** When VRF is requested, pool values are frozen. This prevents pool manipulation between RNG request and consumption. Pending purchases route to separate pending pools, merged on unfreeze.
+- **x00 consolidation (5-dice):** At century boundaries (level 100, 200, ...), futurePool is consolidated by rolling 5 independent dice. Each die independently keeps 30-65% of its portion. Creates variance in how much futurePool carries forward.
+- **Yield distribution at consolidation:** stETH yield split: 23% to DGNRS reward pool, 23% to vault, 46% to segregated accumulator. 8% contract buffer retained.
+- **Early-bird lootbox:** Day 1 of jackpot phase: 3% of futurePool allocated as early-bird lootbox reward, resolved via LootboxModule.
+- **BURNIE jackpot (daily):** 0.5% of prize pool target in BURNIE. Split 75% near-future (trait-matched winners at [lvl, lvl+4]) and 25% far-future (random ticketQueue holders at [lvl+5, lvl+99], up to 10 levels sampled).
+- **Gas-safe chunked distribution:** Daily ETH distribution uses multi-phase cursor system (dailyEthPhase, dailyEthBucketCursor, dailyEthWinnerCursor) allowing distribution to resume across multiple advanceGame calls. Maximum 3 winners per batch in BURNIE distribution.
+- **Auto-rebuy on jackpot winnings:** When enabled, ETH winnings converted to tickets at 1-4 levels ahead (30% bonus, 45% afKing). Take-profit reserves preserved as claimable.
