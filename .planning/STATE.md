@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Game Frontend
+milestone: v2.1
+milestone_name: Contract-Paper Gap Audit
 status: unknown
-stopped_at: Completed 12-01-PLAN.md
-last_updated: "2026-03-18T23:56:50.966Z"
+stopped_at: Completed 13-01-PLAN.md
+last_updated: "2026-03-19T02:06:41.088Z"
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 17
-  completed_plans: 17
+  total_phases: 2
+  completed_phases: 0
+  total_plans: 4
+  completed_plans: 1
 ---
 
 # Project State
@@ -19,102 +19,36 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** Phase 12 — integration-fixes-cleanup
+**Current focus:** Phase 13 — Contract Mechanic Extraction
 
 ## Current Position
 
-Phase: 12 (integration-fixes-cleanup) — EXECUTING
-Plan: 1 of 1
+Phase: 13 (Contract Mechanic Extraction) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 5
-- Average duration: 3min
-- Total execution time: 16min
+- Total plans completed: 0
+- Average duration: -
+- Total execution time: 0 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 06-foundation | 3 | 8min | 3min |
-| 07-purchasing-core-ui | 2 | 8min | 4min |
-
-*Updated after each plan completion*
-| Phase 08 P01 | 3min | 2 tasks | 7 files |
-| Phase 08 P02 | 3min | 2 tasks | 5 files |
-| Phase 08 P03 | 3min | 2 tasks | 5 files |
-| Phase 09 P01 | 5min | 2 tasks | 5 files |
-| Phase 09 P02 | 2min | 2 tasks | 6 files |
-| Phase 09 P03 | 2min | 2 tasks | 6 files |
-| Phase 09 P04 | 1min | 2 tasks | 2 files |
-| Phase 10 P01 | 3min | 2 tasks | 5 files |
-| Phase 10 P02 | 3min | 2 tasks | 5 files |
-| Phase 11 P01 | 2min | 2 tasks | 5 files |
-| Phase 11 P02 | 5min | 2 tasks | 10 files |
-| Phase 12 P01 | 2min | 2 tasks | 7 files |
+| 13 | 0 | - | - |
+| 14 | 0 | - | - |
+| Phase 13 P01 | 5min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
 
-- Rebuild from scratch (production-quality target), extracting good patterns from beta/index.html
-- ES modules with import map — no bundler, no build step
-- Proxy-based reactive store replaces ~45 shared mutable globals in the monolith
-- Database API for reads, contract writes direct via ethers.js
-- EIP-6963 multi-wallet discovery (not legacy window.ethereum only)
-- GSAP 3.14 for timeline animation (coinflip, jackpot, degenerette) — replaces setTimeout chains
-- Phase 10 (Decimator) held until late: requires new contract ABI not in beta
-- Shallow Proxy on top-level state; nested updates via explicit update(path, value) on raw _state
-- CSS organized by concern (base, panels, buttons, forms, tx-status, status-bar) not by component
-- esm.sh CDN for all import map entries
-- API field normalization at polling layer (rngLockedFlag -> game.rngLocked)
-- Auto-reconnect uses silent eth_accounts (no popup), not eth_requestAccounts
-- nav.js bridge is additive-only: CustomEvents alongside existing Mint.init()
-- sendTx() emits lifecycle events on internal bus, not document CustomEvents
-- Custom Element pattern: #unsubs array, subscribe in connectedCallback, cleanup in disconnectedCallback
-- Connect prompt is a self-managing Custom Element (not router-managed); keeps wallet state separate from phase routing
-- Activity score shows total only in Phase 6; breakdown deferred until per-component contract reads available
-- main.js bootstrap sequence: discoverWallets -> initRouter -> checkHealth -> startPolling -> autoReconnect
-- Transaction lifecycle events wired to ui.pendingTxs store path for future tx status components
-- Purchase business logic (contract calls, price calc, EV indicators) centralized in purchases.js; components never import ethers
-- getReadProvider() returns wallet BrowserProvider if connected, else lazily creates JsonRpcProvider from CHAIN.rpcUrl
-- User wallet rejections (ACTION_REJECTED / code 4001) silently dismissed from purchase error display
-- Deity pricing uses getReadProvider() so it displays before wallet connection
-- Symbol grid lazy-loaded on first details open (not page load) to avoid 32 unnecessary ownerOf RPC calls
-- Deity buy button requires both wallet connection AND symbol selection before enabling
-- [Phase 08]: Death clock computation is client-side from levelStartTime (no timer polling)
-- [Phase 08]: Store coinflip slice added in Plan 01 for Plan 03 reuse
-- [Phase 08]: API field mappings use safe fallbacks for graceful degradation when DB API not yet extended
-- [Phase 08]: GSAP preloaded on panel mount to avoid first-reveal CDN jank
-- [Phase 08]: dailyRng.finalWord not yet in API; jackpot panel gracefully degrades to stats-only display
-- [Phase 08]: All traits marked as winners for visual demo until player trait ownership check implemented
-- [Phase 08]: Contract reads used for all player coinflip data (stake, claimable, auto-rebuy) instead of API endpoints
-- [Phase 08]: Bounty state from contract public getters; record holder address left as null until DB endpoint available
-- [Phase 08]: Coinflip business logic centralized in coinflip.js mirroring purchases.js pattern
-- [Phase 09]: Parse BetPlaced events by topic hash from all receipt logs (delegatecall emits from GAME address)
-- [Phase 09]: VRF-pending bets persisted in localStorage keyed by player address with betId+rngIndex pairs
-- [Phase 09]: Store extended with 5 Phase 9 slices (degenerette, quest, claims, affiliate, baf) in Plan 01
-- [Phase 09]: GSAP preloaded on degenerette panel mount (same pattern as jackpot panel)
-- [Phase 09]: Quest progress uses different calc paths for mint quests (count) vs token quests (amount)
-- [Phase 09]: Claims panel subscribes to ui.connectionState for button disable states
-- [Phase 09]: Shield count read from player.shields (API-polled) not separate contract read
-- [Phase 09]: Affiliate module owns URL referral capture (replaces purchases.js getAffiliateCode pattern)
-- [Phase 09]: BAF leaderboard from DB API only (bafTotals mapping is private, no contract reads needed)
-- [Phase 10]: Burn pool computed client-side as futurepool share (10% x5, 30% x00) via futurePrizePoolTotalView
-- [Phase 10]: DecBurnRecorded event parsed from receipt logs for immediate burn total/bucket UI update
-- [Phase 10]: Terminal store slice pre-populated in Plan 01 for Plan 02 reuse
-- [Phase 10]: Time multiplier computed client-side from levelStartTime + DEATH_CLOCK constants (two regimes)
-- [Phase 10]: Insurance bar percentage as yieldAccumulator/futurePool BigInt ratio, capped at 100%
-- [Phase 11]: HTML5 Audio API only (no Web Audio API); autoplay unlock via capture-phase click/keydown listeners
-- [Phase 11]: Death clock #initialLoad flag prevents urgency sound on page load
-- [Phase 11]: Duplicate-play guards via reference/ID tracking in store subscriptions
-- [Phase 11]: Skeleton-to-content swap via data-bind skeleton/content divs with #loaded one-time flag
-- [Phase 11]: Error fallback only on full API failure (apiHealthy=false AND staleData=true), not partial data gaps
+- [Phase 13]: Documented all 54 view functions as flat table for UI development clarity
 
 ### Pending Todos
 
@@ -122,13 +56,11 @@ None.
 
 ### Blockers/Concerns
 
-- Database API not yet tested (separate repo at /home/zak/Dev/PurgeGame/database/)
-- Decimator contract ABI now integrated in beta (DECIMATOR_ABI, DECIMATOR_VIEW_ABI, DECIMATOR_CLAIM_ABI in constants.js)
-- VRF callback timing on Sepolia needs observed measurements before finalizing UX thresholds
-- ES modules require a dev server (file:// will not work); document python3 -m http.server 8080 on day one
+- Database API not yet tested end-to-end with frontend (separate repo, not relevant to this milestone)
+- dailyRng.finalWord not yet in backend API (not relevant to this milestone)
 
 ## Session Continuity
 
-Last session: 2026-03-18T23:56:50.962Z
-Stopped at: Completed 12-01-PLAN.md
+Last session: 2026-03-19T02:06:41.086Z
+Stopped at: Completed 13-01-PLAN.md
 Resume file: None
