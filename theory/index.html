@@ -3485,24 +3485,20 @@
       while the decimator floor is player-specific and rewards engagement, and the market price reflects both.</p>
     <h3 id="section-29">6.3 The 100-Level Cycle</h3>
     <p>Ticket prices escalate within each 100-level cycle from 0.04 ETH at x01 to 0.24 ETH at x00, then reset. Century
-      milestones (x00) are crescendo events where the futurepool transfer, dual bonus BAF jackpot (20% vs 10% at normal
-      milestones), dual bonus decimator (30% vs 10%), dual bonus daily jackpots, and the segregated accumulator
-      distribution (50% of accumulated yield and deposit insurance) all fire at their highest rates
-      simultaneously, distributing a massive fraction of accumulated rewards across multiple channels. The
-      accumulator distribution grows with both time (yield) and historical activity (deposit insurance), adding
-      components that scale independently of current deposit volume. After the crescendo, prices reset to 0.04 ETH,
-      lowering barriers for all bankroll sizes.</p>
-    <p>Each cycle's pools tend to be larger than the last because original deposits cannot be directly withdrawn and the
-      futurepool grows net across each 100-level cycle (despite periodic drains from the drip, decimator, and BAF). The
-      structural trend is upward as long as new deposits continue. This creates a recruitment flywheel: bigger
-      jackpots attract more
-      degens, whose deposits make the next cycle's jackpots bigger still. The on-chain visibility of a growing prize
-      pool is itself a marketing asset that compounds over time.</p>
-    <p><strong>Note:</strong> This is a structural trend, not a guarantee. After the x00 crescendo, significant ETH is
-      distributed and claimed by winners, reducing pool balances. New deposits must outpace those distributions for each
-      successive cycle to be larger than the last. A cycle with insufficient new activity may grow too slowly to
-      replenish what was paid out in the previous x00 crescendo, resulting in smaller pools at the next milestone.</p>
-    <hr />
+      milestones (x00) are crescendo events where multiple mechanics fire at their highest rates simultaneously.
+      The futurepool undergoes a keep-roll: 5 VRF dice determine how much stays (30-65%, averaging ~47.5%), with the
+      remainder dumping into the current pool for immediate jackpot distribution. Before the keep-roll, 50% of the
+      yield accumulator flows into the futurepool (the other 50% is retained as terminal insurance). The dual bonus
+      BAF jackpot (20% vs 10% at normal milestones), dual bonus decimator (30% vs 10%), and dual bonus daily jackpots
+      all fire on top of this enlarged pool. The result is the largest jackpot distribution in the entire cycle,
+      funded by 100 levels of accumulated futurepool growth.</p>
+    <p>Ticket purchases at x00 levels also receive activity-score-scaled bonus mints: up to 100% extra tickets at
+      maximum activity score (3.05), scaling linearly to zero for inactive players, capped at 10 ETH worth of bonus
+      tickets per player per century. A max-activity player buying 10 ETH of tickets at level 100 receives 20 ETH
+      worth of entries. This is a direct reward for sustained engagement and creates a strong incentive to maintain
+      high activity scores heading into the century milestone.</p>
+    <p>After the crescendo, prices reset to 0.04 ETH, lowering barriers for all bankroll sizes. The nextpool requirement
+      is set at one third the remaining futurepool and the game restarts the cycle.</p>
     <h2 id="section-30">7. Robustness and Attack Vectors</h2>
     <p>The preceding sections characterized the protocol's economics under cooperative or self-interested play. We now
       ask: how does the system hold up under adversarial conditions?</p>
@@ -4476,11 +4472,15 @@
       earlier levels is lost); (2) their purchase was marginal and prevented GAMEOVER, saving their locked equity;
       (3) the game would have continued without them, making the purchase unnecessary. States (1) and (2) are +EV.
       State (3) is the only negative, but the more likely it is, the less danger existed to begin with.</p>
-    <p>The terminal decimator plays a supporting role. Players competing for better decimator positioning must maintain
-      quest streaks, which requires daily ticket or lootbox purchases, which funds the nextpool. A player who maintained
-      their streak through the stall will have both a strong decimator position and a large stack of tickets that are
-      each individually +EV through the terminal jackpot. Players chasing the 10% decimator payout are simultaneously
-      closing the gap that would trigger it.</p>
+    <p><strong>The terminal decimator lets anyone bet on protocol death at any time</strong> by burning BURNIE. Burns
+      are weighted by
+      activity score (better bucket and up to 1.78x multiplier) and a time multiplier that rewards early conviction
+      (30x at 120 days remaining, declining to 1x near the deadline; burns are blocked in the final 24 hours).
+      A per-player cap equalizes bankroll, so timing
+      and engagement differentiate positions, not raw capital. At GAMEOVER, 10% of remaining assets go to winning
+      subbuckets selected by VRF. Maximizing a death-bet position requires high activity score, which requires
+      maintaining quest streaks, which requires daily purchases, which funds the nextpool. Chasing the 10% decimator
+      payout simultaneously closes the gap that would trigger it.</p>
     <p><strong>Distress-mode lootboxes.</strong> In the final six hours before GAMEOVER would trigger, lootbox
       purchases switch to 100% nextpool allocation (from the normal 10/90 next/future split) and any future-level
       tickets rolled receive a 25% bonus. The reallocation is the primary mechanism: with GAMEOVER six hours away,
