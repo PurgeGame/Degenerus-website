@@ -14,7 +14,7 @@
 
 ### Analysis
 
-- [ ] **ANLS-01**: Each mechanic cross-referenced to specific game theory paper section or marked undocumented
+- [x] **ANLS-01**: Each mechanic cross-referenced to specific game theory paper section or marked undocumented
 - [ ] **ANLS-02**: Consolidated gap report listing every undocumented mechanic with contract file, function name, what it does, and a blank decision column
 
 ## Out of Scope
@@ -34,7 +34,7 @@
 | EXTR-02 | Phase 13 | Complete |
 | EXTR-03 | Phase 13 | Complete |
 | EXTR-04 | Phase 13 | Complete |
-| ANLS-01 | Phase 14 | Pending |
+| ANLS-01 | Phase 14 | Complete |
 | ANLS-02 | Phase 14 | Pending |
 
 **Coverage:**
