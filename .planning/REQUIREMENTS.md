@@ -1,194 +1,47 @@
-# Requirements: Degenerus Game Frontend
+# Requirements: Contract-Paper Gap Audit
 
 **Defined:** 2026-03-18
 **Core Value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
 
-## v1 Requirements
+## v2.1 Requirements
 
-### Architecture
+### Extraction
 
-- [x] **ARCH-01**: App uses ES modules with import map for dependency resolution (no bundler)
-- [x] **ARCH-02**: Game state managed via reactive proxy store with subscription pattern
-- [x] **ARCH-03**: UI built with Custom Elements (no Shadow DOM) sharing global CSS design system
-- [x] **ARCH-04**: API client handles all REST reads with polling, caching, and lag detection
-- [x] **ARCH-05**: Contract writes go direct via ethers.js with receipt status verification
-- [x] **ARCH-06**: CSS extracted from monolith into modular files with shared design tokens
-- [x] **ARCH-07**: Wallet connection supports EIP-6963 (multi-wallet discovery) with MetaMask fallback
+- [ ] **EXTR-01**: All mechanics in DegenerusGame.sol and 12 game modules catalogued (Advance, Boon, Decimator, Degenerette, Endgame, GameOver, Jackpot, Lootbox, Mint, MintStreakUtils, PayoutUtils, Whale)
+- [x] **EXTR-02**: All mechanics in token contracts catalogued (BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP)
+- [x] **EXTR-03**: All mechanics in support systems catalogued (DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusVault)
+- [ ] **EXTR-04**: All mechanics in infrastructure catalogued (DegenerusJackpots, DegenerusAdmin, DegenerusTraitUtils, DeityBoonViewer, Icons32Data, 5 libraries, storage)
 
-### Jackpot Display
+### Analysis
 
-- [x] **JACK-01**: Player sees animated jackpot resolution with sequential trait reveals per quadrant
-- [x] **JACK-02**: Jackpot shows current pool size, day counter (1-5), and today's allocation
-- [x] **JACK-03**: Winning traits highlighted with badge visualization per bucket
-- [x] **JACK-04**: Win celebration with confetti and prize total animation
-
-### Coinflip
-
-- [x] **FLIP-01**: Player can stake BURNIE in daily coinflip with amount input
-- [x] **FLIP-02**: Coinflip result displays multiplier tier with visual breakdown (1.50x/2.50x/range)
-- [x] **FLIP-03**: Bounty tracker shows current pool, record holder, and armed status
-- [x] **FLIP-04**: Auto-rebuy toggle and recycling bonus displayed
-
-### Purchasing
-
-- [x] **PURCH-01**: Player can buy tickets (ETH) with quantity input and price display
-- [x] **PURCH-02**: Player can buy lootboxes with activity-score-dependent EV indicator
-- [x] **PURCH-03**: Player can buy BURNIE tickets (1,000 BURNIE per ticket)
-- [x] **PURCH-04**: Purchase panel shows current level price and pool fill progress toward target
-- [x] **PURCH-05**: Transaction lifecycle displays pending/confirmed/failed states with tx hash link
-
-### Degenerette
-
-- [x] **DEGEN-01**: Player can place bets with currency selector (ETH/BURNIE/WWXRP) and amount input
-- [x] **DEGEN-02**: VRF-pending bets persisted across page refresh (localStorage)
-- [x] **DEGEN-03**: Bet results display with win/loss indication and claimable winnings
-- [x] **DEGEN-04**: Slot-style animation for result reveal
-
-### Passes
-
-- [x] **PASS-01**: Pass cards display status, pricing, and purchase button for lazy/whale/deity passes
-- [x] **PASS-02**: Deity pass shows symbol selector and boon status
-- [x] **PASS-03**: Pass section is accessible but not prominent (secondary navigation or collapsed panel)
-
-### Quests
-
-- [x] **QUEST-01**: Daily quest slots display with progress bars (slot 0 prerequisite enforced in UI)
-- [x] **QUEST-02**: Streak counter shows consecutive days, shield count, and milestone progress
-- [x] **QUEST-03**: Quest panel shows contextually when quests are active
-
-### Decimator
-
-- [x] **DECI-01**: Player can submit BURNIE burns with bucket/sub-bucket selection
-- [x] **DECI-02**: Display shows current burn pool, player's burn total, and activity-score multiplier
-- [x] **DECI-03**: Decimator panel appears contextually only when decimator window is open
-
-### Death Timer
-
-- [x] **DEATH-01**: Death clock countdown always visible with stage coloring (green/yellow/red)
-- [x] **DEATH-02**: Imminent stage (5 days) triggers visual urgency with pulsing animation
-- [x] **DEATH-03**: Distress stage (6 hours) shows bonus indicator for distress-window purchases
-
-### Terminal
-
-- [x] **TERM-01**: Terminal decimator display shows payout preview for level+1 ticketholders
-- [x] **TERM-02**: Terminal insurance bar shows accumulated stETH yield backup
-
-### Claims
-
-- [x] **CLAIM-01**: Unified claims panel aggregates all claimable winnings across game systems
-- [x] **CLAIM-02**: Player can claim ETH and BURNIE with separate per-contract transactions, shows claimed amount and tx confirmation
-
-### Affiliate
-
-- [x] **AFFIL-01**: Player can create affiliate referral code
-- [x] **AFFIL-02**: Player can input referral code (from URL param or manual entry)
-- [x] **AFFIL-03**: Affiliate earnings display shows cumulative ETH earned
-
-### BAF
-
-- [x] **BAF-01**: Player's BAF score displayed with current ranking context
-- [x] **BAF-02**: Top 4 BAF leaderboard shown (prominent on pre-BAF levels, subtle otherwise)
-
-### Audio
-
-- [x] **AUD-01**: Win sounds on jackpot reveal, coinflip win, and degenerette win
-- [x] **AUD-02**: Flip sound on coinflip resolution
-- [x] **AUD-03**: Urgency tone on death timer entering imminent/distress stage
-
-### State Management
-
-- [x] **STATE-01**: UI switches between purchase phase and jackpot phase display automatically
-- [x] **STATE-02**: GAMEOVER state shows terminal information and disables game actions
-- [x] **STATE-03**: Activity score total visible; breakdown by component (quest streak, mint count, affiliate, passes) deferred to phase with contract read integration
-
-## v2 Requirements
-
-### Advanced Display
-
-- **ADV-01**: Jackpot history browser with paginated past results
-- **ADV-02**: Token analytics dashboard (supply, vault reserves, holder counts)
-- **ADV-03**: Player history page (all bets, purchases, claims over time)
-
-### Real-Time
-
-- **RT-01**: WebSocket connection for live game state updates (replace polling)
-- **RT-02**: Live transaction feed showing other players' activity
+- [ ] **ANLS-01**: Each mechanic cross-referenced to specific game theory paper section or marked undocumented
+- [ ] **ANLS-02**: Consolidated gap report listing every undocumented mechanic with contract file, function name, what it does, and a blank decision column
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Mobile native app | Web-first with responsive design |
-| Smart contract development | Separate repo (degenerus-audit/contracts/) |
-| Database/API development | Separate repo (database/), consumed as dependency |
-| Token analytics dashboard | Defer to v2.1 (requires additional API endpoints) |
-| Chat or social features | Not part of the game loop |
-| WebSocket real-time | Polling sufficient for v2.0, WebSocket in v2.1 |
-| Turbo mode (101+) UI | Contract not finalized, defer to v2.1 |
+| Code changes to contracts | Separate repo, decisions come after audit |
+| Paper edits | Decisions come after audit; edits are a follow-up milestone |
+| Whitepaper cross-reference | Game theory paper only |
+| Frontend changes | Analysis-only milestone |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ARCH-01 | Phase 6 | Complete |
-| ARCH-02 | Phase 6 | Complete |
-| ARCH-03 | Phase 6 | Complete |
-| ARCH-04 | Phase 6 | Complete |
-| ARCH-05 | Phase 6 | Complete |
-| ARCH-06 | Phase 6 | Complete |
-| ARCH-07 | Phase 6 | Complete |
-| STATE-01 | Phase 6 | Complete |
-| STATE-02 | Phase 6 | Complete |
-| STATE-03 | Phase 6 | Partial (total only, breakdown deferred) |
-| PURCH-01 | Phase 7 | Complete |
-| PURCH-02 | Phase 7 | Complete |
-| PURCH-03 | Phase 7 | Complete |
-| PURCH-04 | Phase 7 | Complete |
-| PURCH-05 | Phase 7 | Complete |
-| PASS-01 | Phase 7 | Complete |
-| PASS-02 | Phase 7 | Complete |
-| PASS-03 | Phase 7 | Complete |
-| JACK-01 | Phase 8 | Complete |
-| JACK-02 | Phase 8 | Complete |
-| JACK-03 | Phase 8 | Complete |
-| JACK-04 | Phase 8 | Complete |
-| FLIP-01 | Phase 8 | Complete |
-| FLIP-02 | Phase 8 | Complete |
-| FLIP-03 | Phase 8 | Complete |
-| FLIP-04 | Phase 8 | Complete |
-| DEATH-01 | Phase 8 | Complete |
-| DEATH-02 | Phase 8 | Complete |
-| DEATH-03 | Phase 8 | Complete |
-| DEGEN-01 | Phase 9 | Complete |
-| DEGEN-02 | Phase 9 | Complete |
-| DEGEN-03 | Phase 9 | Complete |
-| DEGEN-04 | Phase 9 | Complete |
-| QUEST-01 | Phase 9 | Complete |
-| QUEST-02 | Phase 9 | Complete |
-| QUEST-03 | Phase 9 | Complete |
-| CLAIM-01 | Phase 9 | Complete |
-| CLAIM-02 | Phase 9 | Complete |
-| AFFIL-01 | Phase 9 | Complete |
-| AFFIL-02 | Phase 12 | Complete |
-| AFFIL-03 | Phase 9 | Complete |
-| BAF-01 | Phase 9 | Complete |
-| BAF-02 | Phase 9 | Complete |
-| DECI-01 | Phase 10 | Complete |
-| DECI-02 | Phase 10 | Complete |
-| DECI-03 | Phase 10 | Complete |
-| TERM-01 | Phase 10 | Complete |
-| TERM-02 | Phase 10 | Complete |
-| AUD-01 | Phase 11 | Complete |
-| AUD-02 | Phase 11 | Complete |
-| AUD-03 | Phase 11 | Complete |
+| EXTR-01 | Phase 13 | Pending |
+| EXTR-02 | Phase 13 | Complete |
+| EXTR-03 | Phase 13 | Complete |
+| EXTR-04 | Phase 13 | Pending |
+| ANLS-01 | Phase 14 | Pending |
+| ANLS-02 | Phase 14 | Pending |
 
 **Coverage:**
-- v1 requirements: 51 total
-- Satisfied: 50
-- Pending: 1 (AFFIL-02, Phase 12 gap closure)
-- Mapped to phases: 51
+- v2.1 requirements: 6 total
+- Mapped to phases: 6
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-18*
-*Last updated: 2026-03-18 after roadmap creation (v2.0 phases 6-11)*
+*Last updated: 2026-03-18 after roadmap creation*
