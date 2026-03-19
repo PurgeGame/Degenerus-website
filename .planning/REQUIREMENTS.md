@@ -7,7 +7,7 @@
 
 ### Extraction
 
-- [ ] **EXTR-01**: All mechanics in DegenerusGame.sol and 12 game modules catalogued (Advance, Boon, Decimator, Degenerette, Endgame, GameOver, Jackpot, Lootbox, Mint, MintStreakUtils, PayoutUtils, Whale)
+- [x] **EXTR-01**: All mechanics in DegenerusGame.sol and 12 game modules catalogued (Advance, Boon, Decimator, Degenerette, Endgame, GameOver, Jackpot, Lootbox, Mint, MintStreakUtils, PayoutUtils, Whale)
 - [x] **EXTR-02**: All mechanics in token contracts catalogued (BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP)
 - [x] **EXTR-03**: All mechanics in support systems catalogued (DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusVault)
 - [x] **EXTR-04**: All mechanics in infrastructure catalogued (DegenerusJackpots, DegenerusAdmin, DegenerusTraitUtils, DeityBoonViewer, Icons32Data, 5 libraries, storage)
@@ -30,7 +30,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| EXTR-01 | Phase 13 | Pending |
+| EXTR-01 | Phase 13 | Complete |
 | EXTR-02 | Phase 13 | Complete |
 | EXTR-03 | Phase 13 | Complete |
 | EXTR-04 | Phase 13 | Complete |

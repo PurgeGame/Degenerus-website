@@ -34,7 +34,7 @@
 
 ### v2.1 Contract-Paper Gap Audit
 
-- [ ] **Phase 13: Contract Mechanic Extraction** - Catalog every mechanic across all 30+ contract files
+- [x] **Phase 13: Contract Mechanic Extraction** - Catalog every mechanic across all 30+ contract files (completed 2026-03-19)
 - [ ] **Phase 14: Gap Analysis and Report** - Cross-reference catalog against game theory paper, produce gap report
 
 ## Phase Details
@@ -49,7 +49,7 @@
   3. Every mechanic in support systems (Affiliate, DeityPass, Quests, Vault) is catalogued
   4. Every mechanic in infrastructure (Jackpots, Admin, TraitUtils, DeityBoonViewer, Icons32Data, libraries, storage) is catalogued
   5. The catalog is structured consistently: contract file, function/mechanism name, what it does, key parameters
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [ ] 13-01-PLAN.md -- Catalog DegenerusGame.sol dispatcher + 6 smaller modules (Boon, Endgame, GameOver, MintStreakUtils, PayoutUtils, Whale)
@@ -83,5 +83,5 @@ Plans:
 | 10. Decimator & Terminal | v2.0 | 2/2 | Complete | 2026-03-18 |
 | 11. Audio & Polish | v2.0 | 2/2 | Complete | 2026-03-18 |
 | 12. Integration Fixes & Cleanup | v2.0 | 1/1 | Complete | 2026-03-18 |
-| 13. Contract Mechanic Extraction | 3/4 | In Progress|  | - |
+| 13. Contract Mechanic Extraction | 4/4 | Complete   | 2026-03-19 | - |
 | 14. Gap Analysis and Report | v2.1 | 0/? | Not started | - |
