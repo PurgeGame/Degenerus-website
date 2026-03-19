@@ -1862,6 +1862,7 @@
             if (hasTicketsState) sfxFanfare();
             var scenario = SCENARIOS[currentDay];
             if (scenario.revealTitle) $('demo-title').textContent = scenario.revealTitle;
+            $('demo-scenario').textContent = scenario.desc;
           } else {
             var remaining = scratched.filter(function (s) { return !s; }).length;
             if (centerPending) remaining++;
@@ -2100,7 +2101,7 @@
           var flameCenter = $('demo-center');
           if (flameCenter) flameCenter.classList.remove('spinning');
           spinning = false;
-          $('demo-scenario').textContent = scenario.desc;
+          // desc shown after scratch reveal, not immediately
 
           if (!hasTickets) {
             scratched = [true, true, true, true];
@@ -2148,6 +2149,7 @@
           } else {
             if (hint) hint.textContent = 'No matching tickets this round';
             if (scenario.revealTitle) $('demo-title').textContent = scenario.revealTitle;
+            $('demo-scenario').textContent = scenario.desc;
           }
           // Enable next button after a short delay to let user scratch
           setTimeout(function () { $('demo-next-btn').disabled = false; }, 500);
