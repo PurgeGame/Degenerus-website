@@ -2101,7 +2101,7 @@
           var flameCenter = $('demo-center');
           if (flameCenter) flameCenter.classList.remove('spinning');
           spinning = false;
-          // desc shown after scratch reveal, not immediately
+          if (currentDay === 0) $('demo-scenario').textContent = scenario.desc;
 
           if (!hasTickets) {
             scratched = [true, true, true, true];
