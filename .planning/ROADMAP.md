@@ -65,7 +65,11 @@ Plans:
   1. Every catalogued mechanic is either mapped to a specific game theory paper section or explicitly marked as undocumented
   2. The gap report lists each undocumented mechanic with: contract file, function name, what it does, and a blank decision column for the user
   3. No mechanic from the catalog is missing from the cross-reference (100% coverage of the extraction)
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 14-01-PLAN.md -- Build complete cross-reference mapping every catalog mechanic to paper sections
+- [ ] 14-02-PLAN.md -- Compile gap report from cross-reference with decision columns
 
 ## Progress
 
@@ -83,5 +87,5 @@ Plans:
 | 10. Decimator & Terminal | v2.0 | 2/2 | Complete | 2026-03-18 |
 | 11. Audio & Polish | v2.0 | 2/2 | Complete | 2026-03-18 |
 | 12. Integration Fixes & Cleanup | v2.0 | 1/1 | Complete | 2026-03-18 |
-| 13. Contract Mechanic Extraction | 4/4 | Complete   | 2026-03-19 | - |
-| 14. Gap Analysis and Report | v2.1 | 0/? | Not started | - |
+| 13. Contract Mechanic Extraction | v2.1 | 4/4 | Complete | 2026-03-19 |
+| 14. Gap Analysis and Report | v2.1 | 0/2 | Not started | - |
