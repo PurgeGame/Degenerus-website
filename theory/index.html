@@ -2228,7 +2228,8 @@
     <p>Each player's utility is a mix of two components: <strong>monetary payoff</strong> ($M$, net ETH. All other
       protocol assets are ultimately claims on future ETH) and <strong>non-monetary payoff</strong> ($\Psi$, primarily
       gambling entertainment: excitement, variance preference, near-miss dopamine, with secondary contributions from
-      status, narrative participation, and community standing). Different player types weight these differently:</p>
+      status, narrative participation, and social interaction with like minded individuals). Different player types
+      weight these differently:</p>
     <table>
       <thead>
         <tr>
@@ -2286,18 +2287,6 @@
       Degenerette variance. The gambling industry demonstrates at population scale that this is sufficient to sustain
       engagement. The affiliate system is the engine that generates it. Every referral adds more players, more action,
       bigger jackpots, and another potential affiliate.</p>
-    <p>The protocol also
-      provides BURNIE, a token with a <a href="#section-27">structural price ratchet</a>
-      that gives participants the number go up experience that drives memecoin
-      engagement. Unlike memecoins, BURNIE is only generated through playing the game (adding ETH to the system) and
-      is convertible to jackpot entries with ETH
-      prizes. The price ratchet is backed
-      by an increase in real extraction value as levels progress and the coin's multiple competing uses generate
-      interesting
-      strategic decision
-      points
-      for
-      holders.</p>
     <p>Collective goals, status and narrative participation may provide additional utility for whales and other engaged
       players. The protocol includes mechanics designed to cultivate these dynamics. Level progression
       becomes a shared objective where every ticket purchase visibly advances the group. The communal coinflip
@@ -2870,7 +2859,21 @@
     <p>The core loop is straightforward: maintain daily engagement (quest streaks, lootbox purchases) to push activity
       score toward its maximum, then use that score to extract above-breakeven returns from protocol
       products. Passes accelerate this by granting immediate activity score bonuses. The lootbox EV benefit caps at $a_i
-      = 2.55$, so a grinder without a deity pass can still capture the full multiplier through disciplined play.</p>
+      = 2.55$, so a grinder without a deity pass can still capture the full multiplier through disciplined play.
+      This is GTO for the ETH side of the game. There is another game layered on top of it.</p>
+    <p>The deepest layer of grinder skill is BURNIE management, and this paper does not attempt to model it. BURNIE
+      is a liquid token with multiple competing uses (ticket purchases, decimator burns, coinflip wagers, quest streak
+      maintenance) and its optimal allocation depends on level velocity, the actions of other players, activity score,
+      and
+      market price. Active players accumulate BURNIE across the whole spectrum of
+      play: jackpot draws, coinflip wins, quest rewards, lootbox prizes, affiliate commissions, and purchase bonuses.
+      The grinder's real edge is in deploying that BURNIE
+      across the protocol's extraction paths at the right moments. This is the game-within-the-game: BURNIE valuation is
+      where truly skilled players separate from the field. A full treatment
+      would require modeling the coin as a liquid asset with endogenous pricing, which is beyond the scope of this
+      paper's equilibrium analysis. Our EV models simplify things, treating 1000 BURNIE as equivalent to one ticket at
+      the current
+      level.</p>
     <p>The grinder's strategic choices (reinvestment mode, pass acquisition, lootbox timing) affect their individual
       returns but not the system's structure. What matters for the analysis is that all of these returns draw from the
       same aggregate pool, so the strategy's profitability depends on sufficient pool inflows from other participants.
@@ -3756,7 +3759,7 @@
       of low activity, the futurepool (which accumulates from all prior levels) continues draining. Once futurepool
       exceeds a sufficient multiple of the next level's target, the drip alone will fill the target without any new
       player purchases. This mechanically guarantees at least one more level completion. The drip awards its equity
-      to existing ticket holders, and the extraction function skims a larger share of the nextpool back to the
+      to existing ticket holders, and the <a href="#section-extraction">extraction function</a> skims a larger share of the nextpool back to the
       futurepool the longer the level takes. Together these transfer value from late re-entrants to players who
       stayed through the drought: more tickets, more ETH prizes, and a larger per-ticket jackpot share.</p>
     <p>This guarantee only applies once the game has progressed enough for the futurepool to substantially exceed the
@@ -4236,7 +4239,7 @@
       complex
       math.</p>
     <p>Terminal value is only half the calculation. If GAMEOVER is averted, the nextpool reaches its 800 ETH
-      target, but the extraction function (<a href="#section-52">Appendix A</a>) transfers a time-dependent
+      target, but the <a href="#section-extraction">extraction function</a> transfers a time-dependent
       percentage of the nextpool into the futurepool before the jackpot distributes. For a level that took
       120 days to complete, the extraction is approximately 50%, leaving ~400 ETH for the jackpot
       while recycling ~400 ETH into the futurepool as reserve capital for future levels. The jackpot allocates
@@ -5046,12 +5049,44 @@
       locked capital flows to the segregated accumulator via yield, and 1% of each completed level's prize pool
       flows there directly, compounding into milestone distributions and terminal insurance.
     </p>
-    <p><strong>Level transition:</strong> When $P^{next}_\ell \geq \bar{P}_\ell$ (the level target):
+    <p id="section-extraction"><strong>Level transition:</strong> When $P^{next}_\ell \geq \bar{P}_\ell$ (the level target):
       $$P^{curr}_{\ell+1} \leftarrow f(P^{fut}_\ell, t)$$</p>
-    <p>where $f$ is a time-dependent extraction function with a U-shaped profile: extraction is highest (~20%+) if the
-      level completes very quickly (under 1 day) or very slowly (over 28 days), and lowest (~3%) around the 14-day sweet
-      spot. Additional adjustments apply for milestone levels, pool ratio imbalances, and random variance. The design
-      incentivizes steady progression velocity.</p>
+    <p>where $f$ is a time-dependent extraction function that transfers a percentage of
+      <code>nextPrizePool</code> to <code>futurePrizePool</code> at level completion. The base rate follows a
+      U-shaped profile with a flat plateau for fast levels:</p>
+    <ul>
+      <li><strong>Days 0–12</strong> (level fills within 12 days): flat at 30% + level bonus. Fast-filling levels
+        get the maximum skim. Every level that fills in under 12 days is treated identically.</li>
+      <li><strong>Days 12–25</strong>: linear decline from 30% to 13% (minimum). The skim drops as level velocity
+        approaches a ~25-day pace.</li>
+      <li><strong>Day ~25</strong>: minimum at 13%. This is the sweet spot where the protocol skims the least,
+        rewarding steady progression.</li>
+      <li><strong>Days 25–39</strong>: linear climb back from 13% to 30%. Slow levels start getting skimmed harder
+        again.</li>
+      <li><strong>Days 39+</strong>: escalating at +1% per week beyond 30%. A stalling level gets progressively
+        more of its pool redirected to the futurepool as mechanical defense.</li>
+    </ul>
+    <p><strong>Century cycle ramp:</strong> The skim rate increases by +1% for every 10 levels within the
+      100-level cycle, resetting at each century. At x00 the bonus is 0%, at x10 it is +1%, at x50 it is +5%, at
+      x90 it is +9%. This progressively feeds the futurepool across the century so that by x00 (when the BAF fires
+      at double rate and the decimator at triple), the futurepool has been building under increasingly aggressive
+      extraction for 100 levels. At x9 levels (x09, x19, ..., x99), an additional +2% applies on top, giving the
+      futurepool a final boost ahead of each BAF milestone.</p>
+    <p><strong>Adaptive adjustments</strong> (each ±2%, stacking on the base rate):</p>
+    <ul>
+      <li><strong>Ratio adjustment:</strong> targets a 2:1 futurepool-to-nextpool ratio. If the futurepool is
+        undersized relative to the nextpool, the skim increases (up to +2%). If oversized, it decreases (up to
+        −2%). This is a self-correcting feedback loop that keeps the futurepool healthy without manual
+        intervention.</li>
+      <li><strong>Growth adjustment:</strong> compares the current nextpool to the previous level's pool. Shrinking
+        or flat pools add up to +2% (defensive: build the futurepool when growth stalls). Pools that grew 20%+
+        subtract up to −2% (the futurepool is already getting fed by lootbox volume). Moderate growth (0–10%)
+        scales linearly between these.</li>
+    </ul>
+    <p>A random variance factor (VRF-derived) applies on top, preventing the skim from being perfectly predictable.
+      The combined effect: the protocol adaptively manages the futurepool balance across growth conditions, skimming
+      aggressively during both surges (fast fills build the futurepool for upcoming BAF/decimator events) and stalls
+      (slow fills build the futurepool as mechanical defense), while skimming least during steady-state progression.</p>
     <p><strong>Yield accrual (continuous):</strong>
       $$\frac{dP^{total}}{dt} = r \cdot S$$</p>
     <p>where $r \approx 0.025$ is the stETH annual yield rate (approximately 2.5% APR at time of writing) and $S$ is
