@@ -294,3 +294,197 @@ Built from Phase 13 catalogs (EXTR-01 through EXTR-04) against game theory paper
 | 184 | wXRP reserves tracking (separate from supply) | key-mechanic | UNDOCUMENTED-IMPL | - | Implementation detail |
 
 **EXTR-02 subtotal: 48 mechanics (7 documented, 11 partial, 14 undocumented-relevant, 16 undocumented-impl)**
+
+---
+
+## EXTR-03: Support Systems
+
+### DegenerusAffiliate.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 185 | createAffiliateCode (permanent code with kickback) | player-facing | DOCUMENTED | S3.5, S2.6 | - |
+| 186 | referPlayer (one-time referral registration) | player-facing | DOCUMENTED | S3.5 | - |
+| 187 | 3-tier commission chain (base + 20% upline1 + 4% upline2) | key-mechanic | PARTIAL | S3.5 | Paper mentions 3-tier chain; 20%/4% upline split percentages not specified |
+| 188 | Reward rates (25% levels 0-3, 20% levels 4+, 5% recycled) | key-mechanic | PARTIAL | S3.5, S2.6 | Paper says 20-25% commission; level-dependent rates and 5% recycled rate not specified |
+| 189 | Kickback (0-25% configurable per code) | key-mechanic | PARTIAL | S3.5 | Kickback mentioned in game theory context; 0-25% range not specified |
+| 190 | Per-sender commission cap (0.5 ETH BURNIE/affiliate/sender/level) | key-mechanic | DOCUMENTED | S2.4 | - |
+| 191 | Lootbox taper (100% at 10000 score to 25% at 25500) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Linear taper formula affects high-activity affiliate economics |
+| 192 | Referral locking (invalid attempt permanently locks to VAULT) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Permanent lock on invalid referral not mentioned |
+| 193 | Weighted-random distribution (single winner per payout) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Gas optimization that preserves EV but adds variance; affects affiliate payout distribution |
+| 194 | Quest integration (affiliate payout triggers quest progress) | key-mechanic | UNDOCUMENTED-IMPL | - | Internal routing |
+| 195 | Unaffiliated player commission goes to vault | key-mechanic | PARTIAL | S4.2 | Per CLAUDE.md: "technical carve-out to zero-rake, worth noting when relevant"; mentioned in paper but mechanism not detailed |
+
+### DegenerusDeityPass.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 196 | Soulbound ERC721 (all transfers revert) | key-mechanic | DOCUMENTED | S3.4, AppC | - |
+| 197 | 32 token cap (one per symbol, 4 quadrants x 8) | key-mechanic | DOCUMENTED | S3.4, AppA | - |
+| 198 | On-chain SVG rendering | key-mechanic | UNDOCUMENTED-IMPL | - | NFT metadata implementation |
+| 199 | External renderer (upgradeable, with fallback) | key-mechanic | UNDOCUMENTED-IMPL | - | NFT rendering implementation |
+| 200 | Pricing curve (not in this contract, in WhaleModule) | key-mechanic | DOCUMENTED | AppA | - |
+
+### DegenerusQuests.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 201 | 2-slot daily quests (slot 0 fixed, slot 1 random) | key-mechanic | PARTIAL | S5.5-D2 | Paper describes quest streaks; 2-slot structure with slot 0 always MINT_ETH mentioned briefly |
+| 202 | 9 quest types (MINT_BURNIE, MINT_ETH, FLIP, AFFILIATE, RESERVED, DECIMATOR, LOOTBOX, DEGENERETTE_ETH, DEGENERETTE_BURNIE) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Quest type variety affects daily engagement patterns; types not enumerated in paper |
+| 203 | Fixed targets (mint price multiples, 2000 BURNIE, capped 0.5 ETH) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Quest difficulty parameters not specified |
+| 204 | Fixed rewards (100 BURNIE slot 0, 200 BURNIE slot 1) | key-mechanic | PARTIAL | S5.5-D2 | Paper mentions 100/200 BURNIE rewards |
+| 205 | Streak system (daily increment, reset on miss) | key-mechanic | DOCUMENTED | S5.5-D2, AppC-Activity | - |
+| 206 | Slot 1 requires Slot 0 completion | key-mechanic | UNDOCUMENTED-RELEVANT | - | Forces ETH deposit quest before bonus quest; affects daily engagement |
+| 207 | Combo completion (auto-complete paired slot) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Convenience mechanic that can complete both quests in one action |
+| 208 | Streak shields (cover missed days) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Shield mechanic for streak protection not mentioned |
+| 209 | Progress versioning (anti-exploit) | key-mechanic | UNDOCUMENTED-IMPL | - | Security implementation |
+| 210 | Weighted slot 1 selection (MINT_BURNIE 10x, FLIP/DEC 4x, LOOTBOX 3x, others 1x) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Quest type probabilities affect expected daily actions |
+
+### DegenerusVault.sol (including DegenerusVaultShare)
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 211 | burnCoin (burn DGVB for proportional BURNIE) | player-facing | UNDOCUMENTED-RELEVANT | - | Vault share redemption mechanic not described |
+| 212 | burnEth (burn DGVE for proportional ETH+stETH) | player-facing | UNDOCUMENTED-RELEVANT | - | Vault share redemption mechanic not described |
+| 213 | Two share classes (DGVB for BURNIE, DGVE for ETH+stETH) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Dual share class vault system entirely undocumented |
+| 214 | Claim formula (reserve * sharesBurned / totalSupply) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Pro-rata redemption formula not specified |
+| 215 | Refill mechanism (1T fresh shares on full burn) | key-mechanic | UNDOCUMENTED-IMPL | - | Edge case handling |
+| 216 | Vault owner = >50.1% DGVE holder | key-mechanic | PARTIAL | S7.2 | Paper mentions admin is "any address holding >50.1% of" governance token; DGVE specifics not detailed |
+| 217 | Gameplay proxy (full game action set for vault owner) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Vault owner can play the game on behalf of vault; not mentioned |
+| 218 | DegenerusVaultShare as tradeable ERC20 | key-mechanic | UNDOCUMENTED-RELEVANT | - | Share tokens are freely transferable; affects governance dynamics |
+| 219 | stETH rebase yield accrual to DGVE | key-mechanic | PARTIAL | S4.1, S4.2 | Paper mentions 25% yield to vault; automatic rebase mechanism not specified |
+| 220 | BURNIE virtual deposit (vaultEscrow increases allowance) | key-mechanic | UNDOCUMENTED-IMPL | - | Implementation of virtual reserve |
+
+**EXTR-03 subtotal: 36 mechanics (7 documented, 8 partial, 15 undocumented-relevant, 6 undocumented-impl)**
+
+---
+
+## EXTR-04: Infrastructure
+
+### DegenerusJackpots.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 221 | BAF prize distribution (7 slices: 10/5/5/5/5/45/25%) | key-mechanic | DOCUMENTED | S3.4, AppB.3 | - |
+| 222 | Scatter level targeting (non-x00: 20/10/10/10; x00: 4/4/4/38 past) | key-mechanic | PARTIAL | AppB.3 | Paper describes scatter; specific round distribution by BAF type not fully specified |
+| 223 | Epoch-based lazy reset (BAF leaderboard) | key-mechanic | UNDOCUMENTED-IMPL | - | Gas optimization for leaderboard management |
+| 224 | Winner mask (last 40 scatter winners get special routing) | key-mechanic | UNDOCUMENTED-IMPL | - | Internal ticket routing optimization |
+| 225 | VRF entropy chaining (keccak256 with incrementing salt) | key-mechanic | UNDOCUMENTED-IMPL | - | RNG implementation detail |
+| 226 | Top-4 sorted leaderboard per level | key-mechanic | PARTIAL | AppB.3 | BAF leaderboard mentioned; sorted top-4 structure not detailed |
+| 227 | Far-future ticket holder draws (3%/2% by BAF score) | key-mechanic | PARTIAL | AppB.3 | Far-future draws mentioned; percentage split by BAF score rank not specified |
+| 228 | Max 107 distinct winners per BAF draw | key-mechanic | UNDOCUMENTED-IMPL | - | Implementation bound |
+
+### DegenerusAdmin.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 229 | setLinkEthPriceFeed (price feed rotation) | admin | PARTIAL | S7.2 | Admin scope documented; specific function not listed |
+| 230 | swapGameEthForStEth (ETH-to-stETH conversion) | admin | DOCUMENTED | S7.2 | - |
+| 231 | stakeGameEthToStEth (stake ETH as stETH) | admin | DOCUMENTED | S7.2 | - |
+| 232 | setLootboxRngThreshold (lootbox RNG config) | admin | DOCUMENTED | S7.2 | - |
+| 233 | propose (emergency VRF swap proposal) | admin | DOCUMENTED | S7.2 | - |
+| 234 | vote (sDGNRS-weighted governance vote) | admin | DOCUMENTED | S7.2 | - |
+| 235 | shutdownVrf (post-GAMEOVER VRF cleanup) | admin | PARTIAL | S9.3 | VRF shutdown implied; specific function not described |
+| 236 | Governance threshold decay (50% to 5% over 7 days) | key-mechanic | PARTIAL | S7.2 | Governance described; decay schedule (50/40/30/20/10/5%) not fully specified |
+| 237 | VRF stall detection (20h admin, 7d community) | key-mechanic | PARTIAL | S7.2 | 20-hour stall mentioned; community 7-day path not specified |
+| 238 | LINK donation reward (3x to 0x based on sub balance) | key-mechanic | UNDOCUMENTED-RELEVANT | - | LINK donation incentive curve not mentioned in paper |
+| 239 | Auto-invalidation (proposals cancelled on VRF recovery) | key-mechanic | PARTIAL | S7.2 | Governance recovery mentioned; auto-invalidation mechanism not specified |
+
+### DegenerusTraitUtils.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 240 | weightedBucket (non-uniform trait distribution) | key-mechanic | PARTIAL | AppC-Traits | Paper mentions deterministic trait assignment; weighted distribution formula (13.3%/12.0%/10.7%) not specified |
+| 241 | traitFromWord (6-bit trait ID generation) | key-mechanic | UNDOCUMENTED-IMPL | - | Implementation of trait generation |
+| 242 | Trait ID structure (8-bit: quadrant/category/sub-bucket) | key-mechanic | UNDOCUMENTED-IMPL | - | Bit-level encoding |
+| 243 | Deterministic guarantee (same seed = same traits) | key-mechanic | DOCUMENTED | S7.1, AppC-Traits | - |
+
+### DeityBoonViewer.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 244 | deityBoonSlots (view deity boon availability) | view | UNDOCUMENTED-IMPL | - | Helper view contract |
+| 245 | 22 boon types across 10 categories (with weights) | key-mechanic | PARTIAL | AppC-Boons | Paper mentions boons generally; 22 types, 10 categories, and specific weights (total 1298) not enumerated |
+
+### Icons32Data.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 246 | SVG path storage (33 icons, 4 quadrants) | key-mechanic | UNDOCUMENTED-IMPL | - | On-chain art storage |
+| 247 | Finalization lock (permanent immutability) | key-mechanic | UNDOCUMENTED-IMPL | - | Data immutability mechanism |
+
+### ContractAddresses.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 248 | Compile-time address constants (24 contracts) | key-mechanic | UNDOCUMENTED-IMPL | - | Deploy infrastructure |
+
+### BitPackingLib.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 249 | setPacked (bit-field operations for mintPacked_) | key-mechanic | UNDOCUMENTED-IMPL | - | Storage optimization |
+| 250 | Mint data layout (256-bit packed player state) | key-mechanic | UNDOCUMENTED-IMPL | - | Storage layout implementation |
+
+### EntropyLib.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 251 | entropyStep (XOR-shift PRNG) | key-mechanic | UNDOCUMENTED-IMPL | - | PRNG implementation |
+
+### GameTimeLib.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 252 | currentDayIndex (22:57 UTC reset) | key-mechanic | UNDOCUMENTED-IMPL | - | Clock implementation |
+
+### JackpotBucketLib.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 253 | traitBucketCounts (base [25, 15, 8, 1] with rotation) | key-mechanic | PARTIAL | AppB.1 | Paper describes bucket structure; base counts [25,15,8,1] and rotation not specified |
+| 254 | Pool-size scaling (1x under 10 ETH to 2x at 50 ETH) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Dynamic winner count scaling with pool size; affects jackpot distribution fairness |
+| 255 | Solo bucket mechanics (never scaled, receives 60%) | key-mechanic | PARTIAL | AppB.1 | Solo bucket (60% share) documented; immunity from scaling not specified |
+| 256 | Share rotation (entropy-based, no permanent quadrant advantage) | key-mechanic | PARTIAL | AppB.1 | Fairness implied; rotation mechanism not specified |
+
+### PriceLookupLib.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 257 | priceForLevel (100-level repeating price cycle) | key-mechanic | DOCUMENTED | S1, AppA | - |
+| 258 | Price tiers (0.01-0.24 ETH, intro overrides) | key-mechanic | DOCUMENTED | S1, AppA | - |
+
+### DegenerusGameStorage.sol
+
+| # | Mechanic | Type | Status | Paper Section(s) | Gap Note |
+|---|----------|------|--------|-------------------|----------|
+| 259 | 5 logical pools (next, future, current, claimable, accumulator) | key-mechanic | DOCUMENTED | S4.1 | - |
+| 260 | Double-buffer ticket queue (write/read slot swap) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Fairness mechanism: tickets purchased after VRF request excluded from current round |
+| 261 | Prize pool freeze (redirect to pending during jackpot) | key-mechanic | PARTIAL | AppC-Pools | Pool freeze mentioned; pending accumulator mechanism not detailed |
+| 262 | Compressed/turbo jackpot mode (1-day/2-day threshold) | key-mechanic | PARTIAL | AppB.1 | See AdvanceModule row 101 |
+| 263 | Distress mode (6h before GAMEOVER) | key-mechanic | DOCUMENTED | S9.3 | - |
+| 264 | Perk burn system (ethPerk, burniePerk, dgnrsPerk counters) | key-mechanic | UNDOCUMENTED-RELEVANT | - | Per-level perk burn tracking entirely undocumented; purpose and game-theoretic impact unclear from storage alone |
+| 265 | Earlybird DGNRS emission (quadratic curve, levels 0-2) | key-mechanic | PARTIAL | AppC-DGNRS | Earlybird pool mentioned (10%); quadratic emission curve and level 0-2 window not specified |
+| 266 | Century bonus tracking (per-player 10 ETH cap at x00) | key-mechanic | PARTIAL | S6.3 | See MintModule row 64 |
+
+**EXTR-04 subtotal: 46 mechanics (11 documented, 17 partial, 4 undocumented-relevant, 14 undocumented-impl)**
+
+---
+
+## Summary
+
+| Source | Total | Documented | Partial | Undoc-Relevant | Undoc-Impl |
+|--------|-------|------------|---------|----------------|------------|
+| EXTR-01 | 136 | 45 | 53 | 30 | 8 |
+| EXTR-02 | 48 | 7 | 11 | 14 | 16 |
+| EXTR-03 | 36 | 7 | 8 | 15 | 6 |
+| EXTR-04 | 46 | 11 | 17 | 4 | 14 |
+| **Total** | **266** | **70** | **89** | **63** | **44** |
+
+**Coverage rates:**
+- Fully documented: 70/266 (26.3%)
+- Partially documented: 89/266 (33.5%)
+- Undocumented but game-theoretically relevant: 63/266 (23.7%)
+- Undocumented implementation details (no paper coverage needed): 44/266 (16.5%)
+- Effective documentation coverage (documented + partial): 159/266 (59.8%)
+- Game-relevant gaps requiring decision: 63 undocumented-relevant + 89 partial = 152 items
