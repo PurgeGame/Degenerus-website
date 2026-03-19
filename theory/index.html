@@ -1205,7 +1205,8 @@
         //                  prizes: [[amt,type,q],...], centerWins: [...] }
         var SCENARIOS = [
           {
-            title: 'Day 1 of 4: Big Win',
+            title: 'Day 1 of 4',
+            revealTitle: 'Day 1 of 4: Big Win',
             desc: 'You own tickets matching 3 of 4 drawn traits. Scratch to reveal your prizes.',
             degenWinCenter: false,
             // drawn: bitcoin_gold, gemini_pink, spade_blue, dice6_red
@@ -1230,7 +1231,8 @@
             centerWins: []
           },
           {
-            title: 'Day 2 of 4: Scratch, But No Luck',
+            title: 'Day 2 of 4',
+            revealTitle: 'Day 2 of 4: Scratch, But No Luck',
             desc: 'You own matching tickets in 2 quadrants, but the jackpot did not pick yours this draw.',
             degenWinCenter: false,
             // drawn: ethereum_blue, leo_gold, heart_red, dice3_green
@@ -1245,7 +1247,8 @@
             centerWins: []
           },
           {
-            title: 'Day 3 of 4: No Matching Traits',
+            title: 'Day 3 of 4',
+            revealTitle: 'Day 3 of 4: No Matching Traits',
             desc: 'You have tickets, but none of your traits match what the jackpot drew today. All red.',
             degenWinCenter: false,
             // drawn: solana_purple, aries_red, ace_gold, dice8_silver
@@ -1260,7 +1263,8 @@
             centerWins: []
           },
           {
-            title: 'Day 4 of 4: Future Tickets + BURNIE',
+            title: 'Day 4 of 4',
+            revealTitle: 'Day 4 of 4: Future Tickets + BURNIE',
             desc: 'You match 2 quadrants. Prizes include future level tickets. Your far-future tickets earned a BURNIE draw in the center diamond.',
             degenWinCenter: true,
             // drawn: xrp_pink, aquarius_blue, diamond_orange, dice1_silver
@@ -1856,6 +1860,8 @@
           if (all) {
             if (hint) hint.textContent = '';
             if (hasTicketsState) sfxFanfare();
+            var scenario = SCENARIOS[currentDay];
+            if (scenario.revealTitle) $('demo-title').textContent = scenario.revealTitle;
           } else {
             var remaining = scratched.filter(function (s) { return !s; }).length;
             if (centerPending) remaining++;
@@ -2141,6 +2147,7 @@
             if (hint) hint.textContent = 'Scratch to find your winners!';
           } else {
             if (hint) hint.textContent = 'No matching tickets this round';
+            if (scenario.revealTitle) $('demo-title').textContent = scenario.revealTitle;
           }
           // Enable next button after a short delay to let user scratch
           setTimeout(function () { $('demo-next-btn').disabled = false; }, 500);
