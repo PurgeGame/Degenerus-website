@@ -558,8 +558,9 @@
       work: either marketing the system or locking capital and playing a complex game well. Passive, risk-averse
       capital is structurally excluded.</p>
     <p>The rules of the game are immutable code. The house can never be sold, gutted, or enshittified. Profit rights are
-      soulbound: a player can walk away and extract their earned share, but only by sacrificing
-      all future distributions. These rights cannot be sold to someone who did not help build the protocol,
+      soulbound: a player can walk away and extract their earned share, but only on the game's timeline and only by
+      sacrificing
+      rights to future revenue. These rights cannot be sold to someone who did not help build the protocol,
       and the forfeited profits accrue to those who did.</p>
     <p>Entertainment seekers pay for the thrill of jackpots, and the surplus from their bets is the main source of
       equity. Strategic players and whales extract a monetary return from that equity by locking capital that grows
@@ -571,11 +572,14 @@
       stop
       depositing and exit. The incentive structure strongly favors the former, and either way, existing capital is held
       in
-      non-refundable lottery tickets that can only resolve on the game's schedule.
+      non-refundable lottery tickets that can only resolve on the game's schedule. The most damaging on-chain attack
+      vector
+      available to
+      any actor is simply choosing to not participate at any given decision point.
       These properties, and game mechanics designed for resilience, make the protocol nearly impossible to kill.</p>
 
     <div class="theorem">
-      <p><strong>Thesis</strong> (Structural Resilience). Once Degenerus Protocol has completed its first level,
+      <p><strong>The Resilience Thesis</strong>. Once Degenerus Protocol has completed its first level,
         continued level advancement is the equilibrium outcome. The rational response to the game's decline is
         participation, not exit, and the closer it gets to death, the more individually profitable it becomes to
         prevent it.</p>
@@ -585,7 +589,9 @@
       harshest adversarial conditions
       and
       maps its limitations. The analysis takes entertainment demand as given. Whether enough players find this game
-      engaging enough to participate is an empirical question outside the model's scope.</p>
+      engaging enough to participate is an empirical question outside the model's scope. The optimal usage of <a
+        href="#section-26">BURNIE</a> is
+      also too complex for the scope of this paper and its valuation is necessarily simplified.</p>
     <p><strong>Terminal state.</strong> Funds are locked in a contract with no admin withdrawal function. If the game
       stalls for more than 120 days, all remaining funds are paid out as ETH to ticket holders and active participants.
       The <a href="#section-41">terminal
@@ -2220,8 +2226,8 @@
     <hr />
     <h2 id="section-3">2. The Core Idea: Cross-Subsidy Structure</h2>
     <h3 id="section-4">2.1 Heterogeneous Reward Structures</h3>
-    <p>A critical departure from standard mechanism design: player types in this system optimize for <em>fundamentally
-        different reward currencies</em>. Traditional game-theoretic analysis assumes a common utility denominator
+    <p>A critical departure from standard mechanism design: player types in this system optimize for fundamentally
+      different reward currencies. Traditional game-theoretic analysis assumes a common utility denominator
       (typically money). In Degenerus Protocol, this assumption fails, and its failure is the engine of the system's
       sustainability.</p>
     <p>Each player's utility is a mix of two components: <strong>monetary payoff</strong> ($M$, net ETH. All other
@@ -3579,42 +3585,42 @@
     <h3 id="section-33">7.2 Griefer Analysis</h3>
     <div class="observation">
       <p><strong>Observation 7.1</strong> (Attack Surface). Every interaction with the protocol either
-        deposits ETH into prize pools, burns BURNIE supply, or claims ETH that was already committed as a
-        liability. An adversary with only financial weapons has two options: participate (which funds the pools
-        and strengthens the game) or don't participate (which is indistinguishable from exit). There is no
-        third option. Non-participation is the strongest available attack.</p>
+        deposits additional ETH into prize pools, burns BURNIE supply, or claims ETH that was already awarded as a
+        prize. An on-chain adversary has two options: participate (which funds the pools
+        and strengthens the game) or don't participate (which is indistinguishable from exit). Non-participation is the
+        strongest available attack.</p>
     </div>
     <p><strong>Well-funded griefers face structural futility.</strong> The Griefer is the strongest adversary we model:
       a well-funded actor (competitor, state-backed regulator, or ideological opponent) willing to spend money purely to
       break the game or force GAMEOVER. The problem for the griefer is that there is no venue for griefing. The
       protocol's mechanisms (RNG locks, VRF commitment, governance-gated emergency recovery) deny any lever to
-      <em>mechanically</em> break the game. What can a griefer actually do? The most plausible attack is to massively
-      inflate the prize pool at the current level, advancing it quickly and setting a high target for the next level
-      that the non-griefer population may struggle to cover. But this is self-defeating: the inflated pool creates a
-      massive jackpot, which is exactly the kind of event that attracts new players and re-engages lapsed ones. The
-      griefer spends money to make the game more exciting for everyone else.
+      <em>mechanically</em> break the game. What can a griefer actually do?
     </p>
-    <p>GAMEOVER requires 120 days of insufficient purchasing activity to meet the current level's target, not just the
-      griefer's departure. The griefer cannot force other players to stop. At best, they can waste money participating,
-      then leave. Their deposits remain in the pool, benefiting everyone else. Worse for the griefer: their departure
-      makes the terminal arbitrage more attractive for remaining players. Each player who leaves increases the
-      per-ticket terminal payout for anyone who buys in, strengthening the +EV opportunity that
-      <a href="#section-41">prevents GAMEOVER</a>. The griefer's exit is self-defeating: it makes the game harder to
-      kill,
-      not easier.
-    </p>
+    <p>The most plausible grief strategy: massively buy tickets at level N, recover most of the spend through
+      jackpot winnings (the griefer holds a large ticket share), claim the ETH, and walk away. Level N+1 now has
+      a ratcheted target inflated by the griefer's deposits. The attack cost is whatever the griefer didn't
+      recover from jackpots, and 20% of their jackpot payout arrives as future-level tickets they cannot sell,
+      locking them into the next level whether they intended to walk away or not. Meanwhile, 10% of their original
+      ticket purchases went to the futurepool, which funds the mechanical defenses that fill the inflated target.
+      The griefer paid to make the next level harder while simultaneously funding the mechanism that makes harder
+      levels completable. The inflated jackpot from the griefer's level is the largest payout the game has
+      produced to date, which is exactly the kind of spectacle that attracts new players to the next level.
+      And the 120-day GAMEOVER clock gives the terminal arbitrage and mechanical flows time to close any
+      remaining gap.</p>
     <p><strong>Even coercing the creator is futile.</strong> Suppose a state-level adversary compels the creator to
       destroy the game under threat of force. The creator <em>cannot comply</em>. The contract is immutable and
       ownerless in the relevant sense: the vault's admin privileges are granted to any address holding &gt;50.1% of
       vault
-      ownership and are limited to proposing emergency VRF recovery and managing the stETH/ETH ratio. The admin has no
+      ownership and are limited to proposing emergency VRF recovery and managing the stETH/ETH ratio (in order to
+      maximize external yield while ensuring claims don't fallback to stETH payments due to an empty ETH balance). The
+      admin has no
       power to pause the
       game, extract funds, modify rules, or trigger GAMEOVER. There is no upgrade proxy. The creator could burn every
       private key they hold and the game would continue operating identically. The
       only path to GAMEOVER is 120 consecutive days where purchasing activity fails to meet the current level's target,
       and no amount of coercion applied to any single party can produce that outcome.</p>
     <p><strong>Chainlink VRF failure.</strong> VRF is the protocol's only external dependency with a recovery
-      path. If Chainlink stops delivering randomness, the admin can propose a VRF coordinator swap after a
+      path. If, and only if, Chainlink stops delivering randomness, the admin can propose a VRF coordinator swap after a
       20-hour stall. Execution requires sDGNRS holder approval exceeding rejection, with a threshold starting at 50%
       and decaying over days. sDGNRS tokens are soulbound (non-transferable, non-purchasable), so governance capture
       via flash loans or market accumulation is impossible. The creator's 20% DGNRS allocation cannot vote (unwrapping
@@ -3625,7 +3631,7 @@
       <li><strong>Admin is dead or unreachable:</strong> after 7 days, any sDGNRS holder with 0.5%+ of circulating
         supply
         can propose. The community path is independent of admin activity.</li>
-      <li><strong>Attacker proposes a hostile coordinator:</strong> sDGNRS holders
+      <li><strong>Attacker (admin or community) proposes a hostile coordinator:</strong> sDGNRS holders
         reject. The proposal dies. No unilateral path to a malicious swap exists.</li>
     </ol>
     <p>Fund misappropriation via VRF swap requires compromising the admin key, causing a VRF
