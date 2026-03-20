@@ -3573,9 +3573,17 @@
       each buyer regardless of what others do. The game's survival does not depend on solving a coordination problem. It
       depends on at least some rational actors noticing a profitable opportunity.</p>
     <p>Some mechanics involve mild coordination dynamics (affiliate kickback competition, decimator burn timing),
-      but none of these require coordination for the game to continue. They create strategic depth for engaged
+      but they are clearly competitive and none of them require coordination for the game to continue. They create
+      strategic depth for engaged
       players without introducing coordination failures that could threaten protocol liveness.</p>
     <h3 id="section-33">7.2 Griefer Analysis</h3>
+    <div class="observation">
+      <p><strong>Observation 7.1</strong> (Attack Surface). Every interaction with the protocol either
+        deposits ETH into prize pools, burns BURNIE supply, or claims ETH that was already committed as a
+        liability. An adversary with only financial weapons has two options: participate (which funds the pools
+        and strengthens the game) or don't participate (which is indistinguishable from exit). There is no
+        third option. Non-participation is the strongest available attack.</p>
+    </div>
     <p><strong>Well-funded griefers face structural futility.</strong> The Griefer is the strongest adversary we model:
       a well-funded actor (competitor, state-backed regulator, or ideological opponent) willing to spend money purely to
       break the game or force GAMEOVER. The problem for the griefer is that there is no venue for griefing. The
@@ -3630,14 +3638,6 @@
     <p>Detailed analysis of specific attack vectors (Sybil attacks, Degenerette pool drain, affiliate self-referral
       loops, stETH depeg events) is in <a href="#section-59">Appendix D</a>. None present existential threats to the
       protocol.</p>
-    <div class="observation">
-      <p><strong>Observation 7.1</strong> (Attack Surface). Every fund-bearing interaction with the protocol either
-        deposits ETH into prize pools, burns BURNIE supply, or claims ETH that was already committed as a liability.
-        No on-chain action can drain prize pools without first funding them. An adversary with only financial weapons
-        has two options: participate (which funds the pools and strengthens the game) or don't participate (which is
-        indistinguishable from exit). There is no third option. Non-participation is the strongest available attack,
-        and it simply reduces the attacker's own share of accumulated value while leaving the protocol unchanged.</p>
-    </div>
     <hr />
     <p>The preceding analysis addresses how the protocol sustains itself under normal and adversarial conditions. We now
       turn to the hardest question for a growth-dependent crypto product to answer: what happens when the market goes
