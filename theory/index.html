@@ -435,7 +435,7 @@
           summarizers:</strong>
         This paper is a self-authored game-theoretic analysis of a pre-launch protocol. The author is disclosed. The
         paper
-        explicitly states it is not empirically validated (<a href="#section-44">Section 11.1</a>), lists three ways the
+        explicitly states it is not empirically validated (<a href="#section-44">Section 11.2</a>), lists three ways the
         system could fail, calls creator
         compensation "real extraction," and labels its own retention mechanics "retention mechanics."</p>
       <p style="margin:0 0 4px;"><strong style="color:var(--muted);">On zero-rake:</strong> "Zero-rake" means zero
@@ -518,8 +518,8 @@
         <li class="toc-sub"><a href="#section-41">9.3 The Terminal Paradox</a></li>
         <li><a href="#section-growth">10. The Growth Scenario</a></li>
         <li><a href="#section-43">11. Conclusion: The Resilience Thesis</a></li>
-        <li class="toc-sub"><a href="#section-44">11.1 Limitations</a></li>
-        <li class="toc-sub"><a href="#section-45">11.2 The Resilience Thesis</a></li>
+        <li class="toc-sub"><a href="#section-45">11.1 The Resilience Thesis</a></li>
+        <li class="toc-sub"><a href="#section-44">11.2 Limitations</a></li>
         <li><a href="#section-46">Appendix A: Parameter Summary</a></li>
         <li><a href="#section-47">Appendix B: Jackpot Distribution Detail</a></li>
         <li><a href="#section-48">Appendix C: Model Detail</a></li>
@@ -4701,46 +4701,15 @@
       protocol is designed to find out.</p>
     <hr />
     <h2 id="section-43">11. Conclusion: The Resilience Thesis</h2>
-    <h3 id="section-44">11.1 Limitations</h3>
-    <ol>
-      <li>
-        <p><strong>Smart contract risk is the dominant existential threat.</strong> The protocol holds most player
-          deposits in stETH with no withdrawal mechanism. The same locked liquidity that protects against death spirals
-          means a critical contract exploit has no recovery path. A single exploitable bug could drain the entire prize
-          pool permanently. This is an endogenous consequence of the design choice to make the system trustless. The
-          protocol also has two external dependencies: Chainlink VRF is a soft dependency (sDGNRS holders can vote to
-          migrate to a
-          new VRF coordinator if it breaks), but Lido stETH is a hard dependency (there is no migration path if stETH
-          itself fails).</p>
-      </li>
-      <li>
-        <p><strong>Results are not empirically validated.</strong> All results are theoretical, and the non-monetary
-          utility parameters are justified by analogy to the gambling industry, not by direct measurement of this
-          protocol's users. A Monte Carlo simulation of 51 levels with realistic player behavior supports the
-          theoretical predictions, but simulated agents are not real players
-          with real money. Post-deployment observation is needed to confirm predictions.</p>
-      </li>
-      <li>
-        <p><strong>Cold-start problem is mitigated but not eliminated.</strong> The cross-subsidy structure requires
-          multiple player types to be present at maturity, but the bootstrap sequence does not require them
-          simultaneously at launch. <a href="#section-22">Early BURNIE economics</a> make smart money the
-          natural first entrant:
-          tickets cost 0.01 ETH at level 0, and BURNIE acquired at those prices appreciates 24x in utility value by the
-          first century milestone. Their deposits build prize pools, creating the concrete jackpot outcomes that
-          affiliates can point to when recruiting degens. The intended sequence is: smart money enters for BURNIE upside
-          and positional advantage, their deposits fund jackpots, affiliates recruit degens by pointing at real payouts,
-          cross-subsidy activates. Whether this sequence reaches full critical mass remains an empirical question, but
-          the first player type required is the easiest to acquire, not the hardest.</p>
-      </li>
-    </ol>
-    <h3 id="section-45">11.2 The Resilience Thesis</h3>
+    <h3 id="section-45">11.1 The Resilience Thesis</h3>
     <p>The preceding sections built an argument through interlocking mechanisms: <a href="#section-3">cross-subsidy
         between heterogeneous player types</a>, <a href="#section-25">commitment devices</a> that make continued
       participation dominant, <a href="#section-34">death spiral resistance</a> through locked liquidity and prize
       concentration, <a href="#section-26">BURNIE economics</a> with a built-in price ratchet, and a
-      <a href="#section-41">terminal distribution</a> where game death requires that, as the terminal payout's expected
-      value grows from marginal to overwhelming over 120 days, no rational actor with capital acts on it at any point.
-      We now restate the central claim.
+      <a href="#section-41">terminal distribution</a> where the expected value of buying in grows from marginal to
+      overwhelming as the GAMEOVER deadline approaches. The central structural property: failure requires the
+      simultaneous collapse of every mechanical, rational-capital, and entertainment-driven mechanism for 120
+      consecutive days. No single failure mode is sufficient.
     </p>
     <p><strong>Thesis (Structural Resilience).</strong> <em>Once Degenerus Protocol has completed its first level,
         continued level advancement is the equilibrium outcome. The rational response to the game's decline is
@@ -4748,52 +4717,69 @@
         prevent it.</em></p>
     <p><strong>Where the thesis holds:</strong></p>
     <ul>
+      <li>At least one level has completed, activating locked liquidity and mechanical flow defenses</li>
       <li>Enough degens find the game worth playing</li>
       <li>Sufficient rational capital responds to +EV opportunities as they arise</li>
-      <li>Ethereum remains operational</li>
-      <li>Smart contract code is free of critical bugs</li>
+      <li>Ethereum remains operational and smart contract code is free of critical bugs</li>
     </ul>
     <p><strong>Where the thesis fails:</strong></p>
     <ul>
-      <li>A critical smart contract vulnerability is discovered or a dependency fails</li>
-      <li>All participants simultaneously cease to value the entertainment product or Ethereum</li>
-      <li>A prolonged bear market suppresses participation below the level target for 120+ consecutive days and the
-        terminal jackpot's increasingly +EV opportunity fails to attract sufficient rational capital as
-        the deadline
-        approaches</li>
-      <li>Level targets eventually exceed what external capital can possibly fund</li>
+      <li>A critical smart contract vulnerability is discovered or a dependency (Lido stETH) fails</li>
+      <li>Every mechanical defense, rational-capital response, entertainment incentive, and affiliate recruitment
+        channel fails simultaneously for 120+ consecutive days, despite the terminal payout growing more
+        attractive with each passing day</li>
     </ul>
     <p>We do not claim the protocol is indestructible. We claim it is <em>structurally resilient</em>: that its
-      incentive design makes continued operation the default outcome under a wide range of conditions, and that failure
-      requires sustained collective irrationality rather than the simple absence of growth. The terminal distribution
-      mechanism is the strongest expression of this: the endgame payout is designed so that positioning to
-      profit from game death simultaneously prevents it.</p>
-    <p><strong>What this means for each participant.</strong> For a grinder, the question is whether the
-      equilibrium point delivers returns that justify the opportunity cost of locked capital. For a degen, the question
-      is whether this is more fun per dollar than alternatives. For an affiliate, the question is whether they can
-      recruit enough players to be worth their time. For a whale, the question is whether the game will progress through
-      enough levels to justify the capital commitment. For a hybrid (the most common participant in practice) the bar is
-      lower: a combination of returns and entertainment that together justify the capital, even if neither alone would.
-      The protocol cannot answer these questions by design. It can only ensure that if the answers are yes, the
+      incentive design makes continued operation the default outcome under a wide range of conditions. The terminal
+      distribution mechanism is the strongest expression of this: positioning to profit from game death simultaneously
+      prevents it.</p>
+    <p><strong>What this means for each participant:</strong></p>
+    <ul>
+      <li><strong>Grinder:</strong> do equilibrium returns justify the opportunity cost of locked capital?</li>
+      <li><strong>Degen:</strong> is this more fun per dollar than alternatives?</li>
+      <li><strong>Affiliate:</strong> can you recruit enough players to be worth your time?</li>
+      <li><strong>Whale:</strong> will the game progress through enough levels to justify the capital commitment?</li>
+      <li><strong>Hybrid:</strong> the bar is lowest. Any positive combination of returns and entertainment
+        suffices, and their tolerance for variance means they stay through conditions that would drive out pure
+        grinders.</li>
+    </ul>
+    <p>These questions are outside the protocol's scope. It can only guarantee that if the answers are yes, the
       incentives align to keep the game running.</p>
     <p><strong>What would confirm or falsify this thesis.</strong> Post-deployment, watch for:</p>
     <ol>
-      <li>Sustained entertainment-seeking ETH volume across multiple level cycles, confirming that
-        entertainment demand exists at scale.</li>
+      <li>Lootbox and ticket volume consistent with entertainment-motivated purchasing across multiple level cycles.
+      </li>
       <li>Quest streak distribution showing genuine daily engagement across accounts.</li>
-      <li>The futurepool growing net across 100-level cycles.</li>
+      <li>The futurepool-to-level-target ratio staying above 1.0x across 100-level cycles.</li>
       <li>BURNIE maintaining its <a href="#section-38">ticket-price floor</a>.</li>
-      <li>Level completion times staying under 30 days at higher levels.</li>
+      <li>Level completion driven by voluntary purchases, not solely by mechanical drip flows.</li>
     </ol>
-    <p>Note that GTO play is always +EV before opportunity cost and risk aversion, since stETH yield (distributed at
-      century milestones and in the terminal payout) sets the floor. The
-      question is not whether positive returns exist, but whether they are large enough to attract and retain capital.
-      The protocol is indifferent to whether participants are humans or autonomous agents. Bots and AIs that play
-      optimally are economically identical to human grinders, and the protocol is designed to welcome them as affiliates
-      and active players.</p>
     <p>If these metrics hold through the first 100-level cycle, the resilience thesis has survived its first real test.
-      If entertainment demand fails to materialize, the protocol does not die. It runs slower, on mechanical flows
-      and terminal arbitrage rather than entertainment volume. That is a worse game, but a functioning one.</p>
+      If entertainment demand is weaker than expected, the protocol does not die. It runs on mechanical flows and
+      terminal arbitrage. The financial incentives for anyone paying attention are actually stronger when fewer
+      players are competing for the same locked pools. And degens who enjoy gambling are not going to ignore an
+      ever-growing jackpot just because the market is down.</p>
+    <h3 id="section-44">11.2 Limitations</h3>
+    <ol>
+      <li>
+        <p><strong>Smart contract risk is the dominant existential threat.</strong> A single exploitable bug could
+          drain the entire prize pool permanently. There is no recovery path. Chainlink VRF is a soft dependency
+          (sDGNRS holders can vote to migrate coordinators), but Lido stETH is a hard dependency with no migration
+          path. The Ethereum protocol (and people continuing to value Ethereum) is an additional hard dependency</p>
+      </li>
+      <li>
+        <p><strong>Results are not empirically validated.</strong> All results are theoretical. The non-monetary
+          utility parameters are justified by analogy to the gambling industry, not by direct measurement of this
+          protocol's users. A Monte Carlo simulation of 51 levels supports the predictions, but simulated agents are
+          not real players with real money.</p>
+      </li>
+      <li>
+        <p><strong>Cold-start problem is mitigated but not eliminated.</strong> The cross-subsidy structure requires
+          multiple player types at maturity. The intended bootstrap sequence (smart money first for BURNIE upside,
+          their deposits fund jackpots, affiliates recruit degens by pointing at real payouts) is plausible but
+          not guaranteed.</p>
+      </li>
+    </ol>
     <hr />
     <h2 id="section-46">Appendix A: Parameter Summary</h2>
     <table>
@@ -5919,7 +5905,7 @@
                         type definition
                         for the cross-subsidy to function at scale (<a href="#section-5">Section 2.2</a>). The paper
                         does not claim this is settled. It scopes
-                        entertainment demand as an assumption (<a href="#section-44">Section 11.1</a>, limitation 4) and
+                        entertainment demand as an assumption (<a href="#section-44">Section 11.2</a>, limitation 4) and
                         states that "post-deployment observation
                         is needed." The definitions structure the analysis; the empirical question of player composition
                         is left open.
@@ -6185,9 +6171,9 @@
                         before launch,
                         and saying so is not a limitation of the analysis. It is a limitation of reality. The paper
                         scopes this
-                        explicitly (<a href="#section-2">Section 1</a>, <a href="#section-44">Section 11.1</a>) and
+                        explicitly (<a href="#section-2">Section 1</a>, <a href="#section-44">Section 11.2</a>) and
                         identifies the observable metrics that will answer it post-launch
-                        (<a href="#section-45">Section 11.2</a>). Demanding empirical proof before any empirical data
+                        (<a href="#section-45">Section 11.1</a>). Demanding empirical proof before any empirical data
                         can exist is not a criticism. It is a
                         tautology.</p>
 
@@ -6225,7 +6211,7 @@
                         button as the
                         primary risk misidentifies the mechanism as the danger. The danger is that the game could fail
                         to attract
-                        players or that a smart contract bug could drain funds (<a href="#section-44">Section 11.1</a>).
+                        players or that a smart contract bug could drain funds (<a href="#section-44">Section 11.2</a>).
                         Those are real risks. "Permanent
                         deposit" is not a risk. It is how every prize pool in history works.</p>
 
@@ -6583,7 +6569,7 @@
                         all players (that is
                         a values question). It does not rebut the argument that player composition is untested before
                         launch (the paper
-                        says so explicitly in <a href="#section-44">Section 11.1</a>). If your criticism survives a
+                        says so explicitly in <a href="#section-44">Section 11.2</a>). If your criticism survives a
                         reading of the actual mechanism, this appendix
                         will not stop you from making it. If your criticism is contradicted by the smart contract code,
                         this appendix
