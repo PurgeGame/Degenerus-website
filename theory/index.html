@@ -3047,13 +3047,19 @@
     </div>
     <p><strong>Constrained optimization.</strong> A player who cannot afford to cap out every protocol benefit each
       level
-      still has a clear prioritization: quest streak maintenance (one ticket per day) has the highest marginal return,
-      followed by lootbox purchases once activity score crosses the +EV threshold. More engagement is always better
-      than less. The question for the constrained player is not "how active should I be?" but "is my bankroll large
-      enough that participation is +EV at all?" That threshold depends on pool composition and is lower when more
-      degens are present. Because there is no rake, the EV floor for optimal play is positive: stETH yield accrues
-      in the segregated accumulator and distributes to players at century milestones and in the terminal payout.
-      Realized outcomes are another matter. The worst case is running badly and recovering nothing.</p>
+      still has a clear prioritization: quest streak maintenance (one ticket-price lootbox per day) has the highest
+      marginal return,
+      followed by additional lootbox purchases. Higher activity score is
+      always better than lower, but engagement beyond streak maintenance costs ETH. The strategic decision is "given my
+      score and
+      bankroll, how much lootbox volume can I sustain?"</p>
+    <p> The constrained player also faces
+      the question "is my bankroll large enough that participation is +EV at all?" The answer depends on pool
+      composition and
+      improves when more degens are present. Because there is no rake, the EV floor for optimal play is positive: stETH
+      yield
+      accrues in the segregated accumulator and distributes to players at century milestones and in the terminal
+      payout. Realized outcomes are another matter. The worst case is running badly and recovering nothing.</p>
     <p><strong>Pass bootstrapping.</strong> New players start at 0.00 activity score and grind up from there. This early
       period, before score is high enough to meaningfully improve returns, is where the protocol is most vulnerable to
       churn. Passes eliminate it. A pass does two things: it adds a direct bonus to activity score, and it guarantees
@@ -3079,27 +3085,31 @@
     <h2 id="section-17">4. The Ownership Model</h2>
     <a id="section-19"></a>
     <div class="definition">
-      <p><strong>Definition</strong> (Zero-Rake). 100% of player deposits go to prize pools.</p>
-      <p>Degenerus Protocol is zero-rake after the first three levels. During the early-bird period (levels 0-2),
+      <p><strong>Definition 4.1</strong> (Zero-Rake). 100% of player deposits go to prize pools.</p>
+
+      <p>Degenerus Protocol is zero-rake after the first three levels.
+
+        During the early-bird period (levels 0-2),
         20% of lootbox ETH routes to the vault, capped at 40 ETH maximum. In exchange, early-bird buyers receive
         sDGNRS from a dedicated pool and bonus BURNIE
         at the cheapest ticket prices in the game. </p>
-      <p>This is structurally a token presale: the 20% compensates
-        ~5,000 hours of unpaid design, engineering, and analysis work completed before launch. Buyers
-        receive protocol equity (DGNRS) and BURNIE that appreciate if the game succeeds.</p>
-      <p>Unlike typical crypto presales, there is no way to directly buy tokens without also taking a stake in the
-        game's future.
-        These early
-        deposits are essential for the protocol to quickly accumulate the locked ETH on which the resilience thesis
-        depends.
-      </p>
     </div>
+    <p>This is structurally a token presale: the 20% compensates
+      ~5,000 hours of unpaid design, engineering, and analysis work completed by a single person before launch. Buyers
+      receive protocol equity (DGNRS) and BURNIE that appreciate if the game succeeds.</p>
+    <p>Unlike typical crypto presales, there is no way to directly buy tokens without also taking a stake in the
+      game's future.
+      These early
+      deposits are essential for the protocol to quickly accumulate the locked ETH on which the resilience thesis
+      depends.
+    </p>
+
     <h3 id="section-creator-comp">4.1 Creator Compensation and the DGNRS Token</h3>
     <a id="section-dgnrs-main"></a>
     <p>I am a self-funded solo dev and the only insider. There are no VCs, team
-      allocations, shill deals, or privileged parties.</p>
-    <p>The protocol has two non-player contracts: the <strong>vault</strong> (creator-controlled) and the
-      <strong>DGNRS contract</strong> (collectively owned by players). They each receive similar treatment:
+      allocations or special shill deals.</p>
+    <p>The protocol has two privleged contracts: the creator-owned <strong>vault</strong> and the
+      <strong>DGNRS token</strong> (collectively owned by players). They each receive similar treatment:
     </p>
     <ul>
       <li>25% of stETH yield</li>
@@ -4796,7 +4806,7 @@
       <li>
         <p><strong>The thesis assumes people continue to enjoy gambling.</strong> Every defense ultimately
           depends on rational actors taking +EV opportunities that carry variance. If the entire player base
-          became sufficiently risk-averse, they might decline +EV bets despite the math favoring action.
+          became sufficiently risk-averse, they might decline high-variance +EV bets despite the math favoring action.
           This is not a practical concern (the history of gambling suggests otherwise), but risk tolerance
           is an assumption, not a guarantee.</p>
       </li>
@@ -5483,10 +5493,12 @@
       <strong>Analysis:</strong> Direct self-referral is blocked at the contract level. Cross-referral between
       colluding accounts (A refers B, B refers A) is costless to set up, but the benefit is strictly bounded:
       commission from any single referred player is hard-capped at 0.5 ETH of BURNIE per level, and a lootbox
-      taper reduces commission rates to 5% for high-activity buyers. Extraction comes from the affiliate BURNIE
-      emission
-      pool, not ETH prize pools. No activity score advantage is gained unless both accounts are independently
-      active players.
+      taper reduces commission rates to 5% for high-activity buyers. The naive A-B-A loop also returns less than
+      expected: the 3-tier affiliate system pays 20% of commission to the referrer's referrer (upline tier 1),
+      which in an A-B-A loop is the buyer themselves. The contract explicitly skips payments to the buyer's own
+      address, so 20% of every commission in the loop is silently lost. Extraction comes from the affiliate
+      BURNIE emission pool, not ETH prize pools. No activity score advantage is gained unless both accounts are
+      independently active players.
       <strong>Verdict:</strong> Low impact. Hard cap and lootbox taper make cross-referral a bounded, minor leak
       from the affiliate incentive budget. Does not threaten ETH solvency.
     </p>
@@ -5900,6 +5912,11 @@
                         player's favor. The stETH is not the steak. It is gravy on top of a steak that is already better
                         than anything
                         else on the menu.</p>
+                      <p>For grinders specifically, stETH yield is not even the relevant profit source. Grinder
+                        profitability comes from degen surplus: entertainment-seeking players voluntarily overspend
+                        relative to their statistical return because the experience is worth it to them. In a zero-rake
+                        system, every dollar of entertainment premium that degens willingly pay is a dollar of
+                        extractable profit for optimized players. Access to degens is where the margin lives.</p>
                       <p>Separately: 50% of stETH yield goes to the vault (25%) and DGNRS holders (25%). This is
                         disclosed in <a href="#section-creator-comp">Section 4.1</a>. The
                         remaining 50% accrues in a segregated accumulator (which also receives 1% of each completed
@@ -6093,7 +6110,8 @@
                         Pools are funded by player deposits and redistribution.</p>
                       <p>On capital destruction: ETH-denominated pool targets do not change when ETH drops in dollar
                         terms. A pool
-                        target of 5 ETH costs $20,000 to fill at $4,000/ETH and $4,000 to fill at $800/ETH. Player
+                        target of 5 ETH costs &#36;20,000 to fill at &#36;4,000/ETH and &#36;4,000 to fill at
+                        &#36;800/ETH. Player
                         wealth declined,
                         but so did the cost of the thing they are buying. The paper addresses this explicitly in <a
                           href="#section-39">Section 9</a>.</p>
@@ -6266,9 +6284,11 @@
                         definition, which is
                         standard in mechanism design: mutualism means both parties achieve higher utility than they
                         would in the
-                        counterfactual (no interaction). A degen who values entertainment at $50 and loses $30 has
-                        gained $20 of net
-                        utility. A grinder who extracts $30 in monetary value has gained $30. Both are better off than
+                        counterfactual (no interaction). A degen who values entertainment at &#36;50 and loses &#36;30
+                        has
+                        gained &#36;20 of net
+                        utility. A grinder who extracts &#36;30 in monetary value has gained &#36;30. Both are better
+                        off than
                         if neither
                         participated. This is the textbook definition of gains from trade in economics, and the paper
                         develops it
@@ -6377,7 +6397,8 @@
                         entertainment, or both). The deposit is not "lost." It is exchanged for something.</p>
                       <p>The correct comparison is not "deposit with withdrawal" versus "deposit without withdrawal." It
                         is: what do
-                        you receive for your deposit, and what is it worth? A Powerball ticket costs $2 and gives you a
+                        you receive for your deposit, and what is it worth? A Powerball ticket costs &#36;2 and gives
+                        you a
                         small chance
                         at a large prize, and nobody calls this "total loss" even though the expected monetary return is
                         negative and
@@ -6458,7 +6479,7 @@
                         steadily fill prize pools over time. Degens arrive when it matters.</p>
                       <p>This is exactly how every lottery works. Powerball's regular players buy tickets consistently
                         at small dollar
-                        amounts. Casual players flood in when the jackpot hits $500 million. Nobody argues that
+                        amounts. Casual players flood in when the jackpot hits &#36;500 million. Nobody argues that
                         Powerball's retention
                         problem is "the surge buyers don't play every week." The surge buyers are responding to the
                         correct signal:
@@ -6664,7 +6685,7 @@
                       <h3>F.26 "On-chain gambling might be a fad"</h3>
                       <p>Gambling is one of the oldest and most persistent human behaviors. Archaeological evidence for
                         dice games dates
-                        to 3000 BCE. The global gambling market exceeds $500 billion annually. No cultural shift,
+                        to 3000 BCE. The global gambling market exceeds &#36;500 billion annually. No cultural shift,
                         technological disruption,
                         or regulatory regime has ever eliminated gambling demand. This objection is really a claim that
                         "on-chain" is a fad,
