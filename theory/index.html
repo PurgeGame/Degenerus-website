@@ -3080,9 +3080,19 @@
     <a id="section-19"></a>
     <div class="definition">
       <p><strong>Definition</strong> (Zero-Rake). 100% of player deposits go to prize pools.</p>
-      <p>Degenerus Protocol is zero-rake after the first three levels. During the early-bird period, I receive 20% of
-        lootbox ETH, capped at 40 ETH maximum. This is real extraction that compensates 5000+ hours of unpaid creative
-        design and development completed before launch.</p>
+      <p>Degenerus Protocol is zero-rake after the first three levels. During the early-bird period (levels 0-2),
+        20% of lootbox ETH routes to the vault, capped at 40 ETH maximum. In exchange, early-bird buyers receive
+        sDGNRS from a dedicated pool and bonus BURNIE
+        at the cheapest ticket prices in the game. </p>
+      <p>This is structurally a token presale: the 20% compensates
+        ~5,000 hours of unpaid design, engineering, and analysis work completed before launch. Buyers
+        receive protocol equity (DGNRS) and BURNIE that appreciate if the game succeeds.</p>
+      <p>Unlike typical crypto presales, there is no way to directly buy tokens without also taking a stake in the
+        game's future.
+        These early
+        deposits are essential for the protocol to quickly accumulate the locked ETH on which the resilience thesis
+        depends.
+      </p>
     </div>
     <h3 id="section-creator-comp">4.1 Creator Compensation and the DGNRS Token</h3>
     <a id="section-dgnrs-main"></a>
@@ -3100,7 +3110,8 @@
     </ul>
     <p>Both compete for jackpot prizes on the same terms as any participant with a long-term capital investment.
       Additionally, the vault receives a cut of the early-bird lootbox buys (when they contain bonus BURNIE and DGNRS).
-      The creator also holds 20% of DGNRS supply as the only liquid (transferable) tokens.</p>
+      The creator also holds 20% of DGNRS supply as the only liquid (transferable) tokens and one trillion wwXRP, a
+      valueless memecoin distributed as a consolation prize to losers.</p>
     <p><strong>DGNRS</strong> is a fixed-supply token. The remaining 80% is distributed to players <a
         href="#section-dgnrs">through gameplay</a>:</p>
     <ul>
@@ -3646,7 +3657,7 @@
     <p>The earliest positions in any level are not day-1 ticket purchases. They are future tickets created by
       lootbox and pass purchases at prior levels, activated before the new level begins. These tickets are eligible for
       BURNIE jackpot draws while still waiting for their level to start. On day 1 of the jackpot phase, they
-      participate in the early-bird lootbox jackpot, a 3% futurepool draw available only to pre-existing next-level
+      participate in the luckbox jackpot, a 3% futurepool draw available only to pre-existing next-level
       holders. Once their level's purchase phase opens, they accumulate drip income and ETH jackpot
       draws without taking any new action. This early positioning is a byproduct of lootbox mechanics:
       lootboxes direct 90% of each purchase to the futurepool, so the behavior that creates the most advantaged
@@ -4104,7 +4115,7 @@
       level's jackpot phase pre-funds the next level before purchases even open. By the time a new level begins, the
       nextpool is already substantially funded. The pool does not need to be built from scratch. It needs to be topped
       off.</p>
-    <p>Over a full 120-day GAMEOVER window, these combined mechanical flows (the 15% transfer, early-bird draw,
+    <p>Over a full 120-day GAMEOVER window, these combined mechanical flows (the 15% transfer, luckbox draw,
       carryover drips, and ~120 daily drip payments) deliver approximately 60% of the futurepool into the
       nextpool with zero new deposits. If the futurepool is roughly 1.5x the level target, mechanical flows alone
       complete the level with no new money at all (the <a href="#gta-simWrap">simulation</a> illustrates this). At that
@@ -4985,9 +4996,9 @@
     <h3>B.2 Purchase-Phase Daily Jackpot</h3>
     <p>During the purchase phase a jackpot fires each day <code>advanceGame</code> is called. Each day may trigger one
       or more of the following draws, depending on conditions:</p>
-    <p><strong>Early-bird jackpot (day 1 of each level's jackpot phase only):</strong> 3% of
+    <p><strong>Luckbox jackpot (day 1 of each level's jackpot phase only):</strong> 3% of
       <code>futurePrizePool</code> is
-      drawn and distributed to lootbox buyers and trait-matched holders as an opening draw for the new level.
+      drawn and distributed to pre-existing next-level ticket holders as an opening draw for the new level.
     </p>
     <p><strong>Daily futurepool extraction:</strong> 1% of <code>futurePrizePool</code> is drawn each day. 75% flows
       to <code>nextPrizePool</code> (at 50% ticket conversion with 200% backing per drip ticket); the remaining 25%
@@ -5848,10 +5859,9 @@
                         early-bird revenue (20% of up to 200 ETH in lootbox purchases, i.e. max 40 ETH), a
                         DGNRS token allocation (20% of supply, receiving a share of stETH yield), the vault (25% of
                         stETH yield, a nerfed deity pass, BURNIE, and unaffiliated player commissions). The
-                        paper calls the early-bird cut "real extraction" in those exact words. Nothing is hidden. This
-                        is a
-                        one-time,
-                        capped development payment for approximately 5,000 hours of solo design, engineering, and
+                        paper frames the early-bird as a token presale: buyers receive sDGNRS and BURNIE in exchange.
+                        Nothing is hidden. This is a one-time, capped development payment for approximately 5,000 hours
+                        of solo design, engineering, and
                         analysis work
                         producing a novel game that does things no existing blockchain protocol has done. A traditional
                         gambling
@@ -5919,7 +5929,7 @@
                         empirically validated,
                         acknowledges correlated failure modes, and lists four specific ways the system could fail. <a
                           href="#section-creator-comp">Section 4.1</a> itemizes
-                        creator extraction and calls it "real extraction."</p>
+                        creator compensation and frames it as a token presale.</p>
                       <p>A sales document that tells you the product might kill your money, lists four ways it could
                         fail, calls its own
                         retention mechanics "retention mechanics," and tells you the game is "primarily redistributive"
