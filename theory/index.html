@@ -3517,7 +3517,8 @@
       milestones (x00) are crescendo events where multiple mechanics fire at their highest rates simultaneously.</p>
     <p>First, half the segregated accumulator (stETH yield plus terminal insurance from the prior 100 levels)
       flows into the futurepool. Then a VRF roll determines how much of the enlarged futurepool stays for
-      future levels and how much transfers to the current pool for immediate jackpot distribution. The retained fraction ranges from 30%
+      future levels and how much transfers to the current pool for immediate jackpot distribution. The retained fraction
+      ranges from 30%
       to 65%, averaging ~47.5%.</p>
     <p>The bonus BAF jackpot (20% of futurepool, primarily paid to tickets purchased over the previous 100-level
       cycle) and an enlarged decimator (30% vs the normal 10%) fire on top of this enlarged pool. Daily jackpot
@@ -3646,8 +3647,8 @@
       lootbox and pass purchases at prior levels, activated before the new level begins. These tickets are eligible for
       BURNIE jackpot draws while still waiting for their level to start. On day 1 of the jackpot phase, they
       participate in the early-bird lootbox jackpot, a 3% futurepool draw available only to pre-existing next-level
-      holders. Once their level's purchase phase opens, they accumulate drip income from day 2 and ETH jackpot
-      draws from day 1 without taking any new action. This early positioning is a byproduct of lootbox mechanics:
+      holders. Once their level's purchase phase opens, they accumulate drip income and ETH jackpot
+      draws without taking any new action. This early positioning is a byproduct of lootbox mechanics:
       lootboxes direct 90% of each purchase to the futurepool, so the behavior that creates the most advantaged
       early positions is the same behavior that builds the mechanical defense described in
       <a href="#section-39a">Section 9.2</a>. Any level where lootbox activity occurred in prior cycles already
@@ -3953,7 +3954,7 @@
       exodus? Gambling entertainment does not degrade with fewer participants. A lootbox is just as fun to open with 10
       players as with 10,000, and the fun scales with the prize pool, which can only increase over time (locked
       liquidity means player exits do not reduce it). Even during slow periods, there is still a jackpot of some kind
-      every night, as well as coinflips.</p>
+      every night, as well as the coinflip.</p>
     <p>A slow-moving game where the big jackpot is far away in time would reduce the appeal for gamblers who want a
       large payout soon. But the monetary argument is sufficient to retain the +EV class during low-activity periods,
       and a growing prize pool will always attract the gambling class later in the level when the jackpot becomes large
@@ -4986,7 +4987,8 @@
       or more of the following draws, depending on conditions:</p>
     <p><strong>Early-bird jackpot (day 1 of each level's jackpot phase only):</strong> 3% of
       <code>futurePrizePool</code> is
-      drawn and distributed to lootbox buyers and trait-matched holders as an opening draw for the new level.</p>
+      drawn and distributed to lootbox buyers and trait-matched holders as an opening draw for the new level.
+    </p>
     <p><strong>Daily futurepool extraction:</strong> 1% of <code>futurePrizePool</code> is drawn each day. 75% flows
       to <code>nextPrizePool</code> (at 50% ticket conversion with 200% backing per drip ticket); the remaining 25%
       is paid as ETH prizes to trait-matched ticket holders. This is the primary mechanism by which the futurepool
