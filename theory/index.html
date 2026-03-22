@@ -3369,6 +3369,10 @@
       Combined with the liquid ETH from the other portion of their win and the results-oriented conviction
       that they've figured the game out, the winner has every incentive to reinvest aggressively at the exact
       moment they feel like a genius for playing.</p>
+    <p><strong>Device 5: Recycling Bonus.</strong> Players who reinvest their full claimable balance (minimum three
+      tickets worth) receive a 10% bonus in BURNIE coinflip credits on the recycled amount.
+      The bonus requires draining the entire balance, creating an all-or-nothing incentive to
+      keep winnings in the system rather than withdrawing piecemeal.</p>
     <p>These commitment devices are powerful. The difference from exploitative gambling design is that the deferred
       rewards here will, with optimal play, result in an overall positive
       expectation. A player can estimate what their
@@ -3511,9 +3515,9 @@
     <h3 id="section-29">6.3 The 100-Level Cycle</h3>
     <p>Ticket prices escalate within each 100-level cycle from 0.04 ETH at x01 to 0.24 ETH at x00, then reset. Century
       milestones (x00) are crescendo events where multiple mechanics fire at their highest rates simultaneously.</p>
-    <p>First, 50% of the yield accumulator flows into the futurepool (the other 50% is retained as terminal
-      insurance). Then a VRF roll determines how much of the futurepool stays for future levels and how much
-      dumps into the current pool for immediate jackpot distribution. The retained fraction ranges from 30%
+    <p>First, half the segregated accumulator (stETH yield plus terminal insurance from the prior 100 levels)
+      flows into the futurepool. Then a VRF roll determines how much of the enlarged futurepool stays for
+      future levels and how much transfers to the current pool for immediate jackpot distribution. The retained fraction ranges from 30%
       to 65%, averaging ~47.5%.</p>
     <p>The bonus BAF jackpot (20% of futurepool, primarily paid to tickets purchased over the previous 100-level
       cycle) and an enlarged decimator (30% vs the normal 10%) fire on top of this enlarged pool. Daily jackpot
@@ -3647,7 +3651,8 @@
       lootboxes direct 90% of each purchase to the futurepool, so the behavior that creates the most advantaged
       early positions is the same behavior that builds the mechanical defense described in
       <a href="#section-39a">Section 9.2</a>. Any level where lootbox activity occurred in prior cycles already
-      has a funded futurepool and a population of pre-positioned holders with locked equity.</p>
+      has a funded futurepool and a population of pre-positioned holders with locked equity.
+    </p>
     <p><strong>(ii) Grinder self-correction.</strong> A stall requires grinder exit (grinders buy daily by definition;
       if they are still buying, there is no stall). But grinder exit shifts the equilibrium breakeven point downward:
       fewer competing lootbox buyers with high activity scores means higher EV per lootbox, so remaining grinders
@@ -4979,7 +4984,8 @@
     <h3>B.2 Purchase-Phase Daily Jackpot</h3>
     <p>During the purchase phase a jackpot fires each day <code>advanceGame</code> is called. Each day may trigger one
       or more of the following draws, depending on conditions:</p>
-    <p><strong>Early-bird jackpot (day 1 of each level's jackpot phase only):</strong> 3% of <code>futurePrizePool</code> is
+    <p><strong>Early-bird jackpot (day 1 of each level's jackpot phase only):</strong> 3% of
+      <code>futurePrizePool</code> is
       drawn and distributed to lootbox buyers and trait-matched holders as an opening draw for the new level.</p>
     <p><strong>Daily futurepool extraction:</strong> 1% of <code>futurePrizePool</code> is drawn each day. 75% flows
       to <code>nextPrizePool</code> (at 50% ticket conversion with 200% backing per drip ticket); the remaining 25%
@@ -5682,7 +5688,8 @@
                         equals the target when filled by mechanical flows), the expected skim return per cycle
                         is anchored to the fixed target, not the declining futurepool.
                         This creates a floor. At steady state, the futurepool converges to approximately:</p>
-                      <p>$$F^* = \frac{\mathbb{E}[S]}{1 - 0.85 \cdot 0.99^{120}} \approx \frac{\mathbb{E}[S]}{0.746}$$</p>
+                      <p>$$F^* = \frac{\mathbb{E}[S]}{1 - 0.85 \cdot 0.99^{120}} \approx \frac{\mathbb{E}[S]}{0.746}$$
+                      </p>
                       <p>where $0.85$ is the fraction remaining after the 15% drawdown, $0.99^{120}$ is the
                         residual after 120 days of 1% daily drip, and $\mathbb{E}[S]$ is the expected skim return
                         per cycle.
@@ -5709,7 +5716,8 @@
                         the opportunity while accelerating level completion. Faster completion
                         reduces the skim (~20% at 30 days vs. ~50% at 120 days), preserving more futurepool for
                         the next level. The depletion cascade is self-correcting: any voluntary participation at
-                        all shortens levels and slows the depletion.</p>
+                        all shortens levels and slows the depletion.
+                      </p>
                       <p><strong>Two additional stabilizers prevent collapse.</strong> First, the terminal arbitrage and
                         future-ticket-holder defenses do not depend on the futurepool. They depend on $P^{total}$,
                         the total locked ETH in the contract, which includes all historical deposits and the
