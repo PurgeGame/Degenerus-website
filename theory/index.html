@@ -3143,9 +3143,10 @@
       non-transferable
       equity in its future revenue, redeemable only by burning their stake. Both creator and DGNRS holder compensation
       are tied to protocol
-      success. The fundamental principle behind Degenerus Protocol is that a well-designed incentive structure can
+      success. The fundamental principle behind Degenerus Protocol is that a well-crafted structure of rules and
+      incentives can create the conditions under which the voluntary actions of purely self-interested individuals
       reliably
-      induce purely selfish individuals to act in a way that benefits the collective.</p>
+      benefit a collective.</p>
     <h3 id="section-permissionless-execution">4.2 Permissionless Execution</h3>
     <p>The protocol has no operator. Daily game logic (jackpot draws, drip distributions, coinflip resolution,
       level transitions) executes when any player calls the permissionless <code>advanceGame()</code> function.
@@ -5047,8 +5048,9 @@
         cycle.</li>
     </ul>
     <h3 id="section-decimator">B.4 Decimator</h3>
-    <p>The decimator is a BURNIE-burn-to-ETH event that fires at milestone levels. Players permanently burn BURNIE to
-      buy weighted pro-rata entries in an ETH distribution from <code>futurePrizePool</code>. Activity score determines
+    <p>The decimator is a BURNIE-burn event that fires at milestone levels. Players permanently burn BURNIE to
+      buy weighted pro-rata entries in a distribution from <code>futurePrizePool</code>, paid 50% as ETH and 50% as
+      lootbox credit (100% ETH during GAMEOVER). Activity score determines
       bucket assignment (lower bucket = better odds) and burn weight multiplier (1.0x at zero activity to ~1.8x at
       maximum), making the decimator strictly more valuable to engaged players. Trigger schedule and pool percentages
       are in <a href="#section-48">Appendix C</a>. At x00 levels the decimator draws 30% of <code>futurePrizePool</code>
