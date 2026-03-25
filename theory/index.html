@@ -2823,7 +2823,10 @@
     </div>
     <p><strong>Within-level timing advantage.</strong> Every ticket is eligible for daily jackpot drawings from the
       moment it is purchased until its level is complete.
-      Earlier tickets accumulate more draws at the same price, so buying early is strictly better. Buying early also
+      Earlier tickets accumulate more draws at the same price, so buying early is strictly better. The earliest
+      possible position is a future ticket from a prior-level lootbox: these holders participate in the luckbox
+      jackpot (a 3% futurepool draw on day 1, available only to pre-existing next-level tickets) before
+      purchases even open. Buying early also
       accelerates level completion, compounding the advantage across levels.</p>
     <h3 id="section-11">3.1 The Degen</h3>
     <p>The degen's utility is dominated by entertainment, not monetary returns.</p>
@@ -4726,10 +4729,11 @@
       tokens earned at level 0 quadruple in ticket-equivalent value by level 10. The incentive to participate
       early is the same incentive that fills the futurepool. Level 0 gets a 365-day death clock specifically
       to give this bootstrap room to work.</p>
-    <p>The protocol guarantees that if enough people want to play, the incentives align to keep the game running.
+    <p>The protocol guarantees that if enough people choose to play, the incentives align to keep the game running.
       This is a conditional claim, not a
       prediction. No empirical outcome can falsify it: if GAMEOVER fires because nobody showed up, the
-      assumptions were not met, not the logic. The thesis can only be challenged by finding a flaw in the
+      assumptions were not met, rather than the logic disproven. The thesis can only be challenged by finding a flaw in
+      the
       proof itself. Of course, empirical outcomes are what actually matter. The paper claims that the mechanism design
       is
       correct, that the incentives point where they should, that the defenses activate when they should,
@@ -4754,7 +4758,7 @@
         a later entrant. Across levels, lootbox purchases create future tickets that earn BURNIE draws
         before their target level starts and drip income from day 1 when it does. The earliest possible
         position at any
-        level is a future ticket from a prior-level lootbox, not a day-1 purchase. Earlier lootbox buying
+        level is a future ticket from a prior-level lootbox, not a day-1 ticket purchase. Earlier lootbox buying
         creates earlier positions at every future level the lootbox touches.</li>
       <li><strong>Lootboxes are the highest-EV product for engaged players.</strong> Above the
         activity score breakeven, lootboxes return more per ETH than tickets. They also direct
@@ -4766,7 +4770,7 @@
       observed stalls, but this comparison requires foreknowledge of the stall and omits the
       cross-level value of future tickets. Ex ante, lootboxes dominate. When players observe a
       stall in progress, the reactive shift to tickets is itself the mechanism that ends it.</p>
-    <p>The optimization thesis closes a potential gap in the resilience argument. The resilience thesis
+    <p>The resilience thesis
       assumes rational actors take +EV opportunities. The optimization thesis shows that the specific
       +EV opportunity rational actors take is the one that maximally funds the mechanical defense.
       A population of optimizers produces maximum mechanical defense as a side effect of self-interested
@@ -4790,9 +4794,18 @@
       <li>
         <p><strong>The thesis assumes people continue to enjoy gambling.</strong> Every defense ultimately
           depends on rational actors taking +EV opportunities that carry variance. If the entire player base
-          became sufficiently risk-averse, they might decline high-variance +EV bets despite the math favoring action.
+          became sufficiently risk-averse, they might decline high-variance +$EV bets despite the math favoring action.
           This is not a practical concern (the history of gambling suggests otherwise), but risk tolerance
           is an assumption, not a guarantee.</p>
+      </li>
+      <li>
+        <p><strong>BURNIE is not fully modeled.</strong> This paper treats 1,000 BURNIE as equivalent to one ticket
+          at the current level. In reality, BURNIE is a liquid token with competing uses (ticket burns, decimator
+          entries, coinflip wagers, market sales) whose optimal allocation depends on level velocity, activity
+          score, and the actions of other players. A full treatment would require modeling it as a liquid asset
+          with endogenous pricing. The 1,000 BURNIE = 1 current-level ticket equivalence is how the contract itself
+          values
+          BURNIE internally, so the simplification is consistent with the protocol's own accounting.</p>
       </li>
       <li>
         <p><strong>Terminal growth bound.</strong> The ratchet means each level requires at least as much ETH as the
