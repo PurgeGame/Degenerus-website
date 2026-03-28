@@ -1,0 +1,400 @@
+/* styles/replay.css -- Jackpot Replay Viewer */
+
+.replay-panel {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.replay-panel .panel-header h2 {
+  font-size: clamp(1rem, 3vw, 1.3rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* --- Controls bar --- */
+
+.replay-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: clamp(0.5rem, 2vw, 0.75rem);
+  margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+}
+
+.replay-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+  min-width: 140px;
+}
+
+.replay-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+
+.replay-select {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b6b8d' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.25em;
+  padding-right: 2rem;
+}
+
+.replay-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.replay-select:hover {
+  border-color: var(--accent-secondary);
+}
+
+.replay-reveal-btn {
+  white-space: nowrap;
+  align-self: flex-end;
+  min-height: 38px;
+}
+
+/* --- Ticket info bar --- */
+
+.replay-ticket-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  margin-bottom: clamp(0.75rem, 3vw, 1rem);
+  font-size: 0.85rem;
+}
+
+.replay-ticket-count {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.replay-ticket-detail {
+  color: var(--text-dim);
+}
+
+.replay-winner-text {
+  color: var(--success) !important;
+}
+
+/* --- Ticket token (whitepaper style: 2x2 grid with flame center) --- */
+
+.replay-ticket {
+  width: clamp(160px, 40vw, 240px);
+  aspect-ratio: 1;
+  margin: 0 auto clamp(0.75rem, 3vw, 1.25rem);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  position: relative;
+  background: var(--bg-tertiary);
+  border: 3px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* Cross lines */
+.replay-ticket::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: var(--border-color);
+  transform: translateX(-50%);
+  z-index: 2;
+}
+.replay-ticket::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--border-color);
+  transform: translateY(-50%);
+  z-index: 2;
+}
+
+.replay-tq {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  padding: 0.25rem;
+}
+
+.replay-tq .badge-img {
+  width: 70%;
+  max-width: 80px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.replay-tq.revealed .badge-img {
+  opacity: 1;
+}
+
+.replay-tq .trait-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: capitalize;
+  margin-top: 0.15rem;
+  text-align: center;
+  line-height: 1.1;
+}
+
+.replay-tq.revealed .trait-label {
+  color: var(--text-secondary);
+}
+
+/* Center flame */
+.replay-ticket-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  width: 28%;
+  height: 28%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.replay-ticket-center img {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-45deg);
+  filter: drop-shadow(0 0 6px rgba(245, 166, 35, 0.5));
+}
+
+/* --- Distributions --- */
+
+.replay-distributions {
+  margin-top: clamp(0.5rem, 2vw, 0.75rem);
+}
+
+.replay-dist-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin: 0 0 0.5rem;
+}
+
+.replay-dist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.replay-dist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.replay-dist-winner {
+  font-weight: 600;
+  color: var(--accent-secondary);
+  font-family: monospace;
+}
+
+.replay-dist-amount {
+  font-weight: 700;
+  color: var(--success);
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.replay-dist-type {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* --- Empty state --- */
+
+.replay-empty {
+  text-align: center;
+  padding: clamp(2rem, 6vw, 3rem) 1rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+/* --- Spin + Scratch quadrant states (ported from jackpot-demo.html) --- */
+
+.replay-tq.q-has-trait {
+  background: rgba(160, 200, 230, 0.65);
+}
+
+.replay-tq.q-no-tickets {
+  background: rgba(239, 120, 120, 0.5);
+}
+
+.replay-tq.q-scratchable {
+  background: #7ca8c4;
+}
+
+.replay-tq.q-has-tickets {
+  background: rgba(22, 163, 74, 0.6);
+}
+
+/* --- Scratch canvas --- */
+
+.replay-scratch-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* --- Prize reveal overlay --- */
+
+.replay-prize-reveal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.replay-prize-reveal.visible {
+  opacity: 1;
+}
+
+.replay-prize-bar {
+  padding: 4px 0;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.replay-prize-bar .replay-prize-total {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  line-height: 1.2;
+}
+
+/* --- Scattered win badges --- */
+
+.replay-badge-wrap {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+  text-align: center;
+}
+
+.replay-scattered-badge {
+  width: 100%;
+  display: block;
+  opacity: 0.85;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.25));
+  object-fit: contain;
+}
+
+/* --- Hint text --- */
+
+.replay-hint {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  min-height: 1.2em;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* --- Spin animation --- */
+
+.replay-ticket-center.spinning img {
+  animation: replay-flame-pulse 0.6s ease-in-out infinite;
+}
+
+@keyframes replay-flame-pulse {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(245, 166, 35, 0.5)) brightness(1); }
+  50% { filter: drop-shadow(0 0 6px rgba(245, 166, 35, 0.5)) brightness(1.4) sepia(1) saturate(5) hue-rotate(-30deg); }
+}
+
+.replay-tq .badge-img {
+  transition: none;
+}
+
+.replay-tq.spinning .badge-img {
+  opacity: 1;
+}
+
+.replay-tq.q-has-trait .badge-img,
+.replay-tq.q-no-tickets .badge-img,
+.replay-tq.q-scratchable .badge-img {
+  opacity: 1;
+}
+
+/* --- Mobile --- */
+
+@media (max-width: 640px) {
+  .replay-controls {
+    flex-direction: column;
+  }
+
+  .replay-control-group {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .replay-reveal-btn {
+    width: 100%;
+  }
+}
