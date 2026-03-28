@@ -2,9 +2,12 @@
 // Browse historical jackpot draws: pick a level/day, view tickets, replay the reveal animation.
 // Slot-machine spin cycles badges through quadrants with live background coloring per player
 // trait ownership, then owned quadrants get a canvas scratch-off that reveals prize amounts.
+// Center diamond scratches to reveal BURNIE wins (farFutureCoin distributions).
+//
+// Ported faithfully from jackpot-demo.html scratch/reveal UX.
 
 import { deriveWinningTraits, traitToBadge, toDisplayOrder, DISPLAY_ORDER } from '../app/jackpot-data.js';
-import { formatEth, truncateAddress } from '../app/utils.js';
+import { formatEth, formatBurnie, truncateAddress } from '../app/utils.js';
 import { playSound } from '../app/audio.js';
 import { API_BASE, BADGE_QUADRANTS, BADGE_COLORS, BADGE_ITEMS, badgeCircularPath } from '../app/constants.js';
 
@@ -19,6 +22,7 @@ async function replayFetch(path) {
 const BRUSH_R = 22;
 const REVEAL_THRESHOLD = 0.75;
 const GRID_RES = 40;
+const CENTER_GRID_RES = 20;
 
 function makeScratchGrid(res) { return new Uint8Array(res * res); }
 
@@ -46,6 +50,16 @@ function gridCoverage(grid) {
   return cleared / grid.length;
 }
 
+/**
+ * Format a prize amount for display in overlays.
+ * For ETH: uses formatEth (wei string).
+ * For BURNIE: uses formatBurnie (wei string).
+ */
+function formatPrizeAmount(weiString, currency) {
+  if (currency === 'BURNIE') return formatBurnie(weiString);
+  return formatEth(weiString);
+}
+
 // --- Component ---
 
 class ReplayPanel extends HTMLElement {
@@ -61,12 +75,21 @@ class ReplayPanel extends HTMLElement {
   #playerTraitIds = new Set();  // Set<number> of owned trait IDs
   #traitsCacheAddress = null;   // address for which #playerTraitIds was fetched
   #animId = 0;                  // spin cancellation token (increment to cancel running spin)
+  #spinning = false;            // true while spin animation is running
   #scratched = [false, false, false, false];  // per-quadrant scratch completion
   #scratchGrids = [null, null, null, null];   // per-quadrant Uint8Array scratch grids
+  #greenRevealed = [false, false, false, false]; // per-quadrant first-badge green flash
+  #badgesRevealed = [[], [], [], []];         // per-badge tracking within each quadrant
+  #quadBadgeBounds = [null, null, null, null]; // per-quadrant badge hit circles
   #quadOwned = [false, false, false, false];  // per-quadrant trait ownership after spin
   #quadWinArrays = [[], [], [], []];          // per-quadrant prize arrays
+  #centerWins = [];                            // far-future coin wins (center diamond)
+  #centerScratched = false;                    // center diamond scratch state
+  #centerScratchGrid = null;                   // center diamond scratch grid
   #audioCtx = null;             // Web Audio context for SFX
   #scratchNode = null;          // active scratch noise node
+  #mouseIsDown = false;         // global mouse button state
+  #badgeCache = new Map();      // path → warmed Image (preloaded badge SVG cache)
 
   connectedCallback() {
     this.innerHTML = `
@@ -101,29 +124,29 @@ class ReplayPanel extends HTMLElement {
         <div class="replay-ticket" data-bind="card-grid">
           <div class="replay-tq" data-pos="tl">
             <img class="badge-img" src="" alt="">
-            <span class="trait-label">?</span>
             <div class="replay-prize-reveal" data-pos="tl"></div>
             <canvas class="replay-scratch-canvas" data-pos="tl"></canvas>
           </div>
           <div class="replay-tq" data-pos="tr">
             <img class="badge-img" src="" alt="">
-            <span class="trait-label">?</span>
             <div class="replay-prize-reveal" data-pos="tr"></div>
             <canvas class="replay-scratch-canvas" data-pos="tr"></canvas>
           </div>
           <div class="replay-tq" data-pos="bl">
             <img class="badge-img" src="" alt="">
-            <span class="trait-label">?</span>
             <div class="replay-prize-reveal" data-pos="bl"></div>
             <canvas class="replay-scratch-canvas" data-pos="bl"></canvas>
           </div>
           <div class="replay-tq" data-pos="br">
             <img class="badge-img" src="" alt="">
-            <span class="trait-label">?</span>
             <div class="replay-prize-reveal" data-pos="br"></div>
             <canvas class="replay-scratch-canvas" data-pos="br"></canvas>
           </div>
-          <div class="replay-ticket-center"><img src="/whitepaper/flame-center.svg" alt=""></div>
+          <div class="replay-ticket-center" data-bind="center">
+            <img src="/specials/special_none.svg" alt="Flame" class="replay-flame">
+            <div class="replay-center-prize" data-bind="center-prize"></div>
+            <canvas class="replay-center-canvas" data-bind="center-canvas"></canvas>
+          </div>
         </div>
 
         <p class="replay-hint" data-bind="hint"></p>
@@ -143,12 +166,67 @@ class ReplayPanel extends HTMLElement {
     this.querySelector('[data-bind="player-select"]').addEventListener('change', (e) => this.#onPlayerChange(e));
     this.querySelector('[data-bind="reveal-btn"]').addEventListener('click', () => this.#triggerReveal());
 
+    // Global mouse button tracking for scratch stop on mouseup
+    this._onMouseDown = () => {
+      this.#mouseIsDown = true;
+      if (this.#audioCtx && this.#audioCtx.state === 'suspended') this.#audioCtx.resume();
+    };
+    this._onMouseUp = () => {
+      this.#mouseIsDown = false;
+      this.#sfxScratchStop();
+    };
+    document.addEventListener('mousedown', this._onMouseDown);
+    document.addEventListener('mouseup', this._onMouseUp);
+
+    // Skip spin on center flame click
+    const centerEl = this.querySelector('[data-bind="center"]');
+    if (centerEl) {
+      centerEl.addEventListener('click', () => {
+        if (!this.#spinning) return;
+        this.#animId++;
+        this.#spinning = false;
+      });
+    }
+
     this.#loadDays();
+    this.#preloadBadges(); // warm browser cache for all badge SVGs in background
   }
 
   disconnectedCallback() {
     this.#animId++;  // cancel any running spin
     this.#sfxScratchStop();
+    document.removeEventListener('mousedown', this._onMouseDown);
+    document.removeEventListener('mouseup', this._onMouseUp);
+  }
+
+  // Preload all 256 badge SVGs into the browser cache so spin src-swaps render instantly.
+  // Fires-and-forgets in the background; does not block the UI.
+  #preloadBadges() {
+    const BADGE_CATEGORIES = ['crypto', 'zodiac', 'cards', 'dice'];
+    let i = 0;
+    const paths = [];
+    for (const cat of BADGE_CATEGORIES) {
+      for (let sym = 0; sym < 8; sym++) {
+        for (let col = 0; col < 8; col++) {
+          paths.push(badgeCircularPath(cat, sym, col));
+        }
+      }
+    }
+    // Load one at a time to avoid flooding the network on first visit
+    const loadNext = () => {
+      if (i >= paths.length) return;
+      const path = paths[i++];
+      if (this.#badgeCache.has(path)) { loadNext(); return; }
+      const img = new Image();
+      img.onload = img.onerror = () => {
+        this.#badgeCache.set(path, img);
+        loadNext();
+      };
+      img.src = path;
+    };
+    // Kick off up to 8 parallel preload chains
+    const concurrency = Math.min(8, paths.length);
+    for (let c = 0; c < concurrency; c++) loadNext();
   }
 
   // --- Data Loading ---
@@ -172,13 +250,33 @@ class ReplayPanel extends HTMLElement {
       const data = await replayFetch(`/tickets/${level}`);
       this.#tickets = data.players;
 
+      // Compute winnings per player from distributions (ETH vs BURNIE)
+      const ethByAddr = {};
+      const burnieByAddr = {};
+      let ethCount = 0, burnieCount = 0;
+      for (const dist of this.#distributions) {
+        const addr = dist.winner.toLowerCase();
+        const isBurnie = dist.currency === 'BURNIE' || dist.distributionType.toLowerCase().includes('coin');
+        if (isBurnie) {
+          burnieByAddr[addr] = (burnieByAddr[addr] || 0n) + BigInt(dist.amount || '0');
+        } else {
+          ethByAddr[addr] = (ethByAddr[addr] || 0n) + BigInt(dist.amount || '0');
+        }
+      }
+
       const select = this.querySelector('[data-bind="player-select"]');
       select.innerHTML = '<option value="">All players (' + data.players.length + ')</option>' +
-        data.players.map(p =>
-          `<option value="${p.address}">${truncateAddress(p.address)} (${p.ticketCount} tickets)</option>`
-        ).join('');
+        data.players.map(p => {
+          const addr = p.address.toLowerCase();
+          const eth = ethByAddr[addr];
+          const burnie = burnieByAddr[addr];
+          const parts = [];
+          if (eth) parts.push(`${formatEth(eth.toString())} ETH`);
+          if (burnie) parts.push(`${formatBurnie(burnie.toString())} BURNIE`);
+          const wonLabel = parts.length > 0 ? ` | Won ${parts.join(' + ')}` : '';
+          return `<option value="${p.address}">${truncateAddress(p.address)} (${p.ticketCount} tix${wonLabel})</option>`;
+        }).join('');
 
-      // Also store as player list
       this.#players = data.players.map(p => p.address);
     } catch (err) {
       console.warn('[ReplayPanel] Failed to load tickets:', err);
@@ -193,6 +291,27 @@ class ReplayPanel extends HTMLElement {
     } catch (err) {
       console.warn('[ReplayPanel] Failed to load day detail:', err);
       return null;
+    }
+  }
+
+  async #loadDistributionsForLevel(level) {
+    // Try new endpoint first (has traitId), fall back to history endpoint
+    try {
+      const data = await replayFetch('/distributions/' + level);
+      this.#distributions = data.distributions || [];
+      return;
+    } catch {}
+    try {
+      const res = await fetch(API_BASE + '/history/jackpots?level=' + level + '&limit=100');
+      if (!res.ok) return;
+      const data = await res.json();
+      this.#distributions = (data.items || []).map(d => ({
+        level: d.level, winner: d.winner, amount: d.amount,
+        traitId: d.traitId ?? null, ticketIndex: d.ticketIndex ?? null,
+        distributionType: d.distributionType,
+      }));
+    } catch (err) {
+      console.warn('[ReplayPanel] Failed to load distributions:', err);
     }
   }
 
@@ -237,17 +356,28 @@ class ReplayPanel extends HTMLElement {
     this.querySelector('[data-bind="reveal-btn"]').disabled = !hasRng || !this.#selectedPlayer;
     this.querySelector('[data-bind="empty-state"]').hidden = true;
 
-    // Load day detail + figure out level from distributions
-    const detail = await this.#loadDayDetail(dayNum);
-    if (detail && detail.distributions.length > 0) {
-      this.#selectedLevel = detail.distributions[0].level;
-      // Tickets are stored at purchaseLevel = gameLevel + 1
-      await this.#loadTickets(this.#selectedLevel + 1);
-      this.#showDistributions(detail.distributions);
+    // Load day detail + distributions (may fallback to history endpoint)
+    await this.#loadDayDetail(dayNum);
+
+    // Determine level from distributions or estimate from day number
+    if (this.#distributions.length > 0) {
+      this.#selectedLevel = this.#distributions[0].level;
     } else {
-      // No distributions — load tickets for level 1 (purchase level for game level 0)
-      this.#selectedLevel = 0;
-      await this.#loadTickets(1);
+      // Estimate: each level is ~8-10 days, so level = floor((day-1) / 8)
+      this.#selectedLevel = Math.max(0, Math.floor((dayNum - 1) / 8));
+    }
+
+    // Fallback: fetch distributions from history if replay endpoint returned none
+    if (this.#distributions.length === 0) {
+      await this.#loadDistributionsForLevel(this.#selectedLevel);
+    }
+
+    // Tickets are stored at purchaseLevel = gameLevel + 1
+    await this.#loadTickets(this.#selectedLevel + 1);
+
+    if (this.#distributions.length > 0) {
+      this.#showDistributions(this.#distributions);
+    } else {
       this.querySelector('[data-bind="distributions"]').hidden = true;
     }
   }
@@ -257,7 +387,11 @@ class ReplayPanel extends HTMLElement {
     this.#selectedPlayer = addr || null;
     this.#updateTicketInfo();
     this.#loadPlayerTraits();
-    // Update reveal button state based on both day and player
+    // Re-render distributions to update (YOU) labels
+    if (this.#distributions.length > 0) {
+      this.#showDistributions(this.#distributions);
+    }
+    // Update reveal button state
     const rngEntry = this.#rngDays.find(d => d.day === this.#selectedDay);
     const hasRng = rngEntry && rngEntry.finalWord && rngEntry.finalWord !== '0';
     this.querySelector('[data-bind="reveal-btn"]').disabled = !hasRng || !this.#selectedPlayer;
@@ -269,7 +403,6 @@ class ReplayPanel extends HTMLElement {
     const detailEl = this.querySelector('[data-bind="ticket-detail"]');
 
     if (!this.#selectedPlayer) {
-      // Show aggregate
       const total = this.#tickets.reduce((sum, t) => sum + t.ticketCount, 0);
       countEl.textContent = `${total.toLocaleString()} total tickets`;
       detailEl.textContent = `across ${this.#tickets.length} players`;
@@ -283,10 +416,9 @@ class ReplayPanel extends HTMLElement {
       detailEl.textContent = `${player.totalMintedOnLevel.toLocaleString()} minted on level`;
       infoEl.hidden = false;
 
-      // Highlight if this player won
-      const won = this.#distributions.find(d => d.winner === this.#selectedPlayer);
+      const won = this.#distributions.find(d => d.winner.toLowerCase() === this.#selectedPlayer.toLowerCase());
       if (won) {
-        countEl.textContent += ' — WINNER';
+        countEl.textContent += ' -- WINNER';
         countEl.classList.add('replay-winner-text');
       } else {
         countEl.classList.remove('replay-winner-text');
@@ -305,13 +437,18 @@ class ReplayPanel extends HTMLElement {
       return;
     }
 
-    list.innerHTML = distributions.map(d => `
-      <div class="replay-dist-item">
-        <span class="replay-dist-winner">${truncateAddress(d.winner)}</span>
-        <span class="replay-dist-amount">${formatEth(d.amount)} ETH</span>
+    const addr = this.#selectedPlayer?.toLowerCase();
+    list.innerHTML = distributions.map(d => {
+      const isMe = addr && d.winner.toLowerCase() === addr;
+      const currency = d.currency || (d.distributionType.toLowerCase().includes('coin') ? 'BURNIE' : 'ETH');
+      const formatted = currency === 'BURNIE' ? formatBurnie(d.amount) : formatEth(d.amount);
+      return `
+      <div class="replay-dist-item${isMe ? ' replay-dist-mine' : ''}">
+        <span class="replay-dist-winner">${truncateAddress(d.winner)}${isMe ? ' (YOU)' : ''}</span>
+        <span class="replay-dist-amount">${formatted} ${currency}</span>
         <span class="replay-dist-type">${d.distributionType}</span>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
 
     container.hidden = false;
   }
@@ -327,7 +464,7 @@ class ReplayPanel extends HTMLElement {
     this.#resetCards();
     await this.#loadPlayerTraits(); // ensure traits loaded
 
-    // Derive winning traits (same logic as before)
+    // Derive winning traits from RNG word (or from distribution traitIds if available)
     let traits;
     const distTraitIds = this.#distributions
       .filter(d => d.traitId != null)
@@ -339,10 +476,10 @@ class ReplayPanel extends HTMLElement {
       traits = deriveWinningTraits(rngEntry.finalWord);
     }
 
-    // Map distributions to quadrants for prize data
-    this.#distributePrizes();
-
     const displayTraits = toDisplayOrder(traits);
+
+    // Map distributions to quadrants for prize data
+    this.#distributePrizes(displayTraits);
 
     const btn = this.querySelector('[data-bind="reveal-btn"]');
     btn.disabled = true;
@@ -354,21 +491,52 @@ class ReplayPanel extends HTMLElement {
     btn.textContent = 'Replay';
   }
 
-  #distributePrizes() {
+  #distributePrizes(displayTraits) {
     this.#quadWinArrays = [[], [], [], []];
-    for (const dist of this.#distributions) {
-      if (dist.traitId == null) continue;
-      const contractQuadrant = Math.floor(dist.traitId / 64);
-      // DISPLAY_ORDER[displayPos] = contractQuadrant, so indexOf gives displayPos
-      const displayPos = DISPLAY_ORDER.indexOf(contractQuadrant);
-      if (displayPos >= 0 && displayPos <= 3) {
-        this.#quadWinArrays[displayPos].push(dist);
+    this.#centerWins = [];
+    const addr = this.#selectedPlayer?.toLowerCase();
+    if (!addr) return;
+
+    const playerDists = this.#distributions.filter(d => d.winner.toLowerCase() === addr);
+    if (playerDists.length === 0) return;
+
+    // Only farFutureCoin goes to center diamond — all other types (including coin) go to quadrants
+    const quadDists = [];
+    for (const dist of playerDists) {
+      if (dist.distributionType === 'farFutureCoin') {
+        this.#centerWins.push(dist);
+      } else {
+        quadDists.push(dist);
+      }
+    }
+
+    // Map quadrant distributions using traitId → contract quadrant → display position
+    for (const dist of quadDists) {
+      if (dist.traitId != null) {
+        // Precise mapping: traitId / 64 gives contract quadrant
+        const contractQ = Math.floor(dist.traitId / 64);
+        const displayPos = DISPLAY_ORDER.indexOf(contractQ);
+        if (displayPos >= 0 && displayPos <= 3) {
+          this.#quadWinArrays[displayPos].push(dist);
+        }
+      } else if (displayTraits) {
+        // Fallback: spread across owned quadrants (no traitId available)
+        const ownedPositions = [];
+        for (let i = 0; i < 4; i++) {
+          if (displayTraits[i] != null && this.#playerTraitIds.has(displayTraits[i])) {
+            ownedPositions.push(i);
+          }
+        }
+        if (ownedPositions.length > 0) {
+          this.#quadWinArrays[ownedPositions[0]].push(dist);
+        }
       }
     }
   }
 
   async #runSpin(displayTraits) {
     const myId = ++this.#animId;
+    this.#spinning = true;
     const quads = this.querySelectorAll('.replay-tq');
     const hint = this.querySelector('[data-bind="hint"]');
 
@@ -380,15 +548,36 @@ class ReplayPanel extends HTMLElement {
     // Reset state
     this.#scratched = [false, false, false, false];
     this.#scratchGrids = [null, null, null, null];
+    this.#greenRevealed = [false, false, false, false];
+    this.#badgesRevealed = [[], [], [], []];
+    this.#quadBadgeBounds = [null, null, null, null];
+    this.#centerScratched = false;
+    this.#centerScratchGrid = null;
     this.#sfxScratchStop();
 
     // Start flame spinning animation
-    const center = this.querySelector('.replay-ticket-center');
+    const center = this.querySelector('[data-bind="center"]');
     if (center) center.classList.add('spinning');
+
+    // Hide center scratch canvas and prize
+    this.#hideCenterScratch();
 
     // Clear canvases and prizes
     if (hint) hint.textContent = '';
     this.#clearScatteredBadges();
+    const mainBadges = this.querySelectorAll('.replay-ticket .badge-img');
+    for (const mb of mainBadges) {
+      mb.style.display = '';
+      // Set explicit pixel dimensions so SVGs render at full size even during rapid src swaps.
+      // Guard against zero rect (element not yet laid out) — fall back to 120px placeholder.
+      const rect = mb.parentElement.getBoundingClientRect();
+      const rawSize = Math.min(rect.width, rect.height);
+      const size = rawSize > 0 ? Math.round(rawSize * 0.92) : 120;
+      console.log('[badge-size]', rawSize, '->', size);
+      mb.setAttribute('width', size);
+      mb.setAttribute('height', size);
+    }
+
     for (let i = 0; i < 4; i++) {
       const canvas = quads[i].querySelector('.replay-scratch-canvas');
       if (canvas) {
@@ -417,7 +606,22 @@ class ReplayPanel extends HTMLElement {
 
     return new Promise(resolve => {
       const step = () => {
-        if (myId !== this.#animId) { resolve(); return; }
+        if (myId !== this.#animId) {
+          // Spin was cancelled (e.g. flame click) -- render final state and finish
+          for (let i = 0; i < 4; i++) {
+            const contractQ = DISPLAY_ORDER[i];
+            const category = BADGE_QUADRANTS[contractQ];
+            const path = badgeCircularPath(category, targets[i].sym, targets[i].col);
+            const img = quads[i].querySelector('.badge-img');
+            if (img) { img.src = path; img.style.opacity = '1'; }
+          }
+          this.#afterSpin(displayTraits, targets, quads, hint);
+          // Auto-reveal all quadrants and center
+          for (let i = 0; i < 4; i++) this.#revealQuadrant(i);
+          this.#revealCenter();
+          resolve();
+          return;
+        }
 
         this.#sfxTick(locksDone);
 
@@ -432,15 +636,17 @@ class ReplayPanel extends HTMLElement {
           const img = quads[i].querySelector('.badge-img');
           if (img) { img.src = path; img.style.opacity = '1'; }
 
-          // Background coloring based on ownership of currently-displayed trait
-          const currentTraitId = contractQ * 64 + sym * 8 + col;
+          // Background coloring during spin
           quads[i].classList.remove('q-has-trait', 'q-no-tickets', 'q-scratchable', 'q-has-tickets');
           if (lockedSymbols[i] && lockedColors[i]) {
             // Fully locked -- show ownership state
             quads[i].classList.add(this.#quadOwned[i] ? 'q-has-trait' : 'q-no-tickets');
+          } else if (lockedSymbols[i]) {
+            // Symbol locked but color still spinning -- show based on actual ownership
+            quads[i].classList.add(this.#quadOwned[i] ? 'q-has-trait' : 'q-no-tickets');
           } else {
-            // Color or symbol still spinning -- color based on displayed badge ownership
-            quads[i].classList.add(this.#playerTraitIds.has(currentTraitId) ? 'q-has-trait' : 'q-no-tickets');
+            // Still spinning -- flash randomly like the demo
+            quads[i].classList.add(Math.random() < 0.5 ? 'q-has-trait' : 'q-no-tickets');
           }
         }
 
@@ -468,6 +674,7 @@ class ReplayPanel extends HTMLElement {
         if (locksDone >= totalLocks) {
           const anyOwned = this.#quadOwned.some(o => o);
           this.#sfxAllLocked(anyOwned);
+          this.#spinning = false;
 
           // Render final badges
           for (let i = 0; i < 4; i++) {
@@ -478,7 +685,7 @@ class ReplayPanel extends HTMLElement {
             if (img) img.src = path;
           }
 
-          this.#afterSpin(displayTraits, quads, hint);
+          this.#afterSpin(displayTraits, targets, quads, hint);
           resolve();
           return;
         }
@@ -490,9 +697,9 @@ class ReplayPanel extends HTMLElement {
     });
   }
 
-  #afterSpin(displayTraits, quads, hint) {
+  #afterSpin(displayTraits, targets, quads, hint) {
     // Stop flame spinning
-    const center = this.querySelector('.replay-ticket-center');
+    const center = this.querySelector('[data-bind="center"]');
     if (center) center.classList.remove('spinning');
 
     let anyOwned = false;
@@ -500,36 +707,54 @@ class ReplayPanel extends HTMLElement {
       quads[i].classList.remove('q-has-trait', 'q-no-tickets');
       if (this.#quadOwned[i]) {
         anyOwned = true;
+        quads[i].classList.remove('q-no-tickets');
         quads[i].classList.add('q-scratchable');
-        // Init scratch canvas
+
+        // Init scratch canvas with badge cover
         const canvas = quads[i].querySelector('.replay-scratch-canvas');
         const badgeSrc = quads[i].querySelector('.badge-img').src;
-        this.#initScratchCanvas(canvas, badgeSrc);
+        this.#initScratchCanvasWithBadge(canvas, badgeSrc);
         canvas.style.transition = 'none';
         canvas.style.opacity = '1';
         canvas.style.pointerEvents = 'auto';
+
         // Wire scratch events
         this.#wireCanvas(canvas, i);
-        // Hide main badge, place scattered win badges
-        const mainBadge = quads[i].querySelector('.badge-img');
-        mainBadge.style.display = 'none';
-        if (this.#quadWinArrays[i].length > 0) {
-          this.#placeWinBadges(i, displayTraits[i]);
-        }
       } else {
         this.#scratched[i] = true;
         quads[i].classList.add('q-no-tickets');
       }
     }
 
+    // Now hide main badges and place scattered win badges for owned quadrants
+    for (let i = 0; i < 4; i++) {
+      if (this.#quadOwned[i]) {
+        const mainBadge = quads[i].querySelector('.badge-img');
+        mainBadge.style.display = 'none';
+        if (this.#quadWinArrays[i].length > 0) {
+          this.#placeWinBadges(i, displayTraits[i]);
+        }
+      }
+    }
+
+    // Show center diamond scratch if player has BURNIE wins
+    if (this.#centerWins.length > 0) {
+      this.#showCenterScratch();
+      anyOwned = true;
+    }
+
     if (anyOwned) {
       if (hint) hint.textContent = 'Scratch to find your winners!';
+    } else if (this.#centerWins.length > 0) {
+      if (hint) hint.textContent = 'You won BURNIE from the center pool!';
     } else {
       if (hint) hint.textContent = 'No matching tickets this round';
     }
   }
 
-  #initScratchCanvas(canvas, badgeSrc) {
+  // --- Canvas scratch initialization ---
+
+  #initScratchCanvasWithBadge(canvas, badgeSrc) {
     const quad = canvas.parentElement;
     const rect = quad.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
@@ -538,7 +763,7 @@ class ReplayPanel extends HTMLElement {
     canvas.style.width = rect.width + 'px';
     canvas.style.height = rect.height + 'px';
     const ctx = canvas.getContext('2d');
-    // Draw blue cover with badge image
+    // Draw blue cover with badge image (matching demo's drawBadgeCover)
     ctx.fillStyle = '#b8d4e8';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const img = new Image();
@@ -562,6 +787,8 @@ class ReplayPanel extends HTMLElement {
     ctx.globalCompositeOperation = 'source-over';
   }
 
+  // --- Quadrant scratch wiring ---
+
   #wireCanvas(canvas, qIdx) {
     let lastPos = null;
     const onScratch = (cx, cy) => {
@@ -572,6 +799,29 @@ class ReplayPanel extends HTMLElement {
       this.#scratchAt(canvas, cx, cy);
       if (!this.#scratchGrids[qIdx]) this.#scratchGrids[qIdx] = makeScratchGrid(GRID_RES);
       markGridCells(this.#scratchGrids[qIdx], GRID_RES, canvas.width, canvas.height, cx, cy, brushR);
+
+      // Check if scratch stroke reveals a win badge (green flash like demo)
+      if (this.#quadWinArrays[qIdx].length > 0 && this.#quadBadgeBounds[qIdx]) {
+        const pctX = (cx / canvas.width) * 100;
+        const pctY = (cy / canvas.height) * 100;
+        const circles = this.#quadBadgeBounds[qIdx];
+        for (let ci = 0; ci < circles.length; ci++) {
+          if (this.#badgesRevealed[qIdx].indexOf(ci) !== -1) continue;
+          const ddx = pctX - circles[ci].cx, ddy = pctY - circles[ci].cy;
+          if (ddx * ddx + ddy * ddy <= circles[ci].r * circles[ci].r) {
+            this.#badgesRevealed[qIdx].push(ci);
+            this.#sfxGreenReveal();
+            if (!this.#greenRevealed[qIdx]) {
+              this.#greenRevealed[qIdx] = true;
+              const quads = this.querySelectorAll('.replay-tq');
+              const quad = quads[qIdx];
+              quad.classList.remove('q-scratchable');
+              quad.classList.add('q-has-tickets');
+            }
+          }
+        }
+      }
+
       // Interpolate between last position for smooth strokes
       if (lastPos) {
         const dx = cx - lastPos.x, dy = cy - lastPos.y;
@@ -588,11 +838,13 @@ class ReplayPanel extends HTMLElement {
         this.#revealQuadrant(qIdx);
       }
     };
+
     const getPos = (clientX, clientY) => {
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       return { x: (clientX - rect.left) * dpr, y: (clientY - rect.top) * dpr };
     };
+
     canvas.addEventListener('mousemove', (e) => {
       if (this.#scratched[qIdx]) return;
       const p = getPos(e.clientX, e.clientY);
@@ -614,6 +866,151 @@ class ReplayPanel extends HTMLElement {
     canvas.addEventListener('touchend', () => { lastPos = null; this.#sfxScratchStop(); });
   }
 
+  // --- Center diamond scratch ---
+
+  #hideCenterScratch() {
+    const canvas = this.querySelector('[data-bind="center-canvas"]');
+    const prize = this.querySelector('[data-bind="center-prize"]');
+    const flame = this.querySelector('.replay-flame');
+    const center = this.querySelector('[data-bind="center"]');
+    if (canvas) { canvas.style.display = 'none'; canvas.style.opacity = '1'; canvas.style.pointerEvents = 'auto'; }
+    if (prize) { prize.style.display = 'none'; prize.innerHTML = ''; prize.classList.remove('visible'); }
+    if (flame) { flame.style.display = ''; flame.style.filter = ''; }
+    if (center) { center.classList.remove('revealed'); }
+  }
+
+  #showCenterScratch() {
+    const canvas = this.querySelector('[data-bind="center-canvas"]');
+    if (!canvas) return;
+    const center = canvas.parentElement;
+    const rect = center.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+
+    // Hide the flame image
+    const flame = this.querySelector('.replay-flame');
+    if (flame) flame.style.display = 'none';
+
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+
+    // Dark cover with green-tinted flame
+    ctx.fillStyle = '#0a1e1a';
+    ctx.fillRect(0, 0, w, h);
+
+    // Draw tinted flame on the cover
+    const img = new Image();
+    img.onload = () => {
+      // Flame SVG viewBox is 38x54 (portrait) -- preserve aspect ratio
+      const svgRatio = 38 / 54;
+      const maxSize = Math.min(w, h) * 0.7;
+      const drawW = maxSize * svgRatio;
+      const drawH = maxSize;
+      ctx.filter = 'sepia(1) saturate(3) hue-rotate(120deg) brightness(1.4)';
+      ctx.drawImage(img, (w - drawW) / 2, (h - drawH) / 2, drawW, drawH);
+      ctx.filter = 'none';
+    };
+    img.src = '/specials/special_none.svg';
+
+    canvas.style.display = 'block';
+    canvas.style.pointerEvents = 'auto';
+
+    // Wire center scratch events
+    this.#wireCenterCanvas(canvas);
+  }
+
+  #wireCenterCanvas(canvas) {
+    let lastPos = null;
+    const onScratch = (cx, cy) => {
+      if (this.#centerScratched) return;
+      this.#sfxScratchStart();
+      const dpr = window.devicePixelRatio || 1;
+      const brushR = BRUSH_R * dpr;
+      this.#scratchAt(canvas, cx, cy);
+      if (!this.#centerScratchGrid) this.#centerScratchGrid = makeScratchGrid(CENTER_GRID_RES);
+      markGridCells(this.#centerScratchGrid, CENTER_GRID_RES, canvas.width, canvas.height, cx, cy, brushR);
+
+      // Interpolate between last position for smooth strokes
+      if (lastPos) {
+        const dx = cx - lastPos.x, dy = cy - lastPos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const steps = Math.max(1, Math.floor(dist / 4));
+        for (let s = 1; s < steps; s++) {
+          const ix = lastPos.x + dx * s / steps, iy = lastPos.y + dy * s / steps;
+          this.#scratchAt(canvas, ix, iy);
+          markGridCells(this.#centerScratchGrid, CENTER_GRID_RES, canvas.width, canvas.height, ix, iy, brushR);
+        }
+      }
+      lastPos = { x: cx, y: cy };
+      // Center uses 50% threshold (smaller area)
+      if (gridCoverage(this.#centerScratchGrid) >= 0.5) {
+        this.#revealCenter();
+      }
+    };
+
+    const getPos = (clientX, clientY) => {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      return { x: (clientX - rect.left) * dpr, y: (clientY - rect.top) * dpr };
+    };
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (this.#centerScratched) return;
+      const p = getPos(e.clientX, e.clientY);
+      onScratch(p.x, p.y);
+    });
+    canvas.addEventListener('mouseleave', () => { lastPos = null; this.#sfxScratchStop(); });
+    canvas.addEventListener('touchstart', (e) => {
+      if (this.#centerScratched) return;
+      e.preventDefault(); lastPos = null;
+      const t = e.touches[0], p = getPos(t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => {
+      if (this.#centerScratched) return;
+      e.preventDefault();
+      const t = e.touches[0], p = getPos(t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchend', () => { lastPos = null; this.#sfxScratchStop(); });
+  }
+
+  #revealCenter() {
+    if (this.#centerScratched || this.#centerWins.length === 0) return;
+    this.#centerScratched = true;
+    this.#sfxScratchStop();
+    this.#sfxGreenReveal();
+
+    const canvas = this.querySelector('[data-bind="center-canvas"]');
+    const prize = this.querySelector('[data-bind="center-prize"]');
+    const center = this.querySelector('[data-bind="center"]');
+
+    // Darken diamond background
+    if (center) center.classList.add('revealed');
+
+    if (canvas) {
+      canvas.style.transition = 'opacity 0.35s ease';
+      canvas.style.opacity = '0';
+      canvas.style.pointerEvents = 'none';
+    }
+
+    if (prize) {
+      const totalBurnie = this.#centerWins.reduce((s, d) => s + BigInt(d.amount || '0'), 0n);
+      const amountStr = formatBurnie(totalBurnie.toString()) + ' BURNIE';
+      prize.innerHTML = `<span class="ff-amount">${amountStr}</span><span class="ff-label">Far Future</span>`;
+      prize.style.display = 'flex';
+      prize.classList.remove('visible');
+      setTimeout(() => prize.classList.add('visible'), 200);
+    }
+
+    this.#checkAllScratched();
+  }
+
+  // --- Quadrant reveal ---
+
   #revealQuadrant(qIdx) {
     if (this.#scratched[qIdx]) return;
     this.#scratched[qIdx] = true;
@@ -622,12 +1019,15 @@ class ReplayPanel extends HTMLElement {
     const quad = quads[qIdx];
     const canvas = quad.querySelector('.replay-scratch-canvas');
     const prize = quad.querySelector('.replay-prize-reveal');
+
     // Fade out canvas
     canvas.style.transition = 'opacity 0.35s ease';
     canvas.style.opacity = '0';
     canvas.style.pointerEvents = 'none';
+
     const isWin = this.#quadWinArrays[qIdx].length > 0;
     this.#sfxReveal(isWin);
+
     quad.classList.remove('q-scratchable');
     if (isWin) {
       quad.classList.add('q-has-tickets');
@@ -637,37 +1037,56 @@ class ReplayPanel extends HTMLElement {
       const mainBadge = quad.querySelector('.badge-img');
       if (mainBadge) mainBadge.style.display = '';
     }
-    // Show prize overlay
+
+    // Show prize overlay — sum by currency type
     if (prize && isWin) {
       const wins = this.#quadWinArrays[qIdx];
-      const lines = wins.map(d => formatEth(d.amount) + ' ETH');
+      let ethTotal = 0n, burnieTotal = 0n;
+      for (const d of wins) {
+        const cur = d.currency || (d.distributionType.toLowerCase().includes('coin') ? 'BURNIE' : 'ETH');
+        if (cur === 'BURNIE') {
+          burnieTotal += BigInt(d.amount || '0');
+        } else {
+          ethTotal += BigInt(d.amount || '0');
+        }
+      }
+      const lines = [];
+      if (ethTotal > 0n) lines.push(formatEth(ethTotal.toString()) + ' ETH');
+      if (burnieTotal > 0n) lines.push(formatBurnie(burnieTotal.toString()) + ' BURNIE');
+      if (lines.length === 0) lines.push(wins.length + ' win' + (wins.length !== 1 ? 's' : ''));
       prize.innerHTML = '<div class="replay-prize-bar">' +
         lines.map(l => '<span class="replay-prize-total">' + l + '</span>').join('') +
         '</div>';
       prize.classList.remove('visible');
       setTimeout(() => prize.classList.add('visible'), 200);
     }
+
     this.#checkAllScratched();
   }
 
   #checkAllScratched() {
     const hint = this.querySelector('[data-bind="hint"]');
-    const allDone = this.#scratched.every(s => s);
+    const centerPending = this.#centerWins.length > 0 && !this.#centerScratched;
+    const allDone = this.#scratched.every(s => s) && !centerPending;
     if (allDone) {
       if (hint) hint.textContent = '';
-      const anyWon = this.#quadWinArrays.some(w => w.length > 0);
+      const anyWon = this.#quadWinArrays.some(w => w.length > 0) || this.#centerWins.length > 0;
       if (anyWon) this.#celebrate();
     } else {
-      const remaining = this.#scratched.filter(s => !s).length;
+      let remaining = this.#scratched.filter(s => !s).length;
+      if (centerPending) remaining++;
       if (hint) hint.textContent = remaining + ' area' + (remaining !== 1 ? 's' : '') + ' left to scratch';
     }
   }
+
+  // --- Scattered win badges ---
 
   #placeWinBadges(qIdx, traitId) {
     const quads = this.querySelectorAll('.replay-tq');
     const quad = quads[qIdx];
     const wins = this.#quadWinArrays[qIdx];
     if (!wins || wins.length === 0) return;
+
     // Use the winning badge for this quadrant
     const badge = traitToBadge(traitId);
     const path = badge ? badge.path : '';
@@ -676,7 +1095,9 @@ class ReplayPanel extends HTMLElement {
     if (count === 1) { minSize = 30; maxSize = 65; }
     else if (count <= 3) { minSize = 25; maxSize = 50; }
     else { minSize = 20; maxSize = 40; }
+
     const placed = [];
+    const allBounds = [];
     for (let w = 0; w < wins.length; w++) {
       let sizePct = minSize + (w / Math.max(1, wins.length - 1)) * (maxSize - minSize);
       if (wins.length === 1) sizePct = maxSize;
@@ -696,6 +1117,8 @@ class ReplayPanel extends HTMLElement {
         if (overlap === 0) break;
       }
       placed.push({ cx: bestLeft + sizePct / 2, cy: bestTop + sizePct / 2, size: sizePct });
+      allBounds.push({ left: bestLeft, top: bestTop, right: bestLeft + sizePct, bottom: bestTop + sizePct });
+
       const wrap = document.createElement('div');
       wrap.className = 'replay-badge-wrap';
       wrap.style.width = sizePct + '%';
@@ -706,6 +1129,13 @@ class ReplayPanel extends HTMLElement {
       wrap.appendChild(img);
       quad.appendChild(wrap);
     }
+
+    // Store badge hit circles for green-reveal detection during scratch
+    const circles = [];
+    for (const bb of allBounds) {
+      circles.push({ cx: (bb.left + bb.right) / 2, cy: (bb.top + bb.bottom) / 2, r: (bb.right - bb.left) / 2 });
+    }
+    this.#quadBadgeBounds[qIdx] = circles;
   }
 
   #clearScatteredBadges() {
@@ -715,24 +1145,34 @@ class ReplayPanel extends HTMLElement {
 
   #resetCards() {
     this.#animId++; // cancel any running spin
+    this.#spinning = false;
     this.#sfxScratchStop();
     const quads = this.querySelectorAll('.replay-tq');
     quads.forEach(q => {
       q.classList.remove('revealed', 'q-has-trait', 'q-no-tickets', 'q-scratchable', 'q-has-tickets');
       const img = q.querySelector('.badge-img');
-      if (img) { img.src = ''; img.alt = ''; img.style.opacity = '0'; img.style.display = ''; }
-      const label = q.querySelector('.trait-label');
-      if (label) label.textContent = '?';
+      if (img) { img.src = ''; img.alt = ''; img.style.opacity = '0'; img.style.display = ''; img.removeAttribute('width'); img.removeAttribute('height'); }
       const canvas = q.querySelector('.replay-scratch-canvas');
       if (canvas) { canvas.style.opacity = '0'; canvas.style.pointerEvents = 'none'; }
       const prize = q.querySelector('.replay-prize-reveal');
       if (prize) { prize.classList.remove('visible'); prize.innerHTML = ''; }
     });
     this.#clearScatteredBadges();
+
+    // Reset center diamond
+    this.#hideCenterScratch();
+
     this.#scratched = [false, false, false, false];
     this.#scratchGrids = [null, null, null, null];
+    this.#greenRevealed = [false, false, false, false];
+    this.#badgesRevealed = [[], [], [], []];
+    this.#quadBadgeBounds = [null, null, null, null];
     this.#quadOwned = [false, false, false, false];
     this.#quadWinArrays = [[], [], [], []];
+    this.#centerWins = [];
+    this.#centerScratched = false;
+    this.#centerScratchGrid = null;
+
     const hint = this.querySelector('[data-bind="hint"]');
     if (hint) hint.textContent = '';
   }
@@ -750,7 +1190,7 @@ class ReplayPanel extends HTMLElement {
     } catch {}
   }
 
-  // --- Web Audio SFX ---
+  // --- Web Audio SFX (ported faithfully from jackpot-demo.html) ---
 
   #getAudio() {
     if (!this.#audioCtx) this.#audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -847,6 +1287,18 @@ class ReplayPanel extends HTMLElement {
     if (!this.#scratchNode) return;
     try { this.#scratchNode.noise.stop(); } catch {}
     this.#scratchNode = null;
+  }
+
+  #sfxGreenReveal() {
+    const ctx = this.#getAudio();
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.05);
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.3);
   }
 
   #sfxReveal(isWin) {
