@@ -347,11 +347,13 @@
 
   // --- DOM creation ---
 
-  function buildNav(currentPage) {
+  function buildNav(config) {
+    config = config || {};
+    var currentPage = config.currentPage || '';
     var nav = document.createElement('nav');
     nav.className = 'unified-nav';
 
-    var pages = [
+    var pages = config.pages || [
       { key: 'beta', label: 'Beta', href: '/beta/' },
       { key: 'degenerette', label: 'Degenerette', href: '/degenerette/' },
       { key: 'whitepaper', label: 'Whitepaper', href: '/whitepaper/' },
@@ -498,7 +500,7 @@
     config = config || {};
     captureReferrer();
 
-    var nav = buildNav(config.currentPage || '');
+    var nav = buildNav(config);
 
     // Insert at top of .container or .page or body
     var container = document.querySelector('.container') || document.querySelector('.page') || document.body;

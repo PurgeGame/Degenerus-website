@@ -2290,6 +2290,7 @@
       becomes a shared objective where every ticket purchase visibly advances the group. The communal coinflip
       produces collective gambling outcomes. Deity boons create social roles. The RNG nudge
       gives players a sense of agency by allowing influence, but not control, over the game's most important outcomes.
+      The community-voted <a href="#section-creator-comp">GNRUS donations</a> add a prosocial dimension.
       These dynamics strengthen retention if they emerge, but no argument in this paper depends on them.</p>
     <h3 id="section-6">2.3 The Cross-Subsidy Mechanism</h3>
     <div class="definition">
@@ -3114,11 +3115,12 @@
     <a id="section-dgnrs-main"></a>
     <p>I am a self-funded solo dev and the only insider. There are no VCs, team
       allocations or special shill deals.</p>
-    <p>The protocol has two privileged contracts: the creator-owned <strong>vault</strong> and the
-      <strong>DGNRS token</strong> (collectively owned by players). They each receive similar treatment:
+    <p>The protocol has three privileged contracts: the creator-owned <strong>vault</strong>, the
+      <strong>DGNRS token</strong> (collectively owned by players), and the <strong>GNRUS donation
+        contract</strong>. The vault and DGNRS each receive similar treatment:
     </p>
     <ul>
-      <li>25% of stETH yield</li>
+      <li>25% of stETH yield each</li>
       <li>A nerfed deity pass (4 tickets per level with activity score boost) in afKing mode</li>
       <li>2 million BURNIE</li>
       <li>Affiliate commissions from unaffiliated players (compensation for general marketing)</li>
@@ -3152,7 +3154,13 @@
       success. The fundamental principle behind Degenerus Protocol is that a well-crafted structure of rules and
       incentives can create the conditions under which the voluntary actions of purely self-interested individuals
       reliably
-      benefit a collective.</p>
+      benefit a collective and generate positive externalities.</p>
+    <p><strong>GNRUS</strong> is the donation contract. It receives 25% of stETH yield. Each level, DGNRS
+      holders vote on a recipient address (the vault has a 5% vote bonus and can always propose).
+      The winning address receives 2% of the remaining unallocated GNRUS supply. GNRUS is also soulbound and can be
+      burned for a proportional share of the stETH yield accumulated in the contract, an amount that
+      can only grow over time. The mechanism lets the community direct a perpetual yield stream to charitable
+      causes without touching player deposits or prize pools.</p>
     <h3 id="section-permissionless-execution">4.2 Permissionless Execution</h3>
     <p>The protocol has no operator. Daily game logic (jackpot draws, drip distributions, coinflip resolution,
       level transitions) executes when any player calls the permissionless <code>advanceGame()</code> function.
@@ -3193,10 +3201,10 @@
         <li><strong>Claims</strong> decrement both <code>claimablePool</code> and total balance by the same amount.
           The inequality is preserved.
         </li>
-        <li><strong>Yield routing</strong> distributes the untracked surplus three ways: 46% to
-          <code>yieldAccumulator</code> (non-obligated), and 23% each to vault and DGNRS as claimable balances
-          (incrementing <code>claimablePool</code>). The ETH was already in <code>totalBalance</code> before
-          distribution, so the inequality is preserved.
+        <li><strong>Yield routing</strong> distributes the untracked surplus four ways: ~25% to
+          <code>yieldAccumulator</code> (non-obligated), and ~25% each to vault, DGNRS, and the GNRUS donation
+          contract as claimable balances (incrementing <code>claimablePool</code>). The ETH was already in
+          <code>totalBalance</code> before distribution, so the inequality is preserved.
         </li>
         <li><strong>Accumulator distributions</strong> at century milestones move 50% of
           <code>yieldAccumulator</code> into <code>futurePrizePool</code>. From there it follows the
@@ -3771,7 +3779,7 @@
       assets; it only reduces competition for those assets. This is structurally different from DeFi protocols where
       whale departure causes liquidity crises.</p>
     <p><strong>(iv) Terminal insurance as self-correcting backstop.</strong> The segregated accumulator receives
-      50% of stETH yield (continuous, regardless of player activity) and 1% of each completed level's prize pool
+      25% of stETH yield (continuous, regardless of player activity) and 1% of each completed level's prize pool
       (at level transition). During a player exodus, yield continues accruing unopposed,
       and the deposit insurance accumulated during healthier levels persists untouched (it does not participate in
       daily drip, BAF, or decimator extractions). The accumulator turns time-without-activity from a pure negative
@@ -4103,7 +4111,7 @@
       assumption of mass exit holds at all.</p>
     <h3 id="section-39a">9.2 Mechanical Defenses</h3>
     <p>The protocol runs on autopilot regardless of human activity. stETH yield
-      continues accruing on all locked ETH, with the player-facing 50% accumulating in the segregated accumulator
+      continues accruing on all locked ETH, with the player-facing 25% accumulating in the segregated accumulator
       alongside deposit insurance from prior levels. The futurepool drip fires daily, transferring capital into the
       nextpool and rewarding ticketholders. The 15% futurepool transfer fires at the start of each level. Ticket
       conversion from the previous
@@ -4153,8 +4161,11 @@
       farms collapse reflexively, speculative tokens drop 90-99%, and pure stETH staking captures the same ~2.5% yield
       that accrues inside Degenerus but without the redistribution layer. The opportunity cost of participation falls,
       because the alternatives fail faster than the protocol does. Most on-chain products that die in bear markets
-      depend on circular token flows or later investors subsidizing earlier ones. Degenerus revenue is gambling spend
-      on entertainment, that is what makes it a business model rather than a scheme. Pool sizes are visible, payout
+      depend on circular token flows or later investors subsidizing earlier ones. Degenerus investor returns are
+      primarily derived
+      from the entertainment spending of gamblers, that is what makes it a business model rather than a scheme. Pool
+      sizes are
+      visible, payout
       rules are immutable, mechanical flows are calculable, and the terminal distribution
       sets a hard floor on what participating capital can recover in the
       worst case.</p>
@@ -4232,10 +4243,8 @@
           the
           survival
           jackpot alone cover the ticket cost. Terminal value is pure upside.</li>
-        <li><strong>Late buyer (day ~115) needs P(GAMEOVER) > 38%</strong>, a threshold comfortably satisfied
-          during a months-long stall.</li>
-        <li><strong>Buying to profit from GAMEOVER funds the pool that prevents it.</strong> Not dominant in the
-          strict sense (unnecessary purchases are -EV), but the blended EV across both states is positive.</li>
+        <li><strong>Buying to profit from GAMEOVER funds the pool that prevents it.</strong> Even late buyers
+          are +EV across both outcomes at any P(GAMEOVER) consistent with a months-long stall.</li>
       </ul>
     </div>
     <p>Consider the two outcomes:</p>
@@ -4270,9 +4279,9 @@
       ~1,375 ticket purchases to close.</p>
     <p>On the day before termination, a potential buyer faces this calculation. If GAMEOVER fires, the terminal
       jackpot receives 90% of all remaining non-obligated assets: the nextpool (701), the residual futurepool
-      (239), and the segregated accumulator (134). At level 50, no century milestone has fired, so the
-      accumulator holds its full balance: ~9 ETH in yield plus ~125 ETH in deposit insurance (1% of each
-      prior level's prize pool). Terminal jackpot: 90% of ~1,074 = ~967 ETH, divided among 6,631
+      (239), and the segregated accumulator (~130). At level 50, no century milestone has fired, so the
+      accumulator holds its full balance: ~4.5 ETH in yield plus ~125 ETH in deposit insurance (1% of each
+      prior level's prize pool). Terminal jackpot: 90% of ~1,070 = ~963 ETH, divided among 6,631
       eligible tickets, for an expected payout of ~0.146 ETH against a 0.08 ETH cost (1.8&times;).
       At higher levels, the retained half of the accumulator compounds across centuries after x00 distributions,
       adding progressively more to the terminal pool.
@@ -4633,6 +4642,9 @@
       buy pressure on ETH itself, raising the dollar value of existing prize pools. Headline jackpot numbers grow
       in the currency casual players actually think in, and grinder returns improve in dollar terms even if their
       ETH-denominated edge is unchanged. Each of these effects feeds the others.</p>
+    <p>stETH yield scales with the pool. The 25% flowing to GNRUS becomes a meaningful charitable
+      stream at scale, the vault's 25% share compensates the creator proportionally, and sDGNRS holders
+      accumulate claims on a yield base that grows monotonically with deposits.</p>
     <p>The game accelerates mechanically with demand. Each level has two phases: a purchase phase (variable length,
       ends when the pool target is met) followed by a jackpot phase (prize distribution across multiple daily draws).
       In normal and compressed modes, the purchase phase continues for one extra day after the target is met,
@@ -4837,9 +4849,10 @@
         <tr>
           <td>stETH yield split</td>
           <td>—</td>
-          <td>50/25/25% accumulator/vault/DGNRS</td>
-          <td>50% to segregated accumulator (also receives 1% of prize pool at each level completion; half distributed
-            at x00, half retained as terminal insurance)</td>
+          <td>25/25/25/25% accumulator/vault/DGNRS/GNRUS</td>
+          <td>25% to segregated accumulator (also receives 1% of prize pool at each level completion; half distributed
+            at x00, half retained as terminal insurance). 25% to GNRUS donation contract (community-voted recipient each
+            level).</td>
         </tr>
         <tr>
           <td>Activity score range</td>
@@ -5273,9 +5286,9 @@
     <p><strong>Yield accrual (continuous):</strong>
       $$\frac{dP^{total}}{dt} = r \cdot S$$</p>
     <p>where $r \approx 0.025$ is the stETH annual yield rate (approximately 2.5% APR at time of writing) and $S$ is
-      total staked ETH. Of this yield, 50% accrues to the segregated accumulator $Y^{acc}$, 25% to the vault,
-      and 25% to DGNRS holders:</p>
-    <p>$$\frac{dY^{acc}}{dt} = 0.50 \cdot r \cdot S$$</p>
+      total staked ETH. Of this yield, 25% accrues to each of the segregated accumulator $Y^{acc}$, the vault,
+      DGNRS holders, and the GNRUS donation contract:</p>
+    <p>$$\frac{dY^{acc}}{dt} = 0.25 \cdot r \cdot S$$</p>
     <p><strong>Deposit insurance (at level transition):</strong> At each level completion, 1% of the prize pool
       routes to the same accumulator:</p>
     <p>$$Y^{acc}_{\ell^+} = Y^{acc}_{\ell^-} + 0.01 \cdot P^{curr}_\ell$$</p>
@@ -5885,7 +5898,7 @@
                         external value that
                         would not exist without the protocol. The yield the creator receives does not reduce player
                         deposits or
-                        winnings. Over time, the stETH yield flowing to players (50% of total yield, via the segregated
+                        winnings. Over time, the stETH yield flowing to players (25% of total yield, via the segregated
                         accumulator's century milestone distributions and terminal insurance) will
                         far exceed the
                         total early-bird extraction, meaning the protocol returns more external value to players than
@@ -5906,7 +5919,7 @@
                         depending on
                         product). Degenerus is zero-rake, which already makes it zero-sum. The stETH yield then pushes
                         aggregate returns
-                        slightly positive. Going from -5% to +1.25% is not a "thin veneer." It is a 6+ percentage point
+                        slightly positive. Going from -5% to +0.6% is not a "thin veneer." It is a 5+ percentage point
                         swing in the
                         player's favor. The stETH is not the steak. It is gravy on top of a steak that is already better
                         than anything
@@ -5916,11 +5929,13 @@
                         relative to their statistical return because the experience is worth it to them. In a zero-rake
                         system, every dollar of entertainment premium that degens willingly pay is a dollar of
                         extractable profit for optimized players. Access to degens is where the margin lives.</p>
-                      <p>Separately: 50% of stETH yield goes to the vault (25%) and DGNRS holders (25%). This is
+                      <p>Separately: 75% of stETH yield goes to the vault (25%), DGNRS holders (25%), and the
+                        GNRUS donation contract (25%). This is
                         disclosed in <a href="#section-creator-comp">Section 4.1</a>. The
-                        remaining 50% accrues in a segregated accumulator (which also receives 1% of each completed
+                        remaining 25% accrues in a segregated accumulator (which also receives 1% of each completed
                         level's prize pool), distributed to players at century milestones and in the terminal payout.
-                        This yield split is part of the creator's compensation structure, not hidden extraction.</p>
+                        This yield split is part of the protocol's compensation and donation structure, not hidden
+                        extraction.</p>
 
                       <h3>F.3 "This is a Ponzi scheme / new money pays old players"</h3>
                       <p>Every prize pool in history is funded by participant deposits. The World Series of Poker, state
