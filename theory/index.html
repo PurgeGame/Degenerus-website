@@ -3242,10 +3242,12 @@
       competition for that drip from degens buying tickets directly, per-grinder daily drip income can increase even as
       levels slow down.</p>
     <p>What decreases is jackpot frequency: levels complete less often, so the lumpy level-completion payouts arrive
-      at wider intervals. ROI may improve as competition thins, but the participation decision
-      depends on APR, which has an additional temporal component reduced by long levels. The extraction function
-      reinforces the shift by
-      skimming more from the nextpool back to the futurepool during slow levels, dampening each jackpot but sustaining
+      at wider intervals. ROI will improve as competition thins, but grinders who think in APR may exit anyway
+      because slower levels reduce annualized returns. Grinders who prefer to maximize ROI stay or increase
+      participation. Even among EV-maximizers, there is a somewhat heterogeneous reward structure.</p>
+    <p> The
+      extraction function
+      skims more from the nextpool back to the futurepool during slow levels, dampening each jackpot but sustaining
       future drip capacity. The system does not resist the slowdown. It adapts to it, shifting from jackpot-heavy
       returns to drip-heavy returns. And the
       adaptation is self-limiting: the grinder-heavy deposit mix that causes the slowdown is the same mix that inflates
@@ -4113,13 +4115,14 @@
     <p>The protocol runs on autopilot regardless of human activity. stETH yield
       continues accruing on all locked ETH, with the player-facing 25% accumulating in the segregated accumulator
       alongside deposit insurance from prior levels. The futurepool drip fires daily, transferring capital into the
-      nextpool and rewarding ticketholders. The 15% futurepool transfer fires at the start of each level. Ticket
+      nextpool and rewarding ticketholders. The 15% futurepool-->nextpool transfer fires at the start of each level.
+      Ticket
       conversion from the previous
       level's jackpot phase pre-funds the next level before purchases even open. By the time a new level begins, the
       nextpool is already substantially funded. The pool does not need to be built from scratch. It needs to be topped
       off.</p>
-    <p>Over a full 120-day GAMEOVER window, these combined mechanical flows (the 15% transfer, luckbox draw,
-      carryover drips, and ~120 daily drip payments) deliver approximately 60% of the futurepool into the
+    <p>Over a full 120-day GAMEOVER window, these combined mechanical flows deliver approximately 60% of the futurepool
+      into the
       nextpool with zero new deposits. If the futurepool is roughly 1.5x the level target, mechanical flows alone
       complete the level with no new money at all (the <a href="#gta-simWrap">simulation</a> illustrates this). At that
       ratio, the mechanical flows finish the job before the
@@ -4127,13 +4130,14 @@
       the clock resets.</p>
     <p>The next level starts with a reduced futurepool, weakening the autopilot for the following cycle. But
       the first cycle was publicly, verifiably profitable for every ticketholder who was present: they received
-      the full 120 days of drip tickets (backed at 200% of face value), daily ETH prize distributions, daily
+      the full 120 days of drip tickets, daily ETH prize distributions, daily
       BURNIE jackpot draws, plus their share of the level's jackpot at the end, all without spending a single
       additional ETH. This is on-chain history that anyone can read.</p>
     <p>Now the new level begins. A day-1 ticket costs 0.08 ETH. The previous level just demonstrated that
       holding tickets through a stall produces positive returns. A day-1 buyer is most profitable if everyone
-      else continues to stay away: fewer tickets means a larger share of the drip, the daily ETH distributions,
-      the BURNIE draws, and the eventual jackpot. The more abandoned the game, the better the deal for anyone
+      else continues to stay away: fewer competing tickets means a larger share of the drip, the daily ETH
+      distributions,
+      the BURNIE draws, and the eventual jackpot. The more players abandon the game, the better the deal for anyone
       who buys in. This is not a coordination problem where you need others to act. It is the opposite: you
       profit most when others don't. Each player who returns dilutes the opportunity for those already
       positioned. A state where nobody buys a ticket for three months, while prior holders visibly
@@ -4389,7 +4393,7 @@
       costs the futurepool 20%. That 20% is not
       destroyed. It was redistributed to players who held tickets through the drought, as drip prizes and
       additional ticket equity. The surplus flows from the system's reserves to its most committed participants (and
-      this worst-case scenario assumes that these players used none of winnings to rebuy).
+      this worst-case scenario assumes that these players used none of those winnings to rebuy).
       Late buyers who close the gap get worse terms, but they still buy because the terminal paradox makes
       it individually rational: buying a ticket is +EV in both the terminal and survival states, and the
       worse the terms get, the higher P(GAMEOVER) climbs, which increases the terminal component of their
@@ -4491,7 +4495,7 @@
       the terminal jackpot draws from every pool in the protocol. Grinders have a much larger relative stake
       in that total than they do in the current level's pool, and the total locked across all pools dwarfs the
       cost of tickets needed to complete the stalling level.</p>
-    <p>And terminal arbitrageurs do not need to complete the level by themselves. Future ticket holders have locked
+    <p>Terminal arbitrageurs do not need to complete the level by themselves. Future ticket holders have locked
       equity that only pays out if the game continues past their target levels. Once the stall becomes visible enough
       to threaten that equity, they step in and defend it with real current-level purchases. They do not even need to
       buy tickets: lootboxes are +EV for engaged players, and a portion of each lootbox purchase flows into the
@@ -4505,8 +4509,8 @@
     <p><em>This self-negating dynamic creates a self-correcting equilibrium.</em>
       Define $p(t)$ as the probability of GAMEOVER at time $t$, conditional on the current state. If $p$ rises, more
       agents buy tickets (the terminal EV increases), which reduces the gap to the level target, which pushes $p$ back
-      down. If $p$ falls, fewer agents buy for terminal reasons, but mechanical flows and normal play continue filling
-      the pool. The equilibrium maps through a continuous, decreasing function:</p>
+      down. If $p$ falls, fewer agents buy for terminal reasons, but mechanical flows and normal play continues filling
+      the pool.</p>
     <p>This feedback loop converges to a unique stable equilibrium probability $p^*$. The
       "fear → buying → reduced risk" function is strictly decreasing, and a decreasing curve crosses a fixed
       reference exactly once: the equilibrium is unique. Any deviation self-corrects. And $p^*$ is small once
@@ -4556,9 +4560,9 @@
       are weighted by
       activity score (better bucket and up to ~1.8x multiplier) and a time multiplier that rewards early conviction
       (30x at 120 days remaining, declining to 1x near the deadline; burns are blocked in the final 24 hours).
-      A per-player cap equalizes bankroll, so timing
-      and engagement differentiate positions, not raw capital. At GAMEOVER, 10% of remaining assets go to winning
-      subbuckets selected by VRF. Maximizing a death-bet position requires high activity score, which requires
+      A per-player cap limits per-wallet spend, so timing
+      and engagement differentiate positions, not raw capital. Maximizing a death-bet position requires high activity
+      score, which requires
       maintaining quest streaks, which requires daily purchases, which funds the nextpool. Chasing the 10% decimator
       payout simultaneously closes the gap that would trigger it. Visible death-betting also
       pressures future ticket holders to step in: the terminal decimator's 10% share comes out of the same pool
@@ -4629,13 +4633,14 @@
       this way. Degenerus is permissionless; there is no means to stop corrupt agents from scamming their players, but
       they can't harm the protocol. The affiliate incentive to solve the
       accessibility problem scales with the jackpot size.</p>
-    <p>The jackpot ratchet also reinforces entertainment-seeking volume, the load-bearing variable
-      in the system. Larger jackpots disproportionately attract entertainment-seeking
+    <p>The jackpot ratchet also reinforces entertainment-seeking volume, the primary variable that determines
+      skill-based
+      yield. Larger jackpots disproportionately attract entertainment-seeking
       players, not grinders. The scenario where
       degens quit requires the argument that degens will lose interest in ever-larger
       guaranteed jackpots. No empirical evidence supports this. All available evidence points in the opposite
       direction.</p>
-    <p>The same locked-capital structure that makes <a href="#section-36">death spirals hard to start</a>
+    <p>The same locked-capital structure that makes death spirals hard to start
       is what makes the growth flywheel hard to stop. Bigger jackpots attract more participants. Their deposits raise
       the next level's target. The futurepool absorbs the surplus and amplifies the next cycle. At sufficient scale,
       particularly if dollar-denominated agents are successful, the volume of ETH flowing into the protocol creates
