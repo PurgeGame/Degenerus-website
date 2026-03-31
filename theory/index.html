@@ -4234,9 +4234,10 @@
       grinder who believes the game continues prefers lootboxes for their multiplied returns across future levels.
       Either way, the mechanism that funds the pool target overlaps heavily with the mechanism that determines
       terminal eligibility. Claiming
-      insurance and preventing the insured event are the same action. To enforce this, BURNIE ticket purchases are
-      blocked during the final 30 days before GAMEOVER. Since BURNIE tickets do not contribute ETH to the nextpool,
-      allowing them would let players dilute the terminal jackpot without funding the target.</p>
+      insurance and preventing the insured event are the same action. To enforce this, the contract
+      bans BURNIE ticket purchases whenever the futurepool's projected drip cannot mechanically close the
+      remaining nextpool gap. If the drip can close the gap, BURNIE tickets are allowed because termination
+      is not mechanically possible. If it cannot, every ticket must bring ETH.</p>
     <div class="observation">
       <p><strong>Observation 10.1</strong> (Terminal Incentive Alignment).</p>
       <ul>
@@ -5633,41 +5634,16 @@
                         eliminates the
                         incentive.</p>
 
-                      <h3>E.4 The BURNIE Ticket Dilution Scenario</h3>
-                      <p>A potential concern: before the 30-day BURNIE ticket freeze (day 90 of the 120-day window),
-                        players could mass
-                        purchase BURNIE tickets. These tickets create next-level entries (and therefore terminal jackpot
-                        eligibility) but
-                        contribute zero ETH to the nextpool. If enough BURNIE tickets are purchased, they dilute the
-                        terminal payout per
-                        ticket without helping close the gap, potentially eliminating the terminal arbitrage incentive
-                        for ETH buyers.</p>
-                      <p><strong>Why this is self-defeating.</strong> BURNIE tickets require burning BURNIE. Burned
-                        BURNIE is permanently
-                        removed from circulation. That BURNIE can never be used at future levels to purchase future
-                        lootboxes, enter the
-                        future decimator, or otherwise dilute the equity of future ticket holders. Mass BURNIE burning
-                        for current-level
-                        tickets therefore:</p>
-                      <ul>
-                        <li>Weakens mechanism A (terminal arbitrage) by diluting the per-ticket terminal payout.</li>
-                        <li>Weakens the burner's own terminal decimator position: the BURNIE burned for tickets is no
-                          longer available to burn in the terminal decimator, which distributes 10% of the terminal
-                          pool weighted by activity score.</li>
-                        <li>Strengthens mechanism B (future ticket holder defense) by permanently destroying the BURNIE
-                          supply that would
-                          compete with future ticket holders' equity at later levels.</li>
-                      </ul>
-                      <p>The two mechanisms are complementary. Weakening one strengthens the other through the same
-                        action. And the 30-day
-                        BURNIE freeze ensures that in the final stretch, when the terminal arbitrage matters most, only
-                        ETH tickets
-                        (which fund the nextpool) can be purchased.</p>
-                      <p>Additionally, a player who burns BURNIE for current-level tickets has revealed that they
-                        believe the game's
-                        terminal or continuation value is worth acting on. They are more likely, not less, to also spend
-                        ETH to defend
-                        their position if needed.</p>
+                      <h3>E.4 BURNIE Ticket Coverage Gate</h3>
+                      <p>BURNIE tickets create next-level entries without contributing ETH to the nextpool. On a level
+                        where the futurepool cannot mechanically close the remaining gap, BURNIE tickets would dilute
+                        the terminal jackpot without helping prevent termination.</p>
+                      <p>The contract eliminates this concern by construction. Each daily advance computes whether
+                        the futurepool's projected drip (0.75% per day, compounding) can cover the remaining
+                        nextpool gap over the death clock's remaining days. If it can, BURNIE tickets are permitted
+                        because the level completes mechanically regardless of dilution. If it cannot, BURNIE tickets
+                        are banned and only ETH purchases are accepted. BURNIE lootboxes can be purchased, but they
+                        award no current level tickets for potentially terminal levels.</p>
 
                       <h3>E.5 Path-Dependent Dynamics</h3>
                       <p>The fixed-point equation is a steady-state characterization. The actual game evolves over 120
@@ -5692,9 +5668,9 @@
                           not require high $p$. The threat to their locked equity becomes salient once the stall is
                           visible, well before
                           $p$ rises to levels that attract pure terminal arbitrageurs.</li>
-                        <li><strong>The BURNIE freeze at day 90 creates early urgency.</strong> BURNIE holders who want
-                          current-level
-                          positioning must act before day 90, pulling some buying forward.</li>
+                        <li><strong>The BURNIE coverage gate creates early urgency.</strong> Once the futurepool
+                          can no longer mechanically close the gap, BURNIE ticket purchases are banned. Holders who want
+                          current-level positioning must act while the gate is open, pulling buying forward.</li>
                         <li><strong>Sequential observability.</strong> On-chain transactions are visible in real time.
                           An agent can
                           observe others buying (or not buying) and update their estimate of $G(t)$ and $p(t)$ block by
