@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Contract-Paper Gap Audit
 status: Phase complete — ready for verification
-stopped_at: Completed 15-03-PLAN.md
-last_updated: "2026-04-01T00:30:24.438Z"
+stopped_at: Completed 15-04-PLAN.md
+last_updated: "2026-04-01T00:40:26.375Z"
 progress:
   total_phases: 2
   completed_phases: 0
@@ -45,7 +45,7 @@ Plan: 2 of 2
 | Phase 13 P04 | 7min | 2 tasks | 1 files |
 | Phase 13 P02 | 15min | 1 tasks | 1 files |
 | Phase 14 P01 | 8min | 2 tasks | 1 files |
-| Phase 15 P03 | 7min | 2 tasks | 1 files |
+| Phase 15 P04 | 4min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -59,7 +59,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 13]: Documented DegenerusGameStorage state variables as mechanics per research Pitfall 3
 - [Phase 13]: Grouped internal helpers under parent public function for catalog clarity
 - [Phase 14]: Classified 266 mechanics into 4 tiers: 70 documented, 89 partial, 63 undocumented-relevant, 44 undocumented-impl
-- [Phase 15]: Final sweep 3-way split (33% DGNRS / 33% vault / 34% GNRUS) is a v7 change not reflected in paper - flagged as Major (GM-02)
+- [Phase 15]: Elevated stETH yield split from Info to Major: paper says 25% accumulator, actual is ~50%
+- [Phase 15]: Merged two GNRUS omission findings into single Major entry with secondary location noted
 
 ### Pending Todos
 
@@ -72,6 +73,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T00:30:24.435Z
-Stopped at: Completed 15-03-PLAN.md
+Last session: 2026-04-01T00:40:26.373Z
+Stopped at: Completed 15-04-PLAN.md
 Resume file: None
