@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Degenerus Viewer</title>
+  <link rel="stylesheet" href="/shared/nav.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/panels.css">
+  <link rel="stylesheet" href="styles/buttons.css">
+  <link rel="stylesheet" href="styles/skeleton.css">
+  <link rel="stylesheet" href="styles/viewer.css">
+  <link rel="stylesheet" href="styles/replay.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "chart.js": "https://esm.sh/chart.js@4.5.1",
+      "gsap": "https://esm.sh/gsap@3.14",
+      "gsap/Flip": "https://esm.sh/gsap@3.14/Flip",
+      "gsap/TextPlugin": "https://esm.sh/gsap@3.14/TextPlugin",
+      "canvas-confetti": "https://esm.sh/canvas-confetti@1.9",
+      "ethers": "https://esm.sh/ethers@6.16"
+    }
+  }
+  </script>
+  <!-- NOTE: ethers is in the map per D-02 but viewer JS must never import it -- viewer is wallet-free (SHELL-01) -->
+</head>
+<body>
+  <div class="container">
+    <!-- Nav bar injected by shared/nav.js -->
+
+    <!-- Page Header -->
+    <header class="page-header">
+      <img class="page-header-logo" src="/badges-circular/flame_red.svg" alt="Degenerus">
+      <h1>VIEWER</h1>
+      <p class="subtitle">Explore any player's activity at any day in the simulation.</p>
+    </header>
+
+    <!-- Controls panel: player selector + day scrubber -->
+    <div class="panel viewer-controls">
+
+      <!-- Player selector -->
+      <div>
+        <select id="viewer-player-select" class="viewer-select" disabled>
+          <option value="">-- Select a player --</option>
+        </select>
+        <div id="viewer-player-loading" class="skeleton-line skeleton-shimmer" style="height:12px;display:none"></div>
+      </div>
+
+      <!-- Day scrubber row -->
+      <div class="viewer-scrubber" id="viewer-scrubber" style="opacity:0.4;pointer-events:none">
+        <button class="btn-icon" id="viewer-prev" aria-label="Previous day" disabled>&#8249;</button>
+        <div class="viewer-scrubber__track">
+          <input type="range" id="viewer-day-slider" min="1" max="1" value="1" aria-label="Day selector">
+        </div>
+        <button class="btn-icon" id="viewer-next" aria-label="Next day" disabled>&#8250;</button>
+        <span class="viewer-scrubber__day-label" id="viewer-day-label">Day 1</span>
+        <input type="number" id="viewer-day-jump" class="viewer-scrubber__jump" min="1" max="1" placeholder="42">
+        <button class="btn-ghost btn-small" id="viewer-day-go">Go</button>
+      </div>
+
+    </div>
+
+    <!-- Empty state panel (visible when no player selected) -->
+    <div class="panel viewer-empty" id="viewer-empty">
+      <h2>Select a player to begin</h2>
+      <p>Choose a player from the dropdown above to explore their activity across all simulation days.</p>
+    </div>
+
+    <!-- Content area (Phases 25-26 panels render here) -->
+    <div id="viewer-content" hidden></div>
+
+    <!-- Replay panel: static outside #viewer-content to survive innerHTML clears (per research override of D-02) -->
+    <div id="replay-wrapper" hidden>
+      <replay-panel></replay-panel>
+    </div>
+
+    <footer>
+      <p>Degenerus Protocol -- Viewer</p>
+    </footer>
+  </div>
+
+  <script src="/shared/nav.js"></script>
+  <script>
+    initNav({
+      currentPage: 'viewer',
+      pages: [
+        { key: 'beta',        label: 'Beta',        href: '/beta/' },
+        { key: 'degenerette', label: 'Degenerette', href: '/degenerette/' },
+        { key: 'whitepaper',  label: 'Whitepaper',  href: '/whitepaper/' },
+        { key: 'theory',      label: 'Game Theory', href: '/theory/' },
+        { key: 'viewer',      label: 'Viewer',      href: '/beta/viewer.html' },
+      ]
+    });
+  </script>
+  <script type="module" src="viewer/main.js"></script>
+  <script type="module" src="components/replay-panel.js"></script>
+</body>
+</html>
