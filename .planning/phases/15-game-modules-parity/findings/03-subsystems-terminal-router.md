@@ -2,8 +2,22 @@
 
 **Verified:** 2026-03-31
 **Paper:** theory/index.html
-**Contracts:** DegeneretteModule, BoonModule, MintStreakUtils, PayoutUtils
+**Contracts verified:** 7 (DegeneretteModule, BoonModule, MintStreakUtils, PayoutUtils, EndgameModule, GameOverModule, DegenerusGame.sol)
 **Contract source:** /home/zak/Dev/PurgeGame/degenerus-audit/contracts/
+
+## Summary
+
+| Severity | Count |
+|----------|-------|
+| Critical | 0 |
+| Major | 1 |
+| Minor | 1 |
+| Info | 1 |
+| **Total** | **3** |
+**Contract source:** /home/zak/Dev/PurgeGame/degenerus-audit/contracts/
+**Delta-v7 cross-referenced:** DegeneretteModule (18 functions), GameOverModule (4 functions), EndgameModule (1 function), DegenerusGame (2 functions)
+
+---
 
 ## DegeneretteModule (DegenerusGameDegeneretteModule.sol)
 
@@ -207,3 +221,202 @@ PayoutUtils is a helper library providing:
 No paper claims reference PayoutUtils directly. The functions are verified through their calling modules (EndgameModule, DegeneretteModule). The auto-rebuy bonus values (13000 BPS = 130%, 14500 BPS = 145% for afKing) are used in EndgameModule line 284-285, which correspond to the paper's "30%/45% auto-rebuy bonuses" claim in S5.3 (130% tickets = 30% bonus, 145% = 45% bonus). This verification is covered in Plan 01/02 scope where MintModule handles the base auto-rebuy flow.
 
 No discrepancies found for PayoutUtils.
+
+---
+
+## EndgameModule (DegenerusGameEndgameModule.sol)
+
+**Status:** COMPLETE
+
+**Delta-v7 cross-reference:** EndgameModule had 1 function changed in v7 (Phase 128, Plan 01). The change was a storage/gas fix, not a behavioral change relevant to paper claims. No pre-v7 paper language found that conflicts with current behavior.
+
+**Note:** Despite the contract name "EndgameModule," this contract primarily handles BAF/Decimator reward jackpots during level transitions, affiliate DGNRS rewards, and whale pass claims. The death clock and GAMEOVER liveness guards are in AdvanceModule, and the terminal distribution is in GameOverModule. The paper's terminal mechanics are verified across these contracts.
+
+### BAF jackpot trigger schedule (verified, not a paper claim for this plan)
+
+Contract verifies the schedule described in EndgameModule comments (lines 160-171):
+- BAF fires every 10 levels: 10% of futurepool (20% at level 50 and every 100th level)
+- Decimator fires at 5, 15, 25, 35, 45, 55, 65, 75, 85 (not 95): 10% of futurepool (30% at every 100th level)
+
+These are verified through JackpotModule/DecimatorModule in Plans 01-02. Included here to confirm EndgameModule's role as dispatcher.
+
+### Auto-rebuy bonus (PayoutUtils cross-reference)
+
+EndgameModule uses auto-rebuy bonuses of 13000 BPS (130% = 30% bonus) and 14500 BPS (145% = 45% bonus for afKing mode) at line 284-285. This corresponds to the paper's S5.3 claim about "30%/45% auto-rebuy bonuses." Verified through PayoutUtils integration.
+
+No discrepancies found for EndgameModule.
+
+---
+
+## GameOverModule (DegenerusGameGameOverModule.sol)
+
+**Status:** COMPLETE
+
+**Delta-v7 cross-reference:** GameOverModule had 4 functions changed in v7. Key changes:
+1. `handleGameOver` renamed to `burnAtGameOver` and moved before Path A early return (GH-01 fix, commit ba89d160)
+2. `_sendToVault` updated to 33/33/34 three-way split (DGNRS/vault/GNRUS) per DRIFT 5 (commit e4833ac7)
+3. GNRUS `burnAtGameOver` hook added
+
+### Death clock duration (S10, line 4054-4056)
+
+Paper: "The protocol reaches GAMEOVER if and only if the nextpool fails to reach its level target within 120 days of the previous level's completion. (Level 0 has a longer 365-day window to allow for bootstrapping.)"
+
+Contract (AdvanceModule `_handleGameOverPath`, lines 471-473):
+```
+(lvl == 0 && ts - lst > uint256(DEPLOY_IDLE_TIMEOUT_DAYS) * 1 days) ||
+(lvl != 0 && ts - 120 days > lst);
+```
+Where `DEPLOY_IDLE_TIMEOUT_DAYS = 365` (line 98).
+
+Both values confirmed: 365 days at level 0, 120 days at level 1+. Match.
+
+### Deity refund (S10, line 4215-4216)
+
+Paper: "Deity pass refunds: 20 ETH/pass if GAMEOVER triggers before level 10; no refund at level 10+"
+
+Contract (`handleGameOverDrain`, lines 52-53, 91-120):
+- `DEITY_PASS_EARLY_GAMEOVER_REFUND = 20 ether`
+- Conditional: `if (lvl < 10)` (before level 10)
+- Iterates through `deityPassOwners`, refunds `refundPerPass * purchasedCount` per owner
+- Budget-capped to `totalFunds - claimablePool`
+
+Match. No discrepancy.
+
+### Terminal decimator 10% (S10, line 4218-4219)
+
+Paper: "Terminal decimator (10%): 10% of remaining assets distributed via decimator, weighted by BURNIE burned and activity score."
+
+Contract (`handleGameOverDrain`, lines 156-166):
+```
+uint256 decPool = remaining / 10; // 10%
+```
+Calls `runTerminalDecimatorJackpot(decPool, lvl, rngWord)`. Refunds flow back to `remaining` for terminal jackpot.
+
+Match. No discrepancy.
+
+### Terminal jackpot 90% (S10, lines 4220-4223)
+
+Paper: "Terminal jackpot (90%): 90% of remaining assets run through a final jackpot draw among next-level ticket holders, where a single winner takes 60% and the remaining 40% is distributed via further draws across all holders."
+
+Contract (`handleGameOverDrain`, lines 168-175):
+- After 10% decimator, `remaining` holds the remaining funds (90% minus any decimator refund, which flows back)
+- Calls `runTerminalJackpot(remaining, lvl + 1, rngWord)` in JackpotModule
+- `FINAL_DAY_SHARES_PACKED = [6000, 1333, 1333, 1334]` BPS in JackpotModule (line 117-120)
+- 6000 BPS = 60% goes to the solo bucket (1 winner), remaining 40% spread across 3 other buckets
+
+Match. The 60/40 split is verified. Note: the paper says "a single winner takes 60%." The contract's solo bucket has `winnerCount == 1` so exactly one winner gets 60%. The other 40% is distributed across 3 trait buckets with varying winner counts. Accurate.
+
+### Final sweep 30 days (S10, line 4224)
+
+Paper: "Final sweep: After 30 days, unclaimed funds are split between the vault and the DGNRS contract."
+
+Contract (`handleFinalSweep`, lines 188-208):
+- `block.timestamp < uint256(gameOverTime) + 30 days` (30-day timing confirmed)
+- Calls `_sendToVault` which splits 33/33/34 to DGNRS, vault, and GNRUS (line 210, 217-224)
+
+The 30-day timing matches. However, the split recipients do not match the paper.
+
+#### GM-02: Final sweep split omits GNRUS
+
+- **Paper:** S10 (line 4224), "unclaimed funds are split between the vault and the DGNRS contract"
+- **Contract:** DegenerusGameGameOverModule.sol, lines 210-224. `_sendToVault` splits 33% DGNRS / 33% vault / 34% GNRUS.
+- **Mismatch:** Paper describes a 2-way split (vault + DGNRS). Contract implements a 3-way split including GNRUS. This is a v7 change (DRIFT 5 in delta-v7 audit confirmed the 33/33/34 split was added in commit e4833ac7).
+- **Severity:** Major
+
+### Terminal distribution sequence (S10)
+
+Paper describes 4 steps in order: deity refund, terminal decimator 10%, terminal jackpot 90%, final sweep 30 days.
+
+Contract `handleGameOverDrain` sequence:
+1. Deity refund (lines 91-120, only if `lvl < 10`)
+2. Calculate available funds (line 123)
+3. Set terminal flags (`gameOver = true`, line 125)
+4. Burn unallocated GNRUS and sDGNRS tokens (lines 129-130)
+5. Terminal decimator 10% (lines 156-166)
+6. Terminal jackpot 90% (lines 168-179)
+7. Undistributed remainder sent to vault/DGNRS/GNRUS (line 177-178)
+
+Then separately, `handleFinalSweep` runs after 30 days (lines 188-208).
+
+The sequence matches the paper's description. Steps 4 (token burns) and 7 (remainder routing) are implementation details not described in the paper but don't contradict it.
+
+---
+
+## DegenerusGame.sol (Core Router)
+
+**Status:** COMPLETE
+
+**Delta-v7 cross-reference:** DegenerusGame had 2 functions changed in v7 (Phase 128, Plan 03). Changes related to GNRUS integration. No behavioral change relevant to paper claims about the router.
+
+### Permissionless execution (S4.2, lines 3164-3177)
+
+Paper claims:
+1. "Daily game logic executes when any player calls the permissionless advanceGame() function" (line 3165-3166)
+2. "Caller receives a BURNIE bounty worth approximately 0.005 ETH" (line 3167)
+3. "Primary calling path requires the caller to have made a purchase in the current or previous day" (line 3174)
+4. "Deity pass holders bypass this requirement entirely" (line 3175)
+5. "Other pass holders can trigger advancement after 15 minutes" (line 3176)
+6. "After 30 minutes the call opens to anyone" (line 3177)
+
+Contract verification:
+1. `advanceGame()` (DegenerusGame.sol line 320, AdvanceModule line 139): `external` with no access control modifier. Permissionless confirmed.
+2. `ADVANCE_BOUNTY_ETH = 0.005 ether` (AdvanceModule line 131). Match.
+3. `_enforceDailyMintGate` (AdvanceModule lines 677-712): Checks `lastEthDay + 1 < gateIdx` for same-day/previous-day purchase. Match.
+4. Deity bypass: `if (deityPassCount[caller] != 0) return;` (line 692). Match.
+5. Pass holder 15-min: `if (elapsed >= 15 minutes)` + frozenUntilLevel check (lines 702-708). Match.
+6. Anyone 30-min: `if (elapsed >= 30 minutes) return;` (line 699). Match.
+
+All 6 claims verified against contract. No discrepancy.
+
+### Solvency invariant (S4.3, lines 3178-3217)
+
+Paper: "claimablePool <= ETH balance + stETH balance" is an accounting identity enforced by the structure of every function.
+
+Paper claims five tracked pools: nextPrizePool, futurePrizePool, currentPrizePool, claimablePool, yieldAccumulator. Plus implicit sixth: untracked yield surplus.
+
+Contract verification:
+- `claimablePool` (Storage line 405): explicit state variable
+- `nextPrizePool` / `futurePrizePool`: packed in Storage line 352
+- `currentPrizePool` (Storage line 350)
+- `yieldAccumulator` (Storage line 1385)
+- Critical invariant declared in DegenerusGame.sol NatSpec (line 18): `address(this).balance + steth.balanceOf(this) >= claimablePool`
+
+All five tracked pools confirmed. The invariant is structural (verified by the v5.0 audit and maintained through v7.0 changes per delta audit). The paper's description of how each transaction category preserves the invariant (deposits, jackpot payouts, claims, yield routing, accumulator distributions) is accurate.
+
+No discrepancy.
+
+### DGNRS distribution (S4.1, lines 5457-5471)
+
+Paper claims: "20% creator, 35% affiliate, 20% lootbox, 10% earlybird, 10% whale, 5% reward"
+
+These percentages are defined in the DegenerusStonk contract (separate from DegenerusGame). The Game router has no knowledge of these distribution percentages. Deferred to Phase 16 (DGNRS/Stonk verification).
+
+### Soulbound, afKing, takeProfit (S4.1, lines 5472-5489)
+
+Paper claims about sDGNRS being soulbound, afKing mode with 10 ETH takeProfit, and BURNIE coinflip credit. These are defined in DegenerusStonk and coinflip contracts, not the Game router. Deferred to Phase 16.
+
+### App. F common misreadings (lines 5820+)
+
+Paper App. F contains factual claims embedded in "what people get wrong" explanations. These were checked for claims referencing Game/Modules contracts in scope:
+
+#### GM-03: Yield routing description omits GNRUS share
+
+The paper's S4.3 yield routing description (line 3204-3207) says yield distributes "~25% to yieldAccumulator (non-obligated), and ~25% each to vault, DGNRS, and the GNRUS donation contract." This correctly describes the 4-way yield split including GNRUS. However, the final sweep description at S10 line 4224 omits GNRUS from the 3-way fund split. This is internally inconsistent: the paper acknowledges GNRUS exists in yield routing but omits it from the final sweep description.
+
+- **Paper:** S10 (line 4224), "split between the vault and the DGNRS contract"
+- **Contract:** DegenerusGameGameOverModule.sol, lines 210-224. Three-way split: DGNRS/vault/GNRUS.
+- **Mismatch:** The paper's S4.1 (line 3127) also says "funds unclaimed 30 days after GAMEOVER" go to vault and DGNRS, consistent with the S10 omission. The yield routing section (S4.3) correctly includes GNRUS. The omission in S10 and S4.1 is a v7 update gap.
+- **Severity:** Info (documented under GM-02 as the primary finding; this notes the secondary location)
+
+---
+
+## Deferred Verifications
+
+The following claims reference contracts outside the Phase 15 scope:
+
+| Claim | Paper Location | Deferred To |
+|-------|---------------|-------------|
+| DGNRS distribution 20/35/20/10/10/5 | S4.1 | Phase 16 (DegenerusStonk) |
+| Soulbound mechanics, afKing, 10 ETH takeProfit | S4.1 | Phase 16 (DegenerusStonk) |
+| Deity boon granting "3 per day" limit | App. C | Phase 16 (Deity/Quest contracts) |
+| Boon budget "10%" allocation | App. G | Phase 15 Plans 01-02 (LootboxModule) |
