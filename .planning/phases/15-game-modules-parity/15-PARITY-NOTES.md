@@ -10,10 +10,10 @@
 | Severity | Count |
 |----------|-------|
 | Critical | 0 |
-| Major | 4 |
+| Major | 3 |
 | Minor | 4 |
 | Info | 5 |
-| **Total** | **13** |
+| **Total** | **12** |
 
 ## Contracts Verified
 
@@ -63,12 +63,10 @@
 
 ### Appendix A: Parameter Table
 
-#### GM-04: stETH yield split description
+#### ~~GM-04: RETRACTED~~ stETH yield split is 25/25/25/25 as paper states
 
-- **Paper:** App. A (line 4858), "25/25/25/25% accumulator/vault/DGNRS/GNRUS"
-- **Contract:** DegenerusGameStorage.sol, line 1382 comment: "Collects 46% of yield surplus each level transition" for the accumulator. The yield split constants in DegenerusGame.sol implement approximately 50/25/25 (accumulator/vault+DGNRS+GNRUS), with a ~8% implementation buffer.
-- **Mismatch:** The paper states a 4-way even split (25% each). The accumulator actually receives approximately 50% of yield, not 25%. The remaining ~50% splits evenly among vault, DGNRS, and GNRUS. The paper understates the accumulator share by half.
-- **Severity:** Major
+- **Status:** RETRACTED. This finding was incorrect.
+- **Actual implementation:** DegenerusGameJackpotModule.sol `_distributeYieldSurplus()` line 903: `quarterShare = (yieldPool * 2300) / 10_000` gives 23% each to vault, sDGNRS, GNRUS, and accumulator. Four equal shares with ~8% buffer. Paper's "25/25/25/25" is the correct simplified description. The DegenerusGameStorage.sol line 1382 comment about "46%" refers to a different mechanism (level transition accumulator collection), not the yield surplus split.
 
 ### Appendix B: Jackpot Distribution
 

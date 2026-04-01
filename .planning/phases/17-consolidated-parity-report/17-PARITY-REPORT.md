@@ -12,10 +12,10 @@
 | Severity | Count |
 |----------|-------|
 | Critical | 1 |
-| Major | 6 |
+| Major | 5 |
 | Minor | 7 |
 | Info | 9 |
-| **Total** | **23** |
+| **Total** | **22** |
 
 ### Contracts Verified
 
@@ -29,7 +29,7 @@ DegenerusAdmin configuration was verified implicitly through game module paramet
 
 ### Coverage Statement
 
-All numerical claims (VER-01) and mechanism descriptions (VER-02) in the game theory paper have been verified against current contract source. 17 paper sections were verified clean with no discrepancies. 23 discrepancies were identified across the remaining sections.
+All numerical claims (VER-01) and mechanism descriptions (VER-02) in the game theory paper have been verified against current contract source. 17 paper sections were verified clean with no discrepancies. 22 discrepancies were identified across the remaining sections.
 
 ---
 
@@ -72,14 +72,6 @@ All numerical claims (VER-01) and mechanism descriptions (VER-02) in the game th
 - **Severity:** Major
 - **Fix guidance:** S10 and S4.1 should describe a 3-way split: 33% DGNRS / 33% vault / 34% GNRUS. The paper already acknowledges GNRUS in S4.3 yield routing; the final sweep description should be consistent.
 - **See also:** TS-05 (GNRUS burn described as "stETH yield" only).
-
-#### GM-04: stETH yield split 50/25/25 vs paper's 25/25/25/25
-
-- **Paper:** App. A (line 4858), "25/25/25/25% accumulator/vault/DGNRS/GNRUS"
-- **Contract:** DegenerusGameStorage.sol, line 1382 comment: "Collects 46% of yield surplus each level transition" for the accumulator. The yield split constants in DegenerusGame.sol implement approximately 50/25/25 (accumulator/vault+DGNRS+GNRUS), with a ~8% implementation buffer.
-- **Mismatch:** The paper states a 4-way even split (25% each). The accumulator actually receives approximately 50% of yield, not 25%. The remaining ~50% splits evenly among vault, DGNRS, and GNRUS. The paper understates the accumulator share by half.
-- **Severity:** Major
-- **Fix guidance:** App. A should state approximately 50/25/25 accumulator/vault+DGNRS/GNRUS split, not 25/25/25/25. The accumulator receives roughly double what the paper claims.
 
 #### TS-04: WWXRP "one trillion" vs 1 billion vault allowance
 
@@ -285,7 +277,7 @@ Sections verified with no discrepancies, confirming VER-01 and VER-02 coverage.
 - S6.2 Decimator (50/50 ETH/lootbox, bucket assignment, burn weight, trigger schedule)
 - S8.3 BURNIE Price Floor (coverage gate)
 - S10.1 Terminal Math (death clock 120/365 days, deity refund, terminal decimator/jackpot, final sweep)
-- App. A Parameter Table (all parameters except stETH yield split GM-04)
+- App. A Parameter Table (all parameters verified, including stETH yield split 25/25/25/25)
 - App. B Jackpot Distribution (JACKPOT_LEVEL_CAP, daily pool %, trait buckets, BURNIE jackpot, early-bird, daily drip)
 - App. C Extraction Function (all 8 components, VRF request/fulfill, timeout, fallback)
 - App. D Attack Vectors (degenerette ETH cap)
