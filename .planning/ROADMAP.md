@@ -5,7 +5,7 @@
 - v1.0 **Paper Audit** - Phases 1-5 (shipped 2026-03-18)
 - v2.0 **Game Frontend** - Phases 6-12 (shipped 2026-03-18)
 - v2.1 **Contract-Paper Gap Audit** - Phases 13-14 (shipped 2026-03-19)
-- v2.2 **Contract-Paper Parity Check** - Phases 15-17 (in progress)
+- v2.2 **Contract-Paper Parity Check** - Phases 15-17 (shipped 2026-04-01)
 
 ## Phases
 
@@ -41,53 +41,33 @@
 
 </details>
 
-### v2.2 Contract-Paper Parity Check
+<details>
+<summary>v2.2 Contract-Paper Parity Check (Phases 15-17) - SHIPPED 2026-04-01</summary>
 
-- [x] **Phase 15: Game & Modules Parity** - Verify 14 core game contracts against paper claims (completed 2026-04-01)
-- [x] **Phase 16: Token & Support Systems Parity** - Verify token contracts and support system contracts (completed 2026-04-01)
-- [x] **Phase 17: Consolidated Parity Report** - Merge all parity notes into final deliverable (completed 2026-04-01)
+- [x] Phase 15: Game & Modules Parity (4/4 plans) - completed 2026-04-01
+- [x] Phase 16: Token & Support Systems Parity (4/4 plans) - completed 2026-04-01
+- [x] Phase 17: Consolidated Parity Report (1/1 plans) - completed 2026-04-01
 
-## Phase Details
-
-### Phase 16: Token & Support Systems Parity
-**Goal**: Every paper claim about token contracts (BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP, GNRUS) and support systems (Affiliate, DeityPass, Quests, Vault) is verified against contract source
-**Depends on**: Phase 15 (methodology and format established)
-**Requirements**: VER-03, VER-04
-**Plans:** 4/4 plans complete
-Plans:
-- [ ] 16-01-PLAN.md -- DGNRS ecosystem + WWXRP verification (resolves Phase 15 deferred items #1, #2)
-- [ ] 16-02-PLAN.md -- Coinflip system + BURNIE token verification
-- [ ] 16-03-PLAN.md -- Support systems verification (resolves Phase 15 deferred item #3)
-- [ ] 16-04-PLAN.md -- GNRUS verification + delta tracking + consolidation into parity notes
-
-**Success Criteria** (what must be TRUE):
-  1. Every paper claim about BURNIE supply, coinflip odds, DGNRS distribution, staking, and WWXRP is verified against token contract source
-  2. Every paper claim about affiliate tiers, deity pass pricing, quest rewards, and vault mechanics is verified against support contract source
-  3. Any new or changed mechanics since v2.1 catalog are identified
-  4. Any removed or renamed mechanics since v2.1 catalog are identified
-  5. Discrepancies follow D-01 format: paper location, contract location, nature of mismatch, severity
-
-### Phase 17: Consolidated Parity Report
-**Goal**: A single deliverable merging all parity notes (Phases 15-16) into a complete cross-contract parity report with recommendations
-**Depends on**: Phase 16
-**Requirements**: VER-01, VER-02, OUT-01, OUT-03
-**Plans:** 1/1 plans complete
-Plans:
-- [x] 17-01-PLAN.md -- Consolidate all 24 discrepancies into severity-first report with fix guidance, new mechanics inventory, and coverage proof
-
-**Success Criteria** (what must be TRUE):
-  1. All numerical claims in the game theory paper verified against current contract constants
-  2. All mechanism descriptions verified against current contract implementations
-  3. Structured parity notes produced per contract group (Game & Modules, Token Contracts, Support Systems)
-  4. Summary of new mechanics not yet covered in the paper with recommendation on documentation
-  5. Single consolidated report ready for user action
+</details>
 
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
+| 1. Preparation | v1.0 | 1/1 | Complete | 2026-03-16 |
+| 2. Number-Heavy Sections Audit | v1.0 | 3/3 | Complete | 2026-03-16 |
+| 3. Mechanism-Heavy Sections Audit | v1.0 | 2/2 | Complete | 2026-03-16 |
+| 4. Prose and Framing Sections Audit | v1.0 | 2/2 | Complete | 2026-03-16 |
+| 5. Cross-Section Consistency and Report | v1.0 | 2/2 | Complete | 2026-03-17 |
+| 6. Foundation | v2.0 | 3/3 | Complete | 2026-03-18 |
+| 7. Purchasing & Core UI | v2.0 | 2/2 | Complete | 2026-03-18 |
+| 8. Hero Displays | v2.0 | 3/3 | Complete | 2026-03-18 |
+| 9. Supporting Features | v2.0 | 4/4 | Complete | 2026-03-18 |
+| 10. Decimator & Terminal | v2.0 | 2/2 | Complete | 2026-03-18 |
+| 11. Audio & Polish | v2.0 | 2/2 | Complete | 2026-03-18 |
+| 12. Integration Fixes & Cleanup | v2.0 | 1/1 | Complete | 2026-03-18 |
 | 13. Contract Mechanic Extraction | v2.1 | 4/4 | Complete | 2026-03-19 |
 | 14. Gap Analysis and Report | v2.1 | 2/2 | Complete | 2026-03-19 |
 | 15. Game & Modules Parity | v2.2 | 4/4 | Complete | 2026-04-01 |
-| 16. Token & Support Systems Parity | v2.2 | 0/4 | Complete    | 2026-04-01 |
-| 17. Consolidated Parity Report | v2.2 | 1/1 | Complete    | 2026-04-01 |
+| 16. Token & Support Systems Parity | v2.2 | 4/4 | Complete | 2026-04-01 |
+| 17. Consolidated Parity Report | v2.2 | 1/1 | Complete | 2026-04-01 |

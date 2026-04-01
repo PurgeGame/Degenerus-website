@@ -3124,11 +3124,11 @@
       <li>A nerfed deity pass (4 tickets per level with activity score boost) in afKing mode</li>
       <li>2 million BURNIE</li>
       <li>Affiliate commissions from unaffiliated players (compensation for general marketing)</li>
-      <li>Any funds unclaimed 30 days after GAMEOVER</li>
+      <li>Any funds unclaimed 30 days after GAMEOVER (split 33/33/34% with GNRUS)</li>
     </ul>
     <p>Both compete for jackpot prizes on the same terms as any participant with a long-term capital investment.
       Additionally, the vault receives a cut of the early-bird lootbox buys (when they contain bonus BURNIE and DGNRS).
-      The creator also holds 20% of DGNRS supply as the only liquid (transferable) tokens and one trillion wwXRP, a
+      The creator also holds 20% of DGNRS supply as the only liquid (transferable) tokens and one billion wwXRP, a
       valueless memecoin distributed as a consolation prize to losers.</p>
     <p><strong>DGNRS</strong> is a deflationary token. The remaining 80% is distributed to players <a
         href="#section-dgnrs">through gameplay</a>:</p>
@@ -3368,7 +3368,7 @@
       random near-future level tickets at 130% face value (145% with a pass), converting liquid ETH winnings
       into illiquid future participation. Enabling requires a lazy pass and locks the player in for 5 levels
       with forced coinflip auto-rebuy and minimum take-profit thresholds. The coinflip system offers escalating
-      recycling bonuses (1% base, 1.6% with afKing) for flipping winnings again rather than
+      recycling bonuses (0.75% base, 1.00% with afKing, scaling up to 2.00% with maximum deity level bonus) for flipping winnings again rather than
       claiming.</p>
     <p>afKing is designed as a near-optimal allocation path for the lazy
       player, spreading value across upcoming levels without requiring daily quest streak
@@ -4221,8 +4221,8 @@
           through a final jackpot draw among
           next-level ticket holders, where a single winner takes 60% and the remaining 40% is distributed via further
           draws across all holders. The only way to become eligible is to hold tickets for the stalling level.</li>
-        <li><strong>Final sweep:</strong> After 30 days, unclaimed funds are split between the vault and the
-          DGNRS contract (see <a href="#section-creator-comp">Section 4.1</a>).</li>
+        <li><strong>Final sweep:</strong> After 30 days, unclaimed funds are split between the vault, the
+          DGNRS contract, and the GNRUS donation contract (33/33/34%) (see <a href="#section-creator-comp">Section 4.1</a>).</li>
       </ol>
     </div>
     <p>The terminal jackpot's eligibility rule is the key design choice. Eligible recipients must hold tickets for the
@@ -5178,7 +5178,7 @@
     </p>
     <p id="section-extraction"><strong>Level transition:</strong> When $P^{next}_\ell \geq \bar{P}_\ell$ (the level
       target):
-      $$P^{curr}_{\ell+1} \leftarrow f(P^{fut}_\ell, t)$$</p>
+      $$P^{fut}_{\ell+1} \mathrel{+}= f(P^{next}_\ell, t), \quad P^{curr}_{\ell+1} \leftarrow P^{next}_\ell - f(P^{next}_\ell, t)$$</p>
     <p>where $f$ is a time-dependent extraction function that transfers a percentage of
       <code>nextPrizePool</code> to <code>futurePrizePool</code> at level completion. The components:
     </p>
@@ -6249,11 +6249,12 @@
                         develops this in full.</p>
 
                       <h3>F.11 "The affiliate system is MLM"</h3>
-                      <p>The affiliate system has a three-level referral chain: ~76% of each commission payment goes to
+                      <p>The affiliate system has a three-level referral chain: 75% of each commission payment goes to
                         the direct
-                        referrer, ~20% to the referrer's referrer, and ~4% to the third level up. Only one level is paid
-                        per
-                        transaction (to save gas), rotating across purchases. Technically, yes, this is a multi-level
+                        referrer in expectation, 20% to the referrer's referrer, and 5% to the third level up. Each
+                        transaction pays one winner via a weighted random roll proportional to these shares, so the full
+                        payout goes to a single recipient each time. Over many transactions the distribution converges
+                        to 75/20/5. Technically, yes, this is a multi-level
                         structure.
                         Calling it "MLM" is pattern-matching to a label without examining the economics.</p>
                       <p>MLM schemes are exploitative because participants at lower levels lose money funding the layers
@@ -6915,8 +6916,8 @@
                       <h4>Level Targeting</h4>
                       <p>Lootbox ticket rewards target a future level:</p>
                       <ul>
-                        <li><strong>95%:</strong> 0 to 5 levels ahead (uniform)</li>
-                        <li><strong>5%:</strong> 5 to 50 levels ahead (uniform)</li>
+                        <li><strong>90%:</strong> 0 to 4 levels ahead (uniform)</li>
+                        <li><strong>10%:</strong> 5 to 50 levels ahead (uniform)</li>
                       </ul>
                       <p>If the rolled level has already passed, tickets default to the current level.</p>
 
