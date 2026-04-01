@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Contract-Paper Gap Audit
-status: executing
-stopped_at: Completed 16-01-PLAN.md
-last_updated: "2026-04-01T01:42:00Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 16-02-PLAN.md
+last_updated: "2026-04-01T01:44:50.751Z"
 progress:
-  total_phases: 4
-  completed_phases: 2
-  total_plans: 10
-  completed_plans: 6
+  total_phases: 2
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 5
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** Phase 16 -- token-support-systems-parity
+**Current focus:** Phase 14 — gap-analysis-and-report
 
 ## Current Position
 
-Phase: 16 (token-support-systems-parity) -- EXECUTING
-Plan: 1 of 4 (complete)
+Phase: 14 (gap-analysis-and-report) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -45,7 +45,7 @@ Plan: 1 of 4 (complete)
 | Phase 13 P04 | 7min | 2 tasks | 1 files |
 | Phase 13 P02 | 15min | 1 tasks | 1 files |
 | Phase 14 P01 | 8min | 2 tasks | 1 files |
-| Phase 16 P01 | 3min | 1 tasks | 1 files |
+| Phase 16 P02 | 6min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -59,9 +59,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 13]: Documented DegenerusGameStorage state variables as mechanics per research Pitfall 3
 - [Phase 13]: Grouped internal helpers under parent public function for catalog clarity
 - [Phase 14]: Classified 266 mechanics into 4 tiers: 70 documented, 89 partial, 63 undocumented-relevant, 44 undocumented-impl
-- [Phase 16]: DGNRS pool percentages 20/35/20/10/10/5 confirmed against BPS constants
-- [Phase 16]: WWXRP "one trillion" claim is Major discrepancy: contract vault allowance is 1 billion
-- [Phase 16]: Deferred verification #3 (deity boon 3/day) scoped to Plan 03 support systems
+- [Phase 16]: Started TS numbering at TS-20 to accommodate parallel Plan 01 findings
+- [Phase 16]: Classified recycling bonus mismatch as Critical since paper's 1%/1.6% vs contract's 0.75%/1.00% affects EV calculations
 
 ### Pending Todos
 
@@ -74,6 +73,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T01:42:00Z
-Stopped at: Completed 16-01-PLAN.md
+Last session: 2026-04-01T01:44:50.749Z
+Stopped at: Completed 16-02-PLAN.md
 Resume file: None
