@@ -10,7 +10,11 @@ Make the on-chain game playable, entertaining, and visually compelling from a br
 
 ## Current State
 
-Shipped v2.0 Game Frontend (2026-03-18): complete game frontend rebuilt from monolith into 15 Custom Element components with centralized business logic modules. 10,462 LOC across JS/CSS/HTML. All core game actions functional: purchasing, coinflip, jackpot display, degenerette, quests, decimator, passes, claims, affiliate, BAF leaderboard. GSAP-animated hero displays for jackpot, coinflip, and degenerette. Death clock with 3-stage urgency. Skeleton loading states and error fallbacks on all panels.
+v2.2 Phase 15 complete (2026-04-01): Game & Modules parity check across 14 contracts (DegenerusGame.sol + 12 modules + storage). 13 discrepancies found (4 Major, 4 Minor, 5 Info). Parity notes ready for Phase 17 consolidation.
+
+Shipped v2.1 Contract-Paper Gap Audit (2026-03-19): complete cross-reference of 266 contract mechanics against game theory paper. 70 fully documented, 89 partially documented, 63 undocumented but game-theoretically relevant, 44 implementation details. Gap report with blank decision columns ready for user action.
+
+Previously shipped v2.0 Game Frontend (2026-03-18): complete game frontend rebuilt from monolith into 15 Custom Element components with centralized business logic modules. 10,462 LOC across JS/CSS/HTML. All core game actions functional.
 
 Previously shipped v1.0 Paper Audit (2026-03-18): systematic audit of all 423 numerical/mechanism claims in the game theory paper.
 
@@ -30,12 +34,14 @@ Database layer (separate repo at /home/zak/Dev/PurgeGame/database/) provides Pos
 - Affiliate infrastructure (create and input codes) (v2.0)
 - BAF scores (contextual prominence based on level phase) (v2.0)
 - Database API integration for all reads, contract writes via ethers.js (v2.0)
+- Systematic mechanic extraction from all contract files (v2.1)
+- Cross-reference every mechanic against game theory paper coverage (v2.1)
+- Gap report: each undocumented mechanic, what it does, contract location (v2.1)
+- Game & Modules parity notes: 14 contracts verified, 13 discrepancies documented with severity (v2.2 Phase 15)
 
 ### Active
 
-- [x] Systematic mechanic extraction from all contract files (Validated in Phase 13: Contract Mechanic Extraction)
-- [ ] Cross-reference every mechanic against game theory paper coverage
-- [ ] Gap report: each undocumented mechanic, what it does, contract location
+(None - next milestone not yet planned)
 
 ### Out of Scope
 
@@ -84,14 +90,31 @@ Database layer (separate repo at /home/zak/Dev/PurgeGame/database/) provides Pos
 - Dead quadrantLabel() export in jackpot-data.js
 - Sound files (win.mp3, flip.mp3, urgency.mp3) are README placeholders requiring user setup
 
-## Current Milestone: v2.1 Contract-Paper Gap Audit
+## Current Milestone: v2.2 Contract-Paper Parity Check
 
-**Goal:** Identify every mechanic in the contracts not documented in the game theory paper, so the user can decide to document or remove each one.
+**Goal:** Verify all game theory paper claims against updated contract source and produce notes/feedback on discrepancies.
 
 **Target features:**
-- Systematic extraction of all mechanics from every contract file
-- Cross-reference against game theory paper coverage
-- Gap report with each undocumented mechanic, what it does, and where it lives
+- Re-verify all numerical claims, mechanism descriptions, and economic parameters against current contract code
+- Identify any new mechanics or changed parameters not yet reflected in the paper
+- Produce structured notes with discrepancies (no paper edits)
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
 
 ---
-*Last updated: 2026-03-19 after Phase 13 completion*
+*Last updated: 2026-04-01 after Phase 15 complete*
