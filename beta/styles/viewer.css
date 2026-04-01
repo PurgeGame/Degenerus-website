@@ -1,0 +1,135 @@
+/* Viewer-specific layout and controls */
+
+.viewer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+}
+
+.viewer-select {
+  background: var(--bg-tertiary, #252542);
+  color: var(--text-primary, #fff);
+  border: 1px solid var(--border-color, #3a3a5c);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  min-width: 260px;
+  cursor: pointer;
+}
+
+.viewer-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.viewer-select option {
+  background: var(--bg-secondary, #1a1a2e);
+  color: var(--text-secondary, #a0a0c0);
+}
+
+.viewer-scrubber {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 300px;
+}
+
+.viewer-scrubber__track {
+  flex: 1;
+}
+
+.viewer-scrubber__track input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent-primary, #f5a623);
+  cursor: pointer;
+}
+
+.viewer-scrubber__day-label {
+  color: var(--accent-primary, #f5a623);
+  font-weight: 700;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  min-width: 100px;
+}
+
+.viewer-scrubber__jump {
+  background: var(--bg-tertiary, #252542);
+  color: var(--text-primary, #fff);
+  border: 1px solid var(--border-color, #3a3a5c);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  width: 64px;
+  text-align: center;
+}
+
+.viewer-scrubber__jump::-webkit-inner-spin-button,
+.viewer-scrubber__jump::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.viewer-scrubber__jump {
+  -moz-appearance: textfield;
+}
+
+.viewer-empty {
+  text-align: center;
+  padding: 48px 16px;
+}
+
+.viewer-empty h2 {
+  color: var(--text-secondary, #a0a0c0);
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+}
+
+.viewer-empty p {
+  color: var(--text-dim, #6b6b8d);
+  font-size: 0.8rem;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.viewer-error {
+  color: var(--error, #ef4444);
+  font-size: 0.72rem;
+  margin-top: 4px;
+}
+
+/* Phase 25 panel styles */
+
+.text-dim {
+  color: var(--text-dim, #6b6b8d);
+  font-size: 0.8rem;
+}
+
+.badge-bought {
+  display: inline-block;
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success, #22c55e);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+}
+
+.activity-panel .section-title,
+.store-panel .section-title {
+  margin-top: 1rem;
+}
+
+.activity-panel .section-title:first-of-type,
+.store-panel .section-title:first-of-type {
+  margin-top: 0;
+}
