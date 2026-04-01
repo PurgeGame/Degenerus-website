@@ -4,7 +4,7 @@
 
 - v1.0 **Paper Audit** - Phases 1-5 (shipped 2026-03-18)
 - v2.0 **Game Frontend** - Phases 6-12 (shipped 2026-03-18)
-- v2.1 **Contract-Paper Gap Audit** - Phases 13-14 (in progress)
+- v2.1 **Contract-Paper Gap Audit** - Phases 13-16 (in progress)
 
 ## Phases
 
@@ -88,4 +88,5 @@ Plans:
 | 11. Audio & Polish | v2.0 | 2/2 | Complete | 2026-03-18 |
 | 12. Integration Fixes & Cleanup | v2.0 | 1/1 | Complete | 2026-03-18 |
 | 13. Contract Mechanic Extraction | v2.1 | 4/4 | Complete | 2026-03-19 |
-| 14. Gap Analysis and Report | 1/2 | In Progress|  | - |
+| 14. Gap Analysis and Report | v2.1 | 1/2 | In Progress | - |
+| 16. Token & Support Systems Parity | v2.1 | 1/4 | In Progress | - |
