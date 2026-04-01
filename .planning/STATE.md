@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Contract-Paper Gap Audit
 status: Phase complete — ready for verification
-stopped_at: Completed 16-02-PLAN.md
-last_updated: "2026-04-01T01:44:50.751Z"
+stopped_at: Completed 16-03-PLAN.md
+last_updated: "2026-04-01T01:44:37.648Z"
 progress:
   total_phases: 2
   completed_phases: 0
@@ -45,7 +45,7 @@ Plan: 2 of 2
 | Phase 13 P04 | 7min | 2 tasks | 1 files |
 | Phase 13 P02 | 15min | 1 tasks | 1 files |
 | Phase 14 P01 | 8min | 2 tasks | 1 files |
-| Phase 16 P02 | 6min | 1 tasks | 1 files |
+| Phase 16 P03 | 6min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -59,8 +59,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 13]: Documented DegenerusGameStorage state variables as mechanics per research Pitfall 3
 - [Phase 13]: Grouped internal helpers under parent public function for catalog clarity
 - [Phase 14]: Classified 266 mechanics into 4 tiers: 70 documented, 89 partial, 63 undocumented-relevant, 44 undocumented-impl
-- [Phase 16]: Started TS numbering at TS-20 to accommodate parallel Plan 01 findings
-- [Phase 16]: Classified recycling bonus mismatch as Critical since paper's 1%/1.6% vs contract's 0.75%/1.00% affects EV calculations
+- [Phase 16]: Deity boon 3/day limit confirmed in DegenerusGameLootboxModule.sol (DEITY_DAILY_BOON_COUNT=3)
+- [Phase 16]: Affiliate 3-tier payout uses weighted random roll, not rotation (TS-01 Major)
+- [Phase 16]: +100 BURNIE pre-final-draw affiliate bonus has no contract implementation (TS-02 Critical)
 
 ### Pending Todos
 
@@ -73,6 +74,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T01:44:50.749Z
-Stopped at: Completed 16-02-PLAN.md
+Last session: 2026-04-01T01:44:37.646Z
+Stopped at: Completed 16-03-PLAN.md
 Resume file: None
