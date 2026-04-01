@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Contract-Paper Gap Audit
-status: Milestone complete
-stopped_at: Completed 15-04-PLAN.md
-last_updated: "2026-04-01T00:47:33.482Z"
+status: executing
+stopped_at: Completed 16-01-PLAN.md
+last_updated: "2026-04-01T01:42:00Z"
 progress:
-  total_phases: 2
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 4
+  completed_phases: 2
+  total_plans: 10
+  completed_plans: 6
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** Phase 14 — gap-analysis-and-report
+**Current focus:** Phase 16 -- token-support-systems-parity
 
 ## Current Position
 
-Phase: 15
-Plan: Not started
+Phase: 16 (token-support-systems-parity) -- EXECUTING
+Plan: 1 of 4 (complete)
 
 ## Performance Metrics
 
@@ -45,7 +45,7 @@ Plan: Not started
 | Phase 13 P04 | 7min | 2 tasks | 1 files |
 | Phase 13 P02 | 15min | 1 tasks | 1 files |
 | Phase 14 P01 | 8min | 2 tasks | 1 files |
-| Phase 15 P04 | 4min | 1 tasks | 1 files |
+| Phase 16 P01 | 3min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -59,8 +59,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 13]: Documented DegenerusGameStorage state variables as mechanics per research Pitfall 3
 - [Phase 13]: Grouped internal helpers under parent public function for catalog clarity
 - [Phase 14]: Classified 266 mechanics into 4 tiers: 70 documented, 89 partial, 63 undocumented-relevant, 44 undocumented-impl
-- [Phase 15]: Elevated stETH yield split from Info to Major: paper says 25% accumulator, actual is ~50%
-- [Phase 15]: Merged two GNRUS omission findings into single Major entry with secondary location noted
+- [Phase 16]: DGNRS pool percentages 20/35/20/10/10/5 confirmed against BPS constants
+- [Phase 16]: WWXRP "one trillion" claim is Major discrepancy: contract vault allowance is 1 billion
+- [Phase 16]: Deferred verification #3 (deity boon 3/day) scoped to Plan 03 support systems
 
 ### Pending Todos
 
@@ -73,6 +74,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T00:40:26.373Z
-Stopped at: Completed 15-04-PLAN.md
+Last session: 2026-04-01T01:42:00Z
+Stopped at: Completed 16-01-PLAN.md
 Resume file: None
