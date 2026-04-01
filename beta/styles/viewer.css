@@ -133,3 +133,63 @@
 .store-panel .section-title:first-of-type {
   margin-top: 0;
 }
+
+/* Phase 26 -- Coinflip display panel */
+
+.coinflip-display-wrapper {
+  perspective: 600px;
+}
+
+.coinflip-display-panel {
+  transform-style: preserve-3d;
+}
+
+.coinflip-display-panel h2 {
+  /* Inherits from panels.css .panel h2 */
+}
+
+.cf-card {
+  padding: 0.5rem 0;
+}
+
+.cf-result-indicator {
+  font-size: 1.4rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  text-align: center;
+  padding: 0.75rem 0;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+}
+
+.cf-win {
+  color: var(--success, #22c55e);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.cf-loss {
+  color: var(--error, #ef4444);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.cf-pending {
+  color: var(--text-dim, #6b6b8d);
+  background: rgba(107, 107, 141, 0.12);
+}
+
+/* Phase 26 -- Replay wrapper */
+
+#replay-wrapper {
+  margin-top: clamp(0.75rem, 3vw, 1.25rem);
+}
+
+#replay-wrapper replay-panel {
+  display: block;
+}
+
+/* Phase 26 -- Layout polish (D-11) */
+
+#viewer-content > .panel:last-child {
+  margin-bottom: 0;
+}
