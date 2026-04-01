@@ -7,10 +7,12 @@ import { fetchJSON } from './api.js';
 import { render as renderDashboard, clearChart } from './dashboard.js';
 import { render as renderActivity } from './activity.js';
 import { render as renderStore } from './store-view.js';
+import { render as renderCoinflip } from './coinflip-display.js';
 
-const selectEl  = document.getElementById('viewer-player-select');
-const emptyEl   = document.getElementById('viewer-empty');
-const contentEl = document.getElementById('viewer-content');
+const selectEl      = document.getElementById('viewer-player-select');
+const emptyEl       = document.getElementById('viewer-empty');
+const contentEl     = document.getElementById('viewer-content');
+const replayWrapperEl = document.getElementById('replay-wrapper');
 
 let currentPlayer = null;
 
@@ -54,6 +56,50 @@ function showPanelSkeletons(container) {
   `;
 }
 
+// --- Replay Panel Sync (D-03, D-13) ---
+
+function syncReplayPanel(player, day) {
+  // Show the replay wrapper once a player is active
+  if (replayWrapperEl) replayWrapperEl.hidden = false;
+
+  const replayEl = document.querySelector('replay-panel');
+  if (!replayEl) return;
+
+  const daySelect = replayEl.querySelector('[data-bind="day-select"]');
+  if (!daySelect) return;
+
+  function trySetDay() {
+    // Wait for day options to be populated (starts as single "Loading days..." placeholder)
+    const hasOptions = daySelect.options.length > 1 && daySelect.options[0]?.value !== '';
+    if (!hasOptions) {
+      const obs = new MutationObserver(() => {
+        obs.disconnect();
+        trySetDay();
+      });
+      obs.observe(daySelect, { childList: true });
+      return;
+    }
+
+    // Set day value and dispatch change to trigger #onDayChange
+    daySelect.value = String(day);
+    daySelect.dispatchEvent(new Event('change'));
+
+    // Now wait for player-select to populate (populated by #loadTickets after day change)
+    const playerSelect = replayEl.querySelector('[data-bind="player-select"]');
+    if (!playerSelect) return;
+
+    const pObs = new MutationObserver(() => {
+      pObs.disconnect();
+      // Set player value and dispatch change to trigger #onPlayerChange
+      playerSelect.value = player;
+      playerSelect.dispatchEvent(new Event('change'));
+    });
+    pObs.observe(playerSelect, { childList: true });
+  }
+
+  trySetDay();
+}
+
 // --- Panel Refresh (D-03) ---
 
 async function refreshPanels(player, day) {
@@ -65,6 +111,8 @@ async function refreshPanels(player, day) {
     renderDashboard({ holdings: data.holdings, daysData }, contentEl);
     renderActivity(data.activity, contentEl);
     renderStore(data.store, contentEl);
+    renderCoinflip(data.activity.coinflip, contentEl);
+    syncReplayPanel(player, day);
   } catch (err) {
     console.error('[viewer] Panel fetch failed:', err);
     contentEl.innerHTML = '<div class="panel"><p class="text-dim">Failed to load data. Try selecting again.</p></div>';
@@ -77,6 +125,7 @@ async function onPlayerChange(addr) {
   currentPlayer = addr;
   emptyEl.hidden = true;
   contentEl.hidden = false;
+  if (replayWrapperEl) replayWrapperEl.hidden = false;
 
   // Destroy sparkline chart before clearing DOM (prevents Chart.js orphan)
   clearChart();
