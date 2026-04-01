@@ -4,7 +4,8 @@
 
 - v1.0 **Paper Audit** - Phases 1-5 (shipped 2026-03-18)
 - v2.0 **Game Frontend** - Phases 6-12 (shipped 2026-03-18)
-- v2.1 **Contract-Paper Gap Audit** - Phases 13-16 (in progress)
+- v2.1 **Contract-Paper Gap Audit** - Phases 13-14 (shipped 2026-03-19)
+- v2.2 **Contract-Paper Parity Check** - Phases 15-17 (in progress)
 
 ## Phases
 
@@ -32,61 +33,61 @@
 
 </details>
 
-### v2.1 Contract-Paper Gap Audit
+<details>
+<summary>v2.1 Contract-Paper Gap Audit (Phases 13-14) - SHIPPED 2026-03-19</summary>
 
-- [x] **Phase 13: Contract Mechanic Extraction** - Catalog every mechanic across all 30+ contract files (completed 2026-03-19)
-- [ ] **Phase 14: Gap Analysis and Report** - Cross-reference catalog against game theory paper, produce gap report
+- [x] Phase 13: Contract Mechanic Extraction (4/4 plans) - completed 2026-03-19
+- [x] Phase 14: Gap Analysis and Report (2/2 plans) - completed 2026-03-19
+
+</details>
+
+### v2.2 Contract-Paper Parity Check
+
+- [x] **Phase 15: Game & Modules Parity** - Verify 14 core game contracts against paper claims (completed 2026-04-01)
+- [x] **Phase 16: Token & Support Systems Parity** - Verify token contracts and support system contracts (completed 2026-04-01)
+- [x] **Phase 17: Consolidated Parity Report** - Merge all parity notes into final deliverable (completed 2026-04-01)
 
 ## Phase Details
 
-### Phase 13: Contract Mechanic Extraction
-**Goal**: A complete, structured catalog of every player-facing and system mechanic in the contract codebase
-**Depends on**: Nothing (first phase of milestone)
-**Requirements**: EXTR-01, EXTR-02, EXTR-03, EXTR-04
-**Success Criteria** (what must be TRUE):
-  1. Every public/external function in DegenerusGame.sol and its 12 game modules has a catalog entry describing what it does
-  2. Every mechanic in token contracts (BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP) is catalogued with its parameters and effects
-  3. Every mechanic in support systems (Affiliate, DeityPass, Quests, Vault) is catalogued
-  4. Every mechanic in infrastructure (Jackpots, Admin, TraitUtils, DeityBoonViewer, Icons32Data, libraries, storage) is catalogued
-  5. The catalog is structured consistently: contract file, function/mechanism name, what it does, key parameters
+### Phase 16: Token & Support Systems Parity
+**Goal**: Every paper claim about token contracts (BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP, GNRUS) and support systems (Affiliate, DeityPass, Quests, Vault) is verified against contract source
+**Depends on**: Phase 15 (methodology and format established)
+**Requirements**: VER-03, VER-04
 **Plans:** 4/4 plans complete
-
 Plans:
-- [ ] 13-01-PLAN.md -- Catalog DegenerusGame.sol dispatcher + 6 smaller modules (Boon, Endgame, GameOver, MintStreakUtils, PayoutUtils, Whale)
-- [ ] 13-02-PLAN.md -- Catalog 6 larger modules (Advance, Decimator, Degenerette, Jackpot, Lootbox, Mint)
-- [ ] 13-03-PLAN.md -- Catalog 5 token contracts + 4 support system contracts
-- [ ] 13-04-PLAN.md -- Catalog infrastructure (Jackpots engine, Admin, TraitUtils, DeityBoonViewer, Icons, libraries, storage)
+- [ ] 16-01-PLAN.md -- DGNRS ecosystem + WWXRP verification (resolves Phase 15 deferred items #1, #2)
+- [ ] 16-02-PLAN.md -- Coinflip system + BURNIE token verification
+- [ ] 16-03-PLAN.md -- Support systems verification (resolves Phase 15 deferred item #3)
+- [ ] 16-04-PLAN.md -- GNRUS verification + delta tracking + consolidation into parity notes
 
-### Phase 14: Gap Analysis and Report
-**Goal**: A complete gap report showing every contract mechanic not documented in the game theory paper, ready for decision-making
-**Depends on**: Phase 13
-**Requirements**: ANLS-01, ANLS-02
 **Success Criteria** (what must be TRUE):
-  1. Every catalogued mechanic is either mapped to a specific game theory paper section or explicitly marked as undocumented
-  2. The gap report lists each undocumented mechanic with: contract file, function name, what it does, and a blank decision column for the user
-  3. No mechanic from the catalog is missing from the cross-reference (100% coverage of the extraction)
-**Plans:** 1/2 plans executed
+  1. Every paper claim about BURNIE supply, coinflip odds, DGNRS distribution, staking, and WWXRP is verified against token contract source
+  2. Every paper claim about affiliate tiers, deity pass pricing, quest rewards, and vault mechanics is verified against support contract source
+  3. Any new or changed mechanics since v2.1 catalog are identified
+  4. Any removed or renamed mechanics since v2.1 catalog are identified
+  5. Discrepancies follow D-01 format: paper location, contract location, nature of mismatch, severity
 
+### Phase 17: Consolidated Parity Report
+**Goal**: A single deliverable merging all parity notes (Phases 15-16) into a complete cross-contract parity report with recommendations
+**Depends on**: Phase 16
+**Requirements**: VER-01, VER-02, OUT-01, OUT-03
+**Plans:** 1/1 plans complete
 Plans:
-- [ ] 14-01-PLAN.md -- Build complete cross-reference mapping every catalog mechanic to paper sections
-- [ ] 14-02-PLAN.md -- Compile gap report from cross-reference with decision columns
+- [x] 17-01-PLAN.md -- Consolidate all 24 discrepancies into severity-first report with fix guidance, new mechanics inventory, and coverage proof
+
+**Success Criteria** (what must be TRUE):
+  1. All numerical claims in the game theory paper verified against current contract constants
+  2. All mechanism descriptions verified against current contract implementations
+  3. Structured parity notes produced per contract group (Game & Modules, Token Contracts, Support Systems)
+  4. Summary of new mechanics not yet covered in the paper with recommendation on documentation
+  5. Single consolidated report ready for user action
 
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Preparation | v1.0 | 1/1 | Complete | 2026-03-16 |
-| 2. Number-Heavy Sections Audit | v1.0 | 3/3 | Complete | 2026-03-16 |
-| 3. Mechanism-Heavy Sections Audit | v1.0 | 2/2 | Complete | 2026-03-16 |
-| 4. Prose and Framing Sections Audit | v1.0 | 2/2 | Complete | 2026-03-16 |
-| 5. Cross-Section Consistency and Report | v1.0 | 2/2 | Complete | 2026-03-17 |
-| 6. Foundation | v2.0 | 3/3 | Complete | 2026-03-18 |
-| 7. Purchasing & Core UI | v2.0 | 2/2 | Complete | 2026-03-18 |
-| 8. Hero Displays | v2.0 | 3/3 | Complete | 2026-03-18 |
-| 9. Supporting Features | v2.0 | 4/4 | Complete | 2026-03-18 |
-| 10. Decimator & Terminal | v2.0 | 2/2 | Complete | 2026-03-18 |
-| 11. Audio & Polish | v2.0 | 2/2 | Complete | 2026-03-18 |
-| 12. Integration Fixes & Cleanup | v2.0 | 1/1 | Complete | 2026-03-18 |
 | 13. Contract Mechanic Extraction | v2.1 | 4/4 | Complete | 2026-03-19 |
-| 14. Gap Analysis and Report | v2.1 | 1/2 | In Progress | - |
-| 16. Token & Support Systems Parity | v2.1 | 1/4 | In Progress | - |
+| 14. Gap Analysis and Report | v2.1 | 2/2 | Complete | 2026-03-19 |
+| 15. Game & Modules Parity | v2.2 | 4/4 | Complete | 2026-04-01 |
+| 16. Token & Support Systems Parity | v2.2 | 0/4 | Complete    | 2026-04-01 |
+| 17. Consolidated Parity Report | v2.2 | 1/1 | Complete    | 2026-04-01 |
