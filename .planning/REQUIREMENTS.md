@@ -1,47 +1,49 @@
-# Requirements: Contract-Paper Gap Audit
+# Requirements: Contract-Paper Parity Check
 
-**Defined:** 2026-03-18
-**Core Value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
+**Defined:** 2026-03-31
+**Core Value:** Verify all game theory paper claims match current contract source
 
-## v2.1 Requirements
+## v2.2 Requirements
 
-### Extraction
+### Verification
 
-- [x] **EXTR-01**: All mechanics in DegenerusGame.sol and 12 game modules catalogued (Advance, Boon, Decimator, Degenerette, Endgame, GameOver, Jackpot, Lootbox, Mint, MintStreakUtils, PayoutUtils, Whale)
-- [x] **EXTR-02**: All mechanics in token contracts catalogued (BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP)
-- [x] **EXTR-03**: All mechanics in support systems catalogued (DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusVault)
-- [x] **EXTR-04**: All mechanics in infrastructure catalogued (DegenerusJackpots, DegenerusAdmin, DegenerusTraitUtils, DeityBoonViewer, Icons32Data, 5 libraries, storage)
+- [ ] **VER-01**: All numerical claims in the game theory paper verified against current contract constants and logic
+- [ ] **VER-02**: All mechanism descriptions in the paper verified against current contract implementations
+- [ ] **VER-03**: Any new or changed contract mechanics since v2.1 identified and cataloged
+- [ ] **VER-04**: Any removed or renamed contract mechanics since v2.1 identified
 
-### Analysis
+### Output
 
-- [x] **ANLS-01**: Each mechanic cross-referenced to specific game theory paper section or marked undocumented
-- [ ] **ANLS-02**: Consolidated gap report listing every undocumented mechanic with contract file, function name, what it does, and a blank decision column
+- [ ] **OUT-01**: Structured parity notes produced per contract group (Game & Modules, Token Contracts, Support Systems, Infrastructure)
+- [ ] **OUT-02**: Each discrepancy includes: paper location, contract location, nature of mismatch, severity
+- [ ] **OUT-03**: Summary of new mechanics not yet covered in the paper with recommendation on whether they warrant documentation
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Code changes to contracts | Separate repo, decisions come after audit |
-| Paper edits | Decisions come after audit; edits are a follow-up milestone |
-| Whitepaper cross-reference | Game theory paper only |
-| Frontend changes | Analysis-only milestone |
+| Paper edits | Advisory notes only; user will edit papers separately |
+| Contract code changes | Read-only audit |
+| Whitepaper verification | Game theory paper only |
+| Database/API verification | Separate repo |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| EXTR-01 | Phase 13 | Complete |
-| EXTR-02 | Phase 13 | Complete |
-| EXTR-03 | Phase 13 | Complete |
-| EXTR-04 | Phase 13 | Complete |
-| ANLS-01 | Phase 14 | Complete |
-| ANLS-02 | Phase 14 | Pending |
+| VER-01 | Phase 17 | Pending |
+| VER-02 | Phase 17 | Pending |
+| VER-03 | Phase 16 | Pending |
+| VER-04 | Phase 16 | Pending |
+| OUT-01 | Phase 17 | Pending |
+| OUT-02 | Phase 15 | Pending |
+| OUT-03 | Phase 17 | Pending |
 
 **Coverage:**
-- v2.1 requirements: 6 total
-- Mapped to phases: 6
+- v2.2 requirements: 7 total
+- Mapped to phases: 7
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-03-18*
-*Last updated: 2026-03-18 after roadmap creation*
+*Requirements defined: 2026-03-31*
+*Last updated: 2026-03-29 after roadmap creation*
