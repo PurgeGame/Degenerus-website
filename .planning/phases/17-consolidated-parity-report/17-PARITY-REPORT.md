@@ -11,11 +11,11 @@
 
 | Severity | Count |
 |----------|-------|
-| Critical | 2 |
+| Critical | 1 |
 | Major | 6 |
 | Minor | 7 |
 | Info | 9 |
-| **Total** | **24** |
+| **Total** | **23** |
 
 ### Contracts Verified
 
@@ -29,19 +29,11 @@ DegenerusAdmin configuration was verified implicitly through game module paramet
 
 ### Coverage Statement
 
-All numerical claims (VER-01) and mechanism descriptions (VER-02) in the game theory paper have been verified against current contract source. 17 paper sections were verified clean with no discrepancies. 24 discrepancies were identified across the remaining sections.
+All numerical claims (VER-01) and mechanism descriptions (VER-02) in the game theory paper have been verified against current contract source. 17 paper sections were verified clean with no discrepancies. 23 discrepancies were identified across the remaining sections.
 
 ---
 
 ## Critical Discrepancies
-
-#### TS-10: Phantom +100 BURNIE pre-final-draw affiliate bonus
-
-- **Paper:** S3.5 (lines 3001-3003), "An additional bonus of +100 BURNIE per ticket applies to affiliate commissions on fresh-ETH purchases on the day before the final jackpot draw."
-- **Contract:** No matching constant, function, or logic in any contract file. Searched DegenerusAffiliate.sol, BurnieCoin.sol, DegenerusGame.sol, and all modules.
-- **Mismatch:** The paper describes a mechanic (+100 BURNIE per ticket affiliate bonus on pre-final-draw day) that does not exist in any contract in the codebase. This claim appears multiple times (lines 3001-3003, 3013, 6710).
-- **Severity:** Critical
-- **Fix guidance:** Remove the +100 BURNIE pre-final-draw affiliate bonus claim from S3.5 (lines 3001-3003, 3013, and 6710). This mechanic is not implemented. The affiliate commission system operates solely on the percentage-based tiers described elsewhere in S3.5.
 
 #### TS-08: Coinflip recycling bonus percentages overstated
 
@@ -227,3 +219,141 @@ All numerical claims (VER-01) and mechanism descriptions (VER-02) in the game th
 - **Contract:** StakedDegenerusStonk.sol constructor mints the entire 1T supply at deployment. DegenerusStonk.sol constructor (lines 113-123) issues 50B DGNRS to creator and holds remaining 150B for vesting. `claimVested()` releases 5B DGNRS per game level to vault owner, up to 200B total (fully vested at level 30).
 - **Mismatch:** "No minting after deployment" is technically correct (all sDGNRS supply minted in constructor). However, the creator's access to their 20% is not immediate: only 50B (5%) is available at deploy, with the remaining 150B vesting over 30 levels. The paper's "20% allocated to the creator at deployment" is correct about allocation but does not disclose the vesting schedule.
 - **Severity:** Info
+
+---
+
+## New Mechanics Since v2.1
+
+New contract capabilities identified during delta tracking (VER-03, VER-04). Each is assessed for whether the game theory paper should cover it.
+
+### Document (game-theoretically relevant)
+
+**GNRUS.sol** (entire contract is new)
+- **Capability:** Soulbound governance token with proposal/vote system, charitable donation selection, and burn-for-proportional-assets redemption
+- **Recommendation:** Document
+- **Rationale:** Core to GNRUS's role described in S4.1 and S4.3. Paper was written before this contract existed. Governance mechanics (proposal, vote, charity selection) are game-theoretically relevant as coordination devices that give GNRUS holders ongoing influence over protocol charitable output.
+
+**BurnieCoinflip.sol** (take-profit system)
+- **Capability:** Players can set automatic take-profit thresholds on coinflip positions, allowing partial exits when winnings exceed a configurable multiple
+- **Recommendation:** Document
+- **Rationale:** Take-profit is a new player strategy that weakens the "all-or-nothing" framing of the commitment device argument in S5.3. Players now have a middle path between full reinvestment and full claim. The paper's Device 5 description should acknowledge this option exists.
+
+**DegenerusStonk.sol** (year sweep)
+- **Capability:** 365 days after GAMEOVER, remaining contract assets split 50/50 between GNRUS holders and vault
+- **Recommendation:** Document
+- **Rationale:** Terminal distribution mechanic not in paper. Relevant to endgame analysis in S10. Creates a finite horizon for post-game asset distribution that the paper's terminal math section should reference.
+
+**StakedDegenerusStonk.sol** (post-game burn)
+- **Capability:** Post-game burn function changes DGNRS token economics by allowing deterministic redemption without VRF gambling
+- **Recommendation:** Document
+- **Rationale:** Already partially covered by TS-06 (Info finding about bifurcated burn paths). The existence of a separate deterministic post-game burn path affects DGNRS's terminal value proposition.
+
+**DegenerusAffiliate.sol** (default referral codes)
+- **Capability:** Every player address has an implicit default referral code without needing to explicitly create one, lowering the barrier to affiliate network participation
+- **Recommendation:** Document
+- **Rationale:** Changes affiliate onboarding UX described in S3.5. Relevant to the network effects argument because zero-friction referral codes increase the probability of organic affiliate tree formation.
+
+**DegenerusQuests.sol** (Degenerette integration)
+- **Capability:** Degenerette wagering now counts toward quest progress, making the mini-game contribute to activity score maintenance
+- **Recommendation:** Document
+- **Rationale:** Expands the "active participation dominant strategy" argument. Degenerette play, previously isolated entertainment, now feeds the quest system. Strengthens the cross-subsidy thesis (entertainment actions produce grinder-relevant score improvements).
+
+### Skip (implementation details, not game-theoretically relevant)
+
+| Contract | Capability | Why Skip |
+|----------|-----------|----------|
+| BurnieCoin.sol | `_consumeCoinflipShortfall` storage optimization | Internal storage packing, no player-facing behavior change |
+| BurnieCoinflip.sol | Flip mode settlement, burn consumption, deity bonus calc, top bettor tracking | Internal helpers for existing mechanics already documented |
+| StakedDegenerusStonk.sol | `burnRemainingPools()`, `transferBetweenPools()` | Administrative pool management functions |
+| WrappedWrappedXRP.sol | `burnForGame()` | WWXRP wager burn. WWXRP is a valueless memecoin; burn path is implementation detail |
+| DegenerusVault.sol | Degenerette betting proxies, coinflip config, operator approval | Vault-owner convenience proxies. Underlying mechanics documented via primary contracts |
+
+---
+
+## Verified Clean Sections
+
+Sections verified with no discrepancies, confirming VER-01 and VER-02 coverage.
+
+**Game and Modules (14 contracts):**
+- S2.3 Cross-Subsidy Mechanism (ticket 90/10, lootbox 10/90 splits)
+- S2.5 Hero Symbol (most-wagered auto-wins quadrant, VRF color)
+- S3.4 Whale Bundles (pricing 2.4-4 ETH, deity 24 ETH, cap 32)
+- S4.2 Permissionless Execution (advanceGame access, 0.005 ETH bounty, gates)
+- S4.3 Solvency Invariant (five tracked pools, structural invariant)
+- S5.3 Commitment Devices (auto-rebuy 30%/45%, century bonus mints, 20 ETH cap)
+- S6.1 Ticket Pricing / BURNIE Cost (0.01-0.24 ETH schedule, 1000 BURNIE per ticket)
+- S6.2 Decimator (50/50 ETH/lootbox, bucket assignment, burn weight, trigger schedule)
+- S8.3 BURNIE Price Floor (coverage gate)
+- S10.1 Terminal Math (death clock 120/365 days, deity refund, terminal decimator/jackpot, final sweep)
+- App. A Parameter Table (all parameters except stETH yield split GM-04)
+- App. B Jackpot Distribution (JACKPOT_LEVEL_CAP, daily pool %, trait buckets, BURNIE jackpot, early-bird, daily drip)
+- App. C Extraction Function (all 8 components, VRF request/fulfill, timeout, fallback)
+- App. D Attack Vectors (degenerette ETH cap)
+- App. E.4 BURNIE Coverage Gate (0.75%/day drip rate)
+- App. F Common Misreadings (except GNRUS cross-ref in GM-03)
+- App. G Degenerette (9 multipliers, 25/75 split, 10% drain cap, EV normalization, ROI curve, +5% ETH bonus, DGNRS rewards)
+- App. G Lootbox Reward Paths (55/10/10/25 probabilities, 161% ticket budget, 5 variance tiers, BURNIE ranges, presale bonus, DGNRS tiers, boon budget/split)
+
+**Token Contracts (6 contracts):**
+- S4.1 creator 20% transferable allocation
+- S4.1 / App. C pool distribution 20/35/20/10/10/5
+- App. C soulbound mechanics (sDGNRS non-transferable)
+- App. C afKing mode and 10 ETH takeProfit
+- S4.1 / App. C VRF multiplier 25-175%
+- App. C half ETH / half lootbox on burn (50/50 split)
+- App. C ETH-preferential payout
+- S4.1 WWXRP as consolation prize
+- App. G Coinflip (tier probabilities, bonus ranges, presale +6pp, win/loss effects)
+- App. A coinflip payout mean 1.9685x
+- S6.1 BURNIE price ratchet
+- S4.1 vault allocation 2M BURNIE
+- App. C decimator constants (12/5/2 buckets, 1000 BURNIE minimum)
+- S2.5 BAF leaderboard (coinflip volume feeds BAF)
+- S5.3 auto-rebuy (toggleable, functions as described)
+- S4.1 GNRUS 2% per level, 5% vault vote bonus, soulbound
+- S4.3 yield routing includes GNRUS
+
+**Support Systems (4 contracts):**
+- S3.5 +100 BURNIE pre-final-draw affiliate bonus (implemented in DegenerusGameMintModule.sol line 948, basis inflated by 7/5 or 3/2 before payAffiliate call)
+- S3.5 commission 20% (levels 4+), 25% (levels 0-3)
+- S3.5 kickback 0-25%, per-sender cap 0.5 ETH/level
+- S3.5 coinflip credit payment, lootbox taper 20% to 5%
+- App. D self-referral blocked
+- S2.4 deity affiliate cap 5 ETH/level, S3.4 deity 20% commission bonus
+- S3.4 deity soulbound, App. A deity cap 32
+- S3.4 permanent 1.55 activity score
+- App. C boon types (31 weighted), App. A quest reward 300 BURNIE
+- App. C quest streak up to 1.00, S3.6 quest streak requires daily ETH purchase
+- S4.1 vault owner >50.1% DGVE, afKing mode, stETH yield 25%, unaffiliated commissions
+- S4.1 vault 2M BURNIE (cross-contract verified)
+
+---
+
+## Known Non-Issues
+
+Items verified and intentionally not flagged, per CLAUDE.md and MEMORY.md guidance.
+
+1. **stETH yield split 50/25/25 vs 46/23/23:** The ~8% contract buffer is an implementation detail. GM-04 flags the paper saying 25/25/25/25 (which IS wrong), not the buffer.
+2. **VAULT_PERPETUAL_TICKETS=16 vs "4 tickets":** Units difference (entries vs purchases due to `<<2`). Not an error.
+3. **SS9.3 futurepool value (800) is post-drawdown:** The paper's math is correct.
+4. **"Zero-rake" presale carve-out:** 20% vault allocation during presale is a known and documented exception.
+5. **Unaffiliated player commissions to vault:** Known technical carve-out.
+6. **Burn weight ~1.8x vs 1.7833x:** Paper's tilde notation covers the 0.02 difference.
+7. **GM-03 final sweep GNRUS omission not re-reported in Phase 16:** Already captured in Phase 15 scope (DegenerusGameGameOverModule.sol). DegenerusStonk.sol `yearSweep()` is a separate later mechanism.
+8. **GM-11 deity boon expiry (2 vs 4 days):** Already reported in Phase 15. Not re-reported in support systems.
+9. **Gambling burn protective caps (160 ETH daily, 50% supply per period):** Safety mechanisms, not discrepancies.
+10. **Post-gameOver BURNIE exclusion from burns:** Documented in TS-06 as Info. Design choice, not error.
+11. **GNRUS yield share "25%" vs actual 23%:** Per CLAUDE.md, the 50/25/25 simplification is deliberate.
+12. **App. A "governance proposal gate 20 hours":** Refers to DegenerusAdmin.sol VRF stall threshold, not GNRUS governance. Correctly labeled "VRF recovery" in App. A.
+13. **Deity pass pricing not in DegenerusDeityPass.sol:** Lives in WhaleModule (Phase 15 scope). Not a discrepancy.
+14. **Activity score calculation not in DegenerusDeityPass.sol:** Lives in DegenerusGame.sol. Not a discrepancy.
+
+---
+
+## Deferred Verifications: All Resolved
+
+Three claims deferred from Phase 15 to Phase 16, all confirmed against contract source.
+
+1. **DGNRS distribution 20/35/20/10/10/5 (S4.1):** Confirmed. All six BPS constants match in StakedDegenerusStonk.sol constructor (CREATOR_BPS=2000, AFFILIATE_POOL_BPS=3500, LOOTBOX_POOL_BPS=2000, EARLYBIRD_POOL_BPS=1000, WHALE_POOL_BPS=1000, REWARD_POOL_BPS=500). Sum = 10000 BPS.
+2. **Soulbound mechanics, afKing, 10 ETH takeProfit (S4.1):** Confirmed. sDGNRS non-transferable. Constructor sets `game.setAfKingMode(address(0), true, 10 ether, 0)`.
+3. **Deity boon "3 per day" limit (App. C):** Confirmed. DEITY_DAILY_BOON_COUNT=3 in DegenerusGameLootboxModule.sol line 337, enforced via bitmask tracking.

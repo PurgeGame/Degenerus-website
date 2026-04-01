@@ -9,11 +9,11 @@
 
 | Severity | Count |
 |----------|-------|
-| Critical | 1 |
+| Critical | 0 |
 | Major | 1 |
 | Minor | 0 |
 | Info | 0 |
-| **Total** | **2** |
+| **Total** | **1** |
 
 ## Contracts Verified
 
@@ -28,12 +28,11 @@
 
 ### Section 3.5: Affiliate Commission System
 
-#### TS-10: +100 BURNIE pre-final-draw affiliate bonus not found in contract
+#### ~~TS-10: RETRACTED~~ +100 BURNIE pre-final-draw affiliate bonus IS implemented
 
-- **Paper:** S3.5 (lines 3001-3003), "An additional bonus of +100 BURNIE per ticket applies to affiliate commissions on fresh-ETH purchases on the day before the final jackpot draw."
-- **Contract:** Searched all contract files (DegenerusAffiliate.sol, BurnieCoin.sol, DegenerusGame.sol, all modules). No constant, function, or logic implementing a "+100 BURNIE per ticket" affiliate bonus tied to pre-final-draw timing.
-- **Mismatch:** The paper describes a specific mechanic (+100 BURNIE per ticket bonus for affiliates on pre-final-draw day) that does not appear to exist in any contract in the codebase. This claim appears multiple times in the paper (lines 3001-3003, 3013, 6710).
-- **Severity:** Critical
+- **Status:** RETRACTED. This finding was incorrect.
+- **Actual location:** DegenerusGameMintModule.sol lines 948-961. The mechanic inflates the BURNIE basis by 7/5 (levels 0-3, 25% affiliate rate) or 3/2 (levels 4+, 20% affiliate rate) before calling `payAffiliate()`. This inflation is calibrated so affiliates receive the equivalent of +100 BURNIE per ticket after percentage scaling. The guard checks `jackpotPhaseFlag && compressedJackpotFlag != 2` (not turbo) and `jackpotCounter + nextStep >= JACKPOT_LEVEL_CAP` (day before final draw).
+- **Original error:** The Phase 16 agent searched DegenerusAffiliate.sol, BurnieCoin.sol, and DegenerusGame.sol but missed DegenerusGameMintModule.sol where the logic actually lives.
 
 ### Appendix F: Common Misreadings
 
