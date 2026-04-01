@@ -157,8 +157,10 @@
 
 .replay-tq .badge-img {
   object-fit: contain;
-  width: 92%;
-  height: 92%;
+  width: 100%;
+  height: 100%;
+  padding: 4%;
+  box-sizing: border-box;
   display: block;
   position: relative;
   z-index: 1;

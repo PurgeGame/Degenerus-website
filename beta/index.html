@@ -24,6 +24,7 @@
   <link rel="stylesheet" href="styles/decimator.css">
   <link rel="stylesheet" href="styles/terminal.css">
   <link rel="stylesheet" href="styles/skeleton.css">
+  <link rel="stylesheet" href="styles/replay.css">
   <script type="importmap">
   {
     "imports": {
@@ -91,6 +92,9 @@
         <tx-status-list></tx-status-list>
       </div>
     </div>
+
+    <!-- DEBUG: Replay viewer — always visible during development, remove/gate for prod -->
+    <replay-panel></replay-panel>
 
     <!-- Stale data indicator -->
     <div id="stale-indicator" class="stale-indicator" hidden>

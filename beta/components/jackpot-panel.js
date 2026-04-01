@@ -143,7 +143,7 @@ class JackpotPanel extends HTMLElement {
         img.alt = `${badge.category} ${badge.color}`;
       }
       if (badge && name) {
-        name.textContent = `${badge.category} ${badge.color}`;
+        name.textContent = badge.label || `${badge.category} ${badge.color}`;
       }
     });
 

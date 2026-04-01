@@ -18,6 +18,7 @@ import '../components/affiliate-panel.js';
 import '../components/baf-panel.js';
 import '../components/decimator-panel.js';
 import '../components/terminal-panel.js';
+import '../components/replay-panel.js'; // DEBUG: replay viewer
 
 // Import modules
 import { update, get, subscribe } from './store.js';

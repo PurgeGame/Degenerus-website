@@ -568,14 +568,8 @@ class ReplayPanel extends HTMLElement {
     const mainBadges = this.querySelectorAll('.replay-ticket .badge-img');
     for (const mb of mainBadges) {
       mb.style.display = '';
-      // Set explicit pixel dimensions so SVGs render at full size even during rapid src swaps.
-      // Guard against zero rect (element not yet laid out) — fall back to 120px placeholder.
-      const rect = mb.parentElement.getBoundingClientRect();
-      const rawSize = Math.min(rect.width, rect.height);
-      const size = rawSize > 0 ? Math.round(rawSize * 0.92) : 120;
-      console.log('[badge-size]', rawSize, '->', size);
-      mb.setAttribute('width', size);
-      mb.setAttribute('height', size);
+      mb.removeAttribute('width');
+      mb.removeAttribute('height');
     }
 
     for (let i = 0; i < 4; i++) {

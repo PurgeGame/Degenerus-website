@@ -44,3 +44,17 @@ All files at `/home/zak/Dev/PurgeGame/degenerus-audit/audit/`:
 - **Economic modeling:** Primer + parameter-reference (all constants in one place)
 - **Skeptic/advocate review:** Primer's pitfalls section + relevant subsystem files for verification
 - **Player-facing content:** Primer is sufficient for most explanations
+
+## Writing & Editing Rules
+
+When editing the whitepaper or game theory paper:
+- Do NOT add unnecessary context about internal mechanics changes.
+- Do NOT duplicate content across sections.
+- Do NOT add teaser sentences ("as we will see in Section X...").
+- Keep edits precise and minimal. Don't rewrite surrounding prose unless asked.
+- Verify all numbers against economics docs before writing.
+- Do NOT flag or soften precise technical language just because it resembles marketing buzzwords when used loosely elsewhere. If a term describes exactly what the mechanism does, it's the right word. "Zero-rake" means zero rake. "Trustless" means trustless. Don't add disclaimers because other projects misuse these terms. Standard technical vocabulary ("incentive structure," "mechanism design," "Nash equilibrium") belongs in a game theory paper. Don't flag it as jargon.
+
+## Agent Review Instructions
+
+When spawning review agents (degen-skeptic, protocol-advocate, readability-reviewer, etc.), instruct them to read the economics primer before making suggestions. Degenerus is both a financial protocol and an entertainment product. Different sections emphasize different aspects. Agents should match the framing of the section they're reviewing rather than imposing one lens everywhere.
