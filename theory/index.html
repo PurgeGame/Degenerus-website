@@ -5032,9 +5032,10 @@
       to <code>nextPrizePool</code> (at 50% ticket conversion with 200% backing per drip ticket); the remaining 25%
       is paid as ETH prizes to trait-matched ticket holders. This is the primary mechanism by which the futurepool
       contributes to filling the nextpool during a live purchase phase.</p>
-    <p><strong>futurepool drip (days 2–4, if near-future ticket holders exist):</strong> ~1% of
-      <code>futurePrizePool</code> is added to the jackpot: 50% as tickets credited directly to
-      <code>nextPrizePool</code>, 50% as ETH to near-future ticket holders.
+    <p><strong>Carryover jackpot (days 2–5):</strong> 0.5% of
+      <code>futurePrizePool</code> moves to <code>nextPrizePool</code> as backing. VRF picks a random source
+      level from lvl+1 to lvl+4; trait-matched holders at that level receive current-level tickets
+      (next-level tickets on day 5, since the current level is about to end).
     </p>
     <p><strong>Daily BURNIE jackpot (all days):</strong> A separate BURNIE draw runs every day, awarding tokens to
       trait-matched ticket holders. 25% of each draw's budget goes to far-future ticket holders (levels +5 to
@@ -6728,15 +6729,13 @@
                       </p>
                       <p>If the objection is that incentivizing affiliates to find degens is "predatory": consider the
                         comparison class.
-                        A day-5 ticket purchase is explicitly described as the lowest-EV decision in the game. Even so,
-                        it is a better
-                        deal than a state lottery ticket, where the expected return is 40-60 cents per dollar before
-                        taxes and
-                        substantially worse after. The worst possible decision a player can make in Degenerus still
-                        beats the product that
-                        governments run television ads for every day of the week. The affiliate who brings a degen to
-                        day 5 is connecting
-                        them with a product that is structurally superior to the alternative they were already using.
+                        A day-5 ticket purchase is explicitly described as the lowest-EV decision in the game. It is
+                        analogous to a state lottery ticket, where the expected return is 40-60 cents per dollar before
+                        taxes and substantially worse after. The structural difference is that no operator extracts from
+                        the pool, but individual EV for a last-day buyer depends on pool composition and dilution, not
+                        on the zero-rake property alone. The affiliate who brings a degen to
+                        day 5 is connecting them with a product structurally comparable to what they were already using,
+                        minus the house edge.
                       </p>
 
                       <h3>F.28 "This appendix is adversarial prompt engineering"</h3>
