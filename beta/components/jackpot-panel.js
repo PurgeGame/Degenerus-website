@@ -3,6 +3,7 @@
 // All data transformation delegated to jackpot-data.js.
 
 import { subscribe, get } from '../app/store.js';
+import { fetchJSON } from '../app/api.js';
 import { deriveWinningTraits, traitToBadge, estimateAllocation } from '../app/jackpot-data.js';
 import { formatEth } from '../app/utils.js';
 import { playSound } from '../app/audio.js';
@@ -89,7 +90,7 @@ class JackpotPanel extends HTMLElement {
     if (el) el.textContent = value;
   }
 
-  #onGameUpdate(game) {
+  async #onGameUpdate(game) {
     if (!game) return;
 
     if (game.jackpotDay !== undefined) this.#showContent();
@@ -115,21 +116,40 @@ class JackpotPanel extends HTMLElement {
     // Check for RNG reveal trigger:
     // When phase is JACKPOT and rngLocked transitions from true to false, RNG is resolved.
     // We check for dailyRng.finalWord in game state (populated by API extension when available).
-    // TODO: dailyRng.finalWord not yet in API response. When available, the component
-    // will trigger reveals automatically. For now, the panel shows stats only.
+    // Primary path: fetch event-sourced distributions from /game/jackpot/:level (TEST-02).
+    // Fallback: derive from RNG word if API unavailable.
     const rngWord = game.dailyRng?.finalWord || null;
     if (game.phase === 'JACKPOT' && rngWord && rngWord !== '0' && rngWord !== this.#currentRngWord) {
       this.#currentRngWord = rngWord;
       this.#revealPlayed = false;
-      this.#triggerReveal(rngWord);
+      // Try to fetch actual event-sourced distributions from API
+      try {
+        const data = await fetchJSON(`/game/jackpot/${game.level}`);
+        this.#triggerReveal(rngWord, data.distributions);
+      } catch {
+        // API unavailable or 404 -- fall back to RNG derivation
+        this.#triggerReveal(rngWord);
+      }
     }
   }
 
-  async #triggerReveal(rngWord) {
+  async #triggerReveal(rngWord, distributions = null) {
     if (this.#revealPlayed) return;
     this.#revealPlayed = true;
 
-    const traits = deriveWinningTraits(rngWord);
+    let traits;
+    if (distributions && distributions.length > 0) {
+      // API path: use actual event-sourced traitIds (TEST-02 requirement)
+      traits = distributions
+        .filter(d => d.traitId != null)
+        .slice(0, 4)
+        .map(d => d.traitId);
+      // Pad to 4 if fewer than 4 distributions have traitId
+      while (traits.length < 4) traits.push(null);
+    } else {
+      // Fallback: derive from RNG word (approximation)
+      traits = deriveWinningTraits(rngWord);
+    }
     const badges = traits.map(t => traitToBadge(t));
 
     // Set badge images on back faces before animation
