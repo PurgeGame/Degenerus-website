@@ -1,8 +1,8 @@
-// app/coinflip.js -- Coinflip business logic: deposit, claim, auto-rebuy, bounty reads
+// app/coinflip.js -- Coinflip business logic: deposit, claim, auto-rebuy
 // Components should import these functions rather than importing ethers or calling contracts directly.
 
 import { ethers } from 'ethers';
-import { getContract, sendTx, getReadProvider } from './contracts.js';
+import { getContract, sendTx } from './contracts.js';
 import { get, update, batch } from './store.js';
 import { CONTRACTS, COINFLIP_ABI, COINFLIP } from './constants.js';
 import { refreshAfterAction } from './api.js';
@@ -66,68 +66,6 @@ export async function setAutoRebuy(enabled, takeProfitStr) {
     'Set auto-rebuy'
   );
   await refreshAfterAction();
-}
-
-// -- Read Functions (use getReadProvider, work before wallet) --
-
-/**
- * Fetch player coinflip state from contract and update store.
- * @param {string} address - Player wallet address
- */
-export async function fetchCoinflipState(address) {
-  if (!address) return;
-
-  const contract = new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, getReadProvider());
-
-  const [stakeResult, claimableResult, rebuyResult] = await Promise.allSettled([
-    contract.coinflipAmount(address),
-    contract.previewClaimCoinflips(address),
-    contract.coinflipAutoRebuyInfo(address),
-  ]);
-
-  const updates = [];
-
-  if (stakeResult.status === 'fulfilled') {
-    updates.push(['coinflip.playerStake', stakeResult.value.toString()]);
-  }
-
-  if (claimableResult.status === 'fulfilled') {
-    updates.push(['coinflip.claimable', claimableResult.value.toString()]);
-  }
-
-  if (rebuyResult.status === 'fulfilled') {
-    const [enabled, stop, carry] = rebuyResult.value;
-    updates.push(['coinflip.autoRebuy', {
-      enabled,
-      stop: stop.toString(),
-      carry: carry.toString(),
-    }]);
-  }
-
-  if (updates.length > 0) {
-    batch(updates);
-  }
-}
-
-/**
- * Fetch global bounty state from contract and update store.
- */
-export async function fetchBountyState() {
-  const contract = new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, getReadProvider());
-
-  try {
-    const [bounty, record] = await Promise.all([
-      contract.currentBounty(),
-      contract.biggestFlipEver(),
-    ]);
-
-    batch([
-      ['coinflip.bounty.pool', bounty.toString()],
-      ['coinflip.bounty.recordAmount', record.toString()],
-    ]);
-  } catch {
-    // Bounty reads failed; leave store values unchanged
-  }
 }
 
 // -- Pure Helpers --

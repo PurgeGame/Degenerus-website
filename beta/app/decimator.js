@@ -2,9 +2,9 @@
 // Components should import these functions rather than importing ethers or calling contracts directly.
 
 import { ethers } from 'ethers';
-import { getContract, sendTx, getReadProvider } from './contracts.js';
+import { getContract, sendTx } from './contracts.js';
 import { get, update, batch } from './store.js';
-import { CONTRACTS, DECIMATOR_ABI, DECIMATOR_VIEW_ABI, DECIMATOR, DECIMATOR_CLAIM_ABI } from './constants.js';
+import { CONTRACTS, DECIMATOR_ABI, DECIMATOR, DECIMATOR_CLAIM_ABI } from './constants.js';
 import { refreshAfterAction } from './api.js';
 
 // -- Write Functions (require wallet) --
@@ -71,78 +71,6 @@ export async function claimDecimatorJackpot(level) {
   );
   await refreshAfterAction();
   return receipt;
-}
-
-// -- Read Functions (use getReadProvider, work before wallet) --
-
-/**
- * Fetch decimator state from contract and update store.
- * If no address is provided, only fetches window + pool state.
- * @param {string} [address] - Player wallet address (optional)
- */
-export async function fetchDecimatorState(address) {
-  const contract = new ethers.Contract(CONTRACTS.GAME, DECIMATOR_VIEW_ABI, getReadProvider());
-
-  const calls = [
-    contract.decWindow(),
-    contract.futurePrizePoolTotalView(),
-  ];
-  if (address) {
-    calls.push(contract.playerActivityScore(address));
-  }
-
-  const results = await Promise.allSettled(calls);
-
-  const updates = [];
-
-  // decWindow result: [on, lvl]
-  if (results[0].status === 'fulfilled') {
-    const [on, lvl] = results[0].value;
-    updates.push(['decimator.windowOpen', on]);
-    updates.push(['decimator.windowLevel', Number(lvl)]);
-  }
-
-  // futurePrizePoolTotalView result: compute burn pool share
-  if (results[1].status === 'fulfilled') {
-    const futurePrizePool = results[1].value;
-    // Determine if current window level is x00 for 30% vs 10% share
-    const windowLevel = results[0].status === 'fulfilled' ? Number(results[0].value[1]) : 0;
-    const isX00 = windowLevel > 0 && windowLevel % 100 === 0;
-    const shareBps = isX00 ? 30n : 10n;
-    const burnPool = BigInt(futurePrizePool) * shareBps / 100n;
-    updates.push(['decimator.burnPool', burnPool.toString()]);
-  }
-
-  // Activity score result (player-specific)
-  if (address && results[2] && results[2].status === 'fulfilled') {
-    const scoreBps = Number(results[2].value);
-    const windowLevel = results[0].status === 'fulfilled' ? Number(results[0].value[1]) : 0;
-    const isLevel100 = windowLevel > 0 && windowLevel % 100 === 0;
-    updates.push(['decimator.playerBucket', computeBucket(scoreBps, isLevel100)]);
-    updates.push(['decimator.activityMultiplier', computeMultiplier(scoreBps)]);
-  }
-
-  if (updates.length > 0) {
-    batch(updates);
-  }
-}
-
-/**
- * Fetch decimator claim status for a player at a given level.
- * @param {string} address - Player wallet address
- * @param {number} level - The level to check
- */
-export async function fetchDecimatorClaimable(address, level) {
-  const contract = new ethers.Contract(CONTRACTS.GAME, DECIMATOR_VIEW_ABI, getReadProvider());
-  try {
-    const [amountWei, winner] = await contract.decClaimable(address, level);
-    batch([
-      ['decimator.claimable', amountWei.toString()],
-      ['decimator.isWinner', winner],
-    ]);
-  } catch {
-    // Leave store unchanged on failure
-  }
 }
 
 // -- Pure Helpers --

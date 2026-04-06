@@ -7,17 +7,15 @@ import {
   depositCoinflip,
   claimCoinflips,
   setAutoRebuy,
-  fetchCoinflipState,
-  fetchBountyState,
   getMultiplierTier,
   isCoinflipLocked,
 } from '../app/coinflip.js';
+import { fetchPlayerData } from '../app/api.js';
 import { formatBurnie, truncateAddress } from '../app/utils.js';
 import { COINFLIP } from '../app/constants.js';
 
 class CoinflipPanel extends HTMLElement {
   #unsubs = [];
-  #bountyLoaded = false;
   #errorTimeout = null;
   #loaded = false;
 
@@ -132,11 +130,7 @@ class CoinflipPanel extends HTMLElement {
     this.#unsubs.push(
       subscribe('player.address', (address) => {
         if (address) {
-          fetchCoinflipState(address);
-          if (!this.#bountyLoaded) {
-            fetchBountyState();
-            this.#bountyLoaded = true;
-          }
+          fetchPlayerData(address);
         }
         this.#validateStakeInput();
       })

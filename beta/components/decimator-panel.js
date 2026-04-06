@@ -6,10 +6,9 @@
 import { subscribe, get } from '../app/store.js';
 import {
   burnForDecimator,
-  fetchDecimatorState,
-  fetchDecimatorClaimable,
   claimDecimatorJackpot,
 } from '../app/decimator.js';
+import { fetchPlayerData } from '../app/api.js';
 import { formatBurnie, formatEth } from '../app/utils.js';
 import { DECIMATOR } from '../app/constants.js';
 
@@ -150,7 +149,7 @@ class DecimatorPanel extends HTMLElement {
     // On wallet connect, fetch decimator state for the player
     this.#unsubs.push(
       subscribe('player.address', (address) => {
-        fetchDecimatorState(address || null);
+        if (address) fetchPlayerData(address);
         this.#validateBurnInput();
       })
     );
