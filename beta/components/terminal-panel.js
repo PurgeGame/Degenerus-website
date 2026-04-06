@@ -8,8 +8,8 @@ import {
   burnForTerminalDecimator,
   claimTerminalDecimator,
   fetchTerminalState,
-  fetchInsuranceData,
 } from '../app/terminal.js';
+import { fetchPlayerData } from '../app/api.js';
 import { formatEth, formatBurnie } from '../app/utils.js';
 import { DECIMATOR } from '../app/constants.js';
 
@@ -115,8 +115,8 @@ class TerminalPanel extends HTMLElement {
     // On wallet connect/disconnect, fetch terminal data
     this.#unsubs.push(
       subscribe('player.address', (address) => {
+        if (address) fetchPlayerData(address);
         fetchTerminalState(address || null);
-        fetchInsuranceData();
         if (address) this.#dataLoaded = true;
         this.#validateBurnInput();
       })

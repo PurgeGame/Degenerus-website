@@ -59,7 +59,8 @@ export async function claimTerminalDecimator() {
 
 /**
  * Fetch terminal decimator state from contract and update store.
- * If no address is provided, only fetches window state (no player-specific reads).
+ * Fetches window state, yieldAccumulator, and (if address given) player-specific reads.
+ * futurePool is now provided by fetchPlayerData() from the API — not fetched here.
  * @param {string} [address] - Player wallet address (optional)
  */
 export async function fetchTerminalState(address) {
@@ -67,6 +68,7 @@ export async function fetchTerminalState(address) {
 
   const calls = [
     contract.terminalDecWindow(),
+    contract.yieldAccumulatorView(),
   ];
   if (address) {
     const currentLevel = get('game.level') || 0;
@@ -75,7 +77,6 @@ export async function fetchTerminalState(address) {
   }
 
   const results = await Promise.allSettled(calls);
-
   const updates = [];
 
   // terminalDecWindow result: [open, lvl]
@@ -85,19 +86,24 @@ export async function fetchTerminalState(address) {
     updates.push(['terminal.decLevel', Number(lvl)]);
   }
 
+  // yieldAccumulatorView result
+  if (results[1].status === 'fulfilled') {
+    updates.push(['terminal.yieldAccumulator', results[1].value.toString()]);
+  }
+
   // terminalDecClaimable result: [amountWei, winner]
-  if (address && results[1] && results[1].status === 'fulfilled') {
-    const [amountWei, winner] = results[1].value;
+  if (address && results[2] && results[2].status === 'fulfilled') {
+    const [amountWei, winner] = results[2].value;
     updates.push(['terminal.claimable', amountWei.toString()]);
     updates.push(['terminal.isWinner', winner]);
   }
 
   // ticketsOwedView result: uint32
-  if (address && results[2] && results[2].status === 'fulfilled') {
-    updates.push(['terminal.playerTicketsNextLevel', Number(results[2].value)]);
+  if (address && results[3] && results[3].status === 'fulfilled') {
+    updates.push(['terminal.playerTicketsNextLevel', Number(results[3].value)]);
   }
 
-  // Compute time multiplier from death clock
+  // Compute time multiplier from death clock (pure, no contract)
   const levelStartTime = get('game.levelStartTime');
   const level = get('game.level') || 0;
   if (levelStartTime) {
@@ -112,27 +118,6 @@ export async function fetchTerminalState(address) {
 
   if (updates.length > 0) {
     batch(updates);
-  }
-}
-
-/**
- * Fetch insurance data (yield accumulator and future pool) and update store.
- */
-export async function fetchInsuranceData() {
-  const contract = new ethers.Contract(CONTRACTS.GAME, DECIMATOR_VIEW_ABI, getReadProvider());
-
-  try {
-    const [accumulator, futurePool] = await Promise.all([
-      contract.yieldAccumulatorView(),
-      contract.futurePrizePoolTotalView(),
-    ]);
-
-    batch([
-      ['terminal.yieldAccumulator', accumulator.toString()],
-      ['terminal.futurePool', futurePool.toString()],
-    ]);
-  } catch {
-    // Leave store unchanged on failure
   }
 }
 
