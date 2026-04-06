@@ -3,7 +3,8 @@
 // All contract interaction delegated to quests.js (no ethers import here).
 
 import { subscribe, get } from '../app/store.js';
-import { fetchQuestState, getQuestProgress } from '../app/quests.js';
+import { getQuestProgress } from '../app/quests.js';
+import { fetchPlayerData } from '../app/api.js';
 
 class QuestPanel extends HTMLElement {
   #unsubs = [];
@@ -44,7 +45,7 @@ class QuestPanel extends HTMLElement {
     this.#unsubs.push(
       subscribe('player.address', (address) => {
         if (address) {
-          fetchQuestState(address);
+          fetchPlayerData(address);
         }
       })
     );
