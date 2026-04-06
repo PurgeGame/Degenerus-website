@@ -2,14 +2,14 @@
 // Code creation, referral input, earnings display.
 // All contract interaction delegated to affiliate.js (no ethers import here).
 
-import { subscribe, get } from '../app/store.js';
+import { subscribe, get, update } from '../app/store.js';
 import {
   createCode,
   referPlayer,
-  fetchAffiliateState,
   captureReferralFromUrl,
   getStoredReferralCode,
 } from '../app/affiliate.js';
+import { fetchPlayerData } from '../app/api.js';
 import { formatEth, truncateAddress } from '../app/utils.js';
 
 class AffiliatePanel extends HTMLElement {
@@ -112,7 +112,11 @@ class AffiliatePanel extends HTMLElement {
     this.#unsubs.push(
       subscribe('player.address', (address) => {
         if (address) {
-          fetchAffiliateState(address);
+          fetchPlayerData(address);
+          try {
+            const storedCode = localStorage.getItem(`degenerus_affiliate_code_${address}`);
+            if (storedCode) update('affiliate.code', storedCode);
+          } catch {}
           const urlCode = captureReferralFromUrl();
           if (!urlCode) {
             // Check for previously stored referral code

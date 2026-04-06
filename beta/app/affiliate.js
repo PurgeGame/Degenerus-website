@@ -5,7 +5,7 @@ import { ethers } from 'ethers';
 import { getContract, sendTx, getReadProvider } from './contracts.js';
 import { get, update, batch } from './store.js';
 import { CONTRACTS, AFFILIATE_ABI } from './constants.js';
-import { refreshAfterAction, fetchJSON } from './api.js';
+import { refreshAfterAction } from './api.js';
 
 // -- Constants --
 const CODE_PATTERN = /^[A-Za-z0-9]{3,31}$/;
@@ -78,41 +78,6 @@ export async function referPlayer(codeStr) {
 
   await refreshAfterAction();
   return receipt;
-}
-
-/**
- * Fetch affiliate state for a player and update store.
- * Non-critical: fails silently.
- * @param {string} address - Player wallet address
- */
-export async function fetchAffiliateState(address) {
-  if (!address) return;
-
-  try {
-    // Read referrer from contract
-    const referrer = await getReferrerAddress(address);
-    if (referrer && referrer !== ethers.ZeroAddress) {
-      update('affiliate.referredBy', referrer);
-    }
-
-    // Read earnings from DB API
-    try {
-      const data = await fetchJSON('/player/' + address);
-      if (data && data.totalAffiliateEarned) {
-        update('affiliate.totalEarned', data.totalAffiliateEarned);
-      }
-    } catch { /* API read failed; non-critical */ }
-
-    // Read stored affiliate code from localStorage
-    try {
-      const storedCode = localStorage.getItem(`degenerus_affiliate_code_${address}`);
-      if (storedCode) {
-        update('affiliate.code', storedCode);
-      }
-    } catch { /* localStorage unavailable */ }
-  } catch {
-    // Contract read failed; non-critical
-  }
 }
 
 /**

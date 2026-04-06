@@ -2,7 +2,7 @@
 // Components should import these functions rather than importing ethers or calling contracts directly.
 
 import { ethers } from 'ethers';
-import { getContract, sendTx, getReadProvider } from './contracts.js';
+import { getContract, sendTx } from './contracts.js';
 import { get, update, batch } from './store.js';
 import { CONTRACTS, DEGENERETTE_ABI, DEGENERETTE } from './constants.js';
 import { refreshAfterAction } from './api.js';
@@ -236,30 +236,6 @@ export function packCustomTicket(traitA, traitB, traitC, traitD) {
     ((traitB & 0xFF) << 8) |
     (traitA & 0xFF)
   );
-}
-
-// -- Read Functions (use getReadProvider, work before wallet) --
-
-/**
- * Fetch degenerette state for a player from contract and localStorage.
- * Updates store with current nonce and pending bets.
- * @param {string} address - Player wallet address
- */
-export async function fetchDegeneretteState(address) {
-  if (!address) return;
-
-  // Load pending bets from localStorage
-  const pending = loadPendingBets(address);
-  update('degenerette.pendingBets', pending);
-
-  // Read current nonce from contract
-  try {
-    const contract = new ethers.Contract(CONTRACTS.GAME, DEGENERETTE_ABI, getReadProvider());
-    const nonce = await contract.degeneretteBetNonce(address);
-    update('degenerette.playerNonce', Number(nonce));
-  } catch {
-    // Contract read failed; leave store value unchanged
-  }
 }
 
 /**

@@ -2,13 +2,14 @@
 // Currency selector, bet form, pending bet tracker, slot-style GSAP reveal animation.
 // All contract interaction delegated to degenerette.js (no ethers import here).
 
-import { subscribe, get } from '../app/store.js';
+import { subscribe, get, update } from '../app/store.js';
 import {
   placeBet,
   resolveBets,
-  fetchDegeneretteState,
+  loadPendingBets,
   currencyLabel,
 } from '../app/degenerette.js';
+import { fetchPlayerData } from '../app/api.js';
 import { formatEth, formatBurnie } from '../app/utils.js';
 import { DEGENERETTE } from '../app/constants.js';
 
@@ -105,7 +106,8 @@ class DegenerettePanel extends HTMLElement {
     this.#unsubs.push(
       subscribe('player.address', (address) => {
         if (address) {
-          fetchDegeneretteState(address);
+          fetchPlayerData(address);
+          update('degenerette.pendingBets', loadPendingBets(address));
         }
         this.#validateInputs();
       })
