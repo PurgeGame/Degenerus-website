@@ -117,6 +117,13 @@ export async function fetchPlayerData(address) {
       ['affiliate.referredBy', data.affiliate?.referrer ?? null],
       ['affiliate.code', data.affiliate?.ownCode ?? null],
       ['affiliate.totalEarned', data.totalAffiliateEarned ?? '0'],
+
+      // Terminal tickets (UI-03) — find next-level ticket count from indexed data
+      ['terminal.playerTicketsNextLevel', (() => {
+        const lvl = get('game.level') || 0;
+        const entry = data.tickets?.find(t => t.level === lvl + 1);
+        return entry?.ticketCount ?? 0;
+      })()],
     ];
 
     // Quest mapping (UI-06)

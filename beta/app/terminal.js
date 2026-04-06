@@ -4,9 +4,9 @@
 // rather than importing ethers or calling contracts directly.
 
 import { ethers } from 'ethers';
-import { getContract, sendTx, getReadProvider } from './contracts.js';
-import { get, update, batch } from './store.js';
-import { CONTRACTS, DECIMATOR_ABI, DECIMATOR_VIEW_ABI, DECIMATOR_CLAIM_ABI, DECIMATOR, DEATH_CLOCK } from './constants.js';
+import { getContract, sendTx } from './contracts.js';
+import { get, batch } from './store.js';
+import { CONTRACTS, DECIMATOR_ABI, DECIMATOR_CLAIM_ABI, DECIMATOR, DEATH_CLOCK } from './constants.js';
 import { refreshAfterAction } from './api.js';
 
 // -- Write Functions (require wallet) --
@@ -55,70 +55,27 @@ export async function claimTerminalDecimator() {
   return receipt;
 }
 
-// -- Read Functions (use getReadProvider, work before wallet) --
+// -- Read Functions --
 
 /**
- * Fetch terminal decimator state from contract and update store.
- * Fetches window state, yieldAccumulator, and (if address given) player-specific reads.
- * futurePool is now provided by fetchPlayerData() from the API — not fetched here.
- * @param {string} [address] - Player wallet address (optional)
+ * Compute terminal decimator time multiplier from death clock and update store.
+ * All other terminal state (tickets, futurePool, decWindowOpen) comes from the API
+ * via fetchPlayerData(). No contract reads needed here.
  */
-export async function fetchTerminalState(address) {
-  const contract = new ethers.Contract(CONTRACTS.GAME, DECIMATOR_VIEW_ABI, getReadProvider());
-
-  const calls = [
-    contract.terminalDecWindow(),
-    contract.yieldAccumulatorView(),
-  ];
-  if (address) {
-    const currentLevel = get('game.level') || 0;
-    calls.push(contract.terminalDecClaimable(address));
-    calls.push(contract.ticketsOwedView(currentLevel + 1, address));
-  }
-
-  const results = await Promise.allSettled(calls);
-  const updates = [];
-
-  // terminalDecWindow result: [open, lvl]
-  if (results[0].status === 'fulfilled') {
-    const [open, lvl] = results[0].value;
-    updates.push(['terminal.decWindowOpen', open]);
-    updates.push(['terminal.decLevel', Number(lvl)]);
-  }
-
-  // yieldAccumulatorView result
-  if (results[1].status === 'fulfilled') {
-    updates.push(['terminal.yieldAccumulator', results[1].value.toString()]);
-  }
-
-  // terminalDecClaimable result: [amountWei, winner]
-  if (address && results[2] && results[2].status === 'fulfilled') {
-    const [amountWei, winner] = results[2].value;
-    updates.push(['terminal.claimable', amountWei.toString()]);
-    updates.push(['terminal.isWinner', winner]);
-  }
-
-  // ticketsOwedView result: uint32
-  if (address && results[3] && results[3].status === 'fulfilled') {
-    updates.push(['terminal.playerTicketsNextLevel', Number(results[3].value)]);
-  }
-
-  // Compute time multiplier from death clock (pure, no contract)
+export function fetchTerminalState() {
   const levelStartTime = get('game.levelStartTime');
   const level = get('game.level') || 0;
-  if (levelStartTime) {
-    const timeout = level === 0 ? DEATH_CLOCK.TIMEOUT_LEVEL_0 : DEATH_CLOCK.TIMEOUT_DEFAULT;
-    const deadline = levelStartTime + timeout;
-    const nowSec = Math.floor(Date.now() / 1000);
-    const daysRemaining = Math.max(0, (deadline - nowSec) / 86400);
-    const mult = computeTimeMultiplier(daysRemaining);
-    updates.push(['terminal.timeMultiplier', mult]);
-    updates.push(['terminal.daysRemaining', Math.floor(daysRemaining)]);
-  }
+  if (!levelStartTime) return;
 
-  if (updates.length > 0) {
-    batch(updates);
-  }
+  const timeout = level === 0 ? DEATH_CLOCK.TIMEOUT_LEVEL_0 : DEATH_CLOCK.TIMEOUT_DEFAULT;
+  const deadline = levelStartTime + timeout;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const daysRemaining = Math.max(0, (deadline - nowSec) / 86400);
+  const mult = computeTimeMultiplier(daysRemaining);
+  batch([
+    ['terminal.timeMultiplier', mult],
+    ['terminal.daysRemaining', Math.floor(daysRemaining)],
+  ]);
 }
 
 // -- Pure Helpers --

@@ -116,15 +116,15 @@ class TerminalPanel extends HTMLElement {
     this.#unsubs.push(
       subscribe('player.address', (address) => {
         if (address) fetchPlayerData(address);
-        fetchTerminalState(address || null);
+        fetchTerminalState();
         if (address) this.#dataLoaded = true;
         this.#validateBurnInput();
       })
     );
 
-    // Terminal dec window availability
+    // Terminal dec window availability (from API via game state)
     this.#unsubs.push(
-      subscribe('terminal.decWindowOpen', (open) => {
+      subscribe('game.decWindowOpen', (open) => {
         if (open !== undefined) this.#showContent();
         // Terminal dec is almost always open (except lastPurchaseDay/gameOver).
         // When closed, hide burn section inputs but still show payout preview.
