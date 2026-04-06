@@ -1,7 +1,7 @@
 // app/api.js -- REST client with polling, exponential backoff, stale data detection
 // Reads game/player state from the database API and updates the reactive store.
 
-import { update, batch, get } from './store.js';
+import { update, batch, get, subscribe } from './store.js';
 import { API_BASE, POLL_INTERVALS } from './constants.js';
 
 let consecutiveFails = 0;
@@ -9,6 +9,7 @@ const MAX_BACKOFF = 30000;
 let gameTimer = null;
 let playerTimer = null;
 let healthTimer = null;
+let jackpotPollTimer = null;
 
 export async function fetchJSON(path) {
   const res = await fetch(API_BASE + path);
@@ -70,6 +71,108 @@ export async function pollPlayerData() {
   }
 }
 
+/**
+ * Fetch full player dashboard from /player/:address and fan out all domain
+ * fields to the store via batch(). Single call per D-03.
+ * @param {string} address - Player wallet address
+ */
+export async function fetchPlayerData(address) {
+  if (!address) return;
+  try {
+    const data = await fetchJSON(`/player/${address}`);
+    const updates = [
+      // Top-level summary
+      ['player.balances.burnie', data.burnieBalance],
+      ['player.balances.dgnrs', data.dgnrsBalance],
+      ['player.balances.wwxrp', data.wwxrpBalance],
+      ['player.claimable', data.claimableEth],
+      ['player.shields', data.shields],
+
+      // Coinflip (UI-01) — data.coinflip may be null
+      ['coinflip.playerStake', data.coinflip?.depositedAmount ?? '0'],
+      ['coinflip.claimable', data.coinflip?.claimablePreview ?? '0'],
+      ['coinflip.autoRebuy', {
+        enabled: data.coinflip?.autoRebuyEnabled ?? false,
+        stop: data.coinflip?.autoRebuyStop ?? '0',
+        carry: '0',  // not stored in DB; safe default per RESEARCH Pitfall 1
+      }],
+      ['coinflip.bounty.pool', data.coinflip?.currentBounty ?? '0'],
+      ['coinflip.bounty.recordHolder', data.coinflip?.biggestFlipPlayer ?? null],
+      ['coinflip.bounty.recordAmount', data.coinflip?.biggestFlipAmount ?? '0'],
+
+      // Decimator (UI-02) — data.decimator may be null
+      ['decimator.windowOpen', data.decimator?.windowOpen ?? false],
+      // burnPool: compute 10% of futurePoolTotal (safe default; x00 detection requires windowLevel which API lacks)
+      ['decimator.burnPool', data.decimator?.futurePoolTotal
+        ? (BigInt(data.decimator.futurePoolTotal) * 10n / 100n).toString()
+        : '0'],
+
+      // Terminal (UI-03) — futurePool from decimator data (shared pool)
+      ['terminal.futurePool', data.decimator?.futurePoolTotal ?? '0'],
+
+      // Degenerette (UI-04) — data.degenerette may be null
+      ['degenerette.playerNonce', data.degenerette?.betNonce ?? 0],
+
+      // Affiliate (UI-05) — data.affiliate always present
+      ['affiliate.referredBy', data.affiliate?.referrer ?? null],
+      ['affiliate.code', data.affiliate?.ownCode ?? null],
+      ['affiliate.totalEarned', data.totalAffiliateEarned ?? '0'],
+    ];
+
+    // Quest mapping (UI-06)
+    if (data.quests?.length > 0) {
+      const slots = [null, null];
+      const progress = [0, 0];
+      const completed = [false, false];
+      for (const q of data.quests) {
+        const i = q.slot;
+        if (i === 0 || i === 1) {
+          slots[i] = {
+            day: q.day,
+            questType: q.questType,
+            highDifficulty: q.highDifficulty ?? false,
+            requirements: {
+              mints: q.requirementMints ?? 0,
+              tokenAmount: q.requirementTokenAmount ?? '0',
+            },
+          };
+          progress[i] = Number(q.progress);
+          completed[i] = q.completed;
+        }
+      }
+      updates.push(
+        ['quest.slots', slots],
+        ['quest.progress', progress],
+        ['quest.completed', completed],
+      );
+    }
+
+    // Quest streak
+    if (data.questStreak) {
+      updates.push(
+        ['quest.baseStreak', data.questStreak.baseStreak ?? 0],
+        ['quest.lastCompletedDay', data.questStreak.lastCompletedDay ?? 0],
+      );
+    }
+
+    // Decimator claimable per level — pick current window level claim
+    if (data.decimator?.claimablePerLevel?.length > 0) {
+      const windowLevel = get('game.level') || 0;
+      const claim = data.decimator.claimablePerLevel.find(c => c.level === windowLevel);
+      if (claim) {
+        updates.push(
+          ['decimator.claimable', claim.ethAmount],
+          ['decimator.isWinner', !claim.claimed && claim.ethAmount !== '0'],
+        );
+      }
+    }
+
+    batch(updates);
+  } catch {
+    // Non-critical — leave store unchanged on failure
+  }
+}
+
 function getBackoffMs() {
   if (consecutiveFails === 0) return 0;
   return Math.min(1000 * Math.pow(2, consecutiveFails - 1), MAX_BACKOFF);
@@ -94,20 +197,44 @@ export function startPolling() {
     playerTimer = setTimeout(playerLoop, POLL_INTERVALS.playerData);
   };
   playerLoop();
+
+  // Jackpot window polling (D-04): re-fetch player data every 30s during jackpot phase
+  subscribe('game', (g) => {
+    if (g?.phase === 'JACKPOT' && g?.jackpotDay > 0) {
+      if (!jackpotPollTimer) {
+        jackpotPollTimer = setInterval(() => {
+          const addr = get('player.address');
+          if (addr) fetchPlayerData(addr);
+        }, 30000);
+      }
+    } else if (jackpotPollTimer) {
+      clearInterval(jackpotPollTimer);
+      jackpotPollTimer = null;
+    }
+  });
 }
 
 export function stopPolling() {
   clearTimeout(gameTimer);
   clearTimeout(playerTimer);
   clearInterval(healthTimer);
+  if (jackpotPollTimer) {
+    clearInterval(jackpotPollTimer);
+    jackpotPollTimer = null;
+  }
   gameTimer = null;
   playerTimer = null;
   healthTimer = null;
 }
 
-// Immediate re-fetch after user actions
+// Immediate re-fetch after user actions (D-07)
 export async function refreshAfterAction() {
-  await Promise.all([pollGameState(), pollPlayerData()]);
+  const addr = get('player.address');
+  await Promise.all([
+    pollGameState(),
+    pollPlayerData(),
+    ...(addr ? [fetchPlayerData(addr)] : []),
+  ]);
 }
 
 // Visibility change handler: re-fetch when tab becomes visible
