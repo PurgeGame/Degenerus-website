@@ -45,6 +45,7 @@ export async function pollGameState() {
       ['game.levelStartTime', data.levelStartTime || null],
       ['game.jackpotDay', data.jackpotCounter || 0],
       ['game.phaseTransitionActive', data.phaseTransitionActive || false],
+      ['game.dailyRng', data.dailyRng || null],
     ]);
     consecutiveFails = 0;
     update('ui.staleData', false);

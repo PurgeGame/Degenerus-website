@@ -13,6 +13,7 @@ const _state = {
     levelStartTime: null,
     jackpotDay: 0,
     phaseTransitionActive: false,
+    dailyRng: null,
   },
   player: {
     address: null,
