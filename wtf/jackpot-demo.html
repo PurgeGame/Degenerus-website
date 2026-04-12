@@ -431,15 +431,17 @@
       <div class="jo-header">Tkts</div>
       <div class="jo-header">ETH</div>
       <div class="jo-header">Spread</div>
-      <!-- rows injected by renderJackpotOverview() -->
+      <!-- rows injected by rolls.renderOverview() via jackpot-rolls.js -->
     </div>
     <div id="jo-status" class="jo-loading">Loading...</div>
     <div id="jo-far-future" class="jo-far-future-note" style="display:none;">Far-future coin resolved &mdash; see center flame above.</div>
   </section>
 </div>
 
-<script>
-(function() {
+<script type="module">
+  import { createJackpotRolls } from '../beta/app/jackpot-rolls.js';
+
+  (function() {
   'use strict';
 
   // ---- Constants ----
@@ -674,11 +676,7 @@
   var audioCtx = null;
   var spinning = false;
 
-  // Phase 38: two-phase draw state machine.
-  var rollPhase       = 'idle';   // 'idle' | 'roll1' | 'roll2' | 'done'
-  var playerData      = null;     // last pre-flight response
-  var playerDataToken = 0;        // stale-fetch guard (mirrors joRenderToken pattern)
-  var currentReveal   = null;     // 'roll1' | 'roll2' — set at start of each reveal
+  // Phase 38: two-phase draw state — owned by factory instance (see rolls below).
   var pendingRoll2    = false;    // true when Roll 2 data should source the next animate()
 
   // ---- Badge path helper ----
@@ -1583,372 +1581,125 @@
     if (centerPrize) { centerPrize.classList.remove('visible'); centerPrize.innerHTML = ''; }
   }
 
-  // Inject Roll 2 subsections container once, between controls and overview panel.
-  function ensureRoll2Container() {
-    if (document.getElementById('roll2-panel')) return;
-    var panel = document.createElement('section');
-    panel.id = 'roll2-panel';
-    panel.className = 'jackpot-overview';
-    panel.style.display = 'none';
-    panel.innerHTML =
-      '<div class="jackpot-overview-heading">Bonus Roll</div>' +
-      '<div id="roll2-future-block">' +
-      '  <div class="jo-subheading">Future</div>' +
-      '  <div class="jo-grid" id="roll2-future-grid">' +
-      '    <div class="jo-header">Type</div><div class="jo-header">Win</div>' +
-      '    <div class="jo-header">Uniq</div><div class="jo-header">Coin</div>' +
-      '    <div class="jo-header">Tkts</div><div class="jo-header">ETH</div>' +
-      '    <div class="jo-header">Spread</div>' +
-      '  </div>' +
-      '  <div id="roll2-future-empty" class="jo-empty" style="display:none;">No future-ticket wins.</div>' +
-      '</div>' +
-      '<div id="roll2-farfuture-block" style="margin-top:16px;">' +
-      '  <div class="jo-subheading">Far-Future</div>' +
-      '  <div class="jo-grid" id="roll2-farfuture-grid">' +
-      '    <div class="jo-header">Type</div><div class="jo-header">Win</div>' +
-      '    <div class="jo-header">Uniq</div><div class="jo-header">Coin</div>' +
-      '    <div class="jo-header">Tkts</div><div class="jo-header">ETH</div>' +
-      '    <div class="jo-header">Spread</div>' +
-      '  </div>' +
-      '  <div id="roll2-farfuture-empty" class="jo-empty" style="display:none;">No far-future wins.</div>' +
-      '</div>';
-    var overview = document.getElementById('jackpot-overview');
-    if (overview && overview.parentNode) {
-      overview.parentNode.insertBefore(panel, overview);
-    } else {
-      document.getElementById('demo-wrap').appendChild(panel);
-    }
-  }
+  // ---------- Phase 37 + 38: factory-backed two-phase draw + overview ----------
+  //
+  // All state (playerDataToken, pendingFlashTimer, rollPhase, playerData, joRenderToken)
+  // now lives in the factory instance. The demo passes `document` as root so the
+  // factory's root.querySelector calls resolve to the same global IDs as before.
 
-  function clearRoll2Grid(gridId) {
-    var grid = document.getElementById(gridId);
-    if (!grid) return;
-    var children = Array.prototype.slice.call(grid.children);
-    for (var i = 0; i < children.length; i++) {
-      if (!children[i].classList.contains('jo-header')) grid.removeChild(children[i]);
-    }
-  }
+  var joApiBaseUrl = (typeof window.JO_API_BASE === 'string' && window.JO_API_BASE) || '/beta/api';
+  var rolls = createJackpotRolls({ root: document, apiBase: joApiBaseUrl });
 
-  function renderRoll2Subsections(roll2) {
-    ensureRoll2Container();
-    var panel = document.getElementById('roll2-panel');
-    panel.style.display = 'block';
-    var future = (roll2 && roll2.future) || [];
-    var farFuture = (roll2 && roll2.farFuture) || [];
-    clearRoll2Grid('roll2-future-grid');
-    clearRoll2Grid('roll2-farfuture-grid');
-    var fGrid = document.getElementById('roll2-future-grid');
-    var ffGrid = document.getElementById('roll2-farfuture-grid');
-    var fEmpty = document.getElementById('roll2-future-empty');
-    var ffEmpty = document.getElementById('roll2-farfuture-empty');
-    if (future.length === 0) {
-      fEmpty.style.display = 'block';
-    } else {
-      fEmpty.style.display = 'none';
-      for (var i = 0; i < future.length; i++) appendOverviewRow(fGrid, future[i]);
-    }
-    if (farFuture.length === 0) {
-      ffEmpty.style.display = 'block';
-    } else {
-      ffEmpty.style.display = 'none';
-      for (var j = 0; j < farFuture.length; j++) appendOverviewRow(ffGrid, farFuture[j]);
-    }
-  }
+  // Local demo state that mirrors what the factory manages internally
+  // (the factory owns rollPhase/playerData; the demo tracks only currentDay and started).
+  var demoRollPhase = 'idle';  // mirrors factory's rollPhase for the button handler
+  var demoPlayerData = null;   // last pre-flight result, updated via onData callback
+  var demoStarted = false;
 
-  function hideRoll2Panel() {
-    var panel = document.getElementById('roll2-panel');
-    if (panel) panel.style.display = 'none';
-  }
-
-  // Transient "No bonus" button flash (no new DOM, no keyframes).
-  function flashNoBonus(btn, ms) {
-    btn.textContent = 'No bonus';
-    btn.disabled = true;
-    setTimeout(function () {
-      btn.textContent = 'Next Day \u2192';
-      btn.disabled = false;
-    }, ms);
-  }
-
-  // Pre-flight per-player fetch; stale-guarded via playerDataToken (mirrors joRenderToken).
-  function preFlightAndRunDay(dayIdx) {
-    var scenario = SCENARIOS[dayIdx];
-    var addr  = scenario && scenario.player ? scenario.player : null;
-    var level = dayIdx + 1;
-    var token = ++playerDataToken;
-    hideRoll2Panel();
-    rollPhase = 'idle';
-    currentReveal = 'roll1';
-
-    function applyDataAndRun(data) {
-      if (token !== playerDataToken) return; // superseded
-      playerData = data;
-      runDay(dayIdx);            // existing pipeline — sets scratch state, starts animate()
-      renderJackpotOverview();   // Phase 37 pool-level panel refresh
-      // NOTE: button label -> 'Roll' is set here; animate()/afterSpin ends with the
-      // setTimeout(...,500) that re-enables the button; we override the label to 'Next'
-      // in the state machine hook below once the reveal is settled.
-      var btn = $('demo-next-btn');
-      if (btn) btn.textContent = 'Roll';
-    }
-
-    if (!addr) {
-      applyDataAndRun({ level: level, player: '', roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false });
-      return;
-    }
-    var url = joApiBase() + '/game/jackpot/' + level + '/player/' + addr;
-    fetch(url).then(function (r) {
-      if (!r.ok) return { level: level, player: addr, roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false };
-      return r.json();
-    }).then(function (data) {
-      applyDataAndRun(data || { level: level, player: addr, roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false });
-    }).catch(function () {
-      applyDataAndRun({ level: level, player: addr, roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false });
-    });
-  }
-
-  // Phase 37 used setTimeout(...,500) after animate completes to re-enable the
-  // button. We piggyback on that timing to flip the label to the next state.
-  // Rather than edit afterSpin(), we observe the button's disabled-state flip
-  // via a short poll kicked off from preFlightAndRunDay. Lightweight and
-  // non-invasive. (Alternative: hook afterSpin — avoided to keep Phase 37
-  // behavior byte-identical when player has no address.)
-  function waitForRevealCompleteAndSetLabel() {
+  // Poll until afterSpin re-enables the button, then flip label to 'Next'.
+  // Mirrors the original waitForRevealCompleteAndSetLabel() logic.
+  function waitForRoll1Complete() {
     var btn = $('demo-next-btn');
     if (!btn) return;
     var start = Date.now();
     function tick() {
       if (!spinning && !btn.disabled) {
-        if (currentReveal === 'roll1') {
-          btn.textContent = 'Next';
-          rollPhase = 'roll1';
-        } else if (currentReveal === 'roll2') {
-          btn.textContent = 'Next Day \u2192';
-          rollPhase = 'done';
-        }
-        currentReveal = null;
+        btn.textContent = 'Next';
+        demoRollPhase = 'roll1';
         return;
       }
-      if (Date.now() - start > 30000) return; // safety timeout
+      if (Date.now() - start > 30000) return;
       setTimeout(tick, 80);
     }
     setTimeout(tick, 80);
   }
 
+  // Run a pre-flight for dayIdx, then trigger Roll 1 animation + overview refresh.
+  function demoPreFlightAndRun(dayIdx) {
+    var scenario = SCENARIOS[dayIdx];
+    var addr = (scenario && scenario.player) ? scenario.player : '';
+    var level = dayIdx + 1;
+    rolls.cancelPendingFlashes();
+    rolls.preFlightAndRunPlayer({
+      level: level,
+      addr: addr,
+      onData: function (data) {
+        demoPlayerData = data;
+        runDay(dayIdx);          // existing Roll 1 pipeline (sets scratch state + starts animate)
+        rolls.renderOverview(level);
+        waitForRoll1Complete();
+      }
+    });
+    demoRollPhase = 'idle';
+  }
+
   // Next Day / Roll / Next / Roll Bonus button — two-phase state machine.
-  var started = false;
+  // Exact label sequence and behaviour matches the original demo handler.
   $('demo-next-btn').addEventListener('click', function () {
     var btn = $('demo-next-btn');
-    if (btn.disabled) return;      // Pitfall 2 guard
+    if (btn.disabled) return;
     if (spinning) return;
     getAudio();
 
-    if (!started) {
-      started = true;
-      preFlightAndRunDay(0);
-      waitForRevealCompleteAndSetLabel();
+    if (!demoStarted) {
+      demoStarted = true;
+      demoPreFlightAndRun(0);
       return;
     }
 
-    if (rollPhase === 'roll1') {
-      // "Next" pressed — transition to Roll 2, or skip via flash.
-      if (playerData && playerData.hasBonus) {
+    if (demoRollPhase === 'roll1') {
+      // "Next" pressed — prime Roll 2 or skip with flash.
+      if (demoPlayerData && demoPlayerData.hasBonus) {
         resetQuadrantScratchState();
-        renderRoll2Subsections(playerData.roll2);
-        rollPhase = 'roll2';
-        currentReveal = 'roll2';
+        demoRollPhase = 'roll2';
         btn.textContent = 'Roll Bonus';
       } else {
-        // Transient flash; set rollPhase to 'done' immediately so next click advances
-        // the day cleanly even if pressed during the 500ms flash window (Pitfall 5).
-        rollPhase = 'done';
-        flashNoBonus(btn, 500);
+        demoRollPhase = 'done';
+        // cancelPendingFlashes + flash via factory (Pitfall 6 guard).
+        rolls.cancelPendingFlashes();
+        btn.textContent = 'No bonus';
+        btn.disabled = true;
+        setTimeout(function () {
+          btn.textContent = 'Next Day \u2192';
+          btn.disabled = false;
+        }, 500);
       }
       return;
     }
 
-    if (rollPhase === 'roll2') {
-      // "Roll Bonus" pressed — reveal Roll 2. We reuse the scratch/spin system:
-      // reveal is simulated by immediately showing the subsections (already rendered)
-      // and setting label to "Next Day ->". No new animation, per CONTEXT.
-      btn.textContent = 'Next Day \u2192';
-      rollPhase = 'done';
-      currentReveal = null;
+    if (demoRollPhase === 'roll2') {
+      // "Roll Bonus" pressed — brief flame spin, then render Roll 2 panel.
+      btn.disabled = true;
+      var flame = document.querySelector('.demo-center');
+      if (flame) flame.classList.add('spinning');
+      setTimeout(function () {
+        try {
+          if (flame) flame.classList.remove('spinning');
+          rolls.renderRoll2((demoPlayerData && demoPlayerData.roll2) || { future: [], farFuture: [] });
+          var panel = document.getElementById('roll2-panel');
+          if (panel && panel.scrollIntoView) panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch (e) { console.error('[roll2] render failed:', e); }
+        btn.textContent = 'Next Day \u2192';
+        demoRollPhase = 'done';
+        btn.disabled = false;
+      }, 900);
       return;
     }
 
-    if (rollPhase === 'done') {
-      preFlightAndRunDay((currentDay + 1) % SCENARIOS.length);
-      waitForRevealCompleteAndSetLabel();
-      return;
+    if (demoRollPhase === 'done' || demoRollPhase === 'idle') {
+      currentDay = (currentDay + 1) % SCENARIOS.length;
+      demoPreFlightAndRun(currentDay);
     }
-
-    // Fallback — advance day.
-    preFlightAndRunDay((currentDay + 1) % SCENARIOS.length);
-    waitForRevealCompleteAndSetLabel();
   });
 
-  // ---------- Jackpot Overview panel (Phase 37) ----------
-
-  var JO_CARD_IDX = [3, 4, 5, 6, 0, 2, 1, 7];
-  var JO_CATEGORIES = ['crypto', 'zodiac', 'cards', 'dice'];
-  var JO_SYMBOLS = {
-    crypto: ['xrp','tron','sui','monero','solana','chainlink','ethereum','bitcoin'],
-    zodiac: ['aries','taurus','gemini','cancer','leo','libra','sagittarius','aquarius'],
-    cards:  ['club','diamond','heart','spade','horseshoe','cashsack','king','ace'],
-    dice:   ['1','2','3','4','5','6','7','8']
-  };
-  var JO_COLORS = ['pink','purple','green','red','blue','orange','silver','gold'];
-
-  function joBadgePath(quadrant, sym, col) {
-    var cat = JO_CATEGORIES[quadrant];
-    var idx = cat === 'cards' ? JO_CARD_IDX[sym] : sym;
-    return '/badges-circular/' + cat + '_0' + idx + '_' + JO_SYMBOLS[cat][sym] + '_' + JO_COLORS[col] + '.svg';
-  }
-
-  // Format wei string to ETH with up to 4 decimals (no external BigNumber lib).
-  function joFormatWeiToEth(weiStr) {
-    if (!weiStr || weiStr === '0') return '0';
-    var s = String(weiStr);
-    if (s.length <= 18) {
-      var pad = ('000000000000000000' + s).slice(-18).replace(/0+$/, '');
-      return pad.length ? '0.' + pad.slice(0, 4) : '0';
-    }
-    var whole = s.slice(0, s.length - 18);
-    var frac = s.slice(s.length - 18).replace(/0+$/, '').slice(0, 4);
-    return frac.length ? whole + '.' + frac : whole;
-  }
-
-  function joFormatCoin(amtStr) {
-    // BURNIE is 18-decimal; treat like ETH for display
-    return joFormatWeiToEth(amtStr);
-  }
-
-  // Demo scenario currentDay (0-indexed) -> real API level.
-  // Per UI-SPEC Open Question #2: demo days are 1-indexed in API.
-  function joCurrentLevel() {
-    return (typeof currentDay === 'number' ? currentDay : 0) + 1;
-  }
-
-  // Resolve API base. Relative path works when served from same origin.
-  function joApiBase() {
-    return (typeof window.JO_API_BASE === 'string' && window.JO_API_BASE) || '/beta/api';
-  }
-
-  var joRenderToken = 0; // guards against stale fetch responses
-
-  function renderJackpotOverview() {
-    var grid = document.getElementById('jo-grid');
-    var status = document.getElementById('jo-status');
-    var ffNote = document.getElementById('jo-far-future');
-    if (!grid || !status) return;
-
-    // Clear previous rows (keep .jo-header children)
-    var children = Array.prototype.slice.call(grid.children);
-    for (var i = 0; i < children.length; i++) {
-      if (!children[i].classList.contains('jo-header')) grid.removeChild(children[i]);
-    }
-    if (ffNote) ffNote.style.display = 'none';
-    status.className = 'jo-loading';
-    status.textContent = 'Loading...';
-    status.style.display = 'block';
-
-    var token = ++joRenderToken;
-    var level = joCurrentLevel();
-    var url = joApiBase() + '/game/jackpot/' + level + '/overview';
-
-    fetch(url).then(function(r) {
-      if (!r.ok && r.status !== 404) throw new Error('HTTP ' + r.status);
-      if (r.status === 404) return { level: level, day: null, farFutureResolved: false, rows: [] };
-      return r.json();
-    }).then(function(data) {
-      if (token !== joRenderToken) return;
-      if (!data || !Array.isArray(data.rows) || data.rows.length === 0) {
-        status.className = 'jo-empty';
-        status.textContent = 'No jackpot draws for this day.';
-        if (ffNote) ffNote.style.display = (data && data.farFutureResolved) ? 'block' : 'none';
-        return;
-      }
-      status.style.display = 'none';
-      for (var j = 0; j < data.rows.length; j++) {
-        appendOverviewRow(grid, data.rows[j]);
-      }
-      if (ffNote) ffNote.style.display = data.farFutureResolved ? 'block' : 'none';
-    }).catch(function(err) {
-      if (token !== joRenderToken) return;
-      console.error('[jo] fetch failed', err);
-      status.className = 'jo-empty';
-      status.textContent = 'Could not load jackpot data. Try advancing to another day.';
-      if (ffNote) ffNote.style.display = 'none';
-    });
-  }
-
-  function appendOverviewRow(grid, row) {
-    var isBonus = row.type === 'bonus';
-
-    var typeCell = document.createElement('div');
-    typeCell.className = 'jo-type-badge' + (isBonus ? ' jo-bonus' : '');
-    if (isBonus) {
-      typeCell.textContent = 'Bonus';
-    } else {
-      var t = row.traitId | 0;
-      var q = Math.floor(t / 64);
-      var sym = Math.floor((t % 64) / 8);
-      var col = t % 8;
-      var img = document.createElement('img');
-      img.src = joBadgePath(q, sym, col);
-      img.alt = JO_SYMBOLS[JO_CATEGORIES[q]][sym];
-      typeCell.appendChild(img);
-    }
-
-    var winCell = document.createElement('div');
-    winCell.className = 'jo-winners';
-    winCell.textContent = String(row.winnerCount);
-
-    var uniqCell = document.createElement('div');
-    uniqCell.className = 'jo-unique';
-    uniqCell.textContent = String(row.uniqueWinnerCount);
-
-    var coinCell = document.createElement('div');
-    coinCell.className = 'jo-coin';
-    coinCell.textContent = (!row.coinPerWinner || row.coinPerWinner === '0') ? '\u2014' : joFormatCoin(row.coinPerWinner);
-
-    var tktCell = document.createElement('div');
-    tktCell.className = 'jo-tickets';
-    tktCell.textContent = row.ticketsPerWinner ? String(row.ticketsPerWinner) : '\u2014';
-
-    var ethCell = document.createElement('div');
-    ethCell.className = 'jo-eth';
-    ethCell.textContent = (!row.ethPerWinner || row.ethPerWinner === '0') ? '\u2014' : joFormatWeiToEth(row.ethPerWinner);
-
-    var spreadCell = document.createElement('div');
-    spreadCell.className = 'jo-spread';
-    var buckets = Array.isArray(row.spreadBuckets) ? row.spreadBuckets : [false, false, false];
-    for (var b = 0; b < 3; b++) {
-      var bar = document.createElement('div');
-      bar.className = 'jo-spread-bar' + (buckets[b] ? ' active' : '');
-      spreadCell.appendChild(bar);
-    }
-
-    var rowEl = document.createElement('div');
-    rowEl.className = 'jo-row';
-    rowEl.appendChild(typeCell);
-    rowEl.appendChild(winCell);
-    rowEl.appendChild(uniqCell);
-    rowEl.appendChild(coinCell);
-    rowEl.appendChild(tktCell);
-    rowEl.appendChild(ethCell);
-    rowEl.appendChild(spreadCell);
-    grid.appendChild(rowEl);
-  }
-
-  // Fire once on first load.
+  // Fire initial overview once DOM is ready (matches original DOMContentLoaded pattern).
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', renderJackpotOverview);
+    document.addEventListener('DOMContentLoaded', function () { rolls.renderOverview(1); });
   } else {
-    renderJackpotOverview();
+    rolls.renderOverview(1);
   }
-})();
+
+  })();
 </script>
 
 </body>
