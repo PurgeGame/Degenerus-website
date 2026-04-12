@@ -1526,7 +1526,169 @@
     } else {
       runDay((currentDay + 1) % SCENARIOS.length);
     }
+    renderJackpotOverview();
   });
+
+  // ---------- Jackpot Overview panel (Phase 37) ----------
+
+  var JO_CARD_IDX = [3, 4, 5, 6, 0, 2, 1, 7];
+  var JO_CATEGORIES = ['crypto', 'zodiac', 'cards', 'dice'];
+  var JO_SYMBOLS = {
+    crypto: ['xrp','tron','sui','monero','solana','chainlink','ethereum','bitcoin'],
+    zodiac: ['aries','taurus','gemini','cancer','leo','libra','sagittarius','aquarius'],
+    cards:  ['club','diamond','heart','spade','horseshoe','cashsack','king','ace'],
+    dice:   ['1','2','3','4','5','6','7','8']
+  };
+  var JO_COLORS = ['pink','purple','green','red','blue','orange','silver','gold'];
+
+  function joBadgePath(quadrant, sym, col) {
+    var cat = JO_CATEGORIES[quadrant];
+    var idx = cat === 'cards' ? JO_CARD_IDX[sym] : sym;
+    return '/badges-circular/' + cat + '_0' + idx + '_' + JO_SYMBOLS[cat][sym] + '_' + JO_COLORS[col] + '.svg';
+  }
+
+  // Format wei string to ETH with up to 4 decimals (no external BigNumber lib).
+  function joFormatWeiToEth(weiStr) {
+    if (!weiStr || weiStr === '0') return '0';
+    var s = String(weiStr);
+    if (s.length <= 18) {
+      var pad = ('000000000000000000' + s).slice(-18).replace(/0+$/, '');
+      return pad.length ? '0.' + pad.slice(0, 4) : '0';
+    }
+    var whole = s.slice(0, s.length - 18);
+    var frac = s.slice(s.length - 18).replace(/0+$/, '').slice(0, 4);
+    return frac.length ? whole + '.' + frac : whole;
+  }
+
+  function joFormatCoin(amtStr) {
+    // BURNIE is 18-decimal; treat like ETH for display
+    return joFormatWeiToEth(amtStr);
+  }
+
+  // Demo scenario currentDay (0-indexed) -> real API level.
+  // Per UI-SPEC Open Question #2: demo days are 1-indexed in API.
+  function joCurrentLevel() {
+    return (typeof currentDay === 'number' ? currentDay : 0) + 1;
+  }
+
+  // Resolve API base. Relative path works when served from same origin.
+  function joApiBase() {
+    return (typeof window.JO_API_BASE === 'string' && window.JO_API_BASE) || '/beta/api';
+  }
+
+  var joRenderToken = 0; // guards against stale fetch responses
+
+  function renderJackpotOverview() {
+    var grid = document.getElementById('jo-grid');
+    var status = document.getElementById('jo-status');
+    var ffNote = document.getElementById('jo-far-future');
+    if (!grid || !status) return;
+
+    // Clear previous rows (keep .jo-header children)
+    var children = Array.prototype.slice.call(grid.children);
+    for (var i = 0; i < children.length; i++) {
+      if (!children[i].classList.contains('jo-header')) grid.removeChild(children[i]);
+    }
+    if (ffNote) ffNote.style.display = 'none';
+    status.className = 'jo-loading';
+    status.textContent = 'Loading...';
+    status.style.display = 'block';
+
+    var token = ++joRenderToken;
+    var level = joCurrentLevel();
+    var url = joApiBase() + '/game/jackpot/' + level + '/overview';
+
+    fetch(url).then(function(r) {
+      if (!r.ok && r.status !== 404) throw new Error('HTTP ' + r.status);
+      if (r.status === 404) return { level: level, day: null, farFutureResolved: false, rows: [] };
+      return r.json();
+    }).then(function(data) {
+      if (token !== joRenderToken) return;
+      if (!data || !Array.isArray(data.rows) || data.rows.length === 0) {
+        status.className = 'jo-empty';
+        status.textContent = 'No jackpot draws for this day.';
+        if (ffNote) ffNote.style.display = (data && data.farFutureResolved) ? 'block' : 'none';
+        return;
+      }
+      status.style.display = 'none';
+      for (var j = 0; j < data.rows.length; j++) {
+        appendOverviewRow(grid, data.rows[j]);
+      }
+      if (ffNote) ffNote.style.display = data.farFutureResolved ? 'block' : 'none';
+    }).catch(function(err) {
+      if (token !== joRenderToken) return;
+      console.error('[jo] fetch failed', err);
+      status.className = 'jo-empty';
+      status.textContent = 'Could not load jackpot data. Try advancing to another day.';
+      if (ffNote) ffNote.style.display = 'none';
+    });
+  }
+
+  function appendOverviewRow(grid, row) {
+    var isBonus = row.type === 'bonus';
+
+    var typeCell = document.createElement('div');
+    typeCell.className = 'jo-type-badge' + (isBonus ? ' jo-bonus' : '');
+    if (isBonus) {
+      typeCell.textContent = 'Bonus';
+    } else {
+      var t = row.traitId | 0;
+      var q = Math.floor(t / 64);
+      var sym = Math.floor((t % 64) / 8);
+      var col = t % 8;
+      var img = document.createElement('img');
+      img.src = joBadgePath(q, sym, col);
+      img.alt = JO_SYMBOLS[JO_CATEGORIES[q]][sym];
+      typeCell.appendChild(img);
+    }
+
+    var winCell = document.createElement('div');
+    winCell.className = 'jo-winners';
+    winCell.textContent = String(row.winnerCount);
+
+    var uniqCell = document.createElement('div');
+    uniqCell.className = 'jo-unique';
+    uniqCell.textContent = String(row.uniqueWinnerCount);
+
+    var coinCell = document.createElement('div');
+    coinCell.className = 'jo-coin';
+    coinCell.textContent = (!row.coinPerWinner || row.coinPerWinner === '0') ? '\u2014' : joFormatCoin(row.coinPerWinner);
+
+    var tktCell = document.createElement('div');
+    tktCell.className = 'jo-tickets';
+    tktCell.textContent = row.ticketsPerWinner ? String(row.ticketsPerWinner) : '\u2014';
+
+    var ethCell = document.createElement('div');
+    ethCell.className = 'jo-eth';
+    ethCell.textContent = (!row.ethPerWinner || row.ethPerWinner === '0') ? '\u2014' : joFormatWeiToEth(row.ethPerWinner);
+
+    var spreadCell = document.createElement('div');
+    spreadCell.className = 'jo-spread';
+    var buckets = Array.isArray(row.spreadBuckets) ? row.spreadBuckets : [false, false, false];
+    for (var b = 0; b < 3; b++) {
+      var bar = document.createElement('div');
+      bar.className = 'jo-spread-bar' + (buckets[b] ? ' active' : '');
+      spreadCell.appendChild(bar);
+    }
+
+    var rowEl = document.createElement('div');
+    rowEl.className = 'jo-row';
+    rowEl.appendChild(typeCell);
+    rowEl.appendChild(winCell);
+    rowEl.appendChild(uniqCell);
+    rowEl.appendChild(coinCell);
+    rowEl.appendChild(tktCell);
+    rowEl.appendChild(ethCell);
+    rowEl.appendChild(spreadCell);
+    grid.appendChild(rowEl);
+  }
+
+  // Fire once on first load.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', renderJackpotOverview);
+  } else {
+    renderJackpotOverview();
+  }
 })();
 </script>
 
