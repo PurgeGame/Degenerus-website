@@ -317,6 +317,14 @@
       letter-spacing: 0.04em;
       margin-bottom: 8px;
     }
+    .jo-subheading {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #cfd8e3;
+      letter-spacing: 0.04em;
+      margin: 6px 0 4px;
+      text-transform: uppercase;
+    }
     .jo-grid {
       display: grid;
       grid-template-columns: 28px 36px 44px 52px 44px 60px 1fr;
@@ -453,6 +461,8 @@
   var SCENARIOS = [
     {
       title: 'Day 1',
+      // Phase 38 fixture C: zero Roll 1 current-level wins, has bonus (future tickets).
+      player: '0x71be63f3384f5fb98995898a86b02fb2426c5788',
       desc: 'Scratch the matching quadrants to reveal prizes.',
       degenWinCenter: false,
       target: [
@@ -470,6 +480,8 @@
     },
     {
       title: 'Day 2',
+      // Phase 38 fixture A: rich Roll 1 + Roll 2 (2 current-level, 11 future, 1 far-future).
+      player: '0x14dc79964da2c08b23698b3d3cc7ca32193d9955',
       desc: 'Scratch to see what you won.',
       degenWinCenter: false,
       target: [
@@ -487,6 +499,8 @@
     },
     {
       title: 'Day 3',
+      // Phase 38 fixture B: Roll 1 present, NO bonus (skip path — "No bonus" flash).
+      player: '0x322813fd9a801c5507c9de605d63cea4f2ce6c44',
       desc: 'Scratch to see what you won.',
       degenWinCenter: false,
       target: [
@@ -501,6 +515,7 @@
     },
     {
       title: 'Day 4',
+      player: '0x70997970c51812dc3a010c7d01b50e0d17dc79c8',
       desc: 'Scratch to see what you won.',
       degenWinCenter: false,
       target: [
@@ -521,6 +536,7 @@
     },
     {
       title: 'Day 5',
+      player: '0x61097ba76cd906d2ba4fd106e757f7eb455fc295',
       desc: 'Scratch to see what you won.',
       degenWinCenter: false,
       target: [
@@ -541,6 +557,7 @@
     },
     {
       title: 'Day 6',
+      player: '0x5e661b79fe2d3f6ce70f5aac07d8cd9abb2743f1',
       desc: 'Scratch to see what you won.',
       degenWinCenter: false,
       target: [
@@ -561,6 +578,7 @@
     },
     {
       title: 'Day 7',
+      player: '0x14dc79964da2c08b23698b3d3cc7ca32193d9955',
       desc: 'Scratch to see what you won.',
       degenWinCenter: true,
       target: [
@@ -583,6 +601,7 @@
     },
     {
       title: 'Day 8',
+      player: '0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc',
       desc: 'Scratch to see what you won.',
       degenWinCenter: false,
       target: [
@@ -654,6 +673,13 @@
   var scratchNode = null;
   var audioCtx = null;
   var spinning = false;
+
+  // Phase 38: two-phase draw state machine.
+  var rollPhase       = 'idle';   // 'idle' | 'roll1' | 'roll2' | 'done'
+  var playerData      = null;     // last pre-flight response
+  var playerDataToken = 0;        // stale-fetch guard (mirrors joRenderToken pattern)
+  var currentReveal   = null;     // 'roll1' | 'roll2' — set at start of each reveal
+  var pendingRoll2    = false;    // true when Roll 2 data should source the next animate()
 
   // ---- Badge path helper ----
   function badgePath(q, sym, col) {
@@ -1515,18 +1541,251 @@
     revealCenter();
   });
 
-  // Next Day button
+  // ---------- Phase 38: two-phase draw state machine ----------
+
+  // Reset quadrant scratch state between Roll 1 and Roll 2 on the same day.
+  // Mirrors the reset block at the top of animate() (lines ~1343-1350). DOES NOT
+  // touch the spin-animation pipeline — it's invoked directly on Roll 1 -> Roll 2
+  // transition so the scratch canvases come back fresh.
+  function resetQuadrantScratchState() {
+    scratched = [false, false, false, false];
+    greenRevealed = [false, false, false, false];
+    badgesRevealed = [[], [], [], []];
+    quadPrizes = [false, false, false, false];
+    quadWinArrays = [[], [], [], []];
+    quadBadgeBounds = [null, null, null, null];
+    scratchGrids = [null, null, null, null];
+    centerScratchGrid = null;
+    centerScratched = false;
+    centerWins = [];
+    // Clear canvases + prize-reveal overlays so they render empty again.
+    var quads = getQuads();
+    for (var i = 0; i < 4; i++) {
+      var canvas = getCanvas(i);
+      if (canvas) {
+        var ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.style.opacity = '0';
+        canvas.style.pointerEvents = 'none';
+      }
+      var prize = getPrize(i);
+      if (prize) { prize.classList.remove('visible'); prize.innerHTML = ''; }
+      if (quads[i]) {
+        quads[i].classList.remove('q-has-trait', 'q-no-tickets', 'q-scratchable', 'q-has-tickets');
+      }
+    }
+    var centerCanvas = $('demo-center-canvas');
+    if (centerCanvas) {
+      var cctx = centerCanvas.getContext('2d');
+      cctx.clearRect(0, 0, centerCanvas.width, centerCanvas.height);
+    }
+    var centerPrize = $('demo-center-prize');
+    if (centerPrize) { centerPrize.classList.remove('visible'); centerPrize.innerHTML = ''; }
+  }
+
+  // Inject Roll 2 subsections container once, between controls and overview panel.
+  function ensureRoll2Container() {
+    if (document.getElementById('roll2-panel')) return;
+    var panel = document.createElement('section');
+    panel.id = 'roll2-panel';
+    panel.className = 'jackpot-overview';
+    panel.style.display = 'none';
+    panel.innerHTML =
+      '<div class="jackpot-overview-heading">Bonus Roll</div>' +
+      '<div id="roll2-future-block">' +
+      '  <div class="jo-subheading">Future</div>' +
+      '  <div class="jo-grid" id="roll2-future-grid">' +
+      '    <div class="jo-header">Type</div><div class="jo-header">Win</div>' +
+      '    <div class="jo-header">Uniq</div><div class="jo-header">Coin</div>' +
+      '    <div class="jo-header">Tkts</div><div class="jo-header">ETH</div>' +
+      '    <div class="jo-header">Spread</div>' +
+      '  </div>' +
+      '  <div id="roll2-future-empty" class="jo-empty" style="display:none;">No future-ticket wins.</div>' +
+      '</div>' +
+      '<div id="roll2-farfuture-block" style="margin-top:16px;">' +
+      '  <div class="jo-subheading">Far-Future</div>' +
+      '  <div class="jo-grid" id="roll2-farfuture-grid">' +
+      '    <div class="jo-header">Type</div><div class="jo-header">Win</div>' +
+      '    <div class="jo-header">Uniq</div><div class="jo-header">Coin</div>' +
+      '    <div class="jo-header">Tkts</div><div class="jo-header">ETH</div>' +
+      '    <div class="jo-header">Spread</div>' +
+      '  </div>' +
+      '  <div id="roll2-farfuture-empty" class="jo-empty" style="display:none;">No far-future wins.</div>' +
+      '</div>';
+    var overview = document.getElementById('jackpot-overview');
+    if (overview && overview.parentNode) {
+      overview.parentNode.insertBefore(panel, overview);
+    } else {
+      document.getElementById('demo-wrap').appendChild(panel);
+    }
+  }
+
+  function clearRoll2Grid(gridId) {
+    var grid = document.getElementById(gridId);
+    if (!grid) return;
+    var children = Array.prototype.slice.call(grid.children);
+    for (var i = 0; i < children.length; i++) {
+      if (!children[i].classList.contains('jo-header')) grid.removeChild(children[i]);
+    }
+  }
+
+  function renderRoll2Subsections(roll2) {
+    ensureRoll2Container();
+    var panel = document.getElementById('roll2-panel');
+    panel.style.display = 'block';
+    var future = (roll2 && roll2.future) || [];
+    var farFuture = (roll2 && roll2.farFuture) || [];
+    clearRoll2Grid('roll2-future-grid');
+    clearRoll2Grid('roll2-farfuture-grid');
+    var fGrid = document.getElementById('roll2-future-grid');
+    var ffGrid = document.getElementById('roll2-farfuture-grid');
+    var fEmpty = document.getElementById('roll2-future-empty');
+    var ffEmpty = document.getElementById('roll2-farfuture-empty');
+    if (future.length === 0) {
+      fEmpty.style.display = 'block';
+    } else {
+      fEmpty.style.display = 'none';
+      for (var i = 0; i < future.length; i++) appendOverviewRow(fGrid, future[i]);
+    }
+    if (farFuture.length === 0) {
+      ffEmpty.style.display = 'block';
+    } else {
+      ffEmpty.style.display = 'none';
+      for (var j = 0; j < farFuture.length; j++) appendOverviewRow(ffGrid, farFuture[j]);
+    }
+  }
+
+  function hideRoll2Panel() {
+    var panel = document.getElementById('roll2-panel');
+    if (panel) panel.style.display = 'none';
+  }
+
+  // Transient "No bonus" button flash (no new DOM, no keyframes).
+  function flashNoBonus(btn, ms) {
+    btn.textContent = 'No bonus';
+    btn.disabled = true;
+    setTimeout(function () {
+      btn.textContent = 'Next Day \u2192';
+      btn.disabled = false;
+    }, ms);
+  }
+
+  // Pre-flight per-player fetch; stale-guarded via playerDataToken (mirrors joRenderToken).
+  function preFlightAndRunDay(dayIdx) {
+    var scenario = SCENARIOS[dayIdx];
+    var addr  = scenario && scenario.player ? scenario.player : null;
+    var level = dayIdx + 1;
+    var token = ++playerDataToken;
+    hideRoll2Panel();
+    rollPhase = 'idle';
+    currentReveal = 'roll1';
+
+    function applyDataAndRun(data) {
+      if (token !== playerDataToken) return; // superseded
+      playerData = data;
+      runDay(dayIdx);            // existing pipeline — sets scratch state, starts animate()
+      renderJackpotOverview();   // Phase 37 pool-level panel refresh
+      // NOTE: button label -> 'Roll' is set here; animate()/afterSpin ends with the
+      // setTimeout(...,500) that re-enables the button; we override the label to 'Next'
+      // in the state machine hook below once the reveal is settled.
+      var btn = $('demo-next-btn');
+      if (btn) btn.textContent = 'Roll';
+    }
+
+    if (!addr) {
+      applyDataAndRun({ level: level, player: '', roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false });
+      return;
+    }
+    var url = joApiBase() + '/game/jackpot/' + level + '/player/' + addr;
+    fetch(url).then(function (r) {
+      if (!r.ok) return { level: level, player: addr, roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false };
+      return r.json();
+    }).then(function (data) {
+      applyDataAndRun(data || { level: level, player: addr, roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false });
+    }).catch(function () {
+      applyDataAndRun({ level: level, player: addr, roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false });
+    });
+  }
+
+  // Phase 37 used setTimeout(...,500) after animate completes to re-enable the
+  // button. We piggyback on that timing to flip the label to the next state.
+  // Rather than edit afterSpin(), we observe the button's disabled-state flip
+  // via a short poll kicked off from preFlightAndRunDay. Lightweight and
+  // non-invasive. (Alternative: hook afterSpin — avoided to keep Phase 37
+  // behavior byte-identical when player has no address.)
+  function waitForRevealCompleteAndSetLabel() {
+    var btn = $('demo-next-btn');
+    if (!btn) return;
+    var start = Date.now();
+    function tick() {
+      if (!spinning && !btn.disabled) {
+        if (currentReveal === 'roll1') {
+          btn.textContent = 'Next';
+          rollPhase = 'roll1';
+        } else if (currentReveal === 'roll2') {
+          btn.textContent = 'Next Day \u2192';
+          rollPhase = 'done';
+        }
+        currentReveal = null;
+        return;
+      }
+      if (Date.now() - start > 30000) return; // safety timeout
+      setTimeout(tick, 80);
+    }
+    setTimeout(tick, 80);
+  }
+
+  // Next Day / Roll / Next / Roll Bonus button — two-phase state machine.
   var started = false;
   $('demo-next-btn').addEventListener('click', function () {
+    var btn = $('demo-next-btn');
+    if (btn.disabled) return;      // Pitfall 2 guard
     if (spinning) return;
     getAudio();
+
     if (!started) {
       started = true;
-      runDay(0);
-    } else {
-      runDay((currentDay + 1) % SCENARIOS.length);
+      preFlightAndRunDay(0);
+      waitForRevealCompleteAndSetLabel();
+      return;
     }
-    renderJackpotOverview();
+
+    if (rollPhase === 'roll1') {
+      // "Next" pressed — transition to Roll 2, or skip via flash.
+      if (playerData && playerData.hasBonus) {
+        resetQuadrantScratchState();
+        renderRoll2Subsections(playerData.roll2);
+        rollPhase = 'roll2';
+        currentReveal = 'roll2';
+        btn.textContent = 'Roll Bonus';
+      } else {
+        // Transient flash; set rollPhase to 'done' immediately so next click advances
+        // the day cleanly even if pressed during the 500ms flash window (Pitfall 5).
+        rollPhase = 'done';
+        flashNoBonus(btn, 500);
+      }
+      return;
+    }
+
+    if (rollPhase === 'roll2') {
+      // "Roll Bonus" pressed — reveal Roll 2. We reuse the scratch/spin system:
+      // reveal is simulated by immediately showing the subsections (already rendered)
+      // and setting label to "Next Day ->". No new animation, per CONTEXT.
+      btn.textContent = 'Next Day \u2192';
+      rollPhase = 'done';
+      currentReveal = null;
+      return;
+    }
+
+    if (rollPhase === 'done') {
+      preFlightAndRunDay((currentDay + 1) % SCENARIOS.length);
+      waitForRevealCompleteAndSetLabel();
+      return;
+    }
+
+    // Fallback — advance day.
+    preFlightAndRunDay((currentDay + 1) % SCENARIOS.length);
+    waitForRevealCompleteAndSetLabel();
   });
 
   // ---------- Jackpot Overview panel (Phase 37) ----------
