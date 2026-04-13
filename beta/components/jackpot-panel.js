@@ -77,9 +77,9 @@ class JackpotPanel extends HTMLElement {
               </div>
             </div>
 
-            <!-- Plan 39-05: Roll 2 symbol-slot grid (3 cols x 9 rows) -->
+            <!-- Plan 39-07: Roll 2 bonus-only slot grid (3 cols x 5 rows: 4 bonus + 1 far-future) -->
             <div class="jp-roll2-result" data-bind="jp-roll2-result" style="display:none;">
-              <div class="jp-roll-heading jp-roll2-heading">Bonus Roll — symbol draws for this day</div>
+              <div class="jp-roll-heading jp-roll2-heading">Bonus Roll — bonus-card draws for this day</div>
               <div class="jp-roll2-slot-grid" data-bind="jp-roll2-slot-grid">
                 <div class="jp-slot-header">Symbol</div>
                 <div class="jp-slot-header">Wins</div>
@@ -717,13 +717,12 @@ class JackpotPanel extends HTMLElement {
     if (this.#replayCancelToken !== cancelToken) return;
     if (spinEl) spinEl.classList.remove('jp-spinning');
 
-    // Plan 39-05: re-bucket by symbol slot (4 main + 4 bonus + 1 far-future)
+    // Plan 39-07: re-bucket by bonus-card symbol slot (4 bonus + 1 far-future)
     const { rebucketRoll2BySlot, joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth } =
       await import('../app/jackpot-rolls.js');
 
     const slots = rebucketRoll2BySlot(
       data.roll2 || {},
-      data.mainTraitsPacked ?? null,
       data.bonusTraitsPacked ?? null,
     );
 

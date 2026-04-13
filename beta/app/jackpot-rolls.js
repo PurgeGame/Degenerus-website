@@ -73,22 +73,23 @@ function joFormatCoin(amtStr) {
  * Plan 39-05: fixes Gap A from 39-UAT.md — far-future BURNIE draws use entropy-
  * derived traitIds so a single winner produced many near-identical raw rows.
  *
+ * Plan 39-07: Roll 2 restricted to bonus-card slots only. Main-card wins
+ * belong exclusively to Roll 1 and are never rendered here. Future rows whose
+ * traitId is not one of the 4 bonus bytes are silently dropped.
+ *
  * @param {{future?: Array, farFuture?: Array}} roll2
- * @param {number|string|null} mainPacked  32-bit packed main traitIds (4 bytes)
  * @param {number|string|null} bonusPacked 32-bit packed bonus traitIds (4 bytes)
  * @returns {Array<{traitId:number|null, quadrant:number|null, symbolIdx:number|null, colorIdx:number|null, wins:number, amountPerWin:string, isEmpty:boolean, isFarFuture:boolean}>}
- *   length 9: slots 0..7 are main[0..3]+bonus[0..3], slot 8 is far-future.
+ *   length 5: slots 0..3 are bonus[0..3], slot 4 is far-future.
  */
-export function rebucketRoll2BySlot(roll2, mainPacked, bonusPacked) {
+export function rebucketRoll2BySlot(roll2, bonusPacked) {
   function unpack(packed) {
     if (packed == null) return [null, null, null, null];
     const p = Number(packed);
     return [p & 0xFF, (p >> 8) & 0xFF, (p >> 16) & 0xFF, (p >> 24) & 0xFF];
   }
 
-  const mainSlots = unpack(mainPacked);
-  const bonusSlots = unpack(bonusPacked);
-  const slotTraitIds = [...mainSlots, ...bonusSlots]; // 8 entries, null when packed missing
+  const slotTraitIds = unpack(bonusPacked); // 4 entries, null when packed missing
 
   // Index future rows by traitId for O(1) lookup
   const byTrait = new Map();
@@ -101,7 +102,7 @@ export function rebucketRoll2BySlot(roll2, mainPacked, bonusPacked) {
   }
 
   const out = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 4; i++) {
     const t = slotTraitIds[i];
     if (t == null) {
       out.push({
