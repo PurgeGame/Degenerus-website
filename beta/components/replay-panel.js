@@ -94,11 +94,9 @@ class ReplayPanel extends HTMLElement {
   #centerScratched = false;                    // center diamond scratch state
   #centerScratchGrid = null;                   // center diamond scratch grid
 
-  // Bonus Roll (Roll 2) scratch state
-  #bonusPhase = false;          // true after bonus roll button clicked
-  #bonusScratchCards = [];      // [{traitId, displayLabel, wins}] for Roll 2 scratch cards
-  #bonusScratched = [];         // per-bonus-card scratch completion flags
-  #bonusScratchGrids = [];      // per-bonus-card Uint8Array scratch grids
+  // Bonus Roll (Roll 2) state — reuses the main widget
+  #bonusPhase = false;          // true while bonus roll is active (Roll 2 reveal)
+  #bonusTraitIds = new Set();   // traitIds the player won in Roll 2 (for spin coloring)
 
   #audioCtx = null;             // Web Audio context for SFX
   #scratchNode = null;          // active scratch noise node
@@ -167,14 +165,9 @@ class ReplayPanel extends HTMLElement {
 
         <div class="replay-bonus-section" data-bind="bonus-section" hidden>
           <button class="btn-primary replay-bonus-btn" data-bind="bonus-btn">
-            Bonus Roll — Reveal Future Wins
+            Bonus Roll
           </button>
           <p class="replay-no-bonus" data-bind="no-bonus" hidden>No bonus this draw</p>
-        </div>
-
-        <div class="replay-bonus-grid" data-bind="bonus-grid" hidden>
-          <h3 class="replay-bonus-title">Bonus Roll — Future-Level Wins</h3>
-          <div class="replay-bonus-cards" data-bind="bonus-cards"></div>
         </div>
 
         <div class="replay-distributions" data-bind="distributions" hidden>
@@ -713,194 +706,111 @@ class ReplayPanel extends HTMLElement {
     }
   }
 
-  #triggerBonusRoll() {
+  async #triggerBonusRoll() {
     if (!this.#roll2Data) return;
-    const btn = this.querySelector('[data-bind="bonus-btn"]');
-    if (btn) btn.disabled = true;
+    const bonusSection = this.querySelector('[data-bind="bonus-section"]');
+    if (bonusSection) bonusSection.hidden = true;
 
     this.#bonusPhase = true;
 
-    // Build bonus scratch cards from roll2.future + roll2.farFuture rows
-    const allRows = [
-      ...(this.#roll2Data.future || []),
-      ...(this.#roll2Data.farFuture || []),
-    ];
+    // Derive Roll 2 winning traits from future rows (trait-based wins for quadrants)
+    // farFuture rows go to the center diamond (BURNIE)
+    const futureRows = this.#roll2Data.future || [];
+    const farFutureRows = this.#roll2Data.farFuture || [];
 
-    this.#bonusScratchCards = allRows.map(row => {
-      const badge = row.traitId != null ? traitToBadge(row.traitId) : null;
-      const label = badge ? `${badge.item} (${badge.category})` : 'Bonus';
-      const wins = [];
+    // Store Roll 2 trait IDs for spin quadrant-ownership detection
+    this.#bonusTraitIds = new Set(futureRows.map(r => r.traitId).filter(t => t != null));
+
+    // Build prize arrays from roll2 rows so #revealQuadrant / #revealCenter show correct amounts
+    this.#distributePrizesFromRoll2(futureRows, farFutureRows);
+
+    // Derive display traits for the spin — use the same RNG word (same draw)
+    const rngEntry = this.#rngDays.find(d => d.day === this.#selectedDay);
+    const traits = deriveWinningTraits(rngEntry.finalWord);
+    const displayTraits = toDisplayOrder(traits);
+
+    // Reset canvases / scratch state so the main widget is fresh for Roll 2
+    this.#resetMainWidget();
+
+    const btn = this.querySelector('[data-bind="reveal-btn"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Bonus Roll...'; }
+
+    await this.#runSpin(displayTraits);
+
+    if (btn) { btn.disabled = false; btn.textContent = 'Replay'; }
+  }
+
+  /**
+   * Distribute Roll 2 prizes into quadrant arrays and center wins.
+   * future rows → quadrant prize arrays (same logic as #distributePrizesFromRoll1)
+   * farFuture rows → center diamond BURNIE wins
+   */
+  #distributePrizesFromRoll2(futureRows, farFutureRows) {
+    this.#quadWinArrays = [[], [], [], []];
+    this.#centerWins = [];
+
+    for (const row of futureRows) {
+      if (row.traitId == null) continue;
+      const contractQ = Math.floor(row.traitId / 64);
+      const displayPos = DISPLAY_ORDER.indexOf(contractQ);
+      if (displayPos < 0 || displayPos > 3) continue;
+
+      const synths = [];
       if (BigInt(row.ethPerWinner || '0') > 0n) {
-        wins.push({ awardType: 'eth', amount: row.ethPerWinner });
+        synths.push({ awardType: 'eth', amount: row.ethPerWinner, traitId: row.traitId });
       }
       if (BigInt(row.coinPerWinner || '0') > 0n) {
-        wins.push({ awardType: 'burnie', amount: row.coinPerWinner });
+        synths.push({ awardType: 'burnie', amount: row.coinPerWinner, traitId: row.traitId });
       }
       if ((row.ticketsPerWinner || 0) > 0) {
-        wins.push({ awardType: 'tickets', amount: String(row.ticketsPerWinner) });
+        synths.push({ awardType: 'tickets', amount: String(row.ticketsPerWinner), traitId: row.traitId });
       }
-      return { traitId: row.traitId, label, badge, wins };
-    });
-
-    this.#bonusScratched = this.#bonusScratchCards.map(() => false);
-    this.#bonusScratchGrids = this.#bonusScratchCards.map(() => null);
-
-    this.#renderBonusGrid();
-  }
-
-  #renderBonusGrid() {
-    const gridSection = this.querySelector('[data-bind="bonus-grid"]');
-    const cardsEl = this.querySelector('[data-bind="bonus-cards"]');
-    if (!gridSection || !cardsEl) return;
-
-    if (this.#bonusScratchCards.length === 0) {
-      gridSection.hidden = true;
-      return;
+      if (synths.length === 0) {
+        synths.push({ awardType: 'eth', amount: '0', traitId: row.traitId });
+      }
+      this.#quadWinArrays[displayPos].push(...synths);
     }
 
-    // Render one scratch card per bonus row
-    cardsEl.innerHTML = this.#bonusScratchCards.map((card, idx) => {
-      const badgeSrc = card.badge ? card.badge.path.replace('/badges/', '/badges-circular/') : '';
-      return `
-        <div class="replay-bonus-card" data-bonus-idx="${idx}">
-          <div class="replay-bonus-card-label">${card.label}</div>
-          <div class="replay-bonus-card-inner">
-            <div class="replay-bonus-prize" data-bonus-prize="${idx}"></div>
-            <canvas class="replay-bonus-canvas" data-bonus-canvas="${idx}"></canvas>
-          </div>
-        </div>`;
-    }).join('');
-
-    gridSection.hidden = false;
-
-    // Init scratch canvas for each card
-    requestAnimationFrame(() => {
-      this.#bonusScratchCards.forEach((card, idx) => {
-        const canvas = cardsEl.querySelector(`[data-bonus-canvas="${idx}"]`);
-        if (canvas) {
-          this.#initBonusCanvas(canvas, card.badge);
-          this.#wireBonusCanvas(canvas, idx);
-        }
-      });
-    });
-  }
-
-  #initBonusCanvas(canvas, badge) {
-    const inner = canvas.parentElement;
-    const rect = inner.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.height + 'px';
-    const ctx = canvas.getContext('2d');
-    // Purple-tinted cover for bonus roll (visually distinct from Roll 1 blue)
-    ctx.fillStyle = '#2d1b69';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (badge) {
-      // traitToBadge returns { category, item, color (string), path (non-circular) }
-      // Use badgeCircularPath with correct symbol index derived from BADGE_ITEMS lookup.
-      const symIdx = (BADGE_ITEMS[badge.category] || []).indexOf(badge.item);
-      const colIdx = BADGE_COLORS.indexOf(badge.color);
-      const src = badgeCircularPath(badge.category, symIdx >= 0 ? symIdx : 0, colIdx >= 0 ? colIdx : 0);
-      const img = new Image();
-      img.onload = () => {
-        const size = Math.min(canvas.width, canvas.height) * 0.7;
-        const x = (canvas.width - size) / 2;
-        const y = (canvas.height - size) / 2;
-        ctx.drawImage(img, x, y, size, size);
-      };
-      img.src = src;
+    for (const row of farFutureRows) {
+      if (BigInt(row.coinPerWinner || '0') > 0n) {
+        this.#centerWins.push({ awardType: 'burnie', amount: row.coinPerWinner, traitId: row.traitId });
+      }
     }
-    canvas.style.display = 'block';
-    canvas.style.pointerEvents = 'auto';
   }
 
-  #wireBonusCanvas(canvas, idx) {
-    let lastPos = null;
-    const onScratch = (cx, cy) => {
-      if (this.#bonusScratched[idx]) return;
-      this.#sfxScratchStart();
-      const dpr = window.devicePixelRatio || 1;
-      const brushR = BRUSH_R * dpr;
-      this.#scratchAt(canvas, cx, cy);
-      if (!this.#bonusScratchGrids[idx]) this.#bonusScratchGrids[idx] = makeScratchGrid(GRID_RES);
-      markGridCells(this.#bonusScratchGrids[idx], GRID_RES, canvas.width, canvas.height, cx, cy, brushR);
-      if (lastPos) {
-        const dx = cx - lastPos.x, dy = cy - lastPos.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const steps = Math.max(1, Math.floor(dist / 4));
-        for (let s = 1; s < steps; s++) {
-          const ix = lastPos.x + dx * s / steps, iy = lastPos.y + dy * s / steps;
-          this.#scratchAt(canvas, ix, iy);
-          markGridCells(this.#bonusScratchGrids[idx], GRID_RES, canvas.width, canvas.height, ix, iy, brushR);
-        }
-      }
-      lastPos = { x: cx, y: cy };
-      if (gridCoverage(this.#bonusScratchGrids[idx]) >= REVEAL_THRESHOLD) {
-        this.#revealBonusCard(idx);
-      }
-    };
-    const getPos = (clientX, clientY) => {
-      const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      return { x: (clientX - rect.left) * dpr, y: (clientY - rect.top) * dpr };
-    };
-    canvas.addEventListener('mousemove', (e) => {
-      if (!this.#mouseIsDown || this.#bonusScratched[idx]) return;
-      const p = getPos(e.clientX, e.clientY);
-      onScratch(p.x, p.y);
-    });
-    canvas.addEventListener('mouseleave', () => { lastPos = null; this.#sfxScratchStop(); });
-    canvas.addEventListener('touchstart', (e) => {
-      if (this.#bonusScratched[idx]) return;
-      e.preventDefault(); lastPos = null;
-      const t = e.touches[0]; const p = getPos(t.clientX, t.clientY);
-      onScratch(p.x, p.y);
-    }, { passive: false });
-    canvas.addEventListener('touchmove', (e) => {
-      if (this.#bonusScratched[idx]) return;
-      e.preventDefault();
-      const t = e.touches[0]; const p = getPos(t.clientX, t.clientY);
-      onScratch(p.x, p.y);
-    }, { passive: false });
-    canvas.addEventListener('touchend', () => { lastPos = null; this.#sfxScratchStop(); });
-  }
-
-  #revealBonusCard(idx) {
-    if (this.#bonusScratched[idx]) return;
-    this.#bonusScratched[idx] = true;
+  /**
+   * Reset only the scratch/reveal state of the main widget (canvases, prizes, badges)
+   * without touching data-loading state. Used before re-running the spin for Roll 2.
+   */
+  #resetMainWidget() {
+    this.#animId++;
+    this.#spinning = false;
     this.#sfxScratchStop();
-    this.#sfxGreenReveal();
 
-    const cardsEl = this.querySelector('[data-bind="bonus-cards"]');
-    if (!cardsEl) return;
-    const canvas = cardsEl.querySelector(`[data-bonus-canvas="${idx}"]`);
-    const prizeEl = cardsEl.querySelector(`[data-bonus-prize="${idx}"]`);
-    const card = this.#bonusScratchCards[idx];
+    const quads = this.querySelectorAll('.replay-tq');
+    quads.forEach(q => {
+      q.classList.remove('revealed', 'q-has-trait', 'q-no-tickets', 'q-scratchable', 'q-has-tickets');
+      const img = q.querySelector('.badge-img');
+      if (img) { img.src = ''; img.alt = ''; img.style.opacity = '0'; img.style.display = ''; }
+      const canvas = q.querySelector('.replay-scratch-canvas');
+      if (canvas) { canvas.style.opacity = '0'; canvas.style.pointerEvents = 'none'; }
+      const prize = q.querySelector('.replay-prize-reveal');
+      if (prize) { prize.classList.remove('visible'); prize.innerHTML = ''; }
+    });
+    this.#clearScatteredBadges();
+    this.#hideCenterScratch();
 
-    if (canvas) {
-      canvas.style.transition = 'opacity 0.35s ease';
-      canvas.style.opacity = '0';
-      canvas.style.pointerEvents = 'none';
-    }
+    this.#scratched = [false, false, false, false];
+    this.#scratchGrids = [null, null, null, null];
+    this.#greenRevealed = [false, false, false, false];
+    this.#badgesRevealed = [[], [], [], []];
+    this.#quadBadgeBounds = [null, null, null, null];
+    this.#quadOwned = [false, false, false, false];
+    this.#centerScratched = false;
+    this.#centerScratchGrid = null;
 
-    if (prizeEl && card.wins.length > 0) {
-      const lines = [];
-      for (const w of card.wins) {
-        if (w.awardType === 'eth') lines.push(formatEth(w.amount) + ' ETH');
-        else if (w.awardType === 'burnie' || w.awardType === 'farFutureCoin') lines.push(formatBurnie(w.amount) + ' BURNIE');
-        else if (w.awardType === 'tickets') lines.push(w.amount + ' ticket' + (w.amount !== '1' ? 's' : ''));
-        else lines.push(w.amount + ' ' + w.awardType);
-      }
-      prizeEl.innerHTML = lines.map(l => `<span class="replay-prize-total">${l}</span>`).join('');
-      prizeEl.classList.add('visible');
-    }
-
-    // Check if all bonus cards scratched
-    if (this.#bonusScratched.every(s => s)) {
-      this.#celebrate();
-    }
+    const hint = this.querySelector('[data-bind="hint"]');
+    if (hint) hint.textContent = '';
   }
 
   async #runSpin(displayTraits) {
@@ -910,12 +820,15 @@ class ReplayPanel extends HTMLElement {
     const hint = this.querySelector('[data-bind="hint"]');
 
     // Determine which quadrants are scratchable: a quadrant is scratchable only if
-    // this player actually has a winning row for that display position (D3).
-    // Fall back to trait ownership when roll1Rows is empty (no player data fetched).
-    const roll1TraitIds = new Set(this.#roll1Rows.map(r => r.traitId).filter(t => t != null));
+    // this player actually has a winning row for that display position.
+    // In bonus phase use Roll 2 trait IDs; otherwise use Roll 1 trait IDs (D3).
+    // Fall back to player trait ownership when no row data is available.
+    const activeTraitIds = this.#bonusPhase
+      ? this.#bonusTraitIds
+      : new Set(this.#roll1Rows.map(r => r.traitId).filter(t => t != null));
     for (let i = 0; i < 4; i++) {
-      if (roll1TraitIds.size > 0) {
-        this.#quadOwned[i] = displayTraits[i] != null && roll1TraitIds.has(displayTraits[i]);
+      if (activeTraitIds.size > 0) {
+        this.#quadOwned[i] = displayTraits[i] != null && activeTraitIds.has(displayTraits[i]);
       } else {
         // Fallback: use player trait ownership (pre-D3 behaviour)
         this.#quadOwned[i] = displayTraits[i] != null && this.#playerTraitIds.has(displayTraits[i]);
@@ -1420,7 +1333,7 @@ class ReplayPanel extends HTMLElement {
         } else if (t === 'dgnrs') {
           dgnrsTotal += BigInt(d.amount || '0');
         } else if (t === 'tickets') {
-          ticketCount += 1;
+          ticketCount += Number(d.amount || '1');
         } else if (t === 'whale_pass') {
           whaleCount += Number(d.amount || '1');
         } else {
@@ -1566,13 +1479,9 @@ class ReplayPanel extends HTMLElement {
 
     // Reset bonus roll state
     this.#bonusPhase = false;
-    this.#bonusScratchCards = [];
-    this.#bonusScratched = [];
-    this.#bonusScratchGrids = [];
+    this.#bonusTraitIds = new Set();
     const bonusSection = this.querySelector('[data-bind="bonus-section"]');
     if (bonusSection) bonusSection.hidden = true;
-    const bonusGrid = this.querySelector('[data-bind="bonus-grid"]');
-    if (bonusGrid) bonusGrid.hidden = true;
     const bonusBtn = this.querySelector('[data-bind="bonus-btn"]');
     if (bonusBtn) { bonusBtn.disabled = false; bonusBtn.hidden = false; }
     const noBonus = this.querySelector('[data-bind="no-bonus"]');
