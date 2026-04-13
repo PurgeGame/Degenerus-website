@@ -70,10 +70,16 @@ class ReplayPanel extends HTMLElement {
   #selectedDay = null;
   #selectedLevel = null;
   #selectedPlayer = null;
-  #distributions = []; // jackpot distributions for selected day
+  #distributions = []; // raw distributions from replay/day endpoint (used for prize mapping)
+  #winners = [];       // winner objects from /game/jackpot/day/:day/winners
+
+  // Per-player roll data from /game/jackpot/:level/player/:addr?day=:day
+  #roll1Rows = [];     // JackpotOverviewRow[] for Roll 1 (current-level ticket wins)
+  #roll2Data = null;   // { future: JackpotOverviewRow[], farFuture: JackpotOverviewRow[] }
+  #hasBonus = false;   // whether this player has Roll 2 data
 
   // Spin + scratch state
-  #playerTraitIds = new Set();  // Set<number> of owned trait IDs
+  #playerTraitIds = new Set();  // Set<number> of owned trait IDs (for spin coloring)
   #traitsCacheAddress = null;   // address for which #playerTraitIds was fetched
   #animId = 0;                  // spin cancellation token (increment to cancel running spin)
   #spinning = false;            // true while spin animation is running
@@ -82,11 +88,18 @@ class ReplayPanel extends HTMLElement {
   #greenRevealed = [false, false, false, false]; // per-quadrant first-badge green flash
   #badgesRevealed = [[], [], [], []];         // per-badge tracking within each quadrant
   #quadBadgeBounds = [null, null, null, null]; // per-quadrant badge hit circles
-  #quadOwned = [false, false, false, false];  // per-quadrant trait ownership after spin
-  #quadWinArrays = [[], [], [], []];          // per-quadrant prize arrays
+  #quadOwned = [false, false, false, false];  // per-quadrant win presence (from roll1Rows)
+  #quadWinArrays = [[], [], [], []];          // per-quadrant prize arrays (from roll1Rows)
   #centerWins = [];                            // far-future coin wins (center diamond)
   #centerScratched = false;                    // center diamond scratch state
   #centerScratchGrid = null;                   // center diamond scratch grid
+
+  // Bonus Roll (Roll 2) scratch state
+  #bonusPhase = false;          // true after bonus roll button clicked
+  #bonusScratchCards = [];      // [{traitId, displayLabel, wins}] for Roll 2 scratch cards
+  #bonusScratched = [];         // per-bonus-card scratch completion flags
+  #bonusScratchGrids = [];      // per-bonus-card Uint8Array scratch grids
+
   #audioCtx = null;             // Web Audio context for SFX
   #scratchNode = null;          // active scratch noise node
   #mouseIsDown = false;         // global mouse button state
@@ -152,6 +165,18 @@ class ReplayPanel extends HTMLElement {
 
         <p class="replay-hint" data-bind="hint"></p>
 
+        <div class="replay-bonus-section" data-bind="bonus-section" hidden>
+          <button class="btn-primary replay-bonus-btn" data-bind="bonus-btn">
+            Bonus Roll — Reveal Future Wins
+          </button>
+          <p class="replay-no-bonus" data-bind="no-bonus" hidden>No bonus this draw</p>
+        </div>
+
+        <div class="replay-bonus-grid" data-bind="bonus-grid" hidden>
+          <h3 class="replay-bonus-title">Bonus Roll — Future-Level Wins</h3>
+          <div class="replay-bonus-cards" data-bind="bonus-cards"></div>
+        </div>
+
         <div class="replay-distributions" data-bind="distributions" hidden>
           <h3 class="replay-dist-title">Jackpot Winners</h3>
           <div class="replay-dist-list" data-bind="dist-list"></div>
@@ -166,6 +191,7 @@ class ReplayPanel extends HTMLElement {
     this.querySelector('[data-bind="day-select"]').addEventListener('change', (e) => this.#onDayChange(e));
     this.querySelector('[data-bind="player-select"]').addEventListener('change', (e) => this.#onPlayerChange(e));
     this.querySelector('[data-bind="reveal-btn"]').addEventListener('click', () => this.#triggerReveal());
+    this.querySelector('[data-bind="bonus-btn"]').addEventListener('click', () => this.#triggerBonusRoll());
 
     // Global mouse button tracking for scratch stop on mouseup
     this._onMouseDown = () => {
@@ -359,27 +385,39 @@ class ReplayPanel extends HTMLElement {
 
     this.querySelector('[data-bind="empty-state"]').hidden = true;
 
-    // Load day detail + distributions (may fallback to history endpoint)
+    // Load day detail (replay endpoint — still needed for distributions used in #distributePrizes)
     await this.#loadDayDetail(dayNum);
 
-    // Determine level from distributions (day detail is authoritative)
-    if (this.#distributions.length > 0) {
-      this.#selectedLevel = this.#distributions[0].level;
-    } else {
-      // No distributions = not a jackpot day (purchase phase). Don't fallback
-      // to level-based loading which would pull in unrelated distributions.
-      this.#selectedLevel = null;
+    // Load winners from the authoritative day/winners endpoint.
+    // This gives us level, winner list with breakdown, and hasBonus flags.
+    this.#winners = [];
+    this.#selectedLevel = null;
+    try {
+      const wRes = await fetch(`${API_BASE}/game/jackpot/day/${dayNum}/winners`);
+      if (wRes.ok) {
+        const wJson = await wRes.json();
+        this.#selectedLevel = wJson.level ?? (this.#distributions[0]?.level ?? null);
+        this.#winners = wJson.winners || [];
+      } else if (this.#distributions.length > 0) {
+        this.#selectedLevel = this.#distributions[0].level;
+      }
+    } catch {
+      if (this.#distributions.length > 0) {
+        this.#selectedLevel = this.#distributions[0].level;
+      }
     }
 
     // Tickets are stored at purchaseLevel = gameLevel + 1
-    await this.#loadTickets(this.#selectedLevel + 1);
+    if (this.#selectedLevel != null) {
+      await this.#loadTickets(this.#selectedLevel + 1);
+    }
 
-    // Enable reveal button if we have RNG + player + distributions
-    const canReveal = hasRng && this.#selectedPlayer && this.#distributions.length > 0;
+    // Enable reveal button if we have RNG + player + winners
+    const canReveal = hasRng && this.#selectedPlayer && this.#winners.length > 0;
     this.querySelector('[data-bind="reveal-btn"]').disabled = !canReveal;
 
-    if (this.#distributions.length > 0) {
-      this.#showDistributions(this.#distributions);
+    if (this.#winners.length > 0) {
+      this.#showDistributions(this.#winners);
     } else {
       this.querySelector('[data-bind="distributions"]').hidden = true;
     }
@@ -397,13 +435,13 @@ class ReplayPanel extends HTMLElement {
     this.#updateTicketInfo();
     this.#loadPlayerTraits();
     // Re-render distributions to update (YOU) labels
-    if (this.#distributions.length > 0) {
-      this.#showDistributions(this.#distributions);
+    if (this.#winners.length > 0) {
+      this.#showDistributions(this.#winners);
     }
     // Update reveal button state
     const rngEntry = this.#rngDays.find(d => d.day === this.#selectedDay);
     const hasRng = rngEntry && rngEntry.finalWord && rngEntry.finalWord !== '0';
-    this.querySelector('[data-bind="reveal-btn"]').disabled = !hasRng || !this.#selectedPlayer;
+    this.querySelector('[data-bind="reveal-btn"]').disabled = !hasRng || !this.#selectedPlayer || !this.#winners.length;
   }
 
   #updateTicketInfo() {
@@ -425,7 +463,7 @@ class ReplayPanel extends HTMLElement {
       detailEl.textContent = `${player.totalMintedOnLevel.toLocaleString()} minted on level`;
       infoEl.hidden = false;
 
-      const won = this.#distributions.find(d => d.winner.toLowerCase() === this.#selectedPlayer.toLowerCase());
+      const won = this.#winners.find(w => w.address.toLowerCase() === this.#selectedPlayer.toLowerCase());
       if (won) {
         countEl.textContent += ' -- WINNER';
         countEl.classList.add('replay-winner-text');
@@ -437,30 +475,87 @@ class ReplayPanel extends HTMLElement {
     }
   }
 
-  #showDistributions(distributions) {
+  #showDistributions(winners) {
+    // winners: array from /game/jackpot/day/:day/winners response
     const container = this.querySelector('[data-bind="distributions"]');
     const list = this.querySelector('[data-bind="dist-list"]');
 
-    if (!distributions.length) {
+    if (!winners || !winners.length) {
       container.hidden = true;
       return;
     }
 
-    const addr = this.#selectedPlayer?.toLowerCase();
-    list.innerHTML = distributions.map(d => {
-      const isMe = addr && d.winner.toLowerCase() === addr;
-      const at = d.awardType || '';
-      const currency = d.currency || (at === 'burnie' || at === 'farFutureCoin' ? 'BURNIE' : at === 'dgnrs' ? 'DGNRS' : at === 'tickets' ? 'TICKETS' : at === 'whale_pass' ? 'WHALE' : 'ETH');
-      const formatted = currency === 'BURNIE' ? formatBurnie(d.amount) : currency === 'TICKETS' ? (d.amount || '0') : formatEth(d.amount);
+    const myAddr = this.#selectedPlayer?.toLowerCase();
+
+    list.innerHTML = winners.map(w => {
+      const addr = w.address.toLowerCase();
+      const isMe = myAddr && addr === myAddr;
+
+      // Build trait-grouped tooltip from breakdown entries
+      const tipHtml = this.#buildWinnerTooltip(w.breakdown || []);
+
       return `
-      <div class="replay-dist-item${isMe ? ' replay-dist-mine' : ''}">
-        <span class="replay-dist-winner">${truncateAddress(d.winner)}${isMe ? ' (YOU)' : ''}</span>
-        <span class="replay-dist-amount">${formatted} ${currency}</span>
-        <span class="replay-dist-type">${d.awardType}</span>
+      <div class="replay-dist-item${isMe ? ' replay-dist-mine' : ''}" style="position:relative">
+        <span class="replay-dist-winner">${truncateAddress(w.address)}${isMe ? ' (YOU)' : ''}</span>
+        ${w.hasBonus ? '<span class="replay-dist-bonus-badge">+BONUS</span>' : ''}
+        <div class="winner-tip">${tipHtml}</div>
       </div>`;
     }).join('');
 
     container.hidden = false;
+  }
+
+  /**
+   * Build HTML for the hover tooltip grouped by trait.
+   * breakdown: [{awardType, amount, count, traitId}]
+   */
+  #buildWinnerTooltip(breakdown) {
+    if (!breakdown || breakdown.length === 0) return '<em>No detail available</em>';
+
+    // Group entries by traitId (null = bonus/whale/ticket with no trait)
+    const byTrait = new Map(); // traitId|'bonus' -> entries[]
+    for (const entry of breakdown) {
+      const key = entry.traitId != null ? entry.traitId : 'bonus';
+      if (!byTrait.has(key)) byTrait.set(key, []);
+      byTrait.get(key).push(entry);
+    }
+
+    const sections = [];
+    for (const [key, entries] of byTrait) {
+      let headerHtml;
+      if (key === 'bonus') {
+        headerHtml = '<span class="tip-trait-name">Bonus</span>';
+      } else {
+        const traitId = Number(key);
+        const badge = traitToBadge(traitId);
+        const quadrant = Math.floor(traitId / 64);
+        const quadrantName = BADGE_QUADRANTS[quadrant] || 'Unknown';
+        const label = badge ? `${badge.item} (${quadrantName} Q${quadrant + 1})` : `Trait ${traitId}`;
+        headerHtml = `<span class="tip-trait-name">${label}</span>`;
+      }
+
+      const rows = entries.map(e => {
+        const at = e.awardType || '';
+        let formatted;
+        if (at === 'eth') {
+          formatted = `${formatEth(e.amount)} ETH`;
+        } else if (at === 'burnie' || at === 'farFutureCoin' || at.includes('burnie')) {
+          formatted = `${formatBurnie(e.amount)} BURNIE`;
+        } else if (at === 'tickets' || at === 'ticket') {
+          formatted = `${e.amount} ticket${e.amount !== '1' ? 's' : ''}`;
+        } else if (at === 'whale_pass') {
+          formatted = `${e.amount} whale pass${e.amount !== '1' ? 'es' : ''}`;
+        } else {
+          formatted = `${e.amount} ${at}`;
+        }
+        const countStr = e.count > 1 ? ` ×${e.count}` : '';
+        return `<span class="tip-row">${formatted}${countStr}</span>`;
+      }).join('');
+
+      sections.push(`<div class="tip-trait-group">${headerHtml}${rows}</div>`);
+    }
+
+    return sections.join('');
   }
 
   // --- Reveal / Spin ---
@@ -472,17 +567,36 @@ class ReplayPanel extends HTMLElement {
     if (!rngEntry || !rngEntry.finalWord || rngEntry.finalWord === '0') return;
 
     this.#resetCards();
-    await this.#loadPlayerTraits(); // ensure traits loaded
+    await this.#loadPlayerTraits(); // ensure traits loaded for spin coloring
 
-    // Derive winning traits from the RNG word — this is the authoritative source
-    // for which traits were drawn on THIS day. Distribution traitIds may span
-    // multiple jackpot days within the same level and should not be used here.
+    // Fetch per-player roll data — authoritative source for which traits this player
+    // actually won (roll1Rows) and whether they have a bonus roll (roll2/hasBonus).
+    // Use the per-winner winningLevel when available (fixes multi-level day edge case).
+    const winnerEntry = this.#winners.find(w => w.address.toLowerCase() === this.#selectedPlayer.toLowerCase());
+    const fetchLevel = winnerEntry?.winningLevel ?? this.#selectedLevel;
+    this.#roll1Rows = [];
+    this.#roll2Data = null;
+    this.#hasBonus = false;
+    if (fetchLevel != null) {
+      try {
+        const pRes = await fetch(`${API_BASE}/game/jackpot/${fetchLevel}/player/${this.#selectedPlayer}?day=${this.#selectedDay}`);
+        if (pRes.ok) {
+          const pData = await pRes.json();
+          this.#roll1Rows = pData.roll1Rows || [];
+          this.#roll2Data = pData.roll2 || null;
+          this.#hasBonus = pData.hasBonus || false;
+        }
+      } catch (err) {
+        console.warn('[ReplayPanel] Failed to load player roll data:', err);
+      }
+    }
+
+    // Derive winning traits from the RNG word for the spin animation display.
     const traits = deriveWinningTraits(rngEntry.finalWord);
-
     const displayTraits = toDisplayOrder(traits);
 
-    // Map distributions to quadrants for prize data
-    this.#distributePrizes(displayTraits);
+    // Map roll1Rows to quadrant prize arrays (D3: only actually-won traits).
+    this.#distributePrizesFromRoll1(displayTraits);
 
     const btn = this.querySelector('[data-bind="reveal-btn"]');
     btn.disabled = true;
@@ -492,22 +606,63 @@ class ReplayPanel extends HTMLElement {
 
     btn.disabled = false;
     btn.textContent = 'Replay';
+
+    // After Roll 1 spin: show bonus section
+    this.#showBonusSection();
   }
 
+  /**
+   * D3: Map roll1Rows (per-player winning trait rows from /game/jackpot/:level/player/:addr)
+   * to quadrant prize arrays. Only traits the player actually won appear as scratchable.
+   * Each row becomes a synthetic dist object so the existing reveal/prize logic works.
+   */
+  #distributePrizesFromRoll1(displayTraits) {
+    this.#quadWinArrays = [[], [], [], []];
+    this.#centerWins = [];
+
+    if (!this.#roll1Rows || this.#roll1Rows.length === 0) {
+      // No roll1 data — fall back to old distribution-based method so non-winning
+      // players still show the correct "no wins" state.
+      return;
+    }
+
+    for (const row of this.#roll1Rows) {
+      if (row.traitId == null) continue; // skip bonus rows with no trait
+      const contractQ = Math.floor(row.traitId / 64);
+      const displayPos = DISPLAY_ORDER.indexOf(contractQ);
+      if (displayPos < 0 || displayPos > 3) continue;
+
+      // Convert JackpotOverviewRow fields to synthetic dist objects for prize display
+      const synths = [];
+      if (BigInt(row.ethPerWinner || '0') > 0n) {
+        synths.push({ awardType: 'eth', amount: row.ethPerWinner, traitId: row.traitId });
+      }
+      if (BigInt(row.coinPerWinner || '0') > 0n) {
+        synths.push({ awardType: 'burnie', amount: row.coinPerWinner, traitId: row.traitId });
+      }
+      if ((row.ticketsPerWinner || 0) > 0) {
+        synths.push({ awardType: 'tickets', amount: String(row.ticketsPerWinner), traitId: row.traitId });
+      }
+      // If no recognised prize amounts, still mark quadrant as won (shows scratch card)
+      if (synths.length === 0) {
+        synths.push({ awardType: 'eth', amount: '0', traitId: row.traitId });
+      }
+      this.#quadWinArrays[displayPos].push(...synths);
+    }
+  }
+
+  // Legacy method — kept so existing #checkAllScratched / farFutureCoin center logic
+  // still has a reference point. Not called from #triggerReveal anymore.
   #distributePrizes(displayTraits) {
     this.#quadWinArrays = [[], [], [], []];
     this.#centerWins = [];
     const addr = this.#selectedPlayer?.toLowerCase();
     if (!addr) return;
 
-    // Build set of today's winning traitIds (from RNG derivation, one per quadrant)
     const todaysTraits = new Set(displayTraits.filter(t => t != null));
-
     const playerDists = this.#distributions.filter(d => d.winner.toLowerCase() === addr);
     if (playerDists.length === 0) return;
 
-    // Only farFutureCoin goes to center diamond — all other types go to quadrants
-    // Filter to only include wins matching today's winning traits (or null traitId bonuses)
     const quadDists = [];
     for (const dist of playerDists) {
       if (dist.awardType === 'farFutureCoin') {
@@ -515,36 +670,236 @@ class ReplayPanel extends HTMLElement {
       } else if (dist.traitId == null || todaysTraits.has(dist.traitId)) {
         quadDists.push(dist);
       }
-      // Skip wins from other jackpot days (different traitIds)
     }
 
-    // First pass: map distributions with traitId to their quadrant
     const noTraitDists = [];
     for (const dist of quadDists) {
       if (dist.traitId != null) {
         const contractQ = Math.floor(dist.traitId / 64);
         const displayPos = DISPLAY_ORDER.indexOf(contractQ);
-        if (displayPos >= 0 && displayPos <= 3) {
-          this.#quadWinArrays[displayPos].push(dist);
-        }
+        if (displayPos >= 0 && displayPos <= 3) this.#quadWinArrays[displayPos].push(dist);
       } else {
         noTraitDists.push(dist);
       }
     }
-    // Second pass: assign null-traitId wins (dgnrs, whale_pass) to the quadrant
-    // with the largest ETH win — these are solo-bucket bonuses tied to the big winner.
     if (noTraitDists.length > 0) {
-      let bestQ = 0;
-      let bestEth = 0n;
+      let bestQ = 0, bestEth = 0n;
       for (let i = 0; i < 4; i++) {
         const qEth = this.#quadWinArrays[i]
           .filter(d => d.awardType === 'eth')
           .reduce((s, d) => s + BigInt(d.amount || '0'), 0n);
         if (qEth > bestEth) { bestEth = qEth; bestQ = i; }
       }
-      for (const dist of noTraitDists) {
-        this.#quadWinArrays[bestQ].push(dist);
+      for (const dist of noTraitDists) this.#quadWinArrays[bestQ].push(dist);
+    }
+  }
+
+  // --- Bonus Roll (Roll 2) ---
+
+  #showBonusSection() {
+    const section = this.querySelector('[data-bind="bonus-section"]');
+    const btn = this.querySelector('[data-bind="bonus-btn"]');
+    const noBonus = this.querySelector('[data-bind="no-bonus"]');
+    if (!section) return;
+
+    // Only show after Roll 1 is done
+    section.hidden = false;
+    if (this.#hasBonus) {
+      btn.hidden = false;
+      noBonus.hidden = true;
+    } else {
+      btn.hidden = true;
+      noBonus.hidden = false;
+    }
+  }
+
+  #triggerBonusRoll() {
+    if (!this.#roll2Data) return;
+    const btn = this.querySelector('[data-bind="bonus-btn"]');
+    if (btn) btn.disabled = true;
+
+    this.#bonusPhase = true;
+
+    // Build bonus scratch cards from roll2.future + roll2.farFuture rows
+    const allRows = [
+      ...(this.#roll2Data.future || []),
+      ...(this.#roll2Data.farFuture || []),
+    ];
+
+    this.#bonusScratchCards = allRows.map(row => {
+      const badge = row.traitId != null ? traitToBadge(row.traitId) : null;
+      const label = badge ? `${badge.item} (${badge.category})` : 'Bonus';
+      const wins = [];
+      if (BigInt(row.ethPerWinner || '0') > 0n) {
+        wins.push({ awardType: 'eth', amount: row.ethPerWinner });
       }
+      if (BigInt(row.coinPerWinner || '0') > 0n) {
+        wins.push({ awardType: 'burnie', amount: row.coinPerWinner });
+      }
+      if ((row.ticketsPerWinner || 0) > 0) {
+        wins.push({ awardType: 'tickets', amount: String(row.ticketsPerWinner) });
+      }
+      return { traitId: row.traitId, label, badge, wins };
+    });
+
+    this.#bonusScratched = this.#bonusScratchCards.map(() => false);
+    this.#bonusScratchGrids = this.#bonusScratchCards.map(() => null);
+
+    this.#renderBonusGrid();
+  }
+
+  #renderBonusGrid() {
+    const gridSection = this.querySelector('[data-bind="bonus-grid"]');
+    const cardsEl = this.querySelector('[data-bind="bonus-cards"]');
+    if (!gridSection || !cardsEl) return;
+
+    if (this.#bonusScratchCards.length === 0) {
+      gridSection.hidden = true;
+      return;
+    }
+
+    // Render one scratch card per bonus row
+    cardsEl.innerHTML = this.#bonusScratchCards.map((card, idx) => {
+      const badgeSrc = card.badge ? card.badge.path.replace('/badges/', '/badges-circular/') : '';
+      return `
+        <div class="replay-bonus-card" data-bonus-idx="${idx}">
+          <div class="replay-bonus-card-label">${card.label}</div>
+          <div class="replay-bonus-card-inner">
+            <div class="replay-bonus-prize" data-bonus-prize="${idx}"></div>
+            <canvas class="replay-bonus-canvas" data-bonus-canvas="${idx}"></canvas>
+          </div>
+        </div>`;
+    }).join('');
+
+    gridSection.hidden = false;
+
+    // Init scratch canvas for each card
+    requestAnimationFrame(() => {
+      this.#bonusScratchCards.forEach((card, idx) => {
+        const canvas = cardsEl.querySelector(`[data-bonus-canvas="${idx}"]`);
+        if (canvas) {
+          this.#initBonusCanvas(canvas, card.badge);
+          this.#wireBonusCanvas(canvas, idx);
+        }
+      });
+    });
+  }
+
+  #initBonusCanvas(canvas, badge) {
+    const inner = canvas.parentElement;
+    const rect = inner.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    const ctx = canvas.getContext('2d');
+    // Purple-tinted cover for bonus roll (visually distinct from Roll 1 blue)
+    ctx.fillStyle = '#2d1b69';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (badge) {
+      // traitToBadge returns { category, item, color (string), path (non-circular) }
+      // Use badgeCircularPath with correct symbol index derived from BADGE_ITEMS lookup.
+      const symIdx = (BADGE_ITEMS[badge.category] || []).indexOf(badge.item);
+      const colIdx = BADGE_COLORS.indexOf(badge.color);
+      const src = badgeCircularPath(badge.category, symIdx >= 0 ? symIdx : 0, colIdx >= 0 ? colIdx : 0);
+      const img = new Image();
+      img.onload = () => {
+        const size = Math.min(canvas.width, canvas.height) * 0.7;
+        const x = (canvas.width - size) / 2;
+        const y = (canvas.height - size) / 2;
+        ctx.drawImage(img, x, y, size, size);
+      };
+      img.src = src;
+    }
+    canvas.style.display = 'block';
+    canvas.style.pointerEvents = 'auto';
+  }
+
+  #wireBonusCanvas(canvas, idx) {
+    let lastPos = null;
+    const onScratch = (cx, cy) => {
+      if (this.#bonusScratched[idx]) return;
+      this.#sfxScratchStart();
+      const dpr = window.devicePixelRatio || 1;
+      const brushR = BRUSH_R * dpr;
+      this.#scratchAt(canvas, cx, cy);
+      if (!this.#bonusScratchGrids[idx]) this.#bonusScratchGrids[idx] = makeScratchGrid(GRID_RES);
+      markGridCells(this.#bonusScratchGrids[idx], GRID_RES, canvas.width, canvas.height, cx, cy, brushR);
+      if (lastPos) {
+        const dx = cx - lastPos.x, dy = cy - lastPos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const steps = Math.max(1, Math.floor(dist / 4));
+        for (let s = 1; s < steps; s++) {
+          const ix = lastPos.x + dx * s / steps, iy = lastPos.y + dy * s / steps;
+          this.#scratchAt(canvas, ix, iy);
+          markGridCells(this.#bonusScratchGrids[idx], GRID_RES, canvas.width, canvas.height, ix, iy, brushR);
+        }
+      }
+      lastPos = { x: cx, y: cy };
+      if (gridCoverage(this.#bonusScratchGrids[idx]) >= REVEAL_THRESHOLD) {
+        this.#revealBonusCard(idx);
+      }
+    };
+    const getPos = (clientX, clientY) => {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      return { x: (clientX - rect.left) * dpr, y: (clientY - rect.top) * dpr };
+    };
+    canvas.addEventListener('mousemove', (e) => {
+      if (!this.#mouseIsDown || this.#bonusScratched[idx]) return;
+      const p = getPos(e.clientX, e.clientY);
+      onScratch(p.x, p.y);
+    });
+    canvas.addEventListener('mouseleave', () => { lastPos = null; this.#sfxScratchStop(); });
+    canvas.addEventListener('touchstart', (e) => {
+      if (this.#bonusScratched[idx]) return;
+      e.preventDefault(); lastPos = null;
+      const t = e.touches[0]; const p = getPos(t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => {
+      if (this.#bonusScratched[idx]) return;
+      e.preventDefault();
+      const t = e.touches[0]; const p = getPos(t.clientX, t.clientY);
+      onScratch(p.x, p.y);
+    }, { passive: false });
+    canvas.addEventListener('touchend', () => { lastPos = null; this.#sfxScratchStop(); });
+  }
+
+  #revealBonusCard(idx) {
+    if (this.#bonusScratched[idx]) return;
+    this.#bonusScratched[idx] = true;
+    this.#sfxScratchStop();
+    this.#sfxGreenReveal();
+
+    const cardsEl = this.querySelector('[data-bind="bonus-cards"]');
+    if (!cardsEl) return;
+    const canvas = cardsEl.querySelector(`[data-bonus-canvas="${idx}"]`);
+    const prizeEl = cardsEl.querySelector(`[data-bonus-prize="${idx}"]`);
+    const card = this.#bonusScratchCards[idx];
+
+    if (canvas) {
+      canvas.style.transition = 'opacity 0.35s ease';
+      canvas.style.opacity = '0';
+      canvas.style.pointerEvents = 'none';
+    }
+
+    if (prizeEl && card.wins.length > 0) {
+      const lines = [];
+      for (const w of card.wins) {
+        if (w.awardType === 'eth') lines.push(formatEth(w.amount) + ' ETH');
+        else if (w.awardType === 'burnie' || w.awardType === 'farFutureCoin') lines.push(formatBurnie(w.amount) + ' BURNIE');
+        else if (w.awardType === 'tickets') lines.push(w.amount + ' ticket' + (w.amount !== '1' ? 's' : ''));
+        else lines.push(w.amount + ' ' + w.awardType);
+      }
+      prizeEl.innerHTML = lines.map(l => `<span class="replay-prize-total">${l}</span>`).join('');
+      prizeEl.classList.add('visible');
+    }
+
+    // Check if all bonus cards scratched
+    if (this.#bonusScratched.every(s => s)) {
+      this.#celebrate();
     }
   }
 
@@ -554,9 +909,17 @@ class ReplayPanel extends HTMLElement {
     const quads = this.querySelectorAll('.replay-tq');
     const hint = this.querySelector('[data-bind="hint"]');
 
-    // Determine ownership per display quadrant
+    // Determine which quadrants are scratchable: a quadrant is scratchable only if
+    // this player actually has a winning row for that display position (D3).
+    // Fall back to trait ownership when roll1Rows is empty (no player data fetched).
+    const roll1TraitIds = new Set(this.#roll1Rows.map(r => r.traitId).filter(t => t != null));
     for (let i = 0; i < 4; i++) {
-      this.#quadOwned[i] = displayTraits[i] != null && this.#playerTraitIds.has(displayTraits[i]);
+      if (roll1TraitIds.size > 0) {
+        this.#quadOwned[i] = displayTraits[i] != null && roll1TraitIds.has(displayTraits[i]);
+      } else {
+        // Fallback: use player trait ownership (pre-D3 behaviour)
+        this.#quadOwned[i] = displayTraits[i] != null && this.#playerTraitIds.has(displayTraits[i]);
+      }
     }
 
     // Reset state
@@ -1200,6 +1563,20 @@ class ReplayPanel extends HTMLElement {
     this.#centerWins = [];
     this.#centerScratched = false;
     this.#centerScratchGrid = null;
+
+    // Reset bonus roll state
+    this.#bonusPhase = false;
+    this.#bonusScratchCards = [];
+    this.#bonusScratched = [];
+    this.#bonusScratchGrids = [];
+    const bonusSection = this.querySelector('[data-bind="bonus-section"]');
+    if (bonusSection) bonusSection.hidden = true;
+    const bonusGrid = this.querySelector('[data-bind="bonus-grid"]');
+    if (bonusGrid) bonusGrid.hidden = true;
+    const bonusBtn = this.querySelector('[data-bind="bonus-btn"]');
+    if (bonusBtn) { bonusBtn.disabled = false; bonusBtn.hidden = false; }
+    const noBonus = this.querySelector('[data-bind="no-bonus"]');
+    if (noBonus) noBonus.hidden = true;
 
     const hint = this.querySelector('[data-bind="hint"]');
     if (hint) hint.textContent = '';
