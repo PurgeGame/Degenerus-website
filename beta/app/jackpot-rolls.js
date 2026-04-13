@@ -79,8 +79,12 @@ function joFormatCoin(amtStr) {
  *
  * @param {{future?: Array, farFuture?: Array}} roll2
  * @param {number|string|null} bonusPacked 32-bit packed bonus traitIds (4 bytes)
- * @returns {Array<{traitId:number|null, quadrant:number|null, symbolIdx:number|null, colorIdx:number|null, wins:number, amountPerWin:string, isEmpty:boolean, isFarFuture:boolean}>}
+ * @returns {Array<{traitId:number|null, quadrant:number|null, symbolIdx:number|null, colorIdx:number|null, wins:number, amountPerWin:string, isEmpty:boolean, isFarFuture:boolean, ticketSubRow:{wins:number, amountPerWin:string}|null}>}
  *   length 5: slots 0..3 are bonus[0..3], slot 4 is far-future.
+ *
+ * Plan 39-09: each slot carries an optional `ticketSubRow` propagated from the
+ * first trait row that has one. Far-future slot always has ticketSubRow:null
+ * (far-future is BURNIE per data model).
  */
 export function rebucketRoll2BySlot(roll2, bonusPacked) {
   function unpack(packed) {
@@ -108,6 +112,7 @@ export function rebucketRoll2BySlot(roll2, bonusPacked) {
       out.push({
         traitId: null, quadrant: null, symbolIdx: null, colorIdx: null,
         wins: 0, amountPerWin: '0', isEmpty: true, isFarFuture: false,
+        ticketSubRow: null,
       });
       continue;
     }
@@ -121,6 +126,14 @@ export function rebucketRoll2BySlot(roll2, bonusPacked) {
       else if (r0.ethPerWinner && r0.ethPerWinner !== '0') amountPerWin = r0.ethPerWinner;
       else if (r0.ticketsPerWinner) amountPerWin = String(r0.ticketsPerWinner);
     }
+    // Plan 39-09: propagate ticketSubRow from the first row that has one.
+    let ticketSubRow = null;
+    for (const r of rows) {
+      if (r && r.ticketSubRow && r.ticketSubRow.wins > 0) {
+        ticketSubRow = { wins: r.ticketSubRow.wins, amountPerWin: r.ticketSubRow.amountPerWin };
+        break;
+      }
+    }
     const quadrant = Math.floor(t / 64);
     const symbolIdx = Math.floor((t % 64) / 8);
     const colorIdx = t % 8;
@@ -129,6 +142,7 @@ export function rebucketRoll2BySlot(roll2, bonusPacked) {
       wins, amountPerWin,
       isEmpty: wins === 0,
       isFarFuture: false,
+      ticketSubRow,
     });
   }
 
@@ -149,6 +163,7 @@ export function rebucketRoll2BySlot(roll2, bonusPacked) {
     wins: farWins, amountPerWin: farAmount,
     isEmpty: farWins === 0,
     isFarFuture: true,
+    ticketSubRow: null,
   });
 
   return out;
