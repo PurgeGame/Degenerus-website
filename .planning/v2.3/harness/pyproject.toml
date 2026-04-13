@@ -15,6 +15,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+validations = [
+    "responses>=0.25",
+    "eth-utils>=4.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -22,5 +26,8 @@ include = ["harness*"]
 exclude = ["tests*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# Phase 19 validations live under ../validations/tests; registered here so
+# `pytest -q` from the harness dir picks up both Phase 18 and Phase 19 suites.
+testpaths = ["tests", "../validations/tests"]
 addopts = "-x --no-header"
+# keccak choice: use eth_utils (documented); pycryptodome not required.
