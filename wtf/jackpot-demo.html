@@ -1671,12 +1671,22 @@
     if (demoRollPhase === 'roll2') {
       // "Roll Bonus" pressed — brief flame spin, then render Roll 2 panel.
       btn.disabled = true;
+      btn.textContent = 'Rolling\u2026';
       var flame = document.querySelector('.demo-center');
       if (flame) flame.classList.add('spinning');
       setTimeout(function () {
         try {
           if (flame) flame.classList.remove('spinning');
           rolls.renderRoll2((demoPlayerData && demoPlayerData.roll2) || { future: [], farFuture: [] });
+          // Scroll the Roll 2 panel into view after rendering.
+          // Uses block:'nearest' so it doesn't over-scroll if the panel is already visible.
+          // (Replaces the prior block:'center' call that caused the scroll-off-top bug —
+          // that bug was due to the old flex-centered body layout; the body now uses
+          // align-items:flex-start so nearest/start scrolling behaves correctly.)
+          var roll2Panel = document.getElementById('roll2-panel');
+          if (roll2Panel && roll2Panel.scrollIntoView) {
+            roll2Panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
         } catch (e) { console.error('[roll2] render failed:', e); }
         btn.textContent = 'Next Day \u2192';
         demoRollPhase = 'done';
