@@ -204,6 +204,23 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
   }
 
   // ------------------------------------------------------------------
+  // _isZeroPrizeRow — true when a row has no prizes assigned at all.
+  // Zero-prize rows (ethPerWinner=0, coinPerWinner=0, ticketsPerWinner=0)
+  // carry no actionable information and should not be rendered in the grid.
+  // ------------------------------------------------------------------
+
+  function _isZeroPrizeRow(row) {
+    if (!row) return true;
+    var eth  = row.ethPerWinner;
+    var coin = row.coinPerWinner;
+    var tkts = row.ticketsPerWinner;
+    var hasEth  = eth  && eth  !== '0';
+    var hasCoin = coin && coin !== '0';
+    var hasTkts = tkts && tkts !== 0;
+    return !hasEth && !hasCoin && !hasTkts;
+  }
+
+  // ------------------------------------------------------------------
   // appendOverviewRow — shared by renderOverview and renderRoll2
   // (ported from jackpot-demo.html lines 1896-1952)
   // ------------------------------------------------------------------
@@ -283,17 +300,19 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
     var ffGrid = $(sel.roll2FarGrid);
     var fEmpty = $(sel.roll2FutureEmpty);
     var ffEmpty = $(sel.roll2FarEmpty);
-    if (future.length === 0) {
+    var futureFiltered = future.filter(function(r) { return !_isZeroPrizeRow(r); });
+    var farFiltered    = farFuture.filter(function(r) { return !_isZeroPrizeRow(r); });
+    if (futureFiltered.length === 0) {
       if (fEmpty) fEmpty.style.display = 'block';
     } else {
       if (fEmpty) fEmpty.style.display = 'none';
-      for (var i = 0; i < future.length; i++) _appendOverviewRow(fGrid, future[i]);
+      for (var i = 0; i < futureFiltered.length; i++) _appendOverviewRow(fGrid, futureFiltered[i]);
     }
-    if (farFuture.length === 0) {
+    if (farFiltered.length === 0) {
       if (ffEmpty) ffEmpty.style.display = 'block';
     } else {
       if (ffEmpty) ffEmpty.style.display = 'none';
-      for (var j = 0; j < farFuture.length; j++) _appendOverviewRow(ffGrid, farFuture[j]);
+      for (var j = 0; j < farFiltered.length; j++) _appendOverviewRow(ffGrid, farFiltered[j]);
     }
   }
 
@@ -362,8 +381,16 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
         return;
       }
       status.style.display = 'none';
+      var visibleRows = 0;
       for (var j = 0; j < data.rows.length; j++) {
+        if (_isZeroPrizeRow(data.rows[j])) continue; // skip zero-prize rows — no info to show
         _appendOverviewRow(grid, data.rows[j]);
+        visibleRows++;
+      }
+      if (visibleRows === 0) {
+        status.className = 'jo-empty';
+        status.textContent = 'No jackpot draws for this day.';
+        status.style.display = 'block';
       }
       if (ffNote) ffNote.style.display = data.farFutureResolved ? 'block' : 'none';
     }).catch(function(err) {
