@@ -27,6 +27,8 @@ from validations.jackpot.jackpot_03 import (
     ensure_source_level_bound_discrepancy_logged,
     validate_jackpot_03,
 )
+from validations.jackpot.jackpot_04 import validate_jackpot_04
+from validations.jackpot.jackpot_05 import validate_jackpot_05
 from validations.jackpot.sample_days import SAMPLE_DAYS_CORE
 
 
@@ -70,6 +72,14 @@ def _run_jackpot_02() -> int:
     return _run_validator("JACKPOT-02", validate_jackpot_02)
 
 
+def _run_jackpot_04() -> int:
+    return _run_validator("JACKPOT-04", validate_jackpot_04)
+
+
+def _run_jackpot_05() -> int:
+    return _run_validator("JACKPOT-05", validate_jackpot_05)
+
+
 def _run_jackpot_03() -> int:
     # Ensure the one-shot source-level doc-vs-contract entry is logged
     # before per-day validation runs. Idempotent.
@@ -110,9 +120,19 @@ def main(argv: list[str] | None = None) -> int:
         help="Run JACKPOT-03 validator (Roll 2 near/far) over SAMPLE_DAYS_CORE.",
     )
     parser.add_argument(
+        "--jackpot-04",
+        action="store_true",
+        help="Run JACKPOT-04 validator (BURNIE 75/25 + center-diamond) over SAMPLE_DAYS_CORE.",
+    )
+    parser.add_argument(
+        "--jackpot-05",
+        action="store_true",
+        help="Run JACKPOT-05 validator (bonus-roll per-quadrant) over SAMPLE_DAYS_CORE.",
+    )
+    parser.add_argument(
         "--all",
         action="store_true",
-        help="Run all JACKPOT validators currently wired (01+02+03).",
+        help="Run all JACKPOT validators currently wired (01+02+03+04+05).",
     )
     parser.add_argument(
         "--record",
@@ -143,8 +163,19 @@ def main(argv: list[str] | None = None) -> int:
         rc = _run_jackpot_02() or rc
     if args.jackpot_03 or args.all:
         rc = _run_jackpot_03() or rc
+    if args.jackpot_04 or args.all:
+        rc = _run_jackpot_04() or rc
+    if args.jackpot_05 or args.all:
+        rc = _run_jackpot_05() or rc
 
-    if not any([args.jackpot_01, args.jackpot_02, args.jackpot_03, args.all]):
+    if not any([
+        args.jackpot_01,
+        args.jackpot_02,
+        args.jackpot_03,
+        args.jackpot_04,
+        args.jackpot_05,
+        args.all,
+    ]):
         parser.print_help()
     return rc
 

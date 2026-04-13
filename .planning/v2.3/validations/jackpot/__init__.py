@@ -27,6 +27,8 @@ from validations.jackpot.trait_derivation import (
     BONUS_TRAITS_TAG,
 )
 from validations.jackpot.jackpot_01 import validate_jackpot_01
+from validations.jackpot.jackpot_04 import validate_jackpot_04
+from validations.jackpot.jackpot_05 import validate_jackpot_05
 
 __all__ = [
     "SAMPLE_DAYS_CORE",
@@ -38,4 +40,6 @@ __all__ = [
     "quadrant_of",
     "BONUS_TRAITS_TAG",
     "validate_jackpot_01",
+    "validate_jackpot_04",
+    "validate_jackpot_05",
 ]
