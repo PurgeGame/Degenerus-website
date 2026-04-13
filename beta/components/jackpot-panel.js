@@ -11,6 +11,7 @@ import { formatEth } from '../app/utils.js';
 import { playSound } from '../app/audio.js';
 import { createScrubber } from '../viewer/scrubber.js';
 import { createJackpotRolls } from '../app/jackpot-rolls.js';
+import { API_BASE } from '../app/constants.js';
 
 class JackpotPanel extends HTMLElement {
   #unsubs = [];
@@ -189,7 +190,7 @@ class JackpotPanel extends HTMLElement {
     // are scoped to this element — no collision with the wtf/jackpot-demo.html IDs.
     this.#rolls = createJackpotRolls({
       root: this,
-      apiBase: '',
+      apiBase: API_BASE,
       selectors: {
         // Overview selectors (used by renderOverview)
         joGrid:          '#jp-jo-grid',
@@ -412,10 +413,32 @@ class JackpotPanel extends HTMLElement {
       res = await fetchJSON(`/game/jackpot/day/${day}/winners`);
     } catch (err) {
       if (v !== this.#winnersRequestVersion) return; // stale
-      console.error('[jackpot-panel] winners fetch failed:', err);
+      // Day-based winners endpoint unavailable (route not yet deployed or API stale).
+      // Fall back: derive level from day (each level = 5 jackpot days) and fetch
+      // overview to confirm the level exists, so #currentLevel gets set and the
+      // roll flow can still proceed even without individual winner addresses.
+      const derivedLevel = Math.ceil(day / 5);
+      let overviewLevel = derivedLevel;
+      try {
+        const ov = await fetchJSON(`/game/jackpot/${derivedLevel}/overview`);
+        if (ov && ov.level) overviewLevel = ov.level;
+      } catch { /* ignore — use derived level */ }
+      if (v !== this.#winnersRequestVersion) return; // stale after overview fetch
+      this.#currentDay = day;
+      this.#currentLevel = overviewLevel;
+      this.#winners = [];
       if (selectEl) {
-        selectEl.disabled = false;
-        selectEl.innerHTML = '<option disabled selected>Error loading winners</option>';
+        selectEl.disabled = true;
+        selectEl.innerHTML = '<option disabled selected>Winners unavailable — API updating</option>';
+      }
+      // Overview and roll flow can still proceed with the derived level.
+      if (overviewLevel) {
+        this.#overviewRendered = false;
+        const overviewDetails = this.querySelector('[data-bind="jp-overview"]');
+        if (overviewDetails && overviewDetails.open) {
+          this.#overviewRendered = true;
+          this.#rolls.renderOverview(overviewLevel);
+        }
       }
       return;
     }
