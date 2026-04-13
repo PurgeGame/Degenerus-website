@@ -1,0 +1,12 @@
+{
+  "items": [
+    {"level": 1, "stage": "PURCHASE", "phase": "PURCHASE", "blockNumber": 100, "day": 1},
+    {"level": 1, "stage": "JACKPOT", "phase": "JACKPOT", "blockNumber": 110, "day": 2},
+    {"level": 1, "stage": "JACKPOT", "phase": "JACKPOT", "blockNumber": 111, "day": 3},
+    {"level": 1, "stage": "JACKPOT", "phase": "JACKPOT", "blockNumber": 112, "day": 4},
+    {"level": 1, "stage": "JACKPOT", "phase": "JACKPOT", "blockNumber": 113, "day": 5},
+    {"level": 1, "stage": "JACKPOT", "phase": "JACKPOT", "blockNumber": 114, "day": 6},
+    {"level": 101, "stage": "JACKPOT", "phase": "JACKPOT", "blockNumber": 500, "day": 200}
+  ],
+  "nextCursor": "page2"
+}

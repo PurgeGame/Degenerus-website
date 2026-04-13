@@ -30,6 +30,10 @@ from validations.jackpot.jackpot_01 import validate_jackpot_01
 from validations.jackpot.jackpot_04 import validate_jackpot_04
 from validations.jackpot.jackpot_05 import validate_jackpot_05
 from validations.jackpot.jackpot_06 import validate_jackpot_06
+from validations.jackpot.jackpot_07 import (
+    select_hero_candidate_day,
+    validate_jackpot_07,
+)
 
 __all__ = [
     "SAMPLE_DAYS_CORE",
@@ -44,4 +48,6 @@ __all__ = [
     "validate_jackpot_04",
     "validate_jackpot_05",
     "validate_jackpot_06",
+    "validate_jackpot_07",
+    "select_hero_candidate_day",
 ]

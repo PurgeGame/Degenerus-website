@@ -1,0 +1,9 @@
+{
+  "items": [
+    {"level": 102, "stage": "JACKPOT", "phase": "JACKPOT", "blockNumber": 600, "day": 201},
+    {"level": 102, "stage": "JACKPOT", "phase": "JACKPOT", "blockNumber": 601, "day": 202},
+    {"level": 102, "stage": "JACKPOT", "phase": "JACKPOT", "blockNumber": 602, "day": 203},
+    {"level": 105, "stage": "JACKPOT", "phase": "JACKPOT", "blockNumber": 700, "day": 250}
+  ],
+  "nextCursor": null
+}
