@@ -1,23 +1,15 @@
 // components/jackpot-panel.js -- Jackpot panel Custom Element
-// Animated sequential trait reveal, pool/day/allocation display, badge visualization, confetti celebration.
-// All data transformation delegated to jackpot-data.js.
-// Plan 03: day scrubber (shared with viewer.html) + winners dropdown above existing 4-card reveal.
-// Plan 04 Roll 1/2 flow removed — kept: scrubber, winners dropdown, summary, Day Overview, live reveal.
+// Historical jackpot explorer: scrubber, winners dropdown, summary, Day Overview, Replay/Bonus Roll.
+// Live 4-card draw panel removed (plan 39-04) — historical explorer only.
 
-import { subscribe, get } from '../app/store.js';
+import { subscribe } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
-import { deriveWinningTraits, traitToBadge, estimateAllocation } from '../app/jackpot-data.js';
 import { formatEth } from '../app/utils.js';
-import { playSound } from '../app/audio.js';
 import { createScrubber } from '../viewer/scrubber.js';
 import { joFormatWeiToEth, createJackpotRolls } from '../app/jackpot-rolls.js';
-import { API_BASE } from '../app/constants.js';
 
 class JackpotPanel extends HTMLElement {
   #unsubs = [];
-  #revealPlayed = false;
-  #currentRngWord = null;
-  #timeline = null;
   #loaded = false;
 
   // Plan 03: scrubber + winners dropdown
@@ -46,31 +38,19 @@ class JackpotPanel extends HTMLElement {
   }
 
   connectedCallback() {
-    // Build 4 trait cards programmatically
-    const cards = [0, 1, 2, 3].map(q => `
-      <div class="trait-card" data-quadrant="${q}">
-        <div class="trait-card-inner">
-          <div class="trait-card-front"><span class="trait-q-label">?</span></div>
-          <div class="trait-card-back"><img class="badge-img" src="" alt=""><span class="trait-name"></span></div>
-        </div>
-      </div>
-    `).join('');
-
     this.innerHTML = `
       <div data-bind="skeleton" class="panel jackpot-panel">
         <div class="skeleton-header"><div class="skeleton-line skeleton-shimmer" style="width:40%"></div></div>
         <div class="skeleton-row"><div class="skeleton-line skeleton-shimmer" style="width:50%"></div><div class="skeleton-line skeleton-shimmer" style="width:40%"></div></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem"><div class="skeleton-block skeleton-shimmer" style="height:80px"></div><div class="skeleton-block skeleton-shimmer" style="height:80px"></div><div class="skeleton-block skeleton-shimmer" style="height:80px"></div><div class="skeleton-block skeleton-shimmer" style="height:80px"></div></div>
       </div>
       <div data-bind="content" style="display:none">
       <div class="panel jackpot-panel">
         <div class="panel-header">
-          <h2>JACKPOT DRAW</h2>
+          <h2>JACKPOT</h2>
           <span class="jackpot-day" data-bind="day">Day --</span>
         </div>
 
-        <!-- Historical jackpot explorer (Plan 03) -->
-        <h3 class="jp-section-title">Historical jackpot explorer</h3>
+        <!-- Historical jackpot explorer -->
         <div class="jp-day-port" data-bind="jp-day-port">
           <div class="jp-day-scrubber" data-bind="jp-day-scrubber"></div>
           <!-- Winner summary: rendered by #renderWinnerSummary on day change -->
@@ -147,34 +127,9 @@ class JackpotPanel extends HTMLElement {
             </div>
           </div>
         </div>
-
-        <!-- Live reveal section (existing 4-card flow, user addendum A6 + O-04) -->
-        <h3 class="jp-section-title">Live reveal</h3>
-        <div class="jackpot-stats">
-          <div class="stat">
-            <div class="stat-label">Prize Pool</div>
-            <div class="stat-value" data-bind="pool">--</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label">Today's Allocation</div>
-            <div class="stat-value" data-bind="allocation">--</div>
-          </div>
-        </div>
-        <div class="jackpot-grid">${cards}</div>
-        <div class="jackpot-result" data-bind="result" hidden>
-          <span class="jackpot-result-text"></span>
-          <span class="jackpot-prize-amount"></span>
-        </div>
-        <details class="jackpot-winners-dropdown" data-bind="winners-dropdown" hidden>
-          <summary>Winner Breakdown</summary>
-          <div class="jackpot-winners-list" data-bind="winners-list"></div>
-        </details>
       </div>
       </div>
     `;
-
-    // Preload GSAP when panel mounts (avoids jank on first reveal)
-    import('gsap').catch(() => {});
 
     // Plan 03: instantiate scrubber inside the jp-day-scrubber container
     this.#scrubber = createScrubber({
@@ -240,10 +195,6 @@ class JackpotPanel extends HTMLElement {
   disconnectedCallback() {
     this.#unsubs.forEach(fn => fn());
     this.#unsubs = [];
-    if (this.#timeline) {
-      this.#timeline.kill();
-      this.#timeline = null;
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -825,265 +776,8 @@ class JackpotPanel extends HTMLElement {
         }
       });
     }
-
-    // Update pool display
-    const poolWei = game.pools?.current || '0';
-    this.#bind('pool', poolWei !== '0' ? formatEth(poolWei) + ' ETH' : '--');
-
-    // Update allocation estimate
-    const alloc = estimateAllocation(poolWei, day);
-    if (alloc.label === '--') {
-      this.#bind('allocation', '--');
-    } else if (alloc.label === '100%') {
-      this.#bind('allocation', formatEth(alloc.min) + ' ETH (100%)');
-    } else {
-      this.#bind('allocation', formatEth(alloc.min) + ' - ' + formatEth(alloc.max) + ' ETH (' + alloc.label + ')');
-    }
-
-    // Show jackpot results — either live reveal or historical data
-    const rngWord = game.dailyRng?.finalWord || null;
-    const currentLevel = game.level || 0;
-
-    if (game.phase === 'JACKPOT' && rngWord && rngWord !== '0' && rngWord !== this.#currentRngWord) {
-      this.#currentRngWord = rngWord;
-      this.#revealPlayed = false;
-      try {
-        const data = await fetchJSON(`/game/jackpot/${currentLevel}`);
-        this.#triggerReveal(rngWord, data.distributions);
-      } catch {
-        this.#triggerReveal(rngWord);
-      }
-    } else if (!this.#revealPlayed && currentLevel > 0) {
-      this.#revealPlayed = true;
-      for (let lvl = 1; lvl <= Math.min(currentLevel, 20); lvl++) {
-        try {
-          const data = await fetchJSON(`/game/jackpot/${lvl}`);
-          if (data.distributions?.length > 0) {
-            this.#bind('day', data.distributions[0].day ? `Day ${data.distributions[0].day}` : `Level ${lvl}`);
-            this.#showHistoricalResults(data.distributions);
-            return;
-          }
-        } catch { /* no data for this level */ }
-      }
-      this.#revealPlayed = false;
-    }
   }
 
-  async #triggerReveal(rngWord, distributions = null) {
-    if (this.#revealPlayed) return;
-    this.#revealPlayed = true;
-
-    let traits;
-    if (distributions && distributions.length > 0) {
-      traits = distributions
-        .filter(d => d.traitId != null)
-        .slice(0, 4)
-        .map(d => d.traitId);
-      while (traits.length < 4) traits.push(null);
-    } else {
-      traits = deriveWinningTraits(rngWord);
-    }
-    const badges = traits.map(t => traitToBadge(t));
-
-    const cardEls = this.querySelectorAll('.trait-card');
-    cardEls.forEach((card, i) => {
-      const badge = badges[i];
-      const img = card.querySelector('.badge-img');
-      const name = card.querySelector('.trait-name');
-      if (badge && img) {
-        img.src = badge.path;
-        img.alt = `${badge.category} ${badge.color}`;
-      }
-      if (badge && name) {
-        name.textContent = badge.label || `${badge.category} ${badge.color}`;
-      }
-    });
-
-    await this.#animateReveal(cardEls, badges);
-  }
-
-  #showHistoricalResults(distributions) {
-    const seen = new Set();
-    const traits = [];
-    for (const d of distributions) {
-      if (d.traitId != null && !seen.has(d.traitId)) {
-        seen.add(d.traitId);
-        traits.push(d.traitId);
-        if (traits.length >= 4) break;
-      }
-    }
-    while (traits.length < 4) traits.push(null);
-
-    const badges = traits.map(t => traitToBadge(t));
-    const cardEls = this.querySelectorAll('.trait-card');
-
-    cardEls.forEach((card, i) => {
-      const badge = badges[i];
-      const img = card.querySelector('.badge-img');
-      const name = card.querySelector('.trait-name');
-      if (badge && img) {
-        img.src = badge.path;
-        img.alt = `${badge.category} ${badge.color}`;
-      }
-      if (badge && name) {
-        name.textContent = badge.label || `${badge.category} ${badge.color}`;
-      }
-      const inner = card.querySelector('.trait-card-inner');
-      if (inner) inner.style.transform = 'rotateY(180deg)';
-      card.setAttribute('data-winner', 'true');
-    });
-
-    const resultEl = this.querySelector('[data-bind="result"]');
-    if (resultEl) resultEl.hidden = false;
-    const textEl = this.querySelector('.jackpot-result-text');
-    if (textEl) {
-      const uniqueWinners = new Set(distributions.map(d => d.winner)).size;
-      textEl.textContent = `${distributions.length} prizes awarded to ${uniqueWinners} winners`;
-    }
-
-    const byPlayer = {};
-    for (const d of distributions) {
-      if (!byPlayer[d.winner]) byPlayer[d.winner] = { ethTotal: 0n, extraTypes: new Set() };
-      const awardType = d.awardType || 'unknown';
-      if (awardType === 'eth') {
-        byPlayer[d.winner].ethTotal += BigInt(d.amount || '0');
-      } else if (awardType !== 'dgnrs') {
-        byPlayer[d.winner].extraTypes.add(awardType);
-      }
-    }
-
-    const sorted = Object.entries(byPlayer)
-      .sort(([, a], [, b]) => (b.ethTotal > a.ethTotal ? 1 : b.ethTotal < a.ethTotal ? -1 : 0));
-
-    const listEl = this.querySelector('[data-bind="winners-list"]');
-    const dropdownEl = this.querySelector('[data-bind="winners-dropdown"]');
-    if (listEl && dropdownEl) {
-      listEl.innerHTML = sorted.map(([addr, { ethTotal, extraTypes }]) => {
-        const short = addr.slice(0, 6) + '…' + addr.slice(-4);
-        const typeLabels = [...extraTypes].map(t => {
-          if (t === 'whale_pass') return 'Whale Pass';
-          if (t === 'tickets') return 'Tickets';
-          if (t.includes('burnie') || t === 'farFutureCoin') return 'BURNIE';
-          return t;
-        });
-        const typeLabel = typeLabels.join(' + ');
-        const ethDisplay = ethTotal > 0n ? formatEth(ethTotal.toString()) + ' ETH' : '';
-        const amountDisplay = [ethDisplay, typeLabel].filter(Boolean).join(' + ');
-        return `<div class="jackpot-winner-row">
-          <span class="winner-addr" title="${addr}">${short}</span>
-          <span class="winner-amount">${amountDisplay || '—'}</span>
-        </div>`;
-      }).join('');
-      dropdownEl.hidden = false;
-    }
-  }
-
-  async #animateReveal(cardEls, badges) {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      cardEls.forEach((card) => {
-        const inner = card.querySelector('.trait-card-inner');
-        if (inner) inner.style.transform = 'rotateY(180deg)';
-        card.setAttribute('data-winner', 'true');
-      });
-      this.#celebrate();
-      return;
-    }
-
-    try {
-      const { default: gsap } = await import('gsap');
-      const tl = gsap.timeline({ paused: true });
-      this.#timeline = tl;
-
-      cardEls.forEach((card, i) => {
-        const inner = card.querySelector('.trait-card-inner');
-        const badgeImg = card.querySelector('.badge-img');
-
-        tl.to(inner, {
-          rotateY: 180,
-          duration: 0.5,
-          ease: 'power2.inOut',
-        }, i === 0 ? '+=0.3' : '+=0.5');
-
-        tl.call(() => card.setAttribute('data-winner', 'true'));
-        tl.fromTo(badgeImg, { scale: 0.8 }, {
-          scale: 1.1,
-          duration: 0.3,
-          ease: 'back.out(1.7)',
-        });
-        tl.to(badgeImg, { scale: 1.0, duration: 0.2 });
-      });
-
-      tl.call(() => this.#celebrate());
-      tl.play();
-    } catch (err) {
-      console.warn('[JackpotPanel] GSAP load failed, using instant reveal:', err);
-      cardEls.forEach(card => {
-        const inner = card.querySelector('.trait-card-inner');
-        if (inner) inner.style.transform = 'rotateY(180deg)';
-        card.setAttribute('data-winner', 'true');
-      });
-      this.#celebrate();
-    }
-  }
-
-  async #celebrate() {
-    playSound('win');
-    try {
-      const { default: confetti } = await import('canvas-confetti');
-
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#22c55e', '#8b5cf6', '#eab308', '#06b6d4'],
-      });
-
-      setTimeout(() => {
-        confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 } });
-        confetti({ particleCount: 50, angle: 120, spread: 55, origin: { x: 1 } });
-      }, 200);
-    } catch (err) {
-      console.warn('[JackpotPanel] Confetti load failed:', err);
-    }
-
-    const resultEl = this.querySelector('[data-bind="result"]');
-    if (resultEl) resultEl.hidden = false;
-
-    const textEl = this.querySelector('.jackpot-result-text');
-    if (textEl) textEl.textContent = 'Winning traits revealed!';
-
-    const amountEl = this.querySelector('.jackpot-prize-amount');
-    if (amountEl) {
-      const poolWei = get('game.pools.current') || '0';
-      const day = get('game.jackpotDay') || 0;
-      const alloc = estimateAllocation(poolWei, day);
-      const mid = (BigInt(alloc.min || '0') + BigInt(alloc.max || '0')) / 2n;
-      this.#animateNumber(amountEl, mid.toString());
-    }
-  }
-
-  #animateNumber(el, targetWei) {
-    const targetText = formatEth(targetWei);
-    const targetNum = parseFloat(targetText) || 0;
-    if (targetNum === 0) {
-      el.textContent = '0 ETH';
-      return;
-    }
-
-    const duration = 600;
-    const start = performance.now();
-
-    const tick = (now) => {
-      const elapsed = now - start;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const current = (targetNum * eased).toFixed(3);
-      el.textContent = current + ' ETH';
-      if (progress < 1) requestAnimationFrame(tick);
-    };
-
-    requestAnimationFrame(tick);
-  }
 }
 
 customElements.define('jackpot-panel', JackpotPanel);
