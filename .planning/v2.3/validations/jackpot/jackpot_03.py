@@ -31,6 +31,7 @@ from harness import (
     load_discrepancies,
 )
 from harness.api import _utc_now_iso
+from harness.yaml_io import _resolve_repo_root
 
 from validations.jackpot.aggregation import reconcile_player_totals
 from validations.jackpot.endpoints import EndpointClient
@@ -43,7 +44,7 @@ _ROLL2_LINE = 585
 CARRYOVER_MAX_OFFSET = 4  # contract canonical (NOT +3 per REQUIREMENTS.md)
 
 SOURCE_LEVEL_BOUND_ID = "JACKPOT-03-source-doc-bound-mismatch"
-DEFAULT_DISCREPANCIES_PATH = ".planning/v2.3/discrepancies.yaml"
+DEFAULT_DISCREPANCIES_PATH = str(_resolve_repo_root() / ".planning" / "v2.3" / "discrepancies.yaml")
 
 _SEVERITY_ORDER = ("Critical", "Major", "Minor", "Info")
 

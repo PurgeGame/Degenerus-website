@@ -48,6 +48,7 @@ from harness import (
     check_api_health,
 )
 from harness.api import _utc_now_iso
+from harness.yaml_io import _resolve_repo_root
 
 from validations.jackpot.endpoints import EndpointClient
 from validations.jackpot.history_levels import (
@@ -411,7 +412,7 @@ def run_hero_candidate_cli() -> int:
                 lag_blocks=0, lag_unreliable=False, sampled_at=snap_ts,
             ),
         )
-        append_discrepancy(".planning/v2.3/discrepancies.yaml", entry)
+        append_discrepancy(str(_resolve_repo_root() / ".planning" / "v2.3" / "discrepancies.yaml"), entry)
     else:
         print(f"hero-candidate: selected day {day} (cached)")
     return 0

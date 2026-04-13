@@ -25,12 +25,13 @@ from harness import (
     load_discrepancies,
 )
 from harness.api import _utc_now_iso
+from harness.yaml_io import _resolve_repo_root
 
 
 _JACKPOT_MODULE = "degenerus-audit/contracts/modules/DegenerusGameJackpotModule.sol"
 _STORAGE = "degenerus-audit/contracts/storage/DegenerusGameStorage.sol"
 
-DEFAULT_DISCREPANCIES_PATH = ".planning/v2.3/discrepancies.yaml"
+DEFAULT_DISCREPANCIES_PATH = str(_resolve_repo_root() / ".planning" / "v2.3" / "discrepancies.yaml")
 
 HISTORY_JACKPOTS_500_ID = "HISTORY-JACKPOTS-500-bug"
 JACKPOT_06_COVERAGE_GAP_ID = "JACKPOT-06-coverage-gap-hero-wagers"

@@ -19,6 +19,7 @@ from collections import Counter
 from typing import Callable
 
 from harness import append_discrepancy, check_api_health
+from harness.yaml_io import _resolve_repo_root
 
 from validations.jackpot.endpoints import EndpointClient
 from validations.jackpot.jackpot_01 import validate_jackpot_01
@@ -37,7 +38,7 @@ from validations.jackpot.source_level_entries import (
 )
 
 
-_DISCREPANCIES_PATH = ".planning/v2.3/discrepancies.yaml"
+_DISCREPANCIES_PATH = str(_resolve_repo_root() / ".planning" / "v2.3" / "discrepancies.yaml")
 
 
 def _run_validator(
