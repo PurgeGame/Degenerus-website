@@ -30,13 +30,12 @@
   margin-bottom: 0.75rem;
 }
 
-/* Winners row: label + select inline */
+/* Winners section: label above, list below */
 .jp-winners {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  flex-direction: column;
+  gap: 0.4rem;
   margin-bottom: 0.75rem;
-  flex-wrap: wrap;
 }
 
 .jp-winners-label {
@@ -48,28 +47,7 @@
   white-space: nowrap;
 }
 
-.jp-winners-select {
-  flex: 1;
-  min-width: 200px;
-  background: var(--bg-tertiary, #252542);
-  color: var(--text-primary, #fff);
-  border: 1px solid var(--border-color, #3a3a5c);
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 0.8rem;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  cursor: pointer;
-}
 
-.jp-winners-select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.jp-winners-select option {
-  background: var(--bg-secondary, #1a1a2e);
-  color: var(--text-secondary, #a0a0c0);
-}
 
 /* Winner summary block — above the winner dropdown, rendered per day change */
 .jp-winner-summary {
@@ -128,6 +106,99 @@
   color: var(--text-dim, #888);
   font-style: italic;
   font-size: 0.72rem;
+}
+
+/* -------------------------------------------------------------------------
+   Winners address list with hover breakdown tooltip (plan 39-04)
+   ------------------------------------------------------------------------- */
+
+.jp-winners-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color, #3a3a5c);
+  border-radius: 6px;
+  background: var(--bg-tertiary, #252542);
+  flex: 1;
+  min-width: 0;
+}
+
+.jp-winner-item {
+  position: relative;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
+  font-family: monospace;
+  color: var(--text-secondary, #a0a0c0);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color, #2a2a45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jp-winner-item:last-child {
+  border-bottom: none;
+}
+
+.jp-winner-item:hover {
+  background: rgba(139, 92, 246, 0.12);
+  color: var(--text-primary, #e0e0e0);
+}
+
+.jp-winner-item--selected {
+  background: rgba(139, 92, 246, 0.18);
+  color: var(--accent-primary, #f5a623);
+  font-weight: 700;
+}
+
+.jp-winner-item--selected:hover {
+  background: rgba(139, 92, 246, 0.25);
+}
+
+.jp-winner-item--empty {
+  color: var(--text-dim, #888);
+  font-style: italic;
+  cursor: default;
+  font-family: inherit;
+}
+
+.jp-winner-item--empty:hover {
+  background: none;
+  color: var(--text-dim, #888);
+}
+
+/* Hover tooltip — appears above the hovered item */
+.jp-winner-tip {
+  display: none;
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 4px);
+  z-index: 100;
+  background: var(--bg-secondary, #1a1a2e);
+  border: 1px solid var(--border-color, #3a3a5c);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.72rem;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: var(--text-secondary, #a0a0c0);
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 160px;
+}
+
+.jp-winner-tip span {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.jp-winner-item:hover .jp-winner-tip {
+  display: flex;
 }
 
 /* jp-overview: Day Overview collapsible — collapsed by default (D-12) */

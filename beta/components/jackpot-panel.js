@@ -57,8 +57,8 @@ class JackpotPanel extends HTMLElement {
           <div class="jp-winner-summary" data-bind="jp-winner-summary" style="display:none;"></div>
 
           <div class="jp-winners">
-            <label class="jp-winners-label">Winner</label>
-            <select class="jp-winners-select" data-bind="jp-winners-select"></select>
+            <div class="jp-winners-label">Winners</div>
+            <ul class="jp-winners-list" data-bind="jp-winners-select" role="listbox" aria-label="Winners"></ul>
           </div>
 
           <!-- Day Overview — collapsed by default (D-12) -->
@@ -394,8 +394,7 @@ class JackpotPanel extends HTMLElement {
 
     const selectEl = this.querySelector('[data-bind="jp-winners-select"]');
     if (selectEl) {
-      selectEl.disabled = true;
-      selectEl.innerHTML = '<option disabled>Loading…</option>';
+      selectEl.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">Loading\u2026</li>';
     }
 
     let res;
@@ -415,8 +414,7 @@ class JackpotPanel extends HTMLElement {
       this.#currentLevel = overviewLevel;
       this.#winners = [];
       if (selectEl) {
-        selectEl.disabled = true;
-        selectEl.innerHTML = '<option disabled selected>Winners unavailable — API updating</option>';
+        selectEl.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">Winners unavailable \u2014 API updating</li>';
       }
       if (overviewLevel) {
         this.#overviewRendered = false;
@@ -445,14 +443,12 @@ class JackpotPanel extends HTMLElement {
 
     if (!selectEl) return;
     selectEl.innerHTML = '';
-    selectEl.disabled = false;
 
     if (this.#winners.length === 0) {
-      const opt = document.createElement('option');
-      opt.disabled = true;
-      opt.selected = true;
-      opt.textContent = 'No data for this day';
-      selectEl.appendChild(opt);
+      const li = document.createElement('li');
+      li.className = 'jp-winner-item jp-winner-item--empty';
+      li.textContent = 'No data for this day';
+      selectEl.appendChild(li);
       const summaryEl = this.querySelector('[data-bind="jp-winner-summary"]');
       if (summaryEl) {
         summaryEl.innerHTML = '<div class="jp-summary-note">No jackpot data indexed for this day — scrub to a nearby day.</div>';
@@ -462,33 +458,76 @@ class JackpotPanel extends HTMLElement {
     }
 
     for (const w of this.#winners) {
-      const opt = document.createElement('option');
-      opt.value = w.address;
-      opt.dataset.hasBonus = String(w.hasBonus);
-      if (w.winningLevel != null) opt.dataset.winningLevel = String(w.winningLevel);
-      opt.textContent = this.#formatWinnerLabel(w);
-      selectEl.appendChild(opt);
+      const li = document.createElement('li');
+      li.className = 'jp-winner-item';
+      li.setAttribute('role', 'option');
+      li.dataset.address = w.address;
+      li.dataset.hasBonus = String(w.hasBonus);
+      if (w.winningLevel != null) li.dataset.winningLevel = String(w.winningLevel);
+
+      const short = w.address.slice(0, 6) + '\u2026' + w.address.slice(-4);
+      li.textContent = short;
+
+      // Hover tooltip with per-winner breakdown
+      if (w.breakdown && w.breakdown.length > 0) {
+        const tip = document.createElement('span');
+        tip.className = 'jp-winner-tip';
+        tip.innerHTML = this.#formatBreakdownTooltip(w.breakdown);
+        li.appendChild(tip);
+      }
+
+      li.addEventListener('click', () => this.#onWinnerItemClick(li));
+      selectEl.appendChild(li);
     }
 
-    // Render the winner summary block above the dropdown
+    // Render the winner summary block above the list
     this.#renderWinnerSummary(this.#winners, this.#currentDay);
 
-    // D-10: auto-select row 0 (highest payout — server returns payout-desc)
-    selectEl.selectedIndex = 0;
-    // Enable Replay button now that we have a day + winner
-    const replayBtn = this.querySelector('#jp-replay-btn');
-    if (replayBtn && this.#replayState === 'idle') replayBtn.disabled = false;
-    this.#onWinnerChange(this.#winners[0].address);
+    // Auto-select row 0 (highest payout — server returns payout-desc)
+    const firstItem = selectEl.querySelector('.jp-winner-item:not(.jp-winner-item--empty)');
+    if (firstItem) {
+      firstItem.classList.add('jp-winner-item--selected');
+      // Enable Replay button now that we have a day + winner
+      const replayBtn = this.querySelector('#jp-replay-btn');
+      if (replayBtn && this.#replayState === 'idle') replayBtn.disabled = false;
+      this.#onWinnerChange(this.#winners[0].address);
+    }
   }
 
-  // Format a winner entry for the dropdown label per D-08:  "0xABCD…1234 — 0.42 ETH"
-  #formatWinnerLabel(w) {
-    const short = w.address.slice(0, 6) + '…' + w.address.slice(-4);
-    const eth = formatEth(w.totalEth);
-    return `${short} — ${eth} ETH`;
+  // Format breakdown array into tooltip HTML lines.
+  #formatBreakdownTooltip(breakdown) {
+    return breakdown.map(b => {
+      const { awardType, amount, count } = b;
+      let label;
+      if (awardType === 'eth') {
+        label = joFormatWeiToEth(amount) + ' ETH';
+      } else if (awardType === 'tickets') {
+        label = amount + ' ticket' + (Number(amount) !== 1 ? 's' : '');
+      } else if (awardType.includes('burnie') || awardType === 'farFutureCoin') {
+        label = joFormatWeiToEth(amount) + ' BURNIE';
+      } else if (awardType === 'whale_pass') {
+        label = 'Whale Pass';
+      } else if (awardType === 'dgnrs') {
+        label = joFormatWeiToEth(amount) + ' DGNRS';
+      } else {
+        label = amount + ' ' + awardType;
+      }
+      return `<span>\u00d7${count} ${label}</span>`;
+    }).join('');
   }
 
-  // Called when the user picks a different winner from the dropdown (or auto-select on day change).
+  // Called when a winner list item is clicked.
+  #onWinnerItemClick(li) {
+    const listEl = this.querySelector('[data-bind="jp-winners-select"]');
+    if (listEl) {
+      listEl.querySelectorAll('.jp-winner-item--selected').forEach(el => el.classList.remove('jp-winner-item--selected'));
+    }
+    li.classList.add('jp-winner-item--selected');
+    const address = li.dataset.address;
+    if (address) this.#onWinnerChange(address);
+  }
+
+  // Called when selection changes (click or auto-select on day change).
   #onWinnerChange(address) {
     if (!address) return;
     // Changing winner resets the replay flow (Pitfall 6 guard)
@@ -558,10 +597,10 @@ class JackpotPanel extends HTMLElement {
     }
   }
 
-  // Helper: get the currently selected winner address from dropdown
+  // Helper: get the currently selected winner address from the list
   _selectedAddress() {
-    const sel = this.querySelector('[data-bind="jp-winners-select"]');
-    return sel && sel.value && !sel.options[sel.selectedIndex]?.disabled ? sel.value : '';
+    const selected = this.querySelector('[data-bind="jp-winners-select"] .jp-winner-item--selected');
+    return selected?.dataset?.address ?? '';
   }
 
   // Helper: clear non-header rows from a grid
