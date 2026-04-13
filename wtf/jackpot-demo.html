@@ -11,9 +11,8 @@
       margin: 0;
       padding: 0;
       width: 100%;
-      min-height: 100%;
-      overflow-x: hidden;
-      overflow-y: auto;
+      height: 100%;
+      overflow: hidden;
       background: #14141a;
       font-family: Inter, system-ui, -apple-system, sans-serif;
       color: #e0e0e0;
@@ -21,9 +20,8 @@
 
     body {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: center;
-      padding: 2rem 0 4rem;
     }
 
     /* ---- Demo widget styles ---- */
@@ -303,85 +301,6 @@
       cursor: not-allowed;
       transform: none;
     }
-
-    /* ---- Jackpot Overview panel (Phase 37) ---- */
-    .jackpot-overview {
-      margin-top: 16px;
-      padding-top: 8px;
-      border-top: 1px solid rgba(255,255,255,0.08);
-      text-align: left;
-    }
-    .jackpot-overview-heading {
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: #f5a623;
-      letter-spacing: 0.04em;
-      margin-bottom: 8px;
-    }
-    .jo-subheading {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: #cfd8e3;
-      letter-spacing: 0.04em;
-      margin: 6px 0 4px;
-      text-transform: uppercase;
-    }
-    .jo-grid {
-      display: grid;
-      grid-template-columns: 28px 36px 44px 52px 44px 60px 1fr;
-      gap: 0 4px;
-      font-size: 0.75rem;
-      width: 100%;
-    }
-    .jo-header {
-      font-size: 0.62rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #f5a623;
-      padding-bottom: 4px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-    }
-    .jo-row { display: contents; }
-    .jo-row > * {
-      padding: 4px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-      display: flex;
-      align-items: center;
-      font-variant-numeric: tabular-nums;
-      color: #e0e0e0;
-    }
-    .jo-row:last-child > * { border-bottom: none; }
-    .jo-type-badge img { width: 24px; height: 24px; object-fit: contain; }
-    .jo-type-badge.jo-bonus {
-      font-size: 0.62rem; font-weight: 700; color: #888;
-      text-transform: uppercase; letter-spacing: 0.05em;
-    }
-    .jo-winners { color: #22c55e; font-weight: 700; }
-    .jo-unique  { color: #888; }
-    .jo-coin, .jo-tickets { color: #e0e0e0; }
-    .jo-eth { color: #22c55e; font-weight: 700; }
-    .jo-spread { display: flex; gap: 4px; align-items: center; }
-    .jo-spread-bar {
-      height: 8px; border-radius: 2px;
-      background: rgba(245,166,35,0.3); flex: 1;
-    }
-    .jo-spread-bar.active { background: #f5a623; }
-    .jo-far-future-note {
-      margin-top: 8px; padding: 4px 8px;
-      border-radius: 4px;
-      background: rgba(245,166,35,0.10);
-      border: 1px solid rgba(245,166,35,0.25);
-      font-size: 0.62rem;
-      color: rgba(255,255,255,0.6);
-      font-style: italic;
-    }
-    .jo-empty, .jo-loading {
-      font-size: 0.75rem; color: #888;
-      text-align: center; padding: 16px 0;
-    }
-    .jo-loading { animation: jo-pulse 1.2s ease-in-out infinite; }
-    @keyframes jo-pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
   </style>
 </head>
 <body>
@@ -422,27 +341,10 @@
   <div class="demo-controls">
     <button class="demo-next-btn" id="demo-next-btn">Next Day &#x2192;</button>
   </div>
-  <section class="jackpot-overview" id="jackpot-overview">
-    <div class="jackpot-overview-heading">Day Overview</div>
-    <div class="jo-grid" id="jo-grid">
-      <div class="jo-header">Type</div>
-      <div class="jo-header">Win</div>
-      <div class="jo-header">Uniq</div>
-      <div class="jo-header">Coin</div>
-      <div class="jo-header">Tkts</div>
-      <div class="jo-header">ETH</div>
-      <div class="jo-header">Spread</div>
-      <!-- rows injected by rolls.renderOverview() via jackpot-rolls.js -->
-    </div>
-    <div id="jo-status" class="jo-loading">Loading...</div>
-    <div id="jo-far-future" class="jo-far-future-note" style="display:none;">Far-future coin resolved &mdash; see center flame above.</div>
-  </section>
 </div>
 
-<script type="module">
-  import { createJackpotRolls } from '../beta/app/jackpot-rolls.js';
-
-  (function() {
+<script>
+(function() {
   'use strict';
 
   // ---- Constants ----
@@ -464,8 +366,6 @@
   var SCENARIOS = [
     {
       title: 'Day 1',
-      // Phase 38 fixture C: zero Roll 1 current-level wins, has bonus (future tickets).
-      player: '0x71be63f3384f5fb98995898a86b02fb2426c5788',
       desc: 'Scratch the matching quadrants to reveal prizes.',
       degenWinCenter: false,
       target: [
@@ -483,8 +383,6 @@
     },
     {
       title: 'Day 2',
-      // Phase 38 fixture A: rich Roll 1 + Roll 2 (2 current-level, 11 future, 1 far-future).
-      player: '0x14dc79964da2c08b23698b3d3cc7ca32193d9955',
       desc: 'Scratch to see what you won.',
       degenWinCenter: false,
       target: [
@@ -502,8 +400,6 @@
     },
     {
       title: 'Day 3',
-      // Phase 38 fixture B: Roll 1 present, NO bonus (skip path — "No bonus" flash).
-      player: '0x322813fd9a801c5507c9de605d63cea4f2ce6c44',
       desc: 'Scratch to see what you won.',
       degenWinCenter: false,
       target: [
@@ -518,7 +414,6 @@
     },
     {
       title: 'Day 4',
-      player: '0x70997970c51812dc3a010c7d01b50e0d17dc79c8',
       desc: 'Scratch to see what you won.',
       degenWinCenter: false,
       target: [
@@ -539,7 +434,6 @@
     },
     {
       title: 'Day 5',
-      player: '0x61097ba76cd906d2ba4fd106e757f7eb455fc295',
       desc: 'Scratch to see what you won.',
       degenWinCenter: false,
       target: [
@@ -560,7 +454,6 @@
     },
     {
       title: 'Day 6',
-      player: '0x5e661b79fe2d3f6ce70f5aac07d8cd9abb2743f1',
       desc: 'Scratch to see what you won.',
       degenWinCenter: false,
       target: [
@@ -581,7 +474,6 @@
     },
     {
       title: 'Day 7',
-      player: '0x14dc79964da2c08b23698b3d3cc7ca32193d9955',
       desc: 'Scratch to see what you won.',
       degenWinCenter: true,
       target: [
@@ -604,7 +496,6 @@
     },
     {
       title: 'Day 8',
-      player: '0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc',
       desc: 'Scratch to see what you won.',
       degenWinCenter: false,
       target: [
@@ -676,9 +567,6 @@
   var scratchNode = null;
   var audioCtx = null;
   var spinning = false;
-
-  // Phase 38: two-phase draw state — owned by factory instance (see rolls below).
-  var pendingRoll2    = false;    // true when Roll 2 data should source the next animate()
 
   // ---- Badge path helper ----
   function badgePath(q, sym, col) {
@@ -1540,175 +1428,19 @@
     revealCenter();
   });
 
-  // ---------- Phase 38: two-phase draw state machine ----------
-
-  // Reset quadrant scratch state between Roll 1 and Roll 2 on the same day.
-  // Mirrors the reset block at the top of animate() (lines ~1343-1350). DOES NOT
-  // touch the spin-animation pipeline — it's invoked directly on Roll 1 -> Roll 2
-  // transition so the scratch canvases come back fresh.
-  function resetQuadrantScratchState() {
-    scratched = [false, false, false, false];
-    greenRevealed = [false, false, false, false];
-    badgesRevealed = [[], [], [], []];
-    quadPrizes = [false, false, false, false];
-    quadWinArrays = [[], [], [], []];
-    quadBadgeBounds = [null, null, null, null];
-    scratchGrids = [null, null, null, null];
-    centerScratchGrid = null;
-    centerScratched = false;
-    centerWins = [];
-    // Clear canvases + prize-reveal overlays so they render empty again.
-    var quads = getQuads();
-    for (var i = 0; i < 4; i++) {
-      var canvas = getCanvas(i);
-      if (canvas) {
-        var ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        canvas.style.opacity = '0';
-        canvas.style.pointerEvents = 'none';
-      }
-      var prize = getPrize(i);
-      if (prize) { prize.classList.remove('visible'); prize.innerHTML = ''; }
-      if (quads[i]) {
-        quads[i].classList.remove('q-has-trait', 'q-no-tickets', 'q-scratchable', 'q-has-tickets');
-      }
-    }
-    var centerCanvas = $('demo-center-canvas');
-    if (centerCanvas) {
-      var cctx = centerCanvas.getContext('2d');
-      cctx.clearRect(0, 0, centerCanvas.width, centerCanvas.height);
-    }
-    var centerPrize = $('demo-center-prize');
-    if (centerPrize) { centerPrize.classList.remove('visible'); centerPrize.innerHTML = ''; }
-  }
-
-  // ---------- Phase 37 + 38: factory-backed two-phase draw + overview ----------
-  //
-  // All state (playerDataToken, pendingFlashTimer, rollPhase, playerData, joRenderToken)
-  // now lives in the factory instance. The demo passes `document` as root so the
-  // factory's root.querySelector calls resolve to the same global IDs as before.
-
-  var joApiBaseUrl = (typeof window.JO_API_BASE === 'string' && window.JO_API_BASE) || '/beta/api';
-  var rolls = createJackpotRolls({ root: document, apiBase: joApiBaseUrl });
-
-  // Local demo state that mirrors what the factory manages internally
-  // (the factory owns rollPhase/playerData; the demo tracks only currentDay and started).
-  var demoRollPhase = 'idle';  // mirrors factory's rollPhase for the button handler
-  var demoPlayerData = null;   // last pre-flight result, updated via onData callback
-  var demoStarted = false;
-
-  // Poll until afterSpin re-enables the button, then flip label to 'Next'.
-  // Mirrors the original waitForRevealCompleteAndSetLabel() logic.
-  function waitForRoll1Complete() {
-    var btn = $('demo-next-btn');
-    if (!btn) return;
-    var start = Date.now();
-    function tick() {
-      if (!spinning && !btn.disabled) {
-        btn.textContent = 'Next';
-        demoRollPhase = 'roll1';
-        return;
-      }
-      if (Date.now() - start > 30000) return;
-      setTimeout(tick, 80);
-    }
-    setTimeout(tick, 80);
-  }
-
-  // Run a pre-flight for dayIdx, then trigger Roll 1 animation + overview refresh.
-  function demoPreFlightAndRun(dayIdx) {
-    var scenario = SCENARIOS[dayIdx];
-    var addr = (scenario && scenario.player) ? scenario.player : '';
-    var level = dayIdx + 1;
-    rolls.cancelPendingFlashes();
-    rolls.preFlightAndRunPlayer({
-      level: level,
-      addr: addr,
-      onData: function (data) {
-        demoPlayerData = data;
-        runDay(dayIdx);          // existing Roll 1 pipeline (sets scratch state + starts animate)
-        rolls.renderOverview(level);
-        waitForRoll1Complete();
-      }
-    });
-    demoRollPhase = 'idle';
-  }
-
-  // Next Day / Roll / Next / Roll Bonus button — two-phase state machine.
-  // Exact label sequence and behaviour matches the original demo handler.
+  // Next Day button
+  var started = false;
   $('demo-next-btn').addEventListener('click', function () {
-    var btn = $('demo-next-btn');
-    if (btn.disabled) return;
     if (spinning) return;
     getAudio();
-
-    if (!demoStarted) {
-      demoStarted = true;
-      demoPreFlightAndRun(0);
-      return;
-    }
-
-    if (demoRollPhase === 'roll1') {
-      // "Next" pressed — prime Roll 2 or skip with flash.
-      if (demoPlayerData && demoPlayerData.hasBonus) {
-        resetQuadrantScratchState();
-        demoRollPhase = 'roll2';
-        btn.textContent = 'Roll Bonus';
-      } else {
-        demoRollPhase = 'done';
-        // cancelPendingFlashes + flash via factory (Pitfall 6 guard).
-        rolls.cancelPendingFlashes();
-        btn.textContent = 'No bonus';
-        btn.disabled = true;
-        setTimeout(function () {
-          btn.textContent = 'Next Day \u2192';
-          btn.disabled = false;
-        }, 500);
-      }
-      return;
-    }
-
-    if (demoRollPhase === 'roll2') {
-      // "Roll Bonus" pressed — brief flame spin, then render Roll 2 panel.
-      btn.disabled = true;
-      btn.textContent = 'Rolling\u2026';
-      var flame = document.querySelector('.demo-center');
-      if (flame) flame.classList.add('spinning');
-      setTimeout(function () {
-        try {
-          if (flame) flame.classList.remove('spinning');
-          rolls.renderRoll2((demoPlayerData && demoPlayerData.roll2) || { future: [], farFuture: [] });
-          // Scroll the Roll 2 panel into view after rendering.
-          // Uses block:'start' so the panel heading appears at the top of the viewport.
-          // (Replaces the prior block:'center' call removed in 2f7aa93 — that call caused
-          // content to scroll off-top under the old flex-centered body layout. The body
-          // now uses align-items:flex-start so block:'start' works correctly.)
-          var roll2Panel = document.getElementById('roll2-panel');
-          if (roll2Panel && roll2Panel.scrollIntoView) {
-            roll2Panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        } catch (e) { console.error('[roll2] render failed:', e); }
-        btn.textContent = 'Next Day \u2192';
-        demoRollPhase = 'done';
-        btn.disabled = false;
-      }, 900);
-      return;
-    }
-
-    if (demoRollPhase === 'done' || demoRollPhase === 'idle') {
-      currentDay = (currentDay + 1) % SCENARIOS.length;
-      demoPreFlightAndRun(currentDay);
+    if (!started) {
+      started = true;
+      runDay(0);
+    } else {
+      runDay((currentDay + 1) % SCENARIOS.length);
     }
   });
-
-  // Fire initial overview once DOM is ready (matches original DOMContentLoaded pattern).
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { rolls.renderOverview(1); });
-  } else {
-    rolls.renderOverview(1);
-  }
-
-  })();
+})();
 </script>
 
 </body>
