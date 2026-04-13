@@ -1,0 +1,68 @@
+# v2.3 discrepancy ledger — append-only structured record.
+#
+# Schema: harness.schema.Discrepancy (pydantic v2).
+# Load/save: harness.yaml_io (SafeLoader + .planning/v2.3/ path guard).
+# Render:    harness.render.render_report -> reports/v2.3-consolidated.md.
+#
+# Required fields per entry (enforced by pydantic at load):
+#   id, domain (JACKPOT|POOLS|PLAYER|TERMINAL), endpoint, expected_value,
+#   derivation {formula, sources[>=1]}, observed_value, magnitude,
+#   severity (Critical|Major|Minor|Info), suspected_source
+#   (gt_paper|contract|api|indexer|expected_fast_regime_divergence|expected_runout_divergence;
+#   whitepaper rejected), hypothesis[>=1], sample_context
+#   {day, level, archetype?, lag_blocks, lag_unreliable, sampled_at}.
+#
+# Seeded with one METHOD-02 source-level entry (DISC-018-001) proving the
+# pipeline end-to-end. Phases 19-22 append additional entries.
+
+discrepancies:
+  - id: DISC-018-001
+    domain: POOLS
+    endpoint: source-level:stETH-split
+    expected_value: "50/25/25 (accumulator/GameA/GameB)"
+    derivation:
+      formula: |
+        canonical stETH yield split per CLAUDE.md: 50% to yieldAccumulator,
+        25% to Game-side A (vault/sDGNRS), 25% to Game-side B (GNRUS charity).
+        Implemented in DegenerusGameJackpotModule.sol via
+        `quarterShare = (yieldPool * 2300) / 10_000` (23% nominal, with
+        ~8% buffer remaining in the contract) — the 8% is an implementation
+        detail, not a canonical economic split.
+      sources:
+        - path: degenerus-audit/contracts/modules/DegenerusGameJackpotModule.sol
+          line: 749
+          label: contract
+          anchor: quarterShare
+        - path: degenerus-audit/contracts/modules/DegenerusGameJackpotModule.sol
+          line: 769
+          label: contract
+          anchor: yieldAccumulator-credit
+        - path: theory/index.html
+          line: null
+          label: gt_paper
+          anchor: steth-yield-split
+    observed_value: "46/23/23 (implementation quarterShare buffer reading)"
+    magnitude: "~8% nominal buffer; canonical split is 50/25/25 per CLAUDE.md"
+    severity: Minor
+    suspected_source: gt_paper
+    hypothesis:
+      - text: |
+          Any GT paper or external reference stating 46/23/23 is citing the
+          implementation quarterShare expression rather than the canonical
+          economic split.
+        falsifiable_by: |
+          Re-read degenerus-audit/contracts/modules/DegenerusGameJackpotModule.sol:749
+          and :769 — quarterShare is 2300 BPS with an ~8% buffer retained in the
+          contract; canonical economic intent is 50/25/25.
+    sample_context:
+      day: 0
+      level: 0
+      archetype: null
+      lag_blocks: 0
+      lag_unreliable: false
+      sampled_at: "2026-04-13T00:00:00Z"
+    notes: |
+      Seeded by plan 18-03 as the METHOD-02 source-level proof entry.
+      The canonical 50/25/25 split is authoritative per CLAUDE.md.
+      See constants.py STETH_ACCUMULATOR_BPS / STETH_A_BPS / STETH_B_BPS notes
+      for the full reconciliation.
