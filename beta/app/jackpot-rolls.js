@@ -511,8 +511,6 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
           try {
             if (flame) flame.classList.remove('spinning');
             renderRoll2((playerData && playerData.roll2) || { future: [], farFuture: [] });
-            var panel = $(sel.roll2Panel);
-            if (panel && panel.scrollIntoView) panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
           } catch (e) { console.error('[roll2] render failed:', e); }
           btn.textContent = 'Next Day \u2192';
           rollPhase = 'done';
