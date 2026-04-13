@@ -270,11 +270,12 @@ class JackpotPanel extends HTMLElement {
   // the selected player's current-level tickets).
   // ---------------------------------------------------------------------------
 
+  // Returns a Promise that resolves once all rows are appended (including async import).
   #renderRoll1(data) {
     const section = this.querySelector('#jp-roll1-section');
     const grid = this.querySelector('#jp-roll1-grid');
     const emptyEl = this.querySelector('#jp-roll1-empty');
-    if (!section || !grid) return;
+    if (!section || !grid) return Promise.resolve();
 
     // Clear previous data rows (keep .jo-header children)
     Array.from(grid.children).forEach(child => {
@@ -286,14 +287,15 @@ class JackpotPanel extends HTMLElement {
 
     if (rows.length === 0) {
       if (emptyEl) emptyEl.style.display = 'block';
-      return;
+      return Promise.resolve();
     }
     if (emptyEl) emptyEl.style.display = 'none';
 
     // Import the row renderer from the factory's shared utility.
     // Since _appendOverviewRow is internal to the factory, we use a local equivalent
     // that mirrors the same logic using the factory's exported helpers.
-    import('../app/jackpot-rolls.js').then(({ joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth }) => {
+    // Returns a Promise so callers can chain animation after rows are in the DOM.
+    return import('../app/jackpot-rolls.js').then(({ joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth }) => {
       // Re-check in case grid was cleared by a newer call while import was resolving
       Array.from(grid.children).forEach(child => {
         if (!child.classList.contains('jo-header')) grid.removeChild(child);
@@ -475,11 +477,18 @@ class JackpotPanel extends HTMLElement {
     this.#rollPhase = 'idle';
     this.#playerData = null;
 
-    // Reset Roll 1 section and hide roll button
+    // Reset Roll 1 section, clear grids, and hide roll button
     const roll1Section = this.querySelector('#jp-roll1-section');
     if (roll1Section) roll1Section.style.display = 'none';
+    this.#clearRoll1Grid();
+    this.#clearRoll2Grids();
+    const roll2Panel = this.querySelector('#jp-roll2-panel');
+    if (roll2Panel) roll2Panel.style.display = 'none';
     const rollBtn = this.querySelector('#jp-roll-btn');
-    if (rollBtn) rollBtn.style.display = 'none';
+    if (rollBtn) {
+      rollBtn.style.display = 'none';
+      rollBtn.classList.remove('spinning');
+    }
 
     const selectEl = this.querySelector('[data-bind="jp-winners-select"]');
     if (selectEl) {
@@ -616,31 +625,59 @@ class JackpotPanel extends HTMLElement {
     // Reset button label and hide it until pre-flight data arrives
     const btn = this.querySelector('#jp-roll-btn');
     if (btn) {
-      btn.textContent = 'Roll';
-      btn.disabled = false;
+      btn.textContent = 'Replay';
+      btn.disabled = true;
       btn.style.display = 'none';
+      btn.classList.remove('spinning');
     }
 
-    // Hide Roll 2 panel from previous selection
+    // Hide Roll 2 panel and clear both grids from previous selection
     const roll2Panel = this.querySelector('#jp-roll2-panel');
     if (roll2Panel) roll2Panel.style.display = 'none';
+    this.#clearRoll2Grids();
+
+    // Clear Roll 1 grid (stale DOM fix — prevent prior day's rows ghosting)
+    const roll1Section = this.querySelector('#jp-roll1-section');
+    if (roll1Section) roll1Section.style.display = 'none';
+    this.#clearRoll1Grid();
 
     await this.#rolls.preFlightAndRunPlayer({
       level: levelForPlayer,
       day: this.#currentDay,   // scopes player endpoint to this day's block range
       addr: address,
       onData: (data) => {
-        // Cache pre-flight result and render Roll 1 grid
+        // Cache pre-flight result — do NOT render grid yet (user must click Replay)
         this.#playerData = data;
-        this.#renderRoll1(data);
-        // Show and label the roll button
+        // Show and enable the Replay button
         if (btn) {
-          btn.textContent = 'Roll';
+          btn.textContent = 'Replay';
           btn.disabled = false;
           btn.style.display = '';
         }
       },
     });
+  }
+
+  // Clear Roll 1 grid data rows (keep .jo-header children)
+  #clearRoll1Grid() {
+    const grid = this.querySelector('#jp-roll1-grid');
+    if (!grid) return;
+    Array.from(grid.children).forEach(child => {
+      if (!child.classList.contains('jo-header')) grid.removeChild(child);
+    });
+    const emptyEl = this.querySelector('#jp-roll1-empty');
+    if (emptyEl) emptyEl.style.display = 'none';
+  }
+
+  // Clear Roll 2 grids data rows (keep .jo-header children)
+  #clearRoll2Grids() {
+    for (const id of ['#jp-roll2-future-grid', '#jp-roll2-far-grid']) {
+      const grid = this.querySelector(id);
+      if (!grid) continue;
+      Array.from(grid.children).forEach(child => {
+        if (!child.classList.contains('jo-header')) grid.removeChild(child);
+      });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -654,66 +691,91 @@ class JackpotPanel extends HTMLElement {
     if (!btn || btn.disabled) return;
 
     if (this.#rollPhase === 'idle') {
-      // "Roll" clicked — Roll 1 data is already shown; advance to waiting-for-next
-      this.#rollPhase = 'roll1';
-      btn.textContent = 'Next';
+      // "Replay" clicked — brief spin animation, then render Roll 1 rows + reveal animation
+      btn.disabled = true;
+      btn.classList.add('spinning');
+      btn.textContent = 'Rolling\u2026';
+
+      setTimeout(() => {
+        btn.classList.remove('spinning');
+        // #renderRoll1 returns a Promise (rows appended after async import resolves)
+        Promise.resolve(this.#renderRoll1(this.#playerData)).then(() => {
+          this.#animateRoll1Rows();
+          this.#rollPhase = 'roll1';
+          if (this.#playerData && this.#playerData.hasBonus) {
+            btn.textContent = 'Bonus Roll';
+            btn.disabled = false;
+          } else {
+            // No bonus — flash "No bonus" 500ms then hide button
+            btn.textContent = 'No bonus';
+            btn.disabled = true;
+            if (this.#noBonusTimer !== null) clearTimeout(this.#noBonusTimer);
+            this.#noBonusTimer = setTimeout(() => {
+              this.#noBonusTimer = null;
+              this.#rollPhase = 'done';
+              btn.disabled = true;
+              btn.style.display = 'none';
+            }, 500);
+          }
+        }).catch(e => {
+          console.error('[jackpot-panel] roll1 render failed:', e);
+        });
+      }, 700);
       return;
     }
 
     if (this.#rollPhase === 'roll1') {
-      if (this.#playerData && this.#playerData.hasBonus) {
-        // Has bonus → prepare Roll Bonus
-        const roll2Panel = this.querySelector('#jp-roll2-panel');
-        if (roll2Panel) roll2Panel.style.display = 'none';
-        this.#rollPhase = 'roll2';
-        btn.textContent = 'Roll Bonus';
-      } else {
-        // No bonus → flash "No bonus" for ≤500ms then return to Next Day
-        this.#rollPhase = 'done';
-        btn.textContent = 'No bonus';
-        btn.disabled = true;
-        if (this.#noBonusTimer !== null) clearTimeout(this.#noBonusTimer);
-        this.#noBonusTimer = setTimeout(() => {
-          this.#noBonusTimer = null;
-          btn.textContent = 'Next Day \u2192';
-          btn.disabled = false;
-        }, 500);
-      }
-      return;
-    }
-
-    if (this.#rollPhase === 'roll2') {
-      // "Roll Bonus" clicked — animate then show Roll 2 data
-      btn.textContent = 'Rolling\u2026';
+      // "Bonus Roll" clicked — spin then reveal Roll 2
       btn.disabled = true;
+      btn.classList.add('spinning');
+      btn.textContent = 'Rolling\u2026';
+
       setTimeout(() => {
+        btn.classList.remove('spinning');
         try {
+          this.#clearRoll2Grids();
           this.#rolls.renderRoll2(
             (this.#playerData && this.#playerData.roll2) || { future: [], farFuture: [] }
           );
           const roll2Panel = this.querySelector('#jp-roll2-panel');
           if (roll2Panel) {
             roll2Panel.style.display = 'block';
+            // Animate Roll 2 rows
+            this.#animateRoll2Rows(roll2Panel);
             roll2Panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
         } catch (e) {
           console.error('[jackpot-panel] roll2 render failed:', e);
         }
-        btn.textContent = 'Next Day \u2192';
-        btn.disabled = false;
         this.#rollPhase = 'done';
+        btn.textContent = 'Done';
+        btn.disabled = true;
+        btn.style.display = 'none';
       }, 900);
       return;
     }
+  }
 
-    if (this.#rollPhase === 'done') {
-      // "Next Day" clicked — advance scrubber by 1
-      if (this.#scrubber && this.#currentDay !== null) {
-        const nextDay = this.#currentDay + 1;
-        this.#scrubber.setDay(nextDay);
-        this.#onDayChange(this.#scrubber.getDay());
-      }
-    }
+  // Add reveal animation to Roll 1 grid rows (scratch-like fade+slide)
+  #animateRoll1Rows() {
+    const grid = this.querySelector('#jp-roll1-grid');
+    if (!grid) return;
+    const rows = Array.from(grid.querySelectorAll('.jo-row'));
+    rows.forEach((row, i) => {
+      row.classList.add('jp-revealing');
+      // Stagger each row by 120ms
+      row.style.animationDelay = (i * 120) + 'ms';
+    });
+  }
+
+  // Add reveal animation to Roll 2 grid rows
+  #animateRoll2Rows(panel) {
+    if (!panel) return;
+    const rows = Array.from(panel.querySelectorAll('.jo-row'));
+    rows.forEach((row, i) => {
+      row.classList.add('jp-revealing');
+      row.style.animationDelay = (i * 100) + 'ms';
+    });
   }
 
   // -- Private methods --
