@@ -201,27 +201,66 @@
   display: flex;
 }
 
-/* jp-overview: Day Overview collapsible — collapsed by default (D-12) */
+/* -------------------------------------------------------------------------
+   Plan 39-06: Day Overview — made visually distinct from winners list.
+   Collapsed by default (D-12). Sits between replay-section and jp-winners.
+   ------------------------------------------------------------------------- */
+
 .jp-overview {
-  border: 1px solid var(--border-color, #3a3a5c);
-  border-radius: 6px;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--accent-primary, #f5a623);
+  border-radius: 8px;
   overflow: hidden;
+  background: rgba(245, 166, 35, 0.04);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
 .jp-overview > summary {
-  padding: 0.5rem 0.75rem;
+  list-style: none; /* hide default marker, we draw our own triangle */
+  padding: 0.6rem 0.9rem 0.6rem 1.9rem;
+  position: relative;
   cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-dim, #6b6b8d);
-  background: var(--bg-secondary, #1a1a2e);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent-primary, #f5a623);
+  background: rgba(245, 166, 35, 0.10);
   user-select: none;
+  transition: background 0.15s;
+}
+
+.jp-overview > summary::-webkit-details-marker { display: none; }
+
+/* Disclosure triangle — rotates when [open] */
+.jp-overview > summary::before {
+  content: '';
+  position: absolute;
+  left: 0.7rem;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-left: 6px solid var(--accent-primary, #f5a623);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transform: translateY(-50%);
+  transition: transform 0.18s ease;
+}
+
+.jp-overview[open] > summary::before {
+  transform: translateY(-50%) rotate(90deg);
+}
+
+.jp-overview > summary:hover {
+  background: rgba(245, 166, 35, 0.18);
 }
 
 .jp-overview-body {
-  padding: 0.5rem 0.75rem;
+  padding: 0.75rem 0.9rem;
   font-size: 0.8rem;
   color: var(--text-secondary, #a0a0c0);
+  background: var(--bg-tertiary, #252542);
+  border-top: 1px solid rgba(245, 166, 35, 0.25);
 }
 /* Section headings that label the two stacked sections (A6 coexistence layout) */
 .jp-section-title {
