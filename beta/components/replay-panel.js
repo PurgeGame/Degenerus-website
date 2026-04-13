@@ -175,6 +175,9 @@ class ReplayPanel extends HTMLElement {
           <p class="replay-no-bonus" data-bind="no-bonus" hidden>No bonus this draw</p>
         </div>
 
+        <!-- Plan 39-10: compact day summary mounted between card grid and winners list -->
+        <day-jackpot-summary></day-jackpot-summary>
+
         <div class="replay-distributions" data-bind="distributions" hidden>
           <h3 class="replay-dist-title">Jackpot Winners</h3>
           <div class="replay-dist-list" data-bind="dist-list"></div>
