@@ -100,29 +100,13 @@ class JackpotPanel extends HTMLElement {
               </div>
             </div>
 
-            <!-- Roll 2 result grid -->
+            <!-- Plan 39-05: Roll 2 symbol-slot grid (3 cols x 9 rows) -->
             <div class="jp-roll2-result" data-bind="jp-roll2-result" style="display:none;">
-              <div class="jp-roll-heading jp-roll2-heading">Bonus Roll — future-level wins</div>
-              <div class="jo-grid jp-roll2-future-grid" data-bind="jp-roll2-future-grid">
-                <div class="jo-header">Type</div>
-                <div class="jo-header">Win</div>
-                <div class="jo-header">Uniq</div>
-                <div class="jo-header">Coin</div>
-                <div class="jo-header">Tkts</div>
-                <div class="jo-header">ETH</div>
-                <div class="jo-header">Spread</div>
-              </div>
-              <div class="jp-roll2-farfuture" data-bind="jp-roll2-farfuture" style="display:none;">
-                <div class="jp-roll-subheading">Far-Future (BURNIE)</div>
-                <div class="jo-grid jp-roll2-far-grid" data-bind="jp-roll2-far-grid">
-                  <div class="jo-header">Type</div>
-                  <div class="jo-header">Win</div>
-                  <div class="jo-header">Uniq</div>
-                  <div class="jo-header">Coin</div>
-                  <div class="jo-header">Tkts</div>
-                  <div class="jo-header">ETH</div>
-                  <div class="jo-header">Spread</div>
-                </div>
+              <div class="jp-roll-heading jp-roll2-heading">Bonus Roll — symbol draws for this day</div>
+              <div class="jp-roll2-slot-grid" data-bind="jp-roll2-slot-grid">
+                <div class="jp-slot-header">Symbol</div>
+                <div class="jp-slot-header">Wins</div>
+                <div class="jp-slot-header">Amount / win</div>
               </div>
             </div>
           </div>
@@ -165,12 +149,6 @@ class JackpotPanel extends HTMLElement {
       apiBase: '/beta/api',
       selectors: {
         roll2Panel:      '[data-bind="jp-roll2-result"]',
-        roll2FutureGrid: '[data-bind="jp-roll2-future-grid"]',
-        roll2FarGrid:    '[data-bind="jp-roll2-far-grid"]',
-        roll2FutureEmpty:'[data-bind="jp-roll2-future-empty"]',
-        roll2FarEmpty:   '[data-bind="jp-roll2-far-empty"]',
-        roll2FutureBlock:'[data-bind="jp-roll2-future-grid"]',
-        roll2FarBlock:   '[data-bind="jp-roll2-farfuture"]',
         joGrid:          '#jp-jo-grid',
         joStatus:        '#jp-jo-status',
         joFarFuture:     '#jp-jo-far-future',
@@ -558,7 +536,16 @@ class JackpotPanel extends HTMLElement {
         btn.disabled = !(this.#currentLevel && this.#currentDay && this._selectedAddress());
         // Clear grids on reset to idle
         if (roll1El) { roll1El.style.display = 'none'; this.#clearGrid('[data-bind="jp-roll1-grid"]'); }
-        if (roll2El) { roll2El.style.display = 'none'; this.#clearGrid('[data-bind="jp-roll2-future-grid"]'); this.#clearGrid('[data-bind="jp-roll2-far-grid"]'); }
+        if (roll2El) {
+          roll2El.style.display = 'none';
+          // Plan 39-05: clear slot-grid non-header cells
+          const slotGrid = this.querySelector('[data-bind="jp-roll2-slot-grid"]');
+          if (slotGrid) {
+            Array.from(slotGrid.children).forEach(c => {
+              if (!c.classList.contains('jp-slot-header')) slotGrid.removeChild(c);
+            });
+          }
+        }
         if (spinEl) spinEl.classList.remove('jp-spinning');
         break;
       case 'roll1_playing':
@@ -721,7 +708,8 @@ class JackpotPanel extends HTMLElement {
   }
 
   async #runRoll2Anim(cancelToken) {
-    const roll2 = this.#replayData?.roll2 || { future: [], farFuture: [] };
+    const data = this.#replayData;
+    if (!data) return;
     const spinEl = this.querySelector('[data-bind="jp-spin-flame"]');
 
     // 900ms spin
@@ -729,48 +717,61 @@ class JackpotPanel extends HTMLElement {
     if (this.#replayCancelToken !== cancelToken) return;
     if (spinEl) spinEl.classList.remove('jp-spinning');
 
-    const future    = (roll2.future    || []).filter(r => r && (r.ethPerWinner !== '0' || r.coinPerWinner !== '0' || r.ticketsPerWinner));
-    const farFuture = (roll2.farFuture || []).filter(r => r && (r.ethPerWinner !== '0' || r.coinPerWinner !== '0' || r.ticketsPerWinner));
+    // Plan 39-05: re-bucket by symbol slot (4 main + 4 bonus + 1 far-future)
+    const { rebucketRoll2BySlot, joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth } =
+      await import('../app/jackpot-rolls.js');
 
-    const futureGrid = this.querySelector('[data-bind="jp-roll2-future-grid"]');
-    const farSection = this.querySelector('[data-bind="jp-roll2-farfuture"]');
-    const farGrid    = this.querySelector('[data-bind="jp-roll2-far-grid"]');
+    const slots = rebucketRoll2BySlot(
+      data.roll2 || {},
+      data.mainTraitsPacked ?? null,
+      data.bonusTraitsPacked ?? null,
+    );
 
-    // Clear existing rows
-    this.#clearGrid('[data-bind="jp-roll2-future-grid"]');
-    this.#clearGrid('[data-bind="jp-roll2-far-grid"]');
-
-    let totalRows = 0;
-
-    if (futureGrid) {
-      for (let i = 0; i < future.length; i++) {
-        this.#appendRevealRow(futureGrid, future[i], totalRows++);
-      }
-    }
-
-    if (farFuture.length > 0 && farSection && farGrid) {
-      farSection.style.display = '';
-      for (let i = 0; i < farFuture.length; i++) {
-        this.#appendRevealRow(farGrid, farFuture[i], totalRows++);
-      }
-    } else if (farSection) {
-      farSection.style.display = 'none';
-    }
-
-    if (totalRows === 0) return; // nothing to animate
-
-    // Wait for all animationend events — class is on cells (display:contents rows can't animate)
-    await new Promise(resolve => {
-      const allCells = [
-        ...(futureGrid ? Array.from(futureGrid.querySelectorAll('.jp-row-reveal')) : []),
-        ...(farGrid    ? Array.from(farGrid.querySelectorAll('.jp-row-reveal'))    : []),
-      ];
-      if (!allCells.length) { resolve(); return; }
-      let done = 0;
-      const onEnd = () => { done++; if (done >= allCells.length) resolve(); };
-      allCells.forEach(c => c.addEventListener('animationend', onEnd, { once: true }));
-      setTimeout(resolve, totalRows * 80 + 900);
+    const grid = this.querySelector('[data-bind="jp-roll2-slot-grid"]');
+    if (!grid) return;
+    // Clear non-header children
+    Array.from(grid.children).forEach(c => {
+      if (!c.classList.contains('jp-slot-header')) grid.removeChild(c);
     });
+
+    slots.forEach((slot, idx) => {
+      const sym = document.createElement('div');
+      sym.className = 'jp-slot-symbol'
+        + (slot.isEmpty ? ' jp-slot-empty' : '')
+        + (slot.isFarFuture ? ' jp-slot-farfuture' : '');
+      if (slot.isFarFuture) {
+        sym.textContent = 'Far-Future (BURNIE)';
+      } else if (slot.traitId == null) {
+        sym.textContent = '\u2014';
+      } else {
+        const img = document.createElement('img');
+        img.src = joBadgePath(slot.quadrant, slot.symbolIdx, slot.colorIdx);
+        img.alt = JO_SYMBOLS[JO_CATEGORIES[slot.quadrant]]?.[slot.symbolIdx] ?? '';
+        sym.appendChild(img);
+      }
+
+      const wins = document.createElement('div');
+      wins.className = 'jp-slot-wins' + (slot.isEmpty ? ' jp-slot-empty' : '');
+      wins.textContent = String(slot.wins);
+
+      const amt = document.createElement('div');
+      amt.className = 'jp-slot-amount' + (slot.isEmpty ? ' jp-slot-empty' : '');
+      if (slot.isEmpty) {
+        amt.textContent = '\u2014';
+      } else {
+        const a = slot.amountPerWin;
+        amt.textContent = (a && a.length > 10) ? joFormatWeiToEth(a) : String(a);
+      }
+
+      [sym, wins, amt].forEach(cell => {
+        cell.classList.add('jp-row-reveal');
+        cell.style.animationDelay = (idx * 60) + 'ms';
+        grid.appendChild(cell);
+      });
+    });
+
+    // Wait for animations (9 rows * 60ms stagger + ~300ms anim duration)
+    await new Promise(resolve => setTimeout(resolve, slots.length * 60 + 400));
   }
 
   // -- Private methods --

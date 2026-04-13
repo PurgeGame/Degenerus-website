@@ -499,4 +499,52 @@
   }
 }
 
+/* Plan 39-05: Roll 2 slot grid — 3 columns, 9 rows (8 slots + 1 far-future) */
+.jp-roll2-slot-grid {
+  display: grid;
+  grid-template-columns: 1fr 60px 1fr;
+  gap: 4px 8px;
+  font-size: 0.8rem;
+  margin-top: 0.4rem;
+}
+.jp-slot-header {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-primary, #f5a623);
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.jp-slot-symbol {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary, #e0e0e0);
+}
+.jp-slot-symbol img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+.jp-slot-symbol.jp-slot-farfuture {
+  font-weight: 700;
+  color: var(--accent-primary, #f5a623);
+}
+.jp-slot-wins {
+  color: var(--success, #22c55e);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.jp-slot-amount {
+  color: var(--text-primary, #e0e0e0);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.jp-slot-empty {
+  opacity: 0.35;
+  color: var(--text-dim, #888) !important;
+  font-weight: 400;
+}
 

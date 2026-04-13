@@ -65,6 +65,94 @@ function joFormatCoin(amtStr) {
   return joFormatWeiToEth(amtStr);
 }
 
+/**
+ * Re-bucket Roll 2 rows into the 8 symbol slots actually drawn for the day
+ * (4 from mainTraitsPacked + 4 from bonusTraitsPacked) plus one far-future
+ * center row aggregating ALL farFuture rows.
+ *
+ * Plan 39-05: fixes Gap A from 39-UAT.md — far-future BURNIE draws use entropy-
+ * derived traitIds so a single winner produced many near-identical raw rows.
+ *
+ * @param {{future?: Array, farFuture?: Array}} roll2
+ * @param {number|string|null} mainPacked  32-bit packed main traitIds (4 bytes)
+ * @param {number|string|null} bonusPacked 32-bit packed bonus traitIds (4 bytes)
+ * @returns {Array<{traitId:number|null, quadrant:number|null, symbolIdx:number|null, colorIdx:number|null, wins:number, amountPerWin:string, isEmpty:boolean, isFarFuture:boolean}>}
+ *   length 9: slots 0..7 are main[0..3]+bonus[0..3], slot 8 is far-future.
+ */
+export function rebucketRoll2BySlot(roll2, mainPacked, bonusPacked) {
+  function unpack(packed) {
+    if (packed == null) return [null, null, null, null];
+    const p = Number(packed);
+    return [p & 0xFF, (p >> 8) & 0xFF, (p >> 16) & 0xFF, (p >> 24) & 0xFF];
+  }
+
+  const mainSlots = unpack(mainPacked);
+  const bonusSlots = unpack(bonusPacked);
+  const slotTraitIds = [...mainSlots, ...bonusSlots]; // 8 entries, null when packed missing
+
+  // Index future rows by traitId for O(1) lookup
+  const byTrait = new Map();
+  const futureRows = (roll2 && roll2.future) || [];
+  for (const row of futureRows) {
+    if (row == null || row.traitId == null) continue;
+    const list = byTrait.get(row.traitId) || [];
+    list.push(row);
+    byTrait.set(row.traitId, list);
+  }
+
+  const out = [];
+  for (let i = 0; i < 8; i++) {
+    const t = slotTraitIds[i];
+    if (t == null) {
+      out.push({
+        traitId: null, quadrant: null, symbolIdx: null, colorIdx: null,
+        wins: 0, amountPerWin: '0', isEmpty: true, isFarFuture: false,
+      });
+      continue;
+    }
+    const rows = byTrait.get(t) || [];
+    let wins = 0;
+    for (const r of rows) wins += Number(r.winnerCount) || 0;
+    let amountPerWin = '0';
+    if (rows.length > 0) {
+      const r0 = rows[0];
+      if (r0.coinPerWinner && r0.coinPerWinner !== '0') amountPerWin = r0.coinPerWinner;
+      else if (r0.ethPerWinner && r0.ethPerWinner !== '0') amountPerWin = r0.ethPerWinner;
+      else if (r0.ticketsPerWinner) amountPerWin = String(r0.ticketsPerWinner);
+    }
+    const quadrant = Math.floor(t / 64);
+    const symbolIdx = Math.floor((t % 64) / 8);
+    const colorIdx = t % 8;
+    out.push({
+      traitId: t, quadrant, symbolIdx, colorIdx,
+      wins, amountPerWin,
+      isEmpty: wins === 0,
+      isFarFuture: false,
+    });
+  }
+
+  // Far-future center: aggregate ALL farFuture rows regardless of traitId.
+  const farRows = (roll2 && roll2.farFuture) || [];
+  let farWins = 0;
+  let farAmount = '0';
+  for (const r of farRows) {
+    if (!r) continue;
+    farWins += Number(r.winnerCount) || 0;
+    if (farAmount === '0') {
+      if (r.coinPerWinner && r.coinPerWinner !== '0') farAmount = r.coinPerWinner;
+      else if (r.ethPerWinner && r.ethPerWinner !== '0') farAmount = r.ethPerWinner;
+    }
+  }
+  out.push({
+    traitId: null, quadrant: null, symbolIdx: null, colorIdx: null,
+    wins: farWins, amountPerWin: farAmount,
+    isEmpty: farWins === 0,
+    isFarFuture: true,
+  });
+
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Per-instance factory
 // ---------------------------------------------------------------------------
