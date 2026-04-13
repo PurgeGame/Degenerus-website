@@ -2,6 +2,7 @@
 // Animated sequential trait reveal, pool/day/allocation display, badge visualization, confetti celebration.
 // All data transformation delegated to jackpot-data.js.
 // Plan 03: day scrubber (shared with viewer.html) + winners dropdown above existing 4-card reveal.
+// Plan 04: createJackpotRolls factory mounted in jp-rolls-slot; winner/day events wired.
 
 import { subscribe, get } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
@@ -9,6 +10,7 @@ import { deriveWinningTraits, traitToBadge, estimateAllocation } from '../app/ja
 import { formatEth } from '../app/utils.js';
 import { playSound } from '../app/audio.js';
 import { createScrubber } from '../viewer/scrubber.js';
+import { createJackpotRolls } from '../app/jackpot-rolls.js';
 
 class JackpotPanel extends HTMLElement {
   #unsubs = [];
@@ -23,6 +25,19 @@ class JackpotPanel extends HTMLElement {
   #currentDay = null;
   #currentLevel = null;
   #winners = [];
+
+  // Plan 04: factory instance
+  #rolls = null;
+  // Track whether the overview has been rendered at least once (for lazy first-open render)
+  #overviewRendered = false;
+  // Panel-local roll state machine — mirrors factory's rollPhase but owned here
+  // so that direct preFlightAndRunPlayer calls (from #onWinnerChange) reset it cleanly.
+  // 'idle' | 'roll1' | 'roll2' | 'done'
+  #rollPhase = 'idle';
+  // Cached pre-flight response for current selection (used by Roll Bonus click)
+  #playerData = null;
+  // Timer handle for the "No bonus" flash — cancelled on winner/day change (Pitfall 6)
+  #noBonusTimer = null;
 
   #showContent() {
     if (this.#loaded) return;
@@ -56,20 +71,83 @@ class JackpotPanel extends HTMLElement {
           <span class="jackpot-day" data-bind="day">Day --</span>
         </div>
 
-        <!-- Plan 03: day scrubber + winners dropdown (above existing 4-card reveal per user addendum A6) -->
+        <!-- Historical jackpot explorer (Plan 03 + 04) -->
+        <h3 class="jp-section-title">Historical jackpot explorer</h3>
         <div class="jp-day-port" data-bind="jp-day-port">
           <div class="jp-day-scrubber" data-bind="jp-day-scrubber"></div>
           <div class="jp-winners">
             <label class="jp-winners-label">Winner</label>
             <select class="jp-winners-select" data-bind="jp-winners-select"></select>
           </div>
-          <div class="jp-rolls-slot" data-bind="jp-rolls-slot"></div>
+
+          <!-- Plan 04: Roll 1 result grid + state-machine button -->
+          <div class="jp-rolls-slot" data-bind="jp-rolls-slot">
+            <div id="jp-roll1-section" class="jp-roll1-section" style="display:none;">
+              <div class="jackpot-overview-heading">Roll 1 — Current Level</div>
+              <div class="jo-grid" id="jp-roll1-grid">
+                <div class="jo-header">Type</div>
+                <div class="jo-header">Win</div>
+                <div class="jo-header">Uniq</div>
+                <div class="jo-header">Coin</div>
+                <div class="jo-header">Tkts</div>
+                <div class="jo-header">ETH</div>
+                <div class="jo-header">Spread</div>
+              </div>
+              <div id="jp-roll1-empty" class="jo-empty" style="display:none;">No current-level wins.</div>
+            </div>
+
+            <!-- Plan 04: Roll 2 panel (pre-created so factory finds it; hidden by default) -->
+            <section id="jp-roll2-panel" class="jackpot-overview" style="display:none;">
+              <div class="jackpot-overview-heading">Bonus Roll</div>
+              <div id="jp-roll2-future-block">
+                <div class="jo-subheading">Future</div>
+                <div class="jo-grid" id="jp-roll2-future-grid">
+                  <div class="jo-header">Type</div><div class="jo-header">Win</div>
+                  <div class="jo-header">Uniq</div><div class="jo-header">Coin</div>
+                  <div class="jo-header">Tkts</div><div class="jo-header">ETH</div>
+                  <div class="jo-header">Spread</div>
+                </div>
+                <div id="jp-roll2-future-empty" class="jo-empty" style="display:none;">No future-ticket wins.</div>
+              </div>
+              <div id="jp-roll2-far-block" style="margin-top:16px;">
+                <div class="jo-subheading">Far-Future</div>
+                <div class="jo-grid" id="jp-roll2-far-grid">
+                  <div class="jo-header">Type</div><div class="jo-header">Win</div>
+                  <div class="jo-header">Uniq</div><div class="jo-header">Coin</div>
+                  <div class="jo-header">Tkts</div><div class="jo-header">ETH</div>
+                  <div class="jo-header">Spread</div>
+                </div>
+                <div id="jp-roll2-far-empty" class="jo-empty" style="display:none;">No far-future wins.</div>
+              </div>
+            </section>
+
+            <div class="jp-roll-controls">
+              <button id="jp-roll-btn" class="jp-roll-btn" style="display:none;">Roll</button>
+            </div>
+          </div>
+
+          <!-- Plan 04: Day Overview — collapsed by default (D-12) -->
           <details class="jp-overview" data-bind="jp-overview">
             <summary>Day Overview</summary>
-            <div class="jp-overview-body" data-bind="jp-overview-body"></div>
+            <div class="jp-overview-body" data-bind="jp-overview-body">
+              <!-- Plan 04: overview grid injected by createJackpotRolls.renderOverview -->
+              <div class="jo-grid" id="jp-jo-grid">
+                <div class="jo-header">Type</div>
+                <div class="jo-header">Win</div>
+                <div class="jo-header">Uniq</div>
+                <div class="jo-header">Coin</div>
+                <div class="jo-header">Tkts</div>
+                <div class="jo-header">ETH</div>
+                <div class="jo-header">Spread</div>
+              </div>
+              <div id="jp-jo-status" class="jo-loading" style="display:none;"></div>
+              <div id="jp-jo-far-future" class="jo-far-future-note" style="display:none;">Far-future coin resolved — see center flame above.</div>
+            </div>
           </details>
         </div>
 
+        <!-- Live reveal section (existing 4-card flow, user addendum A6 + O-04) -->
+        <h3 class="jp-section-title">Live reveal</h3>
         <div class="jackpot-stats">
           <div class="stat">
             <div class="stat-label">Prize Pool</div>
@@ -107,6 +185,56 @@ class JackpotPanel extends HTMLElement {
     });
     this.#unsubs.push(() => this.#scrubber.dispose());
 
+    // Plan 04: instantiate factory with panel-scoped selectors so all DOM lookups
+    // are scoped to this element — no collision with the wtf/jackpot-demo.html IDs.
+    this.#rolls = createJackpotRolls({
+      root: this,
+      apiBase: '',
+      selectors: {
+        // Overview selectors (used by renderOverview)
+        joGrid:          '#jp-jo-grid',
+        joStatus:        '#jp-jo-status',
+        joFarFuture:     '#jp-jo-far-future',
+        // Roll button (used by state machine + flash logic)
+        rollBtn:         '#jp-roll-btn',
+        // Roll 2 panel (pre-created above so _ensureRoll2Container is a no-op)
+        roll2Panel:      '#jp-roll2-panel',
+        roll2FutureGrid: '#jp-roll2-future-grid',
+        roll2FarGrid:    '#jp-roll2-far-grid',
+        roll2FutureEmpty:'#jp-roll2-future-empty',
+        roll2FarEmpty:   '#jp-roll2-far-empty',
+        roll2FutureBlock:'#jp-roll2-future-block',
+        roll2FarBlock:   '#jp-roll2-far-block',
+        // jackpotOverview / demoWrap / demoCenterFlame — not used in panel context;
+        // roll2-panel is pre-created so _ensureRoll2Container short-circuits.
+        jackpotOverview: '#jp-roll2-panel',
+        demoWrap:        '[data-bind="jp-rolls-slot"]',
+        demoCenterFlame: '.jp-roll-controls',  // unused visual effect; points to a safe no-op target
+      },
+    });
+    this.#unsubs.push(() => this.#rolls.dispose());
+
+    // Plan 04: wire the roll button with a panel-owned state machine.
+    // We call preFlightAndRunPlayer directly from #onWinnerChange (not via the
+    // factory's attachButtonStateMachine) so that dropdown re-selection always
+    // resets cleanly — the factory's attachButtonStateMachine has a one-shot
+    // 'started' flag that can't reset across winner changes.
+    const rollBtn = this.querySelector('#jp-roll-btn');
+    if (rollBtn) {
+      rollBtn.addEventListener('click', () => this.#onRollBtnClick());
+    }
+
+    // Wire the jp-overview toggle for lazy first-render (D-12)
+    const overviewDetails = this.querySelector('[data-bind="jp-overview"]');
+    if (overviewDetails) {
+      overviewDetails.addEventListener('toggle', () => {
+        if (overviewDetails.open && !this.#overviewRendered && this.#currentLevel) {
+          this.#overviewRendered = true;
+          this.#rolls.renderOverview(this.#currentLevel);
+        }
+      });
+    }
+
     // Plan 03: wire winners select change handler
     const selectEl = this.querySelector('[data-bind="jp-winners-select"]');
     if (selectEl) {
@@ -126,6 +254,110 @@ class JackpotPanel extends HTMLElement {
       this.#timeline.kill();
       this.#timeline = null;
     }
+    if (this.#noBonusTimer !== null) {
+      clearTimeout(this.#noBonusTimer);
+      this.#noBonusTimer = null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Plan 04: Roll 1 grid renderer
+  // Populates #jp-roll1-grid from data.roll1Rows (per-symbol aggregated rows for
+  // the selected player's current-level tickets).
+  // ---------------------------------------------------------------------------
+
+  #renderRoll1(data) {
+    const section = this.querySelector('#jp-roll1-section');
+    const grid = this.querySelector('#jp-roll1-grid');
+    const emptyEl = this.querySelector('#jp-roll1-empty');
+    if (!section || !grid) return;
+
+    // Clear previous data rows (keep .jo-header children)
+    Array.from(grid.children).forEach(child => {
+      if (!child.classList.contains('jo-header')) grid.removeChild(child);
+    });
+
+    const rows = (data && Array.isArray(data.roll1Rows)) ? data.roll1Rows : [];
+    section.style.display = '';
+
+    if (rows.length === 0) {
+      if (emptyEl) emptyEl.style.display = 'block';
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    // Import the row renderer from the factory's shared utility.
+    // Since _appendOverviewRow is internal to the factory, we use a local equivalent
+    // that mirrors the same logic using the factory's exported helpers.
+    import('../app/jackpot-rolls.js').then(({ joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth }) => {
+      // Re-check in case grid was cleared by a newer call while import was resolving
+      Array.from(grid.children).forEach(child => {
+        if (!child.classList.contains('jo-header')) grid.removeChild(child);
+      });
+
+      const joFormatCoin = (s) => joFormatWeiToEth(s);
+
+      for (const row of rows) {
+        const isBonus = row.type === 'bonus';
+
+        const typeCell = document.createElement('div');
+        typeCell.className = 'jo-type-badge' + (isBonus ? ' jo-bonus' : '');
+        if (isBonus) {
+          typeCell.textContent = 'Bonus';
+        } else {
+          const t = row.traitId | 0;
+          const q = Math.floor(t / 64);
+          const sym = Math.floor((t % 64) / 8);
+          const col = t % 8;
+          const img = document.createElement('img');
+          img.src = joBadgePath(q, sym, col);
+          img.alt = JO_SYMBOLS[JO_CATEGORIES[q]][sym];
+          typeCell.appendChild(img);
+        }
+
+        const winCell = document.createElement('div');
+        winCell.className = 'jo-winners';
+        winCell.textContent = String(row.winnerCount);
+
+        const uniqCell = document.createElement('div');
+        uniqCell.className = 'jo-unique';
+        uniqCell.textContent = String(row.uniqueWinnerCount);
+
+        const coinCell = document.createElement('div');
+        coinCell.className = 'jo-coin';
+        coinCell.textContent = (!row.coinPerWinner || row.coinPerWinner === '0') ? '\u2014' : joFormatCoin(row.coinPerWinner);
+
+        const tktCell = document.createElement('div');
+        tktCell.className = 'jo-tickets';
+        tktCell.textContent = row.ticketsPerWinner ? String(row.ticketsPerWinner) : '\u2014';
+
+        const ethCell = document.createElement('div');
+        ethCell.className = 'jo-eth';
+        ethCell.textContent = (!row.ethPerWinner || row.ethPerWinner === '0') ? '\u2014' : joFormatWeiToEth(row.ethPerWinner);
+
+        const spreadCell = document.createElement('div');
+        spreadCell.className = 'jo-spread';
+        const buckets = Array.isArray(row.spreadBuckets) ? row.spreadBuckets : [false, false, false];
+        for (let b = 0; b < 3; b++) {
+          const bar = document.createElement('div');
+          bar.className = 'jo-spread-bar' + (buckets[b] ? ' active' : '');
+          spreadCell.appendChild(bar);
+        }
+
+        const rowEl = document.createElement('div');
+        rowEl.className = 'jo-row';
+        rowEl.appendChild(typeCell);
+        rowEl.appendChild(winCell);
+        rowEl.appendChild(uniqCell);
+        rowEl.appendChild(coinCell);
+        rowEl.appendChild(tktCell);
+        rowEl.appendChild(ethCell);
+        rowEl.appendChild(spreadCell);
+        grid.appendChild(rowEl);
+      }
+    }).catch(err => {
+      console.error('[jackpot-panel] failed to load row renderer:', err);
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -154,6 +386,21 @@ class JackpotPanel extends HTMLElement {
     this.#winnersRequestVersion++;
     const v = this.#winnersRequestVersion;
 
+    // Plan 04: cancel pending flashes (factory timer + panel "No bonus" timer)
+    if (this.#rolls) this.#rolls.cancelPendingFlashes();
+    if (this.#noBonusTimer !== null) {
+      clearTimeout(this.#noBonusTimer);
+      this.#noBonusTimer = null;
+    }
+    this.#rollPhase = 'idle';
+    this.#playerData = null;
+
+    // Reset Roll 1 section and hide roll button
+    const roll1Section = this.querySelector('#jp-roll1-section');
+    if (roll1Section) roll1Section.style.display = 'none';
+    const rollBtn = this.querySelector('#jp-roll-btn');
+    if (rollBtn) rollBtn.style.display = 'none';
+
     const selectEl = this.querySelector('[data-bind="jp-winners-select"]');
     if (selectEl) {
       selectEl.disabled = true;
@@ -180,6 +427,15 @@ class JackpotPanel extends HTMLElement {
     this.#currentLevel = res.level;
     this.#winners = res.winners || [];
 
+    // Plan 04: refresh overview whenever day changes (D-12); mark for re-render
+    // (whether or not the <details> is currently open)
+    this.#overviewRendered = false;
+    const overviewDetails = this.querySelector('[data-bind="jp-overview"]');
+    if (overviewDetails && overviewDetails.open && this.#currentLevel) {
+      this.#overviewRendered = true;
+      this.#rolls.renderOverview(this.#currentLevel);
+    }
+
     if (!selectEl) return;
     selectEl.innerHTML = '';
     selectEl.disabled = false;
@@ -203,7 +459,7 @@ class JackpotPanel extends HTMLElement {
 
     // D-10: auto-select row 0 (highest payout — server returns payout-desc)
     selectEl.selectedIndex = 0;
-    this.#onWinnerChange(this.#winners[0].address);
+    await this.#onWinnerChange(this.#winners[0].address);
   }
 
   // Format a winner entry for the dropdown label per D-08:  "0xABCD…1234 — 0.42 ETH"
@@ -214,10 +470,121 @@ class JackpotPanel extends HTMLElement {
   }
 
   // Called when the user picks a different winner from the dropdown (or auto-select on day change).
-  // Plan 03: stub — logs the selection. Plan 04 will implement the full two-phase flow.
-  #onWinnerChange(address) {
-    console.log('[jackpot-panel] winner selected:', address);
-    // Plan 04: wire preFlightAndRunPlayer + Roll 1/2 flow here
+  // Plan 04: cancel pending flash, reset panel roll state, then run pre-flight.
+  async #onWinnerChange(address) {
+    if (!address || !this.#currentLevel) return;
+    this.#rolls.cancelPendingFlashes();   // Pitfall 6: factory timer guard
+
+    // Pitfall 6: cancel panel-owned "No bonus" flash timer if still pending
+    if (this.#noBonusTimer !== null) {
+      clearTimeout(this.#noBonusTimer);
+      this.#noBonusTimer = null;
+    }
+
+    // Reset local roll state machine so button starts fresh for the new winner
+    this.#rollPhase = 'idle';
+    this.#playerData = null;
+
+    // Reset button label and hide it until pre-flight data arrives
+    const btn = this.querySelector('#jp-roll-btn');
+    if (btn) {
+      btn.textContent = 'Roll';
+      btn.disabled = false;
+      btn.style.display = 'none';
+    }
+
+    // Hide Roll 2 panel from previous selection
+    const roll2Panel = this.querySelector('#jp-roll2-panel');
+    if (roll2Panel) roll2Panel.style.display = 'none';
+
+    await this.#rolls.preFlightAndRunPlayer({
+      level: this.#currentLevel,
+      addr: address,
+      onData: (data) => {
+        // Cache pre-flight result and render Roll 1 grid
+        this.#playerData = data;
+        this.#renderRoll1(data);
+        // Show and label the roll button
+        if (btn) {
+          btn.textContent = 'Roll';
+          btn.disabled = false;
+          btn.style.display = '';
+        }
+      },
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Plan 04: panel-owned roll button state machine
+  // Sequence: Roll → Next → Roll Bonus → Next Day →
+  //           Roll → Next → (no bonus flash) → Next Day
+  // ---------------------------------------------------------------------------
+
+  #onRollBtnClick() {
+    const btn = this.querySelector('#jp-roll-btn');
+    if (!btn || btn.disabled) return;
+
+    if (this.#rollPhase === 'idle') {
+      // "Roll" clicked — Roll 1 data is already shown; advance to waiting-for-next
+      this.#rollPhase = 'roll1';
+      btn.textContent = 'Next';
+      return;
+    }
+
+    if (this.#rollPhase === 'roll1') {
+      if (this.#playerData && this.#playerData.hasBonus) {
+        // Has bonus → prepare Roll Bonus
+        const roll2Panel = this.querySelector('#jp-roll2-panel');
+        if (roll2Panel) roll2Panel.style.display = 'none';
+        this.#rollPhase = 'roll2';
+        btn.textContent = 'Roll Bonus';
+      } else {
+        // No bonus → flash "No bonus" for ≤500ms then return to Next Day
+        this.#rollPhase = 'done';
+        btn.textContent = 'No bonus';
+        btn.disabled = true;
+        if (this.#noBonusTimer !== null) clearTimeout(this.#noBonusTimer);
+        this.#noBonusTimer = setTimeout(() => {
+          this.#noBonusTimer = null;
+          btn.textContent = 'Next Day \u2192';
+          btn.disabled = false;
+        }, 500);
+      }
+      return;
+    }
+
+    if (this.#rollPhase === 'roll2') {
+      // "Roll Bonus" clicked — animate then show Roll 2 data
+      btn.textContent = 'Rolling\u2026';
+      btn.disabled = true;
+      setTimeout(() => {
+        try {
+          this.#rolls.renderRoll2(
+            (this.#playerData && this.#playerData.roll2) || { future: [], farFuture: [] }
+          );
+          const roll2Panel = this.querySelector('#jp-roll2-panel');
+          if (roll2Panel) {
+            roll2Panel.style.display = 'block';
+            roll2Panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        } catch (e) {
+          console.error('[jackpot-panel] roll2 render failed:', e);
+        }
+        btn.textContent = 'Next Day \u2192';
+        btn.disabled = false;
+        this.#rollPhase = 'done';
+      }, 900);
+      return;
+    }
+
+    if (this.#rollPhase === 'done') {
+      // "Next Day" clicked — advance scrubber by 1
+      if (this.#scrubber && this.#currentDay !== null) {
+        const nextDay = this.#currentDay + 1;
+        this.#scrubber.setDay(nextDay);
+        this.#onDayChange(this.#scrubber.getDay());
+      }
+    }
   }
 
   // -- Private methods --
@@ -406,7 +773,7 @@ class JackpotPanel extends HTMLElement {
     // Check reduced motion preference
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       // Instant reveal without animation
-      cardEls.forEach((card, i) => {
+      cardEls.forEach((card) => {
         const inner = card.querySelector('.trait-card-inner');
         if (inner) inner.style.transform = 'rotateY(180deg)';
         card.setAttribute('data-winner', 'true');

@@ -276,7 +276,57 @@
   font-size: 0.8rem;
   color: var(--text-secondary, #a0a0c0);
 }
-/* Plan 04 will populate jp-overview-body and jp-rolls-slot */
+/* Plan 04: jp-rolls-slot populated content */
+
+/* Section headings that label the two stacked sections (A6 coexistence layout) */
+.jp-section-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim, #6b6b8d);
+  margin: 0 0 0.6rem;
+  padding-top: 0.5rem;
+}
+
+/* Roll 1 current-level result section */
+.jp-roll1-section {
+  margin-bottom: 0.75rem;
+}
+
+/* Roll controls row: houses the state-machine button */
+.jp-roll-controls {
+  display: flex;
+  justify-content: flex-start;
+  margin: 0.5rem 0 0.75rem;
+}
+
+/* The Roll/Next/Roll Bonus/Next Day state-machine button */
+.jp-roll-btn {
+  padding: 0.45rem 1.4rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent-primary, #f5a623);
+  background: rgba(245, 166, 35, 0.12);
+  border: 1px solid rgba(245, 166, 35, 0.35);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  letter-spacing: 0.04em;
+}
+
+.jp-roll-btn:hover {
+  background: rgba(245, 166, 35, 0.25);
+  transform: translateY(-1px);
+}
+
+.jp-roll-btn:active { transform: translateY(0); }
+
+.jp-roll-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
 
 /* -------------------------------------------------------------------------
    Plan 03: jo-* classes — Day Overview grid (ported from wtf/jackpot-demo.html
