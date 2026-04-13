@@ -10,6 +10,7 @@ import { deriveWinningTraits, traitToBadge, toDisplayOrder, DISPLAY_ORDER } from
 import { formatEth, formatBurnie, truncateAddress } from '../app/utils.js';
 import { playSound } from '../app/audio.js';
 import { API_BASE, BADGE_QUADRANTS, BADGE_COLORS, BADGE_ITEMS, badgeCircularPath } from '../app/constants.js';
+import { batch, update } from '../app/store.js';
 
 async function replayFetch(path) {
   const res = await fetch(API_BASE + '/replay' + path);
@@ -256,10 +257,12 @@ class ReplayPanel extends HTMLElement {
       let ethCount = 0, burnieCount = 0;
       for (const dist of this.#distributions) {
         const addr = dist.winner.toLowerCase();
-        const isBurnie = dist.currency === 'BURNIE' || dist.distributionType.toLowerCase().includes('coin');
+        const t = dist.awardType || '';
+        const isBurnie = dist.currency === 'BURNIE' || t === 'burnie' || t === 'farFutureCoin';
+        const isEth = t === 'eth';
         if (isBurnie) {
           burnieByAddr[addr] = (burnieByAddr[addr] || 0n) + BigInt(dist.amount || '0');
-        } else {
+        } else if (isEth) {
           ethByAddr[addr] = (ethByAddr[addr] || 0n) + BigInt(dist.amount || '0');
         }
       }
@@ -308,7 +311,7 @@ class ReplayPanel extends HTMLElement {
       this.#distributions = (data.items || []).map(d => ({
         level: d.level, winner: d.winner, amount: d.amount,
         traitId: d.traitId ?? null, ticketIndex: d.ticketIndex ?? null,
-        distributionType: d.distributionType,
+        awardType: d.awardType,
       }));
     } catch (err) {
       console.warn('[ReplayPanel] Failed to load distributions:', err);
@@ -344,6 +347,7 @@ class ReplayPanel extends HTMLElement {
       this.querySelector('[data-bind="distributions"]').hidden = true;
       this.querySelector('[data-bind="ticket-info"]').hidden = true;
       this.querySelector('[data-bind="reveal-btn"]').disabled = true;
+      batch([['replay.day', null], ['replay.level', null]]);
       return;
     }
 
@@ -353,33 +357,38 @@ class ReplayPanel extends HTMLElement {
     const rngEntry = this.#rngDays.find(d => d.day === dayNum);
     const hasRng = rngEntry && rngEntry.finalWord && rngEntry.finalWord !== '0';
 
-    this.querySelector('[data-bind="reveal-btn"]').disabled = !hasRng || !this.#selectedPlayer;
     this.querySelector('[data-bind="empty-state"]').hidden = true;
 
     // Load day detail + distributions (may fallback to history endpoint)
     await this.#loadDayDetail(dayNum);
 
-    // Determine level from distributions or estimate from day number
+    // Determine level from distributions (day detail is authoritative)
     if (this.#distributions.length > 0) {
       this.#selectedLevel = this.#distributions[0].level;
     } else {
-      // Estimate: each level is ~8-10 days, so level = floor((day-1) / 8)
-      this.#selectedLevel = Math.max(0, Math.floor((dayNum - 1) / 8));
-    }
-
-    // Fallback: fetch distributions from history if replay endpoint returned none
-    if (this.#distributions.length === 0) {
-      await this.#loadDistributionsForLevel(this.#selectedLevel);
+      // No distributions = not a jackpot day (purchase phase). Don't fallback
+      // to level-based loading which would pull in unrelated distributions.
+      this.#selectedLevel = null;
     }
 
     // Tickets are stored at purchaseLevel = gameLevel + 1
     await this.#loadTickets(this.#selectedLevel + 1);
+
+    // Enable reveal button if we have RNG + player + distributions
+    const canReveal = hasRng && this.#selectedPlayer && this.#distributions.length > 0;
+    this.querySelector('[data-bind="reveal-btn"]').disabled = !canReveal;
 
     if (this.#distributions.length > 0) {
       this.#showDistributions(this.#distributions);
     } else {
       this.querySelector('[data-bind="distributions"]').hidden = true;
     }
+
+    // Publish selected day + level to store so game-status-bar can display them.
+    batch([
+      ['replay.day', dayNum],
+      ['replay.level', this.#selectedLevel],
+    ]);
   }
 
   #onPlayerChange(e) {
@@ -440,13 +449,14 @@ class ReplayPanel extends HTMLElement {
     const addr = this.#selectedPlayer?.toLowerCase();
     list.innerHTML = distributions.map(d => {
       const isMe = addr && d.winner.toLowerCase() === addr;
-      const currency = d.currency || (d.distributionType.toLowerCase().includes('coin') ? 'BURNIE' : 'ETH');
-      const formatted = currency === 'BURNIE' ? formatBurnie(d.amount) : formatEth(d.amount);
+      const at = d.awardType || '';
+      const currency = d.currency || (at === 'burnie' || at === 'farFutureCoin' ? 'BURNIE' : at === 'dgnrs' ? 'DGNRS' : at === 'tickets' ? 'TICKETS' : at === 'whale_pass' ? 'WHALE' : 'ETH');
+      const formatted = currency === 'BURNIE' ? formatBurnie(d.amount) : currency === 'TICKETS' ? (d.amount || '0') : formatEth(d.amount);
       return `
       <div class="replay-dist-item${isMe ? ' replay-dist-mine' : ''}">
         <span class="replay-dist-winner">${truncateAddress(d.winner)}${isMe ? ' (YOU)' : ''}</span>
         <span class="replay-dist-amount">${formatted} ${currency}</span>
-        <span class="replay-dist-type">${d.distributionType}</span>
+        <span class="replay-dist-type">${d.awardType}</span>
       </div>`;
     }).join('');
 
@@ -464,17 +474,10 @@ class ReplayPanel extends HTMLElement {
     this.#resetCards();
     await this.#loadPlayerTraits(); // ensure traits loaded
 
-    // Derive winning traits from RNG word (or from distribution traitIds if available)
-    let traits;
-    const distTraitIds = this.#distributions
-      .filter(d => d.traitId != null)
-      .map(d => d.traitId);
-    const uniqueTraits = [...new Set(distTraitIds)];
-    if (uniqueTraits.length >= 4) {
-      traits = uniqueTraits.slice(0, 4);
-    } else {
-      traits = deriveWinningTraits(rngEntry.finalWord);
-    }
+    // Derive winning traits from the RNG word — this is the authoritative source
+    // for which traits were drawn on THIS day. Distribution traitIds may span
+    // multiple jackpot days within the same level and should not be used here.
+    const traits = deriveWinningTraits(rngEntry.finalWord);
 
     const displayTraits = toDisplayOrder(traits);
 
@@ -497,39 +500,50 @@ class ReplayPanel extends HTMLElement {
     const addr = this.#selectedPlayer?.toLowerCase();
     if (!addr) return;
 
+    // Build set of today's winning traitIds (from RNG derivation, one per quadrant)
+    const todaysTraits = new Set(displayTraits.filter(t => t != null));
+
     const playerDists = this.#distributions.filter(d => d.winner.toLowerCase() === addr);
     if (playerDists.length === 0) return;
 
-    // Only farFutureCoin goes to center diamond — all other types (including coin) go to quadrants
+    // Only farFutureCoin goes to center diamond — all other types go to quadrants
+    // Filter to only include wins matching today's winning traits (or null traitId bonuses)
     const quadDists = [];
     for (const dist of playerDists) {
-      if (dist.distributionType === 'farFutureCoin') {
+      if (dist.awardType === 'farFutureCoin') {
         this.#centerWins.push(dist);
-      } else {
+      } else if (dist.traitId == null || todaysTraits.has(dist.traitId)) {
         quadDists.push(dist);
       }
+      // Skip wins from other jackpot days (different traitIds)
     }
 
-    // Map quadrant distributions using traitId → contract quadrant → display position
+    // First pass: map distributions with traitId to their quadrant
+    const noTraitDists = [];
     for (const dist of quadDists) {
       if (dist.traitId != null) {
-        // Precise mapping: traitId / 64 gives contract quadrant
         const contractQ = Math.floor(dist.traitId / 64);
         const displayPos = DISPLAY_ORDER.indexOf(contractQ);
         if (displayPos >= 0 && displayPos <= 3) {
           this.#quadWinArrays[displayPos].push(dist);
         }
-      } else if (displayTraits) {
-        // Fallback: spread across owned quadrants (no traitId available)
-        const ownedPositions = [];
-        for (let i = 0; i < 4; i++) {
-          if (displayTraits[i] != null && this.#playerTraitIds.has(displayTraits[i])) {
-            ownedPositions.push(i);
-          }
-        }
-        if (ownedPositions.length > 0) {
-          this.#quadWinArrays[ownedPositions[0]].push(dist);
-        }
+      } else {
+        noTraitDists.push(dist);
+      }
+    }
+    // Second pass: assign null-traitId wins (dgnrs, whale_pass) to the quadrant
+    // with the largest ETH win — these are solo-bucket bonuses tied to the big winner.
+    if (noTraitDists.length > 0) {
+      let bestQ = 0;
+      let bestEth = 0n;
+      for (let i = 0; i < 4; i++) {
+        const qEth = this.#quadWinArrays[i]
+          .filter(d => d.awardType === 'eth')
+          .reduce((s, d) => s + BigInt(d.amount || '0'), 0n);
+        if (qEth > bestEth) { bestEth = qEth; bestQ = i; }
+      }
+      for (const dist of noTraitDists) {
+        this.#quadWinArrays[bestQ].push(dist);
       }
     }
   }
@@ -1035,11 +1049,17 @@ class ReplayPanel extends HTMLElement {
     // Show prize overlay — sum by currency type
     if (prize && isWin) {
       const wins = this.#quadWinArrays[qIdx];
-      let ethTotal = 0n, burnieTotal = 0n;
+      let ethTotal = 0n, burnieTotal = 0n, dgnrsTotal = 0n, ticketCount = 0, whaleCount = 0;
       for (const d of wins) {
-        const cur = d.currency || (d.distributionType.toLowerCase().includes('coin') ? 'BURNIE' : 'ETH');
-        if (cur === 'BURNIE') {
+        const t = d.awardType || '';
+        if (t === 'burnie' || t === 'farFutureCoin' || d.currency === 'BURNIE') {
           burnieTotal += BigInt(d.amount || '0');
+        } else if (t === 'dgnrs') {
+          dgnrsTotal += BigInt(d.amount || '0');
+        } else if (t === 'tickets') {
+          ticketCount += 1;
+        } else if (t === 'whale_pass') {
+          whaleCount += Number(d.amount || '1');
         } else {
           ethTotal += BigInt(d.amount || '0');
         }
@@ -1047,6 +1067,16 @@ class ReplayPanel extends HTMLElement {
       const lines = [];
       if (ethTotal > 0n) lines.push(formatEth(ethTotal.toString()) + ' ETH');
       if (burnieTotal > 0n) lines.push(formatBurnie(burnieTotal.toString()) + ' BURNIE');
+      if (dgnrsTotal > 0n) {
+        const dgnrsNum = Number(dgnrsTotal / 10n**18n);
+        const label = dgnrsNum >= 1e9 ? (dgnrsNum / 1e9).toFixed(1) + 'B'
+          : dgnrsNum >= 1e6 ? (dgnrsNum / 1e6).toFixed(1) + 'M'
+          : dgnrsNum >= 1e3 ? (dgnrsNum / 1e3).toFixed(1) + 'K'
+          : String(dgnrsNum);
+        lines.push(label + ' DGNRS');
+      }
+      if (ticketCount > 0) lines.push(ticketCount + ' ticket' + (ticketCount !== 1 ? 's' : ''));
+      if (whaleCount > 0) lines.push(whaleCount + ' whale pass' + (whaleCount !== 1 ? 'es' : ''));
       if (lines.length === 0) lines.push(wins.length + ' win' + (wins.length !== 1 ? 's' : ''));
       prize.innerHTML = '<div class="replay-prize-bar">' +
         lines.map(l => '<span class="replay-prize-total">' + l + '</span>').join('') +
@@ -1081,9 +1111,9 @@ class ReplayPanel extends HTMLElement {
     const wins = this.#quadWinArrays[qIdx];
     if (!wins || wins.length === 0) return;
 
-    // Use the winning badge for this quadrant
-    const badge = traitToBadge(traitId);
-    const path = badge ? badge.path : '';
+    // Default badge for this quadrant (used for wins without traitId)
+    const defaultBadge = traitToBadge(traitId);
+    const defaultPath = defaultBadge ? defaultBadge.path : '';
     const count = wins.length;
     let maxSize, minSize;
     if (count === 1) { minSize = 30; maxSize = 65; }
@@ -1113,13 +1143,17 @@ class ReplayPanel extends HTMLElement {
       placed.push({ cx: bestLeft + sizePct / 2, cy: bestTop + sizePct / 2, size: sizePct });
       allBounds.push({ left: bestLeft, top: bestTop, right: bestLeft + sizePct, bottom: bestTop + sizePct });
 
+      // Use each win's own traitId for its badge; fall back to quadrant default
+      const winBadge = wins[w].traitId != null ? traitToBadge(wins[w].traitId) : defaultBadge;
+      const winPath = winBadge ? winBadge.path : defaultPath;
+
       const wrap = document.createElement('div');
       wrap.className = 'replay-badge-wrap';
       wrap.style.width = sizePct + '%';
       wrap.style.left = bestLeft + '%';
       wrap.style.top = bestTop + '%';
       const img = document.createElement('img');
-      img.src = path; img.className = 'replay-scattered-badge'; img.alt = '';
+      img.src = winPath; img.className = 'replay-scattered-badge'; img.alt = '';
       wrap.appendChild(img);
       quad.appendChild(wrap);
     }

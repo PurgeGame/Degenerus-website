@@ -85,6 +85,11 @@ const _state = {
     claimable: '0',
     isWinner: false,
   },
+  // Replay mode: populated by replay-panel on day-change; consumed by status-bar.
+  replay: {
+    day: null,    // currently selected game day (number | null)
+    level: null,  // jackpot level for that day (number | null)
+  },
 };
 
 // Shallow Proxy wrapping the top-level state object.

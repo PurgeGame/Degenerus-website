@@ -41,59 +41,17 @@
   <div class="container">
     <!-- Nav injected by shared/nav.js -->
 
-    <!-- Connect prompt (Custom Element, registered in Plan 03) -->
-    <connect-prompt></connect-prompt>
-
     <!-- Page Header -->
     <header class="page-header">
       <img class="page-header-logo" src="/badges-circular/flame_red.svg" alt="Degenerus">
       <h1>DEGENERUS BETA</h1>
-      <p class="subtitle">Buy tickets, open luckboxes, and claim passes. Real contracts, real ETH.</p>
+      <p class="subtitle">Historical jackpot replay viewer.</p>
     </header>
 
-    <!-- Status Bar (Custom Element, registered in Phase 6 Plan 03) -->
+    <!-- Historical status bar: shows day + level for the replay panel's selected day -->
     <game-status-bar></game-status-bar>
 
-    <!-- Death clock (always visible, outside data-panel divs) -->
-    <death-clock></death-clock>
-
-    <!-- Phase-dependent panels -->
-    <div data-panel="purchase" class="main-layout">
-      <div>
-        <purchase-panel></purchase-panel>
-        <coinflip-panel></coinflip-panel>
-        <degenerette-panel></degenerette-panel>
-        <quest-panel></quest-panel>
-        <claims-panel></claims-panel>
-        <affiliate-panel></affiliate-panel>
-        <baf-panel></baf-panel>
-        <decimator-panel></decimator-panel>
-        <pass-section></pass-section>
-      </div>
-      <div>
-        <tx-status-list></tx-status-list>
-      </div>
-    </div>
-
-    <div data-panel="jackpot" class="main-layout" hidden>
-      <div>
-        <jackpot-panel></jackpot-panel>
-      </div>
-      <div>
-        <tx-status-list></tx-status-list>
-      </div>
-    </div>
-
-    <div data-panel="gameover" class="main-layout" hidden>
-      <div>
-        <terminal-panel></terminal-panel>
-      </div>
-      <div>
-        <tx-status-list></tx-status-list>
-      </div>
-    </div>
-
-    <!-- DEBUG: Replay viewer — always visible during development, remove/gate for prod -->
+    <!-- Jackpot Replay panel -->
     <replay-panel></replay-panel>
 
     <!-- Stale data indicator -->
