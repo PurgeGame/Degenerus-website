@@ -1,5 +1,28 @@
 /* jackpot.css -- Jackpot panel, trait card grid, reveal animation, winner glow, confetti backdrop */
 
+/* -------------------------------------------------------------------------
+   Plan 39-10: <day-jackpot-summary> widget — compact day summary rendered
+   inside <replay-panel> between the card grid and the winners list.
+   ------------------------------------------------------------------------- */
+.day-jackpot-summary {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid #3a2a10;
+  border-radius: 6px;
+  background: #151515;
+}
+.day-jackpot-summary > header {
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #c99b3e;
+  margin-bottom: 0.5rem;
+}
+.day-jackpot-summary-body {
+  min-height: 2rem;
+}
+
+
 .jackpot-panel {
   /* inherits .panel */
 }
