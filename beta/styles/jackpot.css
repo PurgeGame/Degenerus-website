@@ -587,3 +587,19 @@
   font-weight: 400;
 }
 
+/* -------------------------------------------------------------------------
+   Plan 39-08: Defensive guarantees for Day Overview visibility.
+   Prevents accidental hiding from future refactors or cascade collisions.
+   ------------------------------------------------------------------------- */
+.jp-day-port { overflow: visible; min-height: 0; }
+.jp-day-port > .jp-overview {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  min-height: 44px;
+}
+.jp-day-port > .jp-overview > summary {
+  display: list-item;
+  min-height: 32px;
+}
+
