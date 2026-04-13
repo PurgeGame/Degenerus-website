@@ -485,8 +485,8 @@ class ReplayPanel extends HTMLElement {
       const addr = w.address.toLowerCase();
       const isMe = myAddr && addr === myAddr;
 
-      // Build trait-grouped tooltip from breakdown entries
-      const tipHtml = this.#buildWinnerTooltip(w.breakdown || []);
+      // Build trait-grouped tooltip from breakdown entries, partitioned by roll phase
+      const tipHtml = this.#buildWinnerTooltip(w.breakdown || [], w.hasBonus);
 
       return `
       <div class="replay-dist-item${isMe ? ' replay-dist-mine' : ''}" style="position:relative">
@@ -500,56 +500,97 @@ class ReplayPanel extends HTMLElement {
   }
 
   /**
-   * Build HTML for the hover tooltip grouped by trait.
+   * Build HTML for the hover tooltip grouped by trait, partitioned by roll phase.
    * breakdown: [{awardType, amount, count, traitId}]
+   * hasBonus: if true, split entries into Roll 1 (eth/tickets) vs Bonus Roll (burnie non-null traitId)
+   *           vs Bonus Center (null-traitId burnie). This matches exactly what the widget renders
+   *           across Roll 1 quadrants + Roll 2 bonus quadrants + center diamond.
    */
-  #buildWinnerTooltip(breakdown) {
+  #buildWinnerTooltip(breakdown, hasBonus = false) {
     if (!breakdown || breakdown.length === 0) return '<em>No detail available</em>';
 
-    // Group entries by traitId (null = bonus/whale/ticket with no trait)
-    const byTrait = new Map(); // traitId|'bonus' -> entries[]
-    for (const entry of breakdown) {
-      const key = entry.traitId != null ? entry.traitId : 'bonus';
-      if (!byTrait.has(key)) byTrait.set(key, []);
-      byTrait.get(key).push(entry);
-    }
-
-    const sections = [];
-    for (const [key, entries] of byTrait) {
-      let headerHtml;
-      if (key === 'bonus') {
-        headerHtml = '<span class="tip-trait-name">Bonus</span>';
-      } else {
-        const traitId = Number(key);
-        const badge = traitToBadge(traitId);
-        const quadrant = Math.floor(traitId / 64);
-        const quadrantName = BADGE_QUADRANTS[quadrant] || 'Unknown';
-        const label = badge ? `${badge.item} (${quadrantName} Q${quadrant + 1})` : `Trait ${traitId}`;
-        headerHtml = `<span class="tip-trait-name">${label}</span>`;
+    /**
+     * Render a set of entries grouped by traitId into tooltip HTML.
+     * entries: [{awardType, amount, count, traitId}]
+     */
+    const renderEntryGroup = (entries) => {
+      const byTrait = new Map(); // traitId|'bonus' -> entries[]
+      for (const entry of entries) {
+        const key = entry.traitId != null ? entry.traitId : 'bonus';
+        if (!byTrait.has(key)) byTrait.set(key, []);
+        byTrait.get(key).push(entry);
       }
-
-      const rows = entries.map(e => {
-        const at = e.awardType || '';
-        let formatted;
-        if (at === 'eth') {
-          formatted = `${formatEth(e.amount)} ETH`;
-        } else if (at === 'burnie' || at === 'farFutureCoin' || at.includes('burnie')) {
-          formatted = `${formatBurnie(e.amount)} BURNIE`;
-        } else if (at === 'tickets' || at === 'ticket') {
-          formatted = `${e.amount} ticket${e.amount !== '1' ? 's' : ''}`;
-        } else if (at === 'whale_pass') {
-          formatted = `${e.amount} whale pass${e.amount !== '1' ? 'es' : ''}`;
+      const sections = [];
+      for (const [key, ents] of byTrait) {
+        let headerHtml;
+        if (key === 'bonus') {
+          headerHtml = '<span class="tip-trait-name">Bonus Center</span>';
         } else {
-          formatted = `${e.amount} ${at}`;
+          const traitId = Number(key);
+          const badge = traitToBadge(traitId);
+          const quadrant = Math.floor(traitId / 64);
+          const quadrantName = BADGE_QUADRANTS[quadrant] || 'Unknown';
+          const label = badge ? `${badge.item} (${quadrantName} Q${quadrant + 1})` : `Trait ${traitId}`;
+          headerHtml = `<span class="tip-trait-name">${label}</span>`;
         }
-        const countStr = e.count > 1 ? ` ×${e.count}` : '';
-        return `<span class="tip-row">${formatted}${countStr}</span>`;
-      }).join('');
+        const rows = ents.map(e => {
+          const at = e.awardType || '';
+          let formatted;
+          if (at === 'eth') {
+            formatted = `${formatEth(e.amount)} ETH`;
+          } else if (at === 'burnie' || at === 'farFutureCoin' || at.includes('burnie')) {
+            formatted = `${formatBurnie(e.amount)} BURNIE`;
+          } else if (at === 'tickets' || at === 'ticket') {
+            formatted = `${e.amount} ticket${e.amount !== '1' ? 's' : ''}`;
+          } else if (at === 'whale_pass') {
+            formatted = `${e.amount} whale pass${e.amount !== '1' ? 'es' : ''}`;
+          } else {
+            formatted = `${e.amount} ${at}`;
+          }
+          const countStr = e.count > 1 ? ` ×${e.count}` : '';
+          return `<span class="tip-row">${formatted}${countStr}</span>`;
+        }).join('');
+        sections.push(`<div class="tip-trait-group">${headerHtml}${rows}</div>`);
+      }
+      return sections.join('');
+    };
 
-      sections.push(`<div class="tip-trait-group">${headerHtml}${rows}</div>`);
+    if (!hasBonus) {
+      // No bonus roll — render all entries flat, grouped by traitId
+      return renderEntryGroup(breakdown);
     }
 
-    return sections.join('');
+    // Partition: Roll 1 entries (eth / tickets / whale_pass) vs Bonus Roll entries (burnie with
+    // non-null traitId) vs Bonus Center (null-traitId burnie / farFutureCoin).
+    // This mirrors the two-phase widget exactly: Roll 1 quadrants show ETH+tickets, Roll 2 bonus
+    // quadrants show BURNIE per trait, center diamond shows null-traitId BURNIE.
+    const roll1Entries = [];
+    const bonusQuadEntries = [];
+    const bonusCenterEntries = [];
+
+    for (const entry of breakdown) {
+      const at = entry.awardType || '';
+      const isBurnie = at === 'burnie' || at === 'farFutureCoin' || at.includes('burnie');
+      if (isBurnie && entry.traitId == null) {
+        bonusCenterEntries.push(entry);
+      } else if (isBurnie && entry.traitId != null) {
+        bonusQuadEntries.push(entry);
+      } else {
+        roll1Entries.push(entry);
+      }
+    }
+
+    const parts = [];
+    if (roll1Entries.length > 0) {
+      parts.push('<div class="tip-phase-header">Main Roll</div>' + renderEntryGroup(roll1Entries));
+    }
+    if (bonusQuadEntries.length > 0) {
+      parts.push('<div class="tip-phase-header">Bonus Roll</div>' + renderEntryGroup(bonusQuadEntries));
+    }
+    if (bonusCenterEntries.length > 0) {
+      parts.push('<div class="tip-phase-header">Bonus Center</div>' + renderEntryGroup(bonusCenterEntries));
+    }
+    return parts.length > 0 ? parts.join('') : '<em>No detail available</em>';
   }
 
   // --- Reveal / Spin ---
@@ -790,6 +831,8 @@ class ReplayPanel extends HTMLElement {
 
     // Aggregate future rows per display position (multiple traits can share a quadrant).
     // We produce one entry per trait row so badge scatter shows individual trait badges.
+    // BURNIE: use row.coinPerWinner as the authoritative per-trait BURNIE total (this is
+    // what the DB computed). Fall back to breakdown byTrait lookup only if coinPerWinner is 0.
     for (const row of futureRows) {
       if (row.traitId == null) continue;
       const contractQ = Math.floor(row.traitId / 64);
@@ -798,7 +841,11 @@ class ReplayPanel extends HTMLElement {
 
       const bdRec = byTrait.get(row.traitId);
       const ethTotal = bdRec ? bdRec.ethTotal : 0n;
-      const burnieTotal = bdRec ? bdRec.burnieTotal : 0n;
+      // Prefer row.coinPerWinner (authoritative near-future BURNIE from DB) over breakdown lookup.
+      // breakdown may be missing burnie entries for some traitIds on older data.
+      const rowCoin = BigInt(row.coinPerWinner || '0');
+      const bdBurnie = bdRec ? bdRec.burnieTotal : 0n;
+      const burnieTotal = rowCoin > 0n ? rowCoin : bdBurnie;
       const ticketTotal = row.ticketsPerWinner || 0;
 
       this.#quadWinArrays[displayPos].push({

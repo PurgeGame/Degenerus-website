@@ -492,6 +492,22 @@
   line-height: 1.5;
 }
 
+.tip-phase-header {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted, #888);
+  border-bottom: 1px solid var(--border-color, #3a3a5c);
+  margin: 0.4rem 0 0.35rem;
+  padding-bottom: 0.2rem;
+}
+
+.tip-phase-header:first-child {
+  margin-top: 0;
+}
+
 .replay-dist-bonus-badge {
   font-size: 0.65rem;
   font-weight: 700;
