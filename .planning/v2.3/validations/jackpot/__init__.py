@@ -29,6 +29,7 @@ from validations.jackpot.trait_derivation import (
 from validations.jackpot.jackpot_01 import validate_jackpot_01
 from validations.jackpot.jackpot_04 import validate_jackpot_04
 from validations.jackpot.jackpot_05 import validate_jackpot_05
+from validations.jackpot.jackpot_06 import validate_jackpot_06
 
 __all__ = [
     "SAMPLE_DAYS_CORE",
@@ -42,4 +43,5 @@ __all__ = [
     "validate_jackpot_01",
     "validate_jackpot_04",
     "validate_jackpot_05",
+    "validate_jackpot_06",
 ]

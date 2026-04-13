@@ -29,7 +29,12 @@ from validations.jackpot.jackpot_03 import (
 )
 from validations.jackpot.jackpot_04 import validate_jackpot_04
 from validations.jackpot.jackpot_05 import validate_jackpot_05
+from validations.jackpot.jackpot_06 import validate_jackpot_06
 from validations.jackpot.sample_days import SAMPLE_DAYS_CORE
+from validations.jackpot.source_level_entries import (
+    ensure_history_jackpots_500_logged,
+    ensure_jackpot_06_coverage_gap_logged,
+)
 
 
 _DISCREPANCIES_PATH = ".planning/v2.3/discrepancies.yaml"
@@ -78,6 +83,22 @@ def _run_jackpot_04() -> int:
 
 def _run_jackpot_05() -> int:
     return _run_validator("JACKPOT-05", validate_jackpot_05)
+
+
+def _run_jackpot_06() -> int:
+    # Ensure the permanent coverage-gap entry is logged before any per-day
+    # inferential check runs. Idempotent across re-runs.
+    added_gap = ensure_jackpot_06_coverage_gap_logged(_DISCREPANCIES_PATH)
+    added_500 = ensure_history_jackpots_500_logged(_DISCREPANCIES_PATH)
+    if added_gap:
+        print("JACKPOT-06: appended hero-wagers coverage-gap entry (first run)")
+    else:
+        print("JACKPOT-06: coverage-gap entry already present (skipped)")
+    if added_500:
+        print("JACKPOT-06: appended /history/jackpots 500 bug entry (first run)")
+    else:
+        print("JACKPOT-06: /history/jackpots 500 bug entry already present (skipped)")
+    return _run_validator("JACKPOT-06", validate_jackpot_06)
 
 
 def _run_jackpot_03() -> int:
@@ -130,6 +151,21 @@ def main(argv: list[str] | None = None) -> int:
         help="Run JACKPOT-05 validator (bonus-roll per-quadrant) over SAMPLE_DAYS_CORE.",
     )
     parser.add_argument(
+        "--jackpot-06",
+        action="store_true",
+        help="Run JACKPOT-06 inferential hero-override validator over SAMPLE_DAYS_CORE.",
+    )
+    parser.add_argument(
+        "--jackpot-07",
+        action="store_true",
+        help="Run JACKPOT-07 turbo single-shot inference over /history/levels (once per batch).",
+    )
+    parser.add_argument(
+        "--hero-candidate",
+        action="store_true",
+        help="Probe SAMPLE_DAYS_CORE and persist the best JACKPOT-06 candidate day.",
+    )
+    parser.add_argument(
         "--all",
         action="store_true",
         help="Run all JACKPOT validators currently wired (01+02+03+04+05).",
@@ -167,6 +203,22 @@ def main(argv: list[str] | None = None) -> int:
         rc = _run_jackpot_04() or rc
     if args.jackpot_05 or args.all:
         rc = _run_jackpot_05() or rc
+    if args.jackpot_06 or args.all:
+        rc = _run_jackpot_06() or rc
+    if args.jackpot_07 or args.all:
+        try:
+            from validations.jackpot.jackpot_07 import run_jackpot_07_cli
+        except ImportError:
+            print("JACKPOT-07 not yet implemented; skipping")
+        else:
+            rc = run_jackpot_07_cli(_DISCREPANCIES_PATH) or rc
+    if args.hero_candidate or args.all:
+        try:
+            from validations.jackpot.jackpot_07 import run_hero_candidate_cli
+        except ImportError:
+            print("hero-candidate not yet implemented; skipping")
+        else:
+            rc = run_hero_candidate_cli() or rc
 
     if not any([
         args.jackpot_01,
@@ -174,6 +226,9 @@ def main(argv: list[str] | None = None) -> int:
         args.jackpot_03,
         args.jackpot_04,
         args.jackpot_05,
+        args.jackpot_06,
+        args.jackpot_07,
+        args.hero_candidate,
         args.all,
     ]):
         parser.print_help()
