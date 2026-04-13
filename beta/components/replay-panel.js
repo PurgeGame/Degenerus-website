@@ -514,16 +514,25 @@ class ReplayPanel extends HTMLElement {
      * entries: [{awardType, amount, count, traitId}]
      */
     const renderEntryGroup = (entries) => {
-      const byTrait = new Map(); // traitId|'bonus' -> entries[]
+      const byTrait = new Map(); // traitId|'bonus'|'solo' -> entries[]
       for (const entry of entries) {
-        const key = entry.traitId != null ? entry.traitId : 'bonus';
+        let key;
+        if (entry.traitId != null) {
+          key = entry.traitId;
+        } else if ((entry.awardType || '') === 'whale_pass') {
+          key = 'solo'; // whale_pass is awarded to the solo-winner quadrant, not the bonus center
+        } else {
+          key = 'bonus';
+        }
         if (!byTrait.has(key)) byTrait.set(key, []);
         byTrait.get(key).push(entry);
       }
       const sections = [];
       for (const [key, ents] of byTrait) {
         let headerHtml;
-        if (key === 'bonus') {
+        if (key === 'solo') {
+          headerHtml = '<span class="tip-trait-name">Solo Winner</span>';
+        } else if (key === 'bonus') {
           headerHtml = '<span class="tip-trait-name">Bonus Center</span>';
         } else {
           const traitId = Number(key);
