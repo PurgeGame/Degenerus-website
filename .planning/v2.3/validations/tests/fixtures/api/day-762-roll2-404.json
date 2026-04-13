@@ -1,0 +1,5 @@
+{
+  "_comment": "Documentation-only sentinel. The EndpointClient(mode='replay') returns None when day-762-roll2.json is absent from fixtures/api/ — that is the 404 signal the validator expects. This file exists purely to record that day 762 is a known post-gameover 404 case (verified via live probe 2026-04-13).",
+  "status": 404,
+  "body": null
+}
