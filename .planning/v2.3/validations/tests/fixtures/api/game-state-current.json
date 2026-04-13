@@ -1,0 +1,13 @@
+{
+  "level": null,
+  "day": null,
+  "phase": "GAMEOVER",
+  "price": null,
+  "frozen": true,
+  "prizePools": {
+    "futurePrizePool": "0",
+    "nextPrizePool": "0",
+    "currentPrizePool": "0",
+    "claimableWinnings": "0"
+  }
+}

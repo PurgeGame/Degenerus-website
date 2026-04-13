@@ -1,0 +1,11 @@
+{
+  "supplies": {},
+  "vault": {
+    "ethReserve": "62000000000000000",
+    "stEthReserve": "0",
+    "burnieReserve": "0",
+    "dgveSupply": "0",
+    "dgvbSupply": "0"
+  },
+  "holderCounts": {}
+}

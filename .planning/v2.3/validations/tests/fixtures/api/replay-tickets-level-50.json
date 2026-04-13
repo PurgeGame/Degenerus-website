@@ -1,0 +1,8 @@
+{
+  "level": 50,
+  "players": [
+    {"address": "0xaaa", "ticketCount": 10, "totalMintedOnLevel": 10},
+    {"address": "0xbbb", "ticketCount": 5, "totalMintedOnLevel": 5},
+    {"address": "0xccc", "ticketCount": 20, "totalMintedOnLevel": 20}
+  ]
+}
