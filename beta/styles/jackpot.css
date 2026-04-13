@@ -462,4 +462,148 @@
   50%       { opacity: 1; }
 }
 
+/* -------------------------------------------------------------------------
+   Plan 04 (rebuild): Replay / Bonus Roll section
+   ------------------------------------------------------------------------- */
+
+.jp-replay-section {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color, #3a3a5c);
+}
+
+.jp-replay-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Spin flame indicator — small animated flame icon using CSS */
+.jp-spin-flame {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  background: url('/specials/special_none.svg') center / contain no-repeat;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.jp-spin-flame.jp-spinning {
+  opacity: 1;
+  animation: jp-flame-pulse 0.6s ease-in-out infinite;
+}
+
+@keyframes jp-flame-pulse {
+  0%, 100% { filter: brightness(1) sepia(0) saturate(1); opacity: 0.8; }
+  50%       { filter: brightness(1.4) sepia(1) saturate(5) hue-rotate(-30deg); opacity: 1; }
+}
+
+/* Replay button */
+.jp-replay-btn {
+  padding: 0.4rem 1.2rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--accent-primary, #f5a623);
+  border-radius: 6px;
+  background: rgba(245, 166, 35, 0.12);
+  color: var(--accent-primary, #f5a623);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s, opacity 0.15s;
+}
+
+.jp-replay-btn:hover:not(:disabled) {
+  background: rgba(245, 166, 35, 0.28);
+  transform: translateY(-1px);
+}
+
+.jp-replay-btn:active:not(:disabled) { transform: translateY(0); }
+
+.jp-replay-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Spinning button pulse — plays when data-state is roll1_playing or roll2_playing */
+.jp-replay-btn[data-state="roll1_playing"],
+.jp-replay-btn[data-state="roll2_playing"] {
+  animation: jp-btn-spin 0.7s ease-in-out infinite;
+}
+
+@keyframes jp-btn-spin {
+  0%, 100% { opacity: 0.55; }
+  50%       { opacity: 1; }
+}
+
+/* Roll headings */
+.jp-roll-heading {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-primary, #f5a623);
+  margin: 0.5rem 0 0.4rem;
+}
+
+.jp-roll2-heading {
+  color: var(--text-secondary, #a0a0c0);
+  border-top: 1px solid var(--border-color, #3a3a5c);
+  padding-top: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.jp-roll-subheading {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim, #888);
+  margin: 0.4rem 0 0.25rem;
+}
+
+/* Roll 1 empty placeholder */
+.jp-roll1-empty {
+  font-size: 0.75rem;
+  color: var(--text-dim, #888);
+  font-style: italic;
+  padding: 8px 0;
+  grid-column: 1 / -1;
+}
+
+/* Staggered row reveal animation — fade in + unblur from the left */
+@keyframes jp-row-reveal {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+    transform: translateX(0);
+  }
+}
+
+.jp-row-reveal {
+  animation: jp-row-reveal 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jp-row-reveal {
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+  }
+  .jp-replay-btn[data-state="roll1_playing"],
+  .jp-replay-btn[data-state="roll2_playing"] {
+    animation: none !important;
+  }
+  .jp-spin-flame.jp-spinning {
+    animation: none !important;
+  }
+}
+
 

@@ -568,6 +568,191 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
   }
 
   // ------------------------------------------------------------------
+  // runRoll1 — public high-level method (Option A per plan 39-04 spec)
+  //
+  // Performs: spin animation (700ms) → fetch player data → render Roll 1 rows
+  // with staggered fade-in reveal. Returns a Promise that resolves with the
+  // player data object when all reveal animations complete.
+  //
+  // opts.level     — jackpot emission level (number)
+  // opts.day       — jackpot day (optional)
+  // opts.addr      — player address (string; empty → zero-row result)
+  // opts.roll1Grid — CSS selector or HTMLElement for the Roll 1 grid container
+  // opts.spinEl    — CSS selector or HTMLElement for the spin indicator (optional)
+  // ------------------------------------------------------------------
+
+  function runRoll1(opts) {
+    return new Promise(function (resolve) {
+      var spinEl = opts.spinEl
+        ? (typeof opts.spinEl === 'string' ? $(opts.spinEl) : opts.spinEl)
+        : null;
+      var gridEl = opts.roll1Grid
+        ? (typeof opts.roll1Grid === 'string' ? $(opts.roll1Grid) : opts.roll1Grid)
+        : null;
+
+      // Start spin animation
+      if (spinEl) spinEl.classList.add('jp-spinning');
+
+      var spinDuration = 700;
+
+      function _renderRoll1Rows(data) {
+        if (!gridEl) { resolve(data); return; }
+
+        // Clear previous rows (keep .jo-header children)
+        var children = Array.prototype.slice.call(gridEl.children);
+        for (var ci = 0; ci < children.length; ci++) {
+          if (!children[ci].classList.contains('jo-header')) gridEl.removeChild(children[ci]);
+        }
+
+        var rows = (data && Array.isArray(data.roll1Rows)) ? data.roll1Rows : [];
+        var visible = rows.filter(function (r) { return !_isZeroPrizeRow(r); });
+
+        if (visible.length === 0) {
+          // Render a "no wins" placeholder row
+          var emptyEl = document.createElement('div');
+          emptyEl.className = 'jp-roll1-empty';
+          emptyEl.textContent = 'No current-level ticket wins this day.';
+          gridEl.appendChild(emptyEl);
+          resolve(data);
+          return;
+        }
+
+        // NOTE: jo-row uses display:contents so CSS animations cannot be applied
+        // to the row wrapper itself. Instead we animate each cell (direct grid
+        // children) with the jp-row-reveal class and a per-row stagger delay.
+        var lastCell = null;
+        for (var i = 0; i < visible.length; i++) {
+          (function (row, idx) {
+            var delay = idx * 80;
+            // Build via shared helper which appends a jo-row with 7 cells
+            _appendOverviewRow(gridEl, row);
+            // The new jo-row is the last child; stamp reveal class on its cells
+            var joRow = gridEl.lastChild;
+            if (joRow && joRow.classList.contains('jo-row')) {
+              var cells = Array.prototype.slice.call(joRow.children);
+              for (var ci = 0; ci < cells.length; ci++) {
+                cells[ci].classList.add('jp-row-reveal');
+                cells[ci].style.animationDelay = delay + 'ms';
+              }
+              lastCell = cells[cells.length - 1] || null;
+            }
+          })(visible[i], i);
+        }
+
+        // Resolve once the last row's last cell animation completes (or safety timeout)
+        if (lastCell) {
+          var resolved = false;
+          function _doResolve() {
+            if (!resolved) { resolved = true; resolve(data); }
+          }
+          lastCell.addEventListener('animationend', _doResolve, { once: true });
+          _setTimeout(_doResolve, visible.length * 80 + 600);
+        } else {
+          resolve(data);
+        }
+      }
+
+      // Fetch player data, then after spin completes render rows
+      var fetchDone = false;
+      var spinDone = false;
+      var fetchedData = null;
+
+      function _tryRender() {
+        if (fetchDone && spinDone) {
+          if (spinEl) spinEl.classList.remove('jp-spinning');
+          _renderRoll1Rows(fetchedData);
+        }
+      }
+
+      // Fetch
+      if (!opts.addr) {
+        fetchDone = true;
+        fetchedData = { level: opts.level, player: '', roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false };
+        _tryRender();
+      } else {
+        var url = apiBase + '/game/jackpot/' + opts.level + '/player/' + opts.addr +
+                  (opts.day != null ? '?day=' + opts.day : '');
+        _fetch(url).then(function (r) {
+          if (!r.ok) return { level: opts.level, player: opts.addr, roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false };
+          return r.json();
+        }).then(function (data) {
+          fetchedData = data || { level: opts.level, player: opts.addr, roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false };
+          fetchDone = true;
+          _tryRender();
+        }).catch(function () {
+          fetchedData = { level: opts.level, player: opts.addr, roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false };
+          fetchDone = true;
+          _tryRender();
+        });
+      }
+
+      // Spin timer
+      _setTimeout(function () {
+        spinDone = true;
+        _tryRender();
+      }, spinDuration);
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // runRoll2 — public high-level method (Option A per plan 39-04 spec)
+  //
+  // Performs: spin animation (900ms) → render Roll 2 rows with staggered
+  // fade-in reveal. Returns a Promise that resolves when animations complete.
+  //
+  // opts.data      — player data object returned from runRoll1 (has .roll2)
+  // opts.roll2Grid — CSS selector or HTMLElement for the Roll 2 grid wrapper
+  // opts.spinEl    — CSS selector or HTMLElement for the spin indicator (optional)
+  // ------------------------------------------------------------------
+
+  function runRoll2(opts) {
+    return new Promise(function (resolve) {
+      var spinEl = opts.spinEl
+        ? (typeof opts.spinEl === 'string' ? $(opts.spinEl) : opts.spinEl)
+        : null;
+
+      if (spinEl) spinEl.classList.add('jp-spinning');
+
+      _setTimeout(function () {
+        if (spinEl) spinEl.classList.remove('jp-spinning');
+
+        var roll2Data = (opts.data && opts.data.roll2) || { future: [], farFuture: [] };
+
+        // Use the existing renderRoll2 helper for DOM construction, then apply reveal animation
+        // to all newly added .jo-row elements inside the roll2 container.
+        var containerSel = sel.roll2Panel;
+        var containerEl = typeof opts.roll2Grid === 'string'
+          ? $(opts.roll2Grid)
+          : (opts.roll2Grid || $(containerSel));
+
+        renderRoll2(roll2Data);
+
+        // Animate newly added rows
+        var allRows = containerEl ? containerEl.querySelectorAll('.jo-row') : [];
+        if (!allRows || allRows.length === 0) { resolve(); return; }
+
+        var revealCount = 0;
+        var rowArr = Array.prototype.slice.call(allRows);
+        for (var i = 0; i < rowArr.length; i++) {
+          (function (rowEl, idx) {
+            rowEl.classList.add('jp-row-reveal');
+            rowEl.style.animationDelay = (idx * 80) + 'ms';
+            rowEl.addEventListener('animationend', function () {
+              rowEl.style.opacity = '1';
+              rowEl.style.filter = 'none';
+              revealCount++;
+              if (revealCount >= rowArr.length) resolve();
+            }, { once: true });
+          })(rowArr[i], i);
+        }
+
+        // Safety resolve
+        _setTimeout(function () { resolve(); }, rowArr.length * 80 + 900);
+      }, 900);
+    });
+  }
+
+  // ------------------------------------------------------------------
   // Assemble controller
   // ------------------------------------------------------------------
 
@@ -575,6 +760,8 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
     preFlightAndRunPlayer: preFlightAndRunPlayer,
     renderOverview:        renderOverview,
     renderRoll2:           renderRoll2,
+    runRoll1:              runRoll1,
+    runRoll2:              runRoll2,
     cancelPendingFlashes:  cancelPendingFlashes,
     attachButtonStateMachine: attachButtonStateMachine,
     dispose:               dispose

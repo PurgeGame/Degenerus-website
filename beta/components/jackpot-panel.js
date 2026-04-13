@@ -10,7 +10,7 @@ import { deriveWinningTraits, traitToBadge, estimateAllocation } from '../app/ja
 import { formatEth } from '../app/utils.js';
 import { playSound } from '../app/audio.js';
 import { createScrubber } from '../viewer/scrubber.js';
-import { joFormatWeiToEth } from '../app/jackpot-rolls.js';
+import { joFormatWeiToEth, createJackpotRolls } from '../app/jackpot-rolls.js';
 import { API_BASE } from '../app/constants.js';
 
 class JackpotPanel extends HTMLElement {
@@ -29,6 +29,13 @@ class JackpotPanel extends HTMLElement {
 
   // Track whether the overview has been rendered at least once (for lazy first-open render)
   #overviewRendered = false;
+
+  // Plan 04 (rebuild): Replay/Bonus Roll state machine
+  // States: idle | roll1_playing | roll1_done | roll2_playing | roll2_done
+  #replayState = 'idle';
+  #replayData = null;   // last runRoll1 result (holds .hasBonus + .roll2)
+  #rolls = null;        // createJackpotRolls instance
+  #replayCancelToken = 0; // bumped on day/winner change to cancel stale animations
 
   #showContent() {
     if (this.#loaded) return;
@@ -91,6 +98,54 @@ class JackpotPanel extends HTMLElement {
               <div id="jp-jo-far-future" class="jo-far-future-note" style="display:none;">Far-future coin resolved — see center flame above.</div>
             </div>
           </details>
+
+          <!-- Replay / Bonus Roll section (Plan 04 rebuild) -->
+          <div class="jp-replay-section" data-bind="jp-replay-section">
+            <div class="jp-replay-controls">
+              <div class="jp-spin-flame" data-bind="jp-spin-flame" aria-hidden="true"></div>
+              <button class="jp-replay-btn" id="jp-replay-btn" data-state="idle" disabled>Replay</button>
+            </div>
+
+            <!-- Roll 1 result grid -->
+            <div class="jp-roll1-result" data-bind="jp-roll1-result" style="display:none;">
+              <div class="jp-roll-heading">Roll 1 — current-level ticket wins</div>
+              <div class="jo-grid jp-roll1-grid" data-bind="jp-roll1-grid">
+                <div class="jo-header">Type</div>
+                <div class="jo-header">Win</div>
+                <div class="jo-header">Uniq</div>
+                <div class="jo-header">Coin</div>
+                <div class="jo-header">Tkts</div>
+                <div class="jo-header">ETH</div>
+                <div class="jo-header">Spread</div>
+              </div>
+            </div>
+
+            <!-- Roll 2 result grid -->
+            <div class="jp-roll2-result" data-bind="jp-roll2-result" style="display:none;">
+              <div class="jp-roll-heading jp-roll2-heading">Bonus Roll — future-level wins</div>
+              <div class="jo-grid jp-roll2-future-grid" data-bind="jp-roll2-future-grid">
+                <div class="jo-header">Type</div>
+                <div class="jo-header">Win</div>
+                <div class="jo-header">Uniq</div>
+                <div class="jo-header">Coin</div>
+                <div class="jo-header">Tkts</div>
+                <div class="jo-header">ETH</div>
+                <div class="jo-header">Spread</div>
+              </div>
+              <div class="jp-roll2-farfuture" data-bind="jp-roll2-farfuture" style="display:none;">
+                <div class="jp-roll-subheading">Far-Future (BURNIE)</div>
+                <div class="jo-grid jp-roll2-far-grid" data-bind="jp-roll2-far-grid">
+                  <div class="jo-header">Type</div>
+                  <div class="jo-header">Win</div>
+                  <div class="jo-header">Uniq</div>
+                  <div class="jo-header">Coin</div>
+                  <div class="jo-header">Tkts</div>
+                  <div class="jo-header">ETH</div>
+                  <div class="jo-header">Spread</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Live reveal section (existing 4-card flow, user addendum A6 + O-04) -->
@@ -147,6 +202,33 @@ class JackpotPanel extends HTMLElement {
     const selectEl = this.querySelector('[data-bind="jp-winners-select"]');
     if (selectEl) {
       selectEl.addEventListener('change', (e) => this.#onWinnerChange(e.target.value));
+    }
+
+    // Plan 04 (rebuild): initialise rolls factory and wire Replay button
+    this.#rolls = createJackpotRolls({
+      root: this,
+      apiBase: '/beta/api',
+      selectors: {
+        roll2Panel:      '[data-bind="jp-roll2-result"]',
+        roll2FutureGrid: '[data-bind="jp-roll2-future-grid"]',
+        roll2FarGrid:    '[data-bind="jp-roll2-far-grid"]',
+        roll2FutureEmpty:'[data-bind="jp-roll2-future-empty"]',
+        roll2FarEmpty:   '[data-bind="jp-roll2-far-empty"]',
+        roll2FutureBlock:'[data-bind="jp-roll2-future-grid"]',
+        roll2FarBlock:   '[data-bind="jp-roll2-farfuture"]',
+        joGrid:          '#jp-jo-grid',
+        joStatus:        '#jp-jo-status',
+        joFarFuture:     '#jp-jo-far-future',
+        demoCenterFlame: '[data-bind="jp-spin-flame"]',
+        demoWrap:        '[data-bind="jp-replay-section"]',
+        jackpotOverview: '[data-bind="jp-overview"]',
+      }
+    });
+    this.#unsubs.push(() => this.#rolls.dispose());
+
+    const replayBtn = this.querySelector('#jp-replay-btn');
+    if (replayBtn) {
+      replayBtn.addEventListener('click', () => this.#onReplayClick());
     }
 
     // Subscribe to game state
@@ -350,6 +432,12 @@ class JackpotPanel extends HTMLElement {
 
   // Called when the scrubber day changes — fetches winners and populates the dropdown.
   async #onDayChange(day) {
+    // Changing day resets the replay flow (Pitfall 6 guard)
+    this.#replayCancelToken++;
+    this.#replayData = null;
+    this.#rolls?.cancelPendingFlashes();
+    this.#setReplayState('idle');
+
     this.#winnersRequestVersion++;
     const v = this.#winnersRequestVersion;
 
@@ -436,6 +524,9 @@ class JackpotPanel extends HTMLElement {
 
     // D-10: auto-select row 0 (highest payout — server returns payout-desc)
     selectEl.selectedIndex = 0;
+    // Enable Replay button now that we have a day + winner
+    const replayBtn = this.querySelector('#jp-replay-btn');
+    if (replayBtn && this.#replayState === 'idle') replayBtn.disabled = false;
     this.#onWinnerChange(this.#winners[0].address);
   }
 
@@ -447,11 +538,249 @@ class JackpotPanel extends HTMLElement {
   }
 
   // Called when the user picks a different winner from the dropdown (or auto-select on day change).
-  // Pure display: just updates the summary to reflect the selected winner's label.
   #onWinnerChange(address) {
     if (!address) return;
-    // The winner summary is already rendered for the full day above the dropdown.
-    // No additional work needed without the roll flow.
+    // Changing winner resets the replay flow (Pitfall 6 guard)
+    this.#replayCancelToken++;
+    this.#replayData = null;
+    this.#rolls?.cancelPendingFlashes();
+    this.#setReplayState('idle');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Plan 04: Replay / Bonus Roll state machine
+  // ---------------------------------------------------------------------------
+
+  #setReplayState(state) {
+    this.#replayState = state;
+    const btn = this.querySelector('#jp-replay-btn');
+    const roll1El = this.querySelector('[data-bind="jp-roll1-result"]');
+    const roll2El = this.querySelector('[data-bind="jp-roll2-result"]');
+    const spinEl  = this.querySelector('[data-bind="jp-spin-flame"]');
+
+    if (!btn) return;
+    btn.dataset.state = state;
+
+    switch (state) {
+      case 'idle':
+        btn.textContent = 'Replay';
+        // Enabled only when a day + winner is selected
+        btn.disabled = !(this.#currentLevel && this.#currentDay && this._selectedAddress());
+        // Clear grids on reset to idle
+        if (roll1El) { roll1El.style.display = 'none'; this.#clearGrid('[data-bind="jp-roll1-grid"]'); }
+        if (roll2El) { roll2El.style.display = 'none'; this.#clearGrid('[data-bind="jp-roll2-future-grid"]'); this.#clearGrid('[data-bind="jp-roll2-far-grid"]'); }
+        if (spinEl) spinEl.classList.remove('jp-spinning');
+        break;
+      case 'roll1_playing':
+        btn.textContent = 'Rolling…';
+        btn.disabled = true;
+        if (roll1El) { roll1El.style.display = ''; }
+        if (roll2El) { roll2El.style.display = 'none'; }
+        break;
+      case 'roll1_done':
+        // Button label depends on hasBonus
+        if (this.#replayData?.hasBonus) {
+          btn.textContent = 'Bonus Roll';
+          btn.disabled = false;
+        } else {
+          // Flash "No bonus" for 500ms then reset to "Replay"
+          btn.textContent = 'No bonus';
+          btn.disabled = true;
+          setTimeout(() => {
+            if (this.#replayState === 'roll1_done') {
+              this.#setReplayState('idle');
+            }
+          }, 500);
+        }
+        if (spinEl) spinEl.classList.remove('jp-spinning');
+        break;
+      case 'roll2_playing':
+        btn.textContent = 'Rolling…';
+        btn.disabled = true;
+        if (roll2El) { roll2El.style.display = ''; }
+        break;
+      case 'roll2_done':
+        btn.textContent = 'Replay';
+        btn.disabled = false;
+        if (spinEl) spinEl.classList.remove('jp-spinning');
+        break;
+    }
+  }
+
+  // Helper: get the currently selected winner address from dropdown
+  _selectedAddress() {
+    const sel = this.querySelector('[data-bind="jp-winners-select"]');
+    return sel && sel.value && !sel.options[sel.selectedIndex]?.disabled ? sel.value : '';
+  }
+
+  // Helper: clear non-header rows from a grid
+  #clearGrid(selector) {
+    const grid = this.querySelector(selector);
+    if (!grid) return;
+    Array.from(grid.children).forEach(child => {
+      if (!child.classList.contains('jo-header')) grid.removeChild(child);
+    });
+  }
+
+  // Helper: append a staggered-reveal row into a grid
+  #appendRevealRow(grid, row, idx) {
+    // Use _appendOverviewRow from the factory via a temporary container
+    // Since we can't call the factory's private method directly, we build the row manually
+    // mirroring _appendOverviewRow from jackpot-rolls.js
+    const { joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth: fmtWei } = this._rollsHelpers || {};
+    if (!fmtWei) return; // helpers not ready yet
+
+    const isBonus = row.type === 'bonus';
+    const typeCell = document.createElement('div');
+    typeCell.className = 'jo-type-badge' + (isBonus ? ' jo-bonus' : '');
+    if (isBonus) {
+      typeCell.textContent = 'Bonus';
+    } else {
+      const t = row.traitId | 0;
+      const q = Math.floor(t / 64);
+      const sym = Math.floor((t % 64) / 8);
+      const col = t % 8;
+      const img = document.createElement('img');
+      img.src = joBadgePath(q, sym, col);
+      img.alt = JO_SYMBOLS[JO_CATEGORIES[q]]?.[sym] ?? '';
+      typeCell.appendChild(img);
+    }
+
+    const winCell = document.createElement('div'); winCell.className = 'jo-winners'; winCell.textContent = String(row.winnerCount ?? '');
+    const uniqCell = document.createElement('div'); uniqCell.className = 'jo-unique'; uniqCell.textContent = String(row.uniqueWinnerCount ?? '');
+    const coinCell = document.createElement('div'); coinCell.className = 'jo-coin'; coinCell.textContent = (!row.coinPerWinner || row.coinPerWinner === '0') ? '\u2014' : fmtWei(row.coinPerWinner);
+    const tktCell  = document.createElement('div'); tktCell.className = 'jo-tickets'; tktCell.textContent = row.ticketsPerWinner ? String(row.ticketsPerWinner) : '\u2014';
+    const ethCell  = document.createElement('div'); ethCell.className = 'jo-eth'; ethCell.textContent = (!row.ethPerWinner || row.ethPerWinner === '0') ? '\u2014' : fmtWei(row.ethPerWinner);
+    const spreadCell = document.createElement('div'); spreadCell.className = 'jo-spread';
+    const buckets = Array.isArray(row.spreadBuckets) ? row.spreadBuckets : [false, false, false];
+    for (let b = 0; b < 3; b++) {
+      const bar = document.createElement('div');
+      bar.className = 'jo-spread-bar' + (buckets[b] ? ' active' : '');
+      spreadCell.appendChild(bar);
+    }
+
+    const delay = idx * 80;
+    const rowEl = document.createElement('div');
+    rowEl.className = 'jo-row';
+    rowEl.append(typeCell, winCell, uniqCell, coinCell, tktCell, ethCell, spreadCell);
+    // jo-row uses display:contents — animate each cell directly (display:contents
+    // elements cannot be animated in CSS)
+    Array.from(rowEl.children).forEach(cell => {
+      cell.classList.add('jp-row-reveal');
+      cell.style.animationDelay = delay + 'ms';
+    });
+    grid.appendChild(rowEl);
+    return rowEl;
+  }
+
+  async #onReplayClick() {
+    const btn = this.querySelector('#jp-replay-btn');
+    if (!btn || btn.disabled) return;
+
+    const state = this.#replayState;
+
+    if (state === 'idle' || state === 'roll2_done') {
+      // Start Roll 1
+      const addr = this._selectedAddress();
+      const level = this.#currentLevel;
+      const day   = this.#currentDay;
+      if (!addr || !level) return;
+
+      const cancelToken = ++this.#replayCancelToken;
+      this.#replayData = null;
+      this.#setReplayState('roll1_playing');
+
+      // Ensure helpers are cached for row rendering
+      if (!this._rollsHelpers) {
+        try {
+          const mod = await import('../app/jackpot-rolls.js');
+          this._rollsHelpers = { joBadgePath: mod.joBadgePath, JO_CATEGORIES: mod.JO_CATEGORIES, JO_SYMBOLS: mod.JO_SYMBOLS, joFormatWeiToEth: mod.joFormatWeiToEth };
+        } catch { /* ignore */ }
+      }
+
+      const spinEl = this.querySelector('[data-bind="jp-spin-flame"]');
+      if (spinEl) spinEl.classList.add('jp-spinning');
+
+      const data = await this.#rolls.runRoll1({
+        level, day, addr,
+        roll1Grid: this.querySelector('[data-bind="jp-roll1-grid"]'),
+        spinEl,
+      });
+
+      if (this.#replayCancelToken !== cancelToken) return; // superseded
+
+      this.#replayData = data;
+      this.#setReplayState('roll1_done');
+      return;
+    }
+
+    if (state === 'roll1_done' && this.#replayData?.hasBonus) {
+      // Start Roll 2
+      const cancelToken = this.#replayCancelToken;
+      this.#setReplayState('roll2_playing');
+
+      const spinEl = this.querySelector('[data-bind="jp-spin-flame"]');
+      if (spinEl) spinEl.classList.add('jp-spinning');
+
+      // Render Roll 2 rows into our grids with stagger animation
+      await this.#runRoll2Anim(cancelToken);
+
+      if (this.#replayCancelToken !== cancelToken) return;
+      this.#setReplayState('roll2_done');
+    }
+  }
+
+  async #runRoll2Anim(cancelToken) {
+    const roll2 = this.#replayData?.roll2 || { future: [], farFuture: [] };
+    const spinEl = this.querySelector('[data-bind="jp-spin-flame"]');
+
+    // 900ms spin
+    await new Promise(resolve => setTimeout(resolve, 900));
+    if (this.#replayCancelToken !== cancelToken) return;
+    if (spinEl) spinEl.classList.remove('jp-spinning');
+
+    const future    = (roll2.future    || []).filter(r => r && (r.ethPerWinner !== '0' || r.coinPerWinner !== '0' || r.ticketsPerWinner));
+    const farFuture = (roll2.farFuture || []).filter(r => r && (r.ethPerWinner !== '0' || r.coinPerWinner !== '0' || r.ticketsPerWinner));
+
+    const futureGrid = this.querySelector('[data-bind="jp-roll2-future-grid"]');
+    const farSection = this.querySelector('[data-bind="jp-roll2-farfuture"]');
+    const farGrid    = this.querySelector('[data-bind="jp-roll2-far-grid"]');
+
+    // Clear existing rows
+    this.#clearGrid('[data-bind="jp-roll2-future-grid"]');
+    this.#clearGrid('[data-bind="jp-roll2-far-grid"]');
+
+    let totalRows = 0;
+
+    if (futureGrid) {
+      for (let i = 0; i < future.length; i++) {
+        this.#appendRevealRow(futureGrid, future[i], totalRows++);
+      }
+    }
+
+    if (farFuture.length > 0 && farSection && farGrid) {
+      farSection.style.display = '';
+      for (let i = 0; i < farFuture.length; i++) {
+        this.#appendRevealRow(farGrid, farFuture[i], totalRows++);
+      }
+    } else if (farSection) {
+      farSection.style.display = 'none';
+    }
+
+    if (totalRows === 0) return; // nothing to animate
+
+    // Wait for all animationend events — class is on cells (display:contents rows can't animate)
+    await new Promise(resolve => {
+      const allCells = [
+        ...(futureGrid ? Array.from(futureGrid.querySelectorAll('.jp-row-reveal')) : []),
+        ...(farGrid    ? Array.from(farGrid.querySelectorAll('.jp-row-reveal'))    : []),
+      ];
+      if (!allCells.length) { resolve(); return; }
+      let done = 0;
+      const onEnd = () => { done++; if (done >= allCells.length) resolve(); };
+      allCells.forEach(c => c.addEventListener('animationend', onEnd, { once: true }));
+      setTimeout(resolve, totalRows * 80 + 900);
+    });
   }
 
   // -- Private methods --
