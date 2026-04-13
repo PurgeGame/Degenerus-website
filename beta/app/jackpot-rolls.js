@@ -376,7 +376,7 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
       if (token !== joRenderToken) return; // stale response — superseded
       if (!data || !Array.isArray(data.rows) || data.rows.length === 0) {
         status.className = 'jo-empty';
-        status.textContent = 'No jackpot draws for this day.';
+        status.textContent = 'No jackpot data indexed for this day.';
         if (ffNote) ffNote.style.display = (data && data.farFutureResolved) ? 'block' : 'none';
         return;
       }
@@ -389,7 +389,7 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
       }
       if (visibleRows === 0) {
         status.className = 'jo-empty';
-        status.textContent = 'No jackpot draws for this day.';
+        status.textContent = 'No jackpot data indexed for this day.';
         status.style.display = 'block';
       }
       if (ffNote) ffNote.style.display = data.farFutureResolved ? 'block' : 'none';

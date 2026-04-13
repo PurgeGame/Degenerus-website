@@ -546,12 +546,12 @@ class JackpotPanel extends HTMLElement {
       const opt = document.createElement('option');
       opt.disabled = true;
       opt.selected = true;
-      opt.textContent = 'No jackpot this day';
+      opt.textContent = 'No data for this day';
       selectEl.appendChild(opt);
-      // Clear winner summary — this day had no jackpot draw
+      // Clear winner summary — no distributions indexed for this daily_rng window
       const summaryEl = this.querySelector('[data-bind="jp-winner-summary"]');
       if (summaryEl) {
-        summaryEl.innerHTML = '<div class="jp-summary-note">No jackpot draw on this day — scrub to a nearby day to find one.</div>';
+        summaryEl.innerHTML = '<div class="jp-summary-note">No jackpot data indexed for this day — scrub to a nearby day.</div>';
         summaryEl.style.display = '';
       }
       return;
@@ -733,20 +733,28 @@ class JackpotPanel extends HTMLElement {
     this.#bind('day', day > 0 ? `Day ${day}/5` : 'Day --');
 
     // Plan 03: update scrubber range once we know the game level.
-    // Fetch the true latest jackpot day from the API instead of using the broken
-    // "level * 5" heuristic — jackpot draws happen at arbitrary blocks, not every 5 days.
+    // Fetch both earliest and latest jackpot days from the API so the scrubber
+    // does not start at day 1 (which is before the first daily_rng entry and
+    // therefore always empty).  Falls back to formula if endpoints fail.
     if (this.#scrubber && game.level && this.#currentDay === null) {
-      // Fire-and-forget; falls back to the heuristic if the endpoint fails.
-      fetchJSON('/game/jackpot/latest-day').then(({ latestDay }) => {
-        const maxDay = (latestDay && latestDay > 0) ? latestDay : this.#computeLatestCompletedDay(game);
-        if (this.#scrubber) this.#scrubber.setRange(1, maxDay);
+      Promise.all([
+        fetchJSON('/game/jackpot/latest-day').catch(() => ({ latestDay: null })),
+        fetchJSON('/game/jackpot/earliest-day').catch(() => ({ earliestDay: null })),
+      ]).then(([latestRes, earliestRes]) => {
+        const maxDay = (latestRes.latestDay && latestRes.latestDay > 0)
+          ? latestRes.latestDay
+          : this.#computeLatestCompletedDay(game);
+        const minDay = (earliestRes.earliestDay && earliestRes.earliestDay > 0)
+          ? earliestRes.earliestDay
+          : 1;
+        if (this.#scrubber) this.#scrubber.setRange(minDay, maxDay);
         // Navigate to the latest day that actually has jackpot data
         if (this.#currentDay === null) {
           if (this.#scrubber) this.#scrubber.setDay(maxDay);
           this.#onDayChange(maxDay);
         }
       }).catch(() => {
-        // API unavailable — fall back to formula
+        // Both APIs unavailable — fall back to formula
         const latestCompleted = this.#computeLatestCompletedDay(game);
         if (this.#scrubber) this.#scrubber.setRange(1, latestCompleted);
         if (this.#currentDay === null) {
