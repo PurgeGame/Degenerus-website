@@ -56,29 +56,6 @@ class JackpotPanel extends HTMLElement {
           <!-- Winner summary: rendered by #renderWinnerSummary on day change -->
           <div class="jp-winner-summary" data-bind="jp-winner-summary" style="display:none;"></div>
 
-          <div class="jp-winners">
-            <div class="jp-winners-label">Winners</div>
-            <ul class="jp-winners-list" data-bind="jp-winners-select" role="listbox" aria-label="Winners"></ul>
-          </div>
-
-          <!-- Day Overview — collapsed by default (D-12) -->
-          <details class="jp-overview" data-bind="jp-overview">
-            <summary>Day Overview</summary>
-            <div class="jp-overview-body" data-bind="jp-overview-body">
-              <div class="jo-grid" id="jp-jo-grid">
-                <div class="jo-header">Type</div>
-                <div class="jo-header">Win</div>
-                <div class="jo-header">Uniq</div>
-                <div class="jo-header">Coin</div>
-                <div class="jo-header">Tkts</div>
-                <div class="jo-header">ETH</div>
-                <div class="jo-header">Spread</div>
-              </div>
-              <div id="jp-jo-status" class="jo-loading" style="display:none;"></div>
-              <div id="jp-jo-far-future" class="jo-far-future-note" style="display:none;">Far-future coin resolved — see center flame above.</div>
-            </div>
-          </details>
-
           <!-- Replay / Bonus Roll section (Plan 04 rebuild) -->
           <div class="jp-replay-section" data-bind="jp-replay-section">
             <div class="jp-replay-controls">
@@ -109,6 +86,29 @@ class JackpotPanel extends HTMLElement {
                 <div class="jp-slot-header">Amount / win</div>
               </div>
             </div>
+          </div>
+
+          <!-- Day Overview — collapsed by default (D-12) -->
+          <details class="jp-overview" data-bind="jp-overview">
+            <summary>Day Overview</summary>
+            <div class="jp-overview-body" data-bind="jp-overview-body">
+              <div class="jo-grid" id="jp-jo-grid">
+                <div class="jo-header">Type</div>
+                <div class="jo-header">Win</div>
+                <div class="jo-header">Uniq</div>
+                <div class="jo-header">Coin</div>
+                <div class="jo-header">Tkts</div>
+                <div class="jo-header">ETH</div>
+                <div class="jo-header">Spread</div>
+              </div>
+              <div id="jp-jo-status" class="jo-loading" style="display:none;"></div>
+              <div id="jp-jo-far-future" class="jo-far-future-note" style="display:none;">Far-future coin resolved — see center flame above.</div>
+            </div>
+          </details>
+
+          <div class="jp-winners">
+            <div class="jp-winners-label">Winners</div>
+            <ul class="jp-winners-list" data-bind="jp-winners-select" role="listbox" aria-label="Winners"></ul>
           </div>
         </div>
       </div>
