@@ -2,7 +2,7 @@
 // Animated sequential trait reveal, pool/day/allocation display, badge visualization, confetti celebration.
 // All data transformation delegated to jackpot-data.js.
 // Plan 03: day scrubber (shared with viewer.html) + winners dropdown above existing 4-card reveal.
-// Plan 04: createJackpotRolls factory mounted in jp-rolls-slot; winner/day events wired.
+// Plan 04 Roll 1/2 flow removed — kept: scrubber, winners dropdown, summary, Day Overview, live reveal.
 
 import { subscribe, get } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
@@ -10,7 +10,7 @@ import { deriveWinningTraits, traitToBadge, estimateAllocation } from '../app/ja
 import { formatEth } from '../app/utils.js';
 import { playSound } from '../app/audio.js';
 import { createScrubber } from '../viewer/scrubber.js';
-import { createJackpotRolls, joFormatWeiToEth } from '../app/jackpot-rolls.js';
+import { joFormatWeiToEth } from '../app/jackpot-rolls.js';
 import { API_BASE } from '../app/constants.js';
 
 class JackpotPanel extends HTMLElement {
@@ -27,18 +27,8 @@ class JackpotPanel extends HTMLElement {
   #currentLevel = null;
   #winners = [];
 
-  // Plan 04: factory instance
-  #rolls = null;
   // Track whether the overview has been rendered at least once (for lazy first-open render)
   #overviewRendered = false;
-  // Panel-local roll state machine — mirrors factory's rollPhase but owned here
-  // so that direct preFlightAndRunPlayer calls (from #onWinnerChange) reset it cleanly.
-  // 'idle' | 'roll1' | 'roll2' | 'done'
-  #rollPhase = 'idle';
-  // Cached pre-flight response for current selection (used by Roll Bonus click)
-  #playerData = null;
-  // Timer handle for the "No bonus" flash — cancelled on winner/day change (Pitfall 6)
-  #noBonusTimer = null;
 
   #showContent() {
     if (this.#loaded) return;
@@ -72,7 +62,7 @@ class JackpotPanel extends HTMLElement {
           <span class="jackpot-day" data-bind="day">Day --</span>
         </div>
 
-        <!-- Historical jackpot explorer (Plan 03 + 04) -->
+        <!-- Historical jackpot explorer (Plan 03) -->
         <h3 class="jp-section-title">Historical jackpot explorer</h3>
         <div class="jp-day-port" data-bind="jp-day-port">
           <div class="jp-day-scrubber" data-bind="jp-day-scrubber"></div>
@@ -84,57 +74,10 @@ class JackpotPanel extends HTMLElement {
             <select class="jp-winners-select" data-bind="jp-winners-select"></select>
           </div>
 
-          <!-- Plan 04: Roll 1 result grid + state-machine button -->
-          <div class="jp-rolls-slot" data-bind="jp-rolls-slot">
-            <div id="jp-roll1-section" class="jp-roll1-section" style="display:none;">
-              <div class="jackpot-overview-heading">Roll 1 — Current Level</div>
-              <div class="jo-grid" id="jp-roll1-grid">
-                <div class="jo-header">Type</div>
-                <div class="jo-header">Win</div>
-                <div class="jo-header">Uniq</div>
-                <div class="jo-header">Coin</div>
-                <div class="jo-header">Tkts</div>
-                <div class="jo-header">ETH</div>
-                <div class="jo-header">Spread</div>
-              </div>
-              <div id="jp-roll1-empty" class="jo-empty" style="display:none;">No current-level wins.</div>
-            </div>
-
-            <!-- Plan 04: Roll 2 panel (pre-created so factory finds it; hidden by default) -->
-            <section id="jp-roll2-panel" class="jackpot-overview" style="display:none;">
-              <div class="jackpot-overview-heading">Bonus Roll</div>
-              <div id="jp-roll2-future-block">
-                <div class="jo-subheading">Future</div>
-                <div class="jo-grid" id="jp-roll2-future-grid">
-                  <div class="jo-header">Type</div><div class="jo-header">Win</div>
-                  <div class="jo-header">Uniq</div><div class="jo-header">Coin</div>
-                  <div class="jo-header">Tkts</div><div class="jo-header">ETH</div>
-                  <div class="jo-header">Spread</div>
-                </div>
-                <div id="jp-roll2-future-empty" class="jo-empty" style="display:none;">No future-ticket wins.</div>
-              </div>
-              <div id="jp-roll2-far-block" style="margin-top:16px;">
-                <div class="jo-subheading">Far-Future</div>
-                <div class="jo-grid" id="jp-roll2-far-grid">
-                  <div class="jo-header">Type</div><div class="jo-header">Win</div>
-                  <div class="jo-header">Uniq</div><div class="jo-header">Coin</div>
-                  <div class="jo-header">Tkts</div><div class="jo-header">ETH</div>
-                  <div class="jo-header">Spread</div>
-                </div>
-                <div id="jp-roll2-far-empty" class="jo-empty" style="display:none;">No far-future wins.</div>
-              </div>
-            </section>
-
-            <div class="jp-roll-controls">
-              <button id="jp-roll-btn" class="jp-roll-btn" style="display:none;">Roll</button>
-            </div>
-          </div>
-
-          <!-- Plan 04: Day Overview — collapsed by default (D-12) -->
+          <!-- Day Overview — collapsed by default (D-12) -->
           <details class="jp-overview" data-bind="jp-overview">
             <summary>Day Overview</summary>
             <div class="jp-overview-body" data-bind="jp-overview-body">
-              <!-- Plan 04: overview grid injected by createJackpotRolls.renderOverview -->
               <div class="jo-grid" id="jp-jo-grid">
                 <div class="jo-header">Type</div>
                 <div class="jo-header">Win</div>
@@ -189,52 +132,13 @@ class JackpotPanel extends HTMLElement {
     });
     this.#unsubs.push(() => this.#scrubber.dispose());
 
-    // Plan 04: instantiate factory with panel-scoped selectors so all DOM lookups
-    // are scoped to this element — no collision with the wtf/jackpot-demo.html IDs.
-    this.#rolls = createJackpotRolls({
-      root: this,
-      apiBase: API_BASE,
-      selectors: {
-        // Overview selectors (used by renderOverview)
-        joGrid:          '#jp-jo-grid',
-        joStatus:        '#jp-jo-status',
-        joFarFuture:     '#jp-jo-far-future',
-        // Roll button (used by state machine + flash logic)
-        rollBtn:         '#jp-roll-btn',
-        // Roll 2 panel (pre-created above so _ensureRoll2Container is a no-op)
-        roll2Panel:      '#jp-roll2-panel',
-        roll2FutureGrid: '#jp-roll2-future-grid',
-        roll2FarGrid:    '#jp-roll2-far-grid',
-        roll2FutureEmpty:'#jp-roll2-future-empty',
-        roll2FarEmpty:   '#jp-roll2-far-empty',
-        roll2FutureBlock:'#jp-roll2-future-block',
-        roll2FarBlock:   '#jp-roll2-far-block',
-        // jackpotOverview / demoWrap / demoCenterFlame — not used in panel context;
-        // roll2-panel is pre-created so _ensureRoll2Container short-circuits.
-        jackpotOverview: '#jp-roll2-panel',
-        demoWrap:        '[data-bind="jp-rolls-slot"]',
-        demoCenterFlame: '.jp-roll-controls',  // unused visual effect; points to a safe no-op target
-      },
-    });
-    this.#unsubs.push(() => this.#rolls.dispose());
-
-    // Plan 04: wire the roll button with a panel-owned state machine.
-    // We call preFlightAndRunPlayer directly from #onWinnerChange (not via the
-    // factory's attachButtonStateMachine) so that dropdown re-selection always
-    // resets cleanly — the factory's attachButtonStateMachine has a one-shot
-    // 'started' flag that can't reset across winner changes.
-    const rollBtn = this.querySelector('#jp-roll-btn');
-    if (rollBtn) {
-      rollBtn.addEventListener('click', () => this.#onRollBtnClick());
-    }
-
     // Wire the jp-overview toggle for lazy first-render (D-12)
     const overviewDetails = this.querySelector('[data-bind="jp-overview"]');
     if (overviewDetails) {
       overviewDetails.addEventListener('toggle', () => {
         if (overviewDetails.open && !this.#overviewRendered && this.#currentLevel) {
           this.#overviewRendered = true;
-          this.#rolls.renderOverview(this.#currentLevel);
+          this.#renderOverview(this.#currentLevel);
         }
       });
     }
@@ -258,112 +162,103 @@ class JackpotPanel extends HTMLElement {
       this.#timeline.kill();
       this.#timeline = null;
     }
-    if (this.#noBonusTimer !== null) {
-      clearTimeout(this.#noBonusTimer);
-      this.#noBonusTimer = null;
-    }
   }
 
   // ---------------------------------------------------------------------------
-  // Plan 04: Roll 1 grid renderer
-  // Populates #jp-roll1-grid from data.roll1Rows (per-symbol aggregated rows for
-  // the selected player's current-level tickets).
+  // Day Overview renderer — fetches /game/jackpot/:level/overview and populates
+  // the jo-grid inside the <details> block.
   // ---------------------------------------------------------------------------
-
-  // Returns a Promise that resolves once all rows are appended (including async import).
-  #renderRoll1(data) {
-    const section = this.querySelector('#jp-roll1-section');
-    const grid = this.querySelector('#jp-roll1-grid');
-    const emptyEl = this.querySelector('#jp-roll1-empty');
-    if (!section || !grid) return Promise.resolve();
+  async #renderOverview(level) {
+    const grid = this.querySelector('#jp-jo-grid');
+    const statusEl = this.querySelector('#jp-jo-status');
+    const farFutureEl = this.querySelector('#jp-jo-far-future');
+    if (!grid) return;
 
     // Clear previous data rows (keep .jo-header children)
     Array.from(grid.children).forEach(child => {
       if (!child.classList.contains('jo-header')) grid.removeChild(child);
     });
+    if (statusEl) { statusEl.textContent = 'Loading\u2026'; statusEl.style.display = ''; }
+    if (farFutureEl) farFutureEl.style.display = 'none';
 
-    const rows = (data && Array.isArray(data.roll1Rows)) ? data.roll1Rows : [];
-    section.style.display = '';
-
-    if (rows.length === 0) {
-      if (emptyEl) emptyEl.style.display = 'block';
-      return Promise.resolve();
+    let overview;
+    try {
+      overview = await fetchJSON(`/game/jackpot/${level}/overview`);
+    } catch (err) {
+      if (statusEl) { statusEl.textContent = 'Overview unavailable.'; statusEl.style.display = ''; }
+      return;
     }
-    if (emptyEl) emptyEl.style.display = 'none';
 
-    // Import the row renderer from the factory's shared utility.
-    // Since _appendOverviewRow is internal to the factory, we use a local equivalent
-    // that mirrors the same logic using the factory's exported helpers.
-    // Returns a Promise so callers can chain animation after rows are in the DOM.
-    return import('../app/jackpot-rolls.js').then(({ joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth }) => {
-      // Re-check in case grid was cleared by a newer call while import was resolving
-      Array.from(grid.children).forEach(child => {
-        if (!child.classList.contains('jo-header')) grid.removeChild(child);
-      });
+    if (statusEl) statusEl.style.display = 'none';
 
-      const joFormatCoin = (s) => joFormatWeiToEth(s);
+    const rows = overview.rows || overview.distributions || [];
+    if (rows.length === 0) {
+      if (statusEl) { statusEl.textContent = 'No overview data for this level.'; statusEl.style.display = ''; }
+      return;
+    }
 
-      for (const row of rows) {
-        const isBonus = row.type === 'bonus';
+    // Dynamic import so the badge path helper stays in jackpot-rolls.js
+    let joBadgePath, JO_CATEGORIES, JO_SYMBOLS;
+    try {
+      ({ joBadgePath, JO_CATEGORIES, JO_SYMBOLS } = await import('../app/jackpot-rolls.js'));
+    } catch {
+      if (statusEl) { statusEl.textContent = 'Failed to load overview renderer.'; statusEl.style.display = ''; }
+      return;
+    }
 
-        const typeCell = document.createElement('div');
-        typeCell.className = 'jo-type-badge' + (isBonus ? ' jo-bonus' : '');
-        if (isBonus) {
-          typeCell.textContent = 'Bonus';
-        } else {
-          const t = row.traitId | 0;
-          const q = Math.floor(t / 64);
-          const sym = Math.floor((t % 64) / 8);
-          const col = t % 8;
-          const img = document.createElement('img');
-          img.src = joBadgePath(q, sym, col);
-          img.alt = JO_SYMBOLS[JO_CATEGORIES[q]][sym];
-          typeCell.appendChild(img);
-        }
+    for (const row of rows) {
+      const isBonus = row.type === 'bonus';
 
-        const winCell = document.createElement('div');
-        winCell.className = 'jo-winners';
-        winCell.textContent = String(row.winnerCount);
-
-        const uniqCell = document.createElement('div');
-        uniqCell.className = 'jo-unique';
-        uniqCell.textContent = String(row.uniqueWinnerCount);
-
-        const coinCell = document.createElement('div');
-        coinCell.className = 'jo-coin';
-        coinCell.textContent = (!row.coinPerWinner || row.coinPerWinner === '0') ? '\u2014' : joFormatCoin(row.coinPerWinner);
-
-        const tktCell = document.createElement('div');
-        tktCell.className = 'jo-tickets';
-        tktCell.textContent = row.ticketsPerWinner ? String(row.ticketsPerWinner) : '\u2014';
-
-        const ethCell = document.createElement('div');
-        ethCell.className = 'jo-eth';
-        ethCell.textContent = (!row.ethPerWinner || row.ethPerWinner === '0') ? '\u2014' : joFormatWeiToEth(row.ethPerWinner);
-
-        const spreadCell = document.createElement('div');
-        spreadCell.className = 'jo-spread';
-        const buckets = Array.isArray(row.spreadBuckets) ? row.spreadBuckets : [false, false, false];
-        for (let b = 0; b < 3; b++) {
-          const bar = document.createElement('div');
-          bar.className = 'jo-spread-bar' + (buckets[b] ? ' active' : '');
-          spreadCell.appendChild(bar);
-        }
-
-        const rowEl = document.createElement('div');
-        rowEl.className = 'jo-row';
-        rowEl.appendChild(typeCell);
-        rowEl.appendChild(winCell);
-        rowEl.appendChild(uniqCell);
-        rowEl.appendChild(coinCell);
-        rowEl.appendChild(tktCell);
-        rowEl.appendChild(ethCell);
-        rowEl.appendChild(spreadCell);
-        grid.appendChild(rowEl);
+      const typeCell = document.createElement('div');
+      typeCell.className = 'jo-type-badge' + (isBonus ? ' jo-bonus' : '');
+      if (isBonus) {
+        typeCell.textContent = 'Bonus';
+      } else {
+        const t = row.traitId | 0;
+        const q = Math.floor(t / 64);
+        const sym = Math.floor((t % 64) / 8);
+        const img = document.createElement('img');
+        img.src = joBadgePath(q, sym, t % 8);
+        img.alt = JO_SYMBOLS[JO_CATEGORIES[q]]?.[sym] ?? '';
+        typeCell.appendChild(img);
       }
-    }).catch(err => {
-      console.error('[jackpot-panel] failed to load row renderer:', err);
-    });
+
+      const winCell = document.createElement('div');
+      winCell.className = 'jo-winners';
+      winCell.textContent = String(row.winnerCount ?? row.winners ?? '');
+
+      const uniqCell = document.createElement('div');
+      uniqCell.className = 'jo-unique';
+      uniqCell.textContent = String(row.uniqueWinnerCount ?? row.unique ?? '');
+
+      const coinCell = document.createElement('div');
+      coinCell.className = 'jo-coin';
+      coinCell.textContent = (!row.coinPerWinner || row.coinPerWinner === '0') ? '\u2014' : joFormatWeiToEth(row.coinPerWinner);
+
+      const tktCell = document.createElement('div');
+      tktCell.className = 'jo-tickets';
+      tktCell.textContent = row.ticketsPerWinner ? String(row.ticketsPerWinner) : '\u2014';
+
+      const ethCell = document.createElement('div');
+      ethCell.className = 'jo-eth';
+      ethCell.textContent = (!row.ethPerWinner || row.ethPerWinner === '0') ? '\u2014' : joFormatWeiToEth(row.ethPerWinner);
+
+      const spreadCell = document.createElement('div');
+      spreadCell.className = 'jo-spread';
+      const buckets = Array.isArray(row.spreadBuckets) ? row.spreadBuckets : [false, false, false];
+      for (let b = 0; b < 3; b++) {
+        const bar = document.createElement('div');
+        bar.className = 'jo-spread-bar' + (buckets[b] ? ' active' : '');
+        spreadCell.appendChild(bar);
+      }
+
+      const rowEl = document.createElement('div');
+      rowEl.className = 'jo-row';
+      rowEl.append(typeCell, winCell, uniqCell, coinCell, tktCell, ethCell, spreadCell);
+      grid.appendChild(rowEl);
+    }
+
+    if (overview.hasFarFuture && farFutureEl) farFutureEl.style.display = '';
   }
 
   // ---------------------------------------------------------------------------
@@ -371,26 +266,19 @@ class JackpotPanel extends HTMLElement {
   // ---------------------------------------------------------------------------
 
   // Compute the latest completed jackpot day for a given game state.
-  // Each emission level spans exactly 5 jackpot days (per jackpot_distributions.level
-  // cadence documented in Phase 37/38 context).
-  // During JACKPOT phase the current day is in-progress, so exclude it.
   #computeLatestCompletedDay(game) {
     const level = game.level || 0;
     if (level === 0) return 1;
-    const jackpotCounter = game.jackpotDay || 0; // 1-5 within the current level
+    const jackpotCounter = game.jackpotDay || 0;
     if (game.phase === 'JACKPOT') {
-      // in-progress day: exclude it; completed = (level-1)*5 + (jackpotCounter - 1)
       const completed = (level - 1) * 5 + (jackpotCounter - 1);
       return Math.max(1, completed);
     }
-    // Between jackpot phases: all 5 days of the current level are complete
     return level * 5;
   }
 
   // ---------------------------------------------------------------------------
   // Winner summary — brief per-type breakdown rendered above the winner dropdown.
-  // Groups winners by award type (ETH / Tickets / BURNIE) and shows winner count,
-  // unique addresses in parens, and amount per winner.
   // ---------------------------------------------------------------------------
   #renderWinnerSummary(winners, day) {
     const summaryEl = this.querySelector('[data-bind="jp-winner-summary"]');
@@ -402,8 +290,6 @@ class JackpotPanel extends HTMLElement {
       return;
     }
 
-    // Build per-type rows from the aggregated winners list.
-    // The day/winners endpoint gives us totalEth, ticketCount, coinTotal per winner.
     const ethWinners  = winners.filter(w => BigInt(w.totalEth  || '0') > 0n);
     const tickWinners = winners.filter(w => (w.ticketCount || 0) > 0);
     const coinWinners = winners.filter(w => BigInt(w.coinTotal || '0') > 0n);
@@ -445,7 +331,6 @@ class JackpotPanel extends HTMLElement {
       summaryEl.innerHTML = this.#buildSummaryHtml(rows, day);
       summaryEl.style.display = '';
     } else {
-      // Winners exist but only non-standard award types (e.g. whale_pass only)
       summaryEl.innerHTML = `<div class="jp-summary-note">${winners.length} winner${winners.length !== 1 ? 's' : ''} this day</div>`;
       summaryEl.style.display = '';
     }
@@ -468,28 +353,6 @@ class JackpotPanel extends HTMLElement {
     this.#winnersRequestVersion++;
     const v = this.#winnersRequestVersion;
 
-    // Plan 04: cancel pending flashes (factory timer + panel "No bonus" timer)
-    if (this.#rolls) this.#rolls.cancelPendingFlashes();
-    if (this.#noBonusTimer !== null) {
-      clearTimeout(this.#noBonusTimer);
-      this.#noBonusTimer = null;
-    }
-    this.#rollPhase = 'idle';
-    this.#playerData = null;
-
-    // Reset Roll 1 section, clear grids, and hide roll button
-    const roll1Section = this.querySelector('#jp-roll1-section');
-    if (roll1Section) roll1Section.style.display = 'none';
-    this.#clearRoll1Grid();
-    this.#clearRoll2Grids();
-    const roll2Panel = this.querySelector('#jp-roll2-panel');
-    if (roll2Panel) roll2Panel.style.display = 'none';
-    const rollBtn = this.querySelector('#jp-roll-btn');
-    if (rollBtn) {
-      rollBtn.style.display = 'none';
-      rollBtn.classList.remove('spinning');
-    }
-
     const selectEl = this.querySelector('[data-bind="jp-winners-select"]');
     if (selectEl) {
       selectEl.disabled = true;
@@ -500,18 +363,15 @@ class JackpotPanel extends HTMLElement {
     try {
       res = await fetchJSON(`/game/jackpot/day/${day}/winners`);
     } catch (err) {
-      if (v !== this.#winnersRequestVersion) return; // stale
-      // Day-based winners endpoint unavailable (route not yet deployed or API stale).
-      // Fall back: derive level from day (each level = 5 jackpot days) and fetch
-      // overview to confirm the level exists, so #currentLevel gets set and the
-      // roll flow can still proceed even without individual winner addresses.
+      if (v !== this.#winnersRequestVersion) return;
+      // Fall back: derive level from day
       const derivedLevel = Math.ceil(day / 5);
       let overviewLevel = derivedLevel;
       try {
         const ov = await fetchJSON(`/game/jackpot/${derivedLevel}/overview`);
         if (ov && ov.level) overviewLevel = ov.level;
-      } catch { /* ignore — use derived level */ }
-      if (v !== this.#winnersRequestVersion) return; // stale after overview fetch
+      } catch { /* ignore */ }
+      if (v !== this.#winnersRequestVersion) return;
       this.#currentDay = day;
       this.#currentLevel = overviewLevel;
       this.#winners = [];
@@ -519,32 +379,29 @@ class JackpotPanel extends HTMLElement {
         selectEl.disabled = true;
         selectEl.innerHTML = '<option disabled selected>Winners unavailable — API updating</option>';
       }
-      // Overview and roll flow can still proceed with the derived level.
       if (overviewLevel) {
         this.#overviewRendered = false;
         const overviewDetails = this.querySelector('[data-bind="jp-overview"]');
         if (overviewDetails && overviewDetails.open) {
           this.#overviewRendered = true;
-          this.#rolls.renderOverview(overviewLevel);
+          this.#renderOverview(overviewLevel);
         }
       }
       return;
     }
 
-    // Stale-fetch guard — discard if a newer request has been issued since this one started
     if (v !== this.#winnersRequestVersion) return;
 
     this.#currentDay = day;
     this.#currentLevel = res.level;
     this.#winners = res.winners || [];
 
-    // Plan 04: refresh overview whenever day changes (D-12); mark for re-render
-    // (whether or not the <details> is currently open)
+    // Refresh overview whenever day changes (D-12)
     this.#overviewRendered = false;
     const overviewDetails = this.querySelector('[data-bind="jp-overview"]');
     if (overviewDetails && overviewDetails.open && this.#currentLevel) {
       this.#overviewRendered = true;
-      this.#rolls.renderOverview(this.#currentLevel);
+      this.#renderOverview(this.#currentLevel);
     }
 
     if (!selectEl) return;
@@ -557,7 +414,6 @@ class JackpotPanel extends HTMLElement {
       opt.selected = true;
       opt.textContent = 'No data for this day';
       selectEl.appendChild(opt);
-      // Clear winner summary — no distributions indexed for this daily_rng window
       const summaryEl = this.querySelector('[data-bind="jp-winner-summary"]');
       if (summaryEl) {
         summaryEl.innerHTML = '<div class="jp-summary-note">No jackpot data indexed for this day — scrub to a nearby day.</div>';
@@ -570,9 +426,6 @@ class JackpotPanel extends HTMLElement {
       const opt = document.createElement('option');
       opt.value = w.address;
       opt.dataset.hasBonus = String(w.hasBonus);
-      // Store the per-winner winning level so #onWinnerChange uses the correct
-      // level for the player endpoint — prevents level-mismatch when multiple
-      // jackpot levels share the same block-range day.
       if (w.winningLevel != null) opt.dataset.winningLevel = String(w.winningLevel);
       opt.textContent = this.#formatWinnerLabel(w);
       selectEl.appendChild(opt);
@@ -583,7 +436,7 @@ class JackpotPanel extends HTMLElement {
 
     // D-10: auto-select row 0 (highest payout — server returns payout-desc)
     selectEl.selectedIndex = 0;
-    await this.#onWinnerChange(this.#winners[0].address);
+    this.#onWinnerChange(this.#winners[0].address);
   }
 
   // Format a winner entry for the dropdown label per D-08:  "0xABCD…1234 — 0.42 ETH"
@@ -594,188 +447,11 @@ class JackpotPanel extends HTMLElement {
   }
 
   // Called when the user picks a different winner from the dropdown (or auto-select on day change).
-  // Plan 04: cancel pending flash, reset panel roll state, then run pre-flight.
-  async #onWinnerChange(address) {
-    if (!address || !this.#currentLevel) return;
-
-    // Resolve the correct jackpot level for this winner.  The day/winners endpoint
-    // now returns a per-winner winningLevel (dominant level in the day's block range).
-    // If absent (older API or direct call), fall back to #currentLevel.
-    const selectEl = this.querySelector('[data-bind="jp-winners-select"]');
-    let levelForPlayer = this.#currentLevel;
-    if (selectEl) {
-      const selectedOpt = selectEl.querySelector(`option[value="${CSS.escape(address)}"]`);
-      if (selectedOpt && selectedOpt.dataset.winningLevel) {
-        const parsed = Number(selectedOpt.dataset.winningLevel);
-        if (parsed > 0) levelForPlayer = parsed;
-      }
-    }
-    this.#rolls.cancelPendingFlashes();   // Pitfall 6: factory timer guard
-
-    // Pitfall 6: cancel panel-owned "No bonus" flash timer if still pending
-    if (this.#noBonusTimer !== null) {
-      clearTimeout(this.#noBonusTimer);
-      this.#noBonusTimer = null;
-    }
-
-    // Reset local roll state machine so button starts fresh for the new winner
-    this.#rollPhase = 'idle';
-    this.#playerData = null;
-
-    // Reset button label and hide it until pre-flight data arrives
-    const btn = this.querySelector('#jp-roll-btn');
-    if (btn) {
-      btn.textContent = 'Replay';
-      btn.disabled = true;
-      btn.style.display = 'none';
-      btn.classList.remove('spinning');
-    }
-
-    // Hide Roll 2 panel and clear both grids from previous selection
-    const roll2Panel = this.querySelector('#jp-roll2-panel');
-    if (roll2Panel) roll2Panel.style.display = 'none';
-    this.#clearRoll2Grids();
-
-    // Clear Roll 1 grid (stale DOM fix — prevent prior day's rows ghosting)
-    const roll1Section = this.querySelector('#jp-roll1-section');
-    if (roll1Section) roll1Section.style.display = 'none';
-    this.#clearRoll1Grid();
-
-    await this.#rolls.preFlightAndRunPlayer({
-      level: levelForPlayer,
-      day: this.#currentDay,   // scopes player endpoint to this day's block range
-      addr: address,
-      onData: (data) => {
-        // Cache pre-flight result — do NOT render grid yet (user must click Replay)
-        this.#playerData = data;
-        // Show and enable the Replay button
-        if (btn) {
-          btn.textContent = 'Replay';
-          btn.disabled = false;
-          btn.style.display = '';
-        }
-      },
-    });
-  }
-
-  // Clear Roll 1 grid data rows (keep .jo-header children)
-  #clearRoll1Grid() {
-    const grid = this.querySelector('#jp-roll1-grid');
-    if (!grid) return;
-    Array.from(grid.children).forEach(child => {
-      if (!child.classList.contains('jo-header')) grid.removeChild(child);
-    });
-    const emptyEl = this.querySelector('#jp-roll1-empty');
-    if (emptyEl) emptyEl.style.display = 'none';
-  }
-
-  // Clear Roll 2 grids data rows (keep .jo-header children)
-  #clearRoll2Grids() {
-    for (const id of ['#jp-roll2-future-grid', '#jp-roll2-far-grid']) {
-      const grid = this.querySelector(id);
-      if (!grid) continue;
-      Array.from(grid.children).forEach(child => {
-        if (!child.classList.contains('jo-header')) grid.removeChild(child);
-      });
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Plan 04: panel-owned roll button state machine
-  // Sequence: Roll → Next → Roll Bonus → Next Day →
-  //           Roll → Next → (no bonus flash) → Next Day
-  // ---------------------------------------------------------------------------
-
-  #onRollBtnClick() {
-    const btn = this.querySelector('#jp-roll-btn');
-    if (!btn || btn.disabled) return;
-
-    if (this.#rollPhase === 'idle') {
-      // "Replay" clicked — brief spin animation, then render Roll 1 rows + reveal animation
-      btn.disabled = true;
-      btn.classList.add('spinning');
-      btn.textContent = 'Rolling\u2026';
-
-      setTimeout(() => {
-        btn.classList.remove('spinning');
-        // #renderRoll1 returns a Promise (rows appended after async import resolves)
-        Promise.resolve(this.#renderRoll1(this.#playerData)).then(() => {
-          this.#animateRoll1Rows();
-          this.#rollPhase = 'roll1';
-          if (this.#playerData && this.#playerData.hasBonus) {
-            btn.textContent = 'Bonus Roll';
-            btn.disabled = false;
-          } else {
-            // No bonus — flash "No bonus" 500ms then hide button
-            btn.textContent = 'No bonus';
-            btn.disabled = true;
-            if (this.#noBonusTimer !== null) clearTimeout(this.#noBonusTimer);
-            this.#noBonusTimer = setTimeout(() => {
-              this.#noBonusTimer = null;
-              this.#rollPhase = 'done';
-              btn.disabled = true;
-              btn.style.display = 'none';
-            }, 500);
-          }
-        }).catch(e => {
-          console.error('[jackpot-panel] roll1 render failed:', e);
-        });
-      }, 700);
-      return;
-    }
-
-    if (this.#rollPhase === 'roll1') {
-      // "Bonus Roll" clicked — spin then reveal Roll 2
-      btn.disabled = true;
-      btn.classList.add('spinning');
-      btn.textContent = 'Rolling\u2026';
-
-      setTimeout(() => {
-        btn.classList.remove('spinning');
-        try {
-          this.#clearRoll2Grids();
-          this.#rolls.renderRoll2(
-            (this.#playerData && this.#playerData.roll2) || { future: [], farFuture: [] }
-          );
-          const roll2Panel = this.querySelector('#jp-roll2-panel');
-          if (roll2Panel) {
-            roll2Panel.style.display = 'block';
-            // Animate Roll 2 rows
-            this.#animateRoll2Rows(roll2Panel);
-            roll2Panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        } catch (e) {
-          console.error('[jackpot-panel] roll2 render failed:', e);
-        }
-        this.#rollPhase = 'done';
-        btn.textContent = 'Done';
-        btn.disabled = true;
-        btn.style.display = 'none';
-      }, 900);
-      return;
-    }
-  }
-
-  // Add reveal animation to Roll 1 grid rows (scratch-like fade+slide)
-  #animateRoll1Rows() {
-    const grid = this.querySelector('#jp-roll1-grid');
-    if (!grid) return;
-    const rows = Array.from(grid.querySelectorAll('.jo-row'));
-    rows.forEach((row, i) => {
-      row.classList.add('jp-revealing');
-      // Stagger each row by 120ms
-      row.style.animationDelay = (i * 120) + 'ms';
-    });
-  }
-
-  // Add reveal animation to Roll 2 grid rows
-  #animateRoll2Rows(panel) {
-    if (!panel) return;
-    const rows = Array.from(panel.querySelectorAll('.jo-row'));
-    rows.forEach((row, i) => {
-      row.classList.add('jp-revealing');
-      row.style.animationDelay = (i * 100) + 'ms';
-    });
+  // Pure display: just updates the summary to reflect the selected winner's label.
+  #onWinnerChange(address) {
+    if (!address) return;
+    // The winner summary is already rendered for the full day above the dropdown.
+    // No additional work needed without the roll flow.
   }
 
   // -- Private methods --
@@ -795,9 +471,6 @@ class JackpotPanel extends HTMLElement {
     this.#bind('day', day > 0 ? `Day ${day}/5` : 'Day --');
 
     // Plan 03: update scrubber range once we know the game level.
-    // Fetch both earliest and latest jackpot days from the API so the scrubber
-    // does not start at day 1 (which is before the first daily_rng entry and
-    // therefore always empty).  Falls back to formula if endpoints fail.
     if (this.#scrubber && game.level && this.#currentDay === null) {
       Promise.all([
         fetchJSON('/game/jackpot/latest-day').catch(() => ({ latestDay: null })),
@@ -810,13 +483,11 @@ class JackpotPanel extends HTMLElement {
           ? earliestRes.earliestDay
           : 1;
         if (this.#scrubber) this.#scrubber.setRange(minDay, maxDay);
-        // Navigate to the latest day that actually has jackpot data
         if (this.#currentDay === null) {
           if (this.#scrubber) this.#scrubber.setDay(maxDay);
           this.#onDayChange(maxDay);
         }
       }).catch(() => {
-        // Both APIs unavailable — fall back to formula
         const latestCompleted = this.#computeLatestCompletedDay(game);
         if (this.#scrubber) this.#scrubber.setRange(1, latestCompleted);
         if (this.#currentDay === null) {
@@ -845,7 +516,6 @@ class JackpotPanel extends HTMLElement {
     const currentLevel = game.level || 0;
 
     if (game.phase === 'JACKPOT' && rngWord && rngWord !== '0' && rngWord !== this.#currentRngWord) {
-      // Live reveal during JACKPOT phase
       this.#currentRngWord = rngWord;
       this.#revealPlayed = false;
       try {
@@ -855,9 +525,7 @@ class JackpotPanel extends HTMLElement {
         this.#triggerReveal(rngWord);
       }
     } else if (!this.#revealPlayed && currentLevel > 0) {
-      // Historical: show the most recent jackpot results
-      this.#revealPlayed = true; // prevent re-entry from subsequent store updates
-      // Try levels from 1 upward — jackpot data is most reliably at low levels
+      this.#revealPlayed = true;
       for (let lvl = 1; lvl <= Math.min(currentLevel, 20); lvl++) {
         try {
           const data = await fetchJSON(`/game/jackpot/${lvl}`);
@@ -868,7 +536,6 @@ class JackpotPanel extends HTMLElement {
           }
         } catch { /* no data for this level */ }
       }
-      // No data found — reset so it can retry later
       this.#revealPlayed = false;
     }
   }
@@ -879,20 +546,16 @@ class JackpotPanel extends HTMLElement {
 
     let traits;
     if (distributions && distributions.length > 0) {
-      // API path: use actual event-sourced traitIds (TEST-02 requirement)
       traits = distributions
         .filter(d => d.traitId != null)
         .slice(0, 4)
         .map(d => d.traitId);
-      // Pad to 4 if fewer than 4 distributions have traitId
       while (traits.length < 4) traits.push(null);
     } else {
-      // Fallback: derive from RNG word (approximation)
       traits = deriveWinningTraits(rngWord);
     }
     const badges = traits.map(t => traitToBadge(t));
 
-    // Set badge images on back faces before animation
     const cardEls = this.querySelectorAll('.trait-card');
     cardEls.forEach((card, i) => {
       const badge = badges[i];
@@ -911,7 +574,6 @@ class JackpotPanel extends HTMLElement {
   }
 
   #showHistoricalResults(distributions) {
-    // Pick up to 4 unique traits from distributions to show as badge cards
     const seen = new Set();
     const traits = [];
     for (const d of distributions) {
@@ -926,7 +588,6 @@ class JackpotPanel extends HTMLElement {
     const badges = traits.map(t => traitToBadge(t));
     const cardEls = this.querySelectorAll('.trait-card');
 
-    // Set badge images and flip instantly (no animation for historical)
     cardEls.forEach((card, i) => {
       const badge = badges[i];
       const img = card.querySelector('.badge-img');
@@ -943,7 +604,6 @@ class JackpotPanel extends HTMLElement {
       card.setAttribute('data-winner', 'true');
     });
 
-    // Show result summary
     const resultEl = this.querySelector('[data-bind="result"]');
     if (resultEl) resultEl.hidden = false;
     const textEl = this.querySelector('.jackpot-result-text');
@@ -952,9 +612,6 @@ class JackpotPanel extends HTMLElement {
       textEl.textContent = `${distributions.length} prizes awarded to ${uniqueWinners} winners`;
     }
 
-    // Populate winner breakdown dropdown — aggregate ETH per player.
-    // whale_pass amount=1 means "1 pass" (count), NOT 1 wei — exclude from ETH total.
-    // Non-ETH award types are shown as a label only, not summed into the amount.
     const byPlayer = {};
     for (const d of distributions) {
       if (!byPlayer[d.winner]) byPlayer[d.winner] = { ethTotal: 0n, extraTypes: new Set() };
@@ -962,12 +619,10 @@ class JackpotPanel extends HTMLElement {
       if (awardType === 'eth') {
         byPlayer[d.winner].ethTotal += BigInt(d.amount || '0');
       } else if (awardType !== 'dgnrs') {
-        // whale_pass, tickets, burnie etc — flag as extra award types
         byPlayer[d.winner].extraTypes.add(awardType);
       }
     }
 
-    // Sort by ETH total descending
     const sorted = Object.entries(byPlayer)
       .sort(([, a], [, b]) => (b.ethTotal > a.ethTotal ? 1 : b.ethTotal < a.ethTotal ? -1 : 0));
 
@@ -976,7 +631,6 @@ class JackpotPanel extends HTMLElement {
     if (listEl && dropdownEl) {
       listEl.innerHTML = sorted.map(([addr, { ethTotal, extraTypes }]) => {
         const short = addr.slice(0, 6) + '…' + addr.slice(-4);
-        // Map raw awardType keys to human-readable labels
         const typeLabels = [...extraTypes].map(t => {
           if (t === 'whale_pass') return 'Whale Pass';
           if (t === 'tickets') return 'Tickets';
@@ -996,9 +650,7 @@ class JackpotPanel extends HTMLElement {
   }
 
   async #animateReveal(cardEls, badges) {
-    // Check reduced motion preference
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      // Instant reveal without animation
       cardEls.forEach((card) => {
         const inner = card.querySelector('.trait-card-inner');
         if (inner) inner.style.transform = 'rotateY(180deg)';
@@ -1013,19 +665,16 @@ class JackpotPanel extends HTMLElement {
       const tl = gsap.timeline({ paused: true });
       this.#timeline = tl;
 
-      // Sequential card reveals with delay between each
       cardEls.forEach((card, i) => {
         const inner = card.querySelector('.trait-card-inner');
         const badgeImg = card.querySelector('.badge-img');
 
-        // Flip the card
         tl.to(inner, {
           rotateY: 180,
           duration: 0.5,
           ease: 'power2.inOut',
         }, i === 0 ? '+=0.3' : '+=0.5');
 
-        // Winner highlight: scale pop + data attribute for CSS glow
         tl.call(() => card.setAttribute('data-winner', 'true'));
         tl.fromTo(badgeImg, { scale: 0.8 }, {
           scale: 1.1,
@@ -1035,18 +684,16 @@ class JackpotPanel extends HTMLElement {
         tl.to(badgeImg, { scale: 1.0, duration: 0.2 });
       });
 
-      // Celebration at the end
       tl.call(() => this.#celebrate());
-
       tl.play();
     } catch (err) {
-      // GSAP load failure: instant reveal fallback
       console.warn('[JackpotPanel] GSAP load failed, using instant reveal:', err);
       cardEls.forEach(card => {
         const inner = card.querySelector('.trait-card-inner');
         if (inner) inner.style.transform = 'rotateY(180deg)';
         card.setAttribute('data-winner', 'true');
       });
+      this.#celebrate();
     }
   }
 
@@ -1055,7 +702,6 @@ class JackpotPanel extends HTMLElement {
     try {
       const { default: confetti } = await import('canvas-confetti');
 
-      // Center burst
       confetti({
         particleCount: 100,
         spread: 70,
@@ -1063,7 +709,6 @@ class JackpotPanel extends HTMLElement {
         colors: ['#22c55e', '#8b5cf6', '#eab308', '#06b6d4'],
       });
 
-      // Side bursts after short delay
       setTimeout(() => {
         confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 } });
         confetti({ particleCount: 50, angle: 120, spread: 55, origin: { x: 1 } });
@@ -1072,20 +717,17 @@ class JackpotPanel extends HTMLElement {
       console.warn('[JackpotPanel] Confetti load failed:', err);
     }
 
-    // Show result section
     const resultEl = this.querySelector('[data-bind="result"]');
     if (resultEl) resultEl.hidden = false;
 
     const textEl = this.querySelector('.jackpot-result-text');
     if (textEl) textEl.textContent = 'Winning traits revealed!';
 
-    // Animate prize amount with RAF counter
     const amountEl = this.querySelector('.jackpot-prize-amount');
     if (amountEl) {
       const poolWei = get('game.pools.current') || '0';
       const day = get('game.jackpotDay') || 0;
       const alloc = estimateAllocation(poolWei, day);
-      // Use midpoint estimate for display
       const mid = (BigInt(alloc.min || '0') + BigInt(alloc.max || '0')) / 2n;
       this.#animateNumber(amountEl, mid.toString());
     }
@@ -1105,7 +747,6 @@ class JackpotPanel extends HTMLElement {
     const tick = (now) => {
       const elapsed = now - start;
       const progress = Math.min(elapsed / duration, 1);
-      // Ease out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
       const current = (targetNum * eased).toFixed(3);
       el.textContent = current + ' ETH';

@@ -308,11 +308,6 @@
   font-size: 0.72rem;
 }
 
-/* jp-rolls-slot: Plan 04 fills this with the two-phase draw */
-.jp-rolls-slot {
-  /* empty in Plan 03 */
-}
-
 /* jp-overview: Day Overview collapsible — collapsed by default (D-12) */
 .jp-overview {
   border: 1px solid var(--border-color, #3a3a5c);
@@ -335,8 +330,6 @@
   font-size: 0.8rem;
   color: var(--text-secondary, #a0a0c0);
 }
-/* Plan 04: jp-rolls-slot populated content */
-
 /* Section headings that label the two stacked sections (A6 coexistence layout) */
 .jp-section-title {
   font-size: 0.68rem;
@@ -346,45 +339,6 @@
   color: var(--text-dim, #6b6b8d);
   margin: 0 0 0.6rem;
   padding-top: 0.5rem;
-}
-
-/* Roll 1 current-level result section */
-.jp-roll1-section {
-  margin-bottom: 0.75rem;
-}
-
-/* Roll controls row: houses the state-machine button */
-.jp-roll-controls {
-  display: flex;
-  justify-content: flex-start;
-  margin: 0.5rem 0 0.75rem;
-}
-
-/* The Roll/Next/Roll Bonus/Next Day state-machine button */
-.jp-roll-btn {
-  padding: 0.45rem 1.4rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--accent-primary, #f5a623);
-  background: rgba(245, 166, 35, 0.12);
-  border: 1px solid rgba(245, 166, 35, 0.35);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
-  letter-spacing: 0.04em;
-}
-
-.jp-roll-btn:hover {
-  background: rgba(245, 166, 35, 0.25);
-  transform: translateY(-1px);
-}
-
-.jp-roll-btn:active { transform: translateY(0); }
-
-.jp-roll-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  transform: none;
 }
 
 /* -------------------------------------------------------------------------
@@ -508,25 +462,4 @@
   50%       { opacity: 1; }
 }
 
-/* Roll button spinning state (Replay / Bonus Roll click) */
-.jp-roll-btn.spinning {
-  opacity: 0.7;
-  cursor: not-allowed;
-  animation: jp-btn-spin 0.6s linear infinite;
-}
 
-@keyframes jp-btn-spin {
-  from { letter-spacing: 0.04em; filter: brightness(1.4); }
-  50%  { letter-spacing: 0.12em; filter: brightness(0.7); }
-  to   { letter-spacing: 0.04em; filter: brightness(1.4); }
-}
-
-/* Row reveal: scratch-like fade + slide-up per row */
-@keyframes jo-row-reveal {
-  from { opacity: 0; transform: translateY(6px); filter: blur(3px); }
-  to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
-}
-
-.jo-row.jp-revealing > * {
-  animation: jo-row-reveal 0.35s ease-out both;
-}
