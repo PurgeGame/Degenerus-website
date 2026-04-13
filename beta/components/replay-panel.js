@@ -714,15 +714,52 @@ class ReplayPanel extends HTMLElement {
       const burnieTotal = bdRec ? bdRec.burnieTotal : 0n;
       const ticketTotal = row.ticketsPerWinner || 0;
 
-      // One aggregated entry per row keeps badge count = winning-trait count (not award-type count).
-      const entry = {
-        awardType: 'aggregated',
-        ethTotal: ethTotal.toString(),
-        burnieTotal: burnieTotal.toString(),
-        ticketTotal,
-        traitId: row.traitId,
-      };
-      this.#quadWinArrays[displayPos].push(entry);
+      // Bug 2 fix: emit one entry PER EMISSION (winnerCount) so each discrete win
+      // renders as its own badge. Cap at MAX_VISUAL_BADGES per quadrant.
+      const MAX_VISUAL_BADGES = 20;
+      const emissionCount = Math.max(1, Number(row.winnerCount || 1));
+      const burniePerEmission = emissionCount > 0 ? burnieTotal / BigInt(emissionCount) : burnieTotal;
+      const ethPerEmission = emissionCount > 0 ? ethTotal / BigInt(emissionCount) : ethTotal;
+      const ticketsPerEmission = emissionCount > 0 ? Math.floor(ticketTotal / emissionCount) : ticketTotal;
+
+      const currentCount = this.#quadWinArrays[displayPos].length;
+      const remaining = MAX_VISUAL_BADGES - currentCount;
+      if (remaining <= 0) continue;
+
+      const toAdd = Math.min(emissionCount, remaining);
+      for (let e = 0; e < toAdd; e++) {
+        this.#quadWinArrays[displayPos].push({
+          awardType: 'aggregated',
+          ethTotal: ethPerEmission.toString(),
+          burnieTotal: burniePerEmission.toString(),
+          ticketTotal: ticketsPerEmission,
+          traitId: row.traitId,
+        });
+      }
+    }
+    // Add overflow sentinel entries per quadrant where total emissions exceeded the cap
+    const totalEmissions1 = [0, 0, 0, 0];
+    for (const row of this.#roll1Rows) {
+      if (row.traitId == null) continue;
+      const contractQ = Math.floor(row.traitId / 64);
+      const displayPos = DISPLAY_ORDER.indexOf(contractQ);
+      if (displayPos < 0 || displayPos > 3) continue;
+      totalEmissions1[displayPos] += Math.max(1, Number(row.winnerCount || 1));
+    }
+    for (let pos = 0; pos < 4; pos++) {
+      const rendered = this.#quadWinArrays[pos].length;
+      const total = totalEmissions1[pos];
+      if (total > rendered) {
+        const lastEntry = this.#quadWinArrays[pos][rendered - 1];
+        this.#quadWinArrays[pos].push({
+          awardType: 'overflow',
+          overflowCount: total - rendered,
+          traitId: lastEntry ? lastEntry.traitId : null,
+          ethTotal: '0',
+          burnieTotal: '0',
+          ticketTotal: 0,
+        });
+      }
     }
   }
 
@@ -838,10 +875,12 @@ class ReplayPanel extends HTMLElement {
 
     const { byTrait, centerBurnie } = this.#buildBreakdownLookup(winnerEntry?.breakdown);
 
-    // Aggregate future rows per display position (multiple traits can share a quadrant).
-    // We produce one entry per trait row so badge scatter shows individual trait badges.
-    // BURNIE: use row.coinPerWinner as the authoritative per-trait BURNIE total (this is
-    // what the DB computed). Fall back to breakdown byTrait lookup only if coinPerWinner is 0.
+    // Bug 2 fix: emit one entry PER EMISSION (winnerCount) rather than one per row.
+    // winnerCount = number of discrete distribution events this player won for this trait.
+    // Each emission renders as its own badge in the scratch reveal.
+    // Cap visual badges at 20 per quadrant to prevent overflow; excess is noted via
+    // the "+N more" label appended as a sentinel entry with traitId set but no amounts.
+    const MAX_VISUAL_BADGES = 20;
     for (const row of futureRows) {
       if (row.traitId == null) continue;
       const contractQ = Math.floor(row.traitId / 64);
@@ -851,19 +890,63 @@ class ReplayPanel extends HTMLElement {
       const bdRec = byTrait.get(row.traitId);
       const ethTotal = bdRec ? bdRec.ethTotal : 0n;
       // Prefer row.coinPerWinner (authoritative near-future BURNIE from DB) over breakdown lookup.
-      // breakdown may be missing burnie entries for some traitIds on older data.
       const rowCoin = BigInt(row.coinPerWinner || '0');
       const bdBurnie = bdRec ? bdRec.burnieTotal : 0n;
-      const burnieTotal = rowCoin > 0n ? rowCoin : bdBurnie;
+      const burnieTotalRow = rowCoin > 0n ? rowCoin : bdBurnie;
       const ticketTotal = row.ticketsPerWinner || 0;
 
-      this.#quadWinArrays[displayPos].push({
-        awardType: 'aggregated',
-        ethTotal: ethTotal.toString(),
-        burnieTotal: burnieTotal.toString(),
-        ticketTotal,
-        traitId: row.traitId,
-      });
+      // Number of discrete win emissions for this trait
+      const emissionCount = Math.max(1, Number(row.winnerCount || 1));
+      // Per-emission amounts (split evenly for display; totals shown in the overlay)
+      const burniePerEmission = emissionCount > 0 ? burnieTotalRow / BigInt(emissionCount) : burnieTotalRow;
+      const ethPerEmission = emissionCount > 0 ? ethTotal / BigInt(emissionCount) : ethTotal;
+      const ticketsPerEmission = emissionCount > 0 ? Math.floor(ticketTotal / emissionCount) : ticketTotal;
+
+      const currentCount = this.#quadWinArrays[displayPos].length;
+      const remaining = MAX_VISUAL_BADGES - currentCount;
+      if (remaining <= 0) continue; // already at cap for this quadrant
+
+      const toAdd = Math.min(emissionCount, remaining);
+      for (let e = 0; e < toAdd; e++) {
+        this.#quadWinArrays[displayPos].push({
+          awardType: 'aggregated',
+          ethTotal: ethPerEmission.toString(),
+          burnieTotal: burniePerEmission.toString(),
+          ticketTotal: ticketsPerEmission,
+          traitId: row.traitId,
+        });
+      }
+      // If we hit the cap mid-row or for the full quadrant, add overflow sentinel
+      if (emissionCount > toAdd || (emissionCount === toAdd && remaining === toAdd && emissionCount < emissionCount)) {
+        // This is handled below after full loop via per-quadrant overflow check
+      }
+    }
+    // Add "+N more" sentinel entries for any quadrant that exceeded MAX_VISUAL_BADGES
+    // (the overflow is tracked by comparing total row emissions vs rendered count)
+    // Re-derive overflow: count total emissions across all future rows per display pos
+    const totalEmissions = [0, 0, 0, 0];
+    for (const row of futureRows) {
+      if (row.traitId == null) continue;
+      const contractQ = Math.floor(row.traitId / 64);
+      const displayPos = DISPLAY_ORDER.indexOf(contractQ);
+      if (displayPos < 0 || displayPos > 3) continue;
+      totalEmissions[displayPos] += Math.max(1, Number(row.winnerCount || 1));
+    }
+    for (let pos = 0; pos < 4; pos++) {
+      const rendered = this.#quadWinArrays[pos].length;
+      const total = totalEmissions[pos];
+      if (total > rendered) {
+        // Sentinel: traitId from the last rendered entry (for badge path), overflow count in overflowCount
+        const lastEntry = this.#quadWinArrays[pos][rendered - 1];
+        this.#quadWinArrays[pos].push({
+          awardType: 'overflow',
+          overflowCount: total - rendered,
+          traitId: lastEntry ? lastEntry.traitId : null,
+          ethTotal: '0',
+          burnieTotal: '0',
+          ticketTotal: 0,
+        });
+      }
     }
 
     // farFuture rows go to center diamond. Use both row.coinPerWinner and breakdown centerBurnie.
@@ -1122,13 +1205,35 @@ class ReplayPanel extends HTMLElement {
       }
     }
 
-    // Now hide main badges and place scattered win badges for owned quadrants
+    // Now hide main badges and place scattered win badges for owned quadrants.
+    // Bug 1 fix: sync the scratch canvas cover badge to the actual winning trait
+    // (first entry's traitId) rather than the RNG-derived displayTrait, so the top
+    // symbol matches the revealed symbols underneath.
     for (let i = 0; i < 4; i++) {
       if (this.#quadOwned[i]) {
         const mainBadge = quads[i].querySelector('.badge-img');
+
+        // Determine the canonical winning traitId for this quadrant.
+        // For Roll 2 bonus the displayed RNG trait can differ from the player's
+        // actual winning trait — use the first win entry's traitId when present.
+        const wins = this.#quadWinArrays[i];
+        const canonicalTraitId = wins.length > 0 && wins[0].traitId != null
+          ? wins[0].traitId
+          : displayTraits[i];
+        const canonicalBadge = traitToBadge(canonicalTraitId);
+        const canonicalSrc = canonicalBadge ? canonicalBadge.path : (mainBadge ? mainBadge.src : '');
+
+        // Re-paint the scratch cover with the winning trait badge so top = reveal.
+        const canvas = quads[i].querySelector('.replay-scratch-canvas');
+        if (canvas && canonicalSrc) {
+          this.#initScratchCanvasWithBadge(canvas, canonicalSrc);
+        }
+        // Also update the visible badge-img to match (shown briefly before hide).
+        if (mainBadge && canonicalSrc) mainBadge.src = canonicalSrc;
+
         mainBadge.style.display = 'none';
-        if (this.#quadWinArrays[i].length > 0) {
-          this.#placeWinBadges(i, displayTraits[i]);
+        if (wins.length > 0) {
+          this.#placeWinBadges(i, canonicalTraitId);
         }
       }
     }
@@ -1421,7 +1526,7 @@ class ReplayPanel extends HTMLElement {
     canvas.style.opacity = '0';
     canvas.style.pointerEvents = 'none';
 
-    const isWin = this.#quadWinArrays[qIdx].length > 0;
+    const isWin = this.#quadWinArrays[qIdx].some(d => d.awardType !== 'overflow');
     this.#sfxReveal(isWin);
 
     quad.classList.remove('q-scratchable');
@@ -1434,9 +1539,9 @@ class ReplayPanel extends HTMLElement {
       if (mainBadge) mainBadge.style.display = '';
     }
 
-    // Show prize overlay — sum by currency type
+    // Show prize overlay — sum by currency type (skip overflow sentinels)
     if (prize && isWin) {
-      const wins = this.#quadWinArrays[qIdx];
+      const wins = this.#quadWinArrays[qIdx].filter(d => d.awardType !== 'overflow');
       let ethTotal = 0n, burnieTotal = 0n, dgnrsTotal = 0n, ticketCount = 0, whaleCount = 0;
       for (const d of wins) {
         const t = d.awardType || '';
@@ -1487,7 +1592,7 @@ class ReplayPanel extends HTMLElement {
     const allDone = this.#scratched.every(s => s) && !centerPending;
     if (allDone) {
       if (hint) hint.textContent = '';
-      const anyWon = this.#quadWinArrays.some(w => w.length > 0) || this.#centerWins.length > 0;
+      const anyWon = this.#quadWinArrays.some(w => w.some(d => d.awardType !== 'overflow')) || this.#centerWins.length > 0;
       if (anyWon) this.#celebrate();
     } else {
       let remaining = this.#scratched.filter(s => !s).length;
@@ -1504,20 +1609,26 @@ class ReplayPanel extends HTMLElement {
     const wins = this.#quadWinArrays[qIdx];
     if (!wins || wins.length === 0) return;
 
+    // Separate overflow sentinel (awardType='overflow') from real badge entries
+    const overflowEntry = wins.find(w => w.awardType === 'overflow');
+    const realWins = wins.filter(w => w.awardType !== 'overflow');
+    if (realWins.length === 0) return;
+
     // Default badge for this quadrant (used for wins without traitId)
     const defaultBadge = traitToBadge(traitId);
     const defaultPath = defaultBadge ? defaultBadge.path : '';
-    const count = wins.length;
+    const count = realWins.length;
     let maxSize, minSize;
     if (count === 1) { minSize = 30; maxSize = 65; }
     else if (count <= 3) { minSize = 25; maxSize = 50; }
-    else { minSize = 20; maxSize = 40; }
+    else if (count <= 8) { minSize = 18; maxSize = 35; }
+    else { minSize = 14; maxSize = 26; }
 
     const placed = [];
     const allBounds = [];
-    for (let w = 0; w < wins.length; w++) {
-      let sizePct = minSize + (w / Math.max(1, wins.length - 1)) * (maxSize - minSize);
-      if (wins.length === 1) sizePct = maxSize;
+    for (let w = 0; w < realWins.length; w++) {
+      let sizePct = minSize + (w / Math.max(1, realWins.length - 1)) * (maxSize - minSize);
+      if (realWins.length === 1) sizePct = maxSize;
       let bestLeft = null, bestTop = null, bestOverlap = Infinity;
       for (let a = 0; a < 50; a++) {
         const tryLeft = Math.random() * (100 - sizePct);
@@ -1537,7 +1648,7 @@ class ReplayPanel extends HTMLElement {
       allBounds.push({ left: bestLeft, top: bestTop, right: bestLeft + sizePct, bottom: bestTop + sizePct });
 
       // Use each win's own traitId for its badge; fall back to quadrant default
-      const winBadge = wins[w].traitId != null ? traitToBadge(wins[w].traitId) : defaultBadge;
+      const winBadge = realWins[w].traitId != null ? traitToBadge(realWins[w].traitId) : defaultBadge;
       const winPath = winBadge ? winBadge.path : defaultPath;
 
       const wrap = document.createElement('div');
@@ -1549,6 +1660,14 @@ class ReplayPanel extends HTMLElement {
       img.src = winPath; img.className = 'replay-scattered-badge'; img.alt = '';
       wrap.appendChild(img);
       quad.appendChild(wrap);
+    }
+
+    // If there were more emissions than the visual cap, show a "+N more" label
+    if (overflowEntry && overflowEntry.overflowCount > 0) {
+      const label = document.createElement('div');
+      label.className = 'replay-badge-overflow-label';
+      label.textContent = '+' + overflowEntry.overflowCount + ' more';
+      quad.appendChild(label);
     }
 
     // Store badge hit circles for green-reveal detection during scratch
