@@ -468,7 +468,12 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
       return;
     }
 
-    var url = apiBase + '/game/jackpot/' + level + '/player/' + addr;
+    // Append ?day=N when caller provides a day so the player endpoint scopes
+    // distributions to the day's block range — fixes hasBonus mismatch when a
+    // player's distributions span multiple days/levels (e.g. roll2.future tickets
+    // recorded at a different day than the current jackpot day).
+    var url = apiBase + '/game/jackpot/' + level + '/player/' + addr +
+              (day != null ? '?day=' + day : '');
     _fetch(url).then(function(r) {
       if (!r.ok) return { level: level, player: addr, roll1Rows: [], roll2: { future: [], farFuture: [] }, hasBonus: false };
       return r.json();

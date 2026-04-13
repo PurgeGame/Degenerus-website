@@ -10,7 +10,7 @@ import { deriveWinningTraits, traitToBadge, estimateAllocation } from '../app/ja
 import { formatEth } from '../app/utils.js';
 import { playSound } from '../app/audio.js';
 import { createScrubber } from '../viewer/scrubber.js';
-import { createJackpotRolls } from '../app/jackpot-rolls.js';
+import { createJackpotRolls, joFormatWeiToEth } from '../app/jackpot-rolls.js';
 import { API_BASE } from '../app/constants.js';
 
 class JackpotPanel extends HTMLElement {
@@ -76,6 +76,9 @@ class JackpotPanel extends HTMLElement {
         <h3 class="jp-section-title">Historical jackpot explorer</h3>
         <div class="jp-day-port" data-bind="jp-day-port">
           <div class="jp-day-scrubber" data-bind="jp-day-scrubber"></div>
+          <!-- Winner summary: rendered by #renderWinnerSummary on day change -->
+          <div class="jp-winner-summary" data-bind="jp-winner-summary" style="display:none;"></div>
+
           <div class="jp-winners">
             <label class="jp-winners-label">Winner</label>
             <select class="jp-winners-select" data-bind="jp-winners-select"></select>
@@ -382,6 +385,82 @@ class JackpotPanel extends HTMLElement {
     return level * 5;
   }
 
+  // ---------------------------------------------------------------------------
+  // Winner summary — brief per-type breakdown rendered above the winner dropdown.
+  // Groups winners by award type (ETH / Tickets / BURNIE) and shows winner count,
+  // unique addresses in parens, and amount per winner.
+  // ---------------------------------------------------------------------------
+  #renderWinnerSummary(winners, day) {
+    const summaryEl = this.querySelector('[data-bind="jp-winner-summary"]');
+    if (!summaryEl) return;
+
+    if (!winners || winners.length === 0) {
+      summaryEl.style.display = 'none';
+      summaryEl.innerHTML = '';
+      return;
+    }
+
+    // Build per-type rows from the aggregated winners list.
+    // The day/winners endpoint gives us totalEth, ticketCount, coinTotal per winner.
+    const ethWinners  = winners.filter(w => BigInt(w.totalEth  || '0') > 0n);
+    const tickWinners = winners.filter(w => (w.ticketCount || 0) > 0);
+    const coinWinners = winners.filter(w => BigInt(w.coinTotal || '0') > 0n);
+
+    const rows = [];
+
+    if (ethWinners.length > 0) {
+      const uniqueAddrs = new Set(ethWinners.map(w => w.address)).size;
+      const amounts = ethWinners.map(w => BigInt(w.totalEth));
+      const topAmt  = amounts.reduce((a, b) => (b > a ? b : a), 0n);
+      const allSame = amounts.every(a => a === amounts[0]);
+      const amtStr  = allSame
+        ? formatEth(amounts[0].toString()) + ' ETH each'
+        : formatEth(topAmt.toString()) + ' ETH (top)';
+      rows.push({ label: 'ETH', count: ethWinners.length, unique: uniqueAddrs, amount: amtStr });
+    }
+
+    if (tickWinners.length > 0) {
+      const uniqueAddrs = new Set(tickWinners.map(w => w.address)).size;
+      const counts  = tickWinners.map(w => w.ticketCount || 0);
+      const topCount = Math.max(...counts);
+      const allSame  = counts.every(c => c === counts[0]);
+      const amtStr   = allSame ? `${counts[0]} tkts each` : `${topCount} tkts (top)`;
+      rows.push({ label: 'Tickets', count: tickWinners.length, unique: uniqueAddrs, amount: amtStr });
+    }
+
+    if (coinWinners.length > 0) {
+      const uniqueAddrs = new Set(coinWinners.map(w => w.address)).size;
+      const amounts = coinWinners.map(w => BigInt(w.coinTotal));
+      const topAmt  = amounts.reduce((a, b) => (b > a ? b : a), 0n);
+      const allSame = amounts.every(a => a === amounts[0]);
+      const amtStr  = allSame
+        ? joFormatWeiToEth(amounts[0].toString()) + ' BURNIE each'
+        : joFormatWeiToEth(topAmt.toString()) + ' BURNIE (top)';
+      rows.push({ label: 'BURNIE', count: coinWinners.length, unique: uniqueAddrs, amount: amtStr });
+    }
+
+    if (rows.length > 0) {
+      summaryEl.innerHTML = this.#buildSummaryHtml(rows, day);
+      summaryEl.style.display = '';
+    } else {
+      // Winners exist but only non-standard award types (e.g. whale_pass only)
+      summaryEl.innerHTML = `<div class="jp-summary-note">${winners.length} winner${winners.length !== 1 ? 's' : ''} this day</div>`;
+      summaryEl.style.display = '';
+    }
+  }
+
+  #buildSummaryHtml(rows, day) {
+    if (!rows.length) return '';
+    const rowHtml = rows.map(r =>
+      `<div class="jp-summary-row">
+        <span class="jp-summary-type">${r.label}</span>
+        <span class="jp-summary-count">${r.count} <span class="jp-summary-uniq">(${r.unique})</span></span>
+        <span class="jp-summary-amount">${r.amount}</span>
+      </div>`
+    ).join('');
+    return `<div class="jp-summary-header">Day ${day} Jackpot</div>${rowHtml}`;
+  }
+
   // Called when the scrubber day changes — fetches winners and populates the dropdown.
   async #onDayChange(day) {
     this.#winnersRequestVersion++;
@@ -467,8 +546,14 @@ class JackpotPanel extends HTMLElement {
       const opt = document.createElement('option');
       opt.disabled = true;
       opt.selected = true;
-      opt.textContent = 'No winners for this day';
+      opt.textContent = 'No jackpot this day';
       selectEl.appendChild(opt);
+      // Clear winner summary — this day had no jackpot draw
+      const summaryEl = this.querySelector('[data-bind="jp-winner-summary"]');
+      if (summaryEl) {
+        summaryEl.innerHTML = '<div class="jp-summary-note">No jackpot draw on this day — scrub to a nearby day to find one.</div>';
+        summaryEl.style.display = '';
+      }
       return;
     }
 
@@ -476,9 +561,16 @@ class JackpotPanel extends HTMLElement {
       const opt = document.createElement('option');
       opt.value = w.address;
       opt.dataset.hasBonus = String(w.hasBonus);
+      // Store the per-winner winning level so #onWinnerChange uses the correct
+      // level for the player endpoint — prevents level-mismatch when multiple
+      // jackpot levels share the same block-range day.
+      if (w.winningLevel != null) opt.dataset.winningLevel = String(w.winningLevel);
       opt.textContent = this.#formatWinnerLabel(w);
       selectEl.appendChild(opt);
     }
+
+    // Render the winner summary block above the dropdown
+    this.#renderWinnerSummary(this.#winners, this.#currentDay);
 
     // D-10: auto-select row 0 (highest payout — server returns payout-desc)
     selectEl.selectedIndex = 0;
@@ -496,6 +588,19 @@ class JackpotPanel extends HTMLElement {
   // Plan 04: cancel pending flash, reset panel roll state, then run pre-flight.
   async #onWinnerChange(address) {
     if (!address || !this.#currentLevel) return;
+
+    // Resolve the correct jackpot level for this winner.  The day/winners endpoint
+    // now returns a per-winner winningLevel (dominant level in the day's block range).
+    // If absent (older API or direct call), fall back to #currentLevel.
+    const selectEl = this.querySelector('[data-bind="jp-winners-select"]');
+    let levelForPlayer = this.#currentLevel;
+    if (selectEl) {
+      const selectedOpt = selectEl.querySelector(`option[value="${CSS.escape(address)}"]`);
+      if (selectedOpt && selectedOpt.dataset.winningLevel) {
+        const parsed = Number(selectedOpt.dataset.winningLevel);
+        if (parsed > 0) levelForPlayer = parsed;
+      }
+    }
     this.#rolls.cancelPendingFlashes();   // Pitfall 6: factory timer guard
 
     // Pitfall 6: cancel panel-owned "No bonus" flash timer if still pending
@@ -521,7 +626,8 @@ class JackpotPanel extends HTMLElement {
     if (roll2Panel) roll2Panel.style.display = 'none';
 
     await this.#rolls.preFlightAndRunPlayer({
-      level: this.#currentLevel,
+      level: levelForPlayer,
+      day: this.#currentDay,   // scopes player endpoint to this day's block range
       addr: address,
       onData: (data) => {
         // Cache pre-flight result and render Roll 1 grid
@@ -626,16 +732,28 @@ class JackpotPanel extends HTMLElement {
     const day = game.jackpotDay || 0;
     this.#bind('day', day > 0 ? `Day ${day}/5` : 'Day --');
 
-    // Plan 03: update scrubber range once we know the game level
-    if (this.#scrubber && game.level) {
-      const latestCompleted = this.#computeLatestCompletedDay(game);
-      this.#scrubber.setRange(1, latestCompleted);
-      // Only set the day if we haven't already navigated (currentDay null = first load)
-      if (this.#currentDay === null) {
-        this.#scrubber.setDay(latestCompleted);
-        // Trigger initial winners fetch
-        this.#onDayChange(latestCompleted);
-      }
+    // Plan 03: update scrubber range once we know the game level.
+    // Fetch the true latest jackpot day from the API instead of using the broken
+    // "level * 5" heuristic — jackpot draws happen at arbitrary blocks, not every 5 days.
+    if (this.#scrubber && game.level && this.#currentDay === null) {
+      // Fire-and-forget; falls back to the heuristic if the endpoint fails.
+      fetchJSON('/game/jackpot/latest-day').then(({ latestDay }) => {
+        const maxDay = (latestDay && latestDay > 0) ? latestDay : this.#computeLatestCompletedDay(game);
+        if (this.#scrubber) this.#scrubber.setRange(1, maxDay);
+        // Navigate to the latest day that actually has jackpot data
+        if (this.#currentDay === null) {
+          if (this.#scrubber) this.#scrubber.setDay(maxDay);
+          this.#onDayChange(maxDay);
+        }
+      }).catch(() => {
+        // API unavailable — fall back to formula
+        const latestCompleted = this.#computeLatestCompletedDay(game);
+        if (this.#scrubber) this.#scrubber.setRange(1, latestCompleted);
+        if (this.#currentDay === null) {
+          if (this.#scrubber) this.#scrubber.setDay(latestCompleted);
+          this.#onDayChange(latestCompleted);
+        }
+      });
     }
 
     // Update pool display
@@ -764,28 +882,43 @@ class JackpotPanel extends HTMLElement {
       textEl.textContent = `${distributions.length} prizes awarded to ${uniqueWinners} winners`;
     }
 
-    // Populate winner breakdown dropdown — aggregate total amount per player
+    // Populate winner breakdown dropdown — aggregate ETH per player.
+    // whale_pass amount=1 means "1 pass" (count), NOT 1 wei — exclude from ETH total.
+    // Non-ETH award types are shown as a label only, not summed into the amount.
     const byPlayer = {};
     for (const d of distributions) {
-      if (!byPlayer[d.winner]) byPlayer[d.winner] = { total: 0n, types: new Set() };
-      byPlayer[d.winner].total += BigInt(d.amount || '0');
-      byPlayer[d.winner].types.add(d.awardType || 'unknown');
+      if (!byPlayer[d.winner]) byPlayer[d.winner] = { ethTotal: 0n, extraTypes: new Set() };
+      const awardType = d.awardType || 'unknown';
+      if (awardType === 'eth') {
+        byPlayer[d.winner].ethTotal += BigInt(d.amount || '0');
+      } else if (awardType !== 'dgnrs') {
+        // whale_pass, tickets, burnie etc — flag as extra award types
+        byPlayer[d.winner].extraTypes.add(awardType);
+      }
     }
 
-    // Sort by total descending
+    // Sort by ETH total descending
     const sorted = Object.entries(byPlayer)
-      .sort(([, a], [, b]) => (b.total > a.total ? 1 : b.total < a.total ? -1 : 0));
+      .sort(([, a], [, b]) => (b.ethTotal > a.ethTotal ? 1 : b.ethTotal < a.ethTotal ? -1 : 0));
 
     const listEl = this.querySelector('[data-bind="winners-list"]');
     const dropdownEl = this.querySelector('[data-bind="winners-dropdown"]');
     if (listEl && dropdownEl) {
-      listEl.innerHTML = sorted.map(([addr, { total, types }]) => {
+      listEl.innerHTML = sorted.map(([addr, { ethTotal, extraTypes }]) => {
         const short = addr.slice(0, 6) + '…' + addr.slice(-4);
-        const typeLabel = [...types].join(', ');
+        // Map raw awardType keys to human-readable labels
+        const typeLabels = [...extraTypes].map(t => {
+          if (t === 'whale_pass') return 'Whale Pass';
+          if (t === 'tickets') return 'Tickets';
+          if (t.includes('burnie') || t === 'farFutureCoin') return 'BURNIE';
+          return t;
+        });
+        const typeLabel = typeLabels.join(' + ');
+        const ethDisplay = ethTotal > 0n ? formatEth(ethTotal.toString()) + ' ETH' : '';
+        const amountDisplay = [ethDisplay, typeLabel].filter(Boolean).join(' + ');
         return `<div class="jackpot-winner-row">
           <span class="winner-addr" title="${addr}">${short}</span>
-          <span class="winner-type">${typeLabel}</span>
-          <span class="winner-amount">${formatEth(total.toString())} ETH</span>
+          <span class="winner-amount">${amountDisplay || '—'}</span>
         </div>`;
       }).join('');
       dropdownEl.hidden = false;

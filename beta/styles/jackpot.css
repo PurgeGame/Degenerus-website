@@ -249,6 +249,65 @@
   color: var(--text-secondary, #a0a0c0);
 }
 
+/* Winner summary block — above the winner dropdown, rendered per day change */
+.jp-winner-summary {
+  background: rgba(245, 166, 35, 0.06);
+  border: 1px solid rgba(245, 166, 35, 0.2);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.75rem;
+}
+
+.jp-summary-header {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--accent-primary, #f5a623);
+  margin-bottom: 0.35rem;
+}
+
+.jp-summary-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 1fr;
+  gap: 0 0.5rem;
+  align-items: center;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.jp-summary-row:last-child {
+  border-bottom: none;
+}
+
+.jp-summary-type {
+  font-weight: 700;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.jp-summary-count {
+  color: var(--success, #22c55e);
+  font-variant-numeric: tabular-nums;
+}
+
+.jp-summary-uniq {
+  color: var(--text-dim, #888);
+  font-weight: 400;
+}
+
+.jp-summary-amount {
+  color: var(--text-secondary, #a0a0c0);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.jp-summary-note {
+  color: var(--text-dim, #888);
+  font-style: italic;
+  font-size: 0.72rem;
+}
+
 /* jp-rolls-slot: Plan 04 fills this with the two-phase draw */
 .jp-rolls-slot {
   /* empty in Plan 03 */
