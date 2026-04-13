@@ -128,8 +128,152 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Winner breakdown dropdown */
+.jackpot-winners-dropdown {
+  margin-top: 0.75rem;
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.jackpot-winners-dropdown summary {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted, #999);
+  background: var(--surface-2, #1a1a1a);
+}
+
+.jackpot-winners-list {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0.25rem 0;
+}
+
+.jackpot-winner-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  border-bottom: 1px solid var(--border, #222);
+  gap: 0.5rem;
+}
+
+.jackpot-winner-row:last-child {
+  border-bottom: none;
+}
+
+.winner-addr {
+  font-family: monospace;
+  color: var(--text-muted, #999);
+  flex-shrink: 0;
+}
+
+.winner-type {
+  color: var(--text-muted, #777);
+  font-size: 0.65rem;
+  flex: 1;
+  text-align: center;
+}
+
+.winner-amount {
+  font-weight: 700;
+  color: var(--success, #22c55e);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .trait-card-inner {
     transition: none !important;
   }
 }
+
+/* -------------------------------------------------------------------------
+   Plan 03: jp-day-port — scrubber + winners dropdown section
+   Renders above the existing 4-card reveal (user addendum A6: coexist).
+   ------------------------------------------------------------------------- */
+
+.jp-day-port {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border-color, #3a3a5c);
+}
+
+/* The scrubber container — createScrubber injects .viewer-scrubber markup here,
+   reusing the viewer CSS classes so the scrubber looks consistent everywhere. */
+.jp-day-scrubber {
+  margin-bottom: 0.75rem;
+}
+
+/* Winners row: label + select inline */
+.jp-winners {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.jp-winners-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-dim, #6b6b8d);
+  white-space: nowrap;
+}
+
+.jp-winners-select {
+  flex: 1;
+  min-width: 200px;
+  background: var(--bg-tertiary, #252542);
+  color: var(--text-primary, #fff);
+  border: 1px solid var(--border-color, #3a3a5c);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  cursor: pointer;
+}
+
+.jp-winners-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.jp-winners-select option {
+  background: var(--bg-secondary, #1a1a2e);
+  color: var(--text-secondary, #a0a0c0);
+}
+
+/* jp-rolls-slot: Plan 04 fills this with the two-phase draw */
+.jp-rolls-slot {
+  /* empty in Plan 03 */
+}
+
+/* jp-overview: Day Overview collapsible — collapsed by default (D-12) */
+.jp-overview {
+  border: 1px solid var(--border-color, #3a3a5c);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.jp-overview > summary {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim, #6b6b8d);
+  background: var(--bg-secondary, #1a1a2e);
+  user-select: none;
+}
+
+.jp-overview-body {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #a0a0c0);
+}
+/* Plan 04 will populate jp-overview-body and jp-rolls-slot */
