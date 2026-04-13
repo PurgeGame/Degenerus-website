@@ -96,7 +96,8 @@ class ReplayPanel extends HTMLElement {
 
   // Bonus Roll (Roll 2) state — reuses the main widget
   #bonusPhase = false;          // true while bonus roll is active (Roll 2 reveal)
-  #bonusTraitIds = new Set();   // traitIds the player won in Roll 2 (for spin coloring)
+  #bonusTraitIds = new Set();   // traitIds the player won in Roll 2 (unused — kept for compat)
+  #bonusQuadrants = new Set();  // contract quadrant numbers with roll2.future wins
 
   #audioCtx = null;             // Web Audio context for SFX
   #scratchNode = null;          // active scratch noise node
@@ -589,7 +590,7 @@ class ReplayPanel extends HTMLElement {
     const displayTraits = toDisplayOrder(traits);
 
     // Map roll1Rows to quadrant prize arrays (D3: only actually-won traits).
-    this.#distributePrizesFromRoll1(displayTraits);
+    this.#distributePrizesFromRoll1(displayTraits, winnerEntry);
 
     const btn = this.querySelector('[data-bind="reveal-btn"]');
     btn.disabled = true;
@@ -605,11 +606,40 @@ class ReplayPanel extends HTMLElement {
   }
 
   /**
+   * Build a per-traitId lookup from the winner's breakdown array.
+   * breakdown entries have { awardType, amount, count, traitId }.
+   * Returns Map<traitId, { ethTotal: bigint, burnieTotal: bigint }>.
+   * Also returns { centerBurnie: bigint } for null-traitId burnie/farFutureCoin entries.
+   */
+  #buildBreakdownLookup(breakdown) {
+    const byTrait = new Map();
+    let centerBurnie = 0n;
+    for (const entry of (breakdown || [])) {
+      const at = entry.awardType || '';
+      const amt = BigInt(entry.amount || '0');
+      const cnt = BigInt(entry.count || 1);
+      const total = amt * cnt;
+      if (entry.traitId == null) {
+        // null-traitId burnie = farFutureCoin center wins
+        if (at === 'burnie' || at === 'farFutureCoin') centerBurnie += total;
+        continue;
+      }
+      if (!byTrait.has(entry.traitId)) byTrait.set(entry.traitId, { ethTotal: 0n, burnieTotal: 0n });
+      const rec = byTrait.get(entry.traitId);
+      if (at === 'eth') rec.ethTotal += total;
+      else if (at === 'burnie' || at === 'farFutureCoin') rec.burnieTotal += total;
+      // tickets are read from row.ticketsPerWinner (already aggregated correctly)
+    }
+    return { byTrait, centerBurnie };
+  }
+
+  /**
    * D3: Map roll1Rows (per-player winning trait rows from /game/jackpot/:level/player/:addr)
    * to quadrant prize arrays. Only traits the player actually won appear as scratchable.
-   * Each row becomes a synthetic dist object so the existing reveal/prize logic works.
+   * ETH/BURNIE totals come from the winner's breakdown (authoritative), tickets from row.
+   * winnerEntry is the entry from #winners for this player (may be null for non-winners).
    */
-  #distributePrizesFromRoll1(displayTraits) {
+  #distributePrizesFromRoll1(displayTraits, winnerEntry) {
     this.#quadWinArrays = [[], [], [], []];
     this.#centerWins = [];
 
@@ -619,28 +649,30 @@ class ReplayPanel extends HTMLElement {
       return;
     }
 
+    const { byTrait } = this.#buildBreakdownLookup(winnerEntry?.breakdown);
+
     for (const row of this.#roll1Rows) {
       if (row.traitId == null) continue; // skip bonus rows with no trait
       const contractQ = Math.floor(row.traitId / 64);
       const displayPos = DISPLAY_ORDER.indexOf(contractQ);
       if (displayPos < 0 || displayPos > 3) continue;
 
-      // Convert JackpotOverviewRow fields to synthetic dist objects for prize display
-      const synths = [];
-      if (BigInt(row.ethPerWinner || '0') > 0n) {
-        synths.push({ awardType: 'eth', amount: row.ethPerWinner, traitId: row.traitId });
-      }
-      if (BigInt(row.coinPerWinner || '0') > 0n) {
-        synths.push({ awardType: 'burnie', amount: row.coinPerWinner, traitId: row.traitId });
-      }
-      if ((row.ticketsPerWinner || 0) > 0) {
-        synths.push({ awardType: 'tickets', amount: String(row.ticketsPerWinner), traitId: row.traitId });
-      }
-      // If no recognised prize amounts, still mark quadrant as won (shows scratch card)
-      if (synths.length === 0) {
-        synths.push({ awardType: 'eth', amount: '0', traitId: row.traitId });
-      }
-      this.#quadWinArrays[displayPos].push(...synths);
+      // Use breakdown for ETH/BURNIE totals (roll1Rows.ethPerWinner is unreliable).
+      // Tickets come from row.ticketsPerWinner (already correctly aggregated by the API).
+      const bdRec = byTrait.get(row.traitId);
+      const ethTotal = bdRec ? bdRec.ethTotal : 0n;
+      const burnieTotal = bdRec ? bdRec.burnieTotal : 0n;
+      const ticketTotal = row.ticketsPerWinner || 0;
+
+      // One aggregated entry per row keeps badge count = winning-trait count (not award-type count).
+      const entry = {
+        awardType: 'aggregated',
+        ethTotal: ethTotal.toString(),
+        burnieTotal: burnieTotal.toString(),
+        ticketTotal,
+        traitId: row.traitId,
+      };
+      this.#quadWinArrays[displayPos].push(entry);
     }
   }
 
@@ -718,11 +750,15 @@ class ReplayPanel extends HTMLElement {
     const futureRows = this.#roll2Data.future || [];
     const farFutureRows = this.#roll2Data.farFuture || [];
 
-    // Store Roll 2 trait IDs for spin quadrant-ownership detection
+    // Store Roll 2 contract quadrant numbers for spin quadrant-ownership detection.
+    // future rows contain per-trait wins; the spin re-uses the same RNG display traits,
+    // so we match by contract quadrant (traitId/64) rather than exact traitId.
     this.#bonusTraitIds = new Set(futureRows.map(r => r.traitId).filter(t => t != null));
+    this.#bonusQuadrants = new Set(futureRows.map(r => r.traitId != null ? Math.floor(r.traitId / 64) : -1).filter(q => q >= 0));
 
     // Build prize arrays from roll2 rows so #revealQuadrant / #revealCenter show correct amounts
-    this.#distributePrizesFromRoll2(futureRows, farFutureRows);
+    const bonusWinnerEntry = this.#winners.find(w => w.address.toLowerCase() === this.#selectedPlayer.toLowerCase());
+    this.#distributePrizesFromRoll2(futureRows, farFutureRows, bonusWinnerEntry);
 
     // Derive display traits for the spin — use the same RNG word (same draw)
     const rngEntry = this.#rngDays.find(d => d.day === this.#selectedDay);
@@ -742,39 +778,47 @@ class ReplayPanel extends HTMLElement {
 
   /**
    * Distribute Roll 2 prizes into quadrant arrays and center wins.
-   * future rows → quadrant prize arrays (same logic as #distributePrizesFromRoll1)
-   * farFuture rows → center diamond BURNIE wins
+   * future rows → quadrant prize arrays aggregated per display-position.
+   * farFuture rows (and null-traitId burnie breakdown entries) → center diamond BURNIE.
+   * winnerEntry provides the authoritative breakdown for ETH/BURNIE totals.
    */
-  #distributePrizesFromRoll2(futureRows, farFutureRows) {
+  #distributePrizesFromRoll2(futureRows, farFutureRows, winnerEntry) {
     this.#quadWinArrays = [[], [], [], []];
     this.#centerWins = [];
 
+    const { byTrait, centerBurnie } = this.#buildBreakdownLookup(winnerEntry?.breakdown);
+
+    // Aggregate future rows per display position (multiple traits can share a quadrant).
+    // We produce one entry per trait row so badge scatter shows individual trait badges.
     for (const row of futureRows) {
       if (row.traitId == null) continue;
       const contractQ = Math.floor(row.traitId / 64);
       const displayPos = DISPLAY_ORDER.indexOf(contractQ);
       if (displayPos < 0 || displayPos > 3) continue;
 
-      const synths = [];
-      if (BigInt(row.ethPerWinner || '0') > 0n) {
-        synths.push({ awardType: 'eth', amount: row.ethPerWinner, traitId: row.traitId });
-      }
-      if (BigInt(row.coinPerWinner || '0') > 0n) {
-        synths.push({ awardType: 'burnie', amount: row.coinPerWinner, traitId: row.traitId });
-      }
-      if ((row.ticketsPerWinner || 0) > 0) {
-        synths.push({ awardType: 'tickets', amount: String(row.ticketsPerWinner), traitId: row.traitId });
-      }
-      if (synths.length === 0) {
-        synths.push({ awardType: 'eth', amount: '0', traitId: row.traitId });
-      }
-      this.#quadWinArrays[displayPos].push(...synths);
+      const bdRec = byTrait.get(row.traitId);
+      const ethTotal = bdRec ? bdRec.ethTotal : 0n;
+      const burnieTotal = bdRec ? bdRec.burnieTotal : 0n;
+      const ticketTotal = row.ticketsPerWinner || 0;
+
+      this.#quadWinArrays[displayPos].push({
+        awardType: 'aggregated',
+        ethTotal: ethTotal.toString(),
+        burnieTotal: burnieTotal.toString(),
+        ticketTotal,
+        traitId: row.traitId,
+      });
     }
 
+    // farFuture rows go to center diamond. Use both row.coinPerWinner and breakdown centerBurnie.
+    let ffTotal = 0n;
     for (const row of farFutureRows) {
-      if (BigInt(row.coinPerWinner || '0') > 0n) {
-        this.#centerWins.push({ awardType: 'burnie', amount: row.coinPerWinner, traitId: row.traitId });
-      }
+      ffTotal += BigInt(row.coinPerWinner || '0');
+    }
+    // Prefer breakdown-derived center total if it's larger/non-zero (more accurate).
+    if (centerBurnie > ffTotal) ffTotal = centerBurnie;
+    if (ffTotal > 0n) {
+      this.#centerWins.push({ awardType: 'burnie', amount: ffTotal.toString(), traitId: null });
     }
   }
 
@@ -821,17 +865,29 @@ class ReplayPanel extends HTMLElement {
 
     // Determine which quadrants are scratchable: a quadrant is scratchable only if
     // this player actually has a winning row for that display position.
-    // In bonus phase use Roll 2 trait IDs; otherwise use Roll 1 trait IDs (D3).
+    // Roll 1: match by exact traitId (display trait must be a won trait).
+    // Roll 2 bonus: match by contract quadrant — future rows are the player's own traits
+    //   which differ from the drawn display traits, so we check if the contract quadrant
+    //   of the drawn trait (displayTraits[i]/64) appears in #bonusQuadrants.
     // Fall back to player trait ownership when no row data is available.
-    const activeTraitIds = this.#bonusPhase
-      ? this.#bonusTraitIds
-      : new Set(this.#roll1Rows.map(r => r.traitId).filter(t => t != null));
-    for (let i = 0; i < 4; i++) {
-      if (activeTraitIds.size > 0) {
-        this.#quadOwned[i] = displayTraits[i] != null && activeTraitIds.has(displayTraits[i]);
-      } else {
-        // Fallback: use player trait ownership (pre-D3 behaviour)
-        this.#quadOwned[i] = displayTraits[i] != null && this.#playerTraitIds.has(displayTraits[i]);
+    if (this.#bonusPhase) {
+      for (let i = 0; i < 4; i++) {
+        if (this.#bonusQuadrants.size > 0) {
+          const contractQ = displayTraits[i] != null ? Math.floor(displayTraits[i] / 64) : -1;
+          this.#quadOwned[i] = contractQ >= 0 && this.#bonusQuadrants.has(contractQ);
+        } else {
+          this.#quadOwned[i] = false;
+        }
+      }
+    } else {
+      const roll1TraitIds = new Set(this.#roll1Rows.map(r => r.traitId).filter(t => t != null));
+      for (let i = 0; i < 4; i++) {
+        if (roll1TraitIds.size > 0) {
+          this.#quadOwned[i] = displayTraits[i] != null && roll1TraitIds.has(displayTraits[i]);
+        } else {
+          // Fallback: use player trait ownership (pre-D3 behaviour)
+          this.#quadOwned[i] = displayTraits[i] != null && this.#playerTraitIds.has(displayTraits[i]);
+        }
       }
     }
 
@@ -1328,7 +1384,12 @@ class ReplayPanel extends HTMLElement {
       let ethTotal = 0n, burnieTotal = 0n, dgnrsTotal = 0n, ticketCount = 0, whaleCount = 0;
       for (const d of wins) {
         const t = d.awardType || '';
-        if (t === 'burnie' || t === 'farFutureCoin' || d.currency === 'BURNIE') {
+        if (t === 'aggregated') {
+          // New aggregated entry produced by #distributePrizesFromRoll1/2
+          ethTotal += BigInt(d.ethTotal || '0');
+          burnieTotal += BigInt(d.burnieTotal || '0');
+          ticketCount += Number(d.ticketTotal || 0);
+        } else if (t === 'burnie' || t === 'farFutureCoin' || d.currency === 'BURNIE') {
           burnieTotal += BigInt(d.amount || '0');
         } else if (t === 'dgnrs') {
           dgnrsTotal += BigInt(d.amount || '0');
@@ -1480,6 +1541,7 @@ class ReplayPanel extends HTMLElement {
     // Reset bonus roll state
     this.#bonusPhase = false;
     this.#bonusTraitIds = new Set();
+    this.#bonusQuadrants = new Set();
     const bonusSection = this.querySelector('[data-bind="bonus-section"]');
     if (bonusSection) bonusSection.hidden = true;
     const bonusBtn = this.querySelector('[data-bind="bonus-btn"]');
