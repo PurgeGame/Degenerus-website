@@ -1679,10 +1679,10 @@
           if (flame) flame.classList.remove('spinning');
           rolls.renderRoll2((demoPlayerData && demoPlayerData.roll2) || { future: [], farFuture: [] });
           // Scroll the Roll 2 panel into view after rendering.
-          // Uses block:'nearest' so it doesn't over-scroll if the panel is already visible.
-          // (Replaces the prior block:'center' call that caused the scroll-off-top bug —
-          // that bug was due to the old flex-centered body layout; the body now uses
-          // align-items:flex-start so nearest/start scrolling behaves correctly.)
+          // Uses block:'start' so the panel heading appears at the top of the viewport.
+          // (Replaces the prior block:'center' call removed in 2f7aa93 — that call caused
+          // content to scroll off-top under the old flex-centered body layout. The body
+          // now uses align-items:flex-start so block:'start' works correctly.)
           var roll2Panel = document.getElementById('roll2-panel');
           if (roll2Panel && roll2Panel.scrollIntoView) {
             roll2Panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
