@@ -141,30 +141,45 @@ _entries: list[Constant] = [
         name="STETH_ACCUMULATOR_BPS",
         value=5000,
         unit="bps",
-        citation=_c(_GAME, None),
-        notes="50% of stETH yield routed to yield accumulator. Inline split; grep for stETH harvest / yieldAccumulator increment in DegenerusGame.sol + DegenerusVault.sol. Line TBD for 18-02 backfill.",
+        citation=_c(_JACKPOT, 769),
+        notes=(
+            "Canonical 50% of stETH yield routed to yield accumulator (per CLAUDE.md: split is 50/25/25). "
+            "Implementation: `distributeYieldSurplus` at DegenerusGameJackpotModule.sol L737-L770 uses "
+            "`quarterShare = (yieldPool * 2300) / 10_000` and credits vault+sDGNRS+GNRUS (3x23%=69%) then "
+            "`yieldAccumulator += quarterShare` (23%) totaling 92%, leaving ~8% contract buffer. "
+            "The 8% buffer is an implementation detail; canonical economic split remains 50/25/25."
+        ),
     ),
     Constant(
         name="STETH_A_BPS",
         value=2500,
         unit="bps",
-        citation=_c(_GAME, None),
-        notes="25% of stETH yield to Game instance A. Line TBD; grep for stETH yield split in DegenerusGame.sol.",
+        citation=_c(_JACKPOT, 749),
+        notes=(
+            "Canonical 25% of stETH yield to Game-side A (vault / sDGNRS claimable). "
+            "Implemented as `quarterShare = (yieldPool * 2300) / 10_000` (23% with ~8% buffer)."
+        ),
     ),
     Constant(
         name="STETH_B_BPS",
         value=2500,
         unit="bps",
-        citation=_c(_GAME, None),
-        notes="25% of stETH yield to Game instance B. Line TBD; grep for stETH yield split in DegenerusGame.sol.",
+        citation=_c(_JACKPOT, 749),
+        notes=(
+            "Canonical 25% of stETH yield to Game-side B (GNRUS charity). "
+            "Same `quarterShare = (yieldPool * 2300) / 10_000` expression; 23% with ~8% buffer."
+        ),
     ),
     # --- Accumulator per-level skim ---
     Constant(
         name="ACCUMULATOR_PER_LEVEL_BPS",
         value=100,
         unit="bps",
-        citation=_c(_ADVANCE, None),
-        notes="1% of each completed level's prize pool routed to the segregated accumulator at level transition. Line TBD; grep for accumulator increment in advance module.",
+        citation=_c(_ADVANCE, 129),
+        notes=(
+            "INSURANCE_SKIM_BPS = 100; 1% of nextPool routed to yieldAccumulator at level advance "
+            "(applied via `insuranceSkim = (memNext * INSURANCE_SKIM_BPS) / 10_000` at L716)."
+        ),
     ),
     # --- x00 yield accumulator dump ---
     Constant(
@@ -216,8 +231,12 @@ _entries: list[Constant] = [
         name="DEATH_CLOCK_LEVEL_0_DAYS",
         value=365,
         unit="days",
-        citation=_c(_GAME, None),
-        notes="Level 0 death clock = 365 days. Grep for death-clock seeding on level 0; line TBD.",
+        citation=_c(_ADVANCE, 108),
+        notes=(
+            "DEPLOY_IDLE_TIMEOUT_DAYS = 365 (Level-0 only; level 1+ uses hardcoded 120 days per inline comment). "
+            "Applied at DegenerusGameAdvanceModule.sol:503 `currentDay - psd > DEPLOY_IDLE_TIMEOUT_DAYS`. "
+            "Also mirrored at DegenerusGame.sol:148 and storage/DegenerusGameStorage.sol:198."
+        ),
     ),
     Constant(
         name="DEATH_CLOCK_LEVEL_1_PLUS_DAYS",
