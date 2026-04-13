@@ -603,3 +603,32 @@
   min-height: 32px;
 }
 
+/* -------------------------------------------------------------------------
+   Plan 39-09: Ticket sub-row treatment for Roll 1 + Roll 2.
+   Renders nested under the parent trait row with indent + badge + count.
+   grid-column: 1 / -1 spans all columns of the parent CSS grid (7 in Roll 1,
+   3 in Roll 2). Warm gold = "ticket". Works because jo-row uses
+   display:contents so sibling cells are direct grid children.
+   ------------------------------------------------------------------------- */
+.jp-ticket-subrow {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 32px; /* indent for visual nesting */
+  font-size: 0.85em;
+  color: #d4af37;
+  background: rgba(212, 175, 55, 0.06);
+  border-left: 2px solid rgba(212, 175, 55, 0.4);
+}
+.jp-ticket-subrow-badge img {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+  opacity: 0.85;
+}
+.jp-ticket-subrow-label {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+

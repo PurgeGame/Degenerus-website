@@ -65,7 +65,7 @@ class JackpotPanel extends HTMLElement {
 
             <!-- Roll 1 result grid -->
             <div class="jp-roll1-result" data-bind="jp-roll1-result" style="display:none;">
-              <div class="jp-roll-heading">Roll 1 — current-level ticket wins</div>
+              <div class="jp-roll-heading">Roll 1 — current-level wins (ETH + tickets)</div>
               <div class="jo-grid jp-roll1-grid" data-bind="jp-roll1-grid">
                 <div class="jo-header">Type</div>
                 <div class="jo-header">Win</div>
@@ -767,6 +767,31 @@ class JackpotPanel extends HTMLElement {
         cell.style.animationDelay = (idx * 60) + 'ms';
         grid.appendChild(cell);
       });
+
+      // Plan 39-09: ticket sub-row under bonus slot (never under far-future).
+      if (slot.ticketSubRow && slot.ticketSubRow.wins > 0 && !slot.isFarFuture) {
+        const subCell = document.createElement('div');
+        subCell.className = 'jp-ticket-subrow';
+
+        const badge = document.createElement('span');
+        badge.className = 'jp-ticket-subrow-badge';
+        if (slot.traitId != null) {
+          const bImg = document.createElement('img');
+          bImg.src = joBadgePath(slot.quadrant, slot.symbolIdx, slot.colorIdx);
+          bImg.alt = JO_SYMBOLS[JO_CATEGORIES[slot.quadrant]]?.[slot.symbolIdx] ?? '';
+          badge.appendChild(bImg);
+        }
+
+        const label = document.createElement('span');
+        label.className = 'jp-ticket-subrow-label';
+        label.textContent = '\u21B3 Tickets won: ' + slot.ticketSubRow.wins;
+
+        subCell.appendChild(badge);
+        subCell.appendChild(label);
+        subCell.classList.add('jp-row-reveal');
+        subCell.style.animationDelay = ((idx * 60) + 30) + 'ms';
+        grid.appendChild(subCell);
+      }
     });
 
     // Wait for animations (9 rows * 60ms stagger + ~300ms anim duration)

@@ -389,6 +389,41 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
   }
 
   // ------------------------------------------------------------------
+  // Plan 39-09: _buildTicketSubRowCells
+  // Returns an array of direct grid children representing a nested
+  // ticket sub-row. Uses grid-column: 1/-1 to span all columns of the
+  // parent CSS grid (7 cols for Roll 1, 3 cols for Roll 2).
+  // Consumers append each returned cell directly to the grid.
+  // ------------------------------------------------------------------
+
+  function _buildTicketSubRowCells(parentRow, sub) {
+    var cell = document.createElement('div');
+    cell.className = 'jp-ticket-subrow';
+
+    var badge = document.createElement('span');
+    badge.className = 'jp-ticket-subrow-badge';
+    if (parentRow && parentRow.traitId != null) {
+      var t = parentRow.traitId | 0;
+      var q = Math.floor(t / 64);
+      var sym = Math.floor((t % 64) / 8);
+      var col = t % 8;
+      var img = document.createElement('img');
+      img.src = joBadgePath(q, sym, col);
+      var cat = JO_CATEGORIES[q];
+      img.alt = (cat && JO_SYMBOLS[cat] && JO_SYMBOLS[cat][sym]) || '';
+      badge.appendChild(img);
+    }
+
+    var label = document.createElement('span');
+    label.className = 'jp-ticket-subrow-label';
+    label.textContent = '\u21B3 Tickets won: ' + (sub && sub.wins != null ? sub.wins : 0);
+
+    cell.appendChild(badge);
+    cell.appendChild(label);
+    return [cell];
+  }
+
+  // ------------------------------------------------------------------
   // renderRoll2 — public method (ported from renderRoll2Subsections, lines 1632-1656)
   // ------------------------------------------------------------------
 
@@ -715,7 +750,7 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
           // Render a "no wins" placeholder row
           var emptyEl = document.createElement('div');
           emptyEl.className = 'jp-roll1-empty';
-          emptyEl.textContent = 'No current-level ticket wins this day.';
+          emptyEl.textContent = 'No current-level wins this day.';
           gridEl.appendChild(emptyEl);
           resolve(data);
           return;
@@ -739,6 +774,19 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
                 cells[ci].style.animationDelay = delay + 'ms';
               }
               lastCell = cells[cells.length - 1] || null;
+            }
+
+            // Plan 39-09: append nested ticket sub-row immediately under the
+            // parent row when ticket data exists for this trait.
+            if (row && row.ticketSubRow && row.ticketSubRow.wins > 0) {
+              var subDelay = delay + 40;
+              var subCells = _buildTicketSubRowCells(row, row.ticketSubRow);
+              for (var sci = 0; sci < subCells.length; sci++) {
+                subCells[sci].classList.add('jp-row-reveal');
+                subCells[sci].style.animationDelay = subDelay + 'ms';
+                gridEl.appendChild(subCells[sci]);
+              }
+              lastCell = subCells[subCells.length - 1] || lastCell;
             }
           })(visible[i], i);
         }
