@@ -73,10 +73,14 @@ class ReplayPanel extends HTMLElement {
   #distributions = []; // raw distributions from replay/day endpoint (used for prize mapping)
   #winners = [];       // winner objects from /game/jackpot/day/:day/winners
 
-  // Per-player roll data from /game/jackpot/:level/player/:addr?day=:day
-  #roll1Rows = [];     // JackpotOverviewRow[] for Roll 1 (current-level ticket wins)
-  #roll2Data = null;   // { future: JackpotOverviewRow[], farFuture: JackpotOverviewRow[] }
-  #hasBonus = false;   // whether this player has Roll 2 data
+  // Per-day roll caches from /game/jackpot/day/:day/roll1 and /roll2
+  #dayRoll1 = null;    // full response: { day, level, purchaseLevel, wins: [...] }
+  #dayRoll2 = null;    // full response: { day, level, purchaseLevel, wins: [...] }
+
+  // Per-player filtered wins (derived from day caches by filtering on winner address)
+  #playerRoll1Wins = [];  // wins[].filter(w => w.winner === selectedAddr)
+  #playerRoll2Wins = [];  // wins[].filter(w => w.winner === selectedAddr)
+  #hasBonus = false;      // whether this player has Roll 2 wins
 
   // Spin + scratch state
   #playerTraitIds = new Set();  // Set<number> of owned trait IDs (for spin coloring)
@@ -88,8 +92,8 @@ class ReplayPanel extends HTMLElement {
   #greenRevealed = [false, false, false, false]; // per-quadrant first-badge green flash
   #badgesRevealed = [[], [], [], []];         // per-badge tracking within each quadrant
   #quadBadgeBounds = [null, null, null, null]; // per-quadrant badge hit circles
-  #quadOwned = [false, false, false, false];  // per-quadrant win presence (from roll1Rows)
-  #quadWinArrays = [[], [], [], []];          // per-quadrant prize arrays (from roll1Rows)
+  #quadOwned = [false, false, false, false];  // per-quadrant win presence (from playerRoll1Wins)
+  #quadWinArrays = [[], [], [], []];          // per-quadrant prize arrays (from playerRoll1/2Wins)
   #centerWins = [];                            // far-future coin wins (center diamond)
   #centerScratched = false;                    // center diamond scratch state
   #centerScratchGrid = null;                   // center diamond scratch grid
@@ -317,6 +321,30 @@ class ReplayPanel extends HTMLElement {
     }
   }
 
+  async #loadDayRolls(day) {
+    this.#dayRoll1 = null;
+    this.#dayRoll2 = null;
+    const [r1Res, r2Res] = await Promise.allSettled([
+      fetch(`${API_BASE}/game/jackpot/day/${day}/roll1`),
+      fetch(`${API_BASE}/game/jackpot/day/${day}/roll2`),
+    ]);
+    if (r1Res.status === 'fulfilled' && r1Res.value.ok) {
+      try { this.#dayRoll1 = await r1Res.value.json(); } catch {}
+    }
+    if (r2Res.status === 'fulfilled' && r2Res.value.ok) {
+      try { this.#dayRoll2 = await r2Res.value.json(); } catch {}
+    }
+    if (!this.#dayRoll1) console.warn('[ReplayPanel] roll1 endpoint unavailable for day', day);
+    if (!this.#dayRoll2) console.warn('[ReplayPanel] roll2 endpoint unavailable for day', day);
+  }
+
+  #filterPlayerWins(addr) {
+    const norm = addr.toLowerCase();
+    this.#playerRoll1Wins = (this.#dayRoll1?.wins || []).filter(w => w.winner.toLowerCase() === norm);
+    this.#playerRoll2Wins = (this.#dayRoll2?.wins || []).filter(w => w.winner.toLowerCase() === norm);
+    this.#hasBonus = this.#playerRoll2Wins.length > 0;
+  }
+
   async #loadDistributionsForLevel(level) {
     // Try new endpoint first (has traitId), fall back to history endpoint
     try {
@@ -379,8 +407,11 @@ class ReplayPanel extends HTMLElement {
 
     this.querySelector('[data-bind="empty-state"]').hidden = true;
 
-    // Load day detail (replay endpoint — still needed for distributions used in #distributePrizes)
+    // Load day detail (replay endpoint — still needed for distributions used in player-select label)
     await this.#loadDayDetail(dayNum);
+
+    // Prefetch per-day roll1/roll2 caches (new cleaner endpoints)
+    await this.#loadDayRolls(dayNum);
 
     // Load winners from the authoritative day/winners endpoint.
     // This gives us level, winner list with breakdown, and hasBonus flags.
@@ -613,34 +644,15 @@ class ReplayPanel extends HTMLElement {
     this.#resetCards();
     await this.#loadPlayerTraits(); // ensure traits loaded for spin coloring
 
-    // Fetch per-player roll data — authoritative source for which traits this player
-    // actually won (roll1Rows) and whether they have a bonus roll (roll2/hasBonus).
-    // Use the per-winner winningLevel when available (fixes multi-level day edge case).
-    const winnerEntry = this.#winners.find(w => w.address.toLowerCase() === this.#selectedPlayer.toLowerCase());
-    const fetchLevel = winnerEntry?.winningLevel ?? this.#selectedLevel;
-    this.#roll1Rows = [];
-    this.#roll2Data = null;
-    this.#hasBonus = false;
-    if (fetchLevel != null) {
-      try {
-        const pRes = await fetch(`${API_BASE}/game/jackpot/${fetchLevel}/player/${this.#selectedPlayer}?day=${this.#selectedDay}`);
-        if (pRes.ok) {
-          const pData = await pRes.json();
-          this.#roll1Rows = pData.roll1Rows || [];
-          this.#roll2Data = pData.roll2 || null;
-          this.#hasBonus = pData.hasBonus || false;
-        }
-      } catch (err) {
-        console.warn('[ReplayPanel] Failed to load player roll data:', err);
-      }
-    }
+    // Filter the pre-cached day roll1/roll2 responses down to this player's wins.
+    this.#filterPlayerWins(this.#selectedPlayer);
 
     // Derive winning traits from the RNG word for the spin animation display.
     const traits = deriveWinningTraits(rngEntry.finalWord);
     const displayTraits = toDisplayOrder(traits);
 
-    // Map roll1Rows to quadrant prize arrays (D3: only actually-won traits).
-    this.#distributePrizesFromRoll1(displayTraits, winnerEntry);
+    // Map per-player roll1 wins to quadrant prize arrays.
+    this.#distributePrizesFromRoll1();
 
     const btn = this.querySelector('[data-bind="reveal-btn"]');
     btn.disabled = true;
@@ -684,71 +696,77 @@ class ReplayPanel extends HTMLElement {
   }
 
   /**
-   * D3: Map roll1Rows (per-player winning trait rows from /game/jackpot/:level/player/:addr)
-   * to quadrant prize arrays. Only traits the player actually won appear as scratchable.
-   * ETH/BURNIE totals come from the winner's breakdown (authoritative), tickets from row.
-   * winnerEntry is the entry from #winners for this player (may be null for non-winners).
+   * Map #playerRoll1Wins (already filtered to this player, one row per discrete payout)
+   * to quadrant prize arrays. Each win row is exactly one badge/emission — no expansion.
+   * whale_pass / dgnrs rows land under a "Solo Winner" quadrant entry (no traitId quadrant).
    */
-  #distributePrizesFromRoll1(displayTraits, winnerEntry) {
+  #distributePrizesFromRoll1() {
     this.#quadWinArrays = [[], [], [], []];
     this.#centerWins = [];
 
-    if (!this.#roll1Rows || this.#roll1Rows.length === 0) {
-      // No roll1 data — fall back to old distribution-based method so non-winning
-      // players still show the correct "no wins" state.
-      return;
-    }
+    if (!this.#playerRoll1Wins || this.#playerRoll1Wins.length === 0) return;
 
-    const { byTrait } = this.#buildBreakdownLookup(winnerEntry?.breakdown);
+    const MAX_VISUAL_BADGES = 20;
+    // Track total wins per display pos for overflow sentinel
+    const totalPerPos = [0, 0, 0, 0];
 
-    for (const row of this.#roll1Rows) {
-      if (row.traitId == null) continue; // skip bonus rows with no trait
-      const contractQ = Math.floor(row.traitId / 64);
+    for (const win of this.#playerRoll1Wins) {
+      const at = win.awardType || '';
+
+      // whale_pass / dgnrs: no quadrant from traitId — place in quadrant with most ETH wins
+      // (handled after loop below). Skip here.
+      if (win.traitId == null) continue;
+
+      const contractQ = Math.floor(win.traitId / 64);
       const displayPos = DISPLAY_ORDER.indexOf(contractQ);
       if (displayPos < 0 || displayPos > 3) continue;
 
-      // Use breakdown for ETH/BURNIE totals (roll1Rows.ethPerWinner is unreliable).
-      // Tickets come from row.ticketsPerWinner (already correctly aggregated by the API).
-      const bdRec = byTrait.get(row.traitId);
-      const ethTotal = bdRec ? bdRec.ethTotal : 0n;
-      const burnieTotal = bdRec ? bdRec.burnieTotal : 0n;
-      const ticketTotal = row.ticketsPerWinner || 0;
-
-      // Bug 2 fix: emit one entry PER EMISSION (winnerCount) so each discrete win
-      // renders as its own badge. Cap at MAX_VISUAL_BADGES per quadrant.
-      const MAX_VISUAL_BADGES = 20;
-      const emissionCount = Math.max(1, Number(row.winnerCount || 1));
-      const burniePerEmission = emissionCount > 0 ? burnieTotal / BigInt(emissionCount) : burnieTotal;
-      const ethPerEmission = emissionCount > 0 ? ethTotal / BigInt(emissionCount) : ethTotal;
-      const ticketsPerEmission = emissionCount > 0 ? Math.floor(ticketTotal / emissionCount) : ticketTotal;
-
+      totalPerPos[displayPos]++;
       const currentCount = this.#quadWinArrays[displayPos].length;
-      const remaining = MAX_VISUAL_BADGES - currentCount;
-      if (remaining <= 0) continue;
+      if (currentCount >= MAX_VISUAL_BADGES) continue;
 
-      const toAdd = Math.min(emissionCount, remaining);
-      for (let e = 0; e < toAdd; e++) {
-        this.#quadWinArrays[displayPos].push({
-          awardType: 'aggregated',
-          ethTotal: ethPerEmission.toString(),
-          burnieTotal: burniePerEmission.toString(),
-          ticketTotal: ticketsPerEmission,
-          traitId: row.traitId,
-        });
+      this.#quadWinArrays[displayPos].push({
+        awardType: 'aggregated',
+        ethTotal: at === 'eth' ? (win.amount || '0') : '0',
+        burnieTotal: (at === 'burnie' || at === 'farFutureCoin') ? (win.amount || '0') : '0',
+        ticketTotal: (at === 'tickets' || at === 'ticket') ? Number(win.amount || 0) : 0,
+        traitId: win.traitId,
+        ticketIndex: win.ticketIndex ?? null,
+        level: win.level ?? null,
+        sourceLevel: win.sourceLevel ?? null,
+      });
+    }
+
+    // whale_pass / dgnrs wins (no traitId) → place in the quadrant with the most ETH wins
+    const noTraitWins = this.#playerRoll1Wins.filter(w => w.traitId == null);
+    if (noTraitWins.length > 0) {
+      let bestPos = 0, bestEth = 0n;
+      for (let i = 0; i < 4; i++) {
+        const qEth = this.#quadWinArrays[i]
+          .reduce((s, d) => s + BigInt(d.ethTotal || '0'), 0n);
+        if (qEth > bestEth) { bestEth = qEth; bestPos = i; }
+      }
+      for (const win of noTraitWins) {
+        const at = win.awardType || '';
+        totalPerPos[bestPos]++;
+        if (this.#quadWinArrays[bestPos].length < MAX_VISUAL_BADGES) {
+          this.#quadWinArrays[bestPos].push({
+            awardType: 'aggregated',
+            ethTotal: '0',
+            burnieTotal: '0',
+            ticketTotal: 0,
+            whalePassCount: at === 'whale_pass' ? Number(win.amount || 1) : 0,
+            dgnrsTotal: at === 'dgnrs' ? (win.amount || '0') : '0',
+            traitId: null,
+          });
+        }
       }
     }
-    // Add overflow sentinel entries per quadrant where total emissions exceeded the cap
-    const totalEmissions1 = [0, 0, 0, 0];
-    for (const row of this.#roll1Rows) {
-      if (row.traitId == null) continue;
-      const contractQ = Math.floor(row.traitId / 64);
-      const displayPos = DISPLAY_ORDER.indexOf(contractQ);
-      if (displayPos < 0 || displayPos > 3) continue;
-      totalEmissions1[displayPos] += Math.max(1, Number(row.winnerCount || 1));
-    }
+
+    // Overflow sentinels
     for (let pos = 0; pos < 4; pos++) {
       const rendered = this.#quadWinArrays[pos].length;
-      const total = totalEmissions1[pos];
+      const total = totalPerPos[pos];
       if (total > rendered) {
         const lastEntry = this.#quadWinArrays[pos][rendered - 1];
         this.#quadWinArrays[pos].push({
@@ -826,26 +844,22 @@ class ReplayPanel extends HTMLElement {
   }
 
   async #triggerBonusRoll() {
-    if (!this.#roll2Data) return;
+    if (!this.#playerRoll2Wins || this.#playerRoll2Wins.length === 0) return;
     const bonusSection = this.querySelector('[data-bind="bonus-section"]');
     if (bonusSection) bonusSection.hidden = true;
 
     this.#bonusPhase = true;
 
-    // Derive Roll 2 winning traits from future rows (trait-based wins for quadrants)
-    // farFuture rows go to the center diamond (BURNIE)
-    const futureRows = this.#roll2Data.future || [];
-    const farFutureRows = this.#roll2Data.farFuture || [];
+    // Near-future wins (traitId != null) go to quadrants; null-traitId = center diamond BURNIE.
+    const nearFutureWins = this.#playerRoll2Wins.filter(w => w.traitId != null);
+    const farFutureWins  = this.#playerRoll2Wins.filter(w => w.traitId == null);
 
     // Store Roll 2 contract quadrant numbers for spin quadrant-ownership detection.
-    // future rows contain per-trait wins; the spin re-uses the same RNG display traits,
-    // so we match by contract quadrant (traitId/64) rather than exact traitId.
-    this.#bonusTraitIds = new Set(futureRows.map(r => r.traitId).filter(t => t != null));
-    this.#bonusQuadrants = new Set(futureRows.map(r => r.traitId != null ? Math.floor(r.traitId / 64) : -1).filter(q => q >= 0));
+    this.#bonusTraitIds = new Set(nearFutureWins.map(w => w.traitId));
+    this.#bonusQuadrants = new Set(nearFutureWins.map(w => Math.floor(w.traitId / 64)));
 
-    // Build prize arrays from roll2 rows so #revealQuadrant / #revealCenter show correct amounts
-    const bonusWinnerEntry = this.#winners.find(w => w.address.toLowerCase() === this.#selectedPlayer.toLowerCase());
-    this.#distributePrizesFromRoll2(futureRows, farFutureRows, bonusWinnerEntry);
+    // Build prize arrays from filtered wins
+    this.#distributePrizesFromRoll2(nearFutureWins, farFutureWins);
 
     // Derive display traits for the spin — use the same RNG word (same draw)
     const rngEntry = this.#rngDays.find(d => d.day === this.#selectedDay);
@@ -865,78 +879,42 @@ class ReplayPanel extends HTMLElement {
 
   /**
    * Distribute Roll 2 prizes into quadrant arrays and center wins.
-   * future rows → quadrant prize arrays aggregated per display-position.
-   * farFuture rows (and null-traitId burnie breakdown entries) → center diamond BURNIE.
-   * winnerEntry provides the authoritative breakdown for ETH/BURNIE totals.
+   * nearFutureWins (traitId != null) → one badge per win row per display-position quadrant.
+   * farFutureWins (traitId == null) → center diamond BURNIE total.
+   * Each win row from /roll2 is already one discrete payout — no expansion needed.
    */
-  #distributePrizesFromRoll2(futureRows, farFutureRows, winnerEntry) {
+  #distributePrizesFromRoll2(nearFutureWins, farFutureWins) {
     this.#quadWinArrays = [[], [], [], []];
     this.#centerWins = [];
 
-    const { byTrait, centerBurnie } = this.#buildBreakdownLookup(winnerEntry?.breakdown);
-
-    // Bug 2 fix: emit one entry PER EMISSION (winnerCount) rather than one per row.
-    // winnerCount = number of discrete distribution events this player won for this trait.
-    // Each emission renders as its own badge in the scratch reveal.
-    // Cap visual badges at 20 per quadrant to prevent overflow; excess is noted via
-    // the "+N more" label appended as a sentinel entry with traitId set but no amounts.
     const MAX_VISUAL_BADGES = 20;
-    for (const row of futureRows) {
-      if (row.traitId == null) continue;
-      const contractQ = Math.floor(row.traitId / 64);
+    const totalPerPos = [0, 0, 0, 0];
+
+    for (const win of nearFutureWins) {
+      const contractQ = Math.floor(win.traitId / 64);
       const displayPos = DISPLAY_ORDER.indexOf(contractQ);
       if (displayPos < 0 || displayPos > 3) continue;
 
-      const bdRec = byTrait.get(row.traitId);
-      const ethTotal = bdRec ? bdRec.ethTotal : 0n;
-      // Prefer row.coinPerWinner (authoritative near-future BURNIE from DB) over breakdown lookup.
-      const rowCoin = BigInt(row.coinPerWinner || '0');
-      const bdBurnie = bdRec ? bdRec.burnieTotal : 0n;
-      const burnieTotalRow = rowCoin > 0n ? rowCoin : bdBurnie;
-      const ticketTotal = row.ticketsPerWinner || 0;
+      totalPerPos[displayPos]++;
+      if (this.#quadWinArrays[displayPos].length >= MAX_VISUAL_BADGES) continue;
 
-      // Number of discrete win emissions for this trait
-      const emissionCount = Math.max(1, Number(row.winnerCount || 1));
-      // Per-emission amounts (split evenly for display; totals shown in the overlay)
-      const burniePerEmission = emissionCount > 0 ? burnieTotalRow / BigInt(emissionCount) : burnieTotalRow;
-      const ethPerEmission = emissionCount > 0 ? ethTotal / BigInt(emissionCount) : ethTotal;
-      const ticketsPerEmission = emissionCount > 0 ? Math.floor(ticketTotal / emissionCount) : ticketTotal;
-
-      const currentCount = this.#quadWinArrays[displayPos].length;
-      const remaining = MAX_VISUAL_BADGES - currentCount;
-      if (remaining <= 0) continue; // already at cap for this quadrant
-
-      const toAdd = Math.min(emissionCount, remaining);
-      for (let e = 0; e < toAdd; e++) {
-        this.#quadWinArrays[displayPos].push({
-          awardType: 'aggregated',
-          ethTotal: ethPerEmission.toString(),
-          burnieTotal: burniePerEmission.toString(),
-          ticketTotal: ticketsPerEmission,
-          traitId: row.traitId,
-        });
-      }
-      // If we hit the cap mid-row or for the full quadrant, add overflow sentinel
-      if (emissionCount > toAdd || (emissionCount === toAdd && remaining === toAdd && emissionCount < emissionCount)) {
-        // This is handled below after full loop via per-quadrant overflow check
-      }
+      this.#quadWinArrays[displayPos].push({
+        awardType: 'aggregated',
+        ethTotal: '0',
+        burnieTotal: win.awardType === 'burnie' ? (win.amount || '0') : '0',
+        ticketTotal: 0,
+        traitId: win.traitId,
+        ticketIndex: win.ticketIndex ?? null,
+        level: win.level ?? null,
+        sourceLevel: win.sourceLevel ?? null,
+      });
     }
-    // Add "+N more" sentinel entries for any quadrant that exceeded MAX_VISUAL_BADGES
-    // (the overflow is tracked by comparing total row emissions vs rendered count)
-    // Re-derive overflow: count total emissions across all future rows per display pos
-    const totalEmissions = [0, 0, 0, 0];
-    for (const row of futureRows) {
-      if (row.traitId == null) continue;
-      const contractQ = Math.floor(row.traitId / 64);
-      const displayPos = DISPLAY_ORDER.indexOf(contractQ);
-      if (displayPos < 0 || displayPos > 3) continue;
-      totalEmissions[displayPos] += Math.max(1, Number(row.winnerCount || 1));
-    }
+
+    // Overflow sentinels
     for (let pos = 0; pos < 4; pos++) {
       const rendered = this.#quadWinArrays[pos].length;
-      const total = totalEmissions[pos];
+      const total = totalPerPos[pos];
       if (total > rendered) {
-        // Sentinel: traitId from the last rendered entry (for badge path), overflow count in overflowCount
         const lastEntry = this.#quadWinArrays[pos][rendered - 1];
         this.#quadWinArrays[pos].push({
           awardType: 'overflow',
@@ -949,13 +927,11 @@ class ReplayPanel extends HTMLElement {
       }
     }
 
-    // farFuture rows go to center diamond. Use both row.coinPerWinner and breakdown centerBurnie.
+    // farFuture wins → center diamond: sum all amounts
     let ffTotal = 0n;
-    for (const row of farFutureRows) {
-      ffTotal += BigInt(row.coinPerWinner || '0');
+    for (const win of farFutureWins) {
+      ffTotal += BigInt(win.amount || '0');
     }
-    // Prefer breakdown-derived center total if it's larger/non-zero (more accurate).
-    if (centerBurnie > ffTotal) ffTotal = centerBurnie;
     if (ffTotal > 0n) {
       this.#centerWins.push({ awardType: 'burnie', amount: ffTotal.toString(), traitId: null });
     }
@@ -1019,7 +995,7 @@ class ReplayPanel extends HTMLElement {
         }
       }
     } else {
-      const roll1TraitIds = new Set(this.#roll1Rows.map(r => r.traitId).filter(t => t != null));
+      const roll1TraitIds = new Set(this.#playerRoll1Wins.map(r => r.traitId).filter(t => t != null));
       for (let i = 0; i < 4; i++) {
         if (roll1TraitIds.size > 0) {
           this.#quadOwned[i] = displayTraits[i] != null && roll1TraitIds.has(displayTraits[i]);
@@ -1546,10 +1522,12 @@ class ReplayPanel extends HTMLElement {
       for (const d of wins) {
         const t = d.awardType || '';
         if (t === 'aggregated') {
-          // New aggregated entry produced by #distributePrizesFromRoll1/2
+          // Entry produced by #distributePrizesFromRoll1/2 — all amounts pre-normalised
           ethTotal += BigInt(d.ethTotal || '0');
           burnieTotal += BigInt(d.burnieTotal || '0');
           ticketCount += Number(d.ticketTotal || 0);
+          whaleCount += Number(d.whalePassCount || 0);
+          dgnrsTotal += BigInt(d.dgnrsTotal || '0');
         } else if (t === 'burnie' || t === 'farFutureCoin' || d.currency === 'BURNIE') {
           burnieTotal += BigInt(d.amount || '0');
         } else if (t === 'dgnrs') {
@@ -1712,6 +1690,10 @@ class ReplayPanel extends HTMLElement {
     this.#centerWins = [];
     this.#centerScratched = false;
     this.#centerScratchGrid = null;
+
+    // Reset per-player roll win caches
+    this.#playerRoll1Wins = [];
+    this.#playerRoll2Wins = [];
 
     // Reset bonus roll state
     this.#bonusPhase = false;
