@@ -1,0 +1,13 @@
+{
+  "level": 50,
+  "day": 3,
+  "phase": "PURCHASE",
+  "price": "80000000000000000",
+  "frozen": false,
+  "prizePools": {
+    "futurePrizePool": "1000000000000000000",
+    "nextPrizePool": "500000000000000000",
+    "currentPrizePool": "0",
+    "claimableWinnings": "0"
+  }
+}
