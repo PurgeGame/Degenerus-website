@@ -35,6 +35,9 @@ POOLS_02_COVERAGE_GAP_ID = "POOLS-02-coverage-gap-no-deposit-events"
 POOLS_03_COVERAGE_GAP_ID = "POOLS-03-coverage-gap-no-day-over-day-pool-state"
 POOLS_03_SOURCE_DRIFT_ID = "POOLS-03-source-doc-turbo-drift"
 POOLS_04_COVERAGE_GAP_ID = "POOLS-04-coverage-gap-no-transition-snapshots"
+POOLS_05_COVERAGE_GAP_ID = "POOLS-05-coverage-gap-yield-unindexed"
+POOLS_06_COVERAGE_GAP_ID = "POOLS-06-coverage-gap-accumulator-unindexed"
+POOLS_07_SOURCE_DRIFT_ID = "POOLS-07-source-doc-turbo-drift"
 
 _GAME_CONTRACT = "degenerus-audit/contracts/DegenerusGame.sol"
 _MINT_MODULE = "degenerus-audit/contracts/modules/DegenerusGameMintModule.sol"
@@ -363,6 +366,221 @@ def ensure_pools_04_coverage_gap_logged(
             "— but without pre/post pool values, the 15% drawdown assertion "
             "cannot be checked. POOLS-04 produces only inferential per-transition "
             "Info entries this milestone."
+        ),
+    )
+    append_discrepancy(yaml_path, entry)
+    return True
+
+
+def ensure_pools_05_coverage_gap_logged(
+    yaml_path: str = DEFAULT_DISCREPANCIES_PATH,
+) -> bool:
+    """Append the POOLS-05 yield-unindexed coverage-gap entry iff missing."""
+    if _already_present(yaml_path, POOLS_05_COVERAGE_GAP_ID):
+        return False
+
+    entry = Discrepancy(
+        id=POOLS_05_COVERAGE_GAP_ID,
+        domain="POOLS",
+        endpoint=(
+            "(no endpoint — /game/yield 404, /history/yield 404; "
+            "yieldAccumulator absent from database/src/db/schema/ and "
+            "database/src/api/routes/; /tokens/analytics.vault.stEthReserve "
+            "is '0' in sim — sim runs without stETH entirely)"
+        ),
+        expected_value=(
+            "stETH yield 50/25/25 split observable per-accrual via indexed "
+            "yieldAccumulator events"
+        ),
+        observed_value=(
+            "yieldAccumulator not indexed anywhere; stEthReserve=0 in sim "
+            "confirms no stETH in play; direct validation impossible"
+        ),
+        derivation=Derivation(
+            formula=(
+                "distributeYieldSurplus: quarterShare = yieldPool * 2300 / 10000; "
+                "3 recipients x 23% = 69% distributed, 23% to accumulator, "
+                "~8% buffer converges to 0 over time (canonical 50/25/25 per "
+                "MEMORY.md)"
+            ),
+            sources=[
+                Citation(
+                    path=_JACKPOT_MODULE,
+                    line=737,
+                    label="contract",
+                    anchor="distributeYieldSurplus",
+                ),
+            ],
+        ),
+        magnitude=(
+            "permanent coverage gap for POOLS-05 stETH yield split validation; "
+            "two-stage blocker (indexer + sim config)"
+        ),
+        severity="Info",
+        suspected_source="api",
+        hypothesis=[
+            Hypothesis(
+                text=(
+                    "stETH yield distribution is unobservable because "
+                    "(a) indexer does not surface yieldAccumulator state, "
+                    "and (b) the sim itself runs with no stETH — both "
+                    "conditions must be fixed to validate POOLS-05"
+                ),
+                falsifiable_by=(
+                    "add `yield_accumulator_snapshots(day, balance)` table + "
+                    "`/history/yield/day/:day` route AND run sim with non-zero "
+                    "stETH seed so /tokens/analytics.vault.stEthReserve is "
+                    "non-zero; then derive 50/25/25 split from per-accrual "
+                    "deltas against distributeYieldSurplus formula"
+                ),
+            )
+        ],
+        sample_context=_zero_ctx(),
+        notes=(
+            "Two-stage blocker: schema AND sim configuration. Lowest priority "
+            "among coverage gaps because sim-side fix is orthogonal to "
+            "indexer-side fix."
+        ),
+    )
+    append_discrepancy(yaml_path, entry)
+    return True
+
+
+def ensure_pools_06_coverage_gap_logged(
+    yaml_path: str = DEFAULT_DISCREPANCIES_PATH,
+) -> bool:
+    """Append the POOLS-06 segregated-accumulator coverage-gap entry iff missing."""
+    if _already_present(yaml_path, POOLS_06_COVERAGE_GAP_ID):
+        return False
+
+    entry = Discrepancy(
+        id=POOLS_06_COVERAGE_GAP_ID,
+        domain="POOLS",
+        endpoint="(no endpoint — segregated accumulator not surfaced anywhere)",
+        expected_value=(
+            "segregated accumulator state observable: 1% skim per level "
+            "(INSURANCE_SKIM_BPS=100), 50% dump at x00 "
+            "(YIELD_ACCUMULATOR_X00_DUMP_BPS=5000), 50% retained as terminal "
+            "insurance"
+        ),
+        observed_value=(
+            "no /game/accumulator endpoint (404); no accumulator field on "
+            "/tokens/analytics; no accumulator schema table"
+        ),
+        derivation=Derivation(
+            formula=(
+                "accumulator receives INSURANCE_SKIM_BPS=100 (1%) of each "
+                "completed level's prize pool; 50% dumps into futurePool at "
+                "x00 via YIELD_ACCUMULATOR_X00_DUMP_BPS=5000; remainder "
+                "retained as terminal insurance"
+            ),
+            sources=[
+                Citation(path=_ADVANCE_MODULE, line=129, label="contract"),
+                Citation(path=_ADVANCE_MODULE, line=722, label="contract"),
+                Citation(
+                    path=_ADVANCE_MODULE,
+                    line=716,
+                    label="contract",
+                    anchor="skim-apply-site",
+                ),
+            ],
+        ),
+        magnitude=(
+            "permanent coverage gap for POOLS-06 segregated accumulator "
+            "validation"
+        ),
+        severity="Info",
+        suspected_source="api",
+        hypothesis=[
+            Hypothesis(
+                text=(
+                    "segregated accumulator is contract-internal state never "
+                    "surfaced by the indexer; no events with accumulator "
+                    "deltas are exposed"
+                ),
+                falsifiable_by=(
+                    "add `accumulator_snapshots(day, level, balance, "
+                    "skim_delta, dump_delta)` table + `/history/accumulator` "
+                    "and `/history/accumulator/level/:level` routes; emit "
+                    "InsuranceSkimApplied(level, amount) and "
+                    "AccumulatorX00Dump(level, amount) events exposed via "
+                    "/replay/events/:level"
+                ),
+            )
+        ],
+        sample_context=_zero_ctx(),
+        notes=(
+            "Separate from POOLS-05 because accumulator mechanics are distinct "
+            "from stETH yield flow (different constants, different trigger "
+            "sites). Both unblock independently."
+        ),
+    )
+    append_discrepancy(yaml_path, entry)
+    return True
+
+
+def ensure_pools_07_source_drift_logged(
+    yaml_path: str = DEFAULT_DISCREPANCIES_PATH,
+) -> bool:
+    """Append the POOLS-07 REQUIREMENTS.md turbo-drift source-level entry iff missing."""
+    if _already_present(yaml_path, POOLS_07_SOURCE_DRIFT_ID):
+        return False
+
+    price_lib = "degenerus-audit/contracts/libraries/PriceLookupLib.sol"
+
+    entry = Discrepancy(
+        id=POOLS_07_SOURCE_DRIFT_ID,
+        domain="POOLS",
+        endpoint="(source-level — REQUIREMENTS.md:35)",
+        expected_value=(
+            "REQUIREMENTS.md describes mechanisms present in "
+            "degenerus-audit/contracts/"
+        ),
+        observed_value=(
+            "REQUIREMENTS.md:35 phrasing 'dynamic pricing (100K ticket target) "
+            "and fractional credit accumulation in turbo-mode levels' "
+            "describes PLAN-TURBO-MODE.md + testing/contracts/ features; "
+            "audit canonical is static PriceLookupLib.priceForLevel table at "
+            "libraries/PriceLookupLib.sol:7-47 with no dynamic adjustment or "
+            "fractional credits"
+        ),
+        derivation=Derivation(
+            formula=(
+                "audit canonical price curve: static per-level table "
+                "(0.01/0.02/0.04/0.08/0.12/0.16/0.24 ETH by decade within "
+                "100-level cycle); no 100K-target or fractional-credit logic "
+                "in audit contracts"
+            ),
+            sources=[
+                Citation(path=price_lib, line=7, label="contract"),
+                Citation(path=price_lib, line=47, label="contract"),
+            ],
+        ),
+        magnitude=(
+            "document drift: requirement language references turbo-spec "
+            "mechanics absent from audit contracts"
+        ),
+        severity="Minor",
+        suspected_source="api",
+        hypothesis=[
+            Hypothesis(
+                text=(
+                    "REQUIREMENTS.md:35 was authored from PLAN-TURBO-MODE.md / "
+                    "testing/contracts/ before audit contracts were locked as "
+                    "canonical"
+                ),
+                falsifiable_by=(
+                    "rewrite REQUIREMENTS.md:35 POOLS-07 as 'validate static "
+                    "ticket price at current level matches "
+                    "PriceLookupLib.priceForLevel' and delete '100K ticket "
+                    "target' + 'fractional credit accumulation' language"
+                ),
+            )
+        ],
+        sample_context=_zero_ctx(),
+        notes=(
+            "Report-only milestone. Pairs with POOLS-03-source-doc-turbo-drift "
+            "from Plan 20-02."
         ),
     )
     append_discrepancy(yaml_path, entry)
