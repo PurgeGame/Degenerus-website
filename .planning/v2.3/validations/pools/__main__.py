@@ -22,10 +22,15 @@ from harness.yaml_io import _resolve_repo_root
 from validations.pools.endpoints import PoolsEndpointClient, run_with_health_check
 from validations.pools.pools_01 import validate_pools_01
 from validations.pools.pools_02 import validate_pools_02
+from validations.pools.pools_03 import validate_pools_03
+from validations.pools.pools_04 import validate_pools_04
 from validations.pools.sample import SAMPLE_LEVELS
 from validations.pools.source_level_entries import (
     POOLS_01_COVERAGE_GAP_ID,
     POOLS_02_COVERAGE_GAP_ID,
+    POOLS_03_COVERAGE_GAP_ID,
+    POOLS_03_SOURCE_DRIFT_ID,
+    POOLS_04_COVERAGE_GAP_ID,
 )
 
 
@@ -38,7 +43,13 @@ def _coverage_gap_counts(before: list, after: list) -> dict[str, str]:
     before_ids = {d.id for d in before}
     after_ids = {d.id for d in after}
     out: dict[str, str] = {}
-    for gid in (POOLS_01_COVERAGE_GAP_ID, POOLS_02_COVERAGE_GAP_ID):
+    for gid in (
+        POOLS_01_COVERAGE_GAP_ID,
+        POOLS_02_COVERAGE_GAP_ID,
+        POOLS_03_COVERAGE_GAP_ID,
+        POOLS_03_SOURCE_DRIFT_ID,
+        POOLS_04_COVERAGE_GAP_ID,
+    ):
         if gid in before_ids:
             out[gid] = "already present"
         elif gid in after_ids:
@@ -63,13 +74,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="validations.pools")
     parser.add_argument("--pools-01", action="store_true")
     parser.add_argument("--pools-02", action="store_true")
+    parser.add_argument("--pools-03", action="store_true")
+    parser.add_argument("--pools-04", action="store_true")
     parser.add_argument("--all", action="store_true")
     args = parser.parse_args(argv)
 
     if os.environ.get("RUN_LIVE_VALIDATION") != "1":
         return _instructions()
 
-    if not (args.pools_01 or args.pools_02 or args.all):
+    if not (args.pools_01 or args.pools_02 or args.pools_03 or args.pools_04 or args.all):
         parser.print_help()
         return 0
 
@@ -90,6 +103,18 @@ def main(argv: list[str] | None = None) -> int:
                 sample_levels=SAMPLE_LEVELS,
                 lag_snapshot=snapshot,
                 yaml_path=_DISCREPANCIES_PATH,
+            ):
+                counts[entry.severity.lower()] += 1
+                append_discrepancy(_DISCREPANCIES_PATH, entry)
+        if args.pools_03 or args.all:
+            for entry in validate_pools_03(
+                client, lag_snapshot=snapshot, yaml_path=_DISCREPANCIES_PATH
+            ):
+                counts[entry.severity.lower()] += 1
+                append_discrepancy(_DISCREPANCIES_PATH, entry)
+        if args.pools_04 or args.all:
+            for entry in validate_pools_04(
+                client, lag_snapshot=snapshot, yaml_path=_DISCREPANCIES_PATH
             ):
                 counts[entry.severity.lower()] += 1
                 append_discrepancy(_DISCREPANCIES_PATH, entry)

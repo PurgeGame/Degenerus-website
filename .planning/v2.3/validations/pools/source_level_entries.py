@@ -32,9 +32,14 @@ DEFAULT_DISCREPANCIES_PATH = str(
 
 POOLS_01_COVERAGE_GAP_ID = "POOLS-01-coverage-gap-no-per-day-pool-history"
 POOLS_02_COVERAGE_GAP_ID = "POOLS-02-coverage-gap-no-deposit-events"
+POOLS_03_COVERAGE_GAP_ID = "POOLS-03-coverage-gap-no-day-over-day-pool-state"
+POOLS_03_SOURCE_DRIFT_ID = "POOLS-03-source-doc-turbo-drift"
+POOLS_04_COVERAGE_GAP_ID = "POOLS-04-coverage-gap-no-transition-snapshots"
 
 _GAME_CONTRACT = "degenerus-audit/contracts/DegenerusGame.sol"
 _MINT_MODULE = "degenerus-audit/contracts/modules/DegenerusGameMintModule.sol"
+_ADVANCE_MODULE = "degenerus-audit/contracts/modules/DegenerusGameAdvanceModule.sol"
+_JACKPOT_MODULE = "degenerus-audit/contracts/modules/DegenerusGameJackpotModule.sol"
 
 
 def _zero_ctx() -> SampleContext:
@@ -166,6 +171,198 @@ def ensure_pools_02_coverage_gap_logged(
             "PriceLookupLib.priceForLevel, but the observed split cannot be compared "
             "without event data. POOLS-02 reduces to derivation-only Info entries "
             "this milestone."
+        ),
+    )
+    append_discrepancy(yaml_path, entry)
+    return True
+
+
+def ensure_pools_03_coverage_gap_logged(
+    yaml_path: str = DEFAULT_DISCREPANCIES_PATH,
+) -> bool:
+    """Append the POOLS-03 no-day-over-day-pool-state coverage-gap entry iff missing."""
+    if _already_present(yaml_path, POOLS_03_COVERAGE_GAP_ID):
+        return False
+
+    entry = Discrepancy(
+        id=POOLS_03_COVERAGE_GAP_ID,
+        domain="POOLS",
+        endpoint=(
+            "(no endpoint — prize_pools singleton; "
+            "/replay/distributions/:level lacks per-day pool context)"
+        ),
+        expected_value=(
+            "per-day futurePool[day] snapshots enabling day-over-day drip "
+            "reconciliation"
+        ),
+        observed_value=(
+            "only aggregate per-level distributions available; cannot "
+            "reconstruct futurePool[day] * 0.01 daily slice chain"
+        ),
+        derivation=Derivation(
+            formula=(
+                "daily drip = futurePool[day] * 100 / 10000, split 75/25 "
+                "lootbox/ETH per JackpotModule.sol:188,523,530"
+            ),
+            sources=[
+                Citation(path=_JACKPOT_MODULE, line=523, label="contract"),
+            ],
+        ),
+        magnitude=(
+            "permanent coverage gap for POOLS-03 day-over-day drip validation"
+        ),
+        severity="Info",
+        suspected_source="api",
+        hypothesis=[
+            Hypothesis(
+                text=(
+                    "daily drip validation requires futurePool[day] snapshots "
+                    "and skim-pipeline event exposure"
+                ),
+                falsifiable_by=(
+                    "add `prize_pool_snapshots(day, level, futurePool, nextPool, "
+                    "currentPool, claimable)` table with `/history/pools/day/:day` "
+                    "route AND expose `FutureTakeApplied(day, level, takeBps, "
+                    "amount)` events via `/replay/events/:level?types=FutureTakeApplied,"
+                    "DripApplied`"
+                ),
+            )
+        ],
+        sample_context=_zero_ctx(),
+        notes=(
+            "POOLS-03 validation is blocked entirely this milestone. The U-curve "
+            "_applyTimeBasedFutureTake is the audit-canonical mechanism — not "
+            "flat 30-50% graduated extraction."
+        ),
+    )
+    append_discrepancy(yaml_path, entry)
+    return True
+
+
+def ensure_pools_03_source_drift_logged(
+    yaml_path: str = DEFAULT_DISCREPANCIES_PATH,
+) -> bool:
+    """Append the POOLS-03 REQUIREMENTS.md turbo-drift source-level entry iff missing."""
+    if _already_present(yaml_path, POOLS_03_SOURCE_DRIFT_ID):
+        return False
+
+    entry = Discrepancy(
+        id=POOLS_03_SOURCE_DRIFT_ID,
+        domain="POOLS",
+        endpoint="(source-level — REQUIREMENTS.md:31)",
+        expected_value=(
+            "REQUIREMENTS.md describes mechanisms present in "
+            "degenerus-audit/contracts/"
+        ),
+        observed_value=(
+            "REQUIREMENTS.md:31 phrasing 'graduated extraction (30-50%) in turbo "
+            "mode' describes PLAN-TURBO-MODE.md spec; audit canonical is "
+            "`_applyTimeBasedFutureTake` U-curve (13-30% base + VRF variance + "
+            "x9 bonus + overshoot surcharge + triangular variance, capped 80%) "
+            "at AdvanceModule.sol:1014-1123"
+        ),
+        derivation=Derivation(
+            formula=(
+                "audit canonical = 5-stage skim pipeline, not flat bracket"
+            ),
+            sources=[
+                Citation(
+                    path=_ADVANCE_MODULE,
+                    line=1014,
+                    label="contract",
+                    anchor="_applyTimeBasedFutureTake",
+                ),
+            ],
+        ),
+        magnitude=(
+            "document drift: requirement language references turbo-spec "
+            "mechanic absent from audit contracts"
+        ),
+        severity="Minor",
+        # Mirrors Phase 19's JACKPOT-03-source-doc-bound-mismatch pattern:
+        # "api" is the closest permitted literal for doc-vs-contract drift
+        # originating in docs other than the GT paper.
+        suspected_source="api",
+        hypothesis=[
+            Hypothesis(
+                text=(
+                    "REQUIREMENTS.md was authored from PLAN-TURBO-MODE.md before "
+                    "audit contracts were locked as canonical source"
+                ),
+                falsifiable_by=(
+                    "update REQUIREMENTS.md:31 POOLS-03 phrasing to reference "
+                    "`_applyTimeBasedFutureTake` U-curve and remove the "
+                    "'30-50% graduated extraction' bracket"
+                ),
+            )
+        ],
+        sample_context=_zero_ctx(),
+        notes=(
+            "Report-only milestone. Source edits deferred. Mirrors Phase 19 "
+            "pattern JACKPOT-03-source-doc-bound-mismatch."
+        ),
+    )
+    append_discrepancy(yaml_path, entry)
+    return True
+
+
+def ensure_pools_04_coverage_gap_logged(
+    yaml_path: str = DEFAULT_DISCREPANCIES_PATH,
+) -> bool:
+    """Append the POOLS-04 no-transition-snapshots coverage-gap entry iff missing."""
+    if _already_present(yaml_path, POOLS_04_COVERAGE_GAP_ID):
+        return False
+
+    entry = Discrepancy(
+        id=POOLS_04_COVERAGE_GAP_ID,
+        domain="POOLS",
+        endpoint=(
+            "(no endpoint — prize_pools overwritten in-place at transition; "
+            "no pre/post snapshot)"
+        ),
+        expected_value=(
+            "nextpool(level N+1 start) = 0.15 * futurepool(level N pre-transition) "
+            "exactly, 0 at x00"
+        ),
+        observed_value=(
+            "prize_pools singleton is updated in-place as RewardJackpotsSettled "
+            "fires; no snapshot at completedLevelId; /history/levels exposes "
+            "stage transitions but no pool values"
+        ),
+        derivation=Derivation(
+            formula=(
+                "AdvanceModule.sol:805 `(memFuture * 15) / 100`; 0% at x00 "
+                "(level % 100 == 0)"
+            ),
+            sources=[
+                Citation(path=_ADVANCE_MODULE, line=805, label="contract"),
+                Citation(path=_ADVANCE_MODULE, line=1125, label="contract"),
+            ],
+        ),
+        magnitude=(
+            "permanent coverage gap for POOLS-04 per-transition drawdown validation"
+        ),
+        severity="Info",
+        suspected_source="api",
+        hypothesis=[
+            Hypothesis(
+                text=(
+                    "per-transition drawdown validation requires before-and-after "
+                    "pool snapshots keyed by completedLevelId"
+                ),
+                falsifiable_by=(
+                    "add `prize_pool_transitions(completed_level, future_pre, "
+                    "future_post, next_post, drawdown_amount, block_number)` "
+                    "table + `/history/pools/transitions` route"
+                ),
+            )
+        ],
+        sample_context=_zero_ctx(),
+        notes=(
+            "Transition enumeration works (see transitions.enumerate_transitions) "
+            "— but without pre/post pool values, the 15% drawdown assertion "
+            "cannot be checked. POOLS-04 produces only inferential per-transition "
+            "Info entries this milestone."
         ),
     )
     append_discrepancy(yaml_path, entry)
