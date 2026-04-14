@@ -28,27 +28,35 @@ test('defines <day-jackpot-summary> custom element', () => {
   assert.match(src, /class\s+DayJackpotSummary\s+extends\s+HTMLElement/);
 });
 
-test('subscribes to replay.level pub-sub (reacts to day changes)', () => {
+test('subscribes to replay.day pub-sub (Plan 39-11: day-based, not level)', () => {
   const src = readFileSync(COMPONENT_PATH, 'utf8');
-  assert.match(src, /subscribe\s*\(\s*['"]replay\.level['"]/);
+  assert.match(src, /subscribe\s*\(\s*['"]replay\.day['"]/);
   // must import subscribe from the store module
   assert.match(src, /import\s*\{[^}]*subscribe[^}]*\}\s*from\s*['"]\.\.\/app\/store\.js['"]/);
 });
 
-test('reuses jackpot-rolls renderer (no row-render duplication)', () => {
+test('imports joBadgePath from jackpot-rolls for trait badges', () => {
   const src = readFileSync(COMPONENT_PATH, 'utf8');
-  // Must pull in the factory or row renderer from jackpot-rolls.js — don't reinvent.
   assert.match(src, /from\s+['"]\.\.\/app\/jackpot-rolls\.js['"]/);
-  assert.match(src, /createJackpotRolls|renderOverview/);
+  assert.match(src, /joBadgePath/);
 });
 
-test('fetches the level overview endpoint via API_BASE', () => {
+test('fetches the day summary endpoint via API_BASE', () => {
   const src = readFileSync(COMPONENT_PATH, 'utf8');
-  // Uses the shared API base constant (same source replay-panel uses).
   assert.match(src, /from\s+['"]\.\.\/app\/constants\.js['"]/);
   assert.match(src, /API_BASE/);
-  // Renderer fetches /game/jackpot/{level}/overview — that URL (or factory call producing it) must be present.
-  assert.match(src, /\/game\/jackpot\/|renderOverview\s*\(/);
+  // Day-based summary endpoint path must appear (Plan 39-11).
+  assert.match(src, /\/game\/jackpot\/day\/.+?\/summary/);
+});
+
+test('renders three role sections (Roll 1 ETH, Roll 1 Tickets, Roll 2)', () => {
+  const src = readFileSync(COMPONENT_PATH, 'utf8');
+  assert.match(src, /jp-section-rollone|Roll 1/i);
+  assert.match(src, /jp-section-rolltwo|Roll 2/i);
+  // Solo bucket treatment
+  assert.match(src, /solo|jp-solo/i);
+  // Far-future section
+  assert.match(src, /far[-_]?future/i);
 });
 
 test('handles empty / error states gracefully', () => {
