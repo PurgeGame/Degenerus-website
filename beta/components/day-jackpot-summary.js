@@ -1,110 +1,186 @@
-// components/day-jackpot-summary.js -- Day Jackpot Summary widget (Plan 39-10)
+// components/day-jackpot-summary.js -- Day Jackpot Summary widget
 //
-// Compact widget mounted inside <replay-panel> between the card grid / reveal
-// button area and the winners distributions list on /beta/index.html.
+// Plan 39-11 (REWRITTEN): Day-based role-aware summary rendering.
 //
-// Summarises the currently-replayed day: winning traits from Roll 1 (main)
-// and Roll 2 (bonus + far-future), wins-per-trait counts, and the payment
-// per win (ETH / BURNIE). Reuses the row-render logic from jackpot-rolls.js
-// via the `createJackpotRolls` factory — no duplication.
+// Each day = one jackpot, drawn as two rolls:
+//   Roll 1 (main, unsalted)  → 4 shared traits, produces ETH + tickets.
+//                              One of those trait wins may be a "solo" bucket
+//                              (single winner receiving the whale_pass, too).
+//   Roll 2 (bonus, salted)   → 4 different traits, produces coin + far-future.
 //
-// Data flow:
-//   replay-panel publishes replay.level when the user selects a day →
-//   this widget subscribes and calls renderOverview(level), which fetches
-//   `${API_BASE}/game/jackpot/{level}/overview` and populates .jo-grid.
+// Widget subscribes to `replay.day` (NOT replay.level — level conflates across
+// jackpot boundaries post-level-100). It fetches
+// /game/jackpot/day/{day}/summary and renders three role-grouped sections.
 
 import { subscribe } from '../app/store.js';
 import { API_BASE } from '../app/constants.js';
-import { createJackpotRolls } from '../app/jackpot-rolls.js';
+import { joBadgePath, joFormatWeiToEth } from '../app/jackpot-rolls.js';
+
+function shortAddr(addr) {
+  if (!addr || typeof addr !== 'string') return '';
+  return addr.slice(0, 6) + '…' + addr.slice(-4);
+}
+
+function badgeCellHTML(traitId) {
+  if (traitId == null) return '';
+  const q = Math.floor(traitId / 64);
+  const s = Math.floor((traitId % 64) / 8);
+  const c = traitId % 8;
+  const src = joBadgePath(q, s, c);
+  return `<span class="jp-summary-badge"><img src="${src}" alt="trait-${traitId}" width="22" height="22"/></span>`;
+}
+
+function ethRowHTML(row) {
+  return `
+    <div class="jp-summary-row">
+      ${badgeCellHTML(row.traitId)}
+      <span class="jp-summary-type">${row.winnerCount} winner${row.winnerCount === 1 ? '' : 's'} (${row.uniqueCount} unique)</span>
+      <span class="jp-summary-amount">${joFormatWeiToEth(row.ethPerWinner)} ETH</span>
+    </div>`;
+}
+
+function ticketRowHTML(row) {
+  return `
+    <div class="jp-summary-row">
+      ${badgeCellHTML(row.traitId)}
+      <span class="jp-summary-type">${row.winnerCount} winner${row.winnerCount === 1 ? '' : 's'} (${row.uniqueCount} unique)</span>
+      <span class="jp-summary-amount">${row.ticketsPerWinner} tkts ea</span>
+    </div>`;
+}
+
+function coinRowHTML(row) {
+  return `
+    <div class="jp-summary-row">
+      ${badgeCellHTML(row.traitId)}
+      <span class="jp-summary-type">${row.winnerCount} winner${row.winnerCount === 1 ? '' : 's'} (${row.uniqueCount} unique)</span>
+      <span class="jp-summary-amount">${joFormatWeiToEth(row.coinPerWinner)} BURNIE</span>
+    </div>`;
+}
+
+function soloRowHTML(solo) {
+  return `
+    <div class="jp-summary-row jp-solo-bucket">
+      ${badgeCellHTML(solo.traitId)}
+      <span class="jp-summary-type"><strong>SOLO</strong> ${shortAddr(solo.winner)}${solo.hasWhalePass ? ' <span class="jp-whale-pass-badge">WHALE PASS</span>' : ''}</span>
+      <span class="jp-summary-amount">${joFormatWeiToEth(solo.ethAmount)} ETH</span>
+    </div>`;
+}
 
 class DayJackpotSummary extends HTMLElement {
   #unsubs = [];
-  #rolls = null;
+  #currentDay = null;
 
   connectedCallback() {
-    // Build a jackpot-rolls-compatible grid. The factory clears non-header
-    // children on each render, so the initial .jo-header cells are preserved.
     this.innerHTML = `
-      <section class="day-jackpot-summary">
-        <header>Day Jackpot Summary</header>
+      <section class="day-jackpot-summary jp-summary">
+        <header data-bind="header">Day Jackpot Summary</header>
         <div class="day-jackpot-summary-body" data-bind="content">
-          <div class="jo-grid" id="djs-grid">
-            <div class="jo-header">Type</div>
-            <div class="jo-header">Win</div>
-            <div class="jo-header">Uniq</div>
-            <div class="jo-header">Coin</div>
-            <div class="jo-header">Tkts</div>
-            <div class="jo-header">ETH</div>
-            <div class="jo-header">Spread</div>
-          </div>
-          <div id="djs-status" class="jo-empty">Select a day to see jackpot details.</div>
-          <div id="djs-far-future" style="display:none;">Far-future outcomes resolved.</div>
+          <div class="jp-summary-status" data-bind="status">Select a day to see jackpot details.</div>
         </div>
       </section>
     `;
 
-    // Create a jackpot-rolls controller scoped to this widget, with selectors
-    // pointing at our own DOM. The factory also references `rollBtn` etc. but
-    // renderOverview() only touches joGrid / joStatus / joFarFuture — and the
-    // factory doesn't access the missing selectors at construction time.
-    this.#rolls = createJackpotRolls({
-      root: this,
-      apiBase: API_BASE,
-      selectors: {
-        joGrid:      '#djs-grid',
-        joStatus:    '#djs-status',
-        joFarFuture: '#djs-far-future',
-      },
-    });
-
     this.#unsubs.push(
-      subscribe('replay.level', (level) => this.#refresh(level)),
+      subscribe('replay.day', (day) => this.#refresh(day)),
     );
   }
 
   disconnectedCallback() {
     this.#unsubs.forEach((fn) => fn());
     this.#unsubs = [];
-    if (this.#rolls && typeof this.#rolls.dispose === 'function') {
-      try { this.#rolls.dispose(); } catch (_) { /* noop */ }
-    }
-    this.#rolls = null;
   }
 
-  #refresh(level) {
-    const status = this.querySelector('#djs-status');
-    const grid = this.querySelector('#djs-grid');
+  async #refresh(day) {
+    const header = this.querySelector('[data-bind="header"]');
+    const body = this.querySelector('[data-bind="content"]');
+    if (!body) return;
 
-    // Clear any existing non-header rows so the empty state is clean.
-    if (grid) {
-      const children = Array.prototype.slice.call(grid.children);
-      for (let i = 0; i < children.length; i++) {
-        if (!children[i].classList.contains('jo-header')) grid.removeChild(children[i]);
-      }
-    }
-
-    if (level == null) {
-      if (status) {
-        status.className = 'jo-empty';
-        status.textContent = 'Select a day to see jackpot details.';
-        status.style.display = 'block';
-      }
+    if (day == null) {
+      this.#currentDay = null;
+      if (header) header.textContent = 'Day Jackpot Summary';
+      body.innerHTML = `<div class="jp-summary-status">Select a day to see jackpot details.</div>`;
       return;
     }
 
+    this.#currentDay = day;
+    if (header) header.textContent = `Day ${day} Jackpot Summary`;
+    body.innerHTML = `<div class="jp-summary-status jo-loading">Loading day ${day}…</div>`;
+
+    let data = null;
     try {
-      // Delegate to the shared renderer — it fetches
-      // `${API_BASE}/game/jackpot/{level}/overview`, handles 404 / empty /
-      // error states, and populates the grid with .jo-row children.
-      this.#rolls.renderOverview(level);
-    } catch (err) {
-      console.error('[day-jackpot-summary] renderOverview failed', err);
-      if (status) {
-        status.className = 'jo-empty';
-        status.textContent = 'Unable to load jackpot details.';
-        status.style.display = 'block';
+      const res = await fetch(`${API_BASE}/game/jackpot/day/${day}/summary`);
+      if (res.status === 404) {
+        body.innerHTML = `<div class="jp-summary-status jp-summary-empty">No jackpot data for day ${day}.</div>`;
+        return;
       }
+      if (!res.ok) {
+        body.innerHTML = `<div class="jp-summary-status jp-summary-error">Error ${res.status} loading day ${day}.</div>`;
+        return;
+      }
+      data = await res.json();
+    } catch (err) {
+      console.error('[day-jackpot-summary] fetch failed', err);
+      body.innerHTML = `<div class="jp-summary-status jp-summary-error">Unable to load day ${day}.</div>`;
+      return;
     }
+
+    // Stale-guard — user may have scrubbed to a different day while fetching.
+    if (this.#currentDay !== day) return;
+
+    this.#render(body, data);
+  }
+
+  #render(body, data) {
+    const r1 = data.rollOne || {};
+    const r2 = data.rollTwo || {};
+    const eth = Array.isArray(r1.eth) ? r1.eth : [];
+    const tickets = Array.isArray(r1.tickets) ? r1.tickets : [];
+    const coin = Array.isArray(r2.coin) ? r2.coin : [];
+    const ff = r2.farFuture || { resolved: false, winnerCount: 0, totalCoin: '0' };
+
+    const soloHTML = r1.solo ? soloRowHTML(r1.solo) : '';
+    const ethHTML = eth.length > 0
+      ? eth.map(ethRowHTML).join('')
+      : `<div class="jp-summary-note">No ETH distribution on this day.</div>`;
+    const ticketsHTML = tickets.length > 0
+      ? tickets.map(ticketRowHTML).join('')
+      : `<div class="jp-summary-note">No ticket distribution on this day.</div>`;
+    const coinHTML = coin.length > 0
+      ? coin.map(coinRowHTML).join('')
+      : `<div class="jp-summary-note">No bonus coin distribution on this day.</div>`;
+    const ffHTML = ff.resolved
+      ? `<div class="jp-summary-row jp-far-future">
+           <span class="jp-summary-type">Far-Future resolved (${ff.winnerCount} winners)</span>
+           <span class="jp-summary-amount">${joFormatWeiToEth(ff.totalCoin)} BURNIE total</span>
+         </div>`
+      : `<div class="jp-summary-note">Far-Future: pending / unresolved.</div>`;
+
+    body.innerHTML = `
+      <div class="jp-section jp-section-rollone">
+        <h4 class="jp-section-title">Roll 1 — Main Draw</h4>
+        <div class="jp-subsection jp-subsection-eth">
+          <h5 class="jp-subsection-title">ETH Wins</h5>
+          ${soloHTML}
+          ${ethHTML}
+        </div>
+        <div class="jp-subsection jp-subsection-tickets">
+          <h5 class="jp-subsection-title">Ticket Wins</h5>
+          ${ticketsHTML}
+        </div>
+      </div>
+
+      <div class="jp-section jp-section-rolltwo">
+        <h4 class="jp-section-title">Roll 2 — Bonus Draw</h4>
+        <div class="jp-subsection jp-subsection-coin">
+          <h5 class="jp-subsection-title">Bonus Coin</h5>
+          ${coinHTML}
+        </div>
+        <div class="jp-subsection jp-subsection-far-future">
+          <h5 class="jp-subsection-title">Far-Future</h5>
+          ${ffHTML}
+        </div>
+      </div>
+    `;
   }
 }
 

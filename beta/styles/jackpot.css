@@ -22,6 +22,80 @@
   min-height: 2rem;
 }
 
+/* -------------------------------------------------------------------------
+   Plan 39-11: day-based three-section role-aware render
+   ------------------------------------------------------------------------- */
+.day-jackpot-summary .jp-section {
+  margin-top: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.day-jackpot-summary .jp-section-rollone {
+  border-left: 3px solid #2cb5a5; /* teal */
+}
+.day-jackpot-summary .jp-section-rolltwo {
+  border-left: 3px solid #c44bd1; /* magenta */
+}
+.day-jackpot-summary .jp-section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #c99b3e;
+  margin: 0 0 0.35rem;
+}
+.day-jackpot-summary .jp-subsection {
+  margin: 0.25rem 0 0.5rem;
+}
+.day-jackpot-summary .jp-subsection-title {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim, #8a8aa5);
+  margin: 0.3rem 0 0.2rem;
+}
+.day-jackpot-summary .jp-summary-badge img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  vertical-align: middle;
+}
+.day-jackpot-summary .jp-solo-bucket {
+  background: rgba(245, 180, 70, 0.08);
+  border: 1px solid rgba(245, 180, 70, 0.45);
+  box-shadow: 0 0 0 1px rgba(245, 180, 70, 0.25) inset;
+  border-radius: 4px;
+  padding: 3px 6px !important;
+}
+.day-jackpot-summary .jp-whale-pass-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-left: 4px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #1a1a2e;
+  background: #f5b446;
+  border-radius: 3px;
+}
+.day-jackpot-summary .jp-far-future {
+  border-top: 1px dashed rgba(196, 75, 209, 0.4);
+  padding-top: 4px;
+}
+.day-jackpot-summary .jp-summary-empty,
+.day-jackpot-summary .jp-summary-error,
+.day-jackpot-summary .jp-summary-status {
+  font-size: 0.75rem;
+  color: var(--text-dim, #8a8aa5);
+  padding: 8px 0;
+  text-align: center;
+}
+.day-jackpot-summary .jp-summary-error {
+  color: #d97a5a;
+}
+
 
 .jackpot-panel {
   /* inherits .panel */
