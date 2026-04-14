@@ -1,0 +1,7 @@
+{
+  "items": [
+    {"level": 101, "stage": 3, "phase": "PURCHASE", "blockNumber": 1550},
+    {"level": 60, "stage": 7, "phase": "JACKPOT", "blockNumber": 1600}
+  ],
+  "nextCursor": null
+}

@@ -1,0 +1,10 @@
+{
+  "items": [
+    {"level": 49, "stage": 7, "phase": "JACKPOT", "blockNumber": 1234},
+    {"level": 50, "stage": 3, "phase": "PURCHASE", "blockNumber": 1240},
+    {"level": 50, "stage": 7, "phase": "JACKPOT", "blockNumber": 1300},
+    {"level": 51, "stage": 10, "phase": "PURCHASE", "blockNumber": 1310},
+    {"level": 99, "stage": 7, "phase": "JACKPOT", "blockNumber": 1500}
+  ],
+  "nextCursor": "pools-page2"
+}
