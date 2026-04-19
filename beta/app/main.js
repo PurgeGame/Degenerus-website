@@ -20,14 +20,37 @@ import '../components/decimator-panel.js';
 import '../components/terminal-panel.js';
 import '../components/replay-panel.js'; // DEBUG: replay viewer
 import '../components/day-jackpot-summary.js'; // Plan 39-10: day summary widget mounted inside replay-panel
+import '../components/boons-panel.js'; // Phase 44 BOON-03: Active Boons panel
 
 // Import modules
 import { update, get, subscribe } from './store.js';
 import { playSound } from './audio.js';
 import { on } from './events.js';
-import { startPolling, checkHealth } from './api.js';
+import { startPolling, checkHealth, fetchJSON } from './api.js';
 import { discoverWallets, autoReconnect } from './wallet.js';
 import { initRouter } from './router.js';
+
+// Phase 44 BOON-03: refetch player.boons whenever (replay.day, player.address)
+// changes. Uses store.js update() API (store.js exports subscribe/update/get/batch
+// only — no broadcaster/emitter export). Keeps latest address+day in module-scope
+// closures so either subscription can trigger a fresh fetch when its counterpart
+// is already set.
+let _boonsAddress = null;
+let _boonsDay = null;
+async function _refetchBoons() {
+  if (!_boonsAddress || _boonsDay == null) {
+    update('player.boons', []);
+    return;
+  }
+  try {
+    const res = await fetchJSON(`/player/${_boonsAddress}/boons/${_boonsDay}`);
+    update('player.boons', res.boons || []);
+  } catch {
+    update('player.boons', []);
+  }
+}
+subscribe('replay.day', (day) => { _boonsDay = day; _refetchBoons(); });
+subscribe('player.address', (addr) => { _boonsAddress = addr; _refetchBoons(); });
 
 async function init() {
   console.log('[Degenerus] Initializing v2.0...');
