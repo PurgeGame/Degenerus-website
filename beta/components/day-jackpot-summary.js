@@ -14,7 +14,7 @@
 
 import { subscribe } from '../app/store.js';
 import { API_BASE } from '../app/constants.js';
-import { joBadgePath, joFormatWeiToEth } from '../app/jackpot-rolls.js';
+import { joBadgePath, joFormatWeiToEth, joScaledToTickets } from '../app/jackpot-rolls.js';
 
 function shortAddr(addr) {
   if (!addr || typeof addr !== 'string') return '';
@@ -40,11 +40,13 @@ function ethRowHTML(row) {
 }
 
 function ticketRowHTML(row) {
+  // v4.4: ticketsPerWinner is scaled ×TICKET_SCALE (=100).
+  const tkts = joScaledToTickets(row.ticketsPerWinner);
   return `
     <div class="jp-summary-row">
       ${badgeCellHTML(row.traitId)}
       <span class="jp-summary-type">${row.winnerCount} winner${row.winnerCount === 1 ? '' : 's'} (${row.uniqueCount} unique)</span>
-      <span class="jp-summary-amount">${row.ticketsPerWinner} tkts ea</span>
+      <span class="jp-summary-amount">${tkts} tkts ea</span>
     </div>`;
 }
 
@@ -171,10 +173,10 @@ class DayJackpotSummary extends HTMLElement {
             </div>
           </div>
           <div class="jp-subsection jp-subsection-baf-tickets">
-            <h5 class="jp-subsection-title">BAF Lootbox-Ticket Prizes</h5>
+            <h5 class="jp-subsection-title">BAF Lootbox Tickets</h5>
             <div class="jp-summary-row jp-baf-row">
-              <span class="jp-summary-type">${baf.tickets.winnerCount} prize${baf.tickets.winnerCount === 1 ? '' : 's'} across ${baf.tickets.uniqueCount} unique winner${baf.tickets.uniqueCount === 1 ? '' : 's'}</span>
-              <span class="jp-summary-amount">${baf.tickets.total} prize${baf.tickets.total === 1 ? '' : 's'} (each = a lootbox roll → multiple queued tickets; contract doesn't emit exact count)</span>
+              <span class="jp-summary-type">${baf.tickets.winnerCount} roll${baf.tickets.winnerCount === 1 ? '' : 's'} across ${baf.tickets.uniqueCount} unique winner${baf.tickets.uniqueCount === 1 ? '' : 's'}</span>
+              <span class="jp-summary-amount">${joScaledToTickets(baf.tickets.total)} tkts total</span>
             </div>
           </div>
         </div>
@@ -197,10 +199,20 @@ class DayJackpotSummary extends HTMLElement {
           ${dec.regular && dec.regular.claimCount > 0 ? `
             <div class="jp-subsection jp-subsection-dec-regular">
               <h5 class="jp-subsection-title">Regular</h5>
-              <div class="jp-summary-row jp-decimator-row">
+              <div class="jp-summary-row jp-decimator-row jp-decimator-total">
                 <span class="jp-summary-type">${dec.regular.claimCount} claim${dec.regular.claimCount === 1 ? '' : 's'} across ${dec.regular.uniquePlayers} unique player${dec.regular.uniquePlayers === 1 ? '' : 's'}</span>
                 <span class="jp-summary-amount">${joFormatWeiToEth(dec.regular.ethTotal)} ETH${BigInt(dec.regular.lootboxEthTotal || '0') > 0n ? ` + ${joFormatWeiToEth(dec.regular.lootboxEthTotal)} ETH (lootbox)` : ''}</span>
               </div>
+              ${Array.isArray(dec.regular.perRound) && dec.regular.perRound.length > 1 ? `
+                <div class="jp-decimator-perround">
+                  ${dec.regular.perRound.map((r) => `
+                    <div class="jp-summary-row jp-decimator-row jp-decimator-round">
+                      <span class="jp-summary-type">L${r.level}: ${r.claims} claim${r.claims === 1 ? '' : 's'}${r.uniquePlayers !== r.claims ? ` (${r.uniquePlayers} unique)` : ''}</span>
+                      <span class="jp-summary-amount">${joFormatWeiToEth(r.ethTotal)} ETH${BigInt(r.lootboxEthTotal || '0') > 0n ? ` + ${joFormatWeiToEth(r.lootboxEthTotal)} ETH (lootbox)` : ''}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : ''}
             </div>
           ` : ''}
           ${dec.terminal && dec.terminal.claimCount > 0 ? `

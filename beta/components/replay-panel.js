@@ -7,6 +7,7 @@
 // Ported faithfully from jackpot-demo.html scratch/reveal UX.
 
 import { deriveWinningTraits, traitToBadge, toDisplayOrder, DISPLAY_ORDER } from '../app/jackpot-data.js';
+import { joScaledToTickets } from '../app/jackpot-rolls.js';
 import { formatEth, formatBurnie, truncateAddress } from '../app/utils.js';
 import { playSound } from '../app/audio.js';
 import { API_BASE, BADGE_QUADRANTS, BADGE_COLORS, BADGE_ITEMS, badgeCircularPath } from '../app/constants.js';
@@ -265,7 +266,7 @@ class ReplayPanel extends HTMLElement {
       this.#rngDays = data.days;
       const select = this.querySelector('[data-bind="day-select"]');
       select.innerHTML = '<option value="">Pick a jackpot day</option>' +
-        data.days.map(d => `<option value="${d.day}">Day ${d.day}</option>`).join('');
+        data.days.map(d => `<option value="${d.day}">Day ${d.day} — L${d.level} ${d.phase}${d.dayInPhase}</option>`).join('');
     } catch (err) {
       console.warn('[ReplayPanel] Failed to load days:', err);
       const select = this.querySelector('[data-bind="day-select"]');
@@ -460,6 +461,9 @@ class ReplayPanel extends HTMLElement {
   #onPlayerChange(e) {
     const addr = e.target.value;
     this.#selectedPlayer = addr || null;
+    // Publish replay-player selection so sibling widgets (status-bar activity
+    // score) can react without coupling to this panel.
+    update('replay.player', this.#selectedPlayer);
     this.#updateTicketInfo();
     this.#loadPlayerTraits();
     // Re-render distributions to update (YOU) labels
@@ -740,14 +744,21 @@ class ReplayPanel extends HTMLElement {
       });
     }
 
-    // whale_pass / dgnrs wins (no traitId) → place in the quadrant with the most ETH wins
+    // whale_pass / dgnrs wins (no traitId) → attach to the SOLO bucket.
+    // The solo bucket is where this player is the only winner, which on the
+    // contract side pays the biggest single ETH slice (60% on final day,
+    // 20% otherwise — still larger than the per-winner share in multi-winner
+    // buckets).  Picking the quadrant with the largest *single* ETH win
+    // lands on that bucket, whereas summing totals can tip toward a
+    // multi-winner quadrant whose cumulative payout exceeds the solo share.
     const noTraitWins = this.#playerRoll1Wins.filter(w => w.traitId == null);
     if (noTraitWins.length > 0) {
-      let bestPos = 0, bestEth = 0n;
+      let bestPos = 0, bestSingle = 0n;
       for (let i = 0; i < 4; i++) {
-        const qEth = this.#quadWinArrays[i]
-          .reduce((s, d) => s + BigInt(d.ethTotal || '0'), 0n);
-        if (qEth > bestEth) { bestEth = qEth; bestPos = i; }
+        for (const d of this.#quadWinArrays[i]) {
+          const amt = BigInt(d.ethTotal || '0');
+          if (amt > bestSingle) { bestSingle = amt; bestPos = i; }
+        }
       }
       for (const win of noTraitWins) {
         const at = win.awardType || '';
@@ -1521,14 +1532,16 @@ class ReplayPanel extends HTMLElement {
     // Show prize overlay — sum by currency type (skip overflow sentinels)
     if (prize && isWin) {
       const wins = this.#quadWinArrays[qIdx].filter(d => d.awardType !== 'overflow');
-      let ethTotal = 0n, burnieTotal = 0n, dgnrsTotal = 0n, ticketCount = 0, whaleCount = 0;
+      // ticketScaledSum: scaled ticketCount (×TICKET_SCALE=100), rounded to
+      // whole tickets at display (see line below).
+      let ethTotal = 0n, burnieTotal = 0n, dgnrsTotal = 0n, ticketScaledSum = 0, whaleCount = 0;
       for (const d of wins) {
         const t = d.awardType || '';
         if (t === 'aggregated') {
           // Entry produced by #distributePrizesFromRoll1/2 — all amounts pre-normalised
           ethTotal += BigInt(d.ethTotal || '0');
           burnieTotal += BigInt(d.burnieTotal || '0');
-          ticketCount += Number(d.ticketTotal || 0);
+          ticketScaledSum += Number(d.ticketTotal || 0);
           whaleCount += Number(d.whalePassCount || 0);
           dgnrsTotal += BigInt(d.dgnrsTotal || '0');
         } else if (t === 'burnie' || t === 'farFutureCoin' || d.currency === 'BURNIE') {
@@ -1536,13 +1549,14 @@ class ReplayPanel extends HTMLElement {
         } else if (t === 'dgnrs') {
           dgnrsTotal += BigInt(d.amount || '0');
         } else if (t === 'tickets') {
-          ticketCount += Number(d.amount || '1');
+          ticketScaledSum += Number(d.amount || '0');
         } else if (t === 'whale_pass') {
           whaleCount += Number(d.amount || '1');
         } else {
           ethTotal += BigInt(d.amount || '0');
         }
       }
+      const ticketCount = joScaledToTickets(ticketScaledSum);
       const lines = [];
       if (ethTotal > 0n) lines.push(formatEth(ethTotal.toString()) + ' ETH');
       if (burnieTotal > 0n) lines.push(formatBurnie(burnieTotal.toString()) + ' BURNIE');

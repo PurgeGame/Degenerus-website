@@ -65,6 +65,18 @@ function joFormatCoin(amtStr) {
   return joFormatWeiToEth(amtStr);
 }
 
+// JackpotTicketWin emits ticketCount × TICKET_SCALE (=100) to carry fractional
+// remainders across events. Fractional remainders are later resolved on-chain
+// via carry or _rollRemainder; for UI we round to whole tickets at the display
+// boundary.  Accepts number | string | null | undefined; returns an integer.
+export const TICKET_SCALE_DISPLAY = 100;
+export function joScaledToTickets(scaled) {
+  if (scaled == null || scaled === '') return 0;
+  const n = typeof scaled === 'number' ? scaled : Number(scaled);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.round(n / TICKET_SCALE_DISPLAY);
+}
+
 /**
  * Re-bucket Roll 2 rows into the 8 symbol slots actually drawn for the day
  * (4 from mainTraitsPacked + 4 from bonusTraitsPacked) plus one far-future
@@ -124,7 +136,7 @@ export function rebucketRoll2BySlot(roll2, bonusPacked) {
       const r0 = rows[0];
       if (r0.coinPerWinner && r0.coinPerWinner !== '0') amountPerWin = r0.coinPerWinner;
       else if (r0.ethPerWinner && r0.ethPerWinner !== '0') amountPerWin = r0.ethPerWinner;
-      else if (r0.ticketsPerWinner) amountPerWin = String(r0.ticketsPerWinner);
+      else if (r0.ticketsPerWinner) amountPerWin = String(joScaledToTickets(r0.ticketsPerWinner));
     }
     // Plan 39-09: propagate ticketSubRow from the first row that has one.
     let ticketSubRow = null;
@@ -361,7 +373,7 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
 
     var tktCell = document.createElement('div');
     tktCell.className = 'jo-tickets';
-    tktCell.textContent = row.ticketsPerWinner ? String(row.ticketsPerWinner) : '\u2014';
+    tktCell.textContent = row.ticketsPerWinner ? String(joScaledToTickets(row.ticketsPerWinner)) : '\u2014';
 
     var ethCell = document.createElement('div');
     ethCell.className = 'jo-eth';

@@ -6,7 +6,7 @@ import { subscribe } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 import { formatEth } from '../app/utils.js';
 import { createScrubber } from '../viewer/scrubber.js';
-import { joFormatWeiToEth, createJackpotRolls } from '../app/jackpot-rolls.js';
+import { joFormatWeiToEth, joScaledToTickets, createJackpotRolls } from '../app/jackpot-rolls.js';
 
 class JackpotPanel extends HTMLElement {
   #unsubs = [];
@@ -272,7 +272,7 @@ class JackpotPanel extends HTMLElement {
 
       const tktCell = document.createElement('div');
       tktCell.className = 'jo-tickets';
-      tktCell.textContent = row.ticketsPerWinner ? String(row.ticketsPerWinner) : '\u2014';
+      tktCell.textContent = row.ticketsPerWinner ? String(joScaledToTickets(row.ticketsPerWinner)) : '\u2014';
 
       const ethCell = document.createElement('div');
       ethCell.className = 'jo-eth';
@@ -351,7 +351,8 @@ class JackpotPanel extends HTMLElement {
 
     if (tickWinners.length > 0) {
       const uniqueAddrs = new Set(tickWinners.map(w => w.address)).size;
-      const counts  = tickWinners.map(w => w.ticketCount || 0);
+      // v4.4: ticketCount is scaled ×TICKET_SCALE (=100).  Divide for display.
+      const counts  = tickWinners.map(w => joScaledToTickets(w.ticketCount || 0));
       const topCount = Math.max(...counts);
       const allSame  = counts.every(c => c === counts[0]);
       const amtStr   = allSame ? `${counts[0]} tkts each` : `${topCount} tkts (top)`;
@@ -379,14 +380,14 @@ class JackpotPanel extends HTMLElement {
     }
 
     if (bafTicketWinners.length > 0) {
-      // Each BAF ticket event = 1 lootbox-style prize (the contract emits
-      // JackpotTicketWin with ticketCount=0 for BAF wins; the actual ticket
-      // count is computed inside _awardJackpotTickets from the winner's share
-      // and isn't surfaced in the event).  Label as "prizes" rather than
-      // implying a raw ticket count.
+      // v4.4: bafPrize.tickets is the sum of scaled ticketCount per winner.
+      // Report total-tickets-awarded + events-count so the user sees both.
       const uniqueAddrs = new Set(bafTicketWinners.map(w => w.address)).size;
-      const amtStr   = `${bafTicketWinners.length} lootbox-roll prize${bafTicketWinners.length === 1 ? '' : 's'}`;
-      rows.push({ label: 'BAF Prizes', count: bafTicketWinners.length, unique: uniqueAddrs, amount: amtStr });
+      const totalTickets = bafTicketWinners.reduce(
+        (sum, w) => sum + joScaledToTickets(w.bafPrize.tickets || 0), 0
+      );
+      const amtStr = `${totalTickets} tkts across ${bafTicketWinners.length} lootbox roll${bafTicketWinners.length === 1 ? '' : 's'}`;
+      rows.push({ label: 'BAF Tickets', count: bafTicketWinners.length, unique: uniqueAddrs, amount: amtStr });
     }
 
     // Decimator — per-winner regularEth + lootboxEth (regular claim) and
@@ -560,19 +561,22 @@ class JackpotPanel extends HTMLElement {
     const normalAmtText = (w) => {
       const parts = [];
       if (BigInt(w.totalEth || '0') > 0n) parts.push(`${formatEth(w.totalEth)} ETH`);
-      if ((w.ticketCount || 0) > 0)       parts.push(`${w.ticketCount} tkts`);
+      // v4.4: ticketCount is scaled ×TICKET_SCALE (=100).
+      if ((w.ticketCount || 0) > 0) {
+        const n = joScaledToTickets(w.ticketCount);
+        parts.push(`${n} tkts`);
+      }
       if (BigInt(w.coinTotal || '0') > 0n) parts.push(`${joFormatWeiToEth(w.coinTotal)} BURNIE`);
       return parts.join(' · ');
     };
     const bafAmtText = (w) => {
       const parts = [];
       if (BigInt(w.bafPrize.eth || '0') > 0n) parts.push(`${formatEth(w.bafPrize.eth)} ETH`);
-      // bafPrize.tickets = number of lootbox-roll prize EVENTS for this winner,
-      // not a raw ticket count.  Each event queued a variable number of tickets
-      // to the winner's account (the contract doesn't emit the count).
+      // v4.4: bafPrize.tickets is the sum of scaled ticketCount (×TICKET_SCALE)
+      // across all BAF lootbox rolls for this winner.  Divide for display.
       if ((w.bafPrize.tickets || 0) > 0) {
-        const n = w.bafPrize.tickets;
-        parts.push(`${n} lootbox prize${n === 1 ? '' : 's'}`);
+        const n = joScaledToTickets(w.bafPrize.tickets);
+        parts.push(`${n} tkts`);
       }
       return parts.join(' · ');
     };
@@ -827,7 +831,7 @@ class JackpotPanel extends HTMLElement {
     const winCell = document.createElement('div'); winCell.className = 'jo-winners'; winCell.textContent = String(row.winnerCount ?? '');
     const uniqCell = document.createElement('div'); uniqCell.className = 'jo-unique'; uniqCell.textContent = String(row.uniqueWinnerCount ?? '');
     const coinCell = document.createElement('div'); coinCell.className = 'jo-coin'; coinCell.textContent = (!row.coinPerWinner || row.coinPerWinner === '0') ? '\u2014' : fmtWei(row.coinPerWinner);
-    const tktCell  = document.createElement('div'); tktCell.className = 'jo-tickets'; tktCell.textContent = row.ticketsPerWinner ? String(row.ticketsPerWinner) : '\u2014';
+    const tktCell  = document.createElement('div'); tktCell.className = 'jo-tickets'; tktCell.textContent = row.ticketsPerWinner ? String(joScaledToTickets(row.ticketsPerWinner)) : '\u2014';
     const ethCell  = document.createElement('div'); ethCell.className = 'jo-eth'; ethCell.textContent = (!row.ethPerWinner || row.ethPerWinner === '0') ? '\u2014' : fmtWei(row.ethPerWinner);
     const spreadCell = document.createElement('div'); spreadCell.className = 'jo-spread';
     const buckets = Array.isArray(row.spreadBuckets) ? row.spreadBuckets : [false, false, false];
