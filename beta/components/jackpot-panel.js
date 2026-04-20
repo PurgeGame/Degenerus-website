@@ -107,8 +107,29 @@ class JackpotPanel extends HTMLElement {
           </details>
 
           <div class="jp-winners">
-            <div class="jp-winners-label">Winners</div>
-            <ul class="jp-winners-list" data-bind="jp-winners-select" role="listbox" aria-label="Winners"></ul>
+            <div class="jp-winners-group" data-bind="jp-winners-group-normal" style="display:none;">
+              <div class="jp-winners-label">
+                <span data-bind="jp-winners-label-normal">Winners (Normal Jackpot)</span>
+              </div>
+              <ul class="jp-winners-list" data-bind="jp-winners-list-normal" role="listbox" aria-label="Normal jackpot winners"></ul>
+            </div>
+            <div class="jp-winners-group" data-bind="jp-winners-group-baf" style="display:none;">
+              <div class="jp-winners-label">
+                <span data-bind="jp-winners-label-baf">BAF Winners</span>
+              </div>
+              <ul class="jp-winners-list" data-bind="jp-winners-list-baf" role="listbox" aria-label="BAF winners"></ul>
+            </div>
+            <div class="jp-winners-group" data-bind="jp-winners-group-decimator" style="display:none;">
+              <div class="jp-winners-label">
+                <span data-bind="jp-winners-label-decimator">Decimator Winners</span>
+              </div>
+              <ul class="jp-winners-list" data-bind="jp-winners-list-decimator" role="listbox" aria-label="Decimator winners"></ul>
+            </div>
+            <div class="jp-winners-group" data-bind="jp-winners-group-empty" style="display:none;">
+              <ul class="jp-winners-list">
+                <li class="jp-winner-item jp-winner-item--empty" data-bind="jp-winners-empty">No data for this day</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -137,11 +158,9 @@ class JackpotPanel extends HTMLElement {
       });
     }
 
-    // Plan 03: wire winners select change handler
-    const selectEl = this.querySelector('[data-bind="jp-winners-select"]');
-    if (selectEl) {
-      selectEl.addEventListener('change', (e) => this.#onWinnerChange(e.target.value));
-    }
+    // Winner-table click wiring moved to the per-item listeners bound during
+    // #renderWinners() — the former `change` listener on a single <ul> is no
+    // longer meaningful now that winners are split across three lists.
 
     // Plan 04 (rebuild): initialise rolls factory and wire Replay button
     this.#rolls = createJackpotRolls({
@@ -194,7 +213,12 @@ class JackpotPanel extends HTMLElement {
 
     let overview;
     try {
-      overview = await fetchJSON(`/game/jackpot/${level}/overview`);
+      // Pass current day so the overview is scoped to a single day's block
+      // range rather than aggregating all level-N distributions across every
+      // calendar day the level spans (a compressed/normal-mode level's
+      // tickets fire on multiple days before its ETH jackpot).
+      const dayQS = this.#currentDay ? `?day=${this.#currentDay}` : '';
+      overview = await fetchJSON(`/game/jackpot/${level}/overview${dayQS}`);
     } catch (err) {
       if (statusEl) { statusEl.textContent = 'Overview unavailable.'; statusEl.style.display = ''; }
       return;
@@ -304,6 +328,13 @@ class JackpotPanel extends HTMLElement {
     const ethWinners  = winners.filter(w => BigInt(w.totalEth  || '0') > 0n);
     const tickWinners = winners.filter(w => (w.ticketCount || 0) > 0);
     const coinWinners = winners.filter(w => BigInt(w.coinTotal || '0') > 0n);
+    // BAF winners: rows with bafPrize.eth > 0 OR bafPrize.tickets > 0.  The
+    // underlying eth_baf amounts are already included in totalEth (eth_total SQL
+    // groups LIKE 'eth%'), so BAF winners may double-show in the ETH row — that's
+    // intentional: ETH row = total ETH received, BAF row = of that total, how
+    // much came from the BAF draw.
+    const bafEthWinners    = winners.filter(w => w.bafPrize && BigInt(w.bafPrize.eth || '0') > 0n);
+    const bafTicketWinners = winners.filter(w => w.bafPrize && (w.bafPrize.tickets || 0) > 0);
 
     const rows = [];
 
@@ -338,6 +369,52 @@ class JackpotPanel extends HTMLElement {
       rows.push({ label: 'BURNIE', count: coinWinners.length, unique: uniqueAddrs, amount: amtStr });
     }
 
+    if (bafEthWinners.length > 0) {
+      const uniqueAddrs = new Set(bafEthWinners.map(w => w.address)).size;
+      const amounts = bafEthWinners.map(w => BigInt(w.bafPrize.eth));
+      const totalAmt = amounts.reduce((a, b) => a + b, 0n);
+      const topAmt   = amounts.reduce((a, b) => (b > a ? b : a), 0n);
+      const amtStr   = `${formatEth(totalAmt.toString())} ETH total · ${formatEth(topAmt.toString())} (top)`;
+      rows.push({ label: 'BAF ETH', count: bafEthWinners.length, unique: uniqueAddrs, amount: amtStr });
+    }
+
+    if (bafTicketWinners.length > 0) {
+      // Each BAF ticket event = 1 lootbox-style prize (the contract emits
+      // JackpotTicketWin with ticketCount=0 for BAF wins; the actual ticket
+      // count is computed inside _awardJackpotTickets from the winner's share
+      // and isn't surfaced in the event).  Label as "prizes" rather than
+      // implying a raw ticket count.
+      const uniqueAddrs = new Set(bafTicketWinners.map(w => w.address)).size;
+      const amtStr   = `${bafTicketWinners.length} lootbox-roll prize${bafTicketWinners.length === 1 ? '' : 's'}`;
+      rows.push({ label: 'BAF Prizes', count: bafTicketWinners.length, unique: uniqueAddrs, amount: amtStr });
+    }
+
+    // Decimator — per-winner regularEth + lootboxEth (regular claim) and
+    // terminalEth (game-over terminal claim).  Shown as separate rows so the
+    // user can see decimator activity disjoint from jackpot draws.
+    const decRegWinners = winners.filter(w =>
+      w.decimatorPrize &&
+      (BigInt(w.decimatorPrize.regularEth || '0') > 0n ||
+       BigInt(w.decimatorPrize.lootboxEth || '0') > 0n));
+    const decTermWinners = winners.filter(w =>
+      w.decimatorPrize && BigInt(w.decimatorPrize.terminalEth || '0') > 0n);
+
+    if (decRegWinners.length > 0) {
+      const uniqueAddrs = new Set(decRegWinners.map(w => w.address)).size;
+      const totalEth = decRegWinners.reduce((acc, w) =>
+        acc + BigInt(w.decimatorPrize.regularEth || '0') + BigInt(w.decimatorPrize.lootboxEth || '0'), 0n);
+      const amtStr = `${formatEth(totalEth.toString())} ETH total`;
+      rows.push({ label: 'Decimator', count: decRegWinners.length, unique: uniqueAddrs, amount: amtStr });
+    }
+
+    if (decTermWinners.length > 0) {
+      const uniqueAddrs = new Set(decTermWinners.map(w => w.address)).size;
+      const totalEth = decTermWinners.reduce((acc, w) =>
+        acc + BigInt(w.decimatorPrize.terminalEth || '0'), 0n);
+      const amtStr = `${formatEth(totalEth.toString())} ETH total`;
+      rows.push({ label: 'Dec. Terminal', count: decTermWinners.length, unique: uniqueAddrs, amount: amtStr });
+    }
+
     if (rows.length > 0) {
       summaryEl.innerHTML = this.#buildSummaryHtml(rows, day);
       summaryEl.style.display = '';
@@ -370,10 +447,26 @@ class JackpotPanel extends HTMLElement {
     this.#winnersRequestVersion++;
     const v = this.#winnersRequestVersion;
 
-    const selectEl = this.querySelector('[data-bind="jp-winners-select"]');
-    if (selectEl) {
-      selectEl.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">Loading\u2026</li>';
+    // Winner lists: one per category (normal / baf / decimator).  Each is an
+    // independent <ul>; clicking any item selects the winner for replay.
+    const listNormal = this.querySelector('[data-bind="jp-winners-list-normal"]');
+    const listBaf    = this.querySelector('[data-bind="jp-winners-list-baf"]');
+    const listDec    = this.querySelector('[data-bind="jp-winners-list-decimator"]');
+    const groupNormal = this.querySelector('[data-bind="jp-winners-group-normal"]');
+    const groupBaf    = this.querySelector('[data-bind="jp-winners-group-baf"]');
+    const groupDec    = this.querySelector('[data-bind="jp-winners-group-decimator"]');
+    const groupEmpty  = this.querySelector('[data-bind="jp-winners-group-empty"]');
+    const emptyLi     = this.querySelector('[data-bind="jp-winners-empty"]');
+    // Loading placeholder — render in the normal list until the fetch resolves.
+    if (listNormal) {
+      listNormal.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">Loading\u2026</li>';
     }
+    if (listBaf)    listBaf.innerHTML    = '';
+    if (listDec)    listDec.innerHTML    = '';
+    if (groupNormal) groupNormal.style.display = '';
+    if (groupBaf)    groupBaf.style.display    = 'none';
+    if (groupDec)    groupDec.style.display    = 'none';
+    if (groupEmpty)  groupEmpty.style.display  = 'none';
 
     let res;
     try {
@@ -391,8 +484,8 @@ class JackpotPanel extends HTMLElement {
       this.#currentDay = day;
       this.#currentLevel = overviewLevel;
       this.#winners = [];
-      if (selectEl) {
-        selectEl.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">Winners unavailable \u2014 API updating</li>';
+      if (listNormal) {
+        listNormal.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">Winners unavailable \u2014 API updating</li>';
       }
       if (overviewLevel) {
         this.#overviewRendered = false;
@@ -419,14 +512,17 @@ class JackpotPanel extends HTMLElement {
       this.#renderOverview(this.#currentLevel);
     }
 
-    if (!selectEl) return;
-    selectEl.innerHTML = '';
+    // Clear all three lists (they may contain Loading placeholders from above).
+    if (listNormal) listNormal.innerHTML = '';
+    if (listBaf)    listBaf.innerHTML    = '';
+    if (listDec)    listDec.innerHTML    = '';
 
     if (this.#winners.length === 0) {
-      const li = document.createElement('li');
-      li.className = 'jp-winner-item jp-winner-item--empty';
-      li.textContent = 'No data for this day';
-      selectEl.appendChild(li);
+      if (groupNormal) groupNormal.style.display = 'none';
+      if (groupBaf)    groupBaf.style.display    = 'none';
+      if (groupDec)    groupDec.style.display    = 'none';
+      if (groupEmpty)  groupEmpty.style.display  = '';
+      if (emptyLi)     emptyLi.textContent       = `No data for day ${day}`;
       const summaryEl = this.querySelector('[data-bind="jp-winner-summary"]');
       if (summaryEl) {
         summaryEl.innerHTML = '<div class="jp-summary-note">No jackpot data indexed for this day — scrub to a nearby day.</div>';
@@ -435,7 +531,61 @@ class JackpotPanel extends HTMLElement {
       return;
     }
 
+    // Classify each winner into up to three category buckets.  A single winner
+    // can appear in multiple lists if they received awards from multiple
+    // sources (e.g. normal jackpot + BAF).  The category-specific amount is
+    // rendered inline with each list item.
+    const normalWinners = [];
+    const bafWinners = [];
+    const decimatorWinners = [];
     for (const w of this.#winners) {
+      const hasNormal = (BigInt(w.totalEth || '0') > 0n)
+        || ((w.ticketCount || 0) > 0)
+        || (BigInt(w.coinTotal || '0') > 0n);
+      const hasBaf = w.bafPrize && (
+        BigInt(w.bafPrize.eth || '0') > 0n
+        || (w.bafPrize.tickets || 0) > 0
+      );
+      const hasDec = w.decimatorPrize && (
+        BigInt(w.decimatorPrize.regularEth || '0') > 0n
+        || BigInt(w.decimatorPrize.lootboxEth || '0') > 0n
+        || BigInt(w.decimatorPrize.terminalEth || '0') > 0n
+      );
+      if (hasNormal) normalWinners.push(w);
+      if (hasBaf)    bafWinners.push(w);
+      if (hasDec)    decimatorWinners.push(w);
+    }
+
+    // Amount-text helpers for per-category display.
+    const normalAmtText = (w) => {
+      const parts = [];
+      if (BigInt(w.totalEth || '0') > 0n) parts.push(`${formatEth(w.totalEth)} ETH`);
+      if ((w.ticketCount || 0) > 0)       parts.push(`${w.ticketCount} tkts`);
+      if (BigInt(w.coinTotal || '0') > 0n) parts.push(`${joFormatWeiToEth(w.coinTotal)} BURNIE`);
+      return parts.join(' · ');
+    };
+    const bafAmtText = (w) => {
+      const parts = [];
+      if (BigInt(w.bafPrize.eth || '0') > 0n) parts.push(`${formatEth(w.bafPrize.eth)} ETH`);
+      // bafPrize.tickets = number of lootbox-roll prize EVENTS for this winner,
+      // not a raw ticket count.  Each event queued a variable number of tickets
+      // to the winner's account (the contract doesn't emit the count).
+      if ((w.bafPrize.tickets || 0) > 0) {
+        const n = w.bafPrize.tickets;
+        parts.push(`${n} lootbox prize${n === 1 ? '' : 's'}`);
+      }
+      return parts.join(' · ');
+    };
+    const decAmtText = (w) => {
+      const d = w.decimatorPrize;
+      const parts = [];
+      if (BigInt(d.regularEth || '0') > 0n) parts.push(`${formatEth(d.regularEth)} ETH`);
+      if (BigInt(d.lootboxEth || '0') > 0n) parts.push(`${formatEth(d.lootboxEth)} lb`);
+      if (BigInt(d.terminalEth || '0') > 0n) parts.push(`${formatEth(d.terminalEth)} term`);
+      return parts.join(' · ');
+    };
+
+    const buildLi = (w, amountText) => {
       const li = document.createElement('li');
       li.className = 'jp-winner-item';
       li.setAttribute('role', 'option');
@@ -444,9 +594,18 @@ class JackpotPanel extends HTMLElement {
       if (w.winningLevel != null) li.dataset.winningLevel = String(w.winningLevel);
 
       const short = w.address.slice(0, 6) + '\u2026' + w.address.slice(-4);
-      li.textContent = short;
+      const addrSpan = document.createElement('span');
+      addrSpan.className = 'jp-winner-addr';
+      addrSpan.textContent = short;
+      li.appendChild(addrSpan);
 
-      // Hover tooltip with per-winner breakdown
+      if (amountText) {
+        const amtSpan = document.createElement('span');
+        amtSpan.className = 'jp-winner-amount';
+        amtSpan.textContent = amountText;
+        li.appendChild(amtSpan);
+      }
+
       if (w.breakdown && w.breakdown.length > 0) {
         const tip = document.createElement('span');
         tip.className = 'jp-winner-tip';
@@ -455,20 +614,60 @@ class JackpotPanel extends HTMLElement {
       }
 
       li.addEventListener('click', () => this.#onWinnerItemClick(li));
-      selectEl.appendChild(li);
+      return li;
+    };
+
+    if (listNormal) {
+      for (const w of normalWinners) listNormal.appendChild(buildLi(w, normalAmtText(w)));
+    }
+    if (listBaf) {
+      for (const w of bafWinners) listBaf.appendChild(buildLi(w, bafAmtText(w)));
+    }
+    if (listDec) {
+      for (const w of decimatorWinners) listDec.appendChild(buildLi(w, decAmtText(w)));
     }
 
-    // Render the winner summary block above the list
+    // Keep all three category groups ALWAYS visible so users can see the
+    // separation structure even on days without BAF / decimator activity.
+    // Groups with no winners render an empty-state placeholder row.
+    const labelNormal = this.querySelector('[data-bind="jp-winners-label-normal"]');
+    const labelBaf    = this.querySelector('[data-bind="jp-winners-label-baf"]');
+    const labelDec    = this.querySelector('[data-bind="jp-winners-label-decimator"]');
+    if (groupNormal) groupNormal.style.display = '';
+    if (groupBaf)    groupBaf.style.display    = '';
+    if (groupDec)    groupDec.style.display    = '';
+    if (groupEmpty)  groupEmpty.style.display  = 'none';
+    if (labelNormal) labelNormal.textContent = `Winners (Normal Jackpot) — ${normalWinners.length}`;
+    if (labelBaf)    labelBaf.textContent    = `BAF Winners — ${bafWinners.length}`;
+    if (labelDec)    labelDec.textContent    = `Decimator Winners — ${decimatorWinners.length}`;
+
+    // Empty-state placeholders for the two secondary tables when they have no
+    // winners on this day.  Keeps the UI contract — three tables always present.
+    if (listBaf && bafWinners.length === 0) {
+      listBaf.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">No BAF winners this day</li>';
+    }
+    if (listDec && decimatorWinners.length === 0) {
+      listDec.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">No decimator claims this day</li>';
+    }
+    if (listNormal && normalWinners.length === 0) {
+      listNormal.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">No normal-jackpot winners this day</li>';
+    }
+
+    // Render the winner summary block above the lists.
     this.#renderWinnerSummary(this.#winners, this.#currentDay);
 
-    // Auto-select row 0 (highest payout — server returns payout-desc)
-    const firstItem = selectEl.querySelector('.jp-winner-item:not(.jp-winner-item--empty)');
-    if (firstItem) {
+    // Auto-select the highest-payout winner.  Server returns payout-desc order,
+    // and the normal list gets top priority; fall back to BAF then decimator.
+    const firstGroup = normalWinners.length > 0
+      ? listNormal
+      : (bafWinners.length > 0 ? listBaf : (decimatorWinners.length > 0 ? listDec : null));
+    const firstItem = firstGroup?.querySelector('.jp-winner-item');
+    const firstWinner = normalWinners[0] ?? bafWinners[0] ?? decimatorWinners[0];
+    if (firstItem && firstWinner) {
       firstItem.classList.add('jp-winner-item--selected');
-      // Enable Replay button now that we have a day + winner
       const replayBtn = this.querySelector('#jp-replay-btn');
       if (replayBtn && this.#replayState === 'idle') replayBtn.disabled = false;
-      this.#onWinnerChange(this.#winners[0].address);
+      this.#onWinnerChange(firstWinner.address);
     }
   }
 
@@ -494,12 +693,13 @@ class JackpotPanel extends HTMLElement {
     }).join('');
   }
 
-  // Called when a winner list item is clicked.
+  // Called when a winner list item is clicked.  Clears the --selected state
+  // across all three category lists (normal / baf / decimator) so only one
+  // item is highlighted at a time regardless of which table the click came
+  // from.
   #onWinnerItemClick(li) {
-    const listEl = this.querySelector('[data-bind="jp-winners-select"]');
-    if (listEl) {
-      listEl.querySelectorAll('.jp-winner-item--selected').forEach(el => el.classList.remove('jp-winner-item--selected'));
-    }
+    this.querySelectorAll('.jp-winners-list .jp-winner-item--selected')
+      .forEach(el => el.classList.remove('jp-winner-item--selected'));
     li.classList.add('jp-winner-item--selected');
     const address = li.dataset.address;
     if (address) this.#onWinnerChange(address);
@@ -584,9 +784,10 @@ class JackpotPanel extends HTMLElement {
     }
   }
 
-  // Helper: get the currently selected winner address from the list
+  // Helper: get the currently selected winner address from any of the three
+  // category lists (only one item is ever --selected at a time).
   _selectedAddress() {
-    const selected = this.querySelector('[data-bind="jp-winners-select"] .jp-winner-item--selected');
+    const selected = this.querySelector('.jp-winners-list .jp-winner-item--selected');
     return selected?.dataset?.address ?? '';
   }
 

@@ -133,6 +133,7 @@ class DayJackpotSummary extends HTMLElement {
   #render(body, data) {
     const r1 = data.rollOne || {};
     const r2 = data.rollTwo || {};
+    const baf = data.baf || { triggered: false };
     const eth = Array.isArray(r1.eth) ? r1.eth : [];
     const tickets = Array.isArray(r1.tickets) ? r1.tickets : [];
     const coin = Array.isArray(r2.coin) ? r2.coin : [];
@@ -154,6 +155,71 @@ class DayJackpotSummary extends HTMLElement {
            <span class="jp-summary-amount">${joFormatWeiToEth(ff.totalCoin)} BURNIE total</span>
          </div>`
       : `<div class="jp-summary-note">Far-Future: pending / unresolved.</div>`;
+
+    // BAF section — fires every 10 levels, attributed to the level's primary
+    // day (server-side rule in /summary endpoint, matches /winners).
+    // Always visible: when no BAF fired this day, render an empty-state row.
+    const bafSectionHTML = baf.triggered
+      ? `
+        <div class="jp-section jp-section-baf">
+          <h4 class="jp-section-title">BAF — Big Ass Fortune ${baf.level != null ? `(Level ${baf.level})` : ''}</h4>
+          <div class="jp-subsection jp-subsection-baf-eth">
+            <h5 class="jp-subsection-title">BAF ETH</h5>
+            <div class="jp-summary-row jp-baf-row">
+              <span class="jp-summary-type">${baf.eth.winnerCount} win${baf.eth.winnerCount === 1 ? '' : 's'} across ${baf.eth.uniqueCount} unique winner${baf.eth.uniqueCount === 1 ? '' : 's'}</span>
+              <span class="jp-summary-amount">${joFormatWeiToEth(baf.eth.total)} ETH total</span>
+            </div>
+          </div>
+          <div class="jp-subsection jp-subsection-baf-tickets">
+            <h5 class="jp-subsection-title">BAF Lootbox-Ticket Prizes</h5>
+            <div class="jp-summary-row jp-baf-row">
+              <span class="jp-summary-type">${baf.tickets.winnerCount} prize${baf.tickets.winnerCount === 1 ? '' : 's'} across ${baf.tickets.uniqueCount} unique winner${baf.tickets.uniqueCount === 1 ? '' : 's'}</span>
+              <span class="jp-summary-amount">${baf.tickets.total} prize${baf.tickets.total === 1 ? '' : 's'} (each = a lootbox roll → multiple queued tickets; contract doesn't emit exact count)</span>
+            </div>
+          </div>
+        </div>
+      `
+      : `
+        <div class="jp-section jp-section-baf">
+          <h4 class="jp-section-title">BAF — Big Ass Fortune</h4>
+          <div class="jp-summary-note">No BAF this day (fires every 10 levels, attributed to each level's primary day).</div>
+        </div>
+      `;
+
+    // Decimator section — regular claims + terminal (game-over) claim.
+    // Shown completely separate from jackpot draws so ETH amounts don't lump.
+    // Always visible: when no decimator claims landed this day, render an empty-state row.
+    const dec = data.decimator || { triggered: false };
+    const decimatorSectionHTML = dec.triggered
+      ? `
+        <div class="jp-section jp-section-decimator">
+          <h4 class="jp-section-title">Decimator Claims</h4>
+          ${dec.regular && dec.regular.claimCount > 0 ? `
+            <div class="jp-subsection jp-subsection-dec-regular">
+              <h5 class="jp-subsection-title">Regular</h5>
+              <div class="jp-summary-row jp-decimator-row">
+                <span class="jp-summary-type">${dec.regular.claimCount} claim${dec.regular.claimCount === 1 ? '' : 's'} across ${dec.regular.uniquePlayers} unique player${dec.regular.uniquePlayers === 1 ? '' : 's'}</span>
+                <span class="jp-summary-amount">${joFormatWeiToEth(dec.regular.ethTotal)} ETH${BigInt(dec.regular.lootboxEthTotal || '0') > 0n ? ` + ${joFormatWeiToEth(dec.regular.lootboxEthTotal)} ETH (lootbox)` : ''}</span>
+              </div>
+            </div>
+          ` : ''}
+          ${dec.terminal && dec.terminal.claimCount > 0 ? `
+            <div class="jp-subsection jp-subsection-dec-terminal">
+              <h5 class="jp-subsection-title">Terminal (Game-Over)</h5>
+              <div class="jp-summary-row jp-decimator-row">
+                <span class="jp-summary-type">${dec.terminal.claimCount} claim${dec.terminal.claimCount === 1 ? '' : 's'} across ${dec.terminal.uniquePlayers} unique player${dec.terminal.uniquePlayers === 1 ? '' : 's'}</span>
+                <span class="jp-summary-amount">${joFormatWeiToEth(dec.terminal.ethTotal)} ETH</span>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `
+      : `
+        <div class="jp-section jp-section-decimator">
+          <h4 class="jp-section-title">Decimator Claims</h4>
+          <div class="jp-summary-note">No decimator claims this day.</div>
+        </div>
+      `;
 
     body.innerHTML = `
       <div class="jp-section jp-section-rollone">
@@ -180,6 +246,10 @@ class DayJackpotSummary extends HTMLElement {
           ${ffHTML}
         </div>
       </div>
+
+      ${bafSectionHTML}
+
+      ${decimatorSectionHTML}
     `;
   }
 }

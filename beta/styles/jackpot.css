@@ -233,6 +233,49 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.jp-winner-addr {
+  flex: 0 0 auto;
+}
+
+.jp-winner-amount {
+  flex: 1 1 auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary, #d0d0e0);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jp-winner-item--selected .jp-winner-amount {
+  color: var(--accent-primary, #f5a623);
+}
+
+.jp-winners-group + .jp-winners-group {
+  margin-top: 0.75rem;
+}
+
+.jp-winners-group .jp-winners-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, #a0a0c0);
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--border-color, #2a2a45);
+}
+
+.jp-winners-group[data-bind="jp-winners-group-baf"] .jp-winners-label {
+  color: #f5a623; /* warm accent — matches existing BAF / amber palette */
+}
+
+.jp-winners-group[data-bind="jp-winners-group-decimator"] .jp-winners-label {
+  color: #e25c5c; /* dim red — decimator palette */
 }
 
 .jp-winner-item:last-child {
@@ -729,3 +772,126 @@
   letter-spacing: 0.02em;
 }
 
+
+/* -------------------------------------------------------------------------
+   Ticket Distribution widget (point-in-time top/bottom traits per level)
+   ------------------------------------------------------------------------- */
+.jp-trait-dist {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid #3a2a10;
+  border-radius: 6px;
+  background: #151515;
+}
+.jp-trait-dist-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.jp-trait-dist-label {
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #c99b3e;
+}
+.jp-trait-dist-level {
+  font-size: 0.8rem;
+  color: #9aa;
+}
+.jp-trait-dist-level select {
+  margin-left: 0.4rem;
+  background: #1f1f1f;
+  color: #e4c57a;
+  border: 1px solid #3a2a10;
+  padding: 2px 6px;
+}
+.jp-trait-dist-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.jp-trait-dist-group-label {
+  font-size: 0.75rem;
+  color: #9aa;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.25rem;
+}
+.jp-trait-dist-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  padding: 2px 0;
+  color: #c9b98c;
+}
+.jp-trait-dist-tkts {
+  color: #e4c57a;
+  font-weight: 600;
+}
+.jp-trait-dist-holders {
+  color: #8a7f5f;
+  text-align: right;
+}
+.jp-trait-dist-empty {
+  font-size: 0.85rem;
+  color: #6a6a6a;
+  padding: 0.5rem 0;
+}
+
+/* -------------------------------------------------------------------------
+   Lootbox Opens widget (per-player opens on the selected day)
+   ------------------------------------------------------------------------- */
+.jp-lootbox-opens {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid #2a1a3a;
+  border-radius: 6px;
+  background: #131418;
+}
+.jp-lootbox-opens-label {
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #9ab5e4;
+  margin-bottom: 0.5rem;
+}
+.jp-lo-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto auto;
+  gap: 0.5rem;
+  padding: 2px 0;
+  font-size: 0.85rem;
+  color: #c9d1e4;
+  align-items: center;
+}
+.jp-lo-target {
+  color: #9ab5e4;
+  font-weight: 600;
+}
+.jp-lo-traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.jp-lo-trait {
+  background: #1c2234;
+  border: 1px solid #2a3a5a;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 0.75rem;
+  color: #c9d1e4;
+}
+.jp-lo-count {
+  color: #9aa;
+}
+.jp-lo-rewards {
+  color: #e4c57a;
+  font-size: 0.8rem;
+}
+.jp-lootbox-opens-empty {
+  font-size: 0.85rem;
+  color: #6a6a6a;
+  padding: 0.25rem 0;
+}

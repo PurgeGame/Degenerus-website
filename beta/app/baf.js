@@ -16,8 +16,9 @@ export async function fetchBafLeaderboard(level) {
   try {
     const data = await fetchJSON('/leaderboards/baf?level=' + level);
 
-    // Expect array of { player, score, rank }
-    const top4 = Array.isArray(data) ? data.slice(0, 4) : [];
+    // API returns { entries: [{ player, score, rank, level }, ...] }
+    const entries = Array.isArray(data?.entries) ? data.entries : [];
+    const top4 = entries.slice(0, 4);
 
     // Check if connected player is in the top 4
     const playerAddress = get('player.address');

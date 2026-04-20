@@ -504,8 +504,12 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
 
     var token = ++joRenderToken;
 
-    // Build URL: level-keyed endpoint (day-keyed variant deferred per D-04 amendment)
-    var url = apiBase + '/game/jackpot/' + level + '/overview';
+    // Level-keyed endpoint with optional ?day=N to scope aggregates to a single
+    // day's block range.  Without the filter a compressed/normal-mode level
+    // spans multiple calendar days and the overview would double-count tickets
+    // (e.g. level 16 tickets fire on days 17-20 before its ETH fires on day 21).
+    var url = apiBase + '/game/jackpot/' + level + '/overview' +
+              (day != null ? '?day=' + day : '');
 
     _fetch(url).then(function(r) {
       if (!r.ok && r.status !== 404) throw new Error('HTTP ' + r.status);
