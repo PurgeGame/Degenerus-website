@@ -20,18 +20,24 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLAY_ROOT = join(__dirname, '../..');
 const COMPONENTS = join(PLAY_ROOT, 'components');
 
+// Panel list: day-scoped vs level-scoped subscription semantics.
+// Phase 50 baseline had every panel subscribe to replay.day for day-awareness.
+// Phase 54 Wave 1 evolves baf-panel to be level-scoped (replay.level) because
+// BAF is triggered by level multiples of 10, not by daily cadence. Wave 0's
+// play-baf-panel.test.js explicitly asserts the replay.level + replay.player
+// subscription, superseding the Phase 50 blanket assertion for baf-panel.
 const PANEL_STUBS = [
-  { file: 'profile-panel.js', tag: 'profile-panel' },
-  { file: 'packs-panel.js', tag: 'packs-panel' },
-  { file: 'tickets-panel.js', tag: 'tickets-panel' },
-  { file: 'purchase-panel.js', tag: 'purchase-panel' },
-  { file: 'coinflip-panel.js', tag: 'coinflip-panel' },
-  { file: 'baf-panel.js', tag: 'baf-panel' },
-  { file: 'decimator-panel.js', tag: 'decimator-panel' },
-  { file: 'jackpot-panel-wrapper.js', tag: 'jackpot-panel-wrapper' },
+  { file: 'profile-panel.js', tag: 'profile-panel', scope: 'day' },
+  { file: 'packs-panel.js', tag: 'packs-panel', scope: 'day' },
+  { file: 'tickets-panel.js', tag: 'tickets-panel', scope: 'day' },
+  { file: 'purchase-panel.js', tag: 'purchase-panel', scope: 'day' },
+  { file: 'coinflip-panel.js', tag: 'coinflip-panel', scope: 'day' },
+  { file: 'baf-panel.js', tag: 'baf-panel', scope: 'level' },
+  { file: 'decimator-panel.js', tag: 'decimator-panel', scope: 'day' },
+  { file: 'jackpot-panel-wrapper.js', tag: 'jackpot-panel-wrapper', scope: 'day' },
 ];
 
-for (const { file, tag } of PANEL_STUBS) {
+for (const { file, tag, scope } of PANEL_STUBS) {
   const PATH = join(COMPONENTS, file);
 
   test(`${file} exists`, () => {
@@ -63,10 +69,17 @@ for (const { file, tag } of PANEL_STUBS) {
     assert.match(src, /skeleton-shimmer/);
   });
 
-  test(`${file} subscribes to replay.day (day-awareness proof)`, () => {
-    const src = readFileSync(PATH, 'utf8');
-    assert.match(src, /subscribe\(\s*['"]replay\.day['"]/);
-  });
+  if (scope === 'day') {
+    test(`${file} subscribes to replay.day (day-awareness proof)`, () => {
+      const src = readFileSync(PATH, 'utf8');
+      assert.match(src, /subscribe\(\s*['"]replay\.day['"]/);
+    });
+  } else if (scope === 'level') {
+    test(`${file} subscribes to replay.level (level-awareness proof; Phase 54 semantic)`, () => {
+      const src = readFileSync(PATH, 'utf8');
+      assert.match(src, /subscribe\(\s*['"]replay\.level['"]/);
+    });
+  }
 
   test(`${file} subscribes to replay.player (player-awareness proof)`, () => {
     const src = readFileSync(PATH, 'utf8');
