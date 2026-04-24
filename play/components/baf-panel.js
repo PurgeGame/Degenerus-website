@@ -1,21 +1,25 @@
-// play/components/baf-panel.js -- <baf-panel> Custom Element (Phase 54 Wave 1)
+// play/components/baf-panel.js -- <baf-panel> Custom Element (Phase 54 Waves 1+2)
 //
 // Three-section hydrated markup + dual-fetch wiring with stale-response guards
 // and keep-old-data-dim. Data flow:
 //   - BAF-02 leaderboard top-4: GET /leaderboards/baf?level=N (live pre-Phase-54)
 //   - BAF-01 your-rank + BAF-03 round-status: GET /player/:address/baf?level=N
-//     (INTEG-05; Wave 1 emits the call and tolerates 404 silently; Wave 2 enables
-//     rendering once the endpoint ships per INTEG-05-SPEC.md)
+//     (INTEG-05; live as of Wave 2. Endpoint returns 200 with rank=null when the
+//     player has no BAF stake at the level; non-OK responses hit the error-path
+//     fallback that renders the round-status pill via inline derivation and
+//     leaves the your-rank row hidden per INTEG-05-SPEC.md.)
 //
 // Sections (top to bottom, per 54-RESEARCH.md Section 10):
 //   1. Context row (BAF-03 partial) -- next-baf-level label + levels-until label
 //      + round-status pill. Level arithmetic is inline (bafContext); round-status
-//      reads from INTEG-05 response in Wave 2 with Wave 1 fallback derivation.
+//      reads from INTEG-05 response (authoritative); on non-OK responses the
+//      inline fallback derivation keeps the pill sensible.
 //   2. Top-4 leaderboard (BAF-02) -- 4 rows with rank + truncated address + score.
 //      Each row has data-rank="1..4" so CSS applies the D-06 gold/silver/bronze/
 //      regular tier styling.
-//   3. Your-rank row (BAF-01; hidden until INTEG-05 returns data) -- "You: rank N
-//      of M -- {score}". Source: INTEG-05 per-player endpoint.
+//   3. Your-rank row (BAF-01) -- "You: rank N of M -- {score}". Source: INTEG-05
+//      per-player endpoint. Row un-hides when data.rank is non-null; stays hidden
+//      when the selected player has no BAF stake at the level.
 //
 // Data flow:
 //   subscribe('replay.level')  --> #refetchLeaderboard() + #refetchPlayer()
@@ -94,7 +98,7 @@ const TEMPLATE = `
       </div>
     </div>
 
-    <!-- BAF-01 your-rank row (hidden until INTEG-05 returns data in Wave 2) -->
+    <!-- BAF-01 your-rank row (hidden by default; un-hides on INTEG-05 data.rank !== null) -->
     <div class="play-baf-your-rank" data-bind="your-rank" hidden>
       <span>You: rank </span>
       <span data-bind="your-rank-value">--</span>
@@ -167,7 +171,7 @@ class BafPanel extends HTMLElement {
     }
   }
 
-  // --- BAF-01 + BAF-03 roundStatus fetch (INTEG-05; 404-tolerant in Wave 1) -
+  // --- BAF-01 + BAF-03 roundStatus fetch (INTEG-05; live as of Wave 2) -----
 
   async #refetchPlayer() {
     const level = get('replay.level');
@@ -181,9 +185,11 @@ class BafPanel extends HTMLElement {
       if (token !== this.#bafPlayerFetchId) return;
 
       if (!res.ok) {
-        // Wave 1: INTEG-05 not yet shipped in /home/zak/Dev/PurgeGame/database/.
-        // Silent 404 tolerance. Wave 2 flips this to live rendering.
-        // Fall back to inline roundStatus derivation for the pill.
+        // INTEG-05 error path (400/500): fall back to inline derivation for the
+        // round-status pill so the panel degrades gracefully. The your-rank row
+        // stays hidden because we have no rank data to render. Note: INTEG-05
+        // returns 200 even when the player has no BAF stake (rank=null case);
+        // only true errors reach this branch post-Wave-2.
         this.#renderRoundStatusFallback(level);
         return;
       }
@@ -286,9 +292,9 @@ class BafPanel extends HTMLElement {
   }
 
   #renderYourRank(data) {
-    // Wave 1: data is null from the 404 branch; Wave 2 will populate.
-    // Even in Wave 1 we handle the live-data case defensively in case the
-    // endpoint ships early.
+    // Wave 2: INTEG-05 is live. data has full payload on 200 responses; this
+    // helper hides the row when the player has no BAF stake (data.rank === null)
+    // and renders the rank/total/score row otherwise.
     const row = this.#bind('your-rank');
     if (!row) return;
 
@@ -330,10 +336,12 @@ class BafPanel extends HTMLElement {
   }
 
   #renderRoundStatusFallback(level) {
-    // Wave 1 fallback when INTEG-05 404s. Correct in the simple case
-    // (level % 10 !== 0 is definitively "not_eligible"; otherwise assume "open").
-    // Wave 2 replaces with authoritative INTEG-05 response including
-    // "skipped" and "closed" states.
+    // Wave 2 error-path fallback: INTEG-05 is live, but if the endpoint returns
+    // a non-OK status (400/500) or the fetch throws, this defensive derivation
+    // keeps the pill sensible. Conservative: level % 10 !== 0 is definitively
+    // "not_eligible"; otherwise assume "open". Cannot claim "skipped" or
+    // "closed" without authoritative INTEG-05 data, so on errors those states
+    // degrade to "open" until the next successful fetch.
     const status = (level != null && level % 10 === 0) ? 'open' : 'not_eligible';
     this.#renderRoundStatus(status);
   }
