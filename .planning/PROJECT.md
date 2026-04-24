@@ -10,6 +10,8 @@ Make the on-chain game playable, entertaining, and visually compelling from a br
 
 ## Current State
 
+Shipped v2.3 Live API Economic Validation (2026-04-15): Python derivation harness + domain validators (JACKPOT/POOLS/PLAYER/TERMINAL) + consolidated report renderer. JACKPOT live-run produced 111 discrepancies; POOLS/PLAYER/TERMINAL validators wired and tested, live-runs pending indexer availability. Consolidated report at `.planning/v2.3/reports/v2.3-consolidated.md` (112 entries, cross-domain synthesis, sha256 provenance). 480 tests passing. Surfaced 5+ Major source-doc drifts between REQUIREMENTS.md/GT paper/MEMORY.md and audit contracts (notably the "turbo 2-day death clock" myth). See `.planning/milestones/v2.3-ROADMAP.md`.
+
 Shipped v2.2 Contract-Paper Parity Check (2026-04-01): verified all 24 contracts against game theory paper claims. 23 discrepancies found (1 Critical, 6 Major, 7 Minor, 9 Info) with fix guidance. 6 new mechanics recommended for documentation. Consolidated parity report at `.planning/phases/17-consolidated-parity-report/17-PARITY-REPORT.md`.
 
 Shipped v2.1 Contract-Paper Gap Audit (2026-03-19): complete cross-reference of 266 contract mechanics against game theory paper. Gap report with decision columns ready for user action.
@@ -43,7 +45,9 @@ Database layer (separate repo at /home/zak/Dev/PurgeGame/database/) provides Pos
 
 ### Active
 
-(None. Next milestone not yet planned.)
+- Live API economic validation against paper + whitepaper + contracts (v2.3)
+- Turbo-mode-adjusted expected values for jackpots, pools, player economics, endgame (v2.3)
+- Discrepancy report with severity and suspected source (v2.3)
 
 ### Out of Scope
 
@@ -92,9 +96,19 @@ Database layer (separate repo at /home/zak/Dev/PurgeGame/database/) provides Pos
 - Dead quadrantLabel() export in jackpot-data.js
 - Sound files (win.mp3, flip.mp3, urgency.mp3) are README placeholders requiring user setup
 
-## Next Milestone
+## Current Milestone: v2.3 Live API Economic Validation
 
-Not yet planned. Run `/gsd:new-milestone` to start the next cycle.
+**Goal:** Verify live database API (turbo-mode sim data) produces numerical and behavioral outcomes consistent with game theory paper, whitepaper, and contract-derived expected values.
+
+**Target features:**
+- Jackpot validation (Roll 1/2, BURNIE, bonus carryover) against live API at localhost:3000
+- Prize pool flow validation (next/future/claimable, drip, drawdown, stETH yield split)
+- Player economics validation (activity score, quests, affiliate, coinflip EV, lootbox breakeven)
+- Endgame / terminal validation (death clock, decimator buckets, terminal payouts)
+- Three-way expected-value derivation: paper + whitepaper + contracts, turbo-mode-adjusted
+- Discrepancy report with severity (Critical/Major/Minor/Info) and suspected source (paper/whitepaper/contract/indexer/expected turbo divergence)
+
+**Method:** Report-only. No code/paper/contract changes this milestone; fixes deferred to a follow-up.
 
 ## Evolution
 
@@ -114,4 +128,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after v2.2 milestone complete*
+*Last updated: 2026-04-13 — v2.3 milestone started*

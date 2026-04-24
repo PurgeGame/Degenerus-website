@@ -6,6 +6,7 @@
 - v2.0 **Game Frontend** - Phases 6-12 (shipped 2026-03-18)
 - v2.1 **Contract-Paper Gap Audit** - Phases 13-14 (shipped 2026-03-19)
 - v2.2 **Contract-Paper Parity Check** - Phases 15-17 (shipped 2026-04-01)
+- v2.3 **Live API Economic Validation** - Phases 18-23 (shipped 2026-04-15) — see [milestones/v2.3-ROADMAP.md](milestones/v2.3-ROADMAP.md)
 
 ## Phases
 
@@ -50,6 +51,18 @@
 
 </details>
 
+<details>
+<summary>v2.3 Live API Economic Validation (Phases 18-23) - SHIPPED 2026-04-15</summary>
+
+- [x] Phase 18: METHOD Foundation (3/3 plans) - completed 2026-04-13
+- [x] Phase 19: JACKPOT Validation (4/4 plans) - completed 2026-04-13
+- [x] Phase 20: POOLS Validation (3/3 plans) - completed 2026-04-15
+- [x] Phase 21: PLAYER Validation (3/3 plans) - completed 2026-04-15
+- [x] Phase 22: TERMINAL Validation (2/2 plans) - completed 2026-04-15
+- [x] Phase 23: Consolidated Validation Report (1/1 plans) - completed 2026-04-15
+
+</details>
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -71,3 +84,9 @@
 | 15. Game & Modules Parity | v2.2 | 4/4 | Complete | 2026-04-01 |
 | 16. Token & Support Systems Parity | v2.2 | 4/4 | Complete | 2026-04-01 |
 | 17. Consolidated Parity Report | v2.2 | 1/1 | Complete | 2026-04-01 |
+| 18. METHOD Foundation | v2.3 | 3/3 | Complete   | 2026-04-13 |
+| 19. JACKPOT Validation | v2.3 | 4/4 | Complete   | 2026-04-13 |
+| 20. POOLS Validation | v2.3 | 3/3 | Complete    | 2026-04-15 |
+| 21. PLAYER Validation | v2.3 | 3/3 | Complete    | 2026-04-15 |
+| 22. TERMINAL Validation | v2.3 | 2/2 | Complete    | 2026-04-15 |
+| 23. Consolidated Validation Report | v2.3 | 1/1 | Complete    | 2026-04-15 |
