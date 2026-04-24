@@ -70,7 +70,7 @@
 Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band commits in git history (`feat(26-XX)`, `feat(32-XX)`, `feat(37-XX)`, `feat(38-XX)`, `feat(39-XX)`, `feat(44-XX)`) from work done in another repo.
 
 - [x] **Phase 50: Route Foundation & Day-Aware Store** - New player route shell, player-selector, day scrubber, day-aware store contract, INTEG-01 coordination kickoff (completed 2026-04-23)
-- [ ] **Phase 51: Profile & Quests** - Activity score breakdown + quest slots/streak panels (lowest-risk validation of day-aware contract)
+- [ ] **Phase 51: Profile & Quests** - Activity score breakdown + quest slots/streak panels + daily activity counts (lowest-risk validation of day-aware contract; INTEG-02 hard-gated)
 - [ ] **Phase 52: Tickets, Packs & Jackpot Reveal** - 4-trait quadrant inventory, openable pack animation (purchase + win sources), reused beta jackpot Roll widget
 - [ ] **Phase 53: Purchase Flow** - Sim-API ticket and lootbox purchase with inventory feedback loop into Phase 52 packs
 - [ ] **Phase 54: Coinflip & BAF Leaderboards** - Player coinflip state + leaderboards, BAF score and prominence-styled top-4
@@ -95,15 +95,21 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
 **UI hint**: yes
 
 ### Phase 51: Profile & Quests
-**Goal**: Selected player's activity score, quest slots, and streak are fully displayed and re-render correctly when the day scrubber changes.
+**Goal**: Selected player's activity score, quest slots, quest streak, and daily activity counts are fully displayed and re-render correctly when the day scrubber or player-selector changes.
 **Depends on**: Phase 50
-**Requirements**: PROFILE-01, PROFILE-02, PROFILE-03, PROFILE-04
+**Requirements**: PROFILE-01, PROFILE-02, PROFILE-03, PROFILE-04, PROFILE-05, INTEG-02
 **Success Criteria** (what must be TRUE):
-  1. User sees the selected player's activity score with a visible decomposition (quest streak floor, mint count floor, affiliate bonus, deity/whale flags)
-  2. User sees the player's quest slots with progress bar, target value, completion state, and high-difficulty flag styling
+  1. User sees the selected player's activity score with a visible decomposition (quest streak floor, mint count floor, affiliate bonus, and single highest-active pass row) via an info-icon popover
+  2. User sees the player's quest slots with progress bar, target value, and completion state (high-difficulty flag dropped per D-20; vestigial in contracts)
   3. User sees the quest streak counter and the date of the last completed day
-  4. Changing the day scrubber re-renders all profile panels from that day's snapshot without manual refresh, and changing the player-selector re-renders for the new address
-**Plans**: TBD
+  4. User sees the selected day's Daily Activity counts: lootboxes purchased, lootboxes opened, tickets purchased, ticket wins
+  5. Changing the day scrubber re-renders all profile sections from that day's snapshot without manual refresh (keep-old-data-dim during fetch), and changing the player-selector re-renders for the new address
+  6. INTEG-02 (extended `GET /player/:address?day=N` with scoreBreakdown + day-aware quests + questStreak + dailyActivity) is shipped by the database repo, hard-gating the UI hydration waves
+**Plans**: 4 plans
+  - [ ] 51-01-wave0-spec-and-test-harness-PLAN.md — Wave 0: INTEG-02-SPEC.md + REQUIREMENTS.md edits (strike high-difficulty clause, add PROFILE-05) + play-profile-panel.test.js contract-grep harness
+  - [ ] 51-02-wave1-skeleton-and-quests-helper-PLAN.md — Wave 1 (pre-backend): local wallet-free play/app/quests.js + four-section hydrated markup in profile-panel.js + profile-panel CSS (tier colors, popover, quest slots, daily activity, is-stale dim overlay)
+  - [ ] 51-03-wave2-backend-wiring-hard-gated-PLAN.md — Wave 2 (HARD-GATED on INTEG-02 delivery): #profileFetchId stale guard + #refetch() fetch wiring + keep-old-data-dim class toggle + subscribe-to-refetch replacement
+  - [ ] 51-04-wave3-uat-and-polish-PLAN.md — Wave 3 (optional): manual UAT for popover tap+hover+focus, keep-old-data-dim smoothness, tier-color thresholds; records 51-UAT.md
 **UI hint**: yes
 
 ### Phase 52: Tickets, Packs & Jackpot Reveal
@@ -134,13 +140,13 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
 ### Phase 54: Coinflip & BAF Leaderboards
 **Goal**: Selected player's coinflip state and BAF standing are visible, and both leaderboards render with prominence styling that mirrors beta.
 **Depends on**: Phase 50 (route + store); Phase 51 (PROFILE patterns informed by activity score)
-**Requirements**: COINFLIP-01, COINFLIP-02, COINFLIP-03, BAF-01, BAF-02, BAF-03, INTEG-02, INTEG-04
+**Requirements**: COINFLIP-01, COINFLIP-02, COINFLIP-03, BAF-01, BAF-02, BAF-03, INTEG-05, INTEG-04
 **Success Criteria** (what must be TRUE):
   1. User sees the selected player's coinflip state — deposited amount, claimable preview, auto-rebuy settings — and the daily coinflip leaderboard with ranks
   2. User sees the current bounty plus the biggest-flip-today player and amount, both reading from the live API
   3. User sees the selected player's BAF score and rank for the current level/window, alongside the top-4 BAF leaderboard with prominence-based styling matching beta's `baf-panel`
   4. User sees a label indicating which level/window the BAF round is for and whether the round is open or closed
-  5. INTEG-02 (per-player BAF score) is confirmed shipped before BAF-01 lands; INTEG-04 (coinflip recycle/history) is either confirmed or formally documented as deferred with COINFLIP still functional
+  5. INTEG-05 (per-player BAF score) is confirmed shipped before BAF-01 lands; INTEG-04 (coinflip recycle/history) is either confirmed or formally documented as deferred with COINFLIP still functional
 **Plans**: TBD
 **UI hint**: yes
 
@@ -187,8 +193,9 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
 | 22. TERMINAL Validation | v2.3 | 2/2 | Complete    | 2026-04-15 |
 | 23. Consolidated Validation Report | v2.3 | 1/1 | Complete    | 2026-04-15 |
 | 50. Route Foundation & Day-Aware Store | v2.4 | 3/3 | Complete | 2026-04-23 |
-| 51. Profile & Quests | v2.4 | 0/0 | Not started | - |
+| 51. Profile & Quests | v2.4 | 0/4 | Planned | - |
 | 52. Tickets, Packs & Jackpot Reveal | v2.4 | 0/0 | Not started | - |
 | 53. Purchase Flow | v2.4 | 0/0 | Not started | - |
 | 54. Coinflip & BAF Leaderboards | v2.4 | 0/0 | Not started | - |
 | 55. Decimator | v2.4 | 0/0 | Not started | - |
+

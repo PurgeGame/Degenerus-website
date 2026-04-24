@@ -17,9 +17,10 @@ Brand-new player-facing route surfacing every interactive system (purchase, tick
 ### PROFILE — Activity score + quests
 
 - [ ] **PROFILE-01**: User can see selected player's current activity score with decomposition (quest streak, mint count, affiliate bonus, deity/whale flags)
-- [ ] **PROFILE-02**: User can see selected player's current quest slots with progress, target, completion state, high-difficulty flag
+- [ ] **PROFILE-02**: User can see selected player's current quest slots with progress, target, and completion state
 - [ ] **PROFILE-03**: User can see selected player's quest streak counter and last completed day
 - [ ] **PROFILE-04**: Profile panels re-render when day scrubber changes effective day
+- [ ] **PROFILE-05**: User can see selected player's Daily Activity counts for the selected day: lootboxes purchased, lootboxes opened, tickets purchased, ticket wins
 
 ### TICKETS — 4-trait quadrant inventory
 
@@ -79,9 +80,10 @@ Brand-new player-facing route surfacing every interactive system (purchase, tick
 ### INTEG — Backend coordination (database repo)
 
 - [~] **INTEG-01**: Ship or confirm `GET /player/{addr}/tickets/by-trait` endpoint for trait-grouped ticket inventory (P0 — blocks TICKETS/PACKS). Phase 50 kickoff complete: contract spec written (INTEG-01-SPEC.md). Delivery (endpoint implementation in database repo) gates Phase 52.
-- [ ] **INTEG-02**: Ship or confirm per-player BAF score endpoint (P1 — blocks BAF-01)
+- [ ] **INTEG-02**: Ship or confirm extended `GET /player/:address?day=N` endpoint with `scoreBreakdown`, day-aware `quests[]`, `questStreak`, and `dailyActivity` block (P1 — gates Phase 51 PROFILE-01..05)
 - [ ] **INTEG-03**: Ship or confirm per-player decimator bucket/payout endpoint (P1 — blocks DECIMATOR-02/03/04)
 - [ ] **INTEG-04**: Ship or confirm coinflip recycle/history endpoint, OR document as deferred (optional — COINFLIP works without it)
+- [ ] **INTEG-05**: Ship or confirm per-player BAF score endpoint (P1 — blocks BAF-01)
 
 ## Future Requirements (deferred)
 
@@ -122,6 +124,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROFILE-02 | Phase 51 | Pending |
 | PROFILE-03 | Phase 51 | Pending |
 | PROFILE-04 | Phase 51 | Pending |
+| PROFILE-05 | Phase 51 | Pending |
 | TICKETS-01 | Phase 52 | Pending |
 | TICKETS-02 | Phase 52 | Pending |
 | TICKETS-03 | Phase 52 | Pending |
@@ -154,21 +157,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DAY-03 | Phase 50 | Validated (2026-04-24) |
 | DAY-04 | Phase 50 | Validated (2026-04-24) |
 | INTEG-01 | Phase 50 (kickoff), Phase 52 (gate) | Kickoff done (2026-04-24); delivery pending |
-| INTEG-02 | Phase 54 (gate) | Pending |
+| INTEG-02 | Phase 51 (gate) | Pending |
 | INTEG-03 | Phase 55 (gate) | Pending |
 | INTEG-04 | Phase 54 (gate, optional) | Pending |
+| INTEG-05 | Phase 54 (gate) | Pending |
 
 **Coverage:**
-- v2.4 requirements: 40 total
-- Mapped to phases: 40
+- v2.4 requirements: 42 total
+- Mapped to phases: 42
 - Unmapped: 0
 
 **Per-phase counts:**
 - Phase 50 (Route Foundation & Day-Aware Store): 9 requirements (ROUTE-01..04, DAY-01..04, INTEG-01)
-- Phase 51 (Profile & Quests): 4 requirements (PROFILE-01..04)
+- Phase 51 (Profile & Quests): 6 requirements (PROFILE-01..05, INTEG-02)
 - Phase 52 (Tickets, Packs & Jackpot Reveal): 12 requirements (TICKETS-01..04, PACKS-01..05, JACKPOT-01..03)
 - Phase 53 (Purchase Flow): 4 requirements (PURCHASE-01..04)
-- Phase 54 (Coinflip & BAF Leaderboards): 8 requirements (COINFLIP-01..03, BAF-01..03, INTEG-02, INTEG-04)
+- Phase 54 (Coinflip & BAF Leaderboards): 8 requirements (COINFLIP-01..03, BAF-01..03, INTEG-05, INTEG-04)
 - Phase 55 (Decimator): 6 requirements (DECIMATOR-01..05, INTEG-03)
 
 INTEG-01 appears in two phases by design: Phase 50 owns the coordination kickoff (post the endpoint contract spec, ping database repo); Phase 52 gates on confirmed delivery before TICKETS/PACKS code lands.
@@ -177,4 +181,4 @@ Phase numbering jumps from 23 → 50 to avoid collision with out-of-band commits
 
 ---
 *Requirements defined: 2026-04-23*
-*Last updated: 2026-04-23 — traceability filled in for v2.4 roadmap (Phases 50-55)*
+*Last updated: 2026-04-23 -- PROFILE-02 high-difficulty clause struck (D-20, vestigial); PROFILE-05 added (D-11, D-12, Daily Activity counts); INTEG-02 reissued for Phase 51 extended /player/:address?day=N endpoint (D-15); Phase 54 per-player leaderboard endpoint renumbered from old INTEG-02 to INTEG-05*
