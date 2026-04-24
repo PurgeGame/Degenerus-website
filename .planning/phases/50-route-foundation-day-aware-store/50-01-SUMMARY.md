@@ -8,7 +8,7 @@ tags:
   - tests
   - nyquist
   - integ-01
-status: checkpoint
+status: complete
 completed: 2026-04-23
 requires: []
 provides:

@@ -3,8 +3,8 @@
 **Phase:** 50 -- Route Foundation & Day-Aware Store
 **Requirement:** INTEG-01 (kickoff in Phase 50; delivery gates Phase 52)
 **Owner:** website repo (proposal); database repo (implementation)
-**Status:** DRAFT -- awaiting database team confirmation
-**Posted:** [fill in timestamp + venue when coordination ping is sent in Task 3]
+**Status:** DRAFT -- solo dev self-coordination; implement when switching to /home/zak/Dev/PurgeGame/database/
+**Posted:** 2026-04-23 -- solo dev (no external team); this file is the canonical spec to reference when adding the endpoint in the database repo. Phase 52 INTEG-01 gate re-checks for delivery.
 
 ## Why This Endpoint Is Needed
 
