@@ -58,11 +58,11 @@ Brand-new player-facing route surfacing every interactive system (purchase, tick
 
 ### DECIMATOR -- State, bucket, payouts
 
-- [ ] **DECIMATOR-01**: User can see decimator window state (open/closed, level, time remaining if applicable)
-- [ ] **DECIMATOR-02**: User can see selected player's bucket/subbucket assignment per burned level
-- [ ] **DECIMATOR-03**: User can see selected player's burn weight and effective amount per level
-- [ ] **DECIMATOR-04**: User can see winning subbucket reveal and selected player's payout per resolved level
-- [ ] **DECIMATOR-05**: User can see terminal decimator state (burns, weighted amount, time-multiplier) when applicable
+- [x] **DECIMATOR-01**: User can see decimator window state (open/closed, level, time remaining if applicable) (Phase 55 -- 3-state badge via INTEG-03 roundStatus; time-remaining dropped per Pitfall 4 since levelStartTime is null in play/ store)
+- [x] **DECIMATOR-02**: User can see selected player's bucket/subbucket assignment per burned level (Phase 55 Wave 2 -- aria-current populated from INTEG-03 bucket)
+- [x] **DECIMATOR-03**: User can see selected player's burn weight and effective amount per level (Phase 55 Wave 2 -- effectiveAmount + weightedAmount populated from INTEG-03 via formatBurnie)
+- [x] **DECIMATOR-04**: User can see winning subbucket reveal and selected player's payout per resolved level (Phase 55 Wave 2 -- 5-state payout pill from INTEG-03 winningSubbucket + payoutAmount + roundStatus)
+- [x] **DECIMATOR-05**: User can see terminal decimator state (burns, weighted amount, time-multiplier) when applicable (Phase 55 Wave 1 -- terminal sub-section conditional on terminal.burns.length > 0 from INTEG-02 terminal block)
 
 ### JACKPOT -- Reuse beta roll widget
 
@@ -81,7 +81,7 @@ Brand-new player-facing route surfacing every interactive system (purchase, tick
 
 - [~] **INTEG-01**: Ship or confirm `GET /player/{addr}/tickets/by-trait` endpoint for trait-grouped ticket inventory (P0 -- blocks TICKETS/PACKS). Phase 50 kickoff complete: contract spec written (INTEG-01-SPEC.md). Delivery (endpoint implementation in database repo) gates Phase 52.
 - [ ] **INTEG-02**: Ship or confirm extended `GET /player/:address?day=N` endpoint with `scoreBreakdown`, day-aware `quests[]`, `questStreak`, and `dailyActivity` block (P1 -- gates Phase 51 PROFILE-01..05)
-- [ ] **INTEG-03**: Ship or confirm per-player decimator bucket/payout endpoint (P1 -- blocks DECIMATOR-02/03/04)
+- [x] **INTEG-03**: Ship or confirm per-player decimator bucket/payout endpoint (P1 -- blocks DECIMATOR-02/03/04) (Phase 55 Wave 2 shipped 2026-04-24 via database feat a453592 + docs 8c5d717 + test 49d3f3a; response shape matches INTEG-03-SPEC.md exactly -- no field drift)
 - [~] **INTEG-04**: Ship or confirm coinflip recycle/history endpoint, OR document as deferred (deferred per Phase 54 D-10 + ROADMAP Success Criterion 5; COINFLIP functional without it via /player/:address coinflip block + /leaderboards/coinflip; revisit in future phase if player-rank-below-top-10 surfacing is needed)
 - [ ] **INTEG-05**: Ship or confirm per-player BAF score endpoint (P1 -- blocks BAF-01)
 - [ ] **SIM-01**: Ship or confirm HTTP API for the degenerus-sim repo with `POST /player/:address/buy-tickets` and `POST /player/:address/buy-lootbox` endpoints per `.planning/phases/53-purchase-flow/PURCHASE-API-SPEC.md` (P2 -- gates Phase 53 PURCHASE-01/02/04 full validation; scaffold + spec shipped in Phase 53 Option B)
@@ -145,11 +145,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BAF-01 | Phase 54 | Pending |
 | BAF-02 | Phase 54 | Pending |
 | BAF-03 | Phase 54 | Pending |
-| DECIMATOR-01 | Phase 55 | Pending |
-| DECIMATOR-02 | Phase 55 | Pending |
-| DECIMATOR-03 | Phase 55 | Pending |
-| DECIMATOR-04 | Phase 55 | Pending |
-| DECIMATOR-05 | Phase 55 | Pending |
+| DECIMATOR-01 | Phase 55 | Validated (2026-04-24) -- 3-state badge via INTEG-03 roundStatus |
+| DECIMATOR-02 | Phase 55 | Validated (2026-04-24) -- aria-current from INTEG-03 bucket |
+| DECIMATOR-03 | Phase 55 | Validated (2026-04-24) -- effectiveAmount + weightedAmount from INTEG-03 |
+| DECIMATOR-04 | Phase 55 | Validated (2026-04-24) -- 5-state payout pill from INTEG-03 |
+| DECIMATOR-05 | Phase 55 | Validated (2026-04-24) -- terminal sub-section from INTEG-02 terminal block |
 | JACKPOT-01 | Phase 52 | Pending |
 | JACKPOT-02 | Phase 52 | Pending |
 | JACKPOT-03 | Phase 52 | Pending |
@@ -159,7 +159,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DAY-04 | Phase 50 | Validated (2026-04-24) |
 | INTEG-01 | Phase 50 (kickoff), Phase 52 (gate) | Kickoff done (2026-04-24); delivery pending |
 | INTEG-02 | Phase 51 (gate) | Pending |
-| INTEG-03 | Phase 55 (gate) | Pending |
+| INTEG-03 | Phase 55 (gate) | Validated (2026-04-24) -- database a453592 + 8c5d717 + 49d3f3a; shape matches spec exactly |
 | INTEG-04 | Phase 54 (gate, optional) | Deferred (2026-04-24; per D-10 + ROADMAP SC5; coinflip functional without it) |
 | INTEG-05 | Phase 54 (gate) | Pending |
 | SIM-01 | Phase 53 (spec), future (ship) | Spec authored 2026-04-24; deferred |
@@ -183,4 +183,4 @@ Phase numbering jumps from 23 → 50 to avoid collision with out-of-band commits
 
 ---
 *Requirements defined: 2026-04-23*
-*Last updated: 2026-04-24 -- Phase 54 Wave 0 kickoff: INTEG-04 marked deferred per D-10 (ROADMAP Success Criterion 5 permits; coinflip functional without recycle history endpoint via existing /player/:address coinflip block + /leaderboards/coinflip); INTEG-05-SPEC.md authored for per-player BAF score endpoint. Previous update 2026-04-24 (earlier): Phase 53 Option B landed -- PURCHASE-03 validated; PURCHASE-01/02/04 deferred with scaffold + spec; SIM-01 added to INTEG block as new coordination requirement for the degenerus-sim HTTP API (gates Phase 53 live-wiring follow-up). Earlier 2026-04-23: PROFILE-02 high-difficulty clause struck (D-20, vestigial); PROFILE-05 added (D-11, D-12, Daily Activity counts); INTEG-02 reissued for Phase 51 extended /player/:address?day=N endpoint (D-15); Phase 54 per-player leaderboard endpoint renumbered from old INTEG-02 to INTEG-05*
+*Last updated: 2026-04-24 -- Phase 55 Wave 2 (Plan 55-03): INTEG-03 shipped in database repo (feat a453592, docs 8c5d717, test 49d3f3a); response shape matches INTEG-03-SPEC.md with no drift. Website-side flipped decimator-panel.js from safe-degrade stub comment to live INTEG-03 error-path semantics (surgical 21-insertion / 17-deletion edit in commit a6d9bed). All 5 DECIMATOR requirements flipped from Pending to Validated: DECIMATOR-01 (3-state roundStatus badge), DECIMATOR-02 (bucket aria-current), DECIMATOR-03 (effective + weighted from formatBurnie), DECIMATOR-04 (5-state payout pill from payoutAmount + winningSubbucket + roundStatus), DECIMATOR-05 (terminal sub-section from INTEG-02 terminal block -- Wave 1). 13/13 play/ test files green (325/325 assertions). Previous update 2026-04-24 (earlier): Phase 54 Wave 0 kickoff: INTEG-04 marked deferred per D-10 (ROADMAP Success Criterion 5 permits; coinflip functional without recycle history endpoint via existing /player/:address coinflip block + /leaderboards/coinflip); INTEG-05-SPEC.md authored for per-player BAF score endpoint. Previous update 2026-04-24 (earlier): Phase 53 Option B landed -- PURCHASE-03 validated; PURCHASE-01/02/04 deferred with scaffold + spec; SIM-01 added to INTEG block as new coordination requirement for the degenerus-sim HTTP API (gates Phase 53 live-wiring follow-up). Earlier 2026-04-23: PROFILE-02 high-difficulty clause struck (D-20, vestigial); PROFILE-05 added (D-11, D-12, Daily Activity counts); INTEG-02 reissued for Phase 51 extended /player/:address?day=N endpoint (D-15); Phase 54 per-player leaderboard endpoint renumbered from old INTEG-02 to INTEG-05*
