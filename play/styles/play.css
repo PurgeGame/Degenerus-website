@@ -531,16 +531,6 @@ body > .container > footer {
   font-size: 0.9rem;
 }
 
-.packs-panel .packs-truncated {
-  grid-column: 1 / -1;
-  padding: 0.75rem 1rem;
-  text-align: center;
-  color: var(--text-muted, #888);
-  font-size: 0.85rem;
-  font-style: italic;
-  border-top: 1px dashed var(--border-soft, #333);
-}
-
 .pack-sealed {
   background: var(--panel-bg, #1a1a1a);
   border: 1px solid var(--panel-border, #333);
@@ -662,6 +652,181 @@ body > .container > footer {
     padding: 0.4rem;
   }
 }
+
+/* ===== PACKS-V2 (Phase 52 gap-closure) =====
+   Day-keyed packs-panel renders two sections: lootbox tiles (auto-revealed)
+   and sealed ticket-reveal packs (click to reveal). See
+   .planning/phases/52-tickets-packs-jackpot/PACKS-V2-SPEC.md.
+*/
+
+.packs-panel .packs-section {
+  margin-top: 1rem;
+}
+
+.packs-panel .packs-section + .packs-section {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-soft, #2a2a3e);
+}
+
+.packs-panel .packs-section-title {
+  font-size: 0.95rem;
+  margin: 0 0 0.5rem;
+  color: var(--text-secondary, #b8b8c0);
+  font-weight: 600;
+}
+
+/* Lootbox section: auto-revealed tiles with visible traits */
+
+.packs-panel .lootbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+  min-height: 0;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.packs-panel .lootbox-tile {
+  background: var(--panel-bg, #1a1a1a);
+  border: 1px solid var(--panel-border, #333);
+  border-radius: 8px;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.packs-panel .lootbox-tile.pack-source-lootbox {
+  border-color: rgba(160, 130, 220, 0.4);
+}
+
+.packs-panel .lootbox-tile .tile-header {
+  font-size: 0.78rem;
+  color: var(--text-muted, #888);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.packs-panel .lootbox-tile .tile-tickets {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.4rem;
+}
+
+/* Ticket-reveal section: sealed clickable packs */
+
+.packs-panel .ticket-pack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+  min-height: 0;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.packs-panel .ticket-pack {
+  background: var(--panel-bg, #1a1a1a);
+  border: 1px solid var(--panel-border, #333);
+  border-radius: 8px;
+  padding: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: relative;
+  user-select: none;
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+
+.packs-panel .ticket-pack.sealed {
+  animation: pack-pulse 2s ease-in-out infinite;
+  border-color: rgba(140, 180, 220, 0.4);
+}
+
+.packs-panel .ticket-pack.sealed:hover,
+.packs-panel .ticket-pack.sealed:focus {
+  transform: translateY(-2px);
+  border-color: rgba(180, 220, 255, 0.7);
+  outline: none;
+}
+
+.packs-panel .ticket-pack.opened {
+  cursor: default;
+  animation: none;
+  border-color: rgba(120, 200, 140, 0.5);
+}
+
+.packs-panel .ticket-pack .pack-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  border-radius: 6px;
+  padding: 0.5rem;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.packs-panel .ticket-pack.opened .pack-wrapper {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  gap: 0.3rem;
+  background: transparent;
+}
+
+.packs-panel .ticket-pack .pack-label {
+  font-size: 0.85rem;
+  color: var(--text-primary, #f0f0f0);
+  font-weight: 600;
+}
+
+/* Shared ticket-card render (used by both lootbox tiles + ticket-reveal opened state) */
+
+.packs-panel .ticket-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 0.15rem;
+  aspect-ratio: 1 / 1;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+  padding: 4%;
+  /* Stagger custom prop set per-card by JS for the GSAP-cooperating reveal */
+  animation: ticket-reveal 240ms ease-out var(--ticket-reveal-stagger-delay, 0ms) both;
+}
+
+.packs-panel .trait-quadrant {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.packs-panel .trait-quadrant .trait-badge {
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+}
+
+@keyframes ticket-reveal {
+  0%   { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Reduced-motion: instant reveal, no stagger */
+@media (prefers-reduced-motion: reduce) {
+  .packs-panel .ticket-card {
+    animation: none;
+  }
+}
+
+/* ===== /PACKS-V2 ===== */
 
 /* ======================================================================
    Phase 53 -- <purchase-panel> styles
