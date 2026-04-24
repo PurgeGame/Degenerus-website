@@ -73,7 +73,7 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
 - [x] **Phase 51: Profile & Quests** - Activity score breakdown + quest slots/streak panels + daily activity counts (completed 2026-04-24; 4/4 plans; INTEG-02 shipped in database repo; 112/112 tests; UAT deferred per Phase 50 precedent)
 - [x] **Phase 52: Tickets, Packs & Jackpot Reveal** - 4-trait quadrant inventory, openable pack animation (purchase + win sources), reused beta jackpot Roll widget (completed 2026-04-24; 4/4 plans; INTEG-01 shipped in database repo; 197/197 tests; UAT deferred per precedent chain)
 - [~] **Phase 53: Purchase Flow** - Sim-API ticket and lootbox purchase with inventory feedback loop into Phase 52 packs (Option B shipped 2026-04-24: PURCHASE-03 live; PURCHASE-01/02/04 deferred, gated on SIM-01 sim HTTP API build per PURCHASE-API-SPEC.md)
-- [ ] **Phase 54: Coinflip & BAF Leaderboards** - Player coinflip state + leaderboards, BAF score and prominence-styled top-4
+- [x] **Phase 54: Coinflip & BAF Leaderboards** - Player coinflip state + leaderboards, BAF score and prominence-styled top-4 (completed 2026-04-24; 4/4 plans; INTEG-05 shipped in database repo; 288/288 tests; UAT deferred per precedent chain; INTEG-04 formally deferred per SC5)
 - [ ] **Phase 55: Decimator** - Window state, bucket/subbucket assignment, weighted burns, payouts, terminal-decimator state
 
 ## Phase Details
@@ -157,7 +157,11 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
   3. User sees the selected player's BAF score and rank for the current level/window, alongside the top-4 BAF leaderboard with prominence-based styling matching beta's `baf-panel`
   4. User sees a label indicating which level/window the BAF round is for and whether the round is open or closed
   5. INTEG-05 (per-player BAF score) is confirmed shipped before BAF-01 lands; INTEG-04 (coinflip recycle/history) is either confirmed or formally documented as deferred with COINFLIP still functional
-**Plans**: TBD
+**Plans**: 4 plans
+  - [x] 54-01-PLAN.md — Wave 0: INTEG-05-SPEC.md (237 lines) + 2 new test files (play-coinflip-panel + play-baf-panel, 58 assertions) + SHELL-01 FORBIDDEN +3 + INTEG-04 deferral per SC5 (complete 2026-04-24)
+  - [x] 54-02-PLAN.md — Wave 1 (pre-backend): coinflip-panel.js + baf-panel.js evolved from stubs; play.css +237 lines (D-06 gold/silver/bronze/regular prominence); COINFLIP-01/02/03 + BAF-02 live; BAF-01/03 pre-wired (complete 2026-04-24)
+  - [x] 54-03-PLAN.md — Wave 2 (INTEG-05 shipped; 3 database commits a0d4e69/6392541/08ef417, 14/14 vitest): surgical baf-panel.js edit flipping #refetchPlayer from Wave 1 404-tolerant stub to Wave 2 live authoritative hydration (complete 2026-04-24)
+  - [x] 54-04-PLAN.md — Wave 3: manual UAT deferred per Phase 50/51/52/53 precedent chain; 54-UAT.md enumerates 12 UAT scenarios (complete 2026-04-24)
 **UI hint**: yes
 
 ### Phase 55: Decimator
