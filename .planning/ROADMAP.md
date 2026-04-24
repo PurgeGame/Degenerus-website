@@ -122,7 +122,11 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
   3. User watches the pack stay closed until VRF resolves and then open via a GSAP timeline (with optional sound cue) to reveal the 4-trait card; lootbox-sourced packs open immediately on lootbox open since traits are known at that moment
   4. User sees the Roll 1 / Roll 2 trait reveal animation for the selected effective day's jackpot, rendered by the lift-and-shifted beta `jackpot-panel` Roll components (no rewrite)
   5. Changing the day scrubber re-renders both the ticket inventory snapshot and the jackpot reveal for that effective day
-**Plans**: TBD
+**Plans**: 4 plans
+  - [ ] 52-01-PLAN.md — Wave 0: test harness (4 new test files covering TICKETS/PACKS/JACKPOT + D-09 regression guard) + 1-line beta/jackpot-panel.js patch + INTEG-01-SPEC.md copy-forward
+  - [ ] 52-02-PLAN.md — Wave 1 (pre-backend): 4 new helpers (tickets-inventory, tickets-fetch, pack-animator, pack-audio) + 3 new Custom Elements (tickets-panel, packs-panel, jackpot-panel-wrapper) + play.css + play/index.html + Phase 50 stub deletion coordinated with panel-stubs test update
+  - [ ] 52-03-PLAN.md — Wave 2 (HARD-GATED on INTEG-01 delivery): surgical fetch + double stale-guard + keep-old-data-dim wiring in tickets-panel.js and packs-panel.js (mirrors Phase 51 Wave 2 checkpoint pattern)
+  - [ ] 52-04-PLAN.md — Wave 3 (optional): manual UAT for gacha reveal feel, sound gating, jackpot roll rendering, tier SVG correctness, rapid day-scrub stability; records 52-UAT.md (uat-deferred supported per Phase 50/51 precedent)
 **UI hint**: yes
 
 ### Phase 53: Purchase Flow
