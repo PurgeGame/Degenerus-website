@@ -86,9 +86,11 @@ const _state = {
     isWinner: false,
   },
   // Replay mode: populated by replay-panel on day-change; consumed by status-bar.
+  // Phase 50: `player` added for play/ route symmetry (prior: written but undeclared).
   replay: {
     day: null,    // currently selected game day (number | null)
     level: null,  // jackpot level for that day (number | null)
+    player: null, // currently selected player address (string | null). Added Phase 50.
   },
 };
 
