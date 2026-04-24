@@ -649,3 +649,196 @@ body > .container > footer {
     padding: 0.4rem;
   }
 }
+
+/* ======================================================================
+   Phase 53 -- <purchase-panel> styles
+   PURCHASE-03 live display + PURCHASE-01/02 sim-api gated buttons.
+   Tokens from beta/styles/base.css (reused, no new variables).
+   ====================================================================== */
+
+.panel-purchase {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.panel-purchase .panel-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+  color: var(--text-primary, #f0f0f0);
+}
+
+/* Tab switcher (Tickets / Lootbox) */
+.purchase-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border-subtle, #2a2a3e);
+  margin-bottom: 0.75rem;
+}
+
+.purchase-tabs button {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #888);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.purchase-tabs button:hover {
+  color: var(--text-primary, #f0f0f0);
+}
+
+.purchase-tabs button[aria-selected="true"] {
+  color: var(--accent-primary, #f5a623);
+  border-bottom-color: var(--accent-primary, #f5a623);
+}
+
+.purchase-tabs button:focus-visible {
+  outline: 2px solid var(--accent-primary, #f5a623);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Info block (level / cycle / price rows) */
+.purchase-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.6rem 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  border-radius: 4px;
+}
+
+.panel-purchase .info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.panel-purchase .info-label {
+  font-size: 0.8rem;
+  color: var(--text-muted, #888);
+}
+
+.panel-purchase .info-value {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+  color: var(--text-primary, #f0f0f0);
+}
+
+.panel-purchase .info-row.total-cost .info-value {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--accent-primary, #f5a623);
+}
+
+/* Form layout (quantity input + total + buy button) */
+.purchase-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-top: 0.25rem;
+}
+
+.purchase-form[hidden] {
+  display: none;
+}
+
+.purchase-form label {
+  font-size: 0.8rem;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.purchase-form input[type="number"] {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  color: var(--text-primary, #f0f0f0);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  max-width: 160px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.purchase-form input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent-primary, #f5a623);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.purchase-form button {
+  appearance: none;
+  background: var(--accent-primary, #f5a623);
+  color: #0a0a14;
+  border: 1px solid transparent;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.6rem 1.1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.purchase-form button:hover {
+  background: #ffb84d;
+}
+
+/* Sim-api gate: disabled appearance + not-allowed cursor.
+   The button DOM stays in place; tests assert the `data-gate="sim-api"`
+   + `aria-disabled="true"` attributes. Hover surfaces the title tooltip. */
+.purchase-form button[data-gate="sim-api"][aria-disabled="true"] {
+  background: rgba(245, 166, 35, 0.25);
+  color: var(--text-muted, #888);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.purchase-form button[data-gate="sim-api"][aria-disabled="true"]:hover {
+  background: rgba(245, 166, 35, 0.3);
+  opacity: 0.7;
+}
+
+.purchase-form button[data-gate="sim-api"][aria-disabled="true"]:focus-visible {
+  outline: 2px dashed var(--text-muted, #888);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .purchase-tabs button,
+  .purchase-form input[type="number"],
+  .purchase-form button {
+    transition-duration: 0.01ms;
+  }
+}
+
+/* --- Mobile (<= 720px) --- */
+@media (max-width: 720px) {
+  .purchase-tabs button {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
+  .purchase-form input[type="number"] {
+    max-width: 100%;
+    width: 100%;
+  }
+  .purchase-form button {
+    align-self: stretch;
+    text-align: center;
+  }
+}
