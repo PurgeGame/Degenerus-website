@@ -1,34 +1,34 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: executing
-stopped_at: Roadmap created; awaiting `/gsd-plan-phase 18`
-last_updated: "2026-04-15T19:58:25.869Z"
-last_activity: 2026-04-15
+milestone: v2.4
+milestone_name: Player UI
+status: defining-requirements
+stopped_at: Milestone summary approved; defining requirements
+last_updated: "2026-04-23T00:00:00.000Z"
+last_activity: 2026-04-23
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 16
-  completed_plans: 16
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-13)
+See: .planning/PROJECT.md (updated 2026-04-23)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** Phase 20 — pools-validation
+**Current focus:** Defining requirements for v2.4 Player UI
 
 ## Current Position
 
-Phase: 23
-Plan: Not started
-Status: Executing Phase 20
-Last activity: 2026-04-15
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-23 — v2.4 milestone started
 
 ## Accumulated Context
 
@@ -36,12 +36,13 @@ Last activity: 2026-04-15
 
 Decisions are logged in PROJECT.md Key Decisions table.
 
-Roadmap decisions:
+Milestone v2.4 framing decisions:
 
-- Phase numbering continues from v2.2 (ended at 17); v2.3 spans 18–23
-- 6 phases: METHOD foundation, 4 domain validation phases (JACKPOT/POOLS/PLAYER/TERMINAL), consolidated report
-- Report-only milestone; no source edits this milestone
-- METHOD requirements primary-mapped to Phase 18; Phase 23 references METHOD-03/04 as synthesis deliverable but does not double-count them
+- Brand-new player route, separate from `beta/` (dev panels) and `viewer/` (replay tool)
+- Same stack as `beta/` (vanilla ES modules + Custom Elements + Proxy store + GSAP)
+- Read-only via player-selector dropdown; no wallet, no contract writes; purchases call sim API
+- Frontend-first; backend gaps surface as blocker phases requiring database-repo coordination
+- Phase numbering continues from v2.3 (ended at 23) — v2.4 starts at Phase 24
 
 ### Pending Todos
 
@@ -49,11 +50,12 @@ None.
 
 ### Blockers/Concerns
 
-- Database API not yet tested end-to-end with frontend (separate repo) — this milestone will exercise it
-- dailyRng.finalWord not yet in backend API — may block JACKPOT-01 trait reveal comparison if not resolved; document as expected gap rather than a discrepancy
-- Sim runs in turbo mode throughout until endgame; paper's standard-mode graphs are not directly comparable — harness must tag turbo-mode adjustments
+- P0 backend gap: `/player/{addr}/tickets/by-trait` endpoint required for openable-pack feature; coordinate with database repo
+- P1 backend gaps: per-player BAF score, per-player decimator bucket/payout, coinflip history
+- Out-of-band post-v2.3 work in git history (phases 26-44 commits, viewer/replay-panel/boons/API migration) was done in another repo and is not formally tracked; may need retrospective documentation before/during this milestone
+- Several uncommitted modifications to beta/, theory/, agents/, and untracked files (ECONOMICS-REFERENCE.md, beta/viewer/api.js, player-archetypes.json, etc.) remain in working tree; not folded into milestone-start commit
 
 ## Session Continuity
 
-Last session: 2026-04-13
-Stopped at: Roadmap created; awaiting `/gsd-plan-phase 18`
+Last session: 2026-04-23
+Stopped at: Milestone summary approved; defining requirements

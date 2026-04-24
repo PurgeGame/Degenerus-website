@@ -42,12 +42,18 @@ Database layer (separate repo at /home/zak/Dev/PurgeGame/database/) provides Pos
 - Game & Modules parity notes: 14 contracts verified, 13 discrepancies documented with severity (v2.2 Phase 15)
 - Token & Support Systems parity notes: 10 contracts verified, 11 discrepancies documented with severity (v2.2 Phase 16)
 - Consolidated parity report: 23 discrepancies across 24 contracts with fix guidance, 6 new mechanics identified (v2.2 Phase 17)
+- Reusable Python expected-value derivation harness across 4 domains (v2.3 Phase 18)
+- JACKPOT live-run against indexer, 111 discrepancies captured (v2.3 Phase 19)
+- POOLS/PLAYER/TERMINAL validators wired with coverage-gap entries and live-run gating (v2.3 Phases 20-22)
+- Consolidated validation report renderer with severity×domain cross-tab and sha256 provenance (v2.3 Phase 23)
 
 ### Active
 
-- Live API economic validation against paper + whitepaper + contracts (v2.3)
-- Turbo-mode-adjusted expected values for jackpots, pools, player economics, endgame (v2.3)
-- Discrepancy report with severity and suspected source (v2.3)
+- Brand-new player-facing route surfacing every interactive system against live sim/db (v2.4)
+- Ticket inventory shown as 4-trait quadrant cards with openable packs on purchase/win/lootbox (v2.4)
+- Purchase, coinflip, BAF, decimator, activity/quests UIs hosted on the new route (v2.4)
+- Day scrubber dev tool for inspecting any historical day from the selected player's perspective (v2.4)
+- Coordinated backend additions for ticket-by-trait, per-player BAF, per-player decimator endpoints (v2.4)
 
 ### Out of Scope
 
@@ -96,19 +102,32 @@ Database layer (separate repo at /home/zak/Dev/PurgeGame/database/) provides Pos
 - Dead quadrantLabel() export in jackpot-data.js
 - Sound files (win.mp3, flip.mp3, urgency.mp3) are README placeholders requiring user setup
 
-## Current Milestone: v2.3 Live API Economic Validation
+## Current Milestone: v2.4 Player UI
 
-**Goal:** Verify live database API (turbo-mode sim data) produces numerical and behavioral outcomes consistent with game theory paper, whitepaper, and contract-derived expected values.
+**Goal:** Build a brand-new player-facing route that surfaces every interactive system (purchase, tickets/packs, coinflip, BAF, decimator, activity/quests, jackpot replay) against the live sim/db, with a dev-side day scrubber for inspecting any player's perspective on any historical day.
 
 **Target features:**
-- Jackpot validation (Roll 1/2, BURNIE, bonus carryover) against live API at localhost:3000
-- Prize pool flow validation (next/future/claimable, drip, drawdown, stETH yield split)
-- Player economics validation (activity score, quests, affiliate, coinflip EV, lootbox breakeven)
-- Endgame / terminal validation (death clock, decimator buckets, terminal payouts)
-- Three-way expected-value derivation: paper + whitepaper + contracts, turbo-mode-adjusted
-- Discrepancy report with severity (Critical/Major/Minor/Info) and suspected source (paper/whitepaper/contract/indexer/expected turbo divergence)
+- Brand-new route (e.g. `/play` or `/game`) — separate from `beta/` (dev panels) and `viewer/` (replay tool)
+- Activity score breakdown + quest status display (live API endpoints already exist)
+- Ticket inventory rendered as 4-trait quadrant cards, grouped from individual entries
+- Openable ticket packs on purchase, ticket-win, or lootbox-open with GSAP reveal animation
+- Purchase UI for tickets and lootboxes via sim API (no contract writes this milestone)
+- Coinflip play surface (current state + leaderboard; recycle history if backend lands)
+- BAF leaderboard with per-player score and prominence context
+- Decimator UI: window state, bucket assignment, weighted burns, winning subbucket, payout
+- Day scrubber (dev tool now, player-facing read-only later) — pick effective day, re-render UI from snapshot
+- Reuse beta's jackpot-panel Roll 1/Roll 2 trait reveal widget on the new route
 
-**Method:** Report-only. No code/paper/contract changes this milestone; fixes deferred to a follow-up.
+**Stack:** Same as `beta/` — vanilla ES modules, Custom Elements, Proxy reactive store, GSAP. No build step.
+
+**Wallet posture:** Read-only via player-selector dropdown. No EIP-6963 connect, no contract writes. Purchases call the sim API as the selected player.
+
+**Backend dependencies (database repo):**
+- P0 blocker: `/player/{addr}/tickets/by-trait` for openable-pack feature (must coordinate)
+- P1 likely needed: per-player BAF score, per-player decimator bucket/payout, coinflip history
+- Out of scope: sim-time admin endpoints (live in sim repo)
+
+**Method:** Frontend-first; backend gaps surface as blocker phases requiring database-repo coordination before dependent UI lands. Component tests + manual UAT for animations and pack-opening flows.
 
 ## Evolution
 
@@ -128,4 +147,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-13 — v2.3 milestone started*
+*Last updated: 2026-04-23 — v2.4 milestone started*
