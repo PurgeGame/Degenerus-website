@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.4
 milestone_name: Player UI
-status: planned
-stopped_at: Phase 54 complete (4/4 plans, INTEG-05 shipped, UAT deferred); ready for Phase 55 discuss-phase
-last_updated: "2026-04-24T06:30:00.000Z"
+status: milestone_complete
+stopped_at: v2.4 Player UI milestone complete (all 6 phases shipped or partial-with-spec; 325/325 tests; 4 INTEGs shipped in database repo; 1 SIM spec authored); ready for /gsd-complete-milestone
+last_updated: "2026-04-24T07:30:00.000Z"
 last_activity: 2026-04-24
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 6
   total_plans: 20
-  completed_plans: 16
-  percent: 80
+  completed_plans: 20
+  percent: 100
 ---
 
 # Project State
@@ -21,92 +21,90 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** v2.4 Player UI — Phase 54: Coinflip & BAF Leaderboards (next)
+**Current focus:** v2.4 Player UI -- COMPLETE. Ready to archive and start v2.5.
 
 ## Current Position
 
-Phase: 54 — Coinflip & BAF Leaderboards (NOT STARTED)
-Plan: 0/? (discuss-phase not yet run)
-Status: Phase 53 Option B shipped (PURCHASE-03 live, PURCHASE-01/02/04 deferred with SIM-01 HTTP API spec). 230/230 play/ tests green.
-Last activity: 2026-04-24 — Phase 53 shipped Option B in a single wave. 6 commits. PURCHASE-API-SPEC.md (213 lines) authored for sim HTTP endpoint. purchase-panel.js evolved from 40-line stub to 221-line functional element with tab UI, live PURCHASE-03 display (price/level/cycle/total-cost from game store), gated PURCHASE-01/02 buttons (data-gate="sim-api" + aria-disabled + tooltip linking to spec), and plumbing for PURCHASE-04 via existing Phase 52 stale-guard. REQUIREMENTS.md updated: PURCHASE-03 validated, PURCHASE-01/02/04 marked deferred, new SIM-01 requirement added tracking the sim HTTP API build. 33 new Nyquist assertions, SHELL-01 guardrail still green.
+Phase: All 6 phases complete (50, 51, 52, 54, 55 full; 53 Option B partial-with-spec)
+Plan: 20/20 plans executed
+Status: Milestone v2.4 shipped end-to-end in a single autonomous night session.
+Last activity: 2026-04-24 -- Phase 55 "Decimator" shipped. 4 waves, 4 plans. Wave 0: INTEG-03-SPEC + 37-assertion test harness + SHELL-01 FORBIDDEN +3. Wave 1: decimator-panel.js evolved from 40-LOC stub to 568-LOC hydrated panel with contract-truth bucketRange helper (research caught CONTEXT D-03 error: actual range 5-12 normal / 2-12 centennial, NOT 1-8), +199 LOC CSS. Wave 2: INTEG-03 side-quest shipped in database repo (3 atomic commits a453592/8c5d717/49d3f3a, 12/12 vitest), then surgical decimator-panel.js flip from safe-degrade to live. Wave 3: UAT deferred per 5-phase precedent chain (v2.4 terminal phase; resurfacing triggers to v2.5+ cross-panel sweep). 325/325 play/ tests green. 5/5 must-haves verified.
 
 ## Performance Metrics
 
 | Metric | Value |
 |--------|-------|
 | Phases planned | 6 (50-55) |
-| Phases complete | 3 full (50, 51, 52); 1 partial (53 Option B) |
-| Plans complete | 12 / 16 (50: 3, 51: 4, 52: 4, 53: 1; 54-55 not yet planned; SIM-01 deferred to post-v2.4) |
-| Requirements covered | 43 / 43 (SIM-01 added) |
-| Requirements validated | 28 / 43 (ROUTE-01..04, DAY-01..04, INTEG-01, PROFILE-01..05, INTEG-02, TICKETS-01..04, PACKS-01..05, JACKPOT-01..03, PURCHASE-03) |
-| Requirements deferred | 4 (PURCHASE-01/02/04 + SIM-01) |
+| Phases complete | 5 full (50, 51, 52, 54, 55); 1 partial-with-spec (53 Option B) |
+| Plans complete | 20 / 20 |
+| Requirements covered | 43 / 43 (SIM-01 added Phase 53) |
+| Requirements validated | 39 / 43 (all except PURCHASE-01/02/04 + SIM-01, deferred per Option B) |
+| Requirements deferred | 4 (PURCHASE-01/02/04 + SIM-01 gated on sim HTTP API build) + 1 (INTEG-04 per ROADMAP SC5) |
 | Coverage % | 100% |
+| Automated tests | 325/325 green in play/ tree |
+| Database repo integration | 4 INTEGs shipped (INTEG-01, INTEG-02, INTEG-03, INTEG-05); 1 formally deferred (INTEG-04) |
+| Cross-repo commits | ~45 (website) + ~12 (database) this session |
+
+## Milestone Summary
+
+### Phases (chronological)
+
+- **Phase 50** (2026-04-23): Route Foundation & Day-Aware Store -- 3 plans, 88/88 tests. 9 Custom Elements (player-selector, day-scrubber, 7 panel stubs). INTEG-01 kickoff spec.
+- **Phase 51** (2026-04-24): Profile & Quests -- 4 plans, 112/112 tests. Wallet-free play/app/quests.js; profile-panel.js 27→417 LOC with 4 stacked sections; +302 LOC CSS. INTEG-02 shipped (database repo, 3 commits, 20/20 vitest).
+- **Phase 52** (2026-04-24): Tickets, Packs & Jackpot Reveal -- 4 plans, 197/197 tests. 7 new play/ files: 4 helpers + 3 Custom Elements; +281 LOC CSS. INTEG-01 delivered (database repo, 3 commits, 10/10 vitest). D-09 patch: beta/jackpot-panel.js:7 swap to wallet-free utils.
+- **Phase 53** (2026-04-24): Purchase Flow -- Option B: 1 plan, 230/230 tests. purchase-panel.js 40→221 LOC with tab UI, live PURCHASE-03, gated PURCHASE-01/02 buttons. PURCHASE-API-SPEC.md (213 lines) authored for sim HTTP API. PURCHASE-01/02/04 deferred gated on SIM-01 sim-repo build.
+- **Phase 54** (2026-04-24): Coinflip & BAF Leaderboards -- 4 plans, 288/288 tests. coinflip-panel.js 40→305 LOC, baf-panel.js 40→358 LOC, +237 LOC CSS with D-06 gold/silver/bronze prominence. INTEG-05 shipped (database repo, 3 commits, 14/14 vitest). INTEG-04 formally deferred per ROADMAP SC5.
+- **Phase 55** (2026-04-24): Decimator -- 4 plans, 325/325 tests. decimator-panel.js 40→568 LOC with contract-truth bucketRange; +199 LOC CSS. INTEG-03 shipped (database repo, 3 commits, 12/12 vitest).
+
+### INTEG endpoints shipped in sibling database repo
+
+| INTEG | Endpoint | Phase | Commits | Tests |
+|-------|----------|-------|---------|-------|
+| INTEG-01 | `GET /player/:address/tickets/by-trait?level=N&day=M` | 52 | d135605, dab5adf, 64fe8db (via INTEG-02 commits) — actually a46fdcb, e130547, 64fe8db | 10/10 |
+| INTEG-02 | `GET /player/:address?day=N` extended (scoreBreakdown + dailyActivity + questStreak) | 51 | d135605, dab5adf, 64fe8db | 20/20 |
+| INTEG-03 | `GET /player/:address/decimator?level=N&day=M` | 55 | a453592, 8c5d717, 49d3f3a | 12/12 |
+| INTEG-05 | `GET /player/:address/baf?level=N&day=M` | 54 | a0d4e69, 6392541, 08ef417 | 14/14 |
+
+INTEG-04 (coinflip recycle/history) formally deferred per ROADMAP Phase 54 SC5.
+
+### Specs authored (future side-quests)
+
+- `PURCHASE-API-SPEC.md` (213 lines, Phase 53) -- sim HTTP API contract for POST /player/:addr/buy-tickets + /buy-lootbox. Tracked as SIM-01 requirement. Gates PURCHASE-01/02/04 full validation.
+
+### UAT deferrals
+
+All 6 phases deferred their Wave 3 UAT per an evolving precedent chain:
+- Phase 50: deferred -> Phase 51 natural resurfacing
+- Phase 51: deferred -> Phase 52 natural resurfacing
+- Phase 52: deferred -> Phase 53 natural resurfacing
+- Phase 53 (Option B): no UAT applicable (gated on SIM-01)
+- Phase 54: deferred -> Phase 55 natural resurfacing
+- Phase 55 (terminal): deferred -> v2.5+ cross-panel UAT sweep
+
+Aggregate ~50 UAT scenarios queued for the v2.5+ cross-panel visual sweep when a browser session is available.
+
+### Key architectural decisions held across milestone
+
+- Vanilla ES modules + Custom Elements + Proxy store + GSAP (no framework)
+- SHELL-01 invariant: no ethers/wallet.js/contracts.js/beta/app/utils.js in play/; recursive guard test with 14 FORBIDDEN entries by end of milestone
+- Day-aware fetch pattern: #fetchId double stale-guard + .is-stale keep-old-data-dim (originated Phase 51, carried forward)
+- Contract-truth over plan documents: Phase 55 research caught CONTEXT D-03 bucket-range error (1-8 vs actual 5-12/2-12); planner used contract truth via bucketRange() helper
+- Deferred UAT acceptable with structured record in NN-UAT.md citing precedent chain
 
 ## Accumulated Context
-
-### Decisions
-
-Decisions are logged in PROJECT.md Key Decisions table.
-
-Milestone v2.4 framing decisions:
-
-- Brand-new player route, separate from `beta/` (dev panels) and `viewer/` (replay tool)
-- Same stack as `beta/` (vanilla ES modules + Custom Elements + Proxy store + GSAP)
-- Read-only via player-selector dropdown; no wallet, no contract writes; purchases call sim API
-- Frontend-first; backend gaps surface as blocker phases requiring database-repo coordination
-- Phase numbering jumps from 23 → 50 to avoid collision with out-of-band commits in git history
-
-Roadmap-creation decisions (2026-04-23):
-
-- 6 phases (50-55) chosen; matches the orchestrator's suggested shape with one consolidation
-- JACKPOT-01..03 placed in Phase 52 (with TICKETS/PACKS) rather than its own phase
-- INTEG-01 split across Phase 50 (kickoff coordination) and Phase 52 (delivery gate)
-- DAY scrubber landed in Phase 50 alongside ROUTE rather than retrofitted later
-- INTEG-02..05 are gates inside their dependent phases rather than standalone phases
 
 ### Pending Todos
 
 None.
 
-### Blockers/Concerns
+### Blockers/Concerns (post-milestone)
 
-- P0 backend gap: Phase 53 (Purchase Flow) requires a sim API for trust-free wallet-less purchases. Spec/coordination TBD — may surface as a side-quest similar to INTEG-01/INTEG-02 if the sim repo doesn't already have the needed endpoints.
-- P1 backend gaps remaining: per-player BAF score (gates Phase 54 BAF-01), per-player decimator bucket/payout (gates Phase 55 DECIMATOR-02/03/04), coinflip history (optional, Phase 54)
-- Database-side non-blocking TODOs from Phase 51+52: scoreBreakdown.affiliatePoints, dailyActivity.ticketsPurchased, quests[].requirementMints/requirementTokenAmount hardcoded 0 (INTEG-02); source always "purchase" + purchaseBlock always null (INTEG-01). UI renders these correctly as defaults.
-- Out-of-band post-v2.3 work in git history (phase 26-44 commits) was done in another repo and is not formally tracked
-- Several uncommitted modifications to beta/, theory/, agents/, and untracked files remain in working tree; not folded into any phase commit (out of scope for v2.4 Player UI)
+- **SIM-01 side-quest:** sim HTTP API not yet built; required to fully validate PURCHASE-01/02/04. Scope: multi-day integration (fastify + tx signing + anvil coordination). Post-v2.4 decision required: prioritize SIM-01 ship, redesign purchase flow, or defer to v2.6.
+- **v2.5+ cross-panel UAT sweep:** ~50 deferred UAT scenarios queued. Should be scheduled as a dedicated phase at v2.5 start to catch any visual/device contract issues across all 6 panels at once.
+- **Several uncommitted modifications** to beta/, theory/, agents/, and untracked files remain in working tree; not folded into any Phase 50-55 commit (out of scope for v2.4 Player UI; user's separate workstream).
 
 ## Session Continuity
 
-Last session: 2026-04-24
-Stopped at: Phase 52 complete; verification passed; ready for Phase 53
-Next action: `/gsd-discuss-phase 53` to gather context for Purchase Flow. Sim API coordination may surface as a hard-gate similar to INTEG-01/INTEG-02 flow.
-
-### Phase 52 Execution Record (2026-04-24)
-
-- 9 commits on main for Phase 52 (a78f4c9 through fa5c297)
-- 4 plans complete: 52-01 (Wave 0 test harness + D-09 patch + INTEG-01 copy-forward), 52-02 (Wave 1 UI skeleton + 7 new files), 52-03 (Wave 2 fetch wiring + replay.level bootstrap), 52-04 (Wave 3 UAT deferred)
-- Side-repo: INTEG-01 shipped in /home/zak/Dev/PurgeGame/database/ — 3 atomic commits (a46fdcb feat, e130547 docs, 9988887 test), 10/10 vitest pass
-- 197/197 automated tests green in play/ tree (up from 112/112 at Phase 51 end)
-- 5/5 must-haves verified (all 12 requirements: TICKETS-01..04, PACKS-01..05, JACKPOT-01..03 + INTEG-01 hard gate)
-- Key deliverables: 4 helpers (tickets-inventory, tickets-fetch, pack-animator, pack-audio), 3 Custom Elements (tickets-panel, packs-panel, jackpot-panel-wrapper), 281 lines CSS, main.js bootstrap update, INTEG-01 endpoint in database repo
-- D-09 patch held: beta/components/jackpot-panel.js:7 imports from ../viewer/utils.js
-- CARD_IDX = [3, 4, 5, 6, 0, 2, 1, 7] preserved verbatim in tickets-inventory.js
-- SHELL-01 guardrail remains green across all new play/ files
-- UAT deferred per precedent (52-UAT.md, chain with 50 + 51 deferrals)
-
-### Phase 51 Execution Record
-
-- 10 commits on main (473117c through 681c988) + database repo 3 commits (INTEG-02 side-quest)
-- 4 plans complete, 8/8 must-haves verified
-- Key code: play/app/quests.js (wallet-free), play/components/profile-panel.js (417 lines), play/styles/play.css (+302 lines)
-- UAT deferred per Phase 50 precedent
-
-### Phase 50 Execution Record
-
-- 12 commits on main (9ceaba3 through 2f439e7)
-- 3 plans complete, 88/88 tests green
-- 9 Custom Elements: `<player-selector>`, `<day-scrubber>`, 7 panel stubs (1 retired in Phase 52 in favor of jackpot-panel-wrapper)
-- SHELL-01 wallet-free guardrail holds across 16 files in play/
-- INTEG-01 finalized as solo-dev self-coordination (delivered in Phase 52)
-- Browser UAT deferred
+Last session: 2026-04-24 (autonomous night push)
+Stopped at: v2.4 milestone complete
+Next action: `/gsd-complete-milestone` to archive v2.4 and prepare for v2.5, OR `/gsd-new-milestone` to start planning v2.5.

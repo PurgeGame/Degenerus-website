@@ -74,7 +74,7 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
 - [x] **Phase 52: Tickets, Packs & Jackpot Reveal** - 4-trait quadrant inventory, openable pack animation (purchase + win sources), reused beta jackpot Roll widget (completed 2026-04-24; 4/4 plans; INTEG-01 shipped in database repo; 197/197 tests; UAT deferred per precedent chain)
 - [~] **Phase 53: Purchase Flow** - Sim-API ticket and lootbox purchase with inventory feedback loop into Phase 52 packs (Option B shipped 2026-04-24: PURCHASE-03 live; PURCHASE-01/02/04 deferred, gated on SIM-01 sim HTTP API build per PURCHASE-API-SPEC.md)
 - [x] **Phase 54: Coinflip & BAF Leaderboards** - Player coinflip state + leaderboards, BAF score and prominence-styled top-4 (completed 2026-04-24; 4/4 plans; INTEG-05 shipped in database repo; 288/288 tests; UAT deferred per precedent chain; INTEG-04 formally deferred per SC5)
-- [ ] **Phase 55: Decimator** - Window state, bucket/subbucket assignment, weighted burns, payouts, terminal-decimator state
+- [x] **Phase 55: Decimator** - Window state, bucket/subbucket assignment, weighted burns, payouts, terminal-decimator state (completed 2026-04-24; 4/4 plans; INTEG-03 shipped in database repo; 325/325 tests; UAT deferred per 5-phase precedent chain)
 
 ## Phase Details
 
@@ -175,10 +175,10 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
   4. User sees terminal decimator state (burns, weighted amount, time-multiplier) when the protocol enters terminal phase
   5. INTEG-03 (per-player decimator bucket/payout endpoint) is confirmed shipped before DECIMATOR-02/03/04 land
 **Plans**: 4 plans
-  - [ ] 55-01-PLAN.md -- Wave 0: INTEG-03-SPEC.md (db-repo contract, 200+ lines) + play-decimator-panel.test.js (~37 assertions with Pitfall 1 bucket-range literals + Pitfall 4 time-remaining drop + Pitfall 8 score-unit) + play-shell-01.test.js FORBIDDEN +3 (terminal-panel.js, beta/app/decimator.js, beta/app/terminal.js)
-  - [ ] 55-02-PLAN.md -- Wave 1 (pre-backend): decimator-panel.js evolved from 40-LOC stub to ~280-320 LOC hydrated panel; CONTRACT TRUTH bucketRange(level) helper (Pitfall 1: 5-12 normal / 2-12 centennial per BurnieCoin.sol:142-147, NOT 1-8); THREE subscriptions (D-08 replay.level + replay.player + replay.day); dual stale-guards; DECIMATOR-01 + DECIMATOR-03 partial + DECIMATOR-05 + D-07 live; DECIMATOR-02/04 safe-degrade stubs; play.css +150 LOC
-  - [ ] 55-03-PLAN.md -- Wave 2 (HARD-GATED on INTEG-03 database-repo delivery): surgical decimator-panel.js edit flipping #refetchLevel from Wave 1 safe-degrade stub to Wave 2 live authoritative hydration; DECIMATOR-02 + 03 full + 04 validated
-  - [ ] 55-04-PLAN.md -- Wave 3: manual UAT deferrable per Phase 50/51/52/53/54 precedent chain; 55-UAT.md enumerates 14 UAT scenarios; v2.4 TERMINAL-phase framing
+  - [x] 55-01-PLAN.md -- Wave 0: INTEG-03-SPEC.md (370 lines) + play-decimator-panel.test.js (37 assertions) + play-shell-01.test.js FORBIDDEN +3 (complete 2026-04-24)
+  - [x] 55-02-PLAN.md -- Wave 1 (pre-backend): decimator-panel.js 40 → 568 LOC with contract-truth bucketRange helper; play.css +199 LOC; DECIMATOR-01 + 03 partial + 05 + D-07 live (complete 2026-04-24)
+  - [x] 55-03-PLAN.md -- Wave 2 (INTEG-03 shipped; 3 database commits a453592/8c5d717/49d3f3a, 12/12 vitest): surgical decimator-panel.js flip from Wave 1 safe-degrade to Wave 2 live (complete 2026-04-24)
+  - [x] 55-04-PLAN.md -- Wave 3: manual UAT deferred per 5-phase precedent chain; 55-UAT.md 14 scenarios; v2.4 TERMINAL-phase framing to v2.5+ cross-panel sweep (complete 2026-04-24)
 **UI hint**: yes
 
 </details>
