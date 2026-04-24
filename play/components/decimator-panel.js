@@ -6,12 +6,11 @@
 //     GET /player/:address?day=N (live pre-Phase-55; INTEG-02 shipped Phase 51).
 //   - DECIMATOR-02 bucket + subbucket + DECIMATOR-03 full weighted amount +
 //     DECIMATOR-04 winning subbucket + payout:
-//     GET /player/:address/decimator?level=N&day=M (INTEG-03; Wave 2 live.
-//     Wave 1 fetches but tolerates non-OK (404) via safe-degrade stub --
-//     the bucket table still renders the correct range per bucketRange(level),
-//     just without aria-current highlighting. Stats row shows placeholders.
-//     Payout pill stays hidden. No code change between Wave 1 and Wave 2; the
-//     endpoint just starts returning 200.)
+//     GET /player/:address/decimator?level=N&day=M (INTEG-03 live; shipped
+//     Phase 55 Wave 2 per INTEG-03-SPEC.md). On non-OK responses the fetch
+//     falls back to safe-degrade rendering -- bucket table without
+//     aria-current, stats row placeholders, payout pill hidden -- so the
+//     panel degrades gracefully on 400/500 errors.
 //
 // Sections (top to bottom, per 55-RESEARCH.md Section 10):
 //   1. Header + window-status pill (DECIMATOR-01 / D-05) -- OPEN / CLOSED /
@@ -22,8 +21,8 @@
 //   2. Context row (D-07) -- "Activity score: X.XX" + "Level N" label.
 //      Sourced from data.scoreBreakdown.totalBps (same path profile-panel uses).
 //   3. Stats row (DECIMATOR-02/03) -- 4-cell grid: Bucket / Subbucket /
-//      Effective burn / Weighted. Values from INTEG-03 (Wave 2). Wave 1
-//      renders "--" placeholders in all four cells.
+//      Effective burn / Weighted. Values from INTEG-03. Empty state (no burn
+//      at level or INTEG-03 error) renders "--" placeholders in all four cells.
 //   4. Bucket table (DECIMATOR-02 / D-03) -- 8 or 11 rows depending on
 //      whether level is centennial. Player's row gets aria-current="true"
 //      once INTEG-03 provides the bucket. NOTE: bucket range is 5-12 normal /
@@ -237,8 +236,9 @@ class DecimatorPanel extends HTMLElement {
       const data = res.ok ? await res.json() : null;
       if (token !== this.#decimatorPlayerFetchId) return;
 
-      // DECIMATOR-01 binary open/closed badge (Wave 1). Wave 2's #refetchLevel
-      // will upgrade to the 3-state roundStatus pill via #renderRoundStatus.
+      // DECIMATOR-01 binary open/closed badge from extended-player data.
+      // #refetchLevel paints the authoritative 3-state roundStatus pill via
+      // #renderRoundStatus after this (INTEG-03 response is authoritative).
       this.#renderWindowStatus(data?.decimator?.windowOpen);
       // D-07 activity score cross-reference (Pitfall 14 null-guard).
       this.#renderActivityScore(data?.scoreBreakdown?.totalBps);
@@ -258,10 +258,12 @@ class DecimatorPanel extends HTMLElement {
   }
 
   // --- DECIMATOR-02 + DECIMATOR-03 (full) + DECIMATOR-04 fetch (INTEG-03) ---
-  // Wave 1 ships this as a safe-degrade stub: on non-OK (404 pre-Wave-2)
-  // the bucket table renders without aria-current, stats row shows placeholders,
-  // payout pill hidden. Wave 2 requires NO code change -- the endpoint simply
-  // starts returning 200.
+  // INTEG-03 live per Phase 55 Wave 2 (database feat a453592, docs 8c5d717,
+  // test 49d3f3a). On non-OK responses (400/500) falls back to safe-degrade
+  // rendering: bucket table without aria-current, stats row placeholders,
+  // payout pill hidden. The endpoint returns 200 with bucket=null when the
+  // player did not burn at the level; true errors only reach the !res.ok
+  // branch on malformed input or server failure.
 
   async #refetchLevel() {
     const addr  = get('replay.player');
@@ -279,9 +281,11 @@ class DecimatorPanel extends HTMLElement {
       if (token !== this.#decimatorLevelFetchId) return;
 
       if (!res.ok) {
-        // INTEG-03 safe-degrade stub (Wave 1 pre-backend OR Wave 2 error path):
-        // render bucket table WITHOUT aria-current, clear stats row placeholders,
-        // hide payout pill. Wave 2 on 200 response upgrades these to live data.
+        // INTEG-03 error path (400/500): fall back to safe-degrade rendering so
+        // the panel degrades gracefully. The bucket table still shows the correct
+        // range (per contract-truth bucketRange(level)) just without aria-current.
+        // Note: INTEG-03 returns 200 even when the player has no burn at this
+        // level (bucket=null case); only true errors reach this branch post-Wave-2.
         this.#renderBucketTable(level, null);
         this.#renderStatsRow(null);
         this.#renderPayout(null, level);
