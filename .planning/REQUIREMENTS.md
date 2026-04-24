@@ -9,10 +9,10 @@ Brand-new player-facing route surfacing every interactive system (purchase, tick
 
 ### ROUTE — New player surface
 
-- [ ] **ROUTE-01**: User can navigate to a new top-level player route (e.g. `/play` or `/game`), separate from `/beta` and `/beta/viewer`
-- [ ] **ROUTE-02**: User sees a player-selector dropdown on the new route to choose whose perspective to view
-- [ ] **ROUTE-03**: New route has a primary layout with clear sections for profile, tickets, purchase, coinflip, BAF, decimator, jackpot
-- [ ] **ROUTE-04**: New route loads with skeleton states for every panel and hydrates from API without wallet connection
+- [x] **ROUTE-01**: User can navigate to a new top-level player route (e.g. `/play` or `/game`), separate from `/beta` and `/beta/viewer` (Phase 50)
+- [x] **ROUTE-02**: User sees a player-selector dropdown on the new route to choose whose perspective to view (Phase 50)
+- [x] **ROUTE-03**: New route has a primary layout with clear sections for profile, tickets, purchase, coinflip, BAF, decimator, jackpot (Phase 50)
+- [x] **ROUTE-04**: New route loads with skeleton states for every panel and hydrates from API without wallet connection (Phase 50)
 
 ### PROFILE — Activity score + quests
 
@@ -71,14 +71,14 @@ Brand-new player-facing route surfacing every interactive system (purchase, tick
 
 ### DAY — Scrubber (dev now, player-facing later)
 
-- [ ] **DAY-01**: User can pick an effective day from a scrubber control on the new route
-- [ ] **DAY-02**: All panels (PROFILE, TICKETS, PACKS, COINFLIP, BAF, DECIMATOR, JACKPOT) re-render from the selected day's snapshot
-- [ ] **DAY-03**: Scrubber lists only days that have available historical data (via `/replay/rng` or equivalent)
-- [ ] **DAY-04**: Scrubber is labeled/gated as a dev tool for this milestone; design anticipates future player-facing read-only mode
+- [x] **DAY-01**: User can pick an effective day from a scrubber control on the new route (Phase 50)
+- [x] **DAY-02**: All panels (PROFILE, TICKETS, PACKS, COINFLIP, BAF, DECIMATOR, JACKPOT) re-render from the selected day's snapshot (Phase 50 — panel stubs subscribe to `state.replay.day`; real hydration in Phases 51-55)
+- [x] **DAY-03**: Scrubber lists only days that have available historical data (via `/replay/rng` or equivalent) (Phase 50)
+- [x] **DAY-04**: Scrubber is labeled/gated as a dev tool for this milestone; design anticipates future player-facing read-only mode (Phase 50)
 
 ### INTEG — Backend coordination (database repo)
 
-- [ ] **INTEG-01**: Ship or confirm `GET /player/{addr}/tickets/by-trait` endpoint for trait-grouped ticket inventory (P0 — blocks TICKETS/PACKS)
+- [~] **INTEG-01**: Ship or confirm `GET /player/{addr}/tickets/by-trait` endpoint for trait-grouped ticket inventory (P0 — blocks TICKETS/PACKS). Phase 50 kickoff complete: contract spec written (INTEG-01-SPEC.md). Delivery (endpoint implementation in database repo) gates Phase 52.
 - [ ] **INTEG-02**: Ship or confirm per-player BAF score endpoint (P1 — blocks BAF-01)
 - [ ] **INTEG-03**: Ship or confirm per-player decimator bucket/payout endpoint (P1 — blocks DECIMATOR-02/03/04)
 - [ ] **INTEG-04**: Ship or confirm coinflip recycle/history endpoint, OR document as deferred (optional — COINFLIP works without it)
@@ -114,10 +114,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ROUTE-01 | Phase 50 | Pending |
-| ROUTE-02 | Phase 50 | Pending |
-| ROUTE-03 | Phase 50 | Pending |
-| ROUTE-04 | Phase 50 | Pending |
+| ROUTE-01 | Phase 50 | Validated (2026-04-24) |
+| ROUTE-02 | Phase 50 | Validated (2026-04-24) |
+| ROUTE-03 | Phase 50 | Validated (2026-04-24) |
+| ROUTE-04 | Phase 50 | Validated (2026-04-24) |
 | PROFILE-01 | Phase 51 | Pending |
 | PROFILE-02 | Phase 51 | Pending |
 | PROFILE-03 | Phase 51 | Pending |
@@ -149,11 +149,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JACKPOT-01 | Phase 52 | Pending |
 | JACKPOT-02 | Phase 52 | Pending |
 | JACKPOT-03 | Phase 52 | Pending |
-| DAY-01 | Phase 50 | Pending |
-| DAY-02 | Phase 50 | Pending |
-| DAY-03 | Phase 50 | Pending |
-| DAY-04 | Phase 50 | Pending |
-| INTEG-01 | Phase 50 (kickoff), Phase 52 (gate) | Pending |
+| DAY-01 | Phase 50 | Validated (2026-04-24) |
+| DAY-02 | Phase 50 | Validated (2026-04-24) — panel stubs subscribe to `state.replay.day`; hydration in 51-55 |
+| DAY-03 | Phase 50 | Validated (2026-04-24) |
+| DAY-04 | Phase 50 | Validated (2026-04-24) |
+| INTEG-01 | Phase 50 (kickoff), Phase 52 (gate) | Kickoff done (2026-04-24); delivery pending |
 | INTEG-02 | Phase 54 (gate) | Pending |
 | INTEG-03 | Phase 55 (gate) | Pending |
 | INTEG-04 | Phase 54 (gate, optional) | Pending |

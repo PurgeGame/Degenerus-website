@@ -46,10 +46,11 @@ Database layer (separate repo at /home/zak/Dev/PurgeGame/database/) provides Pos
 - JACKPOT live-run against indexer, 111 discrepancies captured (v2.3 Phase 19)
 - POOLS/PLAYER/TERMINAL validators wired with coverage-gap entries and live-run gating (v2.3 Phases 20-22)
 - Consolidated validation report renderer with severity×domain cross-tab and sha256 provenance (v2.3 Phase 23)
+- New `/play/` top-level route with day-aware store, player-selector, day scrubber, and 7 skeleton panel stubs; wallet-free (SHELL-01 guardrail enforced in tests) (v2.4 Phase 50)
 
 ### Active
 
-- Brand-new player-facing route surfacing every interactive system against live sim/db (v2.4)
+- Brand-new player-facing route surfacing every interactive system against live sim/db (v2.4 — foundation shipped Phase 50; panels hydrating in 51-55)
 - Ticket inventory shown as 4-trait quadrant cards with openable packs on purchase/win/lootbox (v2.4)
 - Purchase, coinflip, BAF, decimator, activity/quests UIs hosted on the new route (v2.4)
 - Day scrubber dev tool for inspecting any historical day from the selected player's perspective (v2.4)

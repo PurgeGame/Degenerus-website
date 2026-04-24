@@ -69,7 +69,7 @@
 
 Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band commits in git history (`feat(26-XX)`, `feat(32-XX)`, `feat(37-XX)`, `feat(38-XX)`, `feat(39-XX)`, `feat(44-XX)`) from work done in another repo.
 
-- [ ] **Phase 50: Route Foundation & Day-Aware Store** - New player route shell, player-selector, day scrubber, day-aware store contract, INTEG-01 coordination kickoff
+- [x] **Phase 50: Route Foundation & Day-Aware Store** - New player route shell, player-selector, day scrubber, day-aware store contract, INTEG-01 coordination kickoff (completed 2026-04-23)
 - [ ] **Phase 51: Profile & Quests** - Activity score breakdown + quest slots/streak panels (lowest-risk validation of day-aware contract)
 - [ ] **Phase 52: Tickets, Packs & Jackpot Reveal** - 4-trait quadrant inventory, openable pack animation (purchase + win sources), reused beta jackpot Roll widget
 - [ ] **Phase 53: Purchase Flow** - Sim-API ticket and lootbox purchase with inventory feedback loop into Phase 52 packs
@@ -88,7 +88,10 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
   3. User sees a day scrubber control listing only days with available historical data; changing the day mutates a `state.effectiveDay` in the reactive store and emits a re-render signal
   4. User sees skeleton states in every section on first load and watches them hydrate from API without any wallet connection prompt
   5. INTEG-01 (`GET /player/{addr}/tickets/by-trait`) is confirmed shipped or stubbed by the database repo with a contract spec posted in this phase's notes, unblocking Phase 52
-**Plans**: TBD
+**Plans**: 3 plans (complete)
+  - [x] 50-01-wave0-tests-and-integ-spec-PLAN.md — Wave 0 test harness (4 contract-grep test files) + INTEG-01 spec doc (solo-dev self-coordination) (completed 2026-04-23)
+  - [x] 50-02-route-scaffold-PLAN.md — Wave 1 route scaffold (play/index.html + main.js + api.js + constants.js + play.css + shared/player-archetypes.json move + beta/app/store.js replay.player extension) (completed 2026-04-23)
+  - [x] 50-03-custom-elements-PLAN.md — Wave 2 Custom Elements (<player-selector>, <day-scrubber>, 7 panel stubs); UAT deferred, 88/88 automated tests green (completed 2026-04-23)
 **UI hint**: yes
 
 ### Phase 51: Profile & Quests
@@ -183,7 +186,7 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
 | 21. PLAYER Validation | v2.3 | 3/3 | Complete    | 2026-04-15 |
 | 22. TERMINAL Validation | v2.3 | 2/2 | Complete    | 2026-04-15 |
 | 23. Consolidated Validation Report | v2.3 | 1/1 | Complete    | 2026-04-15 |
-| 50. Route Foundation & Day-Aware Store | v2.4 | 0/0 | Not started | - |
+| 50. Route Foundation & Day-Aware Store | v2.4 | 3/3 | Complete | 2026-04-23 |
 | 51. Profile & Quests | v2.4 | 0/0 | Not started | - |
 | 52. Tickets, Packs & Jackpot Reveal | v2.4 | 0/0 | Not started | - |
 | 53. Purchase Flow | v2.4 | 0/0 | Not started | - |
