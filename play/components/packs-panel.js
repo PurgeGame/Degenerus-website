@@ -1,21 +1,19 @@
-// play/components/packs-panel.js -- <packs-panel> Custom Element (Phase 52 Wave 1)
+// play/components/packs-panel.js -- <packs-panel> Custom Element (PACKS-V2)
 //
-// Renders the selected player's pending + partial + lootbox-source packs
-// (D-03, D-04). Click triggers the GSAP timeline (D-05, D-07). Lootbox
-// source auto-opens on first render (D-06). Sound plays on pack open
-// (D-10) unless muted via the speaker-icon toggle; mute state persists
-// in localStorage.
+// Renders the SELECTED DAY's reveal activity for the chosen player:
+// - Lootbox section: lootboxes opened on day N (auto-revealed; traits visible)
+// - Ticket-reveal section: VRF reveals on day N grouped into 10-ticket packs
+//   (sealed; click to reveal via GSAP timeline)
 //
-// Wave 1: markup + helper imports + stale-guard field + mute toggle +
-// subscribe stubs (like tickets-panel). Wave 2 flips subscribes to
-// this.#refetch(). Pitfall 11 + Pitfall 3 guards are wired here
-// (#animatedCards, #activeTimelines).
+// Day-keyed (subscribes to replay.day + replay.player; NOT replay.level).
+// Mental model per .planning/phases/52-tickets-packs-jackpot/PACKS-V2-SPEC.md.
+// Cumulative inventory remains in tickets-panel (level-keyed via INTEG-01).
 //
 // SECURITY: innerHTML TEMPLATE is static; dynamic writes use DOM API.
 // SHELL-01: imports only from wallet-free surface.
 
 import { subscribe, get } from '../../beta/app/store.js';
-import { fetchTicketsByTrait } from '../app/tickets-fetch.js';
+import { fetchDayPacks } from '../app/day-packs-fetch.js';
 import { traitToBadge } from '../app/tickets-inventory.js';
 import { animatePackOpen } from '../app/pack-animator.js';
 import { playPackOpen, isMuted, setMuted } from '../app/pack-audio.js';
@@ -37,31 +35,34 @@ const TEMPLATE = `
         title="Toggle pack-open sound"
       >sound</button>
     </div>
-    <div class="packs-grid" data-bind="pack-grid">
-      <!-- Sealed/partial/auto-open packs render here. -->
+    <div class="packs-section packs-lootbox">
+      <h3 class="packs-section-title">Lootboxes Opened (<span data-bind="lootbox-count">0</span>)</h3>
+      <div class="lootbox-grid" data-bind="lootbox-grid"></div>
     </div>
+    <div class="packs-section packs-tickets">
+      <h3 class="packs-section-title">Ticket Reveals (<span data-bind="ticket-count">0</span>)</h3>
+      <div class="ticket-pack-grid" data-bind="ticket-pack-grid"></div>
+    </div>
+    <div class="packs-empty" data-bind="empty-state" hidden></div>
   </div>
 </section>`;
 
 class PacksPanel extends HTMLElement {
   #unsubs = [];
   #loaded = false;
-  #packsFetchId = 0;
-  #animatedCards = new Set();     // Pitfall 11: lootbox auto-open dedup
+  #dayPacksFetchId = 0;
   #activeTimelines = new Set();   // Pitfall 3: GSAP cleanup on disconnect
 
   connectedCallback() {
     this.innerHTML = TEMPLATE;
     this.#bindMuteToggle();
 
-    // PACKS-01..05 (Wave 2): flip subscribes to live #refetch(). Both
-    // panels share tickets-fetch.js which dedups wire requests at the
-    // promise level (Pitfall 5); panel-level stale-guards (#packsFetchId)
-    // cover render-level staleness.
+    // PACKS-V2: day-keyed subscriptions (NOT replay.level per
+    // PACKS-V2-SPEC.md line 176; packs-panel surfaces the SELECTED
+    // DAY's reveal activity, not level-scoped cumulative inventory).
     this.#unsubs.push(
       subscribe('replay.day', () => this.#refetch()),
       subscribe('replay.player', () => this.#refetch()),
-      subscribe('replay.level', () => this.#refetch()),
     );
 
     // Kick an initial fetch in case the store already has values.
@@ -69,7 +70,6 @@ class PacksPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
-    // Pitfall 3: kill any in-flight timelines to free GSAP tween storage.
     this.#activeTimelines.forEach((tl) => {
       try { tl.kill(); } catch {}
     });
@@ -103,150 +103,230 @@ class PacksPanel extends HTMLElement {
     if (el) el.hidden = false;
   }
 
-  #renderPacks(cards) {
-    const grid = this.querySelector('[data-bind="pack-grid"]');
-    if (!grid) return;
-
-    const packs = Array.isArray(cards) ? cards.filter((c) => c && c.status !== 'opened') : [];
-
-    while (grid.firstChild) grid.removeChild(grid.firstChild);
-
-    if (packs.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'packs-empty';
-      empty.textContent = 'No packs waiting to open.';
-      grid.appendChild(empty);
-      return;
-    }
-
-    // Render-cap: a player with thousands of unrevealed-pending entries
-    // (level rolled forward without VRF firing) can produce 1000+ pack nodes,
-    // each just an empty placeholder. Cap visible packs and summarize the rest.
-    const RENDER_CAP = 50;
-    const visible = packs.slice(0, RENDER_CAP);
-    const overflow = packs.length - visible.length;
-
-    for (const card of visible) {
-      grid.appendChild(this.#buildPackNode(card));
-    }
-
-    if (overflow > 0) {
-      const more = document.createElement('div');
-      more.className = 'packs-truncated';
-      more.textContent = `+ ${overflow} more unrevealed packs (level rolled forward without reveal)`;
-      grid.appendChild(more);
-    }
-
-    // PACKS-04: auto-open lootbox-sourced packs on first-appearance render.
-    grid.querySelectorAll('.pack-source-lootbox').forEach((packEl) => {
-      const key = packEl.getAttribute('data-card-index');
-      if (!key) return;
-      if (this.#animatedCards.has(key)) return;
-      this.#animatedCards.add(key);
-      this.#openPack(packEl);
-    });
+  #setText(bind, text) {
+    const el = this.querySelector(`[data-bind="${bind}"]`);
+    if (el) el.textContent = String(text);
   }
 
-  #buildPackNode(card) {
+  // --- Render: lootbox section --------------------------------------------
+
+  #renderLootboxes(packs) {
+    const grid = this.querySelector('[data-bind="lootbox-grid"]');
+    if (!grid) return;
+    while (grid.firstChild) grid.removeChild(grid.firstChild);
+    const list = Array.isArray(packs) ? packs : [];
+    this.#setText('lootbox-count', list.length);
+    for (const pack of list) {
+      grid.appendChild(this.#buildLootboxTile(pack));
+    }
+  }
+
+  #buildLootboxTile(pack) {
+    const tile = document.createElement('div');
+    tile.className = 'lootbox-tile pack-source-lootbox';
+    tile.setAttribute('data-pack-id', String(pack.packId ?? ''));
+
+    const header = document.createElement('div');
+    header.className = 'tile-header';
+    const eth = String(pack.ethSpent ?? '0');
+    const burnie = String(pack.burnieSpent ?? '0');
+    if (eth !== '0') {
+      header.textContent = `Lootbox · ${this.#formatEth(eth)} ETH`;
+    } else if (burnie !== '0') {
+      header.textContent = `Lootbox · ${this.#formatBurnieAmount(burnie)} BURNIE`;
+    } else {
+      header.textContent = `Lootbox · #${pack.lootboxIndex ?? '?'}`;
+    }
+    tile.appendChild(header);
+
+    const ticketsGrid = document.createElement('div');
+    ticketsGrid.className = 'tile-tickets';
+    const tickets = Array.isArray(pack.tickets) ? pack.tickets : [];
+    for (const t of tickets) {
+      ticketsGrid.appendChild(this.#buildTicketCard(t));
+    }
+    tile.appendChild(ticketsGrid);
+
+    return tile;
+  }
+
+  // --- Render: ticket-reveal section --------------------------------------
+
+  #renderTicketRevealPacks(packs, day) {
+    const grid = this.querySelector('[data-bind="ticket-pack-grid"]');
+    if (!grid) return;
+    while (grid.firstChild) grid.removeChild(grid.firstChild);
+    const list = Array.isArray(packs) ? packs : [];
+    this.#setText('ticket-count', list.length);
+    for (const pack of list) {
+      grid.appendChild(this.#buildTicketRevealPack(pack));
+    }
+  }
+
+  #buildTicketRevealPack(pack) {
     const packEl = document.createElement('div');
-    // PACKS-01/02/04 source class: 'purchase' -> .pack-source-purchase (neutral tint),
-    // 'jackpot-win' -> .pack-source-jackpot-win (gold tint, winning card from daily draw),
-    // 'lootbox' -> .pack-source-lootbox (purple tint, auto-open on render per D-06).
-    // Defaults to source === 'purchase' when the response omits the field.
-    const source = card.source || 'purchase';
-    packEl.className = `pack-sealed pack-source-${source}`;
-    packEl.setAttribute('data-card-index', String(card.cardIndex));
+    packEl.className = 'ticket-pack sealed pack-source-ticket-reveal';
+    packEl.setAttribute('data-pack-id', String(pack.packId ?? ''));
     packEl.setAttribute('role', 'button');
     packEl.setAttribute('tabindex', '0');
 
-    // Wrapper the GSAP Phase 3 targets (scaled + faded on open).
     const wrapper = document.createElement('div');
     wrapper.className = 'pack-wrapper';
+    const label = document.createElement('span');
+    label.className = 'pack-label';
+    label.textContent = `${pack.ticketCount ?? 0} tickets`;
+    wrapper.appendChild(label);
     packEl.appendChild(wrapper);
 
-    // Peeked trait placeholders for partial/pending cards (D-03 partial).
-    const entries = Array.isArray(card.entries) ? card.entries : [];
-    for (let i = 0; i < 4; i++) {
-      const quadrant = document.createElement('div');
-      quadrant.className = 'pack-trait';
-      const entry = entries[i];
-      const badge = entry ? traitToBadge(entry.traitId) : null;
-      if (badge) {
-        const img = document.createElement('img');
-        img.className = 'trait-badge';
-        img.loading = 'lazy';
-        img.src = badge.path;
-        const label = (entry && entry.traitLabel) ? String(entry.traitLabel) : '';
-        img.alt = label;
-        if (label) img.title = label;
-        quadrant.appendChild(img);
-      }
-      wrapper.appendChild(quadrant);
-    }
-
-    const pill = document.createElement('span');
-    pill.className = `card-source-pill card-source-${source}`;
-    pill.textContent = source;
-    packEl.appendChild(pill);
-
-    // PACKS-03: click handler (and keyboard Enter/Space for a11y).
-    packEl.addEventListener('click', () => this.#openPack(packEl));
+    // PACKS-V2 (D-05 user-click reveal): click runs GSAP timeline + reveals
+    // all tickets staggered. Lootbox tiles auto-reveal; ticket-reveal packs
+    // require user click per PACKS-V2-SPEC.md line 199.
+    const open = () => this.#openTicketRevealPack(packEl, pack);
+    packEl.addEventListener('click', open);
     packEl.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter' || ev.key === ' ') {
         ev.preventDefault();
-        this.#openPack(packEl);
+        open();
       }
     });
 
     return packEl;
   }
 
-  #openPack(packEl) {
-    // Fire-and-forget audio per D-10 (fail-silent in the helper).
+  #openTicketRevealPack(packEl, pack) {
+    if (packEl.classList.contains('opened')) return;
     try { playPackOpen(); } catch {}
+
+    // Replace sealed wrapper content with a 10-ticket-card grid (or fewer
+    // for trailing partial packs).
+    const tickets = Array.isArray(pack.tickets) ? pack.tickets : [];
+    const wrapper = packEl.querySelector('.pack-wrapper');
+    if (wrapper) {
+      while (wrapper.firstChild) wrapper.removeChild(wrapper.firstChild);
+      tickets.forEach((t, i) => {
+        const card = this.#buildTicketCard(t);
+        // 30ms stagger per ticket per PACKS-V2-SPEC.md line 207.
+        card.style.setProperty('--ticket-reveal-stagger-delay', `${i * 30}ms`);
+        wrapper.appendChild(card);
+      });
+    }
+    packEl.classList.remove('sealed');
+    packEl.classList.add('opened');
+
     const tl = animatePackOpen(packEl, () => this.#activeTimelines.delete(tl));
     if (tl) this.#activeTimelines.add(tl);
   }
 
-  #renderError(status) {
-    const grid = this.querySelector('[data-bind="pack-grid"]');
-    if (!grid) return;
-    while (grid.firstChild) grid.removeChild(grid.firstChild);
-    const msg = document.createElement('div');
-    msg.className = 'packs-empty';
-    msg.textContent = status === 404 ? 'No pack data for this day.' : 'Error loading packs.';
-    grid.appendChild(msg);
+  // --- Render: shared ticket-card builder ---------------------------------
+
+  #buildTicketCard(ticket) {
+    const card = document.createElement('div');
+    card.className = 'ticket-card';
+    const traits = Array.isArray(ticket?.traits) ? ticket.traits : [];
+    for (let i = 0; i < 4; i++) {
+      const quad = document.createElement('div');
+      quad.className = 'trait-quadrant';
+      const traitId = traits[i];
+      const badge = traitId != null ? traitToBadge(traitId) : null;
+      if (badge) {
+        const img = document.createElement('img');
+        img.className = 'trait-badge';
+        img.loading = 'lazy';
+        img.src = badge.path;
+        const label = badge.label || '';
+        img.alt = label;
+        if (label) img.title = label;
+        quad.appendChild(img);
+      }
+      card.appendChild(quad);
+    }
+    return card;
   }
 
-  // --- Fetch wiring (Wave 1 defines; Wave 2 flips subscribes) --------------
+  // --- Render: empty-day state --------------------------------------------
+
+  #renderEmptyState(day, lootboxCount, ticketRevealCount) {
+    const empty = this.querySelector('[data-bind="empty-state"]');
+    if (!empty) return;
+    if (lootboxCount === 0 && ticketRevealCount === 0) {
+      empty.textContent = `No packs revealed on day ${day ?? '?'}`;
+      empty.hidden = false;
+    } else {
+      empty.textContent = '';
+      empty.hidden = true;
+    }
+  }
+
+  #renderError(status) {
+    const empty = this.querySelector('[data-bind="empty-state"]');
+    if (!empty) return;
+    empty.textContent = status === 404 ? 'No packs revealed on day not found.' : 'Error loading packs.';
+    empty.hidden = false;
+    // Clear sections so they don't show stale data
+    const lootboxGrid = this.querySelector('[data-bind="lootbox-grid"]');
+    const ticketGrid = this.querySelector('[data-bind="ticket-pack-grid"]');
+    if (lootboxGrid) while (lootboxGrid.firstChild) lootboxGrid.removeChild(lootboxGrid.firstChild);
+    if (ticketGrid) while (ticketGrid.firstChild) ticketGrid.removeChild(ticketGrid.firstChild);
+    this.#setText('lootbox-count', 0);
+    this.#setText('ticket-count', 0);
+  }
+
+  // --- Number formatting helpers (wallet-free; mirrors beta/viewer/utils) -
+
+  #formatEth(weiStr) {
+    try {
+      const wei = BigInt(weiStr);
+      const eth = Number(wei) / 1e18;
+      return eth.toFixed(eth < 0.01 ? 4 : 2);
+    } catch {
+      return '0';
+    }
+  }
+
+  #formatBurnieAmount(weiStr) {
+    try {
+      const wei = BigInt(weiStr);
+      const burnie = Number(wei) / 1e18;
+      return burnie.toFixed(burnie < 0.01 ? 4 : 2);
+    } catch {
+      return '0';
+    }
+  }
+
+  // --- Fetch wiring -------------------------------------------------------
 
   async #refetch() {
     const addr = get('replay.player');
-    const level = get('replay.level');
     const day = get('replay.day');
-    const token = ++this.#packsFetchId;
+    const token = ++this.#dayPacksFetchId;
 
-    if (!addr || level == null || day == null) return;
+    if (!addr || day == null) return;
 
     if (this.#loaded) {
       this.querySelector('[data-bind="content"]')?.classList.add('is-stale');
     }
 
     try {
-      const data = await fetchTicketsByTrait(addr, level, day);
-      if (token !== this.#packsFetchId) return;
+      const data = await fetchDayPacks(addr, day);
+      if (token !== this.#dayPacksFetchId) return;
       if (!data) {
         this.#renderError(404);
         this.#showContent();
         this.querySelector('[data-bind="content"]')?.classList.remove('is-stale');
         return;
       }
-      if (token !== this.#packsFetchId) return;
-      this.#renderPacks(data.cards);
+      if (token !== this.#dayPacksFetchId) return;
+
+      const lootboxPacks = Array.isArray(data.lootboxPacks) ? data.lootboxPacks : [];
+      const ticketRevealPacks = Array.isArray(data.ticketRevealPacks) ? data.ticketRevealPacks : [];
+
+      this.#renderLootboxes(lootboxPacks);
+      this.#renderTicketRevealPacks(ticketRevealPacks, day);
+      this.#renderEmptyState(day, lootboxPacks.length, ticketRevealPacks.length);
       this.#showContent();
       this.querySelector('[data-bind="content"]')?.classList.remove('is-stale');
     } catch (err) {
-      if (token === this.#packsFetchId) {
+      if (token === this.#dayPacksFetchId) {
         this.#renderError(0);
         this.#showContent();
         this.querySelector('[data-bind="content"]')?.classList.remove('is-stale');
@@ -256,3 +336,5 @@ class PacksPanel extends HTMLElement {
 }
 
 customElements.define('packs-panel', PacksPanel);
+</content>
+</invoke>
