@@ -7,6 +7,7 @@
 
 import { update, subscribe, get } from '../../beta/app/store.js';
 import { fetchJSON } from './api.js';
+import { API_BASE } from './constants.js';
 
 // ---------------------------------------------------------------------------
 // Component registration (side-effect imports -- each file calls
@@ -107,6 +108,29 @@ async function boot() {
   } catch (err) {
     console.warn('[play] day-scrubber not available:', err.message);
   }
+
+  // Phase 52 Pitfall 2 guard: populate state.replay.level so <tickets-panel>
+  // and <packs-panel> can fetch INTEG-01, and <jackpot-panel-wrapper> can
+  // shim game.level. Derived from /game/jackpot/day/{day}/winners; falls
+  // back to arithmetic estimate if the endpoint 404s (uniform 5-day levels;
+  // not robust to compressed terminal mode -- acceptable stopgap).
+  async function updateLevelForDay(day) {
+    if (day == null) return;
+    try {
+      const resp = await fetch(`${API_BASE}/game/jackpot/day/${day}/winners`);
+      if (resp.ok) {
+        const payload = await resp.json();
+        if (payload && typeof payload.level === 'number') {
+          update('replay.level', payload.level);
+          return;
+        }
+      }
+    } catch { /* fall through to estimate */ }
+    update('replay.level', Math.max(1, Math.ceil(day / 5)));
+  }
+
+  subscribe('replay.day', (day) => updateLevelForDay(day));
+  updateLevelForDay(get('replay.day'));
 
   // 5. Subscribe to log writes to the store for dev visibility (optional;
   //    panels do their own subscriptions in Plan 03).

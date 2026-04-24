@@ -45,20 +45,18 @@ class TicketsPanel extends HTMLElement {
   connectedCallback() {
     this.innerHTML = TEMPLATE;
 
-    // Wave 1: subscribe calls exist (test greps for the literals). The
-    // callback bodies remain console.log stubs; Wave 2 replaces them
-    // with this.#refetch() once INTEG-01 ships.
+    // TICKETS-01..04 (Wave 2): flip subscribes to live #refetch(). Each
+    // callback ignores its payload; #refetch() reads fresh (player, level,
+    // day) from the store each call so the latest values always win.
+    // Three subscribe calls satisfy the Wave 0 test greps on each path.
     this.#unsubs.push(
-      subscribe('replay.day', (day) => {
-        console.log('[tickets-panel] replay.day =', day);
-      }),
-      subscribe('replay.player', (addr) => {
-        console.log('[tickets-panel] replay.player =', addr);
-      }),
-      subscribe('replay.level', (level) => {
-        console.log('[tickets-panel] replay.level =', level);
-      }),
+      subscribe('replay.day', () => this.#refetch()),
+      subscribe('replay.player', () => this.#refetch()),
+      subscribe('replay.level', () => this.#refetch()),
     );
+
+    // Kick an initial fetch in case the store already has values.
+    this.#refetch();
   }
 
   disconnectedCallback() {

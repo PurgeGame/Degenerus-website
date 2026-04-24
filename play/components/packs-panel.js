@@ -54,19 +54,18 @@ class PacksPanel extends HTMLElement {
     this.innerHTML = TEMPLATE;
     this.#bindMuteToggle();
 
-    // Wave 1: subscribe calls exist; callback bodies are console.log.
-    // Wave 2 flips to this.#refetch() and adds the initial refetch.
+    // PACKS-01..05 (Wave 2): flip subscribes to live #refetch(). Both
+    // panels share tickets-fetch.js which dedups wire requests at the
+    // promise level (Pitfall 5); panel-level stale-guards (#packsFetchId)
+    // cover render-level staleness.
     this.#unsubs.push(
-      subscribe('replay.day', (day) => {
-        console.log('[packs-panel] replay.day =', day);
-      }),
-      subscribe('replay.player', (addr) => {
-        console.log('[packs-panel] replay.player =', addr);
-      }),
-      subscribe('replay.level', (level) => {
-        console.log('[packs-panel] replay.level =', level);
-      }),
+      subscribe('replay.day', () => this.#refetch()),
+      subscribe('replay.player', () => this.#refetch()),
+      subscribe('replay.level', () => this.#refetch()),
     );
+
+    // Kick an initial fetch in case the store already has values.
+    this.#refetch();
   }
 
   disconnectedCallback() {
