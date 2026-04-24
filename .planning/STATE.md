@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.4
 milestone_name: Player UI
-status: planned
-stopped_at: Phase 52 complete (4/4 plans, INTEG-01 shipped, UAT deferred); ready for Phase 53 discuss-phase
-last_updated: "2026-04-24T05:10:00.000Z"
+status: partial
+stopped_at: Phase 53 Option B shipped (PURCHASE-03 live, PURCHASE-01/02/04 deferred with SIM-01 spec); ready for Phase 54 discuss-phase
+last_updated: "2026-04-24T05:40:00.000Z"
 last_activity: 2026-04-24
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 15
-  completed_plans: 11
-  percent: 55
+  total_plans: 16
+  completed_plans: 12
+  percent: 64
 ---
 
 # Project State
@@ -21,24 +21,25 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** v2.4 Player UI — Phase 53: Purchase Flow (next)
+**Current focus:** v2.4 Player UI — Phase 54: Coinflip & BAF Leaderboards (next)
 
 ## Current Position
 
-Phase: 53 — Purchase Flow (NOT STARTED)
+Phase: 54 — Coinflip & BAF Leaderboards (NOT STARTED)
 Plan: 0/? (discuss-phase not yet run)
-Status: Phase 52 complete. 197/197 play/ tests green, 5/5 must-haves verified, UAT deferred (cumulative with Phase 50+51 precedent).
-Last activity: 2026-04-24 — Phase 52 shipped end-to-end. 4 waves, 4 plans, 9 website commits + 3 database commits (INTEG-01 side-quest). Wave 0: 4 new test files + D-09 beta/jackpot-panel.js import patch + INTEG-01-SPEC.md copy-forward. Wave 1: 4 wallet-free helpers (tickets-inventory, tickets-fetch, pack-animator, pack-audio) + 3 Custom Elements (tickets-panel, packs-panel, jackpot-panel-wrapper) + 281 lines CSS + Phase 50 jackpot-panel stub retirement. INTEG-01 side-quest: 3 atomic commits in database repo (a46fdcb feat, e130547 docs, 9988887 test), 10/10 vitest pass. Wave 2: flipped panel subscribe callbacks to live #refetch() + added state.replay.level bootstrap in main.js (Pitfall 2 fix). Wave 3: UAT deferred per precedent.
+Status: Phase 53 Option B shipped (PURCHASE-03 live, PURCHASE-01/02/04 deferred with SIM-01 HTTP API spec). 230/230 play/ tests green.
+Last activity: 2026-04-24 — Phase 53 shipped Option B in a single wave. 6 commits. PURCHASE-API-SPEC.md (213 lines) authored for sim HTTP endpoint. purchase-panel.js evolved from 40-line stub to 221-line functional element with tab UI, live PURCHASE-03 display (price/level/cycle/total-cost from game store), gated PURCHASE-01/02 buttons (data-gate="sim-api" + aria-disabled + tooltip linking to spec), and plumbing for PURCHASE-04 via existing Phase 52 stale-guard. REQUIREMENTS.md updated: PURCHASE-03 validated, PURCHASE-01/02/04 marked deferred, new SIM-01 requirement added tracking the sim HTTP API build. 33 new Nyquist assertions, SHELL-01 guardrail still green.
 
 ## Performance Metrics
 
 | Metric | Value |
 |--------|-------|
 | Phases planned | 6 (50-55) |
-| Phases complete | 3 (Phase 50, 51, 52) |
-| Plans complete | 11 / 15 (Phase 50: 3, Phase 51: 4, Phase 52: 4; Phases 53-55 not yet planned) |
-| Requirements covered | 42 / 42 |
-| Requirements validated | 27 / 42 (ROUTE-01..04, DAY-01..04, INTEG-01, PROFILE-01..05, INTEG-02, TICKETS-01..04, PACKS-01..05, JACKPOT-01..03) |
+| Phases complete | 3 full (50, 51, 52); 1 partial (53 Option B) |
+| Plans complete | 12 / 16 (50: 3, 51: 4, 52: 4, 53: 1; 54-55 not yet planned; SIM-01 deferred to post-v2.4) |
+| Requirements covered | 43 / 43 (SIM-01 added) |
+| Requirements validated | 28 / 43 (ROUTE-01..04, DAY-01..04, INTEG-01, PROFILE-01..05, INTEG-02, TICKETS-01..04, PACKS-01..05, JACKPOT-01..03, PURCHASE-03) |
+| Requirements deferred | 4 (PURCHASE-01/02/04 + SIM-01) |
 | Coverage % | 100% |
 
 ## Accumulated Context

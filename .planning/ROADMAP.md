@@ -72,7 +72,7 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
 - [x] **Phase 50: Route Foundation & Day-Aware Store** - New player route shell, player-selector, day scrubber, day-aware store contract, INTEG-01 coordination kickoff (completed 2026-04-23)
 - [x] **Phase 51: Profile & Quests** - Activity score breakdown + quest slots/streak panels + daily activity counts (completed 2026-04-24; 4/4 plans; INTEG-02 shipped in database repo; 112/112 tests; UAT deferred per Phase 50 precedent)
 - [x] **Phase 52: Tickets, Packs & Jackpot Reveal** - 4-trait quadrant inventory, openable pack animation (purchase + win sources), reused beta jackpot Roll widget (completed 2026-04-24; 4/4 plans; INTEG-01 shipped in database repo; 197/197 tests; UAT deferred per precedent chain)
-- [ ] **Phase 53: Purchase Flow** - Sim-API ticket and lootbox purchase with inventory feedback loop into Phase 52 packs
+- [~] **Phase 53: Purchase Flow** - Sim-API ticket and lootbox purchase with inventory feedback loop into Phase 52 packs (Option B shipped 2026-04-24: PURCHASE-03 live; PURCHASE-01/02/04 deferred, gated on SIM-01 sim HTTP API build per PURCHASE-API-SPEC.md)
 - [ ] **Phase 54: Coinflip & BAF Leaderboards** - Player coinflip state + leaderboards, BAF score and prominence-styled top-4
 - [ ] **Phase 55: Decimator** - Window state, bucket/subbucket assignment, weighted burns, payouts, terminal-decimator state
 
@@ -138,7 +138,13 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
   2. User can click a Buy Lootbox control and trigger a sim-API lootbox purchase for the selected player
   3. User sees the current ticket price, active level/cycle, and computed total cost for the chosen quantity before confirming
   4. After a successful purchase, a new pack appears in the inventory panel and the selected player's deposit-related fields update in the store within one render cycle
-**Plans**: TBD
+**Plans**: 1 plan (Option B — narrowed scope per 53-SCOPE-ASSESSMENT.md)
+  - [x] 53-01-PLAN.md — Option B: PURCHASE-API-SPEC.md authored (213 lines, SIM-01 contract for sim HTTP endpoints), REQUIREMENTS.md updated (PURCHASE-03 live, PURCHASE-01/02/04 deferred), purchase-panel.js evolved from stub to functional element with tabs + live PURCHASE-03 display + gated PURCHASE-01/02 buttons, CSS, 33 new Nyquist assertions (complete 2026-04-24)
+**Implementation status** (Option B):
+  1. DEFERRED — gated on SIM-01 (sim HTTP API ship)
+  2. DEFERRED — gated on SIM-01
+  3. LIVE — PURCHASE-03 ships price/level/cycle/total-cost display from existing game store
+  4. DEFERRED plumbing — Phase 52 packs-panel auto-refreshes on new inventory via existing stale-guard; no additional wiring needed
 **UI hint**: yes
 
 ### Phase 54: Coinflip & BAF Leaderboards
