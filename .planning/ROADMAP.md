@@ -70,7 +70,7 @@
 Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band commits in git history (`feat(26-XX)`, `feat(32-XX)`, `feat(37-XX)`, `feat(38-XX)`, `feat(39-XX)`, `feat(44-XX)`) from work done in another repo.
 
 - [x] **Phase 50: Route Foundation & Day-Aware Store** - New player route shell, player-selector, day scrubber, day-aware store contract, INTEG-01 coordination kickoff (completed 2026-04-23)
-- [ ] **Phase 51: Profile & Quests** - Activity score breakdown + quest slots/streak panels + daily activity counts (lowest-risk validation of day-aware contract; INTEG-02 hard-gated)
+- [x] **Phase 51: Profile & Quests** - Activity score breakdown + quest slots/streak panels + daily activity counts (completed 2026-04-24; 4/4 plans; INTEG-02 shipped in database repo; 112/112 tests; UAT deferred per Phase 50 precedent)
 - [ ] **Phase 52: Tickets, Packs & Jackpot Reveal** - 4-trait quadrant inventory, openable pack animation (purchase + win sources), reused beta jackpot Roll widget
 - [ ] **Phase 53: Purchase Flow** - Sim-API ticket and lootbox purchase with inventory feedback loop into Phase 52 packs
 - [ ] **Phase 54: Coinflip & BAF Leaderboards** - Player coinflip state + leaderboards, BAF score and prominence-styled top-4
