@@ -1,0 +1,68 @@
+/* play.css -- layout for the /play/ route
+   Reuses beta/styles/base.css tokens. Only owns grid + dev-tool wrapper + play-controls. */
+
+.play-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.play-controls > player-selector {
+  display: block;
+  width: 100%;
+}
+
+/* Dev-tool wrapper for DAY-04 -- makes the scrubber visually secondary and labels it. */
+.dev-tool {
+  border: 1px dashed var(--border-subtle, #2a2a3e);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dev-tool__label {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #888);
+  margin-bottom: 0.5rem;
+}
+
+.play-dev-scrubber {
+  display: block;
+}
+
+.play-dev-scrubber > day-scrubber {
+  display: block;
+}
+
+/* Panel grid: 2 columns on medium, single column on narrow. Profile gets top-left.
+   Each <*-panel> Custom Element is block-level and fills its grid cell. */
+.play-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.play-grid > * {
+  display: block;
+  min-height: 160px;
+}
+
+/* Narrow screens: always single column. */
+@media (max-width: 720px) {
+  .play-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Footer spacing (small adjustment; most styling from base.css) */
+body > .container > footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle, #2a2a3e);
+  color: var(--text-muted, #888);
+  font-size: 0.85rem;
+}

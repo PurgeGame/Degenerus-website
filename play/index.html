@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Degenerus Play</title>
+  <link rel="stylesheet" href="/shared/nav.css">
+  <link rel="stylesheet" href="/beta/styles/base.css">
+  <link rel="stylesheet" href="/beta/styles/panels.css">
+  <link rel="stylesheet" href="/beta/styles/buttons.css">
+  <link rel="stylesheet" href="/beta/styles/skeleton.css">
+  <link rel="stylesheet" href="/beta/styles/viewer.css">
+  <link rel="stylesheet" href="/play/styles/play.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "gsap": "https://esm.sh/gsap@3.14",
+      "gsap/Flip": "https://esm.sh/gsap@3.14/Flip",
+      "gsap/TextPlugin": "https://esm.sh/gsap@3.14/TextPlugin",
+      "canvas-confetti": "https://esm.sh/canvas-confetti@1.9"
+    }
+  }
+  </script>
+  <!-- SHELL-01: importmap intentionally omits the ethers specifier. The play/ tree is wallet-free. -->
+</head>
+<body>
+  <div class="container">
+    <!-- Nav injected by shared/nav.js -->
+
+    <header class="page-header">
+      <img class="page-header-logo" src="/badges-circular/flame_red.svg" alt="Degenerus">
+      <h1>DEGENERUS PLAY</h1>
+      <p class="subtitle">Player view. Pick a player and a day.</p>
+    </header>
+
+    <!-- Controls: player-selector + day scrubber (scrubber is dev-tool gated per DAY-04) -->
+    <div class="panel play-controls">
+      <player-selector></player-selector>
+      <div class="dev-tool play-dev-scrubber" aria-label="Developer tools">
+        <div class="dev-tool__label">Developer: day scrubber</div>
+        <day-scrubber></day-scrubber>
+        <!-- Skeleton shimmer placeholder visible until createScrubber injects real DOM -->
+        <div class="skeleton-line skeleton-shimmer" style="width:100%;height:0.6rem;margin-top:0.5rem"></div>
+      </div>
+    </div>
+
+    <!-- Panel grid. Each slot is a Custom Element delivered in Plan 03. -->
+    <div class="play-grid">
+      <profile-panel data-slot="profile"></profile-panel>
+      <tickets-panel data-slot="tickets"></tickets-panel>
+      <purchase-panel data-slot="purchase"></purchase-panel>
+      <coinflip-panel data-slot="coinflip"></coinflip-panel>
+      <baf-panel data-slot="baf"></baf-panel>
+      <decimator-panel data-slot="decimator"></decimator-panel>
+      <jackpot-panel data-slot="jackpot"></jackpot-panel>
+      <!-- Each <*-panel> Custom Element renders its own skeleton with class skeleton-shimmer on connectedCallback -->
+    </div>
+
+    <footer>
+      <p>Degenerus Protocol -- Play</p>
+    </footer>
+  </div>
+
+  <script src="/shared/nav.js"></script>
+  <script>
+    initNav({
+      currentPage: 'play',
+      pages: [
+        { key: 'play',        label: 'Play',        href: '/play/' },
+        { key: 'beta',        label: 'Beta',        href: '/beta/' },
+        { key: 'degenerette', label: 'Degenerette', href: '/degenerette/' },
+        { key: 'whitepaper',  label: 'Whitepaper',  href: '/whitepaper/' },
+        { key: 'theory',      label: 'Game Theory', href: '/theory/' },
+        { key: 'viewer',      label: 'Viewer',      href: '/beta/viewer.html' }
+      ]
+    });
+  </script>
+  <script type="module" src="/play/app/main.js"></script>
+</body>
+</html>
