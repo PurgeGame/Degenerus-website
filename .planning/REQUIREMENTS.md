@@ -114,23 +114,67 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ROUTE-01..04 | TBD | Pending |
-| PROFILE-01..04 | TBD | Pending |
-| TICKETS-01..04 | TBD | Pending |
-| PACKS-01..05 | TBD | Pending |
-| PURCHASE-01..04 | TBD | Pending |
-| COINFLIP-01..03 | TBD | Pending |
-| BAF-01..03 | TBD | Pending |
-| DECIMATOR-01..05 | TBD | Pending |
-| JACKPOT-01..03 | TBD | Pending |
-| DAY-01..04 | TBD | Pending |
-| INTEG-01..04 | TBD | Pending |
+| ROUTE-01 | Phase 50 | Pending |
+| ROUTE-02 | Phase 50 | Pending |
+| ROUTE-03 | Phase 50 | Pending |
+| ROUTE-04 | Phase 50 | Pending |
+| PROFILE-01 | Phase 51 | Pending |
+| PROFILE-02 | Phase 51 | Pending |
+| PROFILE-03 | Phase 51 | Pending |
+| PROFILE-04 | Phase 51 | Pending |
+| TICKETS-01 | Phase 52 | Pending |
+| TICKETS-02 | Phase 52 | Pending |
+| TICKETS-03 | Phase 52 | Pending |
+| TICKETS-04 | Phase 52 | Pending |
+| PACKS-01 | Phase 52 | Pending |
+| PACKS-02 | Phase 52 | Pending |
+| PACKS-03 | Phase 52 | Pending |
+| PACKS-04 | Phase 52 | Pending |
+| PACKS-05 | Phase 52 | Pending |
+| PURCHASE-01 | Phase 53 | Pending |
+| PURCHASE-02 | Phase 53 | Pending |
+| PURCHASE-03 | Phase 53 | Pending |
+| PURCHASE-04 | Phase 53 | Pending |
+| COINFLIP-01 | Phase 54 | Pending |
+| COINFLIP-02 | Phase 54 | Pending |
+| COINFLIP-03 | Phase 54 | Pending |
+| BAF-01 | Phase 54 | Pending |
+| BAF-02 | Phase 54 | Pending |
+| BAF-03 | Phase 54 | Pending |
+| DECIMATOR-01 | Phase 55 | Pending |
+| DECIMATOR-02 | Phase 55 | Pending |
+| DECIMATOR-03 | Phase 55 | Pending |
+| DECIMATOR-04 | Phase 55 | Pending |
+| DECIMATOR-05 | Phase 55 | Pending |
+| JACKPOT-01 | Phase 52 | Pending |
+| JACKPOT-02 | Phase 52 | Pending |
+| JACKPOT-03 | Phase 52 | Pending |
+| DAY-01 | Phase 50 | Pending |
+| DAY-02 | Phase 50 | Pending |
+| DAY-03 | Phase 50 | Pending |
+| DAY-04 | Phase 50 | Pending |
+| INTEG-01 | Phase 50 (kickoff), Phase 52 (gate) | Pending |
+| INTEG-02 | Phase 54 (gate) | Pending |
+| INTEG-03 | Phase 55 (gate) | Pending |
+| INTEG-04 | Phase 54 (gate, optional) | Pending |
 
 **Coverage:**
 - v2.4 requirements: 40 total
-- Mapped to phases: 0 (pre-roadmap)
-- Unmapped: 40
+- Mapped to phases: 40
+- Unmapped: 0
+
+**Per-phase counts:**
+- Phase 50 (Route Foundation & Day-Aware Store): 9 requirements (ROUTE-01..04, DAY-01..04, INTEG-01)
+- Phase 51 (Profile & Quests): 4 requirements (PROFILE-01..04)
+- Phase 52 (Tickets, Packs & Jackpot Reveal): 12 requirements (TICKETS-01..04, PACKS-01..05, JACKPOT-01..03)
+- Phase 53 (Purchase Flow): 4 requirements (PURCHASE-01..04)
+- Phase 54 (Coinflip & BAF Leaderboards): 8 requirements (COINFLIP-01..03, BAF-01..03, INTEG-02, INTEG-04)
+- Phase 55 (Decimator): 6 requirements (DECIMATOR-01..05, INTEG-03)
+
+INTEG-01 appears in two phases by design: Phase 50 owns the coordination kickoff (post the endpoint contract spec, ping database repo); Phase 52 gates on confirmed delivery before TICKETS/PACKS code lands.
+
+Phase numbering jumps from 23 → 50 to avoid collision with out-of-band commits in git history (`feat(26-XX)`, `feat(32-XX)`, `feat(37-XX)`, `feat(38-XX)`, `feat(39-XX)`, `feat(44-XX)`) from work done in another repo.
 
 ---
 *Requirements defined: 2026-04-23*
-*Last updated: 2026-04-23 — initial definition for v2.4 Player UI*
+*Last updated: 2026-04-23 — traceability filled in for v2.4 roadmap (Phases 50-55)*
