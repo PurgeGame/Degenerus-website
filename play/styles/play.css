@@ -518,6 +518,9 @@ body > .container > footer {
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 0.75rem;
   min-height: 140px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
 }
 
 .packs-panel .packs-empty {
@@ -526,6 +529,16 @@ body > .container > footer {
   text-align: center;
   color: var(--text-muted, #888);
   font-size: 0.9rem;
+}
+
+.packs-panel .packs-truncated {
+  grid-column: 1 / -1;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  color: var(--text-muted, #888);
+  font-size: 0.85rem;
+  font-style: italic;
+  border-top: 1px dashed var(--border-soft, #333);
 }
 
 .pack-sealed {

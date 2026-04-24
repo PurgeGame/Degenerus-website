@@ -119,8 +119,22 @@ class PacksPanel extends HTMLElement {
       return;
     }
 
-    for (const card of packs) {
+    // Render-cap: a player with thousands of unrevealed-pending entries
+    // (level rolled forward without VRF firing) can produce 1000+ pack nodes,
+    // each just an empty placeholder. Cap visible packs and summarize the rest.
+    const RENDER_CAP = 50;
+    const visible = packs.slice(0, RENDER_CAP);
+    const overflow = packs.length - visible.length;
+
+    for (const card of visible) {
       grid.appendChild(this.#buildPackNode(card));
+    }
+
+    if (overflow > 0) {
+      const more = document.createElement('div');
+      more.className = 'packs-truncated';
+      more.textContent = `+ ${overflow} more unrevealed packs (level rolled forward without reveal)`;
+      grid.appendChild(more);
     }
 
     // PACKS-04: auto-open lootbox-sourced packs on first-appearance render.
