@@ -71,7 +71,7 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
 
 - [x] **Phase 50: Route Foundation & Day-Aware Store** - New player route shell, player-selector, day scrubber, day-aware store contract, INTEG-01 coordination kickoff (completed 2026-04-23)
 - [x] **Phase 51: Profile & Quests** - Activity score breakdown + quest slots/streak panels + daily activity counts (completed 2026-04-24; 4/4 plans; INTEG-02 shipped in database repo; 112/112 tests; UAT deferred per Phase 50 precedent)
-- [ ] **Phase 52: Tickets, Packs & Jackpot Reveal** - 4-trait quadrant inventory, openable pack animation (purchase + win sources), reused beta jackpot Roll widget
+- [x] **Phase 52: Tickets, Packs & Jackpot Reveal** - 4-trait quadrant inventory, openable pack animation (purchase + win sources), reused beta jackpot Roll widget (completed 2026-04-24; 4/4 plans; INTEG-01 shipped in database repo; 197/197 tests; UAT deferred per precedent chain)
 - [ ] **Phase 53: Purchase Flow** - Sim-API ticket and lootbox purchase with inventory feedback loop into Phase 52 packs
 - [ ] **Phase 54: Coinflip & BAF Leaderboards** - Player coinflip state + leaderboards, BAF score and prominence-styled top-4
 - [ ] **Phase 55: Decimator** - Window state, bucket/subbucket assignment, weighted burns, payouts, terminal-decimator state
@@ -123,10 +123,10 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
   4. User sees the Roll 1 / Roll 2 trait reveal animation for the selected effective day's jackpot, rendered by the lift-and-shifted beta `jackpot-panel` Roll components (no rewrite)
   5. Changing the day scrubber re-renders both the ticket inventory snapshot and the jackpot reveal for that effective day
 **Plans**: 4 plans
-  - [ ] 52-01-PLAN.md — Wave 0: test harness (4 new test files covering TICKETS/PACKS/JACKPOT + D-09 regression guard) + 1-line beta/jackpot-panel.js patch + INTEG-01-SPEC.md copy-forward
-  - [ ] 52-02-PLAN.md — Wave 1 (pre-backend): 4 new helpers (tickets-inventory, tickets-fetch, pack-animator, pack-audio) + 3 new Custom Elements (tickets-panel, packs-panel, jackpot-panel-wrapper) + play.css + play/index.html + Phase 50 stub deletion coordinated with panel-stubs test update
-  - [ ] 52-03-PLAN.md — Wave 2 (HARD-GATED on INTEG-01 delivery): surgical fetch + double stale-guard + keep-old-data-dim wiring in tickets-panel.js and packs-panel.js (mirrors Phase 51 Wave 2 checkpoint pattern)
-  - [ ] 52-04-PLAN.md — Wave 3 (optional): manual UAT for gacha reveal feel, sound gating, jackpot roll rendering, tier SVG correctness, rapid day-scrub stability; records 52-UAT.md (uat-deferred supported per Phase 50/51 precedent)
+  - [x] 52-01-PLAN.md — Wave 0: test harness (4 new test files covering TICKETS/PACKS/JACKPOT + D-09 regression guard) + 1-line beta/jackpot-panel.js patch + INTEG-01-SPEC.md copy-forward (complete 2026-04-24)
+  - [x] 52-02-PLAN.md — Wave 1 (pre-backend): 4 new helpers + 3 new Custom Elements + play.css + play/index.html + Phase 50 stub retirement (complete 2026-04-24)
+  - [x] 52-03-PLAN.md — Wave 2 (INTEG-01 shipped; fetch + double stale-guard + keep-old-data-dim wiring + state.replay.level bootstrap) (complete 2026-04-24)
+  - [x] 52-04-PLAN.md — Wave 3: manual UAT deferred per Phase 50/51 precedent chain; 52-UAT.md records deferral (complete 2026-04-24)
 **UI hint**: yes
 
 ### Phase 53: Purchase Flow
