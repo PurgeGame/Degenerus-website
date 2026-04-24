@@ -106,8 +106,8 @@ Note: phase numbering jumps from 23 → 50 to avoid collision with out-of-band c
   5. Changing the day scrubber re-renders all profile sections from that day's snapshot without manual refresh (keep-old-data-dim during fetch), and changing the player-selector re-renders for the new address
   6. INTEG-02 (extended `GET /player/:address?day=N` with scoreBreakdown + day-aware quests + questStreak + dailyActivity) is shipped by the database repo, hard-gating the UI hydration waves
 **Plans**: 4 plans
-  - [ ] 51-01-wave0-spec-and-test-harness-PLAN.md — Wave 0: INTEG-02-SPEC.md + REQUIREMENTS.md edits (strike high-difficulty clause, add PROFILE-05) + play-profile-panel.test.js contract-grep harness
-  - [ ] 51-02-wave1-skeleton-and-quests-helper-PLAN.md — Wave 1 (pre-backend): local wallet-free play/app/quests.js + four-section hydrated markup in profile-panel.js + profile-panel CSS (tier colors, popover, quest slots, daily activity, is-stale dim overlay)
+  - [x] 51-01-wave0-spec-and-test-harness-PLAN.md — Wave 0: INTEG-02-SPEC.md + REQUIREMENTS.md edits (strike high-difficulty clause, add PROFILE-05) + play-profile-panel.test.js contract-grep harness (complete 2026-04-24)
+  - [x] 51-02-wave1-skeleton-and-quests-helper-PLAN.md — Wave 1 (pre-backend): local wallet-free play/app/quests.js + four-section hydrated markup in profile-panel.js + profile-panel CSS (tier colors, popover, quest slots, daily activity, is-stale dim overlay) (complete 2026-04-24)
   - [ ] 51-03-wave2-backend-wiring-hard-gated-PLAN.md — Wave 2 (HARD-GATED on INTEG-02 delivery): #profileFetchId stale guard + #refetch() fetch wiring + keep-old-data-dim class toggle + subscribe-to-refetch replacement
   - [ ] 51-04-wave3-uat-and-polish-PLAN.md — Wave 3 (optional): manual UAT for popover tap+hover+focus, keep-old-data-dim smoothness, tier-color thresholds; records 51-UAT.md
 **UI hint**: yes

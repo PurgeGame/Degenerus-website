@@ -1,7 +1,7 @@
-// play/components/profile-panel.js -- <profile-panel> Custom Element (Phase 51 Wave 1)
+// play/components/profile-panel.js -- <profile-panel> Custom Element (Phase 51 Wave 2)
 //
-// Four-section hydrated markup + popover a11y wiring + render helpers.
-// Fetch wiring is Wave 2 (hard-gated on INTEG-02 backend delivery).
+// Four-section hydrated markup + popover a11y wiring + render helpers +
+// INTEG-02 fetch wiring with stale-response guard and keep-old-data-dim.
 //
 // Sections (top to bottom, per CONTEXT.md D-02):
 //   1. Activity Score (number + info-icon popover with decomposition)
@@ -11,28 +11,30 @@
 //   4. Daily Activity (four counts: lootboxes purchased/opened, tickets
 //      purchased, ticket wins)
 //
+// Data flow (Wave 2, PROFILE-04):
+//   subscribe('replay.day')    \
+//                                --> #refetch() --> GET /player/:addr?day=N
+//   subscribe('replay.player') /                    --> #renderAll(data)
+//                                                   --> #showContent()
+//   #profileFetchId stale-guard: token bumped on each #refetch() call;
+//   checked AFTER both `await fetch()` AND `await res.json()` so rapid
+//   scrubbing never lets a late response clobber a fresh one (D-18).
+//   On second-and-later fetches, [data-bind="content"] gets .is-stale
+//   (0.6 opacity dim) until the new data renders -- keep-old-data-dim (D-17).
+//
 // SECURITY (T-51-01): the innerHTML template is a static string with no
 // user interpolation. All dynamic writes go through textContent or
 // element.style (never .innerHTML with response data). Matches the
-// Phase 50 scaffold's T-50-01 hardening.
+// Phase 50 scaffold's T-50-01 hardening. Day query value is URL-encoded
+// at the call site (T-51-21).
 //
 // SHELL-01: imports only from the wallet-free surface -- beta/app/store.js
-// (verified) and play/app/quests.js (local, wallet-free per Task 1).
-//
-// Wave 2 will add: a private fetch-id stale-guard counter, a refetch()
-// method hitting the extended player endpoint with a day query param,
-// the is-stale class toggle for keep-old-data-dim, and will replace the
-// subscribe() console.log callbacks with refetch() calls.
+// (verified), play/app/constants.js (pure re-exports), and play/app/quests.js
+// (local, wallet-free per Wave 1).
 
-import { subscribe } from '../../beta/app/store.js';
+import { subscribe, get } from '../../beta/app/store.js';
+import { API_BASE } from '../app/constants.js';
 import { formatQuestTarget, getQuestProgress, QUEST_TYPE_LABELS } from '../app/quests.js';
-
-// Placeholder. Wave 2 replaces these with fetch + render from INTEG-02.
-// Wave 1 keeps the Phase 50 console.log behavior so PROFILE-04's subscribe
-// assertions stay green via the existing stubs.
-// Note: CSS class .is-stale is defined in play/styles/play.css and will be
-// applied to [data-bind="content"] by Wave 2's #refetch() during
-// keep-old-data-dim (D-17). Wave 1 does not toggle it.
 
 const TEMPLATE = `
 <section data-slot="profile" class="panel profile-panel">
@@ -150,22 +152,25 @@ class ProfilePanel extends HTMLElement {
   #unsubs = [];
   #loaded = false;
   #popoverAbort = null;
+  #profileFetchId = 0;
 
   connectedCallback() {
     this.innerHTML = TEMPLATE;
     this.#bindPopover();
 
-    // PROFILE-04 wiring Wave-1: preserve Phase 50 console.log stubs so the
-    // subscribe assertions stay green. Wave 2 replaces these callback bodies
-    // with #refetch() invocations once INTEG-02 backend is delivered.
+    // PROFILE-04: a single #refetch() path for both signals. Each callback
+    // ignores its payload -- #refetch() reads fresh values from the store
+    // so the latest (player, day) pair always wins. Two subscribe calls
+    // satisfy the Wave 0 test assertions on both paths.
     this.#unsubs.push(
-      subscribe('replay.day', (day) => {
-        console.log('[profile-panel] replay.day =', day);
-      }),
-      subscribe('replay.player', (addr) => {
-        console.log('[profile-panel] replay.player =', addr);
-      }),
+      subscribe('replay.day', () => this.#refetch()),
+      subscribe('replay.player', () => this.#refetch()),
     );
+
+    // Kick an initial fetch in case the store already has both values
+    // (Phase 50's main.js boot wires the scrubber + player selector
+    // before this component connects).
+    this.#refetch();
   }
 
   disconnectedCallback() {
@@ -311,6 +316,51 @@ class ProfilePanel extends HTMLElement {
       slotEl.querySelector('.quest-type').textContent = status === 404
         ? 'No data for day'
         : 'Error';
+    }
+  }
+
+  // PROFILE-04: consolidated fetch for the four sections.
+  // One HTTP request per (player, day) change -- see CONTEXT.md D-14.
+  // Uses a fetch-id counter for the D-18 stale-response guard so rapid
+  // scrubbing never lets a late response clobber a fresh one. Two
+  // token comparisons (post-fetch and post-json) cover both slow paths.
+  async #refetch() {
+    const addr = get('replay.player');
+    const day = get('replay.day');
+    const token = ++this.#profileFetchId;
+
+    // No-op until both signals are populated.
+    if (!addr || day == null) return;
+
+    // D-17 keep-old-data-dim: dim existing content on second-and-later
+    // fetches. First fetch keeps the skeleton visible until #showContent()
+    // swaps it in on success (D-16).
+    if (this.#loaded) {
+      this.querySelector('[data-bind="content"]')?.classList.add('is-stale');
+    }
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/player/${addr}?day=${encodeURIComponent(day)}`,
+      );
+      if (token !== this.#profileFetchId) return;
+      if (!res.ok) {
+        this.#renderError(res.status);
+        this.#showContent();
+        this.querySelector('[data-bind="content"]')?.classList.remove('is-stale');
+        return;
+      }
+      const data = await res.json();
+      if (token !== this.#profileFetchId) return;
+      this.#renderAll(data);
+      this.#showContent();
+      this.querySelector('[data-bind="content"]')?.classList.remove('is-stale');
+    } catch (err) {
+      if (token === this.#profileFetchId) {
+        this.#renderError(0);
+        this.#showContent();
+        this.querySelector('[data-bind="content"]')?.classList.remove('is-stale');
+      }
     }
   }
 
