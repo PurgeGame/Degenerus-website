@@ -4,7 +4,7 @@
 
 import { subscribe } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
-import { formatEth } from '../app/utils.js';
+import { formatEth } from '../viewer/utils.js';
 import { createScrubber } from '../viewer/scrubber.js';
 import { joFormatWeiToEth, joScaledToTickets, createJackpotRolls } from '../app/jackpot-rolls.js';
 
