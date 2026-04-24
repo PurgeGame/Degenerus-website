@@ -20,12 +20,13 @@ async function registerComponents() {
     '../components/player-selector.js',
     '../components/day-scrubber.js',
     '../components/profile-panel.js',
+    '../components/packs-panel.js',
     '../components/tickets-panel.js',
     '../components/purchase-panel.js',
     '../components/coinflip-panel.js',
     '../components/baf-panel.js',
     '../components/decimator-panel.js',
-    '../components/jackpot-panel.js',
+    '../components/jackpot-panel-wrapper.js',
   ];
   for (const p of paths) {
     try {

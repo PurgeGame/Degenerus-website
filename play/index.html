@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/beta/styles/buttons.css">
   <link rel="stylesheet" href="/beta/styles/skeleton.css">
   <link rel="stylesheet" href="/beta/styles/viewer.css">
+  <link rel="stylesheet" href="/beta/styles/jackpot.css">
   <link rel="stylesheet" href="/play/styles/play.css">
   <script type="importmap">
   {
@@ -47,12 +48,13 @@
     <!-- Panel grid. Each slot is a Custom Element delivered in Plan 03. -->
     <div class="play-grid">
       <profile-panel data-slot="profile"></profile-panel>
+      <packs-panel data-slot="packs"></packs-panel>
       <tickets-panel data-slot="tickets"></tickets-panel>
       <purchase-panel data-slot="purchase"></purchase-panel>
       <coinflip-panel data-slot="coinflip"></coinflip-panel>
       <baf-panel data-slot="baf"></baf-panel>
       <decimator-panel data-slot="decimator"></decimator-panel>
-      <jackpot-panel data-slot="jackpot"></jackpot-panel>
+      <jackpot-panel-wrapper data-slot="jackpot"></jackpot-panel-wrapper>
       <!-- Each <*-panel> Custom Element renders its own skeleton with class skeleton-shimmer on connectedCallback -->
     </div>
 

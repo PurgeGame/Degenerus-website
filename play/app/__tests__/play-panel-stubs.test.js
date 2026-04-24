@@ -22,12 +22,13 @@ const COMPONENTS = join(PLAY_ROOT, 'components');
 
 const PANEL_STUBS = [
   { file: 'profile-panel.js', tag: 'profile-panel' },
+  { file: 'packs-panel.js', tag: 'packs-panel' },
   { file: 'tickets-panel.js', tag: 'tickets-panel' },
   { file: 'purchase-panel.js', tag: 'purchase-panel' },
   { file: 'coinflip-panel.js', tag: 'coinflip-panel' },
   { file: 'baf-panel.js', tag: 'baf-panel' },
   { file: 'decimator-panel.js', tag: 'decimator-panel' },
-  { file: 'jackpot-panel.js', tag: 'jackpot-panel' },
+  { file: 'jackpot-panel-wrapper.js', tag: 'jackpot-panel-wrapper' },
 ];
 
 for (const { file, tag } of PANEL_STUBS) {

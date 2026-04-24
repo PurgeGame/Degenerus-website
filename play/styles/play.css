@@ -368,3 +368,284 @@ body > .container > footer {
     font-size: 1.25rem;
   }
 }
+
+/* ======================================================================
+   Phase 52 -- <tickets-panel> styles
+   Dense card grid (D-01): ~140px cards, 2x2 trait SVG grid per card.
+   Reuses skeleton.css + panels.css tokens. Borrows sizing conventions
+   from beta/styles/replay.css .replay-tq .badge-img.
+   ====================================================================== */
+
+.tickets-panel .panel-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem 0;
+  color: var(--text-primary, #f0f0f0);
+}
+
+.tickets-panel .tickets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+  min-height: 140px;
+}
+
+.tickets-panel .tickets-empty {
+  grid-column: 1 / -1;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-muted, #888);
+  font-size: 0.9rem;
+}
+
+.ticket-card {
+  background: var(--panel-bg, #1a1a1a);
+  border: 1px solid var(--panel-border, #333);
+  border-radius: 8px;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ticket-card .trait-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 0.25rem;
+  aspect-ratio: 1 / 1;
+}
+
+.ticket-card .trait-quadrant {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  padding: 4%;
+}
+
+.ticket-card .trait-quadrant-empty {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.ticket-card .trait-badge {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.card-source-pill {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.card-source-purchase {
+  background: rgba(240, 240, 240, 0.1);
+  color: var(--text-muted, #888);
+}
+
+.card-source-jackpot-win {
+  background: rgba(255, 215, 0, 0.18);
+  color: #f5c518;
+}
+
+.card-source-lootbox {
+  background: rgba(128, 90, 255, 0.18);
+  color: #b388ff;
+}
+
+.tickets-panel [data-bind="content"] {
+  transition: opacity 0.2s ease;
+}
+
+.tickets-panel [data-bind="content"].is-stale {
+  opacity: 0.6;
+}
+
+/* ======================================================================
+   Phase 52 -- <packs-panel> styles
+   Sealed pack state with pulsing "tap to open" affordance; opened state
+   after GSAP timeline completes; lootbox auto-open tint.
+   ====================================================================== */
+
+.packs-panel .packs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.packs-panel .panel-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary, #f0f0f0);
+}
+
+.packs-panel .mute-toggle {
+  background: transparent;
+  border: 1px solid var(--panel-border, #333);
+  color: var(--text-muted, #888);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.packs-panel .mute-toggle:hover,
+.packs-panel .mute-toggle:focus {
+  color: var(--text-primary, #f0f0f0);
+  border-color: var(--text-primary, #f0f0f0);
+  outline: none;
+}
+
+.packs-panel .mute-toggle[aria-pressed="true"] {
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+}
+
+.packs-panel .packs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+  min-height: 140px;
+}
+
+.packs-panel .packs-empty {
+  grid-column: 1 / -1;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-muted, #888);
+  font-size: 0.9rem;
+}
+
+.pack-sealed {
+  background: var(--panel-bg, #1a1a1a);
+  border: 1px solid var(--panel-border, #333);
+  border-radius: 8px;
+  padding: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: relative;
+  animation: pack-pulse 2s ease-in-out infinite;
+  user-select: none;
+}
+
+.pack-sealed:focus {
+  outline: 2px solid var(--text-primary, #f0f0f0);
+  outline-offset: 2px;
+}
+
+.pack-sealed .pack-wrapper {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 0.25rem;
+  aspect-ratio: 1 / 1;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  border-radius: 6px;
+  padding: 4%;
+}
+
+.pack-sealed .pack-trait {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+  opacity: 0.3;
+}
+
+.pack-sealed .pack-trait .trait-badge {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0.85;
+}
+
+.pack-sealed.pack-source-jackpot-win {
+  border-color: rgba(255, 215, 0, 0.5);
+  box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.4);
+  animation-name: pack-pulse-gold;
+}
+
+.pack-sealed.pack-source-lootbox {
+  border-color: rgba(128, 90, 255, 0.5);
+  animation-name: pack-pulse-lootbox;
+}
+
+.pack-opened {
+  background: var(--panel-bg, #1a1a1a);
+  border: 1px solid var(--panel-border, #333);
+  border-radius: 8px;
+  padding: 0.5rem;
+  animation: none;
+}
+
+.pack-opened .pack-trait {
+  opacity: 1;
+}
+
+@keyframes pack-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 240, 240, 0.2); }
+  50% { box-shadow: 0 0 0 6px rgba(240, 240, 240, 0); }
+}
+
+@keyframes pack-pulse-gold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(255, 215, 0, 0); }
+}
+
+@keyframes pack-pulse-lootbox {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(128, 90, 255, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(128, 90, 255, 0); }
+}
+
+.packs-panel [data-bind="content"] {
+  transition: opacity 0.2s ease;
+}
+
+.packs-panel [data-bind="content"].is-stale {
+  opacity: 0.6;
+}
+
+/* prefers-reduced-motion fallback (D-07) -- kill the pulse. Instant
+   state swap in the GSAP animator path is handled in pack-animator.js;
+   this block only affects the sealed-state pulse. */
+@media (prefers-reduced-motion: reduce) {
+  .pack-sealed,
+  .pack-sealed.pack-source-jackpot-win,
+  .pack-sealed.pack-source-lootbox {
+    animation: none;
+  }
+  .tickets-panel [data-bind="content"],
+  .packs-panel [data-bind="content"] {
+    transition-duration: 0.01ms;
+  }
+}
+
+/* --- Mobile (<= 720px) ------------------------------------------------ */
+
+@media (max-width: 720px) {
+  .tickets-panel .tickets-grid,
+  .packs-panel .packs-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.5rem;
+  }
+  .ticket-card,
+  .pack-sealed,
+  .pack-opened {
+    padding: 0.4rem;
+  }
+}
