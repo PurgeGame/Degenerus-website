@@ -66,3 +66,305 @@ body > .container > footer {
   color: var(--text-muted, #888);
   font-size: 0.85rem;
 }
+
+/* ----------------------------------------------------------------------
+   Phase 51 -- <profile-panel> styles
+   Four sections: Activity Score, Quest Streak banner, Quest Slots,
+   Daily Activity. Tokens from beta/styles/base.css.
+   ---------------------------------------------------------------------- */
+
+.profile-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.profile-section {
+  display: block;
+}
+
+.profile-section + .profile-section {
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle, #2a2a3e);
+}
+
+.profile-section-title {
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted, #888);
+  margin: 0 0 0.5rem 0;
+}
+
+/* --- Section 1: Activity Score --- */
+
+.profile-score {
+  position: relative;
+}
+
+.score-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  position: relative;
+}
+
+.score-value {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 2.25rem;
+  font-weight: 600;
+  line-height: 1;
+  min-width: 4ch;
+}
+
+.score-value.tier-dim {
+  color: var(--text-dim, #555);
+}
+
+.score-value.tier-default {
+  color: var(--text-primary, #f0f0f0);
+}
+
+.score-value.tier-accent {
+  color: var(--accent-primary, #f5a623);
+}
+
+.score-info-btn {
+  appearance: none;
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted, #888);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-weight: 700;
+  font-style: italic;
+  font-size: 1rem;
+  line-height: 1;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.score-info-btn:hover,
+.score-info-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #f0f0f0);
+  border-color: var(--accent-primary, #f5a623);
+  outline: none;
+}
+
+.score-info-btn:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-primary, #f5a623);
+}
+
+.score-popover {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 10;
+  min-width: 220px;
+  padding: 0.75rem;
+  background: rgba(10, 10, 20, 0.96);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.score-popover[hidden] {
+  display: none;
+}
+
+.popover-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.popover-label {
+  font-size: 0.8rem;
+  color: var(--text-muted, #888);
+}
+
+.popover-value {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  color: var(--text-primary, #f0f0f0);
+}
+
+/* --- Section 2: Quest Streak banner --- */
+
+.streak-banner {
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: var(--text-primary, #f0f0f0);
+}
+
+.streak-label {
+  color: var(--text-muted, #888);
+  margin-right: 0.4rem;
+}
+
+.streak-value {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--accent-primary, #f5a623);
+}
+
+.streak-separator {
+  color: var(--text-muted, #888);
+}
+
+.streak-last-day {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: var(--text-primary, #f0f0f0);
+}
+
+/* --- Section 3: Quest Slots --- */
+
+.quest-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.quest-slot {
+  padding: 0.75rem;
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  border-radius: 4px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 0.5rem 1rem;
+  align-items: center;
+}
+
+.quest-slot-primary {
+  background: rgba(245, 166, 35, 0.06);
+}
+
+.quest-slot-secondary {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.quest-label {
+  grid-column: 1 / 2;
+  font-size: 0.9rem;
+  color: var(--text-primary, #f0f0f0);
+}
+
+.quest-target {
+  grid-column: 2 / 3;
+  font-size: 0.85rem;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: var(--text-muted, #888);
+  text-align: right;
+}
+
+.quest-progress-bar {
+  grid-column: 1 / -1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.quest-progress-fill {
+  height: 100%;
+  background: var(--accent-primary, #f5a623);
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+.quest-slot.completed .quest-progress-fill {
+  background: #7cba3b;
+}
+
+.quest-slot.completed .quest-target {
+  color: #7cba3b;
+}
+
+/* --- Section 4: Daily Activity --- */
+
+.daily-activity-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.activity-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  border-radius: 4px;
+}
+
+.activity-count {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary, #f0f0f0);
+  line-height: 1;
+}
+
+.activity-label {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+}
+
+/* --- Keep-old-data-dim (D-17) -------------------------------------
+   Wave 2 toggles .is-stale on [data-bind="content"] during refetch. */
+
+.profile-panel [data-bind="content"] {
+  transition: opacity 0.2s ease;
+}
+
+.profile-panel [data-bind="content"].is-stale {
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-panel [data-bind="content"],
+  .quest-progress-fill,
+  .score-info-btn {
+    transition-duration: 0.01ms;
+  }
+}
+
+/* --- Mobile (<= 720px) --- */
+
+@media (max-width: 720px) {
+  .score-value {
+    font-size: 1.75rem;
+  }
+  .score-popover {
+    left: auto;
+    right: 0;
+    min-width: min(280px, calc(100vw - 2rem));
+  }
+  .daily-activity-grid {
+    grid-template-columns: 1fr;
+  }
+  .activity-count {
+    font-size: 1.25rem;
+  }
+}
