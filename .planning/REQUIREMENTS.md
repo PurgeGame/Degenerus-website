@@ -39,10 +39,10 @@ Brand-new player-facing route surfacing every interactive system (purchase, tick
 
 ### PURCHASE — Buy tickets + lootboxes via sim
 
-- [ ] **PURCHASE-01**: User can trigger a ticket purchase for the selected player via the sim API
-- [ ] **PURCHASE-02**: User can trigger a lootbox purchase for the selected player via the sim API
-- [ ] **PURCHASE-03**: Purchase UI shows current ticket price, active level/cycle, total cost for the selected quantity
-- [ ] **PURCHASE-04**: After purchase, the new pack appears in inventory and the selected player's state reflects the deposit
+- [~] **PURCHASE-01**: User can trigger a ticket purchase for the selected player via the sim API (deferred: requires SIM-01 HTTP endpoint; UI scaffolded with sim-api gate in Phase 53)
+- [~] **PURCHASE-02**: User can trigger a lootbox purchase for the selected player via the sim API (deferred: requires SIM-01; UI scaffolded with sim-api gate in Phase 53)
+- [x] **PURCHASE-03**: Purchase UI shows current ticket price, active level/cycle, total cost for the selected quantity (Phase 53)
+- [~] **PURCHASE-04**: After purchase, the new pack appears in inventory and the selected player's state reflects the deposit (deferred: depends on PURCHASE-01/02 ship; Phase 52 packs-panel auto-renders new entries via existing stale-guard, no additional Phase 53 wiring needed)
 
 ### COINFLIP — Play surface (read-only)
 
@@ -84,6 +84,7 @@ Brand-new player-facing route surfacing every interactive system (purchase, tick
 - [ ] **INTEG-03**: Ship or confirm per-player decimator bucket/payout endpoint (P1 — blocks DECIMATOR-02/03/04)
 - [ ] **INTEG-04**: Ship or confirm coinflip recycle/history endpoint, OR document as deferred (optional — COINFLIP works without it)
 - [ ] **INTEG-05**: Ship or confirm per-player BAF score endpoint (P1 — blocks BAF-01)
+- [ ] **SIM-01**: Ship or confirm HTTP API for the degenerus-sim repo with `POST /player/:address/buy-tickets` and `POST /player/:address/buy-lootbox` endpoints per `.planning/phases/53-purchase-flow/PURCHASE-API-SPEC.md` (P2 — gates Phase 53 PURCHASE-01/02/04 full validation; scaffold + spec shipped in Phase 53 Option B)
 
 ## Future Requirements (deferred)
 
@@ -134,10 +135,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PACKS-03 | Phase 52 | Pending |
 | PACKS-04 | Phase 52 | Pending |
 | PACKS-05 | Phase 52 | Pending |
-| PURCHASE-01 | Phase 53 | Pending |
-| PURCHASE-02 | Phase 53 | Pending |
-| PURCHASE-03 | Phase 53 | Pending |
-| PURCHASE-04 | Phase 53 | Pending |
+| PURCHASE-01 | Phase 53 (scaffold), future (ship) | Scaffold + sim-api gate landed 2026-04-24; deferred on SIM-01 |
+| PURCHASE-02 | Phase 53 (scaffold), future (ship) | Scaffold + sim-api gate landed 2026-04-24; deferred on SIM-01 |
+| PURCHASE-03 | Phase 53 | Validated (2026-04-24) |
+| PURCHASE-04 | Phase 53 (plumbing), future (ship) | Plumbing via Phase 52 stale-guard; deferred on SIM-01 |
 | COINFLIP-01 | Phase 54 | Pending |
 | COINFLIP-02 | Phase 54 | Pending |
 | COINFLIP-03 | Phase 54 | Pending |
@@ -161,17 +162,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INTEG-03 | Phase 55 (gate) | Pending |
 | INTEG-04 | Phase 54 (gate, optional) | Pending |
 | INTEG-05 | Phase 54 (gate) | Pending |
+| SIM-01 | Phase 53 (spec), future (ship) | Spec authored 2026-04-24; deferred |
 
 **Coverage:**
-- v2.4 requirements: 42 total
-- Mapped to phases: 42
+- v2.4 requirements: 43 total
+- Mapped to phases: 43
 - Unmapped: 0
 
 **Per-phase counts:**
 - Phase 50 (Route Foundation & Day-Aware Store): 9 requirements (ROUTE-01..04, DAY-01..04, INTEG-01)
 - Phase 51 (Profile & Quests): 6 requirements (PROFILE-01..05, INTEG-02)
 - Phase 52 (Tickets, Packs & Jackpot Reveal): 12 requirements (TICKETS-01..04, PACKS-01..05, JACKPOT-01..03)
-- Phase 53 (Purchase Flow): 4 requirements (PURCHASE-01..04)
+- Phase 53 (Purchase Flow): 5 requirements (PURCHASE-01..04, SIM-01)
 - Phase 54 (Coinflip & BAF Leaderboards): 8 requirements (COINFLIP-01..03, BAF-01..03, INTEG-05, INTEG-04)
 - Phase 55 (Decimator): 6 requirements (DECIMATOR-01..05, INTEG-03)
 
@@ -181,4 +183,4 @@ Phase numbering jumps from 23 → 50 to avoid collision with out-of-band commits
 
 ---
 *Requirements defined: 2026-04-23*
-*Last updated: 2026-04-23 -- PROFILE-02 high-difficulty clause struck (D-20, vestigial); PROFILE-05 added (D-11, D-12, Daily Activity counts); INTEG-02 reissued for Phase 51 extended /player/:address?day=N endpoint (D-15); Phase 54 per-player leaderboard endpoint renumbered from old INTEG-02 to INTEG-05*
+*Last updated: 2026-04-24 -- Phase 53 Option B landed: PURCHASE-03 validated; PURCHASE-01/02/04 deferred with scaffold + spec; SIM-01 added to INTEG block as new coordination requirement for the degenerus-sim HTTP API (gates Phase 53 live-wiring follow-up). Previous update 2026-04-23: PROFILE-02 high-difficulty clause struck (D-20, vestigial); PROFILE-05 added (D-11, D-12, Daily Activity counts); INTEG-02 reissued for Phase 51 extended /player/:address?day=N endpoint (D-15); Phase 54 per-player leaderboard endpoint renumbered from old INTEG-02 to INTEG-05*
