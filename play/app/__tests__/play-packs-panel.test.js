@@ -1,14 +1,15 @@
-// test file for Phase 52 Wave 0 -- Plan 52-01
+// test file for Phase 52 Wave 5 -- Plan 52-05 (packs-v2 RED harness)
 //
-// Covers: PACKS-01, PACKS-02, PACKS-03, PACKS-04, PACKS-05
+// Covers: PACKS-01, PACKS-02, PACKS-03, PACKS-04, PACKS-05 via the v2
+// day-keyed mental model from PACKS-V2-SPEC.md.
 //
-// Asserts the contract the <packs-panel> Custom Element, the
-// play/app/pack-animator.js helper, and the play/app/pack-audio.js helper
-// must satisfy after Phase 52 Waves 1 and 2 ship. Currently FAILS until
-// Wave 1 lands the markup + GSAP animator + Web Audio wrapper.
+// Asserts the contract the v2 <packs-panel> Custom Element will satisfy
+// after Plan 52-07 ships. Currently FAILS against the v1 implementation
+// on v2-specific assertions; all pack-animator.js + pack-audio.js
+// assertions continue to pass.
 //
 // Test style: contract-grep (readFileSync + regex). Mirrors
-// play/app/__tests__/play-profile-panel.test.js.
+// play/app/__tests__/play-tickets-panel.test.js.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,11 +24,11 @@ const ANIMATOR = join(PLAY_ROOT, 'app', 'pack-animator.js');
 const AUDIO = join(PLAY_ROOT, 'app', 'pack-audio.js');
 
 // ---------------------------------------------------------------------------
-// Existence + registration + class shell
+// Existence + registration + class shell (carry-over from v1)
 // ---------------------------------------------------------------------------
 
 test('packs-panel.js exists', () => {
-  assert.ok(existsSync(PANEL), 'expected play/components/packs-panel.js to exist (Plan 52-02 delivers)');
+  assert.ok(existsSync(PANEL), 'expected play/components/packs-panel.js to exist');
 });
 
 test('packs-panel.js registers <packs-panel>', () => {
@@ -46,13 +47,6 @@ test('packs-panel.js has connectedCallback and disconnectedCallback', () => {
   assert.match(src, /disconnectedCallback\s*\(/);
 });
 
-test('packs-panel.js subscribes to replay.day, replay.player, replay.level', () => {
-  const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /subscribe\(\s*['"]replay\.day['"]/);
-  assert.match(src, /subscribe\(\s*['"]replay\.player['"]/);
-  assert.match(src, /subscribe\(\s*['"]replay\.level['"]/);
-});
-
 test('packs-panel.js imports subscribe from reused beta store', () => {
   const src = readFileSync(PANEL, 'utf8');
   assert.match(src, /from\s+['"]\.\.\/\.\.\/beta\/app\/store\.js['"]/);
@@ -64,66 +58,123 @@ test('packs-panel.js renders skeleton-shimmer in template', () => {
 });
 
 // ---------------------------------------------------------------------------
-// PACKS-01..05 behavioral assertions
+// v2 subscribe shape: replay.day + replay.player ONLY (no replay.level)
 // ---------------------------------------------------------------------------
 
-test('PACKS-01: renders pack per card with purchase source class/tag', () => {
+test('v2: packs-panel.js subscribes to replay.day', () => {
   const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /source\s*===\s*['"]purchase['"]|pack-source-purchase/);
+  assert.match(src, /subscribe\(\s*['"]replay\.day['"]/);
 });
 
-test('PACKS-02: jackpot-win packs have gold-tint or pack-source-jackpot-win class', () => {
+test('v2: packs-panel.js subscribes to replay.player', () => {
   const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /jackpot-win|gold-tint/);
+  assert.match(src, /subscribe\(\s*['"]replay\.player['"]/);
 });
 
-test('PACKS-03: click handler on pack element', () => {
+test('v2: packs-panel.js does NOT subscribe to replay.level', () => {
   const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /addEventListener\(\s*['"]click['"]/);
-});
-
-test('PACKS-03: pack-sealed class is rendered for pending/partial state', () => {
-  const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /pack-sealed/);
-});
-
-test('PACKS-04: lootbox-source packs auto-trigger animation (lootbox branch present)', () => {
-  const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /source\s*===\s*['"]lootbox['"]|pack-source-lootbox|animatedCards/);
-});
-
-test('PACKS-05: imports pack-animator module', () => {
-  const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /from\s+['"]\.\.\/app\/pack-animator\.js['"]/);
-});
-
-test('PACKS-05: imports pack-audio module', () => {
-  const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /from\s+['"]\.\.\/app\/pack-audio\.js['"]/);
+  assert.doesNotMatch(src, /subscribe\(\s*['"]replay\.level['"]/,
+    'v2 packs-panel is day-keyed; replay.level subscription must be dropped per PACKS-V2-SPEC.md line 176');
 });
 
 // ---------------------------------------------------------------------------
-// Shared fetch + stale-guard + keep-old-data-dim
+// v2 fetch shape: fetchDayPacks from day-packs-fetch.js (NOT fetchTicketsByTrait)
 // ---------------------------------------------------------------------------
 
-test('packs-panel.js imports fetchTicketsByTrait from tickets-fetch.js', () => {
+test('v2: packs-panel.js imports fetchDayPacks from day-packs-fetch.js', () => {
   const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /from\s+['"]\.\.\/app\/tickets-fetch\.js['"]/);
-  assert.match(src, /\bfetchTicketsByTrait\b/);
+  assert.match(src, /from\s+['"]\.\.\/app\/day-packs-fetch\.js['"]/,
+    'v2 imports day-keyed helper; fetchTicketsByTrait is v1');
+  assert.match(src, /\bfetchDayPacks\b/);
 });
 
-test('packs-panel.js uses #packsFetchId stale-guard counter', () => {
+test('v2: packs-panel.js does NOT import fetchTicketsByTrait', () => {
   const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /#packsFetchId/);
+  assert.doesNotMatch(src, /\bfetchTicketsByTrait\b/,
+    'v2 uses fetchDayPacks instead; level-keyed fetcher is v1 only');
 });
 
-test('packs-panel.js toggles is-stale class for keep-old-data-dim', () => {
+test('v2: packs-panel.js uses #dayPacksFetchId stale-guard counter', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.match(src, /#dayPacksFetchId/);
+});
+
+test('v2: packs-panel.js toggles is-stale class for keep-old-data-dim', () => {
   const src = readFileSync(PANEL, 'utf8');
   assert.match(src, /is-stale/);
 });
 
 // ---------------------------------------------------------------------------
-// Mute toggle + localStorage (D-10)
+// v2 render shape: two sections (lootbox-grid + ticket-pack-grid)
+// ---------------------------------------------------------------------------
+
+test('v2: packs-panel.js renders lootbox-grid data-bind marker', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.match(src, /data-bind=["']lootbox-grid["']/,
+    'v2 renders a dedicated lootbox section per PACKS-V2-SPEC.md lines 184-188');
+});
+
+test('v2: packs-panel.js renders ticket-pack-grid data-bind marker', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.match(src, /data-bind=["']ticket-pack-grid["']/,
+    'v2 renders a dedicated ticket-reveal section per PACKS-V2-SPEC.md lines 189-194');
+});
+
+test('v2: packs-panel.js renders packs-section CSS class', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.match(src, /\bpacks-section\b/,
+    'v2 groups each of the two render sections with class="packs-section" per PACKS-V2-SPEC.md line 183');
+});
+
+test('v2: packs-panel.js references lootboxPacks from response', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.match(src, /\blootboxPacks\b/,
+    'v2 iterates over response.lootboxPacks per PACKS-V2-SPEC.md line 47');
+});
+
+test('v2: packs-panel.js references ticketRevealPacks from response', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.match(src, /\bticketRevealPacks\b/,
+    'v2 iterates over response.ticketRevealPacks per PACKS-V2-SPEC.md line 60');
+});
+
+test('v2: packs-panel.js references ticket-pack class for sealed tiles', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.match(src, /\bticket-pack\b/,
+    'v2 sealed ticket-reveal tiles carry the ticket-pack class per PACKS-V2-SPEC.md line 206');
+});
+
+test('v2: packs-panel.js attaches click handler for GSAP reveal', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.match(src, /addEventListener\(\s*['"]click['"]/,
+    'v2 ticket-pack tiles are clickable; lootbox tiles auto-reveal per PACKS-V2-SPEC.md line 199');
+});
+
+test('v2: packs-panel.js imports animatePackOpen from pack-animator.js', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.match(src, /from\s+['"]\.\.\/app\/pack-animator\.js['"]/);
+  assert.match(src, /\banimatePackOpen\b/);
+});
+
+test('v2: packs-panel.js imports pack-audio helpers', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.match(src, /from\s+['"]\.\.\/app\/pack-audio\.js['"]/);
+});
+
+test('v2: packs-panel.js renders empty-day copy', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.match(src, /No packs revealed on day/,
+    'v2 empty-state copy per PACKS-V2-SPEC.md line 200');
+});
+
+test('v2: packs-panel.js uses traitToBadge or /badges-circular/ for trait SVG rendering', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.match(src, /\btraitToBadge\b|\/badges-circular\//,
+    'v2 reuses the existing badge-inventory traitToBadge() helper per PACKS-V2-SPEC.md line 83');
+});
+
+// ---------------------------------------------------------------------------
+// Mute toggle + localStorage (D-10; carry-over from v1)
 // ---------------------------------------------------------------------------
 
 test('packs-panel.js renders speaker-icon mute toggle', () => {
@@ -137,11 +188,23 @@ test('packs-panel.js wires mute toggle via isMuted or localStorage', () => {
 });
 
 // ---------------------------------------------------------------------------
-// play/app/pack-animator.js assertions
+// SHELL-01 inverse assertion (explicit panel-level guard)
+// ---------------------------------------------------------------------------
+
+test('packs-panel.js is wallet-free (no ethers, no beta/app/utils.js)', () => {
+  const src = readFileSync(PANEL, 'utf8');
+  assert.doesNotMatch(src, /from\s+['"]ethers['"]/);
+  assert.doesNotMatch(src, /from\s+['"][^'"]*\/beta\/app\/utils\.js['"]/);
+  assert.doesNotMatch(src, /from\s+['"][^'"]*\/wallet\.js['"]/);
+  assert.doesNotMatch(src, /from\s+['"][^'"]*\/contracts\.js['"]/);
+});
+
+// ---------------------------------------------------------------------------
+// play/app/pack-animator.js assertions (CARRY-OVER from v1; unchanged)
 // ---------------------------------------------------------------------------
 
 test('play/app/pack-animator.js exists', () => {
-  assert.ok(existsSync(ANIMATOR), 'expected play/app/pack-animator.js to exist (Plan 52-02 delivers)');
+  assert.ok(existsSync(ANIMATOR), 'expected play/app/pack-animator.js to exist');
 });
 
 test('pack-animator.js exports animatePackOpen', () => {
@@ -166,11 +229,11 @@ test('pack-animator.js is wallet-free (no ethers, no beta/app/utils.js)', () => 
 });
 
 // ---------------------------------------------------------------------------
-// play/app/pack-audio.js assertions (D-10)
+// play/app/pack-audio.js assertions (CARRY-OVER from v1; unchanged)
 // ---------------------------------------------------------------------------
 
 test('play/app/pack-audio.js exists', () => {
-  assert.ok(existsSync(AUDIO), 'expected play/app/pack-audio.js to exist (Plan 52-02 delivers)');
+  assert.ok(existsSync(AUDIO), 'expected play/app/pack-audio.js to exist');
 });
 
 test('pack-audio.js exports playPackOpen, isMuted, setMuted', () => {
