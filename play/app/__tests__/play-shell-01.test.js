@@ -28,6 +28,9 @@ const FORBIDDEN = [
   { label: 'beta/components/purchase-panel.js', pattern: /from\s+['"][^'"]*\/beta\/components\/purchase-panel\.js['"]/ },
   { label: 'beta/components/coinflip-panel.js', pattern: /from\s+['"][^'"]*\/beta\/components\/coinflip-panel\.js['"]/ },
   { label: 'beta/components/decimator-panel.js', pattern: /from\s+['"][^'"]*\/beta\/components\/decimator-panel\.js['"]/ },
+  { label: 'beta/components/baf-panel.js (Phase 54: transitively wallet-tainted + tag-name collision)', pattern: /from\s+['"][^'"]*\/beta\/components\/baf-panel\.js['"]/ },
+  { label: 'beta/app/coinflip.js (Phase 54: ethers at line 4)', pattern: /from\s+['"][^'"]*\/beta\/app\/coinflip\.js['"]/ },
+  { label: 'beta/app/baf.js (Phase 54: transitively tainted via utils.js)', pattern: /from\s+['"][^'"]*\/beta\/app\/baf\.js['"]/ },
 ];
 
 function walk(dir) {
