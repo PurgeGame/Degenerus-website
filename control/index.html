@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Degenerus Control</title>
+  <link rel="stylesheet" href="/shared/nav.css">
+  <link rel="stylesheet" href="control.css">
+</head>
+<body>
+  <div class="container">
+    <!-- /shared/nav.js initNav({ currentPage: 'control' }) injects the unified nav at the top of .container at boot. -->
+
+    <main class="control-grid">
+      <!--
+        Phase 55 D-01 LOCKED — single-file admin shell, vanilla DOM, no Custom Elements.
+        Six panel sections in this exact order:
+          1. state-controls   (CTL-02 + D-05)            — ACTIVE in Plan 55-02
+          2. day-advance      (CTL-03)                   — ACTIVE in Plan 55-02
+          3. force-action     (CTL-04 + D-02a/b)         — placeholder; wired in Plan 55-03
+          4. status-panel     (CTL-05 + D-03)            — ACTIVE in Plan 55-02
+          5. action-log       (CTL-06 + D-06)            — ACTIVE in Plan 55-02
+          6. fund-players     (CTL-07 + D-04b)           — placeholder; wired in Plan 55-03
+      -->
+
+      <section id="state-controls" class="panel">
+        <h2 class="panel-title">State Controls</h2>
+        <div class="panel-body">
+          <div class="state-row">
+            <span class="state-badge-label">State:</span>
+            <span id="state-badge" class="state-badge state-stopped">STOPPED</span>
+          </div>
+          <div class="button-row">
+            <button id="btn-start"  class="btn btn-primary">Start</button>
+            <button id="btn-pause"  class="btn btn-ghost">Pause</button>
+            <button id="btn-resume" class="btn btn-primary">Resume</button>
+            <button id="btn-stop"   class="btn btn-danger">Stop</button>
+          </div>
+          <div id="runtime-stats" class="stats-row">
+            <div class="stat"><span class="stat-label">txs sent:</span><span id="stat-txs-sent" class="stat-value">0</span></div>
+            <div class="stat"><span class="stat-label">errors:</span><span id="stat-errors" class="stat-value">0</span></div>
+            <div class="stat"><span class="stat-label">level:</span><span id="stat-current-level" class="stat-value">&mdash;</span></div>
+            <div class="stat"><span class="stat-label">day:</span><span id="stat-current-day" class="stat-value">&mdash;</span></div>
+            <div class="stat"><span class="stat-label">last action:</span><span id="stat-last-action" class="stat-value">&mdash;</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="day-advance" class="panel">
+        <h2 class="panel-title">Day Advance</h2>
+        <div class="panel-body">
+          <div class="button-row">
+            <button id="btn-advance-1" class="btn btn-primary">Advance 1 Day</button>
+            <input id="input-advance-n" type="number" min="1" max="100" value="5" class="input-small" />
+            <button id="btn-advance-n" class="btn btn-primary">Advance N Days</button>
+          </div>
+          <div id="advance-status" class="status-line">&mdash;</div>
+        </div>
+      </section>
+
+      <section id="force-action" class="panel">
+        <h2 class="panel-title">Force Action</h2>
+        <div class="panel-body">
+          <p class="panel-placeholder">Plan 55-03 fills this panel</p>
+        </div>
+      </section>
+
+      <section id="status-panel" class="panel">
+        <h2 class="panel-title">Status</h2>
+        <div class="panel-body">
+          <div class="status-grid">
+            <div class="status-cell"><span class="status-label">Level / Day</span><span id="status-level-day" class="status-value mono">&mdash; / &mdash;</span></div>
+            <div class="status-cell"><span class="status-label">Jackpot Phase</span><span id="status-phase" class="status-value">&mdash;</span></div>
+            <div class="status-cell"><span class="status-label">Players Alive</span><span id="status-players-alive" class="status-value mono">&mdash;</span></div>
+            <div class="status-cell"><span class="status-label">Pool Balances</span><span id="status-pools" class="status-value mono">&mdash;</span></div>
+            <div class="status-cell"><span class="status-label">Tx Queue Depth</span><span id="status-tx-queue" class="status-value mono">&mdash;</span></div>
+            <div class="status-cell"><span class="status-label">RPC Errors / min</span><span id="status-rpc-errors" class="status-value mono">&mdash;</span></div>
+            <div class="status-cell"><span class="status-label">Last Poll</span><span id="status-last-poll" class="status-value mono">&mdash;</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="action-log" class="panel">
+        <h2 class="panel-title">Live Action Log</h2>
+        <div class="panel-body">
+          <div class="button-row">
+            <button id="btn-log-pause" class="btn btn-ghost">Pause</button>
+            <button id="btn-log-clear" class="btn btn-ghost">Clear</button>
+            <span id="log-status" class="status-line">&mdash; &middot; 0 events</span>
+          </div>
+          <table class="log-table">
+            <thead>
+              <tr><th>time</th><th>type</th><th>player</th><th>tx</th><th>result</th></tr>
+            </thead>
+            <tbody id="log-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="fund-players" class="panel">
+        <h2 class="panel-title">Fund Players</h2>
+        <div class="panel-body">
+          <p class="panel-placeholder">Plan 55-03 fills this panel</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/shared/nav.js"></script>
+  <script>initNav({ currentPage: 'control' });</script>
+  <script type="module" src="control.js"></script>
+</body>
+</html>
