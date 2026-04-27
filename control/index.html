@@ -59,9 +59,33 @@
       </section>
 
       <section id="force-action" class="panel">
-        <h2 class="panel-title">Force Action</h2>
+        <h2 class="panel-title">Force Action (CTL-04)</h2>
         <div class="panel-body">
-          <p class="panel-placeholder">Plan 55-03 fills this panel</p>
+          <div class="fa-form-row">
+            <label for="fa-player" class="fa-label">Player</label>
+            <select id="fa-player" class="fa-select"><option value="">— select wallet —</option></select>
+          </div>
+          <div class="fa-form-row">
+            <label for="fa-action-type" class="fa-label">Action</label>
+            <select id="fa-action-type" class="fa-select">
+              <option value="">— select action —</option>
+              <option value="purchase">purchase</option>
+              <option value="lootboxOpen">lootboxOpen</option>
+              <option value="coinflipDeposit">coinflipDeposit</option>
+              <option value="degenerette">degenerette</option>
+              <option value="claimWinnings">claimWinnings</option>
+              <option value="claimAffiliate" disabled title="auto-fires on score >= 10 ETH via processClaims; manual force deferred to Phase 56+ (no PlayerDecision field on the autoplayer struct — needs direct-call carve-out)">claim affiliate (deferred — see SUMMARY)</option>
+              <option value="claimDecimator">claimDecimator</option>
+              <option value="deityBoon">deityBoon</option>
+              <option value="burnBoon">burnBoon</option>
+            </select>
+          </div>
+          <!-- Conditional fields injected here by control.js based on selected action -->
+          <div id="fa-args" class="fa-args"></div>
+          <div class="button-row">
+            <button id="fa-execute" class="btn btn-primary" disabled>Execute</button>
+          </div>
+          <div id="fa-result" class="fa-result"></div>
         </div>
       </section>
 
@@ -98,9 +122,27 @@
       </section>
 
       <section id="fund-players" class="panel">
-        <h2 class="panel-title">Fund Players</h2>
+        <h2 class="panel-title">Fund Players (CTL-07)</h2>
         <div class="panel-body">
-          <p class="panel-placeholder">Plan 55-03 fills this panel</p>
+          <div class="button-row">
+            <button id="fp-fund-selected" class="btn btn-primary" disabled>Fund Selected</button>
+            <button id="fp-fund-all"      class="btn btn-primary">Fund All 25</button>
+            <button id="fp-refresh"       class="btn btn-ghost">Refresh balances</button>
+            <span id="fp-status" class="status-line">—</span>
+          </div>
+          <table class="fp-table">
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="fp-check-all" /></th>
+                <th>idx</th>
+                <th>wallet</th>
+                <th>pre (ETH)</th>
+                <th>post (ETH)</th>
+                <th>action</th>
+              </tr>
+            </thead>
+            <tbody id="fp-tbody"></tbody>
+          </table>
         </div>
       </section>
     </main>

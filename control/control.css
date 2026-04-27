@@ -249,3 +249,92 @@ body {
   overflow-y: auto;
   display: block;
 }
+
+/* ── Force-action panel (Plan 55-03 — additive only) ──────────────────────── */
+.fa-form-row {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.fa-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.fa-select, .fa-input {
+  padding: 4px 8px;
+  background: var(--bg-panel-alt);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  font-family: var(--mono-stack);
+  font-size: 12px;
+}
+.fa-select:focus, .fa-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+.fa-args {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border-soft);
+}
+.fa-args:empty { display: none; }
+.fa-result {
+  font-family: var(--mono-stack);
+  font-size: 11px;
+  padding: 8px;
+  background: var(--bg-panel-alt);
+  border-radius: 3px;
+  min-height: 24px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.fa-result:empty { display: none; }
+.fa-result.fa-result-success { color: var(--accent-green); border-left: 2px solid var(--accent-green); }
+.fa-result.fa-result-error   { color: var(--accent-red);   border-left: 2px solid var(--accent-red); }
+.fa-result.fa-result-pending { color: var(--accent-amber); border-left: 2px solid var(--accent-amber); }
+.fa-result a { color: var(--accent-blue); }
+.fa-checkbox { transform: scale(1.1); }
+
+/* ── Fund-players panel (Plan 55-03 — additive only) ──────────────────────── */
+.fp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono-stack);
+  font-size: 11px;
+}
+.fp-table th {
+  text-align: left;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-soft);
+  padding: 4px 6px;
+  font-weight: normal;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+.fp-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.fp-table tbody tr:hover { background: var(--bg-panel-alt); }
+.fp-table input[type="checkbox"] { transform: scale(1.1); cursor: pointer; }
+.fp-table .fp-row-pending { opacity: 0.6; }
+
+/* Status pills for the action column */
+.status-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.status-pill-funded  { color: var(--accent-green); border: 1px solid var(--accent-green); }
+.status-pill-topped  { color: var(--accent-blue);  border: 1px solid var(--accent-blue); }
+.status-pill-skipped { color: var(--text-muted);   border: 1px solid var(--border-strong); }
+.status-pill-pending { color: var(--accent-amber); border: 1px solid var(--accent-amber); }
+.status-pill-error   { color: var(--accent-red);   border: 1px solid var(--accent-red); }
