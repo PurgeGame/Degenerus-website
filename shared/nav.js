@@ -360,6 +360,10 @@
       { key: 'theory', label: 'Game Theory', href: '/theory/' },
       { key: 'viewer', label: 'Viewer', href: '/beta/viewer.html' },
     ];
+    // Phase 55 D-08 — localhost-conditional Control link (T-14: hidden on prod deploys)
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      pages.push({ key: 'control', label: 'Control', href: '/control/' });
+    }
 
     // Left side
     var left = document.createElement('div');
