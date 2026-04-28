@@ -22,6 +22,7 @@
 // abortAllInflight() exported as a stub for Phase 58 accountsChanged/disconnect wiring.
 
 import { API_BASE } from '../../beta/app/constants.js';
+import { update } from './store.js';
 
 // ---------------------------------------------------------------------------
 // LOCKED constants (D-04 + Pitfall 3)
@@ -55,7 +56,8 @@ async function fetchJSONWithSignal(path, { signal } = {}) {
 
 // ---------------------------------------------------------------------------
 // 4 pollers — each accepts a signal arg threaded through fetchJSONWithSignal.
-// Phase 56 ships skeleton only; Phase 58+ wires results into the /app/ store.
+// Phase 59 (Plan 59-02) establishes "poller writes its own store path" pattern
+// via pollLastDay → update('app.lastDay', payload). Phase 60+ extends to game/player/health.
 // ---------------------------------------------------------------------------
 
 async function pollGame(signal) {
@@ -72,12 +74,16 @@ async function pollHealth(signal) {
 }
 
 async function pollLastDay(signal) {
-  // Phase 57 ships /game/jackpot/last-day. Until then, tolerate 404 and return null.
-  // Soft-fail: UI panels (Phase 59) will render a cold-start state.
+  // Phase 57 ships /game/jackpot/last-day. On 404 / network error, soft-fail returns null
+  // (UI panel — Phase 59 widget — renders cold-start state by default).
+  // Phase 59 Plan 59-02: write payload to store on success so the widget's
+  // subscribe('app.lastDay', ...) subscriber fires per polling cycle.
   try {
-    return await fetchJSONWithSignal('/game/jackpot/last-day', { signal });
+    const payload = await fetchJSONWithSignal('/game/jackpot/last-day', { signal });
+    update('app.lastDay', payload);  // Plan 59-02 — single new LOC vs Phase 56 baseline
+    return payload;
   } catch (_e) {
-    return null;
+    return null;  // catch branch unchanged: no store write on failure
   }
 }
 

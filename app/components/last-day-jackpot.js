@@ -46,6 +46,313 @@ class LastDayJackpot extends HTMLElement {
     if (el) el.style.display = '';
   }
 
+  // ---------------------------------------------------------------------------
+  // Plan 59-02: app.lastDay subscriber — drives 3-status branch rendering.
+  // Pin-dayId pattern (D-02): #pinnedDay snapshotted at first non-null payload;
+  // newer-day arrivals set #hasNewDayAvailable but do NOT auto-rerender (D-04).
+  // ---------------------------------------------------------------------------
+  #onLastDayUpdate(payload) {
+    if (!payload) return;  // first cycle 404 / undefined initial subscribe fire
+    this.#lastPayload = payload;
+
+    // First payload — snapshot pin (or stay unpinned for cold-start)
+    if (this.#pinnedDay == null) {
+      if (payload.day != null) {
+        this.#pinnedDay = payload.day;
+        this.#pinnedLevel = payload.level ?? null;
+      }
+      this.#renderForStatus(payload);
+      return;
+    }
+
+    // Same-day refresh — re-render in place
+    if (payload.day === this.#pinnedDay) {
+      this.#renderForStatus(payload);
+      return;
+    }
+
+    // Newer day arrived — Plan 59-02 just records the flag; Plan 59-03 renders the banner.
+    if (payload.day != null && payload.day > this.#pinnedDay) {
+      this.#hasNewDayAvailable = true;
+      // Do NOT re-render body (D-04 — non-intrusive notification, not auto-rerender)
+      return;
+    }
+    // payload.day < pinnedDay — defensive: ignore (shouldn't happen given monotonic indexer)
+  }
+
+  #renderForStatus(payload) {
+    this.#showContent();
+    switch (payload.status) {
+      case 'pre-game':            return this.#renderColdStart();
+      case 'resolved-no-winners': return this.#renderEmptyDay(payload.day);
+      case 'resolved':            return this.#renderResolvedDay(payload);
+      default:                    return this.#renderColdStart();  // defensive fallback
+    }
+  }
+
+  #renderColdStart() {
+    const cold = this.querySelector('[data-bind="ldj-status-cold-start"]');
+    const empty = this.querySelector('[data-bind="ldj-status-empty-day"]');
+    const resolved = this.querySelector('[data-bind="ldj-status-resolved"]');
+    if (cold) cold.style.display = '';
+    if (empty) empty.style.display = 'none';
+    if (resolved) resolved.style.display = 'none';
+  }
+
+  #renderEmptyDay(day) {
+    const cold = this.querySelector('[data-bind="ldj-status-cold-start"]');
+    const empty = this.querySelector('[data-bind="ldj-status-empty-day"]');
+    const resolved = this.querySelector('[data-bind="ldj-status-resolved"]');
+    if (cold) cold.style.display = 'none';
+    if (empty) empty.style.display = '';
+    if (resolved) resolved.style.display = 'none';
+    // Day-N copy via textContent (T-58-18 hardening — NEVER innerHTML for server-supplied data)
+    const copy = this.querySelector('[data-bind="ldj-empty-copy"]');
+    if (copy) copy.textContent = `Day ${day} had no winners — pot rolled to day ${Number(day) + 1}.`;
+    // Day label in header
+    const dayLbl = this.querySelector('[data-bind="day"]');
+    if (dayLbl) dayLbl.textContent = `Day ${day}`;
+  }
+
+  #renderResolvedDay(payload) {
+    const cold = this.querySelector('[data-bind="ldj-status-cold-start"]');
+    const empty = this.querySelector('[data-bind="ldj-status-empty-day"]');
+    const resolved = this.querySelector('[data-bind="ldj-status-resolved"]');
+    if (cold) cold.style.display = 'none';
+    if (empty) empty.style.display = 'none';
+    if (resolved) resolved.style.display = '';
+
+    // Day label
+    const dayLbl = this.querySelector('[data-bind="day"]');
+    if (dayLbl) dayLbl.textContent = `Day ${payload.day}`;
+
+    // Winners → cache + render
+    this.#winners = Array.isArray(payload.winners) ? payload.winners : [];
+    this.#renderWinnerSummary(this.#winners, payload.day);
+    this.#renderWinnerLists(payload.day);
+
+    // Replay button: enable now that we have a pinned day with resolved data.
+    // (#setReplayState('idle') flips btn.disabled = !this.#pinnedDay → false here.)
+    this.#setReplayState('idle');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Plan 59-02: Winner classification + per-category list render.
+  // Verbatim port of /beta/jackpot-panel.js:534-674 (winner-pick click-handler stripped
+  // per D-05 — no winner selector UI in /app/). textContent-only for addresses (T-58-18).
+  // ---------------------------------------------------------------------------
+  #renderWinnerLists(day) {
+    const groupNormal    = this.querySelector('[data-bind="jp-winners-group-normal"]');
+    const groupBaf       = this.querySelector('[data-bind="jp-winners-group-baf"]');
+    const groupDec       = this.querySelector('[data-bind="jp-winners-group-decimator"]');
+    const groupEmpty     = this.querySelector('[data-bind="jp-winners-group-empty"]');
+    const listNormal     = this.querySelector('[data-bind="jp-winners-list-normal"]');
+    const listBaf        = this.querySelector('[data-bind="jp-winners-list-baf"]');
+    const listDec        = this.querySelector('[data-bind="jp-winners-list-decimator"]');
+    const labelNormal    = this.querySelector('[data-bind="jp-winners-label-normal"]');
+    const labelBaf       = this.querySelector('[data-bind="jp-winners-label-baf"]');
+    const labelDec       = this.querySelector('[data-bind="jp-winners-label-decimator"]');
+    const emptyLi        = this.querySelector('[data-bind="jp-winners-empty"]');
+
+    // Clear all three lists before re-render
+    if (listNormal) listNormal.innerHTML = '';
+    if (listBaf)    listBaf.innerHTML    = '';
+    if (listDec)    listDec.innerHTML    = '';
+
+    if (!this.#winners || this.#winners.length === 0) {
+      if (groupNormal) groupNormal.style.display = 'none';
+      if (groupBaf)    groupBaf.style.display    = 'none';
+      if (groupDec)    groupDec.style.display    = 'none';
+      if (groupEmpty)  groupEmpty.style.display  = '';
+      if (emptyLi)     emptyLi.textContent       = `No data for day ${day}`;
+      return;
+    }
+
+    // Classification — verbatim from /beta/jackpot-panel.js:541-557
+    const normalWinners = [];
+    const bafWinners = [];
+    const decimatorWinners = [];
+    for (const w of this.#winners) {
+      const hasNormal = (BigInt(w.totalEth || '0') > 0n)
+        || ((w.ticketCount || 0) > 0)
+        || (BigInt(w.coinTotal || '0') > 0n);
+      const hasBaf = w.bafPrize && (
+        BigInt(w.bafPrize.eth || '0') > 0n
+        || (w.bafPrize.tickets || 0) > 0
+      );
+      const hasDec = w.decimatorPrize && (
+        BigInt(w.decimatorPrize.regularEth || '0') > 0n
+        || BigInt(w.decimatorPrize.lootboxEth || '0') > 0n
+        || BigInt(w.decimatorPrize.terminalEth || '0') > 0n
+      );
+      if (hasNormal) normalWinners.push(w);
+      if (hasBaf)    bafWinners.push(w);
+      if (hasDec)    decimatorWinners.push(w);
+    }
+
+    // Per-category amount-text helpers — verbatim from /beta/jackpot-panel.js:560-589
+    const normalAmtText = (w) => {
+      const parts = [];
+      if (BigInt(w.totalEth || '0') > 0n) parts.push(`${formatEth(w.totalEth)} ETH`);
+      if ((w.ticketCount || 0) > 0) {
+        const n = joScaledToTickets(w.ticketCount);
+        parts.push(`${n} tkts`);
+      }
+      if (BigInt(w.coinTotal || '0') > 0n) parts.push(`${joFormatWeiToEth(w.coinTotal)} BURNIE`);
+      return parts.join(' · ');
+    };
+    const bafAmtText = (w) => {
+      const parts = [];
+      if (BigInt(w.bafPrize.eth || '0') > 0n) parts.push(`${formatEth(w.bafPrize.eth)} ETH`);
+      if ((w.bafPrize.tickets || 0) > 0) {
+        const n = joScaledToTickets(w.bafPrize.tickets);
+        parts.push(`${n} tkts`);
+      }
+      return parts.join(' · ');
+    };
+    const decAmtText = (w) => {
+      const d = w.decimatorPrize;
+      const parts = [];
+      if (BigInt(d.regularEth || '0') > 0n) parts.push(`${formatEth(d.regularEth)} ETH`);
+      if (BigInt(d.lootboxEth || '0') > 0n) parts.push(`${formatEth(d.lootboxEth)} lb`);
+      if (BigInt(d.terminalEth || '0') > 0n) parts.push(`${formatEth(d.terminalEth)} term`);
+      return parts.join(' · ');
+    };
+
+    // buildLi — verbatim from /beta/jackpot-panel.js:591-621 minus the click-handler line.
+    // textContent for addresses (T-58-18 — server-supplied untrusted data).
+    const buildLi = (w, amountText) => {
+      const li = document.createElement('li');
+      li.className = 'jp-winner-item';
+      li.setAttribute('role', 'option');
+      li.dataset.address = w.address;
+      li.dataset.hasBonus = String(w.hasBonus);
+      if (w.winningLevel != null) li.dataset.winningLevel = String(w.winningLevel);
+
+      const short = w.address.slice(0, 6) + '…' + w.address.slice(-4);
+      const addrSpan = document.createElement('span');
+      addrSpan.className = 'jp-winner-addr';
+      addrSpan.textContent = short;  // T-58-18 — NEVER innerHTML for server data
+      li.appendChild(addrSpan);
+
+      if (amountText) {
+        const amtSpan = document.createElement('span');
+        amtSpan.className = 'jp-winner-amount';
+        amtSpan.textContent = amountText;  // T-58-18 — NEVER innerHTML
+        li.appendChild(amtSpan);
+      }
+
+      if (w.breakdown && w.breakdown.length > 0) {
+        const tip = document.createElement('span');
+        tip.className = 'jp-winner-tip';
+        tip.innerHTML = this.#formatBreakdownTooltip(w.breakdown);  // composes already-formatted helper output
+        li.appendChild(tip);
+      }
+      // Plan 59-02 omits: li.addEventListener('click', () => this.#onWinnerItemClick(li));
+      // (No winner-pick UI in Phase 59 — D-05 wallet-conditional highlight only — which Plan 59-03 wires.)
+      return li;
+    };
+
+    if (listNormal) {
+      for (const w of normalWinners) listNormal.appendChild(buildLi(w, normalAmtText(w)));
+    }
+    if (listBaf) {
+      for (const w of bafWinners) listBaf.appendChild(buildLi(w, bafAmtText(w)));
+    }
+    if (listDec) {
+      for (const w of decimatorWinners) listDec.appendChild(buildLi(w, decAmtText(w)));
+    }
+
+    // All three category groups always visible on resolved-with-winners days
+    // (consistent UI structure even when one category has zero winners).
+    if (groupNormal) groupNormal.style.display = '';
+    if (groupBaf)    groupBaf.style.display    = '';
+    if (groupDec)    groupDec.style.display    = '';
+    if (groupEmpty)  groupEmpty.style.display  = 'none';
+    if (labelNormal) labelNormal.textContent = `Winners (Normal Jackpot) — Day ${day} (${normalWinners.length})`;
+    if (labelBaf)    labelBaf.textContent    = `BAF Winners — Day ${day} (${bafWinners.length})`;
+    if (labelDec)    labelDec.textContent    = `Decimator Winners — Day ${day} (${decimatorWinners.length})`;
+
+    // Empty-state placeholder text inside each list when its category has 0 winners.
+    if (listBaf && bafWinners.length === 0) {
+      listBaf.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">No BAF winners this day</li>';
+    }
+    if (listDec && decimatorWinners.length === 0) {
+      listDec.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">No decimator claims this day</li>';
+    }
+    if (listNormal && normalWinners.length === 0) {
+      listNormal.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">No normal-jackpot winners this day</li>';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Plan 59-02: Roll 1 staggered reveal driven by pre-loaded payload.roll1.wins[].
+  // Mirrors choreography of /beta/jackpot-rolls.js _renderRoll1Rows (lines 753-821)
+  // but consumes the composed-blob's raw distribution rows instead of the per-player
+  // aggregated roll1Rows (factory's runRoll1 fetches; we have all data already).
+  //
+  // payload.roll1.wins[] shape (database/src/api/routes/game.ts:2038-2051):
+  //   {winner, awardType, traitId, quadrant, amount, level, sourceLevel, ticketIndex}
+  // — flat distribution rows; one row per (winner × awardType × traitId).
+  // We render each row directly without the trait-aggregation that the per-player
+  // endpoint performs server-side.
+  // ---------------------------------------------------------------------------
+  async #animateRoll1FromPayload(payload) {
+    const grid = this.querySelector('[data-bind="jp-roll1-grid"]');
+    const resultPanel = this.querySelector('[data-bind="jp-roll1-result"]');
+    const flame = this.querySelector('[data-bind="jp-spin-flame"]');
+    if (!grid || !resultPanel) return;
+
+    // Reveal Roll 1 result panel
+    resultPanel.style.display = '';
+
+    // Spin flame cue (~700ms — matches /beta/ runRoll1 spinDuration)
+    if (flame) flame.classList.add('jp-spinning');
+    await new Promise(r => setTimeout(r, 700));
+    if (flame) flame.classList.remove('jp-spinning');
+
+    // Clear non-header rows from grid
+    Array.from(grid.children).forEach(child => {
+      if (!child.classList.contains('jo-header')) grid.removeChild(child);
+    });
+
+    // Defensive: payload.roll1?.wins may be empty / null on resolved-no-winners days.
+    const wins = (payload && payload.roll1 && Array.isArray(payload.roll1.wins))
+      ? payload.roll1.wins : [];
+
+    if (wins.length === 0) {
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'jp-roll1-empty';
+      emptyEl.textContent = 'No current-level wins this day.';
+      grid.appendChild(emptyEl);
+      return;
+    }
+
+    // Render each win as a row. Group amounts per-traitId for spread bucket display
+    // would be ideal but Plan 59-02 keeps the inline row-per-distribution approach
+    // (server already pre-filtered to roll1 main-draw rows; volume is bounded).
+    wins.forEach((win, idx) => {
+      const traitIdNum = win.traitId;
+      const isBonus = traitIdNum == null;  // far-future / whale_pass / dgnrs
+
+      const row = {
+        type: isBonus ? 'bonus' : 'normal',
+        traitId: traitIdNum ?? 0,
+        winnerCount: 1,             // each distribution row = one winner allocation
+        uniqueWinnerCount: 1,
+        coinPerWinner: win.awardType && win.awardType.includes('burnie') ? win.amount : '0',
+        ticketsPerWinner: win.awardType === 'tickets' ? win.amount : null,
+        ethPerWinner: win.awardType === 'eth' ? win.amount : '0',
+        spreadBuckets: [false, false, false],  // spread analytics not derivable from raw rows
+      };
+      this.#appendRevealRow(grid, row, idx);
+    });
+
+    // Wait for last row's reveal animation — matches /beta/ _renderRoll1Rows safety timeout
+    const totalDelay = (wins.length * 80) + 400;
+    await new Promise(r => setTimeout(r, Math.min(totalDelay, 3000)));
+  }
+
   connectedCallback() {
     this.innerHTML = `
       <div data-bind="skeleton" class="panel last-day-jackpot">
@@ -160,8 +467,16 @@ class LastDayJackpot extends HTMLElement {
       replayBtn.addEventListener('click', () => this.#onReplayClick());
     }
 
-    // STRIPPED per Plan 59-01: subscribe('app.lastDay', ...) — Plan 59-02 will add data-flow wiring.
-    // For Plan 59-01: dismiss skeleton immediately so the cold-start section is visible by default.
+    // Plan 59-02: subscribe to app.lastDay store path (populated by polling.js's pollLastDay).
+    // subscribe() fires immediately with current value (store.js:117) — first fire likely
+    // undefined since polling hasn't run yet; #onLastDayUpdate guards via `if (!payload) return;`
+    // and leaves the Plan 59-01 default cold-start scaffold visible until a real payload arrives.
+    this.#unsubs.push(
+      subscribe('app.lastDay', (payload) => this.#onLastDayUpdate(payload))
+    );
+
+    // Plan 59-01 default: dismiss skeleton so cold-start is visible until Plan 59-02 payload arrives.
+    // Plan 59-02 #renderForStatus also calls #showContent() — first call wins, others are no-ops.
     this.#showContent();
   }
 
@@ -477,9 +792,10 @@ class LastDayJackpot extends HTMLElement {
     return rowEl;
   }
 
-  // KEEP /beta/ shape — Plan 59-02 will adapt to consume payload.roll1.wins[]
-  // instead of calling factory's runRoll1 (which fetches). For Plan 59-01, the
-  // click handler is wired but won't fire (button stays disabled — #pinnedDay null).
+  // Plan 59-02: consume composed-blob payload directly — NEVER factory.runRoll1
+  // (which would re-fetch /game/jackpot/${level}/player/${addr} per RESEARCH Q1).
+  // Roll 1 → #animateRoll1FromPayload (hand-rolled choreography from pre-loaded data).
+  // Roll 2 → existing #runRoll2Anim (already pure-render — consumes #replayData).
   async #onReplayClick() {
     const btn = this.querySelector('#jp-replay-btn');
     if (!btn || btn.disabled) return;
@@ -487,41 +803,41 @@ class LastDayJackpot extends HTMLElement {
     const state = this.#replayState;
 
     if (state === 'idle' || state === 'roll2_done') {
-      // Plan 59-02 will replace this with payload-driven rendering (no factory fetch).
-      // For Plan 59-01: factory still wired but apiBase='' so no fetch occurs.
-      const level = this.#pinnedLevel;
-      const day   = this.#pinnedDay;
-      if (!day) return;
+      if (!this.#pinnedDay || !this.#lastPayload) return;
 
       const cancelToken = ++this.#replayCancelToken;
-      this.#replayData = null;
+
+      // Populate #replayData from polling payload (NOT from factory.runRoll1 fetch).
+      // Defensive optional-chaining — Pitfalls D + E + bonusTraitsPacked verification:
+      //   Per game.ts:881, bonusTraitsPacked is set in the PER-PLAYER /jackpot/${level}/player/${addr}
+      //   handler — NOT in the day-keyed /jackpot/day/:day/roll2 handler that the composed
+      //   /game/jackpot/last-day blob assembles from. So payload.roll2.bonusTraitsPacked
+      //   will be undefined here in practice; rebucketRoll2BySlot(roll2, null) returns
+      //   4 empty bonus slots (graceful degradation per Pitfall E).
+      this.#replayData = {
+        hasBonus: (this.#lastPayload.roll2?.wins?.length || 0) > 0,
+        roll2: this.#lastPayload.roll2 ?? {},
+        bonusTraitsPacked: this.#lastPayload.roll2?.bonusTraitsPacked ?? null,
+      };
+
       this.#setReplayState('roll1_playing');
 
-      // Ensure helpers are cached for row rendering
+      // Ensure helpers are cached for row rendering (used by #appendRevealRow)
       if (!this._rollsHelpers) {
         this._rollsHelpers = { joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth };
       }
 
-      const spinEl = this.querySelector('[data-bind="jp-spin-flame"]');
-      if (spinEl) spinEl.classList.add('jp-spinning');
-
-      // Plan 59-02 will call this.#animateRoll1FromPayload(this.#lastPayload) here.
-      // For Plan 59-01: leave the factory call shape but it's unreachable (button disabled).
-      const data = await this.#rolls.runRoll1({
-        level, day, addr: '0x0000000000000000000000000000000000000000',
-        roll1Grid: this.querySelector('[data-bind="jp-roll1-grid"]'),
-        spinEl,
-      });
+      // Animate Roll 1 from pre-loaded payload (no fetch — Q1 + Pitfall H)
+      await this.#animateRoll1FromPayload(this.#lastPayload);
 
       if (this.#replayCancelToken !== cancelToken) return; // superseded
 
-      this.#replayData = data;
       this.#setReplayState('roll1_done');
       return;
     }
 
     if (state === 'roll1_done' && this.#replayData?.hasBonus) {
-      // Start Roll 2
+      // Start Roll 2 (factory's pure-render path via existing #runRoll2Anim helper)
       const cancelToken = this.#replayCancelToken;
       this.#setReplayState('roll2_playing');
 

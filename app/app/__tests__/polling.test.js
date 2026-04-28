@@ -13,6 +13,7 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import * as storeMod from '../store.js';
 
 // ---------------------------------------------------------------------------
 // Stub document for the node runtime (polling.js gates on `typeof document`).
@@ -59,6 +60,8 @@ beforeEach(() => {
     fetchCalls.push({ url, opts });
     return { ok: true, status: 200, json: async () => ({ url }) };
   };
+  // Plan 59-02: clear store between tests so app.lastDay assertions are deterministic.
+  storeMod.__resetForTest();
 });
 
 afterEach(() => {
@@ -357,5 +360,78 @@ describe('abortAllInflight stub for Phase 58', () => {
     // 3 long-running cycles created (game, health, lastDay; player is null-short-circuited).
     assert.ok(aborted.length >= 3, `expected at least 3 aborts; got ${aborted.length}`);
     assert.equal(_testing.ACTIVE_CYCLES.size, 0);
+  });
+});
+
+// ===========================================================================
+// pollLastDay store wiring (Phase 59 Plan 59-02)
+// ===========================================================================
+
+describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
+  test('successful fetch writes payload to app.lastDay store path', async () => {
+    fetchImpl = async (url) => {
+      if (url.endsWith('/game/jackpot/last-day')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            day: 7,
+            level: 2,
+            summary: null,
+            winners: [],
+            roll1: { day: 7, level: 2, purchaseLevel: null, wins: [] },
+            roll2: { day: 7, level: 2, purchaseLevel: null, wins: [] },
+            status: 'resolved-no-winners',
+          }),
+        };
+      }
+      // Other 3 polled endpoints return generic ok payloads.
+      return { ok: true, status: 200, json: async () => ({ url }) };
+    };
+    start();
+    await new Promise((r) => setTimeout(r, 30));
+    const stored = storeMod.get('app.lastDay');
+    assert.ok(stored != null, 'app.lastDay populated after first cycle');
+    assert.equal(stored.day, 7);
+    assert.equal(stored.status, 'resolved-no-winners');
+    assert.equal(stored.level, 2);
+  });
+
+  test('failed fetch leaves app.lastDay untouched (catch returns null silently)', async () => {
+    fetchImpl = async (url) => {
+      if (url.endsWith('/game/jackpot/last-day')) {
+        throw new Error('network error');
+      }
+      return { ok: true, status: 200, json: async () => ({ url }) };
+    };
+    start();
+    await new Promise((r) => setTimeout(r, 30));
+    const stored = storeMod.get('app.lastDay');
+    assert.equal(stored, undefined, 'no store write on fetch failure');
+  });
+
+  test('store write occurs only for pollLastDay (other 3 pollers do NOT touch app.*)', async () => {
+    fetchImpl = async (url) => {
+      if (url.endsWith('/game/jackpot/last-day')) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            day: 11, level: 3, summary: null, winners: [],
+            roll1: { day: 11, level: 3, purchaseLevel: null, wins: [] },
+            roll2: { day: 11, level: 3, purchaseLevel: null, wins: [] },
+            status: 'resolved-no-winners',
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ url }) };
+    };
+    start({ playerAddress: '0xabc' });
+    await new Promise((r) => setTimeout(r, 30));
+    // app.lastDay populated; app.game / app.player / app.health remain undefined
+    // (Plan 59-02 only wires pollLastDay; Phase 60+ extends to other 3).
+    assert.ok(storeMod.get('app.lastDay') != null, 'app.lastDay set');
+    assert.equal(storeMod.get('app.game'), undefined, 'app.game untouched (Phase 60)');
+    assert.equal(storeMod.get('app.player'), undefined, 'app.player untouched');
+    assert.equal(storeMod.get('app.health'), undefined, 'app.health untouched');
   });
 });

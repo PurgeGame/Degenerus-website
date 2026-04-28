@@ -364,3 +364,149 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     assert.doesNotThrow(() => el.disconnectedCallback());
   });
 });
+
+// ===========================================================================
+// Plan 59-02: app.lastDay subscriber + status branch dispatch + pin-dayId
+// ===========================================================================
+
+describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
+  beforeEach(async () => {
+    storeMod.__resetForTest();
+    resetDom();
+    await import('../last-day-jackpot.js');
+  });
+
+  function instantiate() {
+    const Ctor = customElements.get('last-day-jackpot');
+    const el = new Ctor();
+    _docBody.appendChild(el);
+    el.connectedCallback();
+    return el;
+  }
+
+  test('status:pre-game payload → cold-start visible, empty-day + resolved hidden', async () => {
+    const el = instantiate();
+    storeMod.update('app.lastDay', { day: null, status: 'pre-game' });
+    await flushMicrotasks();
+    const cold = el.querySelector('[data-bind="ldj-status-cold-start"]');
+    const empty = el.querySelector('[data-bind="ldj-status-empty-day"]');
+    const resolved = el.querySelector('[data-bind="ldj-status-resolved"]');
+    assert.ok(cold, 'cold-start section exists');
+    assert.notEqual(cold.style.display, 'none', 'cold-start visible');
+    assert.equal(empty.style.display, 'none', 'empty-day hidden');
+    assert.equal(resolved.style.display, 'none', 'resolved hidden');
+  });
+
+  test('status:resolved-no-winners payload → empty-day visible with day-N copy + day label updated', async () => {
+    const el = instantiate();
+    storeMod.update('app.lastDay', {
+      day: 5, level: 2, summary: null, winners: [],
+      roll1: { day: 5, level: 2, purchaseLevel: null, wins: [] },
+      roll2: { day: 5, level: 2, purchaseLevel: null, wins: [] },
+      status: 'resolved-no-winners',
+    });
+    await flushMicrotasks();
+    const cold = el.querySelector('[data-bind="ldj-status-cold-start"]');
+    const empty = el.querySelector('[data-bind="ldj-status-empty-day"]');
+    const resolved = el.querySelector('[data-bind="ldj-status-resolved"]');
+    assert.equal(cold.style.display, 'none', 'cold-start hidden');
+    assert.notEqual(empty.style.display, 'none', 'empty-day visible');
+    assert.equal(resolved.style.display, 'none', 'resolved hidden');
+    const copy = el.querySelector('[data-bind="ldj-empty-copy"]');
+    assert.match(copy.textContent, /Day 5 had no winners/, 'day-5 copy present');
+    assert.match(copy.textContent, /day 6/, 'rolled-to-day-6 copy present');
+    const dayLbl = el.querySelector('[data-bind="day"]');
+    assert.match(dayLbl.textContent, /Day 5/);
+  });
+
+  test('status:resolved payload → resolved section visible + day label set + winners cached', async () => {
+    const el = instantiate();
+    const winner = {
+      address: '0xab12000000000000000000000000000000000000',
+      totalEth: '1000000000000000000',  // 1 ETH
+      ticketCount: 100,
+      coinTotal: '0',
+      bafPrize: { eth: '0', tickets: 0 },
+      decimatorPrize: { regularEth: '0', lootboxEth: '0', terminalEth: '0' },
+    };
+    storeMod.update('app.lastDay', {
+      day: 7, level: 2, summary: null, winners: [winner],
+      roll1: { day: 7, level: 2, purchaseLevel: null, wins: [] },
+      roll2: { day: 7, level: 2, purchaseLevel: null, wins: [], bonusTraitsPacked: null },
+      status: 'resolved',
+    });
+    await flushMicrotasks();
+    const cold = el.querySelector('[data-bind="ldj-status-cold-start"]');
+    const empty = el.querySelector('[data-bind="ldj-status-empty-day"]');
+    const resolved = el.querySelector('[data-bind="ldj-status-resolved"]');
+    assert.equal(cold.style.display, 'none', 'cold-start hidden');
+    assert.equal(empty.style.display, 'none', 'empty-day hidden');
+    assert.notEqual(resolved.style.display, 'none', 'resolved visible');
+    const dayLbl = el.querySelector('[data-bind="day"]');
+    assert.match(dayLbl.textContent, /Day 7/);
+  });
+
+  test('Pin-dayId: first payload pins day; same-day refresh re-renders; newer-day sets flag without rerender', async () => {
+    const el = instantiate();
+    // First payload: pin to day 5 empty-day
+    storeMod.update('app.lastDay', {
+      day: 5, level: 2, summary: null, winners: [],
+      roll1: { day: 5, level: 2, purchaseLevel: null, wins: [] },
+      roll2: { day: 5, level: 2, purchaseLevel: null, wins: [] },
+      status: 'resolved-no-winners',
+    });
+    await flushMicrotasks();
+    assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 5/, 'first payload pins day 5');
+
+    // Second payload: same day → re-render in place (still day 5)
+    storeMod.update('app.lastDay', {
+      day: 5, level: 2, summary: null, winners: [],
+      roll1: { day: 5, level: 2, purchaseLevel: null, wins: [] },
+      roll2: { day: 5, level: 2, purchaseLevel: null, wins: [] },
+      status: 'resolved-no-winners',
+    });
+    await flushMicrotasks();
+    assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 5/, 'same-day refresh keeps day 5');
+
+    // Third payload: newer day 6 → should NOT re-render body (banner is Plan 59-03)
+    storeMod.update('app.lastDay', {
+      day: 6, level: 2, summary: null, winners: [],
+      roll1: { day: 6, level: 2, purchaseLevel: null, wins: [] },
+      roll2: { day: 6, level: 2, purchaseLevel: null, wins: [] },
+      status: 'resolved-no-winners',
+    });
+    await flushMicrotasks();
+    // Body should still show day 5 (pin-dayId locked, banner DOM is Plan 59-03)
+    assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 5/, 'body still day 5 after newer-day arrival');
+  });
+
+  test('null/undefined payload does not throw + leaves Plan 59-01 default scaffold visible', async () => {
+    const el = instantiate();
+    assert.doesNotThrow(() => storeMod.update('app.lastDay', null));
+    await flushMicrotasks();
+    assert.doesNotThrow(() => storeMod.update('app.lastDay', undefined));
+    await flushMicrotasks();
+    // Cold-start (Plan 59-01 default scaffold) still visible since #onLastDayUpdate early-returned.
+    const cold = el.querySelector('[data-bind="ldj-status-cold-start"]');
+    assert.notEqual(cold.style.display, 'none', 'cold-start still visible after null payloads');
+  });
+
+  test('Defensive: status:resolved with null summary + undefined bonusTraitsPacked does not throw', async () => {
+    // Pitfalls D + E + bonusTraitsPacked-missing: composed blob may have null summary
+    // and roll2 without bonusTraitsPacked field (verified game.ts:2030-2229 — day-keyed
+    // roll2 handler does NOT include bonusTraitsPacked; only the per-player handler does
+    // per game.ts:881). Widget must tolerate gracefully.
+    const el = instantiate();
+    assert.doesNotThrow(() => {
+      storeMod.update('app.lastDay', {
+        day: 9, level: 2, summary: null, winners: [],
+        roll1: { day: 9, level: 2, purchaseLevel: null, wins: [] },
+        roll2: { day: 9, level: 2, purchaseLevel: null, wins: [] },  // no bonusTraitsPacked
+        status: 'resolved',
+      });
+    });
+    await flushMicrotasks();
+    const resolved = el.querySelector('[data-bind="ldj-status-resolved"]');
+    assert.notEqual(resolved.style.display, 'none', 'resolved visible with null summary');
+  });
+});

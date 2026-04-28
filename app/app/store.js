@@ -254,6 +254,16 @@ export function __resetForTest() {
   _state.ui.mode = 'self';
   _state.ui.chainOk = null;
   _state.ui.walletPickerOpen = false;
+  // Phase 59 Plan 59-02: clear dynamic top-level namespaces (e.g. `app.*`) added
+  // via setPath. polling-store-wired tests assert app.lastDay === undefined after
+  // a failed fetch — without this, prior-test state leaks across cases.
+  // Static namespaces (connected/viewing/ui) above are reset in-place to preserve
+  // existing reference identity; dynamic ones are deleted entirely.
+  for (const k of Object.keys(_state)) {
+    if (k !== 'connected' && k !== 'viewing' && k !== 'ui') {
+      delete _state[k];
+    }
+  }
   _subs.clear();
   _derivePending = false;
   _installInternalSubscribers();
