@@ -77,3 +77,150 @@
 .app-loading-state p {
   margin: 0;
 }
+
+/* ---------- Phase 58: chain-chip live state classes ---------- */
+/* Phase 56 ships .chain-chip and .chain-chip--neutral; Phase 58 plan 58-03
+   adds the on/off-Sepolia variants and the inline switch CTA. Driven by
+   wallet-picker.js's subscribe('ui.chainOk') subscriber. */
+
+.chain-chip--ok {
+  background: rgba(46, 160, 67, 0.18);
+  color: #6dcf83;
+  border-color: rgba(46, 160, 67, 0.35);
+}
+
+.chain-chip--ok .chain-chip__dot {
+  background: #2ea043;
+}
+
+.chain-chip--mismatch {
+  background: rgba(248, 81, 73, 0.18);
+  color: #ff7b72;
+  border-color: rgba(248, 81, 73, 0.35);
+}
+
+.chain-chip--mismatch .chain-chip__dot {
+  background: #f85149;
+}
+
+.chain-chip__switch {
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.chain-chip__switch:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ---------- Phase 58: wallet-picker modal ---------- */
+
+wallet-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: block;
+  pointer-events: auto;
+}
+
+wallet-picker[hidden] {
+  display: none;
+}
+
+.wallet-picker-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+
+.wallet-picker-modal {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 320px;
+  max-width: 480px;
+  max-height: 80vh;
+  padding: 1.5rem;
+  background: var(--bg-secondary, #1a1a1a);
+  color: var(--text-primary, #f5f5f5);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  overflow-y: auto;
+}
+
+.wallet-picker-modal h3 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+}
+
+.wallet-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.wallet-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.wallet-row:hover,
+.wallet-row:focus {
+  background: rgba(255, 255, 255, 0.05);
+  outline: 2px solid var(--accent, #4a90e2);
+  outline-offset: -2px;
+}
+
+.wallet-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.wallet-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.wallet-rdns {
+  font-size: 0.75rem;
+  color: var(--text-dim, #888);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.wallet-picker-empty p {
+  margin: 0.5rem 0;
+}
+
+.wallet-install-links {
+  padding-left: 1.25rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.wallet-install-links a {
+  color: var(--accent, #4a90e2);
+  text-decoration: underline;
+}
+
+.wallet-picker-cancel {
+  margin-top: 0.75rem;
+}

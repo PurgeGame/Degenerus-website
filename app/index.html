@@ -31,7 +31,7 @@
 
     <!-- Sepolia chip row (Phase 56 ships placeholder; Phase 58 activates state colors) -->
     <div class="chain-chip-row" aria-label="Network status">
-      <span id="chain-chip" class="chain-chip chain-chip--neutral" data-state="placeholder">
+      <span id="chain-chip" class="chain-chip chain-chip--neutral">
         <span class="chain-chip__dot"></span>
         <span class="chain-chip__label">Sepolia testnet</span>
       </span>
@@ -60,10 +60,14 @@
     <footer>
       <p>Degenerus Protocol — Sepolia testnet</p>
     </footer>
+
+    <!-- Wallet picker modal (Phase 58 — hidden by default; show() unhides) -->
+    <wallet-picker></wallet-picker>
   </div>
 
   <script src="/shared/nav.js"></script>
   <script>initNav({ currentPage: 'app' });</script>
   <script type="module" src="/app/app/main.js"></script>
+  <script type="module" src="/app/components/wallet-picker.js"></script>
 </body>
 </html>
