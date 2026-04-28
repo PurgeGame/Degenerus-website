@@ -354,6 +354,7 @@
     nav.className = 'unified-nav';
 
     var pages = config.pages || [
+      { key: 'app', label: 'Play', href: '/app/' },
       { key: 'beta', label: 'Beta', href: '/beta/' },
       { key: 'degenerette', label: 'Degenerette', href: '/degenerette/' },
       { key: 'whitepaper', label: 'Whitepaper', href: '/whitepaper/' },
