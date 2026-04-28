@@ -311,3 +311,45 @@ player-dropdown {
   cursor: not-allowed;
   opacity: 0.55;
 }
+
+/* ===========================================================================
+ * Phase 59 — last-day-jackpot widget (Plan 59-01 base styles)
+ * Plan 59-03 appends .ldj-new-day-banner + .ldj-winner-row--mine.
+ * =========================================================================== */
+
+.last-day-jackpot {
+  margin-top: clamp(0.5rem, 2vw, 1rem);
+  margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+}
+
+.ldj-day-label {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ldj-cold-start,
+.ldj-empty-day {
+  padding: clamp(1rem, 4vw, 1.5rem);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.ldj-cold-start p,
+.ldj-empty-day p {
+  margin: 0.5rem 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.ldj-subtle {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-style: italic;
+}
