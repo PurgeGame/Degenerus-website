@@ -57,10 +57,16 @@ export function initRouter() {
 
   // 2. popstate (browser back/forward) — re-read `?as=` and update store.
   //    `next` may be null (absent or invalid) which clears viewing.address.
+  //    WR-04: skip the write when the value is unchanged (no-op popstate
+  //    transitions, e.g., back/forward between two pages neither of which
+  //    has ?as=, would otherwise schedule a deriveMode microtask + URL
+  //    mirror notification for nothing).
   window.addEventListener('popstate', () => {
     const params = new URLSearchParams(window.location.search);
     const next = parseAsParam(params.get('as'));
-    update('viewing.address', next);
+    if (get('viewing.address') !== next) {
+      update('viewing.address', next);
+    }
   });
 
   // 3. store → URL mirror — subscribe to viewing.address changes and replaceState.
