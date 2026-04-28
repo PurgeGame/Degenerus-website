@@ -59,24 +59,40 @@ export async function connectWithPicker() {
       if (!found || found.length === 0) return null;
       if (found.length === 1) return found[0];
       return new Promise((resolve) => {
-        _pickerResolve = resolve;
+        // BL-05: track resolution state via a single boolean so neither
+        // picker.show()'s Promise nor a stray onUserPickedWallet() call can
+        // double-resolve into a stale outer Promise. Both code paths still
+        // function (whichever fires first wins; subsequent calls are no-ops).
+        let resolved = false;
+        const finish = (info) => {
+          if (resolved) return;
+          resolved = true;
+          _pickerResolve = null;
+          resolve(info);
+        };
+        _pickerResolve = finish;
         const picker = typeof document !== 'undefined' ? document.querySelector('wallet-picker') : null;
         if (picker && typeof picker.show === 'function') {
-          // wallet-picker.js (Plan 58-03) returns a Promise from show(); we wire either path.
-          const ret = picker.show(found);
-          if (ret && typeof ret.then === 'function') {
-            ret.then((info) => {
-              if (_pickerResolve) {
-                _pickerResolve(info);
-                _pickerResolve = null;
-              }
-            });
+          // wallet-picker.js (Plan 58-03) returns a Promise from show(). We
+          // wrap synchronous and async failures so the outer Promise can
+          // never leak: any error → resolve(null), letting connectWithPicker
+          // fall through to legacy/null instead of hanging forever.
+          let ret;
+          try {
+            ret = picker.show(found);
+          } catch {
+            finish(null);
+            return;
           }
-          // Otherwise the click handler in wallet-picker calls onUserPickedWallet().
+          if (ret && typeof ret.then === 'function') {
+            ret.then(finish, () => finish(null));
+          }
+          // The click handler in wallet-picker also calls onUserPickedWallet()
+          // → finish(info) via _pickerResolve. The `resolved` guard makes the
+          // duplicate call a no-op.
         } else {
           // Graceful degradation: no picker mounted → first wallet.
-          resolve(found[0]);
-          _pickerResolve = null;
+          finish(found[0]);
         }
       });
     },
