@@ -128,6 +128,13 @@ describe('batch', () => {
 // deriveCanSign — 4-state matrix (DD-03)
 // ===========================================================================
 
+// Helper to drain the microtask queue (deriveMode is queued via queueMicrotask
+// so requireSelf() in 58-01's chokepoint test sees the pre-derive snapshot).
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe('deriveCanSign', () => {
   test('deriveCanSign returns false when no wallet connected', () => {
     update('ui.mode', 'self');
@@ -143,18 +150,20 @@ describe('deriveCanSign', () => {
     assert.equal(deriveCanSign(), false);
   });
 
-  test("deriveCanSign returns false when ui.mode==='view'", () => {
+  test("deriveCanSign returns false when ui.mode==='view'", async () => {
     update('connected.address', '0xaaaa000000000000000000000000000000000001');
     update('ui.chainOk', true);
     update('viewing.address', '0xbbbb000000000000000000000000000000000002');
+    await flushMicrotasks();
     // mode auto-derives to 'view' from the viewing != connected combination.
     assert.equal(get('ui.mode'), 'view');
     assert.equal(deriveCanSign(), false);
   });
 
-  test("deriveCanSign returns true when mode='self' AND chainOk=true AND connected.address truthy", () => {
+  test("deriveCanSign returns true when mode='self' AND chainOk=true AND connected.address truthy", async () => {
     update('connected.address', '0xaaaa000000000000000000000000000000000001');
     update('ui.chainOk', true);
+    await flushMicrotasks();
     // viewing null → mode stays 'self'
     assert.equal(get('ui.mode'), 'self');
     assert.equal(deriveCanSign(), true);
@@ -190,46 +199,53 @@ describe('getViewedAddress', () => {
 // ===========================================================================
 
 describe('ui.mode auto-derivation', () => {
-  test("ui.mode auto-derives to 'view' when viewing.address set AND differs from connected.address", () => {
+  test("ui.mode auto-derives to 'view' when viewing.address set AND differs from connected.address", async () => {
     update('connected.address', '0xaaaa000000000000000000000000000000000001');
     update('viewing.address', '0xbbbb000000000000000000000000000000000002');
+    await flushMicrotasks();
     assert.equal(get('ui.mode'), 'view');
   });
 
-  test("ui.mode auto-derives to 'view' when viewing.address set AND no wallet (deep-link without connect)", () => {
+  test("ui.mode auto-derives to 'view' when viewing.address set AND no wallet (deep-link without connect)", async () => {
     update('connected.address', null);
     update('viewing.address', '0xbbbb000000000000000000000000000000000002');
+    await flushMicrotasks();
     assert.equal(get('ui.mode'), 'view');
   });
 
-  test("ui.mode auto-derives to 'self' when viewing===connected (case-insensitive)", () => {
+  test("ui.mode auto-derives to 'self' when viewing===connected (case-insensitive)", async () => {
     update('connected.address', '0xAAAA000000000000000000000000000000000001');
     // viewing same address but lowercase
     update('viewing.address', '0xaaaa000000000000000000000000000000000001');
+    await flushMicrotasks();
     assert.equal(get('ui.mode'), 'self');
   });
 
-  test("ui.mode auto-derives to 'self' when viewing.address null", () => {
+  test("ui.mode auto-derives to 'self' when viewing.address null", async () => {
     update('connected.address', '0xaaaa000000000000000000000000000000000001');
     update('viewing.address', '0xbbbb000000000000000000000000000000000002');
+    await flushMicrotasks();
     // mode is 'view' here
     assert.equal(get('ui.mode'), 'view');
     update('viewing.address', null);
+    await flushMicrotasks();
     assert.equal(get('ui.mode'), 'self');
   });
 
-  test("wallet.js-style direct update('ui.mode','self') on disconnect is honored (does not get overwritten by derive subscriber when viewing is also null)", () => {
+  test("wallet.js-style direct update('ui.mode','self') on disconnect is honored (does not get overwritten by derive subscriber when viewing is also null)", async () => {
     // Synthetic regression gate for 58-01 contracts.test.js #1 pattern:
     // explicit update('ui.mode', 'view') with viewing=null must NOT be auto-corrected
     // by a connected.address change (derive only re-evaluates when viewing is set,
     // because mode is fundamentally a function of viewing.address).
     update('ui.mode', 'view');
     update('connected.address', '0xaaaa000000000000000000000000000000000001');
+    await flushMicrotasks();
     // viewing is null → derive subscriber on connected.address must skip → mode stays 'view'
     assert.equal(get('ui.mode'), 'view');
     // Now an explicit reset (mirrors wallet.js disconnect path):
     update('connected.address', null);
     update('ui.mode', 'self');
+    await flushMicrotasks();
     assert.equal(get('ui.mode'), 'self');
   });
 });
