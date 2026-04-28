@@ -100,6 +100,10 @@ export async function connectWithPicker() {
 
   if (!browserProvider) return connectLegacy();
 
+  // WR-05: attach listeners BEFORE eth_requestAccounts so chainChanged /
+  // accountsChanged events fired during wallet startup are not lost.
+  attachListeners(browserProvider);
+
   // Explicit connect — request accounts (popup OK on user click).
   const accounts = await browserProvider.provider.request({
     method: 'eth_requestAccounts',
@@ -117,7 +121,6 @@ export async function connectWithPicker() {
   const network = await browserProvider.getNetwork().catch(() => null);
   update('ui.chainOk', network ? Number(network.chainId) === CHAIN.id : null);
 
-  attachListeners(browserProvider);
   emitConnected(addr);
   return browserProvider;
 }
@@ -134,6 +137,10 @@ export async function connectLegacy() {
     return null;
   }
   const browserProvider = new BrowserProvider(eth);
+  // WR-05: attach EIP-1193 listeners BEFORE eth_requestAccounts so
+  // chainChanged/accountsChanged events fired during the wallet's startup /
+  // permission-grant flow (e.g., MetaMask Snap chain init) are not lost.
+  attachListeners(browserProvider);
   const accounts = await eth.request({ method: 'eth_requestAccounts' }).catch(() => []);
   if (!accounts || accounts.length === 0) return null;
 
@@ -148,7 +155,6 @@ export async function connectLegacy() {
   const network = await browserProvider.getNetwork().catch(() => null);
   update('ui.chainOk', network ? Number(network.chainId) === CHAIN.id : null);
 
-  attachListeners(browserProvider);
   emitConnected(addr);
   return browserProvider;
 }
@@ -166,15 +172,17 @@ export async function autoReconnect() {
   if (rdns === 'legacy:window.ethereum') {
     const eth = (typeof globalThis !== 'undefined' && globalThis.window) ? globalThis.window.ethereum : null;
     if (!eth) return false;
+    const browserProvider = new BrowserProvider(eth);
+    // WR-05: attach listeners BEFORE eth_accounts so wallet-startup events
+    // are not lost.
+    attachListeners(browserProvider);
     const accounts = await eth.request({ method: 'eth_accounts' }).catch(() => []);
     if (!accounts || accounts.length === 0) return false;
-    const browserProvider = new BrowserProvider(eth);
     setProvider(browserProvider);
     update('connected.address', accounts[0].toLowerCase());
     update('connected.rdns', 'legacy:window.ethereum');
     const net = await browserProvider.getNetwork().catch(() => null);
     update('ui.chainOk', net ? Number(net.chainId) === CHAIN.id : null);
-    attachListeners(browserProvider);
     return true;
   }
 
@@ -184,6 +192,10 @@ export async function autoReconnect() {
     filter: (found) => (found && found.find((p) => p.rdns === rdns)) || null,
   }).catch(() => null);
   if (!browserProvider) return false;
+
+  // WR-05: attach listeners BEFORE eth_accounts so wallet-startup events
+  // are not lost.
+  attachListeners(browserProvider);
 
   // SILENT — eth_accounts (NOT eth_requestAccounts → no popup).
   const accounts = await browserProvider.provider.request({
@@ -198,7 +210,6 @@ export async function autoReconnect() {
   const network = await browserProvider.getNetwork().catch(() => null);
   update('ui.chainOk', network ? Number(network.chainId) === CHAIN.id : null);
 
-  attachListeners(browserProvider);
   return true;
 }
 
