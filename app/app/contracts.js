@@ -31,7 +31,17 @@ export function clearProvider() { _provider = null; }
 // ---------------------------------------------------------------------------
 // requireSelf — chokepoint guard (RESEARCH §Pattern 4 layer 3).
 // Called as the FIRST statement in sendTx, BEFORE any provider/signer touch.
-// Throws if ui.mode === 'view' OR connected wallet !== viewing target.
+//
+// Throw-message order (WR-03 — documented intent):
+//   1. ui.mode === 'view'       → 'Read-only mode — cannot sign...'
+//   2. !connected               → 'Wallet not connected.'
+//   3. viewing && mismatch      → 'Connected wallet does not match...'
+//
+// In the deep-link no-wallet case (mode==='view' AND connected===null) the
+// user sees message #1, NOT #2. The UI-level disable manager surfaces a
+// "Connect to your own wallet to act" tooltip well before this code path is
+// reached, so the chokepoint message is rarely surfaced to honest users; it
+// matters mainly for devtools-bypass tests (T-58-02).
 // ---------------------------------------------------------------------------
 
 export function requireSelf() {
