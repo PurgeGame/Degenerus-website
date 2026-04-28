@@ -32,9 +32,17 @@ const BANNER_CTA_SELECTOR = '.view-mode-banner__cta';
 
 // ---------------------------------------------------------------------------
 // Banner visibility manager.
+//
+// Idempotency: subscribers + click listener are installed at most once per
+// process lifetime. Repeated calls are no-ops. Tests reset via
+// __resetForTest() below (which also tears down the data-write manager).
 // ---------------------------------------------------------------------------
 
+let _bannerSetupDone = false;
+const _bannerUnsubs = [];
+
 export function setupBanner() {
+  if (_bannerSetupDone) return;
   if (typeof document === 'undefined') return;
   const banner = document.getElementById(BANNER_ID);
   if (!banner) {
@@ -42,11 +50,16 @@ export function setupBanner() {
     console.warn('[view-mode-banner] #view-mode-banner element not found');
     return;
   }
+  _bannerSetupDone = true;
 
-  // Visibility — subscribe('ui.mode') drives the [hidden] attribute.
-  subscribe('ui.mode', (mode) => {
-    banner.hidden = (mode !== 'view');
-  });
+  // Visibility — subscribe('ui.mode') drives the [hidden] attribute. We look
+  // up the banner inside the callback so a Phase 60+ re-render that swaps the
+  // #view-mode-banner element does not leave us writing to a detached node
+  // (WR-07).
+  _bannerUnsubs.push(subscribe('ui.mode', (mode) => {
+    const b = (typeof document !== 'undefined') ? document.getElementById(BANNER_ID) : null;
+    if (b) b.hidden = (mode !== 'view');
+  }));
 
   // Wire the "Back to my account" CTA.
   const cta = banner.querySelector(BANNER_CTA_SELECTOR);
@@ -97,7 +110,17 @@ export function refreshDataWriteButtons() {
   });
 }
 
+// Idempotency: subscribers + MutationObserver are installed at most once per
+// process lifetime. Repeated calls are no-ops. Tests reset via
+// __resetForTest() below.
+let _dataWriteSetupDone = false;
+const _dataWriteUnsubs = [];
+let _dataWriteObserver = null;
+
 export function setupDataWriteManager() {
+  if (_dataWriteSetupDone) return;
+  _dataWriteSetupDone = true;
+
   // Initial pass — Phase 58 ships zero [data-write] buttons; Phase 60+ panels
   // will mount them. Safe to run regardless.
   refreshDataWriteButtons();
@@ -105,14 +128,14 @@ export function setupDataWriteManager() {
   // Re-evaluate whenever any input to canSign changes. subscribe() fires
   // immediately with current value, so each call kicks off an initial refresh
   // (idempotent — the same end-state is computed each time).
-  subscribe('ui.mode', refreshDataWriteButtons);
-  subscribe('ui.chainOk', refreshDataWriteButtons);
-  subscribe('connected.address', refreshDataWriteButtons);
+  _dataWriteUnsubs.push(subscribe('ui.mode', refreshDataWriteButtons));
+  _dataWriteUnsubs.push(subscribe('ui.chainOk', refreshDataWriteButtons));
+  _dataWriteUnsubs.push(subscribe('connected.address', refreshDataWriteButtons));
 
   // MutationObserver: when Phase 60+ panels mount [data-write] buttons after
   // this module's init, refresh them too.
   if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined' && document.body) {
-    const observer = new MutationObserver((mutations) => {
+    _dataWriteObserver = new MutationObserver((mutations) => {
       let needsRefresh = false;
       for (const m of mutations) {
         const added = m && m.addedNodes;
@@ -130,9 +153,33 @@ export function setupDataWriteManager() {
       if (needsRefresh) refreshDataWriteButtons();
     });
     try {
-      observer.observe(document.body, { childList: true, subtree: true });
+      _dataWriteObserver.observe(document.body, { childList: true, subtree: true });
     } catch { /* swallow — non-DOM env */ }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Test-only reset — tears down both managers so a fresh setup* call
+// re-installs subscribers against the post-__resetForTest store registry.
+// NOT for production consumers.
+// ---------------------------------------------------------------------------
+
+export function __resetForTest() {
+  for (const u of _bannerUnsubs) {
+    try { u(); } catch { /* swallow */ }
+  }
+  _bannerUnsubs.length = 0;
+  _bannerSetupDone = false;
+
+  for (const u of _dataWriteUnsubs) {
+    try { u(); } catch { /* swallow */ }
+  }
+  _dataWriteUnsubs.length = 0;
+  if (_dataWriteObserver && typeof _dataWriteObserver.disconnect === 'function') {
+    try { _dataWriteObserver.disconnect(); } catch { /* swallow */ }
+  }
+  _dataWriteObserver = null;
+  _dataWriteSetupDone = false;
 }
 
 // ---------------------------------------------------------------------------

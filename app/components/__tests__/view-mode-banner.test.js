@@ -271,6 +271,10 @@ beforeEach(async () => {
   _docListeners.clear();
   // Ensure module loaded (cached after first import).
   const mod = await import('../view-mode-banner.js');
+  // BL-02: setupBanner / setupDataWriteManager are idempotent across the
+  // process lifetime. To re-install subscribers after storeMod.__resetForTest
+  // wiped the registry, tear down via the module's __resetForTest first.
+  if (typeof mod.__resetForTest === 'function') mod.__resetForTest();
   // Re-run setup so the subscribers are reinstalled in the fresh store registry.
   // setupBanner re-subscribes to ui.mode AND re-binds the back-CTA click handler.
   // setupDataWriteManager re-subscribes to ui.mode/ui.chainOk/connected.address +
