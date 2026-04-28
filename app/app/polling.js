@@ -38,6 +38,10 @@ const VISIBILITY_DEBOUNCE_MS = 100; // Pitfall 3 mitigation
 const TIMER_HANDLES = { game: null, player: null, health: null, lastDay: null };
 const ACTIVE_CYCLES = new Map(); // timerName → AbortController
 
+// Module-level state captured by start() so the visibilitychange handler
+// can re-arm cadence + re-poll without losing the playerAddress (WR-01 fix).
+let _activePlayerAddress = null;
+
 // ---------------------------------------------------------------------------
 // Pitfall 5 reconciliation: own fetch wrapper that supports {signal}.
 // D-04 satisfied — cross-import API_BASE only, no /beta/ edit, no fetchJSON cross-import.
@@ -98,10 +102,11 @@ function runCycle(timerName, fetchers) {
 // ---------------------------------------------------------------------------
 
 export function start({ playerAddress = null } = {}) {
+  _activePlayerAddress = playerAddress;
   // Clear any previously registered handles before re-registering.
   pauseAllTimers();
   const game     = () => runCycle('game',     [(s) => pollGame(s)]);
-  const player   = () => runCycle('player',   [(s) => pollPlayer(playerAddress, s)]);
+  const player   = () => runCycle('player',   [(s) => pollPlayer(_activePlayerAddress, s)]);
   const health   = () => runCycle('health',   [(s) => pollHealth(s)]);
   const lastDay  = () => runCycle('lastDay',  [(s) => pollLastDay(s)]);
   // Eager first cycle (each timer fires immediately, before the first setInterval tick).
@@ -140,11 +145,10 @@ export function handleVisibilityChange() {
   visTimeout = setTimeout(() => {
     visTimeout = null;
     if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-      // Immediate re-poll across all 4 cycles (within 1s per APP-04 success criterion).
-      runCycle('game',    [(s) => pollGame(s)]);
-      runCycle('player',  [(s) => pollPlayer(null, s)]); // Phase 58 supplies addr
-      runCycle('health',  [(s) => pollHealth(s)]);
-      runCycle('lastDay', [(s) => pollLastDay(s)]);
+      // CR-01 + WR-01: re-arm cadence AND fire eager cycle (start() does both).
+      // Preserves the playerAddress captured at the most recent start() call so
+      // the player feed survives tab-switch + return.
+      start({ playerAddress: _activePlayerAddress });
     } else {
       pauseAllTimers();
     }

@@ -252,6 +252,46 @@ describe('visibilitychange handler (D-04 + Pitfall 3)', () => {
     assert.ok(paths.some((p) => p.endsWith('/health')), 'health re-polled on visible');
     assert.ok(paths.some((p) => p.endsWith('/game/jackpot/last-day')), 'lastDay re-polled on visible');
   });
+
+  // CR-01 regression: visible → re-arm all 4 setIntervals after hidden cleared them.
+  test('visible after hidden re-arms all 4 setIntervals (CR-01 regression)', async () => {
+    start({ playerAddress: '0xabc' });
+    await new Promise((r) => setTimeout(r, 10));
+    globalThis.document.visibilityState = 'hidden';
+    handleVisibilityChange();
+    await new Promise((r) => setTimeout(r, 150));
+    assert.equal(_testing.TIMER_HANDLES.game, null, 'precondition: game cleared on hidden');
+    assert.equal(_testing.TIMER_HANDLES.player, null, 'precondition: player cleared on hidden');
+    assert.equal(_testing.TIMER_HANDLES.health, null, 'precondition: health cleared on hidden');
+    assert.equal(_testing.TIMER_HANDLES.lastDay, null, 'precondition: lastDay cleared on hidden');
+
+    globalThis.document.visibilityState = 'visible';
+    handleVisibilityChange();
+    await new Promise((r) => setTimeout(r, 150));
+    assert.ok(_testing.TIMER_HANDLES.game !== null, 'game re-armed on visible');
+    assert.ok(_testing.TIMER_HANDLES.player !== null, 'player re-armed on visible');
+    assert.ok(_testing.TIMER_HANDLES.health !== null, 'health re-armed on visible');
+    assert.ok(_testing.TIMER_HANDLES.lastDay !== null, 'lastDay re-armed on visible');
+  });
+
+  // WR-01 regression: visible after hidden preserves the playerAddress captured at start().
+  test('visible after hidden preserves playerAddress (WR-01 regression)', async () => {
+    start({ playerAddress: '0xfeedface' });
+    await new Promise((r) => setTimeout(r, 10));
+    globalThis.document.visibilityState = 'hidden';
+    handleVisibilityChange();
+    await new Promise((r) => setTimeout(r, 150));
+
+    globalThis.document.visibilityState = 'visible';
+    fetchCalls = [];
+    handleVisibilityChange();
+    await new Promise((r) => setTimeout(r, 150));
+    const paths = fetchCalls.map((c) => c.url);
+    assert.ok(
+      paths.some((p) => p.endsWith('/player/0xfeedface')),
+      `player feed re-polled with captured addr on visible; saw paths=${JSON.stringify(paths)}`,
+    );
+  });
 });
 
 // ===========================================================================
