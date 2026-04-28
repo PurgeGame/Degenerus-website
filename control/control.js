@@ -269,11 +269,24 @@ function renderStatus(merged) {
   const dayPart = merged.dayOfLevel ?? merged.currentDay ?? '—';
   setText('status-level-day', `${merged.currentLevel ?? '—'} / ${dayPart}`);
   setText('status-phase', merged.jackpotPhase ?? merged.phase ?? '—');
-  setText('status-players-alive', merged.playersAlive ?? '—');
+  // playersAlive is not currently surfaced by /game/state or /control/status
+  // (db schema doesn't aggregate it, sim status block omits it). Render
+  // 'n/a' rather than '—' so the operator can tell the field is intentionally
+  // absent vs. waiting on a pending fetch.
+  setText('status-players-alive', merged.playersAlive ?? 'n/a');
 
-  const pools = merged.poolBalances || {};
-  const poolStr = ['jackpot', 'decimator', 'treasury', 'vault']
-    .map(k => `${k.slice(0, 3)}: ${fmtEth(pools[k])}`)
+  // /game/state exposes `prizePools` (NOT `poolBalances`) with these keys:
+  //   { currentPrizePool, nextPrizePool, futurePrizePool, claimableWinnings, frozen }
+  // We display the four wei-string pools as ETH; `frozen` is a bool and is
+  // surfaced separately via the existing 'Jackpot Phase' cell context.
+  const pools = merged.prizePools || merged.poolBalances || {};
+  const poolStr = [
+    ['cur', pools.currentPrizePool],
+    ['nxt', pools.nextPrizePool],
+    ['fut', pools.futurePrizePool],
+    ['clm', pools.claimableWinnings],
+  ]
+    .map(([k, v]) => `${k}: ${fmtEth(v)}`)
     .join(' · ');
   setText('status-pools', poolStr || '—');
 
