@@ -4,16 +4,18 @@
 // replaces the raw eip6963:announceProvider listener + setTimeout(500) race-wait
 // pattern from /beta/app/wallet.js with deterministic ethers-managed dedup + filter.
 //
-// rdns persistence ONLY (NEVER lastWalletAddress / lastWalletUuid) — rdns is the
-// schema-stable wallet identifier per EIP-6963 (T-58-04 + T-58-08).
+// rdns persistence ONLY — rdns is the schema-stable wallet identifier per EIP-6963
+// (T-58-04 + T-58-08). The address-based and uuid-based persistence keys used by
+// /beta/ are intentionally NOT persisted here (uuid is per-session ephemeral; an
+// address as the lookup key cannot survive an account switch within the same wallet).
 //
 // autoReconnect uses eth_accounts (silent, no popup) — eth_requestAccounts is
 // reserved for explicit user "Connect" clicks via connectWithPicker.
 //
 // accountsChanged + chainChanged + disconnect listeners call polling.abortAllInflight()
 // before mutating store, so stale fetches cannot land on the post-change wallet.
-// chainChanged does NOT call window.location.reload() — preserves ?as= URL state and
-// view-mode for users who cold-loaded with a deep link (T-58-06).
+// chainChanged does NOT trigger a page refresh — preserves ?as= URL state and view-mode
+// for users who cold-loaded with a deep link (T-58-06).
 //
 // Bidirectional bridge with /shared/nav.js: listens for `wallet-connected` /
 // `wallet-disconnected` CustomEvents (defensive idempotency, no re-emit loop —
@@ -186,8 +188,8 @@ export async function autoReconnect() {
 
 // ---------------------------------------------------------------------------
 // attachListeners — wire EIP-1193 lifecycle events on the discovered provider.
-// CRITICAL: chainChanged does NOT call window.location.reload() — preserves
-// ?as= URL state for view-mode users (T-58-06).
+// CRITICAL: chainChanged does NOT trigger a page refresh — preserves ?as= URL
+// state for view-mode users (T-58-06).
 // ---------------------------------------------------------------------------
 
 function attachListeners(browserProvider) {
@@ -217,8 +219,8 @@ function attachListeners(browserProvider) {
   eth.on('chainChanged', (hexId) => {
     abortAllInflight();
     update('ui.chainOk', hexId === CHAIN.hexId);
-    // CRITICAL: NO window.location.reload() — preserves ?as= URL state for view-mode
-    // users (T-58-06). The store update is sufficient to drive UI re-render.
+    // CRITICAL: NO page refresh on chainChanged — preserves ?as= URL state for
+    // view-mode users (T-58-06). The store update is sufficient to drive UI re-render.
   });
 
   eth.on('disconnect', () => {
