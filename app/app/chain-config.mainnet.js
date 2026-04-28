@@ -1,18 +1,25 @@
 // website/app/app/chain-config.mainnet.js
 // Mainnet profile — addresses populated at v5.0 mainnet cutover.
 // MAINNET_PENDING = true is the canonical flag downstream phases check.
+//
+// WR-06 PRE-CUTOVER REMINDER: rpcUrl and nativeAddEntry.rpcUrls below are
+// placeholders. BEFORE flipping chain-config.js to import this file, populate
+// both with a non-empty production RPC URL (see ../shared/nav.js usage and
+// EIP-3085 wallet_addEthereumChain validation requirements). The guard in
+// chain-config.js will throw at import-time if either is left empty after
+// cutover.
 
 export const CHAIN = {
   id: 1,
   hexId: '0x1',
   name: 'Ethereum',
-  rpcUrl: '',
+  rpcUrl: '',  // WR-06: populate before cutover (e.g. 'https://eth.llamarpc.com')
   indexerBase: 'https://api.degener.us',
   etherscanBase: 'https://etherscan.io',
   nativeAddEntry: {
     chainId: '0x1',
     chainName: 'Ethereum',
-    rpcUrls: [],
+    rpcUrls: [],  // WR-06: populate before cutover; EIP-3085 requires non-empty array
     nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
     blockExplorerUrls: ['https://etherscan.io'],
   },
