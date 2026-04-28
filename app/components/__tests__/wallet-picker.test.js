@@ -65,29 +65,32 @@ function makeFakeElement(tag = 'div') {
     get innerHTML() { return this._innerHTML; },
     set innerHTML(v) {
       this._innerHTML = String(v);
-      // Re-parse a *trivial* subset so this.querySelector('[data-bind="list"]') etc. works.
-      // We don't run a real parser; instead we materialize the static skeleton elements
-      // that wallet-picker.js's connectedCallback creates and re-expose them.
       this.children = [];
-      // Detect known data-bind / data-close markers in the literal HTML.
-      const list = makeFakeElement('ul');
-      list.attributes['data-bind'] = 'list';
-      const empty = makeFakeElement('div');
-      empty.attributes['data-bind'] = 'empty';
-      empty.hidden = /data-bind="empty"[^>]*hidden/.test(v);
-      const cancelBtn = makeFakeElement('button');
-      cancelBtn.attributes['data-close'] = '';
-      cancelBtn._textContent = 'Cancel';
-      const backdrop = makeFakeElement('div');
-      backdrop.attributes['data-close'] = '';
-      backdrop.className = 'wallet-picker-backdrop';
-      const modal = makeFakeElement('div');
-      modal.className = 'wallet-picker-modal';
-      this.appendChild(backdrop);
-      this.appendChild(modal);
-      modal.appendChild(list);
-      modal.appendChild(empty);
-      modal.appendChild(cancelBtn);
+      // Only materialize the picker's static skeleton when the literal contains the
+      // known data-bind markers — i.e., this is wallet-picker.js's connectedCallback
+      // template (NOT a per-row clear like `list.innerHTML = ''`).
+      if (v && typeof v === 'string' && v.includes('data-bind="list"') && v.includes('data-bind="empty"')) {
+        const list = makeFakeElement('ul');
+        list.attributes['data-bind'] = 'list';
+        list.classList.add('wallet-list');
+        const empty = makeFakeElement('div');
+        empty.attributes['data-bind'] = 'empty';
+        empty.classList.add('wallet-picker-empty');
+        empty.hidden = /data-bind="empty"[^>]*hidden/.test(v);
+        const cancelBtn = makeFakeElement('button');
+        cancelBtn.attributes['data-close'] = '';
+        cancelBtn._textContent = 'Cancel';
+        const backdrop = makeFakeElement('div');
+        backdrop.attributes['data-close'] = '';
+        backdrop.classList.add('wallet-picker-backdrop');
+        const modal = makeFakeElement('div');
+        modal.classList.add('wallet-picker-modal');
+        this.appendChild(backdrop);
+        this.appendChild(modal);
+        modal.appendChild(list);
+        modal.appendChild(empty);
+        modal.appendChild(cancelBtn);
+      }
     },
     get textContent() {
       if (this._textContent) return this._textContent;
@@ -169,7 +172,11 @@ function matches(el, sel) {
   }
   // Class selector .foo
   if (sel.startsWith('.')) {
-    return el.classList && el.classList.contains(sel.slice(1));
+    const cls = sel.slice(1);
+    if (el.classList && el.classList.contains(cls)) return true;
+    // Fallback: handle elements whose impl assigned className directly.
+    if (typeof el.className === 'string' && el.className.split(/\s+/).includes(cls)) return true;
+    return false;
   }
   // ID selector #foo
   if (sel.startsWith('#')) {
@@ -194,9 +201,12 @@ function matches(el, sel) {
 
 class FakeHTMLElement {
   constructor() {
-    // Inherit a fake-element backing object's surface for instance methods.
+    // Build a backing fake element with the full surface (incl. accessor
+    // descriptors for innerHTML / src / textContent), then copy ALL property
+    // descriptors onto `this` so accessors survive — Object.assign would lose them.
     const base = makeFakeElement(this.constructor.name || 'div');
-    Object.assign(this, base);
+    const descriptors = Object.getOwnPropertyDescriptors(base);
+    Object.defineProperties(this, descriptors);
   }
 }
 
@@ -263,10 +273,26 @@ function resetChip() {
   _chainLabel.textContent = 'Sepolia testnet';
 }
 
-beforeEach(() => {
+// Tracks the unsubscribe handle for the chain-chip subscriber re-installed
+// per test (store.__resetForTest clears the subscriber registry, so we must
+// re-register after each reset for chain-chip class transitions to be observed).
+let _chainChipUnsub = null;
+
+beforeEach(async () => {
+  if (_chainChipUnsub) { try { _chainChipUnsub(); } catch { /* swallow */ } _chainChipUnsub = null; }
   storeMod.__resetForTest();
   resetChip();
   _docListeners.clear();
+  // Make sure wallet-picker.js has been imported at least once (initializes
+  // the customElements registration). Subsequent imports are cached.
+  const mod = await importPicker();
+  // Re-install the chain-chip subscriber after store reset (subscriber map
+  // was cleared). Initial fire sees ui.chainOk === null → neutral.
+  _chainChipUnsub = mod._installChainChipSubscriber();
+});
+
+afterEach(() => {
+  if (_chainChipUnsub) { try { _chainChipUnsub(); } catch { /* swallow */ } _chainChipUnsub = null; }
 });
 
 // ---------------------------------------------------------------------------
