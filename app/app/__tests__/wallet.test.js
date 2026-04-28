@@ -287,7 +287,10 @@ describe('accountsChanged listener', () => {
     _events.length = 0;
     _storeUpdates.length = 0;
     const fn = bp._ethListeners.accountsChanged[0];
-    fn(['0xBBBB000000000000000000000000000000000002']);
+    // WR-02: handler is now async (re-derives ui.chainOk from getNetwork()
+    // before dispatching wallet-connected). Await the returned Promise so
+    // the event has been dispatched before assertions run.
+    await fn(['0xBBBB000000000000000000000000000000000002']);
     const upd = _storeUpdates.find((u) => u[0] === 'connected.address' && u[1] !== null);
     assert.ok(upd, 'connected.address updated');
     assert.equal(upd[1], '0xbbbb000000000000000000000000000000000002');

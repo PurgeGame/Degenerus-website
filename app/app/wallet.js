@@ -212,7 +212,7 @@ function attachListeners(browserProvider) {
   const eth = browserProvider.provider;
   if (!eth || typeof eth.on !== 'function') return;
 
-  eth.on('accountsChanged', (accounts) => {
+  eth.on('accountsChanged', async (accounts) => {
     abortAllInflight();
     if (!accounts || accounts.length === 0) {
       // Clear viewing.address FIRST so deriveMode (microtask) sees a consistent
@@ -230,6 +230,12 @@ function attachListeners(browserProvider) {
     } else {
       const addr = accounts[0].toLowerCase();
       update('connected.address', addr);
+      // WR-02: a new account may be on a different chain (some wallets allow
+      // per-account chain settings, e.g., MetaMask Snap, Coinbase Wallet).
+      // Re-derive ui.chainOk so the banner / button-enable state stay in sync
+      // even before any user-driven write triggers assertChain().
+      const network = await browserProvider.getNetwork().catch(() => null);
+      update('ui.chainOk', network ? Number(network.chainId) === CHAIN.id : null);
       // DO NOT touch ui.mode here — view-mode is derived from viewing.address vs
       // connected.address (handled in plan 58-02 store.js deriveMode subscriber).
       document.dispatchEvent(new CustomEvent('wallet-connected', {
