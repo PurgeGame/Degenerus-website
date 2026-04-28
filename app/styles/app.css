@@ -224,3 +224,90 @@ wallet-picker[hidden] {
 .wallet-picker-cancel {
   margin-top: 0.75rem;
 }
+
+/* ---------- Phase 58 plan 04: player-dropdown typeahead ---------- */
+/* Container row that hosts the <player-dropdown> element. Distinct from the
+   per-li `.player-search-row` class inside player-dropdown.js — the descendant
+   selectors below disambiguate via `.player-search-results > li`. */
+
+.player-search-row {
+  margin: 0.5rem 0 1rem;
+  max-width: 480px;
+  position: relative;
+}
+
+player-dropdown {
+  display: block;
+  position: relative;
+}
+
+.player-search-input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border-color, #333);
+  background: var(--bg-secondary, #1a1a1a);
+  color: var(--text-primary, #f5f5f5);
+  border-radius: 6px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.player-search-input:focus {
+  outline: none;
+  border-color: var(--accent, #4a90e2);
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.25);
+}
+
+.player-search-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  background: var(--bg-secondary, #1a1a1a);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.player-search-results[hidden] {
+  display: none;
+}
+
+.player-search-results > li {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  color: var(--text-primary, #e0e0e0);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+}
+
+.player-search-results > li:hover,
+.player-search-results > li:focus {
+  background: rgba(255, 255, 255, 0.05);
+  outline: none;
+}
+
+.player-search-empty {
+  padding: 0.75rem;
+  color: var(--text-dim, #888);
+  font-style: italic;
+  cursor: default;
+}
+
+/* ---------- Phase 58 plan 04: [data-write] disabled state ---------- */
+/* The disable manager in view-mode-banner.js sets `disabled` + title; CSS
+   below adds the visual cue (cursor + opacity) for browsers that don't apply
+   default disabled styling to non-form elements (e.g., buttons inside Custom
+   Elements). */
+
+[data-write][disabled],
+[data-write][aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}

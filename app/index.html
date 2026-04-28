@@ -44,7 +44,12 @@
       <p class="subtitle">Play on Sepolia testnet — connect a wallet for purchases.</p>
     </header>
 
-    <!-- View-mode banner (Phase 58 DD-02 activates; Phase 56 ships hidden placeholder) -->
+    <!-- Player typeahead (Phase 58 DD-01 consumer; visible whether wallet connected or browsing read-only) -->
+    <div class="player-search-row">
+      <player-dropdown></player-dropdown>
+    </div>
+
+    <!-- View-mode banner (Phase 58 DD-02; view-mode-banner.js targets #view-mode-banner by id and toggles [hidden] via subscribe('ui.mode')) -->
     <div id="view-mode-banner" class="view-mode-banner" hidden>
       <span class="view-mode-banner__text">Viewing read-only</span>
       <button class="view-mode-banner__cta" type="button">Back to my account</button>
@@ -69,5 +74,7 @@
   <script>initNav({ currentPage: 'app' });</script>
   <script type="module" src="/app/app/main.js"></script>
   <script type="module" src="/app/components/wallet-picker.js"></script>
+  <script type="module" src="/app/components/player-dropdown.js"></script>
+  <script type="module" src="/app/components/view-mode-banner.js"></script>
 </body>
 </html>
