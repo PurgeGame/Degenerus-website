@@ -860,13 +860,18 @@ function onFundError(data) {
 // --- Boot ------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
+  // initSse() MUST run before initFundPlayers() — the fund-players panel
+  // attaches fund-progress / fund-complete / fund-error listeners against
+  // the module-level `es` handle assigned inside initSse(). If initFundPlayers
+  // ran first, `es` would still be null and those listeners would silently
+  // never attach, breaking row-level progress updates.
+  initSse();
   initStateControls();
   initDayAdvance();
   initStatus();
   initActionLog();
-  initForceAction();    // Plan 55-03 placeholder
-  initFundPlayers();    // Plan 55-03 placeholder
-  initSse();
+  initForceAction();
+  initFundPlayers();
   console.log('[control] initialized', {
     CONTROL_BASE, API_BASE, CHAIN_ID, LOG_BUFFER_SIZE,
   });
