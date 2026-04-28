@@ -128,6 +128,14 @@ export async function connectWithPicker() {
 // ---------------------------------------------------------------------------
 // connectLegacy — window.ethereum fallback for wallets without EIP-6963.
 // Persists sentinel rdns 'legacy:window.ethereum' so autoReconnect routes back.
+//
+// WR-10 contract: this function calls eth_requestAccounts which WILL surface
+// the wallet's permission prompt if the site is not already authorized. It
+// is intended to be invoked from explicit user-initiated paths only:
+//   - connectWithPicker fallback (when EIP-6963 discovery returns null)
+//   - direct user click that opted into "legacy connect" UI
+// Do NOT call from autoReconnect / silent boot flows — autoReconnect uses
+// eth_accounts (silent) for the legacy path.
 // ---------------------------------------------------------------------------
 
 export async function connectLegacy() {
