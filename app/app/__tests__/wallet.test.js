@@ -299,39 +299,54 @@ describe('accountsChanged listener', () => {
     assert.equal(ev.detail.address, '0xbbbb000000000000000000000000000000000002');
   });
 
-  test('calls polling.abortAllInflight before any other update', async () => {
-    // We assert observable side-effect ordering: abortAllInflight is the first thing called
-    // by the listener. We patch polling.abortAllInflight to track order via a sentinel.
-    let order = [];
+  test('calls polling.abortAllInflight before any other update', async (t) => {
+    // WR-08: assert ordering by attempting to patch pollingMod.abortAllInflight
+    // via Object.defineProperty. ESM exports are typically non-configurable in
+    // Node, so the patch may silently fail; we verify the patch took by
+    // probing the function identity and skip the test if it didn't (rather
+    // than passing as a false-green).
+    const order = [];
     const origAbort = pollingMod.abortAllInflight;
-    // Cannot reassign const export; install via a global hook the listener calls:
-    // wallet.js statically imports abortAllInflight; we observe order by injecting a spy
-    // through pollingMod via Object.defineProperty IF possible; otherwise verify ordering
-    // by ensuring local-store removal occurs AFTER state cleared (proxy for ordering).
-    // Simpler proof: monkey-patch the module's abortAllInflight reference via Object.defineProperty.
+    const spy = () => order.push('abort');
+    let patched = false;
     try {
       Object.defineProperty(pollingMod, 'abortAllInflight', {
         configurable: true,
-        get: () => () => order.push('abort'),
+        get: () => spy,
       });
+      // Probe: did the descriptor swap actually take? On Node ESM with
+      // immutable namespace bindings the get() may not be honored even though
+      // defineProperty succeeded.
+      patched = (pollingMod.abortAllInflight === spy);
     } catch {
-      // Fallback: skip strict ordering assertion if not configurable in this Node version.
+      patched = false;
     }
-    const bp = await attachAndConnect();
-    const fn = bp._ethListeners.accountsChanged[0];
-    fn([]);
-    // restore
+
+    if (!patched) {
+      // ESM namespace immutability prevents observing call order via spy.
+      // Skip rather than silently pass with no assertion — the chokepoint
+      // ordering is documented in wallet.js and exercised behaviorally by
+      // sibling tests (state-wipe + dispatch happen, no observable race).
+      t.skip('pollingMod.abortAllInflight is non-configurable in this Node ESM runtime');
+      return;
+    }
+
     try {
-      Object.defineProperty(pollingMod, 'abortAllInflight', {
-        configurable: true,
-        value: origAbort,
-        writable: true,
-      });
-    } catch { /* ignore */ }
-    // If the patch was successfully applied, abort should have been called (order has 'abort').
-    // If not, we cannot assert ordering — but the test still verifies the listener runs without throw.
-    if (order.length > 0) {
+      const bp = await attachAndConnect();
+      const fn = bp._ethListeners.accountsChanged[0];
+      // Use await — the listener is async (WR-02).
+      await fn([]);
+      assert.ok(order.length > 0, 'spy was called (patch effective)');
       assert.equal(order[0], 'abort', 'abortAllInflight called first in accountsChanged');
+    } finally {
+      // Restore — best effort.
+      try {
+        Object.defineProperty(pollingMod, 'abortAllInflight', {
+          configurable: true,
+          value: origAbort,
+          writable: true,
+        });
+      } catch { /* ignore */ }
     }
   });
 });
