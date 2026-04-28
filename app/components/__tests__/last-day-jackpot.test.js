@@ -510,3 +510,279 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
     assert.notEqual(resolved.style.display, 'none', 'resolved visible with null summary');
   });
 });
+
+// ===========================================================================
+// Plan 59-03: localStorage spin-idempotency + new-day banner + wallet highlight
+// ===========================================================================
+
+const RESOLVED_PAYLOAD_DAY5 = {
+  day: 5, level: 2, summary: null,
+  winners: [{
+    address: '0xab12000000000000000000000000000000000000',
+    totalEth: '1000000000000000000', ticketCount: 100, coinTotal: '0',
+    bafPrize: { eth: '0', tickets: 0 },
+    decimatorPrize: { regularEth: '0', lootboxEth: '0', terminalEth: '0' },
+  }],
+  roll1: { day: 5, level: 2, purchaseLevel: null, wins: [] },
+  roll2: { day: 5, level: 2, purchaseLevel: null, wins: [], bonusTraitsPacked: null },
+  status: 'resolved',
+};
+
+describe('Plan 59-03: localStorage spin-idempotency', () => {
+  beforeEach(async () => {
+    storeMod.__resetForTest();
+    resetDom();
+    await import('../last-day-jackpot.js');
+  });
+
+  function instantiate() {
+    const Ctor = customElements.get('last-day-jackpot');
+    const el = new Ctor();
+    _docBody.appendChild(el);
+    el.connectedCallback();
+    return el;
+  }
+
+  test('Fresh day (no localStorage entry) → state stays idle', async () => {
+    const el = instantiate();
+    storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
+    await flushMicrotasks();
+    const btn = el.querySelector('#jp-replay-btn');
+    const state = (btn?.dataset && btn.dataset.state)
+      || (typeof btn?.getAttribute === 'function' ? btn.getAttribute('data-state') : null);
+    assert.equal(state, 'idle', 'fresh day → idle state (animation not yet run)');
+    assert.equal(btn.disabled, false, 'Replay button enabled (pinned day present)');
+  });
+
+  test('Pre-seeded localStorage spun_day_${chainId}_${day} === "1" → state goes directly to roll2_done', async () => {
+    // Read CHAIN.id dynamically since the active profile (sepolia/mainnet) may vary
+    const { CHAIN } = await import('../../app/chain-config.js');
+    globalThis.localStorage.setItem(`spun_day_${CHAIN.id}_5`, '1');
+
+    const el = instantiate();
+    storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
+    await flushMicrotasks();
+    const btn = el.querySelector('#jp-replay-btn');
+    const state = (btn?.dataset && btn.dataset.state)
+      || (typeof btn?.getAttribute === 'function' ? btn.getAttribute('data-state') : null);
+    assert.equal(state, 'roll2_done', 'previously-spun day → roll2_done state (animation skipped)');
+    // Roll 1 + Roll 2 result panels should be visible (rendered instantly)
+    const roll1 = el.querySelector('[data-bind="jp-roll1-result"]');
+    const roll2 = el.querySelector('[data-bind="jp-roll2-result"]');
+    assert.notEqual(roll1?.style?.display, 'none', 'Roll 1 panel visible (instant render)');
+    assert.notEqual(roll2?.style?.display, 'none', 'Roll 2 panel visible (instant render)');
+  });
+
+  test('localStorage QuotaExceededError on setItem → widget renders without throwing (Pitfall F)', async () => {
+    // Replace localStorage with one that throws on every setItem call.
+    const original = globalThis.localStorage;
+    globalThis.localStorage = {
+      _m: new Map(),
+      getItem: (k) => null,
+      setItem: () => { throw new Error('QuotaExceededError'); },
+      removeItem: () => {},
+      clear: () => {},
+    };
+    try {
+      const el = instantiate();
+      // Render resolved + simulate a roll2_done transition by direct state set.
+      assert.doesNotThrow(() => {
+        storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
+      }, 'render should not throw despite localStorage write attempts');
+      await flushMicrotasks();
+      // Verify the widget rendered the resolved state successfully.
+      const resolved = el.querySelector('[data-bind="ldj-status-resolved"]');
+      assert.notEqual(resolved?.style?.display, 'none',
+        'resolved section visible despite localStorage throwing');
+    } finally {
+      globalThis.localStorage = original;
+    }
+  });
+});
+
+describe('Plan 59-03: new-day-available banner', () => {
+  beforeEach(async () => {
+    storeMod.__resetForTest();
+    resetDom();
+    await import('../last-day-jackpot.js');
+  });
+
+  function instantiate() {
+    const Ctor = customElements.get('last-day-jackpot');
+    const el = new Ctor();
+    _docBody.appendChild(el);
+    el.connectedCallback();
+    return el;
+  }
+
+  const DAY5 = {
+    day: 5, level: 2, summary: null, winners: [],
+    roll1: { day: 5, level: 2, purchaseLevel: null, wins: [] },
+    roll2: { day: 5, level: 2, purchaseLevel: null, wins: [] },
+    status: 'resolved-no-winners',
+  };
+  const DAY6 = {
+    ...DAY5, day: 6,
+    roll1: { ...DAY5.roll1, day: 6 },
+    roll2: { ...DAY5.roll2, day: 6 },
+  };
+
+  test('Banner is hidden by default (no newer-day delivery)', async () => {
+    const el = instantiate();
+    storeMod.update('app.lastDay', DAY5);
+    await flushMicrotasks();
+    const banner = el.querySelector('[data-bind="ldj-new-day-banner"]');
+    assert.ok(banner, 'banner element exists');
+    assert.equal(banner.hidden, true, 'banner hidden after first-payload pin (no newer day)');
+  });
+
+  test('Newer-day payload reveals banner with day-N+1 text + body stays pinned to old day', async () => {
+    const el = instantiate();
+    storeMod.update('app.lastDay', DAY5);
+    await flushMicrotasks();
+    // Newer day arrives — banner should appear; body stays on day 5 (pin-dayId)
+    storeMod.update('app.lastDay', DAY6);
+    await flushMicrotasks();
+    const banner = el.querySelector('[data-bind="ldj-new-day-banner"]');
+    assert.equal(banner.hidden, false, 'banner visible after newer-day delivery');
+    const text = el.querySelector('[data-bind="ldj-new-day-text"]');
+    assert.match(text.textContent, /Day 6/, 'banner text references newer day (6)');
+    // Body day label should still show day 5 (pin-dayId — D-04 no auto-rerender)
+    const dayLbl = el.querySelector('[data-bind="day"]');
+    assert.match(dayLbl.textContent, /Day 5/, 'body day label still day 5 (pin locked)');
+  });
+
+  test('"View now" click bumps cancel token + re-pins to newer day + hides banner', async () => {
+    const el = instantiate();
+    storeMod.update('app.lastDay', DAY5);
+    await flushMicrotasks();
+    storeMod.update('app.lastDay', DAY6);
+    await flushMicrotasks();
+    const banner = el.querySelector('[data-bind="ldj-new-day-banner"]');
+    assert.equal(banner.hidden, false, 'banner visible pre-click');
+
+    const viewNowBtn = el.querySelector('[data-bind="ldj-view-now"]');
+    assert.ok(viewNowBtn, 'View now button exists');
+    // Dispatch click event to the button
+    viewNowBtn.dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    assert.equal(banner.hidden, true, 'banner hidden after View now click');
+    // Day label should now reflect day 6 (re-pinned)
+    const dayLbl = el.querySelector('[data-bind="day"]');
+    assert.match(dayLbl.textContent, /Day 6/, 'day label updated to 6 after re-pin');
+  });
+});
+
+describe('Plan 59-03: wallet-conditional highlight', () => {
+  beforeEach(async () => {
+    storeMod.__resetForTest();
+    resetDom();
+    await import('../last-day-jackpot.js');
+  });
+
+  function instantiate() {
+    const Ctor = customElements.get('last-day-jackpot');
+    const el = new Ctor();
+    _docBody.appendChild(el);
+    el.connectedCallback();
+    return el;
+  }
+
+  const MY_ADDR = '0xab12000000000000000000000000000000000000';
+  const OTHER_ADDR = '0x0000000000000000000000000000000000000099';
+  const RESOLVED_WITH_ME = {
+    day: 5, level: 2, summary: null,
+    winners: [
+      { address: MY_ADDR, totalEth: '1000000000000000000', ticketCount: 100, coinTotal: '0',
+        bafPrize: { eth: '0', tickets: 0 },
+        decimatorPrize: { regularEth: '0', lootboxEth: '0', terminalEth: '0' } },
+      { address: OTHER_ADDR, totalEth: '500000000000000000', ticketCount: 50, coinTotal: '0',
+        bafPrize: { eth: '0', tickets: 0 },
+        decimatorPrize: { regularEth: '0', lootboxEth: '0', terminalEth: '0' } },
+    ],
+    roll1: { day: 5, level: 2, purchaseLevel: null, wins: [] },
+    roll2: { day: 5, level: 2, purchaseLevel: null, wins: [], bonusTraitsPacked: null },
+    status: 'resolved',
+  };
+
+  function findWinnerRow(el, lowercaseAddr) {
+    const rows = el.querySelectorAll('.jp-winner-item');
+    for (const row of rows) {
+      if (row.classList && row.classList.contains('jp-winner-item--empty')) continue;
+      const a = (row.dataset && row.dataset.address) || '';
+      if (a === lowercaseAddr) return row;
+    }
+    return null;
+  }
+
+  test('No wallet connected → no rows highlighted', async () => {
+    const el = instantiate();
+    storeMod.update('app.lastDay', RESOLVED_WITH_ME);
+    await flushMicrotasks();
+    const rows = el.querySelectorAll('.jp-winner-item');
+    let realRowCount = 0;
+    for (const row of rows) {
+      if (row.classList && row.classList.contains('jp-winner-item--empty')) continue;
+      realRowCount++;
+      assert.equal(row.classList.contains('ldj-winner-row--mine'), false,
+        `row ${row.dataset?.address} should not be highlighted (no wallet)`);
+    }
+    assert.ok(realRowCount > 0, 'at least one real winner row was rendered');
+  });
+
+  test('connected.address matches a winner → that row gains .ldj-winner-row--mine', async () => {
+    const el = instantiate();
+    storeMod.update('connected.address', MY_ADDR);
+    storeMod.update('app.lastDay', RESOLVED_WITH_ME);
+    await flushMicrotasks();
+    const myRow = findWinnerRow(el, MY_ADDR.toLowerCase());
+    const otherRow = findWinnerRow(el, OTHER_ADDR.toLowerCase());
+    assert.ok(myRow, 'my winner row found');
+    assert.ok(otherRow, 'other winner row found');
+    assert.equal(myRow.classList.contains('ldj-winner-row--mine'), true,
+      'my row highlighted (connected fallback)');
+    assert.equal(otherRow.classList.contains('ldj-winner-row--mine'), false,
+      'other row not highlighted');
+  });
+
+  test('viewing.address takes precedence over connected.address (getViewedAddress)', async () => {
+    const el = instantiate();
+    storeMod.update('connected.address', MY_ADDR);
+    storeMod.update('viewing.address', OTHER_ADDR);
+    storeMod.update('app.lastDay', RESOLVED_WITH_ME);
+    await flushMicrotasks();
+    const myRow = findWinnerRow(el, MY_ADDR.toLowerCase());
+    const viewRow = findWinnerRow(el, OTHER_ADDR.toLowerCase());
+    assert.ok(myRow, 'my row found');
+    assert.ok(viewRow, 'view-as row found');
+    assert.equal(viewRow.classList.contains('ldj-winner-row--mine'), true,
+      'viewed-as row highlighted (viewing.address precedence)');
+    assert.equal(myRow.classList.contains('ldj-winner-row--mine'), false,
+      'connected row NOT highlighted (viewing takes precedence)');
+  });
+
+  test('Disconnect (clear both addresses) → highlight removed without remount', async () => {
+    const el = instantiate();
+    storeMod.update('connected.address', MY_ADDR);
+    storeMod.update('app.lastDay', RESOLVED_WITH_ME);
+    await flushMicrotasks();
+
+    // Verify highlight present before disconnect
+    let myRow = findWinnerRow(el, MY_ADDR.toLowerCase());
+    assert.ok(myRow, 'my row found pre-disconnect');
+    assert.equal(myRow.classList.contains('ldj-winner-row--mine'), true,
+      'highlight present pre-disconnect');
+
+    // Disconnect by clearing both addresses
+    storeMod.update('viewing.address', null);
+    storeMod.update('connected.address', null);
+    await flushMicrotasks();
+
+    // Re-look up row (should still be the same DOM element — no remount)
+    myRow = findWinnerRow(el, MY_ADDR.toLowerCase());
+    assert.ok(myRow, 'my row still present (no remount)');
+    assert.equal(myRow.classList.contains('ldj-winner-row--mine'), false,
+      'highlight cleared post-disconnect');
+  });
+});

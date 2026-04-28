@@ -353,3 +353,56 @@ player-dropdown {
   font-size: 0.85rem;
   font-style: italic;
 }
+
+/* ===========================================================================
+ * Phase 59 — Plan 59-03 additions
+ *   .ldj-new-day-banner   — non-intrusive in-widget notification (D-04)
+ *   .ldj-view-now         — banner button (matches /beta/ button conventions)
+ *   .ldj-winner-row--mine — wallet-conditional row highlight (D-05)
+ * =========================================================================== */
+
+.ldj-new-day-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  margin-bottom: 1rem;
+  background: rgba(99, 179, 237, 0.10);          /* subtle blue accent */
+  border: 1px solid rgba(99, 179, 237, 0.35);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: opacity 200ms ease;
+}
+
+.ldj-new-day-banner[hidden] {
+  display: none !important;
+}
+
+.ldj-view-now {
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  background: rgba(99, 179, 237, 0.20);
+  border: 1px solid rgba(99, 179, 237, 0.55);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.ldj-view-now:hover { background: rgba(99, 179, 237, 0.35); }
+.ldj-view-now:focus-visible {
+  outline: 2px solid rgba(99, 179, 237, 0.7);
+  outline-offset: 2px;
+}
+
+/* Wallet-conditional highlight (D-05) — accent left-border + subtle tint.
+ * Subtle visual treatment that doesn't disrupt the list flow; the connected
+ * (or being-viewed) wallet's winning row stands out without being garish. */
+.jp-winner-item.ldj-winner-row--mine {
+  border-left: 3px solid var(--accent-color, #f6ad55);
+  background: rgba(246, 173, 85, 0.08);
+  padding-left: calc(0.75rem - 3px);
+}

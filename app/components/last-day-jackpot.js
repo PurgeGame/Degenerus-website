@@ -47,6 +47,34 @@ class LastDayJackpot extends HTMLElement {
   }
 
   // ---------------------------------------------------------------------------
+  // Plan 59-03: localStorage spin-idempotency (chainId-scoped per Pitfall B).
+  // All ops try/catch wrapped (Pitfall F — private browsing / QuotaExceededError).
+  // Key shape: `spun_day_${CHAIN.id}_${this.#pinnedDay}` → '1' (truthy presence).
+  // CHAIN.id is forward-compat with mainnet cutover (Phase 56 D-02).
+  // ---------------------------------------------------------------------------
+  #spunKey() {
+    return `spun_day_${CHAIN.id}_${this.#pinnedDay}`;
+  }
+
+  #hasSpunPinnedDay() {
+    if (this.#pinnedDay == null) return false;
+    try {
+      return localStorage.getItem(this.#spunKey()) === '1';
+    } catch {
+      return false;  // private browsing / SecurityError → re-spin acceptable
+    }
+  }
+
+  #markSpunPinnedDay() {
+    if (this.#pinnedDay == null) return;
+    try {
+      localStorage.setItem(this.#spunKey(), '1');
+    } catch {
+      // QuotaExceededError / SecurityError — swallow; user re-spins next visit (acceptable UX)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Plan 59-02: app.lastDay subscriber — drives 3-status branch rendering.
   // Pin-dayId pattern (D-02): #pinnedDay snapshotted at first non-null payload;
   // newer-day arrivals set #hasNewDayAvailable but do NOT auto-rerender (D-04).
@@ -71,10 +99,11 @@ class LastDayJackpot extends HTMLElement {
       return;
     }
 
-    // Newer day arrived — Plan 59-02 just records the flag; Plan 59-03 renders the banner.
+    // Newer day arrived — Plan 59-03 renders the banner DOM (D-04 — non-intrusive
+    // notification, NOT auto-rerender body).
     if (payload.day != null && payload.day > this.#pinnedDay) {
       this.#hasNewDayAvailable = true;
-      // Do NOT re-render body (D-04 — non-intrusive notification, not auto-rerender)
+      this.#renderNewDayBanner();
       return;
     }
     // payload.day < pinnedDay — defensive: ignore (shouldn't happen given monotonic indexer)
@@ -122,6 +151,12 @@ class LastDayJackpot extends HTMLElement {
     if (empty) empty.style.display = 'none';
     if (resolved) resolved.style.display = '';
 
+    // Plan 59-03: defensive — hide banner on a normal resolved render (same-day
+    // refresh / first-pin) so a stale banner doesn't linger from a prior day.
+    // The banner is unhidden only by #renderNewDayBanner when #onLastDayUpdate's
+    // newer-day branch fires.
+    if (!this.#hasNewDayAvailable) this.#hideNewDayBanner();
+
     // Day label
     const dayLbl = this.querySelector('[data-bind="day"]');
     if (dayLbl) dayLbl.textContent = `Day ${payload.day}`;
@@ -131,9 +166,103 @@ class LastDayJackpot extends HTMLElement {
     this.#renderWinnerSummary(this.#winners, payload.day);
     this.#renderWinnerLists(payload.day);
 
+    // Plan 59-03 (D-05): refresh highlight after winners rendered. Subscriber
+    // fires-immediately covers wallet-state changes; this call covers payload
+    // changes (new winners list = need to re-walk + toggle classes).
+    this.#refreshHighlight();
+
+    // Plan 59-03 (D-03): idempotency check — if user previously spun this day,
+    // skip animation and render the rolled state directly. Otherwise idle.
+    if (this.#hasSpunPinnedDay()) {
+      // Ensure helpers cached (defensive — also done in #onReplayClick path)
+      if (!this._rollsHelpers) {
+        this._rollsHelpers = { joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth };
+      }
+      this.#renderRoll1RowsInstant(payload);
+      this.#renderRoll2Instant(payload);
+      // Set state directly to roll2_done; setReplayState re-writes the localStorage
+      // key (idempotent) and updates button label/enabled state.
+      this.#replayState = 'roll2_done';
+      this.#setReplayState('roll2_done');
+      return;
+    }
     // Replay button: enable now that we have a pinned day with resolved data.
     // (#setReplayState('idle') flips btn.disabled = !this.#pinnedDay → false here.)
     this.#setReplayState('idle');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Plan 59-03: in-widget new-day-available banner (D-04).
+  // Banner is in-widget (NOT app-level toast). Shown when polling delivers a
+  // payload whose day is greater than #pinnedDay; clicking "View now" cancels
+  // any in-flight animation (Pitfall H), re-pins to the newer day, and re-runs
+  // the status branch dispatch (which fires the localStorage idempotency check).
+  // ---------------------------------------------------------------------------
+  #renderNewDayBanner() {
+    const banner = this.querySelector('[data-bind="ldj-new-day-banner"]');
+    const text = this.querySelector('[data-bind="ldj-new-day-text"]');
+    if (!banner || !text || !this.#lastPayload) return;
+    // textContent (T-58-18 hardening) — payload.day is integer per Phase 57 schema
+    // but using textContent keeps the pattern consistent and forward-safe.
+    text.textContent = `Day ${this.#lastPayload.day} just resolved — `;
+    banner.removeAttribute('hidden');
+    banner.hidden = false;
+  }
+
+  #hideNewDayBanner() {
+    const banner = this.querySelector('[data-bind="ldj-new-day-banner"]');
+    if (!banner) return;
+    banner.setAttribute('hidden', '');
+    banner.hidden = true;
+  }
+
+  #onNewDayBannerClick() {
+    if (!this.#lastPayload) return;
+    // Pitfall H: cancel in-flight animations BEFORE re-pinning. Bumping the
+    // monotonic cancel-token invalidates any closures captured by an in-flight
+    // #animateRoll1FromPayload / #runRoll2Anim await chain. cancelPendingFlashes
+    // tears down any factory-side timers that might leak into the new day's DOM.
+    // (Prefix ++ for consistency with #onReplayClick line 1113.)
+    ++this.#replayCancelToken;
+    this.#rolls?.cancelPendingFlashes?.();
+
+    // Re-pin to the newer day
+    this.#pinnedDay = this.#lastPayload.day;
+    this.#pinnedLevel = this.#lastPayload.level ?? null;
+    this.#replayState = 'idle';
+    this.#hasNewDayAvailable = false;
+
+    // Hide banner + re-run status branch dispatch (which fires the localStorage
+    // idempotency check; if the user already spun this newer day on a previous
+    // visit, the spin animation will be skipped and the rolled state rendered
+    // directly). If unspun, idle state — user clicks Replay to spin fresh.
+    this.#hideNewDayBanner();
+    this.#renderForStatus(this.#lastPayload);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Plan 59-03: wallet-conditional row highlight (D-05).
+  // Walks rendered .jp-winner-item rows and toggles .ldj-winner-row--mine based
+  // on getViewedAddress() match. viewing.address takes precedence over
+  // connected.address (per store.js:163-169). When disconnected (both null),
+  // class is removed from all rows. Empty-placeholder rows are skipped.
+  // ---------------------------------------------------------------------------
+  #refreshHighlight() {
+    const viewed = getViewedAddress();  // viewing || connected || null
+    const target = viewed ? String(viewed).toLowerCase() : null;
+    const rows = this.querySelectorAll('.jp-winner-item');
+    for (const row of rows) {
+      // Skip the empty-placeholder rows (no real address to match)
+      if (row.classList && row.classList.contains('jp-winner-item--empty')) continue;
+      const rowAddr = (row.dataset && row.dataset.address)
+        || (typeof row.getAttribute === 'function' ? row.getAttribute('data-address') : null)
+        || '';
+      if (target && rowAddr && rowAddr === target) {
+        row.classList.add('ldj-winner-row--mine');
+      } else {
+        row.classList.remove('ldj-winner-row--mine');
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -225,7 +354,10 @@ class LastDayJackpot extends HTMLElement {
       const li = document.createElement('li');
       li.className = 'jp-winner-item';
       li.setAttribute('role', 'option');
-      li.dataset.address = w.address;
+      // Plan 59-03: lowercase for case-insensitive #refreshHighlight lookup.
+      // wallet.js stores lowercase per Phase 58 spec; defensive .toLowerCase()
+      // here ensures highlight comparison works regardless of payload casing.
+      li.dataset.address = String(w.address || '').toLowerCase();
       li.dataset.hasBonus = String(w.hasBonus);
       if (w.winningLevel != null) li.dataset.winningLevel = String(w.winningLevel);
 
@@ -353,6 +485,159 @@ class LastDayJackpot extends HTMLElement {
     await new Promise(r => setTimeout(r, Math.min(totalDelay, 3000)));
   }
 
+  // ---------------------------------------------------------------------------
+  // Plan 59-03: instant (no-animation) renderers for previously-spun days.
+  // Mirror the FINAL-STATE DOM shape that #animateRoll1FromPayload + #runRoll2Anim
+  // produce after their animation completes — but synchronously, no timeouts,
+  // no spin flame, no stagger animation classes that would re-trigger reveal.
+  // ---------------------------------------------------------------------------
+
+  #renderRoll1RowsInstant(payload) {
+    const grid = this.querySelector('[data-bind="jp-roll1-grid"]');
+    const resultPanel = this.querySelector('[data-bind="jp-roll1-result"]');
+    if (!grid || !resultPanel) return;
+    resultPanel.style.display = '';
+
+    // Clear non-header rows
+    Array.from(grid.children).forEach(child => {
+      if (!child.classList.contains('jo-header')) grid.removeChild(child);
+    });
+
+    const wins = (payload && payload.roll1 && Array.isArray(payload.roll1.wins))
+      ? payload.roll1.wins : [];
+
+    if (wins.length === 0) {
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'jp-roll1-empty';
+      emptyEl.textContent = 'No current-level wins this day.';
+      grid.appendChild(emptyEl);
+      return;
+    }
+
+    // Ensure helpers cached (used by #appendRevealRow)
+    if (!this._rollsHelpers) {
+      this._rollsHelpers = { joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth };
+    }
+
+    // Append rows mirroring #animateRoll1FromPayload's row-shape mapping.
+    wins.forEach((win, idx) => {
+      const traitIdNum = win.traitId;
+      const isBonus = traitIdNum == null;
+      const row = {
+        type: isBonus ? 'bonus' : 'normal',
+        traitId: traitIdNum ?? 0,
+        winnerCount: 1,
+        uniqueWinnerCount: 1,
+        coinPerWinner: win.awardType && win.awardType.includes('burnie') ? win.amount : '0',
+        ticketsPerWinner: win.awardType === 'tickets' ? win.amount : null,
+        ethPerWinner: win.awardType === 'eth' ? win.amount : '0',
+        spreadBuckets: [false, false, false],
+      };
+      this.#appendRevealRow(grid, row, idx);
+    });
+
+    // Strip stagger animation classes so rows appear instantly (no reveal anim).
+    // Walk the just-appended rows; jp-row-reveal class is added per-cell by
+    // #appendRevealRow — remove from every cell so no animation fires.
+    Array.from(grid.children).forEach(child => {
+      if (child.classList.contains('jo-header')) return;
+      // jo-row uses display:contents — its children are the actual cells.
+      const cells = (child.children && child.children.length)
+        ? Array.from(child.children) : [child];
+      for (const cell of cells) {
+        if (cell.classList && cell.classList.remove) cell.classList.remove('jp-row-reveal');
+        if (cell.style) cell.style.animationDelay = '0ms';
+      }
+    });
+  }
+
+  #renderRoll2Instant(payload) {
+    const data = payload?.roll2 ?? {};
+    // Mirror #onReplayClick's #replayData shape so subsequent state introspection
+    // (e.g. roll1_done branch checking hasBonus) stays consistent.
+    this.#replayData = {
+      hasBonus: (data.wins?.length || 0) > 0,
+      roll2: data,
+      bonusTraitsPacked: data.bonusTraitsPacked ?? null,
+    };
+
+    const resultPanel = this.querySelector('[data-bind="jp-roll2-result"]');
+    if (resultPanel) resultPanel.style.display = '';
+
+    const grid = this.querySelector('[data-bind="jp-roll2-slot-grid"]');
+    if (!grid) return;
+
+    // Clear non-header children
+    Array.from(grid.children).forEach(c => {
+      if (!c.classList.contains('jp-slot-header')) grid.removeChild(c);
+    });
+
+    // Mirror #runRoll2Anim's final-state DOM shape exactly (jackpot-panel.js:938-1027):
+    // for each slot: 3 cells (sym, wins, amt) appended individually with classes.
+    // Plus optional ticket-sub-row cell when present.
+    const slots = rebucketRoll2BySlot(
+      data || {},
+      this.#replayData.bonusTraitsPacked,
+    );
+
+    slots.forEach((slot, idx) => {
+      const sym = document.createElement('div');
+      sym.className = 'jp-slot-symbol'
+        + (slot.isEmpty ? ' jp-slot-empty' : '')
+        + (slot.isFarFuture ? ' jp-slot-farfuture' : '');
+      if (slot.isFarFuture) {
+        sym.textContent = 'Far-Future (BURNIE)';
+      } else if (slot.traitId == null) {
+        sym.textContent = '—';
+      } else {
+        const img = document.createElement('img');
+        img.src = joBadgePath(slot.quadrant, slot.symbolIdx, slot.colorIdx);
+        img.alt = JO_SYMBOLS[JO_CATEGORIES[slot.quadrant]]?.[slot.symbolIdx] ?? '';
+        sym.appendChild(img);
+      }
+
+      const wins = document.createElement('div');
+      wins.className = 'jp-slot-wins' + (slot.isEmpty ? ' jp-slot-empty' : '');
+      wins.textContent = String(slot.wins);
+
+      const amt = document.createElement('div');
+      amt.className = 'jp-slot-amount' + (slot.isEmpty ? ' jp-slot-empty' : '');
+      if (slot.isEmpty) {
+        amt.textContent = '—';
+      } else {
+        const a = slot.amountPerWin;
+        amt.textContent = (a && a.length > 10) ? joFormatWeiToEth(a) : String(a);
+      }
+
+      // Append cells WITHOUT jp-row-reveal class (no stagger animation).
+      [sym, wins, amt].forEach(cell => grid.appendChild(cell));
+
+      // Ticket sub-row (mirrors #runRoll2Anim:999-1022).
+      if (slot.ticketSubRow && slot.ticketSubRow.wins > 0 && !slot.isFarFuture) {
+        const subCell = document.createElement('div');
+        subCell.className = 'jp-ticket-subrow';
+
+        const badge = document.createElement('span');
+        badge.className = 'jp-ticket-subrow-badge';
+        if (slot.traitId != null) {
+          const bImg = document.createElement('img');
+          bImg.src = joBadgePath(slot.quadrant, slot.symbolIdx, slot.colorIdx);
+          bImg.alt = JO_SYMBOLS[JO_CATEGORIES[slot.quadrant]]?.[slot.symbolIdx] ?? '';
+          badge.appendChild(bImg);
+        }
+
+        const label = document.createElement('span');
+        label.className = 'jp-ticket-subrow-label';
+        label.textContent = '↳ Tickets won: ' + slot.ticketSubRow.wins;
+
+        subCell.appendChild(badge);
+        subCell.appendChild(label);
+        // No jp-row-reveal class — no animation.
+        grid.appendChild(subCell);
+      }
+    });
+  }
+
   connectedCallback() {
     this.innerHTML = `
       <div data-bind="skeleton" class="panel last-day-jackpot">
@@ -467,12 +752,30 @@ class LastDayJackpot extends HTMLElement {
       replayBtn.addEventListener('click', () => this.#onReplayClick());
     }
 
+    // Plan 59-03: wire the new-day banner's "View now" button (D-04).
+    const viewNowBtn = this.querySelector('[data-bind="ldj-view-now"]');
+    if (viewNowBtn) {
+      viewNowBtn.addEventListener('click', () => this.#onNewDayBannerClick());
+    }
+
     // Plan 59-02: subscribe to app.lastDay store path (populated by polling.js's pollLastDay).
     // subscribe() fires immediately with current value (store.js:117) — first fire likely
     // undefined since polling hasn't run yet; #onLastDayUpdate guards via `if (!payload) return;`
     // and leaves the Plan 59-01 default cold-start scaffold visible until a real payload arrives.
     this.#unsubs.push(
       subscribe('app.lastDay', (payload) => this.#onLastDayUpdate(payload))
+    );
+
+    // Plan 59-03: wallet-conditional highlight (D-05). Subscribe to BOTH
+    // viewing.address AND connected.address since getViewedAddress() reads both
+    // (per RESEARCH Q4 + view-mode-banner.js:131-133 multi-subscribe pattern).
+    // Both subscriptions fire immediately with current value (likely null on
+    // first mount) — #refreshHighlight handles null gracefully.
+    this.#unsubs.push(
+      subscribe('viewing.address', () => this.#refreshHighlight())
+    );
+    this.#unsubs.push(
+      subscribe('connected.address', () => this.#refreshHighlight())
     );
 
     // Plan 59-01 default: dismiss skeleton so cold-start is visible until Plan 59-02 payload arrives.
@@ -725,10 +1028,13 @@ class LastDayJackpot extends HTMLElement {
         if (roll2El) { roll2El.style.display = ''; }
         break;
       case 'roll2_done':
+        // Plan 59-03 (D-03): write idempotency flag — chainId-scoped (Pitfall B),
+        // try/catch wrapped (Pitfall F). Subsequent visits to this same day will
+        // skip the spin animation and render the final state directly.
+        this.#markSpunPinnedDay();
         btn.textContent = 'Replay';
         btn.disabled = false;
         if (spinEl) spinEl.classList.remove('jp-spinning');
-        // Plan 59-03 will add: localStorage.setItem(`spun_day_${CHAIN.id}_${this.#pinnedDay}`, '1');
         break;
     }
   }
