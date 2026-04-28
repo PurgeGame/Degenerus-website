@@ -443,11 +443,18 @@ function initSse() {
 // --- Panel: force-action (CTL-04 + D-02a/b) --------------------------------
 //
 // Endpoints called:
-//   GET  /wallets.json                     (file-server-served at port 8080;
-//                                           sim's startFileServer serves the
-//                                           project root; T-1 + T-11: only
-//                                           address + archetype lifted into
-//                                           UI state — privateKey ignored)
+//   GET  CONTROL_BASE+/control/wallets/balances → [{ idx, address, balanceWei }]
+//                                           (sim ships wallets.json in its own
+//                                           repo cwd, NOT in the website repo
+//                                           that the file-server is rooted at,
+//                                           so /wallets.json from port 8080
+//                                           404s. The control-server already
+//                                           knows every player wallet because
+//                                           it loaded them at boot — we reuse
+//                                           that endpoint and skip archetype.
+//                                           T-1: privateKey is never returned
+//                                           by /control/wallets/balances, so
+//                                           it cannot leak into UI state.)
 //   POST CONTROL_BASE+/control/force-action body { player, actionType, args }
 //                                          → 200 { txHash:null, success, error_reason? }
 //                                          → 400 { error, message } on T-9 validation
@@ -459,22 +466,26 @@ function initSse() {
 // proximity in the live action-log panel.
 
 async function initForceAction() {
-  // 1. Populate player dropdown from /wallets.json (file-server-served)
+  // 1. Populate player dropdown from CONTROL_BASE /control/wallets/balances.
+  //    Same source-of-truth as the fund-players panel — guarantees parity and
+  //    avoids the file-server 404 (sim's wallets.json is in the sim repo cwd,
+  //    not the website repo the file-server is rooted at).
   try {
-    const res = await fetch('/wallets.json');
-    if (!res.ok) throw new Error(`/wallets.json → ${res.status}`);
-    const json = await res.json();
-    // T-1 + T-11: extract ONLY address + archetype; privateKey intentionally ignored
-    walletsList = (json.players ?? []).slice(0, 25).map((p, i) => ({
-      idx: i,
-      address: p.address,
-      archetype: p.archetype ?? 'unknown',
+    const { json } = await ctrl('/control/wallets/balances');
+    if (!Array.isArray(json)) throw new Error('invalid balances response');
+    // T-1: only `idx` + `address` lifted into UI state. The endpoint never
+    // returns privateKey. Archetype is not exposed by this endpoint — show
+    // truncAddr only (operator can cross-reference idx in the fund-players
+    // panel if needed).
+    walletsList = json.slice(0, 25).map((entry) => ({
+      idx: entry.idx,
+      address: entry.address,
     }));
     const sel = $('fa-player');
-    walletsList.forEach(({ idx, address, archetype }) => {
+    walletsList.forEach(({ idx, address }) => {
       const opt = document.createElement('option');
       opt.value = address;
-      opt.textContent = `${idx} · ${truncAddr(address)} (${archetype})`;
+      opt.textContent = `${idx} · ${truncAddr(address)}`;
       sel.appendChild(opt);
     });
   } catch (e) {
@@ -483,7 +494,7 @@ async function initForceAction() {
     // failure option (T-11 safe — text built via textContent below)
     sel.textContent = '';
     const opt = document.createElement('option');
-    opt.textContent = `(failed to load /wallets.json: ${(e instanceof Error ? e.message : String(e)).slice(0, 80)})`;
+    opt.textContent = `(failed to load wallets: ${(e instanceof Error ? e.message : String(e)).slice(0, 80)})`;
     opt.disabled = true;
     sel.appendChild(opt);
   }
