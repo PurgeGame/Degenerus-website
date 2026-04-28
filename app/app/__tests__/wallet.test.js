@@ -83,13 +83,12 @@ let _pickerEl = {
 import * as storeMod from '../store.js';        // resolved against the live ./store.js
 import * as pollingMod from '../polling.js';   // resolved against the live ./polling.js
 
-// Track call history through the real store; we'll inspect updates via subscribe.
+// Track call history through the real store. WR-09: subscribers are
+// installed/torn down per test (was: top-level module subscribe with no
+// cleanup, leaking five subscribers per test file load and breaking if a
+// sibling test file's __resetForTest cleared the registry).
 const _storeUpdates = [];        // [path, value]
-storeMod.subscribe('connected.address', (v) => _storeUpdates.push(['connected.address', v]));
-storeMod.subscribe('connected.rdns',    (v) => _storeUpdates.push(['connected.rdns', v]));
-storeMod.subscribe('ui.chainOk',        (v) => _storeUpdates.push(['ui.chainOk', v]));
-storeMod.subscribe('ui.mode',           (v) => _storeUpdates.push(['ui.mode', v]));
-storeMod.subscribe('viewing.address',   (v) => _storeUpdates.push(['viewing.address', v]));
+const _testUnsubs = [];
 
 function resetStore() {
   storeMod.update('connected.address', null);
@@ -98,6 +97,21 @@ function resetStore() {
   storeMod.update('ui.mode', 'self');
   storeMod.update('viewing.address', null);
   _storeUpdates.length = 0;
+}
+
+function installStoreSubscribers() {
+  _testUnsubs.push(storeMod.subscribe('connected.address', (v) => _storeUpdates.push(['connected.address', v])));
+  _testUnsubs.push(storeMod.subscribe('connected.rdns',    (v) => _storeUpdates.push(['connected.rdns', v])));
+  _testUnsubs.push(storeMod.subscribe('ui.chainOk',        (v) => _storeUpdates.push(['ui.chainOk', v])));
+  _testUnsubs.push(storeMod.subscribe('ui.mode',           (v) => _storeUpdates.push(['ui.mode', v])));
+  _testUnsubs.push(storeMod.subscribe('viewing.address',   (v) => _storeUpdates.push(['viewing.address', v])));
+}
+
+function teardownStoreSubscribers() {
+  for (const u of _testUnsubs) {
+    try { u(); } catch { /* swallow */ }
+  }
+  _testUnsubs.length = 0;
 }
 
 // Spy on polling.abortAllInflight via a wrapper that increments a counter.
@@ -184,7 +198,13 @@ function makeMockBrowserProvider({
 const wallet = await import('../wallet.js');
 
 beforeEach(() => {
+  // WR-09: tear down any prior subscribers and re-install fresh ones inside
+  // beforeEach so cross-test contamination is impossible (was: top-level
+  // module subscribe leaked five subscribers per file load).
+  teardownStoreSubscribers();
   resetStore();
+  installStoreSubscribers();
+  _storeUpdates.length = 0;   // drop initial-fire history from re-install
   _events.length = 0;
   _localStore.clear();
   _reloadCalled = false;
@@ -194,6 +214,10 @@ beforeEach(() => {
   _pickerShownWith = null;
   _pickerShowReturn = null;
   _abortCount = 0;
+});
+
+afterEach(() => {
+  teardownStoreSubscribers();
 });
 
 // ===========================================================================
