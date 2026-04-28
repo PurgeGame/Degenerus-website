@@ -32,9 +32,17 @@ import { getProvider, switchToSepolia } from '../app/contracts.js';
 
 export class WalletPicker extends HTMLElement {
   #resolve = null;
+  #initialized = false;
 
   connectedCallback() {
     this.hidden = true;
+    // WR-06: Custom Elements call connectedCallback every time the element is
+    // re-inserted into the DOM (move + reattach cycles). Without a guard, each
+    // call re-runs innerHTML render AND re-attaches click + keydown listeners,
+    // accumulating duplicate listeners on the same `this`. Render + bind once
+    // per instance lifetime.
+    if (this.#initialized) return;
+    this.#initialized = true;
     // Static skeleton — trusted literal markup only. No wallet-supplied data
     // is interpolated here; per-row content is appended via createElement +
     // textContent inside show().
@@ -47,9 +55,9 @@ export class WalletPicker extends HTMLElement {
           <p>No wallet detected.</p>
           <p>Install one to play:</p>
           <ul class="wallet-install-links">
-            <li><a href="https://metamask.io/download/" target="_blank" rel="noopener">MetaMask</a></li>
-            <li><a href="https://www.coinbase.com/wallet/downloads" target="_blank" rel="noopener">Coinbase Wallet</a></li>
-            <li><a href="https://rabby.io/" target="_blank" rel="noopener">Rabby</a></li>
+            <li><a href="https://metamask.io/download/" target="_blank" rel="noopener noreferrer">MetaMask</a></li>
+            <li><a href="https://www.coinbase.com/wallet/downloads" target="_blank" rel="noopener noreferrer">Coinbase Wallet</a></li>
+            <li><a href="https://rabby.io/" target="_blank" rel="noopener noreferrer">Rabby</a></li>
           </ul>
         </div>
         <button class="btn-secondary wallet-picker-cancel" data-close type="button">Cancel</button>
