@@ -136,17 +136,26 @@ export function setupDataWriteManager() {
   // this module's init, refresh them too.
   if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined' && document.body) {
     _dataWriteObserver = new MutationObserver((mutations) => {
+      // WR-11: refresh on BOTH addition and removal. Removed [data-write]
+      // buttons can't be clicked, but the manager's internal model would
+      // otherwise drift from the DOM (callers calling document.querySelectorAll
+      // see fewer buttons than the manager expected). A refresh on removal is
+      // cheap (re-walks the live tree) and keeps state consistent.
       let needsRefresh = false;
+      const isWriteNode = (node) => {
+        if (!node || node.nodeType !== 1) return false;
+        return (typeof node.matches === 'function' && node.matches('[data-write]'))
+          || (typeof node.querySelector === 'function' && Boolean(node.querySelector('[data-write]')));
+      };
       for (const m of mutations) {
-        const added = m && m.addedNodes;
-        if (!added) continue;
+        const added = (m && m.addedNodes) || [];
         for (const node of added) {
-          if (!node || node.nodeType !== 1) continue;   // Element nodes only
-          if ((typeof node.matches === 'function' && node.matches('[data-write]'))
-              || (typeof node.querySelector === 'function' && node.querySelector('[data-write]'))) {
-            needsRefresh = true;
-            break;
-          }
+          if (isWriteNode(node)) { needsRefresh = true; break; }
+        }
+        if (needsRefresh) break;
+        const removed = (m && m.removedNodes) || [];
+        for (const node of removed) {
+          if (isWriteNode(node)) { needsRefresh = true; break; }
         }
         if (needsRefresh) break;
       }
