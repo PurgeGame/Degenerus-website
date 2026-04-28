@@ -218,10 +218,31 @@ export function _updateChainChip(chainOk) {
 // Install the subscriber. If the DOM isn't ready yet, defer until DOMContentLoaded
 // so document.getElementById('chain-chip') resolves on the initial fire.
 //
+// Idempotency: at most one subscriber is registered per process lifetime.
+// Re-entry returns the existing unsubscribe handle so callers do not need to
+// special-case it. Tests reset via _resetChainChipSubscriberForTest below.
+//
 // Test-only: _installChainChipSubscriber is exported so node:test cases can
 // re-register after store.__resetForTest() clears the subscriber map between cases.
+let _chipSubInstalled = false;
+let _chipUnsub = null;
+
 export function _installChainChipSubscriber() {
-  return subscribe('ui.chainOk', _updateChainChip);
+  if (_chipSubInstalled) return _chipUnsub;
+  _chipSubInstalled = true;
+  _chipUnsub = subscribe('ui.chainOk', _updateChainChip);
+  return _chipUnsub;
+}
+
+// Test-only: tear down the chain-chip subscriber so the next
+// _installChainChipSubscriber() call re-registers against a fresh store
+// registry (used after store.__resetForTest()). NOT for production consumers.
+export function _resetChainChipSubscriberForTest() {
+  if (_chipUnsub) {
+    try { _chipUnsub(); } catch { /* swallow */ }
+  }
+  _chipUnsub = null;
+  _chipSubInstalled = false;
 }
 
 if (typeof document !== 'undefined') {

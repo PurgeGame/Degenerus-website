@@ -286,6 +286,12 @@ beforeEach(async () => {
   // Make sure wallet-picker.js has been imported at least once (initializes
   // the customElements registration). Subsequent imports are cached.
   const mod = await importPicker();
+  // BL-03: _installChainChipSubscriber is now idempotent. Tear down via the
+  // module's test-only reset so the next install registers against the
+  // post-storeMod.__resetForTest subscriber registry.
+  if (typeof mod._resetChainChipSubscriberForTest === 'function') {
+    mod._resetChainChipSubscriberForTest();
+  }
   // Re-install the chain-chip subscriber after store reset (subscriber map
   // was cleared). Initial fire sees ui.chainOk === null → neutral.
   _chainChipUnsub = mod._installChainChipSubscriber();
