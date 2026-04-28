@@ -240,7 +240,11 @@ function attachListeners(browserProvider) {
 
   eth.on('chainChanged', (hexId) => {
     abortAllInflight();
-    update('ui.chainOk', hexId === CHAIN.hexId);
+    // WR-01: defensively normalize hexId. EIP-1193 says it's a hex string,
+    // but buggy/malicious wallet extensions can pass a number, object, or
+    // undefined. Compare lowercased per EIP-695 (some wallets return uppercase).
+    const hex = (typeof hexId === 'string') ? hexId.toLowerCase() : null;
+    update('ui.chainOk', hex !== null && hex === CHAIN.hexId.toLowerCase());
     // CRITICAL: NO page refresh on chainChanged — preserves ?as= URL state for
     // view-mode users (T-58-06). The store update is sufficient to drive UI re-render.
   });
