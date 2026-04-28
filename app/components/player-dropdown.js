@@ -118,9 +118,10 @@ export class PlayerDropdown extends HTMLElement {
   }
 
   _renderResults(data, ul) {
-    // Clear prior children — safe innerHTML reset (no untrusted data).
+    // Clear prior children. innerHTML='' detaches all children in real DOM;
+    // the fake-DOM helper's innerHTML setter mirrors that behavior. No
+    // untrusted data — empty string only.
     ul.innerHTML = '';
-    ul.children = [];   // belt-and-suspenders for fake-DOM environments
 
     const results = (data && Array.isArray(data.results)) ? data.results : [];
 
