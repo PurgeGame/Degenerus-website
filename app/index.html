@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Degenerus App</title>
+  <link rel="stylesheet" href="/shared/nav.css">
+  <link rel="stylesheet" href="/beta/styles/base.css">
+  <link rel="stylesheet" href="/beta/styles/panels.css">
+  <link rel="stylesheet" href="/beta/styles/buttons.css">
+  <link rel="stylesheet" href="/beta/styles/status-bar.css">
+  <link rel="stylesheet" href="/beta/styles/skeleton.css">
+  <link rel="stylesheet" href="/beta/styles/forms.css">
+  <link rel="stylesheet" href="/beta/styles/tx-status.css">
+  <link rel="stylesheet" href="/app/styles/app.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "ethers": "https://esm.sh/ethers@6.16.0",
+      "gsap": "https://esm.sh/gsap@3.14",
+      "gsap/Flip": "https://esm.sh/gsap@3.14/Flip",
+      "gsap/TextPlugin": "https://esm.sh/gsap@3.14/TextPlugin",
+      "canvas-confetti": "https://esm.sh/canvas-confetti@1.9"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="container">
+    <!-- Nav injected by shared/nav.js -->
+
+    <!-- Sepolia chip row (Phase 56 ships placeholder; Phase 58 activates state colors) -->
+    <div class="chain-chip-row" aria-label="Network status">
+      <span id="chain-chip" class="chain-chip chain-chip--neutral" data-state="placeholder">
+        <span class="chain-chip__dot"></span>
+        <span class="chain-chip__label">Sepolia testnet</span>
+      </span>
+    </div>
+
+    <!-- Page header -->
+    <header class="page-header">
+      <img class="page-header-logo" src="/badges-circular/flame_red.svg" alt="Degenerus">
+      <h1>DEGENERUS APP</h1>
+      <p class="subtitle">Play on Sepolia testnet — connect a wallet for purchases.</p>
+    </header>
+
+    <!-- View-mode banner (Phase 58 DD-02 activates; Phase 56 ships hidden placeholder) -->
+    <div id="view-mode-banner" class="view-mode-banner" hidden>
+      <span class="view-mode-banner__text">Viewing read-only</span>
+      <button class="view-mode-banner__cta" type="button">Back to my account</button>
+    </div>
+
+    <!-- Main panel surface -->
+    <main id="app-root">
+      <div id="app-loading-state" class="panel app-loading-state">
+        <p>Loading testnet state…</p>
+      </div>
+    </main>
+
+    <footer>
+      <p>Degenerus Protocol — Sepolia testnet</p>
+    </footer>
+  </div>
+
+  <script src="/shared/nav.js"></script>
+  <script>initNav({ currentPage: 'app' });</script>
+  <script type="module" src="/app/app/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+/* /app/styles/app.css — Phase 56 scope */
+
+/* Chain-chip row — Pitfall 1 placeholder; Phase 58 wires state colors */
+.chain-chip-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.chain-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.chain-chip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+}
+
+/* Phase 58 will append .chain-chip--correct / .chain-chip--mismatch state rules. */
+
+/* View-mode banner — DD-02 placeholder; Phase 58 wires content */
+.view-mode-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  border-radius: 8px;
+  color: var(--warning);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.view-mode-banner__cta {
+  background: transparent;
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.view-mode-banner__cta:hover {
+  background: rgba(234, 179, 8, 0.12);
+}
+
+/* App-loading-state — visible-surface marker for Phase 56 */
+.app-loading-state {
+  text-align: center;
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 0.9rem;
+  padding: clamp(1.5rem, 5vw, 2.5rem);
+}
+
+.app-loading-state p {
+  margin: 0;
+}
