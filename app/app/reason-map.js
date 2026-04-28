@@ -65,9 +65,12 @@ const UNKNOWN = {
  * Lookup priority (per ethers v6 docs):
  *   1. error.revert?.name        — custom error matched against Contract ABI
  *                                  (ethers v6 ErrorDescription)
- *   2. error.reason / shortMessage — decoded require(..., "string") message;
- *                                  scanned for any seeded code name (substring match)
- *   3. UNKNOWN catch-all
+ *   2. error.revert?.selector or error.data prefix — 4-byte selector lookup
+ *                                  for ABI-unresolved custom errors
+ *   3. error.reason / shortMessage — decoded require(..., "string") message;
+ *                                  scanned for any seeded code name (substring match,
+ *                                  catch-all single-char 'E' skipped — WR-02)
+ *   4. UNKNOWN catch-all
  *
  * @param {Error|null|undefined} error - ethers v6 CallExceptionError or Error
  * @returns {{code: string, userMessage: string, recoveryAction: string}}
@@ -77,9 +80,24 @@ export function decodeRevertReason(error) {
   // Primary: custom error match (ethers v6 ErrorDescription)
   const name = error.revert?.name;
   if (name && ERROR_REGISTRY.has(name)) return ERROR_REGISTRY.get(name);
-  // Fallback: require-string match (legacy contract reverts)
+  // Selector lookup: ethers v6 ErrorDescription exposes the 4-byte selector
+  // for unrecognized custom errors via error.revert.selector. Some call sites
+  // also expose raw error.data starting with the selector (first 10 chars
+  // including '0x'). WR-03: register() advertises selector-keyed mappings,
+  // so decodeRevertReason must honor that path before the substring fallback.
+  const selector = error.revert?.selector
+    || (typeof error.data === 'string' && error.data.startsWith('0x')
+      ? error.data.slice(0, 10)
+      : null);
+  if (selector && ERROR_REGISTRY.has(selector)) return ERROR_REGISTRY.get(selector);
+  // Fallback: require-string match (legacy contract reverts).
+  // WR-02: the catch-all 'E' is a single-character key — substring-matching it
+  // produces false positives on any reason that happens to contain capital 'E'
+  // (e.g. "Error: ..."). Skip it on the substring path; it remains reachable
+  // via the revert.name path above for legitimate `error E()` reverts.
   const reason = error.reason || error.shortMessage || '';
   for (const [key, mapping] of ERROR_REGISTRY) {
+    if (key === 'E') continue;
     if (reason.includes(key)) return mapping;
   }
   return UNKNOWN;
