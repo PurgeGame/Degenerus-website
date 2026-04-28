@@ -199,6 +199,12 @@ function attachListeners(browserProvider) {
   eth.on('accountsChanged', (accounts) => {
     abortAllInflight();
     if (!accounts || accounts.length === 0) {
+      // Clear viewing.address FIRST so deriveMode (microtask) sees a consistent
+      // (viewing=null, connected=null) state and produces 'self' on its own.
+      // Writing connected.address first would let deriveMode (scheduled by the
+      // connected-clear) flip ui.mode back to 'view' in a microtask, undoing
+      // the explicit ui.mode='self' write below (BL-01).
+      update('viewing.address', null);
       update('connected.address', null);
       update('connected.rdns', null);
       update('ui.mode', 'self');
@@ -224,6 +230,9 @@ function attachListeners(browserProvider) {
   });
 
   eth.on('disconnect', () => {
+    // BL-01: clear viewing.address FIRST so deriveMode produces 'self' from a
+    // consistent post-write state (see accountsChanged([]) above).
+    update('viewing.address', null);
     update('connected.address', null);
     update('connected.rdns', null);
     update('ui.mode', 'self');
@@ -238,6 +247,9 @@ function attachListeners(browserProvider) {
 // ---------------------------------------------------------------------------
 
 export function disconnect() {
+  // BL-01: clear viewing.address FIRST so deriveMode produces 'self' from a
+  // consistent post-write state (see accountsChanged([]) above).
+  update('viewing.address', null);
   update('connected.address', null);
   update('connected.rdns', null);
   update('ui.mode', 'self');
@@ -264,6 +276,9 @@ if (typeof document !== 'undefined') {
 
   document.addEventListener('wallet-disconnected', () => {
     if (get('connected.address')) {
+      // BL-01: clear viewing.address FIRST so deriveMode produces 'self' from a
+      // consistent post-write state (see accountsChanged([]) in attachListeners).
+      update('viewing.address', null);
       update('connected.address', null);
       update('connected.rdns', null);
       update('ui.mode', 'self');
