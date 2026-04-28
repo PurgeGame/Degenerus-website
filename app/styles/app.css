@@ -406,3 +406,147 @@ player-dropdown {
   background: rgba(246, 173, 85, 0.08);
   padding-left: calc(0.75rem - 3px);
 }
+
+/* ===========================================================================
+ * Phase 60 — app-packs-panel (Plan 60-01 base styles, lbx-* prefix)
+ * Plan 60-03 appends .lbx-row, .lbx-row--awaiting, .lbx-row--ready, .lbx-row__signal.
+ * Plan 60-04 appends .lbx-boot-cta refinement (sticky banner-ish).
+ * =========================================================================== */
+
+.app-packs-panel {
+  margin-top: clamp(0.5rem, 2vw, 1rem);
+  margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+}
+
+/* Pay-kind toggle (ETH | BURNIE) ------------------------------------------ */
+
+.lbx-pay-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.lbx-pay-toggle__btn {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border-color, #444);
+  background: var(--bg-secondary, #2a2a2a);
+  color: var(--text-secondary, #aaa);
+  border-radius: 4px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.lbx-pay-toggle__btn:hover {
+  background: var(--bg-hover, #333);
+  color: var(--text-primary, #eee);
+}
+
+.lbx-pay-toggle__btn--active {
+  background: var(--accent, #4a9eff);
+  color: var(--bg-primary, #111);
+  border-color: var(--accent, #4a9eff);
+}
+
+/* Quantity pickers (tickets + lootboxes) ----------------------------------- */
+
+.lbx-quantity-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0;
+}
+
+.lbx-quantity-picker__label {
+  flex: 1;
+  color: var(--text-secondary, #aaa);
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+}
+
+.lbx-quantity-picker__btn {
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border-color, #444);
+  background: var(--bg-secondary, #2a2a2a);
+  color: var(--text-primary, #eee);
+  border-radius: 50%;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.lbx-quantity-picker__btn:hover {
+  background: var(--bg-hover, #333);
+}
+
+.lbx-quantity-picker__display {
+  min-width: 2.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary, #eee);
+}
+
+/* Buy CTA ----------------------------------------------------------------- */
+
+.lbx-buy-button {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0 0.5rem;
+  background: var(--accent-strong, #2d7a4d);
+  color: #fff;
+  border: 1px solid var(--accent-strong, #2d7a4d);
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.lbx-buy-button:hover:not([disabled]) {
+  background: var(--accent-strong-hover, #36925b);
+}
+
+.lbx-buy-button[disabled],
+.lbx-buy-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Error banner (Plan 60-02 populates) ------------------------------------- */
+
+.lbx-error-banner {
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+  background: var(--error-bg, #4a1f1f);
+  color: var(--error-text, #ff6b6b);
+  border: 1px solid var(--error-border, #6b2a2a);
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+/* Rows container (Plan 60-03 populates) + boot-CTA (Plan 60-04) ----------- */
+
+.lbx-rows {
+  margin-top: 0.75rem;
+}
+
+.lbx-boot-cta {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: var(--bg-secondary, #2a2a2a);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: var(--text-primary, #eee);
+}
