@@ -62,6 +62,13 @@ import * as routerMod from '../router.js';
 
 const { initRouter, getViewedAddress, __resetForTest: __resetRouter } = routerMod;
 
+// store.js auto-derive of ui.mode is queued via queueMicrotask; tests that
+// observe ui.mode after viewing.address changes must flush microtasks first.
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 function setLocation(search) {
   _location = {
     search,
@@ -90,10 +97,11 @@ describe('initRouter cold-load ?as=', () => {
     assert.equal(storeMod.get('ui.mode'), 'self');
   });
 
-  test("with ?as=0xABCD...40chars sets viewing.address to lowercased value", () => {
+  test("with ?as=0xABCD...40chars sets viewing.address to lowercased value", async () => {
     setLocation('?as=0xABCDef0000000000000000000000000000000001');
     initRouter();
     assert.equal(storeMod.get('viewing.address'), '0xabcdef0000000000000000000000000000000001');
+    await flushMicrotasks();
     // mode auto-derives to 'view' (no connected.address)
     assert.equal(storeMod.get('ui.mode'), 'view');
   });
@@ -190,11 +198,12 @@ describe('subscribe-driven URL mirror', () => {
     assert.doesNotMatch(last.url, /[?&]as=/);
   });
 
-  test('setting viewing.address EQUAL to connected.address removes ?as= (no view-mode for self-equal)', () => {
+  test('setting viewing.address EQUAL to connected.address removes ?as= (no view-mode for self-equal)', async () => {
     storeMod.update('connected.address', '0xffff000000000000000000000000000000000006');
     initRouter();
     _replaceCalls = [];
     storeMod.update('viewing.address', '0xffff000000000000000000000000000000000006');
+    await flushMicrotasks();
     // mode derives to 'self' (eq) → ?as= dropped
     assert.equal(storeMod.get('ui.mode'), 'self');
     if (_replaceCalls.length > 0) {
