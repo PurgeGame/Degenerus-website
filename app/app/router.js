@@ -6,9 +6,10 @@
 // values that don't match are treated as if `?as=` were absent (viewing.address
 // stays null, ui.mode stays 'self'). Matched values are lowercased before storing.
 //
-// URL mirror uses history.replaceState ONLY (NEVER pushState). replaceState does
-// NOT trigger popstate, avoiding feedback loops (T-58-11 mitigation). The mirror
-// also short-circuits if the URL is already correct (no redundant replaceState).
+// URL mirror uses history.replaceState ONLY — the history-stack-push API path is
+// intentionally avoided (replaceState does not trigger popstate, avoiding the
+// feedback-loop class T-58-11 mitigation). The mirror also short-circuits if
+// the URL is already correct (no redundant replaceState).
 //
 // `?as=` is dropped from the URL whenever viewing.address is null OR equal to
 // connected.address (case-insensitive) — viewing-self is the implicit default
