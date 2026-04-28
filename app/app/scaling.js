@@ -25,12 +25,16 @@ import { formatEther } from 'ethers';
  * unchanged. The fractional portion is zero-padded to `digits` so the
  * UI gets a stable-width string.
  *
+ * WR-04: 0n flows through the same pad-to-digits path as every other
+ * input, so `displayEth(0n)` and `displayEth(1n)` render to the same
+ * width ("0.0000"). This avoids tabular-nums layout shift when a status
+ * bar transitions from initial-zero to first-poll value.
+ *
  * @param {bigint} raw - On-chain wei amount (post-/1M-scaling on Sepolia)
  * @param {number} [digits=4] - Decimal places to render (zero-padded)
- * @returns {string} Formatted ETH string (e.g. "1.0000", "0.5000", or literal "0")
+ * @returns {string} Formatted ETH string (e.g. "1.0000", "0.5000", "0.0000")
  */
 export function displayEth(raw, digits = 4) {
-  if (raw === 0n) return '0';
   const scaled = raw / ETH_DIVISOR;
   const eth = formatEther(scaled);
   const dot = eth.indexOf('.');

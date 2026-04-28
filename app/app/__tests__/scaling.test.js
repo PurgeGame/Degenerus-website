@@ -50,8 +50,14 @@ describe('chain-config divisor parity', () => {
 // ---------------------------------------------------------------------------
 
 describe('displayEth (Sepolia path — active chain-config)', () => {
-  test('0n short-circuits to literal "0" (no decimals)', () => {
-    assert.equal(displayEth(0n), '0');
+  test('0n renders as "0.0000" (consistent width — WR-04)', () => {
+    // WR-04: 0n must pad to the same width as every other input so a
+    // tabular-nums status bar does not layout-shift on first poll.
+    assert.equal(displayEth(0n), '0.0000');
+  });
+
+  test('0n with digits=0 renders as "0"', () => {
+    assert.equal(displayEth(0n, 0), '0');
   });
 
   test('1e24 wei (1M-scaled = 1 ETH) → "1.0000"', () => {
