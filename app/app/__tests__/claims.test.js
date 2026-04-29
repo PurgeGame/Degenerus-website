@@ -494,3 +494,137 @@ describe('Plan 61-02: claims.js source-level invariants', () => {
     );
   });
 });
+
+// ===========================================================================
+// Plan 62-06 — claimAffiliateDgnrs (AFF-03).
+//
+// Phase 62 Plan 62-06 EXTENDS claims.js with a new export claimAffiliateDgnrs
+// that flows through Phase 58 closure-form sendTx + Phase 56 requireStaticCall
+// + reason-map (inherited — no NEW codes registered in claims.js for AFF-03;
+// the 3 NEW codes Zero/Insufficient/InvalidKickback live in affiliate.js for
+// the createAffiliateCode/Customize-CTA path).
+//
+// Verified ABI: degenerus-audit/contracts/DegenerusGame.sol:1426
+//   function claimAffiliateDgnrs(address player) external
+// ===========================================================================
+
+describe('Plan 62-06: claimAffiliateDgnrs', () => {
+  let lastFakeContract;
+
+  beforeEach(() => {
+    storeMod.__resetForTest();
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('viewing.address', null);
+    storeMod.update('ui.mode', 'self');
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    // Build a fake contract with a claimAffiliateDgnrs method.
+    const calls = { claimAffiliateDgnrs: [] };
+    const fake = {
+      claimAffiliateDgnrs: Object.assign(
+        async (...args) => {
+          calls.claimAffiliateDgnrs.push(args);
+          return makeFakeTx(makeFakeReceipt());
+        },
+        { staticCall: async () => undefined },
+      ),
+      interface: { parseLog: (log) => log.parsed ?? null },
+      connect(_signer) { return this; },
+      _calls: calls,
+    };
+    lastFakeContract = fake;
+    claimsMod.__setContractFactoryForTest(() => lastFakeContract);
+  });
+
+  afterEach(() => {
+    claimsMod.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+  });
+
+  test('invokes contract.claimAffiliateDgnrs with connected.address', async () => {
+    await claimsMod.claimAffiliateDgnrs();
+    assert.equal(lastFakeContract._calls.claimAffiliateDgnrs.length, 1, 'called once');
+    const [args] = lastFakeContract._calls.claimAffiliateDgnrs;
+    assert.equal(args[0], CONNECTED, 'player arg = connected.address');
+  });
+
+  test('throws Wallet not connected when no address available', async () => {
+    storeMod.update('connected.address', null);
+    contractsMod.clearProvider();
+    await assert.rejects(claimsMod.claimAffiliateDgnrs(), /Wallet not connected/i);
+  });
+
+  test('accepts explicit player arg overriding store', async () => {
+    await claimsMod.claimAffiliateDgnrs({ player: OTHER });
+    const [args] = lastFakeContract._calls.claimAffiliateDgnrs;
+    assert.equal(args[0], OTHER, 'explicit player arg overrides connected.address');
+  });
+
+  test('static-call gate runs BEFORE sendTx — order verification', async () => {
+    // Build a contract whose static-call reverts; sendTx must not be reached.
+    const calls = { claimAffiliateDgnrs: [] };
+    const reverting = {
+      claimAffiliateDgnrs: Object.assign(
+        async (...args) => { calls.claimAffiliateDgnrs.push(args); return makeFakeTx(makeFakeReceipt()); },
+        {
+          staticCall: async () => {
+            const err = new Error('static-call revert');
+            err.revert = { name: 'DecAlreadyClaimed' };  // any registered code works
+            throw err;
+          },
+        },
+      ),
+      interface: { parseLog: (log) => log.parsed ?? null },
+      connect(_signer) { return this; },
+      _calls: calls,
+    };
+    claimsMod.__setContractFactoryForTest(() => reverting);
+    await assert.rejects(claimsMod.claimAffiliateDgnrs(), /already claimed|claim/i);
+    assert.equal(
+      reverting._calls.claimAffiliateDgnrs.length, 0,
+      'sendTx NOT invoked when static-call gate trips (proves gate runs first)',
+    );
+  });
+});
+
+// ===========================================================================
+// Plan 62-06 — source-level invariants (no NEW reason-map registrations in
+// claims.js; the AFF-03 claim path inherits the existing reason-map state).
+// ===========================================================================
+
+describe('Plan 62-06: claims.js source-level invariants (AFF-03 extension)', () => {
+  const SRC = readFileSync(new URL('../claims.js', import.meta.url), 'utf8');
+
+  test('NEW export claimAffiliateDgnrs present', () => {
+    assert.match(
+      SRC,
+      /export\s+async\s+function\s+claimAffiliateDgnrs/,
+      'claimAffiliateDgnrs exported',
+    );
+  });
+
+  test('canonical ABI: claimAffiliateDgnrs(address player)', () => {
+    assert.ok(
+      SRC.includes('function claimAffiliateDgnrs(address player) external'),
+      'canonical AFFILIATE_DGNRS_ABI fragment present',
+    );
+  });
+
+  test('action label `Claim affiliate DGNRS` is sent to sendTx', () => {
+    assert.ok(SRC.includes("'Claim affiliate DGNRS'"), 'literal action label present');
+  });
+
+  test('claims.js register count UNCHANGED (3 — Phase 61 baseline)', () => {
+    const registers = SRC.match(/register\(/g) || [];
+    assert.equal(
+      registers.length, 3,
+      `claims.js register count must stay at 3 (Phase 61 baseline); got ${registers.length}`,
+    );
+  });
+
+  test('uses closure-form sendTx for claimAffiliateDgnrs', () => {
+    // The whole file should have >= 4 closure-form invocations after Plan 62-06
+    // extension (3 from Phase 61 + 1 NEW for claimAffiliateDgnrs).
+    const matches = SRC.match(/sendTx\(\s*\(s\)\s*=>/g) || [];
+    assert.ok(matches.length >= 4, `expected >= 4 closure-form sendTx after Plan 62-06; got ${matches.length}`);
+  });
+});

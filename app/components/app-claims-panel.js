@@ -36,12 +36,14 @@ import { fetchJSON } from '../../beta/app/api.js';
 // Plan 61-02: claims write path — three named exports wired into per-row click
 // handlers below. `import` triggers reason-map registrations as a side-effect
 // (DecClaimInactive / DecAlreadyClaimed / DecNotWinner).
-import { claimEth, claimBurnie, claimDecimatorLevels } from '../app/claims.js';
+import { claimEth, claimBurnie, claimDecimatorLevels, claimAffiliateDgnrs } from '../app/claims.js';
 
-// v4.6 render whitelist (D-01 LOCKED). The 4 hidden keys (tickets, vault,
-// farFutureCoin, terminal) are read from /pending but NEVER rendered in v4.6;
-// each is documented out-of-scope at CONTEXT.md lines 50-54.
-const VISIBLE_PRIZE_KEYS = ['eth', 'burnie', 'decimator'];
+// v4.6 render whitelist (D-01 LOCKED, extended by Plan 62-06 / AFF-03).
+// The 4 hidden keys (tickets, vault, farFutureCoin, terminal) are read from
+// /pending but NEVER rendered in v4.6; each is documented out-of-scope at
+// CONTEXT.md lines 50-54. Plan 62-06 adds 'affiliate' as the 4th visible key
+// — Phase 61 D-01 LOCKED forward-compat hook.
+const VISIBLE_PRIZE_KEYS = ['eth', 'burnie', 'decimator', 'affiliate'];
 
 // Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for
 // the Plan 61-03 30s polling tick so node:test processes exit cleanly when
@@ -62,6 +64,7 @@ const PRIZE_LABELS = {
   eth: 'ETH winnings',
   burnie: 'BURNIE coinflip winnings',
   decimator: 'Decimator jackpot',
+  affiliate: 'Affiliate commission (DGNRS)',
 };
 
 class AppClaimsPanel extends HTMLElement {
@@ -456,8 +459,20 @@ class AppClaimsPanel extends HTMLElement {
       rows.push({ key: 'decimator', amountWei: decBig, levels: decLevels });
     }
 
-    // Forward-compat: VISIBLE_PRIZE_KEYS sentinel — if a future plan extends
-    // the whitelist (e.g. Phase 62 affiliate row), the array drives inclusion.
+    // Plan 62-06 / AFF-03 — affiliate row sourced from /pending response.
+    // Phase 62-00 ships /pending with `affiliate: {amount, available, reason}`
+    // (forward-debt FD-2 surfaces as `'0'` until indexer aggregation closes;
+    // when it does close, the row appears automatically).
+    const affRaw = String(p.affiliate?.amount || '0');
+    let affBig = 0n;
+    try { affBig = BigInt(affRaw); } catch (_) { affBig = 0n; }
+    if (affBig > 0n) {
+      rows.push({ key: 'affiliate', amountWei: affBig, levels: null });
+    }
+
+    // Forward-compat: VISIBLE_PRIZE_KEYS sentinel — Plan 62-06 extends to
+    // include 'affiliate'; future plans can extend further by adding to the
+    // whitelist + a row builder above.
     return rows.filter((r) => VISIBLE_PRIZE_KEYS.includes(r.key));
   }
 
@@ -582,6 +597,9 @@ class AppClaimsPanel extends HTMLElement {
             levels,
             onProgress: (p) => this.#renderDecimatorProgress(rowEl, p),
           });
+        } else if (row.key === 'affiliate') {
+          // Plan 62-06 / AFF-03 — single-tx sweep of affiliate-share DGNRS.
+          await claimAffiliateDgnrs({ player });
         }
 
         // Success — dispatch panel-internal event so Plan 61-03 can subscribe

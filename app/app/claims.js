@@ -69,6 +69,21 @@ const DECIMATOR_CLAIM_ABI = [
   'function claimDecimatorJackpot(uint24 lvl) external',
 ];
 
+// ── Phase 62 / Plan 62-06 / AFF-03 — APPEND ─────────────────────────────
+// Verified: degenerus-audit/contracts/DegenerusGame.sol:1426
+//   function claimAffiliateDgnrs(address player) external
+//
+// Affiliate DGNRS commission claim — single tx, sweeps the connected user's
+// pending affiliate-share DGNRS into their wallet. Mirrors claimEth shape
+// (closure-form sendTx + requireStaticCall pre-flight + structured-revert
+// error). Plan 62-06 adds NO new reason-map registrations on this path —
+// inherited reverts from Phase 56 baseline + Phase 60 + Phase 61 cover it.
+// (The 3 NEW codes Zero/Insufficient/InvalidKickback live in affiliate.js
+// for the createAffiliateCode/Customize-CTA path, NOT this claim path.)
+const AFFILIATE_DGNRS_ABI = [
+  'function claimAffiliateDgnrs(address player) external',
+];
+
 // ---------------------------------------------------------------------------
 // Test seam — production path uses default `new ethers.Contract(...)`.
 // Tests inject a fake via __setContractFactoryForTest; reset via
@@ -100,6 +115,12 @@ function _buildCoinflipContract(signerOrProvider) {
 function _buildDecimatorContract(signerOrProvider) {
   if (_contractFactory) return _contractFactory(signerOrProvider);
   return new ethers.Contract(CONTRACTS.GAME, DECIMATOR_CLAIM_ABI, signerOrProvider);
+}
+
+// Plan 62-06 — affiliate DGNRS contract builder.
+function _buildAffiliateDgnrsContract(signerOrProvider) {
+  if (_contractFactory) return _contractFactory(signerOrProvider);
+  return new ethers.Contract(CONTRACTS.GAME, AFFILIATE_DGNRS_ABI, signerOrProvider);
 }
 
 // ---------------------------------------------------------------------------
@@ -246,6 +267,46 @@ export async function claimDecimatorLevels({ player, levels, onProgress } = {}) 
     // natural pacing (RESEARCH.md Pattern 1 confirmed; Phase 60 mirror).
   }
   return results;
+}
+
+// ---------------------------------------------------------------------------
+// Plan 62-06 / AFF-03 — claimAffiliateDgnrs(player) on the GAME contract.
+//
+// Single-tx sweep of the connected user's pending affiliate-share DGNRS.
+// D-05 + Pitfall 11: pass `connected.address` EXPLICITLY (not ZeroAddress)
+// so the contract's internal `_resolvePlayer(player)` returns the connected
+// EOA and the Phase 58 freshAddress guard verifies wallet identity.
+//
+// AFF-03 dispatches from <app-claims-panel> via VISIBLE_PRIZE_KEYS extension
+// in Plan 62-06. Phase 61's render gate (`amount > 0`) accepts the affiliate
+// row naturally; Phase 62-00's /pending response carries `affiliate.amount`
+// (forward-debt FD-2 surfaces as `'0'` until indexer aggregation closes).
+// ---------------------------------------------------------------------------
+
+/**
+ * @param {{player?: string}} [args]
+ * @returns {Promise<{receipt: import('ethers').TransactionReceipt}>}
+ */
+export async function claimAffiliateDgnrs({ player } = {}) {
+  const playerArg = player ?? get('connected.address');
+  if (!playerArg) throw new Error('Wallet not connected.');
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+
+  // Static-call gate (Phase 56 D-05) — runs only when a signer is available.
+  if (signer) {
+    const c = _buildAffiliateDgnrsContract(signer);
+    const sim = await requireStaticCall(c, 'claimAffiliateDgnrs', [playerArg], signer);
+    if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call claimAffiliateDgnrs');
+  }
+
+  // Phase 58 chokepoint — closure form mandatory.
+  const receipt = await sendTx(
+    (s) => _buildAffiliateDgnrsContract(s).claimAffiliateDgnrs(playerArg),
+    'Claim affiliate DGNRS',
+  );
+  return { receipt };
 }
 
 // ---------------------------------------------------------------------------

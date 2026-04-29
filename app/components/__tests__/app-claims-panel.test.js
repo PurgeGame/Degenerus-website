@@ -1525,3 +1525,190 @@ describe('app-claims-panel — polling + lifecycle (Plan 61-03)', () => {
     );
   });
 });
+
+// ===========================================================================
+// Plan 62-06 — affiliate row whitelist + claim handler (AFF-03).
+//
+// Phase 61 D-01 LOCKED forward-compat hook: VISIBLE_PRIZE_KEYS sentinel was
+// designed to accept future rows via single-line whitelist edit. Plan 62-06
+// extends from ['eth', 'burnie', 'decimator'] → ['eth', 'burnie', 'decimator',
+// 'affiliate']. Panel now reads p.affiliate.amount from /pending and
+// dispatches click to claimAffiliateDgnrs({player}).
+//
+// Source-grep tests verify the whitelist + #computeVisibleRows extension.
+// Functional tests use the existing fakeContract + fetchResponses harness with
+// affiliate.amount included in the pending fixture.
+// ===========================================================================
+
+import { readFileSync as _readFileSync62 } from 'node:fs';
+const PANEL_SRC_62_06 = _readFileSync62(
+  new URL('../app-claims-panel.js', import.meta.url),
+  'utf8',
+);
+
+describe('app-claims-panel — Plan 62-06 affiliate row whitelist + claim handler', () => {
+  test("VISIBLE_PRIZE_KEYS includes 'affiliate' (whitelist extension)", () => {
+    assert.match(
+      PANEL_SRC_62_06,
+      /VISIBLE_PRIZE_KEYS\s*=\s*\[\s*'eth'\s*,\s*'burnie'\s*,\s*'decimator'\s*,\s*'affiliate'\s*\]/,
+      "VISIBLE_PRIZE_KEYS extended to include 'affiliate'",
+    );
+  });
+
+  test('Panel imports claimAffiliateDgnrs from claims.js', () => {
+    assert.match(
+      PANEL_SRC_62_06,
+      /claimAffiliateDgnrs/,
+      'panel imports claimAffiliateDgnrs',
+    );
+  });
+
+  test('#computeVisibleRows reads p.affiliate.amount from /pending', () => {
+    assert.match(
+      PANEL_SRC_62_06,
+      /p\.affiliate\??\.\s*amount/,
+      'computeVisibleRows reads p.affiliate?.amount',
+    );
+  });
+
+  test('#wireRowHandler dispatches affiliate row to claimAffiliateDgnrs', () => {
+    assert.match(
+      PANEL_SRC_62_06,
+      /row\.key\s*===\s*['"]affiliate['"]/,
+      "wireRowHandler has 'affiliate' branch",
+    );
+    // Must invoke claimAffiliateDgnrs in the affiliate dispatch site.
+    assert.match(
+      PANEL_SRC_62_06,
+      /claimAffiliateDgnrs\s*\(/,
+      'claimAffiliateDgnrs invoked in dispatch',
+    );
+  });
+});
+
+describe('app-claims-panel — Plan 62-06 affiliate row functional', () => {
+  let fakeContract;
+
+  beforeEach(async () => {
+    storeMod.__resetForTest();
+    resetDom();
+    storeMod.update('connected.address', TEST_ADDR);
+    storeMod.update('viewing.address', null);
+    storeMod.update('ui.mode', 'self');
+    contractsMod.setProvider(makeFakeProvider(TEST_ADDR));
+    // Fake contract with claimAffiliateDgnrs method ALONGSIDE existing claim
+    // methods (panel may also click eth/burnie rows in some tests).
+    const calls = {
+      claimWinnings: [],
+      claimCoinflips: [],
+      claimDecimatorJackpot: [],
+      claimAffiliateDgnrs: [],
+    };
+    const stk = (name) => async () => {
+      if (opts.staticCallShouldRevert?.[name]) {
+        const err = new Error('static-call revert');
+        err.revert = { name: opts.staticCallRevertName?.[name] || 'DecAlreadyClaimed' };
+        throw err;
+      }
+    };
+    const opts = {};
+    fakeContract = {
+      claimWinnings: Object.assign(async (...args) => { calls.claimWinnings.push(args); return makeFakeTx(makeFakeReceipt()); }, { staticCall: stk('claimWinnings') }),
+      claimCoinflips: Object.assign(async (...args) => { calls.claimCoinflips.push(args); return makeFakeTx(makeFakeReceipt()); }, { staticCall: stk('claimCoinflips') }),
+      claimDecimatorJackpot: Object.assign(async (...args) => { calls.claimDecimatorJackpot.push(args); return makeFakeTx(makeFakeReceipt()); }, { staticCall: stk('claimDecimatorJackpot') }),
+      claimAffiliateDgnrs: Object.assign(async (...args) => { calls.claimAffiliateDgnrs.push(args); return makeFakeTx(makeFakeReceipt()); }, { staticCall: stk('claimAffiliateDgnrs') }),
+      interface: { parseLog: (log) => log.parsed ?? null },
+      connect(_signer) { return this; },
+      _calls: calls,
+    };
+    claimsMod.__setContractFactoryForTest(() => fakeContract);
+    await import('../app-claims-panel.js');
+  });
+
+  afterEach(() => {
+    claimsMod.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+  });
+
+  function mountPanelWithAffiliate(affiliateOverride = {}) {
+    setFetchResponses({
+      lastDay: { day: 42, status: 'resolved' },
+      pending: {
+        player: TEST_ADDR,
+        pending: {
+          eth:           { amount: '0', available: true, reason: null },
+          burnie:        { amount: '0', available: true, reason: null },
+          tickets:       { amount: '0', available: true, reason: null },
+          decimator:     { amount: '0', available: true, reason: null },
+          terminal:      { amount: '0', available: false, reason: 'pre-game' },
+          vault:         { amount: '0', available: false, reason: 'vault-not-indexed-phase-57' },
+          farFutureCoin: { amount: '0', available: false, reason: 'cumulative-allocated-not-balance' },
+          affiliate:     { amount: '500000000000000000', available: true, reason: null, ...affiliateOverride },
+        },
+      },
+      dashboard: {
+        decimator: { claimablePerLevel: [] },
+      },
+    });
+    globalThis.localStorage.setItem('spun_day_11155111_42', '1');
+    const Ctor = customElements.get('app-claims-panel');
+    const el = new Ctor();
+    _docBody.appendChild(el);
+    el.connectedCallback();
+    return el;
+  }
+
+  test('affiliate row renders when p.affiliate.amount > 0n', async () => {
+    const el = mountPanelWithAffiliate();
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const row = root.querySelector('.clm-row[data-prize-key="affiliate"]');
+    assert.ok(row, 'affiliate row present when amount > 0');
+  });
+
+  test('affiliate row HIDDEN when p.affiliate.amount === 0', async () => {
+    const el = mountPanelWithAffiliate({ amount: '0' });
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const row = root.querySelector('.clm-row[data-prize-key="affiliate"]');
+    assert.equal(row, null, 'affiliate row absent when amount === 0');
+  });
+
+  test('clicking affiliate row dispatches to claimAffiliateDgnrs with connected.address', async () => {
+    const el = mountPanelWithAffiliate();
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const btn = root.querySelector('.clm-row[data-prize-key="affiliate"] .clm-row__claim-cta');
+    assert.ok(btn, 'affiliate claim button present');
+    btn.dispatchEvent({ type: 'click' });
+    await settle(80);
+    assert.equal(fakeContract._calls.claimAffiliateDgnrs.length, 1, 'claimAffiliateDgnrs called once');
+    assert.equal(fakeContract._calls.claimAffiliateDgnrs[0][0], TEST_ADDR, 'player arg = connected.address');
+  });
+
+  test('NEVER optimistic balance subtraction during affiliate-claim pending', async () => {
+    const el = mountPanelWithAffiliate();
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const rowEl = root.querySelector('.clm-row[data-prize-key="affiliate"]');
+    const amountEl = rowEl.querySelector('.clm-row__amount');
+    const beforeAmount = amountEl.textContent;
+    // Inject a never-resolving claimAffiliateDgnrs.
+    const slow = {
+      claimWinnings: Object.assign(async () => makeFakeTx(makeFakeReceipt()), { staticCall: async () => {} }),
+      claimCoinflips: Object.assign(async () => makeFakeTx(makeFakeReceipt()), { staticCall: async () => {} }),
+      claimDecimatorJackpot: Object.assign(async () => makeFakeTx(makeFakeReceipt()), { staticCall: async () => {} }),
+      claimAffiliateDgnrs: Object.assign(
+        async (..._args) => new Promise(() => {}),
+        { staticCall: async () => {} },
+      ),
+      interface: { parseLog: (log) => log.parsed ?? null },
+      connect(_signer) { return this; },
+    };
+    claimsMod.__setContractFactoryForTest(() => slow);
+    const btn = rowEl.querySelector('.clm-row__claim-cta');
+    btn.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    assert.equal(amountEl.textContent, beforeAmount, 'amount unchanged during pending (no optimistic subtraction)');
+  });
+});

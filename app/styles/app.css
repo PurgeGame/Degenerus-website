@@ -1378,3 +1378,174 @@ player-dropdown {
 .app-boons-panel {
   margin-top: 1rem;
 }
+
+/* ── Phase 62 / 62-06 / AFF-01..03 — Affiliate panel (.aff-* / .aff-customize-*) ── */
+/* RESEARCH R10 verified non-colliding. 16th class-prefix in /app/.        */
+/* Plan 62-06 ships AFF-01 default URL + Customize CTA + AFF-02 referee    */
+/* table inside <app-affiliate-panel>; AFF-03 row lives in Phase 61's      */
+/* <app-claims-panel> via VISIBLE_PRIZE_KEYS whitelist extension.          */
+.app-affiliate-panel {
+  margin-top: 1rem;
+}
+
+.aff-header {
+  margin-bottom: 0.75rem;
+}
+
+.aff-default-section {
+  margin-bottom: 1rem;
+}
+
+.aff-hint {
+  color: var(--text-secondary, #aaa);
+  font-size: 0.875rem;
+  margin: 0 0 0.5rem;
+}
+
+.aff-url-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.aff-url-input {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.75rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border, #444);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary, #eee);
+}
+
+.aff-copy-cta {
+  padding: 0.5rem 0.875rem;
+  cursor: pointer;
+}
+
+.aff-copy-feedback {
+  color: var(--accent, #4caf50);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.aff-customize-section {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.aff-customize-summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.aff-customize-hint {
+  color: var(--text-secondary, #aaa);
+  font-size: 0.875rem;
+  margin: 0.5rem 0;
+}
+
+.aff-customize-form {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.aff-customize-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary, #aaa);
+}
+
+.aff-customize-input {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border, #444);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary, #eee);
+}
+
+.aff-customize-submit {
+  padding: 0.5rem 0.875rem;
+  cursor: pointer;
+  align-self: flex-start;
+  margin-top: 0.25rem;
+}
+
+.aff-customize-error {
+  color: var(--error-fg, #b03030);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.aff-customize-success {
+  color: var(--accent, #4caf50);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.aff-referees-section {
+  margin-top: 1rem;
+}
+
+.aff-referees-heading {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.aff-referees-table {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.aff-referees-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border, #333);
+  font-size: 0.875rem;
+}
+
+.aff-referees-row--header {
+  font-weight: 600;
+  color: var(--text-secondary, #aaa);
+  border-bottom: 1px solid var(--border, #444);
+}
+
+.aff-referees-cell {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aff-referees-cell--addr {
+  font-family: monospace;
+  font-size: 0.75rem;
+}
+
+.aff-referees-empty {
+  color: var(--text-secondary, #aaa);
+  font-style: italic;
+  font-size: 0.875rem;
+  padding: 0.5rem;
+}
+
+.aff-claim-link {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #aaa);
+  margin-top: 1rem;
+}
+
+.aff-claim-link-anchor {
+  color: var(--accent, #4caf50);
+  text-decoration: underline;
+}
