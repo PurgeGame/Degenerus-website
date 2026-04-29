@@ -438,9 +438,10 @@ describe('Plan 61-02: claims.js source-level invariants', () => {
   const SRC = readFileSync(new URL('../claims.js', import.meta.url), 'utf8');
 
   test('uses closure-form sendTx — typeof arg[0] is function', () => {
-    // The closure form is `sendTx((s) => new Contract(...).method(args), 'Action')`.
-    // Source-level grep: at least 3 occurrences (one per helper).
-    const matches = SRC.match(/sendTx\(\(s\)\s*=>/g) || [];
+    // The closure form is `sendTx((s) => new Contract(...).method(args), 'Action')`
+    // — both `sendTx((s) =>` and `sendTx(\n  (s) =>` (multi-line, lootbox.js style)
+    // are accepted forms. Phase 58 grep gate uses the FORBIDDEN form only.
+    const matches = SRC.match(/sendTx\(\s*\(s\)\s*=>/g) || [];
     assert.ok(matches.length >= 3, `expected >= 3 closure-form sendTx, got ${matches.length}`);
   });
 
