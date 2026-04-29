@@ -27,9 +27,11 @@
 //   invoked directly through the resolved module namespace (NOT via the silent
 //   4s-fallback branch).
 
-import { subscribe } from '../app/store.js';
-// ^^ pre-imported in Plan 60-01 for forward-compat; Plan 60-02 leaves it pre-imported
-// (Plan 60-04 wires connected.address subscription for boot-CTA / affiliate-code).
+import { subscribe, get } from '../app/store.js';
+// ^^ subscribe pre-imported in Plan 60-01; activated in Plan 60-04 for connected.address
+// subscription (boot-CTA + URL-?ref affiliate persistence). get() reads connected.address
+// inside #runRevealAnimation to write the chainId-scoped revealed-packs localStorage entry
+// on REVEAL ANIMATION COMPLETE per CONTEXT D-07 step 6.
 
 // Plan 60-02: write-path imports — first production consumer of Phase 56 (static-call
 // + reason-map) and Phase 58 (sendTx chokepoint) primitives end-to-end on a write
@@ -43,6 +45,33 @@ import { decodeRevertReason } from '../app/reason-map.js';
 // parseTraitsGeneratedFromReceipt extracts the trait payload for pack-animator.
 // pollRngForLootbox is the view-call wrapper used by #runPollCycle.
 import { openLootBox, parseTraitsGeneratedFromReceipt, pollRngForLootbox } from '../app/lootbox.js';
+
+// Plan 60-04: URL ?ref= bytes32hex affiliate persistence helper. Activated by the
+// connected.address subscription in connectedCallback — writes to chainId-scoped
+// localStorage on first visit; lootbox.js purchaseEth auto-reads on every Buy.
+import { persistAffiliateCodeFromUrl } from '../app/lootbox.js';
+
+// Plan 60-04: chainId-scoped localStorage keys per CONTEXT D-07 step 6 +
+// Phase 59 Pitfall B precedent (chainId scoping forward-safe for v5.0 mainnet).
+import { CHAIN } from '../app/chain-config.js';
+
+// Plan 60-04: cross-imported indexer fetch helper (Phase 56 D-04 cross-import
+// pattern — zero /beta/ source edits per milestone constraint).
+//
+// CONTEXT D-07 step 1 RESEARCH RESULT (verified at execution time against
+// database/src/api/schemas/player.ts): the existing /player/:address endpoint
+// does NOT surface a `lootboxes: [{lootboxIndex, payKind, opened, rngReady}]`
+// array — only aggregate counts (dailyActivity.lootboxesPurchased / opened) and
+// a separate /player/:address/packs?day=N endpoint that surfaces day-scoped
+// reveal activity (NOT cross-session unrevealed inventory with per-pack
+// rngReady/opened flags). Per CONTEXT 'No new database endpoint unless
+// prerequisite gap surfaces' + CONTEXT D-07 step 1 fallback option B:
+// Plan 60-04 ships boot CTA in DEGRADED MODE — fetches /player/:address,
+// gracefully extracts a `lootboxes[]` field if present (forward-compat for a
+// future database endpoint), and stays HIDDEN otherwise. A follow-up plan
+// landing a /player/:address/lootboxes endpoint in database/ would un-degrade
+// the CTA without any widget code changes (the parsing is forward-compatible).
+import { fetchJSON } from '../../beta/app/api.js';
 
 // Conceptual cross-import declarations (resolved lazily at reveal time — see
 // CROSS-IMPORT MECHANICS comment above). The literal `from` strings appear here
@@ -87,6 +116,9 @@ class AppPacksPanel extends HTMLElement {
   #signalTimers = new Map();       // lootboxIndex (string) -> setTimeout handle for "ready" auto-fade
   #revealCancelToken = 0;          // bumps on disconnect / row-state-change to invalidate animation callbacks
   #visibilityListener = null;      // bound listener for visibility-aware pause
+  // Plan 60-04 — boot CTA + idempotency state.
+  #unrevealedPacksFromIndexer = []; // Boot CTA backing data (filtered indexer inventory)
+  #bootCtaRanForAddress = null;     // Idempotency guard — only run boot CTA once per connected address
 
   connectedCallback() {
     this.innerHTML = `
@@ -177,6 +209,16 @@ class AppPacksPanel extends HTMLElement {
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
       document.addEventListener('visibilitychange', this.#visibilityListener);
     }
+
+    // Plan 60-04: subscribe to connected.address — fires the boot CTA + URL-?ref
+    // affiliate persistence on (re)connect. Per CONTEXT D-07 step 2 the boot CTA
+    // fetch is gated on wallet connection state (the chainId-scoped localStorage
+    // key requires the address). subscribe()'s initial-fire semantics mean this
+    // runs synchronously with the current connected.address value (could be null;
+    // #onConnectedAddressChange handles that).
+    this.#unsubs.push(
+      subscribe('connected.address', (addr) => this.#onConnectedAddressChange(addr))
+    );
 
     // Initial render so default state reflects in DOM
     this.#renderState();
@@ -589,6 +631,17 @@ class AppPacksPanel extends HTMLElement {
       await this.#runRevealAnimation(row, traits, cancelToken);
       if (cancelToken !== this.#revealCancelToken) return;
 
+      // Plan 60-04: write to revealed-packs set on REVEAL ANIMATION COMPLETE
+      // (NOT on openLootBox tx confirm) per CONTEXT D-07 step 6 — animation
+      // completion is the UX-level "user has seen the reveal" event. Wrapped in
+      // try/catch via #writeRevealedSet (Pitfall F mitigation — quota survival).
+      const connected = get('connected.address');
+      if (connected) {
+        const set = this.#readRevealedSet(connected);
+        set.add(String(row.lootboxIndex));
+        this.#writeRevealedSet(connected, set);
+      }
+
       row.status = 'revealed';
       this.#renderRows();
     } catch (err) {
@@ -697,7 +750,176 @@ class AppPacksPanel extends HTMLElement {
       lootboxRowsCount: this.#lootboxRows.length,
       lootboxRowStatuses: this.#lootboxRows.map((r) => r.status),
       revealCancelToken: this.#revealCancelToken,
+      // Plan 60-04: boot CTA backing-data count (number of indexer-derived
+      // unrevealed lootboxes awaiting user click-through).
+      unrevealedPacksFromIndexerCount: this.#unrevealedPacksFromIndexer.length,
     };
+  }
+
+  // ---------------------------------------------------------------------
+  // Plan 60-04: localStorage idempotency helpers — chainId-scoped per
+  // CONTEXT D-07 step 6 + Phase 59 Pitfall B precedent. All ops wrapped
+  // in try/catch (Pitfall F mitigation — quota / private-mode survival).
+  // ---------------------------------------------------------------------
+
+  #readRevealedSet(address) {
+    if (!address) return new Set();
+    const key = `revealed-packs:${CHAIN.id}:${String(address).toLowerCase()}`;
+    try {
+      const raw = (typeof localStorage !== 'undefined') ? localStorage.getItem(key) : null;
+      if (!raw) return new Set();
+      const parsed = JSON.parse(raw);
+      return new Set(Array.isArray(parsed) ? parsed.map(String) : []);
+    } catch (_e) {
+      // Pitfall F mitigation — degraded mode if JSON.parse / localStorage throws.
+      return new Set();
+    }
+  }
+
+  #writeRevealedSet(address, set) {
+    if (!address) return;
+    const key = `revealed-packs:${CHAIN.id}:${String(address).toLowerCase()}`;
+    try {
+      const arr = Array.from(set).map(String);
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(key, JSON.stringify(arr));
+      }
+    } catch (_e) {
+      // Pitfall F mitigation per CONTEXT 'In scope LBX-03': quota / SecurityError
+      // survival. Worst case: user re-sees the reveal animation on next visit
+      // (acceptable degraded UX — not a security concern).
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Plan 60-04: connected.address subscriber — fires URL-?ref affiliate persist
+  // + boot CTA fetch on (re)connect. Idempotency guard prevents double-firing
+  // on store re-emit (Phase 59 #refreshHighlight subscriber pattern).
+  // ---------------------------------------------------------------------
+
+  #onConnectedAddressChange(addr) {
+    if (!addr) {
+      // Disconnect: clear boot CTA + reset idempotency guard so a subsequent
+      // reconnect re-fires the fetch.
+      this.#unrevealedPacksFromIndexer = [];
+      this.#renderBootCta();
+      this.#bootCtaRanForAddress = null;
+      return;
+    }
+    // Idempotency: per-address guard. If we already ran for this exact address,
+    // skip the re-run (subscribers fire on initial registration AND on every
+    // store update — guard prevents redundant indexer fetches).
+    if (this.#bootCtaRanForAddress === addr) return;
+    this.#bootCtaRanForAddress = addr;
+
+    // CONTEXT D-05 step 1: persist URL ?ref= bytes32hex to localStorage on first
+    // visit. Idempotent — only writes if URL has a valid bytes32hex param.
+    try { persistAffiliateCodeFromUrl(CHAIN.id, addr); } catch (_) { /* defensive */ }
+
+    // CONTEXT D-07 step 2: fire indexer fetch + boot CTA render.
+    this.#runBootCta(addr);
+  }
+
+  async #runBootCta(address) {
+    if (!address) return;
+    try {
+      // CONTEXT D-07 step 1 RESEARCH RESULT: /player/:address response shape
+      // does NOT currently include a `lootboxes[]` array (verified at execution
+      // time against database/src/api/schemas/player.ts — only aggregate counts
+      // surface). The fetch still runs (forward-compat for a future endpoint
+      // landing in database/), but the unrevealed-packs filter below produces
+      // an empty array, gracefully hiding the boot CTA. See SUMMARY for the
+      // documented gap + follow-up plan recommendation.
+      const playerData = await fetchJSON(`/player/${String(address).toLowerCase()}`);
+      const inventory = Array.isArray(playerData?.lootboxes) ? playerData.lootboxes : [];
+      const revealed = this.#readRevealedSet(address);
+      // Per CONTEXT D-07 step 3: an unrevealed lootbox is one in the on-chain
+      // inventory but NOT in the local revealed-packs set. Two cases collapse
+      // to "show CTA":
+      //   - lb.opened === false: still on-chain unopened — surface Open CTA
+      //   - lb.opened === true BUT not in revealed set: opened in prior session
+      //     but UI didn't get to play animation — re-render reveal animation
+      //     (Pitfall 15 mitigation #3 idempotent reveal). Plan 60-04 ships the
+      //     simpler 'opened: false' path; the re-render-animation case is a
+      //     follow-up that requires the indexer to surface the trait payload.
+      const unrevealed = inventory.filter((lb) => !revealed.has(String(lb.lootboxIndex)));
+      this.#unrevealedPacksFromIndexer = unrevealed;
+      this.#renderBootCta();
+    } catch (_e) {
+      // Indexer error → boot CTA stays hidden (graceful degradation per
+      // CONTEXT D-07 'cold-start is the default'). Not surfaced to user;
+      // the page is functional without boot CTA.
+      this.#unrevealedPacksFromIndexer = [];
+      this.#renderBootCta();
+    }
+  }
+
+  #renderBootCta() {
+    const cta = this.querySelector('[data-bind="lbx-boot-cta"]');
+    if (!cta) return;
+    const N = this.#unrevealedPacksFromIndexer.length;
+    if (N === 0) {
+      cta.hidden = true;
+      cta.textContent = '';
+      return;
+    }
+    // T-60-19 mitigation: build CTA via document.createElement + textContent
+    // (NEVER innerHTML interpolation of server-derived data). The N count is
+    // numeric; the indexer-supplied lootboxIndex/payKind are NOT interpolated
+    // into HTML strings — they only flow into row creation in #onBootCtaClick
+    // which delegates to Plan 60-03's #renderRows (already textContent-only).
+    cta.textContent = '';  // clear any prior children
+    const text = (typeof document !== 'undefined' && document.createElement)
+      ? document.createElement('span')
+      : null;
+    if (text) {
+      text.textContent = `You have ${N} unrevealed pack${N === 1 ? '' : 's'} from previous purchases. `;
+      cta.appendChild(text);
+    }
+    const btn = (typeof document !== 'undefined' && document.createElement)
+      ? document.createElement('button')
+      : null;
+    if (btn) {
+      btn.type = 'button';
+      btn.className = 'lbx-boot-cta__btn';
+      btn.textContent = 'Reveal them';
+      btn.addEventListener('click', () => this.#onBootCtaClick());
+      cta.appendChild(btn);
+    }
+    cta.hidden = false;
+  }
+
+  #onBootCtaClick() {
+    // CONTEXT D-07 step 4 + 5: walk through unrevealed packs sequentially.
+    // Reuses Plan 60-03's per-row state machine (poll RNG → Open CTA → reveal).
+    // Boot CTA does NOT auto-fire opens (D-07 step 5 — consistent with D-02
+    // explicit-Open-click pattern); it just creates the rows + schedules polls
+    // for those still awaiting RNG.
+    for (const lb of this.#unrevealedPacksFromIndexer) {
+      const row = {
+        lootboxIndex: BigInt(lb.lootboxIndex),
+        payKind: lb.payKind === 'BURNIE' ? 'BURNIE' : 'ETH',
+        // Per CONTEXT D-07 step 3 sub-bullet: lb.opened===true AND not in
+        // revealed set means user opened on-chain in a prior session but UI
+        // didn't get to play animation. Plan 60-04 falls back to 'ready-to-open'
+        // (user clicks Open → standard openLootBox path). A follow-up plan can
+        // surface indexer trait data + replay the animation directly.
+        status: lb.opened ? 'ready-to-open' : 'awaiting-rng',
+        rngWord: lb.rngReady ? 1n : 0n,  // sentinel — exact value irrelevant since we check !== 0n
+        receipt: null,                    // no receipt available cross-session
+        contract: null,
+      };
+      this.#lootboxRows.push(row);
+    }
+    // Hide the boot CTA + render rows.
+    this.#unrevealedPacksFromIndexer = [];
+    this.#renderBootCta();
+    this.#renderRows();
+    // Schedule polls for awaiting rows (don't fire if visibility hidden — handled
+    // inside #schedulePoll). Boot CTA does NOT auto-fire opens (D-07 step 5).
+    for (const row of this.#lootboxRows) {
+      if (row.status === 'awaiting-rng') this.#schedulePoll(row);
+    }
   }
 
   // Test-only seam — bumps the cancel token to invalidate any in-flight reveal
@@ -714,6 +936,28 @@ class AppPacksPanel extends HTMLElement {
     if (!row) return;
     return this.#runPollCycle(row);
   }
+}
+
+/**
+ * Plan 60-04 test seam — fires the post-reveal-animation localStorage write
+ * directly without waiting for the cross-imported pack-animator to complete.
+ *
+ * Production code path is unchanged; this seam exists ONLY for tests and is
+ * functionally equivalent to the inline write inside #onOpenClick after
+ * #runRevealAnimation resolves. Same chainId-scoped key shape, same try/catch
+ * Pitfall F handling, same Set semantics.
+ */
+export function __triggerRevealCompleteForTest(el, lootboxIndex, address) {
+  if (!el || !address) return;
+  const key = `revealed-packs:${CHAIN.id}:${String(address).toLowerCase()}`;
+  try {
+    const raw = (typeof localStorage !== 'undefined') ? localStorage.getItem(key) : null;
+    const set = new Set(raw ? JSON.parse(raw) : []);
+    set.add(String(lootboxIndex));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, JSON.stringify(Array.from(set)));
+    }
+  } catch (_e) { /* Pitfall F mitigation */ }
 }
 
 // Idempotency-guarded register (Phase 58/59 pattern — player-dropdown.js:178-182,

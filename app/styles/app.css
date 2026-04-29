@@ -549,6 +549,32 @@ player-dropdown {
   border-radius: 4px;
   font-size: 0.9rem;
   color: var(--text-primary, #eee);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Plan 60-04 — boot CTA "Reveal them" button (CONTEXT D-07 step 4). */
+.lbx-boot-cta__btn {
+  padding: 0.4rem 0.8rem;
+  background: var(--accent-strong, #f6ad55);
+  color: var(--bg-primary, #181818);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.lbx-boot-cta__btn:hover {
+  opacity: 0.9;
+}
+
+.lbx-boot-cta__btn:focus-visible {
+  outline: 2px solid var(--accent-strong, #f6ad55);
+  outline-offset: 2px;
 }
 
 /* ===========================================================================

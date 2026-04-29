@@ -19,7 +19,7 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason } from './reason-map.js';
 import { get } from './store.js';
-import { CONTRACTS } from './chain-config.js';
+import { CONTRACTS, CHAIN } from './chain-config.js';
 
 // ---------------------------------------------------------------------------
 // GAME_ABI fragment — minimal human-readable ABI for Phase 60 surface.
@@ -113,7 +113,10 @@ export async function purchaseEth(args) {
   const buyer = _readBuyer();
   const ticketQuantity = Number(args.ticketQuantity ?? 0);
   const lootboxQuantity = Number(args.lootboxQuantity ?? 0);
-  const affiliateCode = args.affiliateCode ?? ethers.ZeroHash;
+  // Plan 60-04: auto-read affiliate code from chainId-scoped localStorage when caller
+  // omits explicit value. Widget call site is `purchaseEth({ticketQuantity, lootboxQuantity})`
+  // — affiliate plumbing is invisible per CONTEXT D-05 (no UI element in Phase 60).
+  const affiliateCode = args.affiliateCode ?? readAffiliateCode(CHAIN.id, buyer);
   // Default lootBoxAmountWei = LOOTBOX_MIN_WEI × N. Plan 60-04 may upgrade by reading
   // mintPrice() from chain to honor higher tiers; Plan 60-02 uses the contract minimum.
   const lootBoxAmountWei = args.lootBoxAmountWei
@@ -337,4 +340,59 @@ export async function pollRngForLootbox(lootboxIndex) {
   const contract = _buildContract(provider);
   const word = await contract.lootboxRngWord(BigInt(lootboxIndex));
   return BigInt(word);
+}
+
+// ---------------------------------------------------------------------------
+// Plan 60-04 — affiliate-code helpers (LBX-03 + CONTEXT D-05).
+// chainId-scoped localStorage; URL ?ref= on first visit; ZeroHash fallback.
+//
+// Pattern mirrors /beta/mint.js:170-189 getAffiliateCode() but with the format
+// flip locked-in by CONTEXT D-05 step 1: the URL param is already bytes32hex
+// (regex /^0x[a-fA-F0-9]{64}$/) — no encodeBytes32String conversion. Persist
+// as-is; pass directly to the contract's purchase() affiliateCode arg.
+//
+// purchaseCoin signature (verified at contracts/DegenerusGame.sol:546) does
+// NOT accept affiliateCode — BURNIE purchases bypass affiliation per protocol.
+// These helpers are read by purchaseEth ONLY.
+// ---------------------------------------------------------------------------
+
+/**
+ * Read persisted affiliate code from chainId-scoped localStorage.
+ * @param {number} chainId
+ * @param {string} address  Will be lowercased for key consistency.
+ * @returns {string} bytes32 hex (validated) or ethers.ZeroHash.
+ */
+export function readAffiliateCode(chainId, address) {
+  if (!address) return ethers.ZeroHash;
+  try {
+    const key = `affiliate-code:${chainId}:${String(address).toLowerCase()}`;
+    const raw = (typeof localStorage !== 'undefined') ? localStorage.getItem(key) : null;
+    if (raw && /^0x[a-fA-F0-9]{64}$/.test(raw)) return raw;
+  } catch (_e) { /* private mode / quota — defensive (Pitfall F) */ }
+  return ethers.ZeroHash;
+}
+
+/**
+ * Read URL ?ref=<bytes32hex> param and persist to chainId-scoped localStorage.
+ * Idempotent — only writes if URL has a valid bytes32hex param. CONTEXT D-05
+ * step 1: invalid format silently ignored.
+ * @param {number} chainId
+ * @param {string} address
+ * @returns {boolean} true if persisted, false otherwise.
+ */
+export function persistAffiliateCodeFromUrl(chainId, address) {
+  if (!address) return false;
+  try {
+    if (typeof location === 'undefined' || !location.href) return false;
+    const url = new URL(location.href);
+    const ref = url.searchParams.get('ref');
+    if (!ref) return false;
+    if (!/^0x[a-fA-F0-9]{64}$/.test(ref)) return false;
+    const key = `affiliate-code:${chainId}:${String(address).toLowerCase()}`;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, ref);
+      return true;
+    }
+  } catch (_e) { /* quota / disabled — defensive (Pitfall F) */ }
+  return false;
 }

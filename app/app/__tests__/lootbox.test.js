@@ -320,3 +320,122 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(word, 0n);
   });
 });
+
+// ===========================================================================
+// Plan 60-04 — affiliate-code helpers + purchaseEth auto-read
+// ===========================================================================
+
+describe('Plan 60-04: affiliate-code helpers + purchaseEth auto-read', () => {
+  let fakeContract;
+  const VALID_BYTES32 = '0x' + 'ab'.repeat(32);  // 64 hex chars
+
+  beforeEach(() => {
+    storeMod.__resetForTest();
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('viewing.address', null);
+    storeMod.update('ui.mode', 'self');
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    fakeContract = makeFakeContract();
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    // Reset / install localStorage shim
+    if (globalThis.localStorage && typeof globalThis.localStorage.clear === 'function') {
+      globalThis.localStorage.clear();
+    } else {
+      globalThis.localStorage = {
+        _m: new Map(),
+        getItem(k) { return this._m.get(k) ?? null; },
+        setItem(k, v) { this._m.set(k, String(v)); },
+        removeItem(k) { this._m.delete(k); },
+        clear() { this._m.clear(); },
+      };
+    }
+    // Reset location stub
+    globalThis.location = { href: 'http://localhost/' };
+  });
+
+  afterEach(() => {
+    lootboxMod.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+  });
+
+  test('readAffiliateCode returns ZeroHash when localStorage empty', () => {
+    const code = lootboxMod.readAffiliateCode(11155111, CONNECTED);
+    assert.equal(code, '0x0000000000000000000000000000000000000000000000000000000000000000');
+  });
+
+  test('persistAffiliateCodeFromUrl with valid ?ref= writes localStorage and returns true', () => {
+    globalThis.location = { href: `http://localhost/?ref=${VALID_BYTES32}` };
+    const ok = lootboxMod.persistAffiliateCodeFromUrl(11155111, CONNECTED);
+    assert.equal(ok, true);
+    const stored = globalThis.localStorage.getItem(`affiliate-code:11155111:${CONNECTED.toLowerCase()}`);
+    assert.equal(stored, VALID_BYTES32);
+  });
+
+  test('persistAffiliateCodeFromUrl with invalid ?ref= (too short) returns false and does NOT write', () => {
+    globalThis.location = { href: 'http://localhost/?ref=0xabc' };
+    const ok = lootboxMod.persistAffiliateCodeFromUrl(11155111, CONNECTED);
+    assert.equal(ok, false);
+    const stored = globalThis.localStorage.getItem(`affiliate-code:11155111:${CONNECTED.toLowerCase()}`);
+    assert.equal(stored, null);
+  });
+
+  test('persistAffiliateCodeFromUrl with no ?ref= param returns false', () => {
+    globalThis.location = { href: 'http://localhost/' };
+    const ok = lootboxMod.persistAffiliateCodeFromUrl(11155111, CONNECTED);
+    assert.equal(ok, false);
+  });
+
+  test('readAffiliateCode roundtrips persisted bytes32 hex', () => {
+    globalThis.location = { href: `http://localhost/?ref=${VALID_BYTES32}` };
+    lootboxMod.persistAffiliateCodeFromUrl(11155111, CONNECTED);
+    const code = lootboxMod.readAffiliateCode(11155111, CONNECTED);
+    assert.equal(code, VALID_BYTES32);
+  });
+
+  test('purchaseEth auto-reads localStorage affiliate code into args[3]', async () => {
+    // Pre-populate localStorage with a valid affiliate code (simulates URL ?ref=
+    // having been persisted on a prior visit).
+    globalThis.localStorage.setItem(
+      `affiliate-code:11155111:${CONNECTED.toLowerCase()}`,
+      VALID_BYTES32
+    );
+    await lootboxMod.purchaseEth({ ticketQuantity: 1, lootboxQuantity: 1 });
+    const [args] = fakeContract._calls.purchase;
+    assert.equal(args[3], VALID_BYTES32, 'purchase received persisted affiliate code');
+  });
+
+  test('purchaseEth uses ZeroHash when localStorage empty', async () => {
+    await lootboxMod.purchaseEth({ ticketQuantity: 1, lootboxQuantity: 1 });
+    const [args] = fakeContract._calls.purchase;
+    assert.equal(args[3], '0x0000000000000000000000000000000000000000000000000000000000000000');
+  });
+
+  test('persistAffiliateCodeFromUrl: localStorage.setItem throw does NOT crash (Pitfall F)', () => {
+    globalThis.location = { href: `http://localhost/?ref=${VALID_BYTES32}` };
+    // Replace setItem with one that throws (quota simulation)
+    const orig = globalThis.localStorage.setItem.bind(globalThis.localStorage);
+    globalThis.localStorage.setItem = () => { throw new Error('QuotaExceededError'); };
+    let result;
+    assert.doesNotThrow(() => { result = lootboxMod.persistAffiliateCodeFromUrl(11155111, CONNECTED); });
+    assert.equal(result, false);
+    globalThis.localStorage.setItem = orig;  // restore for test isolation
+  });
+
+  test('readAffiliateCode: localStorage.getItem throw does NOT crash (Pitfall F)', () => {
+    const orig = globalThis.localStorage.getItem.bind(globalThis.localStorage);
+    globalThis.localStorage.getItem = () => { throw new Error('SecurityError'); };
+    let code;
+    assert.doesNotThrow(() => { code = lootboxMod.readAffiliateCode(11155111, CONNECTED); });
+    assert.equal(code, '0x0000000000000000000000000000000000000000000000000000000000000000', 'falls back to ZeroHash');
+    globalThis.localStorage.getItem = orig;
+  });
+
+  test('readAffiliateCode rejects malformed localStorage value (e.g. truncated hex)', () => {
+    globalThis.localStorage.setItem(
+      `affiliate-code:11155111:${CONNECTED.toLowerCase()}`,
+      '0xdeadbeef'  // valid hex but only 8 chars — fails 64-char regex
+    );
+    const code = lootboxMod.readAffiliateCode(11155111, CONNECTED);
+    assert.equal(code, '0x0000000000000000000000000000000000000000000000000000000000000000');
+  });
+});
