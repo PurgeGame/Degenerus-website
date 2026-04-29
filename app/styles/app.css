@@ -701,3 +701,170 @@ player-dropdown {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* ===========================================================================
+ * Phase 61 — app-claims-panel (Plan 61-01 base styles, clm-* prefix)
+ * Plan 61-02 will activate .clm-row--claiming / .clm-row--error / .clm-row__error
+ * (the placeholders below) when the claim write path lands.
+ * Plan 61-03 will activate .clm-progress for the decimator N/M progress text.
+ * =========================================================================== */
+
+.app-claims-panel {
+  margin-top: clamp(0.5rem, 2vw, 1rem);
+  margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+}
+
+/* Row container — reuses /beta/styles/panels.css row pattern via cross-link. */
+.clm-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.clm-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color, #444);
+  border-radius: 4px;
+  background: var(--bg-secondary, #2a2a2a);
+  transition: border-color 0.2s, background 0.2s, opacity 0.2s;
+}
+
+.clm-row__label {
+  flex: 0 0 auto;
+  font-weight: 500;
+  color: var(--text-primary, #eee);
+  font-size: 0.95rem;
+}
+
+.clm-row__amount {
+  flex: 1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  color: var(--text-primary, #eee);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.clm-row__claim-cta {
+  min-width: 8rem;
+  height: 2rem;
+  padding: 0.4rem 1rem;
+  background: var(--accent-strong, #2d7a4d);
+  color: #fff;
+  border: 1px solid var(--accent-strong, #2d7a4d);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.clm-row__claim-cta:hover:not([disabled]) {
+  background: var(--accent-strong-hover, #36925b);
+}
+
+.clm-row__claim-cta[disabled],
+.clm-row__claim-cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Plan 61-02 placeholders — claiming overlay (translucent, pointer-events
+ * disabled) and error state (red border + inline reason text below button).
+ * Wired by 61-02's per-row pending UX (D-05) — class add/remove on user click. */
+.clm-row--claiming {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.clm-row--error {
+  border-color: var(--error-border, #6b2a2a);
+  background: var(--error-bg, #4a1f1f);
+}
+
+.clm-row__error {
+  flex: 0 0 100%;
+  margin-top: 0.4rem;
+  color: var(--error-text, #ff6b6b);
+  font-size: 0.82rem;
+  font-style: italic;
+}
+
+/* Plan 61-03 placeholder — decimator N/M progress text below the per-row button. */
+.clm-progress {
+  flex: 0 0 100%;
+  margin-top: 0.4rem;
+  color: var(--text-secondary, #aaa);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Spoiler gate (D-06) — blocking CTA pointing at <last-day-jackpot>.
+ * Dashed border indicates "interactive blocking surface"; centered + padded. */
+.clm-spoiler-gate {
+  margin-top: 0.75rem;
+  padding: clamp(1rem, 4vw, 1.5rem);
+  text-align: center;
+  border: 1px dashed var(--border-color, #444);
+  border-radius: 6px;
+  background: rgba(99, 179, 237, 0.06);
+  color: var(--text-primary, #eee);
+}
+
+.clm-spoiler-gate__header {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.clm-spoiler-gate__cta {
+  display: inline-block;
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  background: rgba(99, 179, 237, 0.2);
+  border: 1px solid rgba(99, 179, 237, 0.55);
+  color: var(--text-primary, #eee);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.clm-spoiler-gate__cta:hover {
+  background: rgba(99, 179, 237, 0.35);
+}
+
+.clm-spoiler-gate__cta:focus-visible {
+  outline: 2px solid rgba(99, 179, 237, 0.7);
+  outline-offset: 2px;
+}
+
+/* Zero-state (CLM-04) — "Nothing to claim right now" + "How prizes work" link. */
+.clm-zero-state {
+  margin-top: 0.75rem;
+  padding: clamp(1rem, 4vw, 1.5rem);
+  text-align: center;
+  color: var(--text-secondary, #aaa);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.clm-zero-state p {
+  margin: 0 0 0.5rem;
+}
+
+.clm-zero-state a {
+  color: var(--accent, #4a90e2);
+  text-decoration: underline;
+}
+
+.clm-zero-state a:hover {
+  color: var(--accent-hover, #5cb0ff);
+}

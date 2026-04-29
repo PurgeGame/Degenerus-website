@@ -15,6 +15,12 @@
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
+// store module is safe to static-import (no HTMLElement use). Tests use it
+// to drive `connected.address` so the panel's #runMountFetch can fetch /pending.
+import * as storeMod from '../../app/store.js';
+
+const TEST_ADDR = '0xab12000000000000000000000000000000000000';
+
 // ---------------------------------------------------------------------------
 // Fake DOM (verbatim port of app-packs-panel.test.js fake-DOM scaffolding —
 // Plan 60-01 precedent at lines 17-260; tests are leaf nodes, no cross-imports).
@@ -277,25 +283,32 @@ function makeLocalStorage() {
 }
 globalThis.localStorage = makeLocalStorage();
 
-// Per-test fetch stub — installed in beforeEach via setFetchResponses().
-let _fetchResponses = new Map();  // url-substring → response object
+// Per-test fetch stub — installed via setFetchResponses({ pending, lastDay, dashboard }).
+// Dispatches by URL pattern matching the 3 indexer routes the panel calls.
+let _fetchResponses = { pending: null, lastDay: null, dashboard: null };
 globalThis.fetch = async (url) => {
   const u = String(url);
-  for (const [key, val] of _fetchResponses) {
-    if (u.includes(key)) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => val,
-      };
+  // /game/jackpot/last-day
+  if (u.includes('/game/jackpot/last-day')) {
+    if (_fetchResponses.lastDay !== null) {
+      return { ok: true, status: 200, json: async () => _fetchResponses.lastDay };
+    }
+  } else if (u.endsWith('/pending')) {
+    // /player/:address/pending
+    if (_fetchResponses.pending !== null) {
+      return { ok: true, status: 200, json: async () => _fetchResponses.pending };
+    }
+  } else if (/\/player\/0x[0-9a-f]+$/i.test(u)) {
+    // /player/:address (consolidated dashboard) — anchored to no trailing path
+    if (_fetchResponses.dashboard !== null) {
+      return { ok: true, status: 200, json: async () => _fetchResponses.dashboard };
     }
   }
-  // Default: 404 no match (Promise.allSettled in panel handles this gracefully)
   return { ok: false, status: 404, json: async () => ({}) };
 };
 
-function setFetchResponses(map) {
-  _fetchResponses = new Map(Object.entries(map));
+function setFetchResponses({ pending = null, lastDay = null, dashboard = null } = {}) {
+  _fetchResponses = { pending, lastDay, dashboard };
 }
 
 function resetDom() {
@@ -328,14 +341,16 @@ function getRenderRoot(el) {
 
 describe('app-claims-panel — spoiler gate (D-06)', () => {
   beforeEach(async () => {
+    storeMod.__resetForTest();
     resetDom();
+    storeMod.update('connected.address', TEST_ADDR);
     await import('../app-claims-panel.js');
   });
 
   test('un-spun resolved day blocks rows (renders .clm-spoiler-gate, hides .clm-row)', async () => {
     setFetchResponses({
-      '/game/jackpot/last-day': { day: 42, status: 'resolved' },
-      '/pending': {
+      lastDay: { day: 42, status: 'resolved' },
+      pending: {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '1234500000000000000', available: true,  reason: null },
@@ -368,8 +383,8 @@ describe('app-claims-panel — spoiler gate (D-06)', () => {
 
   test('spun resolved day reveals rows (.clm-spoiler-gate hidden, .clm-row visible)', async () => {
     setFetchResponses({
-      '/game/jackpot/last-day': { day: 42, status: 'resolved' },
-      '/pending': {
+      lastDay: { day: 42, status: 'resolved' },
+      pending: {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '1234500000000000000', available: true,  reason: null },
@@ -398,8 +413,8 @@ describe('app-claims-panel — spoiler gate (D-06)', () => {
 
   test('cold-start (status: pre-game) opens gate — no spoiler to gate', async () => {
     setFetchResponses({
-      '/game/jackpot/last-day': { day: null, status: 'pre-game' },
-      '/pending': {
+      lastDay: { day: null, status: 'pre-game' },
+      pending: {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '0', available: true,  reason: null },
@@ -430,8 +445,8 @@ describe('app-claims-panel — spoiler gate (D-06)', () => {
 
   test('localStorage SecurityError fail-safe — gate stays CLOSED (show CTA, do not spoil)', async () => {
     setFetchResponses({
-      '/game/jackpot/last-day': { day: 42, status: 'resolved' },
-      '/pending': {
+      lastDay: { day: 42, status: 'resolved' },
+      pending: {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '1234500000000000000', available: true,  reason: null },
@@ -472,14 +487,16 @@ describe('app-claims-panel — spoiler gate (D-06)', () => {
 
 describe('app-claims-panel — render gate (D-01)', () => {
   beforeEach(async () => {
+    storeMod.__resetForTest();
     resetDom();
+    storeMod.update('connected.address', TEST_ADDR);
     await import('../app-claims-panel.js');
   });
 
   test('hidden 4 keys (tickets/vault/terminal/farFutureCoin) NEVER render', async () => {
     setFetchResponses({
-      '/game/jackpot/last-day': { day: 42, status: 'resolved' },
-      '/pending': {
+      lastDay: { day: 42, status: 'resolved' },
+      pending: {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '0', available: true,  reason: null },
@@ -509,8 +526,8 @@ describe('app-claims-panel — render gate (D-01)', () => {
 
   test('only rows with amount > 0n render (eth=1000, burnie=0, decimator=0)', async () => {
     setFetchResponses({
-      '/game/jackpot/last-day': { day: 42, status: 'resolved' },
-      '/pending': {
+      lastDay: { day: 42, status: 'resolved' },
+      pending: {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '1000', available: true,  reason: null },
@@ -552,8 +569,8 @@ describe('app-claims-panel — render gate (D-01)', () => {
 
   test('decimator row hidden when levels.length === 0 even if amount > 0n (Pitfall 7)', async () => {
     setFetchResponses({
-      '/game/jackpot/last-day': { day: 42, status: 'resolved' },
-      '/pending': {
+      lastDay: { day: 42, status: 'resolved' },
+      pending: {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '0', available: true,  reason: null },
@@ -565,7 +582,7 @@ describe('app-claims-panel — render gate (D-01)', () => {
           farFutureCoin: { amount: '0', available: false, reason: 'cumulative-allocated-not-balance' },
         },
       },
-      '/player/0xab12000000000000000000000000000000000000': {
+      dashboard: {
         decimator: { claimablePerLevel: [] },
       },
     });
@@ -588,14 +605,16 @@ describe('app-claims-panel — render gate (D-01)', () => {
 
 describe('app-claims-panel — zero-state (CLM-04)', () => {
   beforeEach(async () => {
+    storeMod.__resetForTest();
     resetDom();
+    storeMod.update('connected.address', TEST_ADDR);
     await import('../app-claims-panel.js');
   });
 
   test('all 3 amounts === 0n + spoiler gate open → renders .clm-zero-state', async () => {
     setFetchResponses({
-      '/game/jackpot/last-day': { day: 42, status: 'resolved' },
-      '/pending': {
+      lastDay: { day: 42, status: 'resolved' },
+      pending: {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '0', available: true,  reason: null },
@@ -632,14 +651,16 @@ describe('app-claims-panel — zero-state (CLM-04)', () => {
 
 describe('app-claims-panel — stub Claim buttons (Plan 61-01 stub state)', () => {
   beforeEach(async () => {
+    storeMod.__resetForTest();
     resetDom();
+    storeMod.update('connected.address', TEST_ADDR);
     await import('../app-claims-panel.js');
   });
 
   test('eth row Claim button is disabled with data-stub="true"', async () => {
     setFetchResponses({
-      '/game/jackpot/last-day': { day: 42, status: 'resolved' },
-      '/pending': {
+      lastDay: { day: 42, status: 'resolved' },
+      pending: {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '1234500000000000000', available: true,  reason: null },
@@ -670,7 +691,9 @@ describe('app-claims-panel — stub Claim buttons (Plan 61-01 stub state)', () =
 
 describe('app-claims-panel — XSS / textContent discipline (T-58-18)', () => {
   beforeEach(async () => {
+    storeMod.__resetForTest();
     resetDom();
+    storeMod.update('connected.address', TEST_ADDR);
     await import('../app-claims-panel.js');
   });
 
@@ -680,8 +703,8 @@ describe('app-claims-panel — XSS / textContent discipline (T-58-18)', () => {
     // the renderer treats it as text. (Real `displayEth()` will throw or normalise;
     // the assertion is that no `<script>` tag is materialised in the DOM.)
     setFetchResponses({
-      '/game/jackpot/last-day': { day: 42, status: 'resolved' },
-      '/pending': {
+      lastDay: { day: 42, status: 'resolved' },
+      pending: {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '1234500000000000000', available: true,  reason: null },
@@ -714,7 +737,9 @@ describe('app-claims-panel — XSS / textContent discipline (T-58-18)', () => {
 
 describe('app-claims-panel — idempotency', () => {
   beforeEach(async () => {
+    storeMod.__resetForTest();
     resetDom();
+    storeMod.update('connected.address', TEST_ADDR);
     await import('../app-claims-panel.js');
   });
 
