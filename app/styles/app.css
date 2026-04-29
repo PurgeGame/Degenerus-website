@@ -1369,3 +1369,12 @@ player-dropdown {
   color: var(--text-secondary, #aaa);
   margin-top: 0.5rem;
 }
+
+/* ── Phase 62 / 62-05 / BNS-01 — Boons panel wrapper (.app-boons-panel) ── */
+/* The verbatim <boons-panel> from /beta/components/boons-panel.js uses its */
+/* own .boons-* / .boon-badge / .boon-tooltip palette loaded via the        */
+/* /beta/styles/boons.css link tag in /app/index.html. This plan adds ONLY  */
+/* the wrapper container rule. NO new .boons-* prefix rules.                */
+.app-boons-panel {
+  margin-top: 1rem;
+}
