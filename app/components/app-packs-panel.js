@@ -15,9 +15,15 @@
 //        <last-day-jackpot></last-day-jackpot> per CONTEXT D-04.
 
 import { subscribe } from '../app/store.js';
-// ^^ unused in Plan 60-01; reserved for Plan 60-02 connected.address subscription.
-// Acceptable per Phase 59 Plan 59-01 precedent (pre-imported store API for forward
-// compat; silences "unexpected new import" diff in next-wave plan).
+// ^^ pre-imported in Plan 60-01 for forward-compat; Plan 60-02 leaves it pre-imported
+// (Plan 60-04 wires connected.address subscription for boot-CTA / affiliate-code).
+
+// Plan 60-02: write-path imports — first production consumer of Phase 56 (static-call
+// + reason-map) and Phase 58 (sendTx chokepoint) primitives end-to-end on a write
+// surface. parseLootboxIdxFromReceipt feeds the receipt-log-first reveal pattern
+// (Plan 60-03 will USE the stored rows to render per-lootbox UI + RNG poll).
+import { purchaseEth, purchaseCoin, parseLootboxIdxFromReceipt } from '../app/lootbox.js';
+import { decodeRevertReason } from '../app/reason-map.js';
 
 const TICKET_MAX = 100;
 const LOOTBOX_MAX = 10;  // per CONTEXT D-01 step 2 — prevents runaway sequential-tx loops
@@ -28,7 +34,8 @@ class AppPacksPanel extends HTMLElement {
   #ticketQuantity = 0;     // default per D-01
   #lootboxQuantity = 1;    // default per D-01 step 2 ("default 1 since this is the lootbox panel")
   #busy = false;           // Plan 60-02 toggles during sendTx in-flight
-  #lootboxRows = [];       // Plan 60-03 populates per-purchase
+  #lootboxRows = [];       // Plan 60-02 seeds from receipt; Plan 60-03 transitions row state
+  #errorTimer = null;      // Plan 60-02 — auto-hide timer for #showError banner
 
   connectedCallback() {
     this.innerHTML = `
@@ -100,11 +107,19 @@ class AppPacksPanel extends HTMLElement {
     if (lMinus) lMinus.addEventListener('click', () => this.#onQtyClick('lootboxes', -1));
     if (lPlus)  lPlus.addEventListener('click',  () => this.#onQtyClick('lootboxes', +1));
 
+    // Plan 60-02: wire Buy click handler — sequential N=1 tx loop with shared progress UI.
+    const buyBtn = this.querySelector('[data-bind="lbx-buy-button"]');
+    if (buyBtn) buyBtn.addEventListener('click', () => this.#onBuyClick());
+
     // Initial render so default state reflects in DOM
     this.#renderState();
   }
 
   disconnectedCallback() {
+    if (this.#errorTimer != null) {
+      clearTimeout(this.#errorTimer);
+      this.#errorTimer = null;
+    }
     for (const u of this.#unsubs) {
       try { u(); } catch (_) { /* defensive */ }
     }
@@ -166,17 +181,103 @@ class AppPacksPanel extends HTMLElement {
   }
 
   // ---------------------------------------------------------------------
+  // Plan 60-02: Buy click handler — sequential N=1 tx loop with shared progress UI.
+  // CONTEXT D-01 step 3 + D-04 wave 2 ("Buy 5 lootboxes" fires 5 sequential txes;
+  // user signs N times; shared progress UI shows '1/5 confirmed, 2/5 pending…').
+  // ---------------------------------------------------------------------
+
+  async #onBuyClick() {
+    if (this.#busy) return;                                          // T-60-10 defense
+    const ticketQuantity = this.#ticketQuantity;
+    const lootboxQuantity = this.#lootboxQuantity;
+    if (ticketQuantity === 0 && lootboxQuantity === 0) return;
+
+    const buyBtn = this.querySelector('[data-bind="lbx-buy-button"]');
+    const N = Math.max(1, lootboxQuantity);
+    // Per CONTEXT 'Claude's Discretion' +/- mechanics: first tx carries ALL tickets;
+    // subsequent txes carry 0 tickets. Avoids splitting small ticket counts across
+    // many txes (simpler UX + matches contract semantics where ticketQuantity > 0
+    // is allowed alongside lootboxQuantity = 1).
+    this.#busy = true;
+    this.#renderState();
+    try {
+      for (let i = 0; i < N; i++) {
+        if (buyBtn) buyBtn.textContent = `${i + 1}/${N} — confirming…`;
+        const args = {
+          ticketQuantity: i === 0 ? ticketQuantity : 0,
+          lootboxQuantity: 1,
+          // affiliateCode: Plan 60-04 wires URL ?ref= param + chainId-scoped
+          // localStorage read. Plan 60-02 always defaults to ZeroHash.
+        };
+        const result = this.#payKind === 'ETH'
+          ? await purchaseEth(args)
+          : await purchaseCoin(args);
+        // Receipt-log-first parse (LBX-04). Plan 60-03 USES #lootboxRows to render
+        // per-lootbox row UI + RNG poll lifecycle. Plan 60-02 just stores them.
+        const idxs = parseLootboxIdxFromReceipt(result.receipt, result.contract);
+        for (const idx of idxs) {
+          this.#lootboxRows.push({
+            lootboxIndex: idx.lootboxIndex,
+            payKind: idx.payKind,
+            status: 'awaiting-rng',  // Plan 60-03 transitions: ready-to-open → opening → revealed
+            rngWord: 0n,
+            receipt: result.receipt,
+            contract: result.contract,
+          });
+        }
+      }
+      if (buyBtn) buyBtn.textContent = 'Buy';
+    } catch (err) {
+      if (buyBtn) buyBtn.textContent = 'Buy';
+      this.#showError(err);
+    } finally {
+      this.#busy = false;                                            // T-60-10 mitigation
+      this.#renderState();
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Plan 60-02: error banner surface — shows decodeRevertReason output for 8s.
+  // T-60-08 mitigation: textContent only (NOT innerHTML) — server-derived strings
+  // never flow through innerHTML.
+  // ---------------------------------------------------------------------
+
+  #showError(err) {
+    if (this.#errorTimer != null) {
+      clearTimeout(this.#errorTimer);
+      this.#errorTimer = null;
+    }
+    let userMessage = err && err.userMessage;
+    if (!userMessage) {
+      try {
+        userMessage = decodeRevertReason(err).userMessage;
+      } catch (_) {
+        userMessage = (err && err.message) || 'Transaction failed.';
+      }
+    }
+    const banner = this.querySelector('[data-bind="lbx-error-banner"]');
+    if (banner) {
+      banner.textContent = String(userMessage || 'Transaction failed.');
+      banner.hidden = false;
+    }
+    this.#errorTimer = setTimeout(() => {
+      if (banner) banner.hidden = true;
+      this.#errorTimer = null;
+    }, 8000);
+  }
+
+  // ---------------------------------------------------------------------
   // Test/Plan-60-02+ accessors (intentionally minimal surface)
   // ---------------------------------------------------------------------
 
   get _state() {
-    // Test-only accessor — exposes private state for assertions in Plan 60-01 tests.
-    // Plan 60-02 will likely remove this accessor and rely on DOM assertions instead.
+    // Test-only accessor — exposes private state for assertions.
     return {
       payKind: this.#payKind,
       ticketQuantity: this.#ticketQuantity,
       lootboxQuantity: this.#lootboxQuantity,
       busy: this.#busy,
+      lootboxRowsCount: this.#lootboxRows.length,
     };
   }
 }

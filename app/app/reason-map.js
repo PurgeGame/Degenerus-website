@@ -113,3 +113,31 @@ export function decodeRevertReason(error) {
 export function register(selectorOrName, mapping) {
   ERROR_REGISTRY.set(selectorOrName, mapping);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 60 (Plan 60-02) extensions — LBX write-path errors registered at module
+// load time so codes are available regardless of whether lootbox.js is imported.
+// Sourced from grep `error\s+\w+\(` in contracts/modules/ + contracts/DegenerusGame.sol:
+//   - GameOverPossible    contracts/modules/DegenerusGameMintModule.sol:78
+//   - AfKingLockActive    contracts/DegenerusGame.sol:92
+//   - NotApproved         contracts/DegenerusGame.sol:95
+// RngNotReady is already in the Phase 56 baseline above.
+// ---------------------------------------------------------------------------
+
+register('GameOverPossible', {
+  code: 'GameOverPossible',
+  userMessage: "BURNIE ticket purchases are blocked right now — game-over risk detected.",
+  recoveryAction: 'Try again after the next jackpot resolves, or use ETH instead.',
+});
+
+register('AfKingLockActive', {
+  code: 'AfKingLockActive',
+  userMessage: 'Affiliate king lock is active — purchases are temporarily paused.',
+  recoveryAction: 'Try again in a few minutes.',
+});
+
+register('NotApproved', {
+  code: 'NotApproved',
+  userMessage: "You're not approved to act on behalf of this player.",
+  recoveryAction: 'Connect to your own wallet to act.',
+});

@@ -127,6 +127,29 @@ describe('register() extension', () => {
   });
 });
 
+describe('Plan 60-02 reason-map extensions (LBX write-path errors)', () => {
+  test('GameOverPossible decodes to user-facing message + recovery', () => {
+    const decoded = decodeRevertReason({ revert: { name: 'GameOverPossible' } });
+    assert.equal(decoded.code, 'GameOverPossible');
+    assert.match(decoded.userMessage, /BURNIE.*blocked|game-over/i);
+    assert.match(decoded.recoveryAction, /next jackpot|ETH/i);
+  });
+
+  test('AfKingLockActive decodes to user-facing message + recovery', () => {
+    const decoded = decodeRevertReason({ revert: { name: 'AfKingLockActive' } });
+    assert.equal(decoded.code, 'AfKingLockActive');
+    assert.match(decoded.userMessage, /lock|paused/i);
+    assert.match(decoded.recoveryAction, /try again|few minutes/i);
+  });
+
+  test('NotApproved decodes to user-facing message + recovery', () => {
+    const decoded = decodeRevertReason({ revert: { name: 'NotApproved' } });
+    assert.equal(decoded.code, 'NotApproved');
+    assert.match(decoded.userMessage, /not approved|approved to act/i);
+    assert.match(decoded.recoveryAction, /your own wallet|connect/i);
+  });
+});
+
 describe('WR-02 regressions: catch-all "E" must not hijack substring-fallback path', () => {
   test('reason "Error: insufficient gas" does NOT classify as E', () => {
     const result = decodeRevertReason({ reason: 'Error: insufficient gas' });

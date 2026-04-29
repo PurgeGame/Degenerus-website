@@ -269,6 +269,8 @@ async function flushMicrotasks() {
 // ---------------------------------------------------------------------------
 
 import * as storeMod from '../../app/store.js';
+import * as lootboxMod from '../../app/lootbox.js';
+import * as contractsMod from '../../app/contracts.js';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -426,6 +428,172 @@ describe('Plan 60-01: <app-packs-panel> Custom Element shell', () => {
 
   test('disconnectedCallback flushes #unsubs without throwing', () => {
     const el = instantiate();
+    assert.doesNotThrow(() => el.disconnectedCallback());
+  });
+});
+
+// ===========================================================================
+// Plan 60-02 — Buy click handler tests (sequential N=1 tx loop + error banner).
+// Drives the full chain end-to-end with a fake contract injected at lootbox.js
+// layer via __setContractFactoryForTest. Phase 56 (static-call) and Phase 58
+// (sendTx + requireSelf + chain assert) primitives run for real — only the
+// contract construction is mocked.
+// ===========================================================================
+
+function makeFakeBuyReceipt(logs) {
+  return { status: 1, hash: '0xreceipt', logs: logs || [] };
+}
+
+function makeFakeBuyTx(receipt) {
+  return { hash: '0xtx', wait: async () => receipt };
+}
+
+function makeFakePurchaseContract(opts = {}) {
+  const calls = { purchase: [], purchaseCoin: [] };
+  const stk = (name) => async () => {
+    if (opts.staticCallShouldRevert?.[name]) {
+      const err = new Error('static-call revert');
+      err.revert = { name: opts.staticCallRevertName?.[name] || 'RngNotReady' };
+      throw err;
+    }
+  };
+  let txCounter = 0n;
+  const c = {
+    purchase: Object.assign(
+      async (...args) => {
+        calls.purchase.push(args);
+        txCounter += 1n;
+        return makeFakeBuyTx(makeFakeBuyReceipt([
+          { parsed: { name: 'LootBoxIdx', args: { index: txCounter, day: 1n, buyer: args[0] } } },
+        ]));
+      },
+      { staticCall: stk('purchase') }
+    ),
+    purchaseCoin: Object.assign(
+      async (...args) => {
+        calls.purchaseCoin.push(args);
+        txCounter += 1n;
+        return makeFakeBuyTx(makeFakeBuyReceipt([
+          { parsed: { name: 'BurnieLootBuy', args: { index: txCounter, burnieAmount: 1000n * 10n ** 18n, buyer: args[0] } } },
+        ]));
+      },
+      { staticCall: stk('purchaseCoin') }
+    ),
+    interface: { parseLog: (log) => log.parsed ?? null },
+    connect(_signer) { return this; },
+    _calls: calls,
+  };
+  return c;
+}
+
+function makeFakeBuyProvider(addr) {
+  return {
+    getNetwork: async () => ({ chainId: 11155111n }),
+    getSigner: async () => ({ getAddress: async () => addr }),
+  };
+}
+
+const CONNECTED = '0xab12000000000000000000000000000000000000';
+
+async function settle(loops = 60) {
+  for (let i = 0; i < loops; i += 1) await Promise.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+  for (let i = 0; i < loops; i += 1) await Promise.resolve();
+}
+
+describe('Plan 60-02: Buy click handler — sequential N=1 tx loop', () => {
+  let fakeContract;
+
+  beforeEach(async () => {
+    storeMod.__resetForTest();
+    resetDom();
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('viewing.address', null);
+    storeMod.update('ui.mode', 'self');
+    contractsMod.setProvider(makeFakeBuyProvider(CONNECTED));
+    fakeContract = makeFakePurchaseContract();
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    // Ensure the Custom Element is registered (re-import is cached after Plan 60-01 tests).
+    await import('../app-packs-panel.js');
+  });
+
+  test('Buy with default state (lootboxes=1, ETH) calls contract.purchase exactly once with payKind=0', async () => {
+    const el = instantiate();
+    clickByDataBind(el, 'lbx-buy-button');
+    await settle(30);
+    assert.equal(fakeContract._calls.purchase.length, 1, 'purchase called once');
+    assert.equal(fakeContract._calls.purchaseCoin.length, 0, 'purchaseCoin NOT called');
+    const [args] = fakeContract._calls.purchase;
+    assert.equal(args[0], CONNECTED);
+    assert.equal(args[4], 0, 'payKind = MintPaymentKind.DirectEth');
+  });
+
+  test('Buy with lootboxes=3 calls contract.purchase exactly 3 times (sequential N=1 loop)', async () => {
+    const el = instantiate();
+    clickByDataBind(el, 'lbx-lootboxes-plus');
+    clickByDataBind(el, 'lbx-lootboxes-plus');
+    assert.equal(el._state.lootboxQuantity, 3);
+    clickByDataBind(el, 'lbx-buy-button');
+    await settle(60);
+    assert.equal(fakeContract._calls.purchase.length, 3, 'purchase called 3 times');
+  });
+
+  test('Buy with payKind=BURNIE calls contract.purchaseCoin (not purchase)', async () => {
+    const el = instantiate();
+    clickByDataBind(el, 'lbx-pay-burnie');
+    assert.equal(el._state.payKind, 'BURNIE');
+    clickByDataBind(el, 'lbx-buy-button');
+    await settle(30);
+    assert.equal(fakeContract._calls.purchaseCoin.length, 1);
+    assert.equal(fakeContract._calls.purchase.length, 0);
+  });
+
+  test('Buy on static-call revert (RngNotReady) surfaces error banner with userMessage', async () => {
+    const reverting = makeFakePurchaseContract({
+      staticCallShouldRevert: { purchase: true },
+      staticCallRevertName: { purchase: 'RngNotReady' },
+    });
+    lootboxMod.__setContractFactoryForTest(() => reverting);
+    const el = instantiate();
+    clickByDataBind(el, 'lbx-buy-button');
+    await settle(30);
+    const banner = el.querySelector('[data-bind="lbx-error-banner"]');
+    assert.equal(banner.hidden, false, 'error banner visible');
+    assert.ok(banner.textContent && banner.textContent.length > 0, 'banner has text');
+    // Verify sendTx was NOT called (static-call gate blocked).
+    assert.equal(reverting._calls.purchase.length, 0, 'purchase blocked by static-call gate');
+    // Clear the 8s auto-hide timer so the test process exits promptly.
+    el.disconnectedCallback();
+  });
+
+  test('After successful Buy with lootboxes=2, _state.lootboxRowsCount === 2', async () => {
+    const el = instantiate();
+    clickByDataBind(el, 'lbx-lootboxes-plus');
+    assert.equal(el._state.lootboxQuantity, 2);
+    clickByDataBind(el, 'lbx-buy-button');
+    await settle(60);
+    assert.equal(el._state.lootboxRowsCount, 2, 'rows count matches N (parsed from receipts)');
+  });
+
+  test('_state.busy = false after completion (try/finally reset); buyBtn.textContent reset to "Buy"', async () => {
+    const el = instantiate();
+    clickByDataBind(el, 'lbx-buy-button');
+    await settle(30);
+    assert.equal(el._state.busy, false, 'busy reset in finally');
+    const buyBtn = el.querySelector('[data-bind="lbx-buy-button"]');
+    assert.equal(buyBtn.textContent, 'Buy', 'button textContent reset');
+  });
+
+  test('disconnectedCallback clears errorTimer without throwing (after error banner shown)', async () => {
+    const reverting = makeFakePurchaseContract({
+      staticCallShouldRevert: { purchase: true },
+      staticCallRevertName: { purchase: 'RngNotReady' },
+    });
+    lootboxMod.__setContractFactoryForTest(() => reverting);
+    const el = instantiate();
+    clickByDataBind(el, 'lbx-buy-button');
+    await settle(30);
+    // errorTimer is set; disconnect should clear it without throwing.
     assert.doesNotThrow(() => el.disconnectedCallback());
   });
 });
