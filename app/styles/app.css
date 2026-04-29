@@ -550,3 +550,128 @@ player-dropdown {
   font-size: 0.9rem;
   color: var(--text-primary, #eee);
 }
+
+/* ===========================================================================
+ * Phase 60 — per-lootbox row states (Plan 60-03 LBX-02)
+ * Awaiting RNG -> Ready to open -> Opening -> Revealed; per CONTEXT D-06.
+ * Pulse animation + spinner are subtle by design: NOT distracting.
+ * =========================================================================== */
+
+.lbx-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lbx-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color, #444);
+  border-radius: 4px;
+  background: var(--bg-secondary, #2a2a2a);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.lbx-row__index {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-primary, #eee);
+  min-width: 4rem;
+}
+
+.lbx-row__status {
+  flex: 1;
+  color: var(--text-secondary, #aaa);
+  font-size: 0.9rem;
+}
+
+.lbx-row__signal {
+  color: var(--accent-success, #4caf6e);
+  font-size: 0.9rem;
+  font-weight: 600;
+  opacity: 1;
+  transition: opacity 0.6s;
+}
+
+.lbx-row__signal[hidden] {
+  display: none;
+}
+
+.lbx-row__open-btn {
+  padding: 0.4rem 1rem;
+  background: var(--accent, #4a9eff);
+  color: var(--bg-primary, #111);
+  border: 1px solid var(--accent, #4a9eff);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.lbx-row__open-btn:hover:not([disabled]) {
+  background: var(--accent-hover, #5cb0ff);
+}
+
+.lbx-row__open-btn[disabled],
+.lbx-row__open-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Awaiting RNG (default — grey) */
+.lbx-row--awaiting {
+  border-color: var(--border-muted, #3a3a3a);
+}
+
+/* Ready to open (pulse + green outline) */
+.lbx-row--ready {
+  border-color: var(--accent-success, #4caf6e);
+  animation: lbx-row-pulse 1s linear infinite;
+}
+
+/* Opening (tx in flight — muted) */
+.lbx-row--opening {
+  opacity: 0.7;
+  border-color: var(--accent, #4a9eff);
+}
+
+/* Revealed (animation complete — completed treatment) */
+.lbx-row--revealed {
+  border-color: var(--accent-success-muted, #2d6e44);
+  background: var(--bg-tertiary, #1f2a23);
+}
+
+/* Spinner inside awaiting state */
+.lbx-spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--border-muted, #3a3a3a);
+  border-top-color: var(--accent, #4a9eff);
+  border-radius: 50%;
+  animation: lbx-spinner-spin 0.9s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 0.4rem;
+}
+
+/* Stage copy overlay (during pack-animator reveal) */
+.lbx-row__stage-copy {
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #aaa);
+  font-style: italic;
+}
+
+@keyframes lbx-row-pulse {
+  0%   { transform: scale(1.0); }
+  50%  { transform: scale(1.02); }
+  100% { transform: scale(1.0); }
+}
+
+@keyframes lbx-spinner-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
