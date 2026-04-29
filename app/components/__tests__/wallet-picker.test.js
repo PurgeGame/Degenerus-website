@@ -261,6 +261,37 @@ globalThis.customElements = {
 import * as storeMod from '../../app/store.js';
 
 // ---------------------------------------------------------------------------
+// Phase 63 D-01 — inject a no-op WC factory into wallet.js BEFORE any test
+// runs the picker's WC-row click handler. The handler dynamically imports
+// wallet.js and calls connectWalletConnect; without this seam, the real
+// @walletconnect/ethereum-provider bundle would call lit-html's
+// createTreeWalker (no DOM under node:test) and crash with an uncaught
+// rejection that gets attributed to a sibling test.
+// ---------------------------------------------------------------------------
+import * as walletMod from '../../app/wallet.js';
+
+class _PickerStubBP {
+  constructor(wc) { this._wc = wc; this.provider = wc; this.providerInfo = null; }
+  async getNetwork() { return { chainId: BigInt(this._wc.chainId || 11155111) }; }
+}
+const _noopWcFactory = {
+  init: async () => ({
+    session: null,
+    accounts: [],
+    chainId: 11155111,
+    connect: async () => {},
+    on: () => {},
+    request: async () => null,
+  }),
+};
+if (typeof walletMod._testInjectWcFactory === 'function') {
+  walletMod._testInjectWcFactory(_noopWcFactory);
+}
+if (typeof walletMod._testInjectWcBrowserProviderCtor === 'function') {
+  walletMod._testInjectWcBrowserProviderCtor(_PickerStubBP);
+}
+
+// ---------------------------------------------------------------------------
 // Reset helpers for per-test isolation.
 // ---------------------------------------------------------------------------
 
@@ -316,7 +347,7 @@ async function importPicker() {
 // ===========================================================================
 
 describe('WalletPicker rendering (WLT-01)', () => {
-  test('show(found) with 2+ entries renders one wallet-row per wallet', async () => {
+  test('show(found) with 2+ entries renders one wallet-row per wallet (+ Phase 63 WC row)', async () => {
     const mod = await importPicker();
     const picker = new mod.WalletPicker();
     picker.connectedCallback();
@@ -328,7 +359,8 @@ describe('WalletPicker rendering (WLT-01)', () => {
     const list = picker.querySelector('[data-bind="list"]');
     assert.ok(list, 'list element exists');
     // Each row appended via createElement('li') + appendChild — fake DOM tracks .children.
-    assert.equal(list.children.length, 2, 'one row per wallet');
+    // Phase 63: ONE additional WC row appended after EIP-6963 rows.
+    assert.equal(list.children.length, 3, 'one row per wallet + WC row');
   });
 
   test('show(found) returns a Promise that resolves to the clicked info', async () => {
@@ -486,5 +518,79 @@ describe('WalletPicker lifecycle cleanup', () => {
     picker.disconnectedCallback();
     const result = await promise;
     assert.equal(result, null, 'pending Promise resolved null on disconnect');
+  });
+});
+
+// ===========================================================================
+// Phase 63 D-01 — WalletConnect row appended after EIP-6963 rows
+// ===========================================================================
+
+describe('WalletPicker — WalletConnect row (Phase 63 D-01)', () => {
+  beforeEach(() => {
+    // Re-inject the noop factory in case storeMod.__resetForTest or another
+    // beforeEach hook cleared it. The wallet module's _testResetWcSingleton
+    // is called inside the wallet.test.js suite — running both suites in the
+    // same process would otherwise leave the WC singleton populated with a
+    // mock from the prior suite.
+    if (typeof walletMod._testResetWcSingleton === 'function') {
+      walletMod._testResetWcSingleton();
+    }
+    if (typeof walletMod._testInjectWcFactory === 'function') {
+      walletMod._testInjectWcFactory(_noopWcFactory);
+    }
+    if (typeof walletMod._testInjectWcBrowserProviderCtor === 'function') {
+      walletMod._testInjectWcBrowserProviderCtor(_PickerStubBP);
+    }
+  });
+  test('show(found) with 1+ wallets appends a WalletConnect row at the end', async () => {
+    const mod = await importPicker();
+    const picker = new mod.WalletPicker();
+    picker.connectedCallback();
+    const found = [
+      { icon: 'data:img;base64,aaa', name: 'MetaMask', rdns: 'io.metamask', uuid: 'u1' },
+    ];
+    picker.show(found);
+    const list = picker.querySelector('[data-bind="list"]');
+    assert.equal(list.children.length, 2, 'one EIP-6963 row + one WC row');
+    const wcRow = list.children[1];
+    const wcName = wcRow.querySelector('.wallet-name');
+    const wcRdns = wcRow.querySelector('.wallet-rdns');
+    assert.equal(wcName.textContent, 'WalletConnect — scan with mobile wallet', 'verbatim WC label');
+    assert.equal(wcRdns.textContent, 'walletconnect:v2', 'WC sentinel rdns rendered');
+  });
+
+  test('WC row click hides picker BEFORE invoking connectWalletConnect (no double-modal stacking)', async () => {
+    const mod = await importPicker();
+    const picker = new mod.WalletPicker();
+    picker.connectedCallback();
+    const found = [
+      { icon: 'data:img;base64,aaa', name: 'MetaMask', rdns: 'io.metamask', uuid: 'u1' },
+    ];
+    const promise = picker.show(found);
+    const list = picker.querySelector('[data-bind="list"]');
+    const wcRow = list.children[1];
+    // Track ordering: hidden=true should land BEFORE the lazy-imported connectWalletConnect.
+    // Since connectWalletConnect is invoked via dynamic import (await), we just verify the
+    // picker is hidden as soon as the click handler runs and the show() Promise resolves to null.
+    assert.equal(picker.hidden, false, 'picker visible before click');
+    wcRow.dispatchEvent({ type: 'click' });
+    // Synchronous picker.hidden mutation happens before the awaited dynamic import resolves.
+    assert.equal(picker.hidden, true, 'picker hidden synchronously after WC click');
+    const result = await promise;
+    assert.equal(result, null, 'show() Promise resolved to null on WC route (BL-05)');
+  });
+
+  test('XSS-safe: WC row label set via textContent (NOT innerHTML)', async () => {
+    const mod = await importPicker();
+    const picker = new mod.WalletPicker();
+    picker.connectedCallback();
+    const found = [{ icon: '', name: 'X', rdns: 'x', uuid: 'u1' }];
+    picker.show(found);
+    const list = picker.querySelector('[data-bind="list"]');
+    const wcRow = list.children[1];
+    // The fake DOM tracks _textContent vs _innerHTML separately.
+    const wcName = wcRow.querySelector('.wallet-name');
+    assert.equal(wcName._textContent, 'WalletConnect — scan with mobile wallet',
+      'name set via textContent setter (fake DOM tracks _textContent)');
   });
 });

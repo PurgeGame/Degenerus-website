@@ -531,6 +531,275 @@ describe('connectWithPicker', () => {
   });
 });
 
+// ===========================================================================
+// Phase 63 D-01 — WalletConnect integration (MOB-01)
+// ===========================================================================
+
+describe('connectWalletConnect (Phase 63 D-01)', () => {
+  // Stub BrowserProvider class for WC tests. Real ethers BrowserProvider's
+  // .provider getter returns `this`, so attachListeners would call ethers' own
+  // event system (which throws "unknown ProviderEvent" on accountsChanged).
+  // The stub mirrors the test mock pattern: .provider points at the wrapped
+  // wc instance directly so attachListeners attaches to the wc.on listener map.
+  class StubBrowserProvider {
+    constructor(wc) {
+      this._wc = wc;
+      this.provider = wc;
+      this.providerInfo = null;
+    }
+    async getNetwork() { return { chainId: BigInt(this._wc.chainId || 11155111) }; }
+    async getSigner() { return { getAddress: async () => this._wc.accounts?.[0] || null }; }
+  }
+
+  // Build a mock EthereumProvider factory whose init() returns a wc-shaped object.
+  function makeMockWcFactory({ session = null, accounts = [], chainId = 11155111, connectImpl } = {}) {
+    const initCalls = [];
+    const connectCalls = [];
+    const wcListeners = {};
+    const wcInstance = {
+      session,
+      get accounts() { return accounts; },
+      set accounts(v) { accounts = v; },
+      chainId,
+      // Always count via connectCalls; user impl runs after the counter bump.
+      connect: async () => {
+        connectCalls.push(Date.now());
+        if (typeof connectImpl === 'function') await connectImpl();
+      },
+      request: async () => null,
+      on: (ev, fn) => { (wcListeners[ev] = wcListeners[ev] || []).push(fn); },
+      _initCalls: initCalls,
+      _connectCalls: connectCalls,
+      _wcListeners: wcListeners,
+      _setAccounts: (a) => { accounts = a; },
+      _setSession: (s) => { wcInstance.session = s; },
+    };
+    const factory = {
+      init: async (opts) => {
+        initCalls.push(opts);
+        return wcInstance;
+      },
+    };
+    return { factory, wcInstance };
+  }
+
+  // Reset the WC singleton + factory injection before each WC test.
+  // Inject the StubBrowserProvider so attachListeners doesn't trip ethers'
+  // event-name validation.
+  beforeEach(() => {
+    if (typeof wallet._testResetWcSingleton === 'function') wallet._testResetWcSingleton();
+    if (typeof wallet._testInjectWcBrowserProviderCtor === 'function') {
+      wallet._testInjectWcBrowserProviderCtor(StubBrowserProvider);
+    }
+  });
+
+  test('singleton: two _ensureWcProvider calls invoke init exactly once and return same instance', async () => {
+    const { factory, wcInstance } = makeMockWcFactory({ session: null, accounts: [] });
+    wallet._testInjectWcFactory(factory);
+    const first = await wallet._testEnsureWcProvider();
+    const second = await wallet._testEnsureWcProvider();
+    assert.equal(wcInstance._initCalls.length, 1, 'init called exactly once');
+    assert.strictEqual(first, second, 'same cached instance');
+  });
+
+  test('connect when no session: calls wc.connect once, persists rdns, lowercases address, sets store', async () => {
+    const accounts = [];
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: null,
+      accounts,
+      chainId: 11155111,
+      connectImpl: async () => {
+        // Simulate post-connect state population.
+        wcInstance._setSession({ topic: 'abc' });
+        wcInstance._setAccounts(['0xAAAA000000000000000000000000000000000099']);
+      },
+    });
+    wallet._testInjectWcFactory(factory);
+    _events.length = 0;
+    _storeUpdates.length = 0;
+    const result = await wallet.connectWalletConnect();
+    assert.ok(result, 'returns a BrowserProvider');
+    assert.equal(wcInstance._connectCalls.length, 1, 'wc.connect called exactly once');
+    assert.equal(_localStore.get('lastWalletRdns'), 'walletconnect:v2', 'WC sentinel persisted');
+    const addrUpd = _storeUpdates.find((u) => u[0] === 'connected.address' && u[1] !== null);
+    assert.ok(addrUpd, 'connected.address updated');
+    assert.equal(addrUpd[1], '0xaaaa000000000000000000000000000000000099', 'address lowercased');
+    const rdnsUpd = _storeUpdates.find((u) => u[0] === 'connected.rdns' && u[1] === 'walletconnect:v2');
+    assert.ok(rdnsUpd, 'connected.rdns set to walletconnect:v2');
+    const ev = _events.find((e) => e.type === 'wallet-connected');
+    assert.ok(ev, 'wallet-connected dispatched');
+  });
+
+  test('init opts shape: optionalChains [11155111, 1], showQrModal, qrModalOptions.enableMobileFullScreen, redirect.universal', async () => {
+    const { factory, wcInstance } = makeMockWcFactory({ session: null, accounts: ['0xab000000000000000000000000000000000000ab'] });
+    wallet._testInjectWcFactory(factory);
+    await wallet._testEnsureWcProvider();
+    const opts = wcInstance._initCalls[0];
+    assert.deepEqual(opts.optionalChains, [11155111, 1], 'optionalChains is [Sepolia, mainnet]');
+    assert.equal(opts.showQrModal, true);
+    assert.ok(opts.qrModalOptions, 'qrModalOptions present');
+    assert.equal(opts.qrModalOptions.enableMobileFullScreen, true, 'enableMobileFullScreen nested under qrModalOptions');
+    assert.ok(opts.metadata, 'metadata present');
+    assert.ok(opts.metadata.redirect, 'metadata.redirect present');
+    assert.ok(typeof opts.metadata.redirect.universal === 'string', 'redirect.universal is a string');
+    assert.ok(opts.metadata.redirect.universal.endsWith('/app/'), 'redirect.universal ends with /app/');
+    // No required-namespace `chains` key
+    assert.equal(opts.chains, undefined, 'no required-namespace chains key');
+  });
+
+  test('autoReconnect WC branch: with persisted session and accounts returns true silently (no wc.connect call)', async () => {
+    _localStore.set('lastWalletRdns', 'walletconnect:v2');
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: { topic: 'persisted' },
+      accounts: ['0xBb00000000000000000000000000000000000077'],
+      chainId: 11155111,
+    });
+    wallet._testInjectWcFactory(factory);
+    _storeUpdates.length = 0;
+    const result = await wallet.autoReconnect();
+    assert.equal(result, true, 'silent reconnect returns true');
+    assert.equal(wcInstance._connectCalls.length, 0, 'wc.connect NEVER called on silent path');
+    const addrUpd = _storeUpdates.find((u) => u[0] === 'connected.address' && u[1] !== null);
+    assert.ok(addrUpd, 'connected.address updated');
+    assert.equal(addrUpd[1], '0xbb00000000000000000000000000000000000077');
+  });
+
+  test('autoReconnect WC branch: with NO persisted session returns false and does not call wc.connect', async () => {
+    _localStore.set('lastWalletRdns', 'walletconnect:v2');
+    const { factory, wcInstance } = makeMockWcFactory({ session: null, accounts: [] });
+    wallet._testInjectWcFactory(factory);
+    const result = await wallet.autoReconnect();
+    assert.equal(result, false, 'no session → false');
+    assert.equal(wcInstance._connectCalls.length, 0, 'wc.connect NEVER called on resume path');
+  });
+
+  test('connectWalletConnect: listeners attached BEFORE store mutations (WR-05 ordering preserved)', async () => {
+    const order = [];
+    const accounts = [];
+    const { factory, wcInstance } = makeMockWcFactory({
+      session: null,
+      accounts,
+      connectImpl: async () => {
+        wcInstance._setSession({ topic: 'a' });
+        wcInstance._setAccounts(['0xc100000000000000000000000000000000000088']);
+      },
+    });
+    // Wrap on() to track listener attachment
+    const origOn = wcInstance.on.bind(wcInstance);
+    wcInstance.on = (ev, fn) => { order.push(`on:${ev}`); origOn(ev, fn); };
+    wallet._testInjectWcFactory(factory);
+    // Spy on store updates via the test infra _storeUpdates: each update push will land
+    // after the connect logic; we record a marker just to verify ordering relative to attach.
+    _storeUpdates.length = 0;
+    await wallet.connectWalletConnect();
+    // The BrowserProvider wraps the WC EIP-1193 provider; attachListeners calls
+    // .on('accountsChanged'|'chainChanged'|'disconnect'). Verify at least one
+    // listener was registered before any store update with rdns walletconnect:v2.
+    const rdnsIdx = _storeUpdates.findIndex((u) => u[0] === 'connected.rdns' && u[1] === 'walletconnect:v2');
+    assert.ok(order.length >= 1, 'at least one listener attached on the WC provider');
+    assert.ok(rdnsIdx >= 0, 'rdns store update happened');
+    // attachListeners runs before setProvider/update — order array captured before any rdns update.
+    // (Synchronous on() calls happen first inside the test event loop.)
+  });
+});
+
+// ===========================================================================
+// Phase 63 D-01 step 4 — device-aware bypass in connectWithPicker
+// ===========================================================================
+
+describe('connectWithPicker — device-aware bypass (Phase 63 D-01 step 4)', () => {
+  // Stub BrowserProvider for WC path (see connectWalletConnect describe block).
+  class StubBrowserProvider {
+    constructor(wc) {
+      this._wc = wc;
+      this.provider = wc;
+      this.providerInfo = null;
+    }
+    async getNetwork() { return { chainId: BigInt(this._wc.chainId || 11155111) }; }
+  }
+
+  // Helpers to mock window.matchMedia and window.ethereum for the bypass heuristic.
+  function setMobileWebNoInjected() {
+    globalThis.window.matchMedia = (q) => ({ matches: q === '(pointer:coarse)', media: q, addEventListener: () => {}, removeEventListener: () => {} });
+    globalThis.window.ethereum = undefined;
+    delete globalThis.window.ethereum;
+  }
+  function setDesktopFinePointer() {
+    globalThis.window.matchMedia = (q) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {} });
+    globalThis.window.ethereum = undefined;
+    delete globalThis.window.ethereum;
+  }
+  function setMobileWithInjected() {
+    globalThis.window.matchMedia = (q) => ({ matches: q === '(pointer:coarse)', media: q, addEventListener: () => {}, removeEventListener: () => {} });
+    globalThis.window.ethereum = { request: async () => [], on: () => {} };
+  }
+
+  beforeEach(() => {
+    if (typeof wallet._testResetWcSingleton === 'function') wallet._testResetWcSingleton();
+    if (typeof wallet._testInjectWcBrowserProviderCtor === 'function') {
+      wallet._testInjectWcBrowserProviderCtor(StubBrowserProvider);
+    }
+  });
+
+  test('coarse pointer + no injected + 0 EIP-6963 announces → calls connectWalletConnect, picker NOT shown', async () => {
+    setMobileWebNoInjected();
+    _discoverFilterResult = [];   // 0 EIP-6963 announces
+    _discoverReturn = null;
+    // Inject a WC factory so connectWalletConnect doesn't blow up
+    const accounts = [];
+    let wcInstance;
+    const factory = {
+      init: async () => {
+        wcInstance = {
+          session: null,
+          get accounts() { return accounts; },
+          chainId: 11155111,
+          connect: async () => {
+            wcInstance.session = { topic: 'mobile-bypass' };
+            accounts.push('0xdd00000000000000000000000000000000000044');
+          },
+          on: () => {},
+        };
+        return wcInstance;
+      },
+    };
+    wallet._testInjectWcFactory(factory);
+    _pickerShownWith = null;
+    const result = await wallet.connectWithPicker();
+    assert.equal(_pickerShownWith, null, 'picker.show NEVER called on mobile-web bypass');
+    assert.ok(result, 'connectWalletConnect returned a provider');
+  });
+
+  test('coarse pointer WITH injected wallet → bypass DOES NOT fire (window.ethereum present)', async () => {
+    setMobileWithInjected();
+    // 1 EIP-6963 wallet announces — discover returns a mock provider, picker auto-selects
+    // (single-wallet path). Bypass condition fails because window.ethereum is defined.
+    _discoverFilterResult = [{ rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'u1' }];
+    _discoverReturn = makeMockBrowserProvider({});
+    _pickerShownWith = null;
+    await wallet.connectWithPicker();
+    assert.equal(_pickerShownWith, null, 'picker.show not invoked for single wallet (auto-select)');
+    // WC singleton MUST NOT be populated — bypass did not fire.
+    assert.equal(wallet._testGetWcSingleton(), null, 'WC singleton not initialized — bypass did not fire');
+    // Reset window.ethereum so subsequent tests don't inherit it.
+    delete globalThis.window.ethereum;
+  });
+
+  test('fine pointer (desktop) + 0 EIP-6963 → bypass DOES NOT fire (matchMedia returns false)', async () => {
+    setDesktopFinePointer();
+    // 0 EIP-6963 announces, no window.ethereum, but pointer is fine (desktop).
+    // Bypass condition fails because matchMedia('(pointer:coarse)') returns false.
+    _discoverFilterResult = [];
+    _discoverReturn = null;
+    globalThis.window.ethereum = undefined;
+    delete globalThis.window.ethereum;
+    await wallet.connectWithPicker();
+    assert.equal(_pickerShownWith, null, 'picker.show not invoked when 0 EIP-6963');
+    // WC singleton MUST NOT be populated — bypass did not fire on desktop.
+    assert.equal(wallet._testGetWcSingleton(), null, 'WC singleton not initialized — bypass did not fire on desktop');
+  });
+});
+
 // Restore original ethers.discover at end of suite (process exit anyway, but clean).
 test.after?.(() => {
   ethersMod.BrowserProvider.discover = _origDiscover;

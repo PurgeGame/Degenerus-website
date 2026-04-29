@@ -55,3 +55,10 @@ export const CONTRACTS = {
 export const ETH_DIVISOR = 1n;             // No /1M scaling on mainnet
 export const TICKET_DIVISOR = 100n;        // BAF scaling preserved
 export const MAINNET_PENDING = true;       // Phase 56 verification asserts true
+
+// Phase 63 D-01 step 1 — mainnet WC v2 projectId (cloud.reown.com).
+// Public token (rate-limit metering, NOT a secret — RESEARCH Runtime State Inventory line 531).
+// Mainnet becomes load-bearing only at v5.0 cutover.
+// TODO(63-01): replace with real cloud.reown.com projectId before mainnet deploy.
+// User pre-authorized demo value (2026-04-29) — autonomous-chain placeholder.
+export const WALLETCONNECT_PROJECT_ID = 'demof9e8d7c6b5a4938271605f4e3d2c1b0a';

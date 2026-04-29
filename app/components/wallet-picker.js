@@ -139,6 +139,67 @@ export class WalletPicker extends HTMLElement {
         });
         list.appendChild(li);
       }
+
+      // Phase 63 D-01 — append WalletConnect row after EIP-6963 rows.
+      // The device-aware bypass (pointer:coarse + !window.ethereum + 0 EIP-6963)
+      // lives in wallet.js connectWithPicker, NOT here. The picker just renders
+      // rows when invoked. Synthetic info object — project-controlled, but we
+      // still use textContent for rendering to match the XSS-safe pattern.
+      const wcInfo = {
+        name: 'WalletConnect — scan with mobile wallet',  // verbatim per CONTEXT specifics line 270
+        icon: '',                                          // bundled WC modal supplies its own logo on open
+        rdns: 'walletconnect:v2',
+      };
+      const wcLi = document.createElement('li');
+      wcLi.className = 'wallet-row wallet-row--walletconnect';
+      wcLi.tabIndex = 0;
+
+      const wcImg = document.createElement('img');
+      wcImg.className = 'wallet-icon';
+      wcImg.src = wcInfo.icon || '';
+      wcImg.alt = '';
+
+      const wcNameEl = document.createElement('span');
+      wcNameEl.className = 'wallet-name';
+      wcNameEl.textContent = wcInfo.name;
+
+      const wcRdnsEl = document.createElement('span');
+      wcRdnsEl.className = 'wallet-rdns';
+      wcRdnsEl.textContent = wcInfo.rdns;
+
+      wcLi.appendChild(wcImg);
+      wcLi.appendChild(wcNameEl);
+      wcLi.appendChild(wcRdnsEl);
+
+      const onWcPick = async () => {
+        // CONTEXT D-01 step 4: hide picker BEFORE invoking connectWalletConnect
+        // (avoids double-modal stacking when WC's bundled modal opens).
+        // BL-05: release the outer Promise with null so connectWithPicker's
+        // filter callback does not double-resolve when the WC modal closes.
+        if (this.#resolve) { this.#resolve(null); this.#resolve = null; }
+        // Synchronous hide — picker is invisible the moment the user clicks WC,
+        // before the dynamic import resolves.
+        this.hidden = true;
+        // Lazy-import to keep wallet-picker.js free of WC import at module-load.
+        let wcMod = null;
+        try {
+          wcMod = await import('../app/wallet.js');
+        } catch (_) { /* swallow — picker re-shows on next user click */ }
+        if (wcMod && typeof wcMod.connectWalletConnect === 'function') {
+          // CONTEXT D-01 step 4 contract: picker stays hidden across the WC
+          // call so the user only sees one modal.
+          this.hidden = true;
+          try { wcMod.connectWalletConnect(); } catch (_) { /* swallow */ }
+        }
+      };
+      wcLi.addEventListener('click', onWcPick);
+      wcLi.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          if (e.preventDefault) e.preventDefault();
+          onWcPick();
+        }
+      });
+      list.appendChild(wcLi);
     }
 
     this.hidden = false;

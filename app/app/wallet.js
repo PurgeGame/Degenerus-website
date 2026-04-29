@@ -28,7 +28,8 @@
 // And one preserved pattern: nav.js bridge events (verbatim from /beta/ L193-208).
 
 import { BrowserProvider } from 'ethers';
-import { CHAIN } from './chain-config.js';
+import { EthereumProvider } from '@walletconnect/ethereum-provider';
+import { CHAIN, WALLETCONNECT_PROJECT_ID } from './chain-config.js';
 import { update, get } from './store.js';
 import { setProvider, clearProvider, switchToSepolia } from './contracts.js';
 import { abortAllInflight } from './polling.js';
@@ -40,6 +41,31 @@ import { abortAllInflight } from './polling.js';
 
 let _pickerResolve = null;
 
+// ---------------------------------------------------------------------------
+// Phase 63 D-01 — singleton EthereumProvider cached for page lifetime.
+// Issue #2930 mitigation: dual EthereumProvider instances on mobile redirect
+// to the wrong app. Init runs at most once per page; subsequent
+// connectWalletConnect / autoReconnect WC-branch calls reuse the cached
+// instance (RESEARCH F-2: loadPersistedSession runs inside init and populates
+// _wcProvider.session / .accounts / .chainId on every init call).
+// ---------------------------------------------------------------------------
+
+let _wcProvider = null;
+
+// Test-seam: factory injection for EthereumProvider.init. Production code uses
+// the imported EthereumProvider directly; tests inject a mock factory so they
+// don't attempt to fetch the esm.sh bundle (too brittle for node:test).
+let _wcEthereumProviderFactory = null;
+
+// Test-seam: BrowserProvider constructor injection for the WC path. ethers'
+// real BrowserProvider construction asserts EIP-1193 shape on the passed object
+// AND its `.provider` getter returns `this` — so node:test cases mocking the WC
+// EthereumProvider need to inject a stub BrowserProvider class to avoid
+// ethers' "unknown ProviderEvent" assertion when attachListeners runs against
+// the wrapped provider's internal subscription system. In production this is
+// always the imported BrowserProvider from ethers.
+let _wcBrowserProviderCtor = null;
+
 export function onUserPickedWallet(info) {
   if (_pickerResolve) {
     _pickerResolve(info);
@@ -48,14 +74,120 @@ export function onUserPickedWallet(info) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 63 D-01 — WalletConnect v2 helpers (init opts + singleton ensure).
+// ---------------------------------------------------------------------------
+
+function _wcInitOpts() {
+  // RESEARCH §Pattern 1 verified bundle behavior:
+  //   - optionalChains (NOT chains) so wallets that don't pre-support Sepolia
+  //     can still pair (required-namespace blocks them).
+  //   - showQrModal:true triggers AppKit lazy-load of the bundled WC modal.
+  //   - enableMobileFullScreen MUST be nested under qrModalOptions (top-level
+  //     is silently ignored — verified in bundle: this.rpc.qrModalOptions?.enableMobileFullScreen===!0).
+  //   - metadata.redirect.universal MUST be the runtime origin (mandatory v1.9.5+).
+  //   - --wcm-z-index 2000 exceeds existing wallet-picker z-index 1000 so WC's
+  //     bundled modal renders above our picker (RESEARCH Anti-Pattern line 505).
+  const win = (typeof globalThis !== 'undefined' && globalThis.window) ? globalThis.window : null;
+  const origin = (win && win.location && win.location.origin) ? win.location.origin : '';
+  return {
+    projectId: WALLETCONNECT_PROJECT_ID,
+    optionalChains: [11155111, 1],
+    showQrModal: true,
+    qrModalOptions: {
+      enableMobileFullScreen: true,
+      themeMode: 'dark',
+      themeVariables: {
+        '--wcm-z-index': '2000',
+        '--wcm-accent-color': 'var(--accent, #4caf50)',
+        '--wcm-background-color': 'var(--bg-secondary, #1a1a1a)',
+        '--wcm-font-family': 'inherit',
+      },
+    },
+    metadata: {
+      name: 'Degenerus',
+      description: 'Degenerus Protocol — on-chain gambling game',
+      url: origin,
+      icons: [`${origin}/badges-circular/flame_red.svg`],
+      redirect: {
+        native: 'degenerus://',
+        universal: `${origin}/app/`,
+      },
+    },
+  };
+}
+
+async function _ensureWcProvider() {
+  // Issue #2930 mitigation: never re-init on the same page.
+  if (_wcProvider) return _wcProvider;
+  const factory = _wcEthereumProviderFactory || EthereumProvider;
+  _wcProvider = await factory.init(_wcInitOpts());
+  // VERIFIED (RESEARCH F-2): loadPersistedSession runs inside init();
+  // _wcProvider.session is truthy iff a prior session was persisted.
+  return _wcProvider;
+}
+
+// ---------------------------------------------------------------------------
+// connectWalletConnect — sibling to connectLegacy / connectWithPicker.
+// Phase 63 D-01: WC v2 provider as a connect option. Wraps the WC EIP-1193
+// provider in a BrowserProvider so the existing setProvider / clearProvider
+// chokepoint (Phase 58) is reused verbatim (CF-04, no new chokepoint).
+// ---------------------------------------------------------------------------
+
+export async function connectWalletConnect() {
+  const wc = await _ensureWcProvider();
+  if (!wc.session || !wc.accounts || wc.accounts.length === 0) {
+    // No persisted session — open the QR modal / deep-link to mobile wallet.
+    // wc.connect() is the popup-equivalent and is intentionally invoked here
+    // (NEVER from autoReconnect — that path is silent).
+    await wc.connect();
+  }
+  if (!wc.accounts || wc.accounts.length === 0) return null;
+
+  const BPCtor = _wcBrowserProviderCtor || BrowserProvider;
+  const browserProvider = new BPCtor(wc);
+  // WR-05: attach EIP-1193 listeners BEFORE returning so chainChanged /
+  // accountsChanged events fired during WC session establishment are not lost.
+  attachListeners(browserProvider);
+
+  setProvider(browserProvider);
+  const addr = String(wc.accounts[0]).toLowerCase();
+  update('connected.address', addr);
+  update('connected.rdns', 'walletconnect:v2');
+  localStorage.setItem('lastWalletRdns', 'walletconnect:v2');
+  update('ui.chainOk', wc.chainId === CHAIN.id);
+
+  emitConnected(addr);
+  return browserProvider;
+}
+
+// ---------------------------------------------------------------------------
 // connectWithPicker — explicit user-initiated connect (popup OK on user click).
 // Discovers EIP-6963 wallets, presents picker for 2+ wallets, persists rdns.
 // ---------------------------------------------------------------------------
 
 export async function connectWithPicker() {
+  // Phase 63 D-01 step 4 — device-aware bypass.
+  // Mobile-web with no injected wallet → skip picker, call WalletConnect directly.
+  // Heuristic: (pointer:coarse) AND no window.ethereum AND zero EIP-6963 announces.
+  // The picker is for desktop / extension users + MM in-dApp browser path.
+  // (This bypass lives in wallet.js connectWithPicker ONLY — wallet-picker.js
+  // does NOT contain pointer:coarse / isMobileWebNoInjected per WARNING 2 fix.)
+  const win = (typeof globalThis !== 'undefined' && globalThis.window) ? globalThis.window : null;
+  const isMobileWebNoInjected = !!(
+    win
+    && typeof win.matchMedia === 'function'
+    && win.matchMedia('(pointer:coarse)').matches
+    && typeof win.ethereum === 'undefined'
+  );
+
+  // Capture the EIP-6963 discovered list via the filter callback so we can
+  // route to WC bypass when the list is empty AND the device is mobile-web.
+  let _discoveredFound = null;
+
   const browserProvider = await BrowserProvider.discover({
     timeout: 1000,
     filter: (found) => {
+      _discoveredFound = found;
       if (!found || found.length === 0) return null;
       if (found.length === 1) return found[0];
       return new Promise((resolve) => {
@@ -97,6 +229,19 @@ export async function connectWithPicker() {
       });
     },
   }).catch(() => null);
+
+  // Phase 63 D-01 step 4 — device-aware bypass dispatch.
+  // If we're on mobile-web with no injected wallet AND zero EIP-6963 announces,
+  // route directly to WalletConnect (WC's bundled modal owns the per-wallet
+  // deep-link dispatch table on mobile). This is the SINGLE-SCOPE owner of the
+  // bypass — wallet-picker.js does NOT replicate this check.
+  if (
+    isMobileWebNoInjected
+    && (!_discoveredFound || _discoveredFound.length === 0)
+    && !browserProvider
+  ) {
+    return connectWalletConnect();
+  }
 
   if (!browserProvider) return connectLegacy();
 
@@ -192,6 +337,30 @@ export async function autoReconnect() {
     const net = await browserProvider.getNetwork().catch(() => null);
     update('ui.chainOk', net ? Number(net.chainId) === CHAIN.id : null);
     return true;
+  }
+
+  // Phase 63 D-01 — WalletConnect silent reconnect path.
+  // EthereumProvider.init() runs loadPersistedSession internally (RESEARCH F-2);
+  // wc.session is truthy iff a prior session was persisted. SILENT semantics —
+  // NEVER call wc.connect() here (popup-equivalent; reserved for explicit user
+  // click via connectWalletConnect).
+  if (rdns === 'walletconnect:v2') {
+    try {
+      const wc = await _ensureWcProvider();
+      if (!wc.session || !wc.accounts || wc.accounts.length === 0) return false;
+      const BPCtor = _wcBrowserProviderCtor || BrowserProvider;
+      const browserProvider = new BPCtor(wc);
+      // WR-05: attach listeners BEFORE consuming wc state so chainChanged
+      // events fired during silent resume are not lost.
+      attachListeners(browserProvider);
+      setProvider(browserProvider);
+      update('connected.address', String(wc.accounts[0]).toLowerCase());
+      update('connected.rdns', 'walletconnect:v2');
+      update('ui.chainOk', wc.chainId === CHAIN.id);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   // EIP-6963 path — discover with byRdns filter (deterministic, no race).
@@ -346,3 +515,11 @@ function emitConnected(address) {
 // ---------------------------------------------------------------------------
 
 export { attachListeners as _testAttachListeners };
+
+// Phase 63 D-01 test seams — WC provider singleton + factory injection.
+export const _testEnsureWcProvider = _ensureWcProvider;
+export const _testWcInitOpts = _wcInitOpts;
+export function _testInjectWcFactory(fn) { _wcEthereumProviderFactory = fn; }
+export function _testInjectWcBrowserProviderCtor(ctor) { _wcBrowserProviderCtor = ctor; }
+export function _testResetWcSingleton() { _wcProvider = null; _wcEthereumProviderFactory = null; _wcBrowserProviderCtor = null; }
+export function _testGetWcSingleton() { return _wcProvider; }

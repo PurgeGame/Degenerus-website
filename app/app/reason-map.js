@@ -141,3 +141,40 @@ register('NotApproved', {
   userMessage: "You're not approved to act on behalf of this player.",
   recoveryAction: 'Connect to your own wallet to act.',
 });
+
+// ---------------------------------------------------------------------------
+// Phase 63 (Plan 63-01) extensions — WalletConnect deep-link / session errors.
+// Sourced from CITED docs.reown.com (HTTP 401/403/1013) + JSON-RPC 2.0 standard
+// (4001 user-rejected) + verified WC bundle error symbols.
+// RESEARCH §Example 3 lines 681-716.
+// ---------------------------------------------------------------------------
+
+register('UserRejected', {
+  code: 'UserRejected',
+  userMessage: 'You rejected the connection request.',
+  recoveryAction: 'Tap Connect again to retry.',
+});
+
+register('SessionExpired', {
+  code: 'SessionExpired',
+  userMessage: 'Your wallet session expired. Please reconnect.',
+  recoveryAction: 'Tap Connect to start a new session.',
+});
+
+register('RateLimited', {
+  code: 'RateLimited',
+  userMessage: 'Too many requests. Wait a moment and try again.',
+  recoveryAction: 'Retry in a few seconds.',
+});
+
+register('ProjectIdInvalid', {
+  code: 'ProjectIdInvalid',
+  userMessage: 'WalletConnect configuration error. Contact support.',
+  recoveryAction: 'Refresh the page; if it persists, file a bug.',
+});
+
+register('USER_DISCONNECTED', {
+  code: 'USER_DISCONNECTED',
+  userMessage: 'Wallet disconnected.',
+  recoveryAction: 'Tap Connect to reconnect.',
+});

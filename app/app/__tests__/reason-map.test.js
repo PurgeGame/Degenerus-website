@@ -171,3 +171,40 @@ describe('WR-02 regressions: catch-all "E" must not hijack substring-fallback pa
     assert.equal(result.code, 'E');
   });
 });
+
+describe('Phase 63 (Plan 63-01) WalletConnect error-code extensions', () => {
+  test('UserRejected decodes to user-facing message + recovery (4001)', () => {
+    const decoded = decodeRevertReason({ revert: { name: 'UserRejected' } });
+    assert.equal(decoded.code, 'UserRejected');
+    assert.match(decoded.userMessage, /rejected the connection/i);
+    assert.match(decoded.recoveryAction, /tap Connect|retry/i);
+  });
+
+  test('SessionExpired decodes to user-facing message + recovery', () => {
+    const decoded = decodeRevertReason({ revert: { name: 'SessionExpired' } });
+    assert.equal(decoded.code, 'SessionExpired');
+    assert.match(decoded.userMessage, /session expired|reconnect/i);
+    assert.match(decoded.recoveryAction, /new session|tap Connect/i);
+  });
+
+  test('RateLimited decodes to user-facing message + recovery (HTTP 429/1013)', () => {
+    const decoded = decodeRevertReason({ revert: { name: 'RateLimited' } });
+    assert.equal(decoded.code, 'RateLimited');
+    assert.match(decoded.userMessage, /too many requests|wait a moment/i);
+    assert.match(decoded.recoveryAction, /retry/i);
+  });
+
+  test('ProjectIdInvalid decodes to user-facing message + recovery (HTTP 401/403)', () => {
+    const decoded = decodeRevertReason({ revert: { name: 'ProjectIdInvalid' } });
+    assert.equal(decoded.code, 'ProjectIdInvalid');
+    assert.match(decoded.userMessage, /WalletConnect.*configuration|contact support/i);
+    assert.match(decoded.recoveryAction, /refresh|file a bug/i);
+  });
+
+  test('USER_DISCONNECTED decodes to user-facing message + recovery (WC disconnect event)', () => {
+    const decoded = decodeRevertReason({ revert: { name: 'USER_DISCONNECTED' } });
+    assert.equal(decoded.code, 'USER_DISCONNECTED');
+    assert.match(decoded.userMessage, /wallet disconnected/i);
+    assert.match(decoded.recoveryAction, /reconnect|tap Connect/i);
+  });
+});

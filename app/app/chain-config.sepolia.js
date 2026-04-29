@@ -47,3 +47,9 @@ export const CONTRACTS = {
 export const ETH_DIVISOR = 1_000_000n;     // /1M scaleEth on Sepolia (Phase 51 51-03 decision)
 export const TICKET_DIVISOR = 100n;        // BAF scaling — same on both chains
 export const MAINNET_PENDING = false;
+
+// Phase 63 D-01 step 1 — Sepolia WC v2 projectId (cloud.reown.com).
+// Public token (rate-limit metering, NOT a secret — RESEARCH Runtime State Inventory line 531).
+// TODO(63-01): replace with real cloud.reown.com projectId before mainnet deploy.
+// User pre-authorized demo value (2026-04-29) — autonomous-chain placeholder.
+export const WALLETCONNECT_PROJECT_ID = 'demoa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
