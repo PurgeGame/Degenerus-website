@@ -20,12 +20,18 @@
 // for static template literals (containers, headers, anchor scaffolding).
 //
 // Plan 61-01 shipped the panel shell with stubbed (disabled) Claim buttons.
-// Plan 61-02 (THIS PLAN) wires the click handlers through Phase 58's sendTx
-// chokepoint and removes the stub attributes — buttons are now interactive.
+// Plan 61-02 wired the click handlers through Phase 58's sendTx chokepoint
+// and removed the stub markers — buttons are now interactive.
+// Plan 61-03 (THIS PLAN) closes the loop with panel-owned 30s polling,
+// AbortController-per-cycle, visibility-aware refresh, cross-tab spun_day
+// storage event listener, post-confirm 250ms debounce hook, and store
+// subscriptions on connected.address + viewing.address. Per RESEARCH
+// Pitfall 9: this is panel-owned polling (mirroring app-packs-panel.js
+// :512-555), NOT a call to polling.js's fictional generic start({key,...}) API.
 
 import { CHAIN } from '../app/chain-config.js';
 import { displayEth } from '../app/scaling.js';
-import { getViewedAddress, get } from '../app/store.js';
+import { getViewedAddress, get, subscribe } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
 // Plan 61-02: claims write path — three named exports wired into per-row click
 // handlers below. `import` triggers reason-map registrations as a side-effect
@@ -36,6 +42,19 @@ import { claimEth, claimBurnie, claimDecimatorLevels } from '../app/claims.js';
 // farFutureCoin, terminal) are read from /pending but NEVER rendered in v4.6;
 // each is documented out-of-scope at CONTEXT.md lines 50-54.
 const VISIBLE_PRIZE_KEYS = ['eth', 'burnie', 'decimator'];
+
+// Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for
+// the Plan 61-03 30s polling tick so node:test processes exit cleanly when
+// no other open handles remain — avoids tests hanging on a 30s pending
+// interval. Verbatim port of the app-packs-panel.js _setTimeoutUnref helper
+// (lines 97-103) — same shape applied to setInterval here.
+function _setIntervalUnref(fn, ms) {
+  const h = setInterval(fn, ms);
+  if (h && typeof h.unref === 'function') {
+    try { h.unref(); } catch (_) { /* defensive */ }
+  }
+  return h;
+}
 
 // Friendly per-prize labels (textContent only). Decimator label is dynamic
 // based on row.levels.length — see #renderRows.
@@ -57,16 +76,67 @@ class AppClaimsPanel extends HTMLElement {
   // Plan 61-02 — per-row click debounce (500ms). Tracks which rowKeys have an
   // in-flight claim; prevents double-fire on rapid double-clicks (T-61-02-07).
   #busyRows = new Set();
+  // --- Plan 61-03 polling lifecycle fields ---
+  // Panel-owned 30s tick (NOT polling.js's fictional generic API per RESEARCH
+  // Pitfall 9). Mirrors app-packs-panel.js:512-555 RNG poll lifecycle shape.
+  #pollHandle = null;          // setInterval handle — cleared in disconnect
+  #pollController = null;      // AbortController — aborted on cycle restart + disconnect
+  #lastPollAt = 0;             // ms timestamp of last cycle start (visibility-return ≥5min logic)
+  #visibilityListener = null;  // document 'visibilitychange' handler reference
+  #storageListener = null;     // window 'storage' handler reference (cross-tab spun_day)
+  #txConfirmListener = null;   // self 'app-claims:tx-confirmed' handler (250ms debounce)
 
   connectedCallback() {
     if (this.#initialized) return;
     this.#initialized = true;
     this.#renderShell();
-    // Plan 61-01: single-shot mount fetch. Polling lifecycle lands in Plan 61-03.
-    this.#runMountFetch();
+    // Plan 61-03: wire lifecycle hooks BEFORE the eager first cycle so the
+    // 30s tick + visibility / storage / tx-confirmed listeners are all live
+    // by the time #runPollCycle returns. Store subscriptions install last —
+    // their initial-fire semantics (subscribe() emits the current value
+    // synchronously) will trigger an extra cycle which is harmless (the
+    // AbortController-per-cycle flushes prior in-flight fetches).
+    this.#wireVisibilityRePoll();
+    this.#wireStorageRePoll();
+    this.#wirePostConfirmDebounce();
+    this.#wireStoreSubscriptions();
+    this.#startPolling();
+    // Eager first cycle on mount — no need to wait 30s. #runPollCycle is the
+    // single source of truth for fetch + render; #runMountFetch is now a thin
+    // wrapper preserved for backward compatibility (Plan 61-01 callers).
+    this.#runPollCycle();
   }
 
   disconnectedCallback() {
+    // --- Plan 61-03 cleanup: clearInterval + abort + removeEventListener × 3 ---
+    if (this.#pollHandle != null) {
+      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+      this.#pollHandle = null;
+    }
+    if (this.#pollController) {
+      try { this.#pollController.abort(); } catch (_) { /* defensive */ }
+      this.#pollController = null;
+    }
+    if (this.#visibilityListener
+      && typeof document !== 'undefined'
+      && typeof document.removeEventListener === 'function') {
+      try { document.removeEventListener('visibilitychange', this.#visibilityListener); }
+      catch (_) { /* defensive */ }
+    }
+    this.#visibilityListener = null;
+    if (this.#storageListener
+      && typeof window !== 'undefined'
+      && typeof window.removeEventListener === 'function') {
+      try { window.removeEventListener('storage', this.#storageListener); }
+      catch (_) { /* defensive */ }
+    }
+    this.#storageListener = null;
+    if (this.#txConfirmListener) {
+      try { this.removeEventListener('app-claims:tx-confirmed', this.#txConfirmListener); }
+      catch (_) { /* defensive */ }
+    }
+    this.#txConfirmListener = null;
+    // --- Plan 61-01 cleanup: store unsubscribes ---
     for (const u of this.#unsubs) {
       try { u(); } catch (_e) { /* defensive */ }
     }
@@ -95,45 +165,151 @@ class AppClaimsPanel extends HTMLElement {
   }
 
   // ---------------------------------------------------------------------
-  // Mount fetch (Plan 61-01 single-shot; Plan 61-03 wraps in 30s poller).
-  // Promise.allSettled fan-out per T-61-01-05 — one bad endpoint cannot
-  // blank the entire panel.
+  // Plan 61-03 polling lifecycle (panel-owned, NOT polling.js — Pitfall 9).
+  //
+  // Mirrors app-packs-panel.js:512-555 RNG poll shape: setInterval(30_000)
+  // tick + AbortController-per-cycle + visibility-pause guard. Each cycle
+  // re-fetches /pending + /last-day + /player/:addr in parallel via
+  // Promise.allSettled (one bad endpoint can't blank the others — T-61-01-05).
   // ---------------------------------------------------------------------
 
+  #startPolling() {
+    if (this.#pollHandle != null) {
+      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+    }
+    if (typeof setInterval !== 'function') return;  // node:test fakeDOM safety
+    // Use unref'd setInterval so node:test processes exit cleanly when no
+    // other open handles remain (Phase 60 _setTimeoutUnref pattern).
+    this.#pollHandle = _setIntervalUnref(() => this.#runPollCycle(), 30_000);
+  }
+
+  // Mount-time fetch helper — Plan 61-01 callers + tests use this entry point.
+  // Plan 61-03 collapses into #runPollCycle (single source of truth for
+  // fetch+render).
   async #runMountFetch() {
-    const addr = (typeof getViewedAddress === 'function' ? getViewedAddress() : null)
-      || get('viewing.address')
-      || get('connected.address')
-      || null;
-    this.#pinnedAddress = addr;
+    return this.#runPollCycle();
+  }
 
-    // Build URL list — /pending + /player/:address require an address; /last-day
-    // is global. fetchJSON prepends API_BASE (== CHAIN.indexerBase).
-    const urls = addr
-      ? [
-          `/player/${addr}/pending`,
-          `/game/jackpot/last-day`,
-          `/player/${addr}`,
-        ]
-      : [
-          null,
-          `/game/jackpot/last-day`,
-          null,
-        ];
+  // Core poller — visibility-guarded, AbortController-flushed, Promise.allSettled
+  // fan-out, render-once-on-success. Network blips are swallowed (next cycle retries).
+  async #runPollCycle() {
+    // Visibility guard — pause polling while tab hidden (T-61-03-03 / Pitfall 13).
+    if (typeof document !== 'undefined'
+      && document.visibilityState
+      && document.visibilityState !== 'visible') {
+      return;
+    }
 
-    const results = await Promise.allSettled(
-      urls.map((u) => (u ? fetchJSON(u) : Promise.resolve(null))),
-    );
-    const [pending, lastDay, dashboard] = results.map(
-      (r) => (r.status === 'fulfilled' ? r.value : null),
-    );
+    // AbortController-per-cycle — flush any prior in-flight cycle. Note:
+    // fetchJSON (beta/app/api.js) does not currently accept a signal arg, so
+    // the abort + signal.aborted check works as a "discard stale results"
+    // guard rather than as a transport-level cancel. The guard prevents a
+    // late-arriving cycle from overwriting fresher data on the panel.
+    if (this.#pollController) {
+      try { this.#pollController.abort(); } catch (_) { /* defensive */ }
+    }
+    this.#pollController = new AbortController();
+    const signal = this.#pollController.signal;
+    this.#lastPollAt = Date.now();
 
-    this.#pendingData = pending?.pending || null;
-    this.#lastDayData = lastDay || null;
-    this.#dashboardData = dashboard || null;
-    this.#pinnedDay = (lastDay && typeof lastDay.day === 'number') ? lastDay.day : null;
+    try {
+      const addr = (typeof getViewedAddress === 'function' ? getViewedAddress() : null)
+        || get('viewing.address')
+        || get('connected.address')
+        || null;
+      this.#pinnedAddress = addr;
 
-    this.#render();
+      // Build URL list — /pending + /player/:address require an address;
+      // /last-day is global. fetchJSON prepends API_BASE (== CHAIN.indexerBase).
+      const urls = addr
+        ? [
+            `/player/${addr}/pending`,
+            `/game/jackpot/last-day`,
+            `/player/${addr}`,
+          ]
+        : [
+            null,
+            `/game/jackpot/last-day`,
+            null,
+          ];
+
+      const results = await Promise.allSettled(
+        urls.map((u) => (u ? fetchJSON(u) : Promise.resolve(null))),
+      );
+      // Stale-cycle guard — if another cycle started + aborted us, discard
+      // these results to avoid overwriting fresher data.
+      if (signal.aborted) return;
+
+      const [pending, lastDay, dashboard] = results.map(
+        (r) => (r.status === 'fulfilled' ? r.value : null),
+      );
+      this.#pendingData = pending?.pending || null;
+      this.#lastDayData = lastDay || null;
+      this.#dashboardData = dashboard || null;
+      this.#pinnedDay = (lastDay && typeof lastDay.day === 'number') ? lastDay.day : null;
+
+      this.#render();
+    } catch (_e) {
+      // Network blip — next cycle retries. Don't crash the panel.
+    }
+  }
+
+  // Visibility-aware refresh — on foreground return AFTER ≥5min hidden, fire
+  // an immediate cycle within 1s. Mirrors Phase 56 D-04 + Pitfall 13 mitigation.
+  #wireVisibilityRePoll() {
+    if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
+    this.#visibilityListener = () => {
+      if (document.visibilityState !== 'visible') return;
+      const elapsed = Date.now() - this.#lastPollAt;
+      if (elapsed >= 5 * 60 * 1000) {
+        // ≥5min hidden — fire immediate re-poll within 1s.
+        this.#runPollCycle();
+      }
+    };
+    document.addEventListener('visibilitychange', this.#visibilityListener);
+  }
+
+  // Cross-tab spoiler-gate refresh — when the user spins in another tab, the
+  // localStorage spun_day key flips and a `storage` event fires here. Filter
+  // on the chainId-scoped prefix so unrelated keys don't trigger spurious
+  // re-renders (T-61-03-07). No fetch needed — the localStorage value
+  // changed, the spoiler-gate decision flips on next #render().
+  #wireStorageRePoll() {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    const prefix = `spun_day_${CHAIN.id}_`;
+    this.#storageListener = (e) => {
+      if (!e || typeof e.key !== 'string') return;
+      if (!e.key.startsWith(prefix)) return;
+      // Spoiler-gate signal flipped (or another spun_day_* changed) — re-render.
+      this.#render();
+    };
+    window.addEventListener('storage', this.#storageListener);
+  }
+
+  // Post-confirm debounce — when Plan 61-02's per-row click handler dispatches
+  // 'app-claims:tx-confirmed' on tx success, schedule a 250ms debounced
+  // re-fetch. ADDITIVE to the regular 30s tick (next regular cycle still fires).
+  // The 250ms is roadmap-locked (success criterion 2 verbatim).
+  #wirePostConfirmDebounce() {
+    this.#txConfirmListener = () => {
+      setTimeout(() => this.#runPollCycle(), 250);
+    };
+    this.addEventListener('app-claims:tx-confirmed', this.#txConfirmListener);
+  }
+
+  // Store subscriptions — Phase 58 namespace. On wallet switch
+  // (connected.address) OR view-target switch (viewing.address), fire an
+  // immediate cycle restart. The AbortController-per-cycle in #runPollCycle
+  // flushes any prior in-flight fetches automatically.
+  //
+  // NOTE: subscribe() fires synchronously with the current value on
+  // registration (Phase 58 store.js semantics) — that initial fire triggers
+  // an extra cycle on mount which is harmless (the cycle is idempotent and
+  // AbortController-flushed).
+  #wireStoreSubscriptions() {
+    const u1 = subscribe('connected.address', () => this.#runPollCycle());
+    const u2 = subscribe('viewing.address', () => this.#runPollCycle());
+    this.#unsubs.push(u1, u2);
   }
 
   // ---------------------------------------------------------------------

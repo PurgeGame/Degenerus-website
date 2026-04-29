@@ -1152,11 +1152,13 @@ describe('app-claims-panel — polling + lifecycle (Plan 61-03)', () => {
     const el = mountPanelForPolling();
     await flushMicrotasks();
     // Source-level invariants — panel-owned poller (NOT polling.js fictional API).
-    assert.match(
-      PANEL_SRC,
-      /setInterval\([^)]*30_?000\)/,
-      'panel calls setInterval with 30_000 ms (or 30000) — panel-owned 30s tick',
+    // Allow `setInterval(...)` OR `_setIntervalUnref(...)` — Phase 60 uses
+    // `_setTimeoutUnref` for node:test process-exit cleanliness; same wrapping
+    // applies here for the 30s tick. Both must end in the literal `30_000` or `30000`.
+    const has30sTick = PANEL_SRC.split('\n').some((line) =>
+      /(setInterval|_setIntervalUnref)\s*\(/.test(line) && /30_?000/.test(line)
     );
+    assert.ok(has30sTick, 'panel calls setInterval (or _setIntervalUnref) with 30_000 ms — panel-owned 30s tick');
     assert.match(PANEL_SRC, /new AbortController\(\)/, 'panel constructs new AbortController per cycle');
     assert.equal(
       PANEL_SRC.includes('polling.start({'),
@@ -1302,11 +1304,10 @@ describe('app-claims-panel — polling + lifecycle (Plan 61-03)', () => {
     const after = _fetchLog.length;
     assert.ok(after > before, 'fresh fetches issued after tx-confirmed + 250ms debounce');
     // Source-level: setTimeout(... , 250) for post-confirm debounce.
-    assert.match(
-      PANEL_SRC,
-      /setTimeout\([^)]*,\s*250\s*\)/,
-      'panel uses setTimeout(..., 250) for post-confirm debounce',
-    );
+    // Note: `[^)]` won't match nested parens like `runPollCycle()`, so we
+    // scan line-by-line for any `setTimeout(...., 250)` shape.
+    const has250Timeout = PANEL_SRC.split('\n').some((line) => /setTimeout\s*\(.*,\s*250\s*\)/.test(line));
+    assert.ok(has250Timeout, 'panel uses setTimeout(..., 250) for post-confirm debounce');
     el.disconnectedCallback();
   });
 
