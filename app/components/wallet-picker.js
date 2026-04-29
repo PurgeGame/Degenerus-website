@@ -25,6 +25,7 @@
 
 import { subscribe } from '../app/store.js';
 import { getProvider, switchToSepolia } from '../app/contracts.js';
+import { lock, unlock } from '../app/scroll-lock.js';
 
 // ---------------------------------------------------------------------------
 // <wallet-picker> Custom Element.
@@ -180,6 +181,7 @@ export class WalletPicker extends HTMLElement {
         // Synchronous hide — picker is invisible the moment the user clicks WC,
         // before the dynamic import resolves.
         this.hidden = true;
+        unlock();   // Phase 63 D-03 Task 1: restore scroll for the WC route too
         // Lazy-import to keep wallet-picker.js free of WC import at module-load.
         let wcMod = null;
         try {
@@ -203,6 +205,7 @@ export class WalletPicker extends HTMLElement {
     }
 
     this.hidden = false;
+    lock();   // Phase 63 D-03 Task 1: freeze background scroll while picker is open
     return new Promise((resolve) => { this.#resolve = resolve; });
   }
 
@@ -212,6 +215,7 @@ export class WalletPicker extends HTMLElement {
       this.#resolve = null;
     }
     this.hidden = true;
+    unlock();   // Phase 63 D-03 Task 1: restore scroll position on dismiss
   }
 
   cancel() {
@@ -220,6 +224,7 @@ export class WalletPicker extends HTMLElement {
       this.#resolve = null;
     }
     this.hidden = true;
+    unlock();   // Phase 63 D-03 Task 1: restore scroll position on dismiss
   }
 }
 

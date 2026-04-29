@@ -1549,3 +1549,153 @@ player-dropdown {
   color: var(--accent, #4caf50);
   text-decoration: underline;
 }
+
+/* === Phase 63 D-03 Tier 1 (MOB-02) — shell + chrome + scroll-lock-aware modals === */
+@media (max-width: 768px) {
+  /* WCAG 2.5.5 / iOS HIG ≥44×44 tap targets on every interactive surface. */
+  button, .btn, [role="button"], a.cta, input[type="button"], input[type="submit"] {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.625rem 0.875rem;
+  }
+  /* Wallet-picker modal: full-screen takeover on narrow viewports.
+     Pairs with scroll-lock.js — the helper freezes body; this rule fills the viewport. */
+  wallet-picker .wallet-picker-modal {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transform: none;
+    left: 0;
+    top: 0;
+    max-width: 100%;
+  }
+  /* Chain-chip row + view-mode banner stack vertically on narrow viewports. */
+  .chain-chip-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .view-mode-banner {
+    padding: 0.75rem;
+    flex-wrap: wrap;
+  }
+  /* iOS safe-area-inset awareness on the app shell (env() defaults to 0 on
+     non-iOS surfaces — see threat model T-63-03-02 for accept-disposition). */
+  body {
+    padding-top: env(safe-area-inset-top, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    padding-left: env(safe-area-inset-left, 0);
+    padding-right: env(safe-area-inset-right, 0);
+  }
+  /* Fluid typography (clamp pattern from existing app.css:43, 74). */
+  h1, .panel-title { font-size: clamp(1.25rem, 4.5vw, 1.875rem); }
+  h2, .section-title { font-size: clamp(1.0625rem, 3.5vw, 1.375rem); }
+}
+
+/* === Phase 63 D-03 Tier 2 (MOB-02) — lootbox + claims highest-stakes panels === */
+@media (max-width: 768px) {
+  /* Lootbox panel: quantity picker rows wrap, pay-toggle + buy button take full width. */
+  app-packs-panel .lbx-quantity-picker {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  app-packs-panel .lbx-pay-toggle {
+    width: 100%;
+  }
+  app-packs-panel [data-bind="lbx-buy-button"],
+  app-packs-panel .lbx-buy-button {
+    width: 100%;
+  }
+  /* Lootbox row (per-pack open/reveal): stack so action button has room. */
+  app-packs-panel .lbx-rows {
+    width: 100%;
+  }
+  /* Claims panel host stays full-width; per-row stack lives inside .clm-content. */
+  app-claims-panel {
+    display: block;
+    width: 100%;
+  }
+  app-claims-panel .clm-content {
+    width: 100%;
+  }
+  app-claims-panel .clm-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  /* Long addresses + bytes32 codes wrap on narrow viewports (no horizontal scroll). */
+  app-claims-panel .clm-row__address {
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+}
+
+/* === Phase 63 D-03 Tier 3 (MOB-02) — remaining 9 panel surfaces === */
+@media (max-width: 768px) {
+  /* Each panel host stays inside its viewport — no horizontal overflow. */
+  app-decimator-panel,
+  app-pass-section,
+  app-coinflip-panel,
+  app-degenerette-panel,
+  app-quest-panel,
+  app-affiliate-panel,
+  app-boons-panel,
+  last-day-jackpot,
+  player-dropdown {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+  }
+  /* Pass-section deity grid: 4 cols on mobile (8 cols on desktop default). */
+  app-pass-section .pass-deity-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  /* Pass-section whale row stacks (label / input / price / buy). */
+  app-pass-section .pass-whale-row {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  /* Affiliate referee table — wrap in horizontal-scroll container so wide
+     tabular data doesn't blow out the viewport at 320px. */
+  app-affiliate-panel .aff-referees-table,
+  app-affiliate-panel .aff-referees-section {
+    overflow-x: auto;
+  }
+  /* Long URLs / hex codes wrap inside the affiliate panel. */
+  app-affiliate-panel .aff-url-input,
+  app-affiliate-panel .aff-customize-input {
+    width: 100%;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+  app-affiliate-panel .aff-url-row {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  /* Player dropdown: full-width search input on narrow viewports. */
+  player-dropdown .player-search-input {
+    width: 100%;
+  }
+  player-dropdown .player-search-results {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+/* === Phase 63 D-03 Tier 3 (MOB-02) — defensive: no horizontal scroll at 320px === */
+html, body {
+  overflow-x: hidden;
+}
+
+/* === Phase 63 D-03 Tier 3 (MOB-02) — desktop ≥1200px refinement === */
+@media (min-width: 1200px) {
+  .container,
+  body > main {
+    max-width: 1200px;
+    margin-inline: auto;
+  }
+}
