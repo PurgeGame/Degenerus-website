@@ -15,11 +15,17 @@
 //   CORRECT:   sendTx( (s) => new Contract(addr, ABI, s).method(args), 'Action' )
 //   FORBIDDEN: passing a pre-resolved tx promise — captures stale signer.
 
-import { sendTx, getProvider, ethers } from './contracts.js';
+import { sendTx, getProvider, ethers, requireSelf } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason } from './reason-map.js';
 import { get } from './store.js';
 import { CONTRACTS, CHAIN } from './chain-config.js';
+
+// Phase 63 Plan 63-02 (D-02 LOCKED) — pre-warm cache TTL.
+// CONTEXT specifics line 268 — 30s matches Phase 56 polling baseline.
+// Caller (app-packs-panel.js) compares Date.now() vs returned `expiresAt`
+// and falls back to the legacy await sendTx path on stale cache (R11).
+const PREWARM_TTL_MS = 30_000;
 
 // ---------------------------------------------------------------------------
 // GAME_ABI fragment — minimal human-readable ABI for Phase 60 surface.
@@ -395,4 +401,113 @@ export function persistAffiliateCodeFromUrl(chainId, address) {
     }
   } catch (_e) { /* quota / disabled — defensive (Pitfall F) */ }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 63 Plan 63-02 (D-02 LOCKED) — iOS Safari user-gesture pre-warm.
+//
+// Pre-warm lootbox purchase tx params BEFORE the click. Click handler in
+// app-packs-panel.js invokes `buildTx()` SYNCHRONOUSLY — no await between
+// gesture and `signer.sendTransaction`. This preserves the user-gesture
+// activation window so the WC SDK's universal-link to MetaMask Mobile fires
+// without surfacing Safari's "Open MetaMask?" confirm prompt (Pitfall 12
+// canonical mitigation per Reown Mobile Linking docs + WC #1165).
+//
+// SCOPE LOCKED to lootbox panel only (CONTEXT D-02). The 10 sibling panels
+// continue using the existing `await sendTx(...)` path — accept the standard
+// "Open MetaMask?" Safari prompt as documented cost-of-business. MM in-dApp
+// browser sidesteps the issue entirely and is the supported mobile path.
+//
+// THIS IS THE ONE PRODUCTION SITE WHERE THE PHASE 58 CLOSURE-FORM `sendTx`
+// CHOKEPOINT IS BYPASSED AT THE CLICK MOMENT. `requireSelf()` is invoked HERE
+// at pre-warm time before deriving signer — devtools-bypass defense preserved.
+// `requireStaticCall` is also lifted out of the click moment to pre-warm.
+//
+// ETH path → `contract.purchase.populateTransaction(...)` (method-attached
+//   v6 form per RESEARCH F-4; the v5 form `contract.populateTransaction[purchase](...)`
+//   is FORBIDDEN — only the v6 documented method-attached form is used).
+// BURNIE path → `contract.purchaseCoin.populateTransaction(...)` (the BURNIE
+//   sibling — separate function, no payKind argument, no msg.value override
+//   per contracts/DegenerusGame.sol:546). The plan acknowledged that
+//   MINT_PAYMENT_KIND_DIRECT_BURNIE does not exist; the correct shape for
+//   BURNIE is the dedicated purchaseCoin() entrypoint.
+// ---------------------------------------------------------------------------
+
+/**
+ * Pre-warm lootbox purchase tx params for synchronous click-time send.
+ *
+ * @param {{ticketQuantity:number, lootboxQuantity:number, payKind:'ETH'|'BURNIE',
+ *          affiliateCode?:string, lootBoxAmountWei?:bigint,
+ *          lootBoxBurnieAmountWei?:bigint}} args
+ * @returns {Promise<{buildTx:()=>Promise<import('ethers').TransactionResponse>,
+ *                    abort:()=>void, expiresAt:number}>}
+ */
+export async function prewarmLootboxBuy(args) {
+  // 1. Devtools-bypass defense — runs BEFORE any provider/signer derivation.
+  //    Pre-warm bypasses the sendTx chokepoint at click moment but still
+  //    honors requireSelf semantics here (T-58-02 + T-63-02-02 mitigation).
+  requireSelf();
+
+  const provider = getProvider();
+  if (!provider) throw new Error('Wallet not connected.');
+  const signer = await provider.getSigner();
+  const buyer = (await signer.getAddress()).toLowerCase();
+
+  const contract = _buildContract(signer);
+  const ticketsScaled = BigInt(Math.max(0, Number(args.ticketQuantity ?? 0))) * 100n;
+
+  let unsignedTx;
+  let staticCallMethod;
+  let staticCallArgs;
+
+  if (args.payKind === 'BURNIE') {
+    // BURNIE path — purchaseCoin() takes (buyer, ticketQuantity*100, burnieAmount).
+    // No affiliateCode arg, no msg.value (BURNIE is not native).
+    const lootBoxBurnieAmountWei = args.lootBoxBurnieAmountWei
+      ?? (BURNIE_LOOTBOX_MIN_WEI * BigInt(Math.max(0, Number(args.lootboxQuantity ?? 0))));
+    unsignedTx = await contract.purchaseCoin.populateTransaction(
+      buyer, ticketsScaled, lootBoxBurnieAmountWei
+    );
+    staticCallMethod = 'purchaseCoin';
+    staticCallArgs = [buyer, ticketsScaled, lootBoxBurnieAmountWei];
+  } else {
+    // ETH path — purchase() with payKind=DirectEth (0). msg.value = lootBoxAmount.
+    const lootBoxAmountWei = args.lootBoxAmountWei
+      ?? (LOOTBOX_MIN_WEI * BigInt(Math.max(0, Number(args.lootboxQuantity ?? 0))));
+    const affiliateCode = args.affiliateCode ?? readAffiliateCode(CHAIN.id, buyer);
+    unsignedTx = await contract.purchase.populateTransaction(
+      buyer, ticketsScaled, lootBoxAmountWei, affiliateCode, MINT_PAYMENT_KIND_DIRECT_ETH,
+      { value: lootBoxAmountWei }
+    );
+    staticCallMethod = 'purchase';
+    staticCallArgs = [buyer, ticketsScaled, lootBoxAmountWei, affiliateCode, MINT_PAYMENT_KIND_DIRECT_ETH];
+  }
+
+  // 2. Static-call pre-flight (Phase 56 D-05) — lifted out of the click moment.
+  //    On revert: throw structured error; caller disables Buy button with the
+  //    decoded reason inline (T-63-02-03 mitigation). Click handler is gated
+  //    on a non-null #prewarmedTx, so this guarantees the click only fires
+  //    when the static-call gate has already passed.
+  const sim = await requireStaticCall(contract, staticCallMethod, staticCallArgs, signer);
+  if (!sim.ok) throw _structuredRevertError(sim.error, `pre-warm ${staticCallMethod}`);
+
+  // 3. Pre-estimate gas (best-effort). signer.sendTransaction re-estimates
+  //    internally if we omit gasLimit, but pre-fetching shaves the round-trip
+  //    out of the click moment. Graceful fallback on rejection.
+  const estimatedGas = await signer.estimateGas(unsignedTx).catch(() => null);
+  if (estimatedGas) unsignedTx.gasLimit = estimatedGas;
+
+  let aborted = false;
+  return {
+    buildTx: () => {
+      if (aborted) throw new Error('Pre-warm stale — recompute.');
+      // SYNCHRONOUS — no `await` here. signer.sendTransaction internally
+      // populates remaining fields (chainId, nonce, fees) — verified ethers
+      // v6 docs. The Promise<TransactionResponse> is returned immediately;
+      // the click handler chains .then(tx => tx.wait()) without awaiting.
+      return signer.sendTransaction(unsignedTx);
+    },
+    abort: () => { aborted = true; },
+    expiresAt: Date.now() + PREWARM_TTL_MS,
+  };
 }

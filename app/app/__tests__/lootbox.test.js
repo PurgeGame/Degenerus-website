@@ -439,3 +439,325 @@ describe('Plan 60-04: affiliate-code helpers + purchaseEth auto-read', () => {
     assert.equal(code, '0x0000000000000000000000000000000000000000000000000000000000000000');
   });
 });
+
+// ===========================================================================
+// Plan 63-02 (D-02 LOCKED) — prewarmLootboxBuy() iOS Safari user-gesture refactor.
+//
+// Tests verify: the helper returns {buildTx, abort, expiresAt}; buildTx is a
+// SYNCHRONOUS arrow function that calls signer.sendTransaction without await;
+// requireSelf() runs BEFORE provider.getSigner() (devtools-bypass defense
+// preserved); requireStaticCall is lifted to pre-warm time (NOT inside buildTx);
+// the v6 method-attached `purchase.populateTransaction(args)` form is used
+// (NOT v5's `populateTransaction.purchase(args)`); abort() invalidates the
+// closure synchronously; expiresAt is 30s in the future; estimateGas attaches
+// gracefully or fails open; lootboxQuantity=0 produces value=0n; BURNIE path
+// routes to purchaseCoin.populateTransaction.
+// ===========================================================================
+
+/**
+ * Builds a fake contract that implements the v6 method-attached populateTransaction
+ * form: contract.purchase.populateTransaction(args) returns a Promise<unsignedTx>.
+ * Same shape for purchaseCoin. Records calls for assertions.
+ */
+function makeFakePrewarmContract(opts = {}) {
+  const calls = {
+    purchasePopulate: [],
+    purchaseCoinPopulate: [],
+    purchaseStaticCall: [],
+    purchaseCoinStaticCall: [],
+  };
+  const stk = (name) => async (..._args) => {
+    if (opts.staticCallShouldRevert?.[name]) {
+      const err = new Error('static-call revert');
+      err.revert = { name: opts.staticCallRevertName?.[name] || 'GameOverPossible' };
+      throw err;
+    }
+    return undefined;
+  };
+  const buildPopulated = (kind, args, txOverrides) => ({
+    to: '0xc0ffee0000000000000000000000000000000000',
+    data: '0xdeadbeef',
+    from: args[0],
+    value: txOverrides?.value ?? 0n,
+    _testKind: kind,
+    _testArgs: args,
+  });
+  const c = {
+    purchase: Object.assign(
+      async (..._args) => { throw new Error('purchase() should not be sent in prewarm tests'); },
+      {
+        populateTransaction: async (...args) => {
+          // Last arg may be the {value} overrides object.
+          const last = args[args.length - 1];
+          const isOverrides = last && typeof last === 'object' && !Array.isArray(last);
+          const txOverrides = isOverrides ? last : undefined;
+          const methodArgs = isOverrides ? args.slice(0, -1) : args;
+          calls.purchasePopulate.push({ args: methodArgs, txOverrides });
+          if (opts.populateThrows?.purchase) throw new Error('populateTransaction-rejected');
+          return buildPopulated('purchase', methodArgs, txOverrides);
+        },
+        staticCall: async (...args) => { calls.purchaseStaticCall.push(args); return stk('purchase')(...args); },
+      }
+    ),
+    purchaseCoin: Object.assign(
+      async (..._args) => { throw new Error('purchaseCoin() should not be sent in prewarm tests'); },
+      {
+        populateTransaction: async (...args) => {
+          calls.purchaseCoinPopulate.push({ args });
+          if (opts.populateThrows?.purchaseCoin) throw new Error('populateTransaction-rejected');
+          return buildPopulated('purchaseCoin', args, undefined);
+        },
+        staticCall: async (...args) => { calls.purchaseCoinStaticCall.push(args); return stk('purchaseCoin')(...args); },
+      }
+    ),
+    interface: { parseLog: (log) => log.parsed ?? null },
+    connect(_signer) { return this; },
+    _calls: calls,
+  };
+  return c;
+}
+
+/** Fake signer that records sendTransaction + estimateGas calls. */
+function makeFakePrewarmSigner(opts = {}) {
+  const calls = { sendTransaction: [], estimateGas: [] };
+  const signer = {
+    getAddress: async () => CONNECTED,
+    estimateGas: async (tx) => {
+      calls.estimateGas.push(tx);
+      if (opts.estimateGasShouldReject) throw new Error('estimateGas-rejected');
+      return opts.estimatedGas ?? 21000n;
+    },
+    // sendTransaction must be a function spy; track INVOCATION TIME so tests
+    // can assert it was called synchronously inside the buildTx() frame.
+    sendTransaction: function (tx) {
+      calls.sendTransaction.push({ tx, invokedAt: Date.now(), microtaskMarker: null });
+      return Promise.resolve({
+        hash: '0xtx-hash-from-prewarm',
+        wait: async () => ({ status: 1, hash: '0xtx-hash-from-prewarm', logs: [] }),
+      });
+    },
+    _calls: calls,
+  };
+  return signer;
+}
+
+function makeFakePrewarmProvider(signer) {
+  return {
+    getNetwork: async () => ({ chainId: 11155111n }),
+    getSigner: async () => signer,
+    _signer: signer,
+  };
+}
+
+describe('Plan 63-02 (D-02 LOCKED): prewarmLootboxBuy() iOS Safari user-gesture refactor', () => {
+  let fakeContract;
+  let fakeSigner;
+  let fakeProvider;
+
+  beforeEach(() => {
+    storeMod.__resetForTest();
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('viewing.address', null);
+    storeMod.update('ui.mode', 'self');
+    fakeSigner = makeFakePrewarmSigner();
+    fakeProvider = makeFakePrewarmProvider(fakeSigner);
+    contractsMod.setProvider(fakeProvider);
+    fakeContract = makeFakePrewarmContract();
+    lootboxMod.__setContractFactoryForTest((_signerOrProvider) => fakeContract);
+  });
+
+  afterEach(() => {
+    lootboxMod.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+  });
+
+  test('returns {buildTx, abort, expiresAt} shape with default ETH purchase', async () => {
+    const result = await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 1, lootboxQuantity: 1, payKind: 'ETH',
+    });
+    assert.equal(typeof result.buildTx, 'function', 'buildTx is a function');
+    assert.equal(typeof result.abort, 'function', 'abort is a function');
+    assert.equal(typeof result.expiresAt, 'number', 'expiresAt is a number');
+  });
+
+  test('expiresAt is in the future and within 30s TTL', async () => {
+    const before = Date.now();
+    const result = await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 0, lootboxQuantity: 1, payKind: 'ETH',
+    });
+    const after = Date.now();
+    assert.ok(result.expiresAt > before, 'expiresAt > before');
+    // Allow a small wall-clock slack (after - before may be a few ms).
+    assert.ok(result.expiresAt - before <= 30_000 + 50, 'expiresAt within 30s + slack of pre-warm start');
+    assert.ok(result.expiresAt - after <= 30_000, 'expiresAt within 30s of pre-warm end');
+  });
+
+  test('uses ethers v6 method-attached populateTransaction form for ETH', async () => {
+    await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 5, lootboxQuantity: 1, payKind: 'ETH',
+    });
+    assert.equal(fakeContract._calls.purchasePopulate.length, 1, 'purchase.populateTransaction called once');
+    const { args, txOverrides } = fakeContract._calls.purchasePopulate[0];
+    assert.equal(args[0], CONNECTED, 'buyer is connected.address (lowercase)');
+    assert.equal(args[1], 500n, 'ticketQuantity * 100 (NatSpec scaling)');
+    assert.ok(args[2] > 0n, 'lootBoxAmount > 0 (default LOOTBOX_MIN_WEI × 1)');
+    assert.equal(args[4], 0, 'payKind = MintPaymentKind.DirectEth (0)');
+    assert.ok(txOverrides && txOverrides.value > 0n, '{value: lootBoxAmountWei} override');
+  });
+
+  test('buildTx calls signer.sendTransaction synchronously (no await) inside the click frame', async () => {
+    const result = await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 0, lootboxQuantity: 1, payKind: 'ETH',
+    });
+    // SYNCHRONOUS-CLICK INVARIANT: simulate the click handler. We capture
+    // a marker BEFORE calling buildTx, then check that sendTransaction was
+    // invoked WITHOUT any microtask boundary in between.
+    let microtaskRanFirst = false;
+    Promise.resolve().then(() => { microtaskRanFirst = true; });
+    const promise = result.buildTx();
+    // At this exact point, sendTransaction MUST have been called. Microtasks
+    // (including the .then() above) have NOT yet run since we have not
+    // awaited anything. If buildTx had an internal `await`, microtasks would
+    // have a chance to run inside the buildTx body.
+    assert.equal(fakeSigner._calls.sendTransaction.length, 1,
+      'sendTransaction called synchronously in same frame as buildTx invocation');
+    assert.equal(microtaskRanFirst, false,
+      'NO microtask boundary between buildTx invocation and sendTransaction call (Pitfall 12 invariant)');
+    // The returned promise resolves to the tx response.
+    const tx = await promise;
+    assert.equal(tx.hash, '0xtx-hash-from-prewarm');
+  });
+
+  test('requireSelf() called BEFORE provider.getSigner() — rejects with thrown error', async () => {
+    // Force requireSelf() to throw by setting ui.mode='view' (read-only).
+    storeMod.update('ui.mode', 'view');
+    let getSignerCalled = false;
+    fakeProvider.getSigner = async () => { getSignerCalled = true; return fakeSigner; };
+    let caught = null;
+    try {
+      await lootboxMod.prewarmLootboxBuy({
+        ticketQuantity: 1, lootboxQuantity: 1, payKind: 'ETH',
+      });
+    } catch (e) { caught = e; }
+    assert.ok(caught, 'prewarm rejected');
+    assert.match(caught.message, /Read-only|cannot sign/i,
+      'rejection comes from requireSelf (devtools-bypass defense)');
+    assert.equal(getSignerCalled, false,
+      'getSigner NEVER called when requireSelf throws — order invariant');
+  });
+
+  test('requireStaticCall is lifted to pre-warm time; revert prevents buildTx invocation', async () => {
+    const reverting = makeFakePrewarmContract({
+      staticCallShouldRevert: { purchase: true },
+      staticCallRevertName: { purchase: 'GameOverPossible' },
+    });
+    lootboxMod.__setContractFactoryForTest(() => reverting);
+    let caught = null;
+    try {
+      await lootboxMod.prewarmLootboxBuy({
+        ticketQuantity: 1, lootboxQuantity: 1, payKind: 'ETH',
+      });
+    } catch (e) { caught = e; }
+    assert.ok(caught, 'prewarm rejected on static-call revert');
+    assert.equal(caught.code, 'GameOverPossible', 'structured error carries decoded code');
+    assert.ok(caught.userMessage && caught.userMessage.length > 0, 'userMessage present');
+    // sendTransaction never invoked because buildTx was never returned.
+    assert.equal(fakeSigner._calls.sendTransaction.length, 0,
+      'sendTransaction NEVER called when static-call gate trips at pre-warm time');
+    // populateTransaction WAS called (lifted before static-call); static-call
+    // also was attempted exactly once.
+    assert.equal(reverting._calls.purchasePopulate.length, 1, 'populateTransaction called');
+    assert.equal(reverting._calls.purchaseStaticCall.length, 1, 'static-call attempted once');
+  });
+
+  test('abort() makes subsequent buildTx() throw synchronously without sending', async () => {
+    const result = await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 0, lootboxQuantity: 1, payKind: 'ETH',
+    });
+    result.abort();
+    assert.throws(() => result.buildTx(), /Pre-warm stale/, 'aborted buildTx throws synchronously');
+    assert.equal(fakeSigner._calls.sendTransaction.length, 0,
+      'sendTransaction NOT called after abort');
+  });
+
+  test('estimateGas success: gasLimit attached to populated tx', async () => {
+    fakeSigner.estimateGas = async (_tx) => 42_000n;
+    const result = await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 0, lootboxQuantity: 1, payKind: 'ETH',
+    });
+    result.buildTx();
+    const sentTx = fakeSigner._calls.sendTransaction[0].tx;
+    assert.equal(sentTx.gasLimit, 42_000n, 'gasLimit attached from estimateGas');
+  });
+
+  test('estimateGas rejection: pre-warm still resolves; gasLimit undefined (graceful fallback)', async () => {
+    fakeSigner = makeFakePrewarmSigner({ estimateGasShouldReject: true });
+    fakeProvider = makeFakePrewarmProvider(fakeSigner);
+    contractsMod.setProvider(fakeProvider);
+    const result = await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 0, lootboxQuantity: 1, payKind: 'ETH',
+    });
+    assert.equal(typeof result.buildTx, 'function', 'pre-warm resolves despite estimateGas rejection');
+    result.buildTx();
+    const sentTx = fakeSigner._calls.sendTransaction[0].tx;
+    assert.equal(sentTx.gasLimit, undefined,
+      'gasLimit undefined → signer.sendTransaction will re-estimate internally');
+  });
+
+  test('lootboxQuantity=0 + ticketQuantity=1: lootBoxAmountWei=0n is acceptable {value:0n}', async () => {
+    await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 1, lootboxQuantity: 0, payKind: 'ETH',
+    });
+    const { args, txOverrides } = fakeContract._calls.purchasePopulate[0];
+    assert.equal(args[2], 0n, 'lootBoxAmount = LOOTBOX_MIN_WEI * 0 = 0n');
+    assert.equal(txOverrides.value, 0n, 'value override = 0n (tickets-only purchase)');
+  });
+
+  test('BURNIE pay-kind routes to purchaseCoin.populateTransaction (no value, no affiliate)', async () => {
+    await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 2, lootboxQuantity: 3, payKind: 'BURNIE',
+    });
+    assert.equal(fakeContract._calls.purchaseCoinPopulate.length, 1,
+      'purchaseCoin.populateTransaction called once');
+    assert.equal(fakeContract._calls.purchasePopulate.length, 0,
+      'purchase.populateTransaction NOT called for BURNIE');
+    const { args } = fakeContract._calls.purchaseCoinPopulate[0];
+    // purchaseCoin signature: (buyer, ticketQuantity*100, burnieAmount) — 3 args, no affiliate.
+    assert.equal(args.length, 3, 'purchaseCoin takes 3 args (no affiliate, no overrides for non-payable)');
+    assert.equal(args[0], CONNECTED);
+    assert.equal(args[1], 200n, 'ticketQuantity * 100');
+    assert.equal(args[2], lootboxMod.BURNIE_LOOTBOX_MIN_WEI * 3n, 'BURNIE_LOOTBOX_MIN_WEI × 3');
+    assert.equal(fakeContract._calls.purchaseCoinStaticCall.length, 1,
+      'purchaseCoin static-call also runs at pre-warm time');
+  });
+
+  test('uses readAffiliateCode default (ZeroHash when localStorage empty) when args.affiliateCode omitted', async () => {
+    // Reset/install localStorage shim (some prior tests may have polluted it).
+    if (globalThis.localStorage && typeof globalThis.localStorage.clear === 'function') {
+      globalThis.localStorage.clear();
+    } else {
+      globalThis.localStorage = {
+        _m: new Map(),
+        getItem(k) { return this._m.get(k) ?? null; },
+        setItem(k, v) { this._m.set(k, String(v)); },
+        removeItem(k) { this._m.delete(k); },
+        clear() { this._m.clear(); },
+      };
+    }
+    await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 0, lootboxQuantity: 1, payKind: 'ETH',
+    });
+    const { args } = fakeContract._calls.purchasePopulate[0];
+    assert.equal(args[3], '0x0000000000000000000000000000000000000000000000000000000000000000',
+      'ZeroHash affiliate default');
+  });
+
+  test('explicit args.affiliateCode overrides readAffiliateCode default', async () => {
+    const explicit = '0x' + 'aa'.repeat(32);
+    await lootboxMod.prewarmLootboxBuy({
+      ticketQuantity: 0, lootboxQuantity: 1, payKind: 'ETH', affiliateCode: explicit,
+    });
+    const { args } = fakeContract._calls.purchasePopulate[0];
+    assert.equal(args[3], explicit, 'explicit affiliateCode used verbatim');
+  });
+});

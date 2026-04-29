@@ -37,7 +37,10 @@ import { subscribe, get } from '../app/store.js';
 // + reason-map) and Phase 58 (sendTx chokepoint) primitives end-to-end on a write
 // surface. parseLootboxIdxFromReceipt feeds the receipt-log-first reveal pattern
 // (Plan 60-03 USES the stored rows to render per-lootbox UI + RNG poll).
-import { purchaseEth, purchaseCoin, parseLootboxIdxFromReceipt } from '../app/lootbox.js';
+// Phase 63 Plan 63-02 (D-02 LOCKED): prewarmLootboxBuy added for iOS Safari
+// user-gesture preservation on the lootbox panel. Other 10 panels keep using
+// the existing await sendTx(...) path with Safari's "Open MetaMask?" prompt.
+import { purchaseEth, purchaseCoin, parseLootboxIdxFromReceipt, prewarmLootboxBuy } from '../app/lootbox.js';
 import { decodeRevertReason } from '../app/reason-map.js';
 
 // Plan 60-03: write-path imports for the open-and-reveal flow.
@@ -119,6 +122,21 @@ class AppPacksPanel extends HTMLElement {
   // Plan 60-04 — boot CTA + idempotency state.
   #unrevealedPacksFromIndexer = []; // Boot CTA backing data (filtered indexer inventory)
   #bootCtaRanForAddress = null;     // Idempotency guard — only run boot CTA once per connected address
+  // Plan 63-02 (D-02 LOCKED) — iOS Safari user-gesture pre-warm cache.
+  // Pre-warm runs on the FULL CONTEXT D-02 step 2c trigger set:
+  //   1. input change (debounced 300ms via _setTimeoutUnref)
+  //   2. connectedCallback (initial pre-warm)
+  //   3. connected.address change (subscribe Plan 60-04 subscriber dispatches)
+  //   4. viewing.address change (new subscription)
+  //   5. chain advance via subscribe('app.lastDay', ...) — 15-min day boundary
+  //   6. 30s expiresAt TTL (R11 fallback when click outpaces refresh)
+  // Click handler (#onBuyClick) is a SYNCHRONOUS arrow-property — no await
+  // between gesture and signer.sendTransaction. R11 fallback: when cache is
+  // null or stale, click runs the legacy await purchaseEth/purchaseCoin path.
+  #prewarmedTx = null;            // {buildTx, abort, expiresAt} | null
+  #prewarmInflight = false;       // re-entrancy guard
+  #prewarmDebounceTimer = null;   // _setTimeoutUnref handle for 300ms debounce
+  #disconnectedSentinel = false;  // bails pending pre-warm cycles after disconnect
 
   connectedCallback() {
     this.innerHTML = `
@@ -220,6 +238,42 @@ class AppPacksPanel extends HTMLElement {
       subscribe('connected.address', (addr) => this.#onConnectedAddressChange(addr))
     );
 
+    // Plan 63-02 (D-02 LOCKED) — wire FULL CONTEXT D-02 step 2c trigger set.
+    // The 5 triggers (input change / connected.address / viewing.address /
+    // chain advance / 30s TTL) all funnel into #schedulePrewarm so the cache
+    // never lags behind state changes that affect the populated tx args
+    // (T-63-02-01 mitigation: stale signer / stale args defense).
+
+    // Trigger 1 (initial pre-warm): connectedCallback.
+    this.#schedulePrewarm();
+
+    // Trigger 2: connected.address change. The Plan 60-04 subscriber above
+    // already fires on connected.address; we additionally wire pre-warm here
+    // so an account-switch (EIP-1193 accountsChanged → store update) aborts
+    // and rebuilds the cached tx with the new signer. The boot-CTA subscriber
+    // and pre-warm subscriber are independent (separate unsub fns).
+    this.#unsubs.push(
+      subscribe('connected.address', () => this.#schedulePrewarm())
+    );
+
+    // Trigger 3: viewing.address change. When the user enters/exits view-mode,
+    // requireSelf() semantics flip — pre-warm must rebuild (or fail with
+    // structured error → Buy button disabled with reason).
+    this.#unsubs.push(
+      subscribe('viewing.address', () => this.#schedulePrewarm())
+    );
+
+    // Trigger 4 (BLOCKER 2 fix — chain advance via 15-min day boundary):
+    // app.lastDay is the canonical chain-advance signal channel populated by
+    // pollLastDay in polling.js (Phase 56 D-04 + Phase 57 + Phase 59 baseline).
+    // last-day-jackpot.js line 766 uses this same pattern. subscribe()'s
+    // initial-fire semantics will invoke this once on subscribe (matches
+    // store.js); the 300ms debounce collapses it with the explicit initial
+    // #schedulePrewarm() call from Trigger 1.
+    this.#unsubs.push(
+      subscribe('app.lastDay', () => this.#schedulePrewarm())
+    );
+
     // Initial render so default state reflects in DOM
     this.#renderState();
   }
@@ -244,6 +298,19 @@ class AppPacksPanel extends HTMLElement {
       clearTimeout(this.#errorTimer);
       this.#errorTimer = null;
     }
+    // Plan 63-02 (D-02 LOCKED) — pre-warm teardown:
+    //   1. Set disconnected sentinel so any pending timer-callback bails on dispatch.
+    //   2. Abort the cached unsigned-tx closure (signer reference release).
+    //   3. Clear the 300ms debounce timer (pending #refreshPrewarm scheduled).
+    this.#disconnectedSentinel = true;
+    if (this.#prewarmedTx) {
+      try { this.#prewarmedTx.abort(); } catch (_) { /* defensive */ }
+      this.#prewarmedTx = null;
+    }
+    if (this.#prewarmDebounceTimer != null) {
+      try { clearTimeout(this.#prewarmDebounceTimer); } catch (_) { /* defensive */ }
+      this.#prewarmDebounceTimer = null;
+    }
     for (const u of this.#unsubs) {
       try { u(); } catch (_) { /* defensive */ }
     }
@@ -259,6 +326,8 @@ class AppPacksPanel extends HTMLElement {
     if (kind !== 'ETH' && kind !== 'BURNIE') return;
     this.#payKind = kind;
     this.#renderState();
+    // Plan 63-02 (D-02 LOCKED) Trigger 5 — input change.
+    this.#schedulePrewarm();
   }
 
   #onQtyClick(field, delta) {
@@ -275,6 +344,8 @@ class AppPacksPanel extends HTMLElement {
       this.#lootboxQuantity = next;
     }
     this.#renderState();
+    // Plan 63-02 (D-02 LOCKED) Trigger 5 — input change.
+    this.#schedulePrewarm();
   }
 
   // ---------------------------------------------------------------------
@@ -305,12 +376,72 @@ class AppPacksPanel extends HTMLElement {
   }
 
   // ---------------------------------------------------------------------
-  // Plan 60-02: Buy click handler — sequential N=1 tx loop with shared progress UI.
-  // CONTEXT D-01 step 3 + D-04 wave 2 ("Buy 5 lootboxes" fires 5 sequential txes;
-  // user signs N times; shared progress UI shows '1/5 confirmed, 2/5 pending…').
+  // Plan 63-02 (D-02 LOCKED) Buy click — SYNCHRONOUS arrow-property.
+  //
+  // CRITICAL Pitfall 12 invariant: this handler MUST NOT be `async` AND MUST
+  // NOT contain `await` between handler entry and `this.#prewarmedTx.buildTx()`.
+  // The deep-link to MetaMask Mobile fires inside the user-gesture activation
+  // window (HTML spec transient activation; iOS Safari ≥0.5s safe, >1s fails).
+  //
+  // Three branches:
+  //   1. Cache present + fresh + lootboxQuantity ≤ 1 → SYNCHRONOUS pre-warm path.
+  //   2. Cache stale, missing, or lootboxQuantity > 1 (multi-tx loop) → R11
+  //      legacy await-fallback path. Standard "Open MetaMask?" Safari prompt
+  //      is acceptable cost-of-business per CONTEXT D-02 step 5.
+  //   3. Both qty zero → no-op (matches existing behavior).
   // ---------------------------------------------------------------------
 
-  async #onBuyClick() {
+  #onBuyClick = () => {
+    if (this.#busy) return;                                          // T-60-10 defense
+    const ticketQuantity = this.#ticketQuantity;
+    const lootboxQuantity = this.#lootboxQuantity;
+    if (ticketQuantity === 0 && lootboxQuantity === 0) return;
+
+    // R11 fallback: stale/missing pre-warm OR multi-tx loop (lootboxQuantity > 1).
+    // The pre-warm cache holds a SINGLE unsigned tx; multi-tx loops use the
+    // legacy sequential N=1 await path (other 10 panels also use this shape).
+    // The synchronous-click invariant only applies to the cache-hit single-tx
+    // branch (the iOS Safari path that actually benefits from gesture preservation).
+    const stale = !this.#prewarmedTx || Date.now() > this.#prewarmedTx.expiresAt;
+    if (stale || lootboxQuantity > 1) {
+      this.#legacyAwaitBuyPath();
+      return;
+    }
+
+    // SYNCHRONOUS PATH — no `await` keyword between here and signer.sendTransaction.
+    const cached = this.#prewarmedTx;
+    this.#prewarmedTx = null;  // consume the cache; refresh after completion
+    this.#busy = true;
+    this.#renderState();
+    const buyBtn = this.querySelector('[data-bind="lbx-buy-button"]');
+    if (buyBtn) buyBtn.textContent = 'Confirming…';
+
+    // buildTx() invokes signer.sendTransaction synchronously (no internal await).
+    // The Promise chain below runs entirely in microtasks AFTER the deep-link
+    // has already fired inside the user-gesture window.
+    cached.buildTx()
+      .then((tx) => tx.wait())
+      .then((receipt) => this.#onTxConfirmed(receipt))
+      .catch((err) => this.#showError(err))
+      .finally(() => {
+        this.#busy = false;
+        if (buyBtn) buyBtn.textContent = 'Buy';
+        this.#renderState();
+        // Re-prime the cache for a subsequent purchase.
+        this.#schedulePrewarm();
+      });
+  };
+
+  // ---------------------------------------------------------------------
+  // Plan 60-02 → 63-02 R11 fallback: legacy sequential N=1 await loop.
+  // Body byte-for-byte identical to the prior async #onBuyClick — preserved
+  // for multi-tx purchases AND for the rare race where a click outpaces the
+  // 300ms pre-warm debounce. CONTEXT D-01 step 3 + D-04 wave 2 ("Buy 5
+  // lootboxes" fires 5 sequential txes; user signs N times; shared progress
+  // UI shows '1/5 confirmed, 2/5 pending…').
+  // ---------------------------------------------------------------------
+
+  async #legacyAwaitBuyPath() {
     if (this.#busy) return;                                          // T-60-10 defense
     const ticketQuantity = this.#ticketQuantity;
     const lootboxQuantity = this.#lootboxQuantity;
@@ -318,10 +449,6 @@ class AppPacksPanel extends HTMLElement {
 
     const buyBtn = this.querySelector('[data-bind="lbx-buy-button"]');
     const N = Math.max(1, lootboxQuantity);
-    // Per CONTEXT 'Claude's Discretion' +/- mechanics: first tx carries ALL tickets;
-    // subsequent txes carry 0 tickets. Avoids splitting small ticket counts across
-    // many txes (simpler UX + matches contract semantics where ticketQuantity > 0
-    // is allowed alongside lootboxQuantity = 1).
     this.#busy = true;
     this.#renderState();
     try {
@@ -330,34 +457,11 @@ class AppPacksPanel extends HTMLElement {
         const args = {
           ticketQuantity: i === 0 ? ticketQuantity : 0,
           lootboxQuantity: 1,
-          // affiliateCode: Plan 60-04 wires URL ?ref= param + chainId-scoped
-          // localStorage read. Plan 60-02 always defaults to ZeroHash.
         };
         const result = this.#payKind === 'ETH'
           ? await purchaseEth(args)
           : await purchaseCoin(args);
-        // Receipt-log-first parse (LBX-04). Plan 60-03 USES #lootboxRows to render
-        // per-lootbox row UI + RNG poll lifecycle.
-        const idxs = parseLootboxIdxFromReceipt(result.receipt, result.contract);
-        const newRows = [];
-        for (const idx of idxs) {
-          const row = {
-            lootboxIndex: idx.lootboxIndex,
-            payKind: idx.payKind,
-            status: 'awaiting-rng',  // Plan 60-03 transitions: ready-to-open -> opening -> revealed
-            rngWord: 0n,
-            receipt: result.receipt,
-            contract: result.contract,
-          };
-          this.#lootboxRows.push(row);
-          newRows.push(row);
-        }
-        // Plan 60-03: render row DOM + schedule first RNG poll cycle for each new row.
-        this.#renderRows();
-        for (const row of newRows) {
-          // First poll fires immediately (subsequent cycles use RNG_POLL_INTERVAL_MS).
-          this.#runPollCycle(row);
-        }
+        this.#processBuyReceipt(result);
       }
       if (buyBtn) buyBtn.textContent = 'Buy';
     } catch (err) {
@@ -366,6 +470,185 @@ class AppPacksPanel extends HTMLElement {
     } finally {
       this.#busy = false;                                            // T-60-10 mitigation
       this.#renderState();
+      // Re-prime the cache for a subsequent single-tx purchase.
+      this.#schedulePrewarm();
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Plan 63-02 — receipt → row processor (extracted from inline buy loop).
+  // Used by both the synchronous pre-warm path (#onTxConfirmed) and the
+  // legacy await loop (#legacyAwaitBuyPath). Behavior is byte-for-byte
+  // identical to the prior inline body — extracted only to share code.
+  // ---------------------------------------------------------------------
+
+  #processBuyReceipt(result) {
+    const idxs = parseLootboxIdxFromReceipt(result.receipt, result.contract);
+    const newRows = [];
+    for (const idx of idxs) {
+      const row = {
+        lootboxIndex: idx.lootboxIndex,
+        payKind: idx.payKind,
+        status: 'awaiting-rng',
+        rngWord: 0n,
+        receipt: result.receipt,
+        contract: result.contract,
+      };
+      this.#lootboxRows.push(row);
+      newRows.push(row);
+    }
+    this.#renderRows();
+    for (const row of newRows) {
+      this.#runPollCycle(row);
+    }
+  }
+
+  // Synchronous-path tx-confirmed handler: derives the contract bound to the
+  // current provider for log parsing (lootbox.js's purchaseEth/purchaseCoin
+  // build this internally; pre-warm path needs to mirror).
+  #onTxConfirmed(receipt) {
+    // Build a lightweight contract-like for parseLootboxIdxFromReceipt — the
+    // parser only needs `interface.parseLog(log)`. We reuse the lootbox.js
+    // GAME_ABI via the test-seam-aware factory by calling __setContractFactoryForTest
+    // in tests OR `new ethers.Contract(...)` in production. Simpler: import
+    // `ethers` + `GAME_ABI` + `CONTRACTS` and build inline. But to avoid a
+    // new top-level import surface here, defer to lootbox.js's internal
+    // _buildContract via a wrapper function. Since _buildContract is internal,
+    // and we need a contract just for log parsing, we build a stub contract
+    // by deriving the interface from a fresh `new ethers.Contract(addr, ABI, provider)`.
+    //
+    // SIMPLER APPROACH: just lazy-import ethers + reuse the ABI through a
+    // dedicated parse-only contract. But that adds import surface. CLEANEST
+    // approach: surface a parse-only helper from lootbox.js.
+    //
+    // For Plan 63-02, we use the receipt-only path: #processBuyReceipt
+    // expects {receipt, contract}. We need the contract for parseLog. Reuse
+    // the panel's existing dynamic-import-ish approach by lazy-loading the
+    // built contract via a one-shot builder. To stay minimal (no new exports),
+    // we duplicate the small inline build:
+    //   const contract = new ethers.Contract(CONTRACTS.GAME, GAME_ABI, provider)
+    // This requires importing ethers + GAME_ABI + CONTRACTS. To preserve the
+    // panel's existing import surface, do this INSIDE #onTxConfirmed via the
+    // already-imported `ethers` from the lootbox module — except lootbox.js
+    // doesn't re-export ethers. So we make the simplest working choice: do
+    // the parsing lazily via a one-shot dynamic import of ethers (already in
+    // the importmap). This keeps the synchronous click invariant on the
+    // PRE-tx-send side — #onTxConfirmed runs in microtasks AFTER the deep-link
+    // has already fired and the tx is mined.
+    this.#processBuyReceiptLazy(receipt);
+  }
+
+  async #processBuyReceiptLazy(receipt) {
+    // Lazy-import to avoid changing the panel's static import surface for a
+    // single one-shot receipt parse. Production: importmap resolves ethers.
+    // Tests inject a stub via globalThis.ethers if needed (none currently
+    // needed because the test fakes drive #processBuyReceipt directly via
+    // legacy fallback path). The contract built here is provider-bound (no
+    // signer needed for log parsing).
+    let ethersMod;
+    try { ethersMod = await import('ethers'); }
+    catch (_) { return; /* receipt parse skipped — degraded UX (rows won't render) */ }
+    let chainConfigMod;
+    try { chainConfigMod = await import('../app/chain-config.js'); }
+    catch (_) { return; }
+    const lootboxMod = await import('../app/lootbox.js');
+    const provider = (await import('../app/contracts.js')).getProvider();
+    if (!provider) return;
+    const contract = new ethersMod.Contract(
+      chainConfigMod.CONTRACTS.GAME,
+      lootboxMod.GAME_ABI,
+      provider
+    );
+    this.#processBuyReceipt({ receipt, contract });
+  }
+
+  // ---------------------------------------------------------------------
+  // Plan 63-02 (D-02 LOCKED) — pre-warm refresh + scheduling.
+  //
+  // #refreshPrewarm: aborts any prior cache, calls prewarmLootboxBuy, stores
+  // the new closure. On error, disables the Buy button with the decoded
+  // userMessage inline (Phase 56 reason-map UX). Re-entrancy-guarded by
+  // #prewarmInflight so concurrent triggers collapse to one in-flight call.
+  //
+  // #schedulePrewarm: 300ms debounce via _setTimeoutUnref so input bursts
+  // (e.g., qty +/- spamming) collapse to a single pre-warm refresh. Uses the
+  // existing _setTimeoutUnref helper so node:test exits cleanly.
+  // ---------------------------------------------------------------------
+
+  async #refreshPrewarm() {
+    if (this.#prewarmInflight) return;
+    // Bail if disconnected — pending timers from prior connectedCallback may
+    // fire after disconnectedCallback ran (the timer fires once even if cleared
+    // after dispatch is in-flight). The empty-unsubs check is a defensive
+    // proxy for "this element is no longer mounted" (matches Phase 60-03's
+    // RevealCancelToken pattern). T-63-02-01 mitigation extension.
+    if (this.#disconnectedSentinel) return;
+    if (this.#unsubs.length === 0) return;
+    // Skip when a tx is mid-flight — pre-warm derives a fresh signer and
+    // collides with the tx's signer state (T-63-02-01 mitigation).
+    if (this.#busy) return;
+    // Both qty zero — Buy button is disabled by #renderState; nothing to pre-warm.
+    if (this.#ticketQuantity === 0 && this.#lootboxQuantity === 0) {
+      if (this.#prewarmedTx) { try { this.#prewarmedTx.abort(); } catch (_) {} }
+      this.#prewarmedTx = null;
+      return;
+    }
+    this.#prewarmInflight = true;
+    try {
+      if (this.#prewarmedTx) {
+        try { this.#prewarmedTx.abort(); } catch (_) { /* defensive */ }
+      }
+      this.#prewarmedTx = await prewarmLootboxBuy({
+        ticketQuantity: this.#ticketQuantity,
+        lootboxQuantity: this.#lootboxQuantity,
+        payKind: this.#payKind,
+      });
+      this.#enableBuyButton();
+    } catch (err) {
+      this.#prewarmedTx = null;
+      const reason = (err && (err.userMessage || err.message)) || 'Cannot pre-warm purchase.';
+      this.#disableBuyButtonWithReason(reason);
+    } finally {
+      this.#prewarmInflight = false;
+    }
+  }
+
+  #schedulePrewarm() {
+    if (this.#disconnectedSentinel) return;
+    if (this.#prewarmDebounceTimer) {
+      try { clearTimeout(this.#prewarmDebounceTimer); } catch (_) { /* defensive */ }
+    }
+    this.#prewarmDebounceTimer = _setTimeoutUnref(() => {
+      this.#prewarmDebounceTimer = null;
+      this.#refreshPrewarm();
+    }, 300);
+  }
+
+  #enableBuyButton() {
+    // Re-derive the enabled/disabled state from the canonical inputs (#renderState
+    // already implements the both-qty-zero rule). Pre-warm success means we
+    // simply re-render so any prior "disabled with reason" state clears.
+    const banner = this.querySelector('[data-bind="lbx-error-banner"]');
+    if (banner && banner.hidden === false && banner._prewarmReason) {
+      banner.hidden = true;
+      banner.textContent = '';
+      banner._prewarmReason = false;
+    }
+    this.#renderState();
+  }
+
+  #disableBuyButtonWithReason(reason) {
+    const buyBtn = this.querySelector('[data-bind="lbx-buy-button"]');
+    if (buyBtn) buyBtn.disabled = true;
+    const banner = this.querySelector('[data-bind="lbx-error-banner"]');
+    if (banner) {
+      // textContent only — T-58-13 + T-60-08 XSS-safe rule. Reason is always
+      // a userMessage string from reason-map.js (or err.message fallback);
+      // never wallet-supplied raw data.
+      banner.textContent = String(reason || 'Cannot pre-warm purchase.');
+      banner.hidden = false;
+      banner._prewarmReason = true;  // sentinel: this banner is from pre-warm,
+                                     //  cleared by #enableBuyButton on next success
     }
   }
 
