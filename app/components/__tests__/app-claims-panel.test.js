@@ -12,12 +12,18 @@
 // Plan 61-02 will extend with claim helpers + reason-map decoders + per-row pending UX.
 // Plan 61-03 will extend with polling lifecycle + visibility + cross-tab spun_day refresh.
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 // store module is safe to static-import (no HTMLElement use). Tests use it
 // to drive `connected.address` so the panel's #runMountFetch can fetch /pending.
 import * as storeMod from '../../app/store.js';
+// Plan 61-02 — claims/contracts modules used by the per-row click handler tests.
+// Tests inject a fake Contract via __setContractFactoryForTest and a fake
+// provider via setProvider; the entire claims.js + contracts.js + reason-map.js
+// pipeline runs end-to-end with only the contract construction stubbed.
+import * as claimsMod from '../../app/claims.js';
+import * as contractsMod from '../../app/contracts.js';
 
 const TEST_ADDR = '0xab12000000000000000000000000000000000000';
 
@@ -649,43 +655,330 @@ describe('app-claims-panel — zero-state (CLM-04)', () => {
   });
 });
 
-describe('app-claims-panel — stub Claim buttons (Plan 61-01 stub state)', () => {
+// ===========================================================================
+// Plan 61-02 — claim handlers (replaces the Plan 61-01 stub-button assertion).
+//
+// Plan 61-01's stub-button test (which asserted `data-stub="true"` + disabled)
+// is REMOVED — Plan 61-02 wires real click handlers and removes both
+// attributes. This describe block adds the per-row click-handler / pending-UX
+// state-machine coverage.
+//
+// Test seam — claims.js's `__setContractFactoryForTest` injects a fake Contract
+// so the entire claims.js + contracts.js + reason-map.js pipeline runs
+// end-to-end (Phase 56 static-call + Phase 58 sendTx + chain-assert all run
+// for real; only the contract construction is stubbed).
+// ===========================================================================
+
+function makeFakeReceipt(logs = []) {
+  return { status: 1, hash: '0xreceipt-hash', logs };
+}
+function makeFakeTx(receipt) {
+  return { hash: '0xtx-hash', wait: async () => receipt };
+}
+function makeFakeProvider(addr) {
+  return {
+    getNetwork: async () => ({ chainId: 11155111n }),
+    getSigner: async () => ({ getAddress: async () => addr }),
+  };
+}
+function makeFakeClaimsContract(opts = {}) {
+  const calls = {
+    claimWinnings: [],
+    claimCoinflips: [],
+    claimDecimatorJackpot: [],
+  };
+  const stk = (name, idx) => async () => {
+    if (opts.staticCallShouldRevert?.[name]) {
+      const stack = opts.staticCallShouldRevert[name];
+      const trip = Array.isArray(stack) ? stack[idx?.value ?? 0] : stack;
+      if (trip) {
+        const err = new Error('static-call revert');
+        const nameStack = opts.staticCallRevertName?.[name];
+        err.revert = {
+          name: Array.isArray(nameStack)
+            ? (nameStack[idx?.value ?? 0] || 'DecAlreadyClaimed')
+            : (nameStack || 'DecAlreadyClaimed'),
+        };
+        throw err;
+      }
+    }
+  };
+  // Index counters for sequential decimator tests.
+  const indices = {
+    claimDecimatorJackpot: { value: 0 },
+  };
+  const c = {
+    claimWinnings: Object.assign(
+      async (...args) => { calls.claimWinnings.push(args); return makeFakeTx(makeFakeReceipt()); },
+      { staticCall: stk('claimWinnings') }
+    ),
+    claimCoinflips: Object.assign(
+      async (...args) => { calls.claimCoinflips.push(args); return makeFakeTx(makeFakeReceipt()); },
+      { staticCall: stk('claimCoinflips') }
+    ),
+    claimDecimatorJackpot: Object.assign(
+      async (...args) => {
+        calls.claimDecimatorJackpot.push(args);
+        const i = indices.claimDecimatorJackpot.value;
+        indices.claimDecimatorJackpot.value = i + 1;
+        return makeFakeTx(makeFakeReceipt());
+      },
+      {
+        staticCall: async (...args) => {
+          // Per-call indexed staticCall (sequential decimator).
+          if (opts.staticCallShouldRevert?.claimDecimatorJackpot) {
+            const stack = opts.staticCallShouldRevert.claimDecimatorJackpot;
+            const i = indices.claimDecimatorJackpot.value;
+            const trip = Array.isArray(stack) ? stack[i] : stack;
+            if (trip) {
+              const err = new Error('static-call revert');
+              const nameStack = opts.staticCallRevertName?.claimDecimatorJackpot;
+              err.revert = {
+                name: Array.isArray(nameStack)
+                  ? (nameStack[i] || 'DecAlreadyClaimed')
+                  : (nameStack || 'DecAlreadyClaimed'),
+              };
+              throw err;
+            }
+          }
+        },
+      }
+    ),
+    interface: { parseLog: (log) => log.parsed ?? null },
+    connect(_signer) { return this; },
+    _calls: calls,
+  };
+  return c;
+}
+
+// Helper: poll-for-condition with bounded loops + setTimeout(0) yields.
+async function settle(loops = 60) {
+  for (let i = 0; i < loops; i += 1) await Promise.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+  for (let i = 0; i < loops; i += 1) await Promise.resolve();
+}
+
+describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
+  let fakeContract;
+
   beforeEach(async () => {
     storeMod.__resetForTest();
     resetDom();
     storeMod.update('connected.address', TEST_ADDR);
+    storeMod.update('viewing.address', null);
+    storeMod.update('ui.mode', 'self');
+    contractsMod.setProvider(makeFakeProvider(TEST_ADDR));
+    fakeContract = makeFakeClaimsContract();
+    claimsMod.__setContractFactoryForTest(() => fakeContract);
     await import('../app-claims-panel.js');
   });
 
-  test('eth row Claim button is disabled with data-stub="true"', async () => {
+  afterEach(() => {
+    claimsMod.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+  });
+
+  function mountPanel(overrides = {}) {
     setFetchResponses({
       lastDay: { day: 42, status: 'resolved' },
       pending: {
-        player: '0xab12000000000000000000000000000000000000',
+        player: TEST_ADDR,
         pending: {
-          eth:           { amount: '1234500000000000000', available: true,  reason: null },
-          burnie:        { amount: '0', available: true, reason: null },
-          tickets:       { amount: '0', available: true, reason: null },
-          decimator:     { amount: '0', available: true, reason: null },
+          eth:           { amount: '1234500000000000000', available: true, reason: null },
+          burnie:        { amount: '500',                 available: true, reason: null },
+          tickets:       { amount: '0',                   available: true, reason: null },
+          decimator:     { amount: '999',                 available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
           vault:         { amount: '0', available: false, reason: 'vault-not-indexed-phase-57' },
           farFutureCoin: { amount: '0', available: false, reason: 'cumulative-allocated-not-balance' },
+          ...(overrides.pending || {}),
+        },
+      },
+      dashboard: {
+        decimator: {
+          claimablePerLevel: overrides.dashboardLevels || [
+            { level: 5, ethAmount: '300', claimed: 0 },
+            { level: 10, ethAmount: '500', claimed: 0 },
+          ],
         },
       },
     });
     globalThis.localStorage.setItem('spun_day_11155111_42', '1');
-
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
     _docBody.appendChild(el);
     el.connectedCallback();
-    await flushMicrotasks();
+    return el;
+  }
 
+  test('rendered Claim buttons are interactive (NO `disabled`, NO `data-stub`)', async () => {
+    const el = mountPanel();
+    await flushMicrotasks();
     const root = getRenderRoot(el);
     const btn = root.querySelector('.clm-row[data-prize-key="eth"] .clm-row__claim-cta');
-    assert.ok(btn, 'eth row claim button exists');
-    assert.equal(btn.disabled, true, 'button is disabled in 61-01');
-    assert.equal(btn.getAttribute('data-stub'), 'true', 'data-stub="true" attribute set');
+    assert.ok(btn, 'eth claim button exists');
+    assert.equal(btn.disabled, false, 'button is interactive (not disabled)');
+    assert.equal(btn.getAttribute('data-stub'), null, 'data-stub attribute removed');
+    // data-write attribute STAYS — Phase 58 view-mode disable-manager hook.
+    assert.equal(btn.getAttribute('data-write'), '', 'data-write attribute retained');
+  });
+
+  test('clicking eth row invokes claimEth (claimWinnings called with connected.address)', async () => {
+    const el = mountPanel();
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const btn = root.querySelector('.clm-row[data-prize-key="eth"] .clm-row__claim-cta');
+    btn.dispatchEvent({ type: 'click' });
+    await settle(80);
+    assert.equal(fakeContract._calls.claimWinnings.length, 1, 'claimWinnings called once');
+    assert.equal(fakeContract._calls.claimWinnings[0][0], TEST_ADDR, 'player arg = connected.address');
+  });
+
+  test('clicking burnie row invokes claimBurnie with amount BigInt sourced from /pending', async () => {
+    const el = mountPanel();
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const btn = root.querySelector('.clm-row[data-prize-key="burnie"] .clm-row__claim-cta');
+    btn.dispatchEvent({ type: 'click' });
+    await settle(80);
+    assert.equal(fakeContract._calls.claimCoinflips.length, 1);
+    const [args] = fakeContract._calls.claimCoinflips;
+    assert.equal(args[0], TEST_ADDR);
+    assert.equal(typeof args[1], 'bigint', 'amount arg is BigInt');
+    assert.equal(args[1], 500n, 'amount sourced from /pending burnie.amount');
+  });
+
+  test('clicking decimator row invokes claimDecimatorLevels with ASCENDING-SORTED levels', async () => {
+    const el = mountPanel({
+      dashboardLevels: [
+        { level: 15, ethAmount: '300', claimed: 0 },
+        { level: 5, ethAmount: '200', claimed: 0 },
+        { level: 10, ethAmount: '400', claimed: 0 },
+      ],
+    });
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const btn = root.querySelector('.clm-row[data-prize-key="decimator"] .clm-row__claim-cta');
+    btn.dispatchEvent({ type: 'click' });
+    await settle(120);
+    assert.equal(fakeContract._calls.claimDecimatorJackpot.length, 3, '3 sequential txes');
+    assert.equal(fakeContract._calls.claimDecimatorJackpot[0][0], 5, 'level 5 first (ascending)');
+    assert.equal(fakeContract._calls.claimDecimatorJackpot[1][0], 10);
+    assert.equal(fakeContract._calls.claimDecimatorJackpot[2][0], 15);
+  });
+
+  test('click sets `.clm-row--claiming` class + button label `Claiming…` during pending', async () => {
+    const el = mountPanel();
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const rowEl = root.querySelector('.clm-row[data-prize-key="eth"]');
+    const btn = rowEl.querySelector('.clm-row__claim-cta');
+    // Inject a never-resolving claimWinnings — the row should stay in `claiming`.
+    const slow = makeFakeClaimsContract();
+    slow.claimWinnings = Object.assign(
+      async (...args) => { slow._calls.claimWinnings.push(args); return new Promise(() => {}); },
+      { staticCall: async () => {} },
+    );
+    claimsMod.__setContractFactoryForTest(() => slow);
+    btn.dispatchEvent({ type: 'click' });
+    // Settle just enough for the click handler's synchronous prelude to apply.
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+    assert.ok(rowEl.classList.contains('clm-row--claiming'), 'row has .clm-row--claiming');
+    assert.equal(btn.disabled, true, 'button disabled during pending');
+    assert.equal(btn.textContent, 'Claiming…', 'button label = Claiming…');
+  });
+
+  test('click is debounced 500ms — double-click invokes claimEth only once', async () => {
+    const el = mountPanel();
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const btn = root.querySelector('.clm-row[data-prize-key="eth"] .clm-row__claim-cta');
+    // Double-click in rapid succession (no async gap).
+    btn.dispatchEvent({ type: 'click' });
+    btn.dispatchEvent({ type: 'click' });
+    await settle(80);
+    assert.equal(fakeContract._calls.claimWinnings.length, 1, 'debounced — exactly one call');
+  });
+
+  test('on revert, row gets `.clm-row--error` and `.clm-row__error` textContent = userMessage', async () => {
+    const reverting = makeFakeClaimsContract({
+      staticCallShouldRevert: { claimWinnings: true },
+      staticCallRevertName: { claimWinnings: 'DecAlreadyClaimed' },
+    });
+    claimsMod.__setContractFactoryForTest(() => reverting);
+    const el = mountPanel();
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const rowEl = root.querySelector('.clm-row[data-prize-key="eth"]');
+    const btn = rowEl.querySelector('.clm-row__claim-cta');
+    btn.dispatchEvent({ type: 'click' });
+    await settle(80);
+    assert.ok(rowEl.classList.contains('clm-row--error'), 'row has .clm-row--error');
+    const errEl = rowEl.querySelector('.clm-row__error');
+    assert.ok(errEl, '.clm-row__error element rendered');
+    // Decoded userMessage must be present (textContent only — T-58-18).
+    assert.match(errEl.textContent, /already claimed/i);
+  });
+
+  test('error auto-clears on next-success-anywhere across the panel', async () => {
+    // First, trip an error on eth row.
+    const reverting = makeFakeClaimsContract({
+      staticCallShouldRevert: { claimWinnings: true },
+      staticCallRevertName: { claimWinnings: 'DecAlreadyClaimed' },
+    });
+    claimsMod.__setContractFactoryForTest(() => reverting);
+    const el = mountPanel();
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const ethRow = root.querySelector('.clm-row[data-prize-key="eth"]');
+    const ethBtn = ethRow.querySelector('.clm-row__claim-cta');
+    ethBtn.dispatchEvent({ type: 'click' });
+    await settle(80);
+    assert.ok(ethRow.classList.contains('clm-row--error'), 'eth row error set');
+    // Now click burnie row → success → clears all errors.
+    claimsMod.__setContractFactoryForTest(() => fakeContract);  // happy-path contract
+    const burnieBtn = root.querySelector('.clm-row[data-prize-key="burnie"] .clm-row__claim-cta');
+    // Wait out the 500ms debounce so the burnie click can register
+    // (defensive — burnie has its own rowKey, but let microtasks flush).
+    await settle(40);
+    burnieBtn.dispatchEvent({ type: 'click' });
+    await settle(80);
+    assert.equal(ethRow.classList.contains('clm-row--error'), false, 'eth row error cleared on next-success');
+    assert.equal(ethRow.querySelector('.clm-row__error'), null, '.clm-row__error element removed');
+  });
+
+  test('NEVER optimistic balance subtraction — row amount unchanged during pending (D-05 LOCKED)', async () => {
+    const el = mountPanel();
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const rowEl = root.querySelector('.clm-row[data-prize-key="eth"]');
+    const amountEl = rowEl.querySelector('.clm-row__amount');
+    const beforeAmount = amountEl.textContent;
+    // Inject a never-resolving tx so we observe the pending state.
+    const slow = makeFakeClaimsContract();
+    slow.claimWinnings = Object.assign(
+      async (...args) => { slow._calls.claimWinnings.push(args); return new Promise(() => {}); },
+      { staticCall: async () => {} },
+    );
+    claimsMod.__setContractFactoryForTest(() => slow);
+    const btn = rowEl.querySelector('.clm-row__claim-cta');
+    btn.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    // pre-click amount must STILL be visible (no optimistic subtraction).
+    assert.equal(amountEl.textContent, beforeAmount, 'row amount unchanged during pending');
+  });
+
+  test('dispatches `app-claims:tx-confirmed` CustomEvent on success', async () => {
+    const el = mountPanel();
+    await flushMicrotasks();
+    let captured = null;
+    el.addEventListener('app-claims:tx-confirmed', (ev) => { captured = ev; });
+    const root = getRenderRoot(el);
+    const btn = root.querySelector('.clm-row[data-prize-key="eth"] .clm-row__claim-cta');
+    btn.dispatchEvent({ type: 'click' });
+    await settle(80);
+    assert.ok(captured, 'app-claims:tx-confirmed event fired');
+    assert.equal(captured.detail?.rowKey, 'eth', 'detail.rowKey = eth');
   });
 });
 

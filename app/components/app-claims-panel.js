@@ -19,14 +19,18 @@
 // T-58-18 hardening: ALL server-derived strings via textContent. innerHTML reserved
 // for static template literals (containers, headers, anchor scaffolding).
 //
-// Plan 61-01 ships ZERO write logic. Per-row Claim buttons are present but
-// DISABLED with data-stub="true". Plan 61-02 removes both attributes and wires
-// the click handlers through Phase 58's sendTx chokepoint.
+// Plan 61-01 shipped the panel shell with stubbed (disabled) Claim buttons.
+// Plan 61-02 (THIS PLAN) wires the click handlers through Phase 58's sendTx
+// chokepoint and removes the stub attributes — buttons are now interactive.
 
 import { CHAIN } from '../app/chain-config.js';
 import { displayEth } from '../app/scaling.js';
 import { getViewedAddress, get } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
+// Plan 61-02: claims write path — three named exports wired into per-row click
+// handlers below. `import` triggers reason-map registrations as a side-effect
+// (DecClaimInactive / DecAlreadyClaimed / DecNotWinner).
+import { claimEth, claimBurnie, claimDecimatorLevels } from '../app/claims.js';
 
 // v4.6 render whitelist (D-01 LOCKED). The 4 hidden keys (tickets, vault,
 // farFutureCoin, terminal) are read from /pending but NEVER rendered in v4.6;
@@ -50,6 +54,9 @@ class AppClaimsPanel extends HTMLElement {
   #pinnedDay = null;       // pinned at fetch time, never mutated mid-render
   #pinnedAddress = null;
   #initialized = false;    // idempotency — connectedCallback re-mount safety
+  // Plan 61-02 — per-row click debounce (500ms). Tracks which rowKeys have an
+  // in-flight claim; prevents double-fire on rapid double-clicks (T-61-02-07).
+  #busyRows = new Set();
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -320,15 +327,13 @@ class AppClaimsPanel extends HTMLElement {
       amountEl.textContent = amountStr;
       rowEl.appendChild(amountEl);
 
-      // Claim CTA — Plan 61-01 stub state: disabled + data-stub="true".
-      // Plan 61-02 wires the click handler and removes both attributes.
-      // data-write attribute is consumed by Phase 58 view-mode disable manager
-      // (defense in depth — the explicit `disabled` is the 61-01 stub state).
+      // Claim CTA — Plan 61-02 wires the click handler. The Plan 61-01 stub
+      // attributes (`disabled`, stub-marker) are REMOVED. The `data-write`
+      // attribute REMAINS — Phase 58's view-mode disable manager auto-disables
+      // when ui.mode === 'view' (defense in depth).
       const btn = document.createElement('button');
       btn.className = 'clm-row__claim-cta';
       btn.setAttribute('data-write', '');
-      btn.disabled = true;
-      btn.setAttribute('data-stub', 'true');
       if (row.key === 'decimator') {
         const n = row.levels?.length || 0;
         btn.textContent = `Claim ${n} ${n === 1 ? 'level' : 'levels'}`;
@@ -337,7 +342,141 @@ class AppClaimsPanel extends HTMLElement {
       }
       rowEl.appendChild(btn);
 
+      // Plan 61-02 — wire per-row click handler (state machine: idle →
+      // claiming → error or success). Captured row reference is per-iteration
+      // and survives async closure (no shared mutable closure capture).
+      this.#wireRowHandler(rowEl, btn, row);
+
       rowsContainer.appendChild(rowEl);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Plan 61-02 — Per-row click handler.
+  //
+  // State machine:
+  //   idle → (click) → claiming (.clm-row--claiming + 'Claiming…' label)
+  //                  → success → dispatch app-claims:tx-confirmed → idle
+  //                              (Plan 61-03 listens and re-fetches; Plan 61-02
+  //                              clears all sibling .clm-row--error states)
+  //                  → error → .clm-row--error + .clm-row__error textContent
+  //                            → 10s auto-clear timer OR cleared on next-success
+  //
+  // Idempotency: 500ms debounce via #busyRows Set (T-61-02-07).
+  // D-05 LOCKED + Pitfall 6 #3: NEVER optimistic balance subtraction —
+  // the row's amount stays at the pre-click value during pending; the next
+  // poll cycle (Plan 61-03) refreshes it.
+  // T-58-18: error.userMessage rendered via textContent only.
+  // ---------------------------------------------------------------------
+
+  #wireRowHandler(rowEl, btn, row) {
+    btn.addEventListener('click', async (ev) => {
+      try { ev?.preventDefault?.(); } catch (_) { /* defensive */ }
+      // 500ms debounce gate (T-61-02-07).
+      if (this.#busyRows.has(row.key)) return;
+      this.#busyRows.add(row.key);
+
+      // Snapshot UI for restore in finally.
+      const originalLabel = btn.textContent;
+
+      rowEl.classList.add('clm-row--claiming');
+      // Defensive: drop any prior error styling before a fresh attempt.
+      rowEl.classList.remove('clm-row--error');
+      const priorErr = rowEl.querySelector?.('.clm-row__error');
+      if (priorErr) priorErr.remove();
+      btn.disabled = true;
+      btn.textContent = 'Claiming…';
+
+      try {
+        const player = get('connected.address');
+        if (row.key === 'eth') {
+          await claimEth({ player });
+        } else if (row.key === 'burnie') {
+          // Pitfall 6: amount sourced from /pending's burnie.amount field
+          // (NOT the /beta address-cast trick).
+          const amount = BigInt(this.#pendingData?.burnie?.amount || '0');
+          await claimBurnie({ player, amount });
+        } else if (row.key === 'decimator') {
+          // Panel pre-sorts ascending — keeps claims.js a pure executor.
+          const levels = Array.isArray(row.levels)
+            ? [...row.levels].sort((a, b) => a - b)
+            : [];
+          await claimDecimatorLevels({
+            player,
+            levels,
+            onProgress: (p) => this.#renderDecimatorProgress(rowEl, p),
+          });
+        }
+
+        // Success — dispatch panel-internal event so Plan 61-03 can subscribe
+        // and run the 250ms post-confirm debounce + re-fetch. Plan 61-02 only
+        // dispatches; the row stays at its pre-click amount until refetch.
+        try {
+          this.dispatchEvent(new CustomEvent('app-claims:tx-confirmed', {
+            detail: { rowKey: row.key },
+            bubbles: true,
+          }));
+        } catch (_e) { /* defensive — fakeDOM CustomEvent shim */ }
+
+        // Clear all error states across the panel on next-success-anywhere.
+        this.#clearAllErrorStates();
+      } catch (error) {
+        // Decoded structured-revert error from claims.js (.userMessage / .code
+        // / .recoveryAction / .cause). Render via textContent (T-58-18).
+        rowEl.classList.add('clm-row--error');
+        rowEl.classList.remove('clm-row--claiming');
+        let errEl = rowEl.querySelector?.('.clm-row__error');
+        if (!errEl) {
+          errEl = document.createElement('div');
+          errEl.className = 'clm-row__error';
+          rowEl.appendChild(errEl);
+        }
+        errEl.textContent = error?.userMessage || error?.message || 'Claim failed.';
+        // 10s auto-clear timer.
+        setTimeout(() => {
+          rowEl.classList.remove('clm-row--error');
+          const stillErr = rowEl.querySelector?.('.clm-row__error');
+          if (stillErr) stillErr.remove();
+        }, 10000);
+      } finally {
+        rowEl.classList.remove('clm-row--claiming');
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        // Release debounce after 500ms (idempotency window).
+        setTimeout(() => this.#busyRows.delete(row.key), 500);
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Plan 61-02 — Decimator progress UX. Updates a `.clm-progress` text
+  // element under the row's button. Server-derived numbers via textContent
+  // (T-58-18). Phase 60 wording mirror.
+  // ---------------------------------------------------------------------
+
+  #renderDecimatorProgress(rowEl, p) {
+    let prog = rowEl.querySelector?.('.clm-progress');
+    if (!prog) {
+      prog = document.createElement('div');
+      prog.className = 'clm-progress';
+      rowEl.appendChild(prog);
+    }
+    const status = p?.status === 'pending' ? 'pending' : 'confirmed';
+    prog.textContent = `${p?.done ?? 0}/${p?.total ?? 0} ${status}…`;
+  }
+
+  // ---------------------------------------------------------------------
+  // Plan 61-02 — Cross-row error clearing (next-success-anywhere). Walks
+  // the panel's render root and removes `.clm-row--error` states + their
+  // `.clm-row__error` children.
+  // ---------------------------------------------------------------------
+
+  #clearAllErrorStates() {
+    const errorRows = this.querySelectorAll?.('.clm-row--error') || [];
+    for (const r of errorRows) {
+      r.classList.remove('clm-row--error');
+      const err = r.querySelector?.('.clm-row__error');
+      if (err) err.remove();
     }
   }
 }
