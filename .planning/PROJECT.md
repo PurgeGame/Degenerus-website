@@ -10,6 +10,8 @@ Make the on-chain game playable, entertaining, and visually compelling from a br
 
 ## Current State
 
+Shipped v2.4 Player UI (2026-04-24): brand-new `/play` route with player-selector + day scrubber + 9 wallet-free Custom Elements; six panels (Profile, Tickets, Packs, Coinflip, BAF, Decimator) hydrated against live database API; 4 INTEG endpoints + PACKS-V2 endpoint shipped in sibling database repo with full vitest coverage; 333/333 play/ tests green. Mid-milestone PACKS-V2 redesign caught a real 1808-empty-pack bug and re-architected on a day-keyed reveal model. PURCHASE-03 live; PURCHASE-API-SPEC.md authored for the deferred sim HTTP API (SIM-01). ~50 manual UAT scenarios deferred to v2.5+ cross-panel sweep. See `.planning/milestones/v2.4-ROADMAP.md`.
+
 Shipped v2.3 Live API Economic Validation (2026-04-15): Python derivation harness + domain validators (JACKPOT/POOLS/PLAYER/TERMINAL) + consolidated report renderer. JACKPOT live-run produced 111 discrepancies; POOLS/PLAYER/TERMINAL validators wired and tested, live-runs pending indexer availability. Consolidated report at `.planning/v2.3/reports/v2.3-consolidated.md` (112 entries, cross-domain synthesis, sha256 provenance). 480 tests passing. Surfaced 5+ Major source-doc drifts between REQUIREMENTS.md/GT paper/MEMORY.md and audit contracts (notably the "turbo 2-day death clock" myth). See `.planning/milestones/v2.3-ROADMAP.md`.
 
 Shipped v2.2 Contract-Paper Parity Check (2026-04-01): verified all 24 contracts against game theory paper claims. 23 discrepancies found (1 Critical, 6 Major, 7 Minor, 9 Info) with fix guidance. 6 new mechanics recommended for documentation. Consolidated parity report at `.planning/phases/17-consolidated-parity-report/17-PARITY-REPORT.md`.
@@ -46,15 +48,21 @@ Database layer (separate repo at /home/zak/Dev/PurgeGame/database/) provides Pos
 - JACKPOT live-run against indexer, 111 discrepancies captured (v2.3 Phase 19)
 - POOLS/PLAYER/TERMINAL validators wired with coverage-gap entries and live-run gating (v2.3 Phases 20-22)
 - Consolidated validation report renderer with severity×domain cross-tab and sha256 provenance (v2.3 Phase 23)
-- New `/play/` top-level route with day-aware store, player-selector, day scrubber, and 7 skeleton panel stubs; wallet-free (SHELL-01 guardrail enforced in tests) (v2.4 Phase 50)
+- New `/play/` top-level player route with day-aware store, player-selector, day scrubber, and 9 wallet-free Custom Elements (v2.4 Phase 50)
+- Activity score breakdown + quest slots/streak + daily activity counts on /play, day-aware re-render via INTEG-02 (v2.4 Phase 51)
+- 4-trait quadrant ticket inventory + openable PACKS-V2 day-keyed reveal animation + reused beta jackpot Roll widget on /play (v2.4 Phase 52)
+- Purchase UI showing live price/level/cycle/total-cost on /play (PURCHASE-03; v2.4 Phase 53)
+- Coinflip state + leaderboards and BAF score + prominence-styled top-4 leaderboard on /play (v2.4 Phase 54)
+- Decimator window state, bucket/subbucket assignment, weighted burns, payouts, terminal state on /play (v2.4 Phase 55)
+- Day scrubber dev tool for inspecting any historical day from the selected player's perspective (v2.4 Phase 50)
+- Coordinated backend additions: INTEG-01 ticket-by-trait, INTEG-02 extended player day-aware, INTEG-03 decimator, INTEG-05 BAF, PACKS-V2 day-keyed packs (v2.4)
+- SHELL-01 invariant: zero ethers/wallet/contracts/beta-utils imports in play/ (recursive grep guard with 14 FORBIDDEN entries) (v2.4)
 
 ### Active
 
-- Brand-new player-facing route surfacing every interactive system against live sim/db (v2.4 — foundation shipped Phase 50; panels hydrating in 51-55)
-- Ticket inventory shown as 4-trait quadrant cards with openable packs on purchase/win/lootbox (v2.4)
-- Purchase, coinflip, BAF, decimator, activity/quests UIs hosted on the new route (v2.4)
-- Day scrubber dev tool for inspecting any historical day from the selected player's perspective (v2.4)
-- Coordinated backend additions for ticket-by-trait, per-player BAF, per-player decimator endpoints (v2.4)
+- v2.5+ cross-panel UAT sweep: ~50 deferred manual scenarios across all 6 v2.4 panels need a single-session browser exercise to verify visual/device contract
+- SIM-01 sim HTTP API: build `POST /player/:address/buy-tickets` + `/buy-lootbox` per `PURCHASE-API-SPEC.md` to unblock PURCHASE-01/02/04
+- INTEG-04 (coinflip recycle/history): formally deferred per ROADMAP SC5; revisit if player-rank-below-top-10 surfacing is needed
 
 ### Out of Scope
 
@@ -65,9 +73,10 @@ Database layer (separate repo at /home/zak/Dev/PurgeGame/database/) provides Pos
 
 ## Context
 
-- Tech stack: Vanilla HTML/CSS/JS, ES modules with import map, ethers.js v6, GSAP 3.14, canvas-confetti
-- Architecture: 15 Custom Elements, Proxy-based reactive store, centralized business logic modules
-- Database API: PostgreSQL + Fastify REST at localhost:3000 (not yet tested end-to-end)
+- Tech stack: Vanilla HTML/CSS/JS, ES modules with import map, ethers.js v6 (beta/ only), GSAP 3.14, canvas-confetti
+- Architecture: 24 Custom Elements (15 in beta/, 9 in play/), Proxy-based reactive store, centralized business logic modules
+- Two top-level routes: `/beta/` (full wallet-connected dev panels) and `/play/` (read-only, day-aware, wallet-free per SHELL-01)
+- Database API: PostgreSQL + Fastify REST at localhost:3000; consumed end-to-end by /play across 5 INTEG endpoints + PACKS-V2
 - Contracts: Sepolia testnet (chainId 11155111)
 - Badge system: 6 card types x 8 colors as individual SVGs
 - Design tokens: CSS custom properties in :root and shared/nav.css
@@ -88,6 +97,14 @@ Database layer (separate repo at /home/zak/Dev/PurgeGame/database/) provides Pos
 | EIP-6963 multi-wallet discovery | Future-proof wallet connection; MetaMask fallback for compatibility | Good |
 | CSS organized by concern | base/panels/buttons/forms/tx-status/status-bar; not per-component | Good |
 | dailyRng.finalWord deferred | Backend API not yet extended; jackpot degrades to stats-only | Pending |
+| Separate `/play/` route, wallet-free | Player-facing surface that's read-only via player-selector; no EIP-6963 connect, no contract writes | Good (v2.4) |
+| SHELL-01 invariant on /play/ | Zero ethers/wallet/contracts/beta-utils imports — enforced by recursive grep test | Good (v2.4) |
+| Day-aware fetch pattern (#fetchId + .is-stale) | Late-response stale guard + keep-old-data-dim across day-scrubber re-renders | Good (v2.4) |
+| Cross-repo INTEG-NN-SPEC + 3-commit ship | Posted spec doc unblocks gating phase; database repo ships feat + docs + test atomically | Good (v2.4) |
+| Wave-based phase execution (0/1/2/3) | Wave 0 RED tests + spec → Wave 1 panel hydration → Wave 2 backend wiring → Wave 3 UAT | Good (v2.4) |
+| Contract-truth over CONTEXT documents | When planner research conflicts with execution-spec assumptions, contract source wins | Good (v2.4 — Phase 55 D-03 catch) |
+| Mid-milestone redesign acceptable when bug-driven | PACKS-V2 day-keyed model added 3 plans + new endpoint mid-Phase-52; shipped same day | Good (v2.4) |
+| Deferred UAT acceptable when documented | Aggregate ~50 scenarios queued for v2.5+ cross-panel sweep with NN-UAT.md per phase | Pending (v2.4) |
 
 ## Constraints
 
@@ -103,32 +120,9 @@ Database layer (separate repo at /home/zak/Dev/PurgeGame/database/) provides Pos
 - Dead quadrantLabel() export in jackpot-data.js
 - Sound files (win.mp3, flip.mp3, urgency.mp3) are README placeholders requiring user setup
 
-## Current Milestone: v2.4 Player UI
+## Current Milestone
 
-**Goal:** Build a brand-new player-facing route that surfaces every interactive system (purchase, tickets/packs, coinflip, BAF, decimator, activity/quests, jackpot replay) against the live sim/db, with a dev-side day scrubber for inspecting any player's perspective on any historical day.
-
-**Target features:**
-- Brand-new route (e.g. `/play` or `/game`) — separate from `beta/` (dev panels) and `viewer/` (replay tool)
-- Activity score breakdown + quest status display (live API endpoints already exist)
-- Ticket inventory rendered as 4-trait quadrant cards, grouped from individual entries
-- Openable ticket packs on purchase, ticket-win, or lootbox-open with GSAP reveal animation
-- Purchase UI for tickets and lootboxes via sim API (no contract writes this milestone)
-- Coinflip play surface (current state + leaderboard; recycle history if backend lands)
-- BAF leaderboard with per-player score and prominence context
-- Decimator UI: window state, bucket assignment, weighted burns, winning subbucket, payout
-- Day scrubber (dev tool now, player-facing read-only later) — pick effective day, re-render UI from snapshot
-- Reuse beta's jackpot-panel Roll 1/Roll 2 trait reveal widget on the new route
-
-**Stack:** Same as `beta/` — vanilla ES modules, Custom Elements, Proxy reactive store, GSAP. No build step.
-
-**Wallet posture:** Read-only via player-selector dropdown. No EIP-6963 connect, no contract writes. Purchases call the sim API as the selected player.
-
-**Backend dependencies (database repo):**
-- P0 blocker: `/player/{addr}/tickets/by-trait` for openable-pack feature (must coordinate)
-- P1 likely needed: per-player BAF score, per-player decimator bucket/payout, coinflip history
-- Out of scope: sim-time admin endpoints (live in sim repo)
-
-**Method:** Frontend-first; backend gaps surface as blocker phases requiring database-repo coordination before dependent UI lands. Component tests + manual UAT for animations and pack-opening flows.
+v2.4 Player UI shipped 2026-04-24. Next milestone planning pending — run `/gsd-new-milestone` to define v2.5 scope.
 
 ## Evolution
 
@@ -148,4 +142,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-23 — v2.4 milestone started*
+*Last updated: 2026-05-02 after v2.4 Player UI milestone shipped*

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.4
 milestone_name: Player UI
-status: milestone_complete
-stopped_at: v2.4 Player UI milestone complete (all 6 phases shipped or partial-with-spec; 325/325 tests; 4 INTEGs shipped in database repo; 1 SIM spec authored); ready for /gsd-complete-milestone
-last_updated: "2026-04-24T07:30:00.000Z"
-last_activity: 2026-04-24
+status: archived
+stopped_at: v2.4 archived; ready for /gsd-new-milestone
+last_updated: "2026-05-03T02:11:36.121Z"
+last_activity: 2026-05-03
 progress:
   total_phases: 6
   completed_phases: 6
-  total_plans: 20
-  completed_plans: 20
+  total_plans: 23
+  completed_plans: 23
   percent: 100
 ---
 
@@ -18,17 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-23)
+See: .planning/PROJECT.md (updated 2026-05-02)
 
 **Core value:** Make the on-chain game playable, entertaining, and visually compelling from a browser
-**Current focus:** v2.4 Player UI -- COMPLETE. Ready to archive and start v2.5.
+**Current focus:** v2.4 Player UI ARCHIVED 2026-05-02. Planning next milestone via `/gsd-new-milestone`.
 
 ## Current Position
 
 Phase: All 6 phases complete (50, 51, 52, 54, 55 full; 53 Option B partial-with-spec)
-Plan: 20/20 plans executed
-Status: Milestone v2.4 shipped end-to-end in a single autonomous night session.
-Last activity: 2026-04-24 -- Phase 55 "Decimator" shipped. 4 waves, 4 plans. Wave 0: INTEG-03-SPEC + 37-assertion test harness + SHELL-01 FORBIDDEN +3. Wave 1: decimator-panel.js evolved from 40-LOC stub to 568-LOC hydrated panel with contract-truth bucketRange helper (research caught CONTEXT D-03 error: actual range 5-12 normal / 2-12 centennial, NOT 1-8), +199 LOC CSS. Wave 2: INTEG-03 side-quest shipped in database repo (3 atomic commits a453592/8c5d717/49d3f3a, 12/12 vitest), then surgical decimator-panel.js flip from safe-degrade to live. Wave 3: UAT deferred per 5-phase precedent chain (v2.4 terminal phase; resurfacing triggers to v2.5+ cross-panel sweep). 325/325 play/ tests green. 5/5 must-haves verified.
+Plan: 23/23 plans executed (3+4+7+1+4+4; Phase 52 includes mid-milestone PACKS-V2 redesign plans 5-7)
+Status: v2.4 archived 2026-05-02; planning v2.5 next.
+Last activity: 2026-05-02 -- /gsd-complete-milestone executed; archives + retrospective + ROADMAP.md reorganization complete.
 
 ## Performance Metrics
 
@@ -36,14 +36,14 @@ Last activity: 2026-04-24 -- Phase 55 "Decimator" shipped. 4 waves, 4 plans. Wav
 |--------|-------|
 | Phases planned | 6 (50-55) |
 | Phases complete | 5 full (50, 51, 52, 54, 55); 1 partial-with-spec (53 Option B) |
-| Plans complete | 20 / 20 |
+| Plans complete | 23 / 23 (Phase 52: 7 plans incl. mid-milestone PACKS-V2 redesign) |
 | Requirements covered | 43 / 43 (SIM-01 added Phase 53) |
-| Requirements validated | 39 / 43 (all except PURCHASE-01/02/04 + SIM-01, deferred per Option B) |
+| Requirements validated | 41 / 46 entries in REQUIREMENTS.md (PURCHASE-01/02/04 + SIM-01 + INTEG-04 deferred) |
 | Requirements deferred | 4 (PURCHASE-01/02/04 + SIM-01 gated on sim HTTP API build) + 1 (INTEG-04 per ROADMAP SC5) |
 | Coverage % | 100% |
-| Automated tests | 325/325 green in play/ tree |
-| Database repo integration | 4 INTEGs shipped (INTEG-01, INTEG-02, INTEG-03, INTEG-05); 1 formally deferred (INTEG-04) |
-| Cross-repo commits | ~45 (website) + ~12 (database) this session |
+| Automated tests | 333/333 green in play/ tree (post-PACKS-V2 redesign) |
+| Database repo integration | 4 INTEGs + PACKS-V2 endpoint shipped (INTEG-01, INTEG-02, INTEG-03, INTEG-05, PACKS-V2); INTEG-04 formally deferred |
+| Cross-repo commits | ~77 (website main range 4f839157..255bfec) + ~15 (database) this milestone |
 
 ## Milestone Summary
 
@@ -51,7 +51,7 @@ Last activity: 2026-04-24 -- Phase 55 "Decimator" shipped. 4 waves, 4 plans. Wav
 
 - **Phase 50** (2026-04-23): Route Foundation & Day-Aware Store -- 3 plans, 88/88 tests. 9 Custom Elements (player-selector, day-scrubber, 7 panel stubs). INTEG-01 kickoff spec.
 - **Phase 51** (2026-04-24): Profile & Quests -- 4 plans, 112/112 tests. Wallet-free play/app/quests.js; profile-panel.js 27→417 LOC with 4 stacked sections; +302 LOC CSS. INTEG-02 shipped (database repo, 3 commits, 20/20 vitest).
-- **Phase 52** (2026-04-24): Tickets, Packs & Jackpot Reveal -- 4 plans, 197/197 tests. 7 new play/ files: 4 helpers + 3 Custom Elements; +281 LOC CSS. INTEG-01 delivered (database repo, 3 commits, 10/10 vitest). D-09 patch: beta/jackpot-panel.js:7 swap to wallet-free utils.
+- **Phase 52** (2026-04-24): Tickets, Packs & Jackpot Reveal -- 7 plans (4 original + 3 mid-milestone PACKS-V2 redesign), 333/333 tests by close. 7 new play/ files: 4 helpers + 3 Custom Elements; +281 LOC CSS. INTEG-01 delivered (database repo, 3 commits, 10/10 vitest). PACKS-V2: caught 1808-empty-pack bug for active player at level 10; new day-keyed `/player/:address/packs?day=N` endpoint shipped same day in database repo (9/9 vitest); frontend rewrite ships 27 v2 day-keyed assertions GREEN. D-09 patch: beta/jackpot-panel.js:7 swap to wallet-free utils.
 - **Phase 53** (2026-04-24): Purchase Flow -- Option B: 1 plan, 230/230 tests. purchase-panel.js 40→221 LOC with tab UI, live PURCHASE-03, gated PURCHASE-01/02 buttons. PURCHASE-API-SPEC.md (213 lines) authored for sim HTTP API. PURCHASE-01/02/04 deferred gated on SIM-01 sim-repo build.
 - **Phase 54** (2026-04-24): Coinflip & BAF Leaderboards -- 4 plans, 288/288 tests. coinflip-panel.js 40→305 LOC, baf-panel.js 40→358 LOC, +237 LOC CSS with D-06 gold/silver/bronze prominence. INTEG-05 shipped (database repo, 3 commits, 14/14 vitest). INTEG-04 formally deferred per ROADMAP SC5.
 - **Phase 55** (2026-04-24): Decimator -- 4 plans, 325/325 tests. decimator-panel.js 40→568 LOC with contract-truth bucketRange; +199 LOC CSS. INTEG-03 shipped (database repo, 3 commits, 12/12 vitest).
@@ -74,6 +74,7 @@ INTEG-04 (coinflip recycle/history) formally deferred per ROADMAP Phase 54 SC5.
 ### UAT deferrals
 
 All 6 phases deferred their Wave 3 UAT per an evolving precedent chain:
+
 - Phase 50: deferred -> Phase 51 natural resurfacing
 - Phase 51: deferred -> Phase 52 natural resurfacing
 - Phase 52: deferred -> Phase 53 natural resurfacing
@@ -103,8 +104,23 @@ None.
 - **v2.5+ cross-panel UAT sweep:** ~50 deferred UAT scenarios queued. Should be scheduled as a dedicated phase at v2.5 start to catch any visual/device contract issues across all 6 panels at once.
 - **Several uncommitted modifications** to beta/, theory/, agents/, and untracked files remain in working tree; not folded into any Phase 50-55 commit (out of scope for v2.4 Player UI; user's separate workstream).
 
+## Deferred Items
+
+Items acknowledged and deferred at v2.4 milestone close on 2026-05-02:
+
+| Category | Phase | Item | Status |
+|----------|-------|------|--------|
+| uat_gap | 51 | 51-UAT.md (Profile & Quests) | deferred per 5-phase precedent chain → v2.5+ cross-panel sweep |
+| uat_gap | 52 | 52-UAT.md (Tickets, Packs & Jackpot) | deferred per 5-phase precedent chain → v2.5+ cross-panel sweep |
+| uat_gap | 54 | 54-UAT.md (Coinflip & BAF) | deferred per 5-phase precedent chain → v2.5+ cross-panel sweep |
+| uat_gap | 55 | 55-UAT.md (Decimator) | deferred per 5-phase precedent chain → v2.5+ cross-panel sweep (terminal phase) |
+| verification_gap | 19 | 19-VERIFICATION.md JACKPOT live-run idempotency | from v2.3; gated on localhost:3000 indexer availability per v2.3-MILESTONE-AUDIT |
+| context_questions | 52 | 52-CONTEXT.md (3 open Q's) | answered during execution; doc not back-filled |
+
+Aggregate: ~50 UAT scenarios queued for v2.5+ cross-panel UAT sweep (single browser session).
+
 ## Session Continuity
 
-Last session: 2026-04-24 (autonomous night push)
-Stopped at: v2.4 milestone complete
-Next action: `/gsd-complete-milestone` to archive v2.4 and prepare for v2.5, OR `/gsd-new-milestone` to start planning v2.5.
+Last session: 2026-05-02 (v2.4 milestone close session)
+Stopped at: v2.4 archived (MILESTONES.md + ROADMAP.md + PROJECT.md updated; archives at .planning/milestones/v2.4-{ROADMAP,REQUIREMENTS}.md; RETROSPECTIVE.md appended; tag pending)
+Next action: `/gsd-new-milestone` to define v2.5 scope.
