@@ -32,6 +32,7 @@ import { get, subscribe, getViewedAddress } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
 import {
   depositCoinflip,
+  readClaimableCoinflip,
   readCurrentCoinflipStake,
   readResolvedCoinflipStake,
   readReverseFlipQuote,
@@ -177,11 +178,9 @@ function compactBetAmount(value) {
   ];
   for (const [size, suffix] of tiers) {
     if (amount < size) continue;
-    const scaled = amount / size;
-    const digits = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
-    return `${scaled.toFixed(digits).replace(/\.0+$|(?<=\.[0-9])0+$/, '')}${suffix}`;
+    return `${Math.round(amount / size)}${suffix}`;
   }
-  return String(Math.round(amount * 100) / 100);
+  return String(Math.round(amount));
 }
 
 class AppDailyFlip extends HTMLElement {
@@ -194,6 +193,7 @@ class AppDailyFlip extends HTMLElement {
   #dashboardAddress = null;
   #currentBetWei = null;   // live coinflipAmount(player), scoped to the current target day
   #resolvedBetWei = null;  // final CoinflipStakeUpdated.newTotal for the exact result day
+  #liveClaimableWei = null; // direct previewClaimCoinflips, bypassing indexer lag
   #fetchSeq = 0;
   #refreshQueued = false;
   #active = false;
@@ -243,6 +243,7 @@ class AppDailyFlip extends HTMLElement {
         this.#settlementState = null;
         this.#currentBetWei = null;
         this.#resolvedBetWei = null;
+        this.#liveClaimableWei = null;
         this.#reverseFlipQuote = null;
         this.#showLiveSideOnCoin = false;
         this.#render();
@@ -254,6 +255,7 @@ class AppDailyFlip extends HTMLElement {
       this.#dashboardAddress = null;
       this.#currentBetWei = null;
       this.#resolvedBetWei = null;
+      this.#liveClaimableWei = null;
       this.#scheduleRefresh();
     }));
     this.#unsubs.push(subscribe('viewing.address', () => {
@@ -261,6 +263,7 @@ class AppDailyFlip extends HTMLElement {
       this.#dashboardAddress = null;
       this.#currentBetWei = null;
       this.#resolvedBetWei = null;
+      this.#liveClaimableWei = null;
       this.#scheduleRefresh();
     }));
 
@@ -427,6 +430,7 @@ class AppDailyFlip extends HTMLElement {
         address: state.address,
         betWei: String(state.betWei),
         claimableBaseWei: String(state.claimableBaseWei),
+        claimableTotalWei: String(state.claimableTotalWei ?? 0n),
         rewardPercent: Number(state.rewardPercent || 0),
         won: Boolean(state.won),
       }));
@@ -447,6 +451,9 @@ class AppDailyFlip extends HTMLElement {
         address: String(address).toLowerCase(),
         betWei: this.#asWei(saved.betWei),
         claimableBaseWei: this.#asWei(saved.claimableBaseWei),
+        claimableTotalWei: saved.claimableTotalWei == null
+          ? null
+          : this.#asWei(saved.claimableTotalWei),
         rewardPercent: Number(saved.rewardPercent || 0),
         won: Boolean(saved.won),
       };
@@ -478,6 +485,12 @@ class AppDailyFlip extends HTMLElement {
       settlement.rewardPercent = Number(
         this.#flipResult.rewardPercent || settlement.rewardPercent || 0,
       );
+    }
+    if (this.#liveClaimableWei != null) {
+      settlement.claimableTotalWei = this.#liveClaimableWei;
+    } else if (settlement.claimableTotalWei == null) {
+      settlement.claimableTotalWei = settlement.claimableBaseWei
+        + this.#settlementGainWei(settlement);
     }
     this.#saveSettlement(settlement);
   }
@@ -512,6 +525,7 @@ class AppDailyFlip extends HTMLElement {
       this.#dashboardAddress = address;
       this.#currentBetWei = null;
       this.#resolvedBetWei = null;
+      this.#liveClaimableWei = null;
     }
     const currentSettlement = this.#activeSettlement();
     if (!currentSettlement) {
@@ -548,6 +562,15 @@ class AppDailyFlip extends HTMLElement {
           this.#currentBetWei = value == null ? null : this.#asWei(value);
         },
         () => { this.#currentBetWei = null; },
+      ),
+      this.#runRefreshTask(
+        seq,
+        addr ? readClaimableCoinflip({ player: addr }) : Promise.resolve(null),
+        (value) => {
+          this.#liveClaimableWei = value == null ? null : this.#asWei(value);
+          this.#repairSettlement();
+        },
+        () => { this.#liveClaimableWei = null; },
       ),
       this.#runRefreshTask(
         seq,
@@ -656,12 +679,12 @@ class AppDailyFlip extends HTMLElement {
   }
 
   #formatFlipPrice(wei) {
-    const fixed = displayToken(BigInt(wei || 0), 6);
-    const [wholeRaw, fractionRaw = ''] = String(fixed).split('.');
-    let whole = wholeRaw;
-    try { whole = BigInt(wholeRaw || '0').toLocaleString('en-US'); } catch (_e) { /* keep text */ }
-    const fraction = fractionRaw.replace(/0+$/, '');
-    return fraction ? `${whole}.${fraction}` : whole;
+    // Costs are shown as whole FLIP too. Round a fractional exact contract
+    // quote up so the label never understates what the wallet will spend.
+    const unit = 10n ** 18n;
+    const raw = BigInt(wei || 0);
+    const whole = raw > 0n ? (raw + unit - 1n) / unit : 0n;
+    return whole.toLocaleString('en-US');
   }
 
   #renderBetTooltip() {
@@ -1010,9 +1033,13 @@ class AppDailyFlip extends HTMLElement {
   #visibleClaimableWei() {
     const indexed = this.#asWei(this.#dashboard?.coinflip?.claimablePreview);
     const settlement = this.#activeSettlement();
-    if (!settlement) return indexed;
-    const resolved = settlement.claimableBaseWei + this.#settlementGainWei(settlement);
-    return indexed > resolved ? indexed : resolved;
+    let visible = this.#liveClaimableWei == null ? indexed : this.#liveClaimableWei;
+    if (!settlement) return visible;
+    const settledTotal = settlement.claimableTotalWei == null
+      ? settlement.claimableBaseWei + this.#settlementGainWei(settlement)
+      : this.#asWei(settlement.claimableTotalWei);
+    if (indexed > visible) visible = indexed;
+    return settledTotal > visible ? settledTotal : visible;
   }
 
   #renderPosition() {
@@ -1205,6 +1232,7 @@ class AppDailyFlip extends HTMLElement {
       address: revealAddress,
       betWei: settledBet,
       claimableBaseWei: this.#asWei(this.#dashboard?.coinflip?.claimablePreview),
+      claimableTotalWei: this.#liveClaimableWei,
       rewardPercent,
       won,
     };
@@ -1226,6 +1254,13 @@ class AppDailyFlip extends HTMLElement {
         && this.#asWei(settledBet) > 0n
         && !reducedMotion;
       if (stillCurrent) {
+        // Production normally has the direct chain total already. If that read
+        // was temporarily unavailable, preserve the old optimistic fallback
+        // until the post-landing refresh obtains the exact contract value.
+        if (settlementState.claimableTotalWei == null) {
+          settlementState.claimableTotalWei = settlementState.claimableBaseWei
+            + this.#settlementGainWei(settlementState);
+        }
         this.#settlementState = settlementState;
         this.#saveSettlement(settlementState);
       }
@@ -1258,6 +1293,11 @@ class AppDailyFlip extends HTMLElement {
           : { type: 'flip:revealed', detail: { day: revealDay } };
         document.dispatchEvent(ev);
       } catch (_e) { /* headless — best-effort */ }
+      // The reveal is presentation-only, but it is the point at which the
+      // previously hidden claimable ledger becomes visible. Refresh the live
+      // contract value on that frame instead of waiting up to 30 seconds for
+      // the indexed dashboard poll.
+      if (stillCurrent) this.#scheduleRefresh();
     };
     if (reducedMotion || typeof setTimeout !== 'function') {
       finish();

@@ -52,14 +52,14 @@ export function displayEth(raw, digits = 4) {
  * Format a raw UNSCALED 18-decimal token amount (FLIP / DGNRS) for display.
  *
  * FLIP and DGNRS are NOT /1M-scaled on testnet (only ETH is — RESEARCH Q5),
- * so this is a plain formatEther with the same zero-padding contract as
- * displayEth. Chain-independent: identical on mainnet.
+ * so this is a plain formatEther. Coin amounts render as whole units by
+ * default; callers can still request fixed precision for non-UI calculations.
  *
  * @param {bigint} raw - On-chain token wei (18 decimals, unscaled)
- * @param {number} [digits=4] - Decimal places to render (zero-padded)
+ * @param {number} [digits=0] - Decimal places to render (whole coins by default)
  * @returns {string} Formatted token string
  */
-export function displayToken(raw, digits = 4) {
+export function displayToken(raw, digits = 0) {
   const eth = formatEther(raw);
   const dot = eth.indexOf('.');
   if (dot === -1) {

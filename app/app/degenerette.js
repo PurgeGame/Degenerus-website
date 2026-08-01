@@ -1,7 +1,7 @@
 // /app/app/degenerette.js — Phase 62 Plan 62-03 (BUY-05 write path).
 //
 // Degenerette two-tx bet flow: placeBet (single tx, emits BetPlaced) → poll
-// pollRngForLootbox(BetPlaced.index) until non-zero → resolveBets (single tx,
+// the indexed word / simulate the exact resolver until ready → resolveBets (single tx,
 // emits DegeneretteResolved + DegeneretteResult per spin).
 //
 // On-chain surfaces (verified against degenerus-audit/contracts/):
@@ -18,9 +18,9 @@
 // RESEARCH R5 confirmed two-tx flow + RNG keying:
 //   - placeDegeneretteBet emits BetPlaced(player, index, betId, packed) where
 //     `index` is the lootbox-RNG index this bet ties to.
-//   - RNG resolution is shared with the lootbox subsystem — degenerette panel
-//     reuses Phase 60 pollRngForLootbox(BigInt(BetPlaced.index)) (RESEARCH R5
-//     OPTION B). When the call returns non-zero the bet is ready to resolve.
+//   - RNG resolution is shared with the lootbox subsystem. The exact word is an
+//     indexer projection; the deployed contract exposes readiness safely by
+//     simulating resolveDegeneretteBets (there is no public word getter).
 //   - resolveDegeneretteBets walks each betId, decodes RNG, emits
 //     DegeneretteResolved (per bet) + DegeneretteResult (per spin within bet).
 //
@@ -44,9 +44,6 @@ import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS, ETH_DIVISOR } from './chain-config.js';
 import { getActingAddress } from './store.js';
-// RESEARCH R5 OPTION B — degenerette RNG is keyed by lootbox-RNG index;
-// reuse Phase 60's canonical reader rather than duplicating the view call.
-import { pollRngForLootbox } from './lootbox.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures verified against
@@ -252,7 +249,11 @@ export async function placeBet({
     const sim = await requireStaticCall(
       c,
       'placeDegeneretteBet',
-      [buyer, cur, amount, tc, ct, hq],
+      // The ETH lane is payable. Simulating it without the same value override
+      // makes every otherwise-valid ETH bet revert in preflight even though
+      // the real send below is correctly funded. Token lanes carry value=0,
+      // so using one canonical argument list is safe for all three currencies.
+      [buyer, cur, amount, tc, ct, hq, { value }],
       signer,
     );
     if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call placeDegeneretteBet');
@@ -321,6 +322,29 @@ export async function readBetInfo({ player, betId } = {}) {
   const contract = _buildContract(provider);
   if (typeof contract.degeneretteBetInfo !== 'function') return null;
   return BigInt(await contract.degeneretteBetInfo(owner, BigInt(betId)));
+}
+
+/**
+ * Side-effect-free readiness probe against the exact resolver entrypoint. The
+ * deployed GAME does not expose its raw lootbox RNG mapping, so eth_call of the
+ * settlement is the authoritative chain fallback while the DB word is indexing.
+ */
+export async function canResolveBets({ player, betIds } = {}) {
+  const owner = player || getActingAddress();
+  if (!owner || !Array.isArray(betIds) || betIds.length === 0) return false;
+  const provider = getProvider();
+  if (!provider) return false;
+  let ids;
+  try { ids = betIds.map((id) => BigInt(id)); }
+  catch (_e) { return false; }
+  const contract = _buildContract(provider);
+  if (typeof contract?.resolveDegeneretteBets?.staticCall !== 'function') return false;
+  try {
+    await contract.resolveDegeneretteBets.staticCall(owner, ids);
+    return true;
+  } catch (_e) {
+    return false;
+  }
 }
 
 const REPLAY_LOG_CHUNK_BLOCKS = 1800;

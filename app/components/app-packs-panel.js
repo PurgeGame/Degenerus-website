@@ -46,8 +46,9 @@ import { decodeRevertReason } from '../app/reason-map.js';
 // Plan 60-03: write-path imports for the open-and-reveal flow.
 // openLootBox opens an ETH lootbox (lootboxes are ETH-only).
 // parseTraitsGeneratedFromReceipt extracts the trait payload for pack-animator.
-// pollRngForLootbox is the view-call wrapper used by #runPollCycle.
-import { openLootBox, parseTraitsGeneratedFromReceipt, pollRngForLootbox } from '../app/lootbox.js';
+// The deployed GAME keeps the raw RNG word private, so readiness is the exact
+// openBox write simulated as an eth_call.
+import { openLootBox, parseTraitsGeneratedFromReceipt, canOpenLootbox } from '../app/lootbox.js';
 
 // Plan 60-04: chainId-scoped localStorage keys per CONTEXT D-07 step 6 +
 // Phase 59 Pitfall B precedent (chainId scoping forward-safe for v5.0 mainnet).
@@ -764,11 +765,13 @@ class AppPacksPanel extends HTMLElement {
     const ctrl = new AbortController();
     this.#pollControllers.set(idxKey, ctrl);
     try {
-      const word = await pollRngForLootbox(row.lootboxIndex);
+      const ready = await canOpenLootbox({
+        player: get('connected.address'),
+        lootboxIndex: row.lootboxIndex,
+      });
       if (ctrl.signal.aborted) return;
       if (row.status !== 'awaiting-rng') return;
-      if (word !== 0n) {
-        row.rngWord = word;
+      if (ready) {
         row.status = 'ready-to-open';
         this.#renderRows();
         this.#showRowSignal(row);

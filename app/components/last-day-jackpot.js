@@ -318,6 +318,35 @@ class LastDayJackpot extends HTMLElement {
     return true;
   }
 
+  #ensureZeroEntryPlayerOption(select, address) {
+    if (!select || !address) return false;
+    const target = String(address);
+    const options = select.options ? Array.from(select.options) : [];
+    if (options.some((option) => String(option.value).toLowerCase() === target.toLowerCase())) {
+      return true;
+    }
+
+    // replay-panel builds this list from /replay/tickets/:level, so an address
+    // with zero entries is correctly absent. It still needs to be selectable:
+    // otherwise #setSelectAndFire leaves the previously rendered player in
+    // place and the zero-entry viewer appears to own that player's wins (most
+    // visibly the far-future result). The synthetic option represents exactly
+    // what the API omitted — this address, with no entries — and the panel's
+    // normal exact-address filtering then renders an empty personal result.
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return false;
+    const option = document.createElement('option');
+    option.value = target;
+    option.textContent = `${target.slice(0, 6)}…${target.slice(-4)} (0 entries)`;
+    option.dataset.zeroEntry = 'true';
+    select.appendChild(option);
+    // The test DOM keeps `options` as a plain array; a real HTMLSelectElement's
+    // live HTMLOptionsCollection is updated by appendChild above.
+    if (Array.isArray(select.options) && !select.options.includes(option)) {
+      select.options.push(option);
+    }
+    return true;
+  }
+
   #trySyncOnce() {
     const panel = this.#panel();
     if (!panel || this.#pinnedDay == null) return false;
@@ -344,6 +373,7 @@ class LastDayJackpot extends HTMLElement {
     // Player defaults are seeded by main.js (sDGNRS house view when nothing
     // else is connected), so getViewedAddress() is the single source of truth.
     const addr = getViewedAddress();
+    if (addr) this.#ensureZeroEntryPlayerOption(playerSelect, addr);
     const playerOk = addr ? this.#setSelectAndFire(playerSelect, addr) : false;
     if (dayOk && playerOk && typeof panel.setPersistedRevealState === 'function') {
       // The replay panel owns rendering; this shell owns the chain/day-scoped

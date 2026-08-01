@@ -304,7 +304,7 @@ describe('formatAmount', () => {
 
   test('FLIP rows format from a string too', () => {
     const out = formatAmount({ unit: 'flip', amount: '150000000000000000000' });
-    assert.equal(out, '150.0000 FLIP');
+    assert.equal(out, '150 FLIP');
   });
 
   test('tickets convert entries → tickets and show both', () => {

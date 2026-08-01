@@ -35,6 +35,10 @@ function makeFakeContract(opts = {}) {
   const calls = {
     purchaseWhalePass: [],
     purchaseDeityPass: [],
+    issueDeityBoon: [],
+    smite: [],
+    subscribe: [],
+    depositAfkingFunding: [],
   };
   const staticCallStub = (methodName) => async (..._args) => {
     if (opts.staticCallShouldRevert?.[methodName]) {
@@ -69,6 +73,34 @@ function makeFakeContract(opts = {}) {
         return sendTxStub('purchaseDeityPass')(...args);
       },
       { staticCall: staticCallStub('purchaseDeityPass') }
+    ),
+    issueDeityBoon: Object.assign(
+      async (...args) => {
+        calls.issueDeityBoon.push(args);
+        return sendTxStub('issueDeityBoon')(...args);
+      },
+      { staticCall: staticCallStub('issueDeityBoon') }
+    ),
+    smite: Object.assign(
+      async (...args) => {
+        calls.smite.push(args);
+        return sendTxStub('smite')(...args);
+      },
+      { staticCall: staticCallStub('smite') }
+    ),
+    subscribe: Object.assign(
+      async (...args) => {
+        calls.subscribe.push(args);
+        return sendTxStub('subscribe')(...args);
+      },
+      { staticCall: staticCallStub('subscribe') }
+    ),
+    depositAfkingFunding: Object.assign(
+      async (...args) => {
+        calls.depositAfkingFunding.push(args);
+        return sendTxStub('depositAfkingFunding')(...args);
+      },
+      { staticCall: staticCallStub('depositAfkingFunding') }
     ),
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
@@ -148,6 +180,249 @@ describe('deity pass NFT catalog', () => {
     ));
 
     assert.equal(await passesMod.readDeityPassCatalog(), null);
+  });
+});
+
+// ===========================================================================
+// Deity daily boon slots + issuance.
+// ===========================================================================
+
+describe('deity daily boons', () => {
+  afterEach(() => {
+    passesMod.__resetDeityBoonReadContractFactoryForTest();
+    passesMod.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+    storeMod.__resetForTest();
+  });
+
+  test('mirrors the viewer weighting deterministically, including conditional pools', () => {
+    const base = {
+      dailySeed: 123456789n,
+      deity: CONNECTED,
+      day: 7,
+    };
+    assert.deepEqual(
+      passesMod.deriveDeityBoonSlots({ ...base, decimatorOpen: true, deityPassAvailable: true }),
+      [4, 8, 17],
+    );
+    assert.deepEqual(
+      passesMod.deriveDeityBoonSlots({ ...base, decimatorOpen: false, deityPassAvailable: false }),
+      [5, 4, 8],
+    );
+  });
+
+  test('returns the three slots with the authoritative used mask', async () => {
+    passesMod.__setDeityBoonReadContractFactoryForTest(() => ({
+      deityBoonData: async () => [123456789n, 7n, 0b101n, true, true],
+    }));
+    const state = await passesMod.readDeityBoonSlots(CONNECTED);
+    assert.equal(state.day, 7);
+    assert.equal(state.usedMask, 0b101);
+    assert.equal(state.ready, true);
+    assert.deepEqual(state.slots, [4, 8, 17]);
+  });
+
+  test('issues a slot for the acting deity only after a static call', async () => {
+    storeMod.__resetForTest();
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('viewing.address', null);
+    storeMod.update('ui.mode', 'self');
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    const fake = makeFakeContract();
+    passesMod.__setContractFactoryForTest(() => fake);
+    const recipient = '0xcd34000000000000000000000000000000000000';
+
+    await passesMod.issueDeityBoon({ recipient, slot: 2 });
+
+    assert.equal(fake._calls.issueDeityBoon.length, 1);
+    assert.deepEqual(fake._calls.issueDeityBoon[0], [
+      '0xAB12000000000000000000000000000000000000',
+      '0xCd34000000000000000000000000000000000000',
+      2,
+    ]);
+  });
+
+  test('rejects self-booning before opening a wallet request', async () => {
+    storeMod.__resetForTest();
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('ui.mode', 'self');
+    await assert.rejects(
+      passesMod.issueDeityBoon({ recipient: CONNECTED, slot: 0 }),
+      /other than yourself/i,
+    );
+  });
+
+  test('a deity curse preflights and sends the holder symbol plus target', async () => {
+    storeMod.__resetForTest();
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('viewing.address', null);
+    storeMod.update('ui.mode', 'self');
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    const fake = makeFakeContract();
+    passesMod.__setContractFactoryForTest(() => fake);
+    const target = '0xcd34000000000000000000000000000000000000';
+
+    await passesMod.smiteWithDeity({ deityId: 11, target });
+
+    assert.equal(fake._calls.smite.length, 1);
+    assert.deepEqual(fake._calls.smite[0], [
+      11,
+      '0xCd34000000000000000000000000000000000000',
+    ]);
+  });
+
+  test('a deity curse rejects an invalid pass id or target before sending', async () => {
+    storeMod.__resetForTest();
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('ui.mode', 'self');
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    const fake = makeFakeContract();
+    passesMod.__setContractFactoryForTest(() => fake);
+
+    await assert.rejects(
+      passesMod.smiteWithDeity({ deityId: 32, target: CONNECTED }),
+      /0-31/,
+    );
+    await assert.rejects(
+      passesMod.smiteWithDeity({ deityId: 11, target: 'not-an-address' }),
+      /valid target/i,
+    );
+    assert.equal(fake._calls.smite.length, 0);
+  });
+});
+
+// ===========================================================================
+// AFKing seat entitlement + claim. Buying a deity/whale/lazy pass latches the
+// free claim in GAME; the ERC-721 is deliberately claimed in a second tx.
+// ===========================================================================
+
+describe('AFKing seat entitlement and claim', () => {
+  afterEach(() => {
+    passesMod.__resetAfkingReadContractFactoryForTest();
+    contractsMod.clearProvider();
+    storeMod.__resetForTest();
+  });
+
+  test('an eligible pass holder with no token is surfaced as claimable', async () => {
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: {
+        balanceOf: async () => 0n,
+        claimSeat: { staticCall: async () => 171n },
+      },
+      game: {
+        subInfo: async () => [false, 0n, 0n, 0n],
+        afkingSnapshot: async () => [10n, false, [0n], [0n]],
+      },
+    }));
+
+    const state = await passesMod.readAfkingSubscription(CONNECTED);
+    assert.equal(state.hasToken, false);
+    assert.equal(state.canClaimSeat, true);
+  });
+
+  test('claimAfkingSeat preflights and sends the chosen badge and colors', async () => {
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('viewing.address', null);
+    storeMod.update('ui.mode', 'self');
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    const calls = [];
+    const order = [];
+    const claimSeat = Object.assign(
+      async (...args) => {
+        order.push('send');
+        calls.push(args);
+        return makeFakeTx(makeFakeReceipt());
+      },
+      {
+        staticCall: async (...args) => {
+          order.push('static');
+          assert.deepEqual(args, [11, 0xd9d9d9, 0xc72734]);
+          return 171n;
+        },
+      },
+    );
+    const token = { claimSeat, connect() { return this; } };
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({ token, game: {} }));
+
+    await passesMod.claimAfkingSeat({
+      symbolId: 11,
+      bgRgb: 0xd9d9d9,
+      trimRgb: 0xc72734,
+    });
+
+    assert.deepEqual(order, ['static', 'send']);
+    assert.deepEqual(calls, [[11, 0xd9d9d9, 0xc72734]]);
+  });
+});
+
+describe('AFKing subscription configuration and funding', () => {
+  let fake;
+
+  beforeEach(() => {
+    storeMod.__resetForTest();
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('viewing.address', null);
+    storeMod.update('ui.mode', 'self');
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    fake = makeFakeContract();
+    passesMod.__setContractFactoryForTest(() => fake);
+  });
+
+  afterEach(() => {
+    passesMod.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+    storeMod.__resetForTest();
+  });
+
+  test('sends delivery mode, quantity, claimable priority, and ETH funding to subscribe', async () => {
+    const funding = 250_000_000_000n;
+    await passesMod.updateAfkingSubscription({
+      dailyQuantity: 3,
+      useTickets: false,
+      drainGameCreditFirst: false,
+      msgValueWei: funding,
+    });
+
+    assert.equal(fake._calls.subscribe.length, 1);
+    assert.deepEqual(fake._calls.subscribe[0], [
+      CONNECTED,
+      false,
+      false,
+      3,
+      '0x0000000000000000000000000000000000000000',
+      { value: funding },
+    ]);
+  });
+
+  test('rejects an invalid quantity or negative funding before sending', async () => {
+    await assert.rejects(
+      passesMod.updateAfkingSubscription({ dailyQuantity: 256 }),
+      /0-255/,
+    );
+    await assert.rejects(
+      passesMod.updateAfkingSubscription({ dailyQuantity: 1, msgValueWei: -1n }),
+      /cannot be negative/,
+    );
+    assert.equal(fake._calls.subscribe.length, 0);
+  });
+
+  test('tops up AFKing funding without rewriting subscription settings', async () => {
+    const funding = 400_000_000_000n;
+    await passesMod.fundAfkingSubscription({ msgValueWei: funding });
+
+    assert.equal(fake._calls.subscribe.length, 0);
+    assert.deepEqual(fake._calls.depositAfkingFunding, [[
+      '0xAB12000000000000000000000000000000000000',
+      { value: funding },
+    ]]);
+  });
+
+  test('rejects an empty AFKing top-up before sending', async () => {
+    await assert.rejects(
+      passesMod.fundAfkingSubscription({ msgValueWei: 0n }),
+      /funding amount/i,
+    );
+    assert.equal(fake._calls.depositAfkingFunding.length, 0);
   });
 });
 

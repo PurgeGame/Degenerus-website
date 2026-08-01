@@ -261,12 +261,9 @@ class AppParimutuelPanel extends HTMLElement {
     const growthRounds = this.#lookback(level);
     const volumeRounds = this.#lookback(volumeRoundNow());
 
-    // The credit quote is only asked for when it can be earned. On the testnet
-    // overlay volumeBetCredit() UNDERFLOWS outside the window — its decay clock
-    // is anchored 7s into a 600s day with 4s steps, so a `tod` past ~30s
-    // subtracts more than the 25 FLIP base and the view panics (mainnet's
-    // 23:15-anchored ladder tops out at 4 steps and cannot). The soft-fail below
-    // covers it either way; not asking is just cheaper.
+    // The credit quote is only asked for while the book is open or about to
+    // open. The profile mirrors the deployed contract's rescaled ladder; the
+    // soft-fail still keeps a transient RPC problem from blocking both books.
     const win = volumeWindow();
     const wantCredit = win.open || win.secondsToOpen <= (VOLUME_WINDOW.leadSeconds || 0);
     const decimatorLevel = Number.isInteger(level) && level >= 0 ? level + 1 : null;
@@ -577,7 +574,7 @@ class AppParimutuelPanel extends HTMLElement {
     let target;
     try { target = BigInt(detail?.target ?? 0); } catch (_e) { target = 0n; }
     if (target <= 0n) target = 2_000n * (10n ** 18n);
-    const fixed = String(displayToken(target, 6));
+    const fixed = String(displayToken(target, 0));
     const value = fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed;
     this.#decimatorDraft = value;
     const input = this.querySelector('[data-bind="pari-decimator-input"]');
@@ -955,7 +952,7 @@ class AppParimutuelPanel extends HTMLElement {
           verb.textContent = `${sideText} `;
           const target = document.createElement('span');
           target.className = 'pari-side__target';
-          target.textContent = `TARGET · ${offered.offered}`;
+          target.textContent = offered.offered;
           action.appendChild(verb);
           action.appendChild(target);
         } else {
@@ -966,7 +963,7 @@ class AppParimutuelPanel extends HTMLElement {
           'aria-label',
           `Bet ${isOver ? 'over' : 'under'}${offered
             ? kind === 'volume'
-              ? ` the target of ${offered.offered}`
+              ? ` ${offered.offered}`
               : ` ${offered.offered}`
             : ''}`,
         );
@@ -983,7 +980,7 @@ class AppParimutuelPanel extends HTMLElement {
         if (kind === 'volume' && offered) {
           const target = document.createElement('span');
           target.className = 'pari-side__target';
-          target.textContent = `TARGET · ${offered.offered}`;
+          target.textContent = offered.offered;
           cell.appendChild(target);
         }
         if (mine === side) {

@@ -14,7 +14,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { displayEth, displayTickets } from '../scaling.js';
+import { displayEth, displayTickets, displayToken } from '../scaling.js';
 import {
   ETH_DIVISOR as SEPOLIA_ETH_DIVISOR,
   TICKET_DIVISOR as SEPOLIA_TICKET_DIVISOR,
@@ -84,6 +84,24 @@ describe('displayEth (Sepolia path — active chain-config)', () => {
   test('digits=0 strips fractional → integer-only string', () => {
     // formatEther(1e18) = "1.0"; digits=0 returns "1" (no decimal point)
     assert.equal(displayEth(1_000_000_000_000n, 0), '1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// displayToken — whole-coin UI default
+// ---------------------------------------------------------------------------
+
+describe('displayToken (unscaled 18-decimal coin amounts)', () => {
+  test('default display removes fractional FLIP/DGNRS/WWXRP units', () => {
+    assert.equal(displayToken(1_750_000_000_000_000_000n), '1');
+  });
+
+  test('whole token amounts remain exact', () => {
+    assert.equal(displayToken(54_000n * 10n ** 18n), '54000');
+  });
+
+  test('explicit precision remains available to non-default callers', () => {
+    assert.equal(displayToken(1_750_000_000_000_000_000n, 2), '1.75');
   });
 });
 

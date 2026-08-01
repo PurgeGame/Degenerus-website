@@ -49,7 +49,10 @@ export function formatEth(weiString) {
 /** Format FLIP wei string to human-readable string. FLIP is NOT /1M-scaled on testnet. */
 export function formatFlip(weiString) {
   if (!weiString || weiString === '0') return '0';
-  const num = formatWei(weiString, 18, TOKEN_DISPLAY_SCALE);
-  if (num < 1) return num.toFixed(2);
-  return Math.floor(num).toLocaleString();
+  try {
+    const whole = (BigInt(weiString) * TOKEN_DISPLAY_SCALE) / (10n ** 18n);
+    return whole.toLocaleString();
+  } catch {
+    return '0';
+  }
 }

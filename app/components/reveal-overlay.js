@@ -65,6 +65,8 @@ let _buffer = [];
 // consumed. Pack-watch owns the durable pending/revealed bookkeeping.
 export const PACK_REVEAL_COMPLETE_EVENT = 'degenerus:pack-reveal-complete';
 export const PACK_REVEAL_ABORT_EVENT = 'degenerus:pack-reveal-abort';
+export const LOOTBOX_REVEAL_COMPLETE_EVENT = 'degenerus:lootbox-reveal-complete';
+export const LOOTBOX_REVEAL_ABORT_EVENT = 'degenerus:lootbox-reveal-abort';
 
 /**
  * Enqueue a reveal sequence. Safe to call before <reveal-overlay> mounts —
@@ -139,14 +141,22 @@ export function goldTicketLabel(traitIds) {
     : 'GOLD TICKET';
 }
 
+function _groupAmountText(value) {
+  const text = String(value ?? '0');
+  const match = /^([+-]?)(\d+)(\.\d+)?$/.exec(text);
+  if (!match) return text;
+  return `${match[1]}${match[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${match[3] || ''}`;
+}
+
 function _ethText(wei) {
-  try { return displayEth(BigInt(wei ?? 0)); } catch (_e) { return '0'; }
+  try { return _groupAmountText(displayEth(BigInt(wei ?? 0))); } catch (_e) { return '0'; }
 }
 function _tokenText(wei) {
   try {
-    return String(displayToken(BigInt(wei ?? 0)))
+    const trimmed = String(displayToken(BigInt(wei ?? 0)))
       .replace(/(\.\d*?[1-9])0+$/, '$1')
       .replace(/\.0+$/, '');
+    return _groupAmountText(trimmed);
   } catch (_e) { return '0'; }
 }
 
@@ -203,15 +213,18 @@ export function buildBoxSpinBoard(spin) {
     unit: DGN_UNITS[currency],
     total,
     spinSum: null,
-    survived: spinType === 'flip' && spin?.survived != null
-      ? Boolean(spin.survived)
+    // A zero-payout FLIP leg has nothing left to present after its reels. The
+    // contract still records the survival bit, but replaying a second loss
+    // animation here makes an empty result look like it first won something.
+    survived: spinType === 'flip' && total > 0n && spin?.survived === true
+      ? true
       : null,
     heroIdx: null,
     boxSpin: true,
     grossPayout,
-    // The box only tells the player which currency lane it rolled after every
-    // verified reel lands. Keep the internal unit for payout math, but do not
-    // put it in the pre-spin heading.
+    // The first verified reel is the mystery beat. Keep the internal unit for
+    // payout math, but do not put it (or the telltale reel count) anywhere in
+    // the pre-spin UI; both become visible only after reel one lands.
     headline: 'LOOTBOX SPIN · CURRENCY HIDDEN',
   };
 }
@@ -270,6 +283,14 @@ function _cardsFromLeg(leg) {
         countText: _tokenText(leg.amount), spin: null,
       });
       break;
+    case 'wwxrp':
+      cards.push({
+        type: 'wwxrp', rarity: 'rare', icon: ICONS.wwxrp, glyph: null,
+        label: 'WWXRP', value: _tokenText(leg.amount),
+        sub: 'Coinflip currency credited to your wallet',
+        countText: _tokenText(leg.amount), spin: null,
+      });
+      break;
     case 'whalepass':
       cards.push({
         type: 'whalepass', rarity: 'legendary', icon: null, glyph: '🐳',
@@ -312,7 +333,7 @@ function _cardsFromLeg(leg) {
         // telltale reel count sealed until reel one has actually landed.
         value: '?',
         revealedValue: `×${spinCount}`,
-        sub: 'Run every verified reel to reveal its currency',
+        sub: 'Land the first reel to reveal its currency',
         countText: null,
         spin: {
           spinType: leg.spinType,
@@ -350,6 +371,24 @@ export function normalizeSequence(seq) {
       (sum, card) => sum + (card.spin?.reels?.length || 0),
       0,
     );
+    const rawRelease = seq.lootboxRelease;
+    const lootboxRelease = rawRelease && typeof rawRelease === 'object'
+      ? {
+          address: String(rawRelease.address || '').toLowerCase(),
+          key: String(rawRelease.key || ''),
+          lootboxIndex: rawRelease.lootboxIndex == null
+            ? null
+            : Number(rawRelease.lootboxIndex),
+          transactionHash: rawRelease.transactionHash == null
+            ? null
+            : String(rawRelease.transactionHash).toLowerCase(),
+        }
+      : null;
+    const validLootboxRelease = lootboxRelease
+      && lootboxRelease.address
+      && lootboxRelease.key
+      ? lootboxRelease
+      : null;
     return {
       kind,
       title: seq.title || 'LOOTBOX',
@@ -358,6 +397,7 @@ export function normalizeSequence(seq) {
       noVessel: Boolean(seq.noVessel),
       boxIndex,
       boxSpinCount,
+      lootboxRelease: validLootboxRelease,
       cards,
     };
   }
@@ -537,15 +577,14 @@ export function normalizeSequence(seq) {
     const spinSum = rows.reduce((a, r) => a + r.payout, 0n);
     const won = total > 0n;
     const hits = rows.filter((r) => r.payout > 0n).length;
-    // FLIP bets double-or-nothing the WHOLE bet on one survival flip, so a
-    // FLIP total that isn't 2x the per-spin sum means the flip busted.
-    const survived = (currency === 1 && spinSum > 0n) ? won : null;
+    // Only stage the survival beat for a payout the player actually receives.
+    // A zero final total already has a complete losing reel result; replaying
+    // the contract's failed survival coin after it is redundant and misleading.
+    const survived = currency === 1 && won ? true : null;
     const amount = currency === 0 ? _ethText(total) : _tokenText(total);
     return {
       kind,
-      // A busted FLIP bet DID hit — the flip took it. Saying "no hits" over a
-      // board full of paid rows is the one wrong thing to say here.
-      title: seq.title || (won ? 'YOU WON' : (survived === false ? 'FLIP BUSTED' : 'NO HITS')),
+      title: seq.title || (won ? 'YOU WON' : 'NO HITS'),
       // The verdict above is a SPOILER while the reels are still turning, so the
       // board plays under a neutral heading and swaps to it at the end.
       boardTitle: 'DEGENERETTE',
@@ -566,9 +605,7 @@ export function normalizeSequence(seq) {
         glyph: null,
         label: `DEGENERETTE — ${rows.length} SPIN${rows.length === 1 ? '' : 'S'}`,
         value: won ? `${amount} ${unit}` : '',
-        sub: won
-          ? `${hits} of ${rows.length} paid`
-          : (survived === false ? 'Survival flip busted the payout' : 'The house took this one'),
+        sub: won ? `${hits} of ${rows.length} paid` : 'The house took this one',
         countText: null, spin: null,
       }],
     };
@@ -694,7 +731,7 @@ function _animateCount(el, text, ms = 750) {
   const step = (now) => {
     const t = Math.min((now - start) / duration, 1);
     const eased = 1 - Math.pow(1 - t, 3);
-    el.textContent = (target * eased).toFixed(decimals) + suffix;
+    el.textContent = _groupAmountText((target * eased).toFixed(decimals)) + suffix;
     if (t < 1) requestAnimationFrame(step);
     else el.textContent = String(text);
   };
@@ -832,18 +869,39 @@ class RevealOverlay extends HTMLElement {
         <div class="rvl-stage" data-bind="rvl-stage">
           <div class="rvl-title" data-bind="rvl-title" aria-live="polite"></div>
           <div class="rvl-vessel" data-bind="rvl-vessel" hidden>
+            <div class="rvl-lootbox-fx" aria-hidden="true">
+              <span class="rvl-lootbox-beam"></span>
+              <span class="rvl-lootbox-rays"></span>
+              <span class="rvl-lootbox-ring rvl-lootbox-ring--outer"></span>
+              <span class="rvl-lootbox-ring rvl-lootbox-ring--inner"></span>
+              <span class="rvl-lootbox-spark rvl-lootbox-spark--1"></span>
+              <span class="rvl-lootbox-spark rvl-lootbox-spark--2"></span>
+              <span class="rvl-lootbox-spark rvl-lootbox-spark--3"></span>
+              <span class="rvl-lootbox-spark rvl-lootbox-spark--4"></span>
+              <span class="rvl-lootbox-spark rvl-lootbox-spark--5"></span>
+              <span class="rvl-lootbox-spark rvl-lootbox-spark--6"></span>
+              <span class="rvl-lootbox-spark rvl-lootbox-spark--7"></span>
+              <span class="rvl-lootbox-spark rvl-lootbox-spark--8"></span>
+            </div>
             <div class="rvl-chest" data-bind="rvl-chest">
               <div class="rvl-chest-aura"></div>
-              <div class="rvl-chest-lid"><span class="rvl-chest-lid-mark"></span></div>
+              <div class="rvl-chest-lid">
+                <span class="rvl-chest-lid-mark"></span>
+                <span class="rvl-chest-rivet rvl-chest-rivet--tl"></span>
+                <span class="rvl-chest-rivet rvl-chest-rivet--tr"></span>
+              </div>
+              <div class="rvl-chest-seam"></div>
               <div class="rvl-chest-body">
                 <div class="rvl-chest-brand">
                   <img class="rvl-chest-logo" src="/whitepaper/flame-logo.svg" alt="">
                   <span class="rvl-chest-wordmark">DEGENERUS</span>
                   <strong class="rvl-chest-edition">LOOTBOX</strong>
                 </div>
-                <span class="rvl-chest-meta" data-bind="rvl-chest-meta">RNG VERIFIED</span>
+                <span class="rvl-chest-rivet rvl-chest-rivet--bl"></span>
+                <span class="rvl-chest-rivet rvl-chest-rivet--br"></span>
               </div>
               <div class="rvl-chest-clasp"><span class="rvl-chest-q">?</span></div>
+              <div class="rvl-chest-platform"></div>
             </div>
             <div class="rvl-pack" data-bind="rvl-pack">
               <div class="rvl-pack-shine"></div>
@@ -963,11 +1021,15 @@ class RevealOverlay extends HTMLElement {
         const seq = this.#queue.shift();
         this.#currentSequence = seq;
         await this.#playSequence(seq);
-        if (!this.#aborted) this.#emitPackComplete(seq);
+        if (!this.#aborted) {
+          this.#emitPackComplete(seq);
+          this.#emitLootboxComplete(seq);
+        }
       }
     } catch (_e) {
       // Never let a reveal error strand the scroll lock.
       this.#emitPackAbort([this.#currentSequence, ...this.#queue]);
+      this.#emitLootboxAbort([this.#currentSequence, ...this.#queue]);
       this.#aborted = true;
       this.#queue = [];
     } finally {
@@ -982,6 +1044,7 @@ class RevealOverlay extends HTMLElement {
 
   #abort() {
     this.#emitPackAbort([this.#currentSequence, ...this.#queue]);
+    this.#emitLootboxAbort([this.#currentSequence, ...this.#queue]);
     this.#aborted = true;
     this.#queue = [];
     this.#currentSequence = null;
@@ -1011,6 +1074,32 @@ class RevealOverlay extends HTMLElement {
     if (releases.length === 0) return;
     try {
       document.dispatchEvent(new CustomEvent(PACK_REVEAL_ABORT_EVENT, {
+        detail: { releases },
+      }));
+    } catch (_e) { /* presentation bookkeeping must never break the overlay */ }
+  }
+
+  #emitLootboxComplete(seq) {
+    const release = seq?.lootboxRelease;
+    if (!release || typeof document === 'undefined' || typeof document.dispatchEvent !== 'function'
+      || typeof CustomEvent !== 'function') return;
+    try {
+      document.dispatchEvent(new CustomEvent(LOOTBOX_REVEAL_COMPLETE_EVENT, {
+        detail: { ...release },
+      }));
+    } catch (_e) { /* presentation bookkeeping must never break the overlay */ }
+  }
+
+  #emitLootboxAbort(sequences) {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function'
+      || typeof CustomEvent !== 'function') return;
+    const releases = (Array.isArray(sequences) ? sequences : [])
+      .map((seq) => seq?.lootboxRelease)
+      .filter(Boolean)
+      .map((release) => ({ ...release }));
+    if (releases.length === 0) return;
+    try {
+      document.dispatchEvent(new CustomEvent(LOOTBOX_REVEAL_ABORT_EVENT, {
         detail: { releases },
       }));
     } catch (_e) { /* presentation bookkeeping must never break the overlay */ }
@@ -1064,6 +1153,7 @@ class RevealOverlay extends HTMLElement {
         'rvl-bursting',
         'rvl-stage--degenerette',
         'rvl-stage--ticket-pack',
+        'rvl-stage--lootbox',
       );
     }
   }
@@ -1085,6 +1175,7 @@ class RevealOverlay extends HTMLElement {
         'rvl-stage--ticket-pack',
         Array.isArray(seq.ticketGrid) && seq.ticketGrid.length > 0,
       );
+      rootStage.classList.toggle('rvl-stage--lootbox', seq.kind === 'lootbox');
     }
     // boardTitle is the non-spoiler heading a spin-through plays under; the real
     // verdict lands only after every verified reel has settled.
@@ -1192,12 +1283,6 @@ class RevealOverlay extends HTMLElement {
           vessel.classList.toggle('rvl-vessel--foil-pack', isFoilPack);
         }
       }
-      const chestMeta = this.#bind('rvl-chest-meta');
-      if (chestMeta) {
-        chestMeta.textContent = isLootbox
-          ? `${seq.boxIndex ? `BOX #${seq.boxIndex} · ` : ''}RNG VERIFIED`
-          : '';
-      }
       const packEdition = this.#bind('rvl-pack-edition');
       if (packEdition) packEdition.textContent = isFoilPack ? 'FOIL PACK' : 'TICKET PACK';
       const packLevel = this.#bind('rvl-pack-level');
@@ -1252,10 +1337,11 @@ class RevealOverlay extends HTMLElement {
         if (stage && stage.classList) stage.classList.add('rvl-bursting');
         await this.#wait(140);
       } else {
-        // --- charging: shake + glow build ---
+        // --- charging: lock, energy build, then the crack ---
         if (stage && stage.classList) stage.classList.add('rvl-charging');
-        sfxSpinStart(900);
-        await this.#wait(900);
+        const chargeMs = isLootbox ? 1180 : 900;
+        sfxSpinStart(chargeMs);
+        await this.#wait(chargeMs);
         if (this.#aborted) return;
 
         // --- burst ---
@@ -1267,7 +1353,8 @@ class RevealOverlay extends HTMLElement {
         // sequence's contents rather than the reveal-so-far: a big sequence whose
         // every card is a `nowin` gets the burst animation without the confetti.
         if (seq.big && !seq.consolationOnly && !allNoWin && !hasSpins) this.#fireConfetti(false);
-        await this.#wait(320);
+        if (isLootbox) sfxRollDone(true);
+        await this.#wait(isLootbox ? 520 : 320);
       }
       if (vessel) vessel.hidden = true;
       if (stage && stage.classList) stage.classList.remove('rvl-bursting');
@@ -1680,30 +1767,24 @@ class RevealOverlay extends HTMLElement {
     running.className = 'rvl-spin-running';
     const runLabel = document.createElement('span');
     runLabel.className = 'rvl-spin-running-label';
-    runLabel.textContent = board.boxSpin ? 'BOX RESULT' : 'WON SO FAR';
+    runLabel.textContent = 'WON SO FAR';
     const runAmount = document.createElement('span');
     runAmount.className = 'rvl-spin-running-amount';
-    runAmount.textContent = board.boxSpin ? 'PAYOUT LOCKED' : `0 ${board.unit}`;
+    runAmount.textContent = `0 ${board.unit}`;
     running.appendChild(runLabel);
     running.appendChild(runAmount);
+    // Lootbox reels reveal their denomination after reel one. A textual
+    // "payout locked / reels locked" rail only narrated the animation and
+    // could leak its shape; the currency/result graphics own that beat.
+    running.hidden = board.boxSpin;
     zone.appendChild(running);
 
     const stage = document.createElement('div');
     stage.className = board.boxSpin ? 'rvl-dgn-stage rvl-dgn-stage--box' : 'rvl-dgn-stage';
-    const progress = document.createElement('div');
-    progress.className = 'rvl-dgn-progress';
-    progress.textContent = board.boxSpin ? 'SPIN 1' : `SPIN 1 OF ${board.rows.length}`;
     const compare = document.createElement('div');
     compare.className = 'rvl-dgn-compare';
     const pop = document.createElement('div');
     pop.className = 'rvl-dgn-roll-pop';
-    const status = document.createElement('div');
-    status.className = 'rvl-dgn-status';
-    status.setAttribute('aria-live', 'polite');
-    status.textContent = board.boxSpin ? 'BOX SPIN READY' : 'SPIN 1 READY';
-    const hint = document.createElement('div');
-    hint.className = 'rvl-dgn-hint';
-    hint.textContent = 'ONE CLICK PER SPIN · 8 LOCKS · COLOR THEN SYMBOL';
     const actions = document.createElement('div');
     actions.className = 'rvl-dgn-actions';
     const cta = document.createElement('button');
@@ -1727,16 +1808,13 @@ class RevealOverlay extends HTMLElement {
     actions.appendChild(skipCta);
     const history = document.createElement('div');
     history.className = 'rvl-dgn-history';
-    stage.appendChild(progress);
     stage.appendChild(compare);
     stage.appendChild(pop);
-    stage.appendChild(status);
-    stage.appendChild(hint);
     stage.appendChild(actions);
     stage.appendChild(history);
     zone.appendChild(stage);
     return {
-      zone, head, stage, compare, progress, pop, status, hint,
+      zone, head, stage, compare, pop,
       actions, cta, skipCta, history, runAmount,
     };
   }
@@ -1814,18 +1892,11 @@ class RevealOverlay extends HTMLElement {
         pair.house.cells[q].classList.add('rvl-rq--symbol-locked');
       }
     }
-    const left = Math.max(0, 8 - frame.locksDone);
-    if (frame.lock) {
-      const phase = frame.lock.type === 'color' ? 'COLOR' : 'SYMBOL';
-      pair.rendered.status.textContent = `Q${frame.lock.quadrant + 1} ${phase} LOCKED · ${matchingLocks} MATCHING · ${left} LEFT`;
-    } else {
-      pair.rendered.status.textContent = `HOUSE TOKEN SPINNING · ${left} LOCKS LEFT`;
-    }
     return matchingLocks;
   }
 
   #settleFullSpinPair(pair) {
-    const { row, board, rendered } = pair;
+    const { row, board } = pair;
     if (pair.targetTraits) {
       this.#applyFullSpinFrame(pair, {
         traits: pair.targetTraits,
@@ -1846,11 +1917,6 @@ class RevealOverlay extends HTMLElement {
         if (center?.classList) center.classList.add(won ? 'is-win' : 'is-miss');
       }
     }
-    const scoreText = row.score > 0 ? `S ${row.score}` : 'MISS';
-    const payoutText = won ? ` · +${this.#formatDgnAmount(board, row.payout)} ${board.unit}` : '';
-    rendered.status.textContent = row.houseTraits == null
-      ? `SPIN ${row.spinIndex + 1} · REEL UNAVAILABLE · ${scoreText}${payoutText}`
-      : `SPIN ${row.spinIndex + 1} · ${scoreText}${payoutText}`;
   }
 
   #jiggleFullSpin(pair, intensity) {
@@ -1974,7 +2040,9 @@ class RevealOverlay extends HTMLElement {
     rendered.stage.appendChild(results);
   }
 
-  async #appendBoxSpinCurrencyReveal(rendered, board, reducedMotion) {
+  async #appendBoxSpinCurrencyReveal(rendered, board, reducedMotion, {
+    interstitial = false,
+  } = {}) {
     if (!board.boxSpin || this.#aborted) return;
     const currencyKey = DGN_CARD_TYPES[board.currency] || 'flip';
     const reveal = document.createElement('div');
@@ -1991,7 +2059,7 @@ class RevealOverlay extends HTMLElement {
 
     const eyebrow = document.createElement('span');
     eyebrow.className = 'rvl-box-currency-eyebrow';
-    eyebrow.textContent = 'BOX SPIN CURRENCY';
+    eyebrow.textContent = 'MYSTERY CURRENCY';
     const name = document.createElement('strong');
     name.className = 'rvl-box-currency-name';
     name.textContent = board.unit;
@@ -2004,7 +2072,6 @@ class RevealOverlay extends HTMLElement {
     reveal.appendChild(name);
     reveal.appendChild(sub);
     rendered.stage.appendChild(reveal);
-    rendered.status.textContent = 'CURRENCY REVEAL…';
 
     if (!reducedMotion) {
       sfxSpinStart(520);
@@ -2013,10 +2080,18 @@ class RevealOverlay extends HTMLElement {
     }
 
     if (reveal.classList) reveal.classList.add('is-revealed');
-    if (rendered.head) rendered.head.textContent = `${board.unit} BOX SPIN · ON-CHAIN RESULT`;
-    rendered.status.textContent = `${board.unit} SPIN CONFIRMED`;
+    if (rendered.head) {
+      rendered.head.textContent = `${board.unit} BOX SPIN · ${board.rows.length} REEL${
+        board.rows.length === 1 ? '' : 'S'
+      }`;
+    }
     sfxRollDone(board.total > 0n);
-    if (!reducedMotion) await this.#wait(480);
+    if (!reducedMotion) await this.#wait(interstitial ? 720 : 480);
+    if (interstitial && !this.#aborted) {
+      reveal.classList?.add('is-leaving');
+      if (!reducedMotion) await this.#wait(180);
+      reveal.remove?.();
+    }
   }
 
   async #appendFullSpinSurvival(rendered, board, reducedMotion) {
@@ -2062,15 +2137,21 @@ class RevealOverlay extends HTMLElement {
     reducedMotion = false,
     sequence = null,
     finalLabel = null,
+    currencyRevealed = false,
   } = {}) {
-    await this.#appendBoxSpinCurrencyReveal(rendered, board, reducedMotion);
+    if (!currencyRevealed) {
+      await this.#appendBoxSpinCurrencyReveal(rendered, board, reducedMotion);
+    }
     if (this.#aborted) return board.total > 0n;
 
     await this.#appendFullSpinSurvival(rendered, board, reducedMotion);
     if (this.#aborted) return board.total > 0n;
 
     const won = board.total > 0n;
-    if (board.boxSpin && board.survived == null) {
+    // When there is no survival beat, settle the tracker on the authoritative
+    // final payout. This matters for a FLIP round whose per-spin rows contain
+    // hits but whose final payout is zero.
+    if (board.survived == null) {
       this.#setRunningTotal(rendered, board, board.total, reducedMotion ? 0 : 600);
     }
     this.#appendFullSpinResultDetails(rendered, board);
@@ -2081,7 +2162,6 @@ class RevealOverlay extends HTMLElement {
       ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} WON`
       : (board.survived === false ? 'HIT — SURVIVAL FLIP BUSTED' : 'NO HIT');
     rendered.stage.appendChild(totalEl);
-    rendered.hint.textContent = 'RESULT LOCKED';
 
     if (sequence) {
       const title = this.#bind('rvl-title');
@@ -2119,11 +2199,9 @@ class RevealOverlay extends HTMLElement {
       board,
     );
     this.#settleFullSpinPair(pair);
-    rendered.progress.textContent = `SPIN ${board.rows.length} OF ${board.rows.length} · COMPLETE`;
     rendered.cta.hidden = true;
     if (rendered.skipCta) rendered.skipCta.hidden = true;
-    if (board.boxSpin) rendered.runAmount.textContent = `ALL ${board.rows.length} REELS LOCKED`;
-    else this.#setRunningTotal(rendered, board, board.spinSum, 0);
+    if (!board.boxSpin) this.#setRunningTotal(rendered, board, board.spinSum, 0);
     return this.#finishFullSpinBoard(rendered, board, {
       ...options,
       reducedMotion: true,
@@ -2325,13 +2403,11 @@ class RevealOverlay extends HTMLElement {
       let running = 0n;
       let skipped = false;
       let completed = 0;
+      let currencyRevealed = false;
       for (let i = 0; i < count; i++) {
         const row = board.rows[i];
         const plan = plans[i];
         const countIsRevealed = !board.boxSpin || i > 0;
-        rendered.progress.textContent = countIsRevealed
-          ? `SPIN ${i + 1} OF ${count} · READY`
-          : 'SPIN 1 · READY';
         rendered.cta.dataset.mode = 'spin';
         rendered.cta.textContent = countIsRevealed
           ? `SPIN ${i + 1} OF ${count}`
@@ -2340,10 +2416,6 @@ class RevealOverlay extends HTMLElement {
         rendered.cta.hidden = false;
         rendered.skipCta.hidden = false;
         rendered.skipCta.disabled = false;
-        rendered.hint.textContent = i === 0
-          ? 'CLICK SPIN · EACH REEL WAITS FOR YOU'
-          : `SPIN ${i} LANDED · CLICK FOR THE NEXT REEL`;
-        if (i > 0) rendered.status.textContent = `SPIN ${i} LANDED · SPIN ${i + 1} READY`;
 
         let action = null;
         while (!this.#aborted && action !== 'spin' && action !== 'skip') {
@@ -2362,13 +2434,9 @@ class RevealOverlay extends HTMLElement {
             board,
           );
         }
-        rendered.progress.textContent = countIsRevealed
-          ? `SPIN ${i + 1} OF ${count} · SPINNING`
-          : 'SPIN 1 · SPINNING';
         rendered.cta.dataset.mode = 'busy';
-        rendered.cta.textContent = 'SPINNING…';
         rendered.cta.disabled = true;
-        rendered.hint.textContent = 'SKIP TO RESULTS IS ALWAYS AVAILABLE';
+        rendered.cta.hidden = true;
         sfxSpinStart(Math.max(800, plan.length * profile.cadence));
 
         let matchingLocks = 0;
@@ -2395,14 +2463,19 @@ class RevealOverlay extends HTMLElement {
         this.#settleFullSpinPair(pair);
         this.#appendFullSpinHistory(rendered, row, board);
         this.#showFullSpinPop(rendered, row, board);
-        if (board.boxSpin) {
-          rendered.runAmount.textContent = `${i + 1}/${count} REELS LOCKED`;
-        } else {
+        if (!board.boxSpin) {
           running += row.payout;
           this.#setRunningTotal(rendered, board, running, 520);
         }
         sfxRollDone(board.boxSpin ? row.score > 0 : row.payout > 0n);
         completed = i + 1;
+        if (board.boxSpin && i === 0) {
+          await this.#appendBoxSpinCurrencyReveal(rendered, board, false, {
+            interstitial: count > 1,
+          });
+          if (this.#aborted) return board.total > 0n;
+          currencyRevealed = true;
+        }
       }
 
       if (skipped) {
@@ -2421,22 +2494,20 @@ class RevealOverlay extends HTMLElement {
         );
         this.#settleFullSpinPair(pair);
         this.#showFullSpinPop(rendered, last, board);
-        if (board.boxSpin) rendered.runAmount.textContent = `ALL ${count} REELS LOCKED`;
-        else this.#setRunningTotal(rendered, board, board.spinSum, 0);
-        rendered.status.textContent = `ALL ${count} SPINS LANDED`;
+        if (!board.boxSpin) this.#setRunningTotal(rendered, board, board.spinSum, 0);
         sfxRollDone(board.boxSpin
           ? board.rows.some((row) => row.score > 0)
           : board.spinSum > 0n);
-      } else if (board.boxSpin) {
-        rendered.runAmount.textContent = `ALL ${count} REELS LOCKED`;
-      } else {
+      } else if (!board.boxSpin) {
         this.#setRunningTotal(rendered, board, board.spinSum, 0);
       }
-      rendered.progress.textContent = `SPIN ${count} OF ${count} · COMPLETE`;
       rendered.cta.hidden = true;
       rendered.skipCta.hidden = true;
 
-      return await this.#finishFullSpinBoard(rendered, board, options);
+      return await this.#finishFullSpinBoard(rendered, board, {
+        ...options,
+        currencyRevealed,
+      });
     } finally {
       this.#controlsOnly = priorControlsOnly;
       if (restoreCompactStage) rootStage.classList.remove('rvl-stage--degenerette');

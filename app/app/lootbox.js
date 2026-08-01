@@ -59,7 +59,8 @@ const PREWARM_TTL_MS = 30_000;
 // Base Sepolia redeploy #7 GAME ABI (degenerus-sim/deployments/abis/GAME.json):
 //   - purchase(buyer, ticketQuantity, lootBoxAmount, affiliateCode, payKind, foil)
 //   - openBox(player, index)            — renamed from openLootBox
-//   - lootboxRngWordByIndex(index)      — public mapping getter (alias dropped)
+//   - boxIndexComplete(index)           — conservative swept-index view
+//   - requestLootboxRng()               — permissionless mid-day RNG request
 //   - LootBoxBuy / LootBoxIdx / TraitsGenerated events unchanged
 //
 // NOTE: Lootboxes are ETH-denominated, and FLIP-paid ticket purchases are gone too
@@ -75,8 +76,11 @@ export const GAME_ABI = [
   //   on-chain, and openLootBox was renamed openBox (same (address, uint48) shape).
   'function purchase(address buyer, uint256 ticketQuantity, uint256 lootBoxAmount, bytes32 affiliateCode, uint8 payKind, bool foil) payable',
   'function openBox(address player, uint48 index)',
-  // Views — lootboxRngWord(uint48) is now the public mapping getter lootboxRngWordByIndex.
-  'function lootboxRngWordByIndex(uint48 index) view returns (uint256 word)',
+  // The raw lootbox RNG mapping is intentionally not exposed by the deployed
+  // GAME. Readiness is probed with the exact write as eth_call; this avoids the
+  // stale `lootboxRngWordByIndex` selector that silently reverted in production.
+  'function boxIndexComplete(uint48 index) view returns (bool complete)',
+  'function requestLootboxRng()',
   'function lootboxStatus(address player, uint48 lootboxIndex) view returns (uint256 amount, bool presale)',
   'function claimableWinningsOf(address player) view returns (uint256)',
   // Foil module errors bubble through GAME.purchase via delegatecall. Keeping
@@ -522,22 +526,68 @@ export function parseTraitsGeneratedFromReceipt(receipt, contract) {
 }
 
 // ---------------------------------------------------------------------------
-// pollRngForLootbox — view call to lootboxRngWordByIndex(uint48) (the public
-// mapping getter; redeploy #7 dropped the lootboxRngWord alias). Returns 0n
-// if not ready. Plan 60-03 widget polling lifecycle wraps in interval +
-// AbortController-per-cycle.
+// Lootbox readiness helpers. The current deployed GAME deliberately exposes no
+// raw RNG-word getter. Simulating openBox is the authoritative, side-effect-free
+// readiness probe for one player's box; boxIndexComplete is only a conservative
+// signal that the permissionless sweep has already passed an index.
 // ---------------------------------------------------------------------------
 
 /**
- * @param {bigint | number} lootboxIndex
- * @returns {Promise<bigint>} 0n if RNG not yet fulfilled OR no provider configured.
+ * @param {{player?: string, lootboxIndex: bigint | number}} args
+ * @returns {Promise<boolean>}
  */
-export async function pollRngForLootbox(lootboxIndex) {
+export async function canOpenLootbox({ player, lootboxIndex } = {}) {
   const provider = getProvider();
-  if (!provider) return 0n;
+  const owner = player || getActingAddress();
+  if (!provider || !owner || lootboxIndex == null) return false;
   const contract = _buildContract(provider);
-  const word = await contract.lootboxRngWordByIndex(BigInt(lootboxIndex));
-  return BigInt(word);
+  if (typeof contract?.openBox?.staticCall !== 'function') return false;
+  try {
+    await contract.openBox.staticCall(owner, BigInt(lootboxIndex));
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+/** Conservative completion hint used when the exact box has already vanished. */
+export async function isLootboxIndexComplete(lootboxIndex) {
+  const provider = getProvider();
+  if (!provider || lootboxIndex == null) return false;
+  const contract = _buildContract(provider);
+  if (typeof contract?.boxIndexComplete !== 'function') return false;
+  return Boolean(await contract.boxIndexComplete(BigInt(lootboxIndex)));
+}
+
+/** Whether the connected account can permissionlessly request the pending RNG now. */
+export async function canRequestLootboxRng() {
+  const provider = getProvider();
+  if (!provider) return false;
+  let runner = provider;
+  try { runner = await provider.getSigner(); } catch (_e) { /* read-only probe */ }
+  const contract = _buildContract(runner);
+  if (typeof contract?.requestLootboxRng?.staticCall !== 'function') return false;
+  try {
+    await contract.requestLootboxRng.staticCall();
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+/** Permissionlessly start the shared RNG batch once its on-chain gates are open. */
+export async function requestLootboxRng() {
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (!signer) throw new Error('Wallet not connected.');
+  const contract = _buildContract(signer);
+  const sim = await requireStaticCall(contract, 'requestLootboxRng', [], signer);
+  if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call requestLootboxRng');
+  const receipt = await sendTx(
+    (s) => _buildContract(s).requestLootboxRng(),
+    'Request Degenerette RNG',
+  );
+  return { receipt };
 }
 
 /**

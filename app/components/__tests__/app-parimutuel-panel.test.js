@@ -9,7 +9,7 @@
 //   - a settled winner keeps the panel on screen with a CLAIM for the total
 //   - a bet click reaches placeBet(player, over)
 //
-// The volume book runs off the wall clock (26s of every 600s on the testnet
+// The volume book runs off the wall clock (540s of every 600s on the testnet
 // overlay), so every test pins it through parimutuel.js's __setClockForTest —
 // otherwise these would pass or fail depending on the minute they ran.
 //
@@ -706,7 +706,7 @@ describe('app-parimutuel-panel', () => {
     // Deploy-relative, NOT the epoch-scale day boundary — an absolute index
     // would read ~2.97M here and would query rounds nobody ever bet on.
     assert.match(card.querySelector('.pari-book__title').textContent, /Round 101$/);
-    assert.match(card.querySelector('[data-bind="pari-clock"]').textContent, /closes in 0:25/);
+    assert.match(card.querySelector('[data-bind="pari-clock"]').textContent, /closes in 8:59/);
     assert.deepEqual(
       card.querySelectorAll('.pari-side__action').map((n) => n.textContent),
       ['OVER', 'UNDER'],
@@ -780,12 +780,12 @@ describe('app-parimutuel-panel', () => {
     // …and the split reads off the bet counts, 2 v 6.
     assert.deepEqual(
       card.querySelectorAll('.pari-side__action').map((n) => n.textContent),
-      ['OVER TARGET · 3 tickets', 'UNDER TARGET · 3 tickets'],
+      ['OVER 3 tickets', 'UNDER 3 tickets'],
     );
     assert.deepEqual(
       card.querySelectorAll('.pari-side__target').map((n) => n.textContent),
-      ['TARGET · 3 tickets', 'TARGET · 3 tickets'],
-      'the actual number being bet over or under has an explicit label',
+      ['3 tickets', '3 tickets'],
+      'the actual number being bet over or under stays visible without redundant TARGET copy',
     );
     assert.match(
       APP_CSS,
@@ -823,7 +823,7 @@ describe('app-parimutuel-panel', () => {
       'the immediately preceding UNDER result is fetched and painted red');
     assert.deepEqual(
       card.querySelectorAll('.pari-side__action').map((node) => node.textContent),
-      ['OVER TARGET · 4 tickets', 'UNDER TARGET · 4 tickets'],
+      ['OVER 4 tickets', 'UNDER 4 tickets'],
       'both choices retain the actual chain benchmark despite the stale local anchor',
     );
     el.disconnectedCallback();
@@ -849,7 +849,7 @@ describe('app-parimutuel-panel', () => {
     const card = el.querySelector('[data-bind="pari-volume"]');
     assert.deepEqual(
       card.querySelectorAll('.pari-side__target').map((node) => node.textContent),
-      ['TARGET · 3 tickets', 'TARGET · 3 tickets'],
+      ['3 tickets', '3 tickets'],
     );
     const under = card.querySelectorAll('.pari-side')
       .find((node) => String(node.className).split(/\s+/).includes('pari-side--under'));

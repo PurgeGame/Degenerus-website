@@ -30,6 +30,7 @@ import { CHAIN, CONTRACTS } from '../app/chain-config.js';
 import { DGN_TICKET_COPY_EVENT, dgnReconstructTicketTraits } from '../app/dgn-traits.js';
 import { unopenedPackCardIndexes } from '../app/pack-watch.js';
 import { PACK_REVEAL_COMPLETE_EVENT } from './reveal-overlay.js';
+import { readDeityPassCatalog } from '../app/passes.js';
 
 const ENTRIES_PER_CARD = 4;
 const POLL_INTERVAL_MS = 60_000;
@@ -227,8 +228,7 @@ class AppTicketsInventory extends HTMLElement {
   #activeLevel = null;    // the running jackpot level (app.lastDay.level)
   #address = null;
   #data = null;           // by-trait payload for (#address, #viewLevel)
-  #owedEntries = 0;       // ticketsOwedView entries (won, not yet materialised)
-  #deityPassSymbols = []; // DB-backed symbol ids owned by the viewed player
+  #deityPassSymbols = []; // persistent NFT-backed symbol ids owned by the viewed player
   #deityExpectedEntries = new Map(); // live virtual entries keyed by trait id
   // The viewed level's foil lines, as canonical trait keys. A foil pack's four
   // lines are ordinary entries in the by-trait inventory with no marker of their
@@ -562,7 +562,7 @@ class AppTicketsInventory extends HTMLElement {
     }
     const lower = String(addr).toLowerCase();
     const day = Number(get('app.lastDay')?.day);
-    const [byTrait, dashboard, pending, foil, playerDay] = await Promise.allSettled([
+    const [byTrait, dashboard, foil, playerDay, deityCatalog] = await Promise.allSettled([
       // NO day param (tickets-fetch.js gotcha — see file header). Skipped in
       // far-future view — those levels can't have rolled traits yet.
       this.#isFarFuture()
@@ -570,10 +570,6 @@ class AppTicketsInventory extends HTMLElement {
         : fetchJSON(`/player/${lower}/tickets/by-trait?level=${lvl}`),
       // Per-level entry counts for the far-future long-term view.
       fetchJSON(`/player/${lower}`),
-      // Tickets WON but not yet materialised — see #renderOwedPack. Neither of
-      // the other two endpoints carries them: by-trait returns materialised
-      // entries only, and the dashboard's `tickets` rows are per-level holdings.
-      fetchJSON(`/player/${lower}/pending`),
       // Foil lines for this level — soft-fails to "no foil" (see #foilKeys).
       this.#isFarFuture()
         ? Promise.resolve(null)
@@ -584,6 +580,10 @@ class AppTicketsInventory extends HTMLElement {
       Number.isInteger(day) && day >= 0
         ? fetchJSON(`/viewer/player/${lower}/day/${day}`)
         : Promise.resolve(null),
+      // Persistent ownership comes from the soulbound NFT. The viewer endpoint
+      // above contains only purchases made on the selected day and therefore
+      // cannot tell us whether a pass bought earlier is still in inventory.
+      readDeityPassCatalog(),
     ]);
     if (seq !== this.#fetchSeq) return;
     const rawTicketData = byTrait.status === 'fulfilled' ? byTrait.value : null;
@@ -598,15 +598,19 @@ class AppTicketsInventory extends HTMLElement {
       && Array.isArray(playerDay.value?.store?.deityPassPurchases)
       ? playerDay.value.store.deityPassPurchases
       : [];
-    this.#deityPassSymbols = [...new Set(deityRows
-      .map((row) => Number(row?.symbolId))
+    const ownedFromNft = deityCatalog.status === 'fulfilled'
+      && deityCatalog.value?.ownersBySymbol instanceof Map
+      ? [...deityCatalog.value.ownersBySymbol.entries()]
+        .filter(([, owner]) => String(owner || '').toLowerCase() === lower)
+        .map(([symbolId]) => Number(symbolId))
+      : [];
+    // A same-day purchase remains a useful soft fallback during a transient
+    // RPC failure, but it never replaces the persistent NFT ownership read.
+    const ownedFromToday = deityRows.map((row) => Number(row?.symbolId));
+    this.#deityPassSymbols = [...new Set([...ownedFromNft, ...ownedFromToday]
       .filter((symbolId) => Number.isInteger(symbolId) && symbolId >= 0 && symbolId < 32))]
       .sort((a, b) => a - b);
     this.#deityExpectedEntries = new Map();
-    this.#owedEntries = pending.status === 'fulfilled'
-      && pending.value?.pending?.tickets?.available !== false
-      ? Number(pending.value?.pending?.tickets?.amount ?? 0)
-      : 0;
     const rows = dashboard.status === 'fulfilled' && Array.isArray(dashboard.value?.tickets)
       ? dashboard.value.tickets
       : [];
@@ -848,12 +852,7 @@ class AppTicketsInventory extends HTMLElement {
     // Permanent account collectibles come before level-scoped tickets.
     const deityRendered = this.#renderDeityPasses(host);
 
-    // Owed pack FIRST among ticket rewards. It is a prize the player has not seen yet, and the card
-    // list runs to dozens of tiles — appended last it sat below the fold, which
-    // is the same "won tickets went nowhere" complaint it exists to answer.
-    const owedRendered = this.#renderOwedPack(host);
-
-    if (sorted.length === 0 && pendingCount === 0 && !owedRendered && !deityRendered) {
+    if (sorted.length === 0 && pendingCount === 0 && !deityRendered) {
       const empty = document.createElement('p');
       empty.className = 'inv-empty';
       empty.textContent = this.#address
@@ -973,62 +972,14 @@ class AppTicketsInventory extends HTMLElement {
       badge.alt = `${symbolName} deity pass`;
       hero.appendChild(badge);
       pass.appendChild(hero);
+      const label = document.createElement('strong');
+      label.className = 'inv-deity-pass__name';
+      label.textContent = `God of ${symbolName.charAt(0).toUpperCase()}${symbolName.slice(1)}`;
+      pass.appendChild(label);
       host.appendChild(pass);
       rendered += 1;
     }
     return rendered;
-  }
-
-  /**
-   * Tickets WON but not yet materialised, shown as a sealed pack (user ask:
-   * "show the pending tickets as a pack").
-   *
-   * This is a different thing from the `status === 'pending'` cards above.
-   * Those are packs the player BOUGHT whose traits have not been revealed yet.
-   * This is the on-chain `ticketsOwedView` balance — tickets awarded by a
-   * jackpot draw that have not been turned into entries. They were invisible
-   * everywhere in the UI: the by-trait endpoint only returns materialised
-   * entries, so a draw could pay you 17 tickets and nothing on the page moved.
-   *
-   * UNITS: the API returns ENTRIES (database ticket-bucket-reader.ts:79), and
-   * 4 entries = 1 ticket (ENTRIES_PER_CARD). The pack shows tickets with the
-   * entry count under it.
-   *
-   * It is level-agnostic (the owed balance sums across levels), so it renders
-   * regardless of which level the inventory is currently viewing — hence the
-   * explicit "across all levels" caption; without it the number would look
-   * wrong next to a level-scoped card list.
-   */
-  #renderOwedPack(host) {
-    const entries = Number(this.#owedEntries ?? 0);
-    if (!Number.isFinite(entries) || entries <= 0) return false;
-    const tickets = Math.floor(entries / ENTRIES_PER_CARD);
-    if (tickets <= 0) return false;
-
-    const wrap = document.createElement('div');
-    wrap.className = 'inv-card-wrap';
-
-    const pack = document.createElement('div');
-    pack.className = 'inv-card inv-card--owed';
-
-    const title = document.createElement('span');
-    title.className = 'inv-owed__count';
-    title.textContent = `${tickets}`;
-
-    const label = document.createElement('span');
-    label.className = 'inv-owed__label';
-    label.textContent = tickets === 1 ? 'ticket won' : 'tickets won';
-
-    const sub = document.createElement('span');
-    sub.className = 'inv-owed__sub';
-    sub.textContent = `${entries} entries · across all levels`;
-
-    pack.appendChild(title);
-    pack.appendChild(label);
-    pack.appendChild(sub);
-    wrap.appendChild(pack);
-    host.appendChild(wrap);
-    return true;
   }
 
   // Chart mode — the wide view: per quadrant, an 8×8 grid (row = symbol,

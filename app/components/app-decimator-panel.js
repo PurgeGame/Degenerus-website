@@ -71,7 +71,7 @@ import { formatFlip } from '../../beta/viewer/utils.js';
 import { queueReveal } from './reveal-overlay.js';
 import { updateBalanceDisplay, resetBalanceDisplay } from '../app/balance-countup.js';
 // Ticket reveals are deferred until the traits roll — see app/app/pack-watch.js.
-import { recordPendingPack } from '../app/pack-watch.js';
+import { recordPendingPack, recordLootboxTicketPacks } from '../app/pack-watch.js';
 import {
   formatPurchaseAffiliateCode,
   validatePurchaseAffiliateCode,
@@ -379,7 +379,7 @@ class AppDecimatorPanel extends HTMLElement {
         <div class="dec-input-row dec-input-row--pair">
           <span class="dec-input-group dec-input-group--tickets">
             <label class="dec-input-label" for="dec-tickets-input">
-              <span>Buy tickets</span>
+              <span data-bind="dec-ticket-action-label">Buy tickets</span>
               <boon-product-indicator product="purchase"></boon-product-indicator>
             </label>
             <span class="dec-stepper">
@@ -710,15 +710,21 @@ class AppDecimatorPanel extends HTMLElement {
     // away the fraction and quoted the wrong number.
     const tq = this.#ticketsWanted();
     if (this.#flipModeEnabled()) {
-      // FLIP is an alternate ticket-payment checkbox, not a second
-      // transaction button. The quoted unit communicates the selected mode.
-      let amount = '';
+      // FLIP is burned, not paid as ETH. Give the full-width action rail an
+      // explicit exchange quote so cost and output read as one action.
+      let burn = '';
       if (tq > 0) {
         try {
-          amount = `${formatFlip(flipCostFromTickets(tq).toString())} FLIP`;
+          burn = `${formatFlip(flipCostFromTickets(tq).toString())} FLIP`;
         } catch (_e) { /* retain action without a quote */ }
       }
-      this.#setBuyLabel('Redeem', amount);
+      const ticketCount = Number.isInteger(tq)
+        ? String(tq)
+        : String(tq).replace(/0+$/, '').replace(/\.$/, '');
+      const output = tq > 0
+        ? `for ${ticketCount} ${tq === 1 ? 'ticket' : 'tickets'}`
+        : 'for tickets';
+      this.#setBuyLabel(burn ? `Burn ${burn}` : 'Burn FLIP', output);
       this.#renderFlipCredit(null);
       return;
     }
@@ -1044,6 +1050,10 @@ class AppDecimatorPanel extends HTMLElement {
 
   #renderPurchaseMode() {
     const flipMode = this.#flipModeEnabled();
+    const ticketLabel = this.querySelector('[data-bind="dec-ticket-action-label"]');
+    if (ticketLabel) ticketLabel.textContent = flipMode ? 'Burn for tickets' : 'Buy tickets';
+    const buyRow = this.querySelector('.dec-buy-row');
+    if (buyRow?.classList) buyRow.classList.toggle('dec-buy-row--flip', flipMode);
     const lootboxGroup = this.querySelector('[data-bind="dec-lootbox-group"]');
     const lootboxInput = this.querySelector('[name="dec-lootbox-eth"]');
     if (lootboxGroup) {
@@ -1222,16 +1232,21 @@ class AppDecimatorPanel extends HTMLElement {
     this.#busy = true;
     if (btn) {
       btn.disabled = true;
-      this.#setBuyLabel('Redeeming…');
+      this.#setBuyLabel('Burning FLIP…');
     }
     try {
-      await redeemFlip({ player, tickets });
+      const { receipt } = await redeemFlip({ player, tickets });
       // Same as the ETH ticket leg: FLIP-bought entries are trait-less until
       // the level draw, so no popup here — pack-watch pops the reveal once the
       // symbols are real. Fire-and-forget.
       const target = this.#targetLevel();
       if (target != null) {
-        recordPendingPack({ address: player, level: target }).catch(() => {});
+        recordPendingPack({
+          address: player,
+          level: target,
+          expectedTickets: Math.floor(tickets),
+          sourceKey: receipt?.hash ? `redeem:${String(receipt.hash).toLowerCase()}` : null,
+        }).catch(() => {});
       }
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
@@ -1552,6 +1567,8 @@ class AppDecimatorPanel extends HTMLElement {
             address: buyer,
             level: pendingPackLevel,
             foilExpected: Boolean(foilWanted || foilBought),
+            expectedTickets: Math.floor(ticketQuantity) + ((foilWanted || foilBought) ? 4 : 0),
+            sourceKey: receipt?.hash ? `purchase:${String(receipt.hash).toLowerCase()}` : null,
           }).catch(() => {});
         }
         const autoLegs = parseOpenLegsFromReceipt(receipt, buyer);
@@ -1559,7 +1576,26 @@ class AppDecimatorPanel extends HTMLElement {
           const autoBoxIndex = autoLegs.find(
             (leg) => leg?.legType === 'opened' && leg.lootboxIndex != null,
           )?.lootboxIndex;
-          queueReveal({ kind: 'lootbox', lootboxIndex: autoBoxIndex, legs: autoLegs });
+          const transactionHash = receipt?.hash || receipt?.transactionHash || null;
+          const releaseKey = transactionHash
+            ? `tx:${String(transactionHash).toLowerCase()}`
+            : null;
+          recordLootboxTicketPacks({
+            address: buyer,
+            legs: autoLegs,
+            sourceKey: releaseKey ? `lootbox:${releaseKey}` : null,
+          }).catch(() => {});
+          queueReveal({
+            kind: 'lootbox',
+            lootboxIndex: autoBoxIndex,
+            legs: autoLegs,
+            lootboxRelease: releaseKey ? {
+              address: buyer,
+              key: releaseKey,
+              lootboxIndex: Number(autoBoxIndex ?? 0),
+              transactionHash,
+            } : null,
+          });
         }
       } catch (_e) { /* reveal is decoration — never fail the buy over it */ }
 

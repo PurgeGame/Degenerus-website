@@ -22,14 +22,10 @@
 //                                                       ↓
 //                                                       idle (on user "Place another")
 //
-// CF-08: the final outcome remains accessible inline via the compact score
-// controls. The reel uses the standalone simulator's synthesized lock/match
-// cues and final win/loss sting; no result path opens a toast or modal.
-// Task #11: the visual ticket picker feeds placeBet and history outcomes retain
-// a player-vs-house results surface.
-// 2026-07-31: fresh and historical bets stage their verified reels directly
-// inside this widget. One click advances one spin, Skip all settles immediately,
-// and Replay spins resets the board. No result path opens a popup.
+// The widget owns ticket construction, wagering, pending-RNG state, and the
+// permissionless resolve transaction. Every completed result is handed to the
+// shared branded reveal overlay; there is deliberately no second reel player
+// embedded in this panel.
 //
 // Carry-forwards (CONTEXT 62-CONTEXT.md):
 //   CF-01: Phase 58 closure-form sendTx — flows through degenerette.js (place + resolve).
@@ -48,6 +44,7 @@ import { get, subscribe, getViewedAddress, getActingAddress } from '../app/store
 import { fetchJSON } from '../../beta/app/api.js';
 import {
   placeBet,
+  canResolveBets,
   readBetInfo,
   readResolvedBet,
   resolveCommunityBets,
@@ -56,7 +53,11 @@ import {
   parseSpinResultsFromReceipt,
   degeneretteLimits,
 } from '../app/degenerette.js';
-import { scaledTicketPriceWei, pollRngForLootbox } from '../app/lootbox.js';
+import {
+  scaledTicketPriceWei,
+  canRequestLootboxRng,
+  requestLootboxRng,
+} from '../app/lootbox.js';
 import { compactUiError } from '../app/ui-error.js';
 // Shared trait codecs (extracted from this file — see dgn-traits.js header).
 import {
@@ -68,9 +69,7 @@ import {
 // Per-spin house reels: the chain publishes spin 0's only.
 import { dgnDeriveSpins, dgnScore } from '../app/dgn-reels.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
-// The standalone-style eight-lock reel planner now plays entirely inside this
-// widget for both fresh resolutions and history replays.
-import { buildDegeneretteSpinFrames } from './reveal-overlay.js';
+import { queueReveal } from './reveal-overlay.js';
 
 function _setIntervalUnref(fn, ms) {
   const h = setInterval(fn, ms);
@@ -91,88 +90,16 @@ const COMMUNITY_MAX_SPINS = 30;
 const INDEX_REPLAY_RETRIES = 3;
 const INDEX_REPLAY_DELAY_MS = 650;
 const PLAYER_FEED_MAX_PAGES = 20;
-// Mirrors reveal-overlay's standalone Degenerette profile: 2–4 idle rolls
-// between eight independent locks, at the standalone game's default cadence.
-const INLINE_SPIN_FRAME_MS = 170;
 const DEFAULT_ETH_BET_WEI = (10n ** 16n) / BigInt(ETH_DIVISOR); // 0.01 displayed ETH
 const DEFAULT_FLIP_BET = '250';
 const DEFAULT_WWXRP_BET = '1';
-
-// Standalone Degenerette's audio fallback, ported from the demo bundle. The
-// demo tries optional mp3 buffers first, then uses these exact notes whenever
-// those assets are unavailable. Keeping the oscillator path here means the app
-// reveal has sound without adding another blocking asset fetch to resolution.
-const INLINE_MATCH_NOTES = Object.freeze([262, 294, 330, 349, 392, 440, 494, 523]);
-let _inlineAudioContext = null;
-
-function _initInlineAudio() {
-  if (_inlineAudioContext) return _inlineAudioContext;
-  const AudioContextCtor = globalThis.window?.AudioContext
-    || globalThis.window?.webkitAudioContext;
-  if (typeof AudioContextCtor !== 'function') return null;
-  try {
-    _inlineAudioContext = new AudioContextCtor();
-  } catch (_e) {
-    _inlineAudioContext = null;
-  }
-  return _inlineAudioContext;
-}
-
-function _inlineTone(frequency, duration = 0.15, type = 'square') {
-  const context = _initInlineAudio();
-  if (!context) return;
-  try {
-    if (context.state === 'suspended') void context.resume?.();
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.type = type;
-    oscillator.frequency.value = frequency;
-    gain.gain.value = 0.09;
-    gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + duration);
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + duration);
-  } catch (_e) { /* audio is strictly best-effort */ }
-}
-
-function _playInlineSound(name) {
-  const match = String(name || '').match(/^match(\d)$/);
-  if (match) {
-    const note = INLINE_MATCH_NOTES[Number(match[1]) - 1];
-    if (note) _inlineTone(note, 0.2, 'square');
-    return;
-  }
-  if (name === 'click') {
-    _inlineTone(400, 0.05, 'triangle');
-    return;
-  }
-  if (name === 'lose') {
-    _inlineTone(300, 0.15, 'sawtooth');
-    setTimeout(() => _inlineTone(200, 0.3, 'sawtooth'), 150);
-    return;
-  }
-  if (name === 'win') {
-    [0, 2, 4, 7].forEach((noteIndex, chordIndex) => {
-      setTimeout(() => {
-        _inlineTone(INLINE_MATCH_NOTES[noteIndex] * 2, 0.2, 'square');
-        if (chordIndex === 3) {
-          setTimeout(() => {
-            _inlineTone(INLINE_MATCH_NOTES[0] * 2, 0.4, 'square');
-            _inlineTone(INLINE_MATCH_NOTES[2] * 2, 0.4, 'square');
-            _inlineTone(INLINE_MATCH_NOTES[4] * 2, 0.4, 'square');
-          }, 100);
-        }
-      }, chordIndex * 100);
-    });
-  }
-}
 
 // Two-stage state machine (RESEARCH R5).
 const STATE = Object.freeze({
   IDLE: 'idle',
   PLACING: 'placing',
   AWAITING_RNG: 'awaitingRng',
+  REQUESTING_RNG: 'requestingRng',
   READY: 'ready',
   RESOLVING: 'resolving',
   INDEXING: 'indexing',
@@ -183,6 +110,7 @@ const STATE_LABELS = Object.freeze({
   idle: '',
   placing: 'Placing…',
   awaitingRng: 'Awaiting RNG…',
+  requestingRng: 'Requesting RNG…',
   ready: 'Ready to resolve.',
   resolving: 'Resolving…',
   indexing: 'Loading spins…',
@@ -407,6 +335,94 @@ export function normalizeDegeneretteSpinResults(
 }
 
 /**
+ * Build the one canonical presentation payload for a resolved Degenerette bet.
+ * Receipt, indexed-feed, and exact chain-log recovery all pass through here so
+ * the overlay can never receive a shortened round or reuse spin zero's reel for
+ * later spins.
+ */
+export function buildDegeneretteRevealSequence({
+  resolvedEntry,
+  spinResults,
+  resultTickets = [],
+  rngWord = 0n,
+  betIndex = 0,
+  currency = 0,
+  amountPerSpin = 0n,
+  heroQuadrant = 0,
+} = {}) {
+  if (!resolvedEntry) return null;
+  const complete = normalizeDegeneretteSpinResults(
+    spinResults,
+    resolvedEntry.spinCount ?? 1,
+    { player: resolvedEntry.player, betId: resolvedEntry.betId },
+  );
+  if (!complete.complete) return null;
+
+  const hero = Number(heroQuadrant) & 3;
+  const resolvedTraits = resolvedEntry.resultTraits == null
+    ? null
+    : Number(resolvedEntry.resultTraits) >>> 0;
+  const derived = dgnDeriveSpins({
+    rngWord,
+    index: Number(betIndex ?? 0),
+    heroQuadrant: hero,
+    currency: Number(currency),
+    resolvedResultTraits: resolvedEntry.resultTraits,
+    spins: complete.spins,
+  });
+
+  const projected = new Map();
+  for (const ticket of Array.isArray(resultTickets) ? resultTickets : []) {
+    const spinIndex = Number(ticket?.spinIndex ?? ticket?.spinIdx ?? 0);
+    const raw = ticket?.resultTicket ?? ticket?.resultTraits
+      ?? ticket?.houseTicket ?? ticket?.houseTraits;
+    if (raw != null && Number.isInteger(spinIndex) && spinIndex >= 0) {
+      projected.set(spinIndex, Number(raw) >>> 0);
+    }
+  }
+
+  const rows = derived.rows.map((row) => {
+    const projectedTraits = projected.get(row.spinIndex);
+    if (projectedTraits == null) return row;
+    const anchorOk = row.spinIndex !== 0
+      || resolvedTraits == null
+      || projectedTraits === resolvedTraits;
+    const scoreOk = dgnScore(row.playerTraits, projectedTraits, hero) === row.score;
+    return anchorOk && scoreOk ? { ...row, houseTraits: projectedTraits } : row;
+  });
+
+  // Even without a recoverable RNG word, the chain's published spin-zero reel
+  // remains authoritative. Multi-spin rounds still wait for every other reel.
+  if (!derived.verified) {
+    const zero = rows.find((row) => row.spinIndex === 0);
+    if (zero && resolvedTraits != null) zero.houseTraits = resolvedTraits;
+  }
+  const indexes = new Set(rows.map((row) => row.spinIndex));
+  if (rows.length !== complete.expectedSpinCount
+    || rows.some((row) => row.houseTraits == null)
+    || Array.from({ length: complete.expectedSpinCount }, (_, i) => indexes.has(i)).some((ok) => !ok)) {
+    return null;
+  }
+
+  let perSpin = 0n;
+  let totalPayout = 0n;
+  try { perSpin = BigInt(amountPerSpin ?? 0); } catch (_e) { perSpin = 0n; }
+  try { totalPayout = BigInt(resolvedEntry.totalPayout ?? 0); } catch (_e) { totalPayout = 0n; }
+  return {
+    kind: 'degenerette',
+    betId: resolvedEntry.betId == null ? null : String(resolvedEntry.betId),
+    headline: resolvedEntry.betId == null ? null : `BET #${String(resolvedEntry.betId)}`,
+    currency: Number(currency),
+    heroIdx: hero,
+    amountPerSpin: perSpin,
+    totalWager: perSpin * BigInt(complete.expectedSpinCount),
+    totalPayout,
+    spinCount: complete.expectedSpinCount,
+    spins: rows,
+  };
+}
+
+/**
  * Read enough feed pages to obtain the viewed player's latest resolved bets.
  * Current API workers honour `player`; older workers ignore it and return a
  * global page. Client-side filtering plus the cursor makes both versions safe
@@ -504,6 +520,7 @@ class AppDegenerettePanel extends HTMLElement {
   // wait: every spin's house reel is derived from it and it is NOT readable
   // from the resolve receipt.
   #currentRngWord = 0n;
+  #rngRequestAvailable = false;
   #currentHero = null;         // hero quadrant of the in-flight bet
   #pendingAddress = null;
   #pickerContextKey = null;
@@ -518,15 +535,14 @@ class AppDegenerettePanel extends HTMLElement {
   }));
   #dgnHero = Math.floor(Math.random() * 4);
   #dgnEditing = null;
-  // Resolved bets play inside this panel one spin at a time. A monotonically
-  // increasing token cancels an animation when a new bet/result replaces it.
+  // Legacy private state remains declared while the now-unmounted embedded
+  // result implementation is retired below. No live path writes or renders it;
+  // complete results go straight to reveal-overlay.
   #inlineBoard = null;
   #inlineNextSpin = 0;
   #inlineBusy = false;
   #inlineRunToken = 0;
   #inlineViewedSpin = null;
-  // Lightweight feed cache powers the lit Results affordance and keeps a
-  // click from issuing a duplicate request immediately after the 30s poll.
   #historyItems = [];
   #historyAddress = null;
   #historyFetchedAt = 0;
@@ -556,9 +572,6 @@ class AppDegenerettePanel extends HTMLElement {
   }
 
   disconnectedCallback() {
-    this.#inlineRunToken += 1;
-    this.#inlineBusy = false;
-    this.#historySeq += 1;
     this.#pendingRecoverySeq += 1;
     this.#pendingRecoveryAddress = null;
     if (this.#pollHandle != null) {
@@ -707,41 +720,6 @@ class AppDegenerettePanel extends HTMLElement {
           </button>
         </div>
 
-        <section class="dgn-results-summary" data-bind="dgn-results-summary" hidden aria-live="polite">
-          <div class="dgn-results-summary__copy">
-            <span class="dgn-results-summary__eyebrow" data-bind="dgn-results-eyebrow">LATEST ROUND WINNINGS</span>
-            <strong class="dgn-results-summary__total" data-bind="dgn-results-total">—</strong>
-            <span class="dgn-results-summary__meta" data-bind="dgn-results-meta"></span>
-          </div>
-          <button type="button" class="dgn-results-summary__close"
-                  data-bind="dgn-results-close">BACK TO BUYING</button>
-        </section>
-
-        <section class="dgn-inline-spin" data-bind="dgn-inline-spin" hidden aria-live="polite">
-          <div class="dgn-inline-spin__arena">
-            <div class="dgn-inline-spin__side">
-              <div class="dgn-inline-spin__ticket" data-bind="dgn-inline-player"></div>
-            </div>
-            <div class="dgn-inline-spin__side">
-              <div class="dgn-inline-spin__ticket" data-bind="dgn-inline-house"></div>
-            </div>
-          </div>
-          <div class="dgn-inline-spin__pop" data-bind="dgn-inline-pop" aria-hidden="true"></div>
-          <div class="dgn-inline-spin__history" data-bind="dgn-inline-history"
-               aria-label="Revealed spins"></div>
-          <div class="dgn-inline-spin__actions">
-            <button type="button" class="dgn-inline-spin__cta" data-bind="dgn-inline-spin-cta">SPIN</button>
-            <button type="button" class="dgn-inline-spin__skip" data-bind="dgn-inline-skip-cta">SKIP</button>
-          </div>
-        </section>
-
-        <section class="dgn-results-panel" data-bind="dgn-results-panel" hidden aria-live="polite">
-          <div class="dgn-results-panel__head">
-            <h3 class="dgn-results-panel__title" data-bind="dgn-results-title">Results</h3>
-          </div>
-          <div class="dgn-results-panel__body" data-bind="dgn-results-body"></div>
-        </section>
-
         <div class="deg-outcome" data-bind="deg-outcome"></div>
         <div class="deg-error" data-bind="deg-error" hidden role="alert"></div>
       </section>
@@ -753,12 +731,6 @@ class AppDegenerettePanel extends HTMLElement {
     if (place) place.addEventListener('click', (e) => this.#onPlaceClick(e));
     const resolve = this.querySelector('[data-bind="deg-resolve-cta"]');
     if (resolve) resolve.addEventListener('click', (e) => this.#onResolveClick(e));
-    const inlineSpin = this.querySelector('[data-bind="dgn-inline-spin-cta"]');
-    if (inlineSpin) inlineSpin.addEventListener('click', () => this.#onInlineSpinClick());
-    const inlineSkip = this.querySelector('[data-bind="dgn-inline-skip-cta"]');
-    if (inlineSkip) inlineSkip.addEventListener('click', () => this.#skipInlineSpins());
-    const close = this.querySelector('[data-bind="dgn-results-close"]');
-    if (close) close.addEventListener('click', () => this.#exitResultsMode());
     // Spin cap and minimum bet are per currency, so the controls follow it.
     const currency = this.querySelector('[name="deg-currency"]');
     if (currency) currency.addEventListener('change', () => {
@@ -861,7 +833,7 @@ class AppDegenerettePanel extends HTMLElement {
     const perSpin = total / BigInt(spinCount);
     const rendered = currency === 0
       ? displayEth(perSpin, 6)
-      : displayToken(perSpin, 6);
+      : displayToken(perSpin, 0);
     const renderedText = String(rendered);
     amountInput.value = renderedText.includes('.')
       ? renderedText.replace(/0+$/, '').replace(/\.$/, '')
@@ -1028,84 +1000,11 @@ class AppDegenerettePanel extends HTMLElement {
     return key;
   }
 
-  #historyOwner() {
-    if (get('ui.mode') === 'combined') return null;
-    const address = (typeof getViewedAddress === 'function' ? getViewedAddress() : null)
-      || get('viewing.address')
-      || get('connected.address')
-      || null;
-    return address ? String(address).toLowerCase() : null;
-  }
-
-  #renderResultsAvailability() {
-    const button = this.querySelector('[data-bind="deg-results-cta"]');
-    if (!button) return;
-    const count = this.#historyItems.filter((bet) => (
-      Array.isArray(bet?.results)
-      && bet.results.some((row) => row?.resultType === 'resolved')
-    )).length;
-    const ready = this.#localResultReady || count > 0;
-    button.classList?.toggle('is-ready', ready);
-    button.textContent = ready ? `Results · ${Math.max(1, count)}` : 'Results';
-    button.setAttribute(
-      'aria-label',
-      ready
-        ? `${Math.max(1, count)} Degenerette result${Math.max(1, count) === 1 ? '' : 's'} ready`
-        : 'Degenerette results',
-    );
-  }
-
-  #resetHistoryAvailability() {
-    this.#historySeq += 1;
-    this.#historyItems = [];
-    this.#historyAddress = null;
-    this.#historyFetchedAt = 0;
-    this.#localResultReady = false;
-    if (this.#resultsMode) this.#exitResultsMode();
-    this.#renderResultsAvailability();
-  }
-
-  async #loadHistoryItems({ force = false } = {}) {
-    const owner = this.#historyOwner();
-    if (!owner) {
-      if (this.#historyAddress != null || this.#historyItems.length > 0) {
-        this.#resetHistoryAvailability();
-      } else {
-        this.#renderResultsAvailability();
-      }
-      return [];
-    }
-    const fresh = this.#historyAddress === owner
-      && Date.now() - this.#historyFetchedAt < 15_000;
-    if (!force && fresh) return this.#historyItems;
-
-    const seq = ++this.#historySeq;
-    let items = [];
-    try {
-      items = await fetchDegenerettePlayerFeed(owner, {
-        targetResolved: 12,
-        maxPages: PLAYER_FEED_MAX_PAGES,
-      });
-    } catch (error) {
-      if (force) throw error;
-      return this.#historyItems;
-    }
-    if (seq !== this.#historySeq || this.#historyOwner() !== owner) {
-      return this.#historyItems;
-    }
-    this.#historyItems = items
-      .filter((bet) => String(bet?.player || '').toLowerCase() === owner);
-    this.#historyAddress = owner;
-    this.#historyFetchedAt = Date.now();
-    if (this.#historyItems.some((bet) => (
-      Array.isArray(bet?.results)
-      && bet.results.some((row) => row?.resultType === 'resolved')
-    ))) {
-      this.#localResultReady = false;
-    }
-    this.#renderResultsAvailability();
-    return this.#historyItems;
-  }
+  // Transitional no-op history hooks for the retired embedded results code.
+  // Result replay will move to a dedicated history launcher in a later slice;
+  // nothing in the mounted widget calls these methods.
+  #historyOwner() { return null; }
+  async #loadHistoryItems() { return []; }
 
   async #runPollCycle() {
     if (typeof document !== 'undefined'
@@ -1174,18 +1073,15 @@ class AppDegenerettePanel extends HTMLElement {
 
   #wireStoreSubscriptions() {
     const u1 = subscribe('connected.address', () => {
-      this.#resetHistoryAvailability();
       this.#syncPickerContext();
       this.#restorePendingBet();
       this.#runPollCycle();
     });
     const u2 = subscribe('viewing.address', () => {
-      this.#resetHistoryAvailability();
       this.#syncPickerContext();
       this.#runPollCycle();
     });
     const u3 = subscribe('ui.mode', () => {
-      this.#resetHistoryAvailability();
       this.#syncPickerContext();
       this.#renderCurrencyGate();
       this.#restorePendingBet();
@@ -1472,7 +1368,7 @@ class AppDegenerettePanel extends HTMLElement {
     const unit = degeneretteLimits(currency)?.unit || 'FLIP';
     const total = amount * spins;
     const formatted = Number.isFinite(total) && total > 0
-      ? total.toLocaleString('en-US', { maximumFractionDigits: 6 })
+      ? total.toLocaleString('en-US', { maximumFractionDigits: currency === 0 ? 6 : 0 })
       : '—';
     const verb = this.#state === STATE.PLACING ? 'Placing' : 'Place Bet';
     button.textContent = `${verb} · ${formatted} ${unit}`;
@@ -1516,6 +1412,11 @@ class AppDegenerettePanel extends HTMLElement {
   // ---------------------------------------------------------------------
 
   #setState(next) {
+    // Availability belongs to one awaiting cycle only. A newly placed/restored
+    // bet must earn it from a fresh on-chain simulation.
+    if (next !== STATE.AWAITING_RNG || this.#state !== STATE.AWAITING_RNG) {
+      this.#rngRequestAvailable = false;
+    }
     this.#state = next;
     this.#renderState();
   }
@@ -1531,9 +1432,16 @@ class AppDegenerettePanel extends HTMLElement {
       // READY, shown + disabled while RESOLVING (progress feedback). Hidden in
       // every other state (idle / placing / awaiting RNG / resolved) — nothing
       // to resolve, so no dead button sitting in the action row.
-      const showResolve = this.#state === STATE.READY || this.#state === STATE.RESOLVING;
+      const requestable = this.#state === STATE.AWAITING_RNG && this.#rngRequestAvailable;
+      const showResolve = requestable
+        || this.#state === STATE.REQUESTING_RNG
+        || this.#state === STATE.READY
+        || this.#state === STATE.RESOLVING;
       resolveBtn.hidden = !showResolve;
-      resolveBtn.disabled = this.#state !== STATE.READY;
+      resolveBtn.disabled = !(requestable || this.#state === STATE.READY);
+      resolveBtn.textContent = requestable || this.#state === STATE.REQUESTING_RNG
+        ? 'Request RNG'
+        : 'Resolve';
     }
     const placeBtn = this.querySelector('[data-bind="deg-place-cta"]');
     if (placeBtn) {
@@ -1542,6 +1450,7 @@ class AppDegenerettePanel extends HTMLElement {
       // keeps older rows recoverable after the newest active card is retired.
       placeBtn.disabled = (
         this.#state === STATE.PLACING
+        || this.#state === STATE.REQUESTING_RNG
         || this.#state === STATE.RESOLVING
       );
       this.#renderPlaceLabel();
@@ -1551,12 +1460,9 @@ class AppDegenerettePanel extends HTMLElement {
 
   #publishPending() {
     const resolutionActive = [
-      STATE.AWAITING_RNG, STATE.READY, STATE.RESOLVING, STATE.INDEXING,
+      STATE.AWAITING_RNG, STATE.REQUESTING_RNG, STATE.READY, STATE.RESOLVING, STATE.INDEXING,
     ].includes(this.#state) && this.#currentBetId != null;
-    const revealReady = this.#state === STATE.RESOLVED
-      && this.#inlineBoard
-      && this.#inlineNextSpin < this.#inlineBoard.rows.length;
-    if ((!resolutionActive && !revealReady) || !this.#pendingAddress) {
+    if (!resolutionActive || !this.#pendingAddress) {
       clearPendingActions(PENDING_SOURCE);
       return;
     }
@@ -1566,32 +1472,24 @@ class AppDegenerettePanel extends HTMLElement {
       id: `degenerette:${String(this.#currentBetId)}`,
       kind: 'degenerette',
       label: `Degenerette · ${spins} spin${spins === 1 ? '' : 's'}`,
-      shortLabel: revealReady ? 'Play result' : 'Resolve degen',
-      detail: revealReady
-        ? 'Result ready · tap to play the reels'
-        : this.#state === STATE.READY
+      shortLabel: 'Resolve degen',
+      detail: this.#state === STATE.READY
         ? `RNG ready · ${units[this.#currentCurrency] || 'FLIP'} result locked`
+        : this.#state === STATE.REQUESTING_RNG
+          ? 'Requesting shared RNG on-chain'
         : this.#state === STATE.RESOLVING
           ? 'Resolving on-chain'
           : this.#state === STATE.INDEXING
             ? 'Loading every verified spin'
-          : 'Waiting for Chainlink RNG',
-      state: revealReady || this.#state === STATE.READY
+          : this.#rngRequestAvailable
+            ? 'RNG request ready'
+            : 'Waiting for Chainlink RNG',
+      state: this.#state === STATE.READY || this.#rngRequestAvailable
         ? 'ready'
-        : this.#state === STATE.RESOLVING ? 'busy' : 'waiting',
+        : [STATE.REQUESTING_RNG, STATE.RESOLVING].includes(this.#state) ? 'busy' : 'waiting',
       order: 15,
-      run: revealReady
-        ? () => this.#openInlineResultFromTray()
-        : () => this.#onResolveClick(),
+      run: () => this.#onResolveClick(),
     }]);
-  }
-
-  async #openInlineResultFromTray() {
-    try { this.scrollIntoView?.({ behavior: 'smooth', block: 'center' }); }
-    catch (_e) { /* headless / older browser */ }
-    const spin = this.querySelector('[data-bind="dgn-inline-spin-cta"]');
-    try { spin?.focus?.({ preventScroll: true }); } catch (_e) { /* defensive */ }
-    await this.#onInlineSpinClick();
   }
 
   // ---------------------------------------------------------------------
@@ -1621,7 +1519,6 @@ class AppDegenerettePanel extends HTMLElement {
     // response cannot overwrite the identifiers parsed from this receipt; the
     // older bet remains durable in the player DB snapshot.
     this.#cancelRngPoll();
-    this.#clearInlineSpin();
     const priorOutcome = this.querySelector('[data-bind="deg-outcome"]');
     if (priorOutcome) priorOutcome.textContent = '';
     this.#clearError();
@@ -1740,9 +1637,10 @@ class AppDegenerettePanel extends HTMLElement {
   }
 
   // ---------------------------------------------------------------------
-  // RNG poll subcycle — the DB joins BetPlaced.betIndex to lootbox_rng. The
-  // indexed word is primary; the public getter is the compatibility path while
-  // an API worker is still serving the earlier feed projection.
+  // RNG poll subcycle — the DB supplies the exact hidden word used to rebuild
+  // every reel. The deployed GAME intentionally has no public word getter, so
+  // an eth_call of the exact resolver is the chain-authoritative readiness
+  // fallback while that DB projection catches up.
   // ---------------------------------------------------------------------
 
   #startRngPollCycle() {
@@ -1753,13 +1651,18 @@ class AppDegenerettePanel extends HTMLElement {
       if (ac.signal.aborted) return;
       try {
         const player = this.#pendingAddress || getActingAddress();
-        const response = await fetchJSON(
-          `/degenerette/feed?limit=200&player=${encodeURIComponent(String(player || '').toLowerCase())}`,
-        );
-        const bet = mergeDegeneretteFeedItems(response?.items).find((item) => (
+        let bet = null;
+        try {
+          const response = await fetchJSON(
+            `/degenerette/feed?limit=200&player=${encodeURIComponent(String(player || '').toLowerCase())}`,
+          );
+          bet = mergeDegeneretteFeedItems(response?.items).find((item) => (
           String(item?.player || '').toLowerCase() === String(player || '').toLowerCase()
           && String(item?.betId) === String(this.#currentBetId)
-        ));
+          ));
+        } catch (_e) {
+          // The chain probes below remain useful during an API restart.
+        }
         if (ac.signal.aborted) return;
         const results = Array.isArray(bet?.results) ? bet.results : [];
         if (results.some((row) => row?.resultType === 'resolved')) {
@@ -1767,30 +1670,36 @@ class AppDegenerettePanel extends HTMLElement {
         }
         let word = 0n;
         try { word = BigInt(bet?.rngWord ?? 0); } catch (_e) { word = 0n; }
-        // DB is primary. Keep the canonical view as a compatibility/recovery
-        // read when an API worker is still serving the pre-rngWord feed schema
-        // or the placement row has not reached the indexer yet. This prevents
-        // a fulfilled bet from living in "Awaiting RNG" forever.
-        if (word === 0n && this.#currentLootboxIndex != null) {
-          word = await pollRngForLootbox(this.#currentLootboxIndex).catch(() => 0n);
-        }
-        if (word !== 0n) {
-          // Keep the exact indexed word so a just-mined receipt can render all
-          // reels immediately, before the result-ticket projection catches up.
-          this.#currentRngWord = word;
-          // A refresh can restore a bet that another wallet already resolved.
-          // Older feed workers may omit that summary, so use the cleared chain
-          // slot to enter exact-event recovery instead of offering Resolve again.
-          const packed = await readBetInfo({
+        if (word !== 0n) this.#currentRngWord = word;
+
+        // A refresh can restore a bet that another wallet already resolved.
+        // Zero is authoritative even if the result feed is a block behind.
+        const packed = await readBetInfo({
+          player,
+          betId: this.#currentBetId,
+        }).catch(() => null);
+        if (packed === 0n) {
+          if (await this.#replayIndexedResolution(player, this.#currentBetId, 1)) return;
+          this.#setState(STATE.INDEXING);
+        } else {
+          const ready = word !== 0n || await canResolveBets({
             player,
-            betId: this.#currentBetId,
-          }).catch(() => null);
-          if (packed === 0n) {
-            if (await this.#replayIndexedResolution(player, this.#currentBetId, 1)) return;
-            this.#setState(STATE.INDEXING);
-          } else {
+            betIds: [this.#currentBetId],
+          }).catch(() => false);
+          if (ready) {
             this.#setState(STATE.READY);
             return;  // stop polling
+          }
+
+          // Mid-day RNG is permissionless but gated. When the exact on-chain
+          // request simulates successfully, light the same resolve action so a
+          // player can start the shared batch instead of waiting forever.
+          if (this.#state === STATE.AWAITING_RNG) {
+            const requestable = await canRequestLootboxRng().catch(() => false);
+            if (requestable !== this.#rngRequestAvailable) {
+              this.#rngRequestAvailable = requestable;
+              this.#renderState();
+            }
           }
         }
       } catch (_e) {
@@ -1823,6 +1732,10 @@ class AppDegenerettePanel extends HTMLElement {
   async #onResolveClick(e) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
     if (this.#busyResolve) return;
+    if (this.#state === STATE.AWAITING_RNG && this.#rngRequestAvailable) {
+      await this.#onRequestRng();
+      return;
+    }
     if (this.#state !== STATE.READY) return;
     if (this.#currentBetId == null) return;
     this.#busyResolve = true;
@@ -1900,21 +1813,54 @@ class AppDegenerettePanel extends HTMLElement {
     }
   }
 
+  async #onRequestRng() {
+    if (this.#busyResolve || this.#currentBetId == null) return;
+    this.#busyResolve = true;
+    this.#clearError();
+    this.#setState(STATE.REQUESTING_RNG);
+    try {
+      await requestLootboxRng();
+    } catch (error) {
+      // A competing request between simulation and broadcast is success from
+      // this player's perspective; resume the wait without a loud red wall.
+      const msg = compactUiError(error, 'RNG request did not go through.');
+      if (!/in flight|already|locked/i.test(String(msg))) this.#renderError(msg);
+    } finally {
+      this.#setState(STATE.AWAITING_RNG);
+      this.#startRngPollCycle();
+      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+      setTimeout(() => { this.#busyResolve = false; }, DEBOUNCE_MS);
+    }
+  }
+
   #finishResolvedBet(resolved, spinResults, resultTickets = []) {
     const spins = Array.isArray(spinResults) ? spinResults : [];
     const outcomeEl = this.querySelector('[data-bind="deg-outcome"]');
     // Do not retire the pending bet or start a shortened animation. A summary
     // may be visible one projection before its final per-spin row; the replay
     // path will fetch the exact complete event set.
-    if (!this.#stageInlineResolvedBet(resolved, spins, resultTickets)) return false;
-    this.#localResultReady = true;
-    this.#renderResultsAvailability();
-    // A fresh settlement owns the main result surface. Retire an open history
-    // list before staging it so the newly resolved reels are visible at once.
-    this.#closeResultsPanel();
+    const sequence = buildDegeneretteRevealSequence({
+      resolvedEntry: resolved,
+      spinResults: spins,
+      resultTickets,
+      rngWord: this.#currentRngWord,
+      betIndex: this.#currentLootboxIndex,
+      currency: this.#currentCurrency,
+      amountPerSpin: this.#currentAmountPerSpin,
+      heroQuadrant: this.#currentHero == null ? this.#dgnHero : this.#currentHero,
+    });
+    if (!sequence) return false;
     if (outcomeEl) outcomeEl.textContent = '';
     _writePendingBet(this.#pendingAddress, null);
-    this.#setState(STATE.RESOLVED);
+    queueReveal(sequence);
+    // The overlay has accepted the complete audit trail. Release this active
+    // slot immediately so another older pending bet can light up while the
+    // player is watching the reveal.
+    this.#currentBetId = null;
+    this.#currentLootboxIndex = null;
+    this.#currentRngWord = 0n;
+    this.#setState(STATE.IDLE);
+    void this.#recoverPendingBetFromDb();
     setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     return true;
   }
@@ -1962,10 +1908,6 @@ class AppDegenerettePanel extends HTMLElement {
         { player, betId },
       );
       if (!complete.complete) return false;
-      if (this.#currentRngWord === 0n && this.#currentLootboxIndex != null) {
-        this.#currentRngWord = await pollRngForLootbox(this.#currentLootboxIndex)
-          .catch(() => 0n);
-      }
       return this.#finishResolvedBet(replay.resolved, complete.spins);
     };
 
@@ -2024,10 +1966,6 @@ class AppDegenerettePanel extends HTMLElement {
           if (this.#currentRngWord === 0n && this.#currentLootboxIndex != null) {
             try { this.#currentRngWord = BigInt(bet.rngWord ?? 0); }
             catch (_e) { this.#currentRngWord = 0n; }
-            if (this.#currentRngWord === 0n) {
-              this.#currentRngWord = await pollRngForLootbox(this.#currentLootboxIndex)
-                .catch(() => 0n);
-            }
           }
           if (complete.complete
             && this.#finishResolvedBet(resolved, complete.spins, bet.resultTickets)) {
@@ -2892,9 +2830,6 @@ class AppDegenerettePanel extends HTMLElement {
       let rngWord = 0n;
       try { rngWord = BigInt(bet.rngWord ?? 0); }
       catch (_e) { rngWord = 0n; }
-      if (rngWord === 0n) {
-        rngWord = await pollRngForLootbox(BigInt(bet.betIndex)).catch(() => 0n);
-      }
       const derived = dgnDeriveSpins({
         rngWord,
         index: Number(bet.betIndex),

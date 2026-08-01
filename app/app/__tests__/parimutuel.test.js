@@ -15,7 +15,7 @@
 //   :141 MarketClosed  :144 AlreadyBet  :149 NothingToSettle  :154 NotEligible
 //
 // The testnet overlay rescales the volume window with the 600s game day
-// (contracts-testnet/DegenerusParimutuel.sol:478 — `(ts - 82620) % 600 < 26`),
+// (contracts-testnet/DegenerusParimutuel.sol:478 — `(ts - 82620) % 600 < 540`),
 // and chain-config.sepolia.js VOLUME_WINDOW mirrors those constants. The clock
 // tests below are written against that active profile.
 
@@ -158,6 +158,13 @@ describe('payoutPerWinner mirrors _payoutFrom', () => {
 
 describe('volumeWindow / volumeRoundNow mirror _openVolumeRound', () => {
   const { anchor, period, openSeconds } = VOLUME_WINDOW;
+
+  test('active testnet profile matches the deployed post-change clock constants', () => {
+    assert.equal(period, 600);
+    assert.equal(openSeconds, 540);
+    assert.equal(VOLUME_WINDOW.creditDecayStart, 154);
+    assert.equal(VOLUME_WINDOW.creditDecayStep, 86);
+  });
 
   test('open at the top of a game day, for openSeconds', () => {
     const w = pari.volumeWindow(anchor + period * 5);

@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 
 import * as storeMod from '../../app/store.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
+import * as passesMod from '../../app/passes.js';
 
 let packWatchMod = null;
 let inventoryMod = null;
@@ -245,6 +246,13 @@ function resetDom() {
   _gameState = { level: 17, phase: 'JACKPOT', jackpotPhaseFlag: true };
   _deitySymbols = [];
   _fetchLog.length = 0;
+  passesMod.__setDeityReadContractFactoryForTest(() => ({
+    name: async () => 'Degenerus Deity Pass',
+    ownerOf: async (symbolId) => {
+      if (_deitySymbols.includes(Number(symbolId))) return TEST_ADDR;
+      throw new Error('InvalidToken');
+    },
+  }));
 }
 
 async function flushMicrotasks() {
@@ -341,6 +349,7 @@ describe('app-tickets-inventory — cards + chart', () => {
     const hero = cards[0].querySelector('.inv-deity-pass__hero');
     assert.ok(hero, 'deity symbol receives the dedicated spiked hero treatment');
     assert.equal(hero.querySelector('img')?.src, '/badges-circular/cards_02_cashsack_gold.svg');
+    assert.equal(cards[0].querySelector('.inv-deity-pass__name')?.textContent, 'God of Cashsack');
     assert.equal(cards[0].className.includes('inv-card--degenerette-copy'), false,
       'a one-symbol pass cannot be copied into the four-trait Degenerette ticket');
     el.disconnectedCallback();

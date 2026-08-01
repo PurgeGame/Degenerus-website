@@ -461,6 +461,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       connect(_s) { return this; },
     }));
     await import('../app-degenerette-panel.js');
+    const reveal = await loadReveal();
+    reveal.__takeQueuedForTest();
   });
 
   test("Custom element 'app-degenerette-panel' registers idempotently", async () => {
@@ -879,15 +881,17 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.ok(resolveArgs, 'resolveDegeneretteBets invoked');
     assert.equal(resolveArgs[0], CONNECTED, 'player = connected.address');
     assert.deepEqual(resolveArgs[1], [42n], 'betIds = [parsed BetPlaced.betId]');
-    const [resolvedAction] = pendingActionsMod.getPendingActions();
-    assert.equal(resolvedAction?.state, 'ready',
-      'resolved bet stays in the shared tray until its animation is consumed');
-    assert.equal(resolvedAction?.shortLabel, 'Play result');
+    assert.equal(pendingActionsMod.getPendingActions().length, 0,
+      'the resolved action leaves the tray once the full reveal is queued');
+    const [sequence] = (await loadReveal()).__takeQueuedForTest();
+    assert.equal(sequence?.kind, 'degenerette');
+    assert.equal(sequence?.currency, 0);
+    assert.equal(sequence?.spins?.length, 1);
 
     el.disconnectedCallback();
   });
 
-  test('Outcome stays neutral and the settled score control carries the result', async () => {
+  test('Outcome stays neutral and resolution never mounts a second reel player in the widget', async () => {
     useDegeneretteFeed(readyFeedItem());
 
     const el = instantiate();
@@ -910,16 +914,12 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.ok(outcomeEl, '.deg-outcome present');
     assert.equal(outcomeEl.textContent, '',
       'resolution does not add verbose result copy before the player reveals it');
-    assert.equal(el.querySelector('[data-bind="dgn-inline-spin"]').hidden, false,
-      'resolved spin is staged inside the widget');
-
-    el.querySelector('[data-bind="dgn-inline-skip-cta"]')
-      .dispatchEvent({ type: 'click' });
-    assert.equal(outcomeEl.textContent, '', 'legacy outcome line stays empty after reveal');
-    const score = el.querySelector('.dgn-inline-spin__history-chip');
-    assert.match(score.textContent, /^SCORE: \d+(?: · \+.+)?$/,
-      'the compact score control carries only score and an optional win amount');
-    assert.doesNotMatch(score.textContent, /#\d|spin/i, 'visible score has no spin number');
+    assert.equal(el.querySelector('[data-bind="dgn-inline-spin"]'), null,
+      'the embedded reveal surface is absent');
+    assert.equal(el.querySelector('[data-bind="dgn-results-summary"]'), null,
+      'the embedded results summary is absent');
+    assert.equal((await loadReveal()).__takeQueuedForTest().length, 1,
+      'the branded overlay receives the completed result');
 
     el.disconnectedCallback();
   });
@@ -1033,29 +1033,16 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.doesNotMatch(PANEL_SRC, /amount\s*=\s*amount\s*-/, 'no optimistic subtraction patterns');
   });
 
-  test('inline reveal has explicit controls and the standalone animation/audio profile', () => {
-    assert.doesNotMatch(
-      PANEL_SRC,
-      /\btoast\(|new Audio\(/,
-      'panel source must not use popup toasts or blocking audio assets',
-    );
-    assert.match(PANEL_SRC, /#onInlineSpinClick\(\)/, 'one-spin action is wired');
-    assert.match(PANEL_SRC, /#skipInlineSpins\(\)/, 'skip action is wired');
-    assert.match(
-      PANEL_SRC,
-      /buildDegeneretteSpinFrames\(\{[\s\S]*?idleMin:\s*2,[\s\S]*?idleMax:\s*4/,
-      'embedded player reuses the full standalone eight-lock spin plan',
-    );
-    assert.match(PANEL_SRC, /const INLINE_SPIN_FRAME_MS = 170/,
-      'embedded reel uses the standalone cadence');
-    assert.match(PANEL_SRC, /const INLINE_MATCH_NOTES = Object\.freeze\(\[262, 294, 330, 349, 392, 440, 494, 523\]\)/,
-      'embedded reel carries the standalone rising match notes');
-    assert.match(PANEL_SRC, /context\.createOscillator\(\)/,
-      'embedded reveal has a best-effort oscillator fallback');
-    assert.match(PANEL_SRC, /_playInlineSound\(`match\$\{matchSoundCount\}`\)/,
-      'each successful lock advances the match sound');
-    assert.match(PANEL_SRC, /_playInlineSound\(row\.score >= 3[\s\S]*?\? 'win' : 'lose'\)/,
-      'the settled reel plays its win or loss ending');
+  test('completed results have one authoritative full-screen reveal path', () => {
+    assert.match(PANEL_SRC, /import \{ queueReveal \} from '\.\/reveal-overlay\.js'/);
+    assert.match(PANEL_SRC, /buildDegeneretteRevealSequence\(\{/,
+      'receipt, DB, and chain recovery share a normalized sequence builder');
+    assert.match(PANEL_SRC, /queueReveal\(sequence\)/,
+      'a complete result launches the branded overlay');
+    assert.doesNotMatch(PANEL_SRC, /<section class="dgn-inline-spin"/,
+      'the widget no longer mounts its own reel player');
+    assert.doesNotMatch(PANEL_SRC, /<section class=\"dgn-results-summary\"/,
+      'the widget no longer mounts a duplicate result summary');
   });
 
   test('reads the player-filtered DB feed first and keeps a chain-read recovery path', () => {
@@ -1080,10 +1067,10 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 });
 
 // ===========================================================================
-// Task #11 — ticket picker + embedded results surface.
+// Task #11 — ticket picker + shared branded results surface.
 // ===========================================================================
 
-describe('Task #11: <app-degenerette-panel> ticket picker + embedded results', () => {
+describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', () => {
   beforeEach(async () => {
     storeMod.__resetForTest();
     resetDom();
@@ -1099,7 +1086,8 @@ describe('Task #11: <app-degenerette-panel> ticket picker + embedded results', (
     }));
     useDegeneretteFeed(readyFeedItem());
     await import('../app-degenerette-panel.js');
-    await loadReveal();
+    const reveal = await loadReveal();
+    reveal.__takeQueuedForTest();
   });
 
   test('picker renders 4 quadrant badges + exactly one hero, no raw uint32 input', () => {
@@ -1210,10 +1198,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + embedded results', (
     el.disconnectedCallback();
   });
 
-  // A newly resolved bet stays in the center widget: the player can reveal one
-  // reel at a time or skip to the final result. The overlay is reserved for
-  // replaying indexed history.
-  test('resolve success stages the verified Degenerette spin inside the widget', async () => {
+  test('resolve success launches the verified Degenerette result in the branded overlay', async () => {
     revealMod.__takeQueuedForTest();   // drop anything from earlier tests
     const el = instantiate();
     await settle(40);
@@ -1225,32 +1210,18 @@ describe('Task #11: <app-degenerette-panel> ticket picker + embedded results', (
     el.querySelector('.deg-resolve-cta').dispatchEvent({ type: 'click' });
     await settle(80);
 
-    assert.deepEqual(revealMod.__takeQueuedForTest(), [],
-      'fresh resolves do not auto-launch the full-screen overlay');
-    const stage = el.querySelector('[data-bind="dgn-inline-spin"]');
-    assert.equal(stage.hidden, false, 'inline reveal is visible');
-    assert.equal(el.querySelector('[data-bind="dgn-inline-progress"]'), null,
-      'verbose progress chrome is removed from the reel');
-    assert.doesNotMatch(el.querySelector('[data-bind="dgn-results-meta"]').textContent, /\b1\s+SPINS?\b/i,
-      'the round size stays sealed until the first spin lands');
-    assert.match(el.querySelector('[data-bind="dgn-inline-house"]').textContent, /\?/,
-      'house reel is concealed before the spin');
-
-    el.querySelector('[data-bind="dgn-inline-skip-cta"]')
-      .dispatchEvent({ type: 'click' });
-    assert.equal(el.querySelector('[data-bind="dgn-inline-title"]'), null);
-    assert.equal(el.querySelector('[data-bind="dgn-inline-result"]'), null);
+    const [sequence] = revealMod.__takeQueuedForTest();
+    assert.equal(sequence.kind, 'degenerette');
+    assert.equal(sequence.spins.length, 1);
+    assert.equal(sequence.spins[0].score, 4);
+    assert.equal(sequence.currency, 0);
+    assert.equal(el.querySelector('[data-bind="dgn-inline-spin"]'), null);
+    assert.equal(el.querySelector('[data-bind="dgn-results-panel"]'), null);
     assert.equal(el.querySelector('[data-bind="deg-outcome"]').textContent, '');
-    assert.match(el.querySelector('.dgn-inline-spin__history-chip').textContent,
-      /^SCORE: 4 · \+.+$/);
-    assert.ok(stage.classList.contains('has-win-result'),
-      'the settled stage background communicates the win');
-    assert.equal(el.querySelector('[data-bind="dgn-results-panel"]').hidden, true,
-      'history panel does not compete with a fresh embedded reveal');
     el.disconnectedCallback();
   });
 
-  test('each click advances one spin, score controls revisit reels, and replay resets', async (t) => {
+  test('multi-spin resolution sends every distinct verified reel to the overlay', async (t) => {
     const originalMatchMedia = globalThis.window.matchMedia;
     t.after(() => { globalThis.window.matchMedia = originalMatchMedia; });
     globalThis.window.matchMedia = () => ({ matches: true });
@@ -1317,47 +1288,14 @@ describe('Task #11: <app-degenerette-panel> ticket picker + embedded results', (
     el.querySelector('.deg-resolve-cta').dispatchEvent({ type: 'click' });
     await settle(80);
 
-    const spin = el.querySelector('[data-bind="dgn-inline-spin-cta"]');
-    spin.dispatchEvent({ type: 'click' });
-    await settle(10);
-    assert.equal(spin.textContent, 'NEXT SPIN', 'first click reveals only spin one');
-    assert.equal(el.querySelector('[data-bind="dgn-inline-progress"]'), null);
-    assert.equal(el.querySelector('[data-bind="deg-outcome"]').textContent, '',
-      'aggregate outcome stays out of the legacy copy line');
-    const firstReel = el.querySelector('[data-bind="dgn-inline-house"]')
-      .querySelectorAll('img').map((img) => img.src);
-    assert.equal(firstReel.length, 5, 'spin one renders four symbols plus its center flame');
-    assert.equal(el.querySelectorAll('.dgn-inline-spin__history-chip').length, 1,
-      'the first settled reel remains in the cumulative spin history');
-    assert.doesNotMatch(el.querySelector('.dgn-inline-spin__history-chip').textContent, /#\d|spin/i);
-
-    spin.dispatchEvent({ type: 'click' });
-    await settle(10);
-    assert.equal(spin.textContent, 'REPLAY', 'second click completes the board');
-    assert.equal(el.querySelector('[data-bind="deg-outcome"]').textContent, '');
-    const secondReel = el.querySelector('[data-bind="dgn-inline-house"]')
-      .querySelectorAll('img').map((img) => img.src);
-    assert.equal(secondReel.length, 5, 'spin two renders its full ticket too');
-    assert.notDeepEqual(secondReel.slice(0, 4), firstReel.slice(0, 4),
-      'spin two uses its own derived house reel instead of reusing spin one');
-    assert.equal(el.querySelectorAll('.dgn-inline-spin__history-chip').length, 2,
-      'the completed board retains one history chip for every spin');
-
-    const scoreControls = el.querySelectorAll('.dgn-inline-spin__history-chip');
-    scoreControls[0].dispatchEvent({ type: 'click' });
-    const revisited = el.querySelector('[data-bind="dgn-inline-house"]')
-      .querySelectorAll('img').map((img) => img.src);
-    assert.deepEqual(revisited.slice(0, 4), firstReel.slice(0, 4),
-      'clicking the first score restores that spin\'s complete graphic');
-    assert.equal(scoreControls[0].getAttribute('aria-pressed'), 'false',
-      'history rerender replaces the old control instance');
-    assert.equal(el.querySelectorAll('.dgn-inline-spin__history-chip')[0]
-      .getAttribute('aria-pressed'), 'true', 'the revisited score is selected');
-
-    spin.dispatchEvent({ type: 'click' });
-    await settle(10);
-    assert.equal(spin.textContent, 'SPIN', 'Replay resets to the first unrevealed reel');
-    assert.equal(el.querySelector('[data-bind="dgn-inline-progress"]'), null);
+    const [sequence] = revealMod.__takeQueuedForTest();
+    assert.equal(sequence.kind, 'degenerette');
+    assert.equal(sequence.spinCount, 2);
+    assert.deepEqual(sequence.spins.map((row) => row.spinIndex), [0, 1]);
+    assert.deepEqual(sequence.spins.map((row) => row.houseTraits), houses,
+      'later spins retain their own RNG-derived house reels');
+    assert.notEqual(sequence.spins[0].houseTraits, sequence.spins[1].houseTraits);
+    assert.equal(el.querySelector('[data-bind="dgn-inline-spin"]'), null);
 
     el.disconnectedCallback();
   });
@@ -1457,16 +1395,12 @@ describe('Task #11: <app-degenerette-panel> ticket picker + embedded results', (
     assert.deepEqual(calls.info, [[CONNECTED, 42n]]);
     assert.equal(calls.resolve, 0, 'the cleared bet slot never reaches a wallet write');
     assert.equal(calls.logs.length, 2, 'resolved summary and per-spin logs are queried');
-    assert.deepEqual(revealMod.__takeQueuedForTest(), [],
-      'indexed resolution is also staged inside the widget');
-    assert.equal(el.querySelector('[data-bind="dgn-inline-spin"]').hidden, false);
-    const [ready] = pendingActionsMod.getPendingActions();
-    assert.equal(ready.shortLabel, 'Play result', 'resolved reel is published to the bottom tray');
-    assert.equal(ready.state, 'ready');
-    await ready.run();
-    await settle(10);
-    assert.match(el.querySelector('.dgn-inline-spin__history-chip').textContent,
-      /^SCORE: 4 · \+.+$/);
+    const [sequence] = revealMod.__takeQueuedForTest();
+    assert.equal(sequence.kind, 'degenerette',
+      'the recovered chain result launches through the same overlay path');
+    assert.equal(sequence.spins.length, 1);
+    assert.equal(sequence.spins[0].score, 4);
+    assert.equal(el.querySelector('[data-bind="dgn-inline-spin"]'), null);
     assert.equal(el.querySelector('[data-bind="deg-outcome"]').textContent, '');
     assert.equal(pendingActionsMod.getPendingActions().length, 0);
     el.disconnectedCallback();

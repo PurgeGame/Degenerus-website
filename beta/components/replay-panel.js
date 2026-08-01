@@ -8,7 +8,11 @@
 
 import { deriveWinningTraits, traitToBadge, toDisplayOrder, DISPLAY_ORDER } from '../app/jackpot-data.js';
 import { joScaledToTickets } from '../app/jackpot-rolls.js';
-import { buildRoll1BucketSummaries, buildRoll2BucketSummaries } from '../app/jackpot-buckets.js';
+import {
+  buildRoll1BucketSummaries,
+  buildRoll2BucketSummaries,
+  splitOpeningFlipDraw,
+} from '../app/jackpot-buckets.js';
 // SHELL-01 patch (Phase 52 followup, mirrors D-09 from jackpot-panel.js):
 // swap the wallet-tainted utils.js import for the wallet-free viewer/utils.js
 // equivalents so play/ can consume this component via a recursive-import walk
@@ -29,9 +33,9 @@ async function replayFetch(path) {
 // drawn, so its tickets have no traits to match.
 const FAR_FUTURE_HORIZON = 4;
 
-// Scratch-cover fill when the viewed player has no winning entry in a quadrant.
-// It stays red ("win not possible") but is deliberately lighter than the old
-// solo-only cover so the badge remains legible and the front does not read black.
+// Scratch-cover fill when the viewed player cannot win a quadrant. This is the
+// darker locked/unscratched face; the paper beneath is the lighter loser pink
+// from `.q-win-impossible` in replay.css.
 const NO_WIN_COVER_FILL = 'rgb(218, 104, 104)';
 // A real winner must not be visible before scratching. Winning quadrants and
 // owned "could win" misses share this exact blue cover; green lives underneath.
@@ -101,6 +105,7 @@ class ReplayPanel extends HTMLElement {
   #selectedDay = null;
   #selectedLevel = null;
   #selectedPlayer = null;
+  #openingFlipDay = false; // game level 0: two FLIP boards, no normal ETH/ticket Roll 1
   #distributions = []; // raw distributions from replay/day endpoint (used for prize mapping)
   #winners = [];       // winner objects from /game/jackpot/day/:day/winners
 
@@ -142,6 +147,7 @@ class ReplayPanel extends HTMLElement {
   // Bonus Roll (Roll 2) state — reuses the main widget
   #bonusPhase = false;          // true while bonus roll is active (Roll 2 reveal)
   #mainScratchComplete = false; // Roll 2 stays locked until Roll 1 is uncovered
+  #mainAllRed = false;          // no owned quadrant/center win: Roll 2 may start immediately
   #bonusScratchComplete = false;// both boards can be revisited once Roll 2 is uncovered
   #drawViewSwitching = false;   // coalesces rapid center-flame view toggles
   #bonusTraitIds = new Set();   // traitIds the player won in Roll 2 (unused — kept for compat)
@@ -297,7 +303,7 @@ class ReplayPanel extends HTMLElement {
       });
       centerEl.addEventListener('keydown', (event) => {
         if (event?.key !== 'Enter' && event?.key !== ' ') return;
-        if (!this.#mainScratchComplete || !this.#bonusScratchComplete) return;
+        if (!this.#mainReadyForBonus() || !this.#bonusScratchComplete) return;
         try { event.preventDefault?.(); } catch { /* fake DOM */ }
         void this.#toggleRevealedDraw();
       });
@@ -411,7 +417,8 @@ class ReplayPanel extends HTMLElement {
         }
         quads[i]?.classList.remove(
           'q-has-trait', 'q-no-tickets', 'q-scratchable', 'q-has-tickets',
-          'q-public-result', 'q-win-impossible', 'q-owned-miss', 'q-player-win',
+          'q-public-result', 'q-win-impossible', 'q-win-impossible-lock',
+          'q-owned-miss', 'q-player-win',
           'q-gold-trait', 'q-result-pending', 'q-result-revealed',
         );
         const shownTrait = contractQ * 64 + col * 8 + sym;
@@ -600,6 +607,33 @@ class ReplayPanel extends HTMLElement {
     }
     if (!this.#dayRoll1) console.warn('[ReplayPanel] roll1 endpoint unavailable for day', day);
     if (!this.#dayRoll2) console.warn('[ReplayPanel] roll2 endpoint unavailable for day', day);
+    this.#repairOpeningFlipRolls(day);
+  }
+
+  #isOpeningFlipDraw(day) {
+    const row = this.#rngDays.find((entry) => Number(entry.day) === Number(day));
+    // During game level 0 the replay clock correctly advertises the tickets on
+    // sale (L1), so L1 purchase-phase rows are the opening double-FLIP path.
+    return Number(row?.level) === 1 && String(row?.phase || '').toUpperCase() === 'P';
+  }
+
+  #packedTraits(packed) {
+    if (packed == null) return [];
+    const value = Number(packed) >>> 0;
+    return [value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff];
+  }
+
+  #repairOpeningFlipRolls(day) {
+    this.#openingFlipDay = this.#isOpeningFlipDraw(day);
+    if (!this.#openingFlipDay) return;
+    const rng = this.#rngDays.find((entry) => Number(entry.day) === Number(day));
+    const { mainWins, bonusWins } = splitOpeningFlipDraw(
+      this.#distributions,
+      this.#packedTraits(rng?.mainTraitsPacked),
+      this.#packedTraits(rng?.bonusTraitsPacked),
+    );
+    this.#dayRoll1 = { day: Number(day), level: 0, purchaseLevel: 1, wins: mainWins };
+    this.#dayRoll2 = { day: Number(day), level: 0, purchaseLevel: 1, wins: bonusWins };
   }
 
   #filterPlayerWins(addr) {
@@ -622,7 +656,7 @@ class ReplayPanel extends HTMLElement {
   async #refreshPlayerEligibility() {
     this.#playerHasFutureTickets = null;
     if (!this.#selectedPlayer || !this.#selectedDay) return;
-    const dayLevel = Number(this.#selectedLevel);
+    const dayLevel = Number(this.#dayRoll1?.purchaseLevel ?? this.#selectedLevel);
     if (!Number.isFinite(dayLevel)) return;
     try {
       const url = `${API_BASE}/player/${encodeURIComponent(this.#selectedPlayer)}?day=${encodeURIComponent(this.#selectedDay)}`;
@@ -661,7 +695,7 @@ class ReplayPanel extends HTMLElement {
   // Bounded by FAR_FUTURE_HORIZON: levels past it have no rolled traits, so
   // fetching them would cost a request per level to learn nothing.
   async #loadFutureTraits() {
-    const dayLevel = Number(this.#selectedLevel);
+    const dayLevel = Number(this.#dayRoll1?.purchaseLevel ?? this.#selectedLevel);
     if (!this.#selectedPlayer || !Number.isFinite(dayLevel)) {
       this.#futureTraitIds = new Set();
       this.#futureTraitsCacheKey = null;
@@ -759,6 +793,7 @@ class ReplayPanel extends HTMLElement {
     }
 
     this.#selectedDay = dayNum;
+    this.#openingFlipDay = false;
     this.#resetCards();
 
     const rngEntry = this.#rngDays.find(d => d.day === dayNum);
@@ -780,7 +815,9 @@ class ReplayPanel extends HTMLElement {
       const wRes = await fetch(`${API_BASE}/game/jackpot/day/${dayNum}/winners`);
       if (wRes.ok) {
         const wJson = await wRes.json();
-        this.#selectedLevel = wJson.level ?? (this.#distributions[0]?.level ?? null);
+        this.#selectedLevel = this.#openingFlipDay
+          ? 0
+          : (wJson.level ?? (this.#distributions[0]?.level ?? null));
         this.#winners = wJson.winners || [];
       } else if (this.#distributions.length > 0) {
         this.#selectedLevel = this.#distributions[0].level;
@@ -791,9 +828,11 @@ class ReplayPanel extends HTMLElement {
       }
     }
 
-    // Tickets are stored at purchaseLevel = gameLevel + 1
+    // Roll 1 grades the purchase level itself. Prefer the endpoint's explicit
+    // source level; modal winner level can be the level receiving ticket prizes
+    // (or an opening bonus target), which is not the ownership cohort.
     if (this.#selectedLevel != null) {
-      await this.#loadTickets(this.#selectedLevel + 1);
+      await this.#loadTickets(this.#dayRoll1?.purchaseLevel ?? (this.#selectedLevel + 1));
     }
 
     // A valid draw can have zero winners. RNG + a selected player are enough
@@ -1085,6 +1124,11 @@ class ReplayPanel extends HTMLElement {
       const isFlip = at === 'flip' || at === 'farFutureCoin' || at.includes('flip');
       if (at === 'eth_baf' || at === 'tickets_baf') {
         bafEntries.push(entry);
+      } else if (this.#openingFlipDay
+        && isFlip
+        && entry.traitId != null
+        && Number(entry.level) === 1) {
+        roll1Entries.push(entry);
       } else if (isFlip && entry.traitId == null) {
         bonusCenterEntries.push(entry);
       } else if (isFlip && entry.traitId != null) {
@@ -1157,8 +1201,10 @@ class ReplayPanel extends HTMLElement {
       if (this.#hasBonus) {
         this.#btnMode = 'bonus';
         btn.textContent = 'Bonus Roll';
-        btn.disabled = !this.#mainScratchComplete;
-        btn.title = this.#mainScratchComplete ? '' : 'Scratch the main draw first';
+        btn.disabled = !this.#mainReadyForBonus();
+        btn.title = this.#mainReadyForBonus()
+          ? (this.#mainAllRed && !this.#mainScratchComplete ? 'All red — bonus roll ready' : '')
+          : 'Scratch the main draw first';
       } else {
         btn.hidden = true;
       }
@@ -1365,6 +1411,10 @@ class ReplayPanel extends HTMLElement {
     return this.hasAttribute('single-button');
   }
 
+  #mainReadyForBonus() {
+    return this.#mainScratchComplete || this.#mainAllRed;
+  }
+
   #showBonusSection() {
     const section = this.querySelector('[data-bind="bonus-section"]');
     const btn = this.querySelector('[data-bind="bonus-btn"]');
@@ -1384,8 +1434,10 @@ class ReplayPanel extends HTMLElement {
     section.hidden = false;
     if (this.#hasBonus) {
       btn.hidden = false;
-      btn.disabled = !this.#mainScratchComplete;
-      btn.title = this.#mainScratchComplete ? '' : 'Scratch the main draw first';
+      btn.disabled = !this.#mainReadyForBonus();
+      btn.title = this.#mainReadyForBonus()
+        ? (this.#mainAllRed && !this.#mainScratchComplete ? 'All red — bonus roll ready' : '')
+        : 'Scratch the main draw first';
       noBonus.hidden = true;
     } else {
       btn.hidden = true;
@@ -1397,7 +1449,7 @@ class ReplayPanel extends HTMLElement {
     // Public Roll 2 results remain viewable even for a player with no eligible
     // future ticket. The button is hidden only when no bonus draw exists.
     if (!this.#hasBonus
-      || !this.#mainScratchComplete
+      || !this.#mainReadyForBonus()
       || this.#bonusPhase
       || this.#bonusScratchComplete) return;
     const bonusSection = this.querySelector('[data-bind="bonus-section"]');
@@ -1444,7 +1496,7 @@ class ReplayPanel extends HTMLElement {
     const center = this.querySelector('[data-bind="center"]');
     if (!center) return;
     const ready = this.#hasBonus
-      && this.#mainScratchComplete
+      && this.#mainReadyForBonus()
       && this.#bonusScratchComplete
       && !this.#spinning
       && !this.#drawViewSwitching;
@@ -1467,7 +1519,7 @@ class ReplayPanel extends HTMLElement {
     if (this.#drawViewSwitching
       || this.#spinning
       || !this.#hasBonus
-      || !this.#mainScratchComplete
+      || !this.#mainReadyForBonus()
       || !this.#bonusScratchComplete) return;
 
     this.#drawViewSwitching = true;
@@ -1566,7 +1618,7 @@ class ReplayPanel extends HTMLElement {
     quads.forEach(q => {
       q.classList.remove(
         'revealed', 'q-has-trait', 'q-no-tickets', 'q-scratchable',
-        'q-has-tickets', 'q-public-result', 'q-win-impossible',
+        'q-has-tickets', 'q-public-result', 'q-win-impossible', 'q-win-impossible-lock',
         'q-owned-miss', 'q-player-win', 'q-gold-trait',
         'q-result-pending', 'q-result-revealed',
       );
@@ -1612,12 +1664,13 @@ class ReplayPanel extends HTMLElement {
     // and win sound. Roll 2 keeps its player-eligible-only scratch behavior.
     if (this.#bonusPhase) {
       for (let i = 0; i < 4; i++) {
-        if (this.#bonusQuadrants.size > 0) {
-          const contractQ = displayTraits[i] != null ? Math.floor(displayTraits[i] / 64) : -1;
-          this.#quadOwned[i] = contractQ >= 0 && this.#bonusQuadrants.has(contractQ);
-        } else {
-          this.#quadOwned[i] = false;
-        }
+        const contractQ = displayTraits[i] != null ? Math.floor(displayTraits[i] / 64) : -1;
+        const hasPlayerWin = contractQ >= 0 && this.#bonusQuadrants.has(contractQ);
+        // Roll 2 uses future-level holdings. A held offered trait that missed
+        // its bucket is still a possible-win blue face, just like Roll 1; an
+        // actual win is authoritative even if the by-trait endpoint lags.
+        this.#quadOwned[i] = hasPlayerWin
+          || (displayTraits[i] != null && this.#futureTraitIds.has(displayTraits[i]));
       }
     } else {
       const roll1TraitIds = new Set(this.#playerRoll1Wins.map(r => r.traitId).filter(t => t != null));
@@ -1799,23 +1852,26 @@ class ReplayPanel extends HTMLElement {
             'q-scratchable',
             'q-has-tickets',
             'q-gold-trait',
+            'q-win-impossible-lock',
           );
           if (lockedSymbols[i] && lockedColors[i]) {
             // Fully locked -- ownership state, which is also what decides
             // scratchability once the reels stop.
             quads[i].classList.add(this.#quadOwned[i] ? 'q-has-trait' : 'q-no-tickets');
-            // Main-draw target not owned = guaranteed loss. Commit the final
-            // light-red face as THIS quadrant locks, not after every reel ends.
-            if (!this.#bonusPhase && !this.#quadOwned[i]) {
-              quads[i].classList.add('q-win-impossible');
+            // A target not owned for this draw = guaranteed loss. Commit the darker
+            // scratch-front color as THIS quadrant locks. #afterSpin swaps the
+            // paper underneath to the lighter pink while painting this same
+            // dark color onto the removable canvas, so there is no face snap.
+            if (!this.#quadOwned[i]) {
+              quads[i].classList.add('q-win-impossible-lock');
             } else {
-              quads[i].classList.remove('q-win-impossible');
+              quads[i].classList.remove('q-win-impossible-lock');
             }
             if (this.#quadOwned[i] && targets[i].col === 7) {
               quads[i].classList.add('q-gold-trait');
             }
           } else {
-            quads[i].classList.remove('q-win-impossible');
+            quads[i].classList.remove('q-win-impossible-lock');
             // Mid-spin: the shown trait is quadrant/colour/symbol packed the
             // same way the contract packs it ([QQ][CCC][SSS]).
             const shownTrait = contractQ * 64 + col * 8 + sym;
@@ -1855,6 +1911,7 @@ class ReplayPanel extends HTMLElement {
       : buildRoll1BucketSummaries(
           this.#dayRoll1?.wins,
           displayTraits,
+          this.#openingFlipDay ? 'FLIP' : 'ETH',
         );
 
     let anyScratchable = false;
@@ -1864,6 +1921,7 @@ class ReplayPanel extends HTMLElement {
         'q-no-tickets',
         'q-public-result',
         'q-win-impossible',
+        'q-win-impossible-lock',
         'q-owned-miss',
         'q-player-win',
         'q-gold-trait',
@@ -1883,7 +1941,7 @@ class ReplayPanel extends HTMLElement {
             traitId: displayTraits[i],
             winnerCount: null,
             perWinWei: null,
-            currency: this.#bonusPhase ? 'FLIP' : 'ETH',
+            currency: (this.#bonusPhase || this.#openingFlipDay) ? 'FLIP' : 'ETH',
           })
         : null;
       const scratchable = true;
@@ -1991,8 +2049,20 @@ class ReplayPanel extends HTMLElement {
       anyScratchable = true;
     }
 
+    // A board with four guaranteed-loss faces and no center payout contains no
+    // hidden personal result. Let the player continue directly to Roll 2; they
+    // can still scratch or revisit the public main-board results later.
     if (!this.#bonusPhase) {
-      if (hint) hint.textContent = 'Scratch every quadrant to reveal the draw!';
+      this.#mainAllRed = this.#quadOwned.every((owned) => !owned)
+        && this.#centerWins.length === 0;
+    }
+
+    if (!this.#bonusPhase) {
+      if (hint) {
+        hint.textContent = this.#mainAllRed && this.#hasBonus
+          ? 'All red — bonus roll is ready.'
+          : 'Scratch every quadrant to reveal the draw!';
+      }
     } else if (anyScratchable) {
       if (hint) hint.textContent = 'Scratch every quadrant to reveal the bonus draw!';
     } else {
@@ -2245,8 +2315,8 @@ class ReplayPanel extends HTMLElement {
     canvas.style.height = rect.height + 'px';
     const ctx = canvas.getContext('2d');
     // Draw the cover with badge image (matching demo's drawBadgeCover). Default
-    // is the blue scratch cover; a public non-player result passes the lighter
-    // "win not possible" red.
+    // is the blue scratch cover; a known loser passes the darker locked-face
+    // pink while the lighter loser paper remains visible through scratches.
     ctx.fillStyle = fillColor || POSSIBLE_WIN_COVER_FILL;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const img = new Image();
@@ -2701,7 +2771,7 @@ class ReplayPanel extends HTMLElement {
     quads.forEach(q => {
       q.classList.remove(
         'revealed', 'q-has-trait', 'q-no-tickets', 'q-scratchable',
-        'q-has-tickets', 'q-public-result', 'q-win-impossible',
+        'q-has-tickets', 'q-public-result', 'q-win-impossible', 'q-win-impossible-lock',
         'q-owned-miss', 'q-player-win', 'q-gold-trait',
         'q-result-pending', 'q-result-revealed',
       );
@@ -2742,6 +2812,7 @@ class ReplayPanel extends HTMLElement {
     // Reset bonus roll state
     this.#bonusPhase = false;
     this.#mainScratchComplete = false;
+    this.#mainAllRed = false;
     this.#bonusScratchComplete = false;
     this.#drawViewSwitching = false;
     this.#bonusTraitIds = new Set();

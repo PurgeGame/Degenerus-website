@@ -724,6 +724,14 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
     );
   });
 
+  test('payable preflight carries the same ETH value as the wallet send', () => {
+    assert.match(
+      SRC,
+      /requireStaticCall\([\s\S]*?'placeDegeneretteBet'[\s\S]*?\[buyer, cur, amount, tc, ct, hq, \{ value \}\]/,
+      'ETH bets must not be simulated with msg.value=0',
+    );
+  });
+
   test('canonical ABI: resolveDegeneretteBets signature', () => {
     assert.ok(
       SRC.includes('function resolveDegeneretteBets(address player, uint64[] calldata betIds) external'),

@@ -102,6 +102,7 @@ const FLIP_READ_ABI = ['function balanceOf(address owner) external view returns 
 
 let _currentStakeReader = null;
 let _resolvedStakeReader = null;
+let _claimableReader = null;
 let _reverseFlipQuoteReader = null;
 // null = unprobed; true = deploy has rngNudgeQuote() (run23+ signature);
 // false = legacy deploy (storage-slot quote + no-arg reverseFlip). Probed once
@@ -112,6 +113,7 @@ let _publicReadProvider = null;
 const _resolvedStakeCache = new Map();
 const _currentStakeInflight = new Map();
 const _resolvedStakeInflight = new Map();
+const _claimableInflight = new Map();
 let _reverseFlipQuoteInflight = null;
 const LOG_CHUNK_BLOCKS = 1_800;
 const RESOLVED_STAKE_STORAGE_PREFIX = 'coinflip_resolved_stake_v1';
@@ -127,6 +129,12 @@ export function __setResolvedStakeReaderForTest(fn) {
   _resolvedStakeReader = typeof fn === 'function' ? fn : null;
   _resolvedStakeCache.clear();
   _resolvedStakeInflight.clear();
+}
+
+/** Test-only: replace the live previewClaimCoinflips read. */
+export function __setClaimableReaderForTest(fn) {
+  _claimableReader = typeof fn === 'function' ? fn : null;
+  _claimableInflight.clear();
 }
 
 /** Test-only: replace the live reverseFlip storage/lock read. */
@@ -148,6 +156,13 @@ export function __resetResolvedStakeReaderForTest() {
   _resolvedStakeReader = null;
   _resolvedStakeCache.clear();
   _resolvedStakeInflight.clear();
+  _publicReadProvider = null;
+}
+
+/** Test-only: restore the production claimable reader. */
+export function __resetClaimableReaderForTest() {
+  _claimableReader = null;
+  _claimableInflight.clear();
   _publicReadProvider = null;
 }
 
@@ -344,6 +359,45 @@ export async function readCurrentCoinflipStake({ player } = {}) {
     return await request;
   } finally {
     if (_currentStakeInflight.get(key) === request) _currentStakeInflight.delete(key);
+  }
+}
+
+/**
+ * Read the exact currently claimable FLIP directly from Coinflip.
+ *
+ * The player dashboard is indexed and may still contain the pre-resolution
+ * value when the reveal animation lands. `previewClaimCoinflips` includes all
+ * settled/mintable coinflip winnings at the chain head, so the reveal can
+ * unmask the real total without waiting for the indexer's next cycle.
+ *
+ * @param {{player?: string}} [args]
+ * @returns {Promise<bigint|null>} null when the read is unavailable
+ */
+export async function readClaimableCoinflip({ player } = {}) {
+  const target = player || getActingAddress();
+  if (!target) return null;
+  const key = `${CHAIN.id}:${String(target).toLowerCase()}`;
+  if (_claimableInflight.has(key)) return _claimableInflight.get(key);
+
+  const request = (async () => {
+    try {
+      if (_claimableReader) {
+        const value = await _claimableReader({ player: target });
+        return value == null ? null : BigInt(value);
+      }
+      const provider = _readerProvider();
+      if (!provider || !CONTRACTS.COINFLIP) return null;
+      const coinflip = new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, provider);
+      return BigInt(await coinflip.previewClaimCoinflips(target));
+    } catch (_e) {
+      return null;
+    }
+  })();
+  _claimableInflight.set(key, request);
+  try {
+    return await request;
+  } finally {
+    if (_claimableInflight.get(key) === request) _claimableInflight.delete(key);
   }
 }
 

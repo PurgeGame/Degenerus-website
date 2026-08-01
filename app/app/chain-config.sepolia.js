@@ -56,17 +56,17 @@ export const CONTRACTS = {
 };
 
 // Ticket-volume parimutuel window, for the COUNTDOWN ONLY — the contract's own
-// `openRound` return is what gates the buttons. Mirrors this deploy's
-// contracts-testnet/DegenerusParimutuel.sol:478 `(ts - 82620) % 600 < 26` and
-// its credit ladder (25 FLIP, -5 per 4s from 7s into the 600s game day).
+// `openRound` return is what gates the buttons. Mirrors this deploy's current
+// contracts-testnet/DegenerusParimutuel.sol:478 `(ts - 82620) % 600 < 540` and
+// its rescaled credit ladder (25 FLIP, -5 per 86s from 154s into the game day).
 // The testnet overlay rescales the window with the day; mainnet does NOT
 // (see chain-config.mainnet.js).
 export const VOLUME_WINDOW = {
   anchor: 82_620,        // GameTimeLib.JACKPOT_RESET_TIME — 22:57 UTC, the day boundary
   period: 600,           // one game day (600s testnet overlay)
-  openSeconds: 26,       // betting window at the top of the day
-  creditDecayStart: 7,   // seconds into the day the 25 FLIP placement credit starts decaying
-  creditDecayStep: 4,    // -5 FLIP per step
+  openSeconds: 540,      // betting is open for the first nine minutes
+  creditDecayStart: 154, // full 25 FLIP through the first rescaled credit tier
+  creditDecayStep: 86,   // -5 FLIP per rescaled step
   leadSeconds: 90,       // how early the widget surfaces the card ahead of the open
   // ContractAddresses.DEPLOY_DAY_BOUNDARY — day indices are DEPLOY-relative
   // (GameTimeLib:34, day 1 = deploy day), so the volume book's rounds are small

@@ -352,6 +352,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     resetDom();
     coinflipMod.__setCurrentStakeReaderForTest(async () => _currentStakeWei);
     coinflipMod.__setResolvedStakeReaderForTest(async () => _resolvedStakeWei);
+    coinflipMod.__setClaimableReaderForTest(async () => null);
     coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({
       queued: 0n,
       locked: false,
@@ -364,6 +365,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
   afterEach(() => {
     coinflipMod.__resetCurrentStakeReaderForTest();
     coinflipMod.__resetResolvedStakeReaderForTest();
+    coinflipMod.__resetClaimableReaderForTest();
     coinflipMod.__resetReverseFlipQuoteReaderForTest();
   });
 
@@ -1032,6 +1034,25 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
+  test('a win unmasks the live chain claimable even while the dashboard is stale', async () => {
+    const exactClaimable = 4_612_331n * 10n ** 18n;
+    coinflipMod.__setClaimableReaderForTest(async () => exactClaimable);
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    const el = mount();
+    await flushMicrotasks();
+
+    assert.equal(el.querySelector('[data-bind="df-funds-claimable"]').textContent, '•••• FLIP');
+    el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    assert.match(el.querySelector('[data-bind="df-funds-claimable"]').textContent, /4,612,331 FLIP/,
+      'the post-reveal ledger comes from previewClaimCoinflips, not the stale player endpoint');
+    el.disconnectedCallback();
+  });
+
   test('reload repairs an older receipt with the authoritative resolved-day total', async () => {
     _currentStakeWei = '12000000000000000000000';
     _fetchResponses = {
@@ -1179,9 +1200,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
     button.dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="df-reverse-dialog"]').hidden, false,
       'the card opens the confirmation dialog');
-    assert.equal(el.querySelector('[data-bind="df-reverse-cost"]').textContent, '337.5 FLIP');
+    assert.equal(el.querySelector('[data-bind="df-reverse-cost"]').textContent, '338 FLIP');
     assert.equal(el.querySelector('[data-bind="df-reverse-accept"]').textContent,
-      'Accept · 337.5 FLIP');
+      'Accept · 338 FLIP');
     const sideBadge = el.querySelector('[data-bind="df-reverse-side-img"]');
     assert.equal(el.querySelector('[data-bind="df-reverse-side"]'), null,
       'the side name is not printed beside the badge');
@@ -1256,6 +1277,7 @@ describe('new-day rollover (codex-found race)', () => {
     resetDom();
     coinflipMod.__setCurrentStakeReaderForTest(async () => _currentStakeWei);
     coinflipMod.__setResolvedStakeReaderForTest(async () => _resolvedStakeWei);
+    coinflipMod.__setClaimableReaderForTest(async () => null);
     coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({
       queued: 0n,
       locked: false,
@@ -1268,6 +1290,7 @@ describe('new-day rollover (codex-found race)', () => {
   afterEach(() => {
     coinflipMod.__resetCurrentStakeReaderForTest();
     coinflipMod.__resetResolvedStakeReaderForTest();
+    coinflipMod.__resetClaimableReaderForTest();
     coinflipMod.__resetReverseFlipQuoteReaderForTest();
   });
 

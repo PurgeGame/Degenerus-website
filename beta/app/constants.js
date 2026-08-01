@@ -32,6 +32,11 @@ export const CONTRACTS = {
 
 export const ETHERSCAN_BASE = 'http://localhost:8545';
 
+// Sepolia/local deployments store ETH-denominated game amounts at 1/1,000,000
+// scale. ERC-20 coin amounts keep their normal 18-decimal units.
+export const ETH_DISPLAY_SCALE = 1_000_000n;
+export const TOKEN_DISPLAY_SCALE = 1n;
+
 // Indexer/DB API (Fastify, database repo). Host-aware: pages served from
 // localhost keep the local dev stack; the deployed site hits the Fly app.
 // NOTE: this is NOT the api.degener.us session server (Discord/wallet login) —

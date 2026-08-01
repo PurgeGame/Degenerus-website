@@ -62,6 +62,7 @@ beforeEach(() => {
   };
   // Plan 59-02: clear store between tests so app.lastDay assertions are deterministic.
   storeMod.__resetForTest();
+  _testing.resetGoldRushYieldReader();
 });
 
 afterEach(() => {
@@ -201,6 +202,80 @@ describe('Promise.allSettled fallback (Pitfall 7)', () => {
     const result = await p;
     assert.equal(result[0].status, 'rejected');
     assert.equal(result[0].reason.message, 'boom');
+  });
+});
+
+describe('gold-rush local fallback', () => {
+  const GAME_STATE = {
+    level: 7,
+    phase: 'JACKPOT',
+    jackpotCounter: 2,
+    prizePools: {
+      currentPrizePool: '100',
+      nextPrizePool: '200',
+      futurePrizePool: '300',
+      claimableWinnings: '9000',
+      frozen: true,
+    },
+  };
+
+  test('contract-exact fallback adds yield but excludes claimable', () => {
+    const payload = _testing.buildGoldRushFallbackPayload(
+      GAME_STATE,
+      { indexedBlock: 456, chainTip: null, lagBlocks: 0 },
+      40n,
+    );
+    assert.equal(payload.headlineWei, '640');
+    assert.equal(payload.components.claimableWei, '9000');
+    assert.equal(payload.components.yieldAccumulatorWei, '40');
+    assert.equal(payload.grandEthWei, '75');
+    assert.equal(payload.atBlock, 456);
+    assert.equal(payload.ready, true);
+    assert.equal(payload.fallback, true);
+  });
+
+  test('a broken specialized route still publishes the local headline', async () => {
+    fetchImpl = async (url, opts) => {
+      fetchCalls.push({ url, opts });
+      if (String(url).endsWith('/game/jackpot/gold-rush')) {
+        return { ok: false, status: 500, json: async () => ({}) };
+      }
+      if (String(url).endsWith('/game/state')) {
+        return { ok: true, status: 200, json: async () => GAME_STATE };
+      }
+      if (String(url).endsWith('/health')) {
+        return { ok: true, status: 200, json: async () => ({ indexedBlock: 789, chainTip: null, lagBlocks: 0 }) };
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    };
+    _testing.setGoldRushYieldReader(async () => 50n);
+
+    const payload = await _testing.pollGoldRush(new AbortController().signal);
+
+    assert.equal(payload.headlineWei, '650');
+    assert.equal(payload.atBlock, 789);
+    assert.equal(storeMod.get('app.goldRush').headlineWei, '650');
+    assert.ok(fetchCalls.some((call) => call.url.endsWith('/game/state')));
+  });
+
+  test('a failed yield read paints the known pools as warming-up, not blank', async () => {
+    fetchImpl = async (url, opts) => {
+      fetchCalls.push({ url, opts });
+      if (String(url).endsWith('/game/jackpot/gold-rush')) {
+        return { ok: false, status: 500, json: async () => ({}) };
+      }
+      if (String(url).endsWith('/game/state')) {
+        return { ok: true, status: 200, json: async () => GAME_STATE };
+      }
+      return { ok: false, status: 503, json: async () => ({}) };
+    };
+    _testing.setGoldRushYieldReader(async () => { throw new Error('RPC unavailable'); });
+
+    const payload = await _testing.pollGoldRush(new AbortController().signal);
+
+    assert.equal(payload.headlineWei, '600');
+    assert.equal(payload.ready, false);
+    assert.equal(storeMod.get('app.goldRush').headlineWei, '600');
   });
 });
 

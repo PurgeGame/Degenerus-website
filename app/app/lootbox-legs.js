@@ -210,22 +210,23 @@ function _feedBigInt(value) {
  * replaying somebody else's result.
  *
  * @param {Array<object>} items
- * @param {{player: string, lootboxIndex: bigint|number}} args
+ * @param {{player: string, lootboxIndex?: bigint|number, transactionHash?: string}} args
  * @returns {Array<object>}
  */
-export function openLegsFromFeed(items, { player, lootboxIndex } = {}) {
+export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash } = {}) {
   const rows = Array.isArray(items) ? items : [];
   const wantPlayer = String(player || '').toLowerCase();
   const wantIndex = String(lootboxIndex ?? '');
-  if (!wantPlayer || !wantIndex) return [];
+  const wantTx = String(transactionHash || '').toLowerCase();
+  if (!wantPlayer || (!wantIndex && !wantTx)) return [];
 
-  const anchors = rows
+  const anchors = wantTx ? [] : rows
     .filter((item) => String(item?.player || '').toLowerCase() === wantPlayer
       && item?.lootboxIndex != null
       && String(item.lootboxIndex) === wantIndex
       && ['opened', 'presale', 'flipOpened'].includes(String(item?.legType || '')))
     .sort((a, b) => Number(b?.ord ?? b?.logIndex ?? 0) - Number(a?.ord ?? a?.logIndex ?? 0));
-  const txHash = anchors[0]?.transactionHash;
+  const txHash = wantTx || anchors[0]?.transactionHash;
   if (!txHash) return [];
 
   const txRows = rows
@@ -250,6 +251,36 @@ export function openLegsFromFeed(items, { player, lootboxIndex } = {}) {
         });
         break;
       }
+      case 'flipOpened': {
+        const futureTickets = Number(data.tickets ?? data.futureTickets ?? 0);
+        const roundedUp = Boolean(data.roundedUp);
+        out.push({
+          legType: 'opened',
+          lootboxIndex: BigInt(item.lootboxIndex ?? 0),
+          amount: _feedBigInt(data.flipAmount),
+          futureLevel: Number(data.ticketLevel ?? data.futureLevel ?? item.levelAtOpen ?? 0),
+          wholeTickets: wholeTicketsFromOpened(futureTickets, roundedUp),
+          flip: _feedBigInt(data.flipReward ?? data.flip),
+        });
+        break;
+      }
+      case 'presale': {
+        out.push({
+          legType: 'opened',
+          lootboxIndex: BigInt(item.lootboxIndex ?? 0),
+          amount: _feedBigInt(data.amount),
+          futureLevel: Number(item.levelAtOpen ?? 0),
+          wholeTickets: 0,
+          flip: _feedBigInt(data.flip),
+        });
+        if (_feedBigInt(data.dgnrs) > 0n) {
+          out.push({ legType: 'dgnrs', amount: _feedBigInt(data.dgnrs) });
+        }
+        if (_feedBigInt(data.wwxrp) > 0n) {
+          out.push({ legType: 'wwxrp', amount: _feedBigInt(data.wwxrp) });
+        }
+        break;
+      }
       case 'dgnrs':
         out.push({ legType: 'dgnrs', amount: _feedBigInt(data.dgnrsAmount ?? data.amount) });
         break;
@@ -270,6 +301,14 @@ export function openLegsFromFeed(items, { player, lootboxIndex } = {}) {
         });
         break;
       }
+      case 'lazypass':
+        out.push({
+          legType: 'reward',
+          rewardType: 11,
+          label: 'Lazy pass',
+          amount: _feedBigInt(data.amount),
+        });
+        break;
       case 'spin': {
         const spin = item.spin || {};
         out.push({

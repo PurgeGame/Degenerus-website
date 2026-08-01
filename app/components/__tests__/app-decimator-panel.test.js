@@ -1466,6 +1466,38 @@ describe('Foil pack buy leg', () => {
     el.disconnectedCallback();
   });
 
+  test('first-day foil quest checks the new level instead of suppressing it with the prior pack', async () => {
+    const checkedLevels = [];
+    storeMod.update('ui.foilQuest', {
+      active: true,
+      completed: false,
+      day: 6,
+      level: 2,
+      address: CONNECTED.toLowerCase(),
+    });
+    _fetchHandler = async (url) => {
+      const u = String(url);
+      if (u.includes('/game/state')) {
+        return { level: 1, phase: 'PURCHASE', jackpotPhaseFlag: false };
+      }
+      if (u.includes('/foil')) {
+        const level = Number(new URL(u, 'http://localhost').searchParams.get('level'));
+        checkedLevels.push(level);
+        return { present: level === 1, level };
+      }
+      return { player: null, pending: {} };
+    };
+
+    const el = instantiate();
+    await settle(60);
+    assert.ok(checkedLevels.includes(2), 'ownership is checked against the live level-2 quest pack');
+    assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, false,
+      'the owned level-1 pack cannot hide the level-2 option');
+    assert.equal(el.querySelector('[data-bind="dec-foil-check"]').disabled, false);
+    assert.match(el.querySelector('[data-bind="dec-price"]').textContent, /Level 2/);
+    el.disconnectedCallback();
+  });
+
   test('a foil quest without a resolved purchase level never falls back to level zero', async () => {
     const checkedLevels = [];
     storeMod.update('ui.foilQuest', {

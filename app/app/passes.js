@@ -58,8 +58,16 @@ const PASSES_ABI = [
   // the read views beside the write also lets the pass panel show authoritative
   // active/funding state without waiting for an indexer cycle.
   'function subscribe(address player, bool drainGameCreditFirst, bool useTickets, uint8 dailyQuantity, address fundingSource) external payable',
+  'function depositAfkingFunding(address player) external payable',
   'function subInfo(address player) external view returns (bool active, uint8 dailyQuantity, uint24 afkingStartDay, uint24 afkCoveredThroughDay)',
   'function afkingSnapshot(address[] players) external view returns (uint256 mintPriceWei, bool rngLocked_, uint256[] claimables, uint256[] afkingFundings)',
+  // Deity holders receive three deterministic, VRF-backed boon slots per day.
+  // The standalone viewer is not part of the deployed address manifest, so the
+  // browser reads this raw tuple and mirrors the viewer's pure weighting below.
+  'function deityBoonData(address deity) external view returns (uint256 dailySeed, uint24 day, uint8 usedMask, bool decimatorOpen, bool deityPassAvailable)',
+  'function issueDeityBoon(address deity, address recipient, uint8 slot) external',
+  // Deity-pass owner action: burn 200 FLIP and add a +2 curse stack.
+  'function smite(uint256 deityId, address smitee) external',
   // Current named errors are included so ethers exposes error.revert.name to
   // the reason map. Without these fragments a valid custom-error response can
   // collapse into the old generic deity "E" treatment.
@@ -73,11 +81,25 @@ const PASSES_ABI = [
   'error SeatForfeited()',
   'error MustPurchaseToBeginAfking()',
   'error NotSubscribed()',
+  'error ZeroAddress()',
+  'error SelfBoon()',
+  'error InvalidSlot()',
+  'error Unauthorized()',
+  'error RngNotReady()',
+  'error RecipientAlreadyBoonedToday()',
+  'error RecipientBoonCapReached()',
+  'error SlotAlreadyUsed()',
+  'error SmiteeAfkingImmune()',
+  'error SmiteCeilingReached()',
+  'error Insufficient()',
   // Receipt-log events for confirmation parsing (CF-05). Sourced from
   // contracts/modules/DegenerusGameWhaleModule.sol:62 (WhalePassClaimed) and
   // contracts/storage/DegenerusGameStorage.sol:516 (DeityPassPurchased).
   'event WhalePassClaimed(address indexed player, address indexed caller, uint256 halfPasses, uint24 startLevel)',
   'event DeityPassPurchased(address indexed buyer, uint8 symbolId, uint256 price, uint24 level)',
+  'event DeityBoonIssued(address indexed deity, address indexed recipient, uint24 indexed day, uint8 slot, uint8 boonType)',
+  'event Smited(uint256 indexed deityId, address indexed smitee)',
+  'event AfkingFunded(address indexed player, uint256 amount)',
 ];
 
 // The GAME no longer exposes the old deityPassTotalIssuedCount() view. The
@@ -91,7 +113,14 @@ const DEITY_PASS_READ_ABI = [
 ];
 const AFKING_SEAT_READ_ABI = [
   'function balanceOf(address account) external view returns (uint256)',
+  'function claimSeat(uint8 symbolId, uint24 bgRgb, uint24 trimRgb) external returns (uint256 tokenId)',
+  'event SeatClaimed(address indexed owner, uint256 indexed tokenId, uint8 symbolId, uint24 bgRgb, uint24 trimRgb, bool freeTranche)',
+  'error InvalidTrait()',
+  'error NotEligible()',
+  'error SupplyCapped()',
 ];
+const AFKING_DEFAULT_BG_RGB = 0xd9d9d9;
+const AFKING_DEFAULT_TRIM_RGB = 0xc72734;
 const INVALID_TOKEN_SELECTOR = ethers.id('InvalidToken()').slice(0, 10).toLowerCase();
 // Canonical CREATE2 Multicall3 deployment (present on Base Sepolia and
 // Ethereum). One aggregate avoids a 32-request burst that Base's public RPC
@@ -110,6 +139,7 @@ const MULTICALL3_ABI = [
 let _contractFactory = null;
 let _deityReadContractFactory = null;
 let _afkingReadContractFactory = null;
+let _deityBoonReadContractFactory = null;
 let _publicReadProvider = null;
 let _deityContractVerified = false;
 
@@ -135,6 +165,15 @@ export function __setAfkingReadContractFactoryForTest(fn) {
 
 export function __resetAfkingReadContractFactoryForTest() {
   _afkingReadContractFactory = null;
+}
+
+/** Test-only: replace the GAME deity-boon read contract with a fake. */
+export function __setDeityBoonReadContractFactoryForTest(fn) {
+  _deityBoonReadContractFactory = typeof fn === 'function' ? fn : null;
+}
+
+export function __resetDeityBoonReadContractFactoryForTest() {
+  _deityBoonReadContractFactory = null;
 }
 
 /** Test-only: clear the injected factory; subsequent calls use the real path. */
@@ -179,6 +218,22 @@ function _afkingReadContracts() {
     game: new ethers.Contract(CONTRACTS.GAME, PASSES_ABI, provider),
     token: new ethers.Contract(CONTRACTS.AFKING_SUB_TOKEN, AFKING_SEAT_READ_ABI, provider),
   };
+}
+
+function _afkingSeatContract(signerOrProvider) {
+  if (_afkingReadContractFactory) return _afkingReadContractFactory(signerOrProvider)?.token || null;
+  if (!CONTRACTS.AFKING_SUB_TOKEN || !signerOrProvider) return null;
+  return new ethers.Contract(CONTRACTS.AFKING_SUB_TOKEN, AFKING_SEAT_READ_ABI, signerOrProvider);
+}
+
+function _deityBoonReadContract() {
+  if (_deityBoonReadContractFactory) return _deityBoonReadContractFactory();
+  // Component tests already inject the GAME half of the AFKing reader. Reuse
+  // that seam so a fake-DOM test never falls through to the public RPC.
+  if (_afkingReadContractFactory) return _afkingReadContracts()?.game || null;
+  const provider = _ensurePublicReadProvider();
+  if (!provider || !CONTRACTS.GAME) return null;
+  return new ethers.Contract(CONTRACTS.GAME, PASSES_ABI, provider);
 }
 
 function _deityMulticallContract() {
@@ -305,12 +360,167 @@ export async function readDeityPassCatalog() {
   };
 }
 
+// Exact ordered weight table from DeityBoonViewer._boonFromRoll(). Conditional
+// entries are omitted (including their weight) when that product is unavailable.
+// Keeping the order here is load-bearing: the slot hash selects a point on this
+// cumulative line, so sorting the rows would change every displayed boon.
+const DEITY_BOON_WEIGHTS = Object.freeze([
+  [1, 200], [2, 40], [3, 8],
+  [5, 200], [6, 30], [22, 8],
+  [7, 400], [8, 80], [9, 16],
+  [13, 40, 'decimator'], [14, 8, 'decimator'], [15, 2, 'decimator'],
+  [16, 28], [23, 10], [24, 2],
+  [25, 28, 'deity'], [26, 10, 'deity'], [27, 2, 'deity'],
+  [17, 100], [18, 30], [19, 8],
+  [4, 200], [28, 8],
+  [29, 30], [30, 8], [31, 2],
+]);
+
+function _normalizedHexAddress(value) {
+  const raw = String(value || '').trim();
+  if (!ethers.isAddress(raw)) return null;
+  // Lowercasing first accepts wallets supplied with either checksum casing or
+  // all-lowercase DB casing while still returning a canonical checksum value.
+  return ethers.getAddress(raw.toLowerCase());
+}
+
+/**
+ * Mirror DeityBoonViewer.deityBoonSlots() without depending on an undeployed
+ * viewer address. `abi.encode`, not packed encoding, is part of the RNG domain.
+ */
+export function deriveDeityBoonSlots({
+  dailySeed,
+  deity,
+  day,
+  decimatorOpen,
+  deityPassAvailable,
+} = {}) {
+  const address = _normalizedHexAddress(deity);
+  if (!address) throw new Error('Invalid deity address.');
+  const seed = BigInt(dailySeed ?? 0n);
+  const dayNumber = Number(day);
+  if (!Number.isInteger(dayNumber) || dayNumber < 0 || dayNumber > 0xffffff) {
+    throw new Error('Invalid deity boon day.');
+  }
+  if (seed === 0n) return [0, 0, 0];
+
+  const activeRows = DEITY_BOON_WEIGHTS.filter((row) => (
+    (row[2] !== 'decimator' || Boolean(decimatorOpen))
+    && (row[2] !== 'deity' || Boolean(deityPassAvailable))
+  ));
+  const totalWeight = activeRows.reduce((sum, row) => sum + row[1], 0);
+  const coder = ethers.AbiCoder.defaultAbiCoder();
+
+  return Array.from({ length: 3 }, (_unused, slot) => {
+    const encoded = coder.encode(
+      ['uint256', 'address', 'uint24', 'uint8'],
+      [seed, address, dayNumber, slot],
+    );
+    const roll = Number(BigInt(ethers.keccak256(encoded)) % BigInt(totalWeight));
+    let cursor = 0;
+    for (const [boonType, weight] of activeRows) {
+      cursor += weight;
+      if (roll < cursor) return boonType;
+    }
+    // Matches the viewer's fail-safe tail. The cumulative table should always
+    // return before this point, but a deterministic fallback is safer than 0.
+    return 19;
+  });
+}
+
+/** Read a deity holder's three boon slots and today's used-slot mask. */
+export async function readDeityBoonSlots(player) {
+  const deity = _normalizedHexAddress(player);
+  if (!deity) return null;
+  const contract = _deityBoonReadContract();
+  if (!contract) return null;
+  try {
+    const raw = await contract.deityBoonData(deity);
+    const dailySeed = BigInt(raw?.dailySeed ?? raw?.[0] ?? 0);
+    const day = Number(raw?.day ?? raw?.[1] ?? 0);
+    const usedMask = Number(raw?.usedMask ?? raw?.[2] ?? 0);
+    const decimatorOpen = Boolean(raw?.decimatorOpen ?? raw?.[3]);
+    const deityPassAvailable = Boolean(raw?.deityPassAvailable ?? raw?.[4]);
+    return {
+      day,
+      usedMask,
+      ready: dailySeed !== 0n,
+      slots: deriveDeityBoonSlots({
+        dailySeed,
+        deity,
+        day,
+        decimatorOpen,
+        deityPassAvailable,
+      }),
+    };
+  } catch (_error) {
+    return null;
+  }
+}
+
+/** Issue one of the acting deity holder's daily boon slots to another wallet. */
+export async function issueDeityBoon({ recipient, slot } = {}) {
+  const deity = _normalizedHexAddress(getActingAddress());
+  if (!deity) throw new Error('Wallet not connected.');
+  const target = _normalizedHexAddress(recipient);
+  if (!target || target === ethers.ZeroAddress) throw new Error('Enter a valid recipient address.');
+  if (target.toLowerCase() === deity.toLowerCase()) throw new Error('Choose someone other than yourself.');
+  const slotNumber = Number(slot);
+  if (!Number.isInteger(slotNumber) || slotNumber < 0 || slotNumber > 2) {
+    throw new Error('Boon slot must be 1-3.');
+  }
+  const args = [deity, target, slotNumber];
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (signer) {
+    const contract = _buildContract(signer);
+    const sim = await requireStaticCall(contract, 'issueDeityBoon', args, signer);
+    if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call issueDeityBoon');
+  }
+
+  const receipt = await sendTx(
+    (s) => _buildContract(s).issueDeityBoon(...args),
+    'Give deity boon',
+  );
+  return { receipt };
+}
+
+/** Burn 200 FLIP to add one +2 curse stack to a target as a deity holder. */
+export async function smiteWithDeity({ deityId, target } = {}) {
+  const deity = _normalizedHexAddress(getActingAddress());
+  if (!deity) throw new Error('Wallet not connected.');
+  const sid = Number(deityId);
+  if (!Number.isInteger(sid) || sid < 0 || sid > 31) {
+    throw new Error('Deity pass symbol must be 0-31.');
+  }
+  const smitee = _normalizedHexAddress(target);
+  if (!smitee || smitee === ethers.ZeroAddress) {
+    throw new Error('Enter a valid target wallet address.');
+  }
+  const args = [sid, smitee];
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (signer) {
+    const contract = _buildContract(signer);
+    const sim = await requireStaticCall(contract, 'smite', args, signer);
+    if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call smite');
+  }
+
+  const receipt = await sendTx(
+    (s) => _buildContract(s).smite(...args),
+    'Curse player',
+  );
+  return { receipt };
+}
+
 /**
  * Authoritative AFKing seat + subscription snapshot for one player.
  * A null result means the RPC/config is unavailable; it never means "no seat".
  *
  * @param {string} player
- * @returns {Promise<null|{hasToken:boolean,tokenBalance:bigint,active:boolean,dailyQuantity:number,startDay:number,coveredThroughDay:number,mintPriceWei:bigint,rngLocked:boolean,claimableWei:bigint,fundingWei:bigint}>}
+ * @returns {Promise<null|{hasToken:boolean,canClaimSeat:boolean,tokenBalance:bigint,active:boolean,dailyQuantity:number,startDay:number,coveredThroughDay:number,mintPriceWei:bigint,rngLocked:boolean,claimableWei:bigint,fundingWei:bigint}>}
  */
 export async function readAfkingSubscription(player) {
   const address = String(player || '').trim();
@@ -318,16 +528,49 @@ export async function readAfkingSubscription(player) {
   const contracts = _afkingReadContracts();
   if (!contracts?.game || !contracts?.token) return null;
   try {
-    const [tokenBalanceRaw, info, snapshot] = await Promise.all([
-      contracts.token.balanceOf(address),
-      contracts.game.subInfo(address),
-      contracts.game.afkingSnapshot([address]),
-    ]);
-    const tokenBalance = BigInt(tokenBalanceRaw ?? 0);
+    // Pass ownership latches a free-seat entitlement in GAME; it does not mint
+    // the ERC-721 seat automatically. Read the existing subscription first,
+    // then use one exact claimSeat simulation for a zero-balance player. This
+    // avoids a burst of separate entitlement getter calls on public Base RPCs
+    // and covers both free-tranche eligibility and a vault grant.
+    const call = (target, method, ...args) => Promise.resolve().then(() => {
+      if (typeof target?.[method] !== 'function') throw new Error(`${method} unavailable`);
+      return target[method](...args);
+    });
+    // Keep these three calls sequential. The Base public endpoint intermittently
+    // rate-limits the panel's wider mount burst; losing afkingSnapshot made the
+    // editor appear with no daily price even though the seat probe succeeded.
+    const settle = async (promise) => {
+      try { return { status: 'fulfilled', value: await promise }; }
+      catch (reason) { return { status: 'rejected', reason }; }
+    };
+    const balanceRes = await settle(call(contracts.token, 'balanceOf', address));
+    const infoRes = await settle(call(contracts.game, 'subInfo', address));
+    const snapshotRes = await settle(call(contracts.game, 'afkingSnapshot', [address]));
+    const value = (result, fallback) => result.status === 'fulfilled' ? result.value : fallback;
+    const balanceKnown = balanceRes.status === 'fulfilled';
+    const tokenBalance = BigInt(value(balanceRes, 0n) ?? 0n);
+    let canClaimSeat = false;
+    if (tokenBalance === 0n && typeof contracts.token?.claimSeat?.staticCall === 'function') {
+      try {
+        await contracts.token.claimSeat.staticCall(
+          0,
+          AFKING_DEFAULT_BG_RGB,
+          AFKING_DEFAULT_TRIM_RGB,
+          { from: address },
+        );
+        canClaimSeat = true;
+      } catch (_error) { /* a contract revert means no claim is currently available */ }
+    }
+    if (!balanceKnown && !canClaimSeat) return null;
+
+    const info = value(infoRes, null);
+    const snapshot = value(snapshotRes, null);
     const claimables = snapshot?.claimables ?? snapshot?.[2] ?? [];
     const fundings = snapshot?.afkingFundings ?? snapshot?.[3] ?? [];
     return {
       hasToken: tokenBalance > 0n,
+      canClaimSeat,
       tokenBalance,
       active: Boolean(info?.active ?? info?.[0]),
       dailyQuantity: Number(info?.dailyQuantity ?? info?.[1] ?? 0),
@@ -341,6 +584,38 @@ export async function readAfkingSubscription(player) {
   } catch (_error) {
     return null;
   }
+}
+
+/** Claim the acting player's pass-earned AFKing seat with cosmetic traits. */
+export async function claimAfkingSeat({ symbolId, bgRgb, trimRgb } = {}) {
+  const player = getActingAddress();
+  if (!player) throw new Error('Wallet not connected.');
+  const sid = Number(symbolId);
+  const bg = Number(bgRgb);
+  const trim = Number(trimRgb);
+  if (!Number.isInteger(sid) || sid < 0 || sid > 31) {
+    throw new Error('Symbol must be 0-31.');
+  }
+  for (const [label, color] of [['Background', bg], ['Trim', trim]]) {
+    if (!Number.isInteger(color) || color < 0 || color > 0xFFFFFF) {
+      throw new Error(`${label} color must be a six-digit color.`);
+    }
+  }
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (!signer) throw new Error('Wallet not connected.');
+  const contract = _afkingSeatContract(signer);
+  if (!contract) throw new Error('AFKing seat contract unavailable.');
+  const args = [sid, bg, trim];
+  const sim = await requireStaticCall(contract, 'claimSeat', args, signer);
+  if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call claimSeat');
+
+  const receipt = await sendTx(
+    (freshSigner) => _afkingSeatContract(freshSigner).claimSeat(...args),
+    'Claim AFKing seat',
+  );
+  return { receipt };
 }
 
 /** Configure, replace, or cancel the acting player's AFKing subscription. */
@@ -372,6 +647,29 @@ export async function updateAfkingSubscription({
   const receipt = await sendTx(
     (s) => _buildContract(s).subscribe(...args),
     qty === 0 ? 'Cancel AFKing subscription' : 'Save AFKing subscription',
+  );
+  return { receipt };
+}
+
+/** Add prepaid ETH without changing an active AFKing subscription's settings. */
+export async function fundAfkingSubscription({ msgValueWei } = {}) {
+  const player = _normalizedHexAddress(getActingAddress());
+  if (!player) throw new Error('Wallet not connected.');
+  const value = BigInt(msgValueWei ?? 0n);
+  if (value <= 0n) throw new Error('Enter an AFKing funding amount.');
+  const args = [player, { value }];
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (signer) {
+    const contract = _buildContract(signer);
+    const sim = await requireStaticCall(contract, 'depositAfkingFunding', args, signer);
+    if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call depositAfkingFunding');
+  }
+
+  const receipt = await sendTx(
+    (s) => _buildContract(s).depositAfkingFunding(...args),
+    'Fund AFKing subscription',
   );
   return { receipt };
 }
@@ -583,6 +881,24 @@ register('NoCoin', {
   recoveryAction: 'Hold a subscription seat token, then retry.',
 });
 
+register('NotEligible', {
+  code: 'NotEligible',
+  userMessage: 'This wallet does not have an AFKing seat claim available.',
+  recoveryAction: 'Refresh the pass panel or use the wallet that earned the pass benefit.',
+});
+
+register('InvalidTrait', {
+  code: 'InvalidTrait',
+  userMessage: 'Choose a valid AFKing seat badge.',
+  recoveryAction: 'Pick one of the badges in the selector.',
+});
+
+register('SupplyCapped', {
+  code: 'SupplyCapped',
+  userMessage: 'All AFKing subscription seats have been claimed.',
+  recoveryAction: 'A seat must be transferred or granted before another can be claimed.',
+});
+
 register('SeatForfeited', {
   code: 'SeatForfeited',
   userMessage: 'This AFKing seat was forfeited after its funding ran out.',
@@ -599,6 +915,54 @@ register('NotSubscribed', {
   code: 'NotSubscribed',
   userMessage: 'There is no active AFKing subscription to cancel.',
   recoveryAction: 'Refresh the pass section.',
+});
+
+register('SelfBoon', {
+  code: 'SelfBoon',
+  userMessage: 'Deity boons have to go to another player.',
+  recoveryAction: 'Enter a different wallet address.',
+});
+
+register('InvalidSlot', {
+  code: 'InvalidSlot',
+  userMessage: 'That deity boon slot is not valid.',
+  recoveryAction: 'Refresh the pass section.',
+});
+
+register('Unauthorized', {
+  code: 'Unauthorized',
+  userMessage: 'This account cannot use that deity pass.',
+  recoveryAction: 'Switch to the wallet that owns the deity pass.',
+});
+
+register('RecipientAlreadyBoonedToday', {
+  code: 'RecipientAlreadyBoonedToday',
+  userMessage: 'That wallet already received a deity boon today.',
+  recoveryAction: 'Choose another player.',
+});
+
+register('RecipientBoonCapReached', {
+  code: 'RecipientBoonCapReached',
+  userMessage: 'That wallet has reached your lifetime boon limit.',
+  recoveryAction: 'Choose another player.',
+});
+
+register('SlotAlreadyUsed', {
+  code: 'SlotAlreadyUsed',
+  userMessage: 'That boon has already been given away.',
+  recoveryAction: 'Choose one of today\'s remaining boons.',
+});
+
+register('SmiteeAfkingImmune', {
+  code: 'SmiteeAfkingImmune',
+  userMessage: 'Active AFKing subscribers cannot be cursed.',
+  recoveryAction: 'Choose a player without an active AFKing subscription.',
+});
+
+register('SmiteCeilingReached', {
+  code: 'SmiteCeilingReached',
+  userMessage: 'That player is already at the deity curse limit.',
+  recoveryAction: 'Choose another player.',
 });
 
 // ---------------------------------------------------------------------------

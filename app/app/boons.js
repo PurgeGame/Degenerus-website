@@ -7,6 +7,7 @@ const BOON_UI = Object.freeze({
   1:  { product: 'coinflip', label: 'BOON +5%', detail: 'Your next coinflip deposit gets +5%' },
   2:  { product: 'coinflip', label: 'BOON +10%', detail: 'Your next coinflip deposit gets +10%' },
   3:  { product: 'coinflip', label: 'BOON +25%', detail: 'Your next coinflip deposit gets +25%' },
+  4:  { product: 'quests', label: 'BOON SHIELD', detail: "Protects today's quest streak" },
   5:  { product: 'lootbox', label: 'BOON +5%', detail: 'Your next lootbox purchase gets +5% value' },
   6:  { product: 'lootbox', label: 'BOON +15%', detail: 'Your next lootbox purchase gets +15% value' },
   7:  { product: 'purchase', label: 'BOON +5%', detail: 'Your next ETH ticket purchase gets +5% entries' },
@@ -62,6 +63,29 @@ export function boonIndicatorModel(payload, product) {
     boonType: Number(active.row.boonType),
     label: active.ui.label,
     title: `${active.ui.detail}${Number.isInteger(day) && day > 0 ? ` · Day ${day}` : ''}`,
+  };
+}
+
+const BOON_PRODUCT_NAMES = Object.freeze({
+  coinflip: 'Coinflip',
+  quests: 'Quest',
+  lootbox: 'Lootbox',
+  purchase: 'Tickets',
+  decimator: 'Decimator',
+  whale: 'Whale',
+  activity: 'Degen score',
+  deity: 'Deity pass',
+  lazy: 'Lazy pass',
+});
+
+/** Compact, effective-value copy for a deity holder's daily issuance slots. */
+export function boonTypePresentation(boonType) {
+  const ui = BOON_UI[Number(boonType)];
+  if (!ui) return { name: 'Mystery boon', effect: '', detail: 'Daily deity boon' };
+  return {
+    name: Number(boonType) === 28 ? 'Whale pass' : (BOON_PRODUCT_NAMES[ui.product] || 'Boon'),
+    effect: String(ui.label || '').replace(/^BOON\s*/i, ''),
+    detail: ui.detail,
   };
 }
 

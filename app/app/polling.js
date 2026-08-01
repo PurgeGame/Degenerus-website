@@ -39,6 +39,8 @@
 import { API_BASE } from '../../beta/app/constants.js';
 import { update, get } from './store.js';
 import { mergePlayerPayloads } from './combine.js';
+import { ethers } from './contracts.js';
+import { CHAIN, CONTRACTS } from './chain-config.js';
 
 // ---------------------------------------------------------------------------
 // LOCKED constants (D-04 + Pitfall 3)
@@ -89,6 +91,89 @@ let _activePlayerAddress = null;
 let _goldRushLastBlock = null;
 let _goldRushQuietPolls = 0;
 let _goldRushDelay = GOLD_RUSH_CADENCE.active;
+let _goldRushYieldReader = null;
+let _goldRushReadProvider = null;
+
+const GOLD_RUSH_FALLBACK_ABI = [
+  'function yieldAccumulatorView() external view returns (uint256)',
+];
+
+async function readGoldRushYieldAccumulator() {
+  if (_goldRushYieldReader) return BigInt(await _goldRushYieldReader());
+  if (!_goldRushReadProvider && CHAIN.rpcUrl) {
+    _goldRushReadProvider = new ethers.JsonRpcProvider(
+      CHAIN.rpcUrl,
+      Number(CHAIN.id),
+      { staticNetwork: true, batchMaxCount: 1 },
+    );
+  }
+  if (!_goldRushReadProvider || !CONTRACTS.GAME) throw new Error('Gold-rush chain reader unavailable');
+  const game = new ethers.Contract(CONTRACTS.GAME, GOLD_RUSH_FALLBACK_ABI, _goldRushReadProvider);
+  return BigInt(await game.yieldAccumulatorView());
+}
+
+function fallbackPoolWei(pools, key) {
+  const raw = pools?.[key];
+  if (raw == null || raw === '') throw new Error(`Missing ${key}`);
+  const value = BigInt(raw);
+  if (value < 0n) throw new Error(`Invalid ${key}`);
+  return value;
+}
+
+/**
+ * Rebuild the ticker payload from independently available sources when the
+ * specialized DB route is unavailable. This is the same contract sum as the
+ * indexer's ticker: current + next + future + yieldAccumulator. Claimable is
+ * context only and is deliberately excluded.
+ */
+function buildGoldRushFallbackPayload(gameState, health, yieldAccumulatorWei, previous = null) {
+  const pools = gameState?.prizePools;
+  const current = fallbackPoolWei(pools, 'currentPrizePool');
+  const next = fallbackPoolWei(pools, 'nextPrizePool');
+  const future = fallbackPoolWei(pools, 'futurePrizePool');
+  const claimable = BigInt(pools?.claimableWinnings ?? 0);
+  const hasExactYield = yieldAccumulatorWei != null;
+  const yieldAcc = hasExactYield ? BigInt(yieldAccumulatorWei) : 0n;
+  const headline = current + next + future + yieldAcc;
+  let previousHeadline = null;
+  try {
+    if (previous?.headlineWei != null) previousHeadline = BigInt(previous.headlineWei);
+  } catch { /* malformed prior payload is ignored */ }
+  const indexedBlock = Number(health?.indexedBlock);
+  const atBlock = Number.isSafeInteger(indexedBlock) && indexedBlock >= 0 ? indexedBlock : null;
+  const chainTip = health?.chainTip == null ? null : Number(health.chainTip);
+  const lagBlocks = Number(health?.lagBlocks);
+  const level = Number(gameState?.level);
+  const phaseDay = Number(gameState?.jackpotCounter);
+
+  return {
+    headlineWei: headline.toString(),
+    prevHeadlineWei: previousHeadline == null ? null : previousHeadline.toString(),
+    deltaWei: previousHeadline == null ? '0' : (headline - previousHeadline).toString(),
+    atBlock,
+    fromBlock: previous?.atBlock ?? null,
+    sampledAt: null,
+    components: {
+      currentWei: current.toString(),
+      nextWei: next.toString(),
+      futureWei: future.toString(),
+      yieldAccumulatorWei: yieldAcc.toString(),
+      claimableWei: claimable.toString(),
+    },
+    grandEthWei: (future / 4n).toString(),
+    indexedBlock: atBlock ?? 0,
+    chainTip: chainTip != null && Number.isSafeInteger(chainTip) && chainTip >= 0 ? chainTip : null,
+    lagBlocks: Number.isSafeInteger(lagBlocks) && lagBlocks >= 0 ? lagBlocks : 0,
+    level: Number.isSafeInteger(level) && level >= 0 ? level : null,
+    phase: gameState?.phase == null ? null : String(gameState.phase),
+    phaseDay: Number.isSafeInteger(phaseDay) && phaseDay >= 0 ? phaseDay : null,
+    phaseDayCap: 5,
+    frozen: Boolean(pools?.frozen ?? gameState?.prizePoolFrozen),
+    ready: hasExactYield,
+    armed: previous?.armed ?? null,
+    fallback: true,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Pitfall 5 reconciliation: own fetch wrapper that supports {signal}.
@@ -168,7 +253,30 @@ async function pollGoldRush(signal) {
     update('app.goldRush', payload);
     return payload;
   } catch (_e) {
-    return null;
+    if (signal?.aborted) return null;
+    // The local DB can be healthy while only this route fails response-schema
+    // serialization. Do not strand the headline at an em dash: reconstruct the
+    // exact sum from /game/state plus the one component that endpoint does not
+    // expose, read directly from GAME. The chain read is allowed to degrade so
+    // the known three-pool subtotal still paints with a "warming up" chip.
+    const [stateResult, healthResult, yieldResult] = await Promise.allSettled([
+      fetchJSONWithSignal('/game/state', { signal }),
+      fetchJSONWithSignal('/health', { signal }),
+      readGoldRushYieldAccumulator(),
+    ]);
+    if (stateResult.status !== 'fulfilled') return null;
+    try {
+      const payload = buildGoldRushFallbackPayload(
+        stateResult.value,
+        healthResult.status === 'fulfilled' ? healthResult.value : null,
+        yieldResult.status === 'fulfilled' ? yieldResult.value : null,
+        get('app.goldRush'),
+      );
+      update('app.goldRush', payload);
+      return payload;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -440,6 +548,14 @@ export const _testing = {
   pollApprovers,
   pollCurrentBoons,
   pollGoldRush,
+  buildGoldRushFallbackPayload,
+  setGoldRushYieldReader(fn) {
+    _goldRushYieldReader = typeof fn === 'function' ? fn : null;
+  },
+  resetGoldRushYieldReader() {
+    _goldRushYieldReader = null;
+    _goldRushReadProvider = null;
+  },
   buildPlayerFetchers,
   runPlayerCycle,
   GOLD_RUSH_CADENCE,

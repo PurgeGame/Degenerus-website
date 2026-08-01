@@ -323,8 +323,15 @@
 }
 
 .replay-tq.q-win-impossible {
-  /* Same solid face painted onto the scratch canvas. Applying this class at
-     each quadrant's symbol lock means spin → scratch has no colour snap. */
+  /* Lighter losing paper revealed beneath the darker removable cover. */
+  background: rgba(239, 120, 120, 0.5);
+  transition: background-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.replay-tq.q-win-impossible-lock {
+  /* The darker face appears the instant an impossible target locks. The
+     scratch canvas is painted this exact color before this class is removed,
+     so lock → scratch remains visually continuous. */
   background: rgb(218, 104, 104);
   transition: background-color 0.22s ease, box-shadow 0.22s ease;
 }

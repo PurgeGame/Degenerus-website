@@ -43,6 +43,7 @@ import { get, update, subscribe, getViewedAddress } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { scaledTicketPriceWei } from '../app/lootbox.js';
+import { activeTicketLevel } from '../app/active-level.js';
 import './boon-product-indicator.js';
 
 // Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for the
@@ -108,7 +109,7 @@ function _fmtDailyQuestAmount(questType, raw) {
   }
   if ([2, 3, 5, 8].includes(type)) {
     if (amount < 1_000_000n) return amount.toLocaleString('en-US');
-    return `${_trimGrouped(displayToken(amount, 2))} FLIP`;
+    return `${_trimGrouped(displayToken(amount, 0))} FLIP`;
   }
   if (type === 4) return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'pack' : 'packs'}`;
   if (type === 9) return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'ticket' : 'tickets'}`;
@@ -207,7 +208,7 @@ function _fmtLevelQuestAmount(questType, raw) {
     return `${_trimGrouped(displayEth(amount, 4))} ETH`;
   }
   if (type === 2 || type === 3 || type === 5 || type === 8) {
-    return `${_trimGrouped(displayToken(amount, 2))} FLIP`;
+    return `${_trimGrouped(displayToken(amount, 0))} FLIP`;
   }
   if (type === 9) {
     return `${amount.toLocaleString('en-US')} ${amount === 1n ? 'ticket' : 'tickets'}`;
@@ -231,6 +232,7 @@ class AppQuestPanel extends HTMLElement {
   #questStreak = null;
   #scoreBreakdown = null;
   #levelQuest = null;   // optional DB projection: active level quest view
+  #gameState = null;    // live routing state; foil quests must use the level a buy reaches NOW
   #afkingActive = false;  // subscription runs the dailies — never "missed"
   #pinnedAddress = null;
 
@@ -355,16 +357,19 @@ class AppQuestPanel extends HTMLElement {
     }
 
     try {
-      // TWO sources, deliberately. /player/:addr carries quest_progress, which
+      // Two quest sources, deliberately. /player/:addr carries quest_progress, which
       // only has a row once THIS player has progressed a quest — driving the
       // panel from it alone showed whatever they last touched, forever (the
       // reported bug: "daily quest is always affiliate and green" — a completed
       // day-241 affiliate row still on screen at day 279). The day's actual two
       // slots come from /game/quests/day/:day, which is player-independent.
+      // /game/state is routing metadata only: it tells a foil quest which level
+      // a purchase made now will actually enter.
       const day = this.#currentDay();
-      const [data, defs] = await Promise.all([
+      const [data, defs, gameState] = await Promise.all([
         fetchJSON(`/player/${addr}`),
         day != null ? fetchJSON(`/game/quests/day/${day}`).catch(() => null) : Promise.resolve(null),
+        fetchJSON('/game/state').catch(() => null),
       ]);
       if (signal.aborted) return;
       this.#questData = Array.isArray(data?.quests) ? data.quests : null;
@@ -375,6 +380,7 @@ class AppQuestPanel extends HTMLElement {
       this.#levelQuest = data?.levelQuest && typeof data.levelQuest === 'object'
         ? data.levelQuest
         : null;
+      if (gameState && typeof gameState === 'object') this.#gameState = gameState;
       this.#afkingActive = data?.afkingActive === true;
       this.#renderQuests();
     } catch (_e) {
@@ -463,10 +469,19 @@ class AppQuestPanel extends HTMLElement {
     const day = this.#questDay != null
       ? Number(this.#questDay)
       : all.reduce((m, q) => Math.max(m, Number(q?.day ?? 0)), 0);
-    const rawPurchaseLevel = Number(get('app.lastDay')?.roll1?.purchaseLevel);
-    const purchaseLevel = Number.isInteger(rawPurchaseLevel) && rawPurchaseLevel >= 0
-      ? rawPurchaseLevel
+    // The last resolved draw describes where THAT DAY'S tickets were bought;
+    // on the first purchase day of a new level it necessarily points one level
+    // behind the live purchase route. Using it for a foil quest made the buy
+    // panel check the prior level, find the prior foil pack, and hide the new
+    // quest-completing pack. Prefer the contract-equivalent route from the live
+    // /game/state payload. The last-day value remains only a degraded fallback.
+    const livePurchaseLevel = activeTicketLevel(this.#gameState);
+    const rawLastDayPurchaseLevel = Number(get('app.lastDay')?.roll1?.purchaseLevel);
+    const fallbackPurchaseLevel = Number.isInteger(rawLastDayPurchaseLevel)
+      && rawLastDayPurchaseLevel >= 0
+      ? rawLastDayPurchaseLevel
       : null;
+    const purchaseLevel = livePurchaseLevel ?? fallbackPurchaseLevel;
 
     // Progress rows for THIS day only, indexed by slot.
     const progressBySlot = new Map();
@@ -681,12 +696,32 @@ class AppQuestPanel extends HTMLElement {
     const questType = Number(quest.questType ?? 0);
     const assigned = questType > 0;
     const isDone = Boolean(quest.completed);
-    const isLocked = assigned && !quest.eligible && !isDone;
+    // Contract eligibility gates COMPLETION only. Progress still accumulates
+    // while this is false, so the card must remain active/clickable instead of
+    // looking like the quest itself is unavailable.
+    const completionLocked = assigned && !quest.eligible && !isDone;
     const progress = quest.progress ?? 0;
     const target = quest.target ?? 0;
     // Absent on older API builds — default to true so an unknown field never blanks the bar.
     const progressAvailable = quest.progressAvailable !== false;
     const label = assigned ? (QUEST_TYPE_LABELS[questType] || 'Level quest') : 'Next level quest';
+    const passKind = String(this.#scoreBreakdown?.passBonus?.kind || '').toLowerCase();
+    const streak = Number(this.#questStreak?.baseStreak ?? 0);
+    const loyaltyQualified = Boolean(passKind) || (Number.isFinite(streak) && streak >= 5);
+    const loyaltyLabel = passKind === 'deity'
+      ? 'Deity pass recognized'
+      : passKind
+        ? 'Pass recognized'
+        : loyaltyQualified
+          ? 'Quest streak recognized'
+          : '';
+    const completionGateLabel = completionLocked
+      ? loyaltyQualified
+        ? this.#afkingActive
+          ? `${loyaltyLabel}; progress banks now, and the next qualifying afKing purchase clears the activity prerequisite`
+          : `${loyaltyLabel}; progress banks now, and one ticket-price of current-level ticket or lootbox activity clears the reward prerequisite`
+        : 'Progress banks now; completion also needs current-level purchase activity plus a 5-day streak or pass'
+      : '';
 
     let statusText;
     let statusKind;
@@ -699,21 +734,17 @@ class AppQuestPanel extends HTMLElement {
       statusText = 'COMPLETE';
       statusKind = 'done';
       stateLabel = 'Complete';
-    } else if (isLocked) {
-      statusText = 'QUALIFY';
-      statusKind = 'locked';
-      stateLabel = 'Buy one ticket for this level, then reach a 5-day streak or hold a pass';
     } else if (!progressAvailable) {
       // Affiliate level quests only: the API cannot derive per-player progress from events
       // (the credit goes to a rolled winner on a kickback-adjusted base), so it sends
       // progressAvailable:false with progress 0. Show the target, not a fake empty bar.
       statusText = `TARGET ${_fmtLevelQuestAmount(questType, target)}`;
       statusKind = 'progress';
-      stateLabel = `Target ${_fmtLevelQuestAmount(questType, target)}; progress is not tracked for this quest`;
+      stateLabel = `Target ${_fmtLevelQuestAmount(questType, target)}; progress is not tracked for this quest${completionGateLabel ? `; ${completionGateLabel}` : ''}`;
     } else {
       statusText = `${_fmtLevelQuestAmount(questType, progress)} / ${_fmtLevelQuestAmount(questType, target)}`;
       statusKind = 'progress';
-      stateLabel = `${_fmtLevelQuestAmount(questType, progress)} of ${_fmtLevelQuestAmount(questType, target)}`;
+      stateLabel = `${_fmtLevelQuestAmount(questType, progress)} of ${_fmtLevelQuestAmount(questType, target)}${completionGateLabel ? `; ${completionGateLabel}` : ''}`;
     }
 
     this.#appendQuestCard(slotsEl, {
@@ -727,10 +758,12 @@ class AppQuestPanel extends HTMLElement {
       stateLabel,
       progressPercent: progressAvailable ? _questProgressPercent(progress, target, isDone) : 0,
       isDone,
-      isGated: isLocked || !assigned,
+      isGated: !assigned,
       rewardText: '800 FLIP',
       rewardExtraText: '+5 STREAK',
-      rewardTitle: 'Completion credits 800 FLIP and adds 5 to the quest streak',
+      rewardTitle: completionGateLabel
+        ? `Completion credits 800 FLIP and adds 5 to the quest streak. ${completionGateLabel}`
+        : 'Completion credits 800 FLIP and adds 5 to the quest streak',
       questType,
       target,
     });

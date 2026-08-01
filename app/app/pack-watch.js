@@ -44,6 +44,7 @@ export const MAX_TICKETS_PER_PACK = 9;
 
 // Traits roll at the level draw, so there is nothing to gain from a tight poll.
 const WATCH_INTERVAL_MS = 45_000;
+const SEED_RECOVERY_GRACE_MS = 120_000;
 
 // A record older than this is dropped unopened. Generous on purpose: tickets can
 // be bought for a FUTURE level whose traits do not roll until that level goes
@@ -92,6 +93,36 @@ function _revealedSet(address, level) {
 
 function _saveRevealed(address, level, set) {
   _write(_revealedKey(address, level), Array.from(set));
+}
+
+function _expectedTickets(value) {
+  const n = Math.floor(Number(value) || 0);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function _seedOpenedCards(address, level, payload, keepNewest = 0) {
+  const opened = _openedCards(payload)
+    .slice()
+    .sort((a, b) => Number(a.cardIndex) - Number(b.cardIndex));
+  const keep = Math.min(opened.length, _expectedTickets(keepNewest));
+  const seed = _revealedSet(address, level);
+  for (const card of opened.slice(0, opened.length - keep)) {
+    seed.add(Number(card.cardIndex));
+  }
+  _saveRevealed(address, level, seed);
+}
+
+function _replacePendingRecord(record) {
+  const addr = _lower(record?.address);
+  const lvl = Number(record?.level);
+  if (!addr || !Number.isInteger(lvl)) return;
+  const list = pendingPacks();
+  const at = list.findIndex((row) => (
+    row && _lower(row.address) === addr && Number(row.level) === lvl
+  ));
+  if (at >= 0) list[at] = { ...record };
+  else list.push({ ...record });
+  _write(PENDING_KEY, list);
 }
 
 function _publishWaitingRecords(address) {
@@ -155,41 +186,101 @@ async function _fetchCards(address, level) {
  * one buy): the record merges and the seed is only taken the first time, so a
  * second call cannot mark the first call's tickets as already seen.
  *
- * @param {{address: string, level: number, foilExpected?: boolean}} args
+ * @param {{address: string, level: number, foilExpected?: boolean,
+ *   expectedTickets?: number, sourceKey?: string, settledExpected?: boolean}} args
  */
-export async function recordPendingPack({ address, level, foilExpected = false } = {}) {
+export async function recordPendingPack({
+  address,
+  level,
+  foilExpected = false,
+  expectedTickets = 0,
+  sourceKey = null,
+  settledExpected = false,
+} = {}) {
   const addr = _lower(address);
   const lvl = Number(level);
   if (!addr || !Number.isInteger(lvl) || lvl < 0) return false;
+  const expected = _expectedTickets(expectedTickets);
+  const source = sourceKey == null ? null : String(sourceKey);
 
   const pending = _read(PENDING_KEY, []);
   const list = Array.isArray(pending) ? pending : [];
   const already = list.find((p) => p && _lower(p.address) === addr && Number(p.level) === lvl);
   if (already) {
+    const sources = new Set(Array.isArray(already.sourceKeys) ? already.sourceKeys.map(String) : []);
+    const duplicate = source != null && sources.has(source);
+    if (source != null) sources.add(source);
     already.at = _now();
     already.foilExpected = Boolean(already.foilExpected || foilExpected);
+    already.settledExpected = Boolean(already.settledExpected || settledExpected);
+    if (!duplicate) {
+      already.expectedTickets = _expectedTickets(already.expectedTickets) + expected;
+    }
+    already.sourceKeys = [...sources];
     _write(PENDING_KEY, list);
     _publishWaitingRecords(addr);
     return true;
   }
 
   // Seed BEFORE recording: everything already rolled at this level is old news.
+  let seedPending = false;
   try {
     const payload = await _fetchCards(addr, lvl);
-    const seed = _revealedSet(addr, lvl);
-    for (const c of _openedCards(payload)) seed.add(Number(c.cardIndex));
-    _saveRevealed(addr, lvl, seed);
+    const hasIncomplete = (Array.isArray(payload?.cards) ? payload.cards : [])
+      .some((card) => _wholeCardTraitIds(card) == null);
+    _seedOpenedCards(
+      addr,
+      lvl,
+      payload,
+      settledExpected && !hasIncomplete ? expected : 0,
+    );
   } catch (_e) {
-    // Endpoint down at buy time. Recording anyway would risk revealing the
-    // player's existing tickets as if they were new, so skip the record: the
-    // tickets still land in the inventory, they just do not get a popup.
-    return false;
+    // Keep a durable record through an API/indexer outage. _inspectOne performs
+    // the baseline seed on the first trustworthy response; expectedTickets lets
+    // it preserve an already-rolled newest award instead of swallowing it.
+    seedPending = true;
   }
 
-  list.push({ address: addr, level: lvl, at: _now(), foilExpected: Boolean(foilExpected) });
+  list.push({
+    address: addr,
+    level: lvl,
+    at: _now(),
+    foilExpected: Boolean(foilExpected),
+    expectedTickets: expected,
+    sourceKeys: source == null ? [] : [source],
+    settledExpected: Boolean(settledExpected),
+    seedPending,
+  });
   _write(PENDING_KEY, list);
   _publishWaitingRecords(addr);
   return true;
+}
+
+/** Register whole-ticket awards carried by a lootbox result. */
+export async function recordLootboxTicketPacks({
+  address,
+  legs = [],
+  sourceKey = null,
+  settledExpected = false,
+} = {}) {
+  const grouped = new Map();
+  for (const leg of Array.isArray(legs) ? legs : []) {
+    if (leg?.legType !== 'opened') continue;
+    const level = Number(leg.futureLevel);
+    const count = _expectedTickets(leg.wholeTickets);
+    if (!Number.isInteger(level) || level < 0 || count <= 0) continue;
+    grouped.set(level, (grouped.get(level) || 0) + count);
+  }
+  const results = await Promise.all([...grouped.entries()].map(([level, count]) => (
+    recordPendingPack({
+      address,
+      level,
+      expectedTickets: count,
+      sourceKey: sourceKey == null ? null : `${sourceKey}:L${level}`,
+      settledExpected,
+    })
+  )));
+  return results.filter(Boolean).length;
 }
 
 /** The outstanding records (test/introspection helper). */
@@ -309,6 +400,24 @@ async function _inspectOne(address, rec) {
     payload = await _fetchCards(address, level);
   } catch (_e) {
     return { level, error: true, ready: false, fresh: [], unseen: [], rec };
+  }
+  if (rec.seedPending) {
+    const cards = Array.isArray(payload?.cards) ? payload.cards : [];
+    const hasIncomplete = cards.some((card) => _wholeCardTraitIds(card) == null);
+    const oldEnough = _now() - Number(rec?.at || 0) >= SEED_RECOVERY_GRACE_MS;
+    if (!hasIncomplete && !rec.settledExpected && !oldEnough) {
+      return {
+        level, rec, seedPending: true, ready: false, fresh: [], unseen: [],
+      };
+    }
+    _seedOpenedCards(
+      address,
+      level,
+      payload,
+      !hasIncomplete ? _expectedTickets(rec.expectedTickets) : 0,
+    );
+    rec.seedPending = false;
+    _replacePendingRecord(rec);
   }
   const revealed = _revealedSet(address, level);
   const cards = Array.isArray(payload?.cards) ? payload.cards : [];

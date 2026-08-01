@@ -558,12 +558,15 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
-  test('an unfinished foil quest publishes the same purchase level to the buy panel', async () => {
+  test('an unfinished foil quest publishes the live routed level, not the prior draw level', async () => {
     storeMod.update('app.lastDay', {
       day: 1,
-      roll1: { purchaseLevel: 13 },
+      roll1: { purchaseLevel: 12 },
     });
     _fetchHandler = async (url) => {
+      if (String(url).includes('/game/state')) {
+        return { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
+      }
       if (String(url).includes('/game/quests/day/')) {
         return {
           day: 1,
@@ -593,9 +596,92 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(storeMod.get('ui.foilQuest'), null, 'unmounted quest context cannot stay stale');
   });
 
+  test('first-day foil quest advances past an already-owned previous-level pack', async () => {
+    storeMod.update('app.lastDay', {
+      day: 1,
+      roll1: { purchaseLevel: 1 },
+    });
+    _fetchHandler = async (url) => {
+      const u = String(url);
+      if (u.includes('/game/state')) {
+        return { level: 1, phase: 'PURCHASE', jackpotPhaseFlag: false };
+      }
+      if (u.includes('/game/quests/day/')) {
+        return {
+          day: 1,
+          quests: [
+            { slot: 0, questType: 1, flags: 0, target: '40000000000' },
+            { slot: 1, questType: 4, flags: 0, target: '1' },
+          ],
+        };
+      }
+      return makeQuestsPayload({
+        quests: [
+          { day: 1, slot: 0, questType: 1, progress: 0, target: '40000000000', completed: false },
+        ],
+      });
+    };
+
+    const el = instantiate();
+    await settle(40);
+    assert.equal(storeMod.get('ui.foilQuest')?.level, 2,
+      'purchase phase routes the quest pack to level 2 instead of rechecking owned level 1');
+    el.disconnectedCallback();
+  });
+
   test('level quest is never sourced from an in-browser contract fallback', () => {
     assert.doesNotMatch(PANEL_SRC, /getPlayerLevelQuestView|JsonRpcProvider|new ethers\.Contract/);
     assert.match(PANEL_SRC, /data\?\.levelQuest/, 'optional level quest comes from /player payload');
+  });
+
+  test('a deity + afKing holder can keep working a level quest before its completion gate clears', async () => {
+    const events = [];
+    const listener = (event) => events.push(event.detail);
+    document.addEventListener('quest:activate', listener);
+    _fetchHandler = async () => makeQuestsPayload({
+      afkingActive: true,
+      questStreak: { baseStreak: 0, lastCompletedDay: 0 },
+      levelQuest: {
+        level: 7,
+        questType: 2,
+        progress: '8000000000000000000000',
+        target: '20000000000000000000000',
+        completed: false,
+        eligible: false,
+      },
+      scoreBreakdown: {
+        questStreakPoints: 0,
+        mintCountPoints: 0,
+        affiliatePoints: 0,
+        totalBps: 8000,
+        passBonus: { kind: 'deity', points: 80 },
+      },
+    });
+
+    const el = instantiate();
+    await settle(40);
+
+    const levelSlot = el.querySelectorAll('.qst-slot')[2];
+    assert.equal(
+      levelSlot.querySelector('.qst-slot-status')?.textContent,
+      '8,000 FLIP / 20,000 FLIP',
+      'the card shows banked progress instead of replacing it with BUY 1 TICKET',
+    );
+    assert.match(levelSlot.getAttribute('aria-label') || '', /Deity pass recognized/);
+    assert.match(levelSlot.getAttribute('aria-label') || '', /next qualifying afKing purchase/);
+    assert.equal(levelSlot.classList.contains('qst-slot--gated'), false,
+      'a completion prerequisite no longer greys out progress that the contract is banking');
+    assert.equal(levelSlot.classList.contains('qst-slot--actionable'), true);
+    assert.equal(levelSlot.getAttribute('role'), 'button');
+    levelSlot.dispatchEvent({ type: 'click' });
+    assert.deepEqual(events, [{
+      questType: 2,
+      target: '20000000000000000000000',
+      variant: 'level',
+    }]);
+
+    document.removeEventListener('quest:activate', listener);
+    el.disconnectedCallback();
   });
 
   test('Completed quest renders a completion indicator via textContent (no toast / no audio)', async () => {

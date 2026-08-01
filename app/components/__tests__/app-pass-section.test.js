@@ -293,7 +293,13 @@ function makeFakeReceipt(logs) { return { status: 1, hash: '0xreceipt', logs: lo
 function makeFakeTx(receipt) { return { hash: '0xtx', wait: async () => receipt }; }
 
 function makeFakePassContract(opts = {}) {
-  const calls = { purchaseWhalePass: [], purchaseDeityPass: [] };
+  const calls = {
+    purchaseWhalePass: [],
+    purchaseDeityPass: [],
+    subscribe: [],
+    depositAfkingFunding: [],
+    smite: [],
+  };
   const stk = (name) => async () => {
     if (opts.staticCallShouldRevert?.[name]) {
       const err = new Error('static-call revert');
@@ -315,6 +321,27 @@ function makeFakePassContract(opts = {}) {
         return makeFakeTx(makeFakeReceipt());
       },
       { staticCall: stk('purchaseDeityPass') }
+    ),
+    subscribe: Object.assign(
+      async (...args) => {
+        calls.subscribe.push(args);
+        return makeFakeTx(makeFakeReceipt());
+      },
+      { staticCall: stk('subscribe') }
+    ),
+    depositAfkingFunding: Object.assign(
+      async (...args) => {
+        calls.depositAfkingFunding.push(args);
+        return makeFakeTx(makeFakeReceipt());
+      },
+      { staticCall: stk('depositAfkingFunding') }
+    ),
+    smite: Object.assign(
+      async (...args) => {
+        calls.smite.push(args);
+        return makeFakeTx(makeFakeReceipt());
+      },
+      { staticCall: stk('smite') }
     ),
     interface: { parseLog: () => null },
     connect(_signer) { return this; },
@@ -539,12 +566,188 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
     const select = el.querySelector('[data-bind="pass-deity-select"]');
     const buy = el.querySelector('[data-bind="pass-deity-buy"]');
-    assert.deepEqual(select.children.map((option) => option.value), ['11'],
-      'only the owned symbol remains in the dropdown');
-    assert.equal(select.disabled, true, 'owned pass selector is informational');
-    assert.equal(buy.disabled, true, 'one-pass-per-wallet guard locks repurchase');
-    assert.equal(select.getAttribute('data-write-lock-title'), 'You already own this deity pass');
+    assert.equal(select.hidden, true, 'owned pass no longer renders a selector');
+    assert.equal(buy.hidden, true, 'owned pass has no impossible repurchase button');
+    assert.equal(el.querySelector('[data-bind="pass-deity-owned-name"]').textContent, 'God of Cancer');
+    assert.equal(el.querySelector('[data-bind="pass-deity-owned-name"]').hidden, false);
     assert.match(el.querySelector('[data-bind="pass-deity-hint"]').textContent, /^your pass · /);
+
+    el.disconnectedCallback();
+  });
+
+  test('a deity holder gets a quick 200 FLIP curse action wired to their pass id', async () => {
+    const passContract = makeFakePassContract();
+    passesMod.__setContractFactoryForTest(() => passContract);
+    passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(new Map([
+      [11, CONNECTED],
+    ])));
+
+    const el = instantiate();
+    await settle(60);
+
+    const section = el.querySelector('[data-bind="pass-deity-curse"]');
+    const target = el.querySelector('[name="pass-deity-curse-target"]');
+    const button = el.querySelector('[data-bind="pass-deity-curse-button"]');
+    assert.equal(section.hidden, false, 'curse row is visible to the connected deity holder');
+    assert.match(button.textContent, /200 FLIP/);
+
+    target.value = '0xcd34000000000000000000000000000000000000';
+    button.dispatchEvent({ type: 'click' });
+    await settle(60);
+
+    assert.deepEqual(passContract._calls.smite, [[
+      11,
+      '0xCd34000000000000000000000000000000000000',
+    ]]);
+    assert.equal(target.value, '', 'confirmed curse clears the target field');
+    el.disconnectedCallback();
+  });
+
+  test('an eligible deity holder can claim the missing AFKing seat, then sees the subscription editor', async () => {
+    passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(new Map([
+      [11, CONNECTED],
+    ])));
+    const sent = [];
+    const claimSeat = Object.assign(
+      async (...args) => {
+        sent.push(args);
+        return makeFakeTx(makeFakeReceipt());
+      },
+      { staticCall: async () => 171n },
+    );
+    const token = {
+      balanceOf: async () => 0n,
+      seatClaimed: async () => false,
+      freeClaims: async () => 168n,
+      FREE_TRANCHE: async () => 1_000n,
+      vaultGrants: async () => 0n,
+      claimSeat,
+      connect() { return this; },
+    };
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token,
+      game: {
+        subInfo: async () => [false, 0n, 0n, 0n],
+        afkingSnapshot: async () => [40_000_000_000n, false, [0n], [0n]],
+        mintPackedFor: async () => 1n << 154n,
+      },
+    }));
+
+    const el = instantiate();
+    await settle(60);
+    const section = el.querySelector('[data-bind="pass-afking"]');
+    const claim = el.querySelector('[data-bind="pass-afking-claim"]');
+    const controls = el.querySelector('[data-bind="pass-afking-controls"]');
+    assert.equal(section.hidden, false, 'eligible holder sees the AFKing area before minting');
+    assert.equal(claim.hidden, false, 'free seat claim is visible');
+    assert.equal(controls.hidden, false, 'delivery, quantity, and funding stay visible before seat claim');
+    assert.equal(el.querySelector('[data-bind="pass-afking-save"]').disabled, true,
+      'subscription start waits for the required seat transaction');
+    assert.equal(el.querySelector('[data-bind="pass-afking-mode"]').value, 'lootbox');
+    assert.equal(el.querySelector('[name="pass-afking-qty"]').value, '1');
+    assert.equal(el.querySelector('[name="pass-afking-fund"]').value, '0.4',
+      'funding visibly defaults to ten current ticket prices before claiming');
+    assert.equal(el.querySelector('[data-bind="pass-afking-symbol"]'), null,
+      'seat cosmetics are intentionally omitted from the functional editor');
+
+    el.querySelector('[data-bind="pass-afking-claim-button"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+    assert.deepEqual(sent, [[11, 0xd9d9d9, 0xc72734]]);
+    assert.equal(claim.hidden, true, 'claim row leaves after confirmation');
+    assert.equal(controls.hidden, false, 'subscription editor remains in place after claiming');
+    assert.equal(el.querySelector('[data-bind="pass-afking-save"]').disabled, false,
+      'subscription start unlocks immediately after claiming');
+    assert.equal(el.querySelector('[data-bind="pass-afking-mode"]').value, 'lootbox');
+    assert.equal(el.querySelector('[name="pass-afking-qty"]').value, '1');
+    assert.equal(el.querySelector('[name="pass-afking-fund"]').value, '0.4',
+      'funding defaults to ten current ticket prices');
+    assert.equal(el.querySelector('[data-bind="pass-afking-bg"]'), null);
+    assert.equal(el.querySelector('[data-bind="pass-afking-trim"]'), null);
+
+    el.disconnectedCallback();
+  });
+
+  test('an existing AFKing holder gets all subscription options and a ten-price funding top-up', async () => {
+    const passContract = makeFakePassContract();
+    passesMod.__setContractFactoryForTest(() => passContract);
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 1n },
+      game: {
+        subInfo: async () => [true, 2n, 8n, 12n],
+        afkingSnapshot: async () => [40_000_000_000n, false, [0n], [80_000_000_000n]],
+      },
+    }));
+
+    const el = instantiate();
+    await settle(60);
+    assert.equal(el.querySelector('[data-bind="pass-afking"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="pass-afking-mode"]').value, 'lootbox');
+    assert.equal(el.querySelector('[name="pass-afking-qty"]').value, '2');
+    assert.equal(el.querySelector('[name="pass-afking-fund"]').value, '0.4',
+      'active subscriptions also default top-up funding to ten ticket prices');
+    assert.match(el.querySelector('[data-bind="pass-afking-funding"]').textContent, /0\.08 ETH/);
+
+    el.querySelector('[data-bind="pass-afking-mode"]').value = 'tickets';
+    el.querySelector('[name="pass-afking-qty"]').value = '3';
+    el.querySelector('[name="pass-afking-claimable-first"]').checked = false;
+    el.querySelector('[name="pass-afking-fund"]').value = '0.25';
+    el.querySelector('[data-bind="pass-afking-save"]').dispatchEvent({ type: 'click' });
+    await settle(60);
+
+    assert.equal(passContract._calls.subscribe.length, 1);
+    assert.deepEqual(passContract._calls.subscribe[0], [
+      CONNECTED,
+      false,
+      true,
+      3,
+      '0x0000000000000000000000000000000000000000',
+      { value: 250_000_000_000n },
+    ]);
+
+    const fundInput = el.querySelector('[name="pass-afking-fund"]');
+    const fundOnly = el.querySelector('[data-bind="pass-afking-fund-button"]');
+    assert.equal(fundOnly.hidden, false, 'an active subscription exposes independent funding');
+    fundInput.value = '0.5';
+    fundInput.dispatchEvent({ type: 'input' });
+    fundOnly.dispatchEvent({ type: 'click' });
+    await settle(60);
+    assert.deepEqual(passContract._calls.depositAfkingFunding, [[
+      '0xAB12000000000000000000000000000000000000',
+      { value: 500_000_000_000n },
+    ]]);
+    assert.equal(passContract._calls.subscribe.length, 1,
+      'fund-only top-up does not rewrite the selected subscription settings');
+    el.disconnectedCallback();
+  });
+
+  test('AFKing explains an RNG settings lock while leaving independent funding available', async () => {
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 1n },
+      game: {
+        subInfo: async () => [true, 2n, 8n, 12n],
+        afkingSnapshot: async () => [40_000_000_000n, true, [0n], [80_000_000_000n]],
+      },
+    }));
+
+    const el = instantiate();
+    await settle(60);
+
+    const notice = el.querySelector('[data-bind="pass-afking-lock"]');
+    const save = el.querySelector('[data-bind="pass-afking-save"]');
+    const cancel = el.querySelector('[data-bind="pass-afking-cancel"]');
+    const fundOnly = el.querySelector('[data-bind="pass-afking-fund-button"]');
+    assert.equal(notice.hidden, false, 'the reason for disabled settings is visible');
+    assert.match(notice.textContent, /RNG SETTLING/);
+    assert.equal(save.textContent, 'RNG settling');
+    assert.equal(save.disabled, true);
+    assert.equal(cancel.disabled, true);
+    assert.notEqual(save.getAttribute('data-write-locked'), null,
+      'the global signer refresher cannot erase the domain lock');
+    assert.notEqual(cancel.getAttribute('data-write-locked'), null);
+    assert.equal(fundOnly.disabled, false,
+      'fund-only deposits remain usable because they are not contract RNG-locked');
+    assert.equal(fundOnly.getAttribute('data-write-locked'), null);
 
     el.disconnectedCallback();
   });

@@ -23,17 +23,21 @@
 export function buildRoll1BucketSummaries(
   wins,
   displayTraits,
+  currency = 'ETH',
 ) {
   const traits = Array.isArray(displayTraits) ? displayTraits : [];
   if (!Array.isArray(wins)) return traits.map(() => null);
+  const payoutCurrency = String(currency).toUpperCase() === 'FLIP' ? 'FLIP' : 'ETH';
 
   const byTrait = new Map();
   for (const row of wins) {
     if (!row || row.traitId == null) continue;
     const awardType = String(row.awardType || '').toLowerCase();
     const isEth = awardType === 'eth';
+    const isFlip = awardType === 'flip' || row.currency === 'FLIP';
     const isTicket = awardType === 'tickets' || awardType === 'ticket';
-    if (!isEth && !isTicket) continue;
+    const isCurrency = payoutCurrency === 'FLIP' ? isFlip : isEth;
+    if (!isCurrency && !isTicket) continue;
     const traitId = Number(row.traitId);
     if (!Number.isInteger(traitId) || traitId < 0 || traitId > 255) continue;
     let amount;
@@ -51,7 +55,7 @@ export function buildRoll1BucketSummaries(
       byTrait.set(traitId, group);
     }
     const winner = String(row.winner || '').toLowerCase();
-    if (isEth) {
+    if (isCurrency) {
       group.rows += 1;
       group.total += amount;
       if (winner) group.winners.add(winner);
@@ -78,6 +82,7 @@ export function buildRoll1BucketSummaries(
         ticketEntriesPerWinner: group?.ticketRows
           ? group.ticketTotal / BigInt(group.ticketRows)
           : 0n,
+        ...(payoutCurrency === 'FLIP' ? { currency: 'FLIP' } : {}),
       };
     }
     return {
@@ -91,8 +96,43 @@ export function buildRoll1BucketSummaries(
       ticketEntriesPerWinner: group.ticketRows
         ? group.ticketTotal / BigInt(group.ticketRows)
         : 0n,
+      ...(payoutCurrency === 'FLIP' ? { currency: 'FLIP' } : {}),
     };
   });
+}
+
+/**
+ * Split the pre-game (game level 0 / purchase level 1) double-FLIP draw.
+ *
+ * That path intentionally emits no ETH or ticket distributions, so the normal
+ * Roll 1 API is empty. The contract's first draw targets level 1 with the
+ * persisted main traits; its second targets levels 2..5 with the persisted
+ * bonus traits. Null-trait far-future rows cannot be distinguished after
+ * indexing and remain on the bonus center, matching the existing API.
+ */
+export function splitOpeningFlipDraw(distributions, mainTraits, bonusTraits) {
+  const rows = Array.isArray(distributions) ? distributions : [];
+  const main = new Set((Array.isArray(mainTraits) ? mainTraits : []).map(Number));
+  const bonus = new Set((Array.isArray(bonusTraits) ? bonusTraits : []).map(Number));
+  const flipRows = rows.filter((row) => {
+    const awardType = String(row?.awardType || '').toLowerCase();
+    return row && (awardType === 'flip' || row.currency === 'FLIP');
+  });
+  return {
+    mainWins: flipRows.filter((row) => (
+      row.traitId != null
+      && Number(row.level) === 1
+      && main.has(Number(row.traitId))
+    )),
+    bonusWins: flipRows.filter((row) => (
+      row.traitId == null
+      || (
+        Number(row.level) >= 2
+        && Number(row.level) <= 5
+        && bonus.has(Number(row.traitId))
+      )
+    )),
+  };
 }
 
 /**

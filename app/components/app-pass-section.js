@@ -36,7 +36,7 @@
 
 import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
 import { displayEth } from '../app/scaling.js';
-import { parseEther } from 'ethers';
+import { isAddress, parseEther } from 'ethers';
 import { get, subscribe, getViewedAddress, getActingAddress, deriveCanSign } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
 import {
@@ -46,9 +46,16 @@ import {
   deityPassErrorOverride,
   readDeityPassCatalog,
   readAfkingSubscription,
+  claimAfkingSeat,
   updateAfkingSubscription,
+  fundAfkingSubscription,
+  readDeityBoonSlots,
+  issueDeityBoon,
+  smiteWithDeity,
 } from '../app/passes.js';
+import { boonTypePresentation } from '../app/boons.js';
 import { scaledTicketPriceWei } from '../app/decimator.js';
+import { activeTicketLevel } from '../app/active-level.js';
 import { decodeRevertReason } from '../app/reason-map.js';
 import './boon-product-indicator.js';
 
@@ -119,7 +126,37 @@ function _setIntervalUnref(fn, ms) {
   return h;
 }
 
+function _setTimeoutUnref(fn, ms) {
+  const h = setTimeout(fn, ms);
+  if (h && typeof h.unref === 'function') {
+    try { h.unref(); } catch (_) { /* defensive */ }
+  }
+  return h;
+}
+
+// Keep component-owned business locks intact when view-mode-banner.js next
+// refreshes every [data-write] control. Setting `.disabled` alone is racy: the
+// global signer manager correctly re-enables writable controls and cannot know
+// that this particular action is unavailable during RNG settlement.
+function _setDomainWriteLock(control, locked, title = '') {
+  if (!control) return;
+  if (locked) {
+    control.setAttribute('data-write-locked', '');
+    control.setAttribute('data-write-lock-title', title || 'Action unavailable');
+  } else {
+    control.removeAttribute('data-write-locked');
+    control.removeAttribute('data-write-lock-title');
+  }
+  control.disabled = Boolean(locked || !deriveCanSign());
+  if (locked) control.title = title || 'Action unavailable';
+  else {
+    control.title = '';
+    control.removeAttribute('title');
+  }
+}
+
 const POLL_INTERVAL_MS = 30_000;       // Phase 56 D-04 / Phase 61 D-04 LOCKED.
+const AFKING_LOCK_POLL_MS = 4_000;     // RNG locks are brief; don't leave stale controls for 30s.
 const POST_CONFIRM_REFETCH_MS = 250;   // CF-06 — 250ms debounced refetch on tx confirm.
 const ERROR_AUTO_CLEAR_MS = 10_000;    // 10s — mirrors Phase 61 D-05 pattern.
 const DEBOUNCE_MS = 500;               // 500ms click debounce window.
@@ -171,15 +208,22 @@ class AppPassSection extends HTMLElement {
   #busyWhale = false;
   #busyLazy = false;
   #busyAfking = false;
+  #busyAfkingFunding = false;
+  #busyAfkingSeat = false;
+  #busyBoonSlot = null;
+  #busyCurse = false;
   // Per-symbol-id debounce for the deity grid (T-62-02-05 mitigation).
   #busySymbols = new Set();
   #errorTimerWhale = null;
   #errorTimerDeity = null;
   #errorTimerLazy = null;
   #errorTimerAfking = null;
+  #errorTimerBoon = null;
+  #errorTimerCurse = null;
   // --- Panel-owned 30s poll lifecycle (Phase 61 D-04 LOCKED — NOT polling.js) ---
   #pollHandle = null;
   #pollController = null;
+  #afkingLockPollHandle = null;
   #lastPollAt = 0;
   #visibilityListener = null;
   // --- Pinned data from /player/:address (server-derived; rendered via textContent) ---
@@ -187,13 +231,22 @@ class AppPassSection extends HTMLElement {
   #pinnedAddress = null;
   // Cached pricing snapshot for click-time msgValueWei computation.
   #pricingData = null;
+  // Full game state is retained so AFKing pricing can fall back to the same
+  // active-ticket-level calculation as the purchase widget when the batched
+  // contract snapshot is temporarily unavailable.
+  #gameState = null;
   // Canonical 32-symbol catalog from the soulbound deity-pass NFT. null means
   // availability is unknown, never "all symbols available".
   #deityCatalog = null;
-  // Authoritative token + GAME subscription snapshot. null keeps the entire
-  // editor hidden; a positive seat-token balance is the only visibility gate.
+  // Authoritative token + GAME subscription snapshot. Pass buyers can have a
+  // claimable free seat before balanceOf turns positive, so either state may
+  // surface the editor.
   #afkingState = null;
   #afkingFormAddress = null;
+  #afkingFundingSeededAddress = null;
+  #deityBoonState = null;
+  #deityBoonAddress = null;
+  #deityBoonFormAddress = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -218,6 +271,10 @@ class AppPassSection extends HTMLElement {
       try { this.#pollController.abort(); } catch (_) { /* defensive */ }
       this.#pollController = null;
     }
+    if (this.#afkingLockPollHandle != null) {
+      try { clearTimeout(this.#afkingLockPollHandle); } catch (_) { /* defensive */ }
+      this.#afkingLockPollHandle = null;
+    }
     if (this.#visibilityListener
       && typeof document !== 'undefined'
       && typeof document.removeEventListener === 'function') {
@@ -240,6 +297,14 @@ class AppPassSection extends HTMLElement {
     if (this.#errorTimerAfking != null) {
       try { clearTimeout(this.#errorTimerAfking); } catch (_) { /* defensive */ }
       this.#errorTimerAfking = null;
+    }
+    if (this.#errorTimerBoon != null) {
+      try { clearTimeout(this.#errorTimerBoon); } catch (_) { /* defensive */ }
+      this.#errorTimerBoon = null;
+    }
+    if (this.#errorTimerCurse != null) {
+      try { clearTimeout(this.#errorTimerCurse); } catch (_) { /* defensive */ }
+      this.#errorTimerCurse = null;
     }
     this.#busySymbols.clear();
     for (const u of this.#unsubs) {
@@ -292,59 +357,126 @@ class AppPassSection extends HTMLElement {
         </div>
         <div class="pass-lazy-error" data-bind="pass-lazy-error" hidden role="alert"></div>
 
-        <!-- AFKING SUBSCRIPTION — mounted only after the chain confirms this
-             player holds at least one AFKing Subscription Token. -->
+        <!-- AFKING SUBSCRIPTION — pass buyers first claim their free seat;
+             minted-seat holders get the subscription editor immediately. -->
         <section class="pass-afking" data-bind="pass-afking" hidden>
           <div class="pass-afking__head">
             <span class="pass-section-title">AFKing subscription</span>
             <strong class="pass-afking__status" data-bind="pass-afking-status">SEAT READY</strong>
             <span class="pass-afking__funding" data-bind="pass-afking-funding">—</span>
           </div>
-          <div class="pass-afking__controls">
+          <div class="pass-afking__claim" data-bind="pass-afking-claim" hidden>
+            <span>Claim the included seat, then start with the settings below.</span>
+            <button type="button" class="pass-afking__claim-button" data-write
+                    data-bind="pass-afking-claim-button">1 · Claim seat</button>
+          </div>
+          <div class="pass-afking__lock" data-bind="pass-afking-lock" hidden role="status">
+            <strong>RNG SETTLING</strong>
+            <span>Settings and cancel unlock automatically. Funding stays open.</span>
+          </div>
+          <div class="pass-afking__controls" data-bind="pass-afking-controls" hidden>
             <label class="pass-afking__field">
-              <span>Daily</span>
+              <span>Daily buy</span>
               <select name="pass-afking-mode" data-bind="pass-afking-mode">
+                <option value="lootbox">Lootboxes</option>
                 <option value="tickets">Tickets</option>
-                <option value="lootbox">Lootbox</option>
               </select>
             </label>
             <label class="pass-afking__field pass-afking__field--qty">
-              <span>Size</span>
+              <span>Per day</span>
               <input type="number" name="pass-afking-qty" min="1" max="255" step="1" value="1">
             </label>
             <label class="pass-afking__field pass-afking__field--fund">
-              <span>Add funds</span>
+              <span>Fund now</span>
               <input type="number" name="pass-afking-fund" min="0" step="0.01" value="0" inputmode="decimal">
               <small>ETH</small>
             </label>
+            <button type="button" class="pass-afking__fund-button" data-write
+                    data-bind="pass-afking-fund-button" hidden>Fund only</button>
             <label class="pass-afking__credit">
               <input type="checkbox" name="pass-afking-claimable-first" checked>
               <span>Claimable first</span>
             </label>
-            <span class="pass-afking__day-cost" data-bind="pass-afking-day-cost">—</span>
+            <span class="pass-afking__costs">
+              <span class="pass-afking__day-cost" data-bind="pass-afking-day-cost">—</span>
+              <span class="pass-afking__coverage" data-bind="pass-afking-coverage">—</span>
+            </span>
             <button type="button" class="pass-afking__save" data-write data-bind="pass-afking-save">Start</button>
             <button type="button" class="pass-afking__cancel" data-write data-bind="pass-afking-cancel" hidden>Cancel</button>
           </div>
           <div class="pass-afking-error" data-bind="pass-afking-error" hidden role="alert"></div>
         </section>
 
-        <!-- DEITY PICKER — only currently available symbols appear in the
-             dropdown; the selected real gold badge remains visible beside it. -->
-        <div class="pass-deity-section">
-          <span class="pass-section-title">Deity pass
-            <boon-product-indicator product="deity"></boon-product-indicator>
-          </span>
-          <span class="pass-deity-hint" data-bind="pass-deity-hint">pick your symbol</span>
-          <div class="pass-deity-picker">
-            <span class="pass-deity-preview" aria-hidden="true">
-              <img data-bind="pass-deity-preview" src="" alt="">
+        <!-- DEITY PASS — intentionally the collapsed child of the default-open
+             afKing pass section. Holders get the same picker header plus their
+             three authoritative daily issuance slots inside the dropdown. -->
+        <details class="pass-deity-section" data-bind="pass-deity-details">
+          <summary class="pass-deity-summary">
+            <span class="pass-section-title">Deity pass
+              <boon-product-indicator product="deity"></boon-product-indicator>
             </span>
-            <select class="pass-deity-select" name="pass-deity-symbol"
-                    data-bind="pass-deity-select" aria-label="Deity pass symbol"></select>
-            <button type="button" class="pass-deity-buy" data-write data-bind="pass-deity-buy">Buy</button>
+            <span class="pass-deity-hint" data-bind="pass-deity-hint">pick your symbol</span>
+          </summary>
+          <div class="pass-deity-body">
+            <div class="pass-deity-picker">
+              <span class="pass-deity-preview" aria-hidden="true">
+                <img data-bind="pass-deity-preview" src="" alt="">
+              </span>
+              <strong class="pass-deity-owned-name" data-bind="pass-deity-owned-name" hidden></strong>
+              <select class="pass-deity-select" name="pass-deity-symbol"
+                      data-bind="pass-deity-select" aria-label="Deity pass symbol"></select>
+              <button type="button" class="pass-deity-buy" data-write data-bind="pass-deity-buy">Buy</button>
+            </div>
+            <div class="pass-deity-error" data-bind="pass-deity-error" hidden role="alert"></div>
+
+            <section class="pass-deity-boons" data-bind="pass-deity-boons" hidden>
+              <div class="pass-deity-boons__head">
+                <div>
+                  <strong>Daily boons</strong>
+                  <span>Give one to another player</span>
+                </div>
+                <span class="pass-deity-boons__status" data-bind="pass-deity-boons-status">SYNCING</span>
+              </div>
+              <label class="pass-deity-boons__recipient">
+                <span>Recipient</span>
+                <input type="text" name="pass-deity-boon-recipient"
+                       placeholder="0x wallet address" autocomplete="off" spellcheck="false">
+              </label>
+              <div class="pass-deity-boons__slots" aria-label="Today's deity boons">
+                <button type="button" class="pass-deity-boon-slot" data-write
+                        data-bind="pass-deity-boon-slot-0" disabled>
+                  <span data-bind="pass-deity-boon-name-0">Waiting for RNG</span>
+                  <strong data-bind="pass-deity-boon-effect-0">SLOT 1</strong>
+                </button>
+                <button type="button" class="pass-deity-boon-slot" data-write
+                        data-bind="pass-deity-boon-slot-1" disabled>
+                  <span data-bind="pass-deity-boon-name-1">Waiting for RNG</span>
+                  <strong data-bind="pass-deity-boon-effect-1">SLOT 2</strong>
+                </button>
+                <button type="button" class="pass-deity-boon-slot" data-write
+                        data-bind="pass-deity-boon-slot-2" disabled>
+                  <span data-bind="pass-deity-boon-name-2">Waiting for RNG</span>
+                  <strong data-bind="pass-deity-boon-effect-2">SLOT 3</strong>
+                </button>
+              </div>
+              <div class="pass-deity-boon-error" data-bind="pass-deity-boon-error" hidden role="alert"></div>
+            </section>
+
+            <section class="pass-deity-curse" data-bind="pass-deity-curse" hidden
+                     title="Burn 200 FLIP to add two curse points. Active AFKing subscribers are immune.">
+              <div class="pass-deity-curse__label">
+                <strong>Quick curse</strong>
+                <span>+2 curse · burns 200 FLIP</span>
+              </div>
+              <input type="text" name="pass-deity-curse-target"
+                     placeholder="0x target wallet" aria-label="Wallet to curse"
+                     autocomplete="off" spellcheck="false">
+              <button type="button" class="pass-deity-curse__button" data-write
+                      data-bind="pass-deity-curse-button">Curse · 200 FLIP</button>
+              <div class="pass-deity-curse-error" data-bind="pass-deity-curse-error" hidden role="alert"></div>
+            </section>
           </div>
-          <div class="pass-deity-error" data-bind="pass-deity-error" hidden role="alert"></div>
-        </div>
+        </details>
       </section>
     `;
   }
@@ -375,12 +507,24 @@ class AppPassSection extends HTMLElement {
     if (deitySelect) deitySelect.addEventListener('change', () => this.#renderDeityPreview());
     const afkingSave = this.querySelector('[data-bind="pass-afking-save"]');
     if (afkingSave) afkingSave.addEventListener('click', (e) => this.#onAfkingSave(e));
+    const afkingClaim = this.querySelector('[data-bind="pass-afking-claim-button"]');
+    if (afkingClaim) afkingClaim.addEventListener('click', (e) => this.#onAfkingSeatClaim(e));
     const afkingCancel = this.querySelector('[data-bind="pass-afking-cancel"]');
     if (afkingCancel) afkingCancel.addEventListener('click', (e) => this.#onAfkingCancel(e));
     const afkingQty = this.querySelector('[name="pass-afking-qty"]');
     if (afkingQty) afkingQty.addEventListener('input', () => this.#renderAfkingDayCost());
     const afkingMode = this.querySelector('[data-bind="pass-afking-mode"]');
     if (afkingMode) afkingMode.addEventListener('change', () => this.#renderAfkingDayCost());
+    const afkingFund = this.querySelector('[name="pass-afking-fund"]');
+    if (afkingFund) afkingFund.addEventListener('input', () => this.#renderAfkingDayCost());
+    const afkingFundButton = this.querySelector('[data-bind="pass-afking-fund-button"]');
+    if (afkingFundButton) afkingFundButton.addEventListener('click', (e) => this.#onAfkingFund(e));
+    for (let slot = 0; slot < 3; slot += 1) {
+      const boonButton = this.querySelector(`[data-bind="pass-deity-boon-slot-${slot}"]`);
+      if (boonButton) boonButton.addEventListener('click', (e) => this.#onDeityBoonClick(e, slot));
+    }
+    const curseButton = this.querySelector('[data-bind="pass-deity-curse-button"]');
+    if (curseButton) curseButton.addEventListener('click', (e) => this.#onDeityCurseClick(e));
   }
 
   // ---------------------------------------------------------------------
@@ -413,18 +557,26 @@ class AppPassSection extends HTMLElement {
         || get('viewing.address')
         || get('connected.address')
         || null;
+      const actionTarget = getActingAddress() || addr;
       if (String(addr || '').toLowerCase() !== String(this.#pinnedAddress || '').toLowerCase()) {
         this.#afkingFormAddress = null;
+        this.#afkingFundingSeededAddress = null;
+      }
+      if (String(actionTarget || '').toLowerCase() !== String(this.#deityBoonAddress || '').toLowerCase()) {
+        this.#deityBoonState = null;
+        this.#deityBoonFormAddress = null;
       }
       this.#pinnedAddress = addr;
+      this.#deityBoonAddress = actionTarget;
       // Level comes from /game/state. Deity availability and issued count come
       // from the pass NFT, because /player has neither a global count nor the
       // 32-symbol ownership catalog.
-      const [stateRes, playerRes, deityRes, afkingRes] = await Promise.allSettled([
+      const [stateRes, playerRes, deityRes, afkingRes, deityBoonRes] = await Promise.allSettled([
         fetchJSON('/game/state'),
         addr ? fetchJSON(`/player/${addr}`) : Promise.resolve(null),
         readDeityPassCatalog(),
-        addr ? readAfkingSubscription(addr) : Promise.resolve(null),
+        actionTarget ? readAfkingSubscription(actionTarget) : Promise.resolve(null),
+        actionTarget ? readDeityBoonSlots(actionTarget) : Promise.resolve(null),
       ]);
       if (signal.aborted) return;
       const gs = stateRes.status === 'fulfilled' ? stateRes.value : null;
@@ -432,7 +584,9 @@ class AppPassSection extends HTMLElement {
       const freshCatalog = deityRes.status === 'fulfilled' ? deityRes.value : null;
       if (freshCatalog) this.#deityCatalog = freshCatalog;
       this.#afkingState = afkingRes.status === 'fulfilled' ? afkingRes.value : null;
+      this.#deityBoonState = deityBoonRes.status === 'fulfilled' ? deityBoonRes.value : null;
       this.#playerData = data || null;
+      this.#gameState = gs;
       const level = gs?.level ?? data?.level ?? data?.currentLevel ?? null;
       const jackpotPhase = Boolean(gs?.jackpotPhaseFlag ?? (gs?.phase === 'JACKPOT'));
       this.#pricingData = {
@@ -470,6 +624,7 @@ class AppPassSection extends HTMLElement {
     const u3 = subscribe('ui.mode', () => {
       this.#renderCombinedGate();
       this.#renderDeityCatalog();
+      this.#renderDeityBoons();
     });
     this.#unsubs.push(u1, u2, u3);
   }
@@ -534,6 +689,7 @@ class AppPassSection extends HTMLElement {
       }
     }
     this.#renderDeityCatalog();
+    this.#renderDeityBoons();
     this.#renderAfking();
     // Lazy row — visible ONLY when the level window is open (user ask).
     const lazyRow = this.querySelector('[data-bind="pass-lazy-row"]');
@@ -551,8 +707,8 @@ class AppPassSection extends HTMLElement {
     this.#renderCombinedGate();
   }
 
-  #ownedDeitySymbolId() {
-    const address = String(this.#pinnedAddress || '').toLowerCase();
+  #ownedDeitySymbolId(ownerAddress = this.#pinnedAddress) {
+    const address = String(ownerAddress || '').toLowerCase();
     if (!address || !this.#deityCatalog?.ownersBySymbol) return null;
     for (const [symbolId, owner] of this.#deityCatalog.ownersBySymbol.entries()) {
       if (String(owner || '').toLowerCase() === address) return Number(symbolId);
@@ -567,6 +723,7 @@ class AppPassSection extends HTMLElement {
     const canSign = deriveCanSign();
     const select = this.querySelector('[data-bind="pass-deity-select"]');
     const buy = this.querySelector('[data-bind="pass-deity-buy"]');
+    const ownedName = this.querySelector('[data-bind="pass-deity-owned-name"]');
     if (!select || !buy) return;
 
     const previous = Number(select.value);
@@ -608,6 +765,23 @@ class AppPassSection extends HTMLElement {
     else if (busy) lockTitle = 'Purchase pending';
 
     const domainLocked = Boolean(lockTitle);
+    if (ownedSymbolId != null) {
+      const badge = passSymbolBadge(ownedSymbolId);
+      const symbol = String(badge.name || '').trim().split(/\s+/).at(-1) || 'Symbol';
+      if (ownedName) {
+        ownedName.textContent = `God of ${symbol.charAt(0).toUpperCase()}${symbol.slice(1)}`;
+        ownedName.hidden = false;
+      }
+      select.hidden = true;
+      buy.hidden = true;
+    } else {
+      if (ownedName) {
+        ownedName.textContent = '';
+        ownedName.hidden = true;
+      }
+      select.hidden = false;
+      buy.hidden = false;
+    }
     select.disabled = domainLocked || !canSign;
     buy.disabled = domainLocked || !canSign;
     for (const control of [select, buy]) {
@@ -642,24 +816,213 @@ class AppPassSection extends HTMLElement {
     preview.hidden = false;
   }
 
+  #renderDeityBoons() {
+    const section = this.querySelector('[data-bind="pass-deity-boons"]');
+    const curseSection = this.querySelector('[data-bind="pass-deity-curse"]');
+    if (!section && !curseSection) return;
+    const holderAddress = this.#deityBoonAddress || getActingAddress() || this.#pinnedAddress;
+    const deityId = this.#ownedDeitySymbolId(holderAddress);
+    const ownsPass = deityId != null;
+    const visible = Boolean(ownsPass && get('ui.mode') !== 'combined');
+    // smite() is stricter than the operator-aware boon path: msg.sender must
+    // directly own this deity token, so never offer it while acting for another
+    // account in operator mode.
+    const connectedDeityId = this.#ownedDeitySymbolId(get('connected.address'));
+    const curseVisible = Boolean(visible && get('ui.mode') === 'self' && connectedDeityId === deityId);
+    if (section) section.hidden = !visible;
+    if (curseSection) curseSection.hidden = !curseVisible;
+
+    const details = this.querySelector('[data-bind="pass-deity-details"]');
+    details?.classList?.toggle('pass-deity-section--holder', visible);
+    if (!visible) return;
+
+    const addressKey = String(holderAddress || '').toLowerCase();
+    const recipient = this.querySelector('[name="pass-deity-boon-recipient"]');
+    const curseTarget = this.querySelector('[name="pass-deity-curse-target"]');
+    if (this.#deityBoonFormAddress !== addressKey) {
+      if (recipient) recipient.value = '';
+      if (curseTarget) curseTarget.value = '';
+      this.#deityBoonFormAddress = addressKey;
+    }
+
+    // Cursing is not RNG/day gated. Ownership, signer state, and the contract's
+    // static-call are the complete gate; the latter catches AFKing immunity and
+    // the five-stack ceiling before the wallet opens.
+    const curseButton = this.querySelector('[data-bind="pass-deity-curse-button"]');
+    const canCurse = Boolean(curseVisible && deriveCanSign() && !this.#busyCurse);
+    if (curseTarget) curseTarget.disabled = !canCurse;
+    if (curseButton) {
+      curseButton.disabled = !canCurse;
+      curseButton.textContent = this.#busyCurse ? 'Cursing…' : 'Curse · 200 FLIP';
+    }
+
+    const state = this.#deityBoonState;
+    const usedMask = Number(state?.usedMask ?? 0) & 0b111;
+    const usedCount = [0, 1, 2].filter((slot) => (usedMask & (1 << slot)) !== 0).length;
+    const remaining = 3 - usedCount;
+    const status = this.querySelector('[data-bind="pass-deity-boons-status"]');
+    if (status) {
+      if (!state) status.textContent = 'SYNCING';
+      else if (!state.ready) status.textContent = `DAY ${state.day} · RNG PENDING`;
+      else status.textContent = `DAY ${state.day} · ${remaining}/3 LEFT`;
+    }
+
+    const canIssue = Boolean(state?.ready && remaining > 0 && deriveCanSign());
+    if (recipient) recipient.disabled = !canIssue || this.#busyBoonSlot != null;
+
+    for (let slot = 0; slot < 3; slot += 1) {
+      const button = this.querySelector(`[data-bind="pass-deity-boon-slot-${slot}"]`);
+      const name = this.querySelector(`[data-bind="pass-deity-boon-name-${slot}"]`);
+      const effect = this.querySelector(`[data-bind="pass-deity-boon-effect-${slot}"]`);
+      if (!button || !name || !effect) continue;
+
+      const boonType = Number(state?.slots?.[slot] ?? 0);
+      const used = (usedMask & (1 << slot)) !== 0;
+      const presentation = boonType > 0 ? boonTypePresentation(boonType) : null;
+      name.textContent = presentation?.name || (state?.ready ? 'Boon unavailable' : 'Waiting for RNG');
+      effect.textContent = used
+        ? 'ISSUED'
+        : (presentation?.effect || `SLOT ${slot + 1}`);
+      button.disabled = !canIssue || used || this.#busyBoonSlot != null;
+      button.classList.toggle('pass-deity-boon-slot--used', used);
+      button.classList.toggle('pass-deity-boon-slot--busy', this.#busyBoonSlot === slot);
+      button.title = used
+        ? 'Already issued today'
+        : (presentation?.detail || 'Available after today\'s RNG resolves');
+    }
+  }
+
+  #afkingMintPriceWei() {
+    const snapshotPrice = BigInt(this.#afkingState?.mintPriceWei ?? 0n);
+    if (snapshotPrice > 0n) return snapshotPrice;
+    const targetLevel = activeTicketLevel(this.#gameState);
+    if (targetLevel == null) return 0n;
+    try { return scaledTicketPriceWei(targetLevel); }
+    catch (_error) { return 0n; }
+  }
+
+  #afkingFundingInputWei() {
+    const input = this.querySelector('[name="pass-afking-fund"]');
+    const value = String(input?.value || '0').trim();
+    try {
+      const wei = parseEther(value || '0') / ETH_DIVISOR;
+      return wei >= 0n ? wei : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
   #renderAfkingDayCost() {
     const cost = this.querySelector('[data-bind="pass-afking-day-cost"]');
+    const coverage = this.querySelector('[data-bind="pass-afking-coverage"]');
     const qtyInput = this.querySelector('[name="pass-afking-qty"]');
-    if (!cost) return;
+    const save = this.querySelector('[data-bind="pass-afking-save"]');
+    const fundButton = this.querySelector('[data-bind="pass-afking-fund-button"]');
+    if (!cost && !coverage && !save && !fundButton) return;
     const quantity = Math.min(255, Math.max(1, Number.parseInt(qtyInput?.value || '1', 10) || 1));
-    const mintPrice = this.#afkingState?.mintPriceWei ?? 0n;
-    cost.textContent = mintPrice > 0n
-      ? `ONE DAY · ${formatPassEth(mintPrice * BigInt(quantity))} ETH`
-      : 'ONE DAY · —';
+    const mintPrice = this.#afkingMintPriceWei();
+    const dayCost = mintPrice * BigInt(quantity);
+    if (cost) {
+      cost.textContent = dayCost > 0n
+        ? `COST / DAY · ${formatPassEth(dayCost)} ETH`
+        : 'COST / DAY · —';
+    }
+
+    const addedFunding = this.#afkingFundingInputWei();
+    if (coverage) {
+      if (dayCost <= 0n || addedFunding == null) {
+        coverage.textContent = 'COVERAGE · —';
+      } else {
+        const available = BigInt(this.#afkingState?.fundingWei ?? 0n) + addedFunding;
+        const days = available / dayCost;
+        coverage.textContent = `COVERS · ${days} DAY${days === 1n ? '' : 'S'}`;
+      }
+    }
+
+    if (save && !this.#busyAfking) {
+      const needsSeat = Boolean(!this.#afkingState?.hasToken && this.#afkingState?.canClaimSeat);
+      if (this.#afkingState?.rngLocked) {
+        save.textContent = 'RNG settling';
+      } else if (needsSeat) {
+        save.textContent = 'Claim seat first';
+      } else {
+        const action = this.#afkingState?.active ? 'Update' : 'Start';
+        const fundingLabel = addedFunding != null && addedFunding > 0n
+          ? ` + ${formatPassEth(addedFunding, 6)} ETH`
+          : '';
+        save.textContent = `${action}${fundingLabel}`;
+      }
+    }
+
+    if (fundButton) {
+      const active = Boolean(this.#afkingState?.hasToken && this.#afkingState?.active);
+      fundButton.hidden = !active;
+      fundButton.textContent = this.#busyAfkingFunding
+        ? 'Funding…'
+        : (addedFunding != null && addedFunding > 0n
+          ? `Fund only · ${formatPassEth(addedFunding, 6)} ETH`
+          : 'Fund only');
+      const fundLocked = !active
+        || this.#busyAfking
+        || this.#busyAfkingFunding
+        || addedFunding == null
+        || addedFunding <= 0n;
+      const fundLockTitle = !active
+        ? 'Start the subscription with funding first'
+        : this.#busyAfking || this.#busyAfkingFunding
+          ? 'Funding transaction pending'
+          : addedFunding == null || addedFunding <= 0n
+            ? 'Enter an ETH amount to add'
+            : '';
+      _setDomainWriteLock(fundButton, fundLocked, fundLockTitle);
+      if (!fundLocked) {
+        fundButton.title = 'Add prepaid ETH without changing the daily settings; available during RNG locks';
+      }
+    }
+  }
+
+  #syncAfkingLockPolling() {
+    const locked = Boolean(this.#afkingState?.rngLocked);
+    if (!locked) {
+      if (this.#afkingLockPollHandle != null) {
+        try { clearTimeout(this.#afkingLockPollHandle); } catch (_) { /* defensive */ }
+        this.#afkingLockPollHandle = null;
+      }
+      return;
+    }
+    if (this.#afkingLockPollHandle != null || typeof setTimeout !== 'function') return;
+    this.#afkingLockPollHandle = _setTimeoutUnref(() => {
+      this.#afkingLockPollHandle = null;
+      this.#runPollCycle();
+    }, AFKING_LOCK_POLL_MS);
   }
 
   #renderAfking() {
     const section = this.querySelector('[data-bind="pass-afking"]');
     if (!section) return;
     const state = this.#afkingState;
-    const visible = Boolean(state?.hasToken && get('ui.mode') !== 'combined');
+    const visible = Boolean(
+      state && (state.hasToken || state.canClaimSeat) && get('ui.mode') !== 'combined',
+    );
     section.hidden = !visible;
-    if (!visible) return;
+    if (!visible) {
+      this.#syncAfkingLockPolling();
+      return;
+    }
+
+    const claim = this.querySelector('[data-bind="pass-afking-claim"]');
+    const lockNotice = this.querySelector('[data-bind="pass-afking-lock"]');
+    const controls = this.querySelector('[data-bind="pass-afking-controls"]');
+    const needsSeat = Boolean(!state.hasToken && state.canClaimSeat);
+    if (claim) claim.hidden = !needsSeat;
+    if (lockNotice) {
+      lockNotice.hidden = !state.rngLocked;
+      lockNotice.textContent = 'RNG SETTLING · Settings and cancel unlock automatically. Funding stays open.';
+    }
+    // Keep the complete editor visible before the free seat is claimed. This
+    // lets an eligible pass holder choose delivery, amount, and funding first;
+    // the settings survive the seat transaction and Start unlocks immediately.
+    if (controls) controls.hidden = false;
 
     const addressKey = String(this.#pinnedAddress || '').toLowerCase();
     const qtyInput = this.querySelector('[name="pass-afking-qty"]');
@@ -668,33 +1031,71 @@ class AppPassSection extends HTMLElement {
     const creditInput = this.querySelector('[name="pass-afking-claimable-first"]');
     if (this.#afkingFormAddress !== addressKey) {
       if (qtyInput) qtyInput.value = String(state.active ? Math.max(1, state.dailyQuantity) : 1);
-      if (modeInput) modeInput.value = 'tickets';
+      if (modeInput) modeInput.value = 'lootbox';
       if (fundInput) fundInput.value = '0';
       if (creditInput) creditInput.checked = true;
       this.#afkingFormAddress = addressKey;
     }
+    const mintPrice = this.#afkingMintPriceWei();
+    if (this.#afkingFundingSeededAddress !== addressKey && mintPrice > 0n) {
+      // A funding field is useful for top-ups as well as first activation.
+      // Seed both active and inactive holders with ten ticket prices once per
+      // account, then leave their edits alone across the 30-second poll cycle.
+      if (fundInput) fundInput.value = formatPassEth(mintPrice * 10n, 6);
+      this.#afkingFundingSeededAddress = addressKey;
+    }
 
     const status = this.querySelector('[data-bind="pass-afking-status"]');
     if (status) {
-      status.textContent = state.active ? `ACTIVE · ${state.dailyQuantity}/DAY` : 'SEAT READY';
+      status.textContent = needsSeat
+        ? 'FREE SEAT READY'
+        : (state.active ? `ACTIVE · ${state.dailyQuantity}/DAY` : 'SEAT READY');
       status.classList.toggle('pass-afking__status--active', Boolean(state.active));
     }
     const funding = this.querySelector('[data-bind="pass-afking-funding"]');
-    if (funding) funding.textContent = `FUNDING · ${formatPassEth(state.fundingWei)} ETH`;
+    if (funding) {
+      funding.textContent = `FUNDS · ${formatPassEth(state.fundingWei)} ETH`;
+    }
 
+    const claimButton = this.querySelector('[data-bind="pass-afking-claim-button"]');
+    if (claimButton) {
+      claimButton.textContent = this.#busyAfkingSeat ? 'Claiming…' : '1 · Claim seat';
+      _setDomainWriteLock(
+        claimButton,
+        !needsSeat || this.#busyAfkingSeat,
+        this.#busyAfkingSeat ? 'Seat claim pending' : 'Seat already claimed',
+      );
+    }
     const save = this.querySelector('[data-bind="pass-afking-save"]');
     const cancel = this.querySelector('[data-bind="pass-afking-cancel"]');
-    const locked = Boolean(state.rngLocked || this.#busyAfking);
+    const locked = Boolean(state.rngLocked || this.#busyAfking || this.#busyAfkingFunding);
     if (save) {
-      save.textContent = this.#busyAfking ? 'Saving…' : (state.active ? 'Update' : 'Start');
-      save.disabled = locked || !deriveCanSign();
-      save.title = state.rngLocked ? 'Available after RNG resolves' : '';
+      save.textContent = this.#busyAfking
+        ? 'Saving…'
+        : state.rngLocked
+          ? 'RNG settling'
+          : needsSeat
+            ? '2 · Start after claim'
+            : (state.active ? 'Update' : 'Start');
+      const saveLockTitle = needsSeat
+        ? 'Claim the included AFKing seat first'
+        : state.rngLocked
+          ? 'Settings unlock automatically after RNG resolves'
+          : this.#busyAfking || this.#busyAfkingFunding
+            ? 'Transaction pending'
+            : '';
+      _setDomainWriteLock(save, needsSeat || locked, saveLockTitle);
     }
     if (cancel) {
       cancel.hidden = !state.active;
-      cancel.disabled = locked || !deriveCanSign();
+      _setDomainWriteLock(
+        cancel,
+        locked,
+        state.rngLocked ? 'Cancel unlocks automatically after RNG resolves' : 'Transaction pending',
+      );
     }
     this.#renderAfkingDayCost();
+    this.#syncAfkingLockPolling();
   }
 
   // ---------------------------------------------------------------------
@@ -911,9 +1312,126 @@ class AppPassSection extends HTMLElement {
     }
   }
 
+  async #onDeityBoonClick(e, slot) {
+    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+    if (this.#busyBoonSlot != null || !deriveCanSign()) return;
+    const actingAddress = getActingAddress();
+    if (!actingAddress || this.#ownedDeitySymbolId(actingAddress) == null) return;
+    if (!this.#deityBoonState?.ready) return;
+    const slotNumber = Number(slot);
+    if (!Number.isInteger(slotNumber) || slotNumber < 0 || slotNumber > 2) return;
+    if ((Number(this.#deityBoonState.usedMask || 0) & (1 << slotNumber)) !== 0) return;
+
+    const recipientInput = this.querySelector('[name="pass-deity-boon-recipient"]');
+    const recipient = String(recipientInput?.value || '').trim();
+    if (!isAddress(recipient)) {
+      this.#renderBoonError('Enter a valid recipient wallet address.');
+      return;
+    }
+    if (recipient.toLowerCase() === String(actingAddress).toLowerCase()) {
+      this.#renderBoonError('Choose someone other than yourself.');
+      return;
+    }
+
+    this.#busyBoonSlot = slotNumber;
+    this.#clearBoonError();
+    this.#renderDeityBoons();
+    try {
+      await issueDeityBoon({ recipient, slot: slotNumber });
+      // The receipt has confirmed at this point, so lock the consumed slot now;
+      // the debounced read below reconciles the new mask from chain state.
+      this.#deityBoonState = {
+        ...this.#deityBoonState,
+        usedMask: Number(this.#deityBoonState.usedMask || 0) | (1 << slotNumber),
+      };
+      if (recipientInput) recipientInput.value = '';
+      this.#clearAllErrorStates();
+      try {
+        this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
+          detail: { kind: 'deity-boon', slot: slotNumber, recipient },
+          bubbles: true,
+        }));
+      } catch (_error) { /* defensive */ }
+      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+    } catch (error) {
+      const decoded = error?.userMessage ? error : decodeRevertReason(error);
+      this.#renderBoonError(decoded?.userMessage || error?.message || 'Could not give that boon.');
+    } finally {
+      this.#busyBoonSlot = null;
+      this.#renderDeityBoons();
+    }
+  }
+
+  async #onDeityCurseClick(e) {
+    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+    if (this.#busyCurse || !deriveCanSign() || get('ui.mode') !== 'self') return;
+    const deityId = this.#ownedDeitySymbolId(get('connected.address'));
+    if (deityId == null) return;
+
+    const targetInput = this.querySelector('[name="pass-deity-curse-target"]');
+    const target = String(targetInput?.value || '').trim();
+    if (!isAddress(target) || /^0x0{40}$/i.test(target)) {
+      this.#renderCurseError('Enter a valid target wallet address.');
+      return;
+    }
+
+    this.#busyCurse = true;
+    this.#clearCurseError();
+    this.#renderDeityBoons();
+    try {
+      await smiteWithDeity({ deityId, target });
+      if (targetInput) targetInput.value = '';
+      this.#clearAllErrorStates();
+      try {
+        this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
+          detail: { kind: 'deity-curse', deityId, target },
+          bubbles: true,
+        }));
+      } catch (_error) { /* defensive */ }
+    } catch (error) {
+      const decoded = error?.userMessage ? error : decodeRevertReason(error);
+      this.#renderCurseError(decoded?.userMessage || error?.message || 'Could not curse that player.');
+    } finally {
+      this.#busyCurse = false;
+      this.#renderDeityBoons();
+    }
+  }
+
+  async #onAfkingFund(e) {
+    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+    if (this.#busyAfking || this.#busyAfkingFunding || !this.#afkingState?.active) return;
+    const msgValueWei = this.#afkingFundingInputWei();
+    if (msgValueWei == null || msgValueWei <= 0n) {
+      this.#renderAfkingError('Enter an ETH amount to add.');
+      return;
+    }
+
+    this.#busyAfkingFunding = true;
+    this.#clearAfkingError();
+    this.#renderAfking();
+    try {
+      await fundAfkingSubscription({ msgValueWei });
+      const fundInput = this.querySelector('[name="pass-afking-fund"]');
+      if (fundInput) fundInput.value = '0';
+      this.#clearAllErrorStates();
+      try {
+        this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
+          detail: { kind: 'afking-funding', amountWei: msgValueWei },
+          bubbles: true,
+        }));
+      } catch (_error) { /* defensive */ }
+      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+    } catch (error) {
+      this.#renderAfkingError(error?.userMessage || error?.message || 'Funding failed.');
+    } finally {
+      this.#busyAfkingFunding = false;
+      this.#renderAfking();
+    }
+  }
+
   async #onAfkingSave(e) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busyAfking || !this.#afkingState?.hasToken) return;
+    if (this.#busyAfking || this.#afkingState?.rngLocked || !this.#afkingState?.hasToken) return;
 
     const qtyInput = this.querySelector('[name="pass-afking-qty"]');
     const modeInput = this.querySelector('[data-bind="pass-afking-mode"]');
@@ -963,9 +1481,45 @@ class AppPassSection extends HTMLElement {
     }
   }
 
+  async #onAfkingSeatClaim(e) {
+    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+    if (this.#busyAfkingSeat || !this.#afkingState?.canClaimSeat || !deriveCanSign()) return;
+    // Cosmetic editing can come later; use the deity badge when there is one
+    // and stable defaults for the required on-chain color fields.
+    const symbolId = this.#ownedDeitySymbolId() ?? 0;
+    const bgRgb = 0xd9d9d9;
+    const trimRgb = 0xc72734;
+
+    this.#busyAfkingSeat = true;
+    this.#clearAfkingError();
+    this.#renderAfking();
+    try {
+      await claimAfkingSeat({ symbolId, bgRgb, trimRgb });
+      this.#afkingState = {
+        ...this.#afkingState,
+        hasToken: true,
+        canClaimSeat: false,
+        tokenBalance: BigInt(this.#afkingState.tokenBalance ?? 0n) + 1n,
+      };
+      this.#clearAllErrorStates();
+      try {
+        this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
+          detail: { kind: 'afking-seat', symbolId },
+          bubbles: true,
+        }));
+      } catch (_error) { /* defensive */ }
+      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+    } catch (error) {
+      this.#renderAfkingError(error?.userMessage || error?.message || 'Seat claim failed.');
+    } finally {
+      this.#busyAfkingSeat = false;
+      this.#renderAfking();
+    }
+  }
+
   async #onAfkingCancel(e) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busyAfking || !this.#afkingState?.active) return;
+    if (this.#busyAfking || this.#afkingState?.rngLocked || !this.#afkingState?.active) return;
     this.#busyAfking = true;
     this.#clearAfkingError();
     this.#renderAfking();
@@ -1070,12 +1624,66 @@ class AppPassSection extends HTMLElement {
     }
   }
 
+  #renderBoonError(msg) {
+    const errEl = this.querySelector('[data-bind="pass-deity-boon-error"]');
+    if (!errEl) return;
+    errEl.textContent = String(msg);
+    errEl.hidden = false;
+    if (this.#errorTimerBoon != null) {
+      try { clearTimeout(this.#errorTimerBoon); } catch (_) { /* defensive */ }
+    }
+    this.#errorTimerBoon = setTimeout(() => this.#clearBoonError(), ERROR_AUTO_CLEAR_MS);
+    if (this.#errorTimerBoon && typeof this.#errorTimerBoon.unref === 'function') {
+      try { this.#errorTimerBoon.unref(); } catch (_) { /* defensive */ }
+    }
+  }
+
+  #clearBoonError() {
+    const errEl = this.querySelector('[data-bind="pass-deity-boon-error"]');
+    if (errEl) {
+      errEl.textContent = '';
+      errEl.hidden = true;
+    }
+    if (this.#errorTimerBoon != null) {
+      try { clearTimeout(this.#errorTimerBoon); } catch (_) { /* defensive */ }
+      this.#errorTimerBoon = null;
+    }
+  }
+
+  #renderCurseError(msg) {
+    const errEl = this.querySelector('[data-bind="pass-deity-curse-error"]');
+    if (!errEl) return;
+    errEl.textContent = String(msg);
+    errEl.hidden = false;
+    if (this.#errorTimerCurse != null) {
+      try { clearTimeout(this.#errorTimerCurse); } catch (_) { /* defensive */ }
+    }
+    this.#errorTimerCurse = setTimeout(() => this.#clearCurseError(), ERROR_AUTO_CLEAR_MS);
+    if (this.#errorTimerCurse && typeof this.#errorTimerCurse.unref === 'function') {
+      try { this.#errorTimerCurse.unref(); } catch (_) { /* defensive */ }
+    }
+  }
+
+  #clearCurseError() {
+    const errEl = this.querySelector('[data-bind="pass-deity-curse-error"]');
+    if (errEl) {
+      errEl.textContent = '';
+      errEl.hidden = true;
+    }
+    if (this.#errorTimerCurse != null) {
+      try { clearTimeout(this.#errorTimerCurse); } catch (_) { /* defensive */ }
+      this.#errorTimerCurse = null;
+    }
+  }
+
   // Cross-section error clearing (next-success-anywhere). Mirrors Phase 61 D-05.
   #clearAllErrorStates() {
     this.#clearWhaleError();
     this.#clearDeityError();
     this.#clearLazyError();
     this.#clearAfkingError();
+    this.#clearBoonError();
+    this.#clearCurseError();
   }
 }
 

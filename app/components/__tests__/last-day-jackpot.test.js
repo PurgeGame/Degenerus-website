@@ -722,6 +722,37 @@ describe('new-day auto-follow', () => {
     el.disconnectedCallback();
   });
 
+  test('a zero-entry viewer replaces the stale replay player instead of inheriting their wins', async () => {
+    const viewed = '0x609da633ba1dd5e6aa2e43aa3ea3f740deece5b9';
+    const staleWinner = '0x1111000000000000000000000000000000000000';
+    storeMod.update('connected.address', viewed);
+    const replay = makeFakeElement('replay-panel');
+    const daySelect = makeFakeElement('select');
+    daySelect.attributes['data-bind'] = 'day-select';
+    daySelect.options = [{ value: '5' }];
+    daySelect.value = '5';
+    const playerSelect = makeFakeElement('select');
+    playerSelect.attributes['data-bind'] = 'player-select';
+    playerSelect.options = [{ value: staleWinner }];
+    playerSelect.value = staleWinner;
+    let changes = 0;
+    playerSelect.addEventListener('change', () => { changes += 1; });
+    replay.append(daySelect, playerSelect);
+    _docBody.appendChild(replay);
+
+    const el = instantiate();
+    storeMod.update('app.lastDay', DAY5);
+    await flushMicrotasks();
+
+    assert.equal(playerSelect.value, viewed, 'zero-entry viewer becomes the replay target');
+    assert.equal(changes, 1, 'replay-panel is told to recompute personal results');
+    assert.ok(
+      playerSelect.options.some((option) => option.value === viewed && option.dataset?.zeroEntry === 'true'),
+      'bridge adds an explicit zero-entry option instead of retaining another player',
+    );
+    el.disconnectedCallback();
+  });
+
   test('the bridge restores persisted reveal state through its replay-panel reference', async () => {
     const connected = '0xab12000000000000000000000000000000000000';
     storeMod.update('connected.address', connected);

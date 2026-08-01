@@ -27,7 +27,7 @@ import { get, subscribe } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
 import {
   openLootBox,
-  pollRngForLootbox,
+  canOpenLootbox,
   readLootboxStatus,
 } from '../app/lootbox.js';
 import { compactUiError } from '../app/ui-error.js';
@@ -37,7 +37,12 @@ import {
   readOpenLegsFromChain,
 } from '../app/lootbox-legs.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
-import { queueReveal } from './reveal-overlay.js';
+import { recordLootboxTicketPacks } from '../app/pack-watch.js';
+import {
+  queueReveal,
+  LOOTBOX_REVEAL_COMPLETE_EVENT,
+  LOOTBOX_REVEAL_ABORT_EVENT,
+} from './reveal-overlay.js';
 
 const RNG_POLL_INTERVAL_MS = 7_000;   // Phase 60 packs-panel cadence.
 const ERROR_AUTO_CLEAR_MS = 10_000;
@@ -60,6 +65,38 @@ export function revealedBoxesKey(chainId, address) {
   return `revealed-lootboxes:${chainId}:${String(address || '').toLowerCase()}`;
 }
 
+export function lootboxResultCursorKey(chainId, address) {
+  return `lootbox-result-cursor:${chainId}:${String(address || '').toLowerCase()}`;
+}
+
+function _readResultCursor(addr) {
+  try {
+    const raw = typeof localStorage !== 'undefined'
+      ? localStorage.getItem(lootboxResultCursorKey(CHAIN.id, addr)) : null;
+    if (raw == null || raw === '') return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  } catch (_e) { return null; }
+}
+
+function _writeResultCursor(addr, ord) {
+  if (!addr || !Number.isFinite(Number(ord))) return;
+  try {
+    localStorage.setItem(lootboxResultCursorKey(CHAIN.id, addr), String(Number(ord)));
+  } catch (_e) { /* private mode */ }
+}
+
+function _boxKey(box) {
+  if (box?.resultKey != null && String(box.resultKey)) return String(box.resultKey);
+  const index = Number(box?.index);
+  return Number.isFinite(index) ? String(index) : '';
+}
+
+function _boxLabel(box, upper = false) {
+  const label = Number(box?.index) === 0 ? 'AFKing lootbox' : `Lootbox #${box?.index}`;
+  return upper ? label.toUpperCase() : label;
+}
+
 function _readRevealed(addr) {
   try {
     const raw = typeof localStorage !== 'undefined'
@@ -71,11 +108,11 @@ function _readRevealed(addr) {
   }
 }
 
-function _markRevealed(addr, index) {
+function _markRevealed(addr, key) {
   if (!addr) return;
   try {
     const seen = _readRevealed(addr);
-    seen.add(String(index));
+    seen.add(String(key));
     localStorage.setItem(revealedBoxesKey(CHAIN.id, addr), JSON.stringify([...seen]));
   } catch (_e) { /* private mode: replay may reappear after refresh */ }
 }
@@ -87,15 +124,20 @@ function _readPending(addr) {
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .filter((e) => e && Number.isFinite(Number(e.index)))
+      .filter((e) => e && (Number.isFinite(Number(e.index)) || e.resultKey != null))
       .map((e) => ({
         index: Number(e.index),
+        resultKey: e.resultKey == null ? null : String(e.resultKey),
+        transactionHash: e.transactionHash == null ? null : String(e.transactionHash),
+        ord: Number.isFinite(Number(e.ord)) ? Number(e.ord) : null,
         day: e.day != null ? Number(e.day) : null,
         // Old cache rows predate this flag and were all receipt-sourced.
         // DB-discovered rows persist false so a stale API row cannot become a
         // trusted receipt row merely because the page refreshed.
         fromReceipt: e.fromReceipt !== false,
         createdAt: Number.isFinite(Number(e.createdAt)) ? Number(e.createdAt) : null,
+        ready: Boolean(e.ready || e.resolved),
+        resolved: Boolean(e.resolved),
       }));
   } catch (_e) {
     return [];
@@ -109,17 +151,22 @@ function _writePending(addr, entries) {
     if (!entries || entries.length === 0) localStorage.removeItem(key);
     else localStorage.setItem(key, JSON.stringify(entries.map((e) => ({
       index: e.index,
+      resultKey: e.resultKey ?? null,
+      transactionHash: e.transactionHash ?? null,
+      ord: Number.isFinite(Number(e.ord)) ? Number(e.ord) : null,
       day: e.day,
       fromReceipt: e.fromReceipt !== false,
       createdAt: Number.isFinite(Number(e.createdAt)) ? Number(e.createdAt) : null,
+      ready: Boolean(e.ready),
+      resolved: Boolean(e.resolved),
     }))));
   } catch (_e) { /* quota / private mode — session-only tracking */ }
 }
 
 /**
- * Collapse the durable per-leg result feed into one resolved row per nonzero
- * lootbox RNG index. Reward and BoxSpin legs inherit their opening transaction
- * at replay time; discovery only needs the index-bearing settlement anchor.
+ * Collapse the durable per-leg result feed into one resolved row per opening
+ * transaction. Normal boxes use their shared RNG index; AFKing auto-opens all
+ * use index zero, so their transaction hash is the only collision-free key.
  */
 export function resolvedBoxRowsFromLegs(items, player) {
   const wantPlayer = String(player || '').toLowerCase();
@@ -128,12 +175,17 @@ export function resolvedBoxRowsFromLegs(items, player) {
     if (String(item?.player || '').toLowerCase() !== wantPlayer) continue;
     if (!['opened', 'flipOpened', 'presale'].includes(String(item?.legType || ''))) continue;
     const index = Number(item?.lootboxIndex);
-    if (!Number.isFinite(index) || index <= 0) continue;
+    if (!Number.isFinite(index) || index < 0) continue;
+    const transactionHash = String(item?.transactionHash || '').toLowerCase();
+    if (index === 0 && !transactionHash) continue;
+    const resultKey = index === 0 ? `tx:${transactionHash}` : String(index);
     const ord = Number(item?.ord ?? item?.logIndex ?? 0);
-    const prior = rows.get(index);
+    const prior = rows.get(resultKey);
     if (!prior || ord > prior.ord) {
-      rows.set(index, {
+      rows.set(resultKey, {
         index,
+        resultKey,
+        transactionHash: transactionHash || null,
         day: null,
         ready: true,
         resolved: true,
@@ -162,6 +214,8 @@ class AppBoxStrip extends HTMLElement {
   #pollBusy = false;
   #errorTimer = null;
   #docListener = null;
+  #revealCompleteListener = null;
+  #revealAbortListener = null;
   // API history can contain legacy purchase rows whose result never received
   // an index-bearing settlement anchor. Once the authoritative on-chain slot
   // confirms one of those indexes is empty, do not probe/promote it every 7s.
@@ -198,8 +252,14 @@ class AppBoxStrip extends HTMLElement {
       && typeof document.removeEventListener === 'function') {
       try { document.removeEventListener('app-decimator:tx-confirmed', this.#docListener); }
       catch (_) { /* defensive */ }
+      try { document.removeEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, this.#revealCompleteListener); }
+      catch (_) { /* defensive */ }
+      try { document.removeEventListener(LOOTBOX_REVEAL_ABORT_EVENT, this.#revealAbortListener); }
+      catch (_) { /* defensive */ }
     }
     this.#docListener = null;
+    this.#revealCompleteListener = null;
+    this.#revealAbortListener = null;
     clearPendingActions(PENDING_SOURCE);
     for (const u of this.#unsubs) {
       try { u(); } catch (_e) { /* defensive */ }
@@ -231,7 +291,10 @@ class AppBoxStrip extends HTMLElement {
       this.#emptyIndexes.clear();
       this.#boxes = this.#addr
         ? _readPending(this.#addr).map((e) => ({
-            ...e, ready: false, resolved: false, opening: false,
+            ...e,
+            ready: Boolean(e.ready || e.resolved),
+            resolved: Boolean(e.resolved),
+            opening: false,
           }))
         : [];
       this.#render();
@@ -253,9 +316,10 @@ class AppBoxStrip extends HTMLElement {
         if (!Number.isFinite(index)) continue;
         // afking idx-0 boxes auto-open in the buy tx — never pending.
         if (index === 0) continue;
-        if (this.#boxes.some((x) => x.index === index)) continue;
+        if (this.#boxes.some((x) => _boxKey(x) === String(index))) continue;
         this.#boxes.push({
           index,
+          resultKey: String(index),
           day: b?.day != null ? Number(b.day) : null,
           ready: false,
           resolved: false,
@@ -270,6 +334,30 @@ class AppBoxStrip extends HTMLElement {
       this.#runPollCycle();
     };
     document.addEventListener('app-decimator:tx-confirmed', this.#docListener);
+
+    this.#revealCompleteListener = (event) => {
+      const detail = event?.detail;
+      const address = String(detail?.address || '').toLowerCase();
+      const key = String(detail?.key || '');
+      if (!address || !key) return;
+      _markRevealed(address, key);
+      if (address === this.#addr) this.#removeBox(key);
+    };
+    this.#revealAbortListener = (event) => {
+      for (const release of Array.isArray(event?.detail?.releases)
+        ? event.detail.releases : []) {
+        if (String(release?.address || '').toLowerCase() !== this.#addr) continue;
+        const key = String(release?.key || '');
+        const box = this.#boxes.find((row) => _boxKey(row) === key);
+        if (box) box.opening = false;
+      }
+      if (this.#addr) {
+        _writePending(this.#addr, this.#boxes);
+        this.#render();
+      }
+    };
+    document.addEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, this.#revealCompleteListener);
+    document.addEventListener(LOOTBOX_REVEAL_ABORT_EVENT, this.#revealAbortListener);
   }
 
   // -------------------------------------------------------------------------
@@ -324,27 +412,31 @@ class AppBoxStrip extends HTMLElement {
         feedRows.set(index, row);
       }
 
-      const local = new Map(this.#boxes.map((box) => [box.index, box]));
+      const local = new Map(this.#boxes.map((box) => [_boxKey(box), box]));
       const tracked = new Set(local.keys());
       const resolvedRows = resolvedBoxRowsFromLegs(legsResponse?.items, owner);
-      const resolvedByIndex = new Map(resolvedRows.map((row) => [row.index, row]));
-      const newestResolved = resolvedRows[0]?.index ?? null;
+      const resolvedByKey = new Map(resolvedRows.map((row) => [_boxKey(row), row]));
+      const priorCursor = _readResultCursor(owner);
+      const newestOrd = resolvedRows.reduce(
+        (highest, row) => Math.max(highest, Number(row.ord) || 0),
+        priorCursor ?? 0,
+      );
 
       // Reconcile only rows the browser was already tracking. Feeding every
       // historical `opened` purchase into the tray is what produced dozens of
       // phantom OPEN notifications on a fresh browser.
-      for (const index of tracked) {
-        if (revealed.has(String(index))) {
-          local.delete(index);
+      for (const key of tracked) {
+        if (revealed.has(key)) {
+          local.delete(key);
           continue;
         }
-        const prior = local.get(index);
-        const feed = feedRows.get(index);
-        const settled = resolvedByIndex.get(index);
+        const prior = local.get(key);
+        const feed = Number(prior?.index) > 0 ? feedRows.get(Number(prior.index)) : null;
+        const settled = resolvedByKey.get(key);
         if (settled) {
-          local.set(index, { ...prior, ...settled, ready: true, resolved: true });
+          local.set(key, { ...prior, ...settled, ready: true, resolved: true });
         } else if (feed) {
-          local.set(index, {
+          local.set(key, {
             ...prior,
             ready: Boolean(feed.ready),
             resolved: Boolean(feed.resolved),
@@ -352,12 +444,17 @@ class AppBoxStrip extends HTMLElement {
         }
       }
 
-      // On a new browser, offer exactly the newest indexed result once. Older
-      // resolved history belongs in the history feeds, not the action tray.
-      if (newestResolved != null && !revealed.has(String(newestResolved))) {
-        const prior = local.get(newestResolved);
-        const settled = resolvedByIndex.get(newestResolved);
-        local.set(newestResolved, {
+      // First visit establishes a history baseline and offers only the newest
+      // result. After that, EVERY result newer than the durable cursor is kept,
+      // so several boxes settling between polls cannot collapse into one chip.
+      const discovered = priorCursor == null
+        ? resolvedRows.slice(0, 1)
+        : resolvedRows.filter((row) => Number(row.ord) > priorCursor);
+      for (const settled of discovered) {
+        const key = _boxKey(settled);
+        if (!key || revealed.has(key)) continue;
+        const prior = local.get(key);
+        local.set(key, {
           ...prior,
           ...settled,
           ready: true,
@@ -366,20 +463,22 @@ class AppBoxStrip extends HTMLElement {
           fromReceipt: Boolean(prior?.fromReceipt),
         });
       }
+      if (legsCall.status === 'fulfilled') _writeResultCursor(owner, newestOrd);
 
       // Unresolved DB purchases are only candidates. `opened:false` is not
       // authoritative for legacy rows whose settlement event lacked an index;
       // the player's live amount slot decides whether a box really exists.
       const candidates = new Map(
         [...local.values()]
-          .filter((box) => !box.resolved)
-          .map((box) => [box.index, box]),
+          .filter((box) => !box.resolved && Number(box.index) > 0)
+          .map((box) => [_boxKey(box), box]),
       );
       for (const row of feedRows.values()) {
         if (row.resolved
           || revealed.has(String(row.index))
           || this.#emptyIndexes.has(row.index)) continue;
-        if (!candidates.has(row.index)) candidates.set(row.index, row);
+        const key = String(row.index);
+        if (!candidates.has(key)) candidates.set(key, { ...row, resultKey: key });
       }
 
       const probes = [...candidates.values()];
@@ -389,30 +488,31 @@ class AppBoxStrip extends HTMLElement {
           lootboxIndex: box.index,
         }).catch(() => null);
         const hasAmount = Boolean(status && BigInt(status.amount ?? 0) > 0n);
-        let rngWord = 0n;
+        let chainReady = false;
         if (hasAmount && !box.ready) {
-          rngWord = await pollRngForLootbox(box.index).then(
-            (word) => BigInt(word || 0),
-            () => 0n,
-          );
+          chainReady = await canOpenLootbox({
+            player: owner,
+            lootboxIndex: box.index,
+          }).catch(() => false);
         }
         return {
+          key: _boxKey(box),
           index: box.index,
           candidate: box,
           statusKnown: status != null,
           hasAmount,
-          ready: hasAmount && (Boolean(box.ready) || rngWord !== 0n),
+          ready: hasAmount && (Boolean(box.ready) || chainReady),
         };
       }));
       if (this.#addr !== owner) return;
       for (const result of probeResults) {
         if (result.status !== 'fulfilled') continue;
-        const { index, candidate, statusKnown, hasAmount, ready } = result.value;
-        const prior = local.get(index);
+        const { key, index, candidate, statusKnown, hasAmount, ready } = result.value;
+        const prior = local.get(key);
         if (!statusKnown) {
           // A receipt row survives an RPC blip; an unverified DB-history row
           // never earns a notification from an unavailable status read.
-          if (!prior?.fromReceipt) local.delete(index);
+          if (!prior?.fromReceipt) local.delete(key);
           continue;
         }
         if (!hasAmount) {
@@ -425,14 +525,14 @@ class AppBoxStrip extends HTMLElement {
             // before either DB route sees it. Keep only that short receipt-to-
             // indexer bridge hidden; once the purchase itself is indexed, a
             // zero amount is authoritative and the stale notification is gone.
-            local.set(index, { ...prior, ready: false, resolved: false });
+            local.set(key, { ...prior, ready: false, resolved: false });
           } else {
-            local.delete(index);
+            local.delete(key);
             this.#emptyIndexes.add(index);
           }
           continue;
         }
-        local.set(index, {
+        local.set(key, {
           ...candidate,
           ...prior,
           ready,
@@ -442,8 +542,11 @@ class AppBoxStrip extends HTMLElement {
         });
       }
 
-      this.#boxes = [...local.values()].sort((a, b) => b.index - a.index);
-      _writePending(owner, this.#boxes.filter((box) => !box.resolved));
+      this.#boxes = [...local.values()].sort((a, b) => (
+        (Number(b.ord) || 0) - (Number(a.ord) || 0)
+        || Number(b.index) - Number(a.index)
+      ));
+      _writePending(owner, this.#boxes);
       this.#render();
     } catch (_e) {
       // API/indexer blip — keep the last honest state and retry next tick.
@@ -484,10 +587,8 @@ class AppBoxStrip extends HTMLElement {
       });
       const legs = parseOpenLegsFromReceipt(receipt, this.#addr);
       if (legs.length > 0) {
-        if (queueReveal({ kind: 'lootbox', lootboxIndex: box.index, legs })) {
-          this.#removeBox(box.index);
-          _markRevealed(this.#addr, box.index);
-        }
+        box.transactionHash = receipt?.hash || receipt?.transactionHash || box.transactionHash || null;
+        this.#queueBoxReveal(box, legs);
       } else {
         // The transaction landed, but its result ABI was newer than this
         // client. Keep the item ready so the DB leg feed can recover it.
@@ -531,11 +632,12 @@ class AppBoxStrip extends HTMLElement {
       legs = openLegsFromFeed(rows, {
         player: this.#addr,
         lootboxIndex: box.index,
+        transactionHash: box.transactionHash,
       });
     } catch (_e) {
       // Fall through to the exact chain-event replay below.
     }
-    if (legs.length === 0) {
+    if (legs.length === 0 && Number(box.index) > 0) {
       try {
         legs = await readOpenLegsFromChain({
           player: this.#addr,
@@ -547,27 +649,56 @@ class AppBoxStrip extends HTMLElement {
       }
     }
 
-    if (legs.length > 0 && queueReveal({
-      kind: 'lootbox',
+    if (legs.length > 0 && this.#queueBoxReveal(box, legs, {
       title: 'LOOTBOX REPLAY',
-      lootboxIndex: box.index,
-      legs,
-    })) {
-      this.#removeBox(box.index);
-      _markRevealed(this.#addr, box.index);
-      return;
-    }
+      settledExpected: true,
+    })) return;
 
-    // The on-chain amount slot is already clear and neither the indexed feed
-    // nor exact event scan has revealable legs. There is no transaction this
-    // button can successfully send. Retire the stale action now; if settlement
-    // legs arrive later, durable discovery will offer the newest result again.
-    this.#emptyIndexes.add(box.index);
-    this.#removeBox(box.index);
+    // Do not retire an indexed result just because a companion leg is still
+    // catching up. It remains actionable and the next poll/click can rebuild
+    // the complete transaction result instead of losing it forever.
+    box.opening = false;
+    box.ready = true;
+    box.resolved = true;
+    this.#renderError('Result syncing — try again shortly.');
+    if (this.#addr) _writePending(this.#addr, this.#boxes);
+    this.#render();
   }
 
-  #removeBox(index) {
-    this.#boxes = this.#boxes.filter((b) => b.index !== index);
+  #queueBoxReveal(box, legs, { title = null, settledExpected = false } = {}) {
+    const address = this.#addr;
+    const key = _boxKey(box);
+    if (!address || !key || !Array.isArray(legs) || legs.length === 0) return false;
+    recordLootboxTicketPacks({
+      address,
+      legs,
+      sourceKey: `lootbox:${key}`,
+      settledExpected,
+    }).catch(() => {});
+    const accepted = queueReveal({
+      kind: 'lootbox',
+      ...(title ? { title } : {}),
+      lootboxIndex: box.index,
+      legs,
+      lootboxRelease: {
+        address,
+        key,
+        lootboxIndex: Number(box.index),
+        transactionHash: box.transactionHash || null,
+      },
+    });
+    if (!accepted) return false;
+    box.opening = true;
+    box.ready = true;
+    box.resolved = true;
+    _writePending(address, this.#boxes);
+    this.#render();
+    return true;
+  }
+
+  #removeBox(keyOrIndex) {
+    const key = String(keyOrIndex);
+    this.#boxes = this.#boxes.filter((box) => _boxKey(box) !== key);
     if (this.#addr) _writePending(this.#addr, this.#boxes);
     this.#render();
   }
@@ -582,9 +713,9 @@ class AppBoxStrip extends HTMLElement {
       return;
     }
     publishPendingActions(PENDING_SOURCE, this.#boxes.map((box) => ({
-      id: `lootbox:${box.index}`,
+      id: `lootbox:${_boxKey(box)}`,
       kind: 'lootbox',
-      label: `Lootbox #${box.index}`,
+      label: _boxLabel(box),
       shortLabel: box.resolved ? 'View result' : 'Open box',
       detail: box.opening
         ? box.resolved ? 'Loading indexed result' : 'Opening on-chain'
@@ -619,7 +750,7 @@ class AppBoxStrip extends HTMLElement {
       copy.className = 'bxs-chip-copy';
       const title = document.createElement('strong');
       title.className = 'bxs-chip-title';
-      title.textContent = `LOOTBOX #${box.index}`;
+      title.textContent = _boxLabel(box, true);
       copy.appendChild(title);
       const status = document.createElement('span');
       status.className = 'bxs-chip-status';
@@ -640,8 +771,8 @@ class AppBoxStrip extends HTMLElement {
         ? 'OPENING…'
         : box.ready ? box.resolved ? 'VIEW RESULT' : 'OPEN LOOTBOX' : 'RNG PENDING';
       cta.setAttribute('aria-label', box.ready
-        ? `${box.resolved ? 'View result for' : 'Open'} lootbox ${box.index}`
-        : `Lootbox ${box.index} waiting for RNG`);
+        ? `${box.resolved ? 'View result for' : 'Open'} ${_boxLabel(box)}`
+        : `${_boxLabel(box)} waiting for RNG`);
       if (box.ready && !box.opening) {
         cta.addEventListener('click', () => this.#onOpenClick(box));
       }
