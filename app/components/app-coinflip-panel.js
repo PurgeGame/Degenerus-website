@@ -1,29 +1,29 @@
 // /app/components/app-coinflip-panel.js — Phase 62 Plan 62-03 (BUY-04)
 //
-// BURNIE coinflip deposit panel. Custom Element shell mirrors Phase 60's
+// FLIP coinflip deposit panel. Custom Element shell mirrors Phase 60's
 // app-packs-panel.js + Phase 61's app-claims-panel.js + Phase 62-01's
 // app-decimator-panel.js + Phase 62-02's app-pass-section.js: light DOM,
 // idempotent customElements.define guard, symmetric connectedCallback /
 // disconnectedCallback, #unsubs[] for store subscriptions, panel-owned 30s
 // poll cycle (Phase 61 D-04 LOCKED — NOT polling.js).
 //
-// On-chain surface: BurnieCoinflip.depositCoinflip(player, amount)
+// On-chain surface: Coinflip.depositCoinflip(player, amount)
 //   via coinflip.js depositCoinflip({amount}).
 //
-// RESEARCH R3 (HIGH confidence): BUY-04 is a SYNCHRONOUS BURNIE deposit. The
+// RESEARCH R3 (HIGH confidence): BUY-04 is a SYNCHRONOUS FLIP deposit. The
 // deposit tx confirms with a CoinflipDeposit event ONLY — there is no per-bet
 // poll cycle (compare to BUY-05's two-tx flow). Outcome resolves daily via
 // global CoinflipDayResolved.
 //
 // CF-08 (roadmap success-criterion 1 verbatim): on tx confirm, render
-//   "Stake recorded — outcome at end of day. Credited Y BURNIE."
+//   "Stake recorded — outcome at end of day. Credited Y FLIP."
 // inline via .textContent. NO toast. NO audio. NO animator.
 //
 // Carry-forwards (CONTEXT 62-CONTEXT.md):
 //   CF-01: Phase 58 closure-form sendTx — flows through coinflip.js.
 //   CF-02: Phase 56 reason-map decodeRevertReason on every catch.
 //   CF-03: Phase 56 requireStaticCall pre-flight inside coinflip.js.
-//   CF-06: Phase 61 D-05 NEVER optimistic balance subtraction. Pre-click BURNIE
+//   CF-06: Phase 61 D-05 NEVER optimistic balance subtraction. Pre-click FLIP
 //          balance stays visible; 250ms post-confirm refetch via #runPollCycle.
 //   CF-07: T-58-18 — error.userMessage rendered via .textContent NOT innerHTML.
 //   CF-15: data-write attribute on Deposit CTA → Phase 58 disable manager
@@ -51,7 +51,7 @@ const POLL_INTERVAL_MS = 30_000;       // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 const POST_CONFIRM_REFETCH_MS = 250;   // CF-06 — 250ms debounced refetch on tx confirm.
 const ERROR_AUTO_CLEAR_MS = 10_000;    // 10s — mirrors Phase 61 D-05 pattern.
 const DEBOUNCE_MS = 500;               // 500ms click debounce window.
-const BURNIE_WEI_DECIMALS = 18n;       // RESEARCH Q5 — BURNIE unscaled (1 BURNIE = 1e18 wei).
+const FLIP_WEI_DECIMALS = 18n;       // RESEARCH Q5 — FLIP unscaled (1 FLIP = 1e18 wei).
 
 class AppCoinflipPanel extends HTMLElement {
   // --- Phase 60 / 61 / 62-01 / 62-02 idempotency-guard pattern ---
@@ -114,14 +114,14 @@ class AppCoinflipPanel extends HTMLElement {
     this.innerHTML = `
       <section class="panel app-coinflip-panel">
         <div class="panel-header">
-          <h2>BURNIE COINFLIP</h2>
+          <h2>FLIP COINFLIP</h2>
         </div>
         <p class="cf-blurb">
-          Deposit BURNIE to stake on today's coinflip. Outcome resolves at the
+          Deposit FLIP to stake on today's coinflip. Outcome resolves at the
           end of the day.
         </p>
         <div class="cf-row">
-          <label class="cf-amount-label" for="cf-amount-input">Stake (BURNIE)</label>
+          <label class="cf-amount-label" for="cf-amount-input">Stake (FLIP)</label>
           <input type="number" name="cf-amount" id="cf-amount-input"
                  class="cf-amount-input" min="100" step="100" value="100">
           <button type="button" class="cf-deposit-cta" data-write data-bind="cf-deposit-cta">
@@ -217,11 +217,11 @@ class AppCoinflipPanel extends HTMLElement {
       balEl.textContent = '—';
       return;
     }
-    const burnie = p.burnie?.balance ?? p.burnie ?? p.player?.burnie ?? null;
-    if (burnie == null) {
+    const flip = p.flip?.balance ?? p.flip ?? p.player?.flip ?? null;
+    if (flip == null) {
       balEl.textContent = 'Balance: —';
     } else {
-      balEl.textContent = `Balance: ${String(burnie)} BURNIE`;
+      balEl.textContent = `Balance: ${String(flip)} FLIP`;
     }
   }
 
@@ -287,12 +287,12 @@ class AppCoinflipPanel extends HTMLElement {
     try {
       const amountInput = this.querySelector('[name="cf-amount"]');
       const rawValue = amountInput ? amountInput.value : '0';
-      const burnieInteger = parseInt(rawValue, 10);
-      if (!Number.isFinite(burnieInteger) || burnieInteger < 100) {
-        this.#renderError('Minimum coinflip deposit is 100 BURNIE.');
+      const flipInteger = parseInt(rawValue, 10);
+      if (!Number.isFinite(flipInteger) || flipInteger < 100) {
+        this.#renderError('Minimum coinflip deposit is 100 FLIP.');
         return;
       }
-      const amountWei = BigInt(burnieInteger) * (10n ** BURNIE_WEI_DECIMALS);
+      const amountWei = BigInt(flipInteger) * (10n ** FLIP_WEI_DECIMALS);
 
       const { receipt } = await depositCoinflip({ amount: amountWei });
 
@@ -307,9 +307,9 @@ class AppCoinflipPanel extends HTMLElement {
         };
         const parsed = parseCoinflipDepositFromReceipt(receipt, parseContract);
         if (parsed.length > 0) {
-          // creditedFlip is reported in BURNIE wei; surface raw wei to keep
+          // creditedFlip is reported in FLIP wei; surface raw wei to keep
           // textContent assignment safe (T-58-18).
-          creditedFlipText = ` Credited ${String(parsed[0].creditedFlip)} BURNIE wei.`;
+          creditedFlipText = ` Credited ${String(parsed[0].creditedFlip)} FLIP wei.`;
         }
       } catch (_e) { /* defensive */ }
 

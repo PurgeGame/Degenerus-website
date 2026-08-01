@@ -24,6 +24,7 @@
 // called for 2+ wallets OR for the explicit zero-wallets install-CTA path.
 
 import { subscribe } from '../app/store.js';
+import { CHAIN } from '../app/chain-config.js';
 import { getProvider, switchToSepolia } from '../app/contracts.js';
 import { lock, unlock } from '../app/scroll-lock.js';
 
@@ -256,13 +257,13 @@ export function _updateChainChip(chainOk) {
 
   if (chainOk === true) {
     chip.classList.add('chain-chip--ok');
-    if (label) label.textContent = 'Sepolia';
+    if (label) label.textContent = CHAIN.name;
     // Drop any prior switch CTA (no longer needed).
     const cta = chip.querySelector('.chain-chip__switch');
     if (cta && cta.remove) cta.remove();
   } else if (chainOk === false) {
     chip.classList.add('chain-chip--mismatch');
-    if (label) label.textContent = 'Wrong network — switch to Sepolia';
+    if (label) label.textContent = `Wrong network — switch to ${CHAIN.name}`;
     // Inject the switch CTA if not already present.
     let cta = chip.querySelector('.chain-chip__switch');
     if (!cta) {
@@ -283,7 +284,7 @@ export function _updateChainChip(chainOk) {
   } else {
     // null / undefined / anything else → neutral placeholder state.
     chip.classList.add('chain-chip--neutral');
-    if (label) label.textContent = 'Sepolia testnet';
+    if (label) label.textContent = `${CHAIN.name} testnet`;
     const cta = chip.querySelector('.chain-chip__switch');
     if (cta && cta.remove) cta.remove();
   }

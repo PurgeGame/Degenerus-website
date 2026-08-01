@@ -363,11 +363,9 @@ describe('Plan 60-01: <app-packs-panel> Custom Element shell', () => {
     assert.ok(el.innerHTML.length > 100, 'innerHTML populated');
   });
 
-  test('innerHTML scaffold contains all 8 required data-bind hooks', () => {
+  test('innerHTML scaffold contains all required data-bind hooks (ETH-only, no pay toggle)', () => {
     const el = instantiate();
     const required = [
-      'lbx-pay-eth',
-      'lbx-pay-burnie',
       'lbx-tickets-display',
       'lbx-lootboxes-display',
       'lbx-buy-button',
@@ -383,35 +381,18 @@ describe('Plan 60-01: <app-packs-panel> Custom Element shell', () => {
     }
   });
 
-  test('Default state: payKind=ETH (active), tickets="0", lootboxes="1"', () => {
+  test('Default state: tickets="0", lootboxes="1" (no pay-kind toggle — ETH-only)', () => {
     const el = instantiate();
-    assert.equal(el._state.payKind, 'ETH', 'payKind default ETH');
     assert.equal(el._state.ticketQuantity, 0, 'tickets default 0');
     assert.equal(el._state.lootboxQuantity, 1, 'lootboxes default 1');
-    const ethBtn = el.querySelector('[data-bind="lbx-pay-eth"]');
-    const burnieBtn = el.querySelector('[data-bind="lbx-pay-burnie"]');
-    assert.ok(ethBtn.classList.contains('lbx-pay-toggle__btn--active'), 'ETH btn has active class');
-    assert.ok(!burnieBtn.classList.contains('lbx-pay-toggle__btn--active'), 'BURNIE btn does NOT have active class');
+    // Pay-kind toggle removed — lootboxes are ETH-only.
+    assert.equal(el._state.payKind, undefined, 'no payKind state exposed');
+    assert.equal(el.querySelector('[data-bind="lbx-pay-eth"]'), null, 'ETH toggle button removed');
+    assert.equal(el.querySelector('[data-bind="lbx-pay-flip"]'), null, 'FLIP toggle button removed');
     const tDisp = el.querySelector('[data-bind="lbx-tickets-display"]');
     const lDisp = el.querySelector('[data-bind="lbx-lootboxes-display"]');
     assert.equal(tDisp.textContent, '0');
     assert.equal(lDisp.textContent, '1');
-  });
-
-  test('Pay-kind toggle: clicking BURNIE updates active class + state', () => {
-    const el = instantiate();
-    clickByDataBind(el, 'lbx-pay-burnie');
-    assert.equal(el._state.payKind, 'BURNIE', 'state.payKind switched to BURNIE');
-    const ethBtn = el.querySelector('[data-bind="lbx-pay-eth"]');
-    const burnieBtn = el.querySelector('[data-bind="lbx-pay-burnie"]');
-    assert.ok(!ethBtn.classList.contains('lbx-pay-toggle__btn--active'));
-    assert.ok(burnieBtn.classList.contains('lbx-pay-toggle__btn--active'));
-
-    // And clicking ETH again flips it back
-    clickByDataBind(el, 'lbx-pay-eth');
-    assert.equal(el._state.payKind, 'ETH', 'state.payKind switched back to ETH');
-    assert.ok(ethBtn.classList.contains('lbx-pay-toggle__btn--active'));
-    assert.ok(!burnieBtn.classList.contains('lbx-pay-toggle__btn--active'));
   });
 
   test('Quantity picker (tickets) +/- increments and clamps to [0, 100]', () => {
@@ -514,7 +495,7 @@ function makeFakePurchaseContract(opts = {}) {
         calls.purchaseCoin.push(args);
         txCounter += 1n;
         return makeFakeBuyTx(makeFakeBuyReceipt([
-          { parsed: { name: 'BurnieLootBuy', args: { index: txCounter, burnieAmount: 1000n * 10n ** 18n, buyer: args[0] } } },
+          { parsed: { name: 'FlipLootBuy', args: { index: txCounter, flipAmount: 1000n * 10n ** 18n, buyer: args[0] } } },
         ]));
       },
       { staticCall: stk('purchaseCoin') }
@@ -528,7 +509,7 @@ function makeFakePurchaseContract(opts = {}) {
 
 function makeFakeBuyProvider(addr) {
   return {
-    getNetwork: async () => ({ chainId: 11155111n }),
+    getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({ getAddress: async () => addr }),
   };
 }
@@ -578,14 +559,12 @@ describe('Plan 60-02: Buy click handler — sequential N=1 tx loop', () => {
     assert.equal(fakeContract._calls.purchase.length, 3, 'purchase called 3 times');
   });
 
-  test('Buy with payKind=BURNIE calls contract.purchaseCoin (not purchase)', async () => {
+  test('Buy never calls contract.purchaseCoin (lootboxes are ETH-only)', async () => {
     const el = instantiate();
-    clickByDataBind(el, 'lbx-pay-burnie');
-    assert.equal(el._state.payKind, 'BURNIE');
     clickByDataBind(el, 'lbx-buy-button');
     await settle(30);
-    assert.equal(fakeContract._calls.purchaseCoin.length, 1);
-    assert.equal(fakeContract._calls.purchase.length, 0);
+    assert.equal(fakeContract._calls.purchaseCoin.length, 0, 'purchaseCoin never called from packs panel');
+    assert.equal(fakeContract._calls.purchase.length, 1, 'ETH purchase called');
   });
 
   test('Buy on static-call revert (RngNotReady) surfaces error banner with userMessage', async () => {
@@ -641,8 +620,8 @@ describe('Plan 60-02: Buy click handler — sequential N=1 tx loop', () => {
 // ===========================================================================
 // Plan 60-03 — per-lootbox rows + RNG poll + Open click + reveal animation.
 // Drives the full chain end-to-end with a fake contract that ALSO exposes
-// lootboxRngWord (for pollRngForLootbox) + openLootBox/openBurnieLootBox
-// (for the second-tx open path). Uses the widget's __runPollCycleForTest +
+// lootboxRngWord (for pollRngForLootbox) + openLootBox (for the second-tx open
+// path; lootboxes are ETH-only). Uses the widget's __runPollCycleForTest +
 // __bumpCancelTokenForTest seams to avoid the 7s setTimeout wait + the
 // 4s reveal-fallback wait — keeps the suite sub-second.
 // ===========================================================================
@@ -650,8 +629,8 @@ describe('Plan 60-02: Buy click handler — sequential N=1 tx loop', () => {
 function makeFakeRngContract(opts = {}) {
   const calls = {
     purchase: [], purchaseCoin: [],
-    openLootBox: [], openBurnieLootBox: [],
-    lootboxRngWord: [],
+    openBox: [],
+    lootboxRngWordByIndex: [],
   };
   const stk = (name) => async () => {
     if (opts.staticCallShouldRevert?.[name]) {
@@ -678,34 +657,23 @@ function makeFakeRngContract(opts = {}) {
         calls.purchaseCoin.push(args);
         txCounter += 1n;
         return makeFakeBuyTx(makeFakeBuyReceipt([
-          { parsed: { name: 'BurnieLootBuy', args: { index: txCounter, burnieAmount: 1000n * 10n ** 18n, buyer: args[0] } } },
+          { parsed: { name: 'FlipLootBuy', args: { index: txCounter, flipAmount: 1000n * 10n ** 18n, buyer: args[0] } } },
         ]));
       },
       { staticCall: stk('purchaseCoin') }
     ),
-    openLootBox: Object.assign(
+    openBox: Object.assign(
       async (...args) => {
-        calls.openLootBox.push(args);
+        calls.openBox.push(args);
         return makeFakeBuyTx(makeFakeBuyReceipt([
           { parsed: { name: 'TraitsGenerated', args: {
             player: args[0], level: 1n, queueIdx: 0n, startIndex: 0n, count: 4n, entropy: 0xdeadbeefn,
           } } },
         ]));
       },
-      { staticCall: stk('openLootBox') }
+      { staticCall: stk('openBox') }
     ),
-    openBurnieLootBox: Object.assign(
-      async (...args) => {
-        calls.openBurnieLootBox.push(args);
-        return makeFakeBuyTx(makeFakeBuyReceipt([
-          { parsed: { name: 'TraitsGenerated', args: {
-            player: args[0], level: 1n, queueIdx: 0n, startIndex: 0n, count: 4n, entropy: 0xcafebeefn,
-          } } },
-        ]));
-      },
-      { staticCall: stk('openBurnieLootBox') }
-    ),
-    lootboxRngWord: async (idx) => { calls.lootboxRngWord.push(idx); return state.rngWord; },
+    lootboxRngWordByIndex: async (idx) => { calls.lootboxRngWordByIndex.push(idx); return state.rngWord; },
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
     _calls: calls,
@@ -800,26 +768,9 @@ describe('Plan 60-03: per-lootbox rows + RNG poll + Open click + reveal animatio
     // without waiting for /play/ pack-animator import (gsap unavailable in tests).
     el.__bumpCancelTokenForTest();
     await settle(60);
-    assert.equal(fakeContract._calls.openLootBox.length, 1, 'openLootBox called exactly once');
+    assert.equal(fakeContract._calls.openBox.length, 1, 'openLootBox called exactly once');
     // After cancel-token bump, the post-tx reveal sequence void-returns; row stays in opening status.
     assert.equal(el._state.lootboxRowStatuses[0], 'opening', 'row left in opening (cancel-token superseded reveal)');
-    el.disconnectedCallback();
-  });
-
-  test('Open click on BURNIE-purchased row routes to openBurnieLootBox', async () => {
-    fakeContract._state.rngWord = 7n;
-    const el = instantiate();
-    clickByDataBind(el, 'lbx-pay-burnie');
-    clickByDataBind(el, 'lbx-buy-button');
-    await settle(60);
-    const row = el.querySelector('.lbx-row');
-    assert.ok(row.classList.contains('lbx-row--ready'), 'BURNIE row ready');
-    const openBtn = row.querySelector('[data-bind="row-open-btn"]');
-    openBtn.dispatchEvent({ type: 'click' });
-    el.__bumpCancelTokenForTest();
-    await settle(60);
-    assert.equal(fakeContract._calls.openBurnieLootBox.length, 1, 'openBurnieLootBox called');
-    assert.equal(fakeContract._calls.openLootBox.length, 0, 'openLootBox NOT called for BURNIE row');
     el.disconnectedCallback();
   });
 
@@ -835,7 +786,7 @@ describe('Plan 60-03: per-lootbox rows + RNG poll + Open click + reveal animatio
     openBtn.dispatchEvent({ type: 'click' });
     el.__bumpCancelTokenForTest();
     await settle(60);
-    assert.equal(fakeContract._calls.openLootBox.length, 1, 'only one openLootBox tx despite double-click');
+    assert.equal(fakeContract._calls.openBox.length, 1, 'only one openLootBox tx despite double-click');
     el.disconnectedCallback();
   });
 
@@ -912,7 +863,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     const upperAddr = '0xAB12000000000000000000000000000000000000';  // mixed case
     __triggerRevealCompleteForTest(el, 1n, upperAddr);
     // Should write to lowercase variant — case-insensitive key.
-    const lowerKey = `revealed-packs:11155111:${upperAddr.toLowerCase()}`;
+    const lowerKey = `revealed-packs:84532:${upperAddr.toLowerCase()}`;
     const raw = globalThis.localStorage.getItem(lowerKey);
     assert.ok(raw, 'key uses lowercased address');
     const arr = JSON.parse(raw);
@@ -922,7 +873,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
   test('Reveal complete writes lootboxIndex to revealed-packs set (chainId-scoped)', () => {
     const el = instantiate();
     __triggerRevealCompleteForTest(el, 7n, CONNECTED);
-    const key = `revealed-packs:11155111:${CONNECTED.toLowerCase()}`;
+    const key = `revealed-packs:84532:${CONNECTED.toLowerCase()}`;
     const raw = globalThis.localStorage.getItem(key);
     assert.ok(raw, 'localStorage entry written');
     const arr = JSON.parse(raw);
@@ -933,7 +884,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     const el = instantiate();
     __triggerRevealCompleteForTest(el, 3n, CONNECTED);
     __triggerRevealCompleteForTest(el, 3n, CONNECTED);
-    const key = `revealed-packs:11155111:${CONNECTED.toLowerCase()}`;
+    const key = `revealed-packs:84532:${CONNECTED.toLowerCase()}`;
     const arr = JSON.parse(globalThis.localStorage.getItem(key));
     assert.equal(arr.filter((v) => v === '3').length, 1, 'no duplicates in revealed set');
   });
@@ -946,18 +897,19 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     globalThis.localStorage.setItem = orig;  // restore for test isolation
   });
 
-  test('URL ?ref= persisted to localStorage on connected.address fire', async () => {
+  test('connect does NOT write the own-code key from URL ?ref= (site-wide ref.js owns capture)', async () => {
+    // Semantics fixed 2026-07-16: affiliate-code:{chain}:{addr} is the
+    // player's OWN registered code; incoming referrals live only in the
+    // /js/ref.js site capture ('affiliate-ref' / 'dgn_ref').
     globalThis.location = { href: `http://localhost/?ref=${VALID_REF_BYTES32}` };
-    // Pre-stub fetch for the boot CTA (will fire on connect)
     globalThis.fetch = async () => ({
       ok: true, status: 200, json: async () => ({ address: CONNECTED, lootboxes: [] }),
     });
     const el = instantiate();
-    // Connect — subscribe('connected.address') fires, persists URL ?ref=
     storeMod.update('connected.address', CONNECTED);
     await settle(60);
-    const stored = globalThis.localStorage.getItem(`affiliate-code:11155111:${CONNECTED.toLowerCase()}`);
-    assert.equal(stored, VALID_REF_BYTES32, 'URL ?ref= bytes32hex persisted to chainId-scoped localStorage');
+    const stored = globalThis.localStorage.getItem(`affiliate-code:84532:${CONNECTED.toLowerCase()}`);
+    assert.equal(stored, null, 'own-code key untouched by an incoming ?ref=');
     el.disconnectedCallback();
   });
 
@@ -969,7 +921,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     const el = instantiate();
     storeMod.update('connected.address', CONNECTED);
     await settle(60);
-    const stored = globalThis.localStorage.getItem(`affiliate-code:11155111:${CONNECTED.toLowerCase()}`);
+    const stored = globalThis.localStorage.getItem(`affiliate-code:84532:${CONNECTED.toLowerCase()}`);
     assert.equal(stored, null, 'invalid ?ref= not persisted');
     el.disconnectedCallback();
   });
@@ -1006,7 +958,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
   test('Boot CTA: indexer returns 2 lootboxes, 1 in localStorage → CTA shows "1 unrevealed pack"', async () => {
     // Pre-seed localStorage with lootbox 5 already revealed
     globalThis.localStorage.setItem(
-      `revealed-packs:11155111:${CONNECTED.toLowerCase()}`,
+      `revealed-packs:84532:${CONNECTED.toLowerCase()}`,
       JSON.stringify(['5'])
     );
     globalThis.fetch = async () => ({
@@ -1036,7 +988,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
         address: CONNECTED,
         lootboxes: [
           { lootboxIndex: '10', payKind: 'ETH', opened: false, rngReady: false },
-          { lootboxIndex: '11', payKind: 'BURNIE', opened: false, rngReady: true },
+          { lootboxIndex: '11', payKind: 'FLIP', opened: false, rngReady: true },
           { lootboxIndex: '12', payKind: 'ETH', opened: true, rngReady: true },
         ],
       }),
@@ -1072,7 +1024,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     assert.equal(el._state.lootboxRowsCount, 1, 'row added from boot CTA');
     assert.equal(el._state.unrevealedPacksFromIndexerCount, 0, 'CTA backing data cleared');
     // Verify D-07 step 5: NO open tx auto-fired (openLootBox not called)
-    assert.equal(fakeContract._calls.openLootBox.length, 0, 'NO auto-fire — Open click is explicit');
+    assert.equal(fakeContract._calls.openBox.length, 0, 'NO auto-fire — Open click is explicit');
     // CTA is now hidden (count=0)
     assert.equal(cta.hidden, true, 'CTA hidden after walk-through started');
     el.disconnectedCallback();
@@ -1126,8 +1078,10 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     el.disconnectedCallback();
   });
 
-  test('INTEGRATION: URL ?ref= → connect → buy → affiliate persisted is used in tx args[3]', async () => {
-    globalThis.location = { href: `http://localhost/?ref=${VALID_REF_BYTES32}` };
+  test('INTEGRATION: site-captured ref → connect → buy → referral used in tx args[3]', async () => {
+    // /js/ref.js (site-wide, first-touch) writes 'affiliate-ref'; the buy
+    // path reads it via lootbox.js readAffiliateCode.
+    globalThis.localStorage.setItem('affiliate-ref', VALID_REF_BYTES32);
     globalThis.fetch = async () => ({
       ok: true, status: 200, json: async () => ({ address: CONNECTED, lootboxes: [] }),
     });
@@ -1137,10 +1091,9 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     // Now click Buy
     clickByDataBind(el, 'lbx-buy-button');
     await settle(60);
-    // purchase() was called with args[3] = the persisted affiliate code
     assert.equal(fakeContract._calls.purchase.length, 1, 'purchase called once');
     const [args] = fakeContract._calls.purchase;
-    assert.equal(args[3], VALID_REF_BYTES32, 'purchase received URL-derived affiliate code via lootbox.js auto-read');
+    assert.equal(args[3], VALID_REF_BYTES32, 'purchase received site-captured referral via lootbox.js auto-read');
     el.disconnectedCallback();
   });
 
@@ -1171,7 +1124,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
     await settle(60);
     __triggerRevealCompleteForTest(el1, lootboxIdx, CONNECTED);
     // Verify localStorage now contains the revealed lootboxIndex.
-    const key = `revealed-packs:11155111:${CONNECTED.toLowerCase()}`;
+    const key = `revealed-packs:84532:${CONNECTED.toLowerCase()}`;
     const arr1 = JSON.parse(globalThis.localStorage.getItem(key));
     assert.ok(arr1.includes(String(lootboxIdx)), `revealed set contains ${lootboxIdx}`);
     el1.disconnectedCallback();
@@ -1208,7 +1161,7 @@ describe('Plan 60-04: localStorage idempotency + boot CTA + URL-?ref affiliate',
 //   1. Synchronous-click invariant (#onBuyClick is arrow-property, no `await`
 //      between handler entry and signer.sendTransaction).
 //   2. Pre-warm refresh wires on the FULL CONTEXT D-02 step 2c trigger set:
-//      input change (qty / payKind), connectedCallback, connected.address
+//      input change (qty), connectedCallback, connected.address
 //      change, viewing.address change, chain advance via subscribe('app.lastDay').
 //   3. 300ms debounce collapses input bursts.
 //   4. Abort previous pre-warm before scheduling next.
@@ -1282,7 +1235,7 @@ function makeFakePrewarmCapableContract(opts = {}) {
         calls.purchaseCoin.push(args);
         txCounter += 1n;
         return makeFakeBuyTx(makeFakeBuyReceipt([
-          { parsed: { name: 'BurnieLootBuy', args: { index: txCounter, burnieAmount: 1000n * 10n ** 18n, buyer: args[0] } } },
+          { parsed: { name: 'FlipLootBuy', args: { index: txCounter, flipAmount: 1000n * 10n ** 18n, buyer: args[0] } } },
         ]));
       },
       {
@@ -1322,7 +1275,7 @@ function makeFakePrewarmProvider() {
     _estimateCalls: estimateCalls,
   };
   return {
-    getNetwork: async () => ({ chainId: 11155111n }),
+    getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => signer,
     _signer: signer,
   };
@@ -1455,23 +1408,19 @@ describe('Plan 63-02 (D-02 LOCKED): iOS Safari user-gesture pre-warm refactor', 
     el.disconnectedCallback();
   });
 
-  test('Pay-kind change triggers pre-warm refresh (input change trigger)', async () => {
+  test('Pre-warm always uses purchase.populateTransaction; never purchaseCoin (ETH-only)', async () => {
     const el = instantiate();
     await waitMs(350);
     await settle(30);
+    // A ticket-quantity change retriggers pre-warm — always the ETH purchase path.
     const ethCount = fakeContract._calls.populatePurchase.length;
-    const burnieCountBefore = fakeContract._calls.populatePurchaseCoin.length;
-    clickByDataBind(el, 'lbx-pay-burnie');
-    await waitMs(350);
-    await settle(30);
-    assert.equal(fakeContract._calls.populatePurchaseCoin.length, burnieCountBefore + 1,
-      'BURNIE pay-kind triggers purchaseCoin.populateTransaction');
-    // Subsequent ETH click triggers another purchase pre-warm
-    clickByDataBind(el, 'lbx-pay-eth');
+    clickByDataBind(el, 'lbx-tickets-plus');
     await waitMs(350);
     await settle(30);
     assert.equal(fakeContract._calls.populatePurchase.length, ethCount + 1,
-      'ETH pay-kind triggers purchase.populateTransaction');
+      'input change triggers purchase.populateTransaction');
+    assert.equal(fakeContract._calls.populatePurchaseCoin.length, 0,
+      'purchaseCoin.populateTransaction NEVER called — no FLIP lootbox path');
     el.disconnectedCallback();
   });
 

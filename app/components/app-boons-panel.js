@@ -38,6 +38,11 @@ import { update as updateBeta } from '../../beta/app/store.js';
 import { subscribe as subscribeApp, getViewedAddress, get as getApp } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
 
+// Account-switcher (2026-07-16) identity-panel note — matches app-quest-panel.js /
+// app-activity-panel.js copy. Boons are per-account event history; combine.js has
+// nothing to merge for them (not listed as a SUM/CONCAT field).
+const COMBINED_NOTE = 'Per-account stat. Pick a single account.';
+
 const POLL_INTERVAL_MS = 30_000; // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 
 // Wraps setTimeout with .unref() in Node.js (no-op in browsers). Used for the
@@ -94,7 +99,14 @@ class AppBoonsPanel extends HTMLElement {
   // -----------------------------------------------------------------------
 
   #renderShell() {
-    this.innerHTML = '<div class="app-boons-panel"><boons-panel></boons-panel></div>';
+    // Account-switcher (2026-07-16): .app-boons-combined-note carries the
+    // identity-panel note in mode 'combined' — the verbatim /beta/ <boons-panel>
+    // is READ-ONLY (CF-09) so it can't render the note itself; the wrapper
+    // hides it and shows this note instead (see #applyCombinedGate).
+    this.innerHTML = '<div class="app-boons-panel">'
+      + '<p class="app-boons-combined-note" data-bind="boons-combined-note" hidden></p>'
+      + '<boons-panel data-bind="boons-inner"></boons-panel>'
+      + '</div>';
   }
 
   // -----------------------------------------------------------------------
@@ -106,7 +118,21 @@ class AppBoonsPanel extends HTMLElement {
   #wireSubscriptions() {
     const u1 = subscribeApp('connected.address', () => this.#refreshBoons());
     const u2 = subscribeApp('viewing.address', () => this.#refreshBoons());
-    this.#unsubs.push(u1, u2);
+    const u3 = subscribeApp('ui.mode', () => this.#refreshBoons());
+    this.#unsubs.push(u1, u2, u3);
+  }
+
+  // Toggle the wrapper's own note vs. the cross-imported <boons-panel> based
+  // on ui.mode. Called from #refreshBoons on every cycle (mode can flip
+  // between poll ticks via the account-switcher).
+  #applyCombinedGate(isCombined) {
+    const note = this.querySelector('[data-bind="boons-combined-note"]');
+    if (note) {
+      note.hidden = !isCombined;
+      if (isCombined) note.textContent = COMBINED_NOTE;
+    }
+    const inner = this.querySelector('[data-bind="boons-inner"]');
+    if (inner) inner.hidden = isCombined;
   }
 
   // -----------------------------------------------------------------------
@@ -143,6 +169,16 @@ class AppBoonsPanel extends HTMLElement {
   // -----------------------------------------------------------------------
 
   async #refreshBoons() {
+    const isCombined = getApp('ui.mode') === 'combined';
+    this.#applyCombinedGate(isCombined);
+    if (isCombined) {
+      // Boons are per-account event history — combine.js has no merged field
+      // for them. Clear the bridged /beta/ store so a stale single-account
+      // list can't leak through the (now-hidden) verbatim panel.
+      updateBeta('player.boons', []);
+      return;
+    }
+
     const addr = (typeof getViewedAddress === 'function' ? getViewedAddress() : null)
       || getApp('viewing.address')
       || getApp('connected.address')

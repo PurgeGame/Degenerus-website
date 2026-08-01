@@ -13,8 +13,11 @@
   <link rel="stylesheet" href="/beta/styles/forms.css">
   <link rel="stylesheet" href="/beta/styles/tx-status.css">
   <link rel="stylesheet" href="/beta/styles/jackpot.css">
+  <link rel="stylesheet" href="/beta/styles/viewer.css">
+  <link rel="stylesheet" href="/beta/styles/replay.css">
   <link rel="stylesheet" href="/beta/styles/boons.css">
   <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/status-indicators.css">
   <script type="importmap">
   {
     "imports": {
@@ -23,101 +26,159 @@
       "gsap/Flip": "https://esm.sh/gsap@3.14/Flip",
       "gsap/TextPlugin": "https://esm.sh/gsap@3.14/TextPlugin",
       "canvas-confetti": "https://esm.sh/canvas-confetti@1.9",
+      "lean-qr": "https://esm.sh/lean-qr@2.5",
       "@walletconnect/ethereum-provider": "https://esm.sh/@walletconnect/ethereum-provider@2.23.9"
     }
   }
   </script>
+  <script defer src="/js/ref.js"></script>
 </head>
-<body>
+<body class="layout-basic">
   <div class="container">
-    <!-- Nav injected by shared/nav.js -->
+    <!-- Nav injected by shared/nav.js (prepends into .container; order-independent) -->
 
-    <!-- Sepolia chip row (Phase 56 ships placeholder; Phase 58 activates state colors) -->
+    <!-- Chrome strip (user call): no page header — the nav bar carries the
+         Degenerus logo + Discord + wallet Connect (its links/extra buttons
+         are hidden in basic mode via app.css); content starts at the
+         balances strip + jackpot hero. -->
+
+    <!-- Account switcher (2026-07-16): "Acting as" select — self / per-approver
+         operator / combined. account-switcher.js keeps it hidden until the
+         connected wallet has 1+ operator approvals (subscribe-driven; the
+         `hidden` attribute here is just the pre-JS default). -->
+    <account-switcher hidden></account-switcher>
+
+    <!-- View-mode banner REMOVED (user call: "we don't need the read only
+         thing"). view-mode-banner.js stays loaded — its #view-mode-banner
+         lookup is null-guarded and it still owns the [data-write] disable
+         manager for view mode (now also operator/combined variants). -->
+
+    <!-- Network chip row (placeholder label; wallet-picker.js re-labels from CHAIN.name) -->
     <div class="chain-chip-row" aria-label="Network status">
       <span id="chain-chip" class="chain-chip chain-chip--neutral">
         <span class="chain-chip__dot"></span>
-        <span class="chain-chip__label">Sepolia testnet</span>
+        <span class="chain-chip__label">Base Sepolia testnet</span>
       </span>
     </div>
 
-    <!-- Phase 59 last-day jackpot widget (top-of-page hero per D-06; JKP-02 + JKP-03) -->
-    <last-day-jackpot></last-day-jackpot>
+    <main>
+      <aside id="testnet-beta-banner" class="testnet-beta-banner" hidden
+             aria-label="Testnet beta warning">
+        <span class="testnet-beta-banner__warning">TESTNET BETA · NOT REAL MONEY</span>
+        <a class="testnet-beta-banner__faucet"
+           href="https://www.alchemy.com/faucets/base-sepolia"
+           target="_blank" rel="noopener noreferrer">GET FREE MONEY</a>
+      </aside>
 
-    <!-- Phase 60 packs panel — first write surface (LBX-01..04 wave) -->
-    <app-packs-panel></app-packs-panel>
+      <!-- Headline jackpot number: the grand gold rush's payout size (current +
+           next + future prize pools + yield accumulator, per _payGoldRush's grand
+           branch). Sampled per block by the indexer, so it ticks up whenever new
+           money enters the pools. First thing on the page by design — it is the
+           draw, and it is the only number that moves on its own. -->
+      <gold-rush-headline></gold-rush-headline>
 
-    <!-- Phase 61 claims panel — multi-prize tray (CLM-01, CLM-03, CLM-04) -->
-    <app-claims-panel></app-claims-panel>
+      <!-- MINE FLIP lives in the NAV now (user call: small, top bar, lights up
+           when there is work). app-mine-flip.js injects itself there — same
+           runtime-mount pattern as the day/level chips. Queue order and
+           the auto-run rules live in app/work-queue.js. -->
 
-    <!-- Phase 62 decimator panel — BUY-01 level-mint (re-export of Phase 60 lootbox.js) -->
-    <app-decimator-panel></app-decimator-panel>
+      <!-- Phase 64 basic-mode: daily drawing front and center.
+           One bordered hero instrument (user call: coinflip lives INSIDE the
+           jackpot widget). Left column: last-day-jackpot is the player-centric
+           shell (day pin, spoiler gate); replay-panel is the
+           GT-paper spin + scratch reveal (beta component, driven by the
+           shell's bridge — its own selects are hidden via app.css). The other
+           columns are the purchase widget and app-daily-flip, the day's
+           coinflip reveal (two-faced coin + Reveal Flip button) + flip
+           stake/redeem actions. On narrow screens the draw and flip stay
+           first, with purchase immediately below them.
+           The foil strip and the day-results list were removed from the shell
+           on 2026-07-29 (user call: "the ugly foil tickets and the big list of
+           what everyone else won") — the widget is the draw and the scratch.
+           The DAY SUMMARY button is still owned by last-day-jackpot (it carries
+           the gates) and replaces Reveal Draw in that button's existing action
+           row once BOTH the board and the flip have played out. -->
+      <section class="jackpot-hero" aria-label="Purchase, daily jackpot draw, and coinflip">
+        <div class="jackpot-hero__draw">
+          <last-day-jackpot></last-day-jackpot>
+          <replay-panel single-button></replay-panel>
+          <div class="jackpot-hero__summary-slot" data-bind="day-summary-slot" hidden></div>
+        </div>
+        <app-daily-flip></app-daily-flip>
+        <app-decimator-panel></app-decimator-panel>
+      </section>
 
-    <!-- Phase 62 pass section — BUY-02 + BUY-03 (whale + deity passes) -->
-    <app-pass-section></app-pass-section>
+      <!-- Claims banner and aggregate winnings strip are intentionally
+           unmounted. Gameplay-specific resolution stays with its owning
+           surface; app-claims-panel.js and app-balances-strip.js remain on
+           disk for THE PIT. -->
 
-    <!-- Phase 62 coinflip panel — BUY-04 (BURNIE coinflip deposit, sync) -->
-    <app-coinflip-panel></app-coinflip-panel>
+      <!-- Second three-column instrument, aligned to the jackpot hero:
+           quests left, Degenerette center, side bets right. Degenerette owns
+           fresh and historical resolved spins in-panel. -->
+      <section class="play-grid" aria-label="Quests, Degenerette, and side bets">
+        <app-quest-panel></app-quest-panel>
+        <app-degenerette-panel></app-degenerette-panel>
+        <app-parimutuel-panel></app-parimutuel-panel>
+      </section>
 
-    <!-- Phase 62 degenerette panel — BUY-05 (place → poll RNG → resolve, two-tx) -->
-    <app-degenerette-panel></app-degenerette-panel>
+      <!-- Task #12: ticket inventory — deduped ticket cards + the wide
+           all-symbols × per-level chart (app-tickets-inventory.js) -->
+      <app-tickets-inventory></app-tickets-inventory>
 
-    <!-- Phase 62 quest panel — QST-01 + QST-02 (read-only display; quests progress automatically per RESEARCH R4) -->
-    <app-quest-panel></app-quest-panel>
-
-    <!-- Phase 62 boons panel — BNS-01 (thin wrapper bridging /beta/ <boons-panel> verbatim cross-import) -->
-    <app-boons-panel></app-boons-panel>
-
-    <!-- Phase 62 affiliate panel — AFF-01 default URL + Customize CTA + AFF-02 referee table; AFF-03 row lives in <app-claims-panel> -->
-    <app-affiliate-panel></app-affiliate-panel>
-
-    <!-- Page header -->
-    <header class="page-header">
-      <img class="page-header-logo" src="/badges-circular/flame_red.svg" alt="Degenerus">
-      <h1>DEGENERUS APP</h1>
-      <p class="subtitle">Play on Sepolia testnet — connect a wallet for purchases.</p>
-    </header>
-
-    <!-- Player typeahead (Phase 58 DD-01 consumer; visible whether wallet connected or browsing read-only) -->
-    <div class="player-search-row">
-      <player-dropdown></player-dropdown>
-    </div>
-
-    <!-- View-mode banner (Phase 58 DD-02; view-mode-banner.js targets #view-mode-banner by id and toggles [hidden] via subscribe('ui.mode')) -->
-    <div id="view-mode-banner" class="view-mode-banner" hidden>
-      <span class="view-mode-banner__text">Viewing read-only</span>
-      <button class="view-mode-banner__cta" type="button">Back to my account</button>
-    </div>
-
-    <!-- Main panel surface -->
-    <main id="app-root">
-      <div id="app-loading-state" class="panel app-loading-state">
-        <p>Loading testnet state…</p>
-      </div>
+      <!-- Collapsed passes (user call: tickets+lootboxes live in the buy
+           panel now, so the packs panel is gone and this is just passes) -->
+      <details class="more-ways">
+        <summary class="more-ways__summary">afKing Passes</summary>
+        <div class="more-ways__content">
+          <app-pass-section></app-pass-section>
+        </div>
+      </details>
     </main>
 
     <footer>
-      <p>Degenerus Protocol — Sepolia testnet</p>
+      <p>Degenerus Protocol — Base Sepolia testnet</p>
     </footer>
 
     <!-- Wallet picker modal (Phase 58 — hidden by default; show() unhides) -->
     <wallet-picker></wallet-picker>
+
+    <!-- One-time first-visit choice: connect now or inspect the public sDGNRS
+         wallet through the starter tutorial. -->
+    <app-onboarding></app-onboarding>
+
+    <!-- Headless lootbox lifecycle controller. Ready boxes are exposed only
+         through the same fixed bottom tray used by ticket packs. -->
+    <app-box-strip tray-only></app-box-strip>
+
+    <!-- Full-screen prize reveal engine (reveal-overlay.js) — lootbox opens,
+         ticket-pack creation, jackpot winnings. Hidden until a sequence is
+         queued via queueReveal(). -->
+    <app-reveal-tray></app-reveal-tray>
+    <reveal-overlay></reveal-overlay>
   </div>
 
   <script src="/shared/nav.js"></script>
   <script>initNav({ currentPage: 'app' });</script>
   <script type="module" src="/app/app/main.js"></script>
+  <script type="module" src="/app/components/testnet-beta-banner.js"></script>
   <script type="module" src="/app/components/wallet-picker.js"></script>
-  <script type="module" src="/app/components/player-dropdown.js"></script>
+  <script type="module" src="/app/components/app-onboarding.js"></script>
+  <script type="module" src="/app/components/account-switcher.js"></script>
   <script type="module" src="/app/components/view-mode-banner.js"></script>
+  <script type="module" src="/app/components/gold-rush-headline.js"></script>
+  <script type="module" src="/beta/components/replay-panel.js"></script>
   <script type="module" src="/app/components/last-day-jackpot.js"></script>
-  <script type="module" src="/app/components/app-packs-panel.js"></script>
-  <script type="module" src="/app/components/app-claims-panel.js"></script>
+  <script type="module" src="/app/components/app-tickets-inventory.js"></script>
+  <script type="module" src="/app/components/app-daily-flip.js"></script>
+  <script type="module" src="/app/components/app-parimutuel-panel.js"></script>
+  <script type="module" src="/app/components/app-mine-flip.js"></script>
   <script type="module" src="/app/components/app-decimator-panel.js"></script>
-  <script type="module" src="/app/components/app-pass-section.js"></script>
-  <script type="module" src="/app/components/app-coinflip-panel.js"></script>
+  <script type="module" src="/app/components/app-box-strip.js"></script>
+  <script type="module" src="/app/components/app-reveal-tray.js"></script>
+  <script type="module" src="/app/components/reveal-overlay.js"></script>
   <script type="module" src="/app/components/app-degenerette-panel.js"></script>
   <script type="module" src="/app/components/app-quest-panel.js"></script>
-  <script type="module" src="/app/components/app-boons-panel.js"></script>
-  <script type="module" src="/app/components/app-affiliate-panel.js"></script>
+  <script type="module" src="/app/components/app-pass-section.js"></script>
 </body>
 </html>

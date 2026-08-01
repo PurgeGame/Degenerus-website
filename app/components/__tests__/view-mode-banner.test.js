@@ -380,6 +380,21 @@ describe('[data-write] disable manager (DD-02)', () => {
     assert.equal(btn.title, '', 'tooltip cleared');
   });
 
+  test('canSign never overrides a component-owned data-write lock', async () => {
+    const btn = makeWriteButton();
+    btn.setAttribute('data-write-locked', '');
+    btn.setAttribute('data-write-lock-title', 'Nothing to claim');
+    _docBody.appendChild(btn);
+
+    storeMod.update('connected.address', '0xab12000000000000000000000000000000000000');
+    storeMod.update('ui.chainOk', true);
+    await flushMicrotasks();
+
+    assert.equal(btn.disabled, true);
+    assert.equal(btn.title, 'Nothing to claim');
+    assert.equal(btn.getAttribute('aria-disabled'), 'true');
+  });
+
   test('Mode flip view→self with canSign true re-enables [data-write]', async () => {
     const btn = makeWriteButton();
     _docBody.appendChild(btn);

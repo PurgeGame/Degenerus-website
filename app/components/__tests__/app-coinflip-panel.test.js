@@ -322,7 +322,7 @@ function makeFakeCoinflipContract(opts = {}) {
 
 function makeFakeProvider(addr) {
   return {
-    getNetwork: async () => ({ chainId: 11155111n }),
+    getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({ getAddress: async () => addr }),
   };
 }
@@ -378,7 +378,7 @@ describe('Plan 62-03: <app-coinflip-panel> Custom Element', () => {
     assert.match(PANEL_SRC, /data-write/, 'panel source contains literal data-write attribute');
   });
 
-  test('Deposit click invokes depositCoinflip with parsed BURNIE amount in BigInt wei', async () => {
+  test('Deposit click invokes depositCoinflip with parsed FLIP amount in BigInt wei', async () => {
     let recordedArgs = null;
     coinflipMod.__setContractFactoryForTest(() => ({
       depositCoinflip: Object.assign(
@@ -408,7 +408,7 @@ describe('Plan 62-03: <app-coinflip-panel> Custom Element', () => {
     assert.ok(recordedArgs, 'depositCoinflip invoked through contract');
     // args = [player, amount]
     assert.equal(recordedArgs[0], CONNECTED, 'player = connected.address');
-    assert.equal(recordedArgs[1], 200n * 10n ** 18n, 'amount = 200 BURNIE in wei');
+    assert.equal(recordedArgs[1], 200n * 10n ** 18n, 'amount = 200 FLIP in wei');
 
     el.disconnectedCallback();
   });
@@ -497,7 +497,7 @@ describe('Plan 62-03: <app-coinflip-panel> Custom Element', () => {
         async () => {
           const err = new Error('decoded revert');
           err.code = 'AmountLTMin';
-          err.userMessage = 'Minimum coinflip deposit is 100 BURNIE.';
+          err.userMessage = 'Minimum coinflip deposit is 100 FLIP.';
           err.recoveryAction = 'Increase your deposit and try again.';
           throw err;
         },

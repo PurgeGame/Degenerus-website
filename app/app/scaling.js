@@ -19,24 +19,48 @@ import { formatEther } from 'ethers';
 /**
  * Format a raw on-chain ETH BigInt for display.
  *
- * Reads ETH_DIVISOR from the chain-config singleton. On Sepolia
- * (`ETH_DIVISOR = 1_000_000n`) the raw is descaled by /1M before
- * `formatEther`; on mainnet (`ETH_DIVISOR = 1n`) the raw is forwarded
- * unchanged. The fractional portion is zero-padded to `digits` so the
- * UI gets a stable-width string.
+ * Reads ETH_DIVISOR from the chain-config singleton. The testnet contracts
+ * are deployed with /1M-scaled wei amounts (0.01 ether costs 1e10 wei
+ * on-chain), so display MULTIPLIES raw by ETH_DIVISOR to render the
+ * mainnet-equivalent number the player thinks in. On mainnet
+ * (`ETH_DIVISOR = 1n`) the raw is forwarded unchanged.
+ * (Phase 64 fix: this previously divided, which rendered every scaled
+ * testnet amount as "0.0000".)
  *
  * WR-04: 0n flows through the same pad-to-digits path as every other
  * input, so `displayEth(0n)` and `displayEth(1n)` render to the same
  * width ("0.0000"). This avoids tabular-nums layout shift when a status
  * bar transitions from initial-zero to first-poll value.
  *
- * @param {bigint} raw - On-chain wei amount (post-/1M-scaling on Sepolia)
+ * @param {bigint} raw - On-chain wei amount (/1M-scaled on testnet)
  * @param {number} [digits=4] - Decimal places to render (zero-padded)
  * @returns {string} Formatted ETH string (e.g. "1.0000", "0.5000", "0.0000")
  */
 export function displayEth(raw, digits = 4) {
-  const scaled = raw / ETH_DIVISOR;
+  const scaled = raw * ETH_DIVISOR;
   const eth = formatEther(scaled);
+  const dot = eth.indexOf('.');
+  if (dot === -1) {
+    return digits > 0 ? eth + '.' + '0'.repeat(digits) : eth;
+  }
+  const intPart = eth.slice(0, dot);
+  const frac = eth.slice(dot + 1).padEnd(digits, '0').slice(0, digits);
+  return digits > 0 ? `${intPart}.${frac}` : intPart;
+}
+
+/**
+ * Format a raw UNSCALED 18-decimal token amount (FLIP / DGNRS) for display.
+ *
+ * FLIP and DGNRS are NOT /1M-scaled on testnet (only ETH is — RESEARCH Q5),
+ * so this is a plain formatEther with the same zero-padding contract as
+ * displayEth. Chain-independent: identical on mainnet.
+ *
+ * @param {bigint} raw - On-chain token wei (18 decimals, unscaled)
+ * @param {number} [digits=4] - Decimal places to render (zero-padded)
+ * @returns {string} Formatted token string
+ */
+export function displayToken(raw, digits = 4) {
+  const eth = formatEther(raw);
   const dot = eth.indexOf('.');
   if (dot === -1) {
     return digits > 0 ? eth + '.' + '0'.repeat(digits) : eth;

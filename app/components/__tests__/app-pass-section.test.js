@@ -1,15 +1,15 @@
 // /app/components/__tests__/app-pass-section.test.js — Phase 62 Plan 62-02 (BUY-02 + BUY-03)
 // Run: cd website && node --test app/components/__tests__/app-pass-section.test.js
 //
-// Tests <app-pass-section> Custom Element: whale row + 32-cell deity grid + per-button
-// click handlers + view-mode disable hook (data-write attribute) + error rendering via
+// Tests <app-pass-section> Custom Element: whale row + compact deity dropdown + buy
+// handlers + view-mode disable hook (data-write attribute) + error rendering via
 // textContent (T-58-18) + NEVER optimistic balance subtraction (CF-06 / D-05) + click
 // debouncing (#busyWhale + #busySymbols Set) + CONTEXT D-05 LOCKED 'E' override on
 // deity-pass path (deityPassErrorOverride applied at panel level).
 //
 // Mirrors app-decimator-panel.test.js fakeDOM scaffold (verbatim port).
 
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
@@ -293,7 +293,7 @@ function makeFakeReceipt(logs) { return { status: 1, hash: '0xreceipt', logs: lo
 function makeFakeTx(receipt) { return { hash: '0xtx', wait: async () => receipt }; }
 
 function makeFakePassContract(opts = {}) {
-  const calls = { purchaseWhaleBundle: [], purchaseDeityPass: [] };
+  const calls = { purchaseWhalePass: [], purchaseDeityPass: [] };
   const stk = (name) => async () => {
     if (opts.staticCallShouldRevert?.[name]) {
       const err = new Error('static-call revert');
@@ -302,12 +302,12 @@ function makeFakePassContract(opts = {}) {
     }
   };
   return {
-    purchaseWhaleBundle: Object.assign(
+    purchaseWhalePass: Object.assign(
       async (...args) => {
-        calls.purchaseWhaleBundle.push(args);
+        calls.purchaseWhalePass.push(args);
         return makeFakeTx(makeFakeReceipt());
       },
-      { staticCall: stk('purchaseWhaleBundle') }
+      { staticCall: stk('purchaseWhalePass') }
     ),
     purchaseDeityPass: Object.assign(
       async (...args) => {
@@ -322,9 +322,29 @@ function makeFakePassContract(opts = {}) {
   };
 }
 
+function makeUnmintedDeityError() {
+  const error = new Error('execution reverted: InvalidToken()');
+  error.data = '0xc1ab6dc1';
+  return error;
+}
+
+function makeFakeDeityReadContract(owners = new Map()) {
+  const normalized = owners instanceof Map
+    ? owners
+    : new Map(Object.entries(owners).map(([id, owner]) => [Number(id), owner]));
+  return {
+    name: async () => 'Degenerus Deity Pass',
+    ownerOf: async (symbolId) => {
+      const id = Number(symbolId);
+      if (normalized.has(id)) return normalized.get(id);
+      throw makeUnmintedDeityError();
+    },
+  };
+}
+
 function makeFakeProvider(addr) {
   return {
-    getNetwork: async () => ({ chainId: 11155111n }),
+    getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({ getAddress: async () => addr }),
   };
 }
@@ -350,9 +370,28 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     storeMod.update('connected.address', CONNECTED);
     storeMod.update('viewing.address', null);
     storeMod.update('ui.mode', 'self');
+    storeMod.update('ui.chainOk', true);
     contractsMod.setProvider(makeFakeProvider(CONNECTED));
     passesMod.__setContractFactoryForTest(() => makeFakePassContract());
+    passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract());
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 0n },
+      game: {
+        subInfo: async () => [false, 0n, 0n, 0n],
+        afkingSnapshot: async () => [0n, false, [], []],
+      },
+    }));
     await import('../app-pass-section.js');
+  });
+
+  afterEach(() => {
+    for (const child of [..._docBody.children]) {
+      try { child.disconnectedCallback?.(); } catch (_) { /* defensive */ }
+    }
+    passesMod.__resetContractFactoryForTest();
+    passesMod.__resetDeityReadContractFactoryForTest();
+    passesMod.__resetAfkingReadContractFactoryForTest();
+    contractsMod.clearProvider();
   });
 
   test("Custom element 'app-pass-section' registers idempotently", async () => {
@@ -363,15 +402,16 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(ctor, ctor2, 'same ctor reference after re-import (idempotent)');
   });
 
-  test('Panel renders shell with whale row + deity grid (32 symbol cells)', () => {
+  test('Panel renders whale row + deity dropdown and product-local boon markers', () => {
     const el = instantiate();
     assert.ok(el.innerHTML.length > 100, 'innerHTML populated');
-    // Whale buy CTA exists
     const whaleBuyBtn = el.querySelector('.pass-whale-buy');
     assert.ok(whaleBuyBtn, 'whale buy CTA rendered');
-    // Deity grid contains 32 symbol cells
-    const deityCells = el.querySelectorAll('.pass-deity-symbol');
-    assert.equal(deityCells.length, 32, '32 deity-symbol cells rendered');
+    assert.ok(el.querySelector('[data-bind="pass-deity-select"]'), 'deity symbol dropdown rendered');
+    assert.ok(el.querySelector('[data-bind="pass-deity-buy"]'), 'deity buy CTA rendered');
+    for (const product of ['whale', 'lazy', 'deity']) {
+      assert.match(el.innerHTML, new RegExp(`<boon-product-indicator product="${product}"`));
+    }
   });
 
   test('Action buttons carry data-write attribute', () => {
@@ -379,12 +419,9 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const whaleBuy = el.querySelector('.pass-whale-buy');
     assert.ok(whaleBuy && whaleBuy.attributes['data-write'] !== undefined,
       'whale buy CTA has data-write');
-    const cells = el.querySelectorAll('.pass-deity-symbol');
-    assert.ok(cells.length > 0);
-    for (const c of cells) {
-      assert.ok(c.attributes['data-write'] !== undefined,
-        `deity cell has data-write (sid=${c.attributes['data-symbol-id']})`);
-    }
+    const deityBuy = el.querySelector('[data-bind="pass-deity-buy"]');
+    assert.ok(deityBuy && deityBuy.attributes['data-write'] !== undefined,
+      'deity buy CTA has data-write');
   });
 
   test('Whale buy click invokes purchaseWhaleBundle with quantity from input', async () => {
@@ -393,7 +430,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     // Replace at module level using the contract factory seam — capture args
     // via a stub that mirrors purchaseWhaleBundle's signature.
     passesMod.__setContractFactoryForTest(() => ({
-      purchaseWhaleBundle: Object.assign(
+      purchaseWhalePass: Object.assign(
         async (...args) => {
           recordedArgs = args;
           return makeFakeTx(makeFakeReceipt());
@@ -427,10 +464,10 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('Deity symbol click invokes purchaseDeityPass with symbolId', async () => {
+  test('Deity dropdown selection invokes purchaseDeityPass with symbolId', async () => {
     let recordedArgs = null;
     passesMod.__setContractFactoryForTest(() => ({
-      purchaseWhaleBundle: Object.assign(
+      purchaseWhalePass: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
       ),
@@ -446,16 +483,14 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     }));
 
     const el = instantiate();
-    await flushMicrotasks();
+    await settle(60);
 
-    const cells = el.querySelectorAll('.pass-deity-symbol');
-    // Find cell with data-symbol-id=7
-    let target = null;
-    for (const c of cells) {
-      if (c.attributes['data-symbol-id'] === '7') { target = c; break; }
-    }
-    assert.ok(target, 'symbol-id=7 cell present');
-    target.dispatchEvent({ type: 'click' });
+    const select = el.querySelector('[data-bind="pass-deity-select"]');
+    const buy = el.querySelector('[data-bind="pass-deity-buy"]');
+    assert.ok(select.children.some((option) => option.value === '7'), 'symbol-id=7 option present');
+    select.value = '7';
+    select.dispatchEvent({ type: 'change' });
+    buy.dispatchEvent({ type: 'click' });
     await settle(60);
 
     assert.ok(recordedArgs, 'purchaseDeityPass invoked');
@@ -465,10 +500,59 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.disconnectedCallback();
   });
 
+  test('Deity dropdown excludes taken symbols and prices from the minted count', async () => {
+    const otherA = '0x1111000000000000000000000000000000000000';
+    const otherB = '0x2222000000000000000000000000000000000000';
+    passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(new Map([
+      [2, otherA],
+      [7, otherB],
+    ])));
+
+    const el = instantiate();
+    await settle(60);
+
+    const select = el.querySelector('[data-bind="pass-deity-select"]');
+    const ids = select.children.map((option) => option.value);
+    assert.equal(ids.length, 30, 'only the 30 available symbols are offered');
+    assert.equal(ids.includes('2'), false, 'first minted symbol omitted');
+    assert.equal(ids.includes('7'), false, 'second minted symbol omitted');
+    assert.equal(ids.includes('8'), true, 'unminted symbol remains available');
+    assert.equal(select.disabled, false, 'available dropdown remains usable');
+    assert.equal(el.querySelector('[data-bind="pass-deity-buy"]').disabled, false,
+      'buy action remains usable');
+    assert.match(
+      el.querySelector('[data-bind="pass-deity-hint"]').textContent,
+      /next pass 27\.0000 ETH/,
+      'two issued passes produce the 24 + triangular(2) = 27 ETH quote',
+    );
+
+    el.disconnectedCallback();
+  });
+
+  test('Deity dropdown shows the connected player pass and locks repurchase', async () => {
+    passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(new Map([
+      [11, CONNECTED.toUpperCase()],
+    ])));
+
+    const el = instantiate();
+    await settle(60);
+
+    const select = el.querySelector('[data-bind="pass-deity-select"]');
+    const buy = el.querySelector('[data-bind="pass-deity-buy"]');
+    assert.deepEqual(select.children.map((option) => option.value), ['11'],
+      'only the owned symbol remains in the dropdown');
+    assert.equal(select.disabled, true, 'owned pass selector is informational');
+    assert.equal(buy.disabled, true, 'one-pass-per-wallet guard locks repurchase');
+    assert.equal(select.getAttribute('data-write-lock-title'), 'You already own this deity pass');
+    assert.match(el.querySelector('[data-bind="pass-deity-hint"]').textContent, /^your pass · /);
+
+    el.disconnectedCallback();
+  });
+
   test("Deity 'E' revert renders 'That symbol's taken — try another.' (CONTEXT D-05 LOCKED)", async () => {
     // Stub purchaseDeityPass to throw a structured 'E' error
     passesMod.__setContractFactoryForTest(() => ({
-      purchaseWhaleBundle: Object.assign(
+      purchaseWhalePass: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
       ),
@@ -487,14 +571,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     }));
 
     const el = instantiate();
-    await flushMicrotasks();
+    await settle(60);
 
-    const cells = el.querySelectorAll('.pass-deity-symbol');
-    let target = null;
-    for (const c of cells) {
-      if (c.attributes['data-symbol-id'] === '7') { target = c; break; }
-    }
-    target.dispatchEvent({ type: 'click' });
+    const select = el.querySelector('[data-bind="pass-deity-select"]');
+    select.value = '7';
+    el.querySelector('[data-bind="pass-deity-buy"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
     const errEl = el.querySelector('.pass-deity-error');
@@ -510,7 +591,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
   test("Deity 'NotApproved' revert surfaces standard reason-map text (NOT the override)", async () => {
     passesMod.__setContractFactoryForTest(() => ({
-      purchaseWhaleBundle: Object.assign(
+      purchaseWhalePass: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
       ),
@@ -529,14 +610,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     }));
 
     const el = instantiate();
-    await flushMicrotasks();
+    await settle(60);
 
-    const cells = el.querySelectorAll('.pass-deity-symbol');
-    let target = null;
-    for (const c of cells) {
-      if (c.attributes['data-symbol-id'] === '3') { target = c; break; }
-    }
-    target.dispatchEvent({ type: 'click' });
+    const select = el.querySelector('[data-bind="pass-deity-select"]');
+    select.value = '3';
+    el.querySelector('[data-bind="pass-deity-buy"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
     const errEl = el.querySelector('.pass-deity-error');
@@ -558,7 +636,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
   test('Deity click handler debounced — double-click invokes purchaseDeityPass exactly once', async () => {
     let callCount = 0;
     passesMod.__setContractFactoryForTest(() => ({
-      purchaseWhaleBundle: Object.assign(
+      purchaseWhalePass: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
       ),
@@ -574,13 +652,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     }));
 
     const el = instantiate();
-    await flushMicrotasks();
+    await settle(60);
 
-    const cells = el.querySelectorAll('.pass-deity-symbol');
-    let target = null;
-    for (const c of cells) {
-      if (c.attributes['data-symbol-id'] === '7') { target = c; break; }
-    }
+    const select = el.querySelector('[data-bind="pass-deity-select"]');
+    select.value = '7';
+    const target = el.querySelector('[data-bind="pass-deity-buy"]');
     // Two rapid clicks
     target.dispatchEvent({ type: 'click' });
     target.dispatchEvent({ type: 'click' });
@@ -640,5 +716,38 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const el = instantiate();
     assert.doesNotThrow(() => el.disconnectedCallback());
     assert.doesNotThrow(() => el.disconnectedCallback());
+  });
+
+  // Account-switcher (2026-07-16) — combined mode hides the buy rows (whale /
+  // lazy / deity are per-account writes with no combined-view target) and
+  // shows the panel's new identity-style note instead.
+  test("mode 'combined' hides the buy rows and shows the per-account note", async () => {
+    storeMod.update('viewing.combined', true);
+    storeMod.update('ui.mode', 'combined');
+    const el = instantiate();
+    await settle();
+
+    const note = el.querySelector('[data-bind="pass-combined-note"]');
+    assert.equal(note.hidden, false, 'combined note visible');
+    assert.equal(note.textContent, 'Per-account stat. Pick a single account.');
+    assert.equal(el.querySelector('.pass-whale-row').hidden, true, 'whale row hidden');
+    assert.equal(el.querySelector('.pass-deity-section').hidden, true, 'deity section hidden');
+    assert.equal(el.querySelector('[data-bind="pass-lazy-row"]').hidden, true, 'lazy row hidden');
+  });
+
+  test("leaving combined mode restores the buy rows and hides the note", async () => {
+    storeMod.update('viewing.combined', true);
+    storeMod.update('ui.mode', 'combined');
+    const el = instantiate();
+    await settle();
+
+    storeMod.update('viewing.combined', false);
+    storeMod.update('ui.mode', 'self');
+    await settle();
+
+    const note = el.querySelector('[data-bind="pass-combined-note"]');
+    assert.equal(note.hidden, true, 'combined note hidden again');
+    assert.equal(el.querySelector('.pass-whale-row').hidden, false, 'whale row restored');
+    assert.equal(el.querySelector('.pass-deity-section').hidden, false, 'deity section restored');
   });
 });

@@ -25,7 +25,7 @@ describe('seeded codes (D-11 LOCKED + Pitfall 4 reconciliation)', () => {
     ['InvalidToken',
       "Someone else already claimed this — try a different one.",
       'Pick a different option and retry.'],
-    // Pitfall 4 alias: "WindowClosed" semantics → NotDecimatorWindow (BurnieCoin.sol:109)
+    // Pitfall 4 alias: "WindowClosed" semantics → NotDecimatorWindow (FLIP.sol:109)
     ['NotDecimatorWindow',
       'The decimator claim window is closed.',
       'Check upcoming windows in the calendar.'],
@@ -131,7 +131,7 @@ describe('Plan 60-02 reason-map extensions (LBX write-path errors)', () => {
   test('GameOverPossible decodes to user-facing message + recovery', () => {
     const decoded = decodeRevertReason({ revert: { name: 'GameOverPossible' } });
     assert.equal(decoded.code, 'GameOverPossible');
-    assert.match(decoded.userMessage, /BURNIE.*blocked|game-over/i);
+    assert.match(decoded.userMessage, /FLIP.*blocked|game-over/i);
     assert.match(decoded.recoveryAction, /next jackpot|ETH/i);
   });
 
@@ -206,5 +206,45 @@ describe('Phase 63 (Plan 63-01) WalletConnect error-code extensions', () => {
     assert.equal(decoded.code, 'USER_DISCONNECTED');
     assert.match(decoded.userMessage, /wallet disconnected/i);
     assert.match(decoded.recoveryAction, /reconnect|tap Connect/i);
+  });
+});
+
+// ===========================================================================
+// Solidity Panic(uint256) — added 2026-07-29. Not a custom error, so it never
+// matched the registry: an under-funded token burn (balanceOf -= amount) landed
+// in the UNKNOWN catch-all and read as "unexpected error".
+// ===========================================================================
+
+describe('Solidity panic decoding', () => {
+  const panicData = (code) => '0x4e487b71' + code.toString(16).padStart(64, '0');
+
+  test('0x11 (arithmetic underflow) reads as a balance problem', () => {
+    const decoded = decodeRevertReason({ data: panicData(0x11) });
+    assert.equal(decoded.code, 'Panic:0x11');
+    assert.match(decoded.userMessage, /balance/i);
+  });
+
+  test('panic code is read from ethers reason text too', () => {
+    const decoded = decodeRevertReason({
+      reason: 'panic code 0x11 (Arithmetic operation overflowed outside of an unchecked block)',
+    });
+    assert.equal(decoded.code, 'Panic:0x11');
+  });
+
+  test('0x12 divide-by-zero and 0x01 assert have their own messages', () => {
+    assert.equal(decodeRevertReason({ data: panicData(0x12) }).code, 'Panic:0x12');
+    assert.equal(decodeRevertReason({ data: panicData(0x01) }).code, 'Panic:0x01');
+  });
+
+  test('an unlisted panic code still decodes as a panic, not UNKNOWN', () => {
+    const decoded = decodeRevertReason({ data: panicData(0x41) });
+    assert.equal(decoded.code, 'Panic');
+    assert.notEqual(decoded.code, 'UNKNOWN');
+  });
+
+  test('a normal custom error is unaffected', () => {
+    assert.equal(decodeRevertReason({ revert: { name: 'RngNotReady' } }).code, 'RngNotReady');
+    assert.equal(decodeRevertReason({ data: '0x969bf728' }).code, 'UNKNOWN',
+      'an unregistered selector still falls through (NothingToClaim registers in claims.js)');
   });
 });

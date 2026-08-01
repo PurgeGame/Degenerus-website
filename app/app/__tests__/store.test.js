@@ -24,6 +24,7 @@ const {
   batch,
   deriveCanSign,
   getViewedAddress,
+  getActingAddress,
   __resetForTest,
 } = storeMod;
 
@@ -114,13 +115,13 @@ describe('batch', () => {
     batch({
       updates: [
         { path: 'connected.address', value: '0xaaaa000000000000000000000000000000000001' },
-        { path: 'connected.chainId', value: 11155111 },
+        { path: 'connected.chainId', value: 84532 },
       ],
     });
     assert.equal(seenA.length - baseA, 1);
     assert.equal(seenC.length - baseC, 1);
     assert.equal(seenA[seenA.length - 1], '0xaaaa000000000000000000000000000000000001');
-    assert.equal(seenC[seenC.length - 1], 11155111);
+    assert.equal(seenC[seenC.length - 1], 84532);
   });
 });
 
@@ -246,6 +247,170 @@ describe('ui.mode auto-derivation', () => {
     update('connected.address', null);
     update('ui.mode', 'self');
     await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'self');
+  });
+});
+
+// ===========================================================================
+// operator + combined mode derivation (account-switcher CORE layer)
+// ===========================================================================
+
+const CONN = '0xaaaa000000000000000000000000000000000001';
+const OWNER = '0xbbbb000000000000000000000000000000000002';
+
+describe('ui.mode operator derivation', () => {
+  test("viewing an approver (approvals.list contains viewing) → 'operator'", async () => {
+    update('connected.address', CONN);
+    update('approvals.list', [OWNER]);
+    update('viewing.address', OWNER);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'operator');
+  });
+
+  test("viewing a NON-approver → 'view' (read-only)", async () => {
+    update('connected.address', CONN);
+    update('approvals.list', []);
+    update('viewing.address', OWNER);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'view');
+  });
+
+  test("approvals.list arriving AFTER viewing.address flips 'view' → 'operator'", async () => {
+    // viewing set first while list empty → 'view'
+    update('connected.address', CONN);
+    update('viewing.address', OWNER);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'view');
+    // list lands late (indexer approvers fetch) → re-derive to 'operator'
+    update('approvals.list', [OWNER]);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'operator');
+  });
+
+  test('operator match is case-insensitive', async () => {
+    update('connected.address', CONN);
+    update('approvals.list', ['0xBBBB000000000000000000000000000000000002']);
+    update('viewing.address', OWNER);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'operator');
+  });
+
+  test("leaving an approved view (viewing.address → null) returns to 'self'", async () => {
+    update('connected.address', CONN);
+    update('approvals.list', [OWNER]);
+    update('viewing.address', OWNER);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'operator');
+    update('viewing.address', null);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'self');
+  });
+});
+
+describe('ui.mode combined derivation', () => {
+  test("viewing.combined && connected → 'combined'", async () => {
+    update('connected.address', CONN);
+    update('viewing.combined', true);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'combined');
+  });
+
+  test("combined takes precedence even when viewing.address is also set", async () => {
+    update('connected.address', CONN);
+    update('approvals.list', [OWNER]);
+    update('viewing.address', OWNER);
+    update('viewing.combined', true);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'combined');
+  });
+
+  test("combined without a wallet stays 'self' (no connected → no aggregate)", async () => {
+    update('connected.address', null);
+    update('viewing.combined', true);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'self');
+  });
+
+  test("clearing viewing.combined returns to 'self'", async () => {
+    update('connected.address', CONN);
+    update('viewing.combined', true);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'combined');
+    update('viewing.combined', false);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'self');
+  });
+});
+
+// ===========================================================================
+// deriveCanSign — operator/combined extension
+// ===========================================================================
+
+describe('deriveCanSign operator/combined', () => {
+  test("operator mode + chainOk + connected → true (operator may sign)", async () => {
+    update('connected.address', CONN);
+    update('ui.chainOk', true);
+    update('approvals.list', [OWNER]);
+    update('viewing.address', OWNER);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'operator');
+    assert.equal(deriveCanSign(), true);
+  });
+
+  test("combined mode → false (read-only aggregate)", async () => {
+    update('connected.address', CONN);
+    update('ui.chainOk', true);
+    update('viewing.combined', true);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'combined');
+    assert.equal(deriveCanSign(), false);
+  });
+});
+
+// ===========================================================================
+// getActingAddress — mode-driven write target
+// ===========================================================================
+
+describe('getActingAddress', () => {
+  test("'self' → connected.address", async () => {
+    update('connected.address', CONN);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'self');
+    assert.equal(getActingAddress(), CONN);
+  });
+
+  test("'operator' → viewing.address (the owner acted for)", async () => {
+    update('connected.address', CONN);
+    update('approvals.list', [OWNER]);
+    update('viewing.address', OWNER);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'operator');
+    assert.equal(getActingAddress(), OWNER);
+  });
+
+  test("'view' → null", async () => {
+    update('connected.address', CONN);
+    update('viewing.address', OWNER); // not in approvals → 'view'
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'view');
+    assert.equal(getActingAddress(), null);
+  });
+
+  test("'combined' → null", async () => {
+    update('connected.address', CONN);
+    update('viewing.combined', true);
+    await flushMicrotasks();
+    assert.equal(get('ui.mode'), 'combined');
+    assert.equal(getActingAddress(), null);
+  });
+
+  test('__resetForTest clears approvals.list + viewing.combined', () => {
+    update('connected.address', CONN);
+    update('approvals.list', [OWNER]);
+    update('viewing.combined', true);
+    __resetForTest();
+    assert.deepEqual(get('approvals.list'), []);
+    assert.equal(get('viewing.combined'), false);
     assert.equal(get('ui.mode'), 'self');
   });
 });

@@ -17,6 +17,13 @@
 // chainChanged does NOT trigger a page refresh — preserves ?as= URL state and view-mode
 // for users who cold-loaded with a deep link (T-58-06).
 //
+// Account-switcher extension (2026-07-16): every disconnect reset block (accountsChanged
+// empty-list branch, the 'disconnect' EIP-1193 event, the explicit disconnect() export,
+// and the nav.js wallet-disconnected bridge) ALSO clears approvals.list to []. This is
+// the single owner of that clear — polling.js only WRITES approvals.list from the
+// /approvers fetch; it never clears it, since polling.js's stop()/pauseAllTimers is
+// timer-only and has no store-reset responsibility elsewhere either.
+//
 // Bidirectional bridge with /shared/nav.js: listens for `wallet-connected` /
 // `wallet-disconnected` CustomEvents (defensive idempotency, no re-emit loop —
 // T-58-07) and dispatches them on /app/-driven connect/disconnect flows.
@@ -40,6 +47,77 @@ import { abortAllInflight } from './polling.js';
 // ---------------------------------------------------------------------------
 
 let _pickerResolve = null;
+
+// ---------------------------------------------------------------------------
+// Raw EIP-1193 handles.
+//
+// ethers v6 stores the injected wallet object in a PRIVATE field (#request) and
+// AbstractProvider's `.provider` getter returns `this`. So
+// `browserProvider.provider` IS the BrowserProvider, not the wallet:
+// `.request(...)` does not exist on it, and `.on('accountsChanged')` reaches
+// ethers' own event system, whose async `on()` rejects with "unknown
+// ProviderEvent". That silently broke both halves of every explicit connect —
+// the account request threw, and the lifecycle listeners were never attached.
+//
+// The announced provider objects are therefore captured here as they arrive and
+// looked up by the EIP-6963 identifiers ethers does hand back on `providerInfo`.
+// ---------------------------------------------------------------------------
+
+const _announced = new Map();   // uuid and rdns → the announced EIP-1193 object
+let _eip1193 = null;            // raw provider backing the live connection
+
+function _captureAnnounce(event) {
+  const detail = event && event.detail;
+  if (!detail || !detail.provider || !detail.info) return;
+  if (detail.info.uuid) _announced.set(detail.info.uuid, detail.provider);
+  if (detail.info.rdns) _announced.set(detail.info.rdns, detail.provider);
+}
+
+// Announcements are re-emitted on every `eip6963:requestProvider`, including the
+// ones ethers' own discover() dispatches, so listening from module load is
+// enough to have the object by the time discover resolves.
+(function _watchAnnounces() {
+  const win = (typeof globalThis !== 'undefined') ? globalThis.window : null;
+  if (!win || typeof win.addEventListener !== 'function') return;
+  win.addEventListener('eip6963:announceProvider', _captureAnnounce);
+  try { win.dispatchEvent(new Event('eip6963:requestProvider')); } catch (_e) { /* headless */ }
+}());
+
+/**
+ * The EIP-1193 object behind a BrowserProvider, best effort:
+ * the explicit handle, then the EIP-6963 capture by uuid/rdns, then a `.provider`
+ * that is genuinely a DISTINCT object (test doubles and the WalletConnect
+ * provider, never real ethers, whose getter self-references), then window.ethereum.
+ */
+function _rawFor(browserProvider, explicit = null) {
+  if (explicit && typeof explicit.request === 'function') return explicit;
+  const info = browserProvider && browserProvider.providerInfo;
+  if (info) {
+    const byUuid = info.uuid && _announced.get(info.uuid);
+    if (byUuid) return byUuid;
+    const byRdns = info.rdns && _announced.get(info.rdns);
+    if (byRdns) return byRdns;
+  }
+  const inner = browserProvider && browserProvider.provider;
+  if (inner && inner !== browserProvider && typeof inner.request === 'function') return inner;
+  const win = (typeof globalThis !== 'undefined') ? globalThis.window : null;
+  return (win && win.ethereum) || null;
+}
+
+/** Ask the wallet directly when we hold it, else through ethers' public send(). */
+async function _rpc(browserProvider, eth, method) {
+  try {
+    if (eth && typeof eth.request === 'function') return await eth.request({ method });
+    return await browserProvider.send(method, []);
+  } catch (_e) {
+    return [];
+  }
+}
+
+/** The raw EIP-1193 provider for the live connection (null when disconnected). */
+export function getEip1193() {
+  return _eip1193;
+}
 
 // ---------------------------------------------------------------------------
 // Phase 63 D-01 — singleton EthereumProvider cached for page lifetime.
@@ -91,7 +169,7 @@ function _wcInitOpts() {
   const origin = (win && win.location && win.location.origin) ? win.location.origin : '';
   return {
     projectId: WALLETCONNECT_PROJECT_ID,
-    optionalChains: [11155111, 1],
+    optionalChains: [CHAIN.id, 1],
     showQrModal: true,
     qrModalOptions: {
       enableMobileFullScreen: true,
@@ -147,7 +225,7 @@ export async function connectWalletConnect() {
   const browserProvider = new BPCtor(wc);
   // WR-05: attach EIP-1193 listeners BEFORE returning so chainChanged /
   // accountsChanged events fired during WC session establishment are not lost.
-  attachListeners(browserProvider);
+  attachListeners(browserProvider, wc);
 
   setProvider(browserProvider);
   const addr = String(wc.accounts[0]).toLowerCase();
@@ -247,12 +325,11 @@ export async function connectWithPicker() {
 
   // WR-05: attach listeners BEFORE eth_requestAccounts so chainChanged /
   // accountsChanged events fired during wallet startup are not lost.
-  attachListeners(browserProvider);
+  const raw = _rawFor(browserProvider);
+  attachListeners(browserProvider, raw);
 
   // Explicit connect — request accounts (popup OK on user click).
-  const accounts = await browserProvider.provider.request({
-    method: 'eth_requestAccounts',
-  }).catch(() => []);
+  const accounts = await _rpc(browserProvider, raw, 'eth_requestAccounts');
   if (!accounts || accounts.length === 0) return null;
 
   const rdns = browserProvider.providerInfo?.rdns;
@@ -293,7 +370,7 @@ export async function connectLegacy() {
   // WR-05: attach EIP-1193 listeners BEFORE eth_requestAccounts so
   // chainChanged/accountsChanged events fired during the wallet's startup /
   // permission-grant flow (e.g., MetaMask Snap chain init) are not lost.
-  attachListeners(browserProvider);
+  attachListeners(browserProvider, eth);
   const accounts = await eth.request({ method: 'eth_requestAccounts' }).catch(() => []);
   if (!accounts || accounts.length === 0) return null;
 
@@ -328,7 +405,7 @@ export async function autoReconnect() {
     const browserProvider = new BrowserProvider(eth);
     // WR-05: attach listeners BEFORE eth_accounts so wallet-startup events
     // are not lost.
-    attachListeners(browserProvider);
+    attachListeners(browserProvider, eth);
     const accounts = await eth.request({ method: 'eth_accounts' }).catch(() => []);
     if (!accounts || accounts.length === 0) return false;
     setProvider(browserProvider);
@@ -352,7 +429,7 @@ export async function autoReconnect() {
       const browserProvider = new BPCtor(wc);
       // WR-05: attach listeners BEFORE consuming wc state so chainChanged
       // events fired during silent resume are not lost.
-      attachListeners(browserProvider);
+      attachListeners(browserProvider, wc);
       setProvider(browserProvider);
       update('connected.address', String(wc.accounts[0]).toLowerCase());
       update('connected.rdns', 'walletconnect:v2');
@@ -372,12 +449,11 @@ export async function autoReconnect() {
 
   // WR-05: attach listeners BEFORE eth_accounts so wallet-startup events
   // are not lost.
-  attachListeners(browserProvider);
+  const raw = _rawFor(browserProvider);
+  attachListeners(browserProvider, raw);
 
   // SILENT — eth_accounts (NOT eth_requestAccounts → no popup).
-  const accounts = await browserProvider.provider.request({
-    method: 'eth_accounts',
-  }).catch(() => []);
+  const accounts = await _rpc(browserProvider, raw, 'eth_accounts');
   if (!accounts || accounts.length === 0) return false;
 
   setProvider(browserProvider);
@@ -396,9 +472,10 @@ export async function autoReconnect() {
 // state for view-mode users (T-58-06).
 // ---------------------------------------------------------------------------
 
-function attachListeners(browserProvider) {
-  const eth = browserProvider.provider;
-  if (!eth || typeof eth.on !== 'function') return;
+function attachListeners(browserProvider, rawProvider = null) {
+  const eth = _rawFor(browserProvider, rawProvider);
+  if (!eth || typeof eth.on !== 'function' || eth === browserProvider) return;
+  _eip1193 = eth;
 
   eth.on('accountsChanged', async (accounts) => {
     abortAllInflight();
@@ -412,6 +489,7 @@ function attachListeners(browserProvider) {
       update('connected.address', null);
       update('connected.rdns', null);
       update('ui.mode', 'self');
+      update('approvals.list', []);
       localStorage.removeItem('lastWalletRdns');
       clearProvider();
       document.dispatchEvent(new CustomEvent('wallet-disconnected'));
@@ -450,6 +528,7 @@ function attachListeners(browserProvider) {
     update('connected.address', null);
     update('connected.rdns', null);
     update('ui.mode', 'self');
+    update('approvals.list', []);
     localStorage.removeItem('lastWalletRdns');
     clearProvider();
     document.dispatchEvent(new CustomEvent('wallet-disconnected'));
@@ -467,8 +546,10 @@ export function disconnect() {
   update('connected.address', null);
   update('connected.rdns', null);
   update('ui.mode', 'self');
+  update('approvals.list', []);
   localStorage.removeItem('lastWalletRdns');
   clearProvider();
+  _eip1193 = null;
   document.dispatchEvent(new CustomEvent('wallet-disconnected'));
 }
 
@@ -479,6 +560,41 @@ export function disconnect() {
 // /app/ store stays in sync with nav.js-driven flows. We do NOT re-emit.
 // ---------------------------------------------------------------------------
 
+/**
+ * Attach a provider for an address that arrived from OUTSIDE this module (the
+ * nav.js bridge). Silent: eth_accounts only, never eth_requestAccounts.
+ *
+ * Without this the bridge left the store half-connected — an address, but no
+ * provider and no `ui.chainOk`. deriveCanSign() requires chainOk === true, so
+ * every [data-write] button (Flip, Buy, Claim) sat disabled while the wallet
+ * looked connected, and any that did fire hit `assertChain`'s "Wallet not
+ * connected" because contracts.js had no provider.
+ */
+async function _attachSilentlyFor(addr) {
+  try {
+    if (getProvider()) {
+      // Provider already live (our own connect flow) — only the chain flag can
+      // be stale here.
+      const net = await getProvider().getNetwork().catch(() => null);
+      update('ui.chainOk', net ? Number(net.chainId) === CHAIN.id : null);
+      return;
+    }
+    const browserProvider = await BrowserProvider.discover({ timeout: 1000, anyProvider: true })
+      .catch(() => null);
+    if (!browserProvider) return;
+    const raw = _rawFor(browserProvider);
+    const accounts = await _rpc(browserProvider, raw, 'eth_accounts');
+    const match = (accounts || []).some((a) => String(a).toLowerCase() === addr);
+    if (!match) return;   // a different wallet is attached; do not hijack it
+    attachListeners(browserProvider, raw);
+    setProvider(browserProvider);
+    const network = await browserProvider.getNetwork().catch(() => null);
+    update('ui.chainOk', network ? Number(network.chainId) === CHAIN.id : null);
+  } catch (_e) {
+    /* best effort — the UI stays read-only rather than breaking */
+  }
+}
+
 if (typeof document !== 'undefined') {
   document.addEventListener('wallet-connected', (e) => {
     const addr = e?.detail?.address ? String(e.detail.address).toLowerCase() : null;
@@ -486,6 +602,9 @@ if (typeof document !== 'undefined') {
       update('connected.address', addr);
       // Do NOT re-emit — defensive idempotency check via address comparison.
     }
+    // Runs even when the address was already known: a bridge event with no
+    // provider behind it is exactly the half-connected state above.
+    if (addr) _attachSilentlyFor(addr);
   });
 
   document.addEventListener('wallet-disconnected', () => {
@@ -496,6 +615,7 @@ if (typeof document !== 'undefined') {
       update('connected.address', null);
       update('connected.rdns', null);
       update('ui.mode', 'self');
+      update('approvals.list', []);
       localStorage.removeItem('lastWalletRdns');
       clearProvider();
     }

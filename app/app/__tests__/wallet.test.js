@@ -158,7 +158,7 @@ ethersMod.BrowserProvider.discover = async (opts = {}) => {
 
 function makeMockBrowserProvider({
   accounts = ['0xABCDef0000000000000000000000000000000000'],
-  chainId = 11155111,
+  chainId = 84532,
   info = { rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'test-uuid' },
   requestImpl,
 } = {}) {
@@ -234,7 +234,7 @@ describe('autoReconnect', () => {
   test('with persisted rdns calls discover with byRdns filter, then eth_accounts (NOT eth_requestAccounts)', async () => {
     _localStore.set('lastWalletRdns', 'io.metamask');
     _discoverFilterResult = [{ rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'u1' }];
-    const bp = makeMockBrowserProvider({ accounts: ['0xABCDef0000000000000000000000000000000001'], chainId: 11155111 });
+    const bp = makeMockBrowserProvider({ accounts: ['0xABCDef0000000000000000000000000000000001'], chainId: 84532 });
     _discoverReturn = bp;
     await wallet.autoReconnect();
     assert.equal(_discoverCalls.length, 1, 'discover called once');
@@ -258,7 +258,7 @@ describe('autoReconnect', () => {
   test('verifies chain via getNetwork — chainId match → ui.chainOk=true', async () => {
     _localStore.set('lastWalletRdns', 'io.metamask');
     _discoverFilterResult = [{ rdns: 'io.metamask', name: 'MetaMask', icon: 'data:', uuid: 'u1' }];
-    _discoverReturn = makeMockBrowserProvider({ chainId: 11155111 });
+    _discoverReturn = makeMockBrowserProvider({ chainId: 84532 });
     await wallet.autoReconnect();
     const chainUpdate = _storeUpdates.filter((u) => u[0] === 'ui.chainOk').pop();
     assert.ok(chainUpdate, 'ui.chainOk was set');
@@ -398,7 +398,7 @@ describe('chainChanged listener', () => {
     assert.equal(wrong[1], false);
 
     // Right chain (Sepolia)
-    fn('0xaa36a7');
+    fn('0x14a34');
     const right = _storeUpdates.filter((u) => u[0] === 'ui.chainOk').pop();
     assert.equal(right[1], true);
 
@@ -425,7 +425,7 @@ describe('switchToSepolia (contracts.js export — exercised here per plan)', ()
     assert.equal(result, true);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].method, 'wallet_switchEthereumChain');
-    assert.equal(calls[0].params[0].chainId, '0xaa36a7');
+    assert.equal(calls[0].params[0].chainId, '0x14a34');
   });
 
   test('on err.code===4902 falls through to wallet_addEthereumChain with CHAIN.nativeAddEntry, then retries switch, returns true', async () => {
@@ -447,8 +447,8 @@ describe('switchToSepolia (contracts.js export — exercised here per plan)', ()
     assert.deepEqual(methods, ['wallet_switchEthereumChain', 'wallet_addEthereumChain', 'wallet_switchEthereumChain']);
     // verify wallet_addEthereumChain received CHAIN.nativeAddEntry shape
     const addEntry = calls[1].params[0];
-    assert.equal(addEntry.chainId, '0xaa36a7');
-    assert.equal(addEntry.chainName, 'Sepolia');
+    assert.equal(addEntry.chainId, '0x14a34');
+    assert.equal(addEntry.chainName, 'Base Sepolia');
     assert.ok(Array.isArray(addEntry.rpcUrls));
   });
 
@@ -547,12 +547,12 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
       this.provider = wc;
       this.providerInfo = null;
     }
-    async getNetwork() { return { chainId: BigInt(this._wc.chainId || 11155111) }; }
+    async getNetwork() { return { chainId: BigInt(this._wc.chainId || 84532) }; }
     async getSigner() { return { getAddress: async () => this._wc.accounts?.[0] || null }; }
   }
 
   // Build a mock EthereumProvider factory whose init() returns a wc-shaped object.
-  function makeMockWcFactory({ session = null, accounts = [], chainId = 11155111, connectImpl } = {}) {
+  function makeMockWcFactory({ session = null, accounts = [], chainId = 84532, connectImpl } = {}) {
     const initCalls = [];
     const connectCalls = [];
     const wcListeners = {};
@@ -607,7 +607,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     const { factory, wcInstance } = makeMockWcFactory({
       session: null,
       accounts,
-      chainId: 11155111,
+      chainId: 84532,
       connectImpl: async () => {
         // Simulate post-connect state population.
         wcInstance._setSession({ topic: 'abc' });
@@ -630,12 +630,12 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     assert.ok(ev, 'wallet-connected dispatched');
   });
 
-  test('init opts shape: optionalChains [11155111, 1], showQrModal, qrModalOptions.enableMobileFullScreen, redirect.universal', async () => {
+  test('init opts shape: optionalChains [84532, 1], showQrModal, qrModalOptions.enableMobileFullScreen, redirect.universal', async () => {
     const { factory, wcInstance } = makeMockWcFactory({ session: null, accounts: ['0xab000000000000000000000000000000000000ab'] });
     wallet._testInjectWcFactory(factory);
     await wallet._testEnsureWcProvider();
     const opts = wcInstance._initCalls[0];
-    assert.deepEqual(opts.optionalChains, [11155111, 1], 'optionalChains is [Sepolia, mainnet]');
+    assert.deepEqual(opts.optionalChains, [84532, 1], 'optionalChains is [Sepolia, mainnet]');
     assert.equal(opts.showQrModal, true);
     assert.ok(opts.qrModalOptions, 'qrModalOptions present');
     assert.equal(opts.qrModalOptions.enableMobileFullScreen, true, 'enableMobileFullScreen nested under qrModalOptions');
@@ -652,7 +652,7 @@ describe('connectWalletConnect (Phase 63 D-01)', () => {
     const { factory, wcInstance } = makeMockWcFactory({
       session: { topic: 'persisted' },
       accounts: ['0xBb00000000000000000000000000000000000077'],
-      chainId: 11155111,
+      chainId: 84532,
     });
     wallet._testInjectWcFactory(factory);
     _storeUpdates.length = 0;
@@ -715,7 +715,7 @@ describe('connectWithPicker — device-aware bypass (Phase 63 D-01 step 4)', () 
       this.provider = wc;
       this.providerInfo = null;
     }
-    async getNetwork() { return { chainId: BigInt(this._wc.chainId || 11155111) }; }
+    async getNetwork() { return { chainId: BigInt(this._wc.chainId || 84532) }; }
   }
 
   // Helpers to mock window.matchMedia and window.ethereum for the bypass heuristic.
@@ -753,7 +753,7 @@ describe('connectWithPicker — device-aware bypass (Phase 63 D-01 step 4)', () 
         wcInstance = {
           session: null,
           get accounts() { return accounts; },
-          chainId: 11155111,
+          chainId: 84532,
           connect: async () => {
             wcInstance.session = { topic: 'mobile-bypass' };
             accounts.push('0xdd00000000000000000000000000000000000044');

@@ -289,7 +289,7 @@
       return;
     }
 
-    var amount = prompt('Donate LINK to fund VRF (earns BURNIE credit).\nHow much LINK?');
+    var amount = prompt('Donate LINK to fund VRF (earns FLIP credit).\nHow much LINK?');
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return;
 
     // Convert to wei (18 decimals)
@@ -364,6 +364,8 @@
     // Phase 55 D-08 — localhost-conditional Control link (T-14: hidden on prod deploys)
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
       pages.push({ key: 'control', label: 'Control', href: '/control/' });
+      pages.push({ key: 'lootbox-feed', label: 'Lootboxes', href: '/lootbox-feed/' });
+      pages.push({ key: 'degenerette-feed', label: 'D-Feed', href: '/degenerette-feed/' });
     }
 
     // Left side
@@ -398,7 +400,7 @@
     donateBtn.id = 'unav-donate';
     donateBtn.className = 'nav-btn nav-btn-donate';
     donateBtn.innerHTML = LINK_SVG + '<span class="btn-label">Fund VRF</span>';
-    donateBtn.title = 'Donate LINK to fund Chainlink VRF — earn BURNIE credit';
+    donateBtn.title = 'Donate LINK to fund Chainlink VRF — earn FLIP credit';
     donateBtn.addEventListener('click', donateLINK);
     auth.appendChild(donateBtn);
 

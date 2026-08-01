@@ -116,6 +116,14 @@
   border: 3px solid #8a8d8f;
   border-radius: 14px;
   overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.replay-ticket.replay-ticket--has-owned-gold {
+  border-color: #d4af37;
+  background:
+    linear-gradient(135deg, #8a6a12 0%, #d4af37 32%, #fff0ad 50%, #d4af37 68%, #8a6a12 100%);
+  box-shadow: 0 0 0 2px rgba(255, 233, 163, 0.22), 0 0 30px rgba(212, 175, 55, 0.42);
 }
 
 /* Cross lines */
@@ -157,10 +165,13 @@
 
 .replay-tq .badge-img {
   object-fit: contain;
-  width: 100%;
-  height: 100%;
-  padding: 4%;
-  box-sizing: border-box;
+  object-position: 50% 50%;
+  flex: 0 0 auto;
+  width: 122%;
+  max-width: none;
+  height: 122%;
+  max-height: none;
+  padding: 0;
   display: block;
   position: relative;
   z-index: 1;
@@ -182,8 +193,8 @@
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   z-index: 20;
-  width: 31%;
-  height: 31%;
+  width: 28%;
+  height: 28%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -207,6 +218,18 @@
 .replay-ticket-center.revealed::before {
   background: linear-gradient(135deg, #2a1a08, #3d2a10, #2a1a08);
   border-color: #c9943a;
+}
+
+/* Once main + bonus are both uncovered, the center becomes a quiet two-state
+   switch. The ring is enough affordance without adding another button row. */
+.replay-ticket-center.replay-ticket-center--draw-toggle::before {
+  border-color: #f5a623;
+  box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.2), 0 0 14px rgba(245, 166, 35, 0.42);
+}
+.replay-ticket-center.replay-ticket-center--draw-toggle:hover::before,
+.replay-ticket-center.replay-ticket-center--draw-toggle:focus-visible::before {
+  filter: brightness(1.12);
+  box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.3), 0 0 18px rgba(245, 166, 35, 0.58);
 }
 
 .replay-flame {
@@ -288,6 +311,47 @@
   background: rgba(22, 163, 74, 0.6);
 }
 
+.replay-tq.q-owned-miss {
+  /* The removable canvas is the blue "you held this trait" front. Once it is
+     scratched, a loss uses the same pink result surface as every other miss. */
+  background: rgba(239, 120, 120, 0.5);
+}
+
+.replay-tq.q-player-win {
+  background: rgba(22, 163, 74, 0.72);
+  box-shadow: inset 0 0 0 2px rgba(134, 239, 172, 0.55);
+}
+
+.replay-tq.q-win-impossible {
+  /* Same solid face painted onto the scratch canvas. Applying this class at
+     each quadrant's symbol lock means spin → scratch has no colour snap. */
+  background: rgb(218, 104, 104);
+  transition: background-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.replay-tq.q-gold-trait {
+  background:
+    linear-gradient(135deg, #8a6a12 0%, #d4af37 30%, #fff0ad 50%, #d4af37 70%, #8a6a12 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 244, 176, 0.62);
+}
+
+/* Neutral result paper while the cover is only partly scratched. Eligibility
+   still lives on the canvas above it; pink/green commits at the reveal point. */
+.replay-tq.q-result-pending {
+  background: #bfc2c5;
+  box-shadow: none;
+}
+
+.replay-tq.q-result-revealed.q-has-tickets {
+  background: rgba(22, 163, 74, 0.72);
+  box-shadow: inset 0 0 0 2px rgba(134, 239, 172, 0.55);
+}
+
+.replay-tq.q-result-revealed.q-no-tickets {
+  background: rgba(239, 120, 120, 0.5);
+  box-shadow: none;
+}
+
 /* --- Scratch canvas --- */
 
 .replay-scratch-canvas {
@@ -323,20 +387,43 @@
   opacity: 1;
 }
 
-.replay-prize-bar {
-  padding: 4px 0;
+/* Compact per-quadrant receipt. This restores the actual prize description
+   without resurrecting the old aggregate winnings bar above the ticket. */
+.replay-win-description {
+  align-self: center;
+  max-width: 86%;
+  margin: 0 5% 5%;
+  padding: 0.34rem 0.48rem;
+  border: 1px solid rgba(187, 247, 208, 0.62);
+  border-radius: 10px;
+  background: rgba(5, 46, 22, 0.88);
+  box-shadow: 0 3px 14px rgba(5, 46, 22, 0.34);
+  color: #f0fdf4;
   text-align: center;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(2px);
 }
 
-.replay-prize-bar .replay-prize-total {
+.replay-win-description__title {
   display: block;
-  font-size: 0.65rem;
-  font-weight: 800;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  line-height: 1.2;
+  margin-bottom: 0.18rem;
+  color: #bbf7d0;
+  font-size: clamp(0.46rem, 1.4vw, 0.62rem);
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.replay-win-description__lines {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.14rem 0.38rem;
+}
+
+.replay-win-description__line {
+  font-size: clamp(0.58rem, 1.8vw, 0.78rem);
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 /* --- Scattered win badges --- */
@@ -592,4 +679,138 @@
   .replay-reveal-btn {
     width: 100%;
   }
+}
+
+/* --- Public result when the viewed player has no winning entry ----------------
+   Every main-draw quadrant stays scratchable. Its red cover communicates that
+   the player cannot win there; scratching reveals the bucket's actual badge,
+   ETH amount, ticket amount, and one combined winning-entry count. */
+.replay-prize-reveal.replay-bucket-reveal {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.22rem;
+  text-align: center;
+  padding: 0.1rem;
+}
+
+/* The center diamond occupies every quadrant's inner corner. Reserve that
+   corner instead of allowing it to sit over payout copy; the modifier follows
+   display order (TL, TR, BL, BR) and leaves the outer corner for the receipt. */
+.replay-prize-reveal.replay-bucket-reveal--q0 { padding: 4% 14% 14% 4%; }
+.replay-prize-reveal.replay-bucket-reveal--q1 { padding: 4% 4% 14% 14%; }
+.replay-prize-reveal.replay-bucket-reveal--q2 { padding: 14% 14% 4% 4%; }
+.replay-prize-reveal.replay-bucket-reveal--q3 { padding: 14% 4% 4% 14%; }
+
+/* Still smaller than the live/reel badge, but large enough to read comfortably
+   on the scratched-off public-result surface. */
+.replay-bucket-badge {
+  width: 44%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.replay-bucket-amount {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.18em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(0.72rem, 2.35vw, 1.08rem);
+  font-weight: 900;
+  line-height: 1.05;
+  color: #5c1616;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.replay-bucket-eth {
+  height: 1.26em;
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.replay-bucket-tickets {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  color: #1f4f7a;
+  font-size: clamp(0.62rem, 1.9vw, 0.82rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.replay-bucket-ticket-count {
+  line-height: 1;
+}
+
+.replay-bucket-row-count {
+  flex: 0 0 auto;
+  margin-left: 0.08em;
+  font-size: 0.78em;
+  font-weight: 950;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.replay-bucket-row-count--currency { color: rgba(92, 22, 22, 0.78); }
+.replay-bucket-row-count--tickets { color: rgba(31, 79, 122, 0.82); }
+
+/* A miniature version of the actual Degenerus ticket: four paper quadrants,
+   crossed seams, and the same centered flame used by inventory tickets. */
+.replay-bucket-ticket-icon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 1.72em;
+  height: 1.72em;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid #777b7e;
+  border-radius: 0.22em;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 0.5px), #85898c calc(50% - 0.5px), #85898c calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(0deg, transparent calc(50% - 0.5px), #85898c calc(50% - 0.5px), #85898c calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(135deg, #e8e8e8, #c9ccce);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.36);
+}
+
+.replay-bucket-ticket-icon::before {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 2;
+  width: 44%;
+  aspect-ratio: 1;
+  border: 1px solid #777b7e;
+  border-radius: 0.08em;
+  background: #fff;
+  content: '';
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.replay-bucket-ticket-badge {
+  position: absolute;
+  z-index: 1;
+  width: 36%;
+  height: 36%;
+  object-fit: contain;
+}
+.replay-bucket-ticket-badge--q0 { top: 4%; left: 4%; }
+.replay-bucket-ticket-badge--q1 { top: 4%; right: 4%; }
+.replay-bucket-ticket-badge--q2 { bottom: 4%; left: 4%; }
+.replay-bucket-ticket-badge--q3 { right: 4%; bottom: 4%; }
+
+.replay-bucket-ticket-flame {
+  position: relative;
+  z-index: 3;
+  width: 30%;
+  height: 42%;
+  object-fit: contain;
 }

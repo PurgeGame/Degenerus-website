@@ -510,7 +510,7 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     // Need provider for sendTx path.
     const contractsMod = await import('../../app/contracts.js');
     contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 11155111n }),
+      getNetwork: async () => ({ chainId: 84532n }),
       getSigner: async () => ({ getAddress: async () => CONNECTED }),
     });
     affiliateMod.__setContractFactoryForTest(() => fake);
@@ -554,7 +554,7 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     };
     const contractsMod = await import('../../app/contracts.js');
     contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 11155111n }),
+      getNetwork: async () => ({ chainId: 84532n }),
       getSigner: async () => ({ getAddress: async () => CONNECTED }),
     });
     affiliateMod.__setContractFactoryForTest(() => fake);
@@ -594,7 +594,7 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     };
     const contractsMod = await import('../../app/contracts.js');
     contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 11155111n }),
+      getNetwork: async () => ({ chainId: 84532n }),
       getSigner: async () => ({ getAddress: async () => CONNECTED }),
     });
     affiliateMod.__setContractFactoryForTest(() => fake);
@@ -626,7 +626,7 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
   test('Referee table renders rows via textContent (T-58-18 + FD-2 honored)', async () => {
     _fetchHandler = async () => makeRefereesPayload({
       referees: [
-        { address: '0xref1000000000000000000000000000000000001', referredAt: '12345', totalCommissionBurnie: '0', available: false, reason: 'commission-aggregation-pending' },
+        { address: '0xref1000000000000000000000000000000000001', referredAt: '12345', totalCommissionFlip: '0', available: false, reason: 'commission-aggregation-pending' },
       ],
       total: 1,
     });
@@ -668,7 +668,7 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     };
     const contractsMod = await import('../../app/contracts.js');
     contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 11155111n }),
+      getNetwork: async () => ({ chainId: 84532n }),
       getSigner: async () => ({ getAddress: async () => CONNECTED }),
     });
     affiliateMod.__setContractFactoryForTest(() => fake);
@@ -699,11 +699,13 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     assert.match(PANEL_SRC, /createAffiliateCode/, 'imports createAffiliateCode');
   });
 
-  test('Panel imports readAffiliateCode from lootbox.js (R6 — Phase 60 D-05 reuse)', () => {
-    assert.match(
-      PANEL_SRC,
+  test('Panel sources own code from affiliate.js readers, NOT lootbox readAffiliateCode', () => {
+    assert.match(PANEL_SRC, /readRegisteredCode/, 'sync own-code read (affiliate.js)');
+    assert.match(PANEL_SRC, /resolveRegisteredCode/, 'DB-first async refresh (affiliate.js)');
+    assert.doesNotMatch(
+      PANEL_SRC.replace(/^\s*\/\/.*$/gm, ''), // comments may mention it
       /readAffiliateCode/,
-      'panel uses readAffiliateCode from lootbox.js',
+      'purchase-default helper (the code that referred YOU) must not build your own link',
     );
   });
 
@@ -737,5 +739,24 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     assert.doesNotThrow(() => el.disconnectedCallback());
     // Idempotent: second call also safe.
     assert.doesNotThrow(() => el.disconnectedCallback());
+  });
+
+  // Account-switcher (2026-07-16) — combined mode renders the referee-table
+  // empty-state with the per-account note instead of fetching (the affiliate
+  // link + referee data are per-account identity, not summed by combine.js).
+  test("mode 'combined' renders the per-account note via the existing referees empty-state", async () => {
+    let fetched = false;
+    _fetchHandler = async () => { fetched = true; return makeRefereesPayload(); };
+    storeMod.update('viewing.combined', true);
+    storeMod.update('ui.mode', 'combined');
+    const el = instantiate();
+    await settle();
+
+    const emptyEl = el.querySelector('[data-bind="aff-referees-empty"]');
+    assert.equal(emptyEl.hidden, false, 'referees empty-state visible in combined mode');
+    assert.equal(emptyEl.textContent, 'Per-account stat. Pick a single account.');
+    assert.equal(fetched, false, '/player/:address/referees never fetched in combined mode');
+    const urlInput = el.querySelector('[data-bind="aff-url"]');
+    assert.equal(urlInput.value, '', 'URL blanked in combined mode');
   });
 });

@@ -33,6 +33,20 @@ select {
   -webkit-appearance: none;
 }
 
+/* Kill the native number-input spinner. `appearance: none` on the input alone
+   does NOT remove the ::-webkit-inner-spin-button in Chrome — the pseudo-element
+   must be targeted directly; Firefox needs -moz-appearance: textfield. Without
+   this the native arrows show up next to our custom ▲/▼ steppers. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 input[type="number"]:focus,
 input[type="text"]:focus,
 select:focus {

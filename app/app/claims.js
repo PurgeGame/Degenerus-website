@@ -26,7 +26,7 @@
 // Phase 58 chokepoint's freshAddress equality guard.
 //
 // Pitfall 6: claimCoinflips(player, amount) — amount sourced from /pending's
-// `pending.burnie.amount` field. NEVER the /beta address-cast trick (passing
+// `pending.flip.amount` field. NEVER the /beta address-cast trick (passing
 // player-as-uint256 as the second arg to abuse the contract's clamp pattern).
 //
 // D-02 LOCKED: claimDecimatorLevels iterates levels sequentially. NO
@@ -41,7 +41,7 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS } from './chain-config.js';
-import { get } from './store.js';
+import { get, getActingAddress } from './store.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures verified against
@@ -55,7 +55,7 @@ const CLAIMS_ABI = [
   'function claimableWinningsOf(address player) view returns (uint256)',
 ];
 
-// Verified: degenerus-audit/contracts/BurnieCoinflip.sol:332-337.
+// Verified: degenerus-audit/contracts/Coinflip.sol:332-337.
 // CRITICAL: /beta/app/constants.js:79 has WRONG signature `(address, address)`.
 // Phase 61 uses canonical `(address player, uint256 amount)`.
 const COINFLIP_ABI = [
@@ -63,10 +63,11 @@ const COINFLIP_ABI = [
 ];
 
 // Verified: degenerus-audit/contracts/DegenerusGame.sol:1252-1264 (delegatecalls
-// IDegenerusGameDecimatorModule.claimDecimatorJackpot — the entrypoint on the
-// GAME contract takes the same uint24 lvl arg and dispatches via delegatecall).
+// IDegenerusGameDecimatorModule.claimDecimatorJackpot — redeploy #7 surface
+// takes (address player, uint24 lvl); the GAME entrypoint dispatches via
+// delegatecall.
 const DECIMATOR_CLAIM_ABI = [
-  'function claimDecimatorJackpot(uint24 lvl) external',
+  'function claimDecimatorJackpot(address player, uint24 lvl) external',
 ];
 
 // ── Phase 62 / Plan 62-06 / AFF-03 — APPEND ─────────────────────────────
@@ -147,11 +148,36 @@ function _structuredRevertError(error, context) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Chain truth for the ETH-winnings row: `claimableWinningsOf(player)`.
+ *
+ * The indexer's /pending rollup is derived from events and can disagree with
+ * the chain (a claim it has not indexed yet, a mis-tallied reward). Offering a
+ * claim off a stale rollup makes the button revert NothingToClaim(), so callers
+ * that build a work list check here first. Returns null when there is no
+ * provider or the read fails — "unknown", which is NOT "zero".
+ *
+ * @param {{player?: string}} [args]
+ * @returns {Promise<bigint|null>}
+ */
+export async function readClaimableEth({ player } = {}) {
+  const playerArg = player ?? getActingAddress();
+  if (!playerArg) return null;
+  const provider = getProvider();
+  if (!provider) return null;
+  try {
+    const contract = _buildGameContract(provider);
+    return BigInt(await contract.claimableWinningsOf(playerArg));
+  } catch (_e) {
+    return null;
+  }
+}
+
+/**
  * @param {{player?: string}} [args]
  * @returns {Promise<{receipt: import('ethers').TransactionReceipt}>}
  */
 export async function claimEth({ player } = {}) {
-  const playerArg = player ?? get('connected.address');
+  const playerArg = player ?? getActingAddress();
   if (!playerArg) throw new Error('Wallet not connected.');
 
   const provider = getProvider();
@@ -171,18 +197,18 @@ export async function claimEth({ player } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// claimBurnie — claimCoinflips(player, amount) on the COINFLIP contract.
-// Pitfall 6: amount is the EXPLICIT /pending burnie.amount BigInt — never the
+// claimFlip — claimCoinflips(player, amount) on the COINFLIP contract.
+// Pitfall 6: amount is the EXPLICIT /pending flip.amount BigInt — never the
 // /beta address-cast trick (passing player as uint256 to abuse the contract's
-// clamp pattern at BurnieCoinflip.sol:399-402).
+// clamp pattern at Coinflip.sol:399-402).
 // ---------------------------------------------------------------------------
 
 /**
  * @param {{player?: string, amount: bigint | string | number}} args
  * @returns {Promise<{receipt: import('ethers').TransactionReceipt}>}
  */
-export async function claimBurnie({ player, amount } = {}) {
-  const playerArg = player ?? get('connected.address');
+export async function claimFlip({ player, amount } = {}) {
+  const playerArg = player ?? getActingAddress();
   if (!playerArg) throw new Error('Wallet not connected.');
   if (amount == null) throw new Error('Nothing to claim.');
   let amountBI;
@@ -202,7 +228,7 @@ export async function claimBurnie({ player, amount } = {}) {
     if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call claimCoinflips');
   }
 
-  const receipt = await sendTx((s) => _buildCoinflipContract(s).claimCoinflips(playerArg, amountBI), 'Claim BURNIE winnings');
+  const receipt = await sendTx((s) => _buildCoinflipContract(s).claimCoinflips(playerArg, amountBI), 'Claim FLIP winnings');
   return { receipt };
 }
 
@@ -234,7 +260,7 @@ export async function claimBurnie({ player, amount } = {}) {
  * @returns {Promise<Array<{level: number | bigint, receipt: import('ethers').TransactionReceipt}>>}
  */
 export async function claimDecimatorLevels({ player, levels, onProgress } = {}) {
-  const playerArg = player ?? get('connected.address');
+  const playerArg = player ?? getActingAddress();
   if (!playerArg) throw new Error('Wallet not connected.');
   if (!Array.isArray(levels) || levels.length === 0) {
     throw new Error('No levels to claim.');
@@ -251,7 +277,7 @@ export async function claimDecimatorLevels({ player, levels, onProgress } = {}) 
     const signer = provider ? await provider.getSigner() : null;
     if (signer) {
       const c = _buildDecimatorContract(signer);
-      const sim = await requireStaticCall(c, 'claimDecimatorJackpot', [lvl], signer);
+      const sim = await requireStaticCall(c, 'claimDecimatorJackpot', [playerArg, lvl], signer);
       if (!sim.ok) {
         throw _structuredRevertError(
           sim.error,
@@ -260,7 +286,7 @@ export async function claimDecimatorLevels({ player, levels, onProgress } = {}) 
       }
     }
 
-    const receipt = await sendTx((s) => _buildDecimatorContract(s).claimDecimatorJackpot(lvl), `Claim decimator level ${lvl}`);
+    const receipt = await sendTx((s) => _buildDecimatorContract(s).claimDecimatorJackpot(playerArg, lvl), `Claim decimator level ${lvl}`);
     results.push({ level: lvl, receipt });
     onProgress?.({ done: i + 1, total, status: 'confirmed', currentLevel: lvl });
     // No inter-tx pacing primitive — `await tx.wait()` (inside sendTx) is the
@@ -288,7 +314,7 @@ export async function claimDecimatorLevels({ player, levels, onProgress } = {}) 
  * @returns {Promise<{receipt: import('ethers').TransactionReceipt}>}
  */
 export async function claimAffiliateDgnrs({ player } = {}) {
-  const playerArg = player ?? get('connected.address');
+  const playerArg = player ?? getActingAddress();
   if (!playerArg) throw new Error('Wallet not connected.');
 
   const provider = getProvider();
@@ -323,6 +349,15 @@ export async function claimAffiliateDgnrs({ player } = {}) {
 // Phase 61 claim functions per RESEARCH §7).
 // ---------------------------------------------------------------------------
 
+// GAME claimWinnings / claim paths, selector 0x969bf728. Left unmapped this read
+// as the UNKNOWN catch-all's "unexpected error", which is how a claim offered off
+// a stale indexer rollup looked like a broken button (2026-07-29).
+register('NothingToClaim', {
+  code: 'NothingToClaim',
+  userMessage: 'Nothing to claim right now.',
+  recoveryAction: 'The list was out of date — it refreshes automatically.',
+});
+
 register('DecClaimInactive', {
   code: 'DecClaimInactive',
   userMessage: 'Decimator claim is not active for this level yet.',
@@ -340,3 +375,138 @@ register('DecNotWinner', {
   userMessage: 'Your subbucket did not win this decimator round.',
   recoveryAction: 'No claim available for this level.',
 });
+
+// ---------------------------------------------------------------------------
+// Task (purchase widgets) — redeemFlip: FLIP → tickets, window-gated.
+//
+// Verified: degenerus-audit/contracts/DegenerusGame.sol:685 →
+//   modules/DegenerusGameMintModule.sol:931 redeemFlip(buyer, entryQuantityScaled)
+// entryQuantityScaled is in purchase units: 4 * QTY_SCALE = 400 = ONE whole
+// ticket (MintModule.sol:148). ticketRedemptionOpen itself is internal, but the
+// exact opening predicate is public: no RNG lock and nextPrizePool > target.
+// Reading that predicate keeps visibility independent of the player's balance;
+// the amount-specific static call still protects the actual write.
+// ---------------------------------------------------------------------------
+
+const REDEEM_FLIP_ABI = [
+  'function redeemFlip(address buyer, uint256 entryQuantityScaled) external',
+  'function rngLocked() external view returns (bool)',
+  'function nextPrizePoolView() external view returns (uint256)',
+  'function prizePoolTargetView() external view returns (uint256)',
+];
+
+function _buildRedeemFlipContract(signerOrProvider) {
+  if (_contractFactory) return _contractFactory(signerOrProvider);
+  return new ethers.Contract(CONTRACTS.GAME, REDEEM_FLIP_ABI, signerOrProvider);
+}
+
+export const ENTRIES_SCALED_PER_TICKET = 400n;  // 4 entries × QTY_SCALE 100
+
+// FLIP charged per whole ticket. Contract:
+//   coinCost = (entryQuantityScaled * (PRICE_COIN_UNIT / 4)) / QTY_SCALE
+// (DegenerusGameMintModule.sol:1997) with PRICE_COIN_UNIT = 1000 ether
+// (DegenerusGameStorage.sol:162), so 400 units → 1000 FLIP and the price is flat
+// across levels — unlike the ETH ticket price. FLIP is UNSCALED on testnet (only
+// ETH is /1M-scaled), so no ETH_DIVISOR here.
+const PRICE_COIN_UNIT_WEI = 1000n * (10n ** 18n);
+const QTY_SCALE = 100n;
+
+/**
+ * Purchase units for a ticket count, snapped to the entry (0.25 tickets).
+ * Mirrors lootbox.js entriesScaledFromTickets; duplicated rather than imported
+ * to keep claims.js free of cross-module coupling (see the header note).
+ * Falls back to one whole ticket for blank/garbage input, matching the
+ * historical `Math.max(1, …)` clamp these helpers shipped with.
+ */
+function _entriesScaled(tickets) {
+  const t = Number(tickets);
+  if (!Number.isFinite(t) || t <= 0) return ENTRIES_SCALED_PER_TICKET;
+  const units = BigInt(Math.round(t * 4)) * QTY_SCALE;
+  return units > 0n ? units : ENTRIES_SCALED_PER_TICKET;
+}
+
+/**
+ * Exactly what redeemFlip will burn for `tickets`, in FLIP wei.
+ * @param {number} tickets
+ * @returns {bigint}
+ */
+export function flipCostFromTickets(tickets) {
+  return (_entriesScaled(tickets) * (PRICE_COIN_UNIT_WEI / 4n)) / QTY_SCALE;
+}
+
+/**
+ * Read whether the contract's FLIP-for-tickets window is open without using
+ * the player's FLIP balance as a proxy. The storage latch is set by this exact
+ * predicate and cleared at the final RNG request, so these public views track
+ * the actionable window without attempting a purchase.
+ *
+ * Read-only; never throws. A failed RPC read is treated as unknown/closed so a
+ * stale control cannot invite a write against an unverified window.
+ *
+ * @returns {Promise<boolean>}
+ */
+export async function probeRedeemFlipWindow() {
+  try {
+    const provider = getProvider();
+    if (!provider) return false;
+    const contract = _buildRedeemFlipContract(provider);
+    const [locked, nextPool, target] = await Promise.all([
+      contract.rngLocked(),
+      contract.nextPrizePoolView(),
+      contract.prizePoolTargetView(),
+    ]);
+    return !Boolean(locked) && BigInt(nextPool) > BigInt(target);
+  } catch (_e) {
+    return false;
+  }
+}
+
+/**
+ * Probe whether redeemFlip would succeed for this player/quantity right now.
+ * Read-only (staticCall from the provider); never throws.
+ *
+ * This is an amount-specific affordability/execution probe. Do not use it to
+ * decide whether the control is visible: an insufficient player balance and a
+ * closed window deliberately share the same generic E() revert. Visibility is
+ * driven by probeRedeemFlipWindow(); submit-time validation uses this path.
+ *
+ * @param {{player?: string, tickets?: number}} [args]
+ * @returns {Promise<boolean>}
+ */
+export async function probeRedeemFlip({ player, tickets = 1 } = {}) {
+  const playerArg = player ?? getActingAddress();
+  if (!playerArg) return false;
+  try {
+    const provider = getProvider();
+    if (!provider) return false;
+    const contract = _buildRedeemFlipContract(provider);
+    await contract.redeemFlip.staticCall(playerArg, _entriesScaled(tickets));
+    return true;
+  } catch (_e) {
+    return false;  // window closed / insufficient FLIP / no RPC — not redeemable
+  }
+}
+
+/**
+ * @param {{player?: string, tickets?: number}} [args]
+ * @returns {Promise<{receipt: import('ethers').TransactionReceipt}>}
+ */
+export async function redeemFlip({ player, tickets = 1 } = {}) {
+  const playerArg = player ?? getActingAddress();
+  if (!playerArg) throw new Error('Wallet not connected.');
+  const qty = _entriesScaled(tickets);
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (signer) {
+    const contract = _buildRedeemFlipContract(signer);
+    const sim = await requireStaticCall(contract, 'redeemFlip', [playerArg, qty], signer);
+    if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call redeemFlip');
+  }
+
+  const receipt = await sendTx(
+    (s) => _buildRedeemFlipContract(s).redeemFlip(playerArg, qty),
+    'Redeem FLIP for tickets',
+  );
+  return { receipt };
+}

@@ -1,42 +1,95 @@
-// /app/components/last-day-jackpot.js — Phase 59 Plan 59-01 (JKP-03)
-// Copy-and-adapt of /beta/components/jackpot-panel.js — historical-explorer paths
-// STRIPPED (D-01); rewired to consume Phase 57 /game/jackpot/last-day composed blob.
-// Plan 59-01: shell + 3-status branch rendering. Plan 59-02 wires data flow.
-// Plan 59-03 adds localStorage idempotency + new-day banner + wallet-conditional highlight.
+// /app/components/last-day-jackpot.js — Phase 59 shell, rebuilt Phase 64.
 //
-// Mount: <last-day-jackpot></last-day-jackpot> in /app/index.html (top-of-page hero per D-06).
-// Cross-imports /beta/ verbatim per D-01 + Pattern 5 (zero /beta/ edits).
+// The widget is now a thin PLAYER-CENTRIC shell around the beta
+// <replay-panel> (the working spin + scratch reveal from the GT paper demo,
+// mounted as a sibling in app/index.html):
+//
+//   - pins the last resolved day from app.lastDay (polling.js) and BRIDGES
+//     (pinned day, viewed player) into the replay-panel's own selects —
+//     the panel then runs its slot-machine spin with live per-quadrant
+//     ownership lighting and scratch-off prize reveals;
+//   - listens for the panel's `replay:scratch-complete` (all owned quadrants
+//     + center scratched — NOT mere spin end, which would spoil unscratched
+//     prizes) to write the spun_day spoiler key, fire confetti when the
+//     viewed player won, light up the foil strip, and dispatch
+//     `jackpot:revealed` (winnings banner signal);
+//   - renders a one-line day stat (no winner-address dumps — leaderboards
+//     are pro-mode content) and the player's foil-ticket strip.
+//
+// Phase 59 relics removed in the rebuild: the roll1/roll2 data grids, the
+// Replay state machine, winner classification lists, and the winner summary
+// table (the "Type/Win/Uniq/Spread" spam).
 
 import { subscribe, get, getViewedAddress } from '../app/store.js';
-import { formatEth } from '../../beta/viewer/utils.js';
-import {
-  joFormatWeiToEth,
-  joScaledToTickets,
-  joBadgePath,
-  JO_CATEGORIES,
-  JO_SYMBOLS,
-  rebucketRoll2BySlot,
-  createJackpotRolls,
-} from '../../beta/app/jackpot-rolls.js';
+import { formatEth, formatFlip } from '../../beta/viewer/utils.js';
 import { CHAIN } from '../app/chain-config.js';
-// STRIPPED per D-01: import fetchJSON (widget consumes via store subscription, not direct fetch)
-// STRIPPED per D-03: import createScrubber (hidden scrubber)
+// Phase 64 — foil-ticket strip: pure grading helpers + the indexer base URL
+// (API_BASE cross-import only, mirroring polling.js Pitfall 5 discipline).
+import { bestGrade, FOIL_CLAIM_THRESHOLD } from '../app/foil-match.js';
+import { API_BASE } from '../../beta/app/constants.js';
+// Reveal-engine wiring: the viewed player's jackpot winnings auto-play a
+// celebration sequence; a claimed foil match reveals its payout box-spin.
+import { queueReveal } from './reveal-overlay.js';
+import { claimFoilMatch, parseFoilMatchClaimedFromReceipt } from '../app/foil-claim.js';
+import { parseOpenLegsFromReceipt } from '../app/lootbox-legs.js';
+import { sfxTick, sfxRollDone } from '../app/jackpot-sfx.js';
+
+// Testnet contracts hold /1M-scaled ETH wei; FLIP/DGNRS are UNSCALED.
+//
+// This used to pre-multiply by ETH_DIVISOR because beta's formatEth was pinned at a
+// 1n display scale and would otherwise floor every ETH amount to "0". That formatter
+// now applies the ETH scale itself (beta/viewer/utils.js, fixed 2026-07-28 — the same
+// 1n bug was making the draw board's per-quadrant amounts read "0 ETH"), so
+// compensating here would double-scale and render 0.03 ETH as 30000.00.
+// Kept as a named wrapper rather than inlining formatEth: it is the single chokepoint
+// for "this string is an ETH amount", and it keeps the BigInt parse guard.
+const fmtEthScaled = (weiStr) => {
+  try { BigInt(weiStr || '0'); } catch { return '0'; }
+  return formatEth(String(weiStr || '0'));
+};
+
+// FLIP display (UNSCALED 18-dec) — beta formatFlip keeps sub-1-FLIP amounts
+// visible as decimals instead of flooring to "0 FLIP" (user-reported).
+
+// Bridge cadence: the replay-panel populates its <select> options
+// asynchronously; the bridge retries until both selects accept the target
+// values (mirrors play/app/replay-panel-sync.js).
+const BRIDGE_RETRY_MS = 500;
+const BRIDGE_MAX_ATTEMPTS = 60;
 
 class LastDayJackpot extends HTMLElement {
   #unsubs = [];
   #loaded = false;
-  // Pin-at-fetch (D-02): snapshot day from first payload; never mutated mid-render.
+  // The player may browse an older day, but a genuinely newer resolved day
+  // automatically becomes the active day. latestDaySeen distinguishes that
+  // event from routine same-day polling, so historical browsing does not snap
+  // back on every refresh.
   #pinnedDay = null;
   #pinnedLevel = null;
-  #lastPayload = null;        // most recent payload (may differ from pinned if newer day arrived)
-  #hasNewDayAvailable = false; // Plan 59-03 banner trigger
+  #latestDaySeen = null;
+  #lastPayload = null;
+  #hasNewDayAvailable = false; // Legacy banner fallback; normal flow auto-follows.
   #winners = [];
-  // Replay/Bonus Roll state machine (verbatim from /beta/ per D-03):
-  // States: idle | roll1_playing | roll1_done | roll2_playing | roll2_done
-  #replayState = 'idle';
-  #replayData = null;          // {hasBonus, roll2, bonusTraitsPacked} — populated from polling payload in Plan 59-02
-  #rolls = null;               // createJackpotRolls instance
-  #replayCancelToken = 0;      // bumped on day change to cancel stale animations
+  // Phase 64 — foil strip state + panel bridge state.
+  #foilData = null;
+  #foilSeq = 0;
+  #bridgeTimer = null;
+  #bridgeAttempts = 0;
+  #scratchCompleteListener = null;
+  #celebratedDay = null;  // host confetti fires once per pinned day (bonus roll re-fires the event)
+  #foilClaimBusy = false; // one in-flight foil claim at a time
+  // --- "Whole board played out" gates for the results CTA (user call: the
+  //     main UI — every scratch roll AND the coin flip — plays out first;
+  //     the full-reveal popup sits behind a button, never auto-pops). ---
+  #boardDone = false;        // final scratch-complete seen (bonus done or none)
+  #sawScratchEvent = false;  // distinguishes live play from a reloaded spun day
+  #flipResult;               // /game/coinflip/day/:day — undefined unknown, null no-row (gate waived)
+  #flipFetchedDay = null;
+  #flipListener = null;
+  // The CTA is re-parented into replay-panel's one action row, so a
+  // this.querySelector() lookup stops finding it — hold the node instead.
+  #resultsCtaEl = null;
+  #summaryBusy = false;
 
   #showContent() {
     if (this.#loaded) return;
@@ -50,10 +103,16 @@ class LastDayJackpot extends HTMLElement {
   // Plan 59-03: localStorage spin-idempotency (chainId-scoped per Pitfall B).
   // All ops try/catch wrapped (Pitfall F — private browsing / QuotaExceededError).
   // Key shape: `spun_day_${CHAIN.id}_${this.#pinnedDay}` → '1' (truthy presence).
-  // CHAIN.id is forward-compat with mainnet cutover (Phase 56 D-02).
+  // Phase 64: the key is written when the embedded replay-panel's reveal is
+  // FULLY scratched (replay:scratch-complete) — spin end alone would spoil
+  // still-covered prizes. It remains the claims-panel spoiler gate.
   // ---------------------------------------------------------------------------
   #spunKey() {
     return `spun_day_${CHAIN.id}_${this.#pinnedDay}`;
+  }
+
+  #boardCompleteKey() {
+    return `jackpot_complete_day_${CHAIN.id}_${this.#pinnedDay}`;
   }
 
   #hasSpunPinnedDay() {
@@ -70,53 +129,82 @@ class LastDayJackpot extends HTMLElement {
     try {
       localStorage.setItem(this.#spunKey(), '1');
     } catch {
-      // QuotaExceededError / SecurityError — swallow; user re-spins next visit (acceptable UX)
+      // QuotaExceededError / SecurityError — swallow; user re-spins next visit
     }
+  }
+
+  #hasCompletedPinnedDay() {
+    if (this.#pinnedDay == null) return false;
+    try { return localStorage.getItem(this.#boardCompleteKey()) === '1'; }
+    catch { return false; }
+  }
+
+  #markCompletedPinnedDay() {
+    if (this.#pinnedDay == null) return;
+    try { localStorage.setItem(this.#boardCompleteKey(), '1'); }
+    catch { /* private browsing: only this refresh loses the preferred view */ }
   }
 
   // ---------------------------------------------------------------------------
   // Plan 59-02: app.lastDay subscriber — drives 3-status branch rendering.
-  // Pin-dayId pattern (D-02): #pinnedDay snapshotted at first non-null payload;
-  // newer-day arrivals set #hasNewDayAvailable but do NOT auto-rerender (D-04).
   // ---------------------------------------------------------------------------
   #onLastDayUpdate(payload) {
     if (!payload) return;  // first cycle 404 / undefined initial subscribe fire
     this.#lastPayload = payload;
+    const parsedDay = payload.day == null ? null : Number(payload.day);
+    const payloadDay = Number.isFinite(parsedDay) && parsedDay > 0 ? parsedDay : null;
+    const isNewLatest = payloadDay != null
+      && (this.#latestDaySeen == null || payloadDay > this.#latestDaySeen);
+    if (isNewLatest) this.#latestDaySeen = payloadDay;
 
-    // First payload — snapshot pin (or stay unpinned for cold-start)
     if (this.#pinnedDay == null) {
-      if (payload.day != null) {
-        this.#pinnedDay = payload.day;
-        this.#pinnedLevel = payload.level ?? null;
-      }
+      if (payloadDay != null) this.#adoptLatestDay(payload, false);
+      else this.#renderForStatus(payload);
+      return;
+    }
+
+    if (isNewLatest && payloadDay !== Number(this.#pinnedDay)) {
+      this.#adoptLatestDay(payload, true);
+      return;
+    }
+
+    if (payloadDay === Number(this.#pinnedDay)) {
       this.#renderForStatus(payload);
       return;
     }
 
-    // Same-day refresh — re-render in place
-    if (payload.day === this.#pinnedDay) {
-      this.#renderForStatus(payload);
-      return;
-    }
+    // A routine poll of the already-known latest day while the player is
+    // deliberately browsing history is ignored. Only isNewLatest above
+    // overrides a manual historical pin.
+  }
 
-    // Newer day arrived — Plan 59-03 renders the banner DOM (D-04 — non-intrusive
-    // notification, NOT auto-rerender body).
-    if (payload.day != null && payload.day > this.#pinnedDay) {
-      this.#hasNewDayAvailable = true;
-      this.#renderNewDayBanner();
-      return;
-    }
-    // payload.day < pinnedDay — defensive: ignore (shouldn't happen given monotonic indexer)
+  #adoptLatestDay(payload, resetGates) {
+    this.#pinnedDay = Number(payload.day);
+    this.#pinnedLevel = payload.level ?? null;
+    this.#hasNewDayAvailable = false;
+    this.#hideNewDayBanner();
+    this.#foilSeq += 1; // invalidate any older-day request still in flight
+    this.#foilData = null;
+    this.#winners = [];
+    if (resetGates) this.#resetDayGates();
+    this.#renderForStatus(payload);
   }
 
   #renderForStatus(payload) {
     this.#showContent();
     switch (payload.status) {
-      case 'pre-game':            return this.#renderColdStart();
-      case 'resolved-no-winners': return this.#renderEmptyDay(payload.day);
-      case 'resolved':            return this.#renderResolvedDay(payload);
-      default:                    return this.#renderColdStart();  // defensive fallback
+      case 'pre-game':            this.#renderColdStart(); break;
+      case 'resolved-no-winners': this.#renderEmptyDay(payload.day); break;
+      case 'resolved':            this.#renderResolvedDay(payload); break;
+      default:                    this.#renderColdStart(); // defensive fallback
     }
+    // These consumers all key off #pinnedDay. Updating them from the same
+    // status dispatch prevents the old "label changed, board/flip did not"
+    // partial-day state.
+    this.#syncReplayPanel();
+    this.#refreshFoil();
+    this.#refreshFlipRow();
+    this.#maybeShowResultsCta();
   }
 
   #renderColdStart() {
@@ -135,12 +223,11 @@ class LastDayJackpot extends HTMLElement {
     if (cold) cold.style.display = 'none';
     if (empty) empty.style.display = '';
     if (resolved) resolved.style.display = 'none';
-    // Day-N copy via textContent (T-58-18 hardening — NEVER innerHTML for server-supplied data)
     const copy = this.querySelector('[data-bind="ldj-empty-copy"]');
     if (copy) copy.textContent = `Day ${day} had no winners — pot rolled to day ${Number(day) + 1}.`;
-    // Day label in header
     const dayLbl = this.querySelector('[data-bind="day"]');
     if (dayLbl) dayLbl.textContent = `Day ${day}`;
+    this.#winners = [];
   }
 
   #renderResolvedDay(payload) {
@@ -151,59 +238,452 @@ class LastDayJackpot extends HTMLElement {
     if (empty) empty.style.display = 'none';
     if (resolved) resolved.style.display = '';
 
-    // Plan 59-03: defensive — hide banner on a normal resolved render (same-day
-    // refresh / first-pin) so a stale banner doesn't linger from a prior day.
-    // The banner is unhidden only by #renderNewDayBanner when #onLastDayUpdate's
-    // newer-day branch fires.
     if (!this.#hasNewDayAvailable) this.#hideNewDayBanner();
 
-    // Day label
     const dayLbl = this.querySelector('[data-bind="day"]');
     if (dayLbl) dayLbl.textContent = `Day ${payload.day}`;
 
-    // Winners → cache + render
     this.#winners = Array.isArray(payload.winners) ? payload.winners : [];
-    this.#renderWinnerSummary(this.#winners, payload.day);
-    this.#renderWinnerLists(payload.day);
 
-    // Plan 59-03 (D-05): refresh highlight after winners rendered. Subscriber
-    // fires-immediately covers wallet-state changes; this call covers payload
-    // changes (new winners list = need to re-walk + toggle classes).
-    this.#refreshHighlight();
+  }
 
-    // Plan 59-03 (D-03): idempotency check — if user previously spun this day,
-    // skip animation and render the rolled state directly. Otherwise idle.
-    if (this.#hasSpunPinnedDay()) {
-      // Ensure helpers cached (defensive — also done in #onReplayClick path)
-      if (!this._rollsHelpers) {
-        this._rollsHelpers = { joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth };
-      }
-      this.#renderRoll1RowsInstant(payload);
-      this.#renderRoll2Instant(payload);
-      // Set state directly to roll2_done; setReplayState re-writes the localStorage
-      // key (idempotent) and updates button label/enabled state.
-      this.#replayState = 'roll2_done';
-      this.#setReplayState('roll2_done');
-      return;
+  // ---------------------------------------------------------------------------
+  // Day stat — the winners/top-hit caption was REMOVED from the board on
+  // 2026-07-29 (user call). It survives only as the subtitle on the popup's
+  // NO HIT card, where the player has just been told they didn't win and the
+  // day's actual scale is the point.
+  // ---------------------------------------------------------------------------
+  /** True when the board is pinned to a day other than the one the data is for. */
+  #viewingPastDay() {
+    const payloadDay = this.#lastPayload && this.#lastPayload.day;
+    return this.#pinnedDay != null && payloadDay != null
+      && Number(payloadDay) !== Number(this.#pinnedDay);
+  }
+
+  #dayStatsText() {
+    // Winners/top-hit come off /game/jackpot/last-day, which only ever carries the
+    // LATEST day, so an older pinned day gets no totals — only its own label.
+    if (this.#viewingPastDay()) return `Day ${this.#pinnedDay} draw`;
+    const winners = this.#winners;
+    if (!winners || winners.length === 0) return 'No winners recorded this day.';
+    let topEth = 0n;
+    for (const w of winners) {
+      try {
+        const v = BigInt(w.totalEth || '0');
+        if (v > topEth) topEth = v;
+      } catch { /* skip malformed */ }
     }
-    // Replay button: enable now that we have a pinned day with resolved data.
-    // (#setReplayState('idle') flips btn.disabled = !this.#pinnedDay → false here.)
-    this.#setReplayState('idle');
+    const unique = new Set(winners.map((w) => String(w.address || '').toLowerCase())).size;
+    const parts = [`${unique} winner${unique === 1 ? '' : 's'} this day`];
+    if (topEth > 0n) parts.push(`top hit ${fmtEthScaled(topEth.toString())} ETH`);
+    return parts.join(' · ');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Day results — what each winning trait paid (user ask: "the scratchoff
+  // still does not reveal winners"). The viewed player often ISN'T a winner
+  // (the sDGNRS house default never wins roll 1), so an honest empty scratch
+  // needs the day's actual results beside it. Aggregates only — per-trait
+  // winner counts + per-winner amounts from payload.summary — never address
+  // dumps (leaderboards stay pro-mode). SPOILER-GATED on #hasSpunPinnedDay.
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // Phase 64: replay-panel bridge — drive the sibling <replay-panel>'s own
+  // day/player selects to (pinnedDay, viewedPlayer). The panel populates its
+  // options asynchronously, so retry on a short timer until both take
+  // (play/app/replay-panel-sync.js pattern). Selects are hidden via app.css;
+  // the panel's Reveal button stays as the player's spin trigger.
+  // ---------------------------------------------------------------------------
+
+  #panel() {
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return null;
+    return document.querySelector('replay-panel');
+  }
+
+  #setSelectAndFire(select, value) {
+    if (!select || value == null) return false;
+    const target = String(value).toLowerCase ? String(value) : String(value);
+    const options = select.options ? Array.from(select.options) : [];
+    const matching = options.find((o) => String(o.value).toLowerCase() === target.toLowerCase());
+    if (!matching) return false;
+    if (String(select.value).toLowerCase() === target.toLowerCase()) return true;
+    select.value = matching.value;
+    try {
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch {
+      // fakeDOM Event shim absent — dispatch a minimal object instead
+      try { select.dispatchEvent({ type: 'change', bubbles: true }); } catch { /* give up */ }
+    }
+    return true;
+  }
+
+  #trySyncOnce() {
+    const panel = this.#panel();
+    if (!panel || this.#pinnedDay == null) return false;
+    const daySelect = panel.querySelector('[data-bind="day-select"]');
+    const playerSelect = panel.querySelector('[data-bind="player-select"]');
+    const hasPinnedDay = daySelect?.options
+      && Array.from(daySelect.options).some(
+        (option) => String(option.value) === String(this.#pinnedDay),
+      );
+    if (!hasPinnedDay) {
+      // replay-panel historically loaded this list only once. Ask it to
+      // refresh when the latest resolved day is not present; its public method
+      // coalesces/throttles retries while the indexer catches up.
+      if (typeof panel.refreshDays === 'function') {
+        try {
+          Promise.resolve(panel.refreshDays()).then((refreshed) => {
+            if (refreshed && this.#pinnedDay != null) this.#trySyncOnce();
+          }).catch(() => {});
+        } catch { /* older replay-panel / fakeDOM */ }
+      }
+      return false;
+    }
+    const dayOk = this.#setSelectAndFire(daySelect, this.#pinnedDay);
+    // Player defaults are seeded by main.js (sDGNRS house view when nothing
+    // else is connected), so getViewedAddress() is the single source of truth.
+    const addr = getViewedAddress();
+    const playerOk = addr ? this.#setSelectAndFire(playerSelect, addr) : false;
+    if (dayOk && playerOk && typeof panel.setPersistedRevealState === 'function') {
+      // The replay panel owns rendering; this shell owns the chain/day-scoped
+      // completion key. Feeding it here lets refresh restore a cleared board
+      // or run the silent waiting reels without duplicating jackpot logic.
+      panel.setPersistedRevealState(
+        this.#hasSpunPinnedDay(),
+        this.#hasCompletedPinnedDay(),
+      );
+    }
+    return dayOk && playerOk;
+  }
+
+  /**
+   * Let a manual pick on the panel's Day select re-pin the board.
+   *
+   * Without this the select is decorative: #trySyncOnce writes #pinnedDay back into it
+   * on every lastDay poll (60s), so a chosen day silently snaps back. Treating the pick
+   * as a new pin makes the control authoritative — and doubles as the escape hatch when
+   * the board is holding an older day behind the "new day" banner.
+   *
+   * Idempotent: re-binding on a later sync is a no-op thanks to the wired flag, and the
+   * listener ignores the programmatic changes #setSelectAndFire dispatches (they always
+   * carry the day already pinned).
+   */
+  #wireDayPicker() {
+    const panel = this.#panel();
+    const daySelect = panel && panel.querySelector('[data-bind="day-select"]');
+    if (!daySelect || daySelect.dataset.ldjWired === '1') return;
+    daySelect.dataset.ldjWired = '1';
+    daySelect.addEventListener('change', () => {
+      const picked = Number(daySelect.value);
+      if (!Number.isFinite(picked) || picked <= 0) return;
+      if (picked === this.#pinnedDay) return;   // programmatic re-sync, not a user pick
+      this.#pinnedDay = picked;
+      // Leaving the newest day pinned means the banner has nothing left to offer.
+      this.#hasNewDayAvailable = false;
+      const banner = this.querySelector('[data-bind="ldj-new-day-banner"]');
+      if (banner) banner.setAttribute('hidden', '');
+    });
+  }
+
+  #syncReplayPanel() {
+    this.#wireDayPicker();
+    if (this.#bridgeTimer != null) {
+      try { clearInterval(this.#bridgeTimer); } catch { /* defensive */ }
+      this.#bridgeTimer = null;
+    }
+    if (this.#trySyncOnce()) return;
+    if (typeof setInterval !== 'function') return;
+    this.#bridgeAttempts = 0;
+    const handle = setInterval(() => {
+      this.#bridgeAttempts += 1;
+      if (this.#trySyncOnce() || this.#bridgeAttempts >= BRIDGE_MAX_ATTEMPTS) {
+        try { clearInterval(handle); } catch { /* defensive */ }
+        if (this.#bridgeTimer === handle) this.#bridgeTimer = null;
+      }
+    }, BRIDGE_RETRY_MS);
+    if (handle && typeof handle.unref === 'function') {
+      try { handle.unref(); } catch { /* defensive */ }
+    }
+    this.#bridgeTimer = handle;
+  }
+
+  // Panel reveal fully scratched — open the spoiler gate and fire follow-on
+  // UI. Fires per roll (Roll 1, then bonus Roll 2); every step below is
+  // idempotent, and confetti is additionally once-per-day guarded.
+  #onPanelScratchComplete(e) {
+    this.#markSpunPinnedDay();
+    this.#sawScratchEvent = true;
+    // The spoiler gate is open, so a claimable foil match can surface now.
+    this.#renderFoil(true);
+    // Inline confetti when the viewed player is among the day's winners —
+    // part of the board playing out. The full-reveal popup does NOT auto-pop
+    // here (user call): it sits behind the results CTA once the WHOLE board
+    // (bonus roll included) and the coin flip are done.
+    const viewed = getViewedAddress();
+    const target = viewed ? String(viewed).toLowerCase() : null;
+    const mine = Boolean(target && (this.#winners || []).some(
+      (w) => String(w.address || '').toLowerCase() === target,
+    ));
+    if (mine && this.#celebratedDay !== this.#pinnedDay) {
+      this.#celebratedDay = this.#pinnedDay;
+      this.#fireConfetti(true);
+    }
+    // Final roll? (bonus phase completing, or roll 1 with no bonus ahead).
+    // A detail-less event (older panel / tests) counts as final.
+    const d = e?.detail;
+    if (!d || d.bonusPhase === true || !d.bonusAvailable) {
+      this.#boardDone = true;
+      this.#markCompletedPinnedDay();
+    }
+    this.#maybeShowResultsCta();
+    // Same-tab signal consumed by the winnings banner (app-claims-panel).
+    try {
+      const detail = { day: this.#pinnedDay, mine };
+      const ev = (typeof CustomEvent === 'function')
+        ? new CustomEvent('jackpot:revealed', { detail })
+        : { type: 'jackpot:revealed', detail };
+      document.dispatchEvent(ev);
+    } catch { /* headless / fakeDOM — signal is best-effort */ }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Results CTA — appears only after the WHOLE main UI played out: every
+  // scratch roll (bonus included) AND the daily coin flip (waived when the
+  // day has no coinflip row — balances-strip rule). Clicking opens the
+  // full-reveal popup for the viewed player.
+  // ---------------------------------------------------------------------------
+
+  #resultsCta() {
+    if (this.#resultsCtaEl) return this.#resultsCtaEl;
+    this.#resultsCtaEl = this.querySelector('[data-bind="ldj-results-cta"]');
+    return this.#resultsCtaEl;
+  }
+
+  #resetDayGates() {
+    this.#boardDone = false;
+    this.#sawScratchEvent = false;
+    this.#flipResult = undefined;
+    this.#flipFetchedDay = null;
+    const cta = this.#resultsCta();
+    this.#setResultsCtaVisible(cta, false);
+  }
+
+  // Coin flip revealed for the pinned day? Same gate as app-balances-strip:
+  // the flip_day key, waived when the day has no coinflip row.
+  #flipGateOpen() {
+    if (this.#pinnedDay == null) return false;
+    if (this.#flipFetchedDay === this.#pinnedDay && this.#flipResult === null) return true;
+    try {
+      return typeof localStorage !== 'undefined'
+        && localStorage.getItem(`flip_day_${CHAIN.id}_${this.#pinnedDay}`) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  #summaryOpenedKey() {
+    if (this.#pinnedDay == null) return null;
+    const viewed = getViewedAddress();
+    const player = viewed ? String(viewed).toLowerCase() : 'no-player';
+    return `day_summary_${CHAIN.id}_${this.#pinnedDay}_${player}`;
+  }
+
+  #hasOpenedSummary() {
+    const key = this.#summaryOpenedKey();
+    if (!key) return false;
+    try { return localStorage.getItem(key) === '1'; }
+    catch { return false; }
+  }
+
+  #markSummaryOpened() {
+    const key = this.#summaryOpenedKey();
+    if (!key) return;
+    try { localStorage.setItem(key, '1'); }
+    catch { /* private browsing: hiding for this mount is still enough */ }
+  }
+
+  // Fetch the day's coinflip row ONLY to apply the no-row waiver. Failure
+  // leaves the waiver unknown (gate falls back to the flip_day key alone).
+  async #refreshFlipRow() {
+    const day = this.#pinnedDay;
+    if (day == null || this.#flipFetchedDay === day || typeof fetch !== 'function') return;
+    try {
+      const res = await fetch(`${API_BASE}/game/coinflip/day/${day}`);
+      if (!res.ok) return; // unknown — key-only gate
+      const data = await res.json();
+      if (this.#pinnedDay !== day) return; // day re-pinned mid-flight
+      this.#flipResult = data ?? null;
+      this.#flipFetchedDay = day;
+    } catch { /* network blip / headless — key-only gate */ }
+    this.#maybeShowResultsCta();
+  }
+
+  /** Share replay-panel's single action row with Reveal Draw. */
+  #mountResultsCta(cta) {
+    if (!cta || typeof document === 'undefined') return;
+    const replay = document.querySelector('replay-panel');
+    const controls = replay?.querySelector?.('.replay-controls');
+    const slot = document.querySelector('[data-bind="day-summary-slot"]');
+    const target = controls || slot;
+    if (!target || cta.parentNode === target || cta.parentElement === target) return;
+    try { target.appendChild(cta); } catch { /* fakeDOM — leave it in the shell */ }
+  }
+
+  #setResultsCtaVisible(cta, visible) {
+    if (cta) cta.hidden = !visible;
+    if (typeof document === 'undefined') return;
+    const replay = document.querySelector('replay-panel');
+    const controls = replay?.querySelector?.('.replay-controls');
+    const reveal = replay?.querySelector?.('[data-bind="reveal-btn"]');
+    // Never force Reveal Draw back on: replay-panel owns when that button is
+    // valid. We only guarantee that the two actions cannot coexist.
+    if (visible && reveal) reveal.hidden = true;
+    const slot = document.querySelector('[data-bind="day-summary-slot"]');
+    if (slot) slot.hidden = controls ? true : !visible;
+  }
+
+  #maybeShowResultsCta() {
+    const cta = this.#resultsCta();
+    if (!cta) return;
+    this.#mountResultsCta(cta);
+    // Reloaded spun day: the board was already played out in a prior session
+    // (spun_day persisted) — don't force a re-scratch to reach the results.
+    const boardDone = this.#boardDone
+      || (!this.#sawScratchEvent && this.#hasSpunPinnedDay());
+    const show = Boolean(
+      this.#pinnedDay != null
+      && boardDone
+      && this.#flipGateOpen()
+      && !this.#hasOpenedSummary()
+    );
+    this.#setResultsCtaVisible(cta, show);
+  }
+
+  async #loadDayActivity(viewed, day) {
+    if (!viewed || day == null || typeof fetch !== 'function') return null;
+    const address = encodeURIComponent(String(viewed).toLowerCase());
+    const dayParam = encodeURIComponent(String(day));
+    const read = async (path) => {
+      const res = await fetch(`${API_BASE}${path}`);
+      if (!res.ok) throw new Error(`API ${res.status}`);
+      return res.json();
+    };
+    const [packsResult, viewerResult] = await Promise.allSettled([
+      read(`/player/${address}/packs?day=${dayParam}`),
+      read(`/viewer/player/${address}/day/${dayParam}`),
+    ]);
+    const packs = packsResult.status === 'fulfilled' ? packsResult.value : null;
+    const viewer = viewerResult.status === 'fulfilled' ? viewerResult.value : null;
+    const ticketPacks = Array.isArray(packs?.ticketRevealPacks)
+      ? packs.ticketRevealPacks : [];
+    const ticketCount = ticketPacks.reduce(
+      (sum, pack) => sum + Math.max(0, Number(pack?.ticketCount) || 0),
+      0,
+    );
+    const activity = viewer?.activity;
+    const openedLootboxes = Array.isArray(packs?.lootboxPacks)
+      ? packs.lootboxPacks.length : 0;
+    const lootboxesBought = !Array.isArray(activity?.lootboxPurchases)
+      ? openedLootboxes
+      : activity.lootboxPurchases.length;
+    const lootboxesOpened = !Array.isArray(activity?.lootboxResults)
+      ? openedLootboxes
+      : activity.lootboxResults.filter((row) => (
+        row?.rewardType === 'opened' || row?.rewardType === 'flipOpened'
+      )).length;
+    let hasCoinflipBet = false;
+    try { hasCoinflipBet = BigInt(activity?.coinflip?.stakeAmount || '0') > 0n; } catch { /* malformed row */ }
+    const coinflipWon = activity?.coinflip?.win === true
+      ? true
+      : activity?.coinflip?.win === false ? false : null;
+    return {
+      ticketPacks: ticketPacks.length,
+      ticketCount,
+      lootboxesBought,
+      lootboxesOpened,
+      hasCoinflipBet,
+      coinflipWon,
+    };
+  }
+
+  // Build + queue the viewed player's full day summary. Winner → prize cards;
+  // non-winner → an honest NO HIT card. Day-scoped DB feeds add the ticket
+  // packs and lootboxes the player bought/opened during the round.
+  async #onResultsCtaClick() {
+    if (this.#summaryBusy || this.#hasOpenedSummary()) return;
+    const viewed = getViewedAddress();
+    const target = viewed ? String(viewed).toLowerCase() : null;
+    const winnerRow = target ? (this.#winners || []).find(
+      (w) => String(w.address || '').toLowerCase() === target,
+    ) : null;
+    // Winner row units: totalEth = scaled ETH-wei, coinTotal = FLIP-wei,
+    // ticketCount = ENTRIES (4 = 1 whole ticket).
+    const prizes = [];
+    if (winnerRow) {
+      try {
+        if (BigInt(winnerRow.totalEth || '0') > 0n) {
+          prizes.push({ type: 'eth', amount: BigInt(winnerRow.totalEth) });
+        }
+        if (BigInt(winnerRow.coinTotal || '0') > 0n) {
+          prizes.push({ type: 'flip', amount: BigInt(winnerRow.coinTotal) });
+        }
+        const wholeTickets = Math.round(Number(winnerRow.ticketCount || 0) / 4);
+        if (wholeTickets > 0) {
+          // Ticket awards land at the winning trait's award level when the
+          // breakdown carries one (award rows are next-level).
+          const ticketRow = Array.isArray(winnerRow.breakdown)
+            ? winnerRow.breakdown.find((b) => b && b.awardType === 'tickets') : null;
+          prizes.push({ type: 'tickets', amount: wholeTickets, level: ticketRow?.level });
+        }
+      } catch { /* malformed row — falls through to the NO HIT summary */ }
+    }
+    const cta = this.#resultsCta();
+    this.#summaryBusy = true;
+    if (cta) {
+      cta.disabled = true;
+      cta.textContent = 'LOADING DAY SUMMARY…';
+    }
+    try {
+      const activity = await this.#loadDayActivity(viewed, this.#pinnedDay);
+      // The 1 WWXRP card is the losing-coinflip consolation, not a generic
+      // participation award. Requiring an explicit false also prevents a
+      // missing/pending outcome from being presented as a loss.
+      let consolationOnly = false;
+      if (prizes.length === 0 && activity?.hasCoinflipBet && activity.coinflipWon === false) {
+        prizes.push({ type: 'wwxrp', amount: 10n ** 18n });
+        consolationOnly = true;
+      }
+      queueReveal({
+        kind: 'jackpot',
+        title: this.#pinnedDay != null ? `DAY ${this.#pinnedDay} SUMMARY` : 'DAY SUMMARY',
+        day: this.#pinnedDay,
+        prizes,
+        consolationOnly,
+        activity,
+        noWin: prizes.length === 0 ? { sub: this.#dayStatsText() } : null,
+      });
+      // The summary is a one-shot epilogue for this player/day. Persist the
+      // consumption so refresh cannot bring the action row back after it has
+      // already queued the reveal.
+      this.#markSummaryOpened();
+      this.#setResultsCtaVisible(cta, false);
+    } finally {
+      this.#summaryBusy = false;
+      if (cta) {
+        cta.disabled = false;
+        cta.textContent = 'DAY SUMMARY';
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
   // Plan 59-03: in-widget new-day-available banner (D-04).
-  // Banner is in-widget (NOT app-level toast). Shown when polling delivers a
-  // payload whose day is greater than #pinnedDay; clicking "View now" cancels
-  // any in-flight animation (Pitfall H), re-pins to the newer day, and re-runs
-  // the status branch dispatch (which fires the localStorage idempotency check).
   // ---------------------------------------------------------------------------
   #renderNewDayBanner() {
     const banner = this.querySelector('[data-bind="ldj-new-day-banner"]');
     const text = this.querySelector('[data-bind="ldj-new-day-text"]');
     if (!banner || !text || !this.#lastPayload) return;
-    // textContent (T-58-18 hardening) — payload.day is integer per Phase 57 schema
-    // but using textContent keeps the pattern consistent and forward-safe.
     text.textContent = `Day ${this.#lastPayload.day} just resolved — `;
     banner.removeAttribute('hidden');
     banner.hidden = false;
@@ -218,427 +698,170 @@ class LastDayJackpot extends HTMLElement {
 
   #onNewDayBannerClick() {
     if (!this.#lastPayload) return;
-    // Pitfall H: cancel in-flight animations BEFORE re-pinning. Bumping the
-    // monotonic cancel-token invalidates any closures captured by an in-flight
-    // #animateRoll1FromPayload / #runRoll2Anim await chain. cancelPendingFlashes
-    // tears down any factory-side timers that might leak into the new day's DOM.
-    // (Prefix ++ for consistency with #onReplayClick line 1113.)
-    ++this.#replayCancelToken;
-    this.#rolls?.cancelPendingFlashes?.();
-
-    // Re-pin to the newer day
-    this.#pinnedDay = this.#lastPayload.day;
-    this.#pinnedLevel = this.#lastPayload.level ?? null;
-    this.#replayState = 'idle';
-    this.#hasNewDayAvailable = false;
-
-    // Hide banner + re-run status branch dispatch (which fires the localStorage
-    // idempotency check; if the user already spun this newer day on a previous
-    // visit, the spin animation will be skipped and the rolled state rendered
-    // directly). If unspun, idle state — user clicks Replay to spin fresh.
-    this.#hideNewDayBanner();
-    this.#renderForStatus(this.#lastPayload);
+    this.#adoptLatestDay(this.#lastPayload, true);
   }
 
   // ---------------------------------------------------------------------------
-  // Plan 59-03: wallet-conditional row highlight (D-05).
-  // Walks rendered .jp-winner-item rows and toggles .ldj-winner-row--mine based
-  // on getViewedAddress() match. viewing.address takes precedence over
-  // connected.address (per store.js:163-169). When disconnected (both null),
-  // class is removed from all rows. Empty-placeholder rows are skipped.
+  // Phase 64: foil-ticket strip — the viewed player's four foil lines for the
+  // pinned day's level, lit up where they match the day's winning sets.
+  // Match lighting is SPOILER-GATED on #hasSpunPinnedDay; the strip itself
+  // (the player's own tickets) shows regardless.
   // ---------------------------------------------------------------------------
-  #refreshHighlight() {
-    const viewed = getViewedAddress();  // viewing || connected || null
-    const target = viewed ? String(viewed).toLowerCase() : null;
-    const rows = this.querySelectorAll('.jp-winner-item');
-    for (const row of rows) {
-      // Skip the empty-placeholder rows (no real address to match)
-      if (row.classList && row.classList.contains('jp-winner-item--empty')) continue;
-      const rowAddr = (row.dataset && row.dataset.address)
-        || (typeof row.getAttribute === 'function' ? row.getAttribute('data-address') : null)
-        || '';
-      if (target && rowAddr && rowAddr === target) {
-        row.classList.add('ldj-winner-row--mine');
-      } else {
-        row.classList.remove('ldj-winner-row--mine');
-      }
-    }
-  }
 
-  // ---------------------------------------------------------------------------
-  // Plan 59-02: Winner classification + per-category list render.
-  // Verbatim port of /beta/jackpot-panel.js:534-674 (winner-pick click-handler stripped
-  // per D-05 — no winner selector UI in /app/). textContent-only for addresses (T-58-18).
-  // ---------------------------------------------------------------------------
-  #renderWinnerLists(day) {
-    const groupNormal    = this.querySelector('[data-bind="jp-winners-group-normal"]');
-    const groupBaf       = this.querySelector('[data-bind="jp-winners-group-baf"]');
-    const groupDec       = this.querySelector('[data-bind="jp-winners-group-decimator"]');
-    const groupEmpty     = this.querySelector('[data-bind="jp-winners-group-empty"]');
-    const listNormal     = this.querySelector('[data-bind="jp-winners-list-normal"]');
-    const listBaf        = this.querySelector('[data-bind="jp-winners-list-baf"]');
-    const listDec        = this.querySelector('[data-bind="jp-winners-list-decimator"]');
-    const labelNormal    = this.querySelector('[data-bind="jp-winners-label-normal"]');
-    const labelBaf       = this.querySelector('[data-bind="jp-winners-label-baf"]');
-    const labelDec       = this.querySelector('[data-bind="jp-winners-label-decimator"]');
-    const emptyLi        = this.querySelector('[data-bind="jp-winners-empty"]');
-
-    // Clear all three lists before re-render
-    if (listNormal) listNormal.innerHTML = '';
-    if (listBaf)    listBaf.innerHTML    = '';
-    if (listDec)    listDec.innerHTML    = '';
-
-    if (!this.#winners || this.#winners.length === 0) {
-      if (groupNormal) groupNormal.style.display = 'none';
-      if (groupBaf)    groupBaf.style.display    = 'none';
-      if (groupDec)    groupDec.style.display    = 'none';
-      if (groupEmpty)  groupEmpty.style.display  = '';
-      if (emptyLi)     emptyLi.textContent       = `No data for day ${day}`;
+  async #refreshFoil() {
+    if (!this.querySelector('[data-bind="ldj-foil"]')) return;
+    const addr = getViewedAddress();
+    // Foil packs key on the day's PURCHASE level (roll1.purchaseLevel) — the
+    // aggregate payload.level is the count-weighted winner level and reads
+    // one high (same wrong-level class as the inventory/scratch-gate fixes).
+    const level = this.#lastPayload?.roll1?.purchaseLevel
+      ?? this.#lastPayload?.level
+      ?? this.#pinnedLevel;
+    if (!addr || level == null || typeof fetch !== 'function') {
+      this.#foilData = null;
+      this.#renderFoil();
       return;
     }
-
-    // Classification — verbatim from /beta/jackpot-panel.js:541-557
-    const normalWinners = [];
-    const bafWinners = [];
-    const decimatorWinners = [];
-    for (const w of this.#winners) {
-      const hasNormal = (BigInt(w.totalEth || '0') > 0n)
-        || ((w.ticketCount || 0) > 0)
-        || (BigInt(w.coinTotal || '0') > 0n);
-      const hasBaf = w.bafPrize && (
-        BigInt(w.bafPrize.eth || '0') > 0n
-        || (w.bafPrize.tickets || 0) > 0
-      );
-      const hasDec = w.decimatorPrize && (
-        BigInt(w.decimatorPrize.regularEth || '0') > 0n
-        || BigInt(w.decimatorPrize.lootboxEth || '0') > 0n
-        || BigInt(w.decimatorPrize.terminalEth || '0') > 0n
-      );
-      if (hasNormal) normalWinners.push(w);
-      if (hasBaf)    bafWinners.push(w);
-      if (hasDec)    decimatorWinners.push(w);
+    const seq = ++this.#foilSeq;
+    try {
+      const res = await fetch(`${API_BASE}/player/${addr}/foil?level=${level}`);
+      if (!res.ok) throw new Error(`API ${res.status}`);
+      const data = await res.json();
+      if (seq !== this.#foilSeq) return; // superseded by a newer refresh
+      this.#foilData = data;
+    } catch (_e) {
+      if (seq !== this.#foilSeq) return;
+      this.#foilData = null; // network blip / no route → strip hides
     }
+    this.#renderFoil();
+  }
 
-    // Per-category amount-text helpers — verbatim from /beta/jackpot-panel.js:560-589
-    const normalAmtText = (w) => {
-      const parts = [];
-      if (BigInt(w.totalEth || '0') > 0n) parts.push(`${formatEth(w.totalEth)} ETH`);
-      if ((w.ticketCount || 0) > 0) {
-        const n = joScaledToTickets(w.ticketCount);
-        parts.push(`${n} tkts`);
+  /**
+   * The foil CLAIM affordance — all that is left of the foil strip (user call
+   * 2026-07-29). The strip itself (ladder chips, four badge lines, partial-tier
+   * chips) is gone; a claimable match still has to be claimable, so this renders
+   * one button for the best unclaimed line and stays hidden otherwise.
+   */
+  #renderFoil(animate = false) {
+    const bar = this.querySelector('[data-bind="ldj-foil-claimbar"]');
+    if (!bar) return;
+    bar.textContent = '';
+    bar.hidden = true;
+    const d = this.#foilData;
+    if (!d || !d.present || !Array.isArray(d.lines) || d.lines.length === 0) return;
+    // Grading is spoiler-gated the same way the strip was: no lighting up a match
+    // before the player has scratched the day.
+    if (!this.#hasSpunPinnedDay()) return;
+
+    const summary = this.#lastPayload?.summary || null;
+    const mainSet = summary?.rollOne?.mainTraitsPacked ?? null;
+    const bonusSet = summary?.rollTwo?.bonusTraitsPacked ?? null;
+    const claims = Array.isArray(d.claims) ? d.claims : [];
+    const day = this.#pinnedDay;
+
+    let best = null;
+    d.lines.forEach((line, i) => {
+      if (claims.find((c) => c && c.day === day && c.ticketIndex === i)) return;
+      const grade = bestGrade(line, mainSet, bonusSet);
+      if (!grade || grade.score < FOIL_CLAIM_THRESHOLD) return;
+      if (!best || grade.score > best.grade.score) best = { i, grade };
+    });
+    if (!best) return;
+
+    bar.hidden = false;
+    const label = document.createElement('span');
+    label.className = 'ldj-foil-claimbar__label';
+    label.textContent = `Foil match T${best.grade.score}`;
+    bar.appendChild(label);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ldj-foil-claim';
+    btn.setAttribute('data-write', '');
+    btn.textContent = `CLAIM T${best.grade.score}`;
+    btn.addEventListener('click', () => this.#onFoilClaim(best.i, best.grade, btn));
+    bar.appendChild(btn);
+    if (animate && !this.#reducedMotion()) {
+      const t = setTimeout(() => sfxRollDone(true), 200);
+      if (t && typeof t.unref === 'function') { try { t.unref(); } catch { /* defensive */ } }
+    }
+  }
+
+  // Claim a matched foil line — the payout is an isolated Degenerette
+  // box-spin; its BoxSpin event replays through the reveal overlay.
+  async #onFoilClaim(ticketIndex, grade, btn) {
+    if (this.#foilClaimBusy) return;
+    this.#foilClaimBusy = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Claiming…'; }
+    try {
+      const player = getViewedAddress();
+      const { receipt, contract } = await claimFoilMatch({
+        player,
+        day: this.#pinnedDay,
+        ticketIndex,
+        drawKind: grade.drawKind ?? 0,
+      });
+      const claimedInfo = parseFoilMatchClaimedFromReceipt(receipt, contract);
+      const tier = claimedInfo[0]?.tier ?? grade.score;
+      const legs = parseOpenLegsFromReceipt(receipt, player);
+      if (legs.length > 0) {
+        // This receipt carries the same verified BoxSpin shape as a lootbox,
+        // but there is no sealed box to crack — go directly to the spin card.
+        queueReveal({
+          kind: 'lootbox',
+          title: `FOIL MATCH T${tier}`,
+          noVessel: true,
+          legs,
+        });
       }
-      if (BigInt(w.coinTotal || '0') > 0n) parts.push(`${joFormatWeiToEth(w.coinTotal)} BURNIE`);
-      return parts.join(' · ');
-    };
-    const bafAmtText = (w) => {
-      const parts = [];
-      if (BigInt(w.bafPrize.eth || '0') > 0n) parts.push(`${formatEth(w.bafPrize.eth)} ETH`);
-      if ((w.bafPrize.tickets || 0) > 0) {
-        const n = joScaledToTickets(w.bafPrize.tickets);
-        parts.push(`${n} tkts`);
+      // Re-pull claims so the line flips to "Claimed T{n}".
+      this.#refreshFoil();
+    } catch (error) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = String(error?.userMessage || 'Claim failed — retry');
       }
-      return parts.join(' · ');
-    };
-    const decAmtText = (w) => {
-      const d = w.decimatorPrize;
-      const parts = [];
-      if (BigInt(d.regularEth || '0') > 0n) parts.push(`${formatEth(d.regularEth)} ETH`);
-      if (BigInt(d.lootboxEth || '0') > 0n) parts.push(`${formatEth(d.lootboxEth)} lb`);
-      if (BigInt(d.terminalEth || '0') > 0n) parts.push(`${formatEth(d.terminalEth)} term`);
-      return parts.join(' · ');
-    };
-
-    // buildLi — verbatim from /beta/jackpot-panel.js:591-621 minus the click-handler line.
-    // textContent for addresses (T-58-18 — server-supplied untrusted data).
-    const buildLi = (w, amountText) => {
-      const li = document.createElement('li');
-      li.className = 'jp-winner-item';
-      li.setAttribute('role', 'option');
-      // Plan 59-03: lowercase for case-insensitive #refreshHighlight lookup.
-      // wallet.js stores lowercase per Phase 58 spec; defensive .toLowerCase()
-      // here ensures highlight comparison works regardless of payload casing.
-      li.dataset.address = String(w.address || '').toLowerCase();
-      li.dataset.hasBonus = String(w.hasBonus);
-      if (w.winningLevel != null) li.dataset.winningLevel = String(w.winningLevel);
-
-      const short = w.address.slice(0, 6) + '…' + w.address.slice(-4);
-      const addrSpan = document.createElement('span');
-      addrSpan.className = 'jp-winner-addr';
-      addrSpan.textContent = short;  // T-58-18 — NEVER innerHTML for server data
-      li.appendChild(addrSpan);
-
-      if (amountText) {
-        const amtSpan = document.createElement('span');
-        amtSpan.className = 'jp-winner-amount';
-        amtSpan.textContent = amountText;  // T-58-18 — NEVER innerHTML
-        li.appendChild(amtSpan);
-      }
-
-      if (w.breakdown && w.breakdown.length > 0) {
-        const tip = document.createElement('span');
-        tip.className = 'jp-winner-tip';
-        tip.innerHTML = this.#formatBreakdownTooltip(w.breakdown);  // composes already-formatted helper output
-        li.appendChild(tip);
-      }
-      // Plan 59-02 omits: li.addEventListener('click', () => this.#onWinnerItemClick(li));
-      // (No winner-pick UI in Phase 59 — D-05 wallet-conditional highlight only — which Plan 59-03 wires.)
-      return li;
-    };
-
-    if (listNormal) {
-      for (const w of normalWinners) listNormal.appendChild(buildLi(w, normalAmtText(w)));
-    }
-    if (listBaf) {
-      for (const w of bafWinners) listBaf.appendChild(buildLi(w, bafAmtText(w)));
-    }
-    if (listDec) {
-      for (const w of decimatorWinners) listDec.appendChild(buildLi(w, decAmtText(w)));
-    }
-
-    // All three category groups always visible on resolved-with-winners days
-    // (consistent UI structure even when one category has zero winners).
-    if (groupNormal) groupNormal.style.display = '';
-    if (groupBaf)    groupBaf.style.display    = '';
-    if (groupDec)    groupDec.style.display    = '';
-    if (groupEmpty)  groupEmpty.style.display  = 'none';
-    if (labelNormal) labelNormal.textContent = `Winners (Normal Jackpot) — Day ${day} (${normalWinners.length})`;
-    if (labelBaf)    labelBaf.textContent    = `BAF Winners — Day ${day} (${bafWinners.length})`;
-    if (labelDec)    labelDec.textContent    = `Decimator Winners — Day ${day} (${decimatorWinners.length})`;
-
-    // Empty-state placeholder text inside each list when its category has 0 winners.
-    if (listBaf && bafWinners.length === 0) {
-      listBaf.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">No BAF winners this day</li>';
-    }
-    if (listDec && decimatorWinners.length === 0) {
-      listDec.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">No decimator claims this day</li>';
-    }
-    if (listNormal && normalWinners.length === 0) {
-      listNormal.innerHTML = '<li class="jp-winner-item jp-winner-item--empty">No normal-jackpot winners this day</li>';
+    } finally {
+      this.#foilClaimBusy = false;
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Plan 59-02: Roll 1 staggered reveal driven by pre-loaded payload.roll1.wins[].
-  // Mirrors choreography of /beta/jackpot-rolls.js _renderRoll1Rows (lines 753-821)
-  // but consumes the composed-blob's raw distribution rows instead of the per-player
-  // aggregated roll1Rows (factory's runRoll1 fetches; we have all data already).
-  //
-  // payload.roll1.wins[] shape (database/src/api/routes/game.ts:2038-2051):
-  //   {winner, awardType, traitId, quadrant, amount, level, sourceLevel, ticketIndex}
-  // — flat distribution rows; one row per (winner × awardType × traitId).
-  // We render each row directly without the trait-aggregation that the per-player
-  // endpoint performs server-side.
+  // Phase 64 — celebration helpers.
   // ---------------------------------------------------------------------------
-  async #animateRoll1FromPayload(payload) {
-    const grid = this.querySelector('[data-bind="jp-roll1-grid"]');
-    const resultPanel = this.querySelector('[data-bind="jp-roll1-result"]');
-    const flame = this.querySelector('[data-bind="jp-spin-flame"]');
-    if (!grid || !resultPanel) return;
 
-    // Reveal Roll 1 result panel
-    resultPanel.style.display = '';
-
-    // Spin flame cue (~700ms — matches /beta/ runRoll1 spinDuration)
-    if (flame) flame.classList.add('jp-spinning');
-    await new Promise(r => setTimeout(r, 700));
-    if (flame) flame.classList.remove('jp-spinning');
-
-    // Clear non-header rows from grid
-    Array.from(grid.children).forEach(child => {
-      if (!child.classList.contains('jo-header')) grid.removeChild(child);
-    });
-
-    // Defensive: payload.roll1?.wins may be empty / null on resolved-no-winners days.
-    const wins = (payload && payload.roll1 && Array.isArray(payload.roll1.wins))
-      ? payload.roll1.wins : [];
-
-    if (wins.length === 0) {
-      const emptyEl = document.createElement('div');
-      emptyEl.className = 'jp-roll1-empty';
-      emptyEl.textContent = 'No current-level wins this day.';
-      grid.appendChild(emptyEl);
-      return;
+  #reducedMotion() {
+    try {
+      return typeof matchMedia === 'function'
+        && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch {
+      return false;
     }
+  }
 
-    // Render each win as a row. Group amounts per-traitId for spread bucket display
-    // would be ideal but Plan 59-02 keeps the inline row-per-distribution approach
-    // (server already pre-filtered to roll1 main-draw rows; volume is bounded).
-    wins.forEach((win, idx) => {
-      const traitIdNum = win.traitId;
-      const isBonus = traitIdNum == null;  // far-future / whale_pass / dgnrs
-
-      const row = {
-        type: isBonus ? 'bonus' : 'normal',
-        traitId: traitIdNum ?? 0,
-        winnerCount: 1,             // each distribution row = one winner allocation
-        uniqueWinnerCount: 1,
-        coinPerWinner: win.awardType && win.awardType.includes('burnie') ? win.amount : '0',
-        ticketsPerWinner: win.awardType === 'tickets' ? win.amount : null,
-        ethPerWinner: win.awardType === 'eth' ? win.amount : '0',
-        spreadBuckets: [false, false, false],  // spread analytics not derivable from raw rows
-      };
-      this.#appendRevealRow(grid, row, idx);
-    });
-
-    // Wait for last row's reveal animation — matches /beta/ _renderRoll1Rows safety timeout
-    const totalDelay = (wins.length * 80) + 400;
-    await new Promise(r => setTimeout(r, Math.min(totalDelay, 3000)));
+  async #fireConfetti(big) {
+    if (this.#reducedMotion()) return;
+    try {
+      const mod = await import('canvas-confetti');
+      const confetti = mod.default || mod;
+      const colors = ['#f5a623', '#ffc04d', '#ffffff', '#22c55e'];
+      confetti({ particleCount: big ? 160 : 80, spread: big ? 100 : 70, origin: { y: 0.5 }, colors });
+      if (big) {
+        setTimeout(() => {
+          try {
+            confetti({ particleCount: 60, angle: 60, spread: 55, origin: { x: 0, y: 0.7 }, colors });
+            confetti({ particleCount: 60, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, colors });
+          } catch { /* no-op */ }
+        }, 250);
+      }
+    } catch { /* node:test / offline — no confetti, no crash */ }
   }
 
   // ---------------------------------------------------------------------------
-  // Plan 59-03: instant (no-animation) renderers for previously-spun days.
-  // Mirror the FINAL-STATE DOM shape that #animateRoll1FromPayload + #runRoll2Anim
-  // produce after their animation completes — but synchronously, no timeouts,
-  // no spin flame, no stagger animation classes that would re-trigger reveal.
+  // Mount / unmount.
   // ---------------------------------------------------------------------------
-
-  #renderRoll1RowsInstant(payload) {
-    const grid = this.querySelector('[data-bind="jp-roll1-grid"]');
-    const resultPanel = this.querySelector('[data-bind="jp-roll1-result"]');
-    if (!grid || !resultPanel) return;
-    resultPanel.style.display = '';
-
-    // Clear non-header rows
-    Array.from(grid.children).forEach(child => {
-      if (!child.classList.contains('jo-header')) grid.removeChild(child);
-    });
-
-    const wins = (payload && payload.roll1 && Array.isArray(payload.roll1.wins))
-      ? payload.roll1.wins : [];
-
-    if (wins.length === 0) {
-      const emptyEl = document.createElement('div');
-      emptyEl.className = 'jp-roll1-empty';
-      emptyEl.textContent = 'No current-level wins this day.';
-      grid.appendChild(emptyEl);
-      return;
-    }
-
-    // Ensure helpers cached (used by #appendRevealRow)
-    if (!this._rollsHelpers) {
-      this._rollsHelpers = { joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth };
-    }
-
-    // Append rows mirroring #animateRoll1FromPayload's row-shape mapping.
-    wins.forEach((win, idx) => {
-      const traitIdNum = win.traitId;
-      const isBonus = traitIdNum == null;
-      const row = {
-        type: isBonus ? 'bonus' : 'normal',
-        traitId: traitIdNum ?? 0,
-        winnerCount: 1,
-        uniqueWinnerCount: 1,
-        coinPerWinner: win.awardType && win.awardType.includes('burnie') ? win.amount : '0',
-        ticketsPerWinner: win.awardType === 'tickets' ? win.amount : null,
-        ethPerWinner: win.awardType === 'eth' ? win.amount : '0',
-        spreadBuckets: [false, false, false],
-      };
-      this.#appendRevealRow(grid, row, idx);
-    });
-
-    // Strip stagger animation classes so rows appear instantly (no reveal anim).
-    // Walk the just-appended rows; jp-row-reveal class is added per-cell by
-    // #appendRevealRow — remove from every cell so no animation fires.
-    Array.from(grid.children).forEach(child => {
-      if (child.classList.contains('jo-header')) return;
-      // jo-row uses display:contents — its children are the actual cells.
-      const cells = (child.children && child.children.length)
-        ? Array.from(child.children) : [child];
-      for (const cell of cells) {
-        if (cell.classList && cell.classList.remove) cell.classList.remove('jp-row-reveal');
-        if (cell.style) cell.style.animationDelay = '0ms';
-      }
-    });
-  }
-
-  #renderRoll2Instant(payload) {
-    const data = payload?.roll2 ?? {};
-    // Mirror #onReplayClick's #replayData shape so subsequent state introspection
-    // (e.g. roll1_done branch checking hasBonus) stays consistent.
-    this.#replayData = {
-      hasBonus: (data.wins?.length || 0) > 0,
-      roll2: data,
-      bonusTraitsPacked: data.bonusTraitsPacked ?? null,
-    };
-
-    const resultPanel = this.querySelector('[data-bind="jp-roll2-result"]');
-    if (resultPanel) resultPanel.style.display = '';
-
-    const grid = this.querySelector('[data-bind="jp-roll2-slot-grid"]');
-    if (!grid) return;
-
-    // Clear non-header children
-    Array.from(grid.children).forEach(c => {
-      if (!c.classList.contains('jp-slot-header')) grid.removeChild(c);
-    });
-
-    // Mirror #runRoll2Anim's final-state DOM shape exactly (jackpot-panel.js:938-1027):
-    // for each slot: 3 cells (sym, wins, amt) appended individually with classes.
-    // Plus optional ticket-sub-row cell when present.
-    const slots = rebucketRoll2BySlot(
-      data || {},
-      this.#replayData.bonusTraitsPacked,
-    );
-
-    slots.forEach((slot, idx) => {
-      const sym = document.createElement('div');
-      sym.className = 'jp-slot-symbol'
-        + (slot.isEmpty ? ' jp-slot-empty' : '')
-        + (slot.isFarFuture ? ' jp-slot-farfuture' : '');
-      if (slot.isFarFuture) {
-        sym.textContent = 'Far-Future (BURNIE)';
-      } else if (slot.traitId == null) {
-        sym.textContent = '—';
-      } else {
-        const img = document.createElement('img');
-        img.src = joBadgePath(slot.quadrant, slot.symbolIdx, slot.colorIdx);
-        img.alt = JO_SYMBOLS[JO_CATEGORIES[slot.quadrant]]?.[slot.symbolIdx] ?? '';
-        sym.appendChild(img);
-      }
-
-      const wins = document.createElement('div');
-      wins.className = 'jp-slot-wins' + (slot.isEmpty ? ' jp-slot-empty' : '');
-      wins.textContent = String(slot.wins);
-
-      const amt = document.createElement('div');
-      amt.className = 'jp-slot-amount' + (slot.isEmpty ? ' jp-slot-empty' : '');
-      if (slot.isEmpty) {
-        amt.textContent = '—';
-      } else {
-        const a = slot.amountPerWin;
-        amt.textContent = (a && a.length > 10) ? joFormatWeiToEth(a) : String(a);
-      }
-
-      // Append cells WITHOUT jp-row-reveal class (no stagger animation).
-      [sym, wins, amt].forEach(cell => grid.appendChild(cell));
-
-      // Ticket sub-row (mirrors #runRoll2Anim:999-1022).
-      if (slot.ticketSubRow && slot.ticketSubRow.wins > 0 && !slot.isFarFuture) {
-        const subCell = document.createElement('div');
-        subCell.className = 'jp-ticket-subrow';
-
-        const badge = document.createElement('span');
-        badge.className = 'jp-ticket-subrow-badge';
-        if (slot.traitId != null) {
-          const bImg = document.createElement('img');
-          bImg.src = joBadgePath(slot.quadrant, slot.symbolIdx, slot.colorIdx);
-          bImg.alt = JO_SYMBOLS[JO_CATEGORIES[slot.quadrant]]?.[slot.symbolIdx] ?? '';
-          badge.appendChild(bImg);
-        }
-
-        const label = document.createElement('span');
-        label.className = 'jp-ticket-subrow-label';
-        label.textContent = '↳ Tickets won: ' + slot.ticketSubRow.wins;
-
-        subCell.appendChild(badge);
-        subCell.appendChild(label);
-        // No jp-row-reveal class — no animation.
-        grid.appendChild(subCell);
-      }
-    });
-  }
 
   connectedCallback() {
+    this.#resultsCtaEl = null;   // the markup below mints a fresh one
     this.innerHTML = `
       <div data-bind="skeleton" class="panel last-day-jackpot">
         <div class="skeleton-header"><div class="skeleton-line skeleton-shimmer" style="width:40%"></div></div>
@@ -651,616 +874,130 @@ class LastDayJackpot extends HTMLElement {
             <span class="ldj-day-label" data-bind="day">Day --</span>
           </div>
 
-          <!-- Cold-start (status:'pre-game' OR no payload) — JKP-03 first-class state -->
+          <!-- Cold-start (status:'pre-game' OR no payload) -->
           <div data-bind="ldj-status-cold-start" class="ldj-cold-start">
             <p>Game starts soon, no jackpots yet.</p>
             <p class="ldj-subtle">When the first day completes, this is where the wins will appear.</p>
           </div>
 
-          <!-- Empty-day (status:'resolved-no-winners') — JKP-03 first-class state -->
+          <!-- Empty-day (status:'resolved-no-winners') -->
           <div data-bind="ldj-status-empty-day" class="ldj-empty-day" style="display:none;">
             <p data-bind="ldj-empty-copy">Day -- had no winners — pot rolled to day --.</p>
           </div>
 
-          <!-- Resolved (status:'resolved') — winners + spin reveal -->
+          <!-- Resolved: the spin/scratch reveal itself is the sibling
+               <replay-panel> (app/index.html); this branch carries the
+               player-centric chrome around it. -->
           <div data-bind="ldj-status-resolved" style="display:none;">
-            <!-- New-day banner (Plan 59-03 — hidden by default) -->
             <div class="ldj-new-day-banner" data-bind="ldj-new-day-banner" hidden>
               <span data-bind="ldj-new-day-text"></span>
               <button class="ldj-view-now" data-bind="ldj-view-now" type="button">View now</button>
             </div>
 
-            <!-- Winner summary (Plan 59-02 populates) -->
-            <div class="jp-winner-summary" data-bind="jp-winner-summary" style="display:none;"></div>
+            <!-- Full-reveal summary CTA — hidden until the WHOLE board (bonus
+                 roll included) and the coin flip play out (#maybeShowResultsCta).
+                 #mountResultsCta relocates it beneath the replay board in the
+                 middle draw column; this is just where it is born. -->
+            <button type="button" class="ldj-results-cta" data-bind="ldj-results-cta" hidden>
+              DAY SUMMARY
+            </button>
 
-            <!-- Replay / Bonus Roll section (D-03 verbatim from /beta/) -->
-            <div class="jp-replay-section" data-bind="jp-replay-section">
-              <div class="jp-replay-controls">
-                <div class="jp-spin-flame" data-bind="jp-spin-flame" aria-hidden="true"></div>
-                <button class="jp-replay-btn" id="jp-replay-btn" data-state="idle" disabled>Replay</button>
-              </div>
-
-              <!-- Roll 1 result grid -->
-              <div class="jp-roll1-result" data-bind="jp-roll1-result" style="display:none;">
-                <div class="jp-roll-heading">Roll 1 — current-level wins (ETH + tickets)</div>
-                <div class="jo-grid jp-roll1-grid" data-bind="jp-roll1-grid">
-                  <div class="jo-header">Type</div>
-                  <div class="jo-header">Win</div>
-                  <div class="jo-header">Uniq</div>
-                  <div class="jo-header">Coin</div>
-                  <div class="jo-header">Tkts</div>
-                  <div class="jo-header">ETH</div>
-                  <div class="jo-header">Spread</div>
-                </div>
-              </div>
-
-              <!-- Roll 2 bonus-only slot grid -->
-              <div class="jp-roll2-result" data-bind="jp-roll2-result" style="display:none;">
-                <div class="jp-roll-heading jp-roll2-heading">Bonus Roll — bonus-card draws for this day</div>
-                <div class="jp-roll2-slot-grid" data-bind="jp-roll2-slot-grid">
-                  <div class="jp-slot-header">Symbol</div>
-                  <div class="jp-slot-header">Wins</div>
-                  <div class="jp-slot-header">Amount / win</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Winner groups (KEEP from /beta/ — Plan 59-02 populates) -->
-            <div class="jp-winners">
-              <div class="jp-winners-group" data-bind="jp-winners-group-normal" style="display:none;">
-                <div class="jp-winners-label"><span data-bind="jp-winners-label-normal">Winners (Normal Jackpot)</span></div>
-                <ul class="jp-winners-list" data-bind="jp-winners-list-normal" role="listbox" aria-label="Normal jackpot winners"></ul>
-              </div>
-              <div class="jp-winners-group" data-bind="jp-winners-group-baf" style="display:none;">
-                <div class="jp-winners-label"><span data-bind="jp-winners-label-baf">BAF Winners</span></div>
-                <ul class="jp-winners-list" data-bind="jp-winners-list-baf" role="listbox" aria-label="BAF winners"></ul>
-              </div>
-              <div class="jp-winners-group" data-bind="jp-winners-group-decimator" style="display:none;">
-                <div class="jp-winners-label"><span data-bind="jp-winners-label-decimator">Decimator Winners</span></div>
-                <ul class="jp-winners-list" data-bind="jp-winners-list-decimator" role="listbox" aria-label="Decimator winners"></ul>
-              </div>
-              <div class="jp-winners-group" data-bind="jp-winners-group-empty" style="display:none;">
-                <ul class="jp-winners-list">
-                  <li class="jp-winner-item jp-winner-item--empty" data-bind="jp-winners-empty">No data for this day</li>
-                </ul>
-              </div>
-            </div>
+            <!-- The day-results list ("What the draw paid"), the foil-ticket
+                 strip, and the "N winners this day · top hit …" caption were all
+                 removed 2026-07-29 (user calls: "the ugly foil tickets and the
+                 big list of what everyone else won", then the caption). The
+                 widget is the draw and the scratch; DAY SUMMARY still opens
+                 the player's own popup, and the caption survives as that popup's
+                 NO HIT subtitle (#dayStatsText).
+                 What could NOT just go: a matched foil line pays a bonus spin, and
+                 the CLAIM button lived inside that strip. This bar is that button
+                 and nothing else — hidden unless a line is actually claimable. -->
+            <div class="ldj-foil-claimbar" data-bind="ldj-foil-claimbar" hidden></div>
           </div>
         </div>
       </div>
     `;
 
-    // STRIPPED per D-03: createScrubber instantiation
-    // STRIPPED per Q12: jp-overview toggle wiring (#renderOverview removed)
-
-    // Plan 04 (rebuild — verbatim from /beta/): initialise rolls factory and wire Replay button.
-    // Phase 59 reduced selectors (joGrid/joStatus/joFarFuture/jackpotOverview removed — DOM not present).
-    this.#rolls = createJackpotRolls({
-      root: this,
-      apiBase: '',  // Phase 59 does NOT call factory's fetch methods (D-02 + RESEARCH Q1)
-      selectors: {
-        roll2Panel:      '[data-bind="jp-roll2-result"]',
-        demoCenterFlame: '[data-bind="jp-spin-flame"]',
-        demoWrap:        '[data-bind="jp-replay-section"]',
-        // STRIPPED per Q12: joGrid, joStatus, joFarFuture, jackpotOverview (DOM removed)
-      }
-    });
-    this.#unsubs.push(() => this.#rolls.dispose());
-
-    const replayBtn = this.querySelector('#jp-replay-btn');
-    if (replayBtn) {
-      replayBtn.addEventListener('click', () => this.#onReplayClick());
-    }
-
-    // Plan 59-03: wire the new-day banner's "View now" button (D-04).
+    // New-day banner CTA (Plan 59-03 D-04).
     const viewNowBtn = this.querySelector('[data-bind="ldj-view-now"]');
     if (viewNowBtn) {
       viewNowBtn.addEventListener('click', () => this.#onNewDayBannerClick());
     }
 
-    // Plan 59-02: subscribe to app.lastDay store path (populated by polling.js's pollLastDay).
-    // subscribe() fires immediately with current value (store.js:117) — first fire likely
-    // undefined since polling hasn't run yet; #onLastDayUpdate guards via `if (!payload) return;`
-    // and leaves the Plan 59-01 default cold-start scaffold visible until a real payload arrives.
+    // Full-reveal popup CTA (gated behind the whole board + flip playing out).
+    const resultsCta = this.#resultsCta();
+    if (resultsCta) {
+      resultsCta.addEventListener('click', () => this.#onResultsCtaClick());
+    }
+
+    // app.lastDay subscription (polling.js pollLastDay writes it).
     this.#unsubs.push(
       subscribe('app.lastDay', (payload) => this.#onLastDayUpdate(payload))
     );
 
-    // Plan 59-03: wallet-conditional highlight (D-05). Subscribe to BOTH
-    // viewing.address AND connected.address since getViewedAddress() reads both
-    // (per RESEARCH Q4 + view-mode-banner.js:131-133 multi-subscribe pattern).
-    // Both subscriptions fire immediately with current value (likely null on
-    // first mount) — #refreshHighlight handles null gracefully.
+    // Viewed-player changes re-target both the spin panel and the foil strip.
     this.#unsubs.push(
-      subscribe('viewing.address', () => this.#refreshHighlight())
+      subscribe('viewing.address', () => {
+        this.#syncReplayPanel();
+        this.#refreshFoil();
+        this.#maybeShowResultsCta();
+      })
     );
     this.#unsubs.push(
-      subscribe('connected.address', () => this.#refreshHighlight())
+      subscribe('connected.address', () => {
+        this.#syncReplayPanel();
+        this.#refreshFoil();
+        this.#maybeShowResultsCta();
+      })
     );
 
-    // Plan 59-01 default: dismiss skeleton so cold-start is visible until Plan 59-02 payload arrives.
-    // Plan 59-02 #renderForStatus also calls #showContent() — first call wins, others are no-ops.
+    // Panel scratch completion (bubbles from the sibling <replay-panel>) —
+    // the spoiler gate opens only after the player scratches every owned
+    // area, not at spin end. The event's detail (bonusPhase/bonusAvailable)
+    // feeds the results-CTA "whole board done" gate.
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      this.#scratchCompleteListener = (e) => this.#onPanelScratchComplete(e);
+      document.addEventListener('replay:scratch-complete', this.#scratchCompleteListener);
+      // Coin-flip reveal (app-daily-flip) — the other half of the CTA gate.
+      this.#flipListener = () => this.#maybeShowResultsCta();
+      document.addEventListener('flip:revealed', this.#flipListener);
+    }
+
     this.#showContent();
   }
 
   disconnectedCallback() {
     this.#unsubs.forEach(fn => fn());
     this.#unsubs = [];
+    // The CTA may be parked inside <app-daily-flip>; innerHTML teardown here
+    // would not reach it, so pull it out explicitly (connectedCallback mints a
+    // fresh one, and an orphan would keep firing this instance's handler).
+    if (this.#resultsCtaEl) {
+      try { this.#resultsCtaEl.remove(); } catch { /* fakeDOM */ }
+      this.#resultsCtaEl = null;
+    }
+    if (this.#bridgeTimer != null) {
+      try { clearInterval(this.#bridgeTimer); } catch { /* defensive */ }
+      this.#bridgeTimer = null;
+    }
+    if (this.#scratchCompleteListener
+      && typeof document !== 'undefined'
+      && typeof document.removeEventListener === 'function') {
+      try { document.removeEventListener('replay:scratch-complete', this.#scratchCompleteListener); }
+      catch { /* defensive */ }
+    }
+    this.#scratchCompleteListener = null;
+    if (this.#flipListener
+      && typeof document !== 'undefined'
+      && typeof document.removeEventListener === 'function') {
+      try { document.removeEventListener('flip:revealed', this.#flipListener); }
+      catch { /* defensive */ }
+    }
+    this.#flipListener = null;
   }
-
-  // ---------------------------------------------------------------------------
-  // STRIPPED per Q12 (overview): #renderOverview(level)
-  // STRIPPED per Q12: #computeLatestCompletedDay(game)
-  // ---------------------------------------------------------------------------
-
-  // ---------------------------------------------------------------------------
-  // Winner summary — brief per-type breakdown rendered above the winner dropdown.
-  // KEEP verbatim from /beta/ — used by Plan 59-02 #renderResolvedDay.
-  // ---------------------------------------------------------------------------
-  #renderWinnerSummary(winners, day) {
-    const summaryEl = this.querySelector('[data-bind="jp-winner-summary"]');
-    if (!summaryEl) return;
-
-    if (!winners || winners.length === 0) {
-      summaryEl.style.display = 'none';
-      summaryEl.innerHTML = '';
-      return;
-    }
-
-    const ethWinners  = winners.filter(w => BigInt(w.totalEth  || '0') > 0n);
-    const tickWinners = winners.filter(w => (w.ticketCount || 0) > 0);
-    const coinWinners = winners.filter(w => BigInt(w.coinTotal || '0') > 0n);
-    // BAF winners: rows with bafPrize.eth > 0 OR bafPrize.tickets > 0.
-    const bafEthWinners    = winners.filter(w => w.bafPrize && BigInt(w.bafPrize.eth || '0') > 0n);
-    const bafTicketWinners = winners.filter(w => w.bafPrize && (w.bafPrize.tickets || 0) > 0);
-
-    const rows = [];
-
-    if (ethWinners.length > 0) {
-      const uniqueAddrs = new Set(ethWinners.map(w => w.address)).size;
-      const amounts = ethWinners.map(w => BigInt(w.totalEth));
-      const topAmt  = amounts.reduce((a, b) => (b > a ? b : a), 0n);
-      const allSame = amounts.every(a => a === amounts[0]);
-      const amtStr  = allSame
-        ? formatEth(amounts[0].toString()) + ' ETH each'
-        : formatEth(topAmt.toString()) + ' ETH (top)';
-      rows.push({ label: 'ETH', count: ethWinners.length, unique: uniqueAddrs, amount: amtStr });
-    }
-
-    if (tickWinners.length > 0) {
-      const uniqueAddrs = new Set(tickWinners.map(w => w.address)).size;
-      const counts  = tickWinners.map(w => joScaledToTickets(w.ticketCount || 0));
-      const topCount = Math.max(...counts);
-      const allSame  = counts.every(c => c === counts[0]);
-      const amtStr   = allSame ? `${counts[0]} tkts each` : `${topCount} tkts (top)`;
-      rows.push({ label: 'Tickets', count: tickWinners.length, unique: uniqueAddrs, amount: amtStr });
-    }
-
-    if (coinWinners.length > 0) {
-      const uniqueAddrs = new Set(coinWinners.map(w => w.address)).size;
-      const amounts = coinWinners.map(w => BigInt(w.coinTotal));
-      const topAmt  = amounts.reduce((a, b) => (b > a ? b : a), 0n);
-      const allSame = amounts.every(a => a === amounts[0]);
-      const amtStr  = allSame
-        ? joFormatWeiToEth(amounts[0].toString()) + ' BURNIE each'
-        : joFormatWeiToEth(topAmt.toString()) + ' BURNIE (top)';
-      rows.push({ label: 'BURNIE', count: coinWinners.length, unique: uniqueAddrs, amount: amtStr });
-    }
-
-    if (bafEthWinners.length > 0) {
-      const uniqueAddrs = new Set(bafEthWinners.map(w => w.address)).size;
-      const amounts = bafEthWinners.map(w => BigInt(w.bafPrize.eth));
-      const totalAmt = amounts.reduce((a, b) => a + b, 0n);
-      const topAmt   = amounts.reduce((a, b) => (b > a ? b : a), 0n);
-      const amtStr   = `${formatEth(totalAmt.toString())} ETH total · ${formatEth(topAmt.toString())} (top)`;
-      rows.push({ label: 'BAF ETH', count: bafEthWinners.length, unique: uniqueAddrs, amount: amtStr });
-    }
-
-    if (bafTicketWinners.length > 0) {
-      const uniqueAddrs = new Set(bafTicketWinners.map(w => w.address)).size;
-      const totalTickets = bafTicketWinners.reduce(
-        (sum, w) => sum + joScaledToTickets(w.bafPrize.tickets || 0), 0
-      );
-      const amtStr = `${totalTickets} tkts across ${bafTicketWinners.length} lootbox roll${bafTicketWinners.length === 1 ? '' : 's'}`;
-      rows.push({ label: 'BAF Tickets', count: bafTicketWinners.length, unique: uniqueAddrs, amount: amtStr });
-    }
-
-    // Decimator — per-winner regularEth + lootboxEth (regular claim) and
-    // terminalEth (game-over terminal claim).
-    const decRegWinners = winners.filter(w =>
-      w.decimatorPrize &&
-      (BigInt(w.decimatorPrize.regularEth || '0') > 0n ||
-       BigInt(w.decimatorPrize.lootboxEth || '0') > 0n));
-    const decTermWinners = winners.filter(w =>
-      w.decimatorPrize && BigInt(w.decimatorPrize.terminalEth || '0') > 0n);
-
-    if (decRegWinners.length > 0) {
-      const uniqueAddrs = new Set(decRegWinners.map(w => w.address)).size;
-      const totalEth = decRegWinners.reduce((acc, w) =>
-        acc + BigInt(w.decimatorPrize.regularEth || '0') + BigInt(w.decimatorPrize.lootboxEth || '0'), 0n);
-      const amtStr = `${formatEth(totalEth.toString())} ETH total`;
-      rows.push({ label: 'Decimator', count: decRegWinners.length, unique: uniqueAddrs, amount: amtStr });
-    }
-
-    if (decTermWinners.length > 0) {
-      const uniqueAddrs = new Set(decTermWinners.map(w => w.address)).size;
-      const totalEth = decTermWinners.reduce((acc, w) =>
-        acc + BigInt(w.decimatorPrize.terminalEth || '0'), 0n);
-      const amtStr = `${formatEth(totalEth.toString())} ETH total`;
-      rows.push({ label: 'Dec. Terminal', count: decTermWinners.length, unique: uniqueAddrs, amount: amtStr });
-    }
-
-    if (rows.length > 0) {
-      summaryEl.innerHTML = this.#buildSummaryHtml(rows, day);
-      summaryEl.style.display = '';
-    } else {
-      summaryEl.innerHTML = `<div class="jp-summary-note">${winners.length} winner${winners.length !== 1 ? 's' : ''} this day</div>`;
-      summaryEl.style.display = '';
-    }
-  }
-
-  #buildSummaryHtml(rows, day) {
-    if (!rows.length) return '';
-    const rowHtml = rows.map(r =>
-      `<div class="jp-summary-row">
-        <span class="jp-summary-type">${r.label}</span>
-        <span class="jp-summary-count">${r.count} <span class="jp-summary-uniq">(${r.unique})</span></span>
-        <span class="jp-summary-amount">${r.amount}</span>
-      </div>`
-    ).join('');
-    return `<div class="jp-summary-header">Day ${day} Jackpot</div>${rowHtml}`;
-  }
-
-  // ---------------------------------------------------------------------------
-  // STRIPPED per Plan 59-01: #onDayChange(day) — Plan 59-02 adds #renderResolvedDay
-  // (extracted from this method's classification + per-category list-render code).
-  // ---------------------------------------------------------------------------
-
-  // Format breakdown array into tooltip HTML lines, partitioned by roll phase.
-  // KEEP verbatim from /beta/ — used by Plan 59-02 winner row tooltips.
-  #formatBreakdownTooltip(breakdown) {
-    const rowLabel = (b) => {
-      const { awardType, amount, count } = b;
-      let label;
-      if (awardType === 'eth') {
-        label = joFormatWeiToEth(amount) + ' ETH';
-      } else if (awardType === 'eth_baf') {
-        label = joFormatWeiToEth(amount) + ' ETH (BAF)';
-      } else if (awardType === 'tickets') {
-        const n = joScaledToTickets(amount);
-        label = n + ' ticket' + (n !== 1 ? 's' : '');
-      } else if (awardType === 'tickets_baf') {
-        const n = joScaledToTickets(amount);
-        label = n + ' ticket' + (n !== 1 ? 's' : '') + ' (BAF)';
-      } else if (awardType.includes('burnie') || awardType === 'farFutureCoin') {
-        label = joFormatWeiToEth(amount) + ' BURNIE';
-      } else if (awardType === 'whale_pass') {
-        label = (count > 1 || Number(amount) > 1) ? (amount + ' Whale Passes') : 'Whale Pass';
-      } else if (awardType === 'dgnrs') {
-        label = joFormatWeiToEth(amount) + ' DGNRS';
-      } else {
-        label = amount + ' ' + awardType;
-      }
-      return `<span>×${count} ${label}</span>`;
-    };
-
-    const roll1 = breakdown.filter(b => (b.phase || 'roll1') === 'roll1');
-    const roll2 = breakdown.filter(b => b.phase === 'roll2');
-    const other = breakdown.filter(b => b.phase === 'other');
-
-    const parts = [];
-    if (roll1.length > 0) {
-      parts.push('<div class="jp-tip-phase">Roll 1 — Main Draw</div>' + roll1.map(rowLabel).join(''));
-    }
-    if (roll2.length > 0) {
-      parts.push('<div class="jp-tip-phase">Roll 2 — Bonus Draw</div>' + roll2.map(rowLabel).join(''));
-    }
-    if (other.length > 0) {
-      parts.push('<div class="jp-tip-phase">Other</div>' + other.map(rowLabel).join(''));
-    }
-    return parts.join('');
-  }
-
-  // ---------------------------------------------------------------------------
-  // STRIPPED per Plan 59-01: #onWinnerItemClick(li) and #onWinnerChange(address)
-  // — no winner-pick UI in Phase 59 (D-05 wallet-conditional highlight only).
-  // ---------------------------------------------------------------------------
-
-  // ---------------------------------------------------------------------------
-  // Plan 04 (verbatim from /beta/): Replay / Bonus Roll state machine
-  // Phase 59 adaptation: enable-condition uses #pinnedDay (no winner-pick UI).
-  // ---------------------------------------------------------------------------
-
-  #setReplayState(state) {
-    this.#replayState = state;
-    const btn = this.querySelector('#jp-replay-btn');
-    const roll1El = this.querySelector('[data-bind="jp-roll1-result"]');
-    const roll2El = this.querySelector('[data-bind="jp-roll2-result"]');
-    const spinEl  = this.querySelector('[data-bind="jp-spin-flame"]');
-
-    if (!btn) return;
-    btn.dataset.state = state;
-
-    switch (state) {
-      case 'idle':
-        btn.textContent = 'Replay';
-        // Phase 59: enabled whenever a resolved day is pinned (no winner-pick UI).
-        btn.disabled = !this.#pinnedDay;
-        // Clear grids on reset to idle
-        if (roll1El) { roll1El.style.display = 'none'; this.#clearGrid('[data-bind="jp-roll1-grid"]'); }
-        if (roll2El) {
-          roll2El.style.display = 'none';
-          const slotGrid = this.querySelector('[data-bind="jp-roll2-slot-grid"]');
-          if (slotGrid) {
-            Array.from(slotGrid.children).forEach(c => {
-              if (!c.classList.contains('jp-slot-header')) slotGrid.removeChild(c);
-            });
-          }
-        }
-        if (spinEl) spinEl.classList.remove('jp-spinning');
-        break;
-      case 'roll1_playing':
-        btn.textContent = 'Rolling…';
-        btn.disabled = true;
-        if (roll1El) { roll1El.style.display = ''; }
-        if (roll2El) { roll2El.style.display = 'none'; }
-        break;
-      case 'roll1_done':
-        // Button label depends on hasBonus
-        if (this.#replayData?.hasBonus) {
-          btn.textContent = 'Bonus Roll';
-          btn.disabled = false;
-        } else {
-          // Flash "No bonus" for 500ms then reset to "Replay"
-          btn.textContent = 'No bonus';
-          btn.disabled = true;
-          setTimeout(() => {
-            if (this.#replayState === 'roll1_done') {
-              this.#setReplayState('idle');
-            }
-          }, 500);
-        }
-        if (spinEl) spinEl.classList.remove('jp-spinning');
-        break;
-      case 'roll2_playing':
-        btn.textContent = 'Rolling…';
-        btn.disabled = true;
-        if (roll2El) { roll2El.style.display = ''; }
-        break;
-      case 'roll2_done':
-        // Plan 59-03 (D-03): write idempotency flag — chainId-scoped (Pitfall B),
-        // try/catch wrapped (Pitfall F). Subsequent visits to this same day will
-        // skip the spin animation and render the final state directly.
-        this.#markSpunPinnedDay();
-        btn.textContent = 'Replay';
-        btn.disabled = false;
-        if (spinEl) spinEl.classList.remove('jp-spinning');
-        break;
-    }
-  }
-
-  // STRIPPED per Plan 59-01: _selectedAddress() — no winner-pick UI in Phase 59.
-
-  // Helper: clear non-header rows from a grid. KEEP verbatim from /beta/.
-  #clearGrid(selector) {
-    const grid = this.querySelector(selector);
-    if (!grid) return;
-    Array.from(grid.children).forEach(child => {
-      if (!child.classList.contains('jo-header')) grid.removeChild(child);
-    });
-  }
-
-  // Helper: append a staggered-reveal row into a grid. KEEP verbatim from /beta/
-  // — used by Plan 59-02 Roll 1 animation choreography.
-  #appendRevealRow(grid, row, idx) {
-    const { joBadgePath: badgePath, JO_CATEGORIES: cats, JO_SYMBOLS: syms, joFormatWeiToEth: fmtWei } = this._rollsHelpers || {};
-    if (!fmtWei) return; // helpers not ready yet
-
-    const isBonus = row.type === 'bonus';
-    const typeCell = document.createElement('div');
-    typeCell.className = 'jo-type-badge' + (isBonus ? ' jo-bonus' : '');
-    if (isBonus) {
-      typeCell.textContent = 'Bonus';
-    } else {
-      const t = row.traitId | 0;
-      const q = Math.floor(t / 64);
-      const sym = Math.floor((t % 64) / 8);
-      const col = t % 8;
-      const img = document.createElement('img');
-      img.src = badgePath(q, sym, col);
-      img.alt = syms[cats[q]]?.[sym] ?? '';
-      typeCell.appendChild(img);
-    }
-
-    const winCell = document.createElement('div'); winCell.className = 'jo-winners'; winCell.textContent = String(row.winnerCount ?? '');
-    const uniqCell = document.createElement('div'); uniqCell.className = 'jo-unique'; uniqCell.textContent = String(row.uniqueWinnerCount ?? '');
-    const coinCell = document.createElement('div'); coinCell.className = 'jo-coin'; coinCell.textContent = (!row.coinPerWinner || row.coinPerWinner === '0') ? '—' : fmtWei(row.coinPerWinner);
-    const tktCell  = document.createElement('div'); tktCell.className = 'jo-tickets'; tktCell.textContent = row.ticketsPerWinner ? String(joScaledToTickets(row.ticketsPerWinner)) : '—';
-    const ethCell  = document.createElement('div'); ethCell.className = 'jo-eth'; ethCell.textContent = (!row.ethPerWinner || row.ethPerWinner === '0') ? '—' : fmtWei(row.ethPerWinner);
-    const spreadCell = document.createElement('div'); spreadCell.className = 'jo-spread';
-    const buckets = Array.isArray(row.spreadBuckets) ? row.spreadBuckets : [false, false, false];
-    for (let b = 0; b < 3; b++) {
-      const bar = document.createElement('div');
-      bar.className = 'jo-spread-bar' + (buckets[b] ? ' active' : '');
-      spreadCell.appendChild(bar);
-    }
-
-    const delay = idx * 80;
-    const rowEl = document.createElement('div');
-    rowEl.className = 'jo-row';
-    rowEl.append(typeCell, winCell, uniqCell, coinCell, tktCell, ethCell, spreadCell);
-    // jo-row uses display:contents — animate each cell directly
-    Array.from(rowEl.children).forEach(cell => {
-      cell.classList.add('jp-row-reveal');
-      cell.style.animationDelay = delay + 'ms';
-    });
-    grid.appendChild(rowEl);
-    return rowEl;
-  }
-
-  // Plan 59-02: consume composed-blob payload directly — NEVER factory.runRoll1
-  // (which would re-fetch /game/jackpot/${level}/player/${addr} per RESEARCH Q1).
-  // Roll 1 → #animateRoll1FromPayload (hand-rolled choreography from pre-loaded data).
-  // Roll 2 → existing #runRoll2Anim (already pure-render — consumes #replayData).
-  async #onReplayClick() {
-    const btn = this.querySelector('#jp-replay-btn');
-    if (!btn || btn.disabled) return;
-
-    const state = this.#replayState;
-
-    if (state === 'idle' || state === 'roll2_done') {
-      if (!this.#pinnedDay || !this.#lastPayload) return;
-
-      const cancelToken = ++this.#replayCancelToken;
-
-      // Populate #replayData from polling payload (NOT from factory.runRoll1 fetch).
-      // Defensive optional-chaining — Pitfalls D + E + bonusTraitsPacked verification:
-      //   Per game.ts:881, bonusTraitsPacked is set in the PER-PLAYER /jackpot/${level}/player/${addr}
-      //   handler — NOT in the day-keyed /jackpot/day/:day/roll2 handler that the composed
-      //   /game/jackpot/last-day blob assembles from. So payload.roll2.bonusTraitsPacked
-      //   will be undefined here in practice; rebucketRoll2BySlot(roll2, null) returns
-      //   4 empty bonus slots (graceful degradation per Pitfall E).
-      this.#replayData = {
-        hasBonus: (this.#lastPayload.roll2?.wins?.length || 0) > 0,
-        roll2: this.#lastPayload.roll2 ?? {},
-        bonusTraitsPacked: this.#lastPayload.roll2?.bonusTraitsPacked ?? null,
-      };
-
-      this.#setReplayState('roll1_playing');
-
-      // Ensure helpers are cached for row rendering (used by #appendRevealRow)
-      if (!this._rollsHelpers) {
-        this._rollsHelpers = { joBadgePath, JO_CATEGORIES, JO_SYMBOLS, joFormatWeiToEth };
-      }
-
-      // Animate Roll 1 from pre-loaded payload (no fetch — Q1 + Pitfall H)
-      await this.#animateRoll1FromPayload(this.#lastPayload);
-
-      if (this.#replayCancelToken !== cancelToken) return; // superseded
-
-      this.#setReplayState('roll1_done');
-      return;
-    }
-
-    if (state === 'roll1_done' && this.#replayData?.hasBonus) {
-      // Start Roll 2 (factory's pure-render path via existing #runRoll2Anim helper)
-      const cancelToken = this.#replayCancelToken;
-      this.#setReplayState('roll2_playing');
-
-      const spinEl = this.querySelector('[data-bind="jp-spin-flame"]');
-      if (spinEl) spinEl.classList.add('jp-spinning');
-
-      // Render Roll 2 rows into our grids with stagger animation
-      await this.#runRoll2Anim(cancelToken);
-
-      if (this.#replayCancelToken !== cancelToken) return;
-      this.#setReplayState('roll2_done');
-    }
-  }
-
-  // KEEP verbatim from /beta/ — Roll 2 staggered slot grid render.
-  async #runRoll2Anim(cancelToken) {
-    const data = this.#replayData;
-    if (!data) return;
-    const spinEl = this.querySelector('[data-bind="jp-spin-flame"]');
-
-    // 900ms spin
-    await new Promise(resolve => setTimeout(resolve, 900));
-    if (this.#replayCancelToken !== cancelToken) return;
-    if (spinEl) spinEl.classList.remove('jp-spinning');
-
-    // Re-bucket by bonus-card symbol slot (4 bonus + 1 far-future)
-    const slots = rebucketRoll2BySlot(
-      data.roll2 || {},
-      data.bonusTraitsPacked ?? null,
-    );
-
-    const grid = this.querySelector('[data-bind="jp-roll2-slot-grid"]');
-    if (!grid) return;
-    // Clear non-header children
-    Array.from(grid.children).forEach(c => {
-      if (!c.classList.contains('jp-slot-header')) grid.removeChild(c);
-    });
-
-    slots.forEach((slot, idx) => {
-      const sym = document.createElement('div');
-      sym.className = 'jp-slot-symbol'
-        + (slot.isEmpty ? ' jp-slot-empty' : '')
-        + (slot.isFarFuture ? ' jp-slot-farfuture' : '');
-      if (slot.isFarFuture) {
-        sym.textContent = 'Far-Future (BURNIE)';
-      } else if (slot.traitId == null) {
-        sym.textContent = '—';
-      } else {
-        const img = document.createElement('img');
-        img.src = joBadgePath(slot.quadrant, slot.symbolIdx, slot.colorIdx);
-        img.alt = JO_SYMBOLS[JO_CATEGORIES[slot.quadrant]]?.[slot.symbolIdx] ?? '';
-        sym.appendChild(img);
-      }
-
-      const wins = document.createElement('div');
-      wins.className = 'jp-slot-wins' + (slot.isEmpty ? ' jp-slot-empty' : '');
-      wins.textContent = String(slot.wins);
-
-      const amt = document.createElement('div');
-      amt.className = 'jp-slot-amount' + (slot.isEmpty ? ' jp-slot-empty' : '');
-      if (slot.isEmpty) {
-        amt.textContent = '—';
-      } else {
-        const a = slot.amountPerWin;
-        amt.textContent = (a && a.length > 10) ? joFormatWeiToEth(a) : String(a);
-      }
-
-      [sym, wins, amt].forEach(cell => {
-        cell.classList.add('jp-row-reveal');
-        cell.style.animationDelay = (idx * 60) + 'ms';
-        grid.appendChild(cell);
-      });
-
-      // Ticket sub-row under bonus slot (never under far-future).
-      if (slot.ticketSubRow && slot.ticketSubRow.wins > 0 && !slot.isFarFuture) {
-        const subCell = document.createElement('div');
-        subCell.className = 'jp-ticket-subrow';
-
-        const badge = document.createElement('span');
-        badge.className = 'jp-ticket-subrow-badge';
-        if (slot.traitId != null) {
-          const bImg = document.createElement('img');
-          bImg.src = joBadgePath(slot.quadrant, slot.symbolIdx, slot.colorIdx);
-          bImg.alt = JO_SYMBOLS[JO_CATEGORIES[slot.quadrant]]?.[slot.symbolIdx] ?? '';
-          badge.appendChild(bImg);
-        }
-
-        const label = document.createElement('span');
-        label.className = 'jp-ticket-subrow-label';
-        label.textContent = '↳ Tickets won: ' + slot.ticketSubRow.wins;
-
-        subCell.appendChild(badge);
-        subCell.appendChild(label);
-        subCell.classList.add('jp-row-reveal');
-        subCell.style.animationDelay = ((idx * 60) + 30) + 'ms';
-        grid.appendChild(subCell);
-      }
-    });
-
-    // Wait for animations (9 rows * 60ms stagger + ~300ms anim duration)
-    await new Promise(resolve => setTimeout(resolve, slots.length * 60 + 400));
-  }
-
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
-
-  #bind(key, value) {
-    const el = this.querySelector(`[data-bind="${key}"]`);
-    if (el) el.textContent = value;
-  }
-
-  // STRIPPED per Plan 59-01: #onGameUpdate(game) — Plan 59-02 adds #onLastDayUpdate(payload) replacement.
 }
 
-// Idempotency-guarded register (Phase 58 pattern — player-dropdown.js:178-182).
-// Required for node:test compatibility (re-import does not throw).
+// Idempotency-guarded register (Phase 58 pattern).
 if (typeof customElements !== 'undefined' && typeof customElements.define === 'function') {
   if (!customElements.get('last-day-jackpot')) {
     customElements.define('last-day-jackpot', LastDayJackpot);

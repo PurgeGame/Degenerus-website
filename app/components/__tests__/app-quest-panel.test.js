@@ -1,7 +1,7 @@
 // /app/components/__tests__/app-quest-panel.test.js — Phase 62 Plan 62-04 (QST-01 + QST-02)
 // Run: cd website && node --test app/components/__tests__/app-quest-panel.test.js
 //
-// Tests Custom Element shell + read-only 2-slot quest display + reward cross-link
+// Tests Custom Element shell + DB-backed daily/level quest display + reward cross-link
 // + textContent-only rendering (T-58-18) + ZERO write-surface assertion (T-62-04-NoWrite).
 //
 // RESEARCH R4 (HIGH confidence) invalidated CONTEXT QST framing — there is NO
@@ -321,6 +321,7 @@ const PANEL_SRC = readFileSync(
   new URL('../app-quest-panel.js', import.meta.url),
   'utf8',
 );
+const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 
 // Strip line + block comments so source-grep assertions verify executable code,
 // not documentation strings that mention forbidden tokens (e.g. CF-08 comment
@@ -368,10 +369,18 @@ function makeQuestsPayload(overrides = {}) {
   return {
     player: CONNECTED,
     quests: [
-      { day: 1, slot: 0, questType: 6, progress: 1, target: 3, completed: false, highDifficulty: false, requirementMints: 0, requirementTokenAmount: '0' },
+      { day: 1, slot: 0, questType: 1, progress: 1, target: 3, completed: false, highDifficulty: false, requirementMints: 0, requirementTokenAmount: '0' },
       { day: 1, slot: 1, questType: 2, progress: 0, target: 100, completed: false, highDifficulty: false, requirementMints: 0, requirementTokenAmount: '0' },
     ],
     questStreak: { baseStreak: 5, lastCompletedDay: 0 },
+    levelQuest: {
+      level: 7,
+      questType: 6,
+      progress: '400000000000',
+      target: '1600000000000',
+      completed: false,
+      eligible: true,
+    },
     scoreBreakdown: { questStreakPoints: 5, mintCountPoints: 0, affiliatePoints: 0, totalBps: 50, passBonus: null },
     ...overrides,
   };
@@ -400,7 +409,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(ctor, ctor2, 'same ctor reference after re-import (idempotent)');
   });
 
-  test('Panel renders 2 quest slot containers + reward hint + streak display', async () => {
+  test('Panel renders a compact quest shell with streak HUD', async () => {
     const el = instantiate();
     assert.ok(el.innerHTML.length > 100, 'innerHTML populated');
     assert.match(
@@ -408,11 +417,26 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       /QUEST/,
       'header copy contains QUEST (static template literal)',
     );
-    // Reward-hint cross-link references BURNIE / Claims tray.
+    assert.doesNotMatch(el.innerHTML, /DAILY RUN/, 'removed daily-run kicker stays absent');
+    assert.doesNotMatch(el.innerHTML, /qst-blurb/, 'explanatory subtitle removed');
+    assert.doesNotMatch(el.innerHTML, /Daily quests progress automatically/, 'old verbose intro removed');
+
+    assert.doesNotMatch(el.innerHTML, /qst-reward-hint/,
+      'rewards belong inside their quest cards, not in a strip below them');
+  });
+
+  test('quest blocks keep a fixed height instead of stretching to fill the column', () => {
     assert.match(
-      el.innerHTML,
-      /BURNIE|Claims tray/,
-      'reward-hint references BURNIE balance OR Claims tray (cross-link to Phase 61 CLM row)',
+      APP_CSS,
+      /\.play-grid \.qst-slot\s*\{[^}]*height:\s*7\.5rem/s,
+    );
+    assert.match(
+      APP_CSS,
+      /\.play-grid \.qst-slots\s*\{[^}]*grid-auto-rows:\s*7\.5rem[^}]*align-content:\s*start/s,
+    );
+    assert.match(
+      APP_CSS,
+      /@media\s*\(min-width:\s*1100px\)[\s\S]*?\.qst-slots\s*\{[^}]*flex:\s*0 0 auto[^}]*grid-auto-rows:\s*7\.5rem/s,
     );
   });
 
@@ -430,7 +454,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     await settle(40);
 
     const slots = el.querySelectorAll('.qst-slot');
-    assert.equal(slots.length, 2, 'two .qst-slot elements rendered');
+    assert.equal(slots.length, 3, 'two daily quests plus one DB-backed level quest rendered');
 
     // Slot 0: progress 1/3 — text format flexible, but must contain "1" AND "3".
     const slot0 = slots[0];
@@ -442,7 +466,136 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     // text content is not empty.
     assert.ok(slot0Text.trim().length > 0, 'slot 0 has non-empty textContent');
 
+    const roles = el.querySelectorAll('.qst-slot-role');
+    assert.equal(roles[0]?.textContent, 'DAILY', 'primary slot uses the player-facing DAILY role chip');
+    assert.equal(roles[1]?.textContent, 'BONUS', 'secondary slot uses compact BONUS role chip');
+    assert.equal(roles[2]?.textContent, 'LEVEL', 'level quest has its own role chip');
+    assert.equal(el.querySelectorAll('.qst-slot-icon').length, 3, 'each quest has a game-style icon tile');
+    assert.match(slot0Text, /Buy a ticket or lootbox/, 'ETH quest uses player-facing purchase copy');
+
+    assert.equal(slots[1].classList.contains('qst-slot--gated'), true,
+      'bonus quest is muted until the main quest is complete');
+    assert.match(slots[1].textContent, /0\s*\/\s*100/,
+      'the gated bonus card still shows its real progress target');
+    assert.doesNotMatch(slots[1].textContent, /START|MAIN FIRST|DAILY FIRST/,
+      'progress replaces the old command-like placeholder');
+    assert.match(slots[2].textContent, /800 FLIP/,
+      'level card shows its distinct FLIP reward');
+    assert.equal(slots[2].querySelector('.qst-slot-reward-extra')?.textContent, '+5 STREAK',
+      'level streak reward sits on its own line');
+    const rewards = el.querySelectorAll('.qst-slot-reward');
+    const rewardLogos = el.querySelectorAll('.qst-slot-reward-logo');
+    assert.equal(rewards.length, 3, 'every card owns its reward line');
+    assert.equal(rewardLogos.length, 3, 'each reward line carries the FLIP flame logo');
+    assert.equal(rewardLogos[0].src, '/whitepaper/flame-logo.svg');
+    assert.match(rewards[0].textContent, /100 FLIP/);
+    assert.doesNotMatch(rewards[0].textContent, /NEXT FLIP/,
+      'reward copy stays concise without the removed next-flip suffix');
+
+    const meters = el.querySelectorAll('.qst-meter');
+    assert.equal(meters.length, 3, 'each quest has a progress meter');
+    assert.equal(meters[0].getAttribute('role'), 'progressbar');
+    assert.equal(meters[0].getAttribute('aria-valuenow'), '33', '1 / 3 renders as 33%');
+    assert.match(
+      String(el.querySelectorAll('.qst-meter-fill')[0]?.style?.width || ''),
+      /^33\.3/,
+      'meter fill reflects progress',
+    );
+
     el.disconnectedCallback();
+  });
+
+  test('clicking an actionable quest publishes its exact setup target', async () => {
+    const events = [];
+    const listener = (event) => events.push(event.detail);
+    document.addEventListener('quest:activate', listener);
+    const el = instantiate();
+    await settle(40);
+
+    const level = el.querySelectorAll('.qst-slot')[2];
+    assert.equal(level.getAttribute('role'), 'button');
+    assert.equal(level.getAttribute('tabindex'), '0');
+    level.dispatchEvent({ type: 'click' });
+    assert.deepEqual(events, [{
+      questType: 6,
+      target: '1600000000000',
+      variant: 'level',
+    }]);
+
+    document.removeEventListener('quest:activate', listener);
+    el.disconnectedCallback();
+  });
+
+  test('bonus quest unlocks once the primary quest is complete', async () => {
+    _fetchHandler = async () => makeQuestsPayload({
+      quests: [
+        { day: 1, slot: 0, questType: 1, progress: 3, target: 3, completed: true },
+        { day: 1, slot: 1, questType: 2, progress: 5, target: 100, completed: false },
+      ],
+    });
+    const el = instantiate();
+    await settle(40);
+
+    const slots = el.querySelectorAll('.qst-slot');
+    assert.equal(slots[1].classList.contains('qst-slot--gated'), false);
+    assert.doesNotMatch(slots[1].textContent, /MAIN FIRST/);
+    assert.match(slots[1].textContent, /5 \/ 100/);
+    el.disconnectedCallback();
+  });
+
+  test('quest type 9 uses the player-facing Redeem FLIP label', async () => {
+    _fetchHandler = async () => makeQuestsPayload({
+      quests: [
+        { day: 1, slot: 0, questType: 1, progress: 3, target: 3, completed: true },
+        { day: 1, slot: 1, questType: 9, progress: 0, target: 1, completed: false },
+      ],
+    });
+    const el = instantiate();
+    await settle(40);
+
+    assert.match(el.querySelectorAll('.qst-slot')[1].textContent, /Redeem FLIP/);
+    assert.doesNotMatch(el.textContent, /Mint with FLIP/i);
+    el.disconnectedCallback();
+  });
+
+  test('an unfinished foil quest publishes the same purchase level to the buy panel', async () => {
+    storeMod.update('app.lastDay', {
+      day: 1,
+      roll1: { purchaseLevel: 13 },
+    });
+    _fetchHandler = async (url) => {
+      if (String(url).includes('/game/quests/day/')) {
+        return {
+          day: 1,
+          quests: [
+            { slot: 0, questType: 1, flags: 0, target: '40000000000' },
+            { slot: 1, questType: 4, flags: 0, target: '1' },
+          ],
+        };
+      }
+      return makeQuestsPayload({
+        quests: [
+          { day: 1, slot: 0, questType: 1, progress: 0, target: '40000000000', completed: false },
+        ],
+      });
+    };
+
+    const el = instantiate();
+    await settle(40);
+    assert.deepEqual(storeMod.get('ui.foilQuest'), {
+      active: true,
+      completed: false,
+      day: 1,
+      level: 13,
+      address: CONNECTED.toLowerCase(),
+    });
+    el.disconnectedCallback();
+    assert.equal(storeMod.get('ui.foilQuest'), null, 'unmounted quest context cannot stay stale');
+  });
+
+  test('level quest is never sourced from an in-browser contract fallback', () => {
+    assert.doesNotMatch(PANEL_SRC, /getPlayerLevelQuestView|JsonRpcProvider|new ethers\.Contract/);
+    assert.match(PANEL_SRC, /data\?\.levelQuest/, 'optional level quest comes from /player payload');
   });
 
   test('Completed quest renders a completion indicator via textContent (no toast / no audio)', async () => {
@@ -451,6 +604,14 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
         { day: 1, slot: 0, questType: 6, progress: 3, target: 3, completed: true, highDifficulty: false, requirementMints: 0, requirementTokenAmount: '0' },
         { day: 1, slot: 1, questType: 2, progress: 0, target: 100, completed: false, highDifficulty: false, requirementMints: 0, requirementTokenAmount: '0' },
       ],
+      levelQuest: {
+        level: 7,
+        questType: 6,
+        progress: '1600000000000',
+        target: '1600000000000',
+        completed: true,
+        eligible: true,
+      },
     });
     const el = instantiate();
     await settle(40);
@@ -458,12 +619,14 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     const slots = el.querySelectorAll('.qst-slot');
     const slot0 = slots[0];
     const slot0Text = slot0.textContent || '';
-    // Completion indicator: any of "Done" / "Complete" / "Completed" / a check mark.
-    assert.match(
-      slot0Text,
-      /Done|Complete|✓/i,
-      `slot 0 (completed) text shows completion indicator; got "${slot0Text}"`,
+    assert.match(slot0Text, /COMPLETE/,
+      `slot 0 (completed) uses COMPLETE; got "${slot0Text}"`);
+    assert.deepEqual(
+      el.querySelectorAll('.qst-slot-status--done').map((node) => node.textContent),
+      ['COMPLETE', 'COMPLETE'],
+      'daily and level quest completion labels use the same wording',
     );
+    assert.doesNotMatch(el.textContent, /\bDONE\b/);
 
     // Source-grep — NO toast / playAudio / new Audio in executable code (comments
     // documenting the absence of these tokens do not count — see stripComments).
@@ -490,6 +653,35 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       /7/,
       `streak display contains "7" via textContent; got "${streakEl.textContent}"`,
     );
+
+    el.disconnectedCallback();
+  });
+
+  test('Degen Score mouseover shows the credited quest-streak points, not the raw streak count', async () => {
+    _fetchHandler = async () => makeQuestsPayload({
+      questStreak: { baseStreak: 7, lastCompletedDay: 0 },
+      scoreBreakdown: {
+        totalBps: 53,
+        mintLevelStreakPoints: 50,
+        questStreakPoints: 7,
+        mintCountPoints: 0,
+        affiliatePoints: 0,
+        cursePoints: 0,
+        passBonus: null,
+      },
+    });
+    const el = instantiate();
+    await settle(40);
+
+    const rows = el.querySelector('[data-bind="qst-score-rows"]').children;
+    const streakRow = rows.find(
+      (row) => row.querySelector('.ac-pop__label')?.textContent === 'Quest streak',
+    );
+    assert.ok(streakRow, 'quest-streak breakdown row rendered');
+    assert.equal(streakRow.querySelector('.ac-pop__pts').textContent, '3',
+      'a raw streak of 7 contributes floor(7 / 2) = 3 score points');
+    assert.equal(el.querySelector('[data-bind="qst-streak"]').textContent, '7',
+      'the separate streak counter remains the raw count');
 
     el.disconnectedCallback();
   });
@@ -614,5 +806,28 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       /AbortController|clearTimeout|clearInterval/.test(PANEL_SRC),
       'panel source uses AbortController / clearTimeout / clearInterval cleanup',
     );
+  });
+
+  // Account-switcher (2026-07-16) — combined mode renders the identity-panel
+  // note instead of fetching (quests/questStreak are per-account, not summed
+  // by combine.js).
+  test("mode 'combined' renders the per-account note via the existing empty-state bind", async () => {
+    let fetched = false;
+    _fetchHandler = async () => { fetched = true; return makeQuestsPayload(); };
+    // viewing.combined (not a direct ui.mode override) is the idiomatic
+    // combined-mode entry — it also keeps store.js's deriveMode microtask
+    // landing on 'combined' instead of reverting the mode later.
+    storeMod.update('viewing.combined', true);
+    storeMod.update('ui.mode', 'combined');
+    const el = instantiate();
+    await settle();
+
+    const emptyEl = el.querySelector('[data-bind="qst-empty"]');
+    assert.equal(emptyEl.hidden, false, 'empty-state bind visible in combined mode');
+    assert.equal(emptyEl.textContent, 'Per-account stat. Pick a single account.');
+    assert.equal(fetched, false, '/player/:address never fetched in combined mode');
+
+    const slots = el.querySelector('[data-bind="qst-slots"]');
+    assert.equal(slots.children.length, 0, 'no quest slot rows rendered');
   });
 });

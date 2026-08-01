@@ -24,6 +24,55 @@ import { get } from './store.js';
 // Module-level state — only the BrowserProvider; NO signer cache (WLT-03 fix structural).
 let _provider = null;
 
+// eth_estimateGas is a snapshot. A purchase or resolver can cross a storage
+// boundary between simulation and mining (for example, another player moves a
+// queue cursor), so using the estimate as an exact hard cap is unnecessarily
+// brittle. Keep the cushion modest: enough for the next branch, without the
+// wallet presenting a wildly inflated limit. Unused gas is not charged.
+export const GAS_ESTIMATE_HEADROOM_BPS = 12_000n;
+
+export function gasEstimateWithHeadroom(estimate) {
+  const gas = BigInt(estimate ?? 0);
+  if (gas <= 0n) return gas;
+  return (gas * GAS_ESTIMATE_HEADROOM_BPS + 9_999n) / 10_000n;
+}
+
+/**
+ * Preserve the fresh JsonRpcSigner API while intercepting its final send.
+ * Contract methods call runner.sendTransaction(request); estimating here puts
+ * the safety margin under every normal sendTx consumer without making each
+ * domain module hand-roll populateTransaction. A caller-supplied gasLimit is
+ * respected (the pre-warmed purchase path supplies an already-padded one).
+ */
+function _signerWithGasHeadroom(signer) {
+  if (!signer
+    || typeof signer.sendTransaction !== 'function'
+    || typeof signer.estimateGas !== 'function') return signer;
+
+  return new Proxy(signer, {
+    get(target, prop) {
+      if (prop === 'sendTransaction') {
+        return async (request) => {
+          let next = request;
+          if (request?.gasLimit == null) {
+            try {
+              const estimate = await target.estimateGas(request);
+              next = { ...request, gasLimit: gasEstimateWithHeadroom(estimate) };
+            } catch (_e) {
+              // Keep the wallet/provider's normal fallback path. Estimation
+              // failures are often useful revert messages and must not prevent
+              // the signer from attempting its own population.
+            }
+          }
+          return target.sendTransaction(next);
+        };
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 export function setProvider(browserProvider) { _provider = browserProvider; }
 export function getProvider() { return _provider; }
 export function clearProvider() { _provider = null; }
@@ -32,16 +81,23 @@ export function clearProvider() { _provider = null; }
 // requireSelf — chokepoint guard (RESEARCH §Pattern 4 layer 3).
 // Called as the FIRST statement in sendTx, BEFORE any provider/signer touch.
 //
-// Throw-message order (WR-03 — documented intent):
+// Throw-message order (WR-03 — documented intent; operator-mode extension 2026-07-16):
 //   1. ui.mode === 'view'       → 'Read-only mode — cannot sign...'
-//   2. !connected               → 'Wallet not connected.'
-//   3. viewing && mismatch      → 'Connected wallet does not match...'
+//   2. ui.mode === 'combined'   → 'Combined view is read-only — pick a single account to act.'
+//   3. !connected               → 'Wallet not connected.'
+//   4. viewing && mismatch      → 'Connected wallet does not match...'  (mode !== 'operator' ONLY)
 //
 // In the deep-link no-wallet case (mode==='view' AND connected===null) the
-// user sees message #1, NOT #2. The UI-level disable manager surfaces a
+// user sees message #1, NOT #3. The UI-level disable manager surfaces a
 // "Connect to your own wallet to act" tooltip well before this code path is
 // reached, so the chokepoint message is rarely surfaced to honest users; it
 // matters mainly for devtools-bypass tests (T-58-02).
+//
+// Operator mode: viewing !== connected is the EXPECTED shape (the connected
+// wallet is an approved operator acting for the viewed owner), so the mismatch
+// throw (#4) is skipped. The contract's _resolvePlayer(player) enforces the
+// on-chain approval; sendTx's freshAddress guard still pins the signer to the
+// connected operator, which is correct in operator mode (the operator signs).
 // ---------------------------------------------------------------------------
 
 export function requireSelf() {
@@ -49,12 +105,15 @@ export function requireSelf() {
   if (mode === 'view') {
     throw new Error('Read-only mode — cannot sign transactions while viewing another player.');
   }
+  if (mode === 'combined') {
+    throw new Error('Combined view is read-only — pick a single account to act.');
+  }
   const connected = get('connected.address');
   const viewing = get('viewing.address');
   if (!connected) {
     throw new Error('Wallet not connected.');
   }
-  if (viewing && connected.toLowerCase() !== viewing.toLowerCase()) {
+  if (mode !== 'operator' && viewing && connected.toLowerCase() !== viewing.toLowerCase()) {
     throw new Error('Connected wallet does not match viewing target.');
   }
   return true;
@@ -84,7 +143,7 @@ export async function assertChain() {
   if (!_provider) throw new Error('Wallet not connected');
   const network = await _provider.getNetwork();
   if (Number(network.chainId) !== CHAIN.id) {
-    throw new Error('Wrong network — switch to Sepolia.');
+    throw new Error(`Wrong network — switch to ${CHAIN.name}.`);
   }
   return true;
 }
@@ -118,7 +177,7 @@ export async function sendTx(buildTx, action) {
     throw new Error('Account changed mid-flow — please retry.');
   }
   // 4. Compose tx with fresh signer (caller passes builder, NOT pre-resolved promise).
-  const tx = await buildTx(signer);
+  const tx = await buildTx(_signerWithGasHeadroom(signer));
   // 5. KEEP analog's receipt-status idiom verbatim — the /beta/mint.js:756 bug-class fix.
   const receipt = await tx.wait();
   if (receipt.status === 0) throw new Error(`Reverted: ${tx.hash}`);

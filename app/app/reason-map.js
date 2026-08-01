@@ -4,7 +4,7 @@
 // Pitfall 4 reconciliation: roadmap names "Taken" / "WindowClosed" do NOT exist as
 // canonical contract custom errors. This seed uses the verified canonical aliases:
 //   - "Taken" semantics       → InvalidToken         (DegenerusDeityPass.sol:50)
-//   - "WindowClosed" semantics → NotDecimatorWindow  (BurnieCoin.sol:109)
+//   - "WindowClosed" semantics → NotDecimatorWindow  (FLIP.sol:109)
 // Other 4 codes are verified canonical names from contracts-testnet/:
 //   - NotTimeYet               (modules/DegenerusGameAdvanceModule.sol:44)
 //   - MustMintToday            (modules/DegenerusGameAdvanceModule.sol:43)
@@ -45,7 +45,7 @@ const ERROR_REGISTRY = new Map([
     recoveryAction: 'Pick a different option and retry.',
   }],
   // Pitfall 4 alias: 'WindowClosed' is not a canonical contract error name.
-  // BurnieCoin.sol:109 — `error NotDecimatorWindow();` is the claim-window-closed path.
+  // FLIP.sol:109 — `error NotDecimatorWindow();` is the claim-window-closed path.
   ['NotDecimatorWindow', {
     code: 'NotDecimatorWindow',
     userMessage: 'The decimator claim window is closed.',
@@ -58,6 +58,57 @@ const UNKNOWN = {
   userMessage: 'Unexpected error — please try again.',
   recoveryAction: 'Refresh the page if this persists.',
 };
+
+// Solidity `Panic(uint256)` — not a custom error, so it never matches the
+// registry and used to land in UNKNOWN. It is common in this protocol's UI paths
+// because token burns spend a balance directly (`balanceOf[from] -= amount`),
+// and an under-funded spend underflows rather than reverting with a name.
+const PANIC_SELECTOR = '0x4e487b71';
+const PANIC_MESSAGES = new Map([
+  [0x11, {
+    code: 'Panic:0x11',
+    userMessage: "That amount doesn't fit — usually more than the balance available.",
+    recoveryAction: 'Lower the amount and try again.',
+  }],
+  [0x12, {
+    code: 'Panic:0x12',
+    userMessage: 'The contract divided by zero on this input.',
+    recoveryAction: 'Change the amount and try again.',
+  }],
+  [0x01, {
+    code: 'Panic:0x01',
+    userMessage: 'The contract rejected this state as impossible.',
+    recoveryAction: 'Refresh and retry; report it if it repeats.',
+  }],
+]);
+const PANIC_GENERIC = {
+  code: 'Panic',
+  userMessage: 'The numbers did not add up on-chain.',
+  recoveryAction: 'Adjust the amount and try again.',
+};
+
+/** Panic mapping when `error` is a Solidity panic, else null. */
+function _panicMapping(error) {
+  const data = typeof error.data === 'string' ? error.data
+    : (typeof error.revert?.data === 'string' ? error.revert.data : null);
+  const reason = String(error.reason || error.shortMessage || '');
+  let code = null;
+  if (data && data.startsWith(PANIC_SELECTOR)) {
+    // 32-byte code word follows the selector.
+    const word = data.slice(10, 74);
+    if (word) {
+      try { code = Number(BigInt('0x' + word)); } catch (_e) { code = null; }
+    }
+  } else if (/panic code/i.test(reason)) {
+    const m = /panic code (0x[0-9a-f]+|\d+)/i.exec(reason);
+    if (m) {
+      try { code = Number(BigInt(m[1])); } catch (_e) { code = null; }
+    }
+  } else {
+    return null;
+  }
+  return PANIC_MESSAGES.get(code) || PANIC_GENERIC;
+}
 
 /**
  * Decode an ethers v6 CallExceptionError into a user-facing object.
@@ -90,6 +141,10 @@ export function decodeRevertReason(error) {
       ? error.data.slice(0, 10)
       : null);
   if (selector && ERROR_REGISTRY.has(selector)) return ERROR_REGISTRY.get(selector);
+  // Solidity panic — checked before the substring fallback so its own reason
+  // text ("panic code 0x11 ...") cannot collide with a registered name.
+  const panic = _panicMapping(error);
+  if (panic) return panic;
   // Fallback: require-string match (legacy contract reverts).
   // WR-02: the catch-all 'E' is a single-character key — substring-matching it
   // produces false positives on any reason that happens to contain capital 'E'
@@ -126,7 +181,7 @@ export function register(selectorOrName, mapping) {
 
 register('GameOverPossible', {
   code: 'GameOverPossible',
-  userMessage: "BURNIE ticket purchases are blocked right now — game-over risk detected.",
+  userMessage: "FLIP ticket purchases are blocked right now — game-over risk detected.",
   recoveryAction: 'Try again after the next jackpot resolves, or use ETH instead.',
 });
 

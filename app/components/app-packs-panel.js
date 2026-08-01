@@ -40,19 +40,14 @@ import { subscribe, get } from '../app/store.js';
 // Phase 63 Plan 63-02 (D-02 LOCKED): prewarmLootboxBuy added for iOS Safari
 // user-gesture preservation on the lootbox panel. Other 10 panels keep using
 // the existing await sendTx(...) path with Safari's "Open MetaMask?" prompt.
-import { purchaseEth, purchaseCoin, parseLootboxIdxFromReceipt, prewarmLootboxBuy } from '../app/lootbox.js';
+import { purchaseEth, parseLootboxIdxFromReceipt, prewarmLootboxBuy } from '../app/lootbox.js';
 import { decodeRevertReason } from '../app/reason-map.js';
 
 // Plan 60-03: write-path imports for the open-and-reveal flow.
-// openLootBox routes to openLootBox() (ETH) vs openBurnieLootBox() (BURNIE) via payKind.
+// openLootBox opens an ETH lootbox (lootboxes are ETH-only).
 // parseTraitsGeneratedFromReceipt extracts the trait payload for pack-animator.
 // pollRngForLootbox is the view-call wrapper used by #runPollCycle.
 import { openLootBox, parseTraitsGeneratedFromReceipt, pollRngForLootbox } from '../app/lootbox.js';
-
-// Plan 60-04: URL ?ref= bytes32hex affiliate persistence helper. Activated by the
-// connected.address subscription in connectedCallback — writes to chainId-scoped
-// localStorage on first visit; lootbox.js purchaseEth auto-reads on every Buy.
-import { persistAffiliateCodeFromUrl } from '../app/lootbox.js';
 
 // Plan 60-04: chainId-scoped localStorage keys per CONTEXT D-07 step 6 +
 // Phase 59 Pitfall B precedent (chainId scoping forward-safe for v5.0 mainnet).
@@ -107,7 +102,6 @@ function _setTimeoutUnref(fn, ms) {
 
 class AppPacksPanel extends HTMLElement {
   #unsubs = [];
-  #payKind = 'ETH';        // default per CONTEXT D-01 step 1 (Recommended starting position)
   #ticketQuantity = 0;     // default per D-01
   #lootboxQuantity = 1;    // default per D-01 step 2 ("default 1 since this is the lootbox panel")
   #busy = false;           // Plan 60-02 toggles during sendTx in-flight
@@ -132,7 +126,7 @@ class AppPacksPanel extends HTMLElement {
   //   6. 30s expiresAt TTL (R11 fallback when click outpaces refresh)
   // Click handler (#onBuyClick) is a SYNCHRONOUS arrow-property — no await
   // between gesture and signer.sendTransaction. R11 fallback: when cache is
-  // null or stale, click runs the legacy await purchaseEth/purchaseCoin path.
+  // null or stale, click runs the legacy await purchaseEth (ETH-only) path.
   #prewarmedTx = null;            // {buildTx, abort, expiresAt} | null
   #prewarmInflight = false;       // re-entrancy guard
   #prewarmDebounceTimer = null;   // _setTimeoutUnref handle for 300ms debounce
@@ -143,20 +137,6 @@ class AppPacksPanel extends HTMLElement {
       <div class="panel app-packs-panel">
         <div class="panel-header">
           <h2>PACKS</h2>
-        </div>
-
-        <!-- Pay-kind toggle (D-01: ETH | BURNIE; ETH default) -->
-        <div class="lbx-pay-toggle" data-bind="lbx-pay-toggle" role="radiogroup" aria-label="Payment method">
-          <button type="button"
-                  class="lbx-pay-toggle__btn lbx-pay-toggle__btn--active"
-                  data-bind="lbx-pay-eth"
-                  role="radio"
-                  aria-checked="true">ETH</button>
-          <button type="button"
-                  class="lbx-pay-toggle__btn"
-                  data-bind="lbx-pay-burnie"
-                  role="radio"
-                  aria-checked="false">BURNIE</button>
         </div>
 
         <!-- Ticket quantity picker (D-01 step 2: default 0, max 100) -->
@@ -191,12 +171,6 @@ class AppPacksPanel extends HTMLElement {
         <div class="lbx-boot-cta" data-bind="lbx-boot-cta" hidden></div>
       </div>
     `;
-
-    // Wire pay-kind toggle clicks
-    const ethBtn = this.querySelector('[data-bind="lbx-pay-eth"]');
-    const burnieBtn = this.querySelector('[data-bind="lbx-pay-burnie"]');
-    if (ethBtn)    ethBtn.addEventListener('click',    () => this.#onPayKindClick('ETH'));
-    if (burnieBtn) burnieBtn.addEventListener('click', () => this.#onPayKindClick('BURNIE'));
 
     // Wire quantity-picker buttons
     const tMinus = this.querySelector('[data-bind="lbx-tickets-minus"]');
@@ -321,15 +295,6 @@ class AppPacksPanel extends HTMLElement {
   // Event handlers (private)
   // ---------------------------------------------------------------------
 
-  #onPayKindClick(kind) {
-    if (this.#busy) return;
-    if (kind !== 'ETH' && kind !== 'BURNIE') return;
-    this.#payKind = kind;
-    this.#renderState();
-    // Plan 63-02 (D-02 LOCKED) Trigger 5 — input change.
-    this.#schedulePrewarm();
-  }
-
   #onQtyClick(field, delta) {
     if (this.#busy) return;
     if (field === 'tickets') {
@@ -353,20 +318,10 @@ class AppPacksPanel extends HTMLElement {
   // ---------------------------------------------------------------------
 
   #renderState() {
-    const ethBtn    = this.querySelector('[data-bind="lbx-pay-eth"]');
-    const burnieBtn = this.querySelector('[data-bind="lbx-pay-burnie"]');
     const tDisp     = this.querySelector('[data-bind="lbx-tickets-display"]');
     const lDisp     = this.querySelector('[data-bind="lbx-lootboxes-display"]');
     const buyBtn    = this.querySelector('[data-bind="lbx-buy-button"]');
 
-    if (ethBtn) {
-      ethBtn.classList.toggle('lbx-pay-toggle__btn--active', this.#payKind === 'ETH');
-      ethBtn.setAttribute('aria-checked', this.#payKind === 'ETH' ? 'true' : 'false');
-    }
-    if (burnieBtn) {
-      burnieBtn.classList.toggle('lbx-pay-toggle__btn--active', this.#payKind === 'BURNIE');
-      burnieBtn.setAttribute('aria-checked', this.#payKind === 'BURNIE' ? 'true' : 'false');
-    }
     if (tDisp) tDisp.textContent = String(this.#ticketQuantity);
     if (lDisp) lDisp.textContent = String(this.#lootboxQuantity);
     if (buyBtn) {
@@ -458,9 +413,7 @@ class AppPacksPanel extends HTMLElement {
           ticketQuantity: i === 0 ? ticketQuantity : 0,
           lootboxQuantity: 1,
         };
-        const result = this.#payKind === 'ETH'
-          ? await purchaseEth(args)
-          : await purchaseCoin(args);
+        const result = await purchaseEth(args);
         this.#processBuyReceipt(result);
       }
       if (buyBtn) buyBtn.textContent = 'Buy';
@@ -488,7 +441,6 @@ class AppPacksPanel extends HTMLElement {
     for (const idx of idxs) {
       const row = {
         lootboxIndex: idx.lootboxIndex,
-        payKind: idx.payKind,
         status: 'awaiting-rng',
         rngWord: 0n,
         receipt: result.receipt,
@@ -504,8 +456,8 @@ class AppPacksPanel extends HTMLElement {
   }
 
   // Synchronous-path tx-confirmed handler: derives the contract bound to the
-  // current provider for log parsing (lootbox.js's purchaseEth/purchaseCoin
-  // build this internally; pre-warm path needs to mirror).
+  // current provider for log parsing (lootbox.js's purchaseEth builds this
+  // internally; pre-warm path needs to mirror).
   #onTxConfirmed(receipt) {
     // Build a lightweight contract-like for parseLootboxIdxFromReceipt — the
     // parser only needs `interface.parseLog(log)`. We reuse the lootbox.js
@@ -601,7 +553,6 @@ class AppPacksPanel extends HTMLElement {
       this.#prewarmedTx = await prewarmLootboxBuy({
         ticketQuantity: this.#ticketQuantity,
         lootboxQuantity: this.#lootboxQuantity,
-        payKind: this.#payKind,
       });
       this.#enableBuyButton();
     } catch (err) {
@@ -902,7 +853,7 @@ class AppPacksPanel extends HTMLElement {
     }
 
     try {
-      const result = await openLootBox({lootboxIndex: row.lootboxIndex, payKind: row.payKind});
+      const result = await openLootBox({lootboxIndex: row.lootboxIndex});
       if (cancelToken !== this.#revealCancelToken) return;  // superseded — disconnect or stale render
 
       // Receipt-log-first reveal data (LBX-04 source of truth).
@@ -1026,7 +977,6 @@ class AppPacksPanel extends HTMLElement {
   get _state() {
     // Test-only accessor — exposes private state for assertions.
     return {
-      payKind: this.#payKind,
       ticketQuantity: this.#ticketQuantity,
       lootboxQuantity: this.#lootboxQuantity,
       busy: this.#busy,
@@ -1095,9 +1045,8 @@ class AppPacksPanel extends HTMLElement {
     if (this.#bootCtaRanForAddress === addr) return;
     this.#bootCtaRanForAddress = addr;
 
-    // CONTEXT D-05 step 1: persist URL ?ref= bytes32hex to localStorage on first
-    // visit. Idempotent — only writes if URL has a valid bytes32hex param.
-    try { persistAffiliateCodeFromUrl(CHAIN.id, addr); } catch (_) { /* defensive */ }
+    // URL ?ref= capture is handled site-wide by /js/ref.js (first-touch
+    // 'affiliate-ref' + 'dgn_ref'); purchases read it via readAffiliateCode.
 
     // CONTEXT D-07 step 2: fire indexer fetch + boot CTA render.
     this.#runBootCta(addr);
@@ -1181,7 +1130,6 @@ class AppPacksPanel extends HTMLElement {
     for (const lb of this.#unrevealedPacksFromIndexer) {
       const row = {
         lootboxIndex: BigInt(lb.lootboxIndex),
-        payKind: lb.payKind === 'BURNIE' ? 'BURNIE' : 'ETH',
         // Per CONTEXT D-07 step 3 sub-bullet: lb.opened===true AND not in
         // revealed set means user opened on-chain in a prior session but UI
         // didn't get to play animation. Plan 60-04 falls back to 'ready-to-open'

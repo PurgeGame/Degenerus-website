@@ -1,0 +1,189 @@
+// Pure jackpot-board aggregation used by replay-panel's public scratch reveals.
+//
+// Roll 1 emits one JackpotEthWin row per winning entry. Buckets pay the same
+// ETH amount to every entry, so total / row count is the displayed "per win"
+// value and row count is the multiplier. Ticket companion awards are carried
+// alongside that currency result so the public background can show the actual
+// tickets distributed too; whale passes and DGNRS remain player-only details.
+
+/**
+ * @param {Array<object>|null|undefined} wins Roll 1 event rows
+ * @param {Array<number|null|undefined>} displayTraits Four drawn trait IDs
+ * @returns {Array<{
+ *   traitId: number,
+ *   winnerCount: number,
+ *   uniqueWinnerCount: number,
+ *   perWinWei: bigint,
+ *   ticketWinnerCount: number,
+ *   ticketUniqueWinnerCount: number,
+ *   ticketEntriesTotal: bigint,
+ *   ticketEntriesPerWinner: bigint,
+ * }|null>}
+ */
+export function buildRoll1BucketSummaries(
+  wins,
+  displayTraits,
+) {
+  const traits = Array.isArray(displayTraits) ? displayTraits : [];
+  if (!Array.isArray(wins)) return traits.map(() => null);
+
+  const byTrait = new Map();
+  for (const row of wins) {
+    if (!row || row.traitId == null) continue;
+    const awardType = String(row.awardType || '').toLowerCase();
+    const isEth = awardType === 'eth';
+    const isTicket = awardType === 'tickets' || awardType === 'ticket';
+    if (!isEth && !isTicket) continue;
+    const traitId = Number(row.traitId);
+    if (!Number.isInteger(traitId) || traitId < 0 || traitId > 255) continue;
+    let amount;
+    try { amount = BigInt(row.amount || 0); } catch (_e) { continue; }
+    let group = byTrait.get(traitId);
+    if (!group) {
+      group = {
+        rows: 0,
+        total: 0n,
+        winners: new Set(),
+        ticketRows: 0,
+        ticketTotal: 0n,
+        ticketWinners: new Set(),
+      };
+      byTrait.set(traitId, group);
+    }
+    const winner = String(row.winner || '').toLowerCase();
+    if (isEth) {
+      group.rows += 1;
+      group.total += amount;
+      if (winner) group.winners.add(winner);
+    } else {
+      group.ticketRows += 1;
+      group.ticketTotal += amount;
+      if (winner) group.ticketWinners.add(winner);
+    }
+  }
+
+  return traits.map((rawTraitId) => {
+    const traitId = Number(rawTraitId);
+    if (!Number.isInteger(traitId) || traitId < 0 || traitId > 255) return null;
+    const group = byTrait.get(traitId);
+    if (!group || group.rows === 0) {
+      return {
+        traitId,
+        winnerCount: 0,
+        uniqueWinnerCount: 0,
+        perWinWei: 0n,
+        ticketWinnerCount: group?.ticketRows ?? 0,
+        ticketUniqueWinnerCount: group?.ticketWinners?.size ?? 0,
+        ticketEntriesTotal: group?.ticketTotal ?? 0n,
+        ticketEntriesPerWinner: group?.ticketRows
+          ? group.ticketTotal / BigInt(group.ticketRows)
+          : 0n,
+      };
+    }
+    return {
+      traitId,
+      winnerCount: group.rows,
+      uniqueWinnerCount: group.winners.size,
+      perWinWei: group.total / BigInt(group.rows),
+      ticketWinnerCount: group.ticketRows,
+      ticketUniqueWinnerCount: group.ticketWinners.size,
+      ticketEntriesTotal: group.ticketTotal,
+      ticketEntriesPerWinner: group.ticketRows
+        ? group.ticketTotal / BigInt(group.ticketRows)
+        : 0n,
+    };
+  });
+}
+
+/**
+ * Aggregate the public Roll 2 result for the same four-quadrant scratch board.
+ * Roll 2 pays one equal FLIP amount per winning entry; null-trait rows belong
+ * to the far-future center and are deliberately left out of these quadrants.
+ *
+ * @param {Array<object>|null|undefined} wins Roll 2 event rows
+ * @param {Array<number|null|undefined>} displayTraits Four drawn trait IDs
+ * @returns {Array<{
+ *   traitId: number,
+ *   winnerCount: number,
+ *   uniqueWinnerCount: number,
+ *   perWinWei: bigint,
+ *   currency: 'FLIP',
+ *   ticketWinnerCount: number,
+ *   ticketUniqueWinnerCount: number,
+ *   ticketEntriesTotal: bigint,
+ *   ticketEntriesPerWinner: bigint,
+ * }|null>}
+ */
+export function buildRoll2BucketSummaries(wins, displayTraits) {
+  const traits = Array.isArray(displayTraits) ? displayTraits : [];
+  if (!Array.isArray(wins)) return traits.map(() => null);
+
+  const byTrait = new Map();
+  for (const row of wins) {
+    if (!row || row.traitId == null) continue;
+    const awardType = String(row.awardType || '').toLowerCase();
+    const isFlip = awardType === 'flip' || row.currency === 'FLIP';
+    const isTicket = awardType === 'tickets' || awardType === 'ticket';
+    if (!isFlip && !isTicket) continue;
+    const traitId = Number(row.traitId);
+    if (!Number.isInteger(traitId) || traitId < 0 || traitId > 255) continue;
+    let amount;
+    try { amount = BigInt(row.amount || 0); } catch (_e) { continue; }
+    let group = byTrait.get(traitId);
+    if (!group) {
+      group = {
+        rows: 0,
+        total: 0n,
+        winners: new Set(),
+        ticketRows: 0,
+        ticketTotal: 0n,
+        ticketWinners: new Set(),
+      };
+      byTrait.set(traitId, group);
+    }
+    const winner = String(row.winner || '').toLowerCase();
+    if (isFlip) {
+      group.rows += 1;
+      group.total += amount;
+      if (winner) group.winners.add(winner);
+    } else {
+      group.ticketRows += 1;
+      group.ticketTotal += amount;
+      if (winner) group.ticketWinners.add(winner);
+    }
+  }
+
+  return traits.map((rawTraitId) => {
+    const traitId = Number(rawTraitId);
+    if (!Number.isInteger(traitId) || traitId < 0 || traitId > 255) return null;
+    const group = byTrait.get(traitId);
+    if (!group || group.rows === 0) {
+      return {
+        traitId,
+        winnerCount: 0,
+        uniqueWinnerCount: 0,
+        perWinWei: 0n,
+        currency: 'FLIP',
+        ticketWinnerCount: group?.ticketRows ?? 0,
+        ticketUniqueWinnerCount: group?.ticketWinners?.size ?? 0,
+        ticketEntriesTotal: group?.ticketTotal ?? 0n,
+        ticketEntriesPerWinner: group?.ticketRows
+          ? group.ticketTotal / BigInt(group.ticketRows)
+          : 0n,
+      };
+    }
+    return {
+      traitId,
+      winnerCount: group.rows,
+      uniqueWinnerCount: group.winners.size,
+      perWinWei: group.total / BigInt(group.rows),
+      currency: 'FLIP',
+      ticketWinnerCount: group.ticketRows,
+      ticketUniqueWinnerCount: group.ticketWinners.size,
+      ticketEntriesTotal: group.ticketTotal,
+      ticketEntriesPerWinner: group.ticketRows
+        ? group.ticketTotal / BigInt(group.ticketRows)
+        : 0n,
+    };
+  });
+}

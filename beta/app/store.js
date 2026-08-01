@@ -17,7 +17,7 @@ const _state = {
   },
   player: {
     address: null,
-    balances: { eth: '0', burnie: '0', dgnrs: '0', wwxrp: '0' },
+    balances: { eth: '0', flip: '0', dgnrs: '0', wwxrp: '0' },
     activityScore: { total: 0, quest: 0, mint: 0, affiliate: 0, pass: 0 },
     shields: 0,
     claimable: '0',
@@ -51,7 +51,7 @@ const _state = {
   },
   claims: {
     eth: '0',             // ETH claimable (after 1 wei sentinel subtraction)
-    burnie: '0',          // BURNIE claimable from coinflip
+    flip: '0',          // FLIP claimable from coinflip
   },
   affiliate: {
     code: null,           // Player's own affiliate code (string or null)

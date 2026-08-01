@@ -7,32 +7,40 @@ export const CHAIN = {
 };
 
 export const CONTRACTS = {
-  GAME: '0x68b1d87f95878fe05b998f19b66f4baba5de1aed',
-  COIN: '0x959922be3caee4b8cd9a407cc3ac1c251c2007b1',
-  COINFLIP: '0x9a9f2ccfde556a7e9ff0848998aa4a0cfd8863ae',
-  WWXRP: '0x3aa5ebb10dc797cac828524e59a333d0a371443c',
-  AFFILIATE: '0xc6e7df5e7b4f2a278906862b61205850344d4e7d',
-  JACKPOTS: '0x59b670e9fa9d0a427751af201d676719a970857b',
-  QUESTS: '0x4ed7c70f96b99c776995fb64377f0d4ab3b0e1c1',
-  DEITY_PASS: '0x322813fd9a801c5507c9de605d63cea4f2ce6c44',
-  VAULT: '0xa85233c63b9ee964add6f2cffe00fd84eb32338f',
-  DGNRS: '0x7a2088a1bfc9d81c55368ae168c2c02570cb814f',
-  GAME_MINT_MODULE: '0x0165878a594ca255338adfa4d48449f69242eb8f',
-  GAME_LOOTBOX_MODULE: '0x0dcd1bf9a1b36ce34237eeafef220932846bcd82',
-  GAME_DEGENERETTE_MODULE: '0x0b306bf915c4d645ff596e518faf3f9669b97016',
-  GAME_DECIMATOR_MODULE: '0x610178da211fef7d417bc0e6fed39f05609ad788',
-  GAME_JACKPOT_MODULE: '0x8a791620dd6260079bf849dc5567adc3f2fdc318',
-  GAME_WHALE_MODULE: '0x2279b7a0a67db372996a5fab50d91eaa73d2ebe6',
-  GAME_BOON_MODULE: '0x9a676e781a523b5d0c0e43731313a708cb607508',
-  GAME_ADVANCE_MODULE: '0xa513e6e4b8f2a923d98304ec87f64353c4d5c853',
+  GAME: '0xa2868ed96cd3cc873db6d84035b4cf5ca05db623',
+  COIN: '0xedfcd8373cc1f9980af967f1ef167c631433e8ba',
+  COINFLIP: '0x31779ab167664d38fcb6188390073e3c0aee260d',
+  WWXRP: '0x6085b0e2e2bcea8b3fa8c0148ce0a31ecc080fc5',
+  AFFILIATE: '0xcbdbd43c9f49f48de245d81d008c6835741076de',
+  JACKPOTS: '0xc7d63825feb5e43dd615400d2bfe8db72b7a57c0',
+  QUESTS: '0xcb0b0357df6478fd4bf09c60b395e0c9fe51d806',
+  DEITY_PASS: '0xc83a9b319f2ebb61183c0a11667aa80ea4d5296f',
+  VAULT: '0x7b965575249ea39bdef7e5652404004a8bfd7496',
+  DGNRS: '0xd424da01909200db0088453331c1371f2bedabdc',
+  GAME_MINT_MODULE: '0xd33b2cf3c9e112ca008e18406a1a8a1a5e3c1a52',
+  GAME_LOOTBOX_MODULE: '0x9f8e8841612fd1b305d2704f8cc74634da9f104b',
+  GAME_DEGENERETTE_MODULE: '0x393f56bcf8f8f1bb2746a1ff59fc25fc0b3a29ab',
+  GAME_DECIMATOR_MODULE: '0xabd3a4decd62e3074be1ad627d22bcf81dc1b098',
+  GAME_JACKPOT_MODULE: '0xca8bd2ba9f3e23cdd65599fcd5fd6d65461bc776',
+  GAME_WHALE_MODULE: '0x0b2c9f878eaa4494a8cbae4b6f39e5a13ce22754',
+  GAME_BOON_MODULE: '0x8bc69e042937b76291fd8609e510bac294c7fc69',
+  GAME_ADVANCE_MODULE: '0x8c6c70aaa9e28ad2471ff38e16fd01b490a6bb56',
   GAME_ENDGAME_MODULE: '0xb7f8bc63bbcad18155201308c8f3540b07f84f5e',
-  GAME_GAMEOVER_MODULE: '0xa51c1fc2f0d1a1b8494ed1fe312d7c3a78ed91c0',
-  ADMIN: '0x09635f643e140090a9a8dcd712ed6285858cebef',
+  GAME_GAMEOVER_MODULE: '0x7e35e3924e897b484f8c915d45717775a86a8d49',
+  ADMIN: '0x16ea80a57ac86ef97f62d0ea1b6f0d260e36d684',
 };
 
 export const ETHERSCAN_BASE = 'http://localhost:8545';
 
-export const API_BASE = 'http://localhost:3000';
+// Indexer/DB API (Fastify, database repo). Host-aware: pages served from
+// localhost keep the local dev stack; the deployed site hits the Fly app.
+// NOTE: this is NOT the api.degener.us session server (Discord/wallet login) —
+// two different services.
+export const API_BASE =
+  typeof window === 'undefined' ||
+  /^(localhost|127\.0\.0\.1)$/.test(window.location?.hostname ?? 'localhost')
+    ? 'http://localhost:3000'
+    : 'https://degenerus-db.fly.dev';
 
 export const POLL_INTERVALS = {
   gameState: 15000,    // 15 seconds
@@ -87,7 +95,7 @@ export const COINFLIP_ABI = [
 ];
 
 export const COINFLIP = {
-  MIN_DEPOSIT: '100',       // 100 BURNIE minimum (whole tokens, not wei)
+  MIN_DEPOSIT: '100',       // 100 FLIP minimum (whole tokens, not wei)
   RECYCLING_BONUS_PCT: 1.6, // 1.6% recycling bonus
 };
 
@@ -114,8 +122,8 @@ export const AFFILIATE_ABI = [
 ];
 
 export const DEGENERETTE = {
-  CURRENCY: { ETH: 0, BURNIE: 1, WWXRP: 3 },
-  MIN_BET: { ETH: '0.005', BURNIE: '100', WWXRP: '1' },
+  CURRENCY: { ETH: 0, FLIP: 1, WWXRP: 3 },
+  MIN_BET: { ETH: '0.005', FLIP: '100', WWXRP: '1' },
   MAX_SPINS: 10,
   PENDING_BETS_KEY: 'degenerus_pending_bets',
 };
@@ -143,18 +151,18 @@ export const DECIMATOR_CLAIM_ABI = [
 ];
 
 export const DECIMATOR = {
-  MIN_BURN: '1000',             // 1,000 BURNIE minimum (whole tokens, not wei)
+  MIN_BURN: '1000',             // 1,000 FLIP minimum (whole tokens, not wei)
   BUCKET_BASE: 12,              // Starting bucket (worst odds)
   MIN_BUCKET_NORMAL: 5,         // Best bucket for non-x00 levels
   MIN_BUCKET_100: 2,            // Best bucket for x00 levels
   ACTIVITY_CAP_BPS: 23500,      // Activity score cap for bucket/multiplier calc
-  MULTIPLIER_CAP_BURNIE: 200000, // After 200k BURNIE, burns count at 1x
+  MULTIPLIER_CAP_FLIP: 200000, // After 200k FLIP, burns count at 1x
   POOL_SHARE_NORMAL: 0.10,      // 10% of futurepool at x5 levels
   POOL_SHARE_100: 0.30,         // 30% of futurepool at x00 levels
 };
 
 export const QUEST_TYPE_LABELS = {
-  0: 'Mint BURNIE Tickets',
+  0: 'Mint FLIP Tickets',
   1: 'Mint ETH Tickets',
   2: 'Coinflip',
   3: 'Affiliate Earnings',
@@ -162,5 +170,5 @@ export const QUEST_TYPE_LABELS = {
   5: 'Decimator Burns',
   6: 'Lootbox',
   7: 'Degenerette (ETH)',
-  8: 'Degenerette (BURNIE)',
+  8: 'Degenerette (FLIP)',
 };

@@ -46,7 +46,10 @@ if (typeof globalThis.localStorage === 'undefined') {
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 
-const { setProvider, clearProvider, requireSelf, sendTx, assertChain, assertChainOrBlank } = contractsMod;
+const {
+  setProvider, clearProvider, requireSelf, sendTx, assertChain, assertChainOrBlank,
+  gasEstimateWithHeadroom,
+} = contractsMod;
 
 function resetStore() {
   storeMod.update('connected.address', null);
@@ -61,7 +64,7 @@ function resetStore() {
 // ---------------------------------------------------------------------------
 
 function makeProvider({
-  chainId = 11155111,
+  chainId = 84532,
   signerAddress = '0xabcdef0000000000000000000000000000000000',
   receiptStatus = 1,
   txHash = '0xdeadbeef',
@@ -123,6 +126,59 @@ describe('requireSelf chokepoint', () => {
     // viewing matches (different case)
     storeMod.update('viewing.address', '0xaaaa000000000000000000000000000000000001');
     assert.equal(requireSelf(), true);
+  });
+
+  // --- operator-mode + combined-mode extension (account-switcher CORE layer) ---
+
+  test('operator mode: returns true even though viewing !== connected (approved operator)', () => {
+    // In 'operator' mode the connected wallet is an approved operator acting for
+    // the viewed owner, so the viewing!==connected mismatch throw is SKIPPED.
+    storeMod.update('ui.mode', 'operator');
+    storeMod.update('connected.address', '0xAAAA000000000000000000000000000000000001');
+    storeMod.update('viewing.address', '0xbbbb000000000000000000000000000000000002');
+    assert.equal(requireSelf(), true);
+  });
+
+  test('combined mode: throws "Combined view is read-only"', () => {
+    storeMod.update('ui.mode', 'combined');
+    storeMod.update('connected.address', '0xAAAA000000000000000000000000000000000001');
+    assert.throws(() => requireSelf(), /Combined view is read-only/);
+  });
+
+  test('view-mode throw message is unchanged by the extension', () => {
+    storeMod.update('ui.mode', 'view');
+    storeMod.update('connected.address', '0xaaaa000000000000000000000000000000000001');
+    storeMod.update('viewing.address', '0xbbbb000000000000000000000000000000000002');
+    assert.throws(() => requireSelf(), /Read-only mode — cannot sign transactions/);
+  });
+});
+
+// ===========================================================================
+// sendTx operator pass-through / combined block (account-switcher CORE layer)
+// ===========================================================================
+
+describe('sendTx operator + combined modes', () => {
+  test('operator mode: sendTx proceeds to getSigner (chokepoint does NOT block)', async () => {
+    const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    setProvider(provider);
+    // connected = operator (the signer); viewing = owner acted for.
+    storeMod.update('ui.mode', 'operator');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    storeMod.update('viewing.address', '0xbbbb000000000000000000000000000000000002');
+    const buildTx = (s) => Promise.resolve({ hash: '0x', wait: async () => ({ status: 1 }) });
+    const receipt = await sendTx(buildTx, 'operator-act');
+    assert.equal(receipt.status, 1);
+    // freshAddress guard is pinned to the CONNECTED operator (correct — operator signs).
+    assert.equal(provider.getSignerCallCount(), 1);
+  });
+
+  test('combined mode: sendTx aborts BEFORE getSigner with the combined message', async () => {
+    const provider = makeProvider();
+    setProvider(provider);
+    storeMod.update('ui.mode', 'combined');
+    storeMod.update('connected.address', '0xaaaa000000000000000000000000000000000001');
+    await assert.rejects(sendTx(() => Promise.resolve({}), 'x'), /Combined view is read-only/);
+    assert.equal(provider.getSignerCallCount(), 0, 'getSigner NEVER called in combined mode');
   });
 });
 
@@ -186,6 +242,58 @@ describe('sendTx re-derives signer EVERY invocation', () => {
     await sendTx(buildTx, 'test');
     assert.ok(receivedSigner, 'buildTx received a signer arg');
     assert.equal(receivedSigner, provider.lastSigner(), 'buildTx received the same signer getSigner() returned');
+  });
+});
+
+describe('sendTx gas estimate headroom', () => {
+  test('pads an ordinary signer estimate by 20% before sending', async () => {
+    const sent = [];
+    const signer = {
+      getAddress: async () => '0xabcdef0000000000000000000000000000000000',
+      estimateGas: async () => 50_000n,
+      sendTransaction: async (request) => {
+        sent.push(request);
+        return { hash: '0xgas', wait: async () => ({ status: 1 }) };
+      },
+    };
+    setProvider({
+      getNetwork: async () => ({ chainId: 84532n }),
+      getSigner: async () => signer,
+    });
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+
+    await sendTx((fresh) => fresh.sendTransaction({ to: '0x1' }), 'gas-safe');
+
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].gasLimit, 60_000n);
+  });
+
+  test('respects an explicit gasLimit and exposes deterministic rounding', async () => {
+    assert.equal(gasEstimateWithHeadroom(42_000n), 50_400n);
+    assert.equal(gasEstimateWithHeadroom(42_001n), 50_402n);
+
+    const sent = [];
+    const signer = {
+      getAddress: async () => '0xabcdef0000000000000000000000000000000000',
+      estimateGas: async () => { throw new Error('must not estimate'); },
+      sendTransaction: async (request) => {
+        sent.push(request);
+        return { hash: '0xexplicit', wait: async () => ({ status: 1 }) };
+      },
+    };
+    setProvider({
+      getNetwork: async () => ({ chainId: 84532n }),
+      getSigner: async () => signer,
+    });
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+
+    await sendTx(
+      (fresh) => fresh.sendTransaction({ to: '0x1', gasLimit: 77_777n }),
+      'explicit-gas',
+    );
+    assert.equal(sent[0].gasLimit, 77_777n);
   });
 });
 
@@ -255,7 +363,7 @@ describe('switchToSepolia 4902 fallback', () => {
     const methods = calls.map((c) => c.method);
     assert.deepEqual(methods, ['wallet_switchEthereumChain', 'wallet_addEthereumChain', 'wallet_switchEthereumChain']);
     const addEntry = calls[1].params[0];
-    assert.equal(addEntry.chainId, '0xaa36a7');
+    assert.equal(addEntry.chainId, '0x14a34');
   });
 });
 
@@ -271,7 +379,7 @@ describe('assertChainOrBlank read-side gate', () => {
   });
 
   test('returns true on Sepolia chain', async () => {
-    setProvider(makeProvider({ chainId: 11155111 }));
+    setProvider(makeProvider({ chainId: 84532 }));
     const ok = await assertChainOrBlank();
     assert.equal(ok, true);
   });
@@ -290,7 +398,7 @@ describe('assertChain write-side gate', () => {
   });
 
   test('returns true on Sepolia', async () => {
-    setProvider(makeProvider({ chainId: 11155111 }));
+    setProvider(makeProvider({ chainId: 84532 }));
     const ok = await assertChain();
     assert.equal(ok, true);
   });

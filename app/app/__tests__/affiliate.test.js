@@ -38,6 +38,7 @@ function makeFakeTx(receipt) {
 function makeFakeContract(opts = {}) {
   const calls = {
     createAffiliateCode: [],
+    affiliateCode: [],
   };
   const staticCallStub = (methodName) => async (..._args) => {
     if (opts.staticCallShouldRevert?.[methodName]) {
@@ -64,6 +65,13 @@ function makeFakeContract(opts = {}) {
       },
       { staticCall: staticCallStub('createAffiliateCode') }
     ),
+    affiliateCode: async (...args) => {
+      calls.affiliateCode.push(args);
+      return [
+        opts.affiliateOwner || '0x0000000000000000000000000000000000000000',
+        opts.affiliateKickback || 0,
+      ];
+    },
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
     _calls: calls,
@@ -73,7 +81,7 @@ function makeFakeContract(opts = {}) {
 
 function makeFakeProvider(connectedAddr) {
   return {
-    getNetwork: async () => ({ chainId: 11155111n }),
+    getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({
       getAddress: async () => connectedAddr,
     }),
@@ -113,6 +121,65 @@ describe('Plan 62-06: defaultCodeForAddress (Pitfall 5 — LEFT-pad)', () => {
     assert.ok(codeBI <= uint160Max, `BigInt(code)=${codeBI} must be <= uint160 max=${uint160Max}`);
     // And LEFT-pad gives exactly 2**160 - 1 for the all-Fs address.
     assert.equal(codeBI, uint160Max);
+  });
+});
+
+// ===========================================================================
+// First-purchase referral field encoding + validation.
+// ===========================================================================
+
+describe('purchase affiliate input helpers', () => {
+  afterEach(() => {
+    affiliateMod.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+  });
+
+  test('normalizes blank, address, full bytes32, and vanity input', () => {
+    const address = '0x' + 'b'.repeat(40);
+    const padded = '0x' + '0'.repeat(24) + 'b'.repeat(40);
+    assert.equal(affiliateMod.normalizePurchaseAffiliateCode(''), '0x' + '0'.repeat(64));
+    assert.equal(affiliateMod.normalizePurchaseAffiliateCode(address), padded);
+    assert.equal(affiliateMod.normalizePurchaseAffiliateCode(padded.toUpperCase().replace('0X', '0x')), padded);
+    const vanity = affiliateMod.normalizePurchaseAffiliateCode('degen');
+    assert.match(vanity, /^0x[0-9a-f]{64}$/i);
+    assert.equal(affiliateMod.formatPurchaseAffiliateCode(vanity), 'DEGEN');
+    assert.equal(affiliateMod.formatPurchaseAffiliateCode(padded), address);
+  });
+
+  test('rejects malformed purchase input before any transaction', () => {
+    assert.throws(
+      () => affiliateMod.normalizePurchaseAffiliateCode('not a valid code'),
+      /3-31|address|bytes32/i,
+    );
+  });
+
+  test('address referrals validate without an RPC and self-referrals are rejected', async () => {
+    const other = '0x' + 'b'.repeat(40);
+    const expected = '0x' + '0'.repeat(24) + 'b'.repeat(40);
+    assert.equal(
+      await affiliateMod.validatePurchaseAffiliateCode(other, CONNECTED),
+      expected,
+    );
+    await assert.rejects(
+      affiliateMod.validatePurchaseAffiliateCode(CONNECTED, CONNECTED),
+      /own affiliate code/i,
+    );
+  });
+
+  test('registered vanity codes resolve on-chain; unknown codes are rejected', async () => {
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    const owner = '0x' + 'b'.repeat(40);
+    const valid = makeFakeContract({ affiliateOwner: owner });
+    affiliateMod.__setContractFactoryForTest(() => valid);
+    const code = await affiliateMod.validatePurchaseAffiliateCode('DEGEN', CONNECTED);
+    assert.equal(code, affiliateMod.normalizePurchaseAffiliateCode('DEGEN'));
+    assert.equal(valid._calls.affiliateCode.length, 1, 'vanity ownership checked once');
+
+    affiliateMod.__setContractFactoryForTest(() => makeFakeContract());
+    await assert.rejects(
+      affiliateMod.validatePurchaseAffiliateCode('UNKNOWN', CONNECTED),
+      /not registered/i,
+    );
   });
 });
 
@@ -217,7 +284,7 @@ describe('Plan 62-06: createAffiliateCode', () => {
   test('persists registered code to localStorage on confirm (Phase 60 D-05 mechanism)', async () => {
     const result = await affiliateMod.createAffiliateCode({ codeStr: 'DEGEN', kickbackPct: 10 });
     // Phase 60 D-05 key format: `affiliate-code:${CHAIN.id}:${addr.toLowerCase()}`.
-    const key = `affiliate-code:11155111:${CONNECTED.toLowerCase()}`;
+    const key = `affiliate-code:84532:${CONNECTED.toLowerCase()}`;
     const stored = storedKeys.get(key);
     assert.ok(stored, `localStorage[${key}] was set`);
     assert.equal(stored, result.encodedCode, 'stored value === encoded code returned');
@@ -341,5 +408,101 @@ describe('Plan 62-06: affiliate.js source-level invariants', () => {
     assert.match(SRC, /export\s+function\s+defaultCodeForAddress/, 'defaultCodeForAddress exported');
     assert.match(SRC, /export\s+function\s+buildAffiliateUrl/, 'buildAffiliateUrl exported');
     assert.match(SRC, /export\s+async\s+function\s+createAffiliateCode/, 'createAffiliateCode exported (async)');
+  });
+});
+
+// ===========================================================================
+// Own registered code — readRegisteredCode (sync local) +
+// resolveRegisteredCode (DB-first, chain-verified fallback).
+// Semantics fixed 2026-07-16: affiliate-code:{chain}:{addr} = OWN code only;
+// legacy values may still be an incoming referral (old dual-write), hence
+// the on-chain ownership check on the localStorage path.
+// ===========================================================================
+
+const { CHAIN } = await import('../chain-config.js');
+
+describe('own registered code: readRegisteredCode + resolveRegisteredCode', () => {
+  const addr = CONNECTED.toLowerCase();
+  const key = `affiliate-code:${CHAIN.id}:${addr}`;
+  const vanity = contractsMod.ethers.encodeBytes32String('SHARK');
+
+  beforeEach(() => {
+    globalThis.localStorage = {
+      _m: new Map(),
+      getItem(k) { return this._m.get(k) ?? null; },
+      setItem(k, v) { this._m.set(k, String(v)); },
+      removeItem(k) { this._m.delete(k); },
+      clear() { this._m.clear(); },
+    };
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    // Default: indexer unreachable → tests exercise the localStorage
+    // fallback unless they install their own fetch.
+    affiliateMod.__setFetchJSONForTest(async () => { throw new Error('indexer down'); });
+  });
+  afterEach(() => {
+    affiliateMod.__resetContractFactoryForTest();
+    affiliateMod.__setFetchJSONForTest(null);
+    contractsMod.clearProvider();
+  });
+
+  test('readRegisteredCode: vanity value → returned; address-range / junk / absent → null', () => {
+    localStorage.setItem(key, vanity);
+    assert.equal(affiliateMod.readRegisteredCode(CONNECTED), vanity);
+    localStorage.setItem(key, '0x' + '0'.repeat(24) + addr.slice(2)); // default code
+    assert.equal(affiliateMod.readRegisteredCode(CONNECTED), null);
+    localStorage.setItem(key, '0xdeadbeef');
+    assert.equal(affiliateMod.readRegisteredCode(CONNECTED), null);
+    localStorage.clear();
+    assert.equal(affiliateMod.readRegisteredCode(CONNECTED), null);
+  });
+
+  test('DB ownCode wins — no localStorage, no provider, no RPC needed', async () => {
+    contractsMod.clearProvider();
+    affiliateMod.__setFetchJSONForTest(async (path) => {
+      assert.equal(path, `/player/${addr}`);
+      return { affiliate: { ownCode: vanity } };
+    });
+    affiliateMod.__setContractFactoryForTest(() => ({
+      affiliateCode: async () => { throw new Error('must not be called'); },
+    }));
+    assert.equal(await affiliateMod.resolveRegisteredCode(CONNECTED), vanity);
+  });
+
+  test('DB says no code / junk code → falls through to verified localStorage', async () => {
+    affiliateMod.__setFetchJSONForTest(async () => ({ affiliate: { ownCode: null } }));
+    localStorage.setItem(key, vanity);
+    affiliateMod.__setContractFactoryForTest(() => ({
+      affiliateCode: async (code) => {
+        assert.equal(code, vanity);
+        return { owner: CONNECTED, kickback: 5 };
+      },
+    }));
+    assert.equal(await affiliateMod.resolveRegisteredCode(CONNECTED), vanity, 'DB null → localStorage path');
+
+    // Address-range ownCode (a default code, not a vanity registration) is junk too.
+    affiliateMod.__setFetchJSONForTest(async () => (
+      { affiliate: { ownCode: '0x' + '0'.repeat(24) + addr.slice(2) } }
+    ));
+    assert.equal(await affiliateMod.resolveRegisteredCode(CONNECTED), vanity, 'address-range ownCode rejected');
+  });
+
+  test('legacy stored code owned by someone else (old dual-write) → null', async () => {
+    localStorage.setItem(key, vanity);
+    affiliateMod.__setContractFactoryForTest(() => ({
+      affiliateCode: async () => ({ owner: '0x1111111111111111111111111111111111111111', kickback: 0 }),
+    }));
+    assert.equal(await affiliateMod.resolveRegisteredCode(CONNECTED), null);
+  });
+
+  test('nothing stored / no provider / RPC error → null', async () => {
+    assert.equal(await affiliateMod.resolveRegisteredCode(CONNECTED), null, 'nothing stored');
+    localStorage.setItem(key, vanity);
+    contractsMod.clearProvider();
+    assert.equal(await affiliateMod.resolveRegisteredCode(CONNECTED), null, 'no provider');
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    affiliateMod.__setContractFactoryForTest(() => ({
+      affiliateCode: async () => { throw new Error('rpc down'); },
+    }));
+    assert.equal(await affiliateMod.resolveRegisteredCode(CONNECTED), null, 'RPC error');
   });
 });

@@ -48,9 +48,24 @@ export function joBadgePath(quadrant, symbolIdx, colorIdx) {
  * @param {string|number} weiStr
  * @returns {string}
  */
-export function joFormatWeiToEth(weiStr) {
+// Testnet display scaling: contracts use 1M× smaller wei amounts on Sepolia.
+// Multiply ETH/FLIP wei by this to show mainnet-equivalent numbers.
+// Set to 1n on mainnet. Local non-testnet pipeline data is full-scale (mainnet-
+// equivalent 1e18 wei), so no rescale (1n). Use 1_000_000n for the Sepolia/testnet deploy.
+//
+// 2026-07-28: was 1n while pointed at the Sepolia deploy, so every ETH figure this
+// module renders came out 1e6 too small and floored to "0 ETH". Must match
+// ETH_DIVISOR in app/app/chain-config.<chain>.js; the mainnet cutover sets it to 1n.
+//
+// ONLY ETH is /1M-scaled on-chain — FLIP and DGNRS are stored unscaled — so
+// joFormatCoin must NOT use this multiplier (it delegated to the ETH formatter and
+// would have read 1e6× high). TOKEN_DISPLAY_SCALE stays 1n on every chain.
+const ETH_DISPLAY_SCALE = 1_000_000n;
+const TOKEN_DISPLAY_SCALE = 1n;
+
+export function joFormatWeiToEth(weiStr, scale) {
   if (!weiStr || weiStr === '0') return '0';
-  var s = String(weiStr);
+  var s = (BigInt(weiStr) * (scale === undefined ? ETH_DISPLAY_SCALE : scale)).toString();
   if (s.length <= 18) {
     var pad = ('000000000000000000' + s).slice(-18).replace(/0+$/, '');
     return pad.length ? '0.' + pad.slice(0, 4) : '0';
@@ -60,21 +75,25 @@ export function joFormatWeiToEth(weiStr) {
   return frac.length ? whole + '.' + frac : whole;
 }
 
-// Internal: BURNIE is also 18-decimal — treat like ETH for display.
+// Internal: FLIP is also 18-decimal, so it reuses the same digit formatting — but it
+// is NOT /1M-scaled on-chain the way ETH is, so it passes the token scale explicitly.
 function joFormatCoin(amtStr) {
-  return joFormatWeiToEth(amtStr);
+  return joFormatWeiToEth(amtStr, TOKEN_DISPLAY_SCALE);
 }
 
-// JackpotTicketWin emits ticketCount × TICKET_SCALE (=100) to carry fractional
-// remainders across events. Fractional remainders are later resolved on-chain
-// via carry or _rollRemainder; for UI we round to whole tickets at the display
-// boundary.  Accepts number | string | null | undefined; returns an integer.
-export const TICKET_SCALE_DISPLAY = 100;
-export function joScaledToTickets(scaled) {
-  if (scaled == null || scaled === '') return 0;
-  const n = typeof scaled === 'number' ? scaled : Number(scaled);
+// v76 ticket/entry rename: JackpotTicketWin emits `entryCount` in ENTRIES
+// (4 entries = 1 whole ticket) on all 3 paths, and jackpot_distributions.amount
+// (awardType 'tickets'/'tickets_baf') stores those entries verbatim. Divide by 4
+// here to display WHOLE tickets. (Pre-v76 the event field was mislabeled as a
+// whole-ticket count and this divided by 1 — over-counting jackpot ticket wins
+// 4×.) Single chokepoint for the ~20 jackpot-ticket display call sites.
+// Accepts number | string | null | undefined; returns an integer.
+export const ENTRIES_PER_TICKET = 4;
+export function joScaledToTickets(count) {
+  if (count == null || count === '') return 0;
+  const n = typeof count === 'number' ? count : Number(count);
   if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.round(n / TICKET_SCALE_DISPLAY);
+  return Math.round(n / ENTRIES_PER_TICKET);
 }
 
 /**
@@ -82,7 +101,7 @@ export function joScaledToTickets(scaled) {
  * (4 from mainTraitsPacked + 4 from bonusTraitsPacked) plus one far-future
  * center row aggregating ALL farFuture rows.
  *
- * Plan 39-05: fixes Gap A from 39-UAT.md — far-future BURNIE draws use entropy-
+ * Plan 39-05: fixes Gap A from 39-UAT.md — far-future FLIP draws use entropy-
  * derived traitIds so a single winner produced many near-identical raw rows.
  *
  * Plan 39-07: Roll 2 restricted to bonus-card slots only. Main-card wins
@@ -96,7 +115,7 @@ export function joScaledToTickets(scaled) {
  *
  * Plan 39-09: each slot carries an optional `ticketSubRow` propagated from the
  * first trait row that has one. Far-future slot always has ticketSubRow:null
- * (far-future is BURNIE per data model).
+ * (far-future is FLIP per data model).
  */
 export function rebucketRoll2BySlot(roll2, bonusPacked) {
   function unpack(packed) {
@@ -146,9 +165,10 @@ export function rebucketRoll2BySlot(roll2, bonusPacked) {
         break;
       }
     }
+    // Canonical [QQ][CCC][SSS]: bits[5:3]=color (heavy-tail), bits[2:0]=symbol (uniform).
     const quadrant = Math.floor(t / 64);
-    const symbolIdx = Math.floor((t % 64) / 8);
-    const colorIdx = t % 8;
+    const symbolIdx = t % 8;
+    const colorIdx = Math.floor((t % 64) / 8);
     out.push({
       traitId: t, quadrant, symbolIdx, colorIdx,
       wins, amountPerWin,
@@ -349,10 +369,11 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
     if (isBonus) {
       typeCell.textContent = 'Bonus';
     } else {
+      // Canonical [QQ][CCC][SSS]: bits[5:3]=color (heavy-tail), bits[2:0]=symbol (uniform).
       var t = row.traitId | 0;
       var q = Math.floor(t / 64);
-      var sym = Math.floor((t % 64) / 8);
-      var col = t % 8;
+      var sym = t % 8;
+      var col = Math.floor((t % 64) / 8);
       var img = document.createElement('img');
       img.src = joBadgePath(q, sym, col);
       img.alt = JO_SYMBOLS[JO_CATEGORIES[q]][sym];
@@ -415,10 +436,11 @@ export function createJackpotRolls({ root, apiBase, selectors }) {
     var badge = document.createElement('span');
     badge.className = 'jp-ticket-subrow-badge';
     if (parentRow && parentRow.traitId != null) {
+      // Canonical [QQ][CCC][SSS]: bits[5:3]=color (heavy-tail), bits[2:0]=symbol (uniform).
       var t = parentRow.traitId | 0;
       var q = Math.floor(t / 64);
-      var sym = Math.floor((t % 64) / 8);
-      var col = t % 8;
+      var sym = t % 8;
+      var col = Math.floor((t % 64) / 8);
       var img = document.createElement('img');
       img.src = joBadgePath(q, sym, col);
       var cat = JO_CATEGORIES[q];

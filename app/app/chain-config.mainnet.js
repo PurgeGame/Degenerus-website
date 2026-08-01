@@ -14,6 +14,7 @@ export const CHAIN = {
   hexId: '0x1',
   name: 'Ethereum',
   rpcUrl: '',  // WR-06: populate before cutover (e.g. 'https://eth.llamarpc.com')
+  deployBlock: 0, // populate with the production deployment block at cutover
   indexerBase: 'https://api.degener.us',
   etherscanBase: 'https://etherscan.io',
   nativeAddEntry: {
@@ -25,7 +26,7 @@ export const CHAIN = {
   },
 };
 
-// 21 contract slots — populated at v5.0 mainnet cutover.
+// 22 contract slots — populated at v5.0 mainnet cutover.
 // `null` placeholder keeps the file forward-compatible without introducing
 // hex-address literals (Pitfall 1 grep gate).
 export const CONTRACTS = {
@@ -39,6 +40,7 @@ export const CONTRACTS = {
   GAME_LOOTBOX_MODULE:     null,
   GAME_BOON_MODULE:        null,
   GAME_DEGENERETTE_MODULE: null,
+  AFKING_SUB_TOKEN:        null,
   COIN:                    null,
   COINFLIP:                null,
   GAME:                    null,
@@ -46,10 +48,29 @@ export const CONTRACTS = {
   AFFILIATE:               null,
   JACKPOTS:                null,
   QUESTS:                  null,
+  PARIMUTUEL:              null,
   DEITY_PASS:              null,
   VAULT:                   null,
   SDGNRS:                  null,
   DGNRS:                   null,
+};
+
+// Ticket-volume parimutuel window, for the COUNTDOWN ONLY (the contract's
+// `openRound` gates the buttons). Mainnet is the unscaled schedule:
+// DegenerusParimutuel.sol:478 `ts % 1 days >= 82620` — 22:57 UTC to midnight,
+// 3,780s — with the credit decaying 25 → 5 FLIP in 10-minute steps from 23:15
+// (1,080s into the day).
+export const VOLUME_WINDOW = {
+  anchor: 82_620,          // GameTimeLib.JACKPOT_RESET_TIME — 22:57 UTC
+  period: 86_400,          // one real day
+  openSeconds: 3_780,      // 22:57 → 00:00 UTC
+  creditDecayStart: 1_080, // 23:15 UTC
+  creditDecayStep: 600,    // -5 FLIP per 10 minutes
+  leadSeconds: 1_800,      // surface the card 30 minutes before the open
+  // ContractAddresses.DEPLOY_DAY_BOUNDARY — populated at v5.0 cutover from the
+  // deploy manifest. Until then the widget reads the open round off the
+  // contract instead of computing it (see parimutuel.js volumeRoundNow).
+  deployDayBoundary: null,
 };
 
 export const ETH_DIVISOR = 1n;             // No /1M scaling on mainnet

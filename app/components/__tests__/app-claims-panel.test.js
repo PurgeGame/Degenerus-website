@@ -3,7 +3,7 @@
 //
 // Tests Custom Element scaffold for the multi-prize claim tray:
 //   - Spoiler gate (D-06) with localStorage[`spun_day_${CHAIN.id}_${pinnedDay}`]
-//   - Render gate (D-01) — only render eth | burnie | decimator rows when amount > 0n
+//   - Render gate (D-01) — only render eth | flip | decimator rows when amount > 0n
 //   - Hidden 4 keys (tickets, vault, farFutureCoin, terminal) NEVER render in v4.6
 //   - Zero-state copy (CLM-04) when whitelist filter + amount-gate yields zero rows
 //   - Per-row Claim buttons present but DISABLED with data-stub="true" (Plan 61-02 wires)
@@ -395,7 +395,7 @@ describe('app-claims-panel — spoiler gate (D-06)', () => {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '1234500000000000000', available: true,  reason: null },
-          burnie:        { amount: '500000000000000000000', available: true, reason: null },
+          flip:        { amount: '500000000000000000000', available: true, reason: null },
           tickets:       { amount: '0', available: true, reason: null },
           decimator:     { amount: '0', available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -404,7 +404,7 @@ describe('app-claims-panel — spoiler gate (D-06)', () => {
         },
       },
     });
-    // localStorage[spun_day_11155111_42] missing — gate CLOSED.
+    // localStorage[spun_day_84532_42] missing — gate CLOSED.
     // (default localStorage from resetDom returns null for unset keys)
 
     const Ctor = customElements.get('app-claims-panel');
@@ -429,7 +429,7 @@ describe('app-claims-panel — spoiler gate (D-06)', () => {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '1234500000000000000', available: true,  reason: null },
-          burnie:        { amount: '0', available: true, reason: null },
+          flip:        { amount: '0', available: true, reason: null },
           tickets:       { amount: '0', available: true, reason: null },
           decimator:     { amount: '0', available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -438,7 +438,7 @@ describe('app-claims-panel — spoiler gate (D-06)', () => {
         },
       },
     });
-    globalThis.localStorage.setItem('spun_day_11155111_42', '1');
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
 
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
@@ -459,7 +459,7 @@ describe('app-claims-panel — spoiler gate (D-06)', () => {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '0', available: true,  reason: null },
-          burnie:        { amount: '0', available: true, reason: null },
+          flip:        { amount: '0', available: true, reason: null },
           tickets:       { amount: '0', available: true, reason: null },
           decimator:     { amount: '0', available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -491,7 +491,7 @@ describe('app-claims-panel — spoiler gate (D-06)', () => {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '1234500000000000000', available: true,  reason: null },
-          burnie:        { amount: '0', available: true, reason: null },
+          flip:        { amount: '0', available: true, reason: null },
           tickets:       { amount: '0', available: true, reason: null },
           decimator:     { amount: '0', available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -541,7 +541,7 @@ describe('app-claims-panel — render gate (D-01)', () => {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '0', available: true,  reason: null },
-          burnie:        { amount: '0', available: true, reason: null },
+          flip:        { amount: '0', available: true, reason: null },
           tickets:       { amount: '99', available: true, reason: null },
           decimator:     { amount: '0', available: true, reason: null },
           terminal:      { amount: '99', available: false, reason: 'pre-game' },
@@ -550,7 +550,7 @@ describe('app-claims-panel — render gate (D-01)', () => {
         },
       },
     });
-    globalThis.localStorage.setItem('spun_day_11155111_42', '1');
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
 
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
@@ -565,14 +565,14 @@ describe('app-claims-panel — render gate (D-01)', () => {
     assert.ok(root.querySelector('.clm-zero-state'), '.clm-zero-state present');
   });
 
-  test('only rows with amount > 0n render (eth=1000, burnie=0, decimator=0)', async () => {
+  test('only rows with amount > 0n render (eth=1000, flip=0, decimator=0)', async () => {
     setFetchResponses({
       lastDay: { day: 42, status: 'resolved' },
       pending: {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '1000', available: true,  reason: null },
-          burnie:        { amount: '0', available: true, reason: null },
+          flip:        { amount: '0', available: true, reason: null },
           tickets:       { amount: '0', available: true, reason: null },
           decimator:     { amount: '0', available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -581,7 +581,7 @@ describe('app-claims-panel — render gate (D-01)', () => {
         },
       },
     });
-    globalThis.localStorage.setItem('spun_day_11155111_42', '1');
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
 
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
@@ -597,9 +597,9 @@ describe('app-claims-panel — render gate (D-01)', () => {
       'eth row present',
     );
     assert.equal(
-      root.querySelector('.clm-row[data-prize-key="burnie"]'),
+      root.querySelector('.clm-row[data-prize-key="flip"]'),
       null,
-      'burnie row absent',
+      'flip row absent',
     );
     assert.equal(
       root.querySelector('.clm-row[data-prize-key="decimator"]'),
@@ -615,7 +615,7 @@ describe('app-claims-panel — render gate (D-01)', () => {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '0', available: true,  reason: null },
-          burnie:        { amount: '0', available: true, reason: null },
+          flip:        { amount: '0', available: true, reason: null },
           tickets:       { amount: '0', available: true, reason: null },
           decimator:     { amount: '500', available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -627,7 +627,7 @@ describe('app-claims-panel — render gate (D-01)', () => {
         decimator: { claimablePerLevel: [] },
       },
     });
-    globalThis.localStorage.setItem('spun_day_11155111_42', '1');
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
 
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
@@ -659,7 +659,7 @@ describe('app-claims-panel — zero-state (CLM-04)', () => {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '0', available: true,  reason: null },
-          burnie:        { amount: '0', available: true, reason: null },
+          flip:        { amount: '0', available: true, reason: null },
           tickets:       { amount: '0', available: true, reason: null },
           decimator:     { amount: '0', available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -668,7 +668,7 @@ describe('app-claims-panel — zero-state (CLM-04)', () => {
         },
       },
     });
-    globalThis.localStorage.setItem('spun_day_11155111_42', '1');
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
 
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
@@ -712,7 +712,7 @@ function makeFakeTx(receipt) {
 }
 function makeFakeProvider(addr) {
   return {
-    getNetwork: async () => ({ chainId: 11155111n }),
+    getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({ getAddress: async () => addr }),
   };
 }
@@ -820,7 +820,7 @@ describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
         player: TEST_ADDR,
         pending: {
           eth:           { amount: '1234500000000000000', available: true, reason: null },
-          burnie:        { amount: '500',                 available: true, reason: null },
+          flip:        { amount: '500',                 available: true, reason: null },
           tickets:       { amount: '0',                   available: true, reason: null },
           decimator:     { amount: '999',                 available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -838,7 +838,7 @@ describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
         },
       },
     });
-    globalThis.localStorage.setItem('spun_day_11155111_42', '1');
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
     _docBody.appendChild(el);
@@ -869,18 +869,18 @@ describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
     assert.equal(fakeContract._calls.claimWinnings[0][0], TEST_ADDR, 'player arg = connected.address');
   });
 
-  test('clicking burnie row invokes claimBurnie with amount BigInt sourced from /pending', async () => {
+  test('clicking flip row invokes claimFlip with amount BigInt sourced from /pending', async () => {
     const el = mountPanel();
     await flushMicrotasks();
     const root = getRenderRoot(el);
-    const btn = root.querySelector('.clm-row[data-prize-key="burnie"] .clm-row__claim-cta');
+    const btn = root.querySelector('.clm-row[data-prize-key="flip"] .clm-row__claim-cta');
     btn.dispatchEvent({ type: 'click' });
     await settle(80);
     assert.equal(fakeContract._calls.claimCoinflips.length, 1);
     const [args] = fakeContract._calls.claimCoinflips;
     assert.equal(args[0], TEST_ADDR);
     assert.equal(typeof args[1], 'bigint', 'amount arg is BigInt');
-    assert.equal(args[1], 500n, 'amount sourced from /pending burnie.amount');
+    assert.equal(args[1], 500n, 'amount sourced from /pending flip.amount');
   });
 
   test('clicking decimator row invokes claimDecimatorLevels with ASCENDING-SORTED levels', async () => {
@@ -897,9 +897,10 @@ describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
     btn.dispatchEvent({ type: 'click' });
     await settle(120);
     assert.equal(fakeContract._calls.claimDecimatorJackpot.length, 3, '3 sequential txes');
-    assert.equal(fakeContract._calls.claimDecimatorJackpot[0][0], 5, 'level 5 first (ascending)');
-    assert.equal(fakeContract._calls.claimDecimatorJackpot[1][0], 10);
-    assert.equal(fakeContract._calls.claimDecimatorJackpot[2][0], 15);
+    // Redeploy #7: claimDecimatorJackpot(address player, uint24 lvl) — level is arg[1].
+    assert.equal(fakeContract._calls.claimDecimatorJackpot[0][1], 5, 'level 5 first (ascending)');
+    assert.equal(fakeContract._calls.claimDecimatorJackpot[1][1], 10);
+    assert.equal(fakeContract._calls.claimDecimatorJackpot[2][1], 15);
   });
 
   test('click sets `.clm-row--claiming` class + button label `Claiming…` during pending', async () => {
@@ -970,13 +971,13 @@ describe('app-claims-panel — claim handlers (Plan 61-02)', () => {
     ethBtn.dispatchEvent({ type: 'click' });
     await settle(80);
     assert.ok(ethRow.classList.contains('clm-row--error'), 'eth row error set');
-    // Now click burnie row → success → clears all errors.
+    // Now click flip row → success → clears all errors.
     claimsMod.__setContractFactoryForTest(() => fakeContract);  // happy-path contract
-    const burnieBtn = root.querySelector('.clm-row[data-prize-key="burnie"] .clm-row__claim-cta');
-    // Wait out the 500ms debounce so the burnie click can register
-    // (defensive — burnie has its own rowKey, but let microtasks flush).
+    const flipBtn = root.querySelector('.clm-row[data-prize-key="flip"] .clm-row__claim-cta');
+    // Wait out the 500ms debounce so the flip click can register
+    // (defensive — flip has its own rowKey, but let microtasks flush).
     await settle(40);
-    burnieBtn.dispatchEvent({ type: 'click' });
+    flipBtn.dispatchEvent({ type: 'click' });
     await settle(80);
     assert.equal(ethRow.classList.contains('clm-row--error'), false, 'eth row error cleared on next-success');
     assert.equal(ethRow.querySelector('.clm-row__error'), null, '.clm-row__error element removed');
@@ -1036,7 +1037,7 @@ describe('app-claims-panel — XSS / textContent discipline (T-58-18)', () => {
         player: '0xab12000000000000000000000000000000000000',
         pending: {
           eth:           { amount: '1234500000000000000', available: true,  reason: null },
-          burnie:        { amount: '0', available: true, reason: null },
+          flip:        { amount: '0', available: true, reason: null },
           tickets:       { amount: '0', available: true, reason: null },
           decimator:     { amount: '0', available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -1045,7 +1046,7 @@ describe('app-claims-panel — XSS / textContent discipline (T-58-18)', () => {
         },
       },
     });
-    globalThis.localStorage.setItem('spun_day_11155111_42', '1');
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
 
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
@@ -1111,7 +1112,7 @@ function mountPanelForPolling(opts = {}) {
       player: TEST_ADDR,
       pending: {
         eth:           { amount: '1234500000000000000', available: true, reason: null },
-        burnie:        { amount: '0', available: true, reason: null },
+        flip:        { amount: '0', available: true, reason: null },
         tickets:       { amount: '0', available: true, reason: null },
         decimator:     { amount: '0', available: true, reason: null },
         terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -1122,7 +1123,7 @@ function mountPanelForPolling(opts = {}) {
     dashboard: opts.dashboard !== undefined ? opts.dashboard : { decimator: { claimablePerLevel: [] } },
   });
   if (opts.markSpun !== false) {
-    globalThis.localStorage.setItem('spun_day_11155111_42', '1');
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
   }
   const Ctor = customElements.get('app-claims-panel');
   const el = new Ctor();
@@ -1262,10 +1263,10 @@ describe('app-claims-panel — polling + lifecycle (Plan 61-03)', () => {
     assert.equal(root.querySelectorAll('.clm-row').length, 0, 'no rows visible (gate blocks)');
     // Simulate cross-tab spin: localStorage now has the spun_day key, and a
     // storage event fires from the other tab.
-    globalThis.localStorage.setItem('spun_day_11155111_42', '1');
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
     globalThis.window.dispatchEvent({
       type: 'storage',
-      key: 'spun_day_11155111_42',
+      key: 'spun_day_84532_42',
       newValue: '1',
     });
     await flushMicrotasks();
@@ -1439,7 +1440,7 @@ describe('app-claims-panel — polling + lifecycle (Plan 61-03)', () => {
         player: TEST_ADDR,
         pending: {
           eth:           { amount: '0', available: true, reason: null },
-          burnie:        { amount: '0', available: true, reason: null },
+          flip:        { amount: '0', available: true, reason: null },
           tickets:       { amount: '0', available: true, reason: null },
           decimator:     { amount: '0', available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -1478,15 +1479,15 @@ describe('app-claims-panel — polling + lifecycle (Plan 61-03)', () => {
     const OTHER = '0xcd34000000000000000000000000000000000000';
     storeMod.update('connected.address', MINE);
     storeMod.update('viewing.address', OTHER);
-    // localStorage key for chainId 11155111 + day 42 → '1' (I have spun).
-    globalThis.localStorage.setItem('spun_day_11155111_42', '1');
+    // localStorage key for chainId 84532 + day 42 → '1' (I have spun).
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
     setFetchResponses({
       lastDay: { day: 42, status: 'resolved' },
       pending: {
         player: OTHER,
         pending: {
           eth:           { amount: '7777', available: true, reason: null },
-          burnie:        { amount: '0', available: true, reason: null },
+          flip:        { amount: '0', available: true, reason: null },
           tickets:       { amount: '0', available: true, reason: null },
           decimator:     { amount: '0', available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -1531,7 +1532,7 @@ describe('app-claims-panel — polling + lifecycle (Plan 61-03)', () => {
 //
 // Phase 61 D-01 LOCKED forward-compat hook: VISIBLE_PRIZE_KEYS sentinel was
 // designed to accept future rows via single-line whitelist edit. Plan 62-06
-// extends from ['eth', 'burnie', 'decimator'] → ['eth', 'burnie', 'decimator',
+// extends from ['eth', 'flip', 'decimator'] → ['eth', 'flip', 'decimator',
 // 'affiliate']. Panel now reads p.affiliate.amount from /pending and
 // dispatches click to claimAffiliateDgnrs({player}).
 //
@@ -1550,7 +1551,7 @@ describe('app-claims-panel — Plan 62-06 affiliate row whitelist + claim handle
   test("VISIBLE_PRIZE_KEYS includes 'affiliate' (whitelist extension)", () => {
     assert.match(
       PANEL_SRC_62_06,
-      /VISIBLE_PRIZE_KEYS\s*=\s*\[\s*'eth'\s*,\s*'burnie'\s*,\s*'decimator'\s*,\s*'affiliate'\s*\]/,
+      /VISIBLE_PRIZE_KEYS\s*=\s*\[\s*'eth'\s*,\s*'flip'\s*,\s*'decimator'\s*,\s*'affiliate'\s*\]/,
       "VISIBLE_PRIZE_KEYS extended to include 'affiliate'",
     );
   });
@@ -1597,7 +1598,7 @@ describe('app-claims-panel — Plan 62-06 affiliate row functional', () => {
     storeMod.update('ui.mode', 'self');
     contractsMod.setProvider(makeFakeProvider(TEST_ADDR));
     // Fake contract with claimAffiliateDgnrs method ALONGSIDE existing claim
-    // methods (panel may also click eth/burnie rows in some tests).
+    // methods (panel may also click eth/flip rows in some tests).
     const calls = {
       claimWinnings: [],
       claimCoinflips: [],
@@ -1637,7 +1638,7 @@ describe('app-claims-panel — Plan 62-06 affiliate row functional', () => {
         player: TEST_ADDR,
         pending: {
           eth:           { amount: '0', available: true, reason: null },
-          burnie:        { amount: '0', available: true, reason: null },
+          flip:        { amount: '0', available: true, reason: null },
           tickets:       { amount: '0', available: true, reason: null },
           decimator:     { amount: '0', available: true, reason: null },
           terminal:      { amount: '0', available: false, reason: 'pre-game' },
@@ -1650,7 +1651,7 @@ describe('app-claims-panel — Plan 62-06 affiliate row functional', () => {
         decimator: { claimablePerLevel: [] },
       },
     });
-    globalThis.localStorage.setItem('spun_day_11155111_42', '1');
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
     const Ctor = customElements.get('app-claims-panel');
     const el = new Ctor();
     _docBody.appendChild(el);
@@ -1710,5 +1711,316 @@ describe('app-claims-panel — Plan 62-06 affiliate row functional', () => {
     btn.dispatchEvent({ type: 'click' });
     for (let i = 0; i < 8; i += 1) await Promise.resolve();
     assert.equal(amountEl.textContent, beforeAmount, 'amount unchanged during pending (no optimistic subtraction)');
+  });
+});
+
+// ===========================================================================
+// Phase 64 — winnings banner: host auto-hide + headline + same-tab reveal.
+//
+//   - hidden = !(gateOpen && rows.length > 0): the panel exists on the page
+//     ONLY post-spin with something claimable. Pre-spin it stays hidden even
+//     when winnings exist (spoiler-safe — presence alone must not leak).
+//   - .clm-headline sums per denomination (eth+decimator = ETH; flip = FLIP;
+//     affiliate = DGNRS) and NEVER cross-sums.
+//   - document 'jackpot:revealed' (dispatched by last-day-jackpot when the
+//     reveal completes) triggers an immediate re-poll so the banner appears
+//     without waiting for the 30s tick.
+// ===========================================================================
+
+describe('app-claims-panel — Phase 64 winnings banner', () => {
+  beforeEach(async () => {
+    storeMod.__resetForTest();
+    resetDom();
+    storeMod.update('connected.address', TEST_ADDR);
+    await import('../app-claims-panel.js');
+  });
+
+  function pendingPayload({ eth = '0', flip = '0', decimator = '0', affiliate = '0' } = {}) {
+    return {
+      player: TEST_ADDR,
+      pending: {
+        eth:           { amount: eth, available: true, reason: null },
+        flip:          { amount: flip, available: true, reason: null },
+        tickets:       { amount: '0', available: true, reason: null },
+        decimator:     { amount: decimator, available: true, reason: null },
+        affiliate:     { amount: affiliate, available: true, reason: null },
+        terminal:      { amount: '0', available: false, reason: 'pre-game' },
+        vault:         { amount: '0', available: false, reason: 'vault-not-indexed-phase-57' },
+        farFutureCoin: { amount: '0', available: false, reason: 'cumulative-allocated-not-balance' },
+      },
+    };
+  }
+
+  function mountPanel() {
+    const Ctor = customElements.get('app-claims-panel');
+    const el = new Ctor();
+    _docBody.appendChild(el);
+    el.connectedCallback();
+    return el;
+  }
+
+  test('gate open + nothing claimable → host hidden (zero-state still rendered inside)', async () => {
+    setFetchResponses({
+      lastDay: { day: 42, status: 'resolved' },
+      pending: pendingPayload(),
+    });
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+
+    const el = mountPanel();
+    await flushMicrotasks();
+
+    assert.equal(el.hidden, true, 'host hidden when nothing claimable');
+    const root = getRenderRoot(el);
+    assert.ok(root.querySelector('.clm-zero-state'), 'zero-state markup still rendered');
+    el.disconnectedCallback();
+  });
+
+  test('gate open + claimable ETH → host visible with claimable-balance headline', async () => {
+    setFetchResponses({
+      lastDay: { day: 42, status: 'resolved' },
+      pending: pendingPayload({ eth: '1234500000000000000' }),
+    });
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+
+    const el = mountPanel();
+    await flushMicrotasks();
+
+    assert.equal(el.hidden, false, 'host visible when claimable');
+    const root = getRenderRoot(el);
+    const headline = root.querySelector('.clm-headline');
+    assert.ok(headline, '.clm-headline rendered above rows');
+    assert.match(headline.textContent, /Your winnings/, 'headline is balance-framed');
+    assert.doesNotMatch(headline.textContent, /You won/,
+      'never implies the draw produced the balance (cumulative /pending value)');
+    assert.match(headline.textContent, /ETH/, 'headline shows ETH denomination');
+    assert.ok(root.querySelectorAll('.clm-row').length >= 1, 'rows still rendered below headline');
+    el.disconnectedCallback();
+  });
+
+  test('day-payout line shows the draw\'s ACTUAL payout from the winners row', async () => {
+    setFetchResponses({
+      lastDay: {
+        day: 42,
+        status: 'resolved',
+        winners: [{
+          address: TEST_ADDR.toUpperCase(),  // case-insensitive match
+          totalEth: '0',
+          coinTotal: '1215000000000000000000',  // 1,215 FLIP — day paid FLIP only
+          ticketCount: 0,
+        }],
+      },
+      pending: pendingPayload({ eth: '1234500000000000000' }),  // balance carries old ETH
+    });
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+
+    const el = mountPanel();
+    await flushMicrotasks();
+
+    const root = getRenderRoot(el);
+    const dayLine = root.querySelector('.clm-headline__day');
+    assert.ok(dayLine, 'day-payout line rendered');
+    assert.match(dayLine.textContent, /Day 42 paid you/, 'day framing');
+    assert.match(dayLine.textContent, /FLIP/, 'shows the FLIP the draw actually paid');
+    assert.doesNotMatch(dayLine.textContent, /ETH/,
+      'day line excludes the carried ETH balance (day paid zero ETH)');
+    el.disconnectedCallback();
+  });
+
+  test('day-payout line says "nothing new" when the viewed player has no winners row', async () => {
+    setFetchResponses({
+      lastDay: { day: 42, status: 'resolved', winners: [] },
+      pending: pendingPayload({ eth: '1234500000000000000' }),
+    });
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+
+    const el = mountPanel();
+    await flushMicrotasks();
+
+    const root = getRenderRoot(el);
+    const dayLine = root.querySelector('.clm-headline__day');
+    assert.ok(dayLine, 'day-payout line rendered');
+    assert.match(dayLine.textContent, /nothing new/, 'carry-over balance disambiguated');
+    el.disconnectedCallback();
+  });
+
+  test('gate closed + claimable → host stays hidden (spoiler-safe)', async () => {
+    setFetchResponses({
+      lastDay: { day: 42, status: 'resolved' },
+      pending: pendingPayload({ eth: '1234500000000000000' }),
+    });
+    // No spun_day key — gate CLOSED despite claimable winnings.
+
+    const el = mountPanel();
+    await flushMicrotasks();
+
+    assert.equal(el.hidden, true, 'host hidden pre-spin even with winnings (no leak)');
+    const root = getRenderRoot(el);
+    assert.ok(root.querySelector('.clm-spoiler-gate'), 'spoiler-gate markup still rendered inside');
+    el.disconnectedCallback();
+  });
+
+  test('headline keeps denominations separate (ETH and FLIP, never cross-summed)', async () => {
+    setFetchResponses({
+      lastDay: { day: 42, status: 'resolved' },
+      pending: pendingPayload({
+        eth: '1000000000000000000',
+        flip: '500000000000000000000',
+      }),
+    });
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+
+    const el = mountPanel();
+    await flushMicrotasks();
+
+    const headline = getRenderRoot(el).querySelector('.clm-headline');
+    assert.ok(headline, 'headline rendered');
+    const txt = headline.textContent;
+    assert.match(txt, /ETH/, 'ETH part present');
+    assert.match(txt, /FLIP/, 'FLIP part present');
+    assert.match(txt, /·/, 'denominations joined, not summed');
+    el.disconnectedCallback();
+  });
+
+  test("document 'jackpot:revealed' re-polls immediately and unhides the banner", async () => {
+    setFetchResponses({
+      lastDay: { day: 42, status: 'resolved' },
+      pending: pendingPayload({ eth: '1234500000000000000' }),
+    });
+    // Mount pre-spin: gate closed → hidden.
+    const el = mountPanel();
+    await flushMicrotasks();
+    assert.equal(el.hidden, true, 'hidden before reveal');
+
+    const before = _fetchLog.length;
+    // Same-tab reveal: last-day-jackpot writes the spun key then dispatches.
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    globalThis.document.dispatchEvent({ type: 'jackpot:revealed' });
+    await flushMicrotasks();
+
+    assert.ok(_fetchLog.length > before, 'reveal event triggered an immediate re-poll');
+    assert.equal(el.hidden, false, 'banner visible right after reveal (no 30s wait)');
+    el.disconnectedCallback();
+  });
+});
+
+// Account-switcher (2026-07-16) — mode 'combined' builds rows from
+// app.playerCombined (combine.js's merged shape) instead of fetching /pending,
+// with no 'affiliate' row (combine.js omits it as per-account identity).
+describe('app-claims-panel — combined mode (account-switcher)', () => {
+  beforeEach(async () => {
+    storeMod.__resetForTest();
+    resetDom();
+    storeMod.update('connected.address', TEST_ADDR);
+    await import('../app-claims-panel.js');
+  });
+
+  function mountPanel() {
+    const Ctor = customElements.get('app-claims-panel');
+    const el = new Ctor();
+    _docBody.appendChild(el);
+    el.connectedCallback();
+    return el;
+  }
+
+  function combinedPayload(overrides = {}) {
+    return {
+      addresses: [TEST_ADDR, '0xcccc000000000000000000000000000000000003'],
+      perAddress: {},
+      claimableEth: '0',
+      flipBalance: '0',
+      dgnrsBalance: '0',
+      coinflip: { depositedAmount: '0', claimablePreview: '0' },
+      decimator: { claimablePerLevel: [], futurePoolTotal: '0' },
+      terminal: null,
+      tickets: [],
+      ...overrides,
+    };
+  }
+
+  test('renders summed eth/flip/decimator rows from app.playerCombined; /pending never fetched; no affiliate row', async () => {
+    setFetchResponses({ lastDay: { day: 42, status: 'resolved' } });
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    storeMod.update('viewing.combined', true);
+    storeMod.update('ui.mode', 'combined');
+    storeMod.update('app.playerCombined', combinedPayload({
+      claimableEth: '3000000000000000000',   // 3 ETH
+      coinflip: { depositedAmount: '0', claimablePreview: '750000000000000000000' }, // 750 FLIP
+      decimator: {
+        claimablePerLevel: [
+          { level: 2, ethAmount: '1000000000000000000', lootboxCount: 1, claimed: false },
+          { level: 3, ethAmount: '0', lootboxCount: 0, claimed: true },
+        ],
+        futurePoolTotal: '0',
+      },
+    }));
+
+    const el = mountPanel();
+    await flushMicrotasks();
+
+    assert.equal(el.hidden, false, 'banner visible — gate open + rows present');
+    const root = getRenderRoot(el);
+    const rows = root.querySelectorAll('.clm-row');
+    const keys = rows.map((r) => r.attributes['data-prize-key']);
+    assert.ok(keys.includes('eth'), 'eth row present');
+    assert.ok(keys.includes('flip'), 'flip row present');
+    assert.ok(keys.includes('decimator'), 'decimator row present (level 2 unclaimed only)');
+    assert.ok(!keys.includes('affiliate'), 'no affiliate row — combine.js omits it as identity');
+
+    assert.ok(
+      _fetchLog.every((e) => !e.url.endsWith('/pending')),
+      '/pending never fetched in combined mode',
+    );
+    assert.ok(
+      _fetchLog.every((e) => !/\/player\/0x[0-9a-f]+$/i.test(e.url)),
+      '/player/:address never fetched in combined mode',
+    );
+
+    // Claim CTAs carry data-write (auto-disabled by the global manager since
+    // deriveCanSign() is false in 'combined' mode).
+    const ctas = root.querySelectorAll('.clm-row__claim-cta');
+    assert.equal(ctas.length, 3, 'one CTA per visible row');
+    for (const c of ctas) {
+      assert.ok(Object.prototype.hasOwnProperty.call(c.attributes, 'data-write'), 'CTA carries data-write');
+    }
+
+    el.disconnectedCallback();
+  });
+
+  test('claiming in combined mode throws the read-only chokepoint message (defense-in-depth)', async () => {
+    setFetchResponses({ lastDay: { day: 42, status: 'resolved' } });
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    storeMod.update('viewing.combined', true);
+    storeMod.update('ui.mode', 'combined');
+    storeMod.update('app.playerCombined', combinedPayload({ claimableEth: '3000000000000000000' }));
+
+    const el = mountPanel();
+    await flushMicrotasks();
+    const root = getRenderRoot(el);
+    const btn = root.querySelector('[data-prize-key="eth"] .clm-row__claim-cta');
+    assert.ok(btn, 'eth claim CTA rendered');
+
+    btn.dispatchEvent({ type: 'click', preventDefault() {} });
+    await flushMicrotasks();
+
+    const errEl = root.querySelector('[data-prize-key="eth"] .clm-row__error');
+    assert.ok(errEl, 'error rendered on click');
+    assert.match(errEl.textContent, /Combined view is read-only/, 'requireSelf() chokepoint message surfaced');
+    el.disconnectedCallback();
+  });
+
+  test('gate open + all-zero combined payload → zero-state (no rows)', async () => {
+    setFetchResponses({ lastDay: { day: 42, status: 'resolved' } });
+    globalThis.localStorage.setItem('spun_day_84532_42', '1');
+    storeMod.update('viewing.combined', true);
+    storeMod.update('ui.mode', 'combined');
+    storeMod.update('app.playerCombined', combinedPayload());
+
+    const el = mountPanel();
+    await flushMicrotasks();
+
+    assert.equal(el.hidden, true, 'host hidden — zero-state has nothing claimable');
+    const root = getRenderRoot(el);
+    assert.ok(root.querySelector('.clm-zero-state'), 'zero-state rendered');
+    el.disconnectedCallback();
   });
 });

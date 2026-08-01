@@ -3,7 +3,7 @@
 // Multi-prize claim tray — UI shell. Plan history:
 //   - Plan 61-01: panel shell + spoiler gate (D-06) + render gate (D-01) + zero-state
 //                 (CLM-04) + on-mount Promise.allSettled fetch (THIS PLAN)
-//   - Plan 61-02: per-prize claim helpers (claimEth/claimBurnie/decimator loop) +
+//   - Plan 61-02: per-prize claim helpers (claimEth/claimFlip/decimator loop) +
 //                 reason-map registrations + per-row pending UX
 //   - Plan 61-03: 30s polling lifecycle + visibility-aware refresh + cross-tab
 //                 spun_day storage event + post-confirm 250ms debounce
@@ -30,20 +30,20 @@
 // :512-555), NOT a call to polling.js's fictional generic start({key,...}) API.
 
 import { CHAIN } from '../app/chain-config.js';
-import { displayEth } from '../app/scaling.js';
+import { displayEth, displayToken } from '../app/scaling.js';
 import { getViewedAddress, get, subscribe } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
 // Plan 61-02: claims write path — three named exports wired into per-row click
 // handlers below. `import` triggers reason-map registrations as a side-effect
 // (DecClaimInactive / DecAlreadyClaimed / DecNotWinner).
-import { claimEth, claimBurnie, claimDecimatorLevels, claimAffiliateDgnrs } from '../app/claims.js';
+import { claimEth, claimFlip, claimDecimatorLevels, claimAffiliateDgnrs } from '../app/claims.js';
 
 // v4.6 render whitelist (D-01 LOCKED, extended by Plan 62-06 / AFF-03).
 // The 4 hidden keys (tickets, vault, farFutureCoin, terminal) are read from
 // /pending but NEVER rendered in v4.6; each is documented out-of-scope at
 // CONTEXT.md lines 50-54. Plan 62-06 adds 'affiliate' as the 4th visible key
 // — Phase 61 D-01 LOCKED forward-compat hook.
-const VISIBLE_PRIZE_KEYS = ['eth', 'burnie', 'decimator', 'affiliate'];
+const VISIBLE_PRIZE_KEYS = ['eth', 'flip', 'decimator', 'affiliate'];
 
 // Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for
 // the Plan 61-03 30s polling tick so node:test processes exit cleanly when
@@ -62,7 +62,7 @@ function _setIntervalUnref(fn, ms) {
 // based on row.levels.length — see #renderRows.
 const PRIZE_LABELS = {
   eth: 'ETH winnings',
-  burnie: 'BURNIE coinflip winnings',
+  flip: 'FLIP coinflip winnings',
   decimator: 'Decimator jackpot',
   affiliate: 'Affiliate commission (DGNRS)',
 };
@@ -70,12 +70,15 @@ const PRIZE_LABELS = {
 class AppClaimsPanel extends HTMLElement {
   // --- private fields (Phase 60 idempotency-guard pattern) ---
   #unsubs = [];
-  #pendingData = null;     // /player/:address/pending → { eth, burnie, decimator, ... }
+  #pendingData = null;     // /player/:address/pending → { eth, flip, decimator, ... }
   #lastDayData = null;     // /game/jackpot/last-day → { day, status, ... }
   #dashboardData = null;   // /player/:address → { decimator: { claimablePerLevel: [...] } }
   #pinnedDay = null;       // pinned at fetch time, never mutated mid-render
   #pinnedAddress = null;
   #initialized = false;    // idempotency — connectedCallback re-mount safety
+  // Account-switcher (2026-07-16) — mode 'combined' builds rows from
+  // app.playerCombined (combine.js's merged shape) instead of /pending.
+  #combinedData = null;
   // Plan 61-02 — per-row click debounce (500ms). Tracks which rowKeys have an
   // in-flight claim; prevents double-fire on rapid double-clicks (T-61-02-07).
   #busyRows = new Set();
@@ -88,6 +91,7 @@ class AppClaimsPanel extends HTMLElement {
   #visibilityListener = null;  // document 'visibilitychange' handler reference
   #storageListener = null;     // window 'storage' handler reference (cross-tab spun_day)
   #txConfirmListener = null;   // self 'app-claims:tx-confirmed' handler (250ms debounce)
+  #revealListener = null;      // document 'jackpot:revealed' handler (Phase 64 same-tab reveal)
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -101,6 +105,7 @@ class AppClaimsPanel extends HTMLElement {
     // AbortController-per-cycle flushes prior in-flight fetches).
     this.#wireVisibilityRePoll();
     this.#wireStorageRePoll();
+    this.#wireRevealListener();
     this.#wirePostConfirmDebounce();
     this.#wireStoreSubscriptions();
     this.#startPolling();
@@ -134,6 +139,13 @@ class AppClaimsPanel extends HTMLElement {
       catch (_) { /* defensive */ }
     }
     this.#storageListener = null;
+    if (this.#revealListener
+      && typeof document !== 'undefined'
+      && typeof document.removeEventListener === 'function') {
+      try { document.removeEventListener('jackpot:revealed', this.#revealListener); }
+      catch (_) { /* defensive */ }
+    }
+    this.#revealListener = null;
     if (this.#txConfirmListener) {
       try { this.removeEventListener('app-claims:tx-confirmed', this.#txConfirmListener); }
       catch (_) { /* defensive */ }
@@ -216,6 +228,24 @@ class AppClaimsPanel extends HTMLElement {
     this.#lastPollAt = Date.now();
 
     try {
+      // Account-switcher (2026-07-16): mode 'combined' has no single address
+      // to fetch /pending for — build rows from app.playerCombined instead
+      // (still fetches the global /last-day row for the headline's day-payout
+      // sub-line, which no-ops when #pinnedAddress stays null below).
+      const mode = get('ui.mode');
+      if (mode === 'combined') {
+        this.#pinnedAddress = null;
+        this.#pendingData = null;
+        this.#dashboardData = null;
+        this.#combinedData = get('app.playerCombined');
+        const lastDayResult = await fetchJSON(`/game/jackpot/last-day`).catch(() => null);
+        if (signal.aborted) return;
+        this.#lastDayData = lastDayResult || null;
+        this.#pinnedDay = (lastDayResult && typeof lastDayResult.day === 'number') ? lastDayResult.day : null;
+        this.#render();
+        return;
+      }
+
       const addr = (typeof getViewedAddress === 'function' ? getViewedAddress() : null)
         || get('viewing.address')
         || get('connected.address')
@@ -289,6 +319,17 @@ class AppClaimsPanel extends HTMLElement {
     window.addEventListener('storage', this.#storageListener);
   }
 
+  // Same-tab reveal signal (Phase 64) — last-day-jackpot dispatches a bubbling
+  // 'jackpot:revealed' CustomEvent when the spin choreography completes. Fire
+  // an immediate re-poll so the winnings banner appears right after the reveal
+  // instead of waiting for the next 30s tick (the spun_day localStorage write
+  // does NOT fire a same-tab `storage` event — that listener is cross-tab only).
+  #wireRevealListener() {
+    if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
+    this.#revealListener = () => this.#runPollCycle();
+    document.addEventListener('jackpot:revealed', this.#revealListener);
+  }
+
   // Post-confirm debounce — when Plan 61-02's per-row click handler dispatches
   // 'app-claims:tx-confirmed' on tx success, schedule a 250ms debounced
   // re-fetch. ADDITIVE to the regular 30s tick (next regular cycle still fires).
@@ -312,7 +353,15 @@ class AppClaimsPanel extends HTMLElement {
   #wireStoreSubscriptions() {
     const u1 = subscribe('connected.address', () => this.#runPollCycle());
     const u2 = subscribe('viewing.address', () => this.#runPollCycle());
-    this.#unsubs.push(u1, u2);
+    // Account-switcher (2026-07-16): mode flips the data source (see
+    // #runPollCycle's combined branch); app.playerCombined updates live as
+    // polling.js's combined-mode cycle refreshes the merged payload.
+    const u3 = subscribe('ui.mode', () => this.#runPollCycle());
+    const u4 = subscribe('app.playerCombined', (payload) => {
+      this.#combinedData = payload;
+      if (get('ui.mode') === 'combined') this.#render();
+    });
+    this.#unsubs.push(u1, u2, u3, u4);
   }
 
   // ---------------------------------------------------------------------
@@ -342,11 +391,21 @@ class AppClaimsPanel extends HTMLElement {
     content.textContent = '';
 
     const gateOpen = this.#hasSpunPinnedDay();
+    const rows = gateOpen
+      ? (get('ui.mode') === 'combined' ? this.#computeVisibleRowsCombined() : this.#computeVisibleRows())
+      : [];
+    // Phase 64 basic-mode: the panel is a winnings banner — it exists on the
+    // page ONLY when the spin reveal is done AND something is claimable.
+    // Pre-spin the host stays hidden regardless of rows, so its mere presence
+    // can't leak "you won" before the draw is watched (D-06 spoiler gate).
+    // All render paths below still run (inside a hidden host when applicable)
+    // so the Plan 61 DOM contracts hold.
+    this.hidden = !(gateOpen && rows.length > 0);
+
     if (!gateOpen) {
       this.#renderSpoilerGate(content);
       return;
     }
-    const rows = this.#computeVisibleRows();
     if (rows.length === 0) {
       this.#renderZeroState(content);
       return;
@@ -415,7 +474,7 @@ class AppClaimsPanel extends HTMLElement {
 
   // ---------------------------------------------------------------------
   // Compute visible rows (D-01 render gate).
-  //   - Whitelist filter: only eth | burnie | decimator are eligible.
+  //   - Whitelist filter: only eth | flip | decimator are eligible.
   //   - Amount gate: amount > 0n required.
   //   - Decimator special: ALSO requires non-empty levels list (Pitfall 7
   //     belt-and-suspenders — even if the SUM amount is non-zero, an empty
@@ -433,11 +492,11 @@ class AppClaimsPanel extends HTMLElement {
       rows.push({ key: 'eth', amountWei: ethBig, levels: null });
     }
 
-    const burnieRaw = String(p.burnie?.amount || '0');
-    let burnieBig = 0n;
-    try { burnieBig = BigInt(burnieRaw); } catch (_) { burnieBig = 0n; }
-    if (burnieBig > 0n) {
-      rows.push({ key: 'burnie', amountWei: burnieBig, levels: null });
+    const flipRaw = String(p.flip?.amount || '0');
+    let flipBig = 0n;
+    try { flipBig = BigInt(flipRaw); } catch (_) { flipBig = 0n; }
+    if (flipBig > 0n) {
+      rows.push({ key: 'flip', amountWei: flipBig, levels: null });
     }
 
     const decRaw = String(p.decimator?.amount || '0');
@@ -477,11 +536,58 @@ class AppClaimsPanel extends HTMLElement {
   }
 
   // ---------------------------------------------------------------------
+  // Account-switcher (2026-07-16) — combined-mode row builder. Sourced from
+  // app.playerCombined (combine.js's merged shape), NOT /pending (which has
+  // no combined analog). No 'affiliate' row — combine.js intentionally omits
+  // `affiliate` as per-account identity (not summable). Rows carry the same
+  // {key, amountWei, levels} shape as #computeVisibleRows so #renderRows /
+  // #wireRowHandler are reused verbatim; canSign is already false in
+  // 'combined' mode so the rendered Claim CTAs are auto-disabled
+  // (view-mode-banner.js's [data-write] manager) and requireSelf() blocks
+  // any devtools-bypassed click before it reaches a signer.
+  // ---------------------------------------------------------------------
+
+  #computeVisibleRowsCombined() {
+    const d = this.#combinedData;
+    const rows = [];
+    if (!d) return rows;
+
+    let ethBig = 0n;
+    try { ethBig = BigInt(d.claimableEth || '0'); } catch (_) { ethBig = 0n; }
+    if (ethBig > 0n) rows.push({ key: 'eth', amountWei: ethBig, levels: null });
+
+    let flipBig = 0n;
+    try { flipBig = BigInt(d.coinflip?.claimablePreview || '0'); } catch (_) { flipBig = 0n; }
+    if (flipBig > 0n) rows.push({ key: 'flip', amountWei: flipBig, levels: null });
+
+    const dashLevels = Array.isArray(d.decimator?.claimablePerLevel) ? d.decimator.claimablePerLevel : [];
+    let decBig = 0n;
+    const decLevels = [];
+    for (const l of dashLevels) {
+      if (!l || l.claimed) continue;
+      let n = 0n;
+      try { n = BigInt(l.ethAmount || '0'); } catch (_) { n = 0n; }
+      if (n > 0n) {
+        decBig += n;
+        decLevels.push(Number(l.level));
+      }
+    }
+    decLevels.sort((a, b) => a - b);
+    if (decBig > 0n && decLevels.length > 0) {
+      rows.push({ key: 'decimator', amountWei: decBig, levels: decLevels });
+    }
+
+    return rows.filter((r) => VISIBLE_PRIZE_KEYS.includes(r.key));
+  }
+
+  // ---------------------------------------------------------------------
   // Render: rows (D-01). Each row uses textContent for ALL server-derived
   // strings (T-58-18 hardening). innerHTML reserved for static container scaffold.
   // ---------------------------------------------------------------------
 
   #renderRows(content, rows) {
+    // Phase 64 winnings-banner headline — big total up top, per-row detail below.
+    this.#renderHeadline(content, rows);
     // Build container via createElement (no innerHTML interpolation needed).
     const rowsContainer = document.createElement('div');
     rowsContainer.className = 'clm-rows';
@@ -504,13 +610,16 @@ class AppClaimsPanel extends HTMLElement {
       }
       rowEl.appendChild(labelEl);
 
-      // Amount: textContent — formatted via Phase 56 displayEth (BURNIE is also
-      // wei-scaled per Phase 56 D-03; displayEth is the right divider for both).
+      // Amount: textContent — ETH-denominated rows (eth, decimator) go through
+      // displayEth (/1M testnet re-scale); FLIP + DGNRS are UNSCALED 18-dec
+      // tokens and use displayToken (Phase 64 fix — displayEth would inflate
+      // them 1M× on testnet).
       const amountEl = document.createElement('span');
       amountEl.className = 'clm-row__amount';
+      const isEthDenominated = row.key === 'eth' || row.key === 'decimator';
       let amountStr = '0';
       try {
-        amountStr = displayEth(row.amountWei);
+        amountStr = isEthDenominated ? displayEth(row.amountWei) : displayToken(row.amountWei);
       } catch (_e) {
         // Defensive: bad data → show raw wei as text (still safe via textContent).
         amountStr = String(row.amountWei);
@@ -540,6 +649,100 @@ class AppClaimsPanel extends HTMLElement {
 
       rowsContainer.appendChild(rowEl);
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Phase 64 — Winnings-banner headline. Sums per denomination (eth +
+  // decimator rows are ETH-wei; flip is FLIP-wei; affiliate is DGNRS-wei —
+  // NEVER summed cross-denomination). Server-derived numbers via textContent.
+  //
+  // Labeling fix (user-reported): the headline number is the CUMULATIVE
+  // claimable balance from /pending, NOT the day's payout — "You won" implied
+  // the draw produced it (day 66 paid FLIP-only while the balance carried
+  // 10+ ETH from earlier days). The label reads as balance, and the actual
+  // day payout renders on its own line from the last-day winners row.
+  // ---------------------------------------------------------------------
+
+  #renderHeadline(content, rows) {
+    let ethWei = 0n;
+    let flipWei = 0n;
+    let dgnrsWei = 0n;
+    for (const r of rows) {
+      if (r.key === 'eth' || r.key === 'decimator') ethWei += r.amountWei;
+      else if (r.key === 'flip') flipWei += r.amountWei;
+      else if (r.key === 'affiliate') dgnrsWei += r.amountWei;
+    }
+    const fmtEth = (wei) => {
+      try { return displayEth(wei); } catch (_e) { return String(wei); }
+    };
+    const fmtTok = (wei) => {
+      try { return displayToken(wei); } catch (_e) { return String(wei); }
+    };
+    const parts = [];
+    if (ethWei > 0n) parts.push(`${fmtEth(ethWei)} ETH`);
+    if (flipWei > 0n) parts.push(`${fmtTok(flipWei)} FLIP`);
+    if (dgnrsWei > 0n) parts.push(`${fmtTok(dgnrsWei)} DGNRS`);
+    if (parts.length === 0) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'clm-headline';
+
+    const label = document.createElement('span');
+    label.className = 'clm-headline__label';
+    label.textContent = 'Your winnings';
+    wrap.appendChild(label);
+
+    const amount = document.createElement('span');
+    amount.className = 'clm-headline__amount';
+    amount.textContent = parts.join(' · ');
+    wrap.appendChild(amount);
+
+    const sub = document.createElement('span');
+    sub.className = 'clm-headline__sub';
+    sub.textContent = 'unclaimed balance';
+    wrap.appendChild(sub);
+
+    this.#renderDayPayout(wrap);
+
+    content.appendChild(wrap);
+  }
+
+  // ---------------------------------------------------------------------
+  // Phase 64 — the day's ACTUAL payout for the viewed player, from the
+  // last-day winners row (totalEth = ETH-wei, coinTotal = FLIP-wei,
+  // ticketCount = jackpot ticket wins in ENTRIES; /4 → whole tickets). Renders
+  // only for a resolved day; absent row = the balance is all carry-over.
+  // ---------------------------------------------------------------------
+
+  #renderDayPayout(wrap) {
+    const ld = this.#lastDayData;
+    if (!ld || ld.status !== 'resolved' || this.#pinnedDay == null) return;
+    const addr = String(this.#pinnedAddress || '').toLowerCase();
+    if (!addr) return;
+    const row = (Array.isArray(ld.winners) ? ld.winners : []).find(
+      (w) => String(w?.address || '').toLowerCase() === addr,
+    );
+    const parts = [];
+    if (row) {
+      let eth = 0n;
+      try { eth = BigInt(row.totalEth || '0'); } catch (_e) { eth = 0n; }
+      let flip = 0n;
+      try { flip = BigInt(row.coinTotal || '0'); } catch (_e) { flip = 0n; }
+      const tickets = Math.round(Number(row.ticketCount || 0) / 4); // amount is ENTRIES (4 = 1 ticket)
+      if (eth > 0n) {
+        try { parts.push(`${displayEth(eth)} ETH`); } catch (_e) { /* skip malformed */ }
+      }
+      if (flip > 0n) {
+        try { parts.push(`${displayToken(flip)} FLIP`); } catch (_e) { /* skip malformed */ }
+      }
+      if (tickets > 0) parts.push(`${tickets} ticket${tickets === 1 ? '' : 's'}`);
+    }
+    const line = document.createElement('span');
+    line.className = 'clm-headline__day';
+    line.textContent = parts.length > 0
+      ? `Day ${this.#pinnedDay} paid you ${parts.join(' · ')}`
+      : `Day ${this.#pinnedDay} paid you nothing new`;
+    wrap.appendChild(line);
   }
 
   // ---------------------------------------------------------------------
@@ -582,11 +785,11 @@ class AppClaimsPanel extends HTMLElement {
         const player = get('connected.address');
         if (row.key === 'eth') {
           await claimEth({ player });
-        } else if (row.key === 'burnie') {
-          // Pitfall 6: amount sourced from /pending's burnie.amount field
+        } else if (row.key === 'flip') {
+          // Pitfall 6: amount sourced from /pending's flip.amount field
           // (NOT the /beta address-cast trick).
-          const amount = BigInt(this.#pendingData?.burnie?.amount || '0');
-          await claimBurnie({ player, amount });
+          const amount = BigInt(this.#pendingData?.flip?.amount || '0');
+          await claimFlip({ player, amount });
         } else if (row.key === 'decimator') {
           // Panel pre-sorts ascending — keeps claims.js a pure executor.
           const levels = Array.isArray(row.levels)

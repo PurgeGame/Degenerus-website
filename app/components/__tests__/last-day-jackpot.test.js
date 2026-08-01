@@ -7,6 +7,7 @@
 
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 // ---------------------------------------------------------------------------
 // Fake DOM (mirrors view-mode-banner.test.js fake-DOM scaffolding)
@@ -217,8 +218,19 @@ globalThis.document = {
     if (!_docListeners.has(type)) _docListeners.set(type, []);
     _docListeners.get(type).push(fn);
   },
-  removeEventListener: () => {},
-  dispatchEvent: () => true,
+  removeEventListener: (type, fn) => {
+    const arr = _docListeners.get(type);
+    if (!arr) return;
+    const idx = arr.indexOf(fn);
+    if (idx >= 0) arr.splice(idx, 1);
+  },
+  dispatchEvent: (ev) => {
+    const arr = _docListeners.get(ev?.type) || [];
+    for (const fn of [...arr]) {
+      try { fn(ev); } catch { /* swallow */ }
+    }
+    return true;
+  },
   visibilityState: 'visible',
 };
 
@@ -308,16 +320,16 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     const Ctor = customElements.get('last-day-jackpot');
     const el = new Ctor();
     el.connectedCallback();
+    // The spin/scratch reveal is the sibling <replay-panel>; the shell carries the
+    // day pin, banner, and the foil CLAIM bar (the strip itself, the day-results
+    // list, and the day-stats caption were all removed 2026-07-29 on the user's
+    // call — the caption survives only as the popup's NO HIT subtitle).
     const required = [
       'ldj-status-cold-start',
       'ldj-status-empty-day',
       'ldj-status-resolved',
       'ldj-new-day-banner',
-      'jp-replay-section',
-      'jp-roll1-result',
-      'jp-roll2-result',
-      'jp-winners-group-baf',
-      'jp-winners-group-decimator',
+      'ldj-foil-claimbar',
       'day',
     ];
     for (const hook of required) {
@@ -326,7 +338,6 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
         `data-bind="${hook}" present`,
       );
     }
-    assert.ok(el.querySelector('#jp-replay-btn'), '#jp-replay-btn present');
   });
 
   test('Cold-start section visible by default after connectedCallback (Plan 59-01 default state)', async () => {
@@ -446,7 +457,7 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
     assert.match(dayLbl.textContent, /Day 7/);
   });
 
-  test('Pin-dayId: first payload pins day; same-day refresh re-renders; newer-day sets flag without rerender', async () => {
+  test('first payload pins day; same-day refresh stays put; genuinely newer day auto-renders', async () => {
     const el = instantiate();
     // First payload: pin to day 5 empty-day
     storeMod.update('app.lastDay', {
@@ -468,7 +479,7 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
     await flushMicrotasks();
     assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 5/, 'same-day refresh keeps day 5');
 
-    // Third payload: newer day 6 → should NOT re-render body (banner is Plan 59-03)
+    // Third payload: newer day 6 → switch the whole widget automatically.
     storeMod.update('app.lastDay', {
       day: 6, level: 2, summary: null, winners: [],
       roll1: { day: 6, level: 2, purchaseLevel: null, wins: [] },
@@ -476,8 +487,8 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
       status: 'resolved-no-winners',
     });
     await flushMicrotasks();
-    // Body should still show day 5 (pin-dayId locked, banner DOM is Plan 59-03)
-    assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 5/, 'body still day 5 after newer-day arrival');
+    assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 6/,
+      'body automatically follows the new resolved day');
   });
 
   test('null/undefined payload does not throw + leaves Plan 59-01 default scaffold visible', async () => {
@@ -543,34 +554,63 @@ describe('Plan 59-03: localStorage spin-idempotency', () => {
     return el;
   }
 
-  test('Fresh day (no localStorage entry) → state stays idle', async () => {
+  test('replay:scratch-complete (NOT spin-complete) writes the spun_day key + dispatches jackpot:revealed', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
     const el = instantiate();
     storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
     await flushMicrotasks();
-    const btn = el.querySelector('#jp-replay-btn');
-    const state = (btn?.dataset && btn.dataset.state)
-      || (typeof btn?.getAttribute === 'function' ? btn.getAttribute('data-state') : null);
-    assert.equal(state, 'idle', 'fresh day → idle state (animation not yet run)');
-    assert.equal(btn.disabled, false, 'Replay button enabled (pinned day present)');
+    assert.equal(globalThis.localStorage.getItem(`spun_day_${CHAIN.id}_5`), null,
+      'no key before the panel reveal is scratched');
+
+    let revealed = 0;
+    globalThis.document.addEventListener('jackpot:revealed', () => { revealed += 1; });
+
+    // Spin end alone must NOT open the gate — prizes are still under the
+    // scratch cover (user-reported bug: banner spoiled the win pre-scratch).
+    globalThis.document.dispatchEvent({ type: 'replay:spin-complete' });
+    await flushMicrotasks();
+    assert.equal(globalThis.localStorage.getItem(`spun_day_${CHAIN.id}_5`), null,
+      'spun_day key NOT written at spin end');
+    assert.equal(revealed, 0, 'no jackpot:revealed at spin end');
+
+    // The sibling <replay-panel> bubbles this once every owned quadrant +
+    // the center diamond are scratched.
+    globalThis.document.dispatchEvent({ type: 'replay:scratch-complete' });
+    await flushMicrotasks();
+
+    assert.equal(globalThis.localStorage.getItem(`spun_day_${CHAIN.id}_5`), '1',
+      'spun_day key written on scratch completion (claims spoiler gate opens)');
+    assert.equal(globalThis.localStorage.getItem(`jackpot_complete_day_${CHAIN.id}_5`), '1',
+      'a no-bonus main scratch is also the durable whole-board completion');
+    assert.equal(revealed, 1, 'jackpot:revealed dispatched for the winnings banner');
+    el.disconnectedCallback();
   });
 
-  test('Pre-seeded localStorage spun_day_${chainId}_${day} === "1" → state goes directly to roll2_done', async () => {
-    // Read CHAIN.id dynamically since the active profile (sepolia/mainnet) may vary
-    const { CHAIN } = await import('../../app/chain-config.js');
-    globalThis.localStorage.setItem(`spun_day_${CHAIN.id}_5`, '1');
-
+  // The "N winners this day · top hit X ETH" caption was pulled off the board
+  // 2026-07-29 (user call). It is now only the popup's NO HIT subtitle, built by
+  // #dayStatsText() — so the board must carry neither the element nor the copy.
+  test('day-stats caption is gone from the board (no element, no copy)', async () => {
     const el = instantiate();
     storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
     await flushMicrotasks();
-    const btn = el.querySelector('#jp-replay-btn');
-    const state = (btn?.dataset && btn.dataset.state)
-      || (typeof btn?.getAttribute === 'function' ? btn.getAttribute('data-state') : null);
-    assert.equal(state, 'roll2_done', 'previously-spun day → roll2_done state (animation skipped)');
-    // Roll 1 + Roll 2 result panels should be visible (rendered instantly)
-    const roll1 = el.querySelector('[data-bind="jp-roll1-result"]');
-    const roll2 = el.querySelector('[data-bind="jp-roll2-result"]');
-    assert.notEqual(roll1?.style?.display, 'none', 'Roll 1 panel visible (instant render)');
-    assert.notEqual(roll2?.style?.display, 'none', 'Roll 2 panel visible (instant render)');
+    assert.equal(el.querySelector('[data-bind="ldj-day-stats"]'), null,
+      'no day-stats element in the shell');
+    const rendered = el.innerHTML.replace(/<!--[\s\S]*?-->/g, '');
+    assert.doesNotMatch(rendered, /winners this day|top hit/,
+      'no winner-count / top-hit copy rendered on the board');
+    assert.equal(el.querySelectorAll('.jp-winner-item').length, 0,
+      'no winner-address rows in basic mode');
+    el.disconnectedCallback();
+  });
+
+  test('the caption copy survives as the popup NO HIT subtitle (#dayStatsText)', () => {
+    const src = readFileSync(
+      new URL('../last-day-jackpot.js', import.meta.url), 'utf8',
+    );
+    assert.match(src, /#dayStatsText\(\)\s*\{/, 'builder kept');
+    assert.match(src, /winners this day|winner\$\{/, 'winner-count copy kept in the builder');
+    assert.match(src, /noWin:[\s\S]*?this\.#dayStatsText\(\)/,
+      'popup NO HIT sub is fed by the builder');
   });
 
   test('localStorage QuotaExceededError on setItem → widget renders without throwing (Pitfall F)', async () => {
@@ -600,7 +640,7 @@ describe('Plan 59-03: localStorage spin-idempotency', () => {
   });
 });
 
-describe('Plan 59-03: new-day-available banner', () => {
+describe('new-day auto-follow', () => {
   beforeEach(async () => {
     storeMod.__resetForTest();
     resetDom();
@@ -636,45 +676,175 @@ describe('Plan 59-03: new-day-available banner', () => {
     assert.equal(banner.hidden, true, 'banner hidden after first-payload pin (no newer day)');
   });
 
-  test('Newer-day payload reveals banner with day-N+1 text + body stays pinned to old day', async () => {
+  test('newer-day payload updates immediately and leaves the click banner hidden', async () => {
     const el = instantiate();
     storeMod.update('app.lastDay', DAY5);
     await flushMicrotasks();
-    // Newer day arrives — banner should appear; body stays on day 5 (pin-dayId)
+    // Newer day arrives — no extra click is required.
     storeMod.update('app.lastDay', DAY6);
     await flushMicrotasks();
     const banner = el.querySelector('[data-bind="ldj-new-day-banner"]');
-    assert.equal(banner.hidden, false, 'banner visible after newer-day delivery');
-    const text = el.querySelector('[data-bind="ldj-new-day-text"]');
-    assert.match(text.textContent, /Day 6/, 'banner text references newer day (6)');
-    // Body day label should still show day 5 (pin-dayId — D-04 no auto-rerender)
+    assert.equal(banner.hidden, true, 'legacy click banner stays hidden');
     const dayLbl = el.querySelector('[data-bind="day"]');
-    assert.match(dayLbl.textContent, /Day 5/, 'body day label still day 5 (pin locked)');
+    assert.match(dayLbl.textContent, /Day 6/, 'body follows day 6 immediately');
   });
 
-  test('"View now" click bumps cancel token + re-pins to newer day + hides banner', async () => {
+  test('missing replay option is refreshed and selected for the new day', async () => {
+    const connected = '0xab12000000000000000000000000000000000000';
+    storeMod.update('connected.address', connected);
+    const replay = makeFakeElement('replay-panel');
+    const daySelect = makeFakeElement('select');
+    daySelect.attributes['data-bind'] = 'day-select';
+    daySelect.options = [{ value: '5' }];
+    daySelect.value = '5';
+    const playerSelect = makeFakeElement('select');
+    playerSelect.attributes['data-bind'] = 'player-select';
+    playerSelect.options = [{ value: connected }];
+    playerSelect.value = connected;
+    replay.append(daySelect, playerSelect);
+    let refreshes = 0;
+    replay.refreshDays = async () => {
+      refreshes += 1;
+      daySelect.options.push({ value: '6' });
+      return true;
+    };
+    _docBody.appendChild(replay);
+
     const el = instantiate();
     storeMod.update('app.lastDay', DAY5);
     await flushMicrotasks();
     storeMod.update('app.lastDay', DAY6);
     await flushMicrotasks();
-    const banner = el.querySelector('[data-bind="ldj-new-day-banner"]');
-    assert.equal(banner.hidden, false, 'banner visible pre-click');
-
-    const viewNowBtn = el.querySelector('[data-bind="ldj-view-now"]');
-    assert.ok(viewNowBtn, 'View now button exists');
-    // Dispatch click event to the button
-    viewNowBtn.dispatchEvent({ type: 'click' });
     await flushMicrotasks();
 
-    assert.equal(banner.hidden, true, 'banner hidden after View now click');
-    // Day label should now reflect day 6 (re-pinned)
-    const dayLbl = el.querySelector('[data-bind="day"]');
-    assert.match(dayLbl.textContent, /Day 6/, 'day label updated to 6 after re-pin');
+    assert.equal(refreshes, 1, 'replay day source reloaded once');
+    assert.equal(daySelect.value, '6', 'newly loaded day selected automatically');
+    el.disconnectedCallback();
+  });
+
+  test('the bridge restores persisted reveal state through its replay-panel reference', async () => {
+    const connected = '0xab12000000000000000000000000000000000000';
+    storeMod.update('connected.address', connected);
+    const replay = makeFakeElement('replay-panel');
+    const daySelect = makeFakeElement('select');
+    daySelect.attributes['data-bind'] = 'day-select';
+    daySelect.options = [{ value: '5' }];
+    daySelect.value = '5';
+    const playerSelect = makeFakeElement('select');
+    playerSelect.attributes['data-bind'] = 'player-select';
+    playerSelect.options = [{ value: connected }];
+    playerSelect.value = connected;
+    replay.append(daySelect, playerSelect);
+    const restored = [];
+    replay.setPersistedRevealState = (...state) => restored.push(state);
+    _docBody.appendChild(replay);
+
+    const el = instantiate();
+    storeMod.update('app.lastDay', DAY5);
+    await flushMicrotasks();
+
+    assert.deepEqual(restored, [[false, false]]);
+    el.disconnectedCallback();
+  });
+
+  test('the bridge tells replay-panel when both rolls were durably completed', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
+    const connected = '0xab12000000000000000000000000000000000000';
+    storeMod.update('connected.address', connected);
+    globalThis.localStorage.setItem(`spun_day_${CHAIN.id}_5`, '1');
+    globalThis.localStorage.setItem(`jackpot_complete_day_${CHAIN.id}_5`, '1');
+    const replay = makeFakeElement('replay-panel');
+    const daySelect = makeFakeElement('select');
+    daySelect.attributes['data-bind'] = 'day-select';
+    daySelect.options = [{ value: '5' }];
+    daySelect.value = '5';
+    const playerSelect = makeFakeElement('select');
+    playerSelect.attributes['data-bind'] = 'player-select';
+    playerSelect.options = [{ value: connected }];
+    playerSelect.value = connected;
+    replay.append(daySelect, playerSelect);
+    const restored = [];
+    replay.setPersistedRevealState = (...state) => restored.push(state);
+    _docBody.appendChild(replay);
+
+    const el = instantiate();
+    storeMod.update('app.lastDay', DAY5);
+    await flushMicrotasks();
+
+    assert.deepEqual(restored, [[true, true]],
+      'main is restored as the default and bonus stays behind the flame');
+    el.disconnectedCallback();
+  });
+
+  test('a new day resets the prior day reveal gates', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
+    const el = instantiate();
+    globalThis.localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+    storeMod.update('app.lastDay', DAY5);
+    await flushMicrotasks();
+    globalThis.document.dispatchEvent({
+      type: 'replay:scratch-complete',
+      detail: { bonusPhase: false, bonusAvailable: false },
+    });
+    await flushMicrotasks();
+    const cta = el.querySelector('[data-bind="ldj-results-cta"]');
+    assert.equal(cta.hidden, false, 'day 5 is fully revealed');
+
+    storeMod.update('app.lastDay', DAY6);
+    await flushMicrotasks();
+    assert.equal(cta.hidden, true, 'day 6 starts with fresh board/flip gates');
   });
 });
 
-describe('Plan 59-03: wallet-conditional highlight', () => {
+// ===========================================================================
+// Phase 64 — foil-ticket strip: fetch → render → spoiler-gated match lighting.
+//
+// The widget fetches /player/:addr/foil?level=N when a resolved day renders.
+// Cards show regardless of spin state (the player's own tickets); MATCH
+// lighting (face rings, T-chips, claimable pulse) applies only once the pinned
+// day's spun_day key exists (or right after #finishReveal writes it).
+// ===========================================================================
+
+describe('foil CLAIM bar (all that survives of the foil strip)', () => {
+  // User call 2026-07-29: "the ugly foil tickets and the big list of what everyone
+  // else won" came out of the widget. A matched line still PAYS, so the claim
+  // button had to survive — it is now a bar that appears only when something is
+  // claimable, and nothing renders the four badge lines or the tier ladder.
+  test('the strip markup is gone: no lines, ladder, or per-tier chips', () => {
+    const Ctor = customElements.get('last-day-jackpot');
+    const el = new Ctor();
+    el.connectedCallback();
+    for (const hook of ['ldj-foil', 'ldj-foil-lines', 'ldj-foil-ladder', 'ldj-foil-boost']) {
+      assert.equal(el.querySelector(`[data-bind="${hook}"]`), null, `${hook} removed`);
+    }
+    assert.ok(el.querySelector('[data-bind="ldj-foil-claimbar"]'), 'claim bar present');
+    assert.equal(el.querySelector('[data-bind="ldj-foil-claimbar"]').hidden, true,
+      'hidden until something is claimable');
+  });
+
+  test('the day-results list is gone (DAY SUMMARY popup CTA stays)', () => {
+    const Ctor = customElements.get('last-day-jackpot');
+    const el = new Ctor();
+    el.connectedCallback();
+    assert.equal(el.querySelector('[data-bind="ldj-results"]'), null, 'list removed');
+    assert.equal(el.querySelector('[data-bind="ldj-results-rows"]'), null, 'rows removed');
+    const cta = el.querySelector('[data-bind="ldj-results-cta"]');
+    assert.ok(cta, 'popup CTA kept');
+    assert.match(el.innerHTML, />\s*DAY SUMMARY\s*</, 'CTA uses the new name');
+  });
+
+  test('source no longer renders foil faces or the tier ladder', () => {
+    const src = readFileSync(new URL('../last-day-jackpot.js', import.meta.url), 'utf8');
+    assert.equal(/FOIL_TIER_FACES/.test(src), false, 'ladder constant no longer imported');
+    assert.equal(/ldj-foil-face/.test(src), false, 'no badge faces rendered');
+    assert.equal(/renderDayResults/.test(src), false, 'results renderer removed');
+    // The claim path itself must still be wired.
+    assert.match(src, /claimFoilMatch\(/);
+    assert.match(src, /FOIL_CLAIM_THRESHOLD/);
+  });
+});
+
+describe('Results CTA gating (whole board + flip before the popup)', () => {
   beforeEach(async () => {
     storeMod.__resetForTest();
     resetDom();
@@ -682,6 +852,19 @@ describe('Plan 59-03: wallet-conditional highlight', () => {
   });
 
   function instantiate() {
+    const replay = makeFakeElement('replay-panel');
+    const controls = makeFakeElement('div');
+    controls.classList.add('replay-controls');
+    const reveal = makeFakeElement('button');
+    reveal.attributes['data-bind'] = 'reveal-btn';
+    reveal.hidden = false;
+    controls.appendChild(reveal);
+    replay.appendChild(controls);
+    _docBody.appendChild(replay);
+    const slot = makeFakeElement('div');
+    slot.attributes['data-bind'] = 'day-summary-slot';
+    slot.hidden = true;
+    _docBody.appendChild(slot);
     const Ctor = customElements.get('last-day-jackpot');
     const el = new Ctor();
     _docBody.appendChild(el);
@@ -689,100 +872,297 @@ describe('Plan 59-03: wallet-conditional highlight', () => {
     return el;
   }
 
-  const MY_ADDR = '0xab12000000000000000000000000000000000000';
-  const OTHER_ADDR = '0x0000000000000000000000000000000000000099';
-  const RESOLVED_WITH_ME = {
-    day: 5, level: 2, summary: null,
-    winners: [
-      { address: MY_ADDR, totalEth: '1000000000000000000', ticketCount: 100, coinTotal: '0',
-        bafPrize: { eth: '0', tickets: 0 },
-        decimatorPrize: { regularEth: '0', lootboxEth: '0', terminalEth: '0' } },
-      { address: OTHER_ADDR, totalEth: '500000000000000000', ticketCount: 50, coinTotal: '0',
-        bafPrize: { eth: '0', tickets: 0 },
-        decimatorPrize: { regularEth: '0', lootboxEth: '0', terminalEth: '0' } },
-    ],
-    roll1: { day: 5, level: 2, purchaseLevel: null, wins: [] },
-    roll2: { day: 5, level: 2, purchaseLevel: null, wins: [], bonusTraitsPacked: null },
-    status: 'resolved',
-  };
-
-  function findWinnerRow(el, lowercaseAddr) {
-    const rows = el.querySelectorAll('.jp-winner-item');
-    for (const row of rows) {
-      if (row.classList && row.classList.contains('jp-winner-item--empty')) continue;
-      const a = (row.dataset && row.dataset.address) || '';
-      if (a === lowercaseAddr) return row;
-    }
-    return null;
+  function scratchEvent(detail) {
+    return { type: 'replay:scratch-complete', detail };
   }
 
-  test('No wallet connected → no rows highlighted', async () => {
+  test('hidden on a fresh resolved day; roll-1 completion with a bonus AHEAD keeps it hidden', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
+    // Flip gate pre-satisfied so the board gate is what's under test.
+    globalThis.localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
     const el = instantiate();
-    storeMod.update('app.lastDay', RESOLVED_WITH_ME);
+    storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
     await flushMicrotasks();
-    const rows = el.querySelectorAll('.jp-winner-item');
-    let realRowCount = 0;
-    for (const row of rows) {
-      if (row.classList && row.classList.contains('jp-winner-item--empty')) continue;
-      realRowCount++;
-      assert.equal(row.classList.contains('ldj-winner-row--mine'), false,
-        `row ${row.dataset?.address} should not be highlighted (no wallet)`);
+    const cta = el.querySelector('[data-bind="ldj-results-cta"]');
+    const slot = document.querySelector('[data-bind="day-summary-slot"]');
+    const controls = document.querySelector('replay-panel').querySelector('.replay-controls');
+    const reveal = controls.querySelector('[data-bind="reveal-btn"]');
+    assert.ok(cta, 'CTA rendered in the shell');
+    assert.equal(cta.hidden, true, 'hidden before any scratch');
+    assert.equal(slot.hidden, true, 'obsolete extra row always reserves zero space');
+    assert.equal(cta.parentElement, controls, 'summary shares Reveal Draw\'s action row');
+
+    // Roll 1 done but the bonus roll is still ahead → board NOT played out.
+    globalThis.document.dispatchEvent(scratchEvent({ bonusPhase: false, bonusAvailable: true }));
+    await flushMicrotasks();
+    assert.equal(cta.hidden, true, 'still hidden while the bonus roll is pending');
+    assert.equal(globalThis.localStorage.getItem(`jackpot_complete_day_${CHAIN.id}_5`), null,
+      'main completion alone does not claim the bonus was cleared');
+
+    // Bonus roll scratched out → whole board done → CTA appears.
+    globalThis.document.dispatchEvent(scratchEvent({ bonusPhase: true, bonusAvailable: false }));
+    await flushMicrotasks();
+    assert.equal(cta.hidden, false, 'CTA shown after the final roll');
+    assert.equal(slot.hidden, true, 'no second action row is introduced');
+    assert.equal(reveal.hidden, true, 'Reveal Draw and Day Summary are mutually exclusive');
+    assert.equal(globalThis.localStorage.getItem(`jackpot_complete_day_${CHAIN.id}_5`), '1',
+      'finishing the bonus persists the preferred reload view');
+    el.disconnectedCallback();
+  });
+
+  test('no bonus this draw → single roll completion opens the CTA (flip already revealed)', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
+    globalThis.localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+    const el = instantiate();
+    storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
+    await flushMicrotasks();
+    globalThis.document.dispatchEvent(scratchEvent({ bonusPhase: false, bonusAvailable: false }));
+    await flushMicrotasks();
+    const cta = el.querySelector('[data-bind="ldj-results-cta"]');
+    assert.equal(cta.hidden, false, 'CTA shown — no bonus roll to wait for');
+    el.disconnectedCallback();
+  });
+
+  test('flip not revealed yet → CTA stays hidden until flip:revealed', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
+    const el = instantiate();
+    storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
+    await flushMicrotasks();
+    // Whole board done, but the coin is still spinning (no flip_day key,
+    // coinflip-row waiver unknown — default fetch throws in this harness).
+    globalThis.document.dispatchEvent(scratchEvent({ bonusPhase: false, bonusAvailable: false }));
+    await flushMicrotasks();
+    const cta = el.querySelector('[data-bind="ldj-results-cta"]');
+    assert.equal(cta.hidden, true, 'hidden until the flip is revealed');
+
+    // The player taps the coin — app-daily-flip writes the key + dispatches.
+    globalThis.localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+    globalThis.document.dispatchEvent({ type: 'flip:revealed', detail: { day: 5 } });
+    await flushMicrotasks();
+    assert.equal(cta.hidden, false, 'CTA shown once both gates open');
+    el.disconnectedCallback();
+  });
+
+  test('detail-less scratch-complete (legacy/tests) counts as final', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
+    globalThis.localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+    const el = instantiate();
+    storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
+    await flushMicrotasks();
+    globalThis.document.dispatchEvent({ type: 'replay:scratch-complete' });
+    await flushMicrotasks();
+    const cta = el.querySelector('[data-bind="ldj-results-cta"]');
+    assert.equal(cta.hidden, false, 'bare event treated as final');
+    el.disconnectedCallback();
+  });
+
+  test('reloaded spun day (spun_day persisted, no live scratch) opens the CTA without a re-scratch', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
+    globalThis.localStorage.setItem(`spun_day_${CHAIN.id}_5`, '1');
+    globalThis.localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+    const el = instantiate();
+    storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
+    await flushMicrotasks();
+    const cta = el.querySelector('[data-bind="ldj-results-cta"]');
+    assert.equal(cta.hidden, false, 'prior-session play-through honored on reload');
+    el.disconnectedCallback();
+  });
+
+  test('DAY SUMMARY reads the day-scoped pack and player feeds before queuing the reveal', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
+    const revealMod = await import('../reveal-overlay.js');
+    revealMod.__resetForTest();
+    const address = '0x1111000000000000000000000000000000000001';
+    storeMod.update('connected.address', address);
+    const priorFetch = globalThis.fetch;
+    const requested = [];
+    globalThis.fetch = async (url) => {
+      const path = String(url);
+      requested.push(path);
+      if (path.includes('/packs?day=5')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ticketRevealPacks: [{ ticketCount: 10 }, { ticketCount: 3 }],
+            lootboxPacks: [{}, {}],
+          }),
+        };
+      }
+      if (path.includes(`/viewer/player/${address}/day/5`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            activity: {
+              lootboxPurchases: [{}, {}, {}, {}],
+              lootboxResults: [{ rewardType: 'opened' }, { rewardType: 'flipOpened' }],
+              coinflip: null,
+            },
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => null };
+    };
+
+    let el = null;
+    try {
+      globalThis.localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+      el = instantiate();
+      storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
+      await flushMicrotasks();
+      globalThis.document.dispatchEvent(scratchEvent({ bonusPhase: false, bonusAvailable: false }));
+      await flushMicrotasks();
+      const cta = el.querySelector('[data-bind="ldj-results-cta"]');
+      cta.dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      const [queued] = revealMod.__takeQueuedForTest();
+      assert.ok(queued, 'summary reveal queued');
+      assert.equal(queued.title, 'DAY 5 SUMMARY');
+      assert.deepEqual(queued.activity, {
+        ticketPacks: 2,
+        ticketCount: 13,
+        lootboxesBought: 4,
+        lootboxesOpened: 2,
+        hasCoinflipBet: false,
+        coinflipWon: null,
+      });
+      assert.ok(requested.some((url) => url.includes('/packs?day=5')),
+        'pack count came from the day-scoped DB feed');
+      assert.ok(requested.some((url) => url.includes(`/viewer/player/${address}/day/5`)),
+        'lootboxes and coinflip participation came from the day-scoped DB snapshot');
+      assert.equal(cta.hidden, true, 'the summary action is consumed after it queues once');
+      assert.equal(
+        globalThis.localStorage.getItem(`day_summary_${CHAIN.id}_5_${address}`),
+        '1',
+        'the consumed state survives a refresh for this player and day',
+      );
+
+      // A repeated click on the now-hidden node cannot queue a second summary.
+      cta.dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      assert.equal(revealMod.__takeQueuedForTest().length, 0);
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+      revealMod.__resetForTest();
     }
-    assert.ok(realRowCount > 0, 'at least one real winner row was rendered');
   });
 
-  test('connected.address matches a winner → that row gains .ldj-winner-row--mine', async () => {
-    const el = instantiate();
-    storeMod.update('connected.address', MY_ADDR);
-    storeMod.update('app.lastDay', RESOLVED_WITH_ME);
-    await flushMicrotasks();
-    const myRow = findWinnerRow(el, MY_ADDR.toLowerCase());
-    const otherRow = findWinnerRow(el, OTHER_ADDR.toLowerCase());
-    assert.ok(myRow, 'my winner row found');
-    assert.ok(otherRow, 'other winner row found');
-    assert.equal(myRow.classList.contains('ldj-winner-row--mine'), true,
-      'my row highlighted (connected fallback)');
-    assert.equal(otherRow.classList.contains('ldj-winner-row--mine'), false,
-      'other row not highlighted');
+  test('an otherwise empty day with a lost DB-recorded coinflip bet awards the 1 WWXRP summary card', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
+    const revealMod = await import('../reveal-overlay.js');
+    revealMod.__resetForTest();
+    const address = '0x1111000000000000000000000000000000000001';
+    storeMod.update('connected.address', address);
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const path = String(url);
+      if (path.includes('/packs?day=5')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ticketRevealPacks: [], lootboxPacks: [] }),
+        };
+      }
+      if (path.includes(`/viewer/player/${address}/day/5`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            activity: {
+              lootboxPurchases: [],
+              lootboxResults: [],
+              coinflip: { stakeAmount: '250000000000000000000', win: false },
+            },
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => null };
+    };
+
+    let el = null;
+    try {
+      globalThis.localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+      el = instantiate();
+      storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
+      await flushMicrotasks();
+      globalThis.document.dispatchEvent(scratchEvent({ bonusPhase: false, bonusAvailable: false }));
+      await flushMicrotasks();
+      el.querySelector('[data-bind="ldj-results-cta"]').dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      const [queued] = revealMod.__takeQueuedForTest();
+      assert.deepEqual(queued.prizes, [{ type: 'wwxrp', amount: 10n ** 18n }]);
+      assert.equal(queued.noWin, null, 'the WWXRP result replaces the generic NO HIT card');
+      assert.equal(queued.consolationOnly, true,
+        'the reveal layer can play the consolation horn instead of confetti');
+      assert.equal(queued.activity.hasCoinflipBet, true);
+      assert.equal(queued.activity.coinflipWon, false);
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+      revealMod.__resetForTest();
+    }
   });
 
-  test('viewing.address takes precedence over connected.address (getViewedAddress)', async () => {
-    const el = instantiate();
-    storeMod.update('connected.address', MY_ADDR);
-    storeMod.update('viewing.address', OTHER_ADDR);
-    storeMod.update('app.lastDay', RESOLVED_WITH_ME);
-    await flushMicrotasks();
-    const myRow = findWinnerRow(el, MY_ADDR.toLowerCase());
-    const viewRow = findWinnerRow(el, OTHER_ADDR.toLowerCase());
-    assert.ok(myRow, 'my row found');
-    assert.ok(viewRow, 'view-as row found');
-    assert.equal(viewRow.classList.contains('ldj-winner-row--mine'), true,
-      'viewed-as row highlighted (viewing.address precedence)');
-    assert.equal(myRow.classList.contains('ldj-winner-row--mine'), false,
-      'connected row NOT highlighted (viewing takes precedence)');
-  });
+  test('a winning coinflip does not show the 1 WWXRP consolation in an otherwise empty summary', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
+    const revealMod = await import('../reveal-overlay.js');
+    revealMod.__resetForTest();
+    const address = '0x1111000000000000000000000000000000000001';
+    storeMod.update('connected.address', address);
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const path = String(url);
+      if (path.includes('/packs?day=5')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ticketRevealPacks: [], lootboxPacks: [] }),
+        };
+      }
+      if (path.includes(`/viewer/player/${address}/day/5`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            activity: {
+              lootboxPurchases: [],
+              lootboxResults: [],
+              coinflip: { stakeAmount: '250000000000000000000', win: true },
+            },
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => null };
+    };
 
-  test('Disconnect (clear both addresses) → highlight removed without remount', async () => {
-    const el = instantiate();
-    storeMod.update('connected.address', MY_ADDR);
-    storeMod.update('app.lastDay', RESOLVED_WITH_ME);
-    await flushMicrotasks();
+    let el = null;
+    try {
+      globalThis.localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+      el = instantiate();
+      storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
+      await flushMicrotasks();
+      globalThis.document.dispatchEvent(scratchEvent({ bonusPhase: false, bonusAvailable: false }));
+      await flushMicrotasks();
+      el.querySelector('[data-bind="ldj-results-cta"]').dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      await flushMicrotasks();
 
-    // Verify highlight present before disconnect
-    let myRow = findWinnerRow(el, MY_ADDR.toLowerCase());
-    assert.ok(myRow, 'my row found pre-disconnect');
-    assert.equal(myRow.classList.contains('ldj-winner-row--mine'), true,
-      'highlight present pre-disconnect');
-
-    // Disconnect by clearing both addresses
-    storeMod.update('viewing.address', null);
-    storeMod.update('connected.address', null);
-    await flushMicrotasks();
-
-    // Re-look up row (should still be the same DOM element — no remount)
-    myRow = findWinnerRow(el, MY_ADDR.toLowerCase());
-    assert.ok(myRow, 'my row still present (no remount)');
-    assert.equal(myRow.classList.contains('ldj-winner-row--mine'), false,
-      'highlight cleared post-disconnect');
+      const [queued] = revealMod.__takeQueuedForTest();
+      assert.deepEqual(queued.prizes, [], 'no consolation is fabricated after a win');
+      assert.ok(queued.noWin, 'the otherwise empty jackpot summary keeps its normal no-hit card');
+      assert.equal(queued.consolationOnly, false);
+      assert.equal(queued.activity.hasCoinflipBet, true);
+      assert.equal(queued.activity.coinflipWon, true);
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+      revealMod.__resetForTest();
+    }
   });
 });

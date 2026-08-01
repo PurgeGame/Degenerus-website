@@ -5,11 +5,11 @@
 // Coverage strategy: drive the full chain end-to-end with a fake contract injected
 // at the claims.js layer via __setContractFactoryForTest (Phase 60 lootbox.test.js
 // pattern, ported verbatim). Tests assert observable outcomes:
-//   - claimEth / claimBurnie / claimDecimatorLevels invoke the closure-form sendTx
+//   - claimEth / claimFlip / claimDecimatorLevels invoke the closure-form sendTx
 //     with the correct method args.
 //   - Static-call gate runs BEFORE sendTx (Pitfall 9 + Pitfall 15 mitigation).
 //   - Static-call revert throws structured error with .userMessage / .code / .cause.
-//   - claimBurnie sources amount from /pending (NOT the /beta address-cast trick).
+//   - claimFlip sources amount from /pending (NOT the /beta address-cast trick).
 //   - claimDecimatorLevels fires N sequential txes; aborts subsequent levels on revert.
 //   - claimDecimatorLevels emits onProgress before/after each tx.
 //   - Reason-map registers EXACTLY 3 NEW codes (DecClaimInactive, DecAlreadyClaimed,
@@ -123,8 +123,8 @@ function makeFakeContract(opts = {}) {
 
 function makeFakeProvider(connectedAddr) {
   return {
-    // Sepolia chainId per chain-config.sepolia.js (CHAIN.id === 11155111).
-    getNetwork: async () => ({ chainId: 11155111n }),
+    // Sepolia chainId per chain-config.sepolia.js (CHAIN.id === 84532).
+    getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({
       getAddress: async () => connectedAddr,
     }),
@@ -173,6 +173,53 @@ describe('Plan 61-02: claims.js reason-map registrations', () => {
     });
     // No mapping registered → falls back to UNKNOWN.
     assert.equal(decoded.code, 'UNKNOWN');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FLIP ticket-redemption window. Visibility must be based on contract state,
+// not a simulated one-ticket burn (which also fails for a low-balance player).
+// ---------------------------------------------------------------------------
+
+describe('FLIP ticket redemption window', () => {
+  beforeEach(() => {
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+  });
+
+  afterEach(() => {
+    claimsMod.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+  });
+
+  function windowContract({ locked = false, next = 101n, target = 100n } = {}) {
+    return {
+      rngLocked: async () => locked,
+      nextPrizePoolView: async () => next,
+      prizePoolTargetView: async () => target,
+    };
+  }
+
+  test('opens only after next pool strictly clears the target', async () => {
+    claimsMod.__setContractFactoryForTest(() => windowContract());
+    assert.equal(await claimsMod.probeRedeemFlipWindow(), true);
+
+    claimsMod.__setContractFactoryForTest(() => windowContract({ next: 100n }));
+    assert.equal(await claimsMod.probeRedeemFlipWindow(), false,
+      'contract requires nextPrizePool > target, not equality');
+  });
+
+  test('RNG lock closes the displayed window', async () => {
+    claimsMod.__setContractFactoryForTest(() => windowContract({ locked: true, next: 500n }));
+    assert.equal(await claimsMod.probeRedeemFlipWindow(), false);
+  });
+
+  test('RPC/view failures fail closed without throwing', async () => {
+    claimsMod.__setContractFactoryForTest(() => ({
+      rngLocked: async () => { throw new Error('rpc down'); },
+      nextPrizePoolView: async () => 500n,
+      prizePoolTargetView: async () => 100n,
+    }));
+    assert.equal(await claimsMod.probeRedeemFlipWindow(), false);
   });
 });
 
@@ -256,11 +303,11 @@ describe('Plan 61-02: claimEth', () => {
 });
 
 // ===========================================================================
-// claimBurnie — calls contract.claimCoinflips(player, amount) with EXPLICIT amount.
+// claimFlip — calls contract.claimCoinflips(player, amount) with EXPLICIT amount.
 // Pitfall 6: amount sourced from /pending; NEVER address-cast trick.
 // ===========================================================================
 
-describe('Plan 61-02: claimBurnie', () => {
+describe('Plan 61-02: claimFlip', () => {
   let lastFakeContract;
 
   beforeEach(() => {
@@ -279,7 +326,7 @@ describe('Plan 61-02: claimBurnie', () => {
   });
 
   test('invokes claimCoinflips(player, amount) with explicit BigInt amount', async () => {
-    await claimsMod.claimBurnie({ amount: 500n });
+    await claimsMod.claimFlip({ amount: 500n });
     assert.equal(lastFakeContract._calls.claimCoinflips.length, 1);
     const [args] = lastFakeContract._calls.claimCoinflips;
     assert.equal(args[0], CONNECTED, 'player arg = connected.address');
@@ -287,22 +334,22 @@ describe('Plan 61-02: claimBurnie', () => {
   });
 
   test('throws Nothing to claim on amount === 0n', async () => {
-    await assert.rejects(claimsMod.claimBurnie({ amount: 0n }), /Nothing to claim/i);
+    await assert.rejects(claimsMod.claimFlip({ amount: 0n }), /Nothing to claim/i);
   });
 
   test('throws Nothing to claim on amount === undefined', async () => {
-    await assert.rejects(claimsMod.claimBurnie({ amount: undefined }), /Nothing to claim/i);
+    await assert.rejects(claimsMod.claimFlip({ amount: undefined }), /Nothing to claim/i);
   });
 
   test('accepts amount as string and converts to BigInt', async () => {
-    await claimsMod.claimBurnie({ amount: '500' });
+    await claimsMod.claimFlip({ amount: '500' });
     const [args] = lastFakeContract._calls.claimCoinflips;
     assert.equal(typeof args[1], 'bigint', 'amount arg coerced to BigInt');
     assert.equal(args[1], 500n);
   });
 
   test('does NOT use address-cast trick — second arg is explicit amount, NOT BigInt(player)', async () => {
-    await claimsMod.claimBurnie({ amount: 500n });
+    await claimsMod.claimFlip({ amount: 500n });
     const [args] = lastFakeContract._calls.claimCoinflips;
     // The /beta trick passes the player address cast to uint256 as the 2nd arg.
     // Phase 61 must NOT do that — the 2nd arg must be the explicit amount.
@@ -319,7 +366,7 @@ describe('Plan 61-02: claimBurnie', () => {
     claimsMod.__setContractFactoryForTest(() => reverting);
     let caught = null;
     try {
-      await claimsMod.claimBurnie({ amount: 500n });
+      await claimsMod.claimFlip({ amount: 500n });
     } catch (e) {
       caught = e;
     }
@@ -356,9 +403,16 @@ describe('Plan 61-02: claimDecimatorLevels', () => {
   test('fires N sequential txes — levels invoked in passed order (panel pre-sorts ascending)', async () => {
     await claimsMod.claimDecimatorLevels({ levels: [5, 10, 15] });
     assert.equal(lastFakeContract._calls.claimDecimatorJackpot.length, 3);
-    assert.equal(lastFakeContract._calls.claimDecimatorJackpot[0][0], 5);
-    assert.equal(lastFakeContract._calls.claimDecimatorJackpot[1][0], 10);
-    assert.equal(lastFakeContract._calls.claimDecimatorJackpot[2][0], 15);
+    // Redeploy #7 surface: claimDecimatorJackpot(address player, uint24 lvl) —
+    // arg[0] is the player, arg[1] the level.
+    assert.equal(lastFakeContract._calls.claimDecimatorJackpot[0][1], 5);
+    assert.equal(lastFakeContract._calls.claimDecimatorJackpot[1][1], 10);
+    assert.equal(lastFakeContract._calls.claimDecimatorJackpot[2][1], 15);
+    assert.equal(
+      String(lastFakeContract._calls.claimDecimatorJackpot[0][0]).toLowerCase(),
+      String(storeMod.get('connected.address')).toLowerCase(),
+      'player threaded as first arg',
+    );
   });
 
   test('aborts subsequent levels on static-call revert at level K (partial progress preserved)', async () => {
@@ -449,8 +503,8 @@ describe('Plan 61-02: claims.js source-level invariants', () => {
     assert.ok(SRC.includes("'Claim ETH winnings'"), 'literal action label present');
   });
 
-  test('action label `Claim BURNIE winnings` is sent to sendTx', () => {
-    assert.ok(SRC.includes("'Claim BURNIE winnings'"), 'literal action label present');
+  test('action label `Claim FLIP winnings` is sent to sendTx', () => {
+    assert.ok(SRC.includes("'Claim FLIP winnings'"), 'literal action label present');
   });
 
   test('action label `Claim decimator level ${lvl}` template literal is sent to sendTx', () => {
@@ -477,10 +531,10 @@ describe('Plan 61-02: claims.js source-level invariants', () => {
     );
   });
 
-  test('canonical ABI: claimDecimatorJackpot(uint24 lvl)', () => {
+  test('canonical ABI: claimDecimatorJackpot(address player, uint24 lvl)', () => {
     assert.ok(
-      SRC.includes('function claimDecimatorJackpot(uint24 lvl) external'),
-      'canonical DECIMATOR_CLAIM_ABI fragment present',
+      SRC.includes('function claimDecimatorJackpot(address player, uint24 lvl) external'),
+      'canonical DECIMATOR_CLAIM_ABI fragment present (redeploy #7 surface)',
     );
   });
 
@@ -613,12 +667,18 @@ describe('Plan 62-06: claims.js source-level invariants (AFF-03 extension)', () 
     assert.ok(SRC.includes("'Claim affiliate DGNRS'"), 'literal action label present');
   });
 
-  test('claims.js register count UNCHANGED (3 — Phase 61 baseline)', () => {
+  // 3 (Phase 61 baseline) + 1: NothingToClaim, added 2026-07-29. claimWinnings
+  // reverts it (selector 0x969bf728, chain-verified) whenever the claimable
+  // balance is zero — unmapped it surfaced as the UNKNOWN catch-all's
+  // "unexpected error", which is what made a stale work-queue row look like a
+  // broken button. Bump this deliberately, per code, with the reason.
+  test('claims.js register count is 4 (Phase 61 baseline + NothingToClaim)', () => {
     const registers = SRC.match(/register\(/g) || [];
     assert.equal(
-      registers.length, 3,
-      `claims.js register count must stay at 3 (Phase 61 baseline); got ${registers.length}`,
+      registers.length, 4,
+      `claims.js register count must stay at 4; got ${registers.length}`,
     );
+    assert.ok(/register\(\s*['"]NothingToClaim['"]/.test(SRC), 'NothingToClaim registered');
   });
 
   test('uses closure-form sendTx for claimAffiliateDgnrs', () => {

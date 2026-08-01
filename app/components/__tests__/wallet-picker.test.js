@@ -272,13 +272,13 @@ import * as walletMod from '../../app/wallet.js';
 
 class _PickerStubBP {
   constructor(wc) { this._wc = wc; this.provider = wc; this.providerInfo = null; }
-  async getNetwork() { return { chainId: BigInt(this._wc.chainId || 11155111) }; }
+  async getNetwork() { return { chainId: BigInt(this._wc.chainId || 84532) }; }
 }
 const _noopWcFactory = {
   init: async () => ({
     session: null,
     accounts: [],
-    chainId: 11155111,
+    chainId: 84532,
     connect: async () => {},
     on: () => {},
     request: async () => null,

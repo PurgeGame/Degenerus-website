@@ -4,10 +4,17 @@
 // on the existing #view-mode-banner placeholder shipped in Phase 56 + every
 // [data-write] button in the document):
 //
-//   1. Banner visibility — toggles the `hidden` attribute on the #view-mode-banner
-//      element based on subscribe('ui.mode') firings. Wires the
-//      "Back to my account" CTA to clear viewing.address (router.js's URL mirror
-//      from plan 58-02 then drops ?as= and store.js auto-derives ui.mode → 'self').
+//   1. Banner visibility + copy — toggles the `hidden` attribute on the
+//      #view-mode-banner element and sets its .view-mode-banner__text content
+//      based on ui.mode, one of three variants (account-switcher extension,
+//      2026-07-16):
+//        'view'     → "Viewing read-only" (unchanged copy)
+//        'operator' → "Acting for 0xab…cd, approved operator"
+//        'combined' → "Combined view across N accounts. Read-only."
+//      Wires the CTA button: in 'view'/'operator' it reads "Back to my account"
+//      and clears viewing.address; in 'combined' it reads "Exit combined view"
+//      and clears viewing.combined. Both land on 'self' via store.js's
+//      deriveMode subscriber (mode is a function of viewing.address/.combined).
 //
 //   2. [data-write] disable manager — every Phase 60+ tx-bearing button MUST
 //      tag itself with `data-write`. This module subscribes to ui.mode AND
@@ -16,19 +23,59 @@
 //        disabled = !canSign
 //        title    = canSign ? '' : 'Connect to your own wallet to act'
 //      A MutationObserver covers Phase 60+ panels that mount [data-write]
-//      buttons after this module's init.
+//      buttons after this module's init. Operator mode is writable
+//      (deriveCanSign() includes it — see store.js), so this manager leaves
+//      [data-write] buttons ENABLED in 'operator' the same as 'self'.
 //
 // RESEARCH §Pattern 4 layer 1 — UX layer, NOT the safety property. The
 // architectural cut is requireSelf() in /app/app/contracts.js (plan 58-01),
 // which throws BEFORE provider.getSigner() on every write. A devtools-enabled
 // button still throws at the chokepoint before the wallet popup. This module
 // is the UX layer that makes the impossibility visible to honest users.
+//
+// NOTE: #view-mode-banner was removed from app/index.html's markup (user call:
+// "we don't need the read only thing" — basic-mode layout). setupBanner()
+// null-guards the lookup and no-ops when the element is absent, so this
+// module stays code-complete (and immediately useful again if the banner
+// element is ever remounted, e.g., for THE PIT) without requiring an
+// index.html change here.
 
-import { subscribe, update, deriveCanSign } from '../app/store.js';
+import { subscribe, update, get, deriveCanSign } from '../app/store.js';
 
 const DISABLED_TOOLTIP = 'Connect to your own wallet to act';
 const BANNER_ID = 'view-mode-banner';
+const BANNER_TEXT_SELECTOR = '.view-mode-banner__text';
 const BANNER_CTA_SELECTOR = '.view-mode-banner__cta';
+
+/** Abbreviate a 0x address as "0xab…cd" (first 4 chars incl. 0x, last 2). */
+function _abbrev(addr) {
+  if (typeof addr !== 'string' || addr.length < 8) return addr || '';
+  return `${addr.slice(0, 4)}…${addr.slice(-2)}`;
+}
+
+/**
+ * _bannerCopy — the three-variant text + CTA label for the current mode.
+ * 'self' is never rendered (the banner is hidden), but returns a harmless
+ * default so callers never touch undefined.
+ */
+function _bannerCopy(mode) {
+  if (mode === 'operator') {
+    const viewing = get('viewing.address');
+    return {
+      text: `Acting for ${_abbrev(viewing)}, approved operator`,
+      cta: 'Back to my account',
+    };
+  }
+  if (mode === 'combined') {
+    const approvals = Array.isArray(get('approvals.list')) ? get('approvals.list') : [];
+    const n = approvals.length + 1; // + the connected wallet itself
+    return {
+      text: `Combined view across ${n} accounts. Read-only.`,
+      cta: 'Exit combined view',
+    };
+  }
+  return { text: 'Viewing read-only', cta: 'Back to my account' };
+}
 
 // ---------------------------------------------------------------------------
 // Banner visibility manager.
@@ -52,23 +99,43 @@ export function setupBanner() {
   }
   _bannerSetupDone = true;
 
-  // Visibility — subscribe('ui.mode') drives the [hidden] attribute. We look
-  // up the banner inside the callback so a Phase 60+ re-render that swaps the
+  // Visibility + copy — hidden only in 'self'; visible for 'view' / 'operator' /
+  // 'combined', each with its own text + CTA label (_bannerCopy). We look up the
+  // banner inside the callback so a Phase 60+ re-render that swaps the
   // #view-mode-banner element does not leave us writing to a detached node
-  // (WR-07).
-  _bannerUnsubs.push(subscribe('ui.mode', (mode) => {
+  // (WR-07). Re-renders on ui.mode (the visibility + variant switch) AND on
+  // viewing.address / approvals.list so the abbreviated operator address / the
+  // combined account count stay live without a mode flip (e.g., an approver
+  // revoking access mid-session, or a late approvals.list arrival changing N).
+  const renderBanner = () => {
     const b = (typeof document !== 'undefined') ? document.getElementById(BANNER_ID) : null;
-    if (b) b.hidden = (mode !== 'view');
-  }));
+    if (!b) return;
+    const mode = get('ui.mode');
+    b.hidden = (mode === 'self');
+    const { text, cta } = _bannerCopy(mode);
+    const textEl = b.querySelector(BANNER_TEXT_SELECTOR);
+    if (textEl) textEl.textContent = text;
+    const ctaEl = b.querySelector(BANNER_CTA_SELECTOR);
+    if (ctaEl) ctaEl.textContent = cta;
+  };
+  _bannerUnsubs.push(subscribe('ui.mode', renderBanner));
+  _bannerUnsubs.push(subscribe('viewing.address', renderBanner));
+  _bannerUnsubs.push(subscribe('approvals.list', renderBanner));
 
-  // Wire the "Back to my account" CTA.
+  // Wire the CTA. Its action depends on the mode AT CLICK TIME: 'combined'
+  // clears viewing.combined (the switcher's mutually-exclusive counterpart to
+  // viewing.address); 'view'/'operator' clear viewing.address (unchanged).
+  // Either write lands on 'self' via store.js's deriveMode subscriber on the
+  // next microtask; router.js's URL mirror drops ?as= via its own
+  // subscribe('viewing.address') subscriber.
   const cta = banner.querySelector(BANNER_CTA_SELECTOR);
   if (cta) {
     cta.addEventListener('click', () => {
-      update('viewing.address', null);
-      // ui.mode auto-derives to 'self' via store.js's deriveMode subscriber on
-      // the next microtask. router.js's URL mirror drops ?as= via its own
-      // subscribe('viewing.address') subscriber.
+      if (get('ui.mode') === 'combined') {
+        update('viewing.combined', false);
+      } else {
+        update('viewing.address', null);
+      }
     });
   }
 }
@@ -81,7 +148,8 @@ export function setupBanner() {
  * refreshDataWriteButtons — walk every [data-write] in the document and
  * toggle disabled + title based on the current canSign value.
  *
- * canSign === true  → enabled, tooltip cleared
+ * canSign === true  → enabled unless the owning component set
+ *                     data-write-locked for a domain-state reason
  * canSign === false → disabled, title='Connect to your own wallet to act'
  */
 export function refreshDataWriteButtons() {
@@ -90,7 +158,9 @@ export function refreshDataWriteButtons() {
   const buttons = document.querySelectorAll('[data-write]');
   if (!buttons || typeof buttons.forEach !== 'function') return;
   buttons.forEach((btn) => {
-    if (canSign) {
+    const domainLocked = typeof btn.getAttribute === 'function'
+      && btn.getAttribute('data-write-locked') != null;
+    if (canSign && !domainLocked) {
       btn.disabled = false;
       // Clear tooltip — set to empty string AND removeAttribute for max compatibility.
       btn.title = '';
@@ -102,7 +172,10 @@ export function refreshDataWriteButtons() {
       }
     } else {
       btn.disabled = true;
-      btn.title = DISABLED_TOOLTIP;
+      const lockedTitle = domainLocked && typeof btn.getAttribute === 'function'
+        ? btn.getAttribute('data-write-lock-title')
+        : null;
+      btn.title = canSign && lockedTitle ? lockedTitle : DISABLED_TOOLTIP;
       if (typeof btn.setAttribute === 'function') {
         btn.setAttribute('aria-disabled', 'true');
       }

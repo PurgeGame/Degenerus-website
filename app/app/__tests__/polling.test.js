@@ -234,13 +234,14 @@ describe('visibilitychange handler (D-04 + Pitfall 3)', () => {
     await new Promise((r) => setTimeout(r, 30));
     handleVisibilityChange();             // second call cancels first's setTimeout
     await new Promise((r) => setTimeout(r, 150));
-    // Visible-branch effect runs ONCE — fires up to 4 immediate re-poll fetches:
-    // /game/state, /health, /game/jackpot/last-day (and /player/:addr only if addr supplied).
-    // The visible branch in handleVisibilityChange passes addr=null, so 3 fetches.
-    // The assertion is debounce-correctness — we should see <= 4 fetches (single effect),
-    // not 6+ (double effect).
-    assert.ok(fetchCalls.length <= 4, `debounce held; saw ${fetchCalls.length} fetches`);
-    assert.ok(fetchCalls.length >= 3, `effect ran at least once; saw ${fetchCalls.length} fetches`);
+    // Visible-branch effect runs ONCE — fires up to 5 immediate re-poll fetches:
+    // /game/state, /health, /game/jackpot/last-day, /game/jackpot/gold-rush (and
+    // /player/:addr only if addr supplied). The visible branch in
+    // handleVisibilityChange passes addr=null, so 4 fetches.
+    // The assertion is debounce-correctness — we should see <= 5 fetches (single
+    // effect), not 8 (double effect).
+    assert.ok(fetchCalls.length <= 5, `debounce held; saw ${fetchCalls.length} fetches`);
+    assert.ok(fetchCalls.length >= 4, `effect ran at least once; saw ${fetchCalls.length} fetches`);
   });
 
   test('visible → immediate re-poll runs all 4 cycles', async () => {
@@ -433,5 +434,240 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
     assert.equal(storeMod.get('app.game'), undefined, 'app.game untouched (Phase 60)');
     assert.equal(storeMod.get('app.player'), undefined, 'app.player untouched');
     assert.equal(storeMod.get('app.health'), undefined, 'app.health untouched');
+  });
+});
+
+// ===========================================================================
+// approvers fetch + approvals.list (account-switcher, 2026-07-16)
+// ===========================================================================
+
+const CONNECTED = '0xc0ffee0000000000000000000000000000c0ff';
+const APPROVER_A = '0xaaaa000000000000000000000000000000a001';
+const APPROVER_B = '0xbbbb000000000000000000000000000000b002';
+
+describe('approvers fetch + approvals.list (account-switcher)', () => {
+  test('connected wallet triggers /player/:connected/approvers in the same player cycle', async () => {
+    storeMod.update('connected.address', CONNECTED);
+    start({ playerAddress: '0xviewed' });
+    await new Promise((r) => setTimeout(r, 30));
+    const paths = fetchCalls.map((c) => c.url);
+    assert.ok(
+      paths.some((p) => p.endsWith(`/player/${CONNECTED}/approvers`)),
+      `expected an approvers fetch; saw ${JSON.stringify(paths)}`,
+    );
+  });
+
+  test('no connected wallet → no approvers fetch, approvals.list stays empty', async () => {
+    start({ playerAddress: '0xviewed' });
+    await new Promise((r) => setTimeout(r, 30));
+    const paths = fetchCalls.map((c) => c.url);
+    assert.ok(!paths.some((p) => p.includes('/approvers')), 'no approvers fetch when disconnected');
+    assert.deepEqual(storeMod.get('approvals.list'), [], 'approvals.list untouched (default empty)');
+  });
+
+  test('approvers response is lowercased, deduped, and excludes the connected wallet itself', async () => {
+    storeMod.update('connected.address', CONNECTED);
+    fetchImpl = async (url) => {
+      if (url.endsWith('/approvers')) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            operator: CONNECTED,
+            approvers: [
+              { owner: APPROVER_A.toUpperCase(), blockNumber: '10' },
+              { owner: APPROVER_B, blockNumber: '9' },
+              { owner: APPROVER_A, blockNumber: '8' },       // duplicate (different case)
+              { owner: CONNECTED, blockNumber: '7' },         // self — must be excluded
+            ],
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ url }) };
+    };
+    start({ playerAddress: '0xviewed' });
+    await new Promise((r) => setTimeout(r, 30));
+    const list = storeMod.get('approvals.list');
+    assert.deepEqual(list, [APPROVER_A, APPROVER_B], 'lowercased, deduped, self excluded');
+  });
+
+  test('failed approvers fetch leaves approvals.list unchanged (soft-fail, other 3 endpoints unaffected)', async () => {
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('approvals.list', [APPROVER_A]);
+    fetchImpl = async (url) => {
+      if (url.endsWith('/approvers')) throw new Error('network error');
+      return { ok: true, status: 200, json: async () => ({ url }) };
+    };
+    start({ playerAddress: '0xviewed' });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.deepEqual(storeMod.get('approvals.list'), [APPROVER_A], 'prior list preserved on fetch failure');
+  });
+});
+
+// ===========================================================================
+// Current active boons → product-local indicators.
+// ===========================================================================
+
+describe('current boon feed → app.boons', () => {
+  test('viewed player cycle resolves the live day and stores its boon rows', async () => {
+    const viewed = '0x1111000000000000000000000000000000000062';
+    fetchImpl = async (url, opts) => {
+      fetchCalls.push({ url, opts });
+      if (url.endsWith('/game/state')) {
+        return { ok: true, status: 200, json: async () => ({ currentDay: 62 }) };
+      }
+      if (url.endsWith(`/player/${viewed}/boons/62`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            day: 62,
+            address: viewed,
+            boons: [{ boonType: 9, consumed: false, consumedBoostBps: null }],
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    start({ playerAddress: viewed });
+    await new Promise((r) => setTimeout(r, 30));
+
+    assert.ok(fetchCalls.some((call) => call.url.endsWith(`/player/${viewed}/boons/62`)));
+    assert.deepEqual(storeMod.get('app.boons'), {
+      address: viewed,
+      day: 62,
+      boons: [{ boonType: 9, consumed: false, consumedBoostBps: null }],
+    });
+  });
+
+  test('combined mode clears product boons without fetching one account', async () => {
+    storeMod.update('app.boons', {
+      address: CONNECTED,
+      day: 62,
+      boons: [{ boonType: 9, consumed: false }],
+    });
+    storeMod.update('ui.mode', 'combined');
+    start({ playerAddress: CONNECTED });
+    await new Promise((r) => setTimeout(r, 30));
+
+    assert.ok(!fetchCalls.some((call) => call.url.includes('/boons/')));
+    assert.deepEqual(storeMod.get('app.boons'), { address: null, day: null, boons: [] });
+  });
+
+  test('a failed refresh preserves the same account\'s last good boon payload', async () => {
+    const viewed = '0x1111000000000000000000000000000000000062';
+    const prior = { address: viewed, day: 61, boons: [{ boonType: 6, consumed: false }] };
+    storeMod.update('app.boons', prior);
+    fetchImpl = async (url) => {
+      if (url.endsWith('/game/state')) {
+        return { ok: true, status: 200, json: async () => ({ currentDay: 62 }) };
+      }
+      if (url.includes('/boons/')) throw new Error('boon API unavailable');
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+    start({ playerAddress: viewed });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.deepEqual(storeMod.get('app.boons'), prior);
+  });
+});
+
+// ===========================================================================
+// combined mode player cycle → app.playerCombined (account-switcher, 2026-07-16)
+// ===========================================================================
+
+describe('combined mode player cycle → app.playerCombined', () => {
+  function playerPayload(addr, claimableEth) {
+    return {
+      player: addr,
+      claimableEth,
+      flipBalance: '0',
+      dgnrsBalance: '0',
+      coinflip: null,
+      decimator: { claimablePerLevel: [], futurePoolTotal: '0' },
+      terminal: null,
+      tickets: [],
+    };
+  }
+
+  test("mode='combined' fetches /player/:addr for [connected, ...approvals.list] and writes the merge to app.playerCombined", async () => {
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('approvals.list', [APPROVER_A, APPROVER_B]);
+    storeMod.update('ui.mode', 'combined');
+    fetchImpl = async (url) => {
+      fetchCalls.push({ url });
+      if (url.endsWith(`/player/${CONNECTED}`)) {
+        return { ok: true, status: 200, json: async () => playerPayload(CONNECTED, '10') };
+      }
+      if (url.endsWith(`/player/${APPROVER_A}`)) {
+        return { ok: true, status: 200, json: async () => playerPayload(APPROVER_A, '20') };
+      }
+      if (url.endsWith(`/player/${APPROVER_B}`)) {
+        return { ok: true, status: 200, json: async () => playerPayload(APPROVER_B, '30') };
+      }
+      if (url.endsWith('/approvers')) {
+        return { ok: true, status: 200, json: async () => ({ operator: CONNECTED, approvers: [] }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ url }) };
+    };
+    start({ playerAddress: '0xviewed' });
+    await new Promise((r) => setTimeout(r, 30));
+
+    const paths = fetchCalls.map((c) => c.url);
+    for (const addr of [CONNECTED, APPROVER_A, APPROVER_B]) {
+      assert.ok(paths.some((p) => p.endsWith(`/player/${addr}`)), `fetched /player/${addr}`);
+    }
+
+    const merged = storeMod.get('app.playerCombined');
+    assert.ok(merged, 'app.playerCombined populated');
+    assert.equal(merged.claimableEth, '60', 'sums claimableEth across all 3 accounts (BigInt)');
+    assert.deepEqual(
+      [...merged.addresses].sort(),
+      [CONNECTED, APPROVER_A, APPROVER_B].sort(),
+      'addresses[] includes connected + every approver',
+    );
+  });
+
+  test("mode!=='combined' does not fetch other accounts' /player/:addr", async () => {
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('approvals.list', [APPROVER_A]);
+    // ui.mode stays 'self' (default) — combined branch must not fire.
+    start({ playerAddress: '0xviewed' });
+    await new Promise((r) => setTimeout(r, 30));
+    const paths = fetchCalls.map((c) => c.url);
+    assert.ok(!paths.some((p) => p.endsWith(`/player/${APPROVER_A}`)), 'no combined fetch when mode is self');
+  });
+
+  test('leaving combined mode nulls app.playerCombined (only when a stale value is present)', async () => {
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('approvals.list', []);
+    storeMod.update('ui.mode', 'combined');
+    fetchImpl = async (url) => {
+      fetchCalls.push({ url });
+      if (url.endsWith(`/player/${CONNECTED}`)) {
+        return { ok: true, status: 200, json: async () => playerPayload(CONNECTED, '10') };
+      }
+      return { ok: true, status: 200, json: async () => ({ url }) };
+    };
+    start({ playerAddress: '0xviewed' });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.ok(storeMod.get('app.playerCombined') != null, 'precondition: playerCombined populated');
+
+    // Flip out of combined mode and re-run the eager cycle via start() again.
+    storeMod.update('ui.mode', 'self');
+    start({ playerAddress: '0xviewed' });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(storeMod.get('app.playerCombined'), null, 'nulled after leaving combined mode');
+  });
+
+  test('no-churn: app.playerCombined write is skipped when already null and mode stays non-combined', async () => {
+    storeMod.update('connected.address', CONNECTED);
+    // app.playerCombined starts undefined (never set) — not "null" yet.
+    let writeCount = 0;
+    const unsub = storeMod.subscribe('app.playerCombined', () => { writeCount += 1; });
+    writeCount = 0; // subscribe() fires once immediately with current value — discount it
+    start({ playerAddress: '0xviewed' });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(writeCount, 0, 'no app.playerCombined write when never-combined and value already absent');
+    unsub();
   });
 });

@@ -31,7 +31,7 @@ export function deriveWinningTraits(rngWord) {
  * Layout: 4 quadrants × 8 items × 8 colors = 256 traits.
  *   Quadrant 0 (0-63): cards, Quadrant 1 (64-127): crypto,
  *   Quadrant 2 (128-191): dice, Quadrant 3 (192-255): zodiac.
- * Within each quadrant: item = floor((trait % 64) / 8), color = trait % 8.
+ * Within each quadrant: symbol/item = trait % 8 (bits 2:0), color = floor((trait % 64) / 8) (bits 5:3).
  *
  * @param {number|null} traitIndex - Trait index (0-255)
  * @returns {{ category: string, item: string, color: string, path: string, label: string } | null}
@@ -41,8 +41,12 @@ export function traitToBadge(traitIndex) {
   const quadrant = Math.floor(traitIndex / 64);
   const category = BADGE_QUADRANTS[quadrant] || 'cards';
   const withinQuadrant = traitIndex % 64;
-  const itemIdx = Math.floor(withinQuadrant / 8);
-  const colorIdx = withinQuadrant % 8;
+  // Canonical trait decode: symbol/item = bits 2:0 (within % 8), color = bits 5:3
+  // (within / 8). Matches foil-match.js / jackpot-rolls.js. The prior order
+  // transposed symbol and color, so every badge rendered with the wrong pair
+  // (e.g. a "pink taurus" win showed as "purple aries").
+  const itemIdx = withinQuadrant % 8;
+  const colorIdx = Math.floor(withinQuadrant / 8);
   const color = BADGE_COLORS[colorIdx] || 'blue';
   const items = BADGE_ITEMS[category] || [];
   const item = items[itemIdx] || String(itemIdx);

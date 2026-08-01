@@ -33,7 +33,7 @@ function makeFakeTx(receipt) {
 
 function makeFakeContract(opts = {}) {
   const calls = {
-    purchaseWhaleBundle: [],
+    purchaseWhalePass: [],
     purchaseDeityPass: [],
   };
   const staticCallStub = (methodName) => async (..._args) => {
@@ -56,12 +56,12 @@ function makeFakeContract(opts = {}) {
   };
 
   const c = {
-    purchaseWhaleBundle: Object.assign(
+    purchaseWhalePass: Object.assign(
       async (...args) => {
-        calls.purchaseWhaleBundle.push(args);
-        return sendTxStub('purchaseWhaleBundle')(...args);
+        calls.purchaseWhalePass.push(args);
+        return sendTxStub('purchaseWhalePass')(...args);
       },
-      { staticCall: staticCallStub('purchaseWhaleBundle') }
+      { staticCall: staticCallStub('purchaseWhalePass') }
     ),
     purchaseDeityPass: Object.assign(
       async (...args) => {
@@ -79,7 +79,7 @@ function makeFakeContract(opts = {}) {
 
 function makeFakeProvider(connectedAddr) {
   return {
-    getNetwork: async () => ({ chainId: 11155111n }),
+    getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({
       getAddress: async () => connectedAddr,
     }),
@@ -87,6 +87,69 @@ function makeFakeProvider(connectedAddr) {
 }
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
+
+function makeUnmintedDeityError() {
+  const error = new Error('execution reverted: InvalidToken()');
+  error.data = '0xc1ab6dc1';
+  return error;
+}
+
+function makeFakeDeityReadContract(owners = new Map(), opts = {}) {
+  return {
+    name: async () => {
+      if (opts.nameError) throw opts.nameError;
+      return opts.name || 'Degenerus Deity Pass';
+    },
+    ownerOf: async (symbolId) => {
+      const id = Number(symbolId);
+      if (opts.ownerErrors?.has(id)) throw opts.ownerErrors.get(id);
+      if (owners.has(id)) return owners.get(id);
+      throw makeUnmintedDeityError();
+    },
+  };
+}
+
+// ===========================================================================
+// Deity NFT catalog — canonical sold count + unavailable symbols.
+// ===========================================================================
+
+describe('deity pass NFT catalog', () => {
+  afterEach(() => {
+    passesMod.__resetDeityReadContractFactoryForTest();
+  });
+
+  test('returns all minted symbols, owners, and the issued count', async () => {
+    const owners = new Map([
+      [3, '0x3333000000000000000000000000000000000000'],
+      [19, '0x1919000000000000000000000000000000000000'],
+    ]);
+    passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(owners));
+
+    const catalog = await passesMod.readDeityPassCatalog();
+    assert.equal(catalog.issuedCount, 2);
+    assert.deepEqual([...catalog.takenSymbols], [3, 19]);
+    assert.equal(catalog.ownersBySymbol.get(19), owners.get(19));
+  });
+
+  test('returns null on a partial RPC failure instead of exposing a claimed symbol', async () => {
+    const ownerErrors = new Map([[7, new Error('RPC timeout')]]);
+    passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(
+      new Map(),
+      { ownerErrors },
+    ));
+
+    assert.equal(await passesMod.readDeityPassCatalog(), null);
+  });
+
+  test('returns null when the configured address is not the deity pass contract', async () => {
+    passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(
+      new Map(),
+      { name: 'Wrong NFT' },
+    ));
+
+    assert.equal(await passesMod.readDeityPassCatalog(), null);
+  });
+});
 
 // ===========================================================================
 // Reason-map registrations — Plan 62-02 registers ONLY RngLocked.
@@ -146,16 +209,20 @@ describe('Plan 62-02: purchaseWhaleBundle', () => {
     contractsMod.clearProvider();
   });
 
-  test('invokes purchaseWhaleBundle(buyer, qty) with closure-form sendTx + msg.value', async () => {
+  test('invokes purchaseWhaleBundle(buyer, qty, affiliateCode) with closure-form sendTx + msg.value', async () => {
     const value = 12n * 10n ** 18n;
     await passesMod.purchaseWhaleBundle({ quantity: 5, msgValueWei: value });
-    assert.equal(lastFakeContract._calls.purchaseWhaleBundle.length, 1);
-    const [args] = lastFakeContract._calls.purchaseWhaleBundle;
+    assert.equal(lastFakeContract._calls.purchaseWhalePass.length, 1);
+    const [args] = lastFakeContract._calls.purchaseWhalePass;
     assert.equal(args[0], CONNECTED, 'buyer = connected.address');
     assert.equal(args[1], 5n, 'quantity arg = BigInt 5n');
-    // 3rd arg = overrides object containing value
-    assert.ok(args[2] && typeof args[2] === 'object', 'overrides object passed');
-    assert.equal(args[2].value, value, 'msg.value matches msgValueWei');
+    // affiliateCode is part of the SELECTOR, not an optional trailing extra:
+    // the two-arg form does not exist on the deployed GAME (0xe81ebd5f absent,
+    // 0x78f70988 present) and reverts with empty returndata.
+    assert.match(args[2], /^0x[0-9a-f]{64}$/i, 'bytes32 affiliate code passed');
+    // 4th arg = overrides object containing value
+    assert.ok(args[3] && typeof args[3] === 'object', 'overrides object passed');
+    assert.equal(args[3].value, value, 'msg.value matches msgValueWei');
   });
 
   test('rejects quantity < 1', async () => {
@@ -183,15 +250,15 @@ describe('Plan 62-02: purchaseWhaleBundle', () => {
 
   test('static-call gate runs BEFORE sendTx — order verification', async () => {
     const reverting = makeFakeContract({
-      staticCallShouldRevert: { purchaseWhaleBundle: true },
-      staticCallRevertName: { purchaseWhaleBundle: 'E' },
+      staticCallShouldRevert: { purchaseWhalePass: true },
+      staticCallRevertName: { purchaseWhalePass: 'E' },
     });
     passesMod.__setContractFactoryForTest(() => reverting);
     await assert.rejects(
       passesMod.purchaseWhaleBundle({ quantity: 1, msgValueWei: 0n }),
     );
     assert.equal(
-      reverting._calls.purchaseWhaleBundle.length, 0,
+      reverting._calls.purchaseWhalePass.length, 0,
       'sendTx NOT invoked when static-call gate trips',
     );
   });
@@ -341,10 +408,26 @@ describe('Plan 62-02: passes.js source-level invariants', () => {
     assert.ok(SRC.includes("'Buy deity pass'"), 'literal action label present');
   });
 
-  test('canonical ABI: purchaseWhaleBundle(address buyer, uint256 quantity) external payable', () => {
+  test('canonical ABI: purchaseWhalePass(address,uint256,bytes32) — the deployed selector', () => {
     assert.ok(
-      SRC.includes('function purchaseWhaleBundle(address buyer, uint256 quantity) external payable'),
-      'canonical PASSES_ABI fragment present',
+      SRC.includes('function purchaseWhalePass(address buyer, uint256 quantity, bytes32 affiliateCode) external payable'),
+      'canonical PASSES_ABI fragment present (DegenerusGame.sol:997)',
+    );
+  });
+
+  test('canonical ABI: purchaseLazyPass(address,bytes32) — the deployed selector', () => {
+    assert.ok(
+      SRC.includes('function purchaseLazyPass(address buyer, bytes32 affiliateCode) external payable'),
+      'canonical LAZY_PASS_ABI fragment present (DegenerusGame.sol:1029)',
+    );
+  });
+
+  test('the deity static-call carries msg.value, like the send does', () => {
+    // Simulating at value 0 priced the buy from claimable instead of the
+    // payment, so the gate could reject a buy the real tx would have settled.
+    assert.ok(
+      SRC.includes("requireStaticCall(c, 'purchaseDeityPass', [buyer, sid, { value }], signer)"),
+      'deity pre-flight passes the overrides object',
     );
   });
 
@@ -355,14 +438,21 @@ describe('Plan 62-02: passes.js source-level invariants', () => {
     );
   });
 
-  test('reason-map registers EXACTLY 1 NEW code (RngLocked)', () => {
+  test('registers the whale/deity/lazy custom errors the module actually throws', () => {
+    // These are NAMED custom errors in DegenerusGameWhaleModule.sol, not the
+    // `revert E()` this module's header once assumed. Unregistered, every one of
+    // them rendered as the UNKNOWN catch-all's "unexpected error".
     const stripped = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    const registers = stripped.match(/register\s*\(/g) || [];
-    assert.equal(registers.length, 1, `exactly 1 register call expected, got ${registers.length}`);
-    assert.ok(
-      /register\(\s*['"]RngLocked['"]/.test(stripped),
-      'RngLocked must be registered',
-    );
+    for (const code of [
+      'RngLocked', 'SymbolTaken', 'InvalidSymbol', 'AlreadyOwnsDeityPass',
+      'DeityPassConflict', 'InvalidLevelForPass', 'PassNotExpired',
+      'MinQuantityRequired', 'InvalidQuantity', 'GameOver',
+    ]) {
+      assert.ok(
+        new RegExp(`register\\(\\s*['"]${code}['"]`).test(stripped),
+        `${code} must be registered`,
+      );
+    }
   });
 
   test('NO pre-resolved-promise sendTx (Phase 58 closure-form gate)', () => {

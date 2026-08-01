@@ -10,11 +10,26 @@ let gameTimer = null;
 let playerTimer = null;
 let healthTimer = null;
 let jackpotPollTimer = null;
+// App panels mount together and many consume the same large player payload.
+// Share only requests that are currently in flight: this collapses the boot
+// burst without serving stale data after a transaction or on the next poll.
+const inflightJSON = new Map();
 
-export async function fetchJSON(path) {
-  const res = await fetch(API_BASE + path);
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-  return res.json();
+export function fetchJSON(path) {
+  const key = String(path);
+  const existing = inflightJSON.get(key);
+  if (existing) return existing;
+
+  const request = (async () => {
+    const res = await fetch(API_BASE + key);
+    if (!res.ok) throw new Error(`API ${res.status}: ${key}`);
+    return res.json();
+  })();
+  const tracked = request.finally(() => {
+    if (inflightJSON.get(key) === tracked) inflightJSON.delete(key);
+  });
+  inflightJSON.set(key, tracked);
+  return tracked;
 }
 
 export async function checkHealth() {
@@ -61,7 +76,7 @@ export async function pollPlayerData() {
   try {
     const data = await fetchJSON(`/player/${addr}`);
     batch([
-      ['player.balances.burnie', data.burnieBalance],
+      ['player.balances.flip', data.flipBalance],
       ['player.balances.dgnrs', data.dgnrsBalance],
       ['player.balances.wwxrp', data.wwxrpBalance],
       ['player.claimable', data.claimableEth],
@@ -83,7 +98,7 @@ export async function fetchPlayerData(address) {
     const data = await fetchJSON(`/player/${address}`);
     const updates = [
       // Top-level summary
-      ['player.balances.burnie', data.burnieBalance],
+      ['player.balances.flip', data.flipBalance],
       ['player.balances.dgnrs', data.dgnrsBalance],
       ['player.balances.wwxrp', data.wwxrpBalance],
       ['player.claimable', data.claimableEth],
@@ -123,7 +138,7 @@ export async function fetchPlayerData(address) {
       ['terminal.playerTicketsNextLevel', (() => {
         const lvl = get('game.level') || 0;
         const entry = data.tickets?.find(t => t.level === lvl + 1);
-        return entry?.ticketCount ?? 0;
+        return entry?.entryCount ?? 0;
       })()],
     ];
 

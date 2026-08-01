@@ -429,7 +429,7 @@ describe('Plan 62-05: <app-boons-panel> bridge wrapper (verbatim /beta/ cross-im
     );
     assert.match(
       el.innerHTML,
-      /<boons-panel>/,
+      /<boons-panel[\s>]/,
       'wrapper renders nested <boons-panel> (verbatim /beta/ panel registers via side-effect import)',
     );
   });
@@ -574,5 +574,34 @@ describe('Plan 62-05: <app-boons-panel> bridge wrapper (verbatim /beta/ cross-im
       /AbortController|clearTimeout|clearInterval/.test(PANEL_SRC),
       'panel source uses AbortController / clearTimeout / clearInterval for cleanup',
     );
+  });
+
+  // Account-switcher (2026-07-16) — combined mode hides the verbatim /beta/
+  // <boons-panel> (boons are per-account event history; combine.js has no
+  // merged field for them) and shows the wrapper's own identity-panel note.
+  test("mode 'combined' hides <boons-panel>, clears player.boons, and shows the per-account note", async () => {
+    let feedFetched = false;
+    _fetchHandler = async (url) => {
+      if (url.includes('/boons/')) feedFetched = true;
+      if (url.includes('/game/state')) return { currentDay: 42 };
+      return {};
+    };
+    const boonsSpy = spyBetaPath('player.boons');
+    appStoreMod.update('viewing.combined', true);
+    appStoreMod.update('ui.mode', 'combined');
+
+    const el = instantiate();
+    await settle();
+
+    const note = el.querySelector('[data-bind="boons-combined-note"]');
+    assert.equal(note.hidden, false, 'combined note visible');
+    assert.equal(note.textContent, 'Per-account stat. Pick a single account.');
+    const inner = el.querySelector('[data-bind="boons-inner"]');
+    assert.equal(inner.hidden, true, 'verbatim <boons-panel> hidden');
+    assert.equal(feedFetched, false, '/player/:address/boons/:day never fetched in combined mode');
+    assert.deepEqual(boonsSpy.seen[boonsSpy.seen.length - 1], [], 'player.boons cleared to []');
+
+    boonsSpy.unsub();
+    el.disconnectedCallback();
   });
 });

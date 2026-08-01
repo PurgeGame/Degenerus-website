@@ -60,27 +60,30 @@ describe('displayEth (Sepolia path — active chain-config)', () => {
     assert.equal(displayEth(0n, 0), '0');
   });
 
-  test('1e24 wei (1M-scaled = 1 ETH) → "1.0000"', () => {
-    // raw / 1_000_000n = 1e18 = 1 ETH; formatEther → "1.0"; pad to 4 → "1.0000"
-    assert.equal(displayEth(1_000_000_000_000_000_000_000_000n), '1.0000');
+  // Phase 64: testnet contracts hold /1M-scaled wei (1 mainnet-equivalent
+  // ETH = 1e12 on-chain wei), so displayEth MULTIPLIES raw by ETH_DIVISOR.
+
+  test('1e12 wei (1M-scaled = 1 ETH equivalent) → "1.0000"', () => {
+    // raw × 1_000_000n = 1e18 = 1 ETH; formatEther → "1.0"; pad to 4 → "1.0000"
+    assert.equal(displayEth(1_000_000_000_000n), '1.0000');
   });
 
-  test('5e23 wei (1M-scaled = 0.5 ETH) → "0.5000"', () => {
-    assert.equal(displayEth(500_000_000_000_000_000_000_000n), '0.5000');
+  test('5e11 wei (1M-scaled = 0.5 ETH equivalent) → "0.5000"', () => {
+    assert.equal(displayEth(500_000_000_000n), '0.5000');
   });
 
   test('custom digits=2 → "1.00"', () => {
-    assert.equal(displayEth(1_000_000_000_000_000_000_000_000n, 2), '1.00');
+    assert.equal(displayEth(1_000_000_000_000n, 2), '1.00');
   });
 
-  test('sub-divisor input rounds to "0.0000"', () => {
-    // 1n / 1_000_000n = 0n (BigInt floor); formatEther(0n) = '0.0'; pad to 4 → '0.0000'
+  test('tiny input still pads to width ("0.0000")', () => {
+    // 1n × 1_000_000n = 1e6 wei — far below the 4-digit display precision.
     assert.equal(displayEth(1n), '0.0000');
   });
 
   test('digits=0 strips fractional → integer-only string', () => {
     // formatEther(1e18) = "1.0"; digits=0 returns "1" (no decimal point)
-    assert.equal(displayEth(1_000_000_000_000_000_000_000_000n, 0), '1');
+    assert.equal(displayEth(1_000_000_000_000n, 0), '1');
   });
 });
 

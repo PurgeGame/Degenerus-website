@@ -4,7 +4,7 @@
 //
 // Tests for degenerette.js write-path module: placeBet + resolveBets +
 // parseBetPlacedFromReceipt + parseBetResolvedFromReceipt +
-// parseFullTicketResultsFromReceipt + InvalidBet + UnsupportedCurrency
+// parseSpinResultsFromReceipt + InvalidBet + UnsupportedCurrency
 // reason-map registrations.
 //
 // RESEARCH R5 confirmed: BUY-05 is a TWO-tx flow.
@@ -12,17 +12,17 @@
 //                             customTicket, heroQuadrant) payable
 //                             → emits BetPlaced(player, index, betId, packed)
 //   tx 2 (after RNG ready):  resolveDegeneretteBets(player, betIds[])
-//                             → emits FullTicketResolved + FullTicketResult per ticket
+//                             → emits DegeneretteResolved + DegeneretteResult per spin
 //
 // Sources:
 //  - DegenerusGame.sol:714 — placeDegeneretteBet (delegate-called via GAME).
 //  - DegenerusGame.sol:743 — resolveDegeneretteBets (delegate-called via GAME).
 //  - DegenerusGameDegeneretteModule.sol:55 — error InvalidBet();
 //  - DegenerusGameDegeneretteModule.sol:58 — error UnsupportedCurrency();
-//  - DegenerusGameDegeneretteModule.sol:69-104 — BetPlaced / FullTicketResolved / FullTicketResult events.
+//  - DegenerusGameDegeneretteModule.sol:69-104 — BetPlaced / DegeneretteResolved / DegeneretteResult events.
 //
 // RESEARCH Q7: WWXRP (currency 3) deferred from Phase 62 — UI restricts currency
-// to ETH (0) + BURNIE (1). Currency 2 → UnsupportedCurrency revert.
+// to ETH (0) + FLIP (1). Currency 2 → UnsupportedCurrency revert.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -49,6 +49,8 @@ function makeFakeContract(opts = {}) {
   const calls = {
     placeDegeneretteBet: [],
     resolveDegeneretteBets: [],
+    degeneretteResolve: [],
+    degeneretteBetInfo: [],
   };
   const order = [];
   const staticCallStub = (methodName) => async (..._args) => {
@@ -87,6 +89,17 @@ function makeFakeContract(opts = {}) {
       },
       { staticCall: staticCallStub('resolveDegeneretteBets') }
     ),
+    degeneretteResolve: Object.assign(
+      async (...args) => {
+        calls.degeneretteResolve.push(args);
+        return sendTxStub('degeneretteResolve')(...args);
+      },
+      { staticCall: staticCallStub('degeneretteResolve') }
+    ),
+    degeneretteBetInfo: async (...args) => {
+      calls.degeneretteBetInfo.push(args);
+      return opts.betInfo ?? 1n;
+    },
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
     _calls: calls,
@@ -97,7 +110,7 @@ function makeFakeContract(opts = {}) {
 
 function makeFakeProvider(connectedAddr) {
   return {
-    getNetwork: async () => ({ chainId: 11155111n }),
+    getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({
       getAddress: async () => connectedAddr,
     }),
@@ -127,7 +140,7 @@ describe('Plan 62-03: degenerette.js reason-map registrations', () => {
     });
     assert.equal(decoded.code, 'UnsupportedCurrency');
     assert.ok(decoded.userMessage && decoded.userMessage.length > 0);
-    assert.match(decoded.userMessage, /currency|not supported|ETH|BURNIE/i);
+    assert.match(decoded.userMessage, /currency|not supported|ETH|FLIP/i);
   });
 
   test('does NOT re-register RngNotReady (Phase 56 baseline already covers per RESEARCH R11)', () => {
@@ -171,7 +184,7 @@ describe('Plan 62-03: placeBet', () => {
       amountPerTicketWei: amountPerTicket,
       ticketCount,
       customTicket: 0,
-      heroQuadrant: 0xFF,
+      heroQuadrant: 0,
       msgValueWei,
     });
     assert.equal(lastFakeContract._calls.placeDegeneretteBet.length, 1);
@@ -181,38 +194,96 @@ describe('Plan 62-03: placeBet', () => {
     assert.equal(args[2], amountPerTicket, 'amountPerTicket bigint');
     assert.equal(args[3], 3, 'ticketCount = 3');
     assert.equal(args[4], 0, 'customTicket = 0');
-    assert.equal(args[5], 0xFF, 'heroQuadrant = 0xFF (no hero)');
+    assert.equal(args[5], 0, 'heroQuadrant = 0 (quadrant A; v48 requires a valid 0-3)');
     // 7th arg = overrides object containing value
     assert.ok(args[6] && typeof args[6] === 'object', 'overrides object passed');
     assert.equal(args[6].value, msgValueWei, 'msg.value matches msgValueWei');
   });
 
-  test('rejects ticketCount < 1', async () => {
+  test('rejects spinCount < 1', async () => {
     await assert.rejects(
       degeneretteMod.placeBet({
         currency: 0,
         amountPerTicketWei: 10n ** 16n,
         ticketCount: 0,
         customTicket: 0,
-        heroQuadrant: 0xFF,
+        heroQuadrant: 0,
         msgValueWei: 0n,
       }),
-      /Ticket count must be 1-10/i,
+      /Spins must be 1-25 for ETH/i,
     );
   });
 
-  test('rejects ticketCount > 10', async () => {
+  // Per-currency caps, verbatim from DegenerusGameDegeneretteModule.sol:236-238
+  // (MAX_SPINS_ETH 25 / FLIP 15 / WWXRP 5). The old flat 1-10 UI cap hid 15 of
+  // the ETH spins the contract allows.
+  test('accepts the contract cap per currency and rejects one past it', async () => {
+    const cases = [
+      { currency: 0, cap: 25, amount: 10n ** 16n, unit: 'ETH' },
+      { currency: 1, cap: 15, amount: 100n * 10n ** 18n, unit: 'FLIP' },
+      { currency: 3, cap: 5, amount: 10n ** 18n, unit: 'WWXRP' },
+    ];
+    for (const { currency, cap, amount, unit } of cases) {
+      await degeneretteMod.placeBet({
+        currency,
+        amountPerTicketWei: amount,
+        ticketCount: cap,
+        customTicket: 0,
+        heroQuadrant: 0,
+        msgValueWei: currency === 0 ? amount * BigInt(cap) : 0n,
+      });
+      await assert.rejects(
+        degeneretteMod.placeBet({
+          currency,
+          amountPerTicketWei: amount,
+          ticketCount: cap + 1,
+          customTicket: 0,
+          heroQuadrant: 0,
+          msgValueWei: 0n,
+        }),
+        new RegExp(`Spins must be 1-${cap} for ${unit}`, 'i'),
+        `${unit} rejects ${cap + 1} spins`,
+      );
+    }
+    assert.equal(
+      lastFakeContract._calls.placeDegeneretteBet.length, 3,
+      'all three at-cap bets went through',
+    );
+  });
+
+  test('rejects a bet below the contract minimum, per currency', async () => {
+    // MIN_BET_* (module :227-233): 0.005 ETH / 100 FLIP / 1 WWXRP per spin.
+    // ETH callers pass CHAIN-scale wei, so the boundary is scale-dependent —
+    // derive it rather than hardcoding a mainnet figure that passes on testnet.
+    const { ETH_DIVISOR } = await import('../chain-config.js');
+    const ethMinChainWei = (5n * 10n ** 15n) / BigInt(ETH_DIVISOR);
     await assert.rejects(
       degeneretteMod.placeBet({
-        currency: 0,
-        amountPerTicketWei: 10n ** 16n,
-        ticketCount: 11,
-        customTicket: 0,
-        heroQuadrant: 0xFF,
-        msgValueWei: 0n,
+        currency: 0, amountPerTicketWei: ethMinChainWei - 1n, ticketCount: 1, heroQuadrant: 0,
       }),
-      /Ticket count must be 1-10/i,
+      /Minimum bet is 0.005 ETH per spin/i,
     );
+    // …and exactly at the ETH minimum goes through.
+    await degeneretteMod.placeBet({
+      currency: 0, amountPerTicketWei: ethMinChainWei, ticketCount: 1, heroQuadrant: 0,
+      msgValueWei: ethMinChainWei,
+    });
+    await assert.rejects(
+      degeneretteMod.placeBet({
+        currency: 1, amountPerTicketWei: 99n * 10n ** 18n, ticketCount: 1, heroQuadrant: 0,
+      }),
+      /Minimum bet is 100 FLIP per spin/i,
+    );
+    await assert.rejects(
+      degeneretteMod.placeBet({
+        currency: 3, amountPerTicketWei: 10n ** 17n, ticketCount: 1, heroQuadrant: 0,
+      }),
+      /Minimum bet is 1 WWXRP per spin/i,
+    );
+    // Exactly at the minimum is a valid bet.
+    await degeneretteMod.placeBet({
+      currency: 1, amountPerTicketWei: 100n * 10n ** 18n, ticketCount: 1, heroQuadrant: 0,
+    });
   });
 
   test('rejects currency 2 (unsupported) client-side', async () => {
@@ -222,7 +293,7 @@ describe('Plan 62-03: placeBet', () => {
         amountPerTicketWei: 10n ** 16n,
         ticketCount: 1,
         customTicket: 0,
-        heroQuadrant: 0xFF,
+        heroQuadrant: 0,
         msgValueWei: 0n,
       }),
       /Unsupported currency|UnsupportedCurrency|not supported/i,
@@ -236,7 +307,7 @@ describe('Plan 62-03: placeBet', () => {
         amountPerTicketWei: 0n,
         ticketCount: 1,
         customTicket: 0,
-        heroQuadrant: 0xFF,
+        heroQuadrant: 0,
         msgValueWei: 0n,
       }),
       /Amount.*greater than 0|Amount must|InvalidBet/i,
@@ -252,7 +323,7 @@ describe('Plan 62-03: placeBet', () => {
         amountPerTicketWei: 10n ** 16n,
         ticketCount: 1,
         customTicket: 0,
-        heroQuadrant: 0xFF,
+        heroQuadrant: 0,
         msgValueWei: 10n ** 16n,
       }),
       /Wallet not connected/i,
@@ -271,7 +342,7 @@ describe('Plan 62-03: placeBet', () => {
         amountPerTicketWei: 10n ** 16n,
         ticketCount: 1,
         customTicket: 0,
-        heroQuadrant: 0xFF,
+        heroQuadrant: 0,
         msgValueWei: 10n ** 16n,
       }),
     );
@@ -327,6 +398,160 @@ describe('Plan 62-03: resolveBets', () => {
 });
 
 // ===========================================================================
+// Fresh-state + community resolver — clicked bet is the race probe at item 0.
+// ===========================================================================
+
+describe('degenerette fresh-state and community resolution', () => {
+  let fake;
+
+  beforeEach(() => {
+    storeMod.__resetForTest();
+    storeMod.update('connected.address', CONNECTED);
+    storeMod.update('viewing.address', null);
+    storeMod.update('ui.mode', 'self');
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    fake = makeFakeContract({ betInfo: 0x1234n });
+    degeneretteMod.__setContractFactoryForTest(() => fake);
+  });
+
+  afterEach(() => {
+    degeneretteMod.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+  });
+
+  test('readBetInfo checks the named owner and exact bet id', async () => {
+    assert.equal(
+      await degeneretteMod.readBetInfo({ player: CONNECTED, betId: 42 }),
+      0x1234n,
+    );
+    assert.deepEqual(fake._calls.degeneretteBetInfo, [[CONNECTED, 42n]]);
+  });
+
+  test('community batch keeps the clicked bet first and dedupes its tail', async () => {
+    const other = '0xcd34000000000000000000000000000000000000';
+    const result = await degeneretteMod.resolveCommunityBets({
+      player: CONNECTED,
+      betId: 42,
+      candidates: [
+        { player: other, betId: 9 },
+        { player: CONNECTED.toUpperCase(), betId: 42 },
+        { player: other, betId: 9 },
+      ],
+    });
+
+    assert.deepEqual(
+      fake._calls.degeneretteResolve,
+      [[[CONNECTED, other], [42n, 9n]]],
+      'item zero is the clicked race probe; stale duplicate candidates are omitted',
+    );
+    assert.deepEqual(result.players, [CONNECTED, other]);
+    assert.deepEqual(result.betIds, [42n, 9n]);
+    assert.deepEqual(fake._order, ['static:degeneretteResolve', 'send:degeneretteResolve']);
+  });
+
+  test('already-resolved spins can be replayed directly from exact chain-event topics', async () => {
+    const queries = [];
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => 5000,
+    });
+    const eventContract = {
+      filters: {
+        DegeneretteResolved: (player, betId) => ({ event: 'resolved', player, betId }),
+        DegeneretteResult: (player, betId) => ({ event: 'result', player, betId }),
+      },
+      queryFilter: async (filter, from, to) => {
+        queries.push({ filter, from, to });
+        if (filter.event === 'resolved') {
+          return [{
+            args: {
+              player: CONNECTED,
+              betId: 42n,
+              spinCount: 1,
+              totalPayout: 5n,
+              resultTraits: 13n,
+            },
+          }];
+        }
+        return [{
+          args: {
+            player: CONNECTED,
+            betId: 42n,
+            spinIndex: 0,
+            playerTraits: 21n,
+            matches: 4,
+            payout: 5n,
+          },
+        }];
+      },
+    };
+    degeneretteMod.__setContractFactoryForTest(() => eventContract);
+
+    const replay = await degeneretteMod.readResolvedBet({ player: CONNECTED, betId: 42 });
+    assert.equal(replay.resolved.totalPayout, 5n);
+    assert.equal(replay.resolved.resultTraits, 13n);
+    assert.equal(replay.spins.length, 1);
+    assert.equal(replay.spins[0].playerTraits, 21n);
+    assert.equal(queries.length, 2);
+    assert.ok(queries.every((query) => query.to - query.from < 1800));
+    assert.ok(queries.every((query) => query.filter.player === CONNECTED));
+    assert.ok(queries.every((query) => query.filter.betId === 42n));
+  });
+
+  test('chain replay refuses duplicate spin indexes that leave a later spin missing', async () => {
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => 5000,
+    });
+    const eventContract = {
+      filters: {
+        DegeneretteResolved: (player, betId) => ({ event: 'resolved', player, betId }),
+        DegeneretteResult: (player, betId) => ({ event: 'result', player, betId }),
+      },
+      queryFilter: async (filter) => {
+        if (filter.event === 'resolved') {
+          return [{
+            args: {
+              player: CONNECTED,
+              betId: 42n,
+              spinCount: 2,
+              totalPayout: 5n,
+              resultTraits: 13n,
+            },
+          }];
+        }
+        return [
+          {
+            args: {
+              player: CONNECTED,
+              betId: 42n,
+              spinIndex: 0,
+              playerTraits: 21n,
+              matches: 4,
+              payout: 5n,
+            },
+          },
+          {
+            args: {
+              player: CONNECTED,
+              betId: 42n,
+              spinIndex: 0,
+              playerTraits: 22n,
+              matches: 0,
+              payout: 0n,
+            },
+          },
+        ];
+      },
+    };
+    degeneretteMod.__setContractFactoryForTest(() => eventContract);
+
+    const replay = await degeneretteMod.readResolvedBet({ player: CONNECTED, betId: 42 });
+    assert.equal(replay, null, 'spin 1 must exist before a two-spin reveal is staged');
+  });
+});
+
+// ===========================================================================
 // Receipt parsers — Phase 60 D-03 receipt-log-first source of truth.
 // ===========================================================================
 
@@ -354,17 +579,17 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
     assert.equal(out[0].packed, 0xdeadbeefn);
   });
 
-  test('parseBetResolvedFromReceipt returns FullTicketResolved entries', () => {
+  test('parseBetResolvedFromReceipt returns DegeneretteResolved entries', () => {
     const receipt = makeFakeReceipt([
       {
         parsed: {
-          name: 'FullTicketResolved',
+          name: 'DegeneretteResolved',
           args: {
             player: CONNECTED,
             betId: 42n,
-            ticketCount: 3,
+            spinCount: 3,
             totalPayout: 5n * 10n ** 16n,
-            resultTicket: 1234n,
+            resultTraits: 1234n,
           },
         },
       },
@@ -374,21 +599,21 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
     assert.equal(out.length, 1);
     assert.equal(out[0].player, CONNECTED);
     assert.equal(out[0].betId, 42n);
-    assert.equal(out[0].ticketCount, 3n);
+    assert.equal(out[0].spinCount, 3n);
     assert.equal(out[0].totalPayout, 5n * 10n ** 16n);
-    assert.equal(out[0].resultTicket, 1234n);
+    assert.equal(out[0].resultTraits, 1234n);
   });
 
-  test('parseFullTicketResultsFromReceipt returns FullTicketResult per-spin entries', () => {
+  test('parseSpinResultsFromReceipt returns DegeneretteResult per-spin entries', () => {
     const receipt = makeFakeReceipt([
       {
         parsed: {
-          name: 'FullTicketResult',
+          name: 'DegeneretteResult',
           args: {
             player: CONNECTED,
             betId: 42n,
-            ticketIndex: 0,
-            playerTicket: 1234n,
+            spinIndex: 0,
+            playerTraits: 1234n,
             matches: 4,
             payout: 1n * 10n ** 16n,
           },
@@ -396,12 +621,12 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
       },
       {
         parsed: {
-          name: 'FullTicketResult',
+          name: 'DegeneretteResult',
           args: {
             player: CONNECTED,
             betId: 42n,
-            ticketIndex: 1,
-            playerTicket: 5678n,
+            spinIndex: 1,
+            playerTraits: 5678n,
             matches: 2,
             payout: 0n,
           },
@@ -409,12 +634,51 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
       },
     ]);
     const fakeContract = { interface: { parseLog: (log) => log.parsed ?? null } };
-    const out = degeneretteMod.parseFullTicketResultsFromReceipt(receipt, fakeContract);
+    const out = degeneretteMod.parseSpinResultsFromReceipt(receipt, fakeContract);
     assert.equal(out.length, 2);
     assert.equal(out[0].matches, 4n);
     assert.equal(out[0].payout, 1n * 10n ** 16n);
     assert.equal(out[1].matches, 2n);
     assert.equal(out[1].payout, 0n);
+  });
+
+  // The regression that made all of this dead: production logs carry
+  // topics+data, not a `parsed` property. With no parser injected the module
+  // must decode them off its own ABI.
+  test('parsers decode REAL encoded logs with no injected parser', async () => {
+    const { ethers } = await import('ethers');
+    const iface = new ethers.Interface([
+      'event DegeneretteResolved(address indexed player, uint64 indexed betId, uint8 spinCount, uint256 totalPayout, uint32 resultTraits)',
+      'event DegeneretteResult(address indexed player, uint64 indexed betId, uint8 spinIndex, uint32 playerTraits, uint8 matches, uint256 payout)',
+    ]);
+    const enc = (name, args) => {
+      const { data, topics } = iface.encodeEventLog(iface.getEvent(name), args);
+      return { data, topics, address: '0x0000000000000000000000000000000000000001' };
+    };
+    const receipt = {
+      status: 1,
+      logs: [
+        enc('DegeneretteResolved', [CONNECTED, 42n, 2, 7n * 10n ** 15n, 1234]),
+        enc('DegeneretteResult', [CONNECTED, 42n, 0, 1234, 4, 7n * 10n ** 15n]),
+        enc('DegeneretteResult', [CONNECTED, 42n, 1, 1234, 0, 0n]),
+      ],
+    };
+
+    const resolved = degeneretteMod.parseBetResolvedFromReceipt(receipt);
+    assert.equal(resolved.length, 1, 'resolved entry decoded from a real log');
+    assert.equal(resolved[0].spinCount, 2n);
+    assert.equal(resolved[0].totalPayout, 7n * 10n ** 15n);
+    assert.equal(resolved[0].resultTraits, 1234n);
+
+    const spins = degeneretteMod.parseSpinResultsFromReceipt(receipt);
+    assert.equal(spins.length, 2, 'both per-spin entries decoded');
+    assert.equal(spins[0].spinIndex, 0n);
+    assert.equal(spins[0].matches, 4n);
+    assert.equal(spins[1].payout, 0n);
+
+    // A log from another contract/event must not throw or leak through.
+    const foreign = { status: 1, logs: [{ data: '0x', topics: ['0x' + '11'.repeat(32)] }] };
+    assert.deepEqual(degeneretteMod.parseBetResolvedFromReceipt(foreign), []);
   });
 
   test('parseBetPlacedFromReceipt ignores foreign logs gracefully', () => {
@@ -429,7 +693,7 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
     const fakeContract = { interface: { parseLog: () => null } };
     assert.deepEqual(degeneretteMod.parseBetPlacedFromReceipt(null, fakeContract), []);
     assert.deepEqual(degeneretteMod.parseBetResolvedFromReceipt({ logs: undefined }, fakeContract), []);
-    assert.deepEqual(degeneretteMod.parseFullTicketResultsFromReceipt({ logs: [] }, fakeContract), []);
+    assert.deepEqual(degeneretteMod.parseSpinResultsFromReceipt({ logs: [] }, fakeContract), []);
   });
 });
 
@@ -467,18 +731,26 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
     );
   });
 
-  test('canonical event ABIs: BetPlaced + FullTicketResolved + FullTicketResult', () => {
+  // Event names are the 2026-07-29 fix: the module emits DegeneretteResolved /
+  // DegeneretteResult (checked against degenerus-sim/deployments/abis/
+  // GAME_DEGENERETTE_MODULE.json). The old FullTicket* names matched no topic,
+  // so every resolve parsed as zero events.
+  test('canonical event ABIs: BetPlaced + DegeneretteResolved + DegeneretteResult', () => {
     assert.ok(SRC.includes('event BetPlaced(address indexed player, uint32 indexed index, uint64 indexed betId, uint256 packed)'));
-    assert.ok(SRC.includes('event FullTicketResolved(address indexed player, uint64 indexed betId, uint8 ticketCount, uint256 totalPayout, uint32 resultTicket)'));
-    assert.ok(SRC.includes('event FullTicketResult(address indexed player, uint64 indexed betId, uint8 ticketIndex, uint32 playerTicket, uint8 matches, uint256 payout)'));
+    assert.ok(SRC.includes('event DegeneretteResolved(address indexed player, uint64 indexed betId, uint8 spinCount, uint256 totalPayout, uint32 resultTraits)'));
+    assert.ok(SRC.includes('event DegeneretteResult(address indexed player, uint64 indexed betId, uint8 spinIndex, uint32 playerTraits, uint8 matches, uint256 payout)'));
+    // Comments still name the old events (they explain the fix); code must not.
+    const stripped = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(!/FullTicket/.test(stripped), 'no stale FullTicket* event names in code');
   });
 
-  test('reason-map registers EXACTLY 2 NEW codes (InvalidBet + UnsupportedCurrency)', () => {
+  test('reason-map registers input errors plus the public-resolver race signal', () => {
     const stripped = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     const registers = stripped.match(/register\s*\(/g) || [];
-    assert.equal(registers.length, 2, `exactly 2 register calls expected, got ${registers.length}`);
+    assert.equal(registers.length, 3, `exactly 3 register calls expected, got ${registers.length}`);
     assert.ok(/register\(\s*['"]InvalidBet['"]/.test(stripped));
     assert.ok(/register\(\s*['"]UnsupportedCurrency['"]/.test(stripped));
+    assert.ok(/register\(\s*['"]BatchAlreadyTaken['"]/.test(stripped));
   });
 
   test('NO pre-resolved-promise sendTx (Phase 58 closure-form gate)', () => {
@@ -495,12 +767,25 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
     assert.ok(matches.length >= 2, `expected >= 2 requireStaticCall, got ${matches.length}`);
   });
 
-  test('exports 5 named functions (placeBet, resolveBets, 3 parsers)', () => {
+  test('exports placement, both resolver paths, fresh-state read, parsers, and receiptParser', () => {
     assert.ok(/export\s+async\s+function\s+placeBet\b/.test(SRC));
     assert.ok(/export\s+async\s+function\s+resolveBets\b/.test(SRC));
+    assert.ok(/export\s+async\s+function\s+readBetInfo\b/.test(SRC));
+    assert.ok(/export\s+async\s+function\s+readResolvedBet\b/.test(SRC));
+    assert.ok(/export\s+async\s+function\s+resolveCommunityBets\b/.test(SRC));
     assert.ok(/export\s+function\s+parseBetPlacedFromReceipt\b/.test(SRC));
     assert.ok(/export\s+function\s+parseBetResolvedFromReceipt\b/.test(SRC));
-    assert.ok(/export\s+function\s+parseFullTicketResultsFromReceipt\b/.test(SRC));
+    assert.ok(/export\s+function\s+parseSpinResultsFromReceipt\b/.test(SRC));
+    assert.ok(/export\s+function\s+receiptParser\b/.test(SRC));
+  });
+
+  // The parsers must decode REAL logs when no parser is injected — the panel
+  // used to pass a `log.parsed`-only stub, so production parsed nothing.
+  test('parsers default to receiptParser() rather than requiring a contract', () => {
+    assert.match(SRC, /parseBetPlacedFromReceipt\(receipt, contract = receiptParser\(\)\)/);
+    assert.match(SRC, /parseBetResolvedFromReceipt\(receipt, contract = receiptParser\(\)\)/);
+    assert.match(SRC, /parseSpinResultsFromReceipt\(receipt, contract = receiptParser\(\)\)/);
+    assert.match(SRC, /new ethers\.Interface\(DEGENERETTE_ABI\)/);
   });
 
   test('imports pollRngForLootbox from lootbox.js (RESEARCH R5 OPTION B reuse)', () => {

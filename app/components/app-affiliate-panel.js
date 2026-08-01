@@ -36,11 +36,14 @@
 //      Customize your code if you want a shorter / vanity hex code OR want to
 //      share kickback % with referees."
 //
-// CRITICAL — Phase 60 D-05 reuse (RESEARCH R6):
-//   readAffiliateCode from lootbox.js is reused as-is. After the Customize
-//   tx confirms, affiliate.js writes the new code to localStorage; on the
-//   next panel mount or address-change cycle, this panel reads it back via
-//   readAffiliateCode and builds the URL with the registered code.
+// Own-code sourcing (semantics fixed 2026-07-16):
+//   readRegisteredCode (affiliate.js) paints the URL synchronously from the
+//   own-code localStorage key (written after a confirmed Customize tx), then
+//   resolveRegisteredCode refreshes DB-first (indexer affiliate.ownCode —
+//   knows codes registered on ANY device, and ownership-verifies legacy
+//   localStorage values). lootbox.js readAffiliateCode is NOT used here —
+//   that helper is the purchase-tx default (the code that referred YOU),
+//   never your own code.
 //
 // Carry-forwards (CONTEXT 62-CONTEXT.md):
 //   CF-01: Phase 58 closure-form sendTx (via affiliate.js helper).
@@ -63,8 +66,9 @@ import {
   defaultCodeForAddress,
   buildAffiliateUrl,
   createAffiliateCode,
+  readRegisteredCode,
+  resolveRegisteredCode,
 } from '../app/affiliate.js';
-import { readAffiliateCode } from '../app/lootbox.js';   // Phase 60 D-05 reuse (R6)
 
 // Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for the
 // 30s poll tick so node:test processes exit cleanly when no other open handles
@@ -81,7 +85,6 @@ const POLL_INTERVAL_MS = 30_000;        // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 const VISIBILITY_RESUME_GATE_MS = 1000; // ≥1s since last fetch → re-poll on foreground.
 const ERROR_AUTO_CLEAR_MS = 10_000;     // 10s auto-clear for inline errors (Phase 61 D-05 mirror).
 const COPY_FEEDBACK_MS = 2_000;         // 2s copy-success feedback.
-const ZERO_BYTES32 = '0x' + '0'.repeat(64);
 
 class AppAffiliatePanel extends HTMLElement {
   // --- Phase 60/61/62 idempotency-guard pattern ---
@@ -218,6 +221,19 @@ class AppAffiliatePanel extends HTMLElement {
     const signal = this.#pollController.signal;
     this.#lastFetchAt = Date.now();
 
+    // Account-switcher (2026-07-16): the affiliate link + referee table are
+    // per-account identity data (combine.js intentionally omits `affiliate` —
+    // not summable across the combined view's accounts). Render the panel's
+    // existing empty-state instead of fetching.
+    if (get('ui.mode') === 'combined') {
+      this.#defaultUrl = '';
+      this.#registeredCode = null;
+      this.#refereesData = null;
+      this.#setUrl('');
+      this.#renderRefereesEmpty('Per-account stat. Pick a single account.');
+      return;
+    }
+
     const addr = (typeof getViewedAddress === 'function' ? getViewedAddress() : null)
       || get('viewing.address')
       || get('connected.address')
@@ -233,13 +249,19 @@ class AppAffiliatePanel extends HTMLElement {
       return;
     }
 
-    // Phase 60 D-05 reuse — read any previously-registered vanity code from
-    // localStorage. If absent or zero, fall back to defaultCodeForAddress.
-    let stored = null;
-    try { stored = readAffiliateCode(CHAIN.id, addr); } catch (_) { stored = null; }
-    this.#registeredCode = (stored && stored !== ZERO_BYTES32) ? stored : null;
+    // Own registered code: fast paint from the own-code localStorage key
+    // (this-device registrations), then DB-first async refresh so codes
+    // registered on other devices appear too. Absent → defaultCodeForAddress.
+    this.#registeredCode = readRegisteredCode(addr);
     this.#defaultUrl = buildAffiliateUrl(addr, this.#registeredCode);
     this.#setUrl(this.#defaultUrl);
+    resolveRegisteredCode(addr).then((code) => {
+      if (this.#pinnedAddress !== addr) return; // address churn — stale
+      if (!code || code === this.#registeredCode) return;
+      this.#registeredCode = code;
+      this.#defaultUrl = buildAffiliateUrl(addr, code);
+      this.#setUrl(this.#defaultUrl);
+    }).catch(() => { /* resolver never throws, defensive */ });
 
     try {
       const data = await fetchJSON(`/player/${addr}/referees`);
@@ -271,7 +293,8 @@ class AppAffiliatePanel extends HTMLElement {
   #wireStoreSubscriptions() {
     const u1 = subscribe('connected.address', () => this.#runMountFetch());
     const u2 = subscribe('viewing.address', () => this.#runMountFetch());
-    this.#unsubs.push(u1, u2);
+    const u3 = subscribe('ui.mode', () => this.#runMountFetch());
+    this.#unsubs.push(u1, u2, u3);
   }
 
   // ---------------------------------------------------------------------
@@ -455,7 +478,7 @@ class AppAffiliatePanel extends HTMLElement {
     hAt.textContent = 'Referred at';
     const hAmt = document.createElement('span');
     hAmt.className = 'aff-referees-cell aff-referees-cell--amt';
-    hAmt.textContent = 'Commission (BURNIE)';
+    hAmt.textContent = 'Commission (FLIP)';
     header.appendChild(hAddr);
     header.appendChild(hAt);
     header.appendChild(hAmt);
@@ -482,7 +505,7 @@ class AppAffiliatePanel extends HTMLElement {
         amtCell.textContent = '—';
         amtCell.title = String(r?.reason || 'pending');
       } else {
-        amtCell.textContent = String(r?.totalCommissionBurnie ?? '0');
+        amtCell.textContent = String(r?.totalCommissionFlip ?? '0');
       }
       row.appendChild(amtCell);
 
