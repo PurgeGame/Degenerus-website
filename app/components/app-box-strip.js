@@ -577,7 +577,7 @@ class AppBoxStrip extends HTMLElement {
         lootboxIndex: box.index,
       }).catch(() => null);
       if (status && status.amount === 0n) {
-        await this.#replayResolvedBox(box);
+        await this.#replayResolvedBox(box, { retireIfMissing: true });
         return;
       }
 
@@ -605,7 +605,7 @@ class AppBoxStrip extends HTMLElement {
       // the contract's race signal exactly like the pre-read's zero slot:
       // recover the indexed result and replay it, without surfacing a failure.
       if (/already|nothing|no box|resolved/i.test(String(rawMsg))) {
-        await this.#replayResolvedBox(box);
+        await this.#replayResolvedBox(box, { retireIfMissing: true });
       } else {
         this.#renderError(compactUiError(error, 'Box did not open. Try again.'));
         this.#render();
@@ -613,7 +613,7 @@ class AppBoxStrip extends HTMLElement {
     }
   }
 
-  async #replayResolvedBox(box) {
+  async #replayResolvedBox(box, { retireIfMissing = false } = {}) {
     let legs = [];
     try {
       // Ask for both the exact index and the player's newest legs. Current APIs
@@ -650,9 +650,19 @@ class AppBoxStrip extends HTMLElement {
     }
 
     if (legs.length > 0 && this.#queueBoxReveal(box, legs, {
-      title: 'LOOTBOX REPLAY',
       settledExpected: true,
     })) return;
+
+    if (retireIfMissing) {
+      // The live amount slot is authoritative: zero means there is no box left
+      // to open. If neither indexed nor chain event legs can reconstruct an old
+      // result, keeping a dead button forever cannot improve that situation.
+      const address = this.#addr;
+      const key = _boxKey(box);
+      if (address && key) _markRevealed(address, key);
+      this.#removeBox(key);
+      return;
+    }
 
     // Do not retire an indexed result just because a companion leg is still
     // catching up. It remains actionable and the next poll/click can rebuild
@@ -688,11 +698,13 @@ class AppBoxStrip extends HTMLElement {
       },
     });
     if (!accepted) return false;
-    box.opening = true;
-    box.ready = true;
-    box.resolved = true;
-    _writePending(address, this.#boxes);
-    this.#render();
+    // A click consumes the presentation action, not the underlying on-chain
+    // prize. Retire it as soon as the reveal engine accepts the sequence so the
+    // bottom tray cannot offer the same box again while the overlay is playing,
+    // and persist that dismissal so an indexed historical row stays gone after
+    // refresh. Completion events remain as an idempotent safety net.
+    _markRevealed(address, key);
+    this.#removeBox(key);
     return true;
   }
 
@@ -701,6 +713,23 @@ class AppBoxStrip extends HTMLElement {
     this.#boxes = this.#boxes.filter((box) => _boxKey(box) !== key);
     if (this.#addr) _writePending(this.#addr, this.#boxes);
     this.#render();
+  }
+
+  #clearAllBoxes() {
+    const address = this.#addr;
+    if (!address || this.#boxes.some((box) => box.opening)) return false;
+    // CLEAR is presentation-only. Mark every tracked result as seen so the
+    // database discovery pass does not recreate the same notification after a
+    // refresh; any unopened box and all of its rewards remain untouched on
+    // chain and can still be resolved permissionlessly later.
+    for (const box of this.#boxes) {
+      const key = _boxKey(box);
+      if (key) _markRevealed(address, key);
+    }
+    this.#boxes = [];
+    _writePending(address, this.#boxes);
+    this.#render();
+    return true;
   }
 
   // -------------------------------------------------------------------------
@@ -725,6 +754,7 @@ class AppBoxStrip extends HTMLElement {
       state: box.opening ? 'busy' : box.ready ? 'ready' : 'waiting',
       order: 20,
       run: () => this.#onOpenClick(box),
+      clearAll: () => this.#clearAllBoxes(),
     })));
   }
 
@@ -771,7 +801,9 @@ class AppBoxStrip extends HTMLElement {
         ? 'OPENING…'
         : box.ready ? box.resolved ? 'VIEW RESULT' : 'OPEN LOOTBOX' : 'RNG PENDING';
       cta.setAttribute('aria-label', box.ready
-        ? `${box.resolved ? 'View result for' : 'Open'} ${_boxLabel(box)}`
+        ? Number(box.index) === 0
+          ? `${box.resolved ? 'View result for' : 'Open'} AFKing lootbox`
+          : `${box.resolved ? 'View result for' : 'Open'} lootbox ${box.index}`
         : `${_boxLabel(box)} waiting for RNG`);
       if (box.ready && !box.opening) {
         cta.addEventListener('click', () => this.#onOpenClick(box));

@@ -171,6 +171,28 @@ export function thermometerScale(current, target) {
   };
 }
 
+/**
+ * Whether the normal Decimator entry window is live.
+ *
+ * The indexed boolean is the preferred signal, but older/newer API payloads
+ * have exposed it in more than one place and the game-state projection can lag
+ * the implicit x4/x99 level transition.  The level rule is deterministic, so
+ * it is a safe positive fallback; the write still has to pass its contract
+ * static call before anything is sent.
+ */
+export function decimatorWindowIsOpen(gameState, position = null) {
+  if (gameState?.decWindowOpen === true
+    || gameState?.decimator?.windowOpen === true
+    || position?.windowOpen === true
+    || String(position?.roundStatus || '').toLowerCase() === 'open') {
+    return true;
+  }
+
+  const level = Number(gameState?.level);
+  if (!Number.isInteger(level) || level < 0) return false;
+  return (level % 10 === 4 && level % 100 !== 94) || level % 100 === 99;
+}
+
 // One book's fetched state. `rounds` is newest-first.
 function _emptyBook() {
   return { openRound: 0, rounds: [], credit: 0n, questReward: 0n, error: false };
@@ -283,11 +305,6 @@ class AppParimutuelPanel extends HTMLElement {
     this.#volume.credit = credit;
     this.#decimatorPosition = decimatorPosition;
 
-    // Context for each book: the number the open round has to beat. Fired
-    // WITHOUT awaiting — a log query and a view call must never hold up the
-    // books themselves, so they land later and re-render.
-    this.#loadBenchmarks(seq, level);
-
     // The round anchors are off-chain guesses — the level comes from the
     // indexer (which can lag a transition) and the volume round from the local
     // clock. `openRound` is the chain's own answer, so when it falls outside
@@ -298,15 +315,24 @@ class AppParimutuelPanel extends HTMLElement {
     ]);
     if (seq !== this.#fetchSeq) return;
 
+    // Context for each book: the number the open round has to beat. Start this
+    // only after #backfillOpen has adopted the contract's authoritative round,
+    // then request that exact adjacent volume seal. It remains deliberately
+    // un-awaited so historical logs never hold up the live betting controls.
+    this.#loadBenchmarks(seq, level, this.#volume.openRound);
+
     this.#render();
     this.#armPoll();
   }
 
   // Benchmarks are decoration, not settlement inputs: both soft-fail to null and
   // the books render without them.
-  async #loadBenchmarks(seq, level) {
+  async #loadBenchmarks(seq, level, volumeOpenRound) {
+    const open = Number(volumeOpenRound || volumeRoundNow());
+    const previousVolumeRound = Number.isInteger(open) && open > 1 ? open - 1 : null;
     const [seal, ratchets] = await Promise.all([
-      readLastVolumeSeal().catch(() => null),
+      readLastVolumeSeal(previousVolumeRound == null ? undefined : { round: previousVolumeRound })
+        .catch(() => null),
       readGrowthRatchets({ round: level }).catch(() => null),
     ]);
     if (seq !== this.#fetchSeq) return;
@@ -414,7 +440,7 @@ class AppParimutuelPanel extends HTMLElement {
   #visible() {
     return Boolean(this.#growth.openRound)
       || Boolean(this.#volume.openRound)
-      || Boolean(this.#gameState?.decWindowOpen)
+      || decimatorWindowIsOpen(this.#gameState, this.#decimatorPosition)
       || this.#claimableTotal(this.#growth) > 0n
       || this.#claimableTotal(this.#volume) > 0n
       || this.#lost(this.#growth, 'growth').length > 0
@@ -435,7 +461,7 @@ class AppParimutuelPanel extends HTMLElement {
     const win = volumeWindow();
     const hot = win.open
       || win.secondsToOpen <= (VOLUME_WINDOW.leadSeconds || 0)
-      || Boolean(this.#gameState?.decWindowOpen);
+      || decimatorWindowIsOpen(this.#gameState, this.#decimatorPosition);
     this.#pollHandle = _setTimeoutUnref(() => this.#refresh(), hot ? POLL_HOT_MS : POLL_IDLE_MS);
   }
 
@@ -490,7 +516,7 @@ class AppParimutuelPanel extends HTMLElement {
   #renderDecimator() {
     const host = this.querySelector('[data-bind="pari-decimator"]');
     if (!host) return;
-    const open = Boolean(this.#gameState?.decWindowOpen);
+    const open = decimatorWindowIsOpen(this.#gameState, this.#decimatorPosition);
     host.hidden = !open;
     host.textContent = '';
     if (!open) return;

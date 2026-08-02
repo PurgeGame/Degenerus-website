@@ -40,10 +40,10 @@
 // payout, the level-settlement drawdown, game-over zeroing) and dressing it up as a
 // win would be a lie.
 //
-// FROZEN. During the jackpot phase the pools are frozen and in-window purchases
-// route to the pending accumulators, which the contract excludes from the headline.
-// The number legitimately stops moving, so the widget says so ("locked for the
-// draw") rather than looking broken.
+// During the jackpot phase the pools are frozen and in-window purchases route
+// to pending accumulators, which the contract excludes from the headline. That
+// state needs no extra player-facing label; the level/phase clock already says
+// where the game is.
 //
 // Data arrives via the store (`app.goldRush`, written by polling.js's 5s goldRush
 // cycle) — this component owns no fetch of its own.
@@ -354,10 +354,6 @@ class GoldRushHeadline extends HTMLElement {
       chip.hidden = false;
       chip.textContent = `indexer ${lag} blocks behind`;
       chip.className = 'gr__chip gr__chip--wait';
-    } else if (payload.frozen) {
-      chip.hidden = false;
-      chip.textContent = 'locked for the draw';
-      chip.className = 'gr__chip gr__chip--frozen';
     } else {
       chip.hidden = true;
       chip.textContent = '';

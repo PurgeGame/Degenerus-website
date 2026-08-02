@@ -622,11 +622,22 @@ class LastDayJackpot extends HTMLElement {
       : activity.lootboxResults.filter((row) => (
         row?.rewardType === 'opened' || row?.rewardType === 'flipOpened'
       )).length;
+    let coinflipStakeAmount = '0';
     let hasCoinflipBet = false;
-    try { hasCoinflipBet = BigInt(activity?.coinflip?.stakeAmount || '0') > 0n; } catch { /* malformed row */ }
+    try {
+      coinflipStakeAmount = BigInt(activity?.coinflip?.stakeAmount || '0').toString();
+      hasCoinflipBet = BigInt(coinflipStakeAmount) > 0n;
+    } catch { /* malformed row */ }
     const coinflipWon = activity?.coinflip?.win === true
       ? true
       : activity?.coinflip?.win === false ? false : null;
+    const activityRewardRaw = activity?.coinflip?.rewardPercent;
+    const dayRewardRaw = this.#flipResult?.rewardPercent;
+    const activityReward = activityRewardRaw == null ? NaN : Number(activityRewardRaw);
+    const dayReward = dayRewardRaw == null ? NaN : Number(dayRewardRaw);
+    const coinflipRewardPercent = Number.isFinite(activityReward)
+      ? Math.max(0, Math.trunc(activityReward))
+      : Number.isFinite(dayReward) ? Math.max(0, Math.trunc(dayReward)) : 0;
     return {
       ticketPacks: ticketPacks.length,
       ticketCount,
@@ -634,6 +645,8 @@ class LastDayJackpot extends HTMLElement {
       lootboxesOpened,
       hasCoinflipBet,
       coinflipWon,
+      coinflipStakeAmount,
+      coinflipRewardPercent,
     };
   }
 
@@ -691,7 +704,9 @@ class LastDayJackpot extends HTMLElement {
         prizes,
         consolationOnly,
         activity,
-        noWin: prizes.length === 0 ? { sub: this.#dayStatsText() } : null,
+        noWin: prizes.length === 0 && !activity?.hasCoinflipBet
+          ? { sub: this.#dayStatsText() }
+          : null,
       });
       // The summary is a one-shot epilogue for this player/day. Persist the
       // consumption so refresh cannot bring the action row back after it has

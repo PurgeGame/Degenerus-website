@@ -151,9 +151,11 @@ function _readContract() {
 const LOG_CHUNK_BLOCKS = 1800;
 const LOG_CHUNK_LIMIT = 10;
 
-export async function readLastVolumeSeal() {
+export async function readLastVolumeSeal({ round } = {}) {
   const provider = _readerProvider();
   const contract = _readContract();
+  const wantedRound = Number(round);
+  const hasWantedRound = Number.isInteger(wantedRound) && wantedRound > 0;
   let head;
   try {
     head = Number(await provider.getBlockNumber());
@@ -168,19 +170,39 @@ export async function readLastVolumeSeal() {
     const from = Math.max(0, to - LOG_CHUNK_BLOCKS + 1);
     let logs;
     try {
-      logs = await contract.queryFilter(contract.filters.VolumeRoundSealed(), from, to);
+      // Once volumeMarketState has told the panel the contract-authoritative
+      // open round, ask for that exact adjacent seal. A generic "latest" scan
+      // can legitimately return a different round while the local day clock or
+      // indexer is crossing a deployment/round boundary, which used to make the
+      // whole Yesterday line disappear even though its log was available.
+      logs = await contract.queryFilter(
+        contract.filters.VolumeRoundSealed(hasWantedRound ? wantedRound : undefined),
+        from,
+        to,
+      );
     } catch (_e) {
       // A provider that will not serve historical logs is not an error state —
       // the book still renders, just without the benchmark line.
       return null;
     }
     if (logs && logs.length > 0) {
-      const a = logs[logs.length - 1].args;
+      // Some injected/legacy providers ignore indexed filter arguments. Keep
+      // the round check client-side too so an unrelated newest seal can never
+      // displace the actual openRound - 1 benchmark.
+      const matching = hasWantedRound
+        ? logs.filter((log) => Number(log?.args?.round ?? log?.args?.[0] ?? 0) === wantedRound)
+        : logs;
+      if (matching.length === 0) {
+        if (from === 0) break;
+        continue;
+      }
+      const latest = matching[matching.length - 1];
+      const a = latest.args;
       return {
         round: Number(a.round ?? a[0] ?? 0),
         total: BigInt(a.total ?? a[1] ?? 0),
         previous: BigInt(a.previous ?? a[2] ?? 0),
-        blockNumber: Number(logs[logs.length - 1].blockNumber ?? 0),
+        blockNumber: Number(latest.blockNumber ?? 0),
       };
     }
     if (from === 0) break;

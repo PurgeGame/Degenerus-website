@@ -256,6 +256,7 @@ function dashboardPayload() {
   return {
     player: TEST_ADDR,
     flipBalance: '987654000000000000000000',       // 987,654 FLIP
+    sdgnrsBalance: '123450000000000000000000000',   // 123,450,000 sDGNRS
     coinflip: {
       depositedAmount: '43844000000000000000000',     // 43,844 FLIP
       claimablePreview: '4526397000000000000000000',  // 4,526,397 FLIP
@@ -452,8 +453,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       el.querySelector('[data-position="tomorrow"]').querySelector('.df-position-value').textContent,
       '—',
     );
-    assert.match(el.innerHTML, /df-next-bet__label[^>]*>Add bet</,
-      'the compact input keeps its own action label');
+    assert.doesNotMatch(el.innerHTML, /BET AMOUNT/,
+      'the compact stepper does not spend width on a redundant label');
 
     finishCurrent('12000000000000000000000');
     finishResolved('43844000000000000000000');
@@ -866,8 +867,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(rows.length, 2, 'today + tomorrow stay as separate boxes');
     const text = rows.map((r) => r.textContent).join(' | ');
     assert.match(text, /Today's bet/, 'resolved-day box is retained');
-    assert.match(el.innerHTML, /df-next-bet__label[^>]*>Add bet</,
-      'the input lane has its own compact action label');
+    assert.doesNotMatch(el.innerHTML, /BET AMOUNT/,
+      'the input lane leaves its width to the amount and Tomorrow total');
     assert.equal(
       el.querySelector('[data-position="tomorrow"]').querySelector('.df-position-label').textContent,
       "Tomorrow's bet",
@@ -884,11 +885,13 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(el.querySelectorAll('.df-position-delta').length, 0,
       'ordinary indexed values do not carry settlement markers');
     const displays = el.querySelectorAll('.df-funds__display');
-    assert.equal(displays.length, 2);
+    assert.equal(displays.length, 3);
     assert.ok(displays[0].classList.contains('df-funds__display--claimable'),
       'claimable is the top funds box');
     assert.ok(displays[1].classList.contains('df-funds__display--wallet'),
-      'wallet is the bottom funds box');
+      'wallet stays below claimable');
+    assert.ok(displays[2].classList.contains('df-funds__display--sdgnrs'),
+      'sDGNRS is the new bottom funds box');
     assert.match(
       APP_CSS,
       /body\.layout-basic \.df-funds__value\s*\{[^}]*text-align:\s*right/s,
@@ -916,8 +919,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /\.df-modifier-meter__marker\s*\{[^}]*bottom:/s,
       'modifier marker travels vertically');
     assert.match(APP_CSS,
-      /\.df-next-bet__label\s*\{/,
-      'tomorrow label has its own slot above the compact input');
+      /\.df-next-bet__stepper\s*\{[^}]*height:\s*1\.65rem/s,
+      'the amount stepper stays short inside the Tomorrow row');
     const claim = el.querySelector('[data-bind="df-claim-flip-cta"]');
     assert.ok(claim.disabled, 'claim stays unlit while its balance is masked');
     el.disconnectedCallback();
@@ -1131,12 +1134,16 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     const flip = el.querySelector('[data-bind="df-flip-cta"]');
     assert.ok(flip, 'Add Bet CTA');
-    assert.match(el.innerHTML, /aria-label="Add bet"[^>]*>\+<\/button>/,
-      'compact plus action remains accessibly labeled Add Bet');
+    assert.match(el.innerHTML, /aria-label="Add bet"[^>]*>ADD BET<\/button>/,
+      'the transaction control names its full Add Bet action');
     const amount = el.querySelector('[name="df-amount"]');
     amount.value = '54000';
     amount.dispatchEvent({ type: 'input' });
-    assert.equal(flip.title, 'Bet 54k', 'plus tooltip abbreviates the entered stake');
+    assert.equal(flip.title, 'Bet 54k', 'button tooltip abbreviates the entered stake');
+    el.querySelector('[data-bind="df-bet-up"]').dispatchEvent({ type: 'click' });
+    assert.equal(amount.value, '54100', 'custom up arrow adds the explicit 100 FLIP step');
+    el.querySelector('[data-bind="df-bet-down"]').dispatchEvent({ type: 'click' });
+    assert.equal(amount.value, '54000', 'custom down arrow removes the same step');
     assert.ok(
       el.innerHTML.indexOf('data-bind="df-add-bet-controls"')
         < el.innerHTML.indexOf('data-bind="df-position-tomorrow"'),
@@ -1147,6 +1154,55 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.ok(!/Claim DGNRS/.test(el.innerHTML), 'no claim label in markup');
     assert.equal(el.querySelector('[data-bind="df-redeem-group"]'), null,
       'FLIP redemption lives only in the purchase panel');
+    el.disconnectedCallback();
+  });
+
+  test('bottom sDGNRS box shows the DB balance and opens an amount-confirmed burn', async () => {
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+    const el = mount();
+    await flushMicrotasks();
+
+    const box = el.querySelector('[data-bind="df-funds-sdgnrs-box"]');
+    const value = el.querySelector('[data-bind="df-funds-sdgnrs"]');
+    const burn = el.querySelector('[data-bind="df-burn-sdgnrs-cta"]');
+    assert.ok(box, 'sDGNRS is a third, bottom funds box');
+    assert.equal(value.textContent, '123M sDGNRS', 'large sDGNRS balances abbreviate to whole millions');
+    assert.equal(burn.disabled, false, 'the owner can open the burn flow with at least 1 sDGNRS');
+    assert.match(el.innerHTML, /class="sdgnrs-badge df-sdgnrs-badge"/,
+      'the balance uses the same normal Degenerus badge as sDGNRS rewards');
+    assert.match(el.innerHTML, /crypto_06_ethereum_purple\.svg/,
+      'the sDGNRS badge has the purple currency frame');
+    assert.match(el.innerHTML, /special_eth\.svg/,
+      'the sDGNRS badge carries the ETH mark with three flames');
+    assert.match(APP_CSS, /\.df-funds__display--sdgnrs\s*\{[^}]*grid-template-areas:\s*"badge claim label"/s,
+      'the badge has a dedicated slot and cannot overlap the burn control');
+    assert.ok(
+      el.innerHTML.indexOf('data-bind="df-funds-wallet-box"')
+        < el.innerHTML.indexOf('data-bind="df-funds-sdgnrs-box"'),
+      'sDGNRS sits below the wallet box',
+    );
+    assert.ok(
+      el.innerHTML.indexOf('data-bind="df-burn-sdgnrs-cta"')
+        < el.innerHTML.indexOf('<span class="df-funds__label">sDGNRS</span>'),
+      'Burn is laid out on the left of the label and balance',
+    );
+
+    burn.dispatchEvent({ type: 'click' });
+    const dialog = el.querySelector('[data-bind="df-burn-dialog"]');
+    const input = el.querySelector('[name="df-sdgnrs-amount"]');
+    assert.equal(dialog.hidden, false, 'Burn opens the explicit amount confirmation');
+    assert.equal(input.value, '1', 'the destructive action defaults to the contract minimum');
+    assert.match(el.innerHTML, /25%–175% of the previewed ETH value/,
+      'confirmation explains the delayed RNG range');
+    assert.ok(el.querySelector('[data-bind="df-burn-expected"]'),
+      'confirmation reserves a live expected-value readout');
+
+    el.querySelector('[data-bind="df-burn-max"]').dispatchEvent({ type: 'click' });
+    assert.equal(input.value, '123450000', 'MAX preserves the exact burnable balance');
+    assert.equal(el.querySelector('[data-bind="df-burn-accept"]').disabled, false);
+
+    dialog.dispatchEvent({ type: 'click', target: dialog });
+    assert.equal(dialog.hidden, true, 'clicking the backdrop cancels without burning');
     el.disconnectedCallback();
   });
 

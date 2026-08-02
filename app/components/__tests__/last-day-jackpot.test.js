@@ -1059,6 +1059,8 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         lootboxesOpened: 2,
         hasCoinflipBet: false,
         coinflipWon: null,
+        coinflipStakeAmount: '0',
+        coinflipRewardPercent: 0,
       });
       assert.ok(requested.some((url) => url.includes('/packs?day=5')),
         'pack count came from the day-scoped DB feed');
@@ -1133,6 +1135,8 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         'the reveal layer can play the consolation horn instead of confetti');
       assert.equal(queued.activity.hasCoinflipBet, true);
       assert.equal(queued.activity.coinflipWon, false);
+      assert.equal(queued.activity.coinflipStakeAmount, '250000000000000000000');
+      assert.equal(queued.activity.coinflipRewardPercent, 0);
     } finally {
       if (el) el.disconnectedCallback();
       globalThis.fetch = priorFetch;
@@ -1164,7 +1168,11 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
             activity: {
               lootboxPurchases: [],
               lootboxResults: [],
-              coinflip: { stakeAmount: '250000000000000000000', win: true },
+              coinflip: {
+                stakeAmount: '250000000000000000000',
+                win: true,
+                rewardPercent: 82,
+              },
             },
           }),
         };
@@ -1186,10 +1194,13 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
 
       const [queued] = revealMod.__takeQueuedForTest();
       assert.deepEqual(queued.prizes, [], 'no consolation is fabricated after a win');
-      assert.ok(queued.noWin, 'the otherwise empty jackpot summary keeps its normal no-hit card');
+      assert.equal(queued.noWin, null,
+        'the coinflip receipt replaces a generic empty-day card');
       assert.equal(queued.consolationOnly, false);
       assert.equal(queued.activity.hasCoinflipBet, true);
       assert.equal(queued.activity.coinflipWon, true);
+      assert.equal(queued.activity.coinflipStakeAmount, '250000000000000000000');
+      assert.equal(queued.activity.coinflipRewardPercent, 82);
     } finally {
       if (el) el.disconnectedCallback();
       globalThis.fetch = priorFetch;

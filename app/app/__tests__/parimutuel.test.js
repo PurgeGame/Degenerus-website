@@ -442,8 +442,39 @@ describe('readLastVolumeSeal', () => {
   // back from the head in under-cap chunks instead.
   test('scans backwards in chunks under the RPC block-range cap', () => {
     assert.match(SRC, /LOG_CHUNK_BLOCKS = 1800/);
-    assert.match(SRC, /queryFilter\(contract\.filters\.VolumeRoundSealed\(\), from, to\)/);
+    assert.match(SRC, /contract\.filters\.VolumeRoundSealed\(hasWantedRound \? wantedRound : undefined\)/);
+    assert.match(SRC, /contract\.queryFilter\([\s\S]{0,180}\bfrom,\s*\n\s*to,/,
+      'the filtered query still uses bounded block chunks');
     assert.ok(!/queryFilter\([^)]*\b0, 'latest'/.test(SRC), 'no unbounded from-zero log query');
+  });
+
+  test('an exact-round read ignores a newer unrelated seal from a legacy provider', async () => {
+    const filterRounds = [];
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => 100,
+    });
+    pari.__setContractFactoryForTest(() => ({
+      filters: {
+        VolumeRoundSealed: (round) => {
+          filterRounds.push(round);
+          return { round };
+        },
+      },
+      // Deliberately ignore the filter, as some old/injected providers did.
+      queryFilter: async () => [
+        { blockNumber: 80, args: { round: 41, total: 800n, previous: 400n } },
+        { blockNumber: 90, args: { round: 42, total: 1200n, previous: 800n } },
+      ],
+      connect() { return this; },
+    }));
+    const seal = await pari.readLastVolumeSeal({ round: 41 });
+    assert.deepEqual(seal, {
+      round: 41, total: 800n, previous: 400n, blockNumber: 80,
+    });
+    assert.equal(filterRounds[0], 41, 'the indexed event filter receives openRound - 1');
+    pari.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
   });
 
   test('an unreachable head or log service reads null, not a throw', async () => {

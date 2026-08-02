@@ -343,7 +343,7 @@ function growthCard(el) { return el.querySelector('[data-bind="pari-growth"]'); 
 function decimatorCard(el) { return el.querySelector('[data-bind="pari-decimator"]'); }
 
 const revealMod = await import('../reveal-overlay.js');
-const { thermometerScale } = await import('../app-parimutuel-panel.js');
+const { thermometerScale, decimatorWindowIsOpen } = await import('../app-parimutuel-panel.js');
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 
 test('thermometer color scale is target-anchored and becomes solid green after crossing', () => {
@@ -363,6 +363,17 @@ test('thermometer color scale is target-anchored and becomes solid green after c
     /\.pari-thermometer--over \.pari-thermometer__fill\s*\{[^}]*background:\s*#22c55e/s,
     'crossed thermometer uses one solid green fill',
   );
+});
+
+test('Decimator window accepts indexed shapes and the deterministic milestone fallback', () => {
+  assert.equal(decimatorWindowIsOpen({ level: 42, decWindowOpen: true }), true);
+  assert.equal(decimatorWindowIsOpen({ level: 42, decimator: { windowOpen: true } }), true);
+  assert.equal(decimatorWindowIsOpen({ level: 42 }, { roundStatus: 'open' }), true);
+  assert.equal(decimatorWindowIsOpen({ level: 24, decWindowOpen: false }), true,
+    'an x4 window stays visible when the indexed latch lags the transition');
+  assert.equal(decimatorWindowIsOpen({ level: 99, decWindowOpen: false }), true);
+  assert.equal(decimatorWindowIsOpen({ level: 94, decWindowOpen: false }), false);
+  assert.equal(decimatorWindowIsOpen({ level: 25, decWindowOpen: false }), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -465,6 +476,22 @@ describe('app-parimutuel-panel', () => {
       ['static', TEST_ADDR, 3_000n * FLIP],
       ['send', TEST_ADDR, 3_000n * FLIP],
     ]);
+    el.disconnectedCallback();
+  });
+
+  test('the active x4 Decimator round renders even while the indexed latch is stale', async () => {
+    _gameState = {
+      level: 24,
+      phase: 'PURCHASE',
+      decWindowOpen: false,
+      prizePools: { futurePrizePool: '1250000000000' },
+    };
+    installContract({ growth: { 24: { openRound: 0 } } });
+
+    const el = await mount();
+    const card = decimatorCard(el);
+    assert.equal(card.hidden, false);
+    assert.match(card.querySelector('.pari-book__title').textContent, /DECIMATOR · Level 25/);
     el.disconnectedCallback();
   });
 

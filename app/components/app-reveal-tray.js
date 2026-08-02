@@ -18,6 +18,7 @@ import { subscribePendingActions } from '../app/pending-actions.js';
 
 const REVEAL_KINDS = new Set(['lootbox', 'degenerette', 'tickets']);
 const ERROR_AUTO_CLEAR_MS = 10_000;
+const CLEAR_BOXES_BUSY_ID = 'lootbox:clear-all';
 
 export function actionableRevealItems(items) {
   return (Array.isArray(items) ? items : []).filter((item) => (
@@ -43,6 +44,8 @@ class AppRevealTray extends HTMLElement {
     if (this.#initialized) return;
     this.#initialized = true;
     this.#renderShell();
+    const clear = this.querySelector('[data-bind="rrt-clear"]');
+    if (clear) clear.addEventListener('click', () => this.#clearLootboxes());
     this.#unsubscribe = subscribePendingActions((items) => {
       this.#items = actionableRevealItems(items);
       this.#render();
@@ -69,6 +72,8 @@ class AppRevealTray extends HTMLElement {
             <strong>READY TO OPEN</strong>
             <span data-bind="rrt-count"></span>
           </span>
+          <button type="button" class="rrt-clear" data-bind="rrt-clear" hidden
+                  aria-label="Dismiss all pending lootbox opens">CLEAR BOXES</button>
         </div>
         <div class="rrt-actions" data-bind="rrt-actions"></div>
         <div class="rrt-error" data-bind="rrt-error" hidden role="alert"></div>
@@ -91,15 +96,53 @@ class AppRevealTray extends HTMLElement {
     }
   }
 
+  async #clearLootboxes() {
+    if (this.#busyId != null) return;
+    // One controller publishes one callback on each of its rows. Collapse by
+    // source so a two-box tray still invokes that owner exactly once.
+    const owners = new Map();
+    for (const item of this.#items) {
+      if (item?.kind !== 'lootbox' || typeof item.clearAll !== 'function') continue;
+      owners.set(String(item.source || item.id), item.clearAll);
+    }
+    if (owners.size === 0 || this.#items.some((item) => (
+      item?.kind === 'lootbox' && item?.state === 'busy'
+    ))) return;
+
+    this.#busyId = CLEAR_BOXES_BUSY_ID;
+    this.#clearError();
+    this.#render();
+    try {
+      for (const clearAll of owners.values()) await clearAll();
+    } catch (error) {
+      this.#showError(error?.userMessage || error?.message || 'Could not clear box reminders.');
+    } finally {
+      this.#busyId = null;
+      this.#render();
+    }
+  }
+
   #render() {
     const tray = this.querySelector('[data-bind="rrt-tray"]');
     const count = this.querySelector('[data-bind="rrt-count"]');
     const host = this.querySelector('[data-bind="rrt-actions"]');
+    const clear = this.querySelector('[data-bind="rrt-clear"]');
     if (!tray || !count || !host) return;
     const items = this.#items;
     tray.hidden = items.length === 0;
     count.textContent = `${items.length} ${items.length === 1 ? 'result' : 'results'}`;
     host.textContent = '';
+
+    const clearableBoxes = items.filter((item) => (
+      item?.kind === 'lootbox' && typeof item.clearAll === 'function'
+    ));
+    const clearingBoxes = this.#busyId === CLEAR_BOXES_BUSY_ID;
+    if (clear) {
+      clear.hidden = clearableBoxes.length === 0;
+      clear.disabled = clearingBoxes || this.#busyId != null
+        || clearableBoxes.some((item) => item.state === 'busy');
+      clear.textContent = clearingBoxes ? 'CLEARING…' : 'CLEAR BOXES';
+    }
 
     for (const item of items) {
       const localBusy = this.#busyId === item.id;
@@ -107,14 +150,38 @@ class AppRevealTray extends HTMLElement {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = `rrt-action rrt-action--${item.kind}${busy ? ' is-busy' : ''}`;
-      button.disabled = busy || typeof item.run !== 'function';
+      button.disabled = busy || clearingBoxes || typeof item.run !== 'function';
       button.setAttribute('data-action-id', item.id);
       button.setAttribute('aria-label', `${item.shortLabel || 'Open'}: ${item.label}`);
 
       const art = document.createElement('span');
       art.className = `rrt-action__art rrt-action__art--${item.kind}`;
       art.setAttribute('aria-hidden', 'true');
-      art.textContent = item.kind === 'lootbox' ? '?' : item.kind === 'degenerette' ? 'D' : '✦';
+      if (item.kind === 'tickets') {
+        // Use the same branded tear-pack silhouette as the opening overlay.
+        // This miniature has its own fixed aspect ratio so the button grid can
+        // never collapse the wrapper into a horizontal sliver.
+        const pack = document.createElement('span');
+        pack.className = 'rvl-pack rrt-pack-art';
+        const shine = document.createElement('span');
+        shine.className = 'rvl-pack-shine';
+        const brand = document.createElement('span');
+        brand.className = 'rvl-pack-brand';
+        const logo = document.createElement('img');
+        logo.className = 'rvl-pack-logo';
+        logo.src = '/whitepaper/flame-logo.svg';
+        logo.alt = '';
+        const edition = document.createElement('span');
+        edition.className = 'rvl-pack-edition';
+        edition.textContent = 'TICKET PACK';
+        brand.appendChild(logo);
+        brand.appendChild(edition);
+        pack.appendChild(shine);
+        pack.appendChild(brand);
+        art.appendChild(pack);
+      } else {
+        art.textContent = item.kind === 'lootbox' ? '?' : 'D';
+      }
 
       const copy = document.createElement('span');
       copy.className = 'rrt-action__copy';

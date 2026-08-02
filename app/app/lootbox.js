@@ -34,8 +34,8 @@ function _registerFoilError(name, mapping) {
 
 _registerFoilError('FoilAlreadyBought', {
   code: 'FoilAlreadyBought',
-  userMessage: 'You already own a foil pack for this level — one per level.',
-  recoveryAction: 'Wait for the next level to buy another.',
+  userMessage: 'Foil pack purchase is unavailable for this transaction.',
+  recoveryAction: 'Refresh the level and try again.',
 });
 _registerFoilError('DirectEthInsufficient', {
   code: 'DirectEthInsufficient',

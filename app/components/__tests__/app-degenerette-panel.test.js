@@ -484,6 +484,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       /<a class="deg-learn-link" href="\/learn\/degenerette\/">DEGENERETTE<\/a>/,
       'Degenerette heading links to its Learn page',
     );
+    assert.match(
+      APP_CSS,
+      /body\.layout-basic \.deg-heading h2\s*\{[^}]*font-size:\s*1\.05rem;[^}]*font-weight:\s*950;/s,
+      'Degenerette heading matches the bold Quests hierarchy',
+    );
     const placeCta = el.querySelector('.deg-place-cta');
     assert.ok(placeCta, 'Place CTA rendered');
     const resolveCta = el.querySelector('.deg-resolve-cta');
@@ -501,7 +506,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.match(PANEL_SRC, /aria-label="Wager currency"/);
     assert.match(PANEL_SRC, /aria-label="Bet per spin"/);
     assert.match(PANEL_SRC, /aria-label="Number of spins"/);
-    assert.match(PANEL_SRC, /\/shared\/eth-blue\.svg/);
+    assert.match(PANEL_SRC, /\/badges-circular\/crypto_06_ethereum_blue\.svg/,
+      'ETH uses the blue circular Degenerus trait badge');
     assert.match(PANEL_SRC, /\/whitepaper\/flame-logo\.svg/);
     assert.match(PANEL_SRC, /\/shared\/coinflip-face-red\.svg/);
     const placeAt = PANEL_SRC.indexOf('class="deg-place-cta"', wagerAt);

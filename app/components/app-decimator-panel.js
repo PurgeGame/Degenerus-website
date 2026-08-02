@@ -93,10 +93,8 @@ const POLL_INTERVAL_MS = 30_000;       // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 const POST_CONFIRM_REFETCH_MS = 250;   // CF-06 — 250ms debounced refetch on tx confirm.
 const ERROR_AUTO_CLEAR_MS = 10_000;    // 10s — mirrors Phase 61 D-05 pattern.
 const FUNDING_PRIORITY_KEY = `purchase-funding-priority:${CHAIN.id}`;
-// Versioned markers are written only from authoritative evidence: the mined
-// FoilPackBought event's own level, or a FoilAlreadyBought contract preflight.
-// Since the key also includes chain + wallet + level, that fact never expires;
-// expiring it used to re-offer an already-owned pack when indexing took >5m.
+// Versioned markers retain receipt/indexer diagnostics across refreshes. They
+// are never allowed to gate the checkbox; only purchase.staticCall decides.
 const FOIL_OWNERSHIP_MARKER_VERSION = 3;
 
 function _readFundingPriority() {
@@ -199,8 +197,8 @@ export function purchaseFlipCreditBreakdown({
 }
 
 // `/player/:address/foil` reports the FoilPackBought row even before its four
-// ticket lines resolve. Keep the mined receipt's ownership bit locally too, so
-// the add-on disappears immediately while the indexer catches up.
+// ticket lines resolve. Keep that hint for diagnostics/cross-tab refreshes,
+// without using it to suppress a purchase.
 function _foilOwnedKey(address, level) {
   return `foil-owned:${CHAIN.id}:${String(address || '').toLowerCase()}:${Number(level)}`;
 }
@@ -268,10 +266,8 @@ class AppDecimatorPanel extends HTMLElement {
   #affiliateAddress = null;
   #affiliatePrefilledFor = null;
   #affiliateLocallyAssigned = new Set();
-  // --- Foil pack ownership for the ACTING buyer at the current target level.
-  //     null = unknown (loading, endpoint unreachable, or no wallet) → the row
-  //     stays hidden. It is shown only by an explicit DB `present: false` for
-  //     this exact level. {level, owned} pins which level the answer applies to.
+  // --- Informational foil ownership hint for the acting buyer/target level.
+  //     It never gates the row; purchase.staticCall owns that decision.
   #foilStatus = null;
   #foilSeq = 0;
   // --- FLIP ticket buy (GAME.redeemFlip). The internal latch is governed by
@@ -639,8 +635,7 @@ class AppDecimatorPanel extends HTMLElement {
         if (typeof event?.key === 'string' && event.key.startsWith(prefix)) {
           this.#renderFundsFooter();
         } else if (typeof event?.key === 'string' && event.key.startsWith(foilPrefix)) {
-          // A foil buy in another tab should retire this tab's checkbox before
-          // the indexer round-trip catches up.
+          // Refresh the hint for diagnostics; it must not retire the checkbox.
           this.#refreshFoilStatus();
         }
       };
@@ -909,10 +904,10 @@ class AppDecimatorPanel extends HTMLElement {
   }
 
   // ---------------------------------------------------------------------
-  // Foil pack status — one per (player, level). DB-first pre-check via
-  // /player/:addr/foil?level=target for the ACTING buyer; the contract's
-  // FoilAlreadyBought static-call stays the authoritative backstop (e.g. a
-  // just-bought pack the indexer hasn't ingested yet).
+  // Foil pack status is informational only. Indexed ticket rows and local
+  // receipt markers have both proven capable of lagging/misrouting around a
+  // level transition, so neither may suppress the purchase control. The
+  // value-accurate purchase.staticCall remains the ownership authority.
   // ---------------------------------------------------------------------
 
   async #refreshFoilStatus() {
@@ -950,9 +945,8 @@ class AppDecimatorPanel extends HTMLElement {
       }
     } catch (_e) {
       if (seq !== this.#foilSeq) return;
-      // A very recent mined receipt is still enough to suppress a duplicate;
-      // otherwise keep the option usable. The contract simulation immediately
-      // before the write remains the authoritative duplicate check.
+      // Preserve a recent receipt as a hint. The contract simulation
+      // immediately before the write remains the only duplicate gate.
       this.#foilStatus = receiptPendingIndex
         ? { level: target, owned: true }
         : { level: target, owned: null };
@@ -967,12 +961,10 @@ class AppDecimatorPanel extends HTMLElement {
     const check = this.querySelector('[data-bind="dec-foil-check"]');
     const priceEl = this.querySelector('[data-bind="dec-foil-price"]');
     const target = this.#targetLevel();
-    const answered = Boolean(this.#foilStatus && this.#foilStatus.level === target);
-    const owned = Boolean(answered && this.#foilStatus.owned === true);
-    // `owned: null` means the indexer could not answer. Do not turn a read-side
-    // outage into a purchase outage: the click path still refreshes and then
-    // runs the contract's value-accurate static call before sending anything.
-    const available = Boolean(answered && !owned && this.#gameState?.gameOver !== true);
+    // Do not gate this on #foilStatus. A stale `present: true` was preventing
+    // legitimate first-day/quest buys. Target routing + game-over are stable
+    // UI facts; ownership is checked by the contract preflight on click.
+    const available = Boolean(target != null && this.#gameState?.gameOver !== true);
 
     if (priceEl) {
       let text = '—';
@@ -985,13 +977,9 @@ class AppDecimatorPanel extends HTMLElement {
       check.disabled = !available || this.#flipModeEnabled();
       if (!available || this.#flipModeEnabled()) check.checked = false;
     }
-    // One per (player, level), so once it is held the row is dead weight in the
-    // buy panel: hide it outright rather than parking a disabled checkbox and an
-    // OWNED chip in the middle of the flow (user call). The owned state above is
-    // still computed — it is what keeps the foil leg out of the pending total,
-    // and the row comes straight back at the next level.
+    // Ownership hints never hide the row; only the authoritative click-time
+    // simulation may reject a duplicate.
     row.hidden = !available;
-    // Owned flip can zero the foil leg out of the pending total.
     this.#updateTotalLabel();
   }
 
@@ -1261,9 +1249,7 @@ class AppDecimatorPanel extends HTMLElement {
   #foilWanted() {
     const check = this.querySelector('[data-bind="dec-foil-check"]');
     if (!check || check.disabled) return false;
-    const target = this.#targetLevel();
-    const owned = Boolean(this.#foilStatus && this.#foilStatus.level === target && this.#foilStatus.owned);
-    return Boolean(check.checked) && !owned;
+    return Boolean(check.checked);
   }
 
   #markFoilOwned(level, buyer = getActingAddress(), source = 'receipt') {
@@ -1502,19 +1488,9 @@ class AppDecimatorPanel extends HTMLElement {
           const gs = await fetchJSON('/game/state');
           if (gs) this.#gameState = gs;
         } catch (_e) { /* network blip — fall back to the cached snapshot */ }
-        // Ownership can change while the panel is open (or the routed level can
-        // flip between polls). Re-check the exact click-time target before
-        // asking the contract to buy a one-per-level pack.
-        if (foilWanted) {
-          const foilStatus = await this.#refreshFoilStatus();
-          foilWanted = this.#foilWanted();
-          if (!foilWanted) {
-            this.#renderError(foilStatus?.owned
-              ? 'You already own a foil pack for this level — one per level.'
-              : 'Foil pack is not available for this purchase.');
-            return;
-          }
-        }
+        // Never re-check indexed ownership here. purchaseEth immediately runs
+        // the exact contract static-call with this level/value, which is both
+        // fresher and authoritative.
         const priceWei = this.#ticketPriceWei();
         if (priceWei == null) {
           this.#renderError('Ticket price unavailable — try again in a moment.');
@@ -1549,8 +1525,8 @@ class AppDecimatorPanel extends HTMLElement {
       } catch (_e) { boxes = []; }
       try {
         // Foil leg confirmed by its receipt event (NOT optimistic — the tx
-        // mined): flip the row to OWNED immediately (the indexer's
-        // /foil endpoint may lag a few blocks).
+        // mined): clear the selected add-on and retain an informational marker.
+        // The marker does not hide or disable future level attempts.
         const foilBought = parseFoilPackBoughtFromReceipt(receipt, contract)
           .find((f) => String(f.buyer || '').toLowerCase() === String(buyer || '').toLowerCase());
         const boughtFoilLevel = foilBought?.level ?? (foilWanted ? this.#targetLevel() : null);
@@ -1622,11 +1598,6 @@ class AppDecimatorPanel extends HTMLElement {
     } catch (error) {
       // Decoded structured-revert error from lootbox.js (.userMessage / .code
       // / .recoveryAction / .cause). Render via textContent (T-58-18).
-      // If the indexer was behind, the contract is the authoritative ownership
-      // answer: retire the stale option immediately so retrying cannot loop.
-      if (error?.code === 'FoilAlreadyBought') {
-        this.#markFoilOwned(this.#targetLevel(), getActingAddress(), 'contract');
-      }
       this.#renderError(compactUiError(error, 'Purchase did not go through. Try again.'));
     } finally {
       if (btn) btn.disabled = false;

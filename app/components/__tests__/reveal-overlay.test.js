@@ -179,6 +179,7 @@ const {
 } =
   await import('../reveal-overlay.js');
 const { dgnUnpackTicket } = await import('../../app/dgn-traits.js');
+const pendingActionsMod = await import('../../app/pending-actions.js');
 
 const REVEAL_SRC = readFileSync(new URL('../reveal-overlay.js', import.meta.url), 'utf8');
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
@@ -209,6 +210,12 @@ describe('normalizeSequence', () => {
     assert.equal(seq.cards[0].value, '11');
     assert.equal(seq.cards[1].type, 'flip');
     assert.equal(seq.cards[1].value, '12,345', 'whole-coin rewards use thousands separators');
+    assert.equal(seq.cards[1].sub, undefined, 'FLIP receipt has no misleading action list');
+    assert.match(
+      APP_CSS,
+      /\.rvl-card--dgnrs \.rvl-card-value\s*\{[^}]*white-space:\s*nowrap[^}]*overflow-wrap:\s*normal/s,
+      'seven-figure DGNRS amounts stay together instead of wrapping at a comma',
+    );
     assert.equal(seq.cards[2].type, 'spins');
     assert.equal(seq.cards[2].rarity, 'rare', 'the mystery card has a neutral rarity');
     assert.equal(seq.cards[2].revealedRarity, 'epic', 'ETH becomes epic after the reveal');
@@ -445,6 +452,7 @@ describe('normalizeSequence', () => {
       kind: 'jackpot', day: 9, prizes: [], noWin: { sub: '59 winners this day' },
     });
     assert.equal(seq.title, 'DAY 9 SUMMARY');
+    assert.equal(seq.daySummary, true, 'the receipt gets its own non-squeezing layout');
     assert.equal(seq.big, false, 'no fanfare-scale celebration for a miss');
     assert.equal(seq.autoStart, true);
     assert.equal(seq.cards.length, 1);
@@ -479,6 +487,42 @@ describe('normalizeSequence', () => {
     assert.match(seq.cards[1].sub, /14 tickets/);
     assert.equal(seq.cards[2].value, '×3');
     assert.match(seq.cards[2].sub, /2 opened/);
+  });
+
+  test('day summary includes the settled coinflip stake result and winning multiplier', () => {
+    const stake = 250n * 10n ** 18n;
+    const won = normalizeSequence({
+      kind: 'jackpot',
+      day: 9,
+      prizes: [],
+      activity: {
+        hasCoinflipBet: true,
+        coinflipWon: true,
+        coinflipStakeAmount: stake.toString(),
+        coinflipRewardPercent: 82,
+      },
+    });
+    const winCard = won.cards.find((card) => card.type === 'coinflip-result');
+    assert.ok(winCard);
+    assert.equal(winCard.value, 'WIN +455 FLIP');
+    assert.equal(winCard.sub, '182%');
+    assert.equal(winCard.icon, '/shared/coinflip-face-eth.svg');
+    assert.equal(winCard.outcome, 'win');
+
+    const lost = normalizeSequence({
+      kind: 'jackpot',
+      day: 9,
+      prizes: [{ type: 'wwxrp', amount: 10n ** 18n }],
+      activity: {
+        hasCoinflipBet: true,
+        coinflipWon: false,
+        coinflipStakeAmount: stake.toString(),
+      },
+    });
+    const lossCard = lost.cards.find((card) => card.type === 'coinflip-result');
+    assert.ok(lossCard);
+    assert.equal(lossCard.value, 'LOSS -250 FLIP');
+    assert.equal(lossCard.outcome, 'loss');
   });
 
   test('unknown kind / junk → null', () => {
@@ -712,6 +756,7 @@ function instantiate() {
 describe('reveal-overlay element', () => {
   beforeEach(() => {
     __resetForTest();
+    pendingActionsMod.__resetPendingActionsForTest();
   });
 
   test('queueReveal before mount buffers; connect drains and shows summary (reduced motion)', async () => {
@@ -759,8 +804,165 @@ describe('reveal-overlay element', () => {
     assert.match(APP_CSS, /@keyframes rvl-case-unlock/);
     assert.match(APP_CSS, /@keyframes rvl-case-lid-open/);
     assert.match(APP_CSS, /@keyframes rvl-case-rays/);
-    assert.match(REVEAL_SRC, /const chargeMs = isLootbox \? 1180 : 900/,
-      'lootbox anticipation is longer than the generic pack shake');
+    assert.match(REVEAL_SRC, /const LOOTBOX_MANUAL_CHARGE_MS = 820/,
+      'a single box gets a shorter anticipation beat');
+    assert.match(REVEAL_SRC, /const LOOTBOX_AUTO_CHARGE_MS = 560/,
+      'batched boxes use the faster automatic crack');
+    assert.match(REVEAL_SRC, /const LOOTBOX_AUTO_RESULT_MS = 1_750/,
+      'auto mode spends the recovered time on the readable result');
+    assert.match(APP_CSS, /--rvl-box-charge:\s*0\.82s/,
+      'the chest choreography tracks the shortened JS timing');
+    assert.match(APP_CSS, /\.rvl-stage--auto-lootbox\s*\{[^}]*--rvl-box-charge:\s*0\.56s/s,
+      'auto mode has a matching accelerated CSS choreography');
+  });
+
+  test('ordinary lootbox rewards reach the roomy receipt with detailed pack art and no heading', async () => {
+    queueReveal({
+      kind: 'lootbox',
+      lootboxIndex: 47,
+      legs: [{
+        legType: 'opened',
+        wholeTickets: 10,
+        futureLevel: 63,
+        flip: 250n * 10n ** 18n,
+      }],
+    });
+    const el = instantiate();
+    await tick();
+
+    const title = el.querySelector('[data-bind="rvl-title"]');
+    const summary = el.querySelector('[data-bind="rvl-summary"]');
+    assert.equal(title.hidden, true, 'the lootbox art needs no LOOTBOX REPLAY heading');
+    assert.equal(summary.hidden, false, 'ordinary rewards cannot abort on a missing spin board');
+    const pack = summary.querySelector('.rvl-reward-pack');
+    assert.ok(pack, 'ticket rewards reuse the full opening-pack artwork');
+    assert.equal(pack.querySelector('.rvl-pack-level').textContent, 'LEVEL 63');
+    assert.equal(pack.querySelector('.rvl-pack-count').textContent, '10 TICKETS');
+    assert.match(APP_CSS, /\.rvl-stage--lootbox \.rvl-summary-grid[^}]*minmax\(180px, 216px\)/,
+      'lootbox receipt cards use the available screen area');
+    assert.match(REVEAL_SRC, /if \(seq\.kind === 'lootbox'\)[\s\S]*cracks straight into its one contents screen/,
+      'motion lootboxes do not deal the same reward cards once before the receipt');
+
+    summary.querySelector('.rvl-collect-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('sDGNRS rewards use the three-flame ETH mark in a normal purple badge', async () => {
+    queueReveal({
+      kind: 'lootbox', lootboxIndex: 48,
+      legs: [{ legType: 'dgnrs', amount: 12n * 10n ** 18n }],
+    });
+    const el = instantiate();
+    await tick();
+
+    const badge = el.querySelector('.sdgnrs-badge');
+    assert.ok(badge, 'sDGNRS has a composed Degenerus badge');
+    assert.equal(
+      badge.querySelector('.sdgnrs-badge__frame')?.src,
+      '/badges-circular/crypto_06_ethereum_purple.svg',
+    );
+    assert.equal(
+      badge.querySelector('.sdgnrs-badge__mark')?.src,
+      '/specials/special_eth.svg',
+      'the badge center is the ETH mark with three flames',
+    );
+    assert.doesNotMatch(REVEAL_SRC, /special_dgnrs\.svg/,
+      'the orange whale asset is no longer the sDGNRS reward icon');
+
+    el.querySelector('.rvl-collect-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('a lootbox receipt can open the next pending box without returning to the tray', async () => {
+    pendingActionsMod.publishPendingActions('next-box', [{
+      id: 'lootbox:2', kind: 'lootbox', label: 'Lootbox #2', state: 'ready',
+      run: async () => {
+        pendingActionsMod.clearPendingActions('next-box');
+        queueReveal({
+          kind: 'lootbox', lootboxIndex: 2,
+          legs: [{ legType: 'dgnrs', amount: 2n * 10n ** 18n }],
+        });
+      },
+    }]);
+    queueReveal({
+      kind: 'lootbox', lootboxIndex: 1,
+      legs: [{ legType: 'dgnrs', amount: 1n * 10n ** 18n }],
+    });
+    const el = instantiate();
+    await tick();
+
+    let summary = el.querySelector('[data-bind="rvl-summary"]');
+    assert.equal(summary.querySelector('.rvl-collect-cta').textContent, 'OPEN NEXT BOX');
+    summary.querySelector('.rvl-collect-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    for (let i = 0; i < 4; i += 1) await tick();
+
+    summary = el.querySelector('[data-bind="rvl-summary"]');
+    assert.equal(summary.querySelector('.rvl-card-value').textContent, '2');
+    assert.equal(summary.querySelector('.rvl-collect-cta').textContent, 'COLLECT');
+    summary.querySelector('.rvl-collect-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('OPEN ALL BOXES queues every ready box and pauses on the final receipt', async () => {
+    for (const [source, index] of [['box-two', 2], ['box-three', 3]]) {
+      pendingActionsMod.publishPendingActions(source, [{
+        id: `lootbox:${index}`, kind: 'lootbox', label: `Lootbox #${index}`,
+        state: 'ready', order: index,
+        run: async () => {
+          pendingActionsMod.clearPendingActions(source);
+          queueReveal({
+            kind: 'lootbox', lootboxIndex: index,
+            legs: [{ legType: 'dgnrs', amount: BigInt(index) * 10n ** 18n }],
+          });
+        },
+      }]);
+    }
+    queueReveal({
+      kind: 'lootbox', lootboxIndex: 1,
+      legs: [{ legType: 'dgnrs', amount: 1n * 10n ** 18n }],
+    });
+    const el = instantiate();
+    await tick();
+
+    const summary = el.querySelector('[data-bind="rvl-summary"]');
+    const openAll = summary.querySelector('.rvl-open-all-cta--lootboxes');
+    assert.ok(openAll);
+    assert.equal(openAll.textContent, 'OPEN ALL 2 BOXES');
+    openAll.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await new Promise((resolve) => setTimeout(resolve, 240));
+    await tick();
+
+    const lingeringSummary = el.querySelector('[data-bind="rvl-summary"]');
+    assert.equal(lingeringSummary.querySelector('.rvl-card-value').textContent, '2',
+      'auto mode leaves the intermediate reward readable instead of flashing past it');
+    assert.equal(lingeringSummary.querySelector('.rvl-collect-cta').textContent, 'OPENING NEXT BOX…');
+
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    await tick();
+
+    const finalSummary = el.querySelector('[data-bind="rvl-summary"]');
+    assert.equal(finalSummary.querySelector('.rvl-card-value').textContent, '3');
+    assert.equal(finalSummary.querySelector('.rvl-collect-cta').textContent, 'COLLECT');
+    finalSummary.querySelector('.rvl-collect-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('a direct no-vessel lootbox receipt also omits the generic LOOTBOX heading', async () => {
+    queueReveal({
+      kind: 'lootbox', noVessel: true,
+      legs: [{ legType: 'dgnrs', amount: 3n * 10n ** 18n }],
+    });
+    const el = instantiate();
+    await tick();
+    assert.equal(el.querySelector('[data-bind="rvl-title"]').hidden, true);
+    el.querySelector('.rvl-collect-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
   });
 
   test('foil pack keeps its branded full 2×2 ticket hand in reduced motion', async () => {
@@ -1073,10 +1275,18 @@ describe('reveal-overlay element', () => {
     );
     assert.match(APP_CSS, /\.rvl-gamepiece-center img\s*\{[^}]*object-position:\s*50% 50%/,
       'the shared center flame is actually centered');
-    assert.match(APP_CSS, /\.rvl-gamepiece \.rvl-rq img\s*\{[^}]*transform:\s*translateY\(-5%\)/,
-      'badge art is optically lifted without moving its quadrant');
-    assert.match(APP_CSS, /app-degenerette-panel \.dgn-ticket \.dgn-q img[\s\S]*?translateY\(-5%\)/,
-      'the ticket builder uses the same optical alignment');
+    assert.match(APP_CSS, /\.rvl-gamepiece \.rvl-rq img\s*\{[^}]*object-position:\s*50% 50%;[^}]*transform:\s*none/,
+      'badge canvases stay geometrically centered inside their cells');
+    assert.match(APP_CSS, /app-degenerette-panel \.dgn-ticket \.dgn-q img[\s\S]*?transform:\s*translateY\(4%\)/,
+      'the compact builder gets its own slight downward optical correction');
+    assert.match(APP_CSS, /\.rvl-gamepiece-center\s*\{[^}]*z-index:\s*20/,
+      'the center diamond owns a layer above clipped quadrant effects');
+    assert.match(APP_CSS, /\.rvl-gamepiece-center\.is-win::before\s*\{\s*background:\s*#22c55e/,
+      'settled win diamond stays fully opaque');
+    assert.match(APP_CSS, /\.rvl-gamepiece-center\.is-miss::before\s*\{\s*background:\s*#d94c5d/,
+      'settled miss diamond stays fully opaque');
+    assert.match(REVEAL_SRC, /dgnEthBadge:\s*'\/badges-circular\/crypto_06_ethereum_blue\.svg'/,
+      'Degenerette ETH results reuse the blue ticket-trait badge');
   });
 
   test('motion path offers the full token spin and keeps its complete result until COLLECT', async () => {

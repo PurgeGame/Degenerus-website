@@ -2478,6 +2478,7 @@ body.layout-basic app-claims-panel .clm-headline__day {
 
 body.layout-basic .ticket-card {
   position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
@@ -2502,15 +2503,24 @@ body.layout-basic .ticket-card::before { left: 50%; top: 0; width: 2px; height: 
 body.layout-basic .ticket-card::after  { top: 50%; left: 0; width: 100%; height: 2px; transform: translateY(-50%); }
 
 body.layout-basic .trait-quadrant {
+  position: relative;
+  z-index: 1;
   display: flex;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  background: #d9d9d9;
 }
 /* Circular badge SVGs carry generous transparent canvas padding. Enlarge only
    the art inside each quadrant so tickets stay the same size while the badges
    use the space instead of leaving a broad grey moat. */
 body.layout-basic .trait-quadrant img {
+  position: relative;
+  z-index: 2;
+  display: block;
   flex: 0 0 auto;
   width: 122%;
   max-width: none;
@@ -2530,7 +2540,7 @@ body.layout-basic .ticket-card-center {
   background: #fff;
   border: 2px solid #8a8d8f;
   border-radius: 3px;
-  z-index: 6;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2764,6 +2774,7 @@ body.layout-basic .dgn-result-row.is-win { background: rgba(34, 197, 94, 0.06); 
 
 body.layout-basic .dgn-result-card {
   position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
@@ -2776,7 +2787,7 @@ body.layout-basic .dgn-result-card {
 body.layout-basic .dgn-result-card::before,
 body.layout-basic .dgn-result-card::after {
   position: absolute;
-  z-index: 5;
+  z-index: 10;
   background: #8a8d8f;
   content: '';
   pointer-events: none;
@@ -2799,7 +2810,7 @@ body.layout-basic .dgn-result-center {
   position: absolute;
   top: 50%;
   left: 50%;
-  z-index: 7;
+  z-index: 20;
   display: grid;
   width: 27%;
   height: 27%;
@@ -2816,17 +2827,26 @@ body.layout-basic .dgn-result-center img {
   object-fit: contain;
   /* flame-center.svg's ink sits slightly left inside its asymmetric viewBox;
      compensate inside the diamond without moving the diamond itself. */
-  object-position: 53% 50%;
+  object-position: 50% 50%;
   transform: rotate(-45deg);
 }
 
 body.layout-basic .dgn-rq {
+  position: relative;
+  z-index: 1;
   display: flex;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  background: #d9d9d9;
 }
 body.layout-basic .dgn-rq img {
+  position: relative;
+  z-index: 2;
+  display: block;
   flex: 0 0 auto;
   width: 122%;
   max-width: none;
@@ -4267,10 +4287,38 @@ body.layout-basic .rrt-head__logo { width: 1.55rem; height: 1.55rem; object-fit:
 body.layout-basic .rrt-head__copy { display: flex; align-items: baseline; gap: 0.5rem; }
 body.layout-basic .rrt-head__copy strong { color: #ffd56f; font-size: 0.68rem; letter-spacing: 0.16em; }
 body.layout-basic .rrt-head__copy span { color: var(--text-secondary, #aaa); font-size: 0.62rem; }
+body.layout-basic .rrt-clear {
+  min-height: 1.75rem;
+  margin-left: auto;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid rgba(248, 113, 113, 0.36);
+  border-radius: 999px;
+  background: rgba(127, 29, 29, 0.14);
+  color: #fca5a5;
+  font: 900 0.55rem/1 var(--font-display, inherit);
+  letter-spacing: 0.09em;
+  cursor: pointer;
+}
+body.layout-basic .rrt-clear:hover:not(:disabled),
+body.layout-basic .rrt-clear:focus-visible {
+  border-color: rgba(248, 113, 113, 0.78);
+  background: rgba(127, 29, 29, 0.3);
+}
+body.layout-basic .rrt-clear:disabled { cursor: wait; opacity: 0.55; }
+body.layout-basic .rrt-clear[hidden] { display: none !important; }
 body.layout-basic .rrt-actions {
+  --rrt-row-height: 3.6rem;
   display: grid;
+  max-height: 7.65rem;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-auto-rows: var(--rrt-row-height);
   gap: 0.45rem;
+  padding-right: 0.14rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
 }
 body.layout-basic .rrt-action {
   display: grid;
@@ -4308,7 +4356,38 @@ body.layout-basic .rrt-action__art {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 body.layout-basic .rrt-action__art--degenerette { background: linear-gradient(145deg, #a5b4fc, #4f46e5); color: #090a20; }
-body.layout-basic .rrt-action__art--tickets { background: linear-gradient(145deg, #fde68a, #ca8a04); }
+body.layout-basic .rrt-action__art--tickets {
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+}
+body.layout-basic .rrt-pack-art.rvl-pack {
+  flex: 0 0 auto;
+  width: 1.86rem;
+  min-width: 1.86rem;
+  height: 2.55rem;
+  min-height: 2.55rem;
+  aspect-ratio: 118 / 160;
+  gap: 0;
+  padding: 0.28rem 0.13rem 0.2rem;
+  border-width: 1px;
+  border-radius: 5px;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.5));
+  animation: none;
+}
+body.layout-basic .rrt-pack-art .rvl-pack-brand {
+  box-sizing: border-box;
+  gap: 0.08rem;
+  padding: 0.13rem 0.05rem;
+  border-radius: 3px;
+}
+body.layout-basic .rrt-pack-art .rvl-pack-logo { width: 0.7rem; height: 0.7rem; object-fit: contain; }
+body.layout-basic .rrt-pack-art .rvl-pack-edition {
+  margin: 0;
+  font-size: 0.18rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
 body.layout-basic .rrt-action__copy { display: flex; min-width: 0; flex-direction: column; gap: 0.06rem; }
 body.layout-basic .rrt-action__kind { color: var(--text-dim, #6b6b8d); font-size: 0.49rem; font-weight: 950; letter-spacing: 0.13em; }
 body.layout-basic .rrt-action__label { overflow: hidden; font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
@@ -4322,8 +4401,12 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 @media (max-width: 560px) {
   body.layout-basic app-reveal-tray { bottom: max(0.35rem, env(safe-area-inset-bottom)); }
-  body.layout-basic .rrt-tray { max-height: min(52dvh, 360px); overflow-y: auto; }
-  body.layout-basic .rrt-actions { grid-template-columns: minmax(0, 1fr); }
+  body.layout-basic .rrt-tray { max-height: none; overflow: hidden; }
+  body.layout-basic .rrt-actions {
+    --rrt-row-height: 3.3rem;
+    max-height: 7.05rem;
+    grid-template-columns: minmax(0, 1fr);
+  }
   body.layout-basic .rrt-action { grid-template-columns: 2.35rem minmax(0, 1fr) auto; }
   body.layout-basic .rrt-action__art { width: 2.3rem; height: 2.3rem; }
 }
@@ -5050,10 +5133,16 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-stage--lootbox {
   --rvl-box-w: min(348px, 78vw, 49dvh);
   --rvl-box-fx: min(420px, 94vw, 62dvh);
+  --rvl-box-charge: 0.82s;
+  --rvl-box-burst: 0.36s;
   box-sizing: border-box;
-  width: min(96vw, 600px);
+  width: min(96vw, 960px);
   min-height: min(480px, 94dvh);
   overflow: visible;
+}
+.rvl-stage--lootbox.rvl-stage--auto-lootbox {
+  --rvl-box-charge: 0.56s;
+  --rvl-box-burst: 0.26s;
 }
 .rvl-stage--lootbox .rvl-title { margin-bottom: -0.35rem; }
 .rvl-vessel--lootbox {
@@ -5257,15 +5346,15 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 @keyframes rvl-case-lock-pulse { 50% { filter: brightness(1.22); transform: scale(1.06); } }
 
 .rvl-charging .rvl-vessel--lootbox .rvl-chest {
-  animation: rvl-case-charge 1.18s cubic-bezier(0.34, 0.04, 0.16, 1) both;
+  animation: rvl-case-charge var(--rvl-box-charge) cubic-bezier(0.34, 0.04, 0.16, 1) both;
   filter: drop-shadow(0 18px 20px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 28px rgba(237, 14, 17, 0.5));
 }
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-lid { animation: rvl-case-lid-prime 1.18s ease-in both; }
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-clasp { animation: rvl-case-unlock 1.18s ease-in both; }
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-seam { animation: rvl-case-seam-charge 1.18s ease-in both; }
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-body { animation: rvl-case-body-charge 1.18s ease-in both; }
-.rvl-charging .rvl-vessel--lootbox .rvl-chest-aura { animation: rvl-case-aura-charge 1.18s ease-in both; }
-.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-beam { animation: rvl-case-beam-charge 1.18s ease-in both; }
+.rvl-charging .rvl-vessel--lootbox .rvl-chest-lid { animation: rvl-case-lid-prime var(--rvl-box-charge) ease-in both; }
+.rvl-charging .rvl-vessel--lootbox .rvl-chest-clasp { animation: rvl-case-unlock var(--rvl-box-charge) ease-in both; }
+.rvl-charging .rvl-vessel--lootbox .rvl-chest-seam { animation: rvl-case-seam-charge var(--rvl-box-charge) ease-in both; }
+.rvl-charging .rvl-vessel--lootbox .rvl-chest-body { animation: rvl-case-body-charge var(--rvl-box-charge) ease-in both; }
+.rvl-charging .rvl-vessel--lootbox .rvl-chest-aura { animation: rvl-case-aura-charge var(--rvl-box-charge) ease-in both; }
+.rvl-charging .rvl-vessel--lootbox .rvl-lootbox-beam { animation: rvl-case-beam-charge var(--rvl-box-charge) ease-in both; }
 .rvl-charging .rvl-vessel--lootbox .rvl-lootbox-spark { animation: rvl-case-spark-charge 0.62s ease-out infinite; }
 
 @keyframes rvl-case-charge {
@@ -5301,15 +5390,15 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 
 .rvl-bursting .rvl-vessel--lootbox { opacity: 1; transform: none; filter: none; animation: none; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest { animation: rvl-case-release 0.52s ease-out both; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid { animation: rvl-case-lid-open 0.52s cubic-bezier(0.16, 0.72, 0.18, 1) both; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest-body { animation: rvl-case-body-release 0.52s ease-out both; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest-seam { animation: rvl-case-seam-release 0.52s ease-out both; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-chest-aura { animation: rvl-case-aura-release 0.52s ease-out both; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-beam { animation: rvl-case-beam-release 0.52s ease-out both; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-fx::before { animation: rvl-case-flash 0.52s ease-out both; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-rays { animation: rvl-case-rays 0.52s ease-out both; }
-.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-spark { animation: rvl-case-spark-release 0.52s ease-out both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-chest { animation: rvl-case-release var(--rvl-box-burst) ease-out both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-chest-lid { animation: rvl-case-lid-open var(--rvl-box-burst) cubic-bezier(0.16, 0.72, 0.18, 1) both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-chest-body { animation: rvl-case-body-release var(--rvl-box-burst) ease-out both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-chest-seam { animation: rvl-case-seam-release var(--rvl-box-burst) ease-out both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-chest-aura { animation: rvl-case-aura-release var(--rvl-box-burst) ease-out both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-beam { animation: rvl-case-beam-release var(--rvl-box-burst) ease-out both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-fx::before { animation: rvl-case-flash var(--rvl-box-burst) ease-out both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-rays { animation: rvl-case-rays var(--rvl-box-burst) ease-out both; }
+.rvl-bursting .rvl-vessel--lootbox .rvl-lootbox-spark { animation: rvl-case-spark-release var(--rvl-box-burst) ease-out both; }
 
 @keyframes rvl-case-release {
   0%, 62% { opacity: 1; transform: translateY(-3px) scale(1.018); }
@@ -5387,12 +5476,51 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   font-size: clamp(2.2rem, 9vw, 3rem);
 }
 .rvl-card-icon img { width: 100%; height: 100%; object-fit: contain; }
+.sdgnrs-badge {
+  position: relative;
+  display: inline-grid;
+  width: 100%;
+  height: 100%;
+  flex: 0 0 auto;
+  place-items: center;
+  isolation: isolate;
+}
+.sdgnrs-badge::before {
+  position: absolute;
+  z-index: 1;
+  width: 39%;
+  height: 39%;
+  border-radius: 50%;
+  background: #fff;
+  content: '';
+}
+.sdgnrs-badge > .sdgnrs-badge__frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.sdgnrs-badge > .sdgnrs-badge__mark {
+  position: relative;
+  z-index: 2;
+  width: 43%;
+  height: 58%;
+  object-fit: contain;
+}
 .rvl-card-value {
   font-size: clamp(1.5rem, 6vw, 2.1rem);
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
   min-height: 1.1em;
+}
+/* Commas are useful grouping, not legal wrap points. Seven-figure DGNRS
+   rewards must read as one amount in the active card, tray and receipt. */
+.rvl-card--dgnrs .rvl-card-value {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .rvl-card-label {
   font-size: 0.75rem;
@@ -5430,76 +5558,113 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   animation: rvl-card-in 0.36s cubic-bezier(0.34, 1.56, 0.64, 1), rvl-epic-glow 1.2s ease-in-out infinite 0.4s;
 }
 
-/* Mini ticket-pack icon on tickets cards. */
-.rvl-mini-pack {
-  position: relative;
-  display: grid;
-  width: 58px;
-  height: 78px;
-  place-items: center;
-  align-content: center;
-  gap: 2px;
-  overflow: hidden;
-  border: 2px solid #d9902f;
-  border-radius: 8px;
+/* Reward pack: the SAME serrated Degenerus wrapper used by the opener, scaled
+   as one coherent object instead of replaced with a low-detail red thumbnail. */
+.rvl-card-icon--pack,
+.rvl-card-icon--lootbox { width: auto; height: auto; }
+.rvl-reward-pack.rvl-pack {
+  flex: 0 0 auto;
+  width: 118px;
+  min-width: 118px;
+  height: 160px;
+  aspect-ratio: 118 / 160;
+  gap: 0.28rem;
+  padding: 0.78rem 0.5rem 0.62rem;
+  border-radius: 10px;
+  animation: rvl-reward-art-in 0.42s cubic-bezier(0.2, 0.82, 0.25, 1.12) both;
+}
+.rvl-reward-pack .rvl-pack-brand {
+  gap: 0.08rem;
+  padding: 0.34rem 0.22rem;
+  border-radius: 7px;
+}
+.rvl-reward-pack .rvl-pack-logo { width: 38%; height: auto; }
+.rvl-reward-pack .rvl-pack-wordmark { margin-top: 0.08rem; font-size: 0.52rem; letter-spacing: 0.12em; }
+.rvl-reward-pack .rvl-pack-edition { margin-top: 0.08rem; font-size: 0.36rem; letter-spacing: 0.16em; }
+.rvl-reward-pack .rvl-pack-level { padding: 0.22rem 0.42rem; font-size: 0.54rem; }
+.rvl-reward-pack .rvl-pack-count { font-size: 0.46rem; letter-spacing: 0.11em; }
+.rvl-reward-pack--foil.rvl-pack {
+  border-color: #fff1a8;
   background:
-    radial-gradient(circle at 50% 38%, rgba(255, 87, 67, 0.28), transparent 42%),
-    linear-gradient(160deg, #5a1718, #1b0b0c 72%);
-  box-shadow: inset 0 0 0 2px rgba(255, 213, 111, 0.12), 0 4px 12px rgba(0, 0, 0, 0.35);
-  clip-path: polygon(0 6%, 8% 0, 16% 6%, 24% 0, 32% 6%, 40% 0, 48% 6%, 56% 0, 64% 6%, 72% 0, 80% 6%, 88% 0, 96% 6%, 100% 10%, 100% 100%, 0 100%);
+    radial-gradient(circle at 50% 28%, rgba(255, 255, 255, 0.62), transparent 28%),
+    linear-gradient(125deg, #56e0ff, #b694ff, #ff89c8, #ffe180, #69f0c0, #56e0ff);
+  background-size: 100% 100%, 300% 300%;
+  box-shadow: 0 0 32px rgba(255, 225, 128, 0.5);
 }
-.rvl-mini-pack::after {
-  position: absolute;
-  right: 7%;
-  bottom: 7%;
-  left: 7%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, #ffd56f, transparent);
-  content: '';
-}
-.rvl-mini-pack img {
-  width: 58%;
-  height: 48%;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
-}
-.rvl-mini-pack span {
-  color: #fff3d0;
-  font-size: 0.42rem;
-  font-weight: 950;
-  letter-spacing: 0.08em;
-  line-height: 1;
-}
+.rvl-reward-pack--foil .rvl-pack-level { background: linear-gradient(180deg, #fff1a8, #d7a728); color: #1a1206; }
 
-.rvl-mini-lootbox {
+/* The day-summary lootbox uses the same hard-case language as the opener. */
+.rvl-reward-lootbox {
   position: relative;
+  isolation: isolate;
+  width: 132px;
+  height: 92px;
+  filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.48));
+  animation: rvl-reward-art-in 0.42s cubic-bezier(0.2, 0.82, 0.25, 1.12) both;
+}
+.rvl-reward-lootbox__lid,
+.rvl-reward-lootbox__seam,
+.rvl-reward-lootbox__body,
+.rvl-reward-lootbox__clasp { position: absolute; box-sizing: border-box; }
+.rvl-reward-lootbox__lid {
+  top: 4%;
+  right: 0;
+  left: 0;
+  z-index: 3;
+  height: 31%;
+  border: 2px solid #d8b35a;
+  border-bottom: 3px solid #76500f;
+  border-radius: 12px 12px 4px 4px;
+  background: linear-gradient(160deg, #332b52, #171523 70%);
+  box-shadow: inset 0 5px 9px rgba(255,255,255,0.08), 0 5px 0 #08070d;
+}
+.rvl-reward-lootbox__seam {
+  top: 33%;
+  right: 3%;
+  left: 3%;
+  z-index: 5;
+  height: 3px;
+  border-radius: 99px;
+  background: #07060c;
+  box-shadow: 0 1px rgba(255, 222, 132, 0.4);
+}
+.rvl-reward-lootbox__body {
+  right: 2%;
+  bottom: 2%;
+  left: 2%;
+  z-index: 2;
+  display: flex;
+  height: 63%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 2px solid #b88d37;
+  border-radius: 4px 4px 13px 13px;
+  background: radial-gradient(circle at 50% 22%, rgba(237,14,17,0.2), transparent 48%), linear-gradient(155deg,#27213e,#0e0d17 72%);
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.62);
+}
+.rvl-reward-lootbox__body img { width: 29%; height: 42%; object-fit: contain; }
+.rvl-reward-lootbox__body strong { color: #fff; font-size: 0.38rem; letter-spacing: 0.15em; }
+.rvl-reward-lootbox__clasp {
+  top: 27%;
+  left: 50%;
+  z-index: 6;
   display: grid;
-  width: 52px;
-  height: 46px;
+  width: 27px;
+  height: 31px;
   place-items: center;
-  border: 2px solid #ffc04d;
-  border-radius: 8px 8px 10px 10px;
-  background: linear-gradient(155deg, #61362c, #241619 70%);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.06), 0 0 14px rgba(245, 166, 35, 0.28);
-}
-.rvl-mini-lootbox::before {
-  content: '';
-  position: absolute;
-  left: -3px;
-  right: -3px;
-  top: 8px;
-  height: 8px;
-  border: 2px solid #ffd56f;
-  border-radius: 5px;
-  background: #3b2020;
-}
-.rvl-mini-lootbox span {
-  position: relative;
-  z-index: 1;
-  margin-top: 9px;
-  color: #fff1bd;
-  font-size: 1rem;
+  border: 2px solid #f4d37e;
+  border-radius: 7px 7px 9px 9px;
+  background: linear-gradient(145deg,#f4d37e,#a56a12 68%);
+  color: #332005;
+  font-size: 0.9rem;
   font-weight: 1000;
+  transform: translateX(-50%);
+}
+@keyframes rvl-reward-art-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.92); }
+  to { opacity: 1; transform: none; }
 }
 
 /* Tray of already-revealed cards. */
@@ -5520,17 +5685,195 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 .rvl-card--mini .rvl-card-icon { width: 26px; height: 26px; font-size: 1.2rem; }
 .rvl-card--mini .rvl-card-value { font-size: 0.95rem; min-height: auto; }
 .rvl-card--mini .rvl-card-label { font-size: 0.55rem; letter-spacing: 0.08em; }
-.rvl-card--mini .rvl-mini-pack { width: 34px; height: 46px; }
-.rvl-card--mini .rvl-mini-pack span { font-size: 0.28rem; }
-.rvl-card--mini .rvl-mini-lootbox { width: 27px; height: 24px; border-width: 1px; }
-.rvl-card--mini .rvl-mini-lootbox::before { left: -2px; right: -2px; top: 4px; height: 4px; border-width: 1px; }
-.rvl-card--mini .rvl-mini-lootbox span { margin-top: 5px; font-size: 0.62rem; }
 .rvl-card--mini .rvl-card-sub { max-width: 18ch; font-size: 0.55rem; }
 .rvl-card--mini.rvl-rarity-epic,
 .rvl-card--mini.rvl-rarity-legendary { animation: rvl-mini-in 0.28s ease-out; }
 @keyframes rvl-mini-in {
   0% { transform: scale(1.6); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
+}
+
+/* Lootbox rewards have a full-screen receipt, so use it. The active reward is
+   a wide showcase; revealed rewards remain readable tiles instead of 84px
+   badges, and the final receipt can fill four columns on a normal display. */
+.rvl-stage--lootbox > .rvl-card-zone {
+  width: 100%;
+  min-height: min(430px, 58dvh);
+}
+.rvl-stage--lootbox > .rvl-card-zone > .rvl-card {
+  box-sizing: border-box;
+  width: min(90vw, 560px);
+  min-height: 310px;
+  overflow: hidden;
+  padding: clamp(1.25rem, 3vw, 1.8rem);
+  border-width: 2px;
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.075), transparent 34%),
+    radial-gradient(circle at 18% 42%, rgba(139,108,255,0.16), transparent 42%),
+    linear-gradient(155deg, #25213c, #100f1c 72%);
+  box-shadow: 0 24px 54px rgba(0,0,0,0.52), inset 0 0 0 1px rgba(255,255,255,0.045);
+}
+.rvl-stage--lootbox > .rvl-card-zone > .rvl-card::before,
+.rvl-stage--lootbox .rvl-summary-grid > .rvl-card::before {
+  position: absolute;
+  top: 0;
+  right: 12%;
+  left: 12%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  content: '';
+  opacity: 0.72;
+}
+.rvl-stage--lootbox > .rvl-card-zone .rvl-card-inner {
+  display: grid;
+  grid-template: auto auto auto / minmax(170px, 0.9fr) minmax(0, 1.1fr);
+  grid-template-areas: "icon value" "icon label" "icon sub";
+  min-height: 250px;
+  align-content: center;
+  align-items: center;
+  column-gap: clamp(1.2rem, 4vw, 2.2rem);
+  row-gap: 0.6rem;
+  text-align: left;
+}
+.rvl-stage--lootbox > .rvl-card-zone .rvl-card-icon {
+  grid-area: icon;
+  width: clamp(130px, 20vw, 178px);
+  height: clamp(130px, 20vw, 178px);
+  justify-self: center;
+  padding: 0.75rem;
+  box-sizing: border-box;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 24px;
+  background: radial-gradient(circle, rgba(255,255,255,0.09), rgba(255,255,255,0.018) 68%);
+  box-shadow: inset 0 0 28px rgba(0,0,0,0.28);
+}
+.rvl-stage--lootbox > .rvl-card-zone .rvl-card-icon--pack,
+.rvl-stage--lootbox > .rvl-card-zone .rvl-card-icon--lootbox {
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.rvl-stage--lootbox > .rvl-card-zone .rvl-reward-pack.rvl-pack { width: 164px; height: 222px; }
+.rvl-stage--lootbox > .rvl-card-zone .rvl-reward-pack .rvl-pack-logo { width: 42%; }
+.rvl-stage--lootbox > .rvl-card-zone .rvl-reward-pack .rvl-pack-wordmark { font-size: 0.68rem; }
+.rvl-stage--lootbox > .rvl-card-zone .rvl-reward-pack .rvl-pack-edition { font-size: 0.46rem; }
+.rvl-stage--lootbox > .rvl-card-zone .rvl-reward-pack .rvl-pack-level { font-size: 0.66rem; }
+.rvl-stage--lootbox > .rvl-card-zone .rvl-reward-pack .rvl-pack-count { font-size: 0.56rem; }
+.rvl-stage--lootbox > .rvl-card-zone .rvl-reward-lootbox { width: 178px; height: 124px; }
+.rvl-stage--lootbox > .rvl-card-zone .rvl-card-value {
+  grid-area: value;
+  align-self: end;
+  min-width: 0;
+  min-height: auto;
+  color: #fff;
+  font-size: clamp(2.1rem, 6vw, 3.25rem);
+  line-height: 0.95;
+  overflow-wrap: anywhere;
+}
+.rvl-stage--lootbox > .rvl-card-zone .rvl-card--dgnrs .rvl-card-value {
+  font-size: clamp(1.75rem, 5.3vw, 2.85rem);
+  overflow-wrap: normal;
+}
+.rvl-stage--lootbox > .rvl-card-zone .rvl-card-label {
+  grid-area: label;
+  color: #f5dda0;
+  font-size: clamp(0.78rem, 2.2vw, 1rem);
+  line-height: 1.25;
+}
+.rvl-stage--lootbox > .rvl-card-zone .rvl-card-sub {
+  grid-area: sub;
+  align-self: start;
+  max-width: 30ch;
+  color: rgba(226,222,239,0.72);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.rvl-stage--lootbox > .rvl-tray {
+  width: min(92vw, 900px);
+  gap: 0.65rem;
+}
+.rvl-stage--lootbox > .rvl-tray .rvl-card--mini {
+  box-sizing: border-box;
+  width: 148px;
+  min-width: 148px;
+  min-height: 154px;
+  padding: 0.72rem;
+  border-radius: 14px;
+}
+.rvl-stage--lootbox > .rvl-tray .rvl-card-icon { width: 54px; height: 54px; }
+.rvl-stage--lootbox > .rvl-tray .rvl-card-icon--pack,
+.rvl-stage--lootbox > .rvl-tray .rvl-card-icon--lootbox { width: auto; height: auto; }
+.rvl-stage--lootbox > .rvl-tray .rvl-reward-pack.rvl-pack { width: 76px; height: 104px; padding: 0.55rem 0.32rem 0.42rem; }
+.rvl-stage--lootbox > .rvl-tray .rvl-reward-pack .rvl-pack-wordmark { font-size: 0.34rem; }
+.rvl-stage--lootbox > .rvl-tray .rvl-reward-pack .rvl-pack-edition { font-size: 0.24rem; }
+.rvl-stage--lootbox > .rvl-tray .rvl-reward-pack .rvl-pack-level { padding: 0.14rem 0.24rem; font-size: 0.34rem; }
+.rvl-stage--lootbox > .rvl-tray .rvl-reward-pack .rvl-pack-count { font-size: 0.28rem; }
+.rvl-stage--lootbox > .rvl-tray .rvl-card-value { font-size: 1.1rem; }
+.rvl-stage--lootbox > .rvl-tray .rvl-card-label { font-size: 0.58rem; line-height: 1.2; }
+
+.rvl-stage--lootbox > .rvl-summary {
+  box-sizing: border-box;
+  width: min(94vw, 920px);
+  max-height: 84dvh;
+  padding: 0.35rem;
+}
+.rvl-stage--lootbox .rvl-summary-grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 216px));
+  justify-content: center;
+  gap: clamp(0.65rem, 1.5vw, 0.9rem);
+}
+.rvl-stage--lootbox .rvl-summary-grid > .rvl-card--mini {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 252px;
+  padding: 1rem 0.85rem;
+  overflow: hidden;
+  border-width: 2px;
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.065), transparent 38%),
+    linear-gradient(165deg, #25213c, #11101e 74%);
+  box-shadow: 0 14px 30px rgba(0,0,0,0.38), inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+.rvl-stage--lootbox .rvl-summary-grid .rvl-card-inner { gap: 0.48rem; }
+.rvl-stage--lootbox .rvl-summary-grid .rvl-card-icon { width: 84px; height: 84px; }
+.rvl-stage--lootbox .rvl-summary-grid .rvl-card-icon--pack,
+.rvl-stage--lootbox .rvl-summary-grid .rvl-card-icon--lootbox { width: auto; height: auto; }
+.rvl-stage--lootbox .rvl-summary-grid .rvl-reward-pack.rvl-pack { width: 108px; height: 147px; }
+.rvl-stage--lootbox .rvl-summary-grid .rvl-reward-lootbox { width: 118px; height: 82px; }
+.rvl-stage--lootbox .rvl-summary-grid .rvl-card-value { min-height: auto; font-size: 1.55rem; line-height: 1; }
+.rvl-stage--lootbox .rvl-summary-grid .rvl-card-label { color: #e8d5a3; font-size: 0.68rem; line-height: 1.25; }
+.rvl-stage--lootbox .rvl-summary-grid .rvl-card-sub { max-width: 23ch; color: rgba(226,222,239,0.68); font-size: 0.62rem; line-height: 1.35; }
+
+@media (max-width: 600px) {
+  .rvl-stage--lootbox > .rvl-card-zone { min-height: min(520px, 68dvh); }
+  .rvl-stage--lootbox > .rvl-card-zone > .rvl-card { width: min(91vw, 390px); min-height: 430px; padding: 1.15rem; }
+  .rvl-stage--lootbox > .rvl-card-zone .rvl-card-inner {
+    display: flex;
+    min-height: 390px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.58rem;
+    text-align: center;
+  }
+  .rvl-stage--lootbox > .rvl-card-zone .rvl-reward-pack.rvl-pack { width: 142px; height: 193px; }
+  .rvl-stage--lootbox > .rvl-card-zone .rvl-card-value { font-size: clamp(2rem, 10vw, 2.8rem); }
+  .rvl-stage--lootbox > .rvl-card-zone .rvl-card-sub { align-self: center; }
+  .rvl-stage--lootbox .rvl-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rvl-stage--lootbox .rvl-summary-grid > .rvl-card--mini { min-height: 238px; padding-inline: 0.55rem; }
+  .rvl-stage--lootbox .rvl-summary-grid .rvl-reward-pack.rvl-pack { width: 96px; height: 131px; }
+}
+@media (max-width: 350px) {
+  .rvl-stage--lootbox .rvl-summary-grid { grid-template-columns: minmax(0, 226px); }
 }
 
 /* --- Degenerette spin sub-stage ----------------------------------------- */
@@ -5577,6 +5920,7 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 .rvl-ticket--yours .rvl-ticket-tag { color: var(--accent-secondary, #ffc04d); }
 .rvl-ticket-grid {
+  isolation: isolate;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 3px;
@@ -5594,6 +5938,75 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   align-items: center;
   justify-content: center;
   position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Day summaries can carry draw prizes, a flip receipt, bought packs and a
+   lootbox at once. Give those cards a real receipt grid instead of squeezing
+   four 84px mini-cards into the base 560px stage. The pack stays a portrait
+   object at every breakpoint; neither the card flexbox nor the grid may shrink
+   it on its inline axis. */
+.rvl-stage--day-summary {
+  box-sizing: border-box;
+  width: min(96vw, 960px);
+}
+.rvl-stage--day-summary > .rvl-summary {
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 84dvh;
+  padding: 0.3rem;
+}
+.rvl-stage--day-summary .rvl-summary-grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(178px, 214px));
+  justify-content: center;
+  gap: clamp(0.6rem, 1.4vw, 0.9rem);
+}
+.rvl-stage--day-summary .rvl-summary-grid > .rvl-card--mini {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 238px;
+  padding: 0.9rem 0.72rem;
+  overflow: hidden;
+  border-radius: 17px;
+}
+.rvl-stage--day-summary .rvl-card-inner { gap: 0.42rem; }
+.rvl-stage--day-summary .rvl-card-icon { width: 76px; height: 76px; }
+.rvl-stage--day-summary .rvl-card-icon--pack,
+.rvl-stage--day-summary .rvl-card-icon--lootbox {
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+}
+.rvl-stage--day-summary .rvl-reward-pack.rvl-pack {
+  flex: 0 0 auto;
+  width: 108px;
+  min-width: 108px;
+  height: 147px;
+  aspect-ratio: 108 / 147;
+}
+.rvl-stage--day-summary .rvl-reward-lootbox { width: 116px; height: 81px; }
+.rvl-stage--day-summary .rvl-card-value { min-height: auto; font-size: 1.38rem; line-height: 1.05; }
+.rvl-stage--day-summary .rvl-card-label { font-size: 0.65rem; line-height: 1.25; }
+.rvl-stage--day-summary .rvl-card-sub { max-width: 23ch; font-size: 0.62rem; line-height: 1.3; }
+
+@media (max-width: 560px) {
+  .rvl-stage--day-summary .rvl-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rvl-stage--day-summary .rvl-summary-grid > .rvl-card--mini { min-height: 222px; padding-inline: 0.45rem; }
+  .rvl-stage--day-summary .rvl-reward-pack.rvl-pack {
+    width: 92px;
+    min-width: 92px;
+    height: 125px;
+  }
+}
+@media (max-width: 340px) {
+  .rvl-stage--day-summary .rvl-summary-grid { grid-template-columns: minmax(0, 214px); }
 }
 .rvl-rq img {
   flex: 0 0 auto;
@@ -5629,9 +6042,9 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 
 /* Match lighting on the player side (semantics mirror .dgn-rq q-* states). */
-.rvl-rq.q-full { box-shadow: 0 0 0 2px #22c55e, 0 0 14px rgba(34, 197, 94, 0.7); }
-.rvl-rq.q-sym { box-shadow: 0 0 0 2px #f5a623, 0 0 10px rgba(245, 166, 35, 0.55); }
-.rvl-rq.q-col { box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.8); }
+.rvl-rq.q-full { box-shadow: inset 0 0 0 3px #22c55e; }
+.rvl-rq.q-sym { box-shadow: inset 0 0 0 2px #f5a623; }
+.rvl-rq.q-col { box-shadow: inset 0 0 0 2px rgba(6, 182, 212, 0.8); }
 .rvl-rq.q-miss { opacity: 0.55; }
 
 .rvl-spin-score {
@@ -7333,14 +7746,14 @@ body.layout-basic .rvl-ticket-more {
 .rvl-dgn-stage { position: relative; display: flex; width: min(94vw, 720px); max-width: 100%; flex-direction: column; align-items: center; gap: 0.55rem; }
 .rvl-dgn-compare { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; justify-items: center; gap: clamp(0.35rem, 2vw, 1rem); }
 .rvl-gamepiece { min-width: 0; gap: 0.35rem; } .rvl-gamepiece .rvl-ticket-tag { font-size: 0.65rem; }
-.rvl-gamepiece .rvl-ticket-grid { position: relative; box-sizing: border-box; width: clamp(118px, 31vw, 220px); height: auto; aspect-ratio: 1; grid-template: repeat(2, minmax(0, 1fr)) / repeat(2, minmax(0, 1fr)); padding: 0; gap: 0; overflow: hidden; border: 3px solid #8a8d8f; border-radius: 16px; background: #d9d9d9; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); }
-.rvl-gamepiece .rvl-ticket-grid::before, .rvl-gamepiece .rvl-ticket-grid::after { content: ''; position: absolute; z-index: 5; background: #8a8d8f; pointer-events: none; }
+.rvl-gamepiece .rvl-ticket-grid { position: relative; isolation: isolate; box-sizing: border-box; width: clamp(118px, 31vw, 220px); height: auto; aspect-ratio: 1; grid-template: repeat(2, minmax(0, 1fr)) / repeat(2, minmax(0, 1fr)); padding: 0; gap: 0; overflow: hidden; border: 3px solid #8a8d8f; border-radius: 16px; background: #d9d9d9; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); }
+.rvl-gamepiece .rvl-ticket-grid::before, .rvl-gamepiece .rvl-ticket-grid::after { content: ''; position: absolute; z-index: 10; background: #8a8d8f; pointer-events: none; }
 .rvl-gamepiece .rvl-ticket-grid::before { top: 0; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%); } .rvl-gamepiece .rvl-ticket-grid::after { top: 50%; right: 0; left: 0; height: 2px; transform: translateY(-50%); }
-.rvl-gamepiece .rvl-rq { width: auto; height: auto; aspect-ratio: 1; border-radius: 0; background: transparent; transition: background 0.14s ease, filter 0.14s ease; }
-.rvl-gamepiece .rvl-rq img { width: 122%; max-width: none; height: 122%; max-height: none; object-fit: contain; transform: translateY(-5%); } .rvl-gamepiece .rvl-rq--hero { z-index: 6; overflow: hidden; } .rvl-gamepiece .rvl-rq--hero img { transform: translateY(-5%); filter: drop-shadow(0 0 5px rgba(112, 61, 0, 0.8)); }
-.rvl-gamepiece-center { position: absolute; top: 50%; left: 50%; z-index: 10; display: flex; width: 28%; height: 28%; align-items: center; justify-content: center; transform: translate(-50%, -50%); pointer-events: none; }
+.rvl-gamepiece .rvl-rq { z-index: 1; box-sizing: border-box; min-width: 0; min-height: 0; width: auto; height: auto; aspect-ratio: auto; border-radius: 0; overflow: hidden; background: #d9d9d9; transition: background 0.14s ease, filter 0.14s ease; }
+.rvl-gamepiece .rvl-rq img { display: block; width: 122%; max-width: none; height: 122%; max-height: none; object-fit: contain; object-position: 50% 50%; transform: none; } .rvl-gamepiece .rvl-rq--hero { z-index: 1; overflow: hidden; } .rvl-gamepiece .rvl-rq--hero img { transform: none; filter: drop-shadow(0 0 5px rgba(112, 61, 0, 0.8)); }
+.rvl-gamepiece-center { position: absolute; top: 50%; left: 50%; z-index: 20; display: flex; width: 28%; height: 28%; align-items: center; justify-content: center; transform: translate(-50%, -50%); pointer-events: none; }
 .rvl-gamepiece-center::before { content: ''; position: absolute; top: 50%; left: 50%; width: 70.71%; height: 70.71%; box-sizing: border-box; border: 2px solid #8a8d8f; background: #fff; transform: translate(-50%, -50%) rotate(45deg); transition: background 0.2s ease, box-shadow 0.2s ease; }
-.rvl-gamepiece-center img { position: relative; z-index: 1; width: 66%; height: 66%; object-fit: contain; object-position: 50% 50%; } .rvl-gamepiece-center.is-win::before { background: rgba(34, 197, 94, 0.82); box-shadow: 0 0 14px rgba(34, 197, 94, 0.7); } .rvl-gamepiece-center.is-miss::before { background: rgba(239, 68, 68, 0.42); box-shadow: 0 0 10px rgba(239, 68, 68, 0.45); }
+.rvl-gamepiece-center img { position: relative; z-index: 1; width: 66%; height: 66%; object-fit: contain; object-position: 50% 50%; } .rvl-gamepiece-center.is-win::before { background: #22c55e; box-shadow: 0 0 14px rgba(34, 197, 94, 0.7); } .rvl-gamepiece-center.is-miss::before { background: #d94c5d; box-shadow: 0 0 10px rgba(239, 68, 68, 0.45); }
 .rvl-gamepiece .rvl-rq.q-full { background: rgba(34, 197, 94, 0.42); }
 .rvl-gamepiece .rvl-rq.q-sym, .rvl-gamepiece .rvl-rq.q-col, .rvl-gamepiece .rvl-rq.q-lock-hit { background: rgba(96, 160, 255, 0.36); } .rvl-gamepiece .rvl-rq.q-miss, .rvl-gamepiece .rvl-rq.q-lock-miss { background: rgba(239, 68, 68, 0.28); opacity: 1; } .rvl-gamepiece .rvl-rq--hero.q-full { background: rgba(245, 179, 36, 0.52); }
 .rvl-ticket--rolling-full .rvl-ticket-grid { box-shadow: 0 0 25px rgba(139, 92, 246, 0.45); } .rvl-ticket--landed .rvl-ticket-grid { animation: rvl-dgn-land 0.24s cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -8566,7 +8979,16 @@ body.layout-basic .deg-header {
   padding: 0;
 }
 body.layout-basic .deg-heading { min-width: 0; }
-body.layout-basic .deg-heading h2 { margin: 0.08rem 0 0; padding: 0; }
+body.layout-basic .deg-heading h2 {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--text-primary, #eee);
+  font-size: 1.05rem;
+  font-weight: 950;
+  letter-spacing: 0.13em;
+  line-height: 1.2;
+}
 body.layout-basic .deg-learn-link {
   color: inherit;
   text-decoration: none;
@@ -9022,11 +9444,37 @@ body.layout-basic .dgn-inline-spin .dgn-rq.q-miss {
 /* Badge SVGs carry slightly more visual weight below their canvas midpoint.
    Lift the art—not the quadrant—so dividers and hit backgrounds stay exact. */
 body.layout-basic app-degenerette-panel .dgn-ticket .dgn-q img,
-body.layout-basic app-degenerette-panel .dgn-ticket .dgn-q.q-hero img,
 body.layout-basic app-degenerette-panel .dgn-inline-spin .dgn-rq img,
 body.layout-basic app-degenerette-panel .dgn-inline-spin .dgn-rq.q-hero img {
-  transform: translateY(-5%);
+  transform: none;
 }
+body.layout-basic app-degenerette-panel .dgn-ticket .dgn-q img,
+body.layout-basic app-degenerette-panel .dgn-ticket .dgn-q.q-hero img {
+  transform: translateY(4%);
+}
+
+/* Degenerette currency ETH is a ticket trait, so render the same circular
+   blue Ethereum badge instead of the unrelated standalone wallet glyph. */
+body.layout-basic .deg-currency-option[data-bind="deg-currency-option-0"] img {
+  width: min(126%, 5.2rem);
+  height: min(126%, 5.2rem);
+  max-width: none;
+  max-height: none;
+}
+
+/* Daily coinflip receipts are outcomes rather than generic rarity cards. */
+.rvl-card--coinflip-result.rvl-card--outcome-win {
+  border-color: rgba(34, 197, 94, 0.86);
+  background: linear-gradient(165deg, rgba(18, 76, 46, 0.86), rgba(10, 20, 18, 0.98));
+  box-shadow: 0 0 30px rgba(34, 197, 94, 0.3);
+}
+.rvl-card--coinflip-result.rvl-card--outcome-loss {
+  border-color: rgba(239, 68, 68, 0.74);
+  background: linear-gradient(165deg, rgba(91, 25, 37, 0.8), rgba(24, 11, 17, 0.98));
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.2);
+}
+.rvl-card--coinflip-result.rvl-card--outcome-win .rvl-card-value { color: #86efac; }
+.rvl-card--coinflip-result.rvl-card--outcome-loss .rvl-card-value { color: #fca5a5; }
 body.layout-basic .dgn-inline-spin .dgn-rq.dgn-lock-color {
   border-bottom-color: #f5a623;
   border-bottom-width: 3px;
@@ -9290,11 +9738,11 @@ body.layout-basic .df-position > .df-position-slot { height: 2.6rem; }
 body.layout-basic .df-tomorrow-layout {
   box-sizing: border-box;
   display: grid;
-  grid-template-areas: "input-label . total" "amount add total";
-  grid-template-columns: minmax(4.2rem, 4.6rem) 1.32rem minmax(0, 1fr);
-  grid-template-rows: 0.48rem minmax(0, 1fr);
+  grid-template-areas: "amount add total";
+  grid-template-columns: minmax(3.65rem, 4.2rem) minmax(2.7rem, 3.15rem) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   align-items: stretch;
-  gap: 0.08rem 0.14rem;
+  gap: 0.16rem;
   min-width: 0;
   height: 2.6rem;
   padding: 0.16rem 0.24rem 0.18rem;
@@ -9316,18 +9764,20 @@ body.layout-basic .df-tomorrow-layout {
 body.layout-basic .df-next-bet {
   display: contents;
 }
-body.layout-basic .df-next-bet__label {
-  grid-area: input-label;
+body.layout-basic .df-next-bet__stepper {
+  grid-area: amount;
+  display: grid;
+  grid-template-areas: "amount arrows";
+  grid-template-columns: minmax(0, 1fr) 1.05rem;
+  grid-template-rows: minmax(0, 1fr);
+  align-self: center;
+  min-width: 0;
+  height: 1.65rem;
   overflow: hidden;
-  color: rgba(254, 202, 202, 0.56);
-  font-family: "Inter", system-ui, sans-serif;
-  font-size: 0.45rem;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  line-height: 1;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
+  border: 1px solid rgba(248, 113, 113, 0.38);
+  border-radius: 5px;
+  background: rgba(2, 0, 0, 0.38);
+  box-shadow: inset 0 0 10px rgba(239, 68, 68, 0.04);
 }
 body.layout-basic .df-next-bet .df-amount,
 body.layout-basic .df-next-bet .df-flip-cta {
@@ -9338,29 +9788,62 @@ body.layout-basic .df-next-bet .df-flip-cta {
 }
 body.layout-basic .df-next-bet .df-amount {
   grid-area: amount;
-  height: 1.48rem;
-  padding: 0.08rem 0.25rem;
-  border: 1px solid rgba(248, 113, 113, 0.34);
-  border-radius: 4px;
-  background: rgba(2, 0, 0, 0.38);
+  height: 100%;
+  padding: 0 0.22rem;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
   color: #fca5a5;
   font-family: "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
   font-size: 0.72rem;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   text-align: right;
+  appearance: textfield;
+}
+body.layout-basic .df-next-bet .df-amount::-webkit-inner-spin-button,
+body.layout-basic .df-next-bet .df-amount::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+body.layout-basic .df-next-bet__arrows {
+  grid-area: arrows;
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  border-left: 1px solid rgba(248, 113, 113, 0.26);
+}
+body.layout-basic .df-next-bet__arrows button {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: rgba(248, 113, 113, 0.075);
+  color: rgba(254, 202, 202, 0.82);
+  font-size: 0.46rem;
+  line-height: 1;
+  cursor: pointer;
+}
+body.layout-basic .df-next-bet__arrows button + button {
+  border-top: 1px solid rgba(248, 113, 113, 0.2);
+}
+body.layout-basic .df-next-bet__arrows button:hover,
+body.layout-basic .df-next-bet__arrows button:focus-visible {
+  background: rgba(248, 113, 113, 0.2);
+  color: #fff1f2;
 }
 body.layout-basic .df-next-bet .df-flip-cta {
   grid-area: add;
   width: 100%;
   min-width: 0;
-  height: 1.48rem;
-  padding: 0;
+  align-self: center;
+  height: 1.65rem;
+  padding: 0 0.16rem;
   border-color: rgba(248, 113, 113, 0.58);
   border-radius: 3px;
   background: linear-gradient(180deg, rgba(248, 113, 113, 0.24), rgba(127, 29, 29, 0.24));
   color: #fecaca;
   font-family: "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
-  font-size: 0.92rem;
+  font-size: 0.5rem;
   font-weight: 900;
   letter-spacing: 0.05em;
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.1);
@@ -9552,31 +10035,137 @@ body.layout-basic .df-funds__display.has-claimable {
     inset 0 0 20px rgba(248, 113, 113, 0.08),
     0 0 12px rgba(239, 68, 68, 0.1);
 }
-body.layout-basic .df-funds .df-claim-flip-cta[data-write] {
+body.layout-basic .df-funds .df-claim-flip-cta[data-write],
+body.layout-basic .df-funds .df-burn-sdgnrs-cta[data-write] {
   grid-area: claim;
   align-self: center;
   justify-self: start;
   width: auto;
-  min-width: 2.35rem;
-  min-height: 1.08rem;
+  min-width: 3.25rem;
+  min-height: 1.55rem;
   margin: 0;
-  padding: 0.14rem 0.28rem;
+  padding: 0.28rem 0.52rem;
   border: 1px solid rgba(254, 202, 202, 0.6);
   border-radius: 4px;
   background: linear-gradient(180deg, #fca5a5, #ef4444);
   color: #250707;
-  font-size: 0.41rem;
+  font-size: 0.56rem;
   font-weight: 900;
   letter-spacing: 0.1em;
   line-height: 1;
   box-shadow: 0 2px 10px rgba(239, 68, 68, 0.24);
 }
-body.layout-basic .df-funds .df-claim-flip-cta[data-write]:disabled {
+body.layout-basic .df-funds .df-burn-sdgnrs-cta[data-write] {
+  border-color: rgba(253, 230, 138, 0.64);
+  background: linear-gradient(180deg, #fde68a, #f59e0b);
+  color: #2b0808;
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.2);
+}
+body.layout-basic .df-funds__display--sdgnrs {
+  grid-template-areas: "badge claim label" "badge claim value";
+  grid-template-columns: 1.7rem auto minmax(0, 1fr);
+  border-color: rgba(124, 43, 255, 0.52);
+}
+body.layout-basic .df-sdgnrs-badge {
+  grid-area: badge;
+  width: 1.62rem;
+  height: 1.62rem;
+  align-self: center;
+}
+body.layout-basic .df-funds__display--sdgnrs .df-funds__value {
+  color: #ddd0ff;
+  text-shadow: 0 0 7px rgba(124, 43, 255, 0.48);
+}
+body.layout-basic .df-funds .df-claim-flip-cta[data-write]:disabled,
+body.layout-basic .df-funds .df-burn-sdgnrs-cta[data-write]:disabled {
   border-color: rgba(254, 202, 202, 0.14);
   background: rgba(0, 0, 0, 0.16);
   color: rgba(254, 202, 202, 0.25);
   box-shadow: none;
   cursor: default;
+}
+
+body.layout-basic .df-burn-dialog__card {
+  background:
+    radial-gradient(circle at 88% 8%, rgba(245, 158, 11, 0.2), transparent 31%),
+    linear-gradient(145deg, #31090f, #7f1d1d 54%, #2a080d);
+}
+body.layout-basic .df-burn-dialog__amount {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.85rem 0 1rem;
+  color: rgba(255, 247, 237, 0.7);
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-align: left;
+  text-transform: uppercase;
+}
+body.layout-basic .df-burn-dialog__field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid rgba(253, 230, 138, 0.42);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.28);
+}
+body.layout-basic .df-burn-dialog__field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 0.68rem 0.75rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #fde68a;
+  font-family: "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+body.layout-basic .df-burn-dialog__field button {
+  min-width: 3.3rem;
+  border: 0;
+  border-left: 1px solid rgba(253, 230, 138, 0.28);
+  background: rgba(245, 158, 11, 0.12);
+  color: #fde68a;
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 950;
+  cursor: pointer;
+}
+body.layout-basic .df-burn-dialog__quote {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.28rem 0.7rem;
+  margin: -0.25rem 0 1rem;
+  padding: 0.72rem 0.78rem;
+  border: 1px solid rgba(253, 230, 138, 0.28);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.2);
+  color: rgba(255, 247, 237, 0.64);
+  font-size: 0.56rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+body.layout-basic .df-burn-dialog__quote strong {
+  color: #fde68a;
+  font-family: "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+body.layout-basic .df-burn-dialog__quote small {
+  grid-column: 1 / -1;
+  color: rgba(254, 240, 138, 0.68);
+  font-size: 0.54rem;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  text-align: right;
+  text-transform: none;
 }
 
 /* Ticket packs keep one stable stage footprint from wrapper through final

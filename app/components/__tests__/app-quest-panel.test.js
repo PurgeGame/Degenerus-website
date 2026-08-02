@@ -634,6 +634,23 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.match(PANEL_SRC, /data\?\.levelQuest/, 'optional level quest comes from /player payload');
   });
 
+  test('a temporarily null DB projection keeps a visible level-quest slot', async () => {
+    _fetchHandler = async () => makeQuestsPayload({ levelQuest: null });
+    const el = instantiate();
+    await settle(40);
+
+    const slots = el.querySelectorAll('.qst-slot');
+    assert.equal(slots.length, 3, 'daily, bonus, and level slots keep stable layout');
+    const levelSlot = slots[2];
+    assert.equal(levelSlot.querySelector('.qst-slot-role')?.textContent, 'LEVEL');
+    assert.equal(levelSlot.querySelector('.qst-slot-status')?.textContent, 'SYNC');
+    assert.match(levelSlot.textContent, /Awaiting quest data/);
+    assert.match(levelSlot.textContent, /800 FLIP/);
+    assert.equal(levelSlot.classList.contains('qst-slot--gated'), true);
+
+    el.disconnectedCallback();
+  });
+
   test('a deity + afKing holder can keep working a level quest before its completion gate clears', async () => {
     const events = [];
     const listener = (event) => events.push(event.detail);

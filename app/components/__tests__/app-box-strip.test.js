@@ -285,6 +285,28 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
+  test('clearAll dismisses every tracked box durably without opening it', async () => {
+    const el = instantiate();
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxConfirmed([{ index: 8, day: 4 }, { index: 9, day: 4 }]);
+    await tick();
+
+    const action = pendingActionsMod.getPendingActions()[0];
+    assert.equal(typeof action.clearAll, 'function');
+    await action.clearAll();
+
+    assert.deepEqual(pendingActionsMod.getPendingActions(), []);
+    assert.equal(globalThis.localStorage.getItem(KEY), null);
+    assert.deepEqual(
+      JSON.parse(globalThis.localStorage.getItem(revealedBoxesKey(CHAIN.id, ADDR))).sort(),
+      ['8', '9'],
+    );
+    assert.equal(el.querySelectorAll('.bxs-chip').length, 0);
+    assert.equal(el.querySelector('[data-bind="bxs-strip"]').hidden, true);
+    el.disconnectedCallback();
+  });
+
   test('an already-resolved box replays without sending openBox', async () => {
     const calls = { status: [], open: [] };
     const fake = {
@@ -446,6 +468,16 @@ describe('app-box-strip', () => {
       ['77'],
     );
     el.disconnectedCallback();
+
+    const remounted = instantiate();
+    for (let i = 0; i < 10; i += 1) await tick();
+    assert.equal(
+      pendingActionsMod.getPendingActions().some((action) => action.id === 'lootbox:77'),
+      false,
+      'the same indexed result stays dismissed after the controller remounts',
+    );
+    assert.equal(remounted.querySelectorAll('.bxs-chip').length, 0);
+    remounted.disconnectedCallback();
   });
 
   test('persists pending boxes to chainId+address-scoped localStorage', async () => {

@@ -27,7 +27,7 @@
 // T-58-18: server-derived strings via textContent.
 
 import { CHAIN } from '../app/chain-config.js';
-import { displayToken } from '../app/scaling.js';
+import { displayEth, displayToken } from '../app/scaling.js';
 import { get, subscribe, getViewedAddress } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
 import {
@@ -40,6 +40,11 @@ import {
   reverseFlipCostWei,
 } from '../app/coinflip.js';
 import { claimFlip } from '../app/claims.js';
+import {
+  burnSdgnrs,
+  MIN_SDGNRS_BURN_WEI,
+  previewSdgnrsBurn,
+} from '../app/sdgnrs.js';
 import { compactUiError } from '../app/ui-error.js';
 import { updateBalanceDisplay, resetBalanceDisplay } from '../app/balance-countup.js';
 import './boon-product-indicator.js';
@@ -183,6 +188,22 @@ function compactBetAmount(value) {
   return String(Math.round(amount));
 }
 
+function parseTokenAmount(value) {
+  const match = /^\s*(\d+)(?:\.(\d{0,18}))?\s*$/.exec(String(value ?? ''));
+  if (!match) return null;
+  const fraction = (match[2] || '').padEnd(18, '0');
+  try { return (BigInt(match[1]) * (10n ** 18n)) + BigInt(fraction || '0'); }
+  catch (_e) { return null; }
+}
+
+function tokenAmountInput(wei) {
+  const raw = BigInt(wei || 0);
+  const unit = 10n ** 18n;
+  const whole = raw / unit;
+  const fraction = String(raw % unit).padStart(18, '0').replace(/0+$/, '');
+  return fraction ? `${whole}.${fraction}` : String(whole);
+}
+
 class AppDailyFlip extends HTMLElement {
   #unsubs = [];
   #initialized = false;
@@ -214,6 +235,10 @@ class AppDailyFlip extends HTMLElement {
   #reverseFlipQuote = null;
   #showLiveSideOnCoin = false;
   #questActivateListener = null;
+  #sdgnrsQuote = null;
+  #sdgnrsQuoteAmount = null;
+  #sdgnrsQuotePending = false;
+  #sdgnrsQuoteSeq = 0;
   // Day-scoped resolved receipt. It preserves the stake/payout named in the
   // result copy and the optimistic claimable total across a browser reload.
   // "Your bet" deliberately does NOT read this receipt: it comes from the
@@ -276,6 +301,7 @@ class AppDailyFlip extends HTMLElement {
   disconnectedCallback() {
     resetBalanceDisplay(this.querySelector('[data-bind="df-funds-wallet"]'));
     resetBalanceDisplay(this.querySelector('[data-bind="df-funds-claimable"]'));
+    resetBalanceDisplay(this.querySelector('[data-bind="df-funds-sdgnrs"]'));
     this.#active = false;
     this.#fetchSeq += 1;
     this.#refreshQueued = false;
@@ -299,6 +325,8 @@ class AppDailyFlip extends HTMLElement {
     this.#clearModifierMeter();
     this.#clearFakeoutMeter();
     this.#clearRevealTimer();
+    this.#sdgnrsQuoteSeq += 1;
+    this.#sdgnrsQuotePending = false;
     this.#initialized = false;
   }
 
@@ -613,11 +641,16 @@ class AppDailyFlip extends HTMLElement {
           <div class="df-position-slot" data-bind="df-position-today"></div>
           <div class="df-tomorrow-layout">
             <span class="df-flip-group df-next-bet" data-bind="df-add-bet-controls">
-              <span class="df-next-bet__label">Add bet</span>
-              <boon-product-indicator class="df-boon-indicator"
-                                      product="coinflip"></boon-product-indicator>
-              <input type="number" name="df-amount" class="df-amount" min="0" step="100" value="1000" aria-label="FLIP to add to tomorrow's bet">
-              <button type="button" class="df-flip-cta" data-write data-bind="df-flip-cta" aria-label="Add bet" title="Bet 1k">+</button>
+              <span class="df-next-bet__stepper">
+                <input type="number" name="df-amount" class="df-amount" min="0" step="100" value="1000" aria-label="FLIP to add to tomorrow's bet">
+                <span class="df-next-bet__arrows" aria-hidden="false">
+                  <button type="button" data-bind="df-bet-up" aria-label="Increase bet by 100 FLIP">▲</button>
+                  <button type="button" data-bind="df-bet-down" aria-label="Decrease bet by 100 FLIP">▼</button>
+                </span>
+                <boon-product-indicator class="df-boon-indicator"
+                                        product="coinflip"></boon-product-indicator>
+              </span>
+              <button type="button" class="df-flip-cta" data-write data-bind="df-flip-cta" aria-label="Add bet" title="Bet 1k">ADD BET</button>
             </span>
             <div class="df-position-slot" data-bind="df-position-tomorrow"></div>
           </div>
@@ -632,6 +665,48 @@ class AppDailyFlip extends HTMLElement {
           <div class="df-funds__display df-funds__display--wallet" data-bind="df-funds-wallet-box">
             <span class="df-funds__label">WALLET</span>
             <strong class="df-funds__value" data-bind="df-funds-wallet">—</strong>
+          </div>
+          <div class="df-funds__display df-funds__display--sdgnrs" data-bind="df-funds-sdgnrs-box">
+            <span class="sdgnrs-badge df-sdgnrs-badge" aria-hidden="true">
+              <img class="sdgnrs-badge__frame" src="/badges-circular/crypto_06_ethereum_purple.svg" alt="">
+              <img class="sdgnrs-badge__mark" src="/specials/special_eth.svg" alt="">
+            </span>
+            <button type="button" class="df-burn-sdgnrs-cta" data-write data-write-locked
+                    data-write-lock-title="sDGNRS balance is loading"
+                    data-bind="df-burn-sdgnrs-cta" aria-haspopup="dialog">BURN</button>
+            <span class="df-funds__label">sDGNRS</span>
+            <strong class="df-funds__value" data-bind="df-funds-sdgnrs">—</strong>
+          </div>
+        </div>
+        <div class="df-reverse-dialog df-burn-dialog" data-bind="df-burn-dialog" hidden
+             role="dialog" aria-modal="true" aria-labelledby="df-burn-title">
+          <div class="df-reverse-dialog__card df-burn-dialog__card">
+            <button type="button" class="df-reverse-dialog__close" data-bind="df-burn-cancel"
+                    aria-label="Close sDGNRS burn">×</button>
+            <h3 id="df-burn-title">Burn sDGNRS</h3>
+            <p class="df-reverse-dialog__copy">
+              <span>Live-game burns settle on the next daily RNG at 25%–175% of the previewed ETH value.</span>
+              <span>The payout normally splits between claimable ETH and a lootbox; FLIP backing pays only if the next flip wins.</span>
+            </p>
+            <label class="df-burn-dialog__amount">
+              <span>Amount</span>
+              <span class="df-burn-dialog__field">
+                <input type="number" name="df-sdgnrs-amount" min="1" step="1" value="1"
+                       inputmode="decimal" aria-label="sDGNRS to burn">
+                <button type="button" data-bind="df-burn-max">MAX</button>
+              </span>
+            </label>
+            <div class="df-burn-dialog__quote" data-bind="df-burn-quote">
+              <span>Expected ETH value</span>
+              <strong data-bind="df-burn-expected">—</strong>
+              <small data-bind="df-burn-flip-expected"></small>
+            </div>
+            <div class="df-reverse-dialog__actions">
+              <button type="button" class="df-reverse-dialog__later" data-bind="df-burn-cancel">Cancel</button>
+              <button type="button" class="df-reverse-dialog__accept df-burn-dialog__accept"
+                      data-write data-write-locked data-write-lock-title="Enter an sDGNRS amount"
+                      data-bind="df-burn-accept">Burn</button>
+            </div>
           </div>
         </div>
         <div class="df-reverse-dialog" data-bind="df-reverse-dialog" hidden
@@ -693,6 +768,23 @@ class AppDailyFlip extends HTMLElement {
     if (!add) return;
     const abbreviated = compactBetAmount(input?.value ?? 0);
     add.title = `Bet ${abbreviated}`;
+  }
+
+  #stepBetAmount(direction) {
+    const input = this.querySelector('[name="df-amount"]');
+    if (!input) return;
+    const current = Number(input.value);
+    const step = Number(input.step || 100);
+    const minimum = Number(input.min || 0);
+    const next = Math.max(
+      Number.isFinite(minimum) ? minimum : 0,
+      (Number.isFinite(current) ? current : 0)
+        + (Number(direction) < 0 ? -1 : 1) * (Number.isFinite(step) && step > 0 ? step : 100),
+    );
+    input.value = Number.isInteger(next)
+      ? String(next)
+      : String(Number(next.toFixed(6)));
+    this.#renderBetTooltip();
   }
 
   #renderReverseFlip() {
@@ -775,6 +867,157 @@ class AppDailyFlip extends HTMLElement {
     }
     const card = this.querySelector('[data-bind="df-reverse-cta"]');
     try { card?.focus?.(); } catch (_e) { /* headless / detached */ }
+  }
+
+  #sdgnrsBalanceWei() {
+    if (this.#dashboard?.sdgnrsBalance == null) return null;
+    return this.#asWei(this.#dashboard.sdgnrsBalance);
+  }
+
+  #ownsDisplayedSdgnrs() {
+    const connected = get('connected.address');
+    return Boolean(connected && this.#dashboardAddress
+      && String(connected).toLowerCase() === String(this.#dashboardAddress).toLowerCase());
+  }
+
+  #renderSdgnrsBurn() {
+    const button = this.querySelector('[data-bind="df-burn-sdgnrs-cta"]');
+    const accept = this.querySelector('[data-bind="df-burn-accept"]');
+    const input = this.querySelector('[name="df-sdgnrs-amount"]');
+    const balance = this.#sdgnrsBalanceWei();
+    const ownsBalance = this.#ownsDisplayedSdgnrs();
+    const hasMinimum = balance != null && balance >= MIN_SDGNRS_BURN_WEI;
+    const amount = parseTokenAmount(input?.value);
+    const validAmount = amount != null
+      && amount >= MIN_SDGNRS_BURN_WEI
+      && balance != null
+      && amount <= balance;
+
+    if (button) {
+      const locked = this.#busy || !ownsBalance || !hasMinimum;
+      button.disabled = locked;
+      button.textContent = this.#busy ? 'WAIT' : 'BURN';
+      if (locked) {
+        const reason = this.#busy
+          ? 'Transaction in progress'
+          : !ownsBalance
+            ? 'Open your own wallet view to burn sDGNRS'
+            : 'Minimum burn is 1 sDGNRS';
+        button.setAttribute('data-write-locked', '');
+        button.setAttribute('data-write-lock-title', reason);
+        button.title = reason;
+      } else {
+        button.removeAttribute('data-write-locked');
+        button.removeAttribute('data-write-lock-title');
+        button.removeAttribute('title');
+      }
+    }
+    if (accept) {
+      const locked = this.#busy || !ownsBalance || !validAmount;
+      accept.disabled = locked;
+      accept.textContent = this.#busy ? 'Burning…' : 'Burn';
+      if (locked) {
+        accept.setAttribute('data-write-locked', '');
+        accept.setAttribute('data-write-lock-title', this.#busy
+          ? 'Transaction in progress'
+          : 'Enter an amount from 1 through your sDGNRS balance');
+      } else {
+        accept.removeAttribute('data-write-locked');
+        accept.removeAttribute('data-write-lock-title');
+      }
+    }
+  }
+
+  #renderSdgnrsBurnQuote() {
+    const expected = this.querySelector('[data-bind="df-burn-expected"]');
+    const flip = this.querySelector('[data-bind="df-burn-flip-expected"]');
+    if (!expected || !flip) return;
+    const input = this.querySelector('[name="df-sdgnrs-amount"]');
+    const amount = parseTokenAmount(input?.value);
+    const sameAmount = amount != null && amount === this.#sdgnrsQuoteAmount;
+
+    if (!sameAmount || amount < MIN_SDGNRS_BURN_WEI) {
+      expected.textContent = '—';
+      flip.textContent = 'Enter at least 1 sDGNRS';
+      return;
+    }
+    if (this.#sdgnrsQuotePending) {
+      expected.textContent = 'Calculating…';
+      flip.textContent = '';
+      return;
+    }
+    if (!this.#sdgnrsQuote) {
+      expected.textContent = 'Unavailable';
+      flip.textContent = 'The wallet preview could not be read';
+      return;
+    }
+
+    const ethFixed = displayEth(this.#sdgnrsQuote.ethOut, 4);
+    const eth = ethFixed.includes('.')
+      ? ethFixed.replace(/0+$/, '').replace(/\.$/, '')
+      : ethFixed;
+    expected.textContent = `${eth} ETH`;
+    flip.textContent = this.#sdgnrsQuote.flipOut > 0n
+      ? `${this.#fmtWhole(this.#sdgnrsQuote.flipOut)} FLIP backing · pays only on a win`
+      : 'No contingent FLIP backing';
+  }
+
+  #refreshSdgnrsBurnQuote() {
+    const input = this.querySelector('[name="df-sdgnrs-amount"]');
+    const amount = parseTokenAmount(input?.value);
+    const balance = this.#sdgnrsBalanceWei();
+    const valid = amount != null
+      && amount >= MIN_SDGNRS_BURN_WEI
+      && balance != null
+      && amount <= balance;
+    const seq = ++this.#sdgnrsQuoteSeq;
+    this.#sdgnrsQuoteAmount = amount;
+    this.#sdgnrsQuote = null;
+    this.#sdgnrsQuotePending = valid;
+    this.#renderSdgnrsBurnQuote();
+    if (!valid) return;
+
+    void previewSdgnrsBurn({ amount }).then((quote) => {
+      if (!this.#active || seq !== this.#sdgnrsQuoteSeq) return;
+      this.#sdgnrsQuote = quote;
+      this.#sdgnrsQuotePending = false;
+      this.#renderSdgnrsBurnQuote();
+    }, () => {
+      if (!this.#active || seq !== this.#sdgnrsQuoteSeq) return;
+      this.#sdgnrsQuote = null;
+      this.#sdgnrsQuotePending = false;
+      this.#renderSdgnrsBurnQuote();
+    });
+  }
+
+  #openSdgnrsBurnDialog() {
+    if (!this.#ownsDisplayedSdgnrs()) return;
+    const balance = this.#sdgnrsBalanceWei();
+    if (balance == null || balance < MIN_SDGNRS_BURN_WEI) return;
+    const dialog = this.querySelector('[data-bind="df-burn-dialog"]');
+    if (!dialog) return;
+    const input = this.querySelector('[name="df-sdgnrs-amount"]');
+    if (input && (parseTokenAmount(input.value) ?? 0n) > balance) input.value = '1';
+    dialog.hidden = false;
+    this.#renderSdgnrsBurn();
+    this.#refreshSdgnrsBurnQuote();
+    try { input?.focus?.({ preventScroll: true }); } catch (_e) { /* headless */ }
+  }
+
+  #closeSdgnrsBurnDialog() {
+    const dialog = this.querySelector('[data-bind="df-burn-dialog"]');
+    if (dialog) dialog.hidden = true;
+    const button = this.querySelector('[data-bind="df-burn-sdgnrs-cta"]');
+    try { button?.focus?.(); } catch (_e) { /* headless */ }
+  }
+
+  #setMaxSdgnrsBurn() {
+    const balance = this.#sdgnrsBalanceWei();
+    const input = this.querySelector('[name="df-sdgnrs-amount"]');
+    if (!input || balance == null) return;
+    input.value = tokenAmountInput(balance);
+    this.#renderSdgnrsBurn();
+    this.#refreshSdgnrsBurnQuote();
   }
 
   #renderCoin() {
@@ -1000,6 +1243,13 @@ class AppDailyFlip extends HTMLElement {
     return Number.isSafeInteger(n) ? n.toLocaleString('en-US') : whole;
   }
 
+  #fmtSdgnrs(weiStr) {
+    const whole = BigInt(weiStr || '0') / (10n ** 18n);
+    if (whole < 1_000_000n) return whole.toLocaleString('en-US');
+    const millions = (whole + 500_000n) / 1_000_000n;
+    return `${millions.toLocaleString('en-US')}M`;
+  }
+
   #asWei(value) {
     try { return BigInt(value || '0'); } catch (_e) { return 0n; }
   }
@@ -1129,6 +1379,8 @@ class AppDailyFlip extends HTMLElement {
     const claimable = this.querySelector('[data-bind="df-funds-claimable"]');
     const claimBox = this.querySelector('[data-bind="df-funds-claimable-box"]');
     const claim = this.querySelector('[data-bind="df-claim-flip-cta"]');
+    const sdgnrs = this.querySelector('[data-bind="df-funds-sdgnrs"]');
+    const sdgnrsBox = this.querySelector('[data-bind="df-funds-sdgnrs-box"]');
     const visibleClaimable = this.#visibleClaimableWei();
     const walletRaw = this.#dashboard?.flipBalance;
     const hasResult = this.#day != null
@@ -1161,6 +1413,14 @@ class AppDailyFlip extends HTMLElement {
       claim.disabled = !revealComplete || this.#busy || visibleClaimable <= 0n || !get('connected.address');
       claim.textContent = this.#busy ? 'WAIT' : 'CLAIM';
     }
+    updateBalanceDisplay(sdgnrs, {
+      container: sdgnrsBox,
+      scope: this.#dashboardAddress,
+      value: this.#dashboard == null ? null : this.#dashboard.sdgnrsBalance,
+      format: (raw) => `${this.#fmtSdgnrs(raw)} sDGNRS`,
+      formatDelta: (delta) => `+${this.#fmtSdgnrs(delta)} sDGNRS`,
+    });
+    this.#renderSdgnrsBurn();
   }
 
   #reducedMotion() {
@@ -1350,8 +1610,35 @@ class AppDailyFlip extends HTMLElement {
     if (flip) flip.addEventListener('click', () => this.#runAction('flip'));
     const amount = this.querySelector('[name="df-amount"]');
     if (amount) amount.addEventListener('input', () => this.#renderBetTooltip());
+    const betUp = this.querySelector('[data-bind="df-bet-up"]');
+    if (betUp) betUp.addEventListener('click', () => this.#stepBetAmount(1));
+    const betDown = this.querySelector('[data-bind="df-bet-down"]');
+    if (betDown) betDown.addEventListener('click', () => this.#stepBetAmount(-1));
     const claim = this.querySelector('[data-bind="df-claim-flip-cta"]');
     if (claim) claim.addEventListener('click', () => this.#runAction('claim-flip'));
+    const burn = this.querySelector('[data-bind="df-burn-sdgnrs-cta"]');
+    if (burn) burn.addEventListener('click', () => this.#openSdgnrsBurnDialog());
+    const burnInput = this.querySelector('[name="df-sdgnrs-amount"]');
+    if (burnInput) burnInput.addEventListener('input', () => {
+      this.#renderSdgnrsBurn();
+      this.#refreshSdgnrsBurnQuote();
+    });
+    const burnMax = this.querySelector('[data-bind="df-burn-max"]');
+    if (burnMax) burnMax.addEventListener('click', () => this.#setMaxSdgnrsBurn());
+    const burnAccept = this.querySelector('[data-bind="df-burn-accept"]');
+    if (burnAccept) burnAccept.addEventListener('click', () => this.#runAction('burn-sdgnrs'));
+    for (const cancel of this.querySelectorAll('[data-bind="df-burn-cancel"]')) {
+      cancel.addEventListener('click', () => this.#closeSdgnrsBurnDialog());
+    }
+    const burnDialog = this.querySelector('[data-bind="df-burn-dialog"]');
+    if (burnDialog) {
+      burnDialog.addEventListener('keydown', (event) => {
+        if (event?.key === 'Escape') this.#closeSdgnrsBurnDialog();
+      });
+      burnDialog.addEventListener('click', (event) => {
+        if (event?.target === burnDialog) this.#closeSdgnrsBurnDialog();
+      });
+    }
     const accept = this.querySelector('[data-bind="df-reverse-accept"]');
     if (accept) accept.addEventListener('click', () => this.#runAction('reverse'));
     for (const cancel of this.querySelectorAll('[data-bind="df-reverse-cancel"]')) {
@@ -1434,6 +1721,18 @@ class AppDailyFlip extends HTMLElement {
         const amount = this.#visibleClaimableWei();
         if (amount <= 0n) throw new Error('Nothing to claim.');
         await claimFlip({ player, amount });
+      } else if (kind === 'burn-sdgnrs') {
+        const input = this.querySelector('[name="df-sdgnrs-amount"]');
+        const amount = parseTokenAmount(input?.value);
+        const balance = this.#sdgnrsBalanceWei();
+        if (amount == null || amount < MIN_SDGNRS_BURN_WEI) {
+          throw new Error('Minimum burn is 1 sDGNRS.');
+        }
+        if (balance == null || amount > balance) {
+          throw new Error('Not enough sDGNRS for that burn.');
+        }
+        await burnSdgnrs({ amount });
+        this.#closeSdgnrsBurnDialog();
       } else if (kind === 'reverse') {
         const quote = this.#reverseFlipQuote;
         if (!quote) throw new Error('Reverse Flip price is still loading.');

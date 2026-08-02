@@ -52,6 +52,7 @@ import {
 } from '../app/jackpot-sfx.js';
 import { lock as lockScroll, unlock as unlockScroll } from '../app/scroll-lock.js';
 import { canShareWin, shareWin } from '../app/share-win.js';
+import { getPendingActions } from '../app/pending-actions.js';
 
 // ---------------------------------------------------------------------------
 // Module-level queue — components can enqueue before the element mounts.
@@ -110,7 +111,9 @@ const ICONS = Object.freeze({
   flipFace: '/shared/coinflip-face-red.svg',
   ethFace: '/shared/coinflip-face-eth.svg',
   eth: '/specials/special_eth.svg',
-  dgnrs: '/specials/special_dgnrs.svg',
+  dgnEthBadge: '/badges-circular/crypto_06_ethereum_blue.svg',
+  dgnrs: '/specials/special_eth.svg',
+  dgnrsBadge: '/badges-circular/crypto_06_ethereum_purple.svg',
   wwxrp: '/shared/coinflip-face-red.svg',
   flame: '/specials/special_none.svg',
 });
@@ -124,6 +127,16 @@ const SPIN_LABELS = Object.freeze({
 const DGN_UNITS = Object.freeze({ 0: 'ETH', 1: 'FLIP', 3: 'WWXRP' });
 const DGN_CARD_TYPES = Object.freeze({ 0: 'eth', 1: 'flip', 3: 'wwxrp' });
 const BOX_SPIN_CURRENCIES = Object.freeze({ eth: 0, flip: 1, wwxrp: 3 });
+
+// Keep batched boxes moving, but spend the saved time where the player can
+// actually read what came out. Manual receipts remain tap-to-dismiss.
+const LOOTBOX_AUTO_START_MS = 480;
+const LOOTBOX_MANUAL_CHARGE_MS = 820;
+const LOOTBOX_AUTO_CHARGE_MS = 560;
+const LOOTBOX_MANUAL_BURST_MS = 360;
+const LOOTBOX_AUTO_BURST_MS = 260;
+const LOOTBOX_AUTO_RESULT_MS = 1_750;
+const LOOTBOX_AUTO_RESULT_REDUCED_MS = 1_200;
 
 const TRAIT_LABEL_OVERRIDES = Object.freeze({ cashsack: 'CASH SACK' });
 
@@ -259,6 +272,7 @@ function _cardsFromLeg(leg) {
       if (leg.wholeTickets > 0) {
         cards.push({
           type: 'tickets', rarity: 'common', icon: null, glyph: null,
+          level: Number.isFinite(Number(leg.futureLevel)) ? Number(leg.futureLevel) : null,
           label: `LEVEL ${leg.futureLevel} TICKETS`,
           value: String(leg.wholeTickets),
           sub: 'Traits reveal with the level draw',
@@ -269,7 +283,6 @@ function _cardsFromLeg(leg) {
         cards.push({
           type: 'flip', rarity: 'common', icon: ICONS.flip, glyph: null,
           label: 'FLIP', value: _tokenText(leg.flip),
-          sub: 'Stake it, flip it, or burn it for tickets',
           countText: _tokenText(leg.flip), spin: null,
         });
       }
@@ -392,6 +405,10 @@ export function normalizeSequence(seq) {
     return {
       kind,
       title: seq.title || 'LOOTBOX',
+      // Ordinary box openings need no heading—the case/rewards identify the
+      // flow. Preserve a heading only for callers with real custom context,
+      // such as "FOIL MATCH T4".
+      hideTitle: !seq.title,
       big,
       autoStart: false,
       noVessel: Boolean(seq.noVessel),
@@ -478,6 +495,7 @@ export function normalizeSequence(seq) {
         extra,
         cards: wholeTickets.map((t, i) => ({
           type: 'tickets', rarity: t?.foil ? 'epic' : 'common', icon: null, glyph: null,
+          level: normalizedLevel,
           traitIds: t.traitIds,
           foil: Boolean(t?.foil),
           label: `TICKET ${i + 1}`,
@@ -504,6 +522,7 @@ export function normalizeSequence(seq) {
       totalCount: Math.max(count, Number(seq.totalCount ?? count) || count),
       cards: [{
         type: 'tickets', rarity: foilPack ? 'epic' : 'common', icon: null, glyph: null,
+        level: normalizedLevel,
         foil: foilPack,
         label: Number.isFinite(level)
           ? `LEVEL ${level}${foilPack ? ' FOIL' : ''} TICKETS`
@@ -601,7 +620,9 @@ export function normalizeSequence(seq) {
       cards: [{
         type: won ? DGN_CARD_TYPES[currency] || 'flip' : 'nowin',
         rarity: won ? 'epic' : 'common',
-        icon: won ? (ICONS[DGN_CARD_TYPES[currency]] || ICONS.flip) : ICONS.flame,
+        icon: won
+          ? (currency === 0 ? ICONS.dgnEthBadge : (ICONS[DGN_CARD_TYPES[currency]] || ICONS.flip))
+          : ICONS.flame,
         glyph: null,
         label: `DEGENERETTE — ${rows.length} SPIN${rows.length === 1 ? '' : 'S'}`,
         value: won ? `${amount} ${unit}` : '',
@@ -639,6 +660,7 @@ export function normalizeSequence(seq) {
       } else if (p.type === 'tickets' && Number(p.amount ?? 0) > 0) {
         cards.push({
           type: 'tickets', rarity: 'common', icon: null, glyph: null,
+          level: p.level == null ? null : Number(p.level),
           label: p.level != null ? `LEVEL ${p.level} TICKETS` : 'TICKETS',
           value: String(p.amount), sub: 'Won from the draw',
           countText: String(p.amount), spin: null,
@@ -657,6 +679,30 @@ export function normalizeSequence(seq) {
     }
 
     const activity = seq.activity && typeof seq.activity === 'object' ? seq.activity : {};
+    if (activity.hasCoinflipBet && typeof activity.coinflipWon === 'boolean') {
+      let stake = 0n;
+      try { stake = BigInt(activity.coinflipStakeAmount ?? 0); } catch (_e) { stake = 0n; }
+      const rewardPercent = Math.max(0, Math.trunc(Number(activity.coinflipRewardPercent) || 0));
+      const flipWon = activity.coinflipWon;
+      const payout = flipWon
+        ? stake + ((stake * BigInt(rewardPercent)) / 100n)
+        : stake;
+      cards.push({
+        type: 'coinflip-result',
+        outcome: flipWon ? 'win' : 'loss',
+        rarity: flipWon ? 'epic' : 'common',
+        icon: flipWon ? ICONS.ethFace : ICONS.wwxrp,
+        glyph: null,
+        label: 'COINFLIP',
+        value: flipWon
+          ? `WIN +${_tokenText(payout)} FLIP`
+          : `LOSS -${_tokenText(stake)} FLIP`,
+        sub: flipWon ? `${100 + rewardPercent}%` : 'Settled on WWXRP',
+        summaryDetail: true,
+        countText: null,
+        spin: null,
+      });
+    }
     const ticketPacks = Math.max(0, Number(activity.ticketPacks) || 0);
     const ticketCount = Math.max(0, Number(activity.ticketCount) || 0);
     if (ticketPacks > 0) {
@@ -690,6 +736,7 @@ export function normalizeSequence(seq) {
       big: won,
       consolationOnly: Boolean(seq.consolationOnly),
       autoStart: true,
+      daySummary: true,
       // Day summaries follow an already-played-out board — nothing is sealed,
       // so no mystery-chest vessel; straight to the prize cards.
       noVessel: true,
@@ -992,6 +1039,69 @@ class RevealOverlay extends HTMLElement {
     return true;
   }
 
+  #readyPendingLootboxes() {
+    return getPendingActions().filter((item) => (
+      item?.kind === 'lootbox'
+      && item?.state === 'ready'
+      && typeof item.run === 'function'
+    ));
+  }
+
+  // A pending-action owner remains responsible for the chain read/write and
+  // receipt parsing. This helper only collects the normalized reveals that
+  // those honest actions append, then moves them directly behind the box the
+  // player is currently viewing.
+  async #queuePendingLootboxes({ all = false } = {}) {
+    const actions = this.#readyPendingLootboxes();
+    const boxes = [];
+    const unrelated = [];
+    for (const action of actions) {
+      const queueLength = this.#queue.length;
+      try { await action.run(); } catch (_e) { /* the owner keeps failed rows retryable */ }
+      const added = this.#queue.splice(queueLength);
+      for (const seq of added) {
+        if (seq?.kind === 'lootbox') {
+          seq.autoStart = true;
+          seq.autoAdvance = all;
+          boxes.push(seq);
+        } else {
+          unrelated.push(seq);
+        }
+      }
+      if (!all && boxes.length > 0) break;
+    }
+    // Keep non-box work at its original tail while making OPEN NEXT literal.
+    this.#queue.unshift(...boxes);
+    this.#queue.push(...unrelated);
+    return boxes.length;
+  }
+
+  async #openPendingLootboxes(seq, { all = false } = {}) {
+    if (this.#controlsOnly) return;
+    this.#controlsOnly = true;
+    const summary = this.#bind('rvl-summary');
+    for (const button of summary?.querySelectorAll?.('button') || []) button.disabled = true;
+    const close = this.#bind('rvl-close');
+    if (close) close.disabled = true;
+
+    let queued = 0;
+    try {
+      queued = await this.#queuePendingLootboxes({ all });
+    } finally {
+      this.#controlsOnly = false;
+      if (close) close.disabled = false;
+    }
+    if (this.#aborted) return;
+    if (queued > 0) {
+      this.#tap(all ? 'open-all-boxes' : 'next-box');
+      return;
+    }
+    // A wallet rejection or an indexer race leaves the current result intact
+    // and refreshes the controls so the player can retry instead of getting a
+    // dead, disabled button.
+    this.#renderSummary(seq);
+  }
+
   // -------------------------------------------------------------------------
   // Queue driver
   // -------------------------------------------------------------------------
@@ -1132,6 +1242,18 @@ class RevealOverlay extends HTMLElement {
     });
   }
 
+  async #waitAfterSummary(seq) {
+    if (seq?.kind === 'lootbox'
+      && seq.autoAdvance
+      && this.#queue[0]?.kind === 'lootbox') {
+      await this.#wait(
+        _reducedMotion() ? LOOTBOX_AUTO_RESULT_REDUCED_MS : LOOTBOX_AUTO_RESULT_MS,
+      );
+      return;
+    }
+    await this.#waitTap();
+  }
+
   #clearTimers() {
     for (const t of this.#timers) { try { clearTimeout(t); } catch (_e) { /* defensive */ } }
     this.#timers.clear();
@@ -1154,6 +1276,8 @@ class RevealOverlay extends HTMLElement {
         'rvl-stage--degenerette',
         'rvl-stage--ticket-pack',
         'rvl-stage--lootbox',
+        'rvl-stage--auto-lootbox',
+        'rvl-stage--day-summary',
       );
     }
   }
@@ -1176,10 +1300,18 @@ class RevealOverlay extends HTMLElement {
         Array.isArray(seq.ticketGrid) && seq.ticketGrid.length > 0,
       );
       rootStage.classList.toggle('rvl-stage--lootbox', seq.kind === 'lootbox');
+      rootStage.classList.toggle(
+        'rvl-stage--auto-lootbox',
+        seq.kind === 'lootbox' && Boolean(seq.autoStart),
+      );
+      rootStage.classList.toggle('rvl-stage--day-summary', Boolean(seq.daySummary));
     }
     // boardTitle is the non-spoiler heading a spin-through plays under; the real
     // verdict lands only after every verified reel has settled.
-    if (title) title.textContent = seq.boardTitle || seq.title;
+    if (title) {
+      title.hidden = Boolean(seq.hideTitle);
+      title.textContent = seq.boardTitle || seq.title;
+    }
 
     if (_reducedMotion()) {
       // Motion is optional; the full-size result and its audit trail are not.
@@ -1222,7 +1354,7 @@ class RevealOverlay extends HTMLElement {
           this.#renderSummary(seq);
           if (seq.consolationOnly) sfxLoserHorn();
           else if (seq.big) sfxFanfare(true);
-          await this.#waitTap();
+          await this.#waitAfterSummary(seq);
           return;
         }
       }
@@ -1238,7 +1370,7 @@ class RevealOverlay extends HTMLElement {
       if (this.#isOpeningAll(seq) && !this.#hasMorePacks(seq)) {
         this.#openAllBatchId = null;
       }
-      await this.#waitTap();
+      await this.#waitAfterSummary(seq);
       return;
     }
 
@@ -1322,7 +1454,7 @@ class RevealOverlay extends HTMLElement {
       if (openingAll) {
         await this.#wait(120);
       } else if (seq.autoStart) {
-        await this.#wait(700);
+        await this.#wait(isLootbox ? LOOTBOX_AUTO_START_MS : 700);
       } else {
         const action = await this.#waitTap();
         openingAll = action === 'open-all' || this.#isOpeningAll(seq);
@@ -1339,7 +1471,9 @@ class RevealOverlay extends HTMLElement {
       } else {
         // --- charging: lock, energy build, then the crack ---
         if (stage && stage.classList) stage.classList.add('rvl-charging');
-        const chargeMs = isLootbox ? 1180 : 900;
+        const chargeMs = isLootbox
+          ? (seq.autoStart ? LOOTBOX_AUTO_CHARGE_MS : LOOTBOX_MANUAL_CHARGE_MS)
+          : 900;
         sfxSpinStart(chargeMs);
         await this.#wait(chargeMs);
         if (this.#aborted) return;
@@ -1354,7 +1488,10 @@ class RevealOverlay extends HTMLElement {
         // every card is a `nowin` gets the burst animation without the confetti.
         if (seq.big && !seq.consolationOnly && !allNoWin && !hasSpins) this.#fireConfetti(false);
         if (isLootbox) sfxRollDone(true);
-        await this.#wait(isLootbox ? 520 : 320);
+        const burstMs = isLootbox
+          ? (seq.autoStart ? LOOTBOX_AUTO_BURST_MS : LOOTBOX_MANUAL_BURST_MS)
+          : 320;
+        await this.#wait(burstMs);
       }
       if (vessel) vessel.hidden = true;
       if (stage && stage.classList) stage.classList.remove('rvl-bursting');
@@ -1376,6 +1513,19 @@ class RevealOverlay extends HTMLElement {
         finalLabel: this.#queue.length > 0 ? 'NEXT ▸' : 'COLLECT',
       });
       return;
+    }
+
+    if (seq.kind === 'lootbox') {
+      // The old generic flow dealt every reward as a large card and then
+      // immediately drew the same cards again as a receipt. A lootbox now
+      // cracks straight into its one contents screen. BoxSpin is the sole
+      // exception: play the meaningful reel animation, then return to that
+      // same receipt for the rest of the contents.
+      for (const card of seq.cards) {
+        if (!card.spin || this.#aborted) continue;
+        const spinWon = await this.#playSpin(card.spin);
+        anyWin = anyWin || spinWon;
+      }
     } else {
       // --- cards, one at a time ---
       for (let i = 0; i < seq.cards.length; i++) {
@@ -1389,6 +1539,8 @@ class RevealOverlay extends HTMLElement {
         this.#pushToTray(card);
       }
     }
+
+    if (this.#aborted) return;
 
     // --- summary ---
     const zone = this.#bind('rvl-card-zone');
@@ -1408,7 +1560,7 @@ class RevealOverlay extends HTMLElement {
     } else {
       sfxRollDone(true);
     }
-    await this.#waitTap();
+    await this.#waitAfterSummary(seq);
   }
 
   // One prize card: flip in, count up, beat, out.
@@ -1722,7 +1874,7 @@ class RevealOverlay extends HTMLElement {
     const center = document.createElement('div');
     center.className = 'rvl-gamepiece-center';
     const flame = document.createElement('img');
-    flame.src = ICONS.flame;
+    flame.src = '/whitepaper/flame-center.svg';
     flame.alt = '';
     center.appendChild(flame);
     if (grid) grid.appendChild(center);
@@ -2053,7 +2205,9 @@ class RevealOverlay extends HTMLElement {
     const icon = document.createElement('div');
     icon.className = 'rvl-box-currency-icon';
     const image = document.createElement('img');
-    image.src = ICONS[currencyKey] || ICONS.flip;
+    image.src = board.currency === 0
+      ? ICONS.dgnEthBadge
+      : (ICONS[currencyKey] || ICONS.flip);
     image.alt = '';
     icon.appendChild(image);
 
@@ -2518,17 +2672,115 @@ class RevealOverlay extends HTMLElement {
   // DOM builders (createElement only — server data via textContent)
   // -------------------------------------------------------------------------
 
+  #buildRewardPack(card) {
+    const pack = document.createElement('div');
+    pack.className = `rvl-pack rvl-reward-pack${card.foil ? ' rvl-reward-pack--foil' : ''}`;
+
+    const shine = document.createElement('div');
+    shine.className = 'rvl-pack-shine';
+    pack.appendChild(shine);
+
+    const brand = document.createElement('div');
+    brand.className = 'rvl-pack-brand';
+    const logo = document.createElement('img');
+    logo.className = 'rvl-pack-logo';
+    logo.src = '/whitepaper/flame-logo.svg';
+    logo.alt = '';
+    brand.appendChild(logo);
+    const wordmark = document.createElement('span');
+    wordmark.className = 'rvl-pack-wordmark';
+    wordmark.textContent = 'DEGENERUS';
+    brand.appendChild(wordmark);
+    const edition = document.createElement('span');
+    edition.className = 'rvl-pack-edition';
+    edition.textContent = card.foil ? 'FOIL PACK' : 'TICKET PACK';
+    brand.appendChild(edition);
+    pack.appendChild(brand);
+
+    let level = card.level == null ? NaN : Number(card.level);
+    if (!Number.isFinite(level)) {
+      const match = /\bLEVEL\s+(\d+)/i.exec(String(card.label || ''));
+      level = match ? Number(match[1]) : NaN;
+    }
+    const levelTag = document.createElement('span');
+    levelTag.className = 'rvl-pack-level';
+    levelTag.textContent = Number.isFinite(level) ? `LEVEL ${level}` : 'PACK REWARD';
+    pack.appendChild(levelTag);
+
+    const rawCount = String(card.value || '').replace(/^×/, '').trim();
+    const singular = Number(rawCount.replace(/,/g, '')) === 1;
+    const count = document.createElement('span');
+    count.className = 'rvl-pack-count';
+    count.textContent = rawCount
+      ? `${rawCount} ${card.type === 'ticket-packs'
+        ? (singular ? 'PACK' : 'PACKS')
+        : (singular ? 'TICKET' : 'TICKETS')}`
+      : 'TICKET REWARD';
+    pack.appendChild(count);
+    return pack;
+  }
+
+  #buildRewardLootbox() {
+    const box = document.createElement('div');
+    box.className = 'rvl-reward-lootbox';
+    const lid = document.createElement('span');
+    lid.className = 'rvl-reward-lootbox__lid';
+    const seam = document.createElement('span');
+    seam.className = 'rvl-reward-lootbox__seam';
+    const body = document.createElement('span');
+    body.className = 'rvl-reward-lootbox__body';
+    const logo = document.createElement('img');
+    logo.src = '/whitepaper/flame-logo.svg';
+    logo.alt = '';
+    body.appendChild(logo);
+    const name = document.createElement('strong');
+    name.textContent = 'DEGENERUS';
+    body.appendChild(name);
+    const clasp = document.createElement('span');
+    clasp.className = 'rvl-reward-lootbox__clasp';
+    clasp.textContent = '?';
+    box.appendChild(lid);
+    box.appendChild(seam);
+    box.appendChild(body);
+    box.appendChild(clasp);
+    return box;
+  }
+
+  #buildSdgnrsBadge() {
+    const badge = document.createElement('span');
+    badge.className = 'sdgnrs-badge';
+    badge.setAttribute('aria-hidden', 'true');
+
+    const frame = document.createElement('img');
+    frame.className = 'sdgnrs-badge__frame';
+    frame.src = ICONS.dgnrsBadge;
+    frame.alt = '';
+    badge.appendChild(frame);
+
+    const mark = document.createElement('img');
+    mark.className = 'sdgnrs-badge__mark';
+    mark.src = ICONS.dgnrs;
+    mark.alt = '';
+    badge.appendChild(mark);
+    return badge;
+  }
+
   #buildCard(card, compact) {
     const el = document.createElement('div');
     const rarity = compact && card.revealedRarity ? card.revealedRarity : card.rarity;
-    el.className = `rvl-card rvl-rarity-${rarity}${compact ? ' rvl-card--mini' : ''}`;
+    const typeClass = String(card.type || 'reward').toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+    el.className = `rvl-card rvl-card--${typeClass} rvl-rarity-${rarity}${compact ? ' rvl-card--mini' : ''}`;
+    if (card.outcome) el.className += ` rvl-card--outcome-${card.outcome}`;
     if (card.foil) el.className += ' rvl-card--foil-ticket';
     const inner = document.createElement('div');
     inner.className = 'rvl-card-inner';
 
     const icon = document.createElement('div');
     icon.className = 'rvl-card-icon';
-    if (card.icon) {
+    if (card.type === 'dgnrs') {
+      icon.className = 'rvl-card-icon rvl-card-icon--sdgnrs';
+      icon.appendChild(this.#buildSdgnrsBadge());
+    } else if (card.icon) {
       const img = document.createElement('img');
       img.src = card.icon;
       img.alt = '';
@@ -2543,23 +2795,11 @@ class RevealOverlay extends HTMLElement {
       icon.className = 'rvl-card-icon rvl-card-icon--ticket';
       icon.appendChild(this.#buildTicket(dgnTraitIdsToQuadrants(card.traitIds), null, null));
     } else if (card.type === 'tickets' || card.type === 'ticket-packs') {
-      const mini = document.createElement('div');
-      mini.className = 'rvl-mini-pack';
-      const logo = document.createElement('img');
-      logo.src = '/whitepaper/flame-logo.svg';
-      logo.alt = '';
-      mini.appendChild(logo);
-      const wordmark = document.createElement('span');
-      wordmark.textContent = 'DEGENERUS';
-      mini.appendChild(wordmark);
-      icon.appendChild(mini);
+      icon.className = 'rvl-card-icon rvl-card-icon--pack';
+      icon.appendChild(this.#buildRewardPack(card));
     } else if (card.type === 'lootboxes-bought') {
-      const mini = document.createElement('div');
-      mini.className = 'rvl-mini-lootbox';
-      const mark = document.createElement('span');
-      mark.textContent = '?';
-      mini.appendChild(mark);
-      icon.appendChild(mini);
+      icon.className = 'rvl-card-icon rvl-card-icon--lootbox';
+      icon.appendChild(this.#buildRewardLootbox());
     }
     inner.appendChild(icon);
 
@@ -2670,9 +2910,11 @@ class RevealOverlay extends HTMLElement {
       if (valueEl) valueEl.textContent = card.revealedValue || card.value || '';
       // A bet board's card is the only thing left on screen once the rows are
       // gone, so it keeps its sub line (compact cards normally drop it).
-      if ((seq.spinBoard || card.summaryDetail) && card.sub) {
+      if ((seq.spinBoard || card.summaryDetail || (seq.kind === 'lootbox' && !card.spin)) && card.sub) {
         const sub = document.createElement('div');
-        sub.className = `rvl-card-sub ${seq.spinBoard.total > 0n ? 'is-win' : ''}`;
+        const positiveResult = card.outcome === 'win'
+          || (seq.spinBoard != null && _safeBigInt(seq.spinBoard.total) > 0n);
+        sub.className = `rvl-card-sub${positiveResult ? ' is-win' : ''}`;
         sub.textContent = card.sub;
         const inner = el.querySelector('.rvl-card-inner');
         if (inner) inner.appendChild(sub);
@@ -2705,12 +2947,24 @@ class RevealOverlay extends HTMLElement {
     cta.type = 'button';
     cta.className = 'rvl-collect-cta';
     const hasMorePacks = this.#hasMorePacks(seq);
+    const readyLootboxes = seq.kind === 'lootbox' ? this.#readyPendingLootboxes() : [];
+    const hasMoreLootboxes = readyLootboxes.length > 0;
+    const autoNextLootbox = Boolean(
+      seq.kind === 'lootbox' && seq.autoAdvance && this.#queue[0]?.kind === 'lootbox'
+    );
     cta.textContent = hasMorePacks
       ? 'OPEN NEXT PACK'
+      : hasMoreLootboxes ? 'OPEN NEXT BOX'
+        : autoNextLootbox ? 'OPENING NEXT BOX…'
       : this.#queue.length > 0 ? 'NEXT ▸' : 'COLLECT';
+    cta.disabled = autoNextLootbox;
     cta.addEventListener('click', (e) => {
       try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
       if (hasMorePacks) this.#armNextPack(seq);
+      if (hasMoreLootboxes) {
+        void this.#openPendingLootboxes(seq, { all: false });
+        return;
+      }
       this.#tap();
     });
     summary.appendChild(cta);
@@ -2725,6 +2979,18 @@ class RevealOverlay extends HTMLElement {
         this.#startOpenAll(seq);
       });
       summary.appendChild(openAll);
+    }
+
+    if (hasMoreLootboxes && readyLootboxes.length > 1) {
+      const openAllBoxes = document.createElement('button');
+      openAllBoxes.type = 'button';
+      openAllBoxes.className = 'rvl-open-all-cta rvl-open-all-cta--lootboxes';
+      openAllBoxes.textContent = `OPEN ALL ${readyLootboxes.length} BOXES`;
+      openAllBoxes.addEventListener('click', (e) => {
+        try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
+        void this.#openPendingLootboxes(seq, { all: true });
+      });
+      summary.appendChild(openAllBoxes);
     }
 
     // SHARE MY WIN — winnings sequences only (jackpot prizes / paid spins;

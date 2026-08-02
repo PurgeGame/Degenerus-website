@@ -11,8 +11,8 @@
 // transaction; every quest progresses through game actions. This panel reads
 // only the database API. The optional `levelQuest` player field is deliberately
 // not filled by an in-browser RPC fallback: if the indexer has not projected
-// live level-quest state yet, the card stays absent instead of adding a second
-// source of truth.
+// live level-quest state yet, the LEVEL slot remains visible in a syncing state
+// instead of adding a second source of truth or silently collapsing the card.
 //
 // Plan 62-04 reads from /player/:address (Phase 57 player.ts:259-281) — fields:
 //   quests:        Array<{ slot, questType, progress, target, completed, ... }>
@@ -513,13 +513,10 @@ class AppQuestPanel extends HTMLElement {
       slots = all.filter((q) => Number(q?.day ?? 0) === day);
     }
 
-    const hasLevelQuest = Boolean(this.#levelQuest);
-    if (slots.length === 0 && !hasLevelQuest) {
-      emptyEl.hidden = false;
-      emptyEl.textContent = 'No quests today.';
-    } else {
-      emptyEl.hidden = true;
-    }
+    // A LEVEL slot is always rendered below. If its DB projection is briefly
+    // unavailable it carries a compact syncing state, so the panel does not
+    // misleadingly look as though this level has no quest.
+    emptyEl.hidden = true;
 
     // Render each slot — sorted by slot index ascending (slot 0 primary, slot 1
     // secondary; matches /beta/components/quest-panel.js convention).
@@ -692,7 +689,27 @@ class AppQuestPanel extends HTMLElement {
 
   #appendLevelQuestCard(slotsEl) {
     const quest = this.#levelQuest;
-    if (!quest) return;
+    if (!quest) {
+      this.#appendQuestCard(slotsEl, {
+        variant: 'level',
+        role: 'LEVEL',
+        roleLabel: 'Level',
+        label: 'Awaiting quest data',
+        icon: 'L',
+        statusText: 'SYNC',
+        statusKind: 'locked',
+        stateLabel: 'Waiting for the indexed level quest',
+        progressPercent: 0,
+        isDone: false,
+        isGated: true,
+        rewardText: '800 FLIP',
+        rewardExtraText: '+5 STREAK',
+        rewardTitle: 'Completion credits 800 FLIP and adds 5 to the quest streak',
+        questType: 0,
+        target: 0,
+      });
+      return;
+    }
     const questType = Number(quest.questType ?? 0);
     const assigned = questType > 0;
     const isDone = Boolean(quest.completed);

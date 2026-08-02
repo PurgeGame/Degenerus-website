@@ -654,7 +654,7 @@ class AppDegenerettePanel extends HTMLElement {
               <button type="button" class="deg-currency-option is-selected"
                       data-bind="deg-currency-option-0" value="0" aria-pressed="true"
                       aria-label="Pay with ETH" title="ETH">
-                <img src="/shared/eth-blue.svg" alt="">
+                <img src="/badges-circular/crypto_06_ethereum_blue.svg" alt="">
               </button>
               <button type="button" class="deg-currency-option"
                       data-bind="deg-currency-option-1" value="1" aria-pressed="false"

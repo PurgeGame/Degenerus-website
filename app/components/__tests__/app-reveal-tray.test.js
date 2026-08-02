@@ -144,6 +144,52 @@ describe('<app-reveal-tray>', () => {
     el.disconnectedCallback();
   });
 
+  test('CLEAR BOXES invokes each lootbox owner once and dismisses every box row', async () => {
+    let cleared = 0;
+    const clearAll = async () => {
+      cleared += 1;
+      pending.clearPendingActions('box');
+    };
+    pending.publishPendingActions('box', [
+      {
+        id: 'box:7', kind: 'lootbox', label: 'Lootbox #7', state: 'ready',
+        run: async () => {}, clearAll,
+      },
+      {
+        id: 'box:8', kind: 'lootbox', label: 'Lootbox #8', state: 'ready',
+        run: async () => {}, clearAll,
+      },
+    ]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+    const clear = el.querySelector('[data-bind="rrt-clear"]');
+    assert.equal(clear.hidden, false);
+    assert.equal(clear.textContent, 'CLEAR BOXES');
+
+    clear.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    assert.equal(cleared, 1, 'one publisher callback is not repeated per row');
+    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, true);
+    el.disconnectedCallback();
+  });
+
+  test('ticket actions use a fixed-aspect branded pack instead of a squeezed glyph', () => {
+    pending.publishPendingActions('pack', [{
+      id: 'pack:62', kind: 'tickets', label: 'Level 62 ticket pack',
+      shortLabel: 'Open tickets', detail: '5 tickets ready', state: 'ready',
+      run: async () => {},
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+    const art = el.querySelector('.rrt-action__art--tickets');
+    assert.ok(art?.querySelector('.rrt-pack-art'), 'the button carries the opener pack art');
+    assert.equal(art.querySelector('.rvl-pack-logo')?.src, '/whitepaper/flame-logo.svg');
+    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    assert.match(css, /\.rrt-pack-art\.rvl-pack\s*\{[^}]*flex:\s*0 0 auto[^}]*aspect-ratio:\s*118 \/ 160/s,
+      'the compact button cannot flex-squash its portrait wrapper');
+    el.disconnectedCallback();
+  });
+
   test('is mounted once and styled as a fixed bottom surface below the reveal overlay', () => {
     const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
@@ -153,5 +199,15 @@ describe('<app-reveal-tray>', () => {
     assert.match(css, /app-reveal-tray\s*\{[^}]*position:\s*fixed[^}]*bottom:/s);
     assert.match(css, /app-reveal-tray\s*\{[^}]*z-index:\s*900/s);
     assert.match(css, /\.rvl-backdrop\s*\{[^}]*z-index:\s*1200/s);
+    assert.match(
+      css,
+      /body\.layout-basic \.rrt-actions\s*\{[^}]*max-height:\s*7\.65rem[^}]*grid-auto-rows:\s*var\(--rrt-row-height\)[^}]*overflow-y:\s*auto/s,
+      'only two desktop action rows fit before the pending list scrolls',
+    );
+    assert.match(
+      css,
+      /@media \(max-width: 560px\)[\s\S]*?\.rrt-actions\s*\{[^}]*max-height:\s*7\.05rem/s,
+      'the single-column phone tray is likewise capped at two compact rows',
+    );
   });
 });

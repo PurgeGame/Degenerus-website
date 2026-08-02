@@ -1328,7 +1328,7 @@ describe('Foil pack buy leg', () => {
     await import('../app-decimator-panel.js');
   });
 
-  test('foil row stays hidden until the DB explicitly confirms it can be bought', async () => {
+  test('foil row stays usable while the indexed ownership read is pending', async () => {
     let releaseFoil;
     _fetchHandler = async (url) => {
       const u = String(url);
@@ -1339,10 +1339,10 @@ describe('Foil pack buy leg', () => {
     const el = instantiate();
     await flushMicrotasks();
     const row = el.querySelector('[data-bind="dec-foil-row"]');
-    assert.equal(row.hidden, true, 'no ownership-check flash on mount');
+    assert.equal(row.hidden, false, 'an ownership guess never delays a valid level offer');
     releaseFoil({ present: false, level: 12 });
     await settle(20);
-    assert.equal(row.hidden, false, 'explicitly available pack becomes selectable');
+    assert.equal(row.hidden, false, 'the eventual index answer does not move the control');
     el.disconnectedCallback();
   });
 
@@ -1384,7 +1384,7 @@ describe('Foil pack buy leg', () => {
     el.disconnectedCallback();
   });
 
-  test('legacy ownership markers cannot poison the current level offer', async () => {
+  test('ownership markers cannot poison the current level offer', async () => {
     localStorage.setItem(
       `foil-owned:${CHAIN.id}:${CONNECTED.toLowerCase()}:12`,
       JSON.stringify({ version: 2, level: 12, source: 'receipt', at: Date.now() }),
@@ -1392,7 +1392,7 @@ describe('Foil pack buy leg', () => {
     const el = instantiate();
     await settle(60);
     assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, false,
-      'only an exact current-version receipt/contract marker suppresses the offer');
+      'local ownership hints never suppress the contract-preflighted offer');
     el.disconnectedCallback();
   });
 
@@ -1410,7 +1410,7 @@ describe('Foil pack buy leg', () => {
     el.disconnectedCallback();
   });
 
-  test('already purchased for the level → the whole row is hidden, not just disabled', async () => {
+  test('an indexed owned hint does not suppress a potentially valid foil purchase', async () => {
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
@@ -1422,13 +1422,11 @@ describe('Foil pack buy leg', () => {
     };
     const el = instantiate();
     await settle(60);
-    // One per (player, level): once held there is nothing to buy, so the row
-    // leaves the buy flow rather than sitting there disabled (user call).
     const row = el.querySelector('[data-bind="dec-foil-row"]');
-    assert.equal(row.hidden, true, 'foil row hidden once owned');
+    assert.equal(row.hidden, false, 'stale indexed ownership is informational only');
     const check = el.querySelector('[data-bind="dec-foil-check"]');
-    assert.equal(check.disabled, true, 'checkbox still disabled underneath');
-    assert.equal(check.checked, false, 'and cannot carry a stale tick into the buy');
+    assert.equal(check.disabled, false, 'the contract simulation gets the final say');
+    assert.equal(check.checked, false);
     el.disconnectedCallback();
   });
 
@@ -1446,8 +1444,8 @@ describe('Foil pack buy leg', () => {
     };
     const el = instantiate();
     await settle(60);
-    assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, true,
-      'the stale phase snapshot initially points at the already-owned level');
+    assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, false,
+      'even a stale owned hint cannot suppress the purchase control');
 
     storeMod.update('ui.foilQuest', {
       active: true,
@@ -1596,7 +1594,7 @@ describe('Foil pack buy leg', () => {
     el.disconnectedCallback();
   });
 
-  test('click-time ownership refresh blocks a stale duplicate foil buy', async () => {
+  test('click-time buy bypasses a stale indexed ownership change', async () => {
     let owned = false;
     _fetchHandler = async (url) => {
       const u = String(url);
@@ -1617,13 +1615,14 @@ describe('Foil pack buy leg', () => {
     el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
-    assert.equal(fakeContract._calls.purchase.length, 0, 'duplicate stopped before purchase');
-    assert.equal(row.hidden, true, 'stale foil option retired');
-    assert.match(el.querySelector('[data-bind="dec-error"]').textContent, /already own/i);
+    assert.equal(fakeContract._calls.purchase.length, 1,
+      'the value-accurate contract preflight, not the changed DB hint, authorizes the send');
+    assert.equal(row.hidden, false, 'indexed ownership never retires the option');
+    assert.doesNotMatch(el.querySelector('[data-bind="dec-error"]').textContent, /already own/i);
     el.disconnectedCallback();
   });
 
-  test('FoilAlreadyBought preflight retires the row when the indexer lags', async () => {
+  test('FoilAlreadyBought preflight blocks the send without poisoning the row', async () => {
     const fakeContract = makeFakePurchaseContract({
       staticCallShouldRevert: { purchase: true },
       staticCallRevertName: { purchase: 'FoilAlreadyBought' },
@@ -1638,12 +1637,13 @@ describe('Foil pack buy leg', () => {
     await settle(60);
 
     assert.equal(fakeContract._calls.purchase.length, 0, 'static-call failure prevents send');
-    assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, true, 'contract answer retires row');
-    assert.match(el.querySelector('[data-bind="dec-error"]').textContent, /already own/i);
+    assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, false,
+      'a failed attempt does not cache another potentially stale ownership blocker');
+    assert.match(el.querySelector('[data-bind="dec-error"]').textContent, /unavailable for this transaction/i);
     el.disconnectedCallback();
   });
 
-  test('FoilPackBought in the buy receipt retires the row immediately (receipt-first, indexer lag safe)', async () => {
+  test('FoilPackBought clears the selection without turning receipt state into a future gate', async () => {
     // Fake contract whose purchase receipt carries the FoilPackBought event.
     const calls = { purchase: [] };
     const fakeContract = {
@@ -1671,22 +1671,20 @@ describe('Foil pack buy leg', () => {
     await settle(60);
 
     assert.equal(calls.purchase.length, 1, 'purchase fired');
-    // Straight off the receipt, without waiting for the indexer to catch up.
     const row = el.querySelector('[data-bind="dec-foil-row"]');
-    assert.equal(row.hidden, true, 'row gone as soon as the buy confirms');
-    assert.equal(check.disabled, true, 'checkbox locked after the buy');
+    assert.equal(row.hidden, false, 'the level offer is not hidden by UI-side ownership state');
+    assert.equal(check.disabled, false, 'checkbox remains governed by phase, not ownership guesses');
     assert.equal(check.checked, false, 'checkbox cleared after the buy');
     el.disconnectedCallback();
     el.remove();
 
-    // The indexer still says "not present", as it will until the new pack's
-    // four ticket lines roll. The mined receipt marker must win on reload.
+    // The contract remains the duplicate guard on reload too.
     const refreshed = instantiate();
     await settle(60);
     assert.equal(
       refreshed.querySelector('[data-bind="dec-foil-row"]').hidden,
-      true,
-      'refresh cannot re-offer a foil pack whose receipt already confirmed',
+      false,
+      'refresh cannot inherit a false-negative local purchase gate',
     );
     refreshed.disconnectedCallback();
   });
