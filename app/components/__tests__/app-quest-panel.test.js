@@ -1164,6 +1164,50 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
+  test('live GAME identity restores deity score and afKing streak without a player API row', async () => {
+    const { mergeQuestIdentitySnapshot } = await import('../app-quest-panel.js');
+    const identity = mergeQuestIdentitySnapshot(null, {
+      afkingActive: true,
+      effectiveQuestStreak: 5,
+      effectiveQuestStreakExact: true,
+      activityScore: 157,
+      hasDeityPass: true,
+      questStreak: { baseStreak: 0, lastCompletedDay: 0 },
+    });
+
+    assert.equal(identity.questStreak.baseStreak, 5);
+    assert.equal(identity.scoreBreakdown.totalBps, 157);
+    assert.equal(identity.scoreBreakdown.liveOnly, true);
+    assert.equal(identity.scoreBreakdown.questStreakPoints, 5);
+    assert.equal(identity.scoreBreakdown.mintLevelStreakPoints, 50);
+    assert.equal(identity.scoreBreakdown.mintCountPoints, 25);
+    assert.deepEqual(identity.scoreBreakdown.passBonus, { kind: 'deity', points: 80 });
+  });
+
+  test('live GAME total replaces a stale prior-deployment score breakdown', async () => {
+    const { mergeQuestIdentitySnapshot } = await import('../app-quest-panel.js');
+    const identity = mergeQuestIdentitySnapshot({
+      currentStreak: 99,
+      scoreBreakdown: {
+        totalBps: 12,
+        questStreakPoints: 99,
+        passBonus: null,
+      },
+    }, {
+      afkingActive: true,
+      effectiveQuestStreak: 5,
+      effectiveQuestStreakExact: true,
+      activityScore: 157,
+      hasDeityPass: true,
+      questStreak: { baseStreak: 0, lastCompletedDay: 0 },
+    });
+
+    assert.equal(identity.questStreak.baseStreak, 5);
+    assert.equal(identity.scoreBreakdown.totalBps, 157);
+    assert.equal(identity.scoreBreakdown.questStreakPoints, 5);
+    assert.equal(identity.scoreBreakdown.passBonus.kind, 'deity');
+  });
+
   test('Degen Score mouseover shows the credited quest-streak points, not the raw streak count', async () => {
     _fetchHandler = async () => makeQuestsPayload({
       questStreak: { baseStreak: 7, lastCompletedDay: 0 },

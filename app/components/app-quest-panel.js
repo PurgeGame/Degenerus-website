@@ -211,6 +211,81 @@ function _scoreNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function _finiteNullable(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function _liveOnlyScoreBreakdown(liveBoard, streak) {
+  const total = _finiteNullable(liveBoard?.activityScore);
+  if (total == null) return null;
+  const score = {
+    totalBps: total,
+    liveOnly: true,
+  };
+  const streakNumber = _finiteNullable(streak);
+  if (streakNumber != null) score.questStreakPoints = streakNumber;
+  // A deity pass deterministically replaces the two participation components
+  // with their maxima and adds the permanent +80 pass component. These rows
+  // are therefore safe to show even when the indexer has no player record.
+  if (liveBoard?.hasDeityPass === true) {
+    score.mintLevelStreakPoints = 50;
+    score.mintCountPoints = 25;
+    score.passBonus = { kind: 'deity', points: 80 };
+  }
+  return score;
+}
+
+/**
+ * Merge indexed component detail with deployment-local identity values.
+ * GAME owns the headline total and active afKing streak. The database remains
+ * useful for the component breakdown, but only while its total/pass identity
+ * agrees with the current deployment.
+ */
+export function mergeQuestIdentitySnapshot(data, liveBoard) {
+  const afkingActive = liveBoard
+    ? liveBoard.afkingActive === true
+    : data?.afkingActive === true;
+  const indexedCurrent = _finiteNullable(data?.currentStreak);
+  const liveCurrent = _finiteNullable(liveBoard?.effectiveQuestStreak);
+  const useExactLive = liveBoard?.effectiveQuestStreakExact === true
+    && liveCurrent != null;
+  const fallback = liveBoard?.questStreak || data?.questStreak || null;
+  const selectedStreak = afkingActive
+    ? (useExactLive
+      ? liveCurrent
+      : indexedCurrent != null ? indexedCurrent : _finiteNullable(fallback?.baseStreak))
+    : (useExactLive ? liveCurrent : _finiteNullable(fallback?.baseStreak));
+  const questStreak = selectedStreak != null
+    ? {
+      ...(fallback || {}),
+      baseStreak: selectedStreak,
+      lastCompletedDay: fallback?.lastCompletedDay ?? 0,
+    }
+    : fallback;
+
+  const indexedScore = data?.scoreBreakdown && typeof data.scoreBreakdown === 'object'
+    ? data.scoreBreakdown
+    : null;
+  const liveScore = _finiteNullable(liveBoard?.activityScore);
+  let scoreBreakdown = indexedScore;
+  if (liveScore != null) {
+    const indexedTotal = _finiteNullable(indexedScore?.totalBps);
+    const indexedDeity = String(indexedScore?.passBonus?.kind || '').toLowerCase() === 'deity';
+    const deityMismatch = liveBoard?.hasDeityPass != null
+      && Boolean(liveBoard.hasDeityPass) !== indexedDeity;
+    scoreBreakdown = indexedScore
+      && indexedTotal != null
+      && indexedTotal === liveScore
+      && !deityMismatch
+      ? { ...indexedScore, totalBps: liveScore }
+      : _liveOnlyScoreBreakdown(liveBoard, questStreak?.baseStreak);
+  }
+
+  return { afkingActive, questStreak, scoreBreakdown };
+}
+
 /**
  * Visual fill for one Degen Score breakdown row. Capped categories compare to
  * their own contract maximum; quest streak uses a diminishing curve where 20
@@ -1061,32 +1136,20 @@ class AppQuestPanel extends HTMLElement {
         ? liveBoard.quests
         : (Array.isArray(defs?.quests) ? defs.quests : null);
       this.#questDay = liveBoard?.day || defs?.day || day || null;
-      // During an afKing run the Quest contract's manual streak is dormant;
-      // Game's Sub-side compute-on-read owns the effective streak used by the
-      // Degen Score. The player API reconstructs that unified value, so prefer
-      // it over playerQuestStates.streak for an active subscriber.
-      const afkingActive = liveBoard
-        ? liveBoard.afkingActive === true
-        : data?.afkingActive === true;
-      this.#questStreak = afkingActive
-        ? (data?.currentStreak == null
-          ? (data?.questStreak || null)
-          : {
-            ...(data?.questStreak || {}),
-            baseStreak: data.currentStreak,
-            lastCompletedDay: data?.questStreak?.lastCompletedDay
-              ?? liveBoard?.questStreak?.lastCompletedDay
-              ?? 0,
-          })
-        : (liveBoard?.questStreak || data?.questStreak || null);
-      this.#scoreBreakdown = data?.scoreBreakdown || null;
+      // GAME supplies the exact deployment-local headline score and, for a
+      // live afKing subscriber, the packed streak used to calculate it. Keep a
+      // coherent indexed breakdown when one exists; otherwise show only the
+      // contract-known components instead of blanking the whole HUD.
+      const identity = mergeQuestIdentitySnapshot(data, liveBoard);
+      this.#questStreak = identity.questStreak;
+      this.#scoreBreakdown = identity.scoreBreakdown;
       this.#levelQuest = liveBoard?.levelQuest && typeof liveBoard.levelQuest === 'object'
         ? liveBoard.levelQuest
         : data?.levelQuest && typeof data.levelQuest === 'object'
           ? data.levelQuest
         : null;
       if (gameState && typeof gameState === 'object') this.#gameState = gameState;
-      this.#afkingActive = afkingActive;
+      this.#afkingActive = identity.afkingActive;
       this.#renderQuests();
     } catch (_e) {
       // Network blip — render empty/error message; next cycle retries.
@@ -1397,13 +1460,16 @@ class AppQuestPanel extends HTMLElement {
     else { rowsEl.children = []; rowsEl._innerHTML = ''; }
 
     if (score) {
-      const rows = SCORE_COMPONENTS.map((component) => ({
-        key: component.key,
-        label: component.label,
-        points: component.key === 'questStreakPoints'
-          ? questStreakScorePoints(score)
-          : _scoreNumber(score[component.key]),
-      }));
+      const rows = SCORE_COMPONENTS
+        .filter((component) => !score.liveOnly
+          || Object.prototype.hasOwnProperty.call(score, component.key))
+        .map((component) => ({
+          key: component.key,
+          label: component.label,
+          points: component.key === 'questStreakPoints'
+            ? questStreakScorePoints(score)
+            : _scoreNumber(score[component.key]),
+        }));
       if (score.passBonus && _scoreNumber(score.passBonus.points) !== 0) {
         rows.push({
           key: 'passBonusPoints',
