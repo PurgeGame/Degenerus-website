@@ -34,8 +34,10 @@
   margin: 2px 0 0;
 }
 
-/* Hide the big nav logo on the viewer page — compact header is enough */
-.nav-logo {
+/* Hide the big nav logo on the viewer page — compact header is enough.
+   Scoped to the viewer header: /app/ and /play/ also load this stylesheet
+   and an unscoped rule stripped the brand flame out of their nav bars. */
+body:has(.viewer-header) .nav-logo {
   display: none;
 }
 

@@ -451,6 +451,8 @@ describe('<app-activity-panel> activity score + streaks', () => {
     assert.match(text, /Mint count/);
     assert.match(text, /Whale pass \(10-lvl\)/, 'pass bonus labelled by kind');
     assert.match(text, /\+50/, 'level streak points shown signed');
+    assert.match(text, /Quest streak[^|]*\+2/,
+      'raw quest streak 5 contributes floor(5 / 2) = 2 score points');
     assert.match(text, /\+10/, 'pass bonus points shown signed');
     el.disconnectedCallback();
   });
@@ -516,4 +518,3 @@ describe('<app-activity-panel> activity score + streaks', () => {
     el.disconnectedCallback();
   });
 });
-

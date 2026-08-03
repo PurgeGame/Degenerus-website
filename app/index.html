@@ -128,7 +128,7 @@
 
       <!-- Collapsed passes (user call: tickets+lootboxes live in the buy
            panel now, so the packs panel is gone and this is just passes) -->
-      <details class="more-ways" open>
+      <details class="more-ways" open id="afking-passes">
         <summary class="more-ways__summary">afKing Passes</summary>
         <div class="more-ways__content">
           <app-pass-section></app-pass-section>
@@ -150,6 +150,9 @@
     <!-- Headless lootbox lifecycle controller. Ready boxes are exposed only
          through the same fixed bottom tray used by ticket packs. -->
     <app-box-strip tray-only></app-box-strip>
+    <!-- A live sDGNRS burn settles one day later. Keep its claim/open step in
+         the same durable reveal tray, including across page refreshes. -->
+    <app-sdgnrs-redemptions></app-sdgnrs-redemptions>
 
     <!-- Full-screen prize reveal engine (reveal-overlay.js) — lootbox opens,
          ticket-pack creation, jackpot winnings. Hidden until a sequence is
@@ -175,6 +178,7 @@
   <script type="module" src="/app/components/app-mine-flip.js"></script>
   <script type="module" src="/app/components/app-decimator-panel.js"></script>
   <script type="module" src="/app/components/app-box-strip.js"></script>
+  <script type="module" src="/app/components/app-sdgnrs-redemptions.js"></script>
   <script type="module" src="/app/components/app-reveal-tray.js"></script>
   <script type="module" src="/app/components/reveal-overlay.js"></script>
   <script type="module" src="/app/components/app-degenerette-panel.js"></script>

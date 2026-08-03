@@ -24,6 +24,7 @@
 
 import { get, subscribe, getViewedAddress } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
+import { questStreakScorePoints } from '../app/activity-score.js';
 
 function _setIntervalUnref(fn, ms) {
   const h = setInterval(fn, ms);
@@ -271,7 +272,9 @@ class AppActivityPanel extends HTMLElement {
 
     const rows = [];
     for (const c of COMPONENTS) {
-      const pts = this.#num(s[c.key]);
+      const pts = c.key === 'questStreakPoints'
+        ? questStreakScorePoints(s)
+        : this.#num(s[c.key]);
       rows.push({ label: c.label, pts, cap: c.cap, softCap: c.softCap });
     }
     // Pass bonus — labelled by kind. Deity is the top pass (fills to DEITY_PASS_MAX);

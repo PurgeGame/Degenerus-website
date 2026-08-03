@@ -260,6 +260,11 @@ describe('app-box-strip', () => {
     assert.equal(cta.disabled, true);
     assert.equal(cta.textContent, 'RNG PENDING');
     assert.match(chips[0].querySelector('.bxs-chip-status').textContent, /Waiting for RNG/);
+    const pending = pendingActionsMod.getPendingActions();
+    assert.equal(pending.length, 2, 'purchased boxes enter the shared pending area immediately');
+    assert.ok(pending.every((item) => item.state === 'waiting' && item.pinned === true));
+    assert.ok(pending.every((item) => item.resolved === false),
+      'an unresolved box is visible without pretending its prizes exist');
   });
 
   test('ready RNG gets an explicit OPEN LOOTBOX button and a shared ready action', async () => {
@@ -282,6 +287,49 @@ describe('app-box-strip', () => {
     assert.equal(pending[0].id, 'lootbox:8');
     assert.equal(pending[0].state, 'ready');
     assert.equal(typeof pending[0].run, 'function');
+    el.disconnectedCallback();
+  });
+
+  test('a directly queued Degenerette box retires the matching pending replay immediately', async () => {
+    const resultKey = 'tx:0xdegenerettebox';
+    globalThis.localStorage.setItem(KEY, JSON.stringify([{
+      index: 0,
+      resultKey,
+      transactionHash: '0xdegenerettebox',
+      ready: true,
+      resolved: true,
+      fromReceipt: false,
+    }]));
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    assert.ok(
+      pendingActionsMod.getPendingActions().some((action) => action.id === `lootbox:${resultKey}`),
+      'the indexed copy initially exists in the pending tray',
+    );
+
+    revealMod.queueReveal({
+      kind: 'lootbox',
+      legs: [{ legType: 'opened', lootboxIndex: 0, amount: 1n }],
+      lootboxRelease: {
+        address: ADDR,
+        key: resultKey,
+        lootboxIndex: 0,
+        transactionHash: '0xdegenerettebox',
+      },
+    });
+    await tick();
+
+    assert.equal(
+      pendingActionsMod.getPendingActions().some((action) => action.id === `lootbox:${resultKey}`),
+      false,
+      'queuing the direct reveal consumes the duplicate before its receipt is shown',
+    );
+    assert.deepEqual(
+      JSON.parse(globalThis.localStorage.getItem(revealedBoxesKey(CHAIN.id, ADDR))),
+      [resultKey],
+      'later indexer polls cannot rediscover the same opening',
+    );
     el.disconnectedCallback();
   });
 

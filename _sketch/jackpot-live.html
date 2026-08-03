@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jackpot Live — Last Day (PoC)</title>
+  <style>
+    :root {
+      --bg: #0d0f12;
+      --surface: #16191e;
+      --surface-2: #1d2127;
+      --border: #2a2f37;
+      --border-hi: #3b414b;
+      --text: #e6e8eb;
+      --muted: #9aa1a8;
+      --accent: #f6a623;
+      --win: #3fb56b;
+      --loss: #d04848;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+    body { padding: 14px; max-width: 480px; margin: 0 auto; }
+    h1 { font-size: 14px; font-weight: 600; margin: 0 0 8px; color: var(--accent); letter-spacing: 0.02em; }
+    .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; display: block; margin-bottom: 4px; }
+    .picker { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px; align-items: end; }
+    select, .randbtn { background: var(--surface); color: var(--text); border: 1px solid var(--border-hi); border-radius: 6px; padding: 6px 8px; font-size: 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .randbtn { cursor: pointer; background: var(--surface-2); }
+    .randbtn:hover { border-color: var(--accent); }
+    .status { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 11.5px; color: var(--muted); margin-bottom: 12px; }
+    .status b { color: var(--text); }
+    .status .row { display: flex; justify-content: space-between; }
+    .status .row + .row { margin-top: 4px; }
+    .iframe-wrap { background: #14141a; border-radius: 12px; overflow: hidden; }
+    iframe { width: 100%; height: 600px; border: none; display: block; background: #14141a; }
+    details { margin-top: 12px; font-size: 11px; }
+    details summary { color: var(--muted); cursor: pointer; padding: 6px 0; }
+    pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 8px; overflow-x: auto; font-size: 10.5px; line-height: 1.4; max-height: 320px; color: var(--text); }
+    .badge { display: inline-block; background: var(--surface-2); border: 1px solid var(--border-hi); padding: 1px 6px; border-radius: 99px; font-size: 10px; margin-right: 4px; color: var(--muted); }
+    .badge.win { color: var(--win); border-color: var(--win); }
+    .badge.loss { color: var(--loss); border-color: var(--loss); }
+  </style>
+</head>
+<body>
+
+  <h1>Jackpot Live — Last Day (PoC)</h1>
+
+  <div class="picker">
+    <div>
+      <label class="label" for="player-select">Player</label>
+      <select id="player-select">
+        <option value="">— select an address —</option>
+      </select>
+    </div>
+    <div>
+      <label class="label">&nbsp;</label>
+      <button class="randbtn" id="rand-winner-btn" title="Pick a random winner for the last day">🎯 Random winner</button>
+    </div>
+  </div>
+
+  <div class="status" id="status">
+    <div class="row"><span>Status</span><b id="status-msg">Pick a player or click "Random winner"</b></div>
+  </div>
+
+  <div class="iframe-wrap">
+    <iframe id="jackpot-iframe" src="/wtf/jackpot-demo.html" title="Daily jackpot draw widget"></iframe>
+  </div>
+
+  <details>
+    <summary>Raw fetched data (debug)</summary>
+    <pre id="debug">—</pre>
+  </details>
+
+  <script>
+    const API = 'http://localhost:3000/game/jackpot';
+    // Bust the API's `immutable` cache header on /last-day + /day/:day/winners — the chain advances during a session.
+    const noCache = () => `?_=${Date.now()}`;
+
+    // ---- Decoders ----
+    function unpackTraits(packed) {
+      const p = Number(packed);
+      return [p & 0xFF, (p >> 8) & 0xFF, (p >> 16) & 0xFF, (p >> 24) & 0xFF];
+    }
+    // Canonical trait_id layout (DegenerusTraitUtils.sol §traitFromWord):
+    //   [QQ][CCC][SSS] — bits[5:3]=color (heavy-tail), bits[2:0]=symbol (uniform).
+    function traitIdToQSC(traitId) {
+      return {
+        q: Math.floor(traitId / 64),
+        sym: traitId % 8,
+        col: Math.floor((traitId % 64) / 8)
+      };
+    }
+    // Sepolia testnet: on-chain ETH amounts are scaled down 1e6× vs mainnet-magnitude
+    // (chain-config ETH_DIVISOR = 1_000_000n). For the PoC widget — which formats ETH
+    // with 6-decimal precision and would round tiny Sepolia amounts to "0 ETH" —
+    // we descale by /1e12 instead of /1e18 so the magnitude reads like a real jackpot.
+    // This is a display hack for the testnet sketch; production wiring should use
+    // /app/'s `displayEth(raw_bigint)` from scaling.js with the correct ETH_DIVISOR.
+    function ethDisplay(raw) { return Number(raw) / 1e12; }
+    // Testnet FLIP uses the same 1e6 wad scale as ETH — /1e12 instead of /1e18
+    // so testnet FLIP prizes display as their mainnet-equivalent whole numbers.
+    function flipFromWei(wei) { return Number(wei) / 1e12; }
+    function shortAddr(addr) { return addr ? addr.slice(0, 6) + '…' + addr.slice(-4) : '—'; }
+
+    // ---- Build SCENARIOS array from API responses ----
+    async function buildScenarios(address) {
+      const lastDay = await fetch(`${API}/last-day${noCache()}`).then(r => r.json());
+      const { day, level } = lastDay;
+      const winnersResp = await fetch(`${API}/day/${day}/winners${noCache()}`).then(r => r.json());
+
+      const lowerAddr = address.toLowerCase();
+      const me = winnersResp.winners.find(w => w.address.toLowerCase() === lowerAddr);
+
+      const mainPacked = lastDay.summary.rollOne.mainTraitsPacked;
+      const mainRaw = unpackTraits(mainPacked);
+      const mainTraits = mainRaw.map(traitIdToQSC);
+      const mainOwned = mainRaw.map(tid => !!(me && me.breakdown.some(b => b.traitId === tid)));
+      const mainPrizes = [];
+      if (me) {
+        mainRaw.forEach((tid, q) => {
+          const rows = me.breakdown.filter(b => b.traitId === tid);
+          rows.forEach(row => {
+            // Each breakdown row aggregates `count` winning tickets at the same prize amount.
+            // The widget's placeWinBadges() puts ONE scattered badge per prize entry, so
+            // expand by count → one entry per winning ticket → one badge per win.
+            for (let k = 0; k < row.count; k++) {
+              if (row.awardType === 'eth') {
+                mainPrizes.push([ethDisplay(row.amount), 'eth', q]);
+              } else if (row.awardType === 'tickets') {
+                mainPrizes.push([Number(row.amount), 'tickets', q, Number(row.amount)]);
+              } else if (row.awardType === 'flip') {
+                mainPrizes.push([flipFromWei(row.amount), 'flip', q]);
+              }
+            }
+          });
+        });
+      }
+
+      const mainScenario = {
+        title: `Day ${day} (Lv ${level}) — main draw`,
+        desc: me
+          ? `${shortAddr(address)} — ${mainPrizes.length ? mainPrizes.length + ' main-draw prize line(s)' : 'no main-draw wins'}`
+          : 'This address did not win on Day ' + day,
+        degenWinCenter: false,
+        target: mainTraits,
+        owned: mainOwned,
+        prizes: mainPrizes,
+        centerWins: []
+      };
+
+      const scenarios = [mainScenario];
+
+      const bonusPacked = lastDay.summary.rollTwo?.bonusTraitsPacked;
+      const playerHasBonus = me?.hasBonus;
+      if (bonusPacked && playerHasBonus) {
+        const bonusRaw = unpackTraits(bonusPacked);
+        const bonusTraits = bonusRaw.map(traitIdToQSC);
+        const bonusOwned = bonusRaw.map(tid => !!(me.breakdown.some(b => b.traitId === tid)));
+        const bonusPrizes = [];
+        bonusRaw.forEach((tid, q) => {
+          const rows = me.breakdown.filter(b => b.traitId === tid);
+          rows.forEach(row => {
+            for (let k = 0; k < row.count; k++) {
+              if (row.awardType === 'eth') {
+                bonusPrizes.push([ethDisplay(row.amount), 'eth', q]);
+              } else if (row.awardType === 'tickets') {
+                bonusPrizes.push([Number(row.amount), 'tickets', q, Number(row.amount)]);
+              } else if (row.awardType === 'flip') {
+                bonusPrizes.push([flipFromWei(row.amount), 'flip', q]);
+              }
+            }
+          });
+        });
+        // Center wins (whale pass, deity, FLIP no-trait): traitId === null rows
+        const centerWins = [];
+        me.breakdown.filter(b => b.traitId === null).forEach(row => {
+          if (row.awardType === 'flip') centerWins.push([flipFromWei(row.amount), 'flip', -2]);
+          else if (row.awardType === 'whale_pass') centerWins.push([row.count, 'whale_pass', -2]);
+        });
+        scenarios.push({
+          title: `Day ${day} — bonus roll`,
+          desc: 'FLIP coin + extra tickets · Click "Spin →" to play',
+          degenWinCenter: !!centerWins.length,
+          target: bonusTraits,
+          owned: bonusOwned,
+          prizes: bonusPrizes,
+          centerWins
+        });
+      }
+
+      return {
+        scenarios,
+        raw: {
+          day, level,
+          mainTraitsPacked: mainPacked,
+          mainTraitIds: mainRaw,
+          bonusTraitsPacked: bonusPacked,
+          me: me || null
+        }
+      };
+    }
+
+    // ---- Wire ----
+    const iframe = document.getElementById('jackpot-iframe');
+    const dbg = document.getElementById('debug');
+    const statusMsg = document.getElementById('status-msg');
+    const statusBox = document.getElementById('status');
+    let iframeReady = false;
+    let pendingMsg = null;
+
+    window.addEventListener('message', ev => {
+      if (ev.data?.type === 'jackpotDemoReady') {
+        iframeReady = true;
+        if (pendingMsg) {
+          iframe.contentWindow.postMessage(pendingMsg, '*');
+          pendingMsg = null;
+        }
+      }
+    });
+    iframe.addEventListener('load', () => {
+      // Fallback handshake: if widget already initialized but missed the message
+      if (pendingMsg) {
+        iframe.contentWindow.postMessage(pendingMsg, '*');
+        pendingMsg = null;
+      }
+    });
+
+    function injectScenarios(scenarios) {
+      const msg = { type: 'setScenarios', scenarios };
+      if (iframeReady) {
+        iframe.contentWindow.postMessage(msg, '*');
+      } else {
+        pendingMsg = msg;
+      }
+    }
+
+    async function load(address) {
+      statusMsg.textContent = 'Fetching last-day jackpot…';
+      try {
+        const { scenarios, raw } = await buildScenarios(address);
+        dbg.textContent = JSON.stringify(raw, null, 2);
+        const won = scenarios[0].owned.some(Boolean);
+        const wonBonus = scenarios.length > 1;
+        const totalEthDisplay = raw.me ? ethDisplay(raw.me.totalEth).toFixed(4) : '0.0000';
+        const totalFlipDisplay = raw.me ? flipFromWei(raw.me.coinTotal || '0').toFixed(0) : '0';
+        const totalTickets = Math.round((raw.me?.ticketCount ?? 0) / 4); // ticketCount is ENTRIES (4 = 1 ticket)
+        statusBox.innerHTML = `
+          <div class="row"><span>Player</span><b>${shortAddr(address)}</b></div>
+          <div class="row"><span>Day · level</span><b>${raw.day} · L${raw.level}</b></div>
+          <div class="row"><span>Total won</span><b>${totalEthDisplay} ETH · ${Number(totalFlipDisplay).toLocaleString()} FLIP · ${Number(totalTickets).toLocaleString()} tickets</b></div>
+          <div class="row"><span>Main draw</span><b><span class="badge ${won ? 'win' : 'loss'}">${won ? scenarios[0].owned.filter(Boolean).length + '/4 owned' : 'no match'}</span></b></div>
+          <div class="row"><span>Bonus roll</span><b><span class="badge ${wonBonus ? 'win' : 'loss'}">${wonBonus ? scenarios[1].owned.filter(Boolean).length + '/4 owned' : 'n/a'}</span></b></div>
+          <div class="row" style="font-size:10px;color:var(--muted);margin-top:6px;border-top:1px solid var(--border);padding-top:6px;"><span>note</span><span>ETH amounts ×1e6 for testnet display (Sepolia raw values are 1e6× smaller than mainnet-magnitude)</span></div>
+        `;
+        injectScenarios(scenarios);
+        statusMsg.textContent = 'Loaded — press Spin in the widget';
+      } catch (e) {
+        statusMsg.textContent = 'Error: ' + e.message;
+        dbg.textContent = String(e.stack || e);
+      }
+    }
+
+    // ---- Populate dropdown ----
+    let WINNERS_CACHE = null;
+    async function loadDropdown() {
+      const archetypesP = fetch('/beta/viewer/player-archetypes.json').then(r => r.json()).catch(() => ({}));
+      const lastDayP = fetch(`${API}/last-day${noCache()}`).then(r => r.json());
+      const [archetypes, lastDay] = await Promise.all([archetypesP, lastDayP]);
+      const winnersResp = await fetch(`${API}/day/${lastDay.day}/winners${noCache()}`).then(r => r.json());
+      WINNERS_CACHE = winnersResp.winners;
+
+      const sel = document.getElementById('player-select');
+      // Build entry list: address → archetype, mark winners with star, sort winners-first
+      const winnerSet = new Set(WINNERS_CACHE.map(w => w.address.toLowerCase()));
+      const entries = Object.entries(archetypes).map(([addr, archetype]) => ({
+        addr,
+        archetype,
+        isWinner: winnerSet.has(addr.toLowerCase()),
+        winInfo: WINNERS_CACHE.find(w => w.address.toLowerCase() === addr.toLowerCase())
+      }));
+      entries.sort((a, b) => (b.isWinner ? 1 : 0) - (a.isWinner ? 1 : 0));
+
+      entries.forEach(e => {
+        const opt = document.createElement('option');
+        opt.value = e.addr;
+        const ethLabel = e.winInfo && Number(e.winInfo.totalEth) > 0
+          ? ' (' + ethDisplay(e.winInfo.totalEth).toFixed(4) + ' ETH)'
+          : '';
+        opt.textContent = (e.isWinner ? '★ ' : '  ') + e.archetype.padEnd(13) + ' ' + shortAddr(e.addr) + ethLabel;
+        sel.appendChild(opt);
+      });
+
+      // Also expose any winners NOT in archetypes (non-autoplayer real wallets)
+      const archetypeKeys = new Set(Object.keys(archetypes).map(a => a.toLowerCase()));
+      WINNERS_CACHE.filter(w => !archetypeKeys.has(w.address.toLowerCase())).forEach(w => {
+        const opt = document.createElement('option');
+        opt.value = w.address;
+        const ethLabel = Number(w.totalEth) > 0 ? ' (' + ethDisplay(w.totalEth).toFixed(4) + ' ETH)' : '';
+        opt.textContent = '★ external      ' + shortAddr(w.address) + ethLabel;
+        sel.appendChild(opt);
+      });
+
+      sel.addEventListener('change', () => sel.value && load(sel.value));
+
+      // Random winner button
+      document.getElementById('rand-winner-btn').addEventListener('click', () => {
+        const winners = WINNERS_CACHE.filter(w => Number(w.totalEth) > 0 || (w.breakdown && w.breakdown.length > 0));
+        if (!winners.length) { statusMsg.textContent = 'No winners with prizes on the latest day.'; return; }
+        const pick = winners[Math.floor(Math.random() * winners.length)];
+        sel.value = pick.address;
+        load(pick.address);
+      });
+    }
+
+    loadDropdown();
+  </script>
+</body>
+</html>

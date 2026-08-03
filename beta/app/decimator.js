@@ -10,15 +10,15 @@ import { refreshAfterAction } from './api.js';
 // -- Write Functions (require wallet) --
 
 /**
- * Burn BURNIE during a decimator window.
+ * Burn FLIP during a decimator window.
  * Burns go to the COIN contract (not GAME).
- * @param {string} amountStr - User-entered BURNIE amount (e.g. "5000")
+ * @param {string} amountStr - User-entered FLIP amount (e.g. "5000")
  * @returns {Promise<object>} Transaction receipt
  */
 export async function burnForDecimator(amountStr) {
   const amount = parseFloat(amountStr);
   if (!amount || amount < parseFloat(DECIMATOR.MIN_BURN)) {
-    throw new Error('Minimum burn is 1,000 BURNIE');
+    throw new Error('Minimum burn is 1,000 FLIP');
   }
 
   const playerAddress = get('player.address');
@@ -77,7 +77,7 @@ export async function claimDecimatorJackpot(level) {
 
 /**
  * Compute decimator bucket from activity score.
- * Mirrors _adjustDecimatorBucket from BurnieCoin.sol.
+ * Mirrors _adjustDecimatorBucket from FLIP.sol.
  * @param {number} activityScoreBps - Activity score in bps
  * @param {boolean} isLevel100 - Whether current level is x00
  * @returns {number} Bucket number (2-12)

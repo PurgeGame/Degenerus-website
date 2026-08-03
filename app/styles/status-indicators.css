@@ -135,11 +135,11 @@ body.layout-basic .qst-score-label boon-product-indicator {
 
 /* Fakeout ending cue: after the coin visibly settles on the wrong face, the
    same Reverse card used by the real control flies in from above-right and
-   taps its edge. Each card stays invisible until its mimicked normal result
-   has completed every production landing frame. */
+   taps its edge. Each card waits for a brief beat after its mimicked normal
+   result completes; the shorter flight preserves the original impact beat. */
 body.layout-basic .df-fakeout-reverse-card {
   --df-fakeout-delay: 3300ms;
-  --df-fakeout-duration: 700ms;
+  --df-fakeout-duration: 600ms;
   position: absolute;
   left: 50%;
   top: 50%;

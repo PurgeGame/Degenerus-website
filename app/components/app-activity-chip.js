@@ -32,6 +32,7 @@
 
 import { get, subscribe, getViewedAddress } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
+import { questStreakScorePoints } from '../app/activity-score.js';
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -158,7 +159,12 @@ class AppActivityChip extends HTMLElement {
       // Bars are scaled against the largest component present, so the shape of
       // the score reads at a glance without needing per-component caps here
       // (the full panel owns those).
-      const vals = COMPONENTS.map((c) => ({ label: c.label, pts: num(this.#score[c.key]) }));
+      const vals = COMPONENTS.map((c) => ({
+        label: c.label,
+        pts: c.key === 'questStreakPoints'
+          ? questStreakScorePoints(this.#score)
+          : num(this.#score[c.key]),
+      }));
       if (this.#score.passBonus && num(this.#score.passBonus.points) !== 0) {
         vals.push({ label: 'Pass bonus', pts: num(this.#score.passBonus.points) });
       }

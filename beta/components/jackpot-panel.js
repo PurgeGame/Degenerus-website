@@ -328,11 +328,10 @@ class JackpotPanel extends HTMLElement {
     const ethWinners  = winners.filter(w => BigInt(w.totalEth  || '0') > 0n);
     const tickWinners = winners.filter(w => (w.ticketCount || 0) > 0);
     const coinWinners = winners.filter(w => BigInt(w.coinTotal || '0') > 0n);
-    // BAF winners: rows with bafPrize.eth > 0 OR bafPrize.tickets > 0.  The
-    // underlying eth_baf amounts are already included in totalEth (eth_total SQL
-    // groups LIKE 'eth%'), so BAF winners may double-show in the ETH row — that's
-    // intentional: ETH row = total ETH received, BAF row = of that total, how
-    // much came from the BAF draw.
+    // BAF winners: rows with bafPrize.eth > 0 OR bafPrize.tickets > 0.
+    // eth_total / ticket_total in the API exclude eth_baf / tickets_baf
+    // (exact awardType='eth' / 'tickets' SQL match), so the ETH and BAF
+    // rows are disjoint — no double-counting.
     const bafEthWinners    = winners.filter(w => w.bafPrize && BigInt(w.bafPrize.eth || '0') > 0n);
     const bafTicketWinners = winners.filter(w => w.bafPrize && (w.bafPrize.tickets || 0) > 0);
 
@@ -351,7 +350,7 @@ class JackpotPanel extends HTMLElement {
 
     if (tickWinners.length > 0) {
       const uniqueAddrs = new Set(tickWinners.map(w => w.address)).size;
-      // v4.4: ticketCount is scaled ×TICKET_SCALE (=100).  Divide for display.
+      // v76: ticketCount is in ENTRIES (4 = 1 whole ticket).  joScaledToTickets /4.
       const counts  = tickWinners.map(w => joScaledToTickets(w.ticketCount || 0));
       const topCount = Math.max(...counts);
       const allSame  = counts.every(c => c === counts[0]);
@@ -365,9 +364,9 @@ class JackpotPanel extends HTMLElement {
       const topAmt  = amounts.reduce((a, b) => (b > a ? b : a), 0n);
       const allSame = amounts.every(a => a === amounts[0]);
       const amtStr  = allSame
-        ? joFormatWeiToEth(amounts[0].toString()) + ' BURNIE each'
-        : joFormatWeiToEth(topAmt.toString()) + ' BURNIE (top)';
-      rows.push({ label: 'BURNIE', count: coinWinners.length, unique: uniqueAddrs, amount: amtStr });
+        ? joFormatWeiToEth(amounts[0].toString()) + ' FLIP each'
+        : joFormatWeiToEth(topAmt.toString()) + ' FLIP (top)';
+      rows.push({ label: 'FLIP', count: coinWinners.length, unique: uniqueAddrs, amount: amtStr });
     }
 
     if (bafEthWinners.length > 0) {
@@ -474,13 +473,20 @@ class JackpotPanel extends HTMLElement {
       res = await fetchJSON(`/game/jackpot/day/${day}/winners`);
     } catch (err) {
       if (v !== this.#winnersRequestVersion) return;
-      // Fall back: derive level from day
-      const derivedLevel = Math.ceil(day / 5);
-      let overviewLevel = derivedLevel;
+      // Fall back: ask /game/state for the live level (uniform 5-day cadence
+      // doesn't hold on testnet 15-min days or compressed terminal mode).
+      let overviewLevel = null;
       try {
-        const ov = await fetchJSON(`/game/jackpot/${derivedLevel}/overview`);
-        if (ov && ov.level) overviewLevel = ov.level;
+        const stateData = await fetchJSON(`/game/state`);
+        const lvl = Number(stateData?.level);
+        if (Number.isFinite(lvl) && lvl > 0) overviewLevel = lvl;
       } catch { /* ignore */ }
+      if (overviewLevel) {
+        try {
+          const ov = await fetchJSON(`/game/jackpot/${overviewLevel}/overview`);
+          if (ov && ov.level) overviewLevel = ov.level;
+        } catch { /* ignore */ }
+      }
       if (v !== this.#winnersRequestVersion) return;
       this.#currentDay = day;
       this.#currentLevel = overviewLevel;
@@ -561,19 +567,19 @@ class JackpotPanel extends HTMLElement {
     const normalAmtText = (w) => {
       const parts = [];
       if (BigInt(w.totalEth || '0') > 0n) parts.push(`${formatEth(w.totalEth)} ETH`);
-      // v4.4: ticketCount is scaled ×TICKET_SCALE (=100).
+      // v76: ticketCount is in ENTRIES (4 = 1 whole ticket).  joScaledToTickets /4.
       if ((w.ticketCount || 0) > 0) {
         const n = joScaledToTickets(w.ticketCount);
         parts.push(`${n} tkts`);
       }
-      if (BigInt(w.coinTotal || '0') > 0n) parts.push(`${joFormatWeiToEth(w.coinTotal)} BURNIE`);
+      if (BigInt(w.coinTotal || '0') > 0n) parts.push(`${joFormatWeiToEth(w.coinTotal)} FLIP`);
       return parts.join(' · ');
     };
     const bafAmtText = (w) => {
       const parts = [];
       if (BigInt(w.bafPrize.eth || '0') > 0n) parts.push(`${formatEth(w.bafPrize.eth)} ETH`);
-      // v4.4: bafPrize.tickets is the sum of scaled ticketCount (×TICKET_SCALE)
-      // across all BAF lootbox rolls for this winner.  Divide for display.
+      // v76: bafPrize.tickets is the sum of ticketCount in ENTRIES (4 = 1 whole
+      // ticket) across all BAF lootbox rolls for this winner.  joScaledToTickets /4.
       if ((w.bafPrize.tickets || 0) > 0) {
         const n = joScaledToTickets(w.bafPrize.tickets);
         parts.push(`${n} tkts`);
@@ -675,26 +681,50 @@ class JackpotPanel extends HTMLElement {
     }
   }
 
-  // Format breakdown array into tooltip HTML lines.
+  // Format breakdown array into tooltip HTML lines, partitioned by roll phase.
+  // phase is set by the API: 'roll1' (main draw), 'roll2' (bonus / carryover /
+  // far-future), 'other' (BAF + anything else).
   #formatBreakdownTooltip(breakdown) {
-    return breakdown.map(b => {
+    const rowLabel = (b) => {
       const { awardType, amount, count } = b;
       let label;
       if (awardType === 'eth') {
         label = joFormatWeiToEth(amount) + ' ETH';
+      } else if (awardType === 'eth_baf') {
+        label = joFormatWeiToEth(amount) + ' ETH (BAF)';
       } else if (awardType === 'tickets') {
-        label = amount + ' ticket' + (Number(amount) !== 1 ? 's' : '');
-      } else if (awardType.includes('burnie') || awardType === 'farFutureCoin') {
-        label = joFormatWeiToEth(amount) + ' BURNIE';
+        const n = joScaledToTickets(amount);
+        label = n + ' ticket' + (n !== 1 ? 's' : '');
+      } else if (awardType === 'tickets_baf') {
+        const n = joScaledToTickets(amount);
+        label = n + ' ticket' + (n !== 1 ? 's' : '') + ' (BAF)';
+      } else if (awardType.includes('flip') || awardType === 'farFutureCoin') {
+        label = joFormatWeiToEth(amount) + ' FLIP';
       } else if (awardType === 'whale_pass') {
-        label = 'Whale Pass';
+        label = (count > 1 || Number(amount) > 1) ? (amount + ' Whale Passes') : 'Whale Pass';
       } else if (awardType === 'dgnrs') {
         label = joFormatWeiToEth(amount) + ' DGNRS';
       } else {
         label = amount + ' ' + awardType;
       }
       return `<span>\u00d7${count} ${label}</span>`;
-    }).join('');
+    };
+
+    const roll1 = breakdown.filter(b => (b.phase || 'roll1') === 'roll1');
+    const roll2 = breakdown.filter(b => b.phase === 'roll2');
+    const other = breakdown.filter(b => b.phase === 'other');
+
+    const parts = [];
+    if (roll1.length > 0) {
+      parts.push('<div class="jp-tip-phase">Roll 1 \u2014 Main Draw</div>' + roll1.map(rowLabel).join(''));
+    }
+    if (roll2.length > 0) {
+      parts.push('<div class="jp-tip-phase">Roll 2 \u2014 Bonus Draw</div>' + roll2.map(rowLabel).join(''));
+    }
+    if (other.length > 0) {
+      parts.push('<div class="jp-tip-phase">Other</div>' + other.map(rowLabel).join(''));
+    }
+    return parts.join('');
   }
 
   // Called when a winner list item is clicked.  Clears the --selected state
@@ -944,7 +974,7 @@ class JackpotPanel extends HTMLElement {
         + (slot.isEmpty ? ' jp-slot-empty' : '')
         + (slot.isFarFuture ? ' jp-slot-farfuture' : '');
       if (slot.isFarFuture) {
-        sym.textContent = 'Far-Future (BURNIE)';
+        sym.textContent = 'Far-Future (FLIP)';
       } else if (slot.traitId == null) {
         sym.textContent = '\u2014';
       } else {

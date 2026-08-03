@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Degenerus Viewer</title>
   <link rel="stylesheet" href="/shared/nav.css">
-  <link rel="stylesheet" href="styles/base.css">
-  <link rel="stylesheet" href="styles/panels.css">
-  <link rel="stylesheet" href="styles/buttons.css">
-  <link rel="stylesheet" href="styles/skeleton.css">
-  <link rel="stylesheet" href="styles/viewer.css">
-  <link rel="stylesheet" href="styles/replay.css">
+  <link rel="stylesheet" href="/beta/styles/base.css">
+  <link rel="stylesheet" href="/beta/styles/panels.css">
+  <link rel="stylesheet" href="/beta/styles/buttons.css">
+  <link rel="stylesheet" href="/beta/styles/skeleton.css">
+  <link rel="stylesheet" href="/beta/styles/viewer.css">
+  <link rel="stylesheet" href="/beta/styles/replay.css">
   <script type="importmap">
   {
     "imports": {
@@ -29,11 +29,13 @@
   <div class="container">
     <!-- Nav bar injected by shared/nav.js -->
 
-    <!-- Page Header -->
-    <header class="page-header">
-      <img class="page-header-logo" src="/badges-circular/flame_red.svg" alt="Degenerus">
-      <h1>VIEWER</h1>
-      <p class="subtitle">Explore any player's activity at any day in the simulation.</p>
+    <!-- Page Header (compact) -->
+    <header class="viewer-header">
+      <img class="viewer-header__logo" src="/badges-circular/flame_red.svg" alt="Degenerus">
+      <div>
+        <h1 class="viewer-header__title">VIEWER</h1>
+        <p class="viewer-header__subtitle">Pick a player and day to explore the simulation.</p>
+      </div>
     </header>
 
     <!-- Controls panel: player selector + day scrubber -->
@@ -93,7 +95,7 @@
       ]
     });
   </script>
-  <script type="module" src="viewer/main.js"></script>
-  <script type="module" src="components/replay-panel.js"></script>
+  <script type="module" src="/beta/viewer/main.js"></script>
+  <script type="module" src="/beta/components/replay-panel.js"></script>
 </body>
 </html>

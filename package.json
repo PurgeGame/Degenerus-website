@@ -1,0 +1,27 @@
+{
+  "name": "website",
+  "version": "1.0.0",
+  "description": "Static site shell for the Degenerus Protocol, with the Degenerette simulator mounted at `/degenerette/`.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PurgeGame/Degenerus-website.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/PurgeGame/Degenerus-website/issues"
+  },
+  "homepage": "https://github.com/PurgeGame/Degenerus-website#readme",
+  "dependencies": {
+    "ethers": "^6.16.0"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@walletconnect/ethereum-provider": "^2.23.9"
+  }
+}

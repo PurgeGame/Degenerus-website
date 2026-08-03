@@ -3,8 +3,8 @@
 //
 // Tests <app-degenerette-panel> Custom Element: two-stage state machine
 // (idle → placing → awaitingRng → ready → resolving → resolved) + RNG poll
-// reusing Phase 60 pollRngForLootbox + Place + Resolve CTAs both with
-// data-write attribute + supported currency picker + outcome rendered inline
+// reusing Phase 60 pollRngForLootbox + Place CTA + shared pending-tray
+// resolution + supported currency picker + outcome rendered inline
 // after the widget-owned one-click-per-spin reveal (no toast/audio).
 
 import { test, describe, beforeEach } from 'node:test';
@@ -291,6 +291,22 @@ import * as degeneretteMod from '../../app/degenerette.js';
 import * as lootboxMod from '../../app/lootbox.js';
 import * as contractsMod from '../../app/contracts.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
+import * as affiliateMod from '../../app/affiliate.js';
+import * as passesMod from '../../app/passes.js';
+import { DEGENERETTE_PREFERENCES_KEY } from '../../app/degenerette-preferences.js';
+
+function installDeityOwners(owners = new Map()) {
+  passesMod.__setDeityReadContractFactoryForTest(() => ({
+    name: async () => 'Degenerus Deity Pass',
+    ownerOf: async (symbolId) => {
+      const owner = owners.get(Number(symbolId));
+      if (owner) return owner;
+      const error = new Error('InvalidToken');
+      error.data = '0xc1ab6dc1';
+      throw error;
+    },
+  }));
+}
 import {
   DGN_COLOR_HEX, DGN_TICKET_COPY_EVENT,
 } from '../../app/dgn-traits.js';
@@ -310,6 +326,10 @@ const PANEL_SRC = readFileSync(
 );
 const APP_CSS = readFileSync(
   new URL('../../styles/app.css', import.meta.url),
+  'utf8',
+);
+const FLIP_LOGO_SRC = readFileSync(
+  new URL('../../../whitepaper/flame-logo-split.svg', import.meta.url),
   'utf8',
 );
 
@@ -440,6 +460,13 @@ function instantiate() {
   return el;
 }
 
+async function runPendingDegeneretteAction() {
+  const action = pendingActionsMod.getPendingActions()
+    .find((item) => item.kind === 'degenerette' && typeof item.run === 'function');
+  assert.ok(action, 'Degenerette action is available in the shared pending tray');
+  await action.run();
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -453,6 +480,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     storeMod.update('viewing.address', null);
     storeMod.update('ui.mode', 'self');
     contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    installDeityOwners();
     degeneretteMod.__setContractFactoryForTest(() => makeFakeDegContract());
     // Default lootbox stub returns 0n (RNG not ready) — tests override per-case.
     lootboxMod.__setContractFactoryForTest(() => ({
@@ -473,7 +501,22 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(ctor, ctor2, 'same ctor reference after re-import');
   });
 
-  test('Panel renders 2-stage shell with Place CTA + Resolve CTA (initially disabled)', () => {
+  test('amount entry parses decimal text exactly without Number rounding dust', async () => {
+    const { parseDegeneretteAmountInput } = await import('../app-degenerette-panel.js');
+    assert.equal(
+      parseDegeneretteAmountInput('50000', 1),
+      50_000n * 10n ** 18n,
+      'a 50,000 FLIP wager is packed as exactly 50,000 FLIP',
+    );
+    assert.equal(
+      parseDegeneretteAmountInput('0.01', 0),
+      10_000_000_000n,
+      'testnet ETH input is converted through the active 1M divisor',
+    );
+    assert.equal(parseDegeneretteAmountInput('1.0000000000000000001', 1), null);
+  });
+
+  test('Panel renders its bet controls without widget-level RNG or resolve buttons', () => {
     const el = instantiate();
     assert.ok(el.innerHTML.length > 100, 'innerHTML populated');
     assert.match(el.innerHTML.toUpperCase(), /DEGENERETTE/, 'header contains DEGENERETTE');
@@ -489,12 +532,26 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       /body\.layout-basic \.deg-heading h2\s*\{[^}]*font-size:\s*1\.05rem;[^}]*font-weight:\s*950;/s,
       'Degenerette heading matches the bold Quests hierarchy',
     );
+    assert.match(
+      APP_CSS,
+      /body\.layout-basic \.deg-learn-link:hover\s*\{[^}]*text-decoration:\s*none;/s,
+      'the Degenerette heading does not draw an underline beneath the wordmark',
+    );
+    assert.match(
+      APP_CSS,
+      /body\.layout-basic \.deg-header\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;/s,
+      'the inherited panel-header divider under Degenerette is removed',
+    );
+    assert.match(
+      APP_CSS,
+      /\.play-grid \.qst-header,\s*body\.layout-basic \.play-grid \.deg-header,\s*body\.layout-basic \.play-grid \.app-parimutuel > \.panel-header\s*\{[^}]*min-height:\s*2\.55rem;[^}]*align-items:\s*center;/s,
+      'Quests, Degenerette, and Side Bets share one vertical label rail',
+    );
     const placeCta = el.querySelector('.deg-place-cta');
     assert.ok(placeCta, 'Place CTA rendered');
-    const resolveCta = el.querySelector('.deg-resolve-cta');
-    assert.ok(resolveCta, 'Resolve CTA rendered');
-    // Resolve initially disabled until RNG ready.
-    assert.equal(resolveCta.disabled, true, 'Resolve CTA initially disabled');
+    assert.equal(el.querySelector('.deg-resolve-cta'), null,
+      'RNG and resolve controls live only in the shared pending tray');
+    assert.doesNotMatch(el.innerHTML, /data-bind="deg-actions"/);
   });
 
   test('ticket builder comes first and the readable wager uses logo currency choices', () => {
@@ -504,11 +561,19 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       'ticket builder precedes wager in visual and keyboard order');
     assert.doesNotMatch(PANEL_SRC, /deg-block__step/, 'numbered setup labels are removed');
     assert.match(PANEL_SRC, /aria-label="Wager currency"/);
+    assert.match(PANEL_SRC, /deg-currency-picker__label">Currency<\/span>/);
     assert.match(PANEL_SRC, /aria-label="Bet per spin"/);
     assert.match(PANEL_SRC, /aria-label="Number of spins"/);
-    assert.match(PANEL_SRC, /\/badges-circular\/crypto_06_ethereum_blue\.svg/,
-      'ETH uses the blue circular Degenerus trait badge');
-    assert.match(PANEL_SRC, /\/whitepaper\/flame-logo\.svg/);
+    assert.match(PANEL_SRC, /\/badges-circular\/crypto_06_ethereum_green\.svg/,
+      'ETH uses the green circular Degenerus trait badge');
+    assert.doesNotMatch(PANEL_SRC, /\/badges-circular\/crypto_06_ethereum_blue\.svg/,
+      'the blue ETH currency badge is no longer used');
+    assert.match(PANEL_SRC, /data-bind="deg-currency-option-1"[\s\S]*?\/whitepaper\/flame-logo-split\.svg/,
+      'the FLIP wager lane uses the split red/green coin mark');
+    assert.match(FLIP_LOGO_SRC, /fill="#30d100"/,
+      'the FLIP mark uses the exact green ETH ring color');
+    assert.match(FLIP_LOGO_SRC, /fill="#ed0e11"/,
+      'the FLIP mark uses the exact red WWXRP ring color');
     assert.match(PANEL_SRC, /\/shared\/coinflip-face-red\.svg/);
     const placeAt = PANEL_SRC.indexOf('class="deg-place-cta"', wagerAt);
     const wagerEnd = PANEL_SRC.indexOf('</section>', wagerAt);
@@ -516,6 +581,21 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       'Place bet is owned by and sits below the wager controls');
     assert.match(PANEL_SRC, /deg-wager-field__label">Bet per spin/);
     assert.match(PANEL_SRC, /deg-wager-field__label">Spins/);
+    assert.match(
+      APP_CSS,
+      /\.deg-wager-field__label\s*\{[^}]*text-align:\s*center/s,
+      'Currency, Bet per spin, and Spins share centered label typography',
+    );
+    assert.match(
+      APP_CSS,
+      /\.deg-wager-column\s*\{[^}]*grid-template-rows:\s*auto minmax\(8\.75rem, 1fr\)/s,
+      'the wager card closes around its controls and gives the recovered height to referrals',
+    );
+    assert.match(
+      APP_CSS,
+      /\.deg-referral-card__copy > strong > span\s*\{[^}]*font-size:\s*clamp\(1rem, 1\.35vw, 1\.18rem\)/s,
+      'referral copy uses the larger display size',
+    );
     assert.doesNotMatch(PANEL_SRC, /deg-min-hint/,
       'the secondary minimum-bet line is removed');
     assert.match(PANEL_SRC, /data-bind="deg-amount-up"/);
@@ -557,10 +637,49 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       'the circular currency art fills each enlarged control',
     );
     assert.match(
-      APP_CSS,
-      /\.deg-block \.dgn-symbol-btn img\s*\{[^}]*width:\s*138%[^}]*height:\s*138%/s,
-      'badge ring fills roughly 95% of each smaller picker cell',
+      PANEL_SRC,
+      /img\.src\s*=\s*dgnSymbolPath\(q, s, t\.c\)/,
+      'symbol choices use the standalone trait marks instead of circular ticket badges',
     );
+    assert.match(
+      APP_CSS,
+      /\.deg-block \.dgn-symbol-btn\s*\{[^}]*border-radius:\s*7px[^}]*background:\s*linear-gradient/s,
+      'symbol choices share one softly squared neutral tile',
+    );
+    assert.match(
+      APP_CSS,
+      /\.deg-block \.dgn-symbol-btn img\s*\{[^}]*width:\s*82%[^}]*height:\s*82%/s,
+      'standalone marks fill their cells without the old circular-badge crop',
+    );
+    assert.match(PANEL_SRC, /q === 0 && \(s === 3 \|\| s === 7\)/,
+      'Monero and Bitcoin receive the round-art sizing treatment');
+    assert.match(
+      APP_CSS,
+      /\.deg-block \.dgn-symbol-btn--round img\s*\{[^}]*width:\s*92%[^}]*height:\s*92%/s,
+      'round crypto discs remain large after exposing their complete SVG viewBox',
+    );
+    assert.match(
+      APP_CSS,
+      /\.deg-block \.dgn-symbol-btn\.is-selected\s*\{[^}]*outline:\s*2px solid #facc15[^}]*background:\s*linear-gradient[^}]*box-shadow:/s,
+      'the selected symbol has an unmistakable gold outline, fill, and glow',
+    );
+    assert.match(
+      APP_CSS,
+      /\.deg-block \.dgn-ticket-wrap\s*\{[^}]*flex:\s*0 0 auto[^}]*aspect-ratio:\s*1/s,
+      'opening the trait panel cannot flex-shrink the ticket',
+    );
+    assert.match(
+      APP_CSS,
+      /@media \(min-width:\s*1100px\)[\s\S]*?\.deg-block \.dgn-ticket-wrap\s*\{[^}]*width:\s*min\(232px, 100%\)/s,
+      'the wide picker spends recovered padding on a larger ticket',
+    );
+    assert.match(
+      APP_CSS,
+      /\.deg-block \.dgn-colors\s*\{[^}]*grid-template-columns:\s*repeat\(8, 1\.05rem\) 1\.3rem/s,
+      'the Hero star shares the compact color row instead of consuming its own line',
+    );
+    assert.doesNotMatch(PANEL_SRC, /dgn-editor-head/,
+      'the standalone labeled Hero row is removed');
     assert.match(
       APP_CSS,
       /\.deg-block \.dgn-color-btn\s*\{[^}]*width:\s*1\.05rem[^}]*height:\s*1\.05rem/s,
@@ -575,6 +694,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       pink: '#f409cd', purple: '#7c2bff', green: '#30d100', red: '#ed0e11',
       blue: '#1317f7', orange: '#f7931a', silver: '#5e5e5e', gold: '#ab8d3f',
     }, 'picker dots use the SVG badges\' exact ring colors');
+    assert.match(
+      APP_CSS,
+      /\.dgn-inline-spin \.dgn-rq\.q-sym,[\s\S]*?\.dgn-inline-spin \.dgn-rq\.q-col\s*\{[^}]*box-shadow:\s*inset 0 0 0 2px rgba\(126, 176, 255, 0\.78\)/s,
+      'one-trait match cells use a blue inset edge instead of the old warm outline',
+    );
   });
 
   test('clicking an inventory ticket copies all four traits and makes its first gold trait Hero', () => {
@@ -615,6 +739,39 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
+  test('browser preferences restore an independent bet size for each currency', () => {
+    let el = instantiate();
+    const amount = el.querySelector('[name="deg-amount"]');
+    amount.value = '0.025';
+    amount.dispatchEvent({ type: 'input' });
+
+    el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+    assert.equal(amount.value, '250', 'a currency with no preference keeps its safe default');
+    amount.value = '625';
+    amount.dispatchEvent({ type: 'input' });
+
+    el.querySelector('[data-bind="deg-currency-option-3"]').dispatchEvent({ type: 'click' });
+    amount.value = '3';
+    amount.dispatchEvent({ type: 'input' });
+
+    el.querySelector('[data-bind="deg-currency-option-0"]').dispatchEvent({ type: 'click' });
+    assert.equal(amount.value, '0.025', 'ETH restores its own previous bet size');
+    el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+    assert.equal(amount.value, '625', 'FLIP restores its own previous bet size');
+
+    const saved = JSON.parse(localStorage.getItem(DEGENERETTE_PREFERENCES_KEY));
+    assert.deepEqual(saved.bets, { 0: '0.025', 1: '625', 3: '3' });
+    el.disconnectedCallback();
+
+    el = instantiate();
+    assert.equal(el.querySelector('[name="deg-amount"]').value, '0.025',
+      'the ETH preference survives a fresh widget mount');
+    el.querySelector('[data-bind="deg-currency-option-3"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[name="deg-amount"]').value, '3',
+      'the WWXRP preference survives a fresh widget mount');
+    el.disconnectedCallback();
+  });
+
   test('wager steppers start at five spins and update the Place Bet total', () => {
     const el = instantiate();
     const amount = el.querySelector('[name="deg-amount"]');
@@ -637,7 +794,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('Degenerette quest clicks select the currency and exact total without betting', () => {
+  test('Degenerette quest clicks preset safely and confirmed actions place the exact bet', async () => {
+    const fake = makeFakeDegContract();
+    degeneretteMod.__setContractFactoryForTest(() => fake);
     const el = instantiate();
 
     document.dispatchEvent(new CustomEvent('quest:activate', {
@@ -667,15 +826,43 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(el.querySelector('[name="deg-amount"]').value, '0.005');
     assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent,
       'Place Bet · 0.02 ETH');
+
+    assert.equal(fake._calls.placeDegeneretteBet.length, 0,
+      'bare quest activations only configure the wager');
+    document.dispatchEvent(new CustomEvent('quest:activate', {
+      detail: {
+        questType: 8,
+        target: String(2_000n * 10n ** 18n),
+        amountPerSpin: String(400n * 10n ** 18n),
+        spinCount: 5,
+        traitIds: [56, 65, 130, 195],
+        heroQuadrant: 2,
+        variant: 'secondary',
+        submit: true,
+      },
+    }));
+    await settle(60);
+    assert.equal(fake._calls.placeDegeneretteBet.length, 1,
+      'the explicit popup confirmation reaches the existing placement path');
+    assert.equal(fake._calls.placeDegeneretteBet[0][1], 1, 'the FLIP quest selects the FLIP lane');
+    assert.equal(fake._calls.placeDegeneretteBet[0][2], 400n * 10n ** 18n,
+      'five spins divide the exact 2,000 FLIP minimum evenly');
+    assert.equal(fake._calls.placeDegeneretteBet[0][3], 5, 'the preset retains five spins');
+    assert.equal(
+      Number(fake._calls.placeDegeneretteBet[0][4]),
+      56 | (1 << 8) | (2 << 16) | (3 << 24),
+      'the popup ticket is the ticket submitted to the contract',
+    );
+    assert.equal(fake._calls.placeDegeneretteBet[0][5], 2,
+      'the popup Hero quadrant is preserved through submission');
     el.disconnectedCallback();
   });
 
-  test('Both Place + Resolve buttons have data-write attribute (CF-15)', () => {
+  test('Place remains write-marked while widget-level resolution controls stay absent', () => {
     const el = instantiate();
     const place = el.querySelector('.deg-place-cta');
-    const resolve = el.querySelector('.deg-resolve-cta');
     assert.ok(place && place.attributes['data-write'] !== undefined, 'Place has data-write');
-    assert.ok(resolve && resolve.attributes['data-write'] !== undefined, 'Resolve has data-write');
+    assert.equal(el.querySelector('.deg-resolve-cta'), null);
   });
 
   test('Place click invokes placeBet then enters awaitingRng state', async () => {
@@ -698,7 +885,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       ),
       resolveDegeneretteBets: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
-        { staticCall: async () => undefined },
+        { staticCall: async () => { throw new Error('RNG not ready'); } },
       ),
       interface: { parseLog: (log) => log.parsed ?? null },
       connect(_s) { return this; },
@@ -720,14 +907,10 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     await settle(60);
 
     assert.ok(recordedArgs, 'placeDegeneretteBet invoked');
-    // State transitions to awaitingRng — verify visible state element shows that.
+    // State transitions to awaitingRng, but the bottom tray is its only visible surface.
     const stateEl = el.querySelector('.deg-state');
     assert.ok(stateEl, 'state display element rendered');
-    assert.match(
-      stateEl.textContent.toLowerCase(),
-      /awaiting rng|waiting/,
-      'state surfaces awaitingRng',
-    );
+    assert.equal(stateEl.textContent, '', 'main card does not duplicate the RNG wait bubble');
     const [pending] = pendingActionsMod.getPendingActions();
     assert.equal(pending.id, 'degenerette:42');
     assert.equal(pending.state, 'waiting');
@@ -782,13 +965,18 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     const el = instantiate();
     await settle(80);
 
-    assert.deepEqual(reads, [[CONNECTED.toLowerCase(), 42n]],
-      'the DB identifier is verified against the pending on-chain slot');
+    assert.ok(reads.length >= 1, 'the DB identifier is verified against the pending on-chain slot');
+    assert.ok(reads.every(([owner, betId]) => (
+      owner === CONNECTED.toLowerCase() && betId === 42n
+    )), 'every recovery poll verifies the same player and bet identifier');
     const [pending] = pendingActionsMod.getPendingActions();
     assert.equal(pending.id, 'degenerette:42');
-    assert.equal(pending.label, 'Degenerette · 5 spins');
+    assert.equal(pending.label, '5 spins');
+    assert.equal(pending.ticketPacked, '13', 'the exact submitted ticket feeds the pending-card art');
+    assert.equal(pending.heroQuadrant, 2);
     assert.equal(pending.state, 'waiting');
-    assert.match(el.querySelector('.deg-state').textContent, /Awaiting RNG/i);
+    assert.equal(el.querySelector('.deg-state').textContent, '',
+      'the bottom pending row is the sole RNG-wait surface');
     const stored = JSON.parse(localStorage.getItem(
       `pending-degenerette:84532:${CONNECTED.toLowerCase()}`,
     ));
@@ -799,6 +987,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       amountPerSpin: String(amountPerSpin),
       spinCount: 5,
       hero: 2,
+      ticket: '13',
     }, 'the recovered bet is durable across another refresh');
     assert.doesNotMatch(PANEL_SRC, /manual resolve required/i);
 
@@ -822,8 +1011,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 
     // After place + first poll cycle, RNG ready → state transitions to ready.
     assert.ok(feedCalls() >= 1, `Degenerette feed read at least once (got ${feedCalls()})`);
-    const resolveCta = el.querySelector('.deg-resolve-cta');
-    assert.equal(resolveCta.disabled, false, 'Resolve CTA enabled when RNG ready');
+    assert.equal(el.querySelector('.deg-resolve-cta'), null,
+      'readiness does not add a resolve button back into the widget');
     const [pending] = pendingActionsMod.getPendingActions();
     assert.equal(pending.state, 'ready');
     assert.equal(typeof pending.run, 'function',
@@ -832,7 +1021,122 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('Resolve click invokes resolveBets with the parsed betId', async () => {
+  test('a zero chain slot without RNG or resolution evidence stays in the RNG wait', async () => {
+    const contract = makeFakeDegContract();
+    contract.degeneretteBetInfo = async () => 0n;
+    degeneretteMod.__setContractFactoryForTest(() => contract);
+    useDegeneretteFeed(null);
+
+    const el = instantiate();
+    await flushMicrotasks();
+    el.querySelector('[name="deg-amount"]').value = '0.01';
+    el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
+    await settle(80);
+
+    const [pending] = pendingActionsMod.getPendingActions();
+    assert.equal(pending?.state, 'waiting');
+    assert.equal(pending?.phase, 'awaitingRng');
+    assert.equal(pending?.pinned, true,
+      'the bottom panel cannot drop a bet while its RNG state catches up');
+    assert.equal(pending?.shortLabel, 'Resolve degen');
+    assert.equal(pending?.detail, 'Waiting for Chainlink RNG');
+    assert.equal(el.querySelector('.deg-state').textContent, '',
+      'the main widget does not duplicate the pinned RNG wait');
+    assert.doesNotMatch(pending?.detail, /verified spin/i,
+      'the UI does not claim result indexing before an RNG word exists');
+    el.disconnectedCallback();
+  });
+
+  test('a confirmed mid-day RNG request stays pinned through refresh and becomes result-ready', async () => {
+    const storageKey = `pending-degenerette:84532:${CONNECTED.toLowerCase()}`;
+    localStorage.setItem(storageKey, JSON.stringify({
+      betId: '42', index: '7', currency: 1, amountPerSpin: String(250n * 10n ** 18n),
+      spinCount: 1, hero: 2,
+    }));
+
+    let requestSubmitted = false;
+    let requestWrites = 0;
+    let postReceiptRequestabilityReads = 0;
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      degeneretteBetInfo: async () => 13n,
+      resolveDegeneretteBets: Object.assign(
+        async () => makeFakeTx(makeFakeReceipt()),
+        { staticCall: async () => { throw new Error('RNG not ready'); } },
+      ),
+      interface: { parseLog: () => null },
+      connect() { return this; },
+    }));
+    lootboxMod.__setContractFactoryForTest(() => ({
+      requestLootboxRng: Object.assign(
+        async () => {
+          requestSubmitted = true;
+          requestWrites += 1;
+          return makeFakeTx(makeFakeReceipt());
+        },
+        {
+          staticCall: async () => {
+            if (requestSubmitted) {
+              postReceiptRequestabilityReads += 1;
+              if (postReceiptRequestabilityReads > 1) throw new Error('RNG in flight');
+            }
+          },
+        },
+      ),
+      interface: { parseLog: () => null },
+      connect() { return this; },
+    }));
+    useDegeneretteFeed(null);
+
+    let el = instantiate();
+    await settle(80);
+    let [pending] = pendingActionsMod.getPendingActions();
+    assert.equal(pending.phase, 'request-ready');
+    assert.equal(pending.state, 'ready');
+
+    await pending.run();
+    [pending] = pendingActionsMod.getPendingActions();
+    assert.equal(requestWrites, 1);
+    assert.equal(pending.state, 'waiting');
+    assert.equal(pending.phase, 'waiting-rng');
+    assert.equal(pending.shortLabel, 'Waiting for RNG');
+    assert.equal(pending.detail, 'RNG requested · waiting for Chainlink result');
+    assert.equal(pending.pinned, true);
+    assert.equal(pending.progress, 'indeterminate');
+    assert.equal(pending.run, null, 'a submitted request cannot be submitted twice');
+    await settle(80);
+    [pending] = pendingActionsMod.getPendingActions();
+    assert.equal(pending.phase, 'waiting-rng',
+      'polling cannot overwrite the receipt-backed wait with a stale requestable read');
+    assert.equal(el.querySelector('[data-bind="deg-state"]').textContent, '',
+      'the bottom tray remains the sole RNG waiting surface');
+    let stored = JSON.parse(localStorage.getItem(storageKey));
+    assert.equal(stored.rngRequestPending, true);
+    assert.ok(stored.rngRequestStartedAt > 0);
+
+    el.disconnectedCallback();
+    el = instantiate();
+    await settle(80);
+    [pending] = pendingActionsMod.getPendingActions();
+    assert.equal(pending.phase, 'waiting-rng', 'refresh restores the submitted request card');
+    assert.equal(pending.pinned, true);
+    assert.equal(el.querySelector('[data-bind="deg-state"]').textContent, '');
+    el.disconnectedCallback();
+
+    useDegeneretteFeed(readyFeedItem({ currency: 1 }));
+    el = instantiate();
+    await settle(80);
+    [pending] = pendingActionsMod.getPendingActions();
+    assert.equal(pending.state, 'ready');
+    assert.equal(pending.phase, 'result-ready');
+    assert.equal(pending.pinned, false);
+    assert.equal(pending.progress, null);
+    stored = JSON.parse(localStorage.getItem(storageKey));
+    assert.equal(stored.rngRequestPending, undefined,
+      'the persisted progress latch clears as soon as the RNG word is ready');
+    el.disconnectedCallback();
+  });
+
+  test('shared pending action invokes resolveBets with the parsed betId', async () => {
     useDegeneretteFeed(readyFeedItem());
     let resolveArgs = null;
     degeneretteMod.__setContractFactoryForTest(() => ({
@@ -880,8 +1184,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     placeBtn.dispatchEvent({ type: 'click' });
     await settle(80);
 
-    const resolveCta = el.querySelector('.deg-resolve-cta');
-    resolveCta.dispatchEvent({ type: 'click' });
+    await runPendingDegeneretteAction();
     await settle(80);
 
     assert.ok(resolveArgs, 'resolveDegeneretteBets invoked');
@@ -912,8 +1215,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     placeBtn.dispatchEvent({ type: 'click' });
     await settle(80);
 
-    const resolveCta = el.querySelector('.deg-resolve-cta');
-    resolveCta.dispatchEvent({ type: 'click' });
+    await runPendingDegeneretteAction();
     await settle(80);
 
     const outcomeEl = el.querySelector('.deg-outcome');
@@ -1045,6 +1347,16 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       'receipt, DB, and chain recovery share a normalized sequence builder');
     assert.match(PANEL_SRC, /queueReveal\(sequence\)/,
       'a complete result launches the branded overlay');
+    assert.match(
+      PANEL_SRC,
+      /#presentedBetKeys\.has\(presentationKey\)[\s\S]*?#presentedBetKeys\.add\(presentationKey\)/,
+      'a result is retired before the panel asks the DB for its next pending bet',
+    );
+    assert.match(
+      PANEL_SRC,
+      /indexed\?\.results[\s\S]*?resultType === 'resolved'[\s\S]*?continue/,
+      'a stale pending snapshot cannot resurrect a feed-confirmed terminal bet',
+    );
     assert.doesNotMatch(PANEL_SRC, /<section class="dgn-inline-spin"/,
       'the widget no longer mounts its own reel player');
     assert.doesNotMatch(PANEL_SRC, /<section class=\"dgn-results-summary\"/,
@@ -1057,8 +1369,205 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       /\/degenerette\/feed\?limit=200&player=/,
       'panel polls the durable player-filtered feed',
     );
-    assert.match(PANEL_SRC, /pollRngForLootbox/,
-      'a stale/lagging API cannot strand a fulfilled bet in Awaiting RNG');
+    assert.match(PANEL_SRC, /canResolveBets\(\{/,
+      'the exact resolver static call recovers readiness while the DB word lags');
+    assert.match(PANEL_SRC, /readResolvedBet\(\{/,
+      'already-resolved chain events recover a result while the DB feed lags');
+  });
+
+  test('referral is its own full-width wager-column bubble and copies the connected player default link', async () => {
+    affiliateMod.__setFetchJSONForTest(async () => ({ affiliate: { ownCode: null } }));
+    const priorNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    const copied = [];
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { clipboard: { writeText: async (value) => { copied.push(String(value)); } } },
+    });
+    storeMod.update('connected.address', null);
+    const el = instantiate();
+    try {
+      await settle(20);
+      const button = el.querySelector('[data-bind="deg-referral-copy"]');
+      assert.equal(button.disabled, true);
+      storeMod.update('connected.address', CONNECTED);
+      await settle(50);
+      assert.match(el.innerHTML, /REFER FRIENDS[\s\S]*?deg-referral-card__free">FREE<\/span>[\s\S]*?deg-referral-card__flip">FLIP<\/span>[\s\S]*?FOREVER/,
+        'the compact three-line referral promise is part of the graphic');
+      assert.match(APP_CSS, /\.deg-referral-card__free\s*\{[^}]*color:\s*#4ade80/s,
+        'FREE is highlighted in green');
+      assert.match(APP_CSS, /\.deg-referral-card__flip\s*\{[^}]*color:\s*#f87171/s,
+        'FLIP is highlighted in red');
+      assert.match(el.innerHTML,
+        /deg-referral-card__forever[\s\S]*?FOREVER[\s\S]*?deg-referral-card__coin[\s\S]*?coinflip-face-red\.svg[\s\S]*?coinflip-face-eth\.svg/,
+        'the two-sided flipping coin sits directly after FOREVER');
+      assert.match(APP_CSS,
+        /\.deg-referral-card__forever\s*\{[^}]*display:\s*flex[^}]*gap:\s*0\.62rem/s,
+        'the coin is spaced just to the right of FOREVER');
+      assert.match(APP_CSS,
+        /\.deg-referral-card__coin\s*\{[^}]*position:\s*relative[^}]*display:\s*block[^}]*width:\s*2\.75rem[^}]*transform:\s*translate\(0\.22rem, 0\.22rem\)/s,
+        'the larger referral coin is always visible down-right of the word');
+      assert.match(APP_CSS,
+        /\.deg-referral-card__coin-inner\s*\{[^}]*animation:\s*deg-referral-coin-flip 1\.6s linear infinite/s,
+        'the referral coin flips continuously without stop-go easing');
+      const referralCoin = el.querySelector('[data-bind="deg-referral-coin-toggle"]');
+      assert.equal(referralCoin.tagName, 'BUTTON', 'the flipping coin is keyboard accessible');
+      assert.match(el.innerHTML,
+        /data-bind="deg-referral-coin-toggle" aria-pressed="false"[\s\S]*?aria-label="Pause animation and copy referral link"/,
+        'the toggle advertises both pause and copy behavior');
+      assert.match(APP_CSS,
+        /\.deg-referral-card__coin\.is-paused \.deg-referral-card__coin-inner\s*\{[^}]*animation-play-state:\s*paused/s,
+        'the paused state freezes the current face instead of resetting the animation');
+      referralCoin.dispatchEvent({ type: 'click', preventDefault() {} });
+      await settle(80);
+      assert.equal(referralCoin.classList.contains('is-paused'), true);
+      assert.equal(referralCoin.getAttribute('aria-pressed'), 'true');
+      assert.equal(referralCoin.getAttribute('aria-label'), 'Resume animation and copy referral link');
+      assert.equal(copied.length, 1, 'pausing the coin also copies the referral link');
+      referralCoin.dispatchEvent({ type: 'click', preventDefault() {} });
+      await settle(80);
+      assert.equal(referralCoin.classList.contains('is-paused'), false);
+      assert.equal(referralCoin.getAttribute('aria-pressed'), 'false');
+      assert.equal(referralCoin.getAttribute('aria-label'), 'Pause animation and copy referral link');
+      assert.equal(copied.length, 2, 'resuming the coin copies the link too');
+      assert.match(APP_CSS,
+        /\.deg-referral-card__coin img \+ img\s*\{[^}]*rotateX\(180deg\)[^}]*\}[\s\S]*?@keyframes deg-referral-coin-flip\s*\{[^}]*rotateX\(0deg\)[\s\S]*?rotateX\(360deg\)/s,
+        'both faces use an end-over-end vertical flip');
+      assert.match(el.innerHTML, /class="deg-referral-card__logo" src="\/whitepaper\/flame-logo\.svg"/,
+        'one clean Degenerus mark anchors the referral action row');
+      assert.doesNotMatch(el.innerHTML, /deg-referral-card__(?:graphic|link|flame)/,
+        'the old chain-link ornament is gone');
+      assert.doesNotMatch(el.innerHTML, /deg-referral-status/,
+        'the referral tile has no changing subtext');
+      assert.match(el.innerHTML, /Earn 20% commission in FLIP/,
+        'the compact details sheet states the commission rate');
+      assert.doesNotMatch(el.innerHTML, /DEGENERUS REFERRALS/,
+        'the redundant referral popup eyebrow is gone');
+      assert.doesNotMatch(el.innerHTML, /SHARE THE PURGE/,
+        'the details sheet uses current Degenerus branding');
+      assert.ok(
+        PANEL_SRC.indexOf('</section>', PANEL_SRC.indexOf('deg-block deg-block--wager'))
+          < PANEL_SRC.indexOf('<aside class="deg-referral-card"'),
+        'the referral bubble is a sibling below wager, not nested inside it',
+      );
+      assert.match(APP_CSS, /\.deg-wager-column\s*\{[^}]*display:\s*grid/s);
+      assert.match(APP_CSS, /\.deg-referral-card\s*\{[^}]*width:\s*100%[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
+        'the short bubble gives its message the full wager-column width');
+      assert.match(APP_CSS, /\.deg-referral-card__logo\s*\{[^}]*bottom:\s*0\.52rem[^}]*left:\s*0\.58rem/s,
+        'the Degenerus mark sits in the lower-left corner');
+      assert.match(
+        APP_CSS,
+        /app-degenerette-panel \.dgn-ticket \.dgn-q\.q-hero img\s*\{\s*transform:\s*none;/s,
+        'build-ticket badges are centered without the old downward translation',
+      );
+      assert.equal(button.disabled, false);
+      button.dispatchEvent({ type: 'click', preventDefault() {} });
+      await settle(80);
+      assert.equal(copied.length, 3);
+      assert.match(copied.at(-1), /^https:\/\/degener\.us\/app\/\?ref=0x[0-9a-f]{40}$/);
+      assert.match(copied.at(-1), new RegExp(`${CONNECTED.slice(2).toLowerCase()}$`),
+        'the default address-derived code belongs to the connected player');
+      assert.equal(button.textContent, 'CODE COPIED');
+
+      const info = el.querySelector('[data-bind="deg-referral-info"]');
+      info.dispatchEvent({ type: 'click', preventDefault() {} });
+      const dialog = el.querySelector('[data-bind="deg-referral-dialog"]');
+      assert.equal(dialog.hidden, false);
+      const link = el.querySelector('[data-bind="deg-referral-url"]');
+      assert.equal(link.value, copied[0]);
+      link.dispatchEvent({ type: 'click', preventDefault() {} });
+      await settle(80);
+      assert.equal(copied.length, 4);
+      assert.ok(copied.every((value) => value === copied[0]),
+        'every coin, button, and URL route copies the same resolved referral link');
+    } finally {
+      el.disconnectedCallback();
+      affiliateMod.__setFetchJSONForTest(null);
+      if (priorNavigator) Object.defineProperty(globalThis, 'navigator', priorNavigator);
+      else delete globalThis.navigator;
+    }
+  });
+
+  test('referral copy does not wait for affiliate lookup and has a mounted-field fallback', async () => {
+    const pendingLookups = [];
+    affiliateMod.__setFetchJSONForTest(() => new Promise((resolve) => pendingLookups.push(resolve)));
+    const priorNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    const priorExecCommand = document.execCommand;
+    const clipboardAttempts = [];
+    const fallbackCopies = [];
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        clipboard: {
+          writeText(value) {
+            clipboardAttempts.push(String(value));
+            return Promise.reject(new Error('permission denied'));
+          },
+        },
+      },
+    });
+    document.execCommand = (command) => {
+      const field = document.querySelector('textarea');
+      fallbackCopies.push({ command, value: field?.value });
+      return command === 'copy';
+    };
+    const el = instantiate();
+    try {
+      const button = el.querySelector('[data-bind="deg-referral-copy"]');
+      assert.equal(button.disabled, false);
+      button.dispatchEvent({ type: 'click', preventDefault() {} });
+      await settle(20);
+      assert.equal(pendingLookups.length >= 1, true, 'affiliate lookup is still unresolved');
+      assert.deepEqual(clipboardAttempts, [
+        `https://degener.us/app/?ref=${CONNECTED.toLowerCase()}`,
+      ], 'clipboard is attempted immediately with the always-valid address link');
+      assert.deepEqual(fallbackCopies, [{
+        command: 'copy',
+        value: `https://degener.us/app/?ref=${CONNECTED.toLowerCase()}`,
+      }], 'a temporary mounted field backs up denied Clipboard API access');
+      assert.equal(document.querySelector('textarea'), null, 'temporary copy field is removed');
+      assert.equal(button.textContent, 'CODE COPIED');
+    } finally {
+      el.disconnectedCallback();
+      for (const resolve of pendingLookups) resolve({ affiliate: { ownCode: null } });
+      affiliateMod.__setFetchJSONForTest(null);
+      if (priorNavigator) Object.defineProperty(globalThis, 'navigator', priorNavigator);
+      else delete globalThis.navigator;
+      if (priorExecCommand) document.execCommand = priorExecCommand;
+      else delete document.execCommand;
+    }
+  });
+
+  test('Degenerette basics uses one concise ETH/FLIP payout matrix and omits WWXRP payouts', () => {
+    const el = instantiate();
+    try {
+      assert.match(el.innerHTML, /data-bind="deg-basics-info"[^>]*aria-label="How Degenerette works"/);
+      assert.match(el.innerHTML, /Pick a symbol and color for each quadrant/);
+      assert.match(el.innerHTML, /Matching symbols score/);
+      const info = el.querySelector('[data-bind="deg-basics-info"]');
+      const dialog = el.querySelector('[data-bind="deg-basics-dialog"]');
+      const payoutArea = el.querySelector('.deg-payouts');
+      const payoutTables = el.querySelectorAll('.deg-payout-table');
+      assert.equal(payoutTables.length, 1, 'all gold schedules share one comparison matrix');
+      const payoutRows = payoutTables[0].querySelectorAll('tbody')[0].querySelectorAll('tr');
+      assert.equal(payoutRows.length, 9, 'the universal zero scores share one 0–1 row');
+      assert.equal(payoutRows[0].children.length, 9,
+        'score plus all eight ETH/FLIP gold-and-Hero variants are shown');
+      const payoutHeadings = payoutTables[0].querySelectorAll('th')
+        .map((heading) => heading.textContent).join(' ');
+      assert.match(payoutHeadings, /0 GOLD/);
+      assert.match(payoutHeadings, /4 GOLD/);
+      assert.match(payoutHeadings, /HERO GOLD/);
+      assert.match(payoutHeadings, /OTHER HERO/);
+      assert.doesNotMatch(payoutHeadings, /WWXRP/);
+      assert.equal(dialog.hidden, true);
+      info.dispatchEvent({ type: 'click', preventDefault() {} });
+      assert.equal(dialog.hidden, false);
+      el.querySelector('[data-bind="deg-basics-close"]')
+        .dispatchEvent({ type: 'click', preventDefault() {} });
+      assert.equal(dialog.hidden, true);
+    } finally {
+      el.disconnectedCallback();
+    }
   });
 
   test('AbortController used for RNG poll cleanup (T-62-03-07)', () => {
@@ -1084,6 +1593,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     storeMod.update('viewing.address', null);
     storeMod.update('ui.mode', 'self');
     contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    installDeityOwners();
     degeneretteMod.__setContractFactoryForTest(() => makeFakeDegContract());
     lootboxMod.__setContractFactoryForTest(() => ({
       lootboxRngWordByIndex: async () => 0xabcdn,
@@ -1100,6 +1610,11 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     const el = instantiate();
     assert.equal(el.querySelector('[data-bind="dgn-editor"]').hidden, true,
       'the trait selector is closed by default');
+    const editHint = el.querySelector('[data-bind="dgn-ticket-hint"]');
+    assert.match(el.innerHTML, /data-bind="dgn-ticket-hint">CLICK TO EDIT<\/p>/,
+      'the ticket template includes the visible edit affordance copy');
+    assert.equal(editHint.hidden, false,
+      'the idle ticket carries a visible edit affordance below it');
     for (let q = 0; q < 4; q += 1) {
       const img = el.querySelector(`[data-bind="dgn-img-${q}"]`);
       assert.ok(img, `quadrant ${q} badge img`);
@@ -1113,6 +1628,49 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.querySelector('[data-bind="dgn-cell-0"]').dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="dgn-editor"]').hidden, false,
       'clicking a quadrant opens its selector');
+    assert.equal(editHint.hidden, true,
+      'the editor replaces the idle hint instead of duplicating it');
+    el.querySelector('[data-bind="dgn-cell-0"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="dgn-editor"]').hidden, true);
+    assert.equal(editHint.hidden, false, 'closing the editor restores the hint');
+    el.disconnectedCallback();
+  });
+
+  test('pink and green use dark contrast tiles except for crypto symbols', () => {
+    const el = instantiate();
+    el.querySelector('[data-bind="dgn-cell-0"]').dispatchEvent({ type: 'click' });
+    let editor = el.querySelector('[data-bind="dgn-editor"]');
+    editor.querySelectorAll('.dgn-color-btn')[0].dispatchEvent({ type: 'click' });
+    editor = el.querySelector('[data-bind="dgn-editor"]');
+    assert.ok(editor.querySelectorAll('.dgn-symbol-btn')
+      .every((button) => !button.classList.contains('dgn-symbol-btn--dark-trait')),
+    'pink crypto symbols keep the neutral tile');
+
+    editor.querySelectorAll('.dgn-color-btn')[2].dispatchEvent({ type: 'click' });
+    editor = el.querySelector('[data-bind="dgn-editor"]');
+    assert.ok(editor.querySelectorAll('.dgn-symbol-btn')
+      .every((button) => !button.classList.contains('dgn-symbol-btn--dark-trait')),
+    'green crypto symbols keep the neutral tile');
+
+    el.querySelector('[data-bind="dgn-cell-1"]').dispatchEvent({ type: 'click' });
+    editor = el.querySelector('[data-bind="dgn-editor"]');
+    editor.querySelectorAll('.dgn-color-btn')[0].dispatchEvent({ type: 'click' });
+    editor = el.querySelector('[data-bind="dgn-editor"]');
+    assert.ok(editor.querySelectorAll('.dgn-symbol-btn')
+      .every((button) => button.classList.contains('dgn-symbol-btn--dark-trait')),
+    'pink non-crypto symbols retain the dark contrast tile');
+
+    editor.querySelectorAll('.dgn-color-btn')[2].dispatchEvent({ type: 'click' });
+    editor = el.querySelector('[data-bind="dgn-editor"]');
+    assert.ok(editor.querySelectorAll('.dgn-symbol-btn')
+      .every((button) => button.classList.contains('dgn-symbol-btn--dark-trait')),
+    'green non-crypto symbols retain the dark contrast tile');
+
+    editor.querySelectorAll('.dgn-color-btn')[1].dispatchEvent({ type: 'click' });
+    editor = el.querySelector('[data-bind="dgn-editor"]');
+    assert.ok(editor.querySelectorAll('.dgn-symbol-btn')
+      .every((button) => !button.classList.contains('dgn-symbol-btn--dark-trait')),
+    'other colors keep the neutral tile');
     el.disconnectedCallback();
   });
 
@@ -1170,6 +1728,39 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.disconnectedCallback();
   });
 
+  test('a deity holder defaults the Hero quadrant to their owned deity symbol', async () => {
+    installDeityOwners(new Map([[22, CONNECTED]])); // cards quadrant · king
+    storeMod.update('app.lastDay', {
+      day: 131,
+      roll1: { purchaseLevel: 26 },
+    });
+    _fetchHandler = async (url) => {
+      if (String(url).includes('/tickets/by-trait?level=26')) {
+        return {
+          cards: [{
+            cardIndex: 0,
+            status: 'opened',
+            entries: [0, 64, 128, 192].map((traitId) => ({ traitId })),
+          }],
+        };
+      }
+      return { player: null, pending: {} };
+    };
+
+    const el = instantiate();
+    await settle(60);
+
+    assert.equal(
+      el.querySelector('[data-bind="dgn-img-2"]').src,
+      '/badges-circular/cards_01_king_pink.svg',
+      'the deity symbol replaces only the symbol in its natural quadrant',
+    );
+    assert.ok(el.querySelector('[data-bind="dgn-cell-2"]').classList.contains('q-hero'),
+      'the deity symbol quadrant is Hero by default');
+    assert.equal(el.querySelector('[data-bind="dgn-editor"]').hidden, true);
+    el.disconnectedCallback();
+  });
+
   test('editor drives the packed customTicket + heroQuadrant passed to placeDegeneretteBet', async () => {
     const fake = makeFakeDegContract();
     degeneretteMod.__setContractFactoryForTest(() => fake);
@@ -1177,8 +1768,12 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     await settle(40);
 
     // Set (color, symbol) per quadrant via editor buttons: c=[1,2,3,4], s=[5,6,7,0].
+    // Hero is the ninth compact control in the color row.
     const colors = [1, 2, 3, 4];
     const symbols = [5, 6, 7, 0];
+    const initialHero = [0, 1, 2, 3]
+      .find((q) => el.querySelector(`[data-bind="dgn-cell-${q}"]`).classList.contains('q-hero'));
+    const chosenHero = ((initialHero ?? 0) + 1) % 4;
     for (let q = 0; q < 4; q += 1) {
       el.querySelector(`[data-bind="dgn-cell-${q}"]`).dispatchEvent({ type: 'click' });
       // Editor rebuilds after every click — re-query buttons each time.
@@ -1186,9 +1781,15 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
         .querySelectorAll('.dgn-color-btn')[colors[q]].dispatchEvent({ type: 'click' });
       el.querySelector('[data-bind="dgn-editor"]')
         .querySelectorAll('.dgn-symbol-btn')[symbols[q]].dispatchEvent({ type: 'click' });
+      if (q === chosenHero) {
+        const colorRow = el.querySelector('[data-bind="dgn-editor"]').querySelector('.dgn-colors');
+        const hero = colorRow.querySelector('.dgn-hero-toggle');
+        assert.equal(colorRow.children.length, 9, 'eight colors and Hero share one row');
+        assert.equal(colorRow.children[8], hero, 'Hero is the compact trailing control');
+        assert.equal(hero.textContent, '☆');
+        hero.dispatchEvent({ type: 'click' });
+      }
     }
-    // Hero via right-click on quadrant 2.
-    el.querySelector('[data-bind="dgn-cell-2"]').dispatchEvent({ type: 'contextmenu' });
 
     const amountInput = el.querySelector('[name="deg-amount"]');
     if (amountInput) amountInput.value = '0.01';
@@ -1200,7 +1801,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     // byte q = ((c&7)<<3)|(s&7): [13, 22, 31, 32] → LSB-first uint32.
     const expected = (13 | (22 << 8) | (31 << 16) | (32 << 24)) >>> 0;
     assert.equal(Number(args[4]), expected, 'customTicket packs [QQ][CCC][SSS] per byte, QQ=0');
-    assert.equal(Number(args[5]), 2, 'heroQuadrant from right-click');
+    assert.equal(Number(args[5]), chosenHero, 'heroQuadrant comes from the integrated star control');
     el.disconnectedCallback();
   });
 
@@ -1213,7 +1814,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     if (amountInput) amountInput.value = '0.01';
     el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
     await settle(80);
-    el.querySelector('.deg-resolve-cta').dispatchEvent({ type: 'click' });
+    await runPendingDegeneretteAction();
     await settle(80);
 
     const [sequence] = revealMod.__takeQueuedForTest();
@@ -1291,7 +1892,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.querySelector('[name="deg-ticket-count"]').value = '2';
     el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
     await settle(80);
-    el.querySelector('.deg-resolve-cta').dispatchEvent({ type: 'click' });
+    await runPendingDegeneretteAction();
     await settle(80);
 
     const [sequence] = revealMod.__takeQueuedForTest();
@@ -1395,8 +1996,6 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.querySelector('[name="deg-amount"]').value = '0.01';
     el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
     await settle(80);
-    el.querySelector('.deg-resolve-cta').dispatchEvent({ type: 'click' });
-    await settle(80);
 
     assert.deepEqual(calls.info, [[CONNECTED, 42n]]);
     assert.equal(calls.resolve, 0, 'the cleared bet slot never reaches a wallet write');
@@ -1409,6 +2008,129 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     assert.equal(el.querySelector('[data-bind="dgn-inline-spin"]'), null);
     assert.equal(el.querySelector('[data-bind="deg-outcome"]').textContent, '');
     assert.equal(pendingActionsMod.getPendingActions().length, 0);
+    el.disconnectedCallback();
+  });
+
+  test('a stale Resolve click waits for indexed spins and opens them without a second tx or tap', async (t) => {
+    const originalMatchMedia = globalThis.window.matchMedia;
+    t.after(() => { globalThis.window.matchMedia = originalMatchMedia; });
+    globalThis.window.matchMedia = () => ({ matches: true });
+    revealMod.__takeQueuedForTest();
+
+    const ready = readyFeedItem();
+    const packed = BigInt(ready.packedData);
+    const payout = 5n * 10n ** 16n;
+    let feedCalls = 0;
+    _fetchHandler = async (url) => {
+      if (!String(url).includes('/degenerette/feed')) return { player: null, pending: {} };
+      feedCalls += 1;
+      if (feedCalls < 5) return { items: [ready] };
+      return {
+        items: [readyFeedItem({
+          results: [
+            {
+              resultType: 'resolved',
+              transactionHash: '0xdegenerettebox',
+              payout: String(payout),
+              resultData: {
+                spinCount: 1,
+                totalPayout: String(payout),
+                resultTraits: '13',
+              },
+            },
+            {
+              resultType: 'result',
+              payout: String(payout),
+              resultData: { spinIndex: 0, playerTraits: '13', matches: 4 },
+            },
+          ],
+          lootboxPayouts: [{
+            rewardType: 'opened',
+            blockNumber: '5001',
+            rewardData: {
+              amount: String(3n * 10n ** 16n),
+              futureLevel: 8,
+              futureTickets: 200,
+              flip: '0',
+              roundedUp: false,
+            },
+          }],
+        })],
+      };
+    };
+
+    let infoReads = 0;
+    let resolveWrites = 0;
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      placeDegeneretteBet: Object.assign(
+        async (...args) => makeFakeTx(makeFakeReceipt([{
+          parsed: {
+            name: 'BetPlaced',
+            args: { player: args[0], index: 7n, betId: 42n, packed },
+          },
+        }])),
+        { staticCall: async () => undefined },
+      ),
+      degeneretteBetInfo: async () => {
+        infoReads += 1;
+        return infoReads === 1 ? packed : 0n;
+      },
+      resolveDegeneretteBets: Object.assign(
+        async () => {
+          resolveWrites += 1;
+          return makeFakeTx(makeFakeReceipt());
+        },
+        { staticCall: async () => undefined },
+      ),
+      degeneretteResolve: Object.assign(
+        async () => {
+          resolveWrites += 1;
+          return makeFakeTx(makeFakeReceipt());
+        },
+        { staticCall: async () => undefined },
+      ),
+      interface: { parseLog: (log) => log.parsed ?? null },
+      connect() { return this; },
+    }));
+
+    const el = instantiate();
+    await settle(30);
+    el.querySelector('[name="deg-amount"]').value = '0.01';
+    el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
+    await settle(80);
+    assert.equal(pendingActionsMod.getPendingActions()[0]?.state, 'ready');
+
+    await runPendingDegeneretteAction();
+    await settle(80);
+
+    assert.equal(resolveWrites, 0, 'the cleared slot never opens a second wallet transaction');
+    assert.ok(feedCalls >= 6, 'the clicked action keeps following the exact bet until its spins arrive');
+    const [sequence, lootboxSequence] = revealMod.__takeQueuedForTest();
+    assert.equal(sequence?.kind, 'degenerette');
+    assert.equal(sequence?.betId, '42');
+    assert.equal(sequence?.spins?.length, 1);
+    assert.equal(sequence?.lootboxAwarded, true,
+      'the spin result visibly records its recirculated lootbox win');
+    assert.equal(sequence?.lootboxEth, 3n * 10n ** 16n,
+      'the direct opened leg is retained for the actual-ETH/lootbox-ETH split');
+    assert.equal(lootboxSequence?.kind, 'lootbox');
+    assert.equal(lootboxSequence?.title, 'DEGENERETTE LOOTBOX');
+    assert.equal(lootboxSequence?.settledExpected, true,
+      'an auto-resolved fractional-only box still has a visible result');
+    assert.notEqual(lootboxSequence?.noVessel, true,
+      'the one OPEN LOOTBOX click auto-starts the case animation before the receipt');
+    assert.deepEqual(lootboxSequence?.lootboxRelease, {
+      address: CONNECTED.toLowerCase(),
+      key: 'tx:0xdegenerettebox',
+      lootboxIndex: 0,
+      transactionHash: '0xdegenerettebox',
+    }, 'the direct box and pending tray share one settlement identity');
+    assert.deepEqual(lootboxSequence?.legs?.map((leg) => leg.legType), ['opened'],
+      'the already-settled box remains directly behind the Degenerette result');
+    assert.equal(el.querySelector('.deg-error').hidden, true,
+      'indexing lag is not presented as a failed resolve');
+    assert.equal(pendingActionsMod.getPendingActions().length, 0,
+      'the automatically displayed result retires the stale action');
     el.disconnectedCallback();
   });
 

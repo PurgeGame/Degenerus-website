@@ -38,12 +38,15 @@ function makeFakeTx(receipt) {
 function makeFakeContract(opts = {}) {
   const calls = {
     purchase: [],
+    purchaseStatic: [],
     openBox: [],
-    lootboxRngWordByIndex: [],
+    openBoxStatic: [],
     lootboxStatus: [],
     claimableWinningsOf: [],
   };
-  const staticCallStub = (methodName) => async (..._args) => {
+  const staticCallStub = (methodName) => async (...args) => {
+    if (methodName === 'purchase') calls.purchaseStatic.push(args);
+    if (methodName === 'openBox') calls.openBoxStatic.push(args);
     if (opts.staticCallShouldRevert?.[methodName]) {
       const err = new Error('static-call revert');
       err.revert = { name: opts.staticCallRevertName?.[methodName] || 'RngNotReady' };
@@ -66,10 +69,6 @@ function makeFakeContract(opts = {}) {
       },
       { staticCall: staticCallStub('openBox') }
     ),
-    lootboxRngWordByIndex: async (idx) => {
-      calls.lootboxRngWordByIndex.push(idx);
-      return opts.rngWord ?? 0n;
-    },
     lootboxStatus: async (...args) => {
       calls.lootboxStatus.push(args);
       return opts.lootboxStatus ?? [1n, false];
@@ -134,6 +133,61 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       assert.ok(lootboxMod.GAME_ABI.includes(`error ${name}()`), `${name} is in GAME_ABI`);
       assert.equal(decodeRevertReason({ data: selector }).code, name, `${name} selector registered`);
     }
+  });
+
+  test('foil availability uses the exact zero-value purchase probe and only accepts the funding sentinel', async () => {
+    assert.equal(await lootboxMod.probeFoilPackAvailability({ buyer: CONNECTED }), true,
+      'a successful forward-compatible zero-price simulation is available');
+    assert.equal(lastFakeContract._calls.purchase.length, 0, 'the probe never sends');
+    assert.equal(lastFakeContract._calls.purchaseStatic.length, 1);
+    assert.deepEqual(lastFakeContract._calls.purchaseStatic[0], [
+      CONNECTED,
+      0n,
+      0n,
+      '0x0000000000000000000000000000000000000000000000000000000000000000',
+      0,
+      true,
+      { value: 0n },
+    ]);
+
+    lastFakeContract = makeFakeContract({
+      staticCallShouldRevert: { purchase: true },
+      staticCallRevertName: { purchase: 'DirectEthInsufficient' },
+    });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+    assert.equal(await lootboxMod.probeFoilPackAvailability({ buyer: CONNECTED }), true,
+      'DirectEthInsufficient proves the route passed every earlier foil gate');
+
+    for (const name of ['FoilAlreadyBought', 'StaleAdvance', 'GameOverPossible', 'NotApproved']) {
+      lastFakeContract = makeFakeContract({
+        staticCallShouldRevert: { purchase: true },
+        staticCallRevertName: { purchase: name },
+      });
+      lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+      assert.equal(await lootboxMod.probeFoilPackAvailability({ buyer: CONNECTED }), false, name);
+    }
+  });
+
+  test('foil availability detail separates ownership from temporary liveness failures', async () => {
+    lastFakeContract = makeFakeContract({
+      staticCallShouldRevert: { purchase: true },
+      staticCallRevertName: { purchase: 'FoilAlreadyBought' },
+    });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+    assert.deepEqual(
+      await lootboxMod.probeFoilPackAvailabilityState({ buyer: CONNECTED }),
+      { available: false, definitive: true, code: 'FoilAlreadyBought' },
+    );
+
+    lastFakeContract = makeFakeContract({
+      staticCallShouldRevert: { purchase: true },
+      staticCallRevertName: { purchase: 'StaleAdvance' },
+    });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+    assert.deepEqual(
+      await lootboxMod.probeFoilPackAvailabilityState({ buyer: CONNECTED }),
+      { available: false, definitive: false, code: 'StaleAdvance' },
+    );
   });
 
   test('purchaseEth sends ENTRY units (400 per ticket), payKind=0, ZeroHash affiliate', async () => {
@@ -392,24 +446,31 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.deepEqual(lootboxMod.parseTraitsGeneratedFromReceipt(undefined, lastFakeContract), []);
   });
 
-  test('pollRngForLootbox returns 0n when contract view returns 0', async () => {
-    const c = makeFakeContract({ rngWord: 0n });
+  test('canOpenLootbox probes the exact owner and index without sending', async () => {
+    const owner = '0xcd34000000000000000000000000000000000000';
+    const c = makeFakeContract();
     lootboxMod.__setContractFactoryForTest(() => c);
-    const word = await lootboxMod.pollRngForLootbox(7n);
-    assert.equal(word, 0n);
+    assert.equal(await lootboxMod.canOpenLootbox({ player: owner, lootboxIndex: 7n }), true);
+    assert.deepEqual(c._calls.openBoxStatic, [[owner, 7n]]);
+    assert.deepEqual(c._calls.openBox, [], 'readiness probe never opens the box');
   });
 
-  test('pollRngForLootbox returns the word value when non-zero', async () => {
-    const c = makeFakeContract({ rngWord: 12345678n });
+  test('canOpenLootbox fails closed when the exact open simulation rejects', async () => {
+    const c = makeFakeContract({ staticCallShouldRevert: { openBox: true } });
     lootboxMod.__setContractFactoryForTest(() => c);
-    const word = await lootboxMod.pollRngForLootbox(7n);
-    assert.equal(word, 12345678n);
+    assert.equal(
+      await lootboxMod.canOpenLootbox({ player: CONNECTED, lootboxIndex: 7n }),
+      false,
+    );
+    assert.deepEqual(c._calls.openBoxStatic, [[CONNECTED, 7n]]);
   });
 
-  test('pollRngForLootbox returns 0n when no provider configured', async () => {
+  test('canOpenLootbox returns false when no provider is configured', async () => {
     contractsMod.clearProvider();
-    const word = await lootboxMod.pollRngForLootbox(7n);
-    assert.equal(word, 0n);
+    assert.equal(
+      await lootboxMod.canOpenLootbox({ player: CONNECTED, lootboxIndex: 7n }),
+      false,
+    );
   });
 });
 

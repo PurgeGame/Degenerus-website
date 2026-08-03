@@ -63,10 +63,14 @@ beforeEach(() => {
   // Plan 59-02: clear store between tests so app.lastDay assertions are deterministic.
   storeMod.__resetForTest();
   _testing.resetGoldRushYieldReader();
+  // Existing polling tests exercise the indexed soft-fallback unless a case
+  // installs an exact packed-state reader explicitly.
+  _testing.setBoonStateReader(async () => { throw new Error('RPC unavailable'); });
 });
 
 afterEach(() => {
   stop();
+  _testing.resetBoonStateReader();
 });
 
 // ===========================================================================
@@ -74,11 +78,11 @@ afterEach(() => {
 // ===========================================================================
 
 describe('POLL_INTERVALS (D-04 LOCKED cadence)', () => {
-  test('cadence is 15s/30s/60s/60s', () => {
+  test('cadence is 15s/30s/60s/15s', () => {
     assert.equal(POLL_INTERVALS.gameState, 15_000);
     assert.equal(POLL_INTERVALS.playerData, 30_000);
     assert.equal(POLL_INTERVALS.health, 60_000);
-    assert.equal(POLL_INTERVALS.lastDay, 60_000);
+    assert.equal(POLL_INTERVALS.lastDay, 15_000);
   });
 });
 
@@ -486,7 +490,7 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
     assert.equal(stored, undefined, 'no store write on fetch failure');
   });
 
-  test('store write occurs only for pollLastDay (other 3 pollers do NOT touch app.*)', async () => {
+  test('game state is shared while player/health remain private to their pollers', async () => {
     fetchImpl = async (url) => {
       if (url.endsWith('/game/jackpot/last-day')) {
         return {
@@ -503,12 +507,36 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
     };
     start({ playerAddress: '0xabc' });
     await new Promise((r) => setTimeout(r, 30));
-    // app.lastDay populated; app.game / app.player / app.health remain undefined
-    // (Plan 59-02 only wires pollLastDay; Phase 60+ extends to other 3).
+    // app.lastDay and the day-change signal are shared; player/health remain
+    // private to their consumers.
     assert.ok(storeMod.get('app.lastDay') != null, 'app.lastDay set');
+    assert.ok(storeMod.get('app.gameState') != null, 'app.gameState set');
     assert.equal(storeMod.get('app.game'), undefined, 'app.game untouched (Phase 60)');
     assert.equal(storeMod.get('app.player'), undefined, 'app.player untouched');
     assert.equal(storeMod.get('app.health'), undefined, 'app.health untouched');
+  });
+
+  test('a resolved day retries jackpot until app.lastDay catches up', () => {
+    let refreshes = 0;
+    const refreshLastDay = () => { refreshes += 1; };
+
+    _testing.publishGameState({ dailyRng: { day: 171 } }, refreshLastDay);
+    assert.equal(refreshes, 1, 'first exact snapshot requests the still-missing draw');
+
+    _testing.publishGameState({ dailyRng: { day: 171 } }, refreshLastDay);
+    assert.equal(refreshes, 2, 'a raced/stale jackpot response is retried on the next state poll');
+
+    storeMod.update('app.lastDay', { day: 171 });
+    _testing.publishGameState({ dailyRng: { day: 171 } }, refreshLastDay);
+    assert.equal(refreshes, 2, 'once the displayed draw catches up, same-day polls stay quiet');
+
+    _testing.publishGameState({ dailyRng: { day: 172 } }, refreshLastDay);
+    assert.equal(refreshes, 3, 'normal rollover refreshes the draw immediately');
+
+    storeMod.update('app.lastDay', { day: 172 });
+    _testing.publishGameState({ dailyRng: { day: 10 } }, refreshLastDay);
+    assert.equal(refreshes, 4, 'a lower day after redeploy is also a real epoch change');
+    assert.equal(storeMod.get('app.gameState').dailyRng.day, 10);
   });
 });
 
@@ -611,7 +639,47 @@ describe('current boon feed → app.boons', () => {
     assert.deepEqual(storeMod.get('app.boons'), {
       address: viewed,
       day: 62,
+      exact: false,
       boons: [{ boonType: 9, consumed: false, consumedBoostBps: null }],
+    });
+  });
+
+  test('exact packed state replaces stale deity history and includes lootbox-awarded boons', async () => {
+    const viewed = '0x1111000000000000000000000000000000000062';
+    // Active purchase +25% (day 60, four-day window); the indexed response is
+    // deliberately stale and claims a consumed/absent coinflip boon instead.
+    const slot0 = (3n << 160n) | (60n << 112n);
+    _testing.setBoonStateReader(async (address) => {
+      assert.equal(address, viewed);
+      return { slot0, slot1: 0n, currentDay: 62 };
+    });
+    fetchImpl = async (url, opts) => {
+      fetchCalls.push({ url, opts });
+      if (url.endsWith('/game/state')) {
+        return { ok: true, status: 200, json: async () => ({ currentDay: 62 }) };
+      }
+      if (url.endsWith(`/player/${viewed}/boons/62`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            day: 62,
+            address: viewed,
+            boons: [{ boonType: 3, consumed: false }],
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    start({ playerAddress: viewed });
+    await new Promise((r) => setTimeout(r, 30));
+
+    assert.deepEqual(storeMod.get('app.boons'), {
+      address: viewed,
+      day: 62,
+      exact: true,
+      boons: [{ boonType: 9, consumed: false, source: 'chain' }],
     });
   });
 

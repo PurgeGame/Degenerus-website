@@ -39,6 +39,8 @@ function makeFakeContract(opts = {}) {
     smite: [],
     subscribe: [],
     depositAfkingFunding: [],
+    afkingFundingOf: [],
+    withdrawAfkingFunding: [],
   };
   const staticCallStub = (methodName) => async (..._args) => {
     if (opts.staticCallShouldRevert?.[methodName]) {
@@ -101,6 +103,17 @@ function makeFakeContract(opts = {}) {
         return sendTxStub('depositAfkingFunding')(...args);
       },
       { staticCall: staticCallStub('depositAfkingFunding') }
+    ),
+    afkingFundingOf: async (...args) => {
+      calls.afkingFundingOf.push(args);
+      return opts.afkingFundingWei ?? 0n;
+    },
+    withdrawAfkingFunding: Object.assign(
+      async (...args) => {
+        calls.withdrawAfkingFunding.push(args);
+        return sendTxStub('withdrawAfkingFunding')(...args);
+      },
+      { staticCall: staticCallStub('withdrawAfkingFunding') }
     ),
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
@@ -303,12 +316,11 @@ describe('AFKing seat entitlement and claim', () => {
     storeMod.__resetForTest();
   });
 
-  test('an eligible pass holder with no token is surfaced as claimable', async () => {
+  test('a holder with no seat is not surfaced as having one', async () => {
+    // Seats auto-mint with the pass; `claimSeat`/`canClaimSeat` no longer exist, so balanceOf
+    // is the whole signal.
     passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token: {
-        balanceOf: async () => 0n,
-        claimSeat: { staticCall: async () => 171n },
-      },
+      token: { balanceOf: async () => 0n },
       game: {
         subInfo: async () => [false, 0n, 0n, 0n],
         afkingSnapshot: async () => [10n, false, [0n], [0n]],
@@ -317,41 +329,22 @@ describe('AFKing seat entitlement and claim', () => {
 
     const state = await passesMod.readAfkingSubscription(CONNECTED);
     assert.equal(state.hasToken, false);
-    assert.equal(state.canClaimSeat, true);
+    assert.equal(state.tokenBalance, 0n);
+    assert.equal('canClaimSeat' in state, false);
   });
 
-  test('claimAfkingSeat preflights and sends the chosen badge and colors', async () => {
-    storeMod.update('connected.address', CONNECTED);
-    storeMod.update('viewing.address', null);
-    storeMod.update('ui.mode', 'self');
-    contractsMod.setProvider(makeFakeProvider(CONNECTED));
-    const calls = [];
-    const order = [];
-    const claimSeat = Object.assign(
-      async (...args) => {
-        order.push('send');
-        calls.push(args);
-        return makeFakeTx(makeFakeReceipt());
+  test('a seat holder is surfaced as having one', async () => {
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 1n },
+      game: {
+        subInfo: async () => [false, 0n, 0n, 0n],
+        afkingSnapshot: async () => [10n, false, [0n], [0n]],
       },
-      {
-        staticCall: async (...args) => {
-          order.push('static');
-          assert.deepEqual(args, [11, 0xd9d9d9, 0xc72734]);
-          return 171n;
-        },
-      },
-    );
-    const token = { claimSeat, connect() { return this; } };
-    passesMod.__setAfkingReadContractFactoryForTest(() => ({ token, game: {} }));
+    }));
 
-    await passesMod.claimAfkingSeat({
-      symbolId: 11,
-      bgRgb: 0xd9d9d9,
-      trimRgb: 0xc72734,
-    });
-
-    assert.deepEqual(order, ['static', 'send']);
-    assert.deepEqual(calls, [[11, 0xd9d9d9, 0xc72734]]);
+    const state = await passesMod.readAfkingSubscription(CONNECTED);
+    assert.equal(state.hasToken, true);
+    assert.equal(state.tokenBalance, 1n);
   });
 });
 
@@ -424,10 +417,59 @@ describe('AFKing subscription configuration and funding', () => {
     );
     assert.equal(fake._calls.depositAfkingFunding.length, 0);
   });
+
+  test('re-reads and withdraws the connected wallet\'s complete AFKing funding balance', async () => {
+    const funding = 80_000_000_000n;
+    fake = makeFakeContract({ afkingFundingWei: funding });
+    passesMod.__setContractFactoryForTest(() => fake);
+
+    const result = await passesMod.withdrawAfkingSubscriptionFunding();
+
+    assert.equal(result.amountWei, funding);
+    assert.deepEqual(fake._calls.afkingFundingOf, [[
+      '0xAB12000000000000000000000000000000000000',
+    ]]);
+    assert.deepEqual(fake._calls.withdrawAfkingFunding, [[funding]]);
+  });
+
+  test('refuses AFKing withdrawal in operator mode before reading or sending', async () => {
+    storeMod.update('viewing.address', '0xcd34000000000000000000000000000000000000');
+    storeMod.update('ui.mode', 'operator');
+
+    await assert.rejects(
+      passesMod.withdrawAfkingSubscriptionFunding(),
+      /own wallet view/i,
+    );
+    assert.equal(fake._calls.afkingFundingOf.length, 0);
+    assert.equal(fake._calls.withdrawAfkingFunding.length, 0);
+  });
+
+  test('does not open a withdrawal transaction for an empty AFKing balance', async () => {
+    await assert.rejects(
+      passesMod.withdrawAfkingSubscriptionFunding(),
+      /no AFKing funding/i,
+    );
+    assert.equal(fake._calls.withdrawAfkingFunding.length, 0);
+  });
+
+  test('surfaces a stale AFKing withdrawal balance without sending', async () => {
+    fake = makeFakeContract({
+      afkingFundingWei: 80_000_000_000n,
+      staticCallShouldRevert: { withdrawAfkingFunding: true },
+      staticCallRevertName: { withdrawAfkingFunding: 'Insolvent' },
+    });
+    passesMod.__setContractFactoryForTest(() => fake);
+
+    await assert.rejects(
+      passesMod.withdrawAfkingSubscriptionFunding(),
+      (error) => error?.code === 'Insolvent' && /no longer available/i.test(error.userMessage),
+    );
+    assert.equal(fake._calls.withdrawAfkingFunding.length, 0);
+  });
 });
 
 // ===========================================================================
-// Reason-map registrations — Plan 62-02 registers ONLY RngLocked.
+// Reason-map registrations used by the pass and AFKing write paths.
 // ===========================================================================
 
 describe('Plan 62-02: passes.js reason-map registrations', () => {

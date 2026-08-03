@@ -86,6 +86,11 @@ class FakeHTMLElement {
 
 globalThis.HTMLElement = FakeHTMLElement;
 globalThis.document = { createElement: (tag) => makeElement(tag) };
+globalThis.localStorage = {
+  _m: new Map(),
+  getItem(key) { return this._m.get(String(key)) ?? null; },
+  setItem(key, value) { this._m.set(String(key), String(value)); },
+};
 globalThis.customElements = {
   registry: new Map(),
   define(name, ctor) { this.registry.set(name, ctor); },
@@ -93,23 +98,80 @@ globalThis.customElements = {
 };
 
 const pending = await import('../../app/pending-actions.js');
+const drawGate = await import('../../app/major-draw-activity.js');
 const trayModule = await import('../app-reveal-tray.js');
 
-beforeEach(() => pending.__resetPendingActionsForTest());
+beforeEach(() => {
+  pending.__resetPendingActionsForTest();
+  drawGate.__resetMajorDrawActivityForTest();
+  localStorage._m.clear();
+});
 
 describe('actionableRevealItems', () => {
-  test('accepts ready/busy reveal kinds and rejects waiting or unrelated work', () => {
+  test('accepts ready/busy work and explicitly pinned RNG waits, but rejects ordinary waiting', () => {
     const rows = trayModule.actionableRevealItems([
       { kind: 'lootbox', state: 'ready' },
       { kind: 'degenerette', state: 'busy' },
+      { kind: 'degenerette', state: 'waiting', pinned: true },
+      { kind: 'lootbox', state: 'waiting', pinned: true },
+      { kind: 'degenerette', state: 'waiting' },
+      { kind: 'growth-claim', state: 'ready' },
+      { kind: 'volume-claim', state: 'ready' },
       { kind: 'tickets', state: 'waiting' },
+      { kind: 'pari', state: 'ready' },
       { kind: 'batch-resolution', state: 'ready' },
+      { kind: 'bingo', state: 'ready' },
+      { kind: 'foil-match', state: 'ready' },
     ]);
-    assert.deepEqual(rows.map((row) => row.kind), ['lootbox', 'degenerette']);
+    assert.deepEqual(rows.map((row) => row.kind), [
+      'lootbox', 'degenerette', 'degenerette', 'lootbox', 'growth-claim', 'volume-claim', 'batch-resolution', 'bingo', 'foil-match',
+    ]);
   });
 });
 
 describe('<app-reveal-tray>', () => {
+  test('a foil match shows the actual foil ticket and names the scoring reason', () => {
+    pending.publishPendingActions('foil-match', [{
+      id: 'foil-match:44:2:0', kind: 'foil-match', kindLabel: 'FOIL TICKET MATCH',
+      label: 'Day 44 · Foil T5', shortLabel: 'Claim T5',
+      detail: 'MAIN DRAW · 2 exact + 1 symbol',
+      lineTraits: [1, 70, 130, 200],
+      state: 'ready', write: true, run: async () => {},
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const action = el.querySelector('.rrt-action--foil-match');
+    assert.ok(action);
+    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'FOIL TICKET MATCH');
+    assert.match(action.querySelector('.rrt-action__detail').textContent, /2 exact \+ 1 symbol/);
+    assert.equal(action.querySelectorAll('.rrt-foil-match-ticket__q').length, 4,
+      'the pending art copies all four badges from the matched foil ticket');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM T5');
+    assert.notEqual(action.getAttribute('data-write'), null);
+    el.disconnectedCallback();
+  });
+
+  test('a Bingo receipt names why it paid and uses the completed-symbol badge', () => {
+    pending.publishPendingActions('bingo-claims', [{
+      id: 'bingo:0xabc:4', kind: 'bingo', kindLabel: 'QUADRANT-FIRST BINGO',
+      label: 'Level 27 ETHEREUM Bingo', shortLabel: 'Reveal Bingo',
+      detail: 'CRYPTO quadrant · all 8 colors collected',
+      badgePath: '/badges-circular/crypto_06_ethereum_gold.svg',
+      state: 'ready', run: async () => {},
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+    const action = el.querySelector('.rrt-action--bingo');
+    assert.ok(action);
+    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'QUADRANT-FIRST BINGO');
+    assert.match(action.querySelector('.rrt-action__detail').textContent, /all 8 colors/);
+    assert.equal(action.querySelector('.rrt-action__art--bingo').querySelector('img').src,
+      '/badges-circular/crypto_06_ethereum_gold.svg');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'REVEAL BINGO');
+    el.disconnectedCallback();
+  });
+
   test('pins ready reveal work, delegates the click, and hides after its owner clears', async () => {
     const el = new trayModule.AppRevealTray();
     el.connectedCallback();
@@ -144,7 +206,291 @@ describe('<app-reveal-tray>', () => {
     el.disconnectedCallback();
   });
 
-  test('CLEAR BOXES invokes each lootbox owner once and dismisses every box row', async () => {
+  test('a submitted Degenerette RNG request stays pinned with progress, then lights up when ready', () => {
+    pending.publishPendingActions('degenerette', [{
+      id: 'degenerette:42', kind: 'degenerette', label: '1 spin',
+      shortLabel: 'Waiting for RNG', detail: 'RNG requested · waiting for Chainlink result',
+      ticketPacked: '0x1b3a0900', heroQuadrant: 2,
+      state: 'waiting', phase: 'waiting-rng', pinned: true, progress: 'indeterminate',
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const shell = el.querySelector('[data-bind="rrt-tray"]');
+    let action = el.querySelector('.rrt-action--degenerette');
+    assert.equal(shell.hidden, false, 'a requested RNG wait remains on screen');
+    assert.match(action.className, /is-rng-waiting/);
+    assert.match(action.className, /is-waiting/,
+      'not-yet-actionable work receives the shared muted treatment');
+    assert.equal(action.disabled, true, 'waiting progress cannot submit a duplicate request');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'WAITING');
+    assert.ok(action.querySelector('.rrt-action__progress'));
+    assert.equal(el.querySelector('[data-bind="rrt-title"]').textContent, 'RNG PENDING');
+    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'DEGENERETTE');
+    assert.equal(action.querySelector('.rrt-action__label').textContent, '1 spin',
+      'the middle line does not repeat Degenerette');
+    const ticket = action.querySelector('.rrt-degenerette-ticket');
+    assert.match(ticket.className, /ticket-card/,
+      'the pending graphic uses the same ticket paper as the submitted ticket');
+    const badges = ticket.querySelectorAll('.rrt-degenerette-ticket__badge');
+    assert.deepEqual(badges.map((badge) => badge.src), [
+      '/badges-circular/crypto_00_xrp_pink.svg',
+      '/badges-circular/zodiac_01_taurus_purple.svg',
+      '/badges-circular/cards_05_heart_gold.svg',
+      '/badges-circular/dice_03_4_red.svg',
+    ], 'the icon copies all four submitted ticket graphics');
+    assert.match(ticket.children[2].className, /q-hero/,
+      'the submitted Hero quadrant is preserved in the mini ticket');
+    assert.equal(ticket.querySelector('.rrt-degenerette-ticket__center-mark')?.src,
+      '/whitepaper/flame-center.svg', 'the real ticket center mark is present');
+
+    pending.publishPendingActions('degenerette', [{
+      id: 'degenerette:42', kind: 'degenerette', label: '1 spin',
+      shortLabel: 'Resolve degen', detail: 'RNG ready · FLIP result locked',
+      ticketPacked: '0x1b3a0900', heroQuadrant: 2,
+      state: 'ready', phase: 'result-ready', run: async () => {},
+    }]);
+    action = el.querySelector('.rrt-action--degenerette');
+    assert.match(action.className, /is-result-ready/);
+    assert.doesNotMatch(action.className, /is-waiting/);
+    assert.equal(action.disabled, false);
+    assert.equal(action.querySelector('.rrt-action__progress'), null);
+    assert.equal(el.querySelector('[data-bind="rrt-title"]').textContent, 'READY');
+
+    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    assert.match(css, /\.rrt-action__art--degenerette\s*\{[^}]*width:\s*2\.42rem;[^}]*height:\s*2\.42rem/s,
+      'the Degenerette art leaves vertical breathing room inside its fixed-height row');
+    assert.match(css, /@media \(max-width: 560px\)[\s\S]*?\.rrt-action--degenerette \.rrt-action__art\s*\{[^}]*width:\s*2\.12rem;[^}]*height:\s*2\.12rem/s,
+      'the narrow Degenerette art stays below the row content height');
+    assert.match(css, /\.rrt-action--degenerette\.is-result-ready\s*\{[^}]*animation:\s*rrt-degenerette-ready-glow/s);
+    assert.match(css, /\.rrt-action__progress-fill\s*\{[^}]*animation:\s*rrt-rng-progress/s);
+    el.disconnectedCallback();
+  });
+
+  test('OPEN WHEN READY persists and auto-runs only presentation-safe resolved work', async () => {
+    let ran = 0;
+    pending.publishPendingActions('pack', [{
+      id: 'ticket-pack:77', kind: 'tickets', label: 'Level 77 ticket pack',
+      detail: 'Waiting for the Level 77 draw', state: 'waiting', pinned: true,
+      autoOpen: true,
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const checkbox = el.querySelector('[data-bind="rrt-auto-open"]');
+    assert.ok(checkbox, 'the active tray header carries the preference');
+    assert.equal(checkbox.checked, false, 'automatic popups are opt-in');
+    checkbox.checked = true;
+    checkbox.dispatchEvent({ type: 'change' });
+    assert.equal(localStorage.getItem('degenerus:reveal-tray:auto-open:v1'), '1');
+    await Promise.resolve();
+    assert.equal(ran, 0, 'a waiting row is never run');
+
+    pending.publishPendingActions('pack', [{
+      id: 'ticket-pack:77', kind: 'tickets', label: 'Level 77 ticket pack',
+      detail: '4 tickets ready', state: 'ready', autoOpen: true,
+      run: async () => {
+        ran += 1;
+        pending.clearPendingActions('pack');
+      },
+    }]);
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    assert.equal(ran, 1, 'the resolved presentation opens once as soon as it becomes ready');
+
+    assert.equal(trayModule.canAutoOpenReveal({
+      state: 'ready', autoOpen: false, run() {},
+    }), false, 'wallet/write work cannot opt itself in accidentally');
+    el.disconnectedCallback();
+  });
+
+  test('OPEN WHEN READY waits through major draw motion and its cooldown; manual opens still run', async () => {
+    let ran = 0;
+    localStorage.setItem('degenerus:reveal-tray:auto-open:v1', '1');
+    drawGate.setMajorDrawActivity('jackpot-replay', true);
+    pending.publishPendingActions('box', [{
+      id: 'box:88', kind: 'lootbox', label: 'Lootbox #88',
+      detail: 'Result ready', state: 'ready', autoOpen: true,
+      run: async () => {
+        ran += 1;
+        pending.clearPendingActions('box');
+      },
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    assert.equal(ran, 0, 'the jackpot animation prevents an automatic popup');
+
+    const settledAt = Date.now();
+    drawGate.setMajorDrawActivity('jackpot-replay', false);
+    assert.equal(drawGate.isAutomaticPopupBlocked(settledAt + 9_999), true);
+    assert.equal(drawGate.isAutomaticPopupBlocked(settledAt + 10_001), false,
+      'the automatic gate includes a ten-second quiet window');
+    el.querySelector('.rrt-action').dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    assert.equal(ran, 1, 'an explicit click is never blocked by the automatic-popup gate');
+    el.disconnectedCallback();
+  });
+
+  test('an sDGNRS redemption stays pinned while its daily roll is pending', () => {
+    pending.publishPendingActions('sdgnrs-redemptions', [{
+      id: 'sdgnrs-redemption:period:67', kind: 'lootbox',
+      kindLabel: 'sDGNRS REDEMPTION', label: 'Redemption box · Day 67',
+      shortLabel: 'Claim & open', detail: 'Waiting for the daily RNG result',
+      state: 'waiting', pinned: true, progress: 'indeterminate',
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const action = el.querySelector('.rrt-action--lootbox');
+    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, false);
+    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'sDGNRS REDEMPTION');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'WAITING');
+    assert.ok(action.querySelector('.rrt-action__progress'));
+    assert.equal(action.disabled, true);
+    el.disconnectedCallback();
+  });
+
+  test('a Degenerette result remains visible as a non-RNG loading row while spins index', () => {
+    pending.publishPendingActions('degenerette', [{
+      id: 'degenerette:42', kind: 'degenerette', label: '3 spins',
+      shortLabel: 'Loading spins', detail: 'Loading every verified spin',
+      ticketPacked: '0x1b3a0900', heroQuadrant: 2,
+      state: 'waiting', phase: 'indexing', pinned: true,
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const action = el.querySelector('.rrt-action--degenerette');
+    assert.ok(action, 'the chain/indexer handoff cannot disappear from the tray');
+    assert.doesNotMatch(action.className, /is-rng-waiting/);
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'LOADING…');
+    assert.equal(el.querySelector('[data-bind="rrt-title"]').textContent, 'PENDING');
+    el.disconnectedCallback();
+  });
+
+  test('a ready growth payout gets a dedicated CLAIM action in the bottom tray', async () => {
+    let claimed = 0;
+    pending.publishPendingActions('pari', [{
+      id: 'pari:growth:41', kind: 'growth-claim', label: 'GROWTH BET · Level 41',
+      shortLabel: 'Claim', detail: 'OVER paid · 4,000 FLIP ready', state: 'ready',
+      run: async () => {
+        claimed += 1;
+        pending.clearPendingActions('pari');
+      },
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const shell = el.querySelector('[data-bind="rrt-tray"]');
+    const action = el.querySelector('.rrt-action--growth-claim');
+    assert.equal(shell.hidden, false);
+    assert.ok(action, 'growth payout is visible beside the other bottom actions');
+    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'GROWTH BET');
+    assert.equal(action.querySelector('.rrt-action__art--growth-claim').textContent, '↑');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM');
+
+    action.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    assert.equal(claimed, 1);
+    assert.equal(shell.hidden, true);
+    el.disconnectedCallback();
+  });
+
+  test('a ready volume payout uses the same bottom-row CLAIM treatment', () => {
+    pending.publishPendingActions('pari', [{
+      id: 'pari:volume:100', kind: 'volume-claim', label: 'VOLUME BET',
+      shortLabel: 'Claim', detail: 'UNDER paid · 2,250 FLIP ready', state: 'ready',
+      run: async () => {},
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const action = el.querySelector('.rrt-action--volume-claim');
+    assert.ok(action);
+    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'VOLUME BET');
+    assert.equal(action.querySelector('.rrt-action__art--volume-claim').textContent, 'V');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM');
+    el.disconnectedCallback();
+  });
+
+  test('mass protocol work is a distinct resolver action, never the ticket-pack opener', async () => {
+    let resolved = 0;
+    pending.publishPendingActions('mine-flip-resolver', [{
+      id: 'mine-flip:player', kind: 'mass-resolution',
+      compact: true, label: 'Mine FLIP', shortLabel: 'Mine FLIP', detail: '',
+      icon: '/whitepaper/flame-logo-split.svg',
+      state: 'ready', write: true, run: async () => { resolved += 1; },
+    }]);
+    pending.publishPendingActions('pack', [{
+      id: 'pack:62', kind: 'tickets', label: 'Level 62 ticket pack',
+      shortLabel: 'Open tickets', detail: 'Waiting for the Level 62 draw',
+      state: 'waiting', pinned: true,
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const resolver = el.querySelector('.rrt-action--mass-resolution');
+    const pack = el.querySelector('.rrt-action--tickets');
+    assert.ok(resolver, 'the bounty gets its own bottom action');
+    assert.equal(resolver.querySelector('.rrt-action__label').textContent, 'Mine FLIP');
+    const resolverArt = resolver.querySelector('.rrt-action__art--mass-resolution');
+    assert.equal(
+      resolverArt?.querySelector('img')?.src,
+      '/whitepaper/flame-logo-split.svg',
+      'Mine FLIP uses the FLIP mark instead of the protocol logo',
+    );
+    assert.equal(resolver.querySelector('.rrt-action__kind'), null);
+    assert.equal(resolver.querySelector('.rrt-action__detail'), null);
+    assert.equal(resolver.querySelector('.rrt-action__cta'), null);
+    assert.notEqual(resolver.getAttribute('data-write'), null);
+    assert.equal(resolver.disabled, false);
+    assert.equal(pack.querySelector('.rrt-action__cta').textContent, 'WAITING');
+    assert.equal(pack.disabled, true, 'the pack itself never sends the resolver transaction');
+
+    resolver.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    assert.equal(resolved, 1);
+    el.disconnectedCallback();
+  });
+
+  test('HIDE preserves every action and reopens only when the manifest changes', () => {
+    const waiting = {
+      id: 'degenerette:42', kind: 'degenerette', label: 'Degenerette',
+      detail: 'Waiting for Chainlink RNG', state: 'waiting',
+      phase: 'waiting-rng', pinned: true, progress: 'indeterminate',
+    };
+    pending.publishPendingActions('degenerette', [waiting]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const shell = el.querySelector('[data-bind="rrt-tray"]');
+    const hide = el.querySelector('[data-bind="rrt-hide"]');
+    assert.equal(shell.hidden, false);
+    assert.equal(hide.textContent, 'HIDE');
+    hide.dispatchEvent({ type: 'click' });
+    assert.equal(shell.hidden, true, 'HIDE collapses the surface');
+    assert.equal(pending.getPendingActions().length, 1,
+      'HIDE does not clear or dismiss the underlying work');
+
+    pending.publishPendingActions('degenerette', [{ ...waiting }]);
+    assert.equal(shell.hidden, true,
+      'an equivalent polling refresh does not nag the player again');
+
+    pending.publishPendingActions('degenerette', [{
+      ...waiting,
+      state: 'ready',
+      phase: 'result-ready',
+      detail: 'RNG ready · result locked',
+      progress: null,
+      run: async () => {},
+    }]);
+    assert.equal(shell.hidden, false,
+      'a meaningful readiness update automatically brings the tray back');
+    assert.equal(el.querySelector('.rrt-action--degenerette').disabled, false);
+    el.disconnectedCallback();
+  });
+
+  test('CLEAR invokes each owner once and dismisses every current reveal row', async () => {
     let cleared = 0;
     const clearAll = async () => {
       cleared += 1;
@@ -164,7 +510,7 @@ describe('<app-reveal-tray>', () => {
     el.connectedCallback();
     const clear = el.querySelector('[data-bind="rrt-clear"]');
     assert.equal(clear.hidden, false);
-    assert.equal(clear.textContent, 'CLEAR BOXES');
+    assert.equal(clear.textContent, 'CLEAR');
 
     clear.dispatchEvent({ type: 'click' });
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
@@ -176,6 +522,7 @@ describe('<app-reveal-tray>', () => {
   test('ticket actions use a fixed-aspect branded pack instead of a squeezed glyph', () => {
     pending.publishPendingActions('pack', [{
       id: 'pack:62', kind: 'tickets', label: 'Level 62 ticket pack',
+      ticketLevel: 62, ticketCount: 5,
       shortLabel: 'Open tickets', detail: '5 tickets ready', state: 'ready',
       run: async () => {},
     }]);
@@ -184,6 +531,9 @@ describe('<app-reveal-tray>', () => {
     const art = el.querySelector('.rrt-action__art--tickets');
     assert.ok(art?.querySelector('.rrt-pack-art'), 'the button carries the opener pack art');
     assert.equal(art.querySelector('.rvl-pack-logo')?.src, '/whitepaper/flame-logo.svg');
+    assert.equal(art.querySelector('.rrt-pack-level')?.textContent, 'LEVEL 62');
+    assert.equal(art.querySelector('.rrt-pack-count')?.textContent, '5 TICKETS',
+      'quantity and level are printed in the center of the bottom-panel pack');
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.match(css, /\.rrt-pack-art\.rvl-pack\s*\{[^}]*flex:\s*0 0 auto[^}]*aspect-ratio:\s*118 \/ 160/s,
       'the compact button cannot flex-squash its portrait wrapper');
@@ -196,18 +546,24 @@ describe('<app-reveal-tray>', () => {
     assert.equal((html.match(/<app-reveal-tray><\/app-reveal-tray>/g) || []).length, 1);
     assert.equal((html.match(/<app-box-strip tray-only><\/app-box-strip>/g) || []).length, 1,
       'one headless lootbox controller feeds the global tray');
+    assert.equal((html.match(/<app-sdgnrs-redemptions><\/app-sdgnrs-redemptions>/g) || []).length, 1,
+      'one durable sDGNRS claim controller feeds the same tray');
     assert.match(css, /app-reveal-tray\s*\{[^}]*position:\s*fixed[^}]*bottom:/s);
     assert.match(css, /app-reveal-tray\s*\{[^}]*z-index:\s*900/s);
     assert.match(css, /\.rvl-backdrop\s*\{[^}]*z-index:\s*1200/s);
+    assert.match(css,
+      /\.rrt-action\.is-waiting\s*\{[^}]*filter:\s*grayscale\(0\.92\)[^}]*opacity:\s*0\.5/s,
+      'waiting work is visibly grey until it can advance resolution');
     assert.match(
       css,
-      /body\.layout-basic \.rrt-actions\s*\{[^}]*max-height:\s*7\.65rem[^}]*grid-auto-rows:\s*var\(--rrt-row-height\)[^}]*overflow-y:\s*auto/s,
-      'only two desktop action rows fit before the pending list scrolls',
+      /body\.layout-basic \.rrt-actions\s*\{[^}]*max-height:\s*8\.5rem[^}]*flex-wrap:\s*wrap[^}]*overflow-y:\s*auto[^}]*scrollbar-width:\s*none/s,
+      'long manifests remain scrollable without painting a one-pixel animation scrollbar',
     );
+    assert.match(css, /\.rrt-actions::\-webkit-scrollbar\s*\{\s*display:\s*none/s);
     assert.match(
       css,
-      /@media \(max-width: 560px\)[\s\S]*?\.rrt-actions\s*\{[^}]*max-height:\s*7\.05rem/s,
-      'the single-column phone tray is likewise capped at two compact rows',
+      /@media \(max-width: 560px\)[\s\S]*?\.rrt-actions\s*\{[^}]*max-height:\s*7\.9rem/s,
+      'the single-column phone tray likewise fits two compact rows without nuisance scrollbars',
     );
   });
 });

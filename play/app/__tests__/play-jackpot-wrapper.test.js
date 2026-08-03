@@ -100,9 +100,9 @@ test('play/index.html links beta/styles/jackpot.css', () => {
   assert.match(html, /beta\/styles\/jackpot\.css/);
 });
 
-test('play/index.html uses <jackpot-panel-wrapper> tag (not raw <jackpot-panel>)', () => {
+test('play/index.html uses <replay-panel> as the jackpot centerpiece (post-cleanup)', () => {
   const html = readFileSync(PLAY_INDEX, 'utf8');
-  assert.match(html, /<jackpot-panel-wrapper/);
+  assert.match(html, /<replay-panel/);
 });
 
 test('play/index.html includes <packs-panel> (Phase 52 panel add)', () => {
@@ -110,8 +110,8 @@ test('play/index.html includes <packs-panel> (Phase 52 panel add)', () => {
   assert.match(html, /<packs-panel/);
 });
 
-test('play/app/main.js registers jackpot-panel-wrapper and packs-panel via dynamic import', () => {
+test('play/app/main.js registers replay-panel and packs-panel via dynamic import', () => {
   const src = readFileSync(PLAY_MAIN, 'utf8');
-  assert.match(src, /jackpot-panel-wrapper\.js/);
+  assert.match(src, /replay-panel\.js/);
   assert.match(src, /packs-panel\.js/);
 });

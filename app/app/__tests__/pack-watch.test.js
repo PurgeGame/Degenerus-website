@@ -83,7 +83,9 @@ function byTrait(cards) {
 describe('pack-watch — deferred ticket reveals', () => {
   beforeEach(() => {
     localStorage.clear();
-    _routes = {};
+    _routes = {
+      '/game/state': { level: LEVEL, jackpotPhaseFlag: true },
+    };
     overlay.__resetForTest();
     pendingActions.__resetPendingActionsForTest();
   });
@@ -129,6 +131,10 @@ describe('pack-watch — deferred ticket reveals', () => {
     let [item] = pendingActions.getPendingActions();
     assert.equal(item.id, `ticket-pack:${LEVEL}`);
     assert.equal(item.state, 'waiting');
+    assert.equal(item.shortLabel, 'Open tickets');
+    assert.doesNotMatch(item.detail, /foil/i,
+      'an ordinary pack never inherits foil indexing copy');
+    assert.equal(item.run, null, 'an unresolved pack never doubles as a protocol crank button');
 
     _routes['/tickets/by-trait'] = byTrait([card(0, true)]);
     packWatch.startPackWatch({ getAddress: () => ADDR });
@@ -151,6 +157,35 @@ describe('pack-watch — deferred ticket reveals', () => {
     await new Promise((r) => setTimeout(r, 10));
     assert.equal(pendingActions.getPendingActions().length, 0,
       'collecting the pack retires it from the widget');
+  });
+
+  test('purchase-phase future packs stay durable but do not pose as next-RNG work', async () => {
+    _routes['/game/state'] = {
+      level: LEVEL - 1,
+      phase: 'PURCHASE',
+      jackpotPhaseFlag: false,
+      rngLockedFlag: false,
+    };
+    _routes['/tickets/by-trait'] = byTrait([card(0, false)]);
+    await packWatch.recordPendingPack({ address: ADDR, level: LEVEL });
+
+    assert.equal(packWatch.pendingPacks().length, 1,
+      'the future pack remains recorded for its eventual level draw');
+    assert.equal(pendingActions.getPendingActions().length, 0,
+      'a daily RNG during purchase phase cannot resolve the future ticket pack');
+
+    _routes['/game/state'] = {
+      level: LEVEL,
+      phase: 'JACKPOT',
+      jackpotPhaseFlag: true,
+      rngLockedFlag: false,
+    };
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((r) => setTimeout(r, 10));
+    const [item] = pendingActions.getPendingActions();
+    assert.equal(item?.id, `ticket-pack:${LEVEL}`);
+    assert.equal(item?.state, 'waiting',
+      'the same record returns when the next RNG really does cover its level');
   });
 
   test('a revealed ticket is not revealed twice, and the record is cleared', async () => {
@@ -225,11 +260,13 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(takeQueued().length, 0, 'the watcher is inert without a purchase to answer for');
   });
 
-  test('a failed seed fetch skips the record rather than risking a false reveal', async () => {
+  test('a failed seed fetch keeps a guarded seed-pending record for later recovery', async () => {
     _routes = {};   // endpoint down
     const ok = await packWatch.recordPendingPack({ address: ADDR, level: LEVEL });
-    assert.equal(ok, false);
-    assert.equal(packWatch.pendingPacks().length, 0);
+    assert.equal(ok, true);
+    assert.equal(packWatch.pendingPacks().length, 1);
+    assert.equal(packWatch.pendingPacks()[0].seedPending, true,
+      'the next trustworthy response establishes the baseline before revealing');
   });
 
   test('a second record for the same level does not re-seed over the first', async () => {
@@ -295,6 +332,12 @@ describe('pack-watch — deferred ticket reveals', () => {
 
     const foilLines = rolled.slice(1).map((c) => c.entries.map((entry) => entry.traitId));
     _routes['/foil'] = { present: true, level: LEVEL, lines: foilLines };
+    _routes['/tickets/by-trait'] = byTrait(rolled.slice(0, 4));
+    assert.equal(await packWatch.checkPendingPacks({ address: ADDR }), 0,
+      'four indexed foil lines cannot open while only three matching ticket cards exist');
+    assert.equal(takeQueued().length, 0, 'never constructs a three-ticket foil hand');
+
+    _routes['/tickets/by-trait'] = byTrait(rolled);
     assert.equal(await packWatch.checkPendingPacks({ address: ADDR }), 2);
     const [standard, foil] = takeQueued();
     assert.equal(standard.foilPack, false);
@@ -306,5 +349,34 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(foil.tickets.length, 4);
     assert.ok(foil.tickets.every((ticket) => ticket.foil), 'foil pack contains only foil lines');
     assert.notEqual(standard.batchId, foil.batchId, 'OPEN ALL cannot skip the foil opening');
+  });
+
+  test('bottom-panel indexing copy follows foil-only versus mixed pack identity', async () => {
+    _routes['/tickets/by-trait'] = byTrait([card(0, false)]);
+    await packWatch.recordPendingPack({
+      address: ADDR,
+      level: LEVEL,
+      foilExpected: true,
+      standardExpected: false,
+      expectedTickets: 4,
+      sourceKey: 'foil-only',
+    });
+    let [item] = pendingActions.getPendingActions();
+    assert.equal(item.label, `Level ${LEVEL} foil pack`);
+    assert.equal(item.detail, 'Foil pack is still indexing');
+
+    // Pending rows merge per level. Adding an ordinary pack must immediately
+    // change the shared row to neutral ticket-pack copy even though its foil
+    // companion is still catching up.
+    await packWatch.recordPendingPack({
+      address: ADDR,
+      level: LEVEL,
+      expectedTickets: 1,
+      sourceKey: 'ordinary-pack',
+    });
+    [item] = pendingActions.getPendingActions();
+    assert.equal(item.label, `Level ${LEVEL} ticket pack`);
+    assert.equal(item.detail, 'Ticket pack is still indexing');
+    assert.doesNotMatch(item.detail, /foil/i);
   });
 });

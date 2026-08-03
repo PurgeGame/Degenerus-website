@@ -71,6 +71,7 @@ const AFFILIATE_ABI = [
 
 const CODE_PATTERN = /^[A-Za-z0-9]{3,31}$/;
 const MAX_KICKBACK = 25;
+export const REFERRAL_CHANGED_EVENT = 'degenerus:referral-changed';
 
 // ---------------------------------------------------------------------------
 // Test seam — production path uses default `new ethers.Contract(...)`.
@@ -231,6 +232,73 @@ export async function validatePurchaseAffiliateCode(raw, player) {
   return code;
 }
 
+/** The manually selected / link-captured referral used by first-buy writes. */
+export function readStoredPurchaseAffiliateCode() {
+  let code = null;
+  try { code = localStorage.getItem('affiliate-ref'); } catch (_e) { /* private mode */ }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(String(code || ''))) {
+    try {
+      const match = typeof document !== 'undefined'
+        ? String(document.cookie || '').match(/(?:^|;\s*)dgn_ref=([^;]*)/)
+        : null;
+      code = match ? decodeURIComponent(match[1]) : null;
+    } catch (_e) { code = null; }
+  }
+  return /^0x[0-9a-fA-F]{64}$/.test(String(code || '')) ? String(code).toLowerCase() : null;
+}
+
+/**
+ * Validate and explicitly save a top-bar referral. Unlike automatic URL
+ * capture, a player's deliberate edit may replace the prior browser default;
+ * the contract still makes the actual referrer immutable after first buy.
+ */
+export async function savePurchaseAffiliateCode(raw, player = null) {
+  const code = await validatePurchaseAffiliateCode(raw, player);
+  const clear = code === ethers.ZeroHash;
+  try {
+    if (clear) localStorage.removeItem('affiliate-ref');
+    else localStorage.setItem('affiliate-ref', code.toLowerCase());
+  } catch (_e) { /* cookie remains as fallback */ }
+  try {
+    if (typeof document !== 'undefined') {
+      document.cookie = clear
+        ? 'dgn_ref=; max-age=0; path=/; SameSite=Lax'
+        : `dgn_ref=${encodeURIComponent(code.toLowerCase())}; max-age=63072000; path=/; SameSite=Lax`;
+    }
+  } catch (_e) { /* storage remains as fallback */ }
+  try {
+    if (typeof document !== 'undefined' && typeof document.dispatchEvent === 'function') {
+      document.dispatchEvent(new CustomEvent(REFERRAL_CHANGED_EVENT, {
+        detail: { code: clear ? null : code.toLowerCase() },
+      }));
+    }
+  } catch (_e) { /* UI sync is best effort */ }
+  return clear ? null : code.toLowerCase();
+}
+
+/**
+ * Return the player's real immutable referrer, or null when none is assigned.
+ *
+ * The current Affiliate contract deliberately makes `getReferrer()` total: an
+ * unset/locked/vault-coded slot returns VAULT rather than address(0). VAULT is
+ * the reward sink, not a player referral, so UI visibility must treat it as
+ * unassigned. A saved browser code is intentionally irrelevant to this read.
+ */
+export async function readPlayerReferrer(player) {
+  const address = String(player || '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(address)) return null;
+  const provider = getProvider();
+  if (!provider) return null;
+  const referrer = await _buildAffiliateContract(provider).getReferrer(address);
+  const normalized = String(referrer || '').toLowerCase();
+  const vault = String(CONTRACTS.VAULT || '').toLowerCase();
+  return normalized
+    && normalized !== ethers.ZeroAddress.toLowerCase()
+    && (!vault || normalized !== vault)
+    ? normalized
+    : null;
+}
+
 // ---------------------------------------------------------------------------
 // buildAffiliateUrl — build the shareable affiliate URL for a connected user.
 // Default: address-derived bytes32 code (commission flows immediately).
@@ -241,11 +309,18 @@ export async function validatePurchaseAffiliateCode(raw, player) {
  * @param {string} addr Hex address (will be lowercased).
  * @param {string|null} [registeredCode] Optional bytes32 hex from a previous
  *        createAffiliateCode tx; if absent, falls back to defaultCodeForAddress.
- * @returns {string} `https://purgegame.com/app/?ref=<bytes32hex>`
+ * @returns {string} An app-page referral URL. Default links use the player's
+ *          plain address; registered vanity codes retain their bytes32 value.
  */
 export function buildAffiliateUrl(addr, registeredCode = null) {
-  const code = registeredCode || defaultCodeForAddress(addr);
-  return `https://purgegame.com/app/?ref=${code}`;
+  const address = String(addr || '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(address)) {
+    throw new Error('A valid player address is required to build a referral link.');
+  }
+  const code = typeof registeredCode === 'string' && /^0x[0-9a-fA-F]{64}$/.test(registeredCode)
+    ? registeredCode.toLowerCase()
+    : address;
+  return `https://degener.us/app/?ref=${code}`;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,11 +1,11 @@
 // components/purchase-panel.js -- Purchase panel Custom Element
-// ETH/BURNIE toggle, ticket quantity, lootbox amount, pool fill bar, EV indicator.
+// ETH/FLIP toggle, ticket quantity, lootbox amount, pool fill bar, EV indicator.
 // All contract interaction delegated to purchases.js (no ethers import here).
 
 import { subscribe, get } from '../app/store.js';
 import {
   buyEthTicketsAndLootbox,
-  buyBurnieTickets,
+  buyFlipTickets,
   fetchPoolTarget,
   fetchPresaleFlag,
   calcPoolFillPercent,
@@ -14,7 +14,7 @@ import {
   lootboxBadgeText,
   getAffiliateCode,
 } from '../app/purchases.js';
-import { formatEth, formatBurnie } from '../app/utils.js';
+import { formatEth, formatFlip } from '../app/utils.js';
 
 class PurchasePanel extends HTMLElement {
   #unsubs = [];
@@ -47,7 +47,7 @@ class PurchasePanel extends HTMLElement {
           <h2>Purchase</h2>
           <div class="pay-toggle">
             <button class="pay-toggle-btn active" data-mode="eth">ETH</button>
-            <button class="pay-toggle-btn" data-mode="burnie">BURNIE</button>
+            <button class="pay-toggle-btn" data-mode="flip">FLIP</button>
           </div>
         </div>
 
@@ -92,33 +92,27 @@ class PurchasePanel extends HTMLElement {
           <button class="btn-primary buy-eth-btn" data-action="buy-eth">Buy with ETH</button>
         </div>
 
-        <!-- BURNIE mode -->
-        <div class="pay-section" data-pay="burnie" hidden>
+        <!-- FLIP mode -->
+        <div class="pay-section" data-pay="flip" hidden>
           <div class="purchase-info-row info-row">
             <span class="info-label">Rate</span>
-            <span class="info-value">1,000 BURNIE / ticket</span>
+            <span class="info-value">1,000 FLIP / ticket</span>
           </div>
           <div class="purchase-info-row info-row">
-            <span class="info-label">Your BURNIE</span>
-            <span class="info-value" data-bind="burnie-balance">--</span>
+            <span class="info-label">Your FLIP</span>
+            <span class="info-value" data-bind="flip-balance">--</span>
           </div>
           <div class="purchase-row">
             <label>Tickets</label>
             <div class="input-group">
-              <button class="incr-btn" data-incr="burnie-qty" data-delta="-1">-1</button>
-              <input type="number" class="qty-input" data-input="burnie-qty" value="0" min="0" step="1">
-              <button class="incr-btn" data-incr="burnie-qty" data-delta="1">+1</button>
-              <button class="incr-btn" data-incr="burnie-qty" data-delta="10">+10</button>
+              <button class="incr-btn" data-incr="flip-qty" data-delta="-1">-1</button>
+              <input type="number" class="qty-input" data-input="flip-qty" value="0" min="0" step="1">
+              <button class="incr-btn" data-incr="flip-qty" data-delta="1">+1</button>
+              <button class="incr-btn" data-incr="flip-qty" data-delta="10">+10</button>
             </div>
-            <span class="purchase-cost" data-bind="burnie-ticket-cost">0 BURNIE</span>
+            <span class="purchase-cost" data-bind="flip-ticket-cost">0 FLIP</span>
           </div>
-          <div class="purchase-row">
-            <label>Lootbox (BURNIE)</label>
-            <div class="input-group">
-              <input type="number" data-input="burnie-lootbox" value="" min="0" step="100" placeholder="0">
-            </div>
-          </div>
-          <button class="btn-primary buy-burnie-btn" data-action="buy-burnie">Buy with BURNIE</button>
+          <button class="btn-primary buy-flip-btn" data-action="buy-flip">Buy with FLIP</button>
         </div>
 
         <!-- Error display -->
@@ -148,16 +142,16 @@ class PurchasePanel extends HTMLElement {
 
     // Wire buy buttons
     this.querySelector('.buy-eth-btn').addEventListener('click', () => this.#handleBuyEth());
-    this.querySelector('.buy-burnie-btn').addEventListener('click', () => this.#handleBuyBurnie());
+    this.querySelector('.buy-flip-btn').addEventListener('click', () => this.#handleBuyFlip());
 
     // Wire ETH input changes to recalculate total
     this.querySelector('[data-input="eth-qty"]').addEventListener('input', () => this.#recalcTotal());
     this.querySelector('[data-input="eth-lootbox"]').addEventListener('input', () => this.#recalcTotal());
 
-    // Wire BURNIE qty input to update cost display
-    this.querySelector('[data-input="burnie-qty"]').addEventListener('input', () => {
-      const qty = parseInt(this.querySelector('[data-input="burnie-qty"]').value, 10) || 0;
-      this.#bind('burnie-ticket-cost', `${(qty * 1000).toLocaleString()} BURNIE`);
+    // Wire FLIP qty input to update cost display
+    this.querySelector('[data-input="flip-qty"]').addEventListener('input', () => {
+      const qty = parseInt(this.querySelector('[data-input="flip-qty"]').value, 10) || 0;
+      this.#bind('flip-ticket-cost', `${(qty * 1000).toLocaleString()} FLIP`);
     });
 
     // Subscribe to store paths
@@ -168,16 +162,16 @@ class PurchasePanel extends HTMLElement {
       }),
       subscribe('game.level', () => this.#refreshPoolTarget()),
       subscribe('game.pools.next', (v) => this.#updatePoolProgress(v)),
-      subscribe('player.balances.burnie', (v) => {
-        this.#bind('burnie-balance', v && v !== '0' ? formatBurnie(v) + ' BURNIE' : '--');
+      subscribe('player.balances.flip', (v) => {
+        this.#bind('flip-balance', v && v !== '0' ? formatFlip(v) + ' FLIP' : '--');
       }),
       subscribe('player.activityScore.total', (v) => this.#updateEvIndicator(v)),
       subscribe('ui.connectionState', (state) => {
         const disabled = state !== 'connected';
         const ethBtn = this.querySelector('.buy-eth-btn');
-        const burnieBtn = this.querySelector('.buy-burnie-btn');
+        const flipBtn = this.querySelector('.buy-flip-btn');
         if (ethBtn) ethBtn.disabled = disabled;
-        if (burnieBtn) burnieBtn.disabled = disabled;
+        if (flipBtn) flipBtn.disabled = disabled;
       }),
     );
 
@@ -204,9 +198,9 @@ class PurchasePanel extends HTMLElement {
   #switchPayMode(mode) {
     this.#payMode = mode;
     const ethSection = this.querySelector('[data-pay="eth"]');
-    const burnieSection = this.querySelector('[data-pay="burnie"]');
+    const flipSection = this.querySelector('[data-pay="flip"]');
     if (ethSection) ethSection.hidden = mode !== 'eth';
-    if (burnieSection) burnieSection.hidden = mode !== 'burnie';
+    if (flipSection) flipSection.hidden = mode !== 'flip';
 
     this.querySelectorAll('.pay-toggle-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.mode === mode);
@@ -311,16 +305,14 @@ class PurchasePanel extends HTMLElement {
     }
   }
 
-  async #handleBuyBurnie() {
-    const qtyInput = this.querySelector('[data-input="burnie-qty"]');
-    const lootboxInput = this.querySelector('[data-input="burnie-lootbox"]');
+  async #handleBuyFlip() {
+    const qtyInput = this.querySelector('[data-input="flip-qty"]');
     const qty = parseInt(qtyInput?.value, 10) || 0;
-    const lootbox = lootboxInput?.value || '';
-    const btn = this.querySelector('.buy-burnie-btn');
+    const btn = this.querySelector('.buy-flip-btn');
 
     if (btn) btn.disabled = true;
     try {
-      await buyBurnieTickets(qty, lootbox);
+      await buyFlipTickets(qty);
     } catch (err) {
       if (err.code !== 'ACTION_REJECTED' && err.code !== 4001) {
         this.#showError(err.message || 'Transaction failed');

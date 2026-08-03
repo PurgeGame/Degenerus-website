@@ -32,6 +32,130 @@ const BOON_UI = Object.freeze({
   31: { product: 'lazy', label: 'BOON −50%', detail: 'Your lazy pass purchase costs 50% less' },
 });
 
+const MASK_24 = (1n << 24n) - 1n;
+const MASK_8 = 0xFFn;
+
+function _packedBits(word, shift, mask) {
+  return Number((word >> BigInt(shift)) & mask);
+}
+
+function _tierType(tier, types) {
+  return Number.isInteger(tier) && tier > 0 && tier <= types.length
+    ? types[tier - 1]
+    : null;
+}
+
+function _isActiveDay({ tier, stampDay, deityDay, currentDay, expiresAfter = null }) {
+  if (!tier) return false;
+  if (deityDay > 0) return deityDay === currentDay;
+  if (expiresAfter == null || stampDay === 0) return true;
+  return currentDay <= stampDay + expiresAfter;
+}
+
+/**
+ * Decode the GAME's public boonPacked(player) getter into the consumable boons
+ * that are active right now. This is the authority for product highlighting:
+ * the indexed /boons route only contains deity-issued history and therefore
+ * cannot see lootbox-awarded boons or pass discounts consumed without a
+ * BoonConsumed event.
+ */
+export function decodePackedBoons(slot0Raw, slot1Raw, currentDayRaw) {
+  let slot0;
+  let slot1;
+  let currentDay;
+  try {
+    slot0 = BigInt(slot0Raw ?? 0);
+    slot1 = BigInt(slot1Raw ?? 0);
+    currentDay = Number(BigInt(currentDayRaw ?? 0));
+  } catch (_e) {
+    return [];
+  }
+  if (!Number.isInteger(currentDay) || currentDay < 1) return [];
+
+  const rows = [];
+  const addTier = (boonType, active) => {
+    if (boonType != null && active) {
+      rows.push({ boonType, consumed: false, source: 'chain' });
+    }
+  };
+
+  const coinflipTier = _packedBits(slot0, 48, MASK_8);
+  addTier(_tierType(coinflipTier, [1, 2, 3]), _isActiveDay({
+    tier: coinflipTier,
+    stampDay: _packedBits(slot0, 0, MASK_24),
+    deityDay: _packedBits(slot0, 24, MASK_24),
+    currentDay,
+    expiresAfter: 2,
+  }));
+
+  const lootboxTier = _packedBits(slot0, 104, MASK_8);
+  addTier(_tierType(lootboxTier, [5, 6, 22]), _isActiveDay({
+    tier: lootboxTier,
+    stampDay: _packedBits(slot0, 56, MASK_24),
+    deityDay: _packedBits(slot0, 80, MASK_24),
+    currentDay,
+    expiresAfter: 2,
+  }));
+
+  const purchaseTier = _packedBits(slot0, 160, MASK_8);
+  addTier(_tierType(purchaseTier, [7, 8, 9]), _isActiveDay({
+    tier: purchaseTier,
+    stampDay: _packedBits(slot0, 112, MASK_24),
+    deityDay: _packedBits(slot0, 136, MASK_24),
+    currentDay,
+    expiresAfter: 4,
+  }));
+
+  const decimatorTier = _packedBits(slot0, 168, MASK_8);
+  addTier(_tierType(decimatorTier, [13, 14, 15]), _isActiveDay({
+    tier: decimatorTier,
+    stampDay: 0,
+    deityDay: _packedBits(slot0, 176, MASK_24),
+    currentDay,
+  }));
+
+  const whaleTier = _packedBits(slot0, 248, MASK_8);
+  addTier(_tierType(whaleTier, [16, 23, 24]), _isActiveDay({
+    tier: whaleTier,
+    stampDay: _packedBits(slot0, 200, MASK_24),
+    deityDay: _packedBits(slot0, 224, MASK_24),
+    currentDay,
+    expiresAfter: 4,
+  }));
+
+  const activityPending = _packedBits(slot1, 0, MASK_24);
+  if (_isActiveDay({
+    tier: activityPending,
+    stampDay: _packedBits(slot1, 24, MASK_24),
+    deityDay: _packedBits(slot1, 48, MASK_24),
+    currentDay,
+    expiresAfter: 2,
+  })) {
+    const boonType = activityPending >= 50 ? 19 : (activityPending >= 25 ? 18 : 17);
+    rows.push({ boonType, consumed: false, source: 'chain', boostAmount: activityPending });
+  }
+
+  const deityPassTier = _packedBits(slot1, 72, MASK_8);
+  addTier(_tierType(deityPassTier, [25, 26, 27]), _isActiveDay({
+    tier: deityPassTier,
+    stampDay: _packedBits(slot1, 80, MASK_24),
+    deityDay: _packedBits(slot1, 104, MASK_24),
+    currentDay,
+    expiresAfter: 4,
+  }));
+
+  const lazyTier = _packedBits(slot1, 176, MASK_8);
+  addTier(_tierType(lazyTier, [29, 30, 31]), _isActiveDay({
+    tier: lazyTier,
+    stampDay: _packedBits(slot1, 128, MASK_24),
+    deityDay: _packedBits(slot1, 152, MASK_24),
+    currentDay,
+    expiresAfter: 4,
+  }));
+
+  return rows;
+}
+
 function _boonRows(payload) {
   if (Array.isArray(payload)) return payload;
   return Array.isArray(payload?.boons) ? payload.boons : [];
@@ -59,10 +183,15 @@ export function boonIndicatorModel(payload, product) {
   const active = activeBoonForProduct(payload, product);
   if (!active) return null;
   const day = Number(payload?.day);
+  const activityAmount = active.ui.product === 'activity'
+    ? Number(active.row?.boostAmount ?? 0)
+    : 0;
   return {
     boonType: Number(active.row.boonType),
-    label: active.ui.label,
-    title: `${active.ui.detail}${Number.isInteger(day) && day > 0 ? ` · Day ${day}` : ''}`,
+    label: activityAmount > 0 ? `BOON +${activityAmount} SCORE` : active.ui.label,
+    title: `${activityAmount > 0
+      ? `Your pending activity boon adds ${activityAmount} Degen Score`
+      : active.ui.detail}${Number.isInteger(day) && day > 0 ? ` · Day ${day}` : ''}`,
   };
 }
 

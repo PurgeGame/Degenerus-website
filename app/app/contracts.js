@@ -178,9 +178,35 @@ export async function sendTx(buildTx, action) {
   }
   // 4. Compose tx with fresh signer (caller passes builder, NOT pre-resolved promise).
   const tx = await buildTx(_signerWithGasHeadroom(signer));
-  // 5. KEEP analog's receipt-status idiom verbatim — the /beta/mint.js:756 bug-class fix.
-  const receipt = await tx.wait();
-  if (receipt.status === 0) throw new Error(`Reverted: ${tx.hash}`);
+  // 5. Wallets may replace a pending transaction when the user speeds it up.
+  // ethers reports that as a rejected wait() promise even when the replacement
+  // mined successfully. Treat the successful receipt as authoritative so the
+  // UI does not flash "did not go through" for a confirmed write.
+  let receipt;
+  try {
+    receipt = await tx.wait();
+  } catch (error) {
+    const replacementReceipt = error?.receipt ?? error?.replacement?.receipt ?? null;
+    const replacementSucceeded = error?.code === 'TRANSACTION_REPLACED'
+      && error?.cancelled !== true
+      && replacementReceipt != null
+      && Number(replacementReceipt.status) !== 0;
+    if (replacementSucceeded) {
+      receipt = replacementReceipt;
+    } else {
+      // Some injected providers lose the wait subscription just after mining.
+      // One receipt read is enough to distinguish that harmless transport race
+      // without resubmitting or hiding a real revert/cancel.
+      let recovered = null;
+      if (tx?.hash && typeof _provider?.getTransactionReceipt === 'function') {
+        try { recovered = await _provider.getTransactionReceipt(tx.hash); }
+        catch (_e) { /* preserve the original wait error */ }
+      }
+      if (recovered != null && Number(recovered.status) !== 0) receipt = recovered;
+      else throw error;
+    }
+  }
+  if (Number(receipt?.status) === 0) throw new Error(`Reverted: ${tx.hash}`);
   return receipt;
 }
 

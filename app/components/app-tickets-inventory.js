@@ -22,12 +22,24 @@
 // when the last-day payload hasn't arrived.
 // T-58-18: server-derived strings via textContent.
 
-import { get, subscribe, getViewedAddress } from '../app/store.js';
+import { get, subscribe, getViewedAddress, deriveCanSign } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { ethers, getProvider } from '../app/contracts.js';
 import { CHAIN, CONTRACTS } from '../app/chain-config.js';
-import { DGN_TICKET_COPY_EVENT, dgnReconstructTicketTraits } from '../app/dgn-traits.js';
+import { scaledTicketPriceWei } from '../app/lootbox.js';
+import { displayEth, displayToken } from '../app/scaling.js';
+import {
+  previewFarFutureSalvage,
+  sellFarFutureSalvage,
+  SALVAGE_MAX_LINES,
+} from '../app/salvage.js';
+import { compactUiError } from '../app/ui-error.js';
+import {
+  DGN_TICKET_COPY_EVENT,
+  dgnReconstructTicketRecords,
+  dgnReconstructTicketTraits,
+} from '../app/dgn-traits.js';
 import { unopenedPackCardIndexes } from '../app/pack-watch.js';
 import { PACK_REVEAL_COMPLETE_EVENT } from './reveal-overlay.js';
 import { readDeityPassCatalog } from '../app/passes.js';
@@ -39,7 +51,9 @@ const POLL_INTERVAL_MS = 60_000;
 // the long-term view: per-level tickets owed across the whole far-future
 // window (user ask 2026-07-03).
 const FAR_FUTURE_OFFSET = 4;
-const FAR_FUTURE_SPAN = 95;
+const FAR_FUTURE_SPAN = 100;
+const SALVAGE_MIN_DISTANCE = 6;
+const SALVAGE_MAX_DISTANCE = 100;
 const INV_ZOOM_KEY = 'degenerus.ticket-inventory.zoom.v1';
 const INV_HEIGHT_KEY = 'degenerus.ticket-inventory.height.v1';
 const INV_ZOOM_MIN = 80;
@@ -150,17 +164,19 @@ function invComboKey(ids) {
   return [...ids].map(Number).sort((a, b) => a - b).join(',');
 }
 
-/** /foil payload → the set of its lines' combo keys (empty when no pack). */
-function _foilKeySet(payload) {
-  const out = new Set();
+/** /foil payload → its four canonical lines (empty until the pack has rolled). */
+function _foilLines(payload) {
+  const out = [];
   const lines = payload?.present ? payload.lines : null;
   if (!Array.isArray(lines)) return out;
   for (const line of lines) {
     if (Array.isArray(line) && line.length === 4 && line.every((t) => t != null)) {
-      out.add(invComboKey(line));
+      out.push([...line].map(Number).sort((a, b) => a - b));
     }
   }
-  return out;
+  // A foil pack is exactly four tickets. Treat a partial indexer answer as
+  // pending rather than painting a misleading one-ticket foil pack.
+  return out.length >= 4 ? out.slice(0, 4) : [];
 }
 
 /** Remove only cards still owed a pack presentation, including their headline count. */
@@ -182,6 +198,78 @@ export function hideUnopenedPackTickets(payload, hiddenIndexes) {
     totalEntries: Math.max(0, Number(payload.totalEntries || 0) - hiddenEntries),
     cards: visible,
   };
+}
+
+/**
+ * Face value of unresolved ticket entries. The dashboard stores four entries
+ * per whole ticket, and fractional tickets are real inventory, so value the
+ * entries directly instead of rounding them down to display cards.
+ */
+export function unresolvedTicketFaceValueWei(rows, activeLevel) {
+  const floor = Number(activeLevel);
+  if (!Number.isInteger(floor) || floor < 0) return 0n;
+
+  let total = 0n;
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const level = Number(row?.level);
+    if (!Number.isInteger(level) || level < floor) continue;
+    let entries;
+    try {
+      entries = typeof row?.entryCount === 'number'
+        ? BigInt(Math.floor(row.entryCount))
+        : BigInt(row?.entryCount ?? 0);
+    } catch (_e) {
+      continue;
+    }
+    if (entries <= 0n) continue;
+    total += (scaledTicketPriceWei(level) * entries) / BigInt(ENTRIES_PER_CARD);
+  }
+  return total;
+}
+
+/** Keep useful sub-cent precision without printing accounting-style zeroes. */
+export function formatTicketTotalValueEth(rawWei) {
+  const fixed = displayEth(BigInt(rawWei ?? 0), 4);
+  return fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed;
+}
+
+const SALVAGE_PURCHASE_UNITS_PER_TICKET = 400n;
+
+/** Exact purchase units the contract mints from the quote's ticketWei leg. */
+export function salvageTicketPurchaseUnits(ticketWei, activeLevel) {
+  let raw;
+  try { raw = BigInt(ticketWei ?? 0); } catch (_e) { return 0n; }
+  const price = scaledTicketPriceWei(activeLevel);
+  if (raw <= 0n || price <= 0n) return 0n;
+  return (raw * SALVAGE_PURCHASE_UNITS_PER_TICKET) / price;
+}
+
+/** Player-facing ticket count, retaining the contract's 0.0025 precision. */
+export function formatSalvageTicketCount(ticketWei, activeLevel) {
+  const units = salvageTicketPurchaseUnits(ticketWei, activeLevel);
+  const whole = units / SALVAGE_PURCHASE_UNITS_PER_TICKET;
+  const remainder = units % SALVAGE_PURCHASE_UNITS_PER_TICKET;
+  const grouped = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  if (remainder === 0n) return grouped;
+  const fraction = (remainder * 25n).toString().padStart(4, '0').replace(/0+$/, '');
+  return `${grouped}.${fraction}`;
+}
+
+/**
+ * Old ticket rows stop carrying face value only after their level's final
+ * draw has settled. This intentionally differs from activeTicketLevel during
+ * a final RNG lock: new buys already route forward, but the locked draw's
+ * tickets are still unresolved until the phase transition begins.
+ */
+export function unresolvedTicketLevel(gameState) {
+  const level = Number(gameState?.level);
+  if (!Number.isInteger(level) || level < 0) return null;
+  if (gameState?.phaseTransitionActive === true) return level + 1;
+  const jackpotPhase = Boolean(
+    gameState?.jackpotPhaseFlag ?? (gameState?.phase === 'JACKPOT'),
+  );
+  if (jackpotPhase || gameState?.rngLockedFlag === true) return level;
+  return level + 1;
 }
 
 // trait_id (0-255) → {q, sym, col}: q = tid/64, sym = tid%8, col = (tid%64)/8.
@@ -234,8 +322,20 @@ class AppTicketsInventory extends HTMLElement {
   // lines are ordinary entries in the by-trait inventory with no marker of their
   // own, so /foil?level=N is what tells them apart (null until the drain rolls
   // them, which is also before there is anything to highlight).
-  #foilKeys = new Set();
-  #holdings = [];         // per-level {level, wholeTickets} from /player/:addr
+  #foilLines = [];
+  #holdings = [];         // per-level {level, entryCount, wholeTickets} from /player/:addr
+  #holdingsAddress = null;
+  #holdingsLoaded = false;
+  #salvageQueue = [];     // exact {level, queueIndex, entryCount, remainder} mirror
+  #salvageQueueLoaded = false;
+  #salvageSelection = new Map(); // level -> whole-ticket quantity
+  #salvageQuote = null;
+  #salvageQuoteLoading = false;
+  #salvageQuoteSeq = 0;
+  #salvageArmed = false;
+  #salvageBusy = false;
+  #salvageMessage = '';
+  #salvageError = '';
   #fetchSeq = 0;
   #pollHandle = null;
   // Account-switcher (2026-07-16) — mode 'combined' renders from this
@@ -281,6 +381,10 @@ class AppTicketsInventory extends HTMLElement {
     };
     this.#unsubs.push(subscribe('connected.address', onAddr));
     this.#unsubs.push(subscribe('viewing.address', onAddr));
+    // The unresolved-level boundary can advance before the next dashboard
+    // poll. Recalculate the already-loaded aggregate immediately; no refetch
+    // is needed because the per-level rows are durable inventory history.
+    this.#unsubs.push(subscribe('app.gameState', () => this.#renderTotalValue()));
     // Account-switcher (2026-07-16): mode flips the data source; the merged
     // payload updates live as polling.js's combined-mode cycle refreshes.
     this.#unsubs.push(subscribe('ui.mode', () => this.#refresh()));
@@ -322,12 +426,19 @@ class AppTicketsInventory extends HTMLElement {
       <section class="panel app-tickets-inventory">
         <div class="panel-header inv-head">
           <h2>YOUR TICKETS</h2>
-          <span class="inv-meta" data-bind="inv-meta">—</span>
-          <span class="inv-level-nav">
-            <button type="button" class="inv-level-btn" data-bind="inv-prev" title="Previous level">←</button>
-            <span class="inv-level-display">Lv <b data-bind="inv-level">—</b> <span class="inv-level-tag" data-bind="inv-tag"></span></span>
-            <button type="button" class="inv-level-btn" data-bind="inv-next" title="Next level">→</button>
-            <button type="button" class="inv-level-btn" data-bind="inv-jump" title="Jump to active level">⟳</button>
+          <span class="inv-total-value"
+                title="Face value of current and future tickets; fully resolved past levels are excluded.">
+            <span class="inv-total-value__label">TOTAL VALUE</span>
+            <strong data-bind="inv-total-value">—</strong>
+          </span>
+          <span class="inv-level-cluster">
+            <span class="inv-level-nav">
+              <button type="button" class="inv-level-btn" data-bind="inv-prev" title="Previous level">←</button>
+              <span class="inv-level-display">Lv <b data-bind="inv-level">—</b> <span class="inv-level-tag" data-bind="inv-tag"></span></span>
+              <button type="button" class="inv-level-btn" data-bind="inv-next" title="Next level">→</button>
+              <button type="button" class="inv-level-btn" data-bind="inv-jump" title="Jump to active level">⟳</button>
+            </span>
+            <span class="inv-meta" data-bind="inv-meta">—</span>
           </span>
           <span class="inv-mode-toggle">
             <button type="button" class="inv-mode-btn is-active" data-bind="inv-mode-cards">Cards</button>
@@ -554,15 +665,26 @@ class AppTicketsInventory extends HTMLElement {
     const lvl = this.#viewLevel;
     if (!addr || lvl == null) {
       this.#data = null;
+      this.#foilLines = [];
       this.#holdings = [];
+      this.#holdingsAddress = null;
+      this.#holdingsLoaded = false;
+      this.#resetSalvageState();
       this.#deityPassSymbols = [];
       this.#deityExpectedEntries = new Map();
       this.#render();
       return;
     }
     const lower = String(addr).toLowerCase();
+    if (this.#holdingsAddress !== lower) {
+      this.#holdings = [];
+      this.#holdingsAddress = lower;
+      this.#holdingsLoaded = false;
+      this.#resetSalvageState();
+      this.#renderTotalValue();
+    }
     const day = Number(get('app.lastDay')?.day);
-    const [byTrait, dashboard, foil, playerDay, deityCatalog] = await Promise.allSettled([
+    const [byTrait, dashboard, foil, playerDay, deityCatalog, salvageQueue] = await Promise.allSettled([
       // NO day param (tickets-fetch.js gotcha — see file header). Skipped in
       // far-future view — those levels can't have rolled traits yet.
       this.#isFarFuture()
@@ -584,6 +706,11 @@ class AppTicketsInventory extends HTMLElement {
       // above contains only purchases made on the selected day and therefore
       // cannot tell us whether a pass bought earlier is still in inventory.
       readDeityPassCatalog(),
+      // Exact ticketQueue positions are necessary only for a full salvage
+      // liquidation, so keep this indexed read scoped to the long-term view.
+      this.#isFarFuture()
+        ? fetchJSON(`/player/${lower}/far-future-queue`)
+        : Promise.resolve(null),
     ]);
     if (seq !== this.#fetchSeq) return;
     const rawTicketData = byTrait.status === 'fulfilled' ? byTrait.value : null;
@@ -593,7 +720,12 @@ class AppTicketsInventory extends HTMLElement {
       cards: rawTicketData?.cards,
     });
     this.#data = hideUnopenedPackTickets(rawTicketData, hiddenPackCards);
-    this.#foilKeys = _foilKeySet(foil.status === 'fulfilled' ? foil.value : null);
+    // Do not let the direct foil projection bypass the unopened-pack spoiler
+    // gate. Once the reveal releases its card indexes, these four lines become
+    // the authoritative fallback if the generic ticket stream is incomplete.
+    this.#foilLines = hiddenPackCards.size === 0
+      ? _foilLines(foil.status === 'fulfilled' ? foil.value : null)
+      : [];
     const deityRows = playerDay.status === 'fulfilled'
       && Array.isArray(playerDay.value?.store?.deityPassPurchases)
       ? playerDay.value.store.deityPassPurchases
@@ -611,15 +743,43 @@ class AppTicketsInventory extends HTMLElement {
       .filter((symbolId) => Number.isInteger(symbolId) && symbolId >= 0 && symbolId < 32))]
       .sort((a, b) => a - b);
     this.#deityExpectedEntries = new Map();
-    const rows = dashboard.status === 'fulfilled' && Array.isArray(dashboard.value?.tickets)
-      ? dashboard.value.tickets
-      : [];
-    this.#holdings = rows
-      .map((t) => ({
-        level: Number(t?.level),
-        wholeTickets: Math.floor(Number(t?.entryCount ?? 0) / ENTRIES_PER_CARD),
-      }))
-      .filter((t) => Number.isFinite(t.level) && t.wholeTickets > 0);
+    if (dashboard.status === 'fulfilled' && Array.isArray(dashboard.value?.tickets)) {
+      this.#holdings = dashboard.value.tickets
+        .map((t) => {
+          const entryCount = Math.max(0, Math.floor(Number(t?.entryCount ?? 0)));
+          return {
+            level: Number(t?.level),
+            entryCount,
+            wholeTickets: Math.floor(entryCount / ENTRIES_PER_CARD),
+          };
+        })
+        .filter((t) => Number.isInteger(t.level) && t.entryCount > 0);
+      this.#holdingsLoaded = true;
+    }
+    if (this.#isFarFuture() && salvageQueue.status === 'fulfilled'
+      && Array.isArray(salvageQueue.value?.rows)) {
+      this.#salvageQueue = salvageQueue.value.rows
+        .map((row) => ({
+          level: Number(row?.level),
+          queueIndex: Number(row?.queueIndex),
+          entryCount: Math.max(0, Math.floor(Number(row?.entryCount ?? 0))),
+          remainder: Math.max(0, Math.floor(Number(row?.remainder ?? 0))),
+        }))
+        .filter((row) => Number.isInteger(row.level)
+          && Number.isInteger(row.queueIndex)
+          && row.queueIndex >= 0
+          && row.entryCount > 0);
+      this.#salvageQueueLoaded = true;
+      this.#reconcileSalvageSelection();
+    } else if (this.#isFarFuture()) {
+      this.#salvageQueueLoaded = false;
+      // Holdings still support selection + preview. Preserve any live offer;
+      // only a full liquidation has to wait for the exact queue position.
+      if (!this.#salvageQuote && this.#salvageSelection.size === 0) {
+        this.#salvageMessage = 'Queue positions are indexing; offers are available now.';
+      }
+    }
+    if (this.#isFarFuture()) this.#reconcileSalvageSelection();
     this.#render();
     if (!this.#isFarFuture() && this.#deityPassSymbols.length > 0) {
       void this.#refreshDeityExpectedEntries(seq, lvl, this.#deityPassSymbols);
@@ -645,9 +805,238 @@ class AppTicketsInventory extends HTMLElement {
       && this.#viewLevel > this.#activeLevel + FAR_FUTURE_OFFSET;
   }
 
+  #resetSalvageState() {
+    this.#salvageQueue = [];
+    this.#salvageQueueLoaded = false;
+    this.#salvageSelection.clear();
+    this.#salvageQuote = null;
+    this.#salvageQuoteLoading = false;
+    this.#salvageQuoteSeq += 1;
+    this.#salvageArmed = false;
+    this.#salvageBusy = false;
+    this.#salvageMessage = '';
+    this.#salvageError = '';
+  }
+
+  #salvageEligibleRows() {
+    if (this.#activeLevel == null) return [];
+    const min = this.#activeLevel + SALVAGE_MIN_DISTANCE;
+    const max = this.#activeLevel + SALVAGE_MAX_DISTANCE;
+    // Holdings are enough to select and quote a bundle. The queue projection
+    // adds the O(1) index required only when execution empties a level. Keeping
+    // those concerns separate means an API/indexer lag can never turn owned
+    // tickets into an inert, unselectable list.
+    const byLevel = new Map();
+    for (const row of this.#holdings) {
+      const level = Number(row?.level);
+      const entryCount = Math.max(0, Math.floor(Number(row?.entryCount ?? 0)));
+      const wholeTickets = Math.floor(entryCount / ENTRIES_PER_CARD);
+      if (level < min || level > max || wholeTickets <= 0) continue;
+      byLevel.set(level, {
+        level,
+        entryCount,
+        wholeTickets,
+        queueIndex: null,
+        remainder: null,
+        queueExact: false,
+      });
+    }
+    for (const row of this.#salvageQueue) {
+      const level = Number(row?.level);
+      const entryCount = Math.max(0, Math.floor(Number(row?.entryCount ?? 0)));
+      const wholeTickets = Math.floor(entryCount / ENTRIES_PER_CARD);
+      if (level < min || level > max || wholeTickets <= 0) continue;
+      byLevel.set(level, {
+        level,
+        entryCount,
+        wholeTickets,
+        queueIndex: Number(row.queueIndex),
+        remainder: Math.max(0, Math.floor(Number(row.remainder ?? 0))),
+        queueExact: true,
+      });
+    }
+    return [...byLevel.values()].sort((a, b) => a.level - b.level);
+  }
+
+  #reconcileSalvageSelection() {
+    const eligible = new Map(this.#salvageEligibleRows().map((row) => [row.level, row]));
+    let changed = false;
+    for (const [level, quantity] of [...this.#salvageSelection.entries()]) {
+      const max = eligible.get(level)?.wholeTickets ?? 0;
+      const next = Math.max(0, Math.min(max, Math.floor(Number(quantity) || 0)));
+      if (next === 0) {
+        this.#salvageSelection.delete(level);
+        changed = true;
+      } else if (next !== quantity) {
+        this.#salvageSelection.set(level, next);
+        changed = true;
+      }
+    }
+    if (changed) this.#invalidateSalvageQuote();
+  }
+
+  #selectedSalvageLines() {
+    const byLevel = new Map(this.#salvageEligibleRows().map((row) => [row.level, row]));
+    return [...this.#salvageSelection.entries()]
+      .map(([level, ticketQuantity]) => {
+        const row = byLevel.get(Number(level));
+        const tickets = Math.max(0, Math.min(
+          row?.wholeTickets ?? 0,
+          Math.floor(Number(ticketQuantity) || 0),
+        ));
+        return row && tickets > 0 ? {
+          level: row.level,
+          ticketQuantity: tickets,
+          entryQuantity: tickets * ENTRIES_PER_CARD,
+          queueIndex: row.queueIndex,
+          wholeTickets: row.wholeTickets,
+          remainder: row.remainder,
+          queueExact: row.queueExact,
+        } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.level - b.level)
+      .slice(0, SALVAGE_MAX_LINES);
+  }
+
+  #salvageMissingQueueLevels(lines = this.#selectedSalvageLines()) {
+    return lines
+      .filter((line) => line.ticketQuantity === line.wholeTickets
+        && !line.queueExact)
+      .map((line) => line.level);
+  }
+
+  #invalidateSalvageQuote() {
+    this.#salvageQuoteSeq += 1;
+    this.#salvageQuote = null;
+    this.#salvageQuoteLoading = false;
+    this.#salvageArmed = false;
+  }
+
+  #setSalvageQuantity(level, quantity) {
+    const row = this.#salvageEligibleRows().find((candidate) => candidate.level === Number(level));
+    if (!row) return;
+    const next = Math.max(0, Math.min(row.wholeTickets, Math.floor(Number(quantity) || 0)));
+    const adding = next > 0 && !this.#salvageSelection.has(row.level);
+    if (adding && this.#salvageSelection.size >= SALVAGE_MAX_LINES) {
+      this.#salvageError = `Choose up to ${SALVAGE_MAX_LINES} levels per swap.`;
+      this.#renderFarFuture();
+      return;
+    }
+    if (next > 0) this.#salvageSelection.set(row.level, next);
+    else this.#salvageSelection.delete(row.level);
+    this.#salvageMessage = '';
+    this.#salvageError = '';
+    this.#invalidateSalvageQuote();
+    this.#renderFarFuture();
+    void this.#loadSalvageQuote();
+  }
+
+  #toggleAllSalvage() {
+    const rows = this.#salvageEligibleRows().slice(0, SALVAGE_MAX_LINES);
+    if (this.#salvageSelection.size > 0) {
+      this.#salvageSelection.clear();
+    } else {
+      for (const row of rows) this.#salvageSelection.set(row.level, row.wholeTickets);
+    }
+    this.#salvageMessage = '';
+    this.#salvageError = '';
+    this.#invalidateSalvageQuote();
+    this.#renderFarFuture();
+    void this.#loadSalvageQuote();
+  }
+
+  async #loadSalvageQuote() {
+    const lines = this.#selectedSalvageLines();
+    if (!this.#address || lines.length === 0) return;
+    const seq = ++this.#salvageQuoteSeq;
+    this.#salvageQuoteLoading = true;
+    this.#salvageError = '';
+    this.#renderFarFuture();
+    try {
+      const quote = await previewFarFutureSalvage({
+        player: this.#address,
+        levels: lines.map((line) => line.level),
+        quantities: lines.map((line) => line.entryQuantity),
+      });
+      if (seq !== this.#salvageQuoteSeq) return;
+      this.#salvageQuote = quote;
+    } catch (error) {
+      if (seq !== this.#salvageQuoteSeq) return;
+      this.#salvageQuote = null;
+      this.#salvageError = compactUiError(error, 'Could not load the salvage offer.');
+    } finally {
+      if (seq === this.#salvageQuoteSeq) {
+        this.#salvageQuoteLoading = false;
+        this.#renderFarFuture();
+      }
+    }
+  }
+
+  #salvageMinimumMet() {
+    if (!this.#salvageQuote || this.#activeLevel == null) return false;
+    return this.#salvageQuote.totalBudget >= scaledTicketPriceWei(this.#activeLevel) / 4n;
+  }
+
+  async #activateSalvage() {
+    const lines = this.#selectedSalvageLines();
+    if (this.#salvageBusy || !this.#salvageQuote || !this.#salvageMinimumMet()
+      || lines.length === 0) return;
+    if (!deriveCanSign()) {
+      this.#salvageError = 'Connect your wallet to salvage tickets.';
+      this.#renderFarFuture();
+      return;
+    }
+    const missingQueue = this.#salvageMissingQueueLevels(lines);
+    if (missingQueue.length > 0) {
+      this.#salvageError = `Queue position still indexing for level${missingQueue.length === 1 ? '' : 's'} ${missingQueue.join(', ')}. You can quote now; wait to sell the full balance or enter a smaller quantity.`;
+      this.#renderFarFuture();
+      return;
+    }
+    if (!this.#salvageArmed) {
+      this.#salvageArmed = true;
+      this.#salvageMessage = 'Review the payout, then confirm the swap.';
+      this.#renderFarFuture();
+      return;
+    }
+
+    this.#salvageBusy = true;
+    this.#salvageMessage = 'Confirm in your wallet…';
+    this.#salvageError = '';
+    this.#renderFarFuture();
+    try {
+      const { receipt } = await sellFarFutureSalvage({
+        player: this.#address,
+        levels: lines.map((line) => line.level),
+        quantities: lines.map((line) => line.entryQuantity),
+        // Partial lines never consume the index; zero is a safe placeholder.
+        queueIndices: lines.map((line) => line.queueIndex ?? 0),
+      });
+      this.#salvageSelection.clear();
+      this.#salvageQuote = null;
+      this.#salvageArmed = false;
+      this.#salvageMessage = 'Salvage complete — tickets and payouts added.';
+      try {
+        this.dispatchEvent(new CustomEvent('app-salvage:tx-confirmed', {
+          detail: { receipt, levels: lines.map((line) => line.level) },
+          bubbles: true,
+        }));
+      } catch (_e) { /* fakeDOM */ }
+      setTimeout(() => this.#refresh(), 250);
+    } catch (error) {
+      this.#salvageArmed = false;
+      this.#salvageMessage = '';
+      this.#salvageError = compactUiError(error, 'Salvage did not go through. Refresh and try again.');
+    } finally {
+      this.#salvageBusy = false;
+      this.#renderFarFuture();
+    }
+  }
+
   // ---------------------------------------------------------------------
 
   #renderHeader() {
+    this.#renderTotalValue();
     const levelEl = this.querySelector('[data-bind="inv-level"]');
     if (levelEl) levelEl.textContent = this.#viewLevel == null ? '—' : String(this.#viewLevel);
     const tagEl = this.querySelector('[data-bind="inv-tag"]');
@@ -677,6 +1066,42 @@ class AppTicketsInventory extends HTMLElement {
         }
       }
     }
+  }
+
+  #unresolvedLevelFloor() {
+    const gameState = get('app.gameState');
+    const stateLevel = unresolvedTicketLevel(gameState);
+    const candidates = [this.#activeLevel, stateLevel]
+      .map(Number)
+      .filter((level) => Number.isInteger(level) && level >= 0);
+    return candidates.length > 0 ? Math.max(...candidates) : null;
+  }
+
+  #renderTotalValue(rowsOverride = null) {
+    const output = this.querySelector('[data-bind="inv-total-value"]');
+    if (!output) return;
+
+    const combined = get('ui.mode') === 'combined';
+    const rows = rowsOverride ?? (combined ? this.#combined?.tickets : this.#holdings);
+    const loaded = combined
+      ? Boolean(this.#combined && Array.isArray(rows))
+      : Boolean(this.#address && this.#holdingsLoaded);
+    if (!loaded) {
+      output.textContent = '—';
+      return;
+    }
+
+    const gameState = get('app.gameState');
+    if (gameState?.gameOver === true) {
+      output.textContent = `${formatTicketTotalValueEth(0n)} ETH`;
+      return;
+    }
+    const floor = this.#unresolvedLevelFloor();
+    if (floor == null) {
+      output.textContent = '—';
+      return;
+    }
+    output.textContent = `${formatTicketTotalValueEth(unresolvedTicketFaceValueWei(rows, floor))} ETH`;
   }
 
   #render() {
@@ -721,6 +1146,7 @@ class AppTicketsInventory extends HTMLElement {
     if (tagEl) tagEl.textContent = '';
 
     const rows = Array.isArray(this.#combined?.tickets) ? this.#combined.tickets : [];
+    this.#renderTotalValue(rows);
     const addrCount = Array.isArray(this.#combined?.addresses) ? this.#combined.addresses.length : 0;
     const meta = this.querySelector('[data-bind="inv-meta"]');
 
@@ -774,7 +1200,8 @@ class AppTicketsInventory extends HTMLElement {
   }
 
   // Long-term view: tickets owed per level across the far-future window
-  // (active+1 .. active+FAR_FUTURE_SPAN), from the dashboard per-level rows.
+  // (active+1 .. active+FAR_FUTURE_SPAN). The indexed queue mirror replaces
+  // dashboard counts where available and supplies the exact salvage position.
   #renderFarFuture() {
     const host = this.querySelector('[data-bind="inv-ff"]');
     if (!host) return;
@@ -783,9 +1210,23 @@ class AppTicketsInventory extends HTMLElement {
 
     const lo = this.#activeLevel + 1;
     const hi = this.#activeLevel + FAR_FUTURE_SPAN;
-    const rows = this.#holdings
-      .filter((t) => t.level >= lo && t.level <= hi)
-      .sort((a, b) => a.level - b.level);
+    const byLevel = new Map(this.#holdings
+      .filter((t) => t.level >= lo && t.level <= hi && t.wholeTickets > 0)
+      .map((row) => [row.level, { ...row }]));
+    if (this.#salvageQueueLoaded) {
+      for (const queueRow of this.#salvageQueue) {
+        if (queueRow.level < lo || queueRow.level > hi) continue;
+        const wholeTickets = Math.floor(queueRow.entryCount / ENTRIES_PER_CARD);
+        if (wholeTickets <= 0) continue;
+        byLevel.set(queueRow.level, {
+          level: queueRow.level,
+          entryCount: queueRow.entryCount,
+          wholeTickets,
+        });
+      }
+    }
+    const rows = [...byLevel.values()].sort((a, b) => a.level - b.level);
+    const salvageByLevel = new Map(this.#salvageEligibleRows().map((row) => [row.level, row]));
 
     const total = rows.reduce((s, t) => s + t.wholeTickets, 0);
     const head = document.createElement('p');
@@ -802,6 +1243,23 @@ class AppTicketsInventory extends HTMLElement {
       const row = document.createElement('div');
       row.className = 'inv-ff__row';
       if (t.level === this.#viewLevel) row.classList.add('is-viewed');
+      const salvage = salvageByLevel.get(t.level);
+      const selected = this.#salvageSelection.get(t.level) || 0;
+      if (salvage) row.classList.add('is-salvageable');
+      if (selected > 0) row.classList.add('is-selected');
+
+      if (salvage) {
+        const pick = document.createElement('input');
+        pick.className = 'inv-ff__pick';
+        pick.type = 'checkbox';
+        pick.checked = selected > 0;
+        pick.disabled = this.#salvageBusy;
+        pick.setAttribute('aria-label', `Select level ${t.level} for salvage`);
+        pick.addEventListener('change', () => {
+          this.#setSalvageQuantity(t.level, pick.checked ? salvage.wholeTickets : 0);
+        });
+        row.appendChild(pick);
+      }
       const lvl = document.createElement('span');
       lvl.className = 'inv-ff__level';
       lvl.textContent = `L${t.level}`;
@@ -810,9 +1268,140 @@ class AppTicketsInventory extends HTMLElement {
       count.className = 'inv-ff__count';
       count.textContent = `${t.wholeTickets.toLocaleString('en-US')} ticket${t.wholeTickets === 1 ? '' : 's'}`;
       row.appendChild(count);
+
+      if (salvage) {
+        const qty = document.createElement('label');
+        qty.className = 'inv-ff__qty';
+        const qtyLabel = document.createElement('span');
+        qtyLabel.textContent = 'SELL';
+        qty.appendChild(qtyLabel);
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '0';
+        input.max = String(salvage.wholeTickets);
+        input.step = '1';
+        input.inputMode = 'numeric';
+        input.value = String(selected);
+        input.disabled = this.#salvageBusy;
+        input.setAttribute('aria-label', `Level ${t.level} tickets to salvage`);
+        input.addEventListener('change', () => this.#setSalvageQuantity(t.level, input.value));
+        qty.appendChild(input);
+        row.appendChild(qty);
+      }
       list.appendChild(row);
     }
     host.appendChild(list);
+
+    const eligible = this.#salvageEligibleRows();
+    const lines = this.#selectedSalvageLines();
+    const selectedTickets = lines.reduce((sum, line) => sum + line.ticketQuantity, 0);
+    const panel = document.createElement('section');
+    panel.className = 'inv-salvage';
+
+    const panelHead = document.createElement('div');
+    panelHead.className = 'inv-salvage__head';
+    const title = document.createElement('a');
+    title.className = 'inv-salvage__title';
+    title.href = '/learn/salvage-swap/';
+    title.textContent = 'SALVAGE SWAP';
+    title.title = 'Learn about the Salvage Swap';
+    panelHead.appendChild(title);
+    const all = document.createElement('button');
+    all.type = 'button';
+    all.className = 'inv-salvage__all';
+    all.setAttribute('data-bind', 'salvage-select-all');
+    all.textContent = this.#salvageSelection.size > 0
+      ? 'CLEAR'
+      : eligible.length > SALVAGE_MAX_LINES ? `SELECT ${SALVAGE_MAX_LINES}` : 'SELECT ALL';
+    all.disabled = eligible.length === 0 || this.#salvageBusy;
+    all.addEventListener('click', () => this.#toggleAllSalvage());
+    panelHead.appendChild(all);
+    panel.appendChild(panelHead);
+
+    const warning = document.createElement('p');
+    warning.className = 'inv-salvage__warning';
+    warning.textContent = eligible.length > 0
+      ? 'Select tickets to see your payout.'
+      : this.#holdingsLoaded
+        ? 'No tickets are currently eligible.'
+        : 'Loading eligible tickets…';
+    panel.appendChild(warning);
+
+    if (lines.length > 0) {
+      const selectedLine = document.createElement('p');
+      selectedLine.className = 'inv-salvage__selected';
+      selectedLine.textContent = `${selectedTickets.toLocaleString('en-US')} ticket${selectedTickets === 1 ? '' : 's'} selected`;
+      panel.appendChild(selectedLine);
+    }
+
+    if (this.#salvageQuoteLoading) {
+      const loading = document.createElement('p');
+      loading.className = 'inv-salvage__quote-loading';
+      loading.textContent = 'Quoting on chain…';
+      panel.appendChild(loading);
+    } else if (this.#salvageQuote) {
+      const quote = this.#salvageQuote;
+      const payout = document.createElement('div');
+      payout.className = 'inv-salvage__payout';
+      const ticketUnits = salvageTicketPurchaseUnits(quote.ticketWei, this.#activeLevel);
+      const payoutParts = ticketUnits > 0n
+        ? [`${formatSalvageTicketCount(quote.ticketWei, this.#activeLevel)} ${
+          ticketUnits === SALVAGE_PURCHASE_UNITS_PER_TICKET ? 'ticket' : 'tickets'
+        }`]
+        : [];
+      if (quote.ethCashWei > 0n) payoutParts.push(`${formatTicketTotalValueEth(quote.ethCashWei)} ETH`);
+      if (quote.flipTokens > 0n) {
+        const flip = displayToken(quote.flipTokens, 2).replace(/\.0+$|(?<=\.[0-9])0+$/, '');
+        payoutParts.push(`${flip} FLIP`);
+      }
+      const getLabel = document.createElement('small');
+      getLabel.textContent = 'PAYOUT';
+      const getValue = document.createElement('strong');
+      getValue.textContent = payoutParts.length > 0 ? payoutParts.join(' + ') : '0';
+      payout.appendChild(getLabel);
+      payout.appendChild(getValue);
+      panel.appendChild(payout);
+
+      if (!this.#salvageMinimumMet()) {
+        const minimum = document.createElement('p');
+        minimum.className = 'inv-salvage__minimum';
+        minimum.textContent = 'Offer too small — select more tickets.';
+        panel.appendChild(minimum);
+      }
+    }
+
+    const feedback = document.createElement('p');
+    feedback.className = `inv-salvage__feedback${this.#salvageError ? ' is-error' : ''}`;
+    feedback.setAttribute('aria-live', 'polite');
+    feedback.textContent = this.#salvageError || this.#salvageMessage;
+    if (!feedback.textContent) feedback.hidden = true;
+    panel.appendChild(feedback);
+
+    const missingQueue = this.#salvageMissingQueueLevels(lines);
+    if (this.#salvageQuote && missingQueue.length > 0 && !this.#salvageError) {
+      feedback.hidden = false;
+      feedback.textContent = 'Offer ready. Queue positions are still indexing for a full sell-out; partial quantities can execute now.';
+    }
+
+    const execute = document.createElement('button');
+    execute.type = 'button';
+    execute.className = `inv-salvage__execute${this.#salvageArmed ? ' is-armed' : ''}`;
+    execute.setAttribute('data-bind', 'salvage-execute');
+    execute.textContent = this.#salvageBusy
+      ? 'SALVAGING…'
+      : missingQueue.length > 0 && this.#salvageQuote
+        ? 'QUEUE DATA INDEXING'
+        : this.#salvageArmed ? 'CONFIRM SALVAGE' : 'SALVAGE SELECTED';
+    execute.disabled = !deriveCanSign()
+      || lines.length === 0
+      || !this.#salvageQuote
+      || !this.#salvageMinimumMet()
+      || missingQueue.length > 0
+      || this.#salvageQuoteLoading
+      || this.#salvageBusy;
+    execute.addEventListener('click', () => { void this.#activateSalvage(); });
+    panel.appendChild(execute);
+    host.appendChild(panel);
   }
 
   // Cards mode — dedup identical 4-trait combos into ×N cards (sketch
@@ -829,24 +1418,55 @@ class AppTicketsInventory extends HTMLElement {
     for (const card of cardsArr) {
       if (card?.status === 'pending') pendingCount++;
     }
-    for (const ids of reconstructInventoryTicketTraits(cardsArr)) {
-      const key = ids.join(',');
+    const foilRemaining = new Map();
+    for (const line of this.#foilLines) {
+      const key = invComboKey(line);
+      foilRemaining.set(key, (foilRemaining.get(key) || 0) + 1);
+    }
+    let foilOrdinal = 0;
+    for (const record of dgnReconstructTicketRecords(cardsArr)) {
+      const ids = record.traitIds;
+      const comboKey = invComboKey(ids);
+      const foilLeft = foilRemaining.get(comboKey) || 0;
+      const isFoil = foilLeft > 0;
+      if (isFoil) foilRemaining.set(comboKey, foilLeft - 1);
+      // Foil lines are four physical tickets and must stay four visible cards,
+      // even in the vanishingly rare case two lines have the same traits.
+      const key = isFoil ? `foil:${foilOrdinal++}` : ids.join(',');
       if (!combos.has(key)) {
         combos.set(key, {
           traitIds: ids,
           count: 0,
-          foil: this.#foilKeys.has(invComboKey(ids)),
+          foil: isFoil,
           hasGold: invTicketHasGold(ids),
         });
       }
       combos.get(key).count++;
     }
 
-    // Gold is the top colour tier and the useful scan target. Put every ticket
-    // carrying at least one gold trait before the rest, then preserve the
-    // existing duplicate-count ordering within each tier.
+    // /foil is contract-derived and already proves all four lines. If the
+    // generic by-trait stream is lagging or its flattened card buckets contain
+    // a fractional boundary, fill only the unmatched foil tickets from that
+    // exact projection so a real pack can never collapse to one visible card.
+    for (const line of this.#foilLines) {
+      const comboKey = invComboKey(line);
+      const left = foilRemaining.get(comboKey) || 0;
+      if (left <= 0) continue;
+      combos.set(`foil:${foilOrdinal++}`, {
+        traitIds: line,
+        count: 1,
+        foil: true,
+        hasGold: invTicketHasGold(line),
+      });
+      foilRemaining.set(comboKey, left - 1);
+    }
+
+    // Gold is the top colour tier and the useful scan target. Foils are the
+    // next inventory tier, so they stay together immediately after every gold
+    // ticket instead of being lost among ordinary cards with larger counts.
+    const displayTier = (combo) => (combo.hasGold ? 0 : combo.foil ? 1 : 2);
     const sorted = [...combos.values()].sort(
-      (a, b) => Number(b.hasGold) - Number(a.hasGold) || b.count - a.count,
+      (a, b) => displayTier(a) - displayTier(b) || b.count - a.count,
     );
 
     // Permanent account collectibles come before level-scoped tickets.

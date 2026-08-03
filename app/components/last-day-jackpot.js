@@ -13,8 +13,8 @@
 //     prizes) to write the spun_day spoiler key, fire confetti when the
 //     viewed player won, light up the foil strip, and dispatch
 //     `jackpot:revealed` (winnings banner signal);
-//   - renders a one-line day stat (no winner-address dumps — leaderboards
-//     are pro-mode content) and the player's foil-ticket strip.
+//   - renders the compact day shell and publishes earned foil-match claims to
+//     the shared pending tray (no winner-address dumps or inline foil strip).
 //
 // Phase 59 relics removed in the rebuild: the roll1/roll2 data grids, the
 // Replay state machine, winner classification lists, and the winner summary
@@ -23,16 +23,36 @@
 import { subscribe, get, getViewedAddress } from '../app/store.js';
 import { formatEth, formatFlip } from '../../beta/viewer/utils.js';
 import { CHAIN } from '../app/chain-config.js';
-// Phase 64 — foil-ticket strip: pure grading helpers + the indexer base URL
+// Phase 64 — foil-ticket matching: pure grading helpers + the indexer base URL
 // (API_BASE cross-import only, mirroring polling.js Pitfall 5 discipline).
-import { bestGrade, FOIL_CLAIM_THRESHOLD } from '../app/foil-match.js';
+import {
+  claimableDrawGrades,
+  FOIL_CLAIM_THRESHOLD,
+  unpackWinSet,
+} from '../app/foil-match.js';
 import { API_BASE } from '../../beta/app/constants.js';
 // Reveal-engine wiring: the viewed player's jackpot winnings auto-play a
 // celebration sequence; a claimed foil match reveals its payout box-spin.
 import { queueReveal } from './reveal-overlay.js';
-import { claimFoilMatch, parseFoilMatchClaimedFromReceipt } from '../app/foil-claim.js';
+import {
+  claimFoilMatch,
+  FOIL_TIER_FACES,
+  parseFoilMatchClaimedFromReceipt,
+} from '../app/foil-claim.js';
 import { parseOpenLegsFromReceipt } from '../app/lootbox-legs.js';
-import { sfxTick, sfxRollDone } from '../app/jackpot-sfx.js';
+import { readResolvedCoinflipStake } from '../app/coinflip.js';
+import { loadDayLootboxResults } from '../app/day-lootbox-results.js';
+import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
+
+const FOIL_MATCH_ACTION_SOURCE = 'foil-match';
+
+function _isExactDayPayload(payload, day, player) {
+  const expectedDay = Number(day);
+  const actualDay = Number(payload?.day);
+  if (!Number.isInteger(expectedDay) || actualDay !== expectedDay) return false;
+  const payloadPlayer = String(payload?.address || payload?.player || '').toLowerCase();
+  return !payloadPlayer || payloadPlayer === String(player || '').toLowerCase();
+}
 
 // Testnet contracts hold /1M-scaled ETH wei; FLIP/DGNRS are UNSCALED.
 //
@@ -72,12 +92,13 @@ class LastDayJackpot extends HTMLElement {
   #winners = [];
   // Phase 64 — foil strip state + panel bridge state.
   #foilData = null;
+  #foilDataKey = null;
   #foilSeq = 0;
   #bridgeTimer = null;
   #bridgeAttempts = 0;
   #scratchCompleteListener = null;
-  #celebratedDay = null;  // host confetti fires once per pinned day (bonus roll re-fires the event)
   #foilClaimBusy = false; // one in-flight foil claim at a time
+  #locallyClaimedFoilMatches = new Set(); // bridge tx receipt → indexer catch-up
   // --- "Whole board played out" gates for the results CTA (user call: the
   //     main UI — every scratch roll AND the coin flip — plays out first;
   //     the full-reveal popup sits behind a button, never auto-pops). ---
@@ -90,6 +111,14 @@ class LastDayJackpot extends HTMLElement {
   // this.querySelector() lookup stops finding it — hold the node instead.
   #resultsCtaEl = null;
   #summaryBusy = false;
+  // A deliberate day pick is a request to watch that day's presentation again,
+  // even when durable spoiler keys say it was played in an earlier session.
+  // This is an in-memory override only: balances/claims keep their honest
+  // durable completion state while the draw and flip become replayable.
+  #manualReplayDay = null;
+  #historyMetadataSeq = 0;
+  #historyPrevListener = null;
+  #historyNextListener = null;
 
   #showContent() {
     if (this.#loaded) return;
@@ -97,6 +126,14 @@ class LastDayJackpot extends HTMLElement {
     this.querySelector('[data-bind="skeleton"]')?.remove();
     const el = this.querySelector('[data-bind="content"]');
     if (el) el.style.display = '';
+  }
+
+  #setJackpotLoadStatus(text = '') {
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
+    const status = document.querySelector('[data-bind="jackpot-load-status"]');
+    if (!status) return;
+    status.textContent = String(text || '');
+    status.setAttribute('aria-hidden', text ? 'false' : 'true');
   }
 
   // ---------------------------------------------------------------------------
@@ -113,6 +150,10 @@ class LastDayJackpot extends HTMLElement {
 
   #boardCompleteKey() {
     return `jackpot_complete_day_${CHAIN.id}_${this.#pinnedDay}`;
+  }
+
+  #bonusPendingKey() {
+    return `jackpot_bonus_pending_day_${CHAIN.id}_${this.#pinnedDay}`;
   }
 
   #hasSpunPinnedDay() {
@@ -143,6 +184,14 @@ class LastDayJackpot extends HTMLElement {
     if (this.#pinnedDay == null) return;
     try { localStorage.setItem(this.#boardCompleteKey(), '1'); }
     catch { /* private browsing: only this refresh loses the preferred view */ }
+  }
+
+  #markBonusPending(pending) {
+    if (this.#pinnedDay == null) return;
+    try {
+      if (pending) localStorage.setItem(this.#bonusPendingKey(), '1');
+      else localStorage.removeItem(this.#bonusPendingKey());
+    } catch { /* same-tab event still carries the authoritative final state */ }
   }
 
   // ---------------------------------------------------------------------------
@@ -181,13 +230,17 @@ class LastDayJackpot extends HTMLElement {
   #adoptLatestDay(payload, resetGates) {
     this.#pinnedDay = Number(payload.day);
     this.#pinnedLevel = payload.level ?? null;
+    this.#manualReplayDay = null;
     this.#hasNewDayAvailable = false;
     this.#hideNewDayBanner();
     this.#foilSeq += 1; // invalidate any older-day request still in flight
     this.#foilData = null;
+    this.#foilDataKey = null;
+    clearPendingActions(FOIL_MATCH_ACTION_SOURCE);
     this.#winners = [];
     if (resetGates) this.#resetDayGates();
     this.#renderForStatus(payload);
+    this.#dispatchDaySelection(false);
   }
 
   #renderForStatus(payload) {
@@ -205,15 +258,49 @@ class LastDayJackpot extends HTMLElement {
     this.#refreshFoil();
     this.#refreshFlipRow();
     this.#maybeShowResultsCta();
+    this.#renderHistoryNav();
   }
 
   #renderColdStart() {
     const cold = this.querySelector('[data-bind="ldj-status-cold-start"]');
     const empty = this.querySelector('[data-bind="ldj-status-empty-day"]');
     const resolved = this.querySelector('[data-bind="ldj-status-resolved"]');
-    if (cold) cold.style.display = '';
+    if (cold) cold.style.display = 'none';
     if (empty) empty.style.display = 'none';
     if (resolved) resolved.style.display = 'none';
+    this.#setJackpotLoadStatus('(loading)');
+  }
+
+  #renderDeploymentMismatch(mismatch) {
+    if (!mismatch) return;
+    // A redeploy restarts logical day numbers. Drop the old run's monotonic
+    // high-water mark so a repaired API can legitimately move from (for
+    // example) old day 172 to new day 10 in the same browser session.
+    this.#pinnedDay = null;
+    this.#pinnedLevel = null;
+    this.#latestDaySeen = null;
+    this.#lastPayload = null;
+    this.#hasNewDayAvailable = false;
+    this.#foilSeq += 1;
+    this.#foilData = null;
+    this.#foilDataKey = null;
+    clearPendingActions(FOIL_MATCH_ACTION_SOURCE);
+    this.#winners = [];
+    this.#resetDayGates();
+    if (this.#bridgeTimer != null) {
+      try { clearInterval(this.#bridgeTimer); } catch { /* defensive */ }
+      this.#bridgeTimer = null;
+    }
+    this.#showContent();
+    const cold = this.querySelector('[data-bind="ldj-status-cold-start"]');
+    const empty = this.querySelector('[data-bind="ldj-status-empty-day"]');
+    const resolved = this.querySelector('[data-bind="ldj-status-resolved"]');
+    if (cold) cold.style.display = 'none';
+    if (empty) empty.style.display = 'none';
+    if (resolved) resolved.style.display = 'none';
+    const day = this.querySelector('[data-bind="day"]');
+    if (day) day.textContent = 'SYNC';
+    this.#setJackpotLoadStatus('(syncing)');
   }
 
   #renderEmptyDay(day) {
@@ -223,6 +310,7 @@ class LastDayJackpot extends HTMLElement {
     if (cold) cold.style.display = 'none';
     if (empty) empty.style.display = '';
     if (resolved) resolved.style.display = 'none';
+    this.#setJackpotLoadStatus('');
     const copy = this.querySelector('[data-bind="ldj-empty-copy"]');
     if (copy) copy.textContent = `Day ${day} had no winners — pot rolled to day ${Number(day) + 1}.`;
     const dayLbl = this.querySelector('[data-bind="day"]');
@@ -237,6 +325,7 @@ class LastDayJackpot extends HTMLElement {
     if (cold) cold.style.display = 'none';
     if (empty) empty.style.display = 'none';
     if (resolved) resolved.style.display = '';
+    this.#setJackpotLoadStatus('');
 
     if (!this.#hasNewDayAvailable) this.#hideNewDayBanner();
 
@@ -375,16 +464,98 @@ class LastDayJackpot extends HTMLElement {
     const addr = getViewedAddress();
     if (addr) this.#ensureZeroEntryPlayerOption(playerSelect, addr);
     const playerOk = addr ? this.#setSelectAndFire(playerSelect, addr) : false;
-    if (dayOk && playerOk && typeof panel.setPersistedRevealState === 'function') {
-      // The replay panel owns rendering; this shell owns the chain/day-scoped
-      // completion key. Feeding it here lets refresh restore a cleared board
-      // or run the silent waiting reels without duplicating jackpot logic.
-      panel.setPersistedRevealState(
-        this.#hasSpunPinnedDay(),
-        this.#hasCompletedPinnedDay(),
-      );
-    }
+    this.#renderHistoryNav();
     return dayOk && playerOk;
+  }
+
+  #historyNav() {
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return null;
+    return document.querySelector('[data-bind="jackpot-day-history"]');
+  }
+
+  #availableReplayDays() {
+    const select = this.#panel()?.querySelector?.('[data-bind="day-select"]');
+    return (select?.options ? Array.from(select.options) : [])
+      .map((option) => Number(option.value))
+      .filter((day) => Number.isInteger(day) && day > 0)
+      .sort((a, b) => a - b);
+  }
+
+  #renderHistoryNav() {
+    const nav = this.#historyNav();
+    if (!nav || this.#pinnedDay == null) return;
+    const label = nav.querySelector?.('[data-bind="jackpot-day-history-label"]');
+    const prev = nav.querySelector?.('[data-bind="jackpot-day-prev"]');
+    const next = nav.querySelector?.('[data-bind="jackpot-day-next"]');
+    const historical = this.#latestDaySeen != null
+      && Number(this.#pinnedDay) < Number(this.#latestDaySeen);
+    // The replay panel's existing day dropdown is the entry point into
+    // history. Keep this compact stepper out of the live jackpot layout; once
+    // a past day is chosen it provides adjacent-day navigation and a clear
+    // reminder that the board is no longer showing today.
+    nav.hidden = !historical;
+    if (label) {
+      label.textContent = historical
+        ? `VIEWING PAST DAY ${this.#pinnedDay}`
+        : `LATEST DAY ${this.#pinnedDay}`;
+    }
+    nav.classList?.toggle('is-historical', historical);
+    const days = this.#availableReplayDays();
+    const index = days.indexOf(Number(this.#pinnedDay));
+    if (prev) prev.disabled = index <= 0;
+    if (next) next.disabled = index < 0 || index >= days.length - 1;
+  }
+
+  #dispatchDaySelection(manual) {
+    if (this.#pinnedDay == null || typeof document === 'undefined'
+      || typeof document.dispatchEvent !== 'function') return;
+    const historical = this.#latestDaySeen != null
+      && Number(this.#pinnedDay) < Number(this.#latestDaySeen);
+    const detail = {
+      day: Number(this.#pinnedDay),
+      latestDay: this.#latestDaySeen == null ? null : Number(this.#latestDaySeen),
+      historical,
+      manual: Boolean(manual),
+    };
+    try {
+      const event = typeof CustomEvent === 'function'
+        ? new CustomEvent('replay:day-selected', { detail })
+        : { type: 'replay:day-selected', detail };
+      document.dispatchEvent(event);
+    } catch { /* headless/fake DOM */ }
+  }
+
+  async #refreshHistoricalMetadata(day) {
+    const seq = ++this.#historyMetadataSeq;
+    try {
+      const payload = await fetchJSON(`/game/jackpot/day/${day}/winners`);
+      if (seq !== this.#historyMetadataSeq || Number(this.#pinnedDay) !== Number(day)) return;
+      this.#winners = Array.isArray(payload?.winners) ? payload.winners : [];
+      this.#pinnedLevel = payload?.level ?? this.#pinnedLevel;
+    } catch { /* replay-panel still owns the draw when metadata is unavailable */ }
+  }
+
+  #selectAdjacentDay(direction) {
+    const panel = this.#panel();
+    const select = panel?.querySelector?.('[data-bind="day-select"]');
+    const days = this.#availableReplayDays();
+    const index = days.indexOf(Number(this.#pinnedDay));
+    const target = index < 0 ? null : days[index + (Number(direction) < 0 ? -1 : 1)];
+    if (!select || target == null) return;
+    select.value = String(target);
+    try { select.dispatchEvent(new Event('change', { bubbles: true })); }
+    catch { try { select.dispatchEvent({ type: 'change', bubbles: true }); } catch { /* no-op */ } }
+  }
+
+  #wireHistoryNav() {
+    const nav = this.#historyNav();
+    if (!nav || this.#historyPrevListener || this.#historyNextListener) return;
+    const prev = nav.querySelector?.('[data-bind="jackpot-day-prev"]');
+    const next = nav.querySelector?.('[data-bind="jackpot-day-next"]');
+    this.#historyPrevListener = () => this.#selectAdjacentDay(-1);
+    this.#historyNextListener = () => this.#selectAdjacentDay(1);
+    prev?.addEventListener?.('click', this.#historyPrevListener);
+    next?.addEventListener?.('click', this.#historyNextListener);
   }
 
   /**
@@ -409,6 +580,24 @@ class LastDayJackpot extends HTMLElement {
       if (!Number.isFinite(picked) || picked <= 0) return;
       if (picked === this.#pinnedDay) return;   // programmatic re-sync, not a user pick
       this.#pinnedDay = picked;
+      this.#pinnedLevel = null;
+      this.#manualReplayDay = picked;
+      this.#historyMetadataSeq += 1;
+      this.#foilSeq += 1;
+      this.#foilData = null;
+      this.#foilDataKey = null;
+      this.#winners = [];
+      this.#resetDayGates();
+      this.#renderFoil();
+      const dayLabel = this.querySelector('[data-bind="day"]');
+      if (dayLabel) dayLabel.textContent = `Day ${picked}`;
+      if (typeof panel.setPersistedRevealState === 'function') {
+        panel.setPersistedRevealState(false, false);
+      }
+      void this.#refreshHistoricalMetadata(picked);
+      void this.#refreshFlipRow();
+      this.#renderHistoryNav();
+      this.#dispatchDaySelection(true);
       // Leaving the newest day pinned means the banner has nothing left to offer.
       this.#hasNewDayAvailable = false;
       const banner = this.querySelector('[data-bind="ldj-new-day-banner"]');
@@ -418,6 +607,19 @@ class LastDayJackpot extends HTMLElement {
 
   #syncReplayPanel() {
     this.#wireDayPicker();
+    const panel = this.#panel();
+    // Tell the board whether this day is waiting before the async day/player
+    // selectors finish syncing. replay-panel can run its neutral slow reel
+    // without those values; delaying this signal left a newly-ready jackpot
+    // parked on four blank grey quadrants until the bridge completed.
+    if (panel && this.#pinnedDay != null
+      && typeof panel.setPersistedRevealState === 'function') {
+      const replayFresh = Number(this.#manualReplayDay) === Number(this.#pinnedDay);
+      panel.setPersistedRevealState(
+        replayFresh ? false : this.#hasSpunPinnedDay(),
+        replayFresh ? false : this.#hasCompletedPinnedDay(),
+      );
+    }
     if (this.#bridgeTimer != null) {
       try { clearInterval(this.#bridgeTimer); } catch { /* defensive */ }
       this.#bridgeTimer = null;
@@ -445,31 +647,40 @@ class LastDayJackpot extends HTMLElement {
     this.#markSpunPinnedDay();
     this.#sawScratchEvent = true;
     // The spoiler gate is open, so a claimable foil match can surface now.
-    this.#renderFoil(true);
-    // Inline confetti when the viewed player is among the day's winners —
-    // part of the board playing out. The full-reveal popup does NOT auto-pop
-    // here (user call): it sits behind the results CTA once the WHOLE board
-    // (bonus roll included) and the coin flip are done.
+    this.#renderFoil();
+    // The replay board itself knows whether THIS scratch phase contained an
+    // actual personal payout and owns its phase-scoped celebration. Do not add
+    // day-wide host confetti here: a player who wins only the other roll would
+    // otherwise get confetti over a losing scratchoff.
     const viewed = getViewedAddress();
     const target = viewed ? String(viewed).toLowerCase() : null;
     const mine = Boolean(target && (this.#winners || []).some(
       (w) => String(w.address || '').toLowerCase() === target,
     ));
-    if (mine && this.#celebratedDay !== this.#pinnedDay) {
-      this.#celebratedDay = this.#pinnedDay;
-      this.#fireConfetti(true);
-    }
     // Final roll? (bonus phase completing, or roll 1 with no bonus ahead).
     // A detail-less event (older panel / tests) counts as final.
     const d = e?.detail;
-    if (!d || d.bonusPhase === true || !d.bonusAvailable) {
+    const final = !d || d.bonusPhase === true || !d.bonusAvailable;
+    if (final) {
       this.#boardDone = true;
+      this.#manualReplayDay = null;
       this.#markCompletedPinnedDay();
+      this.#markBonusPending(false);
+    } else {
+      // `spun_day` predates the all-roll completion key and is written after
+      // Roll 1. Persist the distinction so a reload cannot mistake a still-
+      // available bonus roll for a fully played legacy board.
+      this.#markBonusPending(true);
     }
     this.#maybeShowResultsCta();
     // Same-tab signal consumed by the winnings banner (app-claims-panel).
     try {
-      const detail = { day: this.#pinnedDay, mine };
+      const detail = {
+        day: this.#pinnedDay,
+        mine,
+        complete: final,
+        bonusPending: !final,
+      };
       const ev = (typeof CustomEvent === 'function')
         ? new CustomEvent('jackpot:revealed', { detail })
         : { type: 'jackpot:revealed', detail };
@@ -579,8 +790,9 @@ class LastDayJackpot extends HTMLElement {
     this.#mountResultsCta(cta);
     // Reloaded spun day: the board was already played out in a prior session
     // (spun_day persisted) — don't force a re-scratch to reach the results.
+    const replayFresh = Number(this.#manualReplayDay) === Number(this.#pinnedDay);
     const boardDone = this.#boardDone
-      || (!this.#sawScratchEvent && this.#hasSpunPinnedDay());
+      || (!replayFresh && !this.#sawScratchEvent && this.#hasSpunPinnedDay());
     const show = Boolean(
       this.#pinnedDay != null
       && boardDone
@@ -592,19 +804,30 @@ class LastDayJackpot extends HTMLElement {
 
   async #loadDayActivity(viewed, day) {
     if (!viewed || day == null || typeof fetch !== 'function') return null;
-    const address = encodeURIComponent(String(viewed).toLowerCase());
+    const player = String(viewed).toLowerCase();
+    const address = encodeURIComponent(player);
     const dayParam = encodeURIComponent(String(day));
     const read = async (path) => {
       const res = await fetch(`${API_BASE}${path}`);
       if (!res.ok) throw new Error(`API ${res.status}`);
       return res.json();
     };
-    const [packsResult, viewerResult] = await Promise.allSettled([
+    const [packsResult, viewerResult, resolvedStakeResult] = await Promise.allSettled([
       read(`/player/${address}/packs?day=${dayParam}`),
       read(`/viewer/player/${address}/day/${dayParam}`),
+      // The viewer day snapshot currently resolves its coinflip lookup through
+      // the jackpot level. A level can span several flip days, so that value can
+      // belong to a different result. Use the same immutable exact-day event
+      // read as the flip widget and retain the viewer row only as a fallback.
+      readResolvedCoinflipStake({ player, day }),
     ]);
-    const packs = packsResult.status === 'fulfilled' ? packsResult.value : null;
-    const viewer = viewerResult.status === 'fulfilled' ? viewerResult.value : null;
+    // Both APIs have an all-time mode. Treat their echoed day as part of the
+    // response contract so a dropped/mishandled query parameter cannot turn a
+    // one-day summary into the player's entire history.
+    const packsCandidate = packsResult.status === 'fulfilled' ? packsResult.value : null;
+    const viewerCandidate = viewerResult.status === 'fulfilled' ? viewerResult.value : null;
+    const packs = _isExactDayPayload(packsCandidate, day, player) ? packsCandidate : null;
+    const viewer = _isExactDayPayload(viewerCandidate, day, player) ? viewerCandidate : null;
     const ticketPacks = Array.isArray(packs?.ticketRevealPacks)
       ? packs.ticketRevealPacks : [];
     const ticketCount = ticketPacks.reduce(
@@ -620,29 +843,48 @@ class LastDayJackpot extends HTMLElement {
     const lootboxesOpened = !Array.isArray(activity?.lootboxResults)
       ? openedLootboxes
       : activity.lootboxResults.filter((row) => (
-        row?.rewardType === 'opened' || row?.rewardType === 'flipOpened'
+        row?.rewardType === 'opened'
+        || row?.rewardType === 'flipOpened'
+        || row?.rewardType === 'presale_opened'
       )).length;
+    const lootboxResults = viewer && packs
+      ? await loadDayLootboxResults({
+          player, day, snapshot: viewer, dayPacks: packs,
+        }).catch(() => [])
+      : [];
+    const resolvedStake = resolvedStakeResult.status === 'fulfilled'
+      && resolvedStakeResult.value != null
+      ? resolvedStakeResult.value
+      : null;
     let coinflipStakeAmount = '0';
     let hasCoinflipBet = false;
     try {
-      coinflipStakeAmount = BigInt(activity?.coinflip?.stakeAmount || '0').toString();
+      coinflipStakeAmount = BigInt(
+        resolvedStake == null ? (activity?.coinflip?.stakeAmount || '0') : resolvedStake,
+      ).toString();
       hasCoinflipBet = BigInt(coinflipStakeAmount) > 0n;
     } catch { /* malformed row */ }
-    const coinflipWon = activity?.coinflip?.win === true
+    const exactDayResult = this.#flipFetchedDay === day ? this.#flipResult : null;
+    const coinflipWon = exactDayResult?.win === true
       ? true
-      : activity?.coinflip?.win === false ? false : null;
+      : exactDayResult?.win === false
+        ? false
+        : activity?.coinflip?.win === true
+          ? true
+          : activity?.coinflip?.win === false ? false : null;
+    const dayRewardRaw = exactDayResult?.rewardPercent;
     const activityRewardRaw = activity?.coinflip?.rewardPercent;
-    const dayRewardRaw = this.#flipResult?.rewardPercent;
     const activityReward = activityRewardRaw == null ? NaN : Number(activityRewardRaw);
     const dayReward = dayRewardRaw == null ? NaN : Number(dayRewardRaw);
-    const coinflipRewardPercent = Number.isFinite(activityReward)
-      ? Math.max(0, Math.trunc(activityReward))
-      : Number.isFinite(dayReward) ? Math.max(0, Math.trunc(dayReward)) : 0;
+    const coinflipRewardPercent = Number.isFinite(dayReward)
+      ? Math.max(0, Math.trunc(dayReward))
+      : Number.isFinite(activityReward) ? Math.max(0, Math.trunc(activityReward)) : 0;
     return {
       ticketPacks: ticketPacks.length,
       ticketCount,
       lootboxesBought,
       lootboxesOpened,
+      lootboxResults,
       hasCoinflipBet,
       coinflipWon,
       coinflipStakeAmount,
@@ -665,11 +907,44 @@ class LastDayJackpot extends HTMLElement {
     const prizes = [];
     if (winnerRow) {
       try {
+        const breakdown = Array.isArray(winnerRow.breakdown) ? winnerRow.breakdown : [];
+        const winningTraits = (...awardTypes) => {
+          const accepted = new Set(awardTypes.map((type) => String(type).toLowerCase()));
+          const traits = new Set();
+          for (const row of breakdown) {
+            if (!accepted.has(String(row?.awardType || '').toLowerCase())) continue;
+            const traitId = Number(row?.traitId);
+            if (Number.isInteger(traitId) && traitId >= 0 && traitId <= 255) traits.add(traitId);
+          }
+          return [...traits];
+        };
         if (BigInt(winnerRow.totalEth || '0') > 0n) {
-          prizes.push({ type: 'eth', amount: BigInt(winnerRow.totalEth) });
+          prizes.push({
+            type: 'eth', amount: BigInt(winnerRow.totalEth),
+            winningTraitIds: winningTraits('eth', 'eth_baf'),
+          });
         }
         if (BigInt(winnerRow.coinTotal || '0') > 0n) {
-          prizes.push({ type: 'flip', amount: BigInt(winnerRow.coinTotal) });
+          prizes.push({
+            type: 'flip', amount: BigInt(winnerRow.coinTotal),
+            winningTraitIds: winningTraits('flip', 'flip_baf', 'farFutureCoin'),
+          });
+        }
+        // The composed last-day winner row already includes Decimator claims,
+        // including players whose only payout that day was Decimator. Reuse it
+        // here so the summary gains the missing result without another API or
+        // database lookup.
+        const decimator = winnerRow.decimatorPrize || {};
+        const decimatorRegular = BigInt(decimator.regularEth || '0');
+        const decimatorLootbox = BigInt(decimator.lootboxEth || '0');
+        const decimatorTerminal = BigInt(decimator.terminalEth || '0');
+        if (decimatorRegular > 0n || decimatorLootbox > 0n || decimatorTerminal > 0n) {
+          prizes.push({
+            type: 'decimator',
+            amount: decimatorRegular + decimatorTerminal,
+            lootboxAmount: decimatorLootbox,
+            terminalAmount: decimatorTerminal,
+          });
         }
         const wholeTickets = Math.round(Number(winnerRow.ticketCount || 0) / 4);
         if (wholeTickets > 0) {
@@ -677,7 +952,10 @@ class LastDayJackpot extends HTMLElement {
           // breakdown carries one (award rows are next-level).
           const ticketRow = Array.isArray(winnerRow.breakdown)
             ? winnerRow.breakdown.find((b) => b && b.awardType === 'tickets') : null;
-          prizes.push({ type: 'tickets', amount: wholeTickets, level: ticketRow?.level });
+          prizes.push({
+            type: 'tickets', amount: wholeTickets, level: ticketRow?.level,
+            winningTraitIds: winningTraits('tickets', 'ticket', 'tickets_baf'),
+          });
         }
       } catch { /* malformed row — falls through to the NO HIT summary */ }
     }
@@ -747,14 +1025,18 @@ class LastDayJackpot extends HTMLElement {
   }
 
   // ---------------------------------------------------------------------------
-  // Phase 64: foil-ticket strip — the viewed player's four foil lines for the
-  // pinned day's level, lit up where they match the day's winning sets.
-  // Match lighting is SPOILER-GATED on #hasSpunPinnedDay; the strip itself
-  // (the player's own tickets) shows regardless.
+  // Phase 64: foil-ticket matching. The old inline strip/claim bar is gone;
+  // this controller grades the viewed player's four lines after the draw is
+  // revealed and publishes the best unclaimed tuple into the shared tray.
   // ---------------------------------------------------------------------------
 
   async #refreshFoil() {
-    if (!this.querySelector('[data-bind="ldj-foil"]')) return;
+    if (this.#viewingPastDay()) {
+      this.#foilData = null;
+      this.#foilDataKey = null;
+      this.#renderFoil();
+      return;
+    }
     const addr = getViewedAddress();
     // Foil packs key on the day's PURCHASE level (roll1.purchaseLevel) — the
     // aggregate payload.level is the count-weighted winner level and reads
@@ -764,8 +1046,16 @@ class LastDayJackpot extends HTMLElement {
       ?? this.#pinnedLevel;
     if (!addr || level == null || typeof fetch !== 'function') {
       this.#foilData = null;
+      this.#foilDataKey = null;
       this.#renderFoil();
       return;
+    }
+    const dataKey = `${String(addr).toLowerCase()}|${Number(level)}|${Number(this.#pinnedDay)}`;
+    const sameScope = this.#foilDataKey === dataKey;
+    if (!sameScope) {
+      this.#foilData = null;
+      this.#foilDataKey = dataKey;
+      this.#renderFoil();
     }
     const seq = ++this.#foilSeq;
     try {
@@ -773,132 +1063,148 @@ class LastDayJackpot extends HTMLElement {
       if (!res.ok) throw new Error(`API ${res.status}`);
       const data = await res.json();
       if (seq !== this.#foilSeq) return; // superseded by a newer refresh
-      this.#foilData = data;
+      // A foil record cannot disappear for the same player/level/day. Keep the
+      // last indexed pack through a transient empty catch-up response, while
+      // still accepting fresher lines/claims whenever the record is present.
+      if (data?.present || !sameScope || !this.#foilData?.present) {
+        this.#foilData = data;
+      }
     } catch (_e) {
       if (seq !== this.#foilSeq) return;
-      this.#foilData = null; // network blip / no route → strip hides
+      // Network/indexer trouble is not proof that a verified pack vanished.
+      // First-load failures remain hidden; same-scope data stays published.
+      if (!sameScope) this.#foilData = null;
     }
     this.#renderFoil();
   }
 
-  /**
-   * The foil CLAIM affordance — all that is left of the foil strip (user call
-   * 2026-07-29). The strip itself (ladder chips, four badge lines, partial-tier
-   * chips) is gone; a claimable match still has to be claimable, so this renders
-   * one button for the best unclaimed line and stays hidden otherwise.
-   */
-  #renderFoil(animate = false) {
-    const bar = this.querySelector('[data-bind="ldj-foil-claimbar"]');
-    if (!bar) return;
-    bar.textContent = '';
-    bar.hidden = true;
+  #foilClaimKey(player, day, ticketIndex, drawKind) {
+    return [String(player || '').toLowerCase(), Number(day), Number(ticketIndex), Number(drawKind)].join(':');
+  }
+
+  #renderFoil() {
     const d = this.#foilData;
-    if (!d || !d.present || !Array.isArray(d.lines) || d.lines.length === 0) return;
-    // Grading is spoiler-gated the same way the strip was: no lighting up a match
-    // before the player has scratched the day.
-    if (!this.#hasSpunPinnedDay()) return;
+    const player = getViewedAddress();
+    const publishEmpty = () => publishPendingActions(FOIL_MATCH_ACTION_SOURCE, []);
+    if (!player || !d || !d.present || !Array.isArray(d.lines) || d.lines.length === 0) {
+      publishEmpty();
+      return;
+    }
+    // Grading remains spoiler-gated: a pending row must not reveal that one of
+    // the covered jackpot traits matched before the player scratches the draw.
+    if (!this.#hasSpunPinnedDay()) {
+      publishEmpty();
+      return;
+    }
 
     const summary = this.#lastPayload?.summary || null;
     const mainSet = summary?.rollOne?.mainTraitsPacked ?? null;
     const bonusSet = summary?.rollTwo?.bonusTraitsPacked ?? null;
     const claims = Array.isArray(d.claims) ? d.claims : [];
-    const day = this.#pinnedDay;
+    const day = Number(this.#pinnedDay);
+    const level = Number(
+      this.#lastPayload?.roll1?.purchaseLevel
+      ?? this.#lastPayload?.level
+      ?? this.#pinnedLevel,
+    );
 
-    let best = null;
+    const candidates = [];
     d.lines.forEach((line, i) => {
-      if (claims.find((c) => c && c.day === day && c.ticketIndex === i)) return;
-      const grade = bestGrade(line, mainSet, bonusSet);
-      if (!grade || grade.score < FOIL_CLAIM_THRESHOLD) return;
-      if (!best || grade.score > best.grade.score) best = { i, grade };
+      for (const grade of claimableDrawGrades(line, mainSet, bonusSet)) {
+        if (grade.score < FOIL_CLAIM_THRESHOLD) continue;
+        const key = this.#foilClaimKey(player, day, i, grade.drawKind);
+        const indexed = claims.some((claim) => (
+          Number(claim?.day) === day
+          && Number(claim?.ticketIndex) === i
+          && Number(claim?.drawKind) === grade.drawKind
+        ));
+        if (indexed || this.#locallyClaimedFoilMatches.has(key)) continue;
+        candidates.push({
+          player: String(player),
+          day,
+          level: Number.isFinite(level) ? level : null,
+          ticketIndex: i,
+          lineTraits: [...line],
+          winningTraits: unpackWinSet(grade.packedSet),
+          grade,
+          key,
+        });
+      }
     });
-    if (!best) return;
-
-    bar.hidden = false;
-    const label = document.createElement('span');
-    label.className = 'ldj-foil-claimbar__label';
-    label.textContent = `Foil match T${best.grade.score}`;
-    bar.appendChild(label);
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'ldj-foil-claim';
-    btn.setAttribute('data-write', '');
-    btn.textContent = `CLAIM T${best.grade.score}`;
-    btn.addEventListener('click', () => this.#onFoilClaim(best.i, best.grade, btn));
-    bar.appendChild(btn);
-    if (animate && !this.#reducedMotion()) {
-      const t = setTimeout(() => sfxRollDone(true), 200);
-      if (t && typeof t.unref === 'function') { try { t.unref(); } catch { /* defensive */ } }
+    candidates.sort((a, b) => (
+      b.grade.score - a.grade.score
+      || a.ticketIndex - b.ticketIndex
+      || a.grade.drawKind - b.grade.drawKind
+    ));
+    const best = candidates[0];
+    if (!best) {
+      publishEmpty();
+      return;
     }
+
+    const exact = best.grade.faces.filter((face) => face === 2).length;
+    const symbolOnly = best.grade.faces.filter((face) => face === 1).length;
+    const drawLabel = best.grade.drawKind === 1 ? 'BONUS DRAW' : 'MAIN DRAW';
+    publishPendingActions(FOIL_MATCH_ACTION_SOURCE, [{
+      id: `foil-match:${best.key}`,
+      kind: 'foil-match',
+      kindLabel: 'FOIL TICKET MATCH',
+      label: `Day ${day} · Foil T${best.grade.score}`,
+      shortLabel: `Claim T${best.grade.score}`,
+      detail: `${drawLabel} · ${exact} exact + ${symbolOnly} symbol`,
+      lineTraits: best.lineTraits,
+      state: this.#foilClaimBusy ? 'busy' : 'ready',
+      write: true,
+      autoOpen: false,
+      order: 15,
+      chronology: (day * 100_000) + (best.ticketIndex * 2) + best.grade.drawKind,
+      run: () => this.#onFoilClaim(best),
+    }]);
   }
 
-  // Claim a matched foil line — the payout is an isolated Degenerette
-  // box-spin; its BoxSpin event replays through the reveal overlay.
-  async #onFoilClaim(ticketIndex, grade, btn) {
+  // Claim a matched foil tuple. Its explanation card leads directly into the
+  // isolated Degenerette BoxSpin from the same transaction receipt.
+  async #onFoilClaim(candidate) {
     if (this.#foilClaimBusy) return;
     this.#foilClaimBusy = true;
-    if (btn) { btn.disabled = true; btn.textContent = 'Claiming…'; }
+    this.#renderFoil();
     try {
-      const player = getViewedAddress();
+      const { player, day, ticketIndex, grade } = candidate;
       const { receipt, contract } = await claimFoilMatch({
         player,
-        day: this.#pinnedDay,
+        day,
         ticketIndex,
         drawKind: grade.drawKind ?? 0,
       });
       const claimedInfo = parseFoilMatchClaimedFromReceipt(receipt, contract);
-      const tier = claimedInfo[0]?.tier ?? grade.score;
+      const claimed = claimedInfo.find((row) => (
+        Number(row?.day) === Number(day)
+        && Number(row?.ticketIndex) === Number(ticketIndex)
+        && Number(row?.drawKind) === Number(grade.drawKind)
+      )) || claimedInfo[0] || null;
+      const tier = claimed?.tier ?? grade.score;
+      const rewardFaces = claimed?.faces ?? FOIL_TIER_FACES[tier] ?? 0;
       const legs = parseOpenLegsFromReceipt(receipt, player);
-      if (legs.length > 0) {
-        // This receipt carries the same verified BoxSpin shape as a lootbox,
-        // but there is no sealed box to crack — go directly to the spin card.
-        queueReveal({
-          kind: 'lootbox',
-          title: `FOIL MATCH T${tier}`,
-          noVessel: true,
-          legs,
-        });
-      }
-      // Re-pull claims so the line flips to "Claimed T{n}".
-      this.#refreshFoil();
-    } catch (error) {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = String(error?.userMessage || 'Claim failed — retry');
-      }
+      this.#locallyClaimedFoilMatches.add(candidate.key);
+      queueReveal({
+        kind: 'foil-match',
+        day,
+        level: candidate.level,
+        ticketIndex,
+        drawKind: grade.drawKind,
+        score: tier,
+        lineTraits: candidate.lineTraits,
+        winningTraits: candidate.winningTraits,
+        matchFaces: grade.faces,
+        rewardFaces,
+        legs,
+      });
+      this.#renderFoil();
+      void this.#refreshFoil();
     } finally {
       this.#foilClaimBusy = false;
+      this.#renderFoil();
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Phase 64 — celebration helpers.
-  // ---------------------------------------------------------------------------
-
-  #reducedMotion() {
-    try {
-      return typeof matchMedia === 'function'
-        && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    } catch {
-      return false;
-    }
-  }
-
-  async #fireConfetti(big) {
-    if (this.#reducedMotion()) return;
-    try {
-      const mod = await import('canvas-confetti');
-      const confetti = mod.default || mod;
-      const colors = ['#f5a623', '#ffc04d', '#ffffff', '#22c55e'];
-      confetti({ particleCount: big ? 160 : 80, spread: big ? 100 : 70, origin: { y: 0.5 }, colors });
-      if (big) {
-        setTimeout(() => {
-          try {
-            confetti({ particleCount: 60, angle: 60, spread: 55, origin: { x: 0, y: 0.7 }, colors });
-            confetti({ particleCount: 60, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, colors });
-          } catch { /* no-op */ }
-        }, 250);
-      }
-    } catch { /* node:test / offline — no confetti, no crash */ }
   }
 
   // ---------------------------------------------------------------------------
@@ -906,6 +1212,9 @@ class LastDayJackpot extends HTMLElement {
   // ---------------------------------------------------------------------------
 
   connectedCallback() {
+    // A replacement shell must not inherit a row owned by an older detached
+    // instance while its first player/foil read is still in flight.
+    clearPendingActions(FOIL_MATCH_ACTION_SOURCE);
     this.#resultsCtaEl = null;   // the markup below mints a fresh one
     this.innerHTML = `
       <div data-bind="skeleton" class="panel last-day-jackpot">
@@ -920,10 +1229,7 @@ class LastDayJackpot extends HTMLElement {
           </div>
 
           <!-- Cold-start (status:'pre-game' OR no payload) -->
-          <div data-bind="ldj-status-cold-start" class="ldj-cold-start">
-            <p>Game starts soon, no jackpots yet.</p>
-            <p class="ldj-subtle">When the first day completes, this is where the wins will appear.</p>
-          </div>
+          <div data-bind="ldj-status-cold-start" class="ldj-cold-start" style="display:none;"></div>
 
           <!-- Empty-day (status:'resolved-no-winners') -->
           <div data-bind="ldj-status-empty-day" class="ldj-empty-day" style="display:none;">
@@ -947,17 +1253,9 @@ class LastDayJackpot extends HTMLElement {
               DAY SUMMARY
             </button>
 
-            <!-- The day-results list ("What the draw paid"), the foil-ticket
-                 strip, and the "N winners this day · top hit …" caption were all
-                 removed 2026-07-29 (user calls: "the ugly foil tickets and the
-                 big list of what everyone else won", then the caption). The
-                 widget is the draw and the scratch; DAY SUMMARY still opens
-                 the player's own popup, and the caption survives as that popup's
-                 NO HIT subtitle (#dayStatsText).
-                 What could NOT just go: a matched foil line pays a bonus spin, and
-                 the CLAIM button lived inside that strip. This bar is that button
-                 and nothing else — hidden unless a line is actually claimable. -->
-            <div class="ldj-foil-claimbar" data-bind="ldj-foil-claimbar" hidden></div>
+            <!-- The day-results list and foil strip remain out of this compact
+                 widget. Claimable foil matches publish into the shared pending
+                 tray; their comparison and payout play in reveal-overlay. -->
           </div>
         </div>
       </div>
@@ -978,6 +1276,9 @@ class LastDayJackpot extends HTMLElement {
     // app.lastDay subscription (polling.js pollLastDay writes it).
     this.#unsubs.push(
       subscribe('app.lastDay', (payload) => this.#onLastDayUpdate(payload))
+    );
+    this.#unsubs.push(
+      subscribe('app.deploymentMismatch', (payload) => this.#renderDeploymentMismatch(payload))
     );
 
     // Viewed-player changes re-target both the spin panel and the foil strip.
@@ -1008,12 +1309,15 @@ class LastDayJackpot extends HTMLElement {
       document.addEventListener('flip:revealed', this.#flipListener);
     }
 
+    this.#setJackpotLoadStatus('(loading)');
     this.#showContent();
+    this.#wireHistoryNav();
   }
 
   disconnectedCallback() {
     this.#unsubs.forEach(fn => fn());
     this.#unsubs = [];
+    clearPendingActions(FOIL_MATCH_ACTION_SOURCE);
     // The CTA may be parked inside <app-daily-flip>; innerHTML teardown here
     // would not reach it, so pull it out explicitly (connectedCallback mints a
     // fresh one, and an orphan would keep firing this instance's handler).
@@ -1039,6 +1343,14 @@ class LastDayJackpot extends HTMLElement {
       catch { /* defensive */ }
     }
     this.#flipListener = null;
+    const nav = this.#historyNav();
+    nav?.querySelector?.('[data-bind="jackpot-day-prev"]')
+      ?.removeEventListener?.('click', this.#historyPrevListener);
+    nav?.querySelector?.('[data-bind="jackpot-day-next"]')
+      ?.removeEventListener?.('click', this.#historyNextListener);
+    this.#historyPrevListener = null;
+    this.#historyNextListener = null;
+    this.#historyMetadataSeq += 1;
   }
 }
 

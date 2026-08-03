@@ -1,10 +1,10 @@
 // components/claims-panel.js -- Unified claims panel Custom Element
-// Aggregates ETH and BURNIE claimable amounts with separate claim buttons.
+// Aggregates ETH and FLIP claimable amounts with separate claim buttons.
 // All contract interaction delegated to claims.js (no ethers import here).
 
 import { subscribe, get } from '../app/store.js';
-import { fetchAllClaimable, claimEth, claimBurnie } from '../app/claims.js';
-import { formatEth, formatBurnie } from '../app/utils.js';
+import { fetchAllClaimable, claimEth, claimFlip } from '../app/claims.js';
+import { formatEth, formatFlip } from '../app/utils.js';
 
 class ClaimsPanel extends HTMLElement {
   #unsubs = [];
@@ -36,12 +36,12 @@ class ClaimsPanel extends HTMLElement {
             <button class="btn-action claim-eth-btn" disabled>Claim ETH</button>
           </div>
           <div class="claim-row">
-            <span class="claim-label">BURNIE Winnings</span>
-            <span class="claim-amount burnie-claimable">0</span>
-            <button class="btn-action claim-burnie-btn" disabled>Claim BURNIE</button>
+            <span class="claim-label">FLIP Winnings</span>
+            <span class="claim-amount flip-claimable">0</span>
+            <button class="btn-action claim-flip-btn" disabled>Claim FLIP</button>
           </div>
         </div>
-        <p class="claims-note text-dim">ETH and BURNIE claims are separate transactions</p>
+        <p class="claims-note text-dim">ETH and FLIP claims are separate transactions</p>
       </div>
       </div>
     `;
@@ -49,7 +49,7 @@ class ClaimsPanel extends HTMLElement {
     // -- Event Listeners --
 
     this.querySelector('.claim-eth-btn').addEventListener('click', () => this.#handleClaimEth());
-    this.querySelector('.claim-burnie-btn').addEventListener('click', () => this.#handleClaimBurnie());
+    this.querySelector('.claim-flip-btn').addEventListener('click', () => this.#handleClaimFlip());
 
     // -- Store Subscriptions --
 
@@ -114,23 +114,23 @@ class ClaimsPanel extends HTMLElement {
 
   #renderClaims(c) {
     const ethEl = this.querySelector('.eth-claimable');
-    const burnieEl = this.querySelector('.burnie-claimable');
+    const flipEl = this.querySelector('.flip-claimable');
 
     if (ethEl) ethEl.textContent = c.eth && c.eth !== '0' ? formatEth(c.eth) + ' ETH' : '0';
-    if (burnieEl) burnieEl.textContent = c.burnie && c.burnie !== '0' ? formatBurnie(c.burnie) + ' BURNIE' : '0';
+    if (flipEl) flipEl.textContent = c.flip && c.flip !== '0' ? formatFlip(c.flip) + ' FLIP' : '0';
 
     this.#updateButtonStates();
   }
 
   #updateButtonStates() {
     const connected = get('ui.connectionState') === 'connected';
-    const claims = get('claims') || { eth: '0', burnie: '0' };
+    const claims = get('claims') || { eth: '0', flip: '0' };
 
     const ethBtn = this.querySelector('.claim-eth-btn');
-    const burnieBtn = this.querySelector('.claim-burnie-btn');
+    const flipBtn = this.querySelector('.claim-flip-btn');
 
     if (ethBtn) ethBtn.disabled = !connected || !claims.eth || claims.eth === '0';
-    if (burnieBtn) burnieBtn.disabled = !connected || !claims.burnie || claims.burnie === '0';
+    if (flipBtn) flipBtn.disabled = !connected || !claims.flip || claims.flip === '0';
   }
 
   async #handleClaimEth() {
@@ -148,15 +148,15 @@ class ClaimsPanel extends HTMLElement {
     }
   }
 
-  async #handleClaimBurnie() {
-    const btn = this.querySelector('.claim-burnie-btn');
+  async #handleClaimFlip() {
+    const btn = this.querySelector('.claim-flip-btn');
     if (btn) btn.disabled = true;
 
     try {
-      await claimBurnie();
+      await claimFlip();
     } catch (err) {
       if (err.code !== 'ACTION_REJECTED' && err.code !== 4001) {
-        console.error('[claims] BURNIE claim failed:', err);
+        console.error('[claims] FLIP claim failed:', err);
       }
     } finally {
       this.#updateButtonStates();

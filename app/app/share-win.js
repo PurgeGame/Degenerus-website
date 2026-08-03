@@ -8,7 +8,7 @@
 //
 // Affiliate link: a registered vanity code when the player has one (bytes32
 // ?ref= form — it can carry a kickback %, strictly better for the referred
-// player), else the bare-address ?ref= form (`https://degener.us/?ref=0x…`)
+// player), else the bare-address ?ref= form (`https://degener.us/app/?ref=0x…`)
 // that /js/ref.js captures site-wide and DegenerusAffiliate resolves as an
 // address-derived default code — commissions flow with zero registration.
 // No connected wallet → plain degener.us link (still a share, just no ref).
@@ -27,7 +27,7 @@ import { displayEth, displayToken } from './scaling.js';
 import { ethers } from './contracts.js';
 import { resolveRegisteredCode } from './affiliate.js';
 
-const SITE_ORIGIN = 'https://degener.us';
+const APP_ORIGIN = 'https://degener.us/app/';
 const MAX_UINT160 = (1n << 160n) - 1n;
 
 // ---------------------------------------------------------------------------
@@ -42,12 +42,12 @@ const MAX_UINT160 = (1n << 160n) - 1n;
  */
 export function buildShareRefUrl(addr, registeredCode = null) {
   if (typeof registeredCode === 'string' && /^0x[0-9a-fA-F]{64}$/.test(registeredCode)) {
-    return `${SITE_ORIGIN}/?ref=${registeredCode.toLowerCase()}`;
+    return `${APP_ORIGIN}?ref=${registeredCode.toLowerCase()}`;
   }
   if (typeof addr === 'string' && /^0x[0-9a-fA-F]{40}$/.test(addr)) {
-    return `${SITE_ORIGIN}/?ref=${addr.toLowerCase()}`;
+    return `${APP_ORIGIN}?ref=${addr.toLowerCase()}`;
   }
-  return `${SITE_ORIGIN}/`;
+  return APP_ORIGIN;
 }
 
 /**

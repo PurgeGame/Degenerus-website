@@ -10,7 +10,7 @@ import {
   fetchTerminalState,
 } from '../app/terminal.js';
 import { fetchPlayerData } from '../app/api.js';
-import { formatEth, formatBurnie } from '../app/utils.js';
+import { formatEth, formatFlip } from '../app/utils.js';
 import { DECIMATOR } from '../app/constants.js';
 
 class TerminalPanel extends HTMLElement {
@@ -76,11 +76,11 @@ class TerminalPanel extends HTMLElement {
             </div>
             <div class="stat">
               <div class="stat-label">Your Burns</div>
-              <div class="stat-value" data-bind="terminal-burn-total">0 BURNIE</div>
+              <div class="stat-value" data-bind="terminal-burn-total">0 FLIP</div>
             </div>
           </div>
           <div class="terminal-burn-input-row">
-            <input type="number" class="terminal-burn-input" min="1000" step="1000" placeholder="Min 1,000 BURNIE" data-bind="terminal-burn-input">
+            <input type="number" class="terminal-burn-input" min="1000" step="1000" placeholder="Min 1,000 FLIP" data-bind="terminal-burn-input">
             <button class="btn-primary terminal-burn-btn" data-action="terminal-burn" disabled>BURN</button>
           </div>
           <span class="terminal-hint">Higher time multiplier = earlier burns count more.</span>
@@ -206,7 +206,7 @@ class TerminalPanel extends HTMLElement {
     // Player burn total display
     this.#unsubs.push(
       subscribe('terminal.playerBurnTotal', (total) => {
-        this.#setTextContent('terminal-burn-total', total && total !== '0' ? formatBurnie(total) + ' BURNIE' : '0 BURNIE');
+        this.#setTextContent('terminal-burn-total', total && total !== '0' ? formatFlip(total) + ' FLIP' : '0 FLIP');
       })
     );
 

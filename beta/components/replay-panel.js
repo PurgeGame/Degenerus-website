@@ -18,9 +18,9 @@ import {
 // equivalents so play/ can consume this component via a recursive-import walk
 // without tripping the SHELL-01 guardrail on `ethers`.
 import { formatEth, formatFlip, truncateAddress } from '../viewer/utils.js';
-import { playSound } from '../app/audio.js';
 import { API_BASE, BADGE_QUADRANTS, BADGE_COLORS, BADGE_ITEMS, badgeCircularPath } from '../app/constants.js';
 import { batch, update } from '../app/store.js';
+import { setMajorDrawActivity } from '../../app/app/major-draw-activity.js';
 
 async function replayFetch(path) {
   const res = await fetch(API_BASE + '/replay' + path);
@@ -164,6 +164,7 @@ class ReplayPanel extends HTMLElement {
   #quadPublicSummaries = [null, null, null, null];
 
   #audioCtx = null;             // Web Audio context for SFX
+  #sfxBus = null;               // dry, compressed slot-cabinet output
   #scratchNode = null;          // active scratch noise node
   #mouseIsDown = false;         // global mouse button state
   #badgeCache = new Map();      // path → warmed Image (preloaded badge SVG cache)
@@ -176,9 +177,19 @@ class ReplayPanel extends HTMLElement {
   #hostRevealCleared = null;
   #hostAllRollsCleared = false;
   #hostRevealSeq = 0;
+  // The app shell publishes the same persisted state on every data poll. Keep
+  // the latest requested key as well as the applied key so duplicate polls are
+  // inert even while the first async restore is still loading.
+  #hostRevealRequestKey = null;
   #hostRevealAppliedKey = null;
   #loadedDay = null;
   #idleSpinTimer = null;
+  // Once the player starts this selection's reveal, polling may update the
+  // persisted flags but must not rebuild/cancel the live main or bonus board.
+  #interactiveRevealKey = null;
+  // Only a direct center-flame click is allowed to turn cancellation into an
+  // immediate final frame. Day/player changes and refreshes abort silently.
+  #skipSpinId = null;
 
   connectedCallback() {
     this.innerHTML = `
@@ -292,6 +303,7 @@ class ReplayPanel extends HTMLElement {
     if (centerEl) {
       centerEl.addEventListener('click', (event) => {
         if (this.#spinning) {
+          this.#skipSpinId = this.#animId;
           this.#animId++;
           this.#spinning = false;
           return;
@@ -315,6 +327,8 @@ class ReplayPanel extends HTMLElement {
 
   disconnectedCallback() {
     this.#animId++;  // cancel any running spin
+    this.#skipSpinId = null;
+    this.#interactiveRevealKey = null;
     this.#stopIdleSpin();
     this.#sfxScratchStop();
     document.removeEventListener('mousedown', this._onMouseDown);
@@ -327,10 +341,40 @@ class ReplayPanel extends HTMLElement {
    */
   setPersistedRevealState(cleared, allRollsCleared = false) {
     if (!this.#singleButton()) return;
-    this.#hostRevealCleared = Boolean(cleared);
-    this.#hostAllRollsCleared = Boolean(cleared && allRollsCleared);
+    const nextCleared = Boolean(cleared);
+    const nextAllRollsCleared = Boolean(nextCleared && allRollsCleared);
+    const requestKey = this.#persistedRevealKey(nextCleared, nextAllRollsCleared);
+    // Routine same-day polling must not rebuild the visible draw. In
+    // particular, #startIdleSpin() resets every quadrant before painting its
+    // next frame, which looked like a random mid-day jackpot reset.
+    if (this.#hostRevealRequestKey === requestKey) return;
+    this.#hostRevealCleared = nextCleared;
+    this.#hostAllRollsCleared = nextAllRollsCleared;
+    this.#hostRevealRequestKey = requestKey;
     this.#hostRevealSeq += 1;
+    // A polling/bridge update for the draw the player is actively uncovering
+    // must not put the attract reel over that live board. This guard has to run
+    // before the eager idle paint below, not only before the async restore.
+    if (this.#selectionKey() === this.#interactiveRevealKey) return;
+    // The host can learn that a brand-new day is uncleared before the replay
+    // endpoints finish loading it. Start the quiet attract reels immediately;
+    // #applyPersistedRevealState restarts them with the exact level holdings
+    // once that asynchronous selection is fully pinned.
+    if (!nextCleared && !this.#spinning) {
+      this.#startIdleSpin();
+    }
     void this.#applyPersistedRevealState(this.#hostRevealSeq);
+  }
+
+  #selectionKey() {
+    if (this.#selectedDay == null || !this.#selectedPlayer) return null;
+    return `${Number(this.#selectedDay)}|${String(this.#selectedPlayer).toLowerCase()}`;
+  }
+
+  #persistedRevealKey(cleared, allRollsCleared) {
+    const selection = this.#selectionKey() || 'selection-pending';
+    return `${selection}|${cleared ? 'cleared' : 'waiting'}`
+      + `|${allRollsCleared ? 'all-rolls' : 'main-only'}`;
   }
 
   async #applyPersistedRevealState(seq = this.#hostRevealSeq) {
@@ -347,8 +391,11 @@ class ReplayPanel extends HTMLElement {
     const day = this.#selectedDay;
     const player = this.#selectedPlayer;
     const cleared = this.#hostRevealCleared;
-    const key = `${day}|${String(player).toLowerCase()}|${cleared ? 'cleared' : 'waiting'}`
-      + `|${this.#hostAllRollsCleared ? 'all-rolls' : 'main-only'}`;
+    const key = this.#persistedRevealKey(cleared, this.#hostAllRollsCleared);
+    // Day/player changes can invoke this method directly after their data
+    // finishes loading. Record that request too, so the next host poll cannot
+    // eagerly repaint while this restore is in flight.
+    this.#hostRevealRequestKey = key;
     if (this.#hostRevealAppliedKey === key) return true;
 
     if (cleared) {
@@ -397,8 +444,27 @@ class ReplayPanel extends HTMLElement {
   }
 
   #startIdleSpin() {
+    // Starting an attract reel that is already running is a no-op. This is the
+    // final safety boundary around the visible ticket: even if a future host
+    // refresh produces a different request key, it cannot clear four painted
+    // badges merely to restart the same timer loop.
+    if (this.#idleSpinTimer != null
+      && this.#hostRevealCleared === false
+      && !this.#spinning) return;
     this.#stopIdleSpin();
     if (this.#hostRevealCleared !== false || this.#spinning) return;
+
+    // Always enter the attract loop from one clean main-draw face. A previous
+    // bonus scratch can leave transparent canvases, revealed prize paper, and
+    // result classes mounted; random badge swaps on top of those layers produce
+    // the mixed front/underside frame reported during bonus clearing.
+    this.#bonusPhase = false;
+    this.#mainScratchComplete = false;
+    this.#mainAllRed = false;
+    this.#bonusScratchComplete = false;
+    this.#drawViewSwitching = false;
+    this.#resetMainWidget();
+    this.#syncDrawToggleAffordance();
 
     const tick = () => {
       this.#idleSpinTimer = null;
@@ -424,7 +490,9 @@ class ReplayPanel extends HTMLElement {
         const shownTrait = contractQ * 64 + col * 8 + sym;
         const ownsShown = this.#playerTraitIds.has(shownTrait);
         quads[i]?.classList.add(ownsShown ? 'q-has-trait' : 'q-no-tickets');
-        if (ownsShown && col === 7) quads[i]?.classList.add('q-gold-trait');
+        if (!this.#bonusPhase && ownsShown && col === 7) {
+          quads[i]?.classList.add('q-gold-trait');
+        }
       }
       this.#syncOwnedGoldState(quads);
       this.querySelector('[data-bind="center"]')?.classList.add('spinning');
@@ -507,15 +575,23 @@ class ReplayPanel extends HTMLElement {
 
   async #loadDays() {
     const select = this.querySelector('[data-bind="day-select"]');
-    const previous = String(select?.value || '');
+    // Rebuilding a <select> clears its value before the app shell can pin it
+    // again. Preserve the logical selection as well as the DOM value: during
+    // indexer catch-up the latter can already be empty even though this panel
+    // is still displaying a perfectly valid day.
+    const previous = String(select?.value || this.#selectedDay || '');
+    const previousOption = select?.options
+      ? Array.from(select.options).find((option) => String(option.value) === previous)
+      : null;
     try {
       const data = await replayFetch('/rng');
-      this.#rngDays = data.days;
+      const days = Array.isArray(data?.days) ? data.days : [];
+      this.#rngDays = days;
       // The replay feed already carries the DB-derived day-within-phase clock.
       // Share its newest row with the headline/nav instead of making that bar
       // issue a duplicate history request just to label PURCHASE DAY N.
-      const latestPhaseDay = Array.isArray(data.days) && data.days.length > 0
-        ? data.days.reduce((latest, row) => (
+      const latestPhaseDay = days.length > 0
+        ? days.reduce((latest, row) => (
           !latest || Number(row.day) > Number(latest.day) ? row : latest
         ), null)
         : null;
@@ -529,14 +605,33 @@ class ReplayPanel extends HTMLElement {
       }
       if (!select) return false;
       select.innerHTML = '<option value="">Pick a jackpot day</option>' +
-        data.days.map(d => `<option value="${d.day}">Day ${d.day} — L${d.level} ${d.phase}${d.dayInPhase}</option>`).join('');
-      if (previous && data.days.some((d) => String(d.day) === previous)) {
-        select.value = previous;
+        days.map(d => `<option value="${d.day}">Day ${d.day} — L${d.level} ${d.phase}${d.dayInPhase}</option>`).join('');
+      if (previous) {
+        let matching = Array.from(select.options || [])
+          .find((option) => String(option.value) === previous);
+        // A resolved day cannot legitimately disappear from the replay feed.
+        // Keep its option through a transient partial response so the bridge
+        // cannot manufacture an empty -> same-day change and blank the board.
+        if (!matching && typeof document !== 'undefined'
+          && typeof document.createElement === 'function') {
+          matching = document.createElement('option');
+          matching.value = previous;
+          matching.textContent = previousOption?.textContent || `Day ${previous}`;
+          matching.dataset.retainedSelection = 'true';
+          select.appendChild(matching);
+        }
+        if (matching) select.value = matching.value;
       }
       return true;
     } catch (err) {
       console.warn('[ReplayPanel] Failed to load days:', err);
-      if (select) select.innerHTML = '<option value="">Failed to load</option>';
+      // A network blip is not a day change. Keep the last usable options and
+      // visible board; only show the failure placeholder on a true cold load.
+      const hasUsableDay = select?.options
+        && Array.from(select.options).some((option) => Number(option.value) > 0);
+      if (select && !hasUsableDay) {
+        select.innerHTML = '<option value="">Failed to load</option>';
+      }
       return false;
     }
   }
@@ -544,7 +639,8 @@ class ReplayPanel extends HTMLElement {
   async #loadTickets(level) {
     try {
       const data = await replayFetch(`/tickets/${level}`);
-      this.#tickets = data.players;
+      const players = Array.isArray(data?.players) ? data.players : [];
+      this.#tickets = players;
 
       // Compute winnings per player from distributions (ETH vs FLIP)
       const ethByAddr = {};
@@ -563,8 +659,14 @@ class ReplayPanel extends HTMLElement {
       }
 
       const select = this.querySelector('[data-bind="player-select"]');
-      select.innerHTML = '<option value="">All players (' + data.players.length + ')</option>' +
-        data.players.map(p => {
+      const previous = String(this.#selectedPlayer || select?.value || '');
+      const previousOption = select?.options
+        ? Array.from(select.options).find(
+            (option) => String(option.value).toLowerCase() === previous.toLowerCase(),
+          )
+        : null;
+      select.innerHTML = '<option value="">All players (' + players.length + ')</option>' +
+        players.map(p => {
           const addr = p.address.toLowerCase();
           const eth = ethByAddr[addr];
           const flip = flipByAddr[addr];
@@ -575,7 +677,26 @@ class ReplayPanel extends HTMLElement {
           return `<option value="${p.address}">${truncateAddress(p.address)} (${p.entryCount} entries${wonLabel})</option>`;
         }).join('');
 
-      this.#players = data.players.map(p => p.address);
+      if (previous) {
+        let matching = Array.from(select.options || []).find(
+          (option) => String(option.value).toLowerCase() === previous.toLowerCase(),
+        );
+        // The app intentionally supports viewing a wallet with zero entries.
+        // Retain that synthetic selection when the level's ticket list reloads
+        // instead of briefly selecting "All players" and resetting the draw.
+        if (!matching && typeof document !== 'undefined'
+          && typeof document.createElement === 'function') {
+          matching = document.createElement('option');
+          matching.value = previous;
+          matching.textContent = previousOption?.textContent
+            || `${truncateAddress(previous)} (0 entries)`;
+          matching.dataset.zeroEntry = 'true';
+          select.appendChild(matching);
+        }
+        if (matching) select.value = matching.value;
+      }
+
+      this.#players = players.map(p => p.address);
     } catch (err) {
       console.warn('[ReplayPanel] Failed to load tickets:', err);
     }
@@ -778,10 +899,30 @@ class ReplayPanel extends HTMLElement {
   // --- Event Handlers ---
 
   async #onDayChange(e) {
+    const dayNum = Number.parseInt(e?.target?.value, 10);
+    const validDay = Number.isInteger(dayNum) && dayNum > 0;
+    // The app bridge can re-dispatch `change` after an option-list refresh.
+    // Treat selecting the day already being displayed as a no-op; #resetCards
+    // is destructive and must only run for an actual logical day transition.
+    if (validDay && Number(this.#selectedDay) === dayNum) return;
+    // In app/single-button mode an empty value can only be a transient option
+    // rebuild. There is no user-facing "no day" selection there, so retain the
+    // current board until the hidden selector is repopulated.
+    if (!validDay && this.#singleButton() && this.#selectedDay != null) {
+      const matching = e?.target?.options
+        ? Array.from(e.target.options).find(
+            (option) => Number(option.value) === Number(this.#selectedDay),
+          )
+        : null;
+      if (matching) e.target.value = matching.value;
+      return;
+    }
+
     this.#hostRevealSeq += 1;
+    this.#interactiveRevealKey = null;
+    this.#skipSpinId = null;
     this.#loadedDay = null;
-    const dayNum = parseInt(e.target.value);
-    if (!dayNum) {
+    if (!validDay) {
       this.#selectedDay = null;
       this.#resetCards();
       this.querySelector('[data-bind="empty-state"]').hidden = false;
@@ -794,7 +935,12 @@ class ReplayPanel extends HTMLElement {
 
     this.#selectedDay = dayNum;
     this.#openingFlipDay = false;
+    // A new day can route to a different purchase level. Never color its
+    // refresh animation from the prior day's cached trait set.
+    this.#playerTraitIds = new Set();
+    this.#traitsCacheAddress = null;
     this.#resetCards();
+    if (this.#hostRevealCleared === false) this.#startIdleSpin();
 
     const rngEntry = this.#rngDays.find(d => d.day === dayNum);
     const hasRng = rngEntry && rngEntry.finalWord && rngEntry.finalWord !== '0';
@@ -858,9 +1004,35 @@ class ReplayPanel extends HTMLElement {
   }
 
   #onPlayerChange(e) {
+    const addr = String(e?.target?.value || '').trim();
+    const nextPlayer = addr || null;
+    const currentPlayer = this.#selectedPlayer == null
+      ? null
+      : String(this.#selectedPlayer);
+    if ((nextPlayer == null && currentPlayer == null)
+      || (nextPlayer != null && currentPlayer != null
+        && nextPlayer.toLowerCase() === currentPlayer.toLowerCase())) return;
+    // The app always has a concrete viewed address. If a ticket-list rebuild
+    // momentarily drops its option, keep the rendered player's draw instead of
+    // clearing all four quadrants while the bridge restores the same address.
+    if (nextPlayer == null && this.#singleButton() && currentPlayer != null) {
+      const matching = e?.target?.options
+        ? Array.from(e.target.options).find(
+            (option) => String(option.value).toLowerCase() === currentPlayer.toLowerCase(),
+          )
+        : null;
+      if (matching) e.target.value = matching.value;
+      return;
+    }
+
     this.#hostRevealSeq += 1;
-    const addr = e.target.value;
-    this.#selectedPlayer = addr || null;
+    this.#interactiveRevealKey = null;
+    this.#skipSpinId = null;
+    this.#selectedPlayer = nextPlayer;
+    this.#playerTraitIds = new Set();
+    this.#traitsCacheAddress = null;
+    this.#resetCards();
+    if (this.#hostRevealCleared === false) this.#startIdleSpin();
     // Publish replay-player selection so sibling widgets (status-bar activity
     // score) can react without coupling to this panel.
     update('replay.player', this.#selectedPlayer);
@@ -1178,9 +1350,20 @@ class ReplayPanel extends HTMLElement {
     const rngEntry = this.#rngDays.find(d => d.day === this.#selectedDay);
     if (!rngEntry || !rngEntry.finalWord || rngEntry.finalWord === '0') return;
 
+    const selectionKey = this.#selectionKey();
+    if (!persisted) this.#interactiveRevealKey = selectionKey;
+
+    // Create/resume WebAudio while the reveal click still owns user activation.
+    // Jackpot cues are synthesized locally, so the spin never waits on an
+    // audio download/decode path.
+    if (!instant) {
+      try { this.#getAudio(); } catch (_error) { /* visuals remain authoritative */ }
+    }
+
     this.#resetCards();
     await this.#loadPlayerTraits(); // ensure traits loaded for spin coloring
     await this.#refreshPlayerEligibility(); // populate #playerHasFutureTickets
+    if (this.#selectionKey() !== selectionKey) return false;
 
     // Filter the pre-cached day roll1/roll2 responses down to this player's wins.
     this.#filterPlayerWins(this.#selectedPlayer);
@@ -1194,7 +1377,8 @@ class ReplayPanel extends HTMLElement {
     btn.disabled = true;
     if (!instant) btn.textContent = 'Revealing...';
 
-    await this.#runSpin(displayTraits, { instant, announce: !persisted });
+    const completed = await this.#runSpin(displayTraits, { instant, announce: !persisted });
+    if (!completed || this.#selectionKey() !== selectionKey) return false;
 
     if (this.#singleButton()) {
       // Same button carries Roll 2; with no bonus ahead the day is played out.
@@ -1215,6 +1399,7 @@ class ReplayPanel extends HTMLElement {
 
     // After Roll 1 spin: show bonus section
     this.#showBonusSection();
+    return true;
   }
 
   /**
@@ -1452,6 +1637,10 @@ class ReplayPanel extends HTMLElement {
       || !this.#mainReadyForBonus()
       || this.#bonusPhase
       || this.#bonusScratchComplete) return;
+    // Resume WebAudio while the bonus click still owns user activation.
+    try { this.#getAudio(); } catch (_error) { /* visuals remain authoritative */ }
+    const selectionKey = this.#selectionKey();
+    this.#interactiveRevealKey = selectionKey;
     const bonusSection = this.querySelector('[data-bind="bonus-section"]');
     if (bonusSection) bonusSection.hidden = true;
 
@@ -1478,7 +1667,9 @@ class ReplayPanel extends HTMLElement {
 
     // Colouring for this roll comes from the future-level holdings.
     await this.#loadFutureTraits();
-    await this.#runSpin(displayTraits);
+    if (this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
+    const completed = await this.#runSpin(displayTraits);
+    if (!completed || this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
 
     if (btn) {
       if (this.#singleButton()) {
@@ -1490,6 +1681,7 @@ class ReplayPanel extends HTMLElement {
         btn.textContent = 'Replay';
       }
     }
+    return true;
   }
 
   #syncDrawToggleAffordance() {
@@ -1611,6 +1803,7 @@ class ReplayPanel extends HTMLElement {
    */
   #resetMainWidget() {
     this.#animId++;
+    this.#skipSpinId = null;
     this.#spinning = false;
     this.#sfxScratchStop();
 
@@ -1655,6 +1848,9 @@ class ReplayPanel extends HTMLElement {
   async #runSpin(displayTraits, { instant = false, announce = true } = {}) {
     this.#stopIdleSpin();
     const myId = ++this.#animId;
+    const spinSelectionKey = this.#selectionKey();
+    const spinBonusPhase = this.#bonusPhase;
+    this.#skipSpinId = null;
     this.#spinning = true;
     const quads = this.querySelectorAll('.replay-tq');
     const hint = this.querySelector('[data-bind="hint"]');
@@ -1761,7 +1957,7 @@ class ReplayPanel extends HTMLElement {
         this.#revealQuadrant(i, { instant: true, silent: true });
       }
       this.#revealCenter({ instant: true, silent: true });
-      return;
+      return true;
     }
 
     // Spin state
@@ -1772,10 +1968,29 @@ class ReplayPanel extends HTMLElement {
     let idleCount = 2 + Math.floor(Math.random() * 3);
     let finalLockSettling = false;
 
+    setMajorDrawActivity('jackpot-replay', true);
     return new Promise(resolve => {
+      let activitySettled = false;
+      const settle = (completed) => {
+        if (!activitySettled) {
+          activitySettled = true;
+          setMajorDrawActivity('jackpot-replay', false);
+        }
+        resolve(completed);
+      };
       const step = () => {
         if (myId !== this.#animId) {
-          // Spin was cancelled (e.g. flame click) -- render final state and finish
+          const intentionalSkip = this.#skipSpinId === myId
+            && this.#selectionKey() === spinSelectionKey
+            && this.#bonusPhase === spinBonusPhase;
+          if (!intentionalSkip) {
+            settle(false);
+            return;
+          }
+          this.#skipSpinId = null;
+          this.#spinning = false;
+          // A center-flame click is an explicit request to skip this exact
+          // spin. Paint and reveal one coherent captured main/bonus result.
           for (let i = 0; i < 4; i++) {
             const contractQ = DISPLAY_ORDER[i];
             const category = BADGE_QUADRANTS[contractQ];
@@ -1787,7 +2002,7 @@ class ReplayPanel extends HTMLElement {
           // Auto-reveal all quadrants and center
           for (let i = 0; i < 4; i++) this.#revealQuadrant(i);
           this.#revealCenter();
-          resolve();
+          settle(true);
           return;
         }
 
@@ -1802,15 +2017,14 @@ class ReplayPanel extends HTMLElement {
             if (img) img.src = badgeCircularPath(category, targets[i].sym, targets[i].col);
           }
           this.#afterSpin(displayTraits, targets, quads, hint);
-          resolve();
+          settle(true);
           return;
         }
-
-        this.#sfxTick(locksDone);
 
         // Advance one color/symbol lock before painting this frame. That makes
         // the selected quadrant visibly assume its final trait and eligibility
         // state at the moment its lock sound plays, including the eighth lock.
+        let lockedQuadrant = null;
         if (idleCount <= 0 && locksDone < totalLocks) {
           const available = [];
           for (let q = 0; q < 4; q++) {
@@ -1822,8 +2036,7 @@ class ReplayPanel extends HTMLElement {
             if (pick.type === 'color') lockedColors[pick.q] = true;
             else lockedSymbols[pick.q] = true;
             locksDone++;
-            if (pick.type === 'symbol') this.#sfxLock(this.#quadOwned[pick.q]);
-            else this.#sfxTick(locksDone);
+            if (pick.type === 'symbol') lockedQuadrant = pick.q;
             idleCount = 2 + Math.floor(Math.random() * 3);
           }
         } else {
@@ -1831,6 +2044,8 @@ class ReplayPanel extends HTMLElement {
         }
 
         // Render random or locked badges
+        let frameWinnableCount = 0;
+        let frameHasGoldWinnable = false;
         for (let i = 0; i < 4; i++) {
           const contractQ = DISPLAY_ORDER[i];
           const sym = lockedSymbols[i] ? targets[i].sym : Math.floor(Math.random() * 8);
@@ -1867,8 +2082,12 @@ class ReplayPanel extends HTMLElement {
             } else {
               quads[i].classList.remove('q-win-impossible-lock');
             }
-            if (this.#quadOwned[i] && targets[i].col === 7) {
+            if (!this.#bonusPhase && this.#quadOwned[i] && targets[i].col === 7) {
               quads[i].classList.add('q-gold-trait');
+            }
+            if (this.#quadOwned[i]) {
+              frameWinnableCount += 1;
+              if (!this.#bonusPhase && targets[i].col === 7) frameHasGoldWinnable = true;
             }
           } else {
             quads[i].classList.remove('q-win-impossible-lock');
@@ -1877,10 +2096,27 @@ class ReplayPanel extends HTMLElement {
             const shownTrait = contractQ * 64 + col * 8 + sym;
             const ownsShown = spinOwned.has(shownTrait);
             quads[i].classList.add(ownsShown ? 'q-has-trait' : 'q-no-tickets');
-            if (ownsShown && col === 7) quads[i].classList.add('q-gold-trait');
+            if (ownsShown) frameWinnableCount += 1;
+            if (!this.#bonusPhase && ownsShown && col === 7) {
+              quads[i].classList.add('q-gold-trait');
+              frameHasGoldWinnable = true;
+            }
           }
         }
         this.#syncOwnedGoldState(quads);
+        // Ordinary frames get one terse digital pulse whose pitch/volume
+        // follows the blue count. A lock frame substitutes its red/blue/gold
+        // cue instead of stacking both sounds on the same animation frame.
+        if (lockedQuadrant != null) {
+          this.#sfxLock({
+            winnable: this.#quadOwned[lockedQuadrant],
+            gold: !this.#bonusPhase
+              && this.#quadOwned[lockedQuadrant]
+              && targets[lockedQuadrant].col === 7,
+          });
+        } else {
+          this.#sfxSpinFrame(frameWinnableCount, frameHasGoldWinnable, locksDone);
+        }
 
         // Check if all locked
         if (locksDone >= totalLocks) {
@@ -1935,7 +2171,13 @@ class ReplayPanel extends HTMLElement {
         .some((d) => d.traitId != null && Number(d.traitId) === Number(displayTraits[i]));
       const ownsDisplayedTrait = displayTraits[i] != null
         && (heldTraits.has(displayTraits[i]) || winnerProvesDisplayedOwnership);
-      const ownsDisplayedGold = ownsDisplayedTrait && isGoldTrait(displayTraits[i]);
+      // Gold is a special main-jackpot eligibility signal. The bonus jackpot
+      // does not pay that gold-trait mechanic, so its held/winning gold badges
+      // keep the ordinary blue/green treatment instead of advertising a prize
+      // that is not available in Roll 2.
+      const ownsDisplayedGold = !this.#bonusPhase
+        && ownsDisplayedTrait
+        && isGoldTrait(displayTraits[i]);
       const publicResult = !hasPlayerWin
         ? (this.#quadPublicSummaries[i] || {
             traitId: displayTraits[i],
@@ -2019,7 +2261,7 @@ class ReplayPanel extends HTMLElement {
         // Re-paint the scratch cover with the winning trait badge so top = reveal.
         const canvas = quads[i].querySelector('.replay-scratch-canvas');
         if (canvas && canonicalSrc) {
-          const canonicalGold = isGoldTrait(canonicalTraitId);
+          const canonicalGold = !this.#bonusPhase && isGoldTrait(canonicalTraitId);
           this.#initScratchCanvasWithBadge(
             canvas,
             canonicalSrc,
@@ -2148,11 +2390,16 @@ class ReplayPanel extends HTMLElement {
     const currencyIcon = document.createElement('img');
     currencyIcon.className = 'replay-bucket-eth replay-bucket-currency';
     currencyIcon.src = currency === 'FLIP'
-      ? '/badges-circular/flame_red.svg'
+      ? '/whitepaper/flame-logo-split.svg'
       : '/symbols/crypto_06_ethereum_silver.svg';
     currencyIcon.alt = currency;
-    amount.appendChild(num);
-    amount.appendChild(currencyIcon);
+    if (currency === 'FLIP') {
+      amount.appendChild(currencyIcon);
+      amount.appendChild(num);
+    } else {
+      amount.appendChild(num);
+      amount.appendChild(currencyIcon);
+    }
     const currencyWinners = document.createElement('span');
     currencyWinners.className = 'replay-bucket-row-count replay-bucket-row-count--currency';
     currencyWinners.textContent = `×${Number.isFinite(currencyWinnerCount) ? currencyWinnerCount : '—'}`;
@@ -2592,7 +2839,15 @@ class ReplayPanel extends HTMLElement {
     canvas.style.pointerEvents = 'none';
 
     const isWin = this.#quadWinArrays[qIdx].some(d => d.awardType !== 'overflow');
-    if (!silent) this.#sfxReveal(isWin);
+    // q-result-pending means the cover was blue/gold and the player could not
+    // know the outcome yet. Give that specific blue→pink miss a small cue;
+    // already-red guaranteed losses keep the ordinary quiet loss landing.
+    const wasPotentialWin = quad.classList.contains('q-result-pending');
+    if (!silent) {
+      if (isWin) this.#sfxReveal(true);
+      else if (wasPotentialWin) this.#sfxPinkReveal();
+      else this.#sfxReveal(false);
+    }
 
     quad.classList.remove('q-scratchable', 'q-result-pending');
     quad.classList.add('q-result-revealed');
@@ -2764,6 +3019,7 @@ class ReplayPanel extends HTMLElement {
 
   #resetCards() {
     this.#animId++; // cancel any running spin
+    this.#skipSpinId = null;
     this.#spinning = false;
     this.#stopIdleSpin();
     this.#sfxScratchStop();
@@ -2839,19 +3095,18 @@ class ReplayPanel extends HTMLElement {
   }
 
   async #celebrate() {
-    playSound('win');
     this.#sfxFanfare();
     try {
       const { default: confetti } = await import('canvas-confetti');
-      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#22c55e', '#8b5cf6', '#eab308', '#06b6d4'] });
+      confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 }, colors: ['#22c55e', '#8b5cf6', '#eab308', '#06b6d4'] });
       setTimeout(() => {
-        confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 } });
-        confetti({ particleCount: 50, angle: 120, spread: 55, origin: { x: 1 } });
+        confetti({ particleCount: 25, angle: 60, spread: 55, origin: { x: 0 } });
+        confetti({ particleCount: 25, angle: 120, spread: 55, origin: { x: 1 } });
       }, 200);
     } catch {}
   }
 
-  // --- Web Audio SFX (ported faithfully from jackpot-demo.html) ---
+  // --- Web Audio SFX: short, dry crypto-slot cues ---
 
   #getAudio() {
     if (!this.#audioCtx) this.#audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -2859,72 +3114,150 @@ class ReplayPanel extends HTMLElement {
     return this.#audioCtx;
   }
 
-  #sfxTick(lockCount) {
-    const ctx = this.#getAudio();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.value = 400 + (lockCount / 8) * 500;
-    osc.type = 'square';
-    gain.gain.setValueAtTime(0.06, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.06);
+  #sfxOutput(ctx) {
+    if (this.#sfxBus) return this.#sfxBus;
+    if (typeof ctx.createDynamicsCompressor !== 'function') return ctx.destination;
+    const bus = ctx.createDynamicsCompressor();
+    bus.threshold.value = -10;
+    bus.knee.value = 3;
+    bus.ratio.value = 6;
+    bus.attack.value = 0.002;
+    bus.release.value = 0.055;
+    bus.connect(ctx.destination);
+    this.#sfxBus = bus;
+    return bus;
   }
 
-  #sfxLock(owned) {
+  #slotTone({
+    frequency,
+    endFrequency = frequency,
+    type = 'square',
+    gain: level = 0.1,
+    delay = 0,
+    duration = 0.05,
+  }) {
     const ctx = this.#getAudio();
-    if (owned) {
-      const o1 = ctx.createOscillator(), g1 = ctx.createGain();
-      o1.connect(g1); g1.connect(ctx.destination);
-      o1.frequency.value = 660; o1.type = 'sine';
-      g1.gain.setValueAtTime(0.12, ctx.currentTime);
-      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-      o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.15);
-      const o2 = ctx.createOscillator(), g2 = ctx.createGain();
-      o2.connect(g2); g2.connect(ctx.destination);
-      o2.frequency.value = 880; o2.type = 'sine';
-      g2.gain.setValueAtTime(0.12, ctx.currentTime + 0.08);
-      g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
-      o2.start(ctx.currentTime + 0.08); o2.stop(ctx.currentTime + 0.22);
+    const start = ctx.currentTime + Math.max(0, delay);
+    const stop = start + Math.max(0.012, duration);
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(Math.max(20, frequency), start);
+    if (endFrequency !== frequency) {
+      osc.frequency.exponentialRampToValueAtTime(Math.max(20, endFrequency), stop);
+    }
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.linearRampToValueAtTime(Math.max(0.001, level), start + 0.002);
+    gain.gain.exponentialRampToValueAtTime(0.0001, stop);
+    osc.connect(gain);
+    gain.connect(this.#sfxOutput(ctx));
+    osc.start(start);
+    osc.stop(stop + 0.008);
+  }
+
+  #slotNoise({
+    center = 2200,
+    type = 'bandpass',
+    q = 0.7,
+    gain: level = 0.06,
+    delay = 0,
+    duration = 0.025,
+  } = {}) {
+    const ctx = this.#getAudio();
+    if (typeof ctx.createBuffer !== 'function'
+      || typeof ctx.createBufferSource !== 'function'
+      || typeof ctx.createBiquadFilter !== 'function') return;
+    const seconds = Math.max(0.012, duration);
+    const samples = Math.max(1, Math.ceil(ctx.sampleRate * seconds));
+    const buffer = ctx.createBuffer(1, samples, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < samples; i++) data[i] = (Math.random() * 2) - 1;
+    const source = ctx.createBufferSource();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    const start = ctx.currentTime + Math.max(0, delay);
+    source.buffer = buffer;
+    filter.type = type;
+    filter.frequency.setValueAtTime(center, start);
+    filter.Q.setValueAtTime(q, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.linearRampToValueAtTime(Math.max(0.001, level), start + 0.0015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + seconds);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.#sfxOutput(ctx));
+    source.start(start);
+    source.stop(start + seconds + 0.005);
+  }
+
+  #sfxSpinFrame(winnableCount, goldWinnable, lockCount) {
+    const count = Math.max(0, Math.min(4, Math.trunc(Number(winnableCount) || 0)));
+    const progress = Math.max(0, Math.min(8, Math.trunc(Number(lockCount) || 0)));
+    // A dry musical pulse on EVERY painted frame. The chord walks upward as
+    // more blue faces appear, while lock progress cycles a four-step arp so the
+    // reel has actual motion instead of isolated mechanical clicks.
+    const reelPitches = [330, 392, 494, 587, 740];
+    const reelGains = [0.105, 0.135, 0.17, 0.215, 0.265];
+    const arpRatios = [1, 1.125, 1.25, 1.5];
+    const root = goldWinnable
+      ? 988 * arpRatios[progress % arpRatios.length]
+      : reelPitches[count] * arpRatios[progress % arpRatios.length];
+    this.#slotTone({
+      frequency: root,
+      type: 'triangle',
+      gain: goldWinnable ? 0.3 : reelGains[count],
+      duration: 0.072,
+    });
+    this.#slotTone({
+      frequency: root * 2,
+      type: 'sine',
+      gain: goldWinnable ? 0.115 : 0.035 + (count * 0.012),
+      delay: 0.012,
+      duration: 0.058,
+    });
+  }
+
+  #sfxLock({ winnable = false, gold = false } = {}) {
+    if (gold) {
+      [1047, 1319, 1568, 2093].forEach((frequency, index) => {
+        this.#slotTone({
+          frequency,
+          type: 'triangle',
+          gain: 0.25 - (index * 0.025),
+          delay: index * 0.035,
+          duration: 0.13,
+        });
+      });
+    } else if (winnable) {
+      this.#slotTone({
+        frequency: 659, type: 'triangle', gain: 0.245, duration: 0.13,
+      });
+      this.#slotTone({
+        frequency: 988, type: 'sine', gain: 0.15, delay: 0.035, duration: 0.15,
+      });
     } else {
-      const osc = ctx.createOscillator(), gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.frequency.setValueAtTime(180, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.12);
-      osc.type = 'triangle';
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15);
+      this.#slotTone({
+        frequency: 247, endFrequency: 196, type: 'triangle', gain: 0.16, duration: 0.085,
+      });
     }
   }
 
   #sfxAllLocked(anyOwned) {
-    const ctx = this.#getAudio();
-    if (anyOwned) {
-      const o1 = ctx.createOscillator(), g1 = ctx.createGain();
-      o1.connect(g1); g1.connect(ctx.destination);
-      o1.frequency.setValueAtTime(200, ctx.currentTime);
-      o1.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.15);
-      o1.type = 'sine';
-      g1.gain.setValueAtTime(0.18, ctx.currentTime);
-      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-      o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.2);
-      const o2 = ctx.createOscillator(), g2 = ctx.createGain();
-      o2.connect(g2); g2.connect(ctx.destination);
-      o2.frequency.value = 1320; o2.type = 'sine';
-      g2.gain.setValueAtTime(0.06, ctx.currentTime + 0.05);
-      g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-      o2.start(ctx.currentTime + 0.05); o2.stop(ctx.currentTime + 0.5);
-    } else {
-      const o1 = ctx.createOscillator(), g1 = ctx.createGain();
-      o1.connect(g1); g1.connect(ctx.destination);
-      o1.frequency.setValueAtTime(120, ctx.currentTime);
-      o1.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.3);
-      o1.type = 'sawtooth';
-      g1.gain.setValueAtTime(0.1, ctx.currentTime);
-      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-      o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.35);
-    }
+    // Delay the final confirmation until the eighth lock cue has cleared.
+    this.#slotTone({
+      frequency: anyOwned ? 1047 : 262,
+      type: 'triangle',
+      gain: anyOwned ? 0.235 : 0.14,
+      delay: 0.2,
+      duration: anyOwned ? 0.16 : 0.1,
+    });
+    if (anyOwned) this.#slotTone({
+      frequency: 1568,
+      type: 'sine',
+      gain: 0.13,
+      delay: 0.245,
+      duration: 0.18,
+    });
   }
 
   #sfxScratchStart() {
@@ -2939,7 +3272,7 @@ class ReplayPanel extends HTMLElement {
     noise.buffer = buf; noise.loop = true;
     filter.type = 'bandpass'; filter.frequency.value = 3000; filter.Q.value = 0.5;
     noise.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
-    gain.gain.value = 0.04;
+    gain.gain.value = 0.05;
     noise.start();
     this.#scratchNode = { noise, gain };
   }
@@ -2951,53 +3284,76 @@ class ReplayPanel extends HTMLElement {
   }
 
   #sfxGreenReveal() {
-    const ctx = this.#getAudio();
-    const osc = ctx.createOscillator(), gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.05);
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.12, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.3);
+    // A crisp arcade-coin sparkle for EACH paid badge. A 14ms high-frequency
+    // attack gives it definition over the scratch bed; short triangle/square
+    // voices keep it bright without the rounded pitch glide that read as a
+    // water droplet.
+    this.#slotNoise({ center: 5800, type: 'highpass', q: 0.55, gain: 0.07, duration: 0.014 });
+    this.#slotTone({
+      frequency: 1568, type: 'triangle', gain: 0.22, duration: 0.075,
+    });
+    this.#slotTone({
+      frequency: 2349, type: 'square', gain: 0.085,
+      delay: 0.018, duration: 0.06,
+    });
+    this.#slotTone({
+      frequency: 3136, type: 'sine', gain: 0.075,
+      delay: 0.04, duration: 0.12,
+    });
+  }
+
+  #sfxPinkReveal() {
+    // A restrained paper-puff + soft falling pair for a blue/gold cover that
+    // resolves pink. It acknowledges the near-miss without sounding like a
+    // jackpot loss stinger or competing with paid-badge dings.
+    this.#slotNoise({
+      center: 1650, type: 'bandpass', q: 0.65, gain: 0.025, duration: 0.018,
+    });
+    this.#slotTone({
+      frequency: 523, endFrequency: 392,
+      type: 'triangle', gain: 0.07, duration: 0.12,
+    });
+    this.#slotTone({
+      frequency: 330, endFrequency: 294,
+      type: 'sine', gain: 0.035, delay: 0.045, duration: 0.13,
+    });
   }
 
   #sfxReveal(isWin) {
-    const ctx = this.#getAudio();
-    const osc = ctx.createOscillator(), gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
     if (isWin) {
-      osc.frequency.setValueAtTime(600, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1400, ctx.currentTime + 0.25);
-      osc.type = 'sine';
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.35);
+      this.#slotTone({
+        frequency: 784, type: 'triangle', gain: 0.17, duration: 0.09,
+      });
+      this.#slotTone({
+        frequency: 1175, type: 'sine', gain: 0.1, delay: 0.025, duration: 0.12,
+      });
     } else {
-      osc.frequency.setValueAtTime(440, ctx.currentTime);
-      osc.frequency.setValueAtTime(349, ctx.currentTime + 0.2);
-      osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.6);
-      osc.type = 'sine';
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.setValueAtTime(0.1, ctx.currentTime + 0.15);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.6);
+      this.#slotTone({
+        frequency: 170, endFrequency: 72, type: 'triangle', gain: 0.145, duration: 0.09,
+      });
     }
   }
 
   #sfxFanfare() {
-    const ctx = this.#getAudio();
-    const notes = [523, 659, 784, 1047];
-    for (let i = 0; i < notes.length; i++) {
-      const freq = notes[i], delay = i * 0.12;
-      const osc = ctx.createOscillator(), gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.frequency.value = freq; osc.type = 'sine';
-      gain.gain.setValueAtTime(0, ctx.currentTime + delay);
-      gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + delay + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.4);
-      osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + 0.4);
-    }
+    // Bright C-major cabinet win: no low drone and no descending sample, so it
+    // resolves celebratory rather than ominous. The octave sparkle supplies a
+    // crypto/arcade edge without turning into a long coin-shower loop.
+    [1047, 1319, 1568, 2093].forEach((frequency, index) => {
+      this.#slotTone({
+        frequency,
+        type: 'triangle',
+        gain: 0.255 - (index * 0.025),
+        delay: index * 0.07,
+        duration: 0.24,
+      });
+    });
+    [2093, 2637, 3136].forEach((frequency, index) => this.#slotTone({
+      frequency,
+      type: 'sine',
+      gain: 0.11 - (index * 0.015),
+      delay: 0.19 + (index * 0.055),
+      duration: 0.28,
+    }));
   }
 }
 

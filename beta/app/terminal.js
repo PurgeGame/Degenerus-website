@@ -12,15 +12,15 @@ import { refreshAfterAction } from './api.js';
 // -- Write Functions (require wallet) --
 
 /**
- * Burn BURNIE for the terminal decimator (always-open death bet).
+ * Burn FLIP for the terminal decimator (always-open death bet).
  * Burns go to the COIN contract (not GAME).
- * @param {string} amountStr - User-entered BURNIE amount (e.g. "5000")
+ * @param {string} amountStr - User-entered FLIP amount (e.g. "5000")
  * @returns {Promise<object>} Transaction receipt
  */
 export async function burnForTerminalDecimator(amountStr) {
   const amount = parseFloat(amountStr);
   if (!amount || amount < parseFloat(DECIMATOR.MIN_BURN)) {
-    throw new Error('Minimum burn is 1,000 BURNIE');
+    throw new Error('Minimum burn is 1,000 FLIP');
   }
 
   const playerAddress = get('player.address');

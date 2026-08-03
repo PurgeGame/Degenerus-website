@@ -9,7 +9,7 @@ import {
   claimDecimatorJackpot,
 } from '../app/decimator.js';
 import { fetchPlayerData } from '../app/api.js';
-import { formatBurnie, formatEth } from '../app/utils.js';
+import { formatFlip, formatEth } from '../app/utils.js';
 import { DECIMATOR } from '../app/constants.js';
 
 class DecimatorPanel extends HTMLElement {
@@ -39,17 +39,17 @@ class DecimatorPanel extends HTMLElement {
           </div>
           <div class="stat">
             <div class="stat-label">Your Burns</div>
-            <div class="stat-value" data-bind="burn-total">0 BURNIE</div>
+            <div class="stat-value" data-bind="burn-total">0 FLIP</div>
           </div>
         </div>
 
         <div class="decimator-burn-section">
-          <label class="decimator-label">Burn BURNIE</label>
+          <label class="decimator-label">Burn FLIP</label>
           <div class="decimator-input-row">
             <input type="number" class="decimator-input" min="1000" step="1000" placeholder="Min 1,000" data-bind="burn-input">
             <button class="btn-primary decimator-burn-btn" data-action="burn" disabled>BURN</button>
           </div>
-          <span class="decimator-hint">Min: 1,000 BURNIE. Lower bucket = better odds.</span>
+          <span class="decimator-hint">Min: 1,000 FLIP. Lower bucket = better odds.</span>
           <span class="decimator-error" data-bind="error" hidden></span>
         </div>
 
@@ -113,7 +113,7 @@ class DecimatorPanel extends HTMLElement {
     // Burn total display
     this.#unsubs.push(
       subscribe('decimator.playerBurnTotal', (total) => {
-        this.#setTextContent('burn-total', total && total !== '0' ? formatBurnie(total) + ' BURNIE' : '0 BURNIE');
+        this.#setTextContent('burn-total', total && total !== '0' ? formatFlip(total) + ' FLIP' : '0 FLIP');
       })
     );
 

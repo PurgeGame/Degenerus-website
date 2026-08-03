@@ -119,6 +119,20 @@ export function getEip1193() {
   return _eip1193;
 }
 
+/**
+ * Whether this browser currently exposes an installed EIP-1193/EIP-6963
+ * wallet. This never requests accounts and never opens a wallet prompt.
+ */
+export function hasInstalledWallet() {
+  const win = (typeof globalThis !== 'undefined') ? globalThis.window : null;
+  if (win?.ethereum) return true;
+  if (_announced.size > 0) return true;
+  // EIP-6963 providers answer this synchronously. Re-requesting also catches
+  // an extension that injected after this module's first discovery event.
+  try { win?.dispatchEvent?.(new Event('eip6963:requestProvider')); } catch (_e) { /* headless */ }
+  return _announced.size > 0;
+}
+
 // ---------------------------------------------------------------------------
 // Phase 63 D-01 — singleton EthereumProvider cached for page lifetime.
 // Issue #2930 mitigation: dual EthereumProvider instances on mobile redirect

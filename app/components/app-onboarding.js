@@ -1,9 +1,9 @@
 // /app/components/app-onboarding.js — one-time first-visit welcome.
 //
 // A new browser gets one concise choice before play: connect through the app's
-// existing EIP-6963/WalletConnect flow, or open the starter tutorial that uses
-// the live sDGNRS protocol wallet as a read-only example. The dismissal is
-// browser-local; no wallet address or tracking identifier is persisted.
+// existing EIP-6963/WalletConnect flow. The starter tutorial remains visible
+// as a coming-soon affordance while that flow is being finished. The dismissal
+// is browser-local; no wallet address or tracking identifier is persisted.
 
 import { get, subscribe } from '../app/store.js';
 import { connectWithPicker } from '../app/wallet.js';
@@ -43,11 +43,14 @@ export class AppOnboarding extends HTMLElement {
         <h2 id="onb-title">Ready to play?</h2>
         <p id="onb-copy" class="onb-copy">
           Connect a wallet to buy tickets, open rewards, and resolve your games.
-          Or take the quick tour using the public sDGNRS wallet first.
+          The quick guided tour is coming soon.
         </p>
         <div class="onb-actions">
           <button type="button" class="onb-connect" data-bind="onb-connect">Connect wallet</button>
-          <a class="onb-tutorial" data-bind="onb-tutorial" href="/learn/tutorial/">View tutorial</a>
+          <button type="button" class="onb-tutorial onb-tutorial--soon"
+                  data-bind="onb-tutorial" aria-disabled="true">
+            <span>View tutorial</span>
+          </button>
         </div>
         <button type="button" class="onb-later" data-bind="onb-dismiss">Not now</button>
       </section>
@@ -58,11 +61,6 @@ export class AppOnboarding extends HTMLElement {
     }
     const connect = this.querySelector('[data-bind="onb-connect"]');
     if (connect) connect.addEventListener('click', () => this.#connect());
-    const tutorial = this.querySelector('[data-bind="onb-tutorial"]');
-    if (tutorial) tutorial.addEventListener('click', () => {
-      rememberOnboarding();
-      this.#hide();
-    });
     this.addEventListener('keydown', (event) => {
       if (event?.key === 'Escape') this.dismiss();
     });

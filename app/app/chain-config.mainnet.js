@@ -63,6 +63,7 @@ export const CONTRACTS = {
 export const VOLUME_WINDOW = {
   anchor: 82_620,          // GameTimeLib.JACKPOT_RESET_TIME — 22:57 UTC
   period: 86_400,          // one real day
+  jackpotReadyDelay: 0,    // calibrate against the production keeper at cutover
   openSeconds: 3_780,      // 22:57 → 00:00 UTC
   creditDecayStart: 1_080, // 23:15 UTC
   creditDecayStep: 600,    // -5 FLIP per 10 minutes

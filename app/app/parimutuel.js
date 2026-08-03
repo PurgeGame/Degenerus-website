@@ -65,10 +65,21 @@ const PARIMUTUEL_ABI = [
 // iff the NEXT step's growth beats the LAST one's.
 const GAME_GROWTH_ABI = [
   'function growthState(uint24 round) external view returns (uint256 ratchetPrev, uint256 ratchetRound, uint256 ratchetNext, uint24 currentLevel, bool bettingOpen, uint8 phaseDay)',
+  'function jackpotPhase() external view returns (bool)',
+  'function jackpotCompressionTier() external view returns (uint8)',
+  'function purchaseInfo() external view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei)',
+  'function prizePoolTargetView() external view returns (uint256)',
   // Emitted from the mint module through GAME delegatecall. Summing these
   // after the previous volume seal reconstructs the live manual-ticket count
   // without reading the packed storage slot directly.
   'event EntriesBought(address indexed buyer, uint256 entryQuantityScaled, uint256 weiIn)',
+];
+
+// Eligibility lives in DegenerusQuests, not in either global market quote.
+// `mayBet` is the lifetime participation gate; `earnsReward` is deliberately
+// stricter and is the only flag the UI may use when advertising BET BONUS.
+const QUEST_MARKET_ABI = [
+  'function marketBetGates(address player, uint24 lvl) external view returns (bool mayBet, bool earnsReward)',
 ];
 
 /** Raw purchase units per whole ticket (4 entries x QTY_SCALE 100). */
@@ -100,15 +111,31 @@ export function __setContractFactoryForTest(fn) {
 // different contract from the parimutuel, so the book stub cannot serve it.
 let _gameFactory = null;
 
+// The quest gate is a third contract, so keep its test seam separate from the
+// Parimutuel and Game readers rather than making one fake impersonate all three.
+let _questFactory = null;
+
 /** Test-only: replace the GAME growth-state reader. */
 export function __setGameFactoryForTest(fn) { _gameFactory = fn; }
 
 /** Test-only: restore the real GAME reader. */
 export function __resetGameFactoryForTest() { _gameFactory = null; }
 
+/** Test-only: replace the QUESTS market-gate reader. */
+export function __setQuestFactoryForTest(fn) { _questFactory = fn; }
+
+/** Test-only: restore the real QUESTS market-gate reader. */
+export function __resetQuestFactoryForTest() { _questFactory = null; }
+
 function _gameContract() {
   if (_gameFactory) return _gameFactory();
   return new ethers.Contract(CONTRACTS.GAME, GAME_GROWTH_ABI, _readerProvider());
+}
+
+function _questContract() {
+  if (_questFactory) return _questFactory();
+  if (!CONTRACTS.QUESTS) return null;
+  return new ethers.Contract(CONTRACTS.QUESTS, QUEST_MARKET_ABI, _readerProvider());
 }
 
 /** Test-only: clear the injected factory; subsequent calls use the real path. */
@@ -265,18 +292,61 @@ export async function readCurrentTicketVolume({ afterBlock, toBlock } = {}) {
  * ratchetRound / ratchetPrev - 1.
  *
  * @param {{round: number}} args
- * @returns {Promise<{prev: bigint, current: bigint, next: bigint}|null>}
+ * @returns {Promise<{prev: bigint, current: bigint, next: bigint, currentLevel: number, bettingOpen: boolean, phaseDay: number}|null>}
  */
 export async function readGrowthRatchets({ round } = {}) {
   const r = Number(round);
-  if (!Number.isInteger(r) || r <= 0) return null;
+  // round 0 is the contract's intentional bootstrap/current-context read. It
+  // returns zero ratchet terms plus currentLevel/phase, which is exactly what
+  // the level-1 prize-pool thermometer needs in order to publish its separate
+  // 50 ETH bootstrap target.
+  if (!Number.isInteger(r) || r < 0) return null;
   try {
     const out = await _gameContract().growthState(r);
     return {
       prev: BigInt(out[0]),
       current: BigInt(out[1]),
       next: BigInt(out[2]),
+      // Keep the contract's level beside the values. The indexer can cross a
+      // level boundary a poll before the connected RPC (or vice versa), and a
+      // level-less prizePoolTargetView must never be labeled as the other
+      // level's target during that short disagreement.
+      currentLevel: Number(out[3]),
+      bettingOpen: Boolean(out[4]),
+      phaseDay: Number(out[5]),
     };
+  } catch (_e) {
+    return null;
+  }
+}
+
+/** Contract-authoritative phase flag, last-purchase latch, and jackpot cadence. */
+export async function readJackpotPhaseContext() {
+  try {
+    const contract = _gameContract();
+    let jackpot;
+    let lastPurchaseDay = null;
+    try {
+      const purchase = await contract.purchaseInfo();
+      jackpot = Boolean(purchase?.inJackpotPhase ?? purchase?.[1]);
+      lastPurchaseDay = Boolean(purchase?.lastPurchaseDay_ ?? purchase?.[2]);
+    } catch (_e) {
+      // Rolling-deploy fallback for an older reader/ABI.
+      jackpot = Boolean(await contract.jackpotPhase());
+    }
+    let compressedFlag = 0;
+    try { compressedFlag = Number(await contract.jackpotCompressionTier()); }
+    catch (_e) { /* old deploy / transient read: ordinary cadence is conservative */ }
+    return { jackpot, lastPurchaseDay, compressedFlag };
+  } catch (_e) {
+    return null;
+  }
+}
+
+/** Contract-exact next-pool threshold. Progression is strict: nextPool > target. */
+export async function readPrizePoolTarget() {
+  try {
+    return BigInt(await _gameContract().prizePoolTargetView());
   } catch (_e) {
     return null;
   }
@@ -358,6 +428,25 @@ export async function readVolumeMarket({ player, round } = {}) {
 /** FLIP the volume placement credit pays right now (decays through the window). */
 export async function readVolumeCredit() {
   return BigInt(await _readContract().volumeBetCredit());
+}
+
+/**
+ * Read the exact player-specific market gates used by both placement paths.
+ * A missing player/level is not eligible; callers intentionally fail closed
+ * for bonus presentation while the write's static call remains authoritative.
+ */
+export async function readMarketBetGates({ player, level } = {}) {
+  const lvl = Number(level);
+  if (!player || !Number.isInteger(lvl) || lvl <= 0) {
+    return { mayBet: false, earnsReward: false };
+  }
+  const contract = _questContract();
+  if (!contract) return { mayBet: false, earnsReward: false };
+  const result = await contract.marketBetGates(player, lvl);
+  return {
+    mayBet: Boolean(result?.mayBet ?? result?.[0]),
+    earnsReward: Boolean(result?.earnsReward ?? result?.[1]),
+  };
 }
 
 /**
@@ -457,7 +546,7 @@ export async function placeGrowthBet({ player, over } = {}) {
 
 /** VOLUME — bet today's manual ETH ticket volume beats the previous round's. */
 export async function placeVolumeBet({ player, over } = {}) {
-  return _placeBet('placeVolumeBet', 'Ticket-volume bet', { player, over });
+  return _placeBet('placeVolumeBet', 'Volume bet', { player, over });
 }
 
 async function _claim(method, action, { player, rounds } = {}) {
@@ -483,7 +572,7 @@ export async function claimGrowth({ player, rounds } = {}) {
 
 /** Volume payouts — a winner's share, or the stake back on a voided round. */
 export async function claimVolume({ player, rounds } = {}) {
-  return _claim('claimVolume', 'Claim ticket-volume bet', { player, rounds });
+  return _claim('claimVolume', 'Claim volume bet', { player, rounds });
 }
 
 /**

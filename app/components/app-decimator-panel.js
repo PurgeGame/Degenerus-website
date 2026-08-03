@@ -37,6 +37,7 @@ import { fetchJSON } from '../../beta/app/api.js';
 // (GameOverPossible / AfKingLockActive / NotApproved). decimator.js is a thin
 // re-export of lootbox.js's purchaseEth + purchaseCoin per Plan 62-01 D-01.
 import { purchaseEth, scaledTicketPriceWei } from '../app/decimator.js';
+import { readAfkingSubscription } from '../app/passes.js';
 // readAffiliateCode comes directly from lootbox.js — Plan 62-01's decimator.js
 // only re-exports the two purchase helpers per its minimal-surface design.
 // LOOTBOX_MIN_WEI: floor on the lootbox ETH leg. There is no per-box price —
@@ -45,6 +46,9 @@ import { purchaseEth, scaledTicketPriceWei } from '../app/decimator.js';
 import {
   readAffiliateCode, LOOTBOX_MIN_WEI, parseLootboxIdxFromReceipt,
   scaledFoilPackCostWei, parseFoilPackBoughtFromReceipt,
+  probeFoilPackAvailabilityState,
+  readPresaleBoxState, purchasePresaleBox, parsePresaleBoxBuyFromReceipt,
+  PRESALE_BOX_MIN_WEI,
   // A ticket is 4 entries; the contract takes entries and charges per entry, so
   // both the quote and the call go through these (see lootbox.js UNITS note).
   // claimableFirstPayment mirrors the click-time funding split for the bonus preview.
@@ -55,7 +59,7 @@ import {
 // Boxes that need a separate openBox call go to the app-root
 // <app-box-strip tray-only> controller via the tx-confirmed event's `boxes`
 // detail. It publishes the eventual open/replay action to the bottom tray.
-import { parseOpenLegsFromReceipt } from '../app/lootbox-legs.js';
+import { enrichLootboxBoonLegs, parseOpenLegsFromReceipt } from '../app/lootbox-legs.js';
 // Contract port of _activeTicketLevel — the level a buy routes to right now.
 import { activeTicketLevel } from '../app/active-level.js';
 // FLIP ticket buy (GAME.redeemFlip) — a second, window-gated payment path for
@@ -72,10 +76,7 @@ import { queueReveal } from './reveal-overlay.js';
 import { updateBalanceDisplay, resetBalanceDisplay } from '../app/balance-countup.js';
 // Ticket reveals are deferred until the traits roll — see app/app/pack-watch.js.
 import { recordPendingPack, recordLootboxTicketPacks } from '../app/pack-watch.js';
-import {
-  formatPurchaseAffiliateCode,
-  validatePurchaseAffiliateCode,
-} from '../app/affiliate.js';
+import { BASE_SEPOLIA_FAUCET_URL, isBaseSepolia } from './testnet-beta-banner.js';
 import './boon-product-indicator.js';
 
 // Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for the
@@ -93,9 +94,6 @@ const POLL_INTERVAL_MS = 30_000;       // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 const POST_CONFIRM_REFETCH_MS = 250;   // CF-06 — 250ms debounced refetch on tx confirm.
 const ERROR_AUTO_CLEAR_MS = 10_000;    // 10s — mirrors Phase 61 D-05 pattern.
 const FUNDING_PRIORITY_KEY = `purchase-funding-priority:${CHAIN.id}`;
-// Versioned markers retain receipt/indexer diagnostics across refreshes. They
-// are never allowed to gate the checkbox; only purchase.staticCall decides.
-const FOIL_OWNERSHIP_MARKER_VERSION = 3;
 
 function _readFundingPriority() {
   try { return localStorage.getItem(FUNDING_PRIORITY_KEY) === 'wallet' ? 'wallet' : 'claimable'; }
@@ -139,6 +137,7 @@ export function purchaseFlipCreditBreakdown({
   totalCostWei = 0n,
   mintCostWei = 0n,
   foilCostWei = 0n,
+  presaleCostWei = 0n,
   claimableWei = 0n,
   preferClaimable = true,
 } = {}) {
@@ -162,10 +161,12 @@ export function purchaseFlipCreditBreakdown({
   let total = 0n;
   let mintCost = 0n;
   let foilCost = 0n;
+  let presaleCost = 0n;
   try { price = BigInt(priceWei); } catch (_e) { price = 0n; }
   try { total = BigInt(totalCostWei); } catch (_e) { total = 0n; }
   try { mintCost = BigInt(mintCostWei); } catch (_e) { mintCost = 0n; }
   try { foilCost = BigInt(foilCostWei); } catch (_e) { foilCost = 0n; }
+  try { presaleCost = BigInt(presaleCostWei); } catch (_e) { presaleCost = 0n; }
 
   let rebuy = 0n;
   if (price > 0n && total > 0n) {
@@ -189,51 +190,36 @@ export function purchaseFlipCreditBreakdown({
       const foilClaimable = foilCost > foilFresh ? foilCost - foilFresh : 0n;
       rebuy = creditFor(mintClaimable) + creditFor(foilClaimable);
     } else {
-      rebuy = creditFor(payment.claimableUsedWei);
+      // A combined mint + presale-box call allocates fresh ETH to the mint leg
+      // first, then spends claimable on the rest. Only claimable consumed by
+      // the mint earns this recycle bonus; the presale box itself does not.
+      const freshForMint = payment.msgValueWei < mintCost
+        ? payment.msgValueWei
+        : mintCost;
+      const mintClaimable = mintCost > freshForMint ? mintCost - freshForMint : 0n;
+      rebuy = creditFor(presaleCost > 0n ? mintClaimable : payment.claimableUsedWei);
     }
   }
 
   return { purchase, bulk, rebuy, total: purchase + bulk + rebuy };
 }
 
-// `/player/:address/foil` reports the FoilPackBought row even before its four
-// ticket lines resolve. Keep that hint for diagnostics/cross-tab refreshes,
-// without using it to suppress a purchase.
-function _foilOwnedKey(address, level) {
-  return `foil-owned:${CHAIN.id}:${String(address || '').toLowerCase()}:${Number(level)}`;
-}
-
-function _locallyOwnsFoil(address, level) {
-  if (!address || !Number.isInteger(Number(level))) return false;
-  try {
-    const raw = localStorage.getItem(_foilOwnedKey(address, level));
-    const marker = raw ? JSON.parse(raw) : null;
-    // Ignore every legacy shape. Earlier builds could write a marker from a
-    // stale UI target; v3 validates the event/preflight level explicitly.
-    return marker?.version === FOIL_OWNERSHIP_MARKER_VERSION
-      && Number(marker?.level) === Number(level)
-      && (marker?.source === 'receipt' || marker?.source === 'contract');
-  } catch (_e) {
-    return false;
-  }
-}
-
-function _rememberFoilOwned(address, level, source = 'receipt') {
-  if (!address || !Number.isInteger(Number(level))) return;
-  try {
-    localStorage.setItem(_foilOwnedKey(address, level), JSON.stringify({
-      version: FOIL_OWNERSHIP_MARKER_VERSION,
-      source: source === 'contract' ? 'contract' : 'receipt',
-      level: Number(level),
-      at: Date.now(),
-    }));
-  } catch (_e) { /* private mode: the contract remains the duplicate guard */ }
-}
-
-function _forgetFoilOwned(address, level) {
-  if (!address || !Number.isInteger(Number(level))) return;
-  try { localStorage.removeItem(_foilOwnedKey(address, level)); }
-  catch (_e) { /* best effort */ }
+/** Maximum presale box that can be attached to the current draft purchase.
+ * The combined contract call mints first, so its newly earned 25% credit is
+ * immediately spendable by the box leg in the same transaction. */
+export function presaleBoxAvailableWei(state, mintCostWei = 0n) {
+  if (!state?.active) return 0n;
+  let credit = 0n;
+  let remaining = 0n;
+  let mintCost = 0n;
+  try { credit = BigInt(state.creditWei ?? 0n); } catch (_e) { credit = 0n; }
+  try { remaining = BigInt(state.remainingWei ?? 0n); } catch (_e) { remaining = 0n; }
+  try { mintCost = BigInt(mintCostWei ?? 0n); } catch (_e) { mintCost = 0n; }
+  if (credit < 0n) credit = 0n;
+  if (remaining <= 0n) return 0n;
+  if (mintCost < 0n) mintCost = 0n;
+  const available = credit + (mintCost / 4n);
+  return available < remaining ? available : remaining;
 }
 
 class AppDecimatorPanel extends HTMLElement {
@@ -257,8 +243,12 @@ class AppDecimatorPanel extends HTMLElement {
   #claimableKnown = false;
   #walletEthWei = null;       // Connected signer's native wallet balance.
   #walletEthAddress = null;
+  #afkingFundingWei = 0n;     // Acting player's spendable AFKing funding.
+  #afkingFundingAddress = null;
+  #afkingFundingKnown = false;
   #claimBusy = null;          // 'eth' while the footer claim is signing.
   #preferClaimable = true;    // ETH purchase funding preference; persisted per chain.
+  #claimableSpoilerOverrideKey = null;
   // Referral assignment is player-specific and permanent after the first buy.
   // null = unknown (keep the field hidden), false = first-buy field available,
   // true = already assigned (field stays out of the purchase flow).
@@ -266,10 +256,20 @@ class AppDecimatorPanel extends HTMLElement {
   #affiliateAddress = null;
   #affiliatePrefilledFor = null;
   #affiliateLocallyAssigned = new Set();
-  // --- Informational foil ownership hint for the acting buyer/target level.
-  //     It never gates the row; purchase.staticCall owns that decision.
+  // The purchase shortcut is an acquisition prompt, not an alternate route
+  // into an already-owned seat. null means the exact pass read is unavailable
+  // or still loading, so the safe rendering is hidden until a definitive
+  // no-seat answer arrives for this acting player.
+  #hasAfkingPass = null;
+  #afkingPassAddress = null;
+  // --- Exact zero-value purchase.staticCall result for the acting buyer.
   #foilStatus = null;
   #foilSeq = 0;
+  // Presale is a live contract latch. The same-tx purchase leg can add 25%
+  // credit before its attached box consumes it, so the rendered maximum also
+  // depends on the current ticket/lootbox draft.
+  #presaleState = null;
+  #presaleAddress = null;
   // --- FLIP ticket buy (GAME.redeemFlip). The internal latch is governed by
   //     public pool/target/lock views. This flag is window availability only,
   //     never player affordability; the write validates the entered amount.
@@ -348,19 +348,21 @@ class AppDecimatorPanel extends HTMLElement {
   // ---------------------------------------------------------------------
 
   #renderShell() {
-    // Condensed shell (user call): no title/blurb/level snapshot; the routed
-    // level and price share one header line. The lootbox leg is a single ETH-value input — there is no
+    // Condensed shell: the purchase desk gets one short, useful identity line
+    // without restoring the old blurb/level snapshot. The routed level and
+    // price remain in the header. The lootbox leg is a single ETH-value input — there is no
     // per-box price; purchase()'s lootBoxAmount is a free ETH amount with a
     // 0.01 ETH floor.
     this.innerHTML = `
       <div class="panel app-decimator-panel">
         <div class="panel-header">
           <div class="dec-header-title">
+            <h2 class="dec-purchase-heading">BUY IN</h2>
             <a class="dec-purchase-help" href="/learn/purchases/"
                aria-label="Learn about tickets, lootboxes, and foil packs"
                title="Learn about purchase options"><span aria-hidden="true">i</span></a>
           </div>
-          <span class="dec-price" data-bind="dec-price">Level — Price - —</span>
+          <span class="dec-price" data-bind="dec-price">Price - —</span>
         </div>
 
         <!-- Account-switcher (2026-07-16): mode 'combined' shows the summed
@@ -379,6 +381,12 @@ class AppDecimatorPanel extends HTMLElement {
               <boon-product-indicator product="purchase"></boon-product-indicator>
             </label>
             <span class="dec-stepper">
+              <span class="dec-quarter-stepper">
+                <button type="button" class="dec-quarter-step" data-dir="1"
+                        aria-label="Increase by 0.25 ticket" tabindex="-1">+.25</button>
+                <button type="button" class="dec-quarter-step" data-dir="-1"
+                        aria-label="Decrease by 0.25 ticket" tabindex="-1">−.25</button>
+              </span>
               <input type="number" name="dec-tickets" id="dec-tickets-input"
                      class="dec-input" min="0" step="0.25" value="0">
               <span class="dec-stepper-btns">
@@ -387,7 +395,7 @@ class AppDecimatorPanel extends HTMLElement {
               </span>
             </span>
           </span>
-          <span class="dec-input-group" data-bind="dec-lootbox-group">
+          <span class="dec-input-group dec-input-group--lootbox" data-bind="dec-lootbox-group">
             <label class="dec-input-label" for="dec-lootbox-eth-input">
               <span>Buy lootbox</span>
               <boon-product-indicator product="lootbox"></boon-product-indicator>
@@ -409,36 +417,49 @@ class AppDecimatorPanel extends HTMLElement {
           <!-- No data-write on the checkbox — panel convention keeps inputs
                enabled in view mode (the Buy CTA is the gated write control). -->
           <input type="checkbox" name="dec-foil" class="dec-foil-check" data-bind="dec-foil-check">
-          <span class="dec-foil-label">Add foil pack</span>
+          <span class="dec-foil-label">Foil pack (limit 1)</span>
           <span class="dec-foil-price" data-bind="dec-foil-price">—</span>
         </label>
 
-        <!-- First-purchase-only referral. The row stays hidden until the
-             player API explicitly reports no assigned referrer; this avoids
-             flashing or leaking the previous account's saved code. -->
-        <label class="dec-affiliate" data-bind="dec-affiliate-row" hidden>
-          <span class="dec-affiliate__label">Affiliate code</span>
-          <input type="text" name="dec-affiliate-code"
-                 class="dec-affiliate__input"
-                 autocomplete="off" autocapitalize="characters"
-                 placeholder="Code or 0x address">
-          <span class="dec-affiliate__hint">Optional · locked after your first purchase</span>
-        </label>
+        <!-- Live credit-gated presale. A non-zero amount attaches the box to
+             this normal purchase; with no other amount it uses the standalone
+             presale-box selector. The regular purchase earns 25% box credit
+             before the attached leg is checked on-chain. -->
+        <div class="dec-presale" data-bind="dec-presale-row" hidden>
+          <div class="dec-presale__label">
+            <strong>PRESALE BOX</strong>
+            <span data-bind="dec-presale-available">AVAILABLE —</span>
+          </div>
+          <div class="dec-presale__controls">
+            <input type="number" name="dec-presale-box-eth"
+                   min="0" step="0.01" value="0"
+                   inputmode="decimal" aria-label="Presale box amount in ETH">
+            <span>ETH</span>
+            <button type="button" data-bind="dec-presale-max">MAX</button>
+          </div>
+        </div>
 
         <!-- Stable half-and-half action rail. The bonus cell stays empty when
              the quote earns no FLIP, so changing quantities never resizes Buy. -->
         <div class="dec-buy-row">
           <div class="dec-flip-credit" data-bind="dec-flip-credit" hidden>
-            <img src="/badges-circular/flame_red.svg" alt="">
+            <img src="/whitepaper/flame-logo-split.svg" alt="">
             <span>BONUS</span>
             <strong data-bind="dec-flip-credit-total">+0 FLIP</strong>
           </div>
           <!-- CF-15: data-write triggers Phase 58 view-mode disable manager. -->
           <button type="button" class="dec-buy-cta" data-write data-bind="dec-buy-cta">
-            <span class="dec-buy-cta__action" data-bind="dec-buy-cta-action">Buy</span>
+            <span class="dec-buy-cta__action" data-bind="dec-buy-cta-action">Buy in</span>
             <strong class="dec-buy-cta__amount" data-bind="dec-buy-cta-amount" hidden></strong>
           </button>
         </div>
+
+        <button type="button" class="dec-afking-jump" data-bind="dec-afking-jump"
+                aria-controls="afking-passes" hidden>
+          <span class="dec-afking-jump__mark" aria-hidden="true">AFK</span>
+          <strong>BUY AFKING PASS</strong>
+          <span class="dec-afking-jump__arrow" aria-hidden="true">↓</span>
+        </button>
 
         <!-- Error display (T-58-18: textContent-only target) -->
         <div class="dec-error" data-bind="dec-error" hidden role="alert"></div>
@@ -457,7 +478,10 @@ class AppDecimatorPanel extends HTMLElement {
                      data-bind="dec-funds-claimable-first" checked>
               <span>USE FIRST</span>
             </label>
-            <strong class="dec-funds__value" data-bind="dec-funds-claimable">—</strong>
+            <strong class="dec-funds__value dec-funds__value--claimable">
+              <span class="dec-funds__number" data-bind="dec-funds-claimable">—</span>
+              <span class="dec-funds__unit" data-bind="dec-funds-claimable-unit">ETH</span>
+            </strong>
             <button type="button" class="dec-funds__claim" data-write
                     data-bind="dec-funds-claim" disabled>CLAIM</button>
           </div>
@@ -478,6 +502,9 @@ class AppDecimatorPanel extends HTMLElement {
               <span>USE FLIP</span>
             </label>
             <strong class="dec-funds__value" data-bind="dec-funds-wallet">—</strong>
+            <a class="dec-funds__faucet" data-bind="dec-funds-faucet"
+               href="${BASE_SEPOLIA_FAUCET_URL}" target="_blank"
+               rel="noopener noreferrer" hidden>GET PLAY MONEY</a>
           </div>
         </div>
       </div>
@@ -494,6 +521,15 @@ class AppDecimatorPanel extends HTMLElement {
     const claimBtn = this.querySelector('[data-bind="dec-funds-claim"]');
     if (claimBtn) {
       claimBtn.addEventListener('click', (e) => this.#onClaimFundsClick(e));
+    }
+    const claimableValue = this.querySelector('[data-bind="dec-funds-claimable"]');
+    if (claimableValue) {
+      claimableValue.addEventListener('click', (event) => this.#revealClaimableSpoiler(event));
+      claimableValue.addEventListener('keydown', (event) => this.#revealClaimableSpoiler(event));
+    }
+    const afkingJump = this.querySelector('[data-bind="dec-afking-jump"]');
+    if (afkingJump) {
+      afkingJump.addEventListener('click', () => this.#openAfkingPasses());
     }
     const walletFirst = this.querySelector('[data-bind="dec-funds-wallet-first"]');
     if (walletFirst) {
@@ -513,25 +549,72 @@ class AppDecimatorPanel extends HTMLElement {
           const tickets = this.querySelector('[name="dec-tickets"]');
           const current = Number(tickets?.value ?? 0);
           if (tickets && Number.isFinite(current) && current === 0) tickets.value = '1';
+          const presale = this.querySelector('[name="dec-presale-box-eth"]');
+          if (presale) presale.value = '0';
+        } else {
+          // Do not let a prior FLIP quote remain painted while the control is
+          // visibly back in ETH mode. #renderPurchaseMode immediately replaces
+          // this baseline with the value-accurate ETH total.
+          this.#setBuyLabel('Buy in');
         }
         this.#renderPurchaseMode();
       });
     }
     // Live total-cost label on the Buy button as quantities change.
-    for (const name of ['dec-tickets', 'dec-lootbox-eth']) {
+    for (const name of ['dec-tickets', 'dec-lootbox-eth', 'dec-presale-box-eth']) {
       const inp = this.querySelector(`[name="${name}"]`);
       if (inp && typeof inp.addEventListener === 'function') {
-        inp.addEventListener('input', () => this.#updateTotalLabel());
+        inp.addEventListener('input', () => {
+          if (name === 'dec-presale-box-eth' && Number(inp.value || 0) > 0) {
+            // The deployed combined selector has no foil flag. Selecting a
+            // presale box therefore exits the optional foil leg explicitly.
+            const foil = this.querySelector('[data-bind="dec-foil-check"]');
+            if (foil) foil.checked = false;
+          }
+          this.#updateTotalLabel();
+        });
       }
     }
     // Foil checkbox adds its leg to the total.
     const foilCheck = this.querySelector('[data-bind="dec-foil-check"]');
     if (foilCheck && typeof foilCheck.addEventListener === 'function') {
-      foilCheck.addEventListener('change', () => this.#updateTotalLabel());
+      foilCheck.addEventListener('change', () => {
+        if (foilCheck.checked) {
+          const presale = this.querySelector('[name="dec-presale-box-eth"]');
+          if (presale) presale.value = '0';
+        }
+        this.#updateTotalLabel();
+      });
     }
-    // ▲/▼ steppers — ticket buttons move one WHOLE ticket while typed values
-    // retain quarter-ticket precision. Lootbox buttons follow their dynamic
-    // one-ticket-price step. (querySelectorAll is guarded for fakeDOM.)
+    const presaleMax = this.querySelector('[data-bind="dec-presale-max"]');
+    if (presaleMax && typeof presaleMax.addEventListener === 'function') {
+      presaleMax.addEventListener('click', () => {
+        const input = this.querySelector('[name="dec-presale-box-eth"]');
+        if (!input) return;
+        const available = this.#presaleAvailableForDraft();
+        if (available < PRESALE_BOX_MIN_WEI) return;
+        input.value = formatPurchaseEth(available);
+        const foil = this.querySelector('[data-bind="dec-foil-check"]');
+        if (foil) foil.checked = false;
+        this.#updateTotalLabel();
+      });
+    }
+    // The dedicated left button exposes the quarter-ticket entry size; the
+    // familiar right-side arrows move whole tickets. Lootbox arrows retain
+    // their dynamic one-ticket-price step.
+    // (querySelectorAll is guarded for fakeDOM.)
+    const quarterSteps = typeof this.querySelectorAll === 'function'
+      ? this.querySelectorAll('.dec-quarter-step') : [];
+    for (const quarterStep of Array.from(quarterSteps)) {
+      if (!quarterStep || typeof quarterStep.addEventListener !== 'function') continue;
+      quarterStep.addEventListener('click', () => {
+        const input = this.querySelector('[name="dec-tickets"]');
+        const dir = Number(quarterStep.getAttribute?.('data-dir')) || 0;
+        if (!input || !dir) return;
+        this.#stepInput(input, dir, 0.25);
+        this.#updateTotalLabel();
+      });
+    }
     const steppers = typeof this.querySelectorAll === 'function'
       ? this.querySelectorAll('.dec-step') : [];
     for (const btn of Array.from(steppers)) {
@@ -547,12 +630,54 @@ class AppDecimatorPanel extends HTMLElement {
     }
   }
 
-  // Quest cards configure the relevant form but never submit it. This keeps a
-  // mission click useful and safe: the player sees the exact amount and still
-  // presses the normal purchase/redeem button themselves.
+  #openAfkingPasses() {
+    if (typeof document === 'undefined') return;
+    const passes = document.querySelector('#afking-passes')
+      || document.querySelector('.more-ways');
+    if (!passes) return;
+    passes.open = true;
+    if (typeof passes.setAttribute === 'function') passes.setAttribute('open', '');
+    const panel = typeof passes.querySelector === 'function'
+      ? passes.querySelector('app-pass-section')
+      : null;
+    const afking = panel && typeof panel.querySelector === 'function'
+      ? panel.querySelector('[data-bind="pass-afking"]')
+      : null;
+    const target = afking && !afking.hidden ? afking : (panel || passes);
+    const reveal = () => {
+      if (typeof target?.scrollIntoView === 'function') {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      const focusTarget = afking && !afking.hidden
+        ? afking.querySelector?.('[data-bind="pass-afking-save"]')
+        : null;
+      if (typeof focusTarget?.focus === 'function') focusTarget.focus({ preventScroll: true });
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(reveal);
+    else reveal();
+  }
+
+  // A bare quest activation only configures the form. The quest confirmation
+  // dialog adds submit:true after showing the exact action; that explicit
+  // confirmation is allowed to continue through the panel's normal guarded
+  // purchase/redeem handler.
   #wireQuestPresets() {
     if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
-    this.#questActivateListener = (event) => this.#applyQuestPreset(event?.detail);
+    this.#questActivateListener = (event) => {
+      void (async () => {
+        const detail = event?.detail;
+        const ready = await this.#applyQuestPreset(detail);
+        if (!detail?.submit || ![1, 4, 6, 9].includes(Number(detail?.questType))) return;
+        if (!ready) {
+          this.#renderError(Number(detail?.questType) === 4
+            ? 'Foil packs are not available right now.'
+            : 'FLIP redemption is not available right now.');
+          return;
+        }
+        if (Number(detail.questType) === 9) await this.#onBuyWithFlipClick();
+        else await this.#onBuyClick();
+      })();
+    };
     document.addEventListener('quest:activate', this.#questActivateListener);
   }
 
@@ -562,9 +687,9 @@ class AppDecimatorPanel extends HTMLElement {
     catch (_e) { try { input.dispatchEvent({ type, bubbles: true }); } catch (_e2) {} }
   }
 
-  #applyQuestPreset(detail) {
+  async #applyQuestPreset(detail) {
     const questType = Number(detail?.questType);
-    if (![1, 4, 6, 9].includes(questType)) return;
+    if (![1, 4, 6, 9].includes(questType)) return false;
 
     const tickets = this.querySelector('[name="dec-tickets"]');
     const lootbox = this.querySelector('[name="dec-lootbox-eth"]');
@@ -574,16 +699,29 @@ class AppDecimatorPanel extends HTMLElement {
     let target = 0n;
     try { target = BigInt(detail?.target ?? 0); } catch (_e) { target = 0n; }
     let focus = tickets;
+    let ready = true;
 
     if (questType === 1) {
-      // ETH mint quest: express the raw spend target as quarter-ticket entries.
-      let wanted = 1;
-      if (price != null && price > 0n && target > 0n) {
-        const entries = (target * BigInt(ENTRIES_PER_TICKET) + price - 1n) / price;
-        wanted = Math.max(0.25, Number(entries) / ENTRIES_PER_TICKET);
+      if (detail?.purchaseKind === 'lootbox') {
+        // The primary daily can be fulfilled by either product. Preserve the
+        // dialog's explicit choice and spend exactly the remaining ETH target,
+        // subject to the contract's ordinary lootbox floor.
+        let amount = target;
+        if (amount <= 0n && price != null) amount = price;
+        if (amount < LOOTBOX_MIN_WEI) amount = LOOTBOX_MIN_WEI;
+        if (tickets) tickets.value = '0';
+        if (lootbox) lootbox.value = formatPurchaseEth(amount);
+        focus = lootbox;
+      } else {
+        // Ticket choice: express the raw spend target as quarter-ticket entries.
+        let wanted = 1;
+        if (price != null && price > 0n && target > 0n) {
+          const entries = (target * BigInt(ENTRIES_PER_TICKET) + price - 1n) / price;
+          wanted = Math.max(0.25, Number(entries) / ENTRIES_PER_TICKET);
+        }
+        if (tickets) tickets.value = String(wanted);
+        if (lootbox) lootbox.value = '0';
       }
-      if (tickets) tickets.value = String(wanted);
-      if (lootbox) lootbox.value = '0';
       if (foil) foil.checked = false;
       if (flip) flip.checked = false;
       this.#renderPurchaseMode();
@@ -604,13 +742,25 @@ class AppDecimatorPanel extends HTMLElement {
       if (lootbox) lootbox.value = '0';
       if (flip) flip.checked = false;
       this.#renderPurchaseMode();
-      if (foil && !foil.disabled) foil.checked = true;
+      await this.#refreshFoilStatus();
+      if (foil) foil.checked = Boolean(this.#foilStatus?.available && !foil.disabled);
+      ready = Boolean(foil?.checked);
       focus = foil;
     } else if (questType === 9) {
-      if (tickets) tickets.value = String(target > 0n ? target : 1n);
+      await this.#refreshFlipBuyStatus();
+      const current = Number(tickets?.value ?? 0);
+      // A bare quest click preserves an existing non-zero draft. The quest
+      // action sheet, however, carries an explicit player-selected quantity and
+      // must configure exactly what its confirm button promised.
+      if (tickets && detail?.configuredAmount && target > 0n) {
+        tickets.value = target.toString();
+      } else if (tickets && (!Number.isFinite(current) || current <= 0)) {
+        tickets.value = '1';
+      }
       if (lootbox) lootbox.value = '0';
       if (foil) foil.checked = false;
       if (flip) flip.checked = this.#flipBuyOpen;
+      ready = Boolean(flip?.checked);
       this.#renderPurchaseMode();
     }
 
@@ -618,6 +768,7 @@ class AppDecimatorPanel extends HTMLElement {
     this.#updateTotalLabel();
     try { this.scrollIntoView?.({ behavior: 'smooth', block: 'center' }); } catch (_e) {}
     try { focus?.focus?.({ preventScroll: true }); } catch (_e) {}
+    return ready;
   }
 
   // Claimable changes as the jackpot settles, so showing it before the scratch
@@ -630,13 +781,9 @@ class AppDecimatorPanel extends HTMLElement {
     }
     if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
       const prefix = `spun_day_${CHAIN.id}_`;
-      const foilPrefix = `foil-owned:${CHAIN.id}:`;
       this.#storageListener = (event) => {
         if (typeof event?.key === 'string' && event.key.startsWith(prefix)) {
           this.#renderFundsFooter();
-        } else if (typeof event?.key === 'string' && event.key.startsWith(foilPrefix)) {
-          // Refresh the hint for diagnostics; it must not retire the checkbox.
-          this.#refreshFoilStatus();
         }
       };
       window.addEventListener('storage', this.#storageListener);
@@ -671,6 +818,69 @@ class AppDecimatorPanel extends HTMLElement {
     return Math.round(t * ENTRIES_PER_TICKET) / ENTRIES_PER_TICKET;
   }
 
+  #ethInputWei(name) {
+    const raw = this.querySelector(`[name="${name}"]`)?.value ?? '0';
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount <= 0) return 0n;
+    try { return BigInt(Math.round(amount * 1e18)) / ETH_DIVISOR; }
+    catch (_e) { return 0n; }
+  }
+
+  #draftMintCostWei() {
+    let total = this.#ethInputWei('dec-lootbox-eth');
+    const price = this.#ticketPriceWei();
+    const tickets = this.#ticketsWanted();
+    if (price != null && tickets > 0) total += ticketCostFromTickets(price, tickets);
+    return total;
+  }
+
+  #presaleAvailableForDraft(mintCostWei = this.#draftMintCostWei()) {
+    const buyer = getActingAddress();
+    const buyerKey = buyer ? String(buyer).toLowerCase() : null;
+    if (!buyerKey || this.#presaleAddress !== buyerKey) return 0n;
+    return presaleBoxAvailableWei(this.#presaleState, mintCostWei);
+  }
+
+  #presaleWantedWei() {
+    return this.#ethInputWei('dec-presale-box-eth');
+  }
+
+  #renderPresaleRow(mintCostWei = this.#draftMintCostWei()) {
+    const row = this.querySelector('[data-bind="dec-presale-row"]');
+    const input = this.querySelector('[name="dec-presale-box-eth"]');
+    const availableEl = this.querySelector('[data-bind="dec-presale-available"]');
+    const maxButton = this.querySelector('[data-bind="dec-presale-max"]');
+    if (!row || !input || !availableEl || !maxButton) return;
+
+    const buyer = getActingAddress();
+    const buyerKey = buyer ? String(buyer).toLowerCase() : null;
+    const live = Boolean(
+      buyerKey
+      && this.#presaleAddress === buyerKey
+      && this.#presaleState?.active
+      && BigInt(this.#presaleState?.remainingWei ?? 0n) > 0n
+      && get('ui.mode') !== 'combined'
+    );
+    row.hidden = !live;
+    if (!live) {
+      if (this.#presaleState && this.#presaleAddress === buyerKey && !this.#presaleState.active) {
+        input.value = '0';
+      }
+      return;
+    }
+
+    const available = this.#presaleAvailableForDraft(mintCostWei);
+    availableEl.textContent = `AVAILABLE ${formatPurchaseEth(available)} ETH`;
+    input.max = formatPurchaseEth(available);
+    input.setAttribute?.('max', input.max);
+    const unavailable = this.#flipModeEnabled() || this.#foilWanted();
+    input.disabled = unavailable;
+    maxButton.disabled = unavailable || available < PRESALE_BOX_MIN_WEI;
+    const wanted = this.#presaleWantedWei();
+    row.classList?.toggle('dec-presale--selected', wanted > 0n && !unavailable);
+    row.classList?.toggle('dec-presale--over-limit', wanted > available);
+  }
+
   #setFundingPriority(preferClaimable) {
     // USE FLIP and the two ETH funding-priority choices are mutually
     // exclusive. Choosing either USE FIRST control exits FLIP mode while
@@ -690,7 +900,7 @@ class AppDecimatorPanel extends HTMLElement {
     const actionEl = this.querySelector('[data-bind="dec-buy-cta-action"]');
     const amountEl = this.querySelector('[data-bind="dec-buy-cta-amount"]');
     if (!btn || !actionEl || !amountEl) return;
-    const actionText = String(action || 'Buy');
+    const actionText = String(action || 'Buy in');
     const amountText = String(amount || '');
     actionEl.textContent = actionText;
     amountEl.textContent = amountText;
@@ -732,6 +942,8 @@ class AppDecimatorPanel extends HTMLElement {
     if (boxFloat > 0) {
       try { mintCostWei += BigInt(Math.round(boxFloat * 1e18)) / ETH_DIVISOR; } catch (_e) { /* skip */ }
     }
+    this.#renderPresaleRow(mintCostWei);
+    const presaleCostWei = this.#presaleWantedWei();
     totalWei = mintCostWei;
     // Foil leg (additive): ten ticket prices at the same target level.
     const target = this.#targetLevel();
@@ -739,17 +951,19 @@ class AppDecimatorPanel extends HTMLElement {
       foilCostWei = scaledFoilPackCostWei(target);
       totalWei += foilCostWei;
     }
+    totalWei += presaleCostWei;
     let amount = '';
     if (totalWei > 0n) {
       try { amount = `${formatPurchaseEth(totalWei)} ETH`; } catch (_e) { amount = ''; }
     }
-    this.#setBuyLabel('Buy', amount);
+    this.#setBuyLabel(presaleCostWei > 0n ? 'Buy in + presale box' : 'Buy in', amount);
     this.#renderFlipCredit({
       tickets: tq,
       priceWei,
       totalCostWei: totalWei,
       mintCostWei,
       foilCostWei,
+      presaleCostWei,
       claimableWei: this.#claimableWei,
       preferClaimable: this.#preferClaimable,
     });
@@ -806,6 +1020,9 @@ class AppDecimatorPanel extends HTMLElement {
     // indexed value exists only to explain the expected wallet/claimable split.
     const acting = getActingAddress();
     const actingLower = acting ? String(acting).toLowerCase() : null;
+    // Retire a prior wallet's answer synchronously. For the same wallet and
+    // routed level, #refreshFoilStatus keeps the definitive result pinned.
+    this.#renderFoilRow();
     if (this.#affiliateAddress !== actingLower) {
       // Account/mode changed: hide immediately and never carry one player's
       // input or assignment state into another player's purchase form.
@@ -816,16 +1033,31 @@ class AppDecimatorPanel extends HTMLElement {
       if (input) input.value = '';
       this.#renderAffiliateInput();
     }
+    if (this.#afkingPassAddress !== actingLower) {
+      this.#afkingPassAddress = actingLower;
+      this.#hasAfkingPass = null;
+      this.#afkingFundingWei = 0n;
+      this.#afkingFundingAddress = actingLower;
+      this.#afkingFundingKnown = false;
+      this.#renderAfkingShortcut();
+    }
+    if (this.#presaleAddress !== actingLower) {
+      this.#presaleAddress = actingLower;
+      this.#presaleState = null;
+      this.#renderPresaleRow();
+    }
     const connected = get('connected.address');
     const connectedLower = connected ? String(connected).toLowerCase() : null;
     const provider = getProvider();
     const walletBalancePromise = connectedLower && typeof provider?.getBalance === 'function'
       ? provider.getBalance(connectedLower)
       : Promise.resolve(null);
-    const [gameResult, playerResult, walletResult] = await Promise.allSettled([
+    const [gameResult, playerResult, walletResult, afkingResult, presaleResult] = await Promise.allSettled([
       fetchJSON('/game/state'),
       actingLower ? fetchJSON(`/player/${actingLower}`) : Promise.resolve(null),
       walletBalancePromise,
+      actingLower ? readAfkingSubscription(actingLower) : Promise.resolve(null),
+      actingLower ? readPresaleBoxState({ player: actingLower }) : Promise.resolve(null),
     ]);
     if (signal.aborted) return;
 
@@ -865,7 +1097,37 @@ class AppDecimatorPanel extends HTMLElement {
       this.#walletEthAddress = connectedLower;
     }
 
+    if (afkingResult.status === 'fulfilled'
+      && afkingResult.value != null
+      && actingLower === this.#afkingPassAddress) {
+      const state = afkingResult.value;
+      // `canClaimSeat` is gone — seats auto-mint with the pass, so holding one IS the signal.
+      this.#hasAfkingPass = Boolean(state.hasToken || state.active);
+      try {
+        this.#afkingFundingWei = BigInt(state.fundingWei ?? 0);
+        this.#afkingFundingAddress = actingLower;
+        this.#afkingFundingKnown = true;
+      } catch (_e) {
+        this.#afkingFundingWei = 0n;
+        this.#afkingFundingAddress = actingLower;
+        this.#afkingFundingKnown = false;
+      }
+    } else {
+      // A failed pass snapshot must not leave a stale funding amount folded
+      // into the wallet total for the same player.
+      this.#afkingFundingWei = 0n;
+      this.#afkingFundingAddress = actingLower;
+      this.#afkingFundingKnown = false;
+    }
+
+    if (presaleResult.status === 'fulfilled'
+      && presaleResult.value != null
+      && this.#presaleAddress === actingLower) {
+      this.#presaleState = presaleResult.value;
+    }
+
     this.#renderAffiliateInput();
+    this.#renderAfkingShortcut();
     this.#renderSnapshot();
     // Foil ownership rides the same cycle (needs the fresh target level).
     this.#refreshFoilStatus();
@@ -903,11 +1165,23 @@ class AppDecimatorPanel extends HTMLElement {
     }
   }
 
+  #renderAfkingShortcut() {
+    const jump = this.querySelector('[data-bind="dec-afking-jump"]');
+    if (!jump) return;
+    const show = Boolean(
+      this.#afkingPassAddress
+      && this.#hasAfkingPass === false
+      && get('ui.mode') !== 'combined',
+    );
+    jump.hidden = !show;
+    if (show) jump.removeAttribute?.('hidden');
+    else jump.setAttribute?.('hidden', '');
+  }
+
   // ---------------------------------------------------------------------
-  // Foil pack status is informational only. Indexed ticket rows and local
-  // receipt markers have both proven capable of lagging/misrouting around a
-  // level transition, so neither may suppress the purchase control. The
-  // value-accurate purchase.staticCall remains the ownership authority.
+  // Foil pack availability comes from the exact deployed purchase route. The
+  // zero-value probe identifies a buyable route by DirectEthInsufficient; the
+  // amount-accurate submit preflight remains the race guard.
   // ---------------------------------------------------------------------
 
   async #refreshFoilStatus() {
@@ -915,41 +1189,47 @@ class AppDecimatorPanel extends HTMLElement {
     // connected operator instead can offer an already-owned pack and then
     // bounce at FoilAlreadyBought.
     const buyer = getActingAddress();
+    const buyerKey = buyer ? String(buyer).toLowerCase() : null;
     const target = this.#targetLevel();
-    if (!buyer || target == null) {
+    if (!buyerKey || target == null) {
       this.#foilStatus = null;
       this.#renderFoilRow();
       return this.#foilStatus;
     }
-    const receiptPendingIndex = _locallyOwnsFoil(buyer, target);
     const seq = ++this.#foilSeq;
+    const sameScope = this.#foilStatus != null
+      && this.#foilStatus.buyer === buyerKey
+      && Number(this.#foilStatus.level) === Number(target);
+    // A routine poll used to clear the definitive answer here, hiding the row
+    // until purchase.staticCall returned. Keep the last same-wallet/same-level
+    // answer pinned so slow RPCs and transient failures cannot make the foil
+    // control blink in and out. A wallet or routed-level change still clears it
+    // immediately, because carrying that answer across scopes would be wrong.
+    if (!sameScope) {
+      this.#foilStatus = null;
+      this.#renderFoilRow();
+    }
     try {
-      const data = await fetchJSON(`/player/${buyer}/foil?level=${target}`);
+      const probe = await probeFoilPackAvailabilityState({ buyer });
+      const available = probe.available === true;
       if (seq !== this.#foilSeq) return; // superseded (wallet/level change)
-      // Never attach a cached/stale answer for level N to the freshly routed
-      // level N+1. This exact mismatch was making a new level report the prior
-      // foil pack as already owned and also polluted the receipt grace cache.
-      const exactLevel = Number(data?.level) === Number(target);
-      if (typeof data?.present === 'boolean' && exactLevel) {
-        const owned = Boolean(data.present) || receiptPendingIndex;
-        this.#foilStatus = { level: target, owned };
-        if (!data.present && !receiptPendingIndex) _forgetFoilOwned(buyer, target);
-      } else {
-        // A stale/malformed indexer response is not evidence that the player
-        // owns this level's pack. Preserve an explicit unknown state so the
-        // UI can offer the leg and let purchase.staticCall be the authoritative
-        // one-per-level guard.
-        this.#foilStatus = receiptPendingIndex
-          ? { level: target, owned: true }
-          : { level: target, owned: null };
+      // A negative zero-value simulation can be temporary (RPC trouble or the
+      // brief StaleAdvance/liveness boundary). Once this exact buyer/level has
+      // been positively verified, do not make the checkbox blink out on that
+      // weaker signal. The amount-accurate click preflight remains the final
+      // race guard, while #markFoilOwned retires a confirmed local purchase
+      // immediately.
+      if (available || probe.definitive || !sameScope || this.#foilStatus?.available !== true) {
+        this.#foilStatus = { buyer: buyerKey, level: target, available: Boolean(available) };
       }
     } catch (_e) {
       if (seq !== this.#foilSeq) return;
-      // Preserve a recent receipt as a hint. The contract simulation
-      // immediately before the write remains the only duplicate gate.
-      this.#foilStatus = receiptPendingIndex
-        ? { level: target, owned: true }
-        : { level: target, owned: null };
+      // A failed refresh is not evidence that a previously buyable route
+      // became unavailable. Preserve the pinned answer for this scope; first
+      // load failures remain safely hidden.
+      if (!sameScope) {
+        this.#foilStatus = { buyer: buyerKey, level: target, available: false };
+      }
     }
     this.#renderFoilRow();
     return this.#foilStatus;
@@ -961,10 +1241,15 @@ class AppDecimatorPanel extends HTMLElement {
     const check = this.querySelector('[data-bind="dec-foil-check"]');
     const priceEl = this.querySelector('[data-bind="dec-foil-price"]');
     const target = this.#targetLevel();
-    // Do not gate this on #foilStatus. A stale `present: true` was preventing
-    // legitimate first-day/quest buys. Target routing + game-over are stable
-    // UI facts; ownership is checked by the contract preflight on click.
-    const available = Boolean(target != null && this.#gameState?.gameOver !== true);
+    const buyer = getActingAddress();
+    const buyerKey = buyer ? String(buyer).toLowerCase() : null;
+    const available = Boolean(
+      buyerKey
+      && this.#foilStatus?.buyer === buyerKey
+      && target != null
+      && Number(this.#foilStatus?.level) === Number(target)
+      && this.#foilStatus?.available === true
+    );
 
     if (priceEl) {
       let text = '—';
@@ -977,8 +1262,6 @@ class AppDecimatorPanel extends HTMLElement {
       check.disabled = !available || this.#flipModeEnabled();
       if (!available || this.#flipModeEnabled()) check.checked = false;
     }
-    // Ownership hints never hide the row; only the authoritative click-time
-    // simulation may reject a duplicate.
     row.hidden = !available;
     this.#updateTotalLabel();
   }
@@ -994,7 +1277,7 @@ class AppDecimatorPanel extends HTMLElement {
   // ---------------------------------------------------------------------
 
   async #refreshFlipBuyStatus() {
-    const buyer = get('connected.address');
+    const buyer = getActingAddress();
     const seq = ++this.#flipProbeSeq;
     if (!buyer) {
       this.#flipBuyOpen = false;
@@ -1004,17 +1287,9 @@ class AppDecimatorPanel extends HTMLElement {
     // Do not simulate a one-ticket burn here. Doing so hides Redeem FLIP
     // from players holding less than 1,000 FLIP even while the window is open.
     // The entered amount is simulated only when the player presses Buy.
-    // Jackpot phase itself is an open redemption window. The public pool
-    // predicate covers the earlier target-met purchase-day window before the
-    // phase flag flips, so either condition should surface the checkbox.
-    let open = Boolean(this.#gameState?.jackpotPhaseFlag);
-    if (!open) {
-      try {
-        open = await probeRedeemFlipWindow();
-      } catch (_e) {
-        open = false;
-      }
-    }
+    let open = false;
+    try { open = await probeRedeemFlipWindow(); }
+    catch (_e) { open = false; }
     if (seq !== this.#flipProbeSeq) return;  // superseded (wallet change / newer poll)
     this.#flipBuyOpen = open;
     this.#renderFlipBuyRow();
@@ -1079,7 +1354,9 @@ class AppDecimatorPanel extends HTMLElement {
     const walletLabel = this.querySelector('[data-bind="dec-funds-wallet-label"]');
     const walletValue = this.querySelector('[data-bind="dec-funds-wallet"]');
     const walletDisplay = this.querySelector('[data-bind="dec-funds-wallet-display"]');
+    const faucet = this.querySelector('[data-bind="dec-funds-faucet"]');
     const claimableValue = this.querySelector('[data-bind="dec-funds-claimable"]');
+    const claimableUnit = this.querySelector('[data-bind="dec-funds-claimable-unit"]');
     const claimableDisplay = this.querySelector('[data-bind="dec-funds-claimable-display"]');
     const claimBtn = this.querySelector('[data-bind="dec-funds-claim"]');
     const walletPriority = this.querySelector('[data-bind="dec-funds-wallet-priority"]');
@@ -1089,6 +1366,7 @@ class AppDecimatorPanel extends HTMLElement {
     if (!root || !walletLabel || !walletValue || !claimableValue || !claimBtn) return;
 
     walletLabel.textContent = 'WALLET';
+    if (claimableUnit) claimableUnit.textContent = 'ETH';
     if (walletPriority) walletPriority.hidden = false;
     if (claimablePriority) claimablePriority.hidden = false;
     const flipMode = this.#flipModeEnabled();
@@ -1109,34 +1387,58 @@ class AppDecimatorPanel extends HTMLElement {
     }
 
     const spoilerOpen = this.#claimableSpoilerOpen();
+    const displayOpen = spoilerOpen
+      || this.#claimableSpoilerOverrideKey === this.#claimableSpoilerKey();
+    const acting = getActingAddress();
+    const actingLower = acting ? String(acting).toLowerCase() : null;
+    const connected = get('connected.address');
+    const connectedLower = connected ? String(connected).toLowerCase() : null;
+    const walletKnown = this.#walletEthWei != null
+      && this.#walletEthAddress === connectedLower;
+    const fundingKnown = this.#afkingFundingKnown
+      && this.#afkingFundingAddress === actingLower;
+    const walletTotal = walletKnown && fundingKnown
+      ? BigInt(this.#walletEthWei) + BigInt(this.#afkingFundingWei)
+      : null;
     updateBalanceDisplay(walletValue, {
       container: walletDisplay,
-      scope: this.#walletEthAddress,
-      value: this.#walletEthWei,
-      format: (raw) => `${formatFundsEth(raw)} ETH`,
+      scope: `${this.#walletEthAddress || ''}:${this.#afkingFundingAddress || ''}`,
+      value: walletTotal,
+      format: (raw) => raw === 0n ? '- ETH' : `${formatFundsEth(raw)} ETH`,
       formatDelta: (delta) => `+${formatFundsEth(delta)} ETH`,
     });
+    const showFaucet = Boolean(isBaseSepolia(CHAIN) && walletTotal === 0n);
+    walletValue.hidden = showFaucet;
+    if (faucet) faucet.hidden = !showFaucet;
     updateBalanceDisplay(claimableValue, {
       container: claimableDisplay,
       scope: this.#claimableAddress,
       value: this.#claimableKnown ? claimable : null,
-      visible: spoilerOpen,
-      format: (raw) => `${formatFundsEth(raw)} ETH`,
+      visible: displayOpen,
+      format: (raw) => raw === 0n ? '-' : formatFundsEth(raw),
       formatDelta: (delta) => `+${formatFundsEth(delta)} ETH`,
-      hiddenText: '•••• ETH',
+      hiddenText: '••••',
     });
-    claimableDisplay?.classList?.toggle('dec-funds__display--spoiler', !spoilerOpen);
-    if (!spoilerOpen) {
-      claimableValue.setAttribute('aria-hidden', 'true');
+    claimableDisplay?.classList?.toggle('dec-funds__display--spoiler', !displayOpen);
+    if (!displayOpen) {
+      claimableValue.removeAttribute('aria-hidden');
+      claimableValue.setAttribute('role', 'button');
+      claimableValue.setAttribute('tabindex', '0');
+      claimableValue.setAttribute('title', 'Show this value anyway');
+      claimableValue.setAttribute('aria-label', 'Claimable balance hidden. Activate to show anyway.');
       claimableDisplay?.setAttribute(
         'aria-label',
-        'Claimable balance hidden until the main jackpot is revealed',
+        'Claimable balance hidden until the main jackpot is revealed. Activate the number to show anyway.',
       );
     } else {
       claimableValue.removeAttribute('aria-hidden');
+      claimableValue.removeAttribute('role');
+      claimableValue.removeAttribute('tabindex');
+      claimableValue.removeAttribute('title');
+      claimableValue.removeAttribute('aria-label');
       claimableDisplay?.removeAttribute('aria-label');
     }
-    root.classList?.toggle('has-claimable', spoilerOpen && claimable > 0n);
+    root.classList?.toggle('has-claimable', displayOpen && claimable > 0n);
     const busy = this.#claimBusy === 'eth';
     const claimReady = Boolean(
       spoilerOpen && !this.#busy && !this.#claimBusy && getActingAddress() && claimable > 0n,
@@ -1174,6 +1476,20 @@ class AppDecimatorPanel extends HTMLElement {
     } catch (_e) {
       return false;
     }
+  }
+
+  #claimableSpoilerKey() {
+    const day = get('app.lastDay')?.day ?? '';
+    const address = getActingAddress() || '';
+    return `${day}:${String(address).toLowerCase()}`;
+  }
+
+  #revealClaimableSpoiler(event) {
+    if (event?.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+    if (this.#claimableSpoilerOpen()) return;
+    try { event?.preventDefault?.(); } catch (_e) { /* fakeDOM */ }
+    this.#claimableSpoilerOverrideKey = this.#claimableSpoilerKey();
+    this.#renderFundsFooter();
   }
 
   async #onClaimFundsClick(e) {
@@ -1255,11 +1571,12 @@ class AppDecimatorPanel extends HTMLElement {
   #markFoilOwned(level, buyer = getActingAddress(), source = 'receipt') {
     const lvl = Number(level);
     if (!Number.isInteger(lvl) || lvl < 0) return;
-    _rememberFoilOwned(buyer, lvl, source);
-    this.#foilStatus = { level: lvl, owned: true };
+    const buyerKey = buyer ? String(buyer).toLowerCase() : null;
+    this.#foilStatus = { buyer: buyerKey, level: lvl, available: false };
     const check = this.querySelector('[data-bind="dec-foil-check"]');
     if (check) check.checked = false;
     this.#renderFoilRow();
+    void this.#refreshFoilStatus();
   }
 
   // The level a buy made RIGHT NOW routes to — gates the ticket price, the
@@ -1268,17 +1585,6 @@ class AppDecimatorPanel extends HTMLElement {
   // shorthand kept the foil row hidden past the point the contract would sell
   // the next level's pack. Returns null when /game/state hasn't loaded.
   #targetLevel() {
-    const foilQuest = get('ui.foilQuest');
-    const buyer = getActingAddress();
-    const questLevel = foilQuest?.level == null ? null : Number(foilQuest.level);
-    const questAddress = foilQuest?.address ? String(foilQuest.address).toLowerCase() : null;
-    if (foilQuest?.active === true
-      && foilQuest?.completed !== true
-      && Number.isInteger(questLevel)
-      && questLevel >= 0
-      && (!questAddress || (buyer && String(buyer).toLowerCase() === questAddress))) {
-      return questLevel;
-    }
     return activeTicketLevel(this.#gameState);
   }
 
@@ -1311,6 +1617,7 @@ class AppDecimatorPanel extends HTMLElement {
     // combined-mode cycle refreshes.
     const u3 = subscribe('ui.mode', () => {
       this.#renderCombinedSummary();
+      this.#renderAfkingShortcut();
       this.#runPollCycle();
     });
     const u4 = subscribe('app.playerCombined', (payload) => {
@@ -1321,10 +1628,9 @@ class AppDecimatorPanel extends HTMLElement {
     // the day-scoped key read by #claimableSpoilerOpen().
     const u5 = subscribe('app.lastDay', () => this.#renderFundsFooter());
     const u6 = subscribe('ui.foilQuest', () => {
-      // Quest definitions and game state arrive on independent polls. Drop an
-      // ownership answer keyed to the prior inferred level and immediately ask
-      // for the quest's exact purchase level.
-      this.#foilStatus = null;
+      // Quest definitions and game state arrive on independent polls. Refresh
+      // the routed contract probe, but never let quest metadata choose a level.
+      // Keep the last same-scope answer visible while that read is in flight.
       this.#renderSnapshot();
       this.#refreshFoilStatus();
     });
@@ -1375,19 +1681,18 @@ class AppDecimatorPanel extends HTMLElement {
     // Phase 64: price renders from /game/state into the header slot.
     const priceEl = this.querySelector('[data-bind="dec-price"]');
     if (!priceEl) return;
-    const target = this.#targetLevel();
     const priceWei = this.#ticketPriceWei();
-    let priceText = 'Level — Price - —';
+    let priceText = 'Price - —';
     if (this.#flipModeEnabled()) {
       try {
         const price = `${formatFlip(flipCostFromTickets(1).toString())} FLIP`;
-        priceText = target == null ? `Level — Price - ${price}` : `Level ${target} Price - ${price}`;
-      } catch (_e) { priceText = 'Level — Price - —'; }
+        priceText = `Price - ${price}`;
+      } catch (_e) { priceText = 'Price - —'; }
     } else if (priceWei != null) {
       try {
         const price = `${formatPurchaseEth(priceWei)} ETH`;
-        priceText = target == null ? `Level — Price - ${price}` : `Level ${target} Price - ${price}`;
-      } catch (_e) { priceText = 'Level — Price - —'; }
+        priceText = `Price - ${price}`;
+      } catch (_e) { priceText = 'Price - —'; }
     }
     priceEl.textContent = priceText;
     // The lootbox is a variable-size ETH leg. One arrow press should add or
@@ -1463,11 +1768,7 @@ class AppDecimatorPanel extends HTMLElement {
       // operator mode), so the deferred ticket reveal is recorded for the
       // account that receives the tickets.
       const buyer = getActingAddress();
-      let affiliateCode = readAffiliateCode(CHAIN.id, buyer);
-      if (this.#affiliateAssigned === false) {
-        const affiliateInput = this.querySelector('[name="dec-affiliate-code"]');
-        affiliateCode = await validatePurchaseAffiliateCode(affiliateInput?.value, buyer);
-      }
+      const affiliateCode = readAffiliateCode(CHAIN.id, buyer);
 
       // Phase 64: the funding helper needs the exact total cost before it can
       // spend claimable first and send only the wallet shortfall. Price comes
@@ -1542,12 +1843,17 @@ class AppDecimatorPanel extends HTMLElement {
           recordPendingPack({
             address: buyer,
             level: pendingPackLevel,
+            standardExpected: ticketQuantity > 0,
             foilExpected: Boolean(foilWanted || foilBought),
             expectedTickets: Math.floor(ticketQuantity) + ((foilWanted || foilBought) ? 4 : 0),
             sourceKey: receipt?.hash ? `purchase:${String(receipt.hash).toLowerCase()}` : null,
           }).catch(() => {});
         }
-        const autoLegs = parseOpenLegsFromReceipt(receipt, buyer);
+        let autoLegs = parseOpenLegsFromReceipt(receipt, buyer);
+        autoLegs = await enrichLootboxBoonLegs(autoLegs, {
+          player: buyer,
+          blockNumber: receipt?.blockNumber ?? null,
+        });
         if (autoLegs.length > 0) {
           const autoBoxIndex = autoLegs.find(
             (leg) => leg?.legType === 'opened' && leg.lootboxIndex != null,

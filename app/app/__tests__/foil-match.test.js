@@ -15,6 +15,7 @@ import {
   unpackWinSet,
   gradeLine,
   bestGrade,
+  claimableDrawGrades,
 } from '../foil-match.js';
 
 // Helper: build a trait byte from (quadrant, color, symbol).
@@ -124,5 +125,21 @@ describe('bestGrade (main vs bonus)', () => {
     const onlyBonus = bestGrade(line, null, pack(36, 65, 172, 201));
     assert.equal(onlyBonus.score, 8);
     assert.equal(onlyBonus.drawKind, 1);
+  });
+});
+
+describe('claimableDrawGrades (contract tuple parity)', () => {
+  test('keeps both main and bonus claims when the same line clears both', () => {
+    const line = [36, 65, 172, 201];
+    const main = pack(36, 65, 0xff, 0xfe);       // T4
+    const bonus = pack(36, 65, 172, 201);        // T8
+    const grades = claimableDrawGrades(line, main, bonus);
+    assert.deepEqual(grades.map((grade) => [grade.drawKind, grade.score]), [[0, 4], [1, 8]]);
+  });
+
+  test('omits a draw that is missing or below T4', () => {
+    const line = [36, 65, 172, 201];
+    const miss = pack(0xff, 0xfe, 0xfd, 0xfc);
+    assert.deepEqual(claimableDrawGrades(line, miss, null), []);
   });
 });

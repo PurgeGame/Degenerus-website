@@ -8,7 +8,7 @@ import { subscribe } from './store.js';
 const PHASES = {
   PURCHASE: ['purchase'],
   JACKPOT: ['jackpot'],
-  GAMEOVER: ['gameover'],
+  GAMEOVER: ['jackpot'],
 };
 
 let currentPhase = null;
@@ -28,9 +28,9 @@ export function initRouter() {
   });
 
   // Subscribe to GAMEOVER for disabling action buttons
-  subscribe('game.gameOver', (isGameOver) => {
-    if (isGameOver) disableAllActions();
-  });
+  // subscribe('game.gameOver', (isGameOver) => {
+  //   if (isGameOver) disableAllActions();
+  // });
 }
 
 function applyPhase(phase) {
@@ -42,7 +42,7 @@ function applyPhase(phase) {
     panel.hidden = !activeNames.includes(name);
   });
 
-  if (phase === 'GAMEOVER') disableAllActions();
+  // if (phase === 'GAMEOVER') disableAllActions();  // temporarily disabled so jackpot panel stays interactive
 }
 
 function disableAllActions() {

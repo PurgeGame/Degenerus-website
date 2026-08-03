@@ -30,6 +30,9 @@ import { VOLUME_WINDOW } from '../../app/chain-config.js';
 const TEST_ADDR = '0xab12000000000000000000000000000000000000';
 const LEVEL = 42;
 const FLIP = 10n ** 18n;
+// Base Sepolia stores native amounts at /1M scale; displayEth restores that
+// factor. Keep pool fixtures in raw contract units so ETH labels are realistic.
+const RAW_ETH = 10n ** 12n;
 
 // Day 100 of this deploy. Day indices are deploy-relative (GameTimeLib:34), so
 // the boundary has to be in the timestamp or the derived round comes out
@@ -240,10 +243,18 @@ function installContract({
   calls,
   growthBettors = [],
   volumeBettors = [],
+  growthReadErrors = [],
+  marketGate = { mayBet: true, earnsReward: true },
+  chainLevel = LEVEL,
+  poolTarget = null,
+  jackpotPhase = false,
+  compressedFlag = 0,
 } = {}) {
   const rows = growth;
+  const rejectedGrowthRounds = new Set(growthReadErrors.map(Number));
   const fake = {
     marketState: async (_player, round) => {
+      if (rejectedGrowthRounds.has(Number(round))) throw new Error('growth read unavailable');
       const r = growthRow(rows[Number(round)] || {});
       return [r.openRound, r.over, r.under, r.questReward, r.side, r.claimed, r.outcome, r.payout];
     },
@@ -302,13 +313,33 @@ function installContract({
     connect(_signer) { return this; },
   };
   pari.__setContractFactoryForTest(() => fake);
+  pari.__setQuestFactoryForTest(() => ({
+    marketBetGates: async () => [
+      Boolean(marketGate?.mayBet),
+      Boolean(marketGate?.earnsReward),
+    ],
+  }));
   // GAME growthState — a different contract, so its own seam.
   if (ratchets) {
     pari.__setGameFactoryForTest(() => ({
-      growthState: async () => [ratchets.prev, ratchets.current, ratchets.next ?? 0n, LEVEL, true, 0],
+      growthState: async () => [ratchets.prev, ratchets.current, ratchets.next ?? 0n, chainLevel, true, 0],
+      prizePoolTargetView: async () => {
+        if (poolTarget == null) throw new Error('no target reader');
+        return poolTarget;
+      },
+      jackpotPhase: async () => jackpotPhase,
+      jackpotCompressionTier: async () => compressedFlag,
     }));
   } else {
-    pari.__setGameFactoryForTest(() => ({ growthState: async () => { throw new Error('no reader'); } }));
+    pari.__setGameFactoryForTest(() => ({
+      growthState: async () => { throw new Error('no reader'); },
+      prizePoolTargetView: async () => {
+        if (poolTarget == null) throw new Error('no target reader');
+        return poolTarget;
+      },
+      jackpotPhase: async () => jackpotPhase,
+      jackpotCompressionTier: async () => compressedFlag,
+    }));
   }
   return fake;
 }
@@ -398,7 +429,9 @@ describe('app-parimutuel-panel', () => {
   });
 
   afterEach(() => {
+    for (const child of _docBody.children || []) child.disconnectedCallback?.();
     pari.__resetContractFactoryForTest();
+    pari.__resetQuestFactoryForTest();
     pari.__resetClockForTest();
     decimatorMod.__resetContractFactoryForTest();
     contractsMod.clearProvider();
@@ -407,11 +440,49 @@ describe('app-parimutuel-panel', () => {
   test('keeps its grid column with a closed-window message when neither book is open', async () => {
     installContract({ growth: { [LEVEL]: { openRound: 0 } } });
     const el = await mount();
+    assert.match(el.innerHTML,
+      /<h2><a class="pari-learn-link" href="\/learn\/side-bets\/">SIDE BETS<\/a><\/h2>/,
+      'the Side Bets heading links directly to its Learn page');
+    assert.match(APP_CSS,
+      /\.app-parimutuel > \.panel-header\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*place-items:\s*center/s,
+      'the Side Bets heading is centered at every viewport width');
     assert.equal(panelOf(el).hidden, false, 'permanent right-column panel remains mounted');
     assert.equal(growthCard(el).hidden, true);
     const empty = el.querySelector('[data-bind="pari-empty"]');
     assert.equal(empty.hidden, false);
     assert.match(empty.textContent, /Books are closed|No side-bet book/i);
+  });
+
+  test('does not publish a prize-pool target while the API and RPC disagree on level', async () => {
+    installContract({
+      growth: { [LEVEL]: { openRound: 0 } },
+      ratchets: { prev: 80n * RAW_ETH, current: 92n * RAW_ETH },
+      chainLevel: LEVEL - 1,
+      poolTarget: 123n * FLIP,
+    });
+    const el = await mount();
+    assert.equal(storeMod.get('app.poolBenchmarks'), undefined,
+      'a target with no level in its ABI is withheld until both data sources agree');
+    el.disconnectedCallback();
+  });
+
+  test('a stale openRound pointer does not render an empty GROWTH heading when its row cannot be read', async () => {
+    const staleOpenRound = LEVEL + 8;
+    installContract({
+      growth: {
+        [LEVEL]: { openRound: staleOpenRound },
+        [LEVEL - 1]: { openRound: staleOpenRound },
+        [LEVEL - 2]: { openRound: staleOpenRound },
+      },
+      growthReadErrors: [staleOpenRound, staleOpenRound - 1],
+    });
+    const el = await mount();
+    assert.equal(growthCard(el).hidden, true,
+      'a pointer without its authoritative market row stays out of the UI');
+    assert.doesNotMatch(el.textContent, /GROWTH BET · Level/,
+      'no orphaned level heading is painted');
+    assert.equal(el.querySelector('[data-bind="pari-empty"]').hidden, false);
+    el.disconnectedCallback();
   });
 
   test('an imminent volume round stays hidden when there is no open book or player position', async () => {
@@ -421,7 +492,7 @@ describe('app-parimutuel-panel', () => {
 
     const volume = el.querySelector('[data-bind="pari-volume"]');
     assert.equal(volume.hidden, true,
-      'a countdown alone does not render a VOLUME · Round card');
+      'a countdown alone does not render a VOLUME BET card');
     assert.equal(el.querySelector('[data-bind="pari-empty"]').hidden, false,
       'the compact closed-books state remains instead of a blank panel');
     el.disconnectedCallback();
@@ -457,18 +528,58 @@ describe('app-parimutuel-panel', () => {
       decimatorBurn: burn,
       connect() { return this; },
     }));
+    decimatorMod.__setDecimatorContextReaderForTest(async () => ({
+      activityScore: 235,
+      dayOneActive: true,
+      lastPurchaseDay: true,
+      futurePoolWei: 1_250_000_000_000n,
+      totalBurnWeight: 2_500n * FLIP,
+      totalRoundScore: 15_150_625n * FLIP,
+    }));
     installContract({ growth: { [LEVEL]: { openRound: 0 } } });
 
     const el = await mount();
     const card = decimatorCard(el);
     assert.equal(card.hidden, false);
-    assert.match(card.querySelector('.pari-book__title').textContent, /DECIMATOR · Level 43/);
-    assert.match(card.textContent, /Pool · 1\.25 ETH/);
-    assert.match(card.textContent, /Yours · 2,500 FLIP · Bucket 7/);
+    assert.equal(card.querySelector('.pari-book__title').textContent, 'DECIMATOR');
+    assert.equal(card.querySelector('.pari-decimator__prize').textContent, '0.125ETH');
+    assert.match(card.textContent, /Burn FLIP to enter\./);
+    assert.match(card.textContent, /CURRENT SCORE2,500/);
+    assert.match(card.textContent, /TOTAL SCORE15,150,625/);
+    assert.equal(
+      card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
+      'FOR 1,841 SCORE',
+    );
+    assert.doesNotMatch(card.textContent, /ACTIVITY|DAY 1|LAST DAY|TOTAL BURN WEIGHT/);
+    assert.doesNotMatch(card.textContent, /Level 43|BURN WINDOW OPEN|Minimum 1,000|Bucket 7/);
 
     const input = card.querySelector('[data-bind="pari-decimator-input"]');
     assert.equal(input.value, '1000');
+    const up = card.querySelector('[data-bind="pari-decimator-up"]');
+    const down = card.querySelector('[data-bind="pari-decimator-down"]');
+    assert.ok(up && down, 'the amount uses a dedicated two-part stepper');
+    assert.equal(up.getAttribute('aria-label'), 'Increase Decimator entry by 1,000 FLIP');
+    assert.equal(down.getAttribute('aria-label'), 'Decrease Decimator entry by 1,000 FLIP');
+    up.click();
+    assert.equal(input.value, '2000');
+    assert.equal(
+      card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
+      'FOR 3,682 SCORE',
+    );
+    down.click();
+    assert.equal(input.value, '1000');
+    down.click();
+    assert.equal(input.value, '1000', 'the down control clamps at the 1,000 FLIP minimum');
     input.value = '3000';
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(
+      card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
+      'FOR 5,523 SCORE',
+    );
+    assert.equal(card.querySelector('.pari-decimator__cta-action').textContent, 'BURN');
+    assert.match(APP_CSS,
+      /\.pari-decimator__input-wrap input::-(?:webkit-inner-spin-button|webkit-outer-spin-button)[\s\S]*?appearance:\s*none/s,
+      'native number arrows stay hidden behind the deliberate 1,000-FLIP rocker');
     card.querySelector('[data-bind="pari-decimator-cta"]').click();
     await flush();
 
@@ -491,12 +602,24 @@ describe('app-parimutuel-panel', () => {
     const el = await mount();
     const card = decimatorCard(el);
     assert.equal(card.hidden, false);
-    assert.match(card.querySelector('.pari-book__title').textContent, /DECIMATOR · Level 25/);
+    assert.equal(card.querySelector('.pari-book__title').textContent, 'DECIMATOR');
     el.disconnectedCallback();
   });
 
-  test('a Decimator quest click fills its FLIP target without entering', async () => {
+  test('a Decimator quest click presets safely and its confirmed action enters the exact amount', async () => {
     _gameState = { level: LEVEL, phase: 'JACKPOT', decWindowOpen: true };
+    const calls = [];
+    const burn = Object.assign(
+      async (...args) => {
+        calls.push(['send', ...args]);
+        return { hash: '0xdec-quest', wait: async () => ({ status: 1, logs: [] }) };
+      },
+      { staticCall: async (...args) => { calls.push(['static', ...args]); } },
+    );
+    decimatorMod.__setContractFactoryForTest(() => ({
+      decimatorBurn: burn,
+      connect() { return this; },
+    }));
     installContract({ growth: { [LEVEL]: { openRound: 0 } } });
     const el = await mount();
 
@@ -508,6 +631,22 @@ describe('app-parimutuel-panel', () => {
       decimatorCard(el).querySelector('[data-bind="pari-decimator-input"]').value,
       '2000',
     );
+    assert.deepEqual(calls, [], 'opening/configuring a quest alone never burns FLIP');
+
+    document.dispatchEvent({
+      type: 'quest:activate',
+      detail: {
+        questType: 5,
+        target: String(3_000n * FLIP),
+        variant: 'secondary',
+        submit: true,
+      },
+    });
+    await flush();
+    assert.deepEqual(calls, [
+      ['static', TEST_ADDR, 3_000n * FLIP],
+      ['send', TEST_ADDR, 3_000n * FLIP],
+    ]);
     el.disconnectedCallback();
   });
 
@@ -518,7 +657,7 @@ describe('app-parimutuel-panel', () => {
 
     const card = growthCard(el);
     assert.equal(card.hidden, false);
-    assert.match(card.querySelector('.pari-book__title').textContent, /GROWTH · Level 42/);
+    assert.match(card.querySelector('.pari-book__title').textContent, /GROWTH BET · Level 42/);
     assert.equal(card.querySelector('.pari-book__ask'), null,
       'the live book does not repeat the wager as a question');
     assert.equal(card.querySelector('.pari-today__label'), null,
@@ -534,8 +673,8 @@ describe('app-parimutuel-panel', () => {
     assert.equal(card.querySelectorAll('.pari-side__count').length, 0,
       'OVER/UNDER controls do not repeat the raw bet counts');
 
-    // No payout quote or repeated stake: the only live secondary information is
-    // the split below the two plain OVER / UNDER controls.
+    // No payout quote or repeated stake: the split and exact placement bonus
+    // are the only live secondary information.
     assert.equal(card.querySelectorAll('.pari-side__pays').length, 0, 'no payout quote');
     const bar = card.querySelector('.pari-split');
     assert.ok(bar, 'split bar rendered');
@@ -551,26 +690,50 @@ describe('app-parimutuel-panel', () => {
       ['75%', '25%'],
       'the split percentages appear once beside the bar',
     );
-    assert.equal(card.querySelector('.pari-book__foot'), null,
-      'quest-credit detail does not clutter the live book');
+    assert.equal(card.querySelector('.pari-prebet-bonus').textContent,
+      'BET: 1,000 FLIP\u00a0\u00a0\u00a0BONUS: +150 FLIP',
+      'the fixed bet and contract-quoted growth reward are visible before betting');
+    assert.match(
+      APP_CSS,
+      /\.pari-prebet-bonus\s*\{[^}]*justify-content:\s*center[^}]*font-size:\s*0\.55rem/s,
+      'the reward remains a compact line rather than another card');
+  });
+
+  test('an allowed player who cannot earn the growth reward sees no bet bonus', async () => {
+    installContract({
+      growth: { [LEVEL]: { openRound: LEVEL, over: 3n, under: 1n } },
+      marketGate: { mayBet: true, earnsReward: false },
+    });
+    const el = await mount();
+    const card = growthCard(el);
+    assert.deepEqual(
+      card.querySelectorAll('.pari-side__action').map((node) => node.textContent),
+      ['OVER', 'UNDER'],
+      'the weaker mayBet gate still permits the choices',
+    );
+    assert.equal(card.querySelector('.pari-prebet-bonus'), null,
+      'the global reward quote is not advertised to an ineligible wallet');
+    el.disconnectedCallback();
   });
 
   test('an open held growth position becomes one your-bet line above the live split', async () => {
     installContract({
       growth: { [LEVEL]: { openRound: LEVEL, over: 3n, under: 1n, side: 1 } },
-      ratchets: { prev: 80n * FLIP, current: 92n * FLIP },
+      ratchets: { prev: 80n * RAW_ETH, current: 92n * RAW_ETH },
     });
     const el = await mount();
     const card = growthCard(el);
     assert.equal(card.querySelectorAll('.pari-side__cta').length, 0, 'no second bet offered');
     assert.equal(card.querySelectorAll('.pari-side').length, 0,
       'the empty opposing cell is removed after committing');
-    assert.equal(card.querySelector('.pari-your-bet').textContent, 'YOUR BET:OVER 15% GROWTH');
+    assert.equal(card.querySelector('.pari-your-bet').textContent, 'YOUR BET:OVER 105.8 ETH');
     assert.deepEqual(
       card.querySelectorAll('.pari-split__label').map((n) => n.textContent),
       ['75%', '25%'],
     );
     assert.equal(card.querySelector('.pari-book__foot'), null);
+    assert.equal(card.querySelector('.pari-prebet-bonus'), null,
+      'the placement bonus disappears after the position is held');
     assert.equal(card.querySelectorAll('.pari-result--pending').length, 0,
       '"To win" stays hidden while this bet is still open');
     const [pending] = pendingActionsMod.getPendingActions();
@@ -597,13 +760,13 @@ describe('app-parimutuel-panel', () => {
           under: 3n,
         },
       },
-      ratchets: { prev: 80n * FLIP, current: 92n * FLIP },
+      ratchets: { prev: 80n * RAW_ETH, current: 92n * RAW_ETH },
     });
     const el = await mount();
     const card = growthCard(el);
     const held = card.querySelector('.pari-your-bet--closed');
     assert.ok(held, 'closed unresolved bet gets a compact held-position receipt');
-    assert.match(held.textContent, /YOUR BET:OVER 15% GROWTHTO WIN: 2,500 FLIP/);
+    assert.match(held.textContent, /YOUR BET:OVER 105.8 ETHTO WIN: 2,500 FLIP/);
     assert.equal(held.querySelector('.pari-your-bet__divider'), null,
       'the compact receipt has no decorative slash');
     assert.match(held.textContent, /2,500 FLIP/,
@@ -616,7 +779,7 @@ describe('app-parimutuel-panel', () => {
       'the old duplicate pending row is removed');
   });
 
-  test('a settled winner keeps the panel up with a claim for the total', async () => {
+  test('settled winners publish claims only to the shared bottom row', async () => {
     installContract({
       growth: {
         [LEVEL]: { openRound: 0 },
@@ -625,14 +788,19 @@ describe('app-parimutuel-panel', () => {
       },
     });
     const el = await mount();
-    assert.equal(panelOf(el).hidden, false, 'closed book, but money is waiting');
     const card = growthCard(el);
+    assert.equal(card.hidden, true,
+      'a settled-win-only book does not occupy the SIDE BETS area');
     assert.equal(card.querySelectorAll('.pari-result--win').length, 0,
       'settled history rows do not repeat old level outcomes');
-    assert.match(card.querySelector('.pari-claim-cta').textContent, /Claim 5,500 FLIP/);
+    assert.equal(card.querySelector('.pari-claim-cta'), null,
+      'claim controls are absent from the side-bet card');
     const pending = pendingActionsMod.getPendingActions();
     assert.equal(pending.length, 2);
     assert.ok(pending.every((item) => item.state === 'ready' && typeof item.run === 'function'));
+    assert.ok(pending.every((item) => item.kind === 'growth-claim'),
+      'settled growth payouts are routed into the shared bottom action tray');
+    assert.ok(pending.every((item) => item.shortLabel === 'Claim'));
   });
 
   test('a lost round remains revealable without a verbose history row', async () => {
@@ -684,8 +852,10 @@ describe('app-parimutuel-panel', () => {
       ],
       calls,
     });
-    const el = await mount();
-    growthCard(el).querySelector('.pari-claim-cta').click();
+    await mount();
+    const claim = pendingActionsMod.getPendingActions().find((item) => item.kind === 'growth-claim');
+    assert.ok(claim, 'the claim is available from the bottom action row');
+    await claim.run();
     await flush();
     assert.deepEqual(calls[0], ['claimRound', LEVEL - 1, [TEST_ADDR, other]]);
   });
@@ -699,7 +869,7 @@ describe('app-parimutuel-panel', () => {
       },
     };
     installContract({ growth, calls });
-    const el = await mount();
+    await mount();
 
     growth[LEVEL - 1] = {
       side: 1,
@@ -709,7 +879,9 @@ describe('app-parimutuel-panel', () => {
       over: 1n,
       under: 3n,
     };
-    growthCard(el).querySelector('.pari-claim-cta').click();
+    const claim = pendingActionsMod.getPendingActions().find((item) => item.kind === 'growth-claim');
+    assert.ok(claim);
+    await claim.run();
     await flush();
 
     assert.deepEqual(calls, [], 'fresh claimed=true state bypasses every write');
@@ -721,7 +893,63 @@ describe('app-parimutuel-panel', () => {
     assert.equal(pendingActionsMod.getPendingActions().length, 0);
   });
 
-  test('an open volume window renders the deploy-relative round and its countdown', async () => {
+  test('settled volume payouts also publish only to the shared bottom row', async () => {
+    installContract({
+      volume: {
+        [VOLUME_ROUND]: { openRound: 0 },
+        [VOLUME_ROUND - 1]: {
+          side: 2, outcome: 2, payout: 2_250n * FLIP, over: 1n, under: 2n,
+        },
+      },
+    });
+    const el = await mount();
+    const card = el.querySelector('[data-bind="pari-volume"]');
+    assert.equal(card.hidden, true);
+    assert.equal(card.querySelector('.pari-claim-cta'), null);
+    const claim = pendingActionsMod.getPendingActions().find((item) => item.kind === 'volume-claim');
+    assert.ok(claim, 'volume claim is included in the bottom action row');
+    assert.equal(claim.shortLabel, 'Claim');
+    assert.match(claim.detail, /2,250 FLIP ready/);
+  });
+
+  test('an open volume window uses the round-free VOLUME BET heading and its countdown', async () => {
+    pari.__setClockForTest(() => OPEN_AT);
+    installContract({
+      growth: { [LEVEL]: { openRound: 0 } },
+      volume: { [VOLUME_ROUND]: { openRound: VOLUME_ROUND, over: 4n, under: 4n } },
+      seals: { [VOLUME_ROUND - 1]: { total: 1200n, previous: 800n } },
+    });
+    const el = await mount();
+    const card = el.querySelector('[data-bind="pari-volume"]');
+    assert.equal(card.hidden, false);
+    // The round remains an internal contract key; it is not useful player UI.
+    assert.equal(card.querySelector('.pari-book__title').textContent, 'VOLUME BET');
+    assert.match(card.querySelector('[data-bind="pari-clock"]').textContent, /closes in 8:59/);
+    assert.deepEqual(
+      card.querySelectorAll('.pari-side__action').map((n) => n.textContent),
+      ['OVER 3 tickets', 'UNDER 3 tickets'],
+    );
+    assert.equal(card.querySelector('.pari-prebet-bonus').textContent,
+      'BET: 1,000 FLIP\u00a0\u00a0\u00a0BONUS: +25 FLIP',
+      'the fixed bet and current decaying volume credit are visible before betting');
+  });
+
+  test('volume credit is hidden when this player cannot earn it', async () => {
+    pari.__setClockForTest(() => OPEN_AT);
+    installContract({
+      growth: { [LEVEL]: { openRound: 0 } },
+      volume: { [VOLUME_ROUND]: { openRound: VOLUME_ROUND, over: 4n, under: 4n } },
+      seals: { [VOLUME_ROUND - 1]: { total: 1200n, previous: 800n } },
+      marketGate: { mayBet: true, earnsReward: false },
+    });
+    const el = await mount();
+    const card = el.querySelector('[data-bind="pari-volume"]');
+    assert.equal(card.hidden, false);
+    assert.equal(card.querySelector('.pari-prebet-bonus'), null);
+    el.disconnectedCallback();
+  });
+
+  test('an open volume book stays hidden until its adjacent ticket seal arrives', async () => {
     pari.__setClockForTest(() => OPEN_AT);
     installContract({
       growth: { [LEVEL]: { openRound: 0 } },
@@ -729,15 +957,13 @@ describe('app-parimutuel-panel', () => {
     });
     const el = await mount();
     const card = el.querySelector('[data-bind="pari-volume"]');
-    assert.equal(card.hidden, false);
-    // Deploy-relative, NOT the epoch-scale day boundary — an absolute index
-    // would read ~2.97M here and would query rounds nobody ever bet on.
-    assert.match(card.querySelector('.pari-book__title').textContent, /Round 101$/);
-    assert.match(card.querySelector('[data-bind="pari-clock"]').textContent, /closes in 8:59/);
-    assert.deepEqual(
-      card.querySelectorAll('.pari-side__action').map((n) => n.textContent),
-      ['OVER', 'UNDER'],
-    );
+    assert.equal(card.hidden, true,
+      'the player never sees an unlabeled ticket OVER / UNDER market');
+    assert.equal(card.querySelectorAll('.pari-side__cta').length, 0);
+    assert.equal(el.querySelector('[data-bind="pari-empty"]').hidden, false);
+    assert.match(el.querySelector('[data-bind="pari-empty"]').textContent,
+      /Loading yesterday’s ticket total/);
+    el.disconnectedCallback();
   });
 
   // User call 2026-07-29: each book shows the number the round has to beat, and
@@ -749,20 +975,20 @@ describe('app-parimutuel-panel', () => {
         [LEVEL - 1]: { outcome: 1 },
       },
       // 80 → 92 ETH of pool = +15%.
-      ratchets: { prev: 80n * 10n ** 18n, current: 92n * 10n ** 18n },
+      ratchets: { prev: 80n * RAW_ETH, current: 92n * RAW_ETH },
     });
     const el = await mount();
     const bench = growthCard(el).querySelector('.pari-book__bench');
     assert.ok(bench, 'benchmark line rendered');
-    assert.equal(bench.textContent, 'Last level: 15%');
+    assert.equal(bench.textContent, 'Last level: 15% · Target: 105.8 ETH');
     const offered = bench.querySelector('.pari-book__offered');
     assert.equal(offered.textContent, '15%', 'only the offered result is isolated');
     assert.match(offered.className, /pari-book__offered--won/, 'prior OVER win is green');
     assert.doesNotMatch(bench.className, /--won|--lost/, 'surrounding explanation stays neutral');
     assert.deepEqual(
       growthCard(el).querySelectorAll('.pari-side__action').map((n) => n.textContent),
-      ['OVER 15%', 'UNDER 15%'],
-      'both growth choices carry the offered line',
+      ['OVER 105.8 ETH', 'UNDER 105.8 ETH'],
+      'both growth choices carry the actionable ETH threshold',
     );
   });
 
@@ -772,11 +998,11 @@ describe('app-parimutuel-panel', () => {
         [LEVEL]: { openRound: LEVEL, over: 1n, under: 1n },
         [LEVEL - 1]: { outcome: 2 },
       },
-      ratchets: { prev: 100n * 10n ** 18n, current: 90n * 10n ** 18n },
+      ratchets: { prev: 100n * RAW_ETH, current: 90n * RAW_ETH },
     });
     const el = await mount();
     const bench = growthCard(el).querySelector('.pari-book__bench');
-    assert.equal(bench.textContent, 'Last level: -10%');
+    assert.equal(bench.textContent, 'Last level: -10% · Target: 81 ETH');
     const offered = bench.querySelector('.pari-book__offered');
     assert.equal(offered.textContent, '-10%');
     assert.match(offered.className, /pari-book__offered--lost/, 'prior UNDER result is red');
@@ -797,12 +1023,14 @@ describe('app-parimutuel-panel', () => {
     const card = el.querySelector('[data-bind="pari-volume"]');
     const bench = card.querySelector('.pari-book__bench');
     assert.ok(bench, 'benchmark line rendered');
-    assert.equal(bench.textContent, 'Yesterday: 3 tickets');
+    assert.equal(bench.textContent, 'Yesterday: 3 tickets bought');
     assert.equal(card.querySelector('.pari-today__label').parentElement,
-      card.querySelector('.pari-book__context'),
-      'TODAY is moved up beside Yesterday so the choices span the card');
+      card.querySelector('.pari-today'),
+      'TODAY owns a centered line immediately below Yesterday');
+    assert.equal(card.querySelector('.pari-book__context').querySelector('.pari-today__label'), null,
+      'TODAY is no longer squeezed onto Yesterday’s line');
     const offered = bench.querySelector('.pari-book__offered');
-    assert.equal(offered.textContent, '3 tickets', 'the new bet’s offered number is isolated');
+    assert.equal(offered.textContent, '3 tickets bought', 'the new bet’s offered number is isolated');
     assert.match(offered.className, /pari-book__offered--won/, 'last day’s OVER win is green');
     // …and the split reads off the bet counts, 2 v 6.
     assert.deepEqual(
@@ -818,6 +1046,16 @@ describe('app-parimutuel-panel', () => {
       APP_CSS,
       /\.pari-side__action\s*\{[^}]*overflow-wrap:\s*anywhere[^}]*white-space:\s*normal/s,
       'long offered values wrap inside their equal-width choice instead of clipping',
+    );
+    assert.match(
+      APP_CSS,
+      /\.pari-today__label\s*\{[^}]*width:\s*100%[^}]*text-align:\s*center/s,
+      'TODAY is centered across its dedicated row',
+    );
+    assert.match(
+      APP_CSS,
+      /\.pari-today--volume \.pari-side__cta\s*\{[^}]*min-height:\s*1\.9rem[^}]*padding:\s*0\.2rem 0\.32rem/s,
+      'ticket choice buttons are slightly shorter without shrinking their width',
     );
     assert.deepEqual(
       card.querySelectorAll('.pari-split__label').map((n) => n.textContent),
@@ -845,7 +1083,7 @@ describe('app-parimutuel-panel', () => {
     const el = await mount();
     const card = el.querySelector('[data-bind="pari-volume"]');
     const offered = card.querySelector('.pari-book__offered');
-    assert.equal(offered.textContent, '4 tickets');
+    assert.equal(offered.textContent, '4 tickets bought');
     assert.match(offered.className, /pari-book__offered--lost/,
       'the immediately preceding UNDER result is fetched and painted red');
     assert.deepEqual(
@@ -856,7 +1094,7 @@ describe('app-parimutuel-panel', () => {
     el.disconnectedCallback();
   });
 
-  test('a held volume position keeps its labelled ticket target visible', async () => {
+  test('a held volume position replaces both choices with one labelled receipt', async () => {
     pari.__setClockForTest(() => OPEN_AT);
     installContract({
       growth: { [LEVEL]: { openRound: 0 } },
@@ -874,13 +1112,53 @@ describe('app-parimutuel-panel', () => {
 
     const el = await mount();
     const card = el.querySelector('[data-bind="pari-volume"]');
-    assert.deepEqual(
-      card.querySelectorAll('.pari-side__target').map((node) => node.textContent),
-      ['3 tickets', '3 tickets'],
-    );
-    const under = card.querySelectorAll('.pari-side')
-      .find((node) => String(node.className).split(/\s+/).includes('pari-side--under'));
-    assert.equal(under?.querySelector('.pari-side__held')?.textContent, 'YOUR BET');
+    assert.equal(card.querySelector('.pari-book__title').textContent, 'VOLUME BET');
+    assert.equal(card.querySelector('.pari-book__context'), null,
+      'Yesterday disappears as soon as the player has a position');
+    assert.equal(card.querySelector('.pari-today__label'), null,
+      'TODAY disappears as soon as the player has a position');
+    assert.equal(card.querySelectorAll('.pari-side__cta').length, 0,
+      'submitted ticket bets no longer look actionable');
+    assert.equal(card.querySelectorAll('.pari-side').length, 0,
+      'the unused opposite choice is removed entirely');
+    const receipt = card.querySelector('.pari-your-bet--volume');
+    assert.ok(receipt?.className.includes('pari-your-bet--under'));
+    assert.equal(receipt.textContent, 'YOUR BET:UNDER 3 tickets');
+    el.disconnectedCallback();
+  });
+
+  test('a closed volume position keeps its pick beside the to-win amount', async () => {
+    pari.__setClockForTest(() => CLOSED_AT);
+    installContract({
+      growth: { [LEVEL]: { openRound: 0 } },
+      volume: {
+        [VOLUME_ROUND]: {
+          openRound: 0,
+          over: 2n,
+          under: 3n,
+          side: 2,
+          outcome: 0,
+          payout: 0n,
+        },
+      },
+      // Round 101 was offered round 100's three-ticket total.
+      seals: { [VOLUME_ROUND - 1]: { total: 1200n, previous: 800n } },
+    });
+
+    const el = await mount();
+    const card = el.querySelector('[data-bind="pari-volume"]');
+    const receipt = card.querySelector('.pari-your-bet--volume.pari-your-bet--closed')
+      || card.querySelector('.pari-your-bet--closed');
+    assert.ok(receipt, 'the unresolved closed wager stays visible');
+    assert.match(receipt.textContent, /YOUR BET:UNDER 3 tickets/,
+      'the exact side and ticket line survive market close');
+    assert.match(receipt.textContent, /TO WIN: 1,666 FLIP/);
+    const pendingAction = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === `pari:volume:${VOLUME_ROUND}`);
+    assert.equal(pendingAction?.label, 'VOLUME BET');
+    assert.equal(pendingAction?.shortLabel, 'VOLUME BET');
+    assert.doesNotMatch(`${pendingAction?.label}${pendingAction?.detail}`, /Round\s+\d+/i,
+      'the pending surface keeps the contract round internal too');
     el.disconnectedCallback();
   });
 
@@ -899,9 +1177,9 @@ describe('app-parimutuel-panel', () => {
     });
     const el = await mount();
     const card = el.querySelector('[data-bind="pari-volume"]');
-    assert.match(card.querySelector('.pari-book__title').textContent, /Round 101$/);
-    assert.equal(card.querySelector('.pari-book__bench'), null,
-      'the UI waits for round 100 instead of substituting round 99');
+    assert.equal(card.hidden, true,
+      'the whole ticket book waits for round 100 instead of substituting round 99');
+    assert.equal(card.querySelector('.pari-book__bench'), null);
     assert.equal(card.querySelector('.pari-thermometer'), null,
       'live progress never targets the stale round-99 line');
   });

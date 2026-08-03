@@ -6,6 +6,7 @@ import {
   publishPendingActions,
   clearPendingActions,
   getPendingActions,
+  pendingSourceHasPublished,
   subscribePendingActions,
   __resetPendingActionsForTest,
 } from '../pending-actions.js';
@@ -13,7 +14,7 @@ import {
 describe('pending-actions registry', () => {
   beforeEach(() => __resetPendingActionsForTest());
 
-  test('providers replace only their own rows and ready items sort first', () => {
+  test('providers replace only their own rows and stay in protocol chronology across states', () => {
     publishPendingActions('boxes', [
       { id: 'box:1', label: 'Box 1', state: 'waiting', order: 20 },
       { id: 'box:2', label: 'Box 2', state: 'ready', run() {}, order: 20 },
@@ -23,11 +24,26 @@ describe('pending-actions registry', () => {
     ]);
     assert.deepEqual(
       getPendingActions().map((item) => [item.id, item.state]),
-      [['box:2', 'ready'], ['pari:7', 'busy'], ['box:1', 'waiting']],
+      [['box:1', 'waiting'], ['box:2', 'ready'], ['pari:7', 'busy']],
     );
 
     publishPendingActions('boxes', [{ id: 'box:3', label: 'Box 3', state: 'waiting' }]);
     assert.deepEqual(getPendingActions().map((item) => item.id), ['pari:7', 'box:3']);
+  });
+
+  test('explicit chronology orders siblings and readiness changes do not reshuffle them', () => {
+    const run = () => {};
+    publishPendingActions('boxes', [
+      { id: 'new', label: 'New', state: 'ready', order: 20, chronology: 200, run },
+      { id: 'old', label: 'Old', state: 'waiting', order: 20, chronology: 100 },
+    ]);
+    assert.deepEqual(getPendingActions().map((item) => item.id), ['old', 'new']);
+
+    publishPendingActions('boxes', [
+      { id: 'new', label: 'New', state: 'waiting', order: 20, chronology: 200 },
+      { id: 'old', label: 'Old', state: 'ready', order: 20, chronology: 100, run },
+    ]);
+    assert.deepEqual(getPendingActions().map((item) => item.id), ['old', 'new']);
   });
 
   test('only a ready item keeps its callback', () => {
@@ -49,5 +65,12 @@ describe('pending-actions registry', () => {
     unsub();
     publishPendingActions('a', [{ id: 'two', label: 'Two' }]);
     assert.deepEqual(seen, [[], ['one'], []]);
+  });
+
+  test('distinguishes an explicit empty provider refresh from not-yet-loaded', () => {
+    assert.equal(pendingSourceHasPublished('lootboxes'), false);
+    publishPendingActions('lootboxes', []);
+    assert.equal(pendingSourceHasPublished('lootboxes'), true);
+    assert.deepEqual(getPendingActions(), []);
   });
 });

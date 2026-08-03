@@ -1,0 +1,3342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Degenerus /app/ — Compact Sketch (2026-05-13)</title>
+  <style>
+    :root {
+      --bg: #0d0f12;
+      --surface: #16191e;
+      --surface-2: #1d2127;
+      --border: #2a2f37;
+      --border-hi: #3b414b;
+      --text: #e6e8eb;
+      --muted: #9aa1a8;
+      --faint: #6b727a;
+      --accent: #f6a623;
+      --win: #3fb56b;
+      --loss: #d04848;
+      --gold: #d4a000;
+      --silver: #aeb8c0;
+      --paper: #d9d9d9;
+      --paper-line: #8a8d8f;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    body { max-width: 540px; margin: 0 auto; padding: 0 12px 80px; }
+    h1, h2, h3 { margin: 0; font-weight: 600; }
+    button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+    small { color: var(--faint); font-size: 11px; }
+    .label { color: var(--muted); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+    /* === TOP STATUS BAR ============================================== */
+    .topbar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 50; }
+    .player-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border-hi); border-radius: 999px; padding: 5px 10px; font-size: 12.5px; font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--text); }
+    .player-chip--select { appearance: none; -webkit-appearance: none; padding-right: 22px; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%239aa1a8' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 8px center; cursor: pointer; max-width: 200px; }
+    .player-chip--select:focus { outline: 1px solid var(--accent); outline-offset: 1px; }
+    .player-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--win); }
+    .player-chip .caret { color: var(--muted); font-size: 10px; margin-left: 2px; }
+    .balances { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; }
+    .balances::-webkit-scrollbar { display: none; }
+    .bal { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+    .bal b { color: var(--text); font-weight: 600; }
+    .bal b::after { content: ' '; }
+    .chain-chip { font-size: 10.5px; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 2px 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+    .wallet-slot { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+    .connect-btn { background: var(--accent); color: #0a0a0a; font-weight: 600; font-size: 12px; padding: 5px 11px; border-radius: 999px; white-space: nowrap; cursor: pointer; border: none; }
+    .connect-btn:hover { filter: brightness(1.08); }
+    .disconnect-x { color: var(--muted); font-size: 14px; line-height: 1; padding: 0 0 0 4px; cursor: pointer; background: none; border: none; }
+    .disconnect-x:hover { color: var(--loss); }
+    .is-hidden { display: none !important; }
+    .claim-pill { background: var(--accent); color: #0a0a0a; font-weight: 700; font-size: 11.5px; padding: 5px 12px; border-radius: 999px; white-space: nowrap; cursor: pointer; border: none; letter-spacing: 0.01em; animation: claim-pulse-pill 1.8s ease-in-out infinite; }
+    .claim-pill:hover:not(:disabled) { filter: brightness(1.08); }
+    .claim-pill:disabled { background: var(--surface-2); color: var(--muted); animation: none; cursor: progress; }
+    .flip-pill { background: var(--surface-2); color: var(--text); border: 1px solid var(--accent); font-weight: 600; font-size: 11px; padding: 4px 10px; border-radius: 999px; white-space: nowrap; cursor: pointer; letter-spacing: 0.02em; }
+    .flip-pill:hover:not(:disabled) { background: var(--accent); color: #0a0a0a; }
+    .flip-pill:disabled { opacity: 0.5; cursor: progress; }
+    .flip-pill .pill-icon { color: var(--accent); margin-right: 3px; }
+    .flip-pill:hover:not(:disabled) .pill-icon { color: #0a0a0a; }
+    .action-pill { background: transparent; border: 1px solid var(--muted); color: var(--muted); font-weight: 600; font-size: 10.5px; padding: 3px 9px; border-radius: 999px; white-space: nowrap; cursor: not-allowed; letter-spacing: 0.04em; text-transform: uppercase; transition: background .2s ease, color .2s ease, border-color .2s ease, box-shadow .2s ease; }
+    .action-pill.is-hot { background: var(--win); color: #0a0a0a; border-color: var(--win); cursor: pointer; animation: action-pill-pulse 1.6s ease-in-out infinite; }
+    .action-pill.is-hot:hover { filter: brightness(1.08); }
+    .action-pill.is-pending { background: var(--accent); color: #0a0a0a; border-color: var(--accent); cursor: progress; animation: none; }
+    @keyframes action-pill-pulse { 0%,100% { box-shadow: 0 0 6px rgba(63, 181, 107, 0.45); } 50% { box-shadow: 0 0 16px rgba(63, 181, 107, 0.85); } }
+    @keyframes claim-pulse-pill { 0%, 100% { box-shadow: 0 0 0 0 rgba(246,166,35,0.55); } 50% { box-shadow: 0 0 0 6px rgba(246,166,35,0); } }
+
+    /* === HERO (daily jackpot ticket draw) ============================ */
+    .hero { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-top: 14px; }
+    .hero-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+    .hero-state { font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }
+    .hero-state--win { color: var(--win); }
+    .hero-state--loss { color: var(--loss); }
+    .hero-state--sealed { color: var(--muted); }
+    .hero-iframe-wrap { display: flex; flex-direction: row; align-items: stretch; justify-content: center; gap: 16px; margin: 4px -8px 8px; flex-wrap: wrap; }
+    .hero-iframe { flex: 1 1 480px; max-width: 540px; min-width: 320px; height: 640px; border: none; background: #14141a; border-radius: 12px; display: block; }
+    .coinflip-widget { flex: 1 1 280px; max-width: 360px; min-width: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+    .coinflip-widget .cf-label { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .coinflip-stage { width: 220px; height: 220px; perspective: 1200px; }
+    .coinflip-coin { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; }
+    .coinflip-face { position: absolute; inset: 0; backface-visibility: hidden; display: flex; align-items: center; justify-content: center; }
+    .coinflip-face img { width: 100%; height: 100%; display: block; }
+    /* Vertical flip — faces rotate around X-axis. Resting state holds the
+       coin at rotateX(0) for win, rotateX(180) for loss. */
+    .coinflip-face--win { transform: rotateX(0deg); filter: drop-shadow(0 0 6px rgba(63,181,107,0.35)); }
+    .coinflip-face--loss { transform: rotateX(180deg); filter: drop-shadow(0 0 6px rgba(208,72,72,0.35)); }
+    /* Two keyframes, one per outcome. Both ease out via expo so the coin
+       decelerates smoothly into the final face — no abrupt snap. 8 full
+       flips end at the target angle. Duration is independent of the jackpot
+       spin — coin runs its own course and reveals the payoff when done. */
+    @keyframes coin-flip-x-win { from { transform: rotateX(0deg); } to { transform: rotateX(2880deg); } }
+    @keyframes coin-flip-x-loss { from { transform: rotateX(0deg); } to { transform: rotateX(3060deg); } }
+    .coinflip-coin.is-flipping-win { animation: coin-flip-x-win 4.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .coinflip-coin.is-flipping-loss { animation: coin-flip-x-loss 4.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .coinflip-result { font-size: 18px; font-weight: 700; text-align: center; min-height: 24px; letter-spacing: 0.01em; }
+    .coinflip-result.is-win { color: var(--win); }
+    .coinflip-result.is-loss { color: var(--loss); }
+    .coinflip-result.is-pending { color: var(--muted); }
+    .coinflip-sub { font-size: 12px; color: var(--muted); text-align: center; }
+    /* Payout % bar — slides during the flip, lands at the rewardPercent spot. */
+    .flip-bar-wrap { width: 220px; display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-top: 4px; }
+    .flip-bar { position: relative; height: 10px; background: var(--surface-2); border-radius: 5px; border: 1px solid var(--border); margin-top: 18px; }
+    .flip-bar-marker { position: absolute; top: -5px; bottom: -5px; width: 3px; background: var(--accent); border-radius: 2px; left: 50%; transform: translateX(-50%); transition: left .35s cubic-bezier(0.25,0.46,0.45,0.94); }
+    .flip-bar-marker.is-sliding { animation: flip-bar-bounce 4.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; transition: none; }
+    .flip-bar-marker.is-win  { background: var(--win); }
+    .flip-bar-marker.is-loss { background: var(--loss); }
+    .flip-bar-num { position: absolute; left: 50%; bottom: 110%; transform: translateX(-50%); font-size: 11.5px; font-weight: 700; color: var(--text); opacity: 0; transition: opacity .25s ease .2s; white-space: nowrap; }
+    .flip-bar-marker.is-revealed .flip-bar-num { opacity: 1; }
+    .flip-bar-ticks { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); padding: 0 2px; }
+    @keyframes flip-bar-bounce {
+      0%   { left: 50%; }
+      10%  { left: 85%; }
+      22%  { left: 10%; }
+      34%  { left: 80%; }
+      46%  { left: 18%; }
+      58%  { left: 70%; }
+      70%  { left: 30%; }
+      82%  { left: 58%; }
+      100% { left: var(--target-left, 50%); }
+    }
+    .meta-row b { font-weight: 600; }
+
+    /* === TICKET CARD (theory-ticket port) ============================ */
+    .ticket-card { position: relative; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; aspect-ratio: 1 / 1; background: var(--paper); border: 3px solid var(--paper-line); border-radius: 14px; overflow: hidden; }
+    .ticket-card.tc-small { border-width: 2px; border-radius: 8px; }
+    .ticket-card::before, .ticket-card::after { content: ''; position: absolute; background: var(--paper-line); z-index: 5; pointer-events: none; }
+    .ticket-card::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+    .ticket-card::after { top: 50%; left: 0; width: 100%; height: 2px; transform: translateY(-50%); }
+    .ticket-card.tc-small::before, .ticket-card.tc-small::after { width: 1px; height: 100%; }
+    .ticket-card.tc-small::after { width: 100%; height: 1px; }
+    .trait-quadrant { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .trait-quadrant img { width: 110%; height: 110%; object-fit: contain; }
+    .trait-quadrant-empty { background: rgba(0,0,0,0.06); }
+    .trait-quadrant--spinning { background: linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.12) 50%, rgba(0,0,0,0.0) 100%); background-size: 100% 200%; animation: spin-blur 0.4s linear infinite; }
+    @keyframes spin-blur { 0% { background-position: 0 0; } 100% { background-position: 0 -200%; } }
+    .ticket-card-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(45deg); width: 30%; height: 30%; background: #fff; border: 2px solid var(--paper-line); border-radius: 3px; z-index: 6; display: flex; align-items: center; justify-content: center; }
+    .ticket-card-center img { width: 95%; height: 95%; transform: rotate(-45deg); object-fit: contain; }
+    .ticket-card--match .trait-quadrant { box-shadow: inset 0 0 0 3px var(--win); }
+    .ticket-card--miss .trait-quadrant { opacity: 0.55; }
+
+    /* === ACTION STRIP ================================================ */
+    .action-strip { margin-top: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+    .buy-head { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+    .buy-head h3 { font-size: 14px; }
+    .buy-price { font-size: 11.5px; color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .buy-panel { padding: 12px 14px 14px; }
+    .buy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; }
+    .buy-input { display: flex; flex-direction: column; gap: 5px; }
+    .buy-input-label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .buy-input > input { background: var(--surface-2); border: 1px solid var(--border-hi); color: var(--text); padding: 8px 10px; border-radius: 6px; font-size: 13.5px; font-family: ui-monospace, "SF Mono", Menlo, monospace; min-width: 0; width: 100%; }
+    .buy-input > input:focus { outline: 1px solid var(--accent); outline-offset: 0; }
+    .buy-lb-hint { display: block; margin-top: 4px; font-size: 10.5px; color: var(--faint); font-family: ui-monospace, "SF Mono", Menlo, monospace; min-height: 13px; }
+    .qty { display: inline-flex; align-items: stretch; border: 1px solid var(--border-hi); border-radius: 6px; overflow: hidden; }
+    .qty button { padding: 0 12px; background: var(--surface-2); font-size: 16px; line-height: 1; }
+    .qty input { width: 100%; min-width: 0; text-align: center; background: transparent; border: none; border-left: 1px solid var(--border); border-right: 1px solid var(--border); color: var(--text); font-size: 13.5px; font-family: ui-monospace, "SF Mono", Menlo, monospace; padding: 8px 0; }
+    .buy-summary { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--border); margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+    .buy-summary b { color: var(--text); font-size: 14px; font-weight: 600; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .primary { background: var(--accent); color: #0a0a0a; font-weight: 600; font-size: 13px; padding: 8px 14px; border-radius: 8px; white-space: nowrap; }
+    .buy-cta { width: 100%; padding: 10px; font-size: 13.5px; }
+    .buy-cta:disabled { opacity: 0.55; cursor: not-allowed; }
+    .buy-note { display: block; margin-top: 8px; font-size: 11px; color: var(--faint); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .buy-note.is-error { color: var(--loss); }
+    .buy-note.is-ok { color: var(--win); }
+
+    .buy-tabs { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); }
+    .buy-tab { padding: 10px 8px; font-size: 12.5px; color: var(--muted); border-right: 1px solid var(--border); cursor: pointer; background: transparent; transition: color 0.1s ease; }
+    .buy-tab:last-child { border-right: none; }
+    .buy-tab:hover { color: var(--text); }
+    .buy-tab.is-active { color: var(--text); background: var(--surface-2); border-bottom: 2px solid var(--accent); margin-bottom: -1px; font-weight: 600; }
+    .pass-grid { display: flex; flex-direction: column; gap: 10px; }
+    .pass-card { background: var(--surface-2); border: 1px solid var(--border-hi); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .pass-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .pass-card-title { font-size: 13px; font-weight: 600; color: var(--text); }
+    .pass-card-price { font-size: 12px; color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .pass-card-meta { font-size: 10.5px; color: var(--faint); line-height: 1.3; }
+    .pass-card-controls { display: grid; grid-template-columns: 110px 1fr; gap: 10px; align-items: end; }
+    .pass-buy-btn { font-size: 12.5px; padding: 7px 10px; border-radius: 6px; }
+    .pass-buy-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    /* === PENDING LIST ============================================== */
+    .pending-list { display: flex; flex-direction: column; gap: 6px; }
+    .pending-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; font-size: 12.5px; }
+    .pending-row .meta { color: var(--muted); font-size: 11px; margin-top: 2px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .pending-row .kind { color: var(--text); font-weight: 600; }
+    .pending-row .pending-action { background: var(--accent); color: #0a0a0a; font-weight: 600; font-size: 11.5px; padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+    .pending-row .pending-action:disabled { opacity: 0.55; cursor: not-allowed; }
+    .pending-row .pending-action.is-wait { background: transparent; color: var(--muted); border: 1px solid var(--border-hi); cursor: not-allowed; }
+    .pending-empty { padding: 14px; text-align: center; color: var(--faint); font-size: 11.5px; }
+    .recent-amount { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+    .recent-amount.is-win { color: var(--win); }
+    .recent-amount.is-loss { color: var(--muted); }
+
+    /* === DEGENERETTE RESULTS (per-spin player vs house gamepieces) === */
+    .dgn-results-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); }
+    .dgn-results-head h4 { margin: 0; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+    .dgn-results-info { font-size: 10.5px; color: var(--faint); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .dgn-results { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+    .dgn-result-row { display: grid; grid-template-columns: auto auto auto 1fr auto; align-items: center; gap: 8px; padding: 7px 9px; background: var(--surface-2); border: 1px solid var(--border); border-left-width: 3px; border-radius: 6px; }
+    .dgn-result-row.is-full { border-left-color: var(--win); background: rgba(34, 197, 94, 0.08); }
+    .dgn-result-row.is-partial { border-left-color: #3b82f6; background: rgba(59, 130, 246, 0.06); }
+    .dgn-result-row.is-miss { border-left-color: var(--border-hi); }
+    .dgn-result-card { width: 48px; height: 48px; position: relative; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; background: #d9d9d9; border: 2px solid var(--paper-line); border-radius: 6px; overflow: hidden; }
+    .dgn-result-card::before, .dgn-result-card::after { content: ''; position: absolute; background: var(--paper-line); z-index: 5; pointer-events: none; }
+    .dgn-result-card::before { left: 50%; top: 0; width: 1px; height: 100%; transform: translateX(-50%); }
+    .dgn-result-card::after { top: 50%; left: 0; width: 100%; height: 1px; transform: translateY(-50%); }
+    .dgn-result-card .dgn-rq { display: flex; align-items: center; justify-content: center; position: relative; overflow: visible; }
+    .dgn-result-card .dgn-rq img { width: 70%; height: 70%; object-fit: contain; transition: width 0.18s ease, height 0.18s ease, filter 0.18s ease; }
+    .dgn-result-card .dgn-rq.q-full { background: rgba(34, 197, 94, 0.45); }
+    .dgn-result-card .dgn-rq.q-sym { background: rgba(59, 130, 246, 0.32); }
+    .dgn-result-card .dgn-rq.q-col { background: rgba(96, 200, 240, 0.28); }
+    .dgn-result-card .dgn-rq.q-miss { background: rgba(239, 68, 68, 0.32); }
+    /* Hero quadrant: the player's "always-on" pick. Symbol fills the cell
+     * (vs ~70% for non-hero) and gets a subtle gold glow so the visual rank
+     * matches the contract's per-spin hero treatment. z-index keeps the
+     * scaled-up badge above the cross-hatch separators. */
+    .dgn-result-card .dgn-rq.q-hero { box-shadow: inset 0 0 0 2px var(--gold); z-index: 6; }
+    .dgn-result-card .dgn-rq.q-hero img { width: 100%; height: 100%; filter: drop-shadow(0 0 3px rgba(212, 160, 0, 0.65)); }
+    .dgn-result-vs { font-size: 9px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; padding: 0 1px; }
+    .dgn-result-meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 11px; }
+    .dgn-result-meta .matches { font-weight: 600; color: var(--text); font-size: 11.5px; }
+    .dgn-result-meta .matches.is-win { color: var(--win); }
+    .dgn-result-meta .matches.is-miss { color: var(--muted); }
+    .dgn-result-meta .sub { color: var(--faint); font-size: 10px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .dgn-result-payout { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+    .dgn-result-payout.is-win { color: var(--win); }
+    .dgn-result-payout.is-miss { color: var(--muted); }
+    .dgn-result-card .dgn-rq.is-spinning { animation: dgn-spin-pulse 0.18s linear infinite alternate; }
+    @keyframes dgn-spin-pulse { from { filter: brightness(1); } to { filter: brightness(1.25); } }
+    .dgn-result-replay { background: transparent; border: 1px solid var(--border-hi); color: var(--muted); font-size: 10px; padding: 2px 6px; border-radius: 4px; cursor: pointer; line-height: 1; font-family: inherit; margin-left: 4px; }
+    .dgn-result-replay:hover { color: var(--text); border-color: var(--accent); }
+    .dgn-result-replay.is-running { color: var(--accent); border-color: var(--accent); }
+    .dgn-results-summary { display: flex; gap: 10px; align-items: baseline; font-size: 10.5px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .dgn-results-summary .label { color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+    .dgn-results-summary .value { color: var(--text); font-weight: 600; }
+    .dgn-results-summary .value.is-win { color: var(--win); }
+    .dgn-results-summary .value.is-miss { color: var(--muted); }
+    .dgn-results-controls { display: flex; gap: 6px; align-items: center; }
+    .dgn-replay-all { background: var(--surface-2); border: 1px solid var(--border-hi); color: var(--text); font-size: 10.5px; padding: 3px 9px; border-radius: 5px; cursor: pointer; font-family: inherit; }
+    .dgn-replay-all:hover { background: var(--accent); color: #0a0a0a; border-color: var(--accent); }
+    .dgn-replay-all:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* Per-spin chip strip — one chip per spin in a multi-spin bet, makes the
+     * "I did 10 spins" visible at a glance. */
+    .dgn-spin-strip { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; padding-top: 4px; margin-top: 4px; border-top: 1px dashed var(--border); }
+    .dgn-spin-strip .dgn-spin-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; font-size: 10.5px; font-family: ui-monospace, "SF Mono", Menlo, monospace; border: 1px solid var(--border-hi); background: var(--surface-2); color: var(--muted); }
+    .dgn-spin-strip .dgn-spin-chip.is-win { color: var(--win); border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.1); }
+    .dgn-spin-strip .dgn-spin-chip.is-big-win { color: #0a0a0a; background: var(--win); border-color: var(--win); font-weight: 600; }
+    .dgn-spin-strip .dgn-spin-chip.is-miss { opacity: 0.55; }
+    .dgn-spin-strip .dgn-spin-chip .num { color: var(--faint); font-size: 9px; }
+
+    /* === DEGENERETTE HISTORY MODAL ================================ */
+    .dgn-history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+    .dgn-history-btn { background: var(--surface-2); border: 1px solid var(--border-hi); color: var(--text); font-size: 11.5px; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+    .dgn-history-btn:hover { background: var(--accent); color: #0a0a0a; border-color: var(--accent); }
+    .dgn-history-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .dgn-history-summary { font-size: 10.5px; color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .dgn-modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; z-index: 1500; backdrop-filter: blur(3px); padding: 20px; }
+    .dgn-modal-overlay[hidden] { display: none; }
+    .dgn-modal { background: var(--surface); border: 1px solid var(--border-hi); border-radius: 12px; width: 100%; max-width: 720px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5); overflow: hidden; }
+    .dgn-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); flex-wrap: wrap; }
+    .dgn-modal-head h3 { margin: 0; font-size: 14px; color: var(--text); }
+    .dgn-modal-head .dgn-results-controls { gap: 8px; }
+    .dgn-modal-close { background: transparent; border: 1px solid var(--border-hi); color: var(--muted); width: 26px; height: 26px; border-radius: 5px; cursor: pointer; font-size: 16px; line-height: 1; padding: 0; font-family: inherit; }
+    .dgn-modal-close:hover { color: var(--text); border-color: var(--loss); background: rgba(239, 68, 68, 0.1); }
+    .dgn-modal .dgn-results-summary { padding: 10px 16px; border-bottom: 1px solid var(--border); margin: 0; font-size: 12px; }
+    .dgn-modal-body { padding: 14px 16px; overflow-y: auto; flex: 1; min-height: 0; }
+    /* Larger cards in the modal so the spin animation is the focal point */
+    .dgn-modal .dgn-result-row { padding: 10px 12px; gap: 12px; font-size: 13px; }
+    .dgn-modal .dgn-result-card { width: 84px; height: 84px; border-width: 3px; border-radius: 10px; }
+    .dgn-modal .dgn-result-vs { font-size: 11px; }
+    .dgn-modal .dgn-result-meta { font-size: 12.5px; }
+    .dgn-modal .dgn-result-meta .matches { font-size: 13px; }
+    .dgn-modal .dgn-result-meta .sub { font-size: 11px; }
+    .dgn-modal .dgn-result-payout { font-size: 13px; }
+    .dgn-modal .dgn-result-replay { font-size: 12px; padding: 4px 8px; }
+    @media (max-width: 540px) {
+      .dgn-modal-overlay { padding: 8px; }
+      .dgn-modal { max-height: 95vh; }
+      .dgn-modal .dgn-result-card { width: 64px; height: 64px; }
+    }
+
+    /* === DEGENERETTE FORM ========================================== */
+    .dgn-selector { display: grid; grid-template-columns: 140px 1fr; gap: 14px; margin: 8px 0 10px; align-items: start; }
+    .dgn-ticket-wrap { display: flex; flex-direction: column; gap: 4px; }
+    .dgn-ticket { width: 140px; height: 140px; cursor: pointer; user-select: none; }
+    .dgn-ticket .dgn-q { transition: box-shadow 0.12s ease, transform 0.12s ease; position: relative; }
+    .dgn-ticket .dgn-q:hover { box-shadow: inset 0 0 0 2px var(--accent); z-index: 2; }
+    .dgn-ticket .dgn-q.is-editing { box-shadow: inset 0 0 0 3px var(--accent); z-index: 3; }
+    .dgn-ticket .dgn-q.q-hero { box-shadow: inset 0 0 0 3px var(--gold); }
+    .dgn-ticket .dgn-q.q-hero.is-editing { box-shadow: inset 0 0 0 3px var(--accent), inset 0 0 0 5px var(--gold); }
+    .dgn-ticket-hint { font-size: 10px; color: var(--faint); line-height: 1.3; text-align: center; }
+    .dgn-editor { min-height: 140px; display: flex; flex-direction: column; gap: 6px; }
+    .dgn-editor-empty { color: var(--faint); font-size: 11.5px; padding: 16px 8px; text-align: center; border: 1px dashed var(--border); border-radius: 8px; }
+    .dgn-editor-rows { display: flex; flex-direction: column; gap: 6px; }
+    .dgn-editor-head { display: flex; justify-content: space-between; align-items: center; }
+    .dgn-edit-cat { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+    .dgn-hero-toggle { font-size: 10.5px; padding: 3px 8px; border: 1px solid var(--border-hi); border-radius: 999px; color: var(--muted); background: var(--surface-2); cursor: pointer; }
+    .dgn-hero-toggle:hover { color: var(--text); border-color: var(--gold); }
+    .dgn-hero-toggle.is-active { background: var(--gold); color: #0a0a0a; border-color: var(--gold); font-weight: 600; }
+    .dgn-editor-label { font-size: 9.5px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+    .dgn-row { display: flex; gap: 5px; flex-wrap: wrap; }
+    .dgn-row button { cursor: pointer; border: 1px solid var(--border-hi); background: var(--surface-2); border-radius: 4px; padding: 0; transition: transform 0.08s ease, border-color 0.08s ease; }
+    .dgn-row button:hover { transform: scale(1.08); border-color: var(--accent); }
+    .dgn-row button.is-active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .dgn-color-btn { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; }
+    .dgn-color-swatch { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25); }
+    .dgn-symbol-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .dgn-symbol-btn img { width: 100%; height: 100%; object-fit: contain; }
+
+    .dgn-currency-row { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; }
+    .dgn-currency { display: flex; gap: 10px; flex-wrap: wrap; }
+    .dgn-currency label { font-size: 11.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
+    .dgn-currency input[type=radio] { accent-color: var(--accent); }
+
+    @media (max-width: 460px) {
+      .dgn-selector { grid-template-columns: 1fr; }
+      .dgn-ticket-wrap { align-items: center; }
+    }
+
+    /* === INVENTORY =================================================== */
+    .inventory { margin-top: 14px; }
+    .inv-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; margin-bottom: 10px; }
+    .inv-head-titles { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .inv-head h3 { font-size: 14px; }
+    .inv-head h3 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+    .inv-level-nav { display: inline-flex; align-items: center; gap: 4px; }
+    .inv-level-btn { background: var(--surface-2); border: 1px solid var(--border-hi); border-radius: 5px; padding: 2px 9px; font-size: 12px; color: var(--text); cursor: pointer; }
+    .inv-level-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .inv-level-display { font-size: 11.5px; color: var(--muted); padding: 0 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .inv-level-display b { color: var(--text); font-weight: 600; }
+    #inv-level-tag { font-size: 9.5px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; margin-left: 4px; }
+    .mode-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .mode-toggle button { padding: 5px 10px; font-size: 11.5px; color: var(--muted); background: var(--surface); }
+    .mode-toggle button.is-active { background: var(--surface-2); color: var(--text); }
+    .inv-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-height: 290px; overflow-y: auto; padding: 6px; margin: -6px; background: linear-gradient(var(--surface) 30%, rgba(13,15,18,0)) 0 0/100% 12px no-repeat, linear-gradient(rgba(13,15,18,0), var(--surface) 70%) 0 100%/100% 12px no-repeat, var(--bg); border-radius: 6px; scrollbar-width: thin; scrollbar-color: var(--border-hi) transparent; }
+    .inv-cards::-webkit-scrollbar { width: 6px; }
+    .inv-cards::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+    .inv-cards::-webkit-scrollbar-track { background: transparent; }
+    .inv-card { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px; }
+    .inv-count { position: absolute; top: 4px; right: 4px; background: rgba(13,15,18,0.85); color: var(--text); font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 999px; border: 1px solid var(--border-hi); z-index: 8; }
+    .inv-card .ticket-card { aspect-ratio: 1/1; }
+
+    .inv-chart { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .chart-quadrant { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px; }
+    .chart-quadrant h4 { font-size: 11px; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 600; }
+    .chart-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+    .chart-cell { position: relative; aspect-ratio: 1/1; background: var(--surface-2); border-radius: 4px; overflow: hidden; opacity: 0.32; }
+    .chart-cell.has { opacity: 1; }
+    .chart-cell img { width: 100%; height: 100%; object-fit: contain; }
+    .chart-cell .cell-count { position: absolute; bottom: 0; right: 0; font-size: 8.5px; line-height: 1; padding: 1px 3px; background: rgba(13,15,18,0.85); border-radius: 3px 0 0 0; color: var(--text); font-weight: 700; }
+    .chart-cell.cell-hit { box-shadow: inset 0 0 0 2px var(--win); }
+
+    /* === HERO LAYOUT GRID =========================================== */
+    .hero-layout-grid { display: flex; flex-direction: column; gap: 16px; margin: 4px -8px 8px; }
+    .hero-main { flex: 1; min-width: 320px; }
+    .hero-side { display: flex; flex-direction: column; gap: 16px; flex: 0 0 340px; }
+    .hero-iframe { width: 100%; height: 640px; border: none; background: #14141a; border-radius: 12px; display: block; }
+
+    /* === STATUS CHIPS ROW (Dashboard) =============================== */
+    .status-chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .status-chip { display: flex; flex-direction: column; align-items: flex-start; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; text-align: left; transition: transform 0.2s ease, border-color 0.2s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; }
+    .status-chip:hover { border-color: var(--border-hi); transform: translateY(-2px); }
+    .status-chip.is-active { border-color: var(--accent); background: linear-gradient(145deg, var(--surface), var(--surface-2)); }
+    .status-chip .chip-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; margin-bottom: 4px; }
+    .status-chip .chip-value { font-size: 16px; font-weight: 700; font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--text); }
+    .status-chip .chip-sub { font-size: 10px; color: var(--faint); margin-top: 4px; font-weight: 400; }
+
+    /* === NET WORTH / PORTFOLIO ====================================== */
+    .portfolio { margin-top: 14px; }
+    .pf-total { font-size: 26px; font-weight: 700; font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--accent); line-height: 1.15; }
+    .pf-total .pf-total-unit { font-size: 13px; color: var(--muted); font-weight: 600; }
+    .pf-breakdown { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .pf-chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+    .pf-chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+    .pf-chart-title { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+    .pf-chart-hint { font-size: 10.5px; color: var(--faint); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .pf-chart { width: 100%; height: 200px; display: block; }
+    .pf-info { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .pf-info .pf-tag { font-size: 10px; color: var(--faint); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; }
+
+    /* === WIDER VIEWPORT (≥940px) ===================================== */
+    @media (min-width: 940px) {
+      body { max-width: 1280px; padding: 0 32px 80px; }
+      .hero-layout-grid { flex-direction: row; align-items: flex-start; gap: 24px; margin: 12px 0; }
+      .hero-main { flex: 1; max-width: none; }
+      .hero-side { flex: 0 0 360px; position: sticky; top: 72px; }
+      .status-chips { grid-template-columns: 1fr; }
+      .inv-cards { grid-template-columns: repeat(8, 1fr); max-height: 480px; }
+    }
+
+    /* === SECTION HEADERS / NOTES ==================================== */
+    .sketch-note { margin: 18px 0 4px; padding: 8px 10px; background: var(--surface); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; font-size: 11.5px; color: var(--muted); }
+    .sketch-note b { color: var(--text); font-weight: 600; }
+    .sketch-divider { margin: 20px 0 8px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.08em; }
+
+  </style>
+</head>
+<body>
+
+  <!-- 1. STATUS BAR — wallet connect overrides the manual player picker when active -->
+  <header class="topbar">
+    <div class="wallet-slot" id="wallet-slot">
+      <button class="connect-btn" id="connect-btn">Connect</button>
+      <select class="player-chip player-chip--select" id="player-chip" title="Pick autoplayer / wallet view (overridden when wallet connected)">
+        <option value="">— pick player —</option>
+      </select>
+      <span class="player-chip is-hidden" id="wallet-chip" title="Connected wallet">
+        <span class="dot"></span>
+        <span id="wallet-addr">—</span>
+        <button class="disconnect-x" id="disconnect-btn" title="Disconnect">×</button>
+      </span>
+      <select class="player-chip player-chip--select is-hidden" id="view-as" title="Accounts that approved you — switch to view & act on their behalf">
+        <option value="__self__">Acting as: you</option>
+      </select>
+    </div>
+    <div class="actas-banner is-hidden" id="actas-banner" style="width:100%;order:99;margin-top:4px;padding:3px 8px;border-radius:6px;background:rgba(255,179,71,0.14);color:#ffb347;font-size:11px;font-weight:600;letter-spacing:.02em;"></div>
+    <div class="balances" id="balances">
+      <span class="bal"><b id="bal-eth">—</b>ETH</span>
+      <span class="bal"><b id="bal-flip">—</b>FLIP</span>
+      <span class="bal"><b id="bal-tickets">—</b>tix</span>
+    </div>
+    <button class="claim-pill is-hidden" id="claim-pill" title="Claim outstanding prizes">Claim</button>
+    <button class="flip-pill is-hidden" id="claim-flip-pill" title="Claim FLIP winnings from the coinflip queue"><span class="pill-icon">↓</span><span id="claim-flip-amt">—</span> FLIP</button>
+    <button class="action-pill" id="midrng-pill" disabled title="Mid-day lootbox RNG — lights up when ETH/FLIP pending exceeds threshold">⚡ RNG</button>
+    <button class="action-pill" id="advance-pill" disabled title="advanceGame — lights up when the contract is ready to advance">↻ ADVANCE</button>
+    <span class="chain-chip" id="chain-chip">Sepolia</span>
+  </header>
+
+  <!-- 2. HERO — full animated jackpot widget -->
+  <section class="hero" id="hero">
+    <div class="hero-head">
+      <span class="label" id="hero-label">Pick a player to load jackpot</span>
+    </div>
+    <div class="hero-layout-grid">
+      <div class="hero-main">
+        <iframe
+          src="/wtf/jackpot-demo.html"
+          title="Daily jackpot draw widget"
+          loading="eager"
+          scrolling="no"
+          allow="autoplay"
+          class="hero-iframe"
+          id="hero-iframe"
+        ></iframe>
+      </div>
+      
+      <div class="hero-side">
+        <!-- Dashboard stats moved into the sidebar for desktop -->
+        <section class="status-chips">
+          <button class="status-chip is-active">
+            <span class="chip-label">Activity score</span>
+            <span class="chip-value">14,820 <small style="color:var(--muted);font-weight:400">BPS · 63%</small></span>
+          </button>
+          <button class="status-chip">
+            <span class="chip-label">Decimator</span>
+            <span class="chip-value">×1.84</span>
+          </button>
+          <button class="status-chip">
+            <span class="chip-label">Whale pass</span>
+            <span class="chip-value">Active · 3d</span>
+          </button>
+          <button class="status-chip">
+            <span class="chip-label">Quest streak</span>
+            <span class="chip-value">7</span>
+          </button>
+          <button class="status-chip" id="coinflip-chip" title="FLIP staked in the daily coinflip queue + claimable winnings">
+            <span class="chip-label">Coinflip</span>
+            <span class="chip-value">—</span>
+            <span class="chip-sub"></span>
+          </button>
+        </section>
+
+        <aside class="coinflip-widget" id="coinflip-widget" aria-label="Daily coinflip outcome">
+          <span class="cf-label">Daily flip</span>
+          <div class="coinflip-stage">
+            <div class="coinflip-coin" id="coinflip-coin">
+              <div class="coinflip-face coinflip-face--win">
+                <img src="/badges-circular/crypto_06_ethereum_green.svg" alt="ETH win" />
+              </div>
+              <div class="coinflip-face coinflip-face--loss">
+                <img src="/badges-circular/crypto_00_xrp_red.svg" alt="XRP loss" />
+              </div>
+            </div>
+          </div>
+          <div class="coinflip-result is-pending" id="coinflip-result">—</div>
+          <div class="coinflip-sub" id="coinflip-sub"></div>
+          <div class="flip-bar-wrap">
+            <div class="flip-bar">
+              <div class="flip-bar-marker" id="flip-bar-marker">
+                <span class="flip-bar-num" id="flip-bar-num"></span>
+              </div>
+            </div>
+            <div class="flip-bar-ticks"><span>50%</span><span>75%</span><span>100%</span><span>125%</span><span>150%</span></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. BUY WIDGET — tickets+lootbox or passes, tabbed -->
+  <section class="action-strip">
+    <div class="buy-head">
+      <h3>Buy</h3>
+      <span class="buy-price" id="buy-price">— ETH / ticket</span>
+    </div>
+    <div class="buy-tabs" id="buy-tabs">
+      <button class="buy-tab is-active" data-tab="tickets">Tickets + Lootbox</button>
+      <button class="buy-tab" data-tab="passes">Passes</button>
+    </div>
+    <div class="buy-panel" id="buy-panel-tickets">
+      <div class="buy-grid">
+        <label class="buy-input">
+          <span class="buy-input-label">Tickets</span>
+          <div class="qty">
+            <button type="button" data-act="dec-tix">−</button>
+            <input id="buy-tix" type="number" value="10" min="0" max="10000" />
+            <button type="button" data-act="inc-tix">+</button>
+          </div>
+        </label>
+        <label class="buy-input">
+          <span class="buy-input-label" id="buy-lb-label">Lootbox (ETH)</span>
+          <input id="buy-lb" type="number" value="0" min="0" step="0.001" placeholder="0.00" />
+          <small id="buy-lb-hint" class="buy-lb-hint">—</small>
+        </label>
+      </div>
+      <div class="buy-summary">
+        <span>Total cost</span>
+        <b id="buy-total">— ETH</b>
+      </div>
+      <button class="primary buy-cta" id="buy-btn" disabled>Connect wallet</button>
+      <small id="buy-status" class="buy-note">Pick a quantity or lootbox size.</small>
+    </div>
+    <div class="buy-panel" id="buy-panel-passes" hidden>
+      <div class="pass-grid">
+        <div class="pass-card">
+          <div class="pass-card-head">
+            <div class="pass-card-title">Lazy Pass</div>
+            <div class="pass-card-price" id="lazy-price">—</div>
+          </div>
+          <div class="pass-card-meta">10 levels · 4 tix/lvl · lootbox bonus</div>
+          <button class="primary pass-buy-btn" id="lazy-buy-btn" data-pass="lazy" disabled>Connect wallet</button>
+        </div>
+        <div class="pass-card">
+          <div class="pass-card-head">
+            <div class="pass-card-title">Whale Bundle</div>
+            <div class="pass-card-price" id="whale-price">—</div>
+          </div>
+          <div class="pass-card-meta">100 levels · 40 tix/lvl (lvl 1–10) · 2 tix/lvl after</div>
+          <div class="pass-card-controls">
+            <label class="buy-input">
+              <span class="buy-input-label">Bundles</span>
+              <div class="qty">
+                <button type="button" data-act="dec-whale">−</button>
+                <input id="whale-qty" type="number" value="1" min="1" max="10" />
+                <button type="button" data-act="inc-whale">+</button>
+              </div>
+            </label>
+            <button class="primary pass-buy-btn" id="whale-buy-btn" data-pass="whale" disabled>Connect wallet</button>
+          </div>
+        </div>
+        <div class="pass-card">
+          <div class="pass-card-head">
+            <div class="pass-card-title">Deity Pass</div>
+            <div class="pass-card-price" id="deity-price">—</div>
+          </div>
+          <div class="pass-card-meta">Pick a symbol (0–31). Cap of 32 total deities.</div>
+          <div class="pass-card-controls">
+            <label class="buy-input">
+              <span class="buy-input-label">Symbol</span>
+              <input id="deity-symbol" type="number" value="0" min="0" max="31" />
+            </label>
+            <button class="primary pass-buy-btn" id="deity-buy-btn" data-pass="deity" disabled>Connect wallet</button>
+          </div>
+        </div>
+        <small id="pass-status" class="buy-note">Buy a pass to lock in 10–100 levels of discounted tickets.</small>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3a. PENDING / OPEN — purchased lootboxes awaiting RNG/open + unresolved degenerette bets -->
+  <section class="action-strip" id="pending-strip">
+    <div class="buy-head">
+      <h3>Open / Resolve</h3>
+      <span class="buy-price" id="pending-count">—</span>
+    </div>
+    <div class="buy-panel">
+      <div class="pending-list" id="pending-list">
+        <div class="pending-empty">Pick a player to load pending items.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3a2. RECENT REWARDS — opened lootboxes + resolved bets with payouts -->
+  <section class="action-strip" id="recent-strip">
+    <div class="buy-head">
+      <h3>Recent rewards</h3>
+      <span class="buy-price" id="recent-info">—</span>
+    </div>
+    <div class="buy-panel">
+      <div class="pending-list" id="recent-list">
+        <div class="pending-empty">Pick a player to load recent rewards.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3b. DEGENERETTE BET — place a custom-ticket bet, resolves on next day's RNG -->
+  <section class="action-strip" id="dgn-strip">
+    <div class="buy-head">
+      <h3>Degenerette</h3>
+      <span class="buy-price" id="dgn-info">Pick 4 traits · 1–10 spins</span>
+    </div>
+    <div class="buy-panel">
+      <div class="buy-grid">
+        <label class="buy-input">
+          <span class="buy-input-label">Bet (ETH / spin)</span>
+          <input id="dgn-amount" type="number" value="0.000005" min="0" step="0.000001" />
+        </label>
+        <label class="buy-input">
+          <span class="buy-input-label">Spins</span>
+          <div class="qty">
+            <button type="button" data-act="dec-spins">−</button>
+            <input id="dgn-spins" type="number" value="1" min="1" max="10" />
+            <button type="button" data-act="inc-spins">+</button>
+          </div>
+        </label>
+      </div>
+      <div class="dgn-selector">
+        <div class="dgn-ticket-wrap">
+          <div class="ticket-card tc-small dgn-ticket" id="dgn-ticket">
+            <div class="trait-quadrant dgn-q" data-q="0"><img id="dgn-q-0" alt="" /></div>
+            <div class="trait-quadrant dgn-q" data-q="1"><img id="dgn-q-1" alt="" /></div>
+            <div class="trait-quadrant dgn-q" data-q="2"><img id="dgn-q-2" alt="" /></div>
+            <div class="trait-quadrant dgn-q" data-q="3"><img id="dgn-q-3" alt="" /></div>
+            <div class="ticket-card-center"><img src="/whitepaper/flame-center.svg" alt="" /></div>
+          </div>
+          <small class="dgn-ticket-hint">Click a quadrant · right-click to set Hero · scroll to cycle</small>
+        </div>
+        <div class="dgn-editor" id="dgn-editor">
+          <div class="dgn-editor-empty" id="dgn-editor-empty">Pick a quadrant to edit traits.</div>
+          <div class="dgn-editor-rows" id="dgn-editor-rows" hidden>
+            <div class="dgn-editor-head">
+              <span id="dgn-edit-cat" class="dgn-edit-cat">—</span>
+              <button type="button" class="dgn-hero-toggle" id="dgn-hero-set">Set as Hero</button>
+            </div>
+            <div class="dgn-editor-label">Color</div>
+            <div class="dgn-row dgn-colors" id="dgn-colors"></div>
+            <div class="dgn-editor-label">Symbol</div>
+            <div class="dgn-row dgn-symbols" id="dgn-symbols"></div>
+          </div>
+        </div>
+      </div>
+      <div class="dgn-currency-row">
+        <span class="buy-input-label">Currency</span>
+        <div class="dgn-currency">
+          <label><input type="radio" name="dgn-cur" value="0" checked />ETH</label>
+          <label><input type="radio" name="dgn-cur" value="1" />FLIP</label>
+          <label><input type="radio" name="dgn-cur" value="3" />WWXRP</label>
+        </div>
+      </div>
+      <div class="buy-summary"><span>Total cost</span><b id="dgn-total">— ETH</b></div>
+      <button class="primary buy-cta" id="dgn-bet-btn" disabled>Connect wallet</button>
+      <small id="dgn-status" class="buy-note">Bet resolves on the next day's RNG draw.</small>
+      <div class="dgn-history-row">
+        <button type="button" class="dgn-history-btn" id="dgn-history-btn" disabled>📊 View bet history</button>
+        <span class="dgn-history-summary" id="dgn-history-summary">—</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3c. DEGENERETTE HISTORY MODAL — full per-bet result viewer w/ spin animations -->
+  <div class="dgn-modal-overlay" id="dgn-modal-overlay" hidden>
+    <div class="dgn-modal" role="dialog" aria-modal="true" aria-labelledby="dgn-modal-title">
+      <div class="dgn-modal-head">
+        <h3 id="dgn-modal-title">Bet history</h3>
+        <div class="dgn-results-controls">
+          <button type="button" class="dgn-replay-all" id="dgn-replay-all" disabled>▶ Replay all</button>
+          <span class="dgn-results-info" id="dgn-results-info">—</span>
+          <button type="button" class="dgn-modal-close" id="dgn-modal-close" aria-label="Close">×</button>
+        </div>
+      </div>
+      <div class="dgn-results-summary" id="dgn-results-summary" hidden>
+        <span><span class="label">Wins</span> <span class="value" id="dgn-summary-wins">0/0</span></span>
+        <span><span class="label">Matches</span> <span class="value" id="dgn-summary-matches">0</span></span>
+        <span><span class="label">Payout</span> <span class="value" id="dgn-summary-payout">0 ETH</span></span>
+      </div>
+      <div class="dgn-modal-body">
+        <div class="dgn-results" id="dgn-results">
+          <div class="pending-empty">Pick a player to load bet history.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. INVENTORY — DUAL MODE -->
+  <section class="inventory">
+    <div class="inv-head">
+      <div class="inv-head-titles">
+        <h3>Your tickets <small id="inv-head-meta">—</small></h3>
+        <div class="inv-level-nav">
+          <button class="inv-level-btn" data-act="prev-lvl" title="Previous level">←</button>
+          <span class="inv-level-display">Lv <b id="inv-level-num">—</b><span id="inv-level-tag"></span></span>
+          <button class="inv-level-btn" data-act="next-lvl" title="Next level">→</button>
+          <button class="inv-level-btn" data-act="jump-active" title="Jump to active ticket level">⟳</button>
+        </div>
+      </div>
+      <div class="mode-toggle">
+        <button class="is-active">Cards</button>
+        <button>Chart</button>
+      </div>
+    </div>
+
+    <!-- Mode A: ticket-card grid (populated by renderInventoryCards) -->
+    <div class="inv-cards">
+      <div style="grid-column:1/-1;padding:18px;text-align:center;color:var(--faint);font-size:11.5px;">Loading inventory…</div>
+    </div>
+
+    <!-- Mode B: 256-trait chart (populated by renderInventoryChart) -->
+    <div class="inv-chart" style="display:none;">
+      <div class="chart-quadrant">
+        <h4>Crypto · 64 traits</h4>
+        <div class="chart-grid" id="chart-crypto"></div>
+      </div>
+      <div class="chart-quadrant">
+        <h4>Zodiac · 64 traits</h4>
+        <div class="chart-grid" id="chart-zodiac"></div>
+      </div>
+      <div class="chart-quadrant">
+        <h4>Cards · 64 traits</h4>
+        <div class="chart-grid" id="chart-cards"></div>
+      </div>
+      <div class="chart-quadrant">
+        <h4>Dice · 64 traits</h4>
+        <div class="chart-grid" id="chart-dice"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. NET WORTH — portfolio face value + per-level value chart -->
+  <section class="portfolio">
+    <div class="inv-head">
+      <div class="inv-head-titles">
+        <h3>Net worth <small id="pf-head-meta">face value of owned assets</small></h3>
+        <div class="pf-total"><b id="pf-total-eth">—</b> <span class="pf-total-unit">ETH</span></div>
+      </div>
+    </div>
+    <div class="pf-breakdown" id="pf-breakdown"></div>
+    <div class="pf-chart-wrap">
+      <div class="pf-chart-head">
+        <span class="pf-chart-title">Value by level</span>
+        <span class="pf-chart-hint" id="pf-chart-hint"></span>
+      </div>
+      <svg class="pf-chart" id="pf-svg" viewBox="0 0 600 200" preserveAspectRatio="none" role="img" aria-label="Owned asset value by level"></svg>
+    </div>
+    <div class="pf-info" id="pf-info"></div>
+  </section>
+
+  <div class="sketch-note">
+    <b>Dashboard sidebar</b> combines the prominent activity chips and daily coinflip widget into a secondary control column on desktop, keeping the primary jackpot visualization and buy actions center-stage.
+  </div>
+
+  <div class="sketch-divider">Sketch notes — what this kills / keeps / adds</div>
+  <div class="sketch-note">
+    <b>Removed surfaces:</b> <code>&lt;last-day-jackpot&gt;</code> table of all winners (own-only via Hero), separate <code>&lt;app-decimator-panel&gt;</code> + <code>&lt;app-pass-section&gt;</code> + <code>&lt;app-quest-panel&gt;</code> + <code>&lt;app-boons-panel&gt;</code> (collapsed into chips + Earn tab), separate <code>&lt;app-affiliate-panel&gt;</code> (Earn tab), the jackpot-rolls reel (replaced by ticket-card spin).
+    <br /><br />
+    <b>Kept surfaces (cross-imports / refactored, not rewritten):</b> wallet picker + player dropdown (Phase 56/58), <code>pack-animator.js</code> (Phase 60), claim flow logic (Phase 61), coinflip + degenerette write paths (Phase 62), WalletConnect provider (Phase 63), Phase 68's 5-component breakdown shape.
+    <br /><br />
+    <b>New work needed:</b> (1) ticket-card spin animation (port from <code>wtf/jackpot-demo.html</code> lock-in mechanic), (2) 256-trait chart component + Cards mode tile builder for the inventory, (3) own-outcome filter on jackpot result (drop other players from <code>&lt;last-day-jackpot&gt;</code>), (4) compact tab/subtab shell to host existing write paths, (5) chip-with-drawer pattern.
+  </div>
+
+  <script type="module">
+    import { BrowserProvider, JsonRpcProvider, Contract, parseEther, formatEther, ZeroAddress, ZeroHash } from 'https://esm.sh/ethers@6.13.4';
+
+    const QUADRANT_NAMES = ['crypto', 'zodiac', 'cards', 'dice'];
+    const QUADRANT_ITEMS = {
+      crypto: ['xrp','tron','sui','monero','solana','chainlink','ethereum','bitcoin'],
+      zodiac: ['aries','taurus','gemini','cancer','leo','libra','sagittarius','aquarius'],
+      cards:  ['club','diamond','heart','spade','horseshoe','cashsack','king','ace'],
+      dice:   ['1','2','3','4','5','6','7','8']
+    };
+    const CARD_IDX = [3, 4, 5, 6, 0, 2, 1, 7];
+    const COLORS = ['pink','purple','green','red','blue','orange','silver','gold'];
+    function badgePath(q, sym, col) {
+      const cat = QUADRANT_NAMES[q];
+      const fileIdx = cat === 'cards' ? CARD_IDX[sym] : sym;
+      return `/badges-circular/${cat}_${String(fileIdx).padStart(2,'0')}_${QUADRANT_ITEMS[cat][sym]}_${COLORS[col]}.svg`;
+    }
+
+    document.querySelectorAll('.mode-toggle button').forEach(t => t.addEventListener('click', () => {
+      document.querySelectorAll('.mode-toggle button').forEach(x => x.classList.remove('is-active'));
+      t.classList.add('is-active');
+      const mode = t.textContent.trim().toLowerCase();
+      invCardsEl.style.display = mode === 'chart' ? 'none' : '';
+      invChartEl.style.display = mode === 'chart' ? '' : 'none';
+    }));
+
+    const API = 'http://localhost:3000';
+    const PUBLIC_SEPOLIA_RPC = 'https://ethereum-sepolia-rpc.publicnode.com';
+    const noCache = () => `?_=${Date.now()}`;
+
+    // --- Sepolia testnet display scaling ---
+    // ETH_DIVISOR=1e6 on Sepolia, plus /1e18 to ETH = /1e24, which rounds to 0
+    // in the widget's 6-decimal formatter. We descale by /1e12 instead so the
+    // magnitudes look like a real jackpot. Production must use /app/'s displayEth.
+    //
+    // FLIP uses the SAME 1e6 testnet wad scale: testnet PRICE_COIN_UNIT=1e15
+    // vs mainnet 1000e18=1e21 (ratio 1e6). A "mainnet-equivalent 1894 FLIP"
+    // shows on-chain as 1.894e15 wei. Standard /1e18 ERC-20 formatting renders
+    // that as 0.001894 (fractional, ugly). We /1e12 instead so testnet FLIP
+    // amounts display as their mainnet-equivalent whole numbers.
+    function ethDisplay(raw) { return Number(raw) / 1e12; }
+    function flipFromWei(wei) { return Number(wei) / 1e12; }
+    function shortAddr(a) { return a ? a.slice(0, 6) + '…' + a.slice(-4) : '—'; }
+    function unpackTraits(packed) { const p = Number(packed); return [p & 0xFF, (p>>8)&0xFF, (p>>16)&0xFF, (p>>24)&0xFF]; }
+    // Canonical trait_id layout (DegenerusTraitUtils.sol §traitFromWord):
+    //   [QQ][CCC][SSS]  → bits[7:6]=quadrant, bits[5:3]=color (heavy-tail), bits[2:0]=symbol (uniform)
+    function traitIdToQSC(tid) { return { q: Math.floor(tid / 64), sym: tid % 8, col: Math.floor((tid % 64) / 8) }; }
+
+    const heroIframe = document.getElementById('hero-iframe');
+    const heroLabel = document.getElementById('hero-label');
+    const playerSel = document.getElementById('player-chip');
+    const chainChip = document.getElementById('chain-chip');
+    const connectBtn = document.getElementById('connect-btn');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+    const walletChip = document.getElementById('wallet-chip');
+    const walletAddrEl = document.getElementById('wallet-addr');
+    const invHeadTitle = document.querySelector('.inv-head h3');
+    const invCardsEl = document.querySelector('.inv-cards');
+    const invChartEl = document.querySelector('.inv-chart');
+    const balEthEl = document.getElementById('bal-eth');
+    const balFlipEl = document.getElementById('bal-flip');
+    const balTixEl = document.getElementById('bal-tickets');
+
+    // Default mode: cards visible, chart hidden
+    invChartEl.style.display = 'none';
+
+    // ====== WALLET CONNECT (overrides manual selector when active) ======
+    const SEPOLIA_HEX = '0xaa36a7';
+    let connectedAddress = null;
+    let walletProvider = null;     // BrowserProvider once connected
+    let readProvider = null;       // JsonRpcProvider for pre-connect reads
+    let signer = null;
+    let DEPLOYMENT = null;
+
+    function setConnectedUI(address) {
+      connectedAddress = address;
+      walletAddrEl.textContent = shortAddr(address);
+      walletChip.classList.remove('is-hidden');
+      connectBtn.classList.add('is-hidden');
+      playerSel.classList.add('is-hidden');
+    }
+    function setDisconnectedUI() {
+      connectedAddress = null;
+      walletChip.classList.add('is-hidden');
+      connectBtn.classList.remove('is-hidden');
+      playerSel.classList.remove('is-hidden');
+    }
+
+    // ====== OPERATOR VIEW / ACT-AS ======
+    // Owners who approved the connected wallet as their operator (via the GAME's
+    // setOperatorApproval; indexed into operator_approvals). When acting as one of
+    // them, write actions are sent on their behalf — the contract authorises this
+    // through isOperatorApproved(owner, operator). The view selector below appears
+    // only when the connected wallet has at least one approver.
+    const viewAsSel = document.getElementById('view-as');
+    const actAsBanner = document.getElementById('actas-banner');
+    let approvedOwners = new Set(); // lowercased owner addresses that approved us
+    let actingAs = null;            // owner address currently acted-as, or null = self
+
+    // Address a write action targets: an approved owner when acting-as, else self.
+    function actingPlayer() {
+      return (actingAs && approvedOwners.has(actingAs.toLowerCase())) ? actingAs : connectedAddress;
+    }
+
+    function renderActAsBanner() {
+      if (!actAsBanner) return;
+      const owner = actingPlayer();
+      if (connectedAddress && owner && owner.toLowerCase() !== connectedAddress.toLowerCase()) {
+        actAsBanner.textContent = `⚠ acting as ${shortAddr(owner)} — claims & purchases are sent on their behalf`;
+        actAsBanner.classList.remove('is-hidden');
+      } else {
+        actAsBanner.classList.add('is-hidden');
+      }
+    }
+
+    // Fetch the connected wallet's approvers and (re)build the view-as selector.
+    async function refreshApprovedOwners() {
+      approvedOwners = new Set();
+      actingAs = null;
+      if (viewAsSel) {
+        viewAsSel.innerHTML = '<option value="__self__">Acting as: you</option>';
+        viewAsSel.classList.add('is-hidden');
+      }
+      renderActAsBanner();
+      if (!connectedAddress) return;
+      try {
+        const data = await jsonFetch(`${API}/player/${connectedAddress}/approvers?_=${Date.now()}`);
+        for (const a of (data?.approvers || [])) approvedOwners.add(String(a.owner).toLowerCase());
+      } catch (e) { /* endpoint absent or no approvers — leave switcher hidden */ }
+      if (viewAsSel && approvedOwners.size) {
+        for (const o of approvedOwners) {
+          const opt = document.createElement('option');
+          opt.value = o;
+          opt.textContent = `Act as ${shortAddr(o)}`;
+          viewAsSel.appendChild(opt);
+        }
+        viewAsSel.classList.remove('is-hidden');
+      }
+    }
+
+    if (viewAsSel) {
+      viewAsSel.addEventListener('change', async () => {
+        const v = viewAsSel.value;
+        actingAs = (v && v !== '__self__') ? v : null;
+        renderActAsBanner();
+        const target = actingPlayer();
+        if (target && GAME_LEVEL != null) await selectPlayer(target);
+      });
+    }
+    async function ensureSepolia(eth) {
+      try {
+        const cid = await eth.request({ method: 'eth_chainId' });
+        if (typeof cid === 'string' && cid.toLowerCase() === SEPOLIA_HEX) return true;
+        await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: SEPOLIA_HEX }] });
+        return true;
+      } catch (e) { console.warn('chain switch failed', e); return false; }
+    }
+    async function bindSigner() {
+      if (!window.ethereum) return false;
+      walletProvider = new BrowserProvider(window.ethereum);
+      signer = await walletProvider.getSigner();
+      return true;
+    }
+    async function connect() {
+      const eth = window.ethereum;
+      if (!eth) { alert('No injected wallet detected. Install MetaMask, or pick a player from the dropdown.'); return; }
+      try {
+        const accs = await eth.request({ method: 'eth_requestAccounts' });
+        if (!accs?.length) return;
+        await ensureSepolia(eth);
+        setConnectedUI(accs[0]);
+        await bindSigner();
+        await refreshApprovedOwners();
+        await refreshBuyPrice();
+        if (GAME_LEVEL != null) await selectPlayer(accs[0]);
+        updateBuyTotal();
+        updateDgnTotal();
+        refreshPassPrices();
+      } catch (e) { console.warn('connect failed', e); }
+    }
+    async function disconnect() {
+      setDisconnectedUI();
+      await refreshApprovedOwners();
+      signer = null;
+      walletProvider = null;
+      if (playerSel.options.length > 1) {
+        playerSel.selectedIndex = 1;
+        if (playerSel.value) await selectPlayer(playerSel.value);
+      } else {
+        heroLabel.textContent = 'Pick a player to load jackpot';
+      }
+      updateBuyTotal();
+    }
+    connectBtn.addEventListener('click', connect);
+    disconnectBtn.addEventListener('click', disconnect);
+    if (window.ethereum?.on) {
+      window.ethereum.on('accountsChanged', async accs => {
+        if (!accs?.length) await disconnect();
+        else {
+          setConnectedUI(accs[0]);
+          await bindSigner();
+          await refreshApprovedOwners();
+          if (GAME_LEVEL != null) await selectPlayer(accs[0]);
+          updateBuyTotal();
+        updateDgnTotal();
+        refreshPassPrices();
+        }
+      });
+      window.ethereum.on('chainChanged', () => { ensureSepolia(window.ethereum); });
+    }
+    async function trySilentReconnect() {
+      if (!window.ethereum?.request) return;
+      try {
+        const accs = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accs?.length) { setConnectedUI(accs[0]); await bindSigner(); }
+      } catch (_) {}
+    }
+
+    // Bridge to /wtf/jackpot-demo.html iframe — it emits `jackpotDemoReady`
+    // on load and accepts a `setScenarios` message to run the spin + scratch
+    // animation against per-player target/owned/prizes data. Also emits
+    // `jackpotSpinStart` + `jackpotSpinEnd` so sibling widgets (coinflip) can
+    // sync their animation to the spin.
+    let iframeReady = false;
+    let pendingScenarios = null;
+    // Coinflip widget state — cached per-day flip result + player stake for the
+    // currently-selected player. coinflipAnimatedDay tracks the last day we
+    // ran the flip animation for, so the bonus-roll spin doesn't re-flip the
+    // coin (the day's coinflip outcome is shared across main + bonus draws).
+    let coinflipDayCache = { day: null, win: null, rewardPercent: 0, stakeWei: 0n };
+    let coinflipAnimatedDay = null;
+    window.addEventListener('message', ev => {
+      if (ev.data?.type === 'jackpotDemoReady') {
+        iframeReady = true;
+        if (pendingScenarios) {
+          heroIframe.contentWindow.postMessage(pendingScenarios, '*');
+          pendingScenarios = null;
+        }
+      } else if (ev.data?.type === 'jackpotSpinStart') {
+        // Only run the flip animation once per day. Bonus-roll spins (second
+        // click of the iframe's Spin button) share the same coinflip outcome,
+        // so re-flipping would be redundant noise.
+        if (coinflipDayCache.day != null && coinflipDayCache.day !== coinflipAnimatedDay) {
+          coinflipAnimatedDay = coinflipDayCache.day;
+          startCoinflipSpin();
+        }
+      }
+    });
+
+    // ====== COINFLIP WIDGET — sibling to the jackpot iframe =================
+    const coinflipCoin = document.getElementById('coinflip-coin');
+    const coinflipResultEl = document.getElementById('coinflip-result');
+    const coinflipSubEl = document.getElementById('coinflip-sub');
+    const flipBarMarker = document.getElementById('flip-bar-marker');
+    const flipBarNum = document.getElementById('flip-bar-num');
+
+    // Fetch the day's coinflip result + the player's stake on that day.
+    // Stake is sourced from the /player endpoint's coinflip.depositedAmount
+    // (most recent day's deposit — matches the displayed last-day jackpot in
+    // 99% of cases since the autoplayer re-stakes daily).
+    async function loadCoinflipForDay(day, address) {
+      if (!day || !address) return;
+      try {
+        const [dayRes, playerRes] = await Promise.all([
+          jsonFetch(`${API}/game/coinflip/day/${day}${noCache()}`).catch(() => null),
+          jsonFetch(`${API}/player/${address}${noCache()}`).catch(() => null),
+        ]);
+        const stakeWei = BigInt(playerRes?.coinflip?.depositedAmount || '0');
+        coinflipDayCache = {
+          day,
+          win: dayRes?.win ?? null,
+          rewardPercent: Number(dayRes?.rewardPercent ?? 0),
+          stakeWei,
+        };
+        renderCoinflipResting();
+      } catch (e) { console.warn('loadCoinflipForDay', e); }
+    }
+
+    // Map a rewardPercent (50..150) to a left-edge percentage along the bar
+    // (0..100). Outside that range gets clamped to the bar edges.
+    function rewardPctToBarLeft(pct) {
+      const clamped = Math.max(50, Math.min(150, pct));
+      return `${((clamped - 50) / 100) * 100}%`;
+    }
+
+    // Pre-spin resting state — show ONLY the player's stake. Win/loss + payoff
+    // stay hidden until the user clicks Spin. The coin holds at the ETH-green
+    // ready face (rotateX 0) and the payout bar marker centers (= 100% reward).
+    function renderCoinflipResting() {
+      const { stakeWei } = coinflipDayCache;
+      coinflipCoin.classList.remove('is-flipping-win', 'is-flipping-loss');
+      coinflipCoin.style.transform = 'rotateX(0deg)';
+      flipBarMarker.classList.remove('is-sliding', 'is-revealed', 'is-win', 'is-loss');
+      flipBarMarker.style.removeProperty('--target-left');
+      flipBarMarker.style.left = '50%';
+      flipBarNum.textContent = '';
+      const stake = flipFromWei(stakeWei);
+      if (stakeWei === 0n) {
+        coinflipResultEl.textContent = 'No stake';
+        coinflipResultEl.className = 'coinflip-result is-pending';
+        coinflipSubEl.textContent = 'spin to reveal flip';
+      } else {
+        coinflipResultEl.textContent = `${stake.toLocaleString(undefined, { maximumFractionDigits: 0 })} FLIP`;
+        coinflipResultEl.className = 'coinflip-result is-pending';
+        coinflipSubEl.textContent = 'staked · spin to reveal';
+      }
+    }
+
+    // Post-spin reveal — coin has landed, now show the win/loss outcome,
+    // payoff amount, and lock the payout bar to its rewardPercent slot.
+    function renderCoinflipRevealed() {
+      const { win, rewardPercent, stakeWei } = coinflipDayCache;
+      if (win === null) return;
+      coinflipCoin.classList.remove('is-flipping-win', 'is-flipping-loss');
+      const target = win ? 0 : 180;
+      coinflipCoin.style.transform = `rotateX(${target}deg)`;
+      const stake = flipFromWei(stakeWei);
+      if (stakeWei === 0n) {
+        coinflipResultEl.textContent = win ? 'Flip won (no stake)' : 'Flip lost (no stake)';
+        coinflipResultEl.className = `coinflip-result ${win ? 'is-win' : 'is-loss'}`;
+        coinflipSubEl.textContent = '';
+      } else if (win) {
+        const gain = stake * (rewardPercent / 100);
+        coinflipResultEl.textContent = `+${gain.toLocaleString(undefined, { maximumFractionDigits: 0 })} FLIP`;
+        coinflipResultEl.className = 'coinflip-result is-win';
+        coinflipSubEl.textContent = `${stake.toLocaleString(undefined, { maximumFractionDigits: 0 })} stake × ${rewardPercent}%`;
+      } else {
+        coinflipResultEl.textContent = `−${stake.toLocaleString(undefined, { maximumFractionDigits: 0 })} FLIP`;
+        coinflipResultEl.className = 'coinflip-result is-loss';
+        coinflipSubEl.textContent = `stake forfeit · ${rewardPercent}% roll`;
+      }
+      // Marker reveal — LOCK the inline `left` first so the marker holds its
+      // landed position when we drop the `.is-sliding` animation class. Without
+      // this the marker would snap back to the base `left: 50%` while the %
+      // label sticks at the actual reward, visually decoupling line ↔ number.
+      flipBarMarker.style.left = rewardPctToBarLeft(rewardPercent);
+      flipBarMarker.classList.remove('is-sliding');
+      flipBarMarker.classList.add('is-revealed', win ? 'is-win' : 'is-loss');
+      flipBarNum.textContent = `${rewardPercent}%`;
+    }
+
+    // Kick off the flip animation. Coin + payout-bar marker both run their
+    // own ~4.2s eased animations and reveal results on `animationend`.
+    function startCoinflipSpin() {
+      const win = coinflipDayCache.win;
+      const reward = coinflipDayCache.rewardPercent;
+      if (win === null) return;  // no data yet, skip the animation
+      coinflipResultEl.textContent = 'Flipping…';
+      coinflipResultEl.className = 'coinflip-result is-pending';
+      coinflipSubEl.textContent = '';
+      flipBarMarker.classList.remove('is-revealed', 'is-win', 'is-loss');
+      flipBarNum.textContent = '';
+      // Coin: wipe inline transform + force reflow so keyframe restarts cleanly.
+      coinflipCoin.classList.remove('is-flipping-win', 'is-flipping-loss');
+      coinflipCoin.style.transform = '';
+      void coinflipCoin.offsetWidth;
+      coinflipCoin.classList.add(win ? 'is-flipping-win' : 'is-flipping-loss');
+      // Payout bar: map reward% (50..150) to bar position (0..100) and write
+      // it to the CSS custom property the keyframe's final frame interpolates
+      // toward via `left: var(--target-left)`.
+      flipBarMarker.classList.remove('is-sliding');
+      flipBarMarker.style.left = '50%';
+      void flipBarMarker.offsetWidth;
+      flipBarMarker.style.setProperty('--target-left', rewardPctToBarLeft(reward));
+      flipBarMarker.classList.add('is-sliding');
+    }
+
+    // Animation end → reveal the result + lock bar position.
+    coinflipCoin.addEventListener('animationend', renderCoinflipRevealed);
+
+    function injectScenarios(scenarios, opts) {
+      const msg = { type: 'setScenarios', scenarios: scenarios || [] };
+      if (opts && Array.isArray(opts.playerTraitPool)) msg.playerTraitPool = opts.playerTraitPool;
+      if (iframeReady) heroIframe.contentWindow.postMessage(msg, '*');
+      else pendingScenarios = msg;
+    }
+
+    // Build a per-quadrant pool of {sym, col} pairs from the player's
+    // ALL-TIME owned trait set, so the spin animation in the iframe samples
+    // from traits the player actually holds rather than uniformly-random
+    // (sym, col) over the full 64-trait space. Returns [pool0, pool1, pool2,
+    // pool3] indexed by quadrant; quadrants with no owned traits get an
+    // empty array (iframe falls back to uniform-random there).
+    async function fetchPlayerTraitPools(address) {
+      try {
+        const data = await jsonFetch(`${API}/replay/player-traits/${address}?_=${Date.now()}`);
+        const ids = Array.isArray(data?.traitIds) ? data.traitIds : [];
+        const pools = [[], [], [], []];
+        for (const tid of ids) {
+          const { q, sym, col } = unpackTraitId(tid);
+          if (q >= 0 && q <= 3) pools[q].push({ sym, col });
+        }
+        return pools;
+      } catch (e) {
+        console.warn('fetchPlayerTraitPools failed', e);
+        return null;
+      }
+    }
+
+    function setOffline(reason) {
+      chainChip.textContent = 'API offline';
+      chainChip.style.color = 'var(--loss)';
+      chainChip.style.borderColor = 'var(--loss)';
+      chainChip.title = reason || 'Database API at :3000 unreachable';
+    }
+    function setOnline() {
+      chainChip.textContent = 'Sepolia';
+      chainChip.style.color = '';
+      chainChip.style.borderColor = '';
+      chainChip.title = '';
+    }
+
+    async function jsonFetch(url) {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`${url}: ${r.status}`);
+      return r.json();
+    }
+
+    async function buildScenariosForPlayer(address, lastDay, winnersList) {
+      const me = winnersList.find(w => w.address.toLowerCase() === address.toLowerCase());
+      const mainPacked = lastDay.summary?.rollOne?.mainTraitsPacked;
+      if (!mainPacked) return null;
+      const mainRaw = unpackTraits(mainPacked);
+      // Main draw award types: ETH (per-quadrant ETH share) + tickets (queued at
+      // the next level for current-level matches). FLIP rows at a main trait
+      // are bonus-roll awards that happen to share a trait_id with the main
+      // draw — they belong in the bonus scenario, not here.
+      const isMainAward = (at) => at === 'eth' || at === 'tickets';
+      const mainOwned = mainRaw.map(tid => !!(me && me.breakdown.some(b => b.traitId === tid && isMainAward(b.awardType))));
+      const mainPrizes = [];
+      if (me) {
+        mainRaw.forEach((tid, q) => {
+          me.breakdown.filter(b => b.traitId === tid && isMainAward(b.awardType)).forEach(row => {
+            // One badge per winning ticket — each breakdown row aggregates `count` wins.
+            for (let k = 0; k < row.count; k++) {
+              if (row.awardType === 'eth') mainPrizes.push([ethDisplay(row.amount), 'eth', q]);
+              else if (row.awardType === 'tickets') {
+                // Contract emits ticket amounts in ENTRIES (4 per ticket) — see
+                // JackpotModule._budgetToTicketUnits: `(budget << 2) / price`.
+                // Divide by 4 here so the iframe label reads tickets, not entries.
+                const tix = Math.floor(Number(row.amount) / 4);
+                if (tix > 0) mainPrizes.push([tix, 'tickets', q, row.level ?? null]);
+              }
+            }
+          });
+        });
+      }
+      const scenarios = [{
+        title: `Day ${lastDay.day} (Lv ${lastDay.level}) — main draw`,
+        desc: me ? `${shortAddr(address)} · ${mainOwned.filter(Boolean).length}/4 matching` : 'No win this day',
+        degenWinCenter: false,
+        target: mainRaw.map(traitIdToQSC),
+        owned: mainOwned,
+        prizes: mainPrizes,
+        centerWins: []
+      }];
+
+      const bonusPacked = lastDay.summary?.rollTwo?.bonusTraitsPacked;
+      if (bonusPacked && me?.hasBonus) {
+        const bonusRaw = unpackTraits(bonusPacked);
+        // Bonus draw is FLIP-only — ETH and tickets at bonus trait IDs are
+        // main-draw awards being attributed via shared trait_id, not bonus
+        // wins. Filter to flip-family awardTypes so the bonus scenario shows
+        // exactly what a "bonus roll matched" payout looks like.
+        const isBonusAward = (at) => typeof at === 'string' && at.includes('flip');
+        const bonusOwned = bonusRaw.map(tid => !!(me.breakdown.some(b => b.traitId === tid && isBonusAward(b.awardType))));
+        const bonusPrizes = [];
+        bonusRaw.forEach((tid, q) => {
+          me.breakdown.filter(b => b.traitId === tid && isBonusAward(b.awardType)).forEach(row => {
+            for (let k = 0; k < row.count; k++) {
+              bonusPrizes.push([flipFromWei(row.amount), 'flip', q]);
+            }
+          });
+        });
+        const centerWins = [];
+        me.breakdown.filter(b => b.traitId === null).forEach(row => {
+          if (row.awardType === 'flip') centerWins.push([flipFromWei(row.amount), 'flip', -2]);
+          else if (row.awardType === 'whale_pass') centerWins.push([row.count, 'whale_pass', -2]);
+        });
+        scenarios.push({
+          title: `Day ${lastDay.day} — bonus roll`,
+          desc: `${shortAddr(address)} · FLIP + extras`,
+          degenWinCenter: !!centerWins.length,
+          target: bonusRaw.map(traitIdToQSC),
+          owned: bonusOwned,
+          prizes: bonusPrizes,
+          centerWins
+        });
+      }
+
+      return { scenarios, me };
+    }
+
+    let LAST_DAY = null;
+    let WINNERS = null;
+    let GAME_LEVEL = null;
+    // ACTIVE_TICKET_LEVEL is what _activeTicketLevel() returns: where NEW purchases land.
+    // In purchase phase that's level+1; in jackpot phase it's level. Drives inventory queries.
+    let ACTIVE_TICKET_LEVEL = null;
+
+    async function selectPlayer(address) {
+      if (!address) return;
+      // Fetch the player's owned-trait pool in parallel with scenario build —
+      // the iframe samples this pool for its spin background so the reels show
+      // traits the player actually holds (per-quadrant).
+      const poolsPromise = fetchPlayerTraitPools(address);
+      try {
+        const built = await buildScenariosForPlayer(address, LAST_DAY, WINNERS);
+        const pools = await poolsPromise;
+        const injectOpts = pools ? { playerTraitPool: pools } : undefined;
+        if (built) {
+          const { scenarios } = built;
+          injectScenarios(scenarios, injectOpts);
+          heroLabel.textContent = `Day ${LAST_DAY.day} jackpot · Level ${LAST_DAY.level}`;
+        } else {
+          // No draw yet (or no mainTraitsPacked). Push an empty scenario so the
+          // spin widget doesn't keep stale state from the previously-selected
+          // player.
+          heroLabel.textContent = LAST_DAY ? `Day ${LAST_DAY.day} · awaiting draw` : 'Pick a player';
+          injectScenarios([{
+            title: 'Awaiting jackpot draw',
+            desc: shortAddr(address),
+            degenWinCenter: false,
+            target: [{q:0,sym:0,col:0},{q:1,sym:0,col:0},{q:2,sym:0,col:0},{q:3,sym:0,col:0}],
+            owned: [false, false, false, false],
+            prizes: [],
+            centerWins: []
+          }], injectOpts);
+        }
+      } catch (e) {
+        console.warn('hero load failed', e);
+      }
+      // Coinflip widget — fetch the day's flip result + player's stake so the
+      // sibling coin animation can render the right "resting" face and pre-
+      // load the payoff text shown after the spin lands.
+      if (LAST_DAY?.day) loadCoinflipForDay(LAST_DAY.day, address);
+      // Refresh on-chain ACTIVE_TICKET_LEVEL (where new purchases land) so we
+      // query the inventory at the right level even after the game has advanced.
+      await refreshBuyPrice();
+      if (ACTIVE_TICKET_LEVEL != null || GAME_LEVEL != null) await loadInventory(address);
+      // Load real player overview (chips + balances)
+      await loadPlayerOverview(address);
+      // Net-worth module (face value of owned assets + per-level value chart)
+      await loadPortfolio(address);
+      if (GAME_LEVEL != null) await loadDecimatorChip(address);
+      if (signer && connectedAddress && address.toLowerCase() === connectedAddress.toLowerCase()) {
+        await updateWalletEthBalance();
+      }
+      // Pending lootbox-opens + degenerette resolutions for this player
+      await loadPending(address);
+      await loadRecent(address);
+      await loadDgnResults(address);
+      // Claimable balances (ETH, decimator levels, affiliate DGNRS, whale halves)
+      await loadClaimables(address);
+    }
+
+    // ====== STATUS CHIPS + BALANCES (real player data) ===================
+    const statusChips = document.querySelectorAll('.status-chips .status-chip');
+    function chipValueEl(idx) { return statusChips[idx]?.querySelector('.chip-value'); }
+
+    async function loadPlayerOverview(address) {
+      // /player returns 404 for unknown addresses (e.g. a freshly-connected wallet
+      // with no on-chain activity). Render zero-state in that case rather than
+      // letting the previous player's values bleed through.
+      let data = null;
+      try {
+        data = await jsonFetch(`${API}/player/${address}?_=${Date.now()}`);
+      } catch (e) {
+        if (!String(e).includes('404')) console.warn('loadPlayerOverview', e);
+      }
+      const bps = data?.scoreBreakdown?.totalBps ?? 0;
+      const pct = (bps / 100).toFixed(0);
+      const ce0 = chipValueEl(0);
+      if (ce0) ce0.innerHTML = `${bps.toLocaleString()} <small style="color:var(--muted);font-weight:400">BPS · ${pct}%</small>`;
+      const pass = data?.scoreBreakdown?.passBonus;
+      const ce2 = chipValueEl(2);
+      if (ce2) {
+        if (!pass || !pass.kind) ce2.textContent = 'None';
+        else ce2.innerHTML = `${pass.kind.replace('_', ' ')} <small style="color:var(--muted);font-weight:400">+${pass.points}</small>`;
+      }
+      const ce3 = chipValueEl(3);
+      if (ce3) ce3.textContent = String(data?.currentStreak ?? 0);
+      const flip = BigInt(data?.flipBalance || '0');
+      // Testnet scale: /1e12 to display mainnet-equivalent whole-FLIP amounts.
+      balFlipEl.textContent = flipFromWei(flip).toLocaleString(undefined, { maximumFractionDigits: 0 });
+      if (!signer) {
+        const eth = BigInt(data?.claimableEth || '0');
+        balEthEl.textContent = Number(formatEther(eth)).toFixed(6);
+      }
+
+      // Claimable FLIP pill — refresh from the same /player payload.
+      // Track WHOSE claimable we just cached, so isOwner can compare the
+      // viewed-player address to the connected wallet without depending on
+      // loadClaimables (which runs later in selectPlayer's pipeline).
+      claimableFlipWei = BigInt(data?.coinflip?.claimablePreview || '0');
+      claimableFlipAddress = address;
+      refreshClaimFlipPill();
+
+      // Coinflip chip — staked FLIP in the daily queue + claimable winnings.
+      // depositedAmount is the most recent day's stake (contract aggregates per
+      // day). claimablePreview is the FLIP-equivalent of accrued wins ready
+      // to be minted/withdrawn. Both are testnet-scaled (/1e12 display).
+      const cf = data?.coinflip;
+      const cfChip = document.getElementById('coinflip-chip');
+      if (cfChip) {
+        const cfValueEl = cfChip.querySelector('.chip-value');
+        const cfSubEl = cfChip.querySelector('.chip-sub');
+        if (!cf) {
+          cfValueEl.textContent = 'Inactive';
+          if (cfSubEl) cfSubEl.textContent = '';
+        } else {
+          const staked = flipFromWei(BigInt(cf.depositedAmount || '0'));
+          const claimable = flipFromWei(BigInt(cf.claimablePreview || '0'));
+          cfValueEl.innerHTML = `${staked.toLocaleString(undefined, { maximumFractionDigits: 0 })} <small style="color:var(--muted);font-weight:400">FLIP</small>`;
+          if (cfSubEl) {
+            cfSubEl.textContent = claimable > 0
+              ? `+${claimable.toLocaleString(undefined, { maximumFractionDigits: 0 })} claimable`
+              : 'no winnings';
+          }
+        }
+      }
+    }
+
+    async function loadDecimatorChip(address) {
+      try {
+        const data = await jsonFetch(`${API}/player/${address}/decimator?level=${GAME_LEVEL}`);
+        const ce = chipValueEl(1);
+        if (!ce) return;
+        if (data.bucket == null) ce.textContent = 'Inactive';
+        else ce.innerHTML = `Bucket ${data.bucket} <small style="color:var(--muted);font-weight:400">${data.roundStatus || ''}</small>`;
+      } catch (e) { console.warn('loadDecimatorChip', e); }
+    }
+
+    async function updateWalletEthBalance() {
+      if (!walletProvider || !connectedAddress) return;
+      try {
+        const bal = await walletProvider.getBalance(connectedAddress);
+        balEthEl.textContent = Number(formatEther(bal)).toFixed(6);
+      } catch (e) { console.warn('updateWalletEthBalance', e); }
+    }
+
+    // ====== INVENTORY (real player ticket data) ==========================
+    // Canonical layout: [QQ][CCC][SSS] — bits[5:3]=color (heavy-tail), bits[2:0]=symbol (uniform).
+    function unpackTraitId(tid) { return { q: Math.floor(tid / 64), sym: tid % 8, col: Math.floor((tid % 64) / 8) }; }
+
+    // viewLevel = the level currently shown in Cards + Chart. Defaults to
+    // ACTIVE_TICKET_LEVEL but can be stepped backwards (past levels where
+    // the player had tickets) or forwards (near-future levels with pending
+    // pre-bought tickets / lootbox/whale-queued tickets).
+    let viewLevel = null;
+    let inventoryAddress = null;
+    const invLevelNumEl = document.getElementById('inv-level-num');
+    const invLevelTagEl = document.getElementById('inv-level-tag');
+    const invHeadMetaEl = document.getElementById('inv-head-meta');
+
+    async function loadInventory(address) {
+      // Reset viewLevel to the active ticket level when the player changes.
+      if (inventoryAddress !== address) viewLevel = null;
+      inventoryAddress = address;
+      if (viewLevel == null) viewLevel = ACTIVE_TICKET_LEVEL ?? GAME_LEVEL ?? 1;
+      await renderInventoryForLevel(address, viewLevel);
+    }
+
+    async function renderInventoryForLevel(address, lvl) {
+      invLevelNumEl.textContent = String(lvl);
+      invLevelTagEl.textContent = lvl === ACTIVE_TICKET_LEVEL ? 'active' : (lvl > (ACTIVE_TICKET_LEVEL ?? 0) ? 'future' : 'past');
+      try {
+        const data = await jsonFetch(`${API}/player/${address}/tickets/by-trait?level=${lvl}&_=${Date.now()}`);
+        renderInventoryCards(data);
+        renderInventoryChart(data);
+        // Tix bal in topbar reflects the level the user is currently viewing.
+        balTixEl.textContent = Math.floor((data.totalEntries || 0) / 4).toLocaleString();
+      } catch (e) {
+        console.warn('inventory load failed', e);
+        invCardsEl.innerHTML = `<div style="grid-column:1/-1;padding:18px;text-align:center;color:var(--faint);font-size:11.5px;">No tickets at level ${lvl}</div>`;
+        invChartEl.querySelectorAll('.chart-grid').forEach(g => g.innerHTML = '');
+        invHeadMetaEl.textContent = `0 cards at Level ${lvl}`;
+        balTixEl.textContent = '0';
+      }
+    }
+
+    // Level navigator clicks
+    document.querySelectorAll('.inv-level-nav .inv-level-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!inventoryAddress) return;
+        if (btn.dataset.act === 'prev-lvl') viewLevel = Math.max(1, viewLevel - 1);
+        else if (btn.dataset.act === 'next-lvl') viewLevel = viewLevel + 1;
+        else if (btn.dataset.act === 'jump-active') viewLevel = ACTIVE_TICKET_LEVEL ?? viewLevel;
+        await renderInventoryForLevel(inventoryAddress, viewLevel);
+      });
+    });
+
+    function renderInventoryCards(data) {
+      const combos = new Map();
+      let pending = 0;
+      for (const card of (data.cards || [])) {
+        if (card.status !== 'opened') { if (card.status === 'pending') pending++; continue; }
+        const ids = card.entries.map(e => e.traitId);
+        if (ids.some(t => t == null)) continue;
+        const key = ids.join(',');
+        if (!combos.has(key)) combos.set(key, { traitIds: ids, count: 0 });
+        combos.get(key).count++;
+      }
+      const totalCards = Math.floor((data.totalEntries || 0) / 4);
+      invHeadMetaEl.textContent = `${totalCards} card${totalCards===1?'':'s'} at Level ${data.level}${pending ? ` · ${pending} pack${pending>1?'s':''} pending` : ''}`;
+
+      const sorted = [...combos.values()].sort((a, b) => b.count - a.count);
+      invCardsEl.innerHTML = '';
+      if (sorted.length === 0 && pending === 0) {
+        invCardsEl.innerHTML = `<div style="grid-column:1/-1;padding:18px;text-align:center;color:var(--faint);font-size:11.5px;">No tickets yet — buy some below.</div>`;
+        return;
+      }
+      // Render all unique combinations; the grid is scrollable (~2 rows visible).
+      sorted.forEach(c => {
+        const card = document.createElement('div');
+        card.className = 'inv-card';
+        card.innerHTML = `<div class="inv-count">×${c.count}</div>`;
+        const tc = document.createElement('div');
+        tc.className = 'ticket-card tc-small';
+        c.traitIds.forEach(tid => {
+          const { q, sym, col } = unpackTraitId(tid);
+          const qd = document.createElement('div');
+          qd.className = 'trait-quadrant';
+          const img = document.createElement('img');
+          img.src = badgePath(q, sym, col);
+          img.alt = '';
+          qd.appendChild(img);
+          tc.appendChild(qd);
+        });
+        const center = document.createElement('div');
+        center.className = 'ticket-card-center';
+        center.innerHTML = '<img src="/whitepaper/flame-center.svg" alt="" />';
+        tc.appendChild(center);
+        card.appendChild(tc);
+        invCardsEl.appendChild(card);
+      });
+      if (pending > 0) {
+        const p = document.createElement('div');
+        p.className = 'inv-card';
+        p.style.cssText = 'background:var(--surface-2);border-style:dashed;display:flex;align-items:center;justify-content:center;aspect-ratio:1/1;font-size:11px;text-align:center;line-height:1.3;color:var(--accent);';
+        p.innerHTML = `<div>↻<br/>${pending} pending<br/>pack${pending>1?'s':''}</div>`;
+        invCardsEl.appendChild(p);
+      }
+    }
+
+    function renderInventoryChart(data) {
+      const counts = new Array(256).fill(0);
+      for (const card of (data.cards || [])) {
+        if (card.status !== 'opened') continue;
+        for (const e of card.entries) {
+          if (e.traitId != null && e.traitId >= 0 && e.traitId < 256) counts[e.traitId]++;
+        }
+      }
+      const gridIds = { crypto: 'chart-crypto', zodiac: 'chart-zodiac', cards: 'chart-cards', dice: 'chart-dice' };
+      QUADRANT_NAMES.forEach((cat, q) => {
+        const root = document.getElementById(gridIds[cat]);
+        if (!root) return;
+        root.innerHTML = '';
+        for (let s = 0; s < 8; s++) {
+          for (let c = 0; c < 8; c++) {
+            // Canonical [QQ][CCC][SSS]: bits[5:3]=color, bits[2:0]=symbol.
+            // Cell at (row=s, col=c) labels itself as "symbol s + color c";
+            // the trait_id that ACTUALLY decomposes to those labels is q*64 + c*8 + s.
+            const tid = q * 64 + c * 8 + s;
+            const count = counts[tid];
+            const cell = document.createElement('div');
+            cell.className = 'chart-cell';
+            if (count > 0) {
+              cell.classList.add('has');
+              const img = document.createElement('img');
+              img.src = badgePath(q, s, c);
+              img.loading = 'lazy';
+              cell.appendChild(img);
+              const cnt = document.createElement('span');
+              cnt.className = 'cell-count';
+              cnt.textContent = count;
+              cell.appendChild(cnt);
+            }
+            root.appendChild(cell);
+          }
+        }
+      });
+    }
+
+    // ====== NET WORTH / PORTFOLIO =======================================
+    // Single ETH "face value" of all owned assets + a per-level value chart.
+    // Reuses the testnet-scale priceForLevel() (declared below — fn decls are
+    // hoisted) and ethDisplay/flipFromWei (/1e12) so magnitudes match the
+    // rest of the app. Valuation model:
+    //   tickets       = ticketCount * mainnet ticket price   (purchase cost)
+    //   FLIP        = balance * (ticket price / 1000)
+    //                   (peg: 1000 FLIP = one ticket)
+    //   DGNRS/sDGNRS  = live previewBurn() liquidation (eth+stEth+flip→eth)
+    //   claimable ETH + unclaimed decimator = face wei
+    // WWXRP is a joke token (0 ETH, count-only). All series data comes from the
+    // existing GET /player/:address dashboard; only DGNRS needs a chain read.
+    //
+    // SCALE: the economy can be deployed scaled-down (Sepolia: ETH_DIVISOR=1e6,
+    // so 1 ETH/FLIP = 1e12 wei on-chain) or at full mainnet scale (local sim:
+    // = 1e18 wei). We read `ethDivisor` from deployment.json (default 1e6 for
+    // Sepolia) and convert all DB/chain wei to mainnet units via 1e18/ethDivisor.
+    // Tickets are scale-free (count × a fixed price constant), so they don't
+    // depend on ethDivisor.
+    const PF_PREVIEW_BURN_ABI = [
+      'function previewBurn(uint256 amount) view returns (uint256 ethOut, uint256 stethOut, uint256 flipOut)',
+      'function balanceOf(address) view returns (uint256)',
+    ];
+    const PF_COL = { accent: '#f6a623', faint: '#6b727a', border: '#2a2f37' };
+    // On-chain wei per 1 mainnet unit (ETH or FLIP): 1e12 on Sepolia, 1e18 on a
+    // full-scale sim. Drives display of all DB/chain balances.
+    function pfWeiPerUnit() {
+      const d = Number(DEPLOYMENT?.ethDivisor);
+      return 1e18 / (Number.isFinite(d) && d > 0 ? d : 1_000_000);
+    }
+    // Mainnet ETH per ticket at a level. priceForLevel() is a fixed Sepolia-scaled
+    // constant (e.g. 0.04 ETH → 4e10 wei), so /1e12 always yields the mainnet price.
+    const pfTicketPriceEth = lvl => Number(priceForLevel(lvl)) / 1e12;
+    const pfTotalEl = document.getElementById('pf-total-eth');
+    const pfBreakdownEl = document.getElementById('pf-breakdown');
+    const pfInfoEl = document.getElementById('pf-info');
+    const pfChartHintEl = document.getElementById('pf-chart-hint');
+    const pfSvg = document.getElementById('pf-svg');
+    let portfolioData = null;
+
+    async function loadPortfolio(address) {
+      await loadDeployment(); // ensures DEPLOYMENT.ethDivisor is available for scaling
+      const lvl = GAME_LEVEL ?? 0;
+      const priceEth = pfTicketPriceEth(lvl);     // mainnet ETH per ticket at current level
+      const weiPerUnit = pfWeiPerUnit();           // on-chain wei per 1 mainnet ETH/FLIP
+      const toEth = raw => Number(raw) / weiPerUnit;   // DB/chain wei -> mainnet ETH (FLIP count uses same scale)
+      const perLevel = new Map();                  // level -> ETH (float)
+
+      // /pending is DB-only and reliable (no contract reads). The full dashboard
+      // adds per-level tickets + decimator for the chart but does a live
+      // activity-score contract read that can fail — so it's best-effort
+      // enrichment only. Totals always come from /pending.
+      const [pendR, dashR] = await Promise.allSettled([
+        jsonFetch(`${API}/player/${address}/pending${noCache()}`),
+        jsonFetch(`${API}/player/${address}${noCache()}`),
+      ]);
+      const pend = pendR.status === 'fulfilled' ? (pendR.value?.pending || null) : null;
+      const dash = (dashR.status === 'fulfilled' && dashR.value && !dashR.value.error
+        && Array.isArray(dashR.value.tickets)) ? dashR.value : null;
+
+      // Tickets — per-level cost basis from the dashboard when available
+      // (price varies by level), else a current-price approximation from the
+      // /pending total count. Scale-free: count × mainnet ticket price.
+      let ticketsEth = 0, ticketCount = 0;
+      if (dash) {
+        for (const t of (dash.tickets || [])) {
+          if ((t.entryCount || 0) <= 0) continue;
+          const whole = t.entryCount / 4;             // 4 entries = 1 whole ticket
+          const v = whole * pfTicketPriceEth(t.level); // pfTicketPriceEth is per WHOLE ticket
+          ticketsEth += v; ticketCount += whole;
+          perLevel.set(t.level, (perLevel.get(t.level) || 0) + v);
+        }
+      } else {
+        // /pending 'tickets' bucket = owed ENTRIES (ticketsOwedView); /4 → whole tickets.
+        ticketCount = Number(pend?.tickets?.amount || '0') / 4;
+        ticketsEth = ticketCount * priceEth;
+      }
+
+      // Decimator — unclaimed pro-rata ETH, per level from dashboard, total from pending.
+      let decimatorEth = 0;
+      if (dash) {
+        for (const d of (dash.decimatorClaims || [])) {
+          if (d.claimed) continue;
+          const v = toEth(BigInt(d.ethAmount || '0'));
+          decimatorEth += v;
+          perLevel.set(d.level, (perLevel.get(d.level) || 0) + v);
+        }
+      } else {
+        decimatorEth = toEth(BigInt(pend?.decimator?.amount || '0'));
+      }
+
+      // Liquid balances — prefer /pending (reliable), fall back to dashboard.
+      const claimableEth = toEth(BigInt(pend?.eth?.amount ?? dash?.claimableEth ?? '0'));
+      const flipCount = toEth(BigInt(pend?.flip?.amount ?? dash?.flipBalance ?? '0')); // FLIP shares the deploy scale
+      const flipEth = flipCount * priceEth / 1000; // peg: 1000 FLIP = one ticket
+
+      // DGNRS + sDGNRS liquidation value via live previewBurn (exact).
+      let dgnrsEth = 0, dgnrsLive = false;
+      try {
+        const p = walletProvider || readProvider || new JsonRpcProvider(PUBLIC_SEPOLIA_RPC);
+        for (const a of [DEPLOYMENT?.contracts?.DGNRS, DEPLOYMENT?.contracts?.SDGNRS]) {
+          if (!a) continue;
+          const c = new Contract(a, PF_PREVIEW_BURN_ABI, p);
+          const bal = await c.balanceOf(address);
+          if (bal > 0n) {
+            const [e, st, bu] = await c.previewBurn(bal);
+            dgnrsEth += toEth(e) + toEth(st) + toEth(bu) * priceEth / 1000;
+          }
+          dgnrsLive = true;
+        }
+      } catch (e) { console.warn('loadPortfolio dgnrs previewBurn', e); }
+
+      // Non level-pegged value sits at the current level on the chart. Without
+      // the dashboard there is no per-level breakdown, so the whole total lands
+      // on one current-level point.
+      const atCurrent = claimableEth + flipEth + dgnrsEth + (dash ? 0 : ticketsEth + decimatorEth);
+      if (atCurrent > 0) perLevel.set(lvl, (perLevel.get(lvl) || 0) + atCurrent);
+
+      const totalEth = ticketsEth + decimatorEth + claimableEth + flipEth + dgnrsEth;
+
+      portfolioData = {
+        totalEth,
+        parts: [
+          { label: 'Tickets', eth: ticketsEth, sub: `${Math.round(ticketCount).toLocaleString()} tix · cost basis` },
+          { label: 'FLIP', eth: flipEth, sub: `${flipCount.toLocaleString(undefined, { maximumFractionDigits: 0 })} FLIP` },
+          { label: 'DGNRS', eth: dgnrsEth, sub: dgnrsLive ? 'liquidation' : 'needs chain read' },
+          { label: 'Claimable', eth: claimableEth, sub: 'ETH winnings' },
+          { label: 'Decimator', eth: decimatorEth, sub: 'unclaimed' },
+        ],
+        series: [...perLevel.entries()].map(([level, eth]) => ({ level, eth })).sort((a, b) => a.level - b.level),
+        info: [],
+      };
+      portfolioData.info.push('tickets at purchase cost · FLIP pegged to ticket price');
+      if (!dash) portfolioData.info.push('per-level detail unavailable — tickets valued at current price');
+      if (!dgnrsLive) portfolioData.info.push('connect / RPC needed for DGNRS value');
+
+      renderPortfolio();
+    }
+
+    function renderPortfolio() {
+      const d = portfolioData;
+      if (!d) return;
+      if (pfTotalEl) pfTotalEl.textContent = d.totalEth.toLocaleString(undefined, { maximumFractionDigits: 4 });
+      if (pfBreakdownEl) {
+        pfBreakdownEl.innerHTML = '';
+        for (const part of d.parts) {
+          const chip = document.createElement('div');
+          chip.className = 'status-chip';
+          const eth = part.eth;
+          chip.innerHTML =
+            `<div class="chip-label">${part.label}</div>` +
+            `<div class="chip-value">${eth.toLocaleString(undefined, { maximumFractionDigits: 4 })}` +
+            `<small style="color:var(--muted);font-weight:400"> ETH</small></div>` +
+            `<div class="chip-sub">${part.sub}</div>`;
+          pfBreakdownEl.appendChild(chip);
+        }
+      }
+      if (pfInfoEl) {
+        pfInfoEl.innerHTML = '';
+        for (const t of d.info) {
+          const tag = document.createElement('span');
+          tag.className = 'pf-tag';
+          tag.textContent = t;
+          pfInfoEl.appendChild(tag);
+        }
+      }
+      renderPortfolioChart(d.series);
+    }
+
+    function renderPortfolioChart(series) {
+      if (!pfSvg) return;
+      const W = 600, H = 200, padL = 6, padR = 6, padT = 12, padB = 20;
+      if (!series || series.length === 0) {
+        pfSvg.innerHTML = `<text x="${W / 2}" y="${H / 2}" fill="${PF_COL.faint}" font-size="12" text-anchor="middle">No owned assets to chart</text>`;
+        if (pfChartHintEl) pfChartHintEl.textContent = '';
+        return;
+      }
+      const levels = series.map(s => s.level);
+      const lvMin = Math.min(...levels), lvMax = Math.max(...levels);
+      const yMax = Math.max(...series.map(s => s.eth), 0) || 1;
+      const spanX = (lvMax - lvMin) || 1;
+      const single = series.length === 1;
+      const X = lv => single ? W / 2 : padL + ((lv - lvMin) / spanX) * (W - padL - padR);
+      const Y = v => (H - padB) - (v / yMax) * (H - padT - padB);
+      const baseY = (H - padB).toFixed(1);
+      const pts = series.map(s => [X(s.level), Y(s.eth)]);
+      let svg = `<line x1="${padL}" y1="${baseY}" x2="${W - padR}" y2="${baseY}" stroke="${PF_COL.border}" stroke-width="1"/>`;
+      if (pts.length > 1) {
+        const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
+        const area = `${line} L${pts[pts.length - 1][0].toFixed(1)} ${baseY} L${pts[0][0].toFixed(1)} ${baseY} Z`;
+        svg += `<path d="${area}" fill="${PF_COL.accent}" opacity="0.12"/>`;
+        svg += `<path d="${line}" fill="none" stroke="${PF_COL.accent}" stroke-width="2"/>`;
+      }
+      series.forEach((s, i) => {
+        const [x, y] = pts[i];
+        svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="${PF_COL.accent}">` +
+          `<title>Lv ${s.level}: ${s.eth.toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH</title></circle>`;
+      });
+      svg += `<text x="${padL}" y="${H - 5}" fill="${PF_COL.faint}" font-size="9">Lv ${lvMin}</text>`;
+      if (!single) svg += `<text x="${W - padR}" y="${H - 5}" fill="${PF_COL.faint}" font-size="9" text-anchor="end">Lv ${lvMax}</text>`;
+      pfSvg.innerHTML = svg;
+      if (pfChartHintEl) pfChartHintEl.textContent = `peak ${yMax.toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH`;
+    }
+
+    // ====== BUY WIDGET ===================================================
+    const PURCHASE_ABI = [
+      'function purchase(address buyer, uint256 ticketQuantity, uint256 lootBoxAmount, bytes32 affiliateCode, uint8 payKind) payable',
+      'function purchaseInfo() view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay, bool rngLocked, uint256 priceWei)',
+      'error E()',
+      'error GameOver()',
+      'error RngLocked()'
+    ];
+    const TICKET_UNIT = 400n;
+    let priceWei = null;
+    const buyTixEl = document.getElementById('buy-tix');
+    const buyLbEl = document.getElementById('buy-lb');
+    const buyTotalEl = document.getElementById('buy-total');
+    const buyBtn = document.getElementById('buy-btn');
+    const buyStatusEl = document.getElementById('buy-status');
+    const buyPriceEl = document.getElementById('buy-price');
+
+    document.querySelectorAll('.qty button[data-act]').forEach(b => {
+      b.addEventListener('click', () => {
+        const v = parseInt(buyTixEl.value, 10) || 0;
+        if (b.dataset.act === 'inc-tix') buyTixEl.value = Math.min(10000, v + 1);
+        else if (b.dataset.act === 'dec-tix') buyTixEl.value = Math.max(0, v - 1);
+        updateBuyTotal();
+        updateDgnTotal();
+        refreshPassPrices();
+      });
+    });
+    [buyTixEl, buyLbEl].forEach(el => el.addEventListener('input', updateBuyTotal));
+
+    function readBuyInputs() {
+      const qty = BigInt(Math.max(0, parseInt(buyTixEl.value, 10) || 0));
+      let lbWei = 0n; // ETH wei (lootboxes are ETH-only)
+      const lbStr = (buyLbEl.value || '').trim();
+      if (lbStr && parseFloat(lbStr) > 0) {
+        try { lbWei = parseEther(lbStr); } catch (_) {}
+      }
+      return { qty, lbWei };
+    }
+    function updateBuyTotal() {
+      const { qty, lbWei } = readBuyInputs();
+      if (priceWei == null) {
+        buyTotalEl.textContent = '— ETH';
+      } else {
+        buyTotalEl.textContent = `${formatEther(priceWei * qty + lbWei)} ETH`;
+      }
+      // Lootbox-to-tickets equivalent (informational; the contract uses lootbox-specific RNG).
+      const hint = document.getElementById('buy-lb-hint');
+      if (hint) {
+        if (priceWei == null || priceWei === 0n || lbWei === 0n) {
+          hint.textContent = '—';
+        } else {
+          const tixHundredths = (lbWei * 100n) / priceWei;
+          const tix = Number(tixHundredths) / 100;
+          hint.textContent = `≈ ${tix.toLocaleString(undefined, { maximumFractionDigits: 2 })} tickets worth`;
+        }
+      }
+      if (!signer) { buyBtn.disabled = true; buyBtn.textContent = 'Connect wallet to buy'; return; }
+      if (priceWei == null) { buyBtn.disabled = true; buyBtn.textContent = 'Loading price…'; return; }
+      if (qty === 0n && lbWei === 0n) { buyBtn.disabled = true; buyBtn.textContent = 'Enter amount'; return; }
+      buyBtn.disabled = false;
+      const parts = [];
+      if (qty > 0n) parts.push(`${qty} ticket${qty > 1n ? 's' : ''}`);
+      if (lbWei > 0n) parts.push('lootbox');
+      buyBtn.textContent = `Buy ${parts.join(' + ')}`;
+    }
+
+    async function loadDeployment() {
+      if (DEPLOYMENT) return DEPLOYMENT;
+      DEPLOYMENT = await jsonFetch('/db/deployment.json');
+      return DEPLOYMENT;
+    }
+    async function refreshBuyPrice() {
+      try {
+        await loadDeployment();
+        const p = walletProvider || readProvider;
+        if (!p) return;
+        const game = new Contract(DEPLOYMENT.contracts.GAME, PURCHASE_ABI, p);
+        const info = await game.purchaseInfo();
+        priceWei = info[4];
+        // purchaseInfo.lvl is the ACTUAL game level; new purchases route to lvl+1 outside
+        // the jackpot phase, which is what _activeTicketLevel() returns.
+        const lvl = info[1] ? Number(info[0]) : Number(info[0]) + 1;
+        ACTIVE_TICKET_LEVEL = lvl;
+        const locked = info[3];
+        buyPriceEl.textContent = `${formatEther(priceWei)} ETH/tix · Lv ${lvl}${locked ? ' · RNG-locked' : ''}`;
+        updateBuyTotal();
+        updateDgnTotal();
+        refreshPassPrices();
+        refreshPassPrices();
+      } catch (e) {
+        console.warn('refreshBuyPrice', e);
+        buyPriceEl.textContent = 'price unavailable';
+      }
+    }
+
+    function formatRevert(e) {
+      const name = e.revert?.name;
+      if (name) return name === 'E' ? 'E() — contract rejected (see console for selector)' : `${name}()`;
+      return e.shortMessage || e.reason || e.message || String(e);
+    }
+
+    // ====== ACTION PILLS — ⚡ RNG (requestLootboxRng) + ↻ ADVANCE (advanceGame)
+    // Pre-flight eligibility via eth_call staticCall. If the call would revert
+    // (threshold unmet / day not over / RNG locked / mid-day flag set / etc.),
+    // the pill stays dim. If it would succeed, the pill glows + becomes clickable.
+    // Connected wallet pays gas on click. Both functions are permissionless.
+    const ACTION_PILL_ABI = [
+      'function requestLootboxRng()',
+      'function advanceGame()',
+      'error E()',
+      'error RngLocked()',
+      'error RngNotReady()',
+      'error GameOver()'
+    ];
+    const midrngPill = document.getElementById('midrng-pill');
+    const advancePill = document.getElementById('advance-pill');
+    function setPillState(btn, hot) {
+      if (btn.classList.contains('is-pending')) return;
+      if (hot) { btn.classList.add('is-hot'); btn.disabled = false; }
+      else     { btn.classList.remove('is-hot'); btn.disabled = true; }
+    }
+    async function checkActionPills() {
+      try {
+        await loadDeployment();
+        const p = walletProvider || readProvider;
+        if (!p || !DEPLOYMENT?.contracts?.GAME) return;
+        const game = new Contract(DEPLOYMENT.contracts.GAME, ACTION_PILL_ABI, p);
+        const callOpts = connectedAddress ? { from: connectedAddress } : {};
+        const [rngOk, advOk] = await Promise.all([
+          game.requestLootboxRng.staticCall(callOpts).then(() => true).catch(() => false),
+          game.advanceGame.staticCall(callOpts).then(() => true).catch(() => false),
+        ]);
+        setPillState(midrngPill, rngOk);
+        setPillState(advancePill, advOk);
+      } catch (e) { console.warn('checkActionPills', e); }
+    }
+    async function firePill(btn, fnName, label) {
+      if (!signer) {
+        try { await connect(); } catch {}
+        if (!signer) return;
+      }
+      if (btn.classList.contains('is-pending')) return;
+      const oldText = btn.textContent;
+      btn.classList.remove('is-hot');
+      btn.classList.add('is-pending');
+      btn.disabled = true;
+      btn.textContent = `${label}…`;
+      try {
+        const game = new Contract(DEPLOYMENT.contracts.GAME, ACTION_PILL_ABI, signer);
+        await game[fnName].staticCall();
+        const tx = await game[fnName]();
+        btn.textContent = 'Pending…';
+        await tx.wait();
+      } catch (e) {
+        console.warn(`${fnName} failed`, e);
+        alert(`${fnName} failed: ${formatRevert(e)}`);
+      } finally {
+        btn.classList.remove('is-pending');
+        btn.textContent = oldText;
+        checkActionPills();
+      }
+    }
+    midrngPill.addEventListener('click', () => firePill(midrngPill, 'requestLootboxRng', 'Requesting RNG'));
+    advancePill.addEventListener('click', () => firePill(advancePill, 'advanceGame', 'Advancing'));
+    setInterval(checkActionPills, 15000);
+    setTimeout(checkActionPills, 1500);
+
+    buyBtn.addEventListener('click', async () => {
+      if (!signer) return;
+      await loadDeployment();
+      const { qty, lbWei } = readBuyInputs();
+      if (qty === 0n && lbWei === 0n) return;
+      if (priceWei == null) { await refreshBuyPrice(); if (priceWei == null) return; }
+      const ticketScaled = qty * TICKET_UNIT;
+      // Acting as an approved owner buys for THEM (purchase takes a
+      // buyer arg); the operator's wallet pays, the tickets/lootboxes land in the
+      // owner's account. Falls back to the signer when not acting-as.
+      const buyer = actingPlayer() || await signer.getAddress();
+      buyBtn.disabled = true;
+      buyStatusEl.classList.remove('is-error', 'is-ok');
+      buyStatusEl.textContent = 'Simulating…';
+      try {
+        const game = new Contract(DEPLOYMENT.contracts.GAME, PURCHASE_ABI, signer);
+        const value = priceWei * qty + lbWei;
+        try {
+          await game.purchase.staticCall(buyer, ticketScaled, lbWei, ZeroHash, 0, { value });
+        } catch (e) {
+          console.warn('purchase preflight failed', e);
+          throw e;
+        }
+        buyStatusEl.textContent = 'Confirm in wallet…';
+        const tx = await game.purchase(buyer, ticketScaled, lbWei, ZeroHash, 0, { value });
+        buyStatusEl.textContent = `Sent ${tx.hash.slice(0, 10)}… — waiting…`;
+        const rcpt = await tx.wait();
+        buyStatusEl.classList.add('is-ok');
+        buyStatusEl.textContent = `Confirmed in block ${rcpt.blockNumber}.`;
+        setTimeout(() => { if (connectedAddress && GAME_LEVEL != null) selectPlayer(connectedAddress); }, 5000);
+      } catch (e) {
+        buyStatusEl.classList.add('is-error');
+        buyStatusEl.textContent = `Failed: ${formatRevert(e)}`.slice(0, 280);
+      } finally {
+        buyBtn.disabled = false;
+        updateBuyTotal();
+        updateDgnTotal();
+        refreshPassPrices();
+      }
+    });
+
+    // ====== PASS TAB ======================================================
+    const PASS_ABI = [
+      'function purchaseLazyPass(address buyer) payable',
+      'function purchaseWhaleBundle(address buyer, uint256 quantity) payable',
+      'function purchaseDeityPass(address buyer, uint8 symbolId) payable',
+      'error E()', 'error RngLocked()'
+    ];
+    const WHALE_EARLY = 2_400_000_000_000n;     // levels 0-4: 2.4 ETH testnet-scaled
+    const WHALE_STANDARD = 4_000_000_000_000n;  // levels 5+: 4 ETH testnet-scaled
+    const DEITY_BASE = 24_000_000_000_000n;     // 24 ETH testnet-scaled at k=0
+
+    function priceForLevel(lvl) {
+      if (lvl < 5) return 10_000_000_000n;
+      if (lvl < 10) return 20_000_000_000n;
+      if (lvl < 30) return 40_000_000_000n;
+      if (lvl < 60) return 80_000_000_000n;
+      if (lvl < 90) return 120_000_000_000n;
+      if (lvl < 100) return 160_000_000_000n;
+      const off = lvl % 100;
+      if (off === 0) return 240_000_000_000n;
+      if (off < 30) return 40_000_000_000n;
+      if (off < 60) return 80_000_000_000n;
+      if (off < 90) return 120_000_000_000n;
+      return 160_000_000_000n;
+    }
+    function computeLazyPassPrice(currentLevel) {
+      // Levels 0-2 are flat 240 gwei. Otherwise sum 10 levels starting at (currentLevel+1) or 1 if level 0.
+      if (currentLevel <= 2) return 240_000_000_000n;
+      const start = currentLevel === 0 ? 1 : currentLevel + 1;
+      let total = 0n;
+      for (let i = 0; i < 10; i++) total += priceForLevel(start + i);
+      return total;
+    }
+    function computeWhalePrice(passLevel, qty) {
+      const unit = passLevel <= 4 ? WHALE_EARLY : WHALE_STANDARD;
+      return unit * BigInt(qty);
+    }
+
+    const buyTabs = document.getElementById('buy-tabs');
+    const buyPanelTickets = document.getElementById('buy-panel-tickets');
+    const buyPanelPasses = document.getElementById('buy-panel-passes');
+    buyTabs.addEventListener('click', (e) => {
+      const t = e.target.closest('.buy-tab');
+      if (!t) return;
+      buyTabs.querySelectorAll('.buy-tab').forEach(x => x.classList.toggle('is-active', x === t));
+      const tab = t.dataset.tab;
+      buyPanelTickets.hidden = tab !== 'tickets';
+      buyPanelPasses.hidden = tab !== 'passes';
+    });
+
+    const lazyPriceEl = document.getElementById('lazy-price');
+    const whalePriceEl = document.getElementById('whale-price');
+    const deityPriceEl = document.getElementById('deity-price');
+    const lazyBuyBtn = document.getElementById('lazy-buy-btn');
+    const whaleBuyBtn = document.getElementById('whale-buy-btn');
+    const deityBuyBtn = document.getElementById('deity-buy-btn');
+    const whaleQtyEl = document.getElementById('whale-qty');
+    const deitySymbolEl = document.getElementById('deity-symbol');
+    const passStatusEl = document.getElementById('pass-status');
+
+    document.querySelectorAll('.qty button[data-act="dec-whale"], .qty button[data-act="inc-whale"]').forEach(b => {
+      b.addEventListener('click', () => {
+        const v = parseInt(whaleQtyEl.value, 10) || 1;
+        if (b.dataset.act === 'inc-whale') whaleQtyEl.value = Math.min(10, v + 1);
+        else whaleQtyEl.value = Math.max(1, v - 1);
+        refreshPassPrices();
+      });
+    });
+    whaleQtyEl.addEventListener('input', refreshPassPrices);
+
+    function refreshPassPrices() {
+      const lvl = ACTIVE_TICKET_LEVEL != null ? Math.max(0, ACTIVE_TICKET_LEVEL - 1) : 0;
+      const lazyP = computeLazyPassPrice(lvl);
+      lazyPriceEl.textContent = `${formatEther(lazyP)} ETH`;
+      const wQty = parseInt(whaleQtyEl.value, 10) || 1;
+      const whaleP = computeWhalePrice(lvl, wQty);
+      whalePriceEl.textContent = `${formatEther(whaleP)} ETH${wQty > 1 ? ` (${wQty}×)` : ''}`;
+      deityPriceEl.textContent = signer ? 'click Buy to compute' : `≥ ${formatEther(DEITY_BASE)} ETH`;
+      const connected = !!signer;
+      lazyBuyBtn.disabled = !connected;
+      whaleBuyBtn.disabled = !connected;
+      deityBuyBtn.disabled = !connected;
+      [lazyBuyBtn, whaleBuyBtn, deityBuyBtn].forEach(b => {
+        if (!connected) b.textContent = 'Connect wallet';
+      });
+      if (connected) {
+        lazyBuyBtn.textContent = `Buy for ${formatEther(lazyP)} ETH`;
+        whaleBuyBtn.textContent = `Buy for ${formatEther(whaleP)} ETH`;
+        deityBuyBtn.textContent = 'Buy Deity Pass';
+      }
+    }
+    refreshPassPrices();
+
+    async function findDeityPassPrice(game, buyer, symbolId) {
+      // The contract's price = DEITY_BASE + k*(k+1)*1e12/2 where k = current count
+      // of deity passes minted. There's no view exposing k, so we probe staticCall
+      // with each possible price (k=0..31) in parallel and pick the one that passes.
+      const trials = [];
+      for (let k = 0; k < 32; k++) {
+        const price = DEITY_BASE + (BigInt(k) * BigInt(k + 1) * 1_000_000_000_000n) / 2n;
+        trials.push(game.purchaseDeityPass.staticCall(buyer, symbolId, { value: price }).then(() => price).catch(() => null));
+      }
+      const results = await Promise.all(trials);
+      const ok = results.find(p => p !== null);
+      if (!ok) throw new Error('No valid price found (deity passes maxed out, or symbol taken, or RNG-locked)');
+      return ok;
+    }
+
+    async function runPassBuy(kind) {
+      if (!signer) return;
+      const btn = { lazy: lazyBuyBtn, whale: whaleBuyBtn, deity: deityBuyBtn }[kind];
+      const originalText = btn.textContent;
+      // Acting as an approved owner buys the pass for THEM (the operator pays).
+      const buyer = actingPlayer() || await signer.getAddress();
+      passStatusEl.classList.remove('is-error', 'is-ok');
+      passStatusEl.textContent = 'Simulating…';
+      btn.disabled = true;
+      try {
+        await loadDeployment();
+        const game = new Contract(DEPLOYMENT.contracts.GAME, PASS_ABI, signer);
+        let tx;
+        if (kind === 'lazy') {
+          const price = computeLazyPassPrice(currentLevel);
+          await game.purchaseLazyPass.staticCall(buyer, { value: price });
+          passStatusEl.textContent = 'Confirm in wallet…';
+          tx = await game.purchaseLazyPass(buyer, { value: price });
+        } else if (kind === 'whale') {
+          const qty = parseInt(whaleQtyEl.value, 10) || 1;
+          const price = computeWhalePrice(passLevel, qty);
+          await game.purchaseWhaleBundle.staticCall(buyer, qty, { value: price });
+          passStatusEl.textContent = 'Confirm in wallet…';
+          tx = await game.purchaseWhaleBundle(buyer, qty, { value: price });
+        } else if (kind === 'deity') {
+          const symbolId = Math.max(0, Math.min(31, parseInt(deitySymbolEl.value, 10) || 0));
+          passStatusEl.textContent = 'Probing for current deity price…';
+          const price = await findDeityPassPrice(game, buyer, symbolId);
+          deityPriceEl.textContent = `${formatEther(price)} ETH`;
+          passStatusEl.textContent = `Confirm in wallet · ${formatEther(price)} ETH …`;
+          tx = await game.purchaseDeityPass(buyer, symbolId, { value: price });
+        }
+        passStatusEl.textContent = `Sent ${tx.hash.slice(0, 10)}… — waiting…`;
+        const rcpt = await tx.wait();
+        passStatusEl.classList.add('is-ok');
+        passStatusEl.textContent = `Confirmed in block ${rcpt.blockNumber}.`;
+        setTimeout(() => { if (connectedAddress) selectPlayer(connectedAddress); }, 5000);
+      } catch (e) {
+        passStatusEl.classList.add('is-error');
+        passStatusEl.textContent = `Failed: ${formatRevert(e)}`.slice(0, 240);
+      } finally {
+        btn.disabled = false;
+        refreshPassPrices();
+      }
+    }
+    lazyBuyBtn.addEventListener('click', () => runPassBuy('lazy'));
+    whaleBuyBtn.addEventListener('click', () => runPassBuy('whale'));
+    deityBuyBtn.addEventListener('click', () => runPassBuy('deity'));
+
+    // ====== PENDING (lootbox opens + degenerette bet resolutions) ========
+    const LOOTBOX_OPEN_ABI = [
+      'function openBox(address player, uint48 index)',
+      'error E()', 'error RngNotReady()'
+    ];
+    const DEGENERETTE_ABI = [
+      'function placeDegeneretteBet(address player, uint8 currency, uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant) payable',
+      // Note: on the module it's resolveBets, but on the GAME proxy it's resolveDegeneretteBets.
+      'function resolveDegeneretteBets(address player, uint64[] calldata betIds)',
+      'error E()', 'error RngNotReady()', 'error InvalidBet()', 'error NotApproved()', 'error UnsupportedCurrency()'
+    ];
+    const ACTION_ABI = [...LOOTBOX_OPEN_ABI, ...DEGENERETTE_ABI];
+
+    const pendingListEl = document.getElementById('pending-list');
+    const pendingCountEl = document.getElementById('pending-count');
+    const recentListEl = document.getElementById('recent-list');
+    const recentInfoEl = document.getElementById('recent-info');
+
+    function isLootboxOpened(item) {
+      // A lootbox-feed entry with only 'lootboxIdx' result means purchased but not opened.
+      // Once opened, additional reward result rows appear.
+      if (!item.results || item.results.length === 0) return false;
+      return item.results.some(r => r.rewardType !== 'lootboxIdx');
+    }
+
+    async function loadPending(address) {
+      pendingListEl.innerHTML = '<div class="pending-empty">Loading…</div>';
+      pendingCountEl.textContent = '—';
+      // Pending items must belong to the address you'll actually call from.
+      // resolveBets requires msg.sender == player (or operator approval), so
+      // if the wallet is connected we always show the wallet's pending list,
+      // regardless of which player is selected in the dropdown.
+      const filterAddr = (connectedAddress || address).toLowerCase();
+      const isOwn = !connectedAddress || filterAddr === (connectedAddress || '').toLowerCase();
+      try {
+        const [lbResp, dgnResp] = await Promise.all([
+          jsonFetch(`${API}/lootbox/feed?limit=200&_=${Date.now()}`),
+          jsonFetch(`${API}/degenerette/feed?limit=200&_=${Date.now()}`)
+        ]);
+        const lbItems = (lbResp.items || []).filter(i => i.player.toLowerCase() === filterAddr);
+        const dgnItems = (dgnResp.items || []).filter(i => i.player.toLowerCase() === filterAddr);
+
+        // Derive RNG-readiness from the GLOBAL feed (not just this player's
+        // items). Both lootbox-open and degenerette-resolve use the same
+        // `lootboxRngWordByIndex[index]` mapping, and the contract sets the
+        // RNG word per index for the whole day in one VRF callback. So if any
+        // lootbox at index N has been opened by anyone, RNG is ready for ALL
+        // pending items at index ≤ N (lootboxes and degenerette bets alike).
+        let maxAppliedIndex = -1;
+        for (const it of (lbResp.items || [])) {
+          if (!isLootboxOpened(it)) continue;
+          const idx = Number(it.resolvedIndex);
+          if (Number.isFinite(idx) && idx > maxAppliedIndex) maxAppliedIndex = idx;
+        }
+        const readyForIndex = (idx) => Number(idx) <= maxAppliedIndex;
+
+        // Aggregate lootbox feed by resolvedIndex (one pending row per index)
+        const byIndex = new Map();
+        for (const it of lbItems) {
+          const idx = it.resolvedIndex;
+          if (idx == null) continue;
+          if (!byIndex.has(idx)) byIndex.set(idx, { index: idx, kind: it.kind, eth: 0n, flip: 0n, opened: false, day: null });
+          const slot = byIndex.get(idx);
+          if (it.kind === 'eth') slot.eth += BigInt(it.costRawWei || '0');
+          if (it.kind === 'flip') slot.flip += BigInt(it.costRawWei || '0');
+          if (isLootboxOpened(it)) slot.opened = true;
+          const dayResult = it.results?.find(r => r.rewardType === 'lootboxIdx')?.rewardData?.day;
+          if (dayResult != null) slot.day = dayResult;
+        }
+        const pendingLb = [...byIndex.values()].filter(e => !e.opened);
+        const pendingDgn = dgnItems.filter(i => !i.results || i.results.length === 0);
+
+        pendingListEl.innerHTML = '';
+        const total = pendingLb.length + pendingDgn.length;
+        const whoseLabel = connectedAddress ? 'wallet' : 'selected player';
+        pendingCountEl.textContent = total === 0 ? `nothing pending for ${whoseLabel}` : `${total} pending · ${whoseLabel}`;
+        if (total === 0) {
+          pendingListEl.innerHTML = `<div class="pending-empty">No open or resolve actions for your ${whoseLabel}.</div>`;
+          return;
+        }
+
+        // Build button state for each pending item. Three exclusive states:
+        //   - no-wallet:    "Connect" (clickable; click handler nudges user)
+        //   - awaiting-rng: grey, disabled, hover-tooltip explains the wait
+        //   - ready:        accent, clickable
+        function buildBtnState(idx, day, verb) {
+          if (!signer) return { label: 'Connect', cls: ' is-wait', disabled: '', title: `Connect a wallet to ${verb}` };
+          if (!readyForIndex(idx)) return {
+            label: 'Awaiting RNG',
+            cls: ' is-wait',
+            disabled: ' disabled',
+            title: `VRF callback for index ${idx}${day != null ? ` (day ${day})` : ''} has not landed yet. The contract sets the RNG word on the next day's advance — try again after the day boundary.`,
+          };
+          return { label: verb.charAt(0).toUpperCase() + verb.slice(1), cls: '', disabled: '', title: '' };
+        }
+        function escapeAttr(s) { return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c])); }
+
+        for (const lb of pendingLb) {
+          const row = document.createElement('div');
+          row.className = 'pending-row';
+          const amount = lb.kind === 'flip'
+            ? `${Number(formatEther(lb.flip)).toLocaleString()} FLIP`
+            : `${formatEther(lb.eth)} ETH`;
+          const s = buildBtnState(lb.index, lb.day, 'open');
+          const status = signer && !readyForIndex(lb.index) ? ' · awaiting RNG' : '';
+          row.innerHTML = `
+            <div>
+              <div class="kind">Lootbox #${lb.index}</div>
+              <div class="meta">${amount}${lb.day != null ? ' · day ' + lb.day : ''}${status}</div>
+            </div>
+            <button class="pending-action${s.cls}" title="${escapeAttr(s.title)}" data-action="open-lb" data-index="${lb.index}" data-kind="${lb.kind}"${s.disabled}>${s.label}</button>
+          `;
+          pendingListEl.appendChild(row);
+        }
+        for (const b of pendingDgn) {
+          const row = document.createElement('div');
+          row.className = 'pending-row';
+          const s = buildBtnState(b.betIndex, null, 'resolve');
+          const status = signer && !readyForIndex(b.betIndex) ? ' · awaiting RNG' : (signer ? ' · ready' : '');
+          row.innerHTML = `
+            <div>
+              <div class="kind">Bet #${b.betId}</div>
+              <div class="meta">rng idx ${b.betIndex}${status}</div>
+            </div>
+            <button class="pending-action${s.cls}" title="${escapeAttr(s.title)}" data-action="resolve-bet" data-betid="${b.betId}"${s.disabled}>${s.label}</button>
+          `;
+          pendingListEl.appendChild(row);
+        }
+      } catch (e) {
+        pendingListEl.innerHTML = `<div class="pending-empty">Failed: ${e.message || e}</div>`;
+        console.warn('loadPending', e);
+      }
+    }
+
+    async function loadRecent(address) {
+      recentListEl.innerHTML = '<div class="pending-empty">Loading…</div>';
+      recentInfoEl.textContent = '—';
+      try {
+        const [lbResp, dgnResp] = await Promise.all([
+          jsonFetch(`${API}/lootbox/feed?limit=200&_=${Date.now()}`),
+          jsonFetch(`${API}/degenerette/feed?limit=200&_=${Date.now()}`)
+        ]);
+        const me = address.toLowerCase();
+        const events = [];
+
+        for (const it of (lbResp.items || [])) {
+          if (it.player.toLowerCase() !== me) continue;
+          const opened = it.results?.find(r => r.rewardType === 'opened' || r.rewardType === 'flipOpened');
+          if (!opened) continue;
+          events.push({ blk: Number(opened.blockNumber || 0), kind: 'lootbox', idx: it.resolvedIndex, lbKind: it.kind, costRawWei: it.costRawWei, data: opened.rewardData || {} });
+        }
+        for (const it of (dgnResp.items || [])) {
+          if (it.player.toLowerCase() !== me) continue;
+          const resolved = it.results?.find(r => r.resultType === 'resolved');
+          if (!resolved) continue;
+          let totalEthPayout = 0n;
+          let totalMatches = 0;
+          for (const r of it.results) {
+            if (r.resultType === 'result') {
+              if (r.payout) totalEthPayout += BigInt(r.payout);
+              totalMatches += (r.resultData?.matches || 0);
+            }
+          }
+          const totalPayout = resolved.resultData?.totalPayout ? BigInt(resolved.resultData.totalPayout) : totalEthPayout;
+          events.push({ blk: Number(resolved.blockNumber || 0), kind: 'bet', betId: it.betId, totalPayout, totalMatches, results: it.results, lootboxPayouts: it.lootboxPayouts || [] });
+        }
+        events.sort((a, b) => b.blk - a.blk);
+        const shown = events.slice(0, 8);
+
+        recentListEl.innerHTML = '';
+        if (shown.length === 0) {
+          recentListEl.innerHTML = '<div class="pending-empty">No recent rewards.</div>';
+          return;
+        }
+        recentInfoEl.textContent = `${shown.length} item${shown.length === 1 ? '' : 's'}`;
+
+        for (const e of shown) {
+          const row = document.createElement('div');
+          row.className = 'pending-row';
+          if (e.kind === 'lootbox') {
+            // ETH amounts on testnet are 1e6-descaled; ethDisplay divides by
+            // 1e12 so the magnitude reads like real ETH. formatEther (1e18)
+            // truncates every testnet payout to "0.000000".
+            const eth = ethDisplay(e.data.amount || '0');
+            // futureTickets is pre-Bernoulli ×100 scaled — show whole tickets.
+            const tixRaw = Number(e.data.futureTickets || 0);
+            const tix = Math.floor(tixRaw / 100);
+            const lvl = e.data.futureLevel ?? '?';
+            const flipWei = BigInt(e.data.flip || '0');
+            const flipNum = flipFromWei(flipWei);
+            const flip = flipWei > 0n ? `${flipNum.toLocaleString(undefined, { maximumFractionDigits: 2 })} FLIP` : null;
+            const parts = [];
+            if (tix > 0) parts.push(`${tix} tix @ Lv ${lvl}`);
+            if (flip) parts.push(flip);
+            if (eth > 0) parts.push(`${eth.toFixed(6)} ETH`);
+            if (parts.length === 0) parts.push('no prize');
+            const won = eth > 0 || tix > 0 || flipWei > 0n;
+            const amountLabel = eth > 0
+              ? `+${eth.toFixed(6)} ETH`
+              : (flipWei > 0n ? `+${flipNum.toLocaleString(undefined, { maximumFractionDigits: 0 })} FLIP` : (tix > 0 ? `+${tix} tix` : '—'));
+            row.innerHTML = `
+              <div>
+                <div class="kind">Lootbox #${e.idx} <small style="color:${won ? 'var(--win)' : 'var(--muted)'}">${won ? 'opened' : 'opened (empty)'}</small></div>
+                <div class="meta">${parts.join(' · ')}</div>
+              </div>
+              <span class="recent-amount ${won ? 'is-win' : 'is-loss'}">${amountLabel}</span>
+            `;
+          } else {
+            const eth = ethDisplay(e.totalPayout || '0');
+            const won = e.totalPayout > 0n;
+            const lootboxNote = e.lootboxPayouts.length > 0 ? ` · +${e.lootboxPayouts.length} lootbox` : '';
+            row.innerHTML = `
+              <div>
+                <div class="kind">Bet #${e.betId} <small style="color:${won ? 'var(--win)' : 'var(--muted)'}">${won ? 'won' : 'no match'}</small></div>
+                <div class="meta">${e.totalMatches} match${e.totalMatches === 1 ? '' : 'es'}${lootboxNote}</div>
+              </div>
+              <span class="recent-amount ${won ? 'is-win' : 'is-loss'}">${won ? '+' : ''}${eth.toFixed(6)} ETH</span>
+            `;
+          }
+          recentListEl.appendChild(row);
+        }
+      } catch (e) {
+        recentListEl.innerHTML = `<div class="pending-empty">Failed: ${e.message || e}</div>`;
+        console.warn('loadRecent', e);
+      }
+    }
+
+    // ====== DEGENERETTE RESULTS VISUALIZATION =============================
+    // Port of /degenerette/index.html's per-spin gamepiece comparison, in a
+    // compact horizontal row form. For each resolved spin we render the
+    // player's chosen ticket and the house's resolved ticket as 2x2 trait
+    // tokens with per-quadrant match-state coloring (full/sym/col/miss).
+    // Each row also auto-plays a quick slot-machine spin animation on first
+    // render and can be replayed individually or via the "Replay all" button.
+    const dgnResultsEl = document.getElementById('dgn-results');
+    const dgnResultsInfoEl = document.getElementById('dgn-results-info');
+    const dgnResultsSummaryEl = document.getElementById('dgn-results-summary');
+    const dgnSummaryWinsEl = document.getElementById('dgn-summary-wins');
+    const dgnSummaryMatchesEl = document.getElementById('dgn-summary-matches');
+    const dgnSummaryPayoutEl = document.getElementById('dgn-summary-payout');
+    const dgnReplayAllBtn = document.getElementById('dgn-replay-all');
+    const dgnHistoryBtn = document.getElementById('dgn-history-btn');
+    const dgnHistorySummaryEl = document.getElementById('dgn-history-summary');
+    const dgnModalOverlay = document.getElementById('dgn-modal-overlay');
+    const dgnModalCloseBtn = document.getElementById('dgn-modal-close');
+
+    function openDgnModal() {
+      if (dgnHistoryBtn.disabled) return;
+      dgnModalOverlay.hidden = false;
+      // Kick off all auto-spins fresh when the modal opens — animation looks
+      // best when triggered alongside the open transition, not on inventory load.
+      setTimeout(() => {
+        const rows = dgnResultsEl.querySelectorAll('.dgn-result-row');
+        rows.forEach((row, i) => {
+          const btn = row.querySelector('.dgn-result-replay');
+          setTimeout(() => btn && btn.click(), i * 140);
+        });
+      }, 80);
+    }
+    function closeDgnModal() {
+      dgnModalOverlay.hidden = true;
+      // Stop any in-flight spins so we don't waste cycles in the background.
+      for (const [, state] of dgnActiveSpins) clearInterval(state.interval);
+      dgnActiveSpins.clear();
+    }
+    dgnHistoryBtn.addEventListener('click', openDgnModal);
+    dgnModalCloseBtn.addEventListener('click', closeDgnModal);
+    dgnModalOverlay.addEventListener('click', (ev) => {
+      if (ev.target === dgnModalOverlay) closeDgnModal();
+    });
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && !dgnModalOverlay.hidden) closeDgnModal();
+    });
+
+    // Cached per-quadrant pool of {sym, col} pairs for the currently-selected
+    // player — populated by selectPlayer via fetchPlayerTraitPools. The spin
+    // animation samples from this so the reels cycle through traits the
+    // player actually holds (more believable than uniform-random).
+    let dgnSelectedPlayerPools = null;
+    // Active animations indexed by row id so Replay All can stagger and
+    // cancel any in-flight ticks before replaying.
+    const dgnActiveSpins = new Map();
+
+    function dgnRandomTrait(q) {
+      if (dgnSelectedPlayerPools && Array.isArray(dgnSelectedPlayerPools[q]) && dgnSelectedPlayerPools[q].length > 0) {
+        const pool = dgnSelectedPlayerPools[q];
+        return pool[Math.floor(Math.random() * pool.length)];
+      }
+      return { sym: Math.floor(Math.random() * 8), col: Math.floor(Math.random() * 8) };
+    }
+
+    function ensureCellImg(cell) {
+      let img = cell.querySelector('img');
+      if (!img) { img = document.createElement('img'); img.alt = ''; cell.appendChild(img); }
+      return img;
+    }
+
+    // Slot-machine spin: rapidly cycle each quadrant's badge, lock them one
+    // at a time in randomized order, then settle onto the actual target +
+    // apply match-state coloring. ~1.2 sec total (4 × 300ms staggered locks).
+    function playRowSpin(card, targetTraits, matchStates, heroIdx, rowId) {
+      const cells = Array.from(card.querySelectorAll('.dgn-rq'));
+      if (cells.length !== 4) return;
+      const prev = dgnActiveSpins.get(rowId);
+      if (prev) clearInterval(prev.interval);
+
+      // Reset all coloring/state, mark all as spinning. Hero stays applied
+      // during the spin too so the hero badge is large from frame 1 — the
+      // rank stays visible while symbols cycle, instead of suddenly growing
+      // when that cell locks.
+      for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i];
+        cell.classList.remove('q-full', 'q-sym', 'q-col', 'q-miss', 'q-hero');
+        cell.classList.add('is-spinning');
+        cell.dataset.locked = '';
+        if (heroIdx === i) cell.classList.add('q-hero');
+      }
+
+      // Randomize lock order, stagger lock steps every 3 ticks
+      const order = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+      const stepMs = 70;
+      const lockStepFor = new Array(4);
+      order.forEach((cellIdx, i) => { lockStepFor[cellIdx] = 4 + i * 3; });
+      const finalStep = Math.max(...lockStepFor) + 1;
+      let step = 0;
+      const state = {};
+
+      const interval = setInterval(() => {
+        for (let i = 0; i < 4; i++) {
+          const cell = cells[i];
+          if (cell.dataset.locked === '1') continue;
+          if (step >= lockStepFor[i]) {
+            cell.dataset.locked = '1';
+            cell.classList.remove('is-spinning');
+            const t = targetTraits[i];
+            ensureCellImg(cell).src = badgePath(i, t.sym, t.col);
+            cell.classList.add('q-' + matchStates[i]);
+            // q-hero was applied up-front; nothing to do here.
+          } else {
+            const r = dgnRandomTrait(i);
+            ensureCellImg(cell).src = badgePath(i, r.sym, r.col);
+          }
+        }
+        step++;
+        if (step > finalStep) {
+          clearInterval(interval);
+          dgnActiveSpins.delete(rowId);
+          if (state.onDone) state.onDone();
+        }
+      }, stepMs);
+      state.interval = interval;
+      dgnActiveSpins.set(rowId, state);
+      return new Promise(resolve => { state.onDone = resolve; });
+    }
+
+    function clearDgnSummary() {
+      dgnResultsSummaryEl.hidden = true;
+      dgnReplayAllBtn.disabled = true;
+      dgnHistoryBtn.disabled = true;
+      dgnHistorySummaryEl.textContent = '—';
+    }
+    function setDgnSummary(bets) {
+      if (!bets.length) { clearDgnSummary(); return; }
+      const winning = bets.filter(b => b.totalPayoutWei > 0n).length;
+      const totalMatches = bets.reduce((s, b) => s + b.totalMatches, 0);
+      const totalPayoutWei = bets.reduce((s, b) => s + b.totalPayoutWei, 0n);
+      dgnSummaryWinsEl.textContent = `${winning}/${bets.length}`;
+      dgnSummaryWinsEl.className = 'value ' + (winning > 0 ? 'is-win' : 'is-miss');
+      dgnSummaryMatchesEl.textContent = String(totalMatches);
+      dgnSummaryMatchesEl.className = 'value ' + (totalMatches > 0 ? 'is-win' : 'is-miss');
+      dgnSummaryPayoutEl.textContent = totalPayoutWei > 0n ? `+${ethDisplay(totalPayoutWei).toFixed(6)} ETH` : '0 ETH';
+      dgnSummaryPayoutEl.className = 'value ' + (totalPayoutWei > 0n ? 'is-win' : 'is-miss');
+      dgnResultsSummaryEl.hidden = false;
+      dgnReplayAllBtn.disabled = false;
+      // Compact summary on the trigger row in the main UI: at-a-glance "Y/N
+      // bets · +X.XX ETH" so the user knows whether there's anything to view
+      // without opening the modal.
+      const payoutLabel = totalPayoutWei > 0n ? `+${ethDisplay(totalPayoutWei).toFixed(6)} ETH` : '—';
+      dgnHistorySummaryEl.textContent = `${winning}/${bets.length} wins · ${payoutLabel}`;
+      dgnHistoryBtn.disabled = false;
+    }
+
+    function buildResultCard(traits, matchStates, heroIdx) {
+      // traits:      array of 4 {q, sym, col}
+      // matchStates: array of 4 in ['full','sym','col','miss'], or null for
+      //              the house side (no match coloring — the house IS truth).
+      // heroIdx:     0..3 or null (player's hero quadrant — larger badge).
+      const card = document.createElement('div');
+      card.className = 'dgn-result-card';
+      for (let q = 0; q < 4; q++) {
+        const cell = document.createElement('div');
+        let cls = 'dgn-rq';
+        if (matchStates) cls += ' q-' + matchStates[q];
+        cell.className = cls;
+        if (heroIdx === q) cell.classList.add('q-hero');
+        const t = traits[q];
+        if (t) {
+          const img = document.createElement('img');
+          img.src = badgePath(q, t.sym, t.col);
+          img.alt = '';
+          cell.appendChild(img);
+        }
+        card.appendChild(cell);
+      }
+      return card;
+    }
+
+    function computeMatches(player, house) {
+      // Per quadrant compare on sym + col. Returns ['full'|'sym'|'col'|'miss', ...].
+      const out = [];
+      let fullCount = 0;
+      for (let q = 0; q < 4; q++) {
+        const p = player[q], h = house[q];
+        if (!p || !h) { out.push('miss'); continue; }
+        const symEq = p.sym === h.sym;
+        const colEq = p.col === h.col;
+        if (symEq && colEq) { out.push('full'); fullCount++; }
+        else if (symEq) out.push('sym');
+        else if (colEq) out.push('col');
+        else out.push('miss');
+      }
+      return { states: out, fullCount };
+    }
+
+    function rowSeverity(fullCount, anyMatch) {
+      if (fullCount >= 1) return 'is-full';
+      if (anyMatch) return 'is-partial';
+      return 'is-miss';
+    }
+
+    // Decode the bet's hero quadrant from the packedData uint256. Per
+    // contracts/modules/DegenerusGameDegeneretteModule.sol the FT_HERO_SHIFT
+    // constant is 237 and `heroQuadrant = (packed >> (FT_HERO_SHIFT + 1)) & 0x3`.
+    // Returns 0..3 (the hero quadrant index) or null when packed is missing.
+    const FT_HERO_QUADRANT_SHIFT = 238n;  // FT_HERO_SHIFT (237) + 1
+    function decodeBetHero(packed) {
+      if (packed == null) return null;
+      try {
+        return Number((BigInt(packed) >> FT_HERO_QUADRANT_SHIFT) & 0x3n);
+      } catch { return null; }
+    }
+
+    async function loadDgnResults(address) {
+      dgnResultsEl.innerHTML = '<div class="pending-empty">Loading…</div>';
+      dgnResultsInfoEl.textContent = '—';
+      clearDgnSummary();
+      // Make sure the spin animation samples from THIS player's owned-trait
+      // pool. fetchPlayerTraitPools is fast (cached by the browser) so we
+      // re-fetch on every selectPlayer to stay current with new mints.
+      dgnSelectedPlayerPools = await fetchPlayerTraitPools(address);
+      try {
+        const resp = await jsonFetch(`${API}/degenerette/feed?limit=200&_=${Date.now()}`);
+        const me = address.toLowerCase();
+        const mine = (resp.items || []).filter(i => i.player.toLowerCase() === me);
+        // One row per BET. Multi-spin bets share the same playerTicket but
+        // each spin gets its own resultTicket on-chain; the indexer only
+        // surfaces the FIRST spin's resultTicket in the 'resolved' event, so
+        // the visualized comparison reflects spin 0. Spin count + total
+        // matches + total payout are shown in the meta line so multi-spin
+        // bets aren't misleading.
+        const bets = [];
+        for (const bet of mine) {
+          const results = Array.isArray(bet.results) ? bet.results : [];
+          const resolved = results.find(r => r.resultType === 'resolved');
+          if (!resolved) continue;
+          const houseRaw = resolved.resultData?.resultTicket;
+          if (houseRaw == null) continue;
+          const houseTraits = unpackTraits(houseRaw).map(traitIdToQSC);
+          // Prefer spin 0's playerTicket; fall back to any spin (they're equal).
+          const perSpin = results.filter(r => r.resultType === 'result');
+          const spinZero = perSpin.find(r => (r.resultData?.ticketIndex ?? 0) === 0) || perSpin[0];
+          const playerRaw = spinZero?.resultData?.playerTicket;
+          if (playerRaw == null) continue;
+          const playerTraits = unpackTraits(playerRaw).map(traitIdToQSC);
+          const m = computeMatches(playerTraits, houseTraits);
+          // Aggregate across spins for the meta + payout line.
+          let totalMatches = 0;
+          let totalPayoutWei = 0n;
+          for (const r of perSpin) {
+            totalMatches += Number(r.resultData?.matches ?? 0);
+            if (r.payout) totalPayoutWei += BigInt(r.payout);
+          }
+          const totalFromResolved = resolved.resultData?.totalPayout ? BigInt(resolved.resultData.totalPayout) : null;
+          if (totalFromResolved != null) totalPayoutWei = totalFromResolved;
+          // Per-spin detail so the modal can show "you did N spins" visibly.
+          // Each entry: { spinIndex, matches, payoutWei }. Sorted by ticketIndex
+          // (spin 0 first) for readable left-to-right reading.
+          const spinDetails = perSpin
+            .map(r => ({
+              spinIndex: Number(r.resultData?.ticketIndex ?? 0),
+              matches: Number(r.resultData?.matches ?? 0),
+              payoutWei: r.payout ? BigInt(r.payout) : 0n,
+            }))
+            .sort((a, b) => a.spinIndex - b.spinIndex);
+          bets.push({
+            blk: Number(resolved.blockNumber || 0),
+            betId: bet.betId,
+            playerTraits, houseTraits,
+            heroIdx: decodeBetHero(bet.packedData),
+            spinZeroMatches: spinZero?.resultData?.matches ?? m.fullCount,
+            spinZeroMatchStates: m.states,
+            spinZeroFullCount: m.fullCount,
+            spinCount: perSpin.length,
+            spinDetails,
+            totalMatches,
+            totalPayoutWei,
+          });
+        }
+        bets.sort((a, b) => b.blk - a.blk);
+        const shown = bets.slice(0, 8);
+
+        dgnResultsEl.innerHTML = '';
+        if (shown.length === 0) {
+          dgnResultsEl.innerHTML = '<div class="pending-empty">No resolved bets yet for this player.</div>';
+          dgnResultsInfoEl.textContent = '—';
+          clearDgnSummary();
+          return;
+        }
+        dgnResultsInfoEl.textContent = `${shown.length} of ${bets.length} bet${bets.length === 1 ? '' : 's'}`;
+        setDgnSummary(shown);
+
+        shown.forEach((s, idx) => {
+          const row = document.createElement('div');
+          const rowId = `dgn-row-${s.betId}-${idx}`;
+          row.id = rowId;
+          const anyMatch = s.spinZeroMatchStates.some(x => x !== 'miss');
+          row.className = 'dgn-result-row ' + rowSeverity(s.spinZeroFullCount, anyMatch);
+          // Player card (initially blank-spinning; coloring applied on lock).
+          const playerCard = buildResultCard(s.playerTraits, s.spinZeroMatchStates, s.heroIdx);
+          row.appendChild(playerCard);
+          const vs = document.createElement('span');
+          vs.className = 'dgn-result-vs';
+          vs.textContent = 'vs';
+          row.appendChild(vs);
+          row.appendChild(buildResultCard(s.houseTraits, null, null));
+          const meta = document.createElement('div');
+          meta.className = 'dgn-result-meta';
+          const matchesEl = document.createElement('span');
+          const winning = s.totalMatches > 0;
+          matchesEl.className = 'matches ' + (winning ? 'is-win' : 'is-miss');
+          const matchLabel = s.spinCount > 1
+            ? `${s.totalMatches} match${s.totalMatches === 1 ? '' : 'es'} across ${s.spinCount} spins`
+            : `${s.totalMatches} match${s.totalMatches === 1 ? '' : 'es'}`;
+          matchesEl.textContent = matchLabel;
+          const sub = document.createElement('span');
+          sub.className = 'sub';
+          sub.textContent = s.spinCount > 1
+            ? `bet #${s.betId} · house shown is spin 0`
+            : `bet #${s.betId}`;
+          meta.appendChild(matchesEl);
+          meta.appendChild(sub);
+          row.appendChild(meta);
+          const payout = document.createElement('span');
+          payout.className = 'dgn-result-payout ' + (s.totalPayoutWei > 0n ? 'is-win' : 'is-miss');
+          const replayBtn = document.createElement('button');
+          replayBtn.type = 'button';
+          replayBtn.className = 'dgn-result-replay';
+          replayBtn.title = 'Replay spin animation';
+          replayBtn.textContent = '↻';
+          replayBtn.addEventListener('click', () => {
+            replayBtn.classList.add('is-running');
+            playRowSpin(playerCard, s.playerTraits, s.spinZeroMatchStates, s.heroIdx, rowId)
+              .finally(() => replayBtn.classList.remove('is-running'));
+          });
+          payout.textContent = s.totalPayoutWei > 0n ? `+${ethDisplay(s.totalPayoutWei).toFixed(6)} ETH` : '—';
+          const right = document.createElement('span');
+          right.style.cssText = 'display:flex;align-items:center;gap:4px;white-space:nowrap;';
+          right.appendChild(payout);
+          right.appendChild(replayBtn);
+          row.appendChild(right);
+          // Per-spin chip strip: one chip per spin so a 10-spin bet visibly
+          // shows 10 chips. Match count + payout per chip; tint green when
+          // the spin paid out, gold when it was a big win (>= 4 matches).
+          if (s.spinDetails && s.spinDetails.length > 0) {
+            const strip = document.createElement('div');
+            strip.className = 'dgn-spin-strip';
+            for (const sp of s.spinDetails) {
+              const chip = document.createElement('span');
+              chip.className = 'dgn-spin-chip';
+              if (sp.payoutWei > 0n) {
+                chip.classList.add(sp.matches >= 4 ? 'is-big-win' : 'is-win');
+              } else {
+                chip.classList.add('is-miss');
+              }
+              const numEl = document.createElement('span');
+              numEl.className = 'num';
+              numEl.textContent = `#${sp.spinIndex}`;
+              const matchEl = document.createElement('span');
+              matchEl.textContent = `${sp.matches}m`;
+              chip.appendChild(numEl);
+              chip.appendChild(matchEl);
+              if (sp.payoutWei > 0n) {
+                const payEl = document.createElement('span');
+                payEl.textContent = `+${ethDisplay(sp.payoutWei).toFixed(5)}`;
+                chip.appendChild(payEl);
+              }
+              chip.title = `Spin ${sp.spinIndex}: ${sp.matches} matches${sp.payoutWei > 0n ? `, +${ethDisplay(sp.payoutWei).toFixed(6)} ETH` : ', no payout'}`;
+              strip.appendChild(chip);
+            }
+            row.appendChild(strip);
+          }
+          dgnResultsEl.appendChild(row);
+          // No auto-spin here — the modal opens trigger the staggered spin
+          // sequence in openDgnModal(). Rendering the row with its final
+          // match coloring + actual badges is the correct "resting" state
+          // when the modal is closed (so a brief flash on open looks right).
+        });
+      } catch (e) {
+        dgnResultsEl.innerHTML = `<div class="pending-empty">Failed: ${e.message || e}</div>`;
+        console.warn('loadDgnResults', e);
+      }
+    }
+
+    // Replay all visible rows sequentially, ~150ms apart so the eye can
+    // follow each one rather than seeing them all spin together.
+    dgnReplayAllBtn.addEventListener('click', async () => {
+      if (dgnReplayAllBtn.disabled) return;
+      dgnReplayAllBtn.disabled = true;
+      const rows = Array.from(dgnResultsEl.querySelectorAll('.dgn-result-row'));
+      for (const row of rows) {
+        const btn = row.querySelector('.dgn-result-replay');
+        if (btn) btn.click();
+        await new Promise(r => setTimeout(r, 180));
+      }
+      // Wait for the last row's animation to finish before re-enabling.
+      await new Promise(r => setTimeout(r, 1300));
+      dgnReplayAllBtn.disabled = false;
+    });
+
+    pendingListEl.addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('[data-action]');
+      if (!btn) return;
+      if (!signer) { btn.textContent = 'connect first'; setTimeout(() => loadPending(connectedAddress || playerSel.value), 1800); return; }
+      await loadDeployment();
+      const buyer = await signer.getAddress();
+      const game = new Contract(DEPLOYMENT.contracts.GAME, ACTION_ABI, signer);
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        if (btn.dataset.action === 'open-lb') {
+          const idx = BigInt(btn.dataset.index);
+          const fn = 'openBox'; // lootboxes are ETH-only
+          await game[fn].staticCall(buyer, idx);
+          const tx = await game[fn](buyer, idx);
+          btn.textContent = 'sent…';
+          await tx.wait();
+        } else if (btn.dataset.action === 'resolve-bet') {
+          const betId = BigInt(btn.dataset.betid);
+          await game.resolveDegeneretteBets.staticCall(buyer, [betId]);
+          const tx = await game.resolveDegeneretteBets(buyer, [betId]);
+          btn.textContent = 'sent…';
+          await tx.wait();
+        }
+        setTimeout(() => { loadPending(buyer); selectPlayer(buyer); }, 5000);
+      } catch (err) {
+        console.warn('pending action failed', { action: btn.dataset.action, err, data: err.data, revert: err.revert, info: err.info });
+        const name = err.revert?.name;
+        const selector = (typeof err.data === 'string' && err.data.startsWith('0x') ? err.data.slice(0, 10) : null);
+        if (name === 'RngNotReady') {
+          btn.classList.add('is-wait');
+          btn.textContent = 'awaiting RNG';
+        } else if (name) {
+          btn.textContent = `Err: ${name}()`;
+        } else if (selector) {
+          // Unknown custom error — surface the 4-byte selector to identify it.
+          btn.textContent = `Err ${selector}`;
+        } else {
+          btn.textContent = err.shortMessage ? err.shortMessage.slice(0, 30) : 'Failed';
+        }
+        setTimeout(() => { btn.disabled = false; if (!btn.classList.contains('is-wait')) btn.textContent = original; }, 6000);
+      }
+    });
+
+    // ====== DEGENERETTE BET ===============================================
+    const DGN_CUR_NAMES = { 0: 'ETH', 1: 'FLIP', 3: 'WWXRP' };
+    const DGN_MIN = { 0: 0.000000005, 1: 100, 3: 1 };  // contract minima per-spin
+    const COLOR_HEX = {
+      pink: '#ff5f9e', purple: '#a05df5', green: '#3fb56b', red: '#d04848',
+      blue: '#4d9cf0', orange: '#f6a623', silver: '#aeb8c0', gold: '#d4a000'
+    };
+    // Seed the ticket with random symbols + colors + a random hero quadrant so
+    // each load starts on a varied ticket (the player can retune any quadrant).
+    const dgnTraits = [0, 1, 2, 3].map(() => ({
+      s: Math.floor(Math.random() * 8),
+      c: Math.floor(Math.random() * 8),
+    }));
+    let dgnHero = Math.floor(Math.random() * 4);   // 0..3, random default hero quadrant
+    let dgnEditing = null;  // 0..3 or null
+
+    const dgnTicketEl = document.getElementById('dgn-ticket');
+    const dgnEditorEmptyEl = document.getElementById('dgn-editor-empty');
+    const dgnEditorRowsEl = document.getElementById('dgn-editor-rows');
+    const dgnEditCatEl = document.getElementById('dgn-edit-cat');
+    const dgnColorsEl = document.getElementById('dgn-colors');
+    const dgnSymbolsEl = document.getElementById('dgn-symbols');
+    const dgnHeroSetBtn = document.getElementById('dgn-hero-set');
+
+    function renderDgnTicket() {
+      for (let q = 0; q < 4; q++) {
+        const img = document.getElementById(`dgn-q-${q}`);
+        if (!img) continue;
+        const { s, c } = dgnTraits[q];
+        img.src = badgePath(q, s, c);
+        const qEl = dgnTicketEl.querySelector(`.dgn-q[data-q="${q}"]`);
+        qEl.classList.toggle('q-hero', dgnHero === q);
+        qEl.classList.toggle('is-editing', dgnEditing === q);
+      }
+    }
+
+    function renderDgnEditor() {
+      if (dgnEditing == null) {
+        dgnEditorEmptyEl.style.display = '';
+        dgnEditorRowsEl.hidden = true;
+        return;
+      }
+      dgnEditorEmptyEl.style.display = 'none';
+      dgnEditorRowsEl.hidden = false;
+      const q = dgnEditing;
+      const cat = QUADRANT_NAMES[q];
+      dgnEditCatEl.textContent = cat;
+      // Hero toggle
+      dgnHeroSetBtn.classList.toggle('is-active', dgnHero === q);
+      dgnHeroSetBtn.textContent = dgnHero === q ? 'Hero ✓' : 'Set as Hero';
+
+      // Color row
+      dgnColorsEl.innerHTML = '';
+      for (let c = 0; c < 8; c++) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'dgn-color-btn' + (dgnTraits[q].c === c ? ' is-active' : '');
+        b.title = COLORS[c];
+        b.dataset.color = String(c);
+        const sw = document.createElement('span');
+        sw.className = 'dgn-color-swatch';
+        sw.style.background = COLOR_HEX[COLORS[c]];
+        b.appendChild(sw);
+        dgnColorsEl.appendChild(b);
+      }
+      // Symbol row (rendered in current color so picker is contextual)
+      dgnSymbolsEl.innerHTML = '';
+      for (let s = 0; s < 8; s++) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'dgn-symbol-btn' + (dgnTraits[q].s === s ? ' is-active' : '');
+        b.title = QUADRANT_ITEMS[cat][s];
+        b.dataset.symbol = String(s);
+        const img = document.createElement('img');
+        img.src = badgePath(q, s, dgnTraits[q].c);
+        img.alt = QUADRANT_ITEMS[cat][s];
+        b.appendChild(img);
+        dgnSymbolsEl.appendChild(b);
+      }
+    }
+
+    function refreshDgnUI() { renderDgnTicket(); renderDgnEditor(); updateDgnTotal(); }
+
+    // Quadrant click → edit | right-click → set hero | wheel → cycle
+    dgnTicketEl.addEventListener('click', (e) => {
+      const qEl = e.target.closest('.dgn-q');
+      if (!qEl) return;
+      dgnEditing = parseInt(qEl.dataset.q, 10);
+      refreshDgnUI();
+    });
+    dgnTicketEl.addEventListener('contextmenu', (e) => {
+      const qEl = e.target.closest('.dgn-q');
+      if (!qEl) return;
+      e.preventDefault();
+      dgnHero = parseInt(qEl.dataset.q, 10);
+      refreshDgnUI();
+    });
+    dgnTicketEl.addEventListener('wheel', (e) => {
+      const qEl = e.target.closest('.dgn-q');
+      if (!qEl) return;
+      e.preventDefault();
+      const q = parseInt(qEl.dataset.q, 10);
+      const delta = e.deltaY > 0 ? 1 : -1;
+      const rect = qEl.getBoundingClientRect();
+      const dx = e.clientX - rect.left - rect.width / 2;
+      const dy = e.clientY - rect.top - rect.height / 2;
+      const radius = Math.hypot(dx, dy) / (rect.width / 2);
+      if (radius >= 0.55) dgnTraits[q].c = (dgnTraits[q].c + delta + 8) % 8;
+      else dgnTraits[q].s = (dgnTraits[q].s + delta + 8) % 8;
+      refreshDgnUI();
+    }, { passive: false });
+
+    // Editor row clicks
+    dgnEditorRowsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn || dgnEditing == null) return;
+      if (btn.id === 'dgn-hero-set') { dgnHero = dgnEditing; }
+      else if (btn.dataset.color != null) { dgnTraits[dgnEditing].c = parseInt(btn.dataset.color, 10); }
+      else if (btn.dataset.symbol != null) { dgnTraits[dgnEditing].s = parseInt(btn.dataset.symbol, 10); }
+      refreshDgnUI();
+    });
+
+    renderDgnTicket();
+    renderDgnEditor();
+
+    const dgnAmountEl = document.getElementById('dgn-amount');
+    const dgnSpinsEl = document.getElementById('dgn-spins');
+    const dgnTotalEl = document.getElementById('dgn-total');
+    const dgnBetBtn = document.getElementById('dgn-bet-btn');
+    const dgnStatusEl = document.getElementById('dgn-status');
+
+    document.querySelectorAll('.qty button[data-act="dec-spins"], .qty button[data-act="inc-spins"]').forEach(b => {
+      b.addEventListener('click', () => {
+        const v = parseInt(dgnSpinsEl.value, 10) || 0;
+        if (b.dataset.act === 'inc-spins') dgnSpinsEl.value = Math.min(10, v + 1);
+        else dgnSpinsEl.value = Math.max(1, v - 1);
+        updateDgnTotal();
+      });
+    });
+    [dgnAmountEl, dgnSpinsEl].forEach(el => el.addEventListener('input', updateDgnTotal));
+    document.querySelectorAll('input[name="dgn-cur"]').forEach(el => el.addEventListener('change', updateDgnTotal));
+
+    function currentDgnCurrency() {
+      return parseInt(document.querySelector('input[name="dgn-cur"]:checked')?.value || '0', 10);
+    }
+    function updateDgnTotal() {
+      const amt = parseFloat(dgnAmountEl.value) || 0;
+      const spins = parseInt(dgnSpinsEl.value, 10) || 1;
+      const cur = currentDgnCurrency();
+      const unit = DGN_CUR_NAMES[cur];
+      dgnTotalEl.textContent = `${(amt * spins).toFixed(unit === 'ETH' ? 6 : 2)} ${unit}`;
+      if (!signer) { dgnBetBtn.disabled = true; dgnBetBtn.textContent = 'Connect wallet'; return; }
+      const tooSmall = amt < DGN_MIN[cur];
+      dgnBetBtn.disabled = tooSmall || spins < 1 || spins > 10;
+      dgnBetBtn.textContent = tooSmall ? `Min ${DGN_MIN[cur]} ${unit}/spin` : `Spin ${spins}× for ${(amt * spins).toFixed(unit === 'ETH' ? 6 : 2)} ${unit}`;
+    }
+
+    function packCustomTicket() {
+      let packed = 0;
+      for (let q = 0; q < 4; q++) {
+        const { s, c } = dgnTraits[q];
+        const byte = ((c & 7) << 3) | (s & 7);  // bits 0-2 symbol, 3-5 color
+        packed |= (byte << (q * 8));
+      }
+      return packed >>> 0;
+    }
+
+    dgnBetBtn.addEventListener('click', async () => {
+      if (!signer) return;
+      const amt = parseFloat(dgnAmountEl.value) || 0;
+      const spins = parseInt(dgnSpinsEl.value, 10) || 1;
+      const cur = currentDgnCurrency();
+      if (amt <= 0 || spins < 1 || spins > 10) return;
+      const amountWei = parseEther(amt.toString());  // FLIP/WWXRP are also 1e18 base
+      const customTicket = packCustomTicket();
+      const heroQuadrant = dgnHero;
+      const value = cur === 0 ? amountWei * BigInt(spins) : 0n;
+      const buyer = await signer.getAddress();
+      dgnBetBtn.disabled = true;
+      dgnStatusEl.classList.remove('is-error', 'is-ok');
+      dgnStatusEl.textContent = 'Simulating…';
+      try {
+        await loadDeployment();
+        const game = new Contract(DEPLOYMENT.contracts.GAME, DEGENERETTE_ABI, signer);
+        await game.placeDegeneretteBet.staticCall(buyer, cur, amountWei, spins, customTicket, heroQuadrant, { value });
+        dgnStatusEl.textContent = 'Confirm in wallet…';
+        const tx = await game.placeDegeneretteBet(buyer, cur, amountWei, spins, customTicket, heroQuadrant, { value });
+        dgnStatusEl.textContent = `Sent ${tx.hash.slice(0,10)}… — waiting…`;
+        const rcpt = await tx.wait();
+        dgnStatusEl.classList.add('is-ok');
+        dgnStatusEl.textContent = `Bet placed in block ${rcpt.blockNumber}. Resolve after next RNG.`;
+        setTimeout(() => { loadPending(buyer); selectPlayer(buyer); }, 5000);
+      } catch (e) {
+        dgnStatusEl.classList.add('is-error');
+        dgnStatusEl.textContent = `Failed: ${formatRevert(e)}`.slice(0, 240);
+      } finally {
+        dgnBetBtn.disabled = false;
+        updateDgnTotal();
+      }
+    });
+
+    // ====== CLAIMABLE TOPBAR PILL ======================================
+    // One pill in the topbar. Hidden when nothing claimable, else shows the
+    // dominant amount (or "Claim N prizes" when multiple kinds). Click runs
+    // every available claim sequentially via DegenerusGame:
+    //   claimWinnings(player), claimDecimatorJackpot(player, lvl),
+    //   claimAffiliateDgnrs(player), claimWhalePass(player).
+    // Bought whale passes activate inline — only jackpot-won halves accrue
+    // to whalePassClaims[] and surface here. Read sources:
+    //   ETH + decimator = /player/${addr} API
+    //   whale halves    = whalePassClaimAmount(player) on-chain
+    const CLAIM_ABI = [
+      'function claimWinnings(address player)',
+      'function claimDecimatorJackpot(address player, uint24 lvl)',
+      'function claimAffiliateDgnrs(address player)',
+      'function claimWhalePass(address player)',
+      'function whalePassClaimAmount(address player) view returns (uint256)',
+      'error E()', 'error RngLocked()'
+    ];
+    const claimPillEl = document.getElementById('claim-pill');
+    let CLAIMABLE_STATE = { eth: 0n, decLevels: [], affiliateDgnrs: 0n, whaleHalves: 0n };
+    let claimableAddress = null;
+
+    function fmtEthShort(wei) {
+      if (wei === 0n) return '0';
+      const s = formatEther(wei);
+      return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
+    }
+
+    function refreshClaimPill() {
+      const kinds = [];
+      if (CLAIMABLE_STATE.eth > 0n) kinds.push({ k: 'eth', label: `${fmtEthShort(CLAIMABLE_STATE.eth)} ETH` });
+      const decTotal = CLAIMABLE_STATE.decLevels.reduce((s, l) => s + BigInt(l.ethAmount || '0'), 0n);
+      if (decTotal > 0n) kinds.push({ k: 'decimator', label: `${fmtEthShort(decTotal)} ETH decimator` });
+      if (CLAIMABLE_STATE.affiliateDgnrs > 0n)
+        kinds.push({ k: 'affiliate', label: `${Number(formatEther(CLAIMABLE_STATE.affiliateDgnrs)).toLocaleString()} DGNRS` });
+      if (CLAIMABLE_STATE.whaleHalves > 0n) {
+        const n = Number(CLAIMABLE_STATE.whaleHalves);
+        kinds.push({ k: 'whale', label: n === 1 ? '1 half pass' : `${n} half passes` });
+      }
+      if (kinds.length === 0) { claimPillEl.classList.add('is-hidden'); return; }
+      claimPillEl.classList.remove('is-hidden');
+      // Enabled when the claimable belongs to whoever we're acting as (self, or an
+      // approved owner) — claims for an approved owner are sent on their behalf.
+      const canClaim = !!signer && !!connectedAddress
+        && claimableAddress?.toLowerCase() === (actingPlayer() || '').toLowerCase();
+      claimPillEl.disabled = !canClaim;
+      claimPillEl.textContent = canClaim
+        ? (kinds.length === 1 ? `Claim ${kinds[0].label}` : `Claim ${kinds.length} prizes`)
+        : (kinds.length === 1 ? `${kinds[0].label} · connect to claim` : `${kinds.length} prizes · connect to claim`);
+      claimPillEl.title = kinds.map(k => k.label).join(' + ');
+    }
+
+    async function loadClaimables(address) {
+      claimableAddress = address || null;
+      CLAIMABLE_STATE = { eth: 0n, decLevels: [], affiliateDgnrs: 0n, whaleHalves: 0n };
+      if (!address) { refreshClaimPill(); return; }
+
+      let pdata = null;
+      try { pdata = await jsonFetch(`${API}/player/${address}?_=${Date.now()}`); }
+      catch (e) { if (!String(e).includes('404')) console.warn('loadClaimables /player', e); }
+
+      CLAIMABLE_STATE.eth = BigInt(pdata?.claimableEth || '0');
+      CLAIMABLE_STATE.decLevels = (pdata?.decimator?.claimablePerLevel || [])
+        .filter(l => l && !l.claimed && BigInt(l.ethAmount || '0') > 0n);
+
+      // Affiliate DGNRS claimable: no /player field today. TODO: extend API
+      // or read from contract once exposed.
+      CLAIMABLE_STATE.affiliateDgnrs = 0n;
+
+      try {
+        const provider = walletProvider || readProvider || new JsonRpcProvider(PUBLIC_SEPOLIA_RPC);
+        if (!DEPLOYMENT) await loadDeployment();
+        const game = new Contract(DEPLOYMENT.contracts.GAME, CLAIM_ABI, provider);
+        CLAIMABLE_STATE.whaleHalves = await game.whalePassClaimAmount(address);
+      } catch (e) {
+        console.warn('whalePassClaimAmount failed', e);
+        CLAIMABLE_STATE.whaleHalves = 0n;
+      }
+
+      refreshClaimPill();
+    }
+
+    async function runClaimTx(buildTx, label) {
+      claimPillEl.disabled = true;
+      const original = claimPillEl.textContent;
+      claimPillEl.textContent = `${label} · confirm…`;
+      try {
+        if (!DEPLOYMENT) await loadDeployment();
+        const game = new Contract(DEPLOYMENT.contracts.GAME, CLAIM_ABI, signer);
+        const tx = await buildTx(game);
+        claimPillEl.textContent = `${label} · ${tx.hash.slice(0, 8)}…`;
+        await tx.wait();
+        claimPillEl.textContent = `${label} ✓`;
+        return true;
+      } catch (e) {
+        console.warn(`claim ${label} failed`, e);
+        claimPillEl.textContent = `Failed: ${formatRevert(e)}`.slice(0, 60);
+        await new Promise(r => setTimeout(r, 2200));
+        claimPillEl.textContent = original;
+        return false;
+      }
+    }
+
+    claimPillEl.addEventListener('click', async () => {
+      if (claimPillEl.disabled) return;
+      if (!signer || !connectedAddress) return;
+      // When acting as an approved owner, claims credit THAT owner (claimWinnings
+      // etc. take a player arg + the contract checks isOperatorApproved).
+      const player = actingPlayer();
+      if (CLAIMABLE_STATE.eth > 0n)
+        if (!await runClaimTx((game) => game.claimWinnings(player), 'ETH')) return;
+      // claimDecimatorJackpot now takes a player arg, so it supports acting-as
+      // (the contract enforces operator approval, like the other claims).
+      for (const lvl of CLAIMABLE_STATE.decLevels.map(l => l.level)) {
+        if (!await runClaimTx((game) => game.claimDecimatorJackpot(player, lvl), `Decimator L${lvl}`)) return;
+      }
+      if (CLAIMABLE_STATE.affiliateDgnrs > 0n)
+        if (!await runClaimTx((game) => game.claimAffiliateDgnrs(player), 'Affiliate')) return;
+      if (CLAIMABLE_STATE.whaleHalves > 0n)
+        if (!await runClaimTx((game) => game.claimWhalePass(player), 'Whale pass')) return;
+      setTimeout(() => loadClaimables(player), 1200);
+    });
+
+    // ====== CLAIMABLE FLIP PILL (coinflip winnings) ======================
+    // Separate pill in the topbar — claims FLIP from the coinflip contract.
+    // Source: /player/${addr}.coinflip.claimablePreview (already fetched in
+    // loadPlayerOverview). Click → COINFLIP.claimCoinflips(0x0, MaxUint256)
+    // which mints all currently-claimable FLIP to the connected wallet.
+    const COINFLIP_CLAIM_ABI = [
+      'function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed)',
+      'error E()', 'error Insufficient()', 'error OnlyFLIP()'
+    ];
+    const claimFlipPill = document.getElementById('claim-flip-pill');
+    const claimFlipAmtEl = document.getElementById('claim-flip-amt');
+    let claimableFlipWei = 0n;
+    // Owner address for the currently-cached claimableFlipWei. Tracked
+    // separately from `claimableAddress` (which is owned by loadClaimables
+    // and may lag behind) because loadPlayerOverview writes the FLIP pill
+    // state and needs to know whose data it just wrote.
+    let claimableFlipAddress = null;
+
+    function refreshClaimFlipPill() {
+      if (claimableFlipWei <= 0n) {
+        claimFlipPill.classList.add('is-hidden');
+        return;
+      }
+      const isOwner = !!signer && !!connectedAddress
+        && claimableFlipAddress?.toLowerCase() === connectedAddress.toLowerCase();
+      claimFlipPill.classList.remove('is-hidden');
+      claimFlipPill.disabled = !isOwner;
+      const display = flipFromWei(claimableFlipWei).toLocaleString(undefined, { maximumFractionDigits: 0 });
+      claimFlipAmtEl.textContent = display;
+      claimFlipPill.title = isOwner
+        ? `Claim ${display} FLIP from the coinflip queue`
+        : `${display} FLIP pending · connect this wallet to claim`;
+    }
+
+    claimFlipPill.addEventListener('click', async () => {
+      if (claimFlipPill.disabled) return;
+      if (!signer || !connectedAddress) return;
+      claimFlipPill.disabled = true;
+      const original = claimFlipAmtEl.textContent;
+      claimFlipAmtEl.textContent = 'confirm…';
+      try {
+        if (!DEPLOYMENT) await loadDeployment();
+        const coinflip = new Contract(DEPLOYMENT.contracts.COINFLIP, COINFLIP_CLAIM_ABI, signer);
+        // address(0) → msg.sender resolution. uint256 max = claim everything available.
+        const tx = await coinflip.claimCoinflips(ZeroAddress, (1n << 256n) - 1n);
+        claimFlipAmtEl.textContent = `${tx.hash.slice(0, 8)}…`;
+        await tx.wait();
+        claimFlipAmtEl.textContent = '✓ claimed';
+        // Refresh balance + claimable preview after a beat so the indexer catches up.
+        setTimeout(() => loadPlayerOverview(connectedAddress), 1500);
+      } catch (e) {
+        console.warn('claimCoinflips failed', e);
+        claimFlipAmtEl.textContent = 'failed';
+        await new Promise(r => setTimeout(r, 1800));
+        claimFlipAmtEl.textContent = original;
+      } finally {
+        // refreshClaimFlipPill below will re-enable if a fresh balance still has claimable
+        claimFlipPill.disabled = false;
+      }
+    });
+
+    // Fetch (LAST_DAY, WINNERS) pair. Tolerates pre-game state where
+    // /game/jackpot/last-day returns {day: null, status: "pre-game"} — in that
+    // case WINNERS is just empty and the page still wires up normally.
+    async function fetchLastDayAndWinners() {
+      const lastDay = await jsonFetch(`${API}/game/jackpot/last-day${noCache()}`);
+      let winners = [];
+      if (lastDay && Number.isFinite(Number(lastDay.day)) && Number(lastDay.day) >= 1) {
+        try {
+          const winnersResp = await jsonFetch(`${API}/game/jackpot/day/${lastDay.day}/winners${noCache()}`);
+          winners = winnersResp.winners || [];
+        } catch (e) {
+          console.warn('winners fetch failed', e);
+        }
+      }
+      return { lastDay, winners };
+    }
+
+    // Periodic refresh: re-fetch LAST_DAY + WINNERS every 20s. If the day
+    // rolled over (autoplayer advanced), re-fire selectPlayer for the currently
+    // selected address so the hero widget reflects the new draw.
+    async function refreshDayState() {
+      try {
+        const state = await jsonFetch(`${API}/game/state${noCache()}`);
+        GAME_LEVEL = Number(state.level);
+        const { lastDay, winners } = await fetchLastDayAndWinners();
+        const prevDay = LAST_DAY?.day ?? null;
+        LAST_DAY = lastDay;
+        WINNERS = winners;
+        setOnline();
+        const newDay = lastDay?.day ?? null;
+        const currentAddr = connectedAddress || (playerSel && playerSel.value) || null;
+        if (newDay !== prevDay && currentAddr) {
+          await selectPlayer(currentAddr);
+        }
+      } catch (e) {
+        console.warn('refreshDayState failed', e);
+        setOffline(String(e));
+      }
+    }
+
+    async function bootstrap() {
+      try {
+        readProvider = new JsonRpcProvider(PUBLIC_SEPOLIA_RPC);
+        await refreshBuyPrice();   // works pre-connect via public RPC
+
+        const archetypesP = fetch('/beta/viewer/player-archetypes.json').then(r => r.json()).catch(() => ({}));
+        const stateP = jsonFetch(`${API}/game/state${noCache()}`);
+        const ldwP = fetchLastDayAndWinners();
+        const [archetypes, state, ldw] = await Promise.all([archetypesP, stateP, ldwP]);
+        GAME_LEVEL = Number(state.level);
+        LAST_DAY = ldw.lastDay;
+        WINNERS = ldw.winners;
+        setOnline();
+
+        // Populate dropdown — winners first (★), then non-winning autoplayers, then external winners
+        const winnerSet = new Set(WINNERS.map(w => w.address.toLowerCase()));
+        const archetypeKeys = new Set(Object.keys(archetypes).map(a => a.toLowerCase()));
+
+        const winningAutoplayers = [], idleAutoplayers = [], externalWinners = [];
+        Object.entries(archetypes).forEach(([addr, archetype]) => {
+          const isWinner = winnerSet.has(addr.toLowerCase());
+          const info = isWinner ? WINNERS.find(w => w.address.toLowerCase() === addr.toLowerCase()) : null;
+          (isWinner ? winningAutoplayers : idleAutoplayers).push({ addr, archetype, info });
+        });
+        WINNERS.filter(w => !archetypeKeys.has(w.address.toLowerCase())).forEach(w => {
+          externalWinners.push({ addr: w.address, archetype: 'external', info: w });
+        });
+
+        const sel = playerSel;
+        function addOpt(e, prefix) {
+          const opt = document.createElement('option');
+          opt.value = e.addr;
+          const ethLabel = e.info && Number(e.info.totalEth) > 0 ? ` ${ethDisplay(e.info.totalEth).toFixed(3)} ETH` : '';
+          opt.textContent = `${prefix} ${shortAddr(e.addr)}${ethLabel}`;
+          sel.appendChild(opt);
+        }
+        winningAutoplayers.forEach(e => addOpt(e, '★ ' + e.archetype));
+        externalWinners.forEach(e => addOpt(e, '★ external'));
+        idleAutoplayers.forEach(e => addOpt(e, '  ' + e.archetype));
+
+        sel.addEventListener('change', () => selectPlayer(sel.value));
+
+        // Wallet wins: if a connection was restored silently, drive the page from it.
+        // Otherwise auto-pick the first winner so the page loads with real data.
+        // In pre-game (no winners yet), fall back to the first autoplayer so the
+        // hero widget still gets a scenario push (the "awaiting draw" placeholder)
+        // instead of staying on its built-in demo content.
+        if (connectedAddress) {
+          await selectPlayer(connectedAddress);
+        } else if (winningAutoplayers.length || externalWinners.length) {
+          const first = winningAutoplayers[0] || externalWinners[0];
+          sel.value = first.addr;
+          await selectPlayer(first.addr);
+        } else if (idleAutoplayers.length) {
+          const first = idleAutoplayers[0];
+          sel.value = first.addr;
+          await selectPlayer(first.addr);
+        }
+        updateBuyTotal();
+        updateDgnTotal();
+        refreshPassPrices();
+      } catch (e) {
+        setOffline(String(e));
+        heroLabel.textContent = 'API at :3000 unreachable — start it to load data';
+        try {
+          const archetypes = await fetch('/beta/viewer/player-archetypes.json').then(r => r.json());
+          Object.entries(archetypes).forEach(([addr, archetype]) => {
+            const opt = document.createElement('option');
+            opt.value = addr;
+            opt.textContent = `  ${archetype} ${shortAddr(addr)}`;
+            playerSel.appendChild(opt);
+          });
+        } catch (_) {}
+        updateBuyTotal();
+        updateDgnTotal();
+        refreshPassPrices();
+      }
+    }
+
+    // Fast-paint the hero widget — minimal data path, fires in parallel with
+    // trySilentReconnect / refreshBuyPrice / archetypes etc. Two API hits
+    // (last-day + winners), build scenarios locally, postMessage to iframe.
+    // The full per-player pipeline (inventory, balances, claimables, trait
+    // pools) runs later via bootstrap's selectPlayer call.
+    async function fastPaintHero() {
+      try {
+        const { lastDay, winners } = await fetchLastDayAndWinners();
+        LAST_DAY = lastDay;
+        WINNERS = winners;
+        if (!lastDay?.summary?.rollOne?.mainTraitsPacked) return;
+        // Pick any winner as the perspective seed — every player sees the same
+        // main draw + bonus draw targets; only the owned/prizes overlay differs.
+        const seedAddr = winners[0]?.address || '0x0000000000000000000000000000000000000000';
+        const built = await buildScenariosForPlayer(seedAddr, lastDay, winners);
+        if (built?.scenarios?.length) {
+          injectScenarios(built.scenarios);
+          heroLabel.textContent = `Day ${lastDay.day} jackpot · Level ${lastDay.level}`;
+        }
+        // Pre-warm the coinflip widget alongside the hero so it paints in the
+        // same first wave. seedAddr's stake may not be the page's final pick
+        // (bootstrap may switch to the connected wallet), but the day's win/
+        // rewardPercent is shared globally so refresh later only re-fetches
+        // the player-specific stake.
+        loadCoinflipForDay(lastDay.day, seedAddr);
+      } catch (e) { console.warn('fastPaintHero', e); }
+    }
+
+    (async () => {
+      // Kick the hero data path off immediately. Don't await — the rest of the
+      // boot proceeds in parallel and overrides this paint later if the wallet
+      // resolves or the dropdown selection commits.
+      const heroPaint = fastPaintHero();
+      await trySilentReconnect();
+      await bootstrap();
+      await heroPaint;  // ensure fastPaint settles before we start the refresh loop
+      // Periodic day-state refresh — re-injects scenarios when the autoplayer
+      // advances to a new day, so the hero widget reflects the latest draw
+      // without requiring a page reload.
+      setInterval(refreshDayState, 20000);
+    })();
+  </script>
+</body>
+</html>

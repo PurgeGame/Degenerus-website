@@ -270,7 +270,7 @@
   function copyAffLink() {
     var code = player && player.referral_code;
     if (!code) return;
-    var link = window.location.origin + '/degenerette/?ref=' + code;
+    var link = window.location.origin + '/app/?ref=' + code;
     var btn = $('unav-aff-copy');
     navigator.clipboard.writeText(link).then(function () {
       if (btn) {
@@ -374,7 +374,13 @@
 
     var logo = document.createElement('a');
     logo.href = '/';
-    logo.innerHTML = '<img class="nav-logo" src="/badges-circular/flame_red.svg" alt="Degenerus" />';
+    logo.className = 'nav-brand';
+    logo.setAttribute('aria-label', 'Degenerus home');
+    var logoSrc = currentPage === 'app'
+      ? '/whitepaper/flame-logo.svg'
+      : '/badges-circular/flame_red.svg';
+    logo.innerHTML = '<img class="nav-logo" src="' + logoSrc + '" alt="" />'
+      + '<span class="nav-wordmark">DEGENERUS</span>';
     left.appendChild(logo);
 
     var links = document.createElement('div');
@@ -391,6 +397,21 @@
     // Right side
     var right = document.createElement('div');
     right.className = 'nav-right';
+
+    // The app owns the actual ticking logic because its active chain profile
+    // determines whether a game day is 10 minutes (testnet) or 24 hours. Keep
+    // the stable mount point in the shared nav so it occupies a real top-bar
+    // pill from first paint instead of jumping in after module boot.
+    if (currentPage === 'app') {
+      var jackpotClock = document.createElement('div');
+      jackpotClock.className = 'nav-jackpot-countdown';
+      jackpotClock.setAttribute('data-bind', 'nav-jackpot-countdown');
+      jackpotClock.setAttribute('role', 'timer');
+      jackpotClock.setAttribute('aria-live', 'off');
+      jackpotClock.innerHTML = '<span class="nav-jackpot-countdown__label">NEXT JACKPOT</span>'
+        + '<strong class="nav-jackpot-countdown__value" data-bind="nav-jackpot-countdown-value">--:--</strong>';
+      right.appendChild(jackpotClock);
+    }
 
     var auth = document.createElement('div');
     auth.className = 'nav-auth';

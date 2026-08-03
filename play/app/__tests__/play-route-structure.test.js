@@ -39,16 +39,14 @@ test('no wallet connect prompt tag', () => {
   assert.doesNotMatch(src, /<connect-prompt/);
 });
 
-test('all 7 panel slot tags present', () => {
+test('focused 5-panel set present (post-cleanup)', () => {
   const src = readFileSync(INDEX, 'utf8');
   const tags = [
+    'replay-panel',
     'profile-panel',
     'tickets-panel',
-    'purchase-panel',
+    'packs-panel',
     'coinflip-panel',
-    'baf-panel',
-    'decimator-panel',
-    'jackpot-panel',
   ];
   for (const tag of tags) {
     assert.match(src, new RegExp('<' + tag), `expected <${tag}> tag in play/index.html`);

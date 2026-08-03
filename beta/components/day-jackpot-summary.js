@@ -23,9 +23,10 @@ function shortAddr(addr) {
 
 function badgeCellHTML(traitId) {
   if (traitId == null) return '';
+  // Canonical [QQ][CCC][SSS]: bits[5:3]=color (heavy-tail), bits[2:0]=symbol (uniform).
   const q = Math.floor(traitId / 64);
-  const s = Math.floor((traitId % 64) / 8);
-  const c = traitId % 8;
+  const s = traitId % 8;
+  const c = Math.floor((traitId % 64) / 8);
   const src = joBadgePath(q, s, c);
   return `<span class="jp-summary-badge"><img src="${src}" alt="trait-${traitId}" width="22" height="22"/></span>`;
 }
@@ -40,7 +41,7 @@ function ethRowHTML(row) {
 }
 
 function ticketRowHTML(row) {
-  // v4.4: ticketsPerWinner is scaled ×TICKET_SCALE (=100).
+  // v76: ticketsPerWinner is in ENTRIES (4 = 1 whole ticket); joScaledToTickets /4.
   const tkts = joScaledToTickets(row.ticketsPerWinner);
   return `
     <div class="jp-summary-row">
@@ -55,15 +56,19 @@ function coinRowHTML(row) {
     <div class="jp-summary-row">
       ${badgeCellHTML(row.traitId)}
       <span class="jp-summary-type">${row.winnerCount} winner${row.winnerCount === 1 ? '' : 's'} (${row.uniqueCount} unique)</span>
-      <span class="jp-summary-amount">${joFormatWeiToEth(row.coinPerWinner)} BURNIE</span>
+      <span class="jp-summary-amount">${joFormatWeiToEth(row.coinPerWinner)} FLIP</span>
     </div>`;
 }
 
 function soloRowHTML(solo) {
+  const wpCount = Number(solo.whalePassCount || 0);
+  const wpBadge = solo.hasWhalePass
+    ? ` <span class="jp-whale-pass-badge">${wpCount > 0 ? wpCount + '× ' : ''}WHALE PASS${wpCount > 1 ? 'ES' : ''}</span>`
+    : '';
   return `
     <div class="jp-summary-row jp-solo-bucket">
       ${badgeCellHTML(solo.traitId)}
-      <span class="jp-summary-type"><strong>SOLO</strong> ${shortAddr(solo.winner)}${solo.hasWhalePass ? ' <span class="jp-whale-pass-badge">WHALE PASS</span>' : ''}</span>
+      <span class="jp-summary-type"><strong>SOLO</strong> ${shortAddr(solo.winner)}${wpBadge}</span>
       <span class="jp-summary-amount">${joFormatWeiToEth(solo.ethAmount)} ETH</span>
     </div>`;
 }
@@ -139,6 +144,7 @@ class DayJackpotSummary extends HTMLElement {
     const eth = Array.isArray(r1.eth) ? r1.eth : [];
     const tickets = Array.isArray(r1.tickets) ? r1.tickets : [];
     const coin = Array.isArray(r2.coin) ? r2.coin : [];
+    const r2Tickets = Array.isArray(r2.tickets) ? r2.tickets : [];
     const ff = r2.farFuture || { resolved: false, winnerCount: 0, totalCoin: '0' };
 
     const soloHTML = r1.solo ? soloRowHTML(r1.solo) : '';
@@ -148,23 +154,56 @@ class DayJackpotSummary extends HTMLElement {
     const ticketsHTML = tickets.length > 0
       ? tickets.map(ticketRowHTML).join('')
       : `<div class="jp-summary-note">No ticket distribution on this day.</div>`;
-    const coinHTML = coin.length > 0
-      ? coin.map(coinRowHTML).join('')
-      : `<div class="jp-summary-note">No bonus coin distribution on this day.</div>`;
+
+    // Always render the 4 chosen bonus traits when bonusDraw is available,
+    // even on no-winner days, so the chosen traits and target level are visible.
+    const bonusDraw = Array.isArray(r2.bonusDraw) ? r2.bonusDraw : null;
+    const coinHTML = bonusDraw
+      ? bonusDraw.map((b) => {
+          const winnersLine = b.winnerCount > 0
+            ? `${b.winnerCount} winner${b.winnerCount === 1 ? '' : 's'} (${b.uniqueCount} unique)`
+            : `<em>no winners</em>`;
+          const amountLine = b.winnerCount > 0
+            ? `${joFormatWeiToEth(b.coinPerWinner)} FLIP each`
+            : `bucket: ${b.bucketTickets} tkt${b.bucketTickets === 1 ? '' : 's'} / ${b.bucketHolders} holder${b.bucketHolders === 1 ? '' : 's'}`;
+          return `
+            <div class="jp-summary-row${b.winnerCount === 0 ? ' jp-summary-empty-bucket' : ''}">
+              ${badgeCellHTML(b.traitId)}
+              <span class="jp-summary-type">${winnersLine}</span>
+              <span class="jp-summary-amount">${amountLine}</span>
+            </div>`;
+        }).join('')
+      : (coin.length > 0
+          ? coin.map(coinRowHTML).join('')
+          : `<div class="jp-summary-note">No bonus coin distribution on this day.</div>`);
+    const r2TicketsHTML = r2Tickets.length > 0
+      ? r2Tickets.map(ticketRowHTML).join('')
+      : `<div class="jp-summary-note">No carryover ticket distribution on this day.</div>`;
     const ffHTML = ff.resolved
       ? `<div class="jp-summary-row jp-far-future">
            <span class="jp-summary-type">Far-Future resolved (${ff.winnerCount} winners)</span>
-           <span class="jp-summary-amount">${joFormatWeiToEth(ff.totalCoin)} BURNIE total</span>
+           <span class="jp-summary-amount">${joFormatWeiToEth(ff.totalCoin)} FLIP total</span>
          </div>`
       : `<div class="jp-summary-note">Far-Future: pending / unresolved.</div>`;
 
-    // BAF section — fires every 10 levels, attributed to the level's primary
-    // day (server-side rule in /summary endpoint, matches /winners).
-    // Always visible: when no BAF fired this day, render an empty-state row.
+    // BAF section — fires every 10 levels, but only when the advance day's
+    // daily coinflip wins. When the flip loses, markBafSkipped fires and the
+    // pool stays in futurePool (no redistribution this bracket).
+    const bafSkippedLevels = Array.isArray(baf.skippedLevels) ? baf.skippedLevels : [];
+    const bafSkippedLabel = bafSkippedLevels.length > 0
+      ? `(Level ${bafSkippedLevels.join(', ')})`
+      : '';
+    const bafSkippedRow = baf.skipped
+      ? `<div class="jp-summary-row jp-baf-skipped">
+           <span class="jp-summary-type"><strong>BAF skipped</strong> ${bafSkippedLabel} — daily flip lost</span>
+           <span class="jp-summary-amount">pool stays in futurePool</span>
+         </div>`
+      : '';
     const bafSectionHTML = baf.triggered
       ? `
         <div class="jp-section jp-section-baf">
           <h4 class="jp-section-title">BAF — Big Ass Fortune ${baf.level != null ? `(Level ${baf.level})` : ''}</h4>
+          ${bafSkippedRow}
           <div class="jp-subsection jp-subsection-baf-eth">
             <h5 class="jp-subsection-title">BAF ETH</h5>
             <div class="jp-summary-row jp-baf-row">
@@ -181,6 +220,16 @@ class DayJackpotSummary extends HTMLElement {
           </div>
         </div>
       `
+      : baf.skipped
+      ? `
+        <div class="jp-section jp-section-baf">
+          <h4 class="jp-section-title">BAF — Big Ass Fortune ${bafSkippedLabel}</h4>
+          <div class="jp-summary-row jp-baf-skipped">
+            <span class="jp-summary-type"><strong>BAF skipped</strong> — daily coinflip for the advance day lost</span>
+            <span class="jp-summary-amount">pool stays in futurePool</span>
+          </div>
+        </div>
+      `
       : `
         <div class="jp-section jp-section-baf">
           <h4 class="jp-section-title">BAF — Big Ass Fortune</h4>
@@ -188,14 +237,28 @@ class DayJackpotSummary extends HTMLElement {
         </div>
       `;
 
-    // Decimator section — regular claims + terminal (game-over) claim.
+    // Decimator section — resolution events (eligible-winner snapshots) +
+    // regular claims + terminal (game-over) claim.  Resolutions show on the day
+    // the decimator FIRED so winners are visible before they call claim.
     // Shown completely separate from jackpot draws so ETH amounts don't lump.
-    // Always visible: when no decimator claims landed this day, render an empty-state row.
+    // Always visible: when no decimator activity landed this day, render an empty-state row.
     const dec = data.decimator || { triggered: false };
+    const decResolutions = Array.isArray(dec.resolutions) ? dec.resolutions : [];
     const decimatorSectionHTML = dec.triggered
       ? `
         <div class="jp-section jp-section-decimator">
-          <h4 class="jp-section-title">Decimator Claims</h4>
+          <h4 class="jp-section-title">Decimator</h4>
+          ${decResolutions.length > 0 ? `
+            <div class="jp-subsection jp-subsection-dec-resolved">
+              <h5 class="jp-subsection-title">Resolved (Eligible Winners)</h5>
+              ${decResolutions.map((r) => `
+                <div class="jp-summary-row jp-decimator-row jp-decimator-resolved">
+                  <span class="jp-summary-type">L${r.level}: ${r.eligibleWinners} eligible winner${r.eligibleWinners === 1 ? '' : 's'}${r.unclaimedEligible > 0 ? ` (${r.unclaimedEligible} unclaimed)` : ''}</span>
+                  <span class="jp-summary-amount">${joFormatWeiToEth(r.poolEth)} ETH pool</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
           ${dec.regular && dec.regular.claimCount > 0 ? `
             <div class="jp-subsection jp-subsection-dec-regular">
               <h5 class="jp-subsection-title">Regular</h5>
@@ -228,8 +291,8 @@ class DayJackpotSummary extends HTMLElement {
       `
       : `
         <div class="jp-section jp-section-decimator">
-          <h4 class="jp-section-title">Decimator Claims</h4>
-          <div class="jp-summary-note">No decimator claims this day.</div>
+          <h4 class="jp-section-title">Decimator</h4>
+          <div class="jp-summary-note">No decimator activity this day.</div>
         </div>
       `;
 
@@ -248,10 +311,14 @@ class DayJackpotSummary extends HTMLElement {
       </div>
 
       <div class="jp-section jp-section-rolltwo">
-        <h4 class="jp-section-title">Roll 2 — Bonus Draw</h4>
+        <h4 class="jp-section-title">Roll 2 — Bonus Draw${r2.bonusTargetLevel != null ? ` (target Level ${r2.bonusTargetLevel})` : ''}</h4>
         <div class="jp-subsection jp-subsection-coin">
           <h5 class="jp-subsection-title">Bonus Coin</h5>
           ${coinHTML}
+        </div>
+        <div class="jp-subsection jp-subsection-tickets">
+          <h5 class="jp-subsection-title">Carryover Ticket Wins</h5>
+          ${r2TicketsHTML}
         </div>
         <div class="jp-subsection jp-subsection-far-future">
           <h5 class="jp-subsection-title">Far-Future</h5>

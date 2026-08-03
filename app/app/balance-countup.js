@@ -224,4 +224,3 @@ export function resetBalanceDisplay(element) {
   _stopAnimation(state);
   _states.delete(element);
 }
-

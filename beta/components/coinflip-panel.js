@@ -1,5 +1,5 @@
 // components/coinflip-panel.js -- Coinflip panel Custom Element
-// BURNIE staking, multiplier-tier result display, bounty tracker, auto-rebuy toggle.
+// FLIP staking, multiplier-tier result display, bounty tracker, auto-rebuy toggle.
 // All contract interaction delegated to coinflip.js (no ethers import here).
 
 import { subscribe, get } from '../app/store.js';
@@ -11,7 +11,7 @@ import {
   isCoinflipLocked,
 } from '../app/coinflip.js';
 import { fetchPlayerData } from '../app/api.js';
-import { formatBurnie, truncateAddress } from '../app/utils.js';
+import { formatFlip, truncateAddress } from '../app/utils.js';
 import { COINFLIP } from '../app/constants.js';
 
 class CoinflipPanel extends HTMLElement {
@@ -38,17 +38,17 @@ class CoinflipPanel extends HTMLElement {
       <div data-bind="content" style="display:none">
       <div class="panel coinflip-panel">
         <div class="panel-header">
-          <h2>BURNIE COINFLIP</h2>
+          <h2>FLIP COINFLIP</h2>
           <span class="coinflip-recycle-badge">+${COINFLIP.RECYCLING_BONUS_PCT}% recycling</span>
         </div>
 
         <div class="coinflip-stake-section">
-          <label class="coinflip-label">Stake BURNIE</label>
+          <label class="coinflip-label">Stake FLIP</label>
           <div class="coinflip-input-row">
             <input type="number" class="coinflip-input" min="100" step="100" placeholder="Min 100" data-bind="stake-input">
             <button class="btn-primary coinflip-deposit-btn" data-action="deposit" disabled>Deposit</button>
           </div>
-          <span class="coinflip-hint" data-bind="stake-hint">Min: ${COINFLIP.MIN_DEPOSIT} BURNIE</span>
+          <span class="coinflip-hint" data-bind="stake-hint">Min: ${COINFLIP.MIN_DEPOSIT} FLIP</span>
           <span class="coinflip-error" data-bind="error" hidden></span>
           <span class="coinflip-locked-msg" data-bind="locked-msg" hidden>Coinflip locked during resolution</span>
         </div>
@@ -61,7 +61,7 @@ class CoinflipPanel extends HTMLElement {
 
         <div class="coinflip-claim-section" data-bind="claim-section" hidden>
           <span class="coinflip-claimable-label">Claimable</span>
-          <span class="coinflip-claimable-value" data-bind="claimable">0 BURNIE</span>
+          <span class="coinflip-claimable-value" data-bind="claimable">0 FLIP</span>
           <button class="btn-primary coinflip-claim-btn" data-action="claim">Claim</button>
         </div>
 
@@ -91,7 +91,7 @@ class CoinflipPanel extends HTMLElement {
             <span>Enable auto-rebuy</span>
           </label>
           <div class="coinflip-autorebuy-detail" data-bind="autorebuy-detail" hidden>
-            <label class="coinflip-label">Take-Profit (BURNIE)</label>
+            <label class="coinflip-label">Take-Profit (FLIP)</label>
             <div class="coinflip-input-row">
               <input type="number" class="coinflip-input" min="0" step="100" placeholder="0 = no limit" data-bind="takeprofit-input">
               <button class="btn-ghost coinflip-save-rebuy-btn" data-action="save-autorebuy">Save</button>
@@ -147,7 +147,7 @@ class CoinflipPanel extends HTMLElement {
         const hasClaimable = cf.claimable && cf.claimable !== '0';
         if (claimSection) claimSection.hidden = !hasClaimable;
         if (hasClaimable) {
-          this.#setTextContent('claimable', formatBurnie(cf.claimable) + ' BURNIE');
+          this.#setTextContent('claimable', formatFlip(cf.claimable) + ' FLIP');
         }
 
         // Auto-rebuy state
@@ -169,10 +169,10 @@ class CoinflipPanel extends HTMLElement {
             armedEl.textContent = armed ? 'ARMED' : 'NOT ARMED';
           }
           if (armed) {
-            this.#setTextContent('bounty-pool', formatBurnie(cf.bounty.pool) + ' BURNIE');
+            this.#setTextContent('bounty-pool', formatFlip(cf.bounty.pool) + ' FLIP');
           }
           if (cf.bounty.recordAmount && cf.bounty.recordAmount !== '0') {
-            this.#setTextContent('bounty-record', formatBurnie(cf.bounty.recordAmount) + ' BURNIE');
+            this.#setTextContent('bounty-record', formatFlip(cf.bounty.recordAmount) + ' FLIP');
           }
           if (cf.bounty.recordHolder) {
             this.#setTextContent('bounty-holder', truncateAddress(cf.bounty.recordHolder));
@@ -242,10 +242,10 @@ class CoinflipPanel extends HTMLElement {
         hint.textContent = 'Coinflip locked during resolution';
         hint.style.color = 'var(--warning)';
       } else if (input.value && !valid) {
-        hint.textContent = `Min: ${COINFLIP.MIN_DEPOSIT} BURNIE`;
+        hint.textContent = `Min: ${COINFLIP.MIN_DEPOSIT} FLIP`;
         hint.style.color = 'var(--warning)';
       } else {
-        hint.textContent = `Min: ${COINFLIP.MIN_DEPOSIT} BURNIE`;
+        hint.textContent = `Min: ${COINFLIP.MIN_DEPOSIT} FLIP`;
         hint.style.color = '';
       }
     }

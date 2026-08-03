@@ -181,6 +181,26 @@ describe('purchase affiliate input helpers', () => {
       /not registered/i,
     );
   });
+
+  test('contract VAULT fallback means no real referrer, independent of a saved code', async () => {
+    const { CONTRACTS } = await import('../chain-config.js');
+    contractsMod.setProvider(makeFakeProvider(CONNECTED));
+    globalThis.localStorage = {
+      getItem: () => affiliateMod.defaultCodeForAddress('0x' + 'b'.repeat(40)),
+      setItem() {},
+      removeItem() {},
+    };
+    affiliateMod.__setContractFactoryForTest(() => ({
+      getReferrer: async () => CONTRACTS.VAULT,
+    }));
+    assert.equal(await affiliateMod.readPlayerReferrer(CONNECTED), null,
+      'the Vault reward sink is not an assigned player referral');
+
+    const real = '0x' + 'c'.repeat(40);
+    affiliateMod.__setContractFactoryForTest(() => ({ getReferrer: async () => real }));
+    assert.equal(await affiliateMod.readPlayerReferrer(CONNECTED), real,
+      'a real non-Vault referrer remains authoritative');
+  });
 });
 
 // ===========================================================================
@@ -191,15 +211,14 @@ describe('Plan 62-06: buildAffiliateUrl', () => {
   test('uses default code when no registeredCode', () => {
     const addr = '0x' + 'a'.repeat(40);
     const url = affiliateMod.buildAffiliateUrl(addr);
-    const expectedCode = '0x' + '0'.repeat(24) + 'a'.repeat(40);
-    assert.equal(url, `https://purgegame.com/app/?ref=${expectedCode}`);
+    assert.equal(url, `https://degener.us/app/?ref=${addr}`);
   });
 
   test('uses registeredCode when provided', () => {
     const addr = '0x' + 'a'.repeat(40);
-    const vanity = '0x' + '4445474500000000000000000000000000000000000000000000000000000000'.slice(2);
+    const vanity = '0x' + '4445474500000000000000000000000000000000000000000000000000000000';
     const url = affiliateMod.buildAffiliateUrl(addr, vanity);
-    assert.equal(url, `https://purgegame.com/app/?ref=${vanity}`);
+    assert.equal(url, `https://degener.us/app/?ref=${vanity}`);
   });
 });
 

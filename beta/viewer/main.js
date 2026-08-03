@@ -8,6 +8,7 @@ import { render as renderDashboard, clearChart } from './dashboard.js';
 import { render as renderActivity } from './activity.js';
 import { render as renderStore } from './store-view.js';
 import { render as renderCoinflip } from './coinflip-display.js';
+import { render as renderBadges } from './badge-inventory.js';
 
 const selectEl      = document.getElementById('viewer-player-select');
 const emptyEl       = document.getElementById('viewer-empty');
@@ -59,7 +60,6 @@ function showPanelSkeletons(container) {
 // --- Replay Panel Sync (D-03, D-13) ---
 
 function syncReplayPanel(player, day) {
-  // Show the replay wrapper once a player is active
   if (replayWrapperEl) replayWrapperEl.hidden = false;
 
   const replayEl = document.querySelector('replay-panel');
@@ -68,36 +68,48 @@ function syncReplayPanel(player, day) {
   const daySelect = replayEl.querySelector('[data-bind="day-select"]');
   if (!daySelect) return;
 
-  function trySetDay() {
-    // Wait for day options to be populated (starts as single "Loading days..." placeholder)
-    const hasOptions = daySelect.options.length > 1 && daySelect.options[0]?.value !== '';
-    if (!hasOptions) {
-      const obs = new MutationObserver(() => {
-        obs.disconnect();
-        trySetDay();
-      });
-      obs.observe(daySelect, { childList: true });
-      return;
-    }
+  // Poll until day-select has real options (replaces MutationObserver which was unreliable)
+  const poll = setInterval(() => {
+    if (daySelect.options.length <= 1 || !daySelect.options[1]?.value) return;
+    clearInterval(poll);
 
-    // Set day value and dispatch change to trigger #onDayChange
-    daySelect.value = String(day);
+    // Set day
+    const dayStr = String(day);
+    daySelect.value = dayStr;
+    if (daySelect.value !== dayStr) {
+      // Day not in replay — find nearest
+      for (let i = daySelect.options.length - 1; i >= 0; i--) {
+        if (daySelect.options[i].value && parseInt(daySelect.options[i].value) <= day) {
+          daySelect.value = daySelect.options[i].value;
+          break;
+        }
+      }
+    }
     daySelect.dispatchEvent(new Event('change'));
 
-    // Now wait for player-select to populate (populated by #loadTickets after day change)
+    // Poll for player-select options (populated async after day change)
     const playerSelect = replayEl.querySelector('[data-bind="player-select"]');
     if (!playerSelect) return;
 
-    const pObs = new MutationObserver(() => {
-      pObs.disconnect();
-      // Set player value and dispatch change to trigger #onPlayerChange
-      playerSelect.value = player;
-      playerSelect.dispatchEvent(new Event('change'));
-    });
-    pObs.observe(playerSelect, { childList: true });
-  }
+    const pPoll = setInterval(() => {
+      if (playerSelect.options.length <= 1) return;
+      clearInterval(pPoll);
 
-  trySetDay();
+      // Find matching player
+      const target = player.toLowerCase();
+      for (const opt of playerSelect.options) {
+        if (opt.value.toLowerCase() === target) {
+          playerSelect.value = opt.value;
+          playerSelect.dispatchEvent(new Event('change'));
+          break;
+        }
+      }
+    }, 100);
+    // Safety: stop polling after 5s
+    setTimeout(() => clearInterval(pPoll), 5000);
+  }, 100);
+  // Safety: stop polling after 5s
+  setTimeout(() => clearInterval(poll), 5000);
 }
 
 // --- Panel Refresh (D-03) ---
@@ -112,6 +124,7 @@ async function refreshPanels(player, day) {
     renderActivity(data.activity, contentEl);
     renderStore(data.store, contentEl);
     renderCoinflip(data.activity.coinflip, contentEl);
+    await renderBadges(player, day, { endBlock: data.endBlock }, contentEl);
     syncReplayPanel(player, day);
   } catch (err) {
     console.error('[viewer] Panel fetch failed:', err);

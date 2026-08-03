@@ -177,7 +177,10 @@ test('tickets-fetch.js URL matches INTEG-01 path /player/.../tickets/by-trait?le
   const src = readFileSync(FETCH, 'utf8');
   assert.match(src, /\/player\/[^`'"]*\/tickets\/by-trait/);
   assert.match(src, /level=/);
-  assert.match(src, /day=/);
+  // day intentionally NOT in the URL (kept in the cache key) -- the by-trait
+  // endpoint's strict blockNumber filter is incompatible with the upsert-in-
+  // place player_tickets table; dropping day matches /player/?day behaviour.
+  assert.match(src, /::\$\{day\}/);
 });
 
 test('tickets-fetch.js imports API_BASE from play/app/constants.js', () => {

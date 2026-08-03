@@ -19,6 +19,8 @@ import { dirname, resolve as resolvePath } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const srcPath = resolvePath(__dirname, '../gold-rush-headline.js');
 const src = readFileSync(srcPath, 'utf8');
+const cssPath = resolvePath(__dirname, '../../styles/app.css');
+const css = readFileSync(cssPath, 'utf8');
 
 // customElements/HTMLElement are absent under node:test. The module guards its
 // define() call and only touches the DOM inside connectedCallback, but the class
@@ -26,7 +28,7 @@ const src = readFileSync(srcPath, 'utf8');
 globalThis.HTMLElement = globalThis.HTMLElement ?? class {};
 
 const { _testing } = await import('../gold-rush-headline.js');
-const { groupEth, fmtEth, easeOutCubic, gameStateChipText } = _testing;
+const { groupEth, fmtEth, easeOutCubic, headlineAmountFit } = _testing;
 
 // polling.js registers a visibilitychange listener behind a typeof guard, so it is
 // import-safe here; its _testing surface exposes the adaptive-cadence internals.
@@ -77,6 +79,14 @@ describe('fmtEth (display scale)', () => {
   });
 });
 
+describe('narrow headline fitting', () => {
+  test('accounts for punctuation as the jackpot grows through width buckets', () => {
+    assert.equal(headlineAmountFit('8,689.892'), 'normal');
+    assert.equal(headlineAmountFit('12,345.678'), 'medium');
+    assert.equal(headlineAmountFit('1,234,567.890'), 'long');
+  });
+});
+
 // ===========================================================================
 // Count-up easing
 // ===========================================================================
@@ -99,35 +109,6 @@ describe('easeOutCubic', () => {
 
   test('front-loaded — past halfway by t=0.25 (reads as money landing)', () => {
     assert.ok(easeOutCubic(0.25) > 0.5, `expected >0.5, got ${easeOutCubic(0.25)}`);
-  });
-});
-
-describe('level 55 phase clock', () => {
-  test('shows the authoritative jackpot day', () => {
-    assert.equal(gameStateChipText({
-      level: 55, phase: 'JACKPOT', phaseDay: 3, phaseDayCap: 5,
-    }), 'L55 · JACKPOT DAY 3/5');
-  });
-
-  test('shows the DB-derived purchase day for the active ticket level', () => {
-    assert.equal(gameStateChipText(
-      { level: 54, phase: 'PURCHASE' },
-      { level: 55, phase: 'P', dayInPhase: 8 },
-    ), 'L55 · PURCHASE DAY 8');
-  });
-
-  test('shows purchase day 1 while the newest DB clock is the prior jackpot level', () => {
-    assert.equal(gameStateChipText(
-      { level: 55, phase: 'PURCHASE' },
-      { level: 55, phase: 'J', dayInPhase: 5 },
-    ), 'L56 · PURCHASE DAY 1');
-  });
-
-  test('does not attach a stale phase clock from another level', () => {
-    assert.equal(gameStateChipText(
-      { level: 54, phase: 'PURCHASE' },
-      { level: 54, phase: 'P', dayInPhase: 99 },
-    ), 'L55 · PURCHASE');
   });
 });
 
@@ -158,9 +139,13 @@ describe('gold-rush-headline.js source discipline', () => {
     assert.equal(/API_BASE/.test(src), false, 'component does not know the API base');
   });
 
+  test('does not recreate the retired level/day navigation pill', () => {
+    assert.doesNotMatch(src, /#renderGameStateChip|id\s*=\s*['"]unav-state/);
+  });
+
   test('respects prefers-reduced-motion by snapping instead of animating', () => {
     assert.match(src, /prefers-reduced-motion/, 'queries the media feature');
-    assert.match(src, /prefersReducedMotion\(\)[\s\S]{0,120}amount\.textContent = fmtEth\(to\)/,
+    assert.match(src, /prefersReducedMotion\(\)[\s\S]{0,140}paintHeadlineAmount\(amount, to\)/,
       'reduced motion path assigns the final value directly');
   });
 
@@ -175,11 +160,67 @@ describe('gold-rush-headline.js source discipline', () => {
     assert.match(src, /clearTimeout\(this\.#floatTimer\)/);
   });
 
-  test('all four golden-ticket banner quadrants use the gold surface', () => {
+  test('keeps the headline free of decorative ticket-card UI', () => {
+    assert.doesNotMatch(src, /gr__ticket|buildGoldTicket|BADGE_QUADRANTS/);
+    assert.doesNotMatch(css, /\.gr__ticket/);
+  });
+
+  test('adds a compact Degenerus Protocol lockup without demoting the jackpot number', () => {
     assert.match(
       src,
-      /BADGE_QUADRANTS\.forEach[\s\S]{0,240}cell\.className = 'trait-quadrant trait-quadrant--gold'/,
-      'the shared gold background class is applied inside the four-quadrant loop',
+      /class="gr__brand"[\s\S]{0,320}\/whitepaper\/flame-logo\.svg[\s\S]{0,320}<strong>DEGENERUS<\/strong>[\s\S]{0,120}<small>PROTOCOL<\/small>/,
+      'the banner carries the protocol flame and full brand name',
+    );
+    assert.ok(
+      src.indexOf('class="gr__brand"') < src.indexOf('class="gr__amount"'),
+      'the restrained brand lockup precedes the headline figure',
+    );
+    assert.match(
+      css,
+      /\.gr__amount\s*\{[\s\S]{0,760}font-size:\s*clamp\(3\.55rem,\s*8\.4vw,\s*6\.8rem\)/,
+      'the jackpot amount retains its oversized headline scale',
+    );
+    assert.match(
+      src,
+      /class="gr__unit-code"[^>]*aria-label="Ethereum"[^>]*>ETH</,
+      'the amount uses an explicit, readable Ethereum currency code',
+    );
+    assert.doesNotMatch(src, /gr__unit-(?:mark|logo)|crypto_06_ethereum_silver\.svg/,
+      'the old circled Ethereum icon is not rendered beside the amount');
+    assert.match(
+      css,
+      /\.gr__unit-code\s*\{[^}]*font-size:\s*clamp\(0\.72rem,\s*1\.5vw,\s*0\.92rem\)/s,
+      'the plain ETH code is larger now that it carries the denomination alone',
+    );
+    assert.match(
+      css,
+      /\.gr__brand-logo\s*\{[\s\S]{0,180}width:\s*clamp\(1\.45rem,\s*3\.2vw,\s*1\.9rem\)/,
+      'the protocol mark stays subordinate to the number',
+    );
+    assert.match(
+      css,
+      /\.gr__brand-copy strong\s*\{[^}]*font-size:\s*clamp\(0\.58rem,\s*1\.5vw,\s*0\.72rem\)/s,
+      'the DEGENERUS line is readable without competing with the amount',
+    );
+    assert.match(
+      css,
+      /\.gr__brand-copy small\s*\{[^}]*font-size:\s*clamp\(0\.4rem,\s*1\.05vw,\s*0\.5rem\)/s,
+      'the PROTOCOL line receives the same modest size increase',
+    );
+    assert.match(
+      css,
+      /\.gr__label-text\s*\{[^}]*font-size:\s*clamp\(0\.72rem,\s*1\.75vw,\s*1\.02rem\)/s,
+      'Golden Ticket Jackpot is slightly larger across the responsive range',
+    );
+    assert.match(
+      css,
+      /\.gr\s*\{[\s\S]{0,520}golden-ticket-frame-v1\.webp/,
+      'the dedicated art pass is integrated as a decorative frame behind live HTML',
+    );
+    assert.match(
+      css,
+      /@media \(max-width: 640px\)[\s\S]*?\.gr__amount\[data-fit="medium"\]\s*\{[^}]*font-size:[^}]*\}[\s\S]*?\.gr__amount\[data-fit="long"\]\s*\{[^}]*font-size:/,
+      'narrow screens shrink longer live totals before the ETH lockup can clip',
     );
   });
 });

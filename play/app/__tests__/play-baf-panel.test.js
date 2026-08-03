@@ -9,7 +9,7 @@
 //   SHELL-01 negatives -- no imports of beta/app/baf.js, beta/app/utils.js, beta/components/baf-panel.js, ethers
 //   Fetch wiring -- /leaderboards/baf?level=N (Wave 1) + /player/:addr/baf?level=N (Wave 2 INTEG-05)
 //   Dual stale-guards -- #bafFetchId (leaderboard) + #bafPlayerFetchId (per-player INTEG-05)
-//   Score-unit discipline (Pitfall 8) -- BAF scores are WEI-scale (formatBurnie required)
+//   Score-unit discipline (Pitfall 8) -- BAF scores are WEI-scale (formatFlip required)
 //   Inline bafContext derivation -- nextBafLevel via Math.ceil((level+1)/10)*10 (per 54-PATTERNS.md)
 //   Selected-player highlighting -- aria-current="true" on matching row
 //   Empty state -- entries.length check or equivalent
@@ -237,15 +237,15 @@ test('baf-panel.js highlights selected player with aria-current', () => {
 // ---------------------------------------------------------------------------
 // Table from 54-PATTERNS.md Score-unit discipline section:
 //
-//   /leaderboards/baf?level=N                           WEI-scale BURNIE              formatBurnie(entry.score)
-//   /player/:addr/baf?level=N (INTEG-05 score field)    WEI-scale BURNIE              formatBurnie(data.score)
+//   /leaderboards/baf?level=N                           WEI-scale FLIP                formatFlip(entry.score)
+//   /player/:addr/baf?level=N (INTEG-05 score field)    WEI-scale FLIP                formatFlip(data.score)
 //
-// WARNING SIGN OF BUG: BAF leaderboard shows "475,215,212,469,240,581,904,067 BURNIE"
-// (wrong -- treats wei as integer; must divide via formatBurnie).
+// WARNING SIGN OF BUG: BAF leaderboard shows "475,215,212,469,240,581,904,067 FLIP"
+// (wrong -- treats wei as integer; must divide via formatFlip).
 
-test('score-unit: baf-panel.js uses formatBurnie for BAF scores (wei-scale)', () => {
+test('score-unit: baf-panel.js uses formatFlip for BAF scores (wei-scale)', () => {
   const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /formatBurnie/);
+  assert.match(src, /formatFlip/);
 });
 
 test('score-unit: baf-panel.js uses truncateAddress for player addresses', () => {

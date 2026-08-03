@@ -34,8 +34,6 @@ import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { getActingAddress } from './store.js';
-// The canonical claim writer — reused so claimCoinflips has ONE call site.
-import { claimFlip } from './claims.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures verified against
@@ -49,12 +47,18 @@ const COINFLIP_ABI = [
   'function previewClaimCoinflips(address player) external view returns (uint256 mintable)',
   // Coinflip.sol:1238 — the live stake for the upcoming/current flip day.
   'function coinflipAmount(address player) external view returns (uint256)',
+  // Auto-rebuy carry is an implicit part of the next effective stake. It is
+  // deliberately not copied into the day-keyed coinflipAmount storage slot.
+  'function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stop, uint256 carry, uint24 startDay)',
+  // Packed three-state result: 0 unresolved, 1 resolved loss, 50..156 win.
+  'function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win)',
   // Coinflip.sol:46 — CoinflipDeposit emitted on every deposit (CF-05).
   'event CoinflipDeposit(address indexed player, uint256 creditedFlip)',
-  // Exact-day cumulative credit. The final newTotal is the amount that day's
-  // win/loss resolves against, including every manual/bonus/system credit.
+  // Exact-day cumulative STORED credit. Auto-rebuy carry is added lazily while
+  // resolving and therefore never appears in newTotal.
   'event CoinflipStakeUpdated(address indexed player, uint24 indexed day, uint256 amount, uint256 newTotal)',
   'event CoinflipDayResolved(uint24 indexed day, bool win, uint16 rewardPercent, uint128 bountyAfter, uint128 bountyPaid, address bountyRecipient)',
+  'event CoinflipClaimState(address indexed player, uint128 claimableStored, uint128 autoRebuyCarry, uint24 lastClaim)',
 ];
 
 // reverseFlip is a GAME action, despite living beside the coinflip UX. It
@@ -97,13 +101,16 @@ const REVERSE_FLIP_STORAGE_SLOT = 5n;
 const UINT64_MASK = (1n << 64n) - 1n;
 export const REVERSE_FLIP_BASE_COST_WEI = 100n * 10n ** 18n;
 
-// FLIP is the token the stake is burned from — the only read needed here.
-const FLIP_READ_ABI = ['function balanceOf(address owner) external view returns (uint256)'];
+const GAME_DAY_READ_ABI = ['function currentDayView() external view returns (uint24)'];
+const ERC20_BALANCE_ABI = ['function balanceOf(address owner) external view returns (uint256)'];
 
 let _currentStakeReader = null;
 let _resolvedStakeReader = null;
 let _claimableReader = null;
+let _latestResultReader = null;
+let _widgetBalancesReader = null;
 let _reverseFlipQuoteReader = null;
+let _stakeReadContractFactory = null;
 // null = unprobed; true = deploy has rngNudgeQuote() (run23+ signature);
 // false = legacy deploy (storage-slot quote + no-arg reverseFlip). Probed once
 // per session by readReverseFlipQuote and consumed by reverseFlip()'s selector
@@ -114,14 +121,26 @@ const _resolvedStakeCache = new Map();
 const _currentStakeInflight = new Map();
 const _resolvedStakeInflight = new Map();
 const _claimableInflight = new Map();
+const _widgetBalancesInflight = new Map();
+let _latestResultInflight = null;
 let _reverseFlipQuoteInflight = null;
 const LOG_CHUNK_BLOCKS = 1_800;
-const RESOLVED_STAKE_STORAGE_PREFIX = 'coinflip_resolved_stake_v1';
+// v1 persisted only CoinflipStakeUpdated.newTotal and therefore permanently
+// under-reported any day resolved with auto-rebuy carry (most visibly sDGNRS).
+const RESOLVED_STAKE_STORAGE_PREFIX = 'coinflip_resolved_stake_v2';
 
 /** Test-only: replace the live current-day stake read. */
 export function __setCurrentStakeReaderForTest(fn) {
   _currentStakeReader = typeof fn === 'function' ? fn : null;
   _currentStakeInflight.clear();
+}
+
+/** Test-only: replace the read contract used by live/historical stake reads. */
+export function __setStakeReadContractFactoryForTest(fn) {
+  _stakeReadContractFactory = typeof fn === 'function' ? fn : null;
+  _currentStakeInflight.clear();
+  _resolvedStakeCache.clear();
+  _resolvedStakeInflight.clear();
 }
 
 /** Test-only: replace the exact resolved-day cumulative stake read. */
@@ -135,6 +154,18 @@ export function __setResolvedStakeReaderForTest(fn) {
 export function __setClaimableReaderForTest(fn) {
   _claimableReader = typeof fn === 'function' ? fn : null;
   _claimableInflight.clear();
+}
+
+/** Test-only: replace the live current-day/result pair read. */
+export function __setLatestResultReaderForTest(fn) {
+  _latestResultReader = typeof fn === 'function' ? fn : null;
+  _latestResultInflight = null;
+}
+
+/** Test-only: replace the live token balances used by the FLIP widget. */
+export function __setWidgetBalancesReaderForTest(fn) {
+  _widgetBalancesReader = typeof fn === 'function' ? fn : null;
+  _widgetBalancesInflight.clear();
 }
 
 /** Test-only: replace the live reverseFlip storage/lock read. */
@@ -151,6 +182,14 @@ export function __resetCurrentStakeReaderForTest() {
   _publicReadProvider = null;
 }
 
+/** Test-only: restore the production stake-read contract. */
+export function __resetStakeReadContractFactoryForTest() {
+  _stakeReadContractFactory = null;
+  _currentStakeInflight.clear();
+  _resolvedStakeCache.clear();
+  _resolvedStakeInflight.clear();
+}
+
 /** Test-only: restore the production resolved-day reader and immutable cache. */
 export function __resetResolvedStakeReaderForTest() {
   _resolvedStakeReader = null;
@@ -163,6 +202,20 @@ export function __resetResolvedStakeReaderForTest() {
 export function __resetClaimableReaderForTest() {
   _claimableReader = null;
   _claimableInflight.clear();
+  _publicReadProvider = null;
+}
+
+/** Test-only: restore the production current-day/result reader. */
+export function __resetLatestResultReaderForTest() {
+  _latestResultReader = null;
+  _latestResultInflight = null;
+  _publicReadProvider = null;
+}
+
+/** Test-only: restore the production FLIP-widget balance reader. */
+export function __resetWidgetBalancesReaderForTest() {
+  _widgetBalancesReader = null;
+  _widgetBalancesInflight.clear();
   _publicReadProvider = null;
 }
 
@@ -188,6 +241,153 @@ function _readerProvider() {
     );
   }
   return _publicReadProvider;
+}
+
+function _stakeReadContract(provider) {
+  return _stakeReadContractFactory
+    ? _stakeReadContractFactory(provider)
+    : new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, provider);
+}
+
+function _normalizeLatestResult(value) {
+  if (!value) return null;
+  const day = Number(value.day);
+  const rewardPercent = Number(value.rewardPercent ?? value.encodedRewardPercent ?? 0);
+  if (!Number.isInteger(day) || day <= 0 || !Number.isFinite(rewardPercent)) return null;
+  const resolved = value.resolved == null ? rewardPercent > 0 : Boolean(value.resolved);
+  if (!resolved) return null;
+  return {
+    day,
+    win: Boolean(value.win),
+    // A loss is stored as the non-zero sentinel `1`; it has no payout modifier.
+    rewardPercent: Boolean(value.win) ? Math.max(0, Math.trunc(rewardPercent)) : 0,
+    resolved: true,
+    source: 'chain',
+  };
+}
+
+/**
+ * Read the newest resolved daily FLIP result from this exact deployment.
+ *
+ * The hosted indexer can retain day-number rows from an older redeploy. GAME's
+ * currentDayView plus Coinflip's packed result are deployment-local, so this is
+ * the authoritative clock/result pair for the widget. If today's lane is still
+ * unresolved, the immediately preceding day is checked.
+ */
+export async function readLatestCoinflipResult() {
+  if (_latestResultInflight) return _latestResultInflight;
+  const request = (async () => {
+    try {
+      if (_latestResultReader) return _normalizeLatestResult(await _latestResultReader());
+      const provider = _readerProvider();
+      if (!provider || !CONTRACTS.GAME || !CONTRACTS.COINFLIP) return null;
+      const game = new ethers.Contract(CONTRACTS.GAME, GAME_DAY_READ_ABI, provider);
+      const coinflip = new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, provider);
+      let overrides = [];
+      if (typeof provider.getBlockNumber === 'function') {
+        try { overrides = [{ blockTag: await provider.getBlockNumber() }]; }
+        catch (_e) { /* unpinned best effort */ }
+      }
+      const currentDay = Number(await game.currentDayView(...overrides));
+      if (!Number.isInteger(currentDay) || currentDay <= 0) return null;
+      for (const day of [currentDay, currentDay - 1]) {
+        if (day <= 0) continue;
+        const result = await coinflip.getCoinflipDayResult(day, ...overrides);
+        const encoded = Number(result?.rewardPercent ?? result?.[0] ?? 0);
+        if (encoded <= 0) continue;
+        return _normalizeLatestResult({
+          day,
+          encodedRewardPercent: encoded,
+          win: Boolean(result?.win ?? result?.[1]),
+          resolved: true,
+        });
+      }
+      return null;
+    } catch (_e) {
+      return null;
+    }
+  })();
+  _latestResultInflight = request;
+  try {
+    return await request;
+  } finally {
+    if (_latestResultInflight === request) _latestResultInflight = null;
+  }
+}
+
+function _fulfilledBigInt(result) {
+  if (result?.status !== 'fulfilled') return null;
+  try { return BigInt(result.value); }
+  catch (_e) { return null; }
+}
+
+/** Direct, same-deployment balances rendered inside the FLIP widget. */
+export async function readFlipWidgetBalances({ player } = {}) {
+  const target = player || getActingAddress();
+  if (!target) return null;
+  const key = `${CHAIN.id}:${String(target).toLowerCase()}`;
+  if (_widgetBalancesInflight.has(key)) return _widgetBalancesInflight.get(key);
+  const request = (async () => {
+    try {
+      if (_widgetBalancesReader) {
+        const value = await _widgetBalancesReader({ player: target });
+        if (!value) return null;
+        return {
+          flipBalance: value.flipBalance == null ? null : BigInt(value.flipBalance),
+          wwxrpBalance: value.wwxrpBalance == null ? null : BigInt(value.wwxrpBalance),
+          sdgnrsBalance: value.sdgnrsBalance == null ? null : BigInt(value.sdgnrsBalance),
+        };
+      }
+      const provider = _readerProvider();
+      if (!provider) return null;
+      let overrides = [];
+      if (typeof provider.getBlockNumber === 'function') {
+        try { overrides = [{ blockTag: await provider.getBlockNumber() }]; }
+        catch (_e) { /* unpinned best effort */ }
+      }
+      const flip = new ethers.Contract(CONTRACTS.COIN, ERC20_BALANCE_ABI, provider);
+      const wwxrp = new ethers.Contract(CONTRACTS.WWXRP, ERC20_BALANCE_ABI, provider);
+      const sdgnrs = new ethers.Contract(CONTRACTS.SDGNRS, ERC20_BALANCE_ABI, provider);
+      const [flipResult, wwxrpResult, sdgnrsResult] = await Promise.allSettled([
+        flip.balanceOf(target, ...overrides),
+        wwxrp.balanceOf(target, ...overrides),
+        sdgnrs.balanceOf(target, ...overrides),
+      ]);
+      const balances = {
+        flipBalance: _fulfilledBigInt(flipResult),
+        wwxrpBalance: _fulfilledBigInt(wwxrpResult),
+        sdgnrsBalance: _fulfilledBigInt(sdgnrsResult),
+      };
+      return Object.values(balances).some((value) => value != null) ? balances : null;
+    } catch (_e) {
+      return null;
+    }
+  })();
+  _widgetBalancesInflight.set(key, request);
+  try {
+    return await request;
+  } finally {
+    if (_widgetBalancesInflight.get(key) === request) _widgetBalancesInflight.delete(key);
+  }
+}
+
+/**
+ * The amount a daily flip actually resolves against. Auto-rebuy carry remains
+ * in PlayerCoinflipState and is folded into the day-keyed stored stake only in
+ * _claimCoinflipsInternal, so coinflipAmount/newTotal alone are not the bet.
+ */
+export function effectiveCoinflipStake(storedStake, autoRebuyInfo = null) {
+  let stored;
+  try { stored = BigInt(storedStake ?? 0); }
+  catch (_e) { return 0n; }
+  const enabled = Boolean(autoRebuyInfo?.enabled ?? autoRebuyInfo?.[0]);
+  if (!enabled) return stored;
+  try {
+    const carry = BigInt(autoRebuyInfo?.carry ?? autoRebuyInfo?.[2] ?? 0);
+    return stored + carry;
+  } catch (_e) {
+    return stored;
+  }
 }
 
 /**
@@ -323,13 +523,32 @@ async function _latestLog(contract, filter, lowerBlock, upperBlock) {
   return null;
 }
 
+function _logIndex(log) {
+  return Number(log?.index ?? log?.logIndex ?? -1);
+}
+
+/** Latest matching event strictly before another event in chain log order. */
+async function _latestLogBefore(contract, filter, lowerBlock, boundary) {
+  const boundaryBlock = Number(boundary?.blockNumber);
+  if (!Number.isInteger(boundaryBlock) || boundaryBlock < lowerBlock) return null;
+
+  const sameBlock = await contract.queryFilter(filter, boundaryBlock, boundaryBlock);
+  const boundaryIndex = _logIndex(boundary);
+  const earlier = sameBlock.filter((log) => _logIndex(log) < boundaryIndex);
+  if (earlier.length > 0) return earlier[earlier.length - 1];
+  if (boundaryBlock === lowerBlock) return null;
+  return _latestLog(contract, filter, lowerBlock, boundaryBlock - 1);
+}
+
 /**
- * Read the player's live stake for the upcoming flip day.
+ * Read the player's effective live stake for the upcoming flip day.
  *
  * The dashboard's `depositedAmount` is the latest indexed daily stake. The
  * resolved day's stake is intentionally retained in that history, so after a
  * resolution it cannot reliably answer "what is my bet now?" The contract's
- * `coinflipAmount(player)` view is explicitly scoped to the current target day.
+ * `coinflipAmount(player)` view is explicitly scoped to the current target day,
+ * but contains only stored credits. When auto-rebuy is enabled, its carry is
+ * folded into that stake lazily at resolution and must be added here.
  *
  * @param {{player?: string}} [args]
  * @returns {Promise<bigint|null>} null when the read is unavailable
@@ -348,8 +567,24 @@ export async function readCurrentCoinflipStake({ player } = {}) {
       }
       const provider = _readerProvider();
       if (!provider) return null;
-      const coinflip = new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, provider);
-      return BigInt(await coinflip.coinflipAmount(target));
+      const coinflip = _stakeReadContract(provider);
+      // Both storage legs change during resolution. Pin them to one block so a
+      // rollover cannot combine a pre-resolution value with a post-resolution
+      // value and briefly double-count (or omit) the carry.
+      let readOverrides = [];
+      if (typeof provider.getBlockNumber === 'function') {
+        try { readOverrides = [{ blockTag: await provider.getBlockNumber() }]; }
+        catch (_e) { /* an unpinned best-effort read is still useful */ }
+      }
+      const [storedResult, rebuyResult] = await Promise.allSettled([
+        coinflip.coinflipAmount(target, ...readOverrides),
+        coinflip.coinflipAutoRebuyInfo(target, ...readOverrides),
+      ]);
+      if (storedResult.status !== 'fulfilled') return null;
+      return effectiveCoinflipStake(
+        storedResult.value,
+        rebuyResult.status === 'fulfilled' ? rebuyResult.value : null,
+      );
     } catch (_e) {
       return null;
     }
@@ -404,9 +639,10 @@ export async function readClaimableCoinflip({ player } = {}) {
 /**
  * Read the cumulative stake for one completed flip day.
  *
- * `CoinflipStakeUpdated.newTotal` is authoritative for this value. In
- * particular, it includes every credit written during the previous day and
- * avoids both misleading alternatives exposed by the general dashboard:
+ * `CoinflipStakeUpdated.newTotal` is authoritative for the stored-credit leg.
+ * If auto-rebuy was active, the latest CoinflipClaimState before the resolution
+ * supplies the carry leg that the contract added lazily. Together they avoid
+ * both misleading alternatives exposed by the general dashboard:
  * `depositedAmount` is merely the newest day, while `coinflipAmount()` is the
  * still-unresolved next day. The final exact-day event is immutable, so reads
  * are cached by player/day.
@@ -438,7 +674,7 @@ export async function readResolvedCoinflipStake({ player, day } = {}) {
 
       const provider = _readerProvider();
       if (!provider || !CONTRACTS.COINFLIP) return null;
-      const contract = new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, provider);
+      const contract = _stakeReadContract(provider);
       const head = Number(await provider.getBlockNumber());
       const deployBlock = Math.max(0, Number(CHAIN.deployBlock || 0));
       const resolved = await _latestLog(
@@ -472,9 +708,33 @@ export async function readResolvedCoinflipStake({ player, day } = {}) {
         stakeLowerBlock,
         resolvedBlock,
       );
-      return stakeLog == null
+      const storedStake = stakeLog == null
         ? 0n
         : BigInt(stakeLog.args?.newTotal ?? stakeLog.args?.[3] ?? 0);
+
+      // Avoid a historical log scan for ordinary accounts that have never
+      // enabled auto-rebuy. sDGNRS is permanently armed after its seed window,
+      // so always reconstruct it even if the optional live info call fails.
+      let rebuyInfo = null;
+      try { rebuyInfo = await contract.coinflipAutoRebuyInfo(target); }
+      catch (_e) { /* older deployments degrade to stored stake */ }
+      const isSdgnrs = CONTRACTS.SDGNRS
+        && String(target).toLowerCase() === String(CONTRACTS.SDGNRS).toLowerCase();
+      const mayHaveCarry = isSdgnrs
+        || Boolean(rebuyInfo?.enabled ?? rebuyInfo?.[0])
+        || BigInt(rebuyInfo?.carry ?? rebuyInfo?.[2] ?? 0) > 0n;
+      if (!mayHaveCarry) return storedStake;
+
+      const priorState = await _latestLogBefore(
+        contract,
+        contract.filters.CoinflipClaimState(target),
+        deployBlock,
+        resolved,
+      );
+      const carry = priorState == null
+        ? 0n
+        : BigInt(priorState.args?.autoRebuyCarry ?? priorState.args?.[2] ?? 0);
+      return storedStake + carry;
     } catch (_e) {
       return null;
     }
@@ -492,38 +752,6 @@ export async function readResolvedCoinflipStake({ player, day } = {}) {
   }
 }
 
-/**
- * What the player can fund a stake with, both legs read from the chain.
- *
- * The deposit burns FLIP through `FLIP.burnForCoinflip`, which — UNLIKE
- * `burnCoin` / `decimatorBurn` / `terminalDecimatorBurn` — does NOT call
- * `_consumeCoinflipShortfall`: it goes straight to `_burn`, so a player whose
- * winnings are unclaimed underflows on `balanceOf[from] -= amount` no matter how
- * much claimable they are sitting on. Hence the claim-first path in
- * depositCoinflip: the chain will not spend claimable for this burn, so the UI
- * mints it first.
- *
- * @param {{player?: string}} [args]
- * @returns {Promise<{liquid: bigint, claimable: bigint}|null>} null = unread
- */
-export async function readFlipFunding({ player } = {}) {
-  const target = player || getActingAddress();
-  if (!target) return null;
-  const provider = getProvider();
-  if (!provider) return null;
-  try {
-    const flip = new ethers.Contract(CONTRACTS.COIN, FLIP_READ_ABI, provider);
-    const coinflip = new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, provider);
-    const [liquid, claimable] = await Promise.all([
-      flip.balanceOf(target),
-      coinflip.previewClaimCoinflips(target),
-    ]);
-    return { liquid: BigInt(liquid), claimable: BigInt(claimable) };
-  } catch (_e) {
-    return null;
-  }
-}
-
 // Minimum FLIP deposit (Coinflip.sol:124 enforces via AmountLTMin).
 // RESEARCH Q5: FLIP is unscaled on Sepolia — 1 FLIP = 1e18 wei.
 const COINFLIP_MIN_FLIP_WEI = 100n * 10n ** 18n;
@@ -536,21 +764,6 @@ const COINFLIP_MIN_FLIP_WEI = 100n * 10n ** 18n;
 
 let _contractFactory = null;
 let _reverseFlipContractFactory = null;
-
-// Collaborator seam for the claim-first path: the funding read and the claim
-// writer live on OTHER contracts (FLIP, and claims.js's COINFLIP handle), so the
-// contract-factory seam above cannot stand in for them.
-let _deps = null;
-
-/** Test-only: override { readFunding, claim }. */
-export function __setDepsForTest(d) { _deps = d; }
-
-/** Test-only: restore the real collaborators. */
-export function __resetDepsForTest() { _deps = null; }
-
-function _collab() {
-  return { readFunding: readFlipFunding, claim: claimFlip, ...(_deps || {}) };
-}
 
 /** Test-only: replace the `new Contract(...)` construction with a fake. */
 export function __setContractFactoryForTest(fn) {
@@ -588,15 +801,6 @@ function _buildReverseFlipContract(signerOrProvider) {
 // ---------------------------------------------------------------------------
 // Structured-revert-error helper — verbatim port from Phase 61 claims.js / 62-02 passes.js.
 // ---------------------------------------------------------------------------
-
-/** Whole-FLIP text for an error message (18 decimals, no dust). */
-function _flipText(wei) {
-  try {
-    return `${(BigInt(wei) / 10n ** 18n).toLocaleString('en-US')} FLIP`;
-  } catch (_e) {
-    return '0 FLIP';
-  }
-}
 
 function _structuredRevertError(error, context) {
   const decoded = decodeRevertReason(error);
@@ -650,13 +854,11 @@ function _reverseFlipRevertError(error, context) {
  * @param {{
  *   amount: bigint | string | number,
  *   player?: string,
- *   claimFirst?: boolean,
- *   onStep?: (step: {kind: string, amount?: bigint}) => void,
  * }} args
- * @returns {Promise<{receipt: import('ethers').TransactionReceipt, claimed: bigint}>}
+ * @returns {Promise<{receipt: import('ethers').TransactionReceipt}>}
  */
 export async function depositCoinflip({
-  amount, player, claimFirst = true, onStep,
+  amount, player,
 } = {}) {
   const buyer = player || getActingAddress();
   if (!buyer) throw new Error('Wallet not connected.');
@@ -671,35 +873,10 @@ export async function depositCoinflip({
     throw new Error('Minimum coinflip deposit is 100 FLIP.');
   }
 
-  // Spend unclaimed winnings BEFORE liquid FLIP (user call 2026-07-29). The
-  // burn behind this deposit will not reach claimable on its own, so the
-  // shortfall is claimed first — exactly the gap, leaving the rest unclaimed.
-  let claimed = 0n;
-  if (claimFirst) {
-    const { readFunding, claim } = _collab();
-    // A read that FAILED (null) must not block a deposit the wallet can fund on
-    // its own — unknown is not "insufficient".
-    const funding = await readFunding({ player: buyer });
-    if (funding && funding.liquid < amountWei) {
-      const shortfall = amountWei - funding.liquid;
-      if (funding.claimable < shortfall) {
-        // Say what is actually available rather than letting the token underflow
-        // into a bare arithmetic panic.
-        const err = new Error(
-          `Not enough FLIP: ${_flipText(funding.liquid)} in your wallet`
-          + ` + ${_flipText(funding.claimable)} claimable, stake is ${_flipText(amountWei)}.`,
-        );
-        err.code = 'InsufficientFlip';
-        err.userMessage = err.message;
-        err.recoveryAction = 'Lower the stake or win some FLIP first.';
-        throw err;
-      }
-      if (typeof onStep === 'function') onStep({ kind: 'claiming', amount: shortfall });
-      const result = await claim({ player: buyer, amount: shortfall });
-      claimed = BigInt(result?.claimed ?? shortfall);
-    }
-  }
-  if (typeof onStep === 'function') onStep({ kind: 'depositing', amount: amountWei });
+  // Current deploy: Coinflip._depositCoinflip settles and consumes the
+  // player's claimableStored first, then burns only the wallet remainder.
+  // Calling claimCoinflips here would mint those winnings just to burn them in
+  // a second signature, forfeiting the contract-native recycling path.
 
   const provider = getProvider();
   const signer = provider ? await provider.getSigner() : null;
@@ -716,7 +893,7 @@ export async function depositCoinflip({
     (s) => _buildContract(s).depositCoinflip(buyer, amountWei),
     'Coinflip deposit',
   );
-  return { receipt, claimed };
+  return { receipt };
 }
 
 /**

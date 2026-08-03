@@ -15,11 +15,13 @@ import assert from 'node:assert/strict';
 import * as storeMod from '../../app/store.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as passesMod from '../../app/passes.js';
+import * as salvageMod from '../../app/salvage.js';
 
 let packWatchMod = null;
 let inventoryMod = null;
 
 const TEST_ADDR = '0xab12000000000000000000000000000000000000';
+const RAW_ETH = 10n ** 12n;
 
 // ---------------------------------------------------------------------------
 // Fake DOM — same trimmed harness as app-balances-strip.test.js.
@@ -207,8 +209,11 @@ globalThis.localStorage = {
 // Fetch stub — by-trait route keyed by level + /game/state (active mint
 // level source: jackpotPhase ? level : level+1); logs URLs for nav assertions.
 let _byLevel = new Map();
+let _foilByLevel = new Map();
 let _gameState = { level: 17, phase: 'JACKPOT', jackpotPhaseFlag: true };  // → active 17
+let _dashboardTickets = [];
 let _deitySymbols = [];
+let _farFutureQueueResponse = null;
 const _fetchLog = [];
 globalThis.fetch = async (url) => {
   const u = String(url);
@@ -216,9 +221,19 @@ globalThis.fetch = async (url) => {
   if (u.endsWith('/game/state')) {
     return { ok: true, status: 200, json: async () => _gameState };
   }
+  if (/\/player\/0x[0-9a-f]+$/i.test(u)) {
+    return { ok: true, status: 200, json: async () => ({ tickets: _dashboardTickets }) };
+  }
   const m = u.match(/\/tickets\/by-trait\?level=(\d+)$/);
   if (m && _byLevel.has(Number(m[1]))) {
     return { ok: true, status: 200, json: async () => _byLevel.get(Number(m[1])) };
+  }
+  const foil = u.match(/\/foil\?level=(\d+)$/);
+  if (foil && _foilByLevel.has(Number(foil[1]))) {
+    return { ok: true, status: 200, json: async () => _foilByLevel.get(Number(foil[1])) };
+  }
+  if (/\/far-future-queue$/i.test(u) && _farFutureQueueResponse) {
+    return { ok: true, status: 200, json: async () => _farFutureQueueResponse };
   }
   if (/\/viewer\/player\/0x[0-9a-f]+\/day\/\d+$/i.test(u)) {
     return {
@@ -243,9 +258,13 @@ function resetDom() {
   globalThis.localStorage.clear();
   _docListeners.clear();
   _byLevel = new Map();
+  _foilByLevel = new Map();
   _gameState = { level: 17, phase: 'JACKPOT', jackpotPhaseFlag: true };
+  _dashboardTickets = [];
   _deitySymbols = [];
+  _farFutureQueueResponse = null;
   _fetchLog.length = 0;
+  salvageMod.__resetSalvageContractFactoryForTest();
   passesMod.__setDeityReadContractFactoryForTest(() => ({
     name: async () => 'Degenerus Deity Pass',
     ownerOf: async (symbolId) => {
@@ -321,6 +340,78 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.equal(counts.length, 1, 'exactly one badge — only the duplicate carries it');
     const meta = el.querySelector('[data-bind="inv-meta"]');
     assert.match(meta.textContent, /3 cards/, 'meta counts totalEntries/4');
+    assert.match(
+      el.innerHTML,
+      /class="inv-level-cluster">[\s\S]*?class="inv-level-nav"[\s\S]*?data-bind="inv-meta"[\s\S]*?<\/span>/,
+      'the ticket count is grouped with the level selector instead of Total Value',
+    );
+    el.disconnectedCallback();
+  });
+
+  test('TOTAL VALUE prices every unresolved entry at its own level and drops resolved levels', async () => {
+    _dashboardTickets = [
+      { level: 16, entryCount: 400 }, // fully resolved: excluded despite its size
+      { level: 17, entryCount: 5 },   // 1.25 × 0.04 ETH = 0.05 ETH
+      { level: 30, entryCount: 2 },   // 0.50 × 0.08 ETH = 0.04 ETH
+    ];
+    _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
+
+    assert.equal(
+      inventoryMod.unresolvedTicketFaceValueWei(_dashboardTickets, 17),
+      90_000_000_000n,
+      'raw value uses the configured testnet ETH scale and retains quarter entries',
+    );
+
+    const el = mount();
+    await flushMicrotasks();
+    const total = el.querySelector('[data-bind="inv-total-value"]');
+    assert.ok(total, 'aggregate is present in the ticket header');
+    assert.equal(total.textContent, '0.09 ETH');
+
+    storeMod.update('app.gameState', {
+      level: 17,
+      phase: 'JACKPOT',
+      jackpotPhaseFlag: true,
+      jackpotCounter: 4,
+      rngLockedFlag: true,
+      phaseTransitionActive: false,
+      gameOver: false,
+    });
+    assert.equal(total.textContent, '0.09 ETH',
+      'a final RNG lock does not erase tickets before that draw settles');
+
+    storeMod.update('app.gameState', {
+      level: 17,
+      phase: 'JACKPOT',
+      jackpotPhaseFlag: true,
+      jackpotCounter: 0,
+      rngLockedFlag: true,
+      phaseTransitionActive: true,
+      gameOver: false,
+    });
+    assert.equal(total.textContent, '0.04 ETH',
+      'advancing the unresolved boundary removes the newly resolved level without a dashboard refetch');
+    el.disconnectedCallback();
+  });
+
+  test('a resolved foil pack always renders its four physical tickets', async () => {
+    _byLevel.set(17, byTraitPayload({
+      cards: Array.from({ length: 4 }, (_unused, i) => cardAt(i, 'opened', COMBO)),
+    }));
+    _foilByLevel.set(17, {
+      present: true,
+      level: 17,
+      lines: Array.from({ length: 4 }, () => [...COMBO]),
+    });
+    const el = mount();
+    await flushMicrotasks();
+
+    const foils = el.querySelectorAll('.inv-card--foil');
+    assert.equal(foils.length, 4,
+      'foil lines stay four visible cards even when their trait combinations collide');
+    assert.equal(el.querySelectorAll('.inv-foil-tag').length, 4);
+    assert.equal(el.querySelectorAll('.inv-count').length, 0,
+      'the foil pack is not collapsed into one ×4 inventory card');
     el.disconnectedCallback();
   });
 
@@ -422,6 +513,100 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.match(cards[0].querySelector('img').src, /_gold\.svg$/, 'first card visibly carries gold');
     assert.ok(!cards[1].classList.contains('inv-card--gold'), 'non-gold ticket follows');
     el.disconnectedCallback();
+  });
+
+  test('foil tickets are grouped immediately after gold tickets', async () => {
+    const plain = [1, 72, 129, 200];
+    const foil = [2, 73, 130, 201];
+    const gold = [56, 74, 131, 202];
+    _byLevel.set(17, byTraitPayload({
+      cards: [
+        cardAt(0, 'opened', plain),
+        ...Array.from({ length: 4 }, (_unused, i) => cardAt(i + 1, 'opened', foil)),
+        cardAt(5, 'opened', gold),
+      ],
+    }));
+    _foilByLevel.set(17, {
+      present: true,
+      level: 17,
+      lines: Array.from({ length: 4 }, () => [...foil]),
+    });
+    const el = mount();
+    await flushMicrotasks();
+
+    const cards = el.querySelector('[data-bind="inv-cards"]').querySelectorAll('.inv-card');
+    assert.equal(cards.length, 6);
+    assert.ok(cards[0].classList.contains('inv-card--gold'), 'gold remains first');
+    for (const cardEl of cards.slice(1, 5)) {
+      assert.match(cardEl.className, /(?:^|\s)inv-card--foil(?:\s|$)/,
+        'all four foils follow gold');
+    }
+    assert.ok(!cards[5].classList.contains('inv-card--gold'));
+    assert.ok(!cards[5].classList.contains('inv-card--foil'), 'ordinary ticket stays below foils');
+    el.disconnectedCallback();
+  });
+
+  test('far-future holdings support multi-select and an offer while queue positions index', async () => {
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('ui.chainOk', true);
+    storeMod.update('app.lastDay', {
+      day: 67,
+      status: 'resolved',
+      level: 17,
+      roll1: { purchaseLevel: 17 },
+    });
+    _dashboardTickets = [
+      { level: 23, entryCount: 8 },
+      { level: 25, entryCount: 4 },
+    ];
+    const quoteCalls = [];
+    salvageMod.__setSalvageContractFactoryForTest(() => ({
+      previewSellFarFutureEntries: async (player, levels, quantities) => {
+        quoteCalls.push({ player, levels, quantities });
+        return [100n * RAW_ETH, 20n * RAW_ETH, 10n * RAW_ETH, 5n * RAW_ETH, 25n * 10n ** 18n];
+      },
+    }));
+
+    const el = mount();
+    await flushMicrotasks();
+    // active 17 → level 22 enters the aggregate far-future view; salvage itself
+    // begins at distance 6, so the owned L23/L25 rows are both eligible.
+    for (let i = 0; i < 5; i += 1) {
+      el.querySelector('[data-bind="inv-next"]').dispatchEvent({ type: 'click' });
+    }
+    await flushMicrotasks();
+
+    let picks = el.querySelectorAll('.inv-ff__pick');
+    assert.equal(picks.length, 2, 'dashboard holdings remain selectable without the queue endpoint');
+    picks[0].checked = true;
+    picks[0].dispatchEvent({ type: 'change' });
+    picks = el.querySelectorAll('.inv-ff__pick');
+    picks[1].checked = true;
+    picks[1].dispatchEvent({ type: 'change' });
+    await flushMicrotasks();
+
+    assert.deepEqual(quoteCalls.at(-1), {
+      player: TEST_ADDR,
+      levels: [23n, 25n],
+      quantities: [8n, 4n],
+    }, 'one exact preview bundles both selected levels in entry units');
+    assert.equal(el.querySelector('.inv-salvage__selected').textContent,
+      '3 tickets selected');
+    assert.equal(el.querySelector('.inv-salvage__metrics'), null,
+      'face value and offer percentage stay out of the compact quote');
+    assert.match(el.querySelector('.inv-salvage__payout').textContent,
+      /^PAYOUT250 tickets \+ 5 ETH \+ 25 FLIP$/,
+      'the contract ticket leg is converted into actual ticket count');
+    assert.doesNotMatch(el.textContent, /ETH TICKETS|FACE VALUE|OFFER ·/i);
+    assert.equal(el.querySelector('[data-bind="salvage-execute"]').textContent,
+      'QUEUE DATA INDEXING',
+      'only the full-balance transaction waits for queue positions; selection and quoting do not');
+    el.disconnectedCallback();
+  });
+
+  test('salvage ticket leg converts contract wei into quarter-ticket purchase units', () => {
+    assert.equal(inventoryMod.salvageTicketPurchaseUnits(10n * RAW_ETH, 17), 100_000n);
+    assert.equal(inventoryMod.formatSalvageTicketCount(10n * RAW_ETH, 17), '250');
   });
 
   test('chart mode: 256 cells, .has + count only where held', async () => {
@@ -643,6 +828,12 @@ describe('app-tickets-inventory — combined mode (account-switcher)', () => {
   });
 
   test('renders owner-tagged rows from app.playerCombined.tickets[]; by-trait/player never fetched', async () => {
+    storeMod.update('app.gameState', {
+      level: 16,
+      phase: 'PURCHASE',
+      jackpotPhaseFlag: false,
+      gameOver: false,
+    });
     storeMod.update('viewing.combined', true);
     storeMod.update('ui.mode', 'combined');
     storeMod.update('app.playerCombined', {
@@ -673,6 +864,8 @@ describe('app-tickets-inventory — combined mode (account-switcher)', () => {
     assert.equal(owners[1], '0xcc…03', 'abbreviated owner tag for OTHER_ADDR');
     const counts = rows.map((r) => r.querySelector('.inv-combined-count').textContent);
     assert.deepEqual(counts, ['4 tickets', '2 tickets']);
+    assert.equal(el.querySelector('[data-bind="inv-total-value"]').textContent, '0.24 ETH',
+      'combined accounts share the same unresolved face-value aggregate');
 
     assert.ok(_fetchLog.every((u) => !u.includes('/tickets/by-trait')), 'by-trait endpoint never fetched in combined mode');
     assert.ok(_fetchLog.every((u) => !/\/player\/0x[0-9a-f]+$/i.test(u)), '/player/:address dashboard never fetched in combined mode');

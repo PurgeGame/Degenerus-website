@@ -26,7 +26,7 @@
 // entrypoint is live. Do not re-add a `mintFlip` fallback off the back of the
 // checked-in ABI — regenerate that artifact instead.
 
-import { sendTx, getProvider, ethers } from './contracts.js';
+import { sendTx, getProvider, ethers, gasEstimateWithHeadroom } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS } from './chain-config.js';
@@ -41,6 +41,11 @@ const MINE_FLIP_ABI = [
 ];
 
 const CRANK_NAME = 'mineFlip';
+// The protocol keeper's measured ceiling, kept below Base's 16,777,216
+// per-transaction cap. Browser sends use the smaller live estimate + shared
+// headroom when possible so low-balance players are not forced to reserve the
+// entire worst-case amount for a cheap crank branch.
+const MINE_FLIP_MAX_GAS_LIMIT = 16_000_000n;
 
 let _contractFactory = null;
 
@@ -101,6 +106,48 @@ export function isNoWorkRevert(error) {
   return /\bNoWork\b/.test(String(error?.message ?? ''));
 }
 
+async function _mineFlipGasBudget(contract, signer, provider) {
+  // BrowserProvider supplies all three methods. The capability guard keeps
+  // read-only/test runners degraded rather than fabricating an affordability
+  // result from incomplete RPC data.
+  if (typeof provider?.getBalance !== 'function'
+    || typeof provider?.getFeeData !== 'function'
+    || typeof signer?.getAddress !== 'function') return null;
+  const connected = typeof contract?.connect === 'function' ? contract.connect(signer) : contract;
+  if (typeof connected?.[CRANK_NAME]?.estimateGas !== 'function') return null;
+
+  try {
+    const [estimateRaw, address, feeData] = await Promise.all([
+      connected[CRANK_NAME].estimateGas(),
+      signer.getAddress(),
+      provider.getFeeData(),
+    ]);
+    const estimate = BigInt(estimateRaw ?? 0);
+    if (estimate <= 0n || estimate > MINE_FLIP_MAX_GAS_LIMIT) {
+      return { affordable: false, reason: 'gas-limit', estimate };
+    }
+    const padded = gasEstimateWithHeadroom(estimate);
+    const gasLimit = padded > MINE_FLIP_MAX_GAS_LIMIT
+      ? MINE_FLIP_MAX_GAS_LIMIT
+      : padded;
+    const feeRaw = feeData?.maxFeePerGas ?? feeData?.gasPrice;
+    if (feeRaw == null) return null;
+    const feePerGas = BigInt(feeRaw);
+    const balance = BigInt(await provider.getBalance(address));
+    const requiredWei = gasLimit * feePerGas;
+    return {
+      affordable: balance >= requiredWei,
+      reason: balance >= requiredWei ? null : 'insufficient-gas',
+      balanceWei: balance,
+      requiredWei,
+      estimate,
+      gasLimit,
+    };
+  } catch (error) {
+    return { affordable: false, reason: 'gas-unknown', error };
+  }
+}
+
 /**
  * Ask the chain whether the crank has anything to do, without spending gas.
  *
@@ -109,7 +156,8 @@ export function isNoWorkRevert(error) {
  * the widget up nor claim the queue is empty.
  *
  * @param {{player?: string}} [args]
- * @returns {Promise<{hasWork: boolean, known: boolean, error?: Error}>}
+ * @returns {Promise<{hasWork: boolean, known: boolean, reason?: string,
+ *   error?: Error, gasLimit?: bigint, balanceWei?: bigint, requiredWei?: bigint}>}
  */
 export async function probeMineFlip({ player } = {}) {
   const provider = getProvider();
@@ -126,7 +174,20 @@ export async function probeMineFlip({ player } = {}) {
 
   const contract = _buildGameContract(signer);
   const sim = await requireStaticCall(contract, CRANK_NAME, [], signer);
-  if (sim.ok) return { hasWork: true, known: true };
+  if (sim.ok) {
+    const budget = await _mineFlipGasBudget(contract, signer, provider);
+    if (budget && !budget.affordable) {
+      return {
+        hasWork: false,
+        known: budget.reason === 'insufficient-gas' || budget.reason === 'gas-limit',
+        reason: budget.reason,
+        error: budget.error,
+        balanceWei: budget.balanceWei,
+        requiredWei: budget.requiredWei,
+      };
+    }
+    return { hasWork: true, known: true, gasLimit: budget?.gasLimit };
+  }
   if (isNoWorkRevert(sim.error)) return { hasWork: false, known: true };
 
   // Some other revert (or an RPC fault): not work, and not a reliable "empty".
@@ -146,6 +207,12 @@ export async function mineFlip({ player } = {}) {
 
   const probe = await probeMineFlip({ player: playerArg });
   if (probe.known && !probe.hasWork) {
+    if (probe.reason === 'insufficient-gas') {
+      const err = new Error('Not enough ETH for Mine FLIP gas.');
+      err.code = 'InsufficientGas';
+      err.userMessage = 'Not enough ETH for Mine FLIP gas.';
+      throw err;
+    }
     const err = new Error('Nothing to mine right now.');
     err.code = 'NoWork';
     err.userMessage = 'Nothing to mine right now.';
@@ -156,8 +223,18 @@ export async function mineFlip({ player } = {}) {
   }
 
   // Phase 58 chokepoint — closure form mandatory (stale-signer capture guard).
-  const receipt = await sendTx((s) => _buildGameContract(s).mineFlip(), 'Mine FLIP');
+  const receipt = await sendTx((s) => {
+    const contract = _buildGameContract(s);
+    return probe.gasLimit != null
+      ? contract.mineFlip({ gasLimit: probe.gasLimit })
+      : contract.mineFlip();
+  }, 'Mine FLIP');
   return { receipt, entrypoint: CRANK_NAME };
 }
 
-export const _testing = { CRANK_NAME, NO_WORK_SELECTOR };
+export const _testing = {
+  CRANK_NAME,
+  NO_WORK_SELECTOR,
+  MINE_FLIP_MAX_GAS_LIMIT,
+  mineFlipGasBudget: _mineFlipGasBudget,
+};

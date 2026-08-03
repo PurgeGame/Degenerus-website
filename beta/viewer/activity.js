@@ -52,8 +52,8 @@ export function render(activity, container) {
         let valueParts = [];
         if (purchase.ethSpent && purchase.ethSpent !== '0') {
           valueParts.push(`${formatEth(purchase.ethSpent)} ETH`);
-        } else if (purchase.burnieSpent && purchase.burnieSpent !== '0') {
-          valueParts.push(`${formatEth(purchase.burnieSpent)} BURNIE`);
+        } else if (purchase.flipSpent && purchase.flipSpent !== '0') {
+          valueParts.push(`${formatEth(purchase.flipSpent)} FLIP`);
         }
         if (purchase.ticketsReceived != null) {
           valueParts.push(`+${purchase.ticketsReceived} tickets`);

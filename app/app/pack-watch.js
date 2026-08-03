@@ -41,6 +41,7 @@ const PENDING_SOURCE = 'ticket-packs';
 // A reveal hand is an exact 3×3. Large buys keep opening as sequential hands
 // (with OPEN ALL available), so the grid never creates a short fourth column.
 export const MAX_TICKETS_PER_PACK = 9;
+export const FOIL_TICKETS_PER_PACK = 4;
 
 // Traits roll at the level draw, so there is nothing to gain from a tight poll.
 const WATCH_INTERVAL_MS = 45_000;
@@ -100,6 +101,18 @@ function _expectedTickets(value) {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+// Pending rows are level-scoped, so a later ordinary purchase can merge into
+// a row that already expects a foil add-on. Keep those two facts separate:
+// `foilExpected` means the foil endpoint must catch up; `standardExpected`
+// controls whether the shared tray describes this as an ordinary/mixed pack.
+// Legacy rows did not preserve that distinction, so migrate them to neutral
+// ticket-pack wording instead of risking the exact false "foil" label that
+// prompted this fix. New foil-only rows explicitly persist false.
+function _standardPackExpected(rec) {
+  if (typeof rec?.standardExpected === 'boolean') return rec.standardExpected;
+  return true;
+}
+
 function _seedOpenedCards(address, level, payload, keepNewest = 0) {
   const opened = _openedCards(payload)
     .slice()
@@ -123,20 +136,6 @@ function _replacePendingRecord(record) {
   if (at >= 0) list[at] = { ...record };
   else list.push({ ...record });
   _write(PENDING_KEY, list);
-}
-
-function _publishWaitingRecords(address) {
-  const addr = _lower(address);
-  if (!addr) return;
-  const mine = pendingPacks().filter((rec) => rec && _lower(rec.address) === addr);
-  publishPendingActions(PENDING_SOURCE, mine.map((rec) => ({
-    id: `ticket-pack:${Number(rec.level)}`,
-    kind: 'tickets',
-    label: `Level ${Number(rec.level)} ticket pack`,
-    detail: `Waiting for the Level ${Number(rec.level)} draw`,
-    state: 'waiting',
-    order: 10,
-  })));
 }
 
 /**
@@ -187,12 +186,14 @@ async function _fetchCards(address, level) {
  * second call cannot mark the first call's tickets as already seen.
  *
  * @param {{address: string, level: number, foilExpected?: boolean,
+ *   standardExpected?: boolean,
  *   expectedTickets?: number, sourceKey?: string, settledExpected?: boolean}} args
  */
 export async function recordPendingPack({
   address,
   level,
   foilExpected = false,
+  standardExpected = true,
   expectedTickets = 0,
   sourceKey = null,
   settledExpected = false,
@@ -211,6 +212,9 @@ export async function recordPendingPack({
     const duplicate = source != null && sources.has(source);
     if (source != null) sources.add(source);
     already.at = _now();
+    already.standardExpected = Boolean(
+      _standardPackExpected(already) || standardExpected,
+    );
     already.foilExpected = Boolean(already.foilExpected || foilExpected);
     already.settledExpected = Boolean(already.settledExpected || settledExpected);
     if (!duplicate) {
@@ -218,7 +222,7 @@ export async function recordPendingPack({
     }
     already.sourceKeys = [...sources];
     _write(PENDING_KEY, list);
-    _publishWaitingRecords(addr);
+    await _publishPackActions(addr, ++_publishSeq);
     return true;
   }
 
@@ -245,6 +249,7 @@ export async function recordPendingPack({
     address: addr,
     level: lvl,
     at: _now(),
+    standardExpected: Boolean(standardExpected),
     foilExpected: Boolean(foilExpected),
     expectedTickets: expected,
     sourceKeys: source == null ? [] : [source],
@@ -252,7 +257,7 @@ export async function recordPendingPack({
     seedPending,
   });
   _write(PENDING_KEY, list);
-  _publishWaitingRecords(addr);
+  await _publishPackActions(addr, ++_publishSeq);
   return true;
 }
 
@@ -377,15 +382,24 @@ async function _foilState(address, level) {
   try {
     const payload = await fetchJSON(`/player/${_lower(address)}/foil?level=${level}`);
     const lines = payload?.present ? payload.lines : null;
-    if (!Array.isArray(lines)) return { complete: false, keys: new Set() };
+    if (!Array.isArray(lines)) {
+      return { complete: false, keys: new Set(), keyCounts: new Map() };
+    }
     const valid = lines
       .filter((l) => Array.isArray(l) && l.length === 4 && l.every((t) => t != null));
+    const expected = valid.slice(0, FOIL_TICKETS_PER_PACK);
+    const keyCounts = new Map();
+    for (const line of expected) {
+      const key = _comboKey(line);
+      keyCounts.set(key, (keyCounts.get(key) || 0) + 1);
+    }
     return {
-      complete: payload?.present === true && valid.length >= 4,
-      keys: new Set(valid.map(_comboKey)),
+      complete: payload?.present === true && valid.length >= FOIL_TICKETS_PER_PACK,
+      keys: new Set(expected.map(_comboKey)),
+      keyCounts,
     };
   } catch (_e) {
-    return { complete: false, keys: new Set() };
+    return { complete: false, keys: new Set(), keyCounts: new Map() };
   }
 }
 
@@ -425,11 +439,25 @@ async function _inspectOne(address, rec) {
   const fresh = unseen
     .map((card) => ({ card, traitIds: _wholeCardTraitIds(card) }))
     .filter((item) => item.traitIds != null);
-  let foilState = { complete: true, keys: new Set() };
+  let foilState = { complete: true, keys: new Set(), keyCounts: new Map() };
   if (fresh.length > 0) foilState = await _foilState(address, level);
-  const foilBlocked = Boolean(rec.foilExpected && !foilState.complete);
+  let indexedFoilTickets = 0;
+  if (rec.foilExpected && foilState.complete) {
+    const remaining = new Map(foilState.keyCounts);
+    for (const item of fresh) {
+      const key = _comboKey(item.traitIds);
+      const left = remaining.get(key) || 0;
+      if (left <= 0) continue;
+      indexedFoilTickets += 1;
+      remaining.set(key, left - 1);
+    }
+  }
+  const foilBlocked = Boolean(
+    rec.foilExpected
+    && (!foilState.complete || indexedFoilTickets < FOIL_TICKETS_PER_PACK)
+  );
   return {
-    level, rec, revealed, unseen, fresh, foilState,
+    level, rec, revealed, unseen, fresh, foilState, indexedFoilTickets,
     ready: fresh.length > 0 && !foilBlocked,
     foilBlocked,
   };
@@ -453,29 +481,61 @@ async function _publishPackActions(address, publishSeq = null) {
     clearPendingActions(PENDING_SOURCE);
     return;
   }
-  const rows = await inspectPendingPacks({ address: addr });
+  const [rows, gameState] = await Promise.all([
+    inspectPendingPacks({ address: addr }),
+    fetchJSON('/game/state').catch(() => null),
+  ]);
+  const jackpotPhase = Boolean(
+    gameState?.jackpotPhaseFlag ?? (gameState?.phase === 'JACKPOT'),
+  );
+  const resolvingLevel = jackpotPhase && Number.isInteger(Number(gameState?.level))
+    ? Number(gameState.level)
+    : null;
   // A wallet switch can land while the ticket/foil endpoints are in flight.
   // Never let that old response repopulate the shared widget for the prior
   // account.
   if (publishSeq != null && publishSeq !== _publishSeq) return;
   publishPendingActions(PENDING_SOURCE, rows
-    .filter((row) => !row.expired)
+    // Completed packs remain openable. An unresolved pack is relevant only
+    // during the jackpot phase that is actually rolling that level. Purchase-
+    // phase tickets route to the next level, but the next daily RNG cannot
+    // resolve them yet; showing those as day-old "unresolved" work was both
+    // noisy and misleading. Old/future records remain durable off-screen.
+    .filter((row) => !row.expired && (
+      row.ready || (resolvingLevel != null && Number(row.level) === resolvingLevel)
+    ))
     .map((row) => {
       const opening = _activePackCards.has(_packKey(addr, row.level));
+      const standardExpected = _standardPackExpected(row.rec);
+      const recordedCount = _expectedTickets(row.rec?.expectedTickets);
+      const ticketCount = row.ready ? row.fresh.length : recordedCount;
       return {
       id: `ticket-pack:${row.level}`,
       kind: 'tickets',
-      label: `Level ${row.level} ticket pack`,
-      shortLabel: 'Open tickets',
+      ticketLevel: row.level,
+      ticketCount,
+      foilPack: Boolean(row.rec?.foilExpected && !standardExpected),
+      label: standardExpected
+        ? `Level ${row.level} ticket pack`
+        : `Level ${row.level} foil pack`,
+      shortLabel: standardExpected ? 'Open tickets' : 'Open foil pack',
       detail: opening
         ? 'Pack opening in progress'
         : row.ready
         ? `${row.fresh.length} ticket${row.fresh.length === 1 ? '' : 's'} ready to reveal`
         : row.foilBlocked
-          ? 'Foil tickets are still indexing'
+          ? (standardExpected
+              ? 'Ticket pack is still indexing'
+              : 'Foil pack is still indexing')
           : `Waiting for the Level ${row.level} draw`,
       state: opening ? 'busy' : row.ready ? 'ready' : 'waiting',
+      autoOpen: row.ready,
+      pinned: !opening && !row.ready,
+      phase: !opening && !row.ready
+        ? 'waiting-draw'
+        : null,
       order: 10,
+      chronology: Number(row.rec?.at ?? row.level),
       run: opening ? null : async () => {
         let current = null;
         try { current = _getAddress ? _getAddress() : null; } catch (_e) { current = null; }
@@ -483,6 +543,9 @@ async function _publishPackActions(address, publishSeq = null) {
         publishPendingActions(PENDING_SOURCE, [{
           id: `ticket-pack:${row.level}`,
           kind: 'tickets',
+          ticketLevel: row.level,
+          ticketCount: row.fresh.length || recordedCount,
+          foilPack: Boolean(row.rec?.foilExpected && !standardExpected),
           label: `Level ${row.level} ticket pack`,
           detail: 'Building your pack reveal',
           state: 'busy',
@@ -549,11 +612,15 @@ export async function checkPendingPacks({ address, levels = null } = {}) {
     // four /foil lines before classifying anything; the tickets endpoint often
     // wins this indexing race by a few blocks.
     if (foilBlocked) continue;
-    const foilKeys = foilState.keys;
+    const foilRemaining = new Map(foilState.keyCounts);
     const tickets = fresh.map(({ card, traitIds }) => {
+      const key = _comboKey(traitIds);
+      const remaining = foilRemaining.get(key) || 0;
+      const foil = remaining > 0;
+      if (foil) foilRemaining.set(key, remaining - 1);
       return {
         traitIds,
-        foil: foilKeys.has(_comboKey(traitIds)),
+        foil,
         cardIndex: Number(card.cardIndex),
       };
     });

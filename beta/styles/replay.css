@@ -714,7 +714,7 @@
 /* Still smaller than the live/reel badge, but large enough to read comfortably
    on the scratched-off public-result surface. */
 .replay-bucket-badge {
-  width: 44%;
+  width: 48%;
   aspect-ratio: 1;
   object-fit: contain;
   flex: 0 0 auto;

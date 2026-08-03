@@ -20,21 +20,20 @@ import { playPackOpen, isMuted, setMuted } from '../app/pack-audio.js';
 
 const TEMPLATE = `
 <section data-slot="packs" class="panel packs-panel">
+  <div class="packs-header">
+    <h2 class="panel-title">Daily Lootbox Results</h2>
+    <button
+      type="button"
+      class="mute-toggle"
+      data-bind="mute-toggle"
+      aria-pressed="false"
+      title="Toggle pack-open sound"
+    >sound</button>
+  </div>
   <div data-bind="skeleton">
-    <div class="skeleton-header"><div class="skeleton-line skeleton-shimmer" style="width:40%"></div></div>
     <div class="skeleton-row"><div class="skeleton-block skeleton-shimmer" style="height:160px"></div></div>
   </div>
   <div data-bind="content" hidden>
-    <div class="packs-header">
-      <h2 class="panel-title">Packs</h2>
-      <button
-        type="button"
-        class="mute-toggle"
-        data-bind="mute-toggle"
-        aria-pressed="false"
-        title="Toggle pack-open sound"
-      >sound</button>
-    </div>
     <div class="packs-section packs-lootbox">
       <h3 class="packs-section-title">Lootboxes Opened (<span data-bind="lootbox-count">0</span>)</h3>
       <div class="lootbox-grid" data-bind="lootbox-grid"></div>
@@ -129,23 +128,38 @@ class PacksPanel extends HTMLElement {
     const header = document.createElement('div');
     header.className = 'tile-header';
     const eth = String(pack.ethSpent ?? '0');
-    const burnie = String(pack.burnieSpent ?? '0');
+    const flip = String(pack.flipSpent ?? '0');
     if (eth !== '0') {
       header.textContent = `Lootbox · ${this.#formatEth(eth)} ETH`;
-    } else if (burnie !== '0') {
-      header.textContent = `Lootbox · ${this.#formatBurnieAmount(burnie)} BURNIE`;
+    } else if (flip !== '0') {
+      header.textContent = `Lootbox · ${this.#formatFlipAmount(flip)} FLIP`;
     } else {
       header.textContent = `Lootbox · #${pack.lootboxIndex ?? '?'}`;
     }
     tile.appendChild(header);
 
-    const ticketsGrid = document.createElement('div');
-    ticketsGrid.className = 'tile-tickets';
     const tickets = Array.isArray(pack.tickets) ? pack.tickets : [];
-    for (const t of tickets) {
-      ticketsGrid.appendChild(this.#buildTicketCard(t));
+    const ticketCount = Number(pack.ticketCount ?? tickets.length);
+
+    const outcome = document.createElement('div');
+    outcome.className = 'tile-outcome';
+    if (ticketCount > 0) {
+      outcome.textContent = `Outcome: ${ticketCount} ticket${ticketCount === 1 ? '' : 's'}`;
+      outcome.classList.add('tile-outcome-tickets');
+    } else {
+      outcome.textContent = 'Outcome: non-ticket reward (FLIP / pass / other)';
+      outcome.classList.add('tile-outcome-other');
     }
-    tile.appendChild(ticketsGrid);
+    tile.appendChild(outcome);
+
+    if (tickets.length > 0) {
+      const ticketsGrid = document.createElement('div');
+      ticketsGrid.className = 'tile-tickets';
+      for (const t of tickets) {
+        ticketsGrid.appendChild(this.#buildTicketCard(t));
+      }
+      tile.appendChild(ticketsGrid);
+    }
 
     return tile;
   }
@@ -240,6 +254,15 @@ class PacksPanel extends HTMLElement {
       }
       card.appendChild(quad);
     }
+    const center = document.createElement('div');
+    center.className = 'ticket-card-center';
+    const flame = document.createElement('img');
+    flame.className = 'ticket-card-flame';
+    flame.src = '/specials/special_none.svg';
+    flame.alt = '';
+    flame.loading = 'lazy';
+    center.appendChild(flame);
+    card.appendChild(center);
     return card;
   }
 
@@ -283,11 +306,10 @@ class PacksPanel extends HTMLElement {
     }
   }
 
-  #formatBurnieAmount(weiStr) {
+  #formatFlipAmount(weiStr) {
     try {
       const wei = BigInt(weiStr);
-      const burnie = Number(wei) / 1e18;
-      return burnie.toFixed(burnie < 0.01 ? 4 : 2);
+      return (wei / (10n ** 18n)).toLocaleString();
     } catch {
       return '0';
     }
@@ -336,5 +358,3 @@ class PacksPanel extends HTMLElement {
 }
 
 customElements.define('packs-panel', PacksPanel);
-</content>
-</invoke>

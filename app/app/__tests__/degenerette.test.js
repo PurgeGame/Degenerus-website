@@ -464,6 +464,7 @@ describe('degenerette fresh-state and community resolution', () => {
         queries.push({ filter, from, to });
         if (filter.event === 'resolved') {
           return [{
+            transactionHash: '0xresolved-transaction',
             args: {
               player: CONNECTED,
               betId: 42n,
@@ -490,6 +491,7 @@ describe('degenerette fresh-state and community resolution', () => {
     const replay = await degeneretteMod.readResolvedBet({ player: CONNECTED, betId: 42 });
     assert.equal(replay.resolved.totalPayout, 5n);
     assert.equal(replay.resolved.resultTraits, 13n);
+    assert.equal(replay.resolved.transactionHash, '0xresolved-transaction');
     assert.equal(replay.spins.length, 1);
     assert.equal(replay.spins[0].playerTraits, 21n);
     assert.equal(queries.length, 2);
@@ -602,6 +604,7 @@ describe('Plan 62-03: degenerette.js receipt parsers', () => {
     assert.equal(out[0].spinCount, 3n);
     assert.equal(out[0].totalPayout, 5n * 10n ** 16n);
     assert.equal(out[0].resultTraits, 1234n);
+    assert.equal(out[0].transactionHash, '0xreceipt-hash');
   });
 
   test('parseSpinResultsFromReceipt returns DegeneretteResult per-spin entries', () => {
@@ -796,11 +799,10 @@ describe('Plan 62-03: degenerette.js source-level invariants', () => {
     assert.match(SRC, /new ethers\.Interface\(DEGENERETTE_ABI\)/);
   });
 
-  test('imports pollRngForLootbox from lootbox.js (RESEARCH R5 OPTION B reuse)', () => {
-    assert.match(
-      SRC,
-      /import\s+\{[^}]*pollRngForLootbox[^}]*\}\s*from\s*['"]\.\/lootbox\.js['"]/,
-      'degenerette.js imports pollRngForLootbox from lootbox.js',
-    );
+  test('uses exact contract state probes instead of the retired lootbox RNG poll helper', () => {
+    assert.match(SRC, /export\s+async\s+function\s+readBetInfo\b/);
+    assert.match(SRC, /export\s+async\s+function\s+canResolveBets\b/);
+    assert.doesNotMatch(SRC, /pollRngForLootbox/,
+      'Degenerette readiness is checked against its own deployed resolver');
   });
 });

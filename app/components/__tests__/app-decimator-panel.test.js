@@ -291,6 +291,7 @@ function resetDom() {
   _fetchHandler = async (url) => (
     String(url).includes('/game/state') ? DEFAULT_GAME_STATE : { player: null, pending: {} }
   );
+  installAfkingReadState();
 }
 
 async function flushMicrotasks() {
@@ -315,7 +316,21 @@ import * as decimatorMod from '../../app/decimator.js';
 import * as lootboxMod from '../../app/lootbox.js';
 import * as contractsMod from '../../app/contracts.js';
 import * as claimsMod from '../../app/claims.js';
-import { CHAIN } from '../../app/chain-config.js';
+import * as passesMod from '../../app/passes.js';
+
+// Seats auto-mint with the pass, so `claimSeat`/`canClaimSeat` are gone — holding one is the
+// whole signal.
+function installAfkingReadState({ hasToken = false, active = false, fundingWei = 0n } = {}) {
+  passesMod.__setAfkingReadContractFactoryForTest(() => ({
+    token: {
+      balanceOf: async () => hasToken ? 1n : 0n,
+    },
+    game: {
+      subInfo: async () => [active, active ? 1 : 0, 0, 0],
+      afkingSnapshot: async () => [1n, false, [0n], [fundingWei]],
+    },
+  }));
+}
 
 // ---------------------------------------------------------------------------
 // Read panel source for grep-based assertions (data-write attribute, textContent
@@ -344,8 +359,22 @@ function makeFakeReceipt(logs) { return { status: 1, hash: '0xreceipt', logs: lo
 function makeFakeTx(receipt) { return { hash: '0xtx', wait: async () => receipt }; }
 
 function makeFakePurchaseContract(opts = {}) {
-  const calls = { purchase: [], purchaseCoin: [] };
-  const stk = (name) => async () => {
+  const calls = { purchase: [], purchaseStatic: [], purchaseCoin: [] };
+  const stk = (name) => async (...args) => {
+    if (name === 'purchase') calls.purchaseStatic.push(args);
+    const isFoilAvailabilityProbe = name === 'purchase'
+      && args[1] === 0n
+      && args[2] === 0n
+      && args[5] === true
+      && args[6]?.value === 0n;
+    const selectedRevert = isFoilAvailabilityProbe
+      ? opts.foilProbeRevertName
+      : opts.foilPurchaseRevertName;
+    if (selectedRevert) {
+      const err = new Error('static-call revert');
+      err.revert = { name: selectedRevert };
+      throw err;
+    }
     if (opts.staticCallShouldRevert?.[name]) {
       const err = new Error('static-call revert');
       err.revert = { name: opts.staticCallRevertName?.[name] || 'GameOverPossible' };
@@ -393,6 +422,7 @@ function makeFakeFundsClaimContract({ flipWindowOpen = false } = {}) {
     return undefined;
   };
   return {
+    livenessTriggered: async () => false,
     rngLocked: async () => false,
     nextPrizePoolView: async () => flipWindowOpen ? 101n : 100n,
     prizePoolTargetView: async () => 100n,
@@ -418,11 +448,16 @@ function makeFakeFundsClaimContract({ flipWindowOpen = false } = {}) {
   };
 }
 
-function makeFakeProvider(addr, walletBalance = 3_125_000_000_000n) {
+function makeFakeProvider(
+  addr,
+  walletBalance = 3_125_000_000_000n,
+  { redemptionOpen = false } = {},
+) {
   return {
     getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({ getAddress: async () => addr }),
     getBalance: async () => walletBalance,
+    getStorage: async () => redemptionOpen ? (1n << 240n) : 0n,
   };
 }
 
@@ -486,6 +521,49 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     el.disconnectedCallback();
   });
 
+  test('BUY AFKING PASS is offered only after an exact no-pass read and opens the pass drawer', async () => {
+    const drawer = makeFakeElement('details');
+    drawer.setAttribute('id', 'afking-passes');
+    drawer.classList.add('more-ways');
+    const passPanel = makeFakeElement('app-pass-section');
+    const afking = makeFakeElement('section');
+    afking.setAttribute('data-bind', 'pass-afking');
+    afking.hidden = false;
+    let scrolled = 0;
+    afking.scrollIntoView = () => { scrolled += 1; };
+    passPanel.appendChild(afking);
+    drawer.appendChild(passPanel);
+    _docBody.appendChild(drawer);
+
+    const el = instantiate();
+    await settle(60);
+    const jump = el.querySelector('[data-bind="dec-afking-jump"]');
+    assert.ok(jump, 'purchase panel exposes the pass shortcut');
+    assert.equal(jump.hidden, false, 'definitive no-seat read reveals the acquisition shortcut');
+    jump.dispatchEvent({ type: 'click' });
+    assert.equal(drawer.open, true);
+    assert.equal(drawer.getAttribute('open'), '');
+    assert.equal(scrolled, 1);
+    el.disconnectedCallback();
+  });
+
+  test('BUY AFKING PASS stays hidden for an existing seat or subscription', async () => {
+    for (const state of [
+      { hasToken: true },
+      { active: true },
+    ]) {
+      installAfkingReadState(state);
+      const el = instantiate();
+      await settle(60);
+      assert.equal(
+        el.querySelector('[data-bind="dec-afking-jump"]').hidden,
+        true,
+        `holder state ${JSON.stringify(state)} does not receive an acquisition prompt`,
+      );
+      el.disconnectedCallback();
+    }
+  });
+
   test('Buy button has data-write attribute (Phase 58 view-mode disable hook)', () => {
     const el = instantiate();
     const btn = el.querySelector('[data-write]');
@@ -500,6 +578,10 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
 
   test('purchase header uses one accessible overview link with detailed follow-ons', () => {
     const el = instantiate();
+    assert.match(el.innerHTML, /<h2 class="dec-purchase-heading">BUY IN<\/h2>/,
+      'the primary purchase surface has a direct player-facing title');
+    assert.doesNotMatch(el.innerHTML, /dec-purchase-mark|TICKETS · LOOTBOXES/,
+      'the narrow title row has no decorative ticket or truncation-prone subtitle');
     assert.match(
       el.innerHTML,
       /class="dec-purchase-help" href="\/learn\/purchases\/"/,
@@ -514,11 +596,16 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
 
   test('purchase fields use action labels, inputs align right, and stay in one compact mobile row', () => {
     const el = instantiate();
-    assert.match(el.innerHTML, /<span>Buy tickets<\/span>/);
+    assert.match(el.innerHTML, /<span data-bind="dec-ticket-action-label">Buy tickets<\/span>/);
     assert.match(el.innerHTML, /<boon-product-indicator product="purchase"/);
     assert.match(el.innerHTML, /<span>Buy lootbox<\/span>/);
     assert.match(el.innerHTML, /<boon-product-indicator product="lootbox"/);
     assert.doesNotMatch(el.innerHTML, /Lootbox value/i);
+    assert.match(
+      APP_CSS,
+      /\.app-decimator-panel \.dec-input-label\s*\{[^}]*font-size:\s*clamp\(0\.72rem, 1\.55vw, 0\.82rem\)/s,
+      'Buy Tickets and Buy Lootbox use the larger matched label size',
+    );
     assert.match(
       APP_CSS,
       /\.dec-input\s*\{[^}]*text-align:\s*right;/s,
@@ -536,8 +623,18 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       APP_CSS,
-      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-input-group\s*\{[^}]*grid-template-rows:\s*auto auto[^}]*min-height:\s*3\.65rem/s,
-      'each narrow selector moves its label above the field within a bounded card',
+      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-input-group\s*\{[^}]*grid-template-rows:\s*minmax\(0\.66rem, auto\) 1\.38rem[^}]*min-height:\s*2\.75rem/s,
+      'each narrow selector keeps its label above a compact bounded field',
+    );
+    assert.match(
+      APP_CSS,
+      /@media \(max-width: 768px\)[\s\S]*?\.jackpot-hero \.dec-input-group \.dec-step,\s*body\.layout-basic \.jackpot-hero \.dec-input-group \.dec-quarter-step\s*\{[^}]*min-width:\s*0[^}]*min-height:\s*0/s,
+      'embedded stepper halves reset the global 44px button minimum throughout narrow mode',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-stepper\s*\{[^}]*width:\s*6\.25rem[^}]*flex:\s*0 0 6\.25rem/s,
+      'ticket and lootbox controls retain the exact same outer width',
     );
     el.disconnectedCallback();
   });
@@ -560,8 +657,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
   });
 
-  test('first-purchase affiliate field is prefilled from the saved referral', async () => {
-    const referrer = '0x' + 'b'.repeat(40);
+  test('the purchase panel leaves referral editing in the top bar', async () => {
     const padded = '0x' + '0'.repeat(24) + 'b'.repeat(40);
     globalThis.localStorage.setItem('affiliate-ref', padded);
     _fetchHandler = async (url) => {
@@ -573,14 +669,13 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
 
     const el = instantiate();
     await settle(60);
-    const row = el.querySelector('[data-bind="dec-affiliate-row"]');
-    const input = el.querySelector('[name="dec-affiliate-code"]');
-    assert.equal(row.hidden, false, 'field shown for an unassigned player');
-    assert.equal(input.value, referrer, 'saved bytes32 address rendered as a friendly address');
+    assert.equal(el.querySelector('[data-bind="dec-affiliate-row"]'), null);
+    assert.equal(el.querySelector('[name="dec-affiliate-code"]'), null,
+      'the buy form does not duplicate the nav referral control');
     el.disconnectedCallback();
   });
 
-  test('affiliate field stays hidden once the player has an assigned referrer', async () => {
+  test('an assigned referrer never creates a duplicate purchase-form field', async () => {
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
@@ -593,15 +688,11 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
 
     const el = instantiate();
     await settle(60);
-    assert.equal(
-      el.querySelector('[data-bind="dec-affiliate-row"]').hidden,
-      true,
-      'field omitted after assignment',
-    );
+    assert.equal(el.querySelector('[data-bind="dec-affiliate-row"]'), null);
     el.disconnectedCallback();
   });
 
-  test('edited affiliate address is sent on the first purchase and then hidden', async () => {
+  test('the referral saved by the top bar is sent on the first purchase', async () => {
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
@@ -610,23 +701,17 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     };
     const fakeContract = makeFakePurchaseContract();
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
-    const referrer = '0x' + 'b'.repeat(40);
     const expected = '0x' + '0'.repeat(24) + 'b'.repeat(40);
+    globalThis.localStorage.setItem('affiliate-ref', expected);
 
     const el = instantiate();
     await settle(60);
-    el.querySelector('[name="dec-affiliate-code"]').value = referrer;
     el.querySelector('[name="dec-tickets"]').value = '1';
     el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(80);
 
     assert.equal(fakeContract._calls.purchase.length, 1, 'purchase sent once');
-    assert.equal(fakeContract._calls.purchase[0][3], expected, 'edited referral sent as bytes32');
-    assert.equal(
-      el.querySelector('[data-bind="dec-affiliate-row"]').hidden,
-      true,
-      'field retires immediately after the confirmed first buy',
-    );
+    assert.equal(fakeContract._calls.purchase[0][3], expected, 'saved referral sent as bytes32');
     el.disconnectedCallback();
   });
 
@@ -908,8 +993,10 @@ describe('combined ticket + lootbox buy', () => {
     const el = instantiate();
     await flushMicrotasks();
     assert.equal(el.querySelector('.dec-balance'), null, 'no owned-count in the buy panel');
+    assert.match(el.innerHTML, /<h2 class="dec-purchase-heading">BUY IN<\/h2>/,
+      'the purchase desk has a useful title without duplicating the ticket field label');
     assert.doesNotMatch(el.innerHTML, /<h2>BUY TICKETS<\/h2>/,
-      'the redundant purchase heading is gone');
+      'the title does not duplicate the ticket-only field label');
     el.disconnectedCallback();
   });
 
@@ -959,7 +1046,8 @@ describe('combined ticket + lootbox buy', () => {
       'wallet is the bottom ETH box');
     assert.equal(el.querySelector('[data-bind="dec-funds-wallet-label"]').textContent, 'WALLET');
     assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, '3.12 ETH');
-    assert.equal(el.querySelector('[data-bind="dec-funds-claimable"]').textContent, '0.02 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-funds-claimable"]').textContent, '0.02');
+    assert.equal(el.querySelector('[data-bind="dec-funds-claimable-unit"]').textContent, 'ETH');
     assert.equal(el.querySelector('[data-bind="dec-funds-claim"]').disabled, false,
       'claim action activates when ETH is claimable');
     assert.equal(el.querySelector('[data-bind="dec-funds-wallet-icon"]'), null);
@@ -987,6 +1075,35 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
+  test('wallet display includes the acting player AFKing funding', async () => {
+    installAfkingReadState({ fundingWei: 875_000_000_000n });
+    const el = instantiate();
+    await settle(60);
+
+    assert.equal(
+      el.querySelector('[data-bind="dec-funds-wallet"]').textContent,
+      '4 ETH',
+      '3.125 wallet ETH plus 0.875 AFKing funding is shown as one spendable total',
+    );
+    assert.equal(el.querySelector('[data-bind="dec-funds-faucet"]').hidden, true);
+    el.disconnectedCallback();
+  });
+
+  test('zero combined testnet funds become an Alchemy GET PLAY MONEY action', async () => {
+    contractsMod.setProvider(makeFakeProvider(CONNECTED, 0n));
+    installAfkingReadState({ fundingWei: 0n });
+    const el = instantiate();
+    await settle(60);
+
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="dec-funds-faucet"]').hidden, false);
+    assert.match(
+      el.innerHTML,
+      /https:\/\/www\.alchemy\.com\/faucets\/base-sepolia[\s\S]*GET PLAY MONEY/,
+    );
+    el.disconnectedCallback();
+  });
+
   test('zero claimable keeps Claim dormant even when the wallet can sign', async () => {
     _fetchHandler = async (url) => {
       const u = String(url);
@@ -998,6 +1115,10 @@ describe('combined ticket + lootbox buy', () => {
     const el = instantiate();
     await settle(60);
     const claim = el.querySelector('[data-bind="dec-funds-claim"]');
+    assert.equal(el.querySelector('[data-bind="dec-funds-claimable"]').textContent, '-',
+      'a known empty claimable balance uses one dash');
+    assert.equal(el.querySelector('[data-bind="dec-funds-claimable-unit"]').textContent, 'ETH',
+      'the balance unit remains visible beside the dash');
     assert.equal(claim.disabled, true);
     assert.notEqual(claim.getAttribute('data-write-locked'), null,
       'domain lock prevents the global signer manager from lighting a zero claim');
@@ -1018,23 +1139,32 @@ describe('combined ticket + lootbox buy', () => {
     await settle(60);
     const display = el.querySelector('[data-bind="dec-funds-claimable-display"]');
     const value = el.querySelector('[data-bind="dec-funds-claimable"]');
+    const unit = el.querySelector('[data-bind="dec-funds-claimable-unit"]');
     const claim = el.querySelector('[data-bind="dec-funds-claim"]');
     assert.ok(display.classList.contains('dec-funds__display--spoiler'));
-    assert.equal(value.textContent, '•••• ETH', 'the DOM only contains a fixed-length mask');
+    assert.equal(value.textContent, '••••', 'the amount DOM only contains a fixed-length mask');
+    assert.equal(unit.textContent, 'ETH', 'the currency unit stays readable beside the mask');
     assert.doesNotMatch(value.textContent, /\d/, 'the hidden balance cannot leak through blurred digits');
-    assert.equal(value.getAttribute('aria-hidden'), 'true', 'screen readers do not receive the spoiler');
-    assert.equal(claim.disabled, true, 'claim action cannot bypass the reveal gate');
+    assert.equal(value.getAttribute('role'), 'button', 'the spoiler is explicitly revealable');
+    value.dispatchEvent({ type: 'click', preventDefault() {} });
+    assert.notEqual(value.textContent, '••••', 'clicking the number reveals the current balance');
+    assert.equal(claim.disabled, true, 'visual opt-out does not bypass claim eligibility');
 
     globalThis.localStorage.setItem('spun_day_84532_67', '1');
     storeMod.update('app.lastDay', { day: 67 });
     assert.ok(!display.classList.contains('dec-funds__display--spoiler'));
-    assert.notEqual(value.textContent, '•••• ETH', 'the real balance is inserted only after reveal');
-    assert.match(value.textContent, /ETH$/);
+    assert.notEqual(value.textContent, '••••', 'the real balance is inserted only after reveal');
+    assert.equal(unit.textContent, 'ETH');
     assert.equal(value.getAttribute('aria-hidden'), null);
     assert.equal(claim.disabled, false);
     assert.match(
       APP_CSS,
-      /\.dec-funds__display--spoiler \.dec-funds__value\s*\{[^}]*filter:\s*blur\(0\.38rem\)/s,
+      /\.dec-funds__display--spoiler \.dec-funds__number\s*\{[^}]*filter:\s*blur\(0\.38rem\)/s,
+    );
+    assert.doesNotMatch(
+      APP_CSS,
+      /\.dec-funds__display--spoiler \.dec-funds__value\s*\{[^}]*filter:\s*blur/s,
+      'the spoiler blur does not include the ETH unit',
     );
     assert.match(
       APP_CSS,
@@ -1120,7 +1250,7 @@ describe('combined ticket + lootbox buy', () => {
     mode.checked = true;
     mode.dispatchEvent({ type: 'change' });
     assert.match(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, /ETH$/);
-    assert.match(el.querySelector('[data-bind="dec-funds-claimable"]').textContent, /ETH$/);
+    assert.equal(el.querySelector('[data-bind="dec-funds-claimable-unit"]').textContent, 'ETH');
     assert.equal(el.querySelector('[data-bind="dec-funds"]').classList.contains('dec-funds--flip'), false);
     el.querySelector('[data-bind="dec-funds-claim"]').dispatchEvent({ type: 'click' });
     await settle(60);
@@ -1191,7 +1321,7 @@ describe('combined ticket + lootbox buy', () => {
     );
     assert.equal(el.querySelectorAll('[data-bind="dec-flip-credit-total"]').length, 1);
     assert.doesNotMatch(tally.textContent, /purchase|bulk|rebuy/i, 'no detailed breakdown');
-    assert.match(PANEL_SRC, /\/badges-circular\/flame_red\.svg/);
+    assert.match(PANEL_SRC, /\/whitepaper\/flame-logo-split\.svg/);
     assert.match(
       PANEL_SRC,
       /<div class="dec-buy-row">[\s\S]*?data-bind="dec-flip-credit"[\s\S]*?data-bind="dec-buy-cta"/,
@@ -1236,7 +1366,7 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
-  test('ticket arrows move one whole ticket while typed quarters stay valid', async () => {
+  test('ticket controls flank the input with quarter steps and whole-ticket arrows', async () => {
     const el = instantiate();
     await settle(60);
 
@@ -1249,12 +1379,22 @@ describe('combined ticket + lootbox buy', () => {
       (button) => button.getAttribute('data-step-for') === 'dec-tickets'
         && button.getAttribute('data-dir') === '-1',
     );
-    input.value = '0.25';
+    const quarter = el.querySelectorAll('.dec-quarter-step');
+    assert.equal(quarter.length, 2, 'the quarter-ticket pair is mounted left of the input');
+    assert.match(el.innerHTML, />\+\.25<\/button>[\s\S]*?>−\.25<\/button>/);
+    assert.match(el.innerHTML, />▲<\/button>[\s\S]*?>▼<\/button>/,
+      'the familiar up/down arrow pair remains on the right');
+    input.value = '0';
+    quarter[0].dispatchEvent({ type: 'click' });
+    assert.equal(input.value, '0.25', 'the upper-left button adds one quarter ticket');
+    quarter[1].dispatchEvent({ type: 'click' });
+    assert.equal(input.value, '0', 'the lower-left button removes one quarter ticket');
+    quarter[0].dispatchEvent({ type: 'click' });
     up.dispatchEvent({ type: 'click' });
     assert.equal(input.value, '1.25', 'up adds one whole ticket');
     down.dispatchEvent({ type: 'click' });
     assert.equal(input.value, '0.25', 'down removes one whole ticket');
-    assert.equal(input.step, '0.25', 'typing still accepts entry-sized quarter tickets');
+    assert.equal(input.step, '0.25', 'typed decimals use the same entry-sized increment');
     el.disconnectedCallback();
   });
 
@@ -1264,7 +1404,7 @@ describe('combined ticket + lootbox buy', () => {
 
     const price = el.querySelector('[data-bind="dec-price"]');
     const input = el.querySelector('[name="dec-lootbox-eth"]');
-    assert.equal(price.textContent, 'Level 12 Price - 0.04 ETH');
+    assert.equal(price.textContent, 'Price - 0.04 ETH');
     assert.equal(input.step, '0.04', 'native number arrows use one ticket price');
 
     const up = el.querySelectorAll('.dec-step').find(
@@ -1297,9 +1437,58 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(el.querySelector('[name="dec-tickets"]').value, '0');
     assert.equal(el.querySelector('[name="dec-lootbox-eth"]').value, '0.08',
       'lootbox mission uses exactly two level-12 ticket prices');
-    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent, 'Buy');
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent, 'Buy in');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.08 ETH');
     assert.equal(fakeContract._calls.purchase.length, 0, 'quest click only configures the form');
+    el.disconnectedCallback();
+  });
+
+  test('the main daily popup can configure its exact minimum as a lootbox instead of tickets', async () => {
+    const fakeContract = makeFakePurchaseContract();
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    const el = instantiate();
+    await settle(60);
+
+    const target = lootboxMod.scaledTicketPriceWei(12);
+    document.dispatchEvent(new CustomEvent('quest:activate', {
+      detail: {
+        questType: 1,
+        target: String(target),
+        variant: 'primary',
+        purchaseKind: 'lootbox',
+      },
+    }));
+
+    assert.equal(el.querySelector('[name="dec-tickets"]').value, '0');
+    assert.equal(el.querySelector('[name="dec-lootbox-eth"]').value, '0.04');
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.04 ETH');
+    assert.equal(fakeContract._calls.purchase.length, 0,
+      'popup confirmation configures the exact action without bypassing the normal buy review');
+    el.disconnectedCallback();
+  });
+
+  test('confirming the main daily popup buys its exact minimum through the normal guarded path', async () => {
+    const fakeContract = makeFakePurchaseContract();
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    const el = instantiate();
+    await settle(60);
+
+    const target = lootboxMod.scaledTicketPriceWei(12);
+    document.dispatchEvent(new CustomEvent('quest:activate', {
+      detail: {
+        questType: 1,
+        target: String(target),
+        variant: 'primary',
+        purchaseKind: 'lootbox',
+        submit: true,
+      },
+    }));
+    await settle(100);
+
+    assert.equal(fakeContract._calls.purchase.length, 1, 'confirmation reaches the existing buy transaction');
+    const args = fakeContract._calls.purchase[0];
+    assert.equal(args[1], 0n, 'the lootbox choice does not add tickets');
+    assert.equal(args[2], target, 'the submitted lootbox spend is the exact displayed minimum');
     el.disconnectedCallback();
   });
 });
@@ -1328,38 +1517,107 @@ describe('Foil pack buy leg', () => {
     await import('../app-decimator-panel.js');
   });
 
-  test('foil row stays usable while the indexed ownership read is pending', async () => {
-    let releaseFoil;
+  test('foil row stays hidden until the exact contract probe resolves available', async () => {
+    let foilEndpointReads = 0;
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
-      if (u.includes('/foil')) return new Promise((resolve) => { releaseFoil = resolve; });
+      if (u.includes('/foil')) foilEndpointReads += 1;
       return { player: null, pending: {} };
     };
     const el = instantiate();
     await flushMicrotasks();
     const row = el.querySelector('[data-bind="dec-foil-row"]');
-    assert.equal(row.hidden, false, 'an ownership guess never delays a valid level offer');
-    releaseFoil({ present: false, level: 12 });
-    await settle(20);
-    assert.equal(row.hidden, false, 'the eventual index answer does not move the control');
+    await settle(30);
+    assert.equal(row.hidden, false, 'a successful purchase.staticCall reveals the control');
+    assert.equal(foilEndpointReads, 0, 'the lagging indexed foil endpoint is never queried');
     el.disconnectedCallback();
   });
 
-  test('unknown foil availability stays usable and lets the contract preflight decide', async () => {
+  test('a same-wallet refresh keeps the foil row pinned while its contract probe is in flight', async () => {
+    const fakeContract = makeFakePurchaseContract();
+    const immediateProbe = fakeContract.purchase.staticCall;
+    let blockNextProbe = false;
+    let releaseProbe = null;
+    fakeContract.purchase.staticCall = async (...args) => {
+      if (blockNextProbe) {
+        await new Promise((resolve) => { releaseProbe = resolve; });
+      }
+      return immediateProbe(...args);
+    };
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+
+    const el = instantiate();
+    await settle(60);
+    const row = el.querySelector('[data-bind="dec-foil-row"]');
+    assert.equal(row.hidden, false, 'the first definitive probe reveals the row');
+
+    blockNextProbe = true;
+    storeMod.update('ui.foilQuest', {
+      active: true,
+      completed: false,
+      level: 12,
+      address: CONNECTED.toLowerCase(),
+    });
+    await flushMicrotasks();
+    assert.equal(typeof releaseProbe, 'function', 'the replacement probe is still in flight');
+    assert.equal(row.hidden, false,
+      'refresh latency does not blank a valid same-wallet/same-level answer');
+
+    blockNextProbe = false;
+    releaseProbe();
+    await settle(30);
+    assert.equal(row.hidden, false, 'the settled replacement retains the row');
+    el.disconnectedCallback();
+  });
+
+  test('a transient negative probe cannot retract a verified same-level foil offer', async () => {
+    const fakeContract = makeFakePurchaseContract();
+    const verifiedProbe = fakeContract.purchase.staticCall;
+    let temporarilyStale = false;
+    fakeContract.purchase.staticCall = async (...args) => {
+      if (temporarilyStale) {
+        const error = new Error('advance is briefly catching up');
+        error.revert = { name: 'StaleAdvance' };
+        throw error;
+      }
+      return verifiedProbe(...args);
+    };
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+
+    const el = instantiate();
+    await settle(60);
+    const row = el.querySelector('[data-bind="dec-foil-row"]');
+    assert.equal(row.hidden, false, 'the initial on-chain probe verifies eligibility');
+
+    temporarilyStale = true;
+    storeMod.update('ui.foilQuest', {
+      active: true,
+      completed: false,
+      level: 12,
+      address: CONNECTED.toLowerCase(),
+    });
+    await settle(60);
+    assert.equal(row.hidden, false,
+      'temporary liveness/static-call state cannot make a verified checkbox flicker out');
+    assert.equal(el.querySelector('[data-bind="dec-foil-check"]').disabled, false);
+    el.disconnectedCallback();
+  });
+
+  test('DirectEthInsufficient from the zero-value probe means the foil route is available', async () => {
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
       if (u.includes('/foil')) throw new Error('indexer unavailable');
       return { player: null, pending: {} };
     };
-    const fakeContract = makeFakePurchaseContract();
+    const fakeContract = makeFakePurchaseContract({ foilProbeRevertName: 'DirectEthInsufficient' });
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
     const el = instantiate();
     await settle(60);
     const row = el.querySelector('[data-bind="dec-foil-row"]');
     const check = el.querySelector('[data-bind="dec-foil-check"]');
-    assert.equal(row.hidden, false, 'an indexer outage does not suppress a valid offer');
+    assert.equal(row.hidden, false, 'the funding sentinel proves every earlier foil gate passed');
     assert.equal(check.disabled, false);
     check.checked = true;
     el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
@@ -1370,7 +1628,10 @@ describe('Foil pack buy leg', () => {
     el.disconnectedCallback();
   });
 
-  test('game-over state suppresses a foil offer even when ownership is clear', async () => {
+  test('a game-over/liveness contract rejection suppresses the foil offer', async () => {
+    lootboxMod.__setContractFactoryForTest(() => makeFakePurchaseContract({
+      foilProbeRevertName: 'GameOverPossible',
+    }));
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return { ...DEFAULT_GAME_STATE, gameOver: true };
@@ -1384,19 +1645,18 @@ describe('Foil pack buy leg', () => {
     el.disconnectedCallback();
   });
 
-  test('ownership markers cannot poison the current level offer', async () => {
-    localStorage.setItem(
-      `foil-owned:${CHAIN.id}:${CONNECTED.toLowerCase()}:12`,
-      JSON.stringify({ version: 2, level: 12, source: 'receipt', at: Date.now() }),
-    );
+  test('FoilAlreadyBought from the routed contract probe hides and disables the option', async () => {
+    lootboxMod.__setContractFactoryForTest(() => makeFakePurchaseContract({
+      foilProbeRevertName: 'FoilAlreadyBought',
+    }));
     const el = instantiate();
     await settle(60);
-    assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, false,
-      'local ownership hints never suppress the contract-preflighted offer');
+    assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="dec-foil-check"]').disabled, true);
     el.disconnectedCallback();
   });
 
-  test('foil row is only a checkbox, Add foil pack label, and 10× price', async () => {
+  test('foil row is only a checkbox, one-pack limit label, and 10× price', async () => {
     const el = instantiate();
     await settle(60);
     const check = el.querySelector('[data-bind="dec-foil-check"]');
@@ -1404,18 +1664,31 @@ describe('Foil pack buy leg', () => {
     assert.equal(check.disabled, false, 'enabled when not owned');
     const price = el.querySelector('[data-bind="dec-foil-price"]');
     assert.equal(price.textContent, '0.4 ETH', '10 × level-12 ticket price');
-    assert.match(el.innerHTML, /<span class="dec-foil-label">Add foil pack<\/span>/);
+    assert.match(el.innerHTML, /<span class="dec-foil-label">Foil pack \(limit 1\)<\/span>/);
     assert.doesNotMatch(el.innerHTML, /dec-foil-card|dec-foil-sub|dec-foil-shine/,
       'the old promotional card and helper copy are gone');
+    assert.match(APP_CSS,
+      /\.app-decimator-panel \.dec-foil-check\s*\{[^}]*appearance:\s*none;[^}]*border-radius:\s*4px/s,
+      'the foil choice uses a deliberate custom checkbox instead of the browser default');
+    assert.match(APP_CSS,
+      /\.app-decimator-panel \.dec-foil-check:checked\s*\{[^}]*34, 211, 238[^}]*236, 72, 153[^}]*234, 179, 8/s,
+      'the checked state carries a restrained foil spectrum');
+    assert.match(APP_CSS,
+      /@keyframes dec-foil-occasional-glint\s*\{[^}]*0%, 68%[^}]*opacity:\s*0/s,
+      'the foil glint spends most of its cycle quiet');
+    assert.match(APP_CSS,
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.app-decimator-panel \.dec-foil::after\s*\{\s*animation:\s*none/s,
+      'the decorative glint respects reduced motion');
     el.disconnectedCallback();
   });
 
-  test('an indexed owned hint does not suppress a potentially valid foil purchase', async () => {
+  test('the indexed foil ownership endpoint is not an availability authority', async () => {
+    let foilEndpointReads = 0;
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
       if (u.includes('/foil')) {
-        assert.match(u, /level=12/, 'ownership checked at the ticket target level');
+        foilEndpointReads += 1;
         return { present: true, level: 12 };
       }
       return { player: null, pending: {} };
@@ -1423,30 +1696,22 @@ describe('Foil pack buy leg', () => {
     const el = instantiate();
     await settle(60);
     const row = el.querySelector('[data-bind="dec-foil-row"]');
-    assert.equal(row.hidden, false, 'stale indexed ownership is informational only');
+    assert.equal(row.hidden, false, 'the exact contract probe passed');
     const check = el.querySelector('[data-bind="dec-foil-check"]');
-    assert.equal(check.disabled, false, 'the contract simulation gets the final say');
+    assert.equal(check.disabled, false);
     assert.equal(check.checked, false);
+    assert.equal(foilEndpointReads, 0, 'no /player/:address/foil read participates');
     el.disconnectedCallback();
   });
 
-  test('an unfinished foil quest overrides a stale inferred level and keeps its pack available', async () => {
-    const checkedLevels = [];
+  test('stale foil quest metadata never overrides the contract-routed purchase level', async () => {
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
-      if (u.includes('/foil')) {
-        const level = Number(new URL(u, 'http://localhost').searchParams.get('level'));
-        checkedLevels.push(level);
-        return { present: level === 12, level };
-      }
       return { player: null, pending: {} };
     };
     const el = instantiate();
     await settle(60);
-    assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, false,
-      'even a stale owned hint cannot suppress the purchase control');
-
     storeMod.update('ui.foilQuest', {
       active: true,
       completed: false,
@@ -1456,16 +1721,48 @@ describe('Foil pack buy leg', () => {
     });
     await settle(60);
 
-    assert.ok(checkedLevels.includes(13), 'ownership is re-queried for the quest level');
     assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, false,
-      'the quest-completing foil option remains selectable');
+      'availability is re-probed without trusting the quest level');
     assert.equal(el.querySelector('[data-bind="dec-foil-check"]').disabled, false);
-    assert.match(el.querySelector('[data-bind="dec-price"]').textContent, /Level 13/);
+    assert.equal(el.querySelector('[data-bind="dec-price"]').textContent, 'Price - 0.04 ETH');
+    assert.doesNotMatch(el.querySelector('[data-bind="dec-price"]').textContent, /Level/i);
     el.disconnectedCallback();
   });
 
-  test('first-day foil quest checks the new level instead of suppressing it with the prior pack', async () => {
-    const checkedLevels = [];
+  test('a foil quest click refreshes exact availability and only checks a genuinely buyable pack', async () => {
+    let available = false;
+    const contracts = [];
+    lootboxMod.__setContractFactoryForTest(() => {
+      const contract = makeFakePurchaseContract({
+        foilProbeRevertName: available ? undefined : 'FoilAlreadyBought',
+      });
+      contracts.push(contract);
+      return contract;
+    });
+    const el = instantiate();
+    await settle(60);
+    const foil = el.querySelector('[data-bind="dec-foil-check"]');
+    assert.equal(foil.checked, false);
+
+    available = true;
+    document.dispatchEvent(new CustomEvent('quest:activate', {
+      detail: { questType: 4, target: '1', variant: 'level' },
+    }));
+    await settle(80);
+    assert.equal(foil.checked, true, 'fresh successful probe selects the foil add-on');
+    assert.equal(contracts.reduce((n, c) => n + c._calls.purchase.length, 0), 0,
+      'quest activation never submits a transaction');
+
+    available = false;
+    document.dispatchEvent(new CustomEvent('quest:activate', {
+      detail: { questType: 4, target: '1', variant: 'level' },
+    }));
+    await settle(80);
+    assert.equal(foil.checked, false, 'a fresh ownership rejection leaves it unchecked');
+    el.disconnectedCallback();
+  });
+
+  test('purchase-day routing, not quest metadata, selects the first-day foil level', async () => {
     storeMod.update('ui.foilQuest', {
       active: true,
       completed: false,
@@ -1478,26 +1775,19 @@ describe('Foil pack buy leg', () => {
       if (u.includes('/game/state')) {
         return { level: 1, phase: 'PURCHASE', jackpotPhaseFlag: false };
       }
-      if (u.includes('/foil')) {
-        const level = Number(new URL(u, 'http://localhost').searchParams.get('level'));
-        checkedLevels.push(level);
-        return { present: level === 1, level };
-      }
       return { player: null, pending: {} };
     };
 
     const el = instantiate();
     await settle(60);
-    assert.ok(checkedLevels.includes(2), 'ownership is checked against the live level-2 quest pack');
     assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, false,
-      'the owned level-1 pack cannot hide the level-2 option');
+      'the live purchase route offers level 2');
     assert.equal(el.querySelector('[data-bind="dec-foil-check"]').disabled, false);
-    assert.match(el.querySelector('[data-bind="dec-price"]').textContent, /Level 2/);
+    assert.equal(el.querySelector('[data-bind="dec-price"]').textContent, 'Price - 0.01 ETH');
     el.disconnectedCallback();
   });
 
-  test('a foil quest without a resolved purchase level never falls back to level zero', async () => {
-    const checkedLevels = [];
+  test('a foil quest without a level leaves the routed level untouched', async () => {
     storeMod.update('ui.foilQuest', {
       active: true,
       completed: false,
@@ -1508,49 +1798,34 @@ describe('Foil pack buy leg', () => {
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
-      if (u.includes('/foil')) {
-        const level = Number(new URL(u, 'http://localhost').searchParams.get('level'));
-        checkedLevels.push(level);
-        return { present: false, level };
-      }
       return { player: null, pending: {} };
     };
 
     const el = instantiate();
     await settle(60);
-    assert.ok(checkedLevels.includes(12), 'normal contract-equivalent target remains the fallback');
-    assert.equal(checkedLevels.includes(0), false, 'null quest metadata is never coerced to level zero');
-    assert.match(el.querySelector('[data-bind="dec-price"]').textContent, /Level 12/);
+    assert.equal(el.querySelector('[data-bind="dec-price"]').textContent, 'Price - 0.04 ETH');
+    assert.doesNotMatch(el.querySelector('[data-bind="dec-price"]').textContent, /Level/i);
     el.disconnectedCallback();
   });
 
-  test('an old-level foil response cannot mark the new target level as owned', async () => {
+  test('old indexed level responses are irrelevant to the exact routed probe', async () => {
+    let foilEndpointReads = 0;
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
-      if (u.includes('/foil')) return { present: true, level: 11 };
+      if (u.includes('/foil')) { foilEndpointReads += 1; return { present: true, level: 11 }; }
       return { player: null, pending: {} };
     };
     const stale = instantiate();
     await settle(60);
     assert.equal(stale.querySelector('[data-bind="dec-foil-row"]').hidden, false,
-      'a mismatched response cannot suppress the level-12 offer');
+      'the routed contract probe exposes the level-12 offer');
     assert.equal(stale.querySelector('[data-bind="dec-foil-check"]').disabled, false,
-      'unknown ownership remains guarded by the contract preflight');
+      'the exact contract probe controls the checkbox');
     stale.disconnectedCallback();
     stale.remove();
 
-    _fetchHandler = async (url) => {
-      const u = String(url);
-      if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
-      if (u.includes('/foil')) return { present: false, level: 12 };
-      return { player: null, pending: {} };
-    };
-    const current = instantiate();
-    await settle(60);
-    assert.equal(current.querySelector('[data-bind="dec-foil-row"]').hidden, false,
-      'the exact new-level answer is not poisoned by the stale response');
-    current.disconnectedCallback();
+    assert.equal(foilEndpointReads, 0);
   });
 
   test('foil-only buy: purchase(foil=true) with msg.value = exact foil cost; 0 tickets allowed', async () => {
@@ -1585,76 +1860,72 @@ describe('Foil pack buy leg', () => {
     check.dispatchEvent({ type: 'change' });
     const action = el.querySelector('[data-bind="dec-buy-cta-action"]');
     const amount = el.querySelector('[data-bind="dec-buy-cta-amount"]');
-    assert.equal(action.textContent, 'Buy');
+    assert.equal(action.textContent, 'Buy in');
     assert.equal(amount.textContent, '0.4 ETH', 'foil-only total is on the second line');
     check.checked = false;
     check.dispatchEvent({ type: 'change' });
-    assert.equal(action.textContent, 'Buy', 'back to bare Buy when unchecked');
+    assert.equal(action.textContent, 'Buy in', 'back to bare Buy in when unchecked');
     assert.equal(amount.hidden, true, 'empty amount line collapses when unchecked');
     el.disconnectedCallback();
   });
 
-  test('click-time buy bypasses a stale indexed ownership change', async () => {
-    let owned = false;
-    _fetchHandler = async (url) => {
-      const u = String(url);
-      if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
-      if (u.includes('/foil')) return { present: owned, level: 12 };
-      return { player: null, pending: {} };
-    };
-    const fakeContract = makeFakePurchaseContract();
+  test('the value-accurate submit probe protects against an ownership race', async () => {
+    const fakeContract = makeFakePurchaseContract({
+      foilPurchaseRevertName: 'FoilAlreadyBought',
+    });
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
     const el = instantiate();
     await settle(60);
 
     const row = el.querySelector('[data-bind="dec-foil-row"]');
     const check = el.querySelector('[data-bind="dec-foil-check"]');
-    assert.equal(row.hidden, false, 'initial ownership read says available');
+    assert.equal(row.hidden, false, 'the earlier zero-value availability probe passed');
     check.checked = true;
-    owned = true; // another tab / earlier receipt lands before this click
     el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
-    assert.equal(fakeContract._calls.purchase.length, 1,
-      'the value-accurate contract preflight, not the changed DB hint, authorizes the send');
-    assert.equal(row.hidden, false, 'indexed ownership never retires the option');
-    assert.doesNotMatch(el.querySelector('[data-bind="dec-error"]').textContent, /already own/i);
+    assert.equal(fakeContract._calls.purchase.length, 0,
+      'the fresh value-accurate preflight blocks the raced send');
+    assert.match(el.querySelector('[data-bind="dec-error"]').textContent, /unavailable for this transaction/i);
     el.disconnectedCallback();
   });
 
-  test('FoilAlreadyBought preflight blocks the send without poisoning the row', async () => {
+  test('StaleAdvance from the availability probe hides the foil option', async () => {
     const fakeContract = makeFakePurchaseContract({
-      staticCallShouldRevert: { purchase: true },
-      staticCallRevertName: { purchase: 'FoilAlreadyBought' },
+      foilProbeRevertName: 'StaleAdvance',
     });
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
     const el = instantiate();
     await settle(60);
 
-    const check = el.querySelector('[data-bind="dec-foil-check"]');
-    check.checked = true;
-    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
-    await settle(60);
-
-    assert.equal(fakeContract._calls.purchase.length, 0, 'static-call failure prevents send');
-    assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, false,
-      'a failed attempt does not cache another potentially stale ownership blocker');
-    assert.match(el.querySelector('[data-bind="dec-error"]').textContent, /unavailable for this transaction/i);
+    assert.equal(fakeContract._calls.purchase.length, 0);
+    assert.equal(el.querySelector('[data-bind="dec-foil-row"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="dec-foil-check"]').disabled, true);
     el.disconnectedCallback();
   });
 
-  test('FoilPackBought clears the selection without turning receipt state into a future gate', async () => {
+  test('FoilPackBought clears the selection and the refreshed contract probe retires the option', async () => {
     // Fake contract whose purchase receipt carries the FoilPackBought event.
     const calls = { purchase: [] };
+    let owned = false;
     const fakeContract = {
       purchase: Object.assign(
         async (...args) => {
           calls.purchase.push(args);
+          owned = true;
           return makeFakeTx(makeFakeReceipt([
             { parsed: { name: 'FoilPackBought', args: { buyer: CONNECTED, level: 12n, multBps: 23500n } } },
           ]));
         },
-        { staticCall: async () => undefined },
+        { staticCall: async (...args) => {
+          const availabilityProbe = args[1] === 0n && args[2] === 0n
+            && args[5] === true && args[6]?.value === 0n;
+          if (availabilityProbe && owned) {
+            const error = new Error('already bought');
+            error.revert = { name: 'FoilAlreadyBought' };
+            throw error;
+          }
+        } },
       ),
       interface: { parseLog: (log) => log.parsed ?? null },
       connect(_s) { return this; },
@@ -1672,19 +1943,19 @@ describe('Foil pack buy leg', () => {
 
     assert.equal(calls.purchase.length, 1, 'purchase fired');
     const row = el.querySelector('[data-bind="dec-foil-row"]');
-    assert.equal(row.hidden, false, 'the level offer is not hidden by UI-side ownership state');
-    assert.equal(check.disabled, false, 'checkbox remains governed by phase, not ownership guesses');
+    assert.equal(row.hidden, true, 'fresh chain ownership retires the one-per-level option');
+    assert.equal(check.disabled, true);
     assert.equal(check.checked, false, 'checkbox cleared after the buy');
     el.disconnectedCallback();
     el.remove();
 
-    // The contract remains the duplicate guard on reload too.
+    // The same exact contract probe governs reload too.
     const refreshed = instantiate();
     await settle(60);
     assert.equal(
       refreshed.querySelector('[data-bind="dec-foil-row"]').hidden,
-      false,
-      'refresh cannot inherit a false-negative local purchase gate',
+      true,
+      'refresh reads the on-chain one-per-level rejection',
     );
     refreshed.disconnectedCallback();
   });
@@ -1790,6 +2061,7 @@ function makeFakeRedeemFlipContract(opts = {}) {
     return makeFakeTx(makeFakeReceipt([]));
   };
   const contract = {
+    livenessTriggered: async () => Boolean(opts.liveness),
     rngLocked: async () => Boolean(opts.rngLocked),
     nextPrizePoolView: async () => opts.windowClosed ? 100n : 101n,
     prizePoolTargetView: async () => 100n,
@@ -1833,12 +2105,30 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     el.disconnectedCallback();
   });
 
-  test('jackpot phase keeps USE FLIP visible even if the pool probe is closed', async () => {
+  test('jackpot phase alone does not show USE FLIP when the exact window is closed', async () => {
     claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract({ windowClosed: true }));
     const el = instantiate();
     await settle(60);
+    assert.equal(el.querySelector('[data-bind="dec-flip-buy"]').hidden, true,
+      'phase metadata cannot override the deployed redemption predicate');
+    claimsMod.__resetContractFactoryForTest();
+    el.disconnectedCallback();
+  });
+
+  test('a latched window remains visible through an intermediate RNG lock', async () => {
+    contractsMod.setProvider(makeFakeProvider(
+      CONNECTED,
+      3_125_000_000_000n,
+      { redemptionOpen: true },
+    ));
+    claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract({
+      windowClosed: true,
+      rngLocked: true,
+    }));
+    const el = instantiate();
+    await settle(60);
     assert.equal(el.querySelector('[data-bind="dec-flip-buy"]').hidden, false,
-      'jackpotPhaseFlag is independently an open redemption window');
+      'the packed ticketRedemptionOpen latch survives the intermediate lock');
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
   });
@@ -1864,8 +2154,8 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     await settle(30);
     const ctaAction = el.querySelector('[data-bind="dec-buy-cta-action"]');
     const ctaAmount = el.querySelector('[data-bind="dec-buy-cta-amount"]');
-    assert.equal(ctaAction.textContent, 'Redeem');
-    assert.equal(ctaAmount.textContent, '2,000 FLIP', '2 tickets = 2,000 FLIP on line two');
+    assert.equal(ctaAction.textContent, 'Burn 2,000 FLIP');
+    assert.equal(ctaAmount.textContent, 'for 2 tickets', 'the ticket output stays on line two');
     assert.equal(el.querySelector('[data-bind="dec-funds-wallet-label"]').textContent, 'WALLET');
     assert.equal(
       el.querySelector('[data-bind="dec-funds"]').classList.contains('dec-funds--flip'),
@@ -1877,7 +2167,8 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     ticketsInput.value = '0.25';
     ticketsInput.dispatchEvent({ type: 'input' });
     await settle(30);
-    assert.equal(ctaAmount.textContent, '250 FLIP', '0.25 tickets = 250 FLIP');
+    assert.equal(ctaAction.textContent, 'Burn 250 FLIP', '0.25 tickets = 250 FLIP');
+    assert.equal(ctaAmount.textContent, 'for 0.25 tickets');
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
   });
@@ -1921,6 +2212,38 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.equal(claimableFirst.checked, false);
     assert.equal(lootboxGroup.hidden, false);
 
+    claimsMod.__resetContractFactoryForTest();
+    el.disconnectedCallback();
+  });
+
+  test('a REDEEM FLIP quest refreshes the window, preserves nonzero tickets, and never submits', async () => {
+    const fake = makeFakeRedeemFlipContract();
+    claimsMod.__setContractFactoryForTest(() => fake);
+    const el = instantiate();
+    await settle(60);
+    const tickets = el.querySelector('[name="dec-tickets"]');
+    const flip = el.querySelector('[data-bind="dec-flip-check"]');
+    tickets.value = '2.25';
+
+    document.dispatchEvent(new CustomEvent('quest:activate', {
+      detail: { questType: 9, target: '2000', variant: 'level' },
+    }));
+    await settle(80);
+    assert.equal(tickets.value, '2.25', 'quest metadata does not overwrite a nonzero amount');
+    assert.equal(flip.checked, true, 'the freshly verified USE FLIP control is selected');
+    assert.equal(el.querySelector('[name="dec-lootbox-eth"]').value, '0');
+    assert.equal(fake._calls.filter((call) => call[0] !== 'static').length, 0,
+      'quest activation does not send redeemFlip');
+
+    flip.checked = false;
+    flip.dispatchEvent({ type: 'change' });
+    tickets.value = '0';
+    document.dispatchEvent(new CustomEvent('quest:activate', {
+      detail: { questType: 9, target: '2000', variant: 'daily' },
+    }));
+    await settle(80);
+    assert.equal(tickets.value, '1', 'only a blank/zero ticket input is seeded');
+    assert.equal(flip.checked, true);
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
   });

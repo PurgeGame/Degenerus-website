@@ -453,7 +453,7 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     const url = input.value || input._value || '';
     const expectedCode = '0x' + '0'.repeat(24) + CONNECTED.slice(2).toLowerCase();
     assert.match(url, new RegExp(expectedCode), `URL contains default LEFT-padded code ${expectedCode}`);
-    assert.match(url, /https:\/\/purgegame\.com\/app\/\?ref=/, 'URL has expected base + ?ref=');
+    assert.match(url, /https:\/\/degener\.us\/\?ref=/, 'URL has the current site base + ?ref=');
   });
 
   test('Copy CTA + Customize submit carry data-write attribute (CF-15 view-mode disable hook)', async () => {

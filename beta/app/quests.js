@@ -4,7 +4,7 @@
 
 import { get } from './store.js';
 import { QUEST_TYPE_LABELS } from './constants.js';
-import { formatEth, formatBurnie } from './utils.js';
+import { formatEth, formatFlip } from './utils.js';
 
 // -- Pure Helpers --
 
@@ -16,19 +16,19 @@ import { formatEth, formatBurnie } from './utils.js';
  */
 export function formatQuestTarget(questType, requirements) {
   switch (questType) {
-    case 0: // MINT_BURNIE
+    case 0: // MINT_FLIP
     case 1: // MINT_ETH
       return `${requirements.mints} ticket${requirements.mints !== 1 ? 's' : ''}`;
     case 2: // FLIP
     case 3: // AFFILIATE
     case 5: // DECIMATOR
-      return formatBurnie(requirements.tokenAmount.toString()) + ' BURNIE';
+      return formatFlip(requirements.tokenAmount.toString()) + ' FLIP';
     case 6: // LOOTBOX
       return formatEth(requirements.tokenAmount.toString()) + ' ETH';
     case 7: // DEGENERETTE_ETH
       return formatEth(requirements.tokenAmount.toString()) + ' ETH wagered';
-    case 8: // DEGENERETTE_BURNIE
-      return formatBurnie(requirements.tokenAmount.toString()) + ' BURNIE wagered';
+    case 8: // DEGENERETTE_FLIP
+      return formatFlip(requirements.tokenAmount.toString()) + ' FLIP wagered';
     default:
       return 'Unknown';
   }

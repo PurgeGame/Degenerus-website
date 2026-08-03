@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Degenerus — Live Sepolia Sim Trajectory</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0d0d12;
+    --panel: #14141a;
+    --panel-2: #1a1a22;
+    --text: #e0e0ea;
+    --text-dim: #888;
+    --text-mid: #a0a0c0;
+    --accent: #4a9eff;
+    --green: #4ade80;
+    --gold: #f9a825;
+    --red: #d32f2f;
+    --border: rgba(160,160,192,0.15);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 1.5rem;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+  h1 {
+    font-size: 1.4rem;
+    margin: 0 0 0.25rem;
+    font-weight: 600;
+  }
+  .sub {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    margin-bottom: 1.25rem;
+  }
+  .meta-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 2rem;
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .meta-bar .item { display: flex; gap: 0.4rem; align-items: baseline; }
+  .meta-bar .label { color: var(--text-dim); }
+  .meta-bar .val { color: var(--text); font-variant-numeric: tabular-nums; }
+  .meta-bar .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .meta-bar .status-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--text-dim); margin-right: 0.4rem;
+    transition: background 0.3s;
+  }
+  .meta-bar .status-dot.live { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .meta-bar .status-dot.stale { background: var(--gold); }
+  .meta-bar .status-dot.error { background: var(--red); }
+  .meta-bar .right { margin-left: auto; display: flex; gap: 0.5rem; }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { background: #23232c; }
+  button:active { transform: translateY(1px); }
+  .chart-panel {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 1rem 1rem 0.5rem;
+    border: 1px solid var(--border);
+  }
+  .chart-panel canvas { max-height: 480px; }
+  .caption {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-align: center;
+    margin: 0.6rem 0 0.2rem;
+    line-height: 1.4;
+  }
+  .legend-hint {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .legend-hint.g { color: var(--green); }
+  .legend-hint.y { color: var(--gold); }
+  .legend-hint.r { color: var(--red); }
+  .empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-dim);
+    font-size: 0.95rem;
+  }
+  .footer {
+    margin-top: 1rem;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-align: center;
+  }
+  .footer a { color: var(--accent); text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Live Sepolia Sim Trajectory</h1>
+  <div class="sub">
+    Live testnet equivalent of the off-chain whitepaper simulation —
+    pool growth, cumulative stETH yield, and per-level jackpots, sampled
+    daily as the on-chain run progresses.
+  </div>
+
+  <div class="meta-bar">
+    <div class="item"><span class="status-dot" id="statusDot"></span><span class="val" id="statusText">connecting…</span></div>
+    <div class="item"><span class="label">Network:</span><span class="val" id="network">—</span></div>
+    <div class="item"><span class="label">GAME:</span><span class="val mono" id="gameAddr">—</span></div>
+    <div class="item"><span class="label">Level:</span><span class="val" id="curLevel">—</span></div>
+    <div class="item"><span class="label">Day:</span><span class="val" id="curDay">—</span></div>
+    <div class="item"><span class="label">Days plotted:</span><span class="val" id="daysPlotted">0</span></div>
+    <div class="item"><span class="label">Last poll:</span><span class="val" id="lastPoll">—</span></div>
+    <div class="right">
+      <button id="refreshBtn">Refresh</button>
+      <button id="resetBtn" title="Clears the locally-accumulated trajectory for this deployment">Reset</button>
+    </div>
+  </div>
+
+  <div class="meta-bar" id="liveStatsBar" style="display:none;">
+    <div class="item"><span class="label">Next pool:</span><span class="val" id="livNext">—</span><span class="label">ETH</span></div>
+    <div class="item"><span class="label">Future pool:</span><span class="val" id="livFuture">—</span><span class="label">ETH</span></div>
+    <div class="item"><span class="label">Current pool:</span><span class="val" id="livCurrent">—</span><span class="label">ETH</span></div>
+    <div class="item"><span class="label">Claimable:</span><span class="val" id="livClaim">—</span><span class="label">ETH</span></div>
+    <div class="item"><span class="label">Phase:</span><span class="val" id="livPhase">—</span></div>
+    <div class="item"><span class="label">Yield (vault):</span><span class="val" id="livYield">—</span><span class="label">ETH</span></div>
+  </div>
+
+  <div class="chart-panel">
+    <canvas id="liveSimChart"></canvas>
+    <p class="caption">
+      <span class="legend-hint">Blue</span>: next-level prize pool filling to target ·
+      <span class="legend-hint g">Green</span>: future pool reserve ·
+      <span class="legend-hint y">Gold</span>: vault stETH balance (rebase-yield catches up here) ·
+      <span class="legend-hint r">Red bars</span>: total ETH jackpot paid per level.
+      Per-day rows backfilled via archive <code>eth_call</code>; forward rows written by the indexer on <code>DailyRngApplied</code>; current in-flight day appended live.
+    </p>
+    <div class="empty" id="emptyMsg" style="display:none;">
+      No on-chain days observed yet. The chart fills in as the play driver
+      advances days. Keep this tab open or revisit during the run.
+    </div>
+  </div>
+
+  <div class="footer">
+    Data source:
+    <span id="apiBaseLabel">http://localhost:3000</span><code>/game/pools/history</code> (indexer-tracked per-day snapshots, backfilled via archive eth_call).
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  const API_BASE = (() => {
+    const fromQuery = new URLSearchParams(location.search).get('api');
+    if (fromQuery) return fromQuery.replace(/\/$/, '');
+    return 'http://localhost:3000';
+  })();
+  document.getElementById('apiBaseLabel').textContent = API_BASE;
+
+  // -------- state ----------
+  let chart = null;
+  let chainId = null;
+  let deployBlock = null;
+  let scaleDivisor = 1e18; // mainnet default; overridden to 1e12 on Sepolia
+  let pollTimer = null;
+  const POLL_MS = 30_000;
+
+  // -------- helpers --------
+  function setStatus(kind, text) {
+    const dot = document.getElementById('statusDot');
+    dot.className = 'status-dot ' + (kind === 'ok' ? 'live' : kind === 'stale' ? 'stale' : kind === 'err' ? 'error' : '');
+    document.getElementById('statusText').textContent = text;
+  }
+  function fmtEth(weiStr) {
+    if (weiStr == null) return 0;
+    try {
+      const n = Number(BigInt(weiStr)) / scaleDivisor;
+      return Math.round(n * 100) / 100;
+    } catch { return 0; }
+  }
+  function nowIso() {
+    const d = new Date();
+    return d.toTimeString().slice(0, 8);
+  }
+  async function api(path) {
+    const res = await fetch(API_BASE + path, { headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error(path + ' ' + res.status);
+    return res.json();
+  }
+
+  // -------- data fetch --------
+  async function loadDeployment() {
+    try {
+      const dep = await fetch('/db/deployment.json').then(r => r.ok ? r.json() : null);
+      if (dep) {
+        chainId = dep.chainId;
+        deployBlock = dep.deployBlock;
+        scaleDivisor = (chainId === 11155111) ? 1e12 : 1e18;
+        document.getElementById('network').textContent = `${dep.network || 'unknown'} (chain ${chainId})`;
+        document.getElementById('gameAddr').textContent =
+          (dep.contracts?.GAME || '—').slice(0, 6) + '…' + (dep.contracts?.GAME || '').slice(-4);
+      }
+    } catch (e) { /* served standalone — that's fine */ }
+  }
+
+  async function fetchState() {
+    return api('/game/state');
+  }
+
+  async function fetchPoolHistory() {
+    const res = await api('/game/pools/history');
+    const shaped = (res.items || []).map(row => ({
+      day:    row.day,
+      lvl:    row.level,
+      next:   fmtEth(row.nextPrizePool),
+      future: fmtEth(row.futurePrizePool),
+      curr:   fmtEth(row.currentPrizePool),
+      claim:  fmtEth(row.claimableWinnings),
+      cy:     fmtEth(row.vaultStEthReserve),
+      jpEth:  fmtEth(row.jackpotEthTotalDay),
+    }));
+    // Trim the leading dead zone — days before the first pool inflow. The
+    // testnet's preflight drain burst-advances through dozens of empty days
+    // in a single tx; plotting them just adds a flat zero shelf that drowns
+    // out the actual game trajectory.
+    const firstActiveIdx = shaped.findIndex(s => s.next > 0 || s.future > 0 || s.curr > 0);
+    return firstActiveIdx > 0 ? shaped.slice(firstActiveIdx) : shaped;
+  }
+
+  /**
+   * Append (or refresh) the current in-flight day to the snapshot trajectory
+   * using the live /game/state read. The indexer only writes per-day snapshots
+   * at day rollover via DailyRngApplied, so without this the chart would lag
+   * by up to a full game-day.
+   */
+  function appendLiveDay(snaps, state, vaultStEthBI) {
+    const day = state.dailyRng?.day;
+    if (day == null) return snaps;
+    const live = {
+      day,
+      lvl:    state.level,
+      next:   fmtEth(state.prizePools?.nextPrizePool),
+      future: fmtEth(state.prizePools?.futurePrizePool),
+      curr:   fmtEth(state.prizePools?.currentPrizePool),
+      claim:  fmtEth(state.prizePools?.claimableWinnings),
+      cy:     fmtEth(vaultStEthBI),
+      jpEth:  0,
+    };
+    const idx = snaps.findIndex(s => s.day === day);
+    if (idx >= 0) snaps[idx] = live; else snaps.push(live);
+    snaps.sort((a, b) => a.day - b.day);
+    return snaps;
+  }
+
+  function deriveJackpotBarsPerLevel(snaps) {
+    // Sum daily ETH jackpot payouts grouped by level. Plotted at the last day
+    // of each level. Server already filtered awardType in ('eth','eth_baf').
+    const sumByLvl = new Map();
+    const lastIdxByLvl = new Map();
+    snaps.forEach((s, i) => {
+      const cur = sumByLvl.get(s.lvl) || 0;
+      sumByLvl.set(s.lvl, cur + (s.jpEth || 0));
+      lastIdxByLvl.set(s.lvl, i);
+    });
+    const bars = [];
+    for (const [lvl, total] of sumByLvl.entries()) {
+      if (total > 0 && lvl > 0) {
+        bars.push({ dayIdx: lastIdxByLvl.get(lvl), value: total });
+      }
+    }
+    return bars;
+  }
+
+  // -------- chart --------
+  function deriveLevelTransitionDays(snaps) {
+    // dayIdx (into the snaps array) where level changes vs prev day.
+    const lt = [];
+    for (let i = 1; i < snaps.length; i++) {
+      if (snaps[i].lvl !== snaps[i-1].lvl) lt.push(i);
+    }
+    return lt;
+  }
+
+  function buildChart(snaps) {
+    const ctx = document.getElementById('liveSimChart');
+    const txtColor = '#a0a0c0';
+    const gridColor = 'rgba(160,160,192,0.1)';
+
+    const labels = snaps.map(s => 'D' + s.day);
+    const ltIdx = deriveLevelTransitionDays(snaps);
+
+    // Jackpot bars: sum of ETH paid out per level, plotted at last day of level.
+    const jpBars = deriveJackpotBarsPerLevel(snaps);
+
+    // Build level labels per gap. ltIdx contains the index of the FIRST day
+    // of each new level (because deriveLevelTransitionDays detects level
+    // changes), so each gap [bounds[i], bounds[i+1]) starts at bounds[i] and
+    // we read the level at that starting index directly. Don't add +1 —
+    // that semantic is for the off-chain whitepaper sim where `lt` is the
+    // last day of each level, and using it here skips single-day levels.
+    const bounds = [0].concat(ltIdx, [snaps.length]);
+    const levelLabels = [];
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const dayIdx = Math.min(bounds[i], snaps.length - 1);
+      const lvl = snaps[dayIdx]?.lvl;
+      levelLabels.push(lvl == null || lvl === 0 ? null : lvl);
+    }
+
+    // Show points when data is sparse so a single-day snapshot is visible.
+    const sparseRadius = snaps.length < 5 ? 4 : 0;
+
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Next Pool',        data: snaps.map(s => s.next),   borderColor: '#4a9eff', borderWidth: 2, pointRadius: sparseRadius, pointBackgroundColor: '#4a9eff', tension: 0.1 },
+          { label: 'Future Pool',      data: snaps.map(s => s.future), borderColor: '#4ade80', borderWidth: 2, pointRadius: sparseRadius, pointBackgroundColor: '#4ade80', tension: 0.1 },
+          { label: 'Cumulative Yield', data: snaps.map(s => s.cy),     borderColor: '#f9a825', backgroundColor: 'rgba(249,168,37,0.12)', borderWidth: 2, pointRadius: sparseRadius, pointBackgroundColor: '#f9a825', tension: 0.1, fill: true },
+          { label: 'Largest Jackpot',  data: [],                       borderColor: '#d32f2f', backgroundColor: 'rgba(211,47,47,0.45)', borderWidth: 2, pointRadius: 0, pointStyle: 'rect' }
+        ]
+      },
+      plugins: [
+        {
+          id: 'levelLines',
+          beforeDraw(c) {
+            const ctx2 = c.ctx, area = c.chartArea, xScale = c.scales.x;
+            ctx2.save();
+            for (const k of ltIdx) {
+              const x = xScale.getPixelForValue(k);
+              ctx2.strokeStyle = 'rgba(128,128,128,0.35)';
+              ctx2.lineWidth = 1; ctx2.setLineDash([5, 5]);
+              ctx2.beginPath(); ctx2.moveTo(x, area.top); ctx2.lineTo(x, area.bottom); ctx2.stroke();
+            }
+            ctx2.setLineDash([]);
+            ctx2.fillStyle = txtColor;
+            ctx2.font = '600 12px -apple-system, sans-serif';
+            ctx2.textAlign = 'left';
+            ctx2.fillText('Level', area.left, area.top - 6);
+            ctx2.font = '10px -apple-system, sans-serif';
+            ctx2.textAlign = 'center';
+            for (let i = 0; i < bounds.length - 1; i++) {
+              const mid = (bounds[i] + bounds[i + 1]) / 2;
+              const xMid = xScale.getPixelForValue(mid);
+              if (levelLabels[i] != null) ctx2.fillText(String(levelLabels[i]), xMid, area.top - 6);
+            }
+            ctx2.restore();
+          }
+        },
+        {
+          id: 'jackpotBars',
+          beforeDraw(c) {
+            const ctx2 = c.ctx, area = c.chartArea, xScale = c.scales.x, yScale = c.scales.y;
+            const bottom = yScale.getPixelForValue(0);
+            ctx2.save();
+            for (const j of jpBars) {
+              const x = xScale.getPixelForValue(j.dayIdx);
+              const yTop = yScale.getPixelForValue(j.value);
+              ctx2.fillStyle = 'rgba(211,47,47,0.45)';
+              ctx2.fillRect(x - 2, yTop, 4, bottom - yTop);
+            }
+            ctx2.restore();
+          }
+        }
+      ],
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        animation: false,
+        layout: { padding: { top: 18 } },
+        scales: {
+          y: {
+            ticks: { color: txtColor, font: { size: 11 } },
+            grid: { color: gridColor },
+            title: { display: true, text: 'ETH (scaled)', color: txtColor, font: { size: 12, weight: '600' } }
+          },
+          x: {
+            title: { display: true, text: 'Day (on-chain)', color: txtColor, font: { size: 12, weight: '600' } },
+            ticks: { color: txtColor, font: { size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 20 },
+            grid: { display: false }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: txtColor, font: { size: 11 }, padding: 10, usePointStyle: true }
+          },
+          tooltip: { enabled: true, mode: 'index', intersect: false }
+        }
+      }
+    });
+  }
+
+  // -------- update loop --------
+  async function tick() {
+    try {
+      const [state, history, tokens] = await Promise.all([
+        fetchState(),
+        fetchPoolHistory(),
+        api('/tokens/analytics').catch(() => null),
+      ]);
+      document.getElementById('curLevel').textContent = state.level ?? '—';
+      document.getElementById('curDay').textContent = state.dailyRng?.day ?? '—';
+      document.getElementById('lastPoll').textContent = nowIso();
+      // Live stats bar — always reflects the latest /game/state.
+      const pp = state.prizePools || {};
+      document.getElementById('livNext').textContent    = fmtEth(pp.nextPrizePool).toFixed(4);
+      document.getElementById('livFuture').textContent  = fmtEth(pp.futurePrizePool).toFixed(4);
+      document.getElementById('livCurrent').textContent = fmtEth(pp.currentPrizePool).toFixed(4);
+      document.getElementById('livClaim').textContent   = fmtEth(pp.claimableWinnings).toFixed(4);
+      document.getElementById('livPhase').textContent   = state.phase ?? '—';
+      document.getElementById('liveStatsBar').style.display = 'flex';
+
+      // Vault stETH (live) — for the current-day yield extrapolation in the chart.
+      const liveStEth = tokens?.vault?.stEthReserve ?? '0';
+      document.getElementById('livYield').textContent = fmtEth(liveStEth).toFixed(4);
+
+      // Append the in-flight current day so the chart's last point tracks live.
+      const snaps = appendLiveDay(history, state, liveStEth);
+
+      document.getElementById('daysPlotted').textContent = snaps.length;
+      document.getElementById('emptyMsg').style.display = snaps.length === 0 ? 'block' : 'none';
+      if (snaps.length > 0) buildChart(snaps);
+      setStatus('ok', 'live');
+    } catch (e) {
+      setStatus('err', `api error: ${e.message}`);
+    }
+  }
+
+  // -------- wire up --------
+  document.getElementById('refreshBtn').addEventListener('click', tick);
+  // Reset has no client-side cache to clear anymore; keep the button as a hard refresh.
+  document.getElementById('resetBtn').addEventListener('click', () => location.reload());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !pollTimer) {
+      pollTimer = setInterval(tick, POLL_MS); tick();
+    } else if (document.visibilityState !== 'visible' && pollTimer) {
+      clearInterval(pollTimer); pollTimer = null;
+    }
+  });
+
+  (async () => {
+    setStatus('', 'connecting…');
+    await loadDeployment();
+    pollTimer = setInterval(tick, POLL_MS);
+    await tick();
+  })();
+})();
+</script>
+</body>
+</html>

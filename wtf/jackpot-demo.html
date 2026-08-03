@@ -331,7 +331,7 @@
         <canvas class="demo-scratch-canvas" data-q="3"></canvas>
       </div>
       <div class="demo-center" id="demo-center">
-        <img src="/specials/special_none.svg" alt="Flame" class="demo-flame" />
+        <img src="../specials/special_none.svg" alt="Flame" class="demo-flame" />
         <div class="demo-center-prize" id="demo-center-prize"></div>
         <canvas class="demo-center-canvas" id="demo-center-canvas"></canvas>
       </div>
@@ -491,7 +491,7 @@
         [2, 'tickets', 2, 6]
       ],
       centerWins: [
-        [820, 'burnie', -2, 12]
+        [820, 'flip', -2, 12]
       ]
     },
     {
@@ -572,11 +572,32 @@
   function badgePath(q, sym, col) {
     var cat = CATEGORIES[q];
     var idx = cat === 'cards' ? CARD_IDX[sym] : sym;
-    return '/badges-circular/' + cat + '_0' + idx + '_' + SYMBOLS[cat][sym] + '_' + COLORS[col] + '.svg';
+    return '../badges-circular/' + cat + '_0' + idx + '_' + SYMBOLS[cat][sym] + '_' + COLORS[col] + '.svg';
   }
 
-  function randomTrait() {
+  // Per-quadrant pool of {sym, col} pairs the player actually owns. When
+  // populated by the host via setScenarios.playerTraitPool, the spin
+  // background samples from it so reels show the player's real trait set
+  // (filtered to that quadrant) instead of uniformly-random badges.
+  var playerTraitPool = null;
+  function randomTrait(q) {
+    if (playerTraitPool && q != null && Array.isArray(playerTraitPool[q]) && playerTraitPool[q].length > 0) {
+      var pool = playerTraitPool[q];
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
     return { sym: Math.floor(Math.random() * 8), col: Math.floor(Math.random() * 8) };
+  }
+  // The spin cycles uniformly through all 64 possibilities per quadrant
+  // (8 symbols × 8 colors). Locked attributes pin one axis: a hero-locked
+  // symbol shows that symbol cycling through all 8 colors; a locked color
+  // shows that color cycling through all 8 symbols. The player's owned-
+  // traits pool intentionally doesn't bias the spin — the user sees the
+  // FULL possibility space, not just their inventory.
+  function pickSpinTrait(q, forcedSym, forcedCol) {
+    return {
+      sym: forcedSym != null ? forcedSym : Math.floor(Math.random() * 8),
+      col: forcedCol != null ? forcedCol : Math.floor(Math.random() * 8),
+    };
   }
 
   // ---- Sound effects (Web Audio) ----
@@ -757,10 +778,10 @@
 
   // ---- Prize display ----
   function formatWin(amount, type) {
-    if (type === 'burnie') {
-      if (amount >= 1000) return Math.round(amount).toLocaleString() + ' BURNIE';
-      if (amount >= 1) return amount.toFixed(2).replace(/\.?0+$/, '') + ' BURNIE';
-      return amount.toFixed(4).replace(/\.?0+$/, '') + ' BURNIE';
+    if (type === 'flip') {
+      if (amount >= 1000) return Math.round(amount).toLocaleString() + ' FLIP';
+      if (amount >= 1) return amount.toFixed(2).replace(/\.?0+$/, '') + ' FLIP';
+      return amount.toFixed(4).replace(/\.?0+$/, '') + ' FLIP';
     }
     if (type === 'tickets') return amount + ' ticket' + (amount !== 1 ? 's' : '');
     var s;
@@ -785,7 +806,7 @@
     }
     var lines = [];
     if (totals.eth) lines.push(formatWin(totals.eth, 'eth'));
-    if (totals.burnie) lines.push(formatWin(totals.burnie, 'burnie'));
+    if (totals.flip) lines.push(formatWin(totals.flip, 'flip'));
     var lvKeys = Object.keys(ticketsByLevel).sort(function (a, b) { return a - b; });
     if (lvKeys.length > 0) {
       for (var li = 0; li < lvKeys.length; li++) {
@@ -1050,7 +1071,7 @@
       ctx.drawImage(img, (w - drawW) / 2, (h - drawH) / 2, drawW, drawH);
       ctx.filter = 'none';
     };
-    img.src = '/specials/special_none.svg';
+    img.src = '../specials/special_none.svg';
     canvas.style.display = 'block';
   }
 
@@ -1069,13 +1090,13 @@
       canvas.style.pointerEvents = 'none';
     }
     if (prize) {
-      var totalBurnie = 0;
+      var totalFlip = 0;
       var levels = [];
       for (var i = 0; i < centerWins.length; i++) {
-        totalBurnie += centerWins[i][0];
+        totalFlip += centerWins[i][0];
         if (centerWins[i].length > 3 && levels.indexOf(centerWins[i][3]) === -1) levels.push(centerWins[i][3]);
       }
-      var amountStr = formatWin(totalBurnie, 'burnie');
+      var amountStr = formatWin(totalFlip, 'flip');
       var levelStr = levels.length > 0 ? 'L' + levels.sort(function (a, b) { return a - b; }).join(', L') : 'Far Future';
       prize.innerHTML = '<span class="ff-amount">' + amountStr + '</span><span class="ff-label">' + levelStr + '</span>';
       prize.style.display = 'block';
@@ -1225,6 +1246,11 @@
     var myId = ++animId;
     spinning = true;
     $('demo-next-btn').disabled = true;
+    // Notify parent so sibling widgets (e.g. the coinflip animation) can
+    // sync their start to the jackpot spin. Safe no-op when standalone.
+    if (window.parent !== window) {
+      try { window.parent.postMessage({ type: 'jackpotSpinStart' }, '*'); } catch (_) {}
+    }
     var target = scenario.target;
     var lockedColors = [false, false, false, false];
     var lockedSymbols = [false, false, false, false];
@@ -1275,12 +1301,10 @@
       sfxTick(locksDone);
       var display = [];
       for (var i = 0; i < 4; i++) {
-        var r = randomTrait();
-        display.push({
-          q: i,
-          sym: lockedSymbols[i] ? target[i].sym : r.sym,
-          col: lockedColors[i] ? target[i].col : r.col
-        });
+        var forcedSym = lockedSymbols[i] ? target[i].sym : null;
+        var forcedCol = lockedColors[i] ? target[i].col : null;
+        var picked = pickSpinTrait(i, forcedSym, forcedCol);
+        display.push({ q: i, sym: picked.sym, col: picked.col });
       }
       renderBadges(display);
       for (var i = 0; i < 4; i++) {
@@ -1292,10 +1316,15 @@
         }
       }
       if (idleCount <= 0 && locksDone < totalLocks) {
+        // All 8 (quadrant, attribute) slots compete equally for the next
+        // lock — color or symbol from any quadrant can fire next, so the
+        // spin unfolds in a fully randomized order like the degenerette
+        // widget. (Was previously color-first-everywhere then symbol-first;
+        // colors always locked before symbols which felt scripted.)
         var available = [];
         for (var q = 0; q < 4; q++) {
-          if (!lockedColors[q]) available.push({ q: q, type: 'color' });
-          else if (!lockedSymbols[q]) available.push({ q: q, type: 'symbol' });
+          if (!lockedColors[q])  available.push({ q: q, type: 'color' });
+          if (!lockedSymbols[q]) available.push({ q: q, type: 'symbol' });
         }
         if (available.length > 0) {
           var pick = available[Math.floor(Math.random() * available.length)];
@@ -1330,6 +1359,9 @@
     var flameCenter = $('demo-center');
     if (flameCenter) flameCenter.classList.remove('spinning');
     spinning = false;
+    if (window.parent !== window) {
+      try { window.parent.postMessage({ type: 'jackpotSpinEnd' }, '*'); } catch (_) {}
+    }
     $('demo-scenario').textContent = scenario.desc;
 
     if (!hasTickets) {
@@ -1389,6 +1421,65 @@
     $('demo-title').textContent = scenario.title;
     $('demo-scenario').textContent = '';
     animate(scenario);
+  }
+
+  // PoC hook: accept scenario overrides via postMessage from a parent page
+  // (used by /_sketch/jackpot-live.html to inject real per-player data).
+  window.addEventListener('message', function (ev) {
+    if (!ev.data || typeof ev.data !== 'object') return;
+    if (ev.data.type !== 'setScenarios') return;
+    // Accept the trait pool independently of scenarios — a host may push a
+    // pool for the freshly-selected player even when scenarios are unchanged.
+    if (Array.isArray(ev.data.playerTraitPool) && ev.data.playerTraitPool.length === 4) {
+      playerTraitPool = ev.data.playerTraitPool;
+    } else if (ev.data.playerTraitPool === null) {
+      playerTraitPool = null;
+    }
+    if (!Array.isArray(ev.data.scenarios) || ev.data.scenarios.length === 0) return;
+    SCENARIOS.length = 0;
+    for (var si = 0; si < ev.data.scenarios.length; si++) SCENARIOS.push(ev.data.scenarios[si]);
+    currentDay = 0;
+    $('demo-title').textContent = SCENARIOS[0].title || 'Daily Jackpot Draw';
+    $('demo-scenario').textContent = SCENARIOS[0].desc || 'Press Next Day to draw.';
+    $('demo-next-btn').textContent = SCENARIOS.length > 1 ? 'Spin →' : 'Spin →';
+    $('demo-next-btn').disabled = false;
+  });
+  // When running inside a parent (e.g. _sketch/app-compact embed), drop the
+  // built-in 8-day demo scenarios and disable the Spin button until the parent
+  // sends real per-day setScenarios data. Standalone viewing of this page (no
+  // parent) keeps the demo deck so the page is still browseable on its own.
+  // Explainer pages embed this as a self-contained toy with no live data feed:
+  // they pass ?demo=1 to keep the built-in deck instead of waiting for a host
+  // that will never answer the jackpotDemoReady ping.
+  var wantsBuiltinDeck = /[?&]demo=1(?:&|$)/.test(window.location.search);
+  if (window.parent !== window && !wantsBuiltinDeck) {
+    SCENARIOS.length = 0;
+    SCENARIOS.push({
+      title: 'Loading last jackpot…',
+      desc: 'Fetching indexed results.',
+      degenWinCenter: false,
+      target: [{q:0,sym:0,col:0},{q:1,sym:0,col:0},{q:2,sym:0,col:0},{q:3,sym:0,col:0}],
+      owned: [false, false, false, false],
+      prizes: [],
+      centerWins: []
+    });
+    $('demo-title').textContent = SCENARIOS[0].title;
+    $('demo-scenario').textContent = SCENARIOS[0].desc;
+    $('demo-next-btn').disabled = true;
+    // Announce readiness repeatedly until the parent acks via setScenarios.
+    // The parent's `message` listener lives in a deferred module script and
+    // may not be attached the first time we fire — without this retry loop,
+    // the first ready signal can be lost and the iframe sits silent forever.
+    var readyAttempts = 0;
+    var announceReady = function () {
+      if (readyAttempts++ > 30) return;  // ~3s of retries
+      window.parent.postMessage({ type: 'jackpotDemoReady' }, '*');
+      setTimeout(announceReady, 100);
+    };
+    window.addEventListener('message', function (ev) {
+      if (ev.data?.type === 'setScenarios') readyAttempts = 999;
+    });
+    announceReady();
   }
 
   // Wire up events

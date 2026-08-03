@@ -266,22 +266,46 @@ class ProfilePanel extends HTMLElement {
 
   #renderQuestSlots(quests) {
     const slots = this.querySelectorAll('.quest-slot');
+    // For a day-filtered fetch (?day=N), the API may return multiple
+    // quest_progress rows per slot (one per progress update on that day).
+    // Pick the LATEST per slot by preferring completed rows, then highest
+    // numeric progress. Falls back to last-in-array when ties.
+    const list = Array.isArray(quests) ? quests : [];
+    const pickLatestForSlot = (slotIdx) => {
+      const matches = list.filter((q) => q && q.slot === slotIdx);
+      if (matches.length === 0) return null;
+      return matches.reduce((best, q) => {
+        if (!best) return q;
+        if (q.completed && !best.completed) return q;
+        if (!q.completed && best.completed) return best;
+        // Compare progress as BigInt (values may exceed Number range).
+        try {
+          const bp = BigInt(best.progress ?? '0');
+          const qp = BigInt(q.progress ?? '0');
+          if (qp >= bp) return q;
+        } catch {
+          // fall through
+        }
+        return best;
+      }, null);
+    };
     for (let i = 0; i < 2; i++) {
       const slotEl = slots[i];
       if (!slotEl) continue;
-      const row = Array.isArray(quests) ? quests.find((q) => q.slot === i) : null;
+      const row = pickLatestForSlot(i);
       const info = getQuestProgress(row);
       const typeEl = slotEl.querySelector('.quest-type');
       const fillEl = slotEl.querySelector('.quest-progress-fill');
       const targetEl = slotEl.querySelector('.quest-target');
+      const labelPrefix = i === 0 ? 'Primary: ' : 'Secondary: ';
       if (!info) {
-        if (typeEl) typeEl.textContent = '--';
+        if (typeEl) typeEl.textContent = labelPrefix + '--';
         if (fillEl) fillEl.style.width = '0%';
         if (targetEl) targetEl.textContent = '--';
         slotEl.classList.remove('completed');
         continue;
       }
-      if (typeEl) typeEl.textContent = (i === 0 ? 'Primary: ' : '') + info.type;
+      if (typeEl) typeEl.textContent = labelPrefix + info.type;
       if (fillEl) fillEl.style.width = Math.round(info.progress) + '%';
       if (targetEl) targetEl.textContent = info.completed ? 'Complete' : info.target;
       if (info.completed) slotEl.classList.add('completed');
@@ -304,6 +328,33 @@ class ProfilePanel extends HTMLElement {
     this.#renderStreak(data?.questStreak);
     this.#renderQuestSlots(data?.quests);
     this.#renderDailyActivity(data?.dailyActivity);
+    this.#renderHistoricalNote(!!data?.historicalUnavailable);
+  }
+
+  #renderHistoricalNote(historicalUnavailable) {
+    const scoreEl = this.querySelector('[data-bind="score"]');
+    if (!scoreEl) return;
+    if (historicalUnavailable) {
+      scoreEl.setAttribute('title', 'Showing current score (historical breakdown unavailable for past days)');
+      scoreEl.classList.add('score-current-only');
+    } else {
+      scoreEl.removeAttribute('title');
+      scoreEl.classList.remove('score-current-only');
+    }
+    // Update popover with a top-level note when historical is unavailable.
+    const pop = this.querySelector('[data-bind="popover"]');
+    if (!pop) return;
+    let noteEl = pop.querySelector('.popover-note');
+    if (historicalUnavailable) {
+      if (!noteEl) {
+        noteEl = document.createElement('div');
+        noteEl.className = 'popover-note';
+        noteEl.textContent = 'Historical breakdown unavailable for past days. Showing current totals only.';
+        pop.insertBefore(noteEl, pop.firstChild);
+      }
+    } else if (noteEl) {
+      noteEl.remove();
+    }
   }
 
   // Defined for Wave 2 to call on 404/500. Wave 1 does not invoke.
@@ -340,18 +391,38 @@ class ProfilePanel extends HTMLElement {
     }
 
     try {
-      const res = await fetch(
-        `${API_BASE}/player/${addr}?day=${encodeURIComponent(day)}`,
-      );
+      // Parallel fetch: profile data + raw activity score. The activity-score
+      // endpoint returns scoreBps even when historical breakdown is
+      // unavailable for past days (player endpoint returns scoreBreakdown:null
+      // in that case). Use it as a fallback so the score field always shows
+      // a number when the player exists.
+      const [profileRes, scoreRes] = await Promise.all([
+        fetch(`${API_BASE}/player/${addr}?day=${encodeURIComponent(day)}`),
+        fetch(`${API_BASE}/player/${addr}/activity-score?day=${encodeURIComponent(day)}`).catch(() => null),
+      ]);
       if (token !== this.#profileFetchId) return;
-      if (!res.ok) {
-        this.#renderError(res.status);
+      if (!profileRes.ok) {
+        this.#renderError(profileRes.status);
         this.#showContent();
         this.querySelector('[data-bind="content"]')?.classList.remove('is-stale');
         return;
       }
-      const data = await res.json();
+      const data = await profileRes.json();
       if (token !== this.#profileFetchId) return;
+
+      // Fallback score injection: if the breakdown is missing but
+      // activity-score returned a number, synthesize a minimal breakdown
+      // so #renderScore at least populates the totalBps display.
+      if ((!data.scoreBreakdown || data.scoreBreakdown.totalBps == null)
+          && scoreRes && scoreRes.ok) {
+        try {
+          const scoreData = await scoreRes.json();
+          if (scoreData && scoreData.scoreBps != null) {
+            data.scoreBreakdown = { totalBps: Number(scoreData.scoreBps) };
+          }
+        } catch {}
+      }
+
       this.#renderAll(data);
       this.#showContent();
       this.querySelector('[data-bind="content"]')?.classList.remove('is-stale');
@@ -364,13 +435,14 @@ class ProfilePanel extends HTMLElement {
     }
   }
 
-  // Popover accessibility (D-05): tap on mobile AND hover on desktop both
-  // open the popover. ESC + outside-click close. Uses AbortController so
-  // disconnectedCallback can drop all listeners cleanly.
+  // Popover accessibility (D-05): hover ANYWHERE on the score row OR click
+  // the info button to open. ESC + outside-click close. Uses AbortController
+  // so disconnectedCallback can drop all listeners cleanly.
   #bindPopover() {
     const btn = this.querySelector('[data-bind="info-btn"]');
     const pop = this.querySelector('[data-bind="popover"]');
-    if (!btn || !pop) return;
+    const row = this.querySelector('.score-row');
+    if (!btn || !pop || !row) return;
     this.#popoverAbort = new AbortController();
     const { signal } = this.#popoverAbort;
 
@@ -384,20 +456,21 @@ class ProfilePanel extends HTMLElement {
     };
     const toggle = () => (pop.hidden ? open() : close());
 
-    // Tap / click (mobile + desktop click)
-    btn.addEventListener('click', toggle, { signal });
-
-    // Hover for mouse only; pointerType filters out touch pointers which
-    // already fire click via browser default.
-    btn.addEventListener('pointerenter', (e) => {
+    // Hover anywhere on the score row (mouse only; touch uses click).
+    row.addEventListener('pointerenter', (e) => {
       if (e.pointerType === 'mouse') open();
     }, { signal });
-    btn.addEventListener('pointerleave', (e) => {
-      if (e.pointerType === 'mouse') close();
+    row.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'mouse' && !pop.matches(':hover')) close();
     }, { signal });
 
-    // Keyboard: focus opens (so Tab-to-button reveals); ESC closes and
-    // returns focus to the button.
+    // Click the "i" button (mobile tap + desktop click).
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggle();
+    }, { signal });
+
+    // Keyboard: focus opens (so Tab reveals); ESC closes.
     btn.addEventListener('focus', () => open(), { signal });
     btn.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') close();
@@ -406,7 +479,7 @@ class ProfilePanel extends HTMLElement {
       if (e.key === 'Escape') { close(); btn.focus(); }
     }, { signal });
 
-    // Outside-click dismiss (D-05 mobile tap-outside).
+    // Outside-click dismiss.
     document.addEventListener('click', (e) => {
       if (pop.hidden) return;
       if (!this.contains(e.target)) close();

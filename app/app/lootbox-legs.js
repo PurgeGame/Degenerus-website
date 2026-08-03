@@ -24,8 +24,10 @@
 // packedSpins decode mirrors database/src/handlers/box-spins.ts bit-for-bit.
 
 import { ethers, getProvider } from './contracts.js';
-import { CONTRACTS } from './chain-config.js';
+import { CHAIN, CONTRACTS } from './chain-config.js';
 import { dgnUnpackTicket } from './dgn-traits.js';
+import { decodePackedBoons } from './boons.js';
+import { readExactBoonState } from './polling.js';
 
 // Minimal open-receipt event ABI — parse-only (no writes here; openLootBox
 // lives in lootbox.js).
@@ -34,6 +36,7 @@ export const OPEN_EVENTS_ABI = [
   'event LootBoxDgnrsReward(address indexed player, uint256 lootboxAmount, uint256 dgnrsAmount)',
   'event LootBoxWhalePassJackpot(address indexed player, uint256 lootboxAmount, uint24 targetLevel, uint32 entriesPerLevel, uint24 statsBoost, uint24 frozenUntilLevel)',
   'event LootBoxReward(address indexed player, uint8 indexed rewardType, uint256 lootboxAmount, uint256 amount)',
+  'event PresaleBoxOpened(address indexed player, uint48 indexed index, uint256 amount, uint256 flip, uint256 dgnrs, uint256 wwxrp, bool closing)',
   'event BoxSpin(address indexed player, uint64 betId, uint256 packedSpins, uint256 payout, uint256 ethShare)',
 ];
 
@@ -43,7 +46,9 @@ const COUNT_SHIFT = 216n;
 const SURVIVED_SHIFT = 224n;
 const U32 = 0xFFFFFFFFn;
 
-// LootBoxReward rewardType → display label (contract NatSpec, LootboxModule:131).
+// LootBoxReward rewardType → display label (contract NatSpec, LootboxModule:128).
+// Unknown IDs deliberately stay visibly unknown; calling one a "bonus reward"
+// made the reveal look like a boon the protocol does not define.
 export const REWARD_TYPE_LABELS = Object.freeze({
   2: 'Coinflip boon',
   4: '+5% boost',
@@ -51,9 +56,161 @@ export const REWARD_TYPE_LABELS = Object.freeze({
   6: '+25% boost',
   8: 'Decimator boost',
   9: 'Whale boon',
-  10: 'Activity boon',
-  11: 'Lazy pass',
+  10: 'Activity / deity pass boon',
+  11: 'Lazy pass discount boon',
+  12: 'Quest streak shield',
 });
+
+export function rewardTypeLabel(rewardType) {
+  const type = Number(rewardType);
+  return REWARD_TYPE_LABELS[type]
+    || `Unknown protocol reward${Number.isInteger(type) && type > 0 ? ` #${type}` : ''}`;
+}
+
+function _rewardAmount(raw) {
+  try { return BigInt(raw ?? 0); }
+  catch (_e) { return 0n; }
+}
+
+function _bpsPercent(raw, fallback = null) {
+  const amount = _rewardAmount(raw);
+  if (amount > 0n && amount <= 10_000n) {
+    const tenths = Number(amount / 10n);
+    return tenths % 10 === 0 ? String(tenths / 10) : (tenths / 10).toFixed(1);
+  }
+  return fallback == null ? null : String(fallback);
+}
+
+/**
+ * Turn the compact LootBoxReward event into useful player-facing copy.
+ * Types 4/5/6 intentionally combine the two purchase-boost categories because
+ * the deployed event records strength, but not whether the draw landed in the
+ * lootbox or ETH-ticket field. Everything else can be named exactly from its
+ * type + amount.
+ */
+export function lootboxRewardPresentation(rewardType, amount, { boonBps = null } = {}) {
+  const type = Number(rewardType);
+  if (type === 2) {
+    const exactPct = _bpsPercent(boonBps)
+      // Future event versions may emit the tier's BPS directly. The current
+      // deployment emits a 5,000-FLIP value cap, which is intentionally too
+      // large for _bpsPercent and therefore cannot masquerade as 50%.
+      ?? _bpsPercent(amount);
+    return {
+      label: 'COINFLIP BOON',
+      value: exactPct == null ? 'BOOST' : `+${exactPct}%`,
+      detail: exactPct == null
+        ? 'Boosts your next manual Coinflip deposit, calculated on up to 100K FLIP'
+        : `Your next manual Coinflip deposit gets +${exactPct}%, calculated on up to 100K FLIP`,
+    };
+  }
+  if (type >= 4 && type <= 6) {
+    const pct = _bpsPercent(amount, ({ 4: 5, 5: 15, 6: 25 })[type]);
+    return {
+      label: 'PURCHASE BOOST',
+      value: `+${pct}%`,
+      detail: `Applies to your next Lootbox or ETH Ticket purchase; the affected Buy button shows the +${pct}% BOON badge`,
+    };
+  }
+  if (type === 8) {
+    const pct = _bpsPercent(amount);
+    return {
+      label: 'DECIMATOR BOON',
+      value: pct == null ? 'BOOST' : `+${pct}%`,
+      detail: pct == null
+        ? 'Boosts the entry weight of your next Decimator FLIP burn'
+        : `Adds +${pct}% entry weight to your next Decimator burn, calculated on up to 50K FLIP`,
+    };
+  }
+  if (type === 9) {
+    const pct = _bpsPercent(amount);
+    return {
+      label: 'WHALE PASS DISCOUNT',
+      value: pct == null ? 'DISCOUNT' : `−${pct}%`,
+      detail: pct == null
+        ? 'Your next whale pass purchase costs less'
+        : `Your next whale pass purchase costs ${pct}% less`,
+    };
+  }
+  if (type === 10) {
+    const raw = _rewardAmount(amount);
+    if (raw > 0n && raw < 100n) {
+      return {
+        label: 'DEGEN SCORE BOON',
+        value: `+${raw}`,
+        detail: `Your next lootbox opening adds ${raw} Degen Score and +${raw} quest streak`,
+      };
+    }
+    const pct = _bpsPercent(raw);
+    return {
+      label: 'DEITY PASS DISCOUNT',
+      value: pct == null ? 'DISCOUNT' : `−${pct}%`,
+      detail: pct == null
+        ? 'Your deity pass purchase costs less'
+        : `Your deity pass purchase costs ${pct}% less`,
+    };
+  }
+  if (type === 11) {
+    const pct = _bpsPercent(amount);
+    return {
+      label: 'LAZY PASS DISCOUNT',
+      value: pct == null ? 'DISCOUNT' : `−${pct}%`,
+      detail: pct == null
+        ? 'Your next lazy pass purchase costs less'
+        : `Your next lazy pass purchase costs ${pct}% less`,
+    };
+  }
+  if (type === 12) {
+    const count = _rewardAmount(amount) || 1n;
+    return {
+      label: 'QUEST STREAK PROTECTION',
+      value: `${count} MISSED DAY${count === 1n ? '' : 'S'}`,
+      detail: `Forgives ${count === 1n ? 'one' : count} missed quest day${count === 1n ? '' : 's'} before your streak can reset`,
+    };
+  }
+  return {
+    label: rewardTypeLabel(type).toUpperCase(),
+    value: '?',
+    detail: 'Unrecognized on-chain reward type',
+  };
+}
+
+const COINFLIP_BOON_BPS = Object.freeze({ 1: 500, 2: 1_000, 3: 2_500 });
+
+/**
+ * The deployed LootBoxReward(type=2) event identifies the coinflip-boon
+ * category but emits its maximum FLIP value, not the selected 5/10/25% tier.
+ * Read the post-settlement packed boon state (at the receipt block when known)
+ * and attach the exact effective BPS to that reward leg before presentation.
+ * A failed optional read leaves the honest non-numeric BOOST label in place.
+ */
+export async function enrichLootboxBoonLegs(legs, {
+  player,
+  blockNumber = null,
+} = {}) {
+  const rows = Array.isArray(legs) ? legs : [];
+  if (!player || !rows.some((leg) => (
+    leg?.legType === 'reward' && Number(leg?.rewardType) === 2
+  ))) return rows;
+  let exact;
+  try {
+    exact = await readExactBoonState(player, { blockTag: blockNumber });
+  } catch (_e) {
+    return rows;
+  }
+  const active = decodePackedBoons(
+    exact?.slot0,
+    exact?.slot1,
+    exact?.currentDay,
+  ).find((boon) => Number(boon?.boonType) >= 1 && Number(boon?.boonType) <= 3);
+  const boonBps = COINFLIP_BOON_BPS[Number(active?.boonType)] || null;
+  if (boonBps == null) return rows;
+  return rows.map((leg) => (
+    leg?.legType === 'reward' && Number(leg?.rewardType) === 2
+      ? { ...leg, boonType: Number(active.boonType), boonBps }
+      : leg
+  ));
+}
 
 /**
  * Decode a BoxSpin packedSpins word into reels (indexer-parity).
@@ -130,6 +287,7 @@ export function __resetForTest() { _ifaceCache = null; }
 export function parseOpenLegsFromReceipt(receipt, playerFilter) {
   const out = [];
   if (!receipt || !Array.isArray(receipt.logs)) return out;
+  const receiptHash = String(receipt.hash || receipt.transactionHash || '').toLowerCase();
   const iface = _iface();
   const gameAddr = String(CONTRACTS.GAME || '').toLowerCase();
   const want = playerFilter ? String(playerFilter).toLowerCase() : null;
@@ -146,6 +304,7 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
           const roundedUp = Boolean(parsed.args.roundedUp);
           out.push({
             legType: 'opened',
+            transactionHash: String(log.transactionHash || receiptHash || '').toLowerCase() || null,
             lootboxIndex: BigInt(parsed.args.lootboxIndex),
             amount: BigInt(parsed.args.amount),
             futureLevel: Number(parsed.args.futureLevel),
@@ -169,9 +328,32 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
           out.push({
             legType: 'reward',
             rewardType,
-            label: REWARD_TYPE_LABELS[rewardType] || 'Bonus reward',
+            label: rewardTypeLabel(rewardType),
             amount: BigInt(parsed.args.amount),
           });
+          break;
+        }
+        case 'PresaleBoxOpened': {
+          // Normalize the presale result into the same prize-leg vocabulary as
+          // the historical indexer feed: an opened anchor plus the independently
+          // displayable DGNRS / WWXRP legs.
+          out.push({
+            legType: 'opened',
+            source: 'presale',
+            transactionHash: String(log.transactionHash || receiptHash || '').toLowerCase() || null,
+            lootboxIndex: BigInt(parsed.args.index),
+            amount: BigInt(parsed.args.amount),
+            futureLevel: 0,
+            wholeTickets: 0,
+            flip: BigInt(parsed.args.flip),
+            closing: Boolean(parsed.args.closing),
+          });
+          if (BigInt(parsed.args.dgnrs) > 0n) {
+            out.push({ legType: 'dgnrs', amount: BigInt(parsed.args.dgnrs) });
+          }
+          if (BigInt(parsed.args.wwxrp) > 0n) {
+            out.push({ legType: 'wwxrp', amount: BigInt(parsed.args.wwxrp) });
+          }
           break;
         }
         case 'BoxSpin': {
@@ -196,6 +378,73 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
 
 function _feedBigInt(value) {
   try { return BigInt(value ?? 0); } catch (_e) { return 0n; }
+}
+
+/**
+ * Degenerette's feed embeds the lootbox settlement events emitted in the same
+ * resolve transaction. Rebuild those raw indexer rows into the exact prize-leg
+ * vocabulary used by a normal lootbox receipt, preserving event order.
+ */
+export function openLegsFromDegenerettePayouts(items) {
+  const out = [];
+  for (const item of Array.isArray(items) ? items : []) {
+    const type = String(item?.rewardType || item?.legType || '');
+    const data = item?.rewardData || item?.spin || {};
+    if (type === 'opened' || type === 'LootBoxOpened') {
+      out.push({
+        legType: 'opened',
+        transactionHash: String(item?.transactionHash || data.transactionHash || '').toLowerCase() || null,
+        // Direct Degenerette boxes are already settled and intentionally use
+        // index zero; this index is presentation context, not an open action.
+        lootboxIndex: _feedBigInt(item?.lootboxIndex ?? data.lootboxIndex ?? 0),
+        amount: _feedBigInt(data.amount ?? item?.boxAmountRawWei),
+        futureLevel: Number(data.futureLevel ?? item?.levelAtOpen ?? 0),
+        wholeTickets: wholeTicketsFromOpened(
+          Number(data.futureTickets ?? 0),
+          Boolean(data.roundedUp),
+        ),
+        flip: _feedBigInt(data.flip),
+      });
+    } else if (type === 'LootBoxDgnrsReward' || type === 'dgnrs') {
+      out.push({ legType: 'dgnrs', amount: _feedBigInt(data.dgnrsAmount ?? data.amount) });
+    } else if (type === 'LootBoxWhalePassJackpot' || type === 'whalepass') {
+      out.push({
+        legType: 'whalepass',
+        targetLevel: Number(data.targetLevel ?? item?.levelAtOpen ?? 0),
+        entriesPerLevel: Number(data.entriesPerLevel ?? 0),
+      });
+    } else if (type === 'LootBoxReward' || type === 'reward') {
+      const rewardType = Number(data.rewardType ?? data.type ?? 0);
+      out.push({
+        legType: 'reward',
+        rewardType,
+        label: rewardTypeLabel(rewardType),
+        amount: _feedBigInt(data.amount),
+      });
+    } else if (type === 'BoxSpin' || type === 'spin') {
+      if (data.packedSpins != null && data.betId != null) {
+        const decoded = decodeBoxSpin(_feedBigInt(data.betId), _feedBigInt(data.packedSpins));
+        out.push({
+          legType: 'spin',
+          ...decoded,
+          payout: _feedBigInt(data.payout),
+          ethShare: _feedBigInt(data.ethShare),
+        });
+      } else if (Array.isArray(data.reels)) {
+        out.push({
+          legType: 'spin',
+          boxOrigin: true,
+          spinType: String(data.spinType || ''),
+          spinCount: Number(data.spinCount ?? data.reels.length),
+          survived: data.survived == null ? null : Boolean(data.survived),
+          payout: _feedBigInt(data.payout),
+          ethShare: _feedBigInt(data.ethShare),
+          reels: data.reels,
+        });
+      }
+    }
+  }
+  return out;
 }
 
 /**
@@ -296,7 +545,7 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
         out.push({
           legType: 'reward',
           rewardType,
-          label: REWARD_TYPE_LABELS[rewardType] || 'Bonus reward',
+          label: rewardTypeLabel(rewardType),
           amount: _feedBigInt(data.amount),
         });
         break;
@@ -354,9 +603,11 @@ export async function readOpenLegsFromChain({ player, lootboxIndex } = {}) {
   catch (_e) { return []; }
   if (!Number.isFinite(head) || head < 0) return [];
 
-  let topics;
+  let topicSets;
   try {
-    topics = _iface().encodeFilterTopics(_iface().getEvent('LootBoxOpened'), [player, index]);
+    topicSets = ['LootBoxOpened', 'PresaleBoxOpened'].map((name) => (
+      _iface().encodeFilterTopics(_iface().getEvent(name), [player, index])
+    ));
   } catch (_e) {
     return [];
   }
@@ -364,15 +615,20 @@ export async function readOpenLegsFromChain({ player, lootboxIndex } = {}) {
   for (let i = 0; i < REPLAY_LOG_CHUNK_LIMIT; i += 1) {
     const toBlock = head - i * REPLAY_LOG_CHUNK_BLOCKS;
     if (toBlock < 0) break;
-    const fromBlock = Math.max(0, toBlock - REPLAY_LOG_CHUNK_BLOCKS + 1);
+    const deployBlock = Number(CHAIN.deployBlock || 0);
+    const fromBlock = Math.max(deployBlock, toBlock - REPLAY_LOG_CHUNK_BLOCKS + 1);
     let logs;
     try {
-      logs = await provider.getLogs({
-        address: CONTRACTS.GAME,
-        topics,
-        fromBlock,
-        toBlock,
-      });
+      const groups = await Promise.all(topicSets.map((topics) => provider.getLogs({
+          address: CONTRACTS.GAME,
+          topics,
+          fromBlock,
+          toBlock,
+        })));
+      logs = groups.flat().sort((a, b) => (
+        Number(a?.blockNumber ?? 0) - Number(b?.blockNumber ?? 0)
+        || Number(a?.index ?? a?.logIndex ?? 0) - Number(b?.index ?? b?.logIndex ?? 0)
+      ));
     } catch (_e) {
       return [];
     }
@@ -386,7 +642,7 @@ export async function readOpenLegsFromChain({ player, lootboxIndex } = {}) {
         return [];
       }
     }
-    if (fromBlock === 0) break;
+    if (fromBlock === deployBlock) break;
   }
   return [];
 }

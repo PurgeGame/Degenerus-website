@@ -65,3 +65,25 @@ export function bestGrade(lineTraits, mainSet, bonusSet) {
   }
   return { ...bonus, drawKind: 1 };
 }
+
+/**
+ * Return every independently claimable draw tuple for one foil line.
+ *
+ * The contract's replay marker includes drawKind, so a line that reaches T4+
+ * against both the main and bonus sets owns two claims. `bestGrade` remains the
+ * display helper for callers that need one headline result; transaction queues
+ * must use this function so the lower of two real wins is never discarded.
+ */
+export function claimableDrawGrades(lineTraits, mainSet, bonusSet) {
+  const draws = [
+    { drawKind: 0, packedSet: mainSet },
+    { drawKind: 1, packedSet: bonusSet },
+  ];
+  return draws.flatMap(({ drawKind, packedSet }) => {
+    if (packedSet == null) return [];
+    const grade = gradeLine(lineTraits, packedSet);
+    return grade.score >= FOIL_CLAIM_THRESHOLD
+      ? [{ ...grade, drawKind, packedSet: Number(packedSet) >>> 0 }]
+      : [];
+  });
+}

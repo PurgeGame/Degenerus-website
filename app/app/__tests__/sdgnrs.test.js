@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import * as sdgnrsMod from '../sdgnrs.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
+import { CONTRACTS } from '../chain-config.js';
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
 const TOKEN = 10n ** 18n;
@@ -17,7 +18,13 @@ function makeFakeProvider() {
   };
 }
 
-function makeFakeContract({ staticError = null, preview = [0n, 0n] } = {}) {
+function makeFakeContract({
+  staticError = null,
+  preview = [0n, 0n],
+  pending = [0n, 0, 0n],
+  roll = 0,
+  claimReceipt = { status: 1, logs: [] },
+} = {}) {
   const calls = [];
   const order = [];
   const burn = Object.assign(
@@ -34,12 +41,29 @@ function makeFakeContract({ staticError = null, preview = [0n, 0n] } = {}) {
       },
     },
   );
+  const claimRedemption = Object.assign(
+    async (...args) => {
+      calls.push(['claim', ...args]);
+      order.push('claim-send');
+      return { hash: '0xc1a1', wait: async () => claimReceipt };
+    },
+    {
+      staticCall: async (...args) => {
+        calls.push(['claim-static', ...args]);
+        order.push('claim-static');
+        if (staticError) throw staticError;
+      },
+    },
+  );
   return {
     burn,
+    claimRedemption,
     previewBurnValue: async (amount) => {
       calls.push(['preview', amount]);
       return preview;
     },
+    pendingRedemptions: async () => pending,
+    redemptionPeriods: async () => roll,
     connect() { return this; },
     _calls: calls,
     _order: order,
@@ -115,5 +139,70 @@ describe('burnSdgnrs', () => {
       (caught) => caught.code === 'BurnsBlockedDuringRng'
         && /after rng settles/i.test(caught.userMessage),
     );
+  });
+
+  test('decodes the submitted period and final redemption payout from receipts', () => {
+    const iface = new contractsMod.ethers.Interface([
+      'event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 flipEscrowed, uint24 periodIndex)',
+      'event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 flipPaid)',
+    ]);
+    const submitted = iface.encodeEventLog(iface.getEvent('RedemptionSubmitted'), [
+      CONNECTED, 25n * TOKEN, 4n, 5n, 67,
+    ]);
+    const claimed = iface.encodeEventLog(iface.getEvent('RedemptionClaimed'), [
+      CONNECTED, 142, 2n, 2n, 900n,
+    ]);
+    const receipt = {
+      hash: '0xabc123',
+      logs: [submitted, claimed].map((event) => ({
+        address: CONTRACTS.SDGNRS,
+        topics: event.topics,
+        data: event.data,
+      })),
+    };
+
+    const parsed = sdgnrsMod.parseSdgnrsRedemptionReceipt(receipt, CONNECTED);
+    assert.equal(parsed.submissions[0].periodIndex, 67);
+    assert.equal(parsed.submissions[0].sdgnrsAmount, 25n * TOKEN);
+    assert.deepEqual(
+      { roll: parsed.claims[0].roll, eth: parsed.claims[0].ethPayout, box: parsed.claims[0].lootboxEth, flip: parsed.claims[0].flipPaid },
+      { roll: 142, eth: 2n, box: 2n, flip: 900n },
+    );
+  });
+
+  test('reads exact pending/ready state and claims the resolved redemption', async () => {
+    const iface = new contractsMod.ethers.Interface([
+      'event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 flipPaid)',
+    ]);
+    const event = iface.encodeEventLog(iface.getEvent('RedemptionClaimed'), [
+      CONNECTED, 125, 4n, 4n, 500n,
+    ]);
+    const receipt = {
+      status: 1,
+      hash: '0xc1a1',
+      logs: [{ address: CONTRACTS.SDGNRS, topics: event.topics, data: event.data }],
+    };
+    const fake = makeFakeContract({
+      pending: [8n, 156, 500n],
+      roll: 125,
+      claimReceipt: receipt,
+    });
+    sdgnrsMod.__setContractFactoryForTest(() => fake);
+
+    const state = await sdgnrsMod.readSdgnrsRedemptionState({
+      player: CONNECTED,
+      periodIndex: 67,
+    });
+    assert.equal(state.exists, true);
+    assert.equal(state.ready, true);
+    assert.equal(state.roll, 125);
+
+    const result = await sdgnrsMod.claimSdgnrsRedemption({
+      player: CONNECTED,
+      periodIndex: 67,
+    });
+    assert.deepEqual(fake._order, ['claim-static', 'claim-send']);
+    assert.equal(result.claim.lootboxEth, 4n);
+    assert.equal(result.claim.flipPaid, 500n);
   });
 });

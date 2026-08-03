@@ -121,13 +121,14 @@ function makeFakeContract(opts = {}) {
   return c;
 }
 
-function makeFakeProvider(connectedAddr) {
+function makeFakeProvider(connectedAddr, { redemptionOpen = false } = {}) {
   return {
     // Sepolia chainId per chain-config.sepolia.js (CHAIN.id === 84532).
     getNetwork: async () => ({ chainId: 84532n }),
     getSigner: async () => ({
       getAddress: async () => connectedAddr,
     }),
+    getStorage: async () => redemptionOpen ? (1n << 240n) : 0n,
   };
 }
 
@@ -191,8 +192,9 @@ describe('FLIP ticket redemption window', () => {
     contractsMod.clearProvider();
   });
 
-  function windowContract({ locked = false, next = 101n, target = 100n } = {}) {
+  function windowContract({ liveness = false, locked = false, next = 101n, target = 100n } = {}) {
     return {
+      livenessTriggered: async () => liveness,
       rngLocked: async () => locked,
       nextPrizePoolView: async () => next,
       prizePoolTargetView: async () => target,
@@ -208,13 +210,27 @@ describe('FLIP ticket redemption window', () => {
       'contract requires nextPrizePool > target, not equality');
   });
 
-  test('RNG lock closes the displayed window', async () => {
+  test('an unlatched RNG lock closes the displayed window', async () => {
     claimsMod.__setContractFactoryForTest(() => windowContract({ locked: true, next: 500n }));
+    assert.equal(await claimsMod.probeRedeemFlipWindow(), false);
+  });
+
+  test('the storage latch keeps redemption open through intermediate RNG locks', async () => {
+    contractsMod.setProvider(makeFakeProvider(CONNECTED, { redemptionOpen: true }));
+    claimsMod.__setContractFactoryForTest(() => windowContract({ locked: true, next: 0n, target: 100n }));
+    assert.equal(await claimsMod.probeRedeemFlipWindow(), true,
+      'the final request, not an intermediate lock, clears the window');
+  });
+
+  test('liveness closes redemption even when the storage latch is still set', async () => {
+    contractsMod.setProvider(makeFakeProvider(CONNECTED, { redemptionOpen: true }));
+    claimsMod.__setContractFactoryForTest(() => windowContract({ liveness: true }));
     assert.equal(await claimsMod.probeRedeemFlipWindow(), false);
   });
 
   test('RPC/view failures fail closed without throwing', async () => {
     claimsMod.__setContractFactoryForTest(() => ({
+      livenessTriggered: async () => false,
       rngLocked: async () => { throw new Error('rpc down'); },
       nextPrizePoolView: async () => 500n,
       prizePoolTargetView: async () => 100n,

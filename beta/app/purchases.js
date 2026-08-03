@@ -4,21 +4,20 @@
 import { ethers } from 'ethers';
 import { getContract, sendTx, getReadProvider } from './contracts.js';
 import { get } from './store.js';
-import { CONTRACTS } from './constants.js';
+import { CONTRACTS, ETH_DISPLAY_SCALE } from './constants.js';
 import { refreshAfterAction } from './api.js';
 
 // -- Constants --
 const TICKET_UNIT = 400n;           // 1 user ticket = 400 contract units
 const TESTNET_DIVISOR = 1000000n;   // Sepolia price divisor
-const BURNIE_PER_TICKET = 1000;     // Display constant: 1000 BURNIE per ticket
+const FLIP_PER_TICKET = 1000;     // Display constant: 1000 FLIP per ticket
 
 const REFERRER_KEY = 'degenerus_referrer_code';
 
 // ABI fragments for purchase-related contract calls
 const PURCHASE_ABI = [
   'function purchase(address buyer, uint256 ticketQuantity, uint256 lootBoxAmount, bytes32 affiliateCode, uint8 payKind) payable',
-  'function purchaseCoin(address buyer, uint256 ticketQuantity, uint256 lootBoxBurnieAmount)',
-  'function purchaseBurnieLootbox(address buyer, uint256 burnieAmount)',
+  'function purchaseCoin(address buyer, uint256 ticketQuantity, uint256 lootBoxFlipAmount)',
   'function prizePoolTargetView() view returns (uint256)',
   'function lootboxPresaleActiveFlag() view returns (bool)',
   'function purchaseInfo() view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay, bool rngLocked, uint256 priceWei)',
@@ -71,28 +70,23 @@ export async function buyEthTicketsAndLootbox(ticketQty, lootboxEthStr, affiliat
 }
 
 /**
- * Buy BURNIE tickets and/or lootbox.
- * No approval needed: BurnieCoin has a game-contract bypass.
- * @param {number} ticketQty - User-facing ticket count (0+)
- * @param {string} lootboxBurnieStr - Lootbox BURNIE amount as string, or falsy for none
+ * Buy tickets with FLIP.
+ * No approval needed: FLIP has a game-contract bypass.
+ * FLIP buys tickets only; lootboxes are ETH-only.
+ * @param {number} ticketQty - User-facing ticket count (1+)
  */
-export async function buyBurnieTickets(ticketQty, lootboxBurnieStr) {
-  if (ticketQty <= 0 && (!lootboxBurnieStr || parseFloat(lootboxBurnieStr) <= 0)) {
-    throw new Error('Enter ticket quantity or BURNIE lootbox amount');
+export async function buyFlipTickets(ticketQty) {
+  if (ticketQty <= 0) {
+    throw new Error('Enter ticket quantity');
   }
 
   const contract = getContract(CONTRACTS.GAME, PURCHASE_ABI);
   const ticketScaled = BigInt(Math.max(ticketQty, 0)) * TICKET_UNIT;
-  const lootboxBurnie = lootboxBurnieStr ? ethers.parseEther(lootboxBurnieStr) : 0n;
 
-  let txPromise;
-  if (ticketQty > 0) {
-    txPromise = contract.purchaseCoin(ethers.ZeroAddress, ticketScaled, lootboxBurnie);
-  } else {
-    txPromise = contract.purchaseBurnieLootbox(ethers.ZeroAddress, lootboxBurnie);
-  }
-
-  const receipt = await sendTx(txPromise, 'Purchase BURNIE tickets');
+  const receipt = await sendTx(
+    contract.purchaseCoin(ethers.ZeroAddress, ticketScaled, 0n),
+    'Purchase FLIP tickets'
+  );
   await refreshAfterAction();
   return receipt;
 }
@@ -178,7 +172,7 @@ export function lootboxBadgeText(priceWei, isPresale) {
   const bps = isPresale ? 2000n : 1000n;
   const lootWei = (BigInt(priceWei) * bps) / 10000n;
   const pct = isPresale ? '20%' : '10%';
-  return `+ free ${ethers.formatEther(lootWei)} ETH lootbox (${pct})`;
+  return `+ free ${ethers.formatEther(lootWei * ETH_DISPLAY_SCALE)} ETH lootbox (${pct})`;
 }
 
 /**

@@ -26,7 +26,7 @@
 //   4. Bucket table (DECIMATOR-02 / D-03) -- 8 or 11 rows depending on
 //      whether level is centennial. Player's row gets aria-current="true"
 //      once INTEG-03 provides the bucket. NOTE: bucket range is 5-12 normal /
-//      2-12 centennial per contract source (BurnieCoin.sol:142-147).
+//      2-12 centennial per contract source (FLIP.sol:142-147).
 //      CONTEXT D-03 "1 through 8" is INCORRECT; see 55-PATTERNS.md CRITICAL
 //      OVERRIDE.
 //   5. Payout pill (DECIMATOR-04 / D-04 / Pitfall 10) -- 5 states:
@@ -67,10 +67,10 @@
 // (new; tag collision + transitively tainted), and ethers bare specifier.
 //
 // SCORE-UNIT DISCIPLINE (Pitfall 8):
-//   effectiveAmount (BURNIE, wei-scale)     -> formatBurnie(value)
-//   weightedAmount  (BURNIE, wei-scale)     -> formatBurnie(value)
-//   terminal burn.effectiveAmount           -> formatBurnie(value)
-//   terminal burn.weightedAmount            -> formatBurnie(value)
+//   effectiveAmount (FLIP, wei-scale)       -> formatFlip(value)
+//   weightedAmount  (FLIP, wei-scale)       -> formatFlip(value)
+//   terminal burn.effectiveAmount           -> formatFlip(value)
+//   terminal burn.weightedAmount            -> formatFlip(value)
 //   payoutAmount    (ETH, wei-scale)        -> formatEth(value)
 //   bucket / subbucket / winningSubbucket   -> String(value) integer
 //   scoreBreakdown.totalBps (int bps)       -> (v / 10000).toFixed(2)
@@ -78,11 +78,11 @@
 
 import { subscribe, get } from '../../beta/app/store.js';
 import { API_BASE } from '../app/constants.js';
-import { formatBurnie, formatEth, truncateAddress } from '../../beta/viewer/utils.js';
+import { formatFlip, formatEth, truncateAddress } from '../../beta/viewer/utils.js';
 
 // --- Inline helpers -------------------------------------------------------
 //
-// Contract-truth bucket range (BurnieCoin.sol:142-147 -- OVERRIDES CONTEXT
+// Contract-truth bucket range (FLIP.sol:142-147 -- OVERRIDES CONTEXT
 // D-03 which incorrectly states the range as 1 through 8). 55-RESEARCH.md
 // Pitfall 1 and 55-PATTERNS.md CRITICAL OVERRIDE document the discrepancy.
 //
@@ -384,14 +384,14 @@ class DecimatorPanel extends HTMLElement {
     this.#setText('bucket',    data.bucket    != null ? String(data.bucket)    : '--');
     this.#setText('subbucket', data.subbucket != null ? String(data.subbucket) : '--');
     // Score-unit discipline (Pitfall 8): effectiveAmount and weightedAmount
-    // are WEI-scale BURNIE. formatBurnie handles both.
+    // are WEI-scale FLIP. formatFlip handles both.
     this.#setText('effective',
       data.effectiveAmount && data.effectiveAmount !== '0'
-        ? `${formatBurnie(data.effectiveAmount)} BURNIE`
+        ? `${formatFlip(data.effectiveAmount)} FLIP`
         : '0');
     this.#setText('weighted',
       data.weightedAmount && data.weightedAmount !== '0'
-        ? `${formatBurnie(data.weightedAmount)} BURNIE`
+        ? `${formatFlip(data.weightedAmount)} FLIP`
         : '0');
   }
 
@@ -502,7 +502,7 @@ class DecimatorPanel extends HTMLElement {
       return;
     }
 
-    // Score-unit discipline: payoutAmount is WEI-scale ETH, not BURNIE.
+    // Score-unit discipline: payoutAmount is WEI-scale ETH, not FLIP.
     if (data.payoutAmount && data.payoutAmount !== '0') {
       pill.setAttribute('data-won', 'true');
       if (labelEl)  labelEl.textContent  = 'You won';
@@ -543,16 +543,16 @@ class DecimatorPanel extends HTMLElement {
       levelCell.textContent = String(burn.level ?? '--');
       row.appendChild(levelCell);
 
-      // Score-unit discipline: terminal burn amounts are WEI-scale BURNIE.
+      // Score-unit discipline: terminal burn amounts are WEI-scale FLIP.
       const effCell = document.createElement('span');
       effCell.textContent = burn.effectiveAmount && burn.effectiveAmount !== '0'
-        ? formatBurnie(burn.effectiveAmount)
+        ? formatFlip(burn.effectiveAmount)
         : '0';
       row.appendChild(effCell);
 
       const weightedCell = document.createElement('span');
       weightedCell.textContent = burn.weightedAmount && burn.weightedAmount !== '0'
-        ? formatBurnie(burn.weightedAmount)
+        ? formatFlip(burn.weightedAmount)
         : '0';
       row.appendChild(weightedCell);
 

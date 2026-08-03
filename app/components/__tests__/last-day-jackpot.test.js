@@ -269,9 +269,10 @@ function resetDom() {
 }
 
 async function flushMicrotasks() {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  // A day summary fans through viewer + pack reads and then (when boxes were
+  // opened) a dependent leg-feed read. Drain the complete promise chain so a
+  // click test cannot leak its in-flight summary lock into the next case.
+  for (let i = 0; i < 12; i += 1) await Promise.resolve();
 }
 
 // ---------------------------------------------------------------------------
@@ -282,10 +283,21 @@ async function flushMicrotasks() {
 // ---------------------------------------------------------------------------
 
 import * as storeMod from '../../app/store.js';
+import * as coinflipMod from '../../app/coinflip.js';
+import * as pendingActionsMod from '../../app/pending-actions.js';
+import { CHAIN } from '../../app/chain-config.js';
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+test('the host does not add day-wide confetti over a losing scratch phase', () => {
+  const src = readFileSync(new URL('../last-day-jackpot.js', import.meta.url), 'utf8');
+  const handler = src.match(/#onPanelScratchComplete\(e\)\s*\{([\s\S]*?)\n  \}/)?.[1] || '';
+  assert.doesNotMatch(handler, /#fireConfetti|canvas-confetti/);
+  assert.doesNotMatch(src, /import\(['"]canvas-confetti['"]\)/,
+    'the replay board is the sole, phase-aware owner of jackpot scratch confetti');
+});
 
 describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
   beforeEach(async () => {
@@ -320,16 +332,13 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     const Ctor = customElements.get('last-day-jackpot');
     const el = new Ctor();
     el.connectedCallback();
-    // The spin/scratch reveal is the sibling <replay-panel>; the shell carries the
-    // day pin, banner, and the foil CLAIM bar (the strip itself, the day-results
-    // list, and the day-stats caption were all removed 2026-07-29 on the user's
-    // call — the caption survives only as the popup's NO HIT subtitle).
+    // The spin/scratch reveal is the sibling <replay-panel>; the shell carries
+    // only the day pin/banner. Foil claims now live in the shared pending tray.
     const required = [
       'ldj-status-cold-start',
       'ldj-status-empty-day',
       'ldj-status-resolved',
       'ldj-new-day-banner',
-      'ldj-foil-claimbar',
       'day',
     ];
     for (const hook of required) {
@@ -340,19 +349,15 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     }
   });
 
-  test('Cold-start section visible by default after connectedCallback (Plan 59-01 default state)', async () => {
+  test('Cold-start copy is suppressed by default so loading cannot shift the board', async () => {
     const Ctor = customElements.get('last-day-jackpot');
     const el = new Ctor();
     el.connectedCallback();
     await flushMicrotasks();
     const cold = el.querySelector('[data-bind="ldj-status-cold-start"]');
     assert.ok(cold, 'cold-start section exists');
-    // Plan 59-01: cold-start visible (style.display !== 'none'); empty-day + resolved hidden.
-    // Plan 59-02 wires data flow that may flip this on payload arrival.
-    assert.notEqual(
-      cold.style.display, 'none',
-      'cold-start visible by default (no display:none on the wrapper)',
-    );
+    assert.equal(cold.style.display, 'none', 'large cold-start copy stays out of layout');
+    assert.doesNotMatch(el.innerHTML, /Game starts soon/i);
     const empty = el.querySelector('[data-bind="ldj-status-empty-day"]');
     assert.ok(empty, 'empty-day section exists');
     assert.equal(
@@ -395,7 +400,7 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
     return el;
   }
 
-  test('status:pre-game payload → cold-start visible, empty-day + resolved hidden', async () => {
+  test('status:pre-game payload keeps large cold-start copy hidden', async () => {
     const el = instantiate();
     storeMod.update('app.lastDay', { day: null, status: 'pre-game' });
     await flushMicrotasks();
@@ -403,7 +408,7 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
     const empty = el.querySelector('[data-bind="ldj-status-empty-day"]');
     const resolved = el.querySelector('[data-bind="ldj-status-resolved"]');
     assert.ok(cold, 'cold-start section exists');
-    assert.notEqual(cold.style.display, 'none', 'cold-start visible');
+    assert.equal(cold.style.display, 'none', 'cold-start copy cannot move the jackpot');
     assert.equal(empty.style.display, 'none', 'empty-day hidden');
     assert.equal(resolved.style.display, 'none', 'resolved hidden');
   });
@@ -491,15 +496,47 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
       'body automatically follows the new resolved day');
   });
 
-  test('null/undefined payload does not throw + leaves Plan 59-01 default scaffold visible', async () => {
+  test('deployment mismatch clears the old run high-water mark so a lower new-run day renders', async () => {
+    const el = instantiate();
+    storeMod.update('app.lastDay', {
+      day: 172, level: 43, summary: null, winners: [],
+      roll1: { day: 172, level: 43, purchaseLevel: null, wins: [] },
+      roll2: { day: 172, level: 43, purchaseLevel: null, wins: [] },
+      status: 'resolved-no-winners',
+    });
+    await flushMicrotasks();
+    assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 172/);
+
+    storeMod.update('app.deploymentMismatch', {
+      surface: 'jackpot', expectedDeployBlock: 44_963_297,
+      observedStartBlock: '44956000', observedDay: 172,
+    });
+    await flushMicrotasks();
+    assert.equal(el.querySelector('[data-bind="day"]').textContent, 'SYNC');
+
+    storeMod.update('app.deploymentMismatch', null);
+    storeMod.update('app.lastDay', {
+      day: 10, level: 2, summary: null, winners: [],
+      roll1: { day: 10, level: 2, purchaseLevel: null, wins: [] },
+      roll2: { day: 10, level: 2, purchaseLevel: null, wins: [] },
+      status: 'resolved-no-winners',
+    });
+    await flushMicrotasks();
+    assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 10/,
+      'new deployment can restart its logical day numbering');
+    el.disconnectedCallback();
+  });
+
+  test('null/undefined payload does not throw + leaves the stable loading scaffold', async () => {
     const el = instantiate();
     assert.doesNotThrow(() => storeMod.update('app.lastDay', null));
     await flushMicrotasks();
     assert.doesNotThrow(() => storeMod.update('app.lastDay', undefined));
     await flushMicrotasks();
-    // Cold-start (Plan 59-01 default scaffold) still visible since #onLastDayUpdate early-returned.
+    // The internal large cold-start block remains suppressed; app/index owns a
+    // reserved one-line loading status below the replay board.
     const cold = el.querySelector('[data-bind="ldj-status-cold-start"]');
-    assert.notEqual(cold.style.display, 'none', 'cold-start still visible after null payloads');
+    assert.equal(cold.style.display, 'none', 'cold-start remains layout-neutral after null payloads');
   });
 
   test('Defensive: status:resolved with null summary + undefined bonusTraitsPacked does not throw', async () => {
@@ -828,7 +865,7 @@ describe('new-day auto-follow', () => {
 });
 
 // ===========================================================================
-// Phase 64 — foil-ticket strip: fetch → render → spoiler-gated match lighting.
+// Phase 64 — foil-ticket matches: fetch → spoiler gate → shared pending action.
 //
 // The widget fetches /player/:addr/foil?level=N when a resolved day renders.
 // Cards show regardless of spin state (the player's own tickets); MATCH
@@ -836,21 +873,24 @@ describe('new-day auto-follow', () => {
 // day's spun_day key exists (or right after #finishReveal writes it).
 // ===========================================================================
 
-describe('foil CLAIM bar (all that survives of the foil strip)', () => {
-  // User call 2026-07-29: "the ugly foil tickets and the big list of what everyone
-  // else won" came out of the widget. A matched line still PAYS, so the claim
-  // button had to survive — it is now a bar that appears only when something is
-  // claimable, and nothing renders the four badge lines or the tier ladder.
-  test('the strip markup is gone: no lines, ladder, or per-tier chips', () => {
+describe('foil match pending action', () => {
+  beforeEach(async () => {
+    storeMod.__resetForTest();
+    pendingActionsMod.__resetPendingActionsForTest();
+    resetDom();
+    await import('../last-day-jackpot.js');
+  });
+
+  test('the inline strip and claim bar are gone', () => {
     const Ctor = customElements.get('last-day-jackpot');
     const el = new Ctor();
     el.connectedCallback();
-    for (const hook of ['ldj-foil', 'ldj-foil-lines', 'ldj-foil-ladder', 'ldj-foil-boost']) {
+    for (const hook of [
+      'ldj-foil', 'ldj-foil-lines', 'ldj-foil-ladder', 'ldj-foil-boost', 'ldj-foil-claimbar',
+    ]) {
       assert.equal(el.querySelector(`[data-bind="${hook}"]`), null, `${hook} removed`);
     }
-    assert.ok(el.querySelector('[data-bind="ldj-foil-claimbar"]'), 'claim bar present');
-    assert.equal(el.querySelector('[data-bind="ldj-foil-claimbar"]').hidden, true,
-      'hidden until something is claimable');
+    el.disconnectedCallback();
   });
 
   test('the day-results list is gone (DAY SUMMARY popup CTA stays)', () => {
@@ -864,20 +904,126 @@ describe('foil CLAIM bar (all that survives of the foil strip)', () => {
     assert.match(el.innerHTML, />\s*DAY SUMMARY\s*</, 'CTA uses the new name');
   });
 
-  test('source no longer renders foil faces or the tier ladder', () => {
+  test('source publishes the contract tuple and sends its receipt to the reveal engine', () => {
     const src = readFileSync(new URL('../last-day-jackpot.js', import.meta.url), 'utf8');
-    assert.equal(/FOIL_TIER_FACES/.test(src), false, 'ladder constant no longer imported');
     assert.equal(/ldj-foil-face/.test(src), false, 'no badge faces rendered');
     assert.equal(/renderDayResults/.test(src), false, 'results renderer removed');
-    // The claim path itself must still be wired.
+    assert.match(src, /claimableDrawGrades\(/,
+      'main and bonus draw claims are graded independently');
+    assert.match(src, /publishPendingActions\(FOIL_MATCH_ACTION_SOURCE/);
+    assert.match(src, /kind:\s*'foil-match'/);
     assert.match(src, /claimFoilMatch\(/);
-    assert.match(src, /FOIL_CLAIM_THRESHOLD/);
+    assert.match(src, /parseFoilMatchClaimedFromReceipt\(/);
+    assert.match(src, /queueReveal\(\{\s*kind:\s*'foil-match'/s);
+  });
+
+  test('a revealed T8 line appears in pending with its actual ticket and match reason', async () => {
+    const player = '0xab12000000000000000000000000000000000000';
+    const traits = [1, 70, 130, 200];
+    const packed = traits.reduce((word, trait, quadrant) => (
+      word | ((trait & 0xff) << (quadrant * 8))
+    ), 0) >>> 0;
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      assert.match(String(url), new RegExp(`/player/${player}/foil\\?level=12$`, 'i'));
+      return {
+        ok: true,
+        json: async () => ({
+          address: player, level: 12, present: true,
+          lines: [traits, [2, 67, 132, 205], [3, 68, 133, 206], [4, 69, 134, 207]],
+          claims: [],
+        }),
+      };
+    };
+    try {
+      localStorage.setItem(`spun_day_${CHAIN.id}_44`, '1');
+      storeMod.update('connected.address', player);
+      const Ctor = customElements.get('last-day-jackpot');
+      const el = new Ctor();
+      _docBody.appendChild(el);
+      el.connectedCallback();
+      storeMod.update('app.lastDay', {
+        day: 44, level: 12,
+        summary: {
+          rollOne: { mainTraitsPacked: packed },
+          rollTwo: { bonusTraitsPacked: null },
+        },
+        winners: [],
+        roll1: { day: 44, level: 12, purchaseLevel: 12, wins: [] },
+        roll2: { day: 44, level: 12, purchaseLevel: 12, wins: [] },
+        status: 'resolved',
+      });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+
+      const [action] = pendingActionsMod.getPendingActions();
+      assert.equal(action.kind, 'foil-match');
+      assert.equal(action.label, 'Day 44 · Foil T8');
+      assert.match(action.detail, /MAIN DRAW · 4 exact/);
+      assert.deepEqual(action.lineTraits, traits);
+      assert.equal(typeof action.run, 'function');
+      el.disconnectedCallback();
+      assert.equal(pendingActionsMod.getPendingActions().length, 0,
+        'detaching the owner cannot leave a stale foil reminder');
+    } finally {
+      globalThis.fetch = priorFetch;
+    }
+  });
+
+  test('a same-day empty catch-up response cannot retract a verified foil match', async () => {
+    const player = '0xab12000000000000000000000000000000000000';
+    const traits = [1, 70, 130, 200];
+    const packed = traits.reduce((word, trait, quadrant) => (
+      word | ((trait & 0xff) << (quadrant * 8))
+    ), 0) >>> 0;
+    let indexed = true;
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => indexed ? ({
+        address: player, level: 12, present: true,
+        lines: [traits, [2, 67, 132, 205], [3, 68, 133, 206], [4, 69, 134, 207]],
+        claims: [],
+      }) : ({ address: player, level: 12, present: false, lines: [], claims: [] }),
+    });
+    const payload = {
+      day: 44, level: 12,
+      summary: {
+        rollOne: { mainTraitsPacked: packed },
+        rollTwo: { bonusTraitsPacked: null },
+      },
+      winners: [],
+      roll1: { day: 44, level: 12, purchaseLevel: 12, wins: [] },
+      roll2: { day: 44, level: 12, purchaseLevel: 12, wins: [] },
+      status: 'resolved',
+    };
+    let el = null;
+    try {
+      localStorage.setItem(`spun_day_${CHAIN.id}_44`, '1');
+      storeMod.update('connected.address', player);
+      const Ctor = customElements.get('last-day-jackpot');
+      el = new Ctor();
+      _docBody.appendChild(el);
+      el.connectedCallback();
+      storeMod.update('app.lastDay', payload);
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+      assert.equal(pendingActionsMod.getPendingActions()[0]?.kind, 'foil-match');
+
+      indexed = false;
+      storeMod.update('app.lastDay', { ...payload });
+      for (let i = 0; i < 8; i += 1) await flushMicrotasks();
+      assert.equal(pendingActionsMod.getPendingActions()[0]?.kind, 'foil-match',
+        'a transient empty indexer answer keeps the last verified same-scope match');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+    }
   });
 });
 
 describe('Results CTA gating (whole board + flip before the popup)', () => {
   beforeEach(async () => {
     storeMod.__resetForTest();
+    coinflipMod.__setResolvedStakeReaderForTest(async () => null);
     resetDom();
     await import('../last-day-jackpot.js');
   });
@@ -929,6 +1075,8 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
     assert.equal(cta.hidden, true, 'still hidden while the bonus roll is pending');
     assert.equal(globalThis.localStorage.getItem(`jackpot_complete_day_${CHAIN.id}_5`), null,
       'main completion alone does not claim the bonus was cleared');
+    assert.equal(globalThis.localStorage.getItem(`jackpot_bonus_pending_day_${CHAIN.id}_5`), '1',
+      'main completion records that the bonus is genuinely still pending');
 
     // Bonus roll scratched out → whole board done → CTA appears.
     globalThis.document.dispatchEvent(scratchEvent({ bonusPhase: true, bonusAvailable: false }));
@@ -938,6 +1086,8 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
     assert.equal(reveal.hidden, true, 'Reveal Draw and Day Summary are mutually exclusive');
     assert.equal(globalThis.localStorage.getItem(`jackpot_complete_day_${CHAIN.id}_5`), '1',
       'finishing the bonus persists the preferred reload view');
+    assert.equal(globalThis.localStorage.getItem(`jackpot_bonus_pending_day_${CHAIN.id}_5`), null,
+      'finishing the bonus retires its pending latch');
     el.disconnectedCallback();
   });
 
@@ -1007,6 +1157,9 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
     storeMod.update('connected.address', address);
     const priorFetch = globalThis.fetch;
     const requested = [];
+    const box7Tx = `0x${'7'.repeat(64)}`;
+    const box8Tx = `0x${'8'.repeat(64)}`;
+    const catchupTx = `0x${'c'.repeat(64)}`;
     globalThis.fetch = async (url) => {
       const path = String(url);
       requested.push(path);
@@ -1015,8 +1168,25 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
           ok: true,
           status: 200,
           json: async () => ({
-            ticketRevealPacks: [{ ticketCount: 10 }, { ticketCount: 3 }],
-            lootboxPacks: [{}, {}],
+            address,
+            day: 5,
+            blockNumber: '500',
+            ticketRevealPacks: [
+              { packId: 'tickets-day-5-batch-0', ticketCount: 10 },
+              { packId: 'tickets-day-5-batch-1', ticketCount: 3 },
+            ],
+            lootboxPacks: [
+              { packId: `lootbox-${box7Tx}-1`, lootboxIndex: 7, revealBlock: '501' },
+              { packId: `lootbox-${box8Tx}-1`, lootboxIndex: 8, revealBlock: '502' },
+              // One advance transaction can settle years of deferred index-0
+              // boxes. They belong in the opened count, never as an endless
+              // queue of AUTO-RESOLVED LOOTBOX reward cards.
+              ...Array.from({ length: 40 }, (_, index) => ({
+                packId: `lootbox-${catchupTx}-${index * 2 + 2}`,
+                lootboxIndex: 0,
+                revealBlock: '503',
+              })),
+            ],
           }),
         };
       }
@@ -1025,11 +1195,90 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
           ok: true,
           status: 200,
           json: async () => ({
+            address,
+            day: 5,
+            level: 10,
             activity: {
-              lootboxPurchases: [{}, {}, {}, {}],
-              lootboxResults: [{ rewardType: 'opened' }, { rewardType: 'flipOpened' }],
+              lootboxPurchases: [
+                { lootboxIndex: 7 }, { lootboxIndex: 8 }, {}, {},
+              ],
+              lootboxResults: [
+                { lootboxIndex: 7, rewardType: 'opened' },
+                { lootboxIndex: 8, rewardType: 'flipOpened' },
+              ],
               coinflip: null,
             },
+          }),
+        };
+      }
+      if (path.includes('/lootbox/legs?')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            items: [
+              // lootboxIndex is an RNG slot and repeats across levels. These
+              // 40 historical rows are deliberate poison: only the two
+              // transaction hashes proven by the day-5 packs may survive.
+              ...Array.from({ length: 40 }, (_, level) => ({
+                uid: `old-${level}`,
+                player: address,
+                legType: 'opened',
+                lootboxIndex: 7,
+                transactionHash: `0x${level.toString(16).padStart(64, '0')}`,
+                blockNumber: String(100 + level),
+                logIndex: 1,
+                ord: (100 + level) * 1_000_000 + 1,
+                levelAtOpen: level + 1,
+                rewardData: { amount: '1', futureTickets: 0, flip: '0' },
+              })),
+              {
+                uid: 'r7', player: address, legType: 'opened', lootboxIndex: 7,
+                transactionHash: box7Tx, blockNumber: '501', logIndex: 1, ord: 501000001,
+                levelAtOpen: 10,
+                rewardData: {
+                  amount: '100', futureLevel: 10, futureTickets: 200,
+                  roundedUp: false, flip: String(4n * 10n ** 18n),
+                },
+              },
+              {
+                uid: 'r8', player: address, legType: 'flipOpened', lootboxIndex: 8,
+                transactionHash: box8Tx, blockNumber: '502', logIndex: 1, ord: 502000001,
+                levelAtOpen: 10,
+                rewardData: {
+                  flipAmount: '100', ticketLevel: 10, tickets: 0,
+                  roundedUp: false, flipReward: '0',
+                },
+              },
+              {
+                uid: 'r9', player: address, legType: 'dgnrs', lootboxIndex: 8,
+                transactionHash: box8Tx, blockNumber: '502', logIndex: 2, ord: 502000002,
+                rewardData: { dgnrsAmount: String(7n * 10n ** 18n) },
+              },
+              ...Array.from({ length: 40 }, (_, index) => [{
+                uid: `catchup-reward-${index}`,
+                player: address,
+                legType: 'dgnrs',
+                lootboxIndex: 0,
+                transactionHash: catchupTx,
+                blockNumber: '503',
+                logIndex: index * 2 + 1,
+                ord: 503000000 + index * 2 + 1,
+                rewardData: { dgnrsAmount: String((index + 1) * 10) },
+              }, {
+                uid: `catchup-opened-${index}`,
+                player: address,
+                legType: 'opened',
+                lootboxIndex: 0,
+                transactionHash: catchupTx,
+                blockNumber: '503',
+                logIndex: index * 2 + 2,
+                ord: 503000000 + index * 2 + 2,
+                levelAtOpen: index + 1,
+                rewardData: { amount: '1', futureTickets: 0, flip: '0' },
+              }]).flat(),
+            ],
+            nextCursor: null,
           }),
         };
       }
@@ -1052,7 +1301,8 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       const [queued] = revealMod.__takeQueuedForTest();
       assert.ok(queued, 'summary reveal queued');
       assert.equal(queued.title, 'DAY 5 SUMMARY');
-      assert.deepEqual(queued.activity, {
+      const { lootboxResults, ...activityCounts } = queued.activity;
+      assert.deepEqual(activityCounts, {
         ticketPacks: 2,
         ticketCount: 13,
         lootboxesBought: 4,
@@ -1062,10 +1312,20 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         coinflipStakeAmount: '0',
         coinflipRewardPercent: 0,
       });
+      assert.equal(lootboxResults.length, 2,
+        'only the two manual boxes are itemized; 40 deferred index-0 boxes cannot become an endless summary');
+      assert.deepEqual(lootboxResults.map((result) => Number(result.lootboxIndex)), [7, 8]);
+      assert.deepEqual(lootboxResults.map((result) => result.transactionHash), [box7Tx, box8Tx],
+        'reused RNG indexes from 40 historical levels cannot enter this day');
+      assert.deepEqual(lootboxResults[0].legs.map((leg) => leg.legType), ['opened']);
+      assert.deepEqual(lootboxResults[1].legs.map((leg) => leg.legType), ['opened', 'dgnrs'],
+        'same-transaction companion rewards stay attached to their box');
       assert.ok(requested.some((url) => url.includes('/packs?day=5')),
         'pack count came from the day-scoped DB feed');
       assert.ok(requested.some((url) => url.includes(`/viewer/player/${address}/day/5`)),
         'lootboxes and coinflip participation came from the day-scoped DB snapshot');
+      assert.ok(requested.some((url) => url.includes('/lootbox/legs?')),
+        'the summary loads the full indexed reward legs, not just opened counts');
       assert.equal(cta.hidden, true, 'the summary action is consumed after it queues once');
       assert.equal(
         globalThis.localStorage.getItem(`day_summary_${CHAIN.id}_5_${address}`),
@@ -1077,6 +1337,81 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       cta.dispatchEvent({ type: 'click' });
       await flushMicrotasks();
       assert.equal(revealMod.__takeQueuedForTest().length, 0);
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+      revealMod.__resetForTest();
+    }
+  });
+
+  test('DAY SUMMARY includes the already-loaded Decimator payout without another endpoint', async () => {
+    const revealMod = await import('../reveal-overlay.js');
+    revealMod.__resetForTest();
+    const address = '0xab12000000000000000000000000000000000000';
+    storeMod.update('connected.address', address);
+    const priorFetch = globalThis.fetch;
+    const requested = [];
+    globalThis.fetch = async (url) => {
+      const path = String(url);
+      requested.push(path);
+      if (path.includes('/packs?day=5')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            address, day: 5, ticketRevealPacks: [], lootboxPacks: [],
+          }),
+        };
+      }
+      if (path.includes(`/viewer/player/${address}/day/5`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            address,
+            day: 5,
+            activity: { lootboxPurchases: [], lootboxResults: [], coinflip: null },
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => null };
+    };
+
+    let el = null;
+    try {
+      localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+      el = instantiate();
+      storeMod.update('app.lastDay', {
+        ...RESOLVED_PAYLOAD_DAY5,
+        winners: [{
+          ...RESOLVED_PAYLOAD_DAY5.winners[0],
+          totalEth: '0',
+          coinTotal: '0',
+          ticketCount: 0,
+          breakdown: [],
+          decimatorPrize: {
+            regularEth: '2000000000000',
+            lootboxEth: '500000000000',
+            terminalEth: '1000000000000',
+          },
+        }],
+      });
+      await flushMicrotasks();
+      document.dispatchEvent(scratchEvent({ bonusPhase: false, bonusAvailable: false }));
+      await flushMicrotasks();
+      el.querySelector('[data-bind="ldj-results-cta"]').dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      const [queued] = revealMod.__takeQueuedForTest();
+      assert.deepEqual(queued.prizes, [{
+        type: 'decimator',
+        amount: 3_000_000_000_000n,
+        lootboxAmount: 500_000_000_000n,
+        terminalAmount: 1_000_000_000_000n,
+      }]);
+      assert.equal(requested.some((path) => /\/decimator(?:\?|\/)/.test(path)), false,
+        'the composed last-day winner row is reused instead of adding a DB request');
     } finally {
       if (el) el.disconnectedCallback();
       globalThis.fetch = priorFetch;
@@ -1097,7 +1432,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ ticketRevealPacks: [], lootboxPacks: [] }),
+          json: async () => ({ address, day: 5, ticketRevealPacks: [], lootboxPacks: [] }),
         };
       }
       if (path.includes(`/viewer/player/${address}/day/5`)) {
@@ -1105,6 +1440,8 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
           ok: true,
           status: 200,
           json: async () => ({
+            address,
+            day: 5,
             activity: {
               lootboxPurchases: [],
               lootboxResults: [],
@@ -1144,11 +1481,97 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
     }
   });
 
-  test('a winning coinflip does not show the 1 WWXRP consolation in an otherwise empty summary', async () => {
+  test('DAY SUMMARY fails closed when an endpoint echoes an all-time or different-day payload', async () => {
     const { CHAIN } = await import('../../app/chain-config.js');
     const revealMod = await import('../reveal-overlay.js');
     revealMod.__resetForTest();
     const address = '0x1111000000000000000000000000000000000001';
+    storeMod.update('connected.address', address);
+    const priorFetch = globalThis.fetch;
+    let legFeedReads = 0;
+    globalThis.fetch = async (url) => {
+      const path = String(url);
+      if (path.includes('/packs?day=5')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            address,
+            day: null, // PACKS-V2 all-time mode — never valid for this summary.
+            ticketRevealPacks: Array.from({ length: 40 }, (_, i) => ({
+              packId: `tickets-day-all-batch-${i}`, ticketCount: 10,
+            })),
+            lootboxPacks: Array.from({ length: 40 }, (_, i) => ({
+              packId: `lootbox-0x${i.toString(16).padStart(64, '0')}-1`,
+              lootboxIndex: 7,
+            })),
+          }),
+        };
+      }
+      if (path.includes(`/viewer/player/${address}/day/5`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            address,
+            day: 40, // stale cross-day response
+            activity: {
+              lootboxPurchases: Array.from({ length: 40 }, () => ({ lootboxIndex: 7 })),
+              lootboxResults: Array.from({ length: 40 }, () => ({
+                lootboxIndex: 7, rewardType: 'opened',
+              })),
+              coinflip: { stakeAmount: String(1_000n * 10n ** 18n), win: false },
+            },
+          }),
+        };
+      }
+      if (path.includes('/lootbox/legs?')) legFeedReads += 1;
+      return { ok: true, status: 200, json: async () => null };
+    };
+
+    let el = null;
+    try {
+      globalThis.localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+      el = instantiate();
+      storeMod.update('app.lastDay', RESOLVED_PAYLOAD_DAY5);
+      await flushMicrotasks();
+      globalThis.document.dispatchEvent(scratchEvent({ bonusPhase: false, bonusAvailable: false }));
+      await flushMicrotasks();
+      el.querySelector('[data-bind="ldj-results-cta"]').dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      const [queued] = revealMod.__takeQueuedForTest();
+      assert.deepEqual(queued.activity, {
+        ticketPacks: 0,
+        ticketCount: 0,
+        lootboxesBought: 0,
+        lootboxesOpened: 0,
+        lootboxResults: [],
+        hasCoinflipBet: false,
+        coinflipWon: null,
+        coinflipStakeAmount: '0',
+        coinflipRewardPercent: 0,
+      });
+      assert.equal(legFeedReads, 0, 'an unproven day cannot fan out into historical reward pages');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+      revealMod.__resetForTest();
+    }
+  });
+
+  test('a winning coinflip summary uses the exact flip day instead of a stale viewer level', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
+    const revealMod = await import('../reveal-overlay.js');
+    revealMod.__resetForTest();
+    const address = '0x1111000000000000000000000000000000000001';
+    const exactStake = 20_500n * 10n ** 18n;
+    coinflipMod.__setResolvedStakeReaderForTest(async ({ player, day }) => {
+      assert.equal(player, address);
+      assert.equal(day, 5);
+      return exactStake;
+    });
     storeMod.update('connected.address', address);
     const priorFetch = globalThis.fetch;
     globalThis.fetch = async (url) => {
@@ -1157,7 +1580,14 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ ticketRevealPacks: [], lootboxPacks: [] }),
+          json: async () => ({ address, day: 5, ticketRevealPacks: [], lootboxPacks: [] }),
+        };
+      }
+      if (path.includes('/game/coinflip/day/5')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ day: 5, win: true, rewardPercent: 100 }),
         };
       }
       if (path.includes(`/viewer/player/${address}/day/5`)) {
@@ -1165,13 +1595,16 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
           ok: true,
           status: 200,
           json: async () => ({
+            address,
+            day: 5,
             activity: {
               lootboxPurchases: [],
               lootboxResults: [],
               coinflip: {
-                stakeAmount: '250000000000000000000',
-                win: true,
-                rewardPercent: 82,
+                // Deliberately wrong level-scoped data: this is the regression.
+                stakeAmount: String(3_000n * 10n ** 18n),
+                win: false,
+                rewardPercent: 50,
               },
             },
           }),
@@ -1199,8 +1632,15 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       assert.equal(queued.consolationOnly, false);
       assert.equal(queued.activity.hasCoinflipBet, true);
       assert.equal(queued.activity.coinflipWon, true);
-      assert.equal(queued.activity.coinflipStakeAmount, '250000000000000000000');
-      assert.equal(queued.activity.coinflipRewardPercent, 82);
+      assert.equal(queued.activity.coinflipStakeAmount, String(exactStake),
+        'the exact day stake replaces the stale 3k viewer value');
+      assert.equal(queued.activity.coinflipRewardPercent, 100,
+        'the global day result replaces the viewer level result');
+      const normalized = revealMod.normalizeSequence(queued);
+      const flipCard = normalized.cards.find((card) => card.type === 'coinflip-result');
+      assert.equal(flipCard.value, '+41,000 FLIP');
+      assert.equal(flipCard.outcomeLabel, 'WIN');
+      assert.equal(flipCard.outcomePercent, '200%');
     } finally {
       if (el) el.disconnectedCallback();
       globalThis.fetch = priorFetch;

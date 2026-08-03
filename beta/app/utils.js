@@ -1,11 +1,12 @@
 // app/utils.js -- Formatting helpers used across all components
 
 import { ethers } from 'ethers';
-import { ETHERSCAN_BASE } from './constants.js';
+import { ETHERSCAN_BASE, ETH_DISPLAY_SCALE, TOKEN_DISPLAY_SCALE } from './constants.js';
 
 export function formatEth(weiString) {
   if (!weiString || weiString === '0') return '0';
-  const val = ethers.formatEther(weiString);
+  const scaled = BigInt(weiString) * ETH_DISPLAY_SCALE;
+  const val = ethers.formatEther(scaled);
   const num = parseFloat(val);
   if (num === 0) return '0';
   if (num < 0.001) return '<0.001';
@@ -14,13 +15,14 @@ export function formatEth(weiString) {
   return num.toFixed(2);
 }
 
-export function formatBurnie(weiString) {
+export function formatFlip(weiString) {
   if (!weiString || weiString === '0') return '0';
-  const val = ethers.formatEther(weiString);
-  const num = parseFloat(val);
-  if (num < 1) return num.toFixed(2);
-  if (num < 1000) return Math.floor(num).toLocaleString();
-  return Math.floor(num).toLocaleString();
+  try {
+    const whole = (BigInt(weiString) * TOKEN_DISPLAY_SCALE) / (10n ** 18n);
+    return whole.toLocaleString();
+  } catch {
+    return '0';
+  }
 }
 
 export function truncateAddress(address) {

@@ -20,24 +20,33 @@
 // Actions (Phase 58 sendTx chokepoint paths, via app/parimutuel.js):
 //   OVER / UNDER — placeBet / placeVolumeBet; the fixed stake stays out of the
 //   compact choices and the live book split appears once below them
-//   CLAIM                — claim / claimVolume over the unclaimed rounds
+//   CLAIM                — published into the shared bottom action tray, then
+//                          claim / claimVolume over the selected round
 //
 // T-58-18: every server- and chain-derived string lands via textContent.
 
 import { CHAIN, VOLUME_WINDOW } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
-import { get, subscribe, getViewedAddress, getActingAddress } from '../app/store.js';
+import { get, update, subscribe, getViewedAddress, getActingAddress } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
 import {
-  readGrowthMarket, readVolumeMarket, readVolumeCredit,
+  readGrowthMarket, readVolumeMarket, readVolumeCredit, readMarketBetGates,
   placeGrowthBet, placeVolumeBet, claimGrowth, claimVolume,
   claimGrowthRound, claimVolumeRound, readRoundWinners,
   volumeWindow, volumeRoundNow,
-  readLastVolumeSeal, readCurrentTicketVolume, readGrowthRatchets,
+  readLastVolumeSeal, readCurrentTicketVolume, readGrowthRatchets, readPrizePoolTarget,
+  readJackpotPhaseContext,
   growthBps, payoutPerWinner, UNITS_PER_TICKET,
   STAKE_WEI, SIDE_OVER, SIDE_UNDER,
 } from '../app/parimutuel.js';
-import { burnForDecimator, DECIMATOR_MIN_FLIP_WEI } from '../app/decimator.js';
+import {
+  burnForDecimator,
+  DECIMATOR_MIN_FLIP_WEI,
+  decimatorEntryScoreWei,
+  decimatorPoolWei,
+  readDecimatorContext,
+} from '../app/decimator.js';
+import { activeBoonForProduct } from '../app/boons.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
 import { queueReveal } from './reveal-overlay.js';
 import { compactUiError } from '../app/ui-error.js';
@@ -90,7 +99,12 @@ function _fmtFlip(wei) {
 
 function _fmtPoolEth(wei) {
   try {
-    return displayEth(BigInt(wei || 0), 2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+    const compact = displayEth(BigInt(wei || 0), 3)
+      .replace(/\.000$/, '')
+      .replace(/(\.\d*?)0+$/, '$1');
+    const [whole, fraction] = compact.split('.');
+    const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return fraction == null ? grouped : `${grouped}.${fraction}`;
   } catch (_e) {
     return '0';
   }
@@ -101,6 +115,24 @@ function _parseFlipInput(raw) {
   if (!match) return null;
   const fraction = String(match[2] || '').padEnd(18, '0');
   return BigInt(match[1]) * 10n ** 18n + BigInt(fraction || '0');
+}
+
+function _formatFlipInput(wei) {
+  const unit = 10n ** 18n;
+  const value = BigInt(wei ?? 0n);
+  const whole = value / unit;
+  const remainder = value % unit;
+  if (remainder === 0n) return String(whole);
+  const fraction = String(remainder).padStart(18, '0').replace(/0+$/, '');
+  return `${whole}.${fraction}`;
+}
+
+function _decimatorBoonBps(payload) {
+  const boonType = Number(activeBoonForProduct(payload, 'decimator')?.row?.boonType || 0);
+  if (boonType === 13) return 1_000;
+  if (boonType === 14) return 2_500;
+  if (boonType === 15) return 5_000;
+  return 0;
 }
 
 /** Percentages read better without a trailing .0 — 62.5% but 50%, not 50.0%. */
@@ -203,6 +235,7 @@ class AppParimutuelPanel extends HTMLElement {
   #initialized = false;
   #growth = _emptyBook();
   #volume = _emptyBook();
+  #bonusEligibility = { growth: false, volume: false };
   #level = null;
   #player = null;
   #fetchSeq = 0;
@@ -213,10 +246,13 @@ class AppParimutuelPanel extends HTMLElement {
   #ratchets = null;
   #gameState = null;
   #decimatorPosition = null;
+  #decimatorContext = null;
   #decimatorDraft = '1000';
   #questActivateListener = null;
   #pollHandle = null;
   #tickHandle = null;
+  #postActionRefreshHandle = null;
+  #busyResetHandle = null;
   #busy = false;
   #errorTimer = null;
 
@@ -225,7 +261,11 @@ class AppParimutuelPanel extends HTMLElement {
     this.#initialized = true;
     this.#renderShell();
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
-      this.#questActivateListener = (event) => this.#applyQuestPreset(event?.detail);
+      this.#questActivateListener = (event) => {
+        const detail = event?.detail;
+        this.#applyQuestPreset(detail);
+        if (Number(detail?.questType) === 5 && detail?.submit) void this.#enterDecimator();
+      };
       document.addEventListener('quest:activate', this.#questActivateListener);
     }
     this.#unsubs.push(subscribe('connected.address', () => this.#refresh()));
@@ -244,13 +284,21 @@ class AppParimutuelPanel extends HTMLElement {
       catch (_e) { /* defensive */ }
       this.#questActivateListener = null;
     }
-    for (const h of [this.#pollHandle, this.#tickHandle, this.#errorTimer]) {
+    for (const h of [
+      this.#pollHandle,
+      this.#tickHandle,
+      this.#postActionRefreshHandle,
+      this.#busyResetHandle,
+      this.#errorTimer,
+    ]) {
       if (h != null) {
         try { clearTimeout(h); } catch (_e) { /* defensive */ }
       }
     }
     this.#pollHandle = null;
     this.#tickHandle = null;
+    this.#postActionRefreshHandle = null;
+    this.#busyResetHandle = null;
     this.#errorTimer = null;
     clearPendingActions(PENDING_SOURCE);
   }
@@ -266,6 +314,7 @@ class AppParimutuelPanel extends HTMLElement {
       || get('connected.address')
       || null;
     const player = addr ? String(addr).toLowerCase() : null;
+    if (player !== this.#player) this.#decimatorContext = null;
     this.#player = player;
 
     // The growth book numbers its rounds by LEVEL, and the level only comes off
@@ -280,6 +329,11 @@ class AppParimutuelPanel extends HTMLElement {
     if (seq !== this.#fetchSeq) return;
     this.#level = level;
 
+    // The full-width pool strip is page-level state, not side-bet history.
+    // Start its three cheap direct reads as soon as /game/state gives us the
+    // level; do not put them behind market lookbacks, player gates, or logs.
+    void this.#loadPoolBenchmarks(seq, level);
+
     const growthRounds = this.#lookback(level);
     const volumeRounds = this.#lookback(volumeRoundNow());
 
@@ -292,11 +346,16 @@ class AppParimutuelPanel extends HTMLElement {
     const decimatorRead = player && decimatorLevel != null
       ? fetchJSON(`/player/${player}/decimator?level=${decimatorLevel}`).catch(() => null)
       : Promise.resolve(null);
-    const [growth, volume, credit, decimatorPosition] = await Promise.all([
+    const decimatorContextRead = decimatorLevel != null
+      && decimatorWindowIsOpen(this.#gameState)
+      ? readDecimatorContext(player, decimatorLevel).catch(() => null)
+      : Promise.resolve(null);
+    const [growth, volume, credit, decimatorPosition, decimatorContext] = await Promise.all([
       Promise.allSettled(growthRounds.map((round) => readGrowthMarket({ player, round }))),
       Promise.allSettled(volumeRounds.map((round) => readVolumeMarket({ player, round }))),
       wantCredit ? readVolumeCredit().then((c) => c, () => 0n) : Promise.resolve(0n),
       decimatorRead,
+      decimatorContextRead,
     ]);
     if (seq !== this.#fetchSeq) return;
 
@@ -304,6 +363,7 @@ class AppParimutuelPanel extends HTMLElement {
     this.#volume = this.#foldBook(volume);
     this.#volume.credit = credit;
     this.#decimatorPosition = decimatorPosition;
+    if (decimatorContext) this.#decimatorContext = decimatorContext;
 
     // The round anchors are off-chain guesses — the level comes from the
     // indexer (which can lag a transition) and the volume round from the local
@@ -315,39 +375,103 @@ class AppParimutuelPanel extends HTMLElement {
     ]);
     if (seq !== this.#fetchSeq) return;
 
-    // Context for each book: the number the open round has to beat. Start this
-    // only after #backfillOpen has adopted the contract's authoritative round,
-    // then request that exact adjacent volume seal. It remains deliberately
-    // un-awaited so historical logs never hold up the live betting controls.
-    this.#loadBenchmarks(seq, level, this.#volume.openRound);
+    // marketState/volumeBetCredit are global quotes. Only QUESTS knows whether
+    // this particular player earns them. Growth checks its actual open round;
+    // volume passes Game.level(), exactly like placeVolumeBet on-chain.
+    const growthLevel = Number(this.#growth.openRound || 0);
+    const volumeLevel = Number(level || 0);
+    const [growthGate, volumeGate] = await Promise.all([
+      player && growthLevel > 0
+        ? readMarketBetGates({ player, level: growthLevel }).catch(() => null)
+        : Promise.resolve(null),
+      player && volumeLevel > 0
+        ? readMarketBetGates({ player, level: volumeLevel }).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    if (seq !== this.#fetchSeq) return;
+    this.#bonusEligibility = {
+      growth: growthGate?.earnsReward === true,
+      volume: volumeGate?.earnsReward === true,
+    };
+
+    // Volume history does need the authoritative open round, so its heavier log
+    // scan remains here. It cannot delay the already-running page pool reads.
+    void this.#loadVolumeBenchmark(seq, this.#volume.openRound);
 
     this.#render();
     this.#armPoll();
   }
 
-  // Benchmarks are decoration, not settlement inputs: both soft-fail to null and
-  // the books render without them.
-  async #loadBenchmarks(seq, level, volumeOpenRound) {
+  // Direct pool/phase reads are not settlement inputs and do not depend on any
+  // player or market history. Keeping them isolated is what lets the strip
+  // paint promptly on cold load and at a phase transition.
+  async #loadPoolBenchmarks(seq, level) {
+    const [ratchets, poolTarget, phaseContext] = await Promise.all([
+      readGrowthRatchets({ round: level }).catch(() => null),
+      readPrizePoolTarget().catch(() => null),
+      readJackpotPhaseContext().catch(() => null),
+    ]);
+    if (seq !== this.#fetchSeq) return;
+    const benchmarkLevel = Number(level);
+    const contractLevel = Number(ratchets?.currentLevel);
+    const benchmarkIsCurrent = Number.isInteger(contractLevel)
+      && contractLevel === benchmarkLevel;
+    if (ratchets
+      && benchmarkIsCurrent
+      && Number.isInteger(benchmarkLevel)
+      && benchmarkLevel >= 0) {
+      const prior = get('app.poolBenchmarks');
+      const sameLevel = Number(prior?.level) === benchmarkLevel;
+      const targetWei = poolTarget != null && BigInt(poolTarget) > 0n
+        ? BigInt(poolTarget).toString()
+        : sameLevel ? prior?.targetWei ?? null : null;
+      const growth = ratchets
+        ? {
+          prev: BigInt(ratchets.prev).toString(),
+          current: BigInt(ratchets.current).toString(),
+          next: BigInt(ratchets.next ?? 0).toString(),
+        }
+        : sameLevel ? prior?.ratchets ?? null : null;
+      // The full-width pool thermometer consumes the same contract reads as
+      // this book. Publish before the historical volume scan so that an RPC's
+      // log latency cannot hold up the page-wide progression display.
+      update('app.poolBenchmarks', {
+        level: benchmarkLevel,
+        targetWei,
+        ratchets: growth,
+        contractPhase: phaseContext
+          ? {
+            jackpot: phaseContext.jackpot === true,
+            lastPurchaseDay: phaseContext.lastPurchaseDay === true,
+            day: Number(ratchets.phaseDay) || 0,
+            compressedFlag: Number(phaseContext.compressedFlag) || 0,
+          }
+          : null,
+      });
+    }
+    if (ratchets) this.#ratchets = ratchets;
+    this.#render();
+  }
+
+  // Volume deliberately waits for its adjacent sealed ticket count so the
+  // player is never offered an unlabeled OVER / UNDER wager. This backwards
+  // log walk can take seconds on public RPCs and must stay off the pool path.
+  async #loadVolumeBenchmark(seq, volumeOpenRound) {
     const open = Number(volumeOpenRound || volumeRoundNow());
     const previousVolumeRound = Number.isInteger(open) && open > 1 ? open - 1 : null;
-    const [seal, ratchets] = await Promise.all([
-      readLastVolumeSeal(previousVolumeRound == null ? undefined : { round: previousVolumeRound })
-        .catch(() => null),
-      readGrowthRatchets({ round: level }).catch(() => null),
-    ]);
+    const seal = await readLastVolumeSeal(
+      previousVolumeRound == null ? undefined : { round: previousVolumeRound },
+    ).catch(() => null);
     if (seq !== this.#fetchSeq) return;
     const currentVolume = seal?.blockNumber > 0
       ? await readCurrentTicketVolume({ afterBlock: seal.blockNumber }).catch(() => null)
       : null;
     if (seq !== this.#fetchSeq) return;
-    if (!seal && !ratchets && currentVolume == null) return;
-    // These are three independent, best-effort reads. A transient historical-log
-    // failure must not erase the last good volume line just because the growth
-    // ratchet read succeeded on the same poll; doing that made both the ticket
-    // threshold and its red/green result color blink out of the live card.
+    if (!seal && currentVolume == null) return;
+    // A transient historical-log failure must not erase the last good volume
+    // line; doing that made the ticket threshold and result color blink out.
     if (seal) this.#lastSeal = seal;
     if (currentVolume != null) this.#currentVolume = currentVolume;
-    if (ratchets) this.#ratchets = ratchets;
     this.#render();
   }
 
@@ -438,11 +562,9 @@ class AppParimutuelPanel extends HTMLElement {
   }
 
   #visible() {
-    return Boolean(this.#growth.openRound)
-      || Boolean(this.#volume.openRound)
+    return Boolean(this.#openState(this.#growth))
+      || (Boolean(this.#openState(this.#volume)) && Boolean(this.#volumeMark(this.#volume.openRound)))
       || decimatorWindowIsOpen(this.#gameState, this.#decimatorPosition)
-      || this.#claimableTotal(this.#growth) > 0n
-      || this.#claimableTotal(this.#volume) > 0n
       || this.#lost(this.#growth, 'growth').length > 0
       || this.#lost(this.#volume, 'volume').length > 0
       || this.#pendingSettlement(this.#growth).length > 0
@@ -482,12 +604,14 @@ class AppParimutuelPanel extends HTMLElement {
     this.innerHTML = `
       <section class="panel app-parimutuel">
         <div class="panel-header">
-          <h2>SIDE BETS</h2>
+          <h2><a class="pari-learn-link" href="/learn/side-bets/">SIDE BETS</a></h2>
         </div>
         <div class="pari-books">
+          <!-- Decimator comes first deliberately: its x4/x99 burn window is
+               level-gated and must not sit below the always-recurring books. -->
+          <article class="pari-book pari-decimator" data-bind="pari-decimator" hidden></article>
           <article class="pari-book" data-bind="pari-growth" hidden></article>
           <article class="pari-book" data-bind="pari-volume" hidden></article>
-          <article class="pari-book pari-decimator" data-bind="pari-decimator" hidden></article>
         </div>
         <p class="pari-empty" data-bind="pari-empty">Checking…</p>
         <div class="pari-error" data-bind="pari-error" hidden role="alert"></div>
@@ -502,9 +626,13 @@ class AppParimutuelPanel extends HTMLElement {
       empty.hidden = visible;
       if (!visible) {
         const win = volumeWindow();
-        empty.textContent = win.secondsToOpen > 0
-          ? `Books are closed · volume opens in ${_fmtClock(win.secondsToOpen)}`
-          : 'Books are closed';
+        const waitingForVolumeLine = Boolean(this.#volume.openRound)
+          && !this.#volumeMark(this.#volume.openRound);
+        empty.textContent = waitingForVolumeLine
+          ? 'Loading yesterday’s ticket total…'
+          : win.secondsToOpen > 0
+            ? `Books are closed · volume opens in ${_fmtClock(win.secondsToOpen)}`
+            : 'Books are closed';
       }
     }
     this.#renderBook('growth');
@@ -526,40 +654,48 @@ class AppParimutuelPanel extends HTMLElement {
     head.className = 'pari-book__head';
     const title = document.createElement('h3');
     title.className = 'pari-book__title';
-    title.textContent = `DECIMATOR${level != null ? ` · Level ${level}` : ''}`;
+    title.textContent = 'DECIMATOR';
     const boon = document.createElement('boon-product-indicator');
     boon.setAttribute('product', 'decimator');
     title.appendChild(boon);
-    const state = document.createElement('span');
-    state.className = 'pari-clock pari-clock--open';
-    state.textContent = 'Entry open';
     head.appendChild(title);
-    head.appendChild(state);
+    const futurePool = this.#decimatorContext?.futurePoolWei
+      ?? this.#gameState?.prizePools?.futurePrizePool;
+    const prize = decimatorPoolWei(futurePool, level);
+    const prizeBox = document.createElement('div');
+    prizeBox.className = 'pari-decimator__prize';
+    const prizeAmount = document.createElement('strong');
+    prizeAmount.textContent = _fmtPoolEth(prize);
+    const prizeUnit = document.createElement('span');
+    prizeUnit.textContent = 'ETH';
+    prizeBox.appendChild(prizeAmount);
+    prizeBox.appendChild(prizeUnit);
+    head.appendChild(prizeBox);
     host.appendChild(head);
 
     const ask = document.createElement('p');
     ask.className = 'pari-book__ask';
-    ask.textContent = level == null
-      ? 'Burn FLIP for a weighted share of the next Decimator pool.'
-      : `Burn FLIP for a weighted share of the Level ${level} Decimator pool.`;
+    ask.textContent = 'Burn FLIP to enter.';
     host.appendChild(ask);
 
-    const stats = document.createElement('div');
-    stats.className = 'pari-decimator__stats';
-    const pool = document.createElement('span');
-    pool.textContent = `Pool · ${_fmtPoolEth(this.#gameState?.prizePools?.futurePrizePool)} ETH`;
-    stats.appendChild(pool);
-    const effective = (() => {
-      try { return BigInt(this.#decimatorPosition?.effectiveAmount ?? 0); }
-      catch (_e) { return 0n; }
-    })();
-    if (effective > 0n) {
-      const mine = document.createElement('span');
-      const bucket = Number(this.#decimatorPosition?.bucket);
-      mine.textContent = `Yours · ${_fmtFlip(effective)} FLIP${Number.isInteger(bucket) ? ` · Bucket ${bucket}` : ''}`;
-      stats.appendChild(mine);
+    const scoreBoard = document.createElement('div');
+    scoreBoard.className = 'pari-decimator__scoreboard';
+    const scoreItems = [
+      ['CURRENT SCORE', this.#decimatorContext?.totalBurnWeight],
+      ['TOTAL SCORE', this.#decimatorContext?.totalRoundScore],
+    ];
+    for (const [label, value] of scoreItems) {
+      const item = document.createElement('span');
+      const itemLabel = document.createElement('small');
+      itemLabel.textContent = label;
+      const itemValue = document.createElement('strong');
+      try { itemValue.textContent = value == null ? '—' : _fmtFlip(BigInt(value)); }
+      catch (_e) { itemValue.textContent = '—'; }
+      item.appendChild(itemLabel);
+      item.appendChild(itemValue);
+      scoreBoard.appendChild(item);
     }
-    host.appendChild(stats);
+    host.appendChild(scoreBoard);
 
     const entry = document.createElement('div');
     entry.className = 'pari-decimator__entry';
@@ -573,26 +709,95 @@ class AppParimutuelPanel extends HTMLElement {
     input.value = this.#decimatorDraft;
     input.setAttribute('data-bind', 'pari-decimator-input');
     input.setAttribute('aria-label', 'Decimator entry size in FLIP');
-    input.addEventListener('input', () => { this.#decimatorDraft = String(input.value || ''); });
+    input.addEventListener('input', () => {
+      this.#decimatorDraft = String(input.value || '');
+      this.#paintDecimatorQuote(input.value, quote);
+    });
     const unit = document.createElement('span');
+    unit.className = 'pari-decimator__input-unit';
     unit.textContent = 'FLIP';
+    const stepper = document.createElement('span');
+    stepper.className = 'pari-decimator__stepper';
+    stepper.setAttribute('role', 'group');
+    stepper.setAttribute('aria-label', 'Adjust Decimator entry by 1,000 FLIP');
+    const makeStepButton = (direction) => {
+      const control = document.createElement('button');
+      control.type = 'button';
+      control.className = `pari-decimator__step pari-decimator__step--${direction > 0 ? 'up' : 'down'}`;
+      control.setAttribute(
+        'data-bind',
+        direction > 0 ? 'pari-decimator-up' : 'pari-decimator-down',
+      );
+      control.setAttribute(
+        'aria-label',
+        `${direction > 0 ? 'Increase' : 'Decrease'} Decimator entry by 1,000 FLIP`,
+      );
+      const arrow = document.createElement('span');
+      arrow.className = 'pari-decimator__step-arrow';
+      arrow.setAttribute('aria-hidden', 'true');
+      control.appendChild(arrow);
+      control.addEventListener('click', () => {
+        const step = 1_000n * (10n ** 18n);
+        const parsed = _parseFlipInput(input.value);
+        const current = parsed == null ? 0n : parsed;
+        const stepped = direction > 0 ? current + step : current - step;
+        const next = stepped < DECIMATOR_MIN_FLIP_WEI
+          ? DECIMATOR_MIN_FLIP_WEI
+          : stepped;
+        const value = _formatFlipInput(next);
+        input.value = value;
+        this.#decimatorDraft = value;
+        this.#paintDecimatorQuote(value, quote);
+      });
+      return control;
+    };
+    stepper.appendChild(makeStepButton(1));
+    stepper.appendChild(makeStepButton(-1));
+    const quote = document.createElement('small');
+    quote.className = 'pari-decimator__cta-quote';
+    quote.setAttribute('data-bind', 'pari-decimator-quote');
     inputWrap.appendChild(input);
     inputWrap.appendChild(unit);
+    inputWrap.appendChild(stepper);
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'pari-decimator__cta';
     button.setAttribute('data-write', '');
     button.setAttribute('data-bind', 'pari-decimator-cta');
-    button.textContent = 'Enter';
+    const buttonAction = document.createElement('span');
+    buttonAction.className = 'pari-decimator__cta-action';
+    buttonAction.textContent = 'BURN';
+    button.appendChild(buttonAction);
+    button.appendChild(quote);
+    this.#paintDecimatorQuote(input.value, quote);
     button.addEventListener('click', () => this.#enterDecimator());
     entry.appendChild(inputWrap);
     entry.appendChild(button);
     host.appendChild(entry);
 
-    const hint = document.createElement('p');
-    hint.className = 'pari-book__foot pari-decimator__hint';
-    hint.textContent = 'Minimum 1,000 · uses wallet + claimable FLIP';
-    host.appendChild(hint);
+  }
+
+  #paintDecimatorQuote(raw, target = null) {
+    const quote = target || this.querySelector('[data-bind="pari-decimator-quote"]');
+    if (!quote) return;
+    const amount = _parseFlipInput(raw);
+    const activityScore = Number(this.#decimatorContext?.activityScore);
+    if (amount == null || amount <= 0n || !Number.isFinite(activityScore)) {
+      quote.textContent = 'FOR — SCORE';
+      return;
+    }
+    let previousScore = 0n;
+    try { previousScore = BigInt(this.#decimatorContext?.totalBurnWeight ?? 0); }
+    catch (_e) { previousScore = 0n; }
+    const score = decimatorEntryScoreWei({
+      amountWei: amount,
+      previousScoreWei: previousScore,
+      activityScore: Math.max(0, Math.trunc(activityScore)),
+      dayOneActive: this.#decimatorContext?.dayOneActive === true,
+      lastPurchaseDay: this.#decimatorContext?.lastPurchaseDay === true,
+      boonBps: _decimatorBoonBps(get('app.boons')),
+    });
+    quote.textContent = `FOR ${_fmtFlip(score)} SCORE`;
   }
 
   #applyQuestPreset(detail) {
@@ -629,12 +834,16 @@ class AppParimutuelPanel extends HTMLElement {
         if (settledLoss && seen.has(id)) continue;
         const ready = claimable || settledLoss;
         const side = result.side === SIDE_OVER ? 'OVER' : 'UNDER';
-        const place = kind === 'growth' ? `Level ${result.round}` : `Round ${result.round}`;
+        const place = kind === 'growth' ? ` · Level ${result.round}` : '';
+        const pariClaim = claimable;
         rows.push({
           id: `pari:${id}`,
-          kind: 'pari',
-          label: `${kind === 'growth' ? 'Growth' : 'Volume'} pari · ${place}`,
-          shortLabel: 'Pari result',
+          // Every ready pari payout belongs in the bottom action tray with
+          // packs and lootboxes. The SIDE BETS cards remain the live books,
+          // not a second home for claim buttons.
+          kind: pariClaim ? `${kind}-claim` : 'pari',
+          label: kind === 'growth' ? `GROWTH BET${place}` : 'VOLUME BET',
+          shortLabel: pariClaim ? 'Claim' : kind === 'growth' ? 'GROWTH BET' : 'VOLUME BET',
           detail: this.#busy
             ? 'Processing result'
             : ready
@@ -643,7 +852,9 @@ class AppParimutuelPanel extends HTMLElement {
                 : `${side} result ready`
               : `${side} · waiting for settlement`,
           state: this.#busy ? 'busy' : ready ? 'ready' : 'waiting',
+          autoOpen: settledLoss,
           order: 30,
+          chronology: Number(result.round),
           run: claimable
             ? () => this.#claim(kind, [result.round])
             : settledLoss ? () => this.#revealPari(kind, result) : null,
@@ -689,22 +900,29 @@ class AppParimutuelPanel extends HTMLElement {
     const claimable = this.#claimable(book);
     const lost = this.#lost(book, kind);
     const pending = this.#pendingSettlement(book);
+    // openRound is only a pointer returned by each lookback read. Do not paint
+    // a header-only card unless the authoritative row for that exact round was
+    // actually recovered (the targeted backfill can soft-fail on a stale RPC).
+    const open = this.#openState(book);
     const win = volumeWindow();
     const volumeSoon = !win.open && win.secondsToOpen <= (VOLUME_WINDOW.leadSeconds || 0);
-    const show = Boolean(book.openRound)
-      || claimable.length > 0
+    const hasContent = Boolean(open)
       || lost.length > 0
       || pending.length > 0;
+    const volumeLineReady = kind !== 'volume'
+      || !book.openRound
+      || Boolean(this.#volumeMark(book.openRound));
+    const show = hasContent && volumeLineReady;
     host.hidden = !show;
     host.textContent = '';
     if (!show) return;
 
-    const open = this.#openState(book);
-    const latestPosition = [...claimable, ...lost, ...pending]
+    const latestPosition = [...lost, ...pending]
       .sort((a, b) => Number(b.round) - Number(a.round))[0];
     const round = book.openRound || open?.round || latestPosition?.round || 0;
     const settledOnly = !book.openRound
-      && (claimable.length > 0 || lost.length > 0 || pending.length > 0);
+      && (lost.length > 0 || pending.length > 0);
+    const heldOpenVolume = kind === 'volume' && Number(open?.side || 0) !== 0;
     if (host.classList) {
       if (settledOnly) host.classList.add('pari-book--settled');
       else host.classList.remove('pari-book--settled');
@@ -715,8 +933,8 @@ class AppParimutuelPanel extends HTMLElement {
     const title = document.createElement('h3');
     title.className = 'pari-book__title';
     title.textContent = kind === 'growth'
-      ? `GROWTH${round ? ` · Level ${round}` : ''}`
-      : `VOLUME${round ? ` · Round ${round}` : ''}`;
+      ? `GROWTH BET${round ? ` · Level ${round}` : ''}`
+      : 'VOLUME BET';
     head.appendChild(title);
     if (!settledOnly) {
       const chip = document.createElement('span');
@@ -733,10 +951,10 @@ class AppParimutuelPanel extends HTMLElement {
     }
     host.appendChild(head);
 
-    if (round && !settledOnly) {
-      // Pair the prior benchmark with the upcoming period label on one compact
-      // context row. Volume adds TODAY at the right edge; keeping it out of the
-      // choice grid lets OVER and UNDER use full width.
+    if (round && !settledOnly && !heldOpenVolume) {
+      // Keep the prior benchmark on its own compact history row. The ticket
+      // book adds a centered TODAY line immediately below it while the player
+      // is still choosing a side. Once committed, the receipt stands alone.
       const context = document.createElement('div');
       context.className = 'pari-book__context';
       const mark = kind === 'growth' ? this.#growthMark(round) : this.#volumeMark(round);
@@ -758,6 +976,12 @@ class AppParimutuelPanel extends HTMLElement {
             ? 'This result did not beat the prior offered number'
             : 'Past result';
         bench.appendChild(offered);
+        if (kind === 'growth' && mark.target) {
+          const target = document.createElement('span');
+          target.className = 'pari-book__target';
+          target.textContent = ` · Target: ${mark.target}`;
+          bench.appendChild(target);
+        }
         context.appendChild(bench);
       }
       host.appendChild(context);
@@ -785,17 +1009,10 @@ class AppParimutuelPanel extends HTMLElement {
       host.appendChild(wait);
     }
 
-    this.#renderPositions(
-      host,
-      kind,
-      book,
-      claimable,
-      lost,
-      featuredGrowthPosition ? pending.slice(1) : pending,
-    );
+    this.#renderPositions(host, kind, book, lost, featuredGrowthPosition ? pending.slice(1) : pending);
   }
 
-  // "Yesterday: N tickets" — strictly the immediately preceding round's
+  // "Yesterday: N tickets bought" — strictly the immediately preceding round's
   // result. A stale seal must never make Round 429 look like it is betting
   // against Round 427; Round 427 only matters through Round 428's recorded
   // OVER/UNDER outcome.
@@ -803,22 +1020,44 @@ class AppParimutuelPanel extends HTMLElement {
     const seal = this.#lastSeal;
     if (!seal) return null;
     const open = Number(round || this.#volume.openRound || volumeRoundNow());
-    if (!Number.isInteger(open) || seal.round !== open - 1) return null;
-    return { lead: 'Yesterday: ', offered: `${_fmtTickets(seal.total)} tickets` };
+    if (!Number.isInteger(open)) return null;
+    // The latest seal includes both its own total and the total it compared
+    // against. That second value preserves the exact pick while the just-closed
+    // round is showing its TO WIN receipt.
+    const total = seal.round === open - 1
+      ? seal.total
+      : seal.round === open ? seal.previous : null;
+    if (total == null) return null;
+    const tickets = _fmtTickets(total);
+    return {
+      lead: 'Yesterday: ',
+      offered: `${tickets} tickets bought`,
+      target: `${tickets} tickets`,
+    };
   }
 
-  // "Last level: X%" — the growth rate the next level has to beat. The book
-  // compares RATIOS of consecutive prize pools, so this is the realized ratio of
-  // the step just completed.
+  // The book compares RATIOS of consecutive prize pools. Keep the prior
+  // percentage as context, but make the actionable line the exact ETH pool
+  // threshold: OVER is strict, so one raw wei is added after integer division.
   #growthMark(round) {
     const r = this.#ratchets;
     if (!r) return null;
     const bps = growthBps(r.prev, r.current);
     if (bps == null) return null;
+    let target;
+    try {
+      const prev = BigInt(r.prev ?? 0);
+      const current = BigInt(r.current ?? 0);
+      if (prev <= 0n || current <= 0n) return null;
+      target = (current * current) / prev + 1n;
+    } catch (_e) {
+      return null;
+    }
     const pct = _fmtPct(Math.abs(bps) / 100);
     return {
       lead: 'Last level: ',
       offered: `${bps < 0 ? '-' : ''}${pct}%`,
+      target: `${_fmtPoolEth(target)} ETH`,
     };
   }
 
@@ -927,14 +1166,12 @@ class AppParimutuelPanel extends HTMLElement {
       ? this.#growthMark(state.round || this.#level)
       : this.#volumeMark(state.round || this.#volume.openRound);
     const today = document.createElement('div');
-    today.className = 'pari-today';
-    if (kind === 'volume') {
+    today.className = `pari-today pari-today--${kind}`;
+    if (kind === 'volume' && mine === 0) {
       const todayLabel = document.createElement('span');
       todayLabel.className = 'pari-today__label';
       todayLabel.textContent = 'TODAY';
-      const context = host.querySelector('.pari-book__context');
-      if (context) context.appendChild(todayLabel);
-      else today.appendChild(todayLabel);
+      today.appendChild(todayLabel);
     }
 
     const wrap = document.createElement('div');
@@ -955,6 +1192,12 @@ class AppParimutuelPanel extends HTMLElement {
       host.appendChild(today);
       return;
     }
+    if (kind === 'volume' && mine !== 0) {
+      this.#renderHeldVolume(today, state, offered);
+      this.#appendSplit(today, overPct);
+      host.appendChild(today);
+      return;
+    }
 
     for (const side of [SIDE_OVER, SIDE_UNDER]) {
       const isOver = side === SIDE_OVER;
@@ -970,7 +1213,7 @@ class AppParimutuelPanel extends HTMLElement {
         btn.setAttribute('data-write', '');
         const action = document.createElement('span');
         action.className = 'pari-side__action';
-        if (kind === 'volume' && offered) {
+        if (offered) {
           const verb = document.createElement('span');
           verb.className = 'pari-side__verb';
           // Keep a separating space in the accessibility/fake-DOM aggregate;
@@ -978,7 +1221,7 @@ class AppParimutuelPanel extends HTMLElement {
           verb.textContent = `${sideText} `;
           const target = document.createElement('span');
           target.className = 'pari-side__target';
-          target.textContent = offered.offered;
+          target.textContent = offered.target;
           action.appendChild(verb);
           action.appendChild(target);
         } else {
@@ -988,9 +1231,7 @@ class AppParimutuelPanel extends HTMLElement {
         btn.setAttribute(
           'aria-label',
           `Bet ${isOver ? 'over' : 'under'}${offered
-            ? kind === 'volume'
-              ? ` ${offered.offered}`
-              : ` ${offered.offered}`
+            ? ` ${offered.target}`
             : ''}`,
         );
         btn.addEventListener('click', () => this.#bet(kind, isOver));
@@ -1023,7 +1264,57 @@ class AppParimutuelPanel extends HTMLElement {
     // Keep the choices terse. The percentages appear once under their matching
     // ends of the live split instead of being repeated inside each button.
     this.#appendSplit(today, overPct);
+    this.#appendPrebetBonus(today, kind);
     host.appendChild(today);
+  }
+
+  // Both contracts expose the exact reward for placing right now: growth's
+  // participation reward comes back with marketState, while Daily Volume's
+  // placement credit decays through its open window. Keep this beside the live
+  // choices only; after the player commits, the held-position receipt takes
+  // over and the quote is no longer relevant.
+  #appendPrebetBonus(host, kind) {
+    if (this.#bonusEligibility[kind] !== true) return;
+    const amount = kind === 'growth' ? this.#growth.questReward : this.#volume.credit;
+    if (BigInt(amount || 0n) <= 0n) return;
+
+    const bonus = document.createElement('div');
+    bonus.className = 'pari-prebet-bonus';
+    const label = document.createElement('span');
+    label.className = 'pari-prebet-bonus__label';
+    label.textContent = `BET: ${_fmtFlip(STAKE_WEI)} FLIP\u00a0\u00a0\u00a0BONUS: `;
+    const value = document.createElement('strong');
+    value.className = 'pari-prebet-bonus__value';
+    value.textContent = `+${_fmtFlip(amount)} FLIP`;
+    bonus.appendChild(label);
+    bonus.appendChild(value);
+    host.appendChild(bonus);
+  }
+
+  #renderHeldVolume(host, state, offered, { closed = false } = {}) {
+    const sideText = state.side === SIDE_OVER ? 'OVER' : 'UNDER';
+    const line = document.createElement('div');
+    line.className = `pari-your-bet pari-your-bet--volume pari-your-bet--${
+      state.side === SIDE_OVER ? 'over' : 'under'
+    }${closed ? ' pari-your-bet--closed' : ''}`;
+    const label = document.createElement('span');
+    label.className = 'pari-your-bet__label';
+    label.textContent = 'YOUR BET:';
+    const pick = document.createElement('strong');
+    pick.className = 'pari-your-bet__pick';
+    const compactTarget = offered?.target || '';
+    pick.textContent = `${sideText}${compactTarget ? ` ${compactTarget}` : ''}`;
+    line.appendChild(label);
+    line.appendChild(pick);
+    if (closed) {
+      const payout = document.createElement('strong');
+      payout.className = 'pari-your-bet__payout';
+      payout.textContent = `TO WIN: ${_fmtFlip(
+        payoutPerWinner(state.overCount, state.underCount, state.side),
+      )} FLIP`;
+      line.appendChild(payout);
+    }
+    host.appendChild(line);
   }
 
   #renderHeldGrowth(host, state, { closed = false } = {}) {
@@ -1037,7 +1328,7 @@ class AppParimutuelPanel extends HTMLElement {
     label.textContent = 'YOUR BET:';
     const pick = document.createElement('strong');
     pick.className = 'pari-your-bet__pick';
-    pick.textContent = `${sideText}${offered ? ` ${offered.offered}` : ''} GROWTH`;
+    pick.textContent = `${sideText}${offered?.target ? ` ${offered.target}` : ''}`;
     line.appendChild(label);
     line.appendChild(pick);
     if (closed) {
@@ -1081,16 +1372,19 @@ class AppParimutuelPanel extends HTMLElement {
     host,
     kind,
     book,
-    claimable,
     lost = this.#lost(book, kind),
     pending = this.#pendingSettlement(book),
   ) {
-    if (claimable.length === 0 && lost.length === 0 && pending.length === 0) return;
+    if (lost.length === 0 && pending.length === 0) return;
 
     const list = document.createElement('div');
     list.className = 'pari-results';
 
     for (const r of pending) {
+      if (kind === 'volume') {
+        this.#renderHeldVolume(list, r, this.#volumeMark(r.round), { closed: true });
+        continue;
+      }
       const row = document.createElement('div');
       row.className = 'pari-result pari-result--pending';
       const label = document.createElement('span');
@@ -1104,18 +1398,8 @@ class AppParimutuelPanel extends HTMLElement {
       list.appendChild(row);
     }
 
-    // Settled history is intentionally absent here. It duplicated the reveal
-    // receipt as a tall “Level N · OVER won / 1,000 FLIP” stack. Retain only a
-    // still-settling position and the useful action below.
-    if (claimable.length > 0 && get('connected.address')) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'pari-claim-cta';
-      btn.setAttribute('data-write', '');
-      btn.textContent = `Claim ${_fmtFlip(this.#claimableTotal(book))} FLIP`;
-      btn.addEventListener('click', () => this.#claim(kind, claimable.map((r) => r.round)));
-      list.appendChild(btn);
-    }
+    // Settled wins and their claim buttons live in the shared bottom action
+    // tray. Keep SIDE BETS focused on live and still-settling positions.
     host.appendChild(list);
   }
 
@@ -1133,6 +1417,7 @@ class AppParimutuelPanel extends HTMLElement {
   async #enterDecimator() {
     const input = this.querySelector('[data-bind="pari-decimator-input"]');
     const button = this.querySelector('[data-bind="pari-decimator-cta"]');
+    const action = button?.querySelector('.pari-decimator__cta-action');
     const amount = _parseFlipInput(input?.value);
     if (amount == null) {
       this.#renderError('Enter a numeric FLIP amount.');
@@ -1145,12 +1430,13 @@ class AppParimutuelPanel extends HTMLElement {
     this.#decimatorDraft = String(input?.value || '1000');
     if (button) {
       button.disabled = true;
-      button.textContent = 'Entering…';
+      if (action) action.textContent = 'BURNING…';
     }
     await this.#run((player) => burnForDecimator({ player, amount }));
     if (button) {
       button.disabled = false;
-      button.textContent = 'Enter';
+      if (action) action.textContent = 'BURN';
+      this.#paintDecimatorQuote(input?.value);
     }
   }
 
@@ -1258,13 +1544,19 @@ class AppParimutuelPanel extends HTMLElement {
       const player = getActingAddress();
       if (!player) throw new Error('Connect a wallet first.');
       await fn(player);
-      _setTimeoutUnref(() => this.#refresh(), 250);
+      if (this.#postActionRefreshHandle != null) clearTimeout(this.#postActionRefreshHandle);
+      this.#postActionRefreshHandle = _setTimeoutUnref(() => {
+        this.#postActionRefreshHandle = null;
+        this.#refresh();
+      }, 250);
       return true;
     } catch (error) {
       this.#renderError(compactUiError(error));
       return false;
     } finally {
-      _setTimeoutUnref(() => {
+      if (this.#busyResetHandle != null) clearTimeout(this.#busyResetHandle);
+      this.#busyResetHandle = _setTimeoutUnref(() => {
+        this.#busyResetHandle = null;
         this.#busy = false;
         this.#publishPending();
       }, 500);

@@ -1,4 +1,4 @@
-// app/claims.js -- Unified claims business logic: ETH + BURNIE aggregation and claim transactions
+// app/claims.js -- Unified claims business logic: ETH + FLIP aggregation and claim transactions
 // Components should import these functions rather than importing ethers or calling contracts directly.
 
 import { ethers } from 'ethers';
@@ -10,21 +10,21 @@ import { refreshAfterAction } from './api.js';
 // -- Read Functions (use getReadProvider, work before wallet) --
 
 /**
- * Fetch all claimable amounts (ETH from game, BURNIE from coinflip) and update store.
+ * Fetch all claimable amounts (ETH from game, FLIP from coinflip) and update store.
  * Uses Promise.allSettled for resilience (one failing doesn't block the other).
  * @param {string} address - Player wallet address
  */
 export async function fetchAllClaimable(address) {
   if (!address) return;
 
-  const [ethResult, burnieResult] = await Promise.allSettled([
+  const [ethResult, flipResult] = await Promise.allSettled([
     fetchEthClaimable(address),
-    fetchBurnieClaimable(address),
+    fetchFlipClaimable(address),
   ]);
 
   batch([
     ['claims.eth', ethResult.status === 'fulfilled' ? ethResult.value : '0'],
-    ['claims.burnie', burnieResult.status === 'fulfilled' ? burnieResult.value : '0'],
+    ['claims.flip', flipResult.status === 'fulfilled' ? flipResult.value : '0'],
   ]);
 }
 
@@ -42,11 +42,11 @@ async function fetchEthClaimable(address) {
 }
 
 /**
- * Read BURNIE claimable from coinflip contract.
+ * Read FLIP claimable from coinflip contract.
  * @param {string} address - Player wallet address
- * @returns {Promise<string>} Claimable BURNIE amount as wei string
+ * @returns {Promise<string>} Claimable FLIP amount as wei string
  */
-async function fetchBurnieClaimable(address) {
+async function fetchFlipClaimable(address) {
   const contract = new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, getReadProvider());
   const raw = await contract.previewClaimCoinflips(address);
   return raw.toString();
@@ -74,17 +74,17 @@ export async function claimEth() {
 }
 
 /**
- * Claim BURNIE winnings from the coinflip contract.
+ * Claim FLIP winnings from the coinflip contract.
  * @returns {Promise<object>} Transaction receipt
  */
-export async function claimBurnie() {
+export async function claimFlip() {
   const playerAddress = get('player.address');
   if (!playerAddress) throw new Error('Wallet not connected');
 
   const contract = getContract(CONTRACTS.COINFLIP, COINFLIP_ABI);
   const receipt = await sendTx(
     contract.claimCoinflips(playerAddress, playerAddress),
-    'Claim BURNIE winnings'
+    'Claim FLIP winnings'
   );
 
   await refreshAfterAction();

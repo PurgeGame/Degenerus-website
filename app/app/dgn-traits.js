@@ -43,6 +43,13 @@ export function dgnBadgePath(q, sym, col) {
   return `/badges-circular/${cat}_${String(fileIdx).padStart(2, '0')}_${DGN_SYMBOLS[cat][sym]}_${DGN_COLORS[col]}.svg`;
 }
 
+/** Standalone trait mark without the ticket badge's color/black/white rings. */
+export function dgnSymbolPath(q, sym, col) {
+  const cat = DGN_QUADRANTS[q];
+  const fileIdx = cat === 'cards' ? DGN_CARD_IDX[sym] : sym;
+  return `/symbols/${cat}_${String(fileIdx).padStart(2, '0')}_${DGN_SYMBOLS[cat][sym]}_${DGN_COLORS[col]}.svg`;
+}
+
 /**
  * uint32 ticket (customTicket / resultTraits / playerTraits) → 4 × {sym, col};
  * byte q = quadrant q's trait (LSB-first).
@@ -169,4 +176,15 @@ export function dgnComputeMatches(player, house) {
     else states.push('miss');
   }
   return { states, fullCount };
+}
+
+/**
+ * Visual states for Degenerette scoring. A color match only contributes when
+ * that quadrant's symbol also matches, so a color-only cell is a scoring miss
+ * and must never be painted like a point-bearing blue cell.
+ */
+export function dgnScoringMatchStates(player, house) {
+  return dgnComputeMatches(player, house).states.map((state) => (
+    state === 'col' ? 'miss' : state
+  ));
 }

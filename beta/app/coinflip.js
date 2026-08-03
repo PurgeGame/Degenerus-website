@@ -10,14 +10,14 @@ import { refreshAfterAction } from './api.js';
 // -- Write Functions (require wallet) --
 
 /**
- * Deposit BURNIE into the daily coinflip.
- * @param {string} amountStr - User-entered BURNIE amount (e.g. "500")
+ * Deposit FLIP into the daily coinflip.
+ * @param {string} amountStr - User-entered FLIP amount (e.g. "500")
  * @returns {Promise<object>} Transaction receipt
  */
 export async function depositCoinflip(amountStr) {
   const amount = parseFloat(amountStr);
   if (!amount || amount < parseFloat(COINFLIP.MIN_DEPOSIT)) {
-    throw new Error('Minimum deposit is 100 BURNIE');
+    throw new Error('Minimum deposit is 100 FLIP');
   }
 
   const playerAddress = get('player.address');
@@ -53,7 +53,7 @@ export async function claimCoinflips() {
 /**
  * Set auto-rebuy configuration.
  * @param {boolean} enabled - Whether auto-rebuy is enabled
- * @param {string} takeProfitStr - BURNIE take-profit amount string, or '0' for no limit
+ * @param {string} takeProfitStr - FLIP take-profit amount string, or '0' for no limit
  */
 export async function setAutoRebuy(enabled, takeProfitStr) {
   const playerAddress = get('player.address');

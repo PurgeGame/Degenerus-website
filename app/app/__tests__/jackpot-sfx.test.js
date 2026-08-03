@@ -21,11 +21,18 @@ import {
   warmup,
   sfxSpinStart,
   sfxTick,
+  sfxMatchLock,
   sfxRollDone,
   sfxFanfare,
   sfxGoldTicket,
   sfxNoWin,
   sfxLoserHorn,
+  sfxCoinflipStart,
+  sfxCoinflipWhoosh,
+  sfxReverseBonk,
+  sfxCoinflipTurn,
+  sfxCoinflipLand,
+  sfxQuestComplete,
   __resetForTest,
 } from '../jackpot-sfx.js';
 
@@ -43,8 +50,10 @@ function makeLocalStorage() {
 // actually schedule audio when unmuted.
 class FakeAudioContext {
   static created = 0;
+  static last = null;
   constructor() {
     FakeAudioContext.created += 1;
+    FakeAudioContext.last = this;
     this.state = 'running';
     this.currentTime = 0;
     this.destination = { name: 'destination' };
@@ -89,6 +98,8 @@ describe('headless safety (no AudioContext / no localStorage)', () => {
       sfxSpinStart(700);
       sfxTick(0);
       sfxTick(23);
+      sfxMatchLock(0);
+      sfxMatchLock(7);
       sfxRollDone(true);
       sfxRollDone(false);
       sfxFanfare(false);
@@ -96,6 +107,14 @@ describe('headless safety (no AudioContext / no localStorage)', () => {
       sfxGoldTicket();
       sfxNoWin();
       sfxLoserHorn();
+      sfxCoinflipStart();
+      sfxCoinflipWhoosh(0.8, true);
+      sfxReverseBonk();
+      sfxCoinflipTurn(true, 2);
+      sfxCoinflipTurn(false, 1);
+      sfxCoinflipLand(true);
+      sfxCoinflipLand(false);
+      sfxQuestComplete();
     });
   });
 
@@ -152,6 +171,7 @@ describe('cues with a stubbed AudioContext', () => {
     globalThis.localStorage = makeLocalStorage();
     globalThis.AudioContext = FakeAudioContext;
     FakeAudioContext.created = 0;
+    FakeAudioContext.last = null;
     __resetForTest();
   });
 
@@ -163,11 +183,43 @@ describe('cues with a stubbed AudioContext', () => {
 
   test('unmuted cues schedule oscillators', () => {
     warmup();
+    const before = FakeAudioContext.last.oscillators.length;
     sfxTick(3);
+    const afterTick = FakeAudioContext.last.oscillators.length;
+    sfxMatchLock(3);
+    const afterMatch = FakeAudioContext.last.oscillators.length;
     sfxFanfare(false);
     // Reach into the cached context via a fresh warmup-created instance:
     // FakeAudioContext.created === 1 means all cues shared the cached ctx.
     assert.equal(FakeAudioContext.created, 1);
+    assert.equal(afterTick - before, 1, 'ordinary lock is one mechanical tick');
+    assert.equal(afterMatch - afterTick, 2,
+      'a winning Degenerette lock has its own layered two-note cue');
+  });
+
+  test('coinflip launch, whoosh, Reverse bonk, turn, and landings have distinct layered cues', () => {
+    warmup();
+    const counts = [];
+    const sample = (cue) => {
+      const before = FakeAudioContext.last.oscillators.length;
+      cue();
+      counts.push(FakeAudioContext.last.oscillators.length - before);
+    };
+    sample(() => sfxCoinflipStart());
+    sample(() => sfxCoinflipWhoosh(0.8, true));
+    sample(() => sfxReverseBonk());
+    sample(() => sfxCoinflipTurn(true, 1));
+    sample(() => sfxCoinflipTurn(false, 2));
+    sample(() => sfxCoinflipLand(true));
+    sample(() => sfxCoinflipLand(false));
+    assert.deepEqual(counts, [3, 2, 3, 2, 2, 4, 2]);
+  });
+
+  test('quest completion is a small two-note chime', () => {
+    warmup();
+    const before = FakeAudioContext.last.oscillators.length;
+    sfxQuestComplete();
+    assert.equal(FakeAudioContext.last.oscillators.length - before, 2);
   });
 
   test('muted → no context, no oscillators', () => {
@@ -175,11 +227,18 @@ describe('cues with a stubbed AudioContext', () => {
     warmup();
     sfxSpinStart(700);
     sfxTick(0);
+    sfxMatchLock(0);
     sfxRollDone(true);
     sfxFanfare(true);
     sfxGoldTicket();
     sfxNoWin();
     sfxLoserHorn();
+    sfxCoinflipStart();
+    sfxCoinflipWhoosh();
+    sfxReverseBonk();
+    sfxCoinflipTurn(true, 1);
+    sfxCoinflipLand(false);
+    sfxQuestComplete();
     assert.equal(FakeAudioContext.created, 0, 'muted cues never touch WebAudio');
   });
 

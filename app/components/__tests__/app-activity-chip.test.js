@@ -391,6 +391,19 @@ describe('breakdown popover', () => {
     el.disconnectedCallback();
   });
 
+  test('quest streak row shows the halved score contribution from the current contract', async () => {
+    stubPlayer(breakdown({
+      totalBps: 135,
+      questStreakPoints: 40,
+    }));
+    const el = await mountChip();
+    const rows = bind(el, 'ac-pop-rows').children;
+    assert.equal(rows[0].querySelector('.ac-pop__pts').textContent, '20',
+      'raw streak 40 contributes floor(40 / 2) = 20 points');
+    assert.equal(rows[0].querySelector('.ac-pop__fill').style.width, '40%');
+    el.disconnectedCallback();
+  });
+
   test('pass bonus appears only when it carries points', async () => {
     const el = await mountChip();
     assert.equal(bind(el, 'ac-pop-rows').children.length, 4);

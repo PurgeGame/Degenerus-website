@@ -6,14 +6,14 @@
 // forbids that import chain in the play/ tree.
 //
 // Differences from beta/app/quests.js:
-//  - Imports formatEth / formatBurnie from the wallet-free mirror at
+//  - Imports formatEth / formatFlip from the wallet-free mirror at
 //    beta/viewer/utils.js (same wei-string contract as beta/app/utils.js
 //    but without the ethers bare-specifier taint).
-//  - Fixes the quest-type enum bug: contract uses 9 for MINT_BURNIE;
+//  - Fixes the quest-type enum bug: contract uses 9 for MINT_FLIP;
 //    0 is the null sentinel ("no quest rolled") per
 //    /home/zak/Dev/PurgeGame/degenerus-audit/contracts/DegenerusQuests.sol
 //    lines 173-175. beta/app/constants.js:155-165 and beta/app/quests.js:19
-//    both map 0 -> MINT_BURNIE, which is wrong on-chain. This module
+//    both map 0 -> MINT_FLIP, which is wrong on-chain. This module
 //    ships the correct mapping locally rather than fixing beta/ (left
 //    for a later cleanup pass).
 //  - getQuestProgress takes a quest ROW object directly from the API
@@ -22,7 +22,7 @@
 //    result synchronously; no reactive store read is needed at render
 //    time.
 
-import { formatEth, formatBurnie } from '../../beta/viewer/utils.js';
+import { formatEth, formatFlip } from '../../beta/viewer/utils.js';
 
 // Quest-type labels (contract values per DegenerusQuests.sol:149-178).
 // Key is the on-chain questType integer; value is the display label.
@@ -36,32 +36,32 @@ export const QUEST_TYPE_LABELS = {
   5: 'Decimator Burns',
   6: 'Lootbox',
   7: 'Degenerette (ETH)',
-  8: 'Degenerette (BURNIE)',
-  9: 'Mint BURNIE Tickets',
+  8: 'Degenerette (FLIP)',
+  9: 'Mint FLIP Tickets',
 };
 
 // Render a human-readable target string for a quest row's requirements.
 // questType: integer on-chain quest type (1, 2, 3, 5, 6, 7, 8, or 9)
 // requirements: { mints: number, tokenAmount: string }
-//   mints         -- for MINT_ETH (1) and MINT_BURNIE (9) quests
+//   mints         -- for MINT_ETH (1) and MINT_FLIP (9) quests
 //   tokenAmount   -- wei-string for the amount-denominated quests
-// Returns a display string ('4 tickets', '10.00 ETH', '1500 BURNIE', etc.)
+// Returns a display string ('4 tickets', '10.00 ETH', '1500 FLIP', etc.)
 // Unknown types return 'Unknown' -- caller may suppress or show as-is.
 export function formatQuestTarget(questType, requirements) {
   switch (questType) {
     case 1:  // MINT_ETH
-    case 9:  // MINT_BURNIE (contract uses 9; NOT 0 per DegenerusQuests.sol:173-175)
+    case 9:  // MINT_FLIP (contract uses 9; NOT 0 per DegenerusQuests.sol:173-175)
       return `${requirements.mints} ticket${requirements.mints !== 1 ? 's' : ''}`;
     case 2:  // FLIP
     case 3:  // AFFILIATE
     case 5:  // DECIMATOR
-      return formatBurnie(requirements.tokenAmount) + ' BURNIE';
+      return formatFlip(requirements.tokenAmount) + ' FLIP';
     case 6:  // LOOTBOX
       return formatEth(requirements.tokenAmount) + ' ETH';
     case 7:  // DEGENERETTE_ETH
       return formatEth(requirements.tokenAmount) + ' ETH wagered';
-    case 8:  // DEGENERETTE_BURNIE
-      return formatBurnie(requirements.tokenAmount) + ' BURNIE wagered';
+    case 8:  // DEGENERETTE_FLIP
+      return formatFlip(requirements.tokenAmount) + ' FLIP wagered';
     default:
       return 'Unknown';
   }

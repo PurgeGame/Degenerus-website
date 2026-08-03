@@ -34,12 +34,13 @@
 //   CF-05: receipt-log-first parsers (BetPlaced + DegeneretteResolved + DegeneretteResult).
 //   CF-06: NEVER optimistic balance subtraction. 250ms post-confirm refetch.
 //   CF-07: T-58-18 — error.userMessage rendered via .textContent.
-//   CF-15: data-write attribute on Place + Resolve CTAs.
+//   CF-15: data-write attribute on Place; RNG/resolve writes are exposed only
+//          through the shared pending-action tray.
 //
 // Class palette: .deg-* prefix.
 
 import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
-import { displayEth, displayToken } from '../app/scaling.js';
+import { displayEth, displayToken, displayTokenSnapped } from '../app/scaling.js';
 import { get, subscribe, getViewedAddress, getActingAddress } from '../app/store.js';
 import { fetchJSON } from '../../beta/app/api.js';
 import {
@@ -52,18 +53,39 @@ import {
   parseBetResolvedFromReceipt,
   parseSpinResultsFromReceipt,
   degeneretteLimits,
+  degenerettePayoutTable,
 } from '../app/degenerette.js';
 import {
   scaledTicketPriceWei,
   canRequestLootboxRng,
   requestLootboxRng,
 } from '../app/lootbox.js';
+import {
+  enrichLootboxBoonLegs,
+  openLegsFromDegenerettePayouts,
+  parseOpenLegsFromReceipt,
+} from '../app/lootbox-legs.js';
+import { recordLootboxTicketPacks } from '../app/pack-watch.js';
 import { compactUiError } from '../app/ui-error.js';
+import {
+  readDegeneretteBetSize,
+  writeDegeneretteBetSize,
+} from '../app/degenerette-preferences.js';
+import { readDeityPassCatalog } from '../app/passes.js';
+import {
+  buildAffiliateUrl,
+  createAffiliateCode,
+  defaultCodeForAddress,
+  formatPurchaseAffiliateCode,
+  readRegisteredCode,
+  resolveRegisteredCode,
+} from '../app/affiliate.js';
 // Shared trait codecs (extracted from this file — see dgn-traits.js header).
 import {
   DGN_QUADRANTS, DGN_SYMBOLS, DGN_COLORS, DGN_COLOR_HEX,
   DGN_TICKET_COPY_EVENT,
-  dgnBadgePath, dgnUnpackTicket, dgnComputeMatches, dgnTraitIdsToQuadrants,
+  dgnBadgePath, dgnSymbolPath, dgnUnpackTicket, dgnComputeMatches,
+  dgnScoringMatchStates, dgnTraitIdsToQuadrants,
   dgnReconstructTicketTraits,
 } from '../app/dgn-traits.js';
 // Per-spin house reels: the chain publishes spin 0's only.
@@ -79,9 +101,50 @@ function _setIntervalUnref(fn, ms) {
   return h;
 }
 
+// Clipboard API calls must happen during the original click's transient user
+// activation. This fallback uses a real, temporarily mounted field instead of
+// the referral dialog input, which may be hidden when the main card is used.
+function _copyTextFallback(text) {
+  if (typeof document === 'undefined'
+    || !document.body
+    || typeof document.createElement !== 'function'
+    || typeof document.execCommand !== 'function') return false;
+  const previousFocus = document.activeElement;
+  let field = null;
+  try {
+    field = document.createElement('textarea');
+    field.value = String(text || '');
+    field.setAttribute('readonly', '');
+    field.setAttribute('aria-hidden', 'true');
+    Object.assign(field.style, {
+      position: 'fixed',
+      top: '0',
+      left: '-9999px',
+      width: '1px',
+      height: '1px',
+      opacity: '0.01',
+      pointerEvents: 'none',
+    });
+    document.body.appendChild(field);
+    field.focus?.({ preventScroll: true });
+    field.select?.();
+    field.setSelectionRange?.(0, field.value.length);
+    return Boolean(document.execCommand('copy'));
+  } catch (_e) {
+    return false;
+  } finally {
+    field?.remove?.();
+    try { previousFocus?.focus?.({ preventScroll: true }); } catch (_e) { /* defensive */ }
+  }
+}
+
 const POLL_INTERVAL_MS = 30_000;          // panel-owned 30s poll for /player snapshot.
 const RNG_POLL_INTERVAL_MS = 7_000;       // 7s per-bet RNG poll cadence.
 const POST_CONFIRM_REFETCH_MS = 250;      // CF-06.
+// A mined request is stronger evidence than an immediately-following
+// requestable static call from a lagging/load-balanced RPC. Hold the receipt
+// state long enough for every reader to catch up before allowing a retry.
+const RNG_REQUEST_RECEIPT_GRACE_MS = 30_000;
 const ERROR_AUTO_CLEAR_MS = 10_000;       // 10s.
 const DEBOUNCE_MS = 500;                  // 500ms click debounce window.
 const PENDING_SOURCE = 'degenerette';
@@ -93,6 +156,62 @@ const PLAYER_FEED_MAX_PAGES = 20;
 const DEFAULT_ETH_BET_WEI = (10n ** 16n) / BigInt(ETH_DIVISOR); // 0.01 displayed ETH
 const DEFAULT_FLIP_BET = '250';
 const DEFAULT_WWXRP_BET = '1';
+const DEGENERETTE_TOKEN_SCALE = 10n ** 18n;
+
+/** Parse the player-facing decimal without crossing through lossy Number math. */
+export function parseDegeneretteAmountInput(value, currency) {
+  const match = /^\s*(\d+)(?:\.(\d{0,18}))?\s*$/.exec(String(value ?? ''));
+  if (!match) return null;
+  try {
+    const fraction = (match[2] || '').padEnd(18, '0');
+    const fullScale = (BigInt(match[1]) * DEGENERETTE_TOKEN_SCALE)
+      + BigInt(fraction || '0');
+    return Number(currency) === 0 ? fullScale / BigInt(ETH_DIVISOR) : fullScale;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function _degeneretteGoldTicket(goldTraits) {
+  const count = Math.max(0, Math.min(4, Math.floor(Number(goldTraits) || 0)));
+  let ticket = 0n;
+  for (let quadrant = 0; quadrant < count; quadrant += 1) {
+    ticket |= 7n << BigInt(quadrant * 8 + 3);
+  }
+  return ticket;
+}
+
+function _formatBaseCentiX(value) {
+  const cents = BigInt(value ?? 0);
+  const whole = cents / 100n;
+  const fraction = cents % 100n;
+  const grouped = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  if (fraction === 0n) return `${grouped}×`;
+  return `${grouped}.${fraction.toString().padStart(2, '0').replace(/0$/, '')}×`;
+}
+
+export function degeneretteBasePayoutTables() {
+  return Array.from({ length: 5 }, (_, goldTraits) => {
+    const customTicket = _degeneretteGoldTicket(goldTraits);
+    const heroGold = 0;
+    const heroNotGold = goldTraits < 4 ? goldTraits : 0;
+    const honestHeroGold = degenerettePayoutTable({
+      customTicket, heroQuadrant: heroGold, currency: 0, activityScore: 0,
+    }).rows;
+    const honestHeroOther = degenerettePayoutTable({
+      customTicket, heroQuadrant: heroNotGold, currency: 0, activityScore: 0,
+    }).rows;
+    return Object.freeze({
+      goldTraits,
+      heroMatters: goldTraits > 0 && goldTraits < 4,
+      rows: Object.freeze(honestHeroGold.map((row, score) => Object.freeze({
+        score,
+        honestHeroGold: row.basePayoutCentiX,
+        honestHeroOther: honestHeroOther[score].basePayoutCentiX,
+      }))),
+    });
+  });
+}
 
 // Two-stage state machine (RESEARCH R5).
 const STATE = Object.freeze({
@@ -134,6 +253,9 @@ function _readPendingBet(address) {
       amountPerSpin: BigInt(row.amountPerSpin ?? 0),
       spinCount: Math.max(1, Number(row.spinCount ?? 1)),
       hero: Number(row.hero ?? 0) & 3,
+      ticket: row.ticket == null ? null : BigInt(row.ticket),
+      rngRequestPending: Boolean(row.rngRequestPending),
+      rngRequestStartedAt: Math.max(0, Number(row.rngRequestStartedAt ?? 0)),
     };
   } catch (_e) {
     return null;
@@ -148,14 +270,22 @@ function _writePendingBet(address, row) {
       localStorage.removeItem(key);
       return;
     }
-    localStorage.setItem(key, JSON.stringify({
+    const payload = {
       betId: String(row.betId),
       index: String(row.index),
       currency: Number(row.currency ?? 0),
       amountPerSpin: String(row.amountPerSpin ?? 0),
       spinCount: Number(row.spinCount ?? 1),
       hero: Number(row.hero ?? 0) & 3,
-    }));
+    };
+    if (row.ticket != null) payload.ticket = String(row.ticket);
+    // Keep old pending-bet records compact, but persist a submitted shared RNG
+    // request so its tray card survives a refresh until the word is ready.
+    if (row.rngRequestPending) {
+      payload.rngRequestPending = true;
+      payload.rngRequestStartedAt = Math.max(0, Number(row.rngRequestStartedAt ?? Date.now()));
+    }
+    localStorage.setItem(key, JSON.stringify(payload));
   } catch (_e) { /* private mode: session state still works */ }
 }
 
@@ -176,7 +306,7 @@ function _writePendingBet(address, row) {
 // currency[40..41], amountPerSpin[42..169], heroQuadrant[218..219].
 // (The pre-v75 layout — hero at 238 — is what app-compact still decodes; STALE.)
 const DGN_MASK128 = (1n << 128n) - 1n;
-function dgnDecodePacked(packedStr) {
+export function dgnDecodePacked(packedStr) {
   let p = 0n;
   try { p = BigInt(packedStr ?? 0); } catch (_e) { return null; }
   return {
@@ -220,9 +350,10 @@ export function mergeDegeneretteFeedItems(items) {
       : `anonymous:${anonymous++}`;
     let merged = groups.get(key);
     if (!merged) {
-      merged = { ...item, results: [], resultTickets: [] };
+      merged = { ...item, results: [], resultTickets: [], lootboxPayouts: [] };
       merged.__results = new Map();
       merged.__tickets = new Map();
+      merged.__lootboxPayouts = new Map();
       groups.set(key, merged);
     } else {
       // Prefer whichever fragment has the concrete placement/replay fields.
@@ -260,12 +391,21 @@ export function mergeDegeneretteFeedItems(items) {
       const spin = ticket?.spinIndex ?? ticket?.spinIdx ?? i;
       merged.__tickets.set(String(spin), ticket);
     });
+    const lootboxPayouts = Array.isArray(item?.lootboxPayouts) ? item.lootboxPayouts : [];
+    lootboxPayouts.forEach((payout, i) => {
+      let payload = '';
+      try { payload = JSON.stringify(payout?.rewardData ?? null); } catch (_e) { payload = String(i); }
+      const payoutKey = [payout?.blockNumber, payout?.rewardType, payload].join(':');
+      merged.__lootboxPayouts.set(payoutKey, payout);
+    });
   }
   return Array.from(groups.values()).map((merged) => {
     merged.results = Array.from(merged.__results.values());
     merged.resultTickets = Array.from(merged.__tickets.values());
+    merged.lootboxPayouts = Array.from(merged.__lootboxPayouts.values());
     delete merged.__results;
     delete merged.__tickets;
+    delete merged.__lootboxPayouts;
     return merged;
   });
 }
@@ -423,6 +563,92 @@ export function buildDegeneretteRevealSequence({
 }
 
 /**
+ * Rebuild a settled feed item into the exact reveal payload used by a live
+ * receipt. Historical-day controllers use this instead of maintaining a
+ * second, inevitably drifting Degenerette decoder.
+ */
+export function degeneretteRevealSequenceFromFeedItem(item) {
+  const merged = mergeDegeneretteFeedItems(item == null ? [] : [item])[0];
+  if (!merged) return null;
+  const packed = dgnDecodePacked(merged.packedData);
+  if (!packed) return null;
+  const results = Array.isArray(merged.results) ? merged.results : [];
+  const resolvedRow = results.find((row) => row?.resultType === 'resolved');
+  if (!resolvedRow) return null;
+  const data = resolvedRow.resultData || {};
+  let resolvedEntry;
+  try {
+    resolvedEntry = {
+      player: String(merged.player || data.player || ''),
+      betId: BigInt(merged.betId ?? data.betId),
+      spinCount: BigInt(data.spinCount ?? packed.spinCount ?? 1),
+      totalPayout: BigInt(data.totalPayout ?? resolvedRow.payout ?? 0),
+      resultTraits: BigInt(data.resultTraits ?? data.resultTicket ?? 0),
+    };
+  } catch (_e) {
+    return null;
+  }
+  const sequence = buildDegeneretteRevealSequence({
+    resolvedEntry,
+    spinResults: results.filter((row) => row?.resultType === 'result'),
+    resultTickets: merged.resultTickets,
+    rngWord: merged.rngWord ?? 0,
+    betIndex: merged.betIndex ?? 0,
+    currency: packed.currency,
+    amountPerSpin: packed.amountPerSpin,
+    heroQuadrant: packed.heroQuadrant,
+  });
+  if (!sequence) return null;
+  const lootboxLegs = openLegsFromDegenerettePayouts(merged.lootboxPayouts);
+  sequence.lootboxAwarded = lootboxLegs.length > 0;
+  sequence.lootboxLegs = lootboxLegs;
+  sequence.lootboxEth = degeneretteLootboxEthFromLegs(lootboxLegs);
+  return sequence;
+}
+
+/**
+ * The first LootBoxOpened leg emitted by a Degenerette ETH settlement is the
+ * recirculated part of that bet's gross payout. Any later opened legs can be
+ * nested rewards produced while resolving that box and must not be counted a
+ * second time as part of the original winnings split.
+ */
+export function degeneretteLootboxEthFromLegs(legs) {
+  const opened = (Array.isArray(legs) ? legs : []).find((leg) => {
+    if (leg?.legType !== 'opened') return false;
+    try { return BigInt(leg?.amount ?? 0) > 0n; } catch (_e) { return false; }
+  });
+  if (!opened) return 0n;
+  try { return BigInt(opened.amount ?? 0); } catch (_e) { return 0n; }
+}
+
+/**
+ * Identity shared with app-box-strip's durable result ledger. Degenerette
+ * settles its direct box at index zero, so the settlement transaction hash is
+ * the only collision-free key. Carrying it into the reveal lets the overlay
+ * suppress and then retire the strip's duplicate presentation action.
+ */
+export function degeneretteLootboxRelease(player, legs, fallbackTransactionHash = null) {
+  const address = String(player || '').toLowerCase();
+  const opened = (Array.isArray(legs) ? legs : []).find((leg) => leg?.legType === 'opened');
+  if (!address || !opened) return null;
+  let index;
+  try { index = Number(BigInt(opened.lootboxIndex ?? 0)); } catch (_e) { return null; }
+  const transactionHash = String(
+    opened.transactionHash || fallbackTransactionHash || '',
+  ).toLowerCase();
+  const key = index === 0
+    ? (transactionHash ? `tx:${transactionHash}` : '')
+    : String(index);
+  if (!key) return null;
+  return {
+    address,
+    key,
+    lootboxIndex: index,
+    transactionHash: transactionHash || null,
+  };
+}
+
+/**
  * Read enough feed pages to obtain the viewed player's latest resolved bets.
  * Current API workers honour `player`; older workers ignore it and return a
  * global page. Client-side filtering plus the cursor makes both versions safe
@@ -489,6 +715,21 @@ export function selectDegeneretteDefaultTicket(payload) {
   return candidates.find((ticket) => ticket.hasGold) || candidates[0] || null;
 }
 
+export function degeneretteDeitySymbolForOwner(catalog, owner) {
+  const address = String(owner || '').toLowerCase();
+  if (!address || !(catalog?.ownersBySymbol instanceof Map)) return null;
+  for (const [symbolId, symbolOwner] of catalog.ownersBySymbol.entries()) {
+    const id = Number(symbolId);
+    if (String(symbolOwner || '').toLowerCase() === address
+      && Number.isInteger(id)
+      && id >= 0
+      && id < 32) {
+      return id;
+    }
+  }
+  return null;
+}
+
 class AppDegenerettePanel extends HTMLElement {
   #unsubs = [];
   #initialized = false;
@@ -516,12 +757,19 @@ class AppDegenerettePanel extends HTMLElement {
   // pending bet and the indexed placement/on-chain slot restores its packed data.
   #pendingRecoverySeq = 0;
   #pendingRecoveryAddress = null;
+  // A resolved bet is presentation work exactly once per mounted session.
+  // Mark it before searching for another DB-pending row so a stale indexer
+  // snapshot cannot send NEXT ACTION back into the result just consumed.
+  #presentedBetKeys = new Set();
   // The RNG word the bet resolves against, kept from the poll that ended the
   // wait: every spin's house reel is derived from it and it is NOT readable
   // from the resolve receipt.
   #currentRngWord = 0n;
   #rngRequestAvailable = false;
+  #rngRequestPending = false;
+  #rngRequestStartedAt = 0;
   #currentHero = null;         // hero quadrant of the in-flight bet
+  #currentTicket = null;       // exact submitted uint32 ticket for pending-card art
   #pendingAddress = null;
   #pickerContextKey = null;
   #defaultTicketKey = null;
@@ -549,13 +797,31 @@ class AppDegenerettePanel extends HTMLElement {
   #historySeq = 0;
   #resultsMode = false;
   #localResultReady = false;
+  // Compact referral card + detail sheet. The affiliate module remains the
+  // sole owner of code resolution/registration; this panel only presents it
+  // at the bottom-right of the full Degenerette panel.
+  #referralAddress = null;
+  #referralCode = null;
+  #referralUrl = '';
+  #referralResolveSeq = 0;
+  #referralBusy = false;
+  #referralCopied = false;
+  #referralCopyTimer = null;
+  #referralDialogReturnFocus = null;
+  #basicsDialogReturnFocus = null;
   #ticketCopyListener = (event) => this.#copyInventoryTicket(event?.detail);
-  #questActivateListener = (event) => this.#applyQuestPreset(event?.detail);
+  #questActivateListener = (event) => {
+    const detail = event?.detail;
+    const ready = this.#applyQuestPreset(detail);
+    if (ready && detail?.submit) void this.#onPlaceClick();
+  };
 
   connectedCallback() {
     if (this.#initialized) return;
     this.#initialized = true;
     this.#renderShell();
+    this.#restoreBetPreference(this.#draftCurrency);
+    this.#renderPayoutTables();
     this.#wireEventHandlers();
     this.#wireVisibilityRePoll();
     this.#wireStoreSubscriptions();
@@ -568,10 +834,12 @@ class AppDegenerettePanel extends HTMLElement {
     this.#renderState();
     this.#renderCurrencyGate();
     this.#renderBetLimits();
+    this.#refreshReferralLink();
     this.#runPollCycle();
   }
 
   disconnectedCallback() {
+    this.#persistBetPreference(this.#draftCurrency);
     this.#pendingRecoverySeq += 1;
     this.#pendingRecoveryAddress = null;
     if (this.#pollHandle != null) {
@@ -601,6 +869,11 @@ class AppDegenerettePanel extends HTMLElement {
       try { clearTimeout(this.#errorTimer); } catch (_) { /* defensive */ }
       this.#errorTimer = null;
     }
+    this.#referralResolveSeq += 1;
+    if (this.#referralCopyTimer != null) {
+      try { clearTimeout(this.#referralCopyTimer); } catch (_) { /* defensive */ }
+      this.#referralCopyTimer = null;
+    }
     for (const u of this.#unsubs) {
       try { u(); } catch (_e) { /* defensive */ }
     }
@@ -621,45 +894,47 @@ class AppDegenerettePanel extends HTMLElement {
         <header class="panel-header deg-header">
           <div class="deg-heading">
             <h2><a class="deg-learn-link" href="/learn/degenerette/">DEGENERETTE</a></h2>
+            <button type="button" class="deg-header__info" data-bind="deg-basics-info"
+                    aria-haspopup="dialog" aria-label="How Degenerette works">i</button>
           </div>
           <span class="deg-state" data-bind="deg-state"></span>
         </header>
 
         <div class="deg-setup" data-bind="deg-setup">
-          <section class="deg-block deg-block--ticket" aria-labelledby="deg-ticket-title">
-            <div class="deg-block__head">
-              <span class="deg-block__title" id="deg-ticket-title">Build ticket</span>
-            </div>
+          <section class="deg-block deg-block--ticket" aria-label="Build Degenerette ticket">
             <!-- Visual ticket picker replaces raw quadrant/uint32 inputs. -->
             <div class="dgn-selector">
-              <div class="dgn-ticket-wrap">
-                <div class="ticket-card tc-small dgn-ticket" data-bind="dgn-ticket">
-                  <div class="trait-quadrant dgn-q" data-bind="dgn-cell-0"><img data-bind="dgn-img-0" alt=""></div>
-                  <div class="trait-quadrant dgn-q" data-bind="dgn-cell-1"><img data-bind="dgn-img-1" alt=""></div>
-                  <div class="trait-quadrant dgn-q" data-bind="dgn-cell-2"><img data-bind="dgn-img-2" alt=""></div>
-                  <div class="trait-quadrant dgn-q" data-bind="dgn-cell-3"><img data-bind="dgn-img-3" alt=""></div>
-                  <div class="ticket-card-center"><img src="/whitepaper/flame-center.svg" alt=""></div>
+              <div class="dgn-ticket-column">
+                <div class="dgn-ticket-wrap">
+                  <div class="ticket-card tc-small dgn-ticket" data-bind="dgn-ticket"
+                       title="Click a quadrant to edit it">
+                    <div class="trait-quadrant dgn-q" data-bind="dgn-cell-0"><img data-bind="dgn-img-0" alt=""></div>
+                    <div class="trait-quadrant dgn-q" data-bind="dgn-cell-1"><img data-bind="dgn-img-1" alt=""></div>
+                    <div class="trait-quadrant dgn-q" data-bind="dgn-cell-2"><img data-bind="dgn-img-2" alt=""></div>
+                    <div class="trait-quadrant dgn-q" data-bind="dgn-cell-3"><img data-bind="dgn-img-3" alt=""></div>
+                    <div class="ticket-card-center"><img src="/whitepaper/flame-center.svg" alt=""></div>
+                  </div>
                 </div>
-                <small class="dgn-ticket-hint">Click to edit · right-click for Hero</small>
+                <p class="dgn-ticket-hint" data-bind="dgn-ticket-hint">CLICK TO EDIT</p>
               </div>
               <div class="dgn-editor" data-bind="dgn-editor"></div>
             </div>
+
           </section>
 
-          <section class="deg-block deg-block--wager" aria-labelledby="deg-wager-title">
-            <div class="deg-block__head">
-              <span class="deg-block__title" id="deg-wager-title">Wager</span>
-            </div>
+          <div class="deg-wager-column">
+          <section class="deg-block deg-block--wager" aria-label="Degenerette wager">
+            <span class="deg-wager-field__label deg-currency-picker__label">Currency</span>
             <div class="deg-currency-picker" role="group" aria-label="Wager currency">
               <button type="button" class="deg-currency-option is-selected"
                       data-bind="deg-currency-option-0" value="0" aria-pressed="true"
                       aria-label="Pay with ETH" title="ETH">
-                <img src="/badges-circular/crypto_06_ethereum_blue.svg" alt="">
+                <img src="/badges-circular/crypto_06_ethereum_green.svg" alt="">
               </button>
               <button type="button" class="deg-currency-option"
                       data-bind="deg-currency-option-1" value="1" aria-pressed="false"
                       aria-label="Pay with FLIP" title="FLIP">
-                <img src="/whitepaper/flame-logo.svg" alt="">
+                <img src="/whitepaper/flame-logo-split.svg" alt="">
               </button>
               <button type="button" class="deg-currency-option"
                       data-bind="deg-currency-option-3" value="3" aria-pressed="false"
@@ -712,25 +987,121 @@ class AppDegenerettePanel extends HTMLElement {
               Place Bet · 0.05 ETH
             </button>
           </section>
-        </div>
 
-        <div class="deg-actions" data-bind="deg-actions">
-          <button type="button" class="deg-resolve-cta" data-write data-bind="deg-resolve-cta" disabled>
-            Resolve
-          </button>
+          <aside class="deg-referral-card" aria-label="Refer friends and earn free FLIP forever">
+            <img class="deg-referral-card__logo" src="/whitepaper/flame-logo.svg" alt="" aria-hidden="true">
+            <div class="deg-referral-card__copy">
+              <strong>
+                <span>REFER FRIENDS</span>
+                <span>EARN <span class="deg-referral-card__free">FREE</span> <span class="deg-referral-card__flip">FLIP</span></span>
+                <span class="deg-referral-card__forever">
+                  <span>FOREVER</span>
+                  <button type="button" class="deg-referral-card__coin"
+                          data-bind="deg-referral-coin-toggle" aria-pressed="false"
+                          aria-label="Pause animation and copy referral link"
+                          title="Pause coin + copy link">
+                    <span class="deg-referral-card__coin-inner">
+                      <img src="/shared/coinflip-face-red.svg" alt="">
+                      <img src="/shared/coinflip-face-eth.svg" alt="">
+                    </span>
+                  </button>
+                </span>
+              </strong>
+            </div>
+            <div class="deg-referral-card__actions">
+              <button type="button" class="deg-referral-card__copy-btn"
+                      data-bind="deg-referral-copy" disabled>COPY LINK</button>
+              <button type="button" class="deg-referral-card__info-btn"
+                      data-bind="deg-referral-info" aria-haspopup="dialog"
+                      aria-label="How referrals and kickback work">i</button>
+            </div>
+            <span class="deg-referral-card__feedback" data-bind="deg-referral-feedback"
+                  hidden role="status"></span>
+          </aside>
+          </div>
         </div>
 
         <div class="deg-outcome" data-bind="deg-outcome"></div>
         <div class="deg-error" data-bind="deg-error" hidden role="alert"></div>
+
       </section>
+      <div class="deg-referral-dialog deg-basics-dialog" data-bind="deg-basics-dialog" hidden
+           role="dialog" aria-modal="true" aria-labelledby="deg-basics-title">
+        <button type="button" class="deg-referral-dialog__backdrop"
+                data-bind="deg-basics-close" aria-label="Close Degenerette basics"></button>
+        <section class="deg-referral-dialog__card deg-basics-dialog__card">
+          <button type="button" class="deg-referral-dialog__close"
+                  data-bind="deg-basics-close" aria-label="Close Degenerette basics">×</button>
+          <h3 id="deg-basics-title">How Degenerette works</h3>
+          <div class="deg-referral-dialog__mechanics">
+            <p><strong>Build your ticket.</strong> Pick a symbol and color for each quadrant. The starred Hero earns an extra point when its symbol matches.</p>
+            <p><strong>Set the wager.</strong> Choose ETH, FLIP, or WWXRP, then choose the bet per spin and number of spins.</p>
+            <p><strong>Spin for matches.</strong> Matching symbols score; a matching color adds another point. Higher scores can pay more in the currency you wagered.</p>
+          </div>
+          <section class="deg-payouts" aria-labelledby="deg-payouts-title">
+            <div class="deg-payouts__head">
+              <h4 id="deg-payouts-title">ETH / FLIP payouts</h4>
+              <p>Base gross multiplier (× wager) before activity adjustment. Scores 0–1 pay 0; Hero position only changes the 1–3 gold schedules.</p>
+            </div>
+            <div class="deg-payouts__tables" data-bind="deg-payout-tables"></div>
+          </section>
+          <a class="deg-referral-dialog__learn" href="/learn/degenerette/">
+            Full rules <span aria-hidden="true">→</span>
+          </a>
+        </section>
+      </div>
+      <div class="deg-referral-dialog" data-bind="deg-referral-dialog" hidden
+           role="dialog" aria-modal="true" aria-labelledby="deg-referral-title">
+        <button type="button" class="deg-referral-dialog__backdrop"
+                data-bind="deg-referral-close" aria-label="Close referral details"></button>
+        <section class="deg-referral-dialog__card">
+          <button type="button" class="deg-referral-dialog__close"
+                  data-bind="deg-referral-close" aria-label="Close referral details">×</button>
+          <h3 id="deg-referral-title">Refer a friend</h3>
+          <div class="deg-referral-dialog__mechanics">
+            <p><strong>Earn 20% commission in FLIP</strong> on eligible purchases made by players who join through your link.</p>
+            <p><strong>Their first valid referral is permanent.</strong> Your default address link works immediately.</p>
+            <p><strong>Want to share it?</strong> A custom code can kick back 0–25% of your commission to referred players.</p>
+          </div>
+          <label class="deg-referral-dialog__link-label">
+            <span>SHAREABLE LINK</span>
+            <input type="text" readonly data-bind="deg-referral-url"
+                   aria-label="Copy your referral link" title="Copy referral link">
+          </label>
+          <div class="deg-referral-dialog__custom">
+            <div class="deg-referral-dialog__custom-head">
+              <strong>Create a custom code</strong>
+              <span data-bind="deg-referral-current-code">Optional</span>
+            </div>
+            <label>
+              <span>CODE</span>
+              <input type="text" name="deg-referral-code" minlength="3" maxlength="31"
+                     pattern="[A-Za-z0-9]{3,31}" autocomplete="off" placeholder="DEGEN123">
+            </label>
+            <label>
+              <span>KICKBACK</span>
+              <span class="deg-referral-dialog__pct-field">
+                <input type="number" name="deg-referral-kickback" min="0" max="25"
+                       step="1" value="0" inputmode="numeric" aria-label="Kickback percent">
+                <span>%</span>
+              </span>
+            </label>
+            <button type="button" class="deg-referral-dialog__register"
+                    data-write data-bind="deg-referral-register">CREATE CODE</button>
+          </div>
+          <p class="deg-referral-dialog__feedback" data-bind="deg-referral-dialog-feedback"
+             hidden role="status"></p>
+          <a class="deg-referral-dialog__learn" href="/learn/affiliates/">
+            Full referral mechanics <span aria-hidden="true">→</span>
+          </a>
+        </section>
+      </div>
     `;
   }
 
   #wireEventHandlers() {
     const place = this.querySelector('[data-bind="deg-place-cta"]');
     if (place) place.addEventListener('click', (e) => this.#onPlaceClick(e));
-    const resolve = this.querySelector('[data-bind="deg-resolve-cta"]');
-    if (resolve) resolve.addEventListener('click', (e) => this.#onResolveClick(e));
     // Spin cap and minimum bet are per currency, so the controls follow it.
     const currency = this.querySelector('[name="deg-currency"]');
     if (currency) currency.addEventListener('change', () => {
@@ -750,6 +1121,7 @@ class AppDegenerettePanel extends HTMLElement {
     if (amount) amount.addEventListener('input', () => {
       this.#renderPlaceLabel();
       this.#renderStepperState();
+      this.#persistBetPreference(this.#draftCurrency);
     });
     const spins = this.querySelector('[name="deg-ticket-count"]');
     if (spins) spins.addEventListener('change', () => {
@@ -764,6 +1136,37 @@ class AppDegenerettePanel extends HTMLElement {
       ?.addEventListener('click', () => this.#stepSpinCount(1));
     this.querySelector('[data-bind="deg-spins-down"]')
       ?.addEventListener('click', () => this.#stepSpinCount(-1));
+
+    this.querySelector('[data-bind="deg-referral-copy"]')
+      ?.addEventListener('click', (event) => this.#copyReferralLink(event));
+    this.querySelector('[data-bind="deg-referral-coin-toggle"]')
+      ?.addEventListener('click', (event) => this.#toggleReferralCoin(event));
+    this.querySelector('[data-bind="deg-referral-url"]')
+      ?.addEventListener('click', (event) => this.#copyReferralLink(event));
+    this.querySelector('[data-bind="deg-referral-info"]')
+      ?.addEventListener('click', (event) => this.#openReferralDialog(event));
+    for (const close of this.querySelectorAll('[data-bind="deg-referral-close"]')) {
+      close.addEventListener('click', () => this.#closeReferralDialog());
+    }
+    this.querySelector('[data-bind="deg-referral-register"]')
+      ?.addEventListener('click', (event) => this.#registerReferralCode(event));
+    const referralDialog = this.querySelector('[data-bind="deg-referral-dialog"]');
+    referralDialog?.addEventListener('keydown', (event) => {
+      if (event?.key !== 'Escape') return;
+      try { event.preventDefault?.(); } catch (_) { /* fakeDOM */ }
+      this.#closeReferralDialog();
+    });
+    this.querySelector('[data-bind="deg-basics-info"]')
+      ?.addEventListener('click', (event) => this.#openBasicsDialog(event));
+    for (const close of this.querySelectorAll('[data-bind="deg-basics-close"]')) {
+      close.addEventListener('click', () => this.#closeBasicsDialog());
+    }
+    const basicsDialog = this.querySelector('[data-bind="deg-basics-dialog"]');
+    basicsDialog?.addEventListener('keydown', (event) => {
+      if (event?.key !== 'Escape') return;
+      try { event.preventDefault?.(); } catch (_) { /* fakeDOM */ }
+      this.#closeBasicsDialog();
+    });
 
     // Picker interactions per quadrant cell (app-compact port; wheel uses
     // Shift as the color modifier instead of the radius test — fakeDOM has
@@ -795,13 +1198,317 @@ class AppDegenerettePanel extends HTMLElement {
     this.#renderPicker();
   }
 
+  /** Snapshot used by the quest action sheet so it submits the card it shows. */
+  getTicketDraft() {
+    return {
+      traitIds: this.#dgnTraits.map(({ s, c }, q) => ((q & 3) << 6) | ((c & 7) << 3) | (s & 7)),
+      heroQuadrant: this.#dgnHero & 3,
+    };
+  }
+
+  #renderReferralLink() {
+    const copy = this.querySelector('[data-bind="deg-referral-copy"]');
+    const url = this.querySelector('[data-bind="deg-referral-url"]');
+    const current = this.querySelector('[data-bind="deg-referral-current-code"]');
+    const register = this.querySelector('[data-bind="deg-referral-register"]');
+    const effectiveCode = this.#referralAddress
+      ? (this.#referralCode || defaultCodeForAddress(this.#referralAddress))
+      : null;
+    const friendly = effectiveCode ? formatPurchaseAffiliateCode(effectiveCode) : '';
+    if (copy) {
+      copy.disabled = !this.#referralAddress || this.#referralBusy;
+      if (!this.#referralBusy) copy.textContent = this.#referralCopied ? 'CODE COPIED' : 'COPY LINK';
+    }
+    if (url) url.value = String(this.#referralUrl || '');
+    if (current) current.textContent = friendly ? `ACTIVE · ${friendly}` : 'Optional';
+    if (register) {
+      register.disabled = !this.#referralAddress || this.#referralBusy;
+      if (!this.#referralBusy) register.textContent = 'CREATE CODE';
+    }
+  }
+
+  #refreshReferralLink() {
+    const address = get('connected.address') || null;
+    const normalized = address ? String(address).toLowerCase() : null;
+    const seq = ++this.#referralResolveSeq;
+    this.#referralAddress = normalized;
+    this.#referralCopied = false;
+    this.#referralCode = normalized ? readRegisteredCode(normalized) : null;
+    this.#referralUrl = normalized
+      ? buildAffiliateUrl(normalized, this.#referralCode)
+      : '';
+    this.#renderReferralLink();
+    if (!normalized) return Promise.resolve(null);
+
+    return resolveRegisteredCode(normalized).then((code) => {
+      if (seq !== this.#referralResolveSeq
+        || this.#referralAddress !== normalized) return null;
+      // A confirmed local registration remains a useful fast fallback during
+      // indexer/RPC trouble. A positive resolver result always wins.
+      if (code) this.#referralCode = code;
+      this.#referralUrl = buildAffiliateUrl(normalized, this.#referralCode);
+      this.#renderReferralLink();
+      return this.#referralCode;
+    }).catch(() => null);
+  }
+
+  #setReferralFeedback(message, { error = false, persist = false } = {}) {
+    const compact = this.querySelector('[data-bind="deg-referral-feedback"]');
+    const dialog = this.querySelector('[data-bind="deg-referral-dialog-feedback"]');
+    for (const node of [compact, dialog]) {
+      if (!node) continue;
+      node.hidden = !message;
+      node.textContent = String(message || '');
+      node.classList?.toggle('is-error', Boolean(error));
+    }
+    if (this.#referralCopyTimer != null) {
+      try { clearTimeout(this.#referralCopyTimer); } catch (_) { /* defensive */ }
+      this.#referralCopyTimer = null;
+    }
+    if (!message || persist) return;
+    this.#referralCopyTimer = setTimeout(() => {
+      this.#referralCopyTimer = null;
+      this.#referralCopied = false;
+      for (const node of [compact, dialog]) {
+        if (!node) continue;
+        node.hidden = true;
+        node.textContent = '';
+      }
+      this.#renderReferralLink();
+    }, 2_000);
+    if (this.#referralCopyTimer && typeof this.#referralCopyTimer.unref === 'function') {
+      try { this.#referralCopyTimer.unref(); } catch (_) { /* defensive */ }
+    }
+  }
+
+  #toggleReferralCoin(event) {
+    const coin = this.querySelector('[data-bind="deg-referral-coin-toggle"]');
+    if (!coin) return;
+    const paused = !coin.classList?.contains('is-paused');
+    coin.classList?.toggle('is-paused', paused);
+    coin.setAttribute('aria-pressed', paused ? 'true' : 'false');
+    coin.setAttribute('aria-label', paused
+      ? 'Resume animation and copy referral link'
+      : 'Pause animation and copy referral link');
+    coin.title = paused ? 'Resume coin + copy link' : 'Pause coin + copy link';
+    void this.#copyReferralLink(event);
+  }
+
+  async #copyReferralLink(event) {
+    try { event?.preventDefault?.(); } catch (_) { /* defensive */ }
+    if (this.#referralBusy || !get('connected.address')) return;
+    const button = this.querySelector('[data-bind="deg-referral-copy"]');
+    this.#referralBusy = true;
+    if (button) { button.disabled = true; button.textContent = 'COPYING…'; }
+    try {
+      // Prime a guaranteed-valid address URL synchronously. Do not await the
+      // optional cross-device vanity-code lookup before calling writeText:
+      // waiting can consume the browser's transient clipboard permission.
+      void this.#refreshReferralLink();
+      const link = this.#referralUrl;
+      if (!link) throw new Error('Connect a wallet to create your referral link.');
+      let copied = false;
+      try {
+        if (typeof navigator !== 'undefined'
+          && navigator.clipboard
+          && typeof navigator.clipboard.writeText === 'function') {
+          await navigator.clipboard.writeText(link);
+          copied = true;
+        }
+      } catch (_) { copied = false; }
+      if (!copied) copied = _copyTextFallback(link);
+      if (!copied) throw new Error('Could not copy the referral link.');
+      this.#referralCopied = true;
+      this.#setReferralFeedback('CODE COPIED');
+    } catch (error) {
+      this.#setReferralFeedback(compactUiError(error, 'Could not copy the referral link.'), { error: true });
+    } finally {
+      this.#referralBusy = false;
+      this.#renderReferralLink();
+    }
+  }
+
+  #openReferralDialog(event) {
+    const dialog = this.querySelector('[data-bind="deg-referral-dialog"]');
+    if (!dialog) return;
+    this.#referralDialogReturnFocus = event?.currentTarget
+      || this.querySelector('[data-bind="deg-referral-info"]');
+    dialog.hidden = false;
+    dialog.removeAttribute?.('hidden');
+    this.#refreshReferralLink();
+    try { this.querySelector('[name="deg-referral-code"]')?.focus?.({ preventScroll: true }); }
+    catch (_) { /* fakeDOM */ }
+  }
+
+  #closeReferralDialog() {
+    const dialog = this.querySelector('[data-bind="deg-referral-dialog"]');
+    if (dialog) {
+      dialog.hidden = true;
+      dialog.setAttribute?.('hidden', '');
+    }
+    const returnFocus = this.#referralDialogReturnFocus;
+    this.#referralDialogReturnFocus = null;
+    try { returnFocus?.focus?.({ preventScroll: true }); } catch (_) { /* defensive */ }
+  }
+
+  #renderPayoutTables() {
+    const host = this.querySelector('[data-bind="deg-payout-tables"]');
+    if (!host) return;
+    host.textContent = '';
+    const currentGold = this.#dgnTraits.filter((trait) => Number(trait?.c) === 7).length;
+    const schedules = degeneretteBasePayoutTables();
+    const columns = schedules.flatMap((schedule) => schedule.heroMatters
+      ? [
+        { schedule, field: 'honestHeroGold' },
+        { schedule, field: 'honestHeroOther' },
+      ]
+      : [{ schedule, field: 'honestHeroGold' }]);
+
+    const scroll = document.createElement('div');
+    scroll.className = 'deg-payout-table-wrap deg-payout-matrix';
+    const table = document.createElement('table');
+    table.className = 'deg-payout-table';
+    table.setAttribute('aria-label', 'ETH and FLIP payout multipliers by score and gold traits');
+    const thead = document.createElement('thead');
+    const goldRow = document.createElement('tr');
+    const scoreHeading = document.createElement('th');
+    scoreHeading.setAttribute('scope', 'col');
+    scoreHeading.setAttribute('rowspan', '2');
+    scoreHeading.textContent = 'SCORE';
+    goldRow.appendChild(scoreHeading);
+    const heroRow = document.createElement('tr');
+    for (const schedule of schedules) {
+      const goldHeading = document.createElement('th');
+      goldHeading.setAttribute('scope', 'colgroup');
+      goldHeading.setAttribute('data-gold-traits', String(schedule.goldTraits));
+      if (schedule.heroMatters) goldHeading.setAttribute('colspan', '2');
+      else goldHeading.setAttribute('rowspan', '2');
+      if (schedule.goldTraits === currentGold) goldHeading.className = 'is-current';
+      goldHeading.textContent = `${schedule.goldTraits} GOLD`;
+      goldRow.appendChild(goldHeading);
+      if (schedule.heroMatters) {
+        for (const label of ['HERO GOLD', 'OTHER HERO']) {
+          const heroHeading = document.createElement('th');
+          heroHeading.setAttribute('scope', 'col');
+          heroHeading.setAttribute('data-gold-traits', String(schedule.goldTraits));
+          if (schedule.goldTraits === currentGold) heroHeading.className = 'is-current';
+          heroHeading.textContent = label;
+          heroRow.appendChild(heroHeading);
+        }
+      }
+    }
+    thead.appendChild(goldRow);
+    thead.appendChild(heroRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    const scoreRows = [{ label: '0–1', score: 0 }]
+      .concat(Array.from({ length: 8 }, (_, index) => ({ label: String(index + 2), score: index + 2 })));
+    for (const scoreRow of scoreRows) {
+      const tr = document.createElement('tr');
+      const score = document.createElement('th');
+      score.setAttribute('scope', 'row');
+      score.textContent = scoreRow.label;
+      tr.appendChild(score);
+      for (const column of columns) {
+        const td = document.createElement('td');
+        td.setAttribute('data-gold-traits', String(column.schedule.goldTraits));
+        if (column.schedule.goldTraits === currentGold) td.className = 'is-current';
+        td.textContent = _formatBaseCentiX(
+          column.schedule.rows[scoreRow.score][column.field],
+        ).replace(/×$/, '');
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    scroll.appendChild(table);
+    host.appendChild(scroll);
+  }
+
+  #openBasicsDialog(event) {
+    const dialog = this.querySelector('[data-bind="deg-basics-dialog"]');
+    if (!dialog) return;
+    this.#basicsDialogReturnFocus = event?.currentTarget
+      || this.querySelector('[data-bind="deg-basics-info"]');
+    dialog.hidden = false;
+    dialog.removeAttribute?.('hidden');
+    try { dialog.querySelector?.('[data-bind="deg-basics-close"]')?.focus?.({ preventScroll: true }); }
+    catch (_) { /* fakeDOM */ }
+  }
+
+  #closeBasicsDialog() {
+    const dialog = this.querySelector('[data-bind="deg-basics-dialog"]');
+    if (dialog) dialog.hidden = true;
+    try { this.#basicsDialogReturnFocus?.focus?.({ preventScroll: true }); }
+    catch (_) { /* fakeDOM */ }
+    this.#basicsDialogReturnFocus = null;
+  }
+
+  async #registerReferralCode(event) {
+    try { event?.preventDefault?.(); } catch (_) { /* defensive */ }
+    if (this.#referralBusy) return;
+    const address = String(get('connected.address') || '').toLowerCase();
+    if (!address) {
+      this.#setReferralFeedback('Connect a wallet to create a code.', { error: true, persist: true });
+      return;
+    }
+    const codeInput = this.querySelector('[name="deg-referral-code"]');
+    const kickbackInput = this.querySelector('[name="deg-referral-kickback"]');
+    const register = this.querySelector('[data-bind="deg-referral-register"]');
+    this.#referralBusy = true;
+    this.#setReferralFeedback('');
+    if (register) { register.disabled = true; register.textContent = 'CREATING…'; }
+    try {
+      const { encodedCode } = await createAffiliateCode({
+        codeStr: String(codeInput?.value || '').trim(),
+        kickbackPct: String(kickbackInput?.value ?? '0'),
+      });
+      if (String(get('connected.address') || '').toLowerCase() === address) {
+        this.#referralAddress = address;
+        this.#referralCode = encodedCode;
+        this.#referralUrl = buildAffiliateUrl(address, encodedCode);
+      }
+      this.#setReferralFeedback(
+        `CODE CREATED · ${formatPurchaseAffiliateCode(encodedCode)} — COPY LINK NOW USES IT`,
+        { persist: true },
+      );
+      try {
+        document.dispatchEvent(new CustomEvent('affiliate:code-registered', {
+          detail: { address, code: encodedCode },
+        }));
+      } catch (_) { /* headless */ }
+    } catch (error) {
+      this.#setReferralFeedback(
+        compactUiError(error, 'Could not create that referral code.'),
+        { error: true, persist: true },
+      );
+    } finally {
+      this.#referralBusy = false;
+      this.#renderReferralLink();
+    }
+  }
+
   // Configure exactly the total the quest asks for while retaining the normal
-  // five-spin draft. The card never places the bet; it only selects the lane
-  // and divides the total evenly across the visible per-spin field.
+  // five-spin draft. Bare quest events only select the lane; the confirmation
+  // dialog may then submit this already-configured bet with submit:true.
   #applyQuestPreset(detail) {
     const questType = Number(detail?.questType);
-    if (questType !== 7 && questType !== 8) return;
+    if (questType !== 7 && questType !== 8) return false;
     const currency = questType === 7 ? 0 : 1;
+    const suppliedTraits = dgnTraitIdsToQuadrants(detail?.traitIds);
+    if (Array.isArray(detail?.traitIds)
+      && detail.traitIds.length === 4
+      && suppliedTraits.every(Boolean)) {
+      this.#dgnTraits = suppliedTraits.map((trait) => ({ s: trait.sym, c: trait.col }));
+      const suppliedHero = Number(detail?.heroQuadrant);
+      this.#dgnHero = Number.isInteger(suppliedHero) && suppliedHero >= 0 && suppliedHero < 4
+        ? suppliedHero : this.#dgnHero;
+      this.#dgnEditing = null;
+      this.#pickerTouched = true;
+      this.#renderPicker();
+    }
+
     let total;
     try { total = BigInt(detail?.target ?? 0); } catch (_e) { total = 0n; }
     if (total <= 0n) {
@@ -812,25 +1519,36 @@ class AppDegenerettePanel extends HTMLElement {
         total = 2_000n * (10n ** 18n);
       }
     }
-    if (total <= 0n) return;
+    if (total <= 0n) return false;
 
     const limits = degeneretteLimits(currency);
     const minPerSpin = currency === 0
       ? limits.minBetFullScale / BigInt(ETH_DIVISOR)
       : limits.minBetFullScale;
-    // Prefer the normal five spins, but never manufacture an invalid wager at
-    // low ticket prices. Walk down to an exact divisor whose per-spin amount
-    // remains at or above the contract minimum.
-    let spinCount = Math.max(1, Math.min(5, Number(total / minPerSpin)));
-    while (spinCount > 1 && total % BigInt(spinCount) !== 0n) spinCount -= 1;
+    let explicitPerSpin = 0n;
+    try { explicitPerSpin = BigInt(detail?.amountPerSpin ?? 0); }
+    catch (_e) { explicitPerSpin = 0n; }
+    const explicitSpins = Number(detail?.spinCount);
+    const hasExplicitWager = explicitPerSpin >= minPerSpin
+      && Number.isInteger(explicitSpins)
+      && explicitSpins >= 1
+      && explicitSpins <= limits.maxSpins;
+    // The quest sheet sends the exact wager it displayed. Legacy bare quest
+    // events retain the earlier safe-divisor setup.
+    let spinCount = hasExplicitWager
+      ? explicitSpins
+      : Math.max(1, Math.min(5, Number(total / minPerSpin)));
+    if (!hasExplicitWager) {
+      while (spinCount > 1 && total % BigInt(spinCount) !== 0n) spinCount -= 1;
+    }
     const currencyInput = this.querySelector('[name="deg-currency"]');
     const spinsInput = this.querySelector('[name="deg-ticket-count"]');
     const amountInput = this.querySelector('[name="deg-amount"]');
-    if (!currencyInput || !spinsInput || !amountInput) return;
+    if (!currencyInput || !spinsInput || !amountInput) return false;
     currencyInput.value = String(currency);
     this.#applyCurrencySelection(currency, { forceReset: true });
     spinsInput.value = String(spinCount);
-    const perSpin = total / BigInt(spinCount);
+    const perSpin = hasExplicitWager ? explicitPerSpin : total / BigInt(spinCount);
     const rendered = currency === 0
       ? displayEth(perSpin, 6)
       : displayToken(perSpin, 0);
@@ -842,6 +1560,7 @@ class AppDegenerettePanel extends HTMLElement {
     this.#renderCurrencyPicker();
     try { this.scrollIntoView?.({ behavior: 'smooth', block: 'center' }); } catch (_e) {}
     try { amountInput.focus?.({ preventScroll: true }); } catch (_e) {}
+    return true;
   }
 
   #copyInventoryTicket(detail) {
@@ -897,38 +1616,22 @@ class AppDegenerettePanel extends HTMLElement {
 
   #renderEditor() {
     const host = this.querySelector('[data-bind="dgn-editor"]');
+    const hint = this.querySelector('[data-bind="dgn-ticket-hint"]');
     if (!host) return;
     host.textContent = '';
     const q = this.#dgnEditing;
     if (q == null) {
       host.hidden = true;
+      if (hint) hint.hidden = false;
       return;
     }
     host.hidden = false;
+    if (hint) hint.hidden = true;
     const t = this.#dgnTraits[q];
-
-    const head = document.createElement('div');
-    head.className = 'dgn-editor-head';
-    const cat = document.createElement('span');
-    cat.className = 'dgn-edit-cat';
-    cat.textContent = DGN_QUADRANTS[q].toUpperCase();
-    head.appendChild(cat);
-    const heroBtn = document.createElement('button');
-    heroBtn.type = 'button';
-    heroBtn.className = 'dgn-hero-toggle';
-    heroBtn.textContent = this.#dgnHero === q ? 'Hero ★' : 'Set as Hero';
-    heroBtn.disabled = this.#dgnHero === q;
-    heroBtn.addEventListener('click', () => {
-      this.#pickerTouched = true;
-      this.#dgnHero = q;
-      this.#renderPicker();
-    });
-    head.appendChild(heroBtn);
-    host.appendChild(head);
 
     const colorRow = document.createElement('div');
     colorRow.className = 'dgn-row dgn-colors';
-    colorRow.setAttribute('aria-label', 'Color');
+    colorRow.setAttribute('aria-label', 'Color and Hero trait');
     for (let c = 0; c < 8; c++) {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -944,6 +1647,21 @@ class AppDegenerettePanel extends HTMLElement {
       });
       colorRow.appendChild(btn);
     }
+
+    const heroBtn = document.createElement('button');
+    heroBtn.type = 'button';
+    heroBtn.className = 'dgn-hero-toggle';
+    heroBtn.classList.toggle('is-selected', this.#dgnHero === q);
+    heroBtn.textContent = this.#dgnHero === q ? '★' : '☆';
+    heroBtn.title = this.#dgnHero === q ? 'Hero quadrant' : 'Make this the Hero quadrant';
+    heroBtn.setAttribute('aria-label', heroBtn.title);
+    heroBtn.disabled = this.#dgnHero === q;
+    heroBtn.addEventListener('click', () => {
+      this.#pickerTouched = true;
+      this.#dgnHero = q;
+      this.#renderPicker();
+    });
+    colorRow.appendChild(heroBtn);
     host.appendChild(colorRow);
 
     const symRow = document.createElement('div');
@@ -952,12 +1670,18 @@ class AppDegenerettePanel extends HTMLElement {
     for (let s = 0; s < 8; s++) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'dgn-symbol-btn';
+      btn.className = `dgn-symbol-btn dgn-symbol-btn--${DGN_QUADRANTS[q]}`;
+      // Crypto marks already carry their own strong brand shapes and colors;
+      // unlike the other quadrants, a dark contrast tile makes them muddier.
+      if (q !== 0 && (t.c === 0 || t.c === 2)) {
+        btn.classList.add('dgn-symbol-btn--dark-trait');
+      }
+      if (q === 0 && (s === 3 || s === 7)) btn.classList.add('dgn-symbol-btn--round');
       if (s === t.s) btn.classList.add('is-selected');
       btn.title = DGN_SYMBOLS[DGN_QUADRANTS[q]][s];
       btn.setAttribute('aria-label', DGN_SYMBOLS[DGN_QUADRANTS[q]][s]);
       const img = document.createElement('img');
-      img.src = dgnBadgePath(q, s, t.c);
+      img.src = dgnSymbolPath(q, s, t.c);
       img.alt = DGN_SYMBOLS[DGN_QUADRANTS[q]][s];
       btn.appendChild(img);
       btn.addEventListener('click', () => {
@@ -1034,9 +1758,10 @@ class AppDegenerettePanel extends HTMLElement {
         return;
       }
 
-      const data = await fetchJSON(
-        `/player/${String(addr).toLowerCase()}/tickets/by-trait?level=${level}`,
-      );
+      const [data, deityCatalog] = await Promise.all([
+        fetchJSON(`/player/${String(addr).toLowerCase()}/tickets/by-trait?level=${level}`),
+        readDeityPassCatalog().catch(() => null),
+      ]);
       if (signal.aborted || this.#pickerTouched) return;
       // The account or purchase level can change while this request is in
       // flight. Never apply a ticket fetched for the old drawing.
@@ -1048,9 +1773,22 @@ class AppDegenerettePanel extends HTMLElement {
       if (currentKey !== key) return;
 
       const selected = selectDegeneretteDefaultTicket(data);
-      if (!selected) return; // retry next poll while entries are materialising
-      this.#dgnTraits = selected.traits;
-      this.#dgnHero = selected.hero;
+      const deitySymbol = degeneretteDeitySymbolForOwner(deityCatalog, addr);
+      if (!selected && deitySymbol == null) return; // retry while entries/ownership materialise
+      if (selected) {
+        this.#dgnTraits = selected.traits;
+        this.#dgnHero = selected.hero;
+      }
+      if (deitySymbol != null) {
+        // A deity pass binds to one symbol, not a color. Preserve the selected
+        // ticket's color in that quadrant, replace only its symbol, and make
+        // that quadrant Hero. Explicit inventory copies and manual edits set
+        // #pickerTouched and therefore remain authoritative afterward.
+        const quadrant = (deitySymbol >> 3) & 3;
+        const symbol = deitySymbol & 7;
+        this.#dgnTraits[quadrant] = { ...this.#dgnTraits[quadrant], s: symbol };
+        this.#dgnHero = quadrant;
+      }
       this.#dgnEditing = null;
       this.#defaultTicketKey = key;
       this.#renderPicker();
@@ -1073,6 +1811,7 @@ class AppDegenerettePanel extends HTMLElement {
 
   #wireStoreSubscriptions() {
     const u1 = subscribe('connected.address', () => {
+      this.#refreshReferralLink();
       this.#syncPickerContext();
       this.#restorePendingBet();
       this.#runPollCycle();
@@ -1108,7 +1847,10 @@ class AppDegenerettePanel extends HTMLElement {
     if (!row) {
       this.#currentBetId = null;
       this.#currentLootboxIndex = null;
+      this.#currentTicket = null;
       this.#currentRngWord = 0n;
+      this.#rngRequestPending = false;
+      this.#rngRequestStartedAt = 0;
       if (![STATE.PLACING, STATE.RESOLVING].includes(this.#state)) this.#setState(STATE.IDLE);
       return;
     }
@@ -1118,7 +1860,10 @@ class AppDegenerettePanel extends HTMLElement {
     this.#currentAmountPerSpin = row.amountPerSpin;
     this.#currentSpinCount = row.spinCount;
     this.#currentHero = row.hero;
+    this.#currentTicket = row.ticket;
     this.#currentRngWord = 0n;
+    this.#rngRequestPending = row.rngRequestPending;
+    this.#rngRequestStartedAt = row.rngRequestStartedAt;
     this.#setState(STATE.AWAITING_RNG);
     this.#startRngPollCycle();
   }
@@ -1174,10 +1919,18 @@ class AppDegenerettePanel extends HTMLElement {
 
       for (const candidate of pending) {
         if (!stillCurrent()) return false;
+        const candidateKey = `${address}:${String(candidate.betId)}`;
+        if (this.#presentedBetKeys.has(candidateKey)) continue;
         const indexed = feed.find((item) => (
           String(item?.player || '').toLowerCase() === address
           && String(item?.betId) === String(candidate.betId)
         ));
+        if ((Array.isArray(indexed?.results) ? indexed.results : [])
+          .some((result) => result?.resultType === 'resolved')) {
+          // The player snapshot can retain a pending row for one projection
+          // after the result feed is complete. That row is already terminal.
+          continue;
+        }
         const chainPacked = await readBetInfo({
           player: address,
           betId: candidate.betId,
@@ -1206,6 +1959,7 @@ class AppDegenerettePanel extends HTMLElement {
           amountPerSpin: decoded.amountPerSpin,
           spinCount: decoded.spinCount,
           hero: decoded.heroQuadrant,
+          ticket: decoded.customTicket,
         };
         if (!stillCurrent()) return false;
         this.#pendingAddress = address;
@@ -1215,7 +1969,10 @@ class AppDegenerettePanel extends HTMLElement {
         this.#currentAmountPerSpin = row.amountPerSpin;
         this.#currentSpinCount = row.spinCount;
         this.#currentHero = row.hero;
+        this.#currentTicket = row.ticket;
         this.#currentRngWord = 0n;
+        this.#rngRequestPending = false;
+        this.#rngRequestStartedAt = 0;
         _writePendingBet(address, row);
         this.#clearError();
         this.#setState(STATE.AWAITING_RNG);
@@ -1268,13 +2025,47 @@ class AppDegenerettePanel extends HTMLElement {
     return DEFAULT_WWXRP_BET;
   }
 
+  #preferredBetLabel(currency) {
+    const stored = readDegeneretteBetSize(currency);
+    const limits = degeneretteLimits(currency);
+    const fallback = this.#defaultBetLabel(currency);
+    if (stored == null || !limits) return fallback;
+    const numeric = Number(stored);
+    // ETH's useful default follows one quarter of the current ticket price.
+    // Do not let an automatically persisted default from an earlier, cheaper
+    // level pin the field below that moving floor when the player returns to
+    // ETH. Explicit preferences above the current floor remain untouched.
+    const preferenceFloor = Number(currency) === 0
+      ? Math.max(Number(limits.minLabel), Number(fallback))
+      : Number(limits.minLabel);
+    return Number.isFinite(numeric) && numeric >= preferenceFloor
+      ? stored
+      : fallback;
+  }
+
+  #restoreBetPreference(currency) {
+    const amount = this.querySelector('[name="deg-amount"]');
+    if (amount) amount.value = this.#preferredBetLabel(currency);
+  }
+
+  #persistBetPreference(currency) {
+    const amount = this.querySelector('[name="deg-amount"]');
+    const limits = degeneretteLimits(currency);
+    const numeric = Number(amount?.value);
+    if (!amount || !limits || !Number.isFinite(numeric)
+      || numeric < Number(limits.minLabel)) return false;
+    return writeDegeneretteBetSize(currency, amount.value);
+  }
+
   #applyCurrencySelection(currency, { forceReset = false } = {}) {
     const next = Number(currency);
+    const previous = this.#draftCurrency;
+    if (next !== previous) this.#persistBetPreference(previous);
     const changed = forceReset || next !== this.#draftCurrency;
     this.#draftCurrency = next;
     if (changed) {
       const amount = this.querySelector('[name="deg-amount"]');
-      if (amount) amount.value = this.#defaultBetLabel(next);
+      if (amount) amount.value = this.#preferredBetLabel(next);
     }
     this.#renderBetLimits();
     this.#renderCurrencyPicker();
@@ -1344,6 +2135,7 @@ class AppDegenerettePanel extends HTMLElement {
     input.value = decimals > 0
       ? next.toFixed(decimals).replace(/\.?0+$/, '')
       : String(Math.round(next));
+    this.#persistBetPreference(currency);
     this.#renderPlaceLabel();
     this.#renderStepperState();
   }
@@ -1408,14 +2200,37 @@ class AppDegenerettePanel extends HTMLElement {
   }
 
   // ---------------------------------------------------------------------
-  // State machine — drives state element + Resolve button enabled/disabled.
+  // State machine — drives the compact status and the shared pending tray.
   // ---------------------------------------------------------------------
+
+  #persistPendingBet() {
+    if (!this.#pendingAddress || this.#currentBetId == null || this.#currentLootboxIndex == null) return;
+    _writePendingBet(this.#pendingAddress, {
+      betId: this.#currentBetId,
+      index: this.#currentLootboxIndex,
+      currency: this.#currentCurrency,
+      amountPerSpin: this.#currentAmountPerSpin,
+      spinCount: this.#currentSpinCount,
+      hero: this.#currentHero,
+      ticket: this.#currentTicket,
+      rngRequestPending: this.#rngRequestPending,
+      rngRequestStartedAt: this.#rngRequestStartedAt,
+    });
+  }
 
   #setState(next) {
     // Availability belongs to one awaiting cycle only. A newly placed/restored
     // bet must earn it from a fresh on-chain simulation.
     if (next !== STATE.AWAITING_RNG || this.#state !== STATE.AWAITING_RNG) {
       this.#rngRequestAvailable = false;
+    }
+    // Once the word exists, the request phase is over. Persist that transition
+    // so a refresh cannot resurrect an obsolete waiting progress card.
+    if ([STATE.READY, STATE.RESOLVED, STATE.IDLE].includes(next)) {
+      const hadPendingRequest = this.#rngRequestPending;
+      this.#rngRequestPending = false;
+      this.#rngRequestStartedAt = 0;
+      if (hadPendingRequest && next === STATE.READY) this.#persistPendingBet();
     }
     this.#state = next;
     this.#renderState();
@@ -1425,23 +2240,13 @@ class AppDegenerettePanel extends HTMLElement {
     const stateEl = this.querySelector('[data-bind="deg-state"]');
     // idle → '' (STATE_LABELS.idle is empty): no dead "Idle" line. ?? keeps the
     // empty label instead of falling through to a default.
-    if (stateEl) stateEl.textContent = STATE_LABELS[this.#state] ?? '';
-    const resolveBtn = this.querySelector('[data-bind="deg-resolve-cta"]');
-    if (resolveBtn) {
-      // Resolve only exists when there's a bet to settle: shown + enabled in
-      // READY, shown + disabled while RESOLVING (progress feedback). Hidden in
-      // every other state (idle / placing / awaiting RNG / resolved) — nothing
-      // to resolve, so no dead button sitting in the action row.
-      const requestable = this.#state === STATE.AWAITING_RNG && this.#rngRequestAvailable;
-      const showResolve = requestable
-        || this.#state === STATE.REQUESTING_RNG
-        || this.#state === STATE.READY
-        || this.#state === STATE.RESOLVING;
-      resolveBtn.hidden = !showResolve;
-      resolveBtn.disabled = !(requestable || this.#state === STATE.READY);
-      resolveBtn.textContent = requestable || this.#state === STATE.REQUESTING_RNG
-        ? 'Request RNG'
-        : 'Resolve';
+    if (stateEl) {
+      // The fixed pending-action tray owns the whole RNG wait lifecycle. Keep
+      // the main wager form still after placement instead of echoing that
+      // state in a second bubble above it.
+      stateEl.textContent = this.#state === STATE.AWAITING_RNG
+        ? ''
+        : (STATE_LABELS[this.#state] ?? '');
     }
     const placeBtn = this.querySelector('[data-bind="deg-place-cta"]');
     if (placeBtn) {
@@ -1468,11 +2273,30 @@ class AppDegenerettePanel extends HTMLElement {
     }
     const units = ['ETH', 'FLIP', 'DGNRS', 'WWXRP'];
     const spins = Math.max(1, Number(this.#currentSpinCount || 1));
+    const phase = this.#state === STATE.READY
+      ? 'result-ready'
+      : this.#state === STATE.REQUESTING_RNG
+        ? 'requesting-rng'
+        : this.#state === STATE.AWAITING_RNG && this.#rngRequestPending
+          ? 'waiting-rng'
+          : this.#state === STATE.AWAITING_RNG && this.#rngRequestAvailable
+            ? 'request-ready'
+            : this.#state;
     publishPendingActions(PENDING_SOURCE, [{
       id: `degenerette:${String(this.#currentBetId)}`,
       kind: 'degenerette',
-      label: `Degenerette · ${spins} spin${spins === 1 ? '' : 's'}`,
-      shortLabel: 'Resolve degen',
+      label: `${spins} spin${spins === 1 ? '' : 's'}`,
+      ticketPacked: this.#currentTicket == null ? null : String(this.#currentTicket),
+      heroQuadrant: this.#currentHero == null ? null : Number(this.#currentHero) & 3,
+      shortLabel: phase === 'waiting-rng'
+        ? 'Waiting for RNG'
+        : phase === 'requesting-rng'
+          ? 'Requesting RNG'
+          : phase === 'request-ready'
+            ? 'Request RNG'
+            : this.#state === STATE.INDEXING
+              ? 'Loading spins'
+            : 'Resolve degen',
       detail: this.#state === STATE.READY
         ? `RNG ready · ${units[this.#currentCurrency] || 'FLIP'} result locked`
         : this.#state === STATE.REQUESTING_RNG
@@ -1481,12 +2305,24 @@ class AppDegenerettePanel extends HTMLElement {
           ? 'Resolving on-chain'
           : this.#state === STATE.INDEXING
             ? 'Loading every verified spin'
+          : phase === 'waiting-rng'
+            ? 'RNG requested · waiting for Chainlink result'
           : this.#rngRequestAvailable
             ? 'RNG request ready'
             : 'Waiting for Chainlink RNG',
       state: this.#state === STATE.READY || this.#rngRequestAvailable
         ? 'ready'
         : [STATE.REQUESTING_RNG, STATE.RESOLVING].includes(this.#state) ? 'busy' : 'waiting',
+      phase,
+      // The bottom card appears as soon as placement confirms. Waiting is a
+      // real player-owned state even before the permissionless request window
+      // opens; the same card later lights up for Request RNG / Resolve.
+      pinned: [STATE.AWAITING_RNG, STATE.INDEXING].includes(this.#state)
+        || phase === 'requesting-rng',
+      progress: this.#state === STATE.AWAITING_RNG || phase === 'requesting-rng'
+        ? 'indeterminate'
+        : null,
+      progressStartedAt: this.#rngRequestStartedAt,
       order: 15,
       run: () => this.#onResolveClick(),
     }]);
@@ -1509,7 +2345,10 @@ class AppDegenerettePanel extends HTMLElement {
           amountPerSpin: this.#currentAmountPerSpin,
           spinCount: this.#currentSpinCount,
           hero: this.#currentHero,
+          ticket: this.#currentTicket,
           rngWord: this.#currentRngWord,
+          rngRequestPending: this.#rngRequestPending,
+          rngRequestStartedAt: this.#rngRequestStartedAt,
           state: this.#state,
           address: this.#pendingAddress,
         }
@@ -1533,18 +2372,16 @@ class AppDegenerettePanel extends HTMLElement {
       const currency = currencyRaw === '' || currencyRaw == null ? 0 : Number(currencyRaw);
       // Amount input is in ETH units for ETH currency, FLIP units for FLIP.
       // Both ETH and FLIP use 18-decimal scaling on the wire.
-      const amountStrEth = amountInput ? String(amountInput.value || '0') : '0';
-      const amountFloat = Number(amountStrEth);
-      if (!Number.isFinite(amountFloat) || amountFloat <= 0) {
+      const amountText = amountInput ? String(amountInput.value || '0') : '0';
+      const amountPerTicketWei = parseDegeneretteAmountInput(amountText, currency);
+      if (amountPerTicketWei == null || amountPerTicketWei <= 0n) {
         this.#renderError('Amount must be greater than 0.');
         this.#setState(STATE.IDLE);
         return;
       }
-      // Convert the input float to wei (18 decimals). ETH amounts are then
-      // /1M-descaled to the testnet contract's wei scale (chain-config
-      // ETH_DIVISOR; 1n on mainnet). FLIP is unscaled on both chains.
-      const fullWei = BigInt(Math.round(amountFloat * 1e18));
-      const amountPerTicketWei = currency === 0 ? fullWei / ETH_DIVISOR : fullWei;
+      // The parser above reads the decimal string directly into 18-decimal
+      // units. ETH is /1M-descaled there for the testnet deployment; token
+      // lanes stay unscaled on every chain.
       const ticketRaw = ticketSel ? ticketSel.value : '1';
       const ticketCount = ticketRaw === '' || ticketRaw == null ? 1 : Number(ticketRaw);
       // v48: hero quadrant is mandatory (0-3) — the picker always has one
@@ -1583,7 +2420,10 @@ class AppDegenerettePanel extends HTMLElement {
         this.#currentAmountPerSpin = amountPerTicketWei;
         this.#currentSpinCount = ticketCount;
         this.#currentHero = heroQuadrant;
+        this.#currentTicket = BigInt(customTicket);
         this.#currentRngWord = 0n;
+        this.#rngRequestPending = false;
+        this.#rngRequestStartedAt = 0;
         this.#setState(STATE.AWAITING_RNG);
         this.#renderError('Bet placed — syncing its RNG status…');
         void this.#recoverPendingBetFromDb();
@@ -1596,7 +2436,10 @@ class AppDegenerettePanel extends HTMLElement {
       this.#currentAmountPerSpin = amountPerTicketWei;
       this.#currentSpinCount = ticketCount;
       this.#currentHero = heroQuadrant;
+      this.#currentTicket = BigInt(customTicket);
       this.#currentRngWord = 0n;
+      this.#rngRequestPending = false;
+      this.#rngRequestStartedAt = 0;
       this.#pendingAddress = getActingAddress()
         ? String(getActingAddress()).toLowerCase()
         : String(get('connected.address') || '').toLowerCase();
@@ -1607,6 +2450,7 @@ class AppDegenerettePanel extends HTMLElement {
         amountPerSpin: this.#currentAmountPerSpin,
         spinCount: this.#currentSpinCount,
         hero: this.#currentHero,
+        ticket: this.#currentTicket,
       });
       this.#setState(STATE.AWAITING_RNG);
       this.#startRngPollCycle();
@@ -1622,7 +2466,10 @@ class AppDegenerettePanel extends HTMLElement {
         this.#currentAmountPerSpin = previousActive.amountPerSpin;
         this.#currentSpinCount = previousActive.spinCount;
         this.#currentHero = previousActive.hero;
+        this.#currentTicket = previousActive.ticket;
         this.#currentRngWord = previousActive.rngWord;
+        this.#rngRequestPending = previousActive.rngRequestPending;
+        this.#rngRequestStartedAt = previousActive.rngRequestStartedAt;
         this.#pendingAddress = previousActive.address;
         _writePendingBet(this.#pendingAddress, previousActive);
         this.#setState(previousActive.state);
@@ -1665,7 +2512,8 @@ class AppDegenerettePanel extends HTMLElement {
         }
         if (ac.signal.aborted) return;
         const results = Array.isArray(bet?.results) ? bet.results : [];
-        if (results.some((row) => row?.resultType === 'resolved')) {
+        const resolvedInFeed = results.some((row) => row?.resultType === 'resolved');
+        if (resolvedInFeed) {
           if (await this.#replayIndexedResolution(player, this.#currentBetId, 1)) return;
         }
         let word = 0n;
@@ -1678,9 +2526,28 @@ class AppDegenerettePanel extends HTMLElement {
           player,
           betId: this.#currentBetId,
         }).catch(() => null);
+        if (packed != null && packed !== 0n && this.#currentTicket == null) {
+          const decoded = dgnDecodePacked(packed);
+          if (decoded) {
+            this.#currentTicket = decoded.customTicket;
+            if (this.#currentHero == null) this.#currentHero = decoded.heroQuadrant;
+            this.#persistPendingBet();
+            this.#renderState();
+          }
+        }
         if (packed === 0n) {
           if (await this.#replayIndexedResolution(player, this.#currentBetId, 1)) return;
-          this.#setState(STATE.INDEXING);
+          // A zero slot by itself is not proof that resolution happened. In
+          // particular, the first poll immediately after a shared mid-day RNG
+          // request can race the RPC/indexer view and briefly return zero while
+          // Chainlink has not supplied a word yet. Only show "Loading spins"
+          // after we have positive resolution/readiness evidence; otherwise
+          // preserve the honest RNG wait (and its persisted request latch).
+          const resolutionKnown = resolvedInFeed
+            || word !== 0n
+            || this.#currentRngWord !== 0n
+            || this.#state === STATE.INDEXING;
+          this.#setState(resolutionKnown ? STATE.INDEXING : STATE.AWAITING_RNG);
         } else {
           const ready = word !== 0n || await canResolveBets({
             player,
@@ -1695,7 +2562,22 @@ class AppDegenerettePanel extends HTMLElement {
           // request simulates successfully, light the same resolve action so a
           // player can start the shared batch instead of waiting forever.
           if (this.#state === STATE.AWAITING_RNG) {
-            const requestable = await canRequestLootboxRng().catch(() => false);
+            let requestable = await canRequestLootboxRng().catch(() => false);
+            // If the request gate opens again before a word arrives, the prior
+            // request is no longer in flight. Restore the actionable request
+            // instead of leaving a permanently animated waiting card. A fresh
+            // successful receipt gets a grace window: an RPC replica can still
+            // simulate the old state for a few reads immediately after mining.
+            if (requestable && this.#rngRequestPending) {
+              const requestAge = Date.now() - Number(this.#rngRequestStartedAt || 0);
+              if (requestAge >= RNG_REQUEST_RECEIPT_GRACE_MS) {
+                this.#rngRequestPending = false;
+                this.#rngRequestStartedAt = 0;
+                this.#persistPendingBet();
+              } else {
+                requestable = false;
+              }
+            }
             if (requestable !== this.#rngRequestAvailable) {
               this.#rngRequestAvailable = requestable;
               this.#renderState();
@@ -1753,8 +2635,13 @@ class AppDegenerettePanel extends HTMLElement {
       const packed = await readBetInfo({ player, betId }).catch(() => null);
       if (packed === 0n) {
         if (!(await this.#replayIndexedResolution(player, betId))) {
-          this.#renderError('This bet is already resolved. Its result is still indexing — tap again shortly.');
-          this.#setState(STATE.READY);
+          // The write is already complete. Do not put the stale Resolve action
+          // back or ask for another click; keep watching the exact bet until
+          // every verified spin is available, then open the normal reveal.
+          const outcomeEl = this.querySelector('[data-bind="deg-outcome"]');
+          if (outcomeEl) outcomeEl.textContent = 'Resolved — loading every spin…';
+          this.#setState(STATE.INDEXING);
+          this.#startRngPollCycle();
         }
         return;
       }
@@ -1775,8 +2662,13 @@ class AppDegenerettePanel extends HTMLElement {
         (row) => String(row.player || '').toLowerCase() === wantPlayer
           && String(row.betId) === wantBet,
       );
+      let lootboxLegs = parseOpenLegsFromReceipt(receipt, wantPlayer);
+      lootboxLegs = await enrichLootboxBoonLegs(lootboxLegs, {
+        player: wantPlayer,
+        blockNumber: receipt?.blockNumber ?? null,
+      });
       if (resolved) {
-        if (!this.#finishResolvedBet(resolved, spinResults)
+        if (!this.#finishResolvedBet(resolved, spinResults, [], lootboxLegs)
           && !(await this.#replayIndexedResolution(player, betId, 1))) {
           const count = Math.max(1, Number(resolved.spinCount || 1n));
           const outcomeEl = this.querySelector('[data-bind="deg-outcome"]');
@@ -1802,10 +2694,16 @@ class AppDegenerettePanel extends HTMLElement {
         this.#currentBetId,
       )) {
         // Replay completed and retired the row.
+      } else if (raced) {
+        // Another resolver landed between our preflight and broadcast. That is
+        // a successful resolution from the player's perspective; automatically
+        // follow its events instead of surfacing a failed tx or another button.
+        const outcomeEl = this.querySelector('[data-bind="deg-outcome"]');
+        if (outcomeEl) outcomeEl.textContent = 'Resolved — loading every spin…';
+        this.#setState(STATE.INDEXING);
+        this.#startRngPollCycle();
       } else {
-        this.#renderError(raced
-          ? 'This bet was resolved by another wallet. Its result is still indexing — tap again shortly.'
-          : msg);
+        this.#renderError(msg);
         this.#setState(STATE.READY);
       }
     } finally {
@@ -1818,14 +2716,22 @@ class AppDegenerettePanel extends HTMLElement {
     this.#busyResolve = true;
     this.#clearError();
     this.#setState(STATE.REQUESTING_RNG);
+    let requestAccepted = false;
     try {
       await requestLootboxRng();
+      requestAccepted = true;
     } catch (error) {
       // A competing request between simulation and broadcast is success from
       // this player's perspective; resume the wait without a loud red wall.
       const msg = compactUiError(error, 'RNG request did not go through.');
-      if (!/in flight|already|locked/i.test(String(msg))) this.#renderError(msg);
+      requestAccepted = /in flight|already|locked/i.test(String(msg));
+      if (!requestAccepted) this.#renderError(msg);
     } finally {
+      this.#rngRequestPending = requestAccepted;
+      this.#rngRequestStartedAt = requestAccepted
+        ? (this.#rngRequestStartedAt || Date.now())
+        : 0;
+      this.#persistPendingBet();
       this.#setState(STATE.AWAITING_RNG);
       this.#startRngPollCycle();
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
@@ -1833,9 +2739,17 @@ class AppDegenerettePanel extends HTMLElement {
     }
   }
 
-  #finishResolvedBet(resolved, spinResults, resultTickets = []) {
+  #finishResolvedBet(resolved, spinResults, resultTickets = [], lootboxLegs = []) {
     const spins = Array.isArray(spinResults) ? spinResults : [];
     const outcomeEl = this.querySelector('[data-bind="deg-outcome"]');
+    const resolvedBetId = resolved?.betId ?? this.#currentBetId;
+    const resolvedPlayer = String(
+      resolved?.player || this.#pendingAddress || getActingAddress() || '',
+    ).toLowerCase();
+    const presentationKey = resolvedPlayer && resolvedBetId != null
+      ? `${resolvedPlayer}:${String(resolvedBetId)}`
+      : null;
+    if (presentationKey && this.#presentedBetKeys.has(presentationKey)) return true;
     // Do not retire the pending bet or start a shortened animation. A summary
     // may be visible one projection before its final per-spin row; the replay
     // path will fetch the exact complete event set.
@@ -1850,18 +2764,58 @@ class AppDegenerettePanel extends HTMLElement {
       heroQuadrant: this.#currentHero == null ? this.#dgnHero : this.#currentHero,
     });
     if (!sequence) return false;
+    if (presentationKey) this.#presentedBetKeys.add(presentationKey);
+    const directBoxLegs = Array.isArray(lootboxLegs) ? lootboxLegs.filter(Boolean) : [];
+    sequence.lootboxAwarded = directBoxLegs.length > 0;
+    sequence.lootboxLegs = directBoxLegs;
+    sequence.lootboxEth = degeneretteLootboxEthFromLegs(directBoxLegs);
+    const lootboxRelease = degeneretteLootboxRelease(
+      resolvedPlayer,
+      directBoxLegs,
+      resolved?.transactionHash,
+    );
     if (outcomeEl) outcomeEl.textContent = '';
-    _writePendingBet(this.#pendingAddress, null);
+    const completesActiveSlot = this.#currentBetId == null
+      || resolvedBetId == null
+      || String(this.#currentBetId) === String(resolvedBetId);
+    if (completesActiveSlot) _writePendingBet(this.#pendingAddress, null);
     queueReveal(sequence);
+    if (directBoxLegs.length > 0) {
+      const address = this.#pendingAddress || getActingAddress();
+      recordLootboxTicketPacks({
+        address,
+        legs: directBoxLegs,
+        sourceKey: `degenerette:${String(resolvedBetId ?? '')}`,
+        settledExpected: true,
+      }).catch(() => {});
+      // The contract has already settled this recirculated box in the resolve
+      // transaction. Keep its contents sealed in presentation, directly after
+      // the reels, so OPEN LOOTBOX reveals the real emitted rewards without a
+      // second wallet transaction.
+      queueReveal({
+        kind: 'lootbox',
+        title: 'DEGENERETTE LOOTBOX',
+        legs: directBoxLegs,
+        settledExpected: true,
+        // OPEN LOOTBOX on the finished Degenerette board arms this already
+        // settled sequence's autoStart path. It plays the case animation once,
+        // then reveals the emitted rewards without another click or wallet tx.
+        ...(lootboxRelease ? { lootboxRelease } : {}),
+      });
+    }
     // The overlay has accepted the complete audit trail. Release this active
     // slot immediately so another older pending bet can light up while the
     // player is watching the reveal.
-    this.#currentBetId = null;
-    this.#currentLootboxIndex = null;
-    this.#currentRngWord = 0n;
-    this.#setState(STATE.IDLE);
-    void this.#recoverPendingBetFromDb();
-    setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+    if (completesActiveSlot) {
+      this.#cancelRngPoll();
+      this.#currentBetId = null;
+      this.#currentLootboxIndex = null;
+      this.#currentTicket = null;
+      this.#currentRngWord = 0n;
+      this.#setState(STATE.IDLE);
+      void this.#recoverPendingBetFromDb();
+      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+    }
     return true;
   }
 
@@ -1881,6 +2835,11 @@ class AppDegenerettePanel extends HTMLElement {
       if (out.length + 1 >= COMMUNITY_MAX_BETS) break;
       const owner = String(item?.player || '');
       if (!/^0x[0-9a-fA-F]{40}$/.test(owner) || item?.betId == null) continue;
+      // A player's other unresolved bets need their own result sequence. If
+      // they ride along in this community batch, their LootBox events would
+      // otherwise be indistinguishable from the primary bet's direct box in
+      // the shared resolve receipt.
+      if (owner.toLowerCase() === String(player || '').toLowerCase()) continue;
       const key = `${owner.toLowerCase()}:${String(item.betId)}`;
       if (key === primaryKey) continue;
       const results = Array.isArray(item?.results) ? item.results : [];
@@ -1908,7 +2867,12 @@ class AppDegenerettePanel extends HTMLElement {
         { player, betId },
       );
       if (!complete.complete) return false;
-      return this.#finishResolvedBet(replay.resolved, complete.spins);
+      let lootboxLegs = parseOpenLegsFromReceipt(replay.receipt, player);
+      lootboxLegs = await enrichLootboxBoonLegs(lootboxLegs, {
+        player,
+        blockNumber: replay.receipt?.blockNumber ?? replay.resolved?.blockNumber ?? null,
+      });
+      return this.#finishResolvedBet(replay.resolved, complete.spins, [], lootboxLegs);
     };
 
     // Exact player+betId topics are complete immediately after a receipt and
@@ -1939,6 +2903,7 @@ class AppDegenerettePanel extends HTMLElement {
           this.#currentAmountPerSpin = decoded.amountPerSpin;
           this.#currentSpinCount = Math.max(1, decoded.spinCount);
           this.#currentHero = decoded.heroQuadrant;
+          this.#currentTicket = decoded.customTicket;
         }
         const results = Array.isArray(bet.results) ? bet.results : [];
         const resolvedRow = results.find((result) => result?.resultType === 'resolved');
@@ -1951,6 +2916,7 @@ class AppDegenerettePanel extends HTMLElement {
             spinCount: BigInt(data.spinCount ?? decoded?.spinCount ?? 1),
             totalPayout: BigInt(data.totalPayout ?? resolvedRow?.payout ?? 0),
             resultTraits: BigInt(data.resultTraits ?? data.resultTicket ?? 0),
+            transactionHash: resolvedRow?.transactionHash || null,
           };
         } catch (_e) {
           resolved = null;
@@ -1967,8 +2933,18 @@ class AppDegenerettePanel extends HTMLElement {
             try { this.#currentRngWord = BigInt(bet.rngWord ?? 0); }
             catch (_e) { this.#currentRngWord = 0n; }
           }
+          let replayLootboxLegs = openLegsFromDegenerettePayouts(bet.lootboxPayouts);
+          replayLootboxLegs = await enrichLootboxBoonLegs(replayLootboxLegs, {
+            player,
+            blockNumber: resolvedRow?.blockNumber ?? null,
+          });
           if (complete.complete
-            && this.#finishResolvedBet(resolved, complete.spins, bet.resultTickets)) {
+            && this.#finishResolvedBet(
+              resolved,
+              complete.spins,
+              bet.resultTickets,
+              replayLootboxLegs,
+            )) {
             return true;
           }
         }
@@ -1999,14 +2975,12 @@ class AppDegenerettePanel extends HTMLElement {
     eyebrow = 'ROUND WINNINGS',
   } = {}) {
     const setup = this.querySelector('[data-bind="deg-setup"]');
-    const actions = this.querySelector('[data-bind="deg-actions"]');
     const summary = this.querySelector('[data-bind="dgn-results-summary"]');
     const eyebrowEl = this.querySelector('[data-bind="dgn-results-eyebrow"]');
     const total = this.querySelector('[data-bind="dgn-results-total"]');
     const metaEl = this.querySelector('[data-bind="dgn-results-meta"]');
     this.#resultsMode = true;
     if (setup) setup.hidden = true;
-    if (actions) actions.hidden = true;
     if (summary) summary.hidden = false;
     if (eyebrowEl) eyebrowEl.textContent = String(eyebrow || 'ROUND WINNINGS');
     if (total) {
@@ -2019,11 +2993,9 @@ class AppDegenerettePanel extends HTMLElement {
   #exitResultsMode() {
     this.#resultsMode = false;
     const setup = this.querySelector('[data-bind="deg-setup"]');
-    const actions = this.querySelector('[data-bind="deg-actions"]');
     const summary = this.querySelector('[data-bind="dgn-results-summary"]');
     const panel = this.querySelector('[data-bind="dgn-results-panel"]');
     if (setup) setup.hidden = false;
-    if (actions) actions.hidden = false;
     if (summary) summary.hidden = true;
     if (panel) panel.hidden = true;
     this.#clearInlineSpin();
@@ -2055,7 +3027,7 @@ class AppDegenerettePanel extends HTMLElement {
     try {
       if (currency === 0) return `${displayEth(BigInt(wei ?? 0))} ETH`;
       const label = currency === 3 ? 'WWXRP' : 'FLIP';
-      return `${displayToken(BigInt(wei ?? 0))} ${label}`;
+      return `${displayTokenSnapped(BigInt(wei ?? 0))} ${label}`;
     } catch (_e) {
       return String(wei ?? 0);
     }
@@ -2177,12 +3149,12 @@ class AppDegenerettePanel extends HTMLElement {
     const playerTraits = dgnUnpackTicket(row.playerTraits);
     const targetTraits = row.houseTraits == null ? null : dgnUnpackTicket(row.houseTraits);
     if (settled && row.houseTraits != null) {
-      states = dgnComputeMatches(
+      states = dgnScoringMatchStates(
         playerTraits,
         targetTraits,
-      ).states;
+      );
     } else if (frame && row.houseTraits != null) {
-      const finalStates = dgnComputeMatches(playerTraits, targetTraits).states;
+      const finalStates = dgnScoringMatchStates(playerTraits, targetTraits);
       states = targetTraits.map((_trait, q) => {
         const colorLocked = Boolean(frame.lockedColors?.[q]);
         const symbolLocked = Boolean(frame.lockedSymbols?.[q]);
@@ -2254,22 +3226,28 @@ class AppDegenerettePanel extends HTMLElement {
     const board = this.#inlineBoard;
     if (!board) return;
     const count = Math.max(0, Math.min(board.rows.length, Number(revealedCount) || 0));
-    const running = board.rows.slice(0, count)
+    const faceTotal = board.rows.slice(0, count)
       .reduce((sum, row) => sum + BigInt(row.payout || 0n), 0n);
     const eyebrow = this.querySelector('[data-bind="dgn-results-eyebrow"]');
     const total = this.querySelector('[data-bind="dgn-results-total"]');
     const meta = this.querySelector('[data-bind="dgn-results-meta"]');
     const complete = count >= board.rows.length;
-    if (eyebrow) eyebrow.textContent = complete ? 'ROUND WINNINGS' : 'WON SO FAR';
+    const settledTotal = complete ? BigInt(board.totalPayout || 0n) : faceTotal;
+    const hits = board.rows.slice(0, count)
+      .filter((row) => BigInt(row.payout || 0n) > 0n).length;
+    const survivalBust = complete && board.currency === 1 && hits > 0 && settledTotal === 0n;
+    if (eyebrow) eyebrow.textContent = complete ? 'ROUND PAYOUT' : 'WON SO FAR';
     if (total) {
-      total.textContent = this.#payoutText(running, board.currency);
-      total.classList?.toggle('is-win', running > 0n);
+      total.textContent = this.#payoutText(settledTotal, board.currency);
+      total.classList?.toggle('is-win', settledTotal > 0n);
     }
     if (meta) {
       meta.textContent = count === 0
         ? 'Reveal the first spin to uncover the round size'
         : complete
-        ? `${board.rows.length} spin${board.rows.length === 1 ? '' : 's'} complete`
+        ? survivalBust
+          ? `${hits} hit${hits === 1 ? '' : 's'} · survival flip lost`
+          : `${hits} hit${hits === 1 ? '' : 's'} across ${board.rows.length} spin${board.rows.length === 1 ? '' : 's'}`
         : `${count} of ${board.rows.length} spins revealed`;
     }
   }
@@ -2366,7 +3344,13 @@ class AppDegenerettePanel extends HTMLElement {
   #finishInlineBoard(lastRow = null) {
     const board = this.#inlineBoard;
     if (!board) return;
-    const won = board.totalPayout > 0n;
+    const biggestHitIndex = board.rows.reduce((best, row, index, rows) => (
+      BigInt(row.payout || 0n) > BigInt(rows[best]?.payout || 0n) ? index : best
+    ), 0);
+    if (BigInt(board.rows[biggestHitIndex]?.payout || 0n) > 0n) {
+      this.#inlineViewedSpin = biggestHitIndex;
+      this.#renderInlineRow(board.rows[biggestHitIndex], { settled: true });
+    }
     this.#updateInlineRunningTotal(board.rows.length);
     this.#renderInlineHistory(board.rows.length);
     const spin = this.querySelector('[data-bind="dgn-inline-spin-cta"]');
@@ -2535,8 +3519,8 @@ class AppDegenerettePanel extends HTMLElement {
     const row = document.createElement('div');
     row.className = 'dgn-result-row';
     row.classList.add(won ? 'is-win' : 'is-miss');
-    const m = dgnComputeMatches(playerTraits, houseTraits);
-    row.appendChild(this.#buildTicketCard(playerTraits, m.states, heroIdx));
+    const states = dgnScoringMatchStates(playerTraits, houseTraits);
+    row.appendChild(this.#buildTicketCard(playerTraits, states, heroIdx));
     const vs = document.createElement('span');
     vs.className = 'dgn-result-vs';
     vs.textContent = 'vs';
@@ -2750,7 +3734,7 @@ class AppDegenerettePanel extends HTMLElement {
         }
         spinCount = Math.max(spinCount, Number(chain.resolved.spinCount || 0n));
       }
-      if (Array.isArray(chain?.spins) && chain.spins.length > indexedSpins.size) {
+      if (Array.isArray(chain?.spins) && chain.spins.length > 0) {
         const bySpin = new Map(perSpin.map((row, i) => [
           Number(row?.resultData?.spinIndex ?? row?.resultData?.ticketIndex ?? i),
           row,

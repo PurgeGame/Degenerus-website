@@ -173,12 +173,12 @@ test('play/app/quests.js exports formatQuestTarget and getQuestProgress', () => 
   assert.match(src, /export\s+function\s+getQuestProgress/);
 });
 
-test('play/app/quests.js maps questType 9 to MINT_BURNIE label (not 0 -- contract uses 9 per DegenerusQuests.sol:173-175)', () => {
+test('play/app/quests.js maps questType 9 to MINT_FLIP label (not 0 -- contract uses 9 per DegenerusQuests.sol:173-175)', () => {
   const src = readFileSync(QUESTS, 'utf8');
-  assert.match(src, /9:\s*['"][^'"]*BURNIE/);
+  assert.match(src, /9:\s*['"][^'"]*FLIP/);
 });
 
-test('play/app/quests.js imports formatEth/formatBurnie from wallet-free beta/viewer/utils.js', () => {
+test('play/app/quests.js imports formatEth/formatFlip from wallet-free beta/viewer/utils.js', () => {
   const src = readFileSync(QUESTS, 'utf8');
   assert.match(src, /from\s+['"][^'"]*\/beta\/viewer\/utils\.js['"]/);
 });

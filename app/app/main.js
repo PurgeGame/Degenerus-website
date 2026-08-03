@@ -16,19 +16,35 @@ import './chain-config.js';
 import { CONTRACTS } from './chain-config.js';
 import { start as startPolling } from './polling.js';
 import { initRouter, getViewedAddress } from './router.js';
-import { autoReconnect } from './wallet.js';
+import { autoReconnect, hasInstalledWallet } from './wallet.js';
 import { subscribe, get, update } from './store.js';
 import { initProGate } from './pro-gate.js';
 import { initNavWallet } from './nav-wallet.js';
 import { initDiscordLink } from './discord-link.js';
 import { startPackWatch, refreshPackWatch } from './pack-watch.js';
+import { startBingoWatch, refreshBingoWatch } from './bingo-watch.js';
+import { resetPresentationStateForDeployment } from './deployment-presentation-state.js';
+import { initButtonFeedback } from './button-feedback.js';
+import { mountJackpotCountdown } from './jackpot-countdown.js';
 
-// Phase 64 — default viewed player: the sDGNRS house address. With no wallet
-// and no ?as= deep-link the app still shows a live, fully-populated player
-// view (the house holds tickets every level). Cleared automatically the
-// moment a wallet connects (only if still the untouched default).
+// The public sDGNRS account is a demo fallback only for browsers with no
+// installed wallet. Never silently move an injected-wallet user into it while
+// their extension is locked, disconnected, or still auto-reconnecting.
 const DEFAULT_PLAYER = String(CONTRACTS.SDGNRS).toLowerCase();
 let _defaultPlayerSeeded = false;
+
+function seedNoWalletDemoIfNeeded() {
+  if (get('viewing.address') || get('connected.address') || hasInstalledWallet()) return false;
+  update('viewing.address', DEFAULT_PLAYER);
+  _defaultPlayerSeeded = true;
+  return true;
+}
+
+function clearUntouchedDemo() {
+  if (!_defaultPlayerSeeded || get('viewing.address') !== DEFAULT_PLAYER) return;
+  _defaultPlayerSeeded = false;
+  update('viewing.address', null);
+}
 
 /**
  * The top-bar day, as a picker.
@@ -149,51 +165,60 @@ export function mountDaySelector({ retries = 40, intervalMs = 500 } = {}) {
 
 async function boot() {
   console.log('[app] booting');
+  initButtonFeedback();
+  // Logical days restart on a new testnet deployment. Clear only prior-run UI
+  // reveal receipts before any jackpot/flip component reads them.
+  resetPresentationStateForDeployment();
   // 1. Router reads ?as= → seeds viewing.address BEFORE any wallet flow.
   initRouter();
   // 1b. Phase 64 — hidden pro-mode eligibility (ui.proEligible off the
   //     connected wallet's activity score; no visible consumer until THE PIT).
   initProGate();
-  // 1c. Phase 64 — seed the sDGNRS house as the default viewed player when
-  //     neither ?as= nor a persisted wallet claims the view.
-  if (!get('viewing.address')) {
-    update('viewing.address', DEFAULT_PLAYER);
-    _defaultPlayerSeeded = true;
-  }
-  // 1d. Take over the nav's Connect button so it drives THIS app's wallet stack
+  // 1c. Take over the nav's Connect button so it drives THIS app's wallet stack
   //     (EIP-6963 + WalletConnect, no backend session) rather than nav.js's
   //     api.degener.us login. Fire-and-forget: it retries until the nav mounts,
   //     and boot must not wait on nav injection.
   initNavWallet();
-  // 1e. Take over the nav's Discord button too: same api.degener.us OAuth, but
+  // 1d. Take over the nav's Discord button too: same api.degener.us OAuth, but
   //     it first binds THIS app's connected wallet into the session so the
   //     discord_id↔address mapping actually persists (nav.js alone never
   //     learns the app-stack wallet). Lazy — nothing runs until clicked.
   initDiscordLink();
+  // A late EIP-6963 injection must immediately retire an untouched demo view.
+  // No account request is made; this only reacts to provider availability.
+  try {
+    window.addEventListener('eip6963:announceProvider', clearUntouchedDemo);
+    window.addEventListener('ethereum#initialized', clearUntouchedDemo);
+  } catch (_e) { /* headless */ }
   // 2. Auto-reconnect via persisted rdns (silent — eth_accounts only, no popup).
   await autoReconnect().catch(() => {});
-  // 2b. Wallet connected (now or later) → drop the untouched house default so
-  //     the player lands on their own view (ui.mode flips back to 'self').
+  // 2b. Only after silent reconnect has had its chance, seed the public demo
+  //     for a browser that genuinely has no installed wallet.
+  seedNoWalletDemoIfNeeded();
+  // 2c. Wallet connected (now or later) → drop the untouched demo so the
+  //     player lands on their own view (ui.mode flips back to 'self').
   subscribe('connected.address', (addr) => {
     if (addr && _defaultPlayerSeeded && get('viewing.address') === DEFAULT_PLAYER) {
-      _defaultPlayerSeeded = false;
-      update('viewing.address', null);
+      clearUntouchedDemo();
       return;
     }
-    // Disconnect drops viewing.address too (wallet.js owns that reset), which
-    // would otherwise leave the page on an empty player. Put the house back so
-    // there is always something live to look at.
+    // A true no-wallet browser can keep the useful public demo after a
+    // WalletConnect session ends. Installed-wallet users stay on their own
+    // empty/connect state instead of silently jumping accounts.
     if (!addr && !get('viewing.address')) {
-      _defaultPlayerSeeded = true;
-      update('viewing.address', DEFAULT_PLAYER);
+      seedNoWalletDemoIfNeeded();
     }
   });
-  // 2c. Deferred ticket reveals. A bought ticket has no symbols until the level
+  // 2d. Deferred ticket reveals. A bought ticket has no symbols until the level
   //     draw rolls them, so the buy records the purchase and this watcher pops
   //     the reveal once the entries are real — including one that rolled while
   //     the tab was closed, since the record outlives the session.
   startPackWatch({ getAddress: () => get('connected.address') });
   subscribe('connected.address', () => refreshPackWatch());
+  // Bingo claims are commonly harvested by a keeper. Watch the player-indexed
+  // GAME receipts so an automatic claim still gets an explicit prize reveal.
+  startBingoWatch({ getAddress: () => get('connected.address') });
+  subscribe('connected.address', () => refreshBingoWatch());
   // 3. Polling starts with the resolved viewing target (?as= OR connected OR
   //    null). Store subscriptions fire immediately, so startup and a connected
   //    self-view used to restart the complete five-poller stack 2–3 times in
@@ -235,6 +260,7 @@ async function boot() {
   //    nav writes into that select and fires `change`, reusing the proven
   //    re-pin path instead of adding a second source of truth.
   mountDaySelector();
+  mountJackpotCountdown();
   console.log('[app] ready');
 }
 

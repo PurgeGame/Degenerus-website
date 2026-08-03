@@ -311,6 +311,7 @@ async function settle(loops = 30) {
 // ---------------------------------------------------------------------------
 
 import * as storeMod from '../../app/store.js';
+import * as jackpotSfxMod from '../../app/jackpot-sfx.js';
 
 // ---------------------------------------------------------------------------
 // Read panel source for grep-based assertions (T-62-04-NoWrite + textContent
@@ -324,8 +325,7 @@ const PANEL_SRC = readFileSync(
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 
 // Strip line + block comments so source-grep assertions verify executable code,
-// not documentation strings that mention forbidden tokens (e.g. CF-08 comment
-// "NO toast / NO audio / NO animator" or "NO sendTx, NO requireStaticCall").
+// not documentation strings that mention forbidden tokens.
 // This mirrors Plan 62-03 D-G's scoped-assertion deviation pattern: the test
 // intent is "panel does NOT INVOKE sendTx", not "panel source string never
 // contains the substring 'sendTx'". Comments carry self-documenting policy.
@@ -417,6 +417,11 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       /QUEST/,
       'header copy contains QUEST (static template literal)',
     );
+    assert.match(
+      el.innerHTML,
+      /<a class="qst-learn-link" href="\/learn\/quests\/">QUESTS<\/a>/,
+      'the Quests heading links directly to its Learn page',
+    );
     assert.doesNotMatch(el.innerHTML, /DAILY RUN/, 'removed daily-run kicker stays absent');
     assert.doesNotMatch(el.innerHTML, /qst-blurb/, 'explanatory subtitle removed');
     assert.doesNotMatch(el.innerHTML, /Daily quests progress automatically/, 'old verbose intro removed');
@@ -471,7 +476,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(roles[1]?.textContent, 'BONUS', 'secondary slot uses compact BONUS role chip');
     assert.equal(roles[2]?.textContent, 'LEVEL', 'level quest has its own role chip');
     assert.equal(el.querySelectorAll('.qst-slot-icon').length, 3, 'each quest has a game-style icon tile');
-    assert.match(slot0Text, /Buy a ticket or lootbox/, 'ETH quest uses player-facing purchase copy');
+    assert.match(slot0Text, /Buy tickets or lootboxes/, 'purchase quests use plural player-facing copy');
 
     assert.equal(slots[1].classList.contains('qst-slot--gated'), true,
       'bonus quest is muted until the main quest is complete');
@@ -487,7 +492,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     const rewardLogos = el.querySelectorAll('.qst-slot-reward-logo');
     assert.equal(rewards.length, 3, 'every card owns its reward line');
     assert.equal(rewardLogos.length, 3, 'each reward line carries the FLIP flame logo');
-    assert.equal(rewardLogos[0].src, '/whitepaper/flame-logo.svg');
+    assert.equal(rewardLogos[0].src, '/whitepaper/flame-logo-split.svg');
     assert.match(rewards[0].textContent, /100 FLIP/);
     assert.doesNotMatch(rewards[0].textContent, /NEXT FLIP/,
       'reward copy stays concise without the removed next-flip suffix');
@@ -505,7 +510,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
-  test('clicking an actionable quest publishes its exact setup target', async () => {
+  test('clicking an actionable quest opens a minimum-action confirmation before publishing', async () => {
     const events = [];
     const listener = (event) => events.push(event.detail);
     document.addEventListener('quest:activate', listener);
@@ -516,10 +521,241 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(level.getAttribute('role'), 'button');
     assert.equal(level.getAttribute('tabindex'), '0');
     level.dispatchEvent({ type: 'click' });
+    assert.deepEqual(events, [], 'opening the bubble does not configure or submit anything');
+    const dialog = el.querySelector('[data-bind="qst-action-dialog"]');
+    assert.equal(dialog.hidden, false);
+    assert.equal(
+      el.querySelector('[data-bind="qst-action-requirement"]').textContent,
+      'BUY LOOTBOX · 1.2 ETH',
+      'the popup subtracts existing progress and presents only the remaining minimum',
+    );
+    assert.match(el.querySelector('[data-bind="qst-action-confirm"]').textContent, /BUY LOOTBOX · 1\.2 ETH/);
+
+    el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
     assert.deepEqual(events, [{
       questType: 6,
+      target: '1200000000000',
+      variant: 'level',
+      submit: true,
+      configuredAmount: true,
+      level: 7,
+    }]);
+    assert.equal(dialog.hidden, true);
+
+    document.removeEventListener('quest:activate', listener);
+    el.disconnectedCallback();
+  });
+
+  test('clicking a gated Coinflip quest explains the gate instead of appearing unresponsive', async () => {
+    const events = [];
+    const listener = (event) => events.push(event.detail);
+    document.addEventListener('quest:activate', listener);
+    const el = instantiate();
+    await settle(40);
+
+    const coinflip = el.querySelectorAll('.qst-slot')[1];
+    assert.equal(coinflip.getAttribute('role'), 'button');
+    assert.equal(coinflip.classList.contains('qst-slot--explainable'), true);
+    coinflip.dispatchEvent({ type: 'click' });
+
+    const dialog = el.querySelector('[data-bind="qst-action-dialog"]');
+    const confirm = el.querySelector('[data-bind="qst-action-confirm"]');
+    assert.equal(dialog.hidden, false, 'the gated quest still opens its action sheet');
+    assert.match(el.querySelector('[data-bind="qst-action-copy"]').textContent,
+      /Complete the daily quest first/);
+    assert.equal(confirm.disabled, true);
+    assert.match(confirm.textContent, /DAILY QUEST FIRST .*ADD BET/);
+    confirm.dispatchEvent({ type: 'click' });
+    assert.deepEqual(events, [], 'the explanatory sheet cannot dispatch a premature bet preset');
+
+    document.removeEventListener('quest:activate', listener);
+    el.disconnectedCallback();
+  });
+
+  test('the main daily popup toggles between the minimum ticket and lootbox setup', async () => {
+    const events = [];
+    const listener = (event) => events.push(event.detail);
+    document.addEventListener('quest:activate', listener);
+    _fetchHandler = async (url) => {
+      const u = String(url);
+      if (u.includes('/game/state')) {
+        return { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
+      }
+      if (u.includes('/game/quests/day/')) {
+        return {
+          day: 1,
+          quests: [
+            { slot: 0, questType: 1, target: '40000000000' },
+            { slot: 1, questType: 2, target: '2000000000000000000000' },
+          ],
+        };
+      }
+      return makeQuestsPayload({
+        quests: [
+          { day: 1, slot: 0, questType: 1, progress: '0', target: '40000000000', completed: false },
+        ],
+      });
+    };
+    storeMod.update('app.lastDay', { day: 1 });
+
+    const el = instantiate();
+    await settle(40);
+    el.querySelectorAll('.qst-slot')[0].dispatchEvent({ type: 'click' });
+
+    const choice = el.querySelector('[data-bind="qst-action-choice"]');
+    const ticket = el.querySelector('[data-bind="qst-action-ticket"]');
+    const lootbox = el.querySelector('[data-bind="qst-action-lootbox"]');
+    assert.equal(choice.hidden, false, 'the purchase quest offers the product toggle');
+    assert.equal(ticket.getAttribute('aria-pressed'), 'true');
+    assert.match(el.querySelector('[data-bind="qst-action-requirement"]').textContent, /BUY .*TICKET/);
+
+    lootbox.dispatchEvent({ type: 'click' });
+    assert.equal(lootbox.getAttribute('aria-pressed'), 'true');
+    assert.equal(ticket.getAttribute('aria-pressed'), 'false');
+    assert.equal(
+      el.querySelector('[data-bind="qst-action-requirement"]').textContent,
+      'BUY LOOTBOX · 0.04 ETH',
+    );
+    assert.match(el.querySelector('[data-bind="qst-action-confirm"]').textContent,
+      /CONFIRM · BUY LOOTBOX · 0\.04 ETH/);
+
+    el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
+    assert.deepEqual(events, [{
+      questType: 1,
+      target: '40000000000',
+      variant: 'primary',
+      submit: true,
+      configuredAmount: true,
+      purchaseKind: 'lootbox',
+    }]);
+
+    document.removeEventListener('quest:activate', listener);
+    el.disconnectedCallback();
+  });
+
+  test('a level purchase quest can choose either tickets or a lootbox', async () => {
+    const events = [];
+    const listener = (event) => events.push(event.detail);
+    document.addEventListener('quest:activate', listener);
+    _fetchHandler = async () => makeQuestsPayload({
+      levelQuest: {
+        level: 7,
+        questType: 1,
+        progress: '0',
+        target: '1600000000000',
+        completed: false,
+        eligible: true,
+      },
+    });
+    const el = instantiate();
+    await settle(40);
+
+    const level = el.querySelectorAll('.qst-slot')[2];
+    assert.match(level.textContent, /Buy tickets or lootboxes/);
+    level.dispatchEvent({ type: 'click' });
+    const choice = el.querySelector('[data-bind="qst-action-choice"]');
+    const lootbox = el.querySelector('[data-bind="qst-action-lootbox"]');
+    assert.equal(choice.hidden, false, 'level purchase quests show the product selector');
+    lootbox.dispatchEvent({ type: 'click' });
+    assert.equal(lootbox.getAttribute('aria-pressed'), 'true');
+    assert.equal(
+      el.querySelector('[data-bind="qst-action-requirement"]').textContent,
+      'BUY LOOTBOX · 1.6 ETH',
+    );
+    el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
+    assert.deepEqual(events, [{
+      questType: 1,
       target: '1600000000000',
       variant: 'level',
+      submit: true,
+      configuredAmount: true,
+      level: 7,
+      purchaseKind: 'lootbox',
+    }]);
+
+    document.removeEventListener('quest:activate', listener);
+    el.disconnectedCallback();
+  });
+
+  test('a Degenerette quest popup shows the selected ticket and submits its exact five-spin wager', async () => {
+    const events = [];
+    const listener = (event) => events.push(event.detail);
+    document.addEventListener('quest:activate', listener);
+    const ticketDraft = makeFakeElement('app-degenerette-panel');
+    ticketDraft.getTicketDraft = () => ({
+      traitIds: [56, 65, 130, 195],
+      heroQuadrant: 2,
+    });
+    _docBody.appendChild(ticketDraft);
+    _fetchHandler = async (url) => {
+      const u = String(url);
+      if (u.includes('/game/state')) {
+        return { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
+      }
+      if (u.includes('/game/quests/day/')) {
+        return {
+          day: 1,
+          quests: [
+            { slot: 0, questType: 1, target: '1' },
+            { slot: 1, questType: 7, target: '80000000000' },
+          ],
+        };
+      }
+      return makeQuestsPayload({
+        quests: [
+          { day: 1, slot: 0, questType: 1, progress: '1', target: '1', completed: true },
+          { day: 1, slot: 1, questType: 7, progress: '0', target: '80000000000', completed: false },
+        ],
+      });
+    };
+    storeMod.update('app.lastDay', { day: 1 });
+
+    const el = instantiate();
+    await settle(40);
+    el.querySelectorAll('.qst-slot')[1].dispatchEvent({ type: 'click' });
+
+    assert.equal(el.querySelector('[data-bind="qst-action-dgn"]').hidden, false);
+    assert.doesNotMatch(el.innerHTML, /MINIMUM ACTION/,
+      'the redundant minimum-action eyebrow is gone');
+    assert.equal(el.querySelector('[name="qst-action-dgn-spins"]').value, '5');
+    assert.equal(el.querySelector('[name="qst-action-dgn-bet"]').value, '0.016');
+    assert.equal(el.querySelector('[data-bind="qst-action-dgn-unit"]').textContent, 'ETH');
+    assert.equal(el.querySelector('[data-bind="qst-action-dgn-bet-limit"]').textContent, 'MIN 0.005');
+    assert.equal(el.querySelector('[data-bind="qst-action-dgn-spins-limit"]').textContent, 'MAX 25');
+    assert.equal(
+      el.querySelector('[data-bind="qst-action-dgn-img-0"]').src,
+      '/badges-circular/crypto_00_xrp_gold.svg',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="qst-action-dgn-cell-2"]').classList.contains('q-hero'),
+      true,
+    );
+    assert.equal(
+      el.querySelector('[data-bind="qst-action-requirement"]').textContent,
+      'DEGENERETTE · 5 SPINS · 0.08 ETH',
+    );
+
+    el.querySelector('[data-bind="qst-action-dgn-spins-up"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[name="qst-action-dgn-spins"]').value, '6',
+      'the visible spin stepper respects the contract maximum');
+    el.querySelector('[data-bind="qst-action-dgn-spins-down"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[name="qst-action-dgn-spins"]').value, '5');
+    el.querySelector('[data-bind="qst-action-dgn-bet-up"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[name="qst-action-dgn-bet"]').value, '0.021',
+      'the wager stepper moves by the currency contract minimum');
+    el.querySelector('[data-bind="qst-action-dgn-bet-down"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[name="qst-action-dgn-bet"]').value, '0.016');
+
+    el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
+    assert.deepEqual(events, [{
+      questType: 7,
+      target: '80000000000',
+      variant: 'secondary',
+      submit: true,
+      amountPerSpin: '16000000000',
+      spinCount: 5,
+      traitIds: [56, 65, 130, 195],
+      heroQuadrant: 2,
     }]);
 
     document.removeEventListener('quest:activate', listener);
@@ -691,17 +927,26 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(levelSlot.classList.contains('qst-slot--actionable'), true);
     assert.equal(levelSlot.getAttribute('role'), 'button');
     levelSlot.dispatchEvent({ type: 'click' });
+    assert.deepEqual(events, [], 'the popup opens before configuring the coinflip form');
+    assert.equal(
+      el.querySelector('[data-bind="qst-action-requirement"]').textContent,
+      'ADD BET · 12,000 FLIP',
+    );
+    el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
     assert.deepEqual(events, [{
       questType: 2,
-      target: '20000000000000000000000',
+      target: '12000000000000000000000',
       variant: 'level',
+      submit: true,
+      configuredAmount: true,
+      level: 7,
     }]);
 
     document.removeEventListener('quest:activate', listener);
     el.disconnectedCallback();
   });
 
-  test('Completed quest renders a completion indicator via textContent (no toast / no audio)', async () => {
+  test('an already-complete initial load renders quietly without replaying the transition', async () => {
     _fetchHandler = async () => makeQuestsPayload({
       quests: [
         { day: 1, slot: 0, questType: 6, progress: 3, target: 3, completed: true, highDifficulty: false, requirementMints: 0, requirementTokenAmount: '0' },
@@ -730,16 +975,103 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       'daily and level quest completion labels use the same wording',
     );
     assert.doesNotMatch(el.textContent, /\bDONE\b/);
+    assert.equal(el.querySelector('.qst-slot--just-completed'), null,
+      'loading an existing completion does not pretend it just happened');
 
-    // Source-grep — NO toast / playAudio / new Audio in executable code (comments
-    // documenting the absence of these tokens do not count — see stripComments).
+    // Feedback stays local and synthesized; there is still no toast or direct
+    // HTMLAudioElement playback path in this read-only component.
     assert.equal(
       /toast|playAudio|new Audio|audio\.play/.test(PANEL_SRC_NOCOMMENT),
       false,
-      'panel source contains NO toast/audio/animator (CF-08 inline-only state change)',
+      'the panel does not add a toast or direct media-element player',
     );
 
     el.disconnectedCallback();
+  });
+
+  test('an observed incomplete-to-complete transition pulses and chimes exactly once', async () => {
+    let completed = false;
+    _fetchHandler = async () => makeQuestsPayload({
+      quests: [
+        {
+          day: 1,
+          slot: 0,
+          questType: 1,
+          progress: completed ? 3 : 1,
+          target: 3,
+          completed,
+        },
+        { day: 1, slot: 1, questType: 2, progress: 0, target: 100, completed: false },
+      ],
+    });
+
+    const realAudioContext = globalThis.AudioContext;
+    class RecordingAudioContext {
+      static last = null;
+      constructor() {
+        RecordingAudioContext.last = this;
+        this.state = 'running';
+        this.currentTime = 0;
+        this.destination = {};
+        this.oscillators = [];
+      }
+      createOscillator() {
+        const oscillator = {
+          type: 'sine',
+          frequency: {
+            setValueAtTime() {},
+            exponentialRampToValueAtTime() {},
+          },
+          connect() {},
+          start() {},
+          stop() {},
+        };
+        this.oscillators.push(oscillator);
+        return oscillator;
+      }
+      createGain() {
+        return {
+          gain: {
+            setValueAtTime() {},
+            exponentialRampToValueAtTime() {},
+          },
+          connect() {},
+        };
+      }
+      close() {}
+    }
+
+    let el;
+    try {
+      globalThis.AudioContext = RecordingAudioContext;
+      jackpotSfxMod.__resetForTest();
+      el = instantiate();
+      await settle(40);
+      assert.equal(RecordingAudioContext.last, null,
+        'the incomplete baseline does not touch WebAudio');
+
+      completed = true;
+      storeMod.update('connected.address', CONNECTED);
+      await settle(60);
+      assert.ok(el.querySelectorAll('.qst-slot')[0]
+        .classList.contains('qst-slot--just-completed'));
+      assert.equal(RecordingAudioContext.last.oscillators.length, 2,
+        'one restrained two-note chime accompanies the card pulse');
+
+      storeMod.update('connected.address', CONNECTED);
+      await settle(60);
+      assert.equal(el.querySelector('.qst-slot--just-completed'), null,
+        'the next completed refresh rebuilds the normal static card');
+      assert.equal(RecordingAudioContext.last.oscillators.length, 2,
+        'polling the same completion cannot replay its chime');
+      assert.match(APP_CSS, /@keyframes qst-complete-pulse/);
+      assert.match(APP_CSS, /qst-slot--just-completed::after/);
+    } finally {
+      el?.disconnectedCallback();
+      jackpotSfxMod.__resetForTest();
+      if (realAudioContext === undefined) delete globalThis.AudioContext;
+      else globalThis.AudioContext = realAudioContext;
+    }
   });
 
   test('Streak count rendered via textContent', async () => {
@@ -757,6 +1089,46 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       `streak display contains "7" via textContent; got "${streakEl.textContent}"`,
     );
 
+    el.disconnectedCallback();
+  });
+
+  test('Degen Score uses loot colors at the exact tier boundaries', async () => {
+    const { degenScoreLootTier } = await import('../app-quest-panel.js');
+    assert.deepEqual(
+      [59, 60, 149, 150, 299, 300, 999, 1_000].map(degenScoreLootTier),
+      ['white', 'green', 'green', 'purple', 'purple', 'orange', 'orange', 'gold'],
+    );
+
+    for (const [tier, color] of [
+      ['white', '#f8fafc'],
+      ['green', '#4ade80'],
+      ['purple', '#c084fc'],
+      ['orange', '#f5a623'],
+      ['gold', '#fde047'],
+    ]) {
+      assert.match(
+        APP_CSS,
+        new RegExp(`qst-score-value\\[data-score-tier="${tier}"\\][^{]*\\{[^}]*${color}`, 's'),
+      );
+    }
+
+    _fetchHandler = async () => makeQuestsPayload({
+      scoreBreakdown: {
+        totalBps: 1_000,
+        mintLevelStreakPoints: 0,
+        questStreakPoints: 0,
+        mintCountPoints: 0,
+        affiliatePoints: 0,
+        cursePoints: 0,
+        passBonus: null,
+      },
+    });
+    const el = instantiate();
+    await settle(40);
+    assert.equal(
+      el.querySelector('[data-bind="qst-score-value"]').getAttribute('data-score-tier'),
+      'gold',
+    );
     el.disconnectedCallback();
   });
 
@@ -786,6 +1158,78 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(el.querySelector('[data-bind="qst-streak"]').textContent, '7',
       'the separate streak counter remains the raw count');
 
+    el.disconnectedCallback();
+  });
+
+  test('Degen Score mouseover bars use independent category maxima and a diminishing quest curve', async () => {
+    const { degenScoreBreakdownBarPercent } = await import('../app-quest-panel.js');
+    assert.equal(degenScoreBreakdownBarPercent('mintCountPoints', 25), 100);
+    assert.equal(degenScoreBreakdownBarPercent('affiliatePoints', 50), 100);
+    assert.equal(degenScoreBreakdownBarPercent('passBonusPoints', 80), 100);
+    assert.equal(degenScoreBreakdownBarPercent('mintLevelStreakPoints', 50), 100);
+    assert.equal(degenScoreBreakdownBarPercent('questStreakPoints', 20), 50,
+      '20 credited quest points is exactly half-full');
+    assert.ok(degenScoreBreakdownBarPercent('questStreakPoints', 100) > 50);
+    assert.ok(degenScoreBreakdownBarPercent('questStreakPoints', 100_000) < 100,
+      'an uncapped quest streak never claims to be fully maxed');
+
+    _fetchHandler = async () => makeQuestsPayload({
+      questStreak: { baseStreak: 40, lastCompletedDay: 0 },
+      scoreBreakdown: {
+        totalBps: 225,
+        mintLevelStreakPoints: 50,
+        // Legacy API field is raw count, so 40 becomes 20 credited points.
+        questStreakPoints: 40,
+        mintCountPoints: 25,
+        affiliatePoints: 50,
+        cursePoints: 0,
+        passBonus: { kind: 'deity', points: 80 },
+      },
+    });
+    const el = instantiate();
+    await settle(40);
+
+    const widths = Object.fromEntries(
+      el.querySelector('[data-bind="qst-score-rows"]').children.map((row) => [
+        row.querySelector('.ac-pop__label').textContent,
+        row.querySelector('.ac-pop__fill').style.width,
+      ]),
+    );
+    assert.deepEqual(widths, {
+      'Quest streak': '50%',
+      'Level streak': '100%',
+      'Mint count': '100%',
+      Referrals: '100%',
+      'Pass bonus': '100%',
+    });
+    el.disconnectedCallback();
+  });
+
+  test('active afKing streak uses the unified API count instead of the dormant manual count', async () => {
+    _fetchHandler = async () => makeQuestsPayload({
+      afkingActive: true,
+      currentStreak: 17,
+      questStreak: { baseStreak: 5, lastCompletedDay: 1 },
+      scoreBreakdown: {
+        totalBps: 8,
+        mintLevelStreakPoints: 0,
+        questStreakPoints: 17,
+        mintCountPoints: 0,
+        affiliatePoints: 0,
+        cursePoints: 0,
+        passBonus: null,
+      },
+    });
+    const el = instantiate();
+    await settle(40);
+
+    assert.equal(el.querySelector('[data-bind="qst-streak"]').textContent, '17',
+      'the Game-side afKing streak is shown, not playerQuestStates.streak');
+    const rows = el.querySelector('[data-bind="qst-score-rows"]').children;
+    const streakRow = rows.find(
+      (row) => row.querySelector('.ac-pop__label')?.textContent === 'Quest streak',
+    );
+    assert.equal(streakRow.querySelector('.ac-pop__pts').textContent, '8');
     el.disconnectedCallback();
   });
 

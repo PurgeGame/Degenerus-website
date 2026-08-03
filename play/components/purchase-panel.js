@@ -6,30 +6,16 @@
 // `data-gate="sim-api"` + a title tooltip pointing at PURCHASE-API-SPEC.md.
 // Live wiring lifts when the degenerus-sim repo ships the SIM-01 HTTP API.
 //
-// PURCHASE-04 piggybacks on Phase 52's <packs-panel> stale-guard: when a real
-// purchase lands later, the packs-panel auto-renders new entries without any
-// additional Phase 53 code.
+// Currency toggle (ETH / FLIP) ships as UI SCAFFOLD. FLIP pricing rule:
+// 1,000 FLIP always buys one ticket regardless of level (per CLAUDE.md
+// FLIP economics). Lootbox-via-FLIP accepts a freeform FLIP amount.
 //
-// Design mirrors <profile-panel> (Phase 51 Wave 2): four data-bind slots +
-// skeleton-to-content swap + subscribe cleanup. Unlike profile-panel this
-// component makes NO network calls; the data it needs (game.level, game.price)
-// is already populated by upstream store plumbing (beta/viewer/main.js or
-// equivalent; Phase 50 boot path).
-//
-// SECURITY (T-53-01): the innerHTML template is a static string with no user
-// interpolation. All dynamic writes go through textContent or element
-// properties (never .innerHTML with response data). Numeric input is coerced
-// to BigInt via BigInt(priceWei) and multiplied with BigInt(quantity);
-// formatEth handles the display formatting for an all-string wei path.
-//
-// SHELL-01: imports only from the wallet-free surface --
-//   beta/app/store.js (verified wallet-free)
-//   beta/viewer/utils.js (wallet-free formatEth; verified in Phase 52)
-// No imports from: ethers, beta/app/wallet.js, beta/app/contracts.js,
-// beta/app/utils.js, beta/app/purchases.js, beta/components/purchase-panel.js.
+// SHELL-01: imports only from the wallet-free surface.
 
 import { subscribe, get } from '../../beta/app/store.js';
 import { formatEth } from '../../beta/viewer/utils.js';
+
+const FLIP_PER_TICKET = 1000;
 
 const TEMPLATE = `
 <section data-slot="purchase" class="panel panel-purchase">
@@ -68,6 +54,11 @@ const TEMPLATE = `
 
     <!-- Tickets form -->
     <div class="purchase-form" data-bind="form-tickets">
+      <div class="purchase-currency" role="radiogroup" aria-label="Pay with">
+        <button type="button" data-bind="ticket-pay-eth" data-currency="eth" role="radio" aria-checked="true">ETH</button>
+        <button type="button" data-bind="ticket-pay-flip" data-currency="flip" role="radio" aria-checked="false">FLIP</button>
+      </div>
+
       <label for="purchase-quantity">Quantity</label>
       <input
         id="purchase-quantity"
@@ -93,15 +84,20 @@ const TEMPLATE = `
 
     <!-- Lootbox form (hidden until tab toggles) -->
     <div class="purchase-form" data-bind="form-lootbox" hidden>
-      <label for="purchase-lootbox-eth">Lootbox ETH</label>
+      <div class="purchase-currency" role="radiogroup" aria-label="Pay with">
+        <button type="button" data-bind="lootbox-pay-eth" data-currency="eth" role="radio" aria-checked="true">ETH</button>
+        <button type="button" data-bind="lootbox-pay-flip" data-currency="flip" role="radio" aria-checked="false">FLIP</button>
+      </div>
+
+      <label data-bind="lootbox-input-label" for="purchase-lootbox-amount">Lootbox ETH</label>
       <input
-        id="purchase-lootbox-eth"
-        data-bind="lootbox-eth-input"
+        id="purchase-lootbox-amount"
+        data-bind="lootbox-amount-input"
         type="number"
         min="0.01"
         step="0.01"
         value="0.05"
-        aria-label="Lootbox ETH amount"
+        aria-label="Lootbox amount"
       />
       <button
         type="button"
@@ -120,11 +116,14 @@ const TEMPLATE = `
 class PurchasePanel extends HTMLElement {
   #unsubs = [];
   #loaded = false;
+  #ticketCurrency = 'eth';
+  #lootboxCurrency = 'eth';
 
   connectedCallback() {
     this.innerHTML = TEMPLATE;
     this.#wireTabs();
     this.#wireQuantityInput();
+    this.#wireCurrencyToggles();
 
     this.#unsubs.push(
       subscribe('replay.day', () => this.#rerender()),
@@ -132,11 +131,6 @@ class PurchasePanel extends HTMLElement {
       subscribe('game.level', () => this.#rerender()),
       subscribe('game.price', () => this.#rerender()),
     );
-
-    // subscribe() fires immediately with current values, so #rerender() has
-    // already been invoked at least once by the loop above. Nothing else to
-    // kick here -- #rerender() is idempotent and no-ops until both level
-    // and price are populated.
   }
 
   disconnectedCallback() {
@@ -149,8 +143,6 @@ class PurchasePanel extends HTMLElement {
   #rerender() {
     const level = get('game.level');
     const price = get('game.price');
-    // Gate on both values being populated. Keep the skeleton visible until
-    // we have enough to render the PURCHASE-03 surface meaningfully.
     if (level == null || price == null || price === '0') return;
     this.#renderInfo(level, price);
     this.#updateTotalCost(price);
@@ -158,7 +150,6 @@ class PurchasePanel extends HTMLElement {
   }
 
   #renderInfo(level, priceWei) {
-    // Cycle is floor(level / 100) per D-02 (PURCHASE-03 scope).
     const lvlNum = Number(level);
     const cycle = Math.floor(lvlNum / 100);
     const byBind = (name) => this.querySelector(`[data-bind="${name}"]`);
@@ -177,14 +168,21 @@ class PurchasePanel extends HTMLElement {
     const qtyEl = this.querySelector('[data-bind="quantity-input"]');
     const raw = qtyEl ? qtyEl.value : '1';
     const qty = Math.max(1, parseInt(raw, 10) || 1);
+    const totalEl = this.querySelector('[data-bind="total-cost"]');
+    if (!totalEl) return;
+
+    if (this.#ticketCurrency === 'flip') {
+      const totalFlip = qty * FLIP_PER_TICKET;
+      totalEl.textContent = totalFlip.toLocaleString() + ' FLIP';
+      return;
+    }
     let totalWei;
     try {
       totalWei = BigInt(priceWei) * BigInt(qty);
     } catch {
       totalWei = 0n;
     }
-    const totalEl = this.querySelector('[data-bind="total-cost"]');
-    if (totalEl) totalEl.textContent = formatEth(totalWei.toString()) + ' ETH';
+    totalEl.textContent = formatEth(totalWei.toString()) + ' ETH';
   }
 
   // -- Event wiring ---------------------------------------------------
@@ -214,6 +212,59 @@ class PurchasePanel extends HTMLElement {
     };
     tabTickets.addEventListener('click', () => show('tickets'));
     tabLootbox.addEventListener('click', () => show('lootbox'));
+  }
+
+  #wireCurrencyToggles() {
+    const tEth = this.querySelector('[data-bind="ticket-pay-eth"]');
+    const tBur = this.querySelector('[data-bind="ticket-pay-flip"]');
+    if (tEth && tBur) {
+      tEth.addEventListener('click', () => this.#setTicketCurrency('eth'));
+      tBur.addEventListener('click', () => this.#setTicketCurrency('flip'));
+    }
+    const lEth = this.querySelector('[data-bind="lootbox-pay-eth"]');
+    const lBur = this.querySelector('[data-bind="lootbox-pay-flip"]');
+    if (lEth && lBur) {
+      lEth.addEventListener('click', () => this.#setLootboxCurrency('eth'));
+      lBur.addEventListener('click', () => this.#setLootboxCurrency('flip'));
+    }
+  }
+
+  #setTicketCurrency(currency) {
+    this.#ticketCurrency = currency;
+    const tEth = this.querySelector('[data-bind="ticket-pay-eth"]');
+    const tBur = this.querySelector('[data-bind="ticket-pay-flip"]');
+    if (tEth) tEth.setAttribute('aria-checked', String(currency === 'eth'));
+    if (tBur) tBur.setAttribute('aria-checked', String(currency === 'flip'));
+    const price = get('game.price');
+    if (price != null && price !== '0') this.#updateTotalCost(price);
+  }
+
+  #setLootboxCurrency(currency) {
+    this.#lootboxCurrency = currency;
+    const lEth = this.querySelector('[data-bind="lootbox-pay-eth"]');
+    const lBur = this.querySelector('[data-bind="lootbox-pay-flip"]');
+    if (lEth) lEth.setAttribute('aria-checked', String(currency === 'eth'));
+    if (lBur) lBur.setAttribute('aria-checked', String(currency === 'flip'));
+
+    const label = this.querySelector('[data-bind="lootbox-input-label"]');
+    const input = this.querySelector('[data-bind="lootbox-amount-input"]');
+    if (currency === 'flip') {
+      if (label) label.textContent = 'Lootbox FLIP';
+      if (input) {
+        input.min = '1';
+        input.step = '1';
+        input.value = '1000';
+        input.setAttribute('aria-label', 'Lootbox FLIP amount');
+      }
+    } else {
+      if (label) label.textContent = 'Lootbox ETH';
+      if (input) {
+        input.min = '0.01';
+        input.step = '0.01';
+        input.value = '0.05';
+        input.setAttribute('aria-label', 'Lootbox ETH amount');
+      }
+    }
   }
 
   #showContent() {

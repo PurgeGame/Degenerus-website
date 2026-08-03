@@ -298,6 +298,8 @@ function makeFakePassContract(opts = {}) {
     purchaseDeityPass: [],
     subscribe: [],
     depositAfkingFunding: [],
+    afkingFundingOf: [],
+    withdrawAfkingFunding: [],
     smite: [],
   };
   const stk = (name) => async () => {
@@ -335,6 +337,17 @@ function makeFakePassContract(opts = {}) {
         return makeFakeTx(makeFakeReceipt());
       },
       { staticCall: stk('depositAfkingFunding') }
+    ),
+    afkingFundingOf: async (...args) => {
+      calls.afkingFundingOf.push(args);
+      return opts.afkingFundingWei ?? 0n;
+    },
+    withdrawAfkingFunding: Object.assign(
+      async (...args) => {
+        calls.withdrawAfkingFunding.push(args);
+        return makeFakeTx(makeFakeReceipt());
+      },
+      { staticCall: stk('withdrawAfkingFunding') }
     ),
     smite: Object.assign(
       async (...args) => {
@@ -429,9 +442,13 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(ctor, ctor2, 'same ctor reference after re-import (idempotent)');
   });
 
-  test('Panel renders whale row + deity dropdown and product-local boon markers', () => {
+  test('Panel puts Lazy above Whale and retains the deity dropdown and local boon markers', () => {
     const el = instantiate();
     assert.ok(el.innerHTML.length > 100, 'innerHTML populated');
+    assert.ok(
+      el.innerHTML.indexOf('pass-product-row--lazy') < el.innerHTML.indexOf('pass-product-row--whale'),
+      'the shorter Lazy product is offered before Whale',
+    );
     const whaleBuyBtn = el.querySelector('.pass-whale-buy');
     assert.ok(whaleBuyBtn, 'whale buy CTA rendered');
     assert.ok(el.querySelector('[data-bind="pass-deity-select"]'), 'deity symbol dropdown rendered');
@@ -439,6 +456,88 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     for (const product of ['whale', 'lazy', 'deity']) {
       assert.match(el.innerHTML, new RegExp(`<boon-product-indicator product="${product}"`));
     }
+  });
+
+  test('each pass has concise visible purpose copy and a compact identity mark', () => {
+    const el = instantiate();
+    const descriptions = [
+      'One ticket every level for the next 10 levels.',
+      'One ticket every other level for the next 100 levels.',
+      'Auto-buy tickets or a lootbox every day.',
+      'Permanent symbol coverage and three boons every day.',
+    ];
+    for (const copy of descriptions) assert.match(el.innerHTML, new RegExp(copy.replace('+', '\\+')));
+    assert.equal(el.querySelectorAll('.pass-product-sigil').length, 4);
+
+    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    assert.match(css, /\.pass-product-row--whale\s*\{[^}]*linear-gradient/s);
+    assert.match(css, /\.pass-product-row--lazy\s*\{[^}]*linear-gradient/s);
+    assert.match(css, /\.pass-product-sigil--deity\s*\{[^}]*radial-gradient/s);
+  });
+
+  test('premium pass cards state their contract-backed bonuses and elevate live pricing', () => {
+    const el = instantiate();
+    for (const benefit of [
+      '1 TICKET / LEVEL', '+85% DEGEN SCORE', '1 TICKET / 2 LEVELS',
+      '+115% DEGEN SCORE', '+155% DEGEN SCORE', '10% LOOTBOX',
+      '3 DAILY BOONS', 'AFKING SEAT',
+    ]) {
+      assert.match(el.innerHTML, new RegExp(benefit.replace(/[+]/g, '\\+')));
+    }
+    assert.match(el.innerHTML, /PASS PRICE/);
+    assert.match(el.innerHTML, /UNIT PRICE/);
+    assert.match(el.innerHTML, /LIVE PRICE/);
+    assert.match(el.innerHTML, /data-bind="pass-whale-lootbox"/,
+      'the Whale card promotes its bundled lootbox as a first-class bonus');
+
+    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    assert.match(css, /\.pass-product-price > strong\s*\{[^}]*font:\s*900 0\.9rem/s,
+      'price is treated as a primary instrument, not muted helper text');
+    assert.match(css, /\.pass-product-perks > span\s*\{[^}]*border-radius:\s*999px/s,
+      'purchase bonuses are compact premium chips');
+  });
+
+  test('Whale pass shows the concrete bundled lootbox value and follows quantity', async () => {
+    _fetchHandler = async (url) => String(url).includes('/player/')
+      ? { level: 12 }
+      : { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
+    const el = instantiate();
+    await settle(40);
+
+    const benefit = el.querySelector('[data-bind="pass-whale-lootbox"]');
+    assert.equal(benefit.textContent, 'BONUS LOOTBOX · 0.4 ETH',
+      'a standard 4 ETH pass advertises its actual 0.4 ETH lootbox');
+    const quantity = el.querySelector('[name="pass-whale-qty"]');
+    quantity.value = '2';
+    quantity.dispatchEvent({ type: 'input' });
+    assert.equal(benefit.textContent, 'BONUS LOOTBOX · 0.8 ETH TOTAL');
+
+    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    assert.match(css, /\.pass-whale-lootbox-perk\s*\{[^}]*font-size:\s*0\.67rem/s,
+      'the bonus receives stronger treatment than an ordinary perk chip');
+    el.disconnectedCallback();
+  });
+
+  test('pass score benefit includes the player-specific streak and mint-count floors', async () => {
+    const { projectedPassScoreGain } = await import('../app-pass-section.js');
+    const score = {
+      mintLevelStreakPoints: 30,
+      mintCountPoints: 20,
+      passBonus: null,
+    };
+    assert.equal(projectedPassScoreGain(score, 10), 35);
+    assert.equal(projectedPassScoreGain(score, 40), 65);
+    assert.equal(projectedPassScoreGain(score, 80), 105);
+
+    _fetchHandler = async (url) => String(url).includes('/player/')
+      ? { scoreBreakdown: score, level: 12 }
+      : { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
+    const el = instantiate();
+    await settle(40);
+    assert.equal(el.querySelector('[data-bind="pass-lazy-score"]').textContent, '+35% DEGEN SCORE');
+    assert.equal(el.querySelector('[data-bind="pass-whale-score"]').textContent, '+65% DEGEN SCORE');
+    assert.equal(el.querySelector('[data-bind="pass-deity-score"]').textContent, '+105% DEGEN SCORE');
+    el.disconnectedCallback();
   });
 
   test('Action buttons carry data-write attribute', () => {
@@ -549,7 +648,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'buy action remains usable');
     assert.match(
       el.querySelector('[data-bind="pass-deity-hint"]').textContent,
-      /next pass 27\.0000 ETH/,
+      /next pass 27 ETH/,
       'two issued passes produce the 24 + triangular(2) = 27 ETH quote',
     );
 
@@ -571,6 +670,17 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(el.querySelector('[data-bind="pass-deity-owned-name"]').textContent, 'God of Cancer');
     assert.equal(el.querySelector('[data-bind="pass-deity-owned-name"]').hidden, false);
     assert.match(el.querySelector('[data-bind="pass-deity-hint"]').textContent, /^your pass · /);
+    const details = el.querySelector('[data-bind="pass-deity-details"]');
+    assert.equal(details.open, true, 'a deity holder gets the owned controls open automatically');
+    assert.equal(el.querySelector('[data-bind="pass-deity-summary"]').hidden, true,
+      'deity marketing/dropdown summary is removed for an existing holder');
+    assert.equal(el.querySelector('[data-bind="pass-deity-summary"]').getAttribute('aria-disabled'), 'true',
+      'the holder view is no longer presented as a dropdown');
+    assert.ok(
+      el.innerHTML.indexOf('data-bind="pass-afking"')
+        > el.innerHTML.indexOf('data-bind="pass-deity-details"'),
+      'the AFKing subscription is a separate box below the premium passes',
+    );
 
     el.disconnectedCallback();
   });
@@ -603,29 +713,14 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('an eligible deity holder can claim the missing AFKing seat, then sees the subscription editor', async () => {
+  test('a pass holder with an auto-minted seat goes straight to the subscription editor', async () => {
+    // Seats auto-mint with the pass now (GAME _grantSeatCoin -> token mintSeatFor), so there is
+    // no claim row and no claim button: holding the seat IS the entry condition.
     passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(new Map([
       [11, CONNECTED],
     ])));
-    const sent = [];
-    const claimSeat = Object.assign(
-      async (...args) => {
-        sent.push(args);
-        return makeFakeTx(makeFakeReceipt());
-      },
-      { staticCall: async () => 171n },
-    );
-    const token = {
-      balanceOf: async () => 0n,
-      seatClaimed: async () => false,
-      freeClaims: async () => 168n,
-      FREE_TRANCHE: async () => 1_000n,
-      vaultGrants: async () => 0n,
-      claimSeat,
-      connect() { return this; },
-    };
     passesMod.__setAfkingReadContractFactoryForTest(() => ({
-      token,
+      token: { balanceOf: async () => 1n },
       game: {
         subInfo: async () => [false, 0n, 0n, 0n],
         afkingSnapshot: async () => [40_000_000_000n, false, [0n], [0n]],
@@ -635,34 +730,18 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
     const el = instantiate();
     await settle(60);
-    const section = el.querySelector('[data-bind="pass-afking"]');
-    const claim = el.querySelector('[data-bind="pass-afking-claim"]');
-    const controls = el.querySelector('[data-bind="pass-afking-controls"]');
-    assert.equal(section.hidden, false, 'eligible holder sees the AFKing area before minting');
-    assert.equal(claim.hidden, false, 'free seat claim is visible');
-    assert.equal(controls.hidden, false, 'delivery, quantity, and funding stay visible before seat claim');
-    assert.equal(el.querySelector('[data-bind="pass-afking-save"]').disabled, true,
-      'subscription start waits for the required seat transaction');
-    assert.equal(el.querySelector('[data-bind="pass-afking-mode"]').value, 'lootbox');
-    assert.equal(el.querySelector('[name="pass-afking-qty"]').value, '1');
-    assert.equal(el.querySelector('[name="pass-afking-fund"]').value, '0.4',
-      'funding visibly defaults to ten current ticket prices before claiming');
+    assert.equal(el.querySelector('[data-bind="pass-afking"]').hidden, false,
+      'seat holder sees the AFKing area');
+    assert.equal(el.querySelector('[data-bind="pass-afking-claim"]'), null,
+      'the claim row is gone entirely');
+    assert.equal(el.querySelector('[data-bind="pass-afking-claim-button"]'), null,
+      'the claim button is gone entirely');
+    assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, false,
+      'the subscription editor is available immediately');
+    assert.equal(el.querySelector('[data-bind="pass-afking-save"]').disabled, false,
+      'start is not gated on any seat transaction');
     assert.equal(el.querySelector('[data-bind="pass-afking-symbol"]'), null,
       'seat cosmetics are intentionally omitted from the functional editor');
-
-    el.querySelector('[data-bind="pass-afking-claim-button"]').dispatchEvent({ type: 'click' });
-    await settle(60);
-    assert.deepEqual(sent, [[11, 0xd9d9d9, 0xc72734]]);
-    assert.equal(claim.hidden, true, 'claim row leaves after confirmation');
-    assert.equal(controls.hidden, false, 'subscription editor remains in place after claiming');
-    assert.equal(el.querySelector('[data-bind="pass-afking-save"]').disabled, false,
-      'subscription start unlocks immediately after claiming');
-    assert.equal(el.querySelector('[data-bind="pass-afking-mode"]').value, 'lootbox');
-    assert.equal(el.querySelector('[name="pass-afking-qty"]').value, '1');
-    assert.equal(el.querySelector('[name="pass-afking-fund"]').value, '0.4',
-      'funding defaults to ten current ticket prices');
-    assert.equal(el.querySelector('[data-bind="pass-afking-bg"]'), null);
-    assert.equal(el.querySelector('[data-bind="pass-afking-trim"]'), null);
 
     el.disconnectedCallback();
   });
@@ -749,6 +828,76 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'fund-only deposits remain usable because they are not contract RNG-locked');
     assert.equal(fundOnly.getAttribute('data-write-locked'), null);
 
+    el.disconnectedCallback();
+  });
+
+  test('AFKing can withdraw the connected wallet\'s full funding even while active', async () => {
+    const funding = 80_000_000_000n;
+    const passContract = makeFakePassContract({ afkingFundingWei: funding });
+    passesMod.__setContractFactoryForTest(() => passContract);
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 1n },
+      game: {
+        subInfo: async () => [true, 2n, 8n, 12n],
+        afkingSnapshot: async () => [40_000_000_000n, false, [0n], [funding]],
+      },
+    }));
+
+    const el = instantiate();
+    await settle(60);
+
+    const withdraw = el.querySelector('[data-bind="pass-afking-withdraw"]');
+    assert.equal(withdraw.hidden, false);
+    assert.equal(withdraw.textContent, 'Withdraw all');
+    assert.match(withdraw.title, /subscription remains active/i);
+
+    withdraw.dispatchEvent({ type: 'click' });
+    await settle(60);
+
+    assert.deepEqual(passContract._calls.afkingFundingOf, [[
+      '0xAB12000000000000000000000000000000000000',
+    ]]);
+    assert.deepEqual(passContract._calls.withdrawAfkingFunding, [[funding]]);
+    el.disconnectedCallback();
+  });
+
+  test('AFKing exposes funded ETH for self-withdrawal even without a seat', async () => {
+    const funding = 25_000_000_000n;
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 0n },
+      game: {
+        subInfo: async () => [false, 0n, 0n, 0n],
+        afkingSnapshot: async () => [40_000_000_000n, false, [0n], [funding]],
+      },
+    }));
+
+    const el = instantiate();
+    await settle(60);
+
+    assert.equal(el.querySelector('[data-bind="pass-afking"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="pass-afking-withdraw"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="pass-afking-status"]').textContent, 'FUNDS READY');
+    el.disconnectedCallback();
+  });
+
+  test('AFKing never offers withdrawal while operating another player\'s account', async () => {
+    const viewed = '0xcd34000000000000000000000000000000000000';
+    storeMod.update('viewing.address', viewed);
+    storeMod.update('ui.mode', 'operator');
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 1n },
+      game: {
+        subInfo: async () => [true, 2n, 8n, 12n],
+        afkingSnapshot: async () => [40_000_000_000n, false, [0n], [80_000_000_000n]],
+      },
+    }));
+
+    const el = instantiate();
+    await settle(60);
+
+    assert.equal(el.querySelector('[data-bind="pass-afking"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="pass-afking-withdraw"]').hidden, true);
     el.disconnectedCallback();
   });
 

@@ -382,15 +382,16 @@ register('DecNotWinner', {
 // Verified: degenerus-audit/contracts/DegenerusGame.sol:685 →
 //   modules/DegenerusGameMintModule.sol:931 redeemFlip(buyer, entryQuantityScaled)
 // entryQuantityScaled is in purchase units: 4 * QTY_SCALE = 400 = ONE whole
-// ticket (MintModule.sol:148). ticketRedemptionOpen itself is internal, but the
-// exact opening predicate is public: no RNG lock and nextPrizePool > target.
-// Reading that predicate keeps visibility independent of the player's balance;
-// the amount-specific static call still protects the actual write.
+// ticket (MintModule.sol:148). ticketRedemptionOpen is an internal packed latch:
+// once opened by the pool predicate it remains open through intermediate RNG
+// locks and is cleared only by the final request. Read that byte directly so
+// visibility mirrors _redeemFlipFor rather than inferring it from phase labels.
 // ---------------------------------------------------------------------------
 
 const REDEEM_FLIP_ABI = [
   'function redeemFlip(address buyer, uint256 entryQuantityScaled) external',
   'function rngLocked() external view returns (bool)',
+  'function livenessTriggered() external view returns (bool)',
   'function nextPrizePoolView() external view returns (uint256)',
   'function prizePoolTargetView() external view returns (uint256)',
 ];
@@ -410,6 +411,25 @@ export const ENTRIES_SCALED_PER_TICKET = 400n;  // 4 entries × QTY_SCALE 100
 // ETH is /1M-scaled), so no ETH_DIVISOR here.
 const PRICE_COIN_UNIT_WEI = 1000n * (10n ** 18n);
 const QTY_SCALE = 100n;
+const REDEEM_FLIP_STORAGE_SLOT = 0;
+const TICKET_REDEMPTION_OPEN_SHIFT = 30n * 8n;
+const PACKED_BYTE_MASK = 0xffn;
+
+async function _readTicketRedemptionOpen(provider) {
+  let raw;
+  if (typeof provider?.getStorage === 'function') {
+    raw = await provider.getStorage(CONTRACTS.GAME, REDEEM_FLIP_STORAGE_SLOT);
+  } else if (typeof provider?.send === 'function') {
+    raw = await provider.send('eth_getStorageAt', [
+      CONTRACTS.GAME,
+      '0x0',
+      'latest',
+    ]);
+  } else {
+    throw new Error('Provider cannot read packed game storage.');
+  }
+  return ((BigInt(raw) >> TICKET_REDEMPTION_OPEN_SHIFT) & PACKED_BYTE_MASK) !== 0n;
+}
 
 /**
  * Purchase units for a ticket count, snapped to the entry (0.25 tickets).
@@ -436,9 +456,9 @@ export function flipCostFromTickets(tickets) {
 
 /**
  * Read whether the contract's FLIP-for-tickets window is open without using
- * the player's FLIP balance as a proxy. The storage latch is set by this exact
- * predicate and cleared at the final RNG request, so these public views track
- * the actionable window without attempting a purchase.
+ * the player's FLIP balance as a proxy. Mirrors _redeemFlipFor exactly:
+ *   !livenessTriggered &&
+ *   (ticketRedemptionOpen || (!rngLocked && nextPrizePool > prizePoolTarget))
  *
  * Read-only; never throws. A failed RPC read is treated as unknown/closed so a
  * stale control cannot invite a write against an unverified window.
@@ -450,12 +470,16 @@ export async function probeRedeemFlipWindow() {
     const provider = getProvider();
     if (!provider) return false;
     const contract = _buildRedeemFlipContract(provider);
-    const [locked, nextPool, target] = await Promise.all([
+
+    const [liveness, redemptionOpen, locked, nextPool, target] = await Promise.all([
+      contract.livenessTriggered(),
+      _readTicketRedemptionOpen(provider),
       contract.rngLocked(),
       contract.nextPrizePoolView(),
       contract.prizePoolTargetView(),
     ]);
-    return !Boolean(locked) && BigInt(nextPool) > BigInt(target);
+    return !Boolean(liveness)
+      && (redemptionOpen || (!Boolean(locked) && BigInt(nextPool) > BigInt(target)));
   } catch (_e) {
     return false;
   }

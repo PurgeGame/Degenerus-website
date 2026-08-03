@@ -225,7 +225,7 @@
     to { opacity: 1; transform: translateY(0); }
   }
   .result-card.tickets { border-left: 4px solid var(--success); }
-  .result-card.burnie { border-left: 4px solid var(--accent-primary); }
+  .result-card.flip { border-left: 4px solid var(--accent-primary); }
   .result-card.dgnrs { border-left: 4px solid var(--purple); }
   .result-card.wwxrp { border-left: 4px solid var(--blue); }
   .result-card.boon { border-left: 4px solid var(--pink); }
@@ -428,6 +428,7 @@
     .btn.small { padding: 0.45rem 0.85rem; font-size: 0.7rem; }
   }
 </style>
+  <script defer src="/js/ref.js"></script>
 </head>
 <body>
 <div class="container">
@@ -439,7 +440,7 @@
 
   <!-- Hidden defaults -->
   <input type="hidden" id="level" value="0">
-  <input type="hidden" id="burniePrice" value="0.01">
+  <input type="hidden" id="flipPrice" value="0.01">
   <input type="hidden" id="dgnrsPool" value="114300000000">
   <!-- Controls -->
   <div class="controls" style="grid-template-columns:1fr">
@@ -480,7 +481,7 @@
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:16px;padding:8px 0 0">
-      <label class="toggle"><input type="checkbox" id="presale" checked> Presale (+62% BURNIE bonus)</label>
+      <label class="toggle"><input type="checkbox" id="presale" checked> Presale (+62% FLIP bonus)</label>
     </div>
   </div>
 
@@ -498,7 +499,7 @@
     <div class="stat"><div class="value" id="statValueOut">0</div><div class="label">ETH Value Out</div></div>
     <div class="stat"><div class="value" id="statBoxes">0</div><div class="label">Boxes</div></div>
     <div class="stat"><div class="value highlight-green" id="statTickets">0</div><div class="label">Tickets</div></div>
-    <div class="stat"><div class="value highlight-accent" id="statBurnie">0</div><div class="label">BURNIE</div></div>
+    <div class="stat"><div class="value highlight-accent" id="statFlip">0</div><div class="label">FLIP</div></div>
     <div class="stat"><div class="value highlight-purple" id="statDgnrs">0</div><div class="label">DGNRS</div><div class="label" id="statDgnrsPct" style="color:var(--purple)"></div></div>
     <div class="stat"><div class="value highlight-blue" id="statWwxrp">0</div><div class="label">WWXRP</div></div>
     <div class="stat"><div class="value highlight-pink" id="statBoons">0</div><div class="label">Boons</div></div>
@@ -602,8 +603,8 @@ function rollDgnrsTier() {
   return { tier: 'MEGA', ppm: 8000 };
 }
 
-// ========== BURNIE variance (mirrors contract) ==========
-function rollBurnieBps() {
+// ========== FLIP variance (mirrors contract) ==========
+function rollFlipBps() {
   const varianceRoll = rngRange(20);
   if (varianceRoll < 16) {
     // Low path (80%): 58% - 130%
@@ -670,7 +671,7 @@ function rollBoon(boonBudget) {
 }
 
 // ========== Core Lootbox Resolution ==========
-function resolveLootbox(amount, currentLevel, activityPct, presale, burniePrice) {
+function resolveLootbox(amount, currentLevel, activityPct, presale, flipPrice) {
   const results = [];
   const ev = evMultiplierBps(activityPct);
   const scaledAmount = (amount * ev) / 10000;
@@ -732,22 +733,22 @@ function resolveLootbox(amount, currentLevel, activityPct, presale, burniePrice)
         rollAmount: rollAmt,
       });
     } else {
-      // 25%: Large BURNIE
-      const { bps, path } = rollBurnieBps();
-      const burnieBudget = (rollAmt * bps) / 10000;
-      // PRICE_COIN_UNIT = 1000 (1000 BURNIE per ETH at price)
+      // 25%: Large FLIP
+      const { bps, path } = rollFlipBps();
+      const flipBudget = (rollAmt * bps) / 10000;
+      // PRICE_COIN_UNIT = 1000 (1000 FLIP per ETH at price)
       const currentPrice = priceForLevel(currentLevel);
-      const burnieAmount = (burnieBudget * 1000) / currentPrice;
+      const flipAmount = (flipBudget * 1000) / currentPrice;
       let bonus = 0;
       if (presale) {
-        bonus = burnieAmount * 0.62; // 62% presale bonus
+        bonus = flipAmount * 0.62; // 62% presale bonus
       }
-      const ethEquiv = ((burnieAmount + bonus) / 1000) * currentPrice;
+      const ethEquiv = ((flipAmount + bonus) / 1000) * currentPrice;
       results.push({
-        type: 'burnie',
-        amount: burnieAmount,
+        type: 'flip',
+        amount: flipAmount,
         bonus: bonus,
-        total: burnieAmount + bonus,
+        total: flipAmount + bonus,
         path: path,
         bps: bps,
         ethValue: ethEquiv,
@@ -770,16 +771,16 @@ let state = {
   totalSpent: 0,
   totalBoxes: 0,
   totalTickets: 0,
-  totalBurnie: 0,
+  totalFlip: 0,
   totalDgnrsHits: 0,
   totalDgnrsAmount: 0,
   totalWwxrp: 0,
   totalBoons: 0,
-  totalBurnieEthValue: 0,
+  totalFlipEthValue: 0,
   totalTicketEthValue: 0,
-  rewardCounts: { tickets: 0, burnie: 0, dgnrs: 0, wwxrp: 0 },
+  rewardCounts: { tickets: 0, flip: 0, dgnrs: 0, wwxrp: 0 },
   ticketTierCounts: { 'JACKPOT 4.6x': 0, 'Great 2.3x': 0, 'Good 1.1x': 0, 'Normal 0.65x': 0, 'Low 0.45x': 0 },
-  burniePathCounts: { high: 0, low: 0 },
+  flipPathCounts: { high: 0, low: 0 },
   boonCatCounts: {},
   ticketsByLevel: {},
 };
@@ -792,14 +793,14 @@ function fmt(n, decimals=2) {
 }
 
 function updateStats() {
-  const valueOut = state.totalTicketEthValue + state.totalBurnieEthValue;
+  const valueOut = state.totalTicketEthValue + state.totalFlipEthValue;
   document.getElementById('statSpent').textContent = fmt(state.totalSpent, 3);
   const voEl = document.getElementById('statValueOut');
   voEl.textContent = fmt(valueOut, 3);
   voEl.className = 'value ' + (state.totalSpent > 0 ? (valueOut >= state.totalSpent ? 'highlight-green' : 'highlight-red') : '');
   document.getElementById('statBoxes').textContent = state.totalBoxes;
   document.getElementById('statTickets').textContent = fmt(state.totalTickets);
-  document.getElementById('statBurnie').textContent = fmt(state.totalBurnie);
+  document.getElementById('statFlip').textContent = fmt(state.totalFlip);
   document.getElementById('statDgnrs').textContent = fmt(state.totalDgnrsAmount, 2);
   const pool = parseFloat(document.getElementById('dgnrsPool').value) || 100000;
   const dgnrsPct = pool > 0 ? (state.totalDgnrsAmount / pool * 100) : 0;
@@ -812,7 +813,7 @@ function updateStats() {
 
 function updateDistribution() {
   const el = document.getElementById('distribution');
-  const total = state.rewardCounts.tickets + state.rewardCounts.burnie +
+  const total = state.rewardCounts.tickets + state.rewardCounts.flip +
                 state.rewardCounts.dgnrs + state.rewardCounts.wwxrp;
   if (total === 0) { el.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px">Open some luckboxes first</div>'; return; }
 
@@ -820,7 +821,7 @@ function updateDistribution() {
   html += '<div style="font-size:0.8em;color:var(--dim);margin-bottom:12px">PRIMARY REWARDS (per roll)</div>';
   const rewardTypes = [
     { name: 'Tickets', count: state.rewardCounts.tickets, color: 'var(--green)', expected: '55%' },
-    { name: 'BURNIE', count: state.rewardCounts.burnie, color: 'var(--accent)', expected: '25%' },
+    { name: 'FLIP', count: state.rewardCounts.flip, color: 'var(--accent)', expected: '25%' },
     { name: 'DGNRS', count: state.rewardCounts.dgnrs, color: 'var(--purple)', expected: '10%' },
     { name: 'WWXRP', count: state.rewardCounts.wwxrp, color: 'var(--blue)', expected: '10%' },
   ];
@@ -869,13 +870,13 @@ function updateDistribution() {
     html += '</div>';
   }
 
-  // BURNIE paths
-  const burnieTotal = state.burniePathCounts.high + state.burniePathCounts.low;
-  if (burnieTotal > 0) {
+  // FLIP paths
+  const flipTotal = state.flipPathCounts.high + state.flipPathCounts.low;
+  if (flipTotal > 0) {
     html += '<div style="margin-bottom:20px">';
-    html += '<div style="font-size:0.8em;color:var(--dim);margin-bottom:12px">BURNIE VARIANCE PATHS</div>';
-    const lowPct = (state.burniePathCounts.low / burnieTotal * 100);
-    const highPct = (state.burniePathCounts.high / burnieTotal * 100);
+    html += '<div style="font-size:0.8em;color:var(--dim);margin-bottom:12px">FLIP VARIANCE PATHS</div>';
+    const lowPct = (state.flipPathCounts.low / flipTotal * 100);
+    const highPct = (state.flipPathCounts.high / flipTotal * 100);
     html += `<div class="dist-row">
       <div class="dist-label">Low 58-130% <span style="color:var(--dim)">(80%)</span></div>
       <div class="dist-bar-wrap"><div class="dist-bar" style="width:${lowPct}%;background:var(--accent)"></div></div>
@@ -917,10 +918,10 @@ function updateEv() {
   }
   const activityPct = parseFloat(document.getElementById('activity').value);
   const evMult = evMultiplierBps(activityPct);
-  const totalRewardValue = state.totalTicketEthValue + state.totalBurnieEthValue;
+  const totalRewardValue = state.totalTicketEthValue + state.totalFlipEthValue;
   const actualEv = state.totalSpent > 0 ? (totalRewardValue / state.totalSpent * 100) : 0;
   const avgTicketsPerBox = state.totalTickets / state.totalBoxes;
-  const avgBurniePerBox = state.totalBurnie / state.totalBoxes;
+  const avgFlipPerBox = state.totalFlip / state.totalBoxes;
 
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -929,7 +930,7 @@ function updateEv() {
         <div style="font-size:1.3em;font-weight:bold;color:${evMult >= 10000 ? 'var(--green)' : 'var(--red)'}">${(evMult/100).toFixed(1)}%</div>
       </div>
       <div>
-        <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">Ticket+BURNIE Return Rate</div>
+        <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">Ticket+FLIP Return Rate</div>
         <div style="font-size:1.3em;font-weight:bold;color:${actualEv >= 100 ? 'var(--green)' : 'var(--red)'}">${actualEv.toFixed(1)}%</div>
       </div>
       <div>
@@ -937,20 +938,20 @@ function updateEv() {
         <div style="font-size:1.3em;font-weight:bold;color:var(--green)">${avgTicketsPerBox.toFixed(2)}</div>
       </div>
       <div>
-        <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">Avg BURNIE/Box</div>
-        <div style="font-size:1.3em;font-weight:bold;color:var(--accent)">${fmt(avgBurniePerBox)}</div>
+        <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">Avg FLIP/Box</div>
+        <div style="font-size:1.3em;font-weight:bold;color:var(--accent)">${fmt(avgFlipPerBox)}</div>
       </div>
       <div>
         <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">Total Ticket ETH Value</div>
         <div style="font-size:1.3em;font-weight:bold">${fmt(state.totalTicketEthValue, 4)} ETH</div>
       </div>
       <div>
-        <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">Total BURNIE ETH Value</div>
-        <div style="font-size:1.3em;font-weight:bold">${fmt(state.totalBurnieEthValue, 4)} ETH</div>
+        <div style="color:var(--dim);font-size:0.75em;text-transform:uppercase">Total FLIP ETH Value</div>
+        <div style="font-size:1.3em;font-weight:bold">${fmt(state.totalFlipEthValue, 4)} ETH</div>
       </div>
     </div>
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);color:var(--dim);font-size:0.8em">
-      Note: Ticket value = tickets x level price. BURNIE value = BURNIE x price setting.
+      Note: Ticket value = tickets x level price. FLIP value = FLIP x price setting.
       DGNRS and WWXRP not included in ETH value calc. Boon value not tracked (too context-dependent).
       The contract also has a 10 ETH/level EV benefit cap not modeled here.
     </div>
@@ -974,14 +975,14 @@ function addResultCard(r) {
       </div>
       <div class="result-value"><span class="eth">${fmt(r.ethValue, 4)} ETH</span><br>value</div>
     `;
-  } else if (r.type === 'burnie') {
+  } else if (r.type === 'flip') {
     const isHigh = r.path === 'high';
-    card.className += isHigh ? ' jackpot' : ' burnie';
+    card.className += isHigh ? ' jackpot' : ' flip';
     card.innerHTML = `
       <div class="result-icon">${isHigh ? '&#x1f525;' : '&#x1fa99;'}</div>
       <div class="result-body">
-        <div class="result-type">BURNIE &mdash; ${isHigh ? 'HIGH PATH' : 'Low Path'} (${(r.bps/100).toFixed(1)}%)</div>
-        <div class="result-main highlight-accent">${fmt(r.total)} BURNIE${r.bonus > 0 ? ` (+${fmt(r.bonus)} presale)` : ''}</div>
+        <div class="result-type">FLIP &mdash; ${isHigh ? 'HIGH PATH' : 'Low Path'} (${(r.bps/100).toFixed(1)}%)</div>
+        <div class="result-main highlight-accent">${fmt(r.total)} FLIP${r.bonus > 0 ? ` (+${fmt(r.bonus)} presale)` : ''}</div>
         <div class="result-detail">${(r.bps/100).toFixed(1)}% of ${fmt(r.rollAmount, 4)} ETH roll</div>
       </div>
       <div class="result-value"><span class="eth">${fmt(r.ethValue, 4)} ETH</span><br>value</div>
@@ -1038,7 +1039,7 @@ function getParams() {
     level: 0,
     activity: parseFloat(document.getElementById('activityInput').value) || 60,
     presale: document.getElementById('presale').checked,
-    burniePrice: priceForLevel(0),
+    flipPrice: priceForLevel(0),
   };
 }
 
@@ -1046,7 +1047,7 @@ function openOne(showCard) {
   const p = getParams();
   if (p.amount < 0.01) return;
 
-  const results = resolveLootbox(p.amount, p.level, p.activity, p.presale, p.burniePrice);
+  const results = resolveLootbox(p.amount, p.level, p.activity, p.presale, p.flipPrice);
   state.totalSpent += p.amount;
   state.totalBoxes += 1;
 
@@ -1057,11 +1058,11 @@ function openOne(showCard) {
       state.rewardCounts.tickets++;
       state.ticketTierCounts[r.tier] = (state.ticketTierCounts[r.tier] || 0) + 1;
       state.ticketsByLevel[r.targetLevel] = (state.ticketsByLevel[r.targetLevel] || 0) + r.tickets;
-    } else if (r.type === 'burnie') {
-      state.totalBurnie += r.total;
-      state.totalBurnieEthValue += r.ethValue;
-      state.rewardCounts.burnie++;
-      state.burniePathCounts[r.path]++;
+    } else if (r.type === 'flip') {
+      state.totalFlip += r.total;
+      state.totalFlipEthValue += r.ethValue;
+      state.rewardCounts.flip++;
+      state.flipPathCounts[r.path]++;
     } else if (r.type === 'dgnrs') {
       state.totalDgnrsHits++;
       state.totalDgnrsAmount += r.amount;
@@ -1116,12 +1117,12 @@ function buyBatch(count) {
 
 function resetAll() {
   state = {
-    totalSpent: 0, totalBoxes: 0, totalTickets: 0, totalBurnie: 0,
+    totalSpent: 0, totalBoxes: 0, totalTickets: 0, totalFlip: 0,
     totalDgnrsHits: 0, totalDgnrsAmount: 0, totalWwxrp: 0, totalBoons: 0,
-    totalBurnieEthValue: 0, totalTicketEthValue: 0,
-    rewardCounts: { tickets: 0, burnie: 0, dgnrs: 0, wwxrp: 0 },
+    totalFlipEthValue: 0, totalTicketEthValue: 0,
+    rewardCounts: { tickets: 0, flip: 0, dgnrs: 0, wwxrp: 0 },
     ticketTierCounts: { 'JACKPOT 4.6x': 0, 'Great 2.3x': 0, 'Good 1.1x': 0, 'Normal 0.65x': 0, 'Low 0.45x': 0 },
-    burniePathCounts: { high: 0, low: 0 },
+    flipPathCounts: { high: 0, low: 0 },
     boonCatCounts: {},
     ticketsByLevel: {},
   };

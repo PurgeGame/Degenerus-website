@@ -44,14 +44,14 @@
 // beta/app/coinflip.js) are honored -- none are imported here.
 //
 // SCORE-UNIT DISCIPLINE (Pitfall 8):
-//   /leaderboards/baf score field -> WEI-scale BURNIE. formatBurnie(score).
-//   INTEG-05 score field           -> WEI-scale BURNIE. formatBurnie(data.score).
+//   /leaderboards/baf score field -> WEI-scale FLIP. formatFlip(score).
+//   INTEG-05 score field           -> WEI-scale FLIP. formatFlip(data.score).
 //   Different from coinflip leaderboard (integer-scale) -- do NOT reuse the
 //   coinflip-panel String() pattern here.
 
 import { subscribe, get } from '../../beta/app/store.js';
 import { API_BASE } from '../app/constants.js';
-import { formatBurnie, truncateAddress } from '../../beta/viewer/utils.js';
+import { formatFlip, truncateAddress } from '../../beta/viewer/utils.js';
 
 // Inline bafContext derivation (54-PATTERNS.md recommendation: 15 LOC inline
 // avoids a new helper file + avoids importing from wallet-tainted beta/app/baf.js).
@@ -267,11 +267,11 @@ class BafPanel extends HTMLElement {
       playerCell.className = 'play-baf-player';
       playerCell.textContent = truncateAddress(entry.player);
 
-      // Score-unit discipline: BAF scores are WEI-scale BURNIE
-      // (live sample level 20 rank 1 = "475215212469240581904067" = 475,215 BURNIE).
-      // MUST formatBurnie; raw string would show ~475 sextillion in UI.
+      // Score-unit discipline: BAF scores are WEI-scale FLIP
+      // (live sample level 20 rank 1 = "475215212469240581904067" = 475,215 FLIP).
+      // MUST formatFlip; raw string would show ~475 sextillion in UI.
       const scoreCell = document.createElement('span');
-      scoreCell.textContent = `${formatBurnie(entry.score)} BURNIE`;
+      scoreCell.textContent = `${formatFlip(entry.score)} FLIP`;
 
       row.appendChild(rankCell);
       row.appendChild(playerCell);
@@ -311,12 +311,12 @@ class BafPanel extends HTMLElement {
     const totalEl = this.#bind('total-participants');
     if (totalEl) totalEl.textContent = String(data.totalParticipants ?? '--');
 
-    // Score-unit: INTEG-05 score is WEI-scale -> formatBurnie.
+    // Score-unit: INTEG-05 score is WEI-scale -> formatFlip.
     const scoreEl = this.#bind('your-score');
     if (scoreEl) {
       scoreEl.textContent = (data.score && data.score !== '0')
-        ? `${formatBurnie(data.score)} BURNIE`
-        : '0 BURNIE';
+        ? `${formatFlip(data.score)} FLIP`
+        : '0 FLIP';
     }
   }
 

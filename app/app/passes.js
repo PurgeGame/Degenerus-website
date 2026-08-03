@@ -34,7 +34,7 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
-import { getActingAddress } from './store.js';
+import { get, getActingAddress } from './store.js';
 // Same first-touch referral the ticket/lootbox path sends (ZeroHash when none).
 import { readAffiliateCode } from './lootbox.js';
 
@@ -59,6 +59,8 @@ const PASSES_ABI = [
   // active/funding state without waiting for an indexer cycle.
   'function subscribe(address player, bool drainGameCreditFirst, bool useTickets, uint8 dailyQuantity, address fundingSource) external payable',
   'function depositAfkingFunding(address player) external payable',
+  'function withdrawAfkingFunding(uint256 amount) external',
+  'function afkingFundingOf(address player) external view returns (uint256)',
   'function subInfo(address player) external view returns (bool active, uint8 dailyQuantity, uint24 afkingStartDay, uint24 afkCoveredThroughDay)',
   'function afkingSnapshot(address[] players) external view returns (uint256 mintPriceWei, bool rngLocked_, uint256[] claimables, uint256[] afkingFundings)',
   // Deity holders receive three deterministic, VRF-backed boon slots per day.
@@ -81,6 +83,9 @@ const PASSES_ABI = [
   'error SeatForfeited()',
   'error MustPurchaseToBeginAfking()',
   'error NotSubscribed()',
+  'error AlreadySwept()',
+  'error Insolvent()',
+  'error TransferFailed()',
   'error ZeroAddress()',
   'error SelfBoon()',
   'error InvalidSlot()',
@@ -100,6 +105,7 @@ const PASSES_ABI = [
   'event DeityBoonIssued(address indexed deity, address indexed recipient, uint24 indexed day, uint8 slot, uint8 boonType)',
   'event Smited(uint256 indexed deityId, address indexed smitee)',
   'event AfkingFunded(address indexed player, uint256 amount)',
+  'event AfkingWithdrew(address indexed player, uint256 amount)',
 ];
 
 // The GAME no longer exposes the old deityPassTotalIssuedCount() view. The
@@ -111,16 +117,15 @@ const DEITY_PASS_READ_ABI = [
   'function ownerOf(uint256 tokenId) external view returns (address)',
   'error InvalidToken()',
 ];
+// Seats AUTO-MINT with any pass acquisition (GAME `_grantSeatCoin` → token `mintSeatFor`), so
+// there is no claim step: `claimSeat` / `SeatClaimed` / `NotEligible` were REMOVED from the token
+// and their call sites deleted here. `balanceOf` is the whole client-side surface now — a holder
+// either has a seat or does not.
 const AFKING_SEAT_READ_ABI = [
   'function balanceOf(address account) external view returns (uint256)',
-  'function claimSeat(uint8 symbolId, uint24 bgRgb, uint24 trimRgb) external returns (uint256 tokenId)',
-  'event SeatClaimed(address indexed owner, uint256 indexed tokenId, uint8 symbolId, uint24 bgRgb, uint24 trimRgb, bool freeTranche)',
   'error InvalidTrait()',
-  'error NotEligible()',
   'error SupplyCapped()',
 ];
-const AFKING_DEFAULT_BG_RGB = 0xd9d9d9;
-const AFKING_DEFAULT_TRIM_RGB = 0xc72734;
 const INVALID_TOKEN_SELECTOR = ethers.id('InvalidToken()').slice(0, 10).toLowerCase();
 // Canonical CREATE2 Multicall3 deployment (present on Base Sepolia and
 // Ethereum). One aggregate avoids a 32-request burst that Base's public RPC
@@ -218,12 +223,6 @@ function _afkingReadContracts() {
     game: new ethers.Contract(CONTRACTS.GAME, PASSES_ABI, provider),
     token: new ethers.Contract(CONTRACTS.AFKING_SUB_TOKEN, AFKING_SEAT_READ_ABI, provider),
   };
-}
-
-function _afkingSeatContract(signerOrProvider) {
-  if (_afkingReadContractFactory) return _afkingReadContractFactory(signerOrProvider)?.token || null;
-  if (!CONTRACTS.AFKING_SUB_TOKEN || !signerOrProvider) return null;
-  return new ethers.Contract(CONTRACTS.AFKING_SUB_TOKEN, AFKING_SEAT_READ_ABI, signerOrProvider);
 }
 
 function _deityBoonReadContract() {
@@ -520,7 +519,7 @@ export async function smiteWithDeity({ deityId, target } = {}) {
  * A null result means the RPC/config is unavailable; it never means "no seat".
  *
  * @param {string} player
- * @returns {Promise<null|{hasToken:boolean,canClaimSeat:boolean,tokenBalance:bigint,active:boolean,dailyQuantity:number,startDay:number,coveredThroughDay:number,mintPriceWei:bigint,rngLocked:boolean,claimableWei:bigint,fundingWei:bigint}>}
+ * @returns {Promise<null|{hasToken:boolean,tokenBalance:bigint,active:boolean,dailyQuantity:number,startDay:number,coveredThroughDay:number,mintPriceWei:bigint,rngLocked:boolean,claimableWei:bigint,fundingWei:bigint}>}
  */
 export async function readAfkingSubscription(player) {
   const address = String(player || '').trim();
@@ -528,11 +527,9 @@ export async function readAfkingSubscription(player) {
   const contracts = _afkingReadContracts();
   if (!contracts?.game || !contracts?.token) return null;
   try {
-    // Pass ownership latches a free-seat entitlement in GAME; it does not mint
-    // the ERC-721 seat automatically. Read the existing subscription first,
-    // then use one exact claimSeat simulation for a zero-balance player. This
-    // avoids a burst of separate entitlement getter calls on public Base RPCs
-    // and covers both free-tranche eligibility and a vault grant.
+    // The seat ERC-721 now arrives WITH the pass (GAME `_grantSeatCoin` → token `mintSeatFor`),
+    // so there is no entitlement to probe and no claim to simulate — balanceOf alone says whether
+    // the player holds a seat.
     const call = (target, method, ...args) => Promise.resolve().then(() => {
       if (typeof target?.[method] !== 'function') throw new Error(`${method} unavailable`);
       return target[method](...args);
@@ -550,19 +547,7 @@ export async function readAfkingSubscription(player) {
     const value = (result, fallback) => result.status === 'fulfilled' ? result.value : fallback;
     const balanceKnown = balanceRes.status === 'fulfilled';
     const tokenBalance = BigInt(value(balanceRes, 0n) ?? 0n);
-    let canClaimSeat = false;
-    if (tokenBalance === 0n && typeof contracts.token?.claimSeat?.staticCall === 'function') {
-      try {
-        await contracts.token.claimSeat.staticCall(
-          0,
-          AFKING_DEFAULT_BG_RGB,
-          AFKING_DEFAULT_TRIM_RGB,
-          { from: address },
-        );
-        canClaimSeat = true;
-      } catch (_error) { /* a contract revert means no claim is currently available */ }
-    }
-    if (!balanceKnown && !canClaimSeat) return null;
+    if (!balanceKnown) return null;
 
     const info = value(infoRes, null);
     const snapshot = value(snapshotRes, null);
@@ -570,7 +555,6 @@ export async function readAfkingSubscription(player) {
     const fundings = snapshot?.afkingFundings ?? snapshot?.[3] ?? [];
     return {
       hasToken: tokenBalance > 0n,
-      canClaimSeat,
       tokenBalance,
       active: Boolean(info?.active ?? info?.[0]),
       dailyQuantity: Number(info?.dailyQuantity ?? info?.[1] ?? 0),
@@ -586,37 +570,11 @@ export async function readAfkingSubscription(player) {
   }
 }
 
-/** Claim the acting player's pass-earned AFKing seat with cosmetic traits. */
-export async function claimAfkingSeat({ symbolId, bgRgb, trimRgb } = {}) {
-  const player = getActingAddress();
-  if (!player) throw new Error('Wallet not connected.');
-  const sid = Number(symbolId);
-  const bg = Number(bgRgb);
-  const trim = Number(trimRgb);
-  if (!Number.isInteger(sid) || sid < 0 || sid > 31) {
-    throw new Error('Symbol must be 0-31.');
-  }
-  for (const [label, color] of [['Background', bg], ['Trim', trim]]) {
-    if (!Number.isInteger(color) || color < 0 || color > 0xFFFFFF) {
-      throw new Error(`${label} color must be a six-digit color.`);
-    }
-  }
-
-  const provider = getProvider();
-  const signer = provider ? await provider.getSigner() : null;
-  if (!signer) throw new Error('Wallet not connected.');
-  const contract = _afkingSeatContract(signer);
-  if (!contract) throw new Error('AFKing seat contract unavailable.');
-  const args = [sid, bg, trim];
-  const sim = await requireStaticCall(contract, 'claimSeat', args, signer);
-  if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call claimSeat');
-
-  const receipt = await sendTx(
-    (freshSigner) => _afkingSeatContract(freshSigner).claimSeat(...args),
-    'Claim AFKing seat',
-  );
-  return { receipt };
-}
+// `claimAfkingSeat` was REMOVED — the token dropped `claimSeat` when seats became auto-minted with
+// the pass. Restyling a seat is still supported on-chain via `setSeatTraits(tokenId, symbol, bg,
+// trim)`, but that needs the holder's tokenId and the token exposes no
+// `tokenOfOwnerByIndex`/`tokensOfOwner`/`seatOf(address)` — so a seat-art editor needs a tokenId
+// source first (index the new `SeatMinted(owner, tokenId, …)` event, or add a `seatOf` view).
 
 /** Configure, replace, or cancel the acting player's AFKing subscription. */
 export async function updateAfkingSubscription({
@@ -672,6 +630,49 @@ export async function fundAfkingSubscription({ msgValueWei } = {}) {
     'Fund AFKing subscription',
   );
   return { receipt };
+}
+
+/**
+ * Withdraw the connected wallet's complete prepaid AFKing balance.
+ *
+ * Unlike subscription writes, the contract has no player argument: it always
+ * debits and pays msg.sender. Refuse operator mode so a panel showing another
+ * player's funding can never make the operator withdraw their own balance by
+ * mistake. The balance is re-read at click time because an active subscription
+ * may consume funding between poll cycles.
+ */
+export async function withdrawAfkingSubscriptionFunding() {
+  const connected = _normalizedHexAddress(get('connected.address'));
+  const acting = _normalizedHexAddress(getActingAddress());
+  if (!connected) throw new Error('Wallet not connected.');
+  if (get('ui.mode') !== 'self' || !acting || acting !== connected) {
+    throw new Error('Switch to your own wallet view to withdraw AFKing funding.');
+  }
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (!signer) throw new Error('Wallet not connected.');
+  const contract = _buildContract(signer);
+  const amountWei = BigInt(await contract.afkingFundingOf(connected));
+  if (amountWei <= 0n) throw new Error('There is no AFKing funding to withdraw.');
+
+  const args = [amountWei];
+  const sim = await requireStaticCall(contract, 'withdrawAfkingFunding', args, signer);
+  if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call withdrawAfkingFunding');
+
+  let receipt;
+  try {
+    receipt = await sendTx(
+      (s) => _buildContract(s).withdrawAfkingFunding(...args),
+      'Withdraw AFKing funding',
+    );
+  } catch (error) {
+    // Keep wallet/provider errors intact, but preserve friendly contract copy
+    // if the bucket changes after preflight and the real send reverts.
+    if (decodeRevertReason(error).code === 'UNKNOWN') throw error;
+    throw _structuredRevertError(error, 'send withdrawAfkingFunding');
+  }
+  return { receipt, amountWei };
 }
 
 // ---------------------------------------------------------------------------
@@ -915,6 +916,24 @@ register('NotSubscribed', {
   code: 'NotSubscribed',
   userMessage: 'There is no active AFKing subscription to cancel.',
   recoveryAction: 'Refresh the pass section.',
+});
+
+register('AlreadySwept', {
+  code: 'AlreadySwept',
+  userMessage: 'The final AFKing funding withdrawal window has closed.',
+  recoveryAction: 'The game has already completed its final sweep.',
+});
+
+register('Insolvent', {
+  code: 'Insolvent',
+  userMessage: 'That AFKing funding amount is no longer available.',
+  recoveryAction: 'Refresh the pass section and retry with the current balance.',
+});
+
+register('TransferFailed', {
+  code: 'TransferFailed',
+  userMessage: 'The AFKing funding transfer back to this wallet failed.',
+  recoveryAction: 'Retry from a wallet that can receive ETH.',
 });
 
 register('SelfBoon', {

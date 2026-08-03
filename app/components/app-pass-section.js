@@ -46,9 +46,9 @@ import {
   deityPassErrorOverride,
   readDeityPassCatalog,
   readAfkingSubscription,
-  claimAfkingSeat,
   updateAfkingSubscription,
   fundAfkingSubscription,
+  withdrawAfkingSubscriptionFunding,
   readDeityBoonSlots,
   issueDeityBoon,
   smiteWithDeity,
@@ -201,6 +201,22 @@ function formatPassEth(raw, digits = 2) {
   }
 }
 
+// Buying any live pass floors both purchase-derived score components to their
+// contract maxima (level streak 50 + mint count 25), then applies the pass's
+// own 10/40/80-point bonus. Show the actual increase from the player's indexed
+// components instead of advertising only component E.
+export function projectedPassScoreGain(scoreBreakdown, passBonusPoints) {
+  const finite = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const score = scoreBreakdown && typeof scoreBreakdown === 'object' ? scoreBreakdown : {};
+  const currentPass = finite(score.passBonus?.points ?? score.passBonusPoints);
+  return Math.max(0, 50 - finite(score.mintLevelStreakPoints))
+    + Math.max(0, 25 - finite(score.mintCountPoints))
+    + Math.max(0, finite(passBonusPoints) - currentPass);
+}
+
 class AppPassSection extends HTMLElement {
   // --- Phase 60 / 61 / 62-01 idempotency-guard pattern ---
   #unsubs = [];
@@ -209,7 +225,7 @@ class AppPassSection extends HTMLElement {
   #busyLazy = false;
   #busyAfking = false;
   #busyAfkingFunding = false;
-  #busyAfkingSeat = false;
+  #busyAfkingWithdrawal = false;
   #busyBoonSlot = null;
   #busyCurse = false;
   // Per-symbol-id debounce for the deity grid (T-62-02-05 mitigation).
@@ -329,100 +345,102 @@ class AppPassSection extends HTMLElement {
              rows in mode 'combined' (see #renderCombinedGate). -->
         <p class="pass-combined-note" data-bind="pass-combined-note" hidden></p>
 
-        <!-- WHALE ROW (compact one-liner) -->
-        <div class="pass-whale-row">
-          <span class="pass-section-title">Whale pass
-            <boon-product-indicator product="whale"></boon-product-indicator>
-          </span>
-          <input type="number" name="pass-whale-qty" id="pass-whale-qty-input"
-                 class="pass-whale-input" min="1" max="100" step="1" value="1" aria-label="Whale pass quantity">
-          <span class="pass-whale-price" data-bind="pass-whale-price">—</span>
-          <button type="button" class="pass-whale-buy" data-write data-bind="pass-whale-buy">
-            Buy
-          </button>
-        </div>
-        <div class="pass-whale-error" data-bind="pass-whale-error" hidden role="alert"></div>
-
         <!-- LAZY ROW — visible ONLY when the level window is open
-             (levels 0-2 / x9 / x0; WhaleModule.sol:431-438) -->
-        <div class="pass-lazy-row" data-bind="pass-lazy-row" hidden>
-          <span class="pass-section-title">Lazy pass
-            <boon-product-indicator product="lazy"></boon-product-indicator>
+             (levels 0-2 / x9 / x0; WhaleModule.sol:431-438). It is the
+             shorter commitment, so it leads the premium-product shelf. -->
+        <div class="pass-lazy-row pass-product-row pass-product-row--lazy" data-bind="pass-lazy-row" hidden>
+          <span class="pass-product-heading">
+            <span class="pass-product-sigil pass-product-sigil--lazy" aria-hidden="true">10</span>
+            <span class="pass-product-copy">
+              <span class="pass-section-title">Lazy pass
+                <boon-product-indicator product="lazy"></boon-product-indicator>
+              </span>
+              <span class="pass-product-description">One ticket every level for the next 10 levels.</span>
+            </span>
           </span>
-          <span class="pass-lazy-blurb">10 levels of auto-mint</span>
-          <span class="pass-lazy-price" data-bind="pass-lazy-price">—</span>
-          <button type="button" class="pass-lazy-buy" data-write data-bind="pass-lazy-buy">
-            Buy
-          </button>
+          <span class="pass-product-perks" aria-label="Lazy pass benefits">
+            <span>1 TICKET / LEVEL</span>
+            <span data-bind="pass-lazy-score">+85% DEGEN SCORE</span>
+            <span>10% LOOTBOX</span>
+            <span>AFKING SEAT</span>
+          </span>
+          <span class="pass-product-checkout pass-product-checkout--lazy">
+            <span class="pass-product-price">
+              <small>PASS PRICE</small>
+              <strong class="pass-lazy-price" data-bind="pass-lazy-price">—</strong>
+            </span>
+            <button type="button" class="pass-lazy-buy" data-write data-bind="pass-lazy-buy">
+              BUY LAZY PASS
+            </button>
+          </span>
         </div>
         <div class="pass-lazy-error" data-bind="pass-lazy-error" hidden role="alert"></div>
 
-        <!-- AFKING SUBSCRIPTION — pass buyers first claim their free seat;
-             minted-seat holders get the subscription editor immediately. -->
-        <section class="pass-afking" data-bind="pass-afking" hidden>
-          <div class="pass-afking__head">
-            <span class="pass-section-title">AFKing subscription</span>
-            <strong class="pass-afking__status" data-bind="pass-afking-status">SEAT READY</strong>
-            <span class="pass-afking__funding" data-bind="pass-afking-funding">—</span>
-          </div>
-          <div class="pass-afking__claim" data-bind="pass-afking-claim" hidden>
-            <span>Claim the included seat, then start with the settings below.</span>
-            <button type="button" class="pass-afking__claim-button" data-write
-                    data-bind="pass-afking-claim-button">1 · Claim seat</button>
-          </div>
-          <div class="pass-afking__lock" data-bind="pass-afking-lock" hidden role="status">
-            <strong>RNG SETTLING</strong>
-            <span>Settings and cancel unlock automatically. Funding stays open.</span>
-          </div>
-          <div class="pass-afking__controls" data-bind="pass-afking-controls" hidden>
-            <label class="pass-afking__field">
-              <span>Daily buy</span>
-              <select name="pass-afking-mode" data-bind="pass-afking-mode">
-                <option value="lootbox">Lootboxes</option>
-                <option value="tickets">Tickets</option>
-              </select>
-            </label>
-            <label class="pass-afking__field pass-afking__field--qty">
-              <span>Per day</span>
-              <input type="number" name="pass-afking-qty" min="1" max="255" step="1" value="1">
-            </label>
-            <label class="pass-afking__field pass-afking__field--fund">
-              <span>Fund now</span>
-              <input type="number" name="pass-afking-fund" min="0" step="0.01" value="0" inputmode="decimal">
-              <small>ETH</small>
-            </label>
-            <button type="button" class="pass-afking__fund-button" data-write
-                    data-bind="pass-afking-fund-button" hidden>Fund only</button>
-            <label class="pass-afking__credit">
-              <input type="checkbox" name="pass-afking-claimable-first" checked>
-              <span>Claimable first</span>
-            </label>
-            <span class="pass-afking__costs">
-              <span class="pass-afking__day-cost" data-bind="pass-afking-day-cost">—</span>
-              <span class="pass-afking__coverage" data-bind="pass-afking-coverage">—</span>
+        <!-- WHALE ROW -->
+        <div class="pass-whale-row pass-product-row pass-product-row--whale">
+          <span class="pass-product-heading">
+            <span class="pass-product-sigil pass-product-sigil--whale" aria-hidden="true">100</span>
+            <span class="pass-product-copy">
+              <span class="pass-section-title">Whale pass
+                <boon-product-indicator product="whale"></boon-product-indicator>
+              </span>
+              <span class="pass-product-description">One ticket every other level for the next 100 levels.</span>
             </span>
-            <button type="button" class="pass-afking__save" data-write data-bind="pass-afking-save">Start</button>
-            <button type="button" class="pass-afking__cancel" data-write data-bind="pass-afking-cancel" hidden>Cancel</button>
-          </div>
-          <div class="pass-afking-error" data-bind="pass-afking-error" hidden role="alert"></div>
-        </section>
+          </span>
+          <span class="pass-product-perks" aria-label="Whale pass benefits">
+            <span class="pass-whale-lootbox-perk" data-bind="pass-whale-lootbox">BONUS LOOTBOX · 10% OF PASS</span>
+            <span>1 TICKET / 2 LEVELS</span>
+            <span data-bind="pass-whale-score">+115% DEGEN SCORE</span>
+            <span>AFKING SEAT</span>
+          </span>
+          <span class="pass-product-checkout pass-product-checkout--whale">
+            <label class="pass-product-quantity" for="pass-whale-qty-input">
+              <small>QTY</small>
+              <input type="number" name="pass-whale-qty" id="pass-whale-qty-input"
+                     class="pass-whale-input" min="1" max="100" step="1" value="1" aria-label="Whale pass quantity">
+            </label>
+            <span class="pass-product-price">
+              <small>UNIT PRICE</small>
+              <strong class="pass-whale-price" data-bind="pass-whale-price">—</strong>
+            </span>
+            <button type="button" class="pass-whale-buy" data-write data-bind="pass-whale-buy">
+              BUY WHALE PASS
+            </button>
+          </span>
+        </div>
+        <div class="pass-whale-error" data-bind="pass-whale-error" hidden role="alert"></div>
 
-        <!-- DEITY PASS — intentionally the collapsed child of the default-open
-             afKing pass section. Holders get the same picker header plus their
-             three authoritative daily issuance slots inside the dropdown. -->
+        <!-- DEITY PASS — buyers use the compact dropdown; holders get their
+             owned symbol and daily controls already open. -->
         <details class="pass-deity-section" data-bind="pass-deity-details">
-          <summary class="pass-deity-summary">
-            <span class="pass-section-title">Deity pass
-              <boon-product-indicator product="deity"></boon-product-indicator>
+          <summary class="pass-deity-summary" data-bind="pass-deity-summary">
+            <span class="pass-product-heading">
+              <span class="pass-product-sigil pass-product-sigil--deity" aria-hidden="true">∞</span>
+              <span class="pass-product-copy">
+                <span class="pass-section-title">Deity pass
+                  <boon-product-indicator product="deity"></boon-product-indicator>
+                </span>
+                <span class="pass-product-description">Permanent symbol coverage and three boons every day.</span>
+              </span>
             </span>
-            <span class="pass-deity-hint" data-bind="pass-deity-hint">pick your symbol</span>
+            <span class="pass-product-perks pass-product-perks--deity" aria-label="Deity pass benefits">
+              <span>PERMANENT</span>
+              <span data-bind="pass-deity-score">+155% DEGEN SCORE</span>
+              <span>3 DAILY BOONS</span>
+              <span>10% LOOTBOX</span>
+              <span>AFKING SEAT</span>
+            </span>
+            <span class="pass-deity-price">
+              <small>LIVE PRICE</small>
+              <strong class="pass-deity-hint" data-bind="pass-deity-hint">pick your symbol</strong>
+            </span>
           </summary>
           <div class="pass-deity-body">
             <div class="pass-deity-picker">
+              <strong class="pass-deity-owned-name" data-bind="pass-deity-owned-name" hidden></strong>
               <span class="pass-deity-preview" aria-hidden="true">
                 <img data-bind="pass-deity-preview" src="" alt="">
               </span>
-              <strong class="pass-deity-owned-name" data-bind="pass-deity-owned-name" hidden></strong>
               <select class="pass-deity-select" name="pass-deity-symbol"
                       data-bind="pass-deity-select" aria-label="Deity pass symbol"></select>
               <button type="button" class="pass-deity-buy" data-write data-bind="pass-deity-buy">Buy</button>
@@ -478,6 +496,62 @@ class AppPassSection extends HTMLElement {
           </div>
         </details>
       </section>
+
+      <!-- AFKING SUBSCRIPTION is its own instrument below the premium passes.
+           The seat arrives automatically with any pass, so every holder sees
+           the complete editor immediately — there is no claim step. -->
+      <section class="panel pass-afking" data-bind="pass-afking" hidden>
+        <div class="pass-afking__head">
+          <span class="pass-product-heading">
+            <span class="pass-product-sigil pass-product-sigil--afking" aria-hidden="true">AUTO</span>
+            <span class="pass-product-copy">
+              <span class="pass-section-title">AFKing subscription</span>
+              <span class="pass-product-description">Auto-buy tickets or a lootbox every day.</span>
+            </span>
+          </span>
+          <strong class="pass-afking__status" data-bind="pass-afking-status">SEAT READY</strong>
+          <span class="pass-afking__wallet">
+            <span class="pass-afking__funding" data-bind="pass-afking-funding">—</span>
+            <button type="button" class="pass-afking__withdraw" data-write
+                    data-bind="pass-afking-withdraw" hidden>Withdraw all</button>
+          </span>
+        </div>
+        <div class="pass-afking__lock" data-bind="pass-afking-lock" hidden role="status">
+          <strong>RNG SETTLING</strong>
+          <span>Settings and cancel unlock automatically. Funding and withdrawals stay open.</span>
+        </div>
+        <div class="pass-afking__controls" data-bind="pass-afking-controls" hidden>
+          <label class="pass-afking__field">
+            <span>Daily buy</span>
+            <select name="pass-afking-mode" data-bind="pass-afking-mode">
+              <option value="lootbox">Lootboxes</option>
+              <option value="tickets">Tickets</option>
+            </select>
+          </label>
+          <label class="pass-afking__field pass-afking__field--qty">
+            <span>Per day</span>
+            <input type="number" name="pass-afking-qty" min="1" max="255" step="1" value="1">
+          </label>
+          <label class="pass-afking__field pass-afking__field--fund">
+            <span>Fund now</span>
+            <input type="number" name="pass-afking-fund" min="0" step="0.01" value="0" inputmode="decimal">
+            <small>ETH</small>
+          </label>
+          <button type="button" class="pass-afking__fund-button" data-write
+                  data-bind="pass-afking-fund-button" hidden>Fund only</button>
+          <label class="pass-afking__credit">
+            <input type="checkbox" name="pass-afking-claimable-first" checked>
+            <span>Claimable first</span>
+          </label>
+          <span class="pass-afking__costs">
+            <span class="pass-afking__day-cost" data-bind="pass-afking-day-cost">—</span>
+            <span class="pass-afking__coverage" data-bind="pass-afking-coverage">—</span>
+          </span>
+          <button type="button" class="pass-afking__save" data-write data-bind="pass-afking-save">Start</button>
+          <button type="button" class="pass-afking__cancel" data-write data-bind="pass-afking-cancel" hidden>Cancel</button>
+        </div>
+        <div class="pass-afking-error" data-bind="pass-afking-error" hidden role="alert"></div>
+      </section>
     `;
   }
 
@@ -499,16 +573,24 @@ class AppPassSection extends HTMLElement {
   #wireEventHandlers() {
     const whaleBuy = this.querySelector('[data-bind="pass-whale-buy"]');
     if (whaleBuy) whaleBuy.addEventListener('click', (e) => this.#onWhaleBuyClick(e));
+    const whaleQty = this.querySelector('[name="pass-whale-qty"]');
+    if (whaleQty) whaleQty.addEventListener('input', () => this.#renderWhaleLootboxBenefit());
     const lazyBuy = this.querySelector('[data-bind="pass-lazy-buy"]');
     if (lazyBuy) lazyBuy.addEventListener('click', (e) => this.#onLazyBuyClick(e));
     const deityBuy = this.querySelector('[data-bind="pass-deity-buy"]');
     if (deityBuy) deityBuy.addEventListener('click', (e) => this.#onDeityBuyClick(e));
     const deitySelect = this.querySelector('[data-bind="pass-deity-select"]');
     if (deitySelect) deitySelect.addEventListener('change', () => this.#renderDeityPreview());
+    const deityDetails = this.querySelector('[data-bind="pass-deity-details"]');
+    const deitySummary = this.querySelector('[data-bind="pass-deity-summary"]');
+    deitySummary?.addEventListener?.('click', (event) => {
+      if (!deityDetails?.classList?.contains('pass-deity-section--holder')) return;
+      try { event.preventDefault?.(); } catch (_e) { /* defensive */ }
+      deityDetails.open = true;
+      deityDetails.setAttribute?.('open', '');
+    });
     const afkingSave = this.querySelector('[data-bind="pass-afking-save"]');
     if (afkingSave) afkingSave.addEventListener('click', (e) => this.#onAfkingSave(e));
-    const afkingClaim = this.querySelector('[data-bind="pass-afking-claim-button"]');
-    if (afkingClaim) afkingClaim.addEventListener('click', (e) => this.#onAfkingSeatClaim(e));
     const afkingCancel = this.querySelector('[data-bind="pass-afking-cancel"]');
     if (afkingCancel) afkingCancel.addEventListener('click', (e) => this.#onAfkingCancel(e));
     const afkingQty = this.querySelector('[name="pass-afking-qty"]');
@@ -519,6 +601,8 @@ class AppPassSection extends HTMLElement {
     if (afkingFund) afkingFund.addEventListener('input', () => this.#renderAfkingDayCost());
     const afkingFundButton = this.querySelector('[data-bind="pass-afking-fund-button"]');
     if (afkingFundButton) afkingFundButton.addEventListener('click', (e) => this.#onAfkingFund(e));
+    const afkingWithdraw = this.querySelector('[data-bind="pass-afking-withdraw"]');
+    if (afkingWithdraw) afkingWithdraw.addEventListener('click', (e) => this.#onAfkingWithdraw(e));
     for (let slot = 0; slot < 3; slot += 1) {
       const boonButton = this.querySelector(`[data-bind="pass-deity-boon-slot-${slot}"]`);
       if (boonButton) boonButton.addEventListener('click', (e) => this.#onDeityBoonClick(e, slot));
@@ -664,15 +748,17 @@ class AppPassSection extends HTMLElement {
 
   #renderPricing() {
     const p = this.#pricingData;
+    this.#renderPassScoreBenefits();
     const priceEl = this.querySelector('[data-bind="pass-whale-price"]');
     if (priceEl) {
       if (!p || p.whaleUnitPriceWei == null) {
         priceEl.textContent = 'Loading price…';
       } else {
-        try { priceEl.textContent = `${displayEth(p.whaleUnitPriceWei)} ETH each`; }
+        try { priceEl.textContent = `${formatPassEth(p.whaleUnitPriceWei)} ETH`; }
         catch (_e) { priceEl.textContent = '—'; }
       }
     }
+    this.#renderWhaleLootboxBenefit();
     const hintEl = this.querySelector('[data-bind="pass-deity-hint"]');
     if (hintEl) {
       const ownedSymbolId = this.#ownedDeitySymbolId();
@@ -682,7 +768,7 @@ class AppPassSection extends HTMLElement {
       } else if (this.#deityCatalog?.issuedCount >= 32) {
         hintEl.textContent = 'sold out';
       } else if (p?.deityNextPriceWei != null) {
-        try { hintEl.textContent = `pick your symbol · next pass ${displayEth(p.deityNextPriceWei)} ETH`; }
+        try { hintEl.textContent = `pick your symbol · next pass ${formatPassEth(p.deityNextPriceWei)} ETH`; }
         catch (_e) { hintEl.textContent = 'pick your symbol'; }
       } else {
         hintEl.textContent = 'checking availability…';
@@ -698,13 +784,39 @@ class AppPassSection extends HTMLElement {
       lazyRow.hidden = !open;
       const lazyPrice = this.querySelector('[data-bind="pass-lazy-price"]');
       if (lazyPrice && open) {
-        try { lazyPrice.textContent = `${displayEth(p.lazyCostWei)} ETH`; }
+        try { lazyPrice.textContent = `${formatPassEth(p.lazyCostWei)} ETH`; }
         catch (_e) { lazyPrice.textContent = '—'; }
       }
     }
     // Re-assert the combined-mode gate — this poll tick's price-window logic
     // above may have just re-revealed the lazy row; combined mode wins.
     this.#renderCombinedGate();
+  }
+
+  #renderPassScoreBenefits() {
+    const score = this.#playerData?.scoreBreakdown || null;
+    for (const [bind, bonus] of [
+      ['pass-lazy-score', 10],
+      ['pass-whale-score', 40],
+      ['pass-deity-score', 80],
+    ]) {
+      const el = this.querySelector(`[data-bind="${bind}"]`);
+      if (el) el.textContent = `+${projectedPassScoreGain(score, bonus)}% DEGEN SCORE`;
+    }
+  }
+
+  #renderWhaleLootboxBenefit() {
+    const benefit = this.querySelector('[data-bind="pass-whale-lootbox"]');
+    if (!benefit) return;
+    const unit = this.#pricingData?.whaleUnitPriceWei;
+    const quantityInput = this.querySelector('[name="pass-whale-qty"]');
+    const quantity = Math.max(1, Math.min(100, Math.trunc(Number(quantityInput?.value) || 1)));
+    if (unit == null) {
+      benefit.textContent = 'BONUS LOOTBOX · 10% OF PASS';
+      return;
+    }
+    const lootboxValue = (BigInt(unit) * BigInt(quantity)) / 10n;
+    benefit.textContent = `BONUS LOOTBOX · ${formatPassEth(lootboxValue)} ETH${quantity > 1 ? ' TOTAL' : ''}`;
   }
 
   #ownedDeitySymbolId(ownerAddress = this.#pinnedAddress) {
@@ -834,6 +946,17 @@ class AppPassSection extends HTMLElement {
 
     const details = this.querySelector('[data-bind="pass-deity-details"]');
     details?.classList?.toggle('pass-deity-section--holder', visible);
+    const summary = this.querySelector('[data-bind="pass-deity-summary"]');
+    if (summary) summary.hidden = visible;
+    if (visible && details) {
+      details.open = true;
+      details.setAttribute?.('open', '');
+      summary?.setAttribute?.('aria-disabled', 'true');
+      summary?.setAttribute?.('tabindex', '-1');
+    } else {
+      summary?.removeAttribute?.('aria-disabled');
+      summary?.removeAttribute?.('tabindex');
+    }
     if (!visible) return;
 
     const addressKey = String(holderAddress || '').toLowerCase();
@@ -940,11 +1063,8 @@ class AppPassSection extends HTMLElement {
     }
 
     if (save && !this.#busyAfking) {
-      const needsSeat = Boolean(!this.#afkingState?.hasToken && this.#afkingState?.canClaimSeat);
       if (this.#afkingState?.rngLocked) {
         save.textContent = 'RNG settling';
-      } else if (needsSeat) {
-        save.textContent = 'Claim seat first';
       } else {
         const action = this.#afkingState?.active ? 'Update' : 'Start';
         const fundingLabel = addedFunding != null && addedFunding > 0n
@@ -965,12 +1085,13 @@ class AppPassSection extends HTMLElement {
       const fundLocked = !active
         || this.#busyAfking
         || this.#busyAfkingFunding
+        || this.#busyAfkingWithdrawal
         || addedFunding == null
         || addedFunding <= 0n;
       const fundLockTitle = !active
         ? 'Start the subscription with funding first'
-        : this.#busyAfking || this.#busyAfkingFunding
-          ? 'Funding transaction pending'
+        : this.#busyAfking || this.#busyAfkingFunding || this.#busyAfkingWithdrawal
+          ? 'AFKing transaction pending'
           : addedFunding == null || addedFunding <= 0n
             ? 'Enter an ETH amount to add'
             : '';
@@ -982,7 +1103,7 @@ class AppPassSection extends HTMLElement {
   }
 
   #syncAfkingLockPolling() {
-    const locked = Boolean(this.#afkingState?.rngLocked);
+    const locked = Boolean(this.#afkingState?.hasToken && this.#afkingState?.rngLocked);
     if (!locked) {
       if (this.#afkingLockPollHandle != null) {
         try { clearTimeout(this.#afkingLockPollHandle); } catch (_) { /* defensive */ }
@@ -1001,8 +1122,9 @@ class AppPassSection extends HTMLElement {
     const section = this.querySelector('[data-bind="pass-afking"]');
     if (!section) return;
     const state = this.#afkingState;
+    const hasFunding = BigInt(state?.fundingWei ?? 0n) > 0n;
     const visible = Boolean(
-      state && (state.hasToken || state.canClaimSeat) && get('ui.mode') !== 'combined',
+      state && (state.hasToken || hasFunding) && get('ui.mode') !== 'combined',
     );
     section.hidden = !visible;
     if (!visible) {
@@ -1010,19 +1132,15 @@ class AppPassSection extends HTMLElement {
       return;
     }
 
-    const claim = this.querySelector('[data-bind="pass-afking-claim"]');
     const lockNotice = this.querySelector('[data-bind="pass-afking-lock"]');
     const controls = this.querySelector('[data-bind="pass-afking-controls"]');
-    const needsSeat = Boolean(!state.hasToken && state.canClaimSeat);
-    if (claim) claim.hidden = !needsSeat;
     if (lockNotice) {
-      lockNotice.hidden = !state.rngLocked;
-      lockNotice.textContent = 'RNG SETTLING · Settings and cancel unlock automatically. Funding stays open.';
+      lockNotice.hidden = !state.hasToken || !state.rngLocked;
+      lockNotice.textContent = 'RNG SETTLING · Settings and cancel unlock automatically. Funding and withdrawals stay open.';
     }
-    // Keep the complete editor visible before the free seat is claimed. This
-    // lets an eligible pass holder choose delivery, amount, and funding first;
-    // the settings survive the seat transaction and Start unlocks immediately.
-    if (controls) controls.hidden = false;
+    // A funded wallet can reclaim its ETH even if it has no seat. Only holders
+    // get the subscription editor itself.
+    if (controls) controls.hidden = !state.hasToken;
 
     const addressKey = String(this.#pinnedAddress || '').toLowerCase();
     const qtyInput = this.querySelector('[name="pass-afking-qty"]');
@@ -1047,9 +1165,9 @@ class AppPassSection extends HTMLElement {
 
     const status = this.querySelector('[data-bind="pass-afking-status"]');
     if (status) {
-      status.textContent = needsSeat
-        ? 'FREE SEAT READY'
-        : (state.active ? `ACTIVE · ${state.dailyQuantity}/DAY` : 'SEAT READY');
+      status.textContent = state.active
+        ? `ACTIVE · ${state.dailyQuantity}/DAY`
+        : (state.hasToken ? 'SEAT READY' : 'FUNDS READY');
       status.classList.toggle('pass-afking__status--active', Boolean(state.active));
     }
     const funding = this.querySelector('[data-bind="pass-afking-funding"]');
@@ -1057,34 +1175,48 @@ class AppPassSection extends HTMLElement {
       funding.textContent = `FUNDS · ${formatPassEth(state.fundingWei)} ETH`;
     }
 
-    const claimButton = this.querySelector('[data-bind="pass-afking-claim-button"]');
-    if (claimButton) {
-      claimButton.textContent = this.#busyAfkingSeat ? 'Claiming…' : '1 · Claim seat';
+    const withdraw = this.querySelector('[data-bind="pass-afking-withdraw"]');
+    if (withdraw) {
+      const selfMode = get('ui.mode') === 'self';
+      withdraw.hidden = !selfMode || !hasFunding;
+      withdraw.textContent = this.#busyAfkingWithdrawal ? 'Withdrawing…' : 'Withdraw all';
+      const withdrawLocked = !selfMode
+        || !hasFunding
+        || this.#busyAfking
+        || this.#busyAfkingFunding
+        || this.#busyAfkingWithdrawal;
       _setDomainWriteLock(
-        claimButton,
-        !needsSeat || this.#busyAfkingSeat,
-        this.#busyAfkingSeat ? 'Seat claim pending' : 'Seat already claimed',
+        withdraw,
+        withdrawLocked,
+        withdrawLocked ? 'AFKing transaction pending' : '',
       );
+      if (!withdrawLocked) {
+        withdraw.title = state.active
+          ? 'Withdraw all prepaid ETH. The subscription remains active and may stop when funding runs out.'
+          : 'Withdraw all prepaid AFKing ETH to this wallet.';
+      }
     }
+
     const save = this.querySelector('[data-bind="pass-afking-save"]');
     const cancel = this.querySelector('[data-bind="pass-afking-cancel"]');
-    const locked = Boolean(state.rngLocked || this.#busyAfking || this.#busyAfkingFunding);
+    const locked = Boolean(
+      state.rngLocked
+      || this.#busyAfking
+      || this.#busyAfkingFunding
+      || this.#busyAfkingWithdrawal
+    );
     if (save) {
       save.textContent = this.#busyAfking
         ? 'Saving…'
         : state.rngLocked
           ? 'RNG settling'
-          : needsSeat
-            ? '2 · Start after claim'
-            : (state.active ? 'Update' : 'Start');
-      const saveLockTitle = needsSeat
-        ? 'Claim the included AFKing seat first'
-        : state.rngLocked
-          ? 'Settings unlock automatically after RNG resolves'
-          : this.#busyAfking || this.#busyAfkingFunding
-            ? 'Transaction pending'
-            : '';
-      _setDomainWriteLock(save, needsSeat || locked, saveLockTitle);
+          : (state.active ? 'Update' : 'Start');
+      const saveLockTitle = state.rngLocked
+        ? 'Settings unlock automatically after RNG resolves'
+        : this.#busyAfking || this.#busyAfkingFunding || this.#busyAfkingWithdrawal
+          ? 'Transaction pending'
+          : '';
+      _setDomainWriteLock(save, locked, saveLockTitle);
     }
     if (cancel) {
       cancel.hidden = !state.active;
@@ -1399,7 +1531,12 @@ class AppPassSection extends HTMLElement {
 
   async #onAfkingFund(e) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busyAfking || this.#busyAfkingFunding || !this.#afkingState?.active) return;
+    if (
+      this.#busyAfking
+      || this.#busyAfkingFunding
+      || this.#busyAfkingWithdrawal
+      || !this.#afkingState?.active
+    ) return;
     const msgValueWei = this.#afkingFundingInputWei();
     if (msgValueWei == null || msgValueWei <= 0n) {
       this.#renderAfkingError('Enter an ETH amount to add.');
@@ -1429,9 +1566,46 @@ class AppPassSection extends HTMLElement {
     }
   }
 
+  async #onAfkingWithdraw(e) {
+    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+    if (
+      this.#busyAfking
+      || this.#busyAfkingFunding
+      || this.#busyAfkingWithdrawal
+      || get('ui.mode') !== 'self'
+      || BigInt(this.#afkingState?.fundingWei ?? 0n) <= 0n
+    ) return;
+
+    this.#busyAfkingWithdrawal = true;
+    this.#clearAfkingError();
+    this.#renderAfking();
+    try {
+      const { amountWei } = await withdrawAfkingSubscriptionFunding();
+      this.#clearAllErrorStates();
+      try {
+        this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
+          detail: { kind: 'afking-withdrawal', amountWei },
+          bubbles: true,
+        }));
+      } catch (_error) { /* defensive */ }
+      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+    } catch (error) {
+      this.#renderAfkingError(error?.userMessage || error?.message || 'Withdrawal failed.');
+    } finally {
+      this.#busyAfkingWithdrawal = false;
+      this.#renderAfking();
+    }
+  }
+
   async #onAfkingSave(e) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busyAfking || this.#afkingState?.rngLocked || !this.#afkingState?.hasToken) return;
+    if (
+      this.#busyAfking
+      || this.#busyAfkingFunding
+      || this.#busyAfkingWithdrawal
+      || this.#afkingState?.rngLocked
+      || !this.#afkingState?.hasToken
+    ) return;
 
     const qtyInput = this.querySelector('[name="pass-afking-qty"]');
     const modeInput = this.querySelector('[data-bind="pass-afking-mode"]');
@@ -1481,45 +1655,21 @@ class AppPassSection extends HTMLElement {
     }
   }
 
-  async #onAfkingSeatClaim(e) {
-    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busyAfkingSeat || !this.#afkingState?.canClaimSeat || !deriveCanSign()) return;
-    // Cosmetic editing can come later; use the deity badge when there is one
-    // and stable defaults for the required on-chain color fields.
-    const symbolId = this.#ownedDeitySymbolId() ?? 0;
-    const bgRgb = 0xd9d9d9;
-    const trimRgb = 0xc72734;
-
-    this.#busyAfkingSeat = true;
-    this.#clearAfkingError();
-    this.#renderAfking();
-    try {
-      await claimAfkingSeat({ symbolId, bgRgb, trimRgb });
-      this.#afkingState = {
-        ...this.#afkingState,
-        hasToken: true,
-        canClaimSeat: false,
-        tokenBalance: BigInt(this.#afkingState.tokenBalance ?? 0n) + 1n,
-      };
-      this.#clearAllErrorStates();
-      try {
-        this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
-          detail: { kind: 'afking-seat', symbolId },
-          bubbles: true,
-        }));
-      } catch (_error) { /* defensive */ }
-      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
-    } catch (error) {
-      this.#renderAfkingError(error?.userMessage || error?.message || 'Seat claim failed.');
-    } finally {
-      this.#busyAfkingSeat = false;
-      this.#renderAfking();
-    }
-  }
+  // #onAfkingSeatClaim was REMOVED along with the whole claim flow: the token dropped `claimSeat`
+  // once seats began auto-minting with the pass (GAME `_grantSeatCoin` → token `mintSeatFor`).
+  // Seat ART is still changeable on-chain via `setSeatTraits(tokenId, …)`, but that needs the
+  // holder's tokenId and the token exposes no owner→token lookup, so an art editor needs a tokenId
+  // source first (index the new `SeatMinted(owner, tokenId, …)` event, or add a `seatOf(address)`).
 
   async #onAfkingCancel(e) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busyAfking || this.#afkingState?.rngLocked || !this.#afkingState?.active) return;
+    if (
+      this.#busyAfking
+      || this.#busyAfkingFunding
+      || this.#busyAfkingWithdrawal
+      || this.#afkingState?.rngLocked
+      || !this.#afkingState?.active
+    ) return;
     this.#busyAfking = true;
     this.#clearAfkingError();
     this.#renderAfking();

@@ -123,7 +123,7 @@ export function render(coinflipData, container) {
   if (win === true) {
     import('canvas-confetti').then(mod => {
       mod.default({
-        particleCount: 40,
+        particleCount: 20,
         spread: 60,
         origin: { y: 0.7 },
         colors: ['#22c55e', '#f5a623']

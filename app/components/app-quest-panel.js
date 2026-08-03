@@ -29,8 +29,8 @@
 //          AbortController-per-cycle + visibility-aware foreground re-poll.
 //   CF-07: T-58-18 — server-derived strings (questName / progress / target /
 //          streak / completion flags) rendered via .textContent NOT innerHTML.
-//   CF-08: roadmap success-criterion 1 verbatim — NO toast / NO audio / NO
-//          animator on quest completion. Inline state change only.
+//   Completion feedback stays inside the quest area: one short chime and a
+//   small card pulse only when a live false → true transition is observed.
 //
 // Class palette: .qst-* prefix (RESEARCH R10 verified non-colliding against
 // existing 14 prefixes: app/cf/chain/clm/dec/deg/jp/last/lbx/ldj/pass/player/
@@ -40,10 +40,16 @@
 // its title/aria-label retains the complete next-flip win/burn condition.
 
 import { get, update, subscribe, getViewedAddress } from '../app/store.js';
+import { ETH_DIVISOR } from '../app/chain-config.js';
 import { fetchJSON } from '../../beta/app/api.js';
 import { displayEth, displayToken } from '../app/scaling.js';
-import { scaledTicketPriceWei } from '../app/lootbox.js';
+import { LOOTBOX_MIN_WEI, scaledTicketPriceWei } from '../app/lootbox.js';
 import { activeTicketLevel } from '../app/active-level.js';
+import { degeneretteLimits } from '../app/degenerette.js';
+import { dgnBadgePath, dgnTraitIdsToQuadrants } from '../app/dgn-traits.js';
+import { readLiveQuestBoard } from '../app/quests.js';
+import { questStreakScorePoints } from '../app/activity-score.js';
+import { sfxQuestComplete } from '../app/jackpot-sfx.js';
 import './boon-product-indicator.js';
 
 // Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for the
@@ -125,7 +131,7 @@ function _fmtDailyQuestAmount(questType, raw) {
 // type 0, and MINT_FLIP is 9. Types 4 (FOIL) and 9 were missing entirely, so a foil-pack
 // day or a redeem-window day rendered "Unknown" as its bonus quest.
 const QUEST_TYPE_LABELS = {
-  1: 'Buy a ticket or lootbox',
+  1: 'Buy tickets or lootboxes',
   2: 'Coinflip',
   3: 'Affiliate',
   4: 'Foil pack',
@@ -155,6 +161,34 @@ const QUEST_TYPE_ICONS = {
 // to prefill for type 3 and its card remains informational.
 const QUEST_SETUP_TYPES = new Set([1, 2, 4, 5, 6, 7, 8, 9]);
 
+function _parseDgnQuestAmount(value, questType) {
+  const match = /^\s*(\d+)(?:\.(\d{0,18}))?\s*$/.exec(String(value ?? ''));
+  if (!match) return null;
+  try {
+    const full = (BigInt(match[1]) * (10n ** 18n))
+      + BigInt((match[2] || '').padEnd(18, '0') || '0');
+    return Number(questType) === 7 ? full / BigInt(ETH_DIVISOR) : full;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function _formatDgnQuestPerSpin(value, questType) {
+  const text = Number(questType) === 7
+    ? displayEth(BigInt(value || 0), 6)
+    : displayToken(BigInt(value || 0), 6);
+  return String(text).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '');
+}
+
+function _parseQuarterTicketCount(value) {
+  const match = /^\s*(\d+)(?:\.(\d{1,2}))?\s*$/.exec(String(value ?? ''));
+  if (!match) return null;
+  const hundredths = BigInt(match[1]) * 100n
+    + BigInt((match[2] || '').padEnd(2, '0'));
+  if (hundredths <= 0n || hundredths % 25n !== 0n) return null;
+  return hundredths / 25n;
+}
+
 const SCORE_COMPONENTS = [
   // Despite its legacy name, questStreakPoints is the raw streak count. The
   // score contribution is floor(count / 2); #renderScoreBreakdown normalizes it.
@@ -164,9 +198,45 @@ const SCORE_COMPONENTS = [
   { key: 'affiliatePoints', label: 'Referrals' },
 ];
 
+const SCORE_COMPONENT_CAPS = Object.freeze({
+  mintLevelStreakPoints: 50,
+  mintCountPoints: 25,
+  affiliatePoints: 50,
+  passBonusPoints: 80,
+});
+const QUEST_STREAK_HALF_FILL_POINTS = 20;
+
 function _scoreNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
+}
+
+/**
+ * Visual fill for one Degen Score breakdown row. Capped categories compare to
+ * their own contract maximum; quest streak uses a diminishing curve where 20
+ * credited points is exactly half-full and can approach, but never reach,
+ * 100%. Cashout curse is uncapped and uses the same non-relative curve.
+ */
+export function degenScoreBreakdownBarPercent(key, value) {
+  const points = Math.abs(_scoreNumber(value));
+  const cap = SCORE_COMPONENT_CAPS[key];
+  if (cap) return Math.max(0, Math.min(100, (points / cap) * 100));
+  if (key === 'questStreakPoints' || key === 'cursePoints') {
+    if (points === 0) return 0;
+    return Math.min(99.5, (points / (points + QUEST_STREAK_HALF_FILL_POINTS)) * 100);
+  }
+  return 0;
+}
+
+/** Loot-style display tier for the player's total Degen Score. */
+export function degenScoreLootTier(value) {
+  const points = Number(value);
+  if (!Number.isFinite(points)) return null;
+  if (points < 60) return 'white';
+  if (points < 150) return 'green';
+  if (points < 300) return 'purple';
+  if (points < 1_000) return 'orange';
+  return 'gold';
 }
 
 function _questProgressPercent(progress, target, completed) {
@@ -225,6 +295,10 @@ class AppQuestPanel extends HTMLElement {
   #pollController = null;
   #lastFetchAt = 0;
   #visibilityListener = null;
+  #questDgnSpins = 5;
+  #questDgnPerSpin = 0n;
+  #questDgnTraitIds = null;
+  #questDgnHero = 0;
   // --- Pinned data from /player/:address (server-derived) ---
   #questData = null;    // quest_progress rows — per player, sparse
   #questDefs = null;    // /game/quests/day/:day slots — per DAY, always both
@@ -235,11 +309,18 @@ class AppQuestPanel extends HTMLElement {
   #gameState = null;    // live routing state; foil quests must use the level a buy reaches NOW
   #afkingActive = false;  // subscription runs the dailies — never "missed"
   #pinnedAddress = null;
+  #questDialogModel = null;
+  #questDialogChoice = 'ticket';
+  #questActionAmount = null;
+  #questDialogReturnFocus = null;
+  #questCompletionIdentity = null;
+  #questCompletionState = new Map();
 
   connectedCallback() {
     if (this.#initialized) return;
     this.#initialized = true;
     this.#renderShell();
+    this.#wireQuestDialog();
     this.#wireVisibilityRePoll();
     this.#wireStoreSubscriptions();
     this.#startPolling();
@@ -248,6 +329,7 @@ class AppQuestPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this.#closeQuestDialog({ restoreFocus: false });
     update('ui.foilQuest', null);
     if (this.#pollHandle != null) {
       try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
@@ -264,6 +346,7 @@ class AppQuestPanel extends HTMLElement {
       catch (_) { /* defensive */ }
     }
     this.#visibilityListener = null;
+    this.#resetQuestCompletionState();
     for (const u of this.#unsubs) {
       try { u(); } catch (_e) { /* defensive */ }
     }
@@ -278,7 +361,7 @@ class AppQuestPanel extends HTMLElement {
     this.innerHTML = `
       <section class="panel app-quest-panel">
         <header class="qst-header">
-          <h2>QUESTS</h2>
+          <h2><a class="qst-learn-link" href="/learn/quests/">QUESTS</a></h2>
           <div class="qst-streak-chip" title="Complete the daily quest to extend your streak">
             <span class="qst-streak-flame" aria-hidden="true">◆</span>
             <strong class="qst-streak" data-bind="qst-streak">—</strong>
@@ -299,7 +382,595 @@ class AppQuestPanel extends HTMLElement {
         <div class="qst-slots" data-bind="qst-slots"></div>
         <div class="qst-empty" data-bind="qst-empty">Loading quests…</div>
       </section>
+      <div class="qst-action-dialog" data-bind="qst-action-dialog" hidden
+           role="dialog" aria-modal="true" aria-labelledby="qst-action-title">
+        <button type="button" class="qst-action-dialog__backdrop"
+                data-bind="qst-action-backdrop" aria-label="Close quest action"></button>
+        <section class="qst-action-dialog__card">
+          <button type="button" class="qst-action-dialog__close"
+                  data-bind="qst-action-close" aria-label="Close quest action">×</button>
+          <span class="qst-action-dialog__eyebrow" data-bind="qst-action-role"></span>
+          <h3 id="qst-action-title" data-bind="qst-action-title"></h3>
+          <p class="qst-action-dialog__copy" data-bind="qst-action-copy"></p>
+          <div class="qst-action-choice" data-bind="qst-action-choice" hidden
+               role="group" aria-label="Choose ticket or lootbox">
+            <button type="button" data-bind="qst-action-ticket" data-choice="ticket">TICKET</button>
+            <button type="button" data-bind="qst-action-lootbox" data-choice="lootbox">LOOTBOX</button>
+          </div>
+          <label class="qst-action-adjust" data-bind="qst-action-adjust" hidden>
+            <span class="qst-action-dgn__field-head">
+              <span data-bind="qst-action-adjust-label">AMOUNT</span>
+              <small data-bind="qst-action-adjust-needed">NEEDED —</small>
+            </span>
+            <span class="qst-action-dgn__stepper qst-action-adjust__stepper">
+              <button type="button" data-bind="qst-action-adjust-down"
+                      aria-label="Decrease quest action amount">−</button>
+              <input type="number" name="qst-action-amount" min="0" step="any"
+                     inputmode="decimal" aria-label="Quest action amount">
+              <strong data-bind="qst-action-adjust-unit"></strong>
+              <button type="button" data-bind="qst-action-adjust-up"
+                      aria-label="Increase quest action amount">+</button>
+            </span>
+          </label>
+          <div class="qst-action-dgn" data-bind="qst-action-dgn" hidden>
+            <div class="ticket-card tc-small dgn-ticket qst-action-dgn__ticket"
+                 aria-label="Degenerette quest ticket">
+              <div class="trait-quadrant dgn-q" data-bind="qst-action-dgn-cell-0"><img data-bind="qst-action-dgn-img-0" alt=""></div>
+              <div class="trait-quadrant dgn-q" data-bind="qst-action-dgn-cell-1"><img data-bind="qst-action-dgn-img-1" alt=""></div>
+              <div class="trait-quadrant dgn-q" data-bind="qst-action-dgn-cell-2"><img data-bind="qst-action-dgn-img-2" alt=""></div>
+              <div class="trait-quadrant dgn-q" data-bind="qst-action-dgn-cell-3"><img data-bind="qst-action-dgn-img-3" alt=""></div>
+              <div class="ticket-card-center"><img src="/whitepaper/flame-center.svg" alt=""></div>
+            </div>
+            <div class="qst-action-dgn__wager">
+              <label class="qst-action-dgn__field">
+                <span class="qst-action-dgn__field-head">
+                  <span>BET PER SPIN</span>
+                  <small data-bind="qst-action-dgn-bet-limit">MIN —</small>
+                </span>
+                <span class="qst-action-dgn__stepper qst-action-dgn__stepper--bet">
+                  <button type="button" data-bind="qst-action-dgn-bet-down"
+                          aria-label="Decrease Degenerette bet per spin">−</button>
+                  <input type="number" name="qst-action-dgn-bet" min="0" step="any"
+                         inputmode="decimal" aria-label="Degenerette bet per spin">
+                  <strong data-bind="qst-action-dgn-unit">ETH</strong>
+                  <button type="button" data-bind="qst-action-dgn-bet-up"
+                          aria-label="Increase Degenerette bet per spin">+</button>
+                </span>
+              </label>
+              <label class="qst-action-dgn__field">
+                <span class="qst-action-dgn__field-head">
+                  <span>SPINS</span>
+                  <small data-bind="qst-action-dgn-spins-limit">MAX —</small>
+                </span>
+                <span class="qst-action-dgn__stepper">
+                  <button type="button" data-bind="qst-action-dgn-spins-down"
+                          aria-label="Decrease Degenerette spins">−</button>
+                  <input type="number" name="qst-action-dgn-spins" min="1" step="1" value="5"
+                         inputmode="numeric" aria-label="Degenerette number of spins">
+                  <button type="button" data-bind="qst-action-dgn-spins-up"
+                          aria-label="Increase Degenerette spins">+</button>
+                </span>
+              </label>
+            </div>
+          </div>
+          <div class="qst-action-requirement">
+            <span>QUEST ACTION</span>
+            <strong data-bind="qst-action-requirement">—</strong>
+          </div>
+          <button type="button" class="qst-action-confirm" data-bind="qst-action-confirm">
+            CONFIRM QUEST ACTION
+          </button>
+        </section>
+      </div>
     `;
+  }
+
+  #wireQuestDialog() {
+    const dialog = this.querySelector('[data-bind="qst-action-dialog"]');
+    const close = this.querySelector('[data-bind="qst-action-close"]');
+    const backdrop = this.querySelector('[data-bind="qst-action-backdrop"]');
+    const ticket = this.querySelector('[data-bind="qst-action-ticket"]');
+    const lootbox = this.querySelector('[data-bind="qst-action-lootbox"]');
+    const adjust = this.querySelector('[data-bind="qst-action-adjust"]');
+    const adjustInput = this.querySelector('[name="qst-action-amount"]');
+    const adjustLabel = this.querySelector('[data-bind="qst-action-adjust-label"]');
+    const adjustNeeded = this.querySelector('[data-bind="qst-action-adjust-needed"]');
+    const adjustUnit = this.querySelector('[data-bind="qst-action-adjust-unit"]');
+    const dgnBet = this.querySelector('[name="qst-action-dgn-bet"]');
+    const dgnSpins = this.querySelector('[name="qst-action-dgn-spins"]');
+    const actionAmount = this.querySelector('[name="qst-action-amount"]');
+    const confirm = this.querySelector('[data-bind="qst-action-confirm"]');
+    close?.addEventListener?.('click', () => this.#closeQuestDialog());
+    backdrop?.addEventListener?.('click', () => this.#closeQuestDialog());
+    ticket?.addEventListener?.('click', () => {
+      this.#questDialogChoice = 'ticket';
+      this.#resetQuestActionAmount();
+      this.#renderQuestDialog();
+    });
+    lootbox?.addEventListener?.('click', () => {
+      this.#questDialogChoice = 'lootbox';
+      this.#resetQuestActionAmount();
+      this.#renderQuestDialog();
+    });
+    actionAmount?.addEventListener?.('change', () => {
+      const parsed = this.#parseQuestActionAmount(actionAmount.value);
+      if (parsed != null) this.#questActionAmount = parsed;
+      this.#renderQuestDialog();
+    });
+    this.querySelector('[data-bind="qst-action-adjust-down"]')
+      ?.addEventListener?.('click', () => this.#stepQuestAction(-1));
+    this.querySelector('[data-bind="qst-action-adjust-up"]')
+      ?.addEventListener?.('click', () => this.#stepQuestAction(1));
+    dgnBet?.addEventListener?.('change', () => {
+      const parsed = _parseDgnQuestAmount(dgnBet.value, this.#questDialogModel?.questType);
+      if (parsed != null && parsed > 0n) this.#questDgnPerSpin = parsed;
+      this.#renderQuestDialog();
+    });
+    dgnSpins?.addEventListener?.('change', () => {
+      const type = Number(this.#questDialogModel?.questType);
+      const max = degeneretteLimits(type === 7 ? 0 : 1)?.maxSpins ?? 5;
+      this.#questDgnSpins = Math.max(1, Math.min(max, Math.trunc(Number(dgnSpins.value) || 5)));
+      this.#questDgnPerSpin = this.#questDgnDefaultPerSpin(this.#questDialogModel);
+      this.#renderQuestDialog();
+    });
+    this.querySelector('[data-bind="qst-action-dgn-bet-down"]')
+      ?.addEventListener?.('click', () => this.#stepQuestDgn('bet', -1));
+    this.querySelector('[data-bind="qst-action-dgn-bet-up"]')
+      ?.addEventListener?.('click', () => this.#stepQuestDgn('bet', 1));
+    this.querySelector('[data-bind="qst-action-dgn-spins-down"]')
+      ?.addEventListener?.('click', () => this.#stepQuestDgn('spins', -1));
+    this.querySelector('[data-bind="qst-action-dgn-spins-up"]')
+      ?.addEventListener?.('click', () => this.#stepQuestDgn('spins', 1));
+    confirm?.addEventListener?.('click', () => this.#confirmQuestDialog());
+    dialog?.addEventListener?.('keydown', (event) => {
+      if (event?.key !== 'Escape') return;
+      try { event.preventDefault?.(); } catch (_e) { /* fakeDOM */ }
+      this.#closeQuestDialog();
+    });
+  }
+
+  #remainingQuestTarget(model) {
+    let target = 0n;
+    let progress = 0n;
+    try { target = BigInt(model?.target ?? 0); } catch (_e) { target = 0n; }
+    try { progress = BigInt(model?.progress ?? 0); } catch (_e) { progress = 0n; }
+    let remaining = target > progress ? target - progress : target;
+    const type = Number(model?.questType);
+    // These actions have hard contract floors. If a partially completed quest
+    // leaves less than one valid action, the floor is the true minimum that can
+    // finish it—not the smaller but unsubmitable arithmetic remainder.
+    const floor = type === 2
+      ? 100n * (10n ** 18n)
+      : type === 5
+        ? 1_000n * (10n ** 18n)
+        : (type === 4 || type === 9) ? 1n : 0n;
+    if (remaining < floor) remaining = floor;
+    return remaining;
+  }
+
+  #questAdjustConfig(model = this.#questDialogModel) {
+    const type = Number(model?.questType);
+    const required = this.#remainingQuestTarget(model);
+    const price = this.#questTicketPrice(model);
+    const purchaseChoice = type === 1 ? this.#questDialogChoice : 'ticket';
+    if (type === 1 && purchaseChoice === 'ticket' && price != null && price > 0n) {
+      const quarter = (price + 3n) / 4n;
+      return { kind: 'tickets', label: 'TICKET COUNT', unit: '', min: quarter, step: quarter, required, price };
+    }
+    if ((type === 1 && purchaseChoice === 'lootbox') || type === 6) {
+      return {
+        kind: 'eth', label: 'LOOTBOX VALUE', unit: 'ETH', min: LOOTBOX_MIN_WEI,
+        step: price != null && price > 0n ? price : LOOTBOX_MIN_WEI,
+        required, price,
+      };
+    }
+    if (type === 2) {
+      const step = 100n * (10n ** 18n);
+      return { kind: 'flip', label: 'BET AMOUNT', unit: 'FLIP', min: step, step, required, price };
+    }
+    if (type === 5) {
+      const step = 1_000n * (10n ** 18n);
+      return { kind: 'flip', label: 'BURN AMOUNT', unit: 'FLIP', min: step, step, required, price };
+    }
+    if (type === 9) {
+      return { kind: 'tickets-count', label: 'TICKETS TO REDEEM', unit: '', min: 1n, step: 1n, required, price };
+    }
+    return null;
+  }
+
+  #resetQuestActionAmount() {
+    const config = this.#questAdjustConfig();
+    if (!config) {
+      this.#questActionAmount = null;
+      return;
+    }
+    let amount = config.required > config.min ? config.required : config.min;
+    if (config.kind === 'tickets') {
+      amount = this.#ticketActionForSpend(amount, config.price).cost;
+    }
+    this.#questActionAmount = amount;
+  }
+
+  #formatQuestActionAmount(config, amount = this.#questActionAmount) {
+    const value = amount == null ? config.min : BigInt(amount);
+    if (config.kind === 'tickets') return this.#ticketActionForSpend(value, config.price).count;
+    if (config.kind === 'tickets-count') return value.toString();
+    return _formatDgnQuestPerSpin(value, config.kind === 'eth' ? 7 : 8);
+  }
+
+  #parseQuestActionAmount(value) {
+    const config = this.#questAdjustConfig();
+    if (!config) return null;
+    if (config.kind === 'tickets') {
+      const entries = _parseQuarterTicketCount(value);
+      if (entries == null || config.price == null) return null;
+      return (config.price * entries + 3n) / 4n;
+    }
+    if (config.kind === 'tickets-count') {
+      if (!/^\s*\d+\s*$/.test(String(value ?? ''))) return null;
+      try {
+        const count = BigInt(String(value).trim());
+        return count > 0n ? count : null;
+      } catch (_e) { return null; }
+    }
+    return _parseDgnQuestAmount(value, config.kind === 'eth' ? 7 : 8);
+  }
+
+  #stepQuestAction(direction) {
+    const config = this.#questAdjustConfig();
+    if (!config || ![-1, 1].includes(Number(direction))) return;
+    const current = this.#questActionAmount == null
+      ? (config.required > config.min ? config.required : config.min)
+      : this.#questActionAmount;
+    this.#questActionAmount = Number(direction) > 0
+      ? current + config.step
+      : (current > config.min + config.step - 1n ? current - config.step : config.min);
+    this.#renderQuestDialog();
+  }
+
+  #stepQuestDgn(kind, direction) {
+    const model = this.#questDialogModel;
+    if (!model || ![-1, 1].includes(Number(direction))) return;
+    const type = Number(model.questType);
+    if (type !== 7 && type !== 8) return;
+    if (kind === 'bet') {
+      const floor = this.#questDgnMinPerSpin(type);
+      const current = this.#questDgnPerSpin > 0n ? this.#questDgnPerSpin : floor;
+      const next = Number(direction) > 0
+        ? current + floor
+        : (current > floor ? current - floor : floor);
+      this.#questDgnPerSpin = next < floor ? floor : next;
+    } else {
+      const max = degeneretteLimits(type === 7 ? 0 : 1)?.maxSpins ?? 5;
+      this.#questDgnSpins = Math.max(
+        1,
+        Math.min(max, Math.trunc(this.#questDgnSpins || 5) + Number(direction)),
+      );
+      // Keep the preset sufficient for the remaining quest after changing the
+      // number of spins. The player can still increase the per-spin wager.
+      this.#questDgnPerSpin = this.#questDgnDefaultPerSpin(model);
+    }
+    this.#renderQuestDialog();
+  }
+
+  #questTicketPrice(model) {
+    let level = Number(model?.level);
+    if (!Number.isInteger(level) || level < 0) level = activeTicketLevel(this.#gameState);
+    if (!Number.isInteger(level) || level < 0) return null;
+    try { return scaledTicketPriceWei(level); } catch (_e) { return null; }
+  }
+
+  #ticketActionForSpend(spend, price) {
+    if (price == null || price <= 0n) return { count: '1', cost: spend };
+    const entries = spend > 0n
+      ? (spend * 4n + price - 1n) / price
+      : 4n;
+    const entryCount = entries > 0n ? entries : 1n;
+    const whole = entryCount / 4n;
+    const quarter = entryCount % 4n;
+    const count = quarter === 0n
+      ? whole.toString()
+      : `${whole}.${String(Number(quarter) * 25).padStart(2, '0')}`.replace(/^0\./, '0.');
+    return {
+      count,
+      cost: (price * entryCount + 3n) / 4n,
+    };
+  }
+
+  #questAction(model = this.#questDialogModel) {
+    const originalType = Number(model?.questType);
+    const required = this.#remainingQuestTarget(model);
+    const price = this.#questTicketPrice(model);
+    const choice = originalType === 1 ? this.#questDialogChoice : 'ticket';
+    const format = (type, amount) => _fmtDailyQuestAmount(type, amount);
+    const selected = this.#questActionAmount;
+
+    if (originalType === 1 && choice === 'lootbox') {
+      const base = required < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : required;
+      const cost = selected == null ? base : (selected < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : selected);
+      return {
+        label: `BUY LOOTBOX · ${format(1, cost)}`,
+        target: cost,
+        purchaseKind: 'lootbox',
+        completes: cost >= required,
+        adjustable: true,
+      };
+    }
+    if (originalType === 1) {
+      const ticket = this.#ticketActionForSpend(selected == null ? required : selected, price);
+      return {
+        label: `BUY ${ticket.count} ${ticket.count === '1' ? 'TICKET' : 'TICKETS'} · ${format(1, ticket.cost)}`,
+        target: ticket.cost,
+        purchaseKind: 'ticket',
+        completes: ticket.cost >= required,
+        adjustable: price != null,
+      };
+    }
+    if (originalType === 2) {
+      const target = selected == null ? required : selected;
+      return { label: `ADD BET · ${format(2, target)}`, target, completes: target >= required, adjustable: true };
+    }
+    if (originalType === 4) {
+      const cost = price == null ? null : price * 10n;
+      return {
+        label: cost == null ? 'ADD FOIL PACK' : `ADD FOIL PACK · ${format(1, cost)}`,
+        target: required,
+        completes: true,
+      };
+    }
+    if (originalType === 5) {
+      const target = selected == null ? required : selected;
+      return { label: `BURN · ${format(5, target)}`, target, completes: target >= required, adjustable: true };
+    }
+    if (originalType === 6) {
+      const base = required < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : required;
+      const cost = selected == null ? base : (selected < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : selected);
+      return {
+        label: `BUY LOOTBOX · ${format(6, cost)}`, target: cost,
+        completes: cost >= required, adjustable: true,
+      };
+    }
+    if (originalType === 7 || originalType === 8) {
+      const spinCount = Math.max(1, Math.trunc(this.#questDgnSpins || 5));
+      const amountPerSpin = this.#questDgnPerSpin > 0n
+        ? this.#questDgnPerSpin
+        : this.#questDgnDefaultPerSpin(model);
+      const total = amountPerSpin * BigInt(spinCount);
+      return {
+        label: `DEGENERETTE · ${spinCount} SPINS · ${format(originalType, total)}`,
+        target: total,
+        amountPerSpin,
+        spinCount,
+        completes: total >= required
+          && amountPerSpin >= this.#questDgnMinPerSpin(originalType)
+          && spinCount <= (degeneretteLimits(originalType === 7 ? 0 : 1)?.maxSpins ?? spinCount),
+      };
+    }
+    if (originalType === 9) {
+      const target = selected == null ? required : selected;
+      return {
+        label: `REDEEM ${target.toLocaleString('en-US')} ${target === 1n ? 'TICKET' : 'TICKETS'} · ${(target * 1_000n).toLocaleString('en-US')} FLIP`,
+        target,
+        completes: target >= required,
+        adjustable: true,
+      };
+    }
+    return { label: 'SET UP QUEST', target: required, completes: true };
+  }
+
+  #openQuestDialog(model, returnFocus) {
+    const dialog = this.querySelector('[data-bind="qst-action-dialog"]');
+    if (!dialog) return;
+    this.#questDialogModel = { ...model };
+    this.#questDialogChoice = 'ticket';
+    this.#resetQuestActionAmount();
+    this.#prepareQuestDgnDraft(this.#questDialogModel);
+    this.#questDialogReturnFocus = returnFocus || null;
+    this.#renderQuestDialog();
+    dialog.hidden = false;
+    dialog.removeAttribute?.('hidden');
+    try { this.querySelector('[data-bind="qst-action-confirm"]')?.focus?.({ preventScroll: true }); }
+    catch (_e) { /* fakeDOM */ }
+  }
+
+  #renderQuestDialog() {
+    const model = this.#questDialogModel;
+    if (!model) return;
+    const role = this.querySelector('[data-bind="qst-action-role"]');
+    const title = this.querySelector('[data-bind="qst-action-title"]');
+    const copy = this.querySelector('[data-bind="qst-action-copy"]');
+    const choice = this.querySelector('[data-bind="qst-action-choice"]');
+    const ticket = this.querySelector('[data-bind="qst-action-ticket"]');
+    const lootbox = this.querySelector('[data-bind="qst-action-lootbox"]');
+    const adjust = this.querySelector('[data-bind="qst-action-adjust"]');
+    const adjustInput = this.querySelector('[name="qst-action-amount"]');
+    const adjustLabel = this.querySelector('[data-bind="qst-action-adjust-label"]');
+    const adjustNeeded = this.querySelector('[data-bind="qst-action-adjust-needed"]');
+    const adjustUnit = this.querySelector('[data-bind="qst-action-adjust-unit"]');
+    const dgn = this.querySelector('[data-bind="qst-action-dgn"]');
+    const dgnBet = this.querySelector('[name="qst-action-dgn-bet"]');
+    const dgnSpins = this.querySelector('[name="qst-action-dgn-spins"]');
+    const dgnUnit = this.querySelector('[data-bind="qst-action-dgn-unit"]');
+    const dgnBetLimit = this.querySelector('[data-bind="qst-action-dgn-bet-limit"]');
+    const dgnSpinsLimit = this.querySelector('[data-bind="qst-action-dgn-spins-limit"]');
+    const requirement = this.querySelector('[data-bind="qst-action-requirement"]');
+    const confirm = this.querySelector('[data-bind="qst-action-confirm"]');
+    const hasPurchaseChoice = Number(model.questType) === 1;
+    const isDgn = Number(model.questType) === 7 || Number(model.questType) === 8;
+    const adjustConfig = isDgn ? null : this.#questAdjustConfig(model);
+    const action = this.#questAction(model);
+    if (role) role.textContent = `${String(model.role || 'QUEST')} QUEST`;
+    if (title) title.textContent = String(model.label || 'Complete quest');
+    if (copy) copy.textContent = isDgn
+      ? 'Review the ticket and wager.'
+      : 'Set the amount, then confirm.';
+    if (choice) choice.hidden = !hasPurchaseChoice;
+    if (ticket) {
+      ticket.textContent = 'TICKET';
+      ticket.classList?.toggle('is-selected', this.#questDialogChoice === 'ticket');
+      ticket.setAttribute?.('aria-pressed', String(this.#questDialogChoice === 'ticket'));
+    }
+    if (lootbox) {
+      lootbox.textContent = 'LOOTBOX';
+      lootbox.classList?.toggle('is-selected', this.#questDialogChoice === 'lootbox');
+      lootbox.setAttribute?.('aria-pressed', String(this.#questDialogChoice === 'lootbox'));
+    }
+    if (adjust) adjust.hidden = !adjustConfig;
+    if (adjustConfig) {
+      if (adjustInput) {
+        adjustInput.value = this.#formatQuestActionAmount(adjustConfig);
+        adjustInput.min = this.#formatQuestActionAmount(adjustConfig, adjustConfig.min);
+        adjustInput.step = adjustConfig.kind === 'tickets' ? '0.25'
+          : adjustConfig.kind === 'tickets-count' ? '1'
+            : this.#formatQuestActionAmount(adjustConfig, adjustConfig.step);
+      }
+      if (adjustLabel) adjustLabel.textContent = adjustConfig.label;
+      if (adjustUnit) adjustUnit.textContent = adjustConfig.unit;
+      if (adjustNeeded) {
+        const needed = adjustConfig.kind === 'tickets'
+          ? this.#ticketActionForSpend(adjustConfig.required, adjustConfig.price).count
+          : this.#formatQuestActionAmount(adjustConfig, adjustConfig.required);
+        adjustNeeded.textContent = `NEEDED ${needed}${adjustConfig.unit ? ` ${adjustConfig.unit}` : ''}`;
+      }
+    }
+    if (dgn) dgn.hidden = !isDgn;
+    if (isDgn) {
+      const currency = Number(model.questType) === 7 ? 0 : 1;
+      const limits = degeneretteLimits(currency);
+      const traits = dgnTraitIdsToQuadrants(this.#questDgnTraitIds);
+      for (let q = 0; q < 4; q += 1) {
+        const trait = traits[q];
+        const image = this.querySelector(`[data-bind="qst-action-dgn-img-${q}"]`);
+        const cell = this.querySelector(`[data-bind="qst-action-dgn-cell-${q}"]`);
+        if (image && trait) {
+          image.src = dgnBadgePath(q, trait.sym, trait.col);
+          image.alt = `Quadrant ${q + 1} trait`;
+        }
+        cell?.classList?.toggle('q-hero', q === this.#questDgnHero);
+      }
+      if (dgnBet) {
+        dgnBet.value = _formatDgnQuestPerSpin(this.#questDgnPerSpin, model.questType);
+        dgnBet.min = _formatDgnQuestPerSpin(this.#questDgnMinPerSpin(model.questType), model.questType);
+        dgnBet.step = dgnBet.min;
+      }
+      if (dgnSpins) {
+        dgnSpins.value = String(this.#questDgnSpins);
+        dgnSpins.max = String(limits?.maxSpins ?? 5);
+      }
+      if (dgnUnit) dgnUnit.textContent = limits?.unit || '';
+      if (dgnBetLimit) dgnBetLimit.textContent = `MIN ${limits?.minLabel || '—'}`;
+      if (dgnSpinsLimit) dgnSpinsLimit.textContent = `MAX ${limits?.maxSpins ?? 5}`;
+    }
+    if (requirement) requirement.textContent = action.label;
+    if (copy && model.isGated) {
+      copy.textContent = 'Complete the daily quest first. You can still preview the exact action here.';
+    }
+    if (confirm) {
+      const completes = action.completes !== false;
+      const blocked = Boolean(model.isGated);
+      confirm.classList?.toggle('is-incomplete', !completes);
+      confirm.disabled = blocked;
+      confirm.textContent = blocked
+        ? `DAILY QUEST FIRST · ${action.label}`
+        : `${completes ? 'CONFIRM' : "WON'T COMPLETE"} · ${action.label}`;
+      confirm.setAttribute?.('title', completes
+        ? (blocked
+          ? 'Complete the daily quest before submitting this bonus quest action.'
+          : 'This action meets the remaining quest requirement.')
+        : 'You can still submit this amount, but it will not complete the quest.');
+    }
+  }
+
+  #confirmQuestDialog() {
+    const model = this.#questDialogModel;
+    if (!model || model.isGated
+      || typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const action = this.#questAction(model);
+    const detail = {
+      questType: Number(model.questType),
+      target: String(action.target ?? 0n),
+      variant: String(model.variant || 'daily'),
+      submit: true,
+      ...(action.adjustable ? { configuredAmount: true } : {}),
+      ...(model.level != null ? { level: Number(model.level) } : {}),
+      ...(action.purchaseKind ? { purchaseKind: action.purchaseKind } : {}),
+      ...(Number(model.questType) === 7 || Number(model.questType) === 8 ? {
+        amountPerSpin: String(action.amountPerSpin ?? 0n),
+        spinCount: Number(action.spinCount ?? 5),
+        traitIds: [...(this.#questDgnTraitIds || [])],
+        heroQuadrant: this.#questDgnHero,
+      } : {}),
+    };
+    try {
+      let activation;
+      if (typeof CustomEvent === 'function') {
+        activation = new CustomEvent('quest:activate', { detail });
+      } else {
+        activation = new Event('quest:activate');
+        Object.defineProperty(activation, 'detail', { configurable: true, value: detail });
+      }
+      document.dispatchEvent(activation);
+    } catch (_e) { /* detached/headless document */ }
+    this.#closeQuestDialog({ restoreFocus: false });
+  }
+
+  #closeQuestDialog({ restoreFocus = true } = {}) {
+    const dialog = this.querySelector?.('[data-bind="qst-action-dialog"]');
+    if (dialog) {
+      dialog.hidden = true;
+      dialog.setAttribute?.('hidden', '');
+    }
+    const returnFocus = this.#questDialogReturnFocus;
+    this.#questDialogModel = null;
+    this.#questActionAmount = null;
+    this.#questDgnPerSpin = 0n;
+    this.#questDgnTraitIds = null;
+    this.#questDgnHero = 0;
+    this.#questDialogReturnFocus = null;
+    if (restoreFocus) {
+      try { returnFocus?.focus?.({ preventScroll: true }); } catch (_e) { /* fakeDOM */ }
+    }
+  }
+
+  #questDgnMinPerSpin(questType) {
+    const currency = Number(questType) === 7 ? 0 : 1;
+    const limits = degeneretteLimits(currency);
+    if (!limits) return 0n;
+    return currency === 0
+      ? limits.minBetFullScale / BigInt(ETH_DIVISOR)
+      : limits.minBetFullScale;
+  }
+
+  #questDgnDefaultPerSpin(model) {
+    const spins = BigInt(Math.max(1, Math.trunc(this.#questDgnSpins || 5)));
+    const remaining = this.#remainingQuestTarget(model);
+    const divided = remaining > 0n ? (remaining + spins - 1n) / spins : 0n;
+    const floor = this.#questDgnMinPerSpin(model?.questType);
+    return divided < floor ? floor : divided;
+  }
+
+  #prepareQuestDgnDraft(model) {
+    const type = Number(model?.questType);
+    if (type !== 7 && type !== 8) {
+      this.#questDgnPerSpin = 0n;
+      this.#questDgnTraitIds = null;
+      this.#questDgnHero = 0;
+      return;
+    }
+    this.#questDgnSpins = 5;
+    this.#questDgnPerSpin = this.#questDgnDefaultPerSpin(model);
+    let draft = null;
+    try {
+      draft = document.querySelector('app-degenerette-panel')?.getTicketDraft?.() || null;
+    } catch (_e) { draft = null; }
+    const supplied = Array.isArray(draft?.traitIds) ? draft.traitIds.map(Number) : [];
+    const decoded = dgnTraitIdsToQuadrants(supplied);
+    const complete = supplied.length === 4 && decoded.every(Boolean);
+    this.#questDgnTraitIds = complete
+      ? decoded.map((trait, q) => ((q & 3) << 6) | ((trait.col & 7) << 3) | (trait.sym & 7))
+      : [0, 73, 146, 219];
+    const hero = Number(draft?.heroQuadrant);
+    this.#questDgnHero = Number.isInteger(hero) && hero >= 0 && hero < 4 ? hero : 0;
   }
 
   // ---------------------------------------------------------------------
@@ -333,6 +1004,7 @@ class AppQuestPanel extends HTMLElement {
     // combine.js intentionally omits `quests`/`questStreak`). Render the
     // panel's existing empty-state instead of fetching.
     if (get('ui.mode') === 'combined') {
+      this.#resetQuestCompletionState();
       this.#questData = null;
       this.#questStreak = null;
       this.#scoreBreakdown = null;
@@ -348,6 +1020,7 @@ class AppQuestPanel extends HTMLElement {
     this.#pinnedAddress = addr;
 
     if (!addr) {
+      this.#resetQuestCompletionState();
       this.#questData = null;
       this.#questStreak = null;
       this.#scoreBreakdown = null;
@@ -366,22 +1039,49 @@ class AppQuestPanel extends HTMLElement {
       // /game/state is routing metadata only: it tells a foil quest which level
       // a purchase made now will actually enter.
       const day = this.#currentDay();
-      const [data, defs, gameState] = await Promise.all([
+      const [data, defs, gameState, liveBoard] = await Promise.all([
         fetchJSON(`/player/${addr}`),
         day != null ? fetchJSON(`/game/quests/day/${day}`).catch(() => null) : Promise.resolve(null),
         fetchJSON('/game/state').catch(() => null),
+        readLiveQuestBoard(addr).catch(() => null),
       ]);
       if (signal.aborted) return;
-      this.#questData = Array.isArray(data?.quests) ? data.quests : null;
-      this.#questDefs = Array.isArray(defs?.quests) ? defs.quests : null;
-      this.#questDay = defs?.day ?? day ?? null;
-      this.#questStreak = data?.questStreak || null;
+      // Daily/level quest state is deployment-local. Prefer the live contract
+      // board so reused deterministic addresses cannot inherit completion,
+      // streak, or afKing flags from an older indexer database.
+      this.#questData = Array.isArray(liveBoard?.quests)
+        ? liveBoard.quests
+        : (Array.isArray(data?.quests) ? data.quests : null);
+      this.#questDefs = Array.isArray(liveBoard?.quests)
+        ? liveBoard.quests
+        : (Array.isArray(defs?.quests) ? defs.quests : null);
+      this.#questDay = liveBoard?.day || defs?.day || day || null;
+      // During an afKing run the Quest contract's manual streak is dormant;
+      // Game's Sub-side compute-on-read owns the effective streak used by the
+      // Degen Score. The player API reconstructs that unified value, so prefer
+      // it over playerQuestStates.streak for an active subscriber.
+      const afkingActive = liveBoard
+        ? liveBoard.afkingActive === true
+        : data?.afkingActive === true;
+      this.#questStreak = afkingActive
+        ? (data?.currentStreak == null
+          ? (data?.questStreak || null)
+          : {
+            ...(data?.questStreak || {}),
+            baseStreak: data.currentStreak,
+            lastCompletedDay: data?.questStreak?.lastCompletedDay
+              ?? liveBoard?.questStreak?.lastCompletedDay
+              ?? 0,
+          })
+        : (liveBoard?.questStreak || data?.questStreak || null);
       this.#scoreBreakdown = data?.scoreBreakdown || null;
-      this.#levelQuest = data?.levelQuest && typeof data.levelQuest === 'object'
-        ? data.levelQuest
+      this.#levelQuest = liveBoard?.levelQuest && typeof liveBoard.levelQuest === 'object'
+        ? liveBoard.levelQuest
+        : data?.levelQuest && typeof data.levelQuest === 'object'
+          ? data.levelQuest
         : null;
       if (gameState && typeof gameState === 'object') this.#gameState = gameState;
-      this.#afkingActive = data?.afkingActive === true;
+      this.#afkingActive = afkingActive;
       this.#renderQuests();
     } catch (_e) {
       // Network blip — render empty/error message; next cycle retries.
@@ -441,8 +1141,53 @@ class AppQuestPanel extends HTMLElement {
 
   // ---------------------------------------------------------------------
   // Render quests — server-derived strings via textContent (T-58-18).
-  // CF-08: NO toast / NO audio / NO animator on completion. Inline-only.
+  // Completion feedback is transition-only; an already-complete initial load
+  // remains quiet and static.
   // ---------------------------------------------------------------------
+
+  #resetQuestCompletionState() {
+    this.#questCompletionIdentity = null;
+    this.#questCompletionState.clear();
+  }
+
+  #captureQuestCompletions(sorted, day) {
+    const identity = this.#pinnedAddress
+      ? String(this.#pinnedAddress).toLowerCase()
+      : null;
+    if (!identity) {
+      this.#resetQuestCompletionState();
+      return { dailyKeys: new Map(), levelKey: null, newlyCompleted: new Set() };
+    }
+    if (identity !== this.#questCompletionIdentity) {
+      this.#questCompletionIdentity = identity;
+      this.#questCompletionState.clear();
+    }
+
+    const dailyKeys = new Map();
+    const newlyCompleted = new Set();
+    const observe = (key, completed) => {
+      const previous = this.#questCompletionState.get(key);
+      if (completed && previous === false) newlyCompleted.add(key);
+      // Completion is monotonic inside a day/level. A stale RPC response must
+      // not arm the same celebration for a second time.
+      if (previous !== true) this.#questCompletionState.set(key, Boolean(completed));
+    };
+
+    for (const quest of sorted) {
+      const slot = Number(quest?.slot ?? 0);
+      const key = `${identity}:day:${day}:slot:${slot}`;
+      dailyKeys.set(slot, key);
+      observe(key, Boolean(quest?.completed));
+    }
+
+    const level = this.#levelQuest;
+    const levelType = Number(level?.questType ?? 0);
+    const levelKey = level && levelType > 0
+      ? `${identity}:level:${Number(level?.level ?? -1)}:type:${levelType}`
+      : null;
+    if (levelKey) observe(levelKey, Boolean(level?.completed));
+    return { dailyKeys, levelKey, newlyCompleted };
+  }
 
   #renderQuests() {
     const slotsEl = this.querySelector('[data-bind="qst-slots"]');
@@ -521,6 +1266,7 @@ class AppQuestPanel extends HTMLElement {
     // Render each slot — sorted by slot index ascending (slot 0 primary, slot 1
     // secondary; matches /beta/components/quest-panel.js convention).
     const sorted = [...slots].sort((a, b) => Number(a?.slot ?? 0) - Number(b?.slot ?? 0));
+    const completion = this.#captureQuestCompletions(sorted, day);
 
     // A forced foil quest and its purchasable pack are the same day/level
     // window. Publish that exact purchase level for the buy panel so it does
@@ -592,17 +1338,25 @@ class AppQuestPanel extends HTMLElement {
         rewardText: '100 FLIP',
         rewardTitle: 'Quest reward: 100 FLIP',
         questType: questTypeRaw,
+        progress: s?.progress ?? 0,
         target: s?.target ?? 0,
         level: questTypeRaw === 4 ? purchaseLevel : null,
+        justCompleted: completion.newlyCompleted.has(completion.dailyKeys.get(slotIndex)),
       });
     }
 
-    this.#appendLevelQuestCard(slotsEl);
+    this.#appendLevelQuestCard(slotsEl, {
+      justCompleted: completion.levelKey != null
+        && completion.newlyCompleted.has(completion.levelKey),
+    });
 
     // Streak — textContent only.
     const streakValue = this.#questStreak?.baseStreak ?? 0;
     streakEl.textContent = String(streakValue);
     this.#renderScoreBreakdown();
+    if (completion.newlyCompleted.size > 0) {
+      try { sfxQuestComplete(); } catch (_e) { /* decoration must not stop polling */ }
+    }
   }
 
   #paintStreakState(primaryComplete, allDailyComplete) {
@@ -627,6 +1381,9 @@ class AppQuestPanel extends HTMLElement {
     const score = this.#scoreBreakdown;
     const points = score ? _scoreNumber(score.totalBps) : null;
     valueEl.textContent = points == null ? '—' : `${points.toLocaleString('en-US')}%`;
+    const scoreTier = degenScoreLootTier(points);
+    if (scoreTier) valueEl.setAttribute('data-score-tier', scoreTier);
+    else valueEl.removeAttribute('data-score-tier');
     headEl.textContent = points == null
       ? 'No Degen Score yet'
       : `Degen Score · ${points.toLocaleString('en-US')}%`;
@@ -635,24 +1392,24 @@ class AppQuestPanel extends HTMLElement {
     else { rowsEl.children = []; rowsEl._innerHTML = ''; }
 
     if (score) {
-      // Use the same DB-backed streak shown in the header. This also avoids an
-      // afKing API compatibility edge where the legacy score field may already
-      // contain the halved contribution instead of the raw streak count.
-      const questStreakCount = _scoreNumber(
-        this.#questStreak?.baseStreak ?? score.questStreakPoints,
-      );
       const rows = SCORE_COMPONENTS.map((component) => ({
+        key: component.key,
         label: component.label,
         points: component.key === 'questStreakPoints'
-          ? Math.floor(Math.max(0, questStreakCount) / 2)
+          ? questStreakScorePoints(score)
           : _scoreNumber(score[component.key]),
       }));
       if (score.passBonus && _scoreNumber(score.passBonus.points) !== 0) {
-        rows.push({ label: 'Pass bonus', points: _scoreNumber(score.passBonus.points) });
+        rows.push({
+          key: 'passBonusPoints',
+          label: 'Pass bonus',
+          points: _scoreNumber(score.passBonus.points),
+        });
       }
       const curse = _scoreNumber(score.cursePoints);
-      if (curse !== 0) rows.push({ label: 'Cashout curse', points: curse, negative: true });
-      const max = rows.reduce((largest, row) => Math.max(largest, Math.abs(row.points)), 0) || 1;
+      if (curse !== 0) {
+        rows.push({ key: 'cursePoints', label: 'Cashout curse', points: curse, negative: true });
+      }
 
       for (const model of rows) {
         const row = document.createElement('div');
@@ -664,7 +1421,10 @@ class AppQuestPanel extends HTMLElement {
         bar.className = 'ac-pop__bar';
         const fill = document.createElement('span');
         fill.className = 'ac-pop__fill';
-        fill.style.width = `${Math.round((Math.abs(model.points) / max) * 100)}%`;
+        const fillPercent = Math.round(
+          degenScoreBreakdownBarPercent(model.key, model.points) * 10,
+        ) / 10;
+        fill.style.width = `${fillPercent}%`;
         bar.appendChild(fill);
         const rowPoints = document.createElement('span');
         rowPoints.className = 'ac-pop__pts';
@@ -687,7 +1447,7 @@ class AppQuestPanel extends HTMLElement {
         : 'Daily quest: unknown';
   }
 
-  #appendLevelQuestCard(slotsEl) {
+  #appendLevelQuestCard(slotsEl, { justCompleted = false } = {}) {
     const quest = this.#levelQuest;
     if (!quest) {
       this.#appendQuestCard(slotsEl, {
@@ -706,6 +1466,7 @@ class AppQuestPanel extends HTMLElement {
         rewardExtraText: '+5 STREAK',
         rewardTitle: 'Completion credits 800 FLIP and adds 5 to the quest streak',
         questType: 0,
+        progress: 0,
         target: 0,
       });
       return;
@@ -782,7 +1543,10 @@ class AppQuestPanel extends HTMLElement {
         ? `Completion credits 800 FLIP and adds 5 to the quest streak. ${completionGateLabel}`
         : 'Completion credits 800 FLIP and adds 5 to the quest streak',
       questType,
+      progress,
       target,
+      level: quest.level,
+      justCompleted,
     });
   }
 
@@ -791,29 +1555,20 @@ class AppQuestPanel extends HTMLElement {
     slotDiv.className = 'qst-slot';
     slotDiv.classList.add(`qst-slot--${model.variant}`);
     if (model.isDone) slotDiv.classList.add('qst-slot--completed');
+    if (model.justCompleted) slotDiv.classList.add('qst-slot--just-completed');
     if (model.isAuto) slotDiv.classList.add('qst-slot--auto');
     if (!model.isDone) slotDiv.classList.add('qst-slot--todo');
     if (model.isUnstarted) slotDiv.classList.add('qst-slot--unstarted');
     if (model.isGated) slotDiv.classList.add('qst-slot--gated');
-    const actionable = !model.isDone
-      && !model.isGated
+    const interactive = !model.isDone
       && QUEST_SETUP_TYPES.has(Number(model.questType));
-    if (actionable) {
-      slotDiv.classList.add('qst-slot--actionable');
+    const actionable = interactive && !model.isGated;
+    if (interactive) {
+      slotDiv.classList.add(actionable ? 'qst-slot--actionable' : 'qst-slot--explainable');
       slotDiv.setAttribute('role', 'button');
       slotDiv.setAttribute('tabindex', '0');
       const activate = () => {
-        if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
-        try {
-          document.dispatchEvent(new CustomEvent('quest:activate', {
-            detail: {
-              questType: Number(model.questType),
-              target: String(model.target ?? '0'),
-              variant: String(model.variant || 'daily'),
-              ...(model.level != null ? { level: Number(model.level) } : {}),
-            },
-          }));
-        } catch (_e) { /* headless CustomEvent shim */ }
+        this.#openQuestDialog(model, slotDiv);
       };
       slotDiv.addEventListener('click', activate);
       slotDiv.addEventListener('keydown', (event) => {
@@ -857,9 +1612,9 @@ class AppQuestPanel extends HTMLElement {
       }
       const rewardLogo = document.createElement('img');
       rewardLogo.className = 'qst-slot-reward-logo';
-      // Degenerus' red flame mark is also the FLIP mark. Keep it attached to
-      // the reward copy — the larger quest-type emblem remains independent.
-      rewardLogo.src = '/whitepaper/flame-logo.svg';
+      // The split red/green coin is the FLIP currency mark. Keep the all-red
+      // flame reserved for Degenerus protocol branding elsewhere in the UI.
+      rewardLogo.src = '/whitepaper/flame-logo-split.svg';
       rewardLogo.alt = '';
       rewardLogo.setAttribute('aria-hidden', 'true');
       const rewardText = document.createElement('span');
@@ -895,7 +1650,7 @@ class AppQuestPanel extends HTMLElement {
     meterEl.appendChild(fillEl);
     slotDiv.appendChild(meterEl);
 
-    const aria = `${model.roleLabel} quest: ${model.label}. ${model.stateLabel}.${actionable ? ' Activate to set up this action.' : ''}`;
+    const aria = `${model.roleLabel} quest: ${model.label}. ${model.stateLabel}.${interactive ? ' Open its action setup.' : ''}`;
     slotDiv.setAttribute('aria-label', aria);
     slotDiv.setAttribute('title', aria);
     slotsEl.appendChild(slotDiv);

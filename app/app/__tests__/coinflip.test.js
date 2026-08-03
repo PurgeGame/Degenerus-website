@@ -28,6 +28,7 @@ import * as coinflipMod from '../coinflip.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
+import { CHAIN, CONTRACTS } from '../chain-config.js';
 
 // ---------------------------------------------------------------------------
 // Fake provider/signer/contract harness — verbatim port of passes.test.js shape.
@@ -160,6 +161,99 @@ describe('coinflip stake reads', () => {
   afterEach(() => {
     coinflipMod.__resetCurrentStakeReaderForTest();
     coinflipMod.__resetResolvedStakeReaderForTest();
+    coinflipMod.__resetStakeReadContractFactoryForTest();
+    contractsMod.clearProvider();
+  });
+
+  test('effective stake adds auto-rebuy carry but never adds inactive carry', () => {
+    const stored = 47_232n * 10n ** 18n;
+    const carry = 9_910_102n * 10n ** 18n;
+    assert.equal(
+      coinflipMod.effectiveCoinflipStake(stored, { enabled: true, carry }),
+      stored + carry,
+    );
+    assert.equal(
+      coinflipMod.effectiveCoinflipStake(stored, { enabled: false, carry }),
+      stored,
+    );
+  });
+
+  test('live stake read includes the contract auto-rebuy carry', async () => {
+    const blockTag = Number(CHAIN.deployBlock) + 500;
+    const seenBlockTags = [];
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => blockTag,
+    });
+    coinflipMod.__setStakeReadContractFactoryForTest(() => ({
+      coinflipAmount: async (_player, overrides) => {
+        seenBlockTags.push(overrides?.blockTag);
+        return 47_232n * 10n ** 18n;
+      },
+      coinflipAutoRebuyInfo: async (_player, overrides) => {
+        seenBlockTags.push(overrides?.blockTag);
+        return [true, 0n, 9_910_102n * 10n ** 18n, 20];
+      },
+    }));
+
+    assert.equal(
+      await coinflipMod.readCurrentCoinflipStake({ player: CONNECTED }),
+      9_957_334n * 10n ** 18n,
+    );
+    assert.deepEqual(seenBlockTags, [blockTag, blockTag],
+      'stored credit and carry come from one atomic chain snapshot');
+  });
+
+  test('resolved sDGNRS stake adds the carry state from before that resolution', async () => {
+    const base = Number(CHAIN.deployBlock);
+    const previousResolution = { blockNumber: base + 100, index: 8 };
+    const priorState = {
+      blockNumber: base + 150,
+      index: 12,
+      args: { autoRebuyCarry: 4_614_766n * 10n ** 18n },
+    };
+    const stakeUpdate = {
+      blockNumber: base + 250,
+      index: 4,
+      args: { newTotal: 47_001n * 10n ** 18n },
+    };
+    const resolution = { blockNumber: base + 300, index: 20 };
+    const postResolutionState = {
+      blockNumber: base + 300,
+      index: 22,
+      args: { autoRebuyCarry: 9_910_102n * 10n ** 18n },
+    };
+    const contract = {
+      filters: {
+        CoinflipDayResolved: (day) => ({ type: 'resolved', day: Number(day) }),
+        CoinflipStakeUpdated: (player, day) => ({
+          type: 'stake', player: String(player).toLowerCase(), day: Number(day),
+        }),
+        CoinflipClaimState: (player) => ({
+          type: 'state', player: String(player).toLowerCase(),
+        }),
+      },
+      coinflipAutoRebuyInfo: async () => [true, 0n, postResolutionState.args.autoRebuyCarry, 20],
+      queryFilter: async (filter, from, to) => {
+        let logs = [];
+        if (filter.type === 'resolved' && filter.day === 167) logs = [previousResolution];
+        if (filter.type === 'resolved' && filter.day === 168) logs = [resolution];
+        if (filter.type === 'stake' && filter.day === 168) logs = [stakeUpdate];
+        if (filter.type === 'state') logs = [priorState, postResolutionState];
+        return logs.filter((log) => log.blockNumber >= from && log.blockNumber <= to);
+      },
+    };
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => base + 400,
+    });
+    coinflipMod.__setStakeReadContractFactoryForTest(() => contract);
+
+    assert.equal(
+      await coinflipMod.readResolvedCoinflipStake({ player: CONTRACTS.SDGNRS, day: 168 }),
+      4_661_767n * 10n ** 18n,
+      'uses the pre-resolution carry, never the larger post-resolution carry',
+    );
   });
 
   test('returns the contract-scoped current-day stake as bigint', async () => {
@@ -237,7 +331,7 @@ describe('coinflip stake reads', () => {
   test('restores an immutable resolved stake from browser storage without RPC', async () => {
     const priorStorage = globalThis.localStorage;
     const values = new Map([
-      [`coinflip_resolved_stake_v1:84532:${CONNECTED}:311`, '7000000000000000000000'],
+      [`coinflip_resolved_stake_v2:84532:${CONNECTED}:311`, '7000000000000000000000'],
     ]);
     globalThis.localStorage = {
       getItem: (key) => values.get(key) ?? null,
@@ -442,103 +536,6 @@ describe('Plan 62-03: depositCoinflip', () => {
 // coinflip.js source-level invariants — closure form, action label, ABI canonical.
 // ===========================================================================
 
-// ===========================================================================
-// Claim-first funding (user call 2026-07-29).
-//
-// The stake is burned by FLIP.burnForCoinflip, which goes straight to _burn —
-// unlike burnCoin / decimatorBurn / terminalDecimatorBurn it does NOT call
-// _consumeCoinflipShortfall. Proven against live state: for an address holding
-// 5,027,308 liquid + 6,816,975 claimable FLIP, a 5,100,000 stake reverts panic
-// 0x11 while 5,027,308 goes through. So the UI mints the gap first.
-// ===========================================================================
-
-describe('depositCoinflip claim-first funding', () => {
-  const F = 10n ** 18n;
-  let fake;
-  let claims;
-
-  function install({ liquid, claimable, readFails = false }) {
-    claims = [];
-    coinflipMod.__setDepsForTest({
-      readFunding: async () => (readFails ? null : { liquid, claimable }),
-      claim: async ({ player, amount }) => { claims.push([player, amount]); return { claimed: amount }; },
-    });
-  }
-
-  beforeEach(() => {
-    storeMod.__resetForTest();
-    storeMod.update('connected.address', CONNECTED);
-    storeMod.update('ui.mode', 'self');
-    contractsMod.setProvider(makeFakeProvider(CONNECTED));
-    fake = makeFakeContract();
-    coinflipMod.__setContractFactoryForTest(() => fake);
-  });
-
-  afterEach(() => {
-    coinflipMod.__resetContractFactoryForTest();
-    coinflipMod.__resetDepsForTest();
-    contractsMod.clearProvider();
-  });
-
-  test('a wallet that covers the stake claims nothing', async () => {
-    install({ liquid: 5_000n * F, claimable: 9_000n * F });
-    const out = await coinflipMod.depositCoinflip({ amount: 1_000n * F });
-    assert.equal(claims.length, 0, 'no claim tx');
-    assert.equal(out.claimed, 0n);
-    assert.equal(fake._calls.depositCoinflip.length, 1);
-  });
-
-  test('a short wallet claims EXACTLY the shortfall, then deposits', async () => {
-    install({ liquid: 400n * F, claimable: 5_000n * F });
-    const out = await coinflipMod.depositCoinflip({ amount: 1_000n * F });
-    assert.equal(claims.length, 1, 'one claim tx');
-    // 600, not 5,000: claimable is also the recycling-bonus basis
-    // (_depositCoinflip's rollAmount), so over-claiming forfeits 75bps of the
-    // slice it drains. Claim the gap and no more.
-    assert.deepEqual(claims[0], [CONNECTED, 600n * F]);
-    assert.equal(out.claimed, 600n * F);
-    assert.equal(fake._calls.depositCoinflip.length, 1, 'deposit still sent');
-    assert.equal(fake._calls.depositCoinflip[0][1], 1_000n * F, 'full stake deposited');
-  });
-
-  test('neither leg covering it names BOTH numbers and sends nothing', async () => {
-    install({ liquid: 100n * F, claimable: 200n * F });
-    await assert.rejects(
-      coinflipMod.depositCoinflip({ amount: 1_000n * F }),
-      /100 FLIP in your wallet.*200 FLIP claimable.*stake is 1,000 FLIP/,
-    );
-    assert.equal(claims.length, 0, 'no claim attempted');
-    assert.equal(fake._calls.depositCoinflip.length, 0, 'no deposit attempted');
-  });
-
-  test('an unreadable balance does not block a deposit — unknown is not zero', async () => {
-    install({ readFails: true });
-    await coinflipMod.depositCoinflip({ amount: 1_000n * F });
-    assert.equal(claims.length, 0);
-    assert.equal(fake._calls.depositCoinflip.length, 1);
-  });
-
-  test('claimFirst: false keeps the old single-tx behaviour', async () => {
-    install({ liquid: 0n, claimable: 9_000n * F });
-    await coinflipMod.depositCoinflip({ amount: 1_000n * F, claimFirst: false });
-    assert.equal(claims.length, 0, 'opted out, so no claim');
-    assert.equal(fake._calls.depositCoinflip.length, 1);
-  });
-
-  test('the claim runs BEFORE the deposit', async () => {
-    const order = [];
-    coinflipMod.__setDepsForTest({
-      readFunding: async () => ({ liquid: 0n, claimable: 9_000n * F }),
-      claim: async ({ amount }) => { order.push('claim'); return { claimed: amount }; },
-    });
-    fake = makeFakeContract();
-    coinflipMod.__setContractFactoryForTest(() => fake);
-    await coinflipMod.depositCoinflip({ amount: 1_000n * F });
-    order.push(...fake._order.filter((o) => o.startsWith('send:')));
-    assert.deepEqual(order, ['claim', 'send:depositCoinflip']);
-  });
-});
-
 describe('Plan 62-03: coinflip.js source-level invariants', () => {
   const SRC = readFileSync(new URL('../coinflip.js', import.meta.url), 'utf8');
 
@@ -549,6 +546,13 @@ describe('Plan 62-03: coinflip.js source-level invariants', () => {
 
   test('action label `Coinflip deposit` is sent to sendTx', () => {
     assert.ok(SRC.includes("'Coinflip deposit'"), 'literal action label present');
+  });
+
+  test('funding is one deposit transaction; the contract owns claimable-first consumption', () => {
+    assert.doesNotMatch(SRC, /claimFirst|readFlipFunding|from ['"]\.\/claims\.js['"]/,
+      'the frontend must not add an obsolete preliminary claim transaction');
+    assert.match(SRC, /claimableStored first, then burns only the wallet remainder/,
+      'the current contract waterfall is documented beside the write path');
   });
 
   test('canonical ABI: depositCoinflip(address player, uint256 amount) external', () => {
@@ -579,10 +583,8 @@ describe('Plan 62-03: coinflip.js source-level invariants', () => {
     );
   });
 
-  // Plan 62-03's 2 + 1: Insufficient, added 2026-07-29. The coinflip stake is
-  // BURNED from the player's FLIP, so an under-funded deposit fails inside
-  // FLIP.sol — `Insufficient()` on the shortfall path — and read as "an
-  // unexpected error" until it was mapped.
+  // Insufficient remains a useful contract-side balance failure even though
+  // the current deploy consumes claimableStored before the wallet remainder.
   test('reason-map registers 3 codes (AmountLTMin + CoinflipLocked + Insufficient)', () => {
     const stripped = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     const registers = stripped.match(/register\s*\(/g) || [];

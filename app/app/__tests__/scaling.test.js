@@ -14,7 +14,9 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { displayEth, displayTickets, displayToken } from '../scaling.js';
+import {
+  displayEth, displayTickets, displayToken, displayTokenSnapped,
+} from '../scaling.js';
 import {
   ETH_DIVISOR as SEPOLIA_ETH_DIVISOR,
   TICKET_DIVISOR as SEPOLIA_TICKET_DIVISOR,
@@ -102,6 +104,18 @@ describe('displayToken (unscaled 18-decimal coin amounts)', () => {
 
   test('explicit precision remains available to non-default callers', () => {
     assert.equal(displayToken(1_750_000_000_000_000_000n, 2), '1.75');
+  });
+
+  test('legacy floating-point dust snaps to the intended whole token amount', () => {
+    const legacyFiftyThousand = (50_000n * 10n ** 18n) - 4_194_304n;
+    assert.equal(displayTokenSnapped(legacyFiftyThousand), '50000');
+  });
+
+  test('meaningful token fractions are not snapped away', () => {
+    assert.equal(
+      displayTokenSnapped((49_999n * 10n ** 18n) + (5n * 10n ** 17n), 2),
+      '49999.50',
+    );
   });
 });
 

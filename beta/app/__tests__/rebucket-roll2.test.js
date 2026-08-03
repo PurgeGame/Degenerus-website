@@ -20,8 +20,10 @@ function pack(b0, b1, b2, b3) {
   return ((b3 & 0xFF) << 24) | ((b2 & 0xFF) << 16) | ((b1 & 0xFF) << 8) | (b0 & 0xFF);
 }
 
-// traitId = quadrant*64 + symbolIdx*8 + colorIdx
-function tid(q, s, c) { return (q * 64) + (s * 8) + c; }
+// Canonical trait_id layout (DegenerusTraitUtils.sol §traitFromWord):
+//   [QQ][CCC][SSS] → bits[7:6]=quadrant, bits[5:3]=color (heavy-tail), bits[2:0]=symbol (uniform).
+// traitId = quadrant*64 + colorIdx*8 + symbolIdx
+function tid(q, s, c) { return (q * 64) + (c * 8) + s; }
 
 // ---------------------------------------------------------------------------
 
@@ -108,8 +110,9 @@ test('Test 6: null bonusPacked produces 4 empty slots with null traitId; far-fut
 });
 
 test('Test 7: slot entries expose quadrant/symbolIdx/colorIdx derived from traitId', () => {
-  // cards quadrant = 2, symbolIdx=0 → traitId = 128 + 0*8 + 1 = 129, colorIdx=1
-  const cardsTid = tid(2, 0, 1);
+  // cards quadrant=2, colorIdx=1, symbolIdx=0 → traitId = 128 + 1*8 + 0 = 136
+  // Canonical [QQ][CCC][SSS]: bits[5:3]=color (heavy-tail), bits[2:0]=symbol (uniform).
+  const cardsTid = tid(2, 0, 1); // tid(q, symbol, color) → 128 + 8 + 0 = 136
   const bonus = pack(cardsTid, 0, 0, 0);
   const out = rebucketRoll2BySlot({ future: [], farFuture: [] }, bonus);
   assert.equal(out[0].quadrant, 2);

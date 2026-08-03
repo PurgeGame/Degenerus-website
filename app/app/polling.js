@@ -4,7 +4,7 @@
 //   - gameTimer     15s
 //   - playerTimer   30s
 //   - healthTimer   60s
-//   - lastDayTimer  60s   (NEW — consumed by Phase 59 JKP; route ships in Phase 57)
+//   - lastDayTimer  15s   (jackpot/flip rollover is player-facing and time-sensitive)
 //   - goldRushTimer  5s   (gold-rush headline ticker — see POLL_INTERVALS.goldRush)
 //
 // AbortController-per-cycle (D-06): each timer firing creates a new AbortController;
@@ -41,6 +41,7 @@ import { update, get } from './store.js';
 import { mergePlayerPayloads } from './combine.js';
 import { ethers } from './contracts.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
+import { decodePackedBoons } from './boons.js';
 
 // ---------------------------------------------------------------------------
 // LOCKED constants (D-04 + Pitfall 3)
@@ -50,7 +51,7 @@ export const POLL_INTERVALS = {
   gameState: 15_000,   // 15s
   playerData: 30_000,  // 30s
   health: 60_000,      // 60s
-  lastDay: 60_000,     // 60s NEW
+  lastDay: 15_000,
   // Gold-rush headline ticker — the FLOOR of an adaptive cadence, not a fixed
   // interval (see GOLD_RUSH_CADENCE). 5s is the fastest useful rate: the indexer
   // samples once per follow-mode batch (~5s at POLLING_INTERVAL_MS=5000), so polling
@@ -93,10 +94,40 @@ let _goldRushQuietPolls = 0;
 let _goldRushDelay = GOLD_RUSH_CADENCE.active;
 let _goldRushYieldReader = null;
 let _goldRushReadProvider = null;
+let _boonStateReader = null;
+let _boonReadProvider = null;
 
 const GOLD_RUSH_FALLBACK_ABI = [
   'function yieldAccumulatorView() external view returns (uint256)',
 ];
+
+const BOON_STATE_ABI = [
+  'function currentDayView() external view returns (uint24)',
+  'function boonPacked(address player) external view returns (uint256 slot0, uint256 slot1)',
+];
+
+export async function readExactBoonState(address, { blockTag = null } = {}) {
+  if (_boonStateReader) return _boonStateReader(address, { blockTag });
+  if (!_boonReadProvider && CHAIN.rpcUrl) {
+    _boonReadProvider = new ethers.JsonRpcProvider(
+      CHAIN.rpcUrl,
+      Number(CHAIN.id),
+      { staticNetwork: true, batchMaxCount: 2 },
+    );
+  }
+  if (!_boonReadProvider || !CONTRACTS.GAME) throw new Error('Boon state reader unavailable');
+  const game = new ethers.Contract(CONTRACTS.GAME, BOON_STATE_ABI, _boonReadProvider);
+  const callOverrides = blockTag == null ? [] : [{ blockTag }];
+  const [packed, currentDay] = await Promise.all([
+    game.boonPacked(address, ...callOverrides),
+    game.currentDayView(...callOverrides),
+  ]);
+  return {
+    slot0: BigInt(packed?.slot0 ?? packed?.[0] ?? 0),
+    slot1: BigInt(packed?.slot1 ?? packed?.[1] ?? 0),
+    currentDay: Number(currentDay),
+  };
+}
 
 async function readGoldRushYieldAccumulator() {
   if (_goldRushYieldReader) return BigInt(await _goldRushYieldReader());
@@ -196,26 +227,69 @@ async function pollGame(signal) {
   return fetchJSONWithSignal('/game/state', { signal });
 }
 
+function resolvedDayFromGameState(payload) {
+  const raw = payload?.dailyRng?.day ?? payload?.currentDay ?? null;
+  const day = Number(raw);
+  return Number.isInteger(day) && day > 0 ? day : null;
+}
+
+/**
+ * Publish the shared game snapshot and pull the jackpot whenever the exact
+ * resolved day is ahead of the draw currently displayed. Comparing against
+ * app.lastDay (rather than only the previous game-state sample) is important:
+ * if the first jackpot request races the indexer at rollover and returns the
+ * old day, every 15s state sample keeps retrying until the draw catches up.
+ */
+function publishGameState(payload, refreshLastDay) {
+  const displayedDay = Number(get('app.lastDay')?.day);
+  const nextDay = resolvedDayFromGameState(payload);
+  update('app.gameState', payload);
+  if (nextDay != null
+    && (!Number.isInteger(displayedDay) || displayedDay <= 0 || nextDay !== displayedDay)) {
+    try { refreshLastDay?.(); } catch { /* the fallback timer is still armed */ }
+  }
+  return payload;
+}
+
 async function pollPlayer(addr, signal) {
   if (!addr) return null;
   return fetchJSONWithSignal(`/player/${addr}`, { signal });
 }
 
-// Active deity boons are day-scoped in the DB. Resolve the live game day in
-// the same abortable player cycle, then publish one normalized payload that
-// every product-local indicator can share.
+// The DB route carries deity-issued history only. Pair it with the GAME's
+// public packed state so product markers also see lootbox-awarded boons and
+// immediately stop showing pass discounts that were consumed without a
+// BoonConsumed event. The chain answer wins when available; DB remains the
+// soft-fail fallback during RPC trouble.
 async function pollCurrentBoons(addr, signal) {
   const address = addr ? String(addr).toLowerCase() : null;
   if (!address) return { address: null, day: null, boons: [] };
   const state = await pollGame(signal);
   const day = Number(state?.currentDay);
   if (!Number.isInteger(day) || day < 1) return { address, day: null, boons: [] };
-  const payload = await fetchJSONWithSignal(`/player/${address}/boons/${day}`, { signal });
-  return {
-    address,
-    day: Number(payload?.day ?? day),
-    boons: Array.isArray(payload?.boons) ? payload.boons : [],
-  };
+  const [indexed, exact] = await Promise.allSettled([
+    fetchJSONWithSignal(`/player/${address}/boons/${day}`, { signal }),
+    readExactBoonState(address),
+  ]);
+  if (exact.status === 'fulfilled') {
+    const exactDay = Number(exact.value?.currentDay ?? day);
+    return {
+      address,
+      day: exactDay,
+      exact: true,
+      boons: decodePackedBoons(exact.value?.slot0, exact.value?.slot1, exactDay),
+    };
+  }
+  if (indexed.status === 'fulfilled') {
+    const payload = indexed.value;
+    return {
+      address,
+      day: Number(payload?.day ?? day),
+      exact: false,
+      boons: Array.isArray(payload?.boons) ? payload.boons : [],
+    };
+  }
+  throw indexed.reason || exact.reason || new Error('Boon state unavailable');
 }
 
 // Account-switcher — dedicated approvers endpoint (NOT part of /player/:address;
@@ -229,6 +303,18 @@ async function pollHealth(signal) {
   return fetchJSONWithSignal('/health', { signal });
 }
 
+/** True unless a block-bearing jackpot payload demonstrably predates this deploy. */
+export function lastDayMatchesDeployment(payload) {
+  const rawStart = payload?.summary?.blockRange?.start
+    ?? payload?.blockRange?.start
+    ?? null;
+  // pre-game / older API response shapes carry no draw block and cannot be
+  // disproved here. Resolved current API payloads always carry summary range.
+  if (rawStart == null || rawStart === '') return true;
+  try { return BigInt(rawStart) >= BigInt(CHAIN.deployBlock || 0); }
+  catch (_e) { return false; }
+}
+
 async function pollLastDay(signal) {
   // Phase 57 ships /game/jackpot/last-day. On 404 / network error, soft-fail returns null
   // (UI panel — Phase 59 widget — renders cold-start state by default).
@@ -236,6 +322,22 @@ async function pollLastDay(signal) {
   // subscribe('app.lastDay', ...) subscriber fires per polling cycle.
   try {
     const payload = await fetchJSONWithSignal('/game/jackpot/last-day', { signal });
+    if (!lastDayMatchesDeployment(payload)) {
+      const observedStartBlock = payload?.summary?.blockRange?.start
+        ?? payload?.blockRange?.start
+        ?? null;
+      // Never let a reused logical day from a previous deployment drive the
+      // jackpot/replay/FLIP surfaces. Publish a precise sync state instead.
+      update('app.deploymentMismatch', {
+        surface: 'jackpot',
+        expectedDeployBlock: Number(CHAIN.deployBlock || 0),
+        observedStartBlock: observedStartBlock == null ? null : String(observedStartBlock),
+        observedDay: payload?.day ?? null,
+      });
+      if (get('app.lastDay') != null) update('app.lastDay', null);
+      return null;
+    }
+    if (get('app.deploymentMismatch') != null) update('app.deploymentMismatch', null);
     update('app.lastDay', payload);  // Plan 59-02 — single new LOC vs Phase 56 baseline
     return payload;
   } catch (_e) {
@@ -470,10 +572,12 @@ export function start({ playerAddress = null } = {}) {
   }
   // Clear any previously registered handles before re-registering.
   pauseAllTimers();
-  const game     = () => runCycle('game',     [(s) => pollGame(s)]);
+  const lastDay  = () => runCycle('lastDay',  [(s) => pollLastDay(s)]);
+  const game     = () => runCycle('game',     [
+    (s) => pollGame(s).then((payload) => publishGameState(payload, lastDay)),
+  ]);
   const player   = () => runPlayerCycle();
   const health   = () => runCycle('health',   [(s) => pollHealth(s)]);
-  const lastDay  = () => runCycle('lastDay',  [(s) => pollLastDay(s)]);
   // Gold-rush cadence restarts at the floor: a tab that comes back after ten minutes
   // hidden should react to the next move promptly, not inherit a 60s backed-off gap.
   _goldRushLastBlock = null;
@@ -547,6 +651,10 @@ export const _testing = {
   fetchJSONWithSignal,
   pollApprovers,
   pollCurrentBoons,
+  publishGameState,
+  resolvedDayFromGameState,
+  pollLastDay,
+  lastDayMatchesDeployment,
   pollGoldRush,
   buildGoldRushFallbackPayload,
   setGoldRushYieldReader(fn) {
@@ -555,6 +663,13 @@ export const _testing = {
   resetGoldRushYieldReader() {
     _goldRushYieldReader = null;
     _goldRushReadProvider = null;
+  },
+  setBoonStateReader(fn) {
+    _boonStateReader = typeof fn === 'function' ? fn : null;
+  },
+  resetBoonStateReader() {
+    _boonStateReader = null;
+    _boonReadProvider = null;
   },
   buildPlayerFetchers,
   runPlayerCycle,

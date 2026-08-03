@@ -13,11 +13,11 @@
   // ---------------------------------------------------------------------------
 
   var CONTRACTS = {
-    GAME: '0x4A2DEE00dF7261c52302165693cbDDEf7c8D89b7',
-    COIN: '0xa65EaDF94aaEb0a1F3448664100beb0546296D43',
-    AFFILIATE: '0x28cA06FA1D3b9F0C0b270efE2326823A1665ac38',
-    QUESTS: '0x8d33232F02fF96c86D566899E94596c52Ad408b1',
-    DEITY_PASS: '0x194480037e1FdbD31e5Df076516302eCc1Cd0798',
+    GAME: '0x9796c61ef69c21e0d16cc6128a543c7f1cd2dde7',
+    COIN: '0x9d24dee58d67cfb090711fc99db7f84cb70fbd2d',
+    AFFILIATE: '0x3c2ea4800a6c93400fc8e9cf4cfa3cbd9cfc4445',
+    QUESTS: '0xd04cb9f5f12153dcb19efeaa98fdb98dc38f63df',
+    DEITY_PASS: '0xe2c9ddaaa5ec505f89a2ff95feba4a5ccf35554e',
   };
 
   var DEITY_PASS_ABI = [
@@ -25,6 +25,11 @@
   ];
 
   var CHAIN_ID = 11155111; // Sepolia testnet
+
+  // Testnet display scaling: contracts use 1M× smaller wei amounts on Sepolia.
+  // Multiply ETH/FLIP wei by this to show mainnet-equivalent numbers.
+  // Set to 1n on mainnet.
+  var ETH_DISPLAY_SCALE = 1000000n;
 
   var REFERRER_KEY = 'degenerette_referrer_code';
 
@@ -48,8 +53,7 @@
     'function ethMintStats(address player) view returns (uint24 lvl, uint24 levelCount, uint24 streak)',
     // Write
     'function purchase(address buyer, uint256 ticketQuantity, uint256 lootBoxAmount, bytes32 affiliateCode, uint8 payKind) payable',
-    'function purchaseCoin(address buyer, uint256 ticketQuantity, uint256 lootBoxBurnieAmount)',
-    'function purchaseBurnieLootbox(address buyer, uint256 burnieAmount)',
+    'function purchaseCoin(address buyer, uint256 ticketQuantity, uint256 lootBoxFlipAmount)',
     'function purchaseWhaleBundle(address buyer, uint256 quantity) payable',
     'function purchaseLazyPass(address buyer) payable',
     'function purchaseDeityPass(address buyer, uint8 symbolId) payable',
@@ -82,8 +86,8 @@
   ];
 
   var QUEST_NAMES = [
-    'Mint (BURNIE)', 'Mint (ETH)', 'Coinflip', 'Affiliate',
-    'Reserved', 'Decimator', 'Luckbox', 'Degenerette (ETH)', 'Degenerette (BURNIE)'
+    'Mint (FLIP)', 'Mint (ETH)', 'Coinflip', 'Affiliate',
+    'Reserved', 'Decimator', 'Luckbox', 'Degenerette (ETH)', 'Degenerette (FLIP)'
   ];
 
   // ---------------------------------------------------------------------------
@@ -150,7 +154,7 @@
     if (c.level != null) {
       setEl('status-level', c.level.toString());
       setEl('ticket-level', c.level.toString());
-      setEl('burnie-ticket-level', c.level.toString());
+      setEl('flip-ticket-level', c.level.toString());
     }
     if (c.price) setEl('status-price', c.price);
     if (c.priceWei) currentMintPrice = BigInt(c.priceWei);
@@ -188,14 +192,15 @@
   }
 
   function formatEth(wei) {
-    return ethers().formatEther(wei);
+    return ethers().formatEther(BigInt(wei) * ETH_DISPLAY_SCALE);
   }
 
-  function formatBurnie(wei) {
-    var full = ethers().formatEther(wei);
+  function formatFlip(wei) {
+    // ERC-20 balances are not /1M-scaled; only ETH-denominated contract values are.
+    var full = ethers().formatEther(BigInt(wei));
     var n = parseFloat(full);
-    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+    if (n >= 1000000) return (n / 1000000).toFixed(0) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
     return n.toFixed(0);
   }
 
@@ -276,7 +281,7 @@
     try {
       await contract.advanceGame.staticCall();
       advBtn.disabled = false;
-      advBtn.title = 'Process daily jackpots. Earns 500 BURNIE.';
+      advBtn.title = 'Process daily jackpots. Earns 500 FLIP.';
     } catch (err) {
       advBtn.disabled = true;
       var reason = err.reason || err.shortMessage || '';
@@ -312,7 +317,7 @@
     if (!el) return;
     el.className = 'status-value';
     if (active) {
-      el.textContent = '62% Bonus BURNIE';
+      el.textContent = '62% Bonus FLIP';
       el.classList.add('presale--active');
     } else {
       el.textContent = 'Inactive';
@@ -322,13 +327,14 @@
     var badge = $('presale-badge');
     if (badge) {
       badge.style.display = active ? 'block' : 'none';
-      badge.textContent = active ? 'PRESALE - 62% BONUS BURNIE' : '';
+      badge.textContent = active ? 'PRESALE - 62% BONUS FLIP' : '';
     }
   }
 
   function weiToStr(wei) {
     var eth = ethers();
-    return eth ? eth.formatEther(wei) : (Number(wei) / 1e18).toString();
+    var scaled = BigInt(wei) * ETH_DISPLAY_SCALE;
+    return eth ? eth.formatEther(scaled) : (Number(scaled) / 1e18).toString();
   }
 
   function parseEthInput(str) {
@@ -351,23 +357,22 @@
       costEl.textContent = weiToStr(ticketWei + lootboxWei);
       var rewardEl = $('eth-coin-reward');
       if (rewardEl) {
-        var burnie = Math.max(qty, 0) * PRICE_COIN_UNIT;
-        rewardEl.textContent = burnie > 0 ? '+ ' + burnie.toLocaleString() + ' free BURNIE' : '';
+        var flip = Math.max(qty, 0) * PRICE_COIN_UNIT;
+        rewardEl.textContent = flip > 0 ? '+ ' + flip.toLocaleString() + ' free FLIP' : '';
       }
     } catch (e) {
       costEl.textContent = '—';
     }
   }
 
-  var PRICE_COIN_UNIT = 100; // 100 BURNIE per ticket
+  var PRICE_COIN_UNIT = 100; // 100 FLIP per ticket
 
-  function updateBurnieTotal() {
-    var costEl = $('burnie-total-cost');
+  function updateFlipTotal() {
+    var costEl = $('flip-total-cost');
     if (!costEl) return;
     try {
-      var qty = parseInt(($('burnie-ticket-qty') || {}).value, 10) || 0;
-      var lootbox = parseFloat(($('burnie-lootbox-amount') || {}).value) || 0;
-      var total = Math.max(qty, 0) * PRICE_COIN_UNIT + Math.max(lootbox, 0);
+      var qty = parseInt(($('flip-ticket-qty') || {}).value, 10) || 0;
+      var total = Math.max(qty, 0) * PRICE_COIN_UNIT;
       costEl.textContent = total.toLocaleString();
     } catch (e) {
       costEl.textContent = '—';
@@ -570,19 +575,21 @@
       ]);
 
       // purchaseInfo returns: (lvl, inJackpotPhase, lastPurchaseDay, rngLocked, priceWei)
+      // lvl is the ACTUAL game level; new purchases route to lvl+1 outside the jackpot phase.
       var lvl = info[0];
       var inJackpot = info[1];
       var rngLocked = info[3];
       var priceWei = info[4];
+      var ticketLvl = inJackpot ? Number(lvl) : Number(lvl) + 1;
 
       currentMintPrice = priceWei;
       isPresale = presale;
       isRngLocked = rngLocked;
       isGameOver = gameOverFlag;
 
-      setEl('status-level', lvl.toString());
-      setEl('ticket-level', lvl.toString());
-      setEl('burnie-ticket-level', lvl.toString());
+      setEl('status-level', ticketLvl.toString());
+      setEl('ticket-level', ticketLvl.toString());
+      setEl('flip-ticket-level', ticketLvl.toString());
       setEl('status-price', formatEth(priceWei) + ' ETH');
       var phaseName = rngLocked ? 'RNG Locked' : (inJackpot ? 'Jackpot' : 'Normal');
       setPhase(inJackpot, rngLocked);
@@ -626,7 +633,7 @@
       var hasLazy = results[idx++];
       var scoreBps = results[idx++];
       var mintStats = results[idx++];
-      var burnieBalance = coinContract ? results[idx++] : 0n;
+      var flipBalance = coinContract ? results[idx++] : 0n;
       var referrer = affiliateContract ? results[idx++] : '0x0000000000000000000000000000000000000000';
       var questView = questsContract ? results[idx++] : null;
 
@@ -634,7 +641,7 @@
       var scorePct = (Number(scoreBps) / 100).toFixed(0);
       setEl('status-score', scorePct + '%');
 
-      setEl('burnie-balance', formatBurnie(burnieBalance) + ' BURNIE');
+      setEl('flip-balance', formatFlip(flipBalance) + ' FLIP');
 
       // Hide referral input if player already has a referrer on-chain
       var affItem = $('affiliate-code');
@@ -767,10 +774,10 @@
   }
 
   // ---------------------------------------------------------------------------
-  // purchaseBurnie — buy tickets and/or lootboxes with BURNIE
+  // purchaseFlip — buy tickets and/or lootboxes with FLIP
   // ---------------------------------------------------------------------------
 
-  async function purchaseBurnie() {
+  async function purchaseFlip() {
     if (!signer || !contract) {
       setTxStatus('error', 'Connect your wallet first');
       return;
@@ -782,13 +789,10 @@
       clearTxStatus();
       await assertChain();
 
-      var ticketQty = parseInt(($('burnie-ticket-qty') || {}).value || '0', 10);
-      var lootboxRaw = parseFloat(($('burnie-lootbox-amount') || {}).value || '0');
+      var ticketQty = parseInt(($('flip-ticket-qty') || {}).value || '0', 10);
 
-      if (ticketQty < 0) ticketQty = 0;
-      if (lootboxRaw < 0) lootboxRaw = 0;
-      if (ticketQty === 0 && lootboxRaw <= 0) {
-        setTxStatus('error', 'Enter a ticket quantity or BURNIE luckbox amount');
+      if (ticketQty <= 0) {
+        setTxStatus('error', 'Enter a ticket quantity');
         return;
       }
 
@@ -796,26 +800,14 @@
       var TICKET_UNIT = 400n;
       var ticketScaled = BigInt(ticketQty) * TICKET_UNIT;
 
-      // Lootbox amount in BURNIE wei (18 decimals), min 1000 BURNIE
-      var lootboxBurnie = eth.parseEther(lootboxRaw.toString());
-
       setTxStatus('pending', 'Confirming...');
 
-      var tx;
-      if (ticketQty > 0) {
-        // purchaseCoin handles both tickets + optional lootbox
-        tx = await contract.purchaseCoin(
-          eth.ZeroAddress,
-          ticketScaled,
-          lootboxBurnie
-        );
-      } else {
-        // Lootbox-only BURNIE purchase
-        tx = await contract.purchaseBurnieLootbox(
-          await signer.getAddress(),
-          lootboxBurnie
-        );
-      }
+      // FLIP buys tickets only; lootboxes are ETH-only
+      var tx = await contract.purchaseCoin(
+        eth.ZeroAddress,
+        ticketScaled,
+        0n
+      );
 
       var receipt = await tx.wait();
       setTxStatus('confirmed', 'Confirmed!', receipt.hash);
@@ -824,7 +816,7 @@
       if (currentAddress) await refreshPlayer(currentAddress);
 
     } catch (err) {
-      console.error('purchaseBurnie error:', err);
+      console.error('purchaseFlip error:', err);
       var msg = err.reason || err.shortMessage || err.message || 'Transaction failed';
       setTxStatus('error', msg);
     }
@@ -990,12 +982,12 @@
         el.addEventListener('change', updateEthTotal);
       }
     });
-    // BURNIE total: tickets + lootbox
-    ['burnie-ticket-qty', 'burnie-lootbox-amount'].forEach(function (id) {
+    // FLIP total: tickets only (lootboxes are ETH-only)
+    ['flip-ticket-qty'].forEach(function (id) {
       var el = $(id);
       if (el) {
-        el.addEventListener('input', updateBurnieTotal);
-        el.addEventListener('change', updateBurnieTotal);
+        el.addEventListener('input', updateFlipTotal);
+        el.addEventListener('change', updateFlipTotal);
       }
     });
     // Whale qty updates price
@@ -1245,7 +1237,7 @@
     refreshState: refreshState,
     refreshPlayer: refreshPlayer,
     purchase: purchase,
-    purchaseBurnie: purchaseBurnie,
+    purchaseFlip: purchaseFlip,
     purchaseWhaleBundle: purchaseWhaleBundle,
     purchaseLazyPass: purchaseLazyPass,
     purchaseDeityPass: purchaseDeityPass,

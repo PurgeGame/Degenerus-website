@@ -1,9 +1,9 @@
 // viewer/dashboard.js -- Dashboard panel: token holdings and Chart.js ticket sparkline
 // DASH-01, DASH-02: tickets, future stock, balances, sparkline
-// No ethers dependency -- uses formatEth/formatBurnie from utils.js (SHELL-01)
+// No ethers dependency -- uses formatEth/formatFlip from utils.js (SHELL-01)
 
 import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler } from 'chart.js';
-import { truncateAddress, formatEth, formatBurnie } from './utils.js';
+import { truncateAddress, formatEth, formatFlip } from './utils.js';
 
 // Register Chart.js components at module level (once)
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler);
@@ -29,7 +29,7 @@ export function clearChart() {
  * @param {object} data.holdings  - holdings object from /day/:day response
  *                                  { tickets, totalMintedOnLevel, balances: [{ contract, balance }] }
  * @param {Array}  data.daysData  - array from getDaysData() in scrubber.js
- *                                  each entry: { day, level, ticketCount, ... }
+ *                                  each entry: { day, level, entryCount, ... }
  * @param {HTMLElement} container - parent element to append/replace panel in
  */
 export function render(data, container) {
@@ -48,10 +48,10 @@ export function render(data, container) {
   const holdingsSection = document.createElement('div');
   holdingsSection.className = 'dashboard-holdings';
 
-  // Row: Tickets
+  // Row: Entries (player_entries.entryCount \u2014 4 entries = 1 whole ticket)
   holdingsSection.appendChild(makeInfoRow(
-    'Tickets',
-    holdings.tickets != null ? String(holdings.tickets) : '\u2014'
+    'Entries',
+    holdings.entries != null ? String(holdings.entries) : '\u2014'
   ));
 
   // Row: Minted This Level
@@ -108,7 +108,7 @@ export function render(data, container) {
 
   // --- Build Chart.js sparkline ---
   const labels = (daysData || []).map(d => d.day);
-  const ticketData = (daysData || []).map(d => d.ticketCount ?? 0);
+  const ticketData = (daysData || []).map(d => d.entryCount ?? 0);
 
   sparklineChart = new Chart(canvas, {
     type: 'line',
@@ -173,7 +173,7 @@ function formatContractLabel(contract) {
 
 /**
  * Format balance for a given contract. Default to ETH formatting.
- * For known contract patterns, could use formatBurnie, but we default to formatEth
+ * For known contract patterns, could use formatFlip, but we default to formatEth
  * as a safe display for all unknown contracts.
  */
 function formatContractBalance(contract, balance) {

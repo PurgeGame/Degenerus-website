@@ -79,7 +79,7 @@ function blockToLevelDay(block) {
 }
 
 // Per-player per-level per-day: jackpot wins as [amount, type, quadrant] tuples.
-// Types: "eth", "burnie", "tickets"
+// Types: "eth", "flip", "tickets"
 // Quadrant: 0-3 (from trait_id) or -1 (unassigned, e.g. lootbox)
 const jackpotWins = {};
 
@@ -94,7 +94,7 @@ function addWin(player, level, day, amount, type, quadrant, extra) {
 
 // Primary source: jackpot_ticket_wins (has trait_id → quadrant, currency, game_level).
 // game_level = current game level when jackpot fired
-// level = ticket pool level (can be up to game_level+4 for BURNIE)
+// level = ticket pool level (can be up to game_level+4 for FLIP)
 // 4th tuple element = ticket level when it differs from game_level
 //
 // NOTE: The contract emits duplicate JackpotTicketWinner events (same winner/trait/ticket/amount
@@ -115,7 +115,7 @@ const jtwRows = qa(
 
 // Track which (block, level) combos are covered by jtw so we know where to fallback
 const jtwCovered = new Set();
-let jtwEthCount = 0, jtwBurnieCount = 0;
+let jtwEthCount = 0, jtwFlipCount = 0;
 
 for (const r of jtwRows) {
   const ld = blockToLevelDay(r.block_number);
@@ -125,8 +125,8 @@ for (const r of jtwRows) {
   const amount = parseFloat(r.total_amount.toFixed(6));
   if (amount <= 0) continue;
 
-  const type = r.currency === 'BURNIE' ? 'burnie' : 'eth';
-  if (type === 'eth') jtwEthCount++; else jtwBurnieCount++;
+  const type = r.currency === 'FLIP' ? 'flip' : 'eth';
+  if (type === 'eth') jtwEthCount++; else jtwFlipCount++;
 
   // Include ticket level as 4th element when it differs from game level
   const extra = (r.level !== r.game_level) ? r.level : undefined;
@@ -152,7 +152,7 @@ for (const p of players) {
   }
 }
 
-// Far-future BURNIE jackpot wins (quadrant = -2, shown in center of token)
+// Far-future FLIP jackpot wins (quadrant = -2, shown in center of token)
 // FarFutureCoinJackpotWinner: winner, currentLevel, winnerLevel, amount
 // Table may not exist in older dbs — check first
 let ffAdded = 0;
@@ -161,7 +161,7 @@ try {
   if (ffTableCheck.length > 0) {
     const ffRows = qa(
       `SELECT LOWER(winner) as player, current_level, winner_level,
-        CAST(amount_wei AS REAL)/1e18 as burnie_amount, block_number
+        CAST(amount_wei AS REAL)/1e18 as flip_amount, block_number
        FROM far_future_coin_jackpots
        WHERE CAST(amount_wei AS REAL) > 0`
     );
@@ -170,11 +170,11 @@ try {
       if (!ld) continue;
       const p = players.find(pl => pl.toLowerCase() === r.player);
       if (!p) continue;
-      const amount = parseFloat(r.burnie_amount.toFixed(2));
+      const amount = parseFloat(r.flip_amount.toFixed(2));
       if (amount <= 0) continue;
       // quadrant = -2 signals "far future, show in center"
       // 4th element = the far-future level where the ticket lives
-      addWin(p, ld.level, ld.day, amount, 'burnie', -2, r.winner_level);
+      addWin(p, ld.level, ld.day, amount, 'flip', -2, r.winner_level);
       ffAdded++;
     }
   }
@@ -187,7 +187,7 @@ try {
 const lootboxRows = qa(
   `SELECT LOWER(player) as player,
     CAST(amount AS REAL) / 1e18 as eth,
-    CAST(burnie AS REAL) / 1e18 as burnie_eth,
+    CAST(burnie AS REAL) / 1e18 as flip_eth,
     future_tickets, future_level, block_number
    FROM lootbox_opens
    WHERE CAST(amount AS REAL) > 0 OR CAST(burnie AS REAL) > 0 OR future_tickets > 0`
@@ -200,7 +200,7 @@ for (const r of lootboxRows) {
   const p = players.find(pl => pl.toLowerCase() === r.player);
   if (!p) continue;
   if (r.eth > 0) { addWin(p, ld.level, ld.day, parseFloat(r.eth.toFixed(6)), 'eth', -1); lootboxAdded++; }
-  if (r.burnie_eth > 0) { addWin(p, ld.level, ld.day, parseFloat(r.burnie_eth.toFixed(2)), 'burnie', -1); lootboxAdded++; }
+  if (r.flip_eth > 0) { addWin(p, ld.level, ld.day, parseFloat(r.flip_eth.toFixed(2)), 'flip', -1); lootboxAdded++; }
   if (r.future_tickets > 0) { addWin(p, ld.level, ld.day, r.future_tickets, 'tickets', -1, r.future_level); lootboxAdded++; }
 }
 
@@ -447,7 +447,7 @@ writeFileSync(OUT, JSON.stringify(output, null, 2));
 
 // Stats
 let totalWinEntries = 0;
-let ethCount = 0, burnieCount = 0, ticketsCount = 0;
+let ethCount = 0, flipCount = 0, ticketsCount = 0;
 let withQuad = 0, noQuad = 0;
 for (const p in jackpotWins) {
   for (const l in jackpotWins[p]) {
@@ -455,7 +455,7 @@ for (const p in jackpotWins) {
       for (const w of jackpotWins[p][l][d]) {
         totalWinEntries++;
         if (w[1] === 'eth') ethCount++;
-        else if (w[1] === 'burnie') burnieCount++;
+        else if (w[1] === 'flip') flipCount++;
         else if (w[1] === 'tickets') ticketsCount++;
         if (w[2] >= 0) withQuad++; else noQuad++;
       }
@@ -463,4 +463,4 @@ for (const p in jackpotWins) {
   }
 }
 const traitPlayers = Object.keys(traitOwnership).length;
-console.log(`Exported ${players.length} players, ${maxWinLevel} levels, ${totalWinEntries} wins (${ethCount} ETH, ${burnieCount} BURNIE, ${ticketsCount} tickets), ${withQuad} with quadrant, ${noQuad} unassigned (${jrFallback} jr-fallback, ${lootboxAdded} lootbox, ${ticketPrizesAdded} ticket-prizes, ${ffAdded} far-future), ${backfilled} trait backfills, ${traitPlayers} trait players to ${OUT}`);
+console.log(`Exported ${players.length} players, ${maxWinLevel} levels, ${totalWinEntries} wins (${ethCount} ETH, ${flipCount} FLIP, ${ticketsCount} tickets), ${withQuad} with quadrant, ${noQuad} unassigned (${jrFallback} jr-fallback, ${lootboxAdded} lootbox, ${ticketPrizesAdded} ticket-prizes, ${ffAdded} far-future), ${backfilled} trait backfills, ${traitPlayers} trait players to ${OUT}`);

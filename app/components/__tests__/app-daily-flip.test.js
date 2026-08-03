@@ -15,6 +15,10 @@ import { readFileSync } from 'node:fs';
 
 import * as storeMod from '../../app/store.js';
 import * as coinflipMod from '../../app/coinflip.js';
+import * as contractsMod from '../../app/contracts.js';
+import * as pendingActionsMod from '../../app/pending-actions.js';
+import * as charityVoteMod from '../../app/charity-vote.js';
+import * as jackpotSfxMod from '../../app/jackpot-sfx.js';
 
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 const STATUS_CSS = readFileSync(new URL('../../styles/status-indicators.css', import.meta.url), 'utf8');
@@ -210,7 +214,7 @@ globalThis.localStorage = {
   clear() { this._m.clear(); },
 };
 
-let _fetchResponses = { dashboard: null, flipDay: null };
+let _fetchResponses = { dashboard: null, flipDay: null, gameState: null, baf: null };
 let _currentStakeWei = null;
 let _resolvedStakeWei = null;
 let _fetchCounts = new Map();
@@ -220,6 +224,14 @@ globalThis.fetch = async (url) => {
   if (/\/game\/coinflip\/day\/\d+$/.test(u)) {
     if (_fetchResponses.flipDay !== null) {
       return { ok: true, status: 200, json: async () => _fetchResponses.flipDay };
+    }
+  } else if (/\/game\/state$/.test(u)) {
+    if (_fetchResponses.gameState != null) {
+      return { ok: true, status: 200, json: async () => _fetchResponses.gameState };
+    }
+  } else if (/\/player\/0x[0-9a-f]+\/baf\?level=\d+$/i.test(u)) {
+    if (_fetchResponses.baf != null) {
+      return { ok: true, status: 200, json: async () => _fetchResponses.baf };
     }
   } else if (/\/player\/0x[0-9a-f]+$/i.test(u)) {
     if (_fetchResponses.dashboard !== null) {
@@ -235,8 +247,13 @@ function resetDom() {
   globalThis.document.querySelector = (sel) => _docBody.querySelector(sel);
   globalThis.document.querySelectorAll = (sel) => _docBody.querySelectorAll(sel);
   globalThis.localStorage.clear();
+  // Most widget tests exercise ledger behavior after the jackpot presentation.
+  // Opt those tests into the normal cleared state; spoiler-gate regressions
+  // explicitly remove this marker below.
+  globalThis.localStorage.setItem('jackpot_complete_day_84532_67', '1');
+  pendingActionsMod.__resetPendingActionsForTest();
   _docListeners.clear();
-  _fetchResponses = { dashboard: null, flipDay: null };
+  _fetchResponses = { dashboard: null, flipDay: null, gameState: null, baf: null };
   _currentStakeWei = '43844000000000000000000';
   _resolvedStakeWei = '43844000000000000000000';
   _fetchCounts = new Map();
@@ -256,6 +273,7 @@ function dashboardPayload() {
   return {
     player: TEST_ADDR,
     flipBalance: '987654000000000000000000',       // 987,654 FLIP
+    wwxrpBalance: '12345000000000000000000',        // 12,345 WWXRP
     sdgnrsBalance: '123450000000000000000000000',   // 123,450,000 sDGNRS
     coinflip: {
       depositedAmount: '43844000000000000000000',     // 43,844 FLIP
@@ -275,6 +293,21 @@ function mount() {
 const revealPlanning = await import('../app-daily-flip.js');
 
 describe('day-wide reveal planning', () => {
+  test('sDGNRS uses one-decimal M from 10M to under 100M, then whole M', () => {
+    const unit = 10n ** 18n;
+    assert.equal(revealPlanning.formatSdgnrsBalance(999n * unit), '999');
+    assert.equal(revealPlanning.formatSdgnrsBalance(0n), '0');
+    assert.equal(revealPlanning.formatSdgnrsBalance(9_999n * unit), '9,999');
+    assert.equal(revealPlanning.formatSdgnrsBalance(10_000n * unit), '10K');
+    assert.equal(revealPlanning.formatSdgnrsBalance(9_876_543n * unit), '9,877K');
+    assert.equal(revealPlanning.formatSdgnrsBalance(9_999_999n * unit), '10,000K');
+    assert.equal(revealPlanning.formatSdgnrsBalance(10_000_000n * unit), '10.0M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(10_450_000n * unit), '10.5M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(99_900_000n * unit), '99.9M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(100_000_000n * unit), '100M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(123_450_000n * unit), '123M');
+  });
+
   test('four distinct tracks publish the requested conditional win odds', () => {
     assert.deepEqual(
       revealPlanning.FLIP_REVEAL_PROFILES.map(({ id, winRate }) => [id, winRate]),
@@ -332,6 +365,8 @@ describe('day-wide reveal planning', () => {
     assert.equal(revealPlanning.REVEAL_DOUBLE_END_MS, 2500);
     assert.equal(revealPlanning.REVEAL_TRIPLE_END_MS, 3400);
     assert.equal(revealPlanning.REVEAL_BIASED_END_MS, 1350);
+    assert.equal(revealPlanning.REVERSE_CARD_ENTRY_WAIT_MS, 100);
+    assert.equal(revealPlanning.REVERSE_CARD_ANIMATION_MS, 600);
 
     for (let day = 1; day <= 250; day += 1) {
       for (const won of [false, true]) {
@@ -342,18 +377,42 @@ describe('day-wide reveal planning', () => {
           : revealPlanning.REVEAL_END_MS;
         assert.equal(plan.openingMs, expectedOpeningMs);
         assert.equal(plan.endingMs, plan.openingMs + (plan.reversalCount * 900));
+        assert.equal(
+          revealPlanning.reverseCardDelayMs(plan, 1),
+          plan.trackMs + plan.openingMs + 100,
+          'the first Reverse card waits 100ms after the mimicked landing',
+        );
+        assert.equal(
+          revealPlanning.reverseCardDelayMs(plan, 2),
+          plan.trackMs + plan.openingMs + 100 + 900,
+          'later cards retain the frame-identical 900ms reversal cadence',
+        );
       }
     }
   });
 });
 
 describe('app-daily-flip — coin reveal + actions', () => {
+  test('the transparent coin hitbox never inherits the rectangular tactile shadow', () => {
+    assert.match(
+      APP_CSS,
+      /\.df-coin\.is-tactile-pressed\s*\{[^}]*box-shadow:\s*none\s*!important/s,
+    );
+    assert.match(
+      APP_CSS,
+      /\.df-coin:focus-visible\s*\{[^}]*border-radius:\s*50%[^}]*outline:/s,
+      'keyboard users retain a circular visible focus indicator',
+    );
+  });
+
   beforeEach(async () => {
     storeMod.__resetForTest();
     resetDom();
     coinflipMod.__setCurrentStakeReaderForTest(async () => _currentStakeWei);
     coinflipMod.__setResolvedStakeReaderForTest(async () => _resolvedStakeWei);
     coinflipMod.__setClaimableReaderForTest(async () => null);
+    coinflipMod.__setLatestResultReaderForTest(async () => null);
+    coinflipMod.__setWidgetBalancesReaderForTest(async () => null);
     coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({
       queued: 0n,
       locked: false,
@@ -367,14 +426,34 @@ describe('app-daily-flip — coin reveal + actions', () => {
     coinflipMod.__resetCurrentStakeReaderForTest();
     coinflipMod.__resetResolvedStakeReaderForTest();
     coinflipMod.__resetClaimableReaderForTest();
+    coinflipMod.__resetLatestResultReaderForTest();
+    coinflipMod.__resetWidgetBalancesReaderForTest();
     coinflipMod.__resetReverseFlipQuoteReaderForTest();
+    coinflipMod.__resetContractFactoryForTest();
+    charityVoteMod.__resetCharityVoteForTest();
+    contractsMod.clearProvider();
   });
 
-  test('unrevealed → clickable 3D coin with a small reveal hint and no extra button', async () => {
+  test('unrevealed → clickable 3D coin with a small left-side reveal graphic and no extra button', async () => {
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: { day: 67, win: true, rewardPercent: 96 } };
     const el = mount();
     await flushMicrotasks();
 
+    assert.match(
+      el.innerHTML,
+      /<h2 class="df-section-title">DAILY COINFLIP<\/h2>/,
+      'the flip column carries the same kind of daily section label as the jackpot',
+    );
+    assert.match(
+      APP_CSS,
+      /\.df-section-title\s*\{[^}]*height:\s*2\.55rem[^}]*align-items:\s*center[^}]*font-size:\s*1\.05rem[^}]*font-weight:\s*950[^}]*letter-spacing:\s*0\.13em/s,
+      'Daily Coinflip uses the shared fixed-height heading baseline and typography',
+    );
+    assert.match(APP_CSS,
+      /\.app-daily-flip\s*\{[^}]*padding-top:\s*0/s,
+      'the coinflip panel padding cannot push its heading below Daily Jackpot');
+    assert.match(APP_CSS, /\.df-coin-stage\s*\{[^}]*position:\s*relative/s,
+      'coin overlays remain anchored to the coin after inserting the heading');
     const coin = el.querySelector('.df-coin--spinning');
     assert.ok(coin, 'spinning coin rendered');
     assert.equal(coin.tagName, 'BUTTON', 'coin is clickable too');
@@ -385,10 +464,50 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.ok(srcs.includes('/shared/coinflip-face-red.svg'), 'red WWXRP face');
     assert.ok(srcs.includes('/shared/coinflip-face-eth.svg'), 'green ETH face');
     const revealHint = el.querySelector('[data-bind="df-reveal-hint"]');
-    assert.equal(revealHint.hidden, false, 'small instruction is visible while unrevealed');
-    assert.equal(revealHint.textContent, 'Click the coin to reveal');
+    assert.equal(revealHint.hidden, false, 'small instruction graphic is visible while unrevealed');
+    assert.equal(revealHint.tagName, 'BUTTON', 'the instruction graphic is itself a reveal control');
+    assert.match(
+      el.innerHTML,
+      /df-reveal-cue__copy"><span>CLICK<\/span><span>TO FLIP<\/span>/,
+      'the compact cue reads as two quiet lines',
+    );
+    assert.match(el.innerHTML, /df-reveal-cue__arrow/, 'the cue points toward the coin');
+    assert.match(
+      APP_CSS,
+      /\.df-reveal-cue\s*\{[^}]*top:\s*0\.68rem;[^}]*right:\s*calc\(50% \+ clamp\(55px, 7vw, 75px\) - 0\.05rem\)[^}]*align-items:\s*flex-end;[^}]*gap:\s*0/s,
+      'the graphic ends outside the coin radius instead of overlapping it',
+    );
+    assert.match(APP_CSS, /\.df-reveal-cue__arrow\s*\{[^}]*transform:\s*rotate\(45deg\)/s,
+      'the cue arrow aims down and right toward the coin');
+    assert.match(APP_CSS, /\.df-reveal-cue__copy\s*\{[^}]*background:[^}]*#140707;[^}]*color|\.df-reveal-cue\s*\{[^}]*color:\s*#86efac/s,
+      'the cue uses the widget red field and green text palette');
+    assert.match(APP_CSS, /@keyframes df-reveal-cue-pulse[\s\S]*?opacity:\s*0\.86[\s\S]*?opacity:\s*1/,
+      'only a restrained opacity/glow pulse animates the static cue');
     assert.equal(el.querySelector('[data-bind="df-reveal-cta"]'), null,
       'there is no duplicate reveal button');
+    el.disconnectedCallback();
+  });
+
+  test('new-day rollover mounts a clickable spinning coin before the result read catches up', async () => {
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+    const el = mount();
+    await flushMicrotasks();
+
+    const resolvingCoin = el.querySelector('.df-coin--resolving');
+    assert.ok(resolvingCoin, 'the flip surface starts at jackpot time instead of going blank');
+    assert.equal(resolvingCoin.tagName, 'BUTTON');
+    resolvingCoin.dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="df-reveal-hint"]').hidden, true,
+      'the click prompt disappears once that exact day is queued');
+    assert.equal(localStorage.getItem('flip_day_84532_67'), null,
+      'clicking early queues the reveal without inventing an outcome');
+
+    _fetchResponses.flipDay = { day: 67, win: true, rewardPercent: 96 };
+    document.dispatchEvent({ type: 'visibilitychange' });
+    await flushMicrotasks();
+    assert.equal(localStorage.getItem('flip_day_84532_67'), '1',
+      'the queued click lands automatically when the exact result arrives');
+    assert.ok(el.querySelector('.df-coin--landed'));
     el.disconnectedCallback();
   });
 
@@ -426,9 +545,45 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
+  test('BAF rank loads once per bracket and refreshes once after a winning reveal', async () => {
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+      gameState: { level: 7 },
+      baf: {
+        level: 10,
+        score: String(1_000n * 10n ** 18n),
+        rank: 3,
+        totalParticipants: 20,
+        roundStatus: 'open',
+      },
+    };
+
+    const el = mount();
+    await flushMicrotasks();
+    const bafUrl = [..._fetchCounts.keys()].find((url) => /\/baf\?level=10$/.test(url));
+    assert.ok(bafUrl, 'initial bracket score/rank is loaded');
+    assert.equal(_fetchCounts.get(bafUrl), 1);
+
+    document.dispatchEvent({ type: 'visibilitychange' });
+    await flushMicrotasks();
+    assert.equal(_fetchCounts.get(bafUrl), 1,
+      'ordinary widget refreshes reuse the cached rank instead of rerunning the DB rank query');
+
+    el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.equal(_fetchCounts.get(bafUrl), 2,
+      'a revealed win invalidates and refreshes the score/rank exactly once');
+    el.disconnectedCallback();
+  });
+
   test('fast API data renders without waiting for slow chain reads', async () => {
     let finishCurrent;
     let finishResolved;
+    let finishLatest;
+    coinflipMod.__setLatestResultReaderForTest(() => new Promise((resolve) => {
+      finishLatest = resolve;
+    }));
     coinflipMod.__setCurrentStakeReaderForTest(() => new Promise((resolve) => {
       finishCurrent = resolve;
     }));
@@ -445,8 +600,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     assert.ok(el.querySelector('.df-coin--spinning'),
       'resolved outcome is revealable as soon as the fast API request finishes');
-    assert.match(el.querySelector('[data-bind="df-funds-wallet"]').textContent, /987,654 FLIP/,
-      'dashboard balance renders while chain reads remain pending');
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '••••',
+      'the combined total cannot expose claimable while chain reads remain pending');
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-unit"]').textContent, 'FLIP',
+      'the currency unit remains readable while its number is masked');
+    assert.match(el.querySelector('[data-bind="df-funds-wwxrp"]').textContent, /12,345 WWXRP/,
+      'the replacement WWXRP balance renders from the dashboard');
     assert.equal(el.querySelector('[data-position="today"]').textContent, "Today's bet—",
       'the still-pending resolved-day value keeps its loading placeholder');
     assert.equal(
@@ -456,16 +615,216 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.doesNotMatch(el.innerHTML, /BET AMOUNT/,
       'the compact stepper does not spend width on a redundant label');
 
+    finishLatest(null);
     finishCurrent('12000000000000000000000');
     finishResolved('43844000000000000000000');
     await flushMicrotasks();
-    assert.match(el.querySelector('[data-position="today"]').textContent, /•••• FLIP/,
-      "today's stake stays masked before the result reveal");
+    assert.match(el.querySelector('[data-position="today"]').textContent, /43,844 FLIP/,
+      "today's committed stake is visible before the result reveal");
     assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/);
     el.disconnectedCallback();
   });
 
-  test('clicking the coin reveals and dismisses its instruction', async () => {
+  test('overlapping refresh signals coalesce into one trailing reload', async () => {
+    let finishFirst;
+    let latestReads = 0;
+    coinflipMod.__setLatestResultReaderForTest(() => {
+      latestReads += 1;
+      if (latestReads === 1) {
+        return new Promise((resolve) => { finishFirst = resolve; });
+      }
+      return Promise.resolve(null);
+    });
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+
+    const el = mount();
+    await flushPromises();
+    assert.equal(latestReads, 1, 'initial refresh is in flight');
+
+    document.dispatchEvent({ type: 'visibilitychange' });
+    document.dispatchEvent({ type: 'visibilitychange' });
+    storeMod.update('viewing.address', TEST_ADDR);
+    await flushPromises();
+    assert.equal(latestReads, 1, 'signals do not start overlapping RPC cycles');
+
+    finishFirst(null);
+    await flushMicrotasks();
+    assert.equal(latestReads, 2, 'all signals collapse into one trailing refresh');
+    el.disconnectedCallback();
+  });
+
+  test("an unresolved ticket pack never masks Tomorrow's bet", async () => {
+    _currentStakeWei = '12000000000000000000000';
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    const rewardGateKey = `flip_reward_reveal_gate_84532_${TEST_ADDR}`;
+    localStorage.setItem(rewardGateKey, '1'); // simulate the stale latch from the reported bug
+    pendingActionsMod.publishPendingActions('ticket-packs', [{
+      id: 'ticket-pack:68', kind: 'tickets', label: 'Level 68 ticket pack',
+      detail: 'Waiting for the Level 68 draw', state: 'waiting', pinned: true,
+    }]);
+
+    const el = mount();
+    await flushMicrotasks();
+    assert.equal(
+      el.querySelector('[data-position="tomorrow"]').querySelector('.df-position-value').textContent,
+      '•••• FLIP',
+      'the durable latch remains safe until the reward-box controllers finish loading',
+    );
+
+    pendingActionsMod.publishPendingActions('lootboxes', []);
+    pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
+    await flushPromises();
+    assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/,
+      'an explicitly empty box refresh retires the stale latch despite the pending pack');
+    assert.equal(localStorage.getItem(rewardGateKey), null);
+    assert.equal(pendingActionsMod.getPendingActions()[0].kind, 'tickets',
+      'the pack remains pending independently of the FLIP spoiler gate');
+    el.disconnectedCallback();
+  });
+
+  test("Tomorrow's bet stays masked through an actual lootbox presentation", async () => {
+    _currentStakeWei = '12000000000000000000000';
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    pendingActionsMod.publishPendingActions('lootboxes', [{
+      id: 'lootbox:9', kind: 'lootbox', label: 'Lootbox #9',
+      detail: 'Prizes ready', state: 'ready', resolved: true, run: async () => {},
+    }]);
+    pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
+    const el = mount();
+    await flushMicrotasks();
+    const tomorrow = () => el.querySelector('[data-position="tomorrow"]');
+    assert.match(tomorrow().textContent, /•••• FLIP/);
+
+    document.dispatchEvent({
+      type: 'degenerus:lootbox-reveal-queued',
+      detail: { presentationId: 'lootbox-reveal:9', address: TEST_ADDR },
+    });
+    pendingActionsMod.publishPendingActions('lootboxes', []);
+    assert.match(tomorrow().textContent, /•••• FLIP/,
+      'removing the tray row cannot reveal a reward while its animation is still queued');
+
+    document.dispatchEvent({
+      type: 'degenerus:lootbox-reveal-complete',
+      detail: { presentationId: 'lootbox-reveal:9', address: TEST_ADDR },
+    });
+    assert.match(tomorrow().textContent, /12,000 FLIP/,
+      'consuming the box presentation opens the gate');
+    el.disconnectedCallback();
+  });
+
+  test("an unresolved lootbox stays visible in Pending without masking Tomorrow's bet", async () => {
+    _currentStakeWei = '12000000000000000000000';
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    pendingActionsMod.publishPendingActions('lootboxes', [{
+      id: 'lootbox:10', kind: 'lootbox', label: 'Lootbox #10',
+      detail: 'Waiting for RNG', state: 'waiting', resolved: false, pinned: true,
+    }]);
+    pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
+
+    const el = mount();
+    await flushMicrotasks();
+    assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/,
+      'there is no result to spoil before the box resolves');
+    el.disconnectedCallback();
+  });
+
+  test('clicking a blurred FLIP value reveals it without opening the gated claim action', async () => {
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    const el = mount();
+    await flushMicrotasks();
+    const value = el.querySelector('[data-bind="df-funds-flip-total"]');
+    const claim = el.querySelector('[data-bind="df-claim-flip-cta"]');
+    assert.equal(value.textContent, '••••');
+    assert.equal(value.getAttribute('role'), 'button');
+    value.dispatchEvent({ type: 'click', preventDefault() {} });
+    assert.notEqual(value.textContent, '••••');
+    assert.equal(claim.disabled, true, 'unblurring is visual and does not bypass claim eligibility');
+    el.disconnectedCallback();
+  });
+
+  test("Tomorrow's bet remains masked until the bonus jackpot is cleared", async () => {
+    _currentStakeWei = '12000000000000000000000';
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    localStorage.removeItem('jackpot_complete_day_84532_67');
+    pendingActionsMod.publishPendingActions('lootboxes', []);
+    pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
+    const el = mount();
+    await flushMicrotasks();
+    const tomorrow = () => el.querySelector('[data-position="tomorrow"]');
+    assert.match(tomorrow().textContent, /•••• FLIP/);
+    assert.doesNotMatch(tomorrow().textContent, /12,000/,
+      'the real value is absent from the rendered Tomorrow row');
+
+    localStorage.setItem('jackpot_complete_day_84532_67', '1');
+    document.dispatchEvent({ type: 'jackpot:revealed', detail: { day: 67 } });
+    assert.match(tomorrow().textContent, /12,000 FLIP/);
+    el.disconnectedCallback();
+  });
+
+  test("a fully revealed legacy jackpot cannot leave Tomorrow's bet blurred forever", async () => {
+    _currentStakeWei = '12000000000000000000000';
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    localStorage.removeItem('jackpot_complete_day_84532_67');
+    localStorage.setItem('spun_day_84532_67', '1');
+    localStorage.removeItem('jackpot_bonus_pending_day_84532_67');
+    pendingActionsMod.publishPendingActions('lootboxes', []);
+    pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
+
+    const el = mount();
+    await flushMicrotasks();
+    assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/,
+      'the pre-all-rolls completion bit migrates without requiring the player to replay a finished draw');
+    el.disconnectedCallback();
+  });
+
+  test("an explicitly pending bonus still masks Tomorrow's bet", async () => {
+    _currentStakeWei = '12000000000000000000000';
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    localStorage.removeItem('jackpot_complete_day_84532_67');
+    localStorage.setItem('spun_day_84532_67', '1');
+    localStorage.setItem('jackpot_bonus_pending_day_84532_67', '1');
+    pendingActionsMod.publishPendingActions('lootboxes', []);
+    pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
+
+    const el = mount();
+    await flushMicrotasks();
+    const tomorrow = () => el.querySelector('[data-position="tomorrow"]');
+    assert.match(tomorrow().textContent, /•••• FLIP/);
+
+    document.dispatchEvent({
+      type: 'jackpot:revealed',
+      detail: { day: 67, complete: true, bonusPending: false },
+    });
+    assert.match(tomorrow().textContent, /12,000 FLIP/,
+      'the final same-tab event opens the gate even when localStorage is unavailable or stale');
+    el.disconnectedCallback();
+  });
+
+  test('clicking the CLICK TO FLIP cue reveals and dismisses its instruction', async () => {
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: { day: 67, win: true, rewardPercent: 96 } };
     let revealed = 0;
     globalThis.document.addEventListener('flip:revealed', () => { revealed += 1; });
@@ -473,7 +832,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const el = mount();
     await flushMicrotasks();
 
-    el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="df-reveal-hint"]').dispatchEvent({ type: 'click' });
     await flushMicrotasks();
 
     assert.equal(globalThis.localStorage.getItem('flip_day_84532_67'), '1', 'gate key written');
@@ -498,16 +857,53 @@ describe('app-daily-flip — coin reveal + actions', () => {
     };
     const el = mount();
     await flushMicrotasks();
-    assert.match(el.querySelector('[data-position="today"]').textContent, /•••• FLIP/);
+    assert.match(el.querySelector('[data-position="today"]').textContent, /43,844 FLIP/);
     assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/);
 
     const realSetTimeout = globalThis.setTimeout;
     const realMatchMedia = globalThis.matchMedia;
+    const realAudioContext = globalThis.AudioContext;
     let revealDelay = 0;
     let revealFinish = null;
     const scheduled = [];
+    class RecordingAudioContext {
+      static last = null;
+      constructor() {
+        RecordingAudioContext.last = this;
+        this.state = 'running';
+        this.currentTime = 0;
+        this.destination = {};
+        this.oscillators = [];
+      }
+      createOscillator() {
+        const oscillator = {
+          type: 'sine',
+          frequency: {
+            setValueAtTime() {},
+            exponentialRampToValueAtTime() {},
+          },
+          connect() {},
+          start() {},
+          stop() {},
+        };
+        this.oscillators.push(oscillator);
+        return oscillator;
+      }
+      createGain() {
+        return {
+          gain: {
+            setValueAtTime() {},
+            exponentialRampToValueAtTime() {},
+          },
+          connect() {},
+        };
+      }
+      close() {}
+    }
     try {
       globalThis.matchMedia = () => ({ matches: false });
+      globalThis.AudioContext = RecordingAudioContext;
+      jackpotSfxMod.__resetForTest();
       globalThis.setTimeout = (fn, delay = 0) => {
         revealDelay = Math.max(revealDelay, Number(delay) || 0);
         const handle = { fn, delay: Number(delay) || 0, unref() {} };
@@ -516,13 +912,14 @@ describe('app-daily-flip — coin reveal + actions', () => {
         return handle;
       };
       el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+      const launchOscillators = RecordingAudioContext.last.oscillators.length;
 
       assert.equal(el.querySelector('.df-modifier-meter'), null,
         'a real win does not leak its percentage during the neutral spin');
       assert.equal(el.querySelector('[data-bind="df-outcome"]').textContent, '',
         'the animation does not add a redundant Flipping status line');
-      assert.match(el.querySelector('[data-position="today"]').textContent, /Today's bet•••• FLIP/,
-        'the result-day bet stays masked without leaking a modifier');
+      assert.match(el.querySelector('[data-position="today"]').textContent, /Today's bet43,844 FLIP/,
+        'the result-day stake stays visible without leaking the result or modifier');
       assert.ok(revealDelay >= 4_000, `reveal has time to read before it lands (${revealDelay}ms)`);
       const rotor = el.querySelector('.df-reveal-active');
       assert.ok(rotor, 'one of the four deterministic motion tracks is active');
@@ -534,15 +931,32 @@ describe('app-daily-flip — coin reveal + actions', () => {
       assert.equal(fakeoutCard.querySelector('img').src, '/shared/reverse-flip-card.svg');
       assert.equal(typeof revealFinish, 'function');
       revealFinish();
+      assert.equal(RecordingAudioContext.last.oscillators.length, launchOscillators,
+        'the winning chord stays silent while the final thermometer is moving');
       const meter = el.querySelector('.df-modifier-meter--settling');
       assert.ok(meter, 'the vertical percentage rail enters only after the final win');
       assert.match(meter.textContent, /196%/);
+      assert.equal(el.querySelector('[data-position="today"] .df-position-outcome'), null,
+        "Today's bet does not turn into WIN while the thermometer is settling");
+      assert.doesNotMatch(el.querySelector('[data-position="today"]').className, /df-position-row--win/,
+        "Today's bet stays neutral until the win sound can play");
 
-      const settle = scheduled.find((entry) => entry.delay === 700);
-      assert.ok(settle, 'the rail gets a finite settle window');
-      settle.fn();
+      const settle = scheduled.find((entry) => entry.delay === 1_600);
+      assert.ok(settle, 'the rail gets a readable 1.6-second settle window');
+      el.querySelector('[data-bind="df-modifier-marker"]').dispatchEvent({
+        type: 'animationend',
+        animationName: 'df-meter-settle',
+      });
+      assert.equal(RecordingAudioContext.last.oscillators.length, launchOscillators + 4,
+        'the winning chord starts on the same animation-end event that commits 196%');
+      assert.match(el.querySelector('[data-position="today"]').className, /df-position-row--win/,
+        "Today's bet turns green on that same completion event");
+      assert.match(el.querySelector('[data-position="today"]').textContent, /WIN/);
       assert.equal(el.querySelector('.df-modifier-flash').textContent, '196%',
         'the rail collapses into the total multiplier');
+      settle.fn();
+      assert.equal(RecordingAudioContext.last.oscillators.length, launchOscillators + 4,
+        'the timer fallback cannot replay the chord after animationend wins the race');
       const flashDone = scheduled.find((entry) => entry.delay === 850);
       assert.ok(flashDone, 'the total multiplier gets a finite flash window');
       flashDone.fn();
@@ -553,6 +967,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
       globalThis.setTimeout = realSetTimeout;
       if (realMatchMedia === undefined) delete globalThis.matchMedia;
       else globalThis.matchMedia = realMatchMedia;
+      jackpotSfxMod.__resetForTest();
+      if (realAudioContext === undefined) delete globalThis.AudioContext;
+      else globalThis.AudioContext = realAudioContext;
       el.disconnectedCallback();
     }
   });
@@ -801,10 +1218,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const outcome = el.querySelector('[data-bind="df-outcome"]');
     assert.equal(outcome.textContent, '', 'the old result line is empty on a win');
     const today = el.querySelector('[data-position="today"]');
-    assert.equal(today.querySelector('.df-position-multiplier').textContent, '196%',
-      'the payout modifier sits at the left of the resolved row');
-    assert.equal(today.querySelector('.df-position-value').textContent, 'WIN +85,934 FLIP',
-      "Today's Bet becomes the single win receipt");
+    assert.equal(today.querySelector('.df-position-outcome').textContent, 'WIN',
+      'the win outcome sits prominently at the left of the resolved row');
+    assert.equal(today.querySelector('.df-position-percentage').textContent, '196%',
+      'the UI shows the total payout multiplier, not only the 96% bonus');
+    assert.equal(today.querySelector('.df-position-value').textContent, '+85,934 FLIP',
+      "Today's Bet keeps the signed payout on the right");
     assert.ok(today.className.includes('df-position-row--win'));
     assert.equal(el.querySelector('.df-modifier-meter'), null,
       'reduced-motion reveal does not retain a percentage rail');
@@ -826,10 +1245,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const outcome = el.querySelector('[data-bind="df-outcome"]');
     assert.equal(outcome.textContent, '', 'the separate result line stays gone');
     const today = el.querySelector('[data-position="today"]');
-    assert.equal(today.querySelector('.df-position-multiplier'), null,
-      'a losing receipt never shows a payout modifier');
-    assert.equal(today.querySelector('.df-position-value').textContent, 'LOSS -43,844 FLIP',
-      'the loss is reported directly in Today’s Bet');
+    assert.equal(today.querySelector('.df-position-outcome').textContent, 'LOSS',
+      'the loss outcome sits at the left of the resolved row');
+    assert.equal(today.querySelector('.df-position-percentage'), null);
+    assert.equal(today.querySelector('.df-position-value').textContent, '-43,844 FLIP',
+      'the signed loss amount stays on the right of Today’s Bet');
     assert.ok(today.className.includes('df-position-row--loss'));
     assert.equal(el.querySelector('.df-modifier-meter'), null,
       'loss clears the scanner instead of settling on a modifier');
@@ -837,28 +1257,77 @@ describe('app-daily-flip — coin reveal + actions', () => {
   });
 
   for (const won of [true, false]) {
-    test(`a resolved zero-stake ${won ? 'win' : 'loss'} shows the same red NO BET receipt`, async () => {
+    test(`a zero-stake ${won ? 'win' : 'loss'} says NO BET before and after reveal`, async () => {
       _resolvedStakeWei = '0';
       _fetchResponses = {
         dashboard: dashboardPayload(),
         flipDay: { day: 67, win: won, rewardPercent: 96 },
       };
-      globalThis.localStorage.setItem('flip_day_84532_67', '1');
 
       const el = mount();
       await flushMicrotasks();
 
-      const today = el.querySelector('[data-position="today"]');
+      let today = el.querySelector('[data-position="today"]');
       assert.equal(today.querySelector('.df-position-value').textContent, 'NO BET');
       assert.equal(today.querySelector('.df-position-multiplier'), null,
         'zero stake never shows the global win multiplier');
       assert.ok(today.className.includes('df-position-row--no-bet'));
       assert.ok(today.querySelector('.df-position-value').className.includes('df-position-value--no-bet'));
+      assert.ok(!today.className.includes('df-position-row--spoiler'));
+
+      el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      today = el.querySelector('[data-position="today"]');
+      assert.equal(today.querySelector('.df-position-value').textContent, 'NO BET',
+        'a global result never fabricates a personal receipt for a zero stake');
       el.disconnectedCallback();
     });
   }
 
-  test('stacked day bets and red funds keep unresolved values masked', async () => {
+  test('a zero-stake global win still runs the percentage thermometer', async () => {
+    _resolvedStakeWei = '0';
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    const el = mount();
+    await flushMicrotasks();
+
+    const realSetTimeout = globalThis.setTimeout;
+    const realMatchMedia = globalThis.matchMedia;
+    const scheduled = [];
+    try {
+      globalThis.matchMedia = () => ({ matches: false });
+      globalThis.setTimeout = (fn, delay = 0) => {
+        const handle = { fn, delay: Number(delay) || 0, unref() {} };
+        scheduled.push(handle);
+        return handle;
+      };
+      el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+
+      const revealFinish = scheduled.find((entry) => (
+        entry.delay === revealPlanning.selectFlipRevealPlan(67, true).totalMs
+      ));
+      assert.ok(revealFinish, 'the normal reveal landing is scheduled');
+      revealFinish.fn();
+
+      assert.equal(
+        el.querySelector('[data-position="today"]').querySelector('.df-position-value').textContent,
+        'NO BET',
+        'the personal receipt remains payout-free',
+      );
+      const meter = el.querySelector('.df-modifier-meter--settling');
+      assert.ok(meter, 'the global winning percentage still gets its thermometer');
+      assert.match(meter.textContent, /196%/);
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      if (realMatchMedia === undefined) delete globalThis.matchMedia;
+      else globalThis.matchMedia = realMatchMedia;
+      el.disconnectedCallback();
+    }
+  });
+
+  test('stacked day bets show the committed stake while masking only the FLIP balance number', async () => {
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: { day: 67, win: true, rewardPercent: 96 } };
     const el = mount();
     await flushMicrotasks();
@@ -874,44 +1343,84 @@ describe('app-daily-flip — coin reveal + actions', () => {
       "Tomorrow's bet",
       'the Tomorrow title sits in the value lane above its FLIP total',
     );
-    assert.match(el.querySelector('[data-position="today"]').textContent, /•••• FLIP/,
-      'today is masked before reveal without leaking digit count');
+    assert.match(el.querySelector('[data-position="today"]').textContent, /43,844 FLIP/,
+      'today shows the committed pre-flip amount');
     assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /43,844 FLIP/,
       'tomorrow remains visible');
-    assert.equal(el.querySelector('[data-bind="df-funds-claimable"]').textContent, '•••• FLIP',
-      'claimable is masked before reveal');
-    assert.match(el.querySelector('[data-bind="df-funds-wallet"]').textContent, /987,654 FLIP/,
-      'wallet remains visible');
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '••••',
+      'the wallet FLIP balance stays masked until the result is revealed');
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-unit"]').textContent, 'FLIP',
+      'only the protocol balance number is blurred');
+    assert.match(el.querySelector('[data-bind="df-funds-wwxrp"]').textContent, /12,345 WWXRP/);
     assert.equal(el.querySelectorAll('.df-position-delta').length, 0,
       'ordinary indexed values do not carry settlement markers');
     const displays = el.querySelectorAll('.df-funds__display');
-    assert.equal(displays.length, 3);
-    assert.ok(displays[0].classList.contains('df-funds__display--claimable'),
-      'claimable is the top funds box');
-    assert.ok(displays[1].classList.contains('df-funds__display--wallet'),
-      'wallet stays below claimable');
+    assert.equal(displays.length, 3, 'three currencies share one protocol-coins instrument');
+    assert.ok(displays[0].classList.contains('df-funds__display--flip-total'),
+      'owned and claimable FLIP keep their own cell');
+    assert.ok(displays[1].classList.contains('df-funds__display--wwxrp'),
+      'WWXRP keeps its own cell');
     assert.ok(displays[2].classList.contains('df-funds__display--sdgnrs'),
-      'sDGNRS is the new bottom funds box');
+      'sDGNRS keeps its own cell');
+    const fundsToggle = el.querySelector('[data-bind="df-funds-toggle"]');
+    assert.ok(fundsToggle, 'Protocol Coins has a compact disclosure control');
+    assert.equal(fundsToggle.getAttribute('aria-expanded'), 'false');
+    assert.equal(displays[0].hidden, false, 'FLIP is the default visible balance');
+    assert.equal(displays[1].hidden, true, 'WWXRP starts collapsed');
+    assert.equal(displays[2].hidden, true, 'sDGNRS starts collapsed');
+    fundsToggle.dispatchEvent({ type: 'click' });
+    assert.equal(fundsToggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(displays[1].hidden, false, 'the dropdown restores WWXRP');
+    assert.equal(displays[2].hidden, false, 'the dropdown restores sDGNRS');
+    assert.match(APP_CSS,
+      /\.df-funds__display--flip-total \.df-funds__value\s*\{[^}]*color:\s*#fde68a[^}]*245, 158, 11/s,
+      'FLIP uses the yellow protocol-coin theme');
+    assert.match(APP_CSS,
+      /\.df-funds__display--wwxrp \.df-funds__value\s*\{[^}]*color:\s*#f87171[^}]*239, 68, 68/s,
+      'WWXRP exactly matches the loss-FLIP red treatment');
+    assert.match(APP_CSS,
+      /\.df-position-value\s*\{[^}]*color:\s*#fde68a[^}]*245, 158, 11/s,
+      'unsettled FLIP positions use yellow');
+    assert.match(APP_CSS,
+      /\.df-position-value--win\s*\{[^}]*color:\s*#86efac/s,
+      'winning outcomes stay green');
+    assert.match(APP_CSS,
+      /\.df-position-value--loss\s*\{[^}]*color:\s*#f87171/s,
+      'losing outcomes stay red');
+    assert.match(APP_CSS,
+      /\.df-funds__display--sdgnrs \.df-funds__value\s*\{[^}]*color:\s*#d8b4fe[^}]*168, 85, 247/s,
+      'sDGNRS uses the purple protocol-coin theme');
+    assert.match(APP_CSS,
+      /body\.layout-basic \.df-funds__coins\s*\{[^}]*border-top:\s*1px solid rgba\(254, 202, 202, 0\.16\)/s,
+      'a full-width divider separates the Protocol Coins title from the FLIP balance');
+    assert.doesNotMatch(APP_CSS, /\.df-funds__display\.has-claimable/,
+      'claimable FLIP does not receive a different row background');
     assert.match(
       APP_CSS,
       /body\.layout-basic \.df-funds__value\s*\{[^}]*text-align:\s*right/s,
-      'coinflip Claimable and Wallet figures are right aligned',
+      'coinflip token figures are right aligned',
     );
-    assert.match(
-      APP_CSS,
-      /body\.layout-basic \.df-position-label,[\s\S]*?body\.layout-basic \.df-funds__label\s*\{\s*text-align:\s*right/s,
-      'all four red-box titles align above the right-aligned FLIP figures',
-    );
+    assert.match(el.innerHTML, /class="df-funds__title df-funds__toggle"[\s\S]*?<span>PROTOCOL COINS<\/span>/,
+      'the shared instrument has one Protocol Coins label');
+    assert.match(APP_CSS,
+      /body\.layout-basic \.df-funds__title\s*\{[^}]*justify-self:\s*end[^}]*text-align:\s*right/s,
+      'the shared Protocol Coins heading aligns with the right-side balances');
+    assert.equal(el.querySelectorAll('.df-funds__label').length, 0,
+      'currency units in the values replace three redundant headings');
     assert.match(
       APP_CSS,
       /body\.layout-basic \.df-position\s*\{\s*margin:\s*auto 0 0\.42rem;/s,
-      'the Today/Tomorrow stack pushes down onto the Claimable/Wallet stack',
+      'the Today/Tomorrow stack pushes down onto the funds stack',
     );
-    assert.match(
-      APP_CSS,
-      /body\.layout-basic \.df-funds\s*\{[^}]*margin-top:\s*0;[^}]*padding-top:\s*0;/s,
-      'the two ledger stacks meet without a floating gap',
-    );
+    assert.match(APP_CSS,
+      /body\.layout-basic \.df-funds__coins\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
+      'all three currencies use compact rows inside one display');
+    assert.match(APP_CSS,
+      /body\.layout-basic \.df-funds__display\s*\{[^}]*grid-template-areas:\s*"action value"[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\)/s,
+      'every Protocol Coins action is left of its right-aligned balance');
+    assert.match(APP_CSS,
+      /\.df-funds__display \+ \.df-funds__display::before\s*\{[^}]*right:\s*0[^}]*left:\s*0[^}]*height:\s*1px[^}]*background:\s*rgba\(254, 202, 202, 0\.16\)/s,
+      'full-width horizontal hairlines separate the three compact rows');
     assert.match(APP_CSS,
       /\.df-modifier-meter-slot\s*\{[^}]*position:\s*absolute[^}]*left:/s,
       'modifier rail is pinned on the left and cannot shift the ledger');
@@ -921,12 +1430,21 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(APP_CSS,
       /\.df-next-bet__stepper\s*\{[^}]*height:\s*1\.65rem/s,
       'the amount stepper stays short inside the Tomorrow row');
+    assert.match(APP_CSS,
+      /\.app-daily-flip :is\([\s\S]*?\.df-burn-sdgnrs-cta[\s\S]*?font-size:\s*var\(--df-action-font-size, 0\.56rem\)/,
+      'the five visible flip actions share the slightly larger desktop label size');
+    assert.match(APP_CSS,
+      /@media \(max-width: 520px\)[\s\S]*?\.app-daily-flip\s*\{\s*--df-action-font-size:\s*0\.49rem;/,
+      'phone labels grow slightly without changing the compact button heights');
+    assert.match(APP_CSS,
+      /\.df-tomorrow-layout \.df-position-unit\s*\{[^}]*margin-left:\s*0\.28em/s,
+      'Tomorrow’s numeric total has a deliberate gap before FLIP');
     const claim = el.querySelector('[data-bind="df-claim-flip-cta"]');
     assert.ok(claim.disabled, 'claim stays unlit while its balance is masked');
     el.disconnectedCallback();
   });
 
-  test("Today's bet never falls back to tomorrow's newer dashboard stake", async () => {
+  test("Today's result can reveal while its exact stake loads, without borrowing tomorrow's stake", async () => {
     _resolvedStakeWei = null;
     _currentStakeWei = '12000000000000000000000';
     _fetchResponses = {
@@ -947,9 +1465,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/);
     el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
     await flushMicrotasks();
-    assert.equal(globalThis.localStorage.getItem('flip_day_84532_67'), null,
-      'reveal waits rather than settling against the newer dashboard stake');
-    assert.match(el.querySelector('[data-bind="df-error"]').textContent, /credited bet is still loading/i);
+    assert.equal(globalThis.localStorage.getItem('flip_day_84532_67'), '1',
+      'the presentation is not blocked by the slower historical log lookup');
+    assert.equal(el.querySelector('[data-position="today"]').textContent, "Today's bet—",
+      'unknown remains unknown instead of settling against tomorrow’s 12,000 FLIP');
+    assert.equal(el.querySelector('[data-bind="df-error"]').hidden, true);
     el.disconnectedCallback();
   });
 
@@ -969,7 +1489,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       el.querySelector('[data-position="tomorrow"]').querySelector('.df-position-value').textContent,
       '—',
       'an unavailable live read never resurrects the resolved-day dashboard amount');
-    assert.match(el.querySelector('[data-position="today"]').textContent, /196%WIN \+85,934 FLIP/,
+    assert.match(el.querySelector('[data-position="today"]').textContent, /WIN196%\+85,934 FLIP/,
       'the resolved payout is shown in its own box after reveal');
     assert.equal(el.querySelector('.df-modifier-result'), null,
       'the old expanded result is gone');
@@ -991,32 +1511,30 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const el = mount();
     await flushMicrotasks();
 
-    assert.match(el.querySelector('[data-position="today"]').textContent, /•••• FLIP/,
-      "before reveal, today's result stake is masked");
+    assert.match(el.querySelector('[data-position="today"]').textContent, /43,844 FLIP/,
+      "before reveal, today's committed stake is visible");
     assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/);
-    assert.equal(el.querySelector('[data-bind="df-funds-claimable"]').textContent, '•••• FLIP');
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '••••');
     el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
     await flushMicrotasks();
 
     const today = el.querySelector('[data-position="today"]');
     const tomorrow = el.querySelector('[data-position="tomorrow"]');
-    const claimable = el.querySelector('[data-bind="df-funds-claimable"]');
-    const balance = el.querySelector('[data-bind="df-funds-wallet"]');
-    assert.match(today.textContent, /Today's bet196%WIN \+85,934 FLIP/,
+    const flipTotal = el.querySelector('[data-bind="df-funds-flip-total"]');
+    assert.match(today.textContent, /Today's betWIN196%\+85,934 FLIP/,
       "after reveal, today's exact result is unmasked");
-    assert.equal(today.querySelector('.df-position-multiplier').textContent, '196%');
+    assert.equal(today.querySelector('.df-position-outcome').textContent, 'WIN');
+    assert.equal(today.querySelector('.df-position-percentage').textContent, '196%');
     assert.ok(today.querySelector('.df-position-value').className.includes('--win'),
       'the positive result receives the green treatment');
     assert.match(tomorrow.textContent, /12,000 FLIP/,
       "tomorrow's unresolved stake remains separate");
     assert.equal(el.querySelectorAll('.df-position-delta').length, 0,
       'the win/loss amount is no longer duplicated beside ledger values');
-    assert.match(claimable.textContent, /4,612,331 FLIP/,
-      'claimable includes principal plus the 96% winning modifier');
+    assert.equal(flipTotal.textContent, '5,599,985',
+      'Protocol Coins includes wallet FLIP plus the existing and just-won claimable amount');
     assert.equal(el.querySelector('.df-modifier-result'), null,
       'the resolved row is the only persistent result');
-    assert.match(balance.textContent, /987,654 FLIP/,
-      'the already-burned wallet balance does not move again at reveal');
 
     // A refresh can still return the resolved day as depositedAmount. The
     // contract read remains authoritative for the current day.
@@ -1025,8 +1543,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/,
       'a stale dashboard refresh cannot resurrect the resolved stake');
-    assert.match(el.querySelector('[data-bind="df-funds-claimable"]').textContent, /4,612,331 FLIP/,
-      'resolved payout survives a stale claimable baseline refresh');
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '5,599,985',
+      'a stale API claimable baseline cannot erase the saved effective total');
 
     _currentStakeWei = '10000000000000000000000';
     storeMod.update('viewing.address', TEST_ADDR);
@@ -1037,7 +1555,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test('a win unmasks the live chain claimable even while the dashboard is stale', async () => {
+  test('a win folds the exact live claimable amount into Protocol Coins FLIP', async () => {
     const exactClaimable = 4_612_331n * 10n ** 18n;
     coinflipMod.__setClaimableReaderForTest(async () => exactClaimable);
     _fetchResponses = {
@@ -1047,12 +1565,110 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const el = mount();
     await flushMicrotasks();
 
-    assert.equal(el.querySelector('[data-bind="df-funds-claimable"]').textContent, '•••• FLIP');
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '••••');
     el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
     await flushMicrotasks();
 
-    assert.match(el.querySelector('[data-bind="df-funds-claimable"]').textContent, /4,612,331 FLIP/,
-      'the post-reveal ledger comes from previewClaimCoinflips, not the stale player endpoint');
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '5,599,985',
+      'the effective total is wallet balanceOf plus previewClaimCoinflips');
+    assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, false,
+      'the exact chain claimable still enables its separate claim action');
+    el.disconnectedCallback();
+  });
+
+  test('a revealed win folds only pending claim credit into BAF and animates the score lane', async () => {
+    const unit = 10n ** 18n;
+    _resolvedStakeWei = String(100n * unit);
+    coinflipMod.__setClaimableReaderForTest(async () => 450n * unit);
+    _fetchResponses = {
+      dashboard: {
+        ...dashboardPayload(),
+        coinflip: {
+          ...dashboardPayload().coinflip,
+          claimablePreview: String(200n * unit),
+        },
+      },
+      flipDay: { day: 67, win: true, rewardPercent: 100 },
+      gameState: { level: 7 },
+      baf: {
+        level: 10,
+        score: String(1_000n * unit),
+        rank: 3,
+        totalParticipants: 20,
+        roundStatus: 'open',
+      },
+    };
+
+    const el = mount();
+    await flushMicrotasks();
+
+    const baf = el.querySelector('[data-bind="df-baf-score"]');
+    assert.equal(baf.textContent, '1,000',
+      'the unrevealed result cannot leak into the indexed BAF score');
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, 'RANK #3');
+
+    el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    assert.equal(baf.textContent, '1,250',
+      'BAF adds live preview minus already-processed claimableStored');
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, 'RANK —',
+      'the indexed rank stays hidden while an unindexed score increase is pending');
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '988,104',
+      'Protocol Coins independently adds the full 450 FLIP claimable amount');
+    assert.equal(el.querySelector('[data-bind="df-baf-score-gain"]'), null,
+      'pending BAF is folded into the score instead of a second ON CLAIM line');
+    assert.doesNotMatch(el.textContent, /ON CLAIM/);
+    assert.match(APP_CSS,
+      /\.df-baf-score\.balance-rise::before\s*\{[^}]*59, 130, 246/s,
+      'the shared count-up sweep is recolored blue for BAF');
+    assert.match(APP_CSS,
+      /\.balance-rise \.df-baf-score__value\s*\{[^}]*animation:\s*df-baf-score-rise/s,
+      'a same-scope score increase animates the BAF number on reveal');
+    assert.match(APP_CSS,
+      /\.df-baf-score__title\s*\{[^}]*grid-template-areas:\s*"info info" "unit rank"/s,
+      'rank sits to the right of BAF while the info dot remains above it');
+    assert.match(APP_CSS,
+      /\.df-baf-score__rank\s*\{[^}]*align-self:\s*baseline;[^}]*font-size:\s*0\.5rem/s,
+      'rank is slightly larger and shares the BAF text baseline');
+    el.disconnectedCallback();
+  });
+
+  test('a claimable indexer lag never raises BAF when the revealed flip lost', async () => {
+    const unit = 10n ** 18n;
+    _resolvedStakeWei = String(100n * unit);
+    coinflipMod.__setClaimableReaderForTest(async () => 450n * unit);
+    _fetchResponses = {
+      dashboard: {
+        ...dashboardPayload(),
+        coinflip: {
+          ...dashboardPayload().coinflip,
+          claimablePreview: String(200n * unit),
+        },
+      },
+      flipDay: { day: 67, win: false, rewardPercent: 0 },
+      gameState: { level: 7 },
+      baf: {
+        level: 10,
+        score: String(1_000n * unit),
+        rank: 3,
+        totalParticipants: 20,
+        roundStatus: 'open',
+      },
+    };
+
+    const el = mount();
+    await flushMicrotasks();
+    const baf = el.querySelector('[data-bind="df-baf-score"]');
+    assert.equal(baf.textContent, '1,000');
+
+    el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    assert.equal(baf.textContent, '1,000',
+      'only a winning settlement can contribute an optimistic BAF delta');
+    const receipt = JSON.parse(localStorage.getItem(`flip_settlement_84532_67_${TEST_ADDR}`));
+    assert.equal(receipt.bafGainWei, '0', 'the repaired loss receipt cannot revive the false gain');
     el.disconnectedCallback();
   });
 
@@ -1079,10 +1695,10 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(reloaded.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/,
       'reload reads the current-day stake independently of the saved result');
     assert.match(reloaded.querySelector('[data-position="today"]').textContent,
-      /Today's bet196%WIN \+85,934 FLIP/,
+      /Today's betWIN196%\+85,934 FLIP/,
       'reload keeps the repaired resolved payout in today');
-    assert.match(reloaded.querySelector('[data-bind="df-funds-claimable"]').textContent, /4,612,331 FLIP/,
-      'saved result keeps the full payout resolved');
+    assert.equal(reloaded.querySelector('[data-bind="df-funds-flip-total"]').textContent, '5,599,985',
+      'saved result retains claimable FLIP in the effective total');
     assert.equal(reloaded.querySelectorAll('.df-position-delta').length, 0,
       'reload does not duplicate the amount outside the result copy');
     assert.equal(reloaded.querySelector('.df-modifier-result'), null,
@@ -1109,13 +1725,13 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     const today = el.querySelector('[data-position="today"]');
     const tomorrow = el.querySelector('[data-position="tomorrow"]');
-    const claimable = el.querySelector('[data-bind="df-funds-claimable"]');
-    assert.match(today.textContent, /Today's betLOSS -43,844 FLIP/);
+    const flipTotal = el.querySelector('[data-bind="df-funds-flip-total"]');
+    assert.match(today.textContent, /Today's betLOSS-43,844 FLIP/);
     assert.match(tomorrow.textContent, /9,000 FLIP/);
-    assert.match(claimable.textContent, /4,526,397 FLIP/,
-      'loss leaves the prior claimable balance untouched');
+    assert.equal(flipTotal.textContent, '5,514,051',
+      'loss leaves prior unclaimed FLIP included in the effective total');
     assert.equal(el.querySelectorAll('.df-position-delta').length, 0);
-    assert.equal(today.querySelector('.df-position-value').textContent, 'LOSS -43,844 FLIP',
+    assert.equal(today.querySelector('.df-position-value').textContent, '-43,844 FLIP',
       'the burned resolved-day stake is the explicit signed loss result');
     assert.equal(el.querySelector('[data-bind="df-outcome"]').textContent, '',
       'there is no second loss result');
@@ -1152,12 +1768,82 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(el.querySelector('[data-bind="df-claim-cta"]'), null,
       'Claim DGNRS CTA removed from the coinflip column');
     assert.ok(!/Claim DGNRS/.test(el.innerHTML), 'no claim label in markup');
+    assert.match(APP_CSS,
+      /\.df-next-bet \.df-flip-cta\s*\{[^}]*background:\s*linear-gradient\(180deg, #fde68a, #f59e0b\)/s,
+      'Add Bet uses the yellow FLIP action treatment');
+    assert.match(APP_CSS,
+      /@media \(max-width: 520px\)[\s\S]*?body\.layout-basic \.app-daily-flip \.df-next-bet \.df-flip-cta\[data-write\]\s*\{[^}]*height:\s*1\.3rem[^}]*min-height:\s*0[^}]*max-height:\s*1\.3rem/s,
+      'Add Bet overrides the global mobile tap target with a bounded narrow height');
+    assert.match(APP_CSS,
+      /@media \(max-width: 520px\)[\s\S]*?\.df-next-bet__arrows button\s*\{[^}]*min-width:\s*0[^}]*min-height:\s*0/s,
+      'the two compact stepper halves cannot inherit 44px mobile button minimums');
+    assert.match(APP_CSS,
+      /\.df-claim-flip-cta\[data-write\]\s*\{[^}]*background:\s*linear-gradient\(180deg, #fde68a, #f59e0b\)/s,
+      'Claim uses the same yellow FLIP action treatment');
     assert.equal(el.querySelector('[data-bind="df-redeem-group"]'), null,
       'FLIP redemption lives only in the purchase panel');
     el.disconnectedCallback();
   });
 
-  test('bottom sDGNRS box shows the DB balance and opens an amount-confirmed burn', async () => {
+  test('WWXRP replaces the wallet box and opens a minimum-safe burn dialog', async () => {
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+    const el = mount();
+    await flushMicrotasks();
+
+    const box = el.querySelector('[data-bind="df-funds-wwxrp-box"]');
+    const value = el.querySelector('[data-bind="df-funds-wwxrp"]');
+    const burn = el.querySelector('[data-bind="df-burn-wwxrp-cta"]');
+    assert.ok(box);
+    assert.equal(value.textContent, '12,345 WWXRP');
+    assert.equal(burn.disabled, false);
+    assert.equal(el.querySelector('[data-bind="df-funds-wallet-box"]'), null,
+      'the separate owned-FLIP wallet box is gone');
+
+    burn.dispatchEvent({ type: 'click' });
+    const dialog = el.querySelector('[data-bind="df-wwxrp-dialog"]');
+    const input = el.querySelector('[name="df-wwxrp-amount"]');
+    assert.equal(dialog.hidden, false);
+    assert.equal(input.value, '25', 'the amount defaults to the contract minimum');
+    assert.match(el.innerHTML, /weighted entry in today’s daily draw/i);
+    assert.match(el.innerHTML, /cannot be recovered/i);
+
+    el.querySelector('[data-bind="df-wwxrp-max"]').dispatchEvent({ type: 'click' });
+    assert.equal(input.value, '12345');
+    assert.equal(el.querySelector('[data-bind="df-wwxrp-accept"]').disabled, false);
+    dialog.dispatchEvent({ type: 'click', target: dialog });
+    assert.equal(dialog.hidden, true);
+    el.disconnectedCallback();
+  });
+
+  test('known empty Protocol Coin balances use one dash while retaining their units', async () => {
+    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+    _fetchResponses = {
+      dashboard: {
+        ...dashboardPayload(),
+        flipBalance: '0',
+        wwxrpBalance: '0',
+        sdgnrsBalance: '0',
+        coinflip: { depositedAmount: '0', claimablePreview: '0' },
+      },
+      flipDay: { day: 67, win: false, rewardPercent: 96 },
+    };
+    _currentStakeWei = '0';
+    _resolvedStakeWei = '0';
+
+    const el = mount();
+    await flushMicrotasks();
+
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '-');
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-unit"]').textContent, 'FLIP');
+    assert.equal(el.querySelector('[data-bind="df-funds-wwxrp"]').textContent, '- WWXRP');
+    assert.equal(el.querySelector('[data-bind="df-funds-sdgnrs"]').textContent, '- sDGNRS');
+    assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, true);
+    assert.equal(el.querySelector('[data-bind="df-burn-wwxrp-cta"]').disabled, true);
+    assert.equal(el.querySelector('[data-bind="df-burn-sdgnrs-cta"]').disabled, true);
+    el.disconnectedCallback();
+  });
+
+  test('sDGNRS cell in Protocol Coins shows the DB balance and opens an amount-confirmed burn', async () => {
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
     const el = mount();
     await flushMicrotasks();
@@ -1165,27 +1851,23 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const box = el.querySelector('[data-bind="df-funds-sdgnrs-box"]');
     const value = el.querySelector('[data-bind="df-funds-sdgnrs"]');
     const burn = el.querySelector('[data-bind="df-burn-sdgnrs-cta"]');
-    assert.ok(box, 'sDGNRS is a third, bottom funds box');
-    assert.equal(value.textContent, '123M sDGNRS', 'large sDGNRS balances abbreviate to whole millions');
+    assert.ok(box, 'sDGNRS is the third cell in the shared display');
+    assert.equal(value.textContent, '123M sDGNRS',
+      'sDGNRS balances at 100M and above drop the decimal');
     assert.equal(burn.disabled, false, 'the owner can open the burn flow with at least 1 sDGNRS');
-    assert.match(el.innerHTML, /class="sdgnrs-badge df-sdgnrs-badge"/,
-      'the balance uses the same normal Degenerus badge as sDGNRS rewards');
-    assert.match(el.innerHTML, /crypto_06_ethereum_purple\.svg/,
-      'the sDGNRS badge has the purple currency frame');
-    assert.match(el.innerHTML, /special_eth\.svg/,
-      'the sDGNRS badge carries the ETH mark with three flames');
-    assert.match(APP_CSS, /\.df-funds__display--sdgnrs\s*\{[^}]*grid-template-areas:\s*"badge claim label"/s,
-      'the badge has a dedicated slot and cannot overlap the burn control');
+    assert.equal(el.querySelector('.df-sdgnrs-badge'), null,
+      'the three-flame reward badge stays out of the main balance UI');
     assert.ok(
-      el.innerHTML.indexOf('data-bind="df-funds-wallet-box"')
+      el.innerHTML.indexOf('data-bind="df-funds-wwxrp-box"')
         < el.innerHTML.indexOf('data-bind="df-funds-sdgnrs-box"'),
-      'sDGNRS sits below the wallet box',
+      'sDGNRS follows WWXRP in the shared display',
     );
-    assert.ok(
-      el.innerHTML.indexOf('data-bind="df-burn-sdgnrs-cta"')
-        < el.innerHTML.indexOf('<span class="df-funds__label">sDGNRS</span>'),
-      'Burn is laid out on the left of the label and balance',
+    assert.match(
+      el.innerHTML,
+      /data-bind="df-funds-sdgnrs-box"[\s\S]*?data-bind="df-burn-sdgnrs-cta"/,
+      'Burn remains attached to the sDGNRS cell',
     );
+    assert.match(el.innerHTML, /class="df-funds__title df-funds__toggle"[\s\S]*?<span>PROTOCOL COINS<\/span>/);
 
     burn.dispatchEvent({ type: 'click' });
     const dialog = el.querySelector('[data-bind="df-burn-dialog"]');
@@ -1203,6 +1885,96 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     dialog.dispatchEvent({ type: 'click', target: dialog });
     assert.equal(dialog.hidden, true, 'clicking the backdrop cancels without burning');
+    el.disconnectedCallback();
+  });
+
+  test('sDGNRS VOTE opens the approval ballot and records support on an eligible charity', async () => {
+    const token = 10n ** 18n;
+    const previousWinner = '0x1111111111111111111111111111111111111111';
+    const selected = '0x2222222222222222222222222222222222222222';
+    const trailing = '0x3333333333333333333333333333333333333333';
+    let voted = false;
+    let reads = 0;
+    const writes = [];
+    const ballotState = () => ({
+      level: 43,
+      voter: TEST_ADDR,
+      votingPower: 12_345n * token,
+      lastWinner: previousWinner,
+      candidates: [
+        { slot: 0, recipient: previousWinner, weight: 9_000n, voted: false, previousWinner: true },
+        { slot: 1, recipient: selected, weight: voted ? 14_345n : 2_000n, voted, previousWinner: false },
+        { slot: 2, recipient: trailing, weight: 4_000n, voted: false, previousWinner: false },
+      ],
+    });
+    charityVoteMod.__setCharityVoteDepsForTest({
+      readState: async () => {
+        reads += 1;
+        return ballotState();
+      },
+      vote: async ({ slot }) => {
+        writes.push(slot);
+        voted = true;
+      },
+    });
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+
+    const el = mount();
+    await flushMicrotasks();
+
+    const open = el.querySelector('[data-bind="df-charity-vote-cta"]');
+    const burn = el.querySelector('[data-bind="df-burn-sdgnrs-cta"]');
+    assert.match(el.innerHTML, /data-bind="df-charity-vote-cta"[^>]*>VOTE<\/button>/);
+    assert.equal(burn.textContent, 'BURN');
+    assert.match(
+      APP_CSS,
+      /\.df-burn-wwxrp-cta\[data-write\]\s*\{[^}]*background:\s*linear-gradient\(180deg, #ff7375, #ed0e11\)/s,
+      'the WWXRP burn control uses the requested red action treatment',
+    );
+    assert.match(
+      APP_CSS,
+      /\.df-funds__sdgnrs-actions \.df-charity-vote-cta,[\s\S]*?\.df-funds__sdgnrs-actions \.df-burn-sdgnrs-cta\[data-write\]/,
+      'Vote and Burn share one sizing/treatment rule',
+    );
+    assert.match(APP_CSS, /\.df-charity-vote-cta \{[\s\S]*?#8b5cf6/,
+      'Vote uses sDGNRS purple');
+    assert.match(APP_CSS, /\.df-burn-sdgnrs-cta\[data-write\] \{[\s\S]*?#ed0e11/,
+      'Burn uses the WWXRP red');
+
+    open.dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    const dialog = el.querySelector('[data-bind="df-charity-dialog"]');
+    assert.equal(dialog.hidden, false);
+    assert.equal(reads, 1);
+    assert.equal(el.querySelector('[data-bind="df-charity-level"]').textContent, '43');
+    assert.equal(el.querySelector('[data-bind="df-charity-power"]').textContent, '12K sDGNRS');
+    assert.equal(el.querySelector('[data-bind="df-charity-supported"]').textContent, '0 / 2');
+    assert.match(el.innerHTML, /Approval voting/);
+    assert.match(el.innerHTML, /contract has no downvote action/);
+
+    const priorButton = el.querySelector('[data-bind="df-charity-vote-slot-0"]');
+    const supportButton = el.querySelector('[data-bind="df-charity-vote-slot-1"]');
+    assert.equal(priorButton.textContent, 'SITS OUT');
+    assert.equal(priorButton.disabled, true);
+    assert.equal(supportButton.textContent, '+ SUPPORT');
+    assert.equal(supportButton.disabled, false);
+
+    supportButton.dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    assert.deepEqual(writes, [1]);
+    assert.equal(reads, 2, 'successful support refreshes the authoritative ranking');
+    assert.equal(el.querySelector('[data-bind="df-charity-supported"]').textContent, '1 / 2');
+    assert.equal(el.querySelector('[data-bind="df-charity-vote-slot-1"]').textContent, 'SUPPORTED ✓');
+    assert.match(el.querySelector('[data-bind="df-charity-status"]').textContent, /Support recorded/);
+
+    el.querySelector('[data-bind="df-charity-refresh"]').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.equal(reads, 3, 'the visible refresh control re-reads the ballot');
+
+    dialog.dispatchEvent({ type: 'click', target: dialog });
+    assert.equal(dialog.hidden, true);
     el.disconnectedCallback();
   });
 
@@ -1232,7 +2004,42 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(amount.value, '1', 'disconnect removes the document-level quest shortcut');
   });
 
-  test('Reverse card appears only after reveal and opens a priced confirmation dialog', async () => {
+  test('confirming a coinflip quest submits the shown minimum through Add Bet', async () => {
+    const calls = [];
+    const deposit = Object.assign(
+      async (...args) => {
+        calls.push(['send', ...args]);
+        return { hash: '0xquest', wait: async () => ({ status: 1, logs: [] }) };
+      },
+      { staticCall: async (...args) => { calls.push(['static', ...args]); } },
+    );
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: 84532n }),
+      getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
+    });
+    coinflipMod.__setContractFactoryForTest(() => ({
+      depositCoinflip: deposit,
+      connect() { return this; },
+    }));
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+    const el = mount();
+    await flushMicrotasks();
+
+    const target = 2_000n * (10n ** 18n);
+    document.dispatchEvent({
+      type: 'quest:activate',
+      detail: { questType: 2, target: String(target), variant: 'secondary', submit: true },
+    });
+    await flushMicrotasks();
+
+    assert.deepEqual(calls, [
+      ['static', TEST_ADDR, target],
+      ['send', TEST_ADDR, target],
+    ]);
+    el.disconnectedCallback();
+  });
+
+  test('Reverse card waits until three seconds after the full reveal, then opens its priced dialog', async () => {
     coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({
       queued: 3n,
       locked: false,
@@ -1245,38 +2052,195 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
 
     assert.equal(el.querySelector('[data-bind="df-reverse-cta"]'), null,
-      'no reverse control is shown before the result reveal');
-    el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
-    await flushMicrotasks();
-    const button = el.querySelector('[data-bind="df-reverse-cta"]');
-    assert.ok(button, 'Reverse card appears beside the landed coin');
-    assert.equal(button.getAttribute('data-reverse-target'), 'wwxrp');
-    assert.ok(button.classList.contains('df-reversi-card--target-wwxrp'),
-      'an odd/ETH current side makes the next-reversal card red for WWXRP');
-    button.dispatchEvent({ type: 'click' });
-    assert.equal(el.querySelector('[data-bind="df-reverse-dialog"]').hidden, false,
-      'the card opens the confirmation dialog');
-    assert.equal(el.querySelector('[data-bind="df-reverse-cost"]').textContent, '338 FLIP');
-    assert.equal(el.querySelector('[data-bind="df-reverse-accept"]').textContent,
-      'Accept · 338 FLIP');
-    const sideBadge = el.querySelector('[data-bind="df-reverse-side-img"]');
-    assert.equal(el.querySelector('[data-bind="df-reverse-side"]'), null,
-      'the side name is not printed beside the badge');
-    assert.equal(sideBadge.src,
-      '/shared/coinflip-face-eth.svg');
-    assert.equal(sideBadge.alt, 'ETH — odd side');
-    assert.match(el.innerHTML, /data-bind="df-reverse-accept"/);
-    assert.match(el.innerHTML, /\/shared\/reverse-flip-card\.svg/);
-    assert.match(el.innerHTML, /reverses the outcome of the next flip/i);
-    assert.match(el.innerHTML, /alters all jackpot outcomes/i);
+      'the Reverse control is absent beside the unresolved spinning coin');
+    const realSetTimeout = globalThis.setTimeout;
+    const scheduled = [];
+    try {
+      globalThis.setTimeout = (fn, delay = 0) => {
+        const handle = { fn, delay: Number(delay) || 0, unref() {} };
+        scheduled.push(handle);
+        return handle;
+      };
+      el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+      assert.equal(el.querySelector('[data-bind="df-reverse-cta"]'), null,
+        'the landed result gets a clean card-free reading beat');
 
-    const dialog = el.querySelector('[data-bind="df-reverse-dialog"]');
-    dialog.dispatchEvent({ type: 'click', target: dialog });
-    assert.equal(dialog.hidden, true, 'clicking the backdrop dismisses the Reverse Flip view');
+      const cardDelay = scheduled.find((entry) => (
+        entry.delay === revealPlanning.REVERSE_CARD_POST_REVEAL_DELAY_MS
+      ));
+      assert.ok(cardDelay, 'the Reverse card owns a dedicated post-animation delay');
+      cardDelay.fn();
+
+      const button = el.querySelector('[data-bind="df-reverse-cta"]');
+      assert.ok(button, 'Reverse card appears beside the landed coin after the delay');
+      assert.equal(button.getAttribute('data-reverse-target'), 'wwxrp');
+      assert.ok(button.classList.contains('df-reversi-card--target-wwxrp'),
+        'an odd/ETH current side makes the next-reversal card red for WWXRP');
+      button.dispatchEvent({ type: 'click' });
+      assert.equal(el.querySelector('[data-bind="df-reverse-dialog"]').hidden, false,
+        'the card opens the confirmation dialog');
+      assert.equal(el.querySelector('[data-bind="df-reverse-cost"]').textContent, '338 FLIP');
+      assert.equal(el.querySelector('[data-bind="df-reverse-accept"]').textContent,
+        'Accept · 338 FLIP');
+      const sideBadge = el.querySelector('[data-bind="df-reverse-side-img"]');
+      assert.equal(el.querySelector('[data-bind="df-reverse-side"]'), null,
+        'the side name is not printed beside the badge');
+      assert.equal(sideBadge.src, '/shared/coinflip-face-eth.svg');
+      assert.equal(sideBadge.alt, 'ETH — odd side');
+      assert.match(el.innerHTML, /data-bind="df-reverse-accept"/);
+      assert.match(el.innerHTML, /\/shared\/reverse-flip-card\.svg/);
+      assert.match(el.innerHTML, /reverses the outcome of the next flip/i);
+      assert.match(el.innerHTML, /alters all jackpot outcomes/i);
+
+      const dialog = el.querySelector('[data-bind="df-reverse-dialog"]');
+      dialog.dispatchEvent({ type: 'click', target: dialog });
+      assert.equal(dialog.hidden, true, 'clicking the backdrop dismisses the Reverse Flip view');
+      assert.equal(el.querySelector('.df-coin--landed').querySelector('img').src,
+        '/shared/coinflip-face-red.svg',
+        'the just-resolved loss remains authoritative during its 15-second reading window');
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      el.disconnectedCallback();
+    }
+  });
+
+  test('the authoritative landing ignores live reversals for 15 seconds after fakeout completion', async () => {
+    let queued = 0n;
+    coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({
+      queued,
+      locked: false,
+    }));
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: false, rewardPercent: 96 },
+    };
+    const plan = revealPlanning.selectFlipRevealPlan(67, false);
+    const el = mount();
+    await flushMicrotasks();
+
+    const realSetTimeout = globalThis.setTimeout;
+    const realMatchMedia = globalThis.matchMedia;
+    const scheduled = [];
+    try {
+      globalThis.matchMedia = () => ({ matches: false });
+      globalThis.setTimeout = (fn, delay = 0) => {
+        const handle = { fn, delay: Number(delay) || 0, unref() {} };
+        scheduled.push(handle);
+        return handle;
+      };
+
+      el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+      const landing = scheduled.filter((entry) => entry.delay === plan.totalMs).at(-1);
+      assert.ok(landing, 'the deterministic fakeout has a final landing callback');
+      landing.fn();
+      assert.equal(
+        el.querySelector('.df-coin--landed').querySelector('img').src,
+        '/shared/coinflip-face-red.svg',
+        'the landing starts on the actual loss face',
+      );
+
+      queued = 1n;
+      storeMod.update('connected.address', TEST_ADDR);
+      await flushPromises();
+      assert.equal(el.querySelector('.df-coin--live-reverse'), null,
+        'a newly observed Reverse Flip cannot animate over the result yet');
+      assert.equal(
+        el.querySelector('.df-coin--landed').querySelector('img').src,
+        '/shared/coinflip-face-red.svg',
+      );
+
+      const truthWindow = scheduled.find((entry) => (
+        entry.delay === revealPlanning.RESULT_TRUTH_WINDOW_MS
+      ));
+      assert.ok(truthWindow, 'the authoritative face is held for exactly 15 seconds');
+      truthWindow.fn();
+      assert.ok(el.querySelector('.df-coin--live-reverse'),
+        'queued live-side animation may resume once the reading window expires');
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      if (realMatchMedia === undefined) delete globalThis.matchMedia;
+      else globalThis.matchMedia = realMatchMedia;
+      el.disconnectedCallback();
+    }
+  });
+
+  test('a mid-day Reverse Flip from another wallet taps the coin, flips its face, and recolors', async () => {
+    let queued = 0n;
+    coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({
+      queued,
+      locked: false,
+    }));
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: false, rewardPercent: 96 },
+    };
+    localStorage.setItem('flip_day_84532_67', '1');
+    const el = mount();
+    await flushMicrotasks();
+
     assert.equal(el.querySelector('.df-coin--landed').querySelector('img').src,
-      '/shared/coinflip-face-eth.svg',
-      'after dismissal the main coin shows the live odd/ETH side, not the prior loss face');
-    el.disconnectedCallback();
+      '/shared/coinflip-face-red.svg');
+    assert.ok(el.querySelector('[data-bind="df-reverse-cta"]')
+      .classList.contains('df-reversi-card--target-eth'));
+
+    const realSetTimeout = globalThis.setTimeout;
+    const realMatchMedia = globalThis.matchMedia;
+    const scheduled = [];
+    try {
+      globalThis.matchMedia = () => ({ matches: false });
+      globalThis.setTimeout = (fn, delay = 0) => {
+        const handle = { fn, delay: Number(delay) || 0, unref() {} };
+        scheduled.push(handle);
+        return handle;
+      };
+      queued = 1n;
+      // The production 30-second poll uses this same refresh path. Re-fire the
+      // account subscription here so the test does not have to wait on a clock.
+      storeMod.update('connected.address', TEST_ADDR);
+      await flushPromises();
+
+      let coin = el.querySelector('.df-coin--live-reverse');
+      let card = el.querySelector('[data-bind="df-reverse-cta"]');
+      assert.ok(coin, 'the landed face is held in a live reversal stage');
+      assert.ok(card.classList.contains('df-reversi-card--live-tap'));
+      assert.ok(card.classList.contains('df-reversi-card--target-eth'),
+        'the approach starts in the card color visible before the reversal');
+
+      const contact = scheduled.find((entry) => entry.delay === 320);
+      assert.ok(contact, 'the card gets a distinct approach before contact');
+      contact.fn();
+      coin = el.querySelector('.df-coin--live-reverse');
+      card = el.querySelector('[data-bind="df-reverse-cta"]');
+      assert.ok(coin.classList.contains('df-coin--reverse-out'),
+        'the coin starts turning only after the card taps it');
+      assert.ok(card.classList.contains('df-reversi-card--target-wwxrp'),
+        'the docked card changes from green to red for the next available target');
+
+      const edge = scheduled.find((entry) => entry.delay === 260);
+      assert.ok(edge, 'the first half-turn reaches an edge-on frame');
+      edge.fn();
+      coin = el.querySelector('.df-coin--live-reverse');
+      assert.equal(coin.querySelector('img').src, '/shared/coinflip-face-eth.svg');
+      assert.ok(coin.classList.contains('df-coin--reverse-in'));
+
+      const finish = scheduled.filter((entry) => entry.delay === 320).at(-1);
+      assert.notEqual(finish, contact);
+      finish.fn();
+      const landed = el.querySelector('.df-coin--landed');
+      assert.equal(landed.getAttribute('data-current-side'), 'eth');
+      assert.equal(landed.querySelector('img').src, '/shared/coinflip-face-eth.svg');
+      assert.ok(el.querySelector('[data-bind="df-reverse-cta"]')
+        .classList.contains('df-reversi-card--target-wwxrp'));
+
+      assert.match(APP_CSS, /@keyframes df-live-reversi-tap[\s\S]*?35\.555556%/);
+      assert.match(APP_CSS, /@keyframes df-live-side-flip-out[\s\S]*?rotateY\(90deg\)/);
+      assert.match(APP_CSS, /@keyframes df-live-side-flip-in[\s\S]*?rotateY\(-90deg\)/);
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      if (realMatchMedia === undefined) delete globalThis.matchMedia;
+      else globalThis.matchMedia = realMatchMedia;
+      el.disconnectedCallback();
+    }
   });
 
   test('Reverse card is hidden while RNG is locked', async () => {
@@ -1288,9 +2252,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: false, rewardPercent: 96 },
     };
+    localStorage.setItem('flip_day_84532_67', '1');
     const el = mount();
-    await flushMicrotasks();
-    el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
     await flushMicrotasks();
     const reverseCard = el.querySelector('[data-bind="df-reverse-cta"]');
     assert.equal(reverseCard.hidden, true, 'locked RNG removes the Reverse icon');
@@ -1334,6 +2297,8 @@ describe('new-day rollover (codex-found race)', () => {
     coinflipMod.__setCurrentStakeReaderForTest(async () => _currentStakeWei);
     coinflipMod.__setResolvedStakeReaderForTest(async () => _resolvedStakeWei);
     coinflipMod.__setClaimableReaderForTest(async () => null);
+    coinflipMod.__setLatestResultReaderForTest(async () => null);
+    coinflipMod.__setWidgetBalancesReaderForTest(async () => null);
     coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({
       queued: 0n,
       locked: false,
@@ -1347,6 +2312,8 @@ describe('new-day rollover (codex-found race)', () => {
     coinflipMod.__resetCurrentStakeReaderForTest();
     coinflipMod.__resetResolvedStakeReaderForTest();
     coinflipMod.__resetClaimableReaderForTest();
+    coinflipMod.__resetLatestResultReaderForTest();
+    coinflipMod.__resetWidgetBalancesReaderForTest();
     coinflipMod.__resetReverseFlipQuoteReaderForTest();
   });
 
@@ -1370,6 +2337,33 @@ describe('new-day rollover (codex-found race)', () => {
       'stale click did NOT reveal day 68');
     assert.equal(globalThis.localStorage.getItem('flip_day_84532_67'), null,
       'nor did it write the old day post-rollover');
+    el.disconnectedCallback();
+  });
+
+  test("a zeroed Tomorrow stake becomes the new unresolved Today's bet", async () => {
+    _currentStakeWei = '12000000000000000000000';
+    _resolvedStakeWei = '43844000000000000000000';
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    const el = mount();
+    await flushMicrotasks();
+    assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /12,000 FLIP/);
+
+    // The contract has moved the day-keyed stake out of coinflipAmount(), but
+    // its immutable resolved-day event has not reached the historical reader.
+    _currentStakeWei = '0';
+    _resolvedStakeWei = null;
+    _fetchResponses.flipDay = null;
+    localStorage.setItem('jackpot_complete_day_84532_68', '1');
+    storeMod.update('app.lastDay', { day: 68, status: 'resolved' });
+    await flushMicrotasks();
+
+    assert.match(el.querySelector('[data-position="today"]').textContent, /Today's bet12,000 FLIP/,
+      'the prior live stake moves into the newly unresolved result row');
+    assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /Tomorrow's bet0 FLIP/,
+      'the cleared live bucket remains visible as the new Tomorrow amount');
     el.disconnectedCallback();
   });
 });

@@ -338,6 +338,60 @@ describe('sendTx receipt handling', () => {
     const tx = { hash: '0xreverted', wait: async () => ({ status: 0, hash: '0xreverted' }) };
     await assert.rejects(sendTx(() => Promise.resolve(tx), 'rev'), /Reverted/);
   });
+
+  test('accepts a successful speed-up replacement instead of reporting a false failure', async () => {
+    const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    setProvider(provider);
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    const replacementReceipt = { status: 1, hash: '0xspeedup' };
+    const tx = {
+      hash: '0xoriginal',
+      wait: async () => {
+        const error = new Error('transaction was replaced');
+        error.code = 'TRANSACTION_REPLACED';
+        error.cancelled = false;
+        error.receipt = replacementReceipt;
+        throw error;
+      },
+    };
+    assert.equal(await sendTx(() => Promise.resolve(tx), 'speed-up'), replacementReceipt);
+  });
+
+  test('recovers a mined receipt when an injected provider drops the wait subscription', async () => {
+    const recovered = { status: 1, hash: '0xconfirmed' };
+    const base = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    const provider = {
+      ...base,
+      getTransactionReceipt: async (hash) => hash === '0xconfirmed' ? recovered : null,
+    };
+    setProvider(provider);
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    const tx = {
+      hash: '0xconfirmed',
+      wait: async () => { throw new Error('provider subscription disconnected'); },
+    };
+    assert.equal(await sendTx(() => Promise.resolve(tx), 'confirmed'), recovered);
+  });
+
+  test('does not treat a cancelled replacement as success', async () => {
+    const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    setProvider(provider);
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    const tx = {
+      hash: '0xoriginal',
+      wait: async () => {
+        const error = new Error('transaction cancelled');
+        error.code = 'TRANSACTION_REPLACED';
+        error.cancelled = true;
+        error.receipt = { status: 1, hash: '0xcancel' };
+        throw error;
+      },
+    };
+    await assert.rejects(sendTx(() => Promise.resolve(tx), 'cancelled'), /cancelled/);
+  });
 });
 
 // ===========================================================================

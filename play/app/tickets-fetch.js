@@ -20,12 +20,18 @@ let lastResult = null;
 let lastResultKey = null;
 
 export async function fetchTicketsByTrait(addr, level, day) {
+  // `day` is intentionally part of the cache key but NOT in the URL: the API's
+  // by-trait endpoint applies a strict blockNumber<=endOfDayN filter to a table
+  // that's upsert-in-place, so passing day routinely drops every row. The
+  // picker counts (from /player/?day) ignore the day filter on the same table,
+  // so we mirror that behaviour here for visual consistency. Historical
+  // per-block accuracy needs a separate ticket-history table.
   const key = `${addr}::${level}::${day}`;
   if (key === lastResultKey && lastResult) return lastResult;
   if (key === lastKey && inFlight) return inFlight;
   lastKey = key;
   const url = `${API_BASE}/player/${encodeURIComponent(addr)}/tickets/by-trait`
-            + `?level=${encodeURIComponent(level)}&day=${encodeURIComponent(day)}`;
+            + `?level=${encodeURIComponent(level)}`;
   inFlight = fetch(url)
     .then((r) => (r.ok ? r.json() : null))
     .then((data) => {

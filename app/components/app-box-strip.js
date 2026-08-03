@@ -32,6 +32,7 @@ import {
 } from '../app/lootbox.js';
 import { compactUiError } from '../app/ui-error.js';
 import {
+  enrichLootboxBoonLegs,
   parseOpenLegsFromReceipt,
   openLegsFromFeed,
   readOpenLegsFromChain,
@@ -40,6 +41,7 @@ import { publishPendingActions, clearPendingActions } from '../app/pending-actio
 import { recordLootboxTicketPacks } from '../app/pack-watch.js';
 import {
   queueReveal,
+  LOOTBOX_REVEAL_QUEUED_EVENT,
   LOOTBOX_REVEAL_COMPLETE_EVENT,
   LOOTBOX_REVEAL_ABORT_EVENT,
 } from './reveal-overlay.js';
@@ -214,6 +216,7 @@ class AppBoxStrip extends HTMLElement {
   #pollBusy = false;
   #errorTimer = null;
   #docListener = null;
+  #revealQueuedListener = null;
   #revealCompleteListener = null;
   #revealAbortListener = null;
   // API history can contain legacy purchase rows whose result never received
@@ -252,12 +255,15 @@ class AppBoxStrip extends HTMLElement {
       && typeof document.removeEventListener === 'function') {
       try { document.removeEventListener('app-decimator:tx-confirmed', this.#docListener); }
       catch (_) { /* defensive */ }
+      try { document.removeEventListener(LOOTBOX_REVEAL_QUEUED_EVENT, this.#revealQueuedListener); }
+      catch (_) { /* defensive */ }
       try { document.removeEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, this.#revealCompleteListener); }
       catch (_) { /* defensive */ }
       try { document.removeEventListener(LOOTBOX_REVEAL_ABORT_EVENT, this.#revealAbortListener); }
       catch (_) { /* defensive */ }
     }
     this.#docListener = null;
+    this.#revealQueuedListener = null;
     this.#revealCompleteListener = null;
     this.#revealAbortListener = null;
     clearPendingActions(PENDING_SOURCE);
@@ -335,6 +341,18 @@ class AppBoxStrip extends HTMLElement {
     };
     document.addEventListener('app-decimator:tx-confirmed', this.#docListener);
 
+    // A direct Degenerette settlement and the durable box feed can discover the
+    // same index-zero box independently. As soon as that exact result is queued
+    // behind the reels, retire the tray copy; waiting until the reveal finishes
+    // leaves a second OPEN LOOTBOX button pointing at the same on-chain legs.
+    this.#revealQueuedListener = (event) => {
+      const detail = event?.detail;
+      const address = String(detail?.address || '').toLowerCase();
+      const key = String(detail?.key || '');
+      if (!address || !key) return;
+      _markRevealed(address, key);
+      if (address === this.#addr) this.#removeBox(key);
+    };
     this.#revealCompleteListener = (event) => {
       const detail = event?.detail;
       const address = String(detail?.address || '').toLowerCase();
@@ -356,6 +374,7 @@ class AppBoxStrip extends HTMLElement {
         this.#render();
       }
     };
+    document.addEventListener(LOOTBOX_REVEAL_QUEUED_EVENT, this.#revealQueuedListener);
     document.addEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, this.#revealCompleteListener);
     document.addEventListener(LOOTBOX_REVEAL_ABORT_EVENT, this.#revealAbortListener);
   }
@@ -585,7 +604,11 @@ class AppBoxStrip extends HTMLElement {
         player: this.#addr,
         lootboxIndex: box.index,
       });
-      const legs = parseOpenLegsFromReceipt(receipt, this.#addr);
+      let legs = parseOpenLegsFromReceipt(receipt, this.#addr);
+      legs = await enrichLootboxBoonLegs(legs, {
+        player: this.#addr,
+        blockNumber: receipt?.blockNumber ?? null,
+      });
       if (legs.length > 0) {
         box.transactionHash = receipt?.hash || receipt?.transactionHash || box.transactionHash || null;
         this.#queueBoxReveal(box, legs);
@@ -649,6 +672,10 @@ class AppBoxStrip extends HTMLElement {
       }
     }
 
+    legs = await enrichLootboxBoonLegs(legs, {
+      player: this.#addr,
+      blockNumber: box.blockNumber ?? null,
+    });
     if (legs.length > 0 && this.#queueBoxReveal(box, legs, {
       settledExpected: true,
     })) return;
@@ -752,7 +779,20 @@ class AppBoxStrip extends HTMLElement {
           ? box.resolved ? 'Result indexed · ready to replay' : 'RNG ready · prizes locked'
           : `Waiting for RNG${box.day == null ? '' : ` · Day ${box.day}`}`,
       state: box.opening ? 'busy' : box.ready ? 'ready' : 'waiting',
+      // Pending/RNG-ready boxes cannot spoil a payout that does not exist yet.
+      // Consumers may gate balances only after an indexed settlement exists.
+      resolved: Boolean(box.resolved),
+      pinned: true,
+      progress: !box.ready && !box.opening ? 'indeterminate' : null,
+      write: !box.resolved,
+      // A resolved/indexed box only replays its popup. An unresolved ready box
+      // still needs an explicit openBox wallet transaction and is never run by
+      // the tray's OPEN WHEN READY preference.
+      autoOpen: Boolean(box.resolved && box.ready && !box.opening),
       order: 20,
+      chronology: Number.isFinite(Number(box.createdAt))
+        ? Number(box.createdAt)
+        : Number.isFinite(Number(box.ord)) ? Number(box.ord) : Number(box.index),
       run: () => this.#onOpenClick(box),
       clearAll: () => this.#clearAllBoxes(),
     })));

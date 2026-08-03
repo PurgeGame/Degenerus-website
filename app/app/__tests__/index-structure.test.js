@@ -24,6 +24,8 @@ import { dirname, resolve as resolvePath } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const htmlPath = resolvePath(__dirname, '../../index.html');
 const html = readFileSync(htmlPath, 'utf8');
+const onboarding = readFileSync(resolvePath(__dirname, '../../components/app-onboarding.js'), 'utf8');
+const appCss = readFileSync(resolvePath(__dirname, '../../styles/app.css'), 'utf8');
 
 describe('index.html basic-mode skeleton', () => {
   test('body carries the layout-basic class', () => {
@@ -62,12 +64,16 @@ describe('index.html basic-mode skeleton', () => {
   });
 
   test('day summary CTA has a landing slot beneath the middle draw', () => {
-    const drawMatch = html.match(/<div class="jackpot-hero__draw">([\s\S]*?)<\/div>/);
-    assert.ok(drawMatch, 'middle draw block present');
-    assert.match(drawMatch[1], /<last-day-jackpot>/);
-    assert.match(drawMatch[1], /<replay-panel/);
-    assert.match(drawMatch[1], /data-bind="day-summary-slot" hidden/,
+    const drawStart = html.indexOf('<div class="jackpot-hero__draw">');
+    const drawEnd = html.indexOf('<app-daily-flip>', drawStart);
+    assert.ok(drawStart >= 0 && drawEnd > drawStart, 'middle draw block present');
+    const draw = html.slice(drawStart, drawEnd);
+    assert.match(draw, /<last-day-jackpot>/);
+    assert.match(draw, /<replay-panel/);
+    assert.match(draw, /data-bind="day-summary-slot" hidden/,
       'the landing slot consumes no height until the summary unlocks');
+    assert.match(draw, /class="jackpot-day-history"[^>]*hidden/,
+      'past-day controls consume no height during the live day');
   });
 
   test('global address / affiliate search is removed', () => {
@@ -82,6 +88,20 @@ describe('index.html basic-mode skeleton', () => {
       'onboarding component script loaded');
   });
 
+  test('the splash tutorial is a grey non-navigation control with coming-soon feedback', () => {
+    assert.match(onboarding,
+      /<button[^>]*class="onb-tutorial onb-tutorial--soon"[\s\S]*?aria-disabled="true"/,
+      'tutorial is rendered as a non-navigating disabled affordance');
+    assert.doesNotMatch(onboarding, /onb-tutorial[^\n]*href=/,
+      'the coming-soon control cannot navigate to the unfinished tutorial');
+    assert.match(appCss,
+      /\.onb-tutorial--soon::after\s*\{[^}]*content:\s*'COMING SOON'/s,
+      'hover and keyboard focus expose the coming-soon label');
+    assert.match(appCss,
+      /\.onb-tutorial\s*\{[^}]*rgba\(203, 213, 225, 0\.52\)[^}]*cursor:\s*not-allowed/s,
+      'the control has the requested grey disabled treatment');
+  });
+
   test('aggregate claims banner and winnings strip are removed', () => {
     assert.equal(html.indexOf('<app-claims-panel'), -1, 'claims panel unmounted');
     assert.equal(html.indexOf('components/app-claims-panel.js'), -1, 'claims script removed');
@@ -94,8 +114,12 @@ describe('index.html basic-mode skeleton', () => {
 
 
   test('more-ways is the afKing Passes drawer (packs panel gone — combined buy owns lootboxes)', () => {
-    const detailsMatch = html.match(/<details class="more-ways">([\s\S]*?)<\/details>/);
+    const detailsMatch = html.match(/<details class="more-ways"[^>]*>([\s\S]*?)<\/details>/);
     assert.ok(detailsMatch, '<details class="more-ways"> block present');
+    assert.match(detailsMatch[0], /^<details class="more-ways"[^>]*\bopen\b[^>]*>/,
+      'the pass desk is open by default');
+    assert.match(detailsMatch[0], /\bid="afking-passes"/,
+      'the purchase shortcut has a stable drawer target');
     assert.match(detailsMatch[1], /<summary class="more-ways__summary">afKing Passes<\/summary>/);
     assert.match(detailsMatch[1], /<app-pass-section>/);
     assert.equal(html.indexOf('<app-packs-panel>'), -1, 'packs panel unmounted');
@@ -160,6 +184,7 @@ describe('index.html basic-mode skeleton', () => {
       '/app/components/app-daily-flip.js',
       '/app/components/app-parimutuel-panel.js',
       '/app/components/app-quest-panel.js',
+      '/app/components/app-day-history-replays.js',
     ]) {
       assert.ok(html.includes(`src="${src}"`), `script tag: ${src}`);
     }

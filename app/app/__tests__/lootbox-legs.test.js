@@ -15,15 +15,19 @@ import assert from 'node:assert/strict';
 import {
   OPEN_EVENTS_ABI,
   decodeBoxSpin,
+  enrichLootboxBoonLegs,
+  lootboxRewardPresentation,
   wholeTicketsFromOpened,
   parseOpenLegsFromReceipt,
   openLegsFromFeed,
+  openLegsFromDegenerettePayouts,
   readOpenLegsFromChain,
   REWARD_TYPE_LABELS,
 } from '../lootbox-legs.js';
 import { ethers } from '../contracts.js';
 import * as contractsMod from '../contracts.js';
-import { CONTRACTS } from '../chain-config.js';
+import { _testing as pollingTesting } from '../polling.js';
+import { CHAIN, CONTRACTS } from '../chain-config.js';
 
 // ---------------------------------------------------------------------------
 // decodeBoxSpin
@@ -32,6 +36,93 @@ import { CONTRACTS } from '../chain-config.js';
 function packSpin(playerTicket, resultTicket, score) {
   return BigInt(playerTicket) | (BigInt(resultTicket) << 32n) | (BigInt(score) << 64n);
 }
+
+describe('lootboxRewardPresentation', () => {
+  test('turns compact reward events into exact strength and product copy', () => {
+    assert.deepEqual(lootboxRewardPresentation(8, 2_500n), {
+      label: 'DECIMATOR BOON',
+      value: '+25%',
+      detail: 'Adds +25% entry weight to your next Decimator burn, calculated on up to 50K FLIP',
+    });
+    assert.deepEqual(lootboxRewardPresentation(10, 50n), {
+      label: 'DEGEN SCORE BOON',
+      value: '+50',
+      detail: 'Your next lootbox opening adds 50 Degen Score and +50 quest streak',
+    });
+    assert.deepEqual(lootboxRewardPresentation(10, 3_500n), {
+      label: 'DEITY PASS DISCOUNT',
+      value: '−35%',
+      detail: 'Your deity pass purchase costs 35% less',
+    });
+  });
+
+  test('honestly names the one event family whose product category is not encoded', () => {
+    const boost = lootboxRewardPresentation(6, 2_500n);
+    assert.equal(boost.label, 'PURCHASE BOOST');
+    assert.equal(boost.value, '+25%');
+    assert.match(boost.detail, /Lootbox or ETH Ticket purchase/i);
+    assert.match(boost.detail, /Buy button shows the \+25% BOON badge/i);
+
+    assert.deepEqual(lootboxRewardPresentation(2, 5_000n * (10n ** 18n)), {
+      label: 'COINFLIP BOON',
+      value: 'BOOST',
+      detail: 'Boosts your next manual Coinflip deposit, calculated on up to 100K FLIP',
+    });
+    assert.deepEqual(lootboxRewardPresentation(
+      2,
+      5_000n * (10n ** 18n),
+      { boonBps: 1_000 },
+    ), {
+      label: 'COINFLIP BOON',
+      value: '+10%',
+      detail: 'Your next manual Coinflip deposit gets +10%, calculated on up to 100K FLIP',
+    });
+
+    assert.deepEqual(lootboxRewardPresentation(12, 1n), {
+      label: 'QUEST STREAK PROTECTION',
+      value: '1 MISSED DAY',
+      detail: 'Forgives one missed quest day before your streak can reset',
+    });
+  });
+});
+
+describe('enrichLootboxBoonLegs', () => {
+  afterEach(() => pollingTesting.resetBoonStateReader());
+
+  test('reads the post-settlement packed state and attaches the exact coinflip tier', async () => {
+    let read;
+    pollingTesting.setBoonStateReader(async (address, options) => {
+      read = { address, options };
+      return {
+        // Coinflip tier 2 (+10%), awarded on the current day.
+        slot0: (2n << 48n) | 62n,
+        slot1: 0n,
+        currentDay: 62,
+      };
+    });
+    const input = [{
+      legType: 'reward',
+      rewardType: 2,
+      amount: 5_000n * (10n ** 18n),
+    }];
+    const enriched = await enrichLootboxBoonLegs(input, {
+      player: PLAYER,
+      blockNumber: 12_345,
+    });
+
+    assert.deepEqual(read, {
+      address: PLAYER,
+      options: { blockTag: 12_345 },
+    });
+    assert.equal(enriched[0].boonType, 2);
+    assert.equal(enriched[0].boonBps, 1_000);
+    assert.equal(lootboxRewardPresentation(
+      enriched[0].rewardType,
+      enriched[0].amount,
+      { boonBps: enriched[0].boonBps },
+    ).value, '+10%');
+  });
+});
 
 describe('decodeBoxSpin', () => {
   test('single WWXRP spin: type + count + reels + traits decode', () => {
@@ -116,6 +207,7 @@ describe('parseOpenLegsFromReceipt', () => {
     const betId = (1n << 63n) | (1n << 60n) | 42n;
     const packed = (BigInt(0x01) | (BigInt(0x02) << 32n) | (4n << 64n)) | (1n << 216n) | (1n << 224n);
     const receipt = {
+      hash: `0x${'ab'.repeat(32)}`,
       logs: [
         log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 6, 1094, ethers.parseEther('120'), true]),
         log('LootBoxDgnrsReward', [PLAYER, 10_000_000_000n, ethers.parseEther('3')]),
@@ -127,6 +219,8 @@ describe('parseOpenLegsFromReceipt', () => {
     assert.equal(legs.length, 4);
 
     assert.equal(legs[0].legType, 'opened');
+    assert.equal(legs[0].transactionHash, receipt.hash,
+      'the direct-box presentation keeps the settlement identity');
     assert.equal(legs[0].futureLevel, 6);
     assert.equal(legs[0].wholeTickets, 11, 'scaled 1094 + roundedUp → 11');
     assert.equal(legs[0].flip, ethers.parseEther('120'));
@@ -208,7 +302,7 @@ describe('openLegsFromFeed', () => {
     assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'reward', 'spin']);
     assert.equal(legs[0].wholeTickets, 11);
     assert.equal(legs[0].futureLevel, 6);
-    assert.equal(legs[1].label, 'Lazy pass');
+    assert.equal(legs[1].label, 'Lazy pass discount boon');
     assert.equal(legs[2].payout, 55n);
     assert.equal(legs[2].reels.length, 1);
   });
@@ -226,6 +320,33 @@ describe('openLegsFromFeed', () => {
   });
 });
 
+describe('openLegsFromDegenerettePayouts', () => {
+  test('turns a large Degenerette win direct-box settlement into revealable legs', () => {
+    const legs = openLegsFromDegenerettePayouts([
+      {
+        rewardType: 'LootBoxReward',
+        rewardData: { rewardType: '12', lootboxAmount: '900', amount: '1' },
+      },
+      {
+        rewardType: 'opened',
+        rewardData: {
+          amount: '900', futureLevel: 44, futureTickets: 325, flip: '700', roundedUp: true,
+        },
+      },
+      {
+        rewardType: 'LootBoxDgnrsReward',
+        rewardData: { lootboxAmount: '900', dgnrsAmount: '55' },
+      },
+    ]);
+
+    assert.deepEqual(legs.map((leg) => leg.legType), ['reward', 'opened', 'dgnrs']);
+    assert.equal(legs[0].label, 'Quest streak shield');
+    assert.equal(legs[1].wholeTickets, 4);
+    assert.equal(legs[1].futureLevel, 44);
+    assert.equal(legs[2].amount, 55n);
+  });
+});
+
 describe('readOpenLegsFromChain', () => {
   afterEach(() => contractsMod.clearProvider());
 
@@ -235,7 +356,7 @@ describe('readOpenLegsFromChain', () => {
       PLAYER, 7n, 1_000n, 6, 400, 120n, false,
     ]);
     contractsMod.setProvider({
-      getBlockNumber: async () => 5000,
+      getBlockNumber: async () => CHAIN.deployBlock + 5000,
       getLogs: async (filter) => {
         assert.equal(filter.address.toLowerCase(), GAME.toLowerCase());
         assert.equal(filter.toBlock - filter.fromBlock, 1799);
@@ -255,6 +376,28 @@ describe('readOpenLegsFromChain', () => {
     const legs = await readOpenLegsFromChain({ player: PLAYER, lootboxIndex: 7 });
     assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'reward']);
     assert.equal(legs[0].wholeTickets, 4);
-    assert.equal(legs[1].label, 'Lazy pass');
+    assert.equal(legs[1].label, 'Lazy pass discount boon');
+  });
+
+  test('names the real quest shield and never invents a generic bonus boon', () => {
+    const tx = `0x${'aa'.repeat(32)}`;
+    const rows = [
+      {
+        player: PLAYER, transactionHash: tx, logIndex: 1, legType: 'opened',
+        lootboxIndex: '8', rewardData: { futureTickets: 0, roundedUp: false },
+      },
+      {
+        player: PLAYER, transactionHash: tx, logIndex: 2, legType: 'reward',
+        rewardData: { rewardType: 12, amount: '1' },
+      },
+      {
+        player: PLAYER, transactionHash: tx, logIndex: 3, legType: 'reward',
+        rewardData: { rewardType: 99, amount: '1' },
+      },
+    ];
+    const legs = openLegsFromFeed(rows, { player: PLAYER, lootboxIndex: 8n });
+    assert.equal(legs[1].label, 'Quest streak shield');
+    assert.equal(legs[2].label, 'Unknown protocol reward #99');
+    assert.ok(legs.every((leg) => !/bonus reward/i.test(String(leg.label || ''))));
   });
 });

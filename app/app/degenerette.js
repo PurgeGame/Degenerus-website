@@ -60,6 +60,7 @@ const DEGENERETTE_ABI = [
   // later stale/not-ready rows are skipped independently.
   'function degeneretteResolve(address[] calldata players, uint64[] calldata betIds) external',
   'function degeneretteBetInfo(address player, uint64 betId) external view returns (uint256 packed)',
+  'function playerActivityScore(address player) external view returns (uint256 scorePoints)',
   'error BatchAlreadyTaken()',
   'error NoWork()',
   'error LengthMismatch()',
@@ -103,6 +104,194 @@ export const DEGENERETTE_LIMITS = Object.freeze({
 /** Contract bounds for a currency, or null if the currency is unsupported. */
 export function degeneretteLimits(currency) {
   return DEGENERETTE_LIMITS[Number(currency)] || null;
+}
+
+// ---------------------------------------------------------------------------
+// Exact payout-table projection.
+//
+// These constants and integer operations mirror the currently deployed
+// DegenerusGameDegeneretteModule. The contract has no public quote method, so
+// keeping this pure projection beside the canonical write ABI lets the hidden
+// rules sheet show the schedule for the ticket, Hero, currency, and activity
+// score the player is actually about to submit.
+// ---------------------------------------------------------------------------
+
+const HONEST_BASE_PACKED = Object.freeze({
+  0: 0x0001905a00004e1400001103000005fe000001e7000000c30000000000000000n,
+  '1g': 0x0001c57f0000587000001346000006ca00000227000000dd0000000000000000n,
+  '1c': 0x0001b880000055e6000012b80000069d00000218000000d60000000000000000n,
+  '2g': 0x0001ef28000060910000150a0000076c0000025a000000f10000000000000000n,
+  '2c': 0x0001e0c700005dc10000146f0000073300000249000000ea0000000000000000n,
+  '3g': 0x0002185400006898000016c80000080b0000028c000001050000000000000000n,
+  '3c': 0x00020899000065880000161e000007d200000279000000fd0000000000000000n,
+  4: 0x000241430000708c0000188c000008a5000002be000001190000000000000000n,
+});
+const HONEST_S8 = Object.freeze({
+  0: 5_124_517n,
+  '1g': 5_804_753n,
+  '1c': 5_638_394n,
+  '2g': 6_337_987n,
+  '2c': 6_153_960n,
+  '3g': 6_865_005n,
+  '3c': 6_663_665n,
+  4: 7_388_959n,
+});
+const SHARED_S9 = Object.freeze([
+  10_756_411n, 12_583_037n, 14_792_939n, 17_512_324n, 20_916_435n,
+]);
+const HONEST_BONUS_FACTORS = Object.freeze({
+  0: 0x0000000002278add00000000002c86d300000000008cd6ca0000000000176ea0n,
+  '1g': 0x0000000003aef46a00000000003d043e0000000000b767d900000000001b448bn,
+  '1c': 0x0000000003aef46a00000000003ed11d0000000000ac8f35000000000019c09en,
+  '2g': 0x0000000006442ce700000000005b52330000000000e67b0800000000001f15dan,
+  '2c': 0x0000000006442ce700000000005e0d4c0000000000def66500000000001d41den,
+  '3g': 0x000000000a96251f00000000008e8baa000000000133ace4000000000024a679n,
+  '3c': 0x000000000a96251f000000000092da3f00000000012ed253000000000022cef8n,
+  4: 0x0000000011ba25db0000000000e5669e0000000001aeccdd00000000002d2c05n,
+});
+const WWXRP_BASE_PACKED = Object.freeze([
+  0x00005e9a00001273000004030000016c000000730000002e0000000000000000n,
+  0x000070aa000015f6000004cc000001af00000089000000370000000000000000n,
+  0x00008532000019f6000005aa000001fe000000a2000000410000000000000000n,
+  0x00009b9a00001e5a0000069d00000254000000bd0000004c0000000000000000n,
+  0x0000b330000022ed0000079d000002b1000000da000000570000000000000000n,
+]);
+const WWXRP_S8 = Object.freeze([
+  1_210_913n, 1_442_106n, 1_704_918n, 1_991_686n, 2_293_601n,
+]);
+const WWXRP_BONUS_FACTORS = Object.freeze([
+  0x0000000002278add00000000000ccc0200000000004153c400000000000fda8bn,
+  0x0000000003aef46a00000000000f5126000000000046a39f00000000000fa6f4n,
+  0x0000000006442ce7000000000013314300000000004ecda200000000000fd37an,
+  0x000000000a96251f000000000019298500000000005b77db0000000000108293n,
+  0x0000000011ba25db00000000002269d300000000006ee3e2000000000011eefcn,
+]);
+
+const PAYOUT_LANE_MASK = 0xFFFFFFFFn;
+const FACTOR_LANE_MASK = 0xFFFFFFFFFFFFFFFFn;
+const ACTIVITY_K = 305n;
+const ACTIVITY_KNEE = 500n;
+const ACTIVITY_CAP = 30_000n;
+
+function _payoutKey(goldQuadrants, heroIsGold) {
+  if (goldQuadrants === 0 || goldQuadrants === 4) return String(goldQuadrants);
+  return `${goldQuadrants}${heroIsGold ? 'g' : 'c'}`;
+}
+
+function _curve(score, min, valueA, valueB, max) {
+  const s = score < 0n ? 0n : score;
+  if (s >= ACTIVITY_CAP) return max;
+  if (s <= ACTIVITY_K) return min + (s * (valueA - min)) / ACTIVITY_K;
+  if (s <= ACTIVITY_KNEE) {
+    return valueA + ((s - ACTIVITY_K) * (valueB - valueA)) / (ACTIVITY_KNEE - ACTIVITY_K);
+  }
+  return valueB + ((s - ACTIVITY_KNEE) * (max - valueB)) / (ACTIVITY_CAP - ACTIVITY_KNEE);
+}
+
+function _basePayoutCentiX(goldQuadrants, score, isWwxrp, heroIsGold) {
+  if (score >= 9) return SHARED_S9[goldQuadrants];
+  if (score === 8) {
+    return isWwxrp
+      ? WWXRP_S8[goldQuadrants]
+      : HONEST_S8[_payoutKey(goldQuadrants, heroIsGold)];
+  }
+  const packed = isWwxrp
+    ? WWXRP_BASE_PACKED[goldQuadrants]
+    : HONEST_BASE_PACKED[_payoutKey(goldQuadrants, heroIsGold)];
+  return (packed >> (BigInt(score) * 32n)) & PAYOUT_LANE_MASK;
+}
+
+function _bonusFactor(goldQuadrants, score, isWwxrp, heroIsGold) {
+  if (score < 6) return 0n;
+  const packed = isWwxrp
+    ? WWXRP_BONUS_FACTORS[goldQuadrants]
+    : HONEST_BONUS_FACTORS[_payoutKey(goldQuadrants, heroIsGold)];
+  return (packed >> (BigInt(score - 6) * 64n)) & FACTOR_LANE_MASK;
+}
+
+/**
+ * Exact gross-return schedule for one Degenerette draft.
+ * `multiplierHundredths` is rounded only for display; `multiplierNumerator`
+ * retains the contract's exact baseCentiX × effectiveRoi numerator over 1e6.
+ */
+export function degenerettePayoutTable({
+  customTicket = 0,
+  heroQuadrant = 0,
+  currency = DEGENERETTE_CURRENCY.ETH,
+  activityScore = 0,
+} = {}) {
+  const cur = Number(currency);
+  if (![DEGENERETTE_CURRENCY.ETH, DEGENERETTE_CURRENCY.FLIP, DEGENERETTE_CURRENCY.WWXRP].includes(cur)) {
+    throw new Error('Unsupported Degenerette currency.');
+  }
+  const hero = Number(heroQuadrant);
+  if (!Number.isInteger(hero) || hero < 0 || hero > 3) throw new Error('Hero quadrant must be 0-3.');
+  let ticket;
+  let activity;
+  try { ticket = BigInt(customTicket) & 0xFFFFFFFFn; }
+  catch (_e) { throw new Error('Custom ticket must be numeric.'); }
+  try { activity = BigInt(activityScore); }
+  catch (_e) { activity = 0n; }
+  if (activity < 0n) activity = 0n;
+
+  let goldQuadrants = 0;
+  for (let quadrant = 0; quadrant < 4; quadrant += 1) {
+    const color = Number((ticket >> BigInt(quadrant * 8 + 3)) & 7n);
+    if (color === 7) goldQuadrants += 1;
+  }
+  const heroColor = Number((ticket >> BigInt(hero * 8 + 3)) & 7n);
+  const heroIsGold = heroColor === 7;
+  const isWwxrp = cur === DEGENERETTE_CURRENCY.WWXRP;
+  const roiBps = isWwxrp
+    ? 7_000n
+    : _curve(activity, 9_000n, 9_891n, 9_970n, 9_990n);
+  const highRoiBps = isWwxrp
+    ? _curve(activity, 7_000n, 11_500n, 11_800n, 12_000n)
+    : 0n;
+
+  const rows = [];
+  for (let score = 0; score <= 9; score += 1) {
+    const basePayoutCentiX = _basePayoutCentiX(goldQuadrants, score, isWwxrp, heroIsGold);
+    let effectiveRoiBps = roiBps;
+    if (score >= 6) {
+      let baseBonus = 0n;
+      if (isWwxrp && highRoiBps > roiBps) baseBonus = highRoiBps - roiBps;
+      else if (cur === DEGENERETTE_CURRENCY.ETH) baseBonus = 500n;
+      if (baseBonus > 0n) {
+        effectiveRoiBps += (baseBonus * _bonusFactor(
+          goldQuadrants, score, isWwxrp, heroIsGold,
+        )) / 1_000_000n;
+      }
+    }
+    const multiplierNumerator = basePayoutCentiX * effectiveRoiBps;
+    rows.push(Object.freeze({
+      score,
+      basePayoutCentiX,
+      effectiveRoiBps,
+      multiplierNumerator,
+      multiplierDenominator: 1_000_000n,
+      multiplierHundredths: (multiplierNumerator + 5_000n) / 10_000n,
+    }));
+  }
+  return Object.freeze({
+    currency: cur,
+    activityScore: activity,
+    goldQuadrants,
+    heroIsGold,
+    roiBps,
+    highRoiBps,
+    rows: Object.freeze(rows),
+  });
+}
+
+/** Format `multiplierHundredths` without crossing through lossy Number math. */
+export function formatDegeneretteMultiplier(multiplierHundredths) {
+  let value;
+  try { value = BigInt(multiplierHundredths); } catch (_e) { return '—'; }
+  const whole = value / 100n;
+  const cents = value % 100n;
+  if (value === 0n) return '0×';
+  return `${whole.toLocaleString('en-US')}.${cents.toString().padStart(2, '0')}×`;
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +547,8 @@ const REPLAY_LOG_CHUNK_LIMIT = 10;
  *
  * @returns {Promise<{
  *   resolved: {player:string,betId:bigint,spinCount:bigint,totalPayout:bigint,resultTraits:bigint},
- *   spins: Array<{player:string,betId:bigint,spinIndex:bigint,playerTraits:bigint,matches:bigint,payout:bigint}>
+ *   spins: Array<{player:string,betId:bigint,spinIndex:bigint,playerTraits:bigint,matches:bigint,payout:bigint}>,
+ *   receipt?: import('ethers').TransactionReceipt|null
  * }|null>}
  */
 export async function readResolvedBet({ player, betId } = {}) {
@@ -401,6 +591,9 @@ export async function readResolvedBet({ player, betId } = {}) {
         spinCount: BigInt(a.spinCount ?? a[2] ?? 0),
         totalPayout: BigInt(a.totalPayout ?? a[3] ?? 0),
         resultTraits: BigInt(a.resultTraits ?? a[4] ?? 0),
+        transactionHash: resolvedLog.transactionHash == null
+          ? null
+          : String(resolvedLog.transactionHash).toLowerCase(),
       };
       const spins = (Array.isArray(resultLogs) ? resultLogs : []).map((log) => {
         const row = log?.args || [];
@@ -420,7 +613,16 @@ export async function readResolvedBet({ player, betId } = {}) {
       const indexes = new Set(spins.map((spin) => Number(spin.spinIndex)));
       const complete = spins.length >= expected
         && Array.from({ length: expected }, (_, spin) => indexes.has(spin)).every(Boolean);
-      if (complete) return { resolved, spins };
+      if (complete) {
+        let receipt = null;
+        const transactionHash = resolvedLog.transactionHash == null
+          ? null : String(resolvedLog.transactionHash);
+        if (transactionHash && typeof provider.getTransactionReceipt === 'function') {
+          try { receipt = await provider.getTransactionReceipt(transactionHash); }
+          catch (_e) { receipt = null; }
+        }
+        return { resolved, spins, receipt, transactionHash };
+      }
     }
     if (from === 0) break;
   }
@@ -543,6 +745,9 @@ export function parseBetResolvedFromReceipt(receipt, contract = receiptParser())
           spinCount: BigInt(parsed.args.spinCount ?? parsed.args[2]),
           totalPayout: BigInt(parsed.args.totalPayout ?? parsed.args[3]),
           resultTraits: BigInt(parsed.args.resultTraits ?? parsed.args[4]),
+          transactionHash: String(
+            log?.transactionHash || receipt.hash || receipt.transactionHash || '',
+          ).toLowerCase() || null,
         });
       }
     } catch (_e) {

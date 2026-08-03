@@ -115,6 +115,57 @@ describe('decimator purchase helper exports', () => {
 
 });
 
+describe('live Decimator display math', () => {
+  test('matches the deployed piecewise activity multiplier at every curve knee', () => {
+    assert.equal(decimatorMod.decimatorActivityMultiplierBps(0), 10_000n);
+    assert.equal(decimatorMod.decimatorActivityMultiplierBps(235), 17_049n);
+    assert.equal(decimatorMod.decimatorActivityMultiplierBps(500), 17_676n);
+    assert.equal(decimatorMod.decimatorActivityMultiplierBps(30_000), 17_833n);
+    assert.equal(decimatorMod.decimatorActivityMultiplierBps(99_999), 17_833n);
+  });
+
+  test('quotes 10% of futurepool for normal Decimators and 30% at x00', () => {
+    assert.equal(decimatorMod.decimatorPoolWei(1_000n, 35), 100n);
+    assert.equal(decimatorMod.decimatorPoolWei(1_000n, 100), 300n);
+  });
+
+  test('folds timing adjustments into the displayed entry multiplier in contract order', () => {
+    assert.equal(decimatorMod.decimatorCurrentMultiplierBps({ activityScore: 235 }), 17_049n);
+    assert.equal(decimatorMod.decimatorCurrentMultiplierBps({
+      activityScore: 235,
+      dayOneActive: true,
+      lastPurchaseDay: true,
+    }), 18_412n);
+  });
+
+  test('quotes added Decimator score with boon and multiplier caps', () => {
+    assert.equal(decimatorMod.decimatorEntryScoreWei({
+      amountWei: 1_000n * FLIP,
+      activityScore: 235,
+      dayOneActive: true,
+      lastPurchaseDay: true,
+    }), 1_841_200_000_000_000_000_000n);
+    assert.equal(decimatorMod.decimatorEntryScoreWei({
+      amountWei: 100_000n * FLIP,
+      previousScoreWei: 200_000n * FLIP,
+      activityScore: 30_000,
+      boonBps: 5_000,
+    }), 125_000n * FLIP, 'past the multiplier cap, only the capped boon base remains');
+  });
+
+  test('decodes the day-one byte and current nested burn slot exactly', () => {
+    assert.equal(decimatorMod.decimatorDayOneActive(1n << 248n), true);
+    assert.equal(decimatorMod.decimatorDayOneActive(0n), false);
+    assert.equal(
+      decimatorMod.decimatorBurnStorageSlot(
+        '0x7776145203f4c8f87fffae24593c92ec7d38880c',
+        35,
+      ),
+      '0xdb9cca4b04e4fa8cc2558955384e79623b0e53611c4b9159a845b8303ffc27f6',
+    );
+  });
+});
+
 describe('burnForDecimator', () => {
   beforeEach(() => {
     storeMod.__resetForTest();

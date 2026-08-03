@@ -203,6 +203,8 @@ describe('volumeWindow / volumeRoundNow mirror _openVolumeRound', () => {
 describe('view decoding', () => {
   afterEach(() => {
     pari.__resetContractFactoryForTest();
+    pari.__resetGameFactoryForTest();
+    pari.__resetQuestFactoryForTest();
     contractsMod.clearProvider();
   });
 
@@ -239,6 +241,51 @@ describe('view decoding', () => {
     pari.__setContractFactoryForTest(() => makeFakeContract({ volumeBetCredit: 15n * 10n ** 18n }));
     contractsMod.setProvider(makeFakeProvider(CONNECTED));
     assert.equal(await pari.readVolumeCredit(), 15n * 10n ** 18n);
+  });
+
+  test('readMarketBetGates keeps bet permission separate from bonus eligibility', async () => {
+    pari.__setQuestFactoryForTest(() => ({
+      marketBetGates: async (player, level) => {
+        assert.equal(player, CONNECTED);
+        assert.equal(level, 42);
+        return [true, false];
+      },
+    }));
+    assert.deepEqual(
+      await pari.readMarketBetGates({ player: CONNECTED, level: 42 }),
+      { mayBet: true, earnsReward: false },
+    );
+  });
+
+  test('phase context reads the exact last-purchase-day latch', async () => {
+    pari.__setGameFactoryForTest(() => ({
+      purchaseInfo: async () => [38, false, true, false, 0n],
+      jackpotCompressionTier: async () => 1,
+    }));
+    assert.deepEqual(await pari.readJackpotPhaseContext(), {
+      jackpot: false,
+      lastPurchaseDay: true,
+      compressedFlag: 1,
+    });
+  });
+
+  test('growthState round 0 remains readable for the level-1 bootstrap target', async () => {
+    const calls = [];
+    pari.__setGameFactoryForTest(() => ({
+      growthState: async (round) => {
+        calls.push(round);
+        return [0n, 0n, 0n, 0, false, 0];
+      },
+    }));
+    assert.deepEqual(await pari.readGrowthRatchets({ round: 0 }), {
+      prev: 0n,
+      current: 0n,
+      next: 0n,
+      currentLevel: 0,
+      bettingOpen: false,
+      phaseDay: 0,
+    });
+    assert.deepEqual(calls, [0]);
   });
 });
 

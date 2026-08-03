@@ -10,11 +10,11 @@ import {
   currencyLabel,
 } from '../app/degenerette.js';
 import { fetchPlayerData } from '../app/api.js';
-import { formatEth, formatBurnie } from '../app/utils.js';
+import { formatEth, formatFlip } from '../app/utils.js';
 import { DEGENERETTE } from '../app/constants.js';
 
-const CURRENCY_KEYS = ['ETH', 'BURNIE', 'WWXRP'];
-const CURRENCY_VALUES = [DEGENERETTE.CURRENCY.ETH, DEGENERETTE.CURRENCY.BURNIE, DEGENERETTE.CURRENCY.WWXRP];
+const CURRENCY_KEYS = ['ETH', 'FLIP', 'WWXRP'];
+const CURRENCY_VALUES = [DEGENERETTE.CURRENCY.ETH, DEGENERETTE.CURRENCY.FLIP, DEGENERETTE.CURRENCY.WWXRP];
 
 class DegenerettePanel extends HTMLElement {
   #unsubs = [];
@@ -47,7 +47,7 @@ class DegenerettePanel extends HTMLElement {
         <div class="degen-bet-form">
           <div class="currency-selector">
             <button data-currency="0" class="active">ETH</button>
-            <button data-currency="1">BURNIE</button>
+            <button data-currency="1">FLIP</button>
             <button data-currency="3">WWXRP</button>
           </div>
           <div class="bet-input-row">
@@ -183,7 +183,7 @@ class DegenerettePanel extends HTMLElement {
       amountInput.placeholder = minBet;
       if (key === 'ETH') {
         amountInput.step = '0.001';
-      } else if (key === 'BURNIE') {
+      } else if (key === 'FLIP') {
         amountInput.step = '1';
       } else {
         amountInput.step = '0.1';
@@ -381,15 +381,15 @@ class DegenerettePanel extends HTMLElement {
       const { default: confetti } = await import('canvas-confetti');
 
       confetti({
-        particleCount: 100,
+        particleCount: 50,
         spread: 70,
         origin: { y: 0.6 },
         colors: ['#22c55e', '#8b5cf6', '#eab308', '#06b6d4'],
       });
 
       setTimeout(() => {
-        confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 } });
-        confetti({ particleCount: 50, angle: 120, spread: 55, origin: { x: 1 } });
+        confetti({ particleCount: 25, angle: 60, spread: 55, origin: { x: 0 } });
+        confetti({ particleCount: 25, angle: 120, spread: 55, origin: { x: 1 } });
       }, 200);
     } catch {
       console.warn('[DegenerettePanel] Confetti load failed');

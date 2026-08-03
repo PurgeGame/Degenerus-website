@@ -40,15 +40,15 @@
 // line 2), and play/app/constants.js (pure re-exports).
 //
 // SCORE-UNIT DISCIPLINE (Pitfall 8 -- 54-RESEARCH.md line 1517):
-//   /leaderboards/coinflip score field -> INTEGER-scale BURNIE (NOT wei).
-//     Render via String(entry.score). Do NOT call formatBurnie on it
-//     (would misinterpret "52875" as 5.2875e-14 BURNIE).
+//   /leaderboards/coinflip score field -> INTEGER-scale FLIP (NOT wei).
+//     Render via String(entry.score). Do NOT call formatFlip on it
+//     (would misinterpret "52875" as 5.2875e-14 FLIP).
 //   coinflip block amounts (deposited, claimable, bounty pool, biggest-flip,
-//     take-profit) -> WEI-scale BURNIE. Render via formatBurnie(value).
+//     take-profit) -> WEI-scale FLIP. Render via formatFlip(value).
 
 import { subscribe, get } from '../../beta/app/store.js';
 import { API_BASE } from '../app/constants.js';
-import { formatBurnie, truncateAddress } from '../../beta/viewer/utils.js';
+import { formatFlip, truncateAddress } from '../../beta/viewer/utils.js';
 
 const TEMPLATE = `
 <section data-slot="coinflip" class="panel play-coinflip-panel">
@@ -195,14 +195,14 @@ class CoinflipPanel extends HTMLElement {
       armedEl.textContent = isArmed ? 'ARMED' : 'NOT ARMED';
     }
 
-    // Wei-scale BURNIE -> formatBurnie for user display (score-unit discipline).
+    // Wei-scale FLIP -> formatFlip for user display (score-unit discipline).
     const poolEl = this.#bind('bounty-pool');
-    if (poolEl) poolEl.textContent = isArmed ? `${formatBurnie(pool)} BURNIE` : '0';
+    if (poolEl) poolEl.textContent = isArmed ? `${formatFlip(pool)} FLIP` : '0';
 
     const recordEl = this.#bind('bounty-record');
     if (recordEl) {
       recordEl.textContent = (biggestAmount && biggestAmount !== '0')
-        ? `${formatBurnie(biggestAmount)} BURNIE`
+        ? `${formatFlip(biggestAmount)} FLIP`
         : '--';
     }
 
@@ -218,12 +218,12 @@ class CoinflipPanel extends HTMLElement {
     const autoRebuy = coinflip?.autoRebuyEnabled === true;
     const takeProfit = coinflip?.autoRebuyStop ?? '0';
 
-    // All amounts WEI-scale -> formatBurnie.
+    // All amounts WEI-scale -> formatFlip.
     const depEl = this.#bind('deposited');
-    if (depEl) depEl.textContent = `${formatBurnie(deposited)} BURNIE`;
+    if (depEl) depEl.textContent = `${formatFlip(deposited)} FLIP`;
 
     const claimEl = this.#bind('claimable');
-    if (claimEl) claimEl.textContent = `${formatBurnie(claimable)} BURNIE`;
+    if (claimEl) claimEl.textContent = `${formatFlip(claimable)} FLIP`;
 
     const autoEl = this.#bind('autorebuy');
     if (autoEl) autoEl.textContent = autoRebuy ? 'ON' : 'OFF';
@@ -231,7 +231,7 @@ class CoinflipPanel extends HTMLElement {
     const tpEl = this.#bind('takeprofit');
     if (tpEl) {
       tpEl.textContent = (takeProfit && takeProfit !== '0')
-        ? `${formatBurnie(takeProfit)} BURNIE`
+        ? `${formatFlip(takeProfit)} FLIP`
         : '--';
     }
   }
@@ -269,11 +269,11 @@ class CoinflipPanel extends HTMLElement {
       playerCell.className = 'play-coinflip-player';
       playerCell.textContent = truncateAddress(entry.player);
 
-      // Score-unit discipline: coinflip leaderboard scores are INTEGER-scale BURNIE
-      // (live sample day 64 rank 1 = "52875" = 52,875 BURNIE). Do NOT call
-      // formatBurnie on these (would misinterpret as wei -> 5.2875e-14).
+      // Score-unit discipline: coinflip leaderboard scores are INTEGER-scale FLIP
+      // (live sample day 64 rank 1 = "52875" = 52,875 FLIP). Do NOT call
+      // formatFlip on these (would misinterpret as wei -> 5.2875e-14).
       const scoreCell = document.createElement('span');
-      scoreCell.textContent = `${String(entry.score ?? '0')} BURNIE`;
+      scoreCell.textContent = `${String(entry.score ?? '0')} FLIP`;
 
       row.appendChild(rankCell);
       row.appendChild(playerCell);

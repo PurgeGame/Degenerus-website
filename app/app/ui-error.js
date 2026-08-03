@@ -35,3 +35,11 @@ export function compactUiError(error, fallback = 'Transaction did not go through
   return _oneLine(fallback) || 'Transaction did not go through. Try again.';
 }
 
+/** Extra-terse variant for the persistent bottom action tray. */
+export function briefTxError(error, fallback = 'Transaction did not go through. Try again.') {
+  const compact = compactUiError(error, fallback);
+  if (compact === 'Transaction cancelled.'
+    || compact === 'RNG is not ready yet.'
+    || compact === 'Not enough balance.') return compact;
+  return _oneLine(fallback) || 'Transaction did not go through. Try again.';
+}

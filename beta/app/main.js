@@ -21,6 +21,7 @@ import '../components/terminal-panel.js';
 import '../components/replay-panel.js'; // DEBUG: replay viewer
 import '../components/day-jackpot-summary.js'; // Plan 39-10: day summary widget mounted inside replay-panel
 import '../components/boons-panel.js'; // Phase 44 BOON-03: Active Boons panel
+import '../components/lootbox-spins-panel.js'; // lootbox box-spin outcome feed (BoxSpin → box_spins)
 
 // Import modules
 import { update, get, subscribe } from './store.js';

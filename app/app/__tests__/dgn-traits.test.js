@@ -6,11 +6,17 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve as resolvePath } from 'node:path';
 
 import {
   DGN_QUADRANTS, DGN_SYMBOLS, DGN_CARD_IDX, DGN_COLORS,
-  dgnBadgePath, dgnUnpackTicket, dgnComputeMatches,
+  dgnBadgePath, dgnSymbolPath, dgnUnpackTicket, dgnComputeMatches,
+  dgnScoringMatchStates,
 } from '../dgn-traits.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('dgnBadgePath', () => {
   test('crypto quadrant: file index == symbol index', () => {
@@ -27,6 +33,18 @@ describe('dgnBadgePath', () => {
     assert.equal(DGN_COLORS.length, 8);
     assert.equal(DGN_CARD_IDX.length, 8);
     for (const q of DGN_QUADRANTS) assert.equal(DGN_SYMBOLS[q].length, 8);
+  });
+  test('round crypto picker art exposes its complete disc in every color', () => {
+    const colors = ['pink', 'purple', 'green', 'red', 'blue', 'orange', 'silver', 'gold'];
+    assert.equal(dgnSymbolPath(0, 3, 4), '/symbols/crypto_03_monero_blue.svg');
+    assert.equal(dgnSymbolPath(0, 7, 4), '/symbols/crypto_07_bitcoin_blue.svg');
+    for (const symbol of ['03_monero', '07_bitcoin']) {
+      for (const color of colors) {
+        const src = readFileSync(resolvePath(__dirname, `../../../symbols/crypto_${symbol}_${color}.svg`), 'utf8');
+        assert.match(src, /viewBox="-22\.25 -22\.25 44\.5 44\.5"/,
+          `${symbol} ${color} must not clip its circular edge`);
+      }
+    }
   });
 });
 
@@ -64,5 +82,7 @@ describe('dgnComputeMatches', () => {
     const m = dgnComputeMatches(player, house);
     assert.deepEqual(m.states, ['full', 'sym', 'col', 'miss']);
     assert.equal(m.fullCount, 1);
+    assert.deepEqual(dgnScoringMatchStates(player, house), ['full', 'sym', 'miss', 'miss'],
+      'color-only similarity is a zero-point miss in Degenerette');
   });
 });

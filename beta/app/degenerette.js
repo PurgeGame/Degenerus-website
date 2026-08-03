@@ -11,7 +11,7 @@ import { refreshAfterAction } from './api.js';
 
 /**
  * Place a degenerette bet.
- * @param {number} currency - 0 = ETH, 1 = BURNIE, 3 = WWXRP
+ * @param {number} currency - 0 = ETH, 1 = FLIP, 3 = WWXRP
  * @param {string} amountStr - Bet amount per ticket (e.g. "0.01")
  * @param {number} ticketCount - Number of spins (1-10)
  * @param {number} customTicket - Packed uint32 trait selections (use packCustomTicket)
@@ -190,27 +190,32 @@ export function parseBetPlacedEvent(receipt) {
 
 /**
  * Parse FullTicketResult events from resolution receipt.
- * FullTicketResult(address indexed player, uint64 indexed betId, uint8 matches, uint256 payout)
+ * FullTicketResult(address indexed player, uint64 indexed betId, uint8 ticketIndex,
+ *                  uint32 playerTicket, uint8 matches, uint256 payout)
+ * `matches` is the composite score S (0-9, v73 Variant-2): a quadrant's symbol match
+ * scores +1 (hero symbol +2), and its color +1 only when that symbol also matched.
  * @param {object} receipt
- * @returns {Array<{ betId: number, matches: number, payout: string, currency: number }>}
+ * @returns {Array<{ betId: number, ticketIndex: number, playerTicket: number, matches: number, payout: string }>}
  */
 function parseResolutionEvents(receipt) {
-  const resultTopic = ethers.id('FullTicketResult(address,uint64,uint8,uint256)');
+  const resultTopic = ethers.id('FullTicketResult(address,uint64,uint8,uint32,uint8,uint256)');
   const results = [];
 
   for (const log of receipt.logs) {
     if (log.topics[0] === resultTopic) {
       try {
         const betId = Number(BigInt(log.topics[2]));
-        // Non-indexed: matches (uint8), payout (uint256)
+        // Non-indexed: ticketIndex (uint8), playerTicket (uint32), matches (uint8), payout (uint256).
         const decoded = ethers.AbiCoder.defaultAbiCoder().decode(
-          ['uint8', 'uint256'],
+          ['uint8', 'uint32', 'uint8', 'uint256'],
           log.data
         );
         results.push({
           betId,
-          matches: Number(decoded[0]),
-          payout: decoded[1].toString(),
+          ticketIndex: Number(decoded[0]),
+          playerTicket: Number(decoded[1]),
+          matches: Number(decoded[2]),
+          payout: decoded[3].toString(),
         });
       } catch { /* skip non-matching logs */ }
     }
@@ -246,7 +251,7 @@ export function packCustomTicket(traitA, traitB, traitC, traitD) {
 export function currencyLabel(currency) {
   switch (currency) {
     case DEGENERETTE.CURRENCY.ETH: return 'ETH';
-    case DEGENERETTE.CURRENCY.BURNIE: return 'BURNIE';
+    case DEGENERETTE.CURRENCY.FLIP: return 'FLIP';
     case DEGENERETTE.CURRENCY.WWXRP: return 'WWXRP';
     default: return 'Unknown';
   }

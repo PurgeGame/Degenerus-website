@@ -225,6 +225,15 @@ afterEach(() => {
 // ===========================================================================
 
 describe('autoReconnect', () => {
+  test('installed-wallet detection is silent and does not require an authorized account', () => {
+    const prior = window.ethereum;
+    window.ethereum = { request: async () => [] };
+    assert.equal(wallet.hasInstalledWallet(), true,
+      'a locked or disconnected injected wallet still prevents demo-account fallback');
+    if (prior === undefined) delete window.ethereum;
+    else window.ethereum = prior;
+  });
+
   test('with no localStorage rdns returns false (no popup, no discover call)', async () => {
     const result = await wallet.autoReconnect();
     assert.equal(result, false);

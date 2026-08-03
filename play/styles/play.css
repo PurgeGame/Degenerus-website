@@ -51,11 +51,90 @@
   min-height: 160px;
 }
 
+/* Feature the slot-machine spinning + scratch-off jackpot ticket at the top,
+   spanning full width. Sourced from beta/components/replay-panel.js. */
+.play-grid > replay-panel {
+  grid-column: 1 / -1;
+  order: -1;
+}
+
+/* The replay-panel ships with its own day + player <select>s. In /play
+   they're driven by the global day-scrubber + player-selector via
+   replay-panel-sync.js, so hide the on-panel dropdowns to keep one
+   source of truth. The "Reveal Draw" button stays visible. */
+.play-grid > replay-panel .replay-control-group {
+  display: none;
+}
+
+/* Strip the supplementary tables/widgets the replay-panel renders below the
+   spinning ticket. The ticket alone is the focus; the day-jackpot summary
+   is redundant with the live jackpot draw on the ticket itself, the winners
+   table is leaderboard noise, and the player-decimator block is unrelated
+   per-day decimator info that lives elsewhere. */
+.play-grid > replay-panel day-jackpot-summary,
+.play-grid > replay-panel .replay-distributions,
+.play-grid > replay-panel .replay-player-decimator {
+  display: none;
+}
+
 /* Narrow screens: always single column. */
 @media (max-width: 720px) {
   .play-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ----------------------------------------------------------------------
+   <position-panel> -- compact "Net Position" widget.
+   Three stacked rows: Spent / Won / Tickets owned. Day-scoped via the
+   shared replay store; values formatted to ETH where applicable.
+   ---------------------------------------------------------------------- */
+.position-panel .panel-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem 0;
+  color: var(--text-primary, #f0f0f0);
+}
+.position-grid {
+  display: grid;
+  gap: 0.5rem;
+}
+.position-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.position-label {
+  color: var(--text-muted, #888);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.position-value {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #f0f0f0);
+}
+.position-value-win {
+  color: #9ec9a4;
+}
+.position-value-loss {
+  color: #d97a7a;
+}
+.position-row-net {
+  margin-top: 0.4rem;
+  border-color: var(--accent-primary, #f5a623);
+  background: rgba(245, 166, 35, 0.06);
+}
+.position-value-net {
+  font-size: 1.1rem;
 }
 
 /* Footer spacing (small adjustment; most styling from base.css) */
@@ -182,6 +261,19 @@ body > .container > footer {
 
 .score-popover[hidden] {
   display: none;
+}
+
+.popover-note {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  font-style: italic;
+  border-bottom: 1px solid var(--border-subtle, #2a2a3e);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.2rem;
+}
+
+.score-value.score-current-only {
+  opacity: 0.85;
 }
 
 .popover-row {
@@ -385,9 +477,241 @@ body > .container > footer {
 
 .tickets-panel .tickets-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 0.75rem;
-  min-height: 140px;
+  grid-template-columns: repeat(2, 100px);
+  justify-content: start;
+  gap: 0.5rem;
+  min-height: 80px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Level picker -- segmented row above the cards. */
+.tickets-level-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.6rem;
+}
+
+.tickets-level-btn {
+  appearance: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  color: var(--text-primary, #f0f0f0);
+  font-family: inherit;
+  padding: 0.35rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 56px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.tickets-level-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(245, 166, 35, 0.5);
+}
+
+.tickets-level-btn[aria-selected="true"] {
+  background: rgba(245, 166, 35, 0.18);
+  border-color: var(--accent-primary, #f5a623);
+  color: var(--accent-primary, #f5a623);
+}
+
+.tickets-level-btn.is-empty {
+  opacity: 0.55;
+}
+
+/* Count is primary -- big monospace number. Label is a small uppercase
+   caption underneath ("L37"). Order in the DOM is count first, label second. */
+.tickets-level-btn-count {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.tickets-level-btn-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #888);
+  line-height: 1;
+}
+
+.tickets-level-btn[aria-selected="true"] .tickets-level-btn-label {
+  color: var(--accent-primary, #f5a623);
+}
+
+.tickets-level-btn[data-level="ff"] {
+  min-width: 90px;
+}
+
+.tickets-level-btn:focus-visible {
+  outline: 2px solid var(--accent-primary, #f5a623);
+  outline-offset: 2px;
+}
+
+/* Inventory-trait pill row -- one pill per distinct trait the player owns at
+   the selected level. Click to highlight matching quadrants on the cards. */
+.tickets-trait-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin-bottom: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  border-radius: 4px;
+}
+.tickets-trait-row[hidden] { display: none; }
+
+.tickets-trait-group-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #888);
+  padding-right: 0.4rem;
+}
+
+.tickets-trait-pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+  overflow: hidden;
+}
+
+.tickets-trait-pill img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.tickets-trait-pill:hover {
+  border-color: #6db8ff;
+}
+
+.tickets-trait-pill[aria-pressed="true"] {
+  border-color: #6db8ff;
+  background: rgba(109, 184, 255, 0.18);
+  box-shadow: 0 0 0 2px rgba(109, 184, 255, 0.35);
+}
+
+.tickets-trait-pill:focus-visible {
+  outline: 2px solid #6db8ff;
+  outline-offset: 2px;
+}
+
+/* Quadrant highlight when a trait pill is active and the card's quadrant
+   matches that traitId. Blue ring + soft glow. */
+.trait-quadrant.is-trait-match {
+  position: relative;
+  outline: 2px solid #6db8ff;
+  outline-offset: -2px;
+  background: rgba(109, 184, 255, 0.18);
+  z-index: 1;
+}
+
+/* Unrevealed cards (status = pending/partial) -- the player owns the ticket
+   but the trait reveal hasn't happened yet (lootbox not opened). Shown as
+   muted placeholders so the user still sees their inventory. */
+.ticket-card--pending,
+.ticket-card--partial {
+  background: #2c2c34;
+  border-color: #4a4a55;
+}
+.ticket-card--pending .trait-quadrant,
+.ticket-card--partial .trait-quadrant.trait-quadrant-empty {
+  background: repeating-linear-gradient(
+    45deg,
+    #2a2a32 0,
+    #2a2a32 6px,
+    #34343d 6px,
+    #34343d 12px
+  );
+  position: relative;
+}
+.ticket-card--pending .trait-quadrant::before,
+.ticket-card--partial .trait-quadrant.trait-quadrant-empty::before {
+  content: '?';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #6c6c78;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 1.4rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* Far-future view -- summary line + per-level rows. */
+.tickets-ff-list[hidden] {
+  display: none;
+}
+
+.tickets-ff-summary {
+  font-size: 0.9rem;
+  color: var(--text-muted, #888);
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  background: rgba(245, 166, 35, 0.06);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  border-radius: 4px;
+}
+
+.tickets-ff-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.3rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.tickets-ff-rows li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  border-radius: 4px;
+}
+
+.tickets-ff-level {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #888);
+}
+
+.tickets-ff-count {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary, #f0f0f0);
 }
 
 .tickets-panel .tickets-empty {
@@ -398,68 +722,106 @@ body > .container > footer {
   font-size: 0.9rem;
 }
 
+/* Beta jackpot ticket aesthetic (mirrors beta/styles/replay.css .replay-ticket):
+   grey paper background, dark border, cross lines, white center diamond. */
 .ticket-card {
-  background: var(--panel-bg, #1a1a1a);
-  border: 1px solid var(--panel-border, #333);
-  border-radius: 8px;
-  padding: 0.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.ticket-card .trait-grid {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
-  gap: 0.25rem;
   aspect-ratio: 1 / 1;
+  background: #d9d9d9;
+  border: 3px solid #8a8d8f;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.ticket-card::before,
+.ticket-card::after {
+  content: '';
+  position: absolute;
+  background: #8a8d8f;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.ticket-card::before {
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+
+.ticket-card::after {
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  transform: translateY(-50%);
 }
 
 .ticket-card .trait-quadrant {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-  padding: 4%;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
 }
 
 .ticket-card .trait-quadrant-empty {
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .ticket-card .trait-badge {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  padding: 1%;
+  box-sizing: border-box;
   display: block;
+  position: relative;
+  z-index: 1;
 }
 
-.card-source-pill {
-  display: inline-block;
-  align-self: flex-start;
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.ticket-card-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  width: 31%;
+  height: 31%;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.card-source-purchase {
-  background: rgba(240, 240, 240, 0.1);
-  color: var(--text-muted, #888);
+.ticket-card-center::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(100% / 1.4142);
+  height: calc(100% / 1.4142);
+  background: #fff;
+  border: 2px solid #8a8d8f;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
-.card-source-jackpot-win {
-  background: rgba(255, 215, 0, 0.18);
-  color: #f5c518;
-}
-
-.card-source-lootbox {
-  background: rgba(128, 90, 255, 0.18);
-  color: #b388ff;
+.ticket-card-flame {
+  position: relative;
+  z-index: 1;
+  width: 60%;
+  height: 60%;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .tickets-panel [data-bind="content"] {
@@ -709,10 +1071,41 @@ body > .container > footer {
   text-transform: uppercase;
 }
 
+.packs-panel .lootbox-tile .tile-outcome {
+  font-size: 0.78rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+.packs-panel .lootbox-tile .tile-outcome-tickets {
+  background: rgba(120, 200, 140, 0.12);
+  border-color: rgba(120, 200, 140, 0.3);
+  color: #9ec9a4;
+}
+
+.packs-panel .lootbox-tile .tile-outcome-other {
+  background: rgba(245, 197, 24, 0.10);
+  border-color: rgba(245, 197, 24, 0.28);
+  color: #d6b34a;
+}
+
 .packs-panel .lootbox-tile .tile-tickets {
   display: grid;
   grid-template-columns: 1fr;
   gap: 0.4rem;
+}
+
+/* Day-jackpot-summary widget embedded at the top of the packs panel.
+   Uses beta/styles/jackpot.css for internal layout; we just add panel
+   chrome (border, padding, slight tint) so it visually nests. */
+.packs-panel .packs-jackpot-summary {
+  display: block;
+  margin: 0 0 0.75rem;
+  border: 1px solid var(--panel-border, #333);
+  border-radius: 8px;
+  background: rgba(40, 30, 18, 0.45);
+  overflow: hidden;
 }
 
 /* Ticket-reveal section: sealed clickable packs */
@@ -784,34 +1177,12 @@ body > .container > footer {
   font-weight: 600;
 }
 
-/* Shared ticket-card render (used by both lootbox tiles + ticket-reveal opened state) */
-
+/* Shared ticket-card render (used by both lootbox tiles + ticket-reveal opened state).
+   Reuses the .ticket-card base style (grey paper / cross lines / center diamond);
+   only adds the staggered reveal animation here. */
 .packs-panel .ticket-card {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  gap: 0.15rem;
-  aspect-ratio: 1 / 1;
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 4px;
-  padding: 4%;
   /* Stagger custom prop set per-card by JS for the GSAP-cooperating reveal */
   animation: ticket-reveal 240ms ease-out var(--ticket-reveal-stagger-delay, 0ms) both;
-}
-
-.packs-panel .trait-quadrant {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.packs-panel .trait-quadrant .trait-badge {
-  width: 88%;
-  height: 88%;
-  object-fit: contain;
 }
 
 @keyframes ticket-reveal {
@@ -1016,6 +1387,351 @@ body > .container > footer {
     width: 100%;
   }
   .purchase-form button {
+    align-self: stretch;
+    text-align: center;
+  }
+}
+
+/* Currency toggle (ETH / FLIP) inside each purchase form */
+.purchase-currency {
+  display: inline-flex;
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  border-radius: 4px;
+  overflow: hidden;
+  align-self: flex-start;
+}
+.purchase-currency button {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #888);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.purchase-currency button + button {
+  border-left: 1px solid var(--border-subtle, #2a2a3e);
+}
+.purchase-currency button:hover {
+  color: var(--text-primary, #f0f0f0);
+}
+.purchase-currency button[aria-checked="true"] {
+  background: rgba(245, 166, 35, 0.18);
+  color: var(--accent-primary, #f5a623);
+}
+.purchase-currency button:focus-visible {
+  outline: 2px solid var(--accent-primary, #f5a623);
+  outline-offset: -2px;
+}
+
+/* ========================================================================
+ * <pass-panel> -- whale / lazy / deity pass purchase cards.
+ * Mirrors purchase-panel patterns; one card per pass type with eligibility
+ * note + price + sim-api-gated buy button.
+ * ======================================================================== */
+
+.panel-pass {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.panel-pass .panel-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+  color: var(--text-primary, #f0f0f0);
+}
+
+.pass-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0.85rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  border-radius: 4px;
+}
+
+.pass-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.pass-card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary, #f0f0f0);
+  letter-spacing: 0.02em;
+}
+
+.pass-card-eligibility {
+  font-size: 0.72rem;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pass-card-blurb {
+  font-size: 0.82rem;
+  color: var(--text-muted, #888);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.pass-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.pass-card-row.total-cost .pass-card-value {
+  color: var(--accent-primary, #f5a623);
+  font-weight: 600;
+}
+
+.pass-card-label {
+  font-size: 0.78rem;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pass-card-value {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+  color: var(--text-primary, #f0f0f0);
+}
+
+.pass-card input[type="number"] {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  color: var(--text-primary, #f0f0f0);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 4px;
+  max-width: 130px;
+}
+
+.pass-card input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent-primary, #f5a623);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Deity symbol picker -- collapsed-by-default dropdown.
+   Selected symbol shows as a button (icon + name + caret); clicking expands
+   the 8-col grid below. Owned symbols render greyed and unclickable. */
+.pass-deity-symbol-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pass-deity-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  color: var(--text-primary, #f0f0f0);
+  font-family: inherit;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.pass-deity-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(245, 166, 35, 0.5);
+}
+
+.pass-deity-toggle:focus-visible {
+  outline: 2px solid var(--accent-primary, #f5a623);
+  outline-offset: 2px;
+}
+
+/* The "disc" wrapper crops the outer rings via overflow:hidden + circular shape.
+   The inner SVG has rings at radius 35.2 (gold), 27.5 (black) and a white inner
+   circle at radius 19.8. Scaling the img up so the white inner circle fills the
+   disc effectively shows just the symbol on white. */
+.pass-deity-toggle-disc {
+  position: relative;
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #fff;
+  flex: none;
+}
+
+.pass-deity-toggle-icon {
+  position: absolute;
+  width: 258%;
+  height: 258%;
+  top: -79%;
+  left: -79%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.pass-deity-toggle-caret {
+  font-size: 0.7rem;
+  color: var(--text-muted, #888);
+  transition: transform 0.15s ease;
+}
+
+.pass-deity-toggle[aria-expanded="true"] .pass-deity-toggle-caret {
+  transform: rotate(180deg);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.pass-deity-symbol-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.35rem;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-subtle, #2a2a3e);
+  border-radius: 4px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+
+.pass-deity-symbol-grid[hidden] {
+  display: none;
+}
+
+.pass-deity-symbol-btn {
+  appearance: none;
+  background: #fff;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.pass-deity-symbol-btn img {
+  position: absolute;
+  width: 258%;
+  height: 258%;
+  top: -79%;
+  left: -79%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.pass-deity-symbol-btn:hover {
+  border-color: var(--accent-primary, #f5a623);
+}
+
+.pass-deity-symbol-btn[aria-checked="true"] {
+  border-color: var(--accent-primary, #f5a623);
+  box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.45);
+}
+
+.pass-deity-symbol-btn.is-owned {
+  cursor: not-allowed;
+  background: #2a2a36;
+}
+
+.pass-deity-symbol-btn.is-owned img {
+  filter: grayscale(1) brightness(0.5);
+  opacity: 0.5;
+}
+
+.pass-deity-symbol-btn.is-owned::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 50%;
+  border-top: 2px solid rgba(217, 122, 122, 0.85);
+  transform: rotate(-22deg);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.pass-deity-symbol-btn.is-owned:hover {
+  border-color: transparent;
+  transform: none;
+}
+
+.pass-deity-symbol-btn:focus-visible {
+  outline: 2px solid var(--accent-primary, #f5a623);
+  outline-offset: 2px;
+}
+
+.pass-card button {
+  appearance: none;
+  background: var(--accent-primary, #f5a623);
+  color: #0a0a14;
+  border: 1px solid transparent;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.55rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.pass-card button:hover {
+  background: #ffb84d;
+}
+
+.pass-card button[data-gate="sim-api"][aria-disabled="true"] {
+  background: rgba(245, 166, 35, 0.25);
+  color: var(--text-muted, #888);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.pass-card button[data-gate="sim-api"][aria-disabled="true"]:hover {
+  background: rgba(245, 166, 35, 0.3);
+  opacity: 0.7;
+}
+
+@media (max-width: 720px) {
+  .pass-card input[type="number"],
+  .pass-card select {
+    max-width: 100%;
+    width: 100%;
+  }
+  .pass-card button {
     align-self: stretch;
     text-align: center;
   }
@@ -1269,7 +1985,7 @@ body > .container > footer {
    with beta components that may coexist in the same page tree).
    Bucket table is NEW relative to beta -- beta renders bucket as a single
    stat cell; play shows the full range per contract source (5-12 normal,
-   2-12 centennial per BurnieCoin.sol:142-147).
+   2-12 centennial per FLIP.sol:142-147).
    ====================================================================== */
 
 .play-decimator-panel .panel-header {

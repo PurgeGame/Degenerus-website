@@ -127,21 +127,21 @@ const FUND_ERROR_LISTENER    = (e) => onFundError(JSON.parse(e.data));
 // a claimAffiliate branch in normal UI flow.
 const ACTION_FORMS = {
   purchase: [
-    { name: 'token', kind: 'token', label: 'Token', options: ['ETH', 'BURNIE'] },
+    { name: 'token', kind: 'token', label: 'Token', options: ['ETH', 'FLIP'] },
     { name: 'count', kind: 'count', label: 'Ticket count (multiple of 100 or 1)', placeholder: '5' },
   ],
   lootboxOpen: [
-    { name: 'token',  kind: 'token',  label: 'Token', options: ['ETH', 'BURNIE'] },
-    { name: 'count',  kind: 'count',  label: 'Lootbox count (when token=ETH)',          placeholder: '1', hint: 'Used when token=ETH; ignored for BURNIE.' },
-    { name: 'amount', kind: 'amount', label: 'BURNIE amount in wei (when token=BURNIE)', placeholder: '1000000000000000000', hint: 'Used when token=BURNIE; ignored for ETH.' },
+    { name: 'token',  kind: 'token',  label: 'Token', options: ['ETH', 'FLIP'] },
+    { name: 'count',  kind: 'count',  label: 'Lootbox count (when token=ETH)',          placeholder: '1', hint: 'Used when token=ETH; ignored for FLIP.' },
+    { name: 'amount', kind: 'amount', label: 'FLIP amount in wei (when token=FLIP)', placeholder: '1000000000000000000', hint: 'Used when token=FLIP; ignored for ETH.' },
   ],
   coinflipDeposit: [
     { name: 'amount',   kind: 'amount',   label: 'Stake amount in wei', placeholder: '500000000000000000' },
-    { name: 'currency', kind: 'currency', label: 'Currency', options: ['eth', 'burnie'] },
+    { name: 'currency', kind: 'currency', label: 'Currency', options: ['eth', 'flip'] },
   ],
   degenerette: [
     { name: 'amount',   kind: 'amount',   label: 'Bet size in wei', placeholder: '100000000000000000' },
-    { name: 'currency', kind: 'currency', label: 'Currency', options: ['eth', 'burnie', 'wwxrp'] },
+    { name: 'currency', kind: 'currency', label: 'Currency', options: ['eth', 'flip', 'wwxrp'] },
     { name: 'picks',    kind: 'picks',    label: 'Picks (CSV of integers; advisory)', placeholder: '1,2,3' },
   ],
   claimWinnings:  [],
@@ -610,10 +610,10 @@ function validateForceActionForm() {
   if (valid && fields.length > 0) {
     const args = readForceActionArgs();
     if (actionType === 'lootboxOpen') {
-      // Special case: needs token + (count when ETH) | (amount when BURNIE)
+      // Special case: needs token + (count when ETH) | (amount when FLIP)
       if (!args.token) valid = false;
       else if (args.token === 'ETH' && !Number.isInteger(args.count)) valid = false;
-      else if (args.token === 'BURNIE' && (typeof args.amount !== 'string' || !/^\d+$/.test(args.amount))) valid = false;
+      else if (args.token === 'FLIP' && (typeof args.amount !== 'string' || !/^\d+$/.test(args.amount))) valid = false;
     } else {
       // Generic: every declared field must be set + well-typed
       for (const spec of fields) {

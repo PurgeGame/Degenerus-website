@@ -10,7 +10,7 @@
 //   Fetch wiring -- Promise.all over /player/:addr?day= and /leaderboards/coinflip?day=
 //   Stale-guard -- #coinflipFetchId counter + is-stale class toggle
 //   Score-unit discipline (Pitfall 8) -- coinflip leaderboard scores are INTEGER-scale (no wei division);
-//     state amounts are WEI-scale (formatBurnie required)
+//     state amounts are WEI-scale (formatFlip required)
 //   Empty state -- entries.length check or equivalent guard against rendering zero-entry leaderboards
 //   Selected-player highlighting -- aria-current="true" on matching row
 
@@ -206,18 +206,18 @@ test('coinflip-panel.js highlights selected player with aria-current', () => {
 // Table from 54-PATTERNS.md Score-unit discipline section:
 //
 //   Endpoint                                            Score format                  Render with
-//   /leaderboards/coinflip?day=N                        INTEGER-scale BURNIE          String(entry.score) OR no-divisor format
-//   /leaderboards/baf?level=N                           WEI-scale BURNIE              formatBurnie(entry.score)
-//   /player/:addr/baf?level=N (INTEG-05)                WEI-scale BURNIE              formatBurnie(data.score)
-//   /player/:addr?day=N coinflip block                  WEI-scale BURNIE              formatBurnie(value)
+//   /leaderboards/coinflip?day=N                        INTEGER-scale FLIP            String(entry.score) OR no-divisor format
+//   /leaderboards/baf?level=N                           WEI-scale FLIP                formatFlip(entry.score)
+//   /player/:addr/baf?level=N (INTEG-05)                WEI-scale FLIP                formatFlip(data.score)
+//   /player/:addr?day=N coinflip block                  WEI-scale FLIP                formatFlip(value)
 //
-// WARNING SIGN OF BUG: coinflip leaderboard shows "0.000000000000052875 BURNIE"
+// WARNING SIGN OF BUG: coinflip leaderboard shows "0.000000000000052875 FLIP"
 // (wrong -- treats integer as wei) OR player state shows "200000000000000000000"
-// without formatBurnie (wrong -- raw wei leaked to UI).
+// without formatFlip (wrong -- raw wei leaked to UI).
 
-test('score-unit: coinflip-panel.js uses formatBurnie for state amounts (wei-scale)', () => {
+test('score-unit: coinflip-panel.js uses formatFlip for state amounts (wei-scale)', () => {
   const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /formatBurnie/);
+  assert.match(src, /formatFlip/);
 });
 
 test('score-unit: coinflip-panel.js uses truncateAddress for player addresses', () => {

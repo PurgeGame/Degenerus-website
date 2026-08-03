@@ -10,7 +10,7 @@ export const CHAIN = {
   hexId: '0x14a34',
   name: 'Base Sepolia',
   rpcUrl: 'https://sepolia.base.org',
-  deployBlock: 44_904_685,
+  deployBlock: 45_005_925,
   indexerBase: 'http://localhost:3000',
   etherscanBase: 'https://sepolia.basescan.org',
   nativeAddEntry: {
@@ -23,36 +23,36 @@ export const CHAIN = {
 };
 
 // 27 contract addresses from the current Base Sepolia deploy manifest
-// (GAME 0xa2868ed9...b623, deploy block 44904685). ADMIN excluded per Plan 56-01
+// (GAME 0x54ad8e5f...1044, deploy block 45005925). ADMIN excluded per Plan 56-01
 // (deployer-only EOA reference, not a player-facing contract).
 export const CONTRACTS = {
-  ICONS_32:                '0xa91a343939a96cb94a392c47589a3d3da62865e1',
-  GAME_MINT_MODULE:        '0xd33b2cf3c9e112ca008e18406a1a8a1a5e3c1a52',
-  GAME_ADVANCE_MODULE:     '0x8c6c70aaa9e28ad2471ff38e16fd01b490a6bb56',
-  GAME_WHALE_MODULE:       '0x0b2c9f878eaa4494a8cbae4b6f39e5a13ce22754',
-  GAME_JACKPOT_MODULE:     '0xca8bd2ba9f3e23cdd65599fcd5fd6d65461bc776',
-  GAME_DECIMATOR_MODULE:   '0xabd3a4decd62e3074be1ad627d22bcf81dc1b098',
-  GAME_GAMEOVER_MODULE:    '0x7e35e3924e897b484f8c915d45717775a86a8d49',
-  GAME_LOOTBOX_MODULE:     '0x9f8e8841612fd1b305d2704f8cc74634da9f104b',
-  GAME_BOON_MODULE:        '0x8bc69e042937b76291fd8609e510bac294c7fc69',
-  GAME_DEGENERETTE_MODULE: '0x393f56bcf8f8f1bb2746a1ff59fc25fc0b3a29ab',
-  GAME_BINGO_MODULE:       '0xbe35e19d7f09e0b30ecf7ea6ec8e180830dec74b',
-  GAME_AFKING_MODULE:      '0xec51c5a28d102fdc13dd6144c020bdbc403f71c3',
-  GAME_FOILPACK_MODULE:    '0x1ccec6bffc0236964129bc7a609b38993662d0b1',
-  AFKING_SUB_TOKEN:        '0x11dd39643c2a0a80aa3f9d123a739461488224d0',
-  COIN:                    '0xedfcd8373cc1f9980af967f1ef167c631433e8ba',
-  COINFLIP:                '0x31779ab167664d38fcb6188390073e3c0aee260d',
-  GAME:                    '0xa2868ed96cd3cc873db6d84035b4cf5ca05db623',
-  WWXRP:                   '0x6085b0e2e2bcea8b3fa8c0148ce0a31ecc080fc5',
-  AFFILIATE:               '0xcbdbd43c9f49f48de245d81d008c6835741076de',
-  JACKPOTS:                '0xc7d63825feb5e43dd615400d2bfe8db72b7a57c0',
-  QUESTS:                  '0xcb0b0357df6478fd4bf09c60b395e0c9fe51d806',
-  PARIMUTUEL:              '0x0df5828670121b9f00ef68aaa9a0a4adc52ced90',
-  DEITY_PASS:              '0xc83a9b319f2ebb61183c0a11667aa80ea4d5296f',
-  VAULT:                   '0x7b965575249ea39bdef7e5652404004a8bfd7496',
-  SDGNRS:                  '0x1f760c7a222d88a69cf403786c075575553145a6',
-  DGNRS:                   '0xd424da01909200db0088453331c1371f2bedabdc',
-  GNRUS:                   '0x7dfea5dbb720f693e881e0d8237b85bd6225defa',
+  ICONS_32:                '0xe7a5539c1914f1335f3055058182ebd524ad1791',
+  GAME_MINT_MODULE:        '0xdf1874bb37b87a8befccc645470553a52359ba2d',
+  GAME_ADVANCE_MODULE:     '0xa8d9e2d8701133a1d5bfb61b6f65bcccd9ae355b',
+  GAME_WHALE_MODULE:       '0x15a52f903100f04ecc1d71b2ab7943cababa73d3',
+  GAME_JACKPOT_MODULE:     '0xaf2043d670ca1f724bbe239f13e1611083a0ffcf',
+  GAME_DECIMATOR_MODULE:   '0x2c55976105e5d2b7cae25870407c9385ad75dd01',
+  GAME_GAMEOVER_MODULE:    '0x7550466fa05ba43044d6412c768fbf1dda22c0e0',
+  GAME_LOOTBOX_MODULE:     '0x87ed4a3b245020a84f566f512782bcebb45f0ea5',
+  GAME_BOON_MODULE:        '0x4af6c15a88a76597b78eff83645c1de326b881ad',
+  GAME_DEGENERETTE_MODULE: '0x21ea7c013dd6c20fcdd90e16289b7bdf5f02ef16',
+  GAME_BINGO_MODULE:       '0xf1c8e1326745a99b5687b6f08d9ce0fb90287211',
+  GAME_AFKING_MODULE:      '0x0e940d9a1f0e8c649d038d08616630daa47fe912',
+  GAME_FOILPACK_MODULE:    '0x792829de274b6f01344c0d47323d062ecf5bfe0d',
+  AFKING_SUB_TOKEN:        '0xdfa02483274e4664c584873f2b9c6d7fca25da10',
+  COIN:                    '0x280a5067694f9deffa767f81d257fbd4f3ac557b',
+  COINFLIP:                '0x364a407bcc157c47bba3b7943ca1de34dfa619f4',
+  GAME:                    '0x54ad8e5f30f2ce3bf3b0d60301de28a5c2d41044',
+  WWXRP:                   '0x8679b4b8c27e15c88807a15980f725924411d3f4',
+  AFFILIATE:               '0x3631d97d708defc9f3d3d11107459e6fd167a20e',
+  JACKPOTS:                '0xb29a9d70b1bb47abfbc5800672a7fb9441b99954',
+  QUESTS:                  '0xbc839f05cfc6e03128864c2e89c6b09356145791',
+  PARIMUTUEL:              '0x05c03588754ce03f694b5b299e7bcc1f2d4cfac1',
+  DEITY_PASS:              '0x38ba62d422167ee5ff2db5b3969f00d5991ea8c5',
+  VAULT:                   '0x7265b4d7a9e2d2accc114cf798d74934d2ca45a6',
+  SDGNRS:                  '0x185eff584ea02ffd4928a7796d8fa21594634489',
+  DGNRS:                   '0x77097af720b3915f96d0e512ebcc841037ffeca0',
+  GNRUS:                   '0x293e3d2dab4736b5155b509bf70c0622a354dc42',
 };
 
 // Ticket-volume parimutuel window, for the COUNTDOWN ONLY — the contract's own
@@ -64,6 +64,7 @@ export const CONTRACTS = {
 export const VOLUME_WINDOW = {
   anchor: 82_620,        // GameTimeLib.JACKPOT_RESET_TIME — 22:57 UTC, the day boundary
   period: 600,           // one game day (600s testnet overlay)
+  jackpotReadyDelay: 60, // RNG/indexing normally makes the new draw playable ~1m later
   openSeconds: 540,      // betting is open for the first nine minutes
   creditDecayStart: 154, // full 25 FLIP through the first rescaled credit tier
   creditDecayStep: 86,   // -5 FLIP per rescaled step
@@ -74,7 +75,7 @@ export const VOLUME_WINDOW = {
   // deploy; it is `deployDayBoundary` in the sim's sepolia-manifest.json and
   // must be re-copied alongside the addresses above. Verified against live
   // VolumeRoundSealed logs (round 22 sealed on day index 22).
-  deployDayBoundary: 2_975_825,
+  deployDayBoundary: 2_976_162, // run #27 (GAME 0x54ad8e5f @ 45005925); was 2_976_020 for run #25
 };
 
 export const ETH_DIVISOR = 1_000_000n;     // /1M scaleEth on testnet (Phase 51 51-03 decision; Base Sepolia run keeps it)

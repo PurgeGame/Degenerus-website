@@ -71,6 +71,26 @@ export function displayToken(raw, digits = 0) {
 }
 
 /**
+ * Format an 18-decimal token amount while repairing only microscopic input
+ * conversion dust around a whole token. Older UI builds converted decimal
+ * strings through Number before sending them, so an intended 50,000 FLIP can
+ * exist on-chain as 49,999.999999999995805696. Values farther than one
+ * millionth of a token from a whole number remain untouched.
+ */
+export function displayTokenSnapped(raw, digits = 0) {
+  const value = BigInt(raw ?? 0);
+  const unit = 10n ** 18n;
+  const tolerance = 10n ** 12n;
+  const sign = value < 0n ? -1n : 1n;
+  const magnitude = value < 0n ? -value : value;
+  const remainder = magnitude % unit;
+  let snapped = magnitude;
+  if (remainder <= tolerance) snapped -= remainder;
+  else if (unit - remainder <= tolerance) snapped += unit - remainder;
+  return displayToken(snapped * sign, digits);
+}
+
+/**
  * Format a raw on-chain ticket count BigInt for display.
  *
  * Reads TICKET_DIVISOR from the chain-config singleton. Both chains

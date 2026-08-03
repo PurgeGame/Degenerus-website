@@ -82,15 +82,25 @@ export const GAME_ABI = [
   'function boxIndexComplete(uint48 index) view returns (bool complete)',
   'function requestLootboxRng()',
   'function lootboxStatus(address player, uint48 lootboxIndex) view returns (uint256 amount, bool presale)',
+  'function lootboxPresaleActiveFlag() view returns (bool active)',
+  'function presaleBoxCreditOf(address player) view returns (uint256 credit)',
+  'function presaleBoxEthRemaining() view returns (uint256 remaining)',
   'function claimableWinningsOf(address player) view returns (uint256)',
+  'function buyPresaleBox(address buyer, uint256 boxAmount) payable',
+  'function buyLootboxAndPresaleBox(address buyer, uint256 entryQuantityScaled, uint256 lootBoxAmount, bytes32 affiliateCode, uint8 payKind, uint256 boxAmount) payable',
   // Foil module errors bubble through GAME.purchase via delegatecall. Keeping
   // them in this interface lets ethers populate error.revert.name.
   'error FoilAlreadyBought()',
   'error DirectEthInsufficient()',
   'error StaleAdvance()',
   // Events
-  'event LootBoxBuy(address indexed buyer, uint32 indexed day, uint256 amount, bool presale, uint24 level)',
+  // Current deploy: the queue index moved directly onto LootBoxBuy and the
+  // redundant LootBoxIdx event was removed. Keep LootBoxIdx below solely so a
+  // cached receipt from an older run can still be decoded safely.
+  'event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount)',
   'event LootBoxIdx(address indexed buyer, uint32 indexed index, uint32 indexed day)',
+  'event PresaleBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount, bool closing)',
+  'event PresaleBoxOpened(address indexed player, uint48 indexed index, uint256 amount, uint256 flip, uint256 dgnrs, uint256 wwxrp, bool closing)',
   'event TraitsGenerated(address indexed player, uint24 indexed level, uint32 queueIdx, uint32 startIndex, uint32 count, uint256 entropy)',
   'event FoilPackBought(address indexed buyer, uint24 indexed level, uint16 multBps, uint256 weiIn)',
 ];
@@ -112,6 +122,8 @@ export const FOIL_PACK_TICKETS = 10n;
 // minimum is 1e10 wei, not 1e16 (Phase 64 fix: sending the full-scale value
 // silently overpaid 1M× into the buyer's afking credit).
 export const LOOTBOX_MIN_WEI = ethers.parseEther('0.01') / ETH_DIVISOR;
+/** Credit-gated presale boxes use the same 0.01 ETH-scaled minimum. */
+export const PRESALE_BOX_MIN_WEI = LOOTBOX_MIN_WEI;
 
 // ---------------------------------------------------------------------------
 // scaledTicketPriceWei — JS port of PriceLookupLib.priceForLevel (verified at
@@ -181,6 +193,63 @@ function _readBuyer() {
   const buyer = getActingAddress();
   if (!buyer) throw new Error('Wallet not connected.');
   return buyer;
+}
+
+/**
+ * Ask the deployed purchase route whether the acting buyer can add a foil pack
+ * right now. A zero-value DirectEth probe is deliberately unaffordable: the
+ * foil module reaches DirectEthInsufficient only after all availability,
+ * liveness, routing, and one-per-level checks have passed.
+ *
+ * Success is accepted as well for forward compatibility with a zero-priced
+ * deployment. Every other revert (including FoilAlreadyBought, StaleAdvance,
+ * GameOver/liveness, and authorization failures) fails closed.
+ *
+ * Detailed form used by UI that needs to distinguish a permanent ownership
+ * rejection from a temporary liveness/RPC miss. The boolean wrapper below
+ * intentionally keeps its original fail-closed contract.
+ *
+ * @param {{buyer?: string}} [args]
+ * @returns {Promise<{available: boolean, definitive: boolean, code: string}>}
+ */
+export async function probeFoilPackAvailabilityState({ buyer } = {}) {
+  const buyerArg = buyer ?? getActingAddress();
+  if (!buyerArg) return { available: false, definitive: false, code: 'NO_BUYER' };
+  try {
+    const provider = getProvider();
+    if (!provider) return { available: false, definitive: false, code: 'NO_PROVIDER' };
+    const signer = await provider.getSigner();
+    if (!signer) return { available: false, definitive: false, code: 'NO_SIGNER' };
+    const contract = _buildContract(signer);
+    await contract.purchase.staticCall(
+      buyerArg,
+      0n,
+      0n,
+      ethers.ZeroHash,
+      MINT_PAYMENT_KIND_DIRECT_ETH,
+      true,
+      { value: 0n },
+    );
+    return { available: true, definitive: true, code: 'AVAILABLE' };
+  } catch (error) {
+    const decoded = decodeRevertReason(error);
+    const rawName = typeof error?.revert?.name === 'string' ? error.revert.name : null;
+    const code = decoded.code === 'UNKNOWN' && rawName ? rawName : decoded.code;
+    if (code === 'DirectEthInsufficient') {
+      return { available: true, definitive: true, code };
+    }
+    // Ownership and authorization cannot heal on another poll for this exact
+    // buyer/level. StaleAdvance and unknown transport/provider failures can.
+    const definitive = code === 'FoilAlreadyBought'
+      || code === 'NotApproved'
+      || code === 'GameOver';
+    return { available: false, definitive, code };
+  }
+}
+
+/** Boolean, fail-closed compatibility wrapper. */
+export async function probeFoilPackAvailability(args = {}) {
+  return Boolean((await probeFoilPackAvailabilityState(args)).available);
 }
 
 function _structuredRevertError(error, context) {
@@ -288,7 +357,8 @@ async function _claimableFirstPaymentFor(contract, buyer, totalCostWei, preferCl
 /**
  * @param {{ticketQuantity: number, lootboxQuantity: number, affiliateCode?: string,
  *          lootBoxAmountWei?: bigint, ticketCostWei?: bigint,
- *          foil?: boolean, foilCostWei?: bigint, preferClaimable?: boolean}} args
+ *          foil?: boolean, foilCostWei?: bigint, presaleBoxAmountWei?: bigint,
+ *          preferClaimable?: boolean}} args
  *   ticketCostWei — scaled per-purchase ticket cost (scaledTicketPriceWei(target) ×
  *   quantity), computed by the panel from /game/state level + phase. It is part
  *   of the exact total; claimableFirstPayment decides the wallet shortfall.
@@ -320,7 +390,23 @@ export async function purchaseEth(args) {
   // afking, so msg.value must include the exact foil cost.
   const foil = Boolean(args.foil);
   const foilCostWei = foil ? (args.foilCostWei ?? 0n) : 0n;
-  const totalCostWei = lootBoxAmountWei + ticketCostWei + foilCostWei;
+  let presaleBoxAmountWei = 0n;
+  try { presaleBoxAmountWei = BigInt(args.presaleBoxAmountWei ?? 0n); }
+  catch (_e) { throw new Error('Enter a valid presale box amount.'); }
+  if (presaleBoxAmountWei < 0n) throw new Error('Enter a valid presale box amount.');
+  if (presaleBoxAmountWei > 0n && presaleBoxAmountWei < PRESALE_BOX_MIN_WEI) {
+    throw new Error('Minimum presale box size is 0.01 ETH.');
+  }
+  if (presaleBoxAmountWei > 0n && foil) {
+    // The deployed combined selector has no foil flag. Keep this explicit so
+    // callers never believe a foil leg was included when it was not.
+    throw new Error('Buy the foil pack separately from a presale box.');
+  }
+  const mintCostWei = lootBoxAmountWei + ticketCostWei + foilCostWei;
+  if (presaleBoxAmountWei > 0n && mintCostWei <= 0n) {
+    throw new Error('Use the standalone presale box purchase when there is no regular purchase.');
+  }
+  const totalCostWei = mintCostWei + presaleBoxAmountWei;
 
   const provider = getProvider();
   const signer = provider ? await provider.getSigner() : null;
@@ -335,24 +421,41 @@ export async function purchaseEth(args) {
   // Static-call gate (Phase 56 D-05) — runs only if a signer is available.
   // Trailing overrides object rides through staticCall(...args) so the sim
   // carries the same msg.value as the real tx (value-accurate pre-flight).
+  const entryQuantityScaled = entriesScaledFromTickets(ticketQuantity);
   if (signer) {
+    const method = presaleBoxAmountWei > 0n ? 'buyLootboxAndPresaleBox' : 'purchase';
+    const callArgs = presaleBoxAmountWei > 0n
+      ? [buyer, entryQuantityScaled, lootBoxAmountWei, affiliateCode, payment.payKind,
+        presaleBoxAmountWei, { value: payment.msgValueWei }]
+      : [buyer, entryQuantityScaled, lootBoxAmountWei, affiliateCode, payment.payKind, foil,
+        { value: payment.msgValueWei }];
     const sim = await requireStaticCall(
       signerContract,
-      'purchase',
-      [buyer, entriesScaledFromTickets(ticketQuantity), lootBoxAmountWei, affiliateCode, payment.payKind, foil,
-        { value: payment.msgValueWei }],
+      method,
+      callArgs,
       signer
     );
-    if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call purchase');
+    if (!sim.ok) throw _structuredRevertError(sim.error, `static-call ${method}`);
   }
 
   // Phase 58 chokepoint — closure form mandatory.
   const receipt = await sendTx(
     (s) => {
       const c = _buildContract(s);
+      if (presaleBoxAmountWei > 0n) {
+        return c.buyLootboxAndPresaleBox(
+          buyer,
+          entryQuantityScaled,
+          lootBoxAmountWei,
+          affiliateCode,
+          payment.payKind,
+          presaleBoxAmountWei,
+          { value: payment.msgValueWei }
+        );
+      }
       return c.purchase(
         buyer,
-        entriesScaledFromTickets(ticketQuantity),
+        entryQuantityScaled,
         lootBoxAmountWei,
         affiliateCode,
         payment.payKind,
@@ -360,7 +463,8 @@ export async function purchaseEth(args) {
         { value: payment.msgValueWei }
       );
     },
-    `${foil ? 'Buy foil pack' : ticketQuantity > 0 ? 'Buy tickets' : 'Buy lootbox'} (${
+    `${presaleBoxAmountWei > 0n ? 'Buy in + presale box'
+      : foil ? 'Buy foil pack' : ticketQuantity > 0 ? 'Buy tickets' : 'Buy lootbox'} (${
       args.preferClaimable === false ? 'wallet ETH' : 'claimable first'
     })`
   );
@@ -368,6 +472,111 @@ export async function purchaseEth(args) {
   // Build a contract bound to the provider (signer-free) for log parsing.
   const contract = _buildContract(provider);
   return { receipt, contract, payment };
+}
+
+// ---------------------------------------------------------------------------
+// Coin-presale boxes — current deploy credit-gated box surface.
+//
+// ETH ticket/lootbox purchases accrue credit at 25% of spend while the presale
+// is active. A box consumes that credit 1:1 and queues at the current shared
+// lootbox RNG index. The standalone write accepts fresh ETH first and pulls any
+// shortfall from claimable/AFKing funding on-chain.
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the exact current presale availability for one player.
+ * @param {{player?: string}} [args]
+ * @returns {Promise<null|{active:boolean,creditWei:bigint,remainingWei:bigint,maxBoxWei:bigint}>}
+ */
+export async function readPresaleBoxState({ player } = {}) {
+  const owner = player || getActingAddress();
+  if (!owner) return null;
+  const provider = getProvider();
+  if (!provider) return null;
+  const contract = _buildContract(provider);
+  if (typeof contract.lootboxPresaleActiveFlag !== 'function'
+    || typeof contract.presaleBoxCreditOf !== 'function'
+    || typeof contract.presaleBoxEthRemaining !== 'function') return null;
+  const [active, creditRaw, remainingRaw] = await Promise.all([
+    contract.lootboxPresaleActiveFlag(),
+    contract.presaleBoxCreditOf(owner),
+    contract.presaleBoxEthRemaining(),
+  ]);
+  const creditWei = BigInt(creditRaw ?? 0n);
+  const remainingWei = BigInt(remainingRaw ?? 0n);
+  return {
+    active: Boolean(active),
+    creditWei,
+    remainingWei,
+    maxBoxWei: creditWei < remainingWei ? creditWei : remainingWei,
+  };
+}
+
+/**
+ * Buy one credit-gated presale box. The requested amount should already be
+ * clamped to the player's live credit and global remaining capacity; this
+ * helper re-reads both immediately before simulation so an old UI quote cannot
+ * turn a close-boundary clamp into unexpected AFKing credit.
+ *
+ * @param {{boxAmountWei: bigint|string|number, player?: string, preferClaimable?: boolean}} args
+ * @returns {Promise<{receipt,contract,payment,state}>}
+ */
+export async function purchasePresaleBox({
+  boxAmountWei,
+  player,
+  preferClaimable = true,
+} = {}) {
+  const buyer = player || _readBuyer();
+  let requested;
+  try { requested = BigInt(boxAmountWei ?? 0n); }
+  catch (_e) { throw new Error('Enter a valid presale box amount.'); }
+  if (requested < PRESALE_BOX_MIN_WEI) {
+    throw new Error('Minimum presale box size is 0.01 ETH.');
+  }
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (!signer) throw new Error('Wallet not connected.');
+  const contract = _buildContract(signer);
+  const state = await readPresaleBoxState({ player: buyer });
+  if (!state?.active || state.remainingWei <= 0n) throw new Error('The presale box round is closed.');
+  if (requested > state.creditWei) throw new Error('Presale credit is lower than that box size.');
+  if (requested > state.remainingWei) throw new Error('Only a smaller presale box remains available.');
+
+  const payment = await _claimableFirstPaymentFor(
+    contract,
+    buyer,
+    requested,
+    preferClaimable !== false,
+  );
+  const callArgs = [buyer, requested, { value: payment.msgValueWei }];
+  const sim = await requireStaticCall(contract, 'buyPresaleBox', callArgs, signer);
+  if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call buyPresaleBox');
+
+  const receipt = await sendTx(
+    (s) => _buildContract(s).buyPresaleBox(...callArgs),
+    'Buy presale box',
+  );
+  return { receipt, contract: _buildContract(provider), payment, state };
+}
+
+/** Current PresaleBoxBuy receipt anchors, in log order. */
+export function parsePresaleBoxBuyFromReceipt(receipt, contract) {
+  const out = [];
+  if (!receipt || !Array.isArray(receipt.logs)) return out;
+  for (const log of receipt.logs) {
+    try {
+      const parsed = contract.interface.parseLog(log);
+      if (parsed?.name !== 'PresaleBoxBuy') continue;
+      out.push({
+        buyer: String(parsed.args.buyer ?? parsed.args[0]),
+        lootboxIndex: BigInt(parsed.args.index ?? parsed.args[1]),
+        amountWei: BigInt(parsed.args.amount ?? parsed.args[2]),
+        closing: Boolean(parsed.args.closing ?? parsed.args[3]),
+      });
+    } catch (_e) { /* foreign log */ }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -456,12 +665,9 @@ export async function openLootBox(args) {
 }
 
 // ---------------------------------------------------------------------------
-// parseLootboxIdxFromReceipt — extracts {lootboxIndex, day} per emitted
-// LootBoxIdx event. Generalized from /beta/mint.js:1110-1119. CONTEXT D-03 +
-// LBX-04 receipt-log-first source of truth. Lootboxes are ETH-only.
-//
-// Event signature verified at contracts/modules/DegenerusGameMintModule.sol:135:
-//   event LootBoxIdx(address indexed buyer, uint32 indexed index, uint32 indexed day)
+// parseLootboxIdxFromReceipt — extracts the queue index from the current
+// LootBoxBuy event. Older cached run receipts may still carry LootBoxIdx, so the
+// parser accepts both shapes while all new writes resolve from LootBoxBuy.
 // ---------------------------------------------------------------------------
 
 /**
@@ -476,7 +682,12 @@ export function parseLootboxIdxFromReceipt(receipt, contract) {
     try {
       const parsed = contract.interface.parseLog(receipt.logs[i]);
       if (!parsed) continue;
-      if (parsed.name === 'LootBoxIdx') {
+      if (parsed.name === 'LootBoxBuy') {
+        out.push({
+          lootboxIndex: BigInt(parsed.args.index ?? parsed.args[1]),
+          day: null,
+        });
+      } else if (parsed.name === 'LootBoxIdx') {
         out.push({
           lootboxIndex: BigInt(parsed.args.index ?? parsed.args[1]),
           day: BigInt(parsed.args.day ?? parsed.args[2]),

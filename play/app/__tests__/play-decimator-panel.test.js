@@ -10,7 +10,7 @@
 //   DECIMATOR-02 -- bucket + subbucket from INTEG-03; bucket-table with
 //                   player-row aria-current. Bucket range per CONTRACT TRUTH
 //                   is 5..12 on normal levels and 2..12 on centennial
-//                   (BurnieCoin.sol:142-147). CONTEXT D-03 is incorrect per
+//                   (FLIP.sol:142-147). CONTEXT D-03 is incorrect per
 //                   RESEARCH Pitfall 1.
 //   DECIMATOR-03 -- effective + weighted burn amounts per level
 //   DECIMATOR-04 -- winning subbucket + payout pill for closed rounds
@@ -24,7 +24,7 @@
 //   Dual stale-guards -- #decimatorPlayerFetchId + #decimatorLevelFetchId
 //   D-07 activity-score cross-reference -- reads scoreBreakdown.totalBps
 //   D-08 -- THREE subscriptions (replay.level + replay.player + replay.day)
-//   Score-unit discipline (Pitfall 8) -- formatBurnie for BURNIE amounts;
+//   Score-unit discipline (Pitfall 8) -- formatFlip for FLIP amounts;
 //                                         formatEth for ETH payoutAmount
 //   Bucket range contract-truth (Pitfall 1) -- literals 12 + 5 in source
 //                                              (contract-truth range, not the
@@ -167,7 +167,7 @@ test('DECIMATOR-02: uses aria-current for player bucket row highlighting (D-03 +
 
 // ---------------------------------------------------------------------------
 // DECIMATOR-03: per-level effective + weighted burn amounts
-// Both are wei-scale BURNIE (Pitfall 8 score-unit discipline enforced below)
+// Both are wei-scale FLIP (Pitfall 8 score-unit discipline enforced below)
 // ---------------------------------------------------------------------------
 
 test('DECIMATOR-03: renders effective + weighted data-binds', () => {
@@ -280,21 +280,21 @@ test('decimator-panel.js includes skeleton-shimmer class', () => {
 // ---------------------------------------------------------------------------
 // Table from 55-PATTERNS.md Score-unit discipline section:
 //
-//   effectiveAmount (INTEG-03 + terminal.burns)  WEI-scale BURNIE  formatBurnie
-//   weightedAmount  (INTEG-03 + terminal.burns)  WEI-scale BURNIE  formatBurnie
+//   effectiveAmount (INTEG-03 + terminal.burns)  WEI-scale FLIP    formatFlip
+//   weightedAmount  (INTEG-03 + terminal.burns)  WEI-scale FLIP    formatFlip
 //   payoutAmount    (INTEG-03 response)          WEI-scale ETH     formatEth
 //   bucket / subbucket / winningSubbucket        integer           String(v)
 //   scoreBreakdown.totalBps                      integer bps       (v/10000).toFixed(2)
 //   timeMultBps (terminal burn)                  integer bps       inline helper
 //
 // WARNING SIGNS OF BUG:
-//   - Stats row shows "5832100000000000000000 BURNIE" (raw wei) -- missing formatBurnie
+//   - Stats row shows "5832100000000000000000 FLIP" (raw wei) -- missing formatFlip
 //   - Payout pill shows "412357 ETH" (raw wei as decimal) -- missing formatEth
 //   - Bucket cell shows "null" literal -- missing null-guard
 
-test('score-unit: decimator-panel uses formatBurnie for BURNIE amounts (effective/weighted/terminal)', () => {
+test('score-unit: decimator-panel uses formatFlip for FLIP amounts (effective/weighted/terminal)', () => {
   const src = readFileSync(PANEL, 'utf8');
-  assert.match(src, /formatBurnie/);
+  assert.match(src, /formatFlip/);
 });
 
 test('score-unit: decimator-panel uses formatEth for ETH payoutAmount (DECIMATOR-04)', () => {
@@ -305,7 +305,7 @@ test('score-unit: decimator-panel uses formatEth for ETH payoutAmount (DECIMATOR
 // ---------------------------------------------------------------------------
 // Bucket-range CONTRACT TRUTH per Pitfall 1 / Assumption A6 (LOAD-BEARING)
 // ---------------------------------------------------------------------------
-// Contract source (BurnieCoin.sol:142-147) is authoritative over CONTEXT D-03:
+// Contract source (FLIP.sol:142-147) is authoritative over CONTEXT D-03:
 //   DECIMATOR_BUCKET_BASE = 12
 //   DECIMATOR_MIN_BUCKET_NORMAL = 5   (normal levels: 5..12, 8 possible)
 //   DECIMATOR_MIN_BUCKET_100 = 2      (centennial levels: 2..12, 11 possible)
@@ -320,14 +320,14 @@ test('score-unit: decimator-panel uses formatEth for ETH payoutAmount (DECIMATOR
 test('bucketRange contract-truth: source contains DECIMATOR_BUCKET_BASE literal 12 (Pitfall 1)', () => {
   const src = readFileSync(PANEL, 'utf8');
   assert.match(src, /\b12\b/,
-    'Expected literal 12 in source (DECIMATOR_BUCKET_BASE per BurnieCoin.sol:142); ' +
+    'Expected literal 12 in source (DECIMATOR_BUCKET_BASE per FLIP.sol:142); ' +
     'see 55-RESEARCH.md Pitfall 1 for the contract-truth bucket range');
 });
 
 test('bucketRange contract-truth: source contains MIN_BUCKET_NORMAL (literal 5 or named constant) (Pitfall 1)', () => {
   const src = readFileSync(PANEL, 'utf8');
   assert.match(src, /\b(5|MIN_BUCKET_NORMAL)\b/,
-    'Expected literal 5 or MIN_BUCKET_NORMAL in source per BurnieCoin.sol:142; ' +
+    'Expected literal 5 or MIN_BUCKET_NORMAL in source per FLIP.sol:142; ' +
     'see 55-RESEARCH.md Pitfall 1 for the contract-truth bucket range');
 });
 

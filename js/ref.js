@@ -79,6 +79,11 @@
     document.cookie = 'dgn_ref=' + ref + '; max-age=63072000; path=/; SameSite=Lax' +
       (location.protocol === 'https:' ? '; Secure' : '');
     try { localStorage.setItem('affiliate-ref', ref); } catch (e) { /* mirror only */ }
+    try {
+      document.dispatchEvent(new CustomEvent('degenerus:referral-changed', {
+        detail: { code: ref }
+      }));
+    } catch (e) { /* input may not be mounted yet */ }
   }
 
   function getPending() {
