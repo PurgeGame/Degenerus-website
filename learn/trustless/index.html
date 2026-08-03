@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trust Model · Degenerus Mechanics</title>
+  <meta name="description"
+    content="What the current Degenerus contracts fix in code, which powers remain privileged or governed, and which external systems and risks users still depend on." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Trust Model</h1>
+  <p class="lede">Degenerus minimizes discretionary control; it does not eliminate trust or risk. The reviewed
+    contract set has fixed module addresses and no general upgrade, pause, or arbitrary jackpot-withdrawal function.
+    It still has privileged operating controls, sDGNRS-governed recovery paths, external dependencies, and the usual
+    possibility of bugs or a bad deployment.</p>
+
+  <h2>What the current code fixes</h2>
+  <table>
+    <tr>
+      <th>Area</th>
+      <th>Constraint</th>
+    </tr>
+    <tr>
+      <td>Game logic</td>
+      <td>Core payout rates, eligibility rules, and odds are code paths rather than ordinary admin settings.</td>
+    </tr>
+    <tr>
+      <td>Upgrades and pauses</td>
+      <td>The reviewed contracts are not proxies and expose no general upgrade or pause switch.</td>
+    </tr>
+    <tr>
+      <td>Jackpot funds</td>
+      <td>There is no general owner function to withdraw a prize pool. Payouts, claims, and terminal distributions
+        follow contract rules.</td>
+    </tr>
+  </table>
+  <p class="fine">Immutability narrows human discretion but also freezes defects. These statements describe the
+    reviewed source; users should separately verify deployed addresses and bytecode.</p>
+
+  <h2>Meaningful privileged controls</h2>
+  <p>The &ldquo;vault owner&rdquo; is whichever account holds more than 50.1% of the DGVE vault-share supply.</p>
+  <p><strong>The one control that could actually ruin the game is the VRF escape hatch.</strong> If Chainlink stops
+    delivering randomness, the vault owner can propose a replacement coordinator, and a malicious coordinator would
+    control the game's randomness. Exploiting it requires the full parlay: Chainlink has to fail, the admin has to be
+    hostile, and sDGNRS governance has to let the hostile swap through. The proposal gates and vote thresholds are
+    detailed under governed recovery paths below. Everything else the owner controls is housekeeping:</p>
+  <table>
+    <tr>
+      <th>Control</th>
+      <th>Scope and consequence</th>
+    </tr>
+    <tr>
+      <td>Tune the lootbox reveal batch size</td>
+      <td>Changes the pending-volume threshold for an extra mid-day randomness request. It affects reveal timing and
+        gas behavior, not the payout formulas.</td>
+    </tr>
+    <tr>
+      <td>Declare a future &ldquo;thanos&rdquo; level</td>
+      <td>May flag a level at least six ahead so its entry counts, and those of every level after, divide by up to
+        256&times;. A prospective redenomination for runaway-demand scale: it is undeclarable unless 40M+ entries
+        survive the division, and it locks before any ticket for the level exists. The division is uniform, so no
+        held ticket is touched and every holder's replacement cost and pot share are unchanged.</td>
+    </tr>
+    <tr>
+      <td>Manage Lido liquidity</td>
+      <td>May stake game ETH that the reserve calculation treats as excess, and may pay exact ETH to receive the same
+        amount of game-held stETH. That swap is at par, so any stETH depeg discount lands on the admin, not the game.
+        Vault and sDGNRS claims are treated as stETH-settleable in that reserve logic.</td>
+    </tr>
+    <tr>
+      <td>Set deity-pass presentation</td>
+      <td>May change renderer and color configuration. This affects metadata and presentation, with a built-in
+        fallback; it does not change pass ownership or game payouts.</td>
+    </tr>
+    <tr>
+      <td>Curate the charity ballot</td>
+      <td>May fill the 20-address slate. Slots 0&ndash;2 lock once filled; edits to slots 3&ndash;19 are queued for the
+        next update. sDGNRS votes choose among the available addresses, so curation still shapes the choice set.</td>
+    </tr>
+    <tr>
+      <td>Post-game GNRUS cleanup</td>
+      <td>After the final sweep, may redeem an inactive holder's GNRUS to that holder. After the additional three-year
+        grace period, may sweep remaining GNRUS backing to the vault.</td>
+    </tr>
+  </table>
+  <p class="fine">The owner can also claim the contract's vested creator DGNRS, unwrap owner-held DGNRS into soulbound
+    sDGNRS for a recipient, operate the vault's own positions, opt the vault into the salvage backstop (buying
+    far-future entries with vault funds, with a configurable balance floor), and mint from WWXRP's uncirculating
+    reserve. Those functions move assets the vault or creator already owns; they are listed here for completeness, not
+    because they control the game.</p>
+
+  <h2>Governed recovery paths</h2>
+  <p>The vault owner can propose emergency infrastructure changes after a verified outage, but execution requires an
+    sDGNRS vote. A community holder with at least 0.5% of voting sDGNRS gets a later proposal path.</p>
+  <table>
+    <tr>
+      <th>Recovery</th>
+      <th>Proposal gates</th>
+      <th>Vote and scope</th>
+    </tr>
+    <tr>
+      <td>VRF coordinator</td>
+      <td>Vault owner after 44 hours since the last processed daily VRF word; community path after 7 days</td>
+      <td>Approval threshold decays from 50% to 5% over a seven-day proposal. It can replace the coordinator and key
+        hash; a recovered VRF kills the proposal.</td>
+    </tr>
+    <tr>
+      <td>LINK/ETH price feed</td>
+      <td>Vault owner after 2 unhealthy days; community path after 7 days</td>
+      <td>Approval threshold decays from 50% to 15%. It can replace or disable the feed used to value LINK-donation
+        rewards.</td>
+    </tr>
+  </table>
+  <p class="fine">The voting token may itself be concentrated. Governance gates reduce unilateral control; they do
+    not guarantee a diverse or attentive electorate.</p>
+
+  <h2>What users still trust</h2>
+  <table>
+    <tr>
+      <td>Chainlink VRF</td>
+      <td>Supplies gameplay randomness. A prolonged failure delays draws and can lead to recovery or terminal
+        handling.</td>
+    </tr>
+    <tr>
+      <td>Lido and stETH</td>
+      <td>Supply staking yield and part of the protocol's backing. Slashing, liquidity, or contract failure can
+        reduce realized value.</td>
+    </tr>
+    <tr>
+      <td>Ethereum and deployment</td>
+      <td>Consensus, gas availability, correct addresses, constructor wiring, and deployed bytecode all matter.</td>
+    </tr>
+    <tr>
+      <td>The contracts themselves</td>
+      <td>Audits reduce uncertainty; they do not prove the absence of bugs, economic exploits, or denial-of-service
+        paths.</td>
+    </tr>
+  </table>
+  <p>The <a href="/learn/endgame/">liveness and endgame rules</a> reduce the chance that value remains frozen forever,
+    but terminal distribution is a fallback, not proof that normal play will continue or every participant will be
+    made whole.</p>
+
+  <h2>Zero rake is not zero allocation</h2>
+  <p>Ordinary ticket and lootbox ETH is routed to game pools without a purchase-time percentage removed as rake. The
+    design still assigns creator DGNRS, routes most presale ETH to the vault, and lets protocol-controlled positions
+    participate under fixed rules. Those are disclosed economic allocations, not contradictions to the narrow routing
+    claim.</p>
+
+  <h2>Don't trust. Verify.</h2>
+  <p>Read the source, but also verify the deployed addresses, bytecode, constructor wiring, privileged holders, live
+    configuration, and any audit assumptions. Source-code immutability is useful only when the chain is running the
+    source you reviewed.</p>
+
+  <div class="cta">
+    <strong>Minimized trust is still a trust model.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Verify code, deployment, configuration, dependencies, and control
+      concentration.</p>
+    <a class="btn" href="https://github.com/PurgeGame/degenerus-protocol">Read the Contracts</a>
+    <a class="btn ghost" href="/learn/sdgnrs/">sDGNRS</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

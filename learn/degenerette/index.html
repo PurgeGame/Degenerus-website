@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Degenerette · Degenerus Mechanics</title>
+  <meta name="description"
+    content="The Degenerus slot machine: bet ETH, FLIP, or WWXRP against published payout and activity curves, with high-variance prizes above 100,000x." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Degenerette</h1>
+  <p class="lede">The slot machine. Bet ETH to win ETH, FLIP to win FLIP, or WWXRP to win WWXRP, against a payout
+    table published in the contract that tops out above 100,000x. Casinos bury their par sheets. This one's public,
+    because it has no choice.</p>
+
+  <iframe class="embed" src="/degenerette/embed.html" style="height: 545px;" loading="lazy"
+    title="Playable Degenerette demo"></iframe>
+  <p class="figcap">The real widget. Spin it.</p>
+
+  <h2>How a spin scores</h2>
+  <p>A spin rolls four quadrants, each with a symbol and a color. Every symbol match scores a point, the hero
+    quadrant's symbol counts double, and a color only scores if its symbol hit too. That gives every spin a score from
+    0 to 9, and anything from 2 up pays:</p>
+  <table>
+    <tr>
+      <th>Score</th>
+      <th>Payout</th>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>~1.95&ndash;2.81x</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>~4.87&ndash;7.02x</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>~15&ndash;22x</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>~44&ndash;63x</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>~200&ndash;288x</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>~1,000&ndash;1,500x</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>~51,000&ndash;74,000x</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>~107,000&ndash;209,000x</td>
+    </tr>
+  </table>
+  <p class="fine">FLIP-staked wins ride one more 50/50, double or nothing, before they mint. Details below.</p>
+  <p class="fine">Ranges depend on hero color and the roll. The honest ETH/FLIP base tables are calibrated toward a
+    100% nominal expected payout; the activity curve climbs from 90% toward that ceiling and tops out just under it.
+    Individual spins remain highly volatile.</p>
+
+  <h2>The nominal payout curves</h2>
+  <table>
+    <tr>
+      <th>Lane</th>
+      <th>Activity score 0</th>
+      <th>High activity score</th>
+    </tr>
+    <tr>
+      <td>ETH</td>
+      <td>90% + 5% ETH bonus</td>
+      <td>~99.9% + 5% ETH bonus</td>
+    </tr>
+    <tr>
+      <td>FLIP</td>
+      <td>90%</td>
+      <td>~99.9%</td>
+    </tr>
+    <tr>
+      <td>WWXRP, openly rigged for you</td>
+      <td>70%</td>
+      <td>115&ndash;120%</td>
+    </tr>
+  </table>
+  <p class="fine">The ETH lane adds 5 percentage points of expected prize value, concentrated in score 6&ndash;9.
+    Large ETH results partly recirculate through lootboxes, and total ETH paid is capped against the futurepool, so a
+    figure above 100% is not a promise of cash profit. WWXRP percentages are denominated in a token with no backing or
+    redemption value.</p>
+
+  <h2>The details</h2>
+  <table>
+    <tr>
+      <td>Minimum bet</td>
+      <td>0.005 ETH, 100 FLIP, or 1 WWXRP</td>
+    </tr>
+    <tr>
+      <td>Max spins per bet</td>
+      <td>25 spins for ETH, 15 for FLIP, 5 for WWXRP</td>
+    </tr>
+    <tr>
+      <td>Big ETH wins</td>
+      <td>Up to 3x pays pure ETH; larger hits split cash and <a href="/learn/lootboxes/">lootbox</a> value. The ETH
+        leg is also capped at 10% of the futurepool</td>
+    </tr>
+    <tr>
+      <td>Every stake</td>
+      <td>Taken at placement, win or lose: ETH goes to the futurepool, FLIP and WWXRP burn. Wins pay from the pool or
+        fresh mint</td>
+    </tr>
+    <tr>
+      <td>FLIP payouts</td>
+      <td>The calculated payout then faces a separate 50/50 double-or-nothing survival flip before minting</td>
+    </tr>
+    <tr>
+      <td>Extras</td>
+      <td>Score 7+ ETH wins earn sDGNRS; the first score 9 on WWXRP in each 10-level bracket takes half a
+        whale pass</td>
+    </tr>
+    <tr>
+      <td>Free spins</td>
+      <td>30% of lootbox rolls pay out as Degenerette spins</td>
+    </tr>
+  </table>
+
+  <div class="cta">
+    <strong>Try the consolation lane.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">A lost coinflip grants 1 WWXRP, enough to stake one spin. It does
+      not restore the burned FLIP.</p>
+    <a class="btn" href="/app/">Spin</a>
+    <a class="btn ghost" href="/learn/wwxrp/">What is WWXRP?</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

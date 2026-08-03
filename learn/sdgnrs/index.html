@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sDGNRS · Degenerus Mechanics</title>
+  <meta name="description"
+    content="sDGNRS is a soulbound protocol token with contract-defined inflows, game positions, voting, and burn-redemption mechanics; DGNRS is its transferable wrapper." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>sDGNRS</h1>
+  <p class="lede">sDGNRS is a soulbound protocol token with defined inflows, game positions, voting, and
+    burn-redemption mechanics. DGNRS is its transferable wrapper. Neither token is legal equity, and its market or
+    redemption value is not guaranteed.</p>
+
+  <h2>Initial token allocation</h2>
+  <table>
+    <tr>
+      <th>Share</th>
+      <th>Allocation</th>
+      <th>How it's earned</th>
+    </tr>
+    <tr>
+      <td>30%</td>
+      <td>Affiliates</td>
+      <td>Level-based top-affiliate and score-weighted claims, plus deity-referral rewards</td>
+    </tr>
+    <tr>
+      <td>20%</td>
+      <td>Creator</td>
+      <td>Vests over the first 30 levels, held as the liquid DGNRS wrapper</td>
+    </tr>
+    <tr>
+      <td>20%</td>
+      <td>Lootbox buyers</td>
+      <td>Each eligible roll draws a token allocation on a four-tier table topped by a 1-in-200 mega draw</td>
+    </tr>
+    <tr>
+      <td>10%</td>
+      <td>Whale &amp; deity pass buyers</td>
+      <td>Minted on pass purchases</td>
+    </tr>
+    <tr>
+      <td>10%</td>
+      <td>Reward pool</td>
+      <td>High-score Degenerette wins and other feats</td>
+    </tr>
+    <tr>
+      <td>10%</td>
+      <td>Presale boxes</td>
+      <td>The capped early-supporter sale</td>
+    </tr>
+  </table>
+  <p class="fine">The largest initial pool is assigned to affiliate mechanics. sDGNRS itself is soulbound; DGNRS is
+    its transferable wrapper.</p>
+
+  <h2>Contract-defined inflows</h2>
+  <table>
+    <tr>
+      <td>stETH yield</td>
+      <td>23% of measured ETH/stETH surplus when yield is distributed</td>
+    </tr>
+    <tr>
+      <td>Presale boxes</td>
+      <td>20% of proceeds</td>
+    </tr>
+    <tr>
+      <td>Unreferred purchases</td>
+      <td>A share of commission FLIP when a buyer has no real referrer</td>
+    </tr>
+  </table>
+
+  <h2>The protocol-held position plays</h2>
+  <p>The contract itself plays: it holds perpetual tickets rolling a hundred levels deep, subscribes itself to a
+    daily afKing lootbox, and, after its seed period, keeps its FLIP backing on coinflip auto-rebuy.</p>
+
+  <h2>Getting value out</h2>
+  <p>During a live game, burning sDGNRS submits a delayed redemption. Its proportional ETH/stETH base rolls from 25%
+    to 175%, set by the resolving day's VRF word; the resolved value normally splits between direct claimable funds
+    and a lootbox, while the FLIP component is contingent on the resolving day's coinflip. Lootbox legs under
+    0.01 ETH are forfeited back to backing. After
+    GAMEOVER, a burn instead receives its deterministic proportional ETH/stETH share with no FLIP leg. These are
+    contract redemption rules, not a guaranteed investment return.</p>
+
+  <div class="cta">
+    <strong>The largest initial pool funds affiliate mechanics.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Follow the level rewards, score claims, and deity referral path.</p>
+    <a class="btn" href="/learn/affiliates/">The Affiliate Deal</a>
+    <a class="btn ghost" href="/learn/presale-boxes/">Presale Boxes</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

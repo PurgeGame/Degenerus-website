@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Degenerus Mechanics</title>
+  <meta name="description"
+    content="Every Degenerus Protocol mechanic explained concisely, with figures checked against the current contracts." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <h1>How every piece works</h1>
+  <p class="lede">Degenerus is an on-chain lottery with a lot of moving parts. Each page explains one in about two
+    minutes: what it does, the contract numbers, and the risk. Ordinary ticket and lootbox ETH routes into game pools
+    without a purchase-time rake; the rules live in immutable <a
+      href="https://github.com/PurgeGame/degenerus-protocol">contracts you can inspect</a>.</p>
+
+  <div class="grouplab">The core game</div>
+  <div class="grid">
+    <a class="card" href="/learn/tutorial/">
+      <div class="card-title">Starter Tutorial</div>
+      <div class="card-hook">Explore the app read-only through the public sDGNRS wallet before connecting your own.</div>
+    </a>
+    <a class="card" href="/learn/purchases/">
+      <div class="card-title">Purchase Options</div>
+      <div class="card-hook">A quick guide to tickets, lootboxes, foil packs, and how one Buy can combine them.</div>
+    </a>
+    <a class="card" href="/learn/tickets/">
+      <div class="card-title">Tickets</div>
+      <div class="card-hook">The basic unit of play. One ticket, four random traits, four jackpot entries.</div>
+    </a>
+    <a class="card" href="/learn/jackpots/">
+      <div class="card-title">The Jackpots</div>
+      <div class="card-hook">Daily prizes while the pool fills, then five logical trait draws. Targets ratchet within
+        each century.</div>
+    </a>
+    <a class="card" href="/learn/coinflip/">
+      <div class="card-title">The Coinflip</div>
+      <div class="card-hook">Every FLIP you win must survive a daily double-or-nothing. Gambling is mandatory.</div>
+    </a>
+    <a class="card" href="/learn/quests/">
+      <div class="card-title">Quests &amp; Activity Score</div>
+      <div class="card-hook">Daily quests pay FLIP and build the score used by several reward curves.</div>
+    </a>
+    <a class="card" href="/learn/cycles/">
+      <div class="card-title">The Cycles</div>
+      <div class="card-hook">One day, one level, ten, one hundred. The nested clocks the whole game runs on.</div>
+    </a>
+  </div>
+
+  <div class="grouplab">More ways to play</div>
+  <div class="grid">
+    <a class="card" href="/learn/lootboxes/">
+      <div class="card-title">Lootboxes</div>
+      <div class="card-hook">Boxes of ETH, FLIP, and tickets, revealed at the daily draw. The grinder's product.</div>
+    </a>
+    <a class="card" href="/learn/foil-packs/">
+      <div class="card-title">Foil Packs</div>
+      <div class="card-hook">Premium ticket packs with a daily re-grade mechanic.</div>
+    </a>
+    <a class="card" href="/learn/degenerette/">
+      <div class="card-title">Degenerette</div>
+      <div class="card-hook">The slot machine. Bet FLIP to win FLIP, or ETH to win ETH.</div>
+    </a>
+    <a class="card" href="/learn/passes/">
+      <div class="card-title">Passes</div>
+      <div class="card-hook">Lazy, whale, and deity passes, plus the afKing subscription they unlock.</div>
+    </a>
+    <a class="card" href="/learn/boons/">
+      <div class="card-title">Boons</div>
+      <div class="card-hook">Single-use bonuses from lootboxes and deities. Discounts, boosts, streak shields.</div>
+    </a>
+    <a class="card" href="/learn/side-bets/">
+      <div class="card-title">The Side Bets</div>
+      <div class="card-hook">Two OVER/UNDER books on the game's own numbers. Winners split the losing side.</div>
+    </a>
+  </div>
+
+  <div class="grouplab">The big events</div>
+  <div class="grid">
+    <a class="card" href="/learn/decimator/">
+      <div class="card-title">The Decimator</div>
+      <div class="card-hook">Burn FLIP for a weighted shot at an ETH jackpot.</div>
+    </a>
+    <a class="card" href="/learn/baf/">
+      <div class="card-title">Big Ass Flip</div>
+      <div class="card-hook">The jackpot where coinflip leaders and lucky ticket holders split the pot.</div>
+    </a>
+    <a class="card" href="/learn/endgame/">
+      <div class="card-title">The Endgame</div>
+      <div class="card-hook">The liveness clocks, terminal distribution, and what can still be forfeited.</div>
+    </a>
+  </div>
+
+  <div class="grouplab">Tokens &amp; protocol claims</div>
+  <div class="grid">
+    <a class="card" href="/learn/flip/">
+      <div class="card-title">FLIP</div>
+      <div class="card-hook">The reward token with a fixed 1,000-FLIP ticket redemption rate.</div>
+    </a>
+    <a class="card" href="/learn/sdgnrs/">
+      <div class="card-title">sDGNRS</div>
+      <div class="card-hook">A soulbound protocol token with defined inflows, positions, voting, and redemption rules.</div>
+    </a>
+    <a class="card" href="/learn/presale-boxes/">
+      <div class="card-title">Presale Boxes</div>
+      <div class="card-hook">A play-gated early sale capped at 50 ETH of box volume.</div>
+    </a>
+    <a class="card" href="/learn/wwxrp/">
+      <div class="card-title">WWXRP</div>
+      <div class="card-hook">Wacky Wrapped XRP. A joke token, and honest about it.</div>
+    </a>
+    <a class="card" href="/learn/salvage-swap/">
+      <div class="card-title">The Salvage Swap</div>
+      <div class="card-hook">The way out of a far-future position, priced so you won't want it.</div>
+    </a>
+    <a class="card" href="/learn/degen-yield/">
+      <div class="card-title">Degen Yield</div>
+      <div class="card-hook">People buy terrible lottery tickets anyway. That is the fuel.</div>
+    </a>
+  </div>
+
+  <div class="grouplab">Get paid</div>
+  <div class="grid">
+    <a class="card" href="/learn/affiliates/">
+      <div class="card-title">The Affiliate Deal</div>
+      <div class="card-hook">FLIP commissions on referred activity, with rates that depend on the product and funding
+        source.</div>
+    </a>
+  </div>
+
+  <div class="grouplab">The trust model</div>
+  <div class="grid">
+    <a class="card" href="/learn/trustless/">
+      <div class="card-title">Trust Model</div>
+      <div class="card-hook">What is immutable, which controls remain, and where Chainlink, Lido, and contract risk
+        enter.</div>
+    </a>
+  </div>
+
+  <div class="cta">
+    <strong>Want the full picture?</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">The whitepaper gives the overview. The game-theory paper explains
+      the incentives, assumptions, and failure modes.</p>
+    <a class="btn" href="/whitepaper/">Whitepaper</a>
+    <a class="btn ghost" href="/theory/">Game Theory</a>
+    <a class="btn ghost" href="/app/">Play</a>
+  </div>
+
+  <footer>
+    Degenerus Protocol &middot; <a href="/">Home</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Jackpots · Degenerus Mechanics</title>
+  <meta name="description"
+    content="How Degenerus jackpots work: daily prizes while a pool fills, five logical trait draws, and a target ratchet that resets after each century level." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>The Jackpots</h1>
+  <p class="lede">The game runs in levels. While a level's pool fills, daily draws pay tickets, ETH, and FLIP. Once
+    the target is met, five logical jackpot draws distribute the active pool, partly as ETH and partly as tickets for
+    the next level.</p>
+
+  <iframe class="embed" src="/wtf/jackpot-demo.html?demo=1" style="height: 480px;" loading="lazy"
+    title="Interactive jackpot draw demo"></iframe>
+  <p class="figcap">A day of draws, playable. Your ticket's four traits against the day's drawn traits: scratch the
+    matches to reveal prizes.</p>
+
+  <h2>The level cycle</h2>
+  <p>During the <strong>purchase phase</strong>, ticket sales fill the level's prize pool. The moment it reaches what
+    the previous level <em>raised</em>, the <strong>jackpot phase</strong> begins. That creates a target ratchet within
+    a 100-level cycle. After an x00 century level, the next target resets to one-third of the futurepool, so neither
+    targets nor payouts rise forever.</p>
+
+  <h2>Every draw, every day</h2>
+  <table>
+    <tr>
+      <th>Draw</th>
+      <th>When</th>
+      <th>What it pays</th>
+    </tr>
+    <tr>
+      <td>Daily drip</td>
+      <td>Every purchase-phase day</td>
+      <td>1% of the futurepool as bonus tickets and ETH to trait-matched holders, plus a FLIP jackpot</td>
+    </tr>
+    <tr>
+      <td>Luckbox</td>
+      <td>First jackpot day of a level</td>
+      <td>3% of the futurepool to players who held next-level tickets early</td>
+    </tr>
+    <tr>
+      <td>Logical days 1&ndash;4</td>
+      <td>Jackpot phase</td>
+      <td>A random 6&ndash;14% budget per logical day. One-fifth becomes next-level tickets; the ETH portion is split
+        across four trait buckets, with the solo bucket receiving the remainder</td>
+    </tr>
+    <tr>
+      <td>Logical day 5</td>
+      <td>Jackpot phase finale</td>
+      <td>The remaining active pool budget; one-fifth becomes next-level tickets and 60% of the ETH portion goes to
+        the solo trait bucket</td>
+    </tr>
+  </table>
+
+  <h2>Who wins</h2>
+  <p>Winners are ticket holders whose <a href="/learn/tickets/">traits</a> match the drawn ones. Each bucket's daily
+    slice spreads across many winners at descending prize sizes:</p>
+  <table>
+    <tr>
+      <th>Winners per bucket</th>
+      <th>Prize size</th>
+    </tr>
+    <tr>
+      <td>25</td>
+      <td>Small</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>Medium</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Large</td>
+    </tr>
+    <tr>
+      <td>1 solo winner</td>
+      <td>The largest single share: 40% of the day's pool on days 1&ndash;4, 60% on the day-5 finale</td>
+    </tr>
+  </table>
+  <p class="fine">The base winner counts scale with the ETH budget; the solo slot stays one winner. Which quadrant is
+    solo is random, with gold drawn traits favored when present. Fast levels compress the schedule: five logical days
+    become three physical days if the pool fills in three, or one if it fills in one. Draw entropy comes from
+    Chainlink VRF, subject to the dependency and fallback risks described in <a href="/learn/trustless/">the trust
+      model</a>.</p>
+
+  <div class="cta">
+    <strong>Then there are the big ones.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Every ten levels, the special event jackpots fire on top of all of
+      this.</p>
+    <a class="btn" href="/learn/decimator/">The Decimator</a>
+    <a class="btn ghost" href="/learn/baf/">Big Ass Flip</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Salvage Swap · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Sell eligible far-future ticket entries to sDGNRS or the vault at a deliberately steep discount, partly as current-level tickets and partly as ETH or FLIP." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>The Salvage Swap</h1>
+  <p class="lede">A ticket purchase is not refundable from its original pools. The salvage swap instead lets you sell
+    eligible far-future entries to a contract-selected buyer. The quote is deliberately punitive: this is an emergency
+    exit, not a promise to recover what you spent.</p>
+
+  <h2>What you can sell</h2>
+  <table>
+    <tr>
+      <td>Eligible</td>
+      <td>Entries 6 to 100 levels beyond the level a ticket would buy into today</td>
+    </tr>
+    <tr>
+      <td>Granularity</td>
+      <td>Single entries, not whole tickets. Four entries make a ticket</td>
+    </tr>
+    <tr>
+      <td>Not eligible</td>
+      <td>Anything within 5 levels, and everything once the game is over or the death clock has fired</td>
+    </tr>
+  </table>
+  <p class="fine">Near-term entries stay put. Eligible entries must be 6&ndash;100 levels beyond the level a new ticket
+    would currently enter.</p>
+
+  <h2>The price is the point</h2>
+  <table>
+    <tr>
+      <th>Distance out</th>
+      <th>You get</th>
+    </tr>
+    <tr>
+      <td>6 levels</td>
+      <td>15% of face</td>
+    </tr>
+    <tr>
+      <td>20 levels</td>
+      <td>10% of face</td>
+    </tr>
+    <tr>
+      <td>100 levels</td>
+      <td>5% of face</td>
+    </tr>
+  </table>
+  <p>The curve slides between those points, and a daily per-player jitter scales the offer between 70% and 110%. A
+    quote therefore lands between 3.5% and 16.5% of the entries' face value at their target levels, not necessarily
+    the amount originally paid. The day's jitter is fixed for that player.</p>
+  <p class="fine">Nothing here is a refund. You are selling an asset to a buyer at a price you should hate, and the
+    discount is what makes anyone willing to take the other side.</p>
+
+  <h2>What you get paid in</h2>
+  <table>
+    <tr>
+      <td>40&ndash;80%</td>
+      <td>Tickets at the current level, bought for you on the spot</td>
+    </tr>
+    <tr>
+      <td>The rest</td>
+      <td>Split between withdrawable ETH and a <a href="/learn/flip/">FLIP</a> credit</td>
+    </tr>
+  </table>
+  <p>The split is rolled, not chosen. The ticket leg executes as a normal recycled purchase at the active ticket
+    level, including its usual pool routing and purchase effects. The FLIP leg is credited into the next daily <a
+      href="/learn/coinflip/">coinflip</a>; it is not immediately withdrawable.</p>
+
+  <h2>Who buys them</h2>
+  <p>Your entries are not destroyed. They transfer intact to a buyer, who now holds that far-future exposure and will
+    receive its jackpot eligibility when the target level arrives.</p>
+  <table>
+    <tr>
+      <td>First in line</td>
+      <td><a href="/learn/sdgnrs/">sDGNRS</a>, using its own claimable balance while keeping at least 1 ETH above the
+        quote</td>
+    </tr>
+    <tr>
+      <td>Backstop</td>
+      <td>The vault, if the vault owner has opted in and can cover it above its reserve floor</td>
+    </tr>
+    <tr>
+      <td>If neither can pay</td>
+      <td>The swap reverts. There is no other buyer</td>
+    </tr>
+  </table>
+  <p class="fine">The buyer receives the entries intact and takes their delay and outcome risk. If neither buyer can
+    meet its funding floor, the swap reverts.</p>
+
+  <div class="cta">
+    <strong>The exit is bad. The position is the point.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Far-future entries are cheap because they are patient. See what
+      they are waiting for.</p>
+    <a class="btn" href="/learn/tickets/">Tickets</a>
+    <a class="btn ghost" href="/learn/jackpots/">The Jackpots</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

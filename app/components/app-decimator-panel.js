@@ -861,20 +861,23 @@ class AppDecimatorPanel extends HTMLElement {
       && BigInt(this.#presaleState?.remainingWei ?? 0n) > 0n
       && get('ui.mode') !== 'combined'
     );
+    const available = live ? this.#presaleAvailableForDraft(mintCostWei) : 0n;
     const foilSelected = this.#foilWanted();
     // The deployed combined selector has no foil flag. Once foil is selected,
     // remove the incompatible presale leg instead of leaving behind a disabled
-    // control that looks like a broken option.
-    row.hidden = !live || foilSelected;
-    if (!live || foilSelected) {
-      if (foilSelected) input.value = '0';
+    // control that looks like a broken option. Also keep the row out of sight
+    // until the player has enough current or same-purchase credit to buy the
+    // contract's minimum box.
+    const visible = live && !foilSelected && available >= PRESALE_BOX_MIN_WEI;
+    row.hidden = !visible;
+    if (!visible) {
+      if (foilSelected || (live && available < PRESALE_BOX_MIN_WEI)) input.value = '0';
       if (this.#presaleState && this.#presaleAddress === buyerKey && !this.#presaleState.active) {
         input.value = '0';
       }
       return;
     }
 
-    const available = this.#presaleAvailableForDraft(mintCostWei);
     availableEl.textContent = `${formatPurchaseEth(available)} ETH AVAILABLE`;
     input.max = formatPurchaseEth(available);
     input.setAttribute?.('max', input.max);

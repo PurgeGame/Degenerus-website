@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FLIP · Degenerus Mechanics</title>
+  <meta name="description"
+    content="FLIP is the Degenerus reward token. During redemption windows, 1,000 FLIP buys one ticket whose ETH price follows the level curve." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>FLIP</h1>
+  <p class="lede">FLIP is the protocol's reward and burn token. During each level's redemption window, 1,000 FLIP
+    buys one ticket. The introductory curve runs from 0.01 ETH to 0.24 ETH; later 100-level cycles run from 0.04 ETH
+    to 0.24 ETH. That fixed redemption rate creates utility, not a guaranteed market price.</p>
+
+  <h2>Where FLIP comes from</h2>
+  <p>Protocol reward paths mint FLIP through affiliate commissions, quests, coinflip bonuses, jackpot side-prizes,
+    lootbox rolls, and <a href="/learn/tickets/">ticket-purchase bonuses</a>. Ticket and lootbox ETH still routes
+    fully into game pools; the purchase bonus is minted on top of the deposit, not carved out of it. Most
+    protocol-issued FLIP first enters the daily <a href="/learn/coinflip/">coinflip</a> as a stake.</p>
+
+  <img class="coin" src="/shared/coinflip-coin.svg" alt="The daily coinflip coin, spinning between its red flame face and green ETH face" />
+  <p class="figcap">Most reward-path FLIP rides this coin before it settles. Green, the stake receives the day's win
+    multiplier. Red, it burns.</p>
+
+  <h2>The ratchet</h2>
+  <p>1,000 FLIP redeems for one ticket during each level's redemption window, the stretch from the moment the
+    pool hits its target through the jackpot days, so FLIP's utility value rides the
+    ticket price curve. A stash earned at level 3 buys the same tickets at level 90, when each one costs 16x more ETH.
+    If FLIP trades below that utility benchmark, buyers may prefer FLIP-funded tickets. Whether market arbitrage
+    closes the gap still depends on liquidity, timing, ticket demand, and game risk.</p>
+
+  <h2>Where FLIP goes to die</h2>
+  <p>Its major protocol sinks burn it:</p>
+  <table>
+    <tr>
+      <th>Sink</th>
+      <th>Cost</th>
+    </tr>
+    <tr>
+      <td>One ticket, any level</td>
+      <td>1,000 FLIP</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/decimator/">Decimator</a> entry</td>
+      <td>1,000 FLIP minimum</td>
+    </tr>
+    <tr>
+      <td>The <a href="/learn/endgame/">death bet</a></td>
+      <td>1,000 FLIP minimum</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/degenerette/">Degenerette</a> spins</td>
+      <td>100 FLIP minimum, stake burns win or lose</td>
+    </tr>
+    <tr>
+      <td>RNG nudge</td>
+      <td>100 FLIP, compounding 50% per nudge already queued</td>
+    </tr>
+    <tr>
+      <td>Decurse a cursed player</td>
+      <td>100 FLIP</td>
+    </tr>
+    <tr>
+      <td>Smite an enemy (deity holders)</td>
+      <td>200 FLIP</td>
+    </tr>
+  </table>
+
+  <div class="cta">
+    <strong>Earning FLIP is a job. Several, actually.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Quests and referred activity credit it as daily coinflip stakes.</p>
+    <a class="btn" href="/learn/quests/">Quests</a>
+    <a class="btn ghost" href="/learn/affiliates/">The Affiliate Deal</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

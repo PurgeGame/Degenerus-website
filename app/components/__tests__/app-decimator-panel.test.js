@@ -1541,8 +1541,14 @@ describe('combined ticket + lootbox buy', () => {
     const tickets = el.querySelector('[name="dec-tickets"]');
     const input = el.querySelector('[name="dec-presale-box-eth"]');
     const max = el.querySelector('[data-bind="dec-presale-max"]');
-    assert.equal(row.hidden, false, 'the live contract latch reveals the option even before credit exists');
-    assert.equal(max.disabled, true, 'zero current/draft credit cannot create a box yet');
+    assert.equal(row.hidden, true, 'zero current/draft credit keeps the presale option out of sight');
+
+    tickets.value = '1'; // level-12 ticket costs 0.04 ETH and earns 0.01 box credit
+    tickets.dispatchEvent({ type: 'input' });
+    assert.equal(row.hidden, false, 'a draft that earns the minimum credit reveals the attached box');
+    assert.equal(el.querySelector('[data-bind="dec-presale-available"]').textContent,
+      '0.01 ETH AVAILABLE');
+    assert.equal(max.disabled, false);
 
     const foil = el.querySelector('[data-bind="dec-foil-check"]');
     foil.checked = true;
@@ -1552,14 +1558,16 @@ describe('combined ticket + lootbox buy', () => {
     foil.checked = false;
     foil.dispatchEvent({ type: 'change' });
     assert.equal(row.hidden, false, 'the presale row returns when foil is unchecked');
-
-    tickets.value = '1'; // level-12 ticket costs 0.04 ETH and earns 0.01 box credit
-    tickets.dispatchEvent({ type: 'input' });
-    assert.equal(el.querySelector('[data-bind="dec-presale-available"]').textContent,
-      '0.01 ETH AVAILABLE');
-    assert.equal(max.disabled, false);
     max.dispatchEvent({ type: 'click' });
     assert.equal(input.value, '0.01');
+
+    tickets.value = '0';
+    tickets.dispatchEvent({ type: 'input' });
+    assert.equal(row.hidden, true, 'removing the credit-earning draft hides presale again');
+    assert.equal(input.value, '0', 'a newly unavailable hidden box cannot remain in the quote');
+    tickets.value = '1';
+    tickets.dispatchEvent({ type: 'input' });
+    max.dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent,
       'Buy in + presale box');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.05 ETH');

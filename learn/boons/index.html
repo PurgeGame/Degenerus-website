@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boons · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Boons: single-use bonuses that drop from lootboxes or get handed out by deity pass holders. Coinflip boosts, bonus tickets, pass discounts, streak shields." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Boons</h1>
+  <p class="lede">Single-use bonuses that drop from lootboxes or get handed to you by a deity pass holder. Bonus
+    tickets, bigger coinflip stakes, pass discounts, streak shields. They're tied to your wallet, they can't be
+    traded, and most of them expire in days. Use them or lose them.</p>
+
+  <h2>Where they come from</h2>
+  <p>There are exactly two sources.</p>
+  <p><strong>Lootboxes.</strong> Every ETH lootbox sets aside 10% of its prize budget (capped at 1 ETH) to fund a
+    boon draw. The draw is a real roll, not a guarantee: the chance scales with the box, and the menu is weighted so
+    small boosts land often and the big rolls are rare. The flashiest result is a free half whale pass.</p>
+  <p><strong>Deities.</strong> Every deity pass holder gets three boons a day, rolled from the same weighted menu
+    by VRF, and their only move is to give them away. The contract will not let a deity boon themselves. A player
+    can receive one deity boon per day, from any deity, and any single deity can give one recipient at most 10
+    boons over the life of the game. Deity-granted boons expire at the end of the day they were granted.</p>
+
+  <h2>The menu</h2>
+  <table>
+    <tr>
+      <th>Boon</th>
+      <th>What it does</th>
+      <th>Shelf life</th>
+    </tr>
+    <tr>
+      <td>Purchase boost</td>
+      <td>Your next ETH ticket buy mints 5%, 15%, or 25% bonus tickets, counted on up to 10 ETH</td>
+      <td>4 days</td>
+    </tr>
+    <tr>
+      <td>Coinflip boost</td>
+      <td>Your next manual coinflip stake gets 5%, 10%, or 25% extra FLIP added, counted on up to 100,000 FLIP</td>
+      <td>2 days</td>
+    </tr>
+    <tr>
+      <td>Lootbox boost</td>
+      <td>Your next lootbox resolves 5%, 15%, or 25% bigger, counted on up to 10 ETH of box value</td>
+      <td>2 days</td>
+    </tr>
+    <tr>
+      <td>Quest shield</td>
+      <td>Absorbs one missed quest day so your streak survives</td>
+      <td>Until used</td>
+    </tr>
+    <tr>
+      <td>Activity bonus</td>
+      <td>Adds 10, 25, or 50 to your mint-count and quest-streak counters, permanent score progress</td>
+      <td>Applied on the spot</td>
+    </tr>
+    <tr>
+      <td>Decimator boost</td>
+      <td>Your decimator burn counts 10%, 25%, or 50% bigger, on up to 50,000 FLIP burned</td>
+      <td>Until used; only offered while a decimator is open</td>
+    </tr>
+    <tr>
+      <td>Whale pass discount</td>
+      <td>10%, 20%, or 35% off one whale pass</td>
+      <td>4 days</td>
+    </tr>
+    <tr>
+      <td>Lazy pass discount</td>
+      <td>10%, 25%, or 50% off a lazy pass, and opens the lazy-pass window even off-schedule</td>
+      <td>4 days</td>
+    </tr>
+    <tr>
+      <td>Deity pass discount</td>
+      <td>10%, 20%, or 35% off a deity pass; only rolls if passes remain and you don't hold one</td>
+      <td>4 days</td>
+    </tr>
+    <tr>
+      <td>Whale pass</td>
+      <td>Half a whale pass, free: one jackpot entry per level for the next 100 levels</td>
+      <td>Yours to claim</td>
+    </tr>
+  </table>
+  <p class="fine">You hold at most one boon per category. A better roll upgrades what you're holding; a worse or
+    equal roll changes nothing.</p>
+
+  <h2>Why it exists</h2>
+  <p>Boons do three jobs. They put a live discount economy inside lootboxes: every box is a shot at cheap tickets
+    or a marked-down pass, funded by the box itself rather than by the prize pools. The short fuses pull decisions
+    forward: a 25% ticket boost with four days on the clock is a reason to buy now, not eventually. And they give
+    deities something no other lottery role has: three favors a day to spend on whoever they want, which turns the
+    game's most expensive pass into a social position with real dealmaking power.</p>
+
+  <div class="cta">
+    <strong>Boons drop from lootboxes.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Every ETH box funds a boon draw. The discounts point at
+      passes.</p>
+    <a class="btn" href="/learn/lootboxes/">How lootboxes work</a>
+    <a class="btn ghost" href="/learn/passes/">The passes</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

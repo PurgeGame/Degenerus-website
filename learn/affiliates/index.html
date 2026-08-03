@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Affiliate Deal · Degenerus Mechanics</title>
+  <meta name="description"
+    content="How Degenerus referral codes, FLIP-denominated commission bases, upline routing, kickbacks, activity points, and DGNRS rewards work." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>The Affiliate Deal</h1>
+  <p class="lede">A referral can earn FLIP-denominated game credits, activity points, and DGNRS allocations. It is not
+    a fixed percentage of a referral's ETH paid as cash: rates vary by purchase path, some rewards go to an upline,
+    and ordinary FLIP commissions still pass through the daily coinflip.</p>
+
+  <h2>How it works</h2>
+  <p>A link supplies an on-chain code. The first valid selection is normally stored for later eligible purchases;
+    invalid, blank, or self-referrals fall back to the vault. One narrow exception lets a vault-default referral be
+    replaced while the presale is active.</p>
+  <p>For an ordinary eligible purchase, the contract converts the purchase basis into FLIP units and applies the rate
+    below. That creates a nominal commission pot without removing ETH from the purchase's pool routing. A code owner
+    may also set a 0&ndash;25% kickback, which is returned to the buyer from that pot.</p>
+
+  <h2>Commission bases</h2>
+  <table>
+    <tr>
+      <th>Purchase type</th>
+      <th>FLIP basis</th>
+    </tr>
+    <tr>
+      <td>Fresh ETH tickets</td>
+      <td>25% at levels 0&ndash;3; 20% from level 4 onward</td>
+    </tr>
+    <tr>
+      <td>Recycled winnings respent on tickets</td>
+      <td>5%</td>
+    </tr>
+    <tr>
+      <td>Fresh ETH lootboxes</td>
+      <td>The same 25%/20% starting rate; from activity score 1.00 to 2.55 it tapers to one-quarter
+        of that rate: 6.25%/5%</td>
+    </tr>
+    <tr>
+      <td>Recycled lootboxes</td>
+      <td>5%, without the activity-score taper</td>
+    </tr>
+    <tr>
+      <td>afKing subscription buys</td>
+      <td>7% flat</td>
+    </tr>
+    <tr>
+      <td>Degenerette</td>
+      <td>7% of the lootbox-valued portion from qualifying score-5+ ETH spin wins</td>
+    </tr>
+    <tr>
+      <td>Whale pass, lazy pass, and foil purchases</td>
+      <td>The ordinary fresh/recycled rates apply to their relevant payment portions</td>
+    </tr>
+    <tr>
+      <td>Deity pass sales</td>
+      <td>A separate path: no ordinary FLIP commission</td>
+    </tr>
+  </table>
+
+  <h2>Who receives an ordinary pot</h2>
+  <p>After any kickback, a deterministic, publicly knowable daily roll sends the entire purchase pot to one address:
+    the direct affiliate with 75% weight, its upline with 20%, or the next upline with 5%. Those are probabilities,
+    not a three-way split. The winner receives a FLIP credit for the next coinflip, so the credited face amount is not
+    a guaranteed realized payout.</p>
+  <p>afKing is different: its accrued 7% base is divided 75%/20%/5% when claimed, without a roll. Its recipients still
+    receive FLIP credit. A Degenerette referral reward goes directly to the player's stored referrer.</p>
+
+  <h2>The deity exception</h2>
+  <p>A deity purchase gives the buyer's stored referrer the associated whale-pass entries and stats. It also draws
+    DGNRS from the available affiliate reserve: 0.5% to the direct referrer, 0.1% to the first upline, and 0.05% to the
+    second. Previously reserved level claims are excluded from that available balance.</p>
+
+  <h2>DGNRS and activity</h2>
+  <p>DGNRS is a protocol token, not legal equity. Its initial allocation reserves 30% for affiliate rewards. At each
+    level transition, the top affiliate receives 1% of the then-current affiliate pool; 5% of the remainder is
+    snapshotted for score-proportional claims by qualifying affiliates. Unclaimed value remains in the pool.</p>
+  <p>Affiliate score from the previous five levels can also add up to +0.50 to the referrer's <a
+      href="/learn/quests/">activity score</a>. The cap is reached at 25 ETH of contract-weighted referred volume;
+    recycled and early-level volume do not carry identical weights.</p>
+
+  <h2>Why it exists</h2>
+  <p>Affiliates supply player acquisition and attention that code cannot create. The current rates and routing are in
+    the contracts, but realized value still depends on coinflip outcomes, continued game activity, token value, and
+    contract and oracle performance.</p>
+
+  <div class="cta">
+    <strong>Follow the reward path, not just the headline rate.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Commission basis, recipient selection, and the coinflip are three
+      separate steps.</p>
+    <a class="btn" href="/affiliates/">Read the affiliate page</a>
+    <a class="btn ghost" href="/agents/#register">Register a code</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

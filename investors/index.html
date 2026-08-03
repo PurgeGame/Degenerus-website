@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Degenerus Investor Thesis</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="description"
+    content="Degenerus cannot print capital or attention, so it pays above market for both. How lootboxes, passes, and the activity score convert degen yield into elevated returns for players who lock capital and show up daily." />
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+      max-width: 860px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+      line-height: 1.7;
+      color: #e0e0e0;
+      background: #0d0d0d;
+    }
+
+    h1 {
+      font-size: clamp(1.05rem, 3vw, 1.55rem);
+      color: #f5a623;
+      line-height: 1.25;
+      margin-bottom: 0.4rem;
+    }
+
+    .lede {
+      font-size: 1.02rem;
+      color: #ccc;
+      border-bottom: 1px solid #333;
+      padding-bottom: 1.2rem;
+    }
+
+    h2 {
+      font-size: 1.2rem;
+      color: #ccc;
+      margin-top: 2.5rem;
+      border-bottom: 1px solid #222;
+      padding-bottom: 0.3rem;
+    }
+
+    p {
+      margin: 0.8rem 0;
+      font-size: 0.94rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.88rem;
+    }
+
+    th,
+    td {
+      padding: 0.5rem 0.7rem;
+      border: 1px solid #333;
+      text-align: left;
+    }
+
+    th {
+      background: #1a1a1a;
+      color: #aaa;
+      font-weight: 600;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      color: #ccc;
+    }
+
+    strong {
+      color: #e8e8e8;
+    }
+
+    a {
+      color: #f5a623;
+    }
+
+    .fine {
+      font-size: 0.8rem;
+      color: #888;
+    }
+
+    .kicker {
+      border-left: 3px solid #f5a623;
+      padding: 0.2rem 0 0.2rem 1rem;
+      font-size: 1.0rem;
+      color: #e8e8e8;
+      font-weight: 600;
+    }
+
+    .cta {
+      border: 1px solid #3a2800;
+      background: #1a1000;
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      margin: 1.8rem 0;
+    }
+
+    .cta a.btn {
+      display: inline-block;
+      background: #f5a623;
+      color: #0d0d0d;
+      border-radius: 3px;
+      padding: 0.5rem 1.2rem;
+      font-weight: 600;
+      text-decoration: none;
+      margin-top: 0.4rem;
+      margin-right: 0.5rem;
+    }
+
+    .cta a.btn:hover {
+      background: #ffc04d;
+    }
+
+    footer {
+      margin-top: 3rem;
+      border-top: 1px solid #222;
+      padding-top: 1rem;
+      font-size: 0.8rem;
+      color: #666;
+    }
+
+    header.brand {
+      display: grid;
+      grid-template-columns: auto auto;
+      justify-content: center;
+      align-items: center;
+      column-gap: 1rem;
+      text-align: left;
+      margin: 0.5rem 0 2rem;
+    }
+
+    header.brand img {
+      width: 52px;
+      height: 52px;
+      grid-row: 1 / span 2;
+    }
+
+    header.brand .brand-name {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      color: #e8e8e8;
+      align-self: end;
+      line-height: 1.2;
+    }
+
+    header.brand .brand-sub {
+      font-size: 0.78rem;
+      letter-spacing: 0.26em;
+      color: #f5a623;
+      text-transform: uppercase;
+      align-self: start;
+      margin-top: 0.15rem;
+    }
+  </style>
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Investor Thesis</div>
+  </header>
+
+  <h1>This game can't print capital or attention. It pays above market for yours.</h1>
+
+  <p class="lede">Degenerus is a decentralized, 100% on-chain gambling protocol built on Ethereum. It takes zero rake:
+    every wei of wagered ETH flows into prize pools that must eventually return to players, plus a quarter of the
+    protocol's staking yield on top. Gamblers spend that money for entertainment, and the protocol routes what they
+    lose to the players who supply the two resources the code cannot mint: locked capital and daily attention. The
+    instruments that capture this flow are <strong>lootboxes</strong>, <strong>passes</strong>, and the
+    <strong>activity score</strong> that decides how much of the surplus is yours. This page explains how they work
+    and why the equilibrium return on playing them well should sit above what liquid markets pay.
+  </p>
+
+  <h2>The game, in sixty seconds</h2>
+
+  <p>The core of the game is a progressive jackpot lottery: daily drawings pay ETH and protocol assets to <a
+      href="/learn/tickets/">ticket</a> holders, and tickets start at 0.01 ETH, 100% of which will be returned to
+    players. Once enough tickets have been sold, the <a href="/learn/jackpots/">main jackpot</a> runs, paying far
+    larger prizes for the next five days. Then the game level advances and the prior level's tickets expire worthless.
+    Each new level requires larger inflows to complete, and at milestone levels the ticket price steps up. Only one
+    thing can cause <a href="/learn/endgame/">GAMEOVER</a>: players failing to inflate the prize pool by the required
+    amount before the level's deadline, 120 days at every level past the first. A banked reserve makes that death
+    unlikely, and the terminal payout is a standing bet on it: nearly every ETH the game holds is paid out to the
+    players present at the end, so the more certain death looks, the better the bet against the game becomes.</p>
+
+  <p>All pooled ETH is converted to Lido stETH and can never be withdrawn by anyone except as winnings, on the game's
+    schedule. Nobody holds a key to the funds, the odds, or an off switch, no upgrade path exists to add one, and the
+    <a href="/learn/trustless/">complete inventory of admin powers</a> is a two-minute read. The
+    full argument that the game is built to be unkillable lives on the <a href="/affiliates/">affiliate page</a> and in
+    the <a href="/theory/">game theory paper</a>. This page takes it as background and focuses on a different question:
+    where the investor's return comes from and why it persists.</p>
+
+  <h2>Where the return comes from</h2>
+
+  <p>Every casino on earth generates the same raw material: gamblers who accept a losing bet in exchange for the
+    entertainment of making it. In a normal casino that money is the operator's profit. Degenerus has no operator take,
+    so the entire surplus, called <a href="/learn/degen-yield/">degen yield</a>, is paid back out through the game
+    itself. It does not flow evenly. The protocol aims it, deliberately, at the players who provide what it needs to
+    survive and grow.</p>
+
+  <p>What it needs is specific. It needs <strong>locked capital</strong>, because deep pools keep jackpots running on
+    schedule and generate the stETH yield. It needs <strong>daily attention</strong>, because a game that must
+    complete each level on a deadline dies without a steady cadence of purchases. And it needs <strong>new
+      players</strong>, which is the affiliate program's job and <a href="/affiliates/">its own page</a>. The first
+    two are the investor's business, and the protocol bids for them the way any buyer bids for a scarce input: it
+    offers a better price than the next best use of your money and time.</p>
+
+  <p class="kicker">The investor class, as a group, earns the degen yield plus its share of the staking yield. The
+    activity score decides how that pot divides among individuals.</p>
+
+  <p>Two consequences follow. First, the return is real and funded: it comes from voluntary spending by entertained
+    customers, not from token emissions or from later depositors. Second, it is competitive: investors divide a pot
+    whose size is set by gambler spending, so each individual's result depends on capturing a larger weight of that
+    pot than the capital-weighted average. The rest of this page is about the weighting machinery.</p>
+
+  <h2>The activity score decides who captures it</h2>
+
+  <p>The contract cannot ask who you are. What it can measure is whether one wallet keeps showing up, and the <a
+      href="/learn/quests/">activity score</a> is that measurement: a number that several payout curves read directly, displayed as
+    points where 100 points equal 1.00. It is money, not a cosmetic XP bar.</p>
+
+  <table>
+    <tr>
+      <th>Component</th>
+      <th>Max points</th>
+    </tr>
+    <tr>
+      <td>Daily quest streak: two quest slots per day, half a point per completion, with a larger jump for level
+        quests. A missed day without a shield resets it to zero</td>
+      <td>Uncapped</td>
+    </tr>
+    <tr>
+      <td>Mint streak: consecutive levels played</td>
+      <td>50</td>
+    </tr>
+    <tr>
+      <td>Referred purchase volume, maxed at 25 ETH</td>
+      <td>50</td>
+    </tr>
+    <tr>
+      <td>Lifetime mint count</td>
+      <td>25</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/passes/">Pass</a> bonus points</td>
+      <td>10&ndash;80</td>
+    </tr>
+  </table>
+
+  <p>The streak component is the heart of it. Completing both daily quests adds one point per day, forever, with no
+    ceiling on the component itself. The shared reward curves saturate at an effective score of 300.00, and the
+    lootbox curve gets there almost entirely by 4.00, a knee any player can reach through daily play alone. A missed day
+    without a streak shield sends the component to zero, and capital cannot buy it back retroactively. The reset is
+    the pricing mechanism: the score is expensive in exactly the currency the protocol is trying to buy,
+    uninterrupted daily engagement, and cheap in the currency whales would prefer to substitute, a one-time lump
+    sum.</p>
+
+  <p>The score is also not pay-only. A player with no pass but a strong streak and an active referral network reaches
+    1.50, nearly the deity pass floor, and the referral component grows from your recruits' spending rather than your
+    own. Passes and referrals get you up the curve with less daily questing; nobody is gated out of the full
+    multiplier.</p>
+
+  <p>Here is what the score buys, all of it contract-defined and published:</p>
+
+  <table>
+    <tr>
+      <th>Product</th>
+      <th>Score 0</th>
+      <th>High score</th>
+    </tr>
+    <tr>
+      <td><a href="/learn/lootboxes/">Lootbox</a> face-value multiplier</td>
+      <td>90%</td>
+      <td>139.5% at 4.00, capping at 145%</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/decimator/">Decimator</a> jackpot weight</td>
+      <td>1.0x</td>
+      <td>~1.74x at 4.00, capping near 1.78x, in a better prize bucket</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/foil-packs/">Foil pack</a> rarity boost</td>
+      <td>2x</td>
+      <td>5&ndash;6x</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/degenerette/">Degenerette</a> base payout target</td>
+      <td>90%</td>
+      <td>~99.9%, before the ETH bonus</td>
+    </tr>
+    <tr>
+      <td>Century-level bonus jackpot entries</td>
+      <td>None</td>
+      <td>Up to double</td>
+    </tr>
+  </table>
+
+  <p>Two players can buy the identical box, pack, or burn and receive different expected value. This is the whole
+    design: the gap between the 90% floor and the 145% cap is degen yield being routed from players who show up
+    casually to players who show up every day. And because bonus century entries and Decimator weight touch the
+    jackpots themselves, a high-score player is not merely losing less on the lottery than a tourist. The engaged
+    player can genuinely be the favorite.</p>
+
+  <h2>Lootboxes: the yield instrument</h2>
+
+  <p>A <a href="/learn/lootboxes/">lootbox</a> is an ETH-denominated box whose prize budget is your deposit times your
+    activity-score multiplier. The curve starts at 90% at score zero, crosses breakeven at 0.60, reaches 139.5% at
+    the 4.00 knee, and caps at 145%. The score on your first deposit into a pending box is frozen for that box,
+    and the portion of the multiplier above the neutral 100% applies to at most 10 ETH of lootbox deposits per player
+    per level.</p>
+
+  <p>That 10 ETH cap is worth staring at. It is the protocol declaring the size of the subsidized seat: every level,
+    each daily player can put up to 10 ETH through a machine whose prize budget runs up to 45% above neutral, and not
+    a wei more at that rate. The cap is per wallet per level, so the strategy it rewards is not concentration but
+    duration: the seat renews every level, and the subsidy compounds for as long as the streak holds.</p>
+
+  <p>What comes out is not a savings-account coupon. Boxes pay tickets about 40% of the time, with a variance roll
+    from roughly 0.6x up to 11x, or 19x on far-future levels. The rest arrives as DGNRS, the protocol's transferable
+    equity token, FLIP, and <a href="/learn/degenerette/">Degenerette</a> spins, including the 15% slice of outcomes
+    that stakes WWXRP, the joke token with no redemption value. The multiplier sets the budget, not the outcome, and ticket
+    prizes generally target upcoming levels rather than paying withdrawable ETH. In other words the yield arrives
+    mostly as more exposure: jackpot equity on future levels, tokens, and spins. Future tickets earn FLIP jackpot
+    draw entries every day while waiting for their level, so earlier is worth more. This is deliberate. The protocol
+    pays
+    above market and, in the same motion, reinvests your winnings into the thing that keeps the jackpots growing.
+    A tenth of each box's budget also funds a side draw of <a href="/learn/boons/">boons</a>, single-use bonuses like
+    purchase discounts and streak shields. The deposited ETH itself routes 90% to the futurepool, the reserve that
+    backs upcoming levels and the daily drip that defends the game during stalls. Lootbox money is what makes the
+    game hard to kill, which is why the game pays a premium for it.</p>
+
+  <h2>Passes: buying the floor</h2>
+
+  <p>The activity score's streak components take months to build and die in a day. <a href="/learn/passes/">Passes</a>
+    are the capital route: prepaid future exposure that comes with a permanent score floor.</p>
+
+  <table>
+    <tr>
+      <th></th>
+      <th>Lazy</th>
+      <th>Whale</th>
+      <th>Deity</th>
+    </tr>
+    <tr>
+      <td>Price</td>
+      <td>The sum of the 10 covered ticket prices; a flat, discounted 0.24 ETH at levels 0&ndash;2, with the
+        difference paid back as bonus tickets</td>
+      <td>2.4 ETH at levels 0&ndash;3, then 4 ETH</td>
+      <td>24 ETH plus escalation per pass sold</td>
+    </tr>
+    <tr>
+      <td>Covers</td>
+      <td>1 ticket per level for 10 levels</td>
+      <td>100 levels: 40 entries per level through level 10 for early buyers, then 2 per level</td>
+      <td>Permanent virtual entries in your symbol's trait bucket at every live level, forever</td>
+    </tr>
+    <tr>
+      <td>Score floor</td>
+      <td>0.85</td>
+      <td>1.15</td>
+      <td>1.55</td>
+    </tr>
+    <tr>
+      <td>Extras</td>
+      <td>10% of price back in lootboxes</td>
+      <td>10% back, plus 1% of the whale DGNRS reserve per pass</td>
+      <td>10% back, 5% of the whale reserve, three randomly rolled boons to hand out daily, a 20% bonus on affiliate
+        commissions, soulbound, 32 will ever exist</td>
+    </tr>
+  </table>
+
+  <p>Read the floors against the payout tables above. A fresh whale wallet starts at 1.15, past the 0.60 lootbox
+    breakeven on day one, and a deity wallet starts at 1.55. The floor also cannot be lost to a missed day, which
+    changes the character of the position: streak-built score is a wasting asset that demands daily maintenance, while
+    a pass floor is bought once and holds. The two stack, so the serious position is a pass floor with a streak built
+    on top of it.</p>
+
+  <p>Pass money is also aimed differently than ticket money. Whale and deity purchases route overwhelmingly to the
+    futurepool, the reserve backing levels that have not arrived yet, while the pass's returns arrive spread across a
+    100-level cycle. Pass buyers are net capital providers in the early game, which deepens the pools everyone draws
+    from and lowers the breakeven score for every other product. A deity holder who goes fully inactive still
+    accumulates jackpot entries and FLIP draws forever, and those virtual entries scale with each level's ticket
+    volume, so the pass appreciates with the game itself.</p>
+
+  <p>A valid pass also unlocks the <strong>afKing subscription</strong>: the contract itself executes one configured
+    ticket or lootbox buy per day from your deposited funds or directly from your winnings, keeps your streaks alive,
+    pays the daily quest FLIP, and mints an extra 10 to 15% FLIP on each daily buy. Only 2,000 subscription seats
+    will ever exist, and the first 1,000 are free claims for pass holders. The subscription turns daily attention
+    from a chore into a position you configure once. It is also the honest answer to the obvious objection that
+    nobody logs in every day for years: the contract does it for you, and the protocol pays extra for setting it up,
+    because a subscribed buyer is exactly the metronome the game wants.</p>
+
+  <p>Whale and deity passes also mint <a href="/learn/sdgnrs/">sDGNRS</a>, which deserves its own paragraph. sDGNRS is
+    the protocol's soulbound revenue token, and it is the intended house. It collects its own 23% of the stETH yield,
+    a second stream on top of the quarter that funds prizes. It holds tickets rolling a hundred levels deep and runs
+    its own daily lootbox, backed by ETH and FLIP that holders redeem a proportional share of by burning. DGNRS is its transferable wrapper. Ten percent of the initial supply
+    is reserved for whale and deity buyers. The lottery's customers are the degens; the house they are playing against is a token, and the token is
+    for sale.</p>
+
+  <h2>The rest of the stack</h2>
+
+  <p>Beyond the two core instruments, the same score-weighted logic runs through the whole product line:</p>
+
+  <p><strong><a href="/learn/foil-packs/">Foil packs</a>.</strong> Ten tickets' worth of ETH buys four rarity-boosted
+    tickets, one pack per wallet per level. The rarity boost runs 2x at score zero to 5&ndash;6x for a daily player,
+    and rarer traits split jackpot prizes with fewer people. Every foil ticket is re-graded against each day's winning
+    traits from its resolve day until the level ends, with a grading ladder that tops out at 10,000 Degenerette faces,
+    stakes for spins that can still lose, plus half a whale pass. A pack also floors your quest streak at 12, insurance for the score it feeds on.</p>
+
+  <p><strong>Buyer-side FLIP.</strong> Every ETH ticket purchase mints its buyer 100 FLIP per ticket, staked on the
+    next daily <a href="/learn/coinflip/">coinflip</a>, with bonuses for recycling winnings and bulk buys up to 250
+    per ticket, a quarter of face value. A ticket's FLIP price is pegged at 1,000 and never moves, while its ETH price climbs a
+    published curve to 24x by level 100, so FLIP accumulated early is a leveraged position on the game's advancement.
+    The full argument for why FLIP is real money is on the <a href="/affiliates/#flip">affiliate page</a>.</p>
+
+  <p><strong>The <a href="/learn/decimator/">Decimator</a>.</strong> This event jackpot burns FLIP for ETH equity.
+    Activity score sets both your prize bucket and a burn weight up to ~1.78x, which makes it the score-holder's
+    preferred exit for accumulated FLIP.</p>
+
+  <p><strong>Century levels.</strong> At the x00 milestones, high-score players receive up to double jackpot entries
+    on the same tickets. The biggest scheduled prize events in the game structurally favor the players who have been
+    there longest.</p>
+
+  <h2>Why competition doesn't arb it away</h2>
+
+  <p>A published prize-budget premium of 45% should attract capital until the edge is gone. Here is why the equilibrium return
+    stays above what liquid markets pay: every mechanism above charges tolls that are real costs to a marginal
+    arbitrageur, and those tolls are the return.</p>
+
+  <p><strong>The capital locks.</strong> ETH that enters the contract stays until it is paid out as winnings, on the
+    game's schedule, not yours. There is no withdrawal function to run on. An investor's exit is ceasing deposits, and
+    level timelines are uncertain, so the position is illiquid with an unknowable duration. Illiquidity of that grade
+    commands a premium everywhere it is sold, and this is no exception.</p>
+
+  <p><strong>The payment is variance-shaped.</strong> Returns arrive as lootbox rolls, future-level tickets, FLIP that
+    must survive a daily coinflip, and jackpot draws. The mean is elevated; the path is a gambler's path. A marginal
+    extractor must price that variance into their required return, and that risk premium is precisely the elevated
+    equilibrium rate. Splitting capital across wallets does not smooth it away. Jackpot draws are the same events for
+    every wallet you own, each wallet needs its own months of streak and its own daily spend, and the score-gated
+    channels are capped per wallet per level. The moat is a fee schedule denominated in time, attention, and variance
+    tolerance, and professional capital cannot pay it at scale.</p>
+
+  <p><strong>The edge is priced in time, not money.</strong> A fund that identifies the return curve tomorrow can buy
+    the curve's floor tomorrow: a pass sets the minimum the moment it settles. Everything above the floor accrues at
+    one day per day. In most of crypto a million dollars deploys in one transaction; here, extraction at scale
+    requires a fleet of capped wallets matured on the game's calendar, each owing its own daily spend, and automation
+    compresses the labor but not the time. High-score capital grows only at calendar rate while the surplus it feeds
+    on renews with every cohort of entertainment buyers. Ordinary inefficiencies die of publicity. This one is
+    published, priced, and defended by the clock.</p>
+
+  <p><strong>The skepticism is load-bearing.</strong> Describe this product cold: a crypto gambling game with illiquid
+    deposits and complex mechanics. The rational first response is "that's a scam," because for everything else
+    matching that description, it is. Here the operator is the Ethereum blockchain, the contract can never owe more
+    than it already holds, and the distribution rules are immutable public code, but few will ever check. That reflex filters
+    out nearly all of the extractive capital that would otherwise compress the returns, and the investors who do the
+    verification work are paid a premium for their perceptiveness. The moat is partly made of other people's
+    unexamined priors.</p>
+
+  <p><strong>The pot is fixed, but the population self-corrects.</strong> Investors divide the degen yield among
+    themselves, so more competitors means thinner returns, and thinner returns push the marginal competitor out, which
+    restores the rate. Even the arrival of competition pays you first. A new investor's lootbox deposits flow into the
+    futurepool and raise the daily drip for existing ticketholders immediately, while their tickets target future
+    levels and their score starts at zero, so they do not compete with you for months. It works in reverse too, and
+    this is the part worth underlining: because locked capital stays in the pools, an investor who quits cannot drain
+    anything on the way out. Their tickets still pay on schedule, but the score weight they held decays, and their
+    share of the future surplus redistributes to whoever continues. Downturns thin the
+    field and fatten the survivors. The class as a whole cannot stampede for the exit, because there is no exit to
+    stampede through, only a schedule of prizes that keeps paying whoever stayed.</p>
+
+  <p><strong>And growth is mandatory.</strong> Each level's prize pool must exceed the one before it or the game dies,
+    and the game is heavily engineered not to die. Jackpot size is the most reliable demand driver in gambling, so the
+    degen yield that funds investor returns is fed by a jackpot that only ratchets upward. The same loop that makes
+    the game hard to kill makes the pot the investors are dividing structurally larger over time.</p>
+
+  <h2>What you are actually signing up for</h2>
+
+  <p>None of this is a fixed-income product, and pretending otherwise would insult you. The honest bill of risks: your
+    returns depend on gamblers continuing to gamble, and while that is among the safest bets in human history, the
+    rate at which they show up to this particular game is unknown. Your capital is illiquid on an uncertain timeline
+    and much of your yield arrives as equity in future levels, which pays off only as the game advances. FLIP and
+    DGNRS carry market price risk on top of their redemption floors. Daily flips and jackpot draws mean months can run
+    below expectation before variance washes out.</p>
+
+  <p>And if the game ever does die, future-level equity evaporates while the terminal jackpot pays out to the people
+    who bet on death by holding final-level tickets. Understand which side of that bet you are on. The investor class
+    is the class that bets against death: your book is the future levels, so keeping the game alive is part of the
+    seat. The protocol arms you for the job, since the rescue trade is buying the same final-level tickets the
+    doubters are hoarding, and those are profitable under most of the circumstances that create the emergency.</p>
+
+  <p>Bankroll risk deserves its own sentence, because it is where good strategies actually die. A theoretically +EV
+    player can still go broke: jackpot income is lumpy with long dry spells, future tickets and streak value are
+    paper wealth that cannot pay tomorrow's quest cost, and the streak itself is a daily fixed expense that cannot be
+    deferred. A player who overextends, misses a day, and drops down the score curve has converted an edge into a
+    hole that takes weeks of clean play to climb out of. The prioritization under a constrained budget is published
+    and simple: streak maintenance first, one ticket-priced purchase per day, then lootbox volume with whatever the
+    bankroll safely sustains. Daily play also costs mainnet gas on top of the ticket, a fixed drag that weighs
+    heaviest on small seats. Zero rake means none of this leaks to an operator, and the pooled ETH earns staking
+    yield on top, so disciplined play has a thin but positive expected-value floor before gas and before the first
+    casual player donates a cent. The meaningful returns above that floor are funded by gamblers, and depend on them
+    showing up.
+    Realized outcomes are another matter, and anyone who tells you otherwise is selling something.</p>
+
+  <p>What you get in exchange is a seat that is impossible to buy anywhere else in crypto: a published, immutable,
+    score-weighted claim on the losses of entertained gamblers. Zero rake. ETH returns funded by real spending, not
+    token inflation. No treasury to drain, no team that can change the deal. The contract offers the same curve to everyone and is
+    incapable of offering anyone more. What separates investors is score, capital, and the discipline to show up
+    daily, the one edge the protocol was built to reward.</p>
+
+  <p class="fine">Every mechanism on this page has a full specification in the protocol's <a href="/theory/">game
+      theory paper</a> and all claims are verifiable in the <a
+      href="https://github.com/PurgeGame/degenerus-protocol">contract source</a>. Nothing here is legal equity, and
+    no return is guaranteed.</p>
+
+  <div class="cta">
+    <p><strong>The score starts accruing the day you do.</strong> A pass buys the floor, the daily quests build the
+      streak, and afKing keeps it alive while you sleep.</p>
+    <a class="btn" href="/app/">Open the app</a>
+    <a class="btn" href="/learn/quests/">How the score works</a>
+    <a class="btn" href="/learn/passes/">Compare passes</a>
+  </div>
+
+  <footer>
+    <p>Further reading: <a href="/theory/">game theory paper</a> · <a href="/whitepaper/">whitepaper</a> · <a
+        href="/affiliates/">affiliate program</a> · <a
+        href="https://github.com/PurgeGame/degenerus-protocol">contract source</a></p>
+  </footer>
+</body>
+
+</html>

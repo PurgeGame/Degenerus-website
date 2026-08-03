@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Decimator · Degenerus Mechanics</title>
+  <meta name="description"
+    content="The Decimator: burn FLIP for a weighted shot at a slice of the futurepool. Fires at milestone levels, triples at every century." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>The Decimator</h1>
+  <p class="lede">Burn FLIP for a weighted chance at a futurepool-funded jackpot. Ordinary Decimators allocate 10%
+    of the futurepool; x00 rounds allocate 30%. A burn is final, and only the randomly selected subbucket in each odds
+    tier shares the pool.</p>
+
+  <h2>The numbers</h2>
+  <table>
+    <tr>
+      <td>Fires at</td>
+      <td>x05, x15, &hellip;, x85 of each cycle (not x95), plus every x00 century</td>
+    </tr>
+    <tr>
+      <td>Entry window</td>
+      <td>Opens one level before the milestone</td>
+    </tr>
+    <tr>
+      <td>Entry</td>
+      <td>Burn FLIP, 1,000 minimum</td>
+    </tr>
+    <tr>
+      <td>Pool</td>
+      <td>10% of the futurepool, 30% at x00</td>
+    </tr>
+    <tr>
+      <td>Payout</td>
+      <td>50% ETH, 50% lootbox credit</td>
+    </tr>
+    <tr>
+      <td>Burn weight</td>
+      <td>1.0x&ndash;~1.78x by activity score, until your weighted burn reaches 200,000 FLIP for the level</td>
+    </tr>
+  </table>
+
+  <h2>Your odds are your engagement</h2>
+  <p>Every entrant lands in a bucket, and your chance of being on the winning side is one in your bucket number.
+    Your activity score sets the bucket, and it only ever improves: burn again at a higher score and your whole
+    position moves up.</p>
+  <table>
+    <tr>
+      <th>Score to reach</th>
+      <th>Bucket</th>
+      <th>Win odds</th>
+    </tr>
+    <tr>
+      <td>0.00</td>
+      <td>12</td>
+      <td>8.3%</td>
+    </tr>
+    <tr>
+      <td>0.10</td>
+      <td>11</td>
+      <td>9.1%</td>
+    </tr>
+    <tr>
+      <td>0.30</td>
+      <td>10</td>
+      <td>10%</td>
+    </tr>
+    <tr>
+      <td>0.55</td>
+      <td>9</td>
+      <td>11.1%</td>
+    </tr>
+    <tr>
+      <td>0.85</td>
+      <td>8</td>
+      <td>12.5%</td>
+    </tr>
+    <tr>
+      <td>1.20</td>
+      <td>7</td>
+      <td>14.3%</td>
+    </tr>
+    <tr>
+      <td>1.80</td>
+      <td>6</td>
+      <td>16.7%</td>
+    </tr>
+    <tr>
+      <td>2.50</td>
+      <td>5</td>
+      <td>20%</td>
+    </tr>
+    <tr>
+      <td>3.00</td>
+      <td>4 &middot; century only</td>
+      <td>25%</td>
+    </tr>
+    <tr>
+      <td>5.00</td>
+      <td>3 &middot; century only</td>
+      <td>33.3%</td>
+    </tr>
+    <tr>
+      <td>10.00</td>
+      <td>2 &middot; century only</td>
+      <td>50%</td>
+    </tr>
+  </table>
+  <p class="fine">Normal milestones cap at bucket 5. Century Decimators unlock buckets 4&ndash;2. Winning players
+    split the jackpot pro rata by effective burn weight; extra FLIP beyond the 200,000 boosted amount still counts at
+    1x.</p>
+
+  <h2>Why it exists</h2>
+  <p>FLIP has two very different sinks. During the redemption window, 1,000 FLIP buys one ticket for any wallet. A
+    Decimator burn instead trades the token for a chance at ETH, with odds and effective weight improved by activity.
+    It can pay more, pay less, or pay nothing; burning also permanently reduces FLIP supply.</p>
+
+  <div class="cta">
+    <strong>Burning FLIP requires having FLIP.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Quests, referrals, and coinflip wins keep the pile growing.</p>
+    <a class="btn" href="/learn/flip/">How FLIP works</a>
+    <a class="btn ghost" href="/learn/baf/">The other big event: BAF</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

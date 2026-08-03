@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Side Bets · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Two parimutuel books on the game's own numbers: whether the pools grow faster next level, and whether this round's ticket buys beat the last round's. 1,000 FLIP a bet, winners split the losing side." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>The Side Bets</h1>
+  <p class="lede">Two parimutuel books let you bet on the game's own trajectory instead of on a draw. Both take one
+    fixed 1,000 FLIP bet per address per round, both are OVER/UNDER, and in both the winning side splits everything
+    the losing side put up.</p>
+
+  <h2>Two books</h2>
+  <table>
+    <tr>
+      <th></th>
+      <th>Growth</th>
+      <th>Ticket volume</th>
+    </tr>
+    <tr>
+      <td>The question</td>
+      <td>Do the pools grow faster next level than they grew this level?</td>
+      <td>Does this round buy more tickets than the last round did?</td>
+    </tr>
+    <tr>
+      <td>One round is</td>
+      <td>One level</td>
+      <td>One game day</td>
+    </tr>
+    <tr>
+      <td>Betting window</td>
+      <td>The whole <a href="/learn/jackpots/">jackpot phase</a></td>
+      <td>22:57 to 00:00 UTC</td>
+    </tr>
+  </table>
+
+  <h2>What a win pays</h2>
+  <p>The stake burns the moment you place it. Every bet is the same size, so each side is a count rather than a
+    pot, and the payout is the whole book divided by the winners:</p>
+  <table>
+    <tr>
+      <th>Book</th>
+      <th>OVER wins</th>
+      <th>UNDER wins</th>
+    </tr>
+    <tr>
+      <td>4 OVER, 1 UNDER</td>
+      <td>1,250 FLIP each</td>
+      <td>5,000 FLIP</td>
+    </tr>
+    <tr>
+      <td>3 OVER, 3 UNDER</td>
+      <td>2,000 FLIP each</td>
+      <td>2,000 FLIP each</td>
+    </tr>
+  </table>
+  <p class="fine">If nobody took the losing side, winners get their 1,000 FLIP back and nothing more. Payouts arrive
+    as coinflip credit, so they take the daily 50/50 like other issued <a href="/learn/flip/">FLIP</a>.</p>
+
+  <h2>The growth book</h2>
+  <p>Every level banks the prize pool it actually achieved when it ends, and that number is written once and never
+    revised. A round compares two of those steps: the growth the next level achieves over this one, against the
+    growth this level achieved over the one before it. Faster is OVER. Ties are UNDER.</p>
+  <p>It is a bet on acceleration, not on size. A level can bank a bigger pool than its predecessor and still settle
+    UNDER, because what is scored is the rate.</p>
+  <p>Betting stays open for the entire jackpot phase, including while a day's random word is in flight. One catch
+    during that lock: the stake cannot top up from unclaimed coinflip winnings, so a bet placed then has to come out
+    of your wallet balance.</p>
+  <p>Placing the bet also completes a level quest, worth 150 FLIP on the phase's first day and halving each day after
+    that, so 75, 37, then 18. It moves your <a href="/learn/quests/">quest streak</a> by 1. The FLIP needs the level
+    quest's own gate, a whole ticket for this level plus either a five-level streak or any pass ever held, or an
+    active afKing subscription. Without that you can still bet, you just bet for nothing extra.</p>
+  <p class="fine">Rounds at a century boundary are lopsided and known to be: the pool arithmetic at x99, x00 and x01
+    is not the ordinary step. Price accordingly.</p>
+
+  <h2>The ticket-volume book</h2>
+  <p>This one counts manual ETH ticket buys and nothing else. FLIP-paid tickets, afKing buys, pass tickets, lootbox
+    tickets, foil packs and awarded tickets are all outside the count, on both sides of the comparison. A round runs
+    from one daily random-number request to the next.</p>
+  <p>OVER can force its own win by going out and buying tickets. That is the design rather than a hole in it: the
+    book leans OVER, every bettor on that side is an incentivized buyer, and every OVER win raises the benchmark the
+    next round has to beat.</p>
+  <p>Placing pays a credit that decays through the window: 25 FLIP until 23:25 UTC, then 5 less every ten minutes,
+    ending at 5 FLIP for the last five minutes. It is at most 2.5% of the stake it rides on, so a placement is
+    deflationary on its own terms whatever the round pays.</p>
+
+  <h2>Why the rewards decay</h2>
+  <p>A parimutuel book pays the last mover best, because the final bettor sees the whole board before committing.
+    Both books answer that with a reward that shrinks as the window runs rather than with a cutoff. Bet early into a
+    thin book and you are guessing, but you are paid more for it.</p>
+
+  <h2>Getting paid</h2>
+  <p>The game pushes each round's answer the instant its terms are final, and the answer is stored as a bit, so a
+    claim never re-derives anything. From there a permissionless crank pays every winner on a round in one batch and
+    earns a gas-pegged FLIP bounty per winner it settles, which means you are normally paid without touching
+    anything. Claiming yourself always works too.</p>
+  <p>One case never settles: a volume round with no comparable predecessor, either the first round ever sealed or a
+    gap left by a stalled random-number request. Handing that outcome to whoever watched the stall would be worse
+    than not scoring it, so the round voids and both sides get their 1,000 FLIP back once a later round seals.</p>
+
+  <h2>Who can bet</h2>
+  <p>Any wallet that has ever bought anything. One bet per address per round, with no amount to choose and no
+    averaging in, which is what makes committing early against a thin book a real decision instead of a mechanical
+    one.</p>
+
+  <div class="cta">
+    <strong>Both books open on their own schedule.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">The app surfaces them only while a window is live, with the
+      current book and what each side pays.</p>
+    <a class="btn" href="/app/">Open the app</a>
+    <a class="btn ghost" href="/learn/cycles/">The cycles they run on</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

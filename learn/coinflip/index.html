@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Coinflip · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Most Degenerus reward-path FLIP enters a communal daily 50/50 coinflip. A win applies the day's multiplier; a loss burns the stake." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>The Coinflip</h1>
+  <p class="lede">Most protocol-issued FLIP, including quests, affiliate commissions, and purchase bonuses, enters
+    as a stake in a daily communal coinflip. Win and the stake returns with a variable bonus. Lose and it
+    burns.</p>
+
+  <h2>The daily flip</h2>
+  <table>
+    <tr>
+      <td>Odds</td>
+      <td>True 50/50, decided once daily for everyone at once: the whole game wins together or loses together</td>
+    </tr>
+    <tr>
+      <td>Loss</td>
+      <td>Stake burns, 1 <a href="/learn/wwxrp/">WWXRP</a> consolation</td>
+    </tr>
+    <tr>
+      <td>Bonus days</td>
+      <td>Sweetened multipliers at level 0, each level's first jackpot day, and the post-BAF day on x0 levels</td>
+    </tr>
+  </table>
+  <p class="fine">Those multipliers are conditional on winning. Including the 50% loss outcome, an ordinary manual
+    stake has slightly below 100% nominal expected return. Bonus days can push it higher.</p>
+
+  <h2>What a win pays</h2>
+  <table>
+    <tr>
+      <th>Chance on a win</th>
+      <th>Total payout</th>
+    </tr>
+    <tr>
+      <td>90%</td>
+      <td>1.78x&ndash;2.15x your stake</td>
+    </tr>
+    <tr>
+      <td>5%</td>
+      <td>1.5x</td>
+    </tr>
+    <tr>
+      <td>5%</td>
+      <td>2.5x</td>
+    </tr>
+  </table>
+
+  <h2>Let it ride</h2>
+  <p>Winnings become claimable FLIP, or arm auto-rebuy and the contract rolls them into the next day's flip. Set a
+    take-profit amount and every whole multiple of it banks to your balance on a win, leaving only the remainder to
+    ride: set 1,000, win 2,500, and 2,000 is yours while 500 rolls. Rolled stakes earn a 0.75% bonus, capped at 1,000
+    FLIP per recycle. One loss ends the run.</p>
+
+  <h2>One flip, everybody</h2>
+  <p>The outcome is communal: a single bit of the day's VRF word decides every stake in the game, and each player's
+    entire day, awards and manual stakes alike, rides that one bit. Total FLIP supply moves in lumps because of it: a
+    loss day burns the game's staked float at once, while a win day expands it according to the payout table. Other
+    reward paths add supply separately.</p>
+
+  <h2>Why it exists</h2>
+  <p>The flip is a filter: issued FLIP usually takes coinflip risk before it becomes claimable, limiting passive
+    reward streams.</p>
+  <p class="fine">One more thing: cash out winnings after days of inactivity and the protocol may curse you, docking
+    activity score until someone pays 100 FLIP to lift it, or you buy a ticket. It is mostly a joke. Mostly.</p>
+
+  <div class="cta">
+    <strong>The biggest flippers get their own jackpot.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Coinflip winnings feed the Big Ass Flip leaderboard every ten
+      levels.</p>
+    <a class="btn" href="/learn/baf/">Big Ass Flip</a>
+    <a class="btn ghost" href="/learn/flip/">What is FLIP?</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

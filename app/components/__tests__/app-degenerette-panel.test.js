@@ -294,6 +294,7 @@ import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as affiliateMod from '../../app/affiliate.js';
 import * as passesMod from '../../app/passes.js';
 import { DEGENERETTE_PREFERENCES_KEY } from '../../app/degenerette-preferences.js';
+import { CHAIN } from '../../app/chain-config.js';
 
 function installDeityOwners(owners = new Map()) {
   passesMod.__setDeityReadContractFactoryForTest(() => ({
@@ -978,7 +979,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(el.querySelector('.deg-state').textContent, '',
       'the bottom pending row is the sole RNG-wait surface');
     const stored = JSON.parse(localStorage.getItem(
-      `pending-degenerette:84532:${CONNECTED.toLowerCase()}`,
+      `pending-degenerette:${CHAIN.id}:${CHAIN.deployBlock}:${CONNECTED.toLowerCase()}`,
     ));
     assert.deepEqual(stored, {
       betId: '42',
@@ -991,6 +992,61 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     }, 'the recovered bet is durable across another refresh');
     assert.doesNotMatch(PANEL_SRC, /manual resolve required/i);
 
+    el.disconnectedCallback();
+  });
+
+  test('old-deployment local and indexed bets cannot reappear as current pending work', async () => {
+    const legacyKey = `pending-degenerette:${CHAIN.id}:${CONNECTED.toLowerCase()}`;
+    localStorage.setItem(legacyKey, JSON.stringify({
+      betId: '42',
+      index: '7',
+      currency: 1,
+      amountPerSpin: String(250n * 10n ** 18n),
+      spinCount: 5,
+      hero: 2,
+      ticket: '13',
+    }));
+    const stalePacked = 13n
+      | (5n << 32n)
+      | (1n << 40n)
+      | ((250n * 10n ** 18n) << 42n)
+      | (2n << 218n);
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      degeneretteBetInfo: async () => { throw new Error('RPC temporarily unavailable'); },
+      connect(_signer) { return this; },
+    }));
+    _fetchHandler = async (url) => {
+      const path = String(url);
+      if (path.includes('/degenerette/feed')) {
+        return {
+          items: [{
+            player: CONNECTED,
+            betIndex: 7,
+            betId: '42',
+            packedData: String(stalePacked),
+            results: [],
+          }],
+        };
+      }
+      if (path.includes(`/player/${CONNECTED.toLowerCase()}`)) {
+        return { degenerette: { pendingBets: [{ betIndex: 7, betId: '42' }] } };
+      }
+      return {};
+    };
+
+    const { pendingDegeneretteKey } = await import('../app-degenerette-panel.js');
+    assert.equal(
+      pendingDegeneretteKey(CONNECTED),
+      `pending-degenerette:${CHAIN.id}:${CHAIN.deployBlock}:${CONNECTED.toLowerCase()}`,
+      'current pending state is namespaced to this exact deployment',
+    );
+    const el = instantiate();
+    await settle(80);
+
+    assert.equal(localStorage.getItem(legacyKey), null,
+      'the ambiguous chain-only reminder is retired on restore');
+    assert.equal(pendingActionsMod.getPendingActions().length, 0,
+      'stale DB packedData cannot substitute for a current GAME slot');
     el.disconnectedCallback();
   });
 
@@ -1048,7 +1104,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
   });
 
   test('a confirmed mid-day RNG request stays pinned through refresh and becomes result-ready', async () => {
-    const storageKey = `pending-degenerette:84532:${CONNECTED.toLowerCase()}`;
+    const storageKey = `pending-degenerette:${CHAIN.id}:${CHAIN.deployBlock}:${CONNECTED.toLowerCase()}`;
     localStorage.setItem(storageKey, JSON.stringify({
       betId: '42', index: '7', currency: 1, amountPerSpin: String(250n * 10n ** 18n),
       spinCount: 1, hero: 2,

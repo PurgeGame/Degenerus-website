@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quests &amp; Activity Score · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Daily quests pay FLIP and build the activity score used by several Degenerus odds, weighting, and face-value payout curves." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Quests &amp; Activity Score</h1>
+  <p class="lede">The activity score measures repeated participation, and daily quests are one of its main inputs.
+    Several odds, weighting, and face-value payout curves read it directly; it is money, not a cosmetic XP bar.</p>
+
+  <h2>The daily quests</h2>
+  <table>
+    <tr>
+      <td>Slots</td>
+      <td>2 per day: an ETH-denominated purchase quest plus a gated random challenge</td>
+    </tr>
+    <tr>
+      <td>Reward</td>
+      <td>100 FLIP per completion</td>
+    </tr>
+    <tr>
+      <td>Streak</td>
+      <td>+1 per quest, +5 per level quest; a missed day resets it to zero</td>
+    </tr>
+    <tr>
+      <td>Protection</td>
+      <td><a href="/learn/boons/">Boon shields</a> and a foil-pack floor can absorb missed days</td>
+    </tr>
+    <tr>
+      <td>Recycling</td>
+      <td>Winnings rolled back into tickets count the same as fresh ETH</td>
+    </tr>
+  </table>
+
+  <h2>How the score adds up</h2>
+  <p>The score is a sum of components, displayed as points where 100 points equals 1.00:</p>
+  <table>
+    <tr>
+      <th>Source</th>
+      <th>Max points</th>
+    </tr>
+    <tr>
+      <td>Quest streak, half a point per streak step; resets with the streak</td>
+      <td>Uncapped component; two daily completions add 1 raw point</td>
+    </tr>
+    <tr>
+      <td>Mint streak, 1 per consecutive level played</td>
+      <td>50</td>
+    </tr>
+    <tr>
+      <td>Referred volume, maxed at 25 ETH</td>
+      <td>50</td>
+    </tr>
+    <tr>
+      <td>Lifetime mint count</td>
+      <td>25</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/passes/">Pass bonuses</a></td>
+      <td>10&ndash;80</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/coinflip/">Cashout curse</a></td>
+      <td>&minus;20 at worst</td>
+    </tr>
+  </table>
+  <p class="fine">Passes floor several components, which is why a fresh deity wallet starts at 1.55 and an active
+    whale pass at 1.15. The quest component can keep growing, but total score is hard-capped at 655.34 and the shared
+    reward curves reach their effective cap at 300.00.</p>
+
+  <h2>What the score actually buys</h2>
+  <table>
+    <tr>
+      <th>Product</th>
+      <th>Score 0</th>
+      <th>High score</th>
+    </tr>
+    <tr>
+      <td><a href="/learn/lootboxes/">Lootbox</a> payout</td>
+      <td>90%</td>
+      <td>139.5% at 4.00, capping at 145%</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/decimator/">Decimator</a></td>
+      <td>Bucket 12, 1.0x weight</td>
+      <td>Bucket 5, ~1.78x weight (bucket 2 on century levels)</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/foil-packs/">Foil pack</a> rarity boost</td>
+      <td>2x</td>
+      <td>5&ndash;6x</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/degenerette/">Degenerette</a> base payout target</td>
+      <td>90%</td>
+      <td>~99.9%, before the ETH bonus</td>
+    </tr>
+    <tr>
+      <td>Century-level bonus entries</td>
+      <td>None</td>
+      <td>Up to double</td>
+    </tr>
+  </table>
+  <p>The pattern is deliberate. Several products give more engaged players a better contract-defined curve. Two
+    players can buy the same box, pack, or burn and receive different weighting or nominal expected value.</p>
+
+  <div class="cta">
+    <strong>Start the streak today.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Each completed daily slot credits a 100-FLIP coinflip stake.</p>
+    <a class="btn" href="/app/">Today's quests</a>
+    <a class="btn ghost" href="/learn/passes/">Or buy a floor</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

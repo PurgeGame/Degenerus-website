@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Cycles · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Degenerus runs on nested clocks: a daily heartbeat, the level loop, event milestones every ten levels, and a 100-level season ending in the century crescendo." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>The Cycles</h1>
+  <p class="lede">The game runs on nested clocks. A daily heartbeat settles every reward. Levels loop from purchase
+    phase to jackpot phase on no fixed schedule. Every tenth level fires event jackpots, and every hundredth closes a
+    season with the century crescendo, then resets prices and targets so the ladder can climb again.</p>
+
+  <h2>One day</h2>
+  <p>Everything in Degenerus settles on a daily tick. Each processed day brings:</p>
+  <table>
+    <tr>
+      <td>The <a href="/learn/coinflip/">communal coinflip</a></td>
+      <td>Every FLIP reward earned that day, and every manual stake, rides one 50/50 for the whole game</td>
+    </tr>
+    <tr>
+      <td>Two <a href="/learn/quests/">quest</a> slots</td>
+      <td>100 FLIP each; completing both adds one point of quest streak per day, uncapped</td>
+    </tr>
+    <tr>
+      <td>The drip</td>
+      <td>Every purchase-phase day, 1% of the futurepool pays bonus tickets and ETH to trait-matched holders, plus a
+        FLIP jackpot</td>
+    </tr>
+    <tr>
+      <td>Draws and re-grades</td>
+      <td>Daily winning traits pay jackpot prizes, re-grade every live <a href="/learn/foil-packs/">foil ticket</a>,
+        and reveal pending <a href="/learn/lootboxes/">lootboxes</a></td>
+    </tr>
+    <tr>
+      <td>Expiries</td>
+      <td><a href="/learn/boons/">Boons</a> rolled that day die at day's end unused; a missed quest day resets an
+        unshielded streak</td>
+    </tr>
+  </table>
+  <p class="fine">The afKing subscription exists because of this clock: it executes one configured buy per processed
+    day so the streaks that ride the clock survive it.</p>
+
+  <h2>One level</h2>
+  <p>A level is the game's basic loop, and it has no fixed length. During the <strong>purchase phase</strong>, sales
+    fill the prize pool toward a target: whatever the previous level raised. The moment the target is met, the
+    <strong>jackpot phase</strong> runs five logical days of trait draws that pay out the active pool, partly as ETH
+    and partly as next-level tickets. Then the level advances and the prior level's tickets expire.</p>
+  <p>A fast level compresses the whole loop into days. A slow one leans on the drip, which can close a funded level's
+    gap by itself over time. The only hard boundary is the deadline: 120 days without completion at any level past
+    the first ends the game, the scenario covered in <a href="/learn/endgame/">the endgame</a>.</p>
+
+  <h2>Ten levels</h2>
+  <p>Every tenth level is a checkpoint where the event layer fires on top of the base game:</p>
+  <table>
+    <tr>
+      <td><a href="/learn/baf/">Big Ass Flip</a></td>
+      <td>At every x0 transition, a VRF bit decides whether 10% of the futurepool pays out across coinflip leaders
+        and ticket samples, 20% at level 50 and x00. The leaderboard resets each window</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/decimator/">The Decimator</a></td>
+      <td>Fires at x05, x15 through x85 of each cycle, skipping x95, plus every x00. Burn FLIP for a weighted slice
+        of 10% of the futurepool</td>
+    </tr>
+    <tr>
+      <td>Streak bonus</td>
+      <td>Quest streaks pay a direct FLIP bonus every 10 levels, escalating and capped</td>
+    </tr>
+    <tr>
+      <td><a href="/learn/passes/">Lazy pass</a> windows</td>
+      <td>Sale checkpoints at x9 and x0 levels queue a ticket per level for the next ten, one level before the BAF
+        fires</td>
+    </tr>
+  </table>
+  <p class="fine">The ten-level rhythm gives forward positions a payday cadence: future tickets and coinflip scores
+    are the raw material the BAF and Decimator draw from.</p>
+
+  <h2>One hundred levels</h2>
+  <p>The century is the game's season. Ticket prices climb a ladder inside it, 0.04 ETH at x01 up to 0.16 by x90, and
+    each level's pool target must beat the last, so both stakes and jackpots ratchet upward for a hundred levels.
+    Because 1,000 FLIP always buys one ticket while the ETH price climbs, FLIP's purchasing power rises 6x inside
+    every cycle, 24x from level 0 to the first century.</p>
+  <p>Then the x00 level lands at 0.24 ETH, and everything fires at once:</p>
+  <table>
+    <tr>
+      <td>Accumulator release</td>
+      <td>Half the segregated accumulator, stETH yield and insurance banked over the whole cycle, flows into the
+        futurepool</td>
+    </tr>
+    <tr>
+      <td>The transfer roll</td>
+      <td>A VRF roll keeps 30&ndash;65% of the enlarged futurepool for future levels and moves the rest into the
+        current pool for immediate jackpots</td>
+    </tr>
+    <tr>
+      <td>Century BAF</td>
+      <td>Doubled to 20% of the futurepool, with most scatter rounds sampling the previous 99 levels: a season-finale
+        payout to the cycle's participants</td>
+    </tr>
+    <tr>
+      <td>Century Decimator</td>
+      <td>Tripled to 30% of the futurepool, and the best odds bucket drops from 5 to 2 for top-score burners</td>
+    </tr>
+    <tr>
+      <td>Bonus mints</td>
+      <td>Ticket buys at x00 mint up to 100% extra entries, scaled by activity score and capped at 20 ETH of bonus
+        tickets per player</td>
+    </tr>
+  </table>
+  <p>The result is by far the largest scheduled payout of the cycle, funded by a hundred levels of accumulated
+    growth. After the crescendo, the ladder resets: tickets drop back to 0.04 ETH, the next target is set at
+    one-third of the remaining futurepool, and the climb starts over. Neither prices nor targets rise forever.</p>
+
+  <h2>Why the rhythm matters</h2>
+  <p>Each clock feeds the one above it. The daily tick is what the <a href="/learn/quests/">activity score</a>
+    measures, and score decides your cut of everything the longer clocks pay: BAF eligibility rides daily flips,
+    Decimator weight and buckets ride score, and the century's bonus mints and backward-looking BAF pay the players
+    who were there all season. The reset is the other half of the design: a pure ratchet would price everyone out,
+    so every hundred levels the game takes its biggest payday and then reopens the door at 0.04 ETH.</p>
+
+  <div class="cta">
+    <strong>The crescendo pays the people already playing.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Century bonuses scale with the score you build one day at a
+      time.</p>
+    <a class="btn" href="/learn/quests/">Quests &amp; Activity Score</a>
+    <a class="btn ghost" href="/learn/jackpots/">The Jackpots</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

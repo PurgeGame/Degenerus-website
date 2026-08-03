@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Big Ass Flip · Degenerus Mechanics</title>
+  <meta name="description"
+    content="At every x0 transition, a VRF gate can allocate 10% of the futurepool, or 20% at level 50 and x00, across coinflip leaders and ticket-based samples." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Big Ass Flip</h1>
+  <p class="lede">At every x0 transition, a VRF bit decides whether the Big Ass Flip runs. On a win it allocates 10%
+    of the futurepool, or 20% at level 50 and x00, across coinflip leaders and ticket-based samples. On a loss,
+    the pool stays in the futurepool.</p>
+
+  <img class="coin" src="/shared/coinflip-coin.svg" alt="The daily coinflip coin, spinning between its red flame face and green ETH face" />
+  <p class="figcap">The daily <a href="/learn/coinflip/">coinflip</a> is the qualifying event. Your cumulative
+    winnings on this coin are your BAF score.</p>
+
+  <h2>How it fires</h2>
+  <table>
+    <tr>
+      <td>Leaderboard</td>
+      <td>Cumulative <a href="/learn/coinflip/">coinflip</a> winnings per player, each 10-level window. Winnings, not
+        volume: losses count for nothing</td>
+    </tr>
+    <tr>
+      <td>Trigger</td>
+      <td>Every x0 level, gated on a 50/50 VRF coin flip. Tails, the money stays put and the next BAF draws from a bigger
+        base</td>
+    </tr>
+    <tr>
+      <td>Pool</td>
+      <td>10% of the futurepool; 20% at level 50 and every x00</td>
+    </tr>
+    <tr>
+      <td>Payout form</td>
+      <td>Prizes at least 5% of the BAF pool split 50% ETH / 50% lootbox value. Smaller prizes alternate between all
+        ETH and all lootbox value</td>
+    </tr>
+  </table>
+
+  <h2>How the pot splits</h2>
+  <table>
+    <tr>
+      <th>Slice</th>
+      <th>Goes to</th>
+    </tr>
+    <tr>
+      <td>10%</td>
+      <td>The window's top coinflip winner</td>
+    </tr>
+    <tr>
+      <td>5%</td>
+      <td>The biggest single-day flipper of the last 24 hours</td>
+    </tr>
+    <tr>
+      <td>5%</td>
+      <td>A random pick from the 3rd and 4th leaderboard slots</td>
+    </tr>
+    <tr>
+      <td>10%</td>
+      <td>Two draws among far-future ticket holders: a random slate is sampled, and the top BAF scores in it win</td>
+    </tr>
+    <tr>
+      <td>70%</td>
+      <td>Scattered across trait-matched ticket holders over 50 draw rounds, each paying a first and second place</td>
+    </tr>
+  </table>
+  <p class="fine">On a normal BAF, scatter samples come from the current and next four levels. At x00, 38 of 50
+    scatter rounds sample the previous 99 levels. A sampled address still needs positive BAF score to win, and empty
+    or ineligible slots return their share to the futurepool.</p>
+
+  <h2>Why it exists</h2>
+  <p>The coinflip settles every reward in the game, and BAF makes sustained flipping a competition worth watching. It
+    gives the daily grind a leaderboard while making current and future ticket positions, and past ones at x00,
+    potential sampling routes for active flippers.</p>
+
+  <div class="cta">
+    <strong>Your BAF score is built one flip at a time.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Every FLIP reward you win feeds the same daily flip.</p>
+    <a class="btn" href="/learn/coinflip/">The Coinflip</a>
+    <a class="btn ghost" href="/learn/decimator/">The Decimator</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

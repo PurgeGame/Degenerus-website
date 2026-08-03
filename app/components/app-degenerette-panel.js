@@ -237,12 +237,23 @@ const STATE_LABELS = Object.freeze({
 });
 
 export function pendingDegeneretteKey(address) {
+  // Bet ids and queue indexes restart on every deployment. Chain id alone is
+  // therefore not a safe namespace on testnet: an old run can leave a valid-
+  // looking local row that can never resolve against the replacement GAME.
+  return `pending-degenerette:${CHAIN.id}:${CHAIN.deployBlock}:${String(address || '').toLowerCase()}`;
+}
+
+function _legacyPendingDegeneretteKey(address) {
   return `pending-degenerette:${CHAIN.id}:${String(address || '').toLowerCase()}`;
 }
 
 function _readPendingBet(address) {
   if (!address || typeof localStorage === 'undefined') return null;
   try {
+    // Pre-deployment-scoped records are ambiguous by construction. The DB +
+    // current GAME slot can recover a genuinely live bet below, so remove the
+    // legacy reminder instead of ever presenting it as current work.
+    localStorage.removeItem(_legacyPendingDegeneretteKey(address));
     const raw = localStorage.getItem(pendingDegeneretteKey(address));
     const row = raw ? JSON.parse(raw) : null;
     if (!row || row.betId == null || row.index == null) return null;
@@ -1940,11 +1951,11 @@ class AppDegenerettePanel extends HTMLElement {
         // an already-completed resolution, so do not resurrect it as pending.
         if (chainPacked === 0n) continue;
 
-        let packed = chainPacked;
-        if (packed == null && indexed?.packedData != null) {
-          try { packed = BigInt(indexed.packedData); } catch (_e) { packed = null; }
-        }
-        if (packed == null || packed === 0n) continue;
+        // Recovery records in the DB can survive a redeploy. Only the current
+        // GAME slot is authoritative enough to resurrect one; an RPC failure
+        // waits for the next poll rather than trusting old indexed packedData.
+        if (chainPacked == null || chainPacked === 0n) continue;
+        const packed = chainPacked;
         const decoded = dgnDecodePacked(packed);
         if (!decoded
           || decoded.spinCount < 1

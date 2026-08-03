@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Degenerus Lootbox Leg Feed</title>
+  <link rel="stylesheet" href="/shared/nav.css">
+  <style>
+    :root {
+      --bg-primary: #0e0e12;
+      --bg-secondary: #16161c;
+      --bg-row: #1a1a22;
+      --bg-row-alt: #1d1d26;
+      --border-color: #2a2a36;
+      --text-primary: #e7e7ee;
+      --text-secondary: #9a9ab0;
+      --text-dim: #6c6c80;
+      --accent: #f5a623;
+      --eth: #3b82f6;
+      --flip: #f97316;
+      --opened: #22c55e;
+      --reward-dgnrs: #a855f7;
+      --reward-wwxrp: #06b6d4;
+      --reward-jackpot: #f409cd;
+      --reward-lazy: #facc15;
+      --reward-boon: #14b8a6;
+      --afking: #64b5f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .container { max-width: 1320px; margin: 0 auto; padding: 1rem; }
+    header.page-header {
+      padding: 1rem 1.25rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    header.page-header h1 {
+      margin: 0;
+      font-size: 1.2rem;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    header.page-header .meta { color: var(--text-secondary); font-size: 0.85rem; }
+    .sub { color: var(--text-dim); font-size: 0.78rem; margin: 0 0 0.75rem; }
+    .controls { display: flex; gap: 0.75rem; align-items: center; margin-left: auto; flex-wrap: wrap; }
+    label.toggle {
+      display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer;
+      font-size: 0.85rem; color: var(--text-secondary);
+    }
+    label.toggle input { accent-color: var(--accent); }
+    button.refresh {
+      background: var(--bg-row); color: var(--text-primary); border: 1px solid var(--border-color);
+      padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+    }
+    button.refresh:hover { border-color: var(--accent); color: var(--accent); }
+
+    .feed { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden; }
+    .feed-header, .row {
+      display: grid;
+      grid-template-columns: 92px 110px 150px 96px 1.7fr 84px 1fr;
+      gap: 0.75rem;
+      padding: 0.55rem 0.85rem;
+      align-items: center;
+    }
+    .feed-header {
+      background: #11111a; border-bottom: 1px solid var(--border-color);
+      font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-dim); font-weight: 600;
+    }
+    .row { border-bottom: 1px solid var(--border-color); transition: background 0.12s; }
+    .row:nth-child(even) { background: var(--bg-row-alt); }
+    .row:nth-child(odd) { background: var(--bg-row); }
+    .row:hover { background: #232330; }
+    .row:last-child { border-bottom: none; }
+
+    .pill {
+      display: inline-flex; align-items: center; padding: 0.15rem 0.5rem; border-radius: 999px;
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;
+    }
+    .pill.opened   { background: rgba(34, 197, 94, 0.18); color: var(--opened); }
+    .pill.flip     { background: rgba(249, 115, 22, 0.18); color: var(--flip); }
+    .pill.dgnrs    { background: rgba(168, 85, 247, 0.18); color: var(--reward-dgnrs); }
+    .pill.boon     { background: rgba(20, 184, 166, 0.18); color: var(--reward-boon); }
+    .pill.lazy     { background: rgba(250, 204, 21, 0.18); color: var(--reward-lazy); }
+    .pill.jackpot  { background: rgba(244, 9, 205, 0.18); color: var(--reward-jackpot); }
+    .pill.wwxrp    { background: rgba(6, 182, 212, 0.18); color: var(--reward-wwxrp); }
+
+    .tag-origin {
+      display: inline-flex; padding: 0.1rem 0.45rem; border-radius: 6px;
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+    }
+    .tag-origin.afking { background: rgba(100, 181, 246, 0.16); color: var(--afking); }
+    .tag-origin.normal { background: rgba(108, 108, 128, 0.16); color: var(--text-secondary); }
+    .tag-origin.spin   { background: rgba(249, 115, 22, 0.14); color: var(--flip); }
+
+    .col-cost { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 0.82rem; color: var(--text-primary); }
+    .col-cost .unit { color: var(--text-dim); font-size: 0.7rem; margin-left: 0.2rem; }
+    .col-cost.dim { color: var(--text-dim); }
+    .col-player { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 0.78rem; color: var(--text-secondary); }
+    .col-player a { color: var(--text-secondary); text-decoration: none; }
+    .col-player a:hover { color: var(--accent); }
+    .col-lvl { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 0.78rem; color: var(--text-secondary); }
+    .col-meta { font-size: 0.75rem; color: var(--text-dim); font-family: 'SF Mono', Menlo, Consolas, monospace; }
+    .col-meta a { color: inherit; text-decoration: none; }
+    .idx-tag {
+      display: inline-block; margin-left: 0.3rem; padding: 0.02rem 0.32rem; font-size: 0.66rem;
+      font-family: 'SF Mono', Menlo, Consolas, monospace; color: var(--text-dim);
+      background: rgba(108, 108, 128, 0.14); border-radius: 0.25rem; vertical-align: middle;
+    }
+
+    .col-rewards { display: flex; flex-direction: column; gap: 0.25rem; }
+    .reward-line { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; flex-wrap: wrap; }
+    .reward-line .label { font-weight: 600; letter-spacing: 0.03em; }
+    .reward-line .value { color: var(--text-secondary); font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 0.74rem; }
+    .label.dgnrs { color: var(--reward-dgnrs); }
+    .label.wwxrp { color: var(--reward-wwxrp); }
+    .label.jackpot { color: var(--reward-jackpot); }
+    .label.lazy { color: var(--reward-lazy); }
+    .label.boon { color: var(--reward-boon); }
+    .label.flip { color: var(--flip); }
+    .label.tix { color: var(--opened); }
+    .reward-empty { color: var(--text-dim); font-style: italic; font-size: 0.75rem; }
+    .spin-win { color: var(--opened); font-weight: 700; }
+    .spin-lose { color: var(--text-dim); }
+    .closing-flag { color: var(--reward-jackpot); font-size: 0.7rem; font-weight: 700; }
+
+    .empty-state, .error-state { padding: 2rem; text-align: center; color: var(--text-dim); }
+    .error-state { color: #ef4444; }
+    .load-more {
+      display: block; width: 100%; padding: 0.75rem; background: var(--bg-row); color: var(--text-secondary);
+      border: none; border-top: 1px solid var(--border-color); cursor: pointer; font-size: 0.85rem;
+    }
+    .load-more:hover { color: var(--accent); background: #232330; }
+    .load-more:disabled { opacity: 0.5; cursor: not-allowed; }
+    .totals { display: flex; gap: 1.5rem; flex-wrap: wrap; padding: 0.5rem 0; color: var(--text-secondary); font-size: 0.85rem; }
+    .totals strong { color: var(--text-primary); }
+
+    @media (max-width: 980px) {
+      .feed-header, .row { grid-template-columns: 80px 1.6fr 90px; }
+      .col-cost, .col-player, .col-meta, .col-lvl { display: none; }
+    }
+  </style>
+  <script defer src="/js/ref.js"></script>
+</head>
+<body>
+  <div class="container">
+    <!-- /shared/nav.js initNav({ currentPage }) injects the unified nav at the top of .container at boot. -->
+    <header class="page-header">
+      <h1>Lootbox Leg Feed</h1>
+      <div class="meta" id="meta">loading…</div>
+      <div class="controls">
+        <label class="toggle"><input type="checkbox" id="autorefresh" checked> Auto-refresh (3s)</label>
+        <button class="refresh" id="refresh-btn">Refresh now</button>
+      </div>
+    </header>
+
+    <p class="sub">One row per on-chain settlement leg — every <code>LootBoxOpened</code> (a split box ⇒ 2 rows),
+      <code>PresaleBoxOpened</code>, DGNRS/boon reward, and box-origin <code>BoxSpin</code>, rendered individually
+      (never merged into a purchase). Includes afking idx-0 auto-opens and recirc opens. Source: <code>/lootbox/legs</code>.</p>
+
+    <div class="totals" id="totals"></div>
+
+    <div class="feed">
+      <div class="feed-header">
+        <div>Leg</div>
+        <div class="col-cost">Box (mainnet)</div>
+        <div class="col-player">Player</div>
+        <div class="col-lvl">Lvl @open</div>
+        <div>Reward</div>
+        <div>Origin</div>
+        <div class="col-meta">Block</div>
+      </div>
+      <div id="rows"></div>
+      <button class="load-more" id="load-more" hidden>Load older →</button>
+    </div>
+  </div>
+
+  <script>
+    // ---------- Config ----------
+    // Sepolia ETH_DIVISOR = 1_000_000n (matches /app/app/chain-config.sepolia.js).
+    // Raw on-chain wei is 1M× smaller than mainnet equivalent — multiply for display.
+    const ETH_DIVISOR = 1000000n;
+    const API_BASE = `http://${location.hostname || 'localhost'}:3000`;
+    const POLL_INTERVAL_MS = 3000;
+    const PAGE_LIMIT = 60;
+    const ETHERSCAN_BASE = 'https://sepolia.etherscan.io';
+
+    // LootBoxReward.rewardType (uint8) — see contracts/modules/DegenerusGameLootboxModule.sol:129
+    const BOON_LABELS = {
+      2:  { label: 'Coinflip Boon',   css: 'boon' },
+      4:  { label: 'Boost 5%',        css: 'boon' },
+      5:  { label: 'Boost 15%',       css: 'boon' },
+      6:  { label: 'Boost 25%',       css: 'boon' },
+      8:  { label: 'Decimator Boost', css: 'boon' },
+      9:  { label: 'Whale Boon',      css: 'boon' },
+      10: { label: 'Activity / Deity',css: 'boon' },
+      11: { label: 'Lazy Pass Boon',  css: 'lazy' },
+    };
+
+    // Normalized legType → header pill.
+    const LEG_META = {
+      opened:    { label: 'Open',      css: 'opened' },
+      flipOpened:{ label: 'FLIP Open', css: 'opened' },
+      presale:   { label: 'Presale',   css: 'wwxrp' },
+      dgnrs:     { label: 'DGNRS',     css: 'dgnrs' },
+      reward:    { label: 'Boon',      css: 'boon' },
+      lazypass:  { label: 'Lazy Pass', css: 'lazy' },
+      whalepass: { label: 'Whale JP',  css: 'jackpot' },
+      spin:      { label: 'Spin',      css: 'flip' },
+    };
+    const SPIN_LABEL = { wwxrp: 'WWXRP', flip: 'FLIP ×3', eth: 'ETH' };
+
+    // ---------- State ----------
+    let items = [];           // accumulated legs (newest first), keyed by `ord`
+    let nextCursor = null;    // ord of the oldest loaded leg (for "load older")
+    let newestOrd = 0;        // poll de-dupe high-water mark
+    let pollTimer = null;
+    let currentPurchaseLevel = null;
+
+    // Tickets: contract emits futureTickets in TICKET_SCALE (=100) units.
+    //   100 scaled = 1 ENTRY · 400 scaled = 4 entries = 1 REAL TICKET
+    const TICKET_SCALE = 100;
+
+    // ---------- Helpers ----------
+    function shortAddr(a) {
+      if (!a) return '';
+      const s = String(a);
+      return s.length > 12 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s;
+    }
+    function formatEthMainnet(rawWeiStr, digits = 6) {
+      let raw;
+      try { raw = BigInt(rawWeiStr || '0'); } catch { return '—'; }
+      const mainnet = raw * ETH_DIVISOR;
+      const whole = mainnet / 10n ** 18n;
+      const frac = (mainnet % 10n ** 18n).toString().padStart(18, '0').slice(0, digits);
+      return `${whole}.${frac}`;
+    }
+    // TICKET_SCALE units → entries with up to 2 decimals (no trailing zeros).
+    function formatTickets(scaled) {
+      const whole = Math.floor(scaled / TICKET_SCALE);
+      const remScaled = scaled % TICKET_SCALE;
+      if (remScaled === 0) return String(whole);
+      const frac = String(remScaled).padStart(2, '0').replace(/0+$/, '');
+      return `${whole}.${frac}`;
+    }
+    // Render a target level with its delta from the chain's currentLevel AT OPEN TIME
+    // (purchaseLevelAtOpen = levelAtOpen + 1, matching the contract's currentLevel = level + 1).
+    function formatLevel(level, levelAtOpen) {
+      const reference = levelAtOpen !== null && levelAtOpen !== undefined
+        ? levelAtOpen + 1
+        : currentPurchaseLevel;
+      if (reference === null || reference === undefined) return `lvl ${level}`;
+      const delta = level - reference;
+      if (delta === 0) return `lvl ${level} (=)`;
+      if (delta > 0) return `lvl ${level} (+${delta})`;
+      return `lvl ${level} (${delta})`;
+    }
+    function formatFlip(rawAmtStr) {
+      let raw;
+      try { raw = BigInt(rawAmtStr || '0'); } catch { return '—'; }
+      const whole = raw / 10n ** 18n;
+      const frac = (raw % 10n ** 18n).toString().padStart(18, '0').slice(0, 2);
+      return `${whole.toLocaleString()}.${frac}`;
+    }
+    function line(css, label, value) {
+      return `<div class="reward-line"><span class="label ${css}">${label}</span>${value ? `<span class="value">${value}</span>` : ''}</div>`;
+    }
+
+    // Build the per-leg reward detail HTML (the right-hand column). Each leg renders
+    // ONLY its own payload — no merging across legs.
+    function renderLegDetail(leg) {
+      const d = leg.rewardData || {};
+      const lvlRef = leg.levelAtOpen;
+      switch (leg.legType) {
+        case 'opened': {
+          const tix = Number(d.futureTickets ?? 0);
+          const flip = BigInt(d.flip || '0');
+          const parts = [];
+          if (tix > 0) parts.push(line('tix', `${formatTickets(tix)} tix`, `→ ${formatLevel(Number(d.futureLevel ?? 0), lvlRef)}${d.roundedUp ? ' ⤴' : ''}`));
+          if (flip > 0n) parts.push(line('flip', 'FLIP', formatFlip(flip.toString())));
+          return parts.length ? parts.join('') : '<span class="reward-empty">no prize</span>';
+        }
+        case 'flipOpened': {
+          const tix = Number(d.tickets ?? 0);
+          const flip = BigInt(d.flipReward || '0');
+          const parts = [];
+          if (tix > 0) parts.push(line('tix', `${formatTickets(tix)} tix`, `→ ${formatLevel(Number(d.ticketLevel ?? 0), lvlRef)}${d.roundedUp ? ' ⤴' : ''}`));
+          if (flip > 0n) parts.push(line('flip', 'FLIP', formatFlip(flip.toString())));
+          return parts.length ? parts.join('') : '<span class="reward-empty">no prize</span>';
+        }
+        case 'presale': {
+          const flip = BigInt(d.flip || '0'), dgnrs = BigInt(d.dgnrs || '0'), wwxrp = BigInt(d.wwxrp || '0');
+          const parts = [];
+          if (flip > 0n)  parts.push(line('flip',  'FLIP',  formatFlip(flip.toString())));
+          if (dgnrs > 0n) parts.push(line('dgnrs', 'DGNRS', formatFlip(dgnrs.toString())));
+          if (wwxrp > 0n) parts.push(line('wwxrp', 'WWXRP', formatFlip(wwxrp.toString())));
+          if (d.closing) parts.push(`<div class="reward-line"><span class="closing-flag">✦ closing box (50-ETH cap)</span></div>`);
+          return parts.length ? parts.join('') : '<span class="reward-empty">presale dud</span>';
+        }
+        case 'dgnrs':
+          return line('dgnrs', 'DGNRS', formatFlip(d.dgnrsAmount ?? d.amount ?? '0'));
+        case 'reward': {
+          const sub = Number(d.rewardType ?? -1);
+          const meta = BOON_LABELS[sub] || { label: `Reward ${sub}`, css: 'boon' };
+          const amt = d.amount ?? '0';
+          const isBoost = [4, 5, 6, 8].includes(sub);
+          return line(meta.css, meta.label, isBoost ? `${(Number(amt) / 100).toFixed(2)}%` : formatFlip(amt));
+        }
+        case 'lazypass':
+          return line('lazy', 'Lazy Pass', '✦');
+        case 'whalepass':
+          return line('jackpot', 'Whale Pass JP', `lvl ${d.targetLevel ?? '?'} · ${d.tickets ?? '?'} tix`);
+        case 'spin': {
+          const s = leg.spin || {};
+          const tok = SPIN_LABEL[s.spinType] ?? s.spinType;
+          const won = s.payout && s.payout !== '0';
+          const survivedTag = s.spinType === 'flip' && s.survived != null
+            ? (s.survived ? ' · <span class="spin-win">SURVIVED ×2</span>' : ' · <span class="spin-lose">BUSTED</span>')
+            : '';
+          const payoutStr = won
+            ? `<span class="spin-win">+${formatFlip(s.payout)} ${tok}</span>`
+            : `<span class="spin-lose">no payout</span>`;
+          const ethShare = (s.spinType === 'eth' && s.ethShare && s.ethShare !== '0')
+            ? ` · ${formatEthMainnet(s.ethShare)} ETH claimable` : '';
+          return `<div class="reward-line"><span class="label flip">${tok}×${s.spinCount ?? 1}</span><span class="value">${payoutStr}${survivedTag}${ethShare}</span></div>`;
+        }
+        default:
+          return `<span class="reward-empty">${leg.rewardType}</span>`;
+      }
+    }
+
+    function renderRow(leg) {
+      const meta = LEG_META[leg.legType] || { label: leg.legType, css: 'boon' };
+      const txUrl = `${ETHERSCAN_BASE}/tx/${leg.transactionHash}`;
+      const addrUrl = `${ETHERSCAN_BASE}/address/${leg.player}`;
+
+      const boxCost = leg.boxAmountRawWei
+        ? `<span class="col-cost">${formatEthMainnet(leg.boxAmountRawWei)}<span class="unit">ETH</span></span>`
+        : `<span class="col-cost dim">—</span>`;
+
+      const idxTag = (leg.lootboxIndex !== null && leg.lootboxIndex !== undefined)
+        ? `<span class="idx-tag" title="shared lootbox RNG-batch index">#${leg.lootboxIndex}</span>` : '';
+
+      const lvl = (leg.levelAtOpen !== null && leg.levelAtOpen !== undefined)
+        ? `lvl ${leg.levelAtOpen + 1}` : '—';
+
+      const originTag = leg.source === 'spin'
+        ? `<span class="tag-origin spin">spin</span>`
+        : (leg.origin
+            ? `<span class="tag-origin ${leg.origin}">${leg.origin}</span>`
+            : `<span class="tag-origin normal" title="reward leg — originating box not identifiable from the event">—</span>`);
+
+      return `
+        <div class="row" data-ord="${leg.ord}">
+          <div><span class="pill ${meta.css}">${meta.label}</span></div>
+          <div>${boxCost}</div>
+          <div class="col-player"><a href="${addrUrl}" target="_blank" rel="noopener">${shortAddr(leg.player)}</a>${idxTag}</div>
+          <div class="col-lvl">${lvl}</div>
+          <div class="col-rewards">${renderLegDetail(leg)}</div>
+          <div>${originTag}</div>
+          <div class="col-meta"><a href="${txUrl}" target="_blank" rel="noopener">${leg.blockNumber}</a></div>
+        </div>`;
+    }
+
+    function renderAll() {
+      const rowsEl = document.getElementById('rows');
+      rowsEl.innerHTML = items.length === 0
+        ? '<div class="empty-state">No lootbox legs yet. Waiting for the indexer…</div>'
+        : items.map(renderRow).join('');
+
+      // Totals — count by legType + box ETH on opens/presale.
+      const byType = {};
+      let boxEthWei = 0n, afking = 0, spins = 0;
+      for (const it of items) {
+        byType[it.legType] = (byType[it.legType] || 0) + 1;
+        if (it.origin === 'afking') afking++;
+        if (it.legType === 'spin') spins++;
+        if (it.boxAmountRawWei) { try { boxEthWei += BigInt(it.boxAmountRawWei) * ETH_DIVISOR; } catch {} }
+      }
+      const ethStr = (() => {
+        const whole = boxEthWei / 10n ** 18n;
+        const frac = (boxEthWei % 10n ** 18n).toString().padStart(18, '0').slice(0, 4);
+        return `${whole}.${frac}`;
+      })();
+      const typeStr = Object.entries(byType).map(([k, v]) => `${LEG_META[k]?.label ?? k}: <strong>${v}</strong>`).join(' · ');
+      document.getElementById('totals').innerHTML =
+        `<div>Loaded: <strong>${items.length}</strong> legs</div>` +
+        `<div>${typeStr}</div>` +
+        `<div>afking opens: <strong>${afking}</strong> · spins: <strong>${spins}</strong></div>` +
+        `<div>Box ETH (opens+presale): <strong>${ethStr} ETH</strong> mainnet-equiv</div>`;
+
+      document.getElementById('load-more').hidden = nextCursor === null;
+    }
+
+    function setMeta(text, isError) {
+      const el = document.getElementById('meta');
+      el.textContent = text;
+      el.style.color = isError ? '#ef4444' : '';
+    }
+
+    async function fetchPage(opts) {
+      const params = new URLSearchParams({ limit: String(PAGE_LIMIT) });
+      if (opts && opts.before) params.set('before', String(opts.before));
+      const res = await fetch(`${API_BASE}/lootbox/legs?${params.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    async function refreshGameState() {
+      try {
+        const res = await fetch(`${API_BASE}/game/state`);
+        if (!res.ok) return;
+        const s = await res.json();
+        const lvl = Number(s.level ?? 0);
+        currentPurchaseLevel = s.phase === 'PURCHASE' ? lvl : lvl + 1;
+      } catch { /* keep last */ }
+    }
+
+    async function refreshNewest() {
+      try {
+        await refreshGameState();
+        const data = await fetchPage({});
+        const page = data.items || [];
+        const fresh = page.filter(it => it.ord > newestOrd);
+        if (fresh.length > 0) {
+          items = fresh.concat(items);
+          newestOrd = items[0].ord;
+        }
+        if (nextCursor === null && page.length === PAGE_LIMIT) nextCursor = data.nextCursor;
+        renderAll();
+        const lvlPart = currentPurchaseLevel !== null ? ` · purchase lvl ${currentPurchaseLevel}` : '';
+        setMeta(`Last update ${new Date().toLocaleTimeString()} · ${items.length} legs${lvlPart}`);
+      } catch (err) {
+        setMeta(`Fetch failed: ${err.message}`, true);
+      }
+    }
+
+    async function loadOlder() {
+      if (nextCursor === null) return;
+      const btn = document.getElementById('load-more');
+      btn.disabled = true; btn.textContent = 'Loading…';
+      try {
+        const data = await fetchPage({ before: nextCursor });
+        items = items.concat(data.items || []);
+        nextCursor = data.nextCursor;
+        renderAll();
+      } catch (err) {
+        setMeta(`Load older failed: ${err.message}`, true);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Load older →';
+      }
+    }
+
+    function startPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = setInterval(refreshNewest, POLL_INTERVAL_MS); }
+    function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+    document.getElementById('refresh-btn').addEventListener('click', refreshNewest);
+    document.getElementById('load-more').addEventListener('click', loadOlder);
+    document.getElementById('autorefresh').addEventListener('change', e => {
+      if (e.target.checked) startPolling(); else stopPolling();
+    });
+
+    refreshNewest().then(() => {
+      if (document.getElementById('autorefresh').checked) startPolling();
+    });
+  </script>
+  <script src="/shared/nav.js"></script>
+  <script>initNav({ currentPage: 'lootbox-feed' });</script>
+</body>
+</html>

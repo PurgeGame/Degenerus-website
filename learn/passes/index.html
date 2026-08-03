@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Passes · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Degenerus lazy, whale, and soulbound deity passes: prepaid future exposure, activity-score floors, pass-specific rewards, and access to afKing automation." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Passes</h1>
+  <p class="lede">Passes prepay future exposure and attach activity-score benefits. Lazy and whale passes queue
+    entries over fixed level ranges; deity passes create permanent virtual entries and a soulbound game identity. A
+    valid pass can also unlock the afKing daily purchase subscription.</p>
+
+  <h2>The three passes</h2>
+  <table>
+    <tr>
+      <th></th>
+      <th>Lazy</th>
+      <th>Whale</th>
+      <th>Deity</th>
+    </tr>
+    <tr>
+      <td>Base price</td>
+      <td>The sum of the 10 levels' ticket prices; discounted to a flat 0.24 ETH, with the difference paid back as
+        bonus tickets, when bought at levels 0&ndash;2</td>
+      <td>2.4 ETH at levels 0&ndash;3, then 4 ETH</td>
+      <td>24 ETH + escalation per pass sold; the 32nd base price reaches 520 ETH before any boon discount</td>
+    </tr>
+    <tr>
+      <td>Covers</td>
+      <td>1 ticket/level for 10 levels</td>
+      <td>100 levels: 40 entries/level through level 10 for early buyers, then 2/level</td>
+      <td>Virtual entries in your symbol's trait bucket at each live level</td>
+    </tr>
+    <tr>
+      <td>Activity floor</td>
+      <td>0.85</td>
+      <td>1.15</td>
+      <td>1.55</td>
+    </tr>
+    <tr>
+      <td>Lootbox back</td>
+      <td>10% of price</td>
+      <td>10% of price</td>
+      <td>10% of price</td>
+    </tr>
+    <tr>
+      <td>DGNRS</td>
+      <td>None</td>
+      <td>1% of the whale reserve per pass</td>
+      <td>5% of the whale reserve</td>
+    </tr>
+    <tr>
+      <td>Supply</td>
+      <td>Renewable, 10 levels at a time</td>
+      <td>Up to 100 per transaction</td>
+      <td>32 ever, one per symbol, one per wallet, soulbound</td>
+    </tr>
+  </table>
+  <p class="fine">A valid one-use boon can discount a pass purchase. Lazy passes are normally available at levels
+    0&ndash;2 and eligible x9/x0 checkpoints, or through a boon; renewal opens when 7 or fewer covered levels remain.</p>
+
+  <h2>The deity extras</h2>
+  <ul>
+    <li>Three boons every day, rolled by VRF: purchase discounts, activity boosts, quest-streak shields, and more. You
+      hand them out, capped at 10 lifetime per recipient, and they expire at the end of the day if unused. The
+      contract will not let a deity boon themselves.</li>
+    <li>Never expires, never transfers, a permanent identity rather than an item.</li>
+    <li>Your stored referrer gets the whale-pass ticket allocation and activity floor. The available DGNRS affiliate
+      reserve also pays 0.5% to that referrer, 0.1% to its upline, and 0.05% to the next upline.</li>
+  </ul>
+
+  <h2>The afKing subscription</h2>
+  <p>Hold a valid pass and you can subscribe to afKing: the contract executes one configured ticket or lootbox buy per
+    processed day from your deposited funds or claimable winnings while the balance lasts.</p>
+  <table>
+    <tr>
+      <td>What it does</td>
+      <td>Buys your chosen quantity of tickets, or a daily lootbox, every day</td>
+    </tr>
+    <tr>
+      <td>Funded by</td>
+      <td>ETH you deposit, or straight from your winnings</td>
+    </tr>
+    <tr>
+      <td>Pays</td>
+      <td>The 100 FLIP daily quest reward, plus a 10% ticket bonus, 15% at 10+/day</td>
+    </tr>
+    <tr>
+      <td>Keeps</td>
+      <td>Your streaks alive; subscribers are immune to the cashout curse, as is anyone holding an active deity, whale,
+        or lazy pass</td>
+    </tr>
+    <tr>
+      <td>Cap</td>
+      <td>1,000 subscribers</td>
+    </tr>
+  </table>
+  <p class="fine">The laziest possible way to be a model citizen.</p>
+
+  <div class="cta">
+    <strong>The floors matter more than they look.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Activity score moves lootbox payouts, Decimator odds, foil
+      boosts, and Degenerette payout targets.</p>
+    <a class="btn" href="/learn/quests/">Quests &amp; Activity Score</a>
+    <a class="btn ghost" href="/app/">Get a pass</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

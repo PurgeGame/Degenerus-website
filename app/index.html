@@ -31,7 +31,8 @@
     }
   }
   </script>
-  <script defer src="/js/ref.js"></script>
+  <!-- Capture ?ref before shared/nav.js removes it from the visible URL. -->
+  <script src="/js/ref.js"></script>
 </head>
 <body class="layout-basic">
   <div class="container">
@@ -77,10 +78,13 @@
            draw, and it is the only number that moves on its own. -->
       <gold-rush-headline></gold-rush-headline>
 
-      <!-- MINE FLIP lives in the NAV now (user call: small, top bar, lights up
-           when there is work). app-mine-flip.js injects itself there — same
-           runtime-mount pattern as the day/level chips. Queue order and
-           the auto-run rules live in app/work-queue.js. -->
+      <!-- The level-wide objective: live nextPrizePool against both the
+           progression threshold and the growth-market O/U line. -->
+      <app-pool-progress></app-pool-progress>
+
+      <!-- Mine FLIP has no top-bar control. app-mine-flip.js is a headless
+           probe that publishes ready crank work into the fixed pending-actions
+           tray at the bottom of the screen. -->
 
       <!-- Phase 64 basic-mode: daily drawing front and center.
            One bordered hero instrument (user call: coinflip lives INSIDE the
@@ -100,13 +104,29 @@
            row once BOTH the board and the flip have played out. -->
       <section class="jackpot-hero" aria-label="Purchase, daily jackpot draw, and coinflip">
         <div class="jackpot-hero__draw">
+          <h2 class="jackpot-hero__draw-title">DAILY JACKPOT</h2>
           <last-day-jackpot></last-day-jackpot>
           <replay-panel single-button></replay-panel>
+          <div class="jackpot-load-status" data-bind="jackpot-load-status"
+               aria-live="polite">(loading)</div>
+          <nav class="jackpot-day-history" data-bind="jackpot-day-history" hidden
+               aria-label="Jackpot day history">
+            <button type="button" data-bind="jackpot-day-prev"
+                    aria-label="View previous jackpot day">‹</button>
+            <span data-bind="jackpot-day-history-label">DAY —</span>
+            <button type="button" data-bind="jackpot-day-next"
+                    aria-label="View next jackpot day">›</button>
+          </nav>
           <div class="jackpot-hero__summary-slot" data-bind="day-summary-slot" hidden></div>
         </div>
         <app-daily-flip></app-daily-flip>
         <app-decimator-panel></app-decimator-panel>
       </section>
+
+      <!-- Headless level-transition watcher. Final Decimator/BAF drawings are
+           offered once in the compact bottom tray instead of occupying a
+           permanent dashboard card. -->
+      <app-jackpot-resolutions hidden aria-hidden="true"></app-jackpot-resolutions>
 
       <!-- Claims banner and aggregate winnings strip are intentionally
            unmounted. Gameplay-specific resolution stays with its owning
@@ -150,6 +170,7 @@
     <!-- Headless lootbox lifecycle controller. Ready boxes are exposed only
          through the same fixed bottom tray used by ticket packs. -->
     <app-box-strip tray-only></app-box-strip>
+    <app-day-history-replays></app-day-history-replays>
     <!-- A live sDGNRS burn settles one day later. Keep its claim/open step in
          the same durable reveal tray, including across page refreshes. -->
     <app-sdgnrs-redemptions></app-sdgnrs-redemptions>
@@ -164,20 +185,24 @@
   <script src="/shared/nav.js"></script>
   <script>initNav({ currentPage: 'app' });</script>
   <script type="module" src="/app/app/main.js"></script>
+  <script type="module" src="/app/components/app-referral-input.js"></script>
   <script type="module" src="/app/components/testnet-beta-banner.js"></script>
   <script type="module" src="/app/components/wallet-picker.js"></script>
   <script type="module" src="/app/components/app-onboarding.js"></script>
   <script type="module" src="/app/components/account-switcher.js"></script>
   <script type="module" src="/app/components/view-mode-banner.js"></script>
   <script type="module" src="/app/components/gold-rush-headline.js"></script>
+  <script type="module" src="/app/components/app-pool-progress.js"></script>
   <script type="module" src="/beta/components/replay-panel.js"></script>
   <script type="module" src="/app/components/last-day-jackpot.js"></script>
   <script type="module" src="/app/components/app-tickets-inventory.js"></script>
   <script type="module" src="/app/components/app-daily-flip.js"></script>
   <script type="module" src="/app/components/app-parimutuel-panel.js"></script>
   <script type="module" src="/app/components/app-mine-flip.js"></script>
+  <script type="module" src="/app/components/app-jackpot-resolutions.js"></script>
   <script type="module" src="/app/components/app-decimator-panel.js"></script>
   <script type="module" src="/app/components/app-box-strip.js"></script>
+  <script type="module" src="/app/components/app-day-history-replays.js"></script>
   <script type="module" src="/app/components/app-sdgnrs-redemptions.js"></script>
   <script type="module" src="/app/components/app-reveal-tray.js"></script>
   <script type="module" src="/app/components/reveal-overlay.js"></script>

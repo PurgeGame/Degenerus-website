@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tickets · Degenerus Mechanics</title>
+  <meta name="description"
+    content="The basic unit of Degenerus play: one ticket, four random traits, four jackpot entries. 100% of ticket ETH goes to prize pools." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Tickets</h1>
+  <p class="lede">A ticket is the basic unit of play. Every ticket carries four random traits and four entries into the
+    level's jackpot draws. 100% of ticket ETH routes to game prize pools; no purchase-time share goes to an operator
+    or team.</p>
+
+  <h2>What you get</h2>
+  <p>Each ticket rolls four traits, one per quadrant, and each trait is a symbol plus a color. The
+    <a href="/learn/jackpots/">jackpot draws</a> pay trait-matched holders, and rarer matches split the prize with
+    fewer people. One ticket counts as four jackpot entries; you can buy fractions, multiples, and future levels ahead
+    of time, which is how <a href="/learn/passes/">passes</a> work under the hood. Future-level tickets stay locked
+    in until their level's jackpot resolves; <a href="/learn/salvage-swap/">Salvage Swap</a> lets you sell an
+    unresolved position back if you change your mind.</p>
+
+  <div class="figrow">
+    <div class="tik" role="img" aria-label="Example ticket: gold Bitcoin, pink Gemini, blue spade, red six">
+      <div class="quad"><img src="/badges-circular/crypto_07_bitcoin_gold.svg" alt="" /></div>
+      <div class="quad"><img src="/badges-circular/zodiac_02_gemini_pink.svg" alt="" /></div>
+      <div class="quad"><img src="/badges-circular/cards_06_spade_blue.svg" alt="" /></div>
+      <div class="quad"><img src="/badges-circular/dice_05_6_red.svg" alt="" /></div>
+      <div class="tik-center"><img src="/whitepaper/flame-center.svg" alt="" /></div>
+    </div>
+    <div class="tik" role="img" aria-label="Example ticket: blue Ethereum, orange Leo, red heart, green three">
+      <div class="quad"><img src="/badges-circular/crypto_06_ethereum_blue.svg" alt="" /></div>
+      <div class="quad"><img src="/badges-circular/zodiac_04_leo_orange.svg" alt="" /></div>
+      <div class="quad"><img src="/badges-circular/cards_05_heart_red.svg" alt="" /></div>
+      <div class="quad"><img src="/badges-circular/dice_02_3_green.svg" alt="" /></div>
+      <div class="tik-center"><img src="/whitepaper/flame-center.svg" alt="" /></div>
+    </div>
+  </div>
+  <p class="figcap">Two tickets as minted. The quadrants always draw from the same four families: crypto, zodiac,
+    cards, dice. The left ticket's Bitcoin rolled gold, the ~1-in-128 color.</p>
+
+  <table>
+    <tr>
+      <th>Trait roll</th>
+      <th>Odds</th>
+    </tr>
+    <tr>
+      <td>Symbol, 1 of the 8 in that quadrant's family</td>
+      <td>12.5% each, uniform</td>
+    </tr>
+    <tr>
+      <td>Pink, purple, or green</td>
+      <td>25% each</td>
+    </tr>
+    <tr>
+      <td>Red</td>
+      <td>12.5%</td>
+    </tr>
+    <tr>
+      <td>Blue</td>
+      <td>6.25%</td>
+    </tr>
+    <tr>
+      <td>Orange</td>
+      <td>3.125%</td>
+    </tr>
+    <tr>
+      <td>Silver</td>
+      <td>2.344%</td>
+    </tr>
+    <tr>
+      <td>Gold</td>
+      <td>0.781%, 1 in 128</td>
+    </tr>
+  </table>
+  <p class="fine">Symbol and color roll independently, so a quadrant has 64 possible traits, weighted heavily toward the
+    common colors. Gold is 32x rarer than pink, purple, or green.</p>
+
+  <h2>What a ticket costs</h2>
+  <table>
+    <tr>
+      <th>Levels</th>
+      <th>Price per ticket</th>
+    </tr>
+    <tr>
+      <td>0&ndash;4</td>
+      <td>0.01 ETH</td>
+    </tr>
+    <tr>
+      <td>5&ndash;9</td>
+      <td>0.02 ETH</td>
+    </tr>
+    <tr>
+      <td>x01&ndash;x29 of each 100-level cycle</td>
+      <td>0.04 ETH</td>
+    </tr>
+    <tr>
+      <td>x30&ndash;x59</td>
+      <td>0.08 ETH</td>
+    </tr>
+    <tr>
+      <td>x60&ndash;x89</td>
+      <td>0.12 ETH</td>
+    </tr>
+    <tr>
+      <td>x90&ndash;x99</td>
+      <td>0.16 ETH</td>
+    </tr>
+    <tr>
+      <td>x00 century levels</td>
+      <td>0.24 ETH</td>
+    </tr>
+  </table>
+  <p>The ladder climbs through each 100-level cycle and then resets: a ticket at level 101 costs 0.04 ETH, the same as
+    one at level 11. Price alone does not set the size of the prize. A level's <a href="/learn/jackpots/">pool target</a> is
+    whatever the previous level raised, except for the target reset after each x00 century level. During a level's
+    redemption window, which opens once the pool hits its target and runs through the jackpot days, 1,000
+    <a href="/learn/flip/">FLIP</a> buys one ticket instead of paying ETH.</p>
+
+  <h2>Where the money goes</h2>
+  <table>
+    <tr>
+      <td>Prize pool for the level being entered</td>
+      <td>90%</td>
+    </tr>
+    <tr>
+      <td>Futurepool, backing daily prizes and future levels</td>
+      <td>10%</td>
+    </tr>
+    <tr>
+      <td>Operator, house, team</td>
+      <td>0%</td>
+    </tr>
+  </table>
+  <p class="fine">Affiliate commissions are minted as FLIP on top of the purchase, not carved out of it.</p>
+
+  <h2>Every ticket mints you FLIP</h2>
+  <p>Every ticket bought with ETH or winnings credits the buyer 100 <a href="/learn/flip/">FLIP</a>, a tenth of the
+    ticket's FLIP face value, on top of the jackpot entries. Two bonuses stack on the base:</p>
+  <table>
+    <tr>
+      <td>Base, every ticket</td>
+      <td>100 FLIP</td>
+    </tr>
+    <tr>
+      <td>Recycled winnings (3+ tickets' worth of claimable in one buy)</td>
+      <td>+100 FLIP per ticket's worth recycled</td>
+    </tr>
+    <tr>
+      <td>Bulk buy (10+ tickets)</td>
+      <td>+50 FLIP per ticket</td>
+    </tr>
+  </table>
+  <p class="fine">A qualifying recycled bulk buy can credit 250 FLIP per ticket, a quarter of face value. Credits arrive as a <a
+      href="/learn/coinflip/">coinflip</a> stake, so they ~double or die on the daily flip before they are yours to
+    spend. FLIP-paid tickets mint no FLIP back.</p>
+
+  <div class="cta">
+    <strong>Tickets are entries. Jackpots are the point.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">See what those four entries are actually drawing for.</p>
+    <a class="btn" href="/learn/jackpots/">The Jackpots</a>
+    <a class="btn ghost" href="/app/">Buy a ticket</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

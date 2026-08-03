@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Endgame · Degenerus Mechanics</title>
+  <meta name="description"
+    content="How Degenerus liveness timeouts, terminal jackpots, death bets, claims, and the 30-day final sweep work." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>The Endgame</h1>
+  <p class="lede">Degenerus has hard-coded liveness exits. If an unmet level sits in purchase phase too long, or the
+    advance machinery stalls past its safety limits, a permissionless call can end the game and distribute available
+    funds. The terminal pot may strengthen incentives to buy into a slow level, but it does not guarantee survival or
+    make any ticket profitable.</p>
+
+  <h2>What can trigger GAMEOVER</h2>
+  <table>
+    <tr>
+      <td>Level 0 inactivity</td>
+      <td>More than 365 days without completing the opening target</td>
+    </tr>
+    <tr>
+      <td>Later-level inactivity</td>
+      <td>More than 120 days in purchase phase with the target still unmet</td>
+    </tr>
+    <tr>
+      <td>Stuck RNG request</td>
+      <td>An outstanding advance request stalled for 14 days can activate liveness; a separate 120-day no-progress
+        deadman also works across jackpot and transition phases</td>
+    </tr>
+    <tr>
+      <td>Control</td>
+      <td>The conditions are contract rules. No admin can declare GAMEOVER early or cancel it once latched</td>
+    </tr>
+  </table>
+  <p class="fine">Meeting the pool target suppresses the ordinary inactivity exit. A stalled-randomness deadman can
+    still terminate a game whose advance path is broken. When fresh randomness cannot be obtained, the terminal path
+    can derive a fallback from previously verified VRF words, combined by a fixed contract rule no player can
+    select or steer.</p>
+
+  <h2>Where the money goes</h2>
+  <ol>
+    <li>Existing claimable winnings remain reserved. Prepaid afKing balances are added when their owners claim after
+      GAMEOVER.</li>
+    <li>If the game ends before level 10, deity owners are refunded what they paid, capped at 20 ETH each and by the
+      available budget, in purchase order.</li>
+    <li>Ten percent of the remaining distributable balance is offered to the terminal Decimator. If it has no
+      qualifying winners, that amount rejoins the ticket jackpot.</li>
+    <li>The remainder goes to a day-5-style trait jackpot for the phase-correct final ticket cohort. Empty trait
+      buckets can leave funds undistributed.</li>
+  </ol>
+  <p>Existing liabilities come first, ticket wins depend on traits and random selection, and some value can remain
+    in the contract. Not everything goes to the last ticket buyers. Players can claim during the 30-day
+    post-GAMEOVER window.</p>
+
+  <h2>The final sweep</h2>
+  <p>Thirty days after GAMEOVER, anyone can advance the cleanup. The contract first pays amounts owed to the vault,
+    sDGNRS, and GNRUS, then splits the remaining ETH and stETH roughly one-third to each. <strong>Unclaimed player
+    balances, winnings included, are forfeited at that point and later claims revert. If you won anything, claim it
+    within the 30 days.</strong></p>
+
+  <h2>Why the terminal pot changes incentives</h2>
+  <p>Ticket ETH cannot be withdrawn from the pools on demand. As participation falls, a visible terminal balance may
+    be shared among fewer eligible entries, which can make buying a slow level more attractive. That is a stabilizing
+    force, not a proof that someone will rescue the level: bankroll constraints, risk beliefs, trait variance,
+    opportunity cost, and coordination failure can still produce GAMEOVER.</p>
+
+  <h2>The death bet</h2>
+  <table>
+    <tr>
+      <td>Entry</td>
+      <td>Burn at least 1,000 FLIP while level &gt; 0 and the purchase target is not already met</td>
+    </tr>
+    <tr>
+      <td>Closing window</td>
+      <td>New burns are blocked with 7 or fewer days left on the level's death clock</td>
+    </tr>
+    <tr>
+      <td>Weight</td>
+      <td>Earlier burns receive up to 20x time weight, plus the activity multiplier on the first 200,000 FLIP</td>
+    </tr>
+    <tr>
+      <td>Payout</td>
+      <td>Only if GAMEOVER occurs at that level and the bettor's subbucket wins; winners split the terminal 10% pro
+        rata by weighted burn</td>
+    </tr>
+    <tr>
+      <td>If the level completes</td>
+      <td>The burned FLIP is gone and that level's terminal position never pays</td>
+    </tr>
+  </table>
+
+  <h2>What remains risky</h2>
+  <p>Deposits are non-withdrawable except through defined winnings and salvage paths. Individual players can lose;
+    nominal multipliers are not guarantees. Terminal settlement also retains smart-contract risk and dependencies on
+    Chainlink entropy and Lido-held stETH. See the <a href="/learn/trustless/">trust model</a> for the exact control
+    and dependency boundaries.</p>
+
+  <div class="cta">
+    <strong>Read the incentives, not a promise.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">The game-theory paper explains why the terminal pot may attract
+      rescue capital, along with the assumptions and failure modes.</p>
+    <a class="btn" href="/theory/">Game Theory</a>
+    <a class="btn ghost" href="/learn/jackpots/">How levels normally end</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

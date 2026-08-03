@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lootboxes · Degenerus Mechanics</title>
+  <meta name="description"
+    content="Degenerus lootboxes: randomized tickets, tokens, and Degenerette spins. Contract face-value multipliers scale from 90% to a 145% cap with activity score." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Mechanics</div>
+  </header>
+
+  <div class="crumb"><a href="/learn/">&larr; All mechanics</a></div>
+
+  <h1>Lootboxes</h1>
+  <p class="lede">A lootbox is an ETH-denominated box, revealed from a future random word. The contract applies an
+    activity-based multiplier to its prize budget: 90% at score zero, 100% at 0.60, and up to 145%. That multiplier
+    is not a guaranteed cash return; outcomes are volatile and often pay tickets, tokens, or spins.</p>
+
+  <h2>What's inside</h2>
+  <table>
+    <tr>
+      <th>Chance</th>
+      <th>Prize</th>
+    </tr>
+    <tr>
+      <td>40%</td>
+      <td>Tickets, with a variance roll from about 0.6x the box's value up to 11x, or 19x when the roll lands on
+        far-future levels</td>
+    </tr>
+    <tr>
+      <td>15%</td>
+      <td>DGNRS, drawn from the lootbox allocation of the protocol token</td>
+    </tr>
+    <tr>
+      <td>15%</td>
+      <td>FLIP</td>
+    </tr>
+    <tr>
+      <td>15%</td>
+      <td>A free <a href="/learn/degenerette/">Degenerette</a> spin staking WWXRP</td>
+    </tr>
+    <tr>
+      <td>10%</td>
+      <td>Three FLIP Degenerette spins</td>
+    </tr>
+    <tr>
+      <td>5%</td>
+      <td>An ETH Degenerette spin</td>
+    </tr>
+  </table>
+  <p class="fine">After the boon set-aside, a multiplier-adjusted box above 0.5 ETH splits into two independent
+    outcome rolls. Ticket prizes generally target upcoming levels rather than paying withdrawable ETH.</p>
+  <p>A tenth of the box's prize budget (capped at 1 ETH) funds a side boon draw; the deposited ETH itself still
+    routes exactly as the table above shows. A <a href="/learn/boons/">boon</a> is a single-use bonus like free
+    tickets on your next buy, a pass discount, or a quest-streak shield.</p>
+
+  <h2>The payout curve is public</h2>
+  <table>
+    <tr>
+      <th>Activity score</th>
+      <th>Contract face-value multiplier</th>
+    </tr>
+    <tr>
+      <td>0.00</td>
+      <td>90%</td>
+    </tr>
+    <tr>
+      <td>0.60</td>
+      <td>100%</td>
+    </tr>
+    <tr>
+      <td>1.00</td>
+      <td>~105%</td>
+    </tr>
+    <tr>
+      <td>2.00</td>
+      <td>~116%</td>
+    </tr>
+    <tr>
+      <td>3.00</td>
+      <td>~128%</td>
+    </tr>
+    <tr>
+      <td>4.00</td>
+      <td>139.5%</td>
+    </tr>
+    <tr>
+      <td>Cap</td>
+      <td>145%</td>
+    </tr>
+  </table>
+  <p>The score on the first deposit into a pending box is frozen for that box. The portion above the neutral 100%
+    multiplier applies to at most 10 ETH of lootbox deposits per player per level. A higher multiplier improves the
+    nominal prize budget, but it does not remove outcome variance, token-price risk, or the delay on future tickets.</p>
+
+  <h2>Where the money goes</h2>
+  <table>
+    <tr>
+      <td>Futurepool, backing upcoming levels and daily prizes</td>
+      <td>90%</td>
+    </tr>
+    <tr>
+      <td>Pool for the level being filled</td>
+      <td>10%</td>
+    </tr>
+  </table>
+  <p class="fine">That is the standard split.</p>
+
+  <div class="cta">
+    <strong>Want the score that unlocks the good boxes?</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">Activity score comes from playing daily. Here is exactly how it
+      accrues.</p>
+    <a class="btn" href="/learn/quests/">Quests &amp; Activity Score</a>
+    <a class="btn ghost" href="/app/">Open a box</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot; <a href="/whitepaper/">Whitepaper</a> &middot;
+    <a href="/theory/">Game Theory</a> &middot; <a href="https://github.com/PurgeGame/degenerus-protocol">Contracts</a>
+  </footer>
+</body>
+
+</html>

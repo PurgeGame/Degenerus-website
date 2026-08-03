@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Starter Tutorial · Degenerus</title>
+  <meta name="description"
+    content="A short, read-only Degenerus tour using the public sDGNRS protocol wallet." />
+  <link rel="stylesheet" href="/learn/learn.css" />
+  <script defer src="/js/ref.js"></script>
+</head>
+
+<body>
+  <header class="brand">
+    <img src="/whitepaper/flame-logo.svg" alt="Degenerus" />
+    <div class="brand-name">DEGENERUS PROTOCOL</div>
+    <div class="brand-sub">Starter Tutorial</div>
+  </header>
+
+  <div class="crumb"><a href="/app/">&larr; Back to the app</a></div>
+
+  <h1>Meet the sDGNRS wallet</h1>
+  <p class="lede">You can explore Degenerus before connecting anything. The app uses the public sDGNRS protocol
+    wallet as its read-only example, so every number you see comes from a real indexed address.</p>
+
+  <section class="tutorial-wallet" aria-labelledby="tutorial-wallet-title">
+    <img src="/whitepaper/flame-logo.svg" alt="">
+    <div>
+      <div class="figlab" id="tutorial-wallet-title">PUBLIC EXAMPLE WALLET</div>
+      <strong>sDGNRS</strong>
+      <code data-bind="tutorial-wallet-address">Loading address…</code>
+    </div>
+  </section>
+
+  <h2>What to look at</h2>
+  <ol>
+    <li><strong>Jackpot:</strong> scratch through the latest public drawing and see how its ticket traits line up.</li>
+    <li><strong>Tickets:</strong> browse the wallet’s level inventory; gold traits are listed first.</li>
+    <li><strong>Quests and side games:</strong> inspect their state without signing or spending anything.</li>
+  </ol>
+
+  <div class="cta">
+    <strong>This tutorial is intentionally small for now.</strong>
+    <p class="fine" style="margin: 0.3rem 0 0.5rem;">We can add guided steps here as the player experience settles.</p>
+    <a class="btn" data-bind="tutorial-open-wallet" href="/app/">Open the sDGNRS wallet</a>
+    <a class="btn ghost" data-bind="tutorial-explorer" href="/app/">View on explorer</a>
+    <a class="btn ghost" href="/learn/sdgnrs/">What is sDGNRS?</a>
+  </div>
+
+  <footer>
+    Part of the <a href="/learn/">Degenerus mechanics series</a> &middot;
+    <a href="/whitepaper/">Whitepaper</a> &middot; <a href="/app/">Play</a>
+  </footer>
+
+  <script type="module">
+    import { CHAIN, CONTRACTS } from '/app/app/chain-config.js';
+
+    const address = CONTRACTS.SDGNRS;
+    const addressEl = document.querySelector('[data-bind="tutorial-wallet-address"]');
+    const appLink = document.querySelector('[data-bind="tutorial-open-wallet"]');
+    const explorerLink = document.querySelector('[data-bind="tutorial-explorer"]');
+    if (address) {
+      if (addressEl) addressEl.textContent = address;
+      if (appLink) appLink.href = `/app/?as=${encodeURIComponent(address)}`;
+      if (explorerLink) explorerLink.href = `${CHAIN.etherscanBase}/address/${address}`;
+    } else {
+      if (addressEl) addressEl.textContent = 'Available after deployment';
+      if (explorerLink) explorerLink.hidden = true;
+    }
+  </script>
+</body>
+
+</html>
