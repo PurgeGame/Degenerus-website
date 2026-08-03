@@ -1040,7 +1040,12 @@ class AppQuestPanel extends HTMLElement {
       // a purchase made now will actually enter.
       const day = this.#currentDay();
       const [data, defs, gameState, liveBoard] = await Promise.all([
-        fetchJSON(`/player/${addr}`),
+        // A wallet does not have a /player row until the indexer observes its
+        // first event. That 404 is normal for a new player and must not throw
+        // away the deployment-local quest board we can read directly from the
+        // contract. DB-only extras (score breakdown / unified afKing streak)
+        // remain empty until the row appears on a later poll.
+        fetchJSON(`/player/${addr}`).catch(() => null),
         day != null ? fetchJSON(`/game/quests/day/${day}`).catch(() => null) : Promise.resolve(null),
         fetchJSON('/game/state').catch(() => null),
         readLiveQuestBoard(addr).catch(() => null),

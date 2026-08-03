@@ -7718,6 +7718,99 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   color: var(--accent-secondary, #ffc04d);
 }
 
+.dec-presale {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.42rem;
+  min-height: 2.08rem;
+  padding: 0.22rem 0.44rem;
+  border: 1px solid rgba(192, 203, 219, 0.18);
+  border-radius: 9px;
+  background: linear-gradient(135deg, rgba(214, 222, 233, 0.08), rgba(88, 99, 118, 0.035));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+.dec-presale[hidden] { display: none !important; }
+.dec-presale__label {
+  display: grid;
+  min-width: 0;
+  gap: 0.08rem;
+}
+.dec-presale__label strong {
+  color: var(--text-primary, #eee);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.045em;
+}
+.dec-presale__label span {
+  color: #8fb99d;
+  font-size: 0.57rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.dec-presale__controls {
+  display: inline-grid;
+  grid-template-columns: 3.8rem auto auto;
+  align-items: center;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(4, 8, 16, 0.42);
+}
+.dec-presale__controls input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 1.8rem;
+  padding: 0.3rem 0.34rem;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-primary, #eee);
+  background: transparent;
+  font: 800 0.72rem/1.1 var(--font-mono, "Roboto Mono", monospace);
+  text-align: right;
+}
+.dec-presale__controls > span {
+  padding: 0 0.3rem 0 0.08rem;
+  color: #8fb99d;
+  font-size: 0.55rem;
+  font-weight: 850;
+}
+.dec-presale__controls button {
+  align-self: stretch;
+  min-height: 1.8rem;
+  padding: 0.28rem 0.38rem;
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0;
+  color: #a7d9b8;
+  background: rgba(80, 112, 92, 0.13);
+  font-size: 0.57rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+.dec-presale__controls button:hover:not(:disabled) {
+  color: #d1fae5;
+  background: rgba(34, 197, 94, 0.18);
+}
+.dec-presale__controls button:disabled,
+.dec-presale__controls input:disabled { opacity: 0.42; cursor: not-allowed; }
+.dec-presale--selected {
+  border-color: rgba(74, 222, 128, 0.38);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(88, 99, 118, 0.035));
+  box-shadow: inset 0 1px 0 rgba(220, 252, 231, 0.05), 0 0 13px rgba(34, 197, 94, 0.07);
+}
+.dec-presale--over-limit .dec-presale__controls input {
+  border-color: rgba(248, 113, 113, 0.75);
+  color: #fecaca;
+}
+
+@media (max-width: 380px) {
+  .dec-presale__controls { grid-template-columns: 3.4rem auto auto; }
+}
+
 /* ============================================================================
    DAY SUMMARY CTA (.ldj-results-cta) — appears only after the whole
    board (bonus roll included) + the coin flip play out; opens the full

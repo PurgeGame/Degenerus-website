@@ -39,6 +39,10 @@ function makeFakeContract(opts = {}) {
   const calls = {
     purchase: [],
     purchaseStatic: [],
+    buyLootboxAndPresaleBox: [],
+    buyLootboxAndPresaleBoxStatic: [],
+    buyPresaleBox: [],
+    buyPresaleBoxStatic: [],
     openBox: [],
     openBoxStatic: [],
     lootboxStatus: [],
@@ -46,6 +50,8 @@ function makeFakeContract(opts = {}) {
   };
   const staticCallStub = (methodName) => async (...args) => {
     if (methodName === 'purchase') calls.purchaseStatic.push(args);
+    if (methodName === 'buyLootboxAndPresaleBox') calls.buyLootboxAndPresaleBoxStatic.push(args);
+    if (methodName === 'buyPresaleBox') calls.buyPresaleBoxStatic.push(args);
     if (methodName === 'openBox') calls.openBoxStatic.push(args);
     if (opts.staticCallShouldRevert?.[methodName]) {
       const err = new Error('static-call revert');
@@ -62,6 +68,23 @@ function makeFakeContract(opts = {}) {
       },
       { staticCall: staticCallStub('purchase') }
     ),
+    buyLootboxAndPresaleBox: Object.assign(
+      async (...args) => {
+        calls.buyLootboxAndPresaleBox.push(args);
+        return makeFakeTx(makeFakeReceipt(opts.combinedPresaleLogs));
+      },
+      { staticCall: staticCallStub('buyLootboxAndPresaleBox') }
+    ),
+    buyPresaleBox: Object.assign(
+      async (...args) => {
+        calls.buyPresaleBox.push(args);
+        return makeFakeTx(makeFakeReceipt(opts.presaleLogs));
+      },
+      { staticCall: staticCallStub('buyPresaleBox') }
+    ),
+    lootboxPresaleActiveFlag: async () => opts.presaleActive ?? true,
+    presaleBoxCreditOf: async () => opts.presaleCredit ?? (2n * lootboxMod.PRESALE_BOX_MIN_WEI),
+    presaleBoxEthRemaining: async () => opts.presaleRemaining ?? (50n * 10n ** 18n),
     openBox: Object.assign(
       async (...args) => {
         calls.openBox.push(args);
@@ -304,6 +327,66 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     const [args] = lastFakeContract._calls.purchase;
     assert.equal(args[6].value, lootboxMod.LOOTBOX_MIN_WEI + ticketCostWei,
       'msg.value = lootbox leg + ticket leg');
+  });
+
+  test('purchaseEth attaches a presale box through the deployed combined selector', async () => {
+    const ticketCostWei = 4n * lootboxMod.PRESALE_BOX_MIN_WEI;
+    const presaleBoxAmountWei = lootboxMod.PRESALE_BOX_MIN_WEI;
+    const out = await lootboxMod.purchaseEth({
+      ticketQuantity: 1,
+      lootboxQuantity: 0,
+      lootBoxAmountWei: 0n,
+      ticketCostWei,
+      presaleBoxAmountWei,
+    });
+
+    assert.equal(lastFakeContract._calls.purchase.length, 0,
+      'the ordinary purchase selector is not used');
+    assert.deepEqual(lastFakeContract._calls.buyLootboxAndPresaleBox[0], [
+      CONNECTED,
+      400n,
+      0n,
+      '0x0000000000000000000000000000000000000000000000000000000000000000',
+      0,
+      presaleBoxAmountWei,
+      { value: ticketCostWei + presaleBoxAmountWei },
+    ]);
+    assert.deepEqual(
+      lastFakeContract._calls.buyLootboxAndPresaleBoxStatic[0],
+      lastFakeContract._calls.buyLootboxAndPresaleBox[0],
+      'the exact value-bearing combined call is simulated before send',
+    );
+    assert.equal(out.payment.totalCostWei, ticketCostWei + presaleBoxAmountWei);
+  });
+
+  test('standalone presale boxes read the live cap, simulate, send, and parse their index', async () => {
+    const amount = lootboxMod.PRESALE_BOX_MIN_WEI;
+    lastFakeContract = makeFakeContract({
+      presaleCredit: 2n * amount,
+      presaleRemaining: 3n * amount,
+      presaleLogs: [{
+        parsed: {
+          name: 'PresaleBoxBuy',
+          args: { buyer: CONNECTED, index: 7n, amount, closing: false },
+        },
+      }],
+    });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+
+    assert.deepEqual(await lootboxMod.readPresaleBoxState({ player: CONNECTED }), {
+      active: true,
+      creditWei: 2n * amount,
+      remainingWei: 3n * amount,
+      maxBoxWei: 2n * amount,
+    });
+    const out = await lootboxMod.purchasePresaleBox({ boxAmountWei: amount });
+    assert.deepEqual(lastFakeContract._calls.buyPresaleBox[0], [
+      CONNECTED, amount, { value: amount },
+    ]);
+    assert.deepEqual(
+      lootboxMod.parsePresaleBoxBuyFromReceipt(out.receipt, out.contract),
+      [{ buyer: CONNECTED, lootboxIndex: 7n, amountWei: amount, closing: false }],
+    );
   });
 
   test('purchaseEth static-call revert throws structured error with userMessage and code', async () => {

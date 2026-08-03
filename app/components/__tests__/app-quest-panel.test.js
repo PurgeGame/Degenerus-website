@@ -453,6 +453,38 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
+  test('a new player still sees the current quests while its player row returns 404', async () => {
+    storeMod.update('app.lastDay', { day: 3, roll1: { purchaseLevel: 1 } });
+    _fetchHandler = async (url) => {
+      const u = String(url);
+      if (u.includes(`/player/${CONNECTED}`)) throw new Error('API 404: player not found');
+      if (u.includes('/game/quests/day/3')) {
+        return {
+          day: 3,
+          quests: [
+            { slot: 0, questType: 1, flags: 0, target: '10000000000' },
+            { slot: 1, questType: 6, flags: 0, target: '20000000000' },
+          ],
+        };
+      }
+      if (u.includes('/game/state')) {
+        return { level: 0, phase: 'PURCHASE', jackpotPhaseFlag: false };
+      }
+      return null;
+    };
+
+    const el = instantiate();
+    await settle(40);
+
+    const slots = el.querySelectorAll('.qst-slot');
+    assert.equal(slots.length, 3,
+      'two current daily definitions plus the stable level placeholder render');
+    assert.match(slots[0].textContent, /Buy tickets or lootboxes/);
+    assert.match(slots[1].textContent, /Lootbox/);
+    assert.doesNotMatch(el.textContent, /Could not load quests/);
+    el.disconnectedCallback();
+  });
+
   test('Quest slot renders questName + progress via textContent (T-58-18)', async () => {
     _fetchHandler = async () => makeQuestsPayload();
     const el = instantiate();

@@ -428,7 +428,7 @@ class AppDecimatorPanel extends HTMLElement {
         <div class="dec-presale" data-bind="dec-presale-row" hidden>
           <div class="dec-presale__label">
             <strong>PRESALE BOX</strong>
-            <span data-bind="dec-presale-available">AVAILABLE —</span>
+            <span data-bind="dec-presale-available">— ETH AVAILABLE</span>
           </div>
           <div class="dec-presale__controls">
             <input type="number" name="dec-presale-box-eth"
@@ -861,8 +861,13 @@ class AppDecimatorPanel extends HTMLElement {
       && BigInt(this.#presaleState?.remainingWei ?? 0n) > 0n
       && get('ui.mode') !== 'combined'
     );
-    row.hidden = !live;
-    if (!live) {
+    const foilSelected = this.#foilWanted();
+    // The deployed combined selector has no foil flag. Once foil is selected,
+    // remove the incompatible presale leg instead of leaving behind a disabled
+    // control that looks like a broken option.
+    row.hidden = !live || foilSelected;
+    if (!live || foilSelected) {
+      if (foilSelected) input.value = '0';
       if (this.#presaleState && this.#presaleAddress === buyerKey && !this.#presaleState.active) {
         input.value = '0';
       }
@@ -870,10 +875,10 @@ class AppDecimatorPanel extends HTMLElement {
     }
 
     const available = this.#presaleAvailableForDraft(mintCostWei);
-    availableEl.textContent = `AVAILABLE ${formatPurchaseEth(available)} ETH`;
+    availableEl.textContent = `${formatPurchaseEth(available)} ETH AVAILABLE`;
     input.max = formatPurchaseEth(available);
     input.setAttribute?.('max', input.max);
-    const unavailable = this.#flipModeEnabled() || this.#foilWanted();
+    const unavailable = this.#flipModeEnabled();
     input.disabled = unavailable;
     maxButton.disabled = unavailable || available < PRESALE_BOX_MIN_WEI;
     const wanted = this.#presaleWantedWei();
@@ -1758,9 +1763,29 @@ class AppDecimatorPanel extends HTMLElement {
         this.#renderError('Minimum lootbox spend is 0.01 ETH.');
         return;
       }
+      const presaleInput = this.querySelector('[name="dec-presale-box-eth"]');
+      const presaleRaw = presaleInput == null || presaleInput.value == null
+        || String(presaleInput.value).trim() === '' ? '0' : String(presaleInput.value);
+      const presaleFloat = Number(presaleRaw);
+      if (!Number.isFinite(presaleFloat) || presaleFloat < 0) {
+        this.#renderError('Presale box ETH must be 0 or at least 0.01.');
+        return;
+      }
+      const presaleBoxAmountWei = presaleFloat > 0
+        ? BigInt(Math.round(presaleFloat * 1e18)) / ETH_DIVISOR
+        : 0n;
+      if (presaleBoxAmountWei > 0n && presaleBoxAmountWei < PRESALE_BOX_MIN_WEI) {
+        this.#renderError('Minimum presale box size is 0.01 ETH.');
+        return;
+      }
       let foilWanted = this.#foilWanted();
-      if (ticketQuantity < 0 || (ticketQuantity <= 0 && lootBoxAmountWei <= 0n && !foilWanted)) {
-        this.#renderError('Enter a ticket amount (0.25 minimum), a lootbox ETH amount, or check the foil pack.');
+      if (foilWanted && presaleBoxAmountWei > 0n) {
+        this.#renderError('Buy the foil pack separately from a presale box.');
+        return;
+      }
+      if (ticketQuantity < 0 || (ticketQuantity <= 0 && lootBoxAmountWei <= 0n
+        && presaleBoxAmountWei <= 0n && !foilWanted)) {
+        this.#renderError('Enter tickets, a lootbox amount, a presale box amount, or select the foil pack.');
         return;
       }
 
@@ -1807,10 +1832,37 @@ class AppDecimatorPanel extends HTMLElement {
         }
       }
 
-      const { receipt, contract } = await purchaseEth({
-        ticketQuantity, lootboxQuantity: 0, affiliateCode, ticketCostWei, lootBoxAmountWei,
-        foil: foilWanted, foilCostWei, preferClaimable: this.#preferClaimable,
-      });
+      const mintCostWei = ticketCostWei + lootBoxAmountWei;
+      if (presaleBoxAmountWei > 0n) {
+        let livePresale = null;
+        try { livePresale = await readPresaleBoxState({ player: buyer }); }
+        catch (_e) { livePresale = null; }
+        if (!livePresale?.active || livePresale.remainingWei <= 0n) {
+          this.#renderError('Presale boxes are not available right now.');
+          return;
+        }
+        this.#presaleAddress = String(buyer || '').toLowerCase();
+        this.#presaleState = livePresale;
+        const available = presaleBoxAvailableWei(livePresale, mintCostWei);
+        if (presaleBoxAmountWei > available) {
+          this.#renderError(`Presale box limit is ${formatPurchaseEth(available)} ETH for this purchase.`);
+          this.#renderPresaleRow(mintCostWei);
+          return;
+        }
+      }
+
+      const hasMintPurchase = ticketQuantity > 0 || lootBoxAmountWei > 0n || foilWanted;
+      const { receipt, contract } = presaleBoxAmountWei > 0n && !hasMintPurchase
+        ? await purchasePresaleBox({
+            boxAmountWei: presaleBoxAmountWei,
+            player: buyer,
+            preferClaimable: this.#preferClaimable,
+          })
+        : await purchaseEth({
+            ticketQuantity, lootboxQuantity: 0, affiliateCode, ticketCostWei, lootBoxAmountWei,
+            foil: foilWanted, foilCostWei, presaleBoxAmountWei,
+            preferClaimable: this.#preferClaimable,
+          });
 
       // Receipt-log-first reveal plumbing (CF-05):
       //   - LootBoxIdx entries → pending boxes for the app-root box controller
@@ -1821,8 +1873,18 @@ class AppDecimatorPanel extends HTMLElement {
       //     level draw).
       let boxes = [];
       try {
-        boxes = parseLootboxIdxFromReceipt(receipt, contract)
-          .map((b) => ({ index: Number(b.lootboxIndex), day: b.day != null ? Number(b.day) : null }));
+        const byIndex = new Map();
+        for (const b of parseLootboxIdxFromReceipt(receipt, contract)) {
+          byIndex.set(Number(b.lootboxIndex), {
+            index: Number(b.lootboxIndex),
+            day: b.day != null ? Number(b.day) : null,
+          });
+        }
+        for (const b of parsePresaleBoxBuyFromReceipt(receipt, contract)) {
+          const index = Number(b.lootboxIndex);
+          if (!byIndex.has(index)) byIndex.set(index, { index, day: null });
+        }
+        boxes = [...byIndex.values()];
       } catch (_e) { boxes = []; }
       try {
         // Foil leg confirmed by its receipt event (NOT optimistic — the tx
@@ -1886,18 +1948,20 @@ class AppDecimatorPanel extends HTMLElement {
       // <app-box-strip tray-only> consumes `boxes` at the document level.
       try {
         this.dispatchEvent(new CustomEvent('app-decimator:tx-confirmed', {
-          detail: { ticketQuantity, lootBoxAmountWei, boxes },
+          detail: { ticketQuantity, lootBoxAmountWei, presaleBoxAmountWei, boxes },
           bubbles: true,
         }));
       } catch (_e) { /* defensive — fakeDOM CustomEvent shim */ }
 
       // Every successful first purchase closes the referral slot, including a
       // deliberate blank code (the contract assigns its no-referrer sink).
-      if (this.#affiliateAssigned === false) {
+      if (hasMintPurchase && this.#affiliateAssigned === false) {
         this.#affiliateLocallyAssigned.add(String(buyer || '').toLowerCase());
         this.#affiliateAssigned = true;
         this.#renderAffiliateInput();
       }
+
+      if (presaleBoxAmountWei > 0n && presaleInput) presaleInput.value = '0';
 
       // 250ms post-confirm refetch (CF-06) — additive to the 30s poll tick.
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);

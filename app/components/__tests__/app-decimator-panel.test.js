@@ -359,9 +359,15 @@ function makeFakeReceipt(logs) { return { status: 1, hash: '0xreceipt', logs: lo
 function makeFakeTx(receipt) { return { hash: '0xtx', wait: async () => receipt }; }
 
 function makeFakePurchaseContract(opts = {}) {
-  const calls = { purchase: [], purchaseStatic: [], purchaseCoin: [] };
+  const calls = {
+    purchase: [], purchaseStatic: [], purchaseCoin: [],
+    buyLootboxAndPresaleBox: [], buyLootboxAndPresaleBoxStatic: [],
+    buyPresaleBox: [], buyPresaleBoxStatic: [],
+  };
   const stk = (name) => async (...args) => {
     if (name === 'purchase') calls.purchaseStatic.push(args);
+    if (name === 'buyLootboxAndPresaleBox') calls.buyLootboxAndPresaleBoxStatic.push(args);
+    if (name === 'buyPresaleBox') calls.buyPresaleBoxStatic.push(args);
     const isFoilAvailabilityProbe = name === 'purchase'
       && args[1] === 0n
       && args[2] === 0n
@@ -403,6 +409,34 @@ function makeFakePurchaseContract(opts = {}) {
       },
       { staticCall: stk('purchaseCoin') }
     ),
+    buyLootboxAndPresaleBox: Object.assign(
+      async (...args) => {
+        calls.buyLootboxAndPresaleBox.push(args);
+        txCounter += 1n;
+        return makeFakeTx(makeFakeReceipt([
+          { parsed: { name: 'LootBoxIdx', args: { index: txCounter, day: 1n, buyer: args[0] } } },
+          { parsed: { name: 'PresaleBoxBuy', args: {
+            buyer: args[0], index: txCounter, amount: args[5], closing: false,
+          } } },
+        ]));
+      },
+      { staticCall: stk('buyLootboxAndPresaleBox') }
+    ),
+    buyPresaleBox: Object.assign(
+      async (...args) => {
+        calls.buyPresaleBox.push(args);
+        txCounter += 1n;
+        return makeFakeTx(makeFakeReceipt([
+          { parsed: { name: 'PresaleBoxBuy', args: {
+            buyer: args[0], index: txCounter, amount: args[1], closing: false,
+          } } },
+        ]));
+      },
+      { staticCall: stk('buyPresaleBox') }
+    ),
+    lootboxPresaleActiveFlag: async () => Boolean(opts.presaleActive),
+    presaleBoxCreditOf: async () => BigInt(opts.presaleCredit ?? 0n),
+    presaleBoxEthRemaining: async () => BigInt(opts.presaleRemaining ?? 0n),
     claimableWinningsOf: async () => BigInt(opts.claimableRaw ?? 0n),
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
@@ -1489,6 +1523,84 @@ describe('combined ticket + lootbox buy', () => {
     const args = fakeContract._calls.purchase[0];
     assert.equal(args[1], 0n, 'the lootbox choice does not add tickets');
     assert.equal(args[2], target, 'the submitted lootbox spend is the exact displayed minimum');
+    el.disconnectedCallback();
+  });
+
+  test('active presale appears and attaches a box using credit earned by this same purchase', async () => {
+    const min = lootboxMod.PRESALE_BOX_MIN_WEI;
+    const fakeContract = makeFakePurchaseContract({
+      presaleActive: true,
+      presaleCredit: 0n,
+      presaleRemaining: 50n * 10n ** 18n / 1_000_000n,
+    });
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    const el = instantiate();
+    await settle(80);
+
+    const row = el.querySelector('[data-bind="dec-presale-row"]');
+    const tickets = el.querySelector('[name="dec-tickets"]');
+    const input = el.querySelector('[name="dec-presale-box-eth"]');
+    const max = el.querySelector('[data-bind="dec-presale-max"]');
+    assert.equal(row.hidden, false, 'the live contract latch reveals the option even before credit exists');
+    assert.equal(max.disabled, true, 'zero current/draft credit cannot create a box yet');
+
+    const foil = el.querySelector('[data-bind="dec-foil-check"]');
+    foil.checked = true;
+    foil.dispatchEvent({ type: 'change' });
+    assert.equal(row.hidden, true, 'selecting the incompatible foil leg removes the presale row');
+    assert.equal(input.value, '0', 'hiding the presale row also clears its quote');
+    foil.checked = false;
+    foil.dispatchEvent({ type: 'change' });
+    assert.equal(row.hidden, false, 'the presale row returns when foil is unchecked');
+
+    tickets.value = '1'; // level-12 ticket costs 0.04 ETH and earns 0.01 box credit
+    tickets.dispatchEvent({ type: 'input' });
+    assert.equal(el.querySelector('[data-bind="dec-presale-available"]').textContent,
+      '0.01 ETH AVAILABLE');
+    assert.equal(max.disabled, false);
+    max.dispatchEvent({ type: 'click' });
+    assert.equal(input.value, '0.01');
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent,
+      'Buy in + presale box');
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.05 ETH');
+
+    let confirmed = null;
+    el.addEventListener('app-decimator:tx-confirmed', (event) => { confirmed = event.detail; });
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
+    await settle(100);
+
+    assert.equal(fakeContract._calls.purchase.length, 0);
+    assert.equal(fakeContract._calls.buyLootboxAndPresaleBox.length, 1,
+      'the normal purchase and presale box ride the one deployed combined selector');
+    const args = fakeContract._calls.buyLootboxAndPresaleBox[0];
+    assert.equal(args[1], 400n);
+    assert.equal(args[5], min);
+    assert.equal(args[6].value, 5n * min);
+    assert.equal(confirmed?.boxes?.length, 1,
+      'regular and presale events sharing one RNG index publish one pending box');
+    assert.equal(confirmed?.presaleBoxAmountWei, min);
+    el.disconnectedCallback();
+  });
+
+  test('banked presale credit can buy a standalone box from the same compact row', async () => {
+    const min = lootboxMod.PRESALE_BOX_MIN_WEI;
+    const fakeContract = makeFakePurchaseContract({
+      presaleActive: true,
+      presaleCredit: 2n * min,
+      presaleRemaining: 50n * 10n ** 18n / 1_000_000n,
+    });
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    const el = instantiate();
+    await settle(80);
+
+    el.querySelector('[data-bind="dec-presale-max"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[name="dec-presale-box-eth"]').value, '0.02');
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
+    await settle(100);
+
+    assert.equal(fakeContract._calls.buyPresaleBox.length, 1);
+    assert.equal(fakeContract._calls.buyLootboxAndPresaleBox.length, 0);
+    assert.equal(fakeContract._calls.buyPresaleBox[0][1], 2n * min);
     el.disconnectedCallback();
   });
 });
