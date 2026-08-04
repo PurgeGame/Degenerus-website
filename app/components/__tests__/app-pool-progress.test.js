@@ -20,6 +20,7 @@ const {
   jackpotPrizePoolWei,
   phaseStripModel,
   prizePoolTargetForLevel,
+  transitionJackpotCountdownModel,
   LEVEL_ONE_TARGET_WEI,
 } = await import('../app-pool-progress.js');
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -60,7 +61,7 @@ describe('next-pool progression model', () => {
     assert.ok(below.fillPercent < below.targetPercent);
     assert.ok(below.targetPercent < below.growthPercent);
     assert.ok(below.growthPercent < 100, 'headroom keeps the furthest marker inside the track');
-    assert.equal(below.referenceKind, 'TARGET');
+    assert.equal(below.referenceKind, 'GUARANTEE');
     assert.equal(below.referenceWei, 120n);
     assert.equal(below.referencePercent, below.targetPercent,
       'before progression the amount remains attached to its target');
@@ -194,6 +195,35 @@ describe('phase strip copy', () => {
   });
 });
 
+describe('special level-transition jackpot countdown', () => {
+  test('names Decimator only on the final x4 jackpot draw', () => {
+    assert.deepEqual(transitionJackpotCountdownModel({
+      level: 34, jackpot: true, finalDraw: true,
+    }), {
+      kind: 'decimator', label: 'DECIMATOR JACKPOT IN:', level: 35,
+    });
+    assert.equal(transitionJackpotCountdownModel({
+      level: 34, jackpot: true, finalDraw: false,
+    }), null, 'the target-driven purchase/early-jackpot period cannot quote a false transition time');
+    assert.equal(transitionJackpotCountdownModel({
+      level: 94, jackpot: true, finalDraw: true,
+    }), null, 'level 95 is the intentional Decimator exception');
+  });
+
+  test('names BAF on the day before x10 and combines both drawings before x100', () => {
+    assert.deepEqual(transitionJackpotCountdownModel({
+      level: 39, jackpot: true, finalDraw: true,
+    }), {
+      kind: 'baf', label: 'BAF JACKPOT IN:', level: 40,
+    });
+    assert.deepEqual(transitionJackpotCountdownModel({
+      level: 99, jackpot: true, finalDraw: true,
+    }), {
+      kind: 'both', label: 'DECIMATOR + BAF JACKPOTS IN:', level: 100,
+    });
+  });
+});
+
 describe('pool thermometer and daily-jackpot shell wiring', () => {
   test('thermometer sits between the jackpot headline and daily instrument', () => {
     const headline = html.indexOf('<gold-rush-headline>');
@@ -256,7 +286,7 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
       'the amount is centered directly over whichever live reference it follows');
     assert.match(component, /referenceLabel\.style\.left = `\$\{model\.referencePercent\}%`/,
       'the rendered amount advances from target to current along the fill');
-    assert.match(component, /model\.levelReady \? '' : 'TARGET'/,
+    assert.match(component, /model\.levelReady \? '' : 'GUARANTEE'/,
       'after clearing the target the live edge shows only its ETH total, without a CURRENT label');
     assert.match(css, /\.pool-progress__track\s*\{[^}]*margin-right:\s*0/s,
       'the target callout no longer shortens the graph');
@@ -287,11 +317,16 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     assert.match(component, /pool-jackpot-countdown/);
     assert.match(component, /secondsUntilNextJackpot/,
       'the strip shares the top-bar countdown clock');
+    assert.match(component, /DECIMATOR JACKPOT IN:/);
+    assert.match(component, /BAF JACKPOT IN:/);
+    assert.match(component, /pool-special-jackpot-countdown/);
+    assert.match(css, /\.pool-progress__special-jackpot\s*\{[^}]*margin:\s*-0\.08rem auto 0\.46rem/s,
+      'the special draw clock sits as a compact line above the pool instrument');
     assert.match(component, /if \(body\) body\.hidden = true/,
       'the purchase thermometer is absent throughout jackpot phase');
     assert.match(css, /\.pool-progress__jackpot\s*\{[^}]*display:\s*grid[^}]*white-space:\s*nowrap/s,
       'desktop jackpot context stays on one physical line');
-    assert.match(css, /@media \(max-width: 480px\)[\s\S]*?\.pool-progress__jackpot\s*\{[^}]*grid-template-areas:\s*"pool pool"\s*"context tail"/s,
+    assert.match(css, /@media \(max-width: 640px\)[\s\S]*?\.pool-progress__jackpot\s*\{[^}]*grid-template-areas:\s*"pool pool"\s*"context tail"/s,
       'narrow jackpot context has a centered pool row and a details row');
   });
 });

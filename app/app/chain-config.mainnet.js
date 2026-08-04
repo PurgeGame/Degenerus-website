@@ -44,6 +44,7 @@ export const CONTRACTS = {
   COIN:                    null,
   COINFLIP:                null,
   GAME:                    null,
+  GAME_LENS:               null,
   WWXRP:                   null,
   AFFILIATE:               null,
   JACKPOTS:                null,

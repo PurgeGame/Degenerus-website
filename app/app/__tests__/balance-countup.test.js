@@ -111,6 +111,32 @@ describe('balance count-up presentation', () => {
     resetBalanceDisplay(element);
   });
 
+  test('a reveal delay holds the previous claimable value before showing its addition', async () => {
+    const { element, container } = makeDisplay();
+    const format = (value) => `${value} ETH`;
+    updateBalanceDisplay(element, {
+      scope: '0xaaa', value: 10n, visible: false, hiddenText: '••••', format,
+    });
+    updateBalanceDisplay(element, {
+      scope: '0xaaa', value: 14n, visible: false, hiddenText: '••••', format,
+    });
+    updateBalanceDisplay(element, {
+      scope: '0xaaa', value: 14n, visible: true, hiddenText: '••••', format,
+      formatDelta: (value) => `+${value} ETH`, duration: 200, revealDelay: 8,
+    });
+
+    assert.equal(element.textContent, '10 ETH');
+    assert.equal(container.classList.contains('balance-rise'), false,
+      'the prior total is established before the award cue begins');
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    assert.equal(container.classList.contains('balance-rise'), true);
+    assert.equal(container.getAttribute('data-balance-delta'), '+4 ETH');
+    runFrame(0);
+    runFrame(200);
+    assert.equal(element.textContent, '14 ETH');
+    resetBalanceDisplay(element);
+  });
+
   test('a decrease snaps and clears any increase treatment', () => {
     const { element, container } = makeDisplay();
     updateBalanceDisplay(element, { scope: '0xaaa', value: 500n });

@@ -60,6 +60,7 @@ const PASSES_ABI = [
   'function subscribe(address player, bool drainGameCreditFirst, bool useTickets, uint8 dailyQuantity, address fundingSource) external payable',
   'function depositAfkingFunding(address player) external payable',
   'function withdrawAfkingFunding(uint256 amount) external',
+  'function claimAfkingFlip(address[] calldata subs) external',
   'function afkingFundingOf(address player) external view returns (uint256)',
   'function subInfo(address player) external view returns (bool active, uint8 dailyQuantity, uint24 afkingStartDay, uint24 afkCoveredThroughDay)',
   'function afkingSnapshot(address[] players) external view returns (uint256 mintPriceWei, bool rngLocked_, uint256[] claimables, uint256[] afkingFundings)',
@@ -125,6 +126,13 @@ const AFKING_SEAT_READ_ABI = [
   'function balanceOf(address account) external view returns (uint256)',
   'error InvalidTrait()',
   'error SupplyCapped()',
+];
+const AFKING_LENS_READ_ABI = [
+  'function subInfoFull(address game,address player) view returns (('
+    + 'bool active,uint8 dailyQuantity,uint8 flags,uint16 score,uint24 amountMilliEth,'
+    + 'uint24 lastAutoBoughtDay,uint24 lastOpenedDay,uint24 afkCoveredThroughDay,'
+    + 'uint24 afkingStartDay,uint32 affiliateBase,uint24 pendingFlip,'
+    + 'uint16 subStreakLatch,uint32 effectiveStreak) s)',
 ];
 const INVALID_TOKEN_SELECTOR = ethers.id('InvalidToken()').slice(0, 10).toLowerCase();
 // Canonical CREATE2 Multicall3 deployment (present on Base Sepolia and
@@ -222,6 +230,9 @@ function _afkingReadContracts() {
   return {
     game: new ethers.Contract(CONTRACTS.GAME, PASSES_ABI, provider),
     token: new ethers.Contract(CONTRACTS.AFKING_SUB_TOKEN, AFKING_SEAT_READ_ABI, provider),
+    lens: CONTRACTS.GAME_LENS
+      ? new ethers.Contract(CONTRACTS.GAME_LENS, AFKING_LENS_READ_ABI, provider)
+      : null,
   };
 }
 
@@ -519,7 +530,7 @@ export async function smiteWithDeity({ deityId, target } = {}) {
  * A null result means the RPC/config is unavailable; it never means "no seat".
  *
  * @param {string} player
- * @returns {Promise<null|{hasToken:boolean,tokenBalance:bigint,active:boolean,dailyQuantity:number,startDay:number,coveredThroughDay:number,mintPriceWei:bigint,rngLocked:boolean,claimableWei:bigint,fundingWei:bigint}>}
+ * @returns {Promise<null|{hasToken:boolean,tokenBalance:bigint,active:boolean,dailyQuantity:number,startDay:number,coveredThroughDay:number,mintPriceWei:bigint,rngLocked:boolean,claimableWei:bigint,fundingWei:bigint,pendingFlipWhole:bigint|null,pendingFlipKnown:boolean}>}
  */
 export async function readAfkingSubscription(player) {
   const address = String(player || '').trim();
@@ -544,6 +555,9 @@ export async function readAfkingSubscription(player) {
     const balanceRes = await settle(call(contracts.token, 'balanceOf', address));
     const infoRes = await settle(call(contracts.game, 'subInfo', address));
     const snapshotRes = await settle(call(contracts.game, 'afkingSnapshot', [address]));
+    const pendingRes = contracts.lens
+      ? await settle(call(contracts.lens, 'subInfoFull', CONTRACTS.GAME, address))
+      : { status: 'rejected', reason: new Error('AFKing lens unavailable') };
     const value = (result, fallback) => result.status === 'fulfilled' ? result.value : fallback;
     const balanceKnown = balanceRes.status === 'fulfilled';
     const tokenBalance = BigInt(value(balanceRes, 0n) ?? 0n);
@@ -551,8 +565,10 @@ export async function readAfkingSubscription(player) {
 
     const info = value(infoRes, null);
     const snapshot = value(snapshotRes, null);
+    const fullSub = value(pendingRes, null);
     const claimables = snapshot?.claimables ?? snapshot?.[2] ?? [];
     const fundings = snapshot?.afkingFundings ?? snapshot?.[3] ?? [];
+    const pendingFlip = fullSub?.pendingFlip ?? fullSub?.[10];
     return {
       hasToken: tokenBalance > 0n,
       tokenBalance,
@@ -564,6 +580,8 @@ export async function readAfkingSubscription(player) {
       rngLocked: Boolean(snapshot?.rngLocked_ ?? snapshot?.[1]),
       claimableWei: BigInt(claimables?.[0] ?? 0),
       fundingWei: BigInt(fundings?.[0] ?? 0),
+      pendingFlipWhole: pendingFlip == null ? null : BigInt(pendingFlip),
+      pendingFlipKnown: pendingFlip != null,
     };
   } catch (_error) {
     return null;
@@ -673,6 +691,26 @@ export async function withdrawAfkingSubscriptionFunding() {
     throw _structuredRevertError(error, 'send withdrawAfkingFunding');
   }
   return { receipt, amountWei };
+}
+
+/** Settle the acting subscriber's accrued per-day and ticket-bonus FLIP. */
+export async function claimAfkingSubscriptionFlip() {
+  const player = _normalizedHexAddress(getActingAddress());
+  if (!player) throw new Error('Wallet not connected.');
+  const args = [[player]];
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (!signer) throw new Error('Wallet not connected.');
+  const contract = _buildContract(signer);
+  const sim = await requireStaticCall(contract, 'claimAfkingFlip', args, signer);
+  if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call claimAfkingFlip');
+
+  const receipt = await sendTx(
+    (s) => _buildContract(s).claimAfkingFlip(...args),
+    'Claim AFKing bonus FLIP',
+  );
+  return { receipt, player };
 }
 
 // ---------------------------------------------------------------------------

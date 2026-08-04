@@ -42,10 +42,12 @@ import {
 import {
   burnForDecimator,
   DECIMATOR_MIN_FLIP_WEI,
+  decimatorCurrentMultiplierBps,
   decimatorEntryScoreWei,
   decimatorPoolWei,
   readDecimatorContext,
 } from '../app/decimator.js';
+import { degenScoreLootTier } from '../app/activity-score.js';
 import { activeBoonForProduct } from '../app/boons.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
 import { queueReveal } from './reveal-overlay.js';
@@ -652,13 +654,27 @@ class AppParimutuelPanel extends HTMLElement {
     const level = Number.isInteger(this.#level) ? this.#level + 1 : null;
     const head = document.createElement('div');
     head.className = 'pari-book__head';
+    const headCopy = document.createElement('div');
+    headCopy.className = 'pari-decimator__head-copy';
     const title = document.createElement('h3');
     title.className = 'pari-book__title';
     title.textContent = 'DECIMATOR';
     const boon = document.createElement('boon-product-indicator');
     boon.setAttribute('product', 'decimator');
     title.appendChild(boon);
-    head.appendChild(title);
+    const winPrompt = document.createElement('span');
+    winPrompt.className = 'pari-decimator__win-prompt';
+    const burnPrompt = document.createElement('span');
+    burnPrompt.className = 'pari-decimator__win-prompt-burn';
+    burnPrompt.textContent = 'BURN FLIP';
+    const winPromptEnd = document.createElement('span');
+    winPromptEnd.className = 'pari-decimator__win-prompt-win';
+    winPromptEnd.textContent = ' TO WIN:';
+    winPrompt.appendChild(burnPrompt);
+    winPrompt.appendChild(winPromptEnd);
+    headCopy.appendChild(title);
+    headCopy.appendChild(winPrompt);
+    head.appendChild(headCopy);
     const futurePool = this.#decimatorContext?.futurePoolWei
       ?? this.#gameState?.prizePools?.futurePrizePool;
     const prize = decimatorPoolWei(futurePool, level);
@@ -674,15 +690,50 @@ class AppParimutuelPanel extends HTMLElement {
     host.appendChild(head);
 
     const ask = document.createElement('p');
-    ask.className = 'pari-book__ask';
-    ask.textContent = 'Burn FLIP to enter.';
+    ask.className = 'pari-book__ask pari-decimator__multiplier-line';
+    const activityScore = Number(this.#decimatorContext?.activityScore);
+    const activityKnown = Number.isFinite(activityScore);
+    const activityPoints = activityKnown ? Math.max(0, Math.trunc(activityScore)) : null;
+    const activityValue = document.createElement('strong');
+    activityValue.className = 'pari-decimator__degen-score';
+    activityValue.textContent = activityPoints == null
+      ? '—'
+      : `${activityPoints.toLocaleString('en-US')}%`;
+    const scoreTier = degenScoreLootTier(activityPoints);
+    if (scoreTier) activityValue.setAttribute('data-score-tier', scoreTier);
+    const activityLabel = document.createElement('span');
+    activityLabel.textContent = 'DEGEN';
+    const equals = document.createElement('span');
+    equals.className = 'pari-decimator__multiplier-equals';
+    equals.textContent = '=';
+    const multiplier = document.createElement('strong');
+    multiplier.className = 'pari-decimator__multiplier-value';
+    if (scoreTier) multiplier.setAttribute('data-score-tier', scoreTier);
+    const multiplierLabel = document.createElement('span');
+    multiplierLabel.className = 'pari-decimator__multiplier-label';
+    multiplierLabel.textContent = 'MULTI';
+    if (activityPoints == null) {
+      multiplier.textContent = '—';
+    } else {
+      const bps = decimatorCurrentMultiplierBps({
+        activityScore: activityPoints,
+        dayOneActive: this.#decimatorContext?.dayOneActive === true,
+        lastPurchaseDay: this.#decimatorContext?.lastPurchaseDay === true,
+      });
+      multiplier.textContent = `${(bps + 50n) / 100n}%`;
+    }
+    ask.appendChild(activityValue);
+    ask.appendChild(activityLabel);
+    ask.appendChild(equals);
+    ask.appendChild(multiplier);
+    ask.appendChild(multiplierLabel);
     host.appendChild(ask);
 
     const scoreBoard = document.createElement('div');
     scoreBoard.className = 'pari-decimator__scoreboard';
     const scoreItems = [
-      ['CURRENT SCORE', this.#decimatorContext?.totalBurnWeight],
-      ['TOTAL SCORE', this.#decimatorContext?.totalRoundScore],
+      ['YOUR SCORE', this.#decimatorContext?.totalBurnWeight],
+      ['ALL PLAYERS SCORE', this.#decimatorContext?.totalRoundScore],
     ];
     for (const [label, value] of scoreItems) {
       const item = document.createElement('span');
@@ -766,7 +817,7 @@ class AppParimutuelPanel extends HTMLElement {
     button.setAttribute('data-bind', 'pari-decimator-cta');
     const buttonAction = document.createElement('span');
     buttonAction.className = 'pari-decimator__cta-action';
-    buttonAction.textContent = 'BURN';
+    buttonAction.textContent = 'BURN FOR';
     button.appendChild(buttonAction);
     button.appendChild(quote);
     this.#paintDecimatorQuote(input.value, quote);
@@ -783,7 +834,7 @@ class AppParimutuelPanel extends HTMLElement {
     const amount = _parseFlipInput(raw);
     const activityScore = Number(this.#decimatorContext?.activityScore);
     if (amount == null || amount <= 0n || !Number.isFinite(activityScore)) {
-      quote.textContent = 'FOR — SCORE';
+      quote.textContent = '— SCORE';
       return;
     }
     let previousScore = 0n;
@@ -797,7 +848,7 @@ class AppParimutuelPanel extends HTMLElement {
       lastPurchaseDay: this.#decimatorContext?.lastPurchaseDay === true,
       boonBps: _decimatorBoonBps(get('app.boons')),
     });
-    quote.textContent = `FOR ${_fmtFlip(score)} SCORE`;
+    quote.textContent = `+${_fmtFlip(score)} SCORE`;
   }
 
   #applyQuestPreset(detail) {
@@ -1435,7 +1486,7 @@ class AppParimutuelPanel extends HTMLElement {
     await this.#run((player) => burnForDecimator({ player, amount }));
     if (button) {
       button.disabled = false;
-      if (action) action.textContent = 'BURN';
+      if (action) action.textContent = 'BURN FOR';
       this.#paintDecimatorQuote(input?.value);
     }
   }

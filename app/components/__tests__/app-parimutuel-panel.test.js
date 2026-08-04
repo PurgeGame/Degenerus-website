@@ -542,13 +542,33 @@ describe('app-parimutuel-panel', () => {
     const card = decimatorCard(el);
     assert.equal(card.hidden, false);
     assert.equal(card.querySelector('.pari-book__title').textContent, 'DECIMATOR');
+    assert.equal(card.querySelector('.pari-decimator__win-prompt').textContent, 'BURN FLIP TO WIN:');
+    assert.equal(card.querySelector('.pari-decimator__win-prompt-burn').textContent, 'BURN FLIP');
+    assert.equal(card.querySelector('.pari-decimator__win-prompt-win').textContent, ' TO WIN:');
     assert.equal(card.querySelector('.pari-decimator__prize').textContent, '0.125ETH');
-    assert.match(card.textContent, /Burn FLIP to enter\./);
-    assert.match(card.textContent, /CURRENT SCORE2,500/);
-    assert.match(card.textContent, /TOTAL SCORE15,150,625/);
+    const degenScore = card.querySelector('.pari-decimator__degen-score');
+    assert.equal(degenScore.textContent, '235%');
+    assert.equal(degenScore.getAttribute('data-score-tier'), 'purple');
+    const multiplierValue = card.querySelector('.pari-decimator__multiplier-value');
+    assert.equal(multiplierValue.textContent, '184%');
+    assert.equal(multiplierValue.getAttribute('data-score-tier'), 'purple');
+    assert.equal(card.querySelector('.pari-decimator__multiplier-label').textContent, 'MULTI');
+    assert.match(card.textContent, /235%DEGEN=184%MULTI/);
+    assert.doesNotMatch(card.textContent, /DEGEN SCORE/);
+    assert.match(APP_CSS,
+      /\.pari-decimator__head-copy\s*\{[^}]*flex-direction:\s*column;[^}]*justify-content:\s*space-between/s,
+      'the title and win prompt form one compact two-line lead-in beside the payout');
+    assert.match(APP_CSS,
+      /\.pari-decimator__win-prompt\s*\{[^}]*align-self:\s*flex-end;[^}]*text-align:\s*right/s,
+      'the win prompt is aligned against the payout bubble');
+    assert.match(APP_CSS, /\.pari-decimator__win-prompt-burn\s*\{[^}]*#f87171/);
+    assert.match(APP_CSS, /\.pari-decimator__win-prompt-win\s*\{[^}]*#86efac/);
+    assert.doesNotMatch(card.textContent, /Burn FLIP to enter\./);
+    assert.match(card.textContent, /YOUR SCORE2,500/);
+    assert.match(card.textContent, /ALL PLAYERS SCORE15,150,625/);
     assert.equal(
       card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
-      'FOR 1,841 SCORE',
+      '+1,841 SCORE',
     );
     assert.doesNotMatch(card.textContent, /ACTIVITY|DAY 1|LAST DAY|TOTAL BURN WEIGHT/);
     assert.doesNotMatch(card.textContent, /Level 43|BURN WINDOW OPEN|Minimum 1,000|Bucket 7/);
@@ -564,7 +584,7 @@ describe('app-parimutuel-panel', () => {
     assert.equal(input.value, '2000');
     assert.equal(
       card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
-      'FOR 3,682 SCORE',
+      '+3,682 SCORE',
     );
     down.click();
     assert.equal(input.value, '1000');
@@ -574,9 +594,12 @@ describe('app-parimutuel-panel', () => {
     input.dispatchEvent({ type: 'input' });
     assert.equal(
       card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
-      'FOR 5,523 SCORE',
+      '+5,523 SCORE',
     );
-    assert.equal(card.querySelector('.pari-decimator__cta-action').textContent, 'BURN');
+    assert.equal(card.querySelector('.pari-decimator__cta-action').textContent, 'BURN FOR');
+    assert.match(APP_CSS,
+      /\.pari-decimator__cta\s*\{[^}]*flex-direction:\s*column/s,
+      'the Decimator CTA stacks its action and score on two lines');
     assert.match(APP_CSS,
       /\.pari-decimator__input-wrap input::-(?:webkit-inner-spin-button|webkit-outer-spin-button)[\s\S]*?appearance:\s*none/s,
       'native number arrows stay hidden behind the deliberate 1,000-FLIP rocker');

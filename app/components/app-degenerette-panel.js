@@ -83,6 +83,7 @@ import {
 // Shared trait codecs (extracted from this file — see dgn-traits.js header).
 import {
   DGN_QUADRANTS, DGN_SYMBOLS, DGN_COLORS, DGN_COLOR_HEX,
+  applyDgnTicketAccent,
   DGN_TICKET_COPY_EVENT,
   dgnBadgePath, dgnSymbolPath, dgnUnpackTicket, dgnComputeMatches,
   dgnScoringMatchStates, dgnTraitIdsToQuadrants,
@@ -1609,6 +1610,10 @@ class AppDegenerettePanel extends HTMLElement {
   }
 
   #renderPicker() {
+    applyDgnTicketAccent(
+      this.querySelector('[data-bind="dgn-ticket"]'),
+      this.#dgnTraits,
+    );
     for (let q = 0; q < 4; q++) {
       const cell = this.querySelector(`[data-bind="dgn-cell-${q}"]`);
       const img = this.querySelector(`[data-bind="dgn-img-${q}"]`);
@@ -3057,6 +3062,7 @@ class AppDegenerettePanel extends HTMLElement {
   #buildTicketCard(traits, matchStates, heroIdx) {
     const card = document.createElement('div');
     card.className = 'dgn-result-card';
+    applyDgnTicketAccent(card, traits);
     for (let q = 0; q < 4; q++) {
       const cell = document.createElement('div');
       cell.className = 'dgn-rq';
@@ -3184,9 +3190,10 @@ class AppDegenerettePanel extends HTMLElement {
       });
       if (frame.lock) {
         const q = frame.lock.quadrant;
+        const symbolMatch = playerTraits[q].sym === targetTraits[q].sym;
         lockMatched = frame.lock.type === 'color'
-          ? playerTraits[q].col === targetTraits[q].col
-          : playerTraits[q].sym === targetTraits[q].sym;
+          ? symbolMatch && playerTraits[q].col === targetTraits[q].col
+          : symbolMatch;
       }
     }
     this.#renderInlineTicket(

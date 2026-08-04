@@ -636,8 +636,7 @@ describe('normalizeSequence', () => {
       prizes: [],
       noWin: { sub: 'No winners recorded this day.' },
       activity: {
-        ticketPacks: 2,
-        ticketCount: 14,
+        ticketsRevealed: 14,
         lootboxesBought: 3,
         lootboxesOpened: 2,
         lootboxResults: [{
@@ -651,10 +650,10 @@ describe('normalizeSequence', () => {
     });
     assert.equal(seq.title, 'DAY 9 SUMMARY');
     assert.deepEqual(seq.cards.map((card) => card.type), [
-      'nowin', 'ticket-packs', 'lootboxes-bought', 'tickets', 'flip', 'dgnrs',
+      'nowin', 'tickets-revealed', 'lootboxes-bought', 'tickets', 'flip', 'dgnrs',
     ]);
-    assert.equal(seq.cards[1].value, '×2');
-    assert.match(seq.cards[1].sub, /14 tickets/);
+    assert.equal(seq.cards[1].label, 'TICKETS REVEALED');
+    assert.equal(seq.cards[1].value, '14');
     assert.equal(seq.cards[2].value, '×3');
     assert.match(seq.cards[2].sub, /2 opened/);
     assert.equal(seq.cards[3].value, '2');
@@ -911,6 +910,11 @@ describe('buildDegeneretteSpinFrames', () => {
     assert.ok(frames.length >= 24 && frames.length <= 40,
       `2–4 idle rolls between eight locks, got ${frames.length} frames`);
     assert.equal(lockFrames.length, 8, 'four color locks + four symbol locks');
+    assert.deepEqual(
+      lockFrames.map((frame) => frame.lock.type),
+      ['symbol', 'symbol', 'symbol', 'symbol', 'color', 'color', 'color', 'color'],
+      'the complete symbol pass settles before any color can lock',
+    );
     assert.ok(frames.some((frame) => frame.lock == null), 'whole-token idle rolls are present');
     for (let q = 0; q < 4; q++) {
       const colorAt = frames.findIndex((frame) => (
@@ -933,8 +937,8 @@ describe('buildDegeneretteSpinFrames', () => {
     assert.deepEqual(buildDegeneretteSpinFrames(args), frames, 'plan is deterministic per spin');
     assert.match(
       REVEAL_SRC,
-      /if \(matched\) \{[\s\S]*?sfxMatchLock\(matchingSoundCount\)[\s\S]*?else \{[\s\S]*?#sfxTickSafe/,
-      'matching Degenerette locks use a distinct cue while misses keep the ordinary tick',
+      /const symbolMatched =[\s\S]*?\? symbolMatched && pair\.playerTraits\[q\]\.col === pair\.targetTraits\[q\]\.col[\s\S]*?if \(matched\) \{[\s\S]*?sfxMatchLock\(matchingSoundCount\)[\s\S]*?else \{[\s\S]*?#sfxTickSafe/,
+      'only score-relevant Degenerette locks use the match cue',
     );
   });
 });
@@ -1328,6 +1332,34 @@ describe('reveal-overlay element', () => {
       'the explanatory foil copy no longer crowds the result hand');
     assert.ok(zone.querySelector('.rvl-ticket-grid-stage--foil'), 'dedicated 2-column foil grid');
     assert.equal(zone.querySelectorAll('.rvl-paper--foil').length, 4);
+    assert.equal(zone.querySelectorAll('.rvl-paper-tag').length, 0,
+      'foil is communicated by the ticket material instead of a text sticker');
+    assert.equal(zone.querySelectorAll('.ticket-card--foil').length, 4,
+      'every revealed foil ticket receives the shared metallic face');
+    assert.match(
+      APP_CSS,
+      /\.rvl-paper--foil\s*\{[^}]*overflow:\s*hidden/s,
+      'the moving foil sheen is clipped to each revealed ticket',
+    );
+    assert.ok(zone.querySelectorAll('.ticket-card--foil').every((ticket) => (
+      ticket.querySelector('.ticket-card-center')?.querySelector('img')?.src
+        === '/whitepaper/flame-center-silver.svg'
+    )), 'every revealed foil ticket uses the dedicated silver flame asset');
+    assert.match(
+      APP_CSS,
+      /\.ticket-card--foil \.trait-quadrant:not\(\.trait-quadrant--gold\)\s*\{[^}]*linear-gradient\([^}]*#f4f7f9[^}]*#66727c/s,
+      'non-gold foil quadrants use a brushed silver surface',
+    );
+    assert.match(
+      APP_CSS,
+      /\.ticket-card--foil \.ticket-card-center\s*\{[^}]*conic-gradient\([^}]*#ffe27a[^}]*box-shadow:/s,
+      'foil centres use a reflective gold diamond',
+    );
+    assert.match(
+      APP_CSS,
+      /\.ticket-card--foil \.ticket-card-center img\s*\{[^}]*filter:[^}]*drop-shadow[^}]*rgba\(255, 255, 255, 0\.72\)/s,
+      'the centre flame receives its silver treatment',
+    );
     assert.equal(el.querySelector('[data-bind="rvl-summary"]').hidden, true,
       'ticket hand never collapses into the generic summary');
     el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
@@ -1417,6 +1449,50 @@ describe('reveal-overlay element', () => {
       'open-all does not cut back to the full sealed-pack scene');
     assert.equal(zone.querySelector('.rvl-open-all-cta'), null, 'no open-all button on final pack');
     assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'COLLECT');
+
+    el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
+    await tick();
+  });
+
+  test('OPEN ALL PACKS continues into every ready ticket pack in Pending', async () => {
+    const el = instantiate();
+    const ticket = (n) => ({ traitIds: [n, 70, 130, 200] });
+    let pendingRuns = 0;
+    pendingActionsMod.publishPendingActions('next-pack', [{
+      id: 'ticket-pack:9', kind: 'tickets', ticketLevel: 9,
+      label: 'Level 9 ticket pack', shortLabel: 'Open tickets',
+      state: 'ready', order: 10, chronology: 9,
+      run: async () => {
+        pendingRuns += 1;
+        pendingActionsMod.clearPendingActions('next-pack');
+        queueReveal({
+          kind: 'pack', title: 'LEVEL 9 TICKETS', level: 9, count: 1,
+          batchId: 'pending-level-9', packIndex: 1, packCount: 1,
+          tickets: [ticket(9)],
+        });
+      },
+    }]);
+    for (let packIndex = 1; packIndex <= 2; packIndex += 1) {
+      queueReveal({
+        kind: 'pack', title: 'LEVEL 7 TICKETS', level: 7, count: 1,
+        batchId: 'current-level-7', packIndex, packCount: 2,
+        tickets: [ticket(packIndex)],
+      });
+    }
+    await tick();
+
+    const zone = el.querySelector('[data-bind="rvl-card-zone"]');
+    const openAll = zone.querySelector('.rvl-open-all-cta');
+    assert.equal(openAll.textContent, 'OPEN ALL PACKS',
+      'the control makes its cross-Pending scope explicit');
+    openAll.dispatchEvent({ type: 'click' });
+    await new Promise((resolve) => setTimeout(resolve, 520));
+    await tick();
+
+    assert.equal(pendingRuns, 1, 'the next ready Pending pack was materialized once');
+    assert.match(el.querySelector('[data-bind="rvl-title"]').textContent, /LEVEL 9 TICKETS/);
+    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'COLLECT',
+      'OPEN ALL pauses on the final Pending pack');
 
     el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
     await tick();

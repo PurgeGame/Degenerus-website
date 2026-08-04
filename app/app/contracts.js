@@ -30,11 +30,44 @@ let _provider = null;
 // brittle. Keep the cushion modest: enough for the next branch, without the
 // wallet presenting a wildly inflated limit. Unused gas is not charged.
 export const GAS_ESTIMATE_HEADROOM_BPS = 12_000n;
+const RECEIPT_RECOVERY_POLL_MS = 300;
+const RECEIPT_RECOVERY_ATTEMPTS = 11;
 
 export function gasEstimateWithHeadroom(estimate) {
   const gas = BigInt(estimate ?? 0);
   if (gas <= 0n) return gas;
   return (gas * GAS_ESTIMATE_HEADROOM_BPS + 9_999n) / 10_000n;
+}
+
+function _wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function _recoverDelayedReceipt(hashes) {
+  if (typeof _provider?.getTransactionReceipt !== 'function') return null;
+  const candidates = [...new Set(
+    (Array.isArray(hashes) ? hashes : [hashes]).filter(Boolean).map(String),
+  )];
+  if (candidates.length === 0) return null;
+
+  // Injected providers occasionally reject wait() while their RPC replica is
+  // still a block or two behind. Keep the write in its pressed/busy state for
+  // a short reconciliation window instead of flashing a false failure and
+  // then discovering the successful transaction on the next poll.
+  for (let attempt = 0; attempt < RECEIPT_RECOVERY_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) await _wait(RECEIPT_RECOVERY_POLL_MS);
+    for (const hash of candidates) {
+      try {
+        const receipt = await _provider.getTransactionReceipt(hash);
+        if (receipt != null) return receipt;
+      } catch (_e) {
+        // A temporary receipt-read failure is precisely what this grace period
+        // is intended to absorb. The original wait error remains authoritative
+        // if no receipt appears by the end of the window.
+      }
+    }
+  }
+  return null;
 }
 
 /**
@@ -194,15 +227,17 @@ export async function sendTx(buildTx, action) {
     if (replacementSucceeded) {
       receipt = replacementReceipt;
     } else {
-      // Some injected providers lose the wait subscription just after mining.
-      // One receipt read is enough to distinguish that harmless transport race
-      // without resubmitting or hiding a real revert/cancel.
-      let recovered = null;
-      if (tx?.hash && typeof _provider?.getTransactionReceipt === 'function') {
-        try { recovered = await _provider.getTransactionReceipt(tx.hash); }
-        catch (_e) { /* preserve the original wait error */ }
-      }
-      if (recovered != null && Number(recovered.status) !== 0) receipt = recovered;
+      const cancelledReplacement = error?.code === 'TRANSACTION_REPLACED'
+        && error?.cancelled === true;
+      const knownRevert = replacementReceipt != null
+        && Number(replacementReceipt.status) === 0;
+      if (cancelledReplacement || knownRevert) throw error;
+
+      const recovered = await _recoverDelayedReceipt([
+        error?.replacement?.hash,
+        tx?.hash,
+      ]);
+      if (recovered != null) receipt = recovered;
       else throw error;
     }
   }

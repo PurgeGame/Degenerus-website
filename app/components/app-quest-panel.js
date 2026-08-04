@@ -46,9 +46,13 @@ import { displayEth, displayToken } from '../app/scaling.js';
 import { LOOTBOX_MIN_WEI, scaledTicketPriceWei } from '../app/lootbox.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { degeneretteLimits } from '../app/degenerette.js';
-import { dgnBadgePath, dgnTraitIdsToQuadrants } from '../app/dgn-traits.js';
+import {
+  applyDgnTicketAccent,
+  dgnBadgePath,
+  dgnTraitIdsToQuadrants,
+} from '../app/dgn-traits.js';
 import { readLiveQuestBoard } from '../app/quests.js';
-import { questStreakScorePoints } from '../app/activity-score.js';
+import { questStreakScorePoints, degenScoreLootTier } from '../app/activity-score.js';
 import { sfxQuestComplete } from '../app/jackpot-sfx.js';
 import './boon-product-indicator.js';
 
@@ -303,16 +307,9 @@ export function degenScoreBreakdownBarPercent(key, value) {
   return 0;
 }
 
-/** Loot-style display tier for the player's total Degen Score. */
-export function degenScoreLootTier(value) {
-  const points = Number(value);
-  if (!Number.isFinite(points)) return null;
-  if (points < 60) return 'white';
-  if (points < 150) return 'green';
-  if (points < 300) return 'purple';
-  if (points < 1_000) return 'orange';
-  return 'gold';
-}
+// Keep the existing component export stable for callers while the tier palette
+// itself lives with the other shared Activity/Degen Score helpers.
+export { degenScoreLootTier };
 
 function _questProgressPercent(progress, target, completed) {
   if (completed) return 100;
@@ -872,13 +869,34 @@ class AppQuestPanel extends HTMLElement {
     const confirm = this.querySelector('[data-bind="qst-action-confirm"]');
     const hasPurchaseChoice = Number(model.questType) === 1;
     const isDgn = Number(model.questType) === 7 || Number(model.questType) === 8;
-    const adjustConfig = isDgn ? null : this.#questAdjustConfig(model);
+    // Ticket/lootbox purchase quests retain their useful product + amount
+    // picker. Degenerette retains its ticket, per-spin wager, and spin count.
+    // Every other quest is a one-click preset, so an amount stepper only adds
+    // noise and makes the confirmation sheet feel like a second game form.
+    const adjustConfig = hasPurchaseChoice ? this.#questAdjustConfig(model) : null;
     const action = this.#questAction(model);
     if (role) role.textContent = `${String(model.role || 'QUEST')} QUEST`;
     if (title) title.textContent = String(model.label || 'Complete quest');
-    if (copy) copy.textContent = isDgn
-      ? 'Review the ticket and wager.'
-      : 'Set the amount, then confirm.';
+    if (copy) {
+      const type = Number(model.questType);
+      if (isDgn) {
+        copy.textContent = 'Choose the bet per spin and number of spins, then confirm.';
+      } else if (hasPurchaseChoice) {
+        copy.textContent = 'Choose tickets or a lootbox and the amount, then confirm.';
+      } else if (type === 2) {
+        copy.textContent = `Add ${_fmtDailyQuestAmount(2, action.target)} to Tomorrow's Bet.`;
+      } else if (type === 4) {
+        copy.textContent = 'Add one foil pack to your next ticket purchase.';
+      } else if (type === 5) {
+        copy.textContent = `Burn ${_fmtDailyQuestAmount(5, action.target)} in the Decimator.`;
+      } else if (type === 6) {
+        copy.textContent = `Buy a ${_fmtDailyQuestAmount(6, action.target)} lootbox.`;
+      } else if (type === 9) {
+        copy.textContent = `Redeem ${BigInt(action.target ?? 0n).toLocaleString('en-US')} ticket${BigInt(action.target ?? 0n) === 1n ? '' : 's'} for FLIP.`;
+      } else {
+        copy.textContent = 'Confirm to open the matching quest action.';
+      }
+    }
     if (choice) choice.hidden = !hasPurchaseChoice;
     if (ticket) {
       ticket.textContent = 'TICKET';
@@ -913,6 +931,10 @@ class AppQuestPanel extends HTMLElement {
       const currency = Number(model.questType) === 7 ? 0 : 1;
       const limits = degeneretteLimits(currency);
       const traits = dgnTraitIdsToQuadrants(this.#questDgnTraitIds);
+      applyDgnTicketAccent(
+        this.querySelector('.qst-action-dgn__ticket'),
+        this.#questDgnTraitIds,
+      );
       for (let q = 0; q < 4; q += 1) {
         const trait = traits[q];
         const image = this.querySelector(`[data-bind="qst-action-dgn-img-${q}"]`);
@@ -947,7 +969,9 @@ class AppQuestPanel extends HTMLElement {
       confirm.disabled = blocked;
       confirm.textContent = blocked
         ? `DAILY QUEST FIRST · ${action.label}`
-        : `${completes ? 'CONFIRM' : "WON'T COMPLETE"} · ${action.label}`;
+        : completes && !isDgn && !hasPurchaseChoice
+          ? 'CONFIRM'
+          : `${completes ? 'CONFIRM' : "WON'T COMPLETE"} · ${action.label}`;
       confirm.setAttribute?.('title', completes
         ? (blocked
           ? 'Complete the daily quest before submitting this bonus quest action.'

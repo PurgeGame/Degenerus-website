@@ -86,6 +86,7 @@ export const GAME_ABI = [
   'function presaleBoxCreditOf(address player) view returns (uint256 credit)',
   'function presaleBoxEthRemaining() view returns (uint256 remaining)',
   'function claimableWinningsOf(address player) view returns (uint256)',
+  'function purchaseInfo() view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei)',
   'function buyPresaleBox(address buyer, uint256 boxAmount) payable',
   'function buyLootboxAndPresaleBox(address buyer, uint256 entryQuantityScaled, uint256 lootBoxAmount, bytes32 affiliateCode, uint8 payKind, uint256 boxAmount) payable',
   // Foil module errors bubble through GAME.purchase via delegatecall. Keeping
@@ -162,6 +163,13 @@ export function scaledFoilPackCostWei(targetLevel) {
   return FOIL_PACK_TICKETS * scaledTicketPriceWei(targetLevel);
 }
 
+/** Foil cost from the contract's exact routed buy-now ticket price. */
+export function foilPackCostFromPriceWei(priceWei) {
+  let price;
+  try { price = BigInt(priceWei ?? 0n); } catch (_e) { return 0n; }
+  return price > 0n ? FOIL_PACK_TICKETS * price : 0n;
+}
+
 // ---------------------------------------------------------------------------
 // Test seam — production path uses default `new ethers.Contract(...)`.
 // Tests inject a fake via __setContractFactoryForTest; reset via __resetContractFactoryForTest.
@@ -193,6 +201,33 @@ function _readBuyer() {
   const buyer = getActingAddress();
   if (!buyer) throw new Error('Wallet not connected.');
   return buyer;
+}
+
+/**
+ * Exact buy-now quote from the deployed route. Unlike the API phase snapshot,
+ * priceWei already accounts for a final sealed RNG window routing Level N
+ * purchases into Level N+1.
+ */
+export async function readPurchaseQuote() {
+  const provider = getProvider();
+  if (!provider) return null;
+  try {
+    const contract = _buildContract(provider);
+    if (typeof contract.purchaseInfo !== 'function') return null;
+    const raw = await contract.purchaseInfo();
+    const currentLevel = Number(raw?.lvl ?? raw?.[0]);
+    const priceWei = BigInt(raw?.priceWei ?? raw?.[4] ?? 0n);
+    if (!Number.isInteger(currentLevel) || currentLevel < 0 || priceWei <= 0n) return null;
+    return {
+      currentLevel,
+      inJackpotPhase: Boolean(raw?.inJackpotPhase ?? raw?.[1]),
+      lastPurchaseDay: Boolean(raw?.lastPurchaseDay_ ?? raw?.[2]),
+      rngLocked: Boolean(raw?.rngLocked_ ?? raw?.[3]),
+      priceWei,
+    };
+  } catch (_e) {
+    return null;
+  }
 }
 
 /**
@@ -384,12 +419,26 @@ export async function purchaseEth(args) {
   // mintPrice() from chain to honor higher tiers; Plan 60-02 uses the contract minimum.
   const lootBoxAmountWei = args.lootBoxAmountWei
     ?? (LOOTBOX_MIN_WEI * BigInt(Math.max(0, lootboxQuantity)));
-  const ticketCostWei = args.ticketCostWei ?? 0n;
+  // purchaseInfo() is authoritative at click time. In the final sealed RNG
+  // window the API can still say Level N while purchase() already routes to
+  // Level N+1; trusting the panel's stale price there underfunded the foil leg
+  // by exactly one level-tier jump.
+  const purchaseQuote = ticketQuantity > 0 || args.foil
+    ? await readPurchaseQuote()
+    : null;
+  const quotedPriceWei = purchaseQuote?.priceWei ?? 0n;
+  const ticketCostWei = quotedPriceWei > 0n && ticketQuantity > 0
+    ? ticketCostFromTickets(quotedPriceWei, ticketQuantity)
+    : BigInt(args.ticketCostWei ?? 0n);
   // Foil leg (additive): DegenerusGame._purchaseWithFoil caps fresh ETH at
   // tickets + lootbox + FOIL_PACK_TICKETS × price and credits any excess to
   // afking, so msg.value must include the exact foil cost.
   const foil = Boolean(args.foil);
-  const foilCostWei = foil ? (args.foilCostWei ?? 0n) : 0n;
+  const foilCostWei = foil
+    ? quotedPriceWei > 0n
+      ? foilPackCostFromPriceWei(quotedPriceWei)
+      : BigInt(args.foilCostWei ?? 0n)
+    : 0n;
   let presaleBoxAmountWei = 0n;
   try { presaleBoxAmountWei = BigInt(args.presaleBoxAmountWei ?? 0n); }
   catch (_e) { throw new Error('Enter a valid presale box amount.'); }

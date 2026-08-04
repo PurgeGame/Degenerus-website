@@ -23,21 +23,29 @@ const GAME_QUEST_CONTEXT_ABI = [
   'function subInfo(address player) view returns (bool active,uint8 dailyQuantity,uint24 afkingStartDay,uint24 afkCoveredThroughDay)',
 ];
 
-// Current DegenerusGame storage layout: `_subOf` is the address mapping at
-// slot 53 and each Sub occupies one packed word. `subInfo` deliberately omits
-// the streak latch, so an active afKing subscriber needs this one read to show
-// the same effective streak that playerActivityScore() uses. This is pinned to
-// the active deployment profile, just like the raw decimator reads.
-const GAME_SUB_ROOT_SLOT = 53n;
-const SUB_COVERED_SHIFT = 104n;
-const SUB_START_SHIFT = 128n;
-const SUB_STREAK_SHIFT = 208n;
-const MASK_16 = (1n << 16n) - 1n;
-const MASK_24 = (1n << 24n) - 1n;
+// DegenerusGameLens is read-only periphery that decodes the packed Sub record
+// GAME.subInfo only partially exposes. `effectiveStreak` is the unified value —
+// it mirrors DegenerusGameStorage._effectiveQuestStreak exactly, so it is the
+// same number playerActivityScore() consumes: the afKing compute-on-read
+// (streak latch + funded delivered days) for a live subscriber, and the manual
+// quest streak for everyone else. It also applies the contract's own decay
+// gate, returning 0 once a playable full day passed with no funded delivery
+// while correctly NOT decaying across a pending unadvanced gap — a distinction
+// no client-side freshness heuristic can make.
+// Declared as the single struct the contract actually returns, not as flattened
+// return values. Both decode the same today (every member is static), but the
+// struct form stays correct if SubFull ever gains a dynamic member.
+const GAME_LENS_ABI = [
+  'function subInfoFull(address game,address player) view returns (('
+    + 'bool active,uint8 dailyQuantity,uint8 flags,uint16 score,uint24 amountMilliEth,'
+    + 'uint24 lastAutoBoughtDay,uint24 lastOpenedDay,uint24 afkCoveredThroughDay,'
+    + 'uint24 afkingStartDay,uint32 affiliateBase,uint24 pendingFlip,'
+    + 'uint16 subStreakLatch,uint32 effectiveStreak) s)',
+];
 
 let _contractFactory = null;
 let _gameContractFactory = null;
-let _storageReader = null;
+let _lensContractFactory = null;
 let _publicProvider = null;
 
 export function __setQuestContractFactoryForTest(factory) {
@@ -48,14 +56,14 @@ export function __setQuestGameContractFactoryForTest(factory) {
   _gameContractFactory = factory;
 }
 
-export function __setQuestStorageReaderForTest(reader) {
-  _storageReader = reader;
+export function __setQuestLensContractFactoryForTest(factory) {
+  _lensContractFactory = factory;
 }
 
 export function __resetQuestContractFactoryForTest() {
   _contractFactory = null;
   _gameContractFactory = null;
-  _storageReader = null;
+  _lensContractFactory = null;
 }
 
 function _readProvider() {
@@ -82,6 +90,17 @@ function _gameContract(provider) {
     : new ethers.Contract(CONTRACTS.GAME, GAME_QUEST_CONTEXT_ABI, provider);
 }
 
+// The lens is deployment-decoupled periphery (it takes the game address per
+// call), but it bakes QUESTS and DEPLOY_DAY_BOUNDARY as compile-time
+// constants, so a redeploy ships a new one. db/sync-deployment.mjs keeps
+// CONTRACTS.GAME_LENS in step with the manifest; a profile that has not
+// deployed one yet leaves it null and the afKing streak falls back.
+function _lensContract(provider) {
+  if (_lensContractFactory) return _lensContractFactory(provider);
+  if (!CONTRACTS.GAME_LENS) return null;
+  return new ethers.Contract(CONTRACTS.GAME_LENS, GAME_LENS_ABI, provider);
+}
+
 function _safeWholeNumber(value) {
   try {
     const parsed = BigInt(value);
@@ -92,51 +111,19 @@ function _safeWholeNumber(value) {
   }
 }
 
-function _subStorageSlot(player) {
-  const coder = ethers.AbiCoder.defaultAbiCoder();
-  return ethers.keccak256(coder.encode(
-    ['address', 'uint256'],
-    [player, GAME_SUB_ROOT_SLOT],
-  ));
-}
-
-async function _readSubStorage(provider, player, blockNumber) {
-  if (_storageReader) return _storageReader(provider, player, blockNumber);
-  const slot = _subStorageSlot(player);
-  if (typeof provider?.getStorage === 'function') {
-    return provider.getStorage(CONTRACTS.GAME, slot, blockNumber);
-  }
-  if (typeof provider?.send === 'function') {
-    return provider.send('eth_getStorageAt', [
-      CONTRACTS.GAME,
-      slot,
-      `0x${BigInt(blockNumber).toString(16)}`,
-    ]);
-  }
-  throw new Error('Quest subscriber storage reads unavailable.');
-}
-
-function _decodeSubStorage(word) {
-  try {
-    const packed = BigInt(word);
-    return {
-      coveredThroughDay: Number((packed >> SUB_COVERED_SHIFT) & MASK_24),
-      startDay: Number((packed >> SUB_START_SHIFT) & MASK_24),
-      streakBase: Number((packed >> SUB_STREAK_SHIFT) & MASK_16),
-    };
-  } catch (_e) {
-    return null;
-  }
-}
-
 async function _readGameQuestContext(provider, player, overrides) {
   const game = _gameContract(provider);
-  const [scoreRead, deityRead, subRead] = await Promise.allSettled([
+  const lens = _lensContract(provider);
+  const [scoreRead, deityRead, subRead, lensRead] = await Promise.allSettled([
     game.playerActivityScore(player, overrides),
     game.hasDeityPass(player, overrides),
     game.subInfo(player, overrides),
+    lens
+      ? lens.subInfoFull(CONTRACTS.GAME, player, overrides)
+      : Promise.reject(new Error('no lens')),
   ]);
   const sub = subRead.status === 'fulfilled' ? subRead.value : null;
+  const lensSub = lensRead.status === 'fulfilled' ? lensRead.value : null;
   return {
     activityScore: scoreRead.status === 'fulfilled'
       ? _safeWholeNumber(scoreRead.value)
@@ -146,6 +133,11 @@ async function _readGameQuestContext(provider, player, overrides) {
       active: Boolean(_value(sub, 'active', 0, false)),
       startDay: Number(_value(sub, 'afkingStartDay', 2, 0)),
       coveredThroughDay: Number(_value(sub, 'afkCoveredThroughDay', 3, 0)),
+    },
+    lensSub: lensSub == null ? null : {
+      startDay: Number(_value(lensSub, 'afkingStartDay', 8, 0)),
+      coveredThroughDay: Number(_value(lensSub, 'afkCoveredThroughDay', 7, 0)),
+      effectiveStreak: Number(_value(lensSub, 'effectiveStreak', 12, 0)),
     },
   };
 }
@@ -197,6 +189,7 @@ export async function readLiveQuestBoard(player) {
       activityScore: null,
       hasDeityPass: null,
       sub: null,
+      lensSub: null,
     })),
   ]);
   const shieldState = shieldResult?.ok ? shieldResult.value : null;
@@ -221,29 +214,32 @@ export async function readLiveQuestBoard(player) {
   const afkingActive = Boolean(_value(effective, 'afking', 1, false));
 
   // During an afKing run the Quest contract intentionally freezes its manual
-  // counter. Read the Game-side latch only for a current, funded subscriber.
-  // If it is stale, retain the decay-aware manual value; that matches Game's
-  // own fallback instead of displaying an old afKing high-water mark.
+  // counter, so the live streak has to come from the Game-side Sub record.
+  //
+  // Take the lens's `effectiveStreak` only when its Sub fields agree with GAME's
+  // own subInfo at the same block. Both ultimately read this GAME's storage, so
+  // this does not detect a lens left over from a previous run (that would only
+  // corrupt `effectiveStreak`, via the QUESTS/DEPLOY_DAY_BOUNDARY it bakes in) —
+  // what it does catch is a lens compiled against a DIFFERENT storage layout,
+  // which is the failure the old hardcoded slot-53 decode was exposed to.
+  // Address freshness is db/sync-deployment.mjs's job, not this check's.
+  //
+  // A zero is the contract's own decay gate firing, not a read failure; fall
+  // back rather than show a stale afKing high-water mark. When the lens is
+  // unavailable entirely, leaving this inexact lets the panel prefer the indexed
+  // /player streak, which is already afKing-correct.
   let effectiveQuestStreak = manualStreak;
   let effectiveQuestStreakExact = !afkingActive;
   const sub = gameContext?.sub;
+  const lensSub = gameContext?.lensSub;
   if (afkingActive && sub?.active && sub.startDay > 0
     && sub.coveredThroughDay >= sub.startDay
-    && (day <= 0 || sub.coveredThroughDay + 1 >= day)) {
-    try {
-      const subWord = await _readSubStorage(provider, player, blockNumber);
-      const decoded = _decodeSubStorage(subWord);
-      if (decoded
-        && decoded.startDay === sub.startDay
-        && decoded.coveredThroughDay === sub.coveredThroughDay) {
-        effectiveQuestStreak = decoded.streakBase
-          + (decoded.coveredThroughDay - decoded.startDay);
-        effectiveQuestStreakExact = true;
-      }
-    } catch (_e) {
-      // A provider may disable eth_getStorageAt. The exact activity score still
-      // renders and the manual streak remains an honest fallback.
-    }
+    && lensSub
+    && lensSub.startDay === sub.startDay
+    && lensSub.coveredThroughDay === sub.coveredThroughDay
+    && lensSub.effectiveStreak > 0) {
+    effectiveQuestStreak = lensSub.effectiveStreak;
+    effectiveQuestStreakExact = true;
   }
 
   return {

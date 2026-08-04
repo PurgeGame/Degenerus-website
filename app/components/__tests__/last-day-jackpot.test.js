@@ -1303,8 +1303,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       assert.equal(queued.title, 'DAY 5 SUMMARY');
       const { lootboxResults, ...activityCounts } = queued.activity;
       assert.deepEqual(activityCounts, {
-        ticketPacks: 2,
-        ticketCount: 13,
+        ticketsRevealed: 13,
         lootboxesBought: 4,
         lootboxesOpened: 2,
         hasCoinflipBet: false,
@@ -1543,8 +1542,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
 
       const [queued] = revealMod.__takeQueuedForTest();
       assert.deepEqual(queued.activity, {
-        ticketPacks: 0,
-        ticketCount: 0,
+        ticketsRevealed: 0,
         lootboxesBought: 0,
         lootboxesOpened: 0,
         lootboxResults: [],

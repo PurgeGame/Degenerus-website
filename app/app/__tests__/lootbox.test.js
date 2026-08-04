@@ -47,6 +47,7 @@ function makeFakeContract(opts = {}) {
     openBoxStatic: [],
     lootboxStatus: [],
     claimableWinningsOf: [],
+    purchaseInfo: [],
   };
   const staticCallStub = (methodName) => async (...args) => {
     if (methodName === 'purchase') calls.purchaseStatic.push(args);
@@ -108,6 +109,12 @@ function makeFakeContract(opts = {}) {
     connect(_signer) { return this; },
     _calls: calls,
   };
+  if (opts.purchaseInfo != null) {
+    c.purchaseInfo = async () => {
+      calls.purchaseInfo.push([]);
+      return opts.purchaseInfo;
+    };
+  }
   return c;
 }
 
@@ -248,6 +255,35 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(lootboxMod.ticketCostFromTickets(price, 1), price, 'one ticket = one ticket price');
     assert.equal(lootboxMod.ticketCostFromTickets(price, 0.25), price / 4n, 'one entry = a quarter');
     assert.equal(lootboxMod.ticketCostFromTickets(price, 5), price * 5n);
+  });
+
+  test('purchaseInfo supplies the exact routed price across a level-tier boundary', async () => {
+    const routedPrice = lootboxMod.scaledTicketPriceWei(30);
+    lastFakeContract = makeFakeContract({
+      purchaseInfo: [29, true, false, true, routedPrice],
+    });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+
+    assert.deepEqual(await lootboxMod.readPurchaseQuote(), {
+      currentLevel: 29,
+      inJackpotPhase: true,
+      lastPurchaseDay: false,
+      rngLocked: true,
+      priceWei: routedPrice,
+    });
+
+    const staleFoilCost = lootboxMod.scaledFoilPackCostWei(29);
+    await lootboxMod.purchaseEth({
+      ticketQuantity: 0,
+      lootboxQuantity: 0,
+      foil: true,
+      foilCostWei: staleFoilCost,
+    });
+    const [args] = lastFakeContract._calls.purchase;
+    assert.equal(args[6].value, lootboxMod.foilPackCostFromPriceWei(routedPrice),
+      'the write ignores the half-price Level 29 quote and funds routed Level 30');
+    assert.equal(args[6].value, staleFoilCost * 2n,
+      'this exact boundary reproduces the reported 2x tier jump');
   });
 
   test('claimable-first split preserves the 1-wei sentinel', () => {

@@ -561,7 +561,11 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       'BUY LOOTBOX · 1.2 ETH',
       'the popup subtracts existing progress and presents only the remaining minimum',
     );
-    assert.match(el.querySelector('[data-bind="qst-action-confirm"]').textContent, /BUY LOOTBOX · 1\.2 ETH/);
+    assert.equal(el.querySelector('[data-bind="qst-action-adjust"]').hidden, true,
+      'one-click quest presets do not repeat the destination form controls');
+    assert.equal(el.querySelector('[data-bind="qst-action-copy"]').textContent,
+      'Buy a 1.2 ETH lootbox.');
+    assert.equal(el.querySelector('[data-bind="qst-action-confirm"]').textContent, 'CONFIRM');
 
     el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
     assert.deepEqual(events, [{
@@ -635,9 +639,11 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.querySelectorAll('.qst-slot')[0].dispatchEvent({ type: 'click' });
 
     const choice = el.querySelector('[data-bind="qst-action-choice"]');
+    const adjust = el.querySelector('[data-bind="qst-action-adjust"]');
     const ticket = el.querySelector('[data-bind="qst-action-ticket"]');
     const lootbox = el.querySelector('[data-bind="qst-action-lootbox"]');
     assert.equal(choice.hidden, false, 'the purchase quest offers the product toggle');
+    assert.equal(adjust.hidden, false, 'ticket/lootbox purchase sizing stays available');
     assert.equal(ticket.getAttribute('aria-pressed'), 'true');
     assert.match(el.querySelector('[data-bind="qst-action-requirement"]').textContent, /BUY .*TICKET/);
 

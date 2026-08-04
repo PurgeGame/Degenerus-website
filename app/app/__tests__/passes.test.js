@@ -41,6 +41,7 @@ function makeFakeContract(opts = {}) {
     depositAfkingFunding: [],
     afkingFundingOf: [],
     withdrawAfkingFunding: [],
+    claimAfkingFlip: [],
   };
   const staticCallStub = (methodName) => async (..._args) => {
     if (opts.staticCallShouldRevert?.[methodName]) {
@@ -114,6 +115,13 @@ function makeFakeContract(opts = {}) {
         return sendTxStub('withdrawAfkingFunding')(...args);
       },
       { staticCall: staticCallStub('withdrawAfkingFunding') }
+    ),
+    claimAfkingFlip: Object.assign(
+      async (...args) => {
+        calls.claimAfkingFlip.push(args);
+        return sendTxStub('claimAfkingFlip')(...args);
+      },
+      { staticCall: staticCallStub('claimAfkingFlip') }
     ),
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
@@ -346,6 +354,23 @@ describe('AFKing seat entitlement and claim', () => {
     assert.equal(state.hasToken, true);
     assert.equal(state.tokenBalance, 1n);
   });
+
+  test('reads the exact accrued AFKing bonus FLIP from the deployment lens', async () => {
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 1n },
+      game: {
+        subInfo: async () => [true, 2n, 8n, 12n],
+        afkingSnapshot: async () => [10n, false, [0n], [0n]],
+      },
+      lens: {
+        subInfoFull: async () => ({ pendingFlip: 275n }),
+      },
+    }));
+
+    const state = await passesMod.readAfkingSubscription(CONNECTED);
+    assert.equal(state.pendingFlipKnown, true);
+    assert.equal(state.pendingFlipWhole, 275n);
+  });
 });
 
 describe('AFKing subscription configuration and funding', () => {
@@ -407,6 +432,14 @@ describe('AFKing subscription configuration and funding', () => {
     assert.deepEqual(fake._calls.depositAfkingFunding, [[
       '0xAB12000000000000000000000000000000000000',
       { value: funding },
+    ]]);
+  });
+
+  test('claims accrued AFKing bonus FLIP for the acting subscriber', async () => {
+    await passesMod.claimAfkingSubscriptionFlip();
+
+    assert.deepEqual(fake._calls.claimAfkingFlip, [[
+      ['0xAB12000000000000000000000000000000000000'],
     ]]);
   });
 

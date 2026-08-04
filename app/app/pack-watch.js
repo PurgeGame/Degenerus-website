@@ -22,7 +22,8 @@
 // land while the tab is closed. Every access is try/caught: private mode and
 // quota errors must never break a buy or a poll (Pitfall F).
 
-import { CHAIN } from './chain-config.js';
+import { CHAIN, CONTRACTS } from './chain-config.js';
+import { getProvider, ethers } from './contracts.js';
 import { fetchJSON } from '../../beta/app/api.js';
 import { publishPendingActions, clearPendingActions } from './pending-actions.js';
 import {
@@ -31,9 +32,23 @@ import {
   PACK_REVEAL_ABORT_EVENT,
 } from '../components/reveal-overlay.js';
 
-const PENDING_KEY = `pack_pending_${CHAIN.id}`;
-const REVEALED_KEY = `pack_revealed_${CHAIN.id}`;
+// Local reveal state is contract-deployment state, not merely chain state.
+// Testnet reuses level numbers and player addresses on every run; carrying a
+// chain-only Level 1 record across a redeploy creates a pack that can never be
+// satisfied by the new GAME.
+const DEPLOY_SCOPE = Number.isInteger(Number(CHAIN.deployBlock))
+  ? Number(CHAIN.deployBlock)
+  : 'unscoped';
+const PENDING_KEY = `pack_pending_${CHAIN.id}_${DEPLOY_SCOPE}`;
+const REVEALED_KEY = `pack_revealed_${CHAIN.id}_${DEPLOY_SCOPE}`;
+const JACKPOT_AWARD_KEY = `pack_jackpot_awards_${CHAIN.id}_${DEPLOY_SCOPE}`;
+const LEGACY_PENDING_KEY = `pack_pending_${CHAIN.id}`;
 const PENDING_SOURCE = 'ticket-packs';
+const ENTRIES_PER_TICKET = 4;
+const LIVE_TICKET_WINDOW = 6;
+const ENTRIES_OWED_ABI = [
+  'function entriesOwedView(uint24 lvl, address player) view returns (uint32)',
+];
 
 // A physical-feeling pack stays readable at ten tickets. Larger drops are
 // split into a batch of packs; reveal-overlay lets the player open each one or
@@ -42,10 +57,21 @@ const PENDING_SOURCE = 'ticket-packs';
 // (with OPEN ALL available), so the grid never creates a short fourth column.
 export const MAX_TICKETS_PER_PACK = 9;
 export const FOIL_TICKETS_PER_PACK = 4;
+// Foil lines are materialized in their own on-chain/indexed stream and do not
+// have card indexes in /tickets/by-trait. Give the four presentation receipts
+// stable per-level sentinels in the revealed set so opening a foil pack remains
+// durable without pretending those lines came from the generic card feed.
+const FOIL_CARD_INDEX_BASE = 0x7FFF_FF00;
 
 // Traits roll at the level draw, so there is nothing to gain from a tight poll.
 const WATCH_INTERVAL_MS = 45_000;
 const SEED_RECOVERY_GRACE_MS = 120_000;
+const INDEXED_AWARD_SEED_GRACE_MS = 2_000;
+// A completed ticket batch normally reaches the REST projection a block or two
+// after entriesOwedView reaches zero. Poll that short hand-off promptly instead
+// of leaving a processed pack painted as Pending until the ordinary 45s watch.
+const INDEX_CATCHUP_RETRY_MS = 2_500;
+const INDEX_CATCHUP_WINDOW_MS = 120_000;
 
 // A record older than this is dropped unopened. Generous on purpose: tickets can
 // be bought for a FUTURE level whose traits do not roll until that level goes
@@ -58,6 +84,11 @@ let _running = false;
 let _now = () => Date.now();
 let _getAddress = null;
 let _publishSeq = 0;
+let _entriesOwedReaderForTest = null;
+let _entriesOwedFallbackProvider = null;
+const _historyBackfilled = new Set();
+let _awardSeedTimer = null;
+let _indexCatchupTimer = null;
 // In-memory only: a reload deliberately forgets the active presentation while
 // the durable pending record remains, so the tray offers the unopened pack
 // again instead of hiding its tickets forever.
@@ -67,6 +98,11 @@ let _abortListener = null;
 
 /** Test-only: pin the clock used for TTL expiry. */
 export function __setClockForTest(fn) { _now = fn || (() => Date.now()); }
+
+/** Test-only: inject the exact entriesOwedView(level, player) projection. */
+export function __setEntriesOwedReaderForTest(fn) {
+  _entriesOwedReaderForTest = typeof fn === 'function' ? fn : null;
+}
 
 function _read(key, fallback) {
   try {
@@ -99,6 +135,64 @@ function _saveRevealed(address, level, set) {
 function _expectedTickets(value) {
   const n = Math.floor(Number(value) || 0);
   return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function _expectedEntries(value) {
+  const n = Math.round((Number(value) || 0) * ENTRIES_PER_TICKET);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function _ticketCountFromEntries(value) {
+  const entries = Math.max(0, Math.floor(Number(value) || 0));
+  return entries > 0 ? entries / ENTRIES_PER_TICKET : 0;
+}
+
+function _newlyCompletedTickets(payload, addedEntries) {
+  const added = Math.max(0, Math.floor(Number(addedEntries) || 0));
+  if (added <= 0) return 0;
+  let total = Math.max(0, Math.floor(Number(payload?.totalEntries) || 0));
+  if (total <= 0) {
+    total = (Array.isArray(payload?.cards) ? payload.cards : [])
+      .reduce((sum, card) => sum + (Array.isArray(card?.entries) ? card.entries.length : 0), 0);
+  }
+  return Math.max(0,
+    Math.floor(total / ENTRIES_PER_TICKET)
+      - Math.floor(Math.max(0, total - added) / ENTRIES_PER_TICKET));
+}
+
+function _pendingPackPreviews(rows) {
+  const previews = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const level = Number(row?.level);
+    if (!Number.isInteger(level) || level < 0) continue;
+    let remaining = _ticketCountFromEntries(row?.pendingEntries);
+    const foilCount = row?.foilBlocked
+      ? Math.min(FOIL_TICKETS_PER_PACK, remaining)
+      : 0;
+    remaining = Math.max(0, remaining - foilCount);
+
+    while (remaining > 0) {
+      const count = Math.min(MAX_TICKETS_PER_PACK, remaining);
+      previews.push({ level, count, foilPack: false });
+      remaining = Math.max(0, remaining - count);
+    }
+    if (foilCount > 0) previews.push({ level, count: foilCount, foilPack: true });
+
+    // A legacy/failed-read record can prove that a pack exists without yet
+    // knowing its exact entry count. Still show which level it will become.
+    if (Number(row?.pendingEntries) === 0 && row?.ready !== true) {
+      const expectedEntries = Math.max(
+        _expectedEntries(row?.rec?.expectedTickets),
+        Math.floor(Number(row?.rec?.expectedEntries) || 0),
+      );
+      if (expectedEntries === 0) previews.push({ level, count: null, foilPack: false });
+    }
+  }
+  return previews.map((preview, index) => ({
+    ...preview,
+    packIndex: index + 1,
+    packCount: previews.length,
+  }));
 }
 
 // Pending rows are level-scoped, so a later ordinary purchase can merge into
@@ -173,6 +267,176 @@ async function _fetchCards(address, level) {
   return fetchJSON(`/player/${_lower(address)}/tickets/by-trait?level=${level}`);
 }
 
+/**
+ * First level whose tickets can still participate in a future draw.
+ * A final RNG lock alone does not retire the level: its entries remain live
+ * until the phase transition actually begins.
+ */
+function _unresolvedTicketFloor(gameState) {
+  const level = Number(gameState?.level);
+  if (!Number.isInteger(level) || level < 0 || gameState?.gameOver === true) return null;
+  if (gameState?.phaseTransitionActive === true) return level + 1;
+  const jackpotPhase = Boolean(
+    gameState?.jackpotPhaseFlag ?? (gameState?.phase === 'JACKPOT'),
+  );
+  if (jackpotPhase || gameState?.rngLockedFlag === true) return level;
+  return level + 1;
+}
+
+/**
+ * Levels in the contract's six-key live processing window that have not
+ * already completed their final draw.
+ */
+export function pendingTicketDrainLevels(gameState) {
+  const level = Number(gameState?.level);
+  const floor = _unresolvedTicketFloor(gameState);
+  if (!Number.isInteger(level) || level < 0 || floor == null) return [];
+  return Array.from({ length: LIVE_TICKET_WINDOW }, (_unused, offset) => level + offset)
+    .filter((candidate) => candidate >= floor);
+}
+
+async function _readEntriesOwed(address, levels) {
+  const wanted = Array.isArray(levels) ? levels : [];
+  if (wanted.length === 0) return [];
+
+  let reader = _entriesOwedReaderForTest;
+  let walletProvider = null;
+  if (!reader) {
+    walletProvider = getProvider();
+    if (!walletProvider || !CONTRACTS.GAME) return [];
+    try {
+      const contract = new ethers.Contract(CONTRACTS.GAME, ENTRIES_OWED_ABI, walletProvider);
+      if (typeof contract.entriesOwedView !== 'function') return [];
+      reader = (player, level) => contract.entriesOwedView(level, player);
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  const readLevel = async (read, level) => {
+    const raw = await read(address, level);
+    const entries = Number(BigInt(raw ?? 0));
+    if (!Number.isSafeInteger(entries) || entries < 0) throw new Error('Invalid entries owed');
+    return { level, entries };
+  };
+  const reads = await Promise.allSettled(wanted.map((level) => readLevel(reader, level)));
+  const rows = reads
+    .filter((read) => read.status === 'fulfilled')
+    .map((read) => read.value);
+
+  // Injected wallet RPCs occasionally reject a parallel eth_call while the
+  // wallet itself remains connected. A rejected zero-refresh used to preserve
+  // the previous non-zero chainOwedEntries forever, manufacturing packs that
+  // still looked queued after the boundary. Retry only the failed levels on the
+  // configured public read RPC; successful wallet answers stay untouched.
+  if (!_entriesOwedReaderForTest && reads.some((read) => read.status === 'rejected')) {
+    try {
+      if (!_entriesOwedFallbackProvider && CHAIN.rpcUrl) {
+        _entriesOwedFallbackProvider = new ethers.JsonRpcProvider(
+          CHAIN.rpcUrl,
+          { name: CHAIN.name, chainId: Number(CHAIN.id) },
+          { staticNetwork: true, batchMaxCount: 2 },
+        );
+      }
+      if (_entriesOwedFallbackProvider) {
+        const fallbackContract = new ethers.Contract(
+          CONTRACTS.GAME,
+          ENTRIES_OWED_ABI,
+          _entriesOwedFallbackProvider,
+        );
+        const fallbackReader = (player, level) => fallbackContract.entriesOwedView(level, player);
+        const failedLevels = wanted.filter((_level, index) => reads[index].status === 'rejected');
+        const retries = await Promise.allSettled(
+          failedLevels.map((level) => readLevel(fallbackReader, level)),
+        );
+        rows.push(...retries
+          .filter((read) => read.status === 'fulfilled')
+          .map((read) => read.value));
+      }
+    } catch (_e) {
+      // Keep the fulfilled wallet reads. A failed fallback is unknown, never an
+      // invented zero, and the next watch tick retries naturally.
+    }
+  }
+  return rows;
+}
+
+/**
+ * Discover queue-backed packs even when this browser did not witness the tx.
+ * Existing purchase/lootbox records are upgraded in place rather than added
+ * again, since entriesOwedView describes those same tickets.
+ */
+async function _syncChainOwedRecords(address, levels) {
+  const owedRows = await _readEntriesOwed(address, levels);
+  if (owedRows.length === 0) return;
+
+  const addr = _lower(address);
+  const list = pendingPacks();
+  let changed = false;
+  for (const { level, entries } of owedRows) {
+    let rec = list.find((row) => (
+      row && _lower(row.address) === addr && Number(row.level) === Number(level)
+    ));
+    if (!rec && entries <= 0) continue;
+
+    if (!rec) {
+      let seedPending = false;
+      try {
+        const payload = await _fetchCards(addr, level);
+        _seedOpenedCards(addr, level, payload, 0);
+      } catch (_e) {
+        seedPending = true;
+      }
+      rec = {
+        address: addr,
+        level,
+        at: _now(),
+        standardExpected: true,
+        foilExpected: false,
+        expectedTickets: _ticketCountFromEntries(entries),
+        expectedEntries: entries,
+        releasedEntries: 0,
+        sourceKeys: [`chain-owed:L${level}`],
+        settledExpected: false,
+        seedPending,
+        chainTracked: true,
+        chainOwedEntries: entries,
+      };
+      list.push(rec);
+      changed = true;
+      continue;
+    }
+
+    const released = Math.max(0, Math.floor(Number(rec.releasedEntries) || 0));
+    const previousExpected = Math.max(
+      _expectedEntries(rec.expectedTickets),
+      Math.floor(Number(rec.expectedEntries) || 0),
+    );
+    const expectedEntries = Math.max(previousExpected, released + entries);
+    const previousOwed = Math.max(0, Math.floor(Number(rec.chainOwedEntries) || 0));
+    const previousDrainedAt = Math.max(0, Number(rec.chainDrainedAt) || 0);
+    const chainDrainedAt = entries > 0
+      ? 0
+      : previousOwed > 0 || !rec.chainTracked || previousDrainedAt === 0
+        ? _now()
+        : previousDrainedAt;
+    const next = {
+      chainTracked: true,
+      chainOwedEntries: entries,
+      chainDrainedAt,
+      expectedEntries,
+      expectedTickets: _ticketCountFromEntries(expectedEntries),
+      standardExpected: Boolean(_standardPackExpected(rec) || entries > 0),
+    };
+    for (const [key, value] of Object.entries(next)) {
+      if (rec[key] === value) continue;
+      rec[key] = value;
+      changed = true;
+    }
+  }
+  if (changed) _write(PENDING_KEY, list);
+}
+
 // ---------------------------------------------------------------------------
 // Recording
 // ---------------------------------------------------------------------------
@@ -187,7 +451,10 @@ async function _fetchCards(address, level) {
  *
  * @param {{address: string, level: number, foilExpected?: boolean,
  *   standardExpected?: boolean,
- *   expectedTickets?: number, sourceKey?: string, settledExpected?: boolean}} args
+ *   expectedTickets?: number, sourceKey?: string, settledExpected?: boolean,
+ *   preserveNewestEntries?: number, deferSeedMs?: number,
+ *   chainExpectedOverlap?: boolean,
+ *   publish?: boolean}} args
  */
 export async function recordPendingPack({
   address,
@@ -197,11 +464,16 @@ export async function recordPendingPack({
   expectedTickets = 0,
   sourceKey = null,
   settledExpected = false,
+  preserveNewestEntries = 0,
+  deferSeedMs = 0,
+  chainExpectedOverlap = false,
+  publish = true,
 } = {}) {
   const addr = _lower(address);
   const lvl = Number(level);
   if (!addr || !Number.isInteger(lvl) || lvl < 0) return false;
-  const expected = _expectedTickets(expectedTickets);
+  const expectedEntryCount = _expectedEntries(expectedTickets);
+  const expected = _ticketCountFromEntries(expectedEntryCount);
   const source = sourceKey == null ? null : String(sourceKey);
 
   const pending = _read(PENDING_KEY, []);
@@ -218,31 +490,61 @@ export async function recordPendingPack({
     already.foilExpected = Boolean(already.foilExpected || foilExpected);
     already.settledExpected = Boolean(already.settledExpected || settledExpected);
     if (!duplicate) {
-      already.expectedTickets = _expectedTickets(already.expectedTickets) + expected;
+      const previousEntries = Math.max(
+        _expectedEntries(already.expectedTickets),
+        Math.floor(Number(already.expectedEntries) || 0),
+      );
+      already.expectedEntries = chainExpectedOverlap && already.chainTracked
+        ? Math.max(previousEntries, Math.max(0, Number(already.releasedEntries) || 0) + expectedEntryCount)
+        : previousEntries + expectedEntryCount;
+      already.expectedTickets = _ticketCountFromEntries(already.expectedEntries);
+    }
+    if (already.seedPending && preserveNewestEntries > 0) {
+      // A pre-existing record whose baseline fetch failed must preserve every
+      // receipt-backed entry now merged into it, not seed the jackpot hand away
+      // when the API recovers.
+      already.seedPreserveEntries = Math.max(
+        Math.max(0, Math.floor(Number(already.seedPreserveEntries) || 0)),
+        Math.max(0, Math.floor(Number(already.expectedEntries) || 0)),
+      );
+      if (deferSeedMs > 0) {
+        already.seedNotBefore = Math.max(
+          Math.max(0, Number(already.seedNotBefore) || 0),
+          _now() + Number(deferSeedMs),
+        );
+      }
     }
     already.sourceKeys = [...sources];
     _write(PENDING_KEY, list);
-    await _publishPackActions(addr, ++_publishSeq);
+    if (publish) await _publishPackActions(addr, ++_publishSeq);
     return true;
   }
 
   // Seed BEFORE recording: everything already rolled at this level is old news.
-  let seedPending = false;
-  try {
-    const payload = await _fetchCards(addr, lvl);
-    const hasIncomplete = (Array.isArray(payload?.cards) ? payload.cards : [])
-      .some((card) => _wholeCardTraitIds(card) == null);
-    _seedOpenedCards(
-      addr,
-      lvl,
-      payload,
-      settledExpected && !hasIncomplete ? expected : 0,
-    );
-  } catch (_e) {
-    // Keep a durable record through an API/indexer outage. _inspectOne performs
-    // the baseline seed on the first trustworthy response; expectedTickets lets
-    // it preserve an already-rolled newest award instead of swallowing it.
-    seedPending = true;
+  let seedPending = Math.max(0, Number(deferSeedMs) || 0) > 0;
+  if (!seedPending) {
+    try {
+      const payload = await _fetchCards(addr, lvl);
+      const hasIncomplete = (Array.isArray(payload?.cards) ? payload.cards : [])
+        .some((card) => _wholeCardTraitIds(card) == null);
+      _seedOpenedCards(
+        addr,
+        lvl,
+        payload,
+        // The indexer can beat the receipt callback. When every card is already
+        // complete, the newest expected tickets are the just-confirmed award,
+        // not old inventory to seed away. This applies to ordinary purchases as
+        // well as historical/settled recovery.
+        preserveNewestEntries > 0
+          ? _newlyCompletedTickets(payload, preserveNewestEntries)
+          : !hasIncomplete ? _expectedTickets(expected) : 0,
+      );
+    } catch (_e) {
+      // Keep a durable record through an API/indexer outage. _inspectOne performs
+      // the baseline seed on the first trustworthy response; expectedTickets lets
+      // it preserve an already-rolled newest award instead of swallowing it.
+      seedPending = true;
+    }
   }
 
   list.push({
@@ -252,12 +554,16 @@ export async function recordPendingPack({
     standardExpected: Boolean(standardExpected),
     foilExpected: Boolean(foilExpected),
     expectedTickets: expected,
+    expectedEntries: expectedEntryCount,
+    releasedEntries: 0,
     sourceKeys: source == null ? [] : [source],
     settledExpected: Boolean(settledExpected),
     seedPending,
+    seedPreserveEntries: Math.max(0, Math.floor(Number(preserveNewestEntries) || 0)),
+    seedNotBefore: seedPending && deferSeedMs > 0 ? _now() + Number(deferSeedMs) : 0,
   });
   _write(PENDING_KEY, list);
-  await _publishPackActions(addr, ++_publishSeq);
+  if (publish) await _publishPackActions(addr, ++_publishSeq);
   return true;
 }
 
@@ -288,8 +594,186 @@ export async function recordLootboxTicketPacks({
   return results.filter(Boolean).length;
 }
 
+function _jackpotAwardLedgerKey(address) {
+  return `${JACKPOT_AWARD_KEY}_${_lower(address)}`;
+}
+
+function _jackpotAwardLedger(address) {
+  const rows = _read(_jackpotAwardLedgerKey(address), []);
+  return Array.isArray(rows) ? rows : [];
+}
+
+function _saveJackpotAwardLedger(address, rows) {
+  _write(_jackpotAwardLedgerKey(address), Array.isArray(rows) ? rows : []);
+}
+
+function _safeEntryCount(value, multiplier = 1) {
+  try {
+    const count = BigInt(value ?? 0) * BigInt(multiplier ?? 1);
+    if (count <= 0n || count > BigInt(Number.MAX_SAFE_INTEGER)) return 0;
+    return Number(count);
+  } catch (_e) {
+    return 0;
+  }
+}
+
+function _ticketAwardRows({ address, payload = null, wins = null } = {}) {
+  const addr = _lower(address);
+  if (!addr) return [];
+  const grouped = new Map();
+  const add = (dayValue, levelValue, entriesValue) => {
+    const day = Number(dayValue);
+    const level = Number(levelValue);
+    const entries = Math.max(0, Math.floor(Number(entriesValue) || 0));
+    if (!Number.isInteger(day) || day <= 0
+      || !Number.isInteger(level) || level < 0 || entries <= 0) return;
+    const key = `${day}:L${level}`;
+    grouped.set(key, {
+      key, day, level,
+      totalEntries: (grouped.get(key)?.totalEntries || 0) + entries,
+    });
+  };
+
+  if (payload && Number(payload?.day) > 0) {
+    const winner = (Array.isArray(payload?.winners) ? payload.winners : [])
+      .find((row) => _lower(row?.address) === addr);
+    for (const row of Array.isArray(winner?.breakdown) ? winner.breakdown : []) {
+      const awardType = String(row?.awardType || '').toLowerCase();
+      if (!['ticket', 'tickets', 'tickets_baf'].includes(awardType)) continue;
+      add(payload.day, row.level, _safeEntryCount(row.amount, row.count));
+    }
+  }
+
+  for (const row of Array.isArray(wins) ? wins : []) {
+    const awardType = String(row?.awardType || '').toLowerCase();
+    if (!['ticket', 'tickets', 'tickets_baf'].includes(awardType)) continue;
+    add(row.day, row.level, _safeEntryCount(row.amount));
+  }
+  return [...grouped.values()];
+}
+
+/**
+ * Durably remember indexed jackpot ticket awards. Repeated 15-second jackpot
+ * payloads are idempotent; a later, fuller history response only contributes
+ * the positive delta that was absent from the earlier summary.
+ */
+export function ingestJackpotTicketAwards({ address, payload = null, wins = null } = {}) {
+  const addr = _lower(address);
+  if (!addr) return 0;
+  const incoming = _ticketAwardRows({ address: addr, payload, wins });
+  if (incoming.length === 0) return 0;
+  const ledger = _jackpotAwardLedger(addr);
+  let changed = 0;
+  for (const award of incoming) {
+    const existing = ledger.find((row) => row?.key === award.key);
+    if (!existing) {
+      ledger.push({
+        ...award,
+        recordedEntries: 0,
+        at: _now(),
+      });
+      changed += 1;
+      continue;
+    }
+    const nextTotal = Math.max(
+      Math.max(0, Math.floor(Number(existing.totalEntries) || 0)),
+      award.totalEntries,
+    );
+    if (nextTotal === Number(existing.totalEntries)) continue;
+    existing.totalEntries = nextTotal;
+    existing.at = _now();
+    changed += 1;
+  }
+  if (changed > 0) _saveJackpotAwardLedger(addr, ledger);
+  return changed;
+}
+
+/** One lightweight catch-up read per connected wallet/resolved day. */
+export async function backfillRecentJackpotTicketAwards({ address, day = null } = {}) {
+  const addr = _lower(address);
+  const requestedDay = Number(day);
+  const dayKey = Number.isInteger(requestedDay) && requestedDay > 0
+    ? String(requestedDay)
+    : 'latest';
+  const backfillKey = `${addr}:${dayKey}`;
+  if (!addr || _historyBackfilled.has(backfillKey)) return 0;
+  _historyBackfilled.add(backfillKey);
+  let payload;
+  try { payload = await fetchJSON(`/player/${addr}/jackpot-history`); }
+  catch (_e) {
+    // Allow a later reconnect to retry an outage; successful sessions stay at
+    // one read regardless of the 15-second polling cadence.
+    _historyBackfilled.delete(backfillKey);
+    return 0;
+  }
+  const wins = Array.isArray(payload?.wins) ? payload.wins : [];
+  const latestDay = wins.reduce((latest, row) => {
+    const day = Number(row?.day);
+    return Number.isInteger(day) && day > latest ? day : latest;
+  }, 0);
+  const targetDay = Number.isInteger(requestedDay) && requestedDay > 0
+    ? requestedDay
+    : latestDay;
+  const recent = targetDay > 0
+    ? wins.filter((row) => {
+      const rowDay = Number(row?.day);
+      return rowDay >= targetDay - 1 && rowDay <= targetDay;
+    })
+    : [];
+  const changed = ingestJackpotTicketAwards({ address: addr, wins: recent });
+  if (changed > 0) refreshPackWatch();
+  return changed;
+}
+
+async function _releaseJackpotTicketAwards(address, levels) {
+  const addr = _lower(address);
+  const live = new Set((Array.isArray(levels) ? levels : []).map(Number));
+  if (!addr || live.size === 0) return 0;
+  const ledger = _jackpotAwardLedger(addr);
+  let released = 0;
+  let changed = false;
+  for (const award of ledger) {
+    if (!live.has(Number(award?.level))) continue;
+    const totalEntries = Math.max(0, Math.floor(Number(award?.totalEntries) || 0));
+    const recordedEntries = Math.max(0, Math.floor(Number(award?.recordedEntries) || 0));
+    const deltaEntries = totalEntries - recordedEntries;
+    if (deltaEntries <= 0) continue;
+    const ok = await recordPendingPack({
+      address: addr,
+      level: Number(award.level),
+      expectedTickets: _ticketCountFromEntries(deltaEntries),
+      sourceKey: `jackpot-award:${award.key}:${totalEntries}`,
+      settledExpected: true,
+      preserveNewestEntries: deltaEntries,
+      deferSeedMs: INDEXED_AWARD_SEED_GRACE_MS,
+      chainExpectedOverlap: true,
+      publish: false,
+    });
+    if (!ok) continue;
+    award.recordedEntries = totalEntries;
+    changed = true;
+    released += deltaEntries;
+  }
+  if (changed) {
+    _saveJackpotAwardLedger(addr, ledger);
+    if (_awardSeedTimer == null && typeof setTimeout === 'function') {
+      _awardSeedTimer = setTimeout(() => {
+        _awardSeedTimer = null;
+        refreshPackWatch();
+      }, INDEXED_AWARD_SEED_GRACE_MS + 50);
+      if (_awardSeedTimer && typeof _awardSeedTimer.unref === 'function') {
+        try { _awardSeedTimer.unref(); } catch (_e) { /* browser timer */ }
+      }
+    }
+  }
+  return released;
+}
+
 /** The outstanding records (test/introspection helper). */
 export function pendingPacks() {
+  // The old chain-only key cannot be safely migrated: its level/card indexes
+  // may refer to a different GAME at the same deterministic addresses.
+  try { localStorage.removeItem(LEGACY_PENDING_KEY); } catch (_e) { /* private mode */ }
   const list = _read(PENDING_KEY, []);
   return Array.isArray(list) ? list : [];
 }
@@ -321,6 +805,21 @@ export function unopenedPackCardIndexes({ address, level, cards = [] } = {}) {
   return hidden;
 }
 
+/** Whether the direct /foil projection still belongs behind its pack opener. */
+export function unopenedFoilPackPending({ address, level } = {}) {
+  const addr = _lower(address);
+  const lvl = Number(level);
+  if (!addr || !Number.isInteger(lvl)) return false;
+  const rec = pendingPacks().find((row) => (
+    row && _lower(row.address) === addr && Number(row.level) === lvl
+  ));
+  if (!rec?.foilExpected) return false;
+  const revealed = _revealedSet(addr, lvl);
+  return Array.from({ length: FOIL_TICKETS_PER_PACK }, (_unused, index) => (
+    FOIL_CARD_INDEX_BASE + index
+  )).some((index) => !revealed.has(index));
+}
+
 function _removePendingLevel(address, level) {
   const addr = _lower(address);
   const lvl = Number(level);
@@ -350,15 +849,33 @@ export async function completePackReveal({ address, level, cardIndexes = [] } = 
     if (active.size === 0) _activePackCards.delete(key);
   }
 
+  let trackedRec = pendingPacks().find((row) => (
+    row && _lower(row.address) === addr && Number(row.level) === lvl
+  ));
+  if (trackedRec) {
+    const released = Math.max(0, Math.floor(Number(trackedRec.releasedEntries) || 0));
+    trackedRec.releasedEntries = released + (indexes.length * ENTRIES_PER_TICKET);
+    _replacePendingRecord(trackedRec);
+  }
+
   // Retire only after the final queued card was opened. A transient partial
   // fourth symbol keeps the purchase record alive for its later pack.
   if (!_activePackCards.has(key)) {
-    const rec = pendingPacks().find((row) => (
+    const rec = trackedRec || pendingPacks().find((row) => (
       row && _lower(row.address) === addr && Number(row.level) === lvl
     ));
     if (rec) {
       const inspected = await _inspectOne(addr, rec);
-      if (inspected && !inspected.error && inspected.unseen.length === 0) {
+      const expectedEntries = Math.max(
+        _expectedEntries(rec.expectedTickets),
+        Math.floor(Number(rec.expectedEntries) || 0),
+      );
+      const releasedEntries = Math.max(0, Math.floor(Number(rec.releasedEntries) || 0));
+      const chainFinished = !rec.chainTracked || (
+        Math.floor(Number(rec.chainOwedEntries) || 0) === 0
+        && releasedEntries >= expectedEntries
+      );
+      if (inspected && !inspected.error && inspected.unseen.length === 0 && chainFinished) {
         _removePendingLevel(addr, lvl);
       }
     }
@@ -383,7 +900,7 @@ async function _foilState(address, level) {
     const payload = await fetchJSON(`/player/${_lower(address)}/foil?level=${level}`);
     const lines = payload?.present ? payload.lines : null;
     if (!Array.isArray(lines)) {
-      return { complete: false, keys: new Set(), keyCounts: new Map() };
+      return { complete: false, lines: [], keys: new Set(), keyCounts: new Map() };
     }
     const valid = lines
       .filter((l) => Array.isArray(l) && l.length === 4 && l.every((t) => t != null));
@@ -395,42 +912,81 @@ async function _foilState(address, level) {
     }
     return {
       complete: payload?.present === true && valid.length >= FOIL_TICKETS_PER_PACK,
+      lines: expected.map((line) => [...line].map(Number).sort((a, b) => a - b)),
       keys: new Set(expected.map(_comboKey)),
       keyCounts,
     };
   } catch (_e) {
-    return { complete: false, keys: new Set(), keyCounts: new Map() };
+    return { complete: false, lines: [], keys: new Set(), keyCounts: new Map() };
   }
 }
 
 async function _inspectOne(address, rec) {
   const level = Number(rec?.level);
   if (!Number.isInteger(level)) return null;
-  if (_now() - Number(rec?.at || 0) > PENDING_TTL_MS) {
+  const chainOwedEntries = Math.max(0, Math.floor(Number(rec?.chainOwedEntries) || 0));
+  const trackedExpectedEntries = Math.max(
+    _expectedEntries(rec?.expectedTickets),
+    Math.floor(Number(rec?.expectedEntries) || 0),
+  );
+  const trackedReleasedEntries = Math.max(0, Math.floor(Number(rec?.releasedEntries) || 0));
+  if (_now() - Number(rec?.at || 0) > PENDING_TTL_MS
+    && !(rec?.chainTracked
+      && (chainOwedEntries > 0 || trackedReleasedEntries < trackedExpectedEntries))) {
     return { level, expired: true, ready: false, fresh: [], unseen: [], rec };
   }
   let payload;
   try {
     payload = await _fetchCards(address, level);
   } catch (_e) {
-    return { level, error: true, ready: false, fresh: [], unseen: [], rec };
+    return {
+      level,
+      error: true,
+      ready: false,
+      fresh: [],
+      unseen: [],
+      rec,
+      pendingEntries: Math.max(0, trackedExpectedEntries - trackedReleasedEntries),
+    };
   }
   if (rec.seedPending) {
+    const seedNotBefore = Math.max(0, Number(rec.seedNotBefore) || 0);
+    if (seedNotBefore > _now()) {
+      return {
+        level,
+        rec,
+        seedPending: true,
+        ready: false,
+        fresh: [],
+        unseen: [],
+        pendingEntries: Math.max(0, trackedExpectedEntries - trackedReleasedEntries),
+      };
+    }
     const cards = Array.isArray(payload?.cards) ? payload.cards : [];
     const hasIncomplete = cards.some((card) => _wholeCardTraitIds(card) == null);
     const oldEnough = _now() - Number(rec?.at || 0) >= SEED_RECOVERY_GRACE_MS;
     if (!hasIncomplete && !rec.settledExpected && !oldEnough) {
       return {
-        level, rec, seedPending: true, ready: false, fresh: [], unseen: [],
+        level,
+        rec,
+        seedPending: true,
+        ready: false,
+        fresh: [],
+        unseen: [],
+        pendingEntries: Math.max(0, trackedExpectedEntries - trackedReleasedEntries),
       };
     }
     _seedOpenedCards(
       address,
       level,
       payload,
-      !hasIncomplete ? _expectedTickets(rec.expectedTickets) : 0,
+      Number(rec.seedPreserveEntries) > 0
+        ? _newlyCompletedTickets(payload, rec.seedPreserveEntries)
+        : !hasIncomplete ? _expectedTickets(rec.expectedTickets) : 0,
     );
     rec.seedPending = false;
+    rec.seedPreserveEntries = 0;
+    rec.seedNotBefore = 0;
     _replacePendingRecord(rec);
   }
   const revealed = _revealedSet(address, level);
@@ -439,27 +995,69 @@ async function _inspectOne(address, rec) {
   const fresh = unseen
     .map((card) => ({ card, traitIds: _wholeCardTraitIds(card) }))
     .filter((item) => item.traitIds != null);
-  let foilState = { complete: true, keys: new Set(), keyCounts: new Map() };
-  if (fresh.length > 0) foilState = await _foilState(address, level);
-  let indexedFoilTickets = 0;
-  if (rec.foilExpected && foilState.complete) {
-    const remaining = new Map(foilState.keyCounts);
-    for (const item of fresh) {
-      const key = _comboKey(item.traitIds);
-      const left = remaining.get(key) || 0;
-      if (left <= 0) continue;
-      indexedFoilTickets += 1;
-      remaining.set(key, left - 1);
-    }
-  }
-  const foilBlocked = Boolean(
-    rec.foilExpected
-    && (!foilState.complete || indexedFoilTickets < FOIL_TICKETS_PER_PACK)
+  // The foil projection is authoritative for foil tickets. They are filed in
+  // separate foil entry rows on the current deploy, so requiring them to also
+  // appear in /tickets/by-trait creates a permanent "still indexing" deadlock
+  // for a foil-only purchase. Ordinary cards remain owned by the generic feed.
+  let foilState = { complete: true, lines: [], keys: new Set(), keyCounts: new Map() };
+  if (rec.foilExpected) foilState = await _foilState(address, level);
+  const foilBlocked = Boolean(rec.foilExpected && !foilState.complete);
+  const foilTickets = rec.foilExpected && foilState.complete
+    ? foilState.lines.map((traitIds, index) => ({
+        traitIds,
+        foil: true,
+        cardIndex: FOIL_CARD_INDEX_BASE + index,
+      })).filter((ticket) => !revealed.has(ticket.cardIndex))
+    : [];
+  const readyTicketCount = fresh.length + foilTickets.length;
+  const releasedEntries = Math.max(0, Math.floor(Number(rec.releasedEntries) || 0));
+  const existingExpectedEntries = Math.max(
+    _expectedEntries(rec.expectedTickets),
+    Math.floor(Number(rec.expectedEntries) || 0),
   );
+  const accountedEntries = releasedEntries
+    + (readyTicketCount * ENTRIES_PER_TICKET)
+    + chainOwedEntries;
+  const expectedEntries = Math.max(existingExpectedEntries, accountedEntries);
+  if (expectedEntries !== Number(rec.expectedEntries)
+    || rec.expectedTickets !== _ticketCountFromEntries(expectedEntries)) {
+    rec.expectedEntries = expectedEntries;
+    rec.expectedTickets = _ticketCountFromEntries(expectedEntries);
+    _replacePendingRecord(rec);
+  }
+  // Once this row has an exact contract projection, Pending means exactly
+  // what entriesOwedView still reports. The jackpot transition processes the
+  // old queue completely, so a zero resets the receipt immediately even when
+  // the indexer needs another beat to expose the resulting real cards. The
+  // durable expected/released counters above keep that hidden hand recoverable
+  // until it can promote into an opener. Foil entries use a separate on-chain
+  // bucket, so retain their four-ticket indexing receipt independently.
+  const readyEntries = readyTicketCount > 0 && !foilBlocked
+    ? readyTicketCount * ENTRIES_PER_TICKET
+    : 0;
+  const fallbackPendingEntries = Math.max(
+    0,
+    expectedEntries - releasedEntries - readyEntries,
+  );
+  const foilPendingEntries = rec.foilExpected && foilBlocked
+    ? FOIL_TICKETS_PER_PACK * ENTRIES_PER_TICKET
+    : 0;
+  // Once this record has an exact contract projection, Pending means exactly
+  // entriesOwedView. In particular, an authoritative zero must clear the count
+  // even when an older receipt expected more cards than the reveal bookkeeping
+  // can currently match. Keep fallbackPendingEntries below as recovery state so
+  // a late index response can still promote into an opener; never repaint it as
+  // hundreds of chain-queued tickets after the queue itself is empty.
+  const trackedPendingEntries = chainOwedEntries;
+  const pendingEntries = rec.chainTracked
+    ? trackedPendingEntries + foilPendingEntries
+    : fallbackPendingEntries;
   return {
-    level, rec, revealed, unseen, fresh, foilState, indexedFoilTickets,
-    ready: fresh.length > 0 && !foilBlocked,
+    level, rec, revealed, unseen, fresh, foilState, foilTickets, readyTicketCount,
+    ready: readyTicketCount > 0 && !foilBlocked,
     foilBlocked,
+    pendingEntries,
+    indexPendingEntries: fallbackPendingEntries,
   };
 }
 
@@ -481,34 +1079,54 @@ async function _publishPackActions(address, publishSeq = null) {
     clearPendingActions(PENDING_SOURCE);
     return;
   }
-  const [rows, gameState] = await Promise.all([
-    inspectPendingPacks({ address: addr }),
-    fetchJSON('/game/state').catch(() => null),
-  ]);
-  const jackpotPhase = Boolean(
-    gameState?.jackpotPhaseFlag ?? (gameState?.phase === 'JACKPOT'),
-  );
-  const resolvingLevel = jackpotPhase && Number.isInteger(Number(gameState?.level))
-    ? Number(gameState.level)
-    : null;
+  const gameState = await fetchJSON('/game/state').catch(() => null);
+  const drainLevels = pendingTicketDrainLevels(gameState);
+  await _syncChainOwedRecords(addr, drainLevels);
+  // The queue can be awarded and fully drained between two 45-second RPC
+  // samples. Indexed JackpotTicketWin history is the durable bridge for that
+  // blind spot; release only levels the contract can process in this sweep.
+  await _releaseJackpotTicketAwards(addr, drainLevels);
+  const rows = await inspectPendingPacks({ address: addr });
   // A wallet switch can land while the ticket/foil endpoints are in flight.
   // Never let that old response repopulate the shared widget for the prior
   // account.
   if (publishSeq != null && publishSeq !== _publishSeq) return;
-  publishPendingActions(PENDING_SOURCE, rows
-    // Completed packs remain openable. An unresolved pack is relevant only
-    // during the jackpot phase that is actually rolling that level. Purchase-
-    // phase tickets route to the next level, but the next daily RNG cannot
-    // resolve them yet; showing those as day-old "unresolved" work was both
-    // noisy and misleading. Old/future records remain durable off-screen.
-    .filter((row) => !row.expired && (
-      row.ready || (resolvingLevel != null && Number(row.level) === resolvingLevel)
-    ))
+  const drainSet = new Set(drainLevels);
+  const liveRows = rows.filter((row) => !row.expired);
+  const catchingUp = liveRows.some((row) => {
+    const drainedAt = Math.max(0, Number(row.rec?.chainDrainedAt) || 0);
+    return row.rec?.chainTracked === true
+      && Math.max(0, Math.floor(Number(row.rec?.chainOwedEntries) || 0)) === 0
+      && row.ready !== true
+      && Math.max(0, Math.floor(Number(row.indexPendingEntries) || 0)) > 0
+      && drainedAt > 0
+      && _now() - drainedAt < INDEX_CATCHUP_WINDOW_MS;
+  });
+  if (catchingUp && _indexCatchupTimer == null && typeof setTimeout === 'function') {
+    _indexCatchupTimer = setTimeout(() => {
+      _indexCatchupTimer = null;
+      refreshPackWatch();
+    }, INDEX_CATCHUP_RETRY_MS);
+    if (_indexCatchupTimer && typeof _indexCatchupTimer.unref === 'function') {
+      try { _indexCatchupTimer.unref(); } catch (_e) { /* browser timer */ }
+    }
+  } else if (!catchingUp && _indexCatchupTimer != null) {
+    try { clearTimeout(_indexCatchupTimer); } catch (_e) { /* defensive */ }
+    _indexCatchupTimer = null;
+  }
+  const actions = liveRows
+    // Once a whole ticket has materialized it is an opener, not part of the
+    // aggregate pending receipt. Keep already-ready packs available even if
+    // their level completed while the player was away.
+    .filter((row) => row.ready || _activePackCards.has(_packKey(addr, row.level)))
     .map((row) => {
       const opening = _activePackCards.has(_packKey(addr, row.level));
       const standardExpected = _standardPackExpected(row.rec);
-      const recordedCount = _expectedTickets(row.rec?.expectedTickets);
-      const ticketCount = row.ready ? row.fresh.length : recordedCount;
+      const recordedCount = _ticketCountFromEntries(Math.max(
+        _expectedEntries(row.rec?.expectedTickets),
+        Math.floor(Number(row.rec?.expectedEntries) || 0),
+      ));
+      const ticketCount = row.readyTicketCount || recordedCount;
       return {
       id: `ticket-pack:${row.level}`,
       kind: 'tickets',
@@ -522,18 +1140,10 @@ async function _publishPackActions(address, publishSeq = null) {
       detail: opening
         ? 'Pack opening in progress'
         : row.ready
-        ? `${row.fresh.length} ticket${row.fresh.length === 1 ? '' : 's'} ready to reveal`
-        : row.foilBlocked
-          ? (standardExpected
-              ? 'Ticket pack is still indexing'
-              : 'Foil pack is still indexing')
-          : `Waiting for the Level ${row.level} draw`,
+        ? `${row.readyTicketCount} ticket${row.readyTicketCount === 1 ? '' : 's'} ready to reveal`
+        : 'Pack is still indexing',
       state: opening ? 'busy' : row.ready ? 'ready' : 'waiting',
       autoOpen: row.ready,
-      pinned: !opening && !row.ready,
-      phase: !opening && !row.ready
-        ? 'waiting-draw'
-        : null,
       order: 10,
       chronology: Number(row.rec?.at ?? row.level),
       run: opening ? null : async () => {
@@ -544,7 +1154,7 @@ async function _publishPackActions(address, publishSeq = null) {
           id: `ticket-pack:${row.level}`,
           kind: 'tickets',
           ticketLevel: row.level,
-          ticketCount: row.fresh.length || recordedCount,
+          ticketCount: row.readyTicketCount || recordedCount,
           foilPack: Boolean(row.rec?.foilExpected && !standardExpected),
           label: `Level ${row.level} ticket pack`,
           detail: 'Building your pack reveal',
@@ -558,7 +1168,66 @@ async function _publishPackActions(address, publishSeq = null) {
         await _publishPackActions(addr, nextSeq);
       },
     };
-    }));
+    });
+
+  // One quiet receipt represents every still-unmaterialized entry in the
+  // contract's live six-level sweep. Resolved levels are deliberately absent
+  // from drainSet, even if an old local record or stale index row survives.
+  const pendingRows = liveRows.filter((row) => drainSet.has(Number(row.level)));
+  const pendingEntries = pendingRows.reduce(
+    (sum, row) => sum + Math.max(0, Math.floor(Number(row.pendingEntries) || 0)),
+    0,
+  );
+  const hasUnknownPending = pendingRows.some((row) => (
+    !row.ready
+    && Math.floor(Number(row.pendingEntries) || 0) === 0
+    && Math.max(
+      _expectedEntries(row.rec?.expectedTickets),
+      Math.floor(Number(row.rec?.expectedEntries) || 0),
+    ) === 0
+  ));
+  if (pendingEntries > 0 || hasUnknownPending) {
+    const ticketCount = _ticketCountFromEntries(pendingEntries);
+    const label = ticketCount > 0
+      ? `${ticketCount} TICKET${ticketCount === 1 ? '' : 'S'} PENDING`
+      : 'TICKETS PENDING';
+    const foilBlockedRows = pendingRows.filter((row) => row.foilBlocked);
+    const foilOnlyBlocked = foilBlockedRows.length > 0
+      && foilBlockedRows.every((row) => !_standardPackExpected(row.rec));
+    const pendingPackPreviews = _pendingPackPreviews(pendingRows);
+    const processedAwaitingIndex = pendingRows.some((row) => (
+      row.rec?.chainTracked === true
+      && Math.max(0, Math.floor(Number(row.rec?.chainOwedEntries) || 0)) === 0
+      && Math.max(0, Math.floor(Number(row.pendingEntries) || 0)) > 0
+    ));
+    actions.push({
+      id: 'ticket-packs:pending',
+      kind: 'tickets',
+      ticketCount: ticketCount || null,
+      foilPack: false,
+      label,
+      shortLabel: 'Pack pending',
+      detail: foilBlockedRows.length > 0
+        ? (foilOnlyBlocked ? 'Foil pack is still indexing' : 'Ticket pack is still indexing')
+        : processedAwaitingIndex
+          ? 'Tickets processed — loading your packs'
+          : 'Queued for processing before the next jackpot',
+      state: 'waiting',
+      autoOpen: false,
+      pinned: true,
+      passive: true,
+      compact: true,
+      pendingPacks: pendingPackPreviews,
+      phase: processedAwaitingIndex ? 'indexing' : 'waiting-draw',
+      // CLEAR means the currently owed hands stay dismissed after they become
+      // real per-level opener rows; HIDE does not consume these aliases.
+      dismissIds: [...new Set(pendingRows.map((row) => `ticket-pack:${row.level}`))],
+      order: 10,
+      chronology: Math.min(...pendingRows.map((row) => Number(row.rec?.at ?? row.level))),
+      run: null,
+    });
+  }
+  publishPendingActions(PENDING_SOURCE, actions);
 }
 
 // ---------------------------------------------------------------------------
@@ -601,37 +1270,28 @@ export async function checkPendingPacks({ address, levels = null } = {}) {
     }
     if (inspected.error) continue;
     const {
-      revealed, unseen, fresh, foilState, foilBlocked,
+      revealed, unseen, fresh, foilTickets, foilBlocked,
     } = inspected;
-    if (fresh.length === 0) continue;
+    if (fresh.length === 0 && foilTickets.length === 0) continue;
 
-    // Foil lines are ordinary entries in by-trait, so /foil is what identifies
-    // them; keyed order-independently since the two endpoints need not agree on
-    // entry order.
-    // A successful foil buy explicitly marks the pending record. Wait for all
-    // four /foil lines before classifying anything; the tickets endpoint often
-    // wins this indexing race by a few blocks.
+    // A successful foil buy explicitly marks the pending record. Wait for the
+    // complete four-line /foil projection, then present it independently of the
+    // ordinary ticket stream.
     if (foilBlocked) continue;
-    const foilRemaining = new Map(foilState.keyCounts);
-    const tickets = fresh.map(({ card, traitIds }) => {
-      const key = _comboKey(traitIds);
-      const remaining = foilRemaining.get(key) || 0;
-      const foil = remaining > 0;
-      if (foil) foilRemaining.set(key, remaining - 1);
-      return {
+    const standardTickets = fresh.map(({ card, traitIds }) => ({
         traitIds,
-        foil,
+        foil: false,
         cardIndex: Number(card.cardIndex),
-      };
-    });
+      }));
+    const tickets = [...standardTickets, ...foilTickets];
 
     // Ordinary tickets open first; foil lines get a separate, unmistakable
     // wrapper and presentation as the special final pack. Each series keeps
     // its own OPEN ALL batch so choosing the fast path for ordinary packs does
     // not skip the foil opening beat.
     const groups = [
-      { foilPack: false, tickets: tickets.filter((ticket) => !ticket.foil) },
-      { foilPack: true, tickets: tickets.filter((ticket) => ticket.foil) },
+      { foilPack: false, tickets: standardTickets },
+      { foilPack: true, tickets: foilTickets },
     ];
     let queuedForRecord = 0;
     for (const group of groups) {
@@ -733,6 +1393,14 @@ export function stopPackWatch() {
     try { clearInterval(_timer); } catch (_e) { /* defensive */ }
   }
   _timer = null;
+  if (_awardSeedTimer != null) {
+    try { clearTimeout(_awardSeedTimer); } catch (_e) { /* defensive */ }
+  }
+  _awardSeedTimer = null;
+  if (_indexCatchupTimer != null) {
+    try { clearTimeout(_indexCatchupTimer); } catch (_e) { /* defensive */ }
+  }
+  _indexCatchupTimer = null;
   _running = false;
   _getAddress = null;
   if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
@@ -742,6 +1410,7 @@ export function stopPackWatch() {
   _completeListener = null;
   _abortListener = null;
   _activePackCards.clear();
+  _historyBackfilled.clear();
   _publishSeq += 1;
   clearPendingActions(PENDING_SOURCE);
 }

@@ -33,6 +33,78 @@ export const DGN_COLOR_HEX = Object.freeze({
   blue: '#1317f7', orange: '#f7931a', silver: '#5e5e5e', gold: '#ab8d3f',
 });
 
+// Ticket paper uses the trait palette for its three structural strokes: outer
+// edge, cross dividers, and centre-diamond edge. Gold is deliberately brighter
+// than the badge's antique-gold outer ring so it still reads against paper.
+const DGN_TICKET_ACCENT_HEX = Object.freeze([
+  '#f409cd', '#7c2bff', '#30d100', '#ed0e11',
+  '#1317f7', '#f7931a', '#7b8490', '#d4af37',
+]);
+
+/**
+ * Stable ticket-specific line colour.
+ *
+ * A gold trait always makes the ticket gold. Otherwise FNV-1a over the four
+ * canonical trait bytes chooses only among non-gold colours absent from the
+ * ticket. The result therefore feels varied without changing between renders.
+ * Accepts either stored trait IDs or quadrant objects ({sym,col}/{s,c}).
+ */
+export function dgnTicketAccent(traits = []) {
+  const bytes = new Array(4).fill(0xFF);
+  const usedColors = new Set();
+  for (const [index, raw] of (Array.isArray(traits) ? traits : []).entries()) {
+    if (raw == null) continue;
+    if (typeof raw === 'number' || typeof raw === 'bigint') {
+      const byte = Number(raw) & 0xFF;
+      const q = (byte >> 6) & 3;
+      const col = (byte >> 3) & 7;
+      bytes[q] = byte;
+      usedColors.add(col);
+      continue;
+    }
+    if (typeof raw !== 'object') continue;
+    const q = Number(raw.q ?? raw.quadrant ?? index) & 3;
+    const sym = Number(raw.sym ?? raw.s);
+    const col = Number(raw.col ?? raw.c);
+    if (!Number.isInteger(sym) || !Number.isInteger(col)) continue;
+    const normalizedCol = col & 7;
+    bytes[q] = ((q & 3) << 6) | (normalizedCol << 3) | (sym & 7);
+    usedColors.add(normalizedCol);
+  }
+
+  let colorIndex = 7;
+  if (!usedColors.has(7)) {
+    const available = Array.from({ length: 7 }, (_unused, index) => index)
+      .filter((index) => !usedColors.has(index));
+    let hash = 0x811C9DC5;
+    for (const byte of bytes) {
+      hash ^= byte;
+      hash = Math.imul(hash, 0x01000193);
+    }
+    colorIndex = available[(hash >>> 0) % available.length];
+  }
+  return Object.freeze({
+    index: colorIndex,
+    name: DGN_COLORS[colorIndex],
+    hex: DGN_TICKET_ACCENT_HEX[colorIndex],
+  });
+}
+
+/** Apply the stable accent without making every renderer know CSS details. */
+export function applyDgnTicketAccent(element, traits = []) {
+  if (!element) return dgnTicketAccent(traits);
+  const accent = dgnTicketAccent(traits);
+  try {
+    if (typeof element.style?.setProperty === 'function') {
+      element.style.setProperty('--ticket-line-color', accent.hex);
+    } else if (element.style) {
+      element.style['--ticket-line-color'] = accent.hex;
+    }
+  } catch (_e) { /* visual enhancement only */ }
+  try { element.setAttribute?.('data-ticket-accent', accent.name); } catch (_e) {}
+  return accent;
+}
+
 /** Inventory card click → load its four traits into the Degenerette builder. */
 export const DGN_TICKET_COPY_EVENT = 'degenerette:copy-ticket';
 

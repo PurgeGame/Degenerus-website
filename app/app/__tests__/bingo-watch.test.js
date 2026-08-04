@@ -22,6 +22,7 @@ const { ethers } = await import('../contracts.js');
 const pending = await import('../pending-actions.js');
 const reveal = await import('../../components/reveal-overlay.js');
 const bingo = await import('../bingo-watch.js');
+const { CHAIN } = await import('../chain-config.js');
 
 const PLAYER = '0xab12000000000000000000000000000000000000';
 const ABI = [
@@ -31,7 +32,9 @@ const ABI = [
 ];
 const iface = new ethers.Interface(ABI);
 
-function log(name, args, { blockNumber = 44_963_400, index = 1, tx = '0xabc' } = {}) {
+const TEST_BLOCK = Number(CHAIN.deployBlock) + 100;
+
+function log(name, args, { blockNumber = TEST_BLOCK, index = 1, tx = '0xabc' } = {}) {
   const event = iface.getEvent(name);
   const encoded = iface.encodeEventLog(event, args);
   return {
@@ -95,7 +98,7 @@ describe('bingo event watcher', () => {
     ];
     bingo.__setBingoReadersForTest({
       logs: async ({ headOnly, fromBlock, toBlock }) => headOnly
-        ? { head: 44_963_405, logs: [] }
+        ? { head: TEST_BLOCK + 5, logs: [] }
         : {
             logs: claimLogs.filter((entry) => (
               entry.blockNumber >= fromBlock && entry.blockNumber <= toBlock
@@ -129,5 +132,68 @@ describe('bingo event watcher', () => {
     rows = pending.getPendingActions().filter((row) => row.kind === 'bingo');
     assert.equal(rows.length, 0, 'reorg-overlap rescan respects the consumed receipt id');
   });
-});
 
+  test('DB proof becomes a write action, then its receipt becomes the Bingo reveal', async () => {
+    const writes = [];
+    const claimReceiptLogs = [
+      log('FirstQuadrantBingo', [PLAYER, 35, 18], { index: 8, tx: '0xcafe' }),
+      log('BingoClaimed', [PLAYER, 35, 18, 5_000n * 10n ** 18n, 99n], {
+        index: 9,
+        tx: '0xcafe',
+      }),
+    ];
+    bingo.__setBingoReadersForTest({
+      index: async () => ({
+        player: PLAYER,
+        claimable: [{
+          player: PLAYER,
+          level: 35,
+          quadrant: 2,
+          symbol: 18,
+          slots: [2, 4, 6, 8, 10, 12, 14, 16],
+        }],
+        claimed: [],
+      }),
+      claim: async (args) => {
+        writes.push(args);
+        return { receipt: { logs: claimReceiptLogs } };
+      },
+      tickets: async () => ({
+        cards: Array.from({ length: 8 }, (_unused, color) => ({
+          entries: [{ traitId: (2 << 6) | (color << 3) | 2 }],
+        })),
+      }),
+    });
+
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+
+    let rows = pending.getPendingActions().filter((row) => row.kind === 'bingo');
+    const claim = rows.find((row) => row.shortLabel === 'Claim Bingo');
+    assert.ok(claim, 'complete DB proof is actionable');
+    assert.equal(claim.write, true);
+    assert.equal(claim.autoOpen, false, 'wallet writes never auto-open');
+
+    await claim.run();
+    assert.deepEqual(writes, [{
+      player: PLAYER,
+      level: 35,
+      symbol: 18,
+      slots: [2, 4, 6, 8, 10, 12, 14, 16],
+    }]);
+
+    rows = pending.getPendingActions().filter((row) => row.kind === 'bingo');
+    assert.equal(rows.some((row) => row.shortLabel === 'Claim Bingo'), false,
+      'confirmed proof is durably retired while the API catches up');
+    const receipt = rows.find((row) => row.shortLabel === 'Reveal Bingo');
+    assert.ok(receipt, 'confirmed receipt immediately becomes a reveal');
+    assert.equal(receipt.kindLabel, 'QUADRANT-FIRST BINGO');
+
+    await receipt.run();
+    const queued = reveal.__takeQueuedForTest();
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0].kind, 'bingo');
+    assert.deepEqual(queued[0].counts.filter(Boolean), Array(8).fill(1));
+  });
+});

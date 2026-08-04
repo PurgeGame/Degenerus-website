@@ -1508,6 +1508,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.match(APP_CSS, /\.deg-wager-column\s*\{[^}]*display:\s*grid/s);
       assert.match(APP_CSS, /\.deg-referral-card\s*\{[^}]*width:\s*100%[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
         'the short bubble gives its message the full wager-column width');
+      assert.match(APP_CSS,
+        /\.deg-referral-card\s*\{\s*width:\s*100%;\s*height:\s*auto;\s*min-height:\s*0;\s*grid-template-rows:\s*auto auto;/s,
+        'phones shrink-wrap the referral bubble instead of inheriting its desktop height');
       assert.match(APP_CSS, /\.deg-referral-card__logo\s*\{[^}]*bottom:\s*0\.52rem[^}]*left:\s*0\.58rem/s,
         'the Degenerus mark sits in the lower-left corner');
       assert.match(

@@ -99,6 +99,7 @@ globalThis.customElements = {
 
 const pending = await import('../../app/pending-actions.js');
 const drawGate = await import('../../app/major-draw-activity.js');
+const preferences = await import('../../app/degenerette-preferences.js');
 const trayModule = await import('../app-reveal-tray.js');
 
 beforeEach(() => {
@@ -114,6 +115,7 @@ describe('actionableRevealItems', () => {
       { kind: 'degenerette', state: 'busy' },
       { kind: 'degenerette', state: 'waiting', pinned: true },
       { kind: 'lootbox', state: 'waiting', pinned: true },
+      { kind: 'tickets', state: 'waiting', pinned: true, passive: true },
       { kind: 'degenerette', state: 'waiting' },
       { kind: 'growth-claim', state: 'ready' },
       { kind: 'volume-claim', state: 'ready' },
@@ -124,7 +126,7 @@ describe('actionableRevealItems', () => {
       { kind: 'foil-match', state: 'ready' },
     ]);
     assert.deepEqual(rows.map((row) => row.kind), [
-      'lootbox', 'degenerette', 'degenerette', 'lootbox', 'growth-claim', 'volume-claim', 'batch-resolution', 'bingo', 'foil-match',
+      'lootbox', 'degenerette', 'degenerette', 'lootbox', 'tickets', 'growth-claim', 'volume-claim', 'batch-resolution', 'bingo', 'foil-match',
     ]);
   });
 });
@@ -135,7 +137,7 @@ describe('<app-reveal-tray>', () => {
       id: 'foil-match:44:2:0', kind: 'foil-match', kindLabel: 'FOIL TICKET MATCH',
       label: 'Day 44 · Foil T5', shortLabel: 'Claim T5',
       detail: 'MAIN DRAW · 2 exact + 1 symbol',
-      lineTraits: [1, 70, 130, 200],
+      lineTraits: [56, 70, 130, 200],
       state: 'ready', write: true, run: async () => {},
     }]);
     const el = new trayModule.AppRevealTray();
@@ -147,6 +149,15 @@ describe('<app-reveal-tray>', () => {
     assert.match(action.querySelector('.rrt-action__detail').textContent, /2 exact \+ 1 symbol/);
     assert.equal(action.querySelectorAll('.rrt-foil-match-ticket__q').length, 4,
       'the pending art copies all four badges from the matched foil ticket');
+    assert.match(action.querySelector('.rrt-foil-match-ticket').className, /(?:^|\s)ticket-card--foil(?:\s|$)/,
+      'the Pending thumbnail uses the same visible foil material as the full ticket');
+    assert.equal(action.querySelectorAll('.trait-quadrant--gold').length, 1,
+      'real gold traits keep their gold surface instead of being painted silver');
+    assert.equal(
+      action.querySelector('.rrt-foil-match-ticket__center')?.querySelector('img')?.src,
+      '/whitepaper/flame-center-silver.svg',
+      'the compact Pending ticket uses the same silver centre flame',
+    );
     assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM T5');
     assert.notEqual(action.getAttribute('data-write'), null);
     el.disconnectedCallback();
@@ -203,6 +214,80 @@ describe('<app-reveal-tray>', () => {
     const el = new trayModule.AppRevealTray();
     el.connectedCallback();
     assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, true);
+    el.disconnectedCallback();
+  });
+
+  test('an unresolved bought pack is a small passive receipt, then promotes to its opener', () => {
+    pending.publishPendingActions('pack', [{
+      id: 'ticket-packs:pending', kind: 'tickets',
+      label: '4 TICKETS PENDING', detail: 'Queued before the next jackpot',
+      ticketCount: 4,
+      state: 'waiting', pinned: true, passive: true, compact: true,
+      pendingPacks: [{ level: 77, count: 4, foilPack: false, packIndex: 1, packCount: 1 }],
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    let action = el.querySelector('.rrt-action--pack-pending');
+    assert.ok(action, 'the bought pack remains visible while its traits are unresolved');
+    assert.equal(action.tagName, 'BUTTON', 'the receipt opens a read-only pack preview');
+    assert.equal(action.disabled, false, 'viewing pending packs is never transaction-locked');
+    assert.equal(action.getAttribute('aria-expanded'), 'false');
+    assert.equal(action.querySelector('.rrt-pack-pending__count').textContent, '4 TICKETS');
+    assert.equal(action.querySelector('.rrt-pack-pending__state').textContent, 'PENDING');
+    assert.ok(action.querySelector('.rrt-pending-pack-art'),
+      'the receipt uses a tiny generic pack icon');
+    assert.equal(action.querySelector('.rvl-pack-logo')?.src, '/whitepaper/flame-logo.svg');
+    assert.equal(action.querySelector('.rrt-action__cta'), null,
+      'there is no fake WAITING action');
+    assert.equal(el.querySelector('[data-bind="rrt-count"]'), null,
+      'the header does not repeat needless action and pending counts');
+    assert.equal(el.querySelector('[data-bind="rrt-clear"]').hidden, false,
+      'CLEAR can permanently dismiss passive protocol reminders too');
+
+    action.dispatchEvent({ type: 'click' });
+    const details = el.querySelector('[data-bind="rrt-pending-details"]');
+    assert.equal(details.hidden, false);
+    assert.equal(details.querySelectorAll('.rrt-pending-pack-preview').length, 1);
+    assert.equal(details.querySelector('.rvl-pack-level').textContent, 'LEVEL 77');
+    assert.equal(details.querySelector('.rvl-pack-count').textContent, '4 TICKETS');
+    assert.equal(details.querySelector('.rrt-pending-pack-preview__caption').textContent, 'PENDING');
+
+    pending.publishPendingActions('pack', [{
+      id: 'ticket-pack:77', kind: 'tickets', label: 'Level 77 ticket pack',
+      shortLabel: 'Open tickets', detail: '4 tickets ready',
+      ticketLevel: 77, ticketCount: 4, state: 'ready', run: async () => {},
+    }]);
+    action = el.querySelector('.rrt-action--tickets');
+    assert.equal(action.tagName, 'BUTTON');
+    assert.equal(action.disabled, false);
+    assert.ok(action.querySelector('.rrt-pack-art'),
+      'the resolved receipt promotes into the normal pack opener');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'OPEN TICKETS');
+    el.disconnectedCallback();
+  });
+
+  test('CLEAR dismisses a pending pack and its eventual per-level opener', async () => {
+    pending.publishPendingActions('pack', [{
+      id: 'ticket-packs:pending', kind: 'tickets', label: '3 TICKETS PENDING',
+      ticketCount: 3, state: 'waiting', pinned: true, passive: true, compact: true,
+      pendingPacks: [{ level: 77, count: 3, foilPack: false, packIndex: 1, packCount: 1 }],
+      dismissIds: ['ticket-pack:77'],
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+    const clear = el.querySelector('[data-bind="rrt-clear"]');
+    assert.equal(clear.hidden, false);
+    clear.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, true);
+
+    pending.publishPendingActions('pack', [{
+      id: 'ticket-pack:77', kind: 'tickets', label: 'Level 77 ticket pack',
+      ticketLevel: 77, ticketCount: 3, state: 'ready', run: async () => {},
+    }]);
+    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, true,
+      'the cleared waiting hand cannot return under its ready opener id');
     el.disconnectedCallback();
   });
 
@@ -300,6 +385,34 @@ describe('<app-reveal-tray>', () => {
     assert.equal(trayModule.canAutoOpenReveal({
       state: 'ready', autoOpen: false, run() {},
     }), false, 'wallet/write work cannot opt itself in accidentally');
+    el.disconnectedCallback();
+  });
+
+  test('Pending header restores and persists the shared reveal speed', () => {
+    localStorage.setItem(preferences.DEGENERETTE_PREFERENCES_KEY, JSON.stringify({
+      version: 1, speed: 2.5, bets: { 1: '500' },
+    }));
+    pending.publishPendingActions('pack', [{
+      id: 'ticket-pack:4', kind: 'tickets', label: 'Level 4 ticket pack',
+      detail: '4 tickets ready', state: 'ready', run: async () => {},
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const speed = el.querySelector('[data-bind="rrt-speed"]');
+    const output = el.querySelector('[data-bind="rrt-speed-value"]');
+    assert.equal(speed.min, '0.5');
+    assert.equal(speed.max, '3');
+    assert.equal(speed.value, '2.5');
+    assert.equal(output.textContent, '2.5×');
+    speed.value = '3';
+    speed.dispatchEvent({ type: 'input' });
+    assert.equal(output.textContent, '3×');
+    speed.dispatchEvent({ type: 'change' });
+    const saved = JSON.parse(localStorage.getItem(preferences.DEGENERETTE_PREFERENCES_KEY));
+    assert.equal(saved.speed, 3);
+    assert.equal(saved.bets['1'], '500', 'changing reveal speed preserves saved wager sizes');
+
     el.disconnectedCallback();
   });
 
@@ -516,6 +629,27 @@ describe('<app-reveal-tray>', () => {
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
     assert.equal(cleared, 1, 'one publisher callback is not repeated per row');
     assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, true);
+
+    pending.publishPendingActions('box', [{
+      id: 'box:7', kind: 'lootbox', label: 'Lootbox #7', detail: 'Now ready again',
+      state: 'ready', run: async () => {},
+    }]);
+    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, true,
+      'the same cleared id cannot return merely because a poll changed its state');
+
+    pending.publishPendingActions('box', [
+      {
+        id: 'box:7', kind: 'lootbox', label: 'Lootbox #7', detail: 'Now ready again',
+        state: 'ready', run: async () => {},
+      },
+      {
+        id: 'box:9', kind: 'lootbox', label: 'Lootbox #9', detail: 'Genuinely new work',
+        state: 'ready', run: async () => {},
+      },
+    ]);
+    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, false);
+    assert.equal(el.querySelectorAll('.rrt-action').length, 1);
+    assert.equal(el.querySelector('.rrt-action').getAttribute('data-action-id'), 'box:9');
     el.disconnectedCallback();
   });
 

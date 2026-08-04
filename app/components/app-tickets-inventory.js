@@ -36,15 +36,20 @@ import {
 } from '../app/salvage.js';
 import { compactUiError } from '../app/ui-error.js';
 import {
+  applyDgnTicketAccent,
   DGN_TICKET_COPY_EVENT,
   dgnReconstructTicketRecords,
   dgnReconstructTicketTraits,
 } from '../app/dgn-traits.js';
-import { unopenedPackCardIndexes } from '../app/pack-watch.js';
+import {
+  unopenedFoilPackPending,
+  unopenedPackCardIndexes,
+} from '../app/pack-watch.js';
 import { PACK_REVEAL_COMPLETE_EVENT } from './reveal-overlay.js';
 import { readDeityPassCatalog } from '../app/passes.js';
 
 const ENTRIES_PER_CARD = 4;
+const HOLDINGS_FALLBACK_NEAR_LEVELS = 6;
 const POLL_INTERVAL_MS = 60_000;
 // Levels beyond active + FAR_FUTURE_OFFSET can't have rolled traits yet
 // (play/components/tickets-panel.js:25 convention) — the widget switches to
@@ -225,6 +230,58 @@ export function unresolvedTicketFaceValueWei(rows, activeLevel) {
     total += (scaledTicketPriceWei(level) * entries) / BigInt(ENTRIES_PER_CARD);
   }
   return total;
+}
+
+/**
+ * Recover the per-level aggregate when /player/:address has no summary row.
+ * The six levels at the live boundary may already be materialized into trait
+ * entries; everything farther out remains in the indexed far-future queue.
+ * Those two projections are disjoint in normal operation, and max-by-level
+ * keeps the merge safe during the promotion boundary.
+ */
+export async function readTicketHoldingsFallback({
+  address,
+  unresolvedLevel,
+  knownLevel = null,
+  knownPayload = null,
+  fetcher = fetchJSON,
+}) {
+  const floor = Number(unresolvedLevel);
+  if (!/^0x[0-9a-fA-F]{40}$/.test(String(address || ''))
+    || !Number.isInteger(floor) || floor < 0
+    || typeof fetcher !== 'function') return null;
+
+  const levels = Array.from(
+    { length: HOLDINGS_FALLBACK_NEAR_LEVELS },
+    (_unused, offset) => floor + offset,
+  );
+  const [near, far] = await Promise.all([
+    Promise.all(levels.map((level) => (
+      Number(knownLevel) === level && knownPayload && typeof knownPayload === 'object'
+        ? Promise.resolve(knownPayload)
+        : fetcher(`/player/${String(address).toLowerCase()}/tickets/by-trait?level=${level}`)
+    ))),
+    fetcher(`/player/${String(address).toLowerCase()}/far-future-queue`),
+  ]);
+
+  const byLevel = new Map();
+  for (let i = 0; i < levels.length; i += 1) {
+    const entries = Math.max(0, Math.floor(Number(near[i]?.totalEntries ?? 0)));
+    if (entries > 0) byLevel.set(levels[i], entries);
+  }
+  for (const row of Array.isArray(far?.rows) ? far.rows : []) {
+    const level = Number(row?.level);
+    const entries = Math.max(0, Math.floor(Number(row?.entryCount ?? 0)));
+    if (!Number.isInteger(level) || level < floor || entries <= 0) continue;
+    byLevel.set(level, Math.max(entries, byLevel.get(level) || 0));
+  }
+  return [...byLevel.entries()]
+    .map(([level, entryCount]) => ({
+      level,
+      entryCount,
+      wholeTickets: Math.floor(entryCount / ENTRIES_PER_CARD),
+    }))
+    .sort((a, b) => a.level - b.level);
 }
 
 /** Keep useful sub-cent precision without printing accounting-style zeroes. */
@@ -723,7 +780,10 @@ class AppTicketsInventory extends HTMLElement {
     // Do not let the direct foil projection bypass the unopened-pack spoiler
     // gate. Once the reveal releases its card indexes, these four lines become
     // the authoritative fallback if the generic ticket stream is incomplete.
-    this.#foilLines = hiddenPackCards.size === 0
+    this.#foilLines = hiddenPackCards.size === 0 && !unopenedFoilPackPending({
+      address: lower,
+      level: lvl,
+    })
       ? _foilLines(foil.status === 'fulfilled' ? foil.value : null)
       : [];
     const deityRows = playerDay.status === 'fulfilled'
@@ -755,6 +815,30 @@ class AppTicketsInventory extends HTMLElement {
         })
         .filter((t) => Number.isInteger(t.level) && t.entryCount > 0);
       this.#holdingsLoaded = true;
+    } else {
+      // A newly deployed player can already own plenty of tickets while the
+      // dashboard route still returns 404 because its materialized player row
+      // has not appeared. Reconstruct the same aggregate from the two ticket
+      // projections that do not require that summary row.
+      const floor = this.#unresolvedLevelFloor();
+      if (floor != null) {
+        try {
+          const fallback = await readTicketHoldingsFallback({
+            address: lower,
+            unresolvedLevel: floor,
+            knownLevel: lvl,
+            knownPayload: rawTicketData,
+          });
+          if (seq !== this.#fetchSeq) return;
+          if (Array.isArray(fallback)) {
+            this.#holdings = fallback;
+            this.#holdingsLoaded = true;
+          }
+        } catch (_e) {
+          // Preserve a prior good aggregate on a transient endpoint failure;
+          // a first-load miss remains the honest em dash and retries next poll.
+        }
+      }
     }
     if (this.#isFarFuture() && salvageQueue.status === 'fulfilled'
       && Array.isArray(salvageQueue.value?.rows)) {
@@ -1510,14 +1594,11 @@ class AppTicketsInventory extends HTMLElement {
       if (combo.hasGold && wrap.classList) wrap.classList.add('inv-card--gold');
       if (combo.foil) {
         // The four boosted lines are worth picking out of a wall of tiles: they
-        // grade against every draw at this level, the plain ones do not.
+        // grade against every draw at this level, the plain ones do not. Their
+        // metal face carries the distinction without covering a trait in text.
         const shine = document.createElement('span');
         shine.className = 'inv-foil-shine';
         wrap.appendChild(shine);
-        const tag = document.createElement('span');
-        tag.className = 'inv-foil-tag';
-        tag.textContent = 'FOIL';
-        wrap.appendChild(tag);
       }
       // ×N badge only when N > 1. The dedup key is the ORDERED 4-trait combo, one of
       // 64^4 ≈ 16.8M, so two tickets colliding is a birthday-problem non-event at any
@@ -1532,7 +1613,8 @@ class AppTicketsInventory extends HTMLElement {
       }
 
       const card = document.createElement('div');
-      card.className = 'ticket-card tc-small';
+      card.className = `ticket-card tc-small${combo.foil ? ' ticket-card--foil' : ''}`;
+      applyDgnTicketAccent(card, combo.traitIds);
       for (const tid of combo.traitIds) {
         const cell = document.createElement('div');
         cell.className = 'trait-quadrant';
@@ -1548,7 +1630,9 @@ class AppTicketsInventory extends HTMLElement {
       const center = document.createElement('div');
       center.className = 'ticket-card-center';
       const flame = document.createElement('img');
-      flame.src = '/whitepaper/flame-center.svg';
+      flame.src = combo.foil
+        ? '/whitepaper/flame-center-silver.svg'
+        : '/whitepaper/flame-center.svg';
       flame.alt = '';
       center.appendChild(flame);
       card.appendChild(center);

@@ -17,11 +17,20 @@
 
 import { subscribePendingActions } from '../app/pending-actions.js';
 import { briefTxError } from '../app/ui-error.js';
-import { dgnBadgePath, dgnTraitIdsToQuadrants, dgnUnpackTicket } from '../app/dgn-traits.js';
+import {
+  applyDgnTicketAccent,
+  dgnBadgePath,
+  dgnTraitIdsToQuadrants,
+  dgnUnpackTicket,
+} from '../app/dgn-traits.js';
 import {
   isAutomaticPopupBlocked,
   subscribeAutomaticPopupGate,
 } from '../app/major-draw-activity.js';
+import {
+  readDegeneretteSpeed,
+  writeDegeneretteSpeed,
+} from '../app/degenerette-preferences.js';
 
 const REVEAL_KINDS = new Set([
   'lootbox',
@@ -58,10 +67,6 @@ export function canAutoOpenReveal(item) {
     && typeof item?.run === 'function';
 }
 
-function _dismissFingerprint(item) {
-  return [item?.state, item?.phase, item?.detail].map((part) => String(part ?? '')).join('|');
-}
-
 // HIDE is intentionally softer than CLEAR. Keep a fingerprint of the actual
 // manifest that was hidden so routine polling with equivalent objects does not
 // reopen the surface. A new row or meaningful transition clears it.
@@ -89,15 +94,21 @@ function _isRngWaiting(item) {
 
 function _ticketPackMeta(item) {
   const levelMatch = /\blevel\s+(\d+)/i.exec(String(item?.label || ''));
-  const countMatch = /\b(\d+)\s+tickets?\b/i.exec(String(item?.detail || ''));
+  const countMatch = /\b(\d+(?:\.\d+)?)\s+tickets?\b/i.exec(String(item?.detail || ''));
   const rawLevel = item?.ticketLevel ?? levelMatch?.[1];
   const rawCount = item?.ticketCount ?? countMatch?.[1];
   const level = Number(rawLevel);
-  const count = Math.floor(Number(rawCount));
+  const count = Number(rawCount);
   return {
     level: Number.isFinite(level) && level >= 0 ? level : null,
     count: Number.isFinite(count) && count > 0 ? count : null,
   };
+}
+
+function _ticketQuantityText(value) {
+  const count = Number(value);
+  if (!Number.isFinite(count) || count <= 0) return 'TICKETS';
+  return `${count} ${count === 1 ? 'TICKET' : 'TICKETS'}`;
 }
 
 export function actionableRevealItems(items) {
@@ -128,7 +139,7 @@ class AppRevealTray extends HTMLElement {
   #initialized = false;
   #unsubscribe = null;
   #items = [];
-  #dismissed = new Map();
+  #dismissed = new Set();
   #hiddenFingerprint = null;
   #busyId = null;
   #errorTimer = null;
@@ -136,6 +147,7 @@ class AppRevealTray extends HTMLElement {
   #autoAttempted = new Set();
   #autoScheduledId = null;
   #popupGateUnsubscribe = null;
+  #expandedPendingId = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -155,17 +167,33 @@ class AppRevealTray extends HTMLElement {
         this.#maybeAutoOpen();
       });
     }
+    const speed = this.querySelector('[data-bind="rrt-speed"]');
+    const speedValue = this.querySelector('[data-bind="rrt-speed-value"]');
+    if (speed) {
+      speed.min = '0.5';
+      speed.max = '3';
+      speed.step = '0.5';
+      speed.value = String(readDegeneretteSpeed());
+      const syncSpeed = ({ persist = false } = {}) => {
+        const multiplier = Math.max(0.5, Math.min(3, Number(speed.value) || 1));
+        if (speedValue) speedValue.textContent = `${multiplier}×`;
+        if (persist) writeDegeneretteSpeed(multiplier);
+      };
+      syncSpeed();
+      speed.addEventListener('input', () => syncSpeed());
+      speed.addEventListener('change', () => syncSpeed({ persist: true }));
+    }
     this.#unsubscribe = subscribePendingActions((items) => {
-      const nextItems = actionableRevealItems(items).filter((item) => {
-        const prior = this.#dismissed.get(item.id);
-        const next = _dismissFingerprint(item);
-        if (prior == null) return true;
-        if (prior === next) return false;
-        // A waiting item becoming actionable (or otherwise changing phase)
-        // is new information and must return after a prior CLEAR.
-        this.#dismissed.delete(item.id);
-        return true;
-      });
+      // CLEAR is a hard dismissal for the current component lifetime. Routine
+      // polls and state transitions of the same protocol item cannot resurrect
+      // it; genuinely new work carries a new id and remains visible. HIDE uses
+      // the separate manifest fingerprint below and never alters this set.
+      const nextItems = actionableRevealItems(items)
+        .filter((item) => !this.#dismissed.has(item.id));
+      if (this.#expandedPendingId != null
+        && !nextItems.some((item) => item.id === this.#expandedPendingId)) {
+        this.#expandedPendingId = null;
+      }
       const nextFingerprint = _manifestFingerprint(nextItems);
       if (this.#hiddenFingerprint != null && nextFingerprint !== this.#hiddenFingerprint) {
         this.#hiddenFingerprint = null;
@@ -191,6 +219,7 @@ class AppRevealTray extends HTMLElement {
     }
     this.#hiddenFingerprint = null;
     this.#autoScheduledId = null;
+    this.#expandedPendingId = null;
     this.#autoAttempted.clear();
     this.#initialized = false;
   }
@@ -203,11 +232,15 @@ class AppRevealTray extends HTMLElement {
           <img class="rrt-head__logo" src="/whitepaper/flame-logo.svg" alt="">
           <span class="rrt-head__copy">
             <strong data-bind="rrt-title">READY</strong>
-            <span data-bind="rrt-count"></span>
           </span>
           <label class="rrt-auto-open">
             <input type="checkbox" data-bind="rrt-auto-open">
             <span>OPEN WHEN READY</span>
+          </label>
+          <label class="rrt-speed" title="Reveal animation speed">
+            <span>SPEED</span>
+            <input type="range" data-bind="rrt-speed" aria-label="Reveal animation speed">
+            <output data-bind="rrt-speed-value">1×</output>
           </label>
           <span class="rrt-head__actions">
             <button type="button" class="rrt-hide" data-bind="rrt-hide" hidden
@@ -217,6 +250,8 @@ class AppRevealTray extends HTMLElement {
           </span>
         </div>
         <div class="rrt-actions" data-bind="rrt-actions"></div>
+        <section id="rrt-pending-details" class="rrt-pending-details"
+                 data-bind="rrt-pending-details" hidden></section>
         <div class="rrt-error" data-bind="rrt-error" hidden role="alert"></div>
       </aside>
     `;
@@ -275,10 +310,15 @@ class AppRevealTray extends HTMLElement {
     if (this.#busyId != null) return;
     const visible = [...this.#items];
     if (visible.length === 0 || visible.some((item) => item?.state === 'busy')) return;
-    // Hide every current reminder. Rows without an owner-level clear callback
-    // are dismissed only for their current state: if a grey wait becomes a lit
-    // action it automatically comes back.
-    for (const item of visible) this.#dismissed.set(item.id, _dismissFingerprint(item));
+    // Hide every current reminder for good. Owner callbacks may also retire
+    // durable local records, but the id tombstone is what prevents a routine
+    // publisher poll from immediately painting the same work again.
+    for (const item of visible) {
+      this.#dismissed.add(item.id);
+      for (const relatedId of Array.isArray(item.dismissIds) ? item.dismissIds : []) {
+        this.#dismissed.add(String(relatedId));
+      }
+    }
 
     // One controller may publish the same callback on several rows. Collapse
     // by source so it is invoked exactly once.
@@ -306,11 +346,11 @@ class AppRevealTray extends HTMLElement {
   #render() {
     const tray = this.querySelector('[data-bind="rrt-tray"]');
     const title = this.querySelector('[data-bind="rrt-title"]');
-    const count = this.querySelector('[data-bind="rrt-count"]');
     const host = this.querySelector('[data-bind="rrt-actions"]');
     const clear = this.querySelector('[data-bind="rrt-clear"]');
     const hide = this.querySelector('[data-bind="rrt-hide"]');
-    if (!tray || !count || !host) return;
+    const pendingDetails = this.querySelector('[data-bind="rrt-pending-details"]');
+    if (!tray || !host) return;
     const items = this.#items;
     const hiddenByUser = this.#hiddenFingerprint != null
       && this.#hiddenFingerprint === _manifestFingerprint(items);
@@ -320,7 +360,6 @@ class AppRevealTray extends HTMLElement {
     if (title) title.textContent = onlyRngWaiting
       ? 'RNG PENDING'
       : onlyWaiting ? 'PENDING' : 'READY';
-    count.textContent = `${items.length} ${items.length === 1 ? 'action' : 'actions'}`;
     host.textContent = '';
 
     const clearingAll = this.#busyId === CLEAR_ALL_BUSY_ID;
@@ -343,8 +382,13 @@ class AppRevealTray extends HTMLElement {
       const rngWaiting = _isRngWaiting(item);
       const resultReady = item.kind === 'degenerette' && item.phase === 'result-ready';
       const compact = item.compact === true;
-      const button = document.createElement('button');
-      button.type = 'button';
+      const passive = item.passive === true;
+      const canInspectPending = passive
+        && item.kind === 'tickets'
+        && Array.isArray(item.pendingPacks)
+        && item.pendingPacks.length > 0;
+      const button = document.createElement(passive && !canInspectPending ? 'div' : 'button');
+      if (!passive || canInspectPending) button.type = 'button';
       button.className = [
         'rrt-action',
         `rrt-action--${item.kind}`,
@@ -353,9 +397,19 @@ class AppRevealTray extends HTMLElement {
         rngWaiting ? 'is-rng-waiting' : '',
         resultReady ? 'is-result-ready' : '',
         compact ? 'rrt-action--compact' : '',
+        passive ? 'rrt-action--passive' : '',
+        passive && item.kind === 'tickets' ? 'rrt-action--pack-pending' : '',
+        canInspectPending ? 'rrt-action--inspectable' : '',
       ].filter(Boolean).join(' ');
       const domainLocked = busy || waiting || clearingAll || typeof item.run !== 'function';
-      button.disabled = domainLocked;
+      button.disabled = canInspectPending ? false : domainLocked;
+      if (passive && !canInspectPending) {
+        button.setAttribute('role', 'status');
+        button.setAttribute('aria-disabled', 'true');
+      } else if (canInspectPending) {
+        button.setAttribute('aria-controls', 'rrt-pending-details');
+        button.setAttribute('aria-expanded', String(this.#expandedPendingId === item.id));
+      }
       if (item.write === true) {
         button.setAttribute('data-write', '');
         if (domainLocked) {
@@ -368,7 +422,9 @@ class AppRevealTray extends HTMLElement {
       }
       button.setAttribute('data-action-id', item.id);
       button.setAttribute('aria-label', compact
-        ? String(item.label || item.shortLabel || 'Open')
+        ? canInspectPending
+          ? `Show ${String(item.label || 'pending tickets')}`
+          : String(item.label || item.shortLabel || 'Open')
         : `${item.shortLabel || 'Open'}: ${item.label}`);
 
       const art = document.createElement('span');
@@ -378,6 +434,7 @@ class AppRevealTray extends HTMLElement {
         const mini = document.createElement('span');
         mini.className = 'ticket-card tc-small dgn-ticket rrt-degenerette-ticket';
         const traits = dgnUnpackTicket(item.ticketPacked);
+        applyDgnTicketAccent(mini, traits);
         const hero = Number(item.heroQuadrant ?? 0) & 3;
         traits.forEach((trait, quadrant) => {
           const cell = document.createElement('span');
@@ -406,11 +463,13 @@ class AppRevealTray extends HTMLElement {
         art.appendChild(badge);
       } else if (item.kind === 'foil-match' && Array.isArray(item.lineTraits)) {
         const mini = document.createElement('span');
-        mini.className = 'ticket-card tc-small dgn-ticket rrt-foil-match-ticket';
+        mini.className = 'ticket-card tc-small ticket-card--foil dgn-ticket rrt-foil-match-ticket';
         const traits = dgnTraitIdsToQuadrants(item.lineTraits);
+        applyDgnTicketAccent(mini, item.lineTraits);
         traits.forEach((trait, quadrant) => {
           const cell = document.createElement('span');
           cell.className = 'trait-quadrant dgn-q rrt-foil-match-ticket__q';
+          if (trait.col === 7) cell.classList?.add('trait-quadrant--gold');
           cell.setAttribute('data-quadrant', String(quadrant));
           const badge = document.createElement('img');
           badge.src = dgnBadgePath(quadrant, trait.sym, trait.col);
@@ -421,11 +480,20 @@ class AppRevealTray extends HTMLElement {
         const center = document.createElement('span');
         center.className = 'ticket-card-center rrt-foil-match-ticket__center';
         const mark = document.createElement('img');
-        mark.src = '/whitepaper/flame-center.svg';
+        mark.src = '/whitepaper/flame-center-silver.svg';
         mark.alt = '';
         center.appendChild(mark);
         mini.appendChild(center);
         art.appendChild(mini);
+      } else if (item.kind === 'tickets' && passive) {
+        const pack = document.createElement('span');
+        pack.className = 'rvl-pack rrt-pending-pack-art';
+        const logo = document.createElement('img');
+        logo.className = 'rvl-pack-logo';
+        logo.src = '/whitepaper/flame-logo.svg';
+        logo.alt = '';
+        pack.appendChild(logo);
+        art.appendChild(pack);
       } else if (item.kind === 'tickets') {
         // Use the same branded tear-pack silhouette as the opening overlay.
         // This miniature has its own fixed aspect ratio so the button grid can
@@ -476,7 +544,21 @@ class AppRevealTray extends HTMLElement {
       copy.className = 'rrt-action__copy';
       const label = document.createElement('strong');
       label.className = 'rrt-action__label';
-      label.textContent = item.label;
+      if (compact && passive && item.kind === 'tickets') {
+        const meta = _ticketPackMeta(item);
+        const amount = document.createElement('span');
+        amount.className = 'rrt-pack-pending__count';
+        amount.textContent = meta.count == null
+          ? 'TICKETS'
+          : `${meta.count} ${meta.count === 1 ? 'TICKET' : 'TICKETS'}`;
+        const state = document.createElement('span');
+        state.className = 'rrt-pack-pending__state';
+        state.textContent = 'PENDING';
+        label.appendChild(amount);
+        label.appendChild(state);
+      } else {
+        label.textContent = item.label;
+      }
       if (compact) {
         copy.appendChild(label);
       } else {
@@ -522,12 +604,90 @@ class AppRevealTray extends HTMLElement {
               : 'OPENING…'
           : String(item.shortLabel || 'Open').toUpperCase();
 
-      button.appendChild(art);
+      if (!passive || item.kind === 'tickets') button.appendChild(art);
       button.appendChild(copy);
-      if (!compact) button.appendChild(cta);
-      if (!button.disabled) button.addEventListener('click', () => this.#run(item));
+      if (!compact && !passive) button.appendChild(cta);
+      if (!passive && !button.disabled) button.addEventListener('click', () => this.#run(item));
+      if (canInspectPending) {
+        button.addEventListener('click', () => {
+          this.#expandedPendingId = this.#expandedPendingId === item.id ? null : item.id;
+          this.#render();
+        });
+      }
       host.appendChild(button);
     }
+    this.#renderPendingPackDetails(
+      pendingDetails,
+      items.find((item) => item.id === this.#expandedPendingId),
+    );
+  }
+
+  #renderPendingPackDetails(host, item) {
+    if (!host) return;
+    host.textContent = '';
+    const packs = Array.isArray(item?.pendingPacks) ? item.pendingPacks : [];
+    if (packs.length === 0) {
+      host.hidden = true;
+      return;
+    }
+    host.hidden = false;
+    const head = document.createElement('span');
+    head.className = 'rrt-pending-details__head';
+    const title = document.createElement('strong');
+    title.textContent = 'PACKS ON THE WAY';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'rrt-pending-details__close';
+    close.textContent = '×';
+    close.setAttribute('aria-label', 'Close pending ticket details');
+    close.addEventListener('click', () => {
+      this.#expandedPendingId = null;
+      this.#render();
+    });
+    head.appendChild(title);
+    head.appendChild(close);
+    host.appendChild(head);
+
+    const list = document.createElement('span');
+    list.className = 'rrt-pending-details__packs';
+    for (const pendingPack of packs) {
+      const tile = document.createElement('span');
+      tile.className = 'rrt-pending-pack-preview';
+      const pack = document.createElement('span');
+      pack.className = `rvl-pack rrt-pending-pack-preview__art${pendingPack.foilPack ? ' is-foil' : ''}`;
+      const shine = document.createElement('span');
+      shine.className = 'rvl-pack-shine';
+      const brand = document.createElement('span');
+      brand.className = 'rvl-pack-brand';
+      const logo = document.createElement('img');
+      logo.className = 'rvl-pack-logo';
+      logo.src = '/whitepaper/flame-logo.svg';
+      logo.alt = '';
+      const edition = document.createElement('span');
+      edition.className = 'rvl-pack-edition';
+      edition.textContent = pendingPack.foilPack ? 'FOIL PACK' : 'TICKET PACK';
+      brand.appendChild(logo);
+      brand.appendChild(edition);
+      const level = document.createElement('span');
+      level.className = 'rvl-pack-level';
+      level.textContent = `LEVEL ${pendingPack.level}`;
+      const quantity = document.createElement('span');
+      quantity.className = 'rvl-pack-count';
+      quantity.textContent = _ticketQuantityText(pendingPack.count);
+      pack.appendChild(shine);
+      pack.appendChild(brand);
+      pack.appendChild(level);
+      pack.appendChild(quantity);
+      const caption = document.createElement('span');
+      caption.className = 'rrt-pending-pack-preview__caption';
+      caption.textContent = packs.length > 1
+        ? `PACK ${pendingPack.packIndex} OF ${pendingPack.packCount} · PENDING`
+        : 'PENDING';
+      tile.appendChild(pack);
+      tile.appendChild(caption);
+      list.appendChild(tile);
+    }
+    host.appendChild(list);
   }
 
   #showError(message) {

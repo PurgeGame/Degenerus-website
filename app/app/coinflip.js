@@ -102,6 +102,9 @@ const UINT64_MASK = (1n << 64n) - 1n;
 export const REVERSE_FLIP_BASE_COST_WEI = 100n * 10n ** 18n;
 
 const GAME_DAY_READ_ABI = ['function currentDayView() external view returns (uint24)'];
+const GAME_BAF_EVE_READ_ABI = [
+  'function purchaseInfo() external view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei)',
+];
 const ERC20_BALANCE_ABI = ['function balanceOf(address owner) external view returns (uint256)'];
 
 let _currentStakeReader = null;
@@ -110,6 +113,7 @@ let _claimableReader = null;
 let _latestResultReader = null;
 let _widgetBalancesReader = null;
 let _reverseFlipQuoteReader = null;
+let _bafFlipEveReader = null;
 let _stakeReadContractFactory = null;
 // null = unprobed; true = deploy has rngNudgeQuote() (run23+ signature);
 // false = legacy deploy (storage-slot quote + no-arg reverseFlip). Probed once
@@ -124,6 +128,7 @@ const _claimableInflight = new Map();
 const _widgetBalancesInflight = new Map();
 let _latestResultInflight = null;
 let _reverseFlipQuoteInflight = null;
+let _bafFlipEveInflight = null;
 const LOG_CHUNK_BLOCKS = 1_800;
 // v1 persisted only CoinflipStakeUpdated.newTotal and therefore permanently
 // under-reported any day resolved with auto-rebuy carry (most visibly sDGNRS).
@@ -173,6 +178,12 @@ export function __setReverseFlipQuoteReaderForTest(fn) {
   _reverseFlipQuoteReader = typeof fn === 'function' ? fn : null;
   _reverseFlipQuoteInflight = null;
   _nudgeQuoteViaView = null;
+}
+
+/** Test-only: replace the GAME purchaseInfo read used by the BAF-eve treatment. */
+export function __setBafFlipEveReaderForTest(fn) {
+  _bafFlipEveReader = typeof fn === 'function' ? fn : null;
+  _bafFlipEveInflight = null;
 }
 
 /** Test-only: restore the production current-day stake reader. */
@@ -227,6 +238,13 @@ export function __resetReverseFlipQuoteReaderForTest() {
   _nudgeQuoteViaView = null;
 }
 
+/** Test-only: restore the production BAF-eve state reader. */
+export function __resetBafFlipEveReaderForTest() {
+  _bafFlipEveReader = null;
+  _bafFlipEveInflight = null;
+  _publicReadProvider = null;
+}
+
 function _readerProvider() {
   const wallet = getProvider();
   if (wallet) return wallet;
@@ -247,6 +265,52 @@ function _stakeReadContract(provider) {
   return _stakeReadContractFactory
     ? _stakeReadContractFactory(provider)
     : new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, provider);
+}
+
+/**
+ * Convert GAME.purchaseInfo() into the one pre-draw state worth celebrating.
+ *
+ * BAF resolves while the game advances into levels 10, 20, 30, ... . The
+ * public final-purchase latch is true for the full deposit window immediately
+ * before that advance. Once RNG locks, the deciding day is already underway,
+ * so it is no longer "tomorrow" and this notice deliberately retires.
+ */
+export function bafFlipEveFromPurchaseInfo(raw) {
+  if (!raw) return null;
+  const currentLevel = Number(raw?.lvl ?? raw?.currentLevel ?? raw?.[0]);
+  const inJackpotPhase = Boolean(raw?.inJackpotPhase ?? raw?.[1]);
+  const lastPurchaseDay = Boolean(raw?.lastPurchaseDay_ ?? raw?.lastPurchaseDay ?? raw?.[2]);
+  const rngLocked = Boolean(raw?.rngLocked_ ?? raw?.rngLocked ?? raw?.[3]);
+  if (!Number.isInteger(currentLevel) || currentLevel < 0) return null;
+  if (inJackpotPhase || !lastPurchaseDay || rngLocked) return null;
+  const targetLevel = currentLevel + 1;
+  if (targetLevel <= 0 || targetLevel % 10 !== 0) return null;
+  return { currentLevel, targetLevel };
+}
+
+/** Read whether tomorrow's daily FLIP is the x10 BAF-triggering flip. */
+export async function readBafFlipEve() {
+  if (_bafFlipEveInflight) return _bafFlipEveInflight;
+  const request = (async () => {
+    try {
+      const raw = _bafFlipEveReader
+        ? await _bafFlipEveReader()
+        : await new ethers.Contract(
+          CONTRACTS.GAME,
+          GAME_BAF_EVE_READ_ABI,
+          _readerProvider(),
+        ).purchaseInfo();
+      return bafFlipEveFromPurchaseInfo(raw);
+    } catch (_e) {
+      return null;
+    }
+  })();
+  _bafFlipEveInflight = request;
+  try {
+    return await request;
+  } finally {
+    if (_bafFlipEveInflight === request) _bafFlipEveInflight = null;
+  }
 }
 
 function _normalizeLatestResult(value) {

@@ -21,7 +21,13 @@ import { subscribe, get, update } from './store.js';
 import { initProGate } from './pro-gate.js';
 import { initNavWallet } from './nav-wallet.js';
 import { initDiscordLink } from './discord-link.js';
-import { startPackWatch, refreshPackWatch } from './pack-watch.js';
+import {
+  backfillRecentJackpotTicketAwards,
+  ingestJackpotTicketAwards,
+  pendingPacks,
+  startPackWatch,
+  refreshPackWatch,
+} from './pack-watch.js';
 import { startBingoWatch, refreshBingoWatch } from './bingo-watch.js';
 import { resetPresentationStateForDeployment } from './deployment-presentation-state.js';
 import { initButtonFeedback } from './button-feedback.js';
@@ -214,9 +220,53 @@ async function boot() {
   //     the reveal once the entries are real — including one that rolled while
   //     the tab was closed, since the record outlives the session.
   startPackWatch({ getAddress: () => get('connected.address') });
-  subscribe('connected.address', () => refreshPackWatch());
-  // Bingo claims are commonly harvested by a keeper. Watch the player-indexed
-  // GAME receipts so an automatic claim still gets an explicit prize reveal.
+  subscribe('connected.address', (address) => {
+    if (address) {
+      const lastDay = get('app.lastDay');
+      ingestJackpotTicketAwards({ address, payload: lastDay });
+      void backfillRecentJackpotTicketAwards({ address, day: lastDay?.day });
+    }
+    refreshPackWatch();
+  });
+  subscribe('app.lastDay', (payload) => {
+    const address = get('connected.address');
+    if (!address || !payload) return;
+    ingestJackpotTicketAwards({ address, payload });
+    void backfillRecentJackpotTicketAwards({ address, day: payload.day });
+    refreshPackWatch();
+    // Ticket buckets and their Bingo proofs become complete during this same
+    // processing pass. Ask the DB again as soon as the settled day lands.
+    refreshBingoWatch();
+  });
+  // Far-future jackpot tickets stay banked until their level enters the exact
+  // six-key processing window. Re-check only when that window changes, not on
+  // every ordinary game-state sample.
+  let packDrainScope = null;
+  subscribe('app.gameState', (state) => {
+    const scope = state ? [
+      state.level,
+      state.phase,
+      state.jackpotPhaseFlag ? 1 : 0,
+      state.rngLockedFlag ? 1 : 0,
+      state.phaseTransitionActive ? 1 : 0,
+      state.advanceStage ?? '',
+      state.ticketsFullyProcessed === true ? 1 : 0,
+    ].join(':') : null;
+    if (scope === packDrainScope) {
+      // Ticket batches can finish in a keeper transaction without changing the
+      // visible phase fields (the current deploy can even leave the completion
+      // latch false after every owed queue reaches zero). While this browser has
+      // a receipt to reconcile, use each normal 15s game sample as a prompt read.
+      if (pendingPacks().length > 0) refreshPackWatch();
+      return;
+    }
+    packDrainScope = scope;
+    refreshPackWatch();
+    refreshBingoWatch();
+  });
+  // The DB finds complete 8-color lines after ticket processing. Each unclaimed
+  // proof becomes a player write in the shared pending tray; settled claims
+  // (including permissionless keeper claims) become explicit prize reveals.
   startBingoWatch({ getAddress: () => get('connected.address') });
   subscribe('connected.address', () => refreshBingoWatch());
   // 3. Polling starts with the resolved viewing target (?as= OR connected OR

@@ -1,9 +1,7 @@
-// Surface automatically-settled Bingo rewards as one-time player reveals.
-//
-// claimBingo is permissionless and the keeper may call it before the player is
-// looking at the app. The GAME event is therefore the receipt and the UI's job
-// is read-only: scan player-indexed logs, persist unseen receipts, then offer a
-// reveal containing the winning 8-color chart line and the credited rewards.
+// Surface DB-discovered Bingo proofs as player claim actions, then show every
+// settled reward as a one-time reveal. The indexed API is authoritative for
+// both unclaimed proofs and historical receipts; the direct GAME log scan stays
+// as a backwards-compatible fallback while the API/indexer is being deployed.
 
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { ethers, getProvider } from './contracts.js';
@@ -11,11 +9,12 @@ import { fetchJSON } from '../../beta/app/api.js';
 import { DGN_QUADRANTS, DGN_SYMBOLS, dgnBadgePath } from './dgn-traits.js';
 import { publishPendingActions, clearPendingActions } from './pending-actions.js';
 import { queueReveal } from '../components/reveal-overlay.js';
+import { claimBingo } from './bingo.js';
 
 const SOURCE = 'bingo-claims';
 const STORAGE_PREFIX = `degenerus:bingo:${CHAIN.id}:${String(CONTRACTS.GAME || '').toLowerCase()}`;
 const WATCH_INTERVAL_MS = 30_000;
-const LOG_CHUNK_BLOCKS = 1_000;
+const LOG_CHUNK_BLOCKS = 2_000;
 const REORG_OVERLAP_BLOCKS = 12;
 const MAX_CONSUMED_IDS = 512;
 
@@ -40,7 +39,10 @@ let _refreshAgain = false;
 let _publishSeq = 0;
 let _logReader = null;
 let _ticketFetcher = null;
+let _indexFetcher = null;
+let _claimWriter = null;
 const _memoryState = new Map();
+const _claimableRows = new Map();
 
 function _lower(value) { return value ? String(value).toLowerCase() : null; }
 function _storageKey(address) { return `${STORAGE_PREFIX}:${_lower(address)}`; }
@@ -69,8 +71,8 @@ function _writeState(address, state) {
 }
 
 function _provider() {
-  const wallet = getProvider();
-  if (wallet) return wallet;
+  // Event backfills are read traffic and may cover thousands of blocks. Keep
+  // them off injected-wallet RPCs, which commonly cap getLogs more harshly.
   if (!_readProvider && CHAIN.rpcUrl) {
     _readProvider = new ethers.JsonRpcProvider(
       CHAIN.rpcUrl,
@@ -78,7 +80,7 @@ function _provider() {
       { staticNetwork: true, batchMaxCount: 2 },
     );
   }
-  return _readProvider;
+  return _readProvider || getProvider();
 }
 
 function _eventIndex(log) {
@@ -87,6 +89,10 @@ function _eventIndex(log) {
 
 function _eventKey(log) {
   return `${String(log?.transactionHash || '').toLowerCase()}:${_eventIndex(log)}`;
+}
+
+function _claimKey(level, quadrant) {
+  return `claim:${Number(level)}:${Number(quadrant)}`;
 }
 
 function _tierKey(log, level, symbol) {
@@ -202,6 +208,81 @@ export async function scanBingoClaims({ address, head = null } = {}) {
   return state.rows;
 }
 
+function _normalizeIndexedReceipt(row, address) {
+  const player = _lower(row?.player || address);
+  const level = Number(row?.level);
+  const symbol = Number(row?.symbol);
+  const blockNumber = Number(row?.blockNumber || 0);
+  const logIndex = Number(row?.logIndex || 0);
+  const transactionHash = String(row?.transactionHash || '').toLowerCase();
+  if (player !== _lower(address)
+    || !Number.isInteger(level) || level < 0
+    || !Number.isInteger(symbol) || symbol < 0 || symbol >= 32
+    || !Number.isInteger(blockNumber) || blockNumber < 0
+    || !Number.isInteger(logIndex) || logIndex < 0) return null;
+  const tier = ['first-quadrant', 'first-symbol', 'regular'].includes(row?.tier)
+    ? row.tier
+    : 'regular';
+  return {
+    id: String(row?.id || `${transactionHash}:${logIndex}`),
+    transactionHash,
+    logIndex,
+    blockNumber,
+    player,
+    level,
+    symbol,
+    tier,
+    flipReward: String(row?.flipReward ?? '0'),
+    dgnrsPaid: String(row?.dgnrsPaid ?? '0'),
+  };
+}
+
+function _normalizeClaimable(row, address) {
+  const player = _lower(row?.player || address);
+  const level = Number(row?.level);
+  const symbol = Number(row?.symbol);
+  const quadrant = Number(row?.quadrant ?? (symbol >> 3));
+  const slots = Array.isArray(row?.slots) ? row.slots.map(Number) : [];
+  if (player !== _lower(address)
+    || !Number.isInteger(level) || level < 0
+    || !Number.isInteger(symbol) || symbol < 0 || symbol >= 32
+    || !Number.isInteger(quadrant) || quadrant < 0 || quadrant > 3
+    || (symbol >> 3) !== quadrant
+    || slots.length !== 8
+    || slots.some((slot) => !Number.isInteger(slot) || slot < 0 || slot > 0xffff_ffff)) {
+    return null;
+  }
+  return {
+    id: _claimKey(level, quadrant),
+    player,
+    level,
+    symbol,
+    quadrant,
+    slots,
+  };
+}
+
+async function _fetchIndexedBingos(address) {
+  if (_indexFetcher) return _indexFetcher({ address });
+  return fetchJSON(`/player/${address}/bingos`);
+}
+
+async function _loadIndexedBingos(address) {
+  const payload = await _fetchIndexedBingos(address);
+  const state = _readState(address);
+  const receipts = (Array.isArray(payload?.claimed) ? payload.claimed : [])
+    .map((row) => _normalizeIndexedReceipt(row, address))
+    .filter(Boolean);
+  _mergeReceipts(state, receipts);
+  _writeState(address, state);
+  const consumed = new Set(state.consumed.map(String));
+  const claimables = (Array.isArray(payload?.claimable) ? payload.claimable : [])
+    .map((row) => _normalizeClaimable(row, address))
+    .filter((row) => row && !consumed.has(row.id));
+  _claimableRows.set(_lower(address), claimables);
+  return { receipts: state.rows, claimables };
+}
+
 /** Counts indexed by color*8+symbol, matching the inventory chart orientation. */
 export function bingoQuadrantEntryCounts(payload, quadrant) {
   const q = Number(quadrant);
@@ -258,7 +339,7 @@ async function _publish(address, seq = null) {
     _consume(addr, current.rows.map((row) => row.id));
     if (_lower(_getAddress?.()) === addr) await _publish(addr, ++_publishSeq);
   };
-  publishPendingActions(SOURCE, state.rows.map((receipt) => {
+  const revealRows = state.rows.map((receipt) => {
     const quadrant = Number(receipt.symbol) >> 3;
     const quadrantName = String(DGN_QUADRANTS[quadrant] || 'trait').toUpperCase();
     const symbolName = _symbolLabel(receipt);
@@ -297,7 +378,74 @@ async function _publish(address, seq = null) {
         await _publish(addr, ++_publishSeq);
       },
     };
-  }));
+  });
+
+  const consumed = new Set(state.consumed.map(String));
+  const claimRows = (_claimableRows.get(addr) || [])
+    .filter((candidate) => !consumed.has(candidate.id))
+    .map((candidate) => {
+      const quadrant = candidate.quadrant;
+      const quadrantName = String(DGN_QUADRANTS[quadrant] || 'trait').toUpperCase();
+      const symbolName = _symbolLabel(candidate);
+      return {
+        id: `bingo-claim:${candidate.level}:${quadrant}`,
+        kind: 'bingo',
+        kindLabel: 'BINGO READY',
+        label: `Level ${candidate.level} ${symbolName} Bingo`,
+        shortLabel: 'Claim Bingo',
+        detail: `${quadrantName} quadrant · all 8 colors collected`,
+        badgePath: dgnBadgePath(quadrant, Number(candidate.symbol) & 7, 7),
+        state: 'ready',
+        write: true,
+        autoOpen: false,
+        order: 13,
+        chronology: (Number(candidate.level) * 4) + quadrant,
+        run: async () => {
+          let current = null;
+          try { current = _lower(_getAddress?.()); } catch (_e) { current = null; }
+          if (current !== addr) return;
+
+          let result;
+          try {
+            result = await (_claimWriter || claimBingo)({
+              player: addr,
+              level: candidate.level,
+              symbol: candidate.symbol,
+              slots: candidate.slots,
+            });
+          } catch (error) {
+            // Another permissionless caller can win the race after the DB read.
+            // Retire the stale write; the indexed receipt will still arrive as
+            // a reveal row on the next refresh.
+            if (error?.code === 'AlreadyClaimed' || /AlreadyClaimed/.test(String(error?.message || ''))) {
+              _consume(addr, candidate.id);
+              _claimableRows.set(addr, (_claimableRows.get(addr) || [])
+                .filter((row) => row.id !== candidate.id));
+              await refreshBingoWatch();
+              return;
+            }
+            throw error;
+          }
+
+          const receipts = decodeBingoLogs(result?.receipt?.logs, addr);
+          if (receipts.length > 0) {
+            const latest = _readState(addr);
+            _mergeReceipts(latest, receipts);
+            _writeState(addr, latest);
+          }
+          // The proof can never become reusable: on-chain dedupe is one claim
+          // per (player, level, quadrant). Persist that fact across API lag and
+          // reloads so a confirmed transaction cannot be offered twice.
+          _consume(addr, [candidate.id]);
+          _claimableRows.set(addr, (_claimableRows.get(addr) || [])
+            .filter((row) => row.id !== candidate.id));
+          await _publish(addr, ++_publishSeq);
+          void refreshBingoWatch();
+        },
+      };
+    });
+
+  publishPendingActions(SOURCE, [...claimRows, ...revealRows]);
 }
 
 /** Re-check immediately (startup, wallet switch, or poll tick). */
@@ -315,8 +463,20 @@ export function refreshBingoWatch() {
   }
   const seq = ++_publishSeq;
   _refreshInFlight = (async () => {
-    try { await scanBingoClaims({ address }); }
-    catch (error) { console.warn?.('[bingo-watch] scan failed', error); }
+    let indexed = false;
+    // Tests that inject a log reader intentionally exercise the legacy path.
+    if (!_logReader || _indexFetcher) {
+      try {
+        await _loadIndexedBingos(address);
+        indexed = true;
+      } catch (error) {
+        console.warn?.('[bingo-watch] indexed Bingo read failed; using event fallback', error);
+      }
+    }
+    if (!indexed) {
+      try { await scanBingoClaims({ address }); }
+      catch (error) { console.warn?.('[bingo-watch] scan failed', error); }
+    }
     if (_lower(_getAddress?.()) === address) await _publish(address, seq);
   })().finally(() => {
     _refreshInFlight = null;
@@ -354,18 +514,23 @@ export function stopBingoWatch() {
   clearPendingActions(SOURCE);
 }
 
-/** Test seams; production always uses the configured RPC and ticket API. */
-export function __setBingoReadersForTest({ logs, tickets } = {}) {
+/** Test seams; production uses the indexed API, configured RPC fallback, and wallet writer. */
+export function __setBingoReadersForTest({ logs, tickets, index, claim } = {}) {
   _logReader = typeof logs === 'function' ? logs : null;
   _ticketFetcher = typeof tickets === 'function' ? tickets : null;
+  _indexFetcher = typeof index === 'function' ? index : null;
+  _claimWriter = typeof claim === 'function' ? claim : null;
 }
 
 export function __resetBingoWatchForTest() {
   stopBingoWatch();
   _logReader = null;
   _ticketFetcher = null;
+  _indexFetcher = null;
+  _claimWriter = null;
   _readProvider = null;
   _refreshInFlight = null;
   _refreshAgain = false;
   _memoryState.clear();
+  _claimableRows.clear();
 }

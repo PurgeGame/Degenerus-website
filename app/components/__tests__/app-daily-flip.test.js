@@ -308,6 +308,24 @@ describe('day-wide reveal planning', () => {
     assert.equal(revealPlanning.formatSdgnrsBalance(123_450_000n * unit), '123M');
   });
 
+  test('BAF eve is only the unlocked final-purchase day before an x10 level', () => {
+    const quote = (overrides = {}) => ({
+      lvl: 39,
+      inJackpotPhase: false,
+      lastPurchaseDay_: true,
+      rngLocked_: false,
+      ...overrides,
+    });
+    assert.deepEqual(
+      coinflipMod.bafFlipEveFromPurchaseInfo(quote()),
+      { currentLevel: 39, targetLevel: 40 },
+    );
+    assert.equal(coinflipMod.bafFlipEveFromPurchaseInfo(quote({ lvl: 38 })), null);
+    assert.equal(coinflipMod.bafFlipEveFromPurchaseInfo(quote({ lastPurchaseDay_: false })), null);
+    assert.equal(coinflipMod.bafFlipEveFromPurchaseInfo(quote({ rngLocked_: true })), null);
+    assert.equal(coinflipMod.bafFlipEveFromPurchaseInfo(quote({ inJackpotPhase: true })), null);
+  });
+
   test('four distinct tracks publish the requested conditional win odds', () => {
     assert.deepEqual(
       revealPlanning.FLIP_REVEAL_PROFILES.map(({ id, winRate }) => [id, winRate]),
@@ -417,6 +435,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       queued: 0n,
       locked: false,
     }));
+    coinflipMod.__setBafFlipEveReaderForTest(async () => null);
     storeMod.update('connected.address', TEST_ADDR);
     storeMod.update('app.lastDay', { day: 67, status: 'resolved' });
     await import('../app-daily-flip.js');
@@ -429,6 +448,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     coinflipMod.__resetLatestResultReaderForTest();
     coinflipMod.__resetWidgetBalancesReaderForTest();
     coinflipMod.__resetReverseFlipQuoteReaderForTest();
+    coinflipMod.__resetBafFlipEveReaderForTest();
     coinflipMod.__resetContractFactoryForTest();
     charityVoteMod.__resetCharityVoteForTest();
     contractsMod.clearProvider();
@@ -485,6 +505,33 @@ describe('app-daily-flip — coin reveal + actions', () => {
       'only a restrained opacity/glow pulse animates the static cue');
     assert.equal(el.querySelector('[data-bind="df-reveal-cta"]'), null,
       'there is no duplicate reveal button');
+    el.disconnectedCallback();
+  });
+
+  test('the x9 final-purchase window gives tomorrow\'s FLIP a special BAF treatment', async () => {
+    coinflipMod.__setBafFlipEveReaderForTest(async () => ({
+      lvl: 39,
+      inJackpotPhase: false,
+      lastPurchaseDay_: true,
+      rngLocked_: false,
+      priceWei: 1n,
+    }));
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+      gameState: { level: 39 },
+      baf: { score: '0', rank: null },
+    };
+    const el = mount();
+    await flushMicrotasks();
+
+    const notice = el.querySelector('[data-bind="df-baf-eve"]');
+    const panel = el.querySelector('.app-daily-flip');
+    assert.equal(notice.hidden, false);
+    assert.equal(panel.classList.contains('app-daily-flip--baf-eve'), true);
+    assert.match(el.innerHTML, /BAF TOMORROW[\s\S]*WIN TRIGGERS THE DRAW/);
+    assert.match(APP_CSS, /\.df-baf-eve\s*\{[^}]*position:\s*absolute[^}]*border:/s);
+    assert.match(APP_CSS, /\.app-daily-flip--baf-eve \.df-tomorrow-layout\s*\{[^}]*border-color:/s);
     el.disconnectedCallback();
   });
 
@@ -574,6 +621,36 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
     assert.equal(_fetchCounts.get(bafUrl), 2,
       'a revealed win invalidates and refreshes the score/rank exactly once');
+    el.disconnectedCallback();
+  });
+
+  test('a transient BAF rank API miss retries instead of caching a dash forever', async () => {
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: false, rewardPercent: 0 },
+      gameState: { level: 7 },
+      baf: null,
+    };
+
+    const el = mount();
+    await flushMicrotasks();
+    const bafUrl = [..._fetchCounts.keys()].find((url) => /\/baf\?level=10$/.test(url));
+    assert.ok(bafUrl);
+    assert.equal(_fetchCounts.get(bafUrl), 1);
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, 'RANK —');
+
+    _fetchResponses.baf = {
+      level: 10,
+      score: String(1_000n * 10n ** 18n),
+      rank: 7,
+      totalParticipants: 20,
+      roundStatus: 'open',
+    };
+    document.dispatchEvent({ type: 'visibilitychange' });
+    await flushMicrotasks();
+
+    assert.equal(_fetchCounts.get(bafUrl), 2);
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, 'RANK #7');
     el.disconnectedCallback();
   });
 
@@ -1612,8 +1689,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     assert.equal(baf.textContent, '1,250',
       'BAF adds live preview minus already-processed claimableStored');
-    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, 'RANK —',
-      'the indexed rank stays hidden while an unindexed score increase is pending');
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, 'RANK #3',
+      'the latest indexed rank stays visible while an unindexed score increase is pending');
     assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '988,104',
       'Protocol Coins independently adds the full 450 FLIP claimable amount');
     assert.equal(el.querySelector('[data-bind="df-baf-score-gain"]'), null,
@@ -1625,6 +1702,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(APP_CSS,
       /\.balance-rise \.df-baf-score__value\s*\{[^}]*animation:\s*df-baf-score-rise/s,
       'a same-scope score increase animates the BAF number on reveal');
+    assert.match(APP_CSS,
+      /\.df-baf-transfer\s*\{[^}]*position:\s*fixed;[^}]*animation:\s*df-baf-transfer-flight/s,
+      "today's finalized +FLIP receipt has a layout-independent flight into BAF");
+    assert.match(APP_CSS,
+      /@keyframes df-baf-transfer-flight\s*\{[\s\S]*var\(--df-baf-flight-x\)[\s\S]*var\(--df-baf-flight-y\)/,
+      'the receipt travels to the measured BAF value rather than a hard-coded screen point');
     assert.match(APP_CSS,
       /\.df-baf-score__title\s*\{[^}]*grid-template-areas:\s*"info info" "unit rank"/s,
       'rank sits to the right of BAF while the info dot remains above it');

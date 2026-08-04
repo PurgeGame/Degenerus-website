@@ -388,7 +388,7 @@ function makeFakePurchaseContract(opts = {}) {
     }
   };
   let txCounter = 0n;
-  return {
+  const contract = {
     purchase: Object.assign(
       async (...args) => {
         calls.purchase.push(args);
@@ -442,6 +442,10 @@ function makeFakePurchaseContract(opts = {}) {
     connect(_signer) { return this; },
     _calls: calls,
   };
+  if (opts.purchaseInfo != null) {
+    contract.purchaseInfo = async () => opts.purchaseInfo;
+  }
+  return contract;
 }
 
 function makeFakeFundsClaimContract({ flipWindowOpen = false } = {}) {
@@ -628,7 +632,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     el.disconnectedCallback();
   });
 
-  test('purchase fields use action labels, inputs align right, and stay in one compact mobile row', () => {
+  test('purchase fields use action labels and become finger-sized full-width phone rows', () => {
     const el = instantiate();
     assert.match(el.innerHTML, /<span data-bind="dec-ticket-action-label">Buy tickets<\/span>/);
     assert.match(el.innerHTML, /<boon-product-indicator product="purchase"/);
@@ -652,23 +656,43 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       APP_CSS,
-      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-input-row--pair\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s,
-      'compact purchase fields share one row instead of doubling selector height',
+      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-input-row--pair\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s,
+      'each purchase field gets the full phone width',
     );
     assert.match(
       APP_CSS,
-      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-input-group\s*\{[^}]*grid-template-rows:\s*minmax\(0\.66rem, auto\) 1\.38rem[^}]*min-height:\s*2\.75rem/s,
-      'each narrow selector keeps its label above a compact bounded field',
+      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-input-group\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)[^}]*grid-template-rows:\s*auto 4rem[^}]*min-height:\s*5\.8rem[^}]*justify-content:\s*stretch/s,
+      'each phone selector is twice the desktop card height with a full-height touch control',
     );
     assert.match(
       APP_CSS,
-      /@media \(max-width: 768px\)[\s\S]*?\.jackpot-hero \.dec-input-group \.dec-step,\s*body\.layout-basic \.jackpot-hero \.dec-input-group \.dec-quarter-step\s*\{[^}]*min-width:\s*0[^}]*min-height:\s*0/s,
-      'embedded stepper halves reset the global 44px button minimum throughout narrow mode',
+      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-input-group \.dec-stepper-btns\s*\{[^}]*flex-direction:\s*row/s,
+      'the old whole-ticket arrows sit side by side instead of becoming tiny stacked halves',
+    );
+    assert.match(
+      APP_CSS,
+      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-input-group \.dec-step\s*\{[^}]*min-width:\s*3rem[^}]*min-height:\s*4rem/s,
+      'whole-ticket arrow buttons fill the enlarged 64px phone control',
+    );
+    assert.match(
+      APP_CSS,
+      /@media \(max-width: 520px\)[\s\S]*?\.jackpot-hero \.dec-buy-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s,
+      'the optional bonus and BUY IN stack rather than halving the phone action width',
     );
     assert.match(
       APP_CSS,
       /\.dec-stepper\s*\{[^}]*width:\s*6\.25rem[^}]*flex:\s*0 0 6\.25rem/s,
       'ticket and lootbox controls retain the exact same outer width',
+    );
+    assert.match(
+      PANEL_SRC,
+      /name="dec-tickets"[^>]*inputmode="decimal"/s,
+      'ticket entry requests the decimal keyboard on mobile',
+    );
+    assert.match(
+      PANEL_SRC,
+      /name="dec-lootbox-eth"[^>]*inputmode="decimal"/s,
+      'lootbox entry requests the decimal keyboard on mobile',
     );
     el.disconnectedCallback();
   });
@@ -1135,6 +1159,20 @@ describe('combined ticket + lootbox buy', () => {
       el.innerHTML,
       /https:\/\/www\.alchemy\.com\/faucets\/base-sepolia[\s\S]*GET PLAY MONEY/,
     );
+    el.disconnectedCallback();
+  });
+
+  test('an empty native wallet still gets play money when AFKing credit is available', async () => {
+    contractsMod.setProvider(makeFakeProvider(CONNECTED, 0n));
+    installAfkingReadState({ fundingWei: 875_000_000_000n });
+    const el = instantiate();
+    await settle(60);
+
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').hidden, false,
+      'the combined spendable AFKing amount remains visible');
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, '0.875 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-funds-faucet"]').hidden, false,
+      'native-wallet zero, not the combined total, drives the gas faucet');
     el.disconnectedCallback();
   });
 
@@ -1797,8 +1835,53 @@ describe('Foil pack buy leg', () => {
       /@keyframes dec-foil-occasional-glint\s*\{[^}]*0%, 68%[^}]*opacity:\s*0/s,
       'the foil glint spends most of its cycle quiet');
     assert.match(APP_CSS,
+      /animation:\s*dec-foil-occasional-glint 11\.25s ease-in-out infinite/,
+      'the foil glint runs one-third less often than its original 7.5 second cycle');
+    assert.match(APP_CSS,
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.app-decimator-panel \.dec-foil::after\s*\{\s*animation:\s*none/s,
       'the decorative glint respects reduced motion');
+    el.disconnectedCallback();
+  });
+
+  test('sealed Level 29 uses the contract-routed Level 30 foil price in the UI and tx', async () => {
+    const routedPrice = lootboxMod.scaledTicketPriceWei(30);
+    const fakeContract = makeFakePurchaseContract({
+      purchaseInfo: [29, true, false, true, routedPrice],
+    });
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    _fetchHandler = async (url) => {
+      if (String(url).includes('/game/state')) {
+        return {
+          level: 29,
+          phase: 'JACKPOT',
+          jackpotPhaseFlag: true,
+          rngLockedFlag: true,
+          jackpotCounter: 2,
+          // Deliberately omit compressedJackpotFlag: this was the stale API
+          // shape that under-routed the old JS-only quote to Level 29.
+        };
+      }
+      return { player: null, pending: {} };
+    };
+
+    const el = instantiate();
+    await settle(70);
+    assert.equal(el.querySelector('[data-bind="dec-price"]').textContent, 'Price - 0.08 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-foil-price"]').textContent, '0.8 ETH');
+
+    const check = el.querySelector('[data-bind="dec-foil-check"]');
+    check.checked = true;
+    check.dispatchEvent({ type: 'change' });
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.8 ETH');
+
+    el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
+    await settle(100);
+    assert.equal(fakeContract._calls.purchase.length, 1);
+    assert.equal(
+      fakeContract._calls.purchase[0][6].value,
+      lootboxMod.foilPackCostFromPriceWei(routedPrice),
+      'the purchase sends the full routed Level 30 foil cost, not half-price Level 29',
+    );
     el.disconnectedCallback();
   });
 

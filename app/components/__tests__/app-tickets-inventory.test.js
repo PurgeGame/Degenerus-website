@@ -11,6 +11,7 @@
 
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import * as storeMod from '../../app/store.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
@@ -22,6 +23,7 @@ let inventoryMod = null;
 
 const TEST_ADDR = '0xab12000000000000000000000000000000000000';
 const RAW_ETH = 10n ** 12n;
+const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 
 // ---------------------------------------------------------------------------
 // Fake DOM — same trimmed harness as app-balances-strip.test.js.
@@ -212,6 +214,7 @@ let _byLevel = new Map();
 let _foilByLevel = new Map();
 let _gameState = { level: 17, phase: 'JACKPOT', jackpotPhaseFlag: true };  // → active 17
 let _dashboardTickets = [];
+let _dashboardUnavailable = false;
 let _deitySymbols = [];
 let _farFutureQueueResponse = null;
 const _fetchLog = [];
@@ -222,7 +225,9 @@ globalThis.fetch = async (url) => {
     return { ok: true, status: 200, json: async () => _gameState };
   }
   if (/\/player\/0x[0-9a-f]+$/i.test(u)) {
-    return { ok: true, status: 200, json: async () => ({ tickets: _dashboardTickets }) };
+    return _dashboardUnavailable
+      ? { ok: false, status: 404, json: async () => ({ message: 'player not found' }) }
+      : { ok: true, status: 200, json: async () => ({ tickets: _dashboardTickets }) };
   }
   const m = u.match(/\/tickets\/by-trait\?level=(\d+)$/);
   if (m && _byLevel.has(Number(m[1]))) {
@@ -261,6 +266,7 @@ function resetDom() {
   _foilByLevel = new Map();
   _gameState = { level: 17, phase: 'JACKPOT', jackpotPhaseFlag: true };
   _dashboardTickets = [];
+  _dashboardUnavailable = false;
   _deitySymbols = [];
   _farFutureQueueResponse = null;
   _fetchLog.length = 0;
@@ -321,6 +327,13 @@ describe('app-tickets-inventory — cards + chart', () => {
     inventoryMod = await import('../app-tickets-inventory.js');
     inventoryMod.__resetDeityEntryContractFactoryForTest();
     packWatchMod = await import('../../app/pack-watch.js');
+  });
+
+  test('YOUR TICKETS stays on one line in the phone header', () => {
+    assert.match(
+      APP_CSS,
+      /\.app-tickets-inventory \.inv-head > h2\s*\{[^}]*flex:\s*0 0 auto[^}]*white-space:\s*nowrap/s,
+    );
   });
 
   test('cards mode dedups identical combos into ×N cards', async () => {
@@ -394,6 +407,71 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
+  test('TOTAL VALUE fallback combines near traits with the far-future queue when /player is 404', async () => {
+    const calls = [];
+    const rows = await inventoryMod.readTicketHoldingsFallback({
+      address: TEST_ADDR,
+      unresolvedLevel: 1,
+      knownLevel: 1,
+      knownPayload: { totalEntries: 152 },
+      fetcher: async (url) => {
+        calls.push(String(url));
+        if (String(url).endsWith('/far-future-queue')) {
+          return {
+            rows: [
+              { level: 7, entryCount: 40 },
+              { level: 20, entryCount: 4 },
+            ],
+          };
+        }
+        const level = Number(/level=(\d+)$/.exec(String(url))?.[1]);
+        return { totalEntries: level === 2 ? 120 : level >= 3 && level <= 6 ? 40 : 0 };
+      },
+    });
+
+    assert.deepEqual(rows.map(({ level, entryCount }) => ({ level, entryCount })), [
+      { level: 1, entryCount: 152 },
+      { level: 2, entryCount: 120 },
+      { level: 3, entryCount: 40 },
+      { level: 4, entryCount: 40 },
+      { level: 5, entryCount: 40 },
+      { level: 6, entryCount: 40 },
+      { level: 7, entryCount: 40 },
+      { level: 20, entryCount: 4 },
+    ]);
+    assert.equal(calls.filter((url) => url.includes('tickets/by-trait')).length, 5,
+      'the already-loaded current level is reused instead of fetched twice');
+    assert.equal(calls.filter((url) => url.endsWith('/far-future-queue')).length, 1,
+      'all remaining future levels come from one compact request');
+  });
+
+  test('ticket header renders the recovered TOTAL VALUE when the dashboard player row is missing', async () => {
+    _dashboardUnavailable = true;
+    _byLevel.set(17, byTraitPayload({ level: 17, cards: [cardAt(0), cardAt(1)] }));
+    _byLevel.set(18, byTraitPayload({ level: 18, cards: [cardAt(0)] }));
+    for (let level = 19; level <= 22; level += 1) {
+      _byLevel.set(level, byTraitPayload({ level, cards: [] }));
+    }
+    _farFutureQueueResponse = {
+      rows: [{ level: 23, queueIndex: 0, entryCount: 4, remainder: 0 }],
+    };
+    const expectedRows = [
+      { level: 17, entryCount: 8 },
+      { level: 18, entryCount: 4 },
+      { level: 23, entryCount: 4 },
+    ];
+
+    const el = mount();
+    await flushMicrotasks();
+    assert.equal(
+      el.querySelector('[data-bind="inv-total-value"]').textContent,
+      `${inventoryMod.formatTicketTotalValueEth(
+        inventoryMod.unresolvedTicketFaceValueWei(expectedRows, 17),
+      )} ETH`,
+    );
+    el.disconnectedCallback();
+  });
+
   test('a resolved foil pack always renders its four physical tickets', async () => {
     _byLevel.set(17, byTraitPayload({
       cards: Array.from({ length: 4 }, (_unused, i) => cardAt(i, 'opened', COMBO)),
@@ -409,7 +487,14 @@ describe('app-tickets-inventory — cards + chart', () => {
     const foils = el.querySelectorAll('.inv-card--foil');
     assert.equal(foils.length, 4,
       'foil lines stay four visible cards even when their trait combinations collide');
-    assert.equal(el.querySelectorAll('.inv-foil-tag').length, 4);
+    assert.equal(el.querySelectorAll('.inv-foil-tag').length, 0,
+      'foil ticket faces use their material treatment instead of covering a trait with text');
+    assert.ok(foils.every((foil) => foil.querySelector('.ticket-card--foil')),
+      'all four physical foil tickets receive the shared metallic face');
+    assert.ok(foils.every((foil) => (
+      foil.querySelector('.ticket-card-center')?.querySelector('img')?.src
+        === '/whitepaper/flame-center-silver.svg'
+    )), 'every foil centre uses the dedicated silver flame');
     assert.equal(el.querySelectorAll('.inv-count').length, 0,
       'the foil pack is not collapsed into one ×4 inventory card');
     el.disconnectedCallback();

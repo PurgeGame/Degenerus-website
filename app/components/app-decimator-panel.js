@@ -45,7 +45,8 @@ import { readAfkingSubscription } from '../app/passes.js';
 // widget takes it as a single ETH input and both legs ride ONE purchase() tx.
 import {
   readAffiliateCode, LOOTBOX_MIN_WEI, parseLootboxIdxFromReceipt,
-  scaledFoilPackCostWei, parseFoilPackBoughtFromReceipt,
+  foilPackCostFromPriceWei, readPurchaseQuote,
+  parseFoilPackBoughtFromReceipt,
   probeFoilPackAvailabilityState,
   readPresaleBoxState, purchasePresaleBox, parsePresaleBoxBuyFromReceipt,
   PRESALE_BOX_MIN_WEI,
@@ -238,6 +239,7 @@ class AppDecimatorPanel extends HTMLElement {
   #questActivateListener = null;
   // --- Pinned data (server-derived; rendered via textContent) ---
   #gameState = null;   // Phase 64 — /game/state snapshot (level + jackpotPhaseFlag → ticket price)
+  #purchaseQuote = null; // Exact purchaseInfo() buy-now route/price.
   #claimableWei = 0n;  // Acting player's indexed claimable balance (quote only).
   #claimableAddress = null;
   #claimableKnown = false;
@@ -371,9 +373,10 @@ class AppDecimatorPanel extends HTMLElement {
              write (Buy CTA auto-disables via [data-write] + canSign). -->
         <div class="dec-combined-summary" data-bind="dec-combined-summary" hidden></div>
 
-        <!-- Tickets + combined-buy lootbox leg on ONE line. The lootbox size is a
-             free ETH amount (min 0.01) riding the same purchase() tx. Both default
-             to 0; its ▲/▼ control steps by one live ticket price. -->
+        <!-- Tickets + combined-buy lootbox leg share the compact desktop rail and
+             become full-width touch rows on phones. The lootbox size is a free ETH
+             amount (min 0.01) riding the same purchase() tx. Both default to 0;
+             its ▲/▼ control steps by one live ticket price. -->
         <div class="dec-input-row dec-input-row--pair">
           <span class="dec-input-group dec-input-group--tickets">
             <label class="dec-input-label" for="dec-tickets-input">
@@ -388,7 +391,8 @@ class AppDecimatorPanel extends HTMLElement {
                         aria-label="Decrease by 0.25 ticket" tabindex="-1">−.25</button>
               </span>
               <input type="number" name="dec-tickets" id="dec-tickets-input"
-                     class="dec-input" min="0" step="0.25" value="0">
+                     class="dec-input" min="0" step="0.25" value="0"
+                     inputmode="decimal">
               <span class="dec-stepper-btns">
                 <button type="button" class="dec-step" data-step-for="dec-tickets" data-dir="1" aria-label="Increase by one whole ticket" tabindex="-1">▲</button>
                 <button type="button" class="dec-step" data-step-for="dec-tickets" data-dir="-1" aria-label="Decrease by one whole ticket" tabindex="-1">▼</button>
@@ -402,7 +406,8 @@ class AppDecimatorPanel extends HTMLElement {
             </label>
             <span class="dec-stepper">
               <input type="number" name="dec-lootbox-eth" id="dec-lootbox-eth-input"
-                     class="dec-input" min="0" step="0.01" value="0" aria-label="Buy lootbox amount in ETH">
+                     class="dec-input" min="0" step="0.01" value="0"
+                     inputmode="decimal" aria-label="Buy lootbox amount in ETH">
               <span class="dec-stepper-btns">
                 <button type="button" class="dec-step" data-step-for="dec-lootbox-eth" data-dir="1" aria-label="Increase lootbox size by one ticket price" tabindex="-1">▲</button>
                 <button type="button" class="dec-step" data-step-for="dec-lootbox-eth" data-dir="-1" aria-label="Decrease lootbox size by one ticket price" tabindex="-1">▼</button>
@@ -439,8 +444,8 @@ class AppDecimatorPanel extends HTMLElement {
           </div>
         </div>
 
-        <!-- Stable half-and-half action rail. The bonus cell stays empty when
-             the quote earns no FLIP, so changing quantities never resizes Buy. -->
+        <!-- Stable half-and-half desktop action rail. On phones the optional bonus
+             and primary action stack so BUY IN gets the whole tap width. -->
         <div class="dec-buy-row">
           <div class="dec-flip-credit" data-bind="dec-flip-credit" hidden>
             <img src="/whitepaper/flame-logo-split.svg" alt="">
@@ -501,10 +506,12 @@ class AppDecimatorPanel extends HTMLElement {
                      data-bind="dec-flip-check">
               <span>USE FLIP</span>
             </label>
-            <strong class="dec-funds__value" data-bind="dec-funds-wallet">—</strong>
-            <a class="dec-funds__faucet" data-bind="dec-funds-faucet"
-               href="${BASE_SEPOLIA_FAUCET_URL}" target="_blank"
-               rel="noopener noreferrer" hidden>GET PLAY MONEY</a>
+            <span class="dec-funds__wallet-value">
+              <strong class="dec-funds__value" data-bind="dec-funds-wallet">—</strong>
+              <a class="dec-funds__faucet" data-bind="dec-funds-faucet"
+                 href="${BASE_SEPOLIA_FAUCET_URL}" target="_blank"
+                 rel="noopener noreferrer" hidden>GET PLAY MONEY</a>
+            </span>
           </div>
         </div>
       </div>
@@ -954,9 +961,8 @@ class AppDecimatorPanel extends HTMLElement {
     const presaleCostWei = this.#presaleWantedWei();
     totalWei = mintCostWei;
     // Foil leg (additive): ten ticket prices at the same target level.
-    const target = this.#targetLevel();
-    if (this.#foilWanted() && target != null) {
-      foilCostWei = scaledFoilPackCostWei(target);
+    if (this.#foilWanted() && priceWei != null) {
+      foilCostWei = foilPackCostFromPriceWei(priceWei);
       totalWei += foilCostWei;
     }
     totalWei += presaleCostWei;
@@ -1060,8 +1066,9 @@ class AppDecimatorPanel extends HTMLElement {
     const walletBalancePromise = connectedLower && typeof provider?.getBalance === 'function'
       ? provider.getBalance(connectedLower)
       : Promise.resolve(null);
-    const [gameResult, playerResult, walletResult, afkingResult, presaleResult] = await Promise.allSettled([
+    const [gameResult, purchaseResult, playerResult, walletResult, afkingResult, presaleResult] = await Promise.allSettled([
       fetchJSON('/game/state'),
+      readPurchaseQuote(),
       actingLower ? fetchJSON(`/player/${actingLower}`) : Promise.resolve(null),
       walletBalancePromise,
       actingLower ? readAfkingSubscription(actingLower) : Promise.resolve(null),
@@ -1072,6 +1079,9 @@ class AppDecimatorPanel extends HTMLElement {
     if (gameResult.status === 'fulfilled' && gameResult.value) {
       this.#gameState = gameResult.value;
     }
+    this.#purchaseQuote = purchaseResult.status === 'fulfilled'
+      ? purchaseResult.value
+      : null;
     if (playerResult.status === 'fulfilled' && playerResult.value && actingLower) {
       let claimable = 0n;
       try { claimable = BigInt(playerResult.value.claimableEth || '0'); } catch (_e) { claimable = 0n; }
@@ -1261,8 +1271,9 @@ class AppDecimatorPanel extends HTMLElement {
 
     if (priceEl) {
       let text = '—';
-      if (target != null) {
-        try { text = `${formatPurchaseEth(scaledFoilPackCostWei(target))} ETH`; } catch (_e) { text = '—'; }
+      const priceWei = this.#ticketPriceWei();
+      if (priceWei != null) {
+        try { text = `${formatPurchaseEth(foilPackCostFromPriceWei(priceWei))} ETH`; } catch (_e) { text = '—'; }
       }
       priceEl.textContent = text;
     }
@@ -1415,8 +1426,16 @@ class AppDecimatorPanel extends HTMLElement {
       format: (raw) => raw === 0n ? '- ETH' : `${formatFundsEth(raw)} ETH`,
       formatDelta: (delta) => `+${formatFundsEth(delta)} ETH`,
     });
-    const showFaucet = Boolean(isBaseSepolia(CHAIN) && walletTotal === 0n);
-    walletValue.hidden = showFaucet;
+    // AFKing funding is spendable purchase credit, but it cannot pay the gas
+    // needed to submit that purchase. Offer the testnet faucet whenever the
+    // connected signer's actual native wallet is empty, even if their combined
+    // WALLET readout contains AFKing funding.
+    const showFaucet = Boolean(
+      isBaseSepolia(CHAIN)
+      && walletKnown
+      && BigInt(this.#walletEthWei) === 0n
+    );
+    walletValue.hidden = showFaucet && (walletTotal == null || walletTotal === 0n);
     if (faucet) faucet.hidden = !showFaucet;
     updateBalanceDisplay(claimableValue, {
       container: claimableDisplay,
@@ -1426,6 +1445,9 @@ class AppDecimatorPanel extends HTMLElement {
       format: (raw) => raw === 0n ? '-' : formatFundsEth(raw),
       formatDelta: (delta) => `+${formatFundsEth(delta)} ETH`,
       hiddenText: '••••',
+      // On unblur, hold the private pre-reveal balance for one short beat,
+      // then show the newly-safe +ETH cue and count it into the total.
+      revealDelay: 240,
     });
     claimableDisplay?.classList?.toggle('dec-funds__display--spoiler', !displayOpen);
     if (!displayOpen) {
@@ -1593,10 +1615,26 @@ class AppDecimatorPanel extends HTMLElement {
   // shorthand kept the foil row hidden past the point the contract would sell
   // the next level's pack. Returns null when /game/state hasn't loaded.
   #targetLevel() {
-    return activeTicketLevel(this.#gameState);
+    const fallback = activeTicketLevel(this.#gameState);
+    const current = Number(this.#purchaseQuote?.currentLevel);
+    let price = 0n;
+    try { price = BigInt(this.#purchaseQuote?.priceWei ?? 0n); } catch (_e) { price = 0n; }
+    if (Number.isInteger(current) && current >= 0 && price > 0n) {
+      const currentPrice = scaledTicketPriceWei(current);
+      const nextPrice = scaledTicketPriceWei(current + 1);
+      // purchaseInfo returns the actual game level plus the exact routed price.
+      // A tier boundary makes the otherwise-hidden sealed-window route explicit.
+      if (price === nextPrice && price !== currentPrice) return current + 1;
+      if (price === currentPrice && price !== nextPrice) return current;
+    }
+    return fallback;
   }
 
   #ticketPriceWei() {
+    try {
+      const exact = BigInt(this.#purchaseQuote?.priceWei ?? 0n);
+      if (exact > 0n) return exact;
+    } catch (_e) { /* fall through to the API-derived curve */ }
     const target = this.#targetLevel();
     return target == null ? null : scaledTicketPriceWei(target);
   }
@@ -1813,10 +1851,14 @@ class AppDecimatorPanel extends HTMLElement {
         // boundary between polls — underpay silently pulls afking credit,
         // overpay silently credits it (no revert to save us). Refetch at
         // click time so the total and its wallet shortfall use fresh state.
-        try {
-          const gs = await fetchJSON('/game/state');
-          if (gs) this.#gameState = gs;
-        } catch (_e) { /* network blip — fall back to the cached snapshot */ }
+        const [gameRead, quoteRead] = await Promise.allSettled([
+          fetchJSON('/game/state'),
+          readPurchaseQuote(),
+        ]);
+        if (gameRead.status === 'fulfilled' && gameRead.value) {
+          this.#gameState = gameRead.value;
+        }
+        if (quoteRead.status === 'fulfilled') this.#purchaseQuote = quoteRead.value;
         // Never re-check indexed ownership here. purchaseEth immediately runs
         // the exact contract static-call with this level/value, which is both
         // fresher and authoritative.
@@ -1830,8 +1872,7 @@ class AppDecimatorPanel extends HTMLElement {
         // an overpay is credited to afking rather than refunded.
         if (ticketQuantity > 0) ticketCostWei = ticketCostFromTickets(priceWei, ticketQuantity);
         if (foilWanted) {
-          const target = this.#targetLevel();
-          foilCostWei = scaledFoilPackCostWei(target);
+          foilCostWei = foilPackCostFromPriceWei(priceWei);
         }
       }
 

@@ -147,7 +147,7 @@ test('summarizeBafAwards keeps BAF award types and the requested level only', ()
     resolutions.summarizeBafAwards([
       { level: 20, awardType: 'eth_baf', amount: '10' },
       { level: 20, awardType: 'eth_baf', amount: '15' },
-      { level: 20, awardType: 'tickets_baf', amount: '3' },
+      { level: 20, awardType: 'tickets_baf', amount: '12' },
       { level: 20, awardType: 'eth', amount: '999' },
       { level: 10, awardType: 'eth_baf', amount: '500' },
     ], 20),

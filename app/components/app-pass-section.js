@@ -49,6 +49,7 @@ import {
   updateAfkingSubscription,
   fundAfkingSubscription,
   withdrawAfkingSubscriptionFunding,
+  claimAfkingSubscriptionFlip,
   readDeityBoonSlots,
   issueDeityBoon,
   smiteWithDeity,
@@ -75,10 +76,13 @@ function passSymbolBadge(symbolId) {
   const q = (symbolId >> 3) & 3;
   const sym = symbolId & 7;
   const cat = PASS_QUADRANTS[q];
+  const symbolSlug = PASS_SYMBOLS[cat][sym];
   const fileIdx = cat === 'cards' ? PASS_CARD_IDX[sym] : sym;
   return {
-    path: `/badges-circular/${cat}_${String(fileIdx).padStart(2, '0')}_${PASS_SYMBOLS[cat][sym]}_gold.svg`,
-    name: `${cat} ${PASS_SYMBOLS[cat][sym]}`,
+    path: `/badges-circular/${cat}_${String(fileIdx).padStart(2, '0')}_${symbolSlug}_gold.svg`,
+    // The on-disk badge retains its historical `xrp` filename, but the
+    // protocol trait and deity pass are player-facing WWXRP everywhere.
+    name: `${cat} ${symbolSlug === 'xrp' ? 'WWXRP' : symbolSlug}`,
   };
 }
 
@@ -226,6 +230,7 @@ class AppPassSection extends HTMLElement {
   #busyAfking = false;
   #busyAfkingFunding = false;
   #busyAfkingWithdrawal = false;
+  #busyAfkingClaim = false;
   #busyBoonSlot = null;
   #busyCurse = false;
   // Per-symbol-id debounce for the deity grid (T-62-02-05 mitigation).
@@ -359,9 +364,9 @@ class AppPassSection extends HTMLElement {
             </span>
           </span>
           <span class="pass-product-perks" aria-label="Lazy pass benefits">
+            <span class="pass-lootbox-perk pass-lazy-lootbox-perk" data-bind="pass-lazy-lootbox">BONUS LOOTBOX · 10% OF PASS</span>
             <span>1 TICKET / LEVEL</span>
             <span data-bind="pass-lazy-score">+85% DEGEN SCORE</span>
-            <span>10% LOOTBOX</span>
             <span>AFKING SEAT</span>
           </span>
           <span class="pass-product-checkout pass-product-checkout--lazy">
@@ -388,7 +393,7 @@ class AppPassSection extends HTMLElement {
             </span>
           </span>
           <span class="pass-product-perks" aria-label="Whale pass benefits">
-            <span class="pass-whale-lootbox-perk" data-bind="pass-whale-lootbox">BONUS LOOTBOX · 10% OF PASS</span>
+            <span class="pass-lootbox-perk pass-whale-lootbox-perk" data-bind="pass-whale-lootbox">BONUS LOOTBOX · 10% OF PASS</span>
             <span>1 TICKET / 2 LEVELS</span>
             <span data-bind="pass-whale-score">+115% DEGEN SCORE</span>
             <span>AFKING SEAT</span>
@@ -512,6 +517,8 @@ class AppPassSection extends HTMLElement {
           <strong class="pass-afking__status" data-bind="pass-afking-status">SEAT READY</strong>
           <span class="pass-afking__wallet">
             <span class="pass-afking__funding" data-bind="pass-afking-funding">—</span>
+            <button type="button" class="pass-afking__claim-button" data-write
+                    data-bind="pass-afking-flip-claim" hidden>Claim bonus FLIP</button>
             <button type="button" class="pass-afking__withdraw" data-write
                     data-bind="pass-afking-withdraw" hidden>Withdraw all</button>
           </span>
@@ -603,6 +610,8 @@ class AppPassSection extends HTMLElement {
     if (afkingFundButton) afkingFundButton.addEventListener('click', (e) => this.#onAfkingFund(e));
     const afkingWithdraw = this.querySelector('[data-bind="pass-afking-withdraw"]');
     if (afkingWithdraw) afkingWithdraw.addEventListener('click', (e) => this.#onAfkingWithdraw(e));
+    const afkingFlipClaim = this.querySelector('[data-bind="pass-afking-flip-claim"]');
+    if (afkingFlipClaim) afkingFlipClaim.addEventListener('click', (e) => this.#onAfkingFlipClaim(e));
     for (let slot = 0; slot < 3; slot += 1) {
       const boonButton = this.querySelector(`[data-bind="pass-deity-boon-slot-${slot}"]`);
       if (boonButton) boonButton.addEventListener('click', (e) => this.#onDeityBoonClick(e, slot));
@@ -759,6 +768,7 @@ class AppPassSection extends HTMLElement {
       }
     }
     this.#renderWhaleLootboxBenefit();
+    this.#renderLazyLootboxBenefit();
     const hintEl = this.querySelector('[data-bind="pass-deity-hint"]');
     if (hintEl) {
       const ownedSymbolId = this.#ownedDeitySymbolId();
@@ -817,6 +827,17 @@ class AppPassSection extends HTMLElement {
     }
     const lootboxValue = (BigInt(unit) * BigInt(quantity)) / 10n;
     benefit.textContent = `BONUS LOOTBOX · ${formatPassEth(lootboxValue)} ETH${quantity > 1 ? ' TOTAL' : ''}`;
+  }
+
+  #renderLazyLootboxBenefit() {
+    const benefit = this.querySelector('[data-bind="pass-lazy-lootbox"]');
+    if (!benefit) return;
+    const cost = this.#pricingData?.lazyCostWei;
+    if (cost == null) {
+      benefit.textContent = 'BONUS LOOTBOX · 10% OF PASS';
+      return;
+    }
+    benefit.textContent = `BONUS LOOTBOX · ${formatPassEth(BigInt(cost) / 10n, 3)} ETH`;
   }
 
   #ownedDeitySymbolId(ownerAddress = this.#pinnedAddress) {
@@ -1086,11 +1107,12 @@ class AppPassSection extends HTMLElement {
         || this.#busyAfking
         || this.#busyAfkingFunding
         || this.#busyAfkingWithdrawal
+        || this.#busyAfkingClaim
         || addedFunding == null
         || addedFunding <= 0n;
       const fundLockTitle = !active
         ? 'Start the subscription with funding first'
-        : this.#busyAfking || this.#busyAfkingFunding || this.#busyAfkingWithdrawal
+        : this.#busyAfking || this.#busyAfkingFunding || this.#busyAfkingWithdrawal || this.#busyAfkingClaim
           ? 'AFKing transaction pending'
           : addedFunding == null || addedFunding <= 0n
             ? 'Enter an ETH amount to add'
@@ -1123,8 +1145,11 @@ class AppPassSection extends HTMLElement {
     if (!section) return;
     const state = this.#afkingState;
     const hasFunding = BigInt(state?.fundingWei ?? 0n) > 0n;
+    const hasPendingFlip = Boolean(
+      state?.pendingFlipKnown && BigInt(state?.pendingFlipWhole ?? 0n) > 0n,
+    );
     const visible = Boolean(
-      state && (state.hasToken || hasFunding) && get('ui.mode') !== 'combined',
+      state && (state.hasToken || hasFunding || hasPendingFlip) && get('ui.mode') !== 'combined',
     );
     section.hidden = !visible;
     if (!visible) {
@@ -1184,7 +1209,8 @@ class AppPassSection extends HTMLElement {
         || !hasFunding
         || this.#busyAfking
         || this.#busyAfkingFunding
-        || this.#busyAfkingWithdrawal;
+        || this.#busyAfkingWithdrawal
+        || this.#busyAfkingClaim;
       _setDomainWriteLock(
         withdraw,
         withdrawLocked,
@@ -1197,6 +1223,29 @@ class AppPassSection extends HTMLElement {
       }
     }
 
+    const flipClaim = this.querySelector('[data-bind="pass-afking-flip-claim"]');
+    if (flipClaim) {
+      const pendingKnown = Boolean(state.pendingFlipKnown);
+      const pending = pendingKnown ? BigInt(state.pendingFlipWhole ?? 0n) : 0n;
+      flipClaim.hidden = !pendingKnown || pending <= 0n;
+      flipClaim.textContent = this.#busyAfkingClaim
+        ? 'Claiming…'
+        : `CLAIM ${pending.toLocaleString('en-US')} FLIP`;
+      const claimLocked = pending <= 0n
+        || this.#busyAfking
+        || this.#busyAfkingFunding
+        || this.#busyAfkingWithdrawal
+        || this.#busyAfkingClaim;
+      _setDomainWriteLock(
+        flipClaim,
+        claimLocked,
+        claimLocked ? 'AFKing transaction pending' : '',
+      );
+      if (!claimLocked) {
+        flipClaim.title = 'Claim accrued AFKing daily and ticket-bonus FLIP';
+      }
+    }
+
     const save = this.querySelector('[data-bind="pass-afking-save"]');
     const cancel = this.querySelector('[data-bind="pass-afking-cancel"]');
     const locked = Boolean(
@@ -1204,6 +1253,7 @@ class AppPassSection extends HTMLElement {
       || this.#busyAfking
       || this.#busyAfkingFunding
       || this.#busyAfkingWithdrawal
+      || this.#busyAfkingClaim
     );
     if (save) {
       save.textContent = this.#busyAfking
@@ -1213,7 +1263,7 @@ class AppPassSection extends HTMLElement {
           : (state.active ? 'Update' : 'Start');
       const saveLockTitle = state.rngLocked
         ? 'Settings unlock automatically after RNG resolves'
-        : this.#busyAfking || this.#busyAfkingFunding || this.#busyAfkingWithdrawal
+        : this.#busyAfking || this.#busyAfkingFunding || this.#busyAfkingWithdrawal || this.#busyAfkingClaim
           ? 'Transaction pending'
           : '';
       _setDomainWriteLock(save, locked, saveLockTitle);
@@ -1535,6 +1585,7 @@ class AppPassSection extends HTMLElement {
       this.#busyAfking
       || this.#busyAfkingFunding
       || this.#busyAfkingWithdrawal
+      || this.#busyAfkingClaim
       || !this.#afkingState?.active
     ) return;
     const msgValueWei = this.#afkingFundingInputWei();
@@ -1572,6 +1623,7 @@ class AppPassSection extends HTMLElement {
       this.#busyAfking
       || this.#busyAfkingFunding
       || this.#busyAfkingWithdrawal
+      || this.#busyAfkingClaim
       || get('ui.mode') !== 'self'
       || BigInt(this.#afkingState?.fundingWei ?? 0n) <= 0n
     ) return;
@@ -1597,12 +1649,51 @@ class AppPassSection extends HTMLElement {
     }
   }
 
+  async #onAfkingFlipClaim(e) {
+    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+    if (
+      this.#busyAfking
+      || this.#busyAfkingFunding
+      || this.#busyAfkingWithdrawal
+      || this.#busyAfkingClaim
+      || !this.#afkingState?.pendingFlipKnown
+      || BigInt(this.#afkingState?.pendingFlipWhole ?? 0n) <= 0n
+    ) return;
+
+    this.#busyAfkingClaim = true;
+    this.#clearAfkingError();
+    this.#renderAfking();
+    try {
+      const pendingFlipWhole = BigInt(this.#afkingState?.pendingFlipWhole ?? 0n);
+      await claimAfkingSubscriptionFlip();
+      this.#afkingState = {
+        ...this.#afkingState,
+        pendingFlipWhole: 0n,
+        pendingFlipKnown: true,
+      };
+      this.#clearAllErrorStates();
+      try {
+        this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
+          detail: { kind: 'afking-flip-claim', pendingFlipWhole },
+          bubbles: true,
+        }));
+      } catch (_error) { /* defensive */ }
+      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+    } catch (error) {
+      this.#renderAfkingError(error?.userMessage || error?.message || 'Bonus FLIP claim failed.');
+    } finally {
+      this.#busyAfkingClaim = false;
+      this.#renderAfking();
+    }
+  }
+
   async #onAfkingSave(e) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
     if (
       this.#busyAfking
       || this.#busyAfkingFunding
       || this.#busyAfkingWithdrawal
+      || this.#busyAfkingClaim
       || this.#afkingState?.rngLocked
       || !this.#afkingState?.hasToken
     ) return;
@@ -1667,6 +1758,7 @@ class AppPassSection extends HTMLElement {
       this.#busyAfking
       || this.#busyAfkingFunding
       || this.#busyAfkingWithdrawal
+      || this.#busyAfkingClaim
       || this.#afkingState?.rngLocked
       || !this.#afkingState?.active
     ) return;

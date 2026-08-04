@@ -300,6 +300,7 @@ function makeFakePassContract(opts = {}) {
     depositAfkingFunding: [],
     afkingFundingOf: [],
     withdrawAfkingFunding: [],
+    claimAfkingFlip: [],
     smite: [],
   };
   const stk = (name) => async () => {
@@ -348,6 +349,13 @@ function makeFakePassContract(opts = {}) {
         return makeFakeTx(makeFakeReceipt());
       },
       { staticCall: stk('withdrawAfkingFunding') }
+    ),
+    claimAfkingFlip: Object.assign(
+      async (...args) => {
+        calls.claimAfkingFlip.push(args);
+        return makeFakeTx(makeFakeReceipt());
+      },
+      { staticCall: stk('claimAfkingFlip') }
     ),
     smite: Object.assign(
       async (...args) => {
@@ -473,6 +481,12 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.match(css, /\.pass-product-row--whale\s*\{[^}]*linear-gradient/s);
     assert.match(css, /\.pass-product-row--lazy\s*\{[^}]*linear-gradient/s);
     assert.match(css, /\.pass-product-sigil--deity\s*\{[^}]*radial-gradient/s);
+    assert.match(css,
+      /\.pass-afking__wallet\s*\{[^}]*width:\s*100%[^}]*flex-wrap:\s*wrap/s,
+      'the AFKing wallet controls can wrap cleanly on a phone');
+    assert.match(css,
+      /\.pass-afking__withdraw\s*\{[^}]*min-width:\s*7rem[^}]*max-width:\s*100%/s,
+      'WITHDRAW ALL keeps enough button width without overflowing');
   });
 
   test('premium pass cards state their contract-backed bonuses and elevate live pricing', () => {
@@ -489,6 +503,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.match(el.innerHTML, /LIVE PRICE/);
     assert.match(el.innerHTML, /data-bind="pass-whale-lootbox"/,
       'the Whale card promotes its bundled lootbox as a first-class bonus');
+    assert.match(el.innerHTML, /data-bind="pass-lazy-lootbox"/,
+      'the Lazy card promotes its bundled lootbox as a first-class bonus');
 
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.match(css, /\.pass-product-price > strong\s*\{[^}]*font:\s*900 0\.9rem/s,
@@ -513,8 +529,22 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(benefit.textContent, 'BONUS LOOTBOX · 0.8 ETH TOTAL');
 
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
-    assert.match(css, /\.pass-whale-lootbox-perk\s*\{[^}]*font-size:\s*0\.67rem/s,
+    assert.match(css, /\.pass-lootbox-perk\s*\{[^}]*font-size:\s*0\.67rem/s,
       'the bonus receives stronger treatment than an ordinary perk chip');
+    el.disconnectedCallback();
+  });
+
+  test('Lazy pass uses the Whale-style bubble with its concrete bundled lootbox value', async () => {
+    _fetchHandler = async (url) => String(url).includes('/player/')
+      ? { level: 1 }
+      : { level: 1, phase: 'PURCHASE', jackpotPhaseFlag: false };
+    const el = instantiate();
+    await settle(40);
+
+    const benefit = el.querySelector('[data-bind="pass-lazy-lootbox"]');
+    assert.equal(benefit.textContent, 'BONUS LOOTBOX · 0.024 ETH');
+    assert.ok(benefit.classList.contains('pass-lootbox-perk'),
+      'Lazy and Whale share the highlighted bonus-lootbox treatment');
     el.disconnectedCallback();
   });
 
@@ -651,6 +681,17 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       /next pass 27 ETH/,
       'two issued passes produce the 24 + triangular(2) = 27 ETH quote',
     );
+
+    el.disconnectedCallback();
+  });
+
+  test('Deity pass presents the legacy XRP badge as WWXRP', async () => {
+    const el = instantiate();
+    await settle(60);
+
+    const select = el.querySelector('[data-bind="pass-deity-select"]');
+    const wwxrp = select.children.find((option) => option.value === '0');
+    assert.equal(wwxrp?.textContent, 'Crypto · WWXRP');
 
     el.disconnectedCallback();
   });
@@ -858,6 +899,34 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       '0xAB12000000000000000000000000000000000000',
     ]]);
     assert.deepEqual(passContract._calls.withdrawAfkingFunding, [[funding]]);
+    el.disconnectedCallback();
+  });
+
+  test('AFKing shows and claims the exact accrued bonus FLIP from its pass area', async () => {
+    const passContract = makeFakePassContract();
+    passesMod.__setContractFactoryForTest(() => passContract);
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 1n },
+      game: {
+        subInfo: async () => [true, 2n, 8n, 12n],
+        afkingSnapshot: async () => [40_000_000_000n, false, [0n], [0n]],
+      },
+      lens: { subInfoFull: async () => ({ pendingFlip: 275n }) },
+    }));
+
+    const el = instantiate();
+    await settle(60);
+
+    const claim = el.querySelector('[data-bind="pass-afking-flip-claim"]');
+    assert.equal(claim.hidden, false);
+    assert.equal(claim.textContent, 'CLAIM 275 FLIP');
+    claim.dispatchEvent({ type: 'click' });
+    await settle(60);
+
+    assert.deepEqual(passContract._calls.claimAfkingFlip, [[
+      ['0xAB12000000000000000000000000000000000000'],
+    ]]);
+    assert.equal(claim.hidden, true, 'confirmed claim retires the action immediately');
     el.disconnectedCallback();
   });
 

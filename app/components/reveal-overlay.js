@@ -49,6 +49,7 @@
 import { displayEth, displayToken, displayTokenSnapped } from '../app/scaling.js';
 import {
   DGN_QUADRANTS, DGN_SYMBOLS,
+  applyDgnTicketAccent,
   dgnBadgePath, dgnComputeMatches, dgnScoringMatchStates,
   dgnTraitIdToQSC, dgnTraitIdsToQuadrants, dgnUnpackTicket,
 } from '../app/dgn-traits.js';
@@ -1025,15 +1026,15 @@ export function normalizeSequence(seq) {
         spin: null,
       });
     }
-    const ticketPacks = Math.max(0, Number(activity.ticketPacks) || 0);
-    const ticketCount = Math.max(0, Number(activity.ticketCount) || 0);
-    if (ticketPacks > 0) {
+    const ticketsRevealed = Math.max(
+      0,
+      Number(activity.ticketsRevealed ?? activity.ticketCount) || 0,
+    );
+    if (ticketsRevealed > 0) {
       cards.push({
-        type: 'ticket-packs', rarity: 'common', icon: null, glyph: null,
-        label: 'TICKET PACKS BOUGHT', value: `×${ticketPacks}`,
-        sub: ticketCount > 0
-          ? `${ticketCount} ticket${ticketCount === 1 ? '' : 's'} inside`
-          : 'Revealed this round',
+        type: 'tickets-revealed', rarity: 'common', icon: null, glyph: null,
+        label: 'TICKETS REVEALED', value: String(ticketsRevealed),
+        sub: 'Revealed this round',
         summaryDetail: true,
         countText: null, spin: null,
       });
@@ -1079,7 +1080,7 @@ export function normalizeSequence(seq) {
     const hasNonConsolationWin = cards.some((card) => {
       if (card.type === 'coinflip-result') return card.outcome === 'win';
       return ![
-        'nowin', 'wwxrp', 'ticket-packs', 'lootboxes-bought', 'settled',
+        'nowin', 'wwxrp', 'tickets-revealed', 'lootboxes-bought', 'settled',
       ].includes(card.type);
     });
     const hasSettledLoss = Boolean(seq.consolationOnly) || cards.some((card) => (
@@ -1181,9 +1182,10 @@ function _animateCount(el, text, ms = 750) {
 //
 // The standalone simulator does not reveal four already-known cells. It keeps
 // rerolling the whole house token and locks eight independent attributes:
-// symbol, then color, for each quadrant. Between locks it shows 2–4 idle rolls.
-// Locking the symbol first prevents a temporary color match from flashing as a
-// possible score before a mismatching symbol resolves the quadrant.
+// all four symbols first, then all four colors. Between locks it shows 2–4 idle
+// rolls. Finishing the symbol pass before any color lands prevents a temporary
+// color match from flashing as meaningful while another quadrant's symbol is
+// still unresolved.
 // This deterministic planner ports that choreography without inventing a new
 // result — every plan ends at the chain-derived `houseTraits`.
 
@@ -1238,9 +1240,13 @@ export function buildDegeneretteSpinFrames({
       idleRemaining -= 1;
     } else {
       const available = [];
+      const lockingSymbols = lockedSymbols.size < 4;
       for (let q = 0; q < 4; q++) {
-        if (!lockedSymbols.has(q)) available.push({ quadrant: q, type: 'symbol' });
-        else if (!lockedColors.has(q)) available.push({ quadrant: q, type: 'color' });
+        if (lockingSymbols) {
+          if (!lockedSymbols.has(q)) available.push({ quadrant: q, type: 'symbol' });
+        } else if (!lockedColors.has(q)) {
+          available.push({ quadrant: q, type: 'color' });
+        }
       }
       lock = available[next() % available.length];
       if (lock.type === 'color') lockedColors.add(lock.quadrant);
@@ -1275,6 +1281,7 @@ class RevealOverlay extends HTMLElement {
   #tapResolve = null;
   #currentSequence = null;
   #openAllBatchId = null;
+  #openAllPacks = false;
   #controlsOnly = false;
   #continuationBusy = false;
 
@@ -1395,9 +1402,7 @@ class RevealOverlay extends HTMLElement {
     if (openAll) openAll.addEventListener('click', (e) => {
       try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
       const seq = this.#currentSequence;
-      if (!this.#hasMorePacks(seq) || !seq.batchId) return;
-      this.#openAllBatchId = seq.batchId;
-      this.#tap('open-all');
+      this.#startOpenAll(seq);
     });
   }
 
@@ -1418,14 +1423,91 @@ class RevealOverlay extends HTMLElement {
   }
 
   #isOpeningAll(seq) {
-    return Boolean(seq?.batchId && this.#openAllBatchId === seq.batchId);
+    return Boolean(
+      seq?.kind === 'pack'
+      && (this.#openAllPacks || (seq.batchId && this.#openAllBatchId === seq.batchId)),
+    );
   }
 
   #startOpenAll(seq) {
-    if (!this.#hasMorePacks(seq) || !seq.batchId) return false;
-    this.#openAllBatchId = seq.batchId;
+    if (!this.#canOpenAllPacks(seq)) return false;
+    this.#openAllPacks = true;
+    this.#openAllBatchId = seq?.batchId || null;
     this.#tap('open-all');
     return true;
+  }
+
+  #pendingMatchesPackRelease(item, release) {
+    if (!release || item?.kind !== 'tickets') return false;
+    return Number(item?.ticketLevel) === Number(release.level);
+  }
+
+  #readyPendingPacks(excludeRelease = null) {
+    return getPendingActions().filter((item) => (
+      item?.kind === 'tickets'
+      && item?.state === 'ready'
+      && typeof item.run === 'function'
+      && !this.#pendingMatchesPackRelease(item, excludeRelease)
+    ));
+  }
+
+  #hasExternalPacks(seq) {
+    const queued = this.#queue[0];
+    return (queued?.kind === 'pack' && queued.batchId !== seq?.batchId)
+      || this.#readyPendingPacks(seq?.packRelease).length > 0;
+  }
+
+  #canOpenAllPacks(seq) {
+    return Boolean(
+      seq?.kind === 'pack'
+      && (this.#hasMorePacks(seq) || this.#hasExternalPacks(seq)),
+    );
+  }
+
+  #openAllPacksLabel(seq, { includeCurrent = false } = {}) {
+    if (this.#hasExternalPacks(seq)) return 'OPEN ALL PACKS';
+    const remaining = this.#remainingPacks(seq, { includeCurrent });
+    return includeCurrent
+      ? `OPEN ALL ${remaining} PACKS`
+      : `OPEN ALL ${remaining} REMAINING`;
+  }
+
+  async #queueNextPendingPack(seq) {
+    const action = this.#readyPendingPacks(seq?.packRelease)[0] || null;
+    if (!action) return false;
+    const close = this.#bind('rvl-close');
+    if (close) close.disabled = true;
+    const queueLength = this.#queue.length;
+    try {
+      await action.run();
+    } catch (_e) {
+      // The pack watcher owns retry state and concise errors. A rejected or
+      // stale action simply ends OPEN ALL on the current readable hand.
+    } finally {
+      if (close) close.disabled = false;
+    }
+    const added = this.#queue.splice(queueLength);
+    const packs = [];
+    const unrelated = [];
+    for (const queued of added) {
+      if (queued?.kind === 'pack') {
+        queued.autoStart = true;
+        packs.push(queued);
+      } else {
+        unrelated.push(queued);
+      }
+    }
+    if (this.#aborted) {
+      this.#emitPackAbort(packs);
+      this.#queue.push(...unrelated);
+      return false;
+    }
+    // The player explicitly selected packs. Keep the newly materialized pack
+    // immediately behind the current pack, while unrelated rewards retain
+    // their existing order at the tail.
+    this.#queue.unshift(...packs);
+    this.#queue.push(...unrelated);
+    return packs.length > 0;
   }
 
   // OPEN NEXT is a one-pack promise: carry that click into the following
@@ -1628,6 +1710,7 @@ class RevealOverlay extends HTMLElement {
       this.#running = false;
       this.#currentSequence = null;
       this.#openAllBatchId = null;
+      this.#openAllPacks = false;
     }
   }
 
@@ -1638,6 +1721,7 @@ class RevealOverlay extends HTMLElement {
     this.#queue = [];
     this.#currentSequence = null;
     this.#openAllBatchId = null;
+    this.#openAllPacks = false;
     this.#clearTimers();
     if (this.#tapResolve) { const r = this.#tapResolve; this.#tapResolve = null; r(); }
   }
@@ -1713,11 +1797,18 @@ class RevealOverlay extends HTMLElement {
   #wait(ms) {
     return new Promise((resolve) => {
       if (this.#aborted) { resolve(); return; }
+      // Degenerette applies its live slider at each reel/frame. Every other
+      // reveal uses the same browser preference here, giving Pending one
+      // honest global speed control without double-scaling Degenerette.
+      const speed = this.#currentSequence?.kind === 'degenerette'
+        ? 1
+        : readDegeneretteSpeed();
+      const delay = Math.max(0, Math.round((Number(ms) || 0) / speed));
       const t = setTimeout(() => {
         this.#timers.delete(t);
         if (this.#tapResolve === resolve) this.#tapResolve = null;
         resolve();
-      }, ms);
+      }, delay);
       if (t && typeof t.unref === 'function') { try { t.unref(); } catch (_e) { /* defensive */ } }
       this.#timers.add(t);
       this.#tapResolve = (v) => { clearTimeout(t); this.#timers.delete(t); resolve(v); };
@@ -1932,10 +2023,10 @@ class RevealOverlay extends HTMLElement {
       }
       const openAll = this.#bind('rvl-open-all');
       if (openAll) {
-        const canOpenAll = isPack && this.#hasMorePacks(seq) && !openingAll;
+        const canOpenAll = isPack && this.#canOpenAllPacks(seq) && !openingAll;
         openAll.hidden = !canOpenAll;
         if (canOpenAll) {
-          openAll.textContent = `OPEN ALL ${this.#remainingPacks(seq, { includeCurrent: true })} PACKS`;
+          openAll.textContent = this.#openAllPacksLabel(seq, { includeCurrent: true });
         }
       }
 
@@ -2148,7 +2239,21 @@ class RevealOverlay extends HTMLElement {
     if (!reduced) await this.#wait(320);
     if (this.#aborted) return;
 
-    const hasMore = this.#hasMorePacks(seq);
+    const hasMoreInBatch = this.#hasMorePacks(seq);
+    let hasMore = hasMoreInBatch;
+    let loadingNext = null;
+    if (openingAll) {
+      hasMore = hasMoreInBatch || this.#queue[0]?.kind === 'pack';
+      if (!hasMore) {
+        loadingNext = document.createElement('div');
+        loadingNext.className = 'rvl-ticket-batch-status';
+        loadingNext.textContent = 'Loading next pending pack…';
+        footer.appendChild(loadingNext);
+        hasMore = await this.#queueNextPendingPack(seq);
+        if (this.#aborted) return;
+      }
+    }
+
     if (!openingAll || !hasMore) {
       sfxFanfare(true);
       this.#fireConfetti(Boolean(seq.foilPack) || seq.ticketGrid.length > 4);
@@ -2157,12 +2262,19 @@ class RevealOverlay extends HTMLElement {
     }
 
     if (openingAll && hasMore) {
-      const status = document.createElement('div');
+      const status = loadingNext || document.createElement('div');
       status.className = 'rvl-ticket-batch-status';
-      status.textContent = `Opening pack ${Number(seq.packIndex) + 1} of ${seq.packCount}…`;
-      footer.appendChild(status);
+      status.textContent = hasMoreInBatch
+        ? `Opening pack ${Number(seq.packIndex) + 1} of ${seq.packCount}…`
+        : 'Opening next pending pack…';
+      if (!status.parentElement) footer.appendChild(status);
       await this.#wait(reduced ? 180 : 700);
       return;
+    }
+    if (loadingNext?.parentElement) loadingNext.remove();
+    if (openingAll && !hasMore) {
+      this.#openAllPacks = false;
+      this.#openAllBatchId = null;
     }
 
     const actions = document.createElement('div');
@@ -2192,12 +2304,11 @@ class RevealOverlay extends HTMLElement {
     });
     actions.appendChild(next);
 
-    if (hasMore && !openingAll) {
+    if (!openingAll && this.#canOpenAllPacks(seq)) {
       const openAll = document.createElement('button');
       openAll.type = 'button';
       openAll.className = 'rvl-open-all-cta';
-      const remaining = this.#remainingPacks(seq);
-      openAll.textContent = `OPEN ALL ${remaining} REMAINING`;
+      openAll.textContent = this.#openAllPacksLabel(seq);
       openAll.addEventListener('click', (e) => {
         try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
         this.#startOpenAll(seq);
@@ -2206,9 +2317,6 @@ class RevealOverlay extends HTMLElement {
     }
 
     footer.appendChild(actions);
-    if (openingAll && !hasMore && this.#openAllBatchId === seq.batchId) {
-      this.#openAllBatchId = null;
-    }
     await this.#waitTap();
   }
 
@@ -2257,13 +2365,10 @@ class RevealOverlay extends HTMLElement {
       const shine = document.createElement('span');
       shine.className = 'rvl-paper-shine';
       wrap.appendChild(shine);
-      const tag = document.createElement('span');
-      tag.className = 'rvl-paper-tag';
-      tag.textContent = 'FOIL';
-      wrap.appendChild(tag);
     }
     const card = document.createElement('div');
-    card.className = 'ticket-card tc-small';
+    card.className = `ticket-card tc-small${foil ? ' ticket-card--foil' : ''}`;
+    applyDgnTicketAccent(card, traitIds);
     for (let q = 0; q < 4; q++) {
       const cell = document.createElement('div');
       cell.className = 'trait-quadrant';
@@ -2281,7 +2386,9 @@ class RevealOverlay extends HTMLElement {
     const center = document.createElement('div');
     center.className = 'ticket-card-center';
     const flame = document.createElement('img');
-    flame.src = '/whitepaper/flame-center.svg';
+    flame.src = foil
+      ? '/whitepaper/flame-center-silver.svg'
+      : '/whitepaper/flame-center.svg';
     flame.alt = '';
     center.appendChild(flame);
     card.appendChild(center);
@@ -2466,7 +2573,9 @@ class RevealOverlay extends HTMLElement {
     headTitle.textContent = board.headline
       || `${board.rows.length} SPIN${board.rows.length === 1 ? '' : 'S'} · ${board.unit}`;
     head.appendChild(headTitle);
-    const initialSpeed = readDegeneretteSpeed();
+    // BoxSpin/foil child reels inherit the global reveal pacing through
+    // #wait(). Only a full Degenerette resolver owns the visible reel slider.
+    const initialSpeed = speedEnabled ? readDegeneretteSpeed() : 1;
     const speedState = { multiplier: initialSpeed };
     if (speedEnabled) {
       const speed = document.createElement('label');
@@ -3350,9 +3459,13 @@ class RevealOverlay extends HTMLElement {
             matchingLocks = this.#applyFullSpinFrame(pair, frame);
             if (frame.lock) {
               const q = frame.lock.quadrant;
+              // Color only contributes when this quadrant's symbol matched.
+              // A same-color / wrong-symbol landing is an ordinary lock tick,
+              // never a misleading match bonk.
+              const symbolMatched = pair.playerTraits[q].sym === pair.targetTraits[q].sym;
               const matched = frame.lock.type === 'color'
-                ? pair.playerTraits[q].col === pair.targetTraits[q].col
-                : pair.playerTraits[q].sym === pair.targetTraits[q].sym;
+                ? symbolMatched && pair.playerTraits[q].col === pair.targetTraits[q].col
+                : symbolMatched;
               if (matched) {
                 try { sfxMatchLock(matchingSoundCount); } catch (_e) { /* audio is decoration */ }
                 matchingSoundCount = Math.min(7, matchingSoundCount + 1);
@@ -3471,7 +3584,9 @@ class RevealOverlay extends HTMLElement {
     brand.appendChild(wordmark);
     const edition = document.createElement('span');
     edition.className = 'rvl-pack-edition';
-    edition.textContent = card.foil ? 'FOIL PACK' : 'TICKET PACK';
+    edition.textContent = card.type === 'tickets-revealed'
+      ? 'REVEALED TICKETS'
+      : card.foil ? 'FOIL PACK' : 'TICKET PACK';
     brand.appendChild(edition);
     pack.appendChild(brand);
 
@@ -3490,9 +3605,7 @@ class RevealOverlay extends HTMLElement {
     const count = document.createElement('span');
     count.className = 'rvl-pack-count';
     count.textContent = rawCount
-      ? `${rawCount} ${card.type === 'ticket-packs'
-        ? (singular ? 'PACK' : 'PACKS')
-        : (singular ? 'TICKET' : 'TICKETS')}`
+      ? `${rawCount} ${singular ? 'TICKET' : 'TICKETS'}`
       : 'TICKET REWARD';
     pack.appendChild(count);
     return pack;
@@ -3702,7 +3815,7 @@ class RevealOverlay extends HTMLElement {
       // fixed square sized for a single glyph, which clips the ticket.
       icon.className = 'rvl-card-icon rvl-card-icon--ticket';
       icon.appendChild(this.#buildTicket(dgnTraitIdsToQuadrants(card.traitIds), null, null));
-    } else if (card.type === 'tickets' || card.type === 'ticket-packs') {
+    } else if (card.type === 'tickets' || card.type === 'tickets-revealed') {
       icon.className = 'rvl-card-icon rvl-card-icon--pack';
       icon.appendChild(this.#buildRewardPack(card));
     } else if (card.type === 'lootboxes-bought') {
@@ -3783,6 +3896,7 @@ class RevealOverlay extends HTMLElement {
     }
     const grid = document.createElement('div');
     grid.className = 'rvl-ticket-grid';
+    applyDgnTicketAccent(grid, traits);
     for (let q = 0; q < 4; q++) {
       const cell = document.createElement('div');
       cell.className = 'rvl-rq';

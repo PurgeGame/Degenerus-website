@@ -43,6 +43,9 @@ export const CONTRACTS = {
   COIN:                    '0x280a5067694f9deffa767f81d257fbd4f3ac557b',
   COINFLIP:                '0x364a407bcc157c47bba3b7943ca1de34dfa619f4',
   GAME:                    '0x54ad8e5f30f2ce3bf3b0d60301de28a5c2d41044',
+  // Read-only periphery (DegenerusGameLens). Redeployed every run — it bakes
+  // QUESTS and DEPLOY_DAY_BOUNDARY as compile-time constants.
+  GAME_LENS:               '0x6cfa47e1b11355d4e8dc82b6f16c44481aa92886',
   WWXRP:                   '0x8679b4b8c27e15c88807a15980f725924411d3f4',
   AFFILIATE:               '0x3631d97d708defc9f3d3d11107459e6fd167a20e',
   JACKPOTS:                '0xb29a9d70b1bb47abfbc5800672a7fb9441b99954',

@@ -17,7 +17,7 @@ test('referral input is unbranded while the far-left Degenerus lockup keeps its 
     /\.nav-left > a\[href="\/"\]\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*center/s,
     'the flame and DEGENERUS wordmark form the far-left lockup');
   assert.match(APP_CSS,
-    /\.nav-left > a\[href="\/"\] \.nav-logo\s*\{[^}]*width:\s*1\.3rem[^}]*height:\s*1\.3rem/s,
+    /\.nav-left > a\[href="\/"\] \.nav-logo\s*\{[^}]*width:\s*1\.6rem[^}]*height:\s*1\.6rem/s,
     'the flame is approximately the wordmark cap height, not a large nav badge');
 });
 

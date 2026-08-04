@@ -24,3 +24,14 @@ export function questStreakScorePoints(score) {
   const curse = Math.abs(_number(score.cursePoints));
   return Math.max(0, Math.floor(total + curse - nonQuest));
 }
+
+/** Loot-style display tier shared by every Degen Score readout. */
+export function degenScoreLootTier(value) {
+  const points = Number(value);
+  if (!Number.isFinite(points)) return null;
+  if (points < 60) return 'white';
+  if (points < 150) return 'green';
+  if (points < 300) return 'purple';
+  if (points < 1_000) return 'orange';
+  return 'gold';
+}

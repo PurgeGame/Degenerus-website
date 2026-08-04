@@ -13,7 +13,7 @@ import { dirname, resolve as resolvePath } from 'node:path';
 import {
   DGN_QUADRANTS, DGN_SYMBOLS, DGN_CARD_IDX, DGN_COLORS,
   dgnBadgePath, dgnSymbolPath, dgnUnpackTicket, dgnComputeMatches,
-  dgnScoringMatchStates,
+  dgnScoringMatchStates, dgnTicketAccent, applyDgnTicketAccent,
 } from '../dgn-traits.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -45,6 +45,33 @@ describe('dgnBadgePath', () => {
           `${symbol} ${color} must not clip its circular edge`);
       }
     }
+  });
+});
+
+describe('dgnTicketAccent', () => {
+  test('any gold trait forces a stable gold structural colour', () => {
+    const ticket = [0, 72, 191, 200]; // q2 byte 191 carries color 7
+    assert.deepEqual(dgnTicketAccent(ticket), {
+      index: 7, name: 'gold', hex: '#d4af37',
+    });
+  });
+
+  test('non-gold tickets choose a deterministic colour absent from the ticket', () => {
+    const ticket = [0, 73, 146, 219]; // colors 0,1,2,3
+    const first = dgnTicketAccent(ticket);
+    const second = dgnTicketAccent([...ticket].reverse());
+    assert.deepEqual(second, first, 'quadrant order does not alter the seeded choice');
+    assert.ok(!new Set([0, 1, 2, 3]).has(first.index));
+    assert.ok(first.index >= 0 && first.index < 7);
+  });
+
+  test('applies the same colour to the shared CSS variable', () => {
+    const style = { setProperty(name, value) { this[name] = value; } };
+    const attrs = {};
+    const el = { style, setAttribute(name, value) { attrs[name] = value; } };
+    const accent = applyDgnTicketAccent(el, [0, 73, 146, 219]);
+    assert.equal(style['--ticket-line-color'], accent.hex);
+    assert.equal(attrs['data-ticket-accent'], accent.name);
   });
 });
 

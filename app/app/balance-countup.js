@@ -47,6 +47,8 @@ function _clearEffect(state) {
 }
 
 function _stopAnimation(state, { clearEffect = true } = {}) {
+  _clearTimer(state.delayTimer);
+  state.delayTimer = null;
   _clearFrame(state.frame);
   state.frame = null;
   state.animating = false;
@@ -106,6 +108,7 @@ export function updateBalanceDisplay(element, {
   hiddenText = '••••',
   emptyText = '—',
   duration = DEFAULT_DURATION_MS,
+  revealDelay = 0,
 } = {}) {
   if (!element) return;
 
@@ -124,6 +127,7 @@ export function updateBalanceDisplay(element, {
       visible: isVisible,
       container,
       frame: null,
+      delayTimer: null,
       effectTimer: null,
       animating: false,
       animationTarget: null,
@@ -171,7 +175,8 @@ export function updateBalanceDisplay(element, {
     return;
   }
 
-  const from = state.visible
+  const wasVisible = state.visible;
+  const from = wasVisible
     ? (state.displayedRaw ?? state.raw)
     : state.hiddenBaseline;
   state.raw = next;
@@ -194,7 +199,6 @@ export function updateBalanceDisplay(element, {
   state.displayedRaw = from;
   _setText(element, fromText);
   const delta = next - from;
-  _startEffect(state, _format(formatDelta, delta, `+${delta}`), durationMs);
 
   let startedAt = null;
   const frame = (timestamp) => {
@@ -214,7 +218,22 @@ export function updateBalanceDisplay(element, {
     }
     state.frame = requestAnimationFrame(frame);
   };
-  state.frame = requestAnimationFrame(frame);
+  const start = () => {
+    state.delayTimer = null;
+    if (!state.animating || state.animationTarget !== next) return;
+    _startEffect(state, _format(formatDelta, delta, `+${delta}`), durationMs);
+    state.frame = requestAnimationFrame(frame);
+  };
+  // A masked balance should visibly establish its previous value before the
+  // newly-safe delta appears. Ordinary visible-to-visible awards remain
+  // immediate; only the hidden-to-visible transition uses this optional beat.
+  const revealDelayMs = wasVisible ? 0 : Math.max(0, Number(revealDelay) || 0);
+  if (revealDelayMs > 0 && typeof setTimeout === 'function') {
+    state.delayTimer = setTimeout(start, revealDelayMs);
+    state.delayTimer?.unref?.();
+  } else {
+    start();
+  }
 }
 
 /** Cancel pending frames/effects when a component is detached. */

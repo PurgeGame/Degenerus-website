@@ -828,9 +828,9 @@ class LastDayJackpot extends HTMLElement {
     const viewerCandidate = viewerResult.status === 'fulfilled' ? viewerResult.value : null;
     const packs = _isExactDayPayload(packsCandidate, day, player) ? packsCandidate : null;
     const viewer = _isExactDayPayload(viewerCandidate, day, player) ? viewerCandidate : null;
-    const ticketPacks = Array.isArray(packs?.ticketRevealPacks)
+    const ticketRevealPacks = Array.isArray(packs?.ticketRevealPacks)
       ? packs.ticketRevealPacks : [];
-    const ticketCount = ticketPacks.reduce(
+    const ticketsRevealed = ticketRevealPacks.reduce(
       (sum, pack) => sum + Math.max(0, Number(pack?.ticketCount) || 0),
       0,
     );
@@ -880,8 +880,10 @@ class LastDayJackpot extends HTMLElement {
       ? Math.max(0, Math.trunc(dayReward))
       : Number.isFinite(activityReward) ? Math.max(0, Math.trunc(activityReward)) : 0;
     return {
-      ticketPacks: ticketPacks.length,
-      ticketCount,
+      // PACKS-V2 batches every ten revealed tickets for presentation. Those
+      // tickets may have been purchased, won, or otherwise awarded, so only
+      // report the fact this feed actually proves: how many were revealed.
+      ticketsRevealed,
       lootboxesBought,
       lootboxesOpened,
       lootboxResults,
@@ -894,7 +896,7 @@ class LastDayJackpot extends HTMLElement {
 
   // Build + queue the viewed player's full day summary. Winner → prize cards;
   // non-winner → an honest NO HIT card. Day-scoped DB feeds add the ticket
-  // packs and lootboxes the player bought/opened during the round.
+  // revealed tickets plus lootboxes the player bought/opened during the round.
   async #onResultsCtaClick() {
     if (this.#summaryBusy || this.#hasOpenedSummary()) return;
     const viewed = getViewedAddress();

@@ -34,6 +34,7 @@ import {
   depositCoinflip,
   readClaimableCoinflip,
   readCurrentCoinflipStake,
+  readBafFlipEve,
   readFlipWidgetBalances,
   readLatestCoinflipResult,
   readResolvedCoinflipStake,
@@ -112,6 +113,7 @@ const METER_RECOVERY_TAIL_MS = 250;
 const METER_REBOUND_MS = REVERSE_CARD_STAGGER_MS + METER_RECOVERY_TAIL_MS;
 const METER_TERMINAL_DRAIN_MS = REVERSE_CARD_STAGGER_MS - METER_RECOVERY_TAIL_MS;
 const LOSS_VERDICT_DELAY_MS = 300;
+const BAF_TRANSFER_DURATION_MS = 820;
 const LIVE_REVERSE_TAP_MS = 320;
 const LIVE_REVERSE_FLIP_HALF_MS = 260;
 const LIVE_REVERSE_RETURN_MS = 320;
@@ -320,6 +322,7 @@ class AppDailyFlip extends HTMLElement {
   #bafScore = null;        // indexed score for the active x10 BAF bracket
   #bafLevel = null;
   #bafAddress = null;
+  #bafFlipEve = null;      // exact GAME.purchaseInfo x9-final-day signal
   // Rank is useful context, not a live ledger. Cache one lookup per
   // player/bracket and invalidate it only when a revealed win can change the
   // score (or when the player/day target changes).
@@ -396,6 +399,9 @@ class AppDailyFlip extends HTMLElement {
   #tomorrowSpoilerOverrideKey = null;
   #flipTotalSpoilerOverrideKey = null;
   #fundsExpanded = false;
+  #bafTransfer = null;
+  #bafTransferDoneKey = null;
+  #bafImpactTimer = null;
 
   #spoilerOverrideKey(kind) {
     return `${kind}:${this.#day ?? ''}:${this.#dashboardAddress ?? ''}`;
@@ -439,6 +445,7 @@ class AppDailyFlip extends HTMLElement {
     // the newly adopted direct-chain day.
     this.#fetchSeq += 1;
     this.#clearRevealTimer();
+    this.#clearBafTransfer({ resetDone: true });
     this.#day = day;
     this.#browsingDay = browsing ? day : null;
     this.#forceReplayDay = forceReplay ? day : null;
@@ -504,6 +511,7 @@ class AppDailyFlip extends HTMLElement {
     }));
     this.#unsubs.push(subscribe('connected.address', () => {
       this.#fetchSeq += 1;
+      this.#clearBafTransfer({ resetDone: true });
       this.#settlementState = null;
       this.#dashboardAddress = null;
       this.#liveBalances = null;
@@ -516,6 +524,7 @@ class AppDailyFlip extends HTMLElement {
       this.#bafLevel = null;
       this.#bafAddress = null;
       this.#bafLookupKey = null;
+      this.#bafFlipEve = null;
       this.#revealRequestedDay = null;
       this.#scheduleRefresh();
       const ballot = this.querySelector('[data-bind="df-charity-dialog"]');
@@ -523,6 +532,7 @@ class AppDailyFlip extends HTMLElement {
     }));
     this.#unsubs.push(subscribe('viewing.address', () => {
       this.#fetchSeq += 1;
+      this.#clearBafTransfer({ resetDone: true });
       this.#settlementState = null;
       this.#dashboardAddress = null;
       this.#liveBalances = null;
@@ -630,6 +640,7 @@ class AppDailyFlip extends HTMLElement {
     this.#clearModifierMeter();
     this.#clearFakeoutMeter();
     this.#clearRevealTimer();
+    this.#clearBafTransfer({ resetDone: true });
     this.#clearLiveReverseAnimation();
     this.#clearResultTruthWindow();
     this.#sdgnrsQuoteSeq += 1;
@@ -1105,6 +1116,10 @@ class AppDailyFlip extends HTMLElement {
     // no longer run at coin landing while the thermometer is still moving.
     this.#renderModifierMeter();
     this.#renderPosition();
+    // Today's green receipt is now authoritative. Carry that exact +FLIP
+    // figure into BAF before committing the score increase; reduced-motion or
+    // unavailable-layout environments fall back to the immediate count-up.
+    if (!this.#startBafTransfer(revealDay)) this.#renderBafScore();
     try { sfxCoinflipLand(true); } catch (_e) { /* sound is decorative */ }
     this.#meterTimer = setTimeout(() => {
       this.#meterTimer = null;
@@ -1391,6 +1406,16 @@ class AppDailyFlip extends HTMLElement {
       ),
       this.#runRefreshTask(
         seq,
+        readBafFlipEve(),
+        (value) => {
+          this.#bafFlipEve = value;
+        },
+        () => {
+          this.#bafFlipEve = null;
+        },
+      ),
+      this.#runRefreshTask(
+        seq,
         addr
           ? fetchJSON('/game/state').then(async (state) => {
             const level = activeBafScoreLevel(state?.level);
@@ -1417,6 +1442,10 @@ class AppDailyFlip extends HTMLElement {
           this.#bafAddress = address;
           this.#bafLevel = null;
           this.#bafScore = null;
+          // A transient API miss must not permanently pin this bracket as
+          // "already looked up". Successful reads stay cached; failures get
+          // one ordinary-poll retry until rank data is available.
+          this.#bafLookupKey = null;
         },
       ),
       this.#runRefreshTask(
@@ -1533,6 +1562,14 @@ class AppDailyFlip extends HTMLElement {
     this.innerHTML = `
       <section class="panel app-daily-flip">
         <h2 class="df-section-title">DAILY COINFLIP</h2>
+        <a class="df-baf-eve" data-bind="df-baf-eve" href="/learn/baf/" hidden
+           aria-label="Big Ass Flip tomorrow. A winning daily coinflip triggers the draw. Learn more.">
+          <span class="df-baf-eve__sigil" aria-hidden="true">BAF</span>
+          <span class="df-baf-eve__copy">
+            <strong>BAF TOMORROW</strong>
+            <small>WIN TRIGGERS THE DRAW</small>
+          </span>
+        </a>
         <div class="df-coin-stage">
           <div class="df-coin-zone" data-bind="df-coin-zone"></div>
           <div class="df-modifier-meter-slot" data-bind="df-modifier-meter-slot"></div>
@@ -1743,6 +1780,7 @@ class AppDailyFlip extends HTMLElement {
   }
 
   #render() {
+    this.#renderBafFlipEve();
     this.#renderCoin();
     this.#renderModifierMeter();
     this.#renderPosition();
@@ -1751,6 +1789,14 @@ class AppDailyFlip extends HTMLElement {
     this.#renderReverseFlip();
     this.#renderBetTooltip();
     this.#maybeStartLiveReverseAnimation();
+  }
+
+  #renderBafFlipEve() {
+    const panel = this.querySelector('.app-daily-flip');
+    const notice = this.querySelector('[data-bind="df-baf-eve"]');
+    const visible = this.#browsingDay == null && this.#bafFlipEve?.targetLevel != null;
+    if (notice) notice.hidden = !visible;
+    panel?.classList?.toggle('app-daily-flip--baf-eve', visible);
   }
 
   #formatFlipPrice(wei) {
@@ -2978,7 +3024,10 @@ class AppDailyFlip extends HTMLElement {
     const hasResult = this.#day != null
       && this.#flipFetchedDay === this.#day
       && this.#flipResult != null;
-    const revealComplete = hasResult && this.#revealed() && !this.#landing;
+    const revealComplete = hasResult
+      && this.#revealed()
+      && !this.#landing
+      && !(Boolean(this.#flipResult?.win) && this.#meterSettling);
     const settlement = this.#activeSettlement();
     const sameBracket = settlement?.bafLevel == null
       || this.#bafLevel == null
@@ -2996,24 +3045,158 @@ class AppDailyFlip extends HTMLElement {
       : 0n;
     if (!credited && optimistic > pending) pending = optimistic;
     const effective = indexed == null ? null : indexed + pending;
+    const activeTransfer = this.#bafTransfer;
+    const transferMatches = activeTransfer != null
+      && Number(activeTransfer.day) === Number(this.#day)
+      && activeTransfer.address === this.#dashboardAddress;
+    const displayed = transferMatches ? activeTransfer.fromWei : effective;
     const rank = Number(this.#bafScore?.rank);
-    // An indexed rank no longer describes an effective score with pending
-    // credit. Hide it until the claim is indexed and the API can rank it.
+    // Keep the latest indexed rank visible while an already-revealed win is
+    // folded into the score. The rank updates after that credit is indexed;
+    // replacing a useful known rank with a dash made the feature look broken.
     if (rankEl) {
-      rankEl.textContent = pending === 0n && Number.isInteger(rank) && rank >= 1
+      rankEl.textContent = Number.isInteger(rank) && rank >= 1
         ? `RANK #${rank}`
         : 'RANK —';
+      rankEl.title = pending > 0n && Number.isInteger(rank) && rank >= 1
+        ? 'Current indexed rank; updates after pending BAF is recorded.'
+        : '';
     }
     updateBalanceDisplay(score, {
       container: box,
       scope: scoreKnown ? `${this.#dashboardAddress}:baf:${this.#bafLevel}` : null,
-      value: effective,
+      value: displayed,
       // BAF is a rank score derived from winning FLIP; it is not a token
       // balance. Pending winning payouts are painted directly into the number
       // after reveal, which makes the same-scope increase count up in place.
       format: (raw) => this.#fmtWhole(raw),
       formatDelta: (delta) => `+${this.#fmtWhole(delta)}`,
     });
+  }
+
+  #clearBafTransfer({ resetDone = false } = {}) {
+    const transfer = this.#bafTransfer;
+    if (transfer?.timer != null) {
+      try { clearTimeout(transfer.timer); } catch (_e) { /* defensive */ }
+    }
+    try { transfer?.node?.remove?.(); } catch (_e) { /* detached DOM */ }
+    this.#bafTransfer = null;
+    if (this.#bafImpactTimer != null) {
+      try { clearTimeout(this.#bafImpactTimer); } catch (_e) { /* defensive */ }
+      this.#bafImpactTimer = null;
+    }
+    this.querySelector('[data-bind="df-baf-score-box"]')
+      ?.classList?.remove('df-baf-score--transfer-impact');
+    if (resetDone) this.#bafTransferDoneKey = null;
+  }
+
+  #finishBafTransfer(key) {
+    const transfer = this.#bafTransfer;
+    if (!transfer || transfer.key !== key) return;
+    if (transfer.timer != null) {
+      try { clearTimeout(transfer.timer); } catch (_e) { /* defensive */ }
+    }
+    try { transfer.node?.remove?.(); } catch (_e) { /* detached DOM */ }
+    this.#bafTransfer = null;
+    this.#bafTransferDoneKey = key;
+
+    const box = this.querySelector('[data-bind="df-baf-score-box"]');
+    box?.classList?.add('df-baf-score--transfer-impact');
+    this.#renderBafScore();
+    if (typeof setTimeout === 'function') {
+      this.#bafImpactTimer = setTimeout(() => {
+        this.#bafImpactTimer = null;
+        box?.classList?.remove('df-baf-score--transfer-impact');
+      }, 1_180);
+      this.#bafImpactTimer?.unref?.();
+    }
+  }
+
+  #startBafTransfer(revealDay) {
+    if (this.#reducedMotion() || typeof document === 'undefined') return false;
+    const settlement = this.#activeSettlement();
+    if (!settlement?.won || Number(settlement.day) !== Number(revealDay)) return false;
+    const currentGain = this.#settlementGainWei(settlement);
+    if (currentGain <= 0n) return false;
+
+    const scoreKnown = this.#bafScore != null && this.#bafAddress === this.#dashboardAddress;
+    if (!scoreKnown) return false;
+    const indexed = this.#asWei(this.#bafScore.score);
+    const sameBracket = settlement.bafLevel == null
+      || this.#bafLevel == null
+      || Number(settlement.bafLevel) === Number(this.#bafLevel);
+    if (!sameBracket) return false;
+    const optimistic = this.#asWei(settlement.bafGainWei);
+    const base = settlement.bafScoreBaseWei;
+    const credited = optimistic > 0n
+      && base != null
+      && indexed >= this.#asWei(base) + optimistic;
+    if (credited) return false;
+    let pending = this.#pendingBafCreditWei() ?? 0n;
+    if (optimistic > pending) pending = optimistic;
+    if (pending < currentGain) pending = currentGain;
+    const effective = indexed + pending;
+    const fromWei = effective - currentGain;
+    const key = [
+      revealDay,
+      this.#dashboardAddress || '',
+      this.#bafLevel ?? '',
+      currentGain,
+      effective,
+    ].join(':');
+    if (this.#bafTransfer?.key === key) return true;
+    if (this.#bafTransferDoneKey === key) return false;
+
+    const source = this.querySelector(
+      '[data-bind="df-position-today"] .df-position-value--win',
+    );
+    const target = this.querySelector('[data-bind="df-baf-score"]');
+    if (!source || !target
+      || typeof source.getBoundingClientRect !== 'function'
+      || typeof target.getBoundingClientRect !== 'function'
+      || typeof document.body?.appendChild !== 'function') return false;
+    const start = source.getBoundingClientRect();
+    const end = target.getBoundingClientRect();
+    if (![start.left, start.top, start.width, start.height, end.left, end.top, end.width, end.height]
+      .every(Number.isFinite) || start.width <= 0 || start.height <= 0) return false;
+
+    const node = document.createElement('span');
+    node.className = 'df-baf-transfer';
+    node.textContent = String(source.textContent || '')
+      .replace(/\s*FLIP\s*$/i, '')
+      .trim();
+    node.setAttribute('aria-hidden', 'true');
+    node.style.left = `${start.left}px`;
+    node.style.top = `${start.top}px`;
+    node.style.setProperty?.(
+      '--df-baf-flight-x',
+      `${(end.left + (end.width / 2)) - (start.left + (start.width / 2))}px`,
+    );
+    node.style.setProperty?.(
+      '--df-baf-flight-y',
+      `${(end.top + (end.height / 2)) - (start.top + (start.height / 2))}px`,
+    );
+    node.style.setProperty?.('--df-baf-flight-duration', `${BAF_TRANSFER_DURATION_MS}ms`);
+
+    this.#bafTransfer = {
+      key,
+      day: revealDay,
+      address: this.#dashboardAddress,
+      fromWei,
+      node,
+      timer: null,
+    };
+    // Establish the score immediately before today's win without producing a
+    // second delta cue for older pending credit. The flying receipt itself is
+    // the +amount cue for this win.
+    resetBalanceDisplay(target);
+    this.#renderBafScore();
+    document.body.appendChild(node);
+    const finish = () => this.#finishBafTransfer(key);
+    node.addEventListener?.('animationend', finish, { once: true });
+    this.#bafTransfer.timer = setTimeout(finish, BAF_TRANSFER_DURATION_MS + 100);
+    this.#bafTransfer.timer?.unref?.();
+    return true;
   }
 
   #reducedMotion() {

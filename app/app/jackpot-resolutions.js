@@ -25,6 +25,7 @@ const BAF_RESOLUTION_ABI = [
   'event BafConsolationClaimed(address indexed player, uint24 indexed lvl, uint256 score, uint256 wwxrpAmount)',
   'error NothingToClaim()',
 ];
+const ENTRIES_PER_TICKET = 4n;
 
 let _decimatorFactory = null;
 let _bafFactory = null;
@@ -209,14 +210,16 @@ export async function claimBafConsolation({ player, level } = {}) {
 export function summarizeBafAwards(wins, level) {
   const lvl = Number(level);
   let eth = 0n;
-  let tickets = 0n;
+  let ticketEntries = 0n;
   for (const row of Array.isArray(wins) ? wins : []) {
     if (Number(row?.level) !== lvl) continue;
     const kind = String(row?.awardType || '');
     try {
       if (kind === 'eth_baf') eth += BigInt(row?.amount ?? 0);
-      if (kind === 'tickets_baf') tickets += BigInt(row?.amount ?? 0);
+      // JackpotTicketWin.entryCount is stored verbatim by the current indexer.
+      // Four on-chain entries are one complete player-facing ticket.
+      if (kind === 'tickets_baf') ticketEntries += BigInt(row?.amount ?? 0);
     } catch (_e) { /* malformed indexed row: ignore just that award */ }
   }
-  return { eth, tickets };
+  return { eth, tickets: ticketEntries / ENTRIES_PER_TICKET };
 }

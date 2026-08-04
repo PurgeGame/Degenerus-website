@@ -375,6 +375,30 @@ describe('sendTx receipt handling', () => {
     assert.equal(await sendTx(() => Promise.resolve(tx), 'confirmed'), recovered);
   });
 
+  test('keeps reconciling briefly when the receipt RPC lags behind a successful write', async () => {
+    const recovered = { status: 1, hash: '0xslow-confirmed' };
+    const base = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    let reads = 0;
+    const provider = {
+      ...base,
+      getTransactionReceipt: async (hash) => {
+        if (hash !== '0xslow-confirmed') return null;
+        reads += 1;
+        return reads >= 2 ? recovered : null;
+      },
+    };
+    setProvider(provider);
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    const tx = {
+      hash: '0xslow-confirmed',
+      wait: async () => { throw new Error('provider timed out waiting for receipt'); },
+    };
+
+    assert.equal(await sendTx(() => Promise.resolve(tx), 'slow-confirmed'), recovered);
+    assert.equal(reads, 2, 'a missing first receipt is retried before surfacing an error');
+  });
+
   test('does not treat a cancelled replacement as success', async () => {
     const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
     setProvider(provider);
