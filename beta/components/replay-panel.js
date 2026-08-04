@@ -37,8 +37,8 @@ const FAR_FUTURE_HORIZON = 4;
 // darker locked/unscratched face; the paper beneath is the lighter loser pink
 // from `.q-win-impossible` in replay.css.
 const NO_WIN_COVER_FILL = 'rgb(218, 104, 104)';
-// A real winner must not be visible before scratching. Winning quadrants and
-// owned "could win" misses share this exact blue cover; green lives underneath.
+// The settled scratch face uses the original pale-blue ticket color. Actual
+// green/pink results stay hidden behind the separate neutral underlay below.
 const POSSIBLE_WIN_COVER_FILL = '#b8d4e8';
 const GOLD_TRAIT_COVER_FILL = 'rgb(212, 175, 55)';
 // Let the eighth lock remain visibly settled before the scratch surface is
@@ -485,7 +485,7 @@ class ReplayPanel extends HTMLElement {
           'q-has-trait', 'q-no-tickets', 'q-scratchable', 'q-has-tickets',
           'q-public-result', 'q-win-impossible', 'q-win-impossible-lock',
           'q-owned-miss', 'q-player-win',
-          'q-gold-trait', 'q-result-pending', 'q-result-revealed',
+          'q-gold-trait', 'q-scratch-underlay', 'q-result-pending', 'q-result-revealed',
         );
         const shownTrait = contractQ * 64 + col * 8 + sym;
         const ownsShown = this.#playerTraitIds.has(shownTrait);
@@ -1812,7 +1812,7 @@ class ReplayPanel extends HTMLElement {
       q.classList.remove(
         'revealed', 'q-has-trait', 'q-no-tickets', 'q-scratchable',
         'q-has-tickets', 'q-public-result', 'q-win-impossible', 'q-win-impossible-lock',
-        'q-owned-miss', 'q-player-win', 'q-gold-trait',
+        'q-owned-miss', 'q-player-win', 'q-gold-trait', 'q-scratch-underlay',
         'q-result-pending', 'q-result-revealed',
       );
       const img = q.querySelector('.badge-img');
@@ -2161,6 +2161,7 @@ class ReplayPanel extends HTMLElement {
         'q-owned-miss',
         'q-player-win',
         'q-gold-trait',
+        'q-scratch-underlay',
         'q-result-pending',
         'q-result-revealed',
       );
@@ -2196,9 +2197,11 @@ class ReplayPanel extends HTMLElement {
       anyScratchable = true;
       // The scratch cover carries blue/red/gold eligibility. Beneath it, keep
       // potential/actual wins neutral until the completion threshold (or an actual
-      // win badge is uncovered). A truly unwinnable quadrant is already known
-      // to be a loser, so it keeps the ordinary pink loser paper immediately.
+      // win badge is uncovered). The same neutral grey also sits beneath a
+      // darker-pink known-loss cover, so a partial scratch never leaks the final
+      // pink paper before the completion threshold.
       quads[i].classList.add('q-scratchable');
+      quads[i].classList.add('q-scratch-underlay');
       if (ownsDisplayedGold) {
         quads[i].classList.add('q-gold-trait');
       } else if (hasPlayerWin) {
@@ -2622,7 +2625,7 @@ class ReplayPanel extends HTMLElement {
               this.#greenRevealed[qIdx] = true;
               const quads = this.querySelectorAll('.replay-tq');
               const quad = quads[qIdx];
-              quad.classList.remove('q-scratchable', 'q-result-pending');
+              quad.classList.remove('q-scratchable', 'q-scratch-underlay', 'q-result-pending');
               quad.classList.add('q-result-revealed', 'q-has-tickets');
             }
           }
@@ -2849,7 +2852,7 @@ class ReplayPanel extends HTMLElement {
       else this.#sfxReveal(false);
     }
 
-    quad.classList.remove('q-scratchable', 'q-result-pending');
+    quad.classList.remove('q-scratchable', 'q-scratch-underlay', 'q-result-pending');
     quad.classList.add('q-result-revealed');
     if (isWin) {
       quad.classList.add('q-has-tickets');
@@ -3028,7 +3031,7 @@ class ReplayPanel extends HTMLElement {
       q.classList.remove(
         'revealed', 'q-has-trait', 'q-no-tickets', 'q-scratchable',
         'q-has-tickets', 'q-public-result', 'q-win-impossible', 'q-win-impossible-lock',
-        'q-owned-miss', 'q-player-win', 'q-gold-trait',
+        'q-owned-miss', 'q-player-win', 'q-gold-trait', 'q-scratch-underlay',
         'q-result-pending', 'q-result-revealed',
       );
       const img = q.querySelector('.badge-img');

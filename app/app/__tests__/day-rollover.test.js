@@ -1,0 +1,107 @@
+import { describe, test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  reconcileDaySync,
+  nextDayProbeDelay,
+  _testing,
+} from '../day-rollover.js';
+
+const win = (day, rewardPercent = 81) => ({
+  day, win: true, rewardPercent, resolved: true, source: 'chain',
+});
+
+function apply(state, snapshot, lastDay) {
+  return reconcileDaySync({ snapshot, lastDay, previous: state, now: 1_000 });
+}
+
+describe('authoritative day rollover reducer', () => {
+  test('jackpot and coinflip unlock only on the same exact chain day', () => {
+    let state = apply(null, { day: 40, blockNumber: 100, coinflip: null }, null);
+    assert.equal(state.phase, 'waiting-both');
+    assert.equal(state.ready, false);
+
+    state = apply(state, { day: 40, blockNumber: 101, coinflip: null }, {
+      day: 40, status: 'resolved',
+    });
+    assert.equal(state.phase, 'waiting-coinflip');
+    assert.equal(state.ready, false);
+
+    state = apply(state, { day: 40, blockNumber: 102, coinflip: win(40) }, {
+      day: 40, status: 'resolved',
+    });
+    assert.equal(state.phase, 'synced');
+    assert.equal(state.ready, true);
+    assert.equal(state.jackpotDay, 40);
+    assert.equal(state.coinflipDay, 40);
+  });
+
+  test('a new chain day clears both prior-day lanes immediately', () => {
+    const prior = apply(null, { day: 40, blockNumber: 100, coinflip: win(40) }, {
+      day: 40, status: 'resolved',
+    });
+    const shifted = apply(prior, { day: 41, blockNumber: 110, coinflip: null }, {
+      day: 40, status: 'resolved',
+    });
+    assert.equal(shifted.day, 41);
+    assert.equal(shifted.previousDay, 40);
+    assert.equal(shifted.ready, false);
+    assert.equal(shifted.jackpotReady, false);
+    assert.equal(shifted.coinflipReady, false);
+  });
+
+  test('stale and duplicate responses cannot regress a ready target', () => {
+    const ready = apply(null, { day: 52, blockNumber: 500, coinflip: win(52, 99) }, {
+      day: 52, status: 'resolved',
+    });
+    const stale = apply(ready, { day: 51, blockNumber: 499, coinflip: win(51) }, {
+      day: 51, status: 'resolved',
+    });
+    assert.equal(stale.day, 52);
+    assert.equal(stale.ready, true);
+    assert.equal(stale.coinflipResult.rewardPercent, 99);
+
+    const duplicate = apply(stale, { day: 52, blockNumber: 500, coinflip: null }, null);
+    assert.equal(duplicate.ready, true);
+    assert.equal(duplicate.coinflipResult.rewardPercent, 99);
+  });
+
+  test('all jackpot/coin ordering permutations converge without cross-day readiness', () => {
+    const permutations = [
+      ['day', 'jackpot', 'coin'], ['day', 'coin', 'jackpot'],
+      ['jackpot', 'day', 'coin'], ['jackpot', 'coin', 'day'],
+      ['coin', 'day', 'jackpot'], ['coin', 'jackpot', 'day'],
+    ];
+    for (const ordering of permutations) {
+      let snapshot = { day: 70, blockNumber: 700, coinflip: null };
+      let lastDay = { day: 70, status: 'resolved' };
+      let state = apply(null, { day: 70, blockNumber: 700, coinflip: win(70) }, lastDay);
+      for (const event of ordering) {
+        if (event === 'day') snapshot = { day: 71, blockNumber: 710, coinflip: null };
+        if (event === 'coin') snapshot = { day: 71, blockNumber: 711, coinflip: win(71) };
+        if (event === 'jackpot') lastDay = { day: 71, status: 'resolved' };
+        state = apply(state, snapshot, lastDay);
+        if (state.ready) {
+          assert.equal(state.jackpotDay, state.day, ordering.join(' → '));
+          assert.equal(state.coinflipDay, state.day, ordering.join(' → '));
+        }
+      }
+      // Apply the final authoritative state after every deliberately shuffled
+      // delivery; all paths must settle identically.
+      state = apply(state, { day: 71, blockNumber: 712, coinflip: win(71) }, {
+        day: 71, status: 'resolved',
+      });
+      assert.equal(state.day, 71, ordering.join(' → '));
+      assert.equal(state.ready, true, ordering.join(' → '));
+    }
+  });
+
+  test('loss sentinel is resolved but exposes no fake payout modifier', () => {
+    assert.deepEqual(_testing.normalizedCoinflip(9, { rewardPercent: 1, win: false }), {
+      day: 9, win: false, rewardPercent: 0, resolved: true, source: 'chain',
+    });
+  });
+
+  test('probe cadence tightens while warming', () => {
+    assert.equal(nextDayProbeDelay({ day: 9, ready: false }, 0), 1_500);
+  });
+});

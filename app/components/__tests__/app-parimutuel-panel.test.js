@@ -924,6 +924,7 @@ describe('app-parimutuel-panel', () => {
           side: 2, outcome: 2, payout: 2_250n * FLIP, over: 1n, under: 2n,
         },
       },
+      seals: { [VOLUME_ROUND - 1]: { total: 800n, previous: 1200n } },
     });
     const el = await mount();
     const card = el.querySelector('[data-bind="pari-volume"]');
@@ -933,6 +934,12 @@ describe('app-parimutuel-panel', () => {
     assert.ok(claim, 'volume claim is included in the bottom action row');
     assert.equal(claim.shortLabel, 'Claim');
     assert.match(claim.detail, /2,250 FLIP ready/);
+    await claim.run();
+    await flush();
+    const [result] = revealMod.__takeQueuedForTest();
+    assert.equal(result.kind, 'pari');
+    assert.equal(result.betTickets, '3');
+    assert.equal(result.resultTickets, '2');
   });
 
   test('an open volume window uses the round-free VOLUME BET heading and its countdown', async () => {

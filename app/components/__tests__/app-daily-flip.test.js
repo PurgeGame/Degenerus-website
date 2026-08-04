@@ -2423,6 +2423,55 @@ describe('new-day rollover (codex-found race)', () => {
     el.disconnectedCallback();
   });
 
+  test('the chain day advances immediately but jackpot and coinflip unlock together', async () => {
+    coinflipMod.__setLatestResultReaderForTest(async () => ({
+      day: 67, win: true, rewardPercent: 96, resolved: true,
+    }));
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      // Deliberately stale same-number/indexed input: app.daySync must win.
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    storeMod.update('app.daySync', {
+      day: 68,
+      jackpotReady: false,
+      coinflipReady: false,
+      ready: false,
+      phase: 'waiting-both',
+      coinflipResult: null,
+    });
+    const el = mount();
+    await flushMicrotasks();
+
+    const warming = el.querySelector('.df-coin--syncing');
+    assert.ok(warming, 'the new chain day replaces yesterday immediately');
+    assert.equal(warming.disabled, true, 'the coin cannot outrun the jackpot lane');
+    warming.dispatchEvent({ type: 'click' });
+    assert.equal(localStorage.getItem('flip_day_84532_68'), null);
+    assert.equal(el.querySelector('[data-bind="df-reveal-hint"]').hidden, true);
+
+    const exact = { day: 68, win: true, rewardPercent: 81, resolved: true, source: 'chain' };
+    storeMod.update('app.lastDay', { day: 68, status: 'resolved' });
+    storeMod.update('app.daySync', {
+      day: 68,
+      jackpotDay: 68,
+      coinflipDay: 68,
+      jackpotReady: true,
+      coinflipReady: true,
+      ready: true,
+      phase: 'synced',
+      coinflipResult: exact,
+    });
+    await flushMicrotasks();
+
+    const ready = el.querySelector('.df-coin--spinning');
+    assert.ok(ready);
+    assert.equal(ready.disabled, false);
+    assert.equal(el.querySelector('[data-bind="df-reveal-hint"]').hidden, false,
+      'the same store transition makes the flip actionable');
+    el.disconnectedCallback();
+  });
+
   test("a zeroed Tomorrow stake becomes the new unresolved Today's bet", async () => {
     _currentStakeWei = '12000000000000000000000';
     _resolvedStakeWei = '43844000000000000000000';

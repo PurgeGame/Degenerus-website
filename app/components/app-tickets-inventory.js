@@ -184,6 +184,23 @@ function _foilLines(payload) {
   return out.length >= 4 ? out.slice(0, 4) : [];
 }
 
+// The API returns fresh object identities on every poll even when the ticket
+// stream is unchanged. A compact visual fingerprint lets the component retain
+// its existing (potentially very large) DOM instead of rebuilding thousands of
+// ticket nodes and image elements once a minute.
+function _inventoryPayloadFingerprint(payload) {
+  const cards = Array.isArray(payload?.cards) ? payload.cards : [];
+  const parts = [String(payload?.totalEntries ?? 0), String(cards.length)];
+  for (const card of cards) {
+    parts.push(String(card?.cardIndex ?? ''), String(card?.status ?? ''));
+    for (const entry of Array.isArray(card?.entries) ? card.entries : []) {
+      parts.push(String(entry?.traitId ?? ''));
+    }
+    parts.push(';');
+  }
+  return parts.join('|');
+}
+
 /** Remove only cards still owed a pack presentation, including their headline count. */
 export function hideUnopenedPackTickets(payload, hiddenIndexes) {
   if (!payload || typeof payload !== 'object') return payload;
@@ -373,8 +390,13 @@ class AppTicketsInventory extends HTMLElement {
   #activeLevel = null;    // the running jackpot level (app.lastDay.level)
   #address = null;
   #data = null;           // by-trait payload for (#address, #viewLevel)
+  #dataRenderKey = 'empty';
+  #cardsRenderKey = null;
+  #chartRenderKey = null;
   #deityPassSymbols = []; // persistent NFT-backed symbol ids owned by the viewed player
   #deityExpectedEntries = new Map(); // live virtual entries keyed by trait id
+  #deityExpectedScope = '';
+  #deityExpectedLoading = '';
   // The viewed level's foil lines, as canonical trait keys. A foil pack's four
   // lines are ordinary entries in the by-trait inventory with no marker of their
   // own, so /foil?level=N is what tells them apart (null until the drain rolls
@@ -403,6 +425,7 @@ class AppTicketsInventory extends HTMLElement {
   #heightCustomized = false;
   #resizeObserver = null;
   #packRevealListener = null;
+  #visibilityListener = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -420,6 +443,10 @@ class AppTicketsInventory extends HTMLElement {
         Promise.resolve().then(() => this.#refresh());
       };
       document.addEventListener(PACK_REVEAL_COMPLETE_EVENT, this.#packRevealListener);
+      this.#visibilityListener = () => {
+        if (document.visibilityState === 'visible') this.#refresh();
+      };
+      document.addEventListener('visibilitychange', this.#visibilityListener);
     }
 
     // The actual last day carries the authoritative current ticket level
@@ -450,7 +477,11 @@ class AppTicketsInventory extends HTMLElement {
       if (get('ui.mode') === 'combined') this.#render();
     }));
     if (typeof setInterval === 'function') {
-      this.#pollHandle = _setIntervalUnref(() => this.#refresh(), POLL_INTERVAL_MS);
+      this.#pollHandle = _setIntervalUnref(() => {
+        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+          this.#refresh();
+        }
+      }, POLL_INTERVAL_MS);
     }
     this.#refresh();
   }
@@ -474,6 +505,12 @@ class AppTicketsInventory extends HTMLElement {
       catch (_e) { /* defensive */ }
     }
     this.#packRevealListener = null;
+    if (this.#visibilityListener && typeof document !== 'undefined'
+      && typeof document.removeEventListener === 'function') {
+      try { document.removeEventListener('visibilitychange', this.#visibilityListener); }
+      catch (_e) { /* defensive */ }
+    }
+    this.#visibilityListener = null;
   }
 
   // ---------------------------------------------------------------------
@@ -539,6 +576,8 @@ class AppTicketsInventory extends HTMLElement {
     if (cardsBtn) cardsBtn.addEventListener('click', () => this.#setMode('cards'));
     const chartBtn = this.querySelector('[data-bind="inv-mode-chart"]');
     if (chartBtn) chartBtn.addEventListener('click', () => this.#setMode('chart'));
+    const cardsHost = this.querySelector('[data-bind="inv-cards"]');
+    if (cardsHost) cardsHost.addEventListener('click', (event) => this.#copyTicket(event, cardsHost));
     const zoomOut = this.querySelector('[data-bind="inv-zoom-out"]');
     if (zoomOut) zoomOut.addEventListener('click', () => this.#setZoom(this.#zoom - INV_ZOOM_STEP));
     const zoomIn = this.querySelector('[data-bind="inv-zoom-in"]');
@@ -648,9 +687,23 @@ class AppTicketsInventory extends HTMLElement {
     this.#refresh();
   }
 
-  #setMode(mode) {
+  #setMode(mode, { render = true } = {}) {
     this.#mode = mode;
     const ff = this.#isFarFuture();
+    if (render && !ff) {
+      if (mode === 'chart') {
+        this.#renderChart();
+        if (this.#deityPassSymbols.length > 0) {
+          void this.#refreshDeityExpectedEntries(
+            this.#fetchSeq,
+            this.#viewLevel,
+            this.#deityPassSymbols,
+          );
+        }
+      } else {
+        this.#renderCards();
+      }
+    }
     const cardsBtn = this.querySelector('[data-bind="inv-mode-cards"]');
     const chartBtn = this.querySelector('[data-bind="inv-mode-chart"]');
     if (cardsBtn && cardsBtn.classList) cardsBtn.classList.toggle('is-active', mode === 'cards');
@@ -672,6 +725,28 @@ class AppTicketsInventory extends HTMLElement {
     );
   }
 
+  #copyTicket(event, host) {
+    let wrap = event?.target || null;
+    while (wrap && wrap !== host && !wrap.__invTicket) wrap = wrap.parentElement;
+    const ticket = wrap?.__invTicket;
+    if (!ticket || typeof document === 'undefined'
+      || typeof document.dispatchEvent !== 'function'
+      || typeof CustomEvent !== 'function') return;
+    for (const prior of host.querySelectorAll?.('.inv-card--copied') || []) {
+      prior.classList?.remove('inv-card--copied');
+    }
+    wrap.classList?.add('inv-card--copied');
+    wrap.title = 'Copied to Degenerette';
+    wrap.setAttribute('aria-label', 'Copied to Degenerette');
+    document.dispatchEvent(new CustomEvent(DGN_TICKET_COPY_EVENT, {
+      detail: {
+        traitIds: [...ticket.traitIds],
+        level: this.#viewLevel,
+        foil: ticket.foil,
+      },
+    }));
+  }
+
   // ---------------------------------------------------------------------
 
   async #refresh() {
@@ -682,6 +757,8 @@ class AppTicketsInventory extends HTMLElement {
       this.#address = null;
       this.#deityPassSymbols = [];
       this.#deityExpectedEntries = new Map();
+      this.#deityExpectedScope = '';
+      this.#deityExpectedLoading = '';
       this.#combined = get('app.playerCombined');
       this.#render();
       return;
@@ -722,6 +799,7 @@ class AppTicketsInventory extends HTMLElement {
     const lvl = this.#viewLevel;
     if (!addr || lvl == null) {
       this.#data = null;
+      this.#dataRenderKey = 'empty';
       this.#foilLines = [];
       this.#holdings = [];
       this.#holdingsAddress = null;
@@ -729,6 +807,8 @@ class AppTicketsInventory extends HTMLElement {
       this.#resetSalvageState();
       this.#deityPassSymbols = [];
       this.#deityExpectedEntries = new Map();
+      this.#deityExpectedScope = '';
+      this.#deityExpectedLoading = '';
       this.#render();
       return;
     }
@@ -777,6 +857,7 @@ class AppTicketsInventory extends HTMLElement {
       cards: rawTicketData?.cards,
     });
     this.#data = hideUnopenedPackTickets(rawTicketData, hiddenPackCards);
+    this.#dataRenderKey = _inventoryPayloadFingerprint(this.#data);
     // Do not let the direct foil projection bypass the unopened-pack spoiler
     // gate. Once the reveal releases its card indexes, these four lines become
     // the authoritative fallback if the generic ticket stream is incomplete.
@@ -802,7 +883,12 @@ class AppTicketsInventory extends HTMLElement {
     this.#deityPassSymbols = [...new Set([...ownedFromNft, ...ownedFromToday]
       .filter((symbolId) => Number.isInteger(symbolId) && symbolId >= 0 && symbolId < 32))]
       .sort((a, b) => a - b);
-    this.#deityExpectedEntries = new Map();
+    const deityScope = `${lower}:${lvl}:${this.#deityPassSymbols.join(',')}`;
+    if (deityScope !== this.#deityExpectedScope) {
+      this.#deityExpectedScope = deityScope;
+      this.#deityExpectedEntries = new Map();
+      this.#deityExpectedLoading = '';
+    }
     if (dashboard.status === 'fulfilled' && Array.isArray(dashboard.value?.tickets)) {
       this.#holdings = dashboard.value.tickets
         .map((t) => {
@@ -865,19 +951,28 @@ class AppTicketsInventory extends HTMLElement {
     }
     if (this.#isFarFuture()) this.#reconcileSalvageSelection();
     this.#render();
-    if (!this.#isFarFuture() && this.#deityPassSymbols.length > 0) {
+    // Virtual Deity counts are chart-only. Avoid eight eth_calls on every
+    // cards-view poll; selecting Chart fetches them immediately and a visible
+    // Chart refreshes them on its normal minute cadence.
+    if (!this.#isFarFuture() && this.#mode === 'chart' && this.#deityPassSymbols.length > 0) {
       void this.#refreshDeityExpectedEntries(seq, lvl, this.#deityPassSymbols);
     }
   }
 
   async #refreshDeityExpectedEntries(seq, level, symbolIds) {
+    const scope = `${String(this.#address || '').toLowerCase()}:${Number(level)}:${symbolIds.join(',')}`;
+    const requestKey = `${seq}:${scope}`;
+    if (this.#deityExpectedLoading === requestKey) return;
+    this.#deityExpectedLoading = requestKey;
     let expected;
     try {
       expected = await readDeityExpectedEntries(level, symbolIds);
     } catch (_e) {
       expected = new Map();
     }
-    if (seq !== this.#fetchSeq || Number(level) !== Number(this.#viewLevel)) return;
+    if (this.#deityExpectedLoading === requestKey) this.#deityExpectedLoading = '';
+    if (seq !== this.#fetchSeq || Number(level) !== Number(this.#viewLevel)
+      || scope !== this.#deityExpectedScope || this.#mode !== 'chart') return;
     this.#deityExpectedEntries = expected;
     this.#renderChart();
   }
@@ -1198,10 +1293,10 @@ class AppTicketsInventory extends HTMLElement {
     const combinedHost = this.querySelector('[data-bind="inv-combined"]');
     if (combinedHost) combinedHost.hidden = true;
     this.#renderHeader();
-    this.#renderCards();
-    this.#renderChart();
-    this.#renderFarFuture();
-    this.#setMode(this.#mode);  // re-assert visibility after rebuild
+    if (this.#isFarFuture()) this.#renderFarFuture();
+    else if (this.#mode === 'chart') this.#renderChart();
+    else this.#renderCards();
+    this.#setMode(this.#mode, { render: false });  // re-assert visibility after rebuild
   }
 
   // ---------------------------------------------------------------------
@@ -1493,6 +1588,15 @@ class AppTicketsInventory extends HTMLElement {
   #renderCards() {
     const host = this.querySelector('[data-bind="inv-cards"]');
     if (!host) return;
+    const renderKey = [
+      String(this.#address || '').toLowerCase(),
+      String(this.#viewLevel ?? ''),
+      this.#dataRenderKey,
+      this.#foilLines.map((line) => line.join(',')).join(';'),
+      this.#deityPassSymbols.join(','),
+    ].join('::');
+    if (renderKey === this.#cardsRenderKey && host.children?.length > 0) return;
+    this.#cardsRenderKey = renderKey;
     host.textContent = '';
     const d = this.#data;
     const cardsArr = Array.isArray(d?.cards) ? d.cards : [];
@@ -1573,24 +1677,10 @@ class AppTicketsInventory extends HTMLElement {
       wrap.classList?.add('inv-card--degenerette-copy');
       wrap.title = 'Use this ticket in Degenerette';
       wrap.setAttribute('aria-label', 'Use this ticket in Degenerette');
-      wrap.addEventListener('click', () => {
-        if (typeof document === 'undefined'
-          || typeof document.dispatchEvent !== 'function'
-          || typeof CustomEvent !== 'function') return;
-        for (const prior of host.querySelectorAll?.('.inv-card--copied') || []) {
-          prior.classList?.remove('inv-card--copied');
-        }
-        wrap.classList?.add('inv-card--copied');
-        wrap.title = 'Copied to Degenerette';
-        wrap.setAttribute('aria-label', 'Copied to Degenerette');
-        document.dispatchEvent(new CustomEvent(DGN_TICKET_COPY_EVENT, {
-          detail: {
-            traitIds: [...combo.traitIds],
-            level: this.#viewLevel,
-            foil: combo.foil,
-          },
-        }));
-      });
+      // One delegated listener on the cards host handles every ticket. Keeping
+      // the immutable payload on the node avoids thousands of per-card
+      // closures in large inventories.
+      wrap.__invTicket = { traitIds: [...combo.traitIds], foil: combo.foil };
       if (combo.hasGold && wrap.classList) wrap.classList.add('inv-card--gold');
       if (combo.foil) {
         // The four boosted lines are worth picking out of a wall of tiles: they
@@ -1624,6 +1714,8 @@ class AppTicketsInventory extends HTMLElement {
         const img = document.createElement('img');
         img.src = invBadgePath(q, sym, col);
         img.alt = `${INV_SYMBOLS[INV_QUADRANTS[q]][sym]} ${INV_COLORS[col]}`;
+        img.loading = 'lazy';
+        img.decoding = 'async';
         cell.appendChild(img);
         card.appendChild(cell);
       }
@@ -1634,6 +1726,8 @@ class AppTicketsInventory extends HTMLElement {
         ? '/whitepaper/flame-center-silver.svg'
         : '/whitepaper/flame-center.svg';
       flame.alt = '';
+      flame.loading = 'lazy';
+      flame.decoding = 'async';
       center.appendChild(flame);
       card.appendChild(center);
       wrap.appendChild(card);
@@ -1674,6 +1768,7 @@ class AppTicketsInventory extends HTMLElement {
       badge.className = 'inv-deity-pass__badge';
       badge.src = invBadgePath(q, sym, INV_GOLD_COLOR_IDX);
       badge.alt = `${symbolName} deity pass`;
+      badge.decoding = 'async';
       hero.appendChild(badge);
       pass.appendChild(hero);
       const label = document.createElement('strong');
@@ -1693,6 +1788,18 @@ class AppTicketsInventory extends HTMLElement {
   #renderChart() {
     const host = this.querySelector('[data-bind="inv-chart"]');
     if (!host) return;
+    const deityKey = [...this.#deityExpectedEntries.entries()]
+      .sort((a, b) => Number(a[0]) - Number(b[0]))
+      .map(([traitId, count]) => `${traitId}:${count}`)
+      .join(',');
+    const renderKey = [
+      String(this.#address || '').toLowerCase(),
+      String(this.#viewLevel ?? ''),
+      this.#dataRenderKey,
+      deityKey,
+    ].join('::');
+    if (renderKey === this.#chartRenderKey && host.children?.length > 0) return;
+    this.#chartRenderKey = renderKey;
     host.textContent = '';
     const d = this.#data;
     const cardsArr = Array.isArray(d?.cards) ? d.cards : [];
@@ -1736,6 +1843,8 @@ class AppTicketsInventory extends HTMLElement {
           const img = document.createElement('img');
           img.src = invBadgePath(q, s, c);
           img.alt = `${INV_SYMBOLS[cat][s]} ${INV_COLORS[c]}`;
+          img.loading = 'lazy';
+          img.decoding = 'async';
           cell.appendChild(img);
           if (count > 0) {
             const label = document.createElement('span');

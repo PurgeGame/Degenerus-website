@@ -2311,7 +2311,7 @@ class AppDegenerettePanel extends HTMLElement {
           : phase === 'request-ready'
             ? 'Request RNG'
             : this.#state === STATE.INDEXING
-              ? 'Loading spins'
+              ? 'Open spins'
             : 'Resolve degen',
       detail: this.#state === STATE.READY
         ? `RNG ready · ${units[this.#currentCurrency] || 'FLIP'} result locked`
@@ -2320,13 +2320,13 @@ class AppDegenerettePanel extends HTMLElement {
         : this.#state === STATE.RESOLVING
           ? 'Resolving on-chain'
           : this.#state === STATE.INDEXING
-            ? 'Loading every verified spin'
+            ? 'Resolved on-chain · load verified spins'
           : phase === 'waiting-rng'
             ? 'RNG requested · waiting for Chainlink result'
           : this.#rngRequestAvailable
             ? 'RNG request ready'
             : 'Waiting for Chainlink RNG',
-      state: this.#state === STATE.READY || this.#rngRequestAvailable
+      state: [STATE.READY, STATE.INDEXING].includes(this.#state) || this.#rngRequestAvailable
         ? 'ready'
         : [STATE.REQUESTING_RNG, STATE.RESOLVING].includes(this.#state) ? 'busy' : 'waiting',
       phase,
@@ -2340,8 +2340,32 @@ class AppDegenerettePanel extends HTMLElement {
         : null,
       progressStartedAt: this.#rngRequestStartedAt,
       order: 15,
-      run: () => this.#onResolveClick(),
+      run: () => this.#onPendingAction(),
     }]);
+  }
+
+  async #onPendingAction(e) {
+    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+    if (this.#state !== STATE.INDEXING) {
+      await this.#onResolveClick(e);
+      return;
+    }
+    if (this.#busyResolve || this.#currentBetId == null) return;
+    this.#busyResolve = true;
+    this.#clearError();
+    try {
+      const opened = await this.#replayIndexedResolution(
+        this.#pendingAddress || getActingAddress(),
+        this.#currentBetId,
+      );
+      if (!opened) {
+        this.#renderError('The result is confirmed and still indexing. Try OPEN SPINS again shortly.');
+        this.#setState(STATE.INDEXING);
+        this.#startRngPollCycle();
+      }
+    } finally {
+      setTimeout(() => { this.#busyResolve = false; }, DEBOUNCE_MS);
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -2780,7 +2804,6 @@ class AppDegenerettePanel extends HTMLElement {
       heroQuadrant: this.#currentHero == null ? this.#dgnHero : this.#currentHero,
     });
     if (!sequence) return false;
-    if (presentationKey) this.#presentedBetKeys.add(presentationKey);
     const directBoxLegs = Array.isArray(lootboxLegs) ? lootboxLegs.filter(Boolean) : [];
     sequence.lootboxAwarded = directBoxLegs.length > 0;
     sequence.lootboxLegs = directBoxLegs;
@@ -2794,8 +2817,12 @@ class AppDegenerettePanel extends HTMLElement {
     const completesActiveSlot = this.#currentBetId == null
       || resolvedBetId == null
       || String(this.#currentBetId) === String(resolvedBetId);
+    // Do not retire a player-owned result unless the full-screen queue accepts
+    // it. This keeps OPEN SPINS available if the reveal surface is temporarily
+    // unavailable instead of silently dropping a confirmed result.
+    if (!queueReveal(sequence)) return false;
+    if (presentationKey) this.#presentedBetKeys.add(presentationKey);
     if (completesActiveSlot) _writePendingBet(this.#pendingAddress, null);
-    queueReveal(sequence);
     if (directBoxLegs.length > 0) {
       const address = this.#pendingAddress || getActingAddress();
       recordLootboxTicketPacks({

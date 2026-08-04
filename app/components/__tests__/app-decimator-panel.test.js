@@ -1170,7 +1170,7 @@ describe('combined ticket + lootbox buy', () => {
 
     assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').hidden, false,
       'the combined spendable AFKing amount remains visible');
-    assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, '0.875 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, '0.87 ETH');
     assert.equal(el.querySelector('[data-bind="dec-funds-faucet"]').hidden, false,
       'native-wallet zero, not the combined total, drives the gas faucet');
     el.disconnectedCallback();

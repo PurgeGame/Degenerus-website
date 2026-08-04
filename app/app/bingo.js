@@ -8,15 +8,34 @@
 
 import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
-import { decodeRevertReason } from './reason-map.js';
+import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS } from './chain-config.js';
 
 export const BINGO_CLAIM_ABI = [
   'function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] slots)',
+  // Include every custom error reachable from claimBingo. Without these ABI
+  // fragments ethers cannot name a static-call revert, so an already-settled
+  // Bingo was reported as UNKNOWN and its stale Pending action never retired.
+  'error AlreadyClaimed()',
+  'error NotSlotOwner()',
+  'error InvalidSymbol()',
+  'error GameOver()',
   'event FirstQuadrantBingo(address indexed player, uint256 level, uint8 symbol)',
   'event FirstSymbolBingo(address indexed player, uint256 level, uint8 symbol)',
   'event BingoClaimed(address indexed player, uint256 level, uint8 symbol, uint256 flipReward, uint256 dgnrsPaid)',
 ];
+
+register('AlreadyClaimed', {
+  code: 'AlreadyClaimed',
+  userMessage: 'This reward was already claimed.',
+  recoveryAction: 'Refresh its indexed result.',
+});
+
+register('NotSlotOwner', {
+  code: 'NotSlotOwner',
+  userMessage: 'That indexed Bingo proof is stale.',
+  recoveryAction: 'Refresh the ticket proof.',
+});
 
 let _contractFactory = null;
 

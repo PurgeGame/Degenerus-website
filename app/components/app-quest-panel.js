@@ -387,6 +387,8 @@ class AppQuestPanel extends HTMLElement {
   #questDialogReturnFocus = null;
   #questCompletionIdentity = null;
   #questCompletionState = new Map();
+  #streakDisplayIdentity = null;
+  #lastRenderedStreak = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -438,6 +440,7 @@ class AppQuestPanel extends HTMLElement {
             <span class="qst-streak-flame" aria-hidden="true">◆</span>
             <strong class="qst-streak" data-bind="qst-streak">—</strong>
             <span class="qst-streak-label">STREAK</span>
+            <span class="qst-streak-gain" data-bind="qst-streak-gain" aria-hidden="true"></span>
           </div>
           <div class="qst-score-control" data-bind="qst-score-control" tabindex="0">
             <strong class="qst-score-value" data-bind="qst-score-value">—</strong>
@@ -1240,6 +1243,37 @@ class AppQuestPanel extends HTMLElement {
   #resetQuestCompletionState() {
     this.#questCompletionIdentity = null;
     this.#questCompletionState.clear();
+    this.#streakDisplayIdentity = null;
+    this.#lastRenderedStreak = null;
+  }
+
+  #renderStreakIncrease(streakEl, nextValue, completionCount) {
+    const chip = this.querySelector('.qst-streak-chip');
+    const gain = this.querySelector('[data-bind="qst-streak-gain"]');
+    const identity = this.#pinnedAddress
+      ? String(this.#pinnedAddress).toLowerCase()
+      : null;
+    const next = Math.max(0, Math.trunc(Number(nextValue) || 0));
+    const previous = identity && identity === this.#streakDisplayIdentity
+      ? this.#lastRenderedStreak
+      : null;
+    const delta = previous != null && next > previous ? next - previous : 0;
+
+    streakEl.textContent = String(next);
+    this.#streakDisplayIdentity = identity;
+    this.#lastRenderedStreak = next;
+
+    chip?.classList?.remove('qst-streak-chip--increased');
+    if (gain) gain.textContent = '';
+    if (completionCount <= 0 || delta <= 0 || !chip || !gain) return;
+
+    // Force a fresh animation even if two independent quests complete inside
+    // one CSS animation window. The displayed value always comes from the
+    // before/after contract streak; daily slots therefore paint +1 while the
+    // harder level quest naturally paints +5.
+    try { void chip.offsetWidth; } catch (_e) { /* fake DOM / detached element */ }
+    gain.textContent = `+${delta}`;
+    chip.classList.add('qst-streak-chip--increased');
   }
 
   #captureQuestCompletions(sorted, day) {
@@ -1444,7 +1478,7 @@ class AppQuestPanel extends HTMLElement {
 
     // Streak — textContent only.
     const streakValue = this.#questStreak?.baseStreak ?? 0;
-    streakEl.textContent = String(streakValue);
+    this.#renderStreakIncrease(streakEl, streakValue, completion.newlyCompleted.size);
     this.#renderScoreBreakdown();
     if (completion.newlyCompleted.size > 0) {
       try { sfxQuestComplete(); } catch (_e) { /* decoration must not stop polling */ }

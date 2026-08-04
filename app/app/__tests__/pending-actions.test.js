@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   publishPendingActions,
   clearPendingActions,
+  dismissPendingActionItems,
   getPendingActions,
   pendingSourceHasPublished,
   subscribePendingActions,
@@ -72,5 +73,29 @@ describe('pending-actions registry', () => {
     publishPendingActions('lootboxes', []);
     assert.equal(pendingSourceHasPublished('lootboxes'), true);
     assert.deepEqual(getPendingActions(), []);
+  });
+
+  test('hard dismissal survives republishes, covers aliases, and clears each owner once', async () => {
+    let clears = 0;
+    const clearAll = async () => { clears += 1; };
+    publishPendingActions('packs', [
+      {
+        id: 'ticket-packs:pending', label: 'Tickets pending', state: 'waiting',
+        dismissIds: ['ticket-pack:8'], clearAll,
+      },
+      { id: 'box:1', label: 'Box', state: 'ready', run() {}, clearAll },
+    ]);
+
+    assert.equal(await dismissPendingActionItems(getPendingActions()), 2);
+    assert.equal(clears, 1, 'one owner hook is called once for the whole source');
+    assert.deepEqual(getPendingActions(), []);
+
+    publishPendingActions('packs', [
+      { id: 'ticket-pack:8', label: 'Pack is ready', state: 'ready', run() {} },
+      { id: 'box:1', label: 'Same box, refreshed', state: 'ready', run() {} },
+      { id: 'box:2', label: 'New box', state: 'ready', run() {} },
+    ]);
+    assert.deepEqual(getPendingActions().map((item) => item.id), ['box:2'],
+      'cleared rows stay gone while genuinely new ids remain visible');
   });
 });

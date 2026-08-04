@@ -82,24 +82,21 @@ describe('index.html basic-mode skeleton', () => {
     assert.equal(html.indexOf('components/player-dropdown.js'), -1, 'search script removed');
   });
 
-  test('first-visit onboarding offers wallet connect and the sDGNRS tutorial', () => {
+  test('first-visit onboarding offers wallet connect and the scripted tutorial', () => {
     assert.ok(html.includes('<app-onboarding>'), 'onboarding element mounted');
     assert.ok(html.includes('src="/app/components/app-onboarding.js"'),
       'onboarding component script loaded');
   });
 
-  test('the splash tutorial is a grey non-navigation control with coming-soon feedback', () => {
+  test('the splash tutorial links to the playable training run', () => {
     assert.match(onboarding,
-      /<button[^>]*class="onb-tutorial onb-tutorial--soon"[\s\S]*?aria-disabled="true"/,
-      'tutorial is rendered as a non-navigating disabled affordance');
-    assert.doesNotMatch(onboarding, /onb-tutorial[^\n]*href=/,
-      'the coming-soon control cannot navigate to the unfinished tutorial');
+      /<a[^>]*class="onb-tutorial"[^>]*href="\/learn\/tutorial\/"/,
+      'tutorial is a direct link to the training route');
+    assert.doesNotMatch(onboarding, /onb-tutorial--soon|COMING SOON|aria-disabled="true"/,
+      'finished tutorial is not presented as disabled');
     assert.match(appCss,
-      /\.onb-tutorial--soon::after\s*\{[^}]*content:\s*'COMING SOON'/s,
-      'hover and keyboard focus expose the coming-soon label');
-    assert.match(appCss,
-      /\.onb-tutorial\s*\{[^}]*rgba\(203, 213, 225, 0\.52\)[^}]*cursor:\s*not-allowed/s,
-      'the control has the requested grey disabled treatment');
+      /\.onb-tutorial\s*\{[^}]*rgba\(245, 166, 35, 0\.55\)[^}]*cursor:\s*pointer/s,
+      'the tutorial link has an active gold treatment');
   });
 
   test('aggregate claims banner and winnings strip are removed', () => {

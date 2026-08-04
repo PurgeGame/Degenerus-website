@@ -55,7 +55,7 @@ test('the center flame switches between fully revealed main and bonus boards', (
     'the flame gains a compact visual affordance only after both boards are ready');
 });
 
-test('wins and could-win misses share a blue front; only the revealed win is green', () => {
+test('wins and could-win misses share the original pale-blue front; only the revealed win is green', () => {
   assert.match(panel, /const POSSIBLE_WIN_COVER_FILL = '#b8d4e8'/);
   assert.match(panel, /hasPlayerWin[\s\S]*?\? POSSIBLE_WIN_COVER_FILL/);
   assert.match(panel, /const canonicalGold = !this\.#bonusPhase && isGoldTrait\(canonicalTraitId\)/);
@@ -91,12 +91,14 @@ test('the result underneath stays grey until the reduced threshold or a real win
   assert.match(panel, /const knownLoser = canvas\.parentElement\?\.classList\?\.contains\('q-win-impossible'\)/);
   assert.match(panel, /const revealThreshold = knownLoser[\s\S]*?KNOWN_LOSER_REVEAL_THRESHOLD[\s\S]*?: REVEAL_THRESHOLD/);
   assert.match(panel, /if \(!\(publicResult && !ownsDisplayedTrait\)\)\s*\{\s*quads\[i\]\.classList\.add\('q-result-pending'\)/);
+  assert.match(panel, /quads\[i\]\.classList\.add\('q-scratch-underlay'\)/,
+    'every cover, including a known pink loss, scratches through to neutral grey');
   assert.match(
     panel,
-    /#greenRevealed\[qIdx\][\s\S]*?classList\.remove\('q-scratchable', 'q-result-pending'\)[\s\S]*?classList\.add\('q-result-revealed', 'q-has-tickets'\)/,
+    /#greenRevealed\[qIdx\][\s\S]*?classList\.remove\('q-scratchable', 'q-scratch-underlay', 'q-result-pending'\)[\s\S]*?classList\.add\('q-result-revealed', 'q-has-tickets'\)/,
   );
   assert.match(panel, /gridCoverage\(this\.#scratchGrids\[qIdx\]\) >= revealThreshold/);
-  assert.match(css, /\.replay-tq\.q-result-pending\s*\{[^}]*background:\s*#bfc2c5/s);
+  assert.match(css, /\.replay-tq\.q-scratch-underlay,[\s\S]*?\.replay-tq\.q-result-pending\s*\{[^}]*background:\s*#bfc2c5/s);
   assert.match(css, /\.replay-tq\.q-result-revealed\.q-has-tickets\s*\{[\s\S]*?rgba\(22, 163, 74/);
   assert.match(css, /\.replay-tq\.q-result-revealed\.q-no-tickets\s*\{[\s\S]*?rgba\(239, 120, 120/);
 });
@@ -106,7 +108,9 @@ test('an unwinnable quadrant locks dark and scratches through to lighter loser p
   assert.match(css, /\.replay-tq\.q-win-impossible-lock\s*\{[^}]*background:\s*rgb\(218, 104, 104\)/s,
     'the lock and scratch cover use the darker pink');
   assert.match(css, /\.replay-tq\.q-win-impossible\s*\{[^}]*background:\s*rgba\(239, 120, 120, 0\.5\)/s,
-    'scratching exposes the lighter pink loser paper');
+    'the completed scratch exposes the lighter pink loser paper');
+  assert.match(css, /\.replay-tq\.q-scratch-underlay,[\s\S]*?background:\s*#bfc2c5/s,
+    'partial scratches expose grey rather than leaking the pink result');
   assert.match(css, /\.replay-tq\.q-win-impossible\s*\{[^}]*transition:\s*background-color 0\.22s ease/s,
     'the revealed paper still eases into its final color');
 });

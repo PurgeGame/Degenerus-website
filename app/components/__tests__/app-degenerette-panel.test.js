@@ -2193,6 +2193,72 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     el.disconnectedCallback();
   });
 
+  test('an indexing Degenerette result stays clickable and opens once verified spins arrive', async () => {
+    revealMod.__takeQueuedForTest();
+    const storageKey = `pending-degenerette:${CHAIN.id}:${CHAIN.deployBlock}:${CONNECTED.toLowerCase()}`;
+    const packed = 13n | (1n << 32n) | ((10n ** 10n) << 42n);
+    localStorage.setItem(storageKey, JSON.stringify({
+      betId: '42',
+      index: '7',
+      currency: 0,
+      amountPerSpin: String(10n ** 10n),
+      spinCount: 1,
+      hero: 0,
+      ticket: '13',
+    }));
+
+    let complete = false;
+    const resolved = {
+      resultType: 'resolved',
+      payout: String(5n * 10n ** 16n),
+      resultData: {
+        spinCount: 1,
+        totalPayout: String(5n * 10n ** 16n),
+        resultTraits: '13',
+      },
+    };
+    useDegeneretteFeed(() => readyFeedItem({
+      packedData: String(packed),
+      results: complete
+        ? [
+            resolved,
+            {
+              resultType: 'result',
+              payout: String(5n * 10n ** 16n),
+              resultData: { spinIndex: 0, playerTraits: '13', matches: 4 },
+            },
+          ]
+        : [resolved],
+      resultTickets: complete ? [{ spinIndex: 0, resultTicket: '13' }] : [],
+    }));
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      degeneretteBetInfo: async () => 0n,
+      connect() { return this; },
+    }));
+
+    const el = instantiate();
+    await settle(80);
+    const action = pendingActionsMod.getPendingActions()
+      .find((row) => row.kind === 'degenerette');
+    assert.equal(action?.phase, 'indexing');
+    assert.equal(action?.state, 'ready');
+    assert.equal(action?.shortLabel, 'Open spins');
+    assert.equal(typeof action?.run, 'function',
+      'an on-chain-resolved result never becomes a dead grey card');
+
+    complete = true;
+    await action.run();
+    await settle(80);
+    const [sequence] = revealMod.__takeQueuedForTest();
+    assert.equal(sequence?.kind, 'degenerette');
+    assert.equal(sequence?.betId, '42');
+    assert.equal(sequence?.spins?.length, 1);
+    assert.equal(pendingActionsMod.getPendingActions().length, 0,
+      'the Pending row retires only after its reveal is accepted');
+    assert.equal(localStorage.getItem(storageKey), null);
+    el.disconnectedCallback();
+  });
+
   // normalizeSequence coverage for the board lives in reveal-overlay.test.js.
 
   test('the obsolete Results button is gone; resolved rounds surface through the tray', () => {

@@ -8,6 +8,10 @@
 const _sources = new Map();
 const _listeners = new Set();
 const _firstSeen = new Map();
+// Hard CLEAR tombstones live with the registry rather than one tray mount.
+// Publishers are intentionally free to keep polling/replacing their rows; an
+// already-cleared logical item must not reappear just because that happened.
+const _dismissed = new Set();
 let _firstSeenSeq = 0;
 // A source can publish an intentionally empty result after its first database
 // refresh. Keep that distinct from "this controller has not loaded yet" so
@@ -38,7 +42,11 @@ function _normalize(source, item, index) {
 
 function _snapshot() {
   const out = [];
-  for (const items of _sources.values()) out.push(...items);
+  for (const items of _sources.values()) {
+    for (const item of items) {
+      if (!_dismissed.has(_dismissKey(item.source, item.id))) out.push(item);
+    }
+  }
   return out.sort((a, b) => {
     // `order` is the protocol timeline (player rewards/claims → permissionless
     // Mine FLIP maintenance), not a visual priority. A row becoming ready must never jump in
@@ -48,6 +56,10 @@ function _snapshot() {
     const byChronology = Number(a.chronology) - Number(b.chronology);
     return byStep || byChronology || Number(a.firstSeenOrder) - Number(b.firstSeenOrder);
   });
+}
+
+function _dismissKey(source, id) {
+  return `${String(source || '')}:${String(id || '')}`;
 }
 
 function _notify() {
@@ -80,6 +92,38 @@ export function clearPendingActions(source) {
   if (_sources.delete(String(source || ''))) _notify();
 }
 
+/**
+ * Permanently dismiss the supplied logical rows for this app session.
+ *
+ * This is presentation-only: it never cancels or consumes on-chain work.
+ * Provider `clearAll` hooks may retire their own durable browser receipts,
+ * while the registry tombstones guarantee that a routine republish cannot
+ * resurrect a cleared reminder. Related ids cover rows that transition from
+ * one aggregate placeholder into one or more ready actions.
+ */
+export async function dismissPendingActionItems(items = null) {
+  const rows = Array.isArray(items) ? [...items] : _snapshot();
+  if (rows.length === 0) return 0;
+
+  for (const item of rows) {
+    _dismissed.add(_dismissKey(item?.source, item?.id));
+    for (const relatedId of Array.isArray(item?.dismissIds) ? item.dismissIds : []) {
+      _dismissed.add(_dismissKey(item?.source, relatedId));
+    }
+  }
+  // Hide synchronously. The owner cleanup below can involve storage or a
+  // refresh and must not leave the cleared queue painted while it completes.
+  _notify();
+
+  const owners = new Map();
+  for (const item of rows) {
+    if (typeof item?.clearAll !== 'function') continue;
+    owners.set(String(item.source || item.id), item.clearAll);
+  }
+  for (const clearAll of owners.values()) await clearAll();
+  return rows.length;
+}
+
 /** Current flattened manifest. Returned as a new array. */
 export function getPendingActions() {
   return _snapshot();
@@ -104,5 +148,6 @@ export function __resetPendingActionsForTest() {
   _listeners.clear();
   _publishedSources.clear();
   _firstSeen.clear();
+  _dismissed.clear();
   _firstSeenSeq = 0;
 }

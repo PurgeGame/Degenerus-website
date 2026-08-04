@@ -342,8 +342,11 @@
   box-shadow: inset 0 0 0 2px rgba(255, 244, 176, 0.62);
 }
 
-/* Neutral result paper while the cover is only partly scratched. Eligibility
-   still lives on the canvas above it; pink/green commits at the reveal point. */
+/* The removable canvas above this layer carries the pale-blue, darker-pink, or
+   gold settled face. During a partial scratch the paper underneath stays
+   neutral; hitting a paid badge removes this class for green immediately, and
+   crossing the reveal threshold removes it for the final pink/green result. */
+.replay-tq.q-scratch-underlay,
 .replay-tq.q-result-pending {
   background: #bfc2c5;
   box-shadow: none;

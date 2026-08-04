@@ -86,6 +86,9 @@ const ACTIVE_CYCLES = new Map(); // timerName → AbortController
 // Module-level state captured by start() so the visibilitychange handler
 // can re-arm cadence + re-poll without losing the playerAddress (WR-01 fix).
 let _activePlayerAddress = null;
+let _forceGameCycle = null;
+let _forceLastDayCycle = null;
+let _forcePlayerCycle = null;
 
 // Gold-rush adaptive-cadence state. Reset by start() so a tab-switch return begins
 // at the floor rather than inheriting a backed-off delay from before it was hidden.
@@ -554,6 +557,19 @@ function runGoldRushCycle() {
   });
 }
 
+/**
+ * Immediate, coalesced API reconciliation requested by the direct chain-day
+ * watcher. These are the same abort-per-cycle functions as normal polling;
+ * rollover does not create a second fetching implementation or timer stack.
+ */
+export function refreshForDayShift({ includePlayer = false } = {}) {
+  const cycles = [];
+  if (typeof _forceGameCycle === 'function') cycles.push(_forceGameCycle());
+  if (typeof _forceLastDayCycle === 'function') cycles.push(_forceLastDayCycle());
+  if (includePlayer && typeof _forcePlayerCycle === 'function') cycles.push(_forcePlayerCycle());
+  return Promise.allSettled(cycles);
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle: start / stop / abortAllInflight / pauseAllTimers
 // ---------------------------------------------------------------------------
@@ -578,6 +594,9 @@ export function start({ playerAddress = null } = {}) {
   ]);
   const player   = () => runPlayerCycle();
   const health   = () => runCycle('health',   [(s) => pollHealth(s)]);
+  _forceGameCycle = game;
+  _forceLastDayCycle = lastDay;
+  _forcePlayerCycle = player;
   // Gold-rush cadence restarts at the floor: a tab that comes back after ten minutes
   // hidden should react to the next move promptly, not inherit a 60s backed-off gap.
   _goldRushLastBlock = null;
@@ -597,6 +616,9 @@ export function start({ playerAddress = null } = {}) {
 
 export function stop() {
   pauseAllTimers();
+  _forceGameCycle = null;
+  _forceLastDayCycle = null;
+  _forcePlayerCycle = null;
 }
 
 export function abortAllInflight() {

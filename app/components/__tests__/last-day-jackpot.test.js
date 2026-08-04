@@ -862,6 +862,52 @@ describe('new-day auto-follow', () => {
     await flushMicrotasks();
     assert.equal(cta.hidden, true, 'day 6 starts with fresh board/flip gates');
   });
+
+  test('direct day shift hides yesterday until jackpot and coinflip are both day-matched', async () => {
+    const connected = '0xab12000000000000000000000000000000000000';
+    storeMod.update('connected.address', connected);
+    const replay = makeFakeElement('replay-panel');
+    const daySelect = makeFakeElement('select');
+    daySelect.attributes['data-bind'] = 'day-select';
+    daySelect.options = [{ value: '5' }, { value: '6' }];
+    daySelect.value = '5';
+    const playerSelect = makeFakeElement('select');
+    playerSelect.attributes['data-bind'] = 'player-select';
+    playerSelect.options = [{ value: connected }];
+    playerSelect.value = connected;
+    replay.append(daySelect, playerSelect);
+    replay.setPersistedRevealState = () => {};
+    _docBody.appendChild(replay);
+
+    const el = instantiate();
+    storeMod.update('app.lastDay', DAY5);
+    await flushMicrotasks();
+    storeMod.update('app.daySync', {
+      day: 6, jackpotReady: false, coinflipReady: false, ready: false,
+      phase: 'waiting-both', coinflipResult: null,
+    });
+    await flushMicrotasks();
+
+    assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 6/);
+    assert.equal(replay.getAttribute('data-day-warming'), '',
+      'the old scratch board is inert as soon as GAME changes day');
+
+    storeMod.update('app.lastDay', DAY6);
+    storeMod.update('app.daySync', {
+      day: 6, jackpotDay: 6, coinflipDay: 6,
+      jackpotReady: true, coinflipReady: true, ready: true,
+      phase: 'synced',
+      coinflipResult: {
+        day: 6, win: false, rewardPercent: 0, resolved: true, source: 'chain',
+      },
+    });
+    await flushMicrotasks();
+
+    assert.equal(daySelect.value, '6');
+    assert.equal(replay.getAttribute('data-day-warming'), null,
+      'both surfaces unlock after their exact day matches');
+    el.disconnectedCallback();
+  });
 });
 
 // ===========================================================================

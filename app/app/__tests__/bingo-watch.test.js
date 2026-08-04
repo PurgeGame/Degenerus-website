@@ -196,4 +196,71 @@ describe('bingo event watcher', () => {
     assert.equal(queued[0].kind, 'bingo');
     assert.deepEqual(queued[0].counts.filter(Boolean), Array(8).fill(1));
   });
+
+  test('CLEAR durably consumes an unclaimed Bingo proof instead of republishing it', async () => {
+    bingo.__setBingoReadersForTest({
+      index: async () => ({
+        player: PLAYER,
+        claimable: [{
+          player: PLAYER,
+          level: 36,
+          quadrant: 1,
+          symbol: 9,
+          slots: [1, 2, 3, 4, 5, 6, 7, 8],
+        }],
+        claimed: [],
+      }),
+    });
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+
+    const [claim] = pending.getPendingActions().filter((row) => row.kind === 'bingo');
+    assert.equal(claim?.shortLabel, 'Claim Bingo');
+    await pending.dismissPendingActionItems([claim]);
+    assert.equal(pending.getPendingActions().some((row) => row.kind === 'bingo'), false);
+
+    // Simulate a tray/app remount: the registry's session tombstone is gone,
+    // while the Bingo watcher's deploy-scoped consumed state remains.
+    pending.__resetPendingActionsForTest();
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+    assert.equal(pending.getPendingActions().some((row) => row.kind === 'bingo'), false,
+      'the unchanged API proof stays cleared after a remount');
+  });
+
+  test('an already-claimed static-call race retires the stale Bingo action', async () => {
+    bingo.__setBingoReadersForTest({
+      index: async () => ({
+        player: PLAYER,
+        claimable: [{
+          player: PLAYER,
+          level: 37,
+          quadrant: 3,
+          symbol: 27,
+          slots: [8, 7, 6, 5, 4, 3, 2, 1],
+        }],
+        claimed: [],
+      }),
+      claim: async () => {
+        const raw = new Error('execution reverted');
+        raw.revert = { name: 'AlreadyClaimed' };
+        const wrapped = new Error('Unexpected error — please try again.');
+        wrapped.code = 'UNKNOWN';
+        wrapped.cause = raw;
+        throw wrapped;
+      },
+    });
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+
+    const claim = pending.getPendingActions().find((row) => row.shortLabel === 'Claim Bingo');
+    assert.ok(claim);
+    await claim.run();
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+    assert.equal(pending.getPendingActions().some((row) => row.kind === 'bingo'), false,
+      'a delayed/permissionless claim cannot strand the old write action');
+  });
 });

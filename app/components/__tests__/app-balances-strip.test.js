@@ -520,4 +520,25 @@ describe('new-day rollover (codex-found race)', () => {
       're-fuzzed synchronously on the new day');
     el.disconnectedCallback();
   });
+
+  test('direct chain day re-fuzzes before the indexed jackpot day catches up', async () => {
+    setFetchResponses({ dashboard: dashboardPayload(), flipDay: { day: 67, win: true, rewardPercent: 96 } });
+    storeMod.update('app.lastDay', { day: 67, status: 'resolved' });
+    globalThis.localStorage.setItem('spun_day_84532_67', '1');
+    globalThis.localStorage.setItem('flip_day_84532_67', '1');
+    const el = mountStrip();
+    await flushMicrotasks();
+    assert.equal(el.querySelector('.abs-strip').classList.contains('abs-strip--fuzzed'), false);
+
+    storeMod.update('app.daySync', {
+      day: 68, jackpotReady: false, coinflipReady: false, ready: false,
+    });
+    assert.equal(el.querySelector('.abs-strip').classList.contains('abs-strip--fuzzed'), true,
+      'claimable values are hidden on the direct boundary signal');
+
+    storeMod.update('app.lastDay', { day: 67, status: 'resolved' });
+    assert.equal(el.querySelector('.abs-strip').classList.contains('abs-strip--fuzzed'), true,
+      'a late indexed N-1 payload cannot restore yesterday\'s reveal state');
+    el.disconnectedCallback();
+  });
 });

@@ -393,6 +393,7 @@ class AppDailyFlip extends HTMLElement {
   #lootboxAbortListener = null;
   #jackpotRevealListener = null;
   #latestDaySeen = null;
+  #daySync = null;         // direct GAME day + exact-day jackpot/FLIP readiness
   #browsingDay = null;
   #forceReplayDay = null;
   #daySelectionListener = null;
@@ -417,6 +418,57 @@ class AppDailyFlip extends HTMLElement {
       this.#flipTotalSpoilerOverrideKey = this.#spoilerOverrideKey(kind);
       this.#renderFunds();
     }
+  }
+
+  #activeDaySync(day = this.#day) {
+    if (this.#browsingDay != null) return null;
+    const syncDay = Number(this.#daySync?.day);
+    return Number.isInteger(syncDay) && syncDay > 0 && syncDay === Number(day)
+      ? this.#daySync
+      : null;
+  }
+
+  #dayAvailabilityReady(day = this.#day) {
+    const sync = this.#activeDaySync(day);
+    // Preserve historical replay and the pre-coordinator fallback. Once a
+    // direct target exists, both jackpot and coinflip unlock together.
+    return sync == null || sync.ready === true;
+  }
+
+  #syncedCoinflipResult(day = this.#day) {
+    const sync = this.#activeDaySync(day);
+    if (!sync?.ready || Number(sync.coinflipResult?.day) !== Number(day)) return null;
+    return sync.coinflipResult;
+  }
+
+  #onDaySync(sync) {
+    const day = Number(sync?.day);
+    this.#daySync = Number.isInteger(day) && day > 0 ? sync : null;
+    if (!this.#daySync) {
+      this.#render();
+      return;
+    }
+    const genuinelyNew = this.#latestDaySeen == null || day > this.#latestDaySeen;
+    if (genuinelyNew) this.#latestDaySeen = day;
+    if (this.#day == null
+      || (genuinelyNew && day !== Number(this.#day))
+      || (this.#browsingDay == null && day !== Number(this.#day))) {
+      this.#adoptDay(day);
+    }
+    if (Number(this.#day) !== day || this.#browsingDay != null) return;
+    const result = this.#syncedCoinflipResult(day);
+    if (result) {
+      this.#flipResult = result;
+      this.#flipFetchedDay = day;
+      this.#repairSettlement();
+    } else {
+      // A same-number indexer row can belong to an earlier testnet deploy.
+      // Keep it out until this deployment's exact coin and jackpot are ready.
+      this.#flipResult = null;
+      this.#flipFetchedDay = null;
+    }
+    this.#render();
+    this.#maybeStartQueuedReveal();
   }
 
   #adoptDay(value, { forceReplay = false, browsing = false } = {}) {
@@ -488,6 +540,8 @@ class AppDailyFlip extends HTMLElement {
     this.#wireActions();
     this.#wireQuestPreset();
     this.#wireRewardSpoilerGate();
+
+    this.#unsubs.push(subscribe('app.daySync', (sync) => this.#onDaySync(sync)));
 
     // On a NEW day: cancel any in-flight landing, re-render immediately so
     // the stale coin can't take clicks against the new day's key, then
@@ -1395,13 +1449,16 @@ class AppDailyFlip extends HTMLElement {
           ? fetchJSON(`/game/coinflip/day/${requestedDay}`)
           : Promise.resolve(null),
         (value) => {
-          this.#flipResult = value;
-          this.#flipFetchedDay = requestedDay;
+          const synced = this.#syncedCoinflipResult(requestedDay);
+          const coordinated = this.#activeDaySync(requestedDay);
+          this.#flipResult = coordinated ? synced : value;
+          this.#flipFetchedDay = coordinated && !synced ? null : requestedDay;
           this.#repairSettlement();
         },
         () => {
-          this.#flipResult = null;
-          this.#flipFetchedDay = requestedDay;
+          const synced = this.#syncedCoinflipResult(requestedDay);
+          this.#flipResult = synced;
+          this.#flipFetchedDay = synced ? requestedDay : null;
         },
       ),
       this.#runRefreshTask(
@@ -1533,21 +1590,26 @@ class AppDailyFlip extends HTMLElement {
       await Promise.allSettled(tasks);
       return;
     }
+    const coordinatedDay = Number(this.#activeDaySync(requestedDay)?.day);
     if (exactFlip?.day != null
       && Number(exactFlip.day) !== Number(requestedDay)
-      && Number(this.#browsingDay) !== Number(requestedDay)) {
+      && Number(this.#browsingDay) !== Number(requestedDay)
+      && Number(exactFlip.day) > Number(requestedDay)
+      && (!Number.isInteger(coordinatedDay) || coordinatedDay !== Number(requestedDay))) {
       this.#adoptDay(exactFlip.day);
       await Promise.allSettled(tasks);
       return;
     }
     day = this.#day;
 
-    if (exactFlip?.day != null && Number(exactFlip.day) === Number(day)) tasks.push(
+    if (exactFlip?.day != null
+      && Number(exactFlip.day) === Number(day)
+      && this.#dayAvailabilityReady(day)) tasks.push(
       this.#runRefreshTask(
         seq,
         Promise.resolve(exactFlip),
         (value) => {
-          this.#flipResult = value;
+          this.#flipResult = this.#syncedCoinflipResult(day) || value;
           this.#flipFetchedDay = day;
           this.#repairSettlement();
         },
@@ -2466,14 +2528,17 @@ class AppDailyFlip extends HTMLElement {
     return reverse;
   }
 
-  #appendSpinningCoin(zone, { resolving = false } = {}) {
+  #appendSpinningCoin(zone, { resolving = false, disabled = false } = {}) {
     const renderedDay = this.#day;
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = `df-coin df-coin--spinning${resolving ? ' df-coin--resolving' : ''}`;
+    btn.className = `df-coin df-coin--spinning${resolving ? ' df-coin--resolving' : ''}${disabled ? ' df-coin--syncing' : ''}`;
+    btn.disabled = Boolean(disabled);
     btn.setAttribute(
       'aria-label',
-      resolving
+      disabled
+        ? 'Daily jackpot and coinflip are syncing'
+        : resolving
         ? 'Daily coinflip is resolving — click to reveal when ready'
         : 'Reveal the daily coinflip result',
     );
@@ -2522,7 +2587,16 @@ class AppDailyFlip extends HTMLElement {
     // a helper-text row beneath the coin or remain after an early click queues it.
     if (revealHint) {
       const queued = this.#revealRequestedDay === this.#day;
-      revealHint.hidden = this.#day == null || this.#revealed() || queued;
+      revealHint.hidden = this.#day == null || this.#revealed() || queued
+        || !this.#dayAvailabilityReady();
+    }
+
+    if (!this.#dayAvailabilityReady()) {
+      if (outcome) outcome.textContent = '';
+      if (this.#day != null && !this.#revealed()) {
+        this.#appendSpinningCoin(zone, { resolving: true, disabled: true });
+      }
+      return;
     }
 
     if (!hasResult) {
@@ -3244,6 +3318,7 @@ class AppDailyFlip extends HTMLElement {
       || Number(this.#revealRequestedDay) !== Number(this.#day)
       || this.#flipFetchedDay !== this.#day
       || this.#flipResult == null
+      || !this.#dayAvailabilityReady()
       || this.#landing
       || this.#revealed()) return;
     const day = this.#day;
@@ -3257,6 +3332,7 @@ class AppDailyFlip extends HTMLElement {
     // PREVIOUS day must not mark the new day revealed. Only act when the
     // fetched result belongs to the current day.
     if (this.#day == null || Number(clickedDay) !== Number(this.#day)) return;
+    if (!this.#dayAvailabilityReady(clickedDay)) return;
     // This call is intentionally inside the player's click so Safari/iOS can
     // unlock WebAudio even when the exact result still needs one more poll.
     warmupCoinflipSfx();

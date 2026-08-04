@@ -915,7 +915,13 @@ class AppParimutuelPanel extends HTMLElement {
     publishPendingActions(PENDING_SOURCE, rows);
   }
 
-  #revealPari(kind, result) {
+  async #revealPari(kind, result) {
+    let volumeSeal = null;
+    if (kind === 'volume') {
+      volumeSeal = Number(this.#lastSeal?.round) === Number(result.round)
+        ? this.#lastSeal
+        : await readLastVolumeSeal({ round: result.round }).catch(() => null);
+    }
     const id = `${kind}:${result.round}`;
     _markResultSeen(this.#player, id);
     queueReveal({
@@ -926,6 +932,11 @@ class AppParimutuelPanel extends HTMLElement {
       outcome: result.outcome,
       payout: result.payout,
       voided: result.voided,
+      // VolumeRoundSealed is the authoritative public result. Carry its raw
+      // 400-units-per-ticket values into player-facing strings here so the
+      // overlay can show the exact line the player picked and what landed.
+      betTickets: volumeSeal ? _fmtTickets(volumeSeal.previous) : null,
+      resultTickets: volumeSeal ? _fmtTickets(volumeSeal.total) : null,
     });
     this.#render();
     this.#publishPending();
@@ -1515,7 +1526,7 @@ class AppParimutuelPanel extends HTMLElement {
 
     const unpaid = results.filter((row) => row.side !== 0 && !row.claimed && row.payout > 0n);
     const alreadySettled = results.filter((row) => row.side !== 0 && row.claimed);
-    for (const row of alreadySettled) this.#revealPari(kind, this.#pariReplayResult(row));
+    for (const row of alreadySettled) await this.#revealPari(kind, this.#pariReplayResult(row));
     if (unpaid.length === 0) {
       this.#render();
       return;
@@ -1550,7 +1561,7 @@ class AppParimutuelPanel extends HTMLElement {
     if (ok) {
       for (const result of unpaid) {
         result.claimed = true;
-        this.#revealPari(kind, this.#pariReplayResult(result));
+        await this.#revealPari(kind, this.#pariReplayResult(result));
       }
     } else {
       // A community crank can win between the fresh read and our simulation.
@@ -1562,7 +1573,7 @@ class AppParimutuelPanel extends HTMLElement {
         if (claimed.length > 0) {
           this.#clearError();
           for (const row of raced) this.#mergeFreshRound(kind, row);
-          for (const row of claimed) this.#revealPari(kind, this.#pariReplayResult(row));
+          for (const row of claimed) await this.#revealPari(kind, this.#pariReplayResult(row));
         }
       } catch (_e) { /* keep the original actionable error */ }
     }

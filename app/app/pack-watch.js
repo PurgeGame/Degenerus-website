@@ -95,6 +95,8 @@ let _indexCatchupTimer = null;
 const _activePackCards = new Map();
 let _completeListener = null;
 let _abortListener = null;
+let _jackpotRevealListener = null;
+const _revealedJackpotDays = new Set();
 
 /** Test-only: pin the clock used for TTL expiry. */
 export function __setClockForTest(fn) { _now = fn || (() => Date.now()); }
@@ -607,6 +609,35 @@ function _saveJackpotAwardLedger(address, rows) {
   _write(_jackpotAwardLedgerKey(address), Array.isArray(rows) ? rows : []);
 }
 
+// Jackpot ticket awards are indexed as soon as the contract draw resolves,
+// which is earlier than the player-facing spin/scratch. Do not let either the
+// history ledger or entriesOwedView turn that result into a Pending spoiler.
+// `jackpot_complete_day` is written after every main/bonus scratch is finished;
+// the spun-without-bonus-pending fallback preserves compatibility with days
+// revealed before the explicit completion key existed.
+function _jackpotAwardDayRevealed(dayValue) {
+  const day = Number(dayValue);
+  if (!Number.isInteger(day) || day <= 0) return true;
+  if (_revealedJackpotDays.has(day)) return true;
+  try {
+    if (localStorage.getItem(`jackpot_complete_day_${CHAIN.id}_${day}`) === '1') return true;
+    return localStorage.getItem(`spun_day_${CHAIN.id}_${day}`) === '1'
+      && localStorage.getItem(`jackpot_bonus_pending_day_${CHAIN.id}_${day}`) !== '1';
+  } catch (_e) {
+    return false;
+  }
+}
+
+function _unrevealedJackpotAwardEntries(address, level) {
+  const addr = _lower(address);
+  const lvl = Number(level);
+  if (!addr || !Number.isInteger(lvl)) return 0;
+  return _jackpotAwardLedger(addr).reduce((sum, award) => {
+    if (Number(award?.level) !== lvl || _jackpotAwardDayRevealed(award?.day)) return sum;
+    return sum + Math.max(0, Math.floor(Number(award?.totalEntries) || 0));
+  }, 0);
+}
+
 function _safeEntryCount(value, multiplier = 1) {
   try {
     const count = BigInt(value ?? 0) * BigInt(multiplier ?? 1);
@@ -734,6 +765,7 @@ async function _releaseJackpotTicketAwards(address, levels) {
   let changed = false;
   for (const award of ledger) {
     if (!live.has(Number(award?.level))) continue;
+    if (!_jackpotAwardDayRevealed(award?.day)) continue;
     const totalEntries = Math.max(0, Math.floor(Number(award?.totalEntries) || 0));
     const recordedEntries = Math.max(0, Math.floor(Number(award?.recordedEntries) || 0));
     const deltaEntries = totalEntries - recordedEntries;
@@ -925,11 +957,20 @@ async function _inspectOne(address, rec) {
   const level = Number(rec?.level);
   if (!Number.isInteger(level)) return null;
   const chainOwedEntries = Math.max(0, Math.floor(Number(rec?.chainOwedEntries) || 0));
+  const unrevealedJackpotEntries = _unrevealedJackpotAwardEntries(address, level);
   const trackedExpectedEntries = Math.max(
     _expectedEntries(rec?.expectedTickets),
     Math.floor(Number(rec?.expectedEntries) || 0),
   );
   const trackedReleasedEntries = Math.max(0, Math.floor(Number(rec?.releasedEntries) || 0));
+  const uninspectedFallbackEntries = Math.max(
+    0,
+    trackedExpectedEntries - trackedReleasedEntries - unrevealedJackpotEntries,
+  );
+  const uninspectedPendingEntries = rec?.chainTracked
+    ? Math.max(0, chainOwedEntries - unrevealedJackpotEntries)
+      + (rec?.foilExpected ? FOIL_TICKETS_PER_PACK * ENTRIES_PER_TICKET : 0)
+    : uninspectedFallbackEntries;
   if (_now() - Number(rec?.at || 0) > PENDING_TTL_MS
     && !(rec?.chainTracked
       && (chainOwedEntries > 0 || trackedReleasedEntries < trackedExpectedEntries))) {
@@ -946,7 +987,7 @@ async function _inspectOne(address, rec) {
       fresh: [],
       unseen: [],
       rec,
-      pendingEntries: Math.max(0, trackedExpectedEntries - trackedReleasedEntries),
+      pendingEntries: uninspectedPendingEntries,
     };
   }
   if (rec.seedPending) {
@@ -959,7 +1000,7 @@ async function _inspectOne(address, rec) {
         ready: false,
         fresh: [],
         unseen: [],
-        pendingEntries: Math.max(0, trackedExpectedEntries - trackedReleasedEntries),
+        pendingEntries: uninspectedPendingEntries,
       };
     }
     const cards = Array.isArray(payload?.cards) ? payload.cards : [];
@@ -973,7 +1014,7 @@ async function _inspectOne(address, rec) {
         ready: false,
         fresh: [],
         unseen: [],
-        pendingEntries: Math.max(0, trackedExpectedEntries - trackedReleasedEntries),
+        pendingEntries: uninspectedPendingEntries,
       };
     }
     _seedOpenedCards(
@@ -992,9 +1033,26 @@ async function _inspectOne(address, rec) {
   const revealed = _revealedSet(address, level);
   const cards = Array.isArray(payload?.cards) ? payload.cards : [];
   const unseen = cards.filter((card) => card && !revealed.has(Number(card.cardIndex)));
-  const fresh = unseen
+  const allFresh = unseen
     .map((card) => ({ card, traitIds: _wholeCardTraitIds(card) }))
     .filter((item) => item.traitIds != null);
+  // Owed entries are FIFO and jackpot awards are appended after the player's
+  // existing hands. While the draw is still covered, withhold the newest whole
+  // cards attributable to the already-indexed award. Existing purchased packs
+  // remain visible; the award cards join them immediately after the draw event.
+  const jackpotEntriesStillOwed = Math.min(unrevealedJackpotEntries, chainOwedEntries);
+  const jackpotEntriesMaterialized = Math.max(
+    0,
+    unrevealedJackpotEntries - jackpotEntriesStillOwed,
+  );
+  const withheldFreshCount = Math.min(
+    allFresh.length,
+    _newlyCompletedTickets(payload, jackpotEntriesMaterialized),
+  );
+  const fresh = allFresh
+    .slice()
+    .sort((a, b) => Number(a.card?.cardIndex) - Number(b.card?.cardIndex))
+    .slice(0, Math.max(0, allFresh.length - withheldFreshCount));
   // The foil projection is authoritative for foil tickets. They are filed in
   // separate foil entry rows on the current deploy, so requiring them to also
   // appear in /tickets/by-trait creates a permanent "still indexing" deadlock
@@ -1009,6 +1067,7 @@ async function _inspectOne(address, rec) {
         cardIndex: FOIL_CARD_INDEX_BASE + index,
       })).filter((ticket) => !revealed.has(ticket.cardIndex))
     : [];
+  const allReadyTicketCount = allFresh.length + foilTickets.length;
   const readyTicketCount = fresh.length + foilTickets.length;
   const releasedEntries = Math.max(0, Math.floor(Number(rec.releasedEntries) || 0));
   const existingExpectedEntries = Math.max(
@@ -1016,7 +1075,7 @@ async function _inspectOne(address, rec) {
     Math.floor(Number(rec.expectedEntries) || 0),
   );
   const accountedEntries = releasedEntries
-    + (readyTicketCount * ENTRIES_PER_TICKET)
+    + (allReadyTicketCount * ENTRIES_PER_TICKET)
     + chainOwedEntries;
   const expectedEntries = Math.max(existingExpectedEntries, accountedEntries);
   if (expectedEntries !== Number(rec.expectedEntries)
@@ -1025,30 +1084,35 @@ async function _inspectOne(address, rec) {
     rec.expectedTickets = _ticketCountFromEntries(expectedEntries);
     _replacePendingRecord(rec);
   }
-  // Once this row has an exact contract projection, Pending means exactly
-  // what entriesOwedView still reports. The jackpot transition processes the
-  // old queue completely, so a zero resets the receipt immediately even when
-  // the indexer needs another beat to expose the resulting real cards. The
-  // durable expected/released counters above keep that hidden hand recoverable
-  // until it can promote into an opener. Foil entries use a separate on-chain
-  // bucket, so retain their four-ticket indexing receipt independently.
+  // Once this row has an exact contract projection, Pending follows the exact
+  // entriesOwedView count minus any still-covered jackpot award. The jackpot
+  // transition processes the old queue completely, so a zero resets the
+  // receipt immediately even when the indexer needs another beat to expose the
+  // resulting real cards. Foil entries use a separate on-chain bucket, so
+  // retain their four-ticket indexing receipt independently.
   const readyEntries = readyTicketCount > 0 && !foilBlocked
     ? readyTicketCount * ENTRIES_PER_TICKET
     : 0;
-  const fallbackPendingEntries = Math.max(
+  const rawFallbackPendingEntries = Math.max(
     0,
     expectedEntries - releasedEntries - readyEntries,
+  );
+  const fallbackPendingEntries = Math.max(
+    0,
+    rawFallbackPendingEntries - unrevealedJackpotEntries,
   );
   const foilPendingEntries = rec.foilExpected && foilBlocked
     ? FOIL_TICKETS_PER_PACK * ENTRIES_PER_TICKET
     : 0;
-  // Once this record has an exact contract projection, Pending means exactly
-  // entriesOwedView. In particular, an authoritative zero must clear the count
-  // even when an older receipt expected more cards than the reveal bookkeeping
-  // can currently match. Keep fallbackPendingEntries below as recovery state so
-  // a late index response can still promote into an opener; never repaint it as
-  // hundreds of chain-queued tickets after the queue itself is empty.
-  const trackedPendingEntries = chainOwedEntries;
+  // An authoritative zero must clear the count even when an older receipt
+  // expected more cards than the reveal bookkeeping can currently match. The
+  // only other subtraction is the indexed award spoiler above. Keep the hidden
+  // counters as recovery state so a late index response can still promote into
+  // an opener after the draw; never repaint it as chain-queued work beforehand.
+  const trackedPendingEntries = Math.max(
+    0,
+    chainOwedEntries - unrevealedJackpotEntries,
+  );
   const pendingEntries = rec.chainTracked
     ? trackedPendingEntries + foilPendingEntries
     : fallbackPendingEntries;
@@ -1364,8 +1428,15 @@ export function startPackWatch({ getAddress } = {}) {
       try { addr = _getAddress ? _getAddress() : null; } catch (_e) { addr = null; }
       if (addr) _publishPackActions(addr, ++_publishSeq).catch(() => {});
     };
+    _jackpotRevealListener = (event) => {
+      if (event?.detail?.complete === false) return;
+      const day = Number(event?.detail?.day);
+      if (Number.isInteger(day) && day > 0) _revealedJackpotDays.add(day);
+      refreshPackWatch();
+    };
     document.addEventListener(PACK_REVEAL_COMPLETE_EVENT, _completeListener);
     document.addEventListener(PACK_REVEAL_ABORT_EVENT, _abortListener);
+    document.addEventListener('jackpot:revealed', _jackpotRevealListener);
   }
   _timer = setInterval(refreshPackWatch, WATCH_INTERVAL_MS);
   if (_timer && typeof _timer.unref === 'function') {
@@ -1406,9 +1477,12 @@ export function stopPackWatch() {
   if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
     if (_completeListener) document.removeEventListener(PACK_REVEAL_COMPLETE_EVENT, _completeListener);
     if (_abortListener) document.removeEventListener(PACK_REVEAL_ABORT_EVENT, _abortListener);
+    if (_jackpotRevealListener) document.removeEventListener('jackpot:revealed', _jackpotRevealListener);
   }
   _completeListener = null;
   _abortListener = null;
+  _jackpotRevealListener = null;
+  _revealedJackpotDays.clear();
   _activePackCards.clear();
   _historyBackfilled.clear();
   _publishSeq += 1;

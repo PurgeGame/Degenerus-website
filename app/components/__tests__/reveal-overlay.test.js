@@ -735,13 +735,16 @@ describe('normalizeSequence', () => {
       side: 2,
       outcome: 1,
       payout: 0n,
+      betTickets: '1,953.11',
+      resultTickets: '2,014.25',
     });
     assert.equal(lost.title, 'VOLUME BET RESULT');
     assert.equal(lost.cards[0].type, 'nowin');
-    assert.equal(lost.cards[0].label, 'VOLUME BET',
-      'volume receipts never expose the internal contract round');
-    assert.equal(lost.cards[0].value, 'UNDER LOST');
-    assert.match(lost.cards[0].sub, /OVER paid/);
+    assert.equal(lost.cards[0].label, 'YOUR BET: UNDER 1,953.11 TICKETS');
+    assert.equal(lost.cards[0].value, 'RESULT: 2,014.25 TICKETS');
+    assert.equal(lost.cards[0].sub, 'WIN 0 FLIP');
+    assert.doesNotMatch(lost.cards[0].label, /ROUND/i,
+      'volume receipts keep the internal contract round hidden');
   });
 
   // Degenerette bet board (user ask 2026-07-29): one row per spin. The pick is
@@ -992,6 +995,19 @@ describe('reveal-overlay element', () => {
     assert.equal(__takeQueuedForTest().length, 1);
   });
 
+  test('one claimed Bingo can only enter the reveal queue once across receipt paths', () => {
+    const bingo = {
+      kind: 'bingo', player: '0x00000000000000000000000000000000000000ab',
+      level: 31, symbol: 18, quadrant: 2,
+      flipReward: 1_000n * 10n ** 18n, dgnrsPaid: 0n,
+    };
+
+    assert.equal(queueReveal({ ...bingo, id: 'local-receipt' }), true);
+    assert.equal(queueReveal({ ...bingo, id: 'indexed-event' }), false,
+      'local receipt and indexer discovery share one protocol-level presentation id');
+    assert.equal(__takeQueuedForTest().length, 1);
+  });
+
   test('queueReveal before mount buffers; connect drains and shows summary (reduced motion)', async () => {
     assert.equal(queueReveal({ kind: 'pack', count: 3, level: 2, pending: true }), true);
     const el = instantiate();
@@ -1010,7 +1026,7 @@ describe('reveal-overlay element', () => {
     assert.equal(backdrop.hidden, true, 'backdrop hidden after tap');
   });
 
-  test('Bingo summary renders the full quadrant chart with its eight-cell line boxed', async () => {
+  test('Bingo summary dims the board around one boxed eight-color line and fits rewards below it', async () => {
     queueReveal({
       kind: 'bingo', level: 31, symbol: 2, tier: 'regular',
       flipReward: 1_000n * 10n ** 18n, dgnrsPaid: 0n,
@@ -1021,10 +1037,19 @@ describe('reveal-overlay element', () => {
     const chart = el.querySelector('.rvl-bingo-chart');
     assert.ok(chart, 'the inventory-style chart is part of the prize card');
     assert.equal(chart.querySelectorAll('.rvl-bingo-chart__cell').length, 64);
+    assert.equal(chart.querySelectorAll('.rvl-bingo-chart__row').length, 8);
+    assert.equal(chart.querySelectorAll('.is-bingo-row').length, 1,
+      'the completed symbol is enclosed as one line instead of eight unrelated boxes');
     assert.equal(chart.querySelectorAll('.is-bingo').length, 8,
-      'every color of the winning symbol is boxed');
+      'every color inside the winning line remains highlighted');
     assert.equal(chart.querySelectorAll('.has').length, 8,
       'the fetched inventory counts light the same completed line');
+    const summary = el.querySelector('[data-bind="rvl-summary"]');
+    assert.equal(summary.classList.contains('rvl-summary--bingo'), true);
+    assert.ok(summary.querySelector('.rvl-summary-grid--bingo'),
+      'the chart and payout cards use the dedicated responsive Bingo receipt');
+    const stage = el.querySelector('[data-bind="rvl-stage"]');
+    assert.equal(stage.classList.contains('rvl-stage--bingo'), true);
   });
 
   test('foil summary compares the ticket to the winning draw and labels every point', async () => {
@@ -1257,6 +1282,33 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
+  test('a completed reward never continues automatically into Mine FLIP', async () => {
+    let mineFlipRuns = 0;
+    pendingActionsMod.publishPendingActions('mine-flip-resolver', [{
+      id: 'mine-flip:player', kind: 'mass-resolution', label: 'Mine FLIP',
+      shortLabel: 'Mine FLIP', state: 'ready', order: 999,
+      run: async () => { mineFlipRuns += 1; },
+    }]);
+    queueReveal({
+      kind: 'jackpot', day: 8,
+      prizes: [{ type: 'flip', amount: 2n * 10n ** 18n }],
+    });
+    const el = instantiate();
+    await tick();
+
+    const summary = el.querySelector('[data-bind="rvl-summary"]');
+    const collect = summary.querySelector('.rvl-collect-cta');
+    assert.equal(collect.textContent, 'COLLECT');
+    collect.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+
+    assert.equal(mineFlipRuns, 0);
+    assert.equal(
+      pendingActionsMod.getPendingActions().some((item) => item.source === 'mine-flip-resolver'),
+      true,
+    );
+  });
+
   test('OPEN ALL BOXES queues every ready box and pauses on the final receipt', async () => {
     for (const [source, index] of [['box-two', 2], ['box-three', 3]]) {
       pendingActionsMod.publishPendingActions(source, [{
@@ -1395,6 +1447,69 @@ describe('reveal-overlay element', () => {
     document.removeEventListener(PACK_REVEAL_COMPLETE_EVENT, onComplete);
   });
 
+  test('SKIP discards the sealed pack presentation and advances without opening it', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    const completed = [];
+    const onComplete = (event) => completed.push(event.detail);
+    document.addEventListener(PACK_REVEAL_COMPLETE_EVENT, onComplete);
+    t.after(() => {
+      window.matchMedia = previousMatchMedia;
+      document.removeEventListener(PACK_REVEAL_COMPLETE_EVENT, onComplete);
+    });
+
+    const el = instantiate();
+    const ticket = (n) => ({ traitIds: [n, 70, 130, 200] });
+    for (let packIndex = 1; packIndex <= 2; packIndex += 1) {
+      queueReveal({
+        kind: 'pack',
+        title: 'YOUR TICKETS',
+        level: 8,
+        count: 1,
+        totalCount: 2,
+        batchId: 'batch-skip',
+        packIndex,
+        packCount: 2,
+        tickets: [ticket(packIndex)],
+        packRelease: {
+          address: '0xab12000000000000000000000000000000000000',
+          level: 8,
+          cardIndexes: [packIndex],
+        },
+      });
+    }
+    await tick();
+
+    const packActions = el.querySelector('[data-bind="rvl-pack-actions"]');
+    const skip = el.querySelector('[data-bind="rvl-skip-pack"]');
+    const openAll = el.querySelector('[data-bind="rvl-open-all"]');
+    assert.equal(packActions.hidden, false, 'sealed packs expose their action row');
+    assert.equal(openAll.hidden, false, 'OPEN ALL remains beside SKIP when packs remain');
+    assert.ok(skip, 'SKIP is available before any ticket is shown');
+    assert.match(
+      APP_CSS,
+      /\.rvl-vessel-skip\s*\{[^}]*min-height:\s*44px|\.rvl-vessel-open-all, \.rvl-vessel-skip, \.rvl-open-all-cta\s*\{[^}]*min-height:\s*44px/s,
+      'SKIP keeps the same tactile minimum target as the pack controls',
+    );
+
+    skip.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+    assert.equal(completed.length, 1, 'skipping permanently consumes the first presentation');
+    assert.deepEqual(completed[0].cardIndexes, [1]);
+    assert.match(el.querySelector('[data-bind="rvl-title"]').textContent, /PACK 2\/2/,
+      'the next sealed pack replaces it immediately');
+    assert.equal(el.querySelector('[data-bind="rvl-vessel"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="rvl-card-zone"]').hidden, true,
+      'the skipped ticket hand was never rendered');
+
+    skip.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+    assert.equal(completed.length, 2);
+    assert.deepEqual(completed[1].cardIndexes, [2]);
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true,
+      'skipping the final pack drains the reveal cleanly');
+  });
+
   test('two queued sequences chain under one backdrop', async () => {
     const el = instantiate();
     queueReveal({ kind: 'pack', count: 1, level: 2, pending: true });
@@ -1449,6 +1564,18 @@ describe('reveal-overlay element', () => {
       'open-all does not cut back to the full sealed-pack scene');
     assert.equal(zone.querySelector('.rvl-open-all-cta'), null, 'no open-all button on final pack');
     assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'COLLECT');
+    const historyLabel = zone.querySelector('.rvl-pack-history-label');
+    const previousPack = zone.querySelector('.rvl-pack-history-nav--previous');
+    const nextPack = zone.querySelector('.rvl-pack-history-nav--next');
+    assert.equal(historyLabel.textContent, 'PACK 3 OF 3 OPENED · LEVEL 7');
+    assert.equal(previousPack.disabled, false);
+    assert.equal(nextPack.disabled, true);
+
+    previousPack.dispatchEvent({ type: 'click', stopPropagation() {} });
+    assert.equal(historyLabel.textContent, 'PACK 2 OF 3 OPENED · LEVEL 7');
+    assert.equal(nextPack.disabled, false, 'right arrow returns toward the latest hand');
+    nextPack.dispatchEvent({ type: 'click', stopPropagation() {} });
+    assert.equal(historyLabel.textContent, 'PACK 3 OF 3 OPENED · LEVEL 7');
 
     el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
     await tick();
@@ -1508,6 +1635,37 @@ describe('reveal-overlay element', () => {
     await tick();
     const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
     assert.equal(backdrop.hidden, true, 'closed immediately, queue dropped');
+  });
+
+  test('fullscreen CLEAR PENDING drops the reveal queue and hard-dismisses current reminders', async () => {
+    let ownerClears = 0;
+    pendingActionsMod.publishPendingActions('boxes', [{
+      id: 'lootbox:77', kind: 'lootbox', label: 'Lootbox #77', state: 'ready',
+      run: async () => {},
+      clearAll: async () => { ownerClears += 1; },
+    }]);
+    const el = instantiate();
+    queueReveal({ kind: 'pack', count: 1, level: 7, pending: true });
+    queueReveal({ kind: 'pack', count: 2, level: 8, pending: true });
+    await tick();
+
+    const clear = el.querySelector('[data-bind="rvl-clear-pending"]');
+    assert.ok(clear, 'fullscreen clear control is mounted beside close');
+    assert.match(el.innerHTML, />CLEAR PENDING<\/button>/);
+    assert.match(APP_CSS, /\.rvl-corner-actions\s*\{[^}]*display:\s*flex/s,
+      'clear and close share one top-right control group');
+    clear.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true,
+      'active and queued fullscreen reveals are dropped');
+    assert.equal(ownerClears, 1);
+
+    pendingActionsMod.publishPendingActions('boxes', [{
+      id: 'lootbox:77', kind: 'lootbox', label: 'Same indexed box', state: 'ready',
+      run: async () => {},
+    }]);
+    assert.deepEqual(pendingActionsMod.getPendingActions(), [],
+      'a routine publisher refresh cannot bring the cleared reminder back');
   });
 
   test('jackpot win summary offers SHARE MY WIN; pack summary does not', async () => {

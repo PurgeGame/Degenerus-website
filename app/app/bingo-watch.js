@@ -95,6 +95,16 @@ function _claimKey(level, quadrant) {
   return `claim:${Number(level)}:${Number(quadrant)}`;
 }
 
+function _claimProofKey(level, quadrant, symbol, slots) {
+  return [
+    'proof',
+    Number(level),
+    Number(quadrant),
+    Number(symbol),
+    ...(Array.isArray(slots) ? slots.map(Number) : []),
+  ].join(':');
+}
+
 function _tierKey(log, level, symbol) {
   return `${String(log?.transactionHash || '').toLowerCase()}:${level}:${symbol}`;
 }
@@ -254,6 +264,11 @@ function _normalizeClaimable(row, address) {
   }
   return {
     id: _claimKey(level, quadrant),
+    // A bad indexed slot should suppress only this exact proof. If the
+    // indexer later corrects one of its eight slots, the corrected proof gets
+    // a new key and can become actionable without resurrecting a Bingo that
+    // really was claimed already.
+    proofId: _claimProofKey(level, quadrant, symbol, slots),
     player,
     level,
     symbol,
@@ -278,7 +293,7 @@ async function _loadIndexedBingos(address) {
   const consumed = new Set(state.consumed.map(String));
   const claimables = (Array.isArray(payload?.claimable) ? payload.claimable : [])
     .map((row) => _normalizeClaimable(row, address))
-    .filter((row) => row && !consumed.has(row.id));
+    .filter((row) => row && !consumed.has(row.id) && !consumed.has(row.proofId));
   _claimableRows.set(_lower(address), claimables);
   return { receipts: state.rows, claimables };
 }
@@ -321,6 +336,32 @@ function _consume(address, ids) {
   _writeState(address, state);
 }
 
+function _bingoClaimErrorName(error) {
+  const seen = new Set();
+  const pending = [error];
+  while (pending.length > 0) {
+    const current = pending.shift();
+    if (!current || (typeof current !== 'object' && typeof current !== 'function')
+      || seen.has(current)) continue;
+    seen.add(current);
+    for (const value of [
+      current.code,
+      current.errorName,
+      current.revert?.name,
+      current.reason,
+      current.shortMessage,
+      current.message,
+    ]) {
+      const match = /(AlreadyClaimed|NotSlotOwner|InvalidSymbol|GameOver)/.exec(String(value || ''));
+      if (match) return match[1];
+    }
+    for (const nested of [current.cause, current.error, current.info?.error]) {
+      if (nested) pending.push(nested);
+    }
+  }
+  return null;
+}
+
 async function _fetchTicketChart(address, level) {
   if (_ticketFetcher) return _ticketFetcher({ address, level });
   return fetchJSON(`/player/${address}/tickets/by-trait?level=${level}`);
@@ -336,7 +377,15 @@ async function _publish(address, seq = null) {
   if (seq != null && seq !== _publishSeq) return;
   const clearAll = async () => {
     const current = _readState(addr);
-    _consume(addr, current.rows.map((row) => row.id));
+    const claimables = _claimableRows.get(addr) || [];
+    // CLEAR means the whole Bingo source, including proofs that have not yet
+    // produced receipts. Previously only reveal receipts were consumed, so a
+    // stuck Claim Bingo row came straight back after refresh/reload.
+    _consume(addr, [
+      ...current.rows.map((row) => row.id),
+      ...claimables.map((row) => row.id),
+    ]);
+    _claimableRows.set(addr, []);
     if (_lower(_getAddress?.()) === addr) await _publish(addr, ++_publishSeq);
   };
   const revealRows = state.rows.map((receipt) => {
@@ -366,14 +415,17 @@ async function _publish(address, seq = null) {
           const payload = await _fetchTicketChart(addr, receipt.level);
           counts = bingoQuadrantEntryCounts(payload, quadrant);
         } catch (_e) { /* claim itself proves the highlighted eight cells */ }
-        const accepted = queueReveal({
+        queueReveal({
           kind: 'bingo',
           ...receipt,
           quadrant,
           sym: Number(receipt.symbol) & 7,
           counts,
+          presentationId: `bingo-reveal:${addr}:${Number(receipt.level)}:${quadrant}`,
         });
-        if (!accepted) throw new Error('Could not stage Bingo reveal');
+        // A local claim receipt and the indexed event may race into this same
+        // action. A rejected duplicate is already staged, so consume this row
+        // instead of leaving it around to produce a second reveal attempt.
         _consume(addr, receipt.id);
         await _publish(addr, ++_publishSeq);
       },
@@ -400,6 +452,7 @@ async function _publish(address, seq = null) {
         autoOpen: false,
         order: 13,
         chronology: (Number(candidate.level) * 4) + quadrant,
+        clearAll,
         run: async () => {
           let current = null;
           try { current = _lower(_getAddress?.()); } catch (_e) { current = null; }
@@ -417,8 +470,17 @@ async function _publish(address, seq = null) {
             // Another permissionless caller can win the race after the DB read.
             // Retire the stale write; the indexed receipt will still arrive as
             // a reveal row on the next refresh.
-            if (error?.code === 'AlreadyClaimed' || /AlreadyClaimed/.test(String(error?.message || ''))) {
-              _consume(addr, candidate.id);
+            const errorName = _bingoClaimErrorName(error);
+            if (errorName) {
+              // AlreadyClaimed/GameOver are terminal for this logical claim.
+              // A bad ownership/symbol row may be repaired by the indexer, so
+              // suppress only its exact eight-slot proof fingerprint.
+              _consume(
+                addr,
+                ['NotSlotOwner', 'InvalidSymbol'].includes(errorName)
+                  ? candidate.proofId
+                  : candidate.id,
+              );
               _claimableRows.set(addr, (_claimableRows.get(addr) || [])
                 .filter((row) => row.id !== candidate.id));
               await refreshBingoWatch();

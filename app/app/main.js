@@ -14,7 +14,8 @@
 
 import './chain-config.js';
 import { CONTRACTS } from './chain-config.js';
-import { start as startPolling } from './polling.js';
+import { start as startPolling, refreshForDayShift } from './polling.js';
+import { startDayRollover } from './day-rollover.js';
 import { initRouter, getViewedAddress } from './router.js';
 import { autoReconnect, hasInstalledWallet } from './wallet.js';
 import { subscribe, get, update } from './store.js';
@@ -298,6 +299,19 @@ async function boot() {
     if (!getViewedAddress() || getViewedAddress() === addr) {
       schedulePollingRestart(addr);
     }
+  });
+  // GAME.currentDayView is the clock for both draw surfaces. At the exact
+  // boundary, promptly reconcile the richer indexed feeds and player-owned
+  // reveals; jackpot and coinflip consumers unlock from the same app.daySync
+  // transition once both exact-day results are present.
+  startDayRollover({
+    onRefreshNeeded: ({ dayChanged, readyChanged }) => {
+      void refreshForDayShift({ includePlayer: dayChanged || readyChanged });
+      if (dayChanged || readyChanged) {
+        refreshPackWatch();
+        refreshBingoWatch();
+      }
+    },
   });
   // 6. THE DAY SELECTOR IS THE DAY AT THE TOP (user call 2026-07-29). It used to
   //    be a static `DAY N` span up here plus a separate, CSS-hidden day <select>

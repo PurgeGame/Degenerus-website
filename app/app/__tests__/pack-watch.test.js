@@ -370,7 +370,7 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(item?.ticketCount, 1);
   });
 
-  test('an indexed jackpot award survives the queue-drain blind spot as two pending packs', async () => {
+  test('an indexed jackpot award stays hidden until its draw, then survives the drain blind spot', async () => {
     let now = 10_000;
     packWatch.__setClockForTest(() => now);
     packWatch.__setEntriesOwedReaderForTest(async () => 0);
@@ -390,6 +390,13 @@ describe('pack-watch — deferred ticket reveals', () => {
     packWatch.startPackWatch({ getAddress: () => ADDR });
     await new Promise((resolve) => setTimeout(resolve, 10));
     let [item] = pendingActions.getPendingActions();
+    assert.equal(item, undefined,
+      'the indexed ticket count cannot spoil an unplayed jackpot draw');
+
+    localStorage.setItem(`jackpot_complete_day_${CHAIN.id}_55`, '1');
+    packWatch.refreshPackWatch();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    [item] = pendingActions.getPendingActions();
     assert.equal(item?.id, 'ticket-packs:pending');
     assert.equal(item?.ticketCount, 18);
     assert.deepEqual(item?.pendingPacks, [{
@@ -423,6 +430,56 @@ describe('pack-watch — deferred ticket reveals', () => {
       Array.from({ length: 18 }, (_unused, index) => index + 1),
       'only the 18 newly awarded complete tickets are opened',
     );
+  });
+
+  test('entriesOwed and materialized cards cannot leak a jackpot ticket award before reveal', async () => {
+    let owedEntries = 72;
+    let ticketPayload = byTrait([card(0, true)]);
+    _routes['/tickets/by-trait'] = () => ticketPayload;
+    packWatch.__setEntriesOwedReaderForTest(async (_address, level) => (
+      level === LEVEL ? owedEntries : 0
+    ));
+    packWatch.ingestJackpotTicketAwards({
+      address: ADDR,
+      wins: [{ day: 55, level: LEVEL, awardType: 'tickets', amount: '72' }],
+    });
+
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(pendingActions.getPendingActions()[0], undefined,
+      'the exact on-chain owed count is spoiler-gated');
+
+    owedEntries = 0;
+    ticketPayload = byTrait(Array.from({ length: 19 }, (_unused, index) => card(index, true)));
+    packWatch.refreshPackWatch();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(pendingActions.getPendingActions()[0], undefined,
+      'the indexed ticket cards remain hidden after processing too');
+
+    localStorage.setItem(`jackpot_complete_day_${CHAIN.id}_55`, '1');
+    packWatch.refreshPackWatch();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const [item] = pendingActions.getPendingActions();
+    assert.equal(item?.id, `ticket-pack:${LEVEL}`);
+    assert.equal(item?.state, 'ready');
+    assert.equal(item?.ticketCount, 18,
+      'the exact awarded hand appears immediately after the player completes the draw');
+  });
+
+  test('a ticket API outage cannot bypass the jackpot-award spoiler gate', async () => {
+    _routes['/tickets/by-trait'] = undefined;
+    packWatch.__setEntriesOwedReaderForTest(async (_address, level) => (
+      level === LEVEL ? 72 : 0
+    ));
+    packWatch.ingestJackpotTicketAwards({
+      address: ADDR,
+      wins: [{ day: 55, level: LEVEL, awardType: 'tickets', amount: '72' }],
+    });
+
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(pendingActions.getPendingActions()[0], undefined,
+      'fallback receipt math is spoiler-safe while the ticket projection is unavailable');
   });
 
   test('jackpot-history catch-up reads at most once per connected wallet and resolved day', async () => {

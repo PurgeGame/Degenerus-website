@@ -1496,7 +1496,7 @@ class AppDecimatorPanel extends HTMLElement {
   }
 
   #claimableSpoilerOpen() {
-    const rawDay = get('app.lastDay')?.day;
+    const rawDay = get('app.daySync')?.day ?? get('app.lastDay')?.day;
     if (rawDay == null) return true; // no resolved main jackpot to spoil yet
     const day = Number(rawDay);
     if (!Number.isFinite(day)) return false;
@@ -1509,7 +1509,7 @@ class AppDecimatorPanel extends HTMLElement {
   }
 
   #claimableSpoilerKey() {
-    const day = get('app.lastDay')?.day ?? '';
+    const day = get('app.daySync')?.day ?? get('app.lastDay')?.day ?? '';
     const address = getActingAddress() || '';
     return `${day}:${String(address).toLowerCase()}`;
   }
@@ -1673,6 +1673,7 @@ class AppDecimatorPanel extends HTMLElement {
     // A newly resolved day closes the spoiler gate immediately and supplies
     // the day-scoped key read by #claimableSpoilerOpen().
     const u5 = subscribe('app.lastDay', () => this.#renderFundsFooter());
+    const u7 = subscribe('app.daySync', () => this.#renderFundsFooter());
     const u6 = subscribe('ui.foilQuest', () => {
       // Quest definitions and game state arrive on independent polls. Refresh
       // the routed contract probe, but never let quest metadata choose a level.
@@ -1680,7 +1681,7 @@ class AppDecimatorPanel extends HTMLElement {
       this.#renderSnapshot();
       this.#refreshFoilStatus();
     });
-    this.#unsubs.push(u1, u2, u3, u4, u5, u6);
+    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7);
   }
 
   // ---------------------------------------------------------------------

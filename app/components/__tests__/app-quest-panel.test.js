@@ -1041,6 +1041,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
         },
         { day: 1, slot: 1, questType: 2, progress: 0, target: 100, completed: false },
       ],
+      questStreak: { baseStreak: completed ? 6 : 5, lastCompletedDay: completed ? 1 : 0 },
     });
 
     const realAudioContext = globalThis.AudioContext;
@@ -1093,6 +1094,13 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       await settle(60);
       assert.ok(el.querySelectorAll('.qst-slot')[0]
         .classList.contains('qst-slot--just-completed'));
+      assert.equal(el.querySelector('[data-bind="qst-streak"]').textContent, '6',
+        'the confirmed quest completion advances the visible streak');
+      assert.equal(el.querySelector('[data-bind="qst-streak-gain"]').textContent, '+1',
+        'the streak HUD names the exact increase');
+      assert.ok(el.querySelector('.qst-streak-chip')
+        .classList.contains('qst-streak-chip--increased'),
+      'the streak HUD pulses in the same render as the quest card');
       assert.equal(RecordingAudioContext.last.oscillators.length, 2,
         'one restrained two-note chime accompanies the card pulse');
 
@@ -1100,10 +1108,13 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       await settle(60);
       assert.equal(el.querySelector('.qst-slot--just-completed'), null,
         'the next completed refresh rebuilds the normal static card');
+      assert.equal(el.querySelector('[data-bind="qst-streak-gain"]').textContent, '',
+        'polling the same completion clears the one-shot gain label');
       assert.equal(RecordingAudioContext.last.oscillators.length, 2,
         'polling the same completion cannot replay its chime');
       assert.match(APP_CSS, /@keyframes qst-complete-pulse/);
       assert.match(APP_CSS, /qst-slot--just-completed::after/);
+      assert.match(APP_CSS, /@keyframes qst-streak-gain/);
     } finally {
       el?.disconnectedCallback();
       jackpotSfxMod.__resetForTest();

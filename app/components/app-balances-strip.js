@@ -73,11 +73,33 @@ class AppBalancesStrip extends HTMLElement {
     // before the async refresh lands — codex finding), then refresh.
     this.#unsubs.push(subscribe('app.lastDay', (payload) => {
       if (!payload || payload.day == null) return;
-      if (payload.day !== this.#day) {
-        this.#day = payload.day;
+      const payloadDay = Number(payload.day);
+      if (!Number.isInteger(payloadDay) || payloadDay <= 0) return;
+      const directDay = Number(get('app.daySync')?.day);
+      // Once the direct chain clock has crossed the boundary, the indexed
+      // last-day poll can briefly publish N-1 again. Never let that stale
+      // payload restore yesterday's reveal keys and unblur spoiled values.
+      if (Number.isInteger(directDay) && directDay > 0 && payloadDay !== directDay) return;
+      if (payloadDay !== Number(this.#day)) {
+        this.#day = payloadDay;
+        this.#flipResult = null;
+        this.#flipFetchedDay = null;
         this.#render();
         this.#refresh();
       }
+    }));
+    // app.lastDay is rich but indexed. GAME.currentDayView moves first, and
+    // balance deltas can spoil both draws during that catch-up gap. Re-pin the
+    // day-scoped keys from the direct clock so the strip re-fuzzes on the
+    // actual boundary.
+    this.#unsubs.push(subscribe('app.daySync', (sync) => {
+      const day = Number(sync?.day);
+      if (!Number.isInteger(day) || day <= 0 || day === Number(this.#day)) return;
+      this.#day = day;
+      this.#flipResult = null;
+      this.#flipFetchedDay = null;
+      this.#render();
+      this.#refresh();
     }));
     this.#unsubs.push(subscribe('connected.address', () => this.#refresh()));
     this.#unsubs.push(subscribe('viewing.address', () => this.#refresh()));

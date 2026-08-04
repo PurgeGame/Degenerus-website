@@ -15,7 +15,10 @@
 // as muted progress feedback, then become the same lit actionable result card.
 // The full-screen reveal overlay sits above this tray.
 
-import { subscribePendingActions } from '../app/pending-actions.js';
+import {
+  dismissPendingActionItems,
+  subscribePendingActions,
+} from '../app/pending-actions.js';
 import { briefTxError } from '../app/ui-error.js';
 import {
   applyDgnTicketAccent,
@@ -139,7 +142,6 @@ class AppRevealTray extends HTMLElement {
   #initialized = false;
   #unsubscribe = null;
   #items = [];
-  #dismissed = new Set();
   #hiddenFingerprint = null;
   #busyId = null;
   #errorTimer = null;
@@ -184,12 +186,10 @@ class AppRevealTray extends HTMLElement {
       speed.addEventListener('change', () => syncSpeed({ persist: true }));
     }
     this.#unsubscribe = subscribePendingActions((items) => {
-      // CLEAR is a hard dismissal for the current component lifetime. Routine
-      // polls and state transitions of the same protocol item cannot resurrect
-      // it; genuinely new work carries a new id and remains visible. HIDE uses
-      // the separate manifest fingerprint below and never alters this set.
-      const nextItems = actionableRevealItems(items)
-        .filter((item) => !this.#dismissed.has(item.id));
+      // CLEAR tombstones are owned by pending-actions, so the same logical row
+      // stays gone across publisher polls and tray remounts. HIDE remains the
+      // softer, fingerprint-only behavior below.
+      const nextItems = actionableRevealItems(items);
       if (this.#expandedPendingId != null
         && !nextItems.some((item) => item.id === this.#expandedPendingId)) {
         this.#expandedPendingId = null;
@@ -310,30 +310,12 @@ class AppRevealTray extends HTMLElement {
     if (this.#busyId != null) return;
     const visible = [...this.#items];
     if (visible.length === 0 || visible.some((item) => item?.state === 'busy')) return;
-    // Hide every current reminder for good. Owner callbacks may also retire
-    // durable local records, but the id tombstone is what prevents a routine
-    // publisher poll from immediately painting the same work again.
-    for (const item of visible) {
-      this.#dismissed.add(item.id);
-      for (const relatedId of Array.isArray(item.dismissIds) ? item.dismissIds : []) {
-        this.#dismissed.add(String(relatedId));
-      }
-    }
-
-    // One controller may publish the same callback on several rows. Collapse
-    // by source so it is invoked exactly once.
-    const owners = new Map();
-    for (const item of visible) {
-      if (typeof item.clearAll !== 'function') continue;
-      owners.set(String(item.source || item.id), item.clearAll);
-    }
-
     this.#busyId = CLEAR_ALL_BUSY_ID;
     this.#clearError();
     this.#items = [];
     this.#render();
     try {
-      for (const clearAll of owners.values()) await clearAll();
+      await dismissPendingActionItems(visible);
     } catch (error) {
       console.warn?.('[reveal-tray] clear failed', error);
       this.#showError(briefTxError(error, 'Could not clear reminders. Try again.'));

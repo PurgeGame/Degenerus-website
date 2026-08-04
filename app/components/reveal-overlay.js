@@ -59,7 +59,10 @@ import {
 } from '../app/jackpot-sfx.js';
 import { lock as lockScroll, unlock as unlockScroll } from '../app/scroll-lock.js';
 import { canShareWin, shareWin } from '../app/share-win.js';
-import { getPendingActions } from '../app/pending-actions.js';
+import {
+  dismissPendingActionItems,
+  getPendingActions,
+} from '../app/pending-actions.js';
 import { lootboxRewardPresentation } from '../app/lootbox-legs.js';
 import { FOIL_CLAIM_THRESHOLD } from '../app/foil-match.js';
 import {
@@ -75,6 +78,7 @@ let _instance = null;
 let _buffer = [];
 let _lootboxPresentationSeq = 0;
 let _queuedLootboxPresentationIds = new Set();
+let _queuedBingoPresentationIds = new Set();
 
 // Ticket inventory listens for these lifecycle events so newly indexed cards
 // remain behind their wrapper until the corresponding presentation is actually
@@ -95,6 +99,22 @@ function _withLootboxPresentationId(seq) {
     return { ...seq, presentationId: `lootbox-reveal:${address}:${key}` };
   }
   return { ...seq, presentationId: `lootbox-reveal:${++_lootboxPresentationSeq}` };
+}
+
+function _withBingoPresentationId(seq) {
+  if (seq?.kind !== 'bingo' || seq.presentationId) return seq;
+  const player = String(seq.player || seq.address || '').toLowerCase();
+  const level = Number(seq.level);
+  const symbol = Number(seq.symbol ?? seq.sym);
+  const quadrant = Number.isInteger(Number(seq.quadrant))
+    ? Number(seq.quadrant)
+    : (Number.isInteger(symbol) ? symbol >> 3 : Number.NaN);
+  if (!player || !Number.isInteger(level) || level < 0
+    || !Number.isInteger(quadrant) || quadrant < 0) return seq;
+  // One player can claim a given level/quadrant Bingo only once. Use that
+  // protocol identity rather than a receipt id: the local transaction receipt
+  // and the indexer can discover the same claim through different paths.
+  return { ...seq, presentationId: `bingo-reveal:${player}:${level}:${quadrant}` };
 }
 
 function _emitLootboxQueued(seq) {
@@ -125,15 +145,22 @@ function _emitLootboxQueued(seq) {
  */
 export function queueReveal(seq) {
   if (!seq || typeof seq !== 'object') return false;
-  const queued = _withLootboxPresentationId(seq);
-  const presentationId = queued?.kind === 'lootbox'
-    ? String(queued.presentationId || '')
-    : '';
+  const queued = _withBingoPresentationId(_withLootboxPresentationId(seq));
+  const presentationId = String(queued?.presentationId || '');
   // Live receipt parsing and the indexed pending tray can discover the same
   // settled box independently. A stable release-derived id keeps that one
   // logical box from entering the overlay twice while its first presentation
   // is buffered, queued, or active.
-  if (presentationId && _queuedLootboxPresentationIds.has(presentationId)) return false;
+  if (queued?.kind === 'lootbox'
+    && presentationId && _queuedLootboxPresentationIds.has(presentationId)) return false;
+  if (queued?.kind === 'bingo'
+    && presentationId && _queuedBingoPresentationIds.has(presentationId)) return false;
+  // Bingo ids are session tombstones, not merely active-queue locks. A claimed
+  // Bingo is immutable, so aborting or completing its visual must not let a
+  // delayed indexer refresh present the same prize again.
+  if (queued?.kind === 'bingo' && presentationId) {
+    _queuedBingoPresentationIds.add(presentationId);
+  }
   _emitLootboxQueued(queued);
   if (_instance) {
     _instance.enqueue(queued);
@@ -149,6 +176,7 @@ export function __resetForTest() {
   _buffer = [];
   _lootboxPresentationSeq = 0;
   _queuedLootboxPresentationIds = new Set();
+  _queuedBingoPresentationIds = new Set();
 }
 
 /**
@@ -821,6 +849,9 @@ export function normalizeSequence(seq) {
     const voided = Boolean(seq.voided);
     const won = payout > 0n;
     const label = market === 'GROWTH' ? `${marketLabel} · LEVEL ${round}` : marketLabel;
+    const betTickets = seq.betTickets == null ? '' : String(seq.betTickets).trim();
+    const resultTickets = seq.resultTickets == null ? '' : String(seq.resultTickets).trim();
+    const hasVolumeResult = market === 'VOLUME' && betTickets && resultTickets;
     return {
       kind,
       title: won ? `${marketLabel} PAID` : `${marketLabel} RESULT`,
@@ -835,13 +866,19 @@ export function normalizeSequence(seq) {
         rarity: won ? 'rare' : 'common',
         icon: won ? ICONS.flip : ICONS.flame,
         glyph: null,
-        label,
-        value: won ? `${_tokenText(payout)} FLIP` : `${side} LOST`,
-        sub: voided
-          ? 'Round voided · your stake was returned'
-          : won
-            ? `${side} paid`
-            : `${outcome || 'THE OTHER SIDE'} paid`,
+        label: hasVolumeResult
+          ? `YOUR BET: ${side} ${betTickets} TICKETS`
+          : label,
+        value: hasVolumeResult
+          ? `RESULT: ${resultTickets} TICKETS`
+          : won ? `${_tokenText(payout)} FLIP` : `${side} LOST`,
+        sub: hasVolumeResult
+          ? (voided ? `RETURNED ${_tokenText(payout)} FLIP` : `WIN ${_tokenText(payout)} FLIP`)
+          : voided
+            ? 'Round voided · your stake was returned'
+            : won
+              ? `${side} paid`
+              : `${outcome || 'THE OTHER SIDE'} paid`,
         countText: won ? `${_tokenText(payout)} FLIP` : null,
         spin: null,
       }],
@@ -1282,6 +1319,7 @@ class RevealOverlay extends HTMLElement {
   #currentSequence = null;
   #openAllBatchId = null;
   #openAllPacks = false;
+  #packHistory = [];
   #controlsOnly = false;
   #continuationBusy = false;
 
@@ -1312,7 +1350,11 @@ class RevealOverlay extends HTMLElement {
   #renderShell() {
     this.innerHTML = `
       <div class="rvl-backdrop" data-bind="rvl-backdrop" hidden>
-        <button type="button" class="rvl-close" data-bind="rvl-close" aria-label="Close reveal">✕</button>
+        <div class="rvl-corner-actions">
+          <button type="button" class="rvl-clear-pending" data-bind="rvl-clear-pending"
+                  aria-label="Clear this reveal and every pending reminder">CLEAR PENDING</button>
+          <button type="button" class="rvl-close" data-bind="rvl-close" aria-label="Close reveal">✕</button>
+        </div>
         <div class="rvl-stage" data-bind="rvl-stage">
           <div class="rvl-title" data-bind="rvl-title" aria-live="polite"></div>
           <div class="rvl-vessel" data-bind="rvl-vessel" hidden>
@@ -1361,9 +1403,15 @@ class RevealOverlay extends HTMLElement {
               <span class="rvl-pack-count" data-bind="rvl-pack-count"></span>
             </div>
             <div class="rvl-vessel-hint" data-bind="rvl-hint">TAP TO OPEN</div>
-            <button type="button" class="rvl-vessel-open-all" data-bind="rvl-open-all" hidden>
-              OPEN ALL
-            </button>
+            <div class="rvl-vessel-pack-actions" data-bind="rvl-pack-actions" hidden>
+              <button type="button" class="rvl-vessel-skip" data-bind="rvl-skip-pack"
+                      aria-label="Skip this pack reveal">
+                SKIP
+              </button>
+              <button type="button" class="rvl-vessel-open-all" data-bind="rvl-open-all" hidden>
+                OPEN ALL
+              </button>
+            </div>
           </div>
           <div class="rvl-card-zone" data-bind="rvl-card-zone" hidden></div>
           <div class="rvl-spin-zone" data-bind="rvl-spin-zone" hidden></div>
@@ -1377,6 +1425,11 @@ class RevealOverlay extends HTMLElement {
   #bind(name) { return this.querySelector(`[data-bind="${name}"]`); }
 
   #wire() {
+    const clearPending = this.#bind('rvl-clear-pending');
+    if (clearPending) clearPending.addEventListener('click', (e) => {
+      try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
+      this.#clearPendingQueue();
+    });
     const close = this.#bind('rvl-close');
     if (close) close.addEventListener('click', (e) => {
       try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
@@ -1404,6 +1457,11 @@ class RevealOverlay extends HTMLElement {
       const seq = this.#currentSequence;
       this.#startOpenAll(seq);
     });
+    const skipPack = this.#bind('rvl-skip-pack');
+    if (skipPack) skipPack.addEventListener('click', (e) => {
+      try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
+      if (this.#currentSequence?.kind === 'pack') this.#tap('skip-pack');
+    });
   }
 
   #hasMorePacks(seq) {
@@ -1413,6 +1471,88 @@ class RevealOverlay extends HTMLElement {
       && seq.batchId
       && Number(seq.packIndex || 1) < Number(seq.packCount || 1),
     );
+  }
+
+  #rememberOpenedPack(seq) {
+    if (seq?.kind !== 'pack' || !Array.isArray(seq.ticketGrid) || seq.ticketGrid.length === 0) {
+      return -1;
+    }
+    const existing = this.#packHistory.indexOf(seq);
+    if (existing >= 0) return existing;
+    this.#packHistory.push(seq);
+    return this.#packHistory.length - 1;
+  }
+
+  #paintOpenedPack(seq, surface, grid) {
+    if (!seq || !surface || !grid) return;
+    surface.className = seq.foilPack
+      ? 'rvl-ticket-pack-stage rvl-ticket-pack-stage--foil'
+      : 'rvl-ticket-pack-stage';
+    grid.className = seq.foilPack
+      ? 'rvl-ticket-grid-stage rvl-ticket-grid-stage--foil'
+      : 'rvl-ticket-grid-stage';
+    grid.textContent = '';
+    for (const ticket of seq.ticketGrid || []) {
+      grid.appendChild(this.#buildPaperTicket(ticket.traitIds, ticket.foil));
+    }
+    if (seq.extra > 0) {
+      const more = document.createElement('div');
+      more.className = 'rvl-ticket-more';
+      more.textContent = `+${seq.extra} more in your inventory`;
+      grid.appendChild(more);
+    }
+  }
+
+  #appendPackHistoryControls({ actions, central, surface, grid, currentIndex }) {
+    if (!actions || !central || this.#packHistory.length < 2) {
+      actions?.appendChild?.(central);
+      return;
+    }
+    const row = document.createElement('div');
+    row.className = 'rvl-pack-history-actions';
+    const previous = document.createElement('button');
+    previous.type = 'button';
+    previous.className = 'rvl-pack-history-nav rvl-pack-history-nav--previous';
+    previous.textContent = '<';
+    previous.setAttribute('aria-label', 'View previous opened pack');
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.className = 'rvl-pack-history-nav rvl-pack-history-nav--next';
+    next.textContent = '>';
+    next.setAttribute('aria-label', 'View next opened pack');
+    const label = document.createElement('div');
+    label.className = 'rvl-pack-history-label';
+
+    const currentRip = surface.querySelector?.('.rvl-auto-pack-rip');
+    let viewedIndex = currentIndex;
+    const paint = (index) => {
+      viewedIndex = Math.max(0, Math.min(this.#packHistory.length - 1, Number(index)));
+      const viewed = this.#packHistory[viewedIndex];
+      this.#paintOpenedPack(viewed, surface, grid);
+      if (currentRip) {
+        const showingCurrent = viewedIndex === currentIndex;
+        currentRip.hidden = !showingCurrent;
+        if (showingCurrent) surface.classList?.add('rvl-ticket-pack-stage--inline-rip');
+      }
+      previous.disabled = viewedIndex <= 0;
+      next.disabled = viewedIndex >= this.#packHistory.length - 1;
+      const level = viewed?.level == null ? '' : ` · LEVEL ${viewed.level}`;
+      label.textContent = `PACK ${viewedIndex + 1} OF ${this.#packHistory.length} OPENED${level}`;
+    };
+    previous.addEventListener('click', (event) => {
+      try { event.stopPropagation(); } catch (_e) { /* fakeDOM */ }
+      if (!previous.disabled) paint(viewedIndex - 1);
+    });
+    next.addEventListener('click', (event) => {
+      try { event.stopPropagation(); } catch (_e) { /* fakeDOM */ }
+      if (!next.disabled) paint(viewedIndex + 1);
+    });
+    row.appendChild(previous);
+    row.appendChild(central);
+    row.appendChild(next);
+    actions.appendChild(label);
+    actions.appendChild(row);
+    paint(currentIndex);
   }
 
   #remainingPacks(seq, { includeCurrent = false } = {}) {
@@ -1472,7 +1612,7 @@ class RevealOverlay extends HTMLElement {
       : `OPEN ALL ${remaining} REMAINING`;
   }
 
-  async #queueNextPendingPack(seq) {
+  async #queueNextPendingPack(seq, { autoStart = true } = {}) {
     const action = this.#readyPendingPacks(seq?.packRelease)[0] || null;
     if (!action) return false;
     const close = this.#bind('rvl-close');
@@ -1491,7 +1631,7 @@ class RevealOverlay extends HTMLElement {
     const unrelated = [];
     for (const queued of added) {
       if (queued?.kind === 'pack') {
-        queued.autoStart = true;
+        queued.autoStart = Boolean(autoStart);
         packs.push(queued);
       } else {
         unrelated.push(queued);
@@ -1543,6 +1683,11 @@ class RevealOverlay extends HTMLElement {
   #nextReadyPendingAction(excludeRelease = null) {
     return getPendingActions().find((item) => (
       item?.state === 'ready' && typeof item.run === 'function'
+      // Mine FLIP is permissionless maintenance, not part of a player's
+      // reward-opening flow. Keep it in Pending for an explicit click, but do
+      // not let a reveal popup chain into it automatically.
+      && item?.source !== 'mine-flip-resolver'
+      && !String(item?.id || '').startsWith('mine-flip:')
       && !this.#pendingMatchesLootboxRelease(item, excludeRelease)
     )) || null;
   }
@@ -1684,6 +1829,7 @@ class RevealOverlay extends HTMLElement {
   async #run() {
     this.#running = true;
     this.#aborted = false;
+    this.#packHistory = [];
     try { lockScroll(); } catch (_e) { /* defensive */ }
     const backdrop = this.#bind('rvl-backdrop');
     if (backdrop) backdrop.hidden = false;
@@ -1691,10 +1837,17 @@ class RevealOverlay extends HTMLElement {
       while (this.#queue.length > 0 && !this.#aborted) {
         const seq = this.#queue.shift();
         this.#currentSequence = seq;
-        await this.#playSequence(seq);
+        const result = await this.#playSequence(seq);
         if (!this.#aborted) {
           this.#emitPackComplete(seq);
           this.#emitLootboxComplete(seq);
+          // SKIP consumes only this presentation. Once its release bookkeeping
+          // has run, materialize the next ready pack if the queue did not
+          // already contain one, and leave that next wrapper sealed.
+          if (result === 'skip-pack' && this.#queue.length === 0) {
+            await Promise.resolve();
+            await this.#queueNextPendingPack(seq, { autoStart: false });
+          }
         }
       }
     } catch (_e) {
@@ -1711,6 +1864,7 @@ class RevealOverlay extends HTMLElement {
       this.#currentSequence = null;
       this.#openAllBatchId = null;
       this.#openAllPacks = false;
+      this.#packHistory = [];
     }
   }
 
@@ -1724,6 +1878,34 @@ class RevealOverlay extends HTMLElement {
     this.#openAllPacks = false;
     this.#clearTimers();
     if (this.#tapResolve) { const r = this.#tapResolve; this.#tapResolve = null; r(); }
+  }
+
+  #clearPendingQueue() {
+    // Tombstone the shared manifest before completion events can make a
+    // controller refresh. That keeps CLEAR materially different from the X:
+    // X merely closes this presentation; CLEAR retires every reminder that is
+    // currently in the queue and prevents routine polling from bringing it
+    // straight back.
+    const clearing = dismissPendingActionItems(getPendingActions());
+    const sequences = [this.#currentSequence, ...this.#queue].filter(Boolean);
+    for (const seq of sequences) {
+      this.#emitPackComplete(seq);
+      this.#emitLootboxComplete(seq);
+    }
+    this.#aborted = true;
+    this.#queue = [];
+    this.#currentSequence = null;
+    this.#openAllBatchId = null;
+    this.#openAllPacks = false;
+    this.#clearTimers();
+    if (this.#tapResolve) {
+      const resolve = this.#tapResolve;
+      this.#tapResolve = null;
+      resolve();
+    }
+    void clearing.catch((error) => {
+      console.warn?.('[reveal-overlay] pending clear failed', error);
+    });
   }
 
   #emitPackComplete(seq) {
@@ -1849,6 +2031,8 @@ class RevealOverlay extends HTMLElement {
     if (tray) tray.textContent = '';
     const openAll = this.#bind('rvl-open-all');
     if (openAll) openAll.hidden = true;
+    const packActions = this.#bind('rvl-pack-actions');
+    if (packActions) packActions.hidden = true;
     const stage = this.#bind('rvl-stage');
     if (stage && stage.classList) {
       stage.classList.remove(
@@ -1859,6 +2043,7 @@ class RevealOverlay extends HTMLElement {
         'rvl-stage--lootbox',
         'rvl-stage--auto-lootbox',
         'rvl-stage--day-summary',
+        'rvl-stage--bingo',
       );
     }
   }
@@ -1886,6 +2071,7 @@ class RevealOverlay extends HTMLElement {
         seq.kind === 'lootbox' && Boolean(seq.autoStart),
       );
       rootStage.classList.toggle('rvl-stage--day-summary', Boolean(seq.daySummary));
+      rootStage.classList.toggle('rvl-stage--bingo', seq.kind === 'bingo');
     }
     // boardTitle is the non-spoiler heading a spin-through plays under; the real
     // verdict lands only after every verified reel has settled.
@@ -2022,8 +2208,11 @@ class RevealOverlay extends HTMLElement {
               : isLootbox ? 'TAP TO CRACK' : 'TAP TO OPEN';
       }
       const openAll = this.#bind('rvl-open-all');
+      const packActions = this.#bind('rvl-pack-actions');
+      if (packActions) packActions.hidden = !isPack || openingAll || Boolean(seq.autoStart);
       if (openAll) {
-        const canOpenAll = isPack && this.#canOpenAllPacks(seq) && !openingAll;
+        const canOpenAll = isPack && this.#canOpenAllPacks(seq)
+          && !openingAll && !seq.autoStart;
         openAll.hidden = !canOpenAll;
         if (canOpenAll) {
           openAll.textContent = this.#openAllPacksLabel(seq, { includeCurrent: true });
@@ -2036,6 +2225,10 @@ class RevealOverlay extends HTMLElement {
         await this.#wait(isLootbox ? LOOTBOX_AUTO_START_MS : 700);
       } else {
         const action = await this.#waitTap();
+        if (action === 'skip-pack' && isPack) {
+          if (packActions) packActions.hidden = true;
+          return 'skip-pack';
+        }
         openingAll = action === 'open-all' || this.#isOpeningAll(seq);
       }
       if (this.#aborted) return;
@@ -2190,6 +2383,7 @@ class RevealOverlay extends HTMLElement {
       surface.appendChild(rip);
     }
     zone.appendChild(surface);
+    const historyIndex = this.#rememberOpenedPack(seq);
     const grid = document.createElement('div');
     grid.className = seq.foilPack
       ? 'rvl-ticket-grid-stage rvl-ticket-grid-stage--foil'
@@ -2302,7 +2496,13 @@ class RevealOverlay extends HTMLElement {
       else this.#armQueuedContinuation();
       this.#tap(hasMore ? 'next-pack' : 'collect');
     });
-    actions.appendChild(next);
+    this.#appendPackHistoryControls({
+      actions,
+      central: next,
+      surface,
+      grid,
+      currentIndex: historyIndex,
+    });
 
     if (!openingAll && this.#canOpenAllPacks(seq)) {
       const openAll = document.createElement('button');
@@ -2406,13 +2606,16 @@ class RevealOverlay extends HTMLElement {
     const el = this.#buildCard(card, false);
     zone.appendChild(el);
     sfxTick(index);
-    // Let the flip-in keyframe run, then count up.
-    await this.#wait(360);
+    // Let the flip-in keyframe run, then count up. A Bingo chart contains the
+    // whole 8x8 entry board, so give the winning line enough time to travel
+    // across all eight colors before replacing it with the payout card.
+    const bingo = card.type === 'bingo';
+    await this.#wait(bingo ? 520 : 360);
     if (this.#aborted) return;
     const valueEl = el.querySelector('.rvl-card-value');
     if (valueEl && card.countText) _animateCount(valueEl, card.countText, 650);
     if (card.rarity === 'epic' || card.rarity === 'legendary') sfxRollDone(true);
-    await this.#wait(card.spin ? 650 : 1150);
+    await this.#wait(card.spin ? 650 : bingo ? 2600 : 1150);
   }
 
   // BoxSpin sub-stage. The event already contains every verified reel and
@@ -3743,9 +3946,9 @@ class RevealOverlay extends HTMLElement {
     const head = document.createElement('div');
     head.className = 'rvl-bingo-chart__head';
     const title = document.createElement('strong');
-    title.textContent = `${String(category || 'trait').toUpperCase()} · 64 TRAITS`;
+    title.textContent = `LEVEL ${Number(meta?.level) || 0} · ${String(category || 'trait').toUpperCase()}`;
     const reason = document.createElement('span');
-    reason.textContent = `${symbolName} · ALL 8 COLORS`;
+    reason.textContent = `${symbolName} BINGO · ALL 8 COLORS`;
     head.appendChild(title);
     head.appendChild(reason);
     chart.appendChild(head);
@@ -3753,9 +3956,17 @@ class RevealOverlay extends HTMLElement {
     const grid = document.createElement('div');
     grid.className = 'rvl-bingo-chart__grid';
     for (let symbolIndex = 0; symbolIndex < 8; symbolIndex += 1) {
+      const winningRow = symbolIndex === winningSym;
+      const row = document.createElement('div');
+      row.className = `rvl-bingo-chart__row${winningRow ? ' is-bingo-row' : ''}`;
+      if (winningRow) {
+        row.setAttribute('aria-label', `${symbolName} Bingo line`);
+      } else {
+        row.setAttribute('aria-hidden', 'true');
+      }
       for (let color = 0; color < 8; color += 1) {
         const count = counts[(color * 8) + symbolIndex];
-        const winning = symbolIndex === winningSym;
+        const winning = winningRow;
         const cell = document.createElement('span');
         cell.className = `rvl-bingo-chart__cell${count > 0 ? ' has' : ''}${winning ? ' is-bingo' : ''}`;
         cell.dataset.bingoColor = String(color);
@@ -3772,8 +3983,9 @@ class RevealOverlay extends HTMLElement {
           amount.textContent = String(count);
           cell.appendChild(amount);
         }
-        grid.appendChild(cell);
+        row.appendChild(cell);
       }
+      grid.appendChild(row);
     }
     chart.appendChild(grid);
     return chart;
@@ -3920,6 +4132,10 @@ class RevealOverlay extends HTMLElement {
   #pushToTray(card) {
     const tray = this.#bind('rvl-tray');
     if (!tray) return;
+    // The complete 8x8 chart is the Bingo hero beat. Repeating that wide chart
+    // in the tiny revealed-card tray crowds the payout card off-screen; the
+    // final Bingo receipt still includes the chart once, at a readable size.
+    if (card?.type === 'bingo') return;
     tray.appendChild(this.#buildCard(card, true));
   }
 
@@ -3950,10 +4166,13 @@ class RevealOverlay extends HTMLElement {
     if (!summary) return;
     summary.textContent = '';
     summary.hidden = false;
-    if (summary.classList) summary.classList.toggle('rvl-summary--foil', Boolean(seq.foilPack));
+    if (summary.classList) {
+      summary.classList.toggle('rvl-summary--foil', Boolean(seq.foilPack));
+      summary.classList.toggle('rvl-summary--bingo', seq.kind === 'bingo');
+    }
 
     const grid = document.createElement('div');
-    grid.className = 'rvl-summary-grid';
+    grid.className = `rvl-summary-grid${seq.kind === 'bingo' ? ' rvl-summary-grid--bingo' : ''}`;
     for (const card of seq.cards) {
       const displayCard = spinGrant && card.spin
         ? {

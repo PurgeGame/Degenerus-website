@@ -88,6 +88,7 @@ class LastDayJackpot extends HTMLElement {
   #pinnedLevel = null;
   #latestDaySeen = null;
   #lastPayload = null;
+  #daySync = null;       // direct GAME day; shared jackpot/coinflip availability gate
   #hasNewDayAvailable = false; // Legacy banner fallback; normal flow auto-follows.
   #winners = [];
   // Phase 64 — foil strip state + panel bridge state.
@@ -134,6 +135,77 @@ class LastDayJackpot extends HTMLElement {
     if (!status) return;
     status.textContent = String(text || '');
     status.setAttribute('aria-hidden', text ? 'false' : 'true');
+  }
+
+  #syncAppliesToPinned() {
+    return this.#manualReplayDay == null
+      && Number(this.#daySync?.day) === Number(this.#pinnedDay);
+  }
+
+  #syncWarming() {
+    return this.#syncAppliesToPinned() && (
+      this.#daySync?.ready !== true
+      || Number(this.#lastPayload?.day) !== Number(this.#pinnedDay)
+    );
+  }
+
+  #setReplayWarming(warming) {
+    const panel = this.#panel();
+    if (!panel) return;
+    if (warming) {
+      panel.setAttribute?.('data-day-warming', '');
+      panel.setAttribute?.('aria-busy', 'true');
+    } else {
+      panel.removeAttribute?.('data-day-warming');
+      panel.removeAttribute?.('aria-busy');
+    }
+  }
+
+  #primeChainDay(day) {
+    this.#pinnedDay = day;
+    this.#pinnedLevel = null;
+    this.#manualReplayDay = null;
+    this.#lastPayload = null;
+    this.#hasNewDayAvailable = false;
+    this.#hideNewDayBanner();
+    this.#foilSeq += 1;
+    this.#foilData = null;
+    this.#foilDataKey = null;
+    clearPendingActions(FOIL_MATCH_ACTION_SOURCE);
+    this.#winners = [];
+    this.#resetDayGates();
+    const label = this.querySelector('[data-bind="day"]');
+    if (label) label.textContent = `Day ${day}`;
+    this.#renderColdStart();
+    this.#setReplayWarming(true);
+    this.#syncReplayPanel();
+    this.#dispatchDaySelection(false);
+  }
+
+  #onDaySync(sync) {
+    const day = Number(sync?.day);
+    this.#daySync = Number.isInteger(day) && day > 0 ? sync : null;
+    if (!this.#daySync) return;
+    const genuinelyNew = this.#latestDaySeen == null || day > this.#latestDaySeen;
+    if (genuinelyNew) this.#latestDaySeen = day;
+    if (this.#pinnedDay == null
+      || (genuinelyNew && day !== Number(this.#pinnedDay))
+      || (this.#manualReplayDay == null && day !== Number(this.#pinnedDay))) {
+      this.#primeChainDay(day);
+    }
+    if (Number(this.#pinnedDay) !== day || this.#manualReplayDay != null) return;
+    if (!sync.ready) {
+      this.#renderColdStart();
+      this.#setReplayWarming(true);
+      this.#syncReplayPanel();
+      return;
+    }
+    if (Number(this.#lastPayload?.day) === day) this.#renderForStatus(this.#lastPayload);
+    else {
+      this.#renderColdStart();
+      this.#setReplayWarming(true);
+      this.#syncReplayPanel();
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -199,7 +271,6 @@ class LastDayJackpot extends HTMLElement {
   // ---------------------------------------------------------------------------
   #onLastDayUpdate(payload) {
     if (!payload) return;  // first cycle 404 / undefined initial subscribe fire
-    this.#lastPayload = payload;
     const parsedDay = payload.day == null ? null : Number(payload.day);
     const payloadDay = Number.isFinite(parsedDay) && parsedDay > 0 ? parsedDay : null;
     const isNewLatest = payloadDay != null
@@ -207,17 +278,20 @@ class LastDayJackpot extends HTMLElement {
     if (isNewLatest) this.#latestDaySeen = payloadDay;
 
     if (this.#pinnedDay == null) {
+      this.#lastPayload = payload;
       if (payloadDay != null) this.#adoptLatestDay(payload, false);
       else this.#renderForStatus(payload);
       return;
     }
 
     if (isNewLatest && payloadDay !== Number(this.#pinnedDay)) {
+      this.#lastPayload = payload;
       this.#adoptLatestDay(payload, true);
       return;
     }
 
     if (payloadDay === Number(this.#pinnedDay)) {
+      this.#lastPayload = payload;
       this.#renderForStatus(payload);
       return;
     }
@@ -245,6 +319,13 @@ class LastDayJackpot extends HTMLElement {
 
   #renderForStatus(payload) {
     this.#showContent();
+    if (this.#syncWarming()) {
+      this.#renderColdStart();
+      this.#setReplayWarming(true);
+      this.#syncReplayPanel();
+      this.#renderHistoryNav();
+      return;
+    }
     switch (payload.status) {
       case 'pre-game':            this.#renderColdStart(); break;
       case 'resolved-no-winners': this.#renderEmptyDay(payload.day); break;
@@ -465,7 +546,9 @@ class LastDayJackpot extends HTMLElement {
     if (addr) this.#ensureZeroEntryPlayerOption(playerSelect, addr);
     const playerOk = addr ? this.#setSelectAndFire(playerSelect, addr) : false;
     this.#renderHistoryNav();
-    return dayOk && playerOk;
+    const synced = dayOk && playerOk;
+    if (synced && !this.#syncWarming()) this.#setReplayWarming(false);
+    return synced;
   }
 
   #historyNav() {
@@ -582,6 +665,7 @@ class LastDayJackpot extends HTMLElement {
       this.#pinnedDay = picked;
       this.#pinnedLevel = null;
       this.#manualReplayDay = picked;
+      this.#setReplayWarming(false);
       this.#historyMetadataSeq += 1;
       this.#foilSeq += 1;
       this.#foilData = null;
@@ -608,6 +692,7 @@ class LastDayJackpot extends HTMLElement {
   #syncReplayPanel() {
     this.#wireDayPicker();
     const panel = this.#panel();
+    this.#setReplayWarming(this.#syncWarming());
     // Tell the board whether this day is waiting before the async day/player
     // selectors finish syncing. replay-panel can run its neutral slow reel
     // without those values; delaying this signal left a newly-ready jackpot
@@ -1278,6 +1363,9 @@ class LastDayJackpot extends HTMLElement {
     // app.lastDay subscription (polling.js pollLastDay writes it).
     this.#unsubs.push(
       subscribe('app.lastDay', (payload) => this.#onLastDayUpdate(payload))
+    );
+    this.#unsubs.push(
+      subscribe('app.daySync', (sync) => this.#onDaySync(sync))
     );
     this.#unsubs.push(
       subscribe('app.deploymentMismatch', (payload) => this.#renderDeploymentMismatch(payload))

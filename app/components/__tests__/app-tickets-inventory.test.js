@@ -578,7 +578,7 @@ describe('app-tickets-inventory — cards + chart', () => {
 
     const ticket = el.querySelector('.inv-card--degenerette-copy');
     assert.ok(ticket, 'opened card is an accessible copy control');
-    ticket.dispatchEvent({ type: 'click' });
+    el.querySelector('[data-bind="inv-cards"]').dispatchEvent({ type: 'click', target: ticket });
     assert.deepEqual(copied, { traitIds: COMBO, level: 17, foil: false });
     assert.ok(ticket.classList.contains('inv-card--copied'));
     assert.equal(ticket.getAttribute('aria-label'), 'Copied to Degenerette');
@@ -699,6 +699,8 @@ describe('app-tickets-inventory — cards + chart', () => {
     const el = mount();
     await flushMicrotasks();
 
+    assert.equal(el.querySelector('[data-bind="inv-chart"]').children.length, 0,
+      'the hidden chart does no DOM or image work in cards mode');
     el.querySelector('[data-bind="inv-mode-chart"]').dispatchEvent({ type: 'click' });
     const chart = el.querySelector('[data-bind="inv-chart"]');
     assert.equal(chart.hidden, false, 'chart visible after toggle');
@@ -728,7 +730,9 @@ describe('app-tickets-inventory — cards + chart', () => {
 
     const el = mount();
     await flushMicrotasks();
+    assert.equal(calls.length, 0, 'cards mode skips chart-only deity RPC reads');
     el.querySelector('[data-bind="inv-mode-chart"]').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
 
     const chart = el.querySelector('[data-bind="inv-chart"]');
     assert.equal(chart.querySelector('.inv-chart__deity-note')?.textContent,
@@ -744,6 +748,32 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.equal(calls.length, 8, 'the projection reads only the eight relevant buckets');
     assert.ok(calls.every((call) => call.level === 17 && call.offset === 0 && call.limit === 0),
       'zero-limit reads retrieve live bucket totals without scanning holder arrays');
+    el.disconnectedCallback();
+  });
+
+  test('an unchanged refresh retains the large cards DOM instead of rebuilding it', async () => {
+    _byLevel.set(17, byTraitPayload({
+      cards: [card('opened'), cardAt(1, 'opened', [2, 73, 130, 201])],
+    }));
+    const el = mount();
+    await flushMicrotasks();
+    const host = el.querySelector('[data-bind="inv-cards"]');
+    const firstCard = host.querySelector('.inv-card');
+    const firstBadge = firstCard.querySelector('img');
+    assert.equal(firstBadge.loading, 'lazy');
+    assert.equal(firstBadge.decoding, 'async');
+
+    storeMod.update('app.lastDay', {
+      day: 67,
+      status: 'resolved',
+      level: 17,
+      roll1: { purchaseLevel: 17 },
+    });
+    await flushMicrotasks();
+    assert.equal(host.querySelector('.inv-card'), firstCard,
+      'same ticket payload keeps the existing card nodes and controls');
+    assert.match(APP_CSS, /\.inv-card\s*\{[^}]*content-visibility:\s*auto[^}]*contain-intrinsic-size:/s,
+      'offscreen inventory cards can skip browser layout and paint work');
     el.disconnectedCallback();
   });
 
