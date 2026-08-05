@@ -45,3 +45,18 @@
 
 /shared/*
   Cache-Control: no-store
+
+# App ES modules had NO rule here, so they fell back to the 4h default
+# (max-age=14400). That bit on 2026-08-05: the RPC endpoint in
+# chain-config.sepolia.js was corrected at origin, but Cloudflare kept serving
+# the previous module to browsers — and because the edge cache key IGNORES the
+# query string, a `?cachebust=` import still returned the stale copy. Chain
+# config and contract addresses live in these files, so a redeploy that doesn't
+# reach clients is a correctness problem, not just a staleness one.
+# 60s + must-revalidate keeps repeat loads cheap (304 on ETag) while letting a
+# publish land within a minute.
+/app/app/*
+  Cache-Control: public, max-age=60, must-revalidate
+
+/app/components/*
+  Cache-Control: public, max-age=60, must-revalidate
