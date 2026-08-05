@@ -2432,13 +2432,15 @@ describe('new-day rollover (codex-found race)', () => {
       // Deliberately stale same-number/indexed input: app.daySync must win.
       flipDay: { day: 67, win: true, rewardPercent: 96 },
     };
+    const exact = { day: 68, win: true, rewardPercent: 81, resolved: true, source: 'chain' };
     storeMod.update('app.daySync', {
       day: 68,
       jackpotReady: false,
-      coinflipReady: false,
+      coinflipDay: 68,
+      coinflipReady: true,
       ready: false,
-      phase: 'waiting-both',
-      coinflipResult: null,
+      phase: 'waiting-jackpot',
+      coinflipResult: exact,
     });
     const el = mount();
     await flushMicrotasks();
@@ -2446,11 +2448,15 @@ describe('new-day rollover (codex-found race)', () => {
     const warming = el.querySelector('.df-coin--syncing');
     assert.ok(warming, 'the new chain day replaces yesterday immediately');
     assert.equal(warming.disabled, true, 'the coin cannot outrun the jackpot lane');
+    assert.match(
+      APP_CSS,
+      /\.df-coin--syncing \.df-coin3d__inner\s*\{[^}]*animation:\s*none/s,
+      'the unavailable coin stays parked instead of advertising a clickable flip',
+    );
     warming.dispatchEvent({ type: 'click' });
     assert.equal(localStorage.getItem('flip_day_84532_68'), null);
     assert.equal(el.querySelector('[data-bind="df-reveal-hint"]').hidden, true);
 
-    const exact = { day: 68, win: true, rewardPercent: 81, resolved: true, source: 'chain' };
     storeMod.update('app.lastDay', { day: 68, status: 'resolved' });
     storeMod.update('app.daySync', {
       day: 68,

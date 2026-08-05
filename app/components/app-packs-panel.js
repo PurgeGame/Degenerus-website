@@ -10,15 +10,15 @@
 //        <last-day-jackpot></last-day-jackpot> per CONTEXT D-04.
 //
 // Plan 60-03 cross-imports (verbatim — zero /play/ edits per milestone constraint):
-//   from '../../play/app/pack-animator.js' (animatePackOpen)
-//   from '../../play/app/pack-audio.js'    (playPackOpen)
+//   from '../app/pack-animator.js' (animatePackOpen)
+//   from '../app/pack-audio.js'    (playPackOpen)
 //
 // CROSS-IMPORT MECHANICS (deviation from plan's static-import shape):
 //   pack-animator.js statically imports `gsap` from the importmap which only resolves
 //   in the browser (production /app/index.html ships the importmap). In node:test
 //   environments, gsap is not installed in node_modules, so a top-level static import
 //   would break test module-load. Accordingly we lazy-load BOTH modules via
-//   dynamic `import('../../play/app/pack-animator.js')` inside the reveal handler.
+//   dynamic `import('../app/pack-animator.js')` inside the reveal handler.
 //   Production behavior is identical (importmap resolves at first call); tests
 //   short-circuit reveal via cancel-token bump + per-test runtime guards.
 //
@@ -70,13 +70,13 @@ import { CHAIN } from '../app/chain-config.js';
 // future database endpoint), and stays HIDDEN otherwise. A follow-up plan
 // landing a /player/:address/lootboxes endpoint in database/ would un-degrade
 // the CTA without any widget code changes (the parsing is forward-compatible).
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 
 // Conceptual cross-import declarations (resolved lazily at reveal time — see
 // CROSS-IMPORT MECHANICS comment above). The literal `from` strings appear here
 // so static-analysis tools and grep gates can detect the dependency:
-//   import { animatePackOpen } from '../../play/app/pack-animator.js';
-//   import { playPackOpen }    from '../../play/app/pack-audio.js';
+//   import { animatePackOpen } from '../app/pack-animator.js';
+//   import { playPackOpen }    from '../app/pack-audio.js';
 
 const TICKET_MAX = 100;
 const LOOTBOX_MAX = 10;  // per CONTEXT D-01 step 2 — prevents runaway sequential-tx loops
@@ -931,9 +931,9 @@ class AppPacksPanel extends HTMLElement {
       // (zero edits to /play/ source per milestone constraint).
       let audioMod = null;
       let animatorMod = null;
-      try { audioMod = await import('../../play/app/pack-audio.js'); }
+      try { audioMod = await import('../app/pack-audio.js'); }
       catch (_) { /* pack-audio failed to load; reveal proceeds without SFX */ }
-      try { animatorMod = await import('../../play/app/pack-animator.js'); }
+      try { animatorMod = await import('../app/pack-animator.js'); }
       catch (_) { /* pack-animator failed to load; reveal proceeds with fixed delay */ }
 
       if (cancelToken !== this.#revealCancelToken) return;

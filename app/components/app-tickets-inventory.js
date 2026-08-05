@@ -23,7 +23,7 @@
 // T-58-18: server-derived strings via textContent.
 
 import { get, subscribe, getViewedAddress, deriveCanSign } from '../app/store.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { ethers, getProvider } from '../app/contracts.js';
 import { CHAIN, CONTRACTS } from '../app/chain-config.js';
@@ -38,12 +38,12 @@ import { compactUiError } from '../app/ui-error.js';
 import {
   applyDgnTicketAccent,
   DGN_TICKET_COPY_EVENT,
-  dgnReconstructTicketRecords,
+  dgnPartitionTicketEntries,
   dgnReconstructTicketTraits,
 } from '../app/dgn-traits.js';
 import {
   unopenedFoilPackPending,
-  unopenedPackCardIndexes,
+  unopenedPackItemKeys,
 } from '../app/pack-watch.js';
 import { PACK_REVEAL_COMPLETE_EVENT } from './reveal-overlay.js';
 import { readDeityPassCatalog } from '../app/passes.js';
@@ -190,7 +190,10 @@ function _foilLines(payload) {
 // ticket nodes and image elements once a minute.
 function _inventoryPayloadFingerprint(payload) {
   const cards = Array.isArray(payload?.cards) ? payload.cards : [];
-  const parts = [String(payload?.totalEntries ?? 0), String(cards.length)];
+  const hidden = payload?._hiddenItemKeys instanceof Set
+    ? [...payload._hiddenItemKeys].map(String).sort()
+    : [];
+  const parts = [String(payload?.totalEntries ?? 0), String(cards.length), hidden.join(',')];
   for (const card of cards) {
     parts.push(String(card?.cardIndex ?? ''), String(card?.status ?? ''));
     for (const entry of Array.isArray(card?.entries) ? card.entries : []) {
@@ -208,17 +211,19 @@ export function hideUnopenedPackTickets(payload, hiddenIndexes) {
     ? hiddenIndexes
     : new Set(Array.isArray(hiddenIndexes) ? hiddenIndexes.map(Number) : []);
   if (hidden.size === 0) return payload;
-  const cards = Array.isArray(payload.cards) ? payload.cards : [];
-  let hiddenEntries = 0;
-  const visible = cards.filter((card) => {
-    if (!hidden.has(Number(card?.cardIndex))) return true;
-    hiddenEntries += Array.isArray(card?.entries) ? card.entries.length : ENTRIES_PER_CARD;
-    return false;
-  });
+  const partitioned = dgnPartitionTicketEntries(payload.cards);
+  const hiddenKeys = new Set([...hidden].map(String));
+  const hiddenEntries = partitioned.tickets.reduce(
+    (sum, ticket) => sum + (hiddenKeys.has(String(ticket.key)) ? ENTRIES_PER_CARD : 0),
+    0,
+  ) + partitioned.entries.reduce(
+    (sum, entry) => sum + (hiddenKeys.has(String(entry.key)) ? 1 : 0),
+    0,
+  );
   return {
     ...payload,
     totalEntries: Math.max(0, Number(payload.totalEntries || 0) - hiddenEntries),
-    cards: visible,
+    _hiddenItemKeys: hiddenKeys,
   };
 }
 
@@ -307,6 +312,19 @@ export function formatTicketTotalValueEth(rawWei) {
   return fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed;
 }
 
+/** Exact player-facing inventory quantity without erasing quarter tickets. */
+export function formatTicketEntryHoldings(entryCount) {
+  const entries = Math.max(0, Math.floor(Number(entryCount) || 0));
+  const whole = Math.floor(entries / ENTRIES_PER_CARD);
+  const loose = entries % ENTRIES_PER_CARD;
+  const parts = [];
+  if (whole > 0) {
+    parts.push(`${whole.toLocaleString('en-US')} ticket${whole === 1 ? '' : 's'}`);
+  }
+  if (loose > 0) parts.push(`${loose} ${loose === 1 ? 'entry' : 'entries'}`);
+  return parts.length > 0 ? parts.join(' + ') : '0 tickets';
+}
+
 const SALVAGE_PURCHASE_UNITS_PER_TICKET = 400n;
 
 /** Exact purchase units the contract mints from the quote's ticketWei leg. */
@@ -372,6 +390,14 @@ export function reconstructInventoryTicketTraits(cards) {
 function invTicketHasGold(ids) {
   return Array.isArray(ids)
     && ids.some((tid) => invTraitToQSC(Number(tid)).col === INV_GOLD_COLOR_IDX);
+}
+
+function invEntryLabel(traitId) {
+  const { q, sym, col } = invTraitToQSC(Number(traitId));
+  const category = INV_QUADRANTS[q];
+  const symbol = INV_SYMBOLS[category]?.[sym] || 'trait';
+  const color = INV_COLORS[col] || 'unknown';
+  return `${symbol.replace(/[_-]+/g, ' ')} ${color}`;
 }
 
 function _setIntervalUnref(fn, ms) {
@@ -851,17 +877,17 @@ class AppTicketsInventory extends HTMLElement {
     ]);
     if (seq !== this.#fetchSeq) return;
     const rawTicketData = byTrait.status === 'fulfilled' ? byTrait.value : null;
-    const hiddenPackCards = unopenedPackCardIndexes({
+    const hiddenPackItems = unopenedPackItemKeys({
       address: lower,
       level: lvl,
       cards: rawTicketData?.cards,
     });
-    this.#data = hideUnopenedPackTickets(rawTicketData, hiddenPackCards);
+    this.#data = hideUnopenedPackTickets(rawTicketData, hiddenPackItems);
     this.#dataRenderKey = _inventoryPayloadFingerprint(this.#data);
     // Do not let the direct foil projection bypass the unopened-pack spoiler
     // gate. Once the reveal releases its card indexes, these four lines become
     // the authoritative fallback if the generic ticket stream is incomplete.
-    this.#foilLines = hiddenPackCards.size === 0 && !unopenedFoilPackPending({
+    this.#foilLines = hiddenPackItems.size === 0 && !unopenedFoilPackPending({
       address: lower,
       level: lvl,
     })
@@ -1237,10 +1263,15 @@ class AppTicketsInventory extends HTMLElement {
         if (!d) {
           meta.textContent = this.#address ? 'No tickets at this level.' : 'Pick a player to see tickets.';
         } else {
-          const cards = Math.floor(Number(d.totalEntries || 0) / ENTRIES_PER_CARD);
+          const totalEntries = Math.max(0, Math.floor(Number(d.totalEntries || 0)));
+          const cards = Math.floor(totalEntries / ENTRIES_PER_CARD);
+          const looseEntries = totalEntries % ENTRIES_PER_CARD;
           const pending = (Array.isArray(d.cards) ? d.cards : [])
             .filter((c) => c && c.status === 'pending').length;
           meta.textContent = `${cards} card${cards === 1 ? '' : 's'}`
+            + (looseEntries
+              ? ` · ${looseEntries} ${looseEntries === 1 ? 'entry' : 'entries'}`
+              : '')
             + (pending ? ` · ${pending} pending` : '');
         }
       }
@@ -1329,12 +1360,16 @@ class AppTicketsInventory extends HTMLElement {
     const addrCount = Array.isArray(this.#combined?.addresses) ? this.#combined.addresses.length : 0;
     const meta = this.querySelector('[data-bind="inv-meta"]');
 
-    const withWhole = rows
-      .map((r) => ({ level: Number(r?.level), whole: Math.floor(Number(r?.entryCount || 0) / ENTRIES_PER_CARD), owner: r?.owner }))
-      .filter((r) => Number.isFinite(r.level) && r.whole > 0)
+    const withEntries = rows
+      .map((r) => ({
+        level: Number(r?.level),
+        entryCount: Math.max(0, Math.floor(Number(r?.entryCount || 0))),
+        owner: r?.owner,
+      }))
+      .filter((r) => Number.isFinite(r.level) && r.entryCount > 0)
       .sort((a, b) => a.level - b.level || String(a.owner).localeCompare(String(b.owner)));
 
-    if (withWhole.length === 0) {
+    if (withEntries.length === 0) {
       if (meta) meta.textContent = addrCount > 0 ? `No tickets across ${addrCount} combined accounts.` : 'No tickets across the combined accounts.';
       const empty = document.createElement('p');
       empty.className = 'inv-empty';
@@ -1343,14 +1378,14 @@ class AppTicketsInventory extends HTMLElement {
       return;
     }
 
-    const totalWhole = withWhole.reduce((s, r) => s + r.whole, 0);
+    const totalEntries = withEntries.reduce((sum, row) => sum + row.entryCount, 0);
     if (meta) {
-      meta.textContent = `${totalWhole} ticket${totalWhole === 1 ? '' : 's'} across ${addrCount} account${addrCount === 1 ? '' : 's'}`;
+      meta.textContent = `${formatTicketEntryHoldings(totalEntries)} across ${addrCount} account${addrCount === 1 ? '' : 's'}`;
     }
 
     const list = document.createElement('div');
     list.className = 'inv-combined-rows';
-    for (const r of withWhole) {
+    for (const r of withEntries) {
       const row = document.createElement('div');
       row.className = 'inv-combined-row';
       const lvl = document.createElement('span');
@@ -1359,7 +1394,7 @@ class AppTicketsInventory extends HTMLElement {
       row.appendChild(lvl);
       const count = document.createElement('span');
       count.className = 'inv-combined-count';
-      count.textContent = `${r.whole} ticket${r.whole === 1 ? '' : 's'}`;
+      count.textContent = formatTicketEntryHoldings(r.entryCount);
       row.appendChild(count);
       const owner = document.createElement('span');
       owner.className = 'inv-combined-owner';
@@ -1390,13 +1425,13 @@ class AppTicketsInventory extends HTMLElement {
     const lo = this.#activeLevel + 1;
     const hi = this.#activeLevel + FAR_FUTURE_SPAN;
     const byLevel = new Map(this.#holdings
-      .filter((t) => t.level >= lo && t.level <= hi && t.wholeTickets > 0)
+      .filter((t) => t.level >= lo && t.level <= hi && t.entryCount > 0)
       .map((row) => [row.level, { ...row }]));
     if (this.#salvageQueueLoaded) {
       for (const queueRow of this.#salvageQueue) {
         if (queueRow.level < lo || queueRow.level > hi) continue;
         const wholeTickets = Math.floor(queueRow.entryCount / ENTRIES_PER_CARD);
-        if (wholeTickets <= 0) continue;
+        if (queueRow.entryCount <= 0) continue;
         byLevel.set(queueRow.level, {
           level: queueRow.level,
           entryCount: queueRow.entryCount,
@@ -1407,11 +1442,11 @@ class AppTicketsInventory extends HTMLElement {
     const rows = [...byLevel.values()].sort((a, b) => a.level - b.level);
     const salvageByLevel = new Map(this.#salvageEligibleRows().map((row) => [row.level, row]));
 
-    const total = rows.reduce((s, t) => s + t.wholeTickets, 0);
+    const totalEntries = rows.reduce((sum, row) => sum + row.entryCount, 0);
     const head = document.createElement('p');
     head.className = 'inv-ff__total';
-    head.textContent = total > 0
-      ? `${total.toLocaleString('en-US')} tickets owed across ${rows.length} future level${rows.length === 1 ? '' : 's'} (through level ${hi})`
+    head.textContent = totalEntries > 0
+      ? `${formatTicketEntryHoldings(totalEntries)} owed across ${rows.length} future level${rows.length === 1 ? '' : 's'} (through level ${hi})`
       : `No far-future tickets held (levels ${lo}–${hi}).`;
     host.appendChild(head);
 
@@ -1445,7 +1480,7 @@ class AppTicketsInventory extends HTMLElement {
       row.appendChild(lvl);
       const count = document.createElement('span');
       count.className = 'inv-ff__count';
-      count.textContent = `${t.wholeTickets.toLocaleString('en-US')} ticket${t.wholeTickets === 1 ? '' : 's'}`;
+      count.textContent = formatTicketEntryHoldings(t.entryCount);
       row.appendChild(count);
 
       if (salvage) {
@@ -1600,6 +1635,7 @@ class AppTicketsInventory extends HTMLElement {
     host.textContent = '';
     const d = this.#data;
     const cardsArr = Array.isArray(d?.cards) ? d.cards : [];
+    const hiddenItemKeys = d?._hiddenItemKeys instanceof Set ? d._hiddenItemKeys : new Set();
 
     const combos = new Map();
     let pendingCount = 0;
@@ -1612,7 +1648,9 @@ class AppTicketsInventory extends HTMLElement {
       foilRemaining.set(key, (foilRemaining.get(key) || 0) + 1);
     }
     let foilOrdinal = 0;
-    for (const record of dgnReconstructTicketRecords(cardsArr)) {
+    const partitioned = dgnPartitionTicketEntries(cardsArr);
+    for (const record of partitioned.tickets
+      .filter((ticket) => !hiddenItemKeys.has(String(ticket.key)))) {
       const ids = record.traitIds;
       const comboKey = invComboKey(ids);
       const foilLeft = foilRemaining.get(comboKey) || 0;
@@ -1656,11 +1694,23 @@ class AppTicketsInventory extends HTMLElement {
     const sorted = [...combos.values()].sort(
       (a, b) => displayTier(a) - displayTier(b) || b.count - a.count,
     );
+    const looseByTrait = new Map();
+    for (const entry of partitioned.entries
+      .filter((item) => !hiddenItemKeys.has(String(item.key)))) {
+      const traitId = Number(entry?.traitId);
+      if (!Number.isInteger(traitId) || traitId < 0 || traitId > 255) continue;
+      looseByTrait.set(traitId, (looseByTrait.get(traitId) || 0) + 1);
+    }
+    const looseEntries = [...looseByTrait.entries()].sort((a, b) => {
+      const aGold = invTraitToQSC(a[0]).col === INV_GOLD_COLOR_IDX;
+      const bGold = invTraitToQSC(b[0]).col === INV_GOLD_COLOR_IDX;
+      return Number(bGold) - Number(aGold) || b[1] - a[1] || a[0] - b[0];
+    });
 
     // Permanent account collectibles come before level-scoped tickets.
     const deityRendered = this.#renderDeityPasses(host);
 
-    if (sorted.length === 0 && pendingCount === 0 && !deityRendered) {
+    if (sorted.length === 0 && looseEntries.length === 0 && pendingCount === 0 && !deityRendered) {
       const empty = document.createElement('p');
       empty.className = 'inv-empty';
       empty.textContent = this.#address
@@ -1734,6 +1784,48 @@ class AppTicketsInventory extends HTMLElement {
       host.appendChild(wrap);
     }
 
+    // A contract entry is one physical quarter of a ticket. Fractional
+    // generation tails are real inventory, so show each rolled trait as that
+    // centerless quarter instead of silently dropping it from Cards mode.
+    for (const [traitId, count] of looseEntries) {
+      const { q, sym, col } = invTraitToQSC(traitId);
+      const wrap = document.createElement('div');
+      wrap.className = 'inv-card inv-card--entry';
+      if (col === INV_GOLD_COLOR_IDX) wrap.classList?.add('inv-card--gold');
+      const traitName = invEntryLabel(traitId);
+      wrap.title = `Ticket entry · ${traitName}`;
+      wrap.setAttribute('aria-label', `${count > 1 ? `${count} matching` : 'One'} ticket ${count === 1 ? 'entry' : 'entries'} · ${traitName}`);
+
+      if (count > 1) {
+        const countBadge = document.createElement('div');
+        countBadge.className = 'inv-count';
+        countBadge.textContent = `×${count}`;
+        wrap.appendChild(countBadge);
+      }
+
+      const entryCard = document.createElement('div');
+      entryCard.className = 'ticket-entry-card tc-small';
+      entryCard.setAttribute('data-quadrant', String(q));
+      applyDgnTicketAccent(entryCard, [traitId]);
+      const cell = document.createElement('div');
+      cell.className = 'trait-quadrant';
+      if (col === INV_GOLD_COLOR_IDX) cell.classList.add('trait-quadrant--gold');
+      const img = document.createElement('img');
+      img.src = invBadgePath(q, sym, col);
+      img.alt = traitName;
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      cell.appendChild(img);
+      entryCard.appendChild(cell);
+      wrap.appendChild(entryCard);
+
+      const label = document.createElement('span');
+      label.className = 'inv-entry-label';
+      label.textContent = count === 1 ? '1 ENTRY' : `${count} ENTRIES`;
+      wrap.appendChild(label);
+      host.appendChild(wrap);
+    }
+
     if (pendingCount > 0) {
       const pend = document.createElement('div');
       pend.className = 'inv-card inv-card--pending';
@@ -1803,14 +1895,19 @@ class AppTicketsInventory extends HTMLElement {
     host.textContent = '';
     const d = this.#data;
     const cardsArr = Array.isArray(d?.cards) ? d.cards : [];
+    const hiddenItemKeys = d?._hiddenItemKeys instanceof Set ? d._hiddenItemKeys : new Set();
 
     const counts = new Array(256).fill(0);
-    for (const card of cardsArr) {
-      if (!card || card.status !== 'opened') continue;
-      for (const e of (card.entries || [])) {
-        const tid = e?.traitId;
-        if (tid != null && tid >= 0 && tid < 256) counts[tid]++;
-      }
+    const opened = cardsArr.filter((card) => card?.status === 'opened');
+    const partitioned = dgnPartitionTicketEntries(opened);
+    for (const ticket of partitioned.tickets
+      .filter((item) => !hiddenItemKeys.has(String(item.key)))) {
+      for (const tid of ticket.traitIds) counts[tid]++;
+    }
+    for (const entry of partitioned.entries
+      .filter((item) => !hiddenItemKeys.has(String(item.key)))) {
+      const tid = Number(entry?.traitId);
+      if (Number.isInteger(tid) && tid >= 0 && tid < 256) counts[tid]++;
     }
 
     if (this.#deityExpectedEntries.size > 0) {

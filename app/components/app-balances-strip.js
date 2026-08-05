@@ -30,7 +30,7 @@
 import { CHAIN } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { getViewedAddress, get, subscribe } from '../app/store.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 // Inline ETH-winnings claim (user call: the big claims banner is gone; the
 // Winnings tile carries the claim instead).
 import { claimEth } from '../app/claims.js';

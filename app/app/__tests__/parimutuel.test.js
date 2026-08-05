@@ -27,7 +27,7 @@ import * as pari from '../parimutuel.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
 import * as reasonMapMod from '../reason-map.js';
-import { VOLUME_WINDOW } from '../chain-config.js';
+import { CHAIN, VOLUME_WINDOW } from '../chain-config.js';
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
 
@@ -263,8 +263,10 @@ describe('view decoding', () => {
       jackpotCompressionTier: async () => 1,
     }));
     assert.deepEqual(await pari.readJackpotPhaseContext(), {
+      level: 38,
       jackpot: false,
       lastPurchaseDay: true,
+      rngLocked: false,
       compressedFlag: 1,
     });
   });
@@ -520,6 +522,57 @@ describe('readLastVolumeSeal', () => {
       round: 41, total: 800n, previous: 400n, blockNumber: 80,
     });
     assert.equal(filterRounds[0], 41, 'the indexed event filter receives openRound - 1');
+    pari.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+  });
+
+  test('an exact old round searches its estimated day instead of only the recent head', async () => {
+    const wantedRound = 41;
+    const deployBlock = Number(CHAIN.deployBlock);
+    const targetBlock = deployBlock + 20_000;
+    const head = deployBlock + 100_000;
+    const sealTimestamp = Number(VOLUME_WINDOW.anchor)
+      + Number(VOLUME_WINDOW.period)
+        * (Number(VOLUME_WINDOW.deployDayBoundary) + wantedRound - 1);
+    const deployTimestamp = sealTimestamp - 40_000;
+    const ranges = [];
+
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => head,
+      getBlock: async (blockNumber) => {
+        assert.equal(Number(blockNumber), deployBlock);
+        return { timestamp: deployTimestamp };
+      },
+    });
+    pari.__setContractFactoryForTest(() => ({
+      filters: { VolumeRoundSealed: (round) => ({ round }) },
+      queryFilter: async (_filter, from, to) => {
+        ranges.push([Number(from), Number(to)]);
+        if (Number(from) <= targetBlock && Number(to) >= targetBlock) {
+          return [{
+            blockNumber: targetBlock,
+            args: { round: wantedRound, total: 800n, previous: 400n },
+          }];
+        }
+        return [];
+      },
+      connect() { return this; },
+    }));
+
+    const seal = await pari.readLastVolumeSeal({ round: wantedRound });
+    assert.deepEqual(seal, {
+      round: wantedRound,
+      total: 800n,
+      previous: 400n,
+      blockNumber: targetBlock,
+    });
+    assert.ok(ranges.length <= 2, 'the estimated scan reaches the old seal directly');
+    assert.ok(ranges.every(([from, to]) => to - from + 1 <= 1800),
+      'every historical lookup remains beneath the RPC range cap');
+    assert.ok(ranges.every(([, to]) => to < head - 50_000),
+      'the exact-round scan does not begin at the unrelated recent head');
+
     pari.__resetContractFactoryForTest();
     contractsMod.clearProvider();
   });

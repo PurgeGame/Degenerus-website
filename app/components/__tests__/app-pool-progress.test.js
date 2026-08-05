@@ -196,30 +196,41 @@ describe('phase strip copy', () => {
 });
 
 describe('special level-transition jackpot countdown', () => {
-  test('names Decimator only on the final x4 jackpot draw', () => {
+  test('names Decimator only after the target level purchase pool closes', () => {
     assert.deepEqual(transitionJackpotCountdownModel({
-      level: 34, jackpot: true, finalDraw: true,
+      level: 34, jackpot: false, lastPurchaseDay: true,
     }), {
-      kind: 'decimator', label: 'DECIMATOR JACKPOT IN:', level: 35,
+      kind: 'decimator', label: 'DECIMATOR CROSSOVER IN:', level: 35,
     });
     assert.equal(transitionJackpotCountdownModel({
-      level: 34, jackpot: true, finalDraw: false,
-    }), null, 'the target-driven purchase/early-jackpot period cannot quote a false transition time');
+      level: 34, jackpot: false, lastPurchaseDay: false,
+    }), null, 'a still-open target-driven purchase phase cannot quote a transition time');
     assert.equal(transitionJackpotCountdownModel({
-      level: 94, jackpot: true, finalDraw: true,
+      level: 94, jackpot: false, lastPurchaseDay: true,
     }), null, 'level 95 is the intentional Decimator exception');
   });
 
-  test('names BAF on the day before x10 and combines both drawings before x100', () => {
+  test('names BAF at the x10 purchase close and never on the previous final jackpot', () => {
     assert.deepEqual(transitionJackpotCountdownModel({
-      level: 39, jackpot: true, finalDraw: true,
+      level: 39, jackpot: false, lastPurchaseDay: true,
     }), {
-      kind: 'baf', label: 'BAF JACKPOT IN:', level: 40,
+      kind: 'baf', label: 'BAF CROSSOVER IN:', level: 40,
     });
+    assert.equal(transitionJackpotCountdownModel({
+      level: 39, jackpot: true, lastPurchaseDay: false,
+    }), null, 'finishing level 39 only opens level 40 purchases; it does not resolve BAF');
     assert.deepEqual(transitionJackpotCountdownModel({
-      level: 99, jackpot: true, finalDraw: true,
+      level: 40, jackpot: false, lastPurchaseDay: true, rngLocked: true,
     }), {
-      kind: 'both', label: 'DECIMATOR + BAF JACKPOTS IN:', level: 100,
+      kind: 'baf', label: 'BAF CROSSOVER IN:', level: 40,
+    }, 'the RNG request promotes the level without moving the BAF target to 50');
+  });
+
+  test('combines both reward jackpots at a closed x100 purchase pool', () => {
+    assert.deepEqual(transitionJackpotCountdownModel({
+      level: 99, jackpot: false, lastPurchaseDay: true,
+    }), {
+      kind: 'both', label: 'DECIMATOR + BAF CROSSOVER IN:', level: 100,
     });
   });
 });
@@ -249,6 +260,8 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     assert.match(pari, /update\('app\.poolBenchmarks'/);
     assert.match(pari, /lastPurchaseDay:\s*phaseContext\.lastPurchaseDay === true/,
       'the phase strip receives the contract last-purchase latch');
+    assert.match(pari, /rngLocked:\s*phaseContext\.rngLocked === true/,
+      'the reward-jackpot clock receives the contract transition lock');
     assert.match(css, /\.pool-progress__track\s*\{/);
     assert.match(component, /data-el="pool-target-marker"/);
     assert.match(component, /data-el="pool-growth-marker"/);
@@ -315,10 +328,10 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
       'the deterministic final-day share is presented as the grand prize');
     assert.match(component, /NEXT JACKPOT IN:/);
     assert.match(component, /pool-jackpot-countdown/);
-    assert.match(component, /secondsUntilNextJackpot/,
+    assert.match(component, /secondsUntilDayCrossover/,
       'the strip shares the top-bar countdown clock');
-    assert.match(component, /DECIMATOR JACKPOT IN:/);
-    assert.match(component, /BAF JACKPOT IN:/);
+    assert.match(component, /DECIMATOR CROSSOVER IN:/);
+    assert.match(component, /BAF CROSSOVER IN:/);
     assert.match(component, /pool-special-jackpot-countdown/);
     assert.match(css, /\.pool-progress__special-jackpot\s*\{[^}]*margin:\s*-0\.08rem auto 0\.46rem/s,
       'the special draw clock sits as a compact line above the pool instrument');

@@ -1,6 +1,6 @@
-// Compact environment warning for the player app. The markup lives in
-// app/index.html so it reserves its normal place above the jackpot headline;
-// this module only decides whether the active build is Base Sepolia.
+// Base Sepolia presentation helpers shared by the app chrome and purchase
+// surfaces. The warning strip belongs in the live beta, but not inside the
+// scripted tutorial's production-UI iframe.
 
 import { CHAIN } from '../app/chain-config.js';
 
@@ -10,16 +10,23 @@ export function isBaseSepolia(chain = CHAIN) {
   return Number(chain?.id) === 84_532;
 }
 
-export function renderTestnetBetaBanner(root = globalThis.document, chain = CHAIN) {
-  const banner = root?.getElementById?.('testnet-beta-banner')
-    || root?.querySelector?.('#testnet-beta-banner');
-  if (!banner) return false;
-
-  const visible = isBaseSepolia(chain);
-  banner.hidden = !visible;
-  if (visible) banner.removeAttribute?.('hidden');
-  else banner.setAttribute?.('hidden', '');
-  return visible;
+export function isTutorialApp(search = '') {
+  try { return new URLSearchParams(String(search || '')).get('tutorial') === '1'; }
+  catch (_e) { return false; }
 }
 
-if (typeof document !== 'undefined') renderTestnetBetaBanner(document, CHAIN);
+export function syncTestnetBetaBanner({
+  documentRef,
+  locationRef,
+  chain = CHAIN,
+} = {}) {
+  const doc = documentRef || (typeof document !== 'undefined' ? document : null);
+  const loc = locationRef || (typeof window !== 'undefined' ? window.location : null);
+  const banner = doc?.getElementById?.('testnet-beta-banner');
+  if (!banner) return false;
+  const show = isBaseSepolia(chain) && !isTutorialApp(loc?.search || '');
+  banner.hidden = !show;
+  return show;
+}
+
+if (typeof document !== 'undefined') syncTestnetBetaBanner();

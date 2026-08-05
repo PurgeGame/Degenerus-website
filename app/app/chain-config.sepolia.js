@@ -18,7 +18,7 @@ export const CHAIN = {
   // (eth_call, eth_getStorageAt, eth_getLogs). sepolia.base.org is retained
   // below as the wallet-add fallback.
   rpcUrl: 'https://base-sepolia-rpc.publicnode.com',
-  deployBlock: 45_005_925,
+  deployBlock: 45_093_474,
   indexerBase: 'http://localhost:3000',
   etherscanBase: 'https://sepolia.basescan.org',
   nativeAddEntry: {
@@ -36,36 +36,36 @@ export const CHAIN = {
 // (GAME 0x54ad8e5f...1044, deploy block 45005925). ADMIN excluded per Plan 56-01
 // (deployer-only EOA reference, not a player-facing contract).
 export const CONTRACTS = {
-  ICONS_32:                '0xe7a5539c1914f1335f3055058182ebd524ad1791',
-  GAME_MINT_MODULE:        '0xdf1874bb37b87a8befccc645470553a52359ba2d',
-  GAME_ADVANCE_MODULE:     '0xa8d9e2d8701133a1d5bfb61b6f65bcccd9ae355b',
-  GAME_WHALE_MODULE:       '0x15a52f903100f04ecc1d71b2ab7943cababa73d3',
-  GAME_JACKPOT_MODULE:     '0xaf2043d670ca1f724bbe239f13e1611083a0ffcf',
-  GAME_DECIMATOR_MODULE:   '0x2c55976105e5d2b7cae25870407c9385ad75dd01',
-  GAME_GAMEOVER_MODULE:    '0x7550466fa05ba43044d6412c768fbf1dda22c0e0',
-  GAME_LOOTBOX_MODULE:     '0x87ed4a3b245020a84f566f512782bcebb45f0ea5',
-  GAME_BOON_MODULE:        '0x4af6c15a88a76597b78eff83645c1de326b881ad',
-  GAME_DEGENERETTE_MODULE: '0x21ea7c013dd6c20fcdd90e16289b7bdf5f02ef16',
-  GAME_BINGO_MODULE:       '0xf1c8e1326745a99b5687b6f08d9ce0fb90287211',
-  GAME_AFKING_MODULE:      '0x0e940d9a1f0e8c649d038d08616630daa47fe912',
-  GAME_FOILPACK_MODULE:    '0x792829de274b6f01344c0d47323d062ecf5bfe0d',
-  AFKING_SUB_TOKEN:        '0xdfa02483274e4664c584873f2b9c6d7fca25da10',
-  COIN:                    '0x280a5067694f9deffa767f81d257fbd4f3ac557b',
-  COINFLIP:                '0x364a407bcc157c47bba3b7943ca1de34dfa619f4',
-  GAME:                    '0x54ad8e5f30f2ce3bf3b0d60301de28a5c2d41044',
+  ICONS_32:                '0xae81fe04be9d373aa835af61a2a290ec07a9e37b',
+  GAME_MINT_MODULE:        '0x18d6478aefa75018d5fc1945ba156aa1d7c6fc05',
+  GAME_ADVANCE_MODULE:     '0xded76f43d9cb2c0c5a321853b51455d010f0731e',
+  GAME_WHALE_MODULE:       '0x22a714a05c691eed658f37ccbceedbc087120f39',
+  GAME_JACKPOT_MODULE:     '0xc3aa180996dc9d80ff8414ae4e89dbdf37c04380',
+  GAME_DECIMATOR_MODULE:   '0x5bbb9ba7ec930e0316cd343a80a7fd2d38d7eb2d',
+  GAME_GAMEOVER_MODULE:    '0xa53dd54bcf97d27a69c84ed51bf03d6e833391cb',
+  GAME_LOOTBOX_MODULE:     '0x9da25d5e8eaf4649cb8e88564411ceea30d78dc4',
+  GAME_BOON_MODULE:        '0xb1bb50d6c84574e443ffd6eda8630033819882ba',
+  GAME_DEGENERETTE_MODULE: '0x0272e75dc71451ca4f000a8530b41f65ee024d55',
+  GAME_BINGO_MODULE:       '0x6d221f26c3f073473a3cf427041158806bf19547',
+  GAME_AFKING_MODULE:      '0x1d56a02269bebed11e6c1fac234f06ff80c71221',
+  GAME_FOILPACK_MODULE:    '0xa51972cb0e5f9a9b915ef052031472568c084aa1',
+  AFKING_SUB_TOKEN:        '0xf0714f1ca410adab6b824d77d13b2444b4b34bb8',
+  COIN:                    '0xda0984df96f7a38bda27d5f151720442dcae66f5',
+  COINFLIP:                '0x411ac227939ea945d9a1387404c3c515bfe2393d',
+  GAME:                    '0x9f6f2d323982001f9034ed11eb14c83a6a323f53',
   // Read-only periphery (DegenerusGameLens). Redeployed every run — it bakes
   // QUESTS and DEPLOY_DAY_BOUNDARY as compile-time constants.
-  GAME_LENS:               '0x6cfa47e1b11355d4e8dc82b6f16c44481aa92886',
-  WWXRP:                   '0x8679b4b8c27e15c88807a15980f725924411d3f4',
-  AFFILIATE:               '0x3631d97d708defc9f3d3d11107459e6fd167a20e',
-  JACKPOTS:                '0xb29a9d70b1bb47abfbc5800672a7fb9441b99954',
-  QUESTS:                  '0xbc839f05cfc6e03128864c2e89c6b09356145791',
-  PARIMUTUEL:              '0x05c03588754ce03f694b5b299e7bcc1f2d4cfac1',
-  DEITY_PASS:              '0x38ba62d422167ee5ff2db5b3969f00d5991ea8c5',
-  VAULT:                   '0x7265b4d7a9e2d2accc114cf798d74934d2ca45a6',
-  SDGNRS:                  '0x185eff584ea02ffd4928a7796d8fa21594634489',
-  DGNRS:                   '0x77097af720b3915f96d0e512ebcc841037ffeca0',
-  GNRUS:                   '0x293e3d2dab4736b5155b509bf70c0622a354dc42',
+  GAME_LENS:               '0x54af457203a30aeb17c3dc0c456a13f41c63f88e',
+  WWXRP:                   '0xfb9200809217fb967959cacc74ffc57b9085a2ec',
+  AFFILIATE:               '0x4f78014f2fca20ee74733a18e29827c626d54285',
+  JACKPOTS:                '0xcd2981c68181a93cd7659fbf6caa9efa1187df7f',
+  QUESTS:                  '0x43661e92f315cf0ff107ebdf643d8af0e23b0d19',
+  PARIMUTUEL:              '0x6b4ff5bbf82cd9e7db6324c24432daf8a7944ca8',
+  DEITY_PASS:              '0x06e958c337cfd92ac846037998c540f4f662d988',
+  VAULT:                   '0x2fe7d00a1356a6d75752bc020efc648b7eed8539',
+  SDGNRS:                  '0xf54ffa0e94d80a3b82398bd2e2952b5158ee1d79',
+  DGNRS:                   '0x7546a373c0d92897d5057161191d7e2f05bc368b',
+  GNRUS:                   '0x715832ea3c1ac93cc2c52d82c9c045b3023d2c09',
 };
 
 // Ticket-volume parimutuel window, for the COUNTDOWN ONLY — the contract's own
@@ -77,7 +77,9 @@ export const CONTRACTS = {
 export const VOLUME_WINDOW = {
   anchor: 82_620,        // GameTimeLib.JACKPOT_RESET_TIME — 22:57 UTC, the day boundary
   period: 600,           // one game day (600s testnet overlay)
-  jackpotReadyDelay: 60, // RNG/indexing normally makes the new draw playable ~1m later
+  // Readiness polling hint only. The visible clock uses the exact boundary so
+  // the real keeper/RNG activation lag remains observable.
+  jackpotReadyDelay: 60,
   openSeconds: 540,      // betting is open for the first nine minutes
   creditDecayStart: 154, // full 25 FLIP through the first rescaled credit tier
   creditDecayStep: 86,   // -5 FLIP per rescaled step
@@ -88,7 +90,7 @@ export const VOLUME_WINDOW = {
   // deploy; it is `deployDayBoundary` in the sim's sepolia-manifest.json and
   // must be re-copied alongside the addresses above. Verified against live
   // VolumeRoundSealed logs (round 22 sealed on day index 22).
-  deployDayBoundary: 2_976_162, // run #27 (GAME 0x54ad8e5f @ 45005925); was 2_976_020 for run #25
+  deployDayBoundary: 2_976_454, // 0x9f6f2d32… @ 45093474
 };
 
 export const ETH_DIVISOR = 1_000_000n;     // /1M scaleEth on testnet (Phase 51 51-03 decision; Base Sepolia run keeps it)

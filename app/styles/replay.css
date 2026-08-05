@@ -1,0 +1,869 @@
+/* styles/replay.css -- Jackpot Replay Viewer */
+
+.replay-panel {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.replay-panel .panel-header h2 {
+  font-size: clamp(1rem, 3vw, 1.3rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* --- Controls bar --- */
+
+.replay-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: clamp(0.5rem, 2vw, 0.75rem);
+  margin-bottom: clamp(0.75rem, 3vw, 1.25rem);
+}
+
+.replay-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+  min-width: 140px;
+}
+
+.replay-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+
+.replay-select {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b6b8d' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.25em;
+  padding-right: 2rem;
+}
+
+.replay-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.replay-select:hover {
+  border-color: var(--accent-secondary);
+}
+
+.replay-reveal-btn {
+  white-space: nowrap;
+  align-self: flex-end;
+  min-height: 38px;
+}
+
+/* --- Ticket info bar --- */
+
+.replay-ticket-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  margin-bottom: clamp(0.75rem, 3vw, 1rem);
+  font-size: 0.85rem;
+}
+
+.replay-ticket-count {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.replay-ticket-detail {
+  color: var(--text-dim);
+}
+
+.replay-winner-text {
+  color: var(--success) !important;
+}
+
+/* --- Ticket token (whitepaper style: 2x2 grid with flame center) --- */
+
+.replay-ticket {
+  width: clamp(240px, 50vw, 300px);
+  aspect-ratio: 1;
+  margin: 0 auto clamp(0.75rem, 3vw, 1.25rem);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  position: relative;
+  background: #d9d9d9;
+  border: 3px solid #8a8d8f;
+  border-radius: 14px;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.replay-ticket.replay-ticket--has-owned-gold {
+  border-color: #d4af37;
+  box-shadow: 0 0 0 2px rgba(255, 233, 163, 0.22), 0 0 30px rgba(212, 175, 55, 0.42);
+}
+
+/* Cross lines */
+.replay-ticket::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: #8a8d8f;
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+}
+.replay-ticket::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: #8a8d8f;
+  transform: translateY(-50%);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.replay-tq {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.replay-tq .badge-img {
+  object-fit: contain;
+  object-position: 50% 50%;
+  flex: 0 0 auto;
+  width: 122%;
+  max-width: none;
+  height: 122%;
+  max-height: none;
+  padding: 0;
+  display: block;
+  position: relative;
+  z-index: 1;
+  opacity: 0;
+  transition: none;
+}
+
+.replay-tq.spinning .badge-img,
+.replay-tq.q-has-trait .badge-img,
+.replay-tq.q-no-tickets .badge-img,
+.replay-tq.q-scratchable .badge-img,
+.replay-tq.q-has-tickets .badge-img {
+  opacity: 1;
+}
+
+/* Center diamond */
+.replay-ticket-center {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  width: 28%;
+  height: 28%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.replay-ticket-center::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: calc(100% / 1.4142);
+  height: calc(100% / 1.4142);
+  background: #fff;
+  border: 2px solid #8a8d8f;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%) rotate(45deg);
+  transition: background 0.4s ease, border-color 0.4s ease;
+}
+
+.replay-ticket-center.revealed::before {
+  background: linear-gradient(135deg, #2a1a08, #3d2a10, #2a1a08);
+  border-color: #c9943a;
+}
+
+/* Once main + bonus are both uncovered, the center becomes a quiet two-state
+   switch. The ring is enough affordance without adding another button row. */
+.replay-ticket-center.replay-ticket-center--draw-toggle::before {
+  border-color: #f5a623;
+  box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.2), 0 0 14px rgba(245, 166, 35, 0.42);
+}
+.replay-ticket-center.replay-ticket-center--draw-toggle:hover::before,
+.replay-ticket-center.replay-ticket-center--draw-toggle:focus-visible::before {
+  filter: brightness(1.12);
+  box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.3), 0 0 18px rgba(245, 166, 35, 0.58);
+}
+
+.replay-flame {
+  position: relative;
+  width: 66%;
+  height: 66%;
+  object-fit: contain;
+  z-index: 1;
+}
+
+/* --- Center diamond scratch canvas --- */
+
+.replay-center-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 5;
+  display: none;
+  cursor: pointer;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  touch-action: none;
+}
+
+/* --- Center prize overlay --- */
+
+.replay-center-prize {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  text-align: center;
+  font-weight: 700;
+  line-height: 1.2;
+  display: none;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.replay-center-prize.visible {
+  opacity: 1;
+}
+
+.replay-center-prize .ff-amount {
+  font-size: 0.7rem;
+  display: block;
+  color: #fff;
+  text-shadow: 0 0 8px rgba(245, 166, 35, 0.8), 0 1px 2px rgba(0,0,0,0.5);
+  letter-spacing: 0.02em;
+}
+
+.replay-center-prize .ff-label {
+  font-size: 0.48rem;
+  color: rgba(255,255,255,0.7);
+  display: block;
+  margin-top: 1px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* --- Spin + Scratch quadrant states (ported from jackpot-demo.html) --- */
+
+.replay-tq.q-has-trait {
+  /* Opaque by design: an owned gold quadrant may turn the outer border gold,
+     but must never tint another quadrant's ordinary possible-win blue. */
+  background: #b8d4e8;
+}
+
+.replay-tq.q-no-tickets {
+  background: rgba(239, 120, 120, 0.5);
+}
+
+.replay-tq.q-scratchable {
+  background: #7ca8c4;
+}
+
+.replay-tq.q-has-tickets {
+  background: rgba(22, 163, 74, 0.6);
+}
+
+.replay-tq.q-owned-miss {
+  /* The removable canvas is the blue "you held this trait" front. Once it is
+     scratched, a loss uses the same pink result surface as every other miss. */
+  background: rgba(239, 120, 120, 0.5);
+}
+
+.replay-tq.q-player-win {
+  background: rgba(22, 163, 74, 0.72);
+  box-shadow: inset 0 0 0 2px rgba(134, 239, 172, 0.55);
+}
+
+.replay-tq.q-win-impossible {
+  /* Lighter losing paper revealed beneath the darker removable cover. */
+  background: rgba(239, 120, 120, 0.5);
+  transition: background-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.replay-tq.q-win-impossible-lock {
+  /* The darker face appears the instant an impossible target locks. The
+     scratch canvas is painted this exact color before this class is removed,
+     so lock → scratch remains visually continuous. */
+  background: rgb(218, 104, 104);
+  transition: background-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.replay-tq.q-gold-trait {
+  background:
+    linear-gradient(135deg, #8a6a12 0%, #d4af37 30%, #fff0ad 50%, #d4af37 70%, #8a6a12 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 244, 176, 0.62);
+}
+
+/* The removable canvas above this layer carries the pale-blue, darker-pink, or
+   gold settled face. During a partial scratch the paper underneath stays
+   neutral; hitting a paid badge removes this class for green immediately, and
+   crossing the reveal threshold removes it for the final pink/green result. */
+.replay-tq.q-scratch-underlay,
+.replay-tq.q-result-pending {
+  background: #bfc2c5;
+  box-shadow: none;
+}
+
+.replay-tq.q-result-revealed.q-has-tickets {
+  background: rgba(22, 163, 74, 0.72);
+  box-shadow: inset 0 0 0 2px rgba(134, 239, 172, 0.55);
+}
+
+.replay-tq.q-result-revealed.q-no-tickets {
+  background: rgba(239, 120, 120, 0.5);
+  box-shadow: none;
+}
+
+/* --- Scratch canvas --- */
+
+.replay-scratch-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* --- Prize reveal overlay --- */
+
+.replay-prize-reveal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.replay-prize-reveal.visible {
+  opacity: 1;
+}
+
+/* Compact per-quadrant receipt. A player win reserves the quadrant's outside
+   edge for this copy: top on the upper pair, bottom on the lower pair. Badge
+   placement uses the complementary art band, so neither layer has to win a
+   z-index fight to remain legible. */
+.replay-prize-reveal.replay-player-win-reveal[data-pos="tl"],
+.replay-prize-reveal.replay-player-win-reveal[data-pos="tr"] {
+  justify-content: flex-start;
+}
+
+.replay-prize-reveal.replay-player-win-reveal[data-pos="bl"],
+.replay-prize-reveal.replay-player-win-reveal[data-pos="br"] {
+  justify-content: flex-end;
+}
+
+.replay-win-description {
+  box-sizing: border-box;
+  width: 94%;
+  align-self: center;
+  max-width: 94%;
+  margin: 0;
+  padding: 0.34rem 0.48rem;
+  border: 1px solid rgba(187, 247, 208, 0.62);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(5, 46, 22, 0.97), rgba(6, 78, 59, 0.94));
+  box-shadow: 0 3px 14px rgba(5, 46, 22, 0.42), inset 0 1px 0 rgba(240, 253, 244, 0.12);
+  color: #f0fdf4;
+  text-align: center;
+}
+
+.replay-player-win-reveal[data-pos="tl"] .replay-win-description,
+.replay-player-win-reveal[data-pos="tr"] .replay-win-description {
+  margin-top: 4%;
+}
+
+.replay-player-win-reveal[data-pos="bl"] .replay-win-description,
+.replay-player-win-reveal[data-pos="br"] .replay-win-description {
+  margin-bottom: 4%;
+}
+
+.replay-win-description__title {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: #bbf7d0;
+  font-size: clamp(0.46rem, 1.4vw, 0.62rem);
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.replay-win-description__lines {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.14rem 0.22rem;
+}
+
+.replay-win-description__line {
+  font-size: clamp(0.58rem, 1.8vw, 0.78rem);
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+/* --- Scattered win badges --- */
+
+.replay-badge-wrap {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+  text-align: center;
+}
+
+.replay-scattered-badge {
+  width: 100%;
+  display: block;
+  opacity: 0.85;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.25));
+  object-fit: contain;
+}
+
+/* "+N more" label shown when win count exceeds the 20-badge visual cap */
+.replay-badge-overflow-label {
+  position: absolute;
+  bottom: 4%;
+  right: 4%;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 2;
+  letter-spacing: 0.02em;
+}
+
+/* Keep the overflow count in the art band as well. */
+.replay-tq[data-pos="tl"] .replay-badge-overflow-label,
+.replay-tq[data-pos="tr"] .replay-badge-overflow-label {
+  top: auto;
+  bottom: 4%;
+}
+
+.replay-tq[data-pos="bl"] .replay-badge-overflow-label,
+.replay-tq[data-pos="br"] .replay-badge-overflow-label {
+  top: 4%;
+  bottom: auto;
+}
+
+.replay-tq[data-pos="tl"] .replay-badge-overflow-label,
+.replay-tq[data-pos="bl"] .replay-badge-overflow-label {
+  left: 4%;
+  right: auto;
+}
+
+/* --- Hint text --- */
+
+.replay-hint {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  min-height: 1.2em;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* --- Spin animation --- */
+
+.replay-ticket-center.spinning .replay-flame {
+  animation: replay-flame-pulse 0.6s ease-in-out infinite;
+}
+
+@keyframes replay-flame-pulse {
+  0%, 100% { filter: brightness(1) sepia(0) saturate(1) hue-rotate(0deg); }
+  50% { filter: brightness(1.4) sepia(1) saturate(5) hue-rotate(-30deg); }
+}
+
+/* --- Distributions --- */
+
+.replay-distributions {
+  margin-top: clamp(0.5rem, 2vw, 0.75rem);
+}
+
+.replay-dist-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin: 0 0 0.5rem;
+}
+
+.replay-dist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.replay-dist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.replay-dist-winner {
+  font-weight: 600;
+  color: var(--accent-secondary);
+  font-family: monospace;
+}
+
+.replay-dist-mine {
+  background: rgba(22, 163, 74, 0.15);
+  border: 1px solid rgba(22, 163, 74, 0.3);
+}
+
+.replay-dist-mine .replay-dist-winner {
+  color: var(--success);
+}
+
+.replay-dist-amount {
+  font-weight: 700;
+  color: var(--success);
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.replay-dist-type {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* --- Winner hover tooltip (D1) --- */
+
+.replay-dist-item {
+  cursor: default;
+}
+
+.winner-tip {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  min-width: 200px;
+  max-width: 300px;
+  background: var(--bg-panel, #1a1a2e);
+  border: 1px solid var(--border-color, #3a3a5c);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  pointer-events: none;
+}
+
+.replay-dist-item:hover .winner-tip {
+  display: block;
+}
+
+.tip-trait-group {
+  margin-bottom: 0.5rem;
+}
+
+.tip-trait-group:last-child {
+  margin-bottom: 0;
+}
+
+.tip-trait-name {
+  display: block;
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: var(--accent-secondary, #7c6af7);
+  text-transform: capitalize;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.2rem;
+}
+
+.tip-row {
+  display: block;
+  padding-left: 0.6rem;
+  color: var(--text-secondary, #c0c0d8);
+  line-height: 1.5;
+}
+
+.tip-phase-header {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted, #888);
+  border-bottom: 1px solid var(--border-color, #3a3a5c);
+  margin: 0.4rem 0 0.35rem;
+  padding-bottom: 0.2rem;
+}
+
+.tip-phase-header:first-child {
+  margin-top: 0;
+}
+
+.replay-dist-bonus-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  background: rgba(124, 106, 247, 0.25);
+  border: 1px solid rgba(124, 106, 247, 0.5);
+  border-radius: 4px;
+  color: #a08cf8;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+/* --- Bonus roll section (D2) --- */
+
+.replay-bonus-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin: clamp(0.75rem, 3vw, 1rem) 0;
+}
+
+.replay-bonus-btn {
+  background: linear-gradient(135deg, #4c1d95, #6d28d9);
+  border-color: #7c3aed;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.replay-bonus-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5b21b6, #7c3aed);
+  box-shadow: 0 0 16px rgba(124, 58, 237, 0.5);
+}
+
+.replay-no-bonus {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  font-style: italic;
+  margin: 0;
+}
+
+/* --- Empty state --- */
+
+.replay-empty {
+  text-align: center;
+  padding: clamp(2rem, 6vw, 3rem) 1rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+/* --- Mobile --- */
+
+@media (max-width: 640px) {
+  .replay-controls {
+    flex-direction: column;
+  }
+
+  .replay-control-group {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .replay-reveal-btn {
+    width: 100%;
+  }
+}
+
+/* --- Public result when the viewed player has no winning entry ----------------
+   Every main-draw quadrant stays scratchable. Its red cover communicates that
+   the player cannot win there; scratching reveals the bucket's actual badge,
+   ETH amount, ticket amount, and one combined winning-entry count. */
+.replay-prize-reveal.replay-bucket-reveal {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.22rem;
+  text-align: center;
+  padding: 0.1rem;
+}
+
+/* The center diamond occupies every quadrant's inner corner. Reserve that
+   corner instead of allowing it to sit over payout copy; the modifier follows
+   display order (TL, TR, BL, BR) and leaves the outer corner for the receipt. */
+.replay-prize-reveal.replay-bucket-reveal--q0 { padding: 4% 14% 14% 4%; }
+.replay-prize-reveal.replay-bucket-reveal--q1 { padding: 4% 4% 14% 14%; }
+.replay-prize-reveal.replay-bucket-reveal--q2 { padding: 14% 14% 4% 4%; }
+.replay-prize-reveal.replay-bucket-reveal--q3 { padding: 14% 4% 4% 14%; }
+
+/* Still smaller than the live/reel badge, but large enough to read comfortably
+   on the scratched-off public-result surface. */
+.replay-bucket-badge {
+  width: 48%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.replay-bucket-amount {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.18em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(0.72rem, 2.35vw, 1.08rem);
+  font-weight: 900;
+  line-height: 1.05;
+  color: #5c1616;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.replay-bucket-eth {
+  height: 1.26em;
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.replay-bucket-tickets {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  color: #1f4f7a;
+  font-size: clamp(0.62rem, 1.9vw, 0.82rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.replay-bucket-ticket-count {
+  line-height: 1;
+}
+
+.replay-bucket-row-count {
+  flex: 0 0 auto;
+  margin-left: 0.08em;
+  font-size: 0.78em;
+  font-weight: 950;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.replay-bucket-row-count--currency { color: rgba(92, 22, 22, 0.78); }
+.replay-bucket-row-count--tickets { color: rgba(31, 79, 122, 0.82); }
+
+/* A miniature version of the actual Degenerus ticket: four paper quadrants,
+   crossed seams, and the same centered flame used by inventory tickets. */
+.replay-bucket-ticket-icon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 1.72em;
+  height: 1.72em;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid #777b7e;
+  border-radius: 0.22em;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 0.5px), #85898c calc(50% - 0.5px), #85898c calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(0deg, transparent calc(50% - 0.5px), #85898c calc(50% - 0.5px), #85898c calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(135deg, #e8e8e8, #c9ccce);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.36);
+}
+
+.replay-bucket-ticket-icon::before {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 2;
+  width: 44%;
+  aspect-ratio: 1;
+  border: 1px solid #777b7e;
+  border-radius: 0.08em;
+  background: #fff;
+  content: '';
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.replay-bucket-ticket-badge {
+  position: absolute;
+  z-index: 1;
+  width: 36%;
+  height: 36%;
+  object-fit: contain;
+}
+.replay-bucket-ticket-badge--q0 { top: 4%; left: 4%; }
+.replay-bucket-ticket-badge--q1 { top: 4%; right: 4%; }
+.replay-bucket-ticket-badge--q2 { bottom: 4%; left: 4%; }
+.replay-bucket-ticket-badge--q3 { right: 4%; bottom: 4%; }
+
+.replay-bucket-ticket-flame {
+  position: relative;
+  z-index: 3;
+  width: 30%;
+  height: 42%;
+  object-fit: contain;
+}

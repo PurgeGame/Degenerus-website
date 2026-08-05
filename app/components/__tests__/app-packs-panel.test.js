@@ -822,7 +822,7 @@ describe('Plan 60-03: per-lootbox rows + RNG poll + Open click + reveal animatio
 //
 // NOTE on import shape: __triggerRevealCompleteForTest is dynamically imported
 // inside beforeEach (NOT a top-level static import). app-packs-panel.js
-// statically imports fetchJSON from '../../beta/app/api.js' which in turn has
+// statically imports fetchJSON from '../../app/api.js' which in turn has
 // a top-level `document.addEventListener('visibilitychange', ...)` — under
 // node:test that runs BEFORE the document stub is installed if the import is
 // hoisted. Dynamic import inside beforeEach defers it until after stubs land,

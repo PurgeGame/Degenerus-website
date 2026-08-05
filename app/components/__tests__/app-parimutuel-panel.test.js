@@ -938,6 +938,8 @@ describe('app-parimutuel-panel', () => {
     await flush();
     const [result] = revealMod.__takeQueuedForTest();
     assert.equal(result.kind, 'pari');
+    assert.equal(result.player, TEST_ADDR);
+    assert.equal(result.presentationId, `pari-reveal:${TEST_ADDR}:volume:${VOLUME_ROUND - 1}`);
     assert.equal(result.betTickets, '3');
     assert.equal(result.resultTickets, '2');
   });

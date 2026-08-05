@@ -5,7 +5,7 @@
 
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { ethers, getProvider } from './contracts.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from './api.js';
 import { DGN_QUADRANTS, DGN_SYMBOLS, dgnBadgePath } from './dgn-traits.js';
 import { publishPendingActions, clearPendingActions } from './pending-actions.js';
 import { queueReveal } from '../components/reveal-overlay.js';
@@ -394,6 +394,7 @@ async function _publish(address, seq = null) {
     const symbolName = _symbolLabel(receipt);
     return {
       id: `bingo:${receipt.id}`,
+      dismissScope: addr,
       kind: 'bingo',
       kindLabel: _tierLabel(receipt.tier),
       label: `Level ${receipt.level} ${symbolName} Bingo`,
@@ -441,6 +442,7 @@ async function _publish(address, seq = null) {
       const symbolName = _symbolLabel(candidate);
       return {
         id: `bingo-claim:${candidate.level}:${quadrant}`,
+        dismissScope: addr,
         kind: 'bingo',
         kindLabel: 'BINGO READY',
         label: `Level ${candidate.level} ${symbolName} Bingo`,

@@ -5,7 +5,7 @@
 // shared bottom tray. Opening it plays a one-time final-draw receipt through
 // reveal-overlay; genuine permissionless claims remain available until mined.
 
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 import { CHAIN } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import {
@@ -342,6 +342,7 @@ class AppJackpotResolutions extends HTMLElement {
       const willWrite = decCanResolve;
       rows.push({
         id: `decimator-resolution:${this.#address}:${decLevel}`,
+        dismissScope: this.#address,
         kind: 'decimator',
         kindLabel: 'DECIMATOR FINAL',
         label: `Level ${decLevel} final draw`,
@@ -372,6 +373,7 @@ class AppJackpotResolutions extends HTMLElement {
       const willWrite = bafCanResolve;
       rows.push({
         id: `baf-resolution:${this.#address}:${bafLevel}`,
+        dismissScope: this.#address,
         kind: 'baf',
         kindLabel: 'BAF FINAL',
         label: `Level ${bafLevel} final draw`,

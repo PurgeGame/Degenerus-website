@@ -38,7 +38,7 @@ import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
 import { displayEth } from '../app/scaling.js';
 import { isAddress, parseEther } from 'ethers';
 import { get, subscribe, getViewedAddress, getActingAddress, deriveCanSign } from '../app/store.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 import {
   purchaseWhaleBundle,
   purchaseDeityPass,
@@ -268,6 +268,9 @@ class AppPassSection extends HTMLElement {
   #deityBoonState = null;
   #deityBoonAddress = null;
   #deityBoonFormAddress = null;
+  // A holder's deity desk opens once when their owned pass resolves. Later
+  // polls preserve an intentional manual collapse instead of snapping it open.
+  #deityAutoOpenedFor = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -341,14 +344,25 @@ class AppPassSection extends HTMLElement {
   #renderShell() {
     this.innerHTML = `
       <section class="panel app-pass-section">
-        <div class="panel-header">
-          <h2>PASSES</h2>
+        <div class="panel-header pass-desk-header">
+          <div>
+            <h2>PASSES</h2>
+            <p>Long-term perks, daily powers, and automated play.</p>
+          </div>
         </div>
 
         <!-- Account-switcher (2026-07-16): pass purchases are per-account
              writes with no combined-view analog — hidden alongside the buy
              rows in mode 'combined' (see #renderCombinedGate). -->
         <p class="pass-combined-note" data-bind="pass-combined-note" hidden></p>
+
+        <div class="pass-shop-heading" data-bind="pass-shop-heading">
+          <div>
+            <strong>PASS SHOP</strong>
+            <span>Every pass includes an AFKing automation seat.</span>
+          </div>
+          <small>ONE-TIME PURCHASES</small>
+        </div>
 
         <!-- LAZY ROW — visible ONLY when the level window is open
              (levels 0-2 / x9 / x0; WhaleModule.sol:431-438). It is the
@@ -422,6 +436,7 @@ class AppPassSection extends HTMLElement {
             <span class="pass-product-heading">
               <span class="pass-product-sigil pass-product-sigil--deity" aria-hidden="true">∞</span>
               <span class="pass-product-copy">
+                <span class="pass-product-eyebrow" data-bind="pass-deity-eyebrow">LIFETIME PASS</span>
                 <span class="pass-section-title">Deity pass
                   <boon-product-indicator product="deity"></boon-product-indicator>
                 </span>
@@ -436,7 +451,7 @@ class AppPassSection extends HTMLElement {
               <span>AFKING SEAT</span>
             </span>
             <span class="pass-deity-price">
-              <small>LIVE PRICE</small>
+              <small data-bind="pass-deity-meta-label">LIVE PRICE</small>
               <strong class="pass-deity-hint" data-bind="pass-deity-hint">pick your symbol</strong>
             </span>
           </summary>
@@ -511,51 +526,76 @@ class AppPassSection extends HTMLElement {
             <span class="pass-product-sigil pass-product-sigil--afking" aria-hidden="true">AUTO</span>
             <span class="pass-product-copy">
               <span class="pass-section-title">AFKing subscription</span>
-              <span class="pass-product-description">Auto-buy tickets or a lootbox every day.</span>
+              <span class="pass-product-description">Place an automatic order at each jackpot.</span>
             </span>
           </span>
-          <strong class="pass-afking__status" data-bind="pass-afking-status">SEAT READY</strong>
-          <span class="pass-afking__wallet">
-            <span class="pass-afking__funding" data-bind="pass-afking-funding">—</span>
-            <button type="button" class="pass-afking__claim-button" data-write
-                    data-bind="pass-afking-flip-claim" hidden>Claim bonus FLIP</button>
-            <button type="button" class="pass-afking__withdraw" data-write
-                    data-bind="pass-afking-withdraw" hidden>Withdraw all</button>
-          </span>
+          <div class="pass-afking__meta">
+            <strong class="pass-afking__status" data-bind="pass-afking-status">SEAT READY</strong>
+            <span class="pass-afking__wallet">
+              <span class="pass-afking__balance">
+                <small>PREPAID BALANCE</small>
+                <span class="pass-afking__funding" data-bind="pass-afking-funding">—</span>
+              </span>
+              <button type="button" class="pass-afking__claim-button" data-write
+                      data-bind="pass-afking-flip-claim" hidden>Claim bonus FLIP</button>
+              <button type="button" class="pass-afking__withdraw" data-write
+                      data-bind="pass-afking-withdraw" hidden>Withdraw all</button>
+            </span>
+          </div>
         </div>
         <div class="pass-afking__lock" data-bind="pass-afking-lock" hidden role="status">
           <strong>RNG SETTLING</strong>
           <span>Settings and cancel unlock automatically. Funding and withdrawals stay open.</span>
         </div>
         <div class="pass-afking__controls" data-bind="pass-afking-controls" hidden>
-          <label class="pass-afking__field">
-            <span>Daily buy</span>
-            <select name="pass-afking-mode" data-bind="pass-afking-mode">
-              <option value="lootbox">Lootboxes</option>
-              <option value="tickets">Tickets</option>
-            </select>
-          </label>
-          <label class="pass-afking__field pass-afking__field--qty">
-            <span>Per day</span>
-            <input type="number" name="pass-afking-qty" min="1" max="255" step="1" value="1">
-          </label>
-          <label class="pass-afking__field pass-afking__field--fund">
-            <span>Fund now</span>
-            <input type="number" name="pass-afking-fund" min="0" step="0.01" value="0" inputmode="decimal">
-            <small>ETH</small>
-          </label>
-          <button type="button" class="pass-afking__fund-button" data-write
-                  data-bind="pass-afking-fund-button" hidden>Fund only</button>
+          <section class="pass-afking__control-card pass-afking__order-card">
+            <header class="pass-afking__control-head">
+              <span>NEXT JACKPOT</span>
+              <strong>Automatic order</strong>
+              <small>Runs when the next jackpot begins.</small>
+            </header>
+            <div class="pass-afking__order-fields">
+              <label class="pass-afking__field">
+                <span>Product</span>
+                <select name="pass-afking-mode" data-bind="pass-afking-mode">
+                  <option value="lootbox">Lootboxes</option>
+                  <option value="tickets">Tickets</option>
+                </select>
+              </label>
+              <label class="pass-afking__field pass-afking__field--qty">
+                <span>Quantity</span>
+                <input type="number" name="pass-afking-qty" min="1" max="255" step="1" value="1">
+              </label>
+            </div>
+          </section>
+          <section class="pass-afking__control-card pass-afking__funding-card">
+            <header class="pass-afking__control-head">
+              <span>PREPAID ETH</span>
+              <strong>Subscription funding</strong>
+              <small>Add funds now or top up without changing the order.</small>
+            </header>
+            <div class="pass-afking__funding-controls">
+              <label class="pass-afking__field pass-afking__field--fund">
+                <span>Add funds</span>
+                <input type="number" name="pass-afking-fund" min="0" step="0.01" value="0" inputmode="decimal">
+                <small>ETH</small>
+              </label>
+              <button type="button" class="pass-afking__fund-button" data-write
+                      data-bind="pass-afking-fund-button" hidden>Fund only</button>
+            </div>
+          </section>
           <label class="pass-afking__credit">
             <input type="checkbox" name="pass-afking-claimable-first" checked>
-            <span>Claimable first</span>
+            <span>Use claimable ETH before prepaid funds</span>
           </label>
           <span class="pass-afking__costs">
             <span class="pass-afking__day-cost" data-bind="pass-afking-day-cost">—</span>
             <span class="pass-afking__coverage" data-bind="pass-afking-coverage">—</span>
           </span>
-          <button type="button" class="pass-afking__save" data-write data-bind="pass-afking-save">Start</button>
-          <button type="button" class="pass-afking__cancel" data-write data-bind="pass-afking-cancel" hidden>Cancel</button>
+          <div class="pass-afking__actions">
+            <button type="button" class="pass-afking__save" data-write data-bind="pass-afking-save">Start</button>
+            <button type="button" class="pass-afking__cancel" data-write data-bind="pass-afking-cancel" hidden>Cancel</button>
+          </div>
         </div>
         <div class="pass-afking-error" data-bind="pass-afking-error" hidden role="alert"></div>
       </section>
@@ -588,14 +628,6 @@ class AppPassSection extends HTMLElement {
     if (deityBuy) deityBuy.addEventListener('click', (e) => this.#onDeityBuyClick(e));
     const deitySelect = this.querySelector('[data-bind="pass-deity-select"]');
     if (deitySelect) deitySelect.addEventListener('change', () => this.#renderDeityPreview());
-    const deityDetails = this.querySelector('[data-bind="pass-deity-details"]');
-    const deitySummary = this.querySelector('[data-bind="pass-deity-summary"]');
-    deitySummary?.addEventListener?.('click', (event) => {
-      if (!deityDetails?.classList?.contains('pass-deity-section--holder')) return;
-      try { event.preventDefault?.(); } catch (_e) { /* defensive */ }
-      deityDetails.open = true;
-      deityDetails.setAttribute?.('open', '');
-    });
     const afkingSave = this.querySelector('[data-bind="pass-afking-save"]');
     if (afkingSave) afkingSave.addEventListener('click', (e) => this.#onAfkingSave(e));
     const afkingCancel = this.querySelector('[data-bind="pass-afking-cancel"]');
@@ -737,6 +769,8 @@ class AppPassSection extends HTMLElement {
       note.hidden = !isCombined;
       if (isCombined) note.textContent = 'Per-account stat. Pick a single account.';
     }
+    const shopHeading = this.querySelector('[data-bind="pass-shop-heading"]');
+    if (shopHeading) shopHeading.hidden = isCombined;
     const whaleRow = this.querySelector('.pass-whale-row');
     if (whaleRow) whaleRow.hidden = isCombined;
     const lazyRow = this.querySelector('[data-bind="pass-lazy-row"]');
@@ -770,18 +804,29 @@ class AppPassSection extends HTMLElement {
     this.#renderWhaleLootboxBenefit();
     this.#renderLazyLootboxBenefit();
     const hintEl = this.querySelector('[data-bind="pass-deity-hint"]');
+    const deityMetaLabel = this.querySelector('[data-bind="pass-deity-meta-label"]');
+    const deityEyebrow = this.querySelector('[data-bind="pass-deity-eyebrow"]');
     if (hintEl) {
       const ownedSymbolId = this.#ownedDeitySymbolId();
       if (ownedSymbolId != null) {
         const ownedName = passSymbolBadge(ownedSymbolId).name;
-        hintEl.textContent = `your pass · ${ownedName}`;
+        const ownedSymbol = ownedName.split(/\s+/).at(-1) || 'symbol';
+        hintEl.textContent = `God of ${ownedSymbol.charAt(0).toUpperCase()}${ownedSymbol.slice(1)}`;
+        if (deityMetaLabel) deityMetaLabel.textContent = 'OWNED';
+        if (deityEyebrow) deityEyebrow.textContent = 'YOUR DEITY PASS';
       } else if (this.#deityCatalog?.issuedCount >= 32) {
         hintEl.textContent = 'sold out';
+        if (deityMetaLabel) deityMetaLabel.textContent = 'STATUS';
+        if (deityEyebrow) deityEyebrow.textContent = 'LIFETIME PASS';
       } else if (p?.deityNextPriceWei != null) {
         try { hintEl.textContent = `pick your symbol · next pass ${formatPassEth(p.deityNextPriceWei)} ETH`; }
         catch (_e) { hintEl.textContent = 'pick your symbol'; }
+        if (deityMetaLabel) deityMetaLabel.textContent = 'LIVE PRICE';
+        if (deityEyebrow) deityEyebrow.textContent = 'LIFETIME PASS';
       } else {
         hintEl.textContent = 'checking availability…';
+        if (deityMetaLabel) deityMetaLabel.textContent = 'LIVE PRICE';
+        if (deityEyebrow) deityEyebrow.textContent = 'LIFETIME PASS';
       }
     }
     this.#renderDeityCatalog();
@@ -968,19 +1013,16 @@ class AppPassSection extends HTMLElement {
     const details = this.querySelector('[data-bind="pass-deity-details"]');
     details?.classList?.toggle('pass-deity-section--holder', visible);
     const summary = this.querySelector('[data-bind="pass-deity-summary"]');
-    if (summary) summary.hidden = visible;
-    if (visible && details) {
+    const addressKey = String(holderAddress || '').toLowerCase();
+    if (visible && details && this.#deityAutoOpenedFor !== addressKey) {
       details.open = true;
       details.setAttribute?.('open', '');
-      summary?.setAttribute?.('aria-disabled', 'true');
-      summary?.setAttribute?.('tabindex', '-1');
-    } else {
-      summary?.removeAttribute?.('aria-disabled');
-      summary?.removeAttribute?.('tabindex');
+      this.#deityAutoOpenedFor = addressKey;
     }
+    if (!visible) this.#deityAutoOpenedFor = null;
+    if (summary) summary.hidden = false;
     if (!visible) return;
 
-    const addressKey = String(holderAddress || '').toLowerCase();
     const recipient = this.querySelector('[name="pass-deity-boon-recipient"]');
     const curseTarget = this.querySelector('[name="pass-deity-curse-target"]');
     if (this.#deityBoonFormAddress !== addressKey) {
@@ -1068,8 +1110,8 @@ class AppPassSection extends HTMLElement {
     const dayCost = mintPrice * BigInt(quantity);
     if (cost) {
       cost.textContent = dayCost > 0n
-        ? `COST / DAY · ${formatPassEth(dayCost)} ETH`
-        : 'COST / DAY · —';
+        ? `NEXT JACKPOT · ${formatPassEth(dayCost)} ETH`
+        : 'NEXT JACKPOT · —';
     }
 
     const addedFunding = this.#afkingFundingInputWei();
@@ -1079,7 +1121,7 @@ class AppPassSection extends HTMLElement {
       } else {
         const available = BigInt(this.#afkingState?.fundingWei ?? 0n) + addedFunding;
         const days = available / dayCost;
-        coverage.textContent = `COVERS · ${days} DAY${days === 1n ? '' : 'S'}`;
+        coverage.textContent = `COVERS · ${days} JACKPOT${days === 1n ? '' : 'S'}`;
       }
     }
 
@@ -1191,13 +1233,13 @@ class AppPassSection extends HTMLElement {
     const status = this.querySelector('[data-bind="pass-afking-status"]');
     if (status) {
       status.textContent = state.active
-        ? `ACTIVE · ${state.dailyQuantity}/DAY`
+        ? `ACTIVE · ${state.dailyQuantity}/JACKPOT`
         : (state.hasToken ? 'SEAT READY' : 'FUNDS READY');
       status.classList.toggle('pass-afking__status--active', Boolean(state.active));
     }
     const funding = this.querySelector('[data-bind="pass-afking-funding"]');
     if (funding) {
-      funding.textContent = `FUNDS · ${formatPassEth(state.fundingWei)} ETH`;
+      funding.textContent = `${formatPassEth(state.fundingWei)} ETH`;
     }
 
     const withdraw = this.querySelector('[data-bind="pass-afking-withdraw"]');
@@ -1704,7 +1746,7 @@ class AppPassSection extends HTMLElement {
     const fundInput = this.querySelector('[name="pass-afking-fund"]');
     const dailyQuantity = Number.parseInt(qtyInput?.value || '0', 10);
     if (!Number.isInteger(dailyQuantity) || dailyQuantity < 1 || dailyQuantity > 255) {
-      this.#renderAfkingError('Daily size must be 1-255.');
+      this.#renderAfkingError('Jackpot quantity must be 1-255.');
       return;
     }
 

@@ -294,7 +294,7 @@ import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as affiliateMod from '../../app/affiliate.js';
 import * as passesMod from '../../app/passes.js';
 import { DEGENERETTE_PREFERENCES_KEY } from '../../app/degenerette-preferences.js';
-import { CHAIN } from '../../app/chain-config.js';
+import { CHAIN, ETH_DIVISOR } from '../../app/chain-config.js';
 
 function installDeityOwners(owners = new Map()) {
   passesMod.__setDeityReadContractFactoryForTest(() => ({
@@ -868,6 +868,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 
   test('Place click invokes placeBet then enters awaitingRng state', async () => {
     let recordedArgs = null;
+    const fullWagerWei = (10n ** 16n) / BigInt(ETH_DIVISOR);
+    const spendableClaimableWei = fullWagerWei / 2n;
     const iface = new contractsMod.ethers.Interface([
       'event BetPlaced(address indexed player, uint32 indexed index, uint64 indexed betId, uint256 packed)',
     ]);
@@ -884,6 +886,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         },
         { staticCall: async () => undefined },
       ),
+      claimableWinningsOf: async () => spendableClaimableWei + 1n,
       resolveDegeneretteBets: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => { throw new Error('RNG not ready'); } },
@@ -908,6 +911,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     await settle(60);
 
     assert.ok(recordedArgs, 'placeDegeneretteBet invoked');
+    assert.equal(recordedArgs[6].value, fullWagerWei - spendableClaimableWei,
+      'the default checked preference spends claimable first and sends only the wallet remainder');
     // State transitions to awaitingRng, but the bottom tray is its only visible surface.
     const stateEl = el.querySelector('.deg-state');
     assert.ok(stateEl, 'state display element rendered');
@@ -1357,16 +1362,23 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 
   test('Place click debounced — double-click invokes placeBet exactly once', async () => {
     let placeCalls = 0;
+    let claimableReads = 0;
+    let recordedValue = null;
     degeneretteMod.__setContractFactoryForTest(() => ({
       placeDegeneretteBet: Object.assign(
         async (...args) => {
           placeCalls += 1;
+          recordedValue = args[6]?.value;
           return makeFakeTx(makeFakeReceipt([
             { parsed: { name: 'BetPlaced', args: { player: args[0], index: 7n, betId: 42n, packed: 0n } } },
           ]));
         },
         { staticCall: async () => undefined },
       ),
+      claimableWinningsOf: async () => {
+        claimableReads += 1;
+        return (10n ** 16n) / BigInt(ETH_DIVISOR) + 1n;
+      },
       resolveDegeneretteBets: Object.assign(
         async () => makeFakeTx(makeFakeReceipt()),
         { staticCall: async () => undefined },
@@ -1377,6 +1389,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 
     const el = instantiate();
     await flushMicrotasks();
+    localStorage.setItem(lootboxMod.PURCHASE_FUNDING_PRIORITY_KEY, 'wallet');
 
     const amountInput = el.querySelector('[name="deg-amount"]');
     if (amountInput) amountInput.value = '0.01';
@@ -1389,6 +1402,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     await settle(60);
 
     assert.equal(placeCalls, 1, 'double-click invokes placeDegeneretteBet exactly once');
+    assert.equal(claimableReads, 0, 'wallet-first preference never probes claimable');
+    assert.equal(recordedValue, (10n ** 16n) / BigInt(ETH_DIVISOR),
+      'wallet-first sends the full ETH wager');
 
     el.disconnectedCallback();
   });
@@ -1417,6 +1433,15 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       'the widget no longer mounts its own reel player');
     assert.doesNotMatch(PANEL_SRC, /<section class=\"dgn-results-summary\"/,
       'the widget no longer mounts a duplicate result summary');
+  });
+
+  test('a DB-recovered Degenerette box has a stable identity before transaction metadata arrives', async () => {
+    const { degeneretteLootboxPresentationId } = await import('../app-degenerette-panel.js');
+    assert.equal(
+      degeneretteLootboxPresentationId(CONNECTED, 42n),
+      `degenerette-lootbox:${CONNECTED.toLowerCase()}:42`,
+    );
+    assert.equal(degeneretteLootboxPresentationId('', 42n), null);
   });
 
   test('reads the player-filtered DB feed first and keeps a chain-read recovery path', () => {

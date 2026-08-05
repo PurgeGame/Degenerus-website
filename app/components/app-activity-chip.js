@@ -31,7 +31,7 @@
 // so there is no markup to hang it off declaratively.
 
 import { get, subscribe, getViewedAddress } from '../app/store.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 import { questStreakScorePoints } from '../app/activity-score.js';
 
 const POLL_INTERVAL_MS = 30_000;

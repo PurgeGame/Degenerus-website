@@ -29,7 +29,7 @@
 import { CHAIN } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { get, subscribe, getViewedAddress } from '../app/store.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 import {
   depositCoinflip,
   readClaimableCoinflip,

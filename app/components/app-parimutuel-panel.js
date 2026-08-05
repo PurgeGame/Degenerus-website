@@ -28,7 +28,7 @@
 import { CHAIN, VOLUME_WINDOW } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { get, update, subscribe, getViewedAddress, getActingAddress } from '../app/store.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 import {
   readGrowthMarket, readVolumeMarket, readVolumeCredit, readMarketBetGates,
   placeGrowthBet, placeVolumeBet, claimGrowth, claimVolume,
@@ -443,8 +443,12 @@ class AppParimutuelPanel extends HTMLElement {
         ratchets: growth,
         contractPhase: phaseContext
           ? {
+            level: phaseContext.level != null && Number.isInteger(Number(phaseContext.level))
+              ? Number(phaseContext.level)
+              : null,
             jackpot: phaseContext.jackpot === true,
             lastPurchaseDay: phaseContext.lastPurchaseDay === true,
+            rngLocked: phaseContext.rngLocked === true,
             day: Number(ratchets.phaseDay) || 0,
             compressedFlag: Number(phaseContext.compressedFlag) || 0,
           }
@@ -889,6 +893,7 @@ class AppParimutuelPanel extends HTMLElement {
         const pariClaim = claimable;
         rows.push({
           id: `pari:${id}`,
+          dismissScope: this.#player,
           // Every ready pari payout belongs in the bottom action tray with
           // packs and lootboxes. The SIDE BETS cards remain the live books,
           // not a second home for claim buttons.
@@ -926,6 +931,8 @@ class AppParimutuelPanel extends HTMLElement {
     _markResultSeen(this.#player, id);
     queueReveal({
       kind: 'pari',
+      player: this.#player,
+      presentationId: `pari-reveal:${this.#player}:${kind}:${result.round}`,
       market: kind,
       round: result.round,
       side: result.side,

@@ -2591,8 +2591,8 @@ body.layout-basic .ticket-card-center {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) rotate(45deg);
-  width: 27%;
-  height: 27%;
+  width: 20%;
+  height: 20%;
   background: #fff;
   border: 2px solid var(--ticket-line-color, #8a8d8f);
   border-radius: 3px;
@@ -2602,6 +2602,48 @@ body.layout-basic .ticket-card-center {
   justify-content: center;
 }
 body.layout-basic .ticket-card-center img { width: 95%; height: 95%; transform: rotate(-45deg); object-fit: contain; }
+
+/* One jackpot entry is literally one quadrant of a ticket. Keep the same
+   paper, badge scale and structural line, but cut away the inner corner that
+   sits beneath the ticket's smaller 20% center diamond. */
+body.layout-basic .ticket-entry-card {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  box-sizing: border-box;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border: 0;
+  padding: 3px;
+  background: var(--ticket-line-color, #8a8d8f);
+}
+body.layout-basic .ticket-entry-card.tc-small { padding: 2px; }
+body.layout-basic .ticket-entry-card[data-quadrant="0"] {
+  border-radius: 14px 3px 3px 3px;
+  clip-path: polygon(0 0, 100% 0, 100% 71.5%, 71.5% 100%, 0 100%);
+}
+body.layout-basic .ticket-entry-card[data-quadrant="1"] {
+  border-radius: 3px 14px 3px 3px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 28.5% 100%, 0 71.5%);
+}
+body.layout-basic .ticket-entry-card[data-quadrant="2"] {
+  border-radius: 3px 3px 3px 14px;
+  clip-path: polygon(0 0, 71.5% 0, 100% 28.5%, 100% 100%, 0 100%);
+}
+body.layout-basic .ticket-entry-card[data-quadrant="3"] {
+  border-radius: 3px 3px 14px 3px;
+  clip-path: polygon(28.5% 0, 100% 0, 100% 100%, 0 100%, 0 28.5%);
+}
+body.layout-basic .ticket-entry-card.tc-small[data-quadrant="0"] { border-radius: 8px 2px 2px 2px; }
+body.layout-basic .ticket-entry-card.tc-small[data-quadrant="1"] { border-radius: 2px 8px 2px 2px; }
+body.layout-basic .ticket-entry-card.tc-small[data-quadrant="2"] { border-radius: 2px 2px 2px 8px; }
+body.layout-basic .ticket-entry-card.tc-small[data-quadrant="3"] { border-radius: 2px 2px 8px 2px; }
+body.layout-basic .ticket-entry-card .trait-quadrant {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  clip-path: inherit;
+}
 
 /* --- Picker --- */
 body.layout-basic .dgn-selector {
@@ -3288,6 +3330,29 @@ body.layout-basic .inv-card--pending {
   color: var(--text-secondary);
   font-size: 0.72rem;
   text-align: center;
+}
+
+body.layout-basic .inv-card--entry {
+  display: grid;
+  aspect-ratio: 1 / 1;
+  grid-template-rows: minmax(0, 1fr) auto;
+  place-items: center;
+  gap: 0.24rem;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.055), transparent 56%),
+    rgba(255, 255, 255, 0.018);
+}
+body.layout-basic .inv-card--entry .ticket-entry-card {
+  width: 52%;
+  align-self: end;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.28);
+}
+body.layout-basic .inv-entry-label {
+  color: var(--text-secondary, #aaa);
+  font-size: 0.5rem;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  line-height: 1;
 }
 
 body.layout-basic .inv-empty { color: var(--text-secondary); font-size: 0.85rem; }
@@ -4143,6 +4208,19 @@ body.layout-basic .df-coin3d__inner {
   will-change: transform;
 }
 
+/* The day-sync gate disables the reveal until both daily result lanes agree.
+   Park the coin on one face during that wait so motion only advertises an
+   action once the coin is actually clickable. */
+body.layout-basic .df-coin--syncing {
+  cursor: default;
+}
+body.layout-basic .df-coin--syncing:hover {
+  filter: none;
+}
+body.layout-basic .df-coin--syncing .df-coin3d__inner {
+  animation: none;
+}
+
 body.layout-basic .df-coin3d__face {
   position: absolute;
   inset: 0;
@@ -4429,11 +4507,32 @@ body.layout-basic .jackpot-hero replay-panel .panel > * {
 }
 
 /* GAME has entered a new day but the two exact-day result lanes have not both
-   arrived. Preserve the board's footprint while preventing yesterday's
-   scratch surface from flashing or accepting a stale click. */
-body.layout-basic .jackpot-hero replay-panel[data-day-warming] .panel > * {
-  visibility: hidden;
+   arrived. Keep the quiet attract reel visible instead of turning the main
+   jackpot into an empty hole. Only the stale controls/copy disappear; the
+   entire panel remains inert until the exact-day payload catches up. */
+body.layout-basic .jackpot-hero replay-panel[data-day-warming] .panel > *,
+body.layout-basic .jackpot-hero replay-panel[data-day-loading] .panel > * {
   pointer-events: none;
+}
+body.layout-basic .jackpot-hero replay-panel[data-day-warming] .replay-controls,
+body.layout-basic .jackpot-hero replay-panel[data-day-warming] .replay-hint,
+body.layout-basic .jackpot-hero replay-panel[data-day-warming] .replay-bonus-section,
+body.layout-basic .jackpot-hero replay-panel[data-day-loading] .replay-controls,
+body.layout-basic .jackpot-hero replay-panel[data-day-loading] .replay-hint,
+body.layout-basic .jackpot-hero replay-panel[data-day-loading] .replay-bonus-section {
+  visibility: hidden;
+}
+body.layout-basic .jackpot-hero replay-panel[data-day-warming] .replay-ticket,
+body.layout-basic .jackpot-hero replay-panel[data-day-loading] .replay-ticket {
+  visibility: visible;
+  border-color: #8a8d8f;
+  background: #d9d9d9;
+  box-shadow: none;
+}
+body.layout-basic .jackpot-hero replay-panel[data-day-warming] .replay-tq,
+body.layout-basic .jackpot-hero replay-panel[data-day-loading] .replay-tq {
+  background: #b8d4e8;
+  box-shadow: none;
 }
 
 body.layout-basic .jackpot-hero replay-panel .panel {
@@ -5397,6 +5496,9 @@ body.layout-basic .rrt-action__art--bingo img {
 }
 body.layout-basic .rrt-action--bingo .rrt-action__cta { color: #67e8f9; }
 body.layout-basic .rrt-action--foil-match {
+  flex-basis: 18rem;
+  width: min(18rem, calc(100vw - 2.25rem));
+  grid-template-columns: 5.35rem minmax(0, 1fr) auto;
   border-color: rgba(250, 204, 21, 0.48);
   background:
     radial-gradient(circle at 1.35rem 50%, rgba(103, 232, 249, 0.18), transparent 35%),
@@ -5405,15 +5507,57 @@ body.layout-basic .rrt-action--foil-match {
 }
 body.layout-basic .rrt-action__art--foil-match {
   overflow: visible;
-  width: 2.42rem;
-  height: 2.42rem;
+  width: 5.25rem;
+  height: 2.72rem;
   background: transparent;
   box-shadow: none;
 }
+body.layout-basic .rrt-foil-match-preview {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 2.08rem 0.48rem 2.08rem;
+  align-items: end;
+  justify-content: center;
+  gap: 0.16rem;
+}
+body.layout-basic .rrt-foil-match-preview__side {
+  display: grid;
+  min-width: 0;
+  grid-template-rows: 0.45rem 2.08rem;
+  justify-items: stretch;
+  gap: 0.1rem;
+}
+body.layout-basic .rrt-foil-match-preview__tag {
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: 0.36rem;
+  font-weight: 1000;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.layout-basic .rrt-foil-match-preview__side:first-child .rrt-foil-match-preview__tag {
+  color: #fde68a;
+}
+body.layout-basic .rrt-foil-match-preview__vs {
+  display: flex;
+  height: 2.08rem;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 0.38rem;
+  font-weight: 1000;
+}
 body.layout-basic .rrt-foil-match-ticket {
-  width: 2.3rem;
-  height: 2.3rem;
-  border-color: rgba(250, 204, 21, 0.9);
+  width: 2.08rem;
+  height: 2.08rem;
+  border-color: var(--ticket-line-color, #8a8d8f);
+  background: #d9d9d9;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.5);
+}
+body.layout-basic .rrt-foil-match-ticket--foil {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(165, 243, 252, 0.76) 45%, rgba(253, 224, 71, 0.78));
   box-shadow:
@@ -5421,7 +5565,21 @@ body.layout-basic .rrt-foil-match-ticket {
     0 2px 7px rgba(0, 0, 0, 0.5);
 }
 body.layout-basic .rrt-foil-match-ticket__q {
-  background: rgba(226, 232, 240, 0.82);
+  background: #d9d9d9;
+  opacity: 1;
+}
+body.layout-basic .rrt-foil-match-ticket .rrt-foil-match-ticket__q.q-full {
+  background: rgba(34, 197, 94, 0.52);
+  box-shadow: inset 0 0 0 2px #22c55e;
+}
+body.layout-basic .rrt-foil-match-ticket .rrt-foil-match-ticket__q.q-sym {
+  background: rgba(96, 160, 255, 0.46);
+  box-shadow: inset 0 0 0 1px rgba(126, 176, 255, 0.88);
+}
+body.layout-basic .rrt-foil-match-ticket .rrt-foil-match-ticket__q.q-miss {
+  background: rgba(225, 71, 91, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(251, 113, 133, 0.62);
+  opacity: 1;
 }
 body.layout-basic .rrt-foil-match-ticket__q img {
   width: 122%;
@@ -5430,6 +5588,9 @@ body.layout-basic .rrt-foil-match-ticket__q img {
   object-fit: contain;
 }
 body.layout-basic .rrt-foil-match-ticket__center {
+  background: #fff;
+}
+body.layout-basic .rrt-foil-match-ticket--foil .rrt-foil-match-ticket__center {
   background: radial-gradient(circle, #fff7b2 0 28%, #d3b34e 31% 56%, #17314a 60% 100%);
 }
 body.layout-basic .rrt-foil-match-ticket__center img {
@@ -5785,8 +5946,16 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   body.layout-basic .rrt-action__art { width: 2.3rem; height: 2.3rem; }
   body.layout-basic .rrt-action--degenerette .rrt-action__art { width: 2.12rem; height: 2.12rem; }
   body.layout-basic .rrt-degenerette-ticket { width: 1.96rem; height: 1.96rem; }
-  body.layout-basic .rrt-action--foil-match .rrt-action__art { width: 2.12rem; height: 2.12rem; }
-  body.layout-basic .rrt-foil-match-ticket { width: 1.96rem; height: 1.96rem; }
+  body.layout-basic .rrt-action--foil-match {
+    flex-basis: min(17.5rem, calc(100vw - 2.25rem));
+    grid-template-columns: 4.8rem minmax(0, 1fr) auto;
+  }
+  body.layout-basic .rrt-action--foil-match .rrt-action__art { width: 4.72rem; height: 2.45rem; }
+  body.layout-basic .rrt-foil-match-preview { grid-template-columns: 1.82rem 0.4rem 1.82rem; gap: 0.13rem; }
+  body.layout-basic .rrt-foil-match-preview__side { grid-template-rows: 0.36rem 1.82rem; gap: 0.07rem; }
+  body.layout-basic .rrt-foil-match-preview__tag { font-size: 0.31rem; }
+  body.layout-basic .rrt-foil-match-preview__vs { height: 1.82rem; font-size: 0.32rem; }
+  body.layout-basic .rrt-foil-match-ticket { width: 1.82rem; height: 1.82rem; }
   body.layout-basic .rrt-auto-open span { display: none; }
   body.layout-basic .rrt-speed > span { display: none; }
   body.layout-basic .rrt-speed input[type="range"] { width: 3.35rem; }
@@ -7162,11 +7331,24 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   line-height: 1.25;
 }
 
-/* A foil claim first explains the contract's +2 exact / +1 symbol scoring,
-   then the same reveal sequence proceeds into its BoxSpin payout. */
+/* A foil claim uses the same two-ticket result language as Degenerette: the
+   player's real foil on the left, the actual jackpot ticket on the right, and
+   settled green / blue / pink match states on both. */
+.rvl-stage--foil-match {
+  box-sizing: border-box;
+  width: min(96vw, 680px);
+  max-height: 100dvh;
+  overflow-y: auto;
+  padding-block: max(0.6rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-bottom));
+  scrollbar-width: thin;
+}
+.rvl-stage--foil-match > .rvl-card-zone {
+  width: 100%;
+  min-height: min(420px, 70dvh);
+}
 .rvl-card--foil-match:not(.rvl-card--mini) {
   box-sizing: border-box;
-  width: min(92vw, 620px);
+  width: min(94vw, 640px);
   padding-inline: clamp(0.7rem, 3vw, 1.2rem);
 }
 .rvl-card-icon--foil-match,
@@ -7175,10 +7357,12 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   height: auto;
 }
 .rvl-foil-match {
+  --rvl-foil-ticket-size: clamp(88px, min(34vw, 28dvh), 205px);
+  box-sizing: border-box;
   width: 100%;
-  padding: 0.54rem;
+  padding: clamp(0.5rem, 2vw, 0.75rem);
   border: 1px solid rgba(250, 204, 21, 0.34);
-  border-radius: 11px;
+  border-radius: 14px;
   background:
     radial-gradient(circle at 50% 0, rgba(34, 211, 238, 0.13), transparent 48%),
     rgba(3, 8, 20, 0.8);
@@ -7195,90 +7379,205 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   letter-spacing: 0.1em;
 }
 .rvl-foil-match__head span { color: #67e8f9; font-weight: 900; }
-.rvl-foil-match__grid {
+.rvl-foil-match__compare {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.34rem;
+  width: fit-content;
+  max-width: 100%;
+  grid-template-columns: var(--rvl-foil-ticket-size) clamp(1.15rem, 4vw, 2rem) var(--rvl-foil-ticket-size);
+  align-items: center;
+  justify-items: stretch;
+  justify-content: center;
+  gap: clamp(0.2rem, 1.2vw, 0.45rem);
+  margin-inline: auto;
 }
-.rvl-foil-pair {
+.rvl-foil-match .rvl-gamepiece {
   display: grid;
-  min-width: 0;
-  justify-items: center;
-  gap: 0.24rem;
-  padding: 0.36rem 0.22rem 0.4rem;
-  border: 1px solid rgba(148, 163, 184, 0.15);
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.72);
+  width: var(--rvl-foil-ticket-size);
+  min-width: var(--rvl-foil-ticket-size);
+  grid-template-rows: 0.9rem var(--rvl-foil-ticket-size);
+  align-items: start;
+  justify-items: stretch;
+  gap: 0.28rem;
 }
-.rvl-foil-pair--exact {
-  border-color: rgba(250, 204, 21, 0.62);
-  background: rgba(113, 63, 18, 0.24);
-  box-shadow: 0 0 12px rgba(250, 204, 21, 0.14);
-}
-.rvl-foil-pair--symbol { border-color: rgba(34, 211, 238, 0.48); }
-.rvl-foil-pair--miss { opacity: 0.5; }
-.rvl-foil-pair__quadrant {
-  color: rgba(226, 232, 240, 0.62);
-  font: 900 0.48rem/1 ui-monospace, monospace;
-  letter-spacing: 0.08em;
-}
-.rvl-foil-pair__badges {
+.rvl-foil-match .rvl-gamepiece .rvl-ticket-tag {
   display: flex;
-  width: 100%;
-  min-width: 0;
+  height: 0.9rem;
   align-items: center;
   justify-content: center;
-  gap: 0.18rem;
-}
-.rvl-card-icon--foil-match .rvl-foil-pair__badge {
-  /* Override the generic `.rvl-card-icon img { width/height: 100% }` rule.
-     Without the extra parent specificity every badge became chart-sized and
-     all eight images spilled across neighbouring quadrants. */
-  display: block;
-  flex: 0 0 auto;
-  width: clamp(27px, 5.4vw, 39px);
-  height: clamp(27px, 5.4vw, 39px);
-  object-fit: contain;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.44));
-}
-.rvl-foil-pair__arrow { color: rgba(226, 232, 240, 0.58); font-size: 0.66rem; }
-.rvl-foil-pair__score {
-  color: #94a3b8;
-  font-size: 0.5rem;
+  overflow: hidden;
+  color: #e2e8f0;
+  font-size: clamp(0.43rem, 1.5vw, 0.58rem);
   line-height: 1;
-  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rvl-foil-pair--exact .rvl-foil-pair__score { color: #fde047; }
-.rvl-foil-pair--symbol .rvl-foil-pair__score { color: #67e8f9; }
-.rvl-foil-match__foot {
-  margin-top: 0.45rem;
-  color: #f8fafc;
-  font-size: 0.58rem;
-  font-weight: 900;
-  letter-spacing: 0.07em;
+.rvl-foil-match .rvl-gamepiece.rvl-foil-match__ticket--foil .rvl-ticket-tag {
+  color: #fde68a;
+}
+.rvl-foil-match .rvl-gamepiece .rvl-ticket-grid {
+  width: var(--rvl-foil-ticket-size);
+  height: var(--rvl-foil-ticket-size);
+  aspect-ratio: 1;
+  border-radius: clamp(9px, 2.3vw, 16px);
+}
+.rvl-foil-match__vs {
+  color: #94a3b8;
+  font-size: clamp(0.5rem, 1.9vw, 0.72rem);
+  font-weight: 1000;
+  letter-spacing: 0.08em;
   text-align: center;
 }
-.rvl-card--foil-match.rvl-card--mini { width: min(88vw, 430px); }
-.rvl-foil-match--compact { padding: 0.4rem; }
-.rvl-foil-match--compact .rvl-foil-match__head { font-size: 0.52rem; }
-.rvl-foil-match--compact .rvl-foil-pair { padding-block: 0.28rem; }
-.rvl-card-icon--foil-match .rvl-foil-match--compact .rvl-foil-pair__badge {
-  width: 28px;
-  height: 28px;
+/* Foil stock remains visibly metallic underneath the settled score tint. */
+.rvl-foil-match .rvl-gamepiece .rvl-ticket-grid--foil {
+  border-color: var(--ticket-line-color, #e2cf82);
+  background: #9ca5ad;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.36),
+    0 0 15px rgba(255, 226, 116, 0.34),
+    0 5px 16px rgba(0, 0, 0, 0.45);
 }
-/* The chart already names the tier, score and exact/symbol breakdown. Repeating
-   all three underneath made the active claim card look like two UIs stacked
-   together, so the full-size explanation is the card. Compact receipts retain
-   their ordinary value/label summary. */
-.rvl-card--foil-match:not(.rvl-card--mini) .rvl-card-value,
-.rvl-card--foil-match:not(.rvl-card--mini) .rvl-card-label,
-.rvl-card--foil-match:not(.rvl-card--mini) .rvl-card-sub {
+.rvl-foil-match .rvl-gamepiece .rvl-ticket-grid--foil .rvl-rq {
+  background:
+    radial-gradient(circle at 24% 18%, rgba(255, 255, 255, 0.58), transparent 31%),
+    linear-gradient(132deg, #f4f7f9 0%, #89949e 18%, #dce1e5 36%, #66727c 52%, #edf0f2 71%, #7d8892 88%, #cdd3d8 100%);
+}
+.rvl-foil-match .rvl-gamepiece .rvl-ticket-grid--foil .rvl-rq--gold {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.32), transparent 38%),
+    linear-gradient(160deg, #8a6a12 0%, #d4af37 30%, #ffe9a3 50%, #d4af37 70%, #8a6a12 100%);
+}
+.rvl-foil-match .rvl-gamepiece.rvl-foil-match__ticket--foil .rvl-gamepiece-center::before {
+  border-color: var(--ticket-line-color, #f1f5f9);
+  background:
+    linear-gradient(125deg, rgba(255, 255, 255, 0.88), transparent 24% 55%, rgba(255, 247, 196, 0.72) 70%, transparent 86%),
+    conic-gradient(from 215deg, #7b5005, #e5b62f, #fff0a0, #ad760d, #ffe27a, #7b5005);
+  box-shadow: 0 0 8px rgba(255, 218, 88, 0.82);
+}
+/* Identical result colours on foil and jackpot tickets, matching the settled
+   Degenerette pair: exact green, symbol-only blue, miss pink. */
+.rvl-foil-match .rvl-gamepiece .rvl-ticket-grid .rvl-rq.q-full {
+  background: rgba(34, 197, 94, 0.42);
+  box-shadow: inset 0 0 0 3px #22c55e;
+  opacity: 1;
+}
+.rvl-foil-match .rvl-gamepiece .rvl-ticket-grid .rvl-rq.q-sym {
+  background: rgba(96, 160, 255, 0.36);
+  box-shadow: inset 0 0 0 2px rgba(126, 176, 255, 0.78);
+  opacity: 1;
+}
+.rvl-foil-match .rvl-gamepiece .rvl-ticket-grid .rvl-rq.q-miss {
+  background: rgba(225, 71, 91, 0.34);
+  box-shadow: inset 0 0 0 2px rgba(225, 71, 91, 0.48);
+  opacity: 1;
+}
+.rvl-foil-match__face {
+  position: absolute;
+  z-index: 4;
+  min-width: 1.2rem;
+  padding: 0.12rem 0.2rem;
+  border-radius: 999px;
+  background: rgba(2, 6, 23, 0.88);
+  color: #fff;
+  font: 1000 clamp(0.42rem, 1.45vw, 0.58rem)/1 ui-monospace, monospace;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+.rvl-foil-match__face--q0 { top: 3px; left: 4px; }
+.rvl-foil-match__face--q1 { top: 3px; right: 4px; }
+.rvl-foil-match__face--q2 { bottom: 3px; left: 4px; }
+.rvl-foil-match__face--q3 { right: 4px; bottom: 3px; }
+.rvl-foil-match__legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  margin-top: 0.55rem;
+}
+.rvl-foil-match__legend-item {
+  padding: 0.2rem 0.42rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  color: #cbd5e1;
+  font-size: clamp(0.43rem, 1.5vw, 0.55rem);
+  font-weight: 900;
+  letter-spacing: 0.045em;
+  white-space: nowrap;
+}
+.rvl-foil-match__legend-item--exact { border-color: rgba(34, 197, 94, 0.62); color: #86efac; }
+.rvl-foil-match__legend-item--symbol { border-color: rgba(96, 160, 255, 0.68); color: #bfdbfe; }
+.rvl-foil-match__legend-item--miss { border-color: rgba(251, 113, 133, 0.48); color: #fda4af; }
+.rvl-foil-match__foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.48rem;
+  margin-top: 0.55rem;
+  padding: 0.48rem 0.62rem;
+  border: 1px solid rgba(250, 204, 21, 0.5);
+  border-radius: 9px;
+  background: linear-gradient(90deg, rgba(120, 53, 15, 0.3), rgba(8, 145, 178, 0.16));
+  text-align: center;
+}
+.rvl-foil-match__foot strong {
+  color: #fde047;
+  font-size: clamp(0.58rem, 2vw, 0.72rem);
+  letter-spacing: 0.09em;
+  white-space: nowrap;
+}
+.rvl-foil-match__foot span {
+  color: #f8fafc;
+  font-size: clamp(0.52rem, 1.8vw, 0.66rem);
+  font-weight: 950;
+  letter-spacing: 0.06em;
+}
+.rvl-card--foil-match.rvl-card--mini {
+  box-sizing: border-box;
+  width: min(88vw, 306px);
+  min-width: 0;
+  padding: 0.45rem;
+}
+.rvl-card--foil-match.rvl-card--mini .rvl-card-icon--foil-match {
+  width: 100%;
+  height: auto;
+  flex: 0 0 auto;
+}
+.rvl-foil-match--compact {
+  --rvl-foil-ticket-size: clamp(68px, min(22vw, 18dvh), 96px);
+  padding: 0.4rem;
+}
+.rvl-foil-match--compact .rvl-foil-match__head { font-size: 0.52rem; }
+.rvl-foil-match--compact .rvl-gamepiece {
+  grid-template-rows: 0.72rem var(--rvl-foil-ticket-size);
+  gap: 0.18rem;
+}
+.rvl-foil-match--compact .rvl-gamepiece .rvl-ticket-tag {
+  height: 0.72rem;
+  font-size: 0.4rem;
+}
+.rvl-foil-match--compact .rvl-foil-match__legend { gap: 0.18rem; margin-top: 0.38rem; }
+.rvl-foil-match--compact .rvl-foil-match__legend-item {
+  padding: 0.14rem 0.26rem;
+  font-size: 0.38rem;
+}
+.rvl-foil-match--compact .rvl-foil-match__foot {
+  gap: 0.3rem;
+  margin-top: 0.38rem;
+  padding: 0.34rem 0.38rem;
+}
+.rvl-foil-match--compact .rvl-foil-match__face {
+  display: none;
+}
+/* The comparison itself contains the score, reason and bonus. Repeating the
+   generic card copy underneath is what previously crushed the mini receipt. */
+.rvl-card--foil-match .rvl-card-value,
+.rvl-card--foil-match .rvl-card-label,
+.rvl-card--foil-match .rvl-card-sub {
   display: none;
 }
 @media (max-width: 480px) {
-  .rvl-foil-match__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rvl-card-icon--foil-match .rvl-foil-pair__badge { width: 31px; height: 31px; }
+  .rvl-foil-match__head { align-items: flex-start; flex-direction: column; gap: 0.12rem; }
+  .rvl-foil-match__foot { align-items: stretch; flex-direction: column; gap: 0.18rem; }
 }
 
 /* Rarity glows. */
@@ -7905,6 +8204,49 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: center;
+}
+
+/* Side-bet results are a single terminal receipt, not a card-deal followed by
+   a second copy. Give that receipt enough type size to show the picked ticket
+   line, actual settled total, and payout without creating a viewport scrollbar. */
+.rvl-stage--pari {
+  width: min(94vw, 420px);
+  max-height: calc(100dvh - 1rem);
+  gap: 0.65rem;
+  padding: 0.35rem;
+  overflow: hidden;
+}
+
+.rvl-stage--pari > .rvl-summary {
+  width: 100%;
+  max-height: none;
+  gap: 0.8rem;
+  overflow: visible;
+}
+
+.rvl-stage--pari .rvl-summary-grid { width: 100%; }
+
+.rvl-stage--pari .rvl-summary-grid > .rvl-card--mini {
+  box-sizing: border-box;
+  width: min(88vw, 350px);
+  padding: 1rem 0.8rem;
+}
+
+.rvl-stage--pari .rvl-card--mini .rvl-card-inner { gap: 0.48rem; }
+.rvl-stage--pari .rvl-card--mini .rvl-card-icon { width: 48px; height: 48px; }
+.rvl-stage--pari .rvl-card--mini .rvl-card-label {
+  font-size: 0.72rem;
+  line-height: 1.25;
+  letter-spacing: 0.06em;
+}
+.rvl-stage--pari .rvl-card--mini .rvl-card-value {
+  font-size: clamp(1.05rem, 4.8vw, 1.35rem);
+  line-height: 1.18;
+}
+.rvl-stage--pari .rvl-card--mini .rvl-card-sub {
+  max-width: none;
+  font-size: 0.7rem;
+  line-height: 1.25;
 }
 .rvl-collect-cta {
   border: none;
@@ -10280,6 +10622,10 @@ body.layout-basic .rvl-card-icon--ticket {
   width: auto;
   height: auto;
 }
+body.layout-basic .rvl-card-icon--ticket-entry {
+  width: 50%;
+  height: auto;
+}
 body.layout-basic .rvl-card--mini .rvl-card-icon--ticket {
   width: auto;
   height: auto;
@@ -10476,6 +10822,26 @@ body.layout-basic .rvl-paper .ticket-card {
   width: 100%;
   min-width: 0;
 }
+body.layout-basic .rvl-paper .ticket-entry-card {
+  width: 100%;
+  min-width: 0;
+}
+body.layout-basic .rvl-paper--entry[data-quadrant="0"] {
+  clip-path: polygon(0 0, 100% 0, 100% 71.5%, 71.5% 100%, 0 100%);
+}
+body.layout-basic .rvl-paper--entry[data-quadrant="1"] {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 28.5% 100%, 0 71.5%);
+}
+body.layout-basic .rvl-paper--entry[data-quadrant="2"] {
+  clip-path: polygon(0 0, 71.5% 0, 100% 28.5%, 100% 100%, 0 100%);
+}
+body.layout-basic .rvl-paper--entry[data-quadrant="3"] {
+  clip-path: polygon(28.5% 0, 100% 0, 100% 100%, 0 100%, 0 28.5%);
+}
+body.layout-basic .rvl-ticket-grid-stage:not(.rvl-ticket-grid-stage--single) .rvl-paper--entry {
+  width: 52%;
+  place-self: center;
+}
 body.layout-basic .rvl-paper--in {
   opacity: 0;
   animation: rvl-paper-in 0.34s ease-out forwards;
@@ -10545,6 +10911,13 @@ body.layout-basic .rvl-gold-hit__ticket .ticket-card {
   width: 100%;
   border-width: 4px;
   border-radius: 16px;
+}
+body.layout-basic .rvl-gold-hit__entry {
+  width: min(39vw, 24vh, 180px);
+}
+body.layout-basic .rvl-gold-hit__entry .ticket-entry-card {
+  width: 100%;
+  border-width: 4px;
 }
 body.layout-basic .rvl-gold-hit__label {
   position: absolute;
@@ -10696,12 +11069,12 @@ body.layout-basic .rvl-ticket-more {
 .rvl-gamepiece-center img { position: relative; z-index: 1; width: 66%; height: 66%; object-fit: contain; object-position: 50% 50%; } .rvl-gamepiece-center.is-win::before { background: #22c55e; box-shadow: 0 0 14px rgba(34, 197, 94, 0.7); } .rvl-gamepiece-center.is-miss::before { background: #d94c5d; box-shadow: 0 0 10px rgba(239, 68, 68, 0.45); }
 .rvl-gamepiece .rvl-rq.q-full { background: rgba(34, 197, 94, 0.42); }
 .rvl-gamepiece .rvl-rq.q-sym,
-.rvl-gamepiece .rvl-rq.q-col,
-.rvl-gamepiece .rvl-rq.q-lock-hit {
+.rvl-gamepiece .rvl-rq.q-col {
   background: rgba(96, 160, 255, 0.36);
 }
-/* A one-trait match is one blue state. Older generic q-sym/q-col rules left
-   orange/green inset edges over this fill, and Hero added another warm halo. */
+/* Settled scoring matches stay blue. During the reel, a provisional matching
+   color is cyan, a scoring symbol is blue, and a completed pair becomes the
+   existing green q-full state. */
 .rvl-gamepiece .rvl-rq.q-sym,
 .rvl-gamepiece .rvl-rq.q-col {
   box-shadow: inset 0 0 0 2px rgba(126, 176, 255, 0.78);
@@ -10717,6 +11090,32 @@ body.layout-basic .rvl-ticket-more {
 .rvl-gamepiece .rvl-rq--hero.q-sym img,
 .rvl-gamepiece .rvl-rq--hero.q-col img {
   filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.68));
+}
+.rvl-gamepiece .rvl-rq.q-lock-symbol-hit {
+  background: rgba(96, 160, 255, 0.36);
+  box-shadow: inset 0 0 0 2px rgba(126, 176, 255, 0.78);
+}
+.rvl-gamepiece .rvl-rq--hero.q-lock-symbol-hit {
+  outline-color: #9bc2ff;
+}
+.rvl-gamepiece .rvl-rq--hero.q-lock-symbol-hit::before {
+  background: #dbeafe;
+}
+.rvl-gamepiece .rvl-rq--hero.q-lock-symbol-hit img {
+  filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.68));
+}
+.rvl-gamepiece .rvl-rq.q-lock-color-hit {
+  background: rgba(34, 211, 238, 0.24);
+  box-shadow: inset 0 0 0 2px rgba(34, 211, 238, 0.72);
+}
+.rvl-gamepiece .rvl-rq--hero.q-lock-color-hit {
+  outline-color: #67e8f9;
+}
+.rvl-gamepiece .rvl-rq--hero.q-lock-color-hit::before {
+  background: #cffafe;
+}
+.rvl-gamepiece .rvl-rq--hero.q-lock-color-hit img {
+  filter: drop-shadow(0 0 5px rgba(6, 182, 212, 0.7));
 }
 .rvl-gamepiece .rvl-rq.q-lock-miss {
   background: rgba(251, 113, 133, 0.17);
@@ -11837,10 +12236,11 @@ body.layout-basic .dec-funds .dec-funds__display--spoiler .dec-funds__claim[data
 .dec-affiliate__hint { color: var(--text-dim, #6b6b8d); font-size: 0.64rem; line-height: 1.2; }
 .rvl-vessel-pack-actions { display: flex; min-height: 44px; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.55rem; }
 .rvl-vessel-pack-actions[hidden] { display: none !important; }
-.rvl-vessel-open-all, .rvl-vessel-skip, .rvl-open-all-cta { min-height: 44px; font-family: inherit; cursor: pointer; }
-.rvl-vessel-open-all { padding: 0.62rem 1.2rem; border: 1px solid rgba(255, 192, 77, 0.65); border-radius: 999px; background: rgba(245, 166, 35, 0.1); color: #ffc04d; font-size: 0.78rem; font-weight: 800; line-height: 1; letter-spacing: 0.12em; }
-.rvl-vessel-open-all[hidden] { display: none !important; }
-.rvl-vessel-open-all:hover { background: rgba(245, 166, 35, 0.2); }
+.rvl-vessel-open-pack, .rvl-vessel-open-all, .rvl-vessel-skip, .rvl-open-all-cta { min-height: 44px; font-family: inherit; cursor: pointer; }
+.rvl-vessel-open-pack, .rvl-vessel-open-all { padding: 0.62rem 1.2rem; border: 1px solid rgba(255, 192, 77, 0.65); border-radius: 999px; background: rgba(245, 166, 35, 0.1); color: #ffc04d; font-size: 0.78rem; font-weight: 800; line-height: 1; letter-spacing: 0.12em; }
+.rvl-vessel-open-pack[hidden], .rvl-vessel-open-all[hidden] { display: none !important; }
+.rvl-vessel-open-pack:hover, .rvl-vessel-open-all:hover { background: rgba(245, 166, 35, 0.2); }
+.rvl-vessel-open-pack:active, .rvl-vessel-open-all:active { transform: scale(0.97); }
 .rvl-vessel-skip { padding: 0.62rem 1rem; border: 1px solid rgba(180, 185, 205, 0.4); border-radius: 999px; background: rgba(125, 132, 155, 0.08); color: rgba(231, 233, 242, 0.78); font-size: 0.76rem; font-weight: 850; line-height: 1; letter-spacing: 0.12em; transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease; }
 .rvl-vessel-skip:hover { background: rgba(150, 158, 185, 0.16); color: #fff; transform: translateY(-1px); }
 .rvl-vessel-skip:active { transform: translateY(0) scale(0.97); }
@@ -16067,6 +16467,316 @@ body.layout-basic .rvl-paper--queued {
   visibility: hidden;
   opacity: 0;
 }
+
+/* A single resolved ticket is the reveal; a sealed wrapper adds no information.
+   Give that ticket a deliberate hero scale. The optional lesson treatment is
+   used by the scripted tutorial and keeps its explanation beside the actual
+   four-quadrant token while the reveal backdrop dims the rest of the app. */
+body.layout-basic .rvl-stage--single-ticket {
+  width: min(96vw, 720px);
+}
+body.layout-basic .rvl-stage--ticket-lesson {
+  width: min(97vw, 1040px);
+  max-height: none;
+}
+body.layout-basic .rvl-ticket-pack-stage--single {
+  width: min(94vw, 680px);
+}
+body.layout-basic .rvl-ticket-grid-stage--single,
+body.layout-basic .rvl-ticket-grid-stage--foil.rvl-ticket-grid-stage--single {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(70vw, 430px, 58dvh);
+  max-width: 430px;
+  gap: 0;
+  padding: 0.35rem;
+}
+body.layout-basic .rvl-ticket-grid-stage--single-entry,
+body.layout-basic .rvl-ticket-grid-stage--foil.rvl-ticket-grid-stage--single-entry {
+  width: min(35vw, 215px, 29dvh);
+  max-width: 215px;
+}
+body.layout-basic .rvl-ticket-grid-stage--single .rvl-paper {
+  width: 100%;
+  padding: 4px;
+  border-radius: 18px;
+}
+body.layout-basic .rvl-ticket-grid-stage--single-entry .rvl-paper--entry {
+  width: 100%;
+}
+body.layout-basic .rvl-ticket-grid-stage--single .ticket-card {
+  border-width: 4px;
+  border-radius: 16px;
+}
+body.layout-basic .rvl-ticket-pack-stage--lesson {
+  width: min(96vw, 1000px);
+}
+body.layout-basic .rvl-ticket-lesson-layout {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(470px, 540px) minmax(310px, 420px);
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1.1rem, 2.5vw, 2.2rem);
+}
+body.layout-basic .rvl-ticket-pack-stage--lesson .rvl-ticket-grid-stage--single {
+  width: min(42vw, 430px, 62dvh);
+}
+body.layout-basic .rvl-ticket-grid-stage--lesson-stack {
+  display: grid;
+  width: min(52vw, 540px, 64dvh);
+  max-width: 540px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: clamp(0.55rem, 1.3vw, 0.9rem);
+  padding: 0.35rem;
+}
+body.layout-basic .rvl-ticket-grid-stage--lesson-stack .rvl-paper {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  padding: 4px;
+  border-radius: 18px;
+}
+body.layout-basic .rvl-ticket-grid-stage--lesson-stack .rvl-paper:first-child {
+  z-index: auto;
+}
+body.layout-basic .rvl-ticket-grid-stage--lesson-stack .rvl-paper:last-child {
+  z-index: auto;
+}
+body.layout-basic .rvl-ticket-grid-stage--lesson-stack .rvl-paper:first-child .ticket-card {
+  transform: none;
+}
+body.layout-basic .rvl-ticket-grid-stage--lesson-stack .rvl-paper:last-child .ticket-card {
+  transform: none;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.34);
+}
+body.layout-basic .rvl-ticket-grid-stage--lesson-stack .ticket-card {
+  border-width: 4px;
+  border-radius: 16px;
+}
+body.layout-basic .rvl-ticket-pack-stage--lesson .ticket-card-center {
+  width: 20%;
+  height: 20%;
+}
+body.layout-basic .rvl-ticket-lesson {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.8rem;
+  padding: clamp(1rem, 2.5vw, 1.45rem);
+  border: 1px solid rgba(255, 204, 102, 0.42);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(80, 17, 34, 0.92), rgba(20, 13, 30, 0.96) 62%),
+    rgba(15, 10, 23, 0.96);
+  box-shadow:
+    0 22px 50px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+  text-align: left;
+}
+body.layout-basic .rvl-ticket-lesson__eyebrow {
+  color: #ffd36a;
+  font-size: clamp(0.68rem, 1.4vw, 0.82rem);
+  font-weight: 950;
+  letter-spacing: 0.15em;
+}
+body.layout-basic .rvl-ticket-lesson__title {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  color: #fff8e8;
+  font-size: clamp(1.35rem, 3vw, 2.3rem);
+  font-weight: 1000;
+  letter-spacing: -0.035em;
+  line-height: 0.96;
+}
+body.layout-basic .rvl-ticket-lesson__title-line {
+  display: block;
+  white-space: nowrap;
+}
+body.layout-basic .rvl-ticket-lesson__intro,
+body.layout-basic .rvl-ticket-lesson__rule {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: clamp(0.9rem, 1.65vw, 1.08rem);
+  line-height: 1.45;
+}
+body.layout-basic .rvl-ticket-lesson__facts {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.48rem;
+}
+body.layout-basic .rvl-ticket-lesson__equation {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: center;
+  gap: clamp(0.35rem, 1vw, 0.65rem);
+  min-width: 0;
+  padding: 0.72rem 0.8rem 0.58rem;
+  border: 1px solid rgba(255, 211, 106, 0.25);
+  border-radius: 12px;
+  background: rgba(255, 211, 106, 0.055);
+  text-align: center;
+}
+body.layout-basic .rvl-ticket-lesson__equation > span {
+  display: grid;
+  min-width: 0;
+  gap: 0.08rem;
+  place-items: center;
+}
+body.layout-basic .rvl-ticket-lesson__equation strong {
+  color: #fff8e8;
+  font-size: clamp(1.35rem, 2.8vw, 2rem);
+  font-weight: 1000;
+  line-height: 0.9;
+}
+body.layout-basic .rvl-ticket-lesson__equation small {
+  color: rgba(255, 255, 255, 0.56);
+  font-size: clamp(0.52rem, 1.1vw, 0.65rem);
+  font-weight: 950;
+  letter-spacing: 0.09em;
+}
+body.layout-basic .rvl-ticket-lesson__equation > b {
+  color: rgba(255, 211, 106, 0.62);
+  font-size: 1.1rem;
+}
+body.layout-basic .rvl-ticket-lesson__equation .is-total strong {
+  color: #ffd36a;
+}
+body.layout-basic .rvl-ticket-lesson__equation > p {
+  grid-column: 1 / -1;
+  margin: 0.34rem 0 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+body.layout-basic .rvl-ticket-lesson__examples {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.48rem;
+}
+body.layout-basic .rvl-ticket-lesson__example {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.48rem;
+  padding: 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.045);
+}
+body.layout-basic .rvl-ticket-lesson__example[data-example="green-ethereum"] {
+  border-color: rgba(74, 222, 128, 0.28);
+  background: rgba(34, 197, 94, 0.065);
+}
+body.layout-basic .rvl-ticket-lesson__example[data-example="orange-bitcoin"] {
+  border-color: rgba(251, 146, 60, 0.3);
+  background: rgba(249, 115, 22, 0.07);
+}
+body.layout-basic .rvl-ticket-lesson__example > img {
+  display: block;
+  width: 2.75rem;
+  height: 2.75rem;
+  object-fit: contain;
+}
+body.layout-basic .rvl-ticket-lesson__example > span {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+body.layout-basic .rvl-ticket-lesson__example small {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.52rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+}
+body.layout-basic .rvl-ticket-lesson__example strong {
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 1000;
+  letter-spacing: 0.025em;
+}
+body.layout-basic .rvl-ticket-lesson__example b {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.6rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+body.layout-basic .rvl-ticket-lesson__rule {
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+body.layout-basic .rvl-ticket-lesson__rule strong {
+  color: #9ed5ff;
+}
+body.layout-basic .rvl-stage--ticket-lesson .rvl-collect-cta {
+  min-width: min(16rem, 72vw);
+  min-height: 48px;
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+}
+
+@media (max-width: 760px) {
+  body.layout-basic .rvl-stage--ticket-lesson {
+    width: min(98vw, 560px);
+    padding-top: 2.8rem;
+  }
+  body.layout-basic .rvl-stage--ticket-lesson > .rvl-card-zone,
+  body.layout-basic .rvl-stage--single-ticket > .rvl-card-zone {
+    min-height: 0;
+  }
+  body.layout-basic .rvl-ticket-pack-stage--lesson {
+    min-height: 0;
+    grid-template-rows: auto minmax(3.5rem, auto);
+    gap: 0.7rem;
+  }
+  body.layout-basic .rvl-ticket-lesson-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.85rem;
+  }
+  body.layout-basic .rvl-ticket-pack-stage--lesson .rvl-ticket-grid-stage--single {
+    width: min(68vw, 300px, 35dvh);
+  }
+  body.layout-basic .rvl-ticket-grid-stage--lesson-stack {
+    width: min(92vw, 380px, 38dvh);
+    gap: 0.46rem;
+  }
+  body.layout-basic .rvl-ticket-lesson {
+    width: min(92vw, 500px);
+    margin-inline: auto;
+    gap: 0.52rem;
+    padding: 0.8rem;
+    border-radius: 13px;
+  }
+  body.layout-basic .rvl-ticket-lesson__title {
+    max-width: none;
+    font-size: clamp(1.35rem, 7vw, 2rem);
+  }
+  body.layout-basic .rvl-ticket-lesson__intro,
+  body.layout-basic .rvl-ticket-lesson__rule {
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+  body.layout-basic .rvl-ticket-lesson__equation {
+    padding: 0.55rem 0.58rem 0.45rem;
+  }
+  body.layout-basic .rvl-ticket-lesson__example {
+    grid-template-columns: 2.2rem minmax(0, 1fr);
+    gap: 0.36rem;
+    padding: 0.42rem;
+  }
+  body.layout-basic .rvl-ticket-lesson__example > img {
+    width: 2.2rem;
+    height: 2.2rem;
+  }
+  body.layout-basic .rvl-ticket-lesson__example strong { font-size: 0.58rem; }
+  body.layout-basic .rvl-ticket-lesson__example b { font-size: 0.53rem; }
+}
 @keyframes rvl-pack-enter-quiet {
   from { opacity: 0; transform: translateY(-10px) scale(0.96); }
   to { opacity: 1; transform: none; }
@@ -16260,7 +16970,7 @@ body.layout-basic .jackpot-hero replay-panel .replay-controls > .ldj-results-cta
 }
 
 /* ==========================================================================
-   Pass desk: default-open afKing editor + collapsed deity pass / boon drawer.
+   Pass desk: owned Deity first, organized pass shop, and AFKing workspace.
    ========================================================================== */
 
 body.layout-basic .app-pass-section {
@@ -16274,12 +16984,62 @@ body.layout-basic app-pass-section {
 }
 
 body.layout-basic .app-pass-section > .panel-header {
+  order: -4;
   margin-bottom: 0.05rem;
 }
 
 body.layout-basic .app-pass-section > .panel-header h2 {
+  margin-bottom: 0.16rem;
   letter-spacing: 0.13em;
   text-shadow: 0 0 18px rgba(111, 183, 255, 0.18);
+}
+
+body.layout-basic .pass-desk-header p {
+  margin: 0;
+  color: var(--text-secondary, #9aa4b2);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+body.layout-basic .pass-combined-note {
+  order: -3;
+}
+
+body.layout-basic .pass-shop-heading {
+  display: flex;
+  order: -1;
+  align-items: end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.24rem 0.12rem 0.08rem;
+}
+
+body.layout-basic .pass-shop-heading[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .pass-shop-heading > div {
+  display: grid;
+  gap: 0.08rem;
+}
+
+body.layout-basic .pass-shop-heading strong {
+  color: #dbe6f2;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+}
+
+body.layout-basic .pass-shop-heading span,
+body.layout-basic .pass-shop-heading small {
+  color: var(--text-secondary, #8f9cab);
+  font-size: 0.62rem;
+  line-height: 1.3;
+}
+
+body.layout-basic .pass-shop-heading small {
+  font-family: var(--font-mono, "Roboto Mono", monospace);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 
 body.layout-basic .pass-product-row {
@@ -16344,6 +17104,12 @@ body.layout-basic .pass-product-copy {
   display: grid;
   gap: 0.12rem;
   min-width: 0;
+}
+
+body.layout-basic .pass-product-eyebrow {
+  color: rgba(234, 211, 139, 0.68);
+  font: 850 0.5rem/1 var(--font-mono, "Roboto Mono", monospace);
+  letter-spacing: 0.14em;
 }
 
 body.layout-basic .app-pass-section .pass-product-copy > .pass-section-title {
@@ -16544,9 +17310,9 @@ body.layout-basic .pass-afking {
 
 body.layout-basic .pass-afking__head {
   display: grid;
-  grid-template-columns: minmax(13.5rem, 1fr) auto auto;
+  grid-template-columns: minmax(13.5rem, 1fr) auto;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.75rem;
 }
 
 body.layout-basic .pass-afking__head .pass-section-title {
@@ -16584,15 +17350,35 @@ body.layout-basic .pass-afking__status--active {
 }
 
 body.layout-basic .pass-afking__funding {
-  color: var(--text-secondary);
-  font-size: 0.72rem;
+  color: #d8ecff;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+body.layout-basic .pass-afking__meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
 }
 
 body.layout-basic .pass-afking__wallet {
   display: inline-flex;
   align-items: center;
-  justify-self: end;
   gap: 0.42rem;
+}
+
+body.layout-basic .pass-afking__balance {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 6.5rem;
+  justify-items: end;
+}
+
+body.layout-basic .pass-afking__balance > small {
+  color: rgba(169, 201, 228, 0.58);
+  font: 850 0.48rem/1 var(--font-mono, "Roboto Mono", monospace);
+  letter-spacing: 0.1em;
 }
 
 body.layout-basic .pass-afking__withdraw {
@@ -16617,9 +17403,54 @@ body.layout-basic .pass-afking__wallet .pass-afking__claim-button {
 
 body.layout-basic .pass-afking__controls {
   display: grid;
-  grid-template-columns: minmax(7rem, 1.05fr) minmax(4.25rem, 0.55fr) minmax(8rem, 1fr) auto auto auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.62rem;
+}
+
+body.layout-basic .pass-afking__control-card {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 0.6rem;
+  padding: 0.68rem;
+  border: 1px solid rgba(129, 190, 240, 0.18);
+  border-radius: 10px;
+  background: rgba(3, 12, 24, 0.26);
+}
+
+body.layout-basic .pass-afking__control-head {
+  display: grid;
+  gap: 0.12rem;
+}
+
+body.layout-basic .pass-afking__control-head > span {
+  color: #76bced;
+  font: 850 0.5rem/1 var(--font-mono, "Roboto Mono", monospace);
+  letter-spacing: 0.13em;
+}
+
+body.layout-basic .pass-afking__control-head > strong {
+  color: #e4f2ff;
+  font-size: 0.78rem;
+}
+
+body.layout-basic .pass-afking__control-head > small {
+  color: #85a6c1;
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
+body.layout-basic .pass-afking__order-fields,
+body.layout-basic .pass-afking__funding-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(5rem, 0.48fr);
   align-items: end;
   gap: 0.48rem;
+}
+
+body.layout-basic .pass-afking__funding-controls {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 body.layout-basic .pass-afking__claim {
@@ -16705,6 +17536,7 @@ body.layout-basic .pass-afking__field--fund small {
 
 body.layout-basic .pass-afking__credit {
   display: inline-flex;
+  grid-column: 1;
   min-height: 2.2rem;
   align-items: center;
   gap: 0.35rem;
@@ -16712,7 +17544,7 @@ body.layout-basic .pass-afking__credit {
   color: var(--text-secondary);
   font-size: 0.68rem;
   font-weight: 700;
-  white-space: nowrap;
+  line-height: 1.25;
 }
 
 body.layout-basic .pass-afking__credit input {
@@ -16727,11 +17559,21 @@ body.layout-basic .pass-afking__day-cost {
 
 body.layout-basic .pass-afking__costs {
   display: grid;
+  grid-column: 2;
   align-self: center;
   gap: 0.18rem;
+  justify-items: end;
   font-family: var(--font-mono, "Roboto Mono", monospace);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+body.layout-basic .pass-afking__actions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 0.48rem;
+  padding-top: 0.08rem;
 }
 
 body.layout-basic .pass-afking__coverage {
@@ -16802,6 +17644,18 @@ body.layout-basic .pass-deity-section {
   border-radius: 11px;
   background: rgba(35, 26, 8, 0.12);
   overflow: clip;
+}
+
+body.layout-basic .pass-deity-section--holder {
+  order: -2;
+  margin-top: 0;
+  border-color: rgba(234, 190, 65, 0.46);
+  background:
+    radial-gradient(circle at 8% 12%, rgba(255, 222, 117, 0.14), transparent 34%),
+    linear-gradient(135deg, rgba(91, 65, 10, 0.2), rgba(23, 18, 9, 0.38));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 241, 184, 0.1),
+    0 12px 32px rgba(88, 59, 6, 0.18);
 }
 
 body.layout-basic .pass-deity-summary {
@@ -16898,10 +17752,8 @@ body.layout-basic .pass-deity-section--holder .pass-deity-picker {
   padding-top: 0;
 }
 body.layout-basic .pass-deity-section--holder > .pass-deity-summary {
-  display: none;
-}
-body.layout-basic .pass-deity-section--holder > .pass-deity-summary::after {
-  display: none;
+  display: grid;
+  background: rgba(255, 235, 158, 0.035);
 }
 body.layout-basic .pass-deity-section--holder .pass-deity-preview {
   grid-column: 2;
@@ -17121,16 +17973,26 @@ body.layout-basic .pass-deity-curse-error {
     grid-row: 1 / span 2;
   }
   body.layout-basic .pass-afking__controls {
-    grid-template-columns: minmax(7rem, 1fr) minmax(4.25rem, 0.55fr) minmax(8rem, 1fr) auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  body.layout-basic .pass-afking__day-cost { justify-self: start; }
+  body.layout-basic .pass-afking__day-cost { justify-self: end; }
 }
 
 @media (max-width: 640px) {
+  body.layout-basic .app-pass-section,
+  body.layout-basic .pass-afking {
+    padding: 0.68rem;
+  }
+  body.layout-basic .pass-shop-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
   body.layout-basic .pass-product-row--whale,
   body.layout-basic .pass-product-row--lazy {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.58rem;
+    padding: 0.7rem;
   }
   body.layout-basic .pass-product-row .pass-product-heading {
     grid-column: 1;
@@ -17144,17 +18006,39 @@ body.layout-basic .pass-deity-curse-error {
     width: 100%;
     min-width: 0;
   }
+  body.layout-basic .pass-product-row .pass-product-perks {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  body.layout-basic .pass-product-row .pass-product-perks > span {
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.2;
+    text-align: center;
+  }
+  body.layout-basic .pass-product-row .pass-product-perks > .pass-lootbox-perk {
+    grid-column: 1 / -1;
+  }
   body.layout-basic .pass-product-checkout--lazy {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
   }
   body.layout-basic .pass-product-checkout--whale {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  body.layout-basic .pass-product-checkout--whale .pass-whale-buy,
+  body.layout-basic .pass-product-checkout--lazy .pass-lazy-buy {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-height: 2.75rem;
   }
   body.layout-basic .pass-product-row .pass-product-price {
     min-width: 0;
   }
   body.layout-basic .pass-deity-summary {
     grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.58rem;
+    padding: 0.72rem;
   }
   body.layout-basic .pass-deity-summary .pass-product-perks,
   body.layout-basic .pass-deity-price {
@@ -17168,13 +18052,17 @@ body.layout-basic .pass-deity-curse-error {
     text-align: left;
   }
   body.layout-basic .pass-afking__head {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr);
   }
-  body.layout-basic .pass-afking__head .pass-product-heading {
-    grid-column: 1 / -1;
+  body.layout-basic .pass-afking__meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  body.layout-basic .pass-afking__balance {
+    justify-items: start;
   }
   body.layout-basic .pass-afking__wallet {
-    grid-column: 1 / -1;
     width: 100%;
     min-width: 0;
     flex-wrap: wrap;
@@ -17188,13 +18076,39 @@ body.layout-basic .pass-deity-curse-error {
     text-align: center;
   }
   body.layout-basic .pass-afking__controls {
-    grid-template-columns: minmax(0, 1fr) minmax(4.5rem, 0.55fr);
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body.layout-basic .pass-afking__control-card,
+  body.layout-basic .pass-afking__credit,
+  body.layout-basic .pass-afking__costs,
+  body.layout-basic .pass-afking__actions {
+    grid-column: 1;
+  }
+  body.layout-basic .pass-afking__order-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(5rem, 0.46fr);
+  }
+  body.layout-basic .pass-afking__funding-controls {
+    grid-template-columns: minmax(0, 1fr);
   }
   body.layout-basic .pass-afking__claim-button { width: 100%; }
   body.layout-basic .pass-afking__claim { align-items: stretch; flex-direction: column; }
-  body.layout-basic .pass-afking__field--fund { grid-column: 1 / -1; }
-  body.layout-basic .pass-afking__credit { padding-left: 0; }
-  body.layout-basic .pass-afking__day-cost { justify-self: end; }
+  body.layout-basic .pass-afking__field--fund { grid-column: 1; }
+  body.layout-basic .pass-afking__credit {
+    width: 100%;
+    padding: 0.2rem 0;
+  }
+  body.layout-basic .pass-afking__costs {
+    width: 100%;
+    justify-items: start;
+    padding: 0.45rem 0;
+    border-top: 1px solid rgba(129, 190, 240, 0.14);
+    border-bottom: 1px solid rgba(129, 190, 240, 0.14);
+  }
+  body.layout-basic .pass-afking__day-cost { justify-self: start; }
+  body.layout-basic .pass-afking__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
   body.layout-basic .pass-afking__save,
   body.layout-basic .pass-afking__fund-button,
   body.layout-basic .pass-afking__cancel { width: 100%; }
@@ -17212,8 +18126,36 @@ body.layout-basic .pass-deity-curse-error {
   body.layout-basic .pass-deity-picker {
     grid-template-columns: 2.35rem minmax(0, 1fr);
   }
+  body.layout-basic .pass-deity-section--holder .pass-deity-picker {
+    grid-template-columns: minmax(0, 1fr) 3rem;
+  }
+  body.layout-basic .pass-deity-body {
+    padding: 0 0.58rem 0.58rem;
+  }
   body.layout-basic .pass-deity-buy { grid-column: 1 / -1; }
+  body.layout-basic .pass-deity-boons {
+    padding: 0.55rem;
+  }
+  body.layout-basic .pass-deity-boons__head,
+  body.layout-basic .pass-deity-boons__recipient {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body.layout-basic .pass-deity-boons__head {
+    flex-direction: column;
+  }
   body.layout-basic .pass-deity-boons__slots { grid-template-columns: 1fr; }
   body.layout-basic .pass-deity-curse { grid-template-columns: 1fr; }
   body.layout-basic .pass-deity-curse__button { width: 100%; }
+  body.layout-basic .pass-afking__field select,
+  body.layout-basic .pass-afking__field input,
+  body.layout-basic .pass-deity-select,
+  body.layout-basic .pass-deity-boons__recipient input,
+  body.layout-basic .pass-deity-curse input,
+  body.layout-basic .pass-afking__save,
+  body.layout-basic .pass-afking__fund-button,
+  body.layout-basic .pass-afking__cancel,
+  body.layout-basic .pass-deity-buy {
+    min-height: 2.75rem;
+  }
 }

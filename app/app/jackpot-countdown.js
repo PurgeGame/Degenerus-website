@@ -1,6 +1,7 @@
-// Compact top-bar countdown to the next playable jackpot window. The active
-// chain profile owns both the day cadence and the small post-rollover delay
-// needed for the keeper/RNG state to become actionable.
+// Compact countdown to the protocol's next day crossover. This deliberately
+// does not guess how long keeper/RNG processing will take after the boundary:
+// comparing this exact clock with the live jackpot phase makes that lag
+// observable instead of hiding it behind a hard-coded readiness estimate.
 
 import { VOLUME_WINDOW } from './chain-config.js';
 
@@ -8,16 +9,15 @@ function positiveModulo(value, divisor) {
   return ((value % divisor) + divisor) % divisor;
 }
 
-/** Whole seconds remaining until the next expected playable jackpot. */
-export function secondsUntilNextJackpot(nowMs = Date.now(), clock = VOLUME_WINDOW) {
+/** Whole seconds remaining until the next protocol day boundary. */
+export function secondsUntilDayCrossover(nowMs = Date.now(), clock = VOLUME_WINDOW) {
   const period = Math.max(1, Math.floor(Number(clock?.period) || 0));
-  const readyDelay = Math.max(0, Math.floor(Number(clock?.jackpotReadyDelay) || 0));
-  const anchor = Math.floor(Number(clock?.anchor) || 0) + readyDelay;
+  const anchor = Math.floor(Number(clock?.anchor) || 0);
   const nowSeconds = Number(nowMs) / 1000;
   if (!Number.isFinite(nowSeconds)) return period;
   const elapsed = positiveModulo(nowSeconds - anchor, period);
-  // ceil keeps the display from announcing 00:00 early. At the exact playable
-  // instant the counter begins tracking the following draw.
+  // ceil keeps the display from announcing 00:00 early. At the exact boundary
+  // the counter begins tracking the following protocol day.
   return Math.max(1, Math.ceil(period - elapsed));
 }
 
@@ -48,7 +48,7 @@ export function mountJackpotCountdown({
   if (!host || !value) return () => {};
 
   const paint = () => {
-    const remaining = secondsUntilNextJackpot(now(), clock);
+    const remaining = secondsUntilDayCrossover(now(), clock);
     const text = formatJackpotCountdown(remaining);
     value.textContent = text;
     host.setAttribute?.('aria-label', `Next jackpot in ${text}`);

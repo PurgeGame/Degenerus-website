@@ -6,7 +6,7 @@
 // Degenerette presentations for the fixed bottom tray. Every action is read-
 // only: it queues an already-settled reveal and never opens a wallet.
 
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 import { getViewedAddress, subscribe } from '../app/store.js';
 import {
   fetchHistoricalLootboxRows,
@@ -171,8 +171,10 @@ class AppDayHistoryReplays extends HTMLElement {
 
   #publish() {
     const day = this.#day;
+    const dismissScope = getViewedAddress();
     publishPendingActions(SOURCE, this.#rows.map((row) => ({
       id: row.id,
+      dismissScope,
       kind: row.kind,
       phase: row.kind === 'degenerette' ? 'result-ready' : 'history-replay',
       label: row.kind === 'degenerette'

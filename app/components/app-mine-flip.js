@@ -12,7 +12,8 @@
 // stale row quietly. A NoWork revert is likewise an ordinary stale-state
 // result; every other error is rethrown for the bottom tray to display.
 
-import { subscribe, getActingAddress } from '../app/store.js';
+import { subscribe, get, getActingAddress } from '../app/store.js';
+import { VOLUME_WINDOW } from '../app/chain-config.js';
 import { loadWorkQueue, nextAction } from '../app/work-queue.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
 
@@ -25,6 +26,25 @@ function _setIntervalUnref(fn, ms) {
     try { handle.unref(); } catch (_error) { /* browser timer */ }
   }
   return handle;
+}
+
+function _mineFlipGeneration() {
+  const gameState = get('app.gameState') || {};
+  const resolvedDay = Number(gameState?.dailyRng?.day ?? gameState?.currentDay);
+  if (Number.isInteger(resolvedDay) && resolvedDay > 0) return `day-${resolvedDay}`;
+
+  const level = Number(gameState?.level);
+  const jackpotDay = Number(gameState?.jackpotCounter);
+  if (Number.isInteger(level) && level >= 0 && Number.isInteger(jackpotDay) && jackpotDay >= 0) {
+    return `level-${level}-day-${jackpotDay}`;
+  }
+
+  // The game-state poll may still be warming up. Its configured day cadence is
+  // enough to prevent a cleared generic resolver from suppressing every future
+  // Mine FLIP action for this wallet.
+  const period = Math.max(1, Number(VOLUME_WINDOW?.period) || 86_400);
+  const anchor = Number(VOLUME_WINDOW?.anchor) || 0;
+  return `clock-${Math.floor((Date.now() / 1_000 - anchor) / period)}`;
 }
 
 class AppMineFlipResolver extends HTMLElement {
@@ -44,6 +64,7 @@ class AppMineFlipResolver extends HTMLElement {
     this.#unsubs.push(subscribe('connected.address', () => this.#refresh()));
     this.#unsubs.push(subscribe('viewing.address', () => this.#refresh()));
     this.#unsubs.push(subscribe('ui.mode', () => this.#refresh()));
+    this.#unsubs.push(subscribe('app.gameState', () => this.#refresh()));
 
     this.#pollHandle = _setIntervalUnref(() => this.#refresh(), POLL_INTERVAL_MS);
     this.#onFocus = () => { if (!document.hidden) this.#refresh(); };
@@ -102,7 +123,8 @@ class AppMineFlipResolver extends HTMLElement {
 
     const address = String(player).toLowerCase();
     publishPendingActions(RESOLVER_SOURCE, [{
-      id: `mine-flip:${address}`,
+      id: `mine-flip:${address}:${_mineFlipGeneration()}`,
+      dismissScope: address,
       kind: 'mass-resolution',
       compact: true,
       label: 'Mine FLIP',

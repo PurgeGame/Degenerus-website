@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Degenerus App</title>
   <link rel="stylesheet" href="/shared/nav.css">
-  <link rel="stylesheet" href="/beta/styles/base.css">
-  <link rel="stylesheet" href="/beta/styles/panels.css">
-  <link rel="stylesheet" href="/beta/styles/buttons.css">
-  <link rel="stylesheet" href="/beta/styles/status-bar.css">
-  <link rel="stylesheet" href="/beta/styles/skeleton.css">
-  <link rel="stylesheet" href="/beta/styles/forms.css">
-  <link rel="stylesheet" href="/beta/styles/tx-status.css">
-  <link rel="stylesheet" href="/beta/styles/jackpot.css">
-  <link rel="stylesheet" href="/beta/styles/viewer.css">
-  <link rel="stylesheet" href="/beta/styles/replay.css">
-  <link rel="stylesheet" href="/beta/styles/boons.css">
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/panels.css">
+  <link rel="stylesheet" href="/app/styles/buttons.css">
+  <link rel="stylesheet" href="/app/styles/status-bar.css">
+  <link rel="stylesheet" href="/app/styles/skeleton.css">
+  <link rel="stylesheet" href="/app/styles/forms.css">
+  <link rel="stylesheet" href="/app/styles/tx-status.css">
+  <link rel="stylesheet" href="/app/styles/jackpot.css">
+  <link rel="stylesheet" href="/app/styles/viewer.css">
+  <link rel="stylesheet" href="/app/styles/replay.css">
+  <link rel="stylesheet" href="/app/styles/boons.css">
   <link rel="stylesheet" href="/app/styles/app.css">
   <link rel="stylesheet" href="/app/styles/status-indicators.css">
   <script type="importmap">
@@ -33,8 +33,28 @@
   </script>
   <!-- Capture ?ref before shared/nav.js removes it from the visible URL. -->
   <script src="/js/ref.js"></script>
+  <!-- Tutorial frames paint the production UI once, then freeze its pollers so
+       scripted training values do not visibly fight live background refreshes. -->
+  <script src="/app/app/tutorial-frame-freeze.js"></script>
 </head>
 <body class="layout-basic">
+  <div
+    id="testnet-beta-banner"
+    class="testnet-beta-banner"
+    role="status"
+    aria-label="Testnet beta warning"
+    hidden
+  >
+    <span class="testnet-beta-banner__dot" aria-hidden="true"></span>
+    <strong>TESTNET BETA · NOT REAL MONEY</strong>
+    <a
+      class="testnet-beta-banner__faucet"
+      href="https://www.alchemy.com/faucets/base-sepolia"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Get free Base Sepolia play money from the Alchemy faucet"
+    >GET FREE PLAY MONEY</a>
+  </div>
   <div class="container">
     <!-- Nav injected by shared/nav.js (prepends into .container; order-independent) -->
 
@@ -63,14 +83,6 @@
     </div>
 
     <main>
-      <aside id="testnet-beta-banner" class="testnet-beta-banner" hidden
-             aria-label="Testnet beta warning">
-        <span class="testnet-beta-banner__warning">TESTNET BETA · NOT REAL MONEY</span>
-        <a class="testnet-beta-banner__faucet"
-           href="https://www.alchemy.com/faucets/base-sepolia"
-           target="_blank" rel="noopener noreferrer">GET FREE MONEY</a>
-      </aside>
-
       <!-- Headline jackpot number: the grand gold rush's payout size (current +
            next + future prize pools + yield accumulator, per _payGoldRush's grand
            branch). Sampled per block by the indexer, so it ticks up whenever new
@@ -184,17 +196,17 @@
 
   <script src="/shared/nav.js"></script>
   <script>initNav({ currentPage: 'app' });</script>
+  <script type="module" src="/app/components/testnet-beta-banner.js"></script>
   <script type="module" src="/app/app/main.js"></script>
   <script type="module" src="/app/components/app-referral-input.js"></script>
   <script type="module" src="/app/components/app-feedback-button.js"></script>
-  <script type="module" src="/app/components/testnet-beta-banner.js"></script>
   <script type="module" src="/app/components/wallet-picker.js"></script>
   <script type="module" src="/app/components/app-onboarding.js"></script>
   <script type="module" src="/app/components/account-switcher.js"></script>
   <script type="module" src="/app/components/view-mode-banner.js"></script>
   <script type="module" src="/app/components/gold-rush-headline.js"></script>
   <script type="module" src="/app/components/app-pool-progress.js"></script>
-  <script type="module" src="/beta/components/replay-panel.js"></script>
+  <script type="module" src="/app/components/replay-panel.js"></script>
   <script type="module" src="/app/components/last-day-jackpot.js"></script>
   <script type="module" src="/app/components/app-tickets-inventory.js"></script>
   <script type="module" src="/app/components/app-daily-flip.js"></script>

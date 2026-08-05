@@ -191,47 +191,80 @@ export async function readLastVolumeSeal({ round } = {}) {
   }
   if (!Number.isFinite(head) || head <= 0) return null;
 
-  for (let i = 0; i < LOG_CHUNK_LIMIT; i += 1) {
-    const to = head - i * LOG_CHUNK_BLOCKS;
-    if (to < 0) break;
-    const from = Math.max(0, to - LOG_CHUNK_BLOCKS + 1);
+  const queriedRanges = new Set();
+  const readRange = async (from, to) => {
+    const rangeKey = `${from}:${to}`;
+    if (queriedRanges.has(rangeKey)) return undefined;
+    queriedRanges.add(rangeKey);
     let logs;
     try {
       // Once volumeMarketState has told the panel the contract-authoritative
-      // open round, ask for that exact adjacent seal. A generic "latest" scan
-      // can legitimately return a different round while the local day clock or
-      // indexer is crossing a deployment/round boundary, which used to make the
-      // whole Yesterday line disappear even though its log was available.
+      // round, filter for that exact seal. Keep the client-side round check for
+      // injected/legacy providers that ignore indexed filter arguments.
       logs = await contract.queryFilter(
         contract.filters.VolumeRoundSealed(hasWantedRound ? wantedRound : undefined),
         from,
         to,
       );
     } catch (_e) {
-      // A provider that will not serve historical logs is not an error state —
-      // the book still renders, just without the benchmark line.
       return null;
     }
-    if (logs && logs.length > 0) {
-      // Some injected/legacy providers ignore indexed filter arguments. Keep
-      // the round check client-side too so an unrelated newest seal can never
-      // displace the actual openRound - 1 benchmark.
-      const matching = hasWantedRound
-        ? logs.filter((log) => Number(log?.args?.round ?? log?.args?.[0] ?? 0) === wantedRound)
-        : logs;
-      if (matching.length === 0) {
-        if (from === 0) break;
-        continue;
+    if (!logs || logs.length === 0) return undefined;
+    const matching = hasWantedRound
+      ? logs.filter((log) => Number(log?.args?.round ?? log?.args?.[0] ?? 0) === wantedRound)
+      : logs;
+    if (matching.length === 0) return undefined;
+    const latest = matching[matching.length - 1];
+    const a = latest.args;
+    return {
+      round: Number(a.round ?? a[0] ?? 0),
+      total: BigInt(a.total ?? a[1] ?? 0),
+      previous: BigInt(a.previous ?? a[2] ?? 0),
+      blockNumber: Number(latest.blockNumber ?? 0),
+    };
+  };
+
+  // An old but still-unclaimed bet can be far outside the recent head scan.
+  // On Base, derive a tight block neighborhood from this deployment's day
+  // boundary and two-second block cadence. This remains four bounded log calls,
+  // not an RPC-hostile deploy-to-head query.
+  if (hasWantedRound
+    && [8_453, 84_532].includes(Number(CHAIN.id))
+    && Number.isInteger(Number(CHAIN.deployBlock))
+    && Number.isFinite(Number(VOLUME_WINDOW.deployDayBoundary))) {
+    try {
+      const deployBlockNumber = Number(CHAIN.deployBlock);
+      const deployBlock = await provider.getBlock(deployBlockNumber);
+      const deployTimestamp = Number(deployBlock?.timestamp);
+      const sealTimestamp = Number(VOLUME_WINDOW.anchor)
+        + Number(VOLUME_WINDOW.period)
+          * (Number(VOLUME_WINDOW.deployDayBoundary) + wantedRound - 1);
+      const estimatedBlock = deployBlockNumber
+        + Math.round((sealTimestamp - deployTimestamp) / 2);
+      if (Number.isFinite(estimatedBlock) && estimatedBlock <= head + LOG_CHUNK_BLOCKS) {
+        const first = Math.max(
+          deployBlockNumber,
+          Math.min(head, estimatedBlock) - LOG_CHUNK_BLOCKS,
+        );
+        for (let i = 0; i < 4; i += 1) {
+          const from = first + i * LOG_CHUNK_BLOCKS;
+          if (from > head) break;
+          const to = Math.min(head, from + LOG_CHUNK_BLOCKS - 1);
+          const seal = await readRange(from, to);
+          if (seal === null) return null;
+          if (seal) return seal;
+        }
       }
-      const latest = matching[matching.length - 1];
-      const a = latest.args;
-      return {
-        round: Number(a.round ?? a[0] ?? 0),
-        total: BigInt(a.total ?? a[1] ?? 0),
-        previous: BigInt(a.previous ?? a[2] ?? 0),
-        blockNumber: Number(latest.blockNumber ?? 0),
-      };
-    }
+    } catch (_e) { /* fall back to the recent bounded scan below */ }
+  }
+
+  for (let i = 0; i < LOG_CHUNK_LIMIT; i += 1) {
+    const to = head - i * LOG_CHUNK_BLOCKS;
+    if (to < 0) break;
+    const from = Math.max(0, to - LOG_CHUNK_BLOCKS + 1);
+    const seal = await readRange(from, to);
+    if (seal === null) return null;
+    if (seal) return seal;
     if (from === 0) break;
   }
   return null;
@@ -326,10 +359,15 @@ export async function readJackpotPhaseContext() {
     const contract = _gameContract();
     let jackpot;
     let lastPurchaseDay = null;
+    let level = null;
+    let rngLocked = null;
     try {
       const purchase = await contract.purchaseInfo();
+      const rawLevel = Number(purchase?.lvl ?? purchase?.[0]);
+      level = Number.isInteger(rawLevel) && rawLevel >= 0 ? rawLevel : null;
       jackpot = Boolean(purchase?.inJackpotPhase ?? purchase?.[1]);
       lastPurchaseDay = Boolean(purchase?.lastPurchaseDay_ ?? purchase?.[2]);
+      rngLocked = Boolean(purchase?.rngLocked_ ?? purchase?.[3]);
     } catch (_e) {
       // Rolling-deploy fallback for an older reader/ABI.
       jackpot = Boolean(await contract.jackpotPhase());
@@ -337,7 +375,7 @@ export async function readJackpotPhaseContext() {
     let compressedFlag = 0;
     try { compressedFlag = Number(await contract.jackpotCompressionTier()); }
     catch (_e) { /* old deploy / transient read: ordinary cadence is conservative */ }
-    return { jackpot, lastPurchaseDay, compressedFlag };
+    return { level, jackpot, lastPurchaseDay, rngLocked, compressedFlag };
   } catch (_e) {
     return null;
   }

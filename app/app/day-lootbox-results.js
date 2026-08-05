@@ -3,7 +3,7 @@
 // complete same-transaction result (including boons and BoxSpin reels), while
 // the viewer snapshot supplies the exact day-specific box indexes.
 
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from './api.js';
 import { openLegsFromFeed } from './lootbox-legs.js';
 
 const PAGE_LIMIT = 200;

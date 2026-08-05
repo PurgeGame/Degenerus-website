@@ -32,7 +32,7 @@
 import { CHAIN } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { getViewedAddress, get, subscribe } from '../app/store.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 // Plan 61-02: claims write path — three named exports wired into per-row click
 // handlers below. `import` triggers reason-map registrations as a side-effect
 // (DecClaimInactive / DecAlreadyClaimed / DecNotWinner).

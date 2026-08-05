@@ -1,7 +1,7 @@
 // Feedback API client. The browser sends a small game-state snapshot alongside
 // the player's words so reports arrive with enough context to reproduce them.
 
-import { API_BASE } from '../../beta/app/constants.js';
+import { API_BASE } from './constants.js';
 import { CHAIN } from './chain-config.js';
 import { get, getViewedAddress } from './store.js';
 

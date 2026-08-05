@@ -14,7 +14,7 @@
 import { displayEth } from '../app/scaling.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { ETH_DIVISOR } from '../app/chain-config.js';
-import { formatJackpotCountdown, secondsUntilNextJackpot } from '../app/jackpot-countdown.js';
+import { formatJackpotCountdown, secondsUntilDayCrossover } from '../app/jackpot-countdown.js';
 import { get, subscribe } from '../app/store.js';
 
 const SCALE_HEADROOM_BPS = 11_250n;
@@ -199,30 +199,31 @@ export function jackpotPrizePoolWei({ gameState = null, ratchets = null } = {}) 
 }
 
 /**
- * Name a level-transition drawing only while the next playable daily jackpot
- * is the final draw that actually triggers it. This keeps the clock truthful:
- * purchase-phase duration is target-driven, so an x4/x9 level cannot quote a
- * Decimator/BAF time until its final jackpot day has arrived.
+ * Name a reward jackpot only after its target level's purchase pool has closed.
+ * BAF/Decimator settle while that level enters jackpot phase, not when the
+ * previous level's final jackpot ends. The RNG request promotes `level` before
+ * settlement, so a locked final-purchase window already names the target level.
  */
 export function transitionJackpotCountdownModel({
   level = null,
   jackpot = false,
-  finalDraw = false,
+  lastPurchaseDay = false,
+  rngLocked = false,
 } = {}) {
   const current = Number(level);
-  if (!jackpot || !finalDraw || !Number.isInteger(current) || current < 0) return null;
+  if (jackpot || !lastPurchaseDay || !Number.isInteger(current) || current < 0) return null;
 
-  const next = current + 1;
-  const mod100 = next % 100;
-  const decimator = mod100 === 0 || (next % 10 === 5 && mod100 !== 95);
-  const baf = next > 0 && next % 10 === 0;
+  const target = current + (rngLocked ? 0 : 1);
+  const mod100 = target % 100;
+  const decimator = mod100 === 0 || (target % 10 === 5 && mod100 !== 95);
+  const baf = target > 0 && target % 10 === 0;
   if (!decimator && !baf) return null;
   if (decimator && baf) {
-    return { kind: 'both', label: 'DECIMATOR + BAF JACKPOTS IN:', level: next };
+    return { kind: 'both', label: 'DECIMATOR + BAF CROSSOVER IN:', level: target };
   }
   return decimator
-    ? { kind: 'decimator', label: 'DECIMATOR JACKPOT IN:', level: next }
-    : { kind: 'baf', label: 'BAF JACKPOT IN:', level: next };
+    ? { kind: 'decimator', label: 'DECIMATOR CROSSOVER IN:', level: target }
+    : { kind: 'baf', label: 'BAF CROSSOVER IN:', level: target };
 }
 
 /** Level and phase-day copy formerly rendered as a top-navigation pill. */
@@ -380,7 +381,7 @@ class AppPoolProgress extends HTMLElement {
     this.innerHTML = `
       <section class="pool-progress" data-mode="purchase" aria-label="Level prize pool">
         <div class="pool-progress__special-jackpot" data-el="pool-special-jackpot" hidden>
-          <span data-el="pool-special-jackpot-label">SPECIAL JACKPOT IN:</span>
+          <span data-el="pool-special-jackpot-label">NEXT JACKPOT IN:</span>
           <strong data-el="pool-special-jackpot-countdown">--:--</strong>
         </div>
         <header class="pool-progress__head">
@@ -417,7 +418,7 @@ class AppPoolProgress extends HTMLElement {
           <span class="pool-progress__jackpot-tail">
             <span class="pool-progress__jackpot-next">
               <span class="pool-progress__jackpot-copy--full">NEXT JACKPOT IN:</span>
-              <span class="pool-progress__jackpot-copy--compact">NEXT</span>
+              <span class="pool-progress__jackpot-copy--compact">NEXT JP</span>
               <strong data-el="pool-jackpot-countdown">--:--</strong>
             </span>
             <i aria-hidden="true">·</i>
@@ -440,7 +441,7 @@ class AppPoolProgress extends HTMLElement {
   }
 
   #paintCountdown() {
-    const countdown = formatJackpotCountdown(secondsUntilNextJackpot());
+    const countdown = formatJackpotCountdown(secondsUntilDayCrossover());
     this.#set('pool-jackpot-countdown', countdown);
     this.#set('pool-special-jackpot-countdown', countdown);
     const special = this.querySelector('[data-el="pool-special-jackpot"]');
@@ -483,6 +484,15 @@ class AppPoolProgress extends HTMLElement {
     const track = this.querySelector('[data-el="pool-track"]');
     const fill = this.querySelector('[data-el="pool-fill"]');
     const specialJackpot = this.querySelector('[data-el="pool-special-jackpot"]');
+    const exactLevel = contractPhase?.level == null ? null : Number(contractPhase.level);
+    const rewardJackpot = transitionJackpotCountdownModel({
+      level: Number.isInteger(exactLevel) ? exactLevel : stateLevel,
+      jackpot: phase.jackpot,
+      lastPurchaseDay: contractPhase?.lastPurchaseDay === true,
+      rngLocked: typeof contractPhase?.rngLocked === 'boolean'
+        ? contractPhase.rngLocked
+        : gameState?.rngLockedFlag === true,
+    });
 
     this.#set('pool-day', phase.dayLabel);
     this.#set('pool-name', phase.level == null
@@ -505,25 +515,11 @@ class AppPoolProgress extends HTMLElement {
         compressedFlag: contractPhase?.compressedFlag
           ?? gameState?.compressedJackpotFlag,
       });
-      const special = transitionJackpotCountdownModel({
-        level: phase.level,
-        jackpot: true,
-        finalDraw: model.finalDraw,
-      });
       if (specialJackpot) {
-        specialJackpot.hidden = special == null;
-        if (special) {
-          specialJackpot.dataset.kind = special.kind;
-          specialJackpot.setAttribute(
-            'aria-label',
-            `${special.label.replace(/:$/, '')} ${this.querySelector('[data-el="pool-special-jackpot-countdown"]')?.textContent || ''}`.trim(),
-          );
-        } else {
-          specialJackpot.removeAttribute('data-kind');
-          specialJackpot.removeAttribute('aria-label');
-        }
+        specialJackpot.hidden = true;
+        specialJackpot.removeAttribute('data-kind');
+        specialJackpot.removeAttribute('aria-label');
       }
-      if (special) this.#set('pool-special-jackpot-label', special.label);
       this.#set('pool-jackpot-level', phase.level ?? '—');
       this.#set('pool-jackpot-pool', _formatWholeEth(fixedPoolWei));
       this.#set('pool-jackpot-day', `${phase.day ?? '—'}/${JACKPOT_DAY_CAP}`);
@@ -542,10 +538,19 @@ class AppPoolProgress extends HTMLElement {
     if (body) body.hidden = false;
     if (jackpotSummary) jackpotSummary.hidden = true;
     if (specialJackpot) {
-      specialJackpot.hidden = true;
-      specialJackpot.removeAttribute('data-kind');
-      specialJackpot.removeAttribute('aria-label');
+      specialJackpot.hidden = rewardJackpot == null;
+      if (rewardJackpot) {
+        specialJackpot.dataset.kind = rewardJackpot.kind;
+        specialJackpot.setAttribute(
+          'aria-label',
+          `${rewardJackpot.label.replace(/:$/, '')} ${this.querySelector('[data-el="pool-special-jackpot-countdown"]')?.textContent || ''}`.trim(),
+        );
+      } else {
+        specialJackpot.removeAttribute('data-kind');
+        specialJackpot.removeAttribute('aria-label');
+      }
     }
+    if (rewardJackpot) this.#set('pool-special-jackpot-label', rewardJackpot.label);
     const nextWei = goldRush?.components?.nextWei
       ?? gameState?.prizePools?.nextPrizePool
       ?? null;

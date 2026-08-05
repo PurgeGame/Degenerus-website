@@ -4,8 +4,9 @@
 // but they are deliberately not the clock: at a day boundary those endpoints
 // can arrive in either order and may briefly return yesterday. One pinned RPC
 // snapshot supplies the deployment-local GAME day plus that exact day's FLIP
-// result. The resulting app.daySync state is the single availability gate used
-// by both the jackpot and coinflip widgets.
+// result. The resulting app.daySync state exposes two exact-day readiness
+// lanes: jackpot consumers use jackpotReady and coinflip consumers use
+// coinflipReady. `ready` remains the aggregate transition state only.
 
 import { ethers } from './contracts.js';
 import { CHAIN, CONTRACTS, VOLUME_WINDOW } from './chain-config.js';
@@ -17,6 +18,10 @@ const COINFLIP_DAY_ABI = [
 ];
 
 const NEAR_BOUNDARY_SECONDS = 20;
+const POST_BOUNDARY_POLL_SECONDS = Math.max(
+  NEAR_BOUNDARY_SECONDS,
+  Math.floor(Number(VOLUME_WINDOW?.jackpotReadyDelay) || 0),
+);
 const NEAR_BOUNDARY_POLL_MS = 1_000;
 const WARMING_POLL_MS = 1_500;
 const TESTNET_STEADY_POLL_MS = 10_000;
@@ -160,9 +165,23 @@ function _secondsToBoundary(nowMs = Date.now()) {
   return elapsed === 0 ? period : period - elapsed;
 }
 
+function _secondsSinceBoundary(nowMs = Date.now()) {
+  const period = Math.max(1, Math.floor(Number(VOLUME_WINDOW?.period) || 0));
+  const anchor = Math.floor(Number(VOLUME_WINDOW?.anchor) || 0);
+  const seconds = Math.floor(Number(nowMs) / 1000);
+  if (!Number.isFinite(seconds)) return period;
+  return ((seconds - anchor) % period + period) % period;
+}
+
 export function nextDayProbeDelay(state = get('app.daySync'), nowMs = Date.now()) {
   if (state && !state.ready) return WARMING_POLL_MS;
-  if (_secondsToBoundary(nowMs) <= NEAR_BOUNDARY_SECONDS) return NEAR_BOUNDARY_POLL_MS;
+  // A boundary probe can land before the first block carrying the new day. Do
+  // not immediately fall back to the steady cadence at elapsed=0: keep probing
+  // through the post-boundary confirmation window so the next block is caught.
+  if (_secondsToBoundary(nowMs) <= NEAR_BOUNDARY_SECONDS
+    || _secondsSinceBoundary(nowMs) <= POST_BOUNDARY_POLL_SECONDS) {
+    return NEAR_BOUNDARY_POLL_MS;
+  }
   return Number(VOLUME_WINDOW?.period) <= 3_600
     ? TESTNET_STEADY_POLL_MS
     : MAINNET_STEADY_POLL_MS;
@@ -280,5 +299,6 @@ export const _testing = {
   },
   normalizedCoinflip: _normalizedCoinflip,
   secondsToBoundary: _secondsToBoundary,
+  secondsSinceBoundary: _secondsSinceBoundary,
   publish: _publish,
 };

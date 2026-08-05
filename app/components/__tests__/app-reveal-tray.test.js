@@ -119,6 +119,7 @@ describe('actionableRevealItems', () => {
       { kind: 'degenerette', state: 'waiting' },
       { kind: 'growth-claim', state: 'ready' },
       { kind: 'volume-claim', state: 'ready' },
+      { kind: 'whale-pass-claim', state: 'ready' },
       { kind: 'tickets', state: 'waiting' },
       { kind: 'pari', state: 'ready' },
       { kind: 'batch-resolution', state: 'ready' },
@@ -126,18 +127,42 @@ describe('actionableRevealItems', () => {
       { kind: 'foil-match', state: 'ready' },
     ]);
     assert.deepEqual(rows.map((row) => row.kind), [
-      'lootbox', 'degenerette', 'degenerette', 'lootbox', 'tickets', 'growth-claim', 'volume-claim', 'batch-resolution', 'bingo', 'foil-match',
+      'lootbox', 'degenerette', 'degenerette', 'lootbox', 'tickets', 'growth-claim', 'volume-claim', 'whale-pass-claim', 'batch-resolution', 'bingo', 'foil-match',
     ]);
   });
 });
 
 describe('<app-reveal-tray>', () => {
+  test('a whale-pass balance is rendered as a guarded CLAIM action', () => {
+    pending.publishPendingActions('whale-pass-claims', [{
+      id: 'whale:2', kind: 'whale-pass-claim', kindLabel: 'WHALE PASS CLAIM',
+      label: '2 whale-pass halves', shortLabel: 'Claim',
+      detail: 'Activate the deferred ticket stream for the next 100 levels',
+      state: 'ready', write: true, run: async () => {},
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const action = el.querySelector('.rrt-action--whale-pass-claim');
+    assert.ok(action);
+    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'WHALE PASS CLAIM');
+    assert.equal(action.querySelector('.rrt-action__art').textContent, '🐳');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM');
+    assert.notEqual(action.getAttribute('data-write'), null);
+    el.disconnectedCallback();
+  });
+
   test('a foil match shows the actual foil ticket and names the scoring reason', () => {
     pending.publishPendingActions('foil-match', [{
       id: 'foil-match:44:2:0', kind: 'foil-match', kindLabel: 'FOIL TICKET MATCH',
       label: 'Day 44 · Foil T5', shortLabel: 'Claim T5',
-      detail: 'MAIN DRAW · 2 exact + 1 symbol',
+      detail: 'MAIN JACKPOT · 2 exact + 1 symbol · 6-face Degenerette bonus',
       lineTraits: [56, 70, 130, 200],
+      winningTraits: [56, 78, 131, 200],
+      matchFaces: [2, 1, 0, 2],
+      drawKind: 0,
+      score: 5,
+      rewardFaces: 6,
       state: 'ready', write: true, run: async () => {},
     }]);
     const el = new trayModule.AppRevealTray();
@@ -146,15 +171,27 @@ describe('<app-reveal-tray>', () => {
     const action = el.querySelector('.rrt-action--foil-match');
     assert.ok(action);
     assert.equal(action.querySelector('.rrt-action__kind').textContent, 'FOIL TICKET MATCH');
-    assert.match(action.querySelector('.rrt-action__detail').textContent, /2 exact \+ 1 symbol/);
-    assert.equal(action.querySelectorAll('.rrt-foil-match-ticket__q').length, 4,
-      'the pending art copies all four badges from the matched foil ticket');
-    assert.match(action.querySelector('.rrt-foil-match-ticket').className, /(?:^|\s)ticket-card--foil(?:\s|$)/,
+    assert.match(action.querySelector('.rrt-action__detail').textContent,
+      /MAIN JACKPOT · 2 exact \+ 1 symbol · 6-face Degenerette bonus/);
+    assert.equal(action.querySelectorAll('.rrt-foil-match-ticket').length, 2,
+      'Pending shows the foil and the jackpot ticket as one comparison');
+    assert.equal(action.querySelectorAll('.rrt-foil-match-ticket__q').length, 8,
+      'both real four-quadrant tickets remain intact at compact size');
+    assert.match(action.querySelector('.rrt-foil-match-ticket--foil').className, /(?:^|\s)ticket-card--foil(?:\s|$)/,
       'the Pending thumbnail uses the same visible foil material as the full ticket');
-    assert.equal(action.querySelectorAll('.trait-quadrant--gold').length, 1,
+    assert.equal(action.querySelectorAll('.trait-quadrant--gold').length, 2,
       'real gold traits keep their gold surface instead of being painted silver');
+    assert.equal(action.querySelectorAll('.q-full').length, 4,
+      'exact quadrants are colored on both sides of the comparison');
+    assert.equal(action.querySelectorAll('.q-sym').length, 2,
+      'symbol-only quadrants are colored on both sides of the comparison');
+    assert.equal(action.querySelectorAll('.q-miss').length, 2,
+      'misses are colored on both sides of the comparison');
+    assert.match(action.querySelector('.rrt-foil-match-preview').textContent, /FOILVSMAIN/,
+      'compact roles distinguish the foil from the main jackpot');
     assert.equal(
-      action.querySelector('.rrt-foil-match-ticket__center')?.querySelector('img')?.src,
+      action.querySelector('.rrt-foil-match-ticket--foil')
+        ?.querySelector('.rrt-foil-match-ticket__center')?.querySelector('img')?.src,
       '/whitepaper/flame-center-silver.svg',
       'the compact Pending ticket uses the same silver centre flame',
     );

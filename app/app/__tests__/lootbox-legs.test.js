@@ -329,6 +329,10 @@ describe('openLegsFromDegenerettePayouts', () => {
       },
       {
         rewardType: 'opened',
+        transactionHash: '0xdegenerette-result',
+        blockNumber: '5001',
+        logIndex: 17,
+        lootboxIndex: 0,
         rewardData: {
           amount: '900', futureLevel: 44, futureTickets: 325, flip: '700', roundedUp: true,
         },
@@ -343,6 +347,9 @@ describe('openLegsFromDegenerettePayouts', () => {
     assert.equal(legs[0].label, 'Quest streak shield');
     assert.equal(legs[1].wholeTickets, 4);
     assert.equal(legs[1].futureLevel, 44);
+    assert.equal(legs[1].transactionHash, '0xdegenerette-result');
+    assert.equal(legs[1].blockNumber, '5001');
+    assert.equal(legs[1].logIndex, 17);
     assert.equal(legs[2].amount, 55n);
   });
 });

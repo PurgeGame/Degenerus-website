@@ -173,7 +173,7 @@ describe('index.html basic-mode skeleton', () => {
       '/app/components/app-onboarding.js',
       '/app/components/view-mode-banner.js',
       '/app/components/last-day-jackpot.js',
-      '/beta/components/replay-panel.js',
+      '/app/components/replay-panel.js',
       '/app/components/app-decimator-panel.js',
       '/app/components/app-degenerette-panel.js',
       '/app/components/app-pass-section.js',

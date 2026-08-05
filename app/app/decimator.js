@@ -302,7 +302,7 @@ async function _readIndexedDecimatorRoundScore(level) {
     // Keep the beta API module lazy here. It installs browser listeners at
     // module evaluation time, while this helper is also imported by the
     // side-effect-free Node unit tests.
-    const { fetchJSON } = await import('../../beta/app/api.js');
+    const { fetchJSON } = await import('./api.js');
     const payload = await fetchJSON(`/game/decimator/${lvl}`);
     const total = BigInt(payload?.totalScore ?? 0);
     return total >= 0n ? total : null;

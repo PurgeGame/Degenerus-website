@@ -53,6 +53,8 @@ import { get, getActingAddress } from './store.js';
 const CLAIMS_ABI = [
   'function claimWinnings(address player) external',
   'function claimableWinningsOf(address player) view returns (uint256)',
+  'function claimWhalePass(address player) external',
+  'function whalePassClaimAmount(address player) view returns (uint256)',
 ];
 
 // Verified: degenerus-audit/contracts/Coinflip.sol:332-337.
@@ -173,6 +175,31 @@ export async function readClaimableEth({ player } = {}) {
 }
 
 /**
+ * Authoritative deferred whale-pass balance for `player`.
+ *
+ * Jackpot-awarded whale-pass halves are held in `whalePassClaims` until the
+ * permissionless claim turns them into the player's 100-level ticket stream.
+ * This read deliberately bypasses the indexer: a valid on-chain claim must
+ * still appear in Pending while database event tables are being repaired.
+ * Returns null for an unavailable/failed read, never a fabricated zero.
+ *
+ * @param {{player?: string}} [args]
+ * @returns {Promise<bigint|null>}
+ */
+export async function readWhalePassClaimAmount({ player } = {}) {
+  const playerArg = player ?? getActingAddress();
+  if (!playerArg) return null;
+  const provider = getProvider();
+  if (!provider) return null;
+  try {
+    const contract = _buildGameContract(provider);
+    return BigInt(await contract.whalePassClaimAmount(playerArg));
+  } catch (_e) {
+    return null;
+  }
+}
+
+/**
  * @param {{player?: string}} [args]
  * @returns {Promise<{receipt: import('ethers').TransactionReceipt}>}
  */
@@ -194,6 +221,36 @@ export async function claimEth({ player } = {}) {
   // Phase 58 chokepoint — closure form mandatory.
   const receipt = await sendTx((s) => _buildGameContract(s).claimWinnings(playerArg), 'Claim ETH winnings');
   return { receipt };
+}
+
+/**
+ * Materialize jackpot-awarded whale-pass halves for `player`.
+ *
+ * The GAME entrypoint is intentionally permissionless: the tickets are always
+ * credited to `player`, never to the caller. The UI still supplies the current
+ * acting player explicitly so self/operator mode cannot drift during a wallet
+ * interaction.
+ *
+ * @param {{player?: string}} [args]
+ * @returns {Promise<{receipt: import('ethers').TransactionReceipt, player: string}>}
+ */
+export async function claimWhalePass({ player } = {}) {
+  const playerArg = player ?? getActingAddress();
+  if (!playerArg) throw new Error('Wallet not connected.');
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (signer) {
+    const contract = _buildGameContract(signer);
+    const sim = await requireStaticCall(contract, 'claimWhalePass', [playerArg], signer);
+    if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call claimWhalePass');
+  }
+
+  const receipt = await sendTx(
+    (s) => _buildGameContract(s).claimWhalePass(playerArg),
+    'Claim whale pass',
+  );
+  return { receipt, player: playerArg };
 }
 
 // ---------------------------------------------------------------------------

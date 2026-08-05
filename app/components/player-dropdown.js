@@ -16,7 +16,7 @@
 // trusted literal markup only.
 
 import { update } from '../app/store.js';
-import { API_BASE } from '../../beta/app/constants.js';
+import { API_BASE } from '../app/constants.js';
 
 const DEBOUNCE_MS = 300;
 const MIN_QUERY_LEN = 2;

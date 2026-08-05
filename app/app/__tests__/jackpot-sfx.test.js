@@ -63,8 +63,10 @@ class FakeAudioContext {
     const osc = {
       type: 'sine',
       frequency: {
-        setValueAtTime: () => {},
-        exponentialRampToValueAtTime: () => {},
+        values: [],
+        ramps: [],
+        setValueAtTime(value, at) { this.values.push({ value, at }); },
+        exponentialRampToValueAtTime(value, at) { this.ramps.push({ value, at }); },
       },
       connect: () => {},
       start: () => {},
@@ -98,8 +100,9 @@ describe('headless safety (no AudioContext / no localStorage)', () => {
       sfxSpinStart(700);
       sfxTick(0);
       sfxTick(23);
-      sfxMatchLock(0);
-      sfxMatchLock(7);
+      sfxMatchLock('color', 0);
+      sfxMatchLock('symbol', 4);
+      sfxMatchLock('both', 7);
       sfxRollDone(true);
       sfxRollDone(false);
       sfxFanfare(false);
@@ -181,20 +184,39 @@ describe('cues with a stubbed AudioContext', () => {
     assert.equal(FakeAudioContext.created, 1, 'context created once and cached');
   });
 
-  test('unmuted cues schedule oscillators', () => {
+  test('color, symbol, and both matches schedule audibly distinct cues', () => {
     warmup();
     const before = FakeAudioContext.last.oscillators.length;
     sfxTick(3);
     const afterTick = FakeAudioContext.last.oscillators.length;
-    sfxMatchLock(3);
-    const afterMatch = FakeAudioContext.last.oscillators.length;
+    sfxMatchLock('color', 3);
+    const afterColor = FakeAudioContext.last.oscillators.length;
+    sfxMatchLock('symbol', 3);
+    const afterSymbol = FakeAudioContext.last.oscillators.length;
+    sfxMatchLock('both', 3);
+    const afterBoth = FakeAudioContext.last.oscillators.length;
     sfxFanfare(false);
     // Reach into the cached context via a fresh warmup-created instance:
     // FakeAudioContext.created === 1 means all cues shared the cached ctx.
     assert.equal(FakeAudioContext.created, 1);
     assert.equal(afterTick - before, 1, 'ordinary lock is one mechanical tick');
-    assert.equal(afterMatch - afterTick, 2,
-      'a winning Degenerette lock has its own layered two-note cue');
+    assert.equal(afterColor - afterTick, 1,
+      'a color-only match is a soft provisional note');
+    assert.equal(afterSymbol - afterColor, 2,
+      'a scoring symbol match has the brighter layered cue');
+    assert.equal(afterBoth - afterSymbol, 3,
+      'a completed color-and-symbol match has a three-note chord');
+
+    const oscillators = FakeAudioContext.last.oscillators;
+    const colorCue = oscillators.slice(afterTick, afterColor);
+    const symbolCue = oscillators.slice(afterColor, afterSymbol);
+    const bothCue = oscillators.slice(afterSymbol, afterBoth);
+    assert.equal(colorCue[0].type, 'triangle');
+    assert.deepEqual(symbolCue.map((osc) => osc.type), ['square', 'sine']);
+    assert.deepEqual(bothCue.map((osc) => osc.type), ['square', 'sine', 'triangle']);
+    assert.ok(colorCue[0].frequency.values[0].value
+      < symbolCue[0].frequency.values[0].value,
+    'the provisional color note sits below the symbol cue');
   });
 
   test('coinflip launch, whoosh, Reverse bonk, turn, and landings have distinct layered cues', () => {
@@ -227,7 +249,7 @@ describe('cues with a stubbed AudioContext', () => {
     warmup();
     sfxSpinStart(700);
     sfxTick(0);
-    sfxMatchLock(0);
+    sfxMatchLock('both', 0);
     sfxRollDone(true);
     sfxFanfare(true);
     sfxGoldTicket();

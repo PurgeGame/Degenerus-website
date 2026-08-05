@@ -394,6 +394,8 @@ export function openLegsFromDegenerettePayouts(items) {
       out.push({
         legType: 'opened',
         transactionHash: String(item?.transactionHash || data.transactionHash || '').toLowerCase() || null,
+        blockNumber: item?.blockNumber == null ? null : String(item.blockNumber),
+        logIndex: item?.logIndex == null ? null : Number(item.logIndex),
         // Direct Degenerette boxes are already settled and intentionally use
         // index zero; this index is presentation context, not an open action.
         lootboxIndex: _feedBigInt(item?.lootboxIndex ?? data.lootboxIndex ?? 0),
@@ -492,6 +494,9 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
         const roundedUp = Boolean(data.roundedUp);
         out.push({
           legType: 'opened',
+          transactionHash: String(item?.transactionHash || '').toLowerCase() || null,
+          blockNumber: item?.blockNumber == null ? null : String(item.blockNumber),
+          logIndex: item?.logIndex == null ? null : Number(item.logIndex),
           lootboxIndex: BigInt(item.lootboxIndex),
           amount: _feedBigInt(data.amount ?? item.boxAmountRawWei),
           futureLevel: Number(data.futureLevel ?? item.levelAtOpen ?? 0),
@@ -505,6 +510,9 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
         const roundedUp = Boolean(data.roundedUp);
         out.push({
           legType: 'opened',
+          transactionHash: String(item?.transactionHash || '').toLowerCase() || null,
+          blockNumber: item?.blockNumber == null ? null : String(item.blockNumber),
+          logIndex: item?.logIndex == null ? null : Number(item.logIndex),
           lootboxIndex: BigInt(item.lootboxIndex ?? 0),
           amount: _feedBigInt(data.flipAmount),
           futureLevel: Number(data.ticketLevel ?? data.futureLevel ?? item.levelAtOpen ?? 0),
@@ -516,6 +524,9 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
       case 'presale': {
         out.push({
           legType: 'opened',
+          transactionHash: String(item?.transactionHash || '').toLowerCase() || null,
+          blockNumber: item?.blockNumber == null ? null : String(item.blockNumber),
+          logIndex: item?.logIndex == null ? null : Number(item.logIndex),
           lootboxIndex: BigInt(item.lootboxIndex ?? 0),
           amount: _feedBigInt(data.amount),
           futureLevel: Number(item.levelAtOpen ?? 0),

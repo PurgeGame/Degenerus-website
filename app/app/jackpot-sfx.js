@@ -7,7 +7,7 @@
 // Cues:
 //   sfxSpinStart(ms)   — low anticipation riser while the flame spins
 //   sfxTick(i)         — short blip per revealed row, pitch rises with index
-//   sfxMatchLock(i)    — bright escalating cue for a matching DGN trait lock
+//   sfxMatchLock(kind, i) — distinct DGN color / symbol / full-match lock cue
 //   sfxRollDone(good)  — lock stinger when a roll completes (two-tone if good)
 //   sfxFanfare(big)    — win arpeggio; `big` = the viewed player won
 //   sfxGoldTicket()     — bright harmonic hit for a gold-trait ticket
@@ -163,17 +163,42 @@ export function sfxTick(i = 0) {
 }
 
 /**
- * A Degenerette lock whose newly settled color or symbol matches the player's
- * ticket. This follows the standalone reveal's eight-note match ladder, with a
- * quiet upper chime so it cannot be mistaken for the ordinary mechanical tick.
+ * A Degenerette lock whose newly settled component matches the player's
+ * ticket. All three cues share the escalating eight-note ladder, but their
+ * weight mirrors scoring: color is a soft provisional note, symbol is the
+ * brighter two-note scoring cue, and both is a three-note full-match chord.
+ *
+ * The numeric-only form remains supported as the former symbol cue so an old
+ * cached caller cannot break during a rolling deployment.
  */
-export function sfxMatchLock(i = 0) {
+export function sfxMatchLock(kind = 'symbol', i = 0) {
   const ctx = _ctx();
   if (!ctx) return;
   try {
+    let matchKind = kind;
+    let index = i;
+    if (typeof kind === 'number') {
+      matchKind = 'symbol';
+      index = kind;
+    }
+    if (matchKind !== 'color' && matchKind !== 'symbol' && matchKind !== 'both') {
+      matchKind = 'symbol';
+    }
     const ladder = [261.63, 293.66, 329.63, 349.23, 392, 440, 493.88, 523.25];
-    const step = Math.max(0, Math.min(ladder.length - 1, Number(i) || 0));
+    const step = Math.max(0, Math.min(ladder.length - 1, Number(index) || 0));
     const root = ladder[step];
+
+    if (matchKind === 'color') {
+      _tone(ctx, {
+        freq: root * 0.75,
+        type: 'triangle',
+        attack: 0.004,
+        decay: 0.14,
+        peak: 0.11,
+      });
+      return;
+    }
+
     _tone(ctx, {
       freq: root,
       type: 'square',
@@ -189,6 +214,16 @@ export function sfxMatchLock(i = 0) {
       decay: 0.2,
       peak: 0.08,
     });
+    if (matchKind === 'both') {
+      _tone(ctx, {
+        freq: root * 1.5,
+        type: 'triangle',
+        at: 0.012,
+        attack: 0.003,
+        decay: 0.24,
+        peak: 0.11,
+      });
+    }
   } catch (_e) { /* audio is decoration */ }
 }
 

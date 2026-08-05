@@ -5,6 +5,7 @@ import {
   nextDayProbeDelay,
   _testing,
 } from '../day-rollover.js';
+import { VOLUME_WINDOW } from '../chain-config.js';
 
 const win = (day, rewardPercent = 81) => ({
   day, win: true, rewardPercent, resolved: true, source: 'chain',
@@ -103,5 +104,15 @@ describe('authoritative day rollover reducer', () => {
 
   test('probe cadence tightens while warming', () => {
     assert.equal(nextDayProbeDelay({ day: 9, ready: false }, 0), 1_500);
+  });
+
+  test('probe cadence stays fast immediately after the wall-clock boundary', () => {
+    const boundaryMs = Number(VOLUME_WINDOW.anchor) * 1_000;
+    assert.equal(nextDayProbeDelay({ day: 9, ready: true }, boundaryMs - 1_000), 1_000,
+      'the final second before rollover is probed eagerly');
+    assert.equal(nextDayProbeDelay({ day: 9, ready: true }, boundaryMs), 1_000,
+      'an exact-boundary read cannot drop back to the steady cadence');
+    assert.equal(nextDayProbeDelay({ day: 9, ready: true }, boundaryMs + 5_000), 1_000,
+      'a prior-block RPC answer is retried while the new boundary settles');
   });
 });

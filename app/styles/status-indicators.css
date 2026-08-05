@@ -1,57 +1,77 @@
-/* Small environment and gameplay-state indicators shared by the main app. */
+/* Small gameplay-state indicators shared by the main app. */
 
-/* Base Sepolia warning. testnet-beta-banner.js removes [hidden] only on 84532. */
+/* Full-width deployment warning. It starts hidden in markup so the tutorial
+   iframe can never flash it before its query-scoped suppression runs. */
 .testnet-beta-banner {
-  min-height: 2rem;
-  margin: 0 0 0.4rem;
-  padding: 0.28rem 0.52rem 0.28rem 0.7rem;
+  position: relative;
+  z-index: 1100;
   display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 1.65rem;
   align-items: center;
   justify-content: center;
-  gap: clamp(0.6rem, 2vw, 1rem);
-  border: 1px solid rgba(255, 127, 127, 0.5);
-  border-radius: 7px;
-  background: linear-gradient(90deg, #861b28, #b32635 50%, #861b28);
-  color: #fff4f4;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  gap: 0.42rem;
+  padding: 0.3rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 213, 111, 0.58);
+  background:
+    linear-gradient(90deg, rgba(78, 9, 25, 0.98), rgba(129, 19, 39, 0.98) 50%, rgba(78, 9, 25, 0.98));
+  box-shadow: 0 4px 18px rgba(41, 4, 13, 0.34), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  color: #ffe29a;
+  font: 950 0.62rem/1.1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em;
+  text-align: center;
 }
 
 .testnet-beta-banner[hidden] { display: none !important; }
 
-.testnet-beta-banner__warning {
-  font-size: clamp(0.62rem, 1.7vw, 0.72rem);
-  font-weight: 900;
-  letter-spacing: 0.11em;
-  line-height: 1.1;
-  text-align: center;
+.testnet-beta-banner__dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: 0 0 0.42rem;
+  border-radius: 50%;
+  background: #ffd56f;
+  box-shadow: 0 0 8px rgba(255, 213, 111, 0.82);
 }
 
 .testnet-beta-banner__faucet {
-  flex: none;
-  padding: 0.22rem 0.48rem;
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  border-radius: 5px;
-  color: #fff;
-  background: rgba(42, 3, 9, 0.32);
-  font-size: 0.6rem;
-  font-weight: 900;
+  display: inline-flex;
+  min-height: 1.15rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.08rem 0.42rem;
+  border: 1px solid rgba(134, 239, 172, 0.65);
+  border-radius: 999px;
+  background: rgba(20, 83, 45, 0.48);
+  color: #a7f3d0;
+  font-size: 0.58rem;
   letter-spacing: 0.08em;
   line-height: 1;
   text-decoration: none;
-  white-space: nowrap;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, color 120ms ease;
 }
 
 .testnet-beta-banner__faucet:hover,
 .testnet-beta-banner__faucet:focus-visible {
-  background: rgba(255, 255, 255, 0.16);
+  border-color: #86efac;
+  background: rgba(22, 101, 52, 0.74);
+  color: #dcfce7;
   transform: translateY(-1px);
 }
 
 .testnet-beta-banner__faucet:focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid rgba(134, 239, 172, 0.72);
   outline-offset: 2px;
 }
+
+@media (max-width: 420px) {
+  .testnet-beta-banner {
+    flex-wrap: wrap;
+    row-gap: 0.22rem;
+  }
+}
+
+html[data-degenerus-tutorial] .testnet-beta-banner { display: none !important; }
 
 /* Active boons sit beside the exact control they modify. */
 boon-product-indicator {

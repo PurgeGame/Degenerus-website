@@ -471,7 +471,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const descriptions = [
       'One ticket every level for the next 10 levels.',
       'One ticket every other level for the next 100 levels.',
-      'Auto-buy tickets or a lootbox every day.',
+      'Place an automatic order at each jackpot.',
       'Permanent symbol coverage and three boons every day.',
     ];
     for (const copy of descriptions) assert.match(el.innerHTML, new RegExp(copy.replace('+', '\\+')));
@@ -696,7 +696,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('Deity dropdown shows the connected player pass and locks repurchase', async () => {
+  test('owned Deity pass moves to the top, defaults open, and remains collapsible', async () => {
     passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(new Map([
       [11, CONNECTED.toUpperCase()],
     ])));
@@ -710,13 +710,18 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(buy.hidden, true, 'owned pass has no impossible repurchase button');
     assert.equal(el.querySelector('[data-bind="pass-deity-owned-name"]').textContent, 'God of Cancer');
     assert.equal(el.querySelector('[data-bind="pass-deity-owned-name"]').hidden, false);
-    assert.match(el.querySelector('[data-bind="pass-deity-hint"]').textContent, /^your pass · /);
+    assert.equal(el.querySelector('[data-bind="pass-deity-hint"]').textContent, 'God of Cancer');
+    assert.equal(el.querySelector('[data-bind="pass-deity-meta-label"]').textContent, 'OWNED');
+    assert.equal(el.querySelector('[data-bind="pass-deity-eyebrow"]').textContent, 'YOUR DEITY PASS');
     const details = el.querySelector('[data-bind="pass-deity-details"]');
     assert.equal(details.open, true, 'a deity holder gets the owned controls open automatically');
-    assert.equal(el.querySelector('[data-bind="pass-deity-summary"]').hidden, true,
-      'deity marketing/dropdown summary is removed for an existing holder');
-    assert.equal(el.querySelector('[data-bind="pass-deity-summary"]').getAttribute('aria-disabled'), 'true',
-      'the holder view is no longer presented as a dropdown');
+    assert.equal(el.querySelector('[data-bind="pass-deity-summary"]').hidden, false,
+      'the owned pass keeps a clear, collapsible heading');
+    assert.equal(el.querySelector('[data-bind="pass-deity-summary"]').getAttribute('aria-disabled'), null,
+      'the holder can collapse the default-open controls');
+    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    assert.match(css, /\.pass-deity-section--holder\s*\{[^}]*order:\s*-2/s,
+      'owned Deity controls are visually ordered above the pass shop');
     assert.ok(
       el.innerHTML.indexOf('data-bind="pass-afking"')
         > el.innerHTML.indexOf('data-bind="pass-deity-details"'),
@@ -724,6 +729,28 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     );
 
     el.disconnectedCallback();
+  });
+
+  test('mobile pass desk separates shopping, jackpot order, funding, and actions', () => {
+    const el = instantiate();
+    assert.ok(el.querySelector('[data-bind="pass-shop-heading"]'), 'pass products have a shop heading');
+    assert.ok(el.querySelector('.pass-afking__order-card'), 'subscription order has its own card');
+    assert.ok(el.querySelector('.pass-afking__funding-card'), 'subscription funding has its own card');
+    assert.ok(el.querySelector('.pass-afking__actions'), 'subscription actions have their own row');
+    assert.match(el.innerHTML, /NEXT JACKPOT/);
+    assert.doesNotMatch(el.innerHTML, /DAY CROSSOVER/i,
+      'player-facing subscription copy uses the jackpot event name');
+
+    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    assert.match(css,
+      /@media \(max-width: 640px\)[\s\S]*?\.pass-product-row \.pass-product-perks\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s,
+      'mobile pass benefits use a stable two-column grid');
+    assert.match(css,
+      /@media \(max-width: 640px\)[\s\S]*?\.pass-afking__controls\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
+      'mobile subscription groups stack in one readable column');
+    assert.match(css,
+      /\.pass-afking__actions\s*\{[^}]*grid-column:\s*1 \/ -1/s,
+      'save and cancel are grouped away from price metadata');
   });
 
   test('a deity holder gets a quick 200 FLIP curse action wired to their pass id', async () => {

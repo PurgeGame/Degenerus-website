@@ -36,7 +36,7 @@
 // place; approvals.list joins that same reset block rather than duplicating the logic
 // inside polling.js's stop()/pauseAllTimers (which owns timers only, no store writes).
 
-import { API_BASE } from '../../beta/app/constants.js';
+import { API_BASE } from './constants.js';
 import { update, get } from './store.js';
 import { mergePlayerPayloads } from './combine.js';
 import { ethers } from './contracts.js';

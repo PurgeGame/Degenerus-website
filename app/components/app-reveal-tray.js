@@ -10,6 +10,7 @@
 //     replays an externally-resolved result, then stages the reel player;
 //   - ticket-pack run() opens the fully indexed pack reveal with no write.
 //   - growth/volume-claim run() claims the settled payout, then stages its result.
+//   - whale-pass-claim run() activates an on-chain deferred ticket stream.
 //
 // Explicitly pinned waiting rows (Degenerette and owed ticket packs) stay put
 // as muted progress feedback, then become the same lit actionable result card.
@@ -41,6 +42,7 @@ const REVEAL_KINDS = new Set([
   'tickets',
   'growth-claim',
   'volume-claim',
+  'whale-pass-claim',
   'decimator',
   'baf',
   'bingo',
@@ -130,6 +132,7 @@ function _kindLabel(kind) {
   if (kind === 'degenerette') return 'DEGENERETTE';
   if (kind === 'growth-claim') return 'GROWTH BET';
   if (kind === 'volume-claim') return 'VOLUME BET';
+  if (kind === 'whale-pass-claim') return 'WHALE PASS CLAIM';
   if (kind === 'decimator') return 'DECIMATOR';
   if (kind === 'baf') return 'BAF CONSOLATION';
   if (kind === 'bingo') return 'BINGO';
@@ -444,29 +447,65 @@ class AppRevealTray extends HTMLElement {
         badge.alt = '';
         art.appendChild(badge);
       } else if (item.kind === 'foil-match' && Array.isArray(item.lineTraits)) {
-        const mini = document.createElement('span');
-        mini.className = 'ticket-card tc-small ticket-card--foil dgn-ticket rrt-foil-match-ticket';
-        const traits = dgnTraitIdsToQuadrants(item.lineTraits);
-        applyDgnTicketAccent(mini, item.lineTraits);
-        traits.forEach((trait, quadrant) => {
-          const cell = document.createElement('span');
-          cell.className = 'trait-quadrant dgn-q rrt-foil-match-ticket__q';
-          if (trait.col === 7) cell.classList?.add('trait-quadrant--gold');
-          cell.setAttribute('data-quadrant', String(quadrant));
-          const badge = document.createElement('img');
-          badge.src = dgnBadgePath(quadrant, trait.sym, trait.col);
-          badge.alt = '';
-          cell.appendChild(badge);
-          mini.appendChild(cell);
+        const faces = Array.from({ length: 4 }, (_unused, quadrant) => {
+          const face = Number(item.matchFaces?.[quadrant]);
+          return face === 2 ? 2 : face === 1 ? 1 : 0;
         });
-        const center = document.createElement('span');
-        center.className = 'ticket-card-center rrt-foil-match-ticket__center';
-        const mark = document.createElement('img');
-        mark.src = '/whitepaper/flame-center-silver.svg';
-        mark.alt = '';
-        center.appendChild(mark);
-        mini.appendChild(center);
-        art.appendChild(mini);
+        const states = faces.map((face) => face === 2 ? 'full' : face === 1 ? 'sym' : 'miss');
+        const preview = document.createElement('span');
+        preview.className = 'rrt-foil-match-preview';
+
+        const makeTicket = (traitIds, labelText, { foil = false } = {}) => {
+          const side = document.createElement('span');
+          side.className = 'rrt-foil-match-preview__side';
+          const tag = document.createElement('small');
+          tag.className = 'rrt-foil-match-preview__tag';
+          tag.textContent = labelText;
+          side.appendChild(tag);
+
+          const mini = document.createElement('span');
+          mini.className = [
+            'ticket-card tc-small dgn-ticket rrt-foil-match-ticket',
+            foil ? 'ticket-card--foil rrt-foil-match-ticket--foil' : 'rrt-foil-match-ticket--jackpot',
+          ].join(' ');
+          const traits = dgnTraitIdsToQuadrants(traitIds);
+          applyDgnTicketAccent(mini, traitIds);
+          traits.forEach((trait, quadrant) => {
+            const cell = document.createElement('span');
+            cell.className = `trait-quadrant dgn-q rrt-foil-match-ticket__q q-${states[quadrant]}`;
+            if (trait?.col === 7) cell.classList?.add('trait-quadrant--gold');
+            cell.setAttribute('data-quadrant', String(quadrant));
+            if (trait) {
+              const badge = document.createElement('img');
+              badge.src = dgnBadgePath(quadrant, trait.sym, trait.col);
+              badge.alt = '';
+              cell.appendChild(badge);
+            }
+            mini.appendChild(cell);
+          });
+          const center = document.createElement('span');
+          center.className = 'ticket-card-center rrt-foil-match-ticket__center';
+          const mark = document.createElement('img');
+          mark.src = foil
+            ? '/whitepaper/flame-center-silver.svg'
+            : '/whitepaper/flame-center.svg';
+          mark.alt = '';
+          center.appendChild(mark);
+          mini.appendChild(center);
+          side.appendChild(mini);
+          return side;
+        };
+
+        preview.appendChild(makeTicket(item.lineTraits, 'FOIL', { foil: true }));
+        const vs = document.createElement('span');
+        vs.className = 'rrt-foil-match-preview__vs';
+        vs.textContent = 'VS';
+        preview.appendChild(vs);
+        preview.appendChild(makeTicket(
+          Array.isArray(item.winningTraits) ? item.winningTraits : [],
+          Number(item.drawKind) === 1 ? 'BONUS' : 'MAIN',
+        ));
+        art.appendChild(preview);
       } else if (item.kind === 'tickets' && passive) {
         const pack = document.createElement('span');
         pack.className = 'rvl-pack rrt-pending-pack-art';
@@ -518,6 +557,7 @@ class AppRevealTray extends HTMLElement {
         art.textContent = item.kind === 'lootbox' ? '?'
           : item.kind === 'growth-claim' ? '↑'
             : item.kind === 'volume-claim' ? 'V'
+              : item.kind === 'whale-pass-claim' ? '🐳'
               : item.kind === 'baf' ? 'B'
                 : item.kind === 'decimator' ? 'X' : 'D';
       }
@@ -573,7 +613,9 @@ class AppRevealTray extends HTMLElement {
         : item.state === 'waiting'
           ? item.phase === 'indexing' ? 'LOADING…' : 'WAITING'
         : busy
-          ? item.kind === 'growth-claim' || item.kind === 'volume-claim'
+          ? item.kind === 'growth-claim'
+            || item.kind === 'volume-claim'
+            || item.kind === 'whale-pass-claim'
             ? 'CLAIMING…'
             : item.kind === 'foil-match'
               ? 'CLAIMING…'

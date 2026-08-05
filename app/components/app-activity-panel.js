@@ -23,7 +23,7 @@
 // dec/deg/df/jp/last/lbx/ldj/pass/player/qst/view/wallet prefixes).
 
 import { get, subscribe, getViewedAddress } from '../app/store.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 import { questStreakScorePoints } from '../app/activity-score.js';
 
 function _setIntervalUnref(fn, ms) {

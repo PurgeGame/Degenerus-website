@@ -24,7 +24,7 @@
 
 import { CHAIN } from '../app/chain-config.js';
 import { get, subscribe } from '../app/store.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 import {
   openLootBox,
   canOpenLootbox,
@@ -770,6 +770,7 @@ class AppBoxStrip extends HTMLElement {
     }
     publishPendingActions(PENDING_SOURCE, this.#boxes.map((box) => ({
       id: `lootbox:${_boxKey(box)}`,
+      dismissScope: this.#addr,
       kind: 'lootbox',
       label: _boxLabel(box),
       shortLabel: box.resolved ? 'View result' : 'Open box',

@@ -12,7 +12,7 @@ import {
   savePurchaseAffiliateCode,
 } from '../app/affiliate.js';
 import { compactUiError } from '../app/ui-error.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 
 const MOUNT_RETRY_MS = 100;
 const MOUNT_RETRIES = 30;

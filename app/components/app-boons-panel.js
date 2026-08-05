@@ -33,10 +33,10 @@
 //   CF-09: BNS-01 cross-import discipline — /beta/ source never modified.
 //   CF-12: Cross-repo discipline — writes to website/ ONLY.
 
-import '../../beta/components/boons-panel.js';
-import { update as updateBeta } from '../../beta/app/store.js';
+import './boons-panel.js';
+import { update as updateBeta } from '../app/reactive-store.js';
 import { subscribe as subscribeApp, getViewedAddress, get as getApp } from '../app/store.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 
 // Account-switcher (2026-07-16) identity-panel note — matches app-quest-panel.js /
 // app-activity-panel.js copy. Boons are per-account event history; combine.js has

@@ -79,6 +79,7 @@ let _buffer = [];
 let _lootboxPresentationSeq = 0;
 let _queuedLootboxPresentationIds = new Set();
 let _queuedBingoPresentationIds = new Set();
+let _queuedPariPresentationIds = new Set();
 
 // Ticket inventory listens for these lifecycle events so newly indexed cards
 // remain behind their wrapper until the corresponding presentation is actually
@@ -117,6 +118,15 @@ function _withBingoPresentationId(seq) {
   return { ...seq, presentationId: `bingo-reveal:${player}:${level}:${quadrant}` };
 }
 
+function _withPariPresentationId(seq) {
+  if (seq?.kind !== 'pari' || seq.presentationId) return seq;
+  const market = String(seq.market || '').toLowerCase() === 'volume' ? 'volume' : 'growth';
+  const round = Number(seq.round);
+  if (!Number.isInteger(round) || round < 0) return seq;
+  const player = String(seq.player || seq.address || 'current').toLowerCase();
+  return { ...seq, presentationId: `pari-reveal:${player}:${market}:${round}` };
+}
+
 function _emitLootboxQueued(seq) {
   const id = seq?.kind === 'lootbox' ? String(seq.presentationId || '') : '';
   if (!id || _queuedLootboxPresentationIds.has(id)) return;
@@ -145,21 +155,31 @@ function _emitLootboxQueued(seq) {
  */
 export function queueReveal(seq) {
   if (!seq || typeof seq !== 'object') return false;
-  const queued = _withBingoPresentationId(_withLootboxPresentationId(seq));
+  const queued = _withPariPresentationId(
+    _withBingoPresentationId(_withLootboxPresentationId(seq)),
+  );
   const presentationId = String(queued?.presentationId || '');
   // Live receipt parsing and the indexed pending tray can discover the same
   // settled box independently. A stable release-derived id keeps that one
-  // logical box from entering the overlay twice while its first presentation
-  // is buffered, queued, or active.
+  // logical box from entering the overlay twice while buffered/active and
+  // remains a session tombstone after completion. Abort explicitly releases
+  // the id so a presentation the player never finished can be retried.
   if (queued?.kind === 'lootbox'
     && presentationId && _queuedLootboxPresentationIds.has(presentationId)) return false;
   if (queued?.kind === 'bingo'
     && presentationId && _queuedBingoPresentationIds.has(presentationId)) return false;
+  if (queued?.kind === 'pari'
+    && presentationId && _queuedPariPresentationIds.has(presentationId)) return false;
   // Bingo ids are session tombstones, not merely active-queue locks. A claimed
   // Bingo is immutable, so aborting or completing its visual must not let a
   // delayed indexer refresh present the same prize again.
   if (queued?.kind === 'bingo' && presentationId) {
     _queuedBingoPresentationIds.add(presentationId);
+  }
+  // A settled side-bet round is immutable too. Claim/read races can discover
+  // it twice, but the player should only see one result presentation.
+  if (queued?.kind === 'pari' && presentationId) {
+    _queuedPariPresentationIds.add(presentationId);
   }
   _emitLootboxQueued(queued);
   if (_instance) {
@@ -177,6 +197,7 @@ export function __resetForTest() {
   _lootboxPresentationSeq = 0;
   _queuedLootboxPresentationIds = new Set();
   _queuedBingoPresentationIds = new Set();
+  _queuedPariPresentationIds = new Set();
 }
 
 /**
@@ -279,6 +300,21 @@ function _tokenText(wei) {
 
 function _safeBigInt(value) {
   try { return BigInt(value ?? 0); } catch (_e) { return 0n; }
+}
+
+/**
+ * A positive payout is not necessarily a win: paid Degenerette bets can
+ * return less than their stake. Reserve celebration cues for break-even or
+ * better. Box spins are granted rewards rather than wagers, so any payout
+ * from one remains celebratory. Missing wager metadata preserves the older
+ * positive-payout behaviour instead of silently downgrading a valid result.
+ */
+export function shouldCelebrateDegenerette({ total, totalWager, boxSpin = false } = {}) {
+  const payout = _safeBigInt(total);
+  if (payout <= 0n) return false;
+  if (boxSpin) return true;
+  const wager = _safeBigInt(totalWager);
+  return wager <= 0n || payout >= wager;
 }
 
 /**
@@ -400,6 +436,22 @@ function _wholeTicketTraitIds(ids) {
     byQuadrant[q] = tid;
   }
   return byQuadrant.every((tid) => tid != null) ? byQuadrant : null;
+}
+
+function _entryTraitId(raw) {
+  const tid = Number(raw?.traitId ?? raw);
+  return Number.isInteger(tid) && tid >= 0 && tid <= 255 ? tid : null;
+}
+
+function _entryHasGold(traitId) {
+  return traitId != null && ((Number(traitId) >> 3) & 7) === 7;
+}
+
+function _goldEntryLabel(traitId) {
+  const { q, sym } = dgnTraitIdToQSC(traitId);
+  const raw = DGN_SYMBOLS[DGN_QUADRANTS[q]]?.[sym];
+  const name = TRAIT_LABEL_OVERRIDES[raw] || String(raw || 'ENTRY').replace(/[_-]+/g, ' ').toUpperCase();
+  return `GOLD ${name} ENTRY`;
 }
 
 function _ticketHasGold(traitIds) {
@@ -615,11 +667,17 @@ export function normalizeSequence(seq) {
         traitIds: _wholeTicketTraitIds(ticket?.traitIds),
         foil: Boolean(ticket?.foil),
       }))
-      .filter((ticket) => ticket.traitIds != null)
-      // A gold hit is the pack finale. Modern Array#sort is stable, so this
-      // keeps the original order inside the plain and gold groups while moving
-      // every ticket with at least one gold trait to the end.
-      .sort((a, b) => Number(_ticketHasGold(a.traitIds)) - Number(_ticketHasGold(b.traitIds)));
+      .filter((ticket) => ticket.traitIds != null);
+    const looseEntries = (Array.isArray(seq.entries) ? seq.entries : [])
+      .map((entry) => ({ traitId: _entryTraitId(entry) }))
+      .filter((entry) => entry.traitId != null);
+    // Gold is the finale for either physical form. Modern Array#sort is stable,
+    // so the original order survives within the plain and gold groups.
+    const revealPieces = [
+      ...wholeTickets.map((ticket) => ({ ...ticket, entry: false })),
+      ...looseEntries.map((entry) => ({ ...entry, entry: true, foil: false })),
+    ].sort((a, b) => Number(a.entry ? _entryHasGold(a.traitId) : _ticketHasGold(a.traitIds))
+      - Number(b.entry ? _entryHasGold(b.traitId) : _ticketHasGold(b.traitIds)));
     const foilPack = Boolean(seq.foilPack)
       || (wholeTickets.length > 0 && wholeTickets.every((ticket) => ticket.foil));
     const packCount = Math.max(1, Math.floor(Number(seq.packCount ?? 1)) || 1);
@@ -639,10 +697,17 @@ export function normalizeSequence(seq) {
             .filter((index) => Number.isInteger(index) && index >= 0))],
         }
       : null;
+    if (packRelease && Array.isArray(rawRelease.itemKeys)) {
+      packRelease.itemKeys = [...new Set(rawRelease.itemKeys.map(String).filter(Boolean))];
+    }
+    if (packRelease && Number.isInteger(Number(rawRelease.entryCount))
+      && Number(rawRelease.entryCount) > 0) {
+      packRelease.entryCount = Number(rawRelease.entryCount);
+    }
     const validPackRelease = packRelease
       && packRelease.address
       && Number.isInteger(packRelease.level)
-      && packRelease.cardIndexes.length > 0
+      && (packRelease.cardIndexes.length > 0 || packRelease.itemKeys?.length > 0)
       ? packRelease
       : null;
     const baseTitle = seq.title
@@ -657,7 +722,7 @@ export function normalizeSequence(seq) {
     // the four symbols it actually got. The sealed shape below is what the buy
     // receipt used to pop; it survives for callers that genuinely have nothing
     // to show yet (see app/app/pack-watch.js for why the buy no longer does).
-    if (wholeTickets.length > 0) {
+    if (revealPieces.length > 0) {
       const extra = Number(seq.extra ?? 0);
       return {
         kind,
@@ -672,23 +737,31 @@ export function normalizeSequence(seq) {
         packCount,
         packRelease: validPackRelease,
         totalCount: Math.max(count, Number(seq.totalCount ?? count) || count),
+        // This deliberately uses a tutorial-specific input flag. Live pack
+        // reveals always get the large direct single-ticket presentation, but
+        // can never accidentally inherit the tutorial's explanatory panel.
+        ticketLesson: Boolean(seq.tutorialTicketLesson),
         // Tickets are dealt as a GRID rather than one card at a time (user
         // call): a pack is a hand, and reading it as a hand is the point. The
         // per-ticket cards below still back the tray/summary path.
-        ticketGrid: wholeTickets.map((t, i) => ({
-          traitIds: t.traitIds,
-          foil: Boolean(t?.foil),
-          label: `TICKET ${i + 1}`,
+        ticketGrid: revealPieces.map((piece, i) => ({
+          traitIds: piece.traitIds,
+          traitId: piece.traitId,
+          entry: Boolean(piece.entry),
+          foil: Boolean(piece?.foil),
+          label: piece.entry ? `ENTRY ${i + 1}` : `TICKET ${i + 1}`,
         })),
         extra,
-        cards: wholeTickets.map((t, i) => ({
-          type: 'tickets', rarity: t?.foil ? 'epic' : 'common', icon: null, glyph: null,
+        cards: revealPieces.map((piece, i) => ({
+          type: piece.entry ? 'ticket-entry' : 'tickets',
+          rarity: piece?.foil ? 'epic' : 'common', icon: null, glyph: null,
           level: normalizedLevel,
-          traitIds: t.traitIds,
-          foil: Boolean(t?.foil),
-          label: `TICKET ${i + 1}`,
+          traitIds: piece.traitIds,
+          entryTraitId: piece.traitId,
+          foil: Boolean(piece?.foil),
+          label: piece.entry ? `ENTRY ${i + 1}` : `TICKET ${i + 1}`,
           value: '',
-          sub: (i === wholeTickets.length - 1 && extra > 0)
+          sub: (i === revealPieces.length - 1 && extra > 0)
             ? `+${extra} more in your inventory`
             : (Number.isFinite(level) ? `Level ${level}` : ''),
           countText: null, spin: null,
@@ -739,7 +812,7 @@ export function normalizeSequence(seq) {
     const drawKind = Number(seq.drawKind) === 1 ? 1 : 0;
     const exact = matchFaces.filter((face) => face === 2).length;
     const symbolOnly = matchFaces.filter((face) => face === 1).length;
-    const drawLabel = drawKind === 1 ? 'BONUS DRAW' : 'MAIN DRAW';
+    const drawLabel = drawKind === 1 ? 'BONUS JACKPOT' : 'MAIN JACKPOT';
     const rarity = score >= 8 ? 'legendary' : score >= 6 ? 'epic' : 'rare';
     const matchCard = {
       type: 'foil-match', rarity, icon: null, glyph: null,
@@ -873,7 +946,9 @@ export function normalizeSequence(seq) {
           ? `RESULT: ${resultTickets} TICKETS`
           : won ? `${_tokenText(payout)} FLIP` : `${side} LOST`,
         sub: hasVolumeResult
-          ? (voided ? `RETURNED ${_tokenText(payout)} FLIP` : `WIN ${_tokenText(payout)} FLIP`)
+          ? (voided
+              ? `RETURNED ${_tokenText(payout)} FLIP`
+              : won ? `WIN ${_tokenText(payout)} FLIP` : 'LOSS · 0 FLIP')
           : voided
             ? 'Round voided · your stake was returned'
             : won
@@ -881,6 +956,8 @@ export function normalizeSequence(seq) {
               : `${outcome || 'THE OTHER SIDE'} paid`,
         countText: won ? `${_tokenText(payout)} FLIP` : null,
         spin: null,
+        summaryDetail: true,
+        labelFirst: true,
       }],
     };
   }
@@ -926,6 +1003,7 @@ export function normalizeSequence(seq) {
       } catch (_e) { return 0n; }
     })();
     const won = total > 0n;
+    const celebrate = shouldCelebrateDegenerette({ total, totalWager });
     const hits = rows.filter((r) => r.payout > 0n).length;
     // FLIP per-spin payouts are the hits entering its final survival flip. A
     // zero settled total after one or more hits is a survival bust, not a
@@ -934,18 +1012,24 @@ export function normalizeSequence(seq) {
     const amount = currency === 0 ? _ethText(total) : _tokenText(total);
     return {
       kind,
-      title: seq.title || (won ? 'YOU WON' : survived === false ? 'SURVIVAL FLIP LOST' : 'NO HITS'),
+      title: seq.title || (celebrate
+        ? 'YOU WON'
+        : won
+          ? 'PARTIAL RETURN'
+          : survived === false
+            ? 'SURVIVAL FLIP LOST'
+            : 'NO HITS'),
       // The verdict above is a SPOILER while the reels are still turning, so the
       // board plays under a neutral heading and swaps to it at the end.
       boardTitle: 'DEGENERETTE',
-      big: won,
-      unlucky: !won,
+      big: celebrate,
+      unlucky: !celebrate,
       // The board owns its own TAP TO SPIN gate, so the sequence-level vessel
       // gate is off and there is no chest to open.
       autoStart: false,
       noVessel: true,
       spinBoard: {
-        rows, currency, unit, total, spinSum, survived, amountPerSpin, totalWager,
+        rows, currency, unit, total, spinSum, survived, amountPerSpin, totalWager, celebrate,
         headline: seq.headline == null ? null : String(seq.headline),
         heroIdx: seq.heroIdx == null ? null : (Number(seq.heroIdx) & 3),
         lootboxAwarded: Boolean(seq.lootboxAwarded),
@@ -1219,10 +1303,10 @@ function _animateCount(el, text, ms = 750) {
 //
 // The standalone simulator does not reveal four already-known cells. It keeps
 // rerolling the whole house token and locks eight independent attributes:
-// all four symbols first, then all four colors. Between locks it shows 2–4 idle
-// rolls. Finishing the symbol pass before any color lands prevents a temporary
-// color match from flashing as meaningful while another quadrant's symbol is
-// still unresolved.
+// four symbols and four colors in a seeded random order. Between locks it
+// shows 2–4 idle rolls. A color or symbol can therefore be the first settled
+// component in any quadrant; presentation code keeps those two partial-match
+// states visually and audibly distinct.
 // This deterministic planner ports that choreography without inventing a new
 // result — every plan ends at the chain-derived `houseTraits`.
 
@@ -1277,13 +1361,9 @@ export function buildDegeneretteSpinFrames({
       idleRemaining -= 1;
     } else {
       const available = [];
-      const lockingSymbols = lockedSymbols.size < 4;
       for (let q = 0; q < 4; q++) {
-        if (lockingSymbols) {
-          if (!lockedSymbols.has(q)) available.push({ quadrant: q, type: 'symbol' });
-        } else if (!lockedColors.has(q)) {
-          available.push({ quadrant: q, type: 'color' });
-        }
+        if (!lockedColors.has(q)) available.push({ quadrant: q, type: 'color' });
+        if (!lockedSymbols.has(q)) available.push({ quadrant: q, type: 'symbol' });
       }
       lock = available[next() % available.length];
       if (lock.type === 'color') lockedColors.add(lock.quadrant);
@@ -1309,6 +1389,36 @@ export function buildDegeneretteSpinFrames({
   return frames;
 }
 
+/**
+ * Classify the component that just locked against the player's ticket.
+ * `both` is reserved for the second matching component completing a full
+ * quadrant; a color by itself remains a non-scoring, provisional match.
+ *
+ * @returns {'color'|'symbol'|'both'|null}
+ */
+export function degeneretteLockMatchType(playerTraits, targetTraits, frame) {
+  const lock = frame?.lock;
+  const q = Number(lock?.quadrant);
+  if ((lock?.type !== 'color' && lock?.type !== 'symbol')
+    || !Number.isInteger(q) || q < 0 || q > 3
+    || !playerTraits?.[q] || !targetTraits?.[q]) return null;
+
+  const colorMatched = playerTraits[q].col === targetTraits[q].col;
+  const symbolMatched = playerTraits[q].sym === targetTraits[q].sym;
+  const componentMatched = lock.type === 'color' ? colorMatched : symbolMatched;
+  if (!componentMatched) return null;
+
+  const colorLocked = Boolean(frame.lockedColors?.[q]);
+  const symbolLocked = Boolean(frame.lockedSymbols?.[q]);
+  if (colorLocked && symbolLocked && colorMatched && symbolMatched) return 'both';
+  return lock.type;
+}
+
+export function shouldBobDegeneretteLock(matchType, matchingLocks) {
+  return (matchType === 'symbol' || matchType === 'both')
+    && Number(matchingLocks) >= 3;
+}
+
 class RevealOverlay extends HTMLElement {
   #initialized = false;
   #queue = [];
@@ -1319,6 +1429,7 @@ class RevealOverlay extends HTMLElement {
   #currentSequence = null;
   #openAllBatchId = null;
   #openAllPacks = false;
+  #skipAllPacks = false;
   #packHistory = [];
   #controlsOnly = false;
   #continuationBusy = false;
@@ -1404,12 +1515,15 @@ class RevealOverlay extends HTMLElement {
             </div>
             <div class="rvl-vessel-hint" data-bind="rvl-hint">TAP TO OPEN</div>
             <div class="rvl-vessel-pack-actions" data-bind="rvl-pack-actions" hidden>
-              <button type="button" class="rvl-vessel-skip" data-bind="rvl-skip-pack"
-                      aria-label="Skip this pack reveal">
-                SKIP
+              <button type="button" class="rvl-vessel-open-pack" data-bind="rvl-open-pack" hidden>
+                OPEN PACK
               </button>
               <button type="button" class="rvl-vessel-open-all" data-bind="rvl-open-all" hidden>
                 OPEN ALL
+              </button>
+              <button type="button" class="rvl-vessel-skip" data-bind="rvl-skip-pack"
+                      aria-label="Skip this pack reveal">
+                SKIP
               </button>
             </div>
           </div>
@@ -1451,6 +1565,11 @@ class RevealOverlay extends HTMLElement {
         this.#tap();
       });
     }
+    const openPack = this.#bind('rvl-open-pack');
+    if (openPack) openPack.addEventListener('click', (e) => {
+      try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
+      if (this.#currentSequence?.kind === 'pack') this.#tap('open-pack');
+    });
     const openAll = this.#bind('rvl-open-all');
     if (openAll) openAll.addEventListener('click', (e) => {
       try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
@@ -1460,7 +1579,12 @@ class RevealOverlay extends HTMLElement {
     const skipPack = this.#bind('rvl-skip-pack');
     if (skipPack) skipPack.addEventListener('click', (e) => {
       try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
-      if (this.#currentSequence?.kind === 'pack') this.#tap('skip-pack');
+      if (this.#currentSequence?.kind !== 'pack') return;
+      const openAll = this.#bind('rvl-open-all');
+      // Keep the secondary action's scope identical to the primary action
+      // beside it. If the wrapper advertises OPEN ALL, SKIP consumes that
+      // same pack set instead of advancing to another sealed wrapper.
+      this.#tap(openAll && !openAll.hidden ? 'skip-all-packs' : 'skip-pack');
     });
   }
 
@@ -1485,15 +1609,31 @@ class RevealOverlay extends HTMLElement {
 
   #paintOpenedPack(seq, surface, grid) {
     if (!seq || !surface || !grid) return;
-    surface.className = seq.foilPack
+    const singlePiece = seq.ticketGrid.length === 1;
+    const singleEntry = singlePiece && Boolean(seq.ticketGrid[0]?.entry);
+    surface.className = (seq.foilPack
       ? 'rvl-ticket-pack-stage rvl-ticket-pack-stage--foil'
-      : 'rvl-ticket-pack-stage';
-    grid.className = seq.foilPack
+      : 'rvl-ticket-pack-stage')
+      + (singlePiece ? ' rvl-ticket-pack-stage--single' : '')
+      + (singleEntry ? ' rvl-ticket-pack-stage--single-entry' : '')
+      + (seq.ticketLesson ? ' rvl-ticket-pack-stage--lesson' : '');
+    grid.className = (seq.foilPack
       ? 'rvl-ticket-grid-stage rvl-ticket-grid-stage--foil'
-      : 'rvl-ticket-grid-stage';
+      : 'rvl-ticket-grid-stage')
+      + (singlePiece ? ' rvl-ticket-grid-stage--single' : '')
+      + (singleEntry ? ' rvl-ticket-grid-stage--single-entry' : '')
+      + (seq.ticketLesson ? ' rvl-ticket-grid-stage--lesson' : '')
+      + (seq.ticketLesson && !singlePiece ? ' rvl-ticket-grid-stage--lesson-stack' : '');
     grid.textContent = '';
     for (const ticket of seq.ticketGrid || []) {
-      grid.appendChild(this.#buildPaperTicket(ticket.traitIds, ticket.foil));
+      const paper = ticket.entry
+        ? this.#buildPaperEntry(ticket.traitId)
+        : this.#buildPaperTicket(ticket.traitIds, ticket.foil);
+      if (seq.ticketLesson || singlePiece) {
+        paper.querySelector(ticket.entry ? '.ticket-entry-card' : '.ticket-card')
+          ?.classList?.remove('tc-small');
+      }
+      grid.appendChild(paper);
     }
     if (seq.extra > 0) {
       const more = document.createElement('div');
@@ -1837,10 +1977,28 @@ class RevealOverlay extends HTMLElement {
       while (this.#queue.length > 0 && !this.#aborted) {
         const seq = this.#queue.shift();
         this.#currentSequence = seq;
-        const result = await this.#playSequence(seq);
+        // Once SKIP ALL is armed, consume subsequent packs through their
+        // normal completion bookkeeping without mounting another wrapper or
+        // ticket hand. Non-pack rewards retain their place in the queue.
+        const result = this.#skipAllPacks && seq?.kind === 'pack'
+          ? 'skip-all-packs'
+          : await this.#playSequence(seq);
         if (!this.#aborted) {
           this.#emitPackComplete(seq);
           this.#emitLootboxComplete(seq);
+          if (result === 'skip-all-packs') {
+            this.#skipAllPacks = true;
+            let hasMore = this.#hasMorePacks(seq)
+              || this.#queue.some((candidate) => candidate?.kind === 'pack');
+            if (!hasMore) {
+              // Completion listeners get a microtask to retire the current
+              // release before a different ready Pending pack is materialized.
+              await Promise.resolve();
+              hasMore = await this.#queueNextPendingPack(seq, { autoStart: false });
+            }
+            if (!hasMore) this.#skipAllPacks = false;
+            continue;
+          }
           // SKIP consumes only this presentation. Once its release bookkeeping
           // has run, materialize the next ready pack if the queue did not
           // already contain one, and leave that next wrapper sealed.
@@ -1864,6 +2022,7 @@ class RevealOverlay extends HTMLElement {
       this.#currentSequence = null;
       this.#openAllBatchId = null;
       this.#openAllPacks = false;
+      this.#skipAllPacks = false;
       this.#packHistory = [];
     }
   }
@@ -1876,6 +2035,7 @@ class RevealOverlay extends HTMLElement {
     this.#currentSequence = null;
     this.#openAllBatchId = null;
     this.#openAllPacks = false;
+    this.#skipAllPacks = false;
     this.#clearTimers();
     if (this.#tapResolve) { const r = this.#tapResolve; this.#tapResolve = null; r(); }
   }
@@ -1897,6 +2057,7 @@ class RevealOverlay extends HTMLElement {
     this.#currentSequence = null;
     this.#openAllBatchId = null;
     this.#openAllPacks = false;
+    this.#skipAllPacks = false;
     this.#clearTimers();
     if (this.#tapResolve) {
       const resolve = this.#tapResolve;
@@ -1914,7 +2075,11 @@ class RevealOverlay extends HTMLElement {
       || typeof CustomEvent !== 'function') return;
     try {
       document.dispatchEvent(new CustomEvent(PACK_REVEAL_COMPLETE_EVENT, {
-        detail: { ...release, cardIndexes: [...release.cardIndexes] },
+        detail: {
+          ...release,
+          cardIndexes: [...release.cardIndexes],
+          ...(release.itemKeys ? { itemKeys: [...release.itemKeys] } : {}),
+        },
       }));
     } catch (_e) { /* presentation bookkeeping must never break the overlay */ }
   }
@@ -1925,7 +2090,11 @@ class RevealOverlay extends HTMLElement {
     const releases = (Array.isArray(sequences) ? sequences : [])
       .map((seq) => seq?.packRelease)
       .filter(Boolean)
-      .map((release) => ({ ...release, cardIndexes: [...release.cardIndexes] }));
+      .map((release) => ({
+        ...release,
+        cardIndexes: [...release.cardIndexes],
+        ...(release.itemKeys ? { itemKeys: [...release.itemKeys] } : {}),
+      }));
     if (releases.length === 0) return;
     try {
       document.dispatchEvent(new CustomEvent(PACK_REVEAL_ABORT_EVENT, {
@@ -1947,9 +2116,6 @@ class RevealOverlay extends HTMLElement {
         },
       }));
     } catch (_e) { /* presentation bookkeeping must never break the overlay */ }
-    if (seq.presentationId != null) {
-      _queuedLootboxPresentationIds.delete(String(seq.presentationId));
-    }
   }
 
   #emitLootboxAbort(sequences) {
@@ -2029,6 +2195,8 @@ class RevealOverlay extends HTMLElement {
     }
     const tray = this.#bind('rvl-tray');
     if (tray) tray.textContent = '';
+    const openPack = this.#bind('rvl-open-pack');
+    if (openPack) openPack.hidden = true;
     const openAll = this.#bind('rvl-open-all');
     if (openAll) openAll.hidden = true;
     const packActions = this.#bind('rvl-pack-actions');
@@ -2040,10 +2208,15 @@ class RevealOverlay extends HTMLElement {
         'rvl-bursting',
         'rvl-stage--degenerette',
         'rvl-stage--ticket-pack',
+        'rvl-stage--single-ticket',
+        'rvl-stage--single-entry',
+        'rvl-stage--ticket-lesson',
         'rvl-stage--lootbox',
         'rvl-stage--auto-lootbox',
         'rvl-stage--day-summary',
         'rvl-stage--bingo',
+        'rvl-stage--pari',
+        'rvl-stage--foil-match',
       );
     }
   }
@@ -2056,6 +2229,14 @@ class RevealOverlay extends HTMLElement {
     this.#hideAll();
     const title = this.#bind('rvl-title');
     const rootStage = this.#bind('rvl-stage');
+    const singleTicket = seq.kind === 'pack'
+      && Array.isArray(seq.ticketGrid)
+      && seq.ticketGrid.length === 1
+      && !seq.ticketGrid[0]?.entry;
+    const singleEntry = seq.kind === 'pack'
+      && Array.isArray(seq.ticketGrid)
+      && seq.ticketGrid.length === 1
+      && Boolean(seq.ticketGrid[0]?.entry);
     if (rootStage?.classList) {
       rootStage.classList.toggle(
         'rvl-stage--degenerette',
@@ -2065,6 +2246,12 @@ class RevealOverlay extends HTMLElement {
         'rvl-stage--ticket-pack',
         Array.isArray(seq.ticketGrid) && seq.ticketGrid.length > 0,
       );
+      rootStage.classList.toggle('rvl-stage--single-ticket', singleTicket);
+      rootStage.classList.toggle('rvl-stage--single-entry', singleEntry);
+      rootStage.classList.toggle(
+        'rvl-stage--ticket-lesson',
+        Boolean(seq.ticketLesson),
+      );
       rootStage.classList.toggle('rvl-stage--lootbox', seq.kind === 'lootbox');
       rootStage.classList.toggle(
         'rvl-stage--auto-lootbox',
@@ -2072,6 +2259,8 @@ class RevealOverlay extends HTMLElement {
       );
       rootStage.classList.toggle('rvl-stage--day-summary', Boolean(seq.daySummary));
       rootStage.classList.toggle('rvl-stage--bingo', seq.kind === 'bingo');
+      rootStage.classList.toggle('rvl-stage--pari', seq.kind === 'pari');
+      rootStage.classList.toggle('rvl-stage--foil-match', seq.kind === 'foil-match');
     }
     // boardTitle is the non-spoiler heading a spin-through plays under; the real
     // verdict lands only after every verified reel has settled.
@@ -2140,8 +2329,15 @@ class RevealOverlay extends HTMLElement {
     });
     const inlineAutoPack = seq.kind === 'pack'
       && this.#isOpeningAll(seq)
+      && Array.isArray(seq.ticketGrid)
+      && seq.ticketGrid.length > 1
       && Number(seq.packIndex || 1) > 1;
-    if (inlineAutoPack) {
+    if (singleTicket) {
+      // One resolved ticket is already the interesting object. Do not make the
+      // player open a wrapper just to reach it; the large ticket surface below
+      // is the complete reveal.
+      sfxWarmup();
+    } else if (inlineAutoPack) {
       // OPEN ALL already had its deliberate wrapper click on pack one. Keep
       // later hands on the ticket surface; #playTicketGrid supplies a small
       // ripping wrapper above the next hand instead of cutting back to the
@@ -2207,16 +2403,34 @@ class RevealOverlay extends HTMLElement {
             : seq.autoStart ? ''
               : isLootbox ? 'TAP TO CRACK' : 'TAP TO OPEN';
       }
+      const openPack = this.#bind('rvl-open-pack');
       const openAll = this.#bind('rvl-open-all');
+      const skipPack = this.#bind('rvl-skip-pack');
       const packActions = this.#bind('rvl-pack-actions');
-      if (packActions) packActions.hidden = !isPack || openingAll || Boolean(seq.autoStart);
+      if (packActions) {
+        packActions.hidden = !isPack || openingAll || Boolean(seq.autoStart)
+          || Boolean(seq.ticketLesson);
+      }
+      const canOpenAll = isPack && this.#canOpenAllPacks(seq)
+        && !openingAll && !seq.autoStart;
       if (openAll) {
-        const canOpenAll = isPack && this.#canOpenAllPacks(seq)
-          && !openingAll && !seq.autoStart;
         openAll.hidden = !canOpenAll;
         if (canOpenAll) {
           openAll.textContent = this.#openAllPacksLabel(seq, { includeCurrent: true });
         }
+      }
+      if (skipPack) {
+        skipPack.textContent = canOpenAll ? 'SKIP ALL' : 'SKIP';
+        skipPack.setAttribute(
+          'aria-label',
+          canOpenAll ? 'Skip all pack reveals' : 'Skip this pack reveal',
+        );
+      }
+      if (openPack) {
+        const canOpenPack = isPack && !this.#canOpenAllPacks(seq)
+          && !openingAll && !seq.autoStart && !seq.ticketLesson;
+        openPack.hidden = !canOpenPack;
+        if (canOpenPack) openPack.textContent = 'OPEN PACK';
       }
 
       if (openingAll) {
@@ -2225,14 +2439,16 @@ class RevealOverlay extends HTMLElement {
         await this.#wait(isLootbox ? LOOTBOX_AUTO_START_MS : 700);
       } else {
         const action = await this.#waitTap();
-        if (action === 'skip-pack' && isPack) {
+        if ((action === 'skip-pack' || action === 'skip-all-packs') && isPack) {
           if (packActions) packActions.hidden = true;
-          return 'skip-pack';
+          return action;
         }
         openingAll = action === 'open-all' || this.#isOpeningAll(seq);
       }
       if (this.#aborted) return;
+      if (packActions) packActions.hidden = true;
       sfxWarmup();
+      if (openPack) openPack.hidden = true;
       if (openAll) openAll.hidden = true;
 
       if (openingAll) {
@@ -2258,7 +2474,9 @@ class RevealOverlay extends HTMLElement {
         // Burst fires BEFORE the cards are turned, so it has to consult the
         // sequence's contents rather than the reveal-so-far: a big sequence whose
         // every card is a `nowin` gets the burst animation without the confetti.
-        if (seq.big && !seq.consolationOnly && !allNoWin && !hasSpins) this.#fireConfetti(false);
+        if (seq.big && !seq.consolationOnly && !allNoWin && !hasSpins && !seq.ticketLesson) {
+          this.#fireConfetti(false);
+        }
         if (isLootbox) sfxRollDone(true);
         const burstMs = isLootbox
           ? (seq.autoStart ? LOOTBOX_AUTO_BURST_MS : LOOTBOX_MANUAL_BURST_MS)
@@ -2285,6 +2503,18 @@ class RevealOverlay extends HTMLElement {
       if (seq.consolationOnly) sfxLoserHorn();
       else if (seq.big) sfxFanfare(true);
       else sfxNoWin();
+      await this.#waitAfterSummary(seq);
+      return;
+    }
+
+    // A side-bet result is already one complete receipt. Dealing it full-size
+    // and then immediately redrawing the same card in the summary looked like
+    // the bet resolved twice. Land directly on the terminal receipt instead.
+    if (seq.kind === 'pari' && seq.cards.length === 1) {
+      this.#renderSummary(seq);
+      if (seq.unlucky) sfxNoWin();
+      else if (seq.big) sfxFanfare(true);
+      else sfxRollDone(true);
       await this.#waitAfterSummary(seq);
       return;
     }
@@ -2356,11 +2586,17 @@ class RevealOverlay extends HTMLElement {
     zone.hidden = false;
     zone.textContent = '';
 
+    const singlePiece = seq.ticketGrid.length === 1;
+    const singleEntry = singlePiece && Boolean(seq.ticketGrid[0]?.entry);
+    const showLesson = Boolean(seq.ticketLesson);
     const surface = document.createElement('div');
-    surface.className = seq.foilPack
+    surface.className = (seq.foilPack
       ? 'rvl-ticket-pack-stage rvl-ticket-pack-stage--foil'
-      : 'rvl-ticket-pack-stage';
-    const inlineAutoPack = openingAll && Number(seq.packIndex || 1) > 1;
+      : 'rvl-ticket-pack-stage')
+      + (singlePiece ? ' rvl-ticket-pack-stage--single' : '')
+      + (singleEntry ? ' rvl-ticket-pack-stage--single-entry' : '')
+      + (showLesson ? ' rvl-ticket-pack-stage--lesson' : '');
+    const inlineAutoPack = openingAll && !singlePiece && Number(seq.packIndex || 1) > 1;
     if (inlineAutoPack) {
       surface.classList.add('rvl-ticket-pack-stage--inline-rip');
       const rip = document.createElement('div');
@@ -2384,19 +2620,35 @@ class RevealOverlay extends HTMLElement {
     }
     zone.appendChild(surface);
     const historyIndex = this.#rememberOpenedPack(seq);
+    const lessonLayout = showLesson ? document.createElement('div') : null;
+    if (lessonLayout) {
+      lessonLayout.className = 'rvl-ticket-lesson-layout';
+      surface.appendChild(lessonLayout);
+    }
     const grid = document.createElement('div');
-    grid.className = seq.foilPack
+    grid.className = (seq.foilPack
       ? 'rvl-ticket-grid-stage rvl-ticket-grid-stage--foil'
-      : 'rvl-ticket-grid-stage';
-    surface.appendChild(grid);
+      : 'rvl-ticket-grid-stage')
+      + (singlePiece ? ' rvl-ticket-grid-stage--single' : '')
+      + (singleEntry ? ' rvl-ticket-grid-stage--single-entry' : '')
+      + (showLesson ? ' rvl-ticket-grid-stage--lesson' : '')
+      + (showLesson && !singlePiece ? ' rvl-ticket-grid-stage--lesson-stack' : '');
+    (lessonLayout || surface).appendChild(grid);
 
     // Reserve the complete hand before dealing it. Appending one ticket at a
     // time used to add whole grid rows mid-animation and shove the controls.
     const dealt = seq.ticketGrid.map((t) => {
-      const el = this.#buildPaperTicket(t.traitIds, t.foil);
+      const el = t.entry
+        ? this.#buildPaperEntry(t.traitId)
+        : this.#buildPaperTicket(t.traitIds, t.foil);
+      if (singlePiece || showLesson) {
+        el.querySelector(t.entry ? '.ticket-entry-card' : '.ticket-card')
+          ?.classList?.remove('tc-small');
+      }
       grid.appendChild(el);
       return { el, ticket: t };
     });
+    if (lessonLayout) lessonLayout.appendChild(this.#buildTicketLesson(seq));
     const footer = document.createElement('div');
     footer.className = 'rvl-ticket-footer';
     surface.appendChild(footer);
@@ -2425,7 +2677,8 @@ class RevealOverlay extends HTMLElement {
         this.#sfxTickSafe(i);
         await this.#wait(70);
         if (el.classList?.contains('rvl-paper--gold')) {
-          await this.#playGoldTicketHit(surface, el, t.traitIds, t.foil);
+          if (t.entry) await this.#playGoldEntryHit(surface, t.traitId);
+          else await this.#playGoldTicketHit(surface, el, t.traitIds, t.foil);
         }
       }
     }
@@ -2450,7 +2703,12 @@ class RevealOverlay extends HTMLElement {
 
     if (!openingAll || !hasMore) {
       sfxFanfare(true);
-      this.#fireConfetti(Boolean(seq.foilPack) || seq.ticketGrid.length > 4);
+      // The first-ticket lesson needs the player's attention on the four
+      // traits and the matching rule; confetti only competes with that lesson
+      // and can still be falling when the tutorial moves on to Quests.
+      if (!seq.ticketLesson) {
+        this.#fireConfetti(Boolean(seq.foilPack) || seq.ticketGrid.length > 4);
+      }
     } else {
       sfxRollDone(true);
     }
@@ -2481,7 +2739,9 @@ class RevealOverlay extends HTMLElement {
     const pendingAction = !hasMore && !queuedLabel ? this.#nextReadyPendingAction() : null;
     next.textContent = hasMore
       ? 'OPEN NEXT PACK'
-      : queuedLabel || (pendingAction ? this.#pendingContinuationLabel(pendingAction) : 'COLLECT');
+      : showLesson
+        ? 'CONTINUE'
+        : queuedLabel || (pendingAction ? this.#pendingContinuationLabel(pendingAction) : 'COLLECT');
     next.dataset.mode = pendingAction ? 'pending-action' : 'continue';
     next.__rvlPendingAction = pendingAction;
     next.addEventListener('click', (e) => {
@@ -2520,6 +2780,119 @@ class RevealOverlay extends HTMLElement {
     await this.#waitTap();
   }
 
+  #buildTicketLesson(seq) {
+    const lesson = document.createElement('aside');
+    lesson.className = 'rvl-ticket-lesson';
+
+    const eyebrow = document.createElement('div');
+    eyebrow.className = 'rvl-ticket-lesson__eyebrow';
+    eyebrow.textContent = 'YOUR FIRST PACK';
+
+    const title = document.createElement('h2');
+    title.className = 'rvl-ticket-lesson__title';
+    title.setAttribute('aria-label', 'ONE TICKET = FOUR JACKPOT ENTRIES');
+    for (const copy of ['ONE TICKET = FOUR', 'JACKPOT ENTRIES']) {
+      const line = document.createElement('span');
+      line.className = 'rvl-ticket-lesson__title-line';
+      line.textContent = copy;
+      title.appendChild(line);
+    }
+
+    const intro = document.createElement('p');
+    intro.className = 'rvl-ticket-lesson__intro';
+    intro.textContent = 'Each quadrant is one entry. These two tickets give you eight entries.';
+
+    const facts = document.createElement('div');
+    facts.className = 'rvl-ticket-lesson__facts';
+
+    const equation = document.createElement('div');
+    equation.className = 'rvl-ticket-lesson__equation';
+    for (const [index, term] of [
+      ['8', 'SYMBOLS', ''],
+      ['8', 'COLORS', ''],
+      ['64', 'TRAITS', 'is-total'],
+    ].entries()) {
+      if (index > 0) {
+        const operator = document.createElement('b');
+        operator.setAttribute('aria-hidden', 'true');
+        operator.textContent = index === 1 ? '×' : '=';
+        equation.appendChild(operator);
+      }
+      const part = document.createElement('span');
+      if (term[2]) part.className = term[2];
+      const value = document.createElement('strong');
+      value.textContent = term[0];
+      const label = document.createElement('small');
+      label.textContent = term[1];
+      part.appendChild(value);
+      part.appendChild(label);
+      equation.appendChild(part);
+    }
+    const equationNote = document.createElement('p');
+    equationNote.textContent = '64 possible traits in every quadrant.';
+    equation.appendChild(equationNote);
+
+    const examples = document.createElement('div');
+    examples.className = 'rvl-ticket-lesson__examples';
+    const exampleSpecs = [
+      {
+        ticketIndex: 0,
+        name: 'GREEN ETHEREUM',
+        tier: 'COMMON COLOR',
+        copy: 'Green appears on about 1 in 4 ticket rolls.',
+      },
+      {
+        ticketIndex: 1,
+        name: 'ORANGE BITCOIN',
+        tier: 'RARER COLOR',
+        copy: 'Orange appears on about 1 in 32 ticket rolls.',
+      },
+    ];
+    for (const spec of exampleSpecs) {
+      const example = document.createElement('div');
+      example.className = 'rvl-ticket-lesson__example';
+      example.dataset.example = spec.ticketIndex === 0 ? 'green-ethereum' : 'orange-bitcoin';
+      const traitIds = seq.ticketGrid?.[spec.ticketIndex]?.traitIds || [];
+      const traitId = traitIds.find((value) => dgnTraitIdToQSC(value).q === 0);
+      const trait = dgnTraitIdToQSC(traitId ?? (spec.ticketIndex === 0 ? 22 : 47));
+      const badge = document.createElement('img');
+      badge.src = dgnBadgePath(trait.q, trait.sym, trait.col);
+      badge.alt = spec.name;
+      const copy = document.createElement('span');
+      const tier = document.createElement('small');
+      tier.textContent = spec.tier;
+      const name = document.createElement('strong');
+      name.textContent = spec.name;
+      const detail = document.createElement('b');
+      detail.textContent = spec.copy;
+      copy.appendChild(tier);
+      copy.appendChild(name);
+      copy.appendChild(detail);
+      example.appendChild(badge);
+      example.appendChild(copy);
+      examples.appendChild(example);
+    }
+
+    facts.appendChild(equation);
+    facts.appendChild(examples);
+
+    const rule = document.createElement('p');
+    rule.className = 'rvl-ticket-lesson__rule';
+    const rarityTitle = document.createElement('strong');
+    rarityTitle.textContent = 'COLOR SHOWS RARITY.';
+    const rarityCopy = document.createElement('span');
+    rarityCopy.textContent = ' The symbol says what the trait is. The color says how hard it was to get on a ticket.';
+    rule.appendChild(rarityTitle);
+    rule.appendChild(rarityCopy);
+
+    lesson.appendChild(eyebrow);
+    lesson.appendChild(title);
+    lesson.appendChild(intro);
+    lesson.appendChild(facts);
+    lesson.appendChild(rule);
+    return lesson;
+  }
+
   // Tick per dealt ticket, but never more than a short burst of them.
   #sfxTickSafe(i) {
     if (i < 8) {
@@ -2543,6 +2916,29 @@ class RevealOverlay extends HTMLElement {
     label.textContent = goldTicketLabel(traitIds);
     hit.appendChild(flare);
     hit.appendChild(heroTicket);
+    hit.appendChild(label);
+    const host = this.#bind('rvl-backdrop') || surface;
+    host.appendChild(hit);
+    try { sfxGoldTicket(); } catch (_e) { /* audio is decoration */ }
+    this.#fireGoldConfetti();
+    await this.#wait(1200);
+    hit.remove?.();
+  }
+
+  async #playGoldEntryHit(surface, traitId) {
+    if (!surface || this.#aborted) return;
+    const hit = document.createElement('div');
+    hit.className = 'rvl-gold-hit rvl-gold-hit--entry';
+    const flare = document.createElement('span');
+    flare.className = 'rvl-gold-hit__flare';
+    const heroEntry = this.#buildPaperEntry(traitId);
+    heroEntry.classList?.add('rvl-gold-hit__ticket', 'rvl-gold-hit__entry', 'rvl-paper--gold-hero');
+    heroEntry.querySelector('.ticket-entry-card')?.classList?.remove('tc-small');
+    const label = document.createElement('strong');
+    label.className = 'rvl-gold-hit__label';
+    label.textContent = _goldEntryLabel(traitId);
+    hit.appendChild(flare);
+    hit.appendChild(heroEntry);
     hit.appendChild(label);
     const host = this.#bind('rvl-backdrop') || surface;
     host.appendChild(hit);
@@ -2592,6 +2988,29 @@ class RevealOverlay extends HTMLElement {
     flame.alt = '';
     center.appendChild(flame);
     card.appendChild(center);
+    wrap.appendChild(card);
+    return wrap;
+  }
+
+  /** One centerless quadrant, preserving the trait's position in a full ticket. */
+  #buildPaperEntry(traitId) {
+    const tid = _entryTraitId(traitId);
+    const { q, sym, col } = dgnTraitIdToQSC(tid ?? 0);
+    const wrap = document.createElement('div');
+    wrap.className = `rvl-paper rvl-paper--entry${col === 7 ? ' rvl-paper--gold' : ''}`;
+    wrap.setAttribute('data-quadrant', String(q));
+    const card = document.createElement('div');
+    card.className = 'ticket-entry-card tc-small';
+    card.setAttribute('data-quadrant', String(q));
+    applyDgnTicketAccent(card, [tid]);
+    const cell = document.createElement('div');
+    cell.className = 'trait-quadrant';
+    if (col === 7) cell.classList.add('trait-quadrant--gold');
+    const img = document.createElement('img');
+    img.src = dgnBadgePath(q, sym, col);
+    img.alt = '';
+    cell.appendChild(img);
+    card.appendChild(cell);
     wrap.appendChild(card);
     return wrap;
   }
@@ -2921,6 +3340,7 @@ class RevealOverlay extends HTMLElement {
     if (!pair || !frame || !pair.targetTraits) return 0;
     const dynamic = [
       'q-full', 'q-sym', 'q-col', 'q-miss', 'q-lock-hit', 'q-lock-miss',
+      'q-lock-color-hit', 'q-lock-symbol-hit',
       'rvl-rq--color-locked', 'rvl-rq--symbol-locked',
     ];
     for (let q = 0; q < 4; q++) {
@@ -2953,10 +3373,10 @@ class RevealOverlay extends HTMLElement {
         state = `q-${finalStates[q]}`;
       } else if (colorLocked) {
         state = pair.playerTraits[q].col === pair.targetTraits[q].col
-          ? 'q-lock-hit' : 'q-lock-miss';
+          ? 'q-lock-color-hit' : 'q-lock-miss';
       } else if (symbolLocked) {
         state = pair.playerTraits[q].sym === pair.targetTraits[q].sym
-          ? 'q-lock-hit' : 'q-lock-miss';
+          ? 'q-lock-symbol-hit' : 'q-lock-miss';
       }
       for (const sideCell of [pair.player.cells[q], pair.house.cells[q]]) {
         if (state && sideCell?.classList) sideCell.classList.add(state);
@@ -3260,7 +3680,7 @@ class RevealOverlay extends HTMLElement {
         : `BUSTED — ${_tokenText(board.spinSum)} FLIP GONE`;
     this.#setRunningTotal(rendered, board, board.total, reducedMotion ? 0 : 600);
     if (!reducedMotion) {
-      sfxRollDone(Boolean(board.survived));
+      sfxRollDone(Boolean(board.survived) && shouldCelebrateDegenerette(board));
       await this.#wait(this.#scaledDgnDelay(rendered, 700));
     }
   }
@@ -3280,6 +3700,7 @@ class RevealOverlay extends HTMLElement {
     if (this.#aborted) return board.total > 0n;
 
     const won = board.total > 0n;
+    const celebrate = shouldCelebrateDegenerette(board);
     // When there is no survival beat, settle the tracker on the authoritative
     // final payout. This matters for a FLIP round whose per-spin rows contain
     // hits but whose final payout is zero.
@@ -3290,9 +3711,11 @@ class RevealOverlay extends HTMLElement {
     this.#enableFullSpinSelection(rendered);
 
     const totalEl = document.createElement('div');
-    totalEl.className = `rvl-spin-total ${won ? 'is-win' : 'is-miss'}`;
+    totalEl.className = `rvl-spin-total ${celebrate ? 'is-win' : 'is-miss'}`;
     totalEl.textContent = won
-      ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} WON`
+      ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} ${
+        celebrate ? 'WON' : 'RETURNED · NET LOSS'
+      }`
       : (board.survived === false ? 'HIT — SURVIVAL FLIP BUSTED' : 'NO HIT');
     rendered.stage.appendChild(totalEl);
 
@@ -3301,7 +3724,7 @@ class RevealOverlay extends HTMLElement {
       if (title) title.textContent = sequence.title;
       const share = this.#buildShareButton(sequence);
       if (share) rendered.stage.appendChild(share);
-      if (won) {
+      if (celebrate) {
         sfxFanfare(Boolean(sequence.big));
         this.#fireConfetti(Boolean(sequence.big));
       } else {
@@ -3312,7 +3735,7 @@ class RevealOverlay extends HTMLElement {
     const pendingAction = sequence && !finalLabel && this.#queue.length === 0
       ? this.#nextReadyPendingAction(sequence?.lootboxRelease)
       : null;
-    const unlucky = Boolean(sequence && !won && !finalLabel && !pendingAction);
+    const unlucky = Boolean(sequence && !celebrate && !finalLabel && !pendingAction);
     if (pendingAction) {
       this.#setPendingContinuation(rendered.cta, pendingAction);
     } else {
@@ -3538,7 +3961,7 @@ class RevealOverlay extends HTMLElement {
   }
 
   // Full standalone-style reveal: the entire house token keeps changing while
-  // symbol, then color, lock independently in all four quadrants. Every spin
+  // color and symbol lock independently in a seeded random order. Every spin
   // has its own explicit gate; SKIP TO RESULTS is a separate control.
   async #playSpinBoard(board, options = {}) {
     const priorControlsOnly = this.#controlsOnly;
@@ -3600,7 +4023,7 @@ class RevealOverlay extends HTMLElement {
         if (rendered.autoCta.classList) {
           rendered.autoCta.classList.toggle('is-active', autoSpinning);
         }
-        rendered.skipCta.hidden = false;
+        rendered.skipCta.hidden = autoSpinning;
         rendered.skipCta.disabled = false;
 
         let action = null;
@@ -3615,6 +4038,7 @@ class RevealOverlay extends HTMLElement {
               // starting another spin behind the player's back.
               autoSpinning = false;
               rendered.cta.hidden = false;
+              rendered.skipCta.hidden = false;
               rendered.autoCta.textContent = 'AUTOSPIN';
               if (rendered.autoCta.classList) rendered.autoCta.classList.remove('is-active');
             } else {
@@ -3626,6 +4050,7 @@ class RevealOverlay extends HTMLElement {
               autoSpinning = true;
               usedAutoSpin = true;
               rendered.cta.hidden = true;
+              rendered.skipCta.hidden = true;
               rendered.autoCta.textContent = 'STOP AUTO';
               if (rendered.autoCta.classList) rendered.autoCta.classList.add('is-active');
               action = 'spin';
@@ -3661,21 +4086,20 @@ class RevealOverlay extends HTMLElement {
           for (const frame of plan) {
             matchingLocks = this.#applyFullSpinFrame(pair, frame);
             if (frame.lock) {
-              const q = frame.lock.quadrant;
-              // Color only contributes when this quadrant's symbol matched.
-              // A same-color / wrong-symbol landing is an ordinary lock tick,
-              // never a misleading match bonk.
-              const symbolMatched = pair.playerTraits[q].sym === pair.targetTraits[q].sym;
-              const matched = frame.lock.type === 'color'
-                ? symbolMatched && pair.playerTraits[q].col === pair.targetTraits[q].col
-                : symbolMatched;
-              if (matched) {
-                try { sfxMatchLock(matchingSoundCount); } catch (_e) { /* audio is decoration */ }
+              const lockMatch = degeneretteLockMatchType(
+                pair.playerTraits,
+                pair.targetTraits,
+                frame,
+              );
+              if (lockMatch) {
+                try {
+                  sfxMatchLock(lockMatch, matchingSoundCount);
+                } catch (_e) { /* audio is decoration */ }
                 matchingSoundCount = Math.min(7, matchingSoundCount + 1);
               } else {
                 this.#sfxTickSafe(frame.locksDone - 1);
               }
-              if (matched && matchingLocks >= 3) {
+              if (shouldBobDegeneretteLock(lockMatch, matchingLocks)) {
                 this.#jiggleFullSpin(pair, matchingLocks - 2);
               }
             }
@@ -3685,6 +4109,7 @@ class RevealOverlay extends HTMLElement {
               // Turning autospin off never interrupts the reel in motion; it
               // simply restores the manual gate for the following reel.
               autoSpinning = false;
+              rendered.skipCta.hidden = false;
               rendered.autoCta.textContent = 'AUTOSPIN';
               if (rendered.autoCta.classList) rendered.autoCta.classList.remove('is-active');
             }
@@ -3866,7 +4291,10 @@ class RevealOverlay extends HTMLElement {
       const face = Number(meta?.matchFaces?.[index]);
       return face === 2 ? 2 : face === 1 ? 1 : 0;
     });
-    const drawLabel = Number(meta?.drawKind) === 1 ? 'BONUS DRAW' : 'MAIN DRAW';
+    const drawLabel = Number(meta?.drawKind) === 1 ? 'BONUS JACKPOT' : 'MAIN JACKPOT';
+    const score = Math.max(0, Math.trunc(Number(meta?.score) || 0));
+    const rewardFaces = Math.max(0, Math.trunc(Number(meta?.rewardFaces) || 0));
+    const states = faces.map((face) => face === 2 ? 'full' : face === 1 ? 'sym' : 'miss');
     const chart = document.createElement('div');
     chart.className = `rvl-foil-match${compact ? ' rvl-foil-match--compact' : ''}`;
     chart.setAttribute('aria-label', `Foil ticket compared with the ${drawLabel.toLowerCase()}`);
@@ -3874,57 +4302,74 @@ class RevealOverlay extends HTMLElement {
     const head = document.createElement('div');
     head.className = 'rvl-foil-match__head';
     const yours = document.createElement('strong');
-    yours.textContent = 'YOUR FOIL';
+    yours.textContent = 'FOIL MATCH';
     const versus = document.createElement('span');
-    versus.textContent = `vs ${drawLabel}`;
+    versus.textContent = `T${score} · ${drawLabel}`;
     head.appendChild(yours);
     head.appendChild(versus);
     chart.appendChild(head);
 
-    const grid = document.createElement('div');
-    grid.className = 'rvl-foil-match__grid';
-    for (let quadrant = 0; quadrant < 4; quadrant += 1) {
-      const face = faces[quadrant];
-      const pair = document.createElement('div');
-      pair.className = `rvl-foil-pair rvl-foil-pair--${face === 2 ? 'exact' : face === 1 ? 'symbol' : 'miss'}`;
-      const q = document.createElement('span');
-      q.className = 'rvl-foil-pair__quadrant';
-      q.textContent = `Q${String.fromCharCode(65 + quadrant)}`;
-      pair.appendChild(q);
-
-      const badges = document.createElement('span');
-      badges.className = 'rvl-foil-pair__badges';
-      for (const [role, traitId] of [['foil', lineTraits[quadrant]], ['draw', winningTraits[quadrant]]]) {
-        const badge = document.createElement('img');
-        const trait = dgnTraitIdToQSC(traitId);
-        badge.src = dgnBadgePath(trait.q, trait.sym, trait.col);
-        badge.alt = role === 'foil' ? 'Foil ticket trait' : 'Winning draw trait';
-        badge.className = `rvl-foil-pair__badge rvl-foil-pair__badge--${role}`;
-        badges.appendChild(badge);
-        if (role === 'foil') {
-          const arrow = document.createElement('span');
-          arrow.className = 'rvl-foil-pair__arrow';
-          arrow.textContent = '→';
-          badges.appendChild(arrow);
-        }
+    const compare = document.createElement('div');
+    compare.className = 'rvl-foil-match__compare';
+    const makeTicket = (traitIds, sideLabel, { foil = false } = {}) => {
+      const traits = dgnTraitIdsToQuadrants(traitIds);
+      const ticket = this.#buildFullGamepiece(traits, sideLabel, null);
+      ticket.el.classList?.add(
+        'rvl-foil-match__ticket',
+        foil ? 'rvl-foil-match__ticket--foil' : 'rvl-foil-match__ticket--jackpot',
+      );
+      if (foil) {
+        ticket.grid?.classList?.add('rvl-ticket-grid--foil');
+        const flame = ticket.center?.querySelector?.('img');
+        if (flame) flame.src = '/whitepaper/flame-center-silver.svg';
       }
-      pair.appendChild(badges);
+      ticket.cells.forEach((cell, quadrant) => {
+        cell.classList?.add(`q-${states[quadrant]}`);
+        if (traits[quadrant]?.col === 7) cell.classList?.add('rvl-rq--gold');
+        if (!foil) return;
+        const face = document.createElement('strong');
+        face.className = `rvl-foil-match__face rvl-foil-match__face--q${quadrant}`;
+        face.textContent = faces[quadrant] === 2 ? '+2' : faces[quadrant] === 1 ? '+1' : '0';
+        cell.appendChild(face);
+      });
+      return ticket.el;
+    };
 
-      const why = document.createElement('strong');
-      why.className = 'rvl-foil-pair__score';
-      why.textContent = face === 2 ? '+2 EXACT' : face === 1 ? '+1 SYMBOL' : 'NO MATCH';
-      pair.appendChild(why);
-      grid.appendChild(pair);
+    compare.appendChild(makeTicket(lineTraits, 'YOUR FOIL', { foil: true }));
+    const vs = document.createElement('span');
+    vs.className = 'rvl-foil-match__vs';
+    vs.textContent = 'VS';
+    compare.appendChild(vs);
+    compare.appendChild(makeTicket(winningTraits, drawLabel));
+    chart.appendChild(compare);
+
+    const exact = faces.filter((face) => face === 2).length;
+    const symbol = faces.filter((face) => face === 1).length;
+    const miss = faces.filter((face) => face === 0).length;
+    const legend = document.createElement('div');
+    legend.className = 'rvl-foil-match__legend';
+    for (const [kind, text] of [
+      ['exact', `${exact} EXACT · +2 EACH`],
+      ['symbol', `${symbol} SYMBOL · +1 EACH`],
+      ['miss', `${miss} MISS`],
+    ]) {
+      const chip = document.createElement('span');
+      chip.className = `rvl-foil-match__legend-item rvl-foil-match__legend-item--${kind}`;
+      chip.textContent = text;
+      legend.appendChild(chip);
     }
-    chart.appendChild(grid);
+    chart.appendChild(legend);
 
     const foot = document.createElement('div');
     foot.className = 'rvl-foil-match__foot';
-    const score = Math.max(0, Math.trunc(Number(meta?.score) || 0));
-    const rewardFaces = Math.max(0, Math.trunc(Number(meta?.rewardFaces) || 0));
-    foot.textContent = rewardFaces > 0
-      ? `T${score} UNLOCKED A ${_groupAmountText(rewardFaces)}-FACE REWARD SPIN`
-      : `T${score} · FOUR OR MORE POINTS UNLOCKS A REWARD`;
+    const bonusTier = document.createElement('strong');
+    bonusTier.textContent = `T${score} BONUS`;
+    const bonus = document.createElement('span');
+    bonus.textContent = rewardFaces > 0
+      ? `${_groupAmountText(rewardFaces)}-FACE DEGENERETTE SPIN`
+      : 'BONUS DETAILS PENDING';
+    foot.appendChild(bonusTier);
+    foot.appendChild(bonus);
     chart.appendChild(foot);
     return chart;
   }
@@ -4020,6 +4465,9 @@ class RevealOverlay extends HTMLElement {
       icon.appendChild(img);
     } else if (card.glyph) {
       icon.textContent = card.glyph;
+    } else if (_entryTraitId(card.entryTraitId) != null) {
+      icon.className = 'rvl-card-icon rvl-card-icon--ticket-entry';
+      icon.appendChild(this.#buildPaperEntry(card.entryTraitId));
     } else if (Array.isArray(card.traitIds) && card.traitIds.length > 0) {
       // A ticket whose symbols are known: show the ticket, not a pack glyph.
       // Same #buildTicket the degenerette reels use, so one decode serves both.
@@ -4058,8 +4506,6 @@ class RevealOverlay extends HTMLElement {
       value.textContent = (!compact && card.countText)
         ? ''
         : (compact && card.revealedValue ? card.revealedValue : (card.value || ''));
-      inner.appendChild(value);
-
       const label = document.createElement('div');
       label.className = 'rvl-card-label';
       // BoxSpin cards remain mystery cards before the reel. Compact cards are
@@ -4068,7 +4514,16 @@ class RevealOverlay extends HTMLElement {
       label.textContent = compact && card.revealedLabel
         ? card.revealedLabel
         : (card.label || '');
-      inner.appendChild(label);
+      // Volume-bet receipts read as a small statement: the player's line,
+      // then the actual settled ticket count, then the payout. Generic reward
+      // cards retain their larger value-first hierarchy.
+      if (card.labelFirst) {
+        inner.appendChild(label);
+        inner.appendChild(value);
+      } else {
+        inner.appendChild(value);
+        inner.appendChild(label);
+      }
 
       if (!compact && card.sub) {
         const sub = document.createElement('div');

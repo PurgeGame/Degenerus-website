@@ -52,7 +52,7 @@ import { get } from './store.js';
 // Pitfall 5 pattern (mirrors pro-gate.js): cross-import ONLY the API_BASE
 // constant — beta/app/api.js has a module-level document side effect and
 // cannot be imported headless (node:test).
-import { API_BASE } from '../../beta/app/constants.js';
+import { API_BASE } from './constants.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures verified against

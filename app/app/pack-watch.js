@@ -24,8 +24,9 @@
 
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { getProvider, ethers } from './contracts.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from './api.js';
 import { publishPendingActions, clearPendingActions } from './pending-actions.js';
+import { dgnPartitionTicketEntries } from './dgn-traits.js';
 import {
   queueReveal,
   PACK_REVEAL_COMPLETE_EVENT,
@@ -127,7 +128,7 @@ function _revealedKey(address, level) { return `${REVEALED_KEY}_${_lower(address
 
 function _revealedSet(address, level) {
   const list = _read(_revealedKey(address, level), []);
-  return new Set(Array.isArray(list) ? list.map(Number) : []);
+  return new Set(Array.isArray(list) ? list.map(String) : []);
 }
 
 function _saveRevealed(address, level, set) {
@@ -147,19 +148,6 @@ function _expectedEntries(value) {
 function _ticketCountFromEntries(value) {
   const entries = Math.max(0, Math.floor(Number(value) || 0));
   return entries > 0 ? entries / ENTRIES_PER_TICKET : 0;
-}
-
-function _newlyCompletedTickets(payload, addedEntries) {
-  const added = Math.max(0, Math.floor(Number(addedEntries) || 0));
-  if (added <= 0) return 0;
-  let total = Math.max(0, Math.floor(Number(payload?.totalEntries) || 0));
-  if (total <= 0) {
-    total = (Array.isArray(payload?.cards) ? payload.cards : [])
-      .reduce((sum, card) => sum + (Array.isArray(card?.entries) ? card.entries.length : 0), 0);
-  }
-  return Math.max(0,
-    Math.floor(total / ENTRIES_PER_TICKET)
-      - Math.floor(Math.max(0, total - added) / ENTRIES_PER_TICKET));
 }
 
 function _pendingPackPreviews(rows) {
@@ -209,14 +197,31 @@ function _standardPackExpected(rec) {
   return true;
 }
 
-function _seedOpenedCards(address, level, payload, keepNewest = 0) {
-  const opened = _openedCards(payload)
-    .slice()
-    .sort((a, b) => Number(a.cardIndex) - Number(b.cardIndex));
-  const keep = Math.min(opened.length, _expectedTickets(keepNewest));
+// CLEAR tombstones the particular level receipt, not the reusable visual id.
+// Include the durable expected-entry total so a genuinely new purchase at the
+// same level can still create a new reminder after an older stuck receipt was
+// explicitly cleared.
+function _packDismissKey(row) {
+  const level = Number(row?.level);
+  const expectedEntries = Math.max(
+    _expectedEntries(row?.rec?.expectedTickets),
+    Math.max(0, Math.floor(Number(row?.rec?.expectedEntries) || 0)),
+  );
+  const packKind = row?.rec?.foilExpected === true ? 'with-foil' : 'standard';
+  return `ticket-pack:${level}:entries-${expectedEntries || 'unknown'}:${packKind}`;
+}
+
+function _seedOpenedCards(address, level, payload, keepNewestEntries = 0) {
+  const opened = _openedPieces(payload);
+  let keep = Math.max(0, Math.floor(Number(keepNewestEntries) || 0));
+  let firstKept = opened.length;
+  while (firstKept > 0 && keep > 0) {
+    firstKept -= 1;
+    keep = Math.max(0, keep - opened[firstKept].entryCount);
+  }
   const seed = _revealedSet(address, level);
-  for (const card of opened.slice(0, opened.length - keep)) {
-    seed.add(Number(card.cardIndex));
+  for (const piece of opened.slice(0, firstKept)) {
+    seed.add(String(piece.key));
   }
   _saveRevealed(address, level, seed);
 }
@@ -259,10 +264,29 @@ function _wholeCardTraitIds(card) {
   return byQuadrant.every((tid) => tid != null) ? byQuadrant : null;
 }
 
-/** Cards whose complete four-quadrant ticket has rolled. */
-function _openedCards(payload) {
-  const cards = Array.isArray(payload?.cards) ? payload.cards : [];
-  return cards.filter((c) => _wholeCardTraitIds(c) != null);
+/** Finalized reveal pieces, including legitimate one-entry ticket quarters. */
+function _openedPieces(payload) {
+  const cards = (Array.isArray(payload?.cards) ? payload.cards : [])
+    .filter((card) => card?.status === 'opened');
+  const partitioned = dgnPartitionTicketEntries(cards);
+  return [
+    ...partitioned.tickets.map((ticket) => ({
+      ...ticket,
+      kind: 'ticket',
+      entryCount: ENTRIES_PER_TICKET,
+      order: Math.min(...ticket.entryIds.map((id) => Number(id)).filter(Number.isFinite)),
+    })),
+    ...partitioned.entries.map((entry) => ({
+      ...entry,
+      kind: 'entry',
+      entryCount: 1,
+      order: Number(entry.entryId),
+    })),
+  ].sort((a, b) => {
+    const ao = Number.isFinite(a.order) ? a.order : Number(a.cardIndexes?.[0] ?? a.cardIndex ?? 0) * 4;
+    const bo = Number.isFinite(b.order) ? b.order : Number(b.cardIndexes?.[0] ?? b.cardIndex ?? 0) * 4;
+    return ao - bo || String(a.key).localeCompare(String(b.key));
+  });
 }
 
 async function _fetchCards(address, level) {
@@ -538,8 +562,8 @@ export async function recordPendingPack({
         // not old inventory to seed away. This applies to ordinary purchases as
         // well as historical/settled recovery.
         preserveNewestEntries > 0
-          ? _newlyCompletedTickets(payload, preserveNewestEntries)
-          : !hasIncomplete ? _expectedTickets(expected) : 0,
+          ? Math.max(0, Math.floor(Number(preserveNewestEntries) || 0))
+          : !hasIncomplete ? expectedEntryCount : 0,
       );
     } catch (_e) {
       // Keep a durable record through an API/indexer outage. _inspectOne performs
@@ -831,10 +855,25 @@ export function unopenedPackCardIndexes({ address, level, cards = [] } = {}) {
   const hidden = new Set();
   for (const card of Array.isArray(cards) ? cards : []) {
     const index = Number(card?.cardIndex);
-    if (!Number.isInteger(index) || revealed.has(index)) continue;
+    if (!Number.isInteger(index) || revealed.has(String(index))) continue;
     if (_wholeCardTraitIds(card) != null) hidden.add(index);
   }
   return hidden;
+}
+
+/** Stable whole-ticket and loose-entry keys still hidden behind a pack opener. */
+export function unopenedPackItemKeys({ address, level, cards = [] } = {}) {
+  const addr = _lower(address);
+  const lvl = Number(level);
+  if (!addr || !Number.isInteger(lvl)) return new Set();
+  const pending = pendingPacks().some((rec) => (
+    rec && _lower(rec.address) === addr && Number(rec.level) === lvl
+  ));
+  if (!pending) return new Set();
+  const revealed = _revealedSet(addr, lvl);
+  return new Set(_openedPieces({ cards })
+    .map((piece) => String(piece.key))
+    .filter((key) => !revealed.has(key)));
 }
 
 /** Whether the direct /foil projection still belongs behind its pack opener. */
@@ -849,7 +888,7 @@ export function unopenedFoilPackPending({ address, level } = {}) {
   const revealed = _revealedSet(addr, lvl);
   return Array.from({ length: FOIL_TICKETS_PER_PACK }, (_unused, index) => (
     FOIL_CARD_INDEX_BASE + index
-  )).some((index) => !revealed.has(index));
+  )).some((index) => !revealed.has(String(index)));
 }
 
 function _removePendingLevel(address, level) {
@@ -861,23 +900,32 @@ function _removePendingLevel(address, level) {
   )));
 }
 
-/** Mark one physically opened pack's cards visible to inventory. */
-export async function completePackReveal({ address, level, cardIndexes = [] } = {}) {
+/** Mark one physically opened pack's tickets/entries visible to inventory. */
+export async function completePackReveal({
+  address,
+  level,
+  cardIndexes = [],
+  itemKeys = [],
+  entryCount = null,
+} = {}) {
   const addr = _lower(address);
   const lvl = Number(level);
   const indexes = [...new Set((Array.isArray(cardIndexes) ? cardIndexes : [])
     .map(Number)
     .filter((index) => Number.isInteger(index) && index >= 0))];
-  if (!addr || !Number.isInteger(lvl) || indexes.length === 0) return false;
+  const keys = [...new Set((Array.isArray(itemKeys) && itemKeys.length > 0
+    ? itemKeys.map(String)
+    : indexes.map(String)).filter(Boolean))];
+  if (!addr || !Number.isInteger(lvl) || keys.length === 0) return false;
 
   const revealed = _revealedSet(addr, lvl);
-  for (const index of indexes) revealed.add(index);
+  for (const itemKey of keys) revealed.add(itemKey);
   _saveRevealed(addr, lvl, revealed);
 
   const key = _packKey(addr, lvl);
   const active = _activePackCards.get(key);
   if (active) {
-    for (const index of indexes) active.delete(index);
+    for (const itemKey of keys) active.delete(itemKey);
     if (active.size === 0) _activePackCards.delete(key);
   }
 
@@ -886,7 +934,9 @@ export async function completePackReveal({ address, level, cardIndexes = [] } = 
   ));
   if (trackedRec) {
     const released = Math.max(0, Math.floor(Number(trackedRec.releasedEntries) || 0));
-    trackedRec.releasedEntries = released + (indexes.length * ENTRIES_PER_TICKET);
+    const exactEntryCount = Math.max(0, Math.floor(Number(entryCount) || 0));
+    trackedRec.releasedEntries = released
+      + (exactEntryCount > 0 ? exactEntryCount : indexes.length * ENTRIES_PER_TICKET);
     _replacePendingRecord(trackedRec);
   }
 
@@ -1022,8 +1072,13 @@ async function _inspectOne(address, rec) {
       level,
       payload,
       Number(rec.seedPreserveEntries) > 0
-        ? _newlyCompletedTickets(payload, rec.seedPreserveEntries)
-        : !hasIncomplete ? _expectedTickets(rec.expectedTickets) : 0,
+        ? Math.max(0, Math.floor(Number(rec.seedPreserveEntries) || 0))
+        : !hasIncomplete
+          ? Math.max(
+              _expectedEntries(rec.expectedTickets),
+              Math.floor(Number(rec.expectedEntries) || 0),
+            )
+          : 0,
     );
     rec.seedPending = false;
     rec.seedPreserveEntries = 0;
@@ -1031,28 +1086,26 @@ async function _inspectOne(address, rec) {
     _replacePendingRecord(rec);
   }
   const revealed = _revealedSet(address, level);
-  const cards = Array.isArray(payload?.cards) ? payload.cards : [];
-  const unseen = cards.filter((card) => card && !revealed.has(Number(card.cardIndex)));
-  const allFresh = unseen
-    .map((card) => ({ card, traitIds: _wholeCardTraitIds(card) }))
-    .filter((item) => item.traitIds != null);
+  const allFresh = _openedPieces(payload)
+    .filter((piece) => !revealed.has(String(piece.key)));
   // Owed entries are FIFO and jackpot awards are appended after the player's
-  // existing hands. While the draw is still covered, withhold the newest whole
-  // cards attributable to the already-indexed award. Existing purchased packs
+  // existing hands. While the draw is still covered, withhold the newest pieces
+  // attributable to the already-indexed award. Existing purchased packs
   // remain visible; the award cards join them immediately after the draw event.
   const jackpotEntriesStillOwed = Math.min(unrevealedJackpotEntries, chainOwedEntries);
   const jackpotEntriesMaterialized = Math.max(
     0,
     unrevealedJackpotEntries - jackpotEntriesStillOwed,
   );
-  const withheldFreshCount = Math.min(
-    allFresh.length,
-    _newlyCompletedTickets(payload, jackpotEntriesMaterialized),
-  );
-  const fresh = allFresh
-    .slice()
-    .sort((a, b) => Number(a.card?.cardIndex) - Number(b.card?.cardIndex))
-    .slice(0, Math.max(0, allFresh.length - withheldFreshCount));
+  let withholdEntries = jackpotEntriesMaterialized;
+  const withheldKeys = new Set();
+  for (let i = allFresh.length - 1; i >= 0 && withholdEntries > 0; i -= 1) {
+    const piece = allFresh[i];
+    if (piece.entryCount > withholdEntries) continue;
+    withheldKeys.add(String(piece.key));
+    withholdEntries -= piece.entryCount;
+  }
+  const fresh = allFresh.filter((piece) => !withheldKeys.has(String(piece.key)));
   // The foil projection is authoritative for foil tickets. They are filed in
   // separate foil entry rows on the current deploy, so requiring them to also
   // appear in /tickets/by-trait creates a permanent "still indexing" deadlock
@@ -1063,19 +1116,25 @@ async function _inspectOne(address, rec) {
   const foilTickets = rec.foilExpected && foilState.complete
     ? foilState.lines.map((traitIds, index) => ({
         traitIds,
+        key: String(FOIL_CARD_INDEX_BASE + index),
+        kind: 'ticket',
+        entryCount: ENTRIES_PER_TICKET,
         foil: true,
         cardIndex: FOIL_CARD_INDEX_BASE + index,
-      })).filter((ticket) => !revealed.has(ticket.cardIndex))
+      })).filter((ticket) => !revealed.has(String(ticket.cardIndex)))
     : [];
-  const allReadyTicketCount = allFresh.length + foilTickets.length;
-  const readyTicketCount = fresh.length + foilTickets.length;
+  const allReadyEntries = allFresh.reduce((sum, piece) => sum + piece.entryCount, 0)
+    + (foilTickets.length * ENTRIES_PER_TICKET);
+  const readyEntryCount = fresh.reduce((sum, piece) => sum + piece.entryCount, 0)
+    + (foilTickets.length * ENTRIES_PER_TICKET);
+  const readyTicketCount = _ticketCountFromEntries(readyEntryCount);
   const releasedEntries = Math.max(0, Math.floor(Number(rec.releasedEntries) || 0));
   const existingExpectedEntries = Math.max(
     _expectedEntries(rec.expectedTickets),
     Math.floor(Number(rec.expectedEntries) || 0),
   );
   const accountedEntries = releasedEntries
-    + (allReadyTicketCount * ENTRIES_PER_TICKET)
+    + allReadyEntries
     + chainOwedEntries;
   const expectedEntries = Math.max(existingExpectedEntries, accountedEntries);
   if (expectedEntries !== Number(rec.expectedEntries)
@@ -1090,8 +1149,8 @@ async function _inspectOne(address, rec) {
   // receipt immediately even when the indexer needs another beat to expose the
   // resulting real cards. Foil entries use a separate on-chain bucket, so
   // retain their four-ticket indexing receipt independently.
-  const readyEntries = readyTicketCount > 0 && !foilBlocked
-    ? readyTicketCount * ENTRIES_PER_TICKET
+  const readyEntries = readyEntryCount > 0 && !foilBlocked
+    ? readyEntryCount
     : 0;
   const rawFallbackPendingEntries = Math.max(
     0,
@@ -1117,8 +1176,9 @@ async function _inspectOne(address, rec) {
     ? trackedPendingEntries + foilPendingEntries
     : fallbackPendingEntries;
   return {
-    level, rec, revealed, unseen, fresh, foilState, foilTickets, readyTicketCount,
-    ready: readyTicketCount > 0 && !foilBlocked,
+    level, rec, revealed, unseen: allFresh, fresh, foilState, foilTickets,
+    readyEntryCount, readyTicketCount,
+    ready: readyEntryCount > 0 && !foilBlocked,
     foilBlocked,
     pendingEntries,
     indexPendingEntries: fallbackPendingEntries,
@@ -1193,6 +1253,8 @@ async function _publishPackActions(address, publishSeq = null) {
       const ticketCount = row.readyTicketCount || recordedCount;
       return {
       id: `ticket-pack:${row.level}`,
+      dismissKey: _packDismissKey(row),
+      dismissScope: addr,
       kind: 'tickets',
       ticketLevel: row.level,
       ticketCount,
@@ -1216,6 +1278,8 @@ async function _publishPackActions(address, publishSeq = null) {
         if (_lower(current) !== addr) return;
         publishPendingActions(PENDING_SOURCE, [{
           id: `ticket-pack:${row.level}`,
+          dismissKey: _packDismissKey(row),
+          dismissScope: addr,
           kind: 'tickets',
           ticketLevel: row.level,
           ticketCount: row.readyTicketCount || recordedCount,
@@ -1266,6 +1330,8 @@ async function _publishPackActions(address, publishSeq = null) {
     ));
     actions.push({
       id: 'ticket-packs:pending',
+      dismissKey: `ticket-packs:pending:${pendingRows.map(_packDismissKey).join('|')}`,
+      dismissScope: addr,
       kind: 'tickets',
       ticketCount: ticketCount || null,
       foilPack: false,
@@ -1285,7 +1351,7 @@ async function _publishPackActions(address, publishSeq = null) {
       phase: processedAwaitingIndex ? 'indexing' : 'waiting-draw',
       // CLEAR means the currently owed hands stay dismissed after they become
       // real per-level opener rows; HIDE does not consume these aliases.
-      dismissIds: [...new Set(pendingRows.map((row) => `ticket-pack:${row.level}`))],
+      dismissIds: [...new Set(pendingRows.map(_packDismissKey))],
       order: 10,
       chronology: Math.min(...pendingRows.map((row) => Number(row.rec?.at ?? row.level))),
       run: null,
@@ -1342,46 +1408,66 @@ export async function checkPendingPacks({ address, levels = null } = {}) {
     // complete four-line /foil projection, then present it independently of the
     // ordinary ticket stream.
     if (foilBlocked) continue;
-    const standardTickets = fresh.map(({ card, traitIds }) => ({
-        traitIds,
-        foil: false,
-        cardIndex: Number(card.cardIndex),
-      }));
-    const tickets = [...standardTickets, ...foilTickets];
+    const standardPieces = fresh.map((piece) => ({
+      ...piece,
+      foil: false,
+      cardIndex: piece.cardIndexes?.length === 1
+        ? Number(piece.cardIndexes[0])
+        : Number.isInteger(Number(piece.cardIndex)) ? Number(piece.cardIndex) : null,
+    }));
+    const pieces = [...standardPieces, ...foilTickets];
 
     // Ordinary tickets open first; foil lines get a separate, unmistakable
     // wrapper and presentation as the special final pack. Each series keeps
     // its own OPEN ALL batch so choosing the fast path for ordinary packs does
     // not skip the foil opening beat.
     const groups = [
-      { foilPack: false, tickets: standardTickets },
-      { foilPack: true, tickets: foilTickets },
+      { foilPack: false, pieces: standardPieces },
+      { foilPack: true, pieces: foilTickets },
     ];
     let queuedForRecord = 0;
     for (const group of groups) {
-      if (group.tickets.length === 0) continue;
-      const packCount = Math.ceil(group.tickets.length / MAX_TICKETS_PER_PACK);
+      if (group.pieces.length === 0) continue;
+      const packCount = Math.ceil(group.pieces.length / MAX_TICKETS_PER_PACK);
       const batchId = `${addr}:${lvl}:${Number(rec.at || 0)}:${group.foilPack ? 'foil' : 'standard'}`;
       for (let i = 0; i < packCount; i++) {
-        const packTickets = group.tickets.slice(
+        const packPieces = group.pieces.slice(
           i * MAX_TICKETS_PER_PACK,
           (i + 1) * MAX_TICKETS_PER_PACK,
         );
+        const packTickets = packPieces
+          .filter((piece) => piece.kind === 'ticket')
+          .map((piece) => ({
+            traitIds: piece.traitIds,
+            foil: Boolean(piece.foil),
+            cardIndex: piece.cardIndex,
+          }));
+        const packEntries = packPieces
+          .filter((piece) => piece.kind === 'entry')
+          .map((piece) => ({ traitId: piece.traitId }));
+        const packEntryCount = packPieces.reduce((sum, piece) => sum + piece.entryCount, 0);
+        const groupEntryCount = group.pieces.reduce((sum, piece) => sum + piece.entryCount, 0);
         queueReveal({
           kind: 'pack',
           title: group.foilPack ? `FOIL PACK · LEVEL ${lvl}` : `LEVEL ${lvl} TICKETS`,
           level: lvl,
           foilPack: group.foilPack,
           tickets: packTickets,
-          count: packTickets.length,
-          totalCount: group.tickets.length,
+          entries: packEntries,
+          count: _ticketCountFromEntries(packEntryCount),
+          totalCount: _ticketCountFromEntries(groupEntryCount),
           batchId,
           packIndex: i + 1,
           packCount,
           packRelease: {
             address: addr,
             level: lvl,
-            cardIndexes: packTickets.map((ticket) => ticket.cardIndex),
+            cardIndexes: [...new Set(packPieces
+              .flatMap((piece) => piece.cardIndexes || [piece.cardIndex])
+              .map(Number)
+              .filter((index) => Number.isInteger(index) && index >= 0))],
+            itemKeys: packPieces.map((piece) => String(piece.key)),
+            entryCount: packEntryCount,
           },
         });
         queued += 1;
@@ -1389,7 +1475,7 @@ export async function checkPendingPacks({ address, levels = null } = {}) {
       }
     }
     if (queuedForRecord > 0) {
-      _activePackCards.set(activeKey, new Set(tickets.map((ticket) => ticket.cardIndex)));
+      _activePackCards.set(activeKey, new Set(pieces.map((piece) => String(piece.key))));
     }
   }
 

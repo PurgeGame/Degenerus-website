@@ -33,7 +33,7 @@
 
 import { CHAIN } from '../app/chain-config.js';
 import { get, subscribe, getViewedAddress } from '../app/store.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 import { depositCoinflip, parseCoinflipDepositFromReceipt } from '../app/coinflip.js';
 
 // Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for the

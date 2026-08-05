@@ -174,8 +174,10 @@ globalThis.localStorage = {
 };
 
 const {
-  queueReveal, normalizeSequence, buildDegeneretteSpinFrames, buildBoxSpinBoard,
+  queueReveal, normalizeSequence, buildDegeneretteSpinFrames,
+  degeneretteLockMatchType, shouldBobDegeneretteLock, buildBoxSpinBoard,
   goldTicketLabel, pickBiggestSpinResult, projectDegeneretteEthSplit,
+  shouldCelebrateDegenerette,
   __resetForTest, __takeQueuedForTest, PACK_REVEAL_COMPLETE_EVENT,
 } =
   await import('../reveal-overlay.js');
@@ -435,7 +437,7 @@ describe('normalizeSequence', () => {
     assert.equal(seq.noVessel, true);
     assert.equal(seq.autoStart, true);
     assert.deepEqual(seq.cards.map((card) => card.type), ['foil-match', 'spins']);
-    assert.match(seq.cards[0].sub, /MAIN DRAW · 2 exact \(\+2\) · 1 symbol \(\+1\)/);
+    assert.match(seq.cards[0].sub, /MAIN JACKPOT · 2 exact \(\+2\) · 1 symbol \(\+1\)/);
     assert.deepEqual(seq.cards[0].foilMatch.matchFaces, [2, 1, 0, 2]);
     assert.equal(seq.cards[0].foilMatch.rewardFaces, 6);
   });
@@ -455,6 +457,33 @@ describe('normalizeSequence', () => {
     assert.equal(seq.cards[0].label, 'TICKET 1');
     assert.match(seq.cards[1].sub, /\+1 more/, 'remainder called out on the last card');
     assert.equal(seq.big, true, 'real tickets are a headline moment');
+  });
+
+  test('a tutorial pack can carry the focused trait lesson into a two-ticket reveal', () => {
+    const seq = normalizeSequence({
+      kind: 'pack',
+      level: 3,
+      count: 2,
+      tutorialTicketLesson: true,
+      tickets: [
+        { traitIds: [22, 73, 178, 219] },
+        { traitIds: [47, 64, 166, 207] },
+      ],
+    });
+    assert.equal(seq.ticketGrid.length, 2);
+    assert.equal(seq.ticketLesson, true);
+  });
+
+  test('a live ticket cannot opt into tutorial lesson copy', () => {
+    const seq = normalizeSequence({
+      kind: 'pack',
+      level: 3,
+      count: 1,
+      ticketLesson: true,
+      tickets: [{ traitIds: [1, 70, 130, 200] }],
+    });
+    assert.equal(seq.ticketGrid.length, 1);
+    assert.equal(seq.ticketLesson, false);
   });
 
   test('gold-ticket hero names its actual gold symbol and rebuilds the whole ticket at full size', () => {
@@ -530,6 +559,21 @@ describe('normalizeSequence', () => {
     });
     assert.equal(allBad.ticketGrid, undefined, 'an incomplete card falls back to sealed copy');
     assert.equal(allBad.cards[0].value, '1');
+  });
+
+  test('pack reveal carries fractional traits as centerless quarter-ticket entries', () => {
+    const seq = normalizeSequence({
+      kind: 'pack',
+      level: 7,
+      count: 1.5,
+      tickets: [{ traitIds: [1, 70, 130, 200] }],
+      entries: [{ traitId: 72 }, 191, { traitId: 999 }],
+    });
+    assert.equal(seq.ticketGrid.length, 3, 'one ticket plus two valid loose entries are dealt');
+    assert.deepEqual(seq.ticketGrid.map((piece) => Boolean(piece.entry)), [false, true, true]);
+    assert.deepEqual(seq.ticketGrid.filter((piece) => piece.entry).map((piece) => piece.traitId), [72, 191]);
+    assert.equal(seq.cards[1].type, 'ticket-entry');
+    assert.equal(seq.cards[1].entryTraitId, 72);
   });
 
   test('pack batches preserve their index/count for next-pack and open-all controls', () => {
@@ -742,9 +786,17 @@ describe('normalizeSequence', () => {
     assert.equal(lost.cards[0].type, 'nowin');
     assert.equal(lost.cards[0].label, 'YOUR BET: UNDER 1,953.11 TICKETS');
     assert.equal(lost.cards[0].value, 'RESULT: 2,014.25 TICKETS');
-    assert.equal(lost.cards[0].sub, 'WIN 0 FLIP');
+    assert.equal(lost.cards[0].sub, 'LOSS · 0 FLIP');
+    assert.equal(lost.cards[0].summaryDetail, true);
+    assert.equal(lost.cards[0].labelFirst, true);
     assert.doesNotMatch(lost.cards[0].label, /ROUND/i,
       'volume receipts keep the internal contract round hidden');
+  });
+
+  test('a side-bet result skips the duplicate full-card then summary sequence', () => {
+    const source = readFileSync(new URL('../reveal-overlay.js', import.meta.url), 'utf8');
+    assert.match(source, /if \(seq\.kind === 'pari' && seq\.cards\.length === 1\)[\s\S]*?#renderSummary\(seq\)/);
+    assert.match(source, /rootStage\.classList\.toggle\('rvl-stage--pari', seq\.kind === 'pari'\)/);
   });
 
   // Degenerette bet board (user ask 2026-07-29): one row per spin. The pick is
@@ -797,6 +849,39 @@ describe('normalizeSequence', () => {
     assert.equal(seq.spinBoard.rows.length, 3);
     assert.equal(seq.title, 'NO HITS');
     assert.equal(seq.unlucky, true, 'a zero-payout result has nothing to collect');
+  });
+
+  test('degenerette: a positive payout below the wager is a return, not a celebration', () => {
+    const seq = normalizeSequence({
+      kind: 'degenerette',
+      currency: 3,
+      amountPerSpin: 10n,
+      // The row count makes the authoritative wager 20 even if this stale
+      // caller aggregate says otherwise.
+      totalWager: 10n,
+      totalPayout: 15n,
+      spins: [
+        { spinIndex: 0, playerTraits: 1, houseTraits: 1, score: 2, payout: 15n },
+        { spinIndex: 1, playerTraits: 1, houseTraits: 2, score: 0, payout: 0n },
+      ],
+    });
+    assert.equal(seq.spinBoard.totalWager, 20n);
+    assert.equal(seq.spinBoard.celebrate, false);
+    assert.equal(seq.title, 'PARTIAL RETURN');
+    assert.equal(seq.big, false);
+    assert.equal(seq.unlucky, true);
+    assert.equal(shouldCelebrateDegenerette({ total: 15n, totalWager: 20n }), false);
+    assert.equal(shouldCelebrateDegenerette({ total: 20n, totalWager: 20n }), true,
+      'getting the full stake back meets the requested threshold');
+    assert.equal(shouldCelebrateDegenerette({ total: 1n, totalWager: 0n }), true,
+      'old receipts without wager metadata keep their positive-payout treatment');
+    assert.equal(shouldCelebrateDegenerette({ total: 1n, totalWager: 20n, boxSpin: true }), true,
+      'a granted lootbox spin has no player stake to lose');
+    assert.match(
+      REVEAL_SRC,
+      /const celebrate = shouldCelebrateDegenerette\(board\)[\s\S]*?if \(celebrate\) \{[\s\S]*?sfxFanfare[\s\S]*?#fireConfetti[\s\S]*?\} else \{[\s\S]*?sfxNoWin/,
+      'fanfare and confetti use net outcome rather than any positive payout',
+    );
   });
 
   test('degenerette: a preliminary FLIP hit with zero final payout stages a survival bust', () => {
@@ -900,7 +985,7 @@ describe('buildBoxSpinBoard', () => {
 });
 
 describe('buildDegeneretteSpinFrames', () => {
-  test('ports the standalone eight-lock plan and lands on the verified ticket', () => {
+  test('randomizes all eight component locks and lands on the verified ticket', () => {
     const args = {
       playerTraits: 0x12345678,
       houseTraits: 0xE7C6A589,
@@ -913,11 +998,11 @@ describe('buildDegeneretteSpinFrames', () => {
     assert.ok(frames.length >= 24 && frames.length <= 40,
       `2–4 idle rolls between eight locks, got ${frames.length} frames`);
     assert.equal(lockFrames.length, 8, 'four color locks + four symbol locks');
-    assert.deepEqual(
-      lockFrames.map((frame) => frame.lock.type),
-      ['symbol', 'symbol', 'symbol', 'symbol', 'color', 'color', 'color', 'color'],
-      'the complete symbol pass settles before any color can lock',
-    );
+    assert.equal(lockFrames.filter((frame) => frame.lock.type === 'color').length, 4);
+    assert.equal(lockFrames.filter((frame) => frame.lock.type === 'symbol').length, 4);
+    assert.equal(new Set(lockFrames.map((frame) => (
+      `${frame.lock.quadrant}:${frame.lock.type}`
+    ))).size, 8, 'every quadrant locks each component exactly once');
     assert.ok(frames.some((frame) => frame.lock == null), 'whole-token idle rolls are present');
     for (let q = 0; q < 4; q++) {
       const colorAt = frames.findIndex((frame) => (
@@ -926,8 +1011,8 @@ describe('buildDegeneretteSpinFrames', () => {
       const symbolAt = frames.findIndex((frame) => (
         frame.lock?.quadrant === q && frame.lock.type === 'symbol'
       ));
-      assert.ok(symbolAt >= 0 && colorAt > symbolAt,
-        `quadrant ${q} locks symbol before color`);
+      assert.ok(symbolAt >= 0 && colorAt >= 0,
+        `quadrant ${q} receives both independent locks`);
       for (const frame of frames) {
         if (frame.lockedColors[q]) assert.equal(frame.traits[q].col, target[q].col);
         if (frame.lockedSymbols[q]) assert.equal(frame.traits[q].sym, target[q].sym);
@@ -938,11 +1023,49 @@ describe('buildDegeneretteSpinFrames', () => {
     assert.deepEqual(final.lockedColors, [true, true, true, true]);
     assert.deepEqual(final.lockedSymbols, [true, true, true, true]);
     assert.deepEqual(buildDegeneretteSpinFrames(args), frames, 'plan is deterministic per spin');
+
+    const firstComponentTypes = new Set();
+    for (let spinIndex = 0; spinIndex < 32; spinIndex += 1) {
+      const sampleLocks = buildDegeneretteSpinFrames({ ...args, spinIndex })
+        .filter((frame) => frame.lock != null);
+      for (let q = 0; q < 4; q += 1) {
+        firstComponentTypes.add(sampleLocks.find((frame) => frame.lock.quadrant === q).lock.type);
+      }
+    }
+    assert.deepEqual([...firstComponentTypes].sort(), ['color', 'symbol'],
+      'seeded plans allow either color or symbol to be first in a quadrant');
     assert.match(
       REVEAL_SRC,
-      /const symbolMatched =[\s\S]*?\? symbolMatched && pair\.playerTraits\[q\]\.col === pair\.targetTraits\[q\]\.col[\s\S]*?if \(matched\) \{[\s\S]*?sfxMatchLock\(matchingSoundCount\)[\s\S]*?else \{[\s\S]*?#sfxTickSafe/,
-      'only score-relevant Degenerette locks use the match cue',
+      /sfxMatchLock\(lockMatch, matchingSoundCount\)/,
+      'the reveal sends its color, symbol, or both classification to audio',
     );
+  });
+
+  test('classifies color, symbol, and completed-trait matches without bobbing color alone', () => {
+    const player = [{ sym: 2, col: 5 }];
+    const target = [{ sym: 2, col: 5 }];
+    const frame = (type, colorLocked, symbolLocked) => ({
+      lock: { quadrant: 0, type },
+      lockedColors: [colorLocked, false, false, false],
+      lockedSymbols: [symbolLocked, false, false, false],
+    });
+
+    assert.equal(degeneretteLockMatchType(player, target, frame('color', true, false)), 'color');
+    assert.equal(degeneretteLockMatchType(player, target, frame('symbol', false, true)), 'symbol');
+    assert.equal(degeneretteLockMatchType(player, target, frame('color', true, true)), 'both');
+    assert.equal(degeneretteLockMatchType(
+      [{ sym: 2, col: 4 }],
+      target,
+      frame('color', true, false),
+    ), null, 'a component miss keeps the ordinary lock tick');
+
+    assert.equal(shouldBobDegeneretteLock('color', 8), false,
+      'a color-only lock never bobs, even late in the ladder');
+    assert.equal(shouldBobDegeneretteLock('symbol', 2), false);
+    assert.equal(shouldBobDegeneretteLock('symbol', 3), true);
+    assert.equal(shouldBobDegeneretteLock('both', 3), true);
+    assert.match(REVEAL_SRC, /shouldBobDegeneretteLock\(lockMatch, matchingLocks\)/,
+      'the motion path uses the scoring-aware bob rule');
   });
 });
 
@@ -1008,6 +1131,23 @@ describe('reveal-overlay element', () => {
     assert.equal(__takeQueuedForTest().length, 1);
   });
 
+  test('one settled side bet can only enter the reveal queue once', () => {
+    const result = {
+      kind: 'pari',
+      player: '0x00000000000000000000000000000000000000ab',
+      market: 'volume',
+      round: 31,
+      side: 1,
+      outcome: 1,
+      payout: 2_000n * 10n ** 18n,
+      betTickets: '20',
+      resultTickets: '24',
+    };
+    assert.equal(queueReveal(result), true);
+    assert.equal(queueReveal({ ...result }), false);
+    assert.equal(__takeQueuedForTest().length, 1);
+  });
+
   test('queueReveal before mount buffers; connect drains and shows summary (reduced motion)', async () => {
     assert.equal(queueReveal({ kind: 'pack', count: 3, level: 2, pending: true }), true);
     const el = instantiate();
@@ -1052,7 +1192,7 @@ describe('reveal-overlay element', () => {
     assert.equal(stage.classList.contains('rvl-stage--bingo'), true);
   });
 
-  test('foil summary compares the ticket to the winning draw and labels every point', async () => {
+  test('foil summary shows both tickets, Degenerette colors, and the exact bonus', async () => {
     queueReveal({
       kind: 'foil-match', day: 44, level: 12, ticketIndex: 2, drawKind: 0,
       score: 5, rewardFaces: 6,
@@ -1066,16 +1206,40 @@ describe('reveal-overlay element', () => {
 
     const chart = el.querySelector('.rvl-foil-match');
     assert.ok(chart, 'the reason chart is the first foil reward card');
-    assert.equal(chart.querySelectorAll('.rvl-foil-pair').length, 4);
-    assert.equal(chart.querySelectorAll('.rvl-foil-pair--exact').length, 2);
-    assert.equal(chart.querySelectorAll('.rvl-foil-pair--symbol').length, 1);
-    assert.equal(chart.querySelectorAll('.rvl-foil-pair--miss').length, 1);
+    assert.equal(chart.querySelectorAll('.rvl-gamepiece').length, 2,
+      'the foil and jackpot are rendered as complete tickets');
+    assert.equal(chart.querySelectorAll('.rvl-ticket-grid').length, 2);
+    assert.equal(chart.querySelectorAll('.rvl-rq').length, 8);
+    assert.equal(chart.querySelectorAll('.q-full').length, 4,
+      'exact matches are green on both tickets like settled Degenerette');
+    assert.equal(chart.querySelectorAll('.q-sym').length, 2,
+      'symbol matches are blue on both tickets like settled Degenerette');
+    assert.equal(chart.querySelectorAll('.q-miss').length, 2,
+      'misses are pink on both tickets like settled Degenerette');
+    assert.equal(chart.querySelectorAll('.rvl-foil-match__face').length, 4,
+      'the foil ticket retains each quadrant point value');
+    assert.deepEqual(
+      chart.querySelectorAll('.rvl-ticket-tag').map((tag) => tag.textContent),
+      ['YOUR FOIL', 'MAIN JACKPOT'],
+      'the two complete tickets name their roles without relying on badge order',
+    );
+    const foilTicket = chart.querySelector('.rvl-foil-match__ticket--foil');
+    assert.equal(
+      foilTicket?.querySelector('.rvl-gamepiece-center')?.querySelector('img')?.src,
+      '/whitepaper/flame-center-silver.svg',
+      'the left ticket is visibly the earned foil rather than a second paper ticket',
+    );
     assert.match(chart.querySelector('.rvl-foil-match__foot').textContent,
-      /T5 UNLOCKED A 6-FACE REWARD SPIN/);
-    assert.match(APP_CSS, /\.rvl-foil-match__grid\s*\{[^}]*grid-template-columns:\s*repeat\(4/s);
+      /T5 BONUS6-FACE DEGENERETTE SPIN/);
     assert.match(APP_CSS,
-      /\.rvl-card-icon--foil-match \.rvl-foil-pair__badge\s*\{[\s\S]{0,520}width:\s*clamp\(27px,[\s\S]{0,180}height:\s*clamp\(27px/,
-      'foil badges override the generic card-icon image size instead of spilling across cells');
+      /\.rvl-foil-match__compare\s*\{[^}]*grid-template-columns:\s*var\(--rvl-foil-ticket-size\)[^}]*var\(--rvl-foil-ticket-size\)/s,
+      'one explicit pair grid keeps both tickets square and equally sized');
+    assert.match(APP_CSS,
+      /\.rvl-foil-match--compact\s*\{[^}]*--rvl-foil-ticket-size:\s*clamp\(68px,[^}]*96px\)/s,
+      'the compact receipt has its own readable square ticket scale');
+    assert.match(APP_CSS,
+      /\.rvl-card--foil-match\.rvl-card--mini \.rvl-card-icon--foil-match\s*\{[^}]*width:\s*100%[^}]*height:\s*auto/s,
+      'the foil receipt overrides the later generic 26px mini-icon box');
   });
 
   test('pack shell carries the Degenerus mark plus dynamic edition and level hooks', () => {
@@ -1447,7 +1611,193 @@ describe('reveal-overlay element', () => {
     document.removeEventListener(PACK_REVEAL_COMPLETE_EVENT, onComplete);
   });
 
-  test('SKIP discards the sealed pack presentation and advances without opening it', async (t) => {
+  test('one resolved live ticket opens large without the tutorial lesson', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+
+    queueReveal({
+      kind: 'pack',
+      level: 3,
+      count: 1,
+      tickets: [{ traitIds: [1, 70, 130, 200] }],
+    });
+    const el = instantiate();
+    await tick();
+
+    assert.equal(el.querySelector('[data-bind="rvl-vessel"]').hidden, true,
+      'there is no sealed-pack beat for a one-ticket reveal');
+    assert.equal(el.querySelector('[data-bind="rvl-pack-actions"]').hidden, true,
+      'SKIP is not offered when the ticket itself is already on screen');
+    assert.equal(el.querySelector('[data-bind="rvl-card-zone"]').hidden, false);
+    assert.ok(el.querySelector('.rvl-ticket-grid-stage--single'));
+    assert.equal(el.querySelector('.rvl-ticket-lesson'), null);
+    assert.equal(el.querySelectorAll('.rvl-ticket-entry-number').length, 0);
+    assert.match(APP_CSS, /\.rvl-ticket-grid-stage--single[\s\S]{0,420}width:\s*min\(70vw, 430px, 58dvh\)/);
+
+    el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('one resolved entry opens as an oriented quarter-ticket with no center diamond', async () => {
+    queueReveal({
+      kind: 'pack',
+      level: 12,
+      count: 0.25,
+      entries: [{ traitId: 72 }],
+    });
+    const el = instantiate();
+    await tick();
+
+    const entry = el.querySelector('.ticket-entry-card');
+    assert.ok(entry, 'the entry uses the dedicated quarter-ticket graphic');
+    assert.equal(entry.getAttribute('data-quadrant'), '1');
+    assert.equal(el.querySelector('.rvl-paper--entry')?.getAttribute('data-quadrant'), '1',
+      'the reveal paper clips the same inner corner as its entry');
+    assert.equal(entry.querySelector('.ticket-card-center'), null,
+      'the standalone entry has no center diamond');
+    assert.match(APP_CSS,
+      /\.ticket-entry-card\[data-quadrant="1"\]\s*\{[^}]*clip-path:\s*polygon\(/s,
+      'the center-facing corner is cut away along the former diamond edge');
+    assert.ok(el.querySelector('[data-bind="rvl-stage"]').classList.contains('rvl-stage--single-entry'));
+
+    el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('the tutorial two-ticket pack starts on its wrapper without a skip action', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+
+    queueReveal({
+      kind: 'pack',
+      level: 3,
+      count: 2,
+      tutorialTicketLesson: true,
+      tickets: [
+        { traitIds: [22, 73, 178, 219] },
+        { traitIds: [47, 64, 166, 207] },
+      ],
+    });
+    const el = instantiate();
+    await tick();
+
+    assert.equal(el.querySelector('[data-bind="rvl-vessel"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="rvl-pack-actions"]').hidden, true,
+      'the lesson requires the pack-opening animation instead of offering SKIP');
+    el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('the tutorial two-ticket reveal shows both large examples beside the rarity lesson', async () => {
+    queueReveal({
+      kind: 'pack',
+      level: 3,
+      count: 2,
+      tutorialTicketLesson: true,
+      tickets: [
+        { traitIds: [22, 73, 178, 219] },
+        { traitIds: [47, 64, 166, 207] },
+      ],
+    });
+    const el = instantiate();
+    await tick();
+
+    assert.ok(el.querySelector('.rvl-ticket-grid-stage--lesson-stack'));
+    assert.equal(el.querySelectorAll('.rvl-paper').length, 2);
+    assert.ok(el.querySelector('.rvl-ticket-lesson'));
+    assert.equal(el.querySelectorAll('.rvl-ticket-entry-number').length, 0);
+    assert.equal(el.querySelector('.rvl-ticket-lesson__eyebrow').textContent, 'YOUR FIRST PACK');
+    assert.deepEqual(
+      Array.from(el.querySelectorAll('.rvl-ticket-lesson__title-line'))
+        .map((line) => line.textContent),
+      ['ONE TICKET = FOUR', 'JACKPOT ENTRIES'],
+    );
+    assert.equal(
+      el.querySelector('.rvl-ticket-lesson__title').getAttribute('aria-label'),
+      'ONE TICKET = FOUR JACKPOT ENTRIES',
+    );
+    assert.match(
+      APP_CSS,
+      /\.rvl-ticket-pack-stage--lesson \.ticket-card-center\s*\{[^}]*width:\s*20%;[^}]*height:\s*20%;/s,
+    );
+    assert.match(
+      APP_CSS,
+      /\.rvl-ticket-grid-stage--lesson-stack\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
+    );
+    assert.match(
+      APP_CSS,
+      /\.rvl-ticket-grid-stage--lesson-stack \.rvl-paper\s*\{[\s\S]*?position:\s*relative[\s\S]*?width:\s*100%/,
+    );
+    assert.match(el.querySelector('.rvl-ticket-lesson__equation').textContent, /8SYMBOLS.*8COLORS.*64TRAITS/);
+    const examples = el.querySelectorAll('.rvl-ticket-lesson__example');
+    assert.equal(examples.length, 2);
+    assert.match(examples[0].textContent, /COMMON COLOR.*GREEN ETHEREUM.*1 in 4/);
+    assert.match(examples[1].textContent, /RARER COLOR.*ORANGE BITCOIN.*1 in 32/);
+    assert.equal(examples[0].querySelector('img').src, '/badges-circular/crypto_06_ethereum_green.svg');
+    assert.equal(examples[1].querySelector('img').src, '/badges-circular/crypto_07_bitcoin_orange.svg');
+    assert.match(el.querySelector('.rvl-ticket-lesson__rule').textContent, /COLOR SHOWS RARITY.*symbol.*color.*hard/);
+    assert.doesNotMatch(
+      el.querySelector('.rvl-ticket-lesson').textContent,
+      /jackpot ticket each day|weighted equally|Blue|Pink/i,
+    );
+    el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('one sealed pack offers OPEN PACK beside SKIP', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    t.after(() => { window.matchMedia = previousMatchMedia; });
+
+    const el = instantiate();
+    queueReveal({
+      kind: 'pack',
+      title: 'YOUR TICKETS',
+      level: 8,
+      count: 2,
+      tickets: [
+        { traitIds: [1, 70, 130, 200] },
+        { traitIds: [2, 71, 131, 201] },
+      ],
+    });
+    await tick();
+
+    const actions = el.querySelector('[data-bind="rvl-pack-actions"]');
+    const openPack = el.querySelector('[data-bind="rvl-open-pack"]');
+    const skip = el.querySelector('[data-bind="rvl-skip-pack"]');
+    const openAll = el.querySelector('[data-bind="rvl-open-all"]');
+    assert.equal(actions.hidden, false, 'the single sealed pack exposes its action row');
+    assert.equal(openPack.hidden, false, 'OPEN PACK is visible when there is no batch');
+    assert.equal(openPack.textContent, 'OPEN PACK');
+    assert.equal(skip.hidden, false, 'SKIP remains beside the explicit open action');
+    assert.equal(skip.textContent, 'SKIP');
+    assert.equal(openAll.hidden, true, 'a one-pack reveal does not advertise OPEN ALL');
+    const buttons = el.querySelectorAll('button');
+    assert.ok(buttons.indexOf(openPack) < buttons.indexOf(skip),
+      'the primary OPEN PACK action stays to the left of SKIP');
+    assert.match(
+      APP_CSS,
+      /\.rvl-vessel-open-pack[^\{]*\{[^}]*min-height:\s*44px/s,
+      'OPEN PACK has a tactile minimum target',
+    );
+
+    openPack.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+    assert.equal(actions.hidden, true, 'the controls clear as the pack starts opening');
+    assert.equal(el.querySelector('[data-bind="rvl-stage"]').classList.contains('rvl-charging'), true);
+
+    el.querySelector('[data-bind="rvl-close"]')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+  });
+
+  test('SKIP ALL consumes the whole batch when OPEN ALL is its companion action', async (t) => {
     const previousMatchMedia = window.matchMedia;
     window.matchMedia = () => ({ matches: false });
     const completed = [];
@@ -1461,20 +1811,21 @@ describe('reveal-overlay element', () => {
     const el = instantiate();
     const ticket = (n) => ({ traitIds: [n, 70, 130, 200] });
     for (let packIndex = 1; packIndex <= 2; packIndex += 1) {
+      const first = ((packIndex - 1) * 2) + 1;
       queueReveal({
         kind: 'pack',
         title: 'YOUR TICKETS',
         level: 8,
-        count: 1,
-        totalCount: 2,
+        count: 2,
+        totalCount: 4,
         batchId: 'batch-skip',
         packIndex,
         packCount: 2,
-        tickets: [ticket(packIndex)],
+        tickets: [ticket(first), ticket(first + 1)],
         packRelease: {
           address: '0xab12000000000000000000000000000000000000',
           level: 8,
-          cardIndexes: [packIndex],
+          cardIndexes: [first, first + 1],
         },
       });
     }
@@ -1486,6 +1837,10 @@ describe('reveal-overlay element', () => {
     assert.equal(packActions.hidden, false, 'sealed packs expose their action row');
     assert.equal(openAll.hidden, false, 'OPEN ALL remains beside SKIP when packs remain');
     assert.ok(skip, 'SKIP is available before any ticket is shown');
+    assert.equal(skip.textContent, 'SKIP ALL', 'the secondary action makes its batch scope explicit');
+    const buttons = el.querySelectorAll('button');
+    assert.ok(buttons.indexOf(openAll) < buttons.indexOf(skip),
+      'the primary OPEN ALL action stays to the left of SKIP ALL');
     assert.match(
       APP_CSS,
       /\.rvl-vessel-skip\s*\{[^}]*min-height:\s*44px|\.rvl-vessel-open-all, \.rvl-vessel-skip, \.rvl-open-all-cta\s*\{[^}]*min-height:\s*44px/s,
@@ -1494,20 +1849,67 @@ describe('reveal-overlay element', () => {
 
     skip.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
-    assert.equal(completed.length, 1, 'skipping permanently consumes the first presentation');
-    assert.deepEqual(completed[0].cardIndexes, [1]);
-    assert.match(el.querySelector('[data-bind="rvl-title"]').textContent, /PACK 2\/2/,
-      'the next sealed pack replaces it immediately');
-    assert.equal(el.querySelector('[data-bind="rvl-vessel"]').hidden, false);
+    assert.equal(completed.length, 2, 'one click permanently consumes every presentation in the batch');
+    assert.deepEqual(completed[0].cardIndexes, [1, 2]);
+    assert.deepEqual(completed[1].cardIndexes, [3, 4]);
     assert.equal(el.querySelector('[data-bind="rvl-card-zone"]').hidden, true,
-      'the skipped ticket hand was never rendered');
+      'none of the skipped ticket hands were rendered');
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true,
+      'skipping the batch drains the reveal cleanly');
+  });
+
+  test('SKIP ALL follows OPEN ALL PACKS into ready Pending ticket packs', async (t) => {
+    const previousMatchMedia = window.matchMedia;
+    window.matchMedia = () => ({ matches: false });
+    const completed = [];
+    const onComplete = (event) => completed.push(event.detail);
+    document.addEventListener(PACK_REVEAL_COMPLETE_EVENT, onComplete);
+    t.after(() => {
+      window.matchMedia = previousMatchMedia;
+      document.removeEventListener(PACK_REVEAL_COMPLETE_EVENT, onComplete);
+    });
+
+    const el = instantiate();
+    const address = '0xab12000000000000000000000000000000000000';
+    const ticket = (n) => ({ traitIds: [n, 70, 130, 200] });
+    let pendingRuns = 0;
+    pendingActionsMod.publishPendingActions('next-pack', [{
+      id: 'ticket-pack:9', kind: 'tickets', ticketLevel: 9,
+      label: 'Level 9 ticket pack', shortLabel: 'Open tickets',
+      state: 'ready', order: 10, chronology: 9,
+      run: async () => {
+        pendingRuns += 1;
+        pendingActionsMod.clearPendingActions('next-pack');
+        queueReveal({
+          kind: 'pack', title: 'LEVEL 9 TICKETS', level: 9, count: 2,
+          batchId: 'pending-level-9', packIndex: 1, packCount: 1,
+          tickets: [ticket(3), ticket(4)],
+          packRelease: { address, level: 9, cardIndexes: [3, 4] },
+        });
+      },
+    }]);
+    queueReveal({
+      kind: 'pack', title: 'LEVEL 7 TICKETS', level: 7, count: 2,
+      batchId: 'current-level-7', packIndex: 1, packCount: 1,
+      tickets: [ticket(1), ticket(2)],
+      packRelease: { address, level: 7, cardIndexes: [1, 2] },
+    });
+    await tick();
+
+    const openAll = el.querySelector('[data-bind="rvl-open-all"]');
+    const skip = el.querySelector('[data-bind="rvl-skip-pack"]');
+    assert.equal(openAll.textContent, 'OPEN ALL PACKS');
+    assert.equal(skip.textContent, 'SKIP ALL');
 
     skip.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
-    assert.equal(completed.length, 2);
-    assert.deepEqual(completed[1].cardIndexes, [2]);
-    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true,
-      'skipping the final pack drains the reveal cleanly');
+
+    assert.equal(pendingRuns, 1, 'the ready Pending pack was materialized once');
+    assert.deepEqual(completed.map((release) => release.cardIndexes), [[1, 2], [3, 4]],
+      'the current and Pending pack releases were both consumed');
+    assert.equal(el.querySelector('[data-bind="rvl-card-zone"]').hidden, true,
+      'the Pending ticket hand was skipped without rendering');
+    assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
   });
 
   test('two queued sequences chain under one backdrop', async () => {
@@ -1558,8 +1960,8 @@ describe('reveal-overlay element', () => {
     await new Promise((r) => setTimeout(r, 230));
     assert.match(el.querySelector('[data-bind="rvl-title"]').textContent, /PACK 3\/3/,
       'intermediate pack auto-advanced and final pack remains visible');
-    assert.ok(zone.querySelector('.rvl-auto-pack-rip'),
-      'later auto-opened hands use the small in-surface ripping pack');
+    assert.equal(zone.querySelector('.rvl-auto-pack-rip'), null,
+      'one-ticket hands stay wrapperless even while OPEN ALL is advancing');
     assert.equal(el.querySelector('[data-bind="rvl-vessel"]').hidden, true,
       'open-all does not cut back to the full sealed-pack scene');
     assert.equal(zone.querySelector('.rvl-open-all-cta'), null, 'no open-all button on final pack');
@@ -1884,6 +2286,16 @@ describe('reveal-overlay element', () => {
     collect.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
     assert.equal(duplicateRuns, 0, 'the duplicate pending action never runs');
+    assert.equal(queueReveal({
+      kind: 'lootbox', title: 'DEGENERETTE LOOTBOX',
+      legs: [{ legType: 'dgnrs', amount: 7n * 10n ** 18n }],
+      lootboxRelease: {
+        address: '0x0000000000000000000000000000000000000001',
+        key: 'tx:0xdegbox',
+        lootboxIndex: 0,
+        transactionHash: '0xdegbox',
+      },
+    }), false, 'an indexer refresh after collection cannot reopen the settled box');
   });
 
   test('a settled Degenerette loss ends with WWXRP UNLUCKY instead of COLLECT', async () => {
@@ -2081,6 +2493,21 @@ describe('reveal-overlay element', () => {
     );
     assert.match(
       APP_CSS,
+      /\.rvl-gamepiece \.rvl-rq\.q-lock-color-hit\s*\{[^}]*background:\s*rgba\(34, 211, 238, 0\.24\)[^}]*box-shadow:\s*inset 0 0 0 2px rgba\(34, 211, 238, 0\.72\)/s,
+      'a matching locked color has its own provisional cyan state',
+    );
+    assert.match(
+      APP_CSS,
+      /\.rvl-gamepiece \.rvl-rq\.q-lock-symbol-hit\s*\{[^}]*background:\s*rgba\(96, 160, 255, 0\.36\)[^}]*box-shadow:\s*inset 0 0 0 2px rgba\(126, 176, 255, 0\.78\)/s,
+      'a matching locked symbol has a distinct scoring-blue state',
+    );
+    assert.match(
+      REVEAL_SRC,
+      /\? 'q-lock-color-hit' : 'q-lock-miss'[\s\S]*?\? 'q-lock-symbol-hit' : 'q-lock-miss'/s,
+      'live frames apply component-specific match classes',
+    );
+    assert.match(
+      APP_CSS,
       /\.rvl-gamepiece \.rvl-rq\.q-lock-miss\s*\{[^}]*background:\s*rgba\(251, 113, 133, 0\.17\)/s,
       'one locked miss keeps a lighter live-spin color',
     );
@@ -2198,6 +2625,51 @@ describe('reveal-overlay element', () => {
       cta.dispatchEvent({ type: 'click', stopPropagation() {} });
       await tick();
       assert.equal(backdrop.hidden, true, 'COLLECT closes the persistent result');
+    } finally {
+      window.matchMedia = previousMatchMedia;
+      if (previousRaf === undefined) delete globalThis.requestAnimationFrame;
+      else globalThis.requestAnimationFrame = previousRaf;
+    }
+  });
+
+  test('Degenerette hides SKIP TO RESULTS while AUTOSPIN is running', async () => {
+    const previousMatchMedia = window.matchMedia;
+    const previousRaf = globalThis.requestAnimationFrame;
+    window.matchMedia = () => ({ matches: false });
+    globalThis.requestAnimationFrame = (fn) => setTimeout(() => fn(performance.now()), 0);
+    try {
+      const el = instantiate();
+      queueReveal({
+        kind: 'degenerette',
+        currency: 1,
+        amountPerSpin: 50_000n * 10n ** 18n,
+        totalWager: 100_000n * 10n ** 18n,
+        totalPayout: 0n,
+        spins: [
+          { spinIndex: 0, playerTraits: 13, houseTraits: 77, score: 0, payout: 0n },
+          { spinIndex: 1, playerTraits: 13, houseTraits: 77, score: 0, payout: 0n },
+        ],
+      });
+      await tick();
+
+      const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
+      backdrop.dispatchEvent({ type: 'click' });
+      await tick();
+
+      const stage = el.querySelector('.rvl-dgn-stage');
+      const auto = stage.querySelector('.rvl-dgn-auto-cta');
+      const skip = stage.querySelector('.rvl-dgn-skip-cta');
+      assert.equal(skip.hidden, false, 'manual resolution still offers the shortcut');
+
+      auto.dispatchEvent({ type: 'click', stopPropagation() {} });
+      await tick();
+      assert.equal(auto.textContent, 'STOP AUTO');
+      assert.equal(skip.hidden, true, 'autospin owns the run without a redundant skip control');
+
+      el.querySelector('[data-bind="rvl-close"]').dispatchEvent({
+        type: 'click', stopPropagation() {},
+      });
+      await tick();
     } finally {
       window.matchMedia = previousMatchMedia;
       if (previousRaf === undefined) delete globalThis.requestAnimationFrame;

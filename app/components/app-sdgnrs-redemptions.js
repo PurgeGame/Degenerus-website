@@ -304,6 +304,7 @@ class AppSdgnrsRedemptions extends HTMLElement {
       const ready = row.state === 'ready';
       return {
         id: `sdgnrs-redemption:${_rowKey(row)}`,
+        dismissScope: this.#address,
         kind: 'lootbox',
         kindLabel: 'sDGNRS REDEMPTION',
         label: row.type === 'claim' ? 'Redemption result' : `Redemption box${period}`,

@@ -21,27 +21,33 @@ import { ETH_DIVISOR } from '../chain-config.js';
 const ADDR = '0x7Fc329000000000000000000000000000000oops'; // invalid (non-hex tail)
 const GOOD = '0x7fC3290000000000000000000000000000000E7a';
 
+// The share link points at the APP, not the marketing root: share-win.js's
+// APP_ORIGIN and affiliate.js's shareUrl builder independently agree on
+// https://degener.us/app/, so a shared ref lands the referee straight in the app
+// instead of one navigation short of it. These expectations predate that move.
+const APP_ORIGIN = 'https://degener.us/app/';
+
 describe('buildShareRefUrl', () => {
   test('valid address → lowercased bare-address ref URL', () => {
     assert.equal(
       buildShareRefUrl(GOOD),
-      'https://degener.us/?ref=0x7fc3290000000000000000000000000000000e7a',
+      `${APP_ORIGIN}?ref=0x7fc3290000000000000000000000000000000e7a`,
     );
   });
 
   test('malformed / missing address → plain origin (no ref)', () => {
-    assert.equal(buildShareRefUrl(ADDR), 'https://degener.us/');
-    assert.equal(buildShareRefUrl(null), 'https://degener.us/');
-    assert.equal(buildShareRefUrl('0x1234'), 'https://degener.us/');
+    assert.equal(buildShareRefUrl(ADDR), APP_ORIGIN);
+    assert.equal(buildShareRefUrl(null), APP_ORIGIN);
+    assert.equal(buildShareRefUrl('0x1234'), APP_ORIGIN);
   });
 
   test('registered code wins over the bare address', () => {
     const code = ethers.encodeBytes32String('SHARK');
-    assert.equal(buildShareRefUrl(GOOD, code), `https://degener.us/?ref=${code.toLowerCase()}`);
+    assert.equal(buildShareRefUrl(GOOD, code), `${APP_ORIGIN}?ref=${code.toLowerCase()}`);
     // Junk code → falls back to the address form.
     assert.equal(
       buildShareRefUrl(GOOD, 'SHARK'),
-      'https://degener.us/?ref=0x7fc3290000000000000000000000000000000e7a',
+      `${APP_ORIGIN}?ref=0x7fc3290000000000000000000000000000000e7a`,
     );
   });
 });
@@ -109,7 +115,10 @@ describe('extractWinLines', () => {
     assert.equal(lines[0].unit, 'ETH');
     assert.equal(lines[0].amount, '1.0000');
     assert.equal(lines[1].unit, 'FLIP');
-    assert.equal(lines[1].amount, '8.0000');
+    // FLIP/WWXRP go through displayToken (digits = 0 — whole units), not
+    // displayEth (digits = 4). The 4-dp spelling here predates that split; ETH
+    // above still asserts 1.0000 precisely because it takes the other path.
+    assert.equal(lines[1].amount, '8');
   });
 
   // A Degenerette bet total is a win the player played for — its own line.
@@ -130,7 +139,8 @@ describe('extractWinLines', () => {
       spinBoard: { total: 4n * 10n ** 18n, currency: 1, unit: 'FLIP' },
     });
     assert.equal(flip[0].unit, 'FLIP');
-    assert.equal(flip[0].amount, '4.0000');
+    // displayToken, whole units — see the lootbox case above.
+    assert.equal(flip[0].amount, '4');
   });
 
   test('degenerette: a losing or busted bet is not shareable', () => {

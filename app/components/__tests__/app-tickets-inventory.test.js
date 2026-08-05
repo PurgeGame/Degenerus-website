@@ -552,7 +552,9 @@ describe('app-tickets-inventory — cards + chart', () => {
       [4, 75, 131, 202],
     ], 'unfinished top row is dropped; later top/bottom rows stay with their own ticket');
 
-    _byLevel.set(17, byTraitPayload({ cards: raw }));
+    const payload = byTraitPayload({ cards: raw });
+    payload.totalEntries = 14;
+    _byLevel.set(17, payload);
     const el = mount();
     await flushMicrotasks();
     const rendered = el.querySelector('[data-bind="inv-cards"]')
@@ -566,6 +568,13 @@ describe('app-tickets-inventory — cards + chart', () => {
       assert.match(paths[2], /\/cards_/);
       assert.match(paths[3], /\/dice_/);
     }
+    const entries = el.querySelectorAll('.ticket-entry-card');
+    assert.equal(entries.length, 2, 'both real fractional entries get quarter-ticket graphics');
+    assert.deepEqual(entries.map((entry) => entry.getAttribute('data-quadrant')), ['0', '1']);
+    assert.ok(entries.every((entry) => !entry.querySelector('.ticket-card-center')),
+      'entry graphics deliberately omit the ticket center diamond');
+    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^3 cards · 2 entries/,
+      'the inventory headline exposes the exact remainder');
     el.disconnectedCallback();
   });
 
@@ -864,6 +873,43 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.equal(el.querySelectorAll('.ticket-card').length, 2,
       'the ticket display refreshes immediately after the pack is consumed');
     assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^2 cards/);
+    el.disconnectedCallback();
+  });
+
+  test('a rolled fractional entry stays behind its reveal, then appears as a quarter-ticket', async () => {
+    _byLevel.set(17, byTraitPayload({ cards: [] }));
+    await packWatchMod.recordPendingPack({
+      address: TEST_ADDR,
+      level: 17,
+      expectedTickets: 0.25,
+    });
+    const loose = cardAt(0, 'opened', [1]);
+    const payload = byTraitPayload({ cards: [loose] });
+    payload.totalEntries = 1;
+    _byLevel.set(17, payload);
+
+    const el = mount();
+    await flushMicrotasks();
+    assert.equal(el.querySelectorAll('.ticket-entry-card').length, 0,
+      'the rolled trait cannot leak before its pack is consumed');
+    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^0 cards/);
+
+    await packWatchMod.completePackReveal({
+      address: TEST_ADDR,
+      level: 17,
+      itemKeys: ['entry:0'],
+      entryCount: 1,
+    });
+    storeMod.update('app.lastDay', {
+      day: 67,
+      status: 'resolved',
+      level: 17,
+      roll1: { purchaseLevel: 17 },
+    });
+    await flushMicrotasks();
+
+    assert.equal(el.querySelectorAll('.ticket-entry-card').length, 1);
+    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^0 cards · 1 entry/);
     el.disconnectedCallback();
   });
 

@@ -555,16 +555,60 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(packWatch.pendingPacks().length, 0);
   });
 
-  test('rejects four rolled entries when their trait IDs collapse into duplicate quadrants', async () => {
+  test('a finalized five-entry award reveals one ticket plus one quarter-ticket entry', async () => {
+    _routes['/tickets/by-trait'] = byTrait([]);
+    await packWatch.recordPendingPack({
+      address: ADDR,
+      level: LEVEL,
+      expectedTickets: 1.25,
+    });
+    const loose = {
+      cardIndex: 1,
+      status: 'opened',
+      entries: [{ entryId: 4, traitId: 2, traitLabel: 'x' }],
+      source: 'jackpot',
+      purchaseBlock: '2',
+    };
+    _routes['/tickets/by-trait'] = {
+      address: ADDR.toLowerCase(),
+      level: LEVEL,
+      totalEntries: 5,
+      cards: [card(0, true), loose],
+    };
+
+    assert.equal(await packWatch.checkPendingPacks({ address: ADDR }), 1);
+    const [seq] = takeQueued();
+    assert.equal(seq.count, 1.25);
+    assert.equal(seq.tickets.length, 1);
+    assert.deepEqual(seq.entries, [{ traitId: 2 }]);
+    assert.equal(seq.packRelease.entryCount, 5);
+    assert.deepEqual(seq.packRelease.itemKeys, ['0', 'entry:4']);
+    assert.deepEqual([...packWatch.unopenedPackItemKeys({
+      address: ADDR,
+      level: LEVEL,
+      cards: [card(0, true), loose],
+    })], ['0', 'entry:4']);
+
+    await packWatch.completePackReveal(seq.packRelease);
+    assert.equal(packWatch.pendingPacks().length, 0,
+      'exact entry-count release retires a fractional pack cleanly');
+  });
+
+  test('duplicate-quadrant rolls reveal as truthful individual entries, never a malformed ticket', async () => {
     _routes['/tickets/by-trait'] = byTrait([card(0, false)]);
     await packWatch.recordPendingPack({ address: ADDR, level: LEVEL });
     const malformed = card(0, true);
     malformed.entries[3].traitId = malformed.entries[2].traitId + 1; // q2 twice; q3 absent
     _routes['/tickets/by-trait'] = byTrait([malformed]);
 
-    assert.equal(await packWatch.checkPendingPacks({ address: ADDR }), 0);
-    assert.equal(takeQueued().length, 0);
-    assert.equal(packWatch.pendingPacks().length, 1, 'wait for a corrected index response');
+    assert.equal(await packWatch.checkPendingPacks({ address: ADDR }), 1);
+    const [seq] = takeQueued();
+    assert.equal(seq.tickets.length, 0, 'duplicate quadrants can never masquerade as a whole ticket');
+    assert.deepEqual(seq.entries.map((entry) => entry.traitId),
+      malformed.entries.map((entry) => entry.traitId));
+    assert.equal(seq.count, 1, 'four independent entries retain one-ticket-equivalent accounting');
+    await packWatch.completePackReveal(seq.packRelease);
+    assert.equal(packWatch.pendingPacks().length, 0);
   });
 
   test('no record → no reveal, however many tickets have rolled', async () => {

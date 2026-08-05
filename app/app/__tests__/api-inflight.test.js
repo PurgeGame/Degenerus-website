@@ -14,7 +14,7 @@ globalThis.document = {
   addEventListener() {},
 };
 
-const api = await import('../../../beta/app/api.js');
+const api = await import('../api.js');
 
 after(() => {
   if (priorDocument === undefined) delete globalThis.document;

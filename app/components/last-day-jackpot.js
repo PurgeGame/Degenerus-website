@@ -21,7 +21,7 @@
 // table (the "Type/Win/Uniq/Spread" spam).
 
 import { subscribe, get, getViewedAddress } from '../app/store.js';
-import { formatEth, formatFlip } from '../../beta/viewer/utils.js';
+import { formatEth, formatFlip } from '../viewer/utils.js';
 import { CHAIN } from '../app/chain-config.js';
 // Phase 64 — foil-ticket matching: pure grading helpers + the indexer base URL
 // (API_BASE cross-import only, mirroring polling.js Pitfall 5 discipline).
@@ -30,7 +30,7 @@ import {
   FOIL_CLAIM_THRESHOLD,
   unpackWinSet,
 } from '../app/foil-match.js';
-import { API_BASE } from '../../beta/app/constants.js';
+import { API_BASE } from '../app/constants.js';
 // Reveal-engine wiring: the viewed player's jackpot winnings auto-play a
 // celebration sequence; a claimed foil match reveals its payout box-spin.
 import { queueReveal } from './reveal-overlay.js';
@@ -88,7 +88,7 @@ class LastDayJackpot extends HTMLElement {
   #pinnedLevel = null;
   #latestDaySeen = null;
   #lastPayload = null;
-  #daySync = null;       // direct GAME day; shared jackpot/coinflip availability gate
+  #daySync = null;       // direct GAME day; jackpot and coinflip expose independent lanes
   #hasNewDayAvailable = false; // Legacy banner fallback; normal flow auto-follows.
   #winners = [];
   // Phase 64 — foil strip state + panel bridge state.
@@ -144,20 +144,36 @@ class LastDayJackpot extends HTMLElement {
 
   #syncWarming() {
     return this.#syncAppliesToPinned() && (
-      this.#daySync?.ready !== true
+      this.#daySync?.jackpotReady !== true
       || Number(this.#lastPayload?.day) !== Number(this.#pinnedDay)
     );
+  }
+
+  #replayShowsPinnedDay(panel = this.#panel()) {
+    const daySelect = panel?.querySelector?.('[data-bind="day-select"]');
+    const replayDay = Number(daySelect?.value);
+    return Number.isInteger(replayDay)
+      && replayDay > 0
+      && replayDay === Number(this.#pinnedDay);
   }
 
   #setReplayWarming(warming) {
     const panel = this.#panel();
     if (!panel) return;
-    if (warming) {
+    // During the indexer handoff the replay panel can still be showing the
+    // previous resolved day. That board remains a real, playable draw (most
+    // importantly, its pending Bonus Roll), so the new-day blue/inert mask
+    // must not be painted over it. Apply the mask only after the target day is
+    // actually selected in replay-panel.
+    if (warming && this.#replayShowsPinnedDay(panel)) {
       panel.setAttribute?.('data-day-warming', '');
       panel.setAttribute?.('aria-busy', 'true');
     } else {
       panel.removeAttribute?.('data-day-warming');
-      panel.removeAttribute?.('aria-busy');
+      // replay-panel owns a second, narrower gate while its exact roll/bucket
+      // endpoints are loading. Do not clear that busy signal merely because
+      // the outer chain/indexer handoff has completed.
+      if (!panel.hasAttribute?.('data-day-loading')) panel.removeAttribute?.('aria-busy');
     }
   }
 
@@ -194,7 +210,10 @@ class LastDayJackpot extends HTMLElement {
       this.#primeChainDay(day);
     }
     if (Number(this.#pinnedDay) !== day || this.#manualReplayDay != null) return;
-    if (!sync.ready) {
+    // Coinflip normally resolves first, but it is an independent result. The
+    // jackpot becomes playable as soon as its own exact-day payload is ready;
+    // a slow or missing coinflip response must never keep this board inert.
+    if (!sync.jackpotReady) {
       this.#renderColdStart();
       this.#setReplayWarming(true);
       this.#syncReplayPanel();
@@ -547,7 +566,21 @@ class LastDayJackpot extends HTMLElement {
     const playerOk = addr ? this.#setSelectAndFire(playerSelect, addr) : false;
     this.#renderHistoryNav();
     const synced = dayOk && playerOk;
-    if (synced && !this.#syncWarming()) this.#setReplayWarming(false);
+    if (synced) {
+      const warming = this.#syncWarming();
+      this.#setReplayWarming(warming);
+      // Persistence belongs to the day currently mounted in replay-panel.
+      // Sending the incoming day's state while yesterday is still selected
+      // can reset that live board and strand its Bonus Roll.
+      if (this.#replayShowsPinnedDay(panel)
+        && typeof panel.setPersistedRevealState === 'function') {
+        const replayFresh = Number(this.#manualReplayDay) === Number(this.#pinnedDay);
+        panel.setPersistedRevealState(
+          (replayFresh || warming) ? false : this.#hasSpunPinnedDay(),
+          (replayFresh || warming) ? false : this.#hasCompletedPinnedDay(),
+        );
+      }
+    }
     return synced;
   }
 
@@ -691,20 +724,7 @@ class LastDayJackpot extends HTMLElement {
 
   #syncReplayPanel() {
     this.#wireDayPicker();
-    const panel = this.#panel();
     this.#setReplayWarming(this.#syncWarming());
-    // Tell the board whether this day is waiting before the async day/player
-    // selectors finish syncing. replay-panel can run its neutral slow reel
-    // without those values; delaying this signal left a newly-ready jackpot
-    // parked on four blank grey quadrants until the bridge completed.
-    if (panel && this.#pinnedDay != null
-      && typeof panel.setPersistedRevealState === 'function') {
-      const replayFresh = Number(this.#manualReplayDay) === Number(this.#pinnedDay);
-      panel.setPersistedRevealState(
-        replayFresh ? false : this.#hasSpunPinnedDay(),
-        replayFresh ? false : this.#hasCompletedPinnedDay(),
-      );
-    }
     if (this.#bridgeTimer != null) {
       try { clearInterval(this.#bridgeTimer); } catch { /* defensive */ }
       this.#bridgeTimer = null;
@@ -1231,15 +1251,23 @@ class LastDayJackpot extends HTMLElement {
 
     const exact = best.grade.faces.filter((face) => face === 2).length;
     const symbolOnly = best.grade.faces.filter((face) => face === 1).length;
-    const drawLabel = best.grade.drawKind === 1 ? 'BONUS DRAW' : 'MAIN DRAW';
+    const drawLabel = best.grade.drawKind === 1 ? 'BONUS JACKPOT' : 'MAIN JACKPOT';
+    const rewardFaces = FOIL_TIER_FACES[best.grade.score] ?? 0;
+    const rewardFacesText = Number(rewardFaces).toLocaleString('en-US');
     publishPendingActions(FOIL_MATCH_ACTION_SOURCE, [{
       id: `foil-match:${best.key}`,
+      dismissScope: player,
       kind: 'foil-match',
       kindLabel: 'FOIL TICKET MATCH',
-      label: `Day ${day} · Foil T${best.grade.score}`,
+      label: `T${best.grade.score} → ${rewardFacesText}-FACE BONUS`,
       shortLabel: `Claim T${best.grade.score}`,
-      detail: `${drawLabel} · ${exact} exact + ${symbolOnly} symbol`,
+      detail: `Day ${day} · ${drawLabel} · ${exact} exact + ${symbolOnly} symbol · Degenerette`,
       lineTraits: best.lineTraits,
+      winningTraits: best.winningTraits,
+      matchFaces: best.grade.faces,
+      drawKind: best.grade.drawKind,
+      score: best.grade.score,
+      rewardFaces,
       state: this.#foilClaimBusy ? 'busy' : 'ready',
       write: true,
       autoOpen: false,

@@ -44,6 +44,7 @@ import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS, ETH_DIVISOR } from './chain-config.js';
 import { getActingAddress } from './store.js';
+import { claimableFirstPayment } from './lootbox.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures verified against
@@ -60,6 +61,7 @@ const DEGENERETTE_ABI = [
   // later stale/not-ready rows are skipped independently.
   'function degeneretteResolve(address[] calldata players, uint64[] calldata betIds) external',
   'function degeneretteBetInfo(address player, uint64 betId) external view returns (uint256 packed)',
+  'function claimableWinningsOf(address player) external view returns (uint256)',
   'function playerActivityScore(address player) external view returns (uint256 scorePoints)',
   'error BatchAlreadyTaken()',
   'error NoWork()',
@@ -377,6 +379,7 @@ function _structuredRevertError(error, context) {
  *   customTicket?: number,
  *   heroQuadrant?: number,
  *   msgValueWei?: bigint | string | number,
+ *   preferClaimable?: boolean,
  *   player?: string,
  * }} args
  * @returns {Promise<{receipt: import('ethers').TransactionReceipt}>}
@@ -388,6 +391,7 @@ export async function placeBet({
   customTicket,
   heroQuadrant,
   msgValueWei,
+  preferClaimable = false,
   player,
 } = {}) {
   const buyer = player || getActingAddress();
@@ -427,16 +431,33 @@ export async function placeBet({
 
   const ct = customTicket == null ? 0 : Number(customTicket);
   const hq = heroQuadrant == null ? HERO_QUADRANT_DEFAULT : Number(heroQuadrant);
-  const value = BigInt(msgValueWei ?? 0n);
+  const totalBet = amount * BigInt(tc);
 
   const provider = getProvider();
   const signer = provider ? await provider.getSigner() : null;
+  const signerContract = signer ? _buildContract(signer) : null;
+  let payment = claimableFirstPayment(totalBet, 0n);
+  if (cur === DEGENERETTE_CURRENCY.ETH && preferClaimable && signerContract
+    && typeof signerContract.claimableWinningsOf === 'function') {
+    try {
+      payment = claimableFirstPayment(
+        totalBet,
+        await signerContract.claimableWinningsOf(buyer),
+      );
+    } catch (_e) {
+      // A quote failure must not strand the wager. Sending the full amount is
+      // the safe fallback; the static-call remains the authoritative gate.
+      payment = claimableFirstPayment(totalBet, 0n);
+    }
+  }
+  const value = cur === DEGENERETTE_CURRENCY.ETH
+    ? (preferClaimable ? payment.msgValueWei : BigInt(msgValueWei ?? totalBet))
+    : BigInt(msgValueWei ?? 0n);
 
   // Static-call gate (Phase 56 D-05) — runs only if a signer is available.
   if (signer) {
-    const c = _buildContract(signer);
     const sim = await requireStaticCall(
-      c,
+      signerContract,
       'placeDegeneretteBet',
       // The ETH lane is payable. Simulating it without the same value override
       // makes every otherwise-valid ETH bet revert in preflight even though
@@ -453,7 +474,7 @@ export async function placeBet({
     (s) => _buildContract(s).placeDegeneretteBet(buyer, cur, amount, tc, ct, hq, { value }),
     'Place degenerette bet',
   );
-  return { receipt };
+  return { receipt, payment: { ...payment, msgValueWei: value } };
 }
 
 // ---------------------------------------------------------------------------

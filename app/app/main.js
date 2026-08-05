@@ -18,7 +18,7 @@ import { start as startPolling, refreshForDayShift } from './polling.js';
 import { startDayRollover } from './day-rollover.js';
 import { initRouter, getViewedAddress } from './router.js';
 import { autoReconnect, hasInstalledWallet } from './wallet.js';
-import { subscribe, get, update } from './store.js';
+import { subscribe, get, getActingAddress, update } from './store.js';
 import { initProGate } from './pro-gate.js';
 import { initNavWallet } from './nav-wallet.js';
 import { initDiscordLink } from './discord-link.js';
@@ -30,6 +30,10 @@ import {
   refreshPackWatch,
 } from './pack-watch.js';
 import { startBingoWatch, refreshBingoWatch } from './bingo-watch.js';
+import {
+  startWhalePassClaims,
+  refreshWhalePassClaims,
+} from './whale-pass-claims.js';
 import { resetPresentationStateForDeployment } from './deployment-presentation-state.js';
 import { initButtonFeedback } from './button-feedback.js';
 import { mountJackpotCountdown } from './jackpot-countdown.js';
@@ -270,6 +274,14 @@ async function boot() {
   // (including permissionless keeper claims) become explicit prize reveals.
   startBingoWatch({ getAddress: () => get('connected.address') });
   subscribe('connected.address', () => refreshBingoWatch());
+  // Jackpot-won whale-pass halves are a deferred on-chain claim, not an
+  // indexed purchase. Read GAME.whalePassClaimAmount directly and publish a
+  // write into the same Pending tray whenever the current acting player has
+  // any. Mode/address subscriptions keep operator and read-only views honest.
+  startWhalePassClaims({ getAddress: () => getActingAddress() });
+  subscribe('connected.address', () => refreshWhalePassClaims());
+  subscribe('viewing.address', () => refreshWhalePassClaims());
+  subscribe('ui.mode', () => refreshWhalePassClaims());
   // 3. Polling starts with the resolved viewing target (?as= OR connected OR
   //    null). Store subscriptions fire immediately, so startup and a connected
   //    self-view used to restart the complete five-poller stack 2–3 times in
@@ -302,14 +314,15 @@ async function boot() {
   });
   // GAME.currentDayView is the clock for both draw surfaces. At the exact
   // boundary, promptly reconcile the richer indexed feeds and player-owned
-  // reveals; jackpot and coinflip consumers unlock from the same app.daySync
-  // transition once both exact-day results are present.
+  // reveals. Jackpot and coinflip consumers each unlock from their own exact-
+  // day lane; app.daySync.ready only reports when the whole handoff is done.
   startDayRollover({
     onRefreshNeeded: ({ dayChanged, readyChanged }) => {
       void refreshForDayShift({ includePlayer: dayChanged || readyChanged });
       if (dayChanged || readyChanged) {
         refreshPackWatch();
         refreshBingoWatch();
+        refreshWhalePassClaims();
       }
     },
   });

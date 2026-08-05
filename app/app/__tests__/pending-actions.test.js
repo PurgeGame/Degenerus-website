@@ -9,11 +9,25 @@ import {
   getPendingActions,
   pendingSourceHasPublished,
   subscribePendingActions,
+  PENDING_DISMISSALS_STORAGE_KEY,
+  __setPendingDismissStorageForTest,
   __resetPendingActionsForTest,
 } from '../pending-actions.js';
 
+const dismissalStorage = {
+  values: new Map(),
+  getItem(key) { return this.values.get(String(key)) ?? null; },
+  setItem(key, value) { this.values.set(String(key), String(value)); },
+  removeItem(key) { this.values.delete(String(key)); },
+  clear() { this.values.clear(); },
+};
+
 describe('pending-actions registry', () => {
-  beforeEach(() => __resetPendingActionsForTest());
+  beforeEach(() => {
+    dismissalStorage.clear();
+    __setPendingDismissStorageForTest(dismissalStorage);
+    __resetPendingActionsForTest();
+  });
 
   test('providers replace only their own rows and stay in protocol chronology across states', () => {
     publishPendingActions('boxes', [
@@ -97,5 +111,42 @@ describe('pending-actions registry', () => {
     ]);
     assert.deepEqual(getPendingActions().map((item) => item.id), ['box:2'],
       'cleared rows stay gone while genuinely new ids remain visible');
+  });
+
+  test('CLEAR survives a registry reload and is isolated to the viewed wallet', async () => {
+    publishPendingActions('boxes', [{
+      id: 'lootbox:77', dismissScope: '0xaaa', label: 'Box', state: 'ready', run() {},
+    }]);
+    await dismissPendingActionItems();
+
+    const saved = JSON.parse(dismissalStorage.getItem(PENDING_DISMISSALS_STORAGE_KEY));
+    assert.equal(saved.version, 1);
+    assert.equal(saved.entries.length, 1, 'the browser receives one durable tombstone');
+
+    // Model a full page reload: publishers/listeners and the in-memory map are
+    // gone, but the browser storage entry remains.
+    __resetPendingActionsForTest({ preserveDismissedStorage: true });
+    publishPendingActions('boxes', [{
+      id: 'lootbox:77', dismissScope: '0xaaa', label: 'Same box after reload', state: 'ready', run() {},
+    }]);
+    assert.deepEqual(getPendingActions(), [], 'the cleared row cannot be republished after reload');
+
+    publishPendingActions('boxes', [{
+      id: 'lootbox:77', dismissScope: '0xbbb', label: 'Another wallet box', state: 'ready', run() {},
+    }]);
+    assert.equal(getPendingActions().length, 1,
+      'one wallet clearing a logical id does not hide another wallet\'s reward');
+  });
+
+  test('storage failures degrade to a durable-for-session tombstone', async () => {
+    __setPendingDismissStorageForTest({
+      getItem() { throw new Error('blocked'); },
+      setItem() { throw new Error('blocked'); },
+      removeItem() {},
+    });
+    publishPendingActions('x', [{ id: 'same', label: 'Same', state: 'ready', run() {} }]);
+    await dismissPendingActionItems();
+    publishPendingActions('x', [{ id: 'same', label: 'Same again', state: 'ready', run() {} }]);
+    assert.deepEqual(getPendingActions(), []);
   });
 });

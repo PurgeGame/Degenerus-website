@@ -42,7 +42,7 @@
 import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
 import { displayEth, displayToken, displayTokenSnapped } from '../app/scaling.js';
 import { get, subscribe, getViewedAddress, getActingAddress } from '../app/store.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 import {
   placeBet,
   canResolveBets,
@@ -59,6 +59,7 @@ import {
   scaledTicketPriceWei,
   canRequestLootboxRng,
   requestLootboxRng,
+  readPurchaseFundingPriority,
 } from '../app/lootbox.js';
 import {
   enrichLootboxBoonLegs,
@@ -658,6 +659,18 @@ export function degeneretteLootboxRelease(player, legs, fallbackTransactionHash 
     lootboxIndex: index,
     transactionHash: transactionHash || null,
   };
+}
+
+/**
+ * Stable fallback while a just-mined API projection is missing its settlement
+ * transaction metadata. One Degenerette bet can award at most one direct
+ * lootbox presentation, so player + bet id collapses the receipt/indexer race
+ * without merging rewards from different bets.
+ */
+export function degeneretteLootboxPresentationId(player, betId) {
+  const address = String(player || '').toLowerCase();
+  if (!address || betId == null || String(betId) === '') return null;
+  return `degenerette-lootbox:${address}:${String(betId)}`;
 }
 
 /**
@@ -2300,6 +2313,7 @@ class AppDegenerettePanel extends HTMLElement {
             : this.#state;
     publishPendingActions(PENDING_SOURCE, [{
       id: `degenerette:${String(this.#currentBetId)}`,
+      dismissScope: this.#pendingAddress,
       kind: 'degenerette',
       label: `${spins} spin${spins === 1 ? '' : 's'}`,
       ticketPacked: this.#currentTicket == null ? null : String(this.#currentTicket),
@@ -2428,10 +2442,11 @@ class AppDegenerettePanel extends HTMLElement {
       // (right-click / "Set as Hero"). Custom ticket packs from picker state.
       const heroQuadrant = this.#dgnHero;
       const customTicket = this.#packCustomTicket();
-      // ETH-paid bets attach msg.value; FLIP-paid bets transfer via burn (no msg.value).
-      const msgValueWei = currency === 0
-        ? amountPerTicketWei * BigInt(ticketCount)
-        : 0n;
+      // Degenerette shares the purchase panel's funding choice. The write
+      // helper re-reads raw claimable on-chain and sends only the wallet
+      // shortfall; token wagers never enter the ETH funding waterfall.
+      const preferClaimable = currency === 0
+        && readPurchaseFundingPriority() === 'claimable';
 
       const { receipt } = await placeBet({
         currency,
@@ -2439,7 +2454,7 @@ class AppDegenerettePanel extends HTMLElement {
         ticketCount,
         customTicket,
         heroQuadrant,
-        msgValueWei,
+        preferClaimable,
       });
 
       // Parse BetPlaced from the real ABI. The canonical parser also accepts
@@ -2813,6 +2828,10 @@ class AppDegenerettePanel extends HTMLElement {
       directBoxLegs,
       resolved?.transactionHash,
     );
+    const lootboxPresentationId = degeneretteLootboxPresentationId(
+      resolvedPlayer,
+      resolvedBetId,
+    );
     if (outcomeEl) outcomeEl.textContent = '';
     const completesActiveSlot = this.#currentBetId == null
       || resolvedBetId == null
@@ -2843,7 +2862,9 @@ class AppDegenerettePanel extends HTMLElement {
         // OPEN LOOTBOX on the finished Degenerette board arms this already
         // settled sequence's autoStart path. It plays the case animation once,
         // then reveals the emitted rewards without another click or wallet tx.
-        ...(lootboxRelease ? { lootboxRelease } : {}),
+        ...(lootboxRelease
+          ? { lootboxRelease }
+          : lootboxPresentationId ? { presentationId: lootboxPresentationId } : {}),
       });
     }
     // The overlay has accepted the complete audit trail. Release this active

@@ -115,6 +115,30 @@ export const GAME_ABI = [
 export const MINT_PAYMENT_KIND_DIRECT_ETH = 0;
 export const MINT_PAYMENT_KIND_CLAIMABLE = 1;
 export const MINT_PAYMENT_KIND_COMBINED = 2;
+export const PURCHASE_FUNDING_PRIORITY_KEY = `purchase-funding-priority:${CHAIN.id}`;
+let _purchaseFundingPriorityMemory = 'claimable';
+
+/** Shared ETH funding preference used by purchases and Degenerette wagers. */
+export function readPurchaseFundingPriority() {
+  try {
+    _purchaseFundingPriorityMemory = localStorage.getItem(PURCHASE_FUNDING_PRIORITY_KEY) === 'wallet'
+      ? 'wallet'
+      : 'claimable';
+    return _purchaseFundingPriorityMemory;
+  } catch (_e) {
+    return _purchaseFundingPriorityMemory;
+  }
+}
+
+export function writePurchaseFundingPriority(priority) {
+  _purchaseFundingPriorityMemory = priority === 'wallet' ? 'wallet' : 'claimable';
+  try {
+    localStorage.setItem(
+      PURCHASE_FUNDING_PRIORITY_KEY,
+      _purchaseFundingPriorityMemory,
+    );
+  } catch (_e) { /* private mode: shared in-memory choice remains authoritative */ }
+}
 /** Foil pack = ten ticket prices at the target level (DegenerusGameStorage.sol:2552). */
 export const FOIL_PACK_TICKETS = 10n;
 /** Lower bound on lootBoxAmount in ETH purchases (LOOTBOX_MIN = 0.01 ether). */

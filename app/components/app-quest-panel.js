@@ -41,7 +41,7 @@
 
 import { get, update, subscribe, getViewedAddress } from '../app/store.js';
 import { ETH_DIVISOR } from '../app/chain-config.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { LOOTBOX_MIN_WEI, scaledTicketPriceWei } from '../app/lootbox.js';
 import { activeTicketLevel } from '../app/active-level.js';

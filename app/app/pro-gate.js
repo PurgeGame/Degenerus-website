@@ -19,7 +19,7 @@ import { get, update, subscribe } from './store.js';
 // Pitfall 5 pattern (mirrors polling.js): cross-import ONLY the API_BASE
 // constant — beta/app/api.js has a module-level document side effect and
 // cannot be imported headless (node:test).
-import { API_BASE } from '../../beta/app/constants.js';
+import { API_BASE } from './constants.js';
 
 export const PRO_SCORE_THRESHOLD_BPS = 8000; // 80 points (10000 bps = 1.00 = 100 pts)
 

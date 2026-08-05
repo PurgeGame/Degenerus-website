@@ -14,6 +14,7 @@ import {
   DGN_QUADRANTS, DGN_SYMBOLS, DGN_CARD_IDX, DGN_COLORS,
   dgnBadgePath, dgnSymbolPath, dgnUnpackTicket, dgnComputeMatches,
   dgnScoringMatchStates, dgnTicketAccent, applyDgnTicketAccent,
+  dgnPartitionTicketEntries,
 } from '../dgn-traits.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -92,6 +93,27 @@ describe('dgnUnpackTicket', () => {
   });
   test('garbage input → zeroed traits, no throw', () => {
     assert.deepEqual(dgnUnpackTicket('not-a-number')[0], { sym: 0, col: 0 });
+  });
+});
+
+describe('dgnPartitionTicketEntries', () => {
+  test('keeps fractional traits as entry records while repairing later whole tickets', () => {
+    const cards = [
+      { cardIndex: 0, entries: [1, 72, 2, 73]
+        .map((traitId, entryId) => ({ traitId, entryId })) },
+      { cardIndex: 1, entries: [130, 201, 4, 75]
+        .map((traitId, offset) => ({ traitId, entryId: offset + 4 })) },
+      { cardIndex: 2, entries: [131, 202]
+        .map((traitId, offset) => ({ traitId, entryId: offset + 8 })) },
+    ];
+
+    const partitioned = dgnPartitionTicketEntries(cards);
+    assert.deepEqual(partitioned.tickets.map((ticket) => ticket.traitIds), [
+      [2, 73, 130, 201],
+      [4, 75, 131, 202],
+    ]);
+    assert.deepEqual(partitioned.entries.map((entry) => entry.traitId), [1, 72]);
+    assert.deepEqual(partitioned.entries.map((entry) => entry.key), ['entry:0', 'entry:1']);
   });
 });
 

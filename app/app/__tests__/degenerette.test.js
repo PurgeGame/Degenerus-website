@@ -51,6 +51,7 @@ function makeFakeContract(opts = {}) {
     resolveDegeneretteBets: [],
     degeneretteResolve: [],
     degeneretteBetInfo: [],
+    claimableWinningsOf: [],
   };
   const order = [];
   const staticCallStub = (methodName) => async (..._args) => {
@@ -99,6 +100,11 @@ function makeFakeContract(opts = {}) {
     degeneretteBetInfo: async (...args) => {
       calls.degeneretteBetInfo.push(args);
       return opts.betInfo ?? 1n;
+    },
+    claimableWinningsOf: async (...args) => {
+      calls.claimableWinningsOf.push(args);
+      if (opts.claimableReadError) throw opts.claimableReadError;
+      return opts.claimableWinnings ?? 0n;
     },
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
@@ -198,6 +204,72 @@ describe('Plan 62-03: placeBet', () => {
     // 7th arg = overrides object containing value
     assert.ok(args[6] && typeof args[6] === 'object', 'overrides object passed');
     assert.equal(args[6].value, msgValueWei, 'msg.value matches msgValueWei');
+  });
+
+  test('claimable-first ETH wager preserves the sentinel and sends only the wallet shortfall', async () => {
+    const amountPerTicket = 10n ** 16n;
+    const ticketCount = 3;
+    const totalWager = amountPerTicket * BigInt(ticketCount);
+    lastFakeContract = makeFakeContract({
+      claimableWinnings: (amountPerTicket * 2n) + 1n,
+    });
+    degeneretteMod.__setContractFactoryForTest(() => lastFakeContract);
+
+    const { payment } = await degeneretteMod.placeBet({
+      currency: 0,
+      amountPerTicketWei: amountPerTicket,
+      ticketCount,
+      customTicket: 0,
+      heroQuadrant: 0,
+      preferClaimable: true,
+    });
+
+    assert.deepEqual(lastFakeContract._calls.claimableWinningsOf, [[CONNECTED]],
+      'the click-time split reads the acting player from chain');
+    const [args] = lastFakeContract._calls.placeDegeneretteBet;
+    assert.equal(args[6].value, amountPerTicket,
+      'two spins come from claimable and the final spin comes from wallet ETH');
+    assert.equal(payment.claimableUsedWei, amountPerTicket * 2n);
+    assert.equal(payment.msgValueWei, amountPerTicket);
+    assert.equal(payment.totalCostWei, totalWager);
+  });
+
+  test('wallet-first ETH wager does not read or consume available claimable', async () => {
+    const amountPerTicket = 10n ** 16n;
+    lastFakeContract = makeFakeContract({ claimableWinnings: amountPerTicket + 1n });
+    degeneretteMod.__setContractFactoryForTest(() => lastFakeContract);
+
+    const { payment } = await degeneretteMod.placeBet({
+      currency: 0,
+      amountPerTicketWei: amountPerTicket,
+      ticketCount: 2,
+      customTicket: 0,
+      heroQuadrant: 0,
+      preferClaimable: false,
+    });
+
+    assert.deepEqual(lastFakeContract._calls.claimableWinningsOf, []);
+    const [args] = lastFakeContract._calls.placeDegeneretteBet;
+    assert.equal(args[6].value, amountPerTicket * 2n);
+    assert.equal(payment.claimableUsedWei, 0n);
+  });
+
+  test('claimable read failure safely falls back to the full wallet wager', async () => {
+    const amountPerTicket = 10n ** 16n;
+    lastFakeContract = makeFakeContract({ claimableReadError: new Error('rpc unavailable') });
+    degeneretteMod.__setContractFactoryForTest(() => lastFakeContract);
+
+    await degeneretteMod.placeBet({
+      currency: 0,
+      amountPerTicketWei: amountPerTicket,
+      ticketCount: 2,
+      customTicket: 0,
+      heroQuadrant: 0,
+      preferClaimable: true,
+    });
+
+    const [args] = lastFakeContract._calls.placeDegeneretteBet;
+    assert.equal(args[6].value, amountPerTicket * 2n);
   });
 
   test('rejects spinCount < 1', async () => {

@@ -20,8 +20,8 @@
 //   1. Custom element registers idempotently under 'app-boons-panel'.
 //   2. Panel renders shell with nested <boons-panel> (verbatim mount).
 //   3. Source contains the literal verbatim cross-import path
-//      `from '../../beta/components/boons-panel.js'`.
-//   4. Source imports `update` from `'../../beta/app/store.js'` (bridge target).
+//      `from '../boons-panel.js'`.
+//   4. Source imports `update` from `'../../app/reactive-store.js'` (bridge target).
 //   5. On mount + viewed-address change, wrapper writes to /beta/ store
 //      `player.boons` path with fetched boons array.
 //   6. On mount, wrapper writes `replay.day` to /beta/ store.
@@ -333,7 +333,7 @@ async function settle(loops = 30) {
 // ---------------------------------------------------------------------------
 
 import * as appStoreMod from '../../app/store.js';
-import * as betaStoreMod from '../../../beta/app/store.js';
+import * as betaStoreMod from '../../app/reactive-store.js';
 
 // ---------------------------------------------------------------------------
 // Read panel source for grep-based assertions (verbatim cross-import path,
@@ -434,26 +434,30 @@ describe('Plan 62-05: <app-boons-panel> bridge wrapper (verbatim /beta/ cross-im
     );
   });
 
-  test('Panel cross-imports /beta/components/boons-panel.js VERBATIM (CF-09 source-grep)', () => {
-    // The literal verbatim cross-import path. CF-09 LOCKED — /beta/ source
-    // NEVER edited; this import is the ONLY mechanism by which <boons-panel>
-    // becomes available in /app/. Accept either `import '...'` (side-effect
-    // form — recommended per RESEARCH R9 OPTION B recipe) OR
-    // `import X from '...'` (named/default form).
+  test('Panel imports the sibling boons-panel.js (CF-09 successor source-grep)', () => {
+    // CF-09 originally LOCKED this as a verbatim cross-import from /beta/, on the rule
+    // that /beta/ source was never edited. /beta/ was absorbed into /app/ 2026-08-05
+    // when /app/ became the definitive UI, so the path is now a sibling — but the
+    // INVARIANT is unchanged and still worth pinning: <boons-panel> becomes available
+    // in /app/ ONLY through this import, and the panel is not reimplemented here.
+    // Accept side-effect form (`import '...'`) or named/default form.
     assert.match(
       PANEL_SRC,
-      /import\s+(?:[^;]*\s+from\s+)?['"]\.\.\/\.\.\/beta\/components\/boons-panel\.js['"]/,
-      "panel source imports '../../beta/components/boons-panel.js' (side-effect or named/default form)",
+      /import\s+(?:[^;]*\s+from\s+)?['"]\.\/boons-panel\.js['"]/,
+      "panel source imports './boons-panel.js' (side-effect or named/default form)",
     );
   });
 
-  test('Panel imports `update` from /beta/app/store.js (bridge target — RESEARCH R9)', () => {
-    // RESEARCH R9 OPTION B: bridge writes go to /beta/ store, NOT /app/ store.
-    // The wrapper must import the /beta/ store's update() function.
+  test('Panel imports `update` from the reactive store (bridge target — RESEARCH R9)', () => {
+    // RESEARCH R9 OPTION B: bridge writes go to the store <boons-panel> subscribes to,
+    // NOT /app/'s own store. That store came from /beta/app/store.js and was absorbed as
+    // app/app/reactive-store.js 2026-08-05 — renamed because /app/ already had a
+    // DIFFERENT store.js. The two are still separate stores on purpose; pointing this
+    // import at '../app/store.js' would silently break the bridge.
     assert.match(
       PANEL_SRC,
-      /import\s*\{[^}]*update[^}]*\}\s*from\s*['"]\.\.\/\.\.\/beta\/app\/store\.js['"]/,
-      "panel source imports `update` from '../../beta/app/store.js'",
+      /import\s*\{[^}]*update[^}]*\}\s*from\s*['"]\.\.\/app\/reactive-store\.js['"]/,
+      "panel source imports `update` from '../app/reactive-store.js'",
     );
   });
 

@@ -32,7 +32,7 @@ import { displayEth } from '../app/scaling.js';
 import { compactUiError } from '../app/ui-error.js';
 import { get, getActingAddress, subscribe } from '../app/store.js';
 import { getProvider } from '../app/contracts.js';
-import { fetchJSON } from '../../beta/app/api.js';
+import { fetchJSON } from '../app/api.js';
 // Eager import — triggers Phase 60's reason-map registrations as a side-effect
 // (GameOverPossible / AfKingLockActive / NotApproved). decimator.js is a thin
 // re-export of lootbox.js's purchaseEth + purchaseCoin per Plan 62-01 D-01.
@@ -54,6 +54,8 @@ import {
   // both the quote and the call go through these (see lootbox.js UNITS note).
   // claimableFirstPayment mirrors the click-time funding split for the bonus preview.
   ticketCostFromTickets, ENTRIES_PER_TICKET, claimableFirstPayment,
+  readPurchaseFundingPriority as _readFundingPriority,
+  writePurchaseFundingPriority as _writeFundingPriority,
 } from '../app/lootbox.js';
 // Reveal plumbing: ticket purchases queue a pack-opening reveal; lootbox legs
 // found in the BUY receipt itself (afking idx-0 auto-opens) reveal instantly.
@@ -72,7 +74,7 @@ import {
   probeRedeemFlipWindow,
   flipCostFromTickets,
 } from '../app/claims.js';
-import { formatFlip } from '../../beta/viewer/utils.js';
+import { formatFlip } from '../viewer/utils.js';
 import { queueReveal } from './reveal-overlay.js';
 import { updateBalanceDisplay, resetBalanceDisplay } from '../app/balance-countup.js';
 // Ticket reveals are deferred until the traits roll — see app/app/pack-watch.js.
@@ -94,18 +96,6 @@ function _setIntervalUnref(fn, ms) {
 const POLL_INTERVAL_MS = 30_000;       // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 const POST_CONFIRM_REFETCH_MS = 250;   // CF-06 — 250ms debounced refetch on tx confirm.
 const ERROR_AUTO_CLEAR_MS = 10_000;    // 10s — mirrors Phase 61 D-05 pattern.
-const FUNDING_PRIORITY_KEY = `purchase-funding-priority:${CHAIN.id}`;
-
-function _readFundingPriority() {
-  try { return localStorage.getItem(FUNDING_PRIORITY_KEY) === 'wallet' ? 'wallet' : 'claimable'; }
-  catch (_e) { return 'claimable'; }
-}
-
-function _writeFundingPriority(priority) {
-  try { localStorage.setItem(FUNDING_PRIORITY_KEY, priority === 'wallet' ? 'wallet' : 'claimable'); }
-  catch (_e) { /* private mode: keep the in-memory choice */ }
-}
-
 // Purchase quotes are controls, not accounting tables: fixed-width values such
 // as "0.0400" add noise and can make an input step look more precise than it
 // is. Keep displayEth's chain scaling/precision, then trim only fractional zeroes.

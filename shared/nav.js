@@ -355,18 +355,11 @@
 
     var pages = config.pages || [
       { key: 'app', label: 'Play', href: '/app/' },
-      { key: 'beta', label: 'Beta', href: '/beta/' },
       { key: 'degenerette', label: 'Degenerette', href: '/degenerette/' },
       { key: 'whitepaper', label: 'Whitepaper', href: '/whitepaper/' },
       { key: 'theory', label: 'Game Theory', href: '/theory/' },
-      { key: 'viewer', label: 'Viewer', href: '/beta/viewer.html' },
+      { key: 'viewer', label: 'Viewer', href: '/app/viewer.html' },
     ];
-    // Phase 55 D-08 — localhost-conditional Control link (T-14: hidden on prod deploys)
-    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-      pages.push({ key: 'control', label: 'Control', href: '/control/' });
-      pages.push({ key: 'lootbox-feed', label: 'Lootboxes', href: '/lootbox-feed/' });
-      pages.push({ key: 'degenerette-feed', label: 'D-Feed', href: '/degenerette-feed/' });
-    }
 
     // Left side
     var left = document.createElement('div');

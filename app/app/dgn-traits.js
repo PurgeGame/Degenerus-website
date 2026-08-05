@@ -169,38 +169,70 @@ export function dgnTraitIdsToQuadrants(traitIds) {
 }
 
 /**
- * Reconstruct whole tickets from a chronological `/tickets/by-trait` card
- * payload.  The API's four-entry buckets can straddle two independent
- * generation calls when the first call ends on a fractional ticket.  Quadrant
- * bits remain authoritative, so a Q0 restart safely identifies that boundary.
+ * Partition a chronological `/tickets/by-trait` payload into whole tickets and
+ * standalone quarter-ticket entries. The API's four-entry buckets can straddle
+ * independent generation calls when the first call ends fractionally.
+ * Quadrant bits remain authoritative, so a Q0 restart identifies that boundary
+ * without throwing away the unfinished, economically real entries.
  *
  * Each returned record includes a stable key. Ordinary aligned API cards keep
  * their numeric cardIndex for backward-compatible reveal tracking; repaired
  * tickets spanning buckets use their constituent entry IDs.
  */
-export function dgnReconstructTicketRecords(cards) {
+export function dgnPartitionTicketEntries(cards) {
   const orderedCards = Array.isArray(cards) ? [...cards] : [];
   orderedCards.sort((a, b) => Number(a?.cardIndex ?? 0) - Number(b?.cardIndex ?? 0));
 
-  const complete = [];
+  const tickets = [];
+  const entries = [];
   let current = [];
+  const looseKey = (row, ordinal) => {
+    const entryId = Number(row?.entryId);
+    if (Number.isFinite(entryId)) return `entry:${entryId}`;
+    return `entry-card:${String(row?.rawCardIndex ?? 'unknown')}:${ordinal}:${row.traitId}`;
+  };
+  const flushLoose = () => {
+    for (const row of current) {
+      entries.push({
+        traitId: row.traitId,
+        entryId: row.entryId,
+        cardIndex: row.rawCardIndex,
+        key: looseKey(row, entries.length),
+      });
+    }
+    current = [];
+  };
+
   for (const card of orderedCards) {
-    const entries = Array.isArray(card?.entries) ? [...card.entries] : [];
-    entries.sort((a, b) => Number(a?.entryId ?? 0) - Number(b?.entryId ?? 0));
-    for (const entry of entries) {
+    const cardEntries = Array.isArray(card?.entries) ? [...card.entries] : [];
+    cardEntries.sort((a, b) => Number(a?.entryId ?? 0) - Number(b?.entryId ?? 0));
+    for (const entry of cardEntries) {
       const tid = Number(entry?.traitId);
       if (!Number.isInteger(tid) || tid < 0 || tid > 255) {
-        current = [];
+        flushLoose();
         continue;
       }
       const { q } = dgnTraitIdToQSC(tid);
 
       // A new Q0 before Q3 is a fresh generation call. Its predecessor was a
       // legitimate fractional ticket, not the top half of this one.
-      if (q === 0 && current.length > 0) current = [];
+      if (q === 0 && current.length > 0) flushLoose();
       if (q !== current.length) {
-        current = [];
-        if (q !== 0) continue;
+        flushLoose();
+        if (q !== 0) {
+          const row = {
+            traitId: tid,
+            entryId: entry?.entryId,
+            rawCardIndex: card?.cardIndex,
+          };
+          entries.push({
+            traitId: row.traitId,
+            entryId: row.entryId,
+            cardIndex: row.rawCardIndex,
+            key: looseKey(row, entries.length),
+          });
+          continue;
+        }
       }
       current.push({
         traitId: tid,
@@ -213,18 +245,28 @@ export function dgnReconstructTicketRecords(cards) {
       const rawCardIndex = rawIndexes.size === 1 ? current[0].rawCardIndex : null;
       const entryIds = current.map((row) => row.entryId);
       const hasEntryIds = entryIds.every((id) => id != null && Number.isFinite(Number(id)));
-      complete.push({
+      tickets.push({
         traitIds: current.map((row) => row.traitId),
         key: rawCardIndex != null
           ? String(rawCardIndex)
           : hasEntryIds
             ? `entries:${entryIds.map(Number).join('.')}`
-            : `traits:${current.map((row) => row.traitId).join('.')}:${complete.length}`,
+            : `traits:${current.map((row) => row.traitId).join('.')}:${tickets.length}`,
+        entryIds,
+        cardIndexes: [...new Set(current
+          .map((row) => Number(row.rawCardIndex))
+          .filter(Number.isFinite))],
       });
       current = [];
     }
   }
-  return complete;
+  flushLoose();
+  return { tickets, entries };
+}
+
+/** Complete four-quadrant tickets, retained as the original public projection. */
+export function dgnReconstructTicketRecords(cards) {
+  return dgnPartitionTicketEntries(cards).tickets;
 }
 
 /** Canonical Q0..Q3 trait arrays for every reconstructed whole ticket. */

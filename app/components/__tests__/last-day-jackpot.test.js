@@ -863,25 +863,27 @@ describe('new-day auto-follow', () => {
     assert.equal(cta.hidden, true, 'day 6 starts with fresh board/flip gates');
   });
 
-  test('direct day shift hides yesterday until jackpot and coinflip are both day-matched', async () => {
+  test('direct day shift leaves yesterday playable until the new jackpot day is mounted', async () => {
     const connected = '0xab12000000000000000000000000000000000000';
     storeMod.update('connected.address', connected);
     const replay = makeFakeElement('replay-panel');
     const daySelect = makeFakeElement('select');
     daySelect.attributes['data-bind'] = 'day-select';
-    daySelect.options = [{ value: '5' }, { value: '6' }];
+    daySelect.options = [{ value: '5' }];
     daySelect.value = '5';
     const playerSelect = makeFakeElement('select');
     playerSelect.attributes['data-bind'] = 'player-select';
     playerSelect.options = [{ value: connected }];
     playerSelect.value = connected;
     replay.append(daySelect, playerSelect);
-    replay.setPersistedRevealState = () => {};
+    const persisted = [];
+    replay.setPersistedRevealState = (...state) => persisted.push(state);
     _docBody.appendChild(replay);
 
     const el = instantiate();
     storeMod.update('app.lastDay', DAY5);
     await flushMicrotasks();
+    const priorPersistenceCalls = persisted.length;
     storeMod.update('app.daySync', {
       day: 6, jackpotReady: false, coinflipReady: false, ready: false,
       phase: 'waiting-both', coinflipResult: null,
@@ -889,23 +891,29 @@ describe('new-day auto-follow', () => {
     await flushMicrotasks();
 
     assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 6/);
-    assert.equal(replay.getAttribute('data-day-warming'), '',
-      'the old scratch board is inert as soon as GAME changes day');
+    assert.equal(daySelect.value, '5', 'the last resolved draw remains mounted');
+    assert.equal(replay.getAttribute('data-day-warming'), null,
+      'the old scratch board keeps its result colors and pointer events');
+    assert.equal(persisted.length, priorPersistenceCalls,
+      'incoming-day persistence cannot reset the prior draw or its bonus button');
 
+    daySelect.options.push({ value: '6' });
     storeMod.update('app.lastDay', DAY6);
+    await flushMicrotasks();
+    assert.equal(daySelect.value, '6');
+    assert.equal(replay.getAttribute('data-day-warming'), '',
+      'the warming mask applies once the incoming day is actually mounted');
+
     storeMod.update('app.daySync', {
-      day: 6, jackpotDay: 6, coinflipDay: 6,
-      jackpotReady: true, coinflipReady: true, ready: true,
-      phase: 'synced',
-      coinflipResult: {
-        day: 6, win: false, rewardPercent: 0, resolved: true, source: 'chain',
-      },
+      day: 6, jackpotDay: 6, coinflipDay: null,
+      jackpotReady: true, coinflipReady: false, ready: false,
+      phase: 'waiting-coinflip', coinflipResult: null,
     });
     await flushMicrotasks();
 
     assert.equal(daySelect.value, '6');
     assert.equal(replay.getAttribute('data-day-warming'), null,
-      'both surfaces unlock after their exact day matches');
+      'the jackpot unlocks from its own exact-day lane without waiting for coinflip');
     el.disconnectedCallback();
   });
 });
@@ -1003,9 +1011,16 @@ describe('foil match pending action', () => {
 
       const [action] = pendingActionsMod.getPendingActions();
       assert.equal(action.kind, 'foil-match');
-      assert.equal(action.label, 'Day 44 · Foil T8');
-      assert.match(action.detail, /MAIN DRAW · 4 exact/);
+      assert.equal(action.label, 'T8 → 10,000-FACE BONUS');
+      assert.match(action.detail, /Day 44 · MAIN JACKPOT · 4 exact .* Degenerette/);
       assert.deepEqual(action.lineTraits, traits);
+      assert.deepEqual(action.winningTraits, traits,
+        'Pending receives the actual jackpot ticket as well as the foil');
+      assert.deepEqual(action.matchFaces, [2, 2, 2, 2]);
+      assert.equal(action.drawKind, 0);
+      assert.equal(action.score, 8);
+      assert.equal(action.rewardFaces, 10_000,
+        'Pending can name the deterministic bonus before the claim is sent');
       assert.equal(typeof action.run, 'function');
       el.disconnectedCallback();
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
