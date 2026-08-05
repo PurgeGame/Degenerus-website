@@ -9,14 +9,24 @@ export const CHAIN = {
   id: 84532,
   hexId: '0x14a34',
   name: 'Base Sepolia',
-  rpcUrl: 'https://sepolia.base.org',
+  // READ path for every public provider in the app (polling, coinflip, quests,
+  // charity-vote, pack-watch, claims/decimator raw-slot reads).
+  // NOT sepolia.base.org: that endpoint rate-limits hard under this app's read
+  // volume — a burst of 25 eth_blockNumber calls measured 17/25 HTTP 429, which
+  // surfaced as dozens of console 429s and blank panels on a single page load.
+  // publicnode answered 25/25 and supports every method used here
+  // (eth_call, eth_getStorageAt, eth_getLogs). sepolia.base.org is retained
+  // below as the wallet-add fallback.
+  rpcUrl: 'https://base-sepolia-rpc.publicnode.com',
   deployBlock: 45_005_925,
   indexerBase: 'http://localhost:3000',
   etherscanBase: 'https://sepolia.basescan.org',
   nativeAddEntry: {
     chainId: '0x14a34',
     chainName: 'Base Sepolia',
-    rpcUrls: ['https://sepolia.base.org'],
+    // Order matters: wallets take the first that works. The rate-limited
+    // canonical endpoint stays as a fallback rather than the default.
+    rpcUrls: ['https://base-sepolia-rpc.publicnode.com', 'https://sepolia.base.org'],
     nativeCurrency: { name: 'Base Sepolia ETH', symbol: 'ETH', decimals: 18 },
     blockExplorerUrls: ['https://sepolia.basescan.org'],
   },
