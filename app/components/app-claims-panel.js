@@ -30,7 +30,7 @@
 // :512-555), NOT a call to polling.js's fictional generic start({key,...}) API.
 
 import { CHAIN } from '../app/chain-config.js';
-import { displayEth, displayToken } from '../app/scaling.js';
+import { displayEthCompact, displayToken } from '../app/scaling.js';
 import { getViewedAddress, get, subscribe } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 // Plan 61-02: claims write path — three named exports wired into per-row click
@@ -619,7 +619,7 @@ class AppClaimsPanel extends HTMLElement {
       const isEthDenominated = row.key === 'eth' || row.key === 'decimator';
       let amountStr = '0';
       try {
-        amountStr = isEthDenominated ? displayEth(row.amountWei) : displayToken(row.amountWei);
+        amountStr = isEthDenominated ? displayEthCompact(row.amountWei) : displayToken(row.amountWei);
       } catch (_e) {
         // Defensive: bad data → show raw wei as text (still safe via textContent).
         amountStr = String(row.amountWei);
@@ -636,10 +636,11 @@ class AppClaimsPanel extends HTMLElement {
       btn.setAttribute('data-write', '');
       if (row.key === 'decimator') {
         const n = row.levels?.length || 0;
-        btn.textContent = `Claim ${n} ${n === 1 ? 'level' : 'levels'}`;
-      } else {
-        btn.textContent = 'Claim';
+        const description = `Claim ${n} ${n === 1 ? 'level' : 'levels'}`;
+        btn.setAttribute('aria-label', description);
+        btn.title = description;
       }
+      btn.textContent = 'Claim';
       rowEl.appendChild(btn);
 
       // Plan 61-02 — wire per-row click handler (state machine: idle →
@@ -673,7 +674,7 @@ class AppClaimsPanel extends HTMLElement {
       else if (r.key === 'affiliate') dgnrsWei += r.amountWei;
     }
     const fmtEth = (wei) => {
-      try { return displayEth(wei); } catch (_e) { return String(wei); }
+      try { return displayEthCompact(wei); } catch (_e) { return String(wei); }
     };
     const fmtTok = (wei) => {
       try { return displayToken(wei); } catch (_e) { return String(wei); }
@@ -730,7 +731,7 @@ class AppClaimsPanel extends HTMLElement {
       try { flip = BigInt(row.coinTotal || '0'); } catch (_e) { flip = 0n; }
       const tickets = Math.round(Number(row.ticketCount || 0) / 4); // amount is ENTRIES (4 = 1 ticket)
       if (eth > 0n) {
-        try { parts.push(`${displayEth(eth)} ETH`); } catch (_e) { /* skip malformed */ }
+        try { parts.push(`${displayEthCompact(eth)} ETH`); } catch (_e) { /* skip malformed */ }
       }
       if (flip > 0n) {
         try { parts.push(`${displayToken(flip)} FLIP`); } catch (_e) { /* skip malformed */ }

@@ -49,6 +49,27 @@ export function displayEth(raw, digits = 4) {
 }
 
 /**
+ * Remove insignificant decimal zeroes from an already-formatted amount.
+ *
+ * Keep this separate from displayEth(): a few compact status rows intentionally
+ * depend on displayEth's fixed width, while prizes and balances should read as
+ * ordinary amounts ("2.5", not "2.5000").
+ *
+ * @param {string|number} formatted
+ * @returns {string}
+ */
+export function trimDisplayZeros(formatted) {
+  const value = String(formatted ?? '');
+  if (!value.includes('.')) return value;
+  return value.replace(/0+$/, '').replace(/\.$/, '');
+}
+
+/** Compact player-facing ETH formatting without accounting-style zeroes. */
+export function displayEthCompact(raw, digits = 4) {
+  return trimDisplayZeros(displayEth(raw, digits));
+}
+
+/**
  * Format a raw UNSCALED 18-decimal token amount (FLIP / DGNRS) for display.
  *
  * FLIP and DGNRS are NOT /1M-scaled on testnet (only ETH is — RESEARCH Q5),

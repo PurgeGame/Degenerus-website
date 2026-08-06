@@ -40,6 +40,7 @@
 // Class palette: .deg-* prefix.
 
 import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
+import { getProvider } from '../app/contracts.js';
 import { displayEth, displayToken, displayTokenSnapped } from '../app/scaling.js';
 import { get, subscribe, getViewedAddress, getActingAddress } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
@@ -58,6 +59,7 @@ import {
 import {
   scaledTicketPriceWei,
   canRequestLootboxRng,
+  readLootboxRngQueueState,
   requestLootboxRng,
   readPurchaseFundingPriority,
 } from '../app/lootbox.js';
@@ -92,7 +94,11 @@ import {
 } from '../app/dgn-traits.js';
 // Per-spin house reels: the chain publishes spin 0's only.
 import { dgnDeriveSpins, dgnScore } from '../app/dgn-reels.js';
-import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
+import {
+  publishPendingActions,
+  clearPendingActions,
+  reportPendingActionError,
+} from '../app/pending-actions.js';
 import { queueReveal } from './reveal-overlay.js';
 
 function _setIntervalUnref(fn, ms) {
@@ -142,6 +148,8 @@ function _copyTextFallback(text) {
 
 const POLL_INTERVAL_MS = 30_000;          // panel-owned 30s poll for /player snapshot.
 const RNG_POLL_INTERVAL_MS = 7_000;       // 7s per-bet RNG poll cadence.
+const RNG_BLOCK_POLL_INTERVAL_MS = 1_800; // Base block progress for the Pending lights.
+const RNG_REQUEST_CONFIRMATIONS = 10;     // DegenerusGameAdvanceModule.sol.
 const POST_CONFIRM_REFETCH_MS = 250;      // CF-06.
 // A mined request is stronger evidence than an immediately-following
 // requestable static call from a lagging/load-balanced RPC. Hold the receipt
@@ -169,6 +177,24 @@ export function parseDegeneretteAmountInput(value, currency) {
     const fullScale = (BigInt(match[1]) * DEGENERETTE_TOKEN_SCALE)
       + BigInt(fraction || '0');
     return Number(currency) === 0 ? fullScale / BigInt(ETH_DIVISOR) : fullScale;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function _pendingDegeneretteAmount(amountWei, currency) {
+  try {
+    const raw = BigInt(amountWei ?? 0);
+    if (raw <= 0n) return null;
+    const lane = Number(currency);
+    const unit = lane === 0 ? 'ETH' : lane === 3 ? 'WWXRP' : lane === 2 ? 'DGNRS' : 'FLIP';
+    const amount = lane === 0
+      ? displayEth(raw, 6)
+      : displayTokenSnapped(raw);
+    const text = String(amount).includes('.')
+      ? String(amount).replace(/0+$/, '').replace(/\.$/, '')
+      : String(amount);
+    return `${text} ${unit}`;
   } catch (_e) {
     return null;
   }
@@ -269,6 +295,8 @@ function _readPendingBet(address) {
       ticket: row.ticket == null ? null : BigInt(row.ticket),
       rngRequestPending: Boolean(row.rngRequestPending),
       rngRequestStartedAt: Math.max(0, Number(row.rngRequestStartedAt ?? 0)),
+      rngRequestBlock: Math.max(0, Number(row.rngRequestBlock ?? 0)),
+      rngObservedBlock: Math.max(0, Number(row.rngObservedBlock ?? 0)),
     };
   } catch (_e) {
     return null;
@@ -297,6 +325,12 @@ function _writePendingBet(address, row) {
     if (row.rngRequestPending) {
       payload.rngRequestPending = true;
       payload.rngRequestStartedAt = Math.max(0, Number(row.rngRequestStartedAt ?? Date.now()));
+      if (Number(row.rngRequestBlock) > 0) {
+        payload.rngRequestBlock = Math.trunc(Number(row.rngRequestBlock));
+      }
+      if (Number(row.rngObservedBlock) > 0) {
+        payload.rngObservedBlock = Math.trunc(Number(row.rngObservedBlock));
+      }
     }
     localStorage.setItem(key, JSON.stringify(payload));
   } catch (_e) { /* private mode: session state still works */ }
@@ -769,6 +803,8 @@ class AppDegenerettePanel extends HTMLElement {
   // Per-bet RNG poll cycle (T-62-03-07 mitigation).
   #rngPollAbort = null;
   #rngPollTimer = null;
+  #rngBlockPollTimer = null;
+  #rngBlockPollToken = 0;
   // Bet state.
   #state = STATE.IDLE;
   #currentBetId = null;
@@ -780,6 +816,9 @@ class AppDegenerettePanel extends HTMLElement {
   // Receipt parsing is the fastest path, but a confirmed placement must remain
   // recoverable if a wallet/provider omits logs. The DB snapshot identifies the
   // pending bet and the indexed placement/on-chain slot restores its packed data.
+  // Until that identity arrives, this receipt key publishes one honest
+  // "confirmed, syncing" RNG row instead of making the new bet disappear.
+  #pendingPlacementKey = null;
   #pendingRecoverySeq = 0;
   #pendingRecoveryAddress = null;
   // A resolved bet is presentation work exactly once per mounted session.
@@ -793,6 +832,11 @@ class AppDegenerettePanel extends HTMLElement {
   #rngRequestAvailable = false;
   #rngRequestPending = false;
   #rngRequestStartedAt = 0;
+  #rngRequestBlock = 0;
+  #rngObservedBlock = 0;
+  #rngQueuePendingMilliEth = 0n;
+  #rngQueueThresholdMilliEth = 0n;
+  #rngQueuePendingFlipWhole = 0n;
   #currentHero = null;         // hero quadrant of the in-flight bet
   #currentTicket = null;       // exact submitted uint32 ticket for pending-card art
   #pendingAddress = null;
@@ -837,8 +881,12 @@ class AppDegenerettePanel extends HTMLElement {
   #ticketCopyListener = (event) => this.#copyInventoryTicket(event?.detail);
   #questActivateListener = (event) => {
     const detail = event?.detail;
-    const ready = this.#applyQuestPreset(detail);
-    if (ready && detail?.submit) void this.#onPlaceClick();
+    if (detail?.submit) {
+      const bet = this.#questBet(detail);
+      if (bet) void this.#onPlaceClick(undefined, bet);
+      return;
+    }
+    this.#applyQuestPreset(detail);
   };
 
   connectedCallback() {
@@ -1514,25 +1562,20 @@ class AppDegenerettePanel extends HTMLElement {
     }
   }
 
-  // Configure exactly the total the quest asks for while retaining the normal
-  // five-spin draft. Bare quest events only select the lane; the confirmation
-  // dialog may then submit this already-configured bet with submit:true.
-  #applyQuestPreset(detail) {
+  #questBet(detail) {
     const questType = Number(detail?.questType);
-    if (questType !== 7 && questType !== 8) return false;
+    if (questType !== 7 && questType !== 8) return null;
     const currency = questType === 7 ? 0 : 1;
     const suppliedTraits = dgnTraitIdsToQuadrants(detail?.traitIds);
-    if (Array.isArray(detail?.traitIds)
+    const hasSuppliedTicket = Array.isArray(detail?.traitIds)
       && detail.traitIds.length === 4
-      && suppliedTraits.every(Boolean)) {
-      this.#dgnTraits = suppliedTraits.map((trait) => ({ s: trait.sym, c: trait.col }));
-      const suppliedHero = Number(detail?.heroQuadrant);
-      this.#dgnHero = Number.isInteger(suppliedHero) && suppliedHero >= 0 && suppliedHero < 4
-        ? suppliedHero : this.#dgnHero;
-      this.#dgnEditing = null;
-      this.#pickerTouched = true;
-      this.#renderPicker();
-    }
+      && suppliedTraits.every(Boolean);
+    const traits = hasSuppliedTicket
+      ? suppliedTraits.map((trait) => ({ s: trait.sym, c: trait.col }))
+      : this.#dgnTraits.map((trait) => ({ s: trait.s, c: trait.c }));
+    const suppliedHero = Number(detail?.heroQuadrant);
+    const heroQuadrant = Number.isInteger(suppliedHero) && suppliedHero >= 0 && suppliedHero < 4
+      ? suppliedHero : this.#dgnHero;
 
     let total;
     try { total = BigInt(detail?.target ?? 0); } catch (_e) { total = 0n; }
@@ -1544,7 +1587,7 @@ class AppDegenerettePanel extends HTMLElement {
         total = 2_000n * (10n ** 18n);
       }
     }
-    if (total <= 0n) return false;
+    if (total <= 0n) return null;
 
     const limits = degeneretteLimits(currency);
     const minPerSpin = currency === 0
@@ -1566,6 +1609,37 @@ class AppDegenerettePanel extends HTMLElement {
     if (!hasExplicitWager) {
       while (spinCount > 1 && total % BigInt(spinCount) !== 0n) spinCount -= 1;
     }
+    const amountPerTicketWei = hasExplicitWager ? explicitPerSpin : total / BigInt(spinCount);
+    let customTicket = 0;
+    traits.forEach((trait, quadrant) => {
+      const packedTrait = ((Number(trait.c) & 7) << 3) | (Number(trait.s) & 7);
+      customTicket |= packedTrait << (quadrant * 8);
+    });
+    return {
+      currency,
+      amountPerTicketWei,
+      ticketCount: spinCount,
+      heroQuadrant,
+      customTicket: customTicket >>> 0,
+      traits,
+      preferClaimable: detail?.preferClaimable == null
+        ? null
+        : Boolean(detail.preferClaimable),
+    };
+  }
+
+  // Bare/legacy activations may still open the matching form as a preset.
+  // Confirmed quest actions submit #questBet directly, so the player's normal
+  // currency, amount, spins, ticket, and Hero remain exactly as configured.
+  #applyQuestPreset(detail) {
+    const preset = this.#questBet(detail);
+    if (!preset) return false;
+    const { currency, amountPerTicketWei: perSpin, ticketCount: spinCount } = preset;
+    this.#dgnTraits = preset.traits.map((trait) => ({ ...trait }));
+    this.#dgnHero = preset.heroQuadrant;
+    this.#dgnEditing = null;
+    this.#pickerTouched = true;
+    this.#renderPicker();
     const currencyInput = this.querySelector('[name="deg-currency"]');
     const spinsInput = this.querySelector('[name="deg-ticket-count"]');
     const amountInput = this.querySelector('[name="deg-amount"]');
@@ -1573,7 +1647,6 @@ class AppDegenerettePanel extends HTMLElement {
     currencyInput.value = String(currency);
     this.#applyCurrencySelection(currency, { forceReset: true });
     spinsInput.value = String(spinCount);
-    const perSpin = hasExplicitWager ? explicitPerSpin : total / BigInt(spinCount);
     const rendered = currency === 0
       ? displayEth(perSpin, 6)
       : displayToken(perSpin, 0);
@@ -1865,10 +1938,12 @@ class AppDegenerettePanel extends HTMLElement {
   #restorePendingBet() {
     const address = getActingAddress();
     const lower = address ? String(address).toLowerCase() : null;
-    if (lower === this.#pendingAddress && this.#currentBetId != null) return;
+    if (lower === this.#pendingAddress
+      && (this.#currentBetId != null || this.#pendingPlacementKey != null)) return;
     if (lower !== this.#pendingAddress) {
       this.#pendingRecoverySeq += 1;
       this.#pendingRecoveryAddress = null;
+      this.#pendingPlacementKey = null;
     }
     this.#cancelRngPoll();
     this.#pendingAddress = lower;
@@ -1880,10 +1955,13 @@ class AppDegenerettePanel extends HTMLElement {
       this.#currentRngWord = 0n;
       this.#rngRequestPending = false;
       this.#rngRequestStartedAt = 0;
+      this.#rngRequestBlock = 0;
+      this.#rngObservedBlock = 0;
       if (![STATE.PLACING, STATE.RESOLVING].includes(this.#state)) this.#setState(STATE.IDLE);
       return;
     }
     this.#currentBetId = row.betId;
+    this.#pendingPlacementKey = null;
     this.#currentLootboxIndex = row.index;
     this.#currentCurrency = row.currency;
     this.#currentAmountPerSpin = row.amountPerSpin;
@@ -1893,6 +1971,8 @@ class AppDegenerettePanel extends HTMLElement {
     this.#currentRngWord = 0n;
     this.#rngRequestPending = row.rngRequestPending;
     this.#rngRequestStartedAt = row.rngRequestStartedAt;
+    this.#rngRequestBlock = row.rngRequestBlock;
+    this.#rngObservedBlock = row.rngObservedBlock;
     this.#setState(STATE.AWAITING_RNG);
     this.#startRngPollCycle();
   }
@@ -1993,6 +2073,7 @@ class AppDegenerettePanel extends HTMLElement {
         if (!stillCurrent()) return false;
         this.#pendingAddress = address;
         this.#currentBetId = row.betId;
+        this.#pendingPlacementKey = null;
         this.#currentLootboxIndex = row.index;
         this.#currentCurrency = row.currency;
         this.#currentAmountPerSpin = row.amountPerSpin;
@@ -2002,6 +2083,8 @@ class AppDegenerettePanel extends HTMLElement {
         this.#currentRngWord = 0n;
         this.#rngRequestPending = false;
         this.#rngRequestStartedAt = 0;
+        this.#rngRequestBlock = 0;
+        this.#rngObservedBlock = 0;
         _writePendingBet(address, row);
         this.#clearError();
         this.#setState(STATE.AWAITING_RNG);
@@ -2244,6 +2327,8 @@ class AppDegenerettePanel extends HTMLElement {
       ticket: this.#currentTicket,
       rngRequestPending: this.#rngRequestPending,
       rngRequestStartedAt: this.#rngRequestStartedAt,
+      rngRequestBlock: this.#rngRequestBlock,
+      rngObservedBlock: this.#rngObservedBlock,
     });
   }
 
@@ -2253,6 +2338,11 @@ class AppDegenerettePanel extends HTMLElement {
     if (next !== STATE.AWAITING_RNG || this.#state !== STATE.AWAITING_RNG) {
       this.#rngRequestAvailable = false;
     }
+    if (next === STATE.AWAITING_RNG && this.#state !== STATE.AWAITING_RNG) {
+      this.#rngQueuePendingMilliEth = 0n;
+      this.#rngQueueThresholdMilliEth = 0n;
+      this.#rngQueuePendingFlipWhole = 0n;
+    }
     // Once the word exists, the request phase is over. Persist that transition
     // so a refresh cannot resurrect an obsolete waiting progress card.
     if ([STATE.READY, STATE.RESOLVED, STATE.IDLE].includes(next)) {
@@ -2260,6 +2350,13 @@ class AppDegenerettePanel extends HTMLElement {
       this.#rngRequestPending = false;
       this.#rngRequestStartedAt = 0;
       if (hadPendingRequest && next === STATE.READY) this.#persistPendingBet();
+    }
+    if ([STATE.READY, STATE.RESOLVED, STATE.IDLE].includes(next)) {
+      this.#cancelRngBlockPoll();
+    }
+    if ([STATE.RESOLVED, STATE.IDLE].includes(next)) {
+      this.#rngRequestBlock = 0;
+      this.#rngObservedBlock = 0;
     }
     this.#state = next;
     this.#renderState();
@@ -2293,9 +2390,13 @@ class AppDegenerettePanel extends HTMLElement {
   }
 
   #publishPending() {
+    // A newly broadcast placement owns a separate temporary source. Leave any
+    // older active bet published while the wallet transaction is mining.
+    if (this.#state === STATE.PLACING) return;
     const resolutionActive = [
       STATE.AWAITING_RNG, STATE.REQUESTING_RNG, STATE.READY, STATE.RESOLVING, STATE.INDEXING,
-    ].includes(this.#state) && this.#currentBetId != null;
+    ].includes(this.#state)
+      && (this.#currentBetId != null || this.#pendingPlacementKey != null);
     if (!resolutionActive || !this.#pendingAddress) {
       clearPendingActions(PENDING_SOURCE);
       return;
@@ -2312,9 +2413,20 @@ class AppDegenerettePanel extends HTMLElement {
             ? 'request-ready'
             : this.#state;
     publishPendingActions(PENDING_SOURCE, [{
-      id: `degenerette:${String(this.#currentBetId)}`,
+      id: this.#currentBetId != null
+        ? `degenerette:${String(this.#currentBetId)}`
+        : `degenerette:sync:${String(this.#pendingPlacementKey)}`,
       dismissScope: this.#pendingAddress,
       kind: 'degenerette',
+      sharedRng: true,
+      currency: this.#currentCurrency,
+      mayAddEth: this.#currentCurrency === 0,
+      amountPerSpin: String(this.#currentAmountPerSpin || 0n),
+      amountLabel: _pendingDegeneretteAmount(
+        this.#currentAmountPerSpin,
+        this.#currentCurrency,
+      ),
+      spinCount: spins,
       label: `${spins} spin${spins === 1 ? '' : 's'}`,
       ticketPacked: this.#currentTicket == null ? null : String(this.#currentTicket),
       heroQuadrant: this.#currentHero == null ? null : Number(this.#currentHero) & 3,
@@ -2327,7 +2439,9 @@ class AppDegenerettePanel extends HTMLElement {
             : this.#state === STATE.INDEXING
               ? 'Open spins'
             : 'Resolve degen',
-      detail: this.#state === STATE.READY
+      detail: this.#currentBetId == null
+        ? 'Bet confirmed · syncing RNG queue'
+        : this.#state === STATE.READY
         ? `RNG ready · ${units[this.#currentCurrency] || 'FLIP'} result locked`
         : this.#state === STATE.REQUESTING_RNG
           ? 'Requesting shared RNG on-chain'
@@ -2353,6 +2467,12 @@ class AppDegenerettePanel extends HTMLElement {
         ? 'indeterminate'
         : null,
       progressStartedAt: this.#rngRequestStartedAt,
+      rngRequestBlock: this.#rngRequestBlock || null,
+      rngCurrentBlock: this.#rngObservedBlock || null,
+      rngConfirmations: RNG_REQUEST_CONFIRMATIONS,
+      rngQueuePendingMilliEth: String(this.#rngQueuePendingMilliEth),
+      rngQueueThresholdMilliEth: String(this.#rngQueueThresholdMilliEth),
+      rngQueuePendingFlipWhole: String(this.#rngQueuePendingFlipWhole),
       order: 15,
       run: () => this.#onPendingAction(),
     }]);
@@ -2386,7 +2506,7 @@ class AppDegenerettePanel extends HTMLElement {
   // Place click — stage 1 of two-tx flow.
   // ---------------------------------------------------------------------
 
-  async #onPlaceClick(e) {
+  async #onPlaceClick(e, questBet = null) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
     if (this.#busyPlace) return;
     this.#busyPlace = true;
@@ -2403,10 +2523,18 @@ class AppDegenerettePanel extends HTMLElement {
           rngWord: this.#currentRngWord,
           rngRequestPending: this.#rngRequestPending,
           rngRequestStartedAt: this.#rngRequestStartedAt,
+          rngRequestBlock: this.#rngRequestBlock,
+          rngObservedBlock: this.#rngObservedBlock,
           state: this.#state,
           address: this.#pendingAddress,
         }
       : null;
+    let optimisticSource = null;
+    const retireOptimistic = () => {
+      if (!optimisticSource) return;
+      clearPendingActions(optimisticSource);
+      optimisticSource = null;
+    };
 
     // A new bet becomes the active card. Stop the older card's poll so a late
     // response cannot overwrite the identifiers parsed from this receipt; the
@@ -2423,11 +2551,15 @@ class AppDegenerettePanel extends HTMLElement {
       const ticketSel = this.querySelector('[name="deg-ticket-count"]');
 
       const currencyRaw = currencySel ? currencySel.value : '0';
-      const currency = currencyRaw === '' || currencyRaw == null ? 0 : Number(currencyRaw);
+      const currency = questBet?.currency == null
+        ? (currencyRaw === '' || currencyRaw == null ? 0 : Number(currencyRaw))
+        : Number(questBet.currency);
       // Amount input is in ETH units for ETH currency, FLIP units for FLIP.
       // Both ETH and FLIP use 18-decimal scaling on the wire.
       const amountText = amountInput ? String(amountInput.value || '0') : '0';
-      const amountPerTicketWei = parseDegeneretteAmountInput(amountText, currency);
+      const amountPerTicketWei = questBet?.amountPerTicketWei == null
+        ? parseDegeneretteAmountInput(amountText, currency)
+        : BigInt(questBet.amountPerTicketWei);
       if (amountPerTicketWei == null || amountPerTicketWei <= 0n) {
         this.#renderError('Amount must be greater than 0.');
         this.#setState(STATE.IDLE);
@@ -2437,16 +2569,28 @@ class AppDegenerettePanel extends HTMLElement {
       // units. ETH is /1M-descaled there for the testnet deployment; token
       // lanes stay unscaled on every chain.
       const ticketRaw = ticketSel ? ticketSel.value : '1';
-      const ticketCount = ticketRaw === '' || ticketRaw == null ? 1 : Number(ticketRaw);
+      const ticketCount = questBet?.ticketCount == null
+        ? (ticketRaw === '' || ticketRaw == null ? 1 : Number(ticketRaw))
+        : Number(questBet.ticketCount);
       // v48: hero quadrant is mandatory (0-3) — the picker always has one
       // (right-click / "Set as Hero"). Custom ticket packs from picker state.
-      const heroQuadrant = this.#dgnHero;
-      const customTicket = this.#packCustomTicket();
+      const heroQuadrant = questBet?.heroQuadrant == null
+        ? this.#dgnHero
+        : Number(questBet.heroQuadrant) & 3;
+      const customTicket = questBet?.customTicket == null
+        ? this.#packCustomTicket()
+        : Number(questBet.customTicket) >>> 0;
       // Degenerette shares the purchase panel's funding choice. The write
       // helper re-reads raw claimable on-chain and sends only the wallet
       // shortfall; token wagers never enter the ETH funding waterfall.
-      const preferClaimable = currency === 0
-        && readPurchaseFundingPriority() === 'claimable';
+      const preferClaimable = currency === 0 && (
+        questBet?.preferClaimable === true
+        || (questBet?.preferClaimable == null
+          && readPurchaseFundingPriority() === 'claimable')
+      );
+      const submissionAddress = String(
+        getActingAddress() || get('connected.address') || '',
+      ).toLowerCase();
 
       const { receipt } = await placeBet({
         currency,
@@ -2455,6 +2599,32 @@ class AppDegenerettePanel extends HTMLElement {
         customTicket,
         heroQuadrant,
         preferClaimable,
+        onSubmitted: (tx) => {
+          const transactionHash = String(tx?.hash || `local-${Date.now()}`).toLowerCase();
+          optimisticSource = `degenerette-submission:${transactionHash}`;
+          publishPendingActions(optimisticSource, [{
+            id: `degenerette:submitted:${transactionHash}`,
+            dismissScope: submissionAddress,
+            kind: 'degenerette',
+            sharedRng: false,
+            currency,
+            mayAddEth: currency === 0,
+            amountPerSpin: String(amountPerTicketWei),
+            amountLabel: _pendingDegeneretteAmount(amountPerTicketWei, currency),
+            spinCount: ticketCount,
+            label: `${ticketCount} spin${ticketCount === 1 ? '' : 's'}`,
+            ticketPacked: String(BigInt(customTicket)),
+            heroQuadrant,
+            shortLabel: 'Transaction sent',
+            detail: 'Bet sent · waiting for confirmation',
+            state: 'waiting',
+            phase: 'submitting',
+            pinned: true,
+            progress: 'indeterminate',
+            chronology: Date.now(),
+            order: 15,
+          }]);
+        },
       });
 
       // Parse BetPlaced from the real ABI. The canonical parser also accepts
@@ -2469,6 +2639,11 @@ class AppDegenerettePanel extends HTMLElement {
         this.#pendingAddress = getActingAddress()
           ? String(getActingAddress()).toLowerCase()
           : String(get('connected.address') || '').toLowerCase();
+        this.#pendingPlacementKey = String(
+          receipt?.hash
+          || receipt?.transactionHash
+          || (receipt?.blockNumber != null ? `block-${receipt.blockNumber}` : Date.now()),
+        ).toLowerCase();
         this.#currentBetId = null;
         this.#currentLootboxIndex = null;
         this.#currentCurrency = currency;
@@ -2479,12 +2654,16 @@ class AppDegenerettePanel extends HTMLElement {
         this.#currentRngWord = 0n;
         this.#rngRequestPending = false;
         this.#rngRequestStartedAt = 0;
+        this.#rngRequestBlock = 0;
+        this.#rngObservedBlock = 0;
         this.#setState(STATE.AWAITING_RNG);
+        retireOptimistic();
         this.#renderError('Bet placed — syncing its RNG status…');
         void this.#recoverPendingBetFromDb();
         setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
         return;
       }
+      this.#pendingPlacementKey = null;
       this.#currentBetId = placed[0].betId;
       this.#currentLootboxIndex = placed[0].index;
       this.#currentCurrency = currency;
@@ -2495,6 +2674,8 @@ class AppDegenerettePanel extends HTMLElement {
       this.#currentRngWord = 0n;
       this.#rngRequestPending = false;
       this.#rngRequestStartedAt = 0;
+      this.#rngRequestBlock = 0;
+      this.#rngObservedBlock = 0;
       this.#pendingAddress = getActingAddress()
         ? String(getActingAddress()).toLowerCase()
         : String(get('connected.address') || '').toLowerCase();
@@ -2508,12 +2689,18 @@ class AppDegenerettePanel extends HTMLElement {
         ticket: this.#currentTicket,
       });
       this.#setState(STATE.AWAITING_RNG);
+      retireOptimistic();
       this.#startRngPollCycle();
 
       // 250ms post-confirm refetch (CF-06).
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
-      this.#renderError(compactUiError(error, 'Bet did not go through. Try again.'));
+      const failureMessage = compactUiError(error, 'Bet did not go through. Try again.');
+      const wasBroadcast = optimisticSource != null;
+      retireOptimistic();
+      this.#renderError(failureMessage);
+      if (wasBroadcast) reportPendingActionError(failureMessage);
+      this.#pendingPlacementKey = null;
       if (previousActive) {
         this.#currentBetId = previousActive.betId;
         this.#currentLootboxIndex = previousActive.index;
@@ -2525,6 +2712,8 @@ class AppDegenerettePanel extends HTMLElement {
         this.#currentRngWord = previousActive.rngWord;
         this.#rngRequestPending = previousActive.rngRequestPending;
         this.#rngRequestStartedAt = previousActive.rngRequestStartedAt;
+        this.#rngRequestBlock = previousActive.rngRequestBlock;
+        this.#rngObservedBlock = previousActive.rngObservedBlock;
         this.#pendingAddress = previousActive.address;
         _writePendingBet(this.#pendingAddress, previousActive);
         this.#setState(previousActive.state);
@@ -2549,6 +2738,7 @@ class AppDegenerettePanel extends HTMLElement {
     this.#cancelRngPoll();
     this.#rngPollAbort = new AbortController();
     const ac = this.#rngPollAbort;
+    this.#startRngBlockPoll();
     const tick = async () => {
       if (ac.signal.aborted) return;
       try {
@@ -2617,7 +2807,45 @@ class AppDegenerettePanel extends HTMLElement {
           // request simulates successfully, light the same resolve action so a
           // player can start the shared batch instead of waiting forever.
           if (this.#state === STATE.AWAITING_RNG) {
-            let requestable = await canRequestLootboxRng().catch(() => false);
+            const [requestProbe, queueState] = await Promise.all([
+              canRequestLootboxRng().catch(() => false),
+              readLootboxRngQueueState().catch(() => null),
+            ]);
+            let shouldRender = false;
+            if (queueState) {
+              const pendingMilliEth = BigInt(queueState.pendingMilliEth ?? 0n);
+              const thresholdMilliEth = BigInt(queueState.thresholdMilliEth ?? 0n);
+              const pendingFlipWhole = BigInt(queueState.pendingFlipWhole ?? 0n);
+              if (pendingMilliEth !== this.#rngQueuePendingMilliEth
+                || thresholdMilliEth !== this.#rngQueueThresholdMilliEth
+                || pendingFlipWhole !== this.#rngQueuePendingFlipWhole) {
+                this.#rngQueuePendingMilliEth = pendingMilliEth;
+                this.#rngQueueThresholdMilliEth = thresholdMilliEth;
+                this.#rngQueuePendingFlipWhole = pendingFlipWhole;
+                shouldRender = true;
+              }
+
+              // Another wallet can submit this permissionless request. Detect
+              // the shared contract latch so this player's dots still switch
+              // from the blue queue to red confirmation progress immediately.
+              if (queueState.middayRequestInFlight && !this.#rngRequestPending) {
+                const observedBlock = Number(queueState.blockNumber);
+                const requestTime = Number(queueState.requestTime ?? 0n);
+                this.#rngRequestPending = true;
+                this.#rngRequestStartedAt = requestTime > 0
+                  ? requestTime * 1_000
+                  : Date.now();
+                if (Number.isInteger(observedBlock) && observedBlock > 0) {
+                  this.#rngRequestBlock = observedBlock;
+                  this.#rngObservedBlock = observedBlock;
+                }
+                this.#persistPendingBet();
+                this.#startRngBlockPoll();
+                shouldRender = true;
+              }
+            }
+            let requestable = Boolean(requestProbe)
+              && !Boolean(queueState?.middayRequestInFlight);
             // If the request gate opens again before a word arrives, the prior
             // request is no longer in flight. Restore the actionable request
             // instead of leaving a permanently animated waiting card. A fresh
@@ -2628,15 +2856,19 @@ class AppDegenerettePanel extends HTMLElement {
               if (requestAge >= RNG_REQUEST_RECEIPT_GRACE_MS) {
                 this.#rngRequestPending = false;
                 this.#rngRequestStartedAt = 0;
+                this.#rngRequestBlock = 0;
+                this.#rngObservedBlock = 0;
                 this.#persistPendingBet();
+                shouldRender = true;
               } else {
                 requestable = false;
               }
             }
             if (requestable !== this.#rngRequestAvailable) {
               this.#rngRequestAvailable = requestable;
-              this.#renderState();
+              shouldRender = true;
             }
+            if (shouldRender) this.#renderState();
           }
         }
       } catch (_e) {
@@ -2651,7 +2883,49 @@ class AppDegenerettePanel extends HTMLElement {
     tick();
   }
 
+  #startRngBlockPoll() {
+    this.#cancelRngBlockPoll();
+    if (!this.#rngRequestPending) return;
+    const token = ++this.#rngBlockPollToken;
+    const tick = async () => {
+      if (token !== this.#rngBlockPollToken || !this.#rngRequestPending) return;
+      try {
+        const provider = getProvider();
+        if (provider && typeof provider.getBlockNumber === 'function') {
+          const block = Number(await provider.getBlockNumber());
+          if (token !== this.#rngBlockPollToken || !this.#rngRequestPending) return;
+          if (Number.isInteger(block) && block > 0) {
+            const previousStart = this.#rngRequestBlock;
+            const previousHead = this.#rngObservedBlock;
+            if (this.#rngRequestBlock <= 0) this.#rngRequestBlock = block;
+            this.#rngObservedBlock = Math.max(this.#rngRequestBlock, block);
+            if (previousStart !== this.#rngRequestBlock
+              || previousHead !== this.#rngObservedBlock) {
+              this.#persistPendingBet();
+              this.#renderState();
+            }
+          }
+        }
+      } catch (_e) { /* the normal RNG poll remains authoritative */ }
+      if (token !== this.#rngBlockPollToken || !this.#rngRequestPending) return;
+      this.#rngBlockPollTimer = setTimeout(tick, RNG_BLOCK_POLL_INTERVAL_MS);
+      if (this.#rngBlockPollTimer && typeof this.#rngBlockPollTimer.unref === 'function') {
+        try { this.#rngBlockPollTimer.unref(); } catch (_e) { /* defensive */ }
+      }
+    };
+    void tick();
+  }
+
+  #cancelRngBlockPoll() {
+    this.#rngBlockPollToken += 1;
+    if (this.#rngBlockPollTimer != null) {
+      try { clearTimeout(this.#rngBlockPollTimer); } catch (_e) { /* defensive */ }
+      this.#rngBlockPollTimer = null;
+    }
+  }
+
   #cancelRngPoll() {
+    this.#cancelRngBlockPoll();
     if (this.#rngPollAbort) {
       try { this.#rngPollAbort.abort(); } catch (_) { /* defensive */ }
       this.#rngPollAbort = null;
@@ -2772,9 +3046,12 @@ class AppDegenerettePanel extends HTMLElement {
     this.#clearError();
     this.#setState(STATE.REQUESTING_RNG);
     let requestAccepted = false;
+    let requestBlock = 0;
     try {
-      await requestLootboxRng();
+      const requested = await requestLootboxRng();
       requestAccepted = true;
+      const minedBlock = Number(requested?.receipt?.blockNumber);
+      if (Number.isInteger(minedBlock) && minedBlock > 0) requestBlock = minedBlock;
     } catch (error) {
       // A competing request between simulation and broadcast is success from
       // this player's perspective; resume the wait without a loud red wall.
@@ -2782,10 +3059,19 @@ class AppDegenerettePanel extends HTMLElement {
       requestAccepted = /in flight|already|locked/i.test(String(msg));
       if (!requestAccepted) this.#renderError(msg);
     } finally {
+      if (requestAccepted && requestBlock <= 0) {
+        try {
+          const provider = getProvider();
+          const observed = Number(await provider?.getBlockNumber?.());
+          if (Number.isInteger(observed) && observed > 0) requestBlock = observed;
+        } catch (_e) { /* a later block poll can establish the baseline */ }
+      }
       this.#rngRequestPending = requestAccepted;
       this.#rngRequestStartedAt = requestAccepted
         ? (this.#rngRequestStartedAt || Date.now())
         : 0;
+      this.#rngRequestBlock = requestAccepted ? requestBlock : 0;
+      this.#rngObservedBlock = requestAccepted ? requestBlock : 0;
       this.#persistPendingBet();
       this.#setState(STATE.AWAITING_RNG);
       this.#startRngPollCycle();

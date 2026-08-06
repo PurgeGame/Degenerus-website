@@ -381,6 +381,7 @@ function _structuredRevertError(error, context) {
  *   msgValueWei?: bigint | string | number,
  *   preferClaimable?: boolean,
  *   player?: string,
+ *   onSubmitted?: function(import('ethers').TransactionResponse): void,
  * }} args
  * @returns {Promise<{receipt: import('ethers').TransactionReceipt}>}
  */
@@ -393,6 +394,7 @@ export async function placeBet({
   msgValueWei,
   preferClaimable = false,
   player,
+  onSubmitted,
 } = {}) {
   const buyer = player || getActingAddress();
   if (!buyer) throw new Error('Wallet not connected.');
@@ -473,6 +475,7 @@ export async function placeBet({
   const receipt = await sendTx(
     (s) => _buildContract(s).placeDegeneretteBet(buyer, cur, amount, tc, ct, hq, { value }),
     'Place degenerette bet',
+    { onSubmitted },
   );
   return { receipt, payment: { ...payment, msgValueWei: value } };
 }

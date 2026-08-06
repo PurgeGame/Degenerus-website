@@ -176,6 +176,7 @@ class AppDayHistoryReplays extends HTMLElement {
       id: row.id,
       dismissScope,
       kind: row.kind,
+      mayAddEth: false,
       phase: row.kind === 'degenerette' ? 'result-ready' : 'history-replay',
       label: row.kind === 'degenerette'
         ? `Day ${day} Degenerette #${row.betId}`

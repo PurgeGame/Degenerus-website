@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 58" role="img" aria-label="Chainlink RNG pending">
+  <defs>
+    <linearGradient id="mark" x1="24" y1="3" x2="48" y2="29" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7597f4"/>
+      <stop offset="1" stop-color="#3158c8"/>
+    </linearGradient>
+  </defs>
+  <path transform="translate(-2 0)" fill="url(#mark)" fill-rule="evenodd" d="M36 2 48.5 9.2v14.4L36 30.8l-12.5-7.2V9.2L36 2Zm0 7.1-6.35 3.65v7.3L36 23.7l6.35-3.65v-7.3L36 9.1Z"/>
+  <text x="36" y="41" fill="#d8e3ff" font-family="Arial, sans-serif" font-size="12" font-weight="900" letter-spacing="2.1" text-anchor="middle">RNG</text>
+  <rect x="13" y="44" width="46" height="12" rx="6" fill="#2563eb" opacity=".16"/>
+  <text x="36" y="53" fill="#93c5fd" font-family="Arial, sans-serif" font-size="9.8" font-weight="900" letter-spacing=".2" text-anchor="middle">PENDING</text>
+</svg>

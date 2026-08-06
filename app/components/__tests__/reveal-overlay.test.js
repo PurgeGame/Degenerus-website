@@ -9,7 +9,7 @@
 
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 // ---------------------------------------------------------------------------
 // Fake DOM scaffold (must exist BEFORE the component import).
@@ -184,6 +184,7 @@ const {
 const { dgnUnpackTicket } = await import('../../app/dgn-traits.js');
 const pendingActionsMod = await import('../../app/pending-actions.js');
 const { DEGENERETTE_PREFERENCES_KEY } = await import('../../app/degenerette-preferences.js');
+const storeMod = await import('../../app/store.js');
 
 const REVEAL_SRC = readFileSync(new URL('../reveal-overlay.js', import.meta.url), 'utf8');
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
@@ -218,6 +219,8 @@ describe('normalizeSequence', () => {
     const seq = normalizeSequence({
       kind: 'lootbox',
       lootboxIndex: 47,
+      amountWei: 400n,
+      ticketPriceWei: 100n,
       legs: [
         { legType: 'opened', wholeTickets: 11, futureLevel: 6, flip: 12_345n * 10n ** 18n },
         {
@@ -227,6 +230,10 @@ describe('normalizeSequence', () => {
       ],
     });
     assert.equal(seq.kind, 'lootbox');
+    assert.equal(seq.lootboxValueTone, 'purple');
+    assert.equal(seq.lootboxTicketUnitsLabel, '4×');
+    assert.equal(seq.amountWei, 400n);
+    assert.equal(seq.ticketPriceWei, 100n);
     assert.equal(seq.cards.length, 3);
     assert.equal(seq.cards[0].type, 'tickets');
     assert.equal(seq.cards[0].label, 'LEVEL 6 TICKETS');
@@ -879,8 +886,8 @@ describe('normalizeSequence', () => {
       'a granted lootbox spin has no player stake to lose');
     assert.match(
       REVEAL_SRC,
-      /const celebrate = shouldCelebrateDegenerette\(board\)[\s\S]*?if \(celebrate\) \{[\s\S]*?sfxFanfare[\s\S]*?#fireConfetti[\s\S]*?\} else \{[\s\S]*?sfxNoWin/,
-      'fanfare and confetti use net outcome rather than any positive payout',
+      /const celebrate = shouldCelebrateDegenerette\(board\)[\s\S]*?if \(celebrate\) \{[\s\S]*?sfxFanfare[\s\S]*?#celebrateWin[\s\S]*?\} else \{[\s\S]*?sfxNoWin/,
+      'fanfare and the protocol win effect use net outcome rather than any positive payout',
     );
   });
 
@@ -981,6 +988,11 @@ describe('buildBoxSpinBoard', () => {
     );
     assert.match(REVEAL_SRC, /const countIsRevealed = !board\.boxSpin \|\| i > 0/,
       'the FLIP-identifying reel count stays hidden before reel one');
+    assert.match(
+      REVEAL_SRC,
+      /#renderFullSpinStage\(board, \{ speedEnabled: !board\.boxSpin \}\)/,
+      'a bonus BoxSpin inherits the enclosing reveal speed instead of multiplying it a second time',
+    );
   });
 });
 
@@ -1095,8 +1107,10 @@ function instantiate() {
 describe('reveal-overlay element', () => {
   beforeEach(() => {
     __resetForTest();
+    storeMod.__resetForTest();
     pendingActionsMod.__resetPendingActionsForTest();
     globalThis.localStorage.clear();
+    globalThis.window.matchMedia = () => ({ matches: true });
   });
 
   test('one indexed lootbox release can only enter the live reveal queue once', () => {
@@ -1242,6 +1256,39 @@ describe('reveal-overlay element', () => {
       'the foil receipt overrides the later generic 26px mini-icon box');
   });
 
+  test('full foil comparison waits for explicit input before advancing', async () => {
+    globalThis.window.matchMedia = () => ({ matches: false });
+    queueReveal({
+      kind: 'foil-match', day: 44, level: 12, ticketIndex: 2, drawKind: 0,
+      score: 5, rewardFaces: 6,
+      lineTraits: [1, 70, 130, 200],
+      winningTraits: [1, 78, 131, 200],
+      matchFaces: [2, 1, 0, 2],
+      legs: [],
+    });
+    const el = instantiate();
+    const backdrop = el.querySelector('[data-bind="rvl-backdrop"]');
+
+    // Advance only the title beat and card entrance; the comparison's own
+    // gate must then remain indefinitely instead of using the generic timer.
+    await tick();
+    backdrop.dispatchEvent({ type: 'click' });
+    await tick();
+    backdrop.dispatchEvent({ type: 'click' });
+    await tick();
+    const action = el.querySelector('.rvl-foil-match__continue');
+    assert.ok(action, 'the full comparison exposes a clear Continue control');
+    assert.equal(el.querySelector('[data-bind="rvl-card-zone"]').hidden, false);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.ok(el.querySelector('.rvl-foil-match__continue'),
+      'the first stage does not close without player input');
+
+    action.dispatchEvent({ type: 'click' });
+    await tick();
+    assert.equal(el.querySelector('[data-bind="rvl-summary"]').hidden, false,
+      'Continue advances to the terminal receipt');
+  });
+
   test('pack shell carries the Degenerus mark plus dynamic edition and level hooks', () => {
     const el = instantiate();
     assert.ok(el.querySelector('.rvl-pack-logo'), 'Degenerus logo is on the wrapper');
@@ -1259,10 +1306,10 @@ describe('reveal-overlay element', () => {
   test('lootbox shell carries the viewport-safe branded staged opener', () => {
     const el = instantiate();
     assert.ok(el.querySelector('.rvl-chest-logo'), 'Degenerus logo is on the box');
-    assert.ok(el.querySelector('.rvl-chest-wordmark'));
-    assert.ok(el.querySelector('.rvl-chest-edition'));
-    assert.match(el.innerHTML, /DEGENERUS/);
-    assert.match(el.innerHTML, /LOOTBOX/);
+    assert.match(el.innerHTML, /rvl-chest-q rvl-chest-logo[^>]*flame-logo\.svg/,
+      'the authentic protocol mark occupies the generated lock medallion');
+    assert.doesNotMatch(el.innerHTML, /rvl-chest-q">\?/,
+      'the generic question-mark chest treatment is gone');
     assert.ok(el.querySelector('.rvl-chest-clasp'), 'opening clasp is rendered');
     assert.doesNotMatch(el.innerHTML, /RNG VERIFIED/,
       'the case does not claim an unexplained verification state');
@@ -1271,8 +1318,23 @@ describe('reveal-overlay element', () => {
     assert.ok(el.querySelector('.rvl-lootbox-rays'), 'radial release field is mounted');
     assert.equal(el.querySelectorAll('.rvl-lootbox-spark').length, 8,
       'the burst has a balanced particle ring');
-    assert.match(APP_CSS, /--rvl-box-w:\s*min\(348px, 78vw, 49dvh\)/,
+    assert.ok(existsSync(new URL('../../assets/lootbox/degenerus-lootbox-case-v3.webp', import.meta.url)),
+      'the generated alpha WebP ships with the app');
+    assert.match(REVEAL_SRC, /LOOTBOX_CASE_ART = '\/app\/assets\/lootbox\/degenerus-lootbox-case-v3\.webp'/);
+    assert.match(APP_CSS, /--rvl-box-w:\s*min\(520px, 88vw, 68dvh\)/,
       'the case is bounded by both viewport axes');
+    assert.match(APP_CSS, /\.rvl-chest-lid\s*\{[^}]*degenerus-lootbox-case-v3\.webp[^}]*center top \/ 100% auto no-repeat/s,
+      'the new case art is cropped into the animated lid');
+    assert.match(APP_CSS, /\.rvl-chest-body\s*\{[^}]*degenerus-lootbox-case-v3\.webp[^}]*center bottom \/ 100% auto no-repeat/s,
+      'the matching lower crop preserves the physical opening beat');
+    assert.match(APP_CSS, /\.bxs-chip-art\s*\{[^}]*degenerus-lootbox-case-v3\.webp/s,
+      'small pending boxes reuse the same recognizable silhouette');
+    assert.match(APP_CSS, /\[data-lootbox-value-tone="green"\][^{]*\{[^}]*#34d399/s,
+      'ticket-price bands publish visibly distinct case colors');
+    assert.match(APP_CSS, /\.rvl-vessel--lootbox \.rvl-chest-lid::before\s*\{[^}]*mix-blend-mode:\s*color[^}]*mask:/s,
+      'the value color tints the detailed case while preserving its luminance and alpha');
+    assert.match(REVEAL_SRC, /rvl-reward-lootbox__art[\s\S]*art\.src = LOOTBOX_CASE_ART/,
+      'lootbox reward cards also reuse the protocol case asset');
     assert.match(APP_CSS, /@keyframes rvl-case-unlock/);
     assert.match(APP_CSS, /@keyframes rvl-case-lid-open/);
     assert.match(APP_CSS, /@keyframes rvl-case-rays/);
@@ -1289,6 +1351,7 @@ describe('reveal-overlay element', () => {
   });
 
   test('ordinary lootbox rewards reach the roomy receipt with detailed pack art and no heading', async () => {
+    storeMod.update('app.lastDay', { roll1: { purchaseLevel: 60 } });
     queueReveal({
       kind: 'lootbox',
       lootboxIndex: 47,
@@ -1309,6 +1372,9 @@ describe('reveal-overlay element', () => {
     const pack = summary.querySelector('.rvl-reward-pack');
     assert.ok(pack, 'ticket rewards reuse the full opening-pack artwork');
     assert.equal(pack.querySelector('.rvl-pack-level').textContent, 'LEVEL 63');
+    assert.equal(pack.querySelector('.rvl-pack-level').getAttribute('data-ticket-level-tone'), 'yellow');
+    assert.equal(pack.getAttribute('data-pack-level-tone'), 'yellow',
+      'the wrapper receives the complementary backing palette for its level pill');
     assert.equal(pack.querySelector('.rvl-pack-count').textContent, '10 TICKETS');
     const ticketCard = summary.querySelector('.rvl-card--tickets');
     assert.equal(ticketCard.querySelector('.rvl-card-value'), null,
@@ -1631,6 +1697,10 @@ describe('reveal-overlay element', () => {
       'SKIP is not offered when the ticket itself is already on screen');
     assert.equal(el.querySelector('[data-bind="rvl-card-zone"]').hidden, false);
     assert.ok(el.querySelector('.rvl-ticket-grid-stage--single'));
+    const packBadge = el.querySelector('.rvl-single-pack-badge');
+    assert.ok(packBadge?.querySelector('.rvl-pack-logo'),
+      'the direct ticket reveal retains a compact pack logo');
+    assert.equal(packBadge.querySelector('.rvl-pack-level').textContent, 'LEVEL 3');
     assert.equal(el.querySelector('.rvl-ticket-lesson'), null);
     assert.equal(el.querySelectorAll('.rvl-ticket-entry-number').length, 0);
     assert.match(APP_CSS, /\.rvl-ticket-grid-stage--single[\s\S]{0,420}width:\s*min\(70vw, 430px, 58dvh\)/);
@@ -1657,10 +1727,21 @@ describe('reveal-overlay element', () => {
       'the reveal paper clips the same inner corner as its entry');
     assert.equal(entry.querySelector('.ticket-card-center'), null,
       'the standalone entry has no center diamond');
+    assert.ok(el.querySelector('.rvl-entry-cluster'),
+      'even one loose entry uses a normal ticket-sized 2x2 footprint');
+    const packBadge = el.querySelector('.rvl-single-pack-badge');
+    assert.ok(packBadge?.querySelector('.rvl-pack-logo'),
+      'a singleton also keeps its source pack identity above the quadrant');
+    assert.equal(packBadge.querySelector('.rvl-pack-level').textContent, 'LEVEL 12');
+    assert.equal(el.querySelector('.rvl-entry-cluster__label'), null,
+      'loose entries do not carry a redundant visual ENTRY label');
     assert.match(APP_CSS,
       /\.ticket-entry-card\[data-quadrant="1"\]\s*\{[^}]*clip-path:\s*polygon\(/s,
       'the center-facing corner is cut away along the former diamond edge');
     assert.ok(el.querySelector('[data-bind="rvl-stage"]').classList.contains('rvl-stage--single-entry'));
+    assert.match(APP_CSS,
+      /\.rvl-ticket-grid-stage--single-entry[\s\S]{0,180}width:\s*min\(70vw, 430px, 58dvh\)/,
+      'the singleton footprint takes the same space as a normal ticket');
 
     el.querySelector('[data-bind="rvl-close"]')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
@@ -1978,6 +2059,64 @@ describe('reveal-overlay element', () => {
     assert.equal(nextPack.disabled, false, 'right arrow returns toward the latest hand');
     nextPack.dispatchEvent({ type: 'click', stopPropagation() {} });
     assert.equal(historyLabel.textContent, 'PACK 3 OF 3 OPENED · LEVEL 7');
+
+    el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
+    await tick();
+  });
+
+  test('multi-pack fast path gives the top wrapper a large staged rip before dealing', () => {
+    assert.match(
+      APP_CSS,
+      /\.rvl-auto-pack-rip__pack\.rvl-pack\s*\{[^}]*width:\s*clamp\(5\.2rem, 18vw, 6\.25rem\);[^}]*height:\s*clamp\(7rem, 24vw, 8\.4rem\)/s,
+      'the inline wrapper is a readable pack rather than a thumbnail',
+    );
+    assert.match(APP_CSS, /@keyframes rvl-inline-pack-rays/,
+      'the rip has a radial release beat');
+    assert.match(APP_CSS, /@keyframes rvl-inline-pack-spark/,
+      'the tear has a traveling hot edge');
+    assert.match(REVEAL_SRC, /if \(inlineAutoPack && !reduced\)[\s\S]*?await this\.#wait\(420\)/,
+      'the first ticket waits until the enlarged wrapper begins tearing');
+  });
+
+  test('OPEN ALL PACKS keeps a foil pack after every ordinary pack', async () => {
+    const el = instantiate();
+    const ticket = (n, foil = false) => ({ traitIds: [n, 70, 130, 200], foil });
+    let pendingRuns = 0;
+    pendingActionsMod.publishPendingActions('foil-last-next-pack', [{
+      id: 'ticket-pack:8', kind: 'tickets', ticketLevel: 8, foilPack: false,
+      label: 'Level 8 ticket pack', state: 'ready', run: async () => {
+        pendingRuns += 1;
+        pendingActionsMod.clearPendingActions('foil-last-next-pack');
+        queueReveal({
+          kind: 'pack', title: 'LEVEL 8 TICKETS', level: 8, count: 1,
+          batchId: 'ordinary-pending', packIndex: 1, packCount: 1,
+          tickets: [ticket(3)],
+        });
+      },
+    }]);
+    queueReveal({
+      kind: 'pack', title: 'LEVEL 7 TICKETS', level: 7, count: 1,
+      batchId: 'foil-last-batch', packIndex: 1, packCount: 2,
+      tickets: [ticket(1)],
+    });
+    queueReveal({
+      kind: 'pack', title: 'FOIL PACK · LEVEL 7', level: 7, count: 1, foilPack: true,
+      batchId: 'foil-last-batch', packIndex: 2, packCount: 2,
+      tickets: [ticket(2, true)],
+    });
+    await tick();
+
+    const zone = el.querySelector('[data-bind="rvl-card-zone"]');
+    const openAll = zone.querySelector('.rvl-open-all-cta');
+    assert.equal(openAll.textContent, 'OPEN ALL PACKS');
+    openAll.dispatchEvent({ type: 'click' });
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    await tick();
+
+    assert.equal(pendingRuns, 1, 'the ordinary Pending pack was pulled ahead of queued foil');
+    assert.match(el.querySelector('[data-bind="rvl-title"]').textContent, /FOIL PACK/,
+      'the foil hand is the final readable hand in the combined opening');
+    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'COLLECT');
 
     el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
     await tick();
@@ -2317,6 +2456,25 @@ describe('reveal-overlay element', () => {
       'the shared red treatment supplies the WWXRP logo');
     cta.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
+  });
+
+  test('a partial Degenerette return does not label the resolution as NET LOSS', async () => {
+    queueReveal({
+      kind: 'degenerette', currency: 0,
+      amountPerSpin: 10n ** 16n, totalWager: 10n ** 16n,
+      totalPayout: 5n * 10n ** 15n,
+      spins: [{
+        spinIndex: 0, playerTraits: 13, houseTraits: 13,
+        score: 1, payout: 5n * 10n ** 15n,
+      }],
+    });
+    const el = instantiate();
+    await tick();
+
+    const total = el.querySelector('.rvl-spin-total');
+    assert.match(total.textContent, /RETURNED/);
+    assert.doesNotMatch(total.textContent, /NET LOSS/,
+      'the payout and signed NET amount already communicate the result');
   });
 
   test('reduced-motion BoxSpin shows the full settled reel, then its currency reveal', async () => {

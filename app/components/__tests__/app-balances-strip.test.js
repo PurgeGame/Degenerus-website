@@ -481,7 +481,7 @@ describe('app-balances-strip — combined mode (account-switcher)', () => {
 
     const el = mountStrip();
     await flushMicrotasks();
-    assert.ok(el.querySelectorAll('.abs-tile__value').map((v) => v.textContent).some((t) => /0\.0000 ETH/.test(t)),
+    assert.ok(el.querySelectorAll('.abs-tile__value').map((v) => v.textContent).some((t) => /0 ETH/.test(t)),
       'combined zero winnings render');
 
     storeMod.update('viewing.combined', false);

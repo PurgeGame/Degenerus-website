@@ -207,7 +207,11 @@ export function dgnPartitionTicketEntries(cards) {
     const cardEntries = Array.isArray(card?.entries) ? [...card.entries] : [];
     cardEntries.sort((a, b) => Number(a?.entryId ?? 0) - Number(b?.entryId ?? 0));
     for (const entry of cardEntries) {
-      const tid = Number(entry?.traitId);
+      // Unrevealed entries arrive as traitId null, and Number(null) is 0 — the
+      // valid trait for crypto/pink/XRP. Reject null before coercing or every
+      // pending slot both paints as pink XRP and splits the ticket it sits in.
+      const rawTid = entry?.traitId;
+      const tid = rawTid == null ? NaN : Number(rawTid);
       if (!Number.isInteger(tid) || tid < 0 || tid > 255) {
         flushLoose();
         continue;

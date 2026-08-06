@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 58" role="img" aria-label="Chainlink RNG incoming">
+  <defs>
+    <linearGradient id="mark" x1="8" y1="4" x2="27" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7597f4"/>
+      <stop offset="1" stop-color="#3158c8"/>
+    </linearGradient>
+  </defs>
+  <path transform="translate(-2 0)" fill="url(#mark)" fill-rule="evenodd" d="M17.5 3.5 27 9v11l-9.5 5.5L8 20V9l9.5-5.5Zm0 5.5-4.75 2.75v5.5L17.5 20l4.75-2.75v-5.5L17.5 9Z"/>
+  <text x="47" y="22" fill="#dbe5ff" font-family="Inter, Arial, sans-serif" font-size="15.5" font-weight="900" letter-spacing="1.25" text-anchor="middle">RNG</text>
+  <rect x="7" y="33" width="58" height="19" rx="6" fill="#2563eb" opacity=".2"/>
+  <text x="36" y="47" fill="#a9d4ff" font-family="Inter, Arial, sans-serif" font-size="9.8" font-weight="900" letter-spacing=".08" text-anchor="middle">INCOMING</text>
+</svg>

@@ -16,6 +16,7 @@ function makeElement(tag = 'div') {
     hidden: false,
     disabled: false,
     className: '',
+    style: {},
     classList: {
       _set: new Set(),
       add(...names) { names.forEach((name) => this._set.add(name)); },
@@ -80,6 +81,11 @@ function matches(el, selector) {
   return el.tagName === selector.toUpperCase();
 }
 
+function pendingSurfaceVisible(el) {
+  return el.querySelector('[data-bind="rrt-tray"]')
+    ?.getAttribute('data-has-pending') === 'true';
+}
+
 class FakeHTMLElement {
   constructor() { Object.defineProperties(this, Object.getOwnPropertyDescriptors(makeElement())); }
 }
@@ -100,9 +106,11 @@ globalThis.customElements = {
 const pending = await import('../../app/pending-actions.js');
 const drawGate = await import('../../app/major-draw-activity.js');
 const preferences = await import('../../app/degenerette-preferences.js');
+const store = await import('../../app/store.js');
 const trayModule = await import('../app-reveal-tray.js');
 
 beforeEach(() => {
+  store.__resetForTest();
   pending.__resetPendingActionsForTest();
   drawGate.__resetMajorDrawActivityForTest();
   localStorage._m.clear();
@@ -130,9 +138,60 @@ describe('actionableRevealItems', () => {
       'lootbox', 'degenerette', 'degenerette', 'lootbox', 'tickets', 'growth-claim', 'volume-claim', 'whale-pass-claim', 'batch-resolution', 'bingo', 'foil-match',
     ]);
   });
+
+  test('incoming RNG estimates advance four lights across the expected ready window', () => {
+    const startedAt = 1_000_000;
+    const dotsAt = (elapsed) => trayModule.rngTimedConfirmationDots({
+      startedAt,
+      now: startedAt + elapsed,
+      estimatedReadyMs: 12_000,
+    });
+    assert.deepEqual(
+      [dotsAt(0), dotsAt(4_000), dotsAt(8_000), dotsAt(12_000), dotsAt(60_000)],
+      [1, 2, 3, 4, 4],
+      'elapsed time fills the incoming lights but can never fill readiness',
+    );
+  });
 });
 
 describe('<app-reveal-tray>', () => {
+  test('a bought lootbox waits as x ETH, box glyph, LOOTBOX instead of a wide purchase row', () => {
+    pending.publishPendingActions('lootboxes', [{
+      id: 'lootbox:submitted:0xabc', kind: 'lootbox', label: 'Lootbox purchase',
+      amountLabel: '0.04 ETH', lootboxValueTone: 'purple',
+      lootboxTicketUnitsLabel: '4×', compact: true,
+      detail: 'Purchase sent · waiting for confirmation',
+      state: 'waiting', pinned: true, progress: 'indeterminate', write: true,
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const action = el.querySelector('.rrt-action--lootbox-summary');
+    assert.ok(action);
+    assert.equal(action.getAttribute('data-lootbox-value-tone'), 'purple');
+    assert.equal(action.querySelector('.rrt-lootbox-summary__amount').textContent, '0.04 ETH');
+    assert.ok(action.querySelector('.rrt-lootbox-summary__box .rrt-action__glyph')
+      || action.querySelector('.rrt-lootbox-summary__box')?.querySelector('.rrt-action__glyph'));
+    assert.match(action.querySelector('.rrt-lootbox-summary').textContent, /0\.04 ETH.*LOOTBOX/);
+    const summaryParts = action.querySelector('.rrt-lootbox-summary').children;
+    assert.match(summaryParts[0].className, /rrt-lootbox-summary__amount/,
+      'the ETH amount owns the first line');
+    assert.match(summaryParts[1].className, /rrt-lootbox-summary__box/,
+      'the lootbox glyph starts the separate second line');
+    assert.equal(action.querySelector('.rrt-action__art'), null,
+      'the exact inline receipt does not duplicate the box glyph at the left');
+    assert.equal(action.querySelector('.rrt-action__cta'), null);
+    assert.equal(action.querySelector('.rrt-action__progress'), null);
+    assert.match(action.title, /4× ticket price/);
+    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    assert.match(css, /\.rrt-lootbox-summary\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*auto auto/s,
+      'the amount and lootbox receipt use two compact lines');
+    assert.match(css, /\.rrt-lootbox-summary__amount\s*\{[^}]*grid-column:\s*1 \/ -1/s);
+    assert.doesNotMatch(css, /\.rrt-action:hover:not\(:disabled\)[^}]*transform:\s*translateY\(-1px\)/s,
+      'pending cards glow in place instead of clipping their top edge');
+    el.disconnectedCallback();
+  });
+
   test('a whale-pass balance is rendered as a guarded CLAIM action', () => {
     pending.publishPendingActions('whale-pass-claims', [{
       id: 'whale:2', kind: 'whale-pass-claim', kindLabel: 'WHALE PASS CLAIM',
@@ -146,7 +205,9 @@ describe('<app-reveal-tray>', () => {
     const action = el.querySelector('.rrt-action--whale-pass-claim');
     assert.ok(action);
     assert.equal(action.querySelector('.rrt-action__kind').textContent, 'WHALE PASS CLAIM');
-    assert.equal(action.querySelector('.rrt-action__art').textContent, '🐳');
+    assert.ok(action.querySelector('.rrt-action__glyph'),
+      'the whale pass uses a real line icon instead of an emoji fallback');
+    assert.equal(action.querySelector('.rrt-action__label').textContent, 'WHALE PASS · 2');
     assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM');
     assert.notEqual(action.getAttribute('data-write'), null);
     el.disconnectedCallback();
@@ -195,7 +256,7 @@ describe('<app-reveal-tray>', () => {
       '/whitepaper/flame-center-silver.svg',
       'the compact Pending ticket uses the same silver centre flame',
     );
-    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM T5');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM');
     assert.notEqual(action.getAttribute('data-write'), null);
     el.disconnectedCallback();
   });
@@ -216,14 +277,20 @@ describe('<app-reveal-tray>', () => {
     assert.match(action.querySelector('.rrt-action__detail').textContent, /all 8 colors/);
     assert.equal(action.querySelector('.rrt-action__art--bingo').querySelector('img').src,
       '/badges-circular/crypto_06_ethereum_gold.svg');
-    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'REVEAL BINGO');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'VIEW');
     el.disconnectedCallback();
   });
 
   test('pins ready reveal work, delegates the click, and hides after its owner clears', async () => {
     const el = new trayModule.AppRevealTray();
     el.connectedCallback();
-    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, true);
+    assert.equal(pendingSurfaceVisible(el), false);
+    assert.ok(el.querySelector('[data-bind="rrt-stage"]'),
+      'the contextual RNG instrument keeps a stable bottom shell');
+    assert.equal(el.querySelector('[data-bind="rrt-rng"]').hidden, true,
+      'an idle RNG shell does not manufacture any bottom-panel chrome');
+    assert.equal(el.querySelector('[data-bind="rrt-rng-request"]').disabled, true,
+      'the always-present control stays inert while the queue is not requestable');
 
     let ran = 0;
     pending.publishPendingActions('box', [{
@@ -235,12 +302,14 @@ describe('<app-reveal-tray>', () => {
       },
     }]);
     const shell = el.querySelector('[data-bind="rrt-tray"]');
-    assert.equal(shell.hidden, false);
+    assert.equal(pendingSurfaceVisible(el), true);
     assert.equal(el.querySelectorAll('.rrt-action').length, 1);
+    assert.ok(el.querySelector('.rrt-action--lootbox')?.querySelector('.rrt-action__glyph'),
+      'a ready lootbox has a recognizable box icon');
     el.querySelector('.rrt-action').dispatchEvent({ type: 'click' });
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
     assert.equal(ran, 1);
-    assert.equal(shell.hidden, true);
+    assert.equal(pendingSurfaceVisible(el), false);
     el.disconnectedCallback();
   });
 
@@ -250,11 +319,12 @@ describe('<app-reveal-tray>', () => {
     }]);
     const el = new trayModule.AppRevealTray();
     el.connectedCallback();
-    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, true);
+    assert.equal(pendingSurfaceVisible(el), false);
     el.disconnectedCallback();
   });
 
   test('an unresolved bought pack is a small passive receipt, then promotes to its opener', () => {
+    store.update('app.lastDay', { roll1: { purchaseLevel: 76 } });
     pending.publishPendingActions('pack', [{
       id: 'ticket-packs:pending', kind: 'tickets',
       label: '4 TICKETS PENDING', detail: 'Queued before the next jackpot',
@@ -270,11 +340,18 @@ describe('<app-reveal-tray>', () => {
     assert.equal(action.tagName, 'BUTTON', 'the receipt opens a read-only pack preview');
     assert.equal(action.disabled, false, 'viewing pending packs is never transaction-locked');
     assert.equal(action.getAttribute('aria-expanded'), 'false');
-    assert.equal(action.querySelector('.rrt-pack-pending__count').textContent, '4 TICKETS');
-    assert.equal(action.querySelector('.rrt-pack-pending__state').textContent, 'PENDING');
+    assert.equal(action.querySelector('.rrt-pack-pending__count').textContent, '4',
+      'the collapsed receipt keeps only the useful quantity');
+    assert.equal(action.querySelector('.rrt-ticket-level'), null,
+      'ticket level waits for the expanded dropdown');
+    assert.equal(action.querySelector('.rrt-pack-pending__state').textContent, 'Tickets');
     assert.ok(action.querySelector('.rrt-pending-pack-art'),
       'the receipt uses a tiny generic pack icon');
+    assert.ok(action.querySelector('.rrt-pending-pack-art')?.querySelector('.rvl-pack-brand'),
+      'even the tiny pending silhouette retains the branded plaque');
     assert.equal(action.querySelector('.rvl-pack-logo')?.src, '/whitepaper/flame-logo.svg');
+    assert.equal(action.querySelector('.rrt-pending-pack-art')?.querySelector('.rvl-pack-edition')?.textContent,
+      'TICKET PACK');
     assert.equal(action.querySelector('.rrt-action__cta'), null,
       'there is no fake WAITING action');
     assert.equal(el.querySelector('[data-bind="rrt-count"]'), null,
@@ -287,6 +364,8 @@ describe('<app-reveal-tray>', () => {
     assert.equal(details.hidden, false);
     assert.equal(details.querySelectorAll('.rrt-pending-pack-preview').length, 1);
     assert.equal(details.querySelector('.rvl-pack-level').textContent, 'LEVEL 77');
+    assert.equal(details.querySelector('.rvl-pack-level').getAttribute('data-ticket-level-tone'), 'green');
+    assert.equal(details.querySelector('.rrt-pending-pack-preview__art').getAttribute('data-pack-level-tone'), 'green');
     assert.equal(details.querySelector('.rvl-pack-count').textContent, '4 TICKETS');
     assert.equal(details.querySelector('.rrt-pending-pack-preview__caption').textContent, 'PENDING');
 
@@ -300,7 +379,13 @@ describe('<app-reveal-tray>', () => {
     assert.equal(action.disabled, false);
     assert.ok(action.querySelector('.rrt-pack-art'),
       'the resolved receipt promotes into the normal pack opener');
-    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'OPEN TICKETS');
+    assert.equal(action.querySelector('.rrt-action__cta'), null,
+      'the lit clickable pack does not repeat the self-evident OPEN action');
+    assert.match(action.className, /\brrt-action--ticket-ready\b/);
+    assert.equal(action.querySelector('.rrt-action__label').textContent, '4 Lvl 77\nTickets');
+    assert.equal(action.querySelector('.rrt-ticket-level').getAttribute('data-ticket-level-tone'), 'green');
+    assert.equal(action.querySelector('.rrt-pack-level').getAttribute('data-ticket-level-tone'), 'green');
+    assert.equal(action.querySelector('.rrt-pack-art').getAttribute('data-pack-level-tone'), 'green');
     el.disconnectedCallback();
   });
 
@@ -317,43 +402,210 @@ describe('<app-reveal-tray>', () => {
     assert.equal(clear.hidden, false);
     clear.dispatchEvent({ type: 'click' });
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
-    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, true);
+    assert.equal(pendingSurfaceVisible(el), false);
 
     pending.publishPendingActions('pack', [{
       id: 'ticket-pack:77', kind: 'tickets', label: 'Level 77 ticket pack',
       ticketLevel: 77, ticketCount: 3, state: 'ready', run: async () => {},
     }]);
-    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, true,
+    assert.equal(pendingSurfaceVisible(el), false,
       'the cleared waiting hand cannot return under its ready opener id');
     el.disconnectedCallback();
   });
 
-  test('a submitted Degenerette RNG request stays pinned with progress, then lights up when ready', () => {
-    pending.publishPendingActions('degenerette', [{
+  test('one static RNG control lights for requests and visualizes Chainlink fulfillment', async () => {
+    const base = {
       id: 'degenerette:42', kind: 'degenerette', label: '1 spin',
-      shortLabel: 'Waiting for RNG', detail: 'RNG requested · waiting for Chainlink result',
-      ticketPacked: '0x1b3a0900', heroQuadrant: 2,
-      state: 'waiting', phase: 'waiting-rng', pinned: true, progress: 'indeterminate',
+      amountLabel: '0.025 ETH', spinCount: 1,
+      ticketPacked: '0x1b3a0900', heroQuadrant: 2, pinned: true,
+    };
+    pending.publishPendingActions('context', [{
+      id: 'growth:context', kind: 'growth-claim', label: 'Growth payout',
+      state: 'ready', run: async () => {},
+    }]);
+    pending.publishPendingActions('degenerette', [{
+      ...base,
+      shortLabel: 'Waiting for RNG', detail: 'Waiting for request window',
+      state: 'waiting', phase: 'awaitingRng', progress: 'indeterminate',
+      rngQueuePendingMilliEth: '420', rngQueueThresholdMilliEth: '1000',
     }]);
     const el = new trayModule.AppRevealTray();
     el.connectedCallback();
 
-    const shell = el.querySelector('[data-bind="rrt-tray"]');
-    let action = el.querySelector('.rrt-action--degenerette');
-    assert.equal(shell.hidden, false, 'a requested RNG wait remains on screen');
-    assert.match(action.className, /is-rng-waiting/);
-    assert.match(action.className, /is-waiting/,
-      'not-yet-actionable work receives the shared muted treatment');
-    assert.equal(action.disabled, true, 'waiting progress cannot submit a duplicate request');
-    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'WAITING');
-    assert.ok(action.querySelector('.rrt-action__progress'));
-    assert.equal(el.querySelector('[data-bind="rrt-title"]').textContent, 'RNG PENDING');
-    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'DEGENERETTE');
-    assert.equal(action.querySelector('.rrt-action__label').textContent, '1 spin',
-      'the middle line does not repeat Degenerette');
+    const lane = el.querySelector('[data-bind="rrt-rng"]');
+    const request = el.querySelector('[data-bind="rrt-rng-request"]');
+    const art = el.querySelector('[data-bind="rrt-rng-art"]');
+    const artPath = () => art.getAttribute('src');
+    const dots = () => el.querySelectorAll('.rrt-rng__step');
+    assert.equal(pendingSurfaceVisible(el), true,
+      'real non-ticket work gives the populated RNG lane a Pending surface');
+    assert.equal(lane.hidden, false);
+    assert.equal(lane.getAttribute('data-rng-phase'), 'queued');
+    assert.equal(request.disabled, true);
+    assert.equal(el.querySelector('[data-bind="rrt-rng-status"]').textContent,
+      'MID-DAY RNG QUEUE · 0.42/1 ETH');
+    assert.equal(dots().length, 5, 'five larger bubbles summarize RNG progress');
+    assert.equal(dots().filter((dot) => /is-complete/.test(dot.className)).length, 3,
+      'the five blue bubbles fill from the real shared ETH queue ratio');
+    assert.doesNotMatch(dots()[0].className, /is-complete/);
+    assert.match(dots()[4].className, /is-complete/,
+      'queue progress starts at the bottom and rises');
+    assert.equal(request.getAttribute('data-rng-button-state'), 'waiting',
+      'the state artwork says WAITING while the free request is still charging');
+    assert.equal(artPath(), '/app/assets/rng-chainlink-waiting.svg');
+    assert.equal(dots().filter((dot) => /is-active/.test(dot.className)).length, 0,
+      'a partially filled queue stays static');
+    assert.ok(el.querySelector('.rrt-action--degenerette'),
+      'the bought spin remains visible while the RNG rail reports its progress');
+    const pendingSpin = el.querySelector('.rrt-action--degenerette');
+    assert.match(pendingSpin.className, /rrt-action--compact/);
+    assert.equal(pendingSpin.querySelector('.rrt-degenerette-summary__amount').textContent,
+      '0.025 ETH');
+    assert.equal(pendingSpin.querySelector('.rrt-degenerette-summary__count').textContent, '×1');
+    const spinSummaryParts = pendingSpin.querySelector('.rrt-degenerette-summary').children;
+    assert.match(spinSummaryParts[0].textContent, /ETH$/);
+    assert.match(spinSummaryParts[1].className, /rrt-degenerette-summary__box/,
+      'the lootbox glyph comes immediately after ETH');
+    assert.equal(spinSummaryParts[2].textContent, '×1');
+    assert.ok(pendingSpin.querySelector('.rrt-degenerette-summary__box .rrt-action__glyph')
+      || pendingSpin.querySelector('.rrt-degenerette-summary__box')?.querySelector('.rrt-action__glyph'),
+    'the compact spin count carries the lootbox glyph');
+    assert.equal(pendingSpin.querySelector('.rrt-action__progress'), null);
+    assert.equal(pendingSpin.querySelector('.rrt-action__cta'), null);
+    assert.doesNotMatch(pendingSpin.className, /is-rng-waiting/,
+      'the spin receipt stays neutral before an RNG request exists');
+    assert.equal(el.querySelector('[data-bind="rrt-title"]'), null,
+      'the obsolete Pending/RNG heading is not rendered');
+    assert.equal(el.querySelector('.rrt-head'), null,
+      'the old logo header has been removed');
+
+    let requests = 0;
+    let finishRequest = null;
+    pending.publishPendingActions('degenerette', [{
+      ...base,
+      shortLabel: 'Waiting for RNG', detail: 'Queue full; request gate unavailable',
+      state: 'waiting', phase: 'awaitingRng', progress: 'indeterminate',
+      rngQueuePendingMilliEth: '1000', rngQueueThresholdMilliEth: '1000',
+    }]);
+    assert.equal(lane.getAttribute('data-rng-phase'), 'queue-ready');
+    assert.match(request.className, /is-lit/,
+      'a full queue lights the Chainlink mark even before this wallet can submit');
+    assert.doesNotMatch(request.className, /is-requestable/);
+    assert.equal(request.disabled, true);
+    assert.equal(request.getAttribute('data-rng-button-state'), 'waiting',
+      'a full queue without an available request gate remains WAITING');
+    assert.equal(artPath(), '/app/assets/rng-chainlink-waiting.svg');
+
+    pending.publishPendingActions('degenerette', [{
+      ...base,
+      shortLabel: 'Request RNG', detail: 'RNG request ready',
+      state: 'ready', phase: 'request-ready',
+      run: async () => {
+        requests += 1;
+        await new Promise((resolve) => { finishRequest = resolve; });
+      },
+    }]);
+    assert.equal(lane.getAttribute('data-rng-phase'), 'requestable');
+    assert.equal(pendingSurfaceVisible(el), true);
+    assert.equal(request.disabled, false);
+    assert.match(request.className, /is-requestable/);
+    assert.equal(dots().filter((dot) => /is-complete/.test(dot.className)).length, 5,
+      'the full blue queue remains visible when its request gate opens');
+    assert.equal(request.getAttribute('data-rng-button-state'), 'request');
+    assert.equal(artPath(), '/app/assets/rng-chainlink-request.svg');
+    assert.match(request.className, /is-state-request/);
+    assert.equal(el.querySelector('.rrt-action--degenerette').disabled, true,
+      'only the dedicated RNG button can submit the RNG request');
+    assert.match(el.innerHTML, /class="rrt-rng__art"/,
+      'the coupled Chainlink mark, RNG label, and state use one fixed asset');
+    assert.equal(el.querySelector('[data-bind="rrt-rng-button-label"]'), null,
+      'the old verbose request label stays removed');
+    assert.equal(request.getAttribute('aria-label'), 'Request shared RNG',
+      'the icon retains a readable accessible action name');
+    request.dispatchEvent({ type: 'click' });
+    await Promise.resolve();
+    assert.equal(requests, 1, 'the stable RNG button delegates the real publisher action');
+    assert.match(request.className, /is-requesting/,
+      'the Chainlink logo spins only while the request transaction is in flight');
+    assert.equal(request.getAttribute('data-rng-button-state'), 'incoming');
+    assert.equal(artPath(), '/app/assets/rng-chainlink-incoming.svg');
+    assert.match(request.className, /is-state-incoming/);
+    assert.doesNotMatch(request.className, /is-request-complete/);
+    assert.equal(dots().filter((dot) => /is-complete/.test(dot.className)).length, 0,
+      'the queue lights clear while the request transaction is pending');
+
+    finishRequest();
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    assert.doesNotMatch(request.className, /is-requesting/);
+    assert.match(request.className, /is-request-complete/,
+      'a confirmed request stops the spin and triggers the short green flash');
+    assert.equal(dots().filter((dot) => /is-complete/.test(dot.className)).length, 1,
+      'the receipt immediately hands progress to the first green block light');
+    assert.match(dots()[4].className, /is-complete/,
+      'the first incoming light is the bottom light');
+    assert.equal(request.getAttribute('data-rng-button-state'), 'incoming');
+    assert.equal(artPath(), '/app/assets/rng-chainlink-incoming.svg');
+
+    pending.publishPendingActions('degenerette', [{
+      ...base,
+      shortLabel: 'Waiting for RNG', detail: 'RNG requested · waiting for Chainlink result',
+      state: 'waiting', phase: 'waiting-rng', progress: 'indeterminate',
+      rngRequestBlock: 100, rngCurrentBlock: 100, rngConfirmations: 10,
+    }]);
+    assert.equal(dots().filter((dot) => /is-complete/.test(dot.className)).length, 1,
+      'the confirmed request clears the blue queue and lights only the bottom dot');
+    assert.equal(lane.style['--rrt-rng-progress-color'], 'hsl(120 78% 52%)',
+      'the first incoming confirmation is green');
+
+    pending.publishPendingActions('degenerette', [{
+      ...base,
+      shortLabel: 'Waiting for RNG', detail: 'RNG requested · waiting for Chainlink result',
+      state: 'waiting', phase: 'waiting-rng', progress: 'indeterminate',
+      rngRequestBlock: 100, rngCurrentBlock: 104, rngConfirmations: 10,
+    }]);
+    assert.ok(el.querySelector('.rrt-action--degenerette'),
+      'the spin receipt survives the submitted-to-incoming RNG handoff');
+    assert.equal(lane.getAttribute('data-rng-phase'), 'fulfilling');
+    assert.equal(request.disabled, true, 'fulfillment cannot submit a duplicate request');
+    assert.equal(dots().filter((dot) => /is-complete/.test(dot.className)).length, 2,
+      'five of ten confirmations fill half of the four progress bubbles');
+    assert.equal(lane.style['--rrt-rng-progress-color'], 'hsl(120 78% 52%)',
+      'all lit incoming bubbles stay the same green');
+    assert.equal(dots().filter((dot) => /is-active/.test(dot.className)).length, 0,
+      'block confirmations advance without a perpetual pulse');
+    assert.doesNotMatch(dots()[0].className, /is-complete/,
+      'the top bubble remains reserved for actual fulfillment');
+    assert.equal(el.querySelector('[data-bind="rrt-rng-status"]').textContent,
+      'WAITING FOR CHAINLINK · 5/10 BLOCKS');
+
+    pending.publishPendingActions('degenerette', [{
+      ...base,
+      shortLabel: 'Resolve degen', detail: 'RNG ready · FLIP result locked',
+      state: 'ready', phase: 'result-ready', run: async () => {},
+    }]);
+    assert.equal(pendingSurfaceVisible(el), true,
+      'the actual resolvable result expands the containing Pending surface');
+    assert.equal(lane.getAttribute('data-rng-phase'), 'fulfilled');
+    assert.equal(dots().filter((dot) => /is-complete/.test(dot.className)).length, 5);
+    assert.equal(lane.style['--rrt-rng-progress-color'], 'hsl(120 78% 52%)',
+      'fulfilled RNG retains the same green used while incoming');
+    assert.match(dots()[0].className, /is-complete/,
+      'the top bubble turns on with the resolvable result');
+    assert.equal(request.getAttribute('data-rng-button-state'), 'ready',
+      'the completed rail explicitly reports RNG READY beside the resolvable action');
+    assert.equal(artPath(), '/app/assets/rng-chainlink-ready.svg');
+    const action = el.querySelector('.rrt-action--degenerette');
+    assert.match(action.className, /is-result-ready/);
+    assert.match(action.className, /rrt-action--compact/,
+      'the ready receipt stays as tight as its waiting form');
+    assert.equal(action.disabled, false);
+    assert.equal(action.querySelector('.rrt-degenerette-summary__amount').textContent, '0.025 ETH');
+    assert.equal(action.querySelector('.rrt-degenerette-summary__count').textContent, '×1');
+    assert.equal(action.querySelector('.rrt-action__cta'), null,
+      'the entire lit card is clickable without a redundant VIEW label');
     const ticket = action.querySelector('.rrt-degenerette-ticket');
     assert.match(ticket.className, /ticket-card/,
-      'the pending graphic uses the same ticket paper as the submitted ticket');
+      'the ready action retains the submitted ticket as its icon');
     const badges = ticket.querySelectorAll('.rrt-degenerette-ticket__badge');
     assert.deepEqual(badges.map((badge) => badge.src), [
       '/badges-circular/crypto_00_xrp_pink.svg',
@@ -366,26 +618,152 @@ describe('<app-reveal-tray>', () => {
     assert.equal(ticket.querySelector('.rrt-degenerette-ticket__center-mark')?.src,
       '/whitepaper/flame-center.svg', 'the real ticket center mark is present');
 
-    pending.publishPendingActions('degenerette', [{
-      id: 'degenerette:42', kind: 'degenerette', label: '1 spin',
-      shortLabel: 'Resolve degen', detail: 'RNG ready · FLIP result locked',
-      ticketPacked: '0x1b3a0900', heroQuadrant: 2,
-      state: 'ready', phase: 'result-ready', run: async () => {},
-    }]);
-    action = el.querySelector('.rrt-action--degenerette');
-    assert.match(action.className, /is-result-ready/);
-    assert.doesNotMatch(action.className, /is-waiting/);
-    assert.equal(action.disabled, false);
-    assert.equal(action.querySelector('.rrt-action__progress'), null);
-    assert.equal(el.querySelector('[data-bind="rrt-title"]').textContent, 'READY');
-
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.match(css, /\.rrt-action__art--degenerette\s*\{[^}]*width:\s*2\.42rem;[^}]*height:\s*2\.42rem/s,
       'the Degenerette art leaves vertical breathing room inside its fixed-height row');
     assert.match(css, /@media \(max-width: 560px\)[\s\S]*?\.rrt-action--degenerette \.rrt-action__art\s*\{[^}]*width:\s*2\.12rem;[^}]*height:\s*2\.12rem/s,
       'the narrow Degenerette art stays below the row content height');
     assert.match(css, /\.rrt-action--degenerette\.is-result-ready\s*\{[^}]*animation:\s*rrt-degenerette-ready-glow/s);
-    assert.match(css, /\.rrt-action__progress-fill\s*\{[^}]*animation:\s*rrt-rng-progress/s);
+    assert.match(css, /\.rrt-degenerette-summary\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*auto auto auto[^}]*row-gap:\s*0\.06rem/s,
+      'ETH and the spin receipt occupy two tightly spaced rows');
+    assert.match(css, /\.rrt-degenerette-summary__amount\s*\{[^}]*grid-column:\s*1 \/ -1/s,
+      'the ETH amount owns its line above the icon and spin count');
+    assert.match(css, /\.rrt-rng__request\.is-requestable\s*\{[^}]*animation:\s*rrt-rng-requestable/s);
+    assert.match(css, /\.rrt-rng__request\.is-requesting \.rrt-rng__art\s*\{[^}]*animation:\s*rrt-rng-art-pending 1\.7s ease-in-out infinite/s,
+      'only an in-flight request gives the fixed state artwork a restrained pulse');
+    assert.match(css, /\.rrt-rng__request\.is-request-complete\s*\{[^}]*animation:\s*rrt-rng-request-complete 0\.7s ease-out 1/s,
+      'request confirmation has one short green flash');
+    assert.match(css,
+      /\.rrt-tray\[data-has-pending="true"\] \.rrt-rng\s*\{[^}]*position:\s*absolute;[^}]*top:\s*0\.62rem;[^}]*left:\s*0\.55rem/s,
+      'the RNG instrument is integrated into the left edge of Pending');
+    assert.match(css, /\.rrt-rng\s*\{[^}]*height:\s*var\(--rrt-row-height, 3\.2rem\);[^}]*grid-template-columns:\s*0\.5rem 3\.65rem/s,
+      'the larger bubble rail is the left column and the branded button follows');
+    assert.match(css, /\.rrt-rng__request\s*\{[^}]*width:\s*3\.65rem;[^}]*height:\s*100%;[^}]*linear-gradient/s,
+      'the fixed Chainlink artwork fills one deliberately surfaced row-height button');
+    assert.match(css,
+      /\.rrt-rng__art\s*\{[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*object-fit:\s*contain/s,
+      'the coupled static artwork scales as one unit without clipping its state copy');
+    assert.match(css,
+      /\.rrt-rng__brand\s*\{[^}]*height:\s*100%;[^}]*align-self:\s*stretch/s,
+      'the coupled Chainlink/RNG image and its bubbles share one normal row height');
+    assert.match(css, /\.rrt-rng__request\s*\{[^}]*height:\s*100%/s,
+      'the button fills only its compact coupled brand unit');
+    assert.match(css, /\.rrt-rng\[hidden\]\s*\{\s*display:\s*none !important/s,
+      'an empty RNG lane cannot be restored by its author display rule');
+    for (const state of ['idle', 'waiting', 'request', 'incoming']) {
+      const svg = readFileSync(new URL(`../../assets/rng-chainlink-${state}.svg`, import.meta.url), 'utf8');
+      assert.match(svg, /viewBox="0 0 72 58"/);
+      assert.match(svg, />RNG<\/text>/, `${state} has a legible fixed RNG label`);
+      assert.match(svg, /<path[^>]*d="M17\.5 3\.5 27 9v11l-9\.5 5\.5L8 20V9l9\.5-5\.5/s,
+        `${state} keeps the Chainlink mark compact at the left of the label`);
+      assert.match(svg, /<path[^>]*transform="translate\(-2 0\)"/,
+        `${state} nudges only the Chainlink mark two pixels left`);
+      assert.match(svg, /<text x="47" y="22"[^>]*font-size="15\.5"[^>]*>RNG<\/text>/s,
+        `${state} gives RNG the larger top-row type`);
+    }
+    for (const [state, label] of [['waiting', 'WAITING'], ['request', 'REQUEST'], ['incoming', 'INCOMING']]) {
+      const svg = readFileSync(new URL(`../../assets/rng-chainlink-${state}.svg`, import.meta.url), 'utf8');
+      assert.match(svg, new RegExp(`font-size="9\\.8"[^>]*>${label}<\\/text>`),
+        `${state} uses the enlarged second-row state`);
+    }
+    assert.match(css, /data-rng-mode="queue"[^}]*\.rrt-rng__step\.is-complete\s*\{[^}]*background:\s*#2a5ada/s,
+      'queue fill uses static Chainlink-blue dots');
+    assert.match(css, /data-rng-mode="confirmations"[^}]*\.rrt-rng__step\.is-complete\s*\{[^}]*background:\s*var\(--rrt-rng-progress-color/s,
+      'every lit incoming confirmation shares the same green progress color');
+    assert.doesNotMatch(css, /\.rrt-rng__step\.is-complete\s*\{[^}]*animation:/s,
+      'lit dots do not animate between real block changes');
+    el.disconnectedCallback();
+  });
+
+  test('a failed shared RNG request follows the winning request instead of showing an error', async () => {
+    pending.publishPendingActions('context', [{
+      id: 'growth:rng-race', kind: 'growth-claim', label: 'Growth payout',
+      state: 'ready', run: async () => {},
+    }]);
+    pending.publishPendingActions('degenerette', [{
+      id: 'degenerette:rng-race', kind: 'degenerette', label: '1 spin',
+      state: 'ready', phase: 'request-ready', pinned: true,
+      run: async () => { throw new Error('request already fulfilled'); },
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const request = el.querySelector('[data-bind="rrt-rng-request"]');
+    const lane = el.querySelector('[data-bind="rrt-rng"]');
+    const error = el.querySelector('[data-bind="rrt-error"]');
+    request.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+
+    assert.equal(request.getAttribute('data-rng-button-state'), 'incoming');
+    assert.equal(request.disabled, true, 'the raced wallet cannot submit a duplicate request');
+    assert.equal(lane.getAttribute('data-rng-phase'), 'fulfilling');
+    assert.equal(el.querySelectorAll('.rrt-rng__step')
+      .filter((dot) => /is-complete/.test(dot.className)).length, 1,
+    'INCOMING lights the first green bubble even before block metadata arrives');
+    assert.equal(el.querySelector('[data-bind="rrt-rng-art"]').getAttribute('src'),
+      '/app/assets/rng-chainlink-incoming.svg');
+    assert.equal(error.hidden, true,
+      'a shared-request race is not presented as a failed player action');
+    assert.doesNotMatch(request.className, /is-request-complete/,
+      'only this wallet receiving a successful receipt gets the green confirmation flash');
+    el.disconnectedCallback();
+  });
+
+  test('shows the RNG lane only when it contains relevant player or jackpot RNG work', () => {
+    pending.publishPendingActions('tickets', [{
+      id: 'ticket-pack:91', kind: 'tickets', label: 'Level 91 ticket pack',
+      state: 'waiting', pinned: true, passive: true,
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const tray = el.querySelector('[data-bind="rrt-tray"]');
+    const lane = el.querySelector('[data-bind="rrt-rng"]');
+    assert.equal(pendingSurfaceVisible(el), true);
+    assert.equal(lane.hidden, true, 'a ticket-only Pending panel does not show empty RNG chrome');
+    assert.equal(tray.getAttribute('data-has-rng'), 'false');
+
+    pending.publishPendingActions('context', [{
+      id: 'growth:91', kind: 'growth-claim', label: 'Growth payout',
+      state: 'ready', run: async () => {},
+    }]);
+    assert.equal(lane.hidden, true,
+      'ordinary non-ticket work alone is not enough—the RNG lane must contain RNG state');
+
+    pending.publishPendingActions('degenerette', [{
+      id: 'degenerette:91', kind: 'degenerette', label: '1 spin',
+      state: 'waiting', phase: 'awaitingRng', pinned: true,
+      rngQueuePendingMilliEth: '250', rngQueueThresholdMilliEth: '1000',
+    }]);
+    assert.equal(lane.hidden, false,
+      'player RNG work fills the lane when the Pending panel already has real non-ticket work');
+    assert.equal(tray.getAttribute('data-has-rng'), 'true');
+
+    pending.clearPendingActions('context');
+    assert.equal(pendingSurfaceVisible(el), true, 'the pending ticket still keeps its own panel visible');
+    assert.equal(lane.hidden, false,
+      'the bought spin is itself real pending work, so its queued RNG status stays visible');
+
+    pending.publishPendingActions('degenerette', [{
+      id: 'degenerette:91', kind: 'degenerette', label: '1 spin',
+      state: 'waiting', phase: 'waiting-rng', pinned: true,
+      rngRequestBlock: 500, rngCurrentBlock: 501, rngConfirmations: 10,
+    }]);
+    assert.equal(lane.hidden, false,
+      'an in-flight request remains visible when this player has work that it will resolve');
+    assert.equal(el.querySelector('[data-bind="rrt-rng-request"]')
+      .getAttribute('data-rng-button-state'), 'incoming');
+
+    pending.clearPendingActions('degenerette');
+    assert.equal(lane.hidden, true);
+    store.update('game.phase', 'JACKPOT');
+    store.update('game.rngLocked', true);
+    assert.equal(lane.hidden, false,
+      'an active jackpot RNG request is the explicit ticket-only/global exception');
+    assert.equal(tray.getAttribute('data-has-rng'), 'true');
+
+    store.update('game.rngLocked', false);
+    assert.equal(lane.hidden, true, 'the jackpot exception disappears as soon as its request settles');
     el.disconnectedCallback();
   });
 
@@ -400,7 +778,7 @@ describe('<app-reveal-tray>', () => {
     el.connectedCallback();
 
     const checkbox = el.querySelector('[data-bind="rrt-auto-open"]');
-    assert.ok(checkbox, 'the active tray header carries the preference');
+    assert.ok(checkbox, 'the compact control block carries the preference');
     assert.equal(checkbox.checked, false, 'automatic popups are opt-in');
     checkbox.checked = true;
     checkbox.dispatchEvent({ type: 'change' });
@@ -425,7 +803,7 @@ describe('<app-reveal-tray>', () => {
     el.disconnectedCallback();
   });
 
-  test('Pending header restores and persists the shared reveal speed', () => {
+  test('Pending controls restore and persist the shared reveal speed', () => {
     localStorage.setItem(preferences.DEGENERETTE_PREFERENCES_KEY, JSON.stringify({
       version: 1, speed: 2.5, bets: { 1: '500' },
     }));
@@ -492,11 +870,40 @@ describe('<app-reveal-tray>', () => {
     el.connectedCallback();
 
     const action = el.querySelector('.rrt-action--lootbox');
-    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, false);
+    assert.equal(pendingSurfaceVisible(el), true);
     assert.equal(action.querySelector('.rrt-action__kind').textContent, 'sDGNRS REDEMPTION');
     assert.equal(action.querySelector('.rrt-action__cta').textContent, 'WAITING');
-    assert.ok(action.querySelector('.rrt-action__progress'));
+    assert.equal(action.querySelector('.rrt-action__progress'), null,
+      'the shared RNG rail owns fulfillment progress instead of duplicating it in the row');
+    assert.equal(el.querySelector('[data-bind="rrt-rng"]').getAttribute('data-rng-phase'),
+      'fulfilling');
+    assert.equal(el.querySelector('[data-bind="rrt-rng-status"]').textContent,
+      'WAITING FOR RNG', 'a generic daily wait does not claim a Chainlink request was submitted');
     assert.equal(action.disabled, true);
+    el.disconnectedCallback();
+  });
+
+  test('live RNG work outranks an already-fulfilled result in the shared rail', () => {
+    pending.publishPendingActions('degenerette', [{
+      id: 'degenerette:42', kind: 'degenerette', label: '1 spin',
+      detail: 'RNG ready', state: 'ready', phase: 'result-ready', run: async () => {},
+    }]);
+    pending.publishPendingActions('box', [{
+      id: 'lootbox:9', kind: 'lootbox', label: 'Lootbox #9',
+      detail: 'Waiting for RNG · Day 71', state: 'waiting', pinned: true,
+      progress: 'indeterminate',
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    assert.equal(el.querySelector('[data-bind="rrt-rng"]').getAttribute('data-rng-phase'),
+      'fulfilling');
+    assert.equal(el.querySelector('[data-bind="rrt-rng-status"]').textContent,
+      'WAITING FOR RNG');
+    assert.ok(el.querySelector('.rrt-action--degenerette'),
+      'the ready result remains independently actionable');
+    assert.ok(el.querySelector('.rrt-action--lootbox'),
+      'the waiting item keeps its compact context row');
     el.disconnectedCallback();
   });
 
@@ -513,8 +920,16 @@ describe('<app-reveal-tray>', () => {
     const action = el.querySelector('.rrt-action--degenerette');
     assert.ok(action, 'the chain/indexer handoff cannot disappear from the tray');
     assert.doesNotMatch(action.className, /is-rng-waiting/);
-    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'LOADING…');
-    assert.equal(el.querySelector('[data-bind="rrt-title"]').textContent, 'PENDING');
+    assert.match(action.className, /rrt-action--compact/);
+    assert.equal(action.querySelector('.rrt-action__cta'), null,
+      'the compact pending receipt has no redundant right-side status');
+    assert.equal(action.querySelector('.rrt-action__progress'), null,
+      'the compact pending receipt has no random indeterminate bar');
+    assert.equal(el.querySelector('[data-bind="rrt-rng"]').getAttribute('data-rng-phase'),
+      'fulfilled');
+    assert.equal(el.querySelector('[data-bind="rrt-title"]'), null);
+    assert.ok(el.querySelector('[data-bind="rrt-controls"]'),
+      'loading work keeps the compact controls without restoring a heading');
     el.disconnectedCallback();
   });
 
@@ -533,16 +948,20 @@ describe('<app-reveal-tray>', () => {
 
     const shell = el.querySelector('[data-bind="rrt-tray"]');
     const action = el.querySelector('.rrt-action--growth-claim');
-    assert.equal(shell.hidden, false);
+    assert.equal(pendingSurfaceVisible(el), true);
     assert.ok(action, 'growth payout is visible beside the other bottom actions');
     assert.equal(action.querySelector('.rrt-action__kind').textContent, 'GROWTH BET');
-    assert.equal(action.querySelector('.rrt-action__art--growth-claim').textContent, '↑');
+    assert.ok(action.querySelector('.rrt-action__art--growth-claim')
+      .querySelector('.rrt-action__glyph'));
+    assert.equal(action.querySelector('.rrt-action__label').textContent, 'GROWTH · L41');
     assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM');
 
     action.dispatchEvent({ type: 'click' });
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
     assert.equal(claimed, 1);
-    assert.equal(shell.hidden, true);
+    assert.equal(pendingSurfaceVisible(el), false);
+    assert.equal(shell.hidden, false,
+      'the shared shell remains mounted for the compact RNG-only state');
     el.disconnectedCallback();
   });
 
@@ -558,7 +977,8 @@ describe('<app-reveal-tray>', () => {
     const action = el.querySelector('.rrt-action--volume-claim');
     assert.ok(action);
     assert.equal(action.querySelector('.rrt-action__kind').textContent, 'VOLUME BET');
-    assert.equal(action.querySelector('.rrt-action__art--volume-claim').textContent, 'V');
+    assert.ok(action.querySelector('.rrt-action__art--volume-claim')
+      .querySelector('.rrt-action__glyph'));
     assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM');
     el.disconnectedCallback();
   });
@@ -582,7 +1002,7 @@ describe('<app-reveal-tray>', () => {
     const resolver = el.querySelector('.rrt-action--mass-resolution');
     const pack = el.querySelector('.rrt-action--tickets');
     assert.ok(resolver, 'the bounty gets its own bottom action');
-    assert.equal(resolver.querySelector('.rrt-action__label').textContent, 'Mine FLIP');
+    assert.equal(resolver.querySelector('.rrt-action__label').textContent, 'MINE FLIP');
     const resolverArt = resolver.querySelector('.rrt-action__art--mass-resolution');
     assert.equal(
       resolverArt?.querySelector('img')?.src,
@@ -606,8 +1026,8 @@ describe('<app-reveal-tray>', () => {
   test('HIDE preserves every action and reopens only when the manifest changes', () => {
     const waiting = {
       id: 'degenerette:42', kind: 'degenerette', label: 'Degenerette',
-      detail: 'Waiting for Chainlink RNG', state: 'waiting',
-      phase: 'waiting-rng', pinned: true, progress: 'indeterminate',
+      detail: 'Result indexed · loading spins', state: 'waiting',
+      phase: 'indexing', pinned: true, progress: 'indeterminate',
     };
     pending.publishPendingActions('degenerette', [waiting]);
     const el = new trayModule.AppRevealTray();
@@ -615,15 +1035,15 @@ describe('<app-reveal-tray>', () => {
 
     const shell = el.querySelector('[data-bind="rrt-tray"]');
     const hide = el.querySelector('[data-bind="rrt-hide"]');
-    assert.equal(shell.hidden, false);
+    assert.equal(pendingSurfaceVisible(el), true);
     assert.equal(hide.textContent, 'HIDE');
     hide.dispatchEvent({ type: 'click' });
-    assert.equal(shell.hidden, true, 'HIDE collapses the surface');
+    assert.equal(pendingSurfaceVisible(el), false, 'HIDE collapses the player-action surface');
     assert.equal(pending.getPendingActions().length, 1,
       'HIDE does not clear or dismiss the underlying work');
 
     pending.publishPendingActions('degenerette', [{ ...waiting }]);
-    assert.equal(shell.hidden, true,
+    assert.equal(pendingSurfaceVisible(el), false,
       'an equivalent polling refresh does not nag the player again');
 
     pending.publishPendingActions('degenerette', [{
@@ -634,7 +1054,7 @@ describe('<app-reveal-tray>', () => {
       progress: null,
       run: async () => {},
     }]);
-    assert.equal(shell.hidden, false,
+    assert.equal(pendingSurfaceVisible(el), true,
       'a meaningful readiness update automatically brings the tray back');
     assert.equal(el.querySelector('.rrt-action--degenerette').disabled, false);
     el.disconnectedCallback();
@@ -665,13 +1085,13 @@ describe('<app-reveal-tray>', () => {
     clear.dispatchEvent({ type: 'click' });
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
     assert.equal(cleared, 1, 'one publisher callback is not repeated per row');
-    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, true);
+    assert.equal(pendingSurfaceVisible(el), false);
 
     pending.publishPendingActions('box', [{
       id: 'box:7', kind: 'lootbox', label: 'Lootbox #7', detail: 'Now ready again',
       state: 'ready', run: async () => {},
     }]);
-    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, true,
+    assert.equal(pendingSurfaceVisible(el), false,
       'the same cleared id cannot return merely because a poll changed its state');
 
     pending.publishPendingActions('box', [
@@ -684,7 +1104,7 @@ describe('<app-reveal-tray>', () => {
         state: 'ready', run: async () => {},
       },
     ]);
-    assert.equal(el.querySelector('[data-bind="rrt-tray"]').hidden, false);
+    assert.equal(pendingSurfaceVisible(el), true);
     assert.equal(el.querySelectorAll('.rrt-action').length, 1);
     assert.equal(el.querySelector('.rrt-action').getAttribute('data-action-id'), 'box:9');
     el.disconnectedCallback();
@@ -700,20 +1120,36 @@ describe('<app-reveal-tray>', () => {
     const el = new trayModule.AppRevealTray();
     el.connectedCallback();
     const art = el.querySelector('.rrt-action__art--tickets');
+    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.ok(art?.querySelector('.rrt-pack-art'), 'the button carries the opener pack art');
+    assert.equal(el.querySelector('.rrt-action__label').textContent, '5 Lvl 62\nTickets');
+    assert.equal(el.querySelector('.rrt-action__cta'), null,
+      'ready ticket packs use their glow as the click affordance');
+    assert.match(css,
+      /\.rrt-action--tickets:not\(\.rrt-action--pack-pending\) \.rrt-action__label\s*\{[^}]*line-height:\s*0\.96;[^}]*white-space:\s*pre-line/s,
+      'the two-line ticket label stays compact instead of widening the Pending row');
+    assert.match(css,
+      /\.rrt-action--tickets\.rrt-action--ticket-ready\s*\{[^}]*width:\s*auto;[^}]*grid-template-columns:\s*2\.28rem auto/s,
+      'the ready-ticket control hugs its pack and label instead of reserving an empty CTA column');
     assert.equal(art.querySelector('.rvl-pack-logo')?.src, '/whitepaper/flame-logo.svg');
     assert.equal(art.querySelector('.rrt-pack-level')?.textContent, 'LEVEL 62');
     assert.equal(art.querySelector('.rrt-pack-count')?.textContent, '5 TICKETS',
       'quantity and level are printed in the center of the bottom-panel pack');
-    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.match(css, /\.rrt-pack-art\.rvl-pack\s*\{[^}]*flex:\s*0 0 auto[^}]*aspect-ratio:\s*118 \/ 160/s,
       'the compact button cannot flex-squash its portrait wrapper');
+    assert.match(css,
+      /\.rrt-pack-art\.rvl-pack\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*minmax\(1\.05rem, 1fr\) 0\.38rem 0\.28rem/s,
+      'tiny pack art preserves separate brand, level, and quantity zones');
+    assert.match(css, /\.rvl-pack-count::before\s*\{[^}]*border:\s*1px solid currentColor/s,
+      'ticket quantity keeps a stacked-ticket pictogram when its copy is too small to read');
     el.disconnectedCallback();
   });
 
   test('is mounted once and styled as a fixed bottom surface below the reveal overlay', () => {
     const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
     assert.equal((html.match(/<app-reveal-tray><\/app-reveal-tray>/g) || []).length, 1);
     assert.equal((html.match(/<app-box-strip tray-only><\/app-box-strip>/g) || []).length, 1,
       'one headless lootbox controller feeds the global tray');
@@ -727,7 +1163,7 @@ describe('<app-reveal-tray>', () => {
       'waiting work is visibly grey until it can advance resolution');
     assert.match(
       css,
-      /body\.layout-basic \.rrt-actions\s*\{[^}]*max-height:\s*8\.5rem[^}]*flex-wrap:\s*wrap[^}]*overflow-y:\s*auto[^}]*scrollbar-width:\s*none/s,
+      /body\.layout-basic \.rrt-actions\s*\{[^}]*max-height:\s*7\.2rem[^}]*flex-wrap:\s*wrap[^}]*overflow-y:\s*auto[^}]*scrollbar-width:\s*none/s,
       'long manifests remain scrollable without painting a one-pixel animation scrollbar',
     );
     assert.match(css, /\.rrt-actions::\-webkit-scrollbar\s*\{\s*display:\s*none/s);
@@ -736,5 +1172,71 @@ describe('<app-reveal-tray>', () => {
       /@media \(max-width: 560px\)[\s\S]*?\.rrt-actions\s*\{[^}]*max-height:\s*7\.9rem/s,
       'the single-column phone tray likewise fits two compact rows without nuisance scrollbars',
     );
+    assert.match(css, /\.rrt-stage\s*\{[^}]*display:\s*block/s,
+      'the contextual RNG control and Pending use one unified compact stage');
+    assert.match(css,
+      /\.rrt-tray\[data-has-pending="false"\]\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent/s,
+      'an RNG-only state does not draw an empty Pending card');
+    const trayAt = el.innerHTML.indexOf('class="rrt-tray"');
+    const rngAt = el.innerHTML.indexOf('class="rrt-rng"');
+    const actionsAt = el.innerHTML.indexOf('class="rrt-actions"');
+    const controlsAt = el.innerHTML.indexOf('class="rrt-controls"');
+    assert.ok(
+      trayAt >= 0 && rngAt > trayAt && actionsAt > rngAt && controlsAt > actionsAt,
+      'the RNG widget is the left-hand child inside Pending',
+    );
+    assert.equal(el.innerHTML.includes('class="rrt-head"'), false,
+      'the top Pending/logo header is gone');
+    assert.equal(el.innerHTML.includes('data-bind="rrt-title"'), false,
+      'Pending and Ready title copy is gone');
+    const autoAt = el.innerHTML.indexOf('data-bind="rrt-auto-open"');
+    const speedAt = el.innerHTML.indexOf('data-bind="rrt-speed"');
+    const hideAt = el.innerHTML.indexOf('data-bind="rrt-hide"');
+    const clearAt = el.innerHTML.indexOf('data-bind="rrt-clear"');
+    assert.ok(autoAt >= 0 && autoAt < speedAt && speedAt < hideAt && hideAt < clearAt,
+      'AUTO and SPEED precede the stacked HIDE and CLEAR controls');
+    assert.match(el.innerHTML, /data-bind="rrt-auto-open"[^>]*>[\s\S]*?<span>AUTO<\/span>/,
+      'the checkbox button uses the concise AUTO label');
+    assert.match(css,
+      /\.rrt-tray\s*\{[^}]*grid-template-areas:[^}]*"actions controls"/s,
+      'actions and controls share the reclaimed main row');
+    assert.match(css,
+      /\.rrt-tray\s*\{[^}]*--rrt-font-family:\s*"Inter"[^}]*font-family:\s*var\(--rrt-font-family\)/s,
+      'Pending establishes one explicit type stack for every nested surface');
+    assert.match(css,
+      /\.rrt-tray button,[\s\S]*?\.rrt-tray input,[\s\S]*?\.rrt-tray output\s*\{[^}]*font-family:\s*inherit/s,
+      'native Pending controls inherit the same typeface instead of browser defaults');
+    const pendingCss = css.slice(css.indexOf('body.layout-basic app-reveal-tray'), css.indexOf('@keyframes rrt-rise'));
+    assert.doesNotMatch(pendingCss, /var\(--font-display|font:\s*[^;]*\bsans-serif\b/,
+      'no Pending sub-control swaps to the display or generic sans fallback');
+    assert.match(css,
+      /\.rrt-controls\s*\{[^}]*width:\s*9\.25rem;[^}]*height:\s*var\(--rrt-row-height\);[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 3\.8rem/s,
+      'AUTO/SPEED sit to the left of the action-button column');
+    assert.match(css,
+      /\.rrt-controls__settings,[\s\S]*?\.rrt-controls__actions\s*\{[^}]*grid-template-rows:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
+      'AUTO over SPEED and HIDE over CLEAR form two aligned stacks');
+    assert.ok(
+      el.innerHTML.indexOf('class="rrt-rng__flow"')
+        < el.innerHTML.indexOf('class="rrt-rng__brand"'),
+      'the vertical dots precede the Chainlink button',
+    );
+    assert.match(css, /\.rrt-rng__flow\s*\{[^}]*flex-direction:\s*column/s,
+      'the block lights form one vertical progression');
+    assert.match(css, /\.rrt-rng__step\s*\{[^}]*width:\s*0\.44rem[^}]*height:\s*0\.44rem/s,
+      'five larger bubbles remain compact beside the logo');
+    assert.match(css,
+      /\.rrt-auto-open\s*\{[^}]*height:\s*100%[\s\S]*?\.rrt-speed\s*\{[^}]*height:\s*100%[\s\S]*?\.rrt-hide,[\s\S]*?\.rrt-clear\s*\{[^}]*height:\s*100%/s,
+      'every half-height control fills one of two equal rows within the shared control height');
+    assert.doesNotMatch(css, /\.rrt-auto-open:has\(input:checked\)/,
+      'AUTO does not highlight its whole tile when enabled');
+    assert.match(css,
+      /\.rrt-auto-open input\s*\{[^}]*appearance:\s*none;[^}]*background:\s*transparent/s,
+      'the unchecked AUTO indicator is clear');
+    assert.match(css,
+      /\.rrt-auto-open input:checked\s*\{[^}]*border-color:\s*#4ade80;[^}]*background:\s*#22c55e/s,
+      'only the checked AUTO indicator turns green');
+    assert.match(css, /\.rrt-action__kind,[\s\S]*?\.rrt-action__detail\s*\{[^}]*clip-path:\s*inset\(50%\)/s,
+      'verbose publisher copy remains accessible without being cut off in the visual tray');
+    el.disconnectedCallback();
   });
 });

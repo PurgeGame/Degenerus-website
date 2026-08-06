@@ -198,9 +198,38 @@ function instantiate({ trayOnly = false } = {}) {
   return el;
 }
 
-function fireTxConfirmed(boxes) {
+function fireTxConfirmed(boxes, extra = {}) {
+  const pricedBoxes = boxes.map((box) => ({
+    amountWei: box.amountWei ?? 10_000_000_000n,
+    ...box,
+  }));
   document.dispatchEvent(new CustomEvent('app-decimator:tx-confirmed', {
-    detail: { ticketQuantity: 0, lootBoxAmountWei: 1n, boxes },
+    detail: {
+      ticketQuantity: 0,
+      lootBoxAmountWei: 10_000_000_000n,
+      ticketPriceWei: 10_000_000_000n,
+      boxes: pricedBoxes,
+      ...extra,
+    },
+    bubbles: true,
+  }));
+}
+
+function fireTxSubmitted(transactionHash) {
+  document.dispatchEvent(new CustomEvent('app-decimator:tx-submitted', {
+    detail: {
+      player: ADDR,
+      transactionHash,
+      lootBoxAmountWei: 1n,
+      ticketPriceWei: 10_000_000_000n,
+    },
+    bubbles: true,
+  }));
+}
+
+function fireTxFailed(transactionHash) {
+  document.dispatchEvent(new CustomEvent('app-decimator:tx-failed', {
+    detail: { player: ADDR, transactionHash, message: 'Purchase reverted' },
     bubbles: true,
   }));
 }
@@ -259,12 +288,65 @@ describe('app-box-strip', () => {
     const cta = chips[0].querySelector('.bxs-open-cta');
     assert.equal(cta.disabled, true);
     assert.equal(cta.textContent, 'RNG PENDING');
-    assert.match(chips[0].querySelector('.bxs-chip-status').textContent, /Waiting for RNG/);
+    assert.equal(chips[0].querySelector('.bxs-chip-status'), null,
+      'the compact chip does not repeat a waiting sentence');
+    assert.equal(chips[0].querySelector('.bxs-chip-amount').textContent, '0.01 ETH');
+    assert.equal(chips[0].querySelector('.bxs-chip-title').textContent, 'LOOTBOX');
     const pending = pendingActionsMod.getPendingActions();
     assert.equal(pending.length, 2, 'purchased boxes enter the shared pending area immediately');
     assert.ok(pending.every((item) => item.state === 'waiting' && item.pinned === true));
+    assert.ok(pending.every((item) => item.sharedRng === true && item.phase === 'awaitingRng'),
+      'receipt-confirmed boxes join the shared RNG widget before indexer discovery');
     assert.ok(pending.every((item) => item.resolved === false),
       'an unresolved box is visible without pretending its prizes exist');
+  });
+
+  test('broadcast purchase appears immediately and a failed tx removes only its placeholder', async () => {
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxConfirmed([{ index: 8, day: 4 }]);
+    await tick();
+
+    fireTxSubmitted('0xnewbox');
+    let pending = pendingActionsMod.getPendingActions();
+    const submitted = pending.find((item) => item.id === 'lootbox:submitted:0xnewbox');
+    assert.ok(submitted, 'the box is visible as soon as the wallet broadcasts the purchase');
+    assert.equal(submitted.phase, 'submitting');
+    assert.equal(submitted.sharedRng, false, 'RNG starts only after the purchase confirms');
+    assert.equal(submitted.shortLabel, 'Transaction sent');
+    assert.ok(pending.some((item) => item.id === 'lootbox:8'),
+      'an older unresolved box remains alongside the new transaction');
+
+    fireTxFailed('0xnewbox');
+    pending = pendingActionsMod.getPendingActions();
+    assert.equal(pending.some((item) => item.id === 'lootbox:submitted:0xnewbox'), false,
+      'only the failed transaction placeholder is retired');
+    assert.ok(pending.some((item) => item.id === 'lootbox:8'),
+      'failure cannot disturb an unrelated pending box');
+    const stored = JSON.parse(localStorage.getItem(KEY));
+    assert.deepEqual(stored.map((row) => row.index), [8]);
+    el.disconnectedCallback();
+  });
+
+  test('confirmation atomically promotes the exact submitted placeholder into its RNG index', async () => {
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxSubmitted('0xpromote');
+    assert.ok(pendingActionsMod.getPendingActions()
+      .some((item) => item.id === 'lootbox:submitted:0xpromote'));
+
+    fireTxConfirmed([{ index: 12, day: 5 }], {
+      player: ADDR,
+      submittedTransactionHash: '0xpromote',
+    });
+    await tick();
+    const pending = pendingActionsMod.getPendingActions();
+    assert.equal(pending.some((item) => item.id === 'lootbox:submitted:0xpromote'), false);
+    assert.equal(pending.filter((item) => item.id === 'lootbox:12').length, 1,
+      'confirmation creates one durable RNG row without duplicating the purchase');
+    el.disconnectedCallback();
   });
 
   test('ready RNG gets an explicit OPEN LOOTBOX button and a shared ready action', async () => {
@@ -274,10 +356,21 @@ describe('app-box-strip', () => {
     fireTxConfirmed([{ index: 8, day: 4 }]);
     await tick();
 
+    const waiting = pendingActionsMod.getPendingActions()
+      .find((action) => action.id === 'lootbox:8');
+    assert.equal(waiting.compact, true, 'the waiting purchase is a compact receipt');
+    assert.equal(waiting.lootboxValueTone, 'green', 'one ticket-price unit has the green case');
+    assert.equal(waiting.lootboxTicketUnitsLabel, '1×');
+    assert.equal(el.querySelector('.bxs-chip').getAttribute('data-lootbox-value-tone'), 'green');
+    const storedBeforeOpen = JSON.parse(localStorage.getItem(KEY));
+    assert.equal(storedBeforeOpen[0].ticketPriceWei, '10000000000',
+      'the purchase-time ticket price survives reloads and later level changes');
+
     assert.equal(el.__setReadyForTest(8), true);
     const chip = el.querySelector('.bxs-chip');
     const cta = chip.querySelector('.bxs-open-cta');
-    assert.equal(chip.querySelector('.bxs-chip-title').textContent, 'LOOTBOX #8');
+    assert.equal(chip.querySelector('.bxs-chip-title').textContent, 'LOOTBOX');
+    assert.equal(chip.querySelector('.bxs-chip-amount').textContent, '0.01 ETH');
     assert.equal(cta.disabled, false);
     assert.equal(cta.textContent, 'OPEN LOOTBOX');
     assert.match(cta.getAttribute('aria-label'), /Open lootbox 8/);
@@ -286,6 +379,7 @@ describe('app-box-strip', () => {
     assert.equal(pending.length, 1);
     assert.equal(pending[0].id, 'lootbox:8');
     assert.equal(pending[0].state, 'ready');
+    assert.equal(pending[0].compact, false, 'the ready box expands to expose OPEN');
     assert.equal(typeof pending[0].run, 'function');
     el.disconnectedCallback();
   });
@@ -398,9 +492,142 @@ describe('app-box-strip', () => {
     assert.ok(calls.status.length >= 1, 'the slot is checked before attempting a write');
     assert.ok(calls.status.every(([owner, index]) => owner === ADDR_LC && index === 8n));
     assert.equal(calls.open.length, 0, 'no wallet write for a cleared on-chain slot');
-    assert.equal(pendingActionsMod.getPendingActions().length, 0,
-      'a cleared slot with no indexed legs retires the stale action instead of persisting forever');
+    const recovering = pendingActionsMod.getPendingActions()
+      .find((action) => action.id === 'lootbox:8');
+    assert.ok(recovering, 'a cleared slot remains visible while its indexed result catches up');
+    assert.equal(recovering.state, 'ready');
+    assert.equal(recovering.resolved, true);
+    assert.equal(recovering.shortLabel, 'View result');
+    assert.ok(globalThis.localStorage.getItem(KEY), 'the receipt row survives the settlement race');
     assert.deepEqual(revealMod.__takeQueuedForTest(), []);
+    el.disconnectedCallback();
+  });
+
+  test('a competing opener cannot make a failed write eat the receipt-backed box', async () => {
+    let raced = false;
+    const calls = { status: 0, open: 0 };
+    const fake = {
+      lootboxRngWordByIndex: async () => 1n,
+      lootboxStatus: async () => {
+        calls.status += 1;
+        return raced ? [0n, false] : [10_000_000_000n, false];
+      },
+      openBox: Object.assign(
+        async () => {
+          calls.open += 1;
+          raced = true;
+          throw new Error('Box already resolved');
+        },
+        { staticCall: async () => undefined },
+      ),
+      queryFilter: async () => [],
+      filters: {},
+      connect() { return this; },
+    };
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+      getSigner: async () => ({ getAddress: async () => ADDR }),
+    });
+    lootboxMod.__setContractFactoryForTest(() => fake);
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [] }),
+    });
+
+    const el = instantiate();
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxConfirmed([{ index: 8, day: 4 }]);
+    await tick();
+    el.__setReadyForTest(8);
+    const action = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:8');
+    await action.run();
+
+    assert.equal(calls.open, 1, 'this wallet reached the write before losing the race');
+    assert.ok(calls.status >= 2, 'the failed write rechecks the cleared amount slot');
+    const recovered = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:8');
+    assert.ok(recovered, 'the box stays present while settlement legs index');
+    assert.equal(recovered.resolved, true);
+    assert.equal(recovered.state, 'ready');
+    assert.equal(recovered.write, false, 'retry becomes a result replay, not another doomed write');
+    assert.equal(revealMod.__takeQueuedForTest().length, 0,
+      'no incomplete popup is fabricated before indexed result legs arrive');
+    el.disconnectedCallback();
+  });
+
+  test('a newly indexed result wins over a stale non-zero RPC slot before openBox', async () => {
+    const calls = { status: [], open: [] };
+    const fake = {
+      lootboxRngWordByIndex: async () => 1n,
+      lootboxStatus: async (...args) => {
+        calls.status.push(args);
+        // Simulate an RPC still serving the block before settlement cleared
+        // the amount slot. The immutable indexed leg below is newer.
+        return [1n, false];
+      },
+      openBox: Object.assign(
+        async (...args) => {
+          calls.open.push(args);
+          return { hash: '0xwrong', wait: async () => ({ status: 1, logs: [] }) };
+        },
+        { staticCall: async () => undefined },
+      ),
+      connect() { return this; },
+    };
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+      getSigner: async () => ({ getAddress: async () => ADDR }),
+    });
+    lootboxMod.__setContractFactoryForTest(() => fake);
+
+    let indexed = false;
+    const settledLeg = {
+      uid: 'indexed-8',
+      player: ADDR_LC,
+      legType: 'opened',
+      lootboxIndex: 8,
+      transactionHash: '0xsettled',
+      blockNumber: '100',
+      logIndex: 4,
+      ord: 104,
+      rewardData: {
+        amount: '123', futureLevel: 9, futureTickets: 0,
+        roundedUp: false, flip: '0',
+      },
+    };
+    globalThis.fetch = async (url) => ({
+      ok: true,
+      status: 200,
+      json: async () => indexed && String(url).includes('/lootbox/legs')
+        ? { items: [settledLeg] }
+        : { items: [] },
+    });
+
+    const el = instantiate();
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxConfirmed([{ index: 8, day: 4 }]);
+    await tick();
+    el.__setReadyForTest(8);
+    indexed = true;
+
+    const pending = pendingActionsMod.getPendingActions()
+      .find((action) => action.id === 'lootbox:8');
+    assert.ok(pending, 'the pre-indexed snapshot still exposes the open action');
+    calls.status.length = 0;
+    await pending.run();
+
+    assert.equal(calls.status.length, 0,
+      'indexed settlement is authoritative before consulting a potentially stale RPC slot');
+    assert.equal(calls.open.length, 0, 'an already-settled box never reaches the wallet write');
+    const [replay] = revealMod.__takeQueuedForTest();
+    assert.equal(replay?.kind, 'lootbox');
+    assert.equal(replay?.lootboxIndex, 8);
+    assert.equal(pendingActionsMod.getPendingActions().length, 0,
+      'the indexed result becomes a reveal and leaves the pending tray');
     el.disconnectedCallback();
   });
 
@@ -494,7 +721,7 @@ describe('app-box-strip', () => {
 
     const chips = el.querySelectorAll('.bxs-chip');
     assert.equal(chips.length, 1, 'only the latest DB-only opening is offered as catch-up');
-    assert.equal(chips[0].querySelector('.bxs-chip-title').textContent, 'LOOTBOX #77');
+    assert.equal(chips[0].querySelector('.bxs-chip-title').textContent, 'LOOTBOX');
     assert.equal(chips[0].querySelector('.bxs-open-cta').textContent, 'VIEW RESULT');
 
     const pending = pendingActionsMod.getPendingActions()

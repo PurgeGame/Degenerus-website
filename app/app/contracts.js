@@ -194,10 +194,13 @@ export async function assertChain() {
 //
 // @param {string} action Human-readable action label (used in error messages by
 //                        Phase 60+ surfaces — Phase 58 keeps it for forward compat).
+// @param {{onSubmitted?: function(import('ethers').TransactionResponse): void}} options
+//        Optional presentation hook fired after the wallet broadcasts but
+//        before receipt confirmation. Hook failures never affect the write.
 // @returns {Promise<import('ethers').TransactionReceipt>}
 // ---------------------------------------------------------------------------
 
-export async function sendTx(buildTx, action) {
+export async function sendTx(buildTx, action, { onSubmitted } = {}) {
   // 1. Chokepoint FIRST — throws BEFORE any provider/signer touch (T-58-02).
   requireSelf();
   // 2. Chain assertion — write-side throw on mismatch (T-58-03).
@@ -211,6 +214,9 @@ export async function sendTx(buildTx, action) {
   }
   // 4. Compose tx with fresh signer (caller passes builder, NOT pre-resolved promise).
   const tx = await buildTx(_signerWithGasHeadroom(signer));
+  if (typeof onSubmitted === 'function') {
+    try { onSubmitted(tx); } catch (_error) { /* presentation cannot fail a write */ }
+  }
   // 5. Wallets may replace a pending transaction when the user speeds it up.
   // ethers reports that as a rejected wait() promise even when the replacement
   // mined successfully. Treat the successful receipt as authoritative so the

@@ -21,6 +21,7 @@ const {
   phaseStripModel,
   prizePoolTargetForLevel,
   transitionJackpotCountdownModel,
+  transitionJackpotLockedLabel,
   LEVEL_ONE_TARGET_WEI,
 } = await import('../app-pool-progress.js');
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -214,7 +215,7 @@ describe('special level-transition jackpot countdown', () => {
     assert.deepEqual(transitionJackpotCountdownModel({
       level: 39, jackpot: false, lastPurchaseDay: true,
     }), {
-      kind: 'baf', label: 'BAF CROSSOVER IN:', level: 40,
+      kind: 'baf', label: 'BIG ASS FLIP LOCKS IN:', level: 40,
     });
     assert.equal(transitionJackpotCountdownModel({
       level: 39, jackpot: true, lastPurchaseDay: false,
@@ -222,7 +223,7 @@ describe('special level-transition jackpot countdown', () => {
     assert.deepEqual(transitionJackpotCountdownModel({
       level: 40, jackpot: false, lastPurchaseDay: true, rngLocked: true,
     }), {
-      kind: 'baf', label: 'BAF CROSSOVER IN:', level: 40,
+      kind: 'baf', label: 'BIG ASS FLIP LOCKS IN:', level: 40,
     }, 'the RNG request promotes the level without moving the BAF target to 50');
   });
 
@@ -230,8 +231,20 @@ describe('special level-transition jackpot countdown', () => {
     assert.deepEqual(transitionJackpotCountdownModel({
       level: 99, jackpot: false, lastPurchaseDay: true,
     }), {
-      kind: 'both', label: 'DECIMATOR + BAF CROSSOVER IN:', level: 100,
+      kind: 'both', label: 'DECIMATOR + BIG ASS FLIP LOCK IN:', level: 100,
     });
+  });
+
+  test('changes lock-in copy at the tracked day boundary', () => {
+    assert.equal(transitionJackpotLockedLabel('baf'), 'BIG ASS FLIP LOCKED IN');
+    assert.equal(
+      transitionJackpotLockedLabel('both'),
+      'DECIMATOR + BIG ASS FLIP LOCKED IN',
+    );
+    assert.match(component, /deadlineMs:\s*Date\.now\(\) \+ \(secondsUntilDayCrossover\(\) \* 1000\)/,
+      'the special clock retains this boundary instead of resetting to the next day');
+    assert.match(component, /remaining <= 0[\s\S]*transitionJackpotLockedLabel/,
+      'crossing the retained boundary swaps the countdown for locked-in copy');
   });
 });
 
@@ -265,6 +278,14 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     assert.match(css, /\.pool-progress__track\s*\{/);
     assert.match(component, /data-el="pool-target-marker"/);
     assert.match(component, /data-el="pool-growth-marker"/);
+    assert.match(component, /pool-target-marker" title="Level guarantee" tabindex="0"/,
+      'thresholds are keyboard-focusable as well as hoverable');
+    assert.match(component, /`\$\{levelLabel\} guarantee · \$\{_formatMarkerEth\(model\.target\)\} ETH prize pool`/,
+      'the guarantee tooltip names its level and ETH position');
+    assert.match(component, /`\$\{levelLabel\} growth O\/U · \$\{_formatMarkerEth\(model\.growthTarget\)\} ETH prize pool/,
+      'the growth tooltip names its level and ETH position');
+    assert.match(css, /\.pool-progress__marker\s*\{[^}]*width:\s*5px[^}]*pointer-events:\s*auto/s,
+      'the formerly faint lines are wider real hover targets');
     assert.match(css, /\.pool-progress__marker::before\s*\{[^}]*content:\s*none/s,
       'threshold lines remain but their decorative diamond caps do not');
     assert.ok(
@@ -331,10 +352,16 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     assert.match(component, /secondsUntilDayCrossover/,
       'the strip shares the top-bar countdown clock');
     assert.match(component, /DECIMATOR CROSSOVER IN:/);
-    assert.match(component, /BAF CROSSOVER IN:/);
+    assert.match(component, /BIG ASS FLIP LOCKS IN:/);
     assert.match(component, /pool-special-jackpot-countdown/);
-    assert.match(css, /\.pool-progress__special-jackpot\s*\{[^}]*margin:\s*-0\.08rem auto 0\.46rem/s,
-      'the special draw clock sits as a compact line above the pool instrument');
+    const headStart = component.indexOf('<header class="pool-progress__head">');
+    const headEnd = component.indexOf('</header>', headStart);
+    const phaseDay = component.indexOf('data-el="pool-day"', headStart);
+    const lockIn = component.indexOf('data-el="pool-special-jackpot"', headStart);
+    assert.ok(headStart >= 0 && phaseDay > headStart && lockIn > phaseDay && lockIn < headEnd,
+      'the lock-in countdown shares the PURCHASE DAY ... (FINAL) header line');
+    assert.match(css, /\.pool-progress__special-jackpot\s*\{[^}]*margin:\s*0 0 0 auto/s,
+      'the lock-in countdown occupies the right side of the shared phase line');
     assert.match(component, /if \(body\) body\.hidden = true/,
       'the purchase thermometer is absent throughout jackpot phase');
     assert.match(css, /\.pool-progress__jackpot\s*\{[^}]*display:\s*grid[^}]*white-space:\s*nowrap/s,

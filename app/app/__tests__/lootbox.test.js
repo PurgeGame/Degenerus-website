@@ -46,7 +46,7 @@ function makeFakeContract(opts = {}) {
     openBox: [],
     openBoxStatic: [],
     lootboxStatus: [],
-    claimableWinningsOf: [],
+    claimableWinningsOf: [], afkingFundingOf: [],
     purchaseInfo: [],
   };
   const staticCallStub = (methodName) => async (...args) => {
@@ -102,6 +102,11 @@ function makeFakeContract(opts = {}) {
       if (opts.claimableReadShouldRevert) throw new Error('claimable read failed');
       return opts.claimableRaw ?? 0n;
     },
+    afkingFundingOf: async (player) => {
+      calls.afkingFundingOf.push(player);
+      if (opts.afkingReadShouldRevert) throw new Error('AFKing funding read failed');
+      return opts.afkingRaw ?? 0n;
+    },
     interface: {
       parseLog: (log) => log.parsed ?? null,
     },
@@ -151,6 +156,48 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
   test('__setContractFactoryForTest seam works (sanity)', () => {
     const res = lootboxMod.parseLootboxIdxFromReceipt({ logs: [] }, lastFakeContract);
     assert.deepEqual(res, []);
+  });
+
+  test('decodes the authoritative mid-day RNG queue fill and request latch', async () => {
+    const queuePacked = 321n
+      | (425n << 48n)
+      | (1_000n << 112n)
+      | (5n << 176n)
+      | (30_000n << 184n);
+    const requestTime = 1_720_000_000n;
+    const timingPacked = requestTime << 48n;
+    assert.deepEqual(
+      lootboxMod.decodeLootboxRngQueueState(queuePacked, timingPacked, 900),
+      {
+        index: 321n,
+        pendingMilliEth: 425n,
+        thresholdMilliEth: 1_000n,
+        pendingEthWei: 425n * 10n ** 15n,
+        thresholdWei: 10n ** 18n,
+        pendingFlipWhole: 30_000n,
+        hasPending: true,
+        queueReady: false,
+        fillBps: 4_250,
+        requestTime,
+        rngLocked: false,
+        middayRequestInFlight: true,
+        blockNumber: 900,
+      },
+    );
+
+    const reads = [];
+    const provider = {
+      getBlockNumber: async () => 901,
+      getStorage: async (_address, slot, blockTag) => {
+        reads.push([slot, blockTag]);
+        return slot === 33n ? queuePacked : timingPacked | (1n << 152n);
+      },
+    };
+    const locked = await lootboxMod.readLootboxRngQueueState({ provider });
+    assert.equal(locked.rngLocked, true);
+    assert.equal(locked.middayRequestInFlight, false,
+      'a daily RNG lock is not mislabeled as the mid-day request');
+    assert.deepEqual(reads, [[33n, 901], [0n, 901]], 'both slots share one block tag');
   });
 
   test('foil delegatecall errors decode by ABI name and raw selector', () => {
@@ -297,6 +344,95 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     );
     assert.equal(lootboxMod.claimableFirstPayment(1_000n, 1n).payKind, 0,
       'sentinel alone is not spendable');
+  });
+
+  test('selected claimable and AFKing funding reduce only the fresh-wallet remainder', () => {
+    assert.deepEqual(
+      lootboxMod.purchaseFundingPayment(1_000n, 301n, 450n, {
+        useClaimable: true,
+        useAfking: true,
+      }),
+      {
+        payKind: lootboxMod.MINT_PAYMENT_KIND_COMBINED,
+        msgValueWei: 250n,
+        claimableUsedWei: 300n,
+        afkingUsedWei: 450n,
+        totalCostWei: 1_000n,
+      },
+    );
+    assert.equal(
+      lootboxMod.purchaseFundingPayment(1_000n, 1_001n, 900n, {
+        useClaimable: true,
+        useAfking: true,
+      }).afkingUsedWei,
+      0n,
+      'AFKing funding stays untouched when claimable already covers the purchase',
+    );
+  });
+
+  test('purchaseEth reads and uses AFKing funding only when the player selected it', async () => {
+    const total = lootboxMod.LOOTBOX_MIN_WEI + 9_000n;
+    const funding = 4_000n;
+    lastFakeContract = makeFakeContract({ afkingRaw: funding });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+
+    const result = await lootboxMod.purchaseEth({
+      ticketQuantity: 1,
+      lootboxQuantity: 1,
+      ticketCostWei: 9_000n,
+      preferClaimable: false,
+      useAfking: true,
+    });
+    const [args] = lastFakeContract._calls.purchase;
+    assert.deepEqual(lastFakeContract._calls.afkingFundingOf, [CONNECTED]);
+    assert.equal(args[4], lootboxMod.MINT_PAYMENT_KIND_DIRECT_ETH,
+      'DirectEth keeps claimable disabled while the contract consumes AFKing credit');
+    assert.equal(args[6].value, total - funding);
+    assert.equal(result.payment.afkingUsedWei, funding);
+  });
+
+  test('foil purchases never underfund msg.value by counting unusable AFKing principal', async () => {
+    const foilCostWei = 1_000n;
+    lastFakeContract = makeFakeContract({ afkingRaw: 900n });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+
+    const result = await lootboxMod.purchaseEth({
+      ticketQuantity: 0,
+      lootboxQuantity: 0,
+      foil: true,
+      foilCostWei,
+      preferClaimable: true,
+      useAfking: true,
+    });
+
+    const [args] = lastFakeContract._calls.purchase;
+    assert.equal(args[4], lootboxMod.MINT_PAYMENT_KIND_DIRECT_ETH);
+    assert.equal(args[6].value, foilCostWei,
+      'wallet funds the full foil cost when claimable is empty');
+    assert.deepEqual(lastFakeContract._calls.afkingFundingOf, [],
+      'the unsupported AFKing source is not included in the foil quote');
+    assert.equal(result.payment.afkingUsedWei, 0n);
+  });
+
+  test('foil purchases use claimable then wallet while leaving AFKing untouched', async () => {
+    const foilCostWei = 1_000n;
+    lastFakeContract = makeFakeContract({ claimableRaw: 301n, afkingRaw: 900n });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+
+    const result = await lootboxMod.purchaseEth({
+      ticketQuantity: 0,
+      lootboxQuantity: 0,
+      foil: true,
+      foilCostWei,
+      preferClaimable: true,
+      useAfking: true,
+    });
+
+    const [args] = lastFakeContract._calls.purchase;
+    assert.equal(args[4], lootboxMod.MINT_PAYMENT_KIND_COMBINED);
+    assert.equal(args[6].value, 700n);
+    assert.equal(result.payment.claimableUsedWei, 300n);
+    assert.equal(result.payment.afkingUsedWei, 0n);
   });
 
   test('purchaseEth uses claimable only when it covers the full purchase', async () => {
@@ -499,6 +635,20 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(idxs[0].lootboxIndex, 5n);
     assert.equal(idxs[0].day, 42n);
     assert.equal(idxs[1].lootboxIndex, 6n);
+  });
+
+  test('parseLootboxIdxFromReceipt keeps the ETH amount from current LootBoxBuy logs', () => {
+    const amount = 125_000_000_000_000_000n;
+    const fakeReceipt = {
+      logs: [
+        { parsed: { name: 'LootBoxBuy', args: { buyer: CONNECTED, index: 17n, amount } } },
+      ],
+    };
+    assert.deepEqual(
+      lootboxMod.parseLootboxIdxFromReceipt(fakeReceipt, lastFakeContract),
+      [{ lootboxIndex: 17n, day: null, amountWei: amount }],
+      'the pending chip can show its purchased ETH amount before the indexer catches up',
+    );
   });
 
   test('parseLootboxIdxFromReceipt ignores FlipLootBuy logs (FLIP lootbox path removed)', () => {

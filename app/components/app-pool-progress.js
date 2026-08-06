@@ -219,11 +219,18 @@ export function transitionJackpotCountdownModel({
   const baf = target > 0 && target % 10 === 0;
   if (!decimator && !baf) return null;
   if (decimator && baf) {
-    return { kind: 'both', label: 'DECIMATOR + BAF CROSSOVER IN:', level: target };
+    return { kind: 'both', label: 'DECIMATOR + BIG ASS FLIP LOCK IN:', level: target };
   }
   return decimator
     ? { kind: 'decimator', label: 'DECIMATOR CROSSOVER IN:', level: target }
-    : { kind: 'baf', label: 'BAF CROSSOVER IN:', level: target };
+    : { kind: 'baf', label: 'BIG ASS FLIP LOCKS IN:', level: target };
+}
+
+/** Copy used after the countdown's own tracked boundary, before state catches up. */
+export function transitionJackpotLockedLabel(kind) {
+  if (kind === 'both') return 'DECIMATOR + BIG ASS FLIP LOCKED IN';
+  if (kind === 'baf') return 'BIG ASS FLIP LOCKED IN';
+  return 'DECIMATOR LOCKED IN';
 }
 
 /** Level and phase-day copy formerly rendered as a top-navigation pill. */
@@ -320,6 +327,14 @@ function _formatWholeEth(raw) {
   return _groupWhole(whole);
 }
 
+function _formatMarkerEth(raw) {
+  const value = _wei(raw);
+  if (value == null) return '—';
+  const [whole, fraction = ''] = displayEth(value, 2).split('.');
+  const trimmed = fraction.replace(/0+$/, '');
+  return `${_groupWhole(whole)}${trimmed ? `.${trimmed}` : ''}`;
+}
+
 function _formatGrowth(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return '—';
@@ -339,6 +354,7 @@ class AppPoolProgress extends HTMLElement {
   #phaseClock = null;
   #phaseClockListener = null;
   #countdownTimer = null;
+  #specialJackpotClock = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -380,12 +396,12 @@ class AppPoolProgress extends HTMLElement {
   #renderShell() {
     this.innerHTML = `
       <section class="pool-progress" data-mode="purchase" aria-label="Level prize pool">
-        <div class="pool-progress__special-jackpot" data-el="pool-special-jackpot" hidden>
-          <span data-el="pool-special-jackpot-label">NEXT JACKPOT IN:</span>
-          <strong data-el="pool-special-jackpot-countdown">--:--</strong>
-        </div>
         <header class="pool-progress__head">
           <strong class="pool-progress__day" data-el="pool-day">PURCHASE</strong>
+          <div class="pool-progress__special-jackpot" data-el="pool-special-jackpot" hidden>
+            <span data-el="pool-special-jackpot-label">NEXT JACKPOT IN:</span>
+            <strong data-el="pool-special-jackpot-countdown">--:--</strong>
+          </div>
         </header>
         <div class="pool-progress__body">
           <strong class="pool-progress__name" data-el="pool-name">LEVEL — PRIZE POOL</strong>
@@ -394,9 +410,9 @@ class AppPoolProgress extends HTMLElement {
                aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <span class="pool-progress__fill" data-el="pool-fill"></span>
             <span class="pool-progress__marker pool-progress__marker--target"
-                  data-el="pool-target-marker" title="Level guarantee"></span>
+                  data-el="pool-target-marker" title="Level guarantee" tabindex="0"></span>
             <span class="pool-progress__marker pool-progress__marker--growth"
-                  data-el="pool-growth-marker" title="Over/under growth target"></span>
+                  data-el="pool-growth-marker" title="Over/under growth target" tabindex="0"></span>
             <span class="pool-progress__marker-label" data-el="pool-reference-label">
               <small data-el="pool-reference-kind">GUARANTEE</small>
               <strong data-el="pool-target-inline">—</strong>
@@ -443,11 +459,35 @@ class AppPoolProgress extends HTMLElement {
   #paintCountdown() {
     const countdown = formatJackpotCountdown(secondsUntilDayCrossover());
     this.#set('pool-jackpot-countdown', countdown);
-    this.#set('pool-special-jackpot-countdown', countdown);
     const special = this.querySelector('[data-el="pool-special-jackpot"]');
+    const specialLabel = this.querySelector('[data-el="pool-special-jackpot-label"]');
+    const specialCountdown = this.querySelector('[data-el="pool-special-jackpot-countdown"]');
     if (special && !special.hidden) {
-      const label = this.querySelector('[data-el="pool-special-jackpot-label"]')?.textContent || 'Special jackpot in:';
-      special.setAttribute('aria-label', `${label.replace(/:$/, '')} ${countdown}`);
+      const clock = this.#specialJackpotClock;
+      const remaining = clock == null
+        ? secondsUntilDayCrossover()
+        : Math.max(0, Math.ceil((clock.deadlineMs - Date.now()) / 1000));
+      const locked = clock != null && remaining <= 0;
+      if (locked) {
+        const label = transitionJackpotLockedLabel(clock.kind);
+        if (specialLabel) specialLabel.textContent = label;
+        if (specialCountdown) {
+          specialCountdown.textContent = '';
+          specialCountdown.hidden = true;
+        }
+        special.setAttribute('data-locked', 'true');
+        special.setAttribute('aria-label', label);
+      } else {
+        const rendered = formatJackpotCountdown(remaining);
+        const label = clock?.label || specialLabel?.textContent || 'Special jackpot in:';
+        if (specialLabel) specialLabel.textContent = label;
+        if (specialCountdown) {
+          specialCountdown.textContent = rendered;
+          specialCountdown.hidden = false;
+        }
+        special.removeAttribute('data-locked');
+        special.setAttribute('aria-label', `${label.replace(/:$/, '')} ${rendered}`);
+      }
     }
   }
 
@@ -457,6 +497,8 @@ class AppPoolProgress extends HTMLElement {
     marker.hidden = position == null;
     if (marker.style && position != null) marker.style.left = `${position}%`;
     marker.title = title;
+    marker.tabIndex = position == null ? -1 : 0;
+    marker.setAttribute('aria-label', title);
   }
 
   #render() {
@@ -493,6 +535,19 @@ class AppPoolProgress extends HTMLElement {
         ? contractPhase.rngLocked
         : gameState?.rngLockedFlag === true,
     });
+    if (rewardJackpot) {
+      const clockKey = `${rewardJackpot.kind}:${rewardJackpot.level}`;
+      if (this.#specialJackpotClock?.key !== clockKey) {
+        this.#specialJackpotClock = {
+          key: clockKey,
+          kind: rewardJackpot.kind,
+          label: rewardJackpot.label,
+          deadlineMs: Date.now() + (secondsUntilDayCrossover() * 1000),
+        };
+      }
+    } else {
+      this.#specialJackpotClock = null;
+    }
 
     this.#set('pool-day', phase.dayLabel);
     this.#set('pool-name', phase.level == null
@@ -518,6 +573,7 @@ class AppPoolProgress extends HTMLElement {
       if (specialJackpot) {
         specialJackpot.hidden = true;
         specialJackpot.removeAttribute('data-kind');
+        specialJackpot.removeAttribute('data-locked');
         specialJackpot.removeAttribute('aria-label');
       }
       this.#set('pool-jackpot-level', phase.level ?? '—');
@@ -547,10 +603,12 @@ class AppPoolProgress extends HTMLElement {
         );
       } else {
         specialJackpot.removeAttribute('data-kind');
+        specialJackpot.removeAttribute('data-locked');
         specialJackpot.removeAttribute('aria-label');
       }
     }
     if (rewardJackpot) this.#set('pool-special-jackpot-label', rewardJackpot.label);
+    this.#paintCountdown();
     const nextWei = goldRush?.components?.nextWei
       ?? gameState?.prizePools?.nextPrizePool
       ?? null;
@@ -566,12 +624,15 @@ class AppPoolProgress extends HTMLElement {
         : 100;
       fill.style.backgroundSize = `${span}% 100%`;
     }
+    const levelLabel = phase.level == null ? 'Current level' : `Level ${phase.level}`;
     this.#setMarker('pool-target-marker', model.targetPercent,
-      model.target == null ? 'Level guarantee' : `Level guarantee: ${_formatWholeEth(model.target)} ETH`);
+      model.target == null
+        ? `${levelLabel} guarantee`
+        : `${levelLabel} guarantee · ${_formatMarkerEth(model.target)} ETH prize pool`);
     this.#setMarker('pool-growth-marker', model.growthPercent,
       model.growthTarget == null
-        ? 'Over/under growth target'
-        : `O/U ${_formatGrowth(model.growthLinePercent)} growth line`);
+        ? `${levelLabel} growth O/U`
+        : `${levelLabel} growth O/U · ${_formatMarkerEth(model.growthTarget)} ETH prize pool (${_formatGrowth(model.growthLinePercent)} line)`);
     const referenceLabel = this.querySelector('[data-el="pool-reference-label"]');
     if (referenceLabel) {
       referenceLabel.hidden = model.referencePercent == null;

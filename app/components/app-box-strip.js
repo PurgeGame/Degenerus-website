@@ -23,6 +23,7 @@
 // Class palette: .bxs-* (non-colliding).
 
 import { CHAIN } from '../app/chain-config.js';
+import { displayEth } from '../app/scaling.js';
 import { get, subscribe } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 import {
@@ -39,6 +40,7 @@ import {
 } from '../app/lootbox-legs.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
 import { recordLootboxTicketPacks } from '../app/pack-watch.js';
+import { lootboxValuePresentation } from '../app/lootbox-value-tone.js';
 import {
   queueReveal,
   LOOTBOX_REVEAL_QUEUED_EVENT,
@@ -95,8 +97,30 @@ function _boxKey(box) {
 }
 
 function _boxLabel(box, upper = false) {
-  const label = Number(box?.index) === 0 ? 'AFKing lootbox' : `Lootbox #${box?.index}`;
+  const label = box?.index == null || !Number.isFinite(Number(box.index))
+    ? 'Lootbox purchase'
+    : Number(box.index) === 0 ? 'AFKing lootbox' : 'Lootbox';
   return upper ? label.toUpperCase() : label;
+}
+
+function _boxAmountLabel(box) {
+  try {
+    const raw = BigInt(box?.amountWei ?? 0);
+    if (raw <= 0n) return null;
+    const rendered = displayEth(raw, 4);
+    const amount = String(rendered).includes('.')
+      ? String(rendered).replace(/0+$/, '').replace(/\.$/, '')
+      : String(rendered);
+    return `${amount} ETH`;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function _boxValuePresentation(box) {
+  return box?.ticketPriceWei == null
+    ? lootboxValuePresentation(box?.amountWei)
+    : lootboxValuePresentation(box?.amountWei, box.ticketPriceWei);
 }
 
 function _readRevealed(addr) {
@@ -128,7 +152,7 @@ function _readPending(addr) {
     return parsed
       .filter((e) => e && (Number.isFinite(Number(e.index)) || e.resultKey != null))
       .map((e) => ({
-        index: Number(e.index),
+        index: e.index == null || !Number.isFinite(Number(e.index)) ? null : Number(e.index),
         resultKey: e.resultKey == null ? null : String(e.resultKey),
         transactionHash: e.transactionHash == null ? null : String(e.transactionHash),
         ord: Number.isFinite(Number(e.ord)) ? Number(e.ord) : null,
@@ -138,6 +162,9 @@ function _readPending(addr) {
         // trusted receipt row merely because the page refreshed.
         fromReceipt: e.fromReceipt !== false,
         createdAt: Number.isFinite(Number(e.createdAt)) ? Number(e.createdAt) : null,
+        amountWei: e.amountWei == null ? null : String(e.amountWei),
+        ticketPriceWei: e.ticketPriceWei == null ? null : String(e.ticketPriceWei),
+        optimistic: Boolean(e.optimistic),
         ready: Boolean(e.ready || e.resolved),
         resolved: Boolean(e.resolved),
       }));
@@ -152,13 +179,16 @@ function _writePending(addr, entries) {
     const key = pendingBoxesKey(CHAIN.id, addr);
     if (!entries || entries.length === 0) localStorage.removeItem(key);
     else localStorage.setItem(key, JSON.stringify(entries.map((e) => ({
-      index: e.index,
+      index: e.index == null || !Number.isFinite(Number(e.index)) ? null : Number(e.index),
       resultKey: e.resultKey ?? null,
       transactionHash: e.transactionHash ?? null,
       ord: Number.isFinite(Number(e.ord)) ? Number(e.ord) : null,
       day: e.day,
       fromReceipt: e.fromReceipt !== false,
       createdAt: Number.isFinite(Number(e.createdAt)) ? Number(e.createdAt) : null,
+      amountWei: e.amountWei == null ? null : String(e.amountWei),
+      ticketPriceWei: e.ticketPriceWei == null ? null : String(e.ticketPriceWei),
+      optimistic: Boolean(e.optimistic),
       ready: Boolean(e.ready),
       resolved: Boolean(e.resolved),
     }))));
@@ -188,6 +218,12 @@ export function resolvedBoxRowsFromLegs(items, player) {
         index,
         resultKey,
         transactionHash: transactionHash || null,
+        amountWei: String(
+          item?.rewardData?.amount
+          ?? item?.boxAmountRawWei
+          ?? item?.amount
+          ?? 0,
+        ),
         day: null,
         ready: true,
         resolved: true,
@@ -216,6 +252,8 @@ class AppBoxStrip extends HTMLElement {
   #pollBusy = false;
   #errorTimer = null;
   #docListener = null;
+  #submittedListener = null;
+  #failedListener = null;
   #revealQueuedListener = null;
   #revealCompleteListener = null;
   #revealAbortListener = null;
@@ -255,6 +293,10 @@ class AppBoxStrip extends HTMLElement {
       && typeof document.removeEventListener === 'function') {
       try { document.removeEventListener('app-decimator:tx-confirmed', this.#docListener); }
       catch (_) { /* defensive */ }
+      try { document.removeEventListener('app-decimator:tx-submitted', this.#submittedListener); }
+      catch (_) { /* defensive */ }
+      try { document.removeEventListener('app-decimator:tx-failed', this.#failedListener); }
+      catch (_) { /* defensive */ }
       try { document.removeEventListener(LOOTBOX_REVEAL_QUEUED_EVENT, this.#revealQueuedListener); }
       catch (_) { /* defensive */ }
       try { document.removeEventListener(LOOTBOX_REVEAL_COMPLETE_EVENT, this.#revealCompleteListener); }
@@ -263,6 +305,8 @@ class AppBoxStrip extends HTMLElement {
       catch (_) { /* defensive */ }
     }
     this.#docListener = null;
+    this.#submittedListener = null;
+    this.#failedListener = null;
     this.#revealQueuedListener = null;
     this.#revealCompleteListener = null;
     this.#revealAbortListener = null;
@@ -313,10 +357,75 @@ class AppBoxStrip extends HTMLElement {
 
   #wireDocEvents() {
     if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
+    this.#submittedListener = (e) => {
+      const detail = e?.detail || {};
+      const player = String(detail.player || '').toLowerCase();
+      const transactionHash = String(detail.transactionHash || '').toLowerCase();
+      if (!this.#addr || player !== this.#addr || !transactionHash) return;
+      const resultKey = `submitted:${transactionHash}`;
+      if (this.#boxes.some((box) => _boxKey(box) === resultKey)) return;
+      this.#boxes.push({
+        index: null,
+        resultKey,
+        transactionHash,
+        day: null,
+        ready: false,
+        resolved: false,
+        opening: false,
+        fromReceipt: true,
+        optimistic: true,
+        createdAt: Date.now(),
+        amountWei: (() => {
+          try {
+            return String(
+              BigInt(detail.lootBoxAmountWei ?? 0)
+              + BigInt(detail.presaleBoxAmountWei ?? 0),
+            );
+          } catch (_e) { return null; }
+        })(),
+        ticketPriceWei: detail.ticketPriceWei == null
+          ? null
+          : String(detail.ticketPriceWei),
+      });
+      _writePending(this.#addr, this.#boxes);
+      this.#render();
+    };
+    this.#failedListener = (e) => {
+      const detail = e?.detail || {};
+      const player = String(detail.player || '').toLowerCase();
+      const transactionHash = String(detail.transactionHash || '').toLowerCase();
+      if (!this.#addr || player !== this.#addr || !transactionHash) return;
+      this.#removeBox(`submitted:${transactionHash}`);
+    };
     this.#docListener = (e) => {
-      const boxes = e?.detail?.boxes;
-      if (!Array.isArray(boxes) || boxes.length === 0) return;
+      const detail = e?.detail || {};
+      const boxes = detail.boxes;
       if (!this.#addr) return;
+      const player = String(e?.detail?.player || '').toLowerCase();
+      if (player && player !== this.#addr) return;
+      const submittedHash = String(
+        e?.detail?.submittedTransactionHash || e?.detail?.transactionHash || '',
+      ).toLowerCase();
+      const submittedKey = submittedHash ? `submitted:${submittedHash}` : '';
+      const submitted = submittedKey
+        ? this.#boxes.find((box) => _boxKey(box) === submittedKey)
+        : null;
+      if (!Array.isArray(boxes) || boxes.length === 0) {
+        if (submitted) {
+          submitted.optimistic = false;
+          submitted.createdAt = Date.now();
+          if (detail.ticketPriceWei != null) {
+            submitted.ticketPriceWei = String(detail.ticketPriceWei);
+          }
+          _writePending(this.#addr, this.#boxes);
+          this.#render();
+          this.#runPollCycle();
+        }
+        return;
+      }
+      if (submittedKey) {
+        this.#boxes = this.#boxes.filter((box) => _boxKey(box) !== submittedKey);
+      }
       for (const b of boxes) {
         const index = Number(b?.index);
         if (!Number.isFinite(index)) continue;
@@ -331,7 +440,23 @@ class AppBoxStrip extends HTMLElement {
           resolved: false,
           opening: false,
           fromReceipt: true,
+          optimistic: false,
           createdAt: Date.now(),
+          amountWei: b?.amountWei == null && boxes.length === 1
+            ? (() => {
+                try {
+                  return String(
+                    BigInt(detail.lootBoxAmountWei ?? 0)
+                    + BigInt(detail.presaleBoxAmountWei ?? 0),
+                  );
+                } catch (_e) { return null; }
+              })()
+            : b?.amountWei == null ? null : String(b.amountWei),
+          ticketPriceWei: b?.ticketPriceWei == null
+            ? detail.ticketPriceWei == null
+              ? submitted?.ticketPriceWei ?? null
+              : String(detail.ticketPriceWei)
+            : String(b.ticketPriceWei),
         });
         this.#emptyIndexes.delete(index);
       }
@@ -339,6 +464,8 @@ class AppBoxStrip extends HTMLElement {
       this.#render();
       this.#runPollCycle();
     };
+    document.addEventListener('app-decimator:tx-submitted', this.#submittedListener);
+    document.addEventListener('app-decimator:tx-failed', this.#failedListener);
     document.addEventListener('app-decimator:tx-confirmed', this.#docListener);
 
     // A direct Degenerette settlement and the durable box feed can discover the
@@ -418,8 +545,9 @@ class AppBoxStrip extends HTMLElement {
         if (!Number.isFinite(index) || index <= 0) continue;
         const row = feedRows.get(index) || {
           index, day: null, ready: false, resolved: false, opening: false,
-          fromReceipt: false,
+          fromReceipt: false, transactionHash: null,
         };
+        row.transactionHash = String(item?.transactionHash || row.transactionHash || '').toLowerCase() || null;
         const resultTypes = new Set((Array.isArray(item?.results) ? item.results : [])
           .map((result) => String(result?.rewardType || '')));
         row.ready ||= Boolean(item?.rngReady);
@@ -435,6 +563,24 @@ class AppBoxStrip extends HTMLElement {
       const tracked = new Set(local.keys());
       const resolvedRows = resolvedBoxRowsFromLegs(legsResponse?.items, owner);
       const resolvedByKey = new Map(resolvedRows.map((row) => [_boxKey(row), row]));
+
+      // If receipt parsing could not recover the index, the indexed purchase
+      // later promotes the exact submitted-hash placeholder without touching
+      // any other box already in Pending.
+      for (const feed of feedRows.values()) {
+        if (!feed.transactionHash) continue;
+        const submittedKey = `submitted:${feed.transactionHash}`;
+        const submitted = local.get(submittedKey);
+        if (!submitted) continue;
+        local.delete(submittedKey);
+        local.set(String(feed.index), {
+          ...submitted,
+          ...feed,
+          resultKey: String(feed.index),
+          optimistic: false,
+          fromReceipt: true,
+        });
+      }
       const priorCursor = _readResultCursor(owner);
       const newestOrd = resolvedRows.reduce(
         (highest, row) => Math.max(highest, Number(row.ord) || 0),
@@ -519,6 +665,7 @@ class AppBoxStrip extends HTMLElement {
           index: box.index,
           candidate: box,
           statusKnown: status != null,
+          amountWei: status == null ? null : String(status.amount ?? 0),
           hasAmount,
           ready: hasAmount && (Boolean(box.ready) || chainReady),
         };
@@ -526,7 +673,7 @@ class AppBoxStrip extends HTMLElement {
       if (this.#addr !== owner) return;
       for (const result of probeResults) {
         if (result.status !== 'fulfilled') continue;
-        const { key, index, candidate, statusKnown, hasAmount, ready } = result.value;
+        const { key, index, candidate, statusKnown, amountWei, hasAmount, ready } = result.value;
         const prior = local.get(key);
         if (!statusKnown) {
           // A receipt row survives an RPC blip; an unverified DB-history row
@@ -535,16 +682,18 @@ class AppBoxStrip extends HTMLElement {
           continue;
         }
         if (!hasAmount) {
-          const indexedPurchase = feedRows.has(index);
-          const recentReceipt = prior?.fromReceipt
-            && Number.isFinite(Number(prior?.createdAt))
-            && Date.now() - Number(prior.createdAt) < 120_000;
-          if (recentReceipt && !indexedPurchase) {
-            // A real recent purchase may have been opened by somebody else
-            // before either DB route sees it. Keep only that short receipt-to-
-            // indexer bridge hidden; once the purchase itself is indexed, a
-            // zero amount is authoritative and the stale notification is gone.
-            local.set(key, { ...prior, ready: false, resolved: false });
+          if (prior?.fromReceipt) {
+            // A receipt-confirmed box cannot become disposable merely because
+            // somebody else won the permissionless open race. A zero slot
+            // proves settlement, but result legs can trail it in the indexer.
+            local.set(key, {
+              ...candidate,
+              ...prior,
+              ready: true,
+              resolved: true,
+              opening: false,
+              amountWei: prior?.amountWei ?? candidate?.amountWei ?? amountWei,
+            });
           } else {
             local.delete(key);
             this.#emptyIndexes.add(index);
@@ -556,6 +705,7 @@ class AppBoxStrip extends HTMLElement {
           ...prior,
           ready,
           resolved: false,
+          amountWei,
           opening: Boolean(prior?.opening),
           fromReceipt: Boolean(prior?.fromReceipt),
         });
@@ -588,6 +738,12 @@ class AppBoxStrip extends HTMLElement {
         await this.#replayResolvedBox(box);
         return;
       }
+      // The indexer can learn about a settlement between polling cycles (or
+      // while the connected RPC is still serving the pre-settlement block).
+      // Prefer that immutable result before consulting the mutable amount
+      // slot; otherwise a stale non-zero RPC read can send the player into an
+      // unnecessary openBox wallet flow for a box that is already finished.
+      if (await this.#replayResolvedBox(box, { silentIfMissing: true })) return;
       // Never open from a stale UI snapshot. The amount slot is cleared before
       // the settlement events emit, so zero means another wallet/crank already
       // won the race and this click should replay, not ask for a doomed tx.
@@ -596,7 +752,7 @@ class AppBoxStrip extends HTMLElement {
         lootboxIndex: box.index,
       }).catch(() => null);
       if (status && status.amount === 0n) {
-        await this.#replayResolvedBox(box, { retireIfMissing: true });
+        await this.#replayResolvedBox(box);
         return;
       }
 
@@ -624,11 +780,17 @@ class AppBoxStrip extends HTMLElement {
     } catch (error) {
       box.opening = false;
       const rawMsg = error?.userMessage || error?.message || '';
+      const latest = await readLootboxStatus({
+        player: this.#addr,
+        lootboxIndex: box.index,
+      }).catch(() => null);
+      const clearedByRace = latest != null && BigInt(latest.amount ?? 0) === 0n;
       // A competitor can land between the read and our wallet broadcast. Treat
       // the contract's race signal exactly like the pre-read's zero slot:
-      // recover the indexed result and replay it, without surfacing a failure.
-      if (/already|nothing|no box|resolved/i.test(String(rawMsg))) {
-        await this.#replayResolvedBox(box, { retireIfMissing: true });
+      // recover the indexed result and replay it, without dropping the receipt
+      // row while its settlement legs are still indexing.
+      if (clearedByRace || /already|nothing|no box|resolved/i.test(String(rawMsg))) {
+        await this.#replayResolvedBox(box);
       } else {
         this.#renderError(compactUiError(error, 'Box did not open. Try again.'));
         this.#render();
@@ -636,7 +798,7 @@ class AppBoxStrip extends HTMLElement {
     }
   }
 
-  async #replayResolvedBox(box, { retireIfMissing = false } = {}) {
+  async #readResolvedBoxLegs(box) {
     let legs = [];
     try {
       // Ask for both the exact index and the player's newest legs. Current APIs
@@ -676,20 +838,30 @@ class AppBoxStrip extends HTMLElement {
       player: this.#addr,
       blockNumber: box.blockNumber ?? null,
     });
-    if (legs.length > 0 && this.#queueBoxReveal(box, legs, {
-      settledExpected: true,
-    })) return;
+    return legs;
+  }
 
-    if (retireIfMissing) {
-      // The live amount slot is authoritative: zero means there is no box left
-      // to open. If neither indexed nor chain event legs can reconstruct an old
-      // result, keeping a dead button forever cannot improve that situation.
-      const address = this.#addr;
-      const key = _boxKey(box);
-      if (address && key) _markRevealed(address, key);
-      this.#removeBox(key);
-      return;
+  async #replayResolvedBox(box, {
+    silentIfMissing = false,
+  } = {}) {
+    const legs = await this.#readResolvedBoxLegs(box);
+    if (legs.length > 0) {
+      const accepted = this.#queueBoxReveal(box, legs, { settledExpected: true });
+      if (!accepted) {
+        // A matching presentation is already queued or was shown this session.
+        // The indexed legs still prove settlement, so retire this duplicate
+        // action instead of falling through to an impossible wallet write.
+        const address = this.#addr;
+        const key = _boxKey(box);
+        if (address && key) _markRevealed(address, key);
+        if (key) this.#removeBox(key);
+      }
+      return true;
     }
+
+    // Probe mode is used immediately before a write. A miss simply continues
+    // to the fresh amount-slot check without changing the button's busy state.
+    if (silentIfMissing) return false;
 
     // Do not retire an indexed result just because a companion leg is still
     // catching up. It remains actionable and the next poll/click can rebuild
@@ -700,6 +872,7 @@ class AppBoxStrip extends HTMLElement {
     this.#renderError('Result syncing — try again shortly.');
     if (this.#addr) _writePending(this.#addr, this.#boxes);
     this.#render();
+    return true;
   }
 
   #queueBoxReveal(box, legs, { title = null, settledExpected = false } = {}) {
@@ -716,7 +889,10 @@ class AppBoxStrip extends HTMLElement {
       kind: 'lootbox',
       ...(title ? { title } : {}),
       lootboxIndex: box.index,
+      amountWei: box.amountWei,
+      ticketPriceWei: box.ticketPriceWei,
       legs,
+      settledExpected,
       lootboxRelease: {
         address,
         key,
@@ -768,22 +944,45 @@ class AppBoxStrip extends HTMLElement {
       clearPendingActions(PENDING_SOURCE);
       return;
     }
-    publishPendingActions(PENDING_SOURCE, this.#boxes.map((box) => ({
+    publishPendingActions(PENDING_SOURCE, this.#boxes.map((box) => {
+      const value = _boxValuePresentation(box);
+      return {
       id: `lootbox:${_boxKey(box)}`,
       dismissScope: this.#addr,
       kind: 'lootbox',
+      mayAddEth: Boolean(box.resolved),
+      amountWei: box.amountWei == null ? null : String(box.amountWei),
+      amountLabel: _boxAmountLabel(box),
+      ticketPriceWei: value.ticketPriceWei == null ? null : String(value.ticketPriceWei),
+      lootboxValueTone: value.tone,
+      lootboxTicketUnitsLabel: value.unitsLabel,
       label: _boxLabel(box),
-      shortLabel: box.resolved ? 'View result' : 'Open box',
-      detail: box.opening
+      shortLabel: box.optimistic
+        ? 'Transaction sent'
+        : box.index == null ? 'Syncing purchase' : box.resolved ? 'View result' : 'Open box',
+      detail: box.optimistic
+        ? 'Purchase sent · waiting for confirmation'
+        : box.index == null
+          ? 'Purchase confirmed · syncing RNG queue'
+        : box.opening
         ? box.resolved ? 'Loading indexed result' : 'Opening on-chain'
         : box.ready
           ? box.resolved ? 'Result indexed · ready to replay' : 'RNG ready · prizes locked'
           : `Waiting for RNG${box.day == null ? '' : ` · Day ${box.day}`}`,
       state: box.opening ? 'busy' : box.ready ? 'ready' : 'waiting',
+      // Normal purchased boxes and Degenerette share the mid-day Chainlink
+      // batch. Publishing that relationship explicitly lets the permanent RNG
+      // widget appear on the receipt paint, inherit the real queue fill, and
+      // become the request control without waiting for the indexer.
+      sharedRng: !box.optimistic,
+      phase: box.optimistic
+        ? 'submitting'
+        : box.opening ? 'resolving' : box.ready ? 'result-ready' : 'awaitingRng',
       // Pending/RNG-ready boxes cannot spoil a payout that does not exist yet.
       // Consumers may gate balances only after an indexed settlement exists.
       resolved: Boolean(box.resolved),
       pinned: true,
+      compact: !box.ready,
       progress: !box.ready && !box.opening ? 'indeterminate' : null,
       write: !box.resolved,
       // A resolved/indexed box only replays its popup. An unresolved ready box
@@ -796,7 +995,8 @@ class AppBoxStrip extends HTMLElement {
         : Number.isFinite(Number(box.ord)) ? Number(box.ord) : Number(box.index),
       run: () => this.#onOpenClick(box),
       clearAll: () => this.#clearAllBoxes(),
-    })));
+      };
+    }));
   }
 
   #render() {
@@ -809,28 +1009,31 @@ class AppBoxStrip extends HTMLElement {
     chips.textContent = '';
     if (!show) return;
     for (const box of this.#boxes) {
+      const value = _boxValuePresentation(box);
       const chip = document.createElement('div');
       chip.className = `bxs-chip${box.ready ? ' bxs-chip--ready' : ''}`
         + (box.opening ? ' bxs-chip--opening' : '');
+      chip.setAttribute('data-lootbox-value-tone', value.tone);
+      if (value.unitsLabel) chip.title = `${value.unitsLabel} ticket-price box`;
 
       const art = document.createElement('span');
       art.className = 'bxs-chip-art';
+      art.setAttribute('data-lootbox-value-tone', value.tone);
       chip.appendChild(art);
 
       const copy = document.createElement('span');
       copy.className = 'bxs-chip-copy';
+      const amountLabel = _boxAmountLabel(box);
+      if (amountLabel) {
+        const amount = document.createElement('span');
+        amount.className = 'bxs-chip-amount';
+        amount.textContent = amountLabel;
+        copy.appendChild(amount);
+      }
       const title = document.createElement('strong');
       title.className = 'bxs-chip-title';
       title.textContent = _boxLabel(box, true);
       copy.appendChild(title);
-      const status = document.createElement('span');
-      status.className = 'bxs-chip-status';
-      status.textContent = box.opening
-        ? box.resolved ? 'Loading result…' : 'Opening on-chain…'
-        : box.ready
-          ? box.resolved ? 'Result ready to replay' : 'RNG ready · prizes locked'
-          : `Waiting for RNG${box.day == null ? '…' : ` · Day ${box.day}`}`;
-      copy.appendChild(status);
       chip.appendChild(copy);
 
       const cta = document.createElement('button');

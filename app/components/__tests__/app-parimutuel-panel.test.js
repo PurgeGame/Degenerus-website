@@ -749,7 +749,8 @@ describe('app-parimutuel-panel', () => {
     assert.equal(card.querySelectorAll('.pari-side__cta').length, 0, 'no second bet offered');
     assert.equal(card.querySelectorAll('.pari-side').length, 0,
       'the empty opposing cell is removed after committing');
-    assert.equal(card.querySelector('.pari-your-bet').textContent, 'YOUR BET:OVER 105.8 ETH');
+    assert.equal(card.querySelector('.pari-your-bet').textContent, 'YOUR BET:OVER 106 ETH',
+      'a held OVER line rounds up against the player without changing the live quote');
     assert.deepEqual(
       card.querySelectorAll('.pari-split__label').map((n) => n.textContent),
       ['75%', '25%'],
@@ -763,6 +764,22 @@ describe('app-parimutuel-panel', () => {
     assert.equal(pending.id, `pari:growth:${LEVEL}`);
     assert.equal(pending.state, 'waiting');
     assert.equal(pending.run, null, 'an unsettled position is informational');
+  });
+
+  test('a held growth UNDER position rounds its receipt down against the player', async () => {
+    installContract({
+      growth: { [LEVEL]: { openRound: LEVEL, over: 1n, under: 3n, side: 2 } },
+      ratchets: { prev: 80n * RAW_ETH, current: 92n * RAW_ETH },
+    });
+    const el = await mount();
+    assert.equal(growthCard(el).querySelector('.pari-your-bet').textContent,
+      'YOUR BET:UNDER 105 ETH');
+    assert.deepEqual(
+      growthCard(el).querySelectorAll('.pari-split__label').map((node) => node.textContent),
+      ['25%', '75%'],
+      'only the held receipt rounds; the exact live book split is unchanged',
+    );
+    el.disconnectedCallback();
   });
 
   test('"To win" appears only after the player’s bet has closed', async () => {
@@ -789,7 +806,7 @@ describe('app-parimutuel-panel', () => {
     const card = growthCard(el);
     const held = card.querySelector('.pari-your-bet--closed');
     assert.ok(held, 'closed unresolved bet gets a compact held-position receipt');
-    assert.match(held.textContent, /YOUR BET:OVER 105.8 ETHTO WIN: 2,500 FLIP/);
+    assert.match(held.textContent, /YOUR BET:OVER 106 ETHTO WIN: 2,500 FLIP/);
     assert.equal(held.querySelector('.pari-your-bet__divider'), null,
       'the compact receipt has no decorative slash');
     assert.match(held.textContent, /2,500 FLIP/,

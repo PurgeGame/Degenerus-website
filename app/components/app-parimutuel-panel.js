@@ -25,7 +25,7 @@
 //
 // T-58-18: every server- and chain-derived string lands via textContent.
 
-import { CHAIN, VOLUME_WINDOW } from '../app/chain-config.js';
+import { CHAIN, ETH_DIVISOR, VOLUME_WINDOW } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { get, update, subscribe, getViewedAddress, getActingAddress } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
@@ -107,6 +107,20 @@ function _fmtPoolEth(wei) {
     const [whole, fraction] = compact.split('.');
     const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     return fraction == null ? grouped : `${grouped}.${fraction}`;
+  } catch (_e) {
+    return '0';
+  }
+}
+
+// A held Growth receipt is deliberately conservative: OVER rounds its line up,
+// UNDER rounds it down. The live market and settlement retain the exact wei.
+function _fmtHeldGrowthEth(wei, side) {
+  try {
+    const scaled = BigInt(wei || 0n) * ETH_DIVISOR;
+    const unit = 10n ** 18n;
+    let whole = scaled / unit;
+    if (side === SIDE_OVER && scaled % unit !== 0n) whole += 1n;
+    return String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   } catch (_e) {
     return '0';
   }
@@ -1127,6 +1141,7 @@ class AppParimutuelPanel extends HTMLElement {
       lead: 'Last level: ',
       offered: `${bps < 0 ? '-' : ''}${pct}%`,
       target: `${_fmtPoolEth(target)} ETH`,
+      targetWei: target,
     };
   }
 
@@ -1397,7 +1412,10 @@ class AppParimutuelPanel extends HTMLElement {
     label.textContent = 'YOUR BET:';
     const pick = document.createElement('strong');
     pick.className = 'pari-your-bet__pick';
-    pick.textContent = `${sideText}${offered?.target ? ` ${offered.target}` : ''}`;
+    const heldTarget = offered?.targetWei == null
+      ? offered?.target
+      : `${_fmtHeldGrowthEth(offered.targetWei, state.side)} ETH`;
+    pick.textContent = `${sideText}${heldTarget ? ` ${heldTarget}` : ''}`;
     line.appendChild(label);
     line.appendChild(pick);
     if (closed) {

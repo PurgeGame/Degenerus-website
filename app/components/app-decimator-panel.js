@@ -33,11 +33,19 @@ import { compactUiError } from '../app/ui-error.js';
 import { get, getActingAddress, subscribe } from '../app/store.js';
 import { getProvider } from '../app/contracts.js';
 import { fetchJSON } from '../app/api.js';
+import {
+  reportPendingActionError,
+  subscribePendingActions,
+} from '../app/pending-actions.js';
 // Eager import — triggers Phase 60's reason-map registrations as a side-effect
 // (GameOverPossible / AfKingLockActive / NotApproved). decimator.js is a thin
 // re-export of lootbox.js's purchaseEth + purchaseCoin per Plan 62-01 D-01.
 import { purchaseEth, scaledTicketPriceWei } from '../app/decimator.js';
-import { readAfkingSubscription } from '../app/passes.js';
+import {
+  claimAfkingSubscriptionFlip,
+  readAfkingSubscription,
+  withdrawAfkingSubscriptionFunding,
+} from '../app/passes.js';
 // readAffiliateCode comes directly from lootbox.js — Plan 62-01's decimator.js
 // only re-exports the two purchase helpers per its minimal-surface design.
 // LOOTBOX_MIN_WEI: floor on the lootbox ETH leg. There is no per-box price —
@@ -56,6 +64,8 @@ import {
   ticketCostFromTickets, ENTRIES_PER_TICKET, claimableFirstPayment,
   readPurchaseFundingPriority as _readFundingPriority,
   writePurchaseFundingPriority as _writeFundingPriority,
+  readPurchaseUseAfking as _readUseAfking,
+  writePurchaseUseAfking as _writeUseAfking,
 } from '../app/lootbox.js';
 // Reveal plumbing: ticket purchases queue a pack-opening reveal; lootbox legs
 // found in the BUY receipt itself (afking idx-0 auto-opens) reveal instantly.
@@ -70,13 +80,16 @@ import { activeTicketLevel } from '../app/active-level.js';
 // whether the current player can afford one whole ticket.
 import {
   claimEth,
+  claimFlip,
   redeemFlip,
   probeRedeemFlipWindow,
   flipCostFromTickets,
 } from '../app/claims.js';
+import { readClaimableCoinflip } from '../app/coinflip.js';
 import { formatFlip } from '../viewer/utils.js';
 import { queueReveal } from './reveal-overlay.js';
 import { updateBalanceDisplay, resetBalanceDisplay } from '../app/balance-countup.js';
+import { degeneretteLimits } from '../app/degenerette.js';
 // Ticket reveals are deferred until the traits roll — see app/app/pack-watch.js.
 import { recordPendingPack, recordLootboxTicketPacks } from '../app/pack-watch.js';
 import { BASE_SEPOLIA_FAUCET_URL, isBaseSepolia } from './testnet-beta-banner.js';
@@ -105,13 +118,60 @@ function formatPurchaseEth(raw) {
   return fixed.replace(/0+$/, '').replace(/\.$/, '');
 }
 
+// Quote CTAs can contain the player's entire balance and a four-digit ticket
+// count. Group only the display string; all transaction math keeps the exact
+// unformatted values returned alongside it.
+function groupAllInNumber(raw) {
+  const original = String(raw ?? '');
+  const normalized = original.replaceAll(',', '');
+  const match = /^(-?)(\d+)(\.\d+)?$/.exec(normalized);
+  if (!match) return original;
+  const grouped = match[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${match[1]}${grouped}${match[3] || ''}`;
+}
+
 // The active testnet displays ETH in the protocol's /1M-normalized units,
 // including the connected wallet readout. Keep the same multiplier and the
 // purchase panel's no-trailing-zero convention in one place.
 function formatFundsEth(raw) {
   const fixed = displayEth(BigInt(raw || 0), 2);
-  if (!fixed.includes('.')) return fixed;
-  return fixed.replace(/0+$/, '').replace(/\.$/, '');
+  const trimmed = fixed.includes('.')
+    ? fixed.replace(/0+$/, '').replace(/\.$/, '')
+    : fixed;
+  const [whole, fraction] = trimmed.split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return fraction == null ? grouped : `${grouped}.${fraction}`;
+}
+
+const ETH_BALANCE_RNG_PHASES = new Set([
+  'submitting',
+  'awaitingRng',
+  'request-ready',
+  'requesting-rng',
+  'waiting-rng',
+  'result-ready',
+  'resolving',
+  'indexing',
+]);
+
+/** Whether unseen player work can still make the displayed ETH total a spoiler. */
+export function pendingMayChangeEth(items = []) {
+  return (Array.isArray(items) ? items : []).some((item) => {
+    if (!item || item.mayAddEth === false) return false;
+    const phase = String(item.phase || '');
+    if (phase && !ETH_BALANCE_RNG_PHASES.has(phase)
+      && !['decimator', 'baf'].includes(String(item.kind || ''))) return false;
+    if (item.mayAddEth === true) return true;
+
+    const kind = String(item.kind || '');
+    if (kind === 'decimator' || kind === 'baf') return true;
+    if (kind === 'lootbox') return item.resolved === true;
+    if (kind !== 'degenerette') return false;
+
+    const hasCurrency = item.currency != null && Number.isFinite(Number(item.currency));
+    return (hasCurrency && Number(item.currency) === 0)
+      || (!hasCurrency && /\bETH\b/i.test(`${item.label || ''} ${item.detail || ''}`));
+  });
 }
 
 /**
@@ -213,6 +273,144 @@ export function presaleBoxAvailableWei(state, mintCostWei = 0n) {
   return available < remaining ? available : remaining;
 }
 
+/** Maximum quarter-ticket preset whose integer contract cost fits the budget. */
+export function allInTicketAmount({ availableWei = 0n, priceWei = 0n, reservedWei = 0n } = {}) {
+  let available = 0n;
+  let price = 0n;
+  let reserved = 0n;
+  try { available = BigInt(availableWei); } catch (_e) { available = 0n; }
+  try { price = BigInt(priceWei); } catch (_e) { price = 0n; }
+  try { reserved = BigInt(reservedWei); } catch (_e) { reserved = 0n; }
+  if (price <= 0n || available <= reserved) return '0';
+  const spendable = available - reserved;
+  let entries = ((spendable + 1n) * BigInt(ENTRIES_PER_TICKET) - 1n) / price;
+  const maxSafeEntries = BigInt(Number.MAX_SAFE_INTEGER);
+  if (entries > maxSafeEntries) entries = maxSafeEntries;
+  if (entries <= 0n) return '0';
+  const whole = entries / BigInt(ENTRIES_PER_TICKET);
+  const remainder = Number(entries % BigInt(ENTRIES_PER_TICKET));
+  return remainder === 0 ? String(whole) : `${whole}.${['', '25', '5', '75'][remainder]}`;
+}
+
+const ALL_IN_COINFLIP_MIN_WEI = 100n * (10n ** 18n);
+const FLIP_WEI = 10n ** 18n;
+// One displayed ETH cent remains in the connected wallet for transaction gas.
+// LOOTBOX_MIN_WEI already expresses exactly 0.01 ETH in the active chain scale.
+const ALL_IN_GAS_RESERVE_WEI = LOOTBOX_MIN_WEI;
+
+export function allInDestinations(currency, flipTicketsOpen = false) {
+  if (String(currency).toUpperCase() === 'FLIP') {
+    return ['coinflip', 'degenerette', ...(flipTicketsOpen ? ['tickets'] : [])];
+  }
+  return ['tickets', 'lootbox', 'degenerette'];
+}
+
+/** Floor an ETH ALL IN budget to one displayed cent before route-specific math. */
+export function floorAllInEthBudgetWei(raw) {
+  let value = 0n;
+  try { value = BigInt(raw ?? 0); } catch (_error) { return 0n; }
+  if (value <= 0n || LOOTBOX_MIN_WEI <= 0n) return 0n;
+  return value - (value % LOOTBOX_MIN_WEI);
+}
+
+export function allInWalletAfterGasReserveWei(raw) {
+  let wallet = 0n;
+  try { wallet = BigInt(raw ?? 0); } catch (_error) { return 0n; }
+  return wallet > ALL_IN_GAS_RESERVE_WEI ? wallet - ALL_IN_GAS_RESERVE_WEI : 0n;
+}
+
+/** Exact, non-mutating quote for the dedicated ALL IN confirmation sheet. */
+export function allInSelectionQuote({
+  currency = 'ETH',
+  target = 'tickets',
+  spins = 5,
+  purchaseEthWei = null,
+  degeneretteEthWei = null,
+  flipWei = null,
+  ticketPriceWei = null,
+  flipTicketsOpen = false,
+  gasReady = true,
+} = {}) {
+  const unit = String(currency).toUpperCase() === 'FLIP' ? 'FLIP' : 'ETH';
+  const formatSpend = (raw) => unit === 'ETH'
+    ? `${groupAllInNumber(formatPurchaseEth(raw))} ETH`
+    : `${groupAllInNumber(formatFlip(String(raw)))} FLIP`;
+  const fail = (message) => ({
+    valid: false,
+    currency: unit,
+    target,
+    spins: Math.max(1, Math.trunc(Number(spins) || 1)),
+    message,
+    buttonLabel: 'ALL IN UNAVAILABLE',
+  });
+  if (!gasReady) return fail('Keep at least 0.01 ETH in your wallet for gas.');
+  if (!allInDestinations(unit, flipTicketsOpen).includes(target)) {
+    return fail('That format is not available for this currency right now.');
+  }
+  let budget = null;
+  try {
+    budget = BigInt(unit === 'FLIP'
+      ? flipWei
+      : target === 'degenerette' ? degeneretteEthWei : purchaseEthWei);
+  } catch (_e) { budget = null; }
+  if (budget == null) return fail(`${unit} balance is still loading.`);
+  if (unit === 'ETH') budget = floorAllInEthBudgetWei(budget);
+  if (budget <= 0n) return fail(`No ${unit} is available to go all in.`);
+
+  let spendWei = budget;
+  let outputLabel = '';
+  let ticketAmount = null;
+  let amountPerSpin = null;
+  let spinCount = Math.max(1, Math.trunc(Number(spins) || 1));
+  if (target === 'tickets') {
+    let price = null;
+    try {
+      price = unit === 'FLIP' ? flipCostFromTickets(1) : BigInt(ticketPriceWei);
+    } catch (_e) { price = null; }
+    if (price == null || price <= 0n) return fail('Ticket price is still loading.');
+    ticketAmount = allInTicketAmount({ availableWei: budget, priceWei: price });
+    if (ticketAmount === '0') return fail(`Not enough ${unit} for one entry.`);
+    spendWei = unit === 'FLIP'
+      ? flipCostFromTickets(Number(ticketAmount))
+      : ticketCostFromTickets(price, Number(ticketAmount));
+    outputLabel = `${groupAllInNumber(ticketAmount)} ${ticketAmount === '1' ? 'TICKET' : 'TICKETS'}`;
+  } else if (target === 'lootbox') {
+    if (budget < LOOTBOX_MIN_WEI) return fail('At least 0.01 ETH is required for a lootbox.');
+    outputLabel = '1 LOOTBOX';
+  } else if (target === 'coinflip') {
+    if (budget < ALL_IN_COINFLIP_MIN_WEI) return fail('At least 100 FLIP is required for Coinflip.');
+    outputLabel = "TODAY'S COINFLIP";
+  } else {
+    const lane = unit === 'ETH' ? 0 : 1;
+    const limits = degeneretteLimits(lane);
+    spinCount = Math.min(limits.maxSpins, spinCount);
+    const divisor = lane === 0 ? BigInt(ETH_DIVISOR) : 1n;
+    const minimum = (limits.minBetFullScale + divisor - 1n) / divisor;
+    amountPerSpin = budget / BigInt(spinCount);
+    if (amountPerSpin < minimum) {
+      return fail(`Not enough ${unit} for ${spinCount} Degenerette spins.`);
+    }
+    spendWei = amountPerSpin * BigInt(spinCount);
+    outputLabel = `${groupAllInNumber(spinCount)} ${spinCount === 1 ? 'SPIN' : 'SPINS'}`;
+  }
+  const spendLabel = formatSpend(spendWei);
+  const fingerprint = [unit, target, spinCount, spendWei, outputLabel].join(':');
+  return {
+    valid: true,
+    currency: unit,
+    target,
+    spins: spinCount,
+    spendWei,
+    spendLabel,
+    outputLabel,
+    ticketAmount,
+    amountPerSpin,
+    fingerprint,
+    message: target === 'degenerette' ? 'Uses your current Degenerette ticket and Hero.' : '',
+    buttonLabel: `ALL IN: ${spendLabel} FOR ${outputLabel}`,
+  };
+}
+
 class AppDecimatorPanel extends HTMLElement {
   // --- Phase 60 / 61 idempotency-guard pattern ---
   #unsubs = [];
@@ -233,6 +431,14 @@ class AppDecimatorPanel extends HTMLElement {
   #claimableWei = 0n;  // Acting player's indexed claimable balance (quote only).
   #claimableAddress = null;
   #claimableKnown = false;
+  #flipBalanceWei = null;      // Acting player's spendable FLIP balance.
+  #flipBalanceAddress = null;
+  #coinflipClaimableWei = 0n; // Settled/mintable Coinflip FLIP.
+  #coinflipClaimableAddress = null;
+  #coinflipClaimableKnown = false;
+  #afkingPendingFlipWei = 0n; // Accrued AFKing FLIP, converted from whole tokens.
+  #afkingPendingFlipAddress = null;
+  #afkingPendingFlipKnown = false;
   #walletEthWei = null;       // Connected signer's native wallet balance.
   #walletEthAddress = null;
   #afkingFundingWei = 0n;     // Acting player's spendable AFKing funding.
@@ -240,7 +446,12 @@ class AppDecimatorPanel extends HTMLElement {
   #afkingFundingKnown = false;
   #claimBusy = null;          // 'eth' while the footer claim is signing.
   #preferClaimable = true;    // ETH purchase funding preference; persisted per chain.
+  #useAfking = true;          // Allow prepaid AFKing funds to cover purchase shortfalls.
+  #fundingOrder = ['claimable', 'afking', 'wallet'];
+  #fundsExpanded = false;     // Available Funds mirrors Protocol Coins disclosure.
+  #pendingActions = [];       // Unseen ETH-capable RNG results mask the compact total.
   #claimableSpoilerOverrideKey = null;
+  #claimableSpoilerHiddenKey = null;
   // Referral assignment is player-specific and permanent after the first buy.
   // null = unknown (keep the field hidden), false = first-buy field available,
   // true = already assigned (field stays out of the purchase flow).
@@ -273,7 +484,19 @@ class AppDecimatorPanel extends HTMLElement {
   connectedCallback() {
     if (this.#initialized) return;
     this.#initialized = true;
-    this.#preferClaimable = _readFundingPriority() !== 'wallet';
+    const storedPriority = _readFundingPriority();
+    const storedUseAfking = _readUseAfking();
+    const primarySource = storedPriority === 'claimable'
+      ? 'claimable'
+      : storedPriority === 'afking' || storedUseAfking
+        ? 'afking'
+        : 'wallet';
+    this.#preferClaimable = primarySource === 'claimable';
+    this.#useAfking = primarySource !== 'wallet';
+    this.#fundingOrder = [
+      primarySource,
+      ...this.#fundingOrder.filter((source) => source !== primarySource),
+    ];
     this.#renderShell();
     this.#wireEventHandlers();
     this.#wireQuestPresets();
@@ -287,8 +510,11 @@ class AppDecimatorPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
+    resetBalanceDisplay(this.querySelector('[data-bind="dec-funds-total"]'));
+    resetBalanceDisplay(this.querySelector('[data-bind="dec-flip-balance-value"]'));
     resetBalanceDisplay(this.querySelector('[data-bind="dec-funds-wallet"]'));
     resetBalanceDisplay(this.querySelector('[data-bind="dec-funds-claimable"]'));
+    resetBalanceDisplay(this.querySelector('[data-bind="dec-funds-afking"]'));
     if (this.#pollHandle != null) {
       try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
@@ -459,49 +685,98 @@ class AppDecimatorPanel extends HTMLElement {
         <!-- Error display (T-58-18: textContent-only target) -->
         <div class="dec-error" data-bind="dec-error" hidden role="alert"></div>
 
-        <!-- ETH purchase balance footer. Claimable is deliberately first. The
-             window-gated alternate ticket payment is a compact option inside
-             the ETH wallet display instead of a second purchase action. -->
-        <div class="dec-funds" data-bind="dec-funds">
-          <div class="dec-funds__display dec-funds__display--claimable"
-               data-bind="dec-funds-claimable-display">
-            <span class="dec-funds__label">
-              <span>CLAIMABLE</span>
-            </span>
-            <label class="dec-funds__priority" data-bind="dec-funds-claimable-priority">
-              <input type="radio" name="dec-funding-priority" value="claimable"
-                     data-bind="dec-funds-claimable-first" checked>
-              <span>USE FIRST</span>
-            </label>
-            <strong class="dec-funds__value dec-funds__value--claimable">
-              <span class="dec-funds__number" data-bind="dec-funds-claimable">—</span>
-              <span class="dec-funds__unit" data-bind="dec-funds-claimable-unit">ETH</span>
+        <!-- Keep both ledgers in one bottom-anchored stack. Selecting FLIP adds
+             its yellow-accented balance immediately above Available Funds; it never floats
+             upward when the ETH disclosure is closed. -->
+        <div class="dec-funds-stack">
+          <button type="button"
+                  class="dec-flip-toggle dec-funds-stack__flip-mode"
+                  data-bind="dec-funds-total-flip" aria-pressed="false" hidden>
+            USE FLIP
+          </button>
+          <div class="dec-flip-balance" data-bind="dec-flip-balance" hidden
+               aria-label="Available FLIP balance">
+            <button type="button" class="dec-flip-toggle dec-flip-balance__toggle"
+                    data-bind="dec-flip-buy" aria-pressed="false" hidden>USE FLIP</button>
+            <span class="dec-flip-balance__label">BALANCE</span>
+            <strong class="dec-flip-balance__value">
+              <span data-bind="dec-flip-balance-value">—</span>
+              <span class="dec-flip-balance__unit">FLIP</span>
             </strong>
-            <button type="button" class="dec-funds__claim" data-write
-                    data-bind="dec-funds-claim" disabled>CLAIM</button>
           </div>
-          <div class="dec-funds__display dec-funds__display--wallet"
-               data-bind="dec-funds-wallet-display">
-            <span class="dec-funds__label">
-              <span data-bind="dec-funds-wallet-label">WALLET</span>
-            </span>
-            <label class="dec-funds__priority" data-bind="dec-funds-wallet-priority">
-              <input type="radio" name="dec-funding-priority" value="wallet"
-                     data-bind="dec-funds-wallet-first">
-              <span>USE FIRST</span>
-            </label>
-            <label class="dec-flip-mode dec-funds__flip-mode"
-                   data-bind="dec-flip-buy" hidden>
+
+          <button type="button" class="dec-all-in" data-bind="dec-all-in" disabled
+                  aria-label="Use all available ETH for tickets">
+            <strong class="dec-all-in__label">ALL IN</strong>
+            <img class="dec-all-in__flame" src="/whitepaper/flame-center.svg"
+                 alt="" aria-hidden="true">
+          </button>
+
+          <!-- Protocol-Coins-style funds disclosure: the collapsed row is an
+               aggregate only; opening it swaps in the ordered source rows. -->
+          <div class="dec-funds" data-bind="dec-funds">
+            <button type="button" class="dec-funds__summary" data-bind="dec-funds-toggle"
+                    aria-expanded="false" aria-controls="dec-funds-breakdown">
+              <span class="dec-funds__summary-label">AVAILABLE FUNDS</span>
+              <span class="dec-funds__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="dec-funds__total" data-bind="dec-funds-total-display">
+              <button type="button" class="dec-flip-toggle dec-funds__eth-mode"
+                      data-bind="dec-funds-total-eth" hidden
+                      aria-label="Use ETH for purchases">USE ETH</button>
+              <strong class="dec-funds__value dec-funds__total-value">
+                <span class="dec-funds__number" data-bind="dec-funds-total">—</span>
+                <span class="dec-funds__unit">ETH</span>
+              </strong>
+            </div>
+            <div id="dec-funds-breakdown" class="dec-funds__breakdown"
+                 data-bind="dec-funds-breakdown" data-expanded="false" hidden>
+            <div class="dec-funds__display dec-funds__display--claimable"
+                 data-bind="dec-funds-claimable-display">
+              <span class="dec-funds__label"><span>CLAIMABLE</span></span>
+              <button type="button" class="dec-funds__priority"
+                      data-bind="dec-funds-use-claimable" aria-pressed="true">
+                USE FIRST
+              </button>
+              <strong class="dec-funds__value dec-funds__value--claimable">
+                <span class="dec-funds__number" data-bind="dec-funds-claimable">—</span>
+                <span class="dec-funds__unit" data-bind="dec-funds-claimable-unit">ETH</span>
+              </strong>
+              <button type="button" class="dec-funds__claim" data-write
+                      data-bind="dec-funds-claim" hidden disabled>CLAIM</button>
+            </div>
+            <div class="dec-funds__display dec-funds__display--afking"
+                 data-bind="dec-funds-afking-display" hidden>
+              <span class="dec-funds__label"><span>AFKING</span></span>
+              <button type="button" class="dec-funds__priority"
+                      data-bind="dec-funds-use-afking" aria-pressed="false">
+                USE FIRST
+              </button>
+              <strong class="dec-funds__value" data-bind="dec-funds-afking">—</strong>
+              <button type="button" class="dec-funds__claim" data-write
+                      data-bind="dec-funds-afking-claim" hidden disabled>CLAIM</button>
+            </div>
+            <div class="dec-funds__display dec-funds__display--wallet"
+                 data-bind="dec-funds-wallet-display" hidden>
+              <span class="dec-funds__label">
+                <span data-bind="dec-funds-wallet-label">WALLET</span>
+              </span>
+              <button type="button" class="dec-funds__priority"
+                      data-bind="dec-funds-use-wallet" aria-pressed="false">
+                USE FIRST
+              </button>
+              <!-- Internal state bridge retained for quest presets and the
+                   transaction path; the visible selectors above are buttons. -->
               <input type="checkbox" name="dec-redeem-with-flip"
-                     data-bind="dec-flip-check">
-              <span>USE FLIP</span>
-            </label>
-            <span class="dec-funds__wallet-value">
-              <strong class="dec-funds__value" data-bind="dec-funds-wallet">—</strong>
-              <a class="dec-funds__faucet" data-bind="dec-funds-faucet"
-                 href="${BASE_SEPOLIA_FAUCET_URL}" target="_blank"
-                 rel="noopener noreferrer" hidden>GET PLAY MONEY</a>
-            </span>
+                     data-bind="dec-flip-check" hidden aria-hidden="true" tabindex="-1">
+              <span class="dec-funds__wallet-value">
+                <strong class="dec-funds__value" data-bind="dec-funds-wallet">—</strong>
+                <a class="dec-funds__faucet" data-bind="dec-funds-faucet"
+                   href="${BASE_SEPOLIA_FAUCET_URL}" target="_blank"
+                   rel="noopener noreferrer" hidden>GET PLAY MONEY</a>
+              </span>
+            </div>
+            </div>
           </div>
         </div>
       </div>
@@ -515,26 +790,53 @@ class AppDecimatorPanel extends HTMLElement {
         this.#flipModeEnabled() ? this.#onBuyWithFlipClick(e) : this.#onBuyClick(e)
       ));
     }
+    const allIn = this.querySelector('[data-bind="dec-all-in"]');
+    if (allIn) allIn.addEventListener('click', () => this.#openAllInDialog());
     const claimBtn = this.querySelector('[data-bind="dec-funds-claim"]');
     if (claimBtn) {
       claimBtn.addEventListener('click', (e) => this.#onClaimFundsClick(e));
     }
+    const afkingClaimBtn = this.querySelector('[data-bind="dec-funds-afking-claim"]');
+    if (afkingClaimBtn) {
+      afkingClaimBtn.addEventListener('click', (e) => this.#onClaimAfkingFundsClick(e));
+    }
     const claimableValue = this.querySelector('[data-bind="dec-funds-claimable"]');
-    if (claimableValue) {
-      claimableValue.addEventListener('click', (event) => this.#revealClaimableSpoiler(event));
-      claimableValue.addEventListener('keydown', (event) => this.#revealClaimableSpoiler(event));
+    const totalValue = this.querySelector('[data-bind="dec-funds-total"]');
+    for (const value of [claimableValue, totalValue]) {
+      if (!value) continue;
+      value.addEventListener('click', (event) => this.#toggleClaimableSpoiler(event));
+      value.addEventListener('keydown', (event) => this.#toggleClaimableSpoiler(event));
     }
     const afkingJump = this.querySelector('[data-bind="dec-afking-jump"]');
     if (afkingJump) {
       afkingJump.addEventListener('click', () => this.#openAfkingPasses());
     }
-    const walletFirst = this.querySelector('[data-bind="dec-funds-wallet-first"]');
-    if (walletFirst) {
-      walletFirst.addEventListener('change', () => this.#setFundingPriority(false));
+    const fundsToggle = this.querySelector('[data-bind="dec-funds-toggle"]');
+    const fundsBreakdown = this.querySelector('[data-bind="dec-funds-breakdown"]');
+    if (fundsToggle && fundsBreakdown) {
+      fundsToggle.addEventListener('click', (event) => {
+        const open = fundsToggle.getAttribute('aria-expanded') !== 'true';
+        this.#fundsExpanded = open;
+        fundsToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (fundsBreakdown.dataset) fundsBreakdown.dataset.expanded = String(open);
+        this.#renderFundsFooter();
+        // A pointer tap should not leave the disclosure's hover/focus treatment
+        // painted over the newly opened ledger. Preserve keyboard focus for
+        // keyboard activation (click detail 0) so the control remains usable.
+        if (Number(event?.detail) > 0) fundsToggle.blur?.();
+      });
     }
-    const claimableFirst = this.querySelector('[data-bind="dec-funds-claimable-first"]');
-    if (claimableFirst) {
-      claimableFirst.addEventListener('change', () => this.#setFundingPriority(true));
+    const useClaimable = this.querySelector('[data-bind="dec-funds-use-claimable"]');
+    if (useClaimable) {
+      useClaimable.addEventListener('click', () => this.#setPrimaryFundingSource('claimable'));
+    }
+    const useAfking = this.querySelector('[data-bind="dec-funds-use-afking"]');
+    if (useAfking) {
+      useAfking.addEventListener('click', () => this.#setPrimaryFundingSource('afking'));
+    }
+    const useWallet = this.querySelector('[data-bind="dec-funds-use-wallet"]');
+    if (useWallet) {
+      useWallet.addEventListener('click', () => this.#setPrimaryFundingSource('wallet'));
     }
     const flipCheck = this.querySelector('[data-bind="dec-flip-check"]');
     if (flipCheck) {
@@ -555,6 +857,17 @@ class AppDecimatorPanel extends HTMLElement {
           this.#setBuyLabel('Buy in');
         }
         this.#renderPurchaseMode();
+      });
+    }
+    for (const bind of ['dec-flip-buy', 'dec-funds-total-flip', 'dec-funds-total-eth']) {
+      const toggle = this.querySelector(`[data-bind="${bind}"]`);
+      if (!toggle) continue;
+      toggle.addEventListener('click', () => {
+        const state = this.querySelector('[data-bind="dec-flip-check"]');
+        if (!state || !this.#flipBuyOpen) return;
+        state.checked = !this.#flipModeEnabled();
+        this.#emitFormEvent(state, 'change');
+        this.#updateTotalLabel();
       });
     }
     // Live total-cost label on the Buy button as quantities change.
@@ -663,19 +976,75 @@ class AppDecimatorPanel extends HTMLElement {
     this.#questActivateListener = (event) => {
       void (async () => {
         const detail = event?.detail;
-        const ready = await this.#applyQuestPreset(detail);
-        if (!detail?.submit || ![1, 4, 6, 9].includes(Number(detail?.questType))) return;
-        if (!ready) {
-          this.#renderError(Number(detail?.questType) === 4
-            ? 'Foil packs are not available right now.'
-            : 'FLIP redemption is not available right now.');
+        if (detail?.submit && [1, 4, 6, 9].includes(Number(detail?.questType))) {
+          const submission = await this.#questSubmission(detail);
+          if (!submission) {
+            this.#renderError(Number(detail?.questType) === 4
+              ? 'Foil packs are not available right now.'
+              : Number(detail?.questType) === 9
+                ? 'FLIP redemption is not available right now.'
+                : 'That quest purchase is not available right now.');
+            return;
+          }
+          if (submission.kind === 'flip') {
+            await this.#onBuyWithFlipClick(undefined, { tickets: submission.ticketQuantity });
+          } else {
+            await this.#onBuyClick(undefined, submission);
+          }
           return;
         }
-        if (Number(detail.questType) === 9) await this.#onBuyWithFlipClick();
-        else await this.#onBuyClick();
+        await this.#applyQuestPreset(detail);
       })();
     };
     document.addEventListener('quest:activate', this.#questActivateListener);
+  }
+
+  async #questSubmission(detail) {
+    const questType = Number(detail?.questType);
+    let target = 0n;
+    try { target = BigInt(detail?.target ?? 0); } catch (_e) { target = 0n; }
+    if (questType === 9) {
+      await this.#refreshFlipBuyStatus();
+      if (!this.#flipBuyOpen) return null;
+      const ticketQuantity = Number(target > 0n ? target : 1n);
+      return Number.isFinite(ticketQuantity) && ticketQuantity > 0
+        ? { kind: 'flip', ticketQuantity }
+        : null;
+    }
+
+    const price = this.#ticketPriceWei();
+    if (questType === 1 && detail?.purchaseKind !== 'lootbox') {
+      let ticketQuantity = 1;
+      if (price != null && price > 0n && target > 0n) {
+        const entries = (target * BigInt(ENTRIES_PER_TICKET) + price - 1n) / price;
+        ticketQuantity = Math.max(0.25, Number(entries) / ENTRIES_PER_TICKET);
+      }
+      return {
+        kind: 'eth', ticketQuantity, lootBoxAmountWei: 0n,
+        presaleBoxAmountWei: 0n, foilWanted: false,
+      };
+    }
+    if ((questType === 1 && detail?.purchaseKind === 'lootbox') || questType === 6) {
+      let amount = target;
+      if (amount <= 0n && price != null) amount = questType === 6 ? price * 2n : price;
+      if (amount < LOOTBOX_MIN_WEI) amount = LOOTBOX_MIN_WEI;
+      return {
+        kind: 'eth', ticketQuantity: 0, lootBoxAmountWei: amount,
+        presaleBoxAmountWei: 0n, foilWanted: false,
+      };
+    }
+    if (questType === 4) {
+      await this.#refreshFoilStatus();
+      // The quest purchase is isolated from the ordinary form. A checked USE
+      // FLIP draft may disable its foil checkbox visually, but it must not
+      // make an otherwise-live foil quest unavailable.
+      const available = Boolean(this.#foilStatus?.available);
+      return available ? {
+        kind: 'eth', ticketQuantity: 0, lootBoxAmountWei: 0n,
+        presaleBoxAmountWei: 0n, foilWanted: true,
+      } : null;
+    }
+    return null;
   }
 
   #emitFormEvent(input, type) {
@@ -831,6 +1200,170 @@ class AppDecimatorPanel extends HTMLElement {
     return total;
   }
 
+  #allInEthAvailableWei({ includeAfking = false } = {}) {
+    const acting = getActingAddress();
+    const connected = get('connected.address');
+    const actingLower = acting ? String(acting).toLowerCase() : null;
+    const connectedLower = connected ? String(connected).toLowerCase() : null;
+    if (!actingLower || actingLower !== connectedLower || get('ui.mode') !== 'self') return null;
+    if (this.#walletEthWei == null || this.#walletEthAddress !== connectedLower) return null;
+    // The funds footer may remain masked to preserve the reveal, but ALL IN is
+    // an explicit spending surface: use every balance value we already know.
+    // Pending results can add funds later; they do not invalidate the current
+    // wallet + indexed-claimable quote.
+    if (!this.#claimableKnown || this.#claimableAddress !== actingLower) return null;
+    let available = allInWalletAfterGasReserveWei(this.#walletEthWei)
+      + (this.#claimableWei > 1n ? this.#claimableWei - 1n : 0n);
+    if (includeAfking) {
+      if (!this.#afkingFundingKnown || this.#afkingFundingAddress !== actingLower) return null;
+      available += this.#afkingFundingWei;
+    }
+    return available;
+  }
+
+  #allInFlipSourcesWei() {
+    const acting = getActingAddress();
+    const actingLower = acting ? String(acting).toLowerCase() : null;
+    if (!actingLower || get('ui.mode') !== 'self'
+      || this.#flipBalanceAddress !== actingLower
+      || this.#flipBalanceWei == null) return null;
+    try {
+      const walletWei = BigInt(this.#flipBalanceWei);
+      const coinflipClaimableWei = this.#coinflipClaimableKnown
+        && this.#coinflipClaimableAddress === actingLower
+        ? BigInt(this.#coinflipClaimableWei)
+        : 0n;
+      const afkingPendingWei = this.#afkingPendingFlipKnown
+        && this.#afkingPendingFlipAddress === actingLower
+        ? BigInt(this.#afkingPendingFlipWei)
+        : 0n;
+      return {
+        walletWei,
+        coinflipClaimableWei,
+        afkingPendingWei,
+        totalWei: walletWei + coinflipClaimableWei + afkingPendingWei,
+      };
+    } catch (_e) { return null; }
+  }
+
+  #allInGasReady() {
+    const connected = get('connected.address');
+    const connectedLower = connected ? String(connected).toLowerCase() : null;
+    if (!connectedLower || this.#walletEthAddress !== connectedLower || this.#walletEthWei == null) {
+      return false;
+    }
+    try { return BigInt(this.#walletEthWei) >= ALL_IN_GAS_RESERVE_WEI; }
+    catch (_error) { return false; }
+  }
+
+  #allInQuote(selection) {
+    const flipSources = String(selection?.currency).toUpperCase() === 'FLIP'
+      ? this.#allInFlipSourcesWei()
+      : null;
+    const quote = allInSelectionQuote({
+      ...selection,
+      purchaseEthWei: this.#allInEthAvailableWei({ includeAfking: true }),
+      degeneretteEthWei: this.#allInEthAvailableWei(),
+      flipWei: flipSources?.totalWei ?? null,
+      ticketPriceWei: this.#ticketPriceWei(),
+      flipTicketsOpen: this.#flipBuyOpen,
+      gasReady: this.#allInGasReady(),
+    });
+    if (quote.valid && flipSources) {
+      quote.flipSources = flipSources;
+      quote.fingerprint = [
+        quote.fingerprint,
+        flipSources.walletWei,
+        flipSources.coinflipClaimableWei,
+        flipSources.afkingPendingWei,
+      ].join(':');
+    }
+    return quote;
+  }
+
+  #openAllInDialog() {
+    if (this.#busy || get('ui.mode') !== 'self') return;
+    const detail = {
+      destinations: {
+        ETH: allInDestinations('ETH'),
+        FLIP: allInDestinations('FLIP', this.#flipBuyOpen),
+      },
+      quote: (selection) => this.#allInQuote(selection),
+      confirm: (selection, fingerprint) => this.#confirmAllIn(selection, fingerprint),
+    };
+    try {
+      this.dispatchEvent(new CustomEvent('app-all-in:open', { detail, bubbles: true }));
+    } catch (_e) { /* defensive — fakeDOM CustomEvent shim */ }
+  }
+
+  async #confirmAllIn(selection, fingerprint) {
+    if (this.#busy) throw new Error('Another purchase is already in progress.');
+    const quote = this.#allInQuote(selection);
+    if (!quote.valid) throw new Error(quote.message || 'ALL IN is unavailable.');
+    if (fingerprint && quote.fingerprint !== fingerprint) {
+      throw new Error('Your available balance changed. Review the updated ALL IN amount.');
+    }
+    if (quote.currency === 'FLIP') {
+      const player = getActingAddress();
+      const sources = quote.flipSources;
+      if (sources?.afkingPendingWei > 0n) {
+        await claimAfkingSubscriptionFlip();
+      }
+      // Coinflip deposits consume their settled ledger natively. Every other
+      // FLIP route burns ERC-20 balance, so materialize that source first.
+      if (quote.target !== 'coinflip' && sources?.coinflipClaimableWei > 0n) {
+        await claimFlip({ player, amount: sources.coinflipClaimableWei });
+      }
+    }
+    if (quote.target === 'tickets') {
+      if (quote.currency === 'FLIP') {
+        return this.#onBuyWithFlipClick(undefined, {
+          tickets: Number(quote.ticketAmount),
+          allIn: true,
+        });
+      }
+      return this.#onBuyClick(undefined, {
+        ticketQuantity: Number(quote.ticketAmount),
+        lootBoxAmountWei: 0n,
+        presaleBoxAmountWei: 0n,
+        foilWanted: false,
+        preferClaimable: true,
+        useAfking: true,
+        allIn: true,
+      });
+    }
+    if (quote.target === 'lootbox') {
+      return this.#onBuyClick(undefined, {
+        ticketQuantity: 0,
+        lootBoxAmountWei: quote.spendWei,
+        presaleBoxAmountWei: 0n,
+        foilWanted: false,
+        preferClaimable: true,
+        useAfking: true,
+        allIn: true,
+      });
+    }
+    const questType = quote.target === 'coinflip'
+      ? 2
+      : quote.currency === 'ETH' ? 7 : 8;
+    try {
+      document.dispatchEvent(new CustomEvent('quest:activate', {
+        detail: {
+          questType,
+          target: quote.spendWei,
+          amountPerSpin: quote.amountPerSpin,
+          spinCount: quote.spins,
+          submit: true,
+          preferClaimable: quote.currency === 'ETH',
+          allIn: true,
+        },
+      }));
+    } catch (_e) {
+      throw new Error('The selected ALL IN surface is not ready.');
+    }
+    return true;
+  }
+
   #presaleAvailableForDraft(mintCostWei = this.#draftMintCostWei()) {
     const buyer = getActingAddress();
     const buyerKey = buyer ? String(buyer).toLowerCase() : null;
@@ -886,15 +1419,22 @@ class AppDecimatorPanel extends HTMLElement {
     row.classList?.toggle('dec-presale--over-limit', wanted > available);
   }
 
-  #setFundingPriority(preferClaimable) {
-    // USE FLIP and the two ETH funding-priority choices are mutually
-    // exclusive. Choosing either USE FIRST control exits FLIP mode while
-    // retaining the selected ETH preference for future renders.
+  #setPrimaryFundingSource(source) {
+    if (!this.#fundingOrder.includes(source)) return;
+    // USE FLIP is a separate ticket-redemption path. Choosing an ETH source
+    // exits that mode, promotes the chosen row, and keeps the other two in
+    // their current relative order.
     const flipCheck = this.querySelector('[data-bind="dec-flip-check"]');
     const leavingFlip = Boolean(flipCheck?.checked);
     if (flipCheck) flipCheck.checked = false;
-    this.#preferClaimable = Boolean(preferClaimable);
-    _writeFundingPriority(this.#preferClaimable ? 'claimable' : 'wallet');
+    this.#fundingOrder = [
+      source,
+      ...this.#fundingOrder.filter((candidate) => candidate !== source),
+    ];
+    this.#preferClaimable = source === 'claimable';
+    this.#useAfking = source !== 'wallet';
+    _writeFundingPriority(source);
+    _writeUseAfking(this.#useAfking);
     if (leavingFlip) this.#renderPurchaseMode();
     this.#renderFundsFooter();
     this.#updateTotalLabel();
@@ -960,7 +1500,11 @@ class AppDecimatorPanel extends HTMLElement {
     if (totalWei > 0n) {
       try { amount = `${formatPurchaseEth(totalWei)} ETH`; } catch (_e) { amount = ''; }
     }
-    this.#setBuyLabel(presaleCostWei > 0n ? 'Buy in + presale box' : 'Buy in', amount);
+    const hasPrimaryDraft = tq > 0 || boxFloat > 0 || this.#foilWanted();
+    const action = presaleCostWei > 0n
+      ? (hasPrimaryDraft ? 'Buy in + presale box' : 'Buy presale box')
+      : 'Buy in';
+    this.#setBuyLabel(action, amount);
     this.#renderFlipCredit({
       tickets: tq,
       priceWei,
@@ -1050,17 +1594,28 @@ class AppDecimatorPanel extends HTMLElement {
       this.#presaleState = null;
       this.#renderPresaleRow();
     }
+    if (this.#flipBalanceAddress !== actingLower) {
+      this.#flipBalanceWei = null;
+      this.#flipBalanceAddress = actingLower;
+      this.#coinflipClaimableWei = 0n;
+      this.#coinflipClaimableAddress = actingLower;
+      this.#coinflipClaimableKnown = false;
+      this.#afkingPendingFlipWei = 0n;
+      this.#afkingPendingFlipAddress = actingLower;
+      this.#afkingPendingFlipKnown = false;
+    }
     const connected = get('connected.address');
     const connectedLower = connected ? String(connected).toLowerCase() : null;
     const provider = getProvider();
     const walletBalancePromise = connectedLower && typeof provider?.getBalance === 'function'
       ? provider.getBalance(connectedLower)
       : Promise.resolve(null);
-    const [gameResult, purchaseResult, playerResult, walletResult, afkingResult, presaleResult] = await Promise.allSettled([
+    const [gameResult, purchaseResult, playerResult, walletResult, coinflipResult, afkingResult, presaleResult] = await Promise.allSettled([
       fetchJSON('/game/state'),
       readPurchaseQuote(),
       actingLower ? fetchJSON(`/player/${actingLower}`) : Promise.resolve(null),
       walletBalancePromise,
+      actingLower ? readClaimableCoinflip({ player: actingLower }) : Promise.resolve(null),
       actingLower ? readAfkingSubscription(actingLower) : Promise.resolve(null),
       actingLower ? readPresaleBoxState({ player: actingLower }) : Promise.resolve(null),
     ]);
@@ -1078,6 +1633,22 @@ class AppDecimatorPanel extends HTMLElement {
       this.#claimableWei = claimable;
       this.#claimableAddress = actingLower;
       this.#claimableKnown = true;
+      try {
+        this.#flipBalanceWei = BigInt(playerResult.value.flipBalance ?? 0n);
+        this.#flipBalanceAddress = actingLower;
+      } catch (_e) {
+        this.#flipBalanceWei = null;
+        this.#flipBalanceAddress = actingLower;
+      }
+      try {
+        this.#coinflipClaimableWei = BigInt(playerResult.value.coinflip?.claimablePreview ?? 0n);
+        this.#coinflipClaimableAddress = actingLower;
+        this.#coinflipClaimableKnown = true;
+      } catch (_e) {
+        this.#coinflipClaimableWei = 0n;
+        this.#coinflipClaimableAddress = actingLower;
+        this.#coinflipClaimableKnown = false;
+      }
       const affiliate = playerResult.value.affiliate;
       if (affiliate && Object.prototype.hasOwnProperty.call(affiliate, 'referrer')) {
         const referrer = String(affiliate.referrer || '').toLowerCase();
@@ -1090,6 +1661,13 @@ class AppDecimatorPanel extends HTMLElement {
       this.#claimableWei = 0n;
       this.#claimableAddress = actingLower;
       this.#claimableKnown = false;
+    }
+    if (coinflipResult.status === 'fulfilled' && coinflipResult.value != null && actingLower) {
+      try {
+        this.#coinflipClaimableWei = BigInt(coinflipResult.value);
+        this.#coinflipClaimableAddress = actingLower;
+        this.#coinflipClaimableKnown = true;
+      } catch (_e) { /* retain the indexed fallback */ }
     }
     if (walletResult.status === 'fulfilled' && walletResult.value != null && connectedLower) {
       try {
@@ -1120,12 +1698,26 @@ class AppDecimatorPanel extends HTMLElement {
         this.#afkingFundingAddress = actingLower;
         this.#afkingFundingKnown = false;
       }
+      try {
+        this.#afkingPendingFlipWei = state.pendingFlipKnown
+          ? BigInt(state.pendingFlipWhole ?? 0n) * FLIP_WEI
+          : 0n;
+        this.#afkingPendingFlipAddress = actingLower;
+        this.#afkingPendingFlipKnown = Boolean(state.pendingFlipKnown);
+      } catch (_e) {
+        this.#afkingPendingFlipWei = 0n;
+        this.#afkingPendingFlipAddress = actingLower;
+        this.#afkingPendingFlipKnown = false;
+      }
     } else {
       // A failed pass snapshot must not leave a stale funding amount folded
       // into the wallet total for the same player.
       this.#afkingFundingWei = 0n;
       this.#afkingFundingAddress = actingLower;
       this.#afkingFundingKnown = false;
+      this.#afkingPendingFlipWei = 0n;
+      this.#afkingPendingFlipAddress = actingLower;
+      this.#afkingPendingFlipKnown = false;
     }
 
     if (presaleResult.status === 'fulfilled'
@@ -1258,6 +1850,7 @@ class AppDecimatorPanel extends HTMLElement {
       && Number(this.#foilStatus?.level) === Number(target)
       && this.#foilStatus?.available === true
     );
+    const flipMode = this.#flipModeEnabled();
 
     if (priceEl) {
       let text = '—';
@@ -1268,10 +1861,13 @@ class AppDecimatorPanel extends HTMLElement {
       priceEl.textContent = text;
     }
     if (check) {
-      check.disabled = !available || this.#flipModeEnabled();
-      if (!available || this.#flipModeEnabled()) check.checked = false;
+      check.disabled = !available || flipMode;
+      if (!available || flipMode) check.checked = false;
     }
-    row.hidden = !available;
+    // redeemFlip is a tickets-only route. Hiding the incompatible add-on is
+    // clearer than leaving a disabled foil control in the FLIP draft; it is
+    // restored from the pinned availability probe as soon as ETH mode returns.
+    row.hidden = !available || flipMode;
     this.#updateTotalLabel();
   }
 
@@ -1307,7 +1903,9 @@ class AppDecimatorPanel extends HTMLElement {
   #renderFlipBuyRow() {
     const row = this.querySelector('[data-bind="dec-flip-buy"]');
     if (!row) return;
-    row.hidden = !this.#flipBuyOpen;
+    // The active toggle lives inside the FLIP balance. Its paired inactive
+    // toggle is pinned just above Available Funds by #renderFundsFooter.
+    row.hidden = !this.#flipBuyOpen || !this.#flipModeEnabled();
     if (!this.#flipBuyOpen) {
       const check = this.querySelector('[data-bind="dec-flip-check"]');
       if (check) check.checked = false;
@@ -1322,6 +1920,20 @@ class AppDecimatorPanel extends HTMLElement {
 
   #renderPurchaseMode() {
     const flipMode = this.#flipModeEnabled();
+    for (const bind of ['dec-flip-buy', 'dec-funds-total-flip']) {
+      const toggle = this.querySelector(`[data-bind="${bind}"]`);
+      if (!toggle) continue;
+      toggle.setAttribute?.('aria-pressed', String(flipMode));
+      toggle.classList?.toggle('is-active', flipMode);
+      toggle.textContent = flipMode ? 'USING FLIP' : 'USE FLIP';
+    }
+    const useEth = this.querySelector('[data-bind="dec-funds-total-eth"]');
+    if (useEth) {
+      useEth.textContent = 'USE ETH';
+      useEth.hidden = !flipMode;
+      if (useEth.hidden) useEth.setAttribute?.('hidden', '');
+      else useEth.removeAttribute?.('hidden');
+    }
     const ticketLabel = this.querySelector('[data-bind="dec-ticket-action-label"]');
     if (ticketLabel) ticketLabel.textContent = flipMode ? 'Burn for tickets' : 'Buy tickets';
     const buyRow = this.querySelector('.dec-buy-row');
@@ -1345,21 +1957,16 @@ class AppDecimatorPanel extends HTMLElement {
     if (foilRow?.classList) foilRow.classList.toggle('dec-foil--payment-disabled', flipMode);
     if (foilCheck && flipMode) foilCheck.checked = false;
 
-    // The saved ETH priority remains intact behind the scenes, but neither
-    // USE FIRST indicator is selected while USE FLIP is active. This keeps the
-    // three visible payment choices honest without making the user reselect a
-    // preference when they leave FLIP mode.
-    const walletFirst = this.querySelector('[data-bind="dec-funds-wallet-first"]');
-    const claimableFirst = this.querySelector('[data-bind="dec-funds-claimable-first"]');
-    if (walletFirst) walletFirst.checked = !flipMode && !this.#preferClaimable;
-    if (claimableFirst) claimableFirst.checked = !flipMode && this.#preferClaimable;
-
+    // The ordered ETH source preference remains intact behind USE FLIP, so a
+    // quest or one-off redemption never rewrites the normal payment waterfall.
     this.#renderFoilRow();
     this.#renderSnapshot();
   }
 
   #renderFundsFooter() {
     const root = this.querySelector('[data-bind="dec-funds"]');
+    const totalDisplay = this.querySelector('[data-bind="dec-funds-total-display"]');
+    const totalValue = this.querySelector('[data-bind="dec-funds-total"]');
     const walletLabel = this.querySelector('[data-bind="dec-funds-wallet-label"]');
     const walletValue = this.querySelector('[data-bind="dec-funds-wallet"]');
     const walletDisplay = this.querySelector('[data-bind="dec-funds-wallet-display"]');
@@ -1368,25 +1975,38 @@ class AppDecimatorPanel extends HTMLElement {
     const claimableUnit = this.querySelector('[data-bind="dec-funds-claimable-unit"]');
     const claimableDisplay = this.querySelector('[data-bind="dec-funds-claimable-display"]');
     const claimBtn = this.querySelector('[data-bind="dec-funds-claim"]');
-    const walletPriority = this.querySelector('[data-bind="dec-funds-wallet-priority"]');
-    const claimablePriority = this.querySelector('[data-bind="dec-funds-claimable-priority"]');
-    const walletFirst = this.querySelector('[data-bind="dec-funds-wallet-first"]');
-    const claimableFirst = this.querySelector('[data-bind="dec-funds-claimable-first"]');
+    const useClaimable = this.querySelector('[data-bind="dec-funds-use-claimable"]');
+    const afkingDisplay = this.querySelector('[data-bind="dec-funds-afking-display"]');
+    const afkingValue = this.querySelector('[data-bind="dec-funds-afking"]');
+    const afkingClaimBtn = this.querySelector('[data-bind="dec-funds-afking-claim"]');
+    const useAfking = this.querySelector('[data-bind="dec-funds-use-afking"]');
+    const useWallet = this.querySelector('[data-bind="dec-funds-use-wallet"]');
+    const flipBuy = this.querySelector('[data-bind="dec-flip-buy"]');
+    const totalFlip = this.querySelector('[data-bind="dec-funds-total-flip"]');
+    const totalEth = this.querySelector('[data-bind="dec-funds-total-eth"]');
+    const allIn = this.querySelector('[data-bind="dec-all-in"]');
+    const flipBalanceDisplay = this.querySelector('[data-bind="dec-flip-balance"]');
+    const flipBalanceValue = this.querySelector('[data-bind="dec-flip-balance-value"]');
     if (!root || !walletLabel || !walletValue || !claimableValue || !claimBtn) return;
 
     walletLabel.textContent = 'WALLET';
     if (claimableUnit) claimableUnit.textContent = 'ETH';
-    if (walletPriority) walletPriority.hidden = false;
-    if (claimablePriority) claimablePriority.hidden = false;
     const flipMode = this.#flipModeEnabled();
-    if (walletFirst) {
-      walletFirst.checked = !flipMode && !this.#preferClaimable;
-      walletFirst.disabled = false;
+    const acting = getActingAddress();
+    const actingLower = acting ? String(acting).toLowerCase() : null;
+    if (flipBalanceDisplay) {
+      flipBalanceDisplay.hidden = !flipMode;
+      if (flipMode) flipBalanceDisplay.removeAttribute?.('hidden');
+      else flipBalanceDisplay.setAttribute?.('hidden', '');
     }
-    if (claimableFirst) {
-      claimableFirst.checked = !flipMode && this.#preferClaimable;
-      claimableFirst.disabled = false;
-    }
+    updateBalanceDisplay(flipBalanceValue, {
+      container: flipBalanceDisplay,
+      scope: this.#flipBalanceAddress,
+      value: this.#flipBalanceAddress === actingLower ? this.#flipBalanceWei : null,
+      format: (raw) => formatFlip(String(raw)),
+      formatDelta: (delta) => `+${formatFlip(String(delta))} FLIP`,
+      hiddenText: '—',
+    });
 
     let claimable = 0n;
     try {
@@ -1396,73 +2016,222 @@ class AppDecimatorPanel extends HTMLElement {
     }
 
     const spoilerOpen = this.#claimableSpoilerOpen();
-    const displayOpen = spoilerOpen
-      || this.#claimableSpoilerOverrideKey === this.#claimableSpoilerKey();
-    const acting = getActingAddress();
-    const actingLower = acting ? String(acting).toLowerCase() : null;
+    const spoilerKey = this.#claimableSpoilerKey();
+    const forcedVisible = this.#claimableSpoilerOverrideKey === spoilerKey;
+    const forcedHidden = this.#claimableSpoilerHiddenKey === spoilerKey;
+    const displayOpen = !forcedHidden && (spoilerOpen || forcedVisible);
     const connected = get('connected.address');
     const connectedLower = connected ? String(connected).toLowerCase() : null;
     const walletKnown = this.#walletEthWei != null
       && this.#walletEthAddress === connectedLower;
     const fundingKnown = this.#afkingFundingKnown
       && this.#afkingFundingAddress === actingLower;
-    const walletTotal = walletKnown && fundingKnown
-      ? BigInt(this.#walletEthWei) + BigInt(this.#afkingFundingWei)
+    const walletBalance = walletKnown ? BigInt(this.#walletEthWei) : null;
+    const afkingBalance = fundingKnown ? BigInt(this.#afkingFundingWei) : null;
+    const spendableClaimable = this.#claimableKnown && claimable > 1n ? claimable - 1n : 0n;
+    const totalDisplayOpen = !forcedHidden && (
+      forcedVisible || (spoilerOpen && !pendingMayChangeEth(this.#pendingActions))
+    );
+    const totalSpoiler = !totalDisplayOpen;
+    const claimableHasFunds = this.#claimableKnown && spendableClaimable > 0n;
+    const afkingHasFunds = fundingKnown && afkingBalance > 0n;
+    const walletHasFunds = walletKnown && walletBalance > 0n;
+    const rows = {
+      claimable: claimableDisplay,
+      afking: afkingDisplay,
+      wallet: walletDisplay,
+    };
+    const buttons = {
+      claimable: useClaimable,
+      afking: useAfking,
+      wallet: useWallet,
+    };
+    const orderedSources = this.#fundingOrder.filter((source) => rows[source]);
+    const compactSource = orderedSources.find((source) => source !== 'afking' || afkingHasFunds)
+      || 'wallet';
+    const breakdown = this.querySelector('[data-bind="dec-funds-breakdown"]');
+    if (breakdown) {
+      breakdown.hidden = !this.#fundsExpanded;
+      if (this.#fundsExpanded) breakdown.removeAttribute?.('hidden');
+      else breakdown.setAttribute?.('hidden', '');
+      if (breakdown.dataset) breakdown.dataset.expanded = String(this.#fundsExpanded);
+    }
+    for (const [rank, source] of orderedSources.entries()) {
+      const row = rows[source];
+      row.style.order = String(rank);
+      row.setAttribute?.('data-funding-rank', String(rank + 1));
+      row.classList?.toggle('is-priority', rank === 0);
+    }
+    // Keep assistive-technology order aligned with the visual grid in a real
+    // DOM. The lightweight test DOM has flattened parents, so `order` remains
+    // the deterministic fallback there.
+    if (breakdown && orderedSources.every((source) => rows[source]?.parentElement === breakdown)) {
+      for (const source of orderedSources) breakdown.appendChild(rows[source]);
+    }
+    const selectedSource = this.#fundingOrder[0];
+    for (const source of orderedSources) {
+      const button = buttons[source];
+      if (!button) continue;
+      const selected = source === selectedSource;
+      const isTopVisibleSource = source === compactSource;
+      button.setAttribute?.('aria-pressed', selected ? 'true' : 'false');
+      button.classList?.toggle('is-active', selected);
+      // USE expresses future payment order, so it remains actionable even
+      // when that source is currently empty. Only the already-active top row
+      // omits its redundant promotion control.
+      button.disabled = false;
+      button.textContent = 'USE FIRST';
+      button.hidden = !this.#fundsExpanded || isTopVisibleSource;
+      if (button.hidden) button.setAttribute?.('hidden', '');
+      else button.removeAttribute?.('hidden');
+      button.title = selected ? `${source.toUpperCase()} is used first` : `Use ${source.toUpperCase()} first`;
+    }
+    if (flipBuy) {
+      flipBuy.hidden = !this.#flipBuyOpen || !flipMode;
+      if (flipBuy.hidden) flipBuy.setAttribute?.('hidden', '');
+      else flipBuy.removeAttribute?.('hidden');
+    }
+    if (totalFlip) {
+      totalFlip.hidden = !this.#flipBuyOpen || flipMode;
+      if (totalFlip.hidden) totalFlip.setAttribute?.('hidden', '');
+      else totalFlip.removeAttribute?.('hidden');
+      totalFlip.setAttribute?.('aria-pressed', String(flipMode));
+      totalFlip.classList?.toggle('is-active', flipMode);
+    }
+    if (totalEth) {
+      totalEth.hidden = !flipMode;
+      if (totalEth.hidden) totalEth.setAttribute?.('hidden', '');
+      else totalEth.removeAttribute?.('hidden');
+    }
+    let showAllIn = false;
+    if (allIn) {
+      showAllIn = !this.#fundsExpanded && get('ui.mode') !== 'combined';
+      allIn.hidden = !showAllIn;
+      if (allIn.hidden) allIn.setAttribute?.('hidden', '');
+      else allIn.removeAttribute?.('hidden');
+      allIn.disabled = this.#busy;
+      allIn.setAttribute?.('aria-label', 'Open ALL IN choices');
+      allIn.title = 'Choose a currency and where to go all in';
+    }
+    root.setAttribute?.('data-primary-funding', compactSource);
+    const totalKnown = this.#claimableKnown && fundingKnown && walletKnown;
+    const totalBalance = totalKnown
+      ? spendableClaimable + afkingBalance + walletBalance
       : null;
+    if (totalDisplay) {
+      totalDisplay.hidden = this.#fundsExpanded;
+      if (totalDisplay.hidden) totalDisplay.setAttribute?.('hidden', '');
+      else totalDisplay.removeAttribute?.('hidden');
+      totalDisplay.classList?.toggle('dec-funds__total--spoiler', totalSpoiler);
+      totalDisplay.classList?.toggle('dec-funds__total--flip-active', flipMode);
+      if (totalSpoiler) {
+        totalDisplay.setAttribute?.(
+          'aria-label',
+          'Total available funds hidden until pending RNG results are viewed.',
+        );
+      } else {
+        totalDisplay.removeAttribute?.('aria-label');
+      }
+    }
+    if (totalValue) {
+      totalValue.setAttribute('role', 'button');
+      totalValue.setAttribute('tabindex', '0');
+      totalValue.setAttribute('title', totalDisplayOpen ? 'Hide available funds' : 'Show available funds');
+      totalValue.setAttribute('aria-label', totalDisplayOpen ? 'Hide available funds' : 'Show available funds');
+    }
+    updateBalanceDisplay(totalValue, {
+      container: totalDisplay,
+      scope: `${actingLower || ''}:${connectedLower || ''}`,
+      value: totalBalance,
+      visible: !totalSpoiler,
+      format: formatFundsEth,
+      formatDelta: (delta) => `+${formatFundsEth(delta)} ETH`,
+      hiddenText: '••••',
+      revealDelay: 240,
+    });
     updateBalanceDisplay(walletValue, {
       container: walletDisplay,
-      scope: `${this.#walletEthAddress || ''}:${this.#afkingFundingAddress || ''}`,
-      value: walletTotal,
+      scope: this.#walletEthAddress,
+      value: walletBalance,
       format: (raw) => raw === 0n ? '- ETH' : `${formatFundsEth(raw)} ETH`,
       formatDelta: (delta) => `+${formatFundsEth(delta)} ETH`,
     });
-    // AFKing funding is spendable purchase credit, but it cannot pay the gas
-    // needed to submit that purchase. Offer the testnet faucet whenever the
-    // connected signer's actual native wallet is empty, even if their combined
-    // WALLET readout contains AFKing funding.
+    // AFKing is spendable purchase credit, but it cannot pay the gas needed to
+    // submit that purchase. The faucet therefore follows native Wallet alone.
     const showFaucet = Boolean(
       isBaseSepolia(CHAIN)
       && walletKnown
       && BigInt(this.#walletEthWei) === 0n
     );
-    walletValue.hidden = showFaucet && (walletTotal == null || walletTotal === 0n);
-    if (faucet) faucet.hidden = !showFaucet;
+    if (walletDisplay) {
+      const showWallet = this.#fundsExpanded;
+      walletDisplay.hidden = !showWallet;
+      if (showWallet) walletDisplay.removeAttribute?.('hidden');
+      else walletDisplay.setAttribute?.('hidden', '');
+    }
+    const showFaucetAction = showFaucet && this.#fundsExpanded;
+    walletValue.hidden = showFaucetAction && (walletBalance == null || walletBalance === 0n);
+    if (faucet) faucet.hidden = !showFaucetAction;
+
+    if (claimableDisplay) {
+      const showClaimable = this.#fundsExpanded;
+      claimableDisplay.hidden = !showClaimable;
+      if (showClaimable) claimableDisplay.removeAttribute?.('hidden');
+      else claimableDisplay.setAttribute?.('hidden', '');
+    }
     updateBalanceDisplay(claimableValue, {
       container: claimableDisplay,
       scope: this.#claimableAddress,
-      value: this.#claimableKnown ? claimable : null,
+      value: this.#claimableKnown ? spendableClaimable : null,
       visible: displayOpen,
       format: (raw) => raw === 0n ? '-' : formatFundsEth(raw),
       formatDelta: (delta) => `+${formatFundsEth(delta)} ETH`,
       hiddenText: '••••',
       // On unblur, hold the private pre-reveal balance for one short beat,
-      // then show the newly-safe +ETH cue and count it into the total.
+      // then show the newly-safe +ETH cue.
       revealDelay: 240,
     });
+
+    if (afkingDisplay) {
+      const showAfking = afkingHasFunds && this.#fundsExpanded;
+      afkingDisplay.hidden = !showAfking;
+      if (showAfking) afkingDisplay.removeAttribute?.('hidden');
+      else afkingDisplay.setAttribute?.('hidden', '');
+    }
+    updateBalanceDisplay(afkingValue, {
+      container: afkingDisplay,
+      scope: this.#afkingFundingAddress,
+      value: fundingKnown ? afkingBalance : null,
+      format: (raw) => raw === 0n ? '- ETH' : `${formatFundsEth(raw)} ETH`,
+      formatDelta: (delta) => `+${formatFundsEth(delta)} ETH`,
+    });
     claimableDisplay?.classList?.toggle('dec-funds__display--spoiler', !displayOpen);
+    claimableValue.removeAttribute('aria-hidden');
+    claimableValue.setAttribute('role', 'button');
+    claimableValue.setAttribute('tabindex', '0');
+    claimableValue.setAttribute('title', displayOpen ? 'Hide claimable balance' : 'Show claimable balance');
+    claimableValue.setAttribute('aria-label', displayOpen ? 'Hide claimable balance' : 'Show claimable balance');
     if (!displayOpen) {
-      claimableValue.removeAttribute('aria-hidden');
-      claimableValue.setAttribute('role', 'button');
-      claimableValue.setAttribute('tabindex', '0');
-      claimableValue.setAttribute('title', 'Show this value anyway');
-      claimableValue.setAttribute('aria-label', 'Claimable balance hidden. Activate to show anyway.');
       claimableDisplay?.setAttribute(
         'aria-label',
-        'Claimable balance hidden until the main jackpot is revealed. Activate the number to show anyway.',
+        'Claimable balance hidden. Activate the number to show it.',
       );
     } else {
-      claimableValue.removeAttribute('aria-hidden');
-      claimableValue.removeAttribute('role');
-      claimableValue.removeAttribute('tabindex');
-      claimableValue.removeAttribute('title');
-      claimableValue.removeAttribute('aria-label');
       claimableDisplay?.removeAttribute('aria-label');
     }
-    root.classList?.toggle('has-claimable', displayOpen && claimable > 0n);
+    root.classList?.toggle('has-claimable', displayOpen && claimableHasFunds);
+    root.classList?.toggle('has-afking-funding', afkingHasFunds);
+    root.classList?.toggle('is-expanded', this.#fundsExpanded);
     const busy = this.#claimBusy === 'eth';
     const claimReady = Boolean(
-      spoilerOpen && !this.#busy && !this.#claimBusy && getActingAddress() && claimable > 0n,
+      !this.#busy && !this.#claimBusy && getActingAddress() && claimableHasFunds,
     );
+    // Keep the action's location stable while expanded. Eligibility controls
+    // its disabled/grey state; a zero balance must not make the button vanish.
+    const showClaimAction = this.#fundsExpanded;
+    claimBtn.hidden = !showClaimAction;
+    if (showClaimAction) claimBtn.removeAttribute?.('hidden');
+    else claimBtn.setAttribute?.('hidden', '');
     claimBtn.textContent = busy ? 'CLAIMING…' : 'CLAIM';
     claimBtn.disabled = !claimReady;
     if (claimReady) {
@@ -1472,17 +2241,44 @@ class AppDecimatorPanel extends HTMLElement {
       claimBtn.setAttribute('data-write-locked', '');
       claimBtn.setAttribute(
         'data-write-lock-title',
-        !spoilerOpen
-          ? 'Reveal the main jackpot first'
-          : claimable <= 0n
-            ? 'No ETH winnings to claim'
-            : 'Claim is unavailable right now',
+        !claimableHasFunds
+          ? 'No ETH winnings to claim'
+          : 'Claim is unavailable right now',
       );
     }
     claimBtn.setAttribute(
       'aria-label',
       'Claim ETH winnings',
     );
+
+    if (afkingClaimBtn) {
+      const afkingBusy = this.#claimBusy === 'afking';
+      const selfMode = get('ui.mode') === 'self';
+      const afkingClaimReady = Boolean(
+        selfMode && !this.#busy && !this.#claimBusy && getActingAddress() && afkingHasFunds,
+      );
+      const showAfkingClaimAction = this.#fundsExpanded && afkingHasFunds;
+      afkingClaimBtn.hidden = !showAfkingClaimAction;
+      if (showAfkingClaimAction) afkingClaimBtn.removeAttribute?.('hidden');
+      else afkingClaimBtn.setAttribute?.('hidden', '');
+      afkingClaimBtn.textContent = afkingBusy ? 'CLAIMING…' : 'CLAIM';
+      afkingClaimBtn.disabled = !afkingClaimReady;
+      afkingClaimBtn.setAttribute('aria-label', 'Claim all AFKing funding');
+      if (afkingClaimReady) {
+        afkingClaimBtn.removeAttribute('data-write-locked');
+        afkingClaimBtn.removeAttribute('data-write-lock-title');
+        afkingClaimBtn.title = 'Withdraw all prepaid AFKing ETH to this wallet';
+      } else {
+        const reason = !selfMode
+          ? 'Switch to your own wallet view to claim AFKing funding'
+          : !afkingHasFunds
+            ? 'No AFKing funding to claim'
+            : 'Claim is unavailable right now';
+        afkingClaimBtn.setAttribute('data-write-locked', '');
+        afkingClaimBtn.setAttribute('data-write-lock-title', reason);
+        afkingClaimBtn.title = reason;
+      }
+    }
   }
 
   #claimableSpoilerOpen() {
@@ -1504,11 +2300,16 @@ class AppDecimatorPanel extends HTMLElement {
     return `${day}:${String(address).toLowerCase()}`;
   }
 
-  #revealClaimableSpoiler(event) {
+  #toggleClaimableSpoiler(event) {
     if (event?.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
-    if (this.#claimableSpoilerOpen()) return;
     try { event?.preventDefault?.(); } catch (_e) { /* fakeDOM */ }
-    this.#claimableSpoilerOverrideKey = this.#claimableSpoilerKey();
+    const key = this.#claimableSpoilerKey();
+    const forcedVisible = this.#claimableSpoilerOverrideKey === key;
+    const forcedHidden = this.#claimableSpoilerHiddenKey === key;
+    const naturallyVisible = this.#claimableSpoilerOpen();
+    const visible = forcedVisible || (!forcedHidden && naturallyVisible);
+    this.#claimableSpoilerOverrideKey = visible ? null : key;
+    this.#claimableSpoilerHiddenKey = visible ? key : null;
     this.#renderFundsFooter();
   }
 
@@ -1539,24 +2340,53 @@ class AppDecimatorPanel extends HTMLElement {
     }
   }
 
-  async #onBuyWithFlipClick(e) {
+  async #onClaimAfkingFundsClick(e) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busy) return;
-    const btn = this.querySelector('[data-bind="dec-buy-cta"]');
-    const tickets = this.#ticketsWanted();
-    if (tickets <= 0) {
-      this.#renderError('Enter a ticket amount (0.25 minimum) to redeem with FLIP.');
+    if (this.#busy || this.#claimBusy || get('ui.mode') !== 'self') return;
+    if (!this.#afkingFundingKnown || this.#afkingFundingWei <= 0n) {
+      this.#renderError('No AFKing funding to claim.');
       return;
+    }
+
+    this.#claimBusy = 'afking';
+    this.#renderFundsFooter();
+    try {
+      await withdrawAfkingSubscriptionFunding();
+      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+    } catch (error) {
+      this.#renderError(compactUiError(error, 'AFKing funding claim did not go through. Try again.'));
+    } finally {
+      this.#claimBusy = null;
+      this.#renderFundsFooter();
+    }
+  }
+
+  async #onBuyWithFlipClick(e, options = {}) {
+    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+    const allInFlow = options?.allIn === true;
+    if (this.#busy) return false;
+    const btn = this.querySelector('[data-bind="dec-buy-cta"]');
+    const override = Number(options?.tickets);
+    const tickets = Number.isFinite(override) && override > 0
+      ? Math.round(override * ENTRIES_PER_TICKET) / ENTRIES_PER_TICKET
+      : this.#ticketsWanted();
+    if (tickets <= 0) {
+      const message = 'Enter a ticket amount (0.25 minimum) to redeem with FLIP.';
+      this.#renderError(message);
+      if (allInFlow) throw new Error(message);
+      return false;
     }
     const player = get('connected.address');
     if (!player) {
-      this.#renderError('Connect a wallet to redeem FLIP.');
-      return;
+      const message = 'Connect a wallet to redeem FLIP.';
+      this.#renderError(message);
+      if (allInFlow) throw new Error(message);
+      return false;
     }
     this.#busy = true;
     if (btn) {
       btn.disabled = true;
-      this.#setBuyLabel('Burning FLIP…');
+      if (!allInFlow) this.#setBuyLabel('Burning FLIP…');
     }
     try {
       const { receipt } = await redeemFlip({ player, tickets });
@@ -1573,8 +2403,11 @@ class AppDecimatorPanel extends HTMLElement {
         }).catch(() => {});
       }
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+      return true;
     } catch (error) {
-      this.#renderError(compactUiError(error, 'FLIP redemption did not go through. Try again.'));
+      const message = compactUiError(error, 'FLIP redemption did not go through. Try again.');
+      this.#renderError(message);
+      if (allInFlow) throw new Error(message, { cause: error });
     } finally {
       this.#busy = false;
       if (btn) btn.disabled = false;
@@ -1664,6 +2497,10 @@ class AppDecimatorPanel extends HTMLElement {
     // the day-scoped key read by #claimableSpoilerOpen().
     const u5 = subscribe('app.lastDay', () => this.#renderFundsFooter());
     const u7 = subscribe('app.daySync', () => this.#renderFundsFooter());
+    const u8 = subscribePendingActions((items) => {
+      this.#pendingActions = Array.isArray(items) ? items : [];
+      this.#renderFundsFooter();
+    });
     const u6 = subscribe('ui.foilQuest', () => {
       // Quest definitions and game state arrive on independent polls. Refresh
       // the routed contract probe, but never let quest metadata choose a level.
@@ -1671,7 +2508,7 @@ class AppDecimatorPanel extends HTMLElement {
       this.#renderSnapshot();
       this.#refreshFoilStatus();
     });
-    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7);
+    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7, u8);
   }
 
   // ---------------------------------------------------------------------
@@ -1756,24 +2593,34 @@ class AppDecimatorPanel extends HTMLElement {
   // T-62-01-04: #busy guard makes double-clicks invoke purchaseEth exactly once.
   // ---------------------------------------------------------------------
 
-  async #onBuyClick(e) {
+  async #onBuyClick(e, questPurchase = null) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busy) return;
+    const allInFlow = questPurchase?.allIn === true;
+    if (this.#busy) return false;
     this.#busy = true;
 
     const btn = this.querySelector('[data-bind="dec-buy-cta"]');
     if (btn) {
       btn.disabled = true;
-      this.#setBuyLabel('Buying…');
+      if (!allInFlow) this.#setBuyLabel('Buying…');
     }
     // Defensive: clear any prior error before a fresh attempt.
     this.#clearError();
+    let submittedLootboxHash = null;
+    let submittedLootboxPlayer = null;
+    const rejectPurchase = (message) => {
+      this.#renderError(message);
+      if (allInFlow) throw new Error(message);
+      return false;
+    };
 
     try {
       // TICKETS, fractional down to the entry (see #ticketsWanted). The field
       // used to be read with parseInt and sent as if it were entries, so "1"
       // bought a quarter ticket and paid for four.
-      const ticketQuantity = this.#ticketsWanted();
+      const ticketQuantity = questPurchase?.ticketQuantity == null
+        ? this.#ticketsWanted()
+        : Number(questPurchase.ticketQuantity);
       // Lootbox leg: a single ETH value (no per-box price). Convert the
       // input float to full-scale wei, then /1M-descale to the deployed
       // contract's wei scale (ETH_DIVISOR; 1n on mainnet) — same shape as
@@ -1784,41 +2631,37 @@ class AppDecimatorPanel extends HTMLElement {
       const boxRaw = boxInput == null || boxInput.value == null
         || String(boxInput.value).trim() === '' ? '0' : String(boxInput.value);
       const boxFloat = Number(boxRaw);
-      if (!Number.isFinite(boxFloat) || boxFloat < 0) {
-        this.#renderError('Lootbox ETH must be 0 or at least 0.01.');
-        return;
+      if (questPurchase == null && (!Number.isFinite(boxFloat) || boxFloat < 0)) {
+        return rejectPurchase('Lootbox ETH must be 0 or at least 0.01.');
       }
-      const lootBoxAmountWei = boxFloat > 0
-        ? BigInt(Math.round(boxFloat * 1e18)) / ETH_DIVISOR
-        : 0n;
+      const lootBoxAmountWei = questPurchase?.lootBoxAmountWei == null
+        ? (boxFloat > 0 ? BigInt(Math.round(boxFloat * 1e18)) / ETH_DIVISOR : 0n)
+        : BigInt(questPurchase.lootBoxAmountWei);
       if (lootBoxAmountWei > 0n && lootBoxAmountWei < LOOTBOX_MIN_WEI) {
-        this.#renderError('Minimum lootbox spend is 0.01 ETH.');
-        return;
+        return rejectPurchase('Minimum lootbox spend is 0.01 ETH.');
       }
       const presaleInput = this.querySelector('[name="dec-presale-box-eth"]');
       const presaleRaw = presaleInput == null || presaleInput.value == null
         || String(presaleInput.value).trim() === '' ? '0' : String(presaleInput.value);
       const presaleFloat = Number(presaleRaw);
-      if (!Number.isFinite(presaleFloat) || presaleFloat < 0) {
-        this.#renderError('Presale box ETH must be 0 or at least 0.01.');
-        return;
+      if (questPurchase == null && (!Number.isFinite(presaleFloat) || presaleFloat < 0)) {
+        return rejectPurchase('Presale box ETH must be 0 or at least 0.01.');
       }
-      const presaleBoxAmountWei = presaleFloat > 0
-        ? BigInt(Math.round(presaleFloat * 1e18)) / ETH_DIVISOR
-        : 0n;
+      const presaleBoxAmountWei = questPurchase?.presaleBoxAmountWei == null
+        ? (presaleFloat > 0 ? BigInt(Math.round(presaleFloat * 1e18)) / ETH_DIVISOR : 0n)
+        : BigInt(questPurchase.presaleBoxAmountWei);
       if (presaleBoxAmountWei > 0n && presaleBoxAmountWei < PRESALE_BOX_MIN_WEI) {
-        this.#renderError('Minimum presale box size is 0.01 ETH.');
-        return;
+        return rejectPurchase('Minimum presale box size is 0.01 ETH.');
       }
-      let foilWanted = this.#foilWanted();
+      let foilWanted = questPurchase?.foilWanted == null
+        ? this.#foilWanted()
+        : Boolean(questPurchase.foilWanted);
       if (foilWanted && presaleBoxAmountWei > 0n) {
-        this.#renderError('Buy the foil pack separately from a presale box.');
-        return;
+        return rejectPurchase('Buy the foil pack separately from a presale box.');
       }
       if (ticketQuantity < 0 || (ticketQuantity <= 0 && lootBoxAmountWei <= 0n
         && presaleBoxAmountWei <= 0n && !foilWanted)) {
-        this.#renderError('Enter tickets, a lootbox amount, a presale box amount, or select the foil pack.');
-        return;
+        return rejectPurchase('Enter tickets, a lootbox amount, a presale box amount, or select the foil pack.');
       }
 
       // Match lootbox.js's actual write target (self or the owner selected in
@@ -1826,6 +2669,7 @@ class AppDecimatorPanel extends HTMLElement {
       // account that receives the tickets.
       const buyer = getActingAddress();
       const affiliateCode = readAffiliateCode(CHAIN.id, buyer);
+      let purchaseTicketPriceWei = this.#ticketPriceWei();
 
       // Phase 64: the funding helper needs the exact total cost before it can
       // spend claimable first and send only the wallet shortfall. Price comes
@@ -1853,17 +2697,18 @@ class AppDecimatorPanel extends HTMLElement {
         // Never re-check indexed ownership here. purchaseEth immediately runs
         // the exact contract static-call with this level/value, which is both
         // fresher and authoritative.
-        const priceWei = this.#ticketPriceWei();
-        if (priceWei == null) {
-          this.#renderError('Ticket price unavailable — try again in a moment.');
-          return;
+        purchaseTicketPriceWei = this.#ticketPriceWei();
+        if (purchaseTicketPriceWei == null) {
+          return rejectPurchase('Ticket price unavailable — try again in a moment.');
         }
         // Exactly what the contract charges: priceWei * entryQuantityScaled /
         // (4 * QTY_SCALE). Quoting priceWei-per-ticket-count overpaid 4x, and
         // an overpay is credited to afking rather than refunded.
-        if (ticketQuantity > 0) ticketCostWei = ticketCostFromTickets(priceWei, ticketQuantity);
+        if (ticketQuantity > 0) {
+          ticketCostWei = ticketCostFromTickets(purchaseTicketPriceWei, ticketQuantity);
+        }
         if (foilWanted) {
-          foilCostWei = foilPackCostFromPriceWei(priceWei);
+          foilCostWei = foilPackCostFromPriceWei(purchaseTicketPriceWei);
         }
       }
 
@@ -1873,30 +2718,54 @@ class AppDecimatorPanel extends HTMLElement {
         try { livePresale = await readPresaleBoxState({ player: buyer }); }
         catch (_e) { livePresale = null; }
         if (!livePresale?.active || livePresale.remainingWei <= 0n) {
-          this.#renderError('Presale boxes are not available right now.');
-          return;
+          return rejectPurchase('Presale boxes are not available right now.');
         }
         this.#presaleAddress = String(buyer || '').toLowerCase();
         this.#presaleState = livePresale;
         const available = presaleBoxAvailableWei(livePresale, mintCostWei);
         if (presaleBoxAmountWei > available) {
-          this.#renderError(`Presale box limit is ${formatPurchaseEth(available)} ETH for this purchase.`);
+          const message = `Presale box limit is ${formatPurchaseEth(available)} ETH for this purchase.`;
+          this.#renderError(message);
           this.#renderPresaleRow(mintCostWei);
-          return;
+          if (allInFlow) throw new Error(message);
+          return false;
         }
       }
 
       const hasMintPurchase = ticketQuantity > 0 || lootBoxAmountWei > 0n || foilWanted;
+      const hasRngBoxPurchase = lootBoxAmountWei > 0n || presaleBoxAmountWei > 0n;
+      const onSubmitted = hasRngBoxPurchase
+        ? (tx) => {
+            submittedLootboxHash = String(tx?.hash || `local-${Date.now()}`).toLowerCase();
+            submittedLootboxPlayer = String(buyer || '').toLowerCase();
+            try {
+              this.dispatchEvent(new CustomEvent('app-decimator:tx-submitted', {
+                detail: {
+                  player: buyer,
+                  transactionHash: submittedLootboxHash,
+                  lootBoxAmountWei,
+                  presaleBoxAmountWei,
+                  ticketPriceWei: purchaseTicketPriceWei,
+                },
+                bubbles: true,
+              }));
+            } catch (_e) { /* defensive — fakeDOM CustomEvent shim */ }
+          }
+        : undefined;
       const { receipt, contract } = presaleBoxAmountWei > 0n && !hasMintPurchase
         ? await purchasePresaleBox({
             boxAmountWei: presaleBoxAmountWei,
             player: buyer,
-            preferClaimable: this.#preferClaimable,
+            preferClaimable: questPurchase?.preferClaimable ?? this.#preferClaimable,
+            useAfking: questPurchase?.useAfking ?? this.#useAfking,
+            onSubmitted,
           })
         : await purchaseEth({
             ticketQuantity, lootboxQuantity: 0, affiliateCode, ticketCostWei, lootBoxAmountWei,
             foil: foilWanted, foilCostWei, presaleBoxAmountWei,
-            preferClaimable: this.#preferClaimable,
+            preferClaimable: questPurchase?.preferClaimable ?? this.#preferClaimable,
+            useAfking: questPurchase?.useAfking ?? this.#useAfking,
+            onSubmitted,
           });
 
       // Receipt-log-first reveal plumbing (CF-05):
@@ -1913,14 +2782,46 @@ class AppDecimatorPanel extends HTMLElement {
           byIndex.set(Number(b.lootboxIndex), {
             index: Number(b.lootboxIndex),
             day: b.day != null ? Number(b.day) : null,
+            amountWei: b.amountWei ?? lootBoxAmountWei,
+            ticketPriceWei: purchaseTicketPriceWei,
           });
         }
         for (const b of parsePresaleBoxBuyFromReceipt(receipt, contract)) {
           const index = Number(b.lootboxIndex);
-          if (!byIndex.has(index)) byIndex.set(index, { index, day: null });
+          const prior = byIndex.get(index);
+          if (prior) {
+            prior.amountWei = BigInt(prior.amountWei ?? 0) + BigInt(b.amountWei ?? 0);
+          } else {
+            byIndex.set(index, {
+              index,
+              day: null,
+              amountWei: b.amountWei,
+              ticketPriceWei: purchaseTicketPriceWei,
+            });
+          }
         }
         boxes = [...byIndex.values()];
       } catch (_e) { boxes = []; }
+
+      // Publish the mined RNG work before any optional receipt enrichment.
+      // Boon metadata and reveal decoration may require additional RPC reads;
+      // neither should delay the player's lootbox from entering Pending.
+      try {
+        this.dispatchEvent(new CustomEvent('app-decimator:tx-confirmed', {
+          detail: {
+            ticketQuantity,
+            lootBoxAmountWei,
+            presaleBoxAmountWei,
+            ticketPriceWei: purchaseTicketPriceWei,
+            boxes,
+            player: buyer,
+            transactionHash: receipt?.hash || receipt?.transactionHash || null,
+            submittedTransactionHash: submittedLootboxHash,
+          },
+          bubbles: true,
+        }));
+      } catch (_e) { /* defensive — fakeDOM CustomEvent shim */ }
+
       try {
         // Foil leg confirmed by its receipt event (NOT optimistic — the tx
         // mined): clear the selected add-on and retain an informational marker.
@@ -1967,6 +2868,8 @@ class AppDecimatorPanel extends HTMLElement {
           queueReveal({
             kind: 'lootbox',
             lootboxIndex: autoBoxIndex,
+            amountWei: lootBoxAmountWei + presaleBoxAmountWei,
+            ticketPriceWei: purchaseTicketPriceWei,
             legs: autoLegs,
             lootboxRelease: releaseKey ? {
               address: buyer,
@@ -1977,16 +2880,6 @@ class AppDecimatorPanel extends HTMLElement {
           });
         }
       } catch (_e) { /* reveal is decoration — never fail the buy over it */ }
-
-      // Success — dispatch panel event for any external listener (mirrors
-      // Phase 61's app-claims:tx-confirmed pattern). The app-root
-      // <app-box-strip tray-only> consumes `boxes` at the document level.
-      try {
-        this.dispatchEvent(new CustomEvent('app-decimator:tx-confirmed', {
-          detail: { ticketQuantity, lootBoxAmountWei, presaleBoxAmountWei, boxes },
-          bubbles: true,
-        }));
-      } catch (_e) { /* defensive — fakeDOM CustomEvent shim */ }
 
       // Every successful first purchase closes the referral slot, including a
       // deliberate blank code (the contract assigns its no-referrer sink).
@@ -2000,10 +2893,26 @@ class AppDecimatorPanel extends HTMLElement {
 
       // 250ms post-confirm refetch (CF-06) — additive to the 30s poll tick.
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+      return true;
     } catch (error) {
       // Decoded structured-revert error from lootbox.js (.userMessage / .code
       // / .recoveryAction / .cause). Render via textContent (T-58-18).
-      this.#renderError(compactUiError(error, 'Purchase did not go through. Try again.'));
+      const failureMessage = compactUiError(error, 'Purchase did not go through. Try again.');
+      this.#renderError(failureMessage);
+      if (submittedLootboxHash) {
+        try {
+          this.dispatchEvent(new CustomEvent('app-decimator:tx-failed', {
+            detail: {
+              player: submittedLootboxPlayer,
+              transactionHash: submittedLootboxHash,
+              message: failureMessage,
+            },
+            bubbles: true,
+          }));
+        } catch (_e) { /* defensive — fakeDOM CustomEvent shim */ }
+        reportPendingActionError(failureMessage);
+      }
+      if (allInFlow) throw new Error(failureMessage, { cause: error });
     } finally {
       if (btn) btn.disabled = false;
       this.#busy = false;

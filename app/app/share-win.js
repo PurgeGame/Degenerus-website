@@ -18,8 +18,7 @@
 // chain-verified localStorage fallback). Any doubt falls back to the bare
 // address, which always pays the sharer.
 //
-// QR: lean-qr via the import-map CDN (same dynamic-import pattern as
-// canvas-confetti). If the import fails the card renders without a QR —
+// QR: lean-qr via the import-map CDN. If the import fails the card renders without a QR —
 // the ref URL is always printed as text, so the link survives regardless.
 
 import { get } from './store.js';
@@ -186,18 +185,27 @@ export function renderShareCard({ title, lines, refUrl, qr }) {
   ctx.fillStyle = bloom;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-  // Confetti dots (deterministic LCG so identical wins render identical cards).
-  let s = 1337;
-  const rnd = () => { s = (s * 48271) % 2147483647; return s / 2147483647; };
-  const dotColors = ['#f5a623', '#ffc04d', '#ffffff', '#22c55e'];
-  for (let i = 0; i < 70; i++) {
-    ctx.globalAlpha = 0.25 + rnd() * 0.5;
-    ctx.fillStyle = dotColors[Math.floor(rnd() * dotColors.length)];
-    const dx = rnd() * CARD_W;
-    const dy = rnd() * CARD_H * 0.62;
+  // Symmetric energy seal: the share image uses the same protocol-native
+  // visual language as the live win effect without obscuring the amounts.
+  const sealX = CARD_W / 2;
+  const sealY = 430;
+  for (const [index, radius] of [170, 285, 400].entries()) {
+    ctx.globalAlpha = 0.3 - index * 0.06;
+    ctx.strokeStyle = index % 2 ? '#22c55e' : '#ffc04d';
+    ctx.lineWidth = index === 0 ? 5 : 3;
     ctx.beginPath();
-    ctx.arc(dx, dy, 3 + rnd() * 6, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(sealX, sealY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 0.2;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 3;
+  for (let spoke = 0; spoke < 8; spoke += 1) {
+    const angle = (Math.PI * 2 * spoke) / 8;
+    ctx.beginPath();
+    ctx.moveTo(sealX + Math.cos(angle) * 115, sealY + Math.sin(angle) * 115);
+    ctx.lineTo(sealX + Math.cos(angle) * 400, sealY + Math.sin(angle) * 400);
+    ctx.stroke();
   }
   ctx.globalAlpha = 1;
 

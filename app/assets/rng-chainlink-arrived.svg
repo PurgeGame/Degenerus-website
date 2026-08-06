@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 58" role="img" aria-label="Chainlink RNG arrived">
+  <defs>
+    <linearGradient id="mark" x1="24" y1="3" x2="48" y2="29" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8aa7ff"/>
+      <stop offset="1" stop-color="#3a64db"/>
+    </linearGradient>
+    <filter id="glow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="1.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path transform="translate(-2 0)" fill="#4ade80" opacity=".22" filter="url(#glow)" d="M36 1 49.5 8.8v15.6L36 32.2l-13.5-7.8V8.8L36 1Z"/>
+  <path transform="translate(-2 0)" fill="url(#mark)" fill-rule="evenodd" d="M36 2 48.5 9.2v14.4L36 30.8l-12.5-7.2V9.2L36 2Zm0 7.1-6.35 3.65v7.3L36 23.7l6.35-3.65v-7.3L36 9.1Z"/>
+  <text x="36" y="41" fill="#e5f9eb" font-family="Arial, sans-serif" font-size="12" font-weight="900" letter-spacing="2.1" text-anchor="middle">RNG</text>
+  <rect x="13" y="44" width="46" height="12" rx="6" fill="#22c55e" opacity=".17"/>
+  <text x="36" y="53" fill="#86efac" font-family="Arial, sans-serif" font-size="9.8" font-weight="900" letter-spacing=".2" text-anchor="middle">ARRIVED</text>
+</svg>

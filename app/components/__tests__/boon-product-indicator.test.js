@@ -8,7 +8,12 @@ class FakeHTMLElement {
     this.hidden = false;
     this.textContent = '';
     this.title = '';
-    this.classList = { add() {} };
+    this.classList = {
+      _set: new Set(),
+      add(...names) { names.forEach((name) => this._set.add(name)); },
+      remove(...names) { names.forEach((name) => this._set.delete(name)); },
+      contains(name) { return this._set.has(name); },
+    };
   }
   getAttribute(name) { return this._attrs.get(name) ?? null; }
   setAttribute(name, value) { this._attrs.set(name, String(value)); }
@@ -50,6 +55,39 @@ describe('<boon-product-indicator>', () => {
     });
     assert.equal(el.hidden, true);
     assert.equal(el.textContent, '');
+    el.disconnectedCallback();
+  });
+
+  test('glows the affected purchase field and exposes the exact bonus on hover', () => {
+    const host = new FakeHTMLElement();
+    host.setAttribute('title', 'Lootbox amount');
+    const el = new BoonProductIndicator();
+    el.setAttribute('product', 'lootbox');
+    el.closest = () => host;
+    el.connectedCallback();
+
+    storeMod.update('app.boons', {
+      address: '0xabc',
+      day: 62,
+      boons: [{ boonType: 6, consumed: false }],
+    });
+
+    assert.equal(host.classList.contains('has-active-boon'), true);
+    assert.equal(host.getAttribute('data-active-boon-product'), 'lootbox');
+    assert.equal(host.getAttribute('data-active-boon-type'), '6');
+    assert.equal(host.getAttribute('data-boon-effect'), '+15%');
+    assert.match(host.getAttribute('title'), /lootbox purchase.*15%/i);
+    assert.match(el.getAttribute('aria-label'), /lootbox purchase.*15%/i);
+    assert.equal(el.getAttribute('tabindex'), '0', 'the hover description is keyboard reachable');
+
+    storeMod.update('app.boons', {
+      address: '0xabc',
+      day: 62,
+      boons: [{ boonType: 6, consumed: true }],
+    });
+    assert.equal(host.classList.contains('has-active-boon'), false);
+    assert.equal(host.getAttribute('data-active-boon-product'), null);
+    assert.equal(host.getAttribute('title'), 'Lootbox amount', 'the original field tooltip is restored');
     el.disconnectedCallback();
   });
 });

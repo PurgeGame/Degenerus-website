@@ -320,6 +320,38 @@ describe('sendTx account-change mid-flow', () => {
 // ===========================================================================
 
 describe('sendTx receipt handling', () => {
+  test('onSubmitted fires after broadcast and before receipt confirmation', async () => {
+    const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    setProvider(provider);
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    const order = [];
+    let release;
+    const confirmation = new Promise((resolve) => { release = resolve; });
+    const tx = {
+      hash: '0xbroadcast',
+      wait: async () => {
+        order.push('wait-started');
+        await confirmation;
+        order.push('confirmed');
+        return { status: 1, hash: '0xbroadcast' };
+      },
+    };
+    const pending = sendTx(
+      async () => {
+        order.push('broadcast');
+        return tx;
+      },
+      'broadcast hook',
+      { onSubmitted: (submitted) => order.push(`submitted:${submitted.hash}`) },
+    );
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    assert.deepEqual(order, ['broadcast', 'submitted:0xbroadcast', 'wait-started']);
+    release();
+    await pending;
+    assert.deepEqual(order, ['broadcast', 'submitted:0xbroadcast', 'wait-started', 'confirmed']);
+  });
+
   test('returns receipt on success', async () => {
     const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
     setProvider(provider);

@@ -10,6 +10,7 @@ import { getViewedAddress } from './store.js';
 
 const _sources = new Map();
 const _listeners = new Set();
+const _errorListeners = new Set();
 const _firstSeen = new Map();
 // Hard CLEAR tombstones live with the registry rather than one tray mount and
 // are persisted below. Publishers are intentionally free to keep polling or
@@ -224,6 +225,22 @@ export function subscribePendingActions(listener) {
   return () => _listeners.delete(listener);
 }
 
+/** Publish a short, presentation-only failure without mutating any owner row. */
+export function reportPendingActionError(message) {
+  const text = String(message || '').trim();
+  if (!text) return;
+  for (const listener of _errorListeners) {
+    try { listener(text); } catch (_e) { /* one surface cannot block another */ }
+  }
+}
+
+/** Subscribe to scoped transaction failures shown by the shared Pending tray. */
+export function subscribePendingActionErrors(listener) {
+  if (typeof listener !== 'function') return () => {};
+  _errorListeners.add(listener);
+  return () => _errorListeners.delete(listener);
+}
+
 /** Test-only storage seam. */
 export function __setPendingDismissStorageForTest(storage) {
   _dismissStorageOverride = storage;
@@ -235,6 +252,7 @@ export function __setPendingDismissStorageForTest(storage) {
 export function __resetPendingActionsForTest({ preserveDismissedStorage = false } = {}) {
   _sources.clear();
   _listeners.clear();
+  _errorListeners.clear();
   _publishedSources.clear();
   _firstSeen.clear();
   _dismissed.clear();

@@ -309,11 +309,14 @@ function byTraitPayload({ level = 17, cards = [] } = {}) {
   return { address: TEST_ADDR, level, day: 67, totalEntries: cards.length * 4, cards };
 }
 
-function mount() {
+function mount({ expanded = true } = {}) {
   const Ctor = customElements.get('app-tickets-inventory');
   const el = new Ctor();
   _docBody.appendChild(el);
   el.connectedCallback();
+  if (expanded) {
+    el.querySelector('[data-bind="inv-toggle"]').dispatchEvent({ type: 'click' });
+  }
   return el;
 }
 
@@ -334,6 +337,102 @@ describe('app-tickets-inventory — cards + chart', () => {
       APP_CSS,
       /\.app-tickets-inventory \.inv-head > h2\s*\{[^}]*flex:\s*0 0 auto[^}]*white-space:\s*nowrap/s,
     );
+    assert.match(
+      APP_CSS,
+      /\.app-tickets-inventory \.inv-head\s*\{[^}]*font-family:\s*"Inter", system-ui, sans-serif/s,
+      'ticket header typography uses the same UI font',
+    );
+    assert.match(
+      APP_CSS,
+      /\.inv-level-btn\s*\{[^}]*font-family:\s*"Inter", system-ui, sans-serif/s,
+      'native level buttons cannot fall back to a mismatched browser font',
+    );
+    assert.match(
+      APP_CSS,
+      /\.app-tickets-inventory :is\(button, input, output, strong\)\s*\{[^}]*font-family:\s*inherit/s,
+      'ticket values and native controls inherit that one type family',
+    );
+  });
+
+  test('starts collapsed and creates no ticket SVG nodes until expanded', async () => {
+    _byLevel.set(17, byTraitPayload({ cards: [card('opened'), card('opened')] }));
+    const el = mount({ expanded: false });
+    await flushMicrotasks();
+
+    const toggle = el.querySelector('[data-bind="inv-toggle"]');
+    assert.match(el.innerHTML, /<h2>YOUR TICKETS<\/h2>/,
+      'the section title is plain text rather than the disclosure control');
+    assert.match(
+      el.innerHTML,
+      /class="inv-level-cluster">[\s\S]*?data-bind="inv-meta"[\s\S]*?class="inv-level-nav"/,
+      'the count remains on the opposite side of the level selector',
+    );
+    assert.ok(
+      el.innerHTML.indexOf('data-bind="inv-toggle"')
+        > el.innerHTML.indexOf('data-bind="inv-zoom-controls"'),
+      'the disclosure is the far-right property of the bar, after its content controls',
+    );
+    assert.equal(toggle.textContent.trim(), '', 'the dropdown control contains no ticket text');
+    assert.match(APP_CSS,
+      /\.inv-disclosure\s*\{[^}]*position:\s*absolute[^}]*right:\s*0[^}]*background:\s*transparent/s,
+      'the chevron is pinned to the right edge instead of wrapping a text label');
+    assert.match(APP_CSS,
+      /\.inv-head:has\(> \.inv-disclosure\[aria-expanded="false"\]\)\s*\{[^}]*margin-bottom:\s*0[^}]*border-bottom-color:\s*transparent/s,
+      'the closed ticket bar has no divider underneath it');
+    assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+    assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, true);
+    assert.equal(el.querySelector('.inv-level-cluster').hidden, false,
+      'level switching remains visible in the compressed header');
+    assert.equal(el.querySelector('[data-bind="inv-meta"]').textContent, '2 tickets',
+      'compressed header keeps the exact owned-ticket quantity visible');
+    assert.equal(el.querySelectorAll('.inv-card').length, 0,
+      'collapsed data refreshes cannot construct ticket cards');
+    assert.equal(el.querySelectorAll('img').length, 0,
+      'no badge SVG request exists in the initial inventory DOM');
+
+    toggle.dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, false);
+    assert.ok(el.querySelectorAll('.inv-card').length > 0);
+    assert.ok(el.querySelectorAll('img').length > 0,
+      'badge SVG nodes are constructed only after explicit expansion');
+    el.disconnectedCallback();
+  });
+
+  test('ticket quantities use quarter decimals instead of a second entry unit', () => {
+    assert.equal(inventoryMod.formatTicketEntryHoldings(0), '0 tickets');
+    assert.equal(inventoryMod.formatTicketEntryHoldings(1), '0.25 tickets');
+    assert.equal(inventoryMod.formatTicketEntryHoldings(5), '1.25 tickets');
+    assert.equal(inventoryMod.formatTicketEntryHoldings(4), '1 ticket');
+  });
+
+  test('red SALVAGE shortcut opens long-term holdings with its panel pinned below', async () => {
+    storeMod.update('app.lastDay', {
+      day: 67,
+      status: 'resolved',
+      level: 17,
+      roll1: { purchaseLevel: 17 },
+    });
+    _dashboardTickets = [{ level: 23, entryCount: 8 }];
+    _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
+    const el = mount({ expanded: false });
+    await flushMicrotasks();
+
+    const shortcut = el.querySelector('[data-bind="inv-salvage-jump"]');
+    assert.equal(shortcut.disabled, false);
+    shortcut.dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    assert.equal(el.querySelector('[data-bind="inv-toggle"]').getAttribute('aria-expanded'), 'true');
+    assert.equal(el.querySelector('[data-bind="inv-level"]').textContent, '22',
+      'shortcut enters the first aggregate long-term level');
+    assert.equal(el.querySelector('[data-bind="inv-ff"]').hidden, false);
+    assert.ok(el.querySelector('[data-bind="inv-salvage-panel"]'),
+      'the salvage section is mounted even before the player selects a line');
+    assert.match(APP_CSS, /\.inv-salvage\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0;/s,
+      'salvage stays pinned to the bottom of the long-term scroll area');
+    el.disconnectedCallback();
   });
 
   test('cards mode dedups identical combos into ×N cards', async () => {
@@ -352,11 +451,11 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.ok(!counts.includes('×1'), 'unique combo shows no badge');
     assert.equal(counts.length, 1, 'exactly one badge — only the duplicate carries it');
     const meta = el.querySelector('[data-bind="inv-meta"]');
-    assert.match(meta.textContent, /3 cards/, 'meta counts totalEntries/4');
+    assert.match(meta.textContent, /3 tickets/, 'meta counts totalEntries/4');
     assert.match(
       el.innerHTML,
-      /class="inv-level-cluster">[\s\S]*?class="inv-level-nav"[\s\S]*?data-bind="inv-meta"[\s\S]*?<\/span>/,
-      'the ticket count is grouped with the level selector instead of Total Value',
+      /class="inv-level-cluster">[\s\S]*?data-bind="inv-meta"[\s\S]*?class="inv-level-nav"[\s\S]*?<\/span>/,
+      'the ticket count sits on the opposite side of the level selector',
     );
     el.disconnectedCallback();
   });
@@ -573,7 +672,7 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.deepEqual(entries.map((entry) => entry.getAttribute('data-quadrant')), ['0', '1']);
     assert.ok(entries.every((entry) => !entry.querySelector('.ticket-card-center')),
       'entry graphics deliberately omit the ticket center diamond');
-    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^3 cards · 2 entries/,
+    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^3\.5 tickets/,
       'the inventory headline exposes the exact remainder');
     el.disconnectedCallback();
   });
@@ -854,7 +953,7 @@ describe('app-tickets-inventory — cards + chart', () => {
 
     assert.equal(el.querySelectorAll('.ticket-card').length, 1,
       'the newly indexed ticket does not appear before its pack');
-    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^1 card/,
+    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^1 ticket/,
       'the headline count does not spoil the unopened ticket either');
 
     await packWatchMod.completePackReveal({
@@ -872,7 +971,7 @@ describe('app-tickets-inventory — cards + chart', () => {
 
     assert.equal(el.querySelectorAll('.ticket-card').length, 2,
       'the ticket display refreshes immediately after the pack is consumed');
-    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^2 cards/);
+    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^2 tickets/);
     el.disconnectedCallback();
   });
 
@@ -892,7 +991,7 @@ describe('app-tickets-inventory — cards + chart', () => {
     await flushMicrotasks();
     assert.equal(el.querySelectorAll('.ticket-entry-card').length, 0,
       'the rolled trait cannot leak before its pack is consumed');
-    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^0 cards/);
+    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^0 tickets/);
 
     await packWatchMod.completePackReveal({
       address: TEST_ADDR,
@@ -909,7 +1008,7 @@ describe('app-tickets-inventory — cards + chart', () => {
     await flushMicrotasks();
 
     assert.equal(el.querySelectorAll('.ticket-entry-card').length, 1);
-    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^0 cards · 1 entry/);
+    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^0\.25 tickets/);
     el.disconnectedCallback();
   });
 
@@ -1020,6 +1119,11 @@ describe('app-tickets-inventory — combined mode (account-switcher)', () => {
     assert.equal(rows.length, 2, 'one row per (level, owner)');
     const levels = rows.map((r) => r.querySelector('.inv-combined-level').textContent);
     assert.deepEqual(levels, ['L17', 'L18'], 'sorted by level ascending');
+    assert.deepEqual(
+      rows.map((r) => r.querySelector('.inv-combined-level').getAttribute('data-ticket-level-tone')),
+      ['white', 'green'],
+      'combined ticket levels use the same purchase-level-relative threat ladder',
+    );
     const owners = rows.map((r) => r.querySelector('.inv-combined-owner').textContent);
     assert.equal(owners[0], '0xab…00', 'abbreviated owner tag for TEST_ADDR');
     assert.equal(owners[1], '0xcc…03', 'abbreviated owner tag for OTHER_ADDR');
@@ -1031,6 +1135,29 @@ describe('app-tickets-inventory — combined mode (account-switcher)', () => {
     assert.ok(_fetchLog.every((u) => !u.includes('/tickets/by-trait')), 'by-trait endpoint never fetched in combined mode');
     assert.ok(_fetchLog.every((u) => !/\/player\/0x[0-9a-f]+$/i.test(u)), '/player/:address dashboard never fetched in combined mode');
 
+    el.disconnectedCallback();
+  });
+
+  test('collapsed combined holdings show their total without constructing owner rows', async () => {
+    storeMod.update('viewing.combined', true);
+    storeMod.update('ui.mode', 'combined');
+    storeMod.update('app.playerCombined', {
+      addresses: [TEST_ADDR, OTHER_ADDR], perAddress: {}, claimableEth: '0', flipBalance: '0', dgnrsBalance: '0',
+      coinflip: null, decimator: { claimablePerLevel: [], futurePoolTotal: '0' }, terminal: null,
+      tickets: [
+        { level: 17, entryCount: 13, owner: TEST_ADDR },
+        { level: 18, entryCount: 1, owner: OTHER_ADDR },
+      ],
+    });
+
+    const el = mount({ expanded: false });
+    await flushMicrotasks();
+
+    assert.equal(el.querySelector('[data-bind="inv-level"]').textContent, 'ALL');
+    assert.equal(el.querySelector('[data-bind="inv-meta"]').textContent, '3.5 tickets across 2 accounts');
+    assert.equal(el.querySelector('[data-bind="inv-combined"]').hidden, true);
+    assert.equal(el.querySelectorAll('.inv-combined-row').length, 0,
+      'the owner list stays lazy until the disclosure opens');
     el.disconnectedCallback();
   });
 

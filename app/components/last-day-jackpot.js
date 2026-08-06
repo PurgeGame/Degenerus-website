@@ -10,7 +10,7 @@
 //     ownership lighting and scratch-off prize reveals;
 //   - listens for the panel's `replay:scratch-complete` (all owned quadrants
 //     + center scratched — NOT mere spin end, which would spoil unscratched
-//     prizes) to write the spun_day spoiler key, fire confetti when the
+//     prizes) to write the spun_day spoiler key and run the winner effect when
 //     viewed player won, light up the foil strip, and dispatch
 //     `jackpot:revealed` (winnings banner signal);
 //   - renders the compact day shell and publishes earned foil-match claims to
@@ -43,6 +43,9 @@ import { parseOpenLegsFromReceipt } from '../app/lootbox-legs.js';
 import { readResolvedCoinflipStake } from '../app/coinflip.js';
 import { loadDayLootboxResults } from '../app/day-lootbox-results.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
+
+const JACKPOT_PROCESSING_STATUS = 'JACKPOT PROCESSING · SPIN AVAILABLE SOON';
+const JACKPOT_SYNCING_STATUS = 'JACKPOT DATA SYNCING · SPIN AVAILABLE SOON';
 
 const FOIL_MATCH_ACTION_SOURCE = 'foil-match';
 
@@ -162,7 +165,7 @@ class LastDayJackpot extends HTMLElement {
     if (!panel) return;
     // During the indexer handoff the replay panel can still be showing the
     // previous resolved day. That board remains a real, playable draw (most
-    // importantly, its pending Bonus Roll), so the new-day blue/inert mask
+    // importantly, its pending Bonus Spin), so the new-day blue/inert mask
     // must not be painted over it. Apply the mask only after the target day is
     // actually selected in replay-panel.
     if (warming && this.#replayShowsPinnedDay(panel)) {
@@ -368,7 +371,7 @@ class LastDayJackpot extends HTMLElement {
     if (cold) cold.style.display = 'none';
     if (empty) empty.style.display = 'none';
     if (resolved) resolved.style.display = 'none';
-    this.#setJackpotLoadStatus('(loading)');
+    this.#setJackpotLoadStatus(JACKPOT_PROCESSING_STATUS);
   }
 
   #renderDeploymentMismatch(mismatch) {
@@ -400,7 +403,7 @@ class LastDayJackpot extends HTMLElement {
     if (resolved) resolved.style.display = 'none';
     const day = this.querySelector('[data-bind="day"]');
     if (day) day.textContent = 'SYNC';
-    this.#setJackpotLoadStatus('(syncing)');
+    this.#setJackpotLoadStatus(JACKPOT_SYNCING_STATUS);
   }
 
   #renderEmptyDay(day) {
@@ -571,7 +574,7 @@ class LastDayJackpot extends HTMLElement {
       this.#setReplayWarming(warming);
       // Persistence belongs to the day currently mounted in replay-panel.
       // Sending the incoming day's state while yesterday is still selected
-      // can reset that live board and strand its Bonus Roll.
+      // can reset that live board and strand its Bonus Spin.
       if (this.#replayShowsPinnedDay(panel)
         && typeof panel.setPersistedRevealState === 'function') {
         const replayFresh = Number(this.#manualReplayDay) === Number(this.#pinnedDay);
@@ -747,7 +750,7 @@ class LastDayJackpot extends HTMLElement {
 
   // Panel reveal fully scratched — open the spoiler gate and fire follow-on
   // UI. Fires per roll (Roll 1, then bonus Roll 2); every step below is
-  // idempotent, and confetti is additionally once-per-day guarded.
+  // idempotent, and the winner effect is additionally once-per-day guarded.
   #onPanelScratchComplete(e) {
     this.#markSpunPinnedDay();
     this.#sawScratchEvent = true;
@@ -755,8 +758,8 @@ class LastDayJackpot extends HTMLElement {
     this.#renderFoil();
     // The replay board itself knows whether THIS scratch phase contained an
     // actual personal payout and owns its phase-scoped celebration. Do not add
-    // day-wide host confetti here: a player who wins only the other roll would
-    // otherwise get confetti over a losing scratchoff.
+    // day-wide host celebration here: a player who wins only the other roll
+    // would otherwise get a winner effect over a losing scratchoff.
     const viewed = getViewedAddress();
     const target = viewed ? String(viewed).toLowerCase() : null;
     const mine = Boolean(target && (this.#winners || []).some(
@@ -865,7 +868,7 @@ class LastDayJackpot extends HTMLElement {
     this.#maybeShowResultsCta();
   }
 
-  /** Share replay-panel's single action row with Reveal Draw. */
+  /** Share replay-panel's single action row with Spin Jackpot. */
   #mountResultsCta(cta) {
     if (!cta || typeof document === 'undefined') return;
     const replay = document.querySelector('replay-panel');
@@ -882,7 +885,7 @@ class LastDayJackpot extends HTMLElement {
     const replay = document.querySelector('replay-panel');
     const controls = replay?.querySelector?.('.replay-controls');
     const reveal = replay?.querySelector?.('[data-bind="reveal-btn"]');
-    // Never force Reveal Draw back on: replay-panel owns when that button is
+    // Never force Spin Jackpot back on: replay-panel owns when that button is
     // valid. We only guarantee that the two actions cannot coexist.
     if (visible && reveal) reveal.hidden = true;
     const slot = document.querySelector('[data-bind="day-summary-slot"]');
@@ -1427,7 +1430,7 @@ class LastDayJackpot extends HTMLElement {
       document.addEventListener('flip:revealed', this.#flipListener);
     }
 
-    this.#setJackpotLoadStatus('(loading)');
+    this.#setJackpotLoadStatus(JACKPOT_PROCESSING_STATUS);
     this.#showContent();
     this.#wireHistoryNav();
   }

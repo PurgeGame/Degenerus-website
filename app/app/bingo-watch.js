@@ -305,7 +305,10 @@ export function bingoQuadrantEntryCounts(payload, quadrant) {
   if (!Number.isInteger(q) || q < 0 || q > 3) return counts;
   for (const card of Array.isArray(payload?.cards) ? payload.cards : []) {
     for (const entry of Array.isArray(card?.entries) ? card.entries : []) {
-      const traitId = Number(entry?.traitId);
+      // Number(null) is 0, a real trait (crypto/pink/XRP). Unrevealed entries
+      // carry traitId null and must not be counted into quadrant 0's slot 0.
+      const rawTid = entry?.traitId;
+      const traitId = rawTid == null ? NaN : Number(rawTid);
       if (!Number.isInteger(traitId) || traitId < 0 || traitId > 255) continue;
       if (((traitId >> 6) & 3) !== q) continue;
       counts[traitId & 63] += 1;

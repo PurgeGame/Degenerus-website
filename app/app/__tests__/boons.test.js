@@ -1,6 +1,11 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { activeBoonForProduct, boonIndicatorModel, decodePackedBoons } from '../boons.js';
+import {
+  activeBoonForProduct,
+  boonIndicatorModel,
+  boonTypePresentation,
+  decodePackedBoons,
+} from '../boons.js';
 
 describe('active boon product mapping', () => {
   test('decodes only currently consumable boons from GAME boonPacked state', () => {
@@ -58,6 +63,12 @@ describe('active boon product mapping', () => {
     assert.equal(boonIndicatorModel(payload, 'deity').label, 'BOON −35%');
     assert.equal(boonIndicatorModel(payload, 'lazy').label, 'BOON −50%');
     assert.match(boonIndicatorModel(payload, 'purchase').title, /Day 62/);
+  });
+
+  test('exposes the affected product for color-coded Deity boon controls', () => {
+    assert.equal(boonTypePresentation(6).product, 'lootbox');
+    assert.equal(boonTypePresentation(15).product, 'decimator');
+    assert.equal(boonTypePresentation(30).product, 'lazy');
   });
 
   test('consumed boons do not remain lit beside a product', () => {

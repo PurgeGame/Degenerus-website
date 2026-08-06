@@ -293,14 +293,16 @@ function mount() {
 const revealPlanning = await import('../app-daily-flip.js');
 
 describe('day-wide reveal planning', () => {
-  test('sDGNRS uses one-decimal M from 10M to under 100M, then whole M', () => {
+  test('sDGNRS stays within three significant figures and promotes suffix carries', () => {
     const unit = 10n ** 18n;
     assert.equal(revealPlanning.formatSdgnrsBalance(999n * unit), '999');
     assert.equal(revealPlanning.formatSdgnrsBalance(0n), '0');
-    assert.equal(revealPlanning.formatSdgnrsBalance(9_999n * unit), '9,999');
-    assert.equal(revealPlanning.formatSdgnrsBalance(10_000n * unit), '10K');
-    assert.equal(revealPlanning.formatSdgnrsBalance(9_876_543n * unit), '9,877K');
-    assert.equal(revealPlanning.formatSdgnrsBalance(9_999_999n * unit), '10,000K');
+    assert.equal(revealPlanning.formatSdgnrsBalance(9_999n * unit), '10.0K');
+    assert.equal(revealPlanning.formatSdgnrsBalance(10_000n * unit), '10.0K');
+    assert.equal(revealPlanning.formatSdgnrsBalance(12_345n * unit), '12.3K');
+    assert.equal(revealPlanning.formatSdgnrsBalance(999_999n * unit), '1.00M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(9_876_543n * unit), '9.88M');
+    assert.equal(revealPlanning.formatSdgnrsBalance(9_999_999n * unit), '10.0M');
     assert.equal(revealPlanning.formatSdgnrsBalance(10_000_000n * unit), '10.0M');
     assert.equal(revealPlanning.formatSdgnrsBalance(10_450_000n * unit), '10.5M');
     assert.equal(revealPlanning.formatSdgnrsBalance(99_900_000n * unit), '99.9M');
@@ -385,6 +387,17 @@ describe('day-wide reveal planning', () => {
     assert.equal(revealPlanning.REVEAL_BIASED_END_MS, 1350);
     assert.equal(revealPlanning.REVERSE_CARD_ENTRY_WAIT_MS, 100);
     assert.equal(revealPlanning.REVERSE_CARD_ANIMATION_MS, 600);
+    for (const ending of [
+      'double-to-win', 'double-to-loss', 'triple-to-win', 'triple-to-loss',
+    ]) {
+      assert.match(
+        APP_CSS,
+        new RegExp(`\\.df-reveal-ending--${ending}\\s*\\{[^}]*--df-ending-animation:`, 's'),
+        `${ending} has a real CSS ending instead of falling back to the idle coin`,
+      );
+    }
+    assert.match(APP_CSS, /@keyframes df-reveal-end-double\s*\{/);
+    assert.match(APP_CSS, /@keyframes df-reveal-end-triple\s*\{/);
 
     for (let day = 1; day <= 250; day += 1) {
       for (const won of [false, true]) {
@@ -483,6 +496,13 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const srcs = coin.querySelectorAll('img').map((i) => i.src);
     assert.ok(srcs.includes('/shared/coinflip-face-red.svg'), 'red WWXRP face');
     assert.ok(srcs.includes('/shared/coinflip-face-eth.svg'), 'green ETH face');
+    const rotorRule = APP_CSS.match(/\.df-coin3d__inner\s*\{[^}]*\}/s)?.[0] || '';
+    assert.match(rotorRule, /transform-style:\s*preserve-3d/);
+    assert.doesNotMatch(rotorRule, /isolation:\s*isolate/,
+      'the rotor cannot use a grouping property that flattens its two 3D faces');
+    assert.match(APP_CSS, /\.df-coin3d__face--red\s*\{[^}]*translateZ\(0\.5px\)/s);
+    assert.match(APP_CSS, /\.df-coin3d__face--eth\s*\{[^}]*rotateX\(180deg\) translateZ\(0\.5px\)/s,
+      'the ETH and WWXRP artwork occupy distinct backface-hidden planes');
     const revealHint = el.querySelector('[data-bind="df-reveal-hint"]');
     assert.equal(revealHint.hidden, false, 'small instruction graphic is visible while unrevealed');
     assert.equal(revealHint.tagName, 'BUTTON', 'the instruction graphic is itself a reveal control');
@@ -527,10 +547,10 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     const notice = el.querySelector('[data-bind="df-baf-eve"]');
     const panel = el.querySelector('.app-daily-flip');
-    assert.equal(notice.hidden, false);
+    assert.equal(notice, null, 'the floating BAF promo is removed');
     assert.equal(panel.classList.contains('app-daily-flip--baf-eve'), true);
-    assert.match(el.innerHTML, /BAF TOMORROW[\s\S]*WIN TRIGGERS THE DRAW/);
-    assert.match(APP_CSS, /\.df-baf-eve\s*\{[^}]*position:\s*absolute[^}]*border:/s);
+    assert.doesNotMatch(el.innerHTML, /BAF TOMORROW|WIN TRIGGERS THE DRAW/);
+    assert.doesNotMatch(APP_CSS, /\.df-baf-eve(?:__|\s|\[)/);
     assert.match(APP_CSS, /\.app-daily-flip--baf-eve \.df-tomorrow-layout\s*\{[^}]*border-color:/s);
     el.disconnectedCallback();
   });
@@ -555,6 +575,51 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(localStorage.getItem('flip_day_84532_67'), '1',
       'the queued click lands automatically when the exact result arrives');
     assert.ok(el.querySelector('.df-coin--landed'));
+    el.disconnectedCallback();
+  });
+
+  test('the waiting coin tracks Reverse Flip parity until resolution', async () => {
+    let queued = 3n;
+    coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({
+      queued,
+      locked: true,
+    }));
+    storeMod.update('app.daySync', {
+      day: 67,
+      jackpotReady: false,
+      coinflipReady: false,
+      ready: false,
+      phase: 'waiting-coinflip',
+      coinflipResult: null,
+    });
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+    const el = mount();
+    await flushMicrotasks();
+
+    let waiting = el.querySelector('.df-coin--resolving');
+    assert.equal(waiting.getAttribute('data-reverse-flips'), '3');
+    assert.equal(waiting.getAttribute('data-current-side'), 'eth');
+    assert.match(waiting.className, /\bdf-coin--queued-eth\b/);
+    assert.match(waiting.className, /\bdf-coin--resolution-locked\b/);
+    assert.match(waiting.getAttribute('aria-label'), /3 Reverse Flips queued; current side ETH/);
+
+    queued = 4n;
+    storeMod.update('connected.address', TEST_ADDR);
+    await flushMicrotasks();
+
+    waiting = el.querySelector('.df-coin--resolving');
+    assert.equal(waiting.getAttribute('data-reverse-flips'), '4');
+    assert.equal(waiting.getAttribute('data-current-side'), 'wwxrp');
+    assert.doesNotMatch(waiting.className, /\bdf-coin--queued-eth\b/);
+    assert.match(waiting.getAttribute('aria-label'), /4 Reverse Flips queued; current side WWXRP/);
+    assert.match(
+      APP_CSS,
+      /\.df-coin--resolving\.df-coin--queued-eth \.df-coin3d__inner\s*\{[^}]*transform:\s*rotateX\(180deg\)[^}]*animation-delay:\s*-550ms/s,
+    );
+    assert.match(
+      APP_CSS,
+      /\.df-coin--resolution-locked \.df-coin3d__inner\s*\{[^}]*animation:\s*none/s,
+    );
     el.disconnectedCallback();
   });
 
@@ -1017,6 +1082,10 @@ describe('app-daily-flip — coin reveal + actions', () => {
         "Today's bet does not turn into WIN while the thermometer is settling");
       assert.doesNotMatch(el.querySelector('[data-position="today"]').className, /df-position-row--win/,
         "Today's bet stays neutral until the win sound can play");
+      assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '••••',
+        'Protocol Coins cannot reveal or add the payout before the result is final');
+      assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, true,
+        'the new payout cannot be claimed during the modifier settle');
 
       const settle = scheduled.find((entry) => entry.delay === 1_600);
       assert.ok(settle, 'the rail gets a readable 1.6-second settle window');
@@ -1029,6 +1098,10 @@ describe('app-daily-flip — coin reveal + actions', () => {
       assert.match(el.querySelector('[data-position="today"]').className, /df-position-row--win/,
         "Today's bet turns green on that same completion event");
       assert.match(el.querySelector('[data-position="today"]').textContent, /WIN/);
+      assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '5,599,985',
+        'Protocol Coins opens on the same completion event as the final result');
+      assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, false,
+        'claim unlocks only after the result sequence completes');
       assert.equal(el.querySelector('.df-modifier-flash').textContent, '196%',
         'the rail collapses into the total multiplier');
       settle.fn();
@@ -1451,7 +1524,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(displays[2].hidden, false, 'the dropdown restores sDGNRS');
     assert.match(APP_CSS,
       /\.df-funds__display--flip-total \.df-funds__value\s*\{[^}]*color:\s*#fde68a[^}]*245, 158, 11/s,
-      'FLIP uses the yellow protocol-coin theme');
+      'the FLIP balance retains its yellow protocol-coin accent');
     assert.match(APP_CSS,
       /\.df-funds__display--wwxrp \.df-funds__value\s*\{[^}]*color:\s*#f87171[^}]*239, 68, 68/s,
       'WWXRP exactly matches the loss-FLIP red treatment');
@@ -1468,14 +1541,28 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /\.df-funds__display--sdgnrs \.df-funds__value\s*\{[^}]*color:\s*#d8b4fe[^}]*168, 85, 247/s,
       'sDGNRS uses the purple protocol-coin theme');
     assert.match(APP_CSS,
-      /body\.layout-basic \.df-funds__coins\s*\{[^}]*border-top:\s*1px solid rgba\(254, 202, 202, 0\.16\)/s,
-      'a full-width divider separates the Protocol Coins title from the FLIP balance');
+      /body\.layout-basic \.df-funds__toggle\[aria-expanded="true"\] \+ \.df-funds__coins\s*\{[^}]*border-top:\s*1px solid rgba\(254, 202, 202, 0\.16\)/s,
+      'the full-width divider appears only while Protocol Coins is expanded');
+    assert.match(APP_CSS,
+      /body\.layout-basic \.df-funds__coins\s*\{[^}]*border-top:\s*0/s,
+      'the collapsed Protocol Coins box has no divider');
+    assert.match(APP_CSS,
+      /\.df-funds:has\(\.df-funds__toggle\[aria-expanded="false"\]\)\s*\{[^}]*height:\s*2\.6rem/s,
+      'the collapsed Protocol Coins box matches the default ledger-row height');
+    assert.match(APP_CSS,
+      /@media \(max-width: 520px\)[\s\S]*?\.df-tomorrow-layout\s*\{[^}]*height:\s*2\.6rem/s,
+      'the Tomorrow box keeps the shared default height on phones too');
     assert.doesNotMatch(APP_CSS, /\.df-funds__display\.has-claimable/,
       'claimable FLIP does not receive a different row background');
     assert.match(
       APP_CSS,
       /body\.layout-basic \.df-funds__value\s*\{[^}]*text-align:\s*right/s,
       'coinflip token figures are right aligned',
+    );
+    assert.match(
+      APP_CSS,
+      /body\.layout-basic \.df-funds__value\s*\{[^}]*font-size:\s*clamp\(0\.92rem,\s*2\.8vw,\s*1\.16rem\)/s,
+      'Protocol Coins FLIP uses the same numeric scale as the neighboring bet boxes',
     );
     assert.match(el.innerHTML, /class="df-funds__title df-funds__toggle"[\s\S]*?<span>PROTOCOL COINS<\/span>/,
       'the shared instrument has one Protocol Coins label');
@@ -1708,12 +1795,17 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(APP_CSS,
       /@keyframes df-baf-transfer-flight\s*\{[\s\S]*var\(--df-baf-flight-x\)[\s\S]*var\(--df-baf-flight-y\)/,
       'the receipt travels to the measured BAF value rather than a hard-coded screen point');
+    assert.match(
+      el.innerHTML,
+      /df-baf-score__label[\s\S]*?df-baf-score__info[\s\S]*?BIG ASS FLIP SCORE/,
+      'the info dot sits directly left of the Big Ass Flip Score title',
+    );
     assert.match(APP_CSS,
-      /\.df-baf-score__title\s*\{[^}]*grid-template-areas:\s*"info info" "unit rank"/s,
-      'rank sits to the right of BAF while the info dot remains above it');
+      /\.df-baf-score__info\s*\{[^}]*box-sizing:\s*border-box;[^}]*min-width:\s*0\.72rem;[^}]*flex:\s*0 0 0\.72rem;[^}]*border-radius:\s*999px;[^}]*color:\s*inherit/s,
+      'the info control stays a true circle and inherits the muted title color');
     assert.match(APP_CSS,
-      /\.df-baf-score__rank\s*\{[^}]*align-self:\s*baseline;[^}]*font-size:\s*0\.5rem/s,
-      'rank is slightly larger and shares the BAF text baseline');
+      /\.df-baf-score__rank\s*\{[^}]*align-self:\s*center;[^}]*font-size:\s*0\.5rem;[^}]*line-height:\s*1\.1/s,
+      'rank is vertically centered against the neighboring BAF text');
     el.disconnectedCallback();
   });
 
@@ -1855,8 +1947,20 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /\.df-next-bet \.df-flip-cta\s*\{[^}]*background:\s*linear-gradient\(180deg, #fde68a, #f59e0b\)/s,
       'Add Bet uses the yellow FLIP action treatment');
     assert.match(APP_CSS,
-      /@media \(max-width: 520px\)[\s\S]*?body\.layout-basic \.app-daily-flip \.df-next-bet \.df-flip-cta\[data-write\]\s*\{[^}]*height:\s*1\.3rem[^}]*min-height:\s*0[^}]*max-height:\s*1\.3rem/s,
-      'Add Bet overrides the global mobile tap target with a bounded narrow height');
+      /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*width:\s*auto[^}]*min-width:\s*3rem[^}]*height:\s*1\.3rem[^}]*min-height:\s*1\.3rem[^}]*max-height:\s*1\.3rem/s,
+      'Add Bet uses the same bounded geometry as its neighboring actions');
+    assert.match(APP_CSS,
+      /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*align-self:\s*center/s,
+      'the compressed Add Bet action is vertically centered');
+    assert.match(APP_CSS,
+      /body\.layout-basic \.df-funds \.df-claim-flip-cta\[data-write\],[\s\S]*?align-self:\s*center/s,
+      'Claim is vertically centered in the compressed Protocol Coins bar too');
+    assert.match(APP_CSS,
+      /\.df-funds:has\(\.df-funds__toggle\[aria-expanded="false"\]\)[\s\S]*?\.df-claim-flip-cta\[data-write\]\s*\{[^}]*transform:\s*translateY\(-0\.38rem\)/s,
+      'the collapsed heading offset is removed from Claim’s visual center');
+    assert.match(APP_CSS,
+      /\.app-daily-flip \.df-next-bet \.df-flip-cta\[data-write\],[\s\S]*?height:\s*1\.3rem/s,
+      'Add Bet participates in the shared action-control rule');
     assert.match(APP_CSS,
       /@media \(max-width: 520px\)[\s\S]*?\.df-next-bet__arrows button\s*\{[^}]*min-width:\s*0[^}]*min-height:\s*0/s,
       'the two compact stepper halves cannot inherit 44px mobile button minimums');
@@ -1937,6 +2041,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.ok(box, 'sDGNRS is the third cell in the shared display');
     assert.equal(value.textContent, '123M sDGNRS',
       'sDGNRS balances at 100M and above drop the decimal');
+    assert.equal(value.title, '123450000 sDGNRS',
+      'the compact cell retains the exact balance on hover');
+    assert.equal(value.getAttribute('aria-label'), 'sDGNRS balance: 123450000 sDGNRS');
     assert.equal(burn.disabled, false, 'the owner can open the burn flow with at least 1 sDGNRS');
     assert.equal(el.querySelector('.df-sdgnrs-badge'), null,
       'the three-flame reward badge stays out of the main balance UI');
@@ -2031,7 +2138,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(dialog.hidden, false);
     assert.equal(reads, 1);
     assert.equal(el.querySelector('[data-bind="df-charity-level"]').textContent, '43');
-    assert.equal(el.querySelector('[data-bind="df-charity-power"]').textContent, '12K sDGNRS');
+    assert.equal(el.querySelector('[data-bind="df-charity-power"]').textContent, '12.3K sDGNRS');
     assert.equal(el.querySelector('[data-bind="df-charity-supported"]').textContent, '0 / 2');
     assert.match(el.innerHTML, /Approval voting/);
     assert.match(el.innerHTML, /contract has no downvote action/);
@@ -2109,6 +2216,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
 
     const target = 2_000n * (10n ** 18n);
+    const normalAmount = el.querySelector('[name="df-amount"]');
+    normalAmount.value = '1375';
     document.dispatchEvent({
       type: 'quest:activate',
       detail: { questType: 2, target: String(target), variant: 'secondary', submit: true },
@@ -2119,6 +2228,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       ['static', TEST_ADDR, target],
       ['send', TEST_ADDR, target],
     ]);
+    assert.equal(normalAmount.value, '1375',
+      'the one-off quest stake does not replace Tomorrow\'s Bet draft');
     el.disconnectedCallback();
   });
 

@@ -71,6 +71,11 @@ function makeFakeElement(tag = 'div') {
         if (idMatch) child.attributes.id = idMatch[1];
         const hrefMatch = /\bhref="([^"]+)"/.exec(attrs);
         if (hrefMatch) child.attributes.href = hrefMatch[1];
+        const tabindexMatch = /\btabindex="([^"]+)"/.exec(attrs);
+        if (tabindexMatch) {
+          child.attributes.tabindex = tabindexMatch[1];
+          child.tabIndex = Number(tabindexMatch[1]);
+        }
         const classMatch = /\bclass="([^"]+)"/.exec(attrs);
         if (classMatch) {
           for (const c of classMatch[1].split(/\s+/)) child.classList.add(c);
@@ -959,7 +964,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       'the card shows banked progress instead of replacing it with BUY 1 TICKET',
     );
     assert.match(levelSlot.getAttribute('aria-label') || '', /Deity pass recognized/);
-    assert.match(levelSlot.getAttribute('aria-label') || '', /next qualifying afKing purchase/);
+    assert.match(levelSlot.getAttribute('aria-label') || '', /four active-level ticket entries/);
     assert.equal(levelSlot.classList.contains('qst-slot--gated'), false,
       'a completion prerequisite no longer greys out progress that the contract is banking');
     assert.equal(levelSlot.classList.contains('qst-slot--actionable'), true);
@@ -981,6 +986,62 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     }]);
 
     document.removeEventListener('quest:activate', listener);
+    el.disconnectedCallback();
+  });
+
+  test('an over-target level quest is complete even while the auxiliary eligibility flag lags', async () => {
+    _fetchHandler = async () => makeQuestsPayload({
+      afkingActive: true,
+      questStreak: { baseStreak: 0, lastCompletedDay: 0 },
+      levelQuest: {
+        level: 7,
+        questType: 2,
+        progress: '40000000000000000000000',
+        target: '20000000000000000000000',
+        completed: false,
+        eligible: false,
+      },
+      scoreBreakdown: {
+        questStreakPoints: 0,
+        mintCountPoints: 0,
+        affiliatePoints: 0,
+        totalBps: 8000,
+        passBonus: { kind: 'deity', points: 80 },
+      },
+    });
+
+    const el = instantiate();
+    await settle(40);
+    const levelSlot = el.querySelectorAll('.qst-slot')[2];
+    assert.equal(levelSlot.querySelector('.qst-slot-status')?.textContent, 'COMPLETE');
+    assert.equal(levelSlot.querySelector('.qst-slot-note'), null);
+    assert.equal(levelSlot.classList.contains('qst-slot--completed'), true);
+    assert.equal(levelSlot.getAttribute('role'), null);
+    assert.doesNotMatch(levelSlot.textContent || '', /ACTIVITY NEEDED|FINALIZE/);
+    el.disconnectedCallback();
+  });
+
+  test('an eligible target-met level quest renders complete without a made-up finalize step', async () => {
+    _fetchHandler = async () => makeQuestsPayload({
+      levelQuest: {
+        level: 7,
+        questType: 2,
+        progress: '40000000000000000000000',
+        target: '20000000000000000000000',
+        completed: false,
+        eligible: true,
+      },
+    });
+
+    const el = instantiate();
+    await settle(40);
+    const levelSlot = el.querySelectorAll('.qst-slot')[2];
+    assert.equal(levelSlot.querySelector('.qst-slot-status')?.textContent, 'COMPLETE');
+    assert.equal(levelSlot.querySelector('.qst-slot-note'), null);
+    assert.equal(levelSlot.classList.contains('qst-slot--completed'), true);
+    assert.equal(levelSlot.getAttribute('role'), null,
+      'a completed quest does not offer another action dialog');
+    assert.doesNotMatch(levelSlot.textContent || '', /READY TO COMPLETE|FINALIZE/);
     el.disconnectedCallback();
   });
 
@@ -1136,6 +1197,28 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       String(streakEl.textContent || ''),
       /7/,
       `streak display contains "7" via textContent; got "${streakEl.textContent}"`,
+    );
+
+    el.disconnectedCallback();
+  });
+
+  test('owned streak shields subtly outline the normal streak bubble without shield text', async () => {
+    _fetchHandler = async () => makeQuestsPayload({ shields: 2 });
+    const el = instantiate();
+    await settle(40);
+
+    const chip = el.querySelector('.qst-streak-chip');
+    assert.equal(chip.classList.contains('qst-streak-chip--shielded'), true);
+    assert.equal(chip.getAttribute('data-streak-shields'), '2');
+    assert.equal(el.querySelector('[data-bind="qst-streak-shields"]'), null,
+      'shield ownership adds no icon, count, or label beside the streak');
+    assert.doesNotMatch(chip.textContent, /SHIELD/i);
+    assert.match(chip.getAttribute('title'), /2 streak shields.*protects one missed quest day/i);
+    assert.equal(chip.getAttribute('tabindex'), '0', 'the shield explanation is keyboard reachable');
+    assert.match(
+      APP_CSS,
+      /qst-streak-chip--shielded\s*\{[^}]*outline:\s*1px solid rgba\(255, 255, 255, 0\.52\)[^}]*0 0 7px rgba\(255, 255, 255, 0\.13\)/s,
+      'the held shield is only a subtle white outline around the normal bubble',
     );
 
     el.disconnectedCallback();

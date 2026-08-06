@@ -87,13 +87,15 @@ function joFormatCoin(amtStr) {
 // here to display WHOLE tickets. (Pre-v76 the event field was mislabeled as a
 // whole-ticket count and this divided by 1 — over-counting jackpot ticket wins
 // 4×.) Single chokepoint for the ~20 jackpot-ticket display call sites.
-// Accepts number | string | null | undefined; returns an integer.
+// Accepts number | string | null | undefined; returns a quarter-ticket exact
+// quantity. One emitted entry is 0.25 tickets and must never be rounded into a
+// made-up whole-ticket count.
 export const ENTRIES_PER_TICKET = 4;
 export function joScaledToTickets(count) {
   if (count == null || count === '') return 0;
   const n = typeof count === 'number' ? count : Number(count);
   if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.round(n / ENTRIES_PER_TICKET);
+  return n / ENTRIES_PER_TICKET;
 }
 
 /**

@@ -89,6 +89,20 @@ describe('bingo event watcher', () => {
     assert.equal(counts.reduce((sum, count) => sum + count, 0), 3);
   });
 
+  test('unrevealed entries do not inflate quadrant 0 slot 0 (crypto/pink/XRP)', () => {
+    const payload = {
+      cards: [{ entries: [
+        { traitId: 0 },       // crypto, pink, XRP — the one real hit
+        { traitId: null },    // unrevealed; Number(null) is 0, must not count
+        { traitId: null },
+        { traitId: undefined },
+      ] }],
+    };
+    const counts = bingo.bingoQuadrantEntryCounts(payload, 0);
+    assert.equal(counts[0], 1);
+    assert.equal(counts.reduce((sum, count) => sum + count, 0), 1);
+  });
+
   test('publishes one durable reveal, then consumed overlap logs cannot reopen it', async () => {
     const claimLogs = [
       log('FirstSymbolBingo', [PLAYER, 31, 2], { index: 4, tx: '0xbeef' }),

@@ -63,8 +63,9 @@ describe('fmtEth (display scale)', () => {
     assert.equal(fmtEth(2344077355857018n), '2,344.077');   // HEADLINE_DIGITS = 3 (user call)
   });
 
-  test('zero renders padded, not bare', () => {
-    assert.equal(fmtEth(0n), '0.000');
+  test('zero and whole prizes do not retain accounting-style padding', () => {
+    assert.equal(fmtEth(0n), '0');
+    assert.equal(fmtEth(1_000_000_000_000n), '1');
   });
 
   test('honours the digits argument (delta floater uses 4)', () => {
@@ -75,7 +76,7 @@ describe('fmtEth (display scale)', () => {
   test('a single-ticket-scale move is still visible at 4 digits', () => {
     // 0.04 ETH display = 4e10 raw wei at the /1M testnet scale. If the headline
     // rounded to 2 digits this would vanish; the ticker exists to show it.
-    assert.equal(fmtEth(40_000_000_000n, 4), '0.0400');
+    assert.equal(fmtEth(40_000_000_000n, 4), '0.04');
   });
 });
 

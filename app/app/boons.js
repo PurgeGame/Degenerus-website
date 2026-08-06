@@ -210,8 +210,11 @@ const BOON_PRODUCT_NAMES = Object.freeze({
 /** Compact, effective-value copy for a deity holder's daily issuance slots. */
 export function boonTypePresentation(boonType) {
   const ui = BOON_UI[Number(boonType)];
-  if (!ui) return { name: 'Mystery boon', effect: '', detail: 'Daily deity boon' };
+  if (!ui) {
+    return { product: 'unknown', name: 'Mystery boon', effect: '', detail: 'Daily deity boon' };
+  }
   return {
+    product: ui.product,
     name: Number(boonType) === 28 ? 'Whale pass' : (BOON_PRODUCT_NAMES[ui.product] || 'Boon'),
     effect: String(ui.label || '').replace(/^BOON\s*/i, ''),
     detail: ui.detail,

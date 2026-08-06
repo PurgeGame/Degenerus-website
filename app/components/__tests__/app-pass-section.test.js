@@ -284,6 +284,7 @@ const PANEL_SRC = readFileSync(
   new URL('../app-pass-section.js', import.meta.url),
   'utf8',
 );
+const INDEX_HTML = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 
 // ---------------------------------------------------------------------------
 // Fake contract harness
@@ -481,6 +482,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.match(css, /\.pass-product-row--whale\s*\{[^}]*linear-gradient/s);
     assert.match(css, /\.pass-product-row--lazy\s*\{[^}]*linear-gradient/s);
     assert.match(css, /\.pass-product-sigil--deity\s*\{[^}]*radial-gradient/s);
+    assert.doesNotMatch(css, /\.pass-product-row:hover\s*\{[^}]*translateY/s,
+      'hovering a pass cannot move the whole bar');
+    assert.match(css,
+      /\.pass-product-row \.pass-whale-input\s*\{[^}]*height:\s*2\.15rem[\s\S]*?\.pass-product-row--whale \.pass-whale-buy\s*\{[^}]*height:\s*2\.15rem/s,
+      'Whale quantity and Buy controls share a desktop height');
     assert.match(css,
       /\.pass-afking__wallet\s*\{[^}]*width:\s*100%[^}]*flex-wrap:\s*wrap/s,
       'the AFKing wallet controls can wrap cleanly on a phone');
@@ -492,19 +498,22 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
   test('premium pass cards state their contract-backed bonuses and elevate live pricing', () => {
     const el = instantiate();
     for (const benefit of [
-      '1 TICKET / LEVEL', '+85% DEGEN SCORE', '1 TICKET / 2 LEVELS',
+      '1 TICKET / LEVEL', '+85% DEGEN SCORE',
       '+115% DEGEN SCORE', '+155% DEGEN SCORE', '10% LOOTBOX',
       '3 DAILY BOONS', 'AFKING SEAT',
     ]) {
       assert.match(el.innerHTML, new RegExp(benefit.replace(/[+]/g, '\\+')));
     }
     assert.match(el.innerHTML, /PASS PRICE/);
-    assert.match(el.innerHTML, /UNIT PRICE/);
+    assert.doesNotMatch(el.innerHTML, /UNIT PRICE|pass-whale-price/,
+      'Whale has no separate per-unit price instrument');
     assert.match(el.innerHTML, /LIVE PRICE/);
     assert.match(el.innerHTML, /data-bind="pass-whale-lootbox"/,
       'the Whale card promotes its bundled lootbox as a first-class bonus');
     assert.match(el.innerHTML, /data-bind="pass-lazy-lootbox"/,
       'the Lazy card promotes its bundled lootbox as a first-class bonus');
+    assert.doesNotMatch(el.innerHTML, />1 TICKET \/ 2 LEVELS</,
+      'the Whale description already explains its ticket cadence');
 
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.match(css, /\.pass-product-price > strong\s*\{[^}]*font:\s*900 0\.9rem/s,
@@ -521,12 +530,19 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     await settle(40);
 
     const benefit = el.querySelector('[data-bind="pass-whale-lootbox"]');
+    const buy = el.querySelector('[data-bind="pass-whale-buy"]');
+    const seat = el.querySelector('[data-bind="pass-whale-afking-seat"]');
     assert.equal(benefit.textContent, 'BONUS LOOTBOX · 0.4 ETH',
       'a standard 4 ETH pass advertises its actual 0.4 ETH lootbox');
+    assert.equal(buy.textContent, 'BUY WHALE PASS · 4 ETH',
+      'the purchase action contains the final one-pass price');
+    assert.equal(seat.hidden, false, 'a wallet without a seat sees the one-time seat benefit');
     const quantity = el.querySelector('[name="pass-whale-qty"]');
     quantity.value = '2';
     quantity.dispatchEvent({ type: 'input' });
-    assert.equal(benefit.textContent, 'BONUS LOOTBOX · 0.8 ETH TOTAL');
+    assert.equal(benefit.textContent, 'BONUS LOOTBOX · 0.8 ETH');
+    assert.equal(buy.textContent, 'BUY WHALE PASS · 8 ETH',
+      'changing quantity updates the final total directly in the purchase action');
 
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.match(css, /\.pass-lootbox-perk\s*\{[^}]*font-size:\s*0\.67rem/s,
@@ -567,6 +583,25 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(el.querySelector('[data-bind="pass-lazy-score"]').textContent, '+35% DEGEN SCORE');
     assert.equal(el.querySelector('[data-bind="pass-whale-score"]').textContent, '+65% DEGEN SCORE');
     assert.equal(el.querySelector('[data-bind="pass-deity-score"]').textContent, '+105% DEGEN SCORE');
+    el.disconnectedCallback();
+  });
+
+  test('a zero projected Degen Score gain leaves no empty bonus chip', async () => {
+    const maxed = {
+      mintLevelStreakPoints: 50,
+      mintCountPoints: 25,
+      passBonus: { points: 80 },
+    };
+    _fetchHandler = async (url) => String(url).includes('/player/')
+      ? { scoreBreakdown: maxed, level: 12 }
+      : { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
+    const el = instantiate();
+    await settle(40);
+    for (const bind of ['pass-lazy-score', 'pass-whale-score', 'pass-deity-score']) {
+      const chip = el.querySelector(`[data-bind="${bind}"]`);
+      assert.equal(chip.hidden, true);
+      assert.equal(chip.textContent, '');
+    }
     el.disconnectedCallback();
   });
 
@@ -696,7 +731,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('owned Deity pass moves to the top, defaults open, and remains collapsible', async () => {
+  test('owned Deity pass leaves the shop while its actions remain above Tickets', async () => {
     passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(new Map([
       [11, CONNECTED.toUpperCase()],
     ])));
@@ -706,22 +741,33 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
     const select = el.querySelector('[data-bind="pass-deity-select"]');
     const buy = el.querySelector('[data-bind="pass-deity-buy"]');
+    const deitySection = el.querySelector('[data-bind="pass-deity-details"]');
+    assert.equal(deitySection.hidden, true,
+      'the entire owned Deity product leaves the Passes/AFKing shop');
+    assert.equal(deitySection.getAttribute('data-deity-owned'), 'true');
     assert.equal(select.hidden, true, 'owned pass no longer renders a selector');
     assert.equal(buy.hidden, true, 'owned pass has no impossible repurchase button');
-    assert.equal(el.querySelector('[data-bind="pass-deity-owned-name"]').textContent, 'God of Cancer');
-    assert.equal(el.querySelector('[data-bind="pass-deity-owned-name"]').hidden, false);
-    assert.equal(el.querySelector('[data-bind="pass-deity-hint"]').textContent, 'God of Cancer');
-    assert.equal(el.querySelector('[data-bind="pass-deity-meta-label"]').textContent, 'OWNED');
-    assert.equal(el.querySelector('[data-bind="pass-deity-eyebrow"]').textContent, 'YOUR DEITY PASS');
-    const details = el.querySelector('[data-bind="pass-deity-details"]');
-    assert.equal(details.open, true, 'a deity holder gets the owned controls open automatically');
-    assert.equal(el.querySelector('[data-bind="pass-deity-summary"]').hidden, false,
-      'the owned pass keeps a clear, collapsible heading');
-    assert.equal(el.querySelector('[data-bind="pass-deity-summary"]').getAttribute('aria-disabled'), null,
-      'the holder can collapse the default-open controls');
-    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
-    assert.match(css, /\.pass-deity-section--holder\s*\{[^}]*order:\s*-2/s,
-      'owned Deity controls are visually ordered above the pass shop');
+    assert.equal(el.querySelector('[data-bind="pass-deity-boons"]'), null);
+    assert.equal(el.querySelector('[data-bind="pass-deity-curse"]'), null,
+      'daily actions no longer live inside the pass/AFKing area');
+    for (const bind of ['pass-lazy-score', 'pass-whale-score', 'pass-deity-score']) {
+      const score = el.querySelector(`[data-bind="${bind}"]`);
+      assert.equal(score.hidden, true, `${bind} is redundant for a Deity holder`);
+      assert.equal(score.textContent, '');
+    }
+    for (const bind of [
+      'pass-lazy-afking-seat',
+      'pass-whale-afking-seat',
+      'pass-deity-afking-seat',
+      'pass-shop-seat-copy',
+    ]) {
+      assert.equal(el.querySelector(`[data-bind="${bind}"]`).hidden, true,
+        `${bind} does not advertise a second non-stackable seat`);
+    }
+    assert.ok(
+      INDEX_HTML.indexOf('<app-deity-desk>') < INDEX_HTML.indexOf('<app-tickets-inventory>'),
+      'the holder action desk mounts immediately above Tickets',
+    );
     assert.ok(
       el.innerHTML.indexOf('data-bind="pass-afking"')
         > el.innerHTML.indexOf('data-bind="pass-deity-details"'),
@@ -753,34 +799,6 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'save and cancel are grouped away from price metadata');
   });
 
-  test('a deity holder gets a quick 200 FLIP curse action wired to their pass id', async () => {
-    const passContract = makeFakePassContract();
-    passesMod.__setContractFactoryForTest(() => passContract);
-    passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(new Map([
-      [11, CONNECTED],
-    ])));
-
-    const el = instantiate();
-    await settle(60);
-
-    const section = el.querySelector('[data-bind="pass-deity-curse"]');
-    const target = el.querySelector('[name="pass-deity-curse-target"]');
-    const button = el.querySelector('[data-bind="pass-deity-curse-button"]');
-    assert.equal(section.hidden, false, 'curse row is visible to the connected deity holder');
-    assert.match(button.textContent, /200 FLIP/);
-
-    target.value = '0xcd34000000000000000000000000000000000000';
-    button.dispatchEvent({ type: 'click' });
-    await settle(60);
-
-    assert.deepEqual(passContract._calls.smite, [[
-      11,
-      '0xCd34000000000000000000000000000000000000',
-    ]]);
-    assert.equal(target.value, '', 'confirmed curse clears the target field');
-    el.disconnectedCallback();
-  });
-
   test('a pass holder with an auto-minted seat goes straight to the subscription editor', async () => {
     // Seats auto-mint with the pass now (GAME _grantSeatCoin -> token mintSeatFor), so there is
     // no claim row and no claim button: holding the seat IS the entry condition.
@@ -798,6 +816,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
     const el = instantiate();
     await settle(60);
+    assert.equal(el.querySelector('[data-bind="pass-whale-afking-seat"]').hidden, true,
+      'Whale stops advertising an AFKing seat once the non-stackable seat is owned');
     assert.equal(el.querySelector('[data-bind="pass-afking"]').hidden, false,
       'seat holder sees the AFKing area');
     assert.equal(el.querySelector('[data-bind="pass-afking-claim"]'), null,
@@ -947,6 +967,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const claim = el.querySelector('[data-bind="pass-afking-flip-claim"]');
     assert.equal(claim.hidden, false);
     assert.equal(claim.textContent, 'CLAIM 275 FLIP');
+    assert.equal(claim.getAttribute('aria-label'), 'Claim 275 bonus FLIP');
     claim.dispatchEvent({ type: 'click' });
     await settle(60);
 

@@ -178,10 +178,16 @@ function _pendingPackPreviews(rows) {
       if (expectedEntries === 0) previews.push({ level, count: null, foilPack: false });
     }
   }
-  return previews.map((preview, index) => ({
+  // Mirror the physical OPEN ALL order: preserve chronology within each kind,
+  // but keep every special foil pack after all ordinary packs.
+  const ordered = [
+    ...previews.filter((preview) => !preview.foilPack),
+    ...previews.filter((preview) => preview.foilPack),
+  ];
+  return ordered.map((preview, index) => ({
     ...preview,
     packIndex: index + 1,
-    packCount: previews.length,
+    packCount: ordered.length,
   }));
 }
 
@@ -1417,24 +1423,28 @@ export async function checkPendingPacks({ address, levels = null } = {}) {
     }));
     const pieces = [...standardPieces, ...foilTickets];
 
-    // Ordinary tickets open first; foil lines get a separate, unmistakable
-    // wrapper and presentation as the special final pack. Each series keeps
-    // its own OPEN ALL batch so choosing the fast path for ordinary packs does
-    // not skip the foil opening beat.
+    // Ordinary tickets open first; foil lines retain their unmistakable
+    // wrapper and presentation as the special final pack. They share one
+    // batch so OPEN ALL includes the foil pack with the final pack index.
     const groups = [
       { foilPack: false, pieces: standardPieces },
       { foilPack: true, pieces: foilTickets },
     ];
-    let queuedForRecord = 0;
+    const packSpecs = [];
     for (const group of groups) {
-      if (group.pieces.length === 0) continue;
-      const packCount = Math.ceil(group.pieces.length / MAX_TICKETS_PER_PACK);
-      const batchId = `${addr}:${lvl}:${Number(rec.at || 0)}:${group.foilPack ? 'foil' : 'standard'}`;
-      for (let i = 0; i < packCount; i++) {
-        const packPieces = group.pieces.slice(
-          i * MAX_TICKETS_PER_PACK,
-          (i + 1) * MAX_TICKETS_PER_PACK,
-        );
+      for (let offset = 0; offset < group.pieces.length; offset += MAX_TICKETS_PER_PACK) {
+        packSpecs.push({
+          foilPack: group.foilPack,
+          pieces: group.pieces.slice(offset, offset + MAX_TICKETS_PER_PACK),
+        });
+      }
+    }
+    const batchId = `${addr}:${lvl}:${Number(rec.at || 0)}:packs`;
+    const packCount = packSpecs.length;
+    const totalEntryCount = pieces.reduce((sum, piece) => sum + piece.entryCount, 0);
+    let queuedForRecord = 0;
+    for (let i = 0; i < packSpecs.length; i += 1) {
+        const { foilPack, pieces: packPieces } = packSpecs[i];
         const packTickets = packPieces
           .filter((piece) => piece.kind === 'ticket')
           .map((piece) => ({
@@ -1446,16 +1456,15 @@ export async function checkPendingPacks({ address, levels = null } = {}) {
           .filter((piece) => piece.kind === 'entry')
           .map((piece) => ({ traitId: piece.traitId }));
         const packEntryCount = packPieces.reduce((sum, piece) => sum + piece.entryCount, 0);
-        const groupEntryCount = group.pieces.reduce((sum, piece) => sum + piece.entryCount, 0);
         queueReveal({
           kind: 'pack',
-          title: group.foilPack ? `FOIL PACK · LEVEL ${lvl}` : `LEVEL ${lvl} TICKETS`,
+          title: foilPack ? `FOIL PACK · LEVEL ${lvl}` : `LEVEL ${lvl} TICKETS`,
           level: lvl,
-          foilPack: group.foilPack,
+          foilPack,
           tickets: packTickets,
           entries: packEntries,
           count: _ticketCountFromEntries(packEntryCount),
-          totalCount: _ticketCountFromEntries(groupEntryCount),
+          totalCount: _ticketCountFromEntries(totalEntryCount),
           batchId,
           packIndex: i + 1,
           packCount,
@@ -1472,7 +1481,6 @@ export async function checkPendingPacks({ address, levels = null } = {}) {
         });
         queued += 1;
         queuedForRecord += 1;
-      }
     }
     if (queuedForRecord > 0) {
       _activePackCards.set(activeKey, new Set(pieces.map((piece) => String(piece.key))));

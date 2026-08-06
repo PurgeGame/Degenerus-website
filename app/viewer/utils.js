@@ -41,9 +41,32 @@ export function formatEth(weiString) {
   const num = formatWei(weiString, 18);
   if (num === 0) return '0';
   if (num < 0.001) return '<0.001';
-  if (num < 1) return num.toFixed(4);
-  if (num < 100) return num.toFixed(3);
-  return num.toFixed(2);
+  const fixed = num < 1
+    ? num.toFixed(4)
+    : num < 100
+      ? num.toFixed(3)
+      : num.toFixed(2);
+  return fixed.replace(/0+$/, '').replace(/\.$/, '');
+}
+
+/**
+ * Compact jackpot ETH without rounding the displayed payout upward.
+ * Solo buckets show at most tenths below 1,000 ETH and whole ETH from 1,000.
+ */
+export function formatEthTruncated(weiString) {
+  let scaledWei;
+  try { scaledWei = BigInt(weiString || '0') * ETH_DISPLAY_SCALE; }
+  catch { return '0'; }
+  if (scaledWei <= 0n) return '0';
+
+  const ethWei = 10n ** 18n;
+  const whole = scaledWei / ethWei;
+  const wholeLabel = whole.toLocaleString('en-US');
+  if (whole >= 1_000n) return wholeLabel;
+
+  const tenths = (scaledWei % ethWei) / (ethWei / 10n);
+  if (tenths === 0n) return whole === 0n ? '<0.1' : wholeLabel;
+  return `${wholeLabel}.${tenths}`;
 }
 
 /** Format FLIP wei string to human-readable string. FLIP is NOT /1M-scaled on testnet. */

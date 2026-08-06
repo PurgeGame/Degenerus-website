@@ -260,10 +260,14 @@ export async function refreshAfterAction() {
   ]);
 }
 
-// Visibility change handler: re-fetch when tab becomes visible
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    pollGameState();
-    pollPlayerData();
-  }
-});
+// Visibility change handler: re-fetch when tab becomes visible. Keep the
+// module importable by headless tests and server-side tooling, where there is
+// no browser document.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      pollGameState();
+      pollPlayerData();
+    }
+  });
+}

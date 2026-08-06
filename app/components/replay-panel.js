@@ -17,14 +17,26 @@ import {
 // swap the wallet-tainted utils.js import for the wallet-free viewer/utils.js
 // equivalents so play/ can consume this component via a recursive-import walk
 // without tripping the SHELL-01 guardrail on `ethers`.
-import { formatEth, formatFlip, truncateAddress } from '../viewer/utils.js';
+import {
+  formatEth,
+  formatEthTruncated,
+  formatFlip,
+  truncateAddress,
+} from '../viewer/utils.js';
 import { API_BASE, BADGE_QUADRANTS, BADGE_COLORS, BADGE_ITEMS, badgeCircularPath } from '../app/constants.js';
 import { batch, update } from '../app/reactive-store.js';
 import { setMajorDrawActivity } from '../app/major-draw-activity.js';
+import { isMuted as isSfxMuted } from '../app/jackpot-sfx.js';
+import { celebrateProtocol } from '../protocol-celebration.js';
 
 const DAY_DATA_RETRY_BASE_MS = 1_500;
 const DAY_DATA_RETRY_MAX_MS = 15_000;
 const RATE_LIMIT_FALLBACK_MS = 15_000;
+const MAIN_SPIN_LABEL = 'SPIN JACKPOT';
+const BONUS_SPIN_LABEL = 'BONUS SPIN';
+const BONUS_SPIN_LOCKED_LABEL = 'SCRATCH TO UNLOCK BONUS';
+const SPIN_AGAIN_LABEL = 'SPIN AGAIN';
+const SPIN_PROCESSING_LABEL = 'JACKPOT PROCESSING';
 let replayApiRetryAfterUntil = 0;
 
 function noteReplayApiResponse(response, now = Date.now()) {
@@ -147,6 +159,10 @@ function formatPrizeAmount(weiString, currency) {
 // --- Component ---
 
 class ReplayPanel extends HTMLElement {
+  static get observedAttributes() {
+    return ['data-day-loading', 'data-day-warming'];
+  }
+
   #rngDays = [];       // [{day, finalWord}]
   #players = [];       // [address, ...]
   #tickets = [];       // [{address, entryCount, totalMintedOnLevel}] — entryCount is ENTRIES (4 = 1 ticket)
@@ -192,7 +208,7 @@ class ReplayPanel extends HTMLElement {
   #centerScratched = false;                    // center diamond scratch state
   #centerScratchGrid = null;                   // center diamond scratch grid
 
-  // Bonus Roll (Roll 2) state — reuses the main widget
+  // Bonus Spin (Roll 2) state — reuses the main widget
   #bonusPhase = false;          // true while bonus roll is active (Roll 2 reveal)
   #mainScratchComplete = false; // Roll 2 stays locked until Roll 1 is uncovered
   #mainAllRed = false;          // no owned quadrant/center win: Roll 2 may start immediately
@@ -202,9 +218,8 @@ class ReplayPanel extends HTMLElement {
   #bonusQuadrants = new Set();  // contract quadrant numbers with roll2.future wins
 
   // Single-button mode (`single-button` attribute, set by /app/): the main
-  // Reveal button is the ONLY roll trigger — after Roll 1 it becomes the Bonus
-  // Roll trigger, and the day ends with no button rather than a "Replay"
-  // re-spin. /beta/ and /play/ keep the separate Bonus Roll button and Replay.
+  // Spin button is the ONLY roll trigger — after Roll 1 it becomes the Bonus
+  // Spin trigger, and the day ends with no button rather than a replay spin.
   #btnMode = 'reveal';          // 'reveal' | 'bonus' — what reveal-btn fires
   // Public main-draw result under each scratch cover. When the viewed player
   // has no winning entry, the quadrant still reveals its badge, ETH per win,
@@ -269,7 +284,7 @@ class ReplayPanel extends HTMLElement {
             </select>
           </div>
           <button class="btn-primary replay-reveal-btn" data-bind="reveal-btn" disabled>
-            Reveal Draw
+            SPIN JACKPOT
           </button>
         </div>
 
@@ -310,7 +325,7 @@ class ReplayPanel extends HTMLElement {
 
         <div class="replay-bonus-section" data-bind="bonus-section" hidden>
           <button class="btn-primary replay-bonus-btn" data-bind="bonus-btn">
-            Bonus Roll
+            BONUS SPIN
           </button>
           <p class="replay-no-bonus" data-bind="no-bonus" hidden>No bonus this draw</p>
         </div>
@@ -378,8 +393,16 @@ class ReplayPanel extends HTMLElement {
       });
     }
 
+    this.#syncSpinControlState();
     this.refreshDays();
     this.#preloadBadges(); // warm browser cache for all badge SVGs in background
+  }
+
+  attributeChangedCallback(name, oldValue, newValue) {
+    if (oldValue === newValue) return;
+    if (name === 'data-day-loading' || name === 'data-day-warming') {
+      this.#syncSpinControlState();
+    }
   }
 
   disconnectedCallback() {
@@ -539,7 +562,7 @@ class ReplayPanel extends HTMLElement {
     if (reveal) {
       reveal.hidden = false;
       reveal.disabled = false;
-      reveal.textContent = 'Reveal Draw';
+      reveal.textContent = MAIN_SPIN_LABEL;
       reveal.title = '';
     }
     this.#startIdleSpin();
@@ -603,6 +626,7 @@ class ReplayPanel extends HTMLElement {
       if (btn) btn.disabled = true;
       this.setAttribute('data-day-loading', Number.isInteger(target) ? String(target) : '');
       this.setAttribute('aria-busy', 'true');
+      this.#syncSpinControlState();
       return;
     }
     if (Number(this.getAttribute('data-day-loading')) === target) {
@@ -610,6 +634,36 @@ class ReplayPanel extends HTMLElement {
     }
     if (!this.hasAttribute('data-day-warming') && !this.hasAttribute('data-day-loading')) {
       this.removeAttribute('aria-busy');
+    }
+    this.#syncSpinControlState();
+  }
+
+  #syncSpinControlState() {
+    const btn = this.querySelector?.('[data-bind="reveal-btn"]');
+    if (!btn) return;
+    const processing = this.hasAttribute('data-day-warming')
+      || this.hasAttribute('data-day-loading');
+    btn.classList?.toggle('is-processing', processing);
+    if (processing) {
+      btn.disabled = true;
+      btn.textContent = SPIN_PROCESSING_LABEL;
+      btn.setAttribute?.('aria-busy', 'true');
+      btn.setAttribute?.('aria-label', 'Jackpot processing. Spin will be available soon.');
+      btn.title = 'Jackpot processing — spin will be available soon';
+      return;
+    }
+    btn.removeAttribute?.('aria-busy');
+    btn.removeAttribute?.('aria-label');
+    btn.classList?.toggle('is-bonus', this.#btnMode === 'bonus');
+    if (this.#btnMode === 'bonus') {
+      const ready = this.#mainReadyForBonus();
+      btn.textContent = ready ? BONUS_SPIN_LABEL : BONUS_SPIN_LOCKED_LABEL;
+      btn.disabled = !ready || !this.#dayDataReady(this.#selectedDay);
+      btn.title = ready ? '' : 'Scratch the main draw first';
+    } else {
+      btn.textContent = MAIN_SPIN_LABEL;
+      btn.disabled = !this.#dayDataReady(this.#selectedDay);
+      btn.title = '';
     }
   }
 
@@ -1358,6 +1412,12 @@ class ReplayPanel extends HTMLElement {
     }
     if (!loadIsCurrent()) return finishStaleLoad();
 
+    // The loading reel uses the same pink/blue ownership language as the
+    // settled draw. Hydrate this level's traits as soon as its purchase level
+    // is known, even while the exact roll payload is still catching up.
+    await this.#loadPlayerTraits();
+    if (!loadIsCurrent()) return finishStaleLoad();
+
     // A valid draw can have zero winners. RNG + a selected player are enough
     // to run the public board, but only after both exact roll payloads exist.
     const rollDataReady = this.#hasExactDayRolls(dayNum);
@@ -1723,10 +1783,10 @@ class ReplayPanel extends HTMLElement {
 
     const parts = [];
     if (roll1Entries.length > 0) {
-      parts.push('<div class="tip-phase-header">Main Roll</div>' + renderEntryGroup(roll1Entries));
+      parts.push('<div class="tip-phase-header">Main Spin</div>' + renderEntryGroup(roll1Entries));
     }
     if (bonusQuadEntries.length > 0) {
-      parts.push('<div class="tip-phase-header">Bonus Roll</div>' + renderEntryGroup(bonusQuadEntries));
+      parts.push('<div class="tip-phase-header">Bonus Spin</div>' + renderEntryGroup(bonusQuadEntries));
     }
     if (bonusCenterEntries.length > 0) {
       parts.push('<div class="tip-phase-header">Bonus Center</div>' + renderEntryGroup(bonusCenterEntries));
@@ -1759,6 +1819,12 @@ class ReplayPanel extends HTMLElement {
     }
 
     this.#resetCards();
+    const btn = this.querySelector('[data-bind="reveal-btn"]');
+    btn.disabled = true;
+    if (!instant) {
+      btn.classList?.add('is-spinning');
+      btn.textContent = 'PREPARING SPIN…';
+    }
     await this.#loadPlayerTraits(); // ensure traits loaded for spin coloring
     await this.#refreshPlayerEligibility(); // populate #playerHasFutureTickets
     if (this.#selectionKey() !== selectionKey) return false;
@@ -1771,28 +1837,28 @@ class ReplayPanel extends HTMLElement {
     // Map per-player roll1 wins to quadrant prize arrays.
     this.#distributePrizesFromRoll1();
 
-    const btn = this.querySelector('[data-bind="reveal-btn"]');
-    btn.disabled = true;
-    if (!instant) btn.textContent = 'Revealing...';
+    if (!instant) btn.textContent = 'SPINNING…';
 
     const completed = await this.#runSpin(displayTraits, { instant, announce: !persisted });
     if (!completed || this.#selectionKey() !== selectionKey) return false;
+    btn.classList?.remove('is-spinning');
 
     if (this.#singleButton()) {
       // Same button carries Roll 2; with no bonus ahead the day is played out.
       if (this.#hasBonus) {
         this.#btnMode = 'bonus';
-        btn.textContent = 'Bonus Roll';
+        btn.classList?.add('is-bonus');
         btn.disabled = !this.#mainReadyForBonus();
+        btn.textContent = this.#mainReadyForBonus() ? BONUS_SPIN_LABEL : BONUS_SPIN_LOCKED_LABEL;
         btn.title = this.#mainReadyForBonus()
-          ? (this.#mainAllRed && !this.#mainScratchComplete ? 'All red — bonus roll ready' : '')
+          ? (this.#mainAllRed && !this.#mainScratchComplete ? 'All red — bonus spin ready' : '')
           : 'Scratch the main draw first';
       } else {
         btn.hidden = true;
       }
     } else {
       btn.disabled = false;
-      btn.textContent = 'Replay';
+      btn.textContent = SPIN_AGAIN_LABEL;
     }
 
     // After Roll 1 spin: show bonus section
@@ -2009,7 +2075,7 @@ class ReplayPanel extends HTMLElement {
     const noBonus = this.querySelector('[data-bind="no-bonus"]');
     if (!section) return;
 
-    // Single-button mode: the main Reveal button already became "Bonus Roll",
+    // Single-button mode: the main Spin button already became "Bonus Spin",
     // so this section is only ever the no-bonus note.
     if (this.#singleButton()) {
       if (btn) btn.hidden = true;
@@ -2023,8 +2089,9 @@ class ReplayPanel extends HTMLElement {
     if (this.#hasBonus) {
       btn.hidden = false;
       btn.disabled = !this.#mainReadyForBonus();
+      btn.textContent = this.#mainReadyForBonus() ? BONUS_SPIN_LABEL : BONUS_SPIN_LOCKED_LABEL;
       btn.title = this.#mainReadyForBonus()
-        ? (this.#mainAllRed && !this.#mainScratchComplete ? 'All red — bonus roll ready' : '')
+        ? (this.#mainAllRed && !this.#mainScratchComplete ? 'All red — bonus spin ready' : '')
         : 'Scratch the main draw first';
       noBonus.hidden = true;
     } else {
@@ -2067,13 +2134,18 @@ class ReplayPanel extends HTMLElement {
     this.#resetMainWidget();
 
     const btn = this.querySelector('[data-bind="reveal-btn"]');
-    if (btn) { btn.disabled = true; btn.textContent = 'Bonus Roll...'; }
+    if (btn) {
+      btn.disabled = true;
+      btn.classList?.add('is-bonus', 'is-spinning');
+      btn.textContent = 'BONUS SPINNING…';
+    }
 
     // Colouring for this roll comes from the future-level holdings.
     await this.#loadFutureTraits();
     if (this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
     const completed = await this.#runSpin(displayTraits);
     if (!completed || this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
+    btn?.classList?.remove('is-spinning');
 
     if (btn) {
       if (this.#singleButton()) {
@@ -2082,7 +2154,7 @@ class ReplayPanel extends HTMLElement {
         btn.hidden = true;
       } else {
         btn.disabled = false;
-        btn.textContent = 'Replay';
+        btn.textContent = SPIN_AGAIN_LABEL;
       }
     }
     return true;
@@ -2719,7 +2791,7 @@ class ReplayPanel extends HTMLElement {
     if (!this.#bonusPhase) {
       if (hint) {
         hint.textContent = this.#mainAllRed && this.#hasBonus
-          ? 'All red — bonus roll is ready.'
+          ? 'All red — bonus spin is ready.'
           : 'Scratch every quadrant to reveal the draw!';
       }
     } else if (anyScratchable) {
@@ -2804,11 +2876,14 @@ class ReplayPanel extends HTMLElement {
       : Number(summary.winnerCount);
     const num = document.createElement('span');
     const currency = summary.currency === 'FLIP' ? 'FLIP' : 'ETH';
-    num.textContent = summary.perWinWei == null
+    const formattedCurrencyAward = summary.perWinWei == null
       ? '—'
       : currency === 'FLIP'
         ? formatFlip(summary.perWinWei.toString())
-        : formatEth(summary.perWinWei.toString());
+        : currencyWinnerCount === 1
+          ? formatEthTruncated(summary.perWinWei.toString())
+          : formatEth(summary.perWinWei.toString());
+    num.textContent = formattedCurrencyAward;
     const currencyIcon = document.createElement('img');
     currencyIcon.className = 'replay-bucket-eth replay-bucket-currency';
     currencyIcon.src = currency === 'FLIP'
@@ -2828,25 +2903,33 @@ class ReplayPanel extends HTMLElement {
     amount.appendChild(currencyWinners);
     host.appendChild(amount);
 
-    const ticketEntriesPerWinner = summary.ticketEntriesPerWinner == null
-      ? null
-      : Number(summary.ticketEntriesPerWinner);
-    const ticketCountPerWinner = ticketEntriesPerWinner == null
-      || !Number.isFinite(ticketEntriesPerWinner)
-      ? null
-      : joScaledToTickets(ticketEntriesPerWinner);
+    const ticketEntriesMin = Number(
+      summary.ticketEntriesMin ?? summary.ticketEntriesPerWinner,
+    );
+    const ticketEntriesMax = Number(
+      summary.ticketEntriesMax ?? summary.ticketEntriesPerWinner,
+    );
+    const ticketCountMin = Number.isFinite(ticketEntriesMin)
+      ? joScaledToTickets(ticketEntriesMin)
+      : null;
+    const ticketCountMax = Number.isFinite(ticketEntriesMax)
+      ? joScaledToTickets(ticketEntriesMax)
+      : null;
+    const ticketCountLabel = ticketCountMin == null || ticketCountMax == null
+      ? '—'
+      : ticketCountMin === ticketCountMax
+        ? ticketCountMin.toLocaleString('en-US', { maximumFractionDigits: 2 })
+        : `${ticketCountMin.toLocaleString('en-US', { maximumFractionDigits: 2 })}–${ticketCountMax.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
     const ticketWinnerCount = summary.ticketWinnerCount == null
       ? null
       : Number(summary.ticketWinnerCount);
-    const hasTicketAward = ticketCountPerWinner !== 0;
+    const hasTicketAward = ticketCountMax != null && ticketCountMax > 0;
     if (hasTicketAward) {
       const tickets = document.createElement('div');
       tickets.className = 'replay-bucket-tickets';
       const perWinnerTickets = document.createElement('span');
       perWinnerTickets.className = 'replay-bucket-ticket-count';
-      perWinnerTickets.textContent = ticketCountPerWinner == null
-        ? '—'
-        : ticketCountPerWinner.toLocaleString();
+      perWinnerTickets.textContent = ticketCountLabel;
       const ticketIcon = document.createElement('span');
       ticketIcon.className = 'replay-bucket-ticket-icon';
       ticketIcon.setAttribute('aria-hidden', 'true');
@@ -2880,18 +2963,16 @@ class ReplayPanel extends HTMLElement {
 
     const perWin = summary.perWinWei == null
       ? `unknown ${currency}`
-      : `${currency === 'FLIP'
-        ? formatFlip(summary.perWinWei.toString())
-        : formatEth(summary.perWinWei.toString())} ${currency}`;
+      : `${formattedCurrencyAward} ${currency}`;
     const currencyWinnersLabel = Number.isFinite(currencyWinnerCount)
       ? `${currencyWinnerCount} currency winner${currencyWinnerCount === 1 ? '' : 's'}`
       : 'unknown currency winners';
     const ticketWinnersLabel = Number.isFinite(ticketWinnerCount)
       ? `${ticketWinnerCount} ticket winner${ticketWinnerCount === 1 ? '' : 's'}`
       : 'unknown ticket winners';
-    const ticketLabel = ticketCountPerWinner == null
+    const ticketLabel = ticketCountMin == null || ticketCountMax == null
       ? 'unknown tickets'
-      : `${ticketCountPerWinner} ticket${ticketCountPerWinner === 1 ? '' : 's'}`;
+      : `${ticketCountLabel} ticket${ticketCountMin === 1 && ticketCountMax === 1 ? '' : 's'}`;
     const ticketAwardLabel = hasTicketAward
       ? `; ticket award ${ticketLabel}, ${ticketWinnersLabel}`
       : '';
@@ -2942,7 +3023,14 @@ class ReplayPanel extends HTMLElement {
     }
 
     const lines = [];
-    if (ethTotal > 0n) lines.push(`${formatEth(ethTotal.toString())} ETH`);
+    const isSoloBucket = Number(this.#quadPublicSummaries[qIdx]?.winnerCount) === 1
+      || wins.some((win) => win.isSolo);
+    if (ethTotal > 0n) {
+      const formattedEth = isSoloBucket
+        ? formatEthTruncated(ethTotal.toString())
+        : formatEth(ethTotal.toString());
+      lines.push(`${formattedEth} ETH`);
+    }
     if (flipTotal > 0n) lines.push(`${formatFlip(flipTotal.toString())} FLIP`);
     if (dgnrsTotal > 0n) lines.push(`${formatFlip(dgnrsTotal.toString())} DGNRS`);
     // JackpotTicketWin stores entryCount (4 entries = one whole ticket).
@@ -3326,11 +3414,13 @@ class ReplayPanel extends HTMLElement {
         const sharedBtn = this.querySelector('[data-bind="reveal-btn"]');
         if (this.#singleButton() && this.#btnMode === 'bonus' && sharedBtn) {
           sharedBtn.disabled = false;
+          sharedBtn.textContent = BONUS_SPIN_LABEL;
           sharedBtn.title = '';
         }
         const bonusBtn = this.querySelector('[data-bind="bonus-btn"]');
         if (bonusBtn) {
           bonusBtn.disabled = false;
+          bonusBtn.textContent = BONUS_SPIN_LABEL;
           bonusBtn.title = '';
         }
       } else {
@@ -3539,17 +3629,22 @@ class ReplayPanel extends HTMLElement {
     this.#bonusTraitIds = new Set();
     this.#bonusQuadrants = new Set();
     this.#syncDrawToggleAffordance();
-    // Single-button mode hides/relabels the main button as the rolls play out;
-    // a new day (or a re-reveal) puts it back to "Reveal Draw".
+    // Single-button mode hides/relabels the main button as the spins play out;
+    // a new day (or a re-spin) puts it back to the main action.
     this.#btnMode = 'reveal';
     const revealBtn = this.querySelector('[data-bind="reveal-btn"]');
-    if (revealBtn) { revealBtn.hidden = false; revealBtn.textContent = 'Reveal Draw'; }
+    if (revealBtn) {
+      revealBtn.hidden = false;
+      revealBtn.classList?.remove('is-bonus', 'is-spinning');
+      revealBtn.textContent = MAIN_SPIN_LABEL;
+    }
     const bonusSection = this.querySelector('[data-bind="bonus-section"]');
     if (bonusSection) bonusSection.hidden = true;
     const bonusBtn = this.querySelector('[data-bind="bonus-btn"]');
     if (bonusBtn) {
       bonusBtn.disabled = true;
       bonusBtn.hidden = false;
+      bonusBtn.textContent = BONUS_SPIN_LOCKED_LABEL;
       bonusBtn.title = 'Scratch the main draw first';
     }
     const noBonus = this.querySelector('[data-bind="no-bonus"]');
@@ -3559,16 +3654,13 @@ class ReplayPanel extends HTMLElement {
     if (hint) hint.textContent = '';
   }
 
-  async #celebrate() {
+  #celebrate() {
     this.#sfxFanfare();
-    try {
-      const { default: confetti } = await import('canvas-confetti');
-      confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 }, colors: ['#22c55e', '#8b5cf6', '#eab308', '#06b6d4'] });
-      setTimeout(() => {
-        confetti({ particleCount: 25, angle: 60, spread: 55, origin: { x: 0 } });
-        confetti({ particleCount: 25, angle: 120, spread: 55, origin: { x: 1 } });
-      }, 200);
-    } catch {}
+    celebrateProtocol({
+      target: this.querySelector('[data-bind="card-grid"]') || this,
+      tone: 'jackpot',
+      big: true,
+    });
   }
 
   // --- Web Audio SFX: short, dry crypto-slot cues ---
@@ -3601,6 +3693,7 @@ class ReplayPanel extends HTMLElement {
     delay = 0,
     duration = 0.05,
   }) {
+    if (isSfxMuted()) return;
     const ctx = this.#getAudio();
     const start = ctx.currentTime + Math.max(0, delay);
     const stop = start + Math.max(0.012, duration);
@@ -3628,6 +3721,7 @@ class ReplayPanel extends HTMLElement {
     delay = 0,
     duration = 0.025,
   } = {}) {
+    if (isSfxMuted()) return;
     const ctx = this.#getAudio();
     if (typeof ctx.createBuffer !== 'function'
       || typeof ctx.createBufferSource !== 'function'
@@ -3726,7 +3820,7 @@ class ReplayPanel extends HTMLElement {
   }
 
   #sfxScratchStart() {
-    if (this.#scratchNode) return;
+    if (this.#scratchNode || isSfxMuted()) return;
     const ctx = this.#getAudio();
     const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const data = buf.getChannelData(0);

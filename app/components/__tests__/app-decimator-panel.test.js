@@ -31,6 +31,7 @@ function makeFakeElement(tag = 'div') {
     hidden: false,
     disabled: false,
     tabIndex: 0,
+    blurCalls: 0,
     className: '',
     dataset: {},
     style: {},
@@ -114,6 +115,7 @@ function makeFakeElement(tag = 'div') {
       return child;
     },
     remove() { if (this.parentElement) this.parentElement.removeChild(this); },
+    blur() { this.blurCalls += 1; },
     contains(other) {
       if (other === this) return true;
       const stack = [...this.children];
@@ -282,6 +284,9 @@ globalThis.fetch = async (url) => {
 };
 
 function resetDom() {
+  pendingActionsMod.__resetPendingActionsForTest();
+  coinflipMod.__setClaimableReaderForTest(null);
+  passesMod.__resetContractFactoryForTest();
   _docBody = makeFakeElement('body');
   globalThis.document.body = _docBody;
   globalThis.document.querySelector = (sel) => _docBody.querySelector(sel);
@@ -317,10 +322,17 @@ import * as lootboxMod from '../../app/lootbox.js';
 import * as contractsMod from '../../app/contracts.js';
 import * as claimsMod from '../../app/claims.js';
 import * as passesMod from '../../app/passes.js';
+import * as coinflipMod from '../../app/coinflip.js';
+import * as pendingActionsMod from '../../app/pending-actions.js';
 
 // Seats auto-mint with the pass, so `claimSeat`/`canClaimSeat` are gone — holding one is the
 // whole signal.
-function installAfkingReadState({ hasToken = false, active = false, fundingWei = 0n } = {}) {
+function installAfkingReadState({
+  hasToken = false,
+  active = false,
+  fundingWei = 0n,
+  pendingFlipWhole = null,
+} = {}) {
   passesMod.__setAfkingReadContractFactoryForTest(() => ({
     token: {
       balanceOf: async () => hasToken ? 1n : 0n,
@@ -329,6 +341,9 @@ function installAfkingReadState({ hasToken = false, active = false, fundingWei =
       subInfo: async () => [active, active ? 1 : 0, 0, 0],
       afkingSnapshot: async () => [1n, false, [0n], [fundingWei]],
     },
+    ...(pendingFlipWhole == null ? {} : {
+      lens: { subInfoFull: async () => ({ pendingFlip: pendingFlipWhole }) },
+    }),
   }));
 }
 
@@ -710,8 +725,33 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       APP_CSS,
-      /\.app-decimator-panel \.dec-funds__display\s*\{[^}]*height:\s*3\.55rem;/s,
-      'the two digital balance displays shed unused vertical space',
+      /\.app-decimator-panel \.dec-funds:has\(\.dec-funds__summary\[aria-expanded="false"\]\)\s*\{[^}]*height:\s*2\.6rem;/s,
+      'collapsed Available Funds matches the Protocol Coins instrument height',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-funds-stack\s*\{[^}]*margin-top:\s*auto;/s,
+      'the FLIP balance and Available Funds stay tethered together at the bottom',
+    );
+    assert.match(
+      APP_CSS,
+      /\.app-decimator-panel \.dec-funds__display\s*\{[^}]*min-height:\s*2\.7rem;[^}]*height:\s*auto;/s,
+      'expanded source rows have room for their full-size value and controls',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-funds__display\s*\{[^}]*grid-template-rows:\s*minmax\(0\.82rem, auto\) minmax\(1\.25rem, auto\)/s,
+      'the label and value lanes cannot collapse below their contents',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-funds__summary\[aria-expanded="true"\] ~ \.dec-funds__breakdown\s*\{[^}]*border-top:\s*1px solid/s,
+      'opening Available Funds adds one divider below its title',
+    );
+    assert.match(
+      APP_CSS,
+      /\.app-decimator-panel \.dec-funds :is\([\s\S]*?\.dec-funds__priority,[\s\S]*?\.dec-funds__claim,[\s\S]*?\.dec-flip-toggle[\s\S]*?\)\s*\{[^}]*width:\s*5rem;[^}]*min-width:\s*5rem;[^}]*max-width:\s*5rem/s,
+      'Available Funds action buttons all occupy the same fixed column width',
     );
   });
 
@@ -1009,6 +1049,13 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
+  test('a mined lootbox is published to Pending before optional reward enrichment', () => {
+    const confirmedAt = PANEL_SRC.indexOf("new CustomEvent('app-decimator:tx-confirmed'");
+    const enrichmentAt = PANEL_SRC.indexOf('let autoLegs = parseOpenLegsFromReceipt');
+    assert.ok(confirmedAt >= 0 && enrichmentAt > confirmedAt,
+      'receipt-confirmed RNG work must not wait behind boon/reveal RPC enrichment');
+  });
+
   test('both zero → validation error, no tx', async () => {
     const fakeContract = makeFakePurchaseContract();
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
@@ -1081,14 +1128,14 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
-  test('purchase footer renders ETH wallet and claimable as two digital displays', async () => {
+  test('purchase footer renders one Available Funds box with a lazy source breakdown', async () => {
     const price = lootboxMod.scaledTicketPriceWei(12);
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
       if (u.includes('/foil')) return { present: false, level: 12 };
       return {
-        claimableEth: String(price / 2n),
+        claimableEth: String((price / 2n) + 1n),
         flipBalance: '9000000000000000000000',
         coinflip: { claimablePreview: '1200000000000000000000' },
       };
@@ -1097,11 +1144,40 @@ describe('combined ticket + lootbox buy', () => {
     const el = instantiate();
     await settle(60);
     const displays = el.querySelectorAll('.dec-funds__display');
-    assert.equal(displays.length, 2, 'wallet and claimable each get a dedicated display');
+    assert.equal(displays.length, 3, 'claimable, AFKING, and wallet have dedicated source rows');
     assert.ok(displays[0].classList.contains('dec-funds__display--claimable'),
-      'claimable is the top ETH box');
-    assert.ok(displays[1].classList.contains('dec-funds__display--wallet'),
-      'wallet is the bottom ETH box');
+      'claimable is the primary and first source row');
+    assert.ok(displays[1].classList.contains('dec-funds__display--afking'),
+      'AFKING is the second conditional source row');
+    assert.ok(displays[2].classList.contains('dec-funds__display--wallet'),
+      'wallet comes last when the disclosure opens');
+    const toggle = el.querySelector('[data-bind="dec-funds-toggle"]');
+    const breakdown = el.querySelector('[data-bind="dec-funds-breakdown"]');
+    const totalDisplay = el.querySelector('[data-bind="dec-funds-total-display"]');
+    const total = el.querySelector('[data-bind="dec-funds-total"]');
+    assert.notEqual(toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(totalDisplay.hidden, false, 'collapsed Available Funds renders one total row');
+    assert.equal(total.textContent, '3.14', 'the compact figure aggregates every ETH source');
+    assert.equal(displays[0].hidden, true, 'Claimable is source detail, not the compact balance');
+    assert.equal(el.querySelector('[data-bind="dec-funds-use-claimable"]').hidden, true,
+      'the compact primary source does not waste space saying to use itself');
+    assert.equal(el.querySelector('[data-bind="dec-funds-claim"]').hidden, true,
+      'collapsed Available Funds is balance-only');
+    assert.equal(displays[1].hidden, true, 'zero AFKING stays absent');
+    assert.equal(displays[2].hidden, true, 'wallet waits for expansion');
+    toggle.dispatchEvent({ type: 'click', detail: 1 });
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(toggle.blurCalls, 1,
+      'a pointer click releases the retained Available Funds focus treatment');
+    assert.equal(breakdown.hidden, false, 'the shared source list remains one instrument');
+    assert.equal(totalDisplay.hidden, true, 'opening the dropdown replaces Total with its sources');
+    assert.equal(displays[0].hidden, false, 'claimable stays first while expanded');
+    assert.equal(displays[1].hidden, true, 'AFKING does not render without money');
+    assert.equal(displays[2].hidden, false, 'wallet appears last');
+    assert.equal(el.querySelector('[data-bind="dec-funds-use-claimable"]').hidden, true,
+      'the top expanded source still needs no USE button');
+    assert.equal(el.querySelector('[data-bind="dec-funds-use-wallet"]').hidden, false,
+      'a lower funded source can be promoted after expansion');
     assert.equal(el.querySelector('[data-bind="dec-funds-wallet-label"]').textContent, 'WALLET');
     assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, '3.12 ETH');
     assert.equal(el.querySelector('[data-bind="dec-funds-claimable"]').textContent, '0.02');
@@ -1118,7 +1194,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.match(
       APP_CSS,
       /\.dec-funds\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s,
-      'the purchase displays stay stacked claimable-over-wallet',
+      'the purchase source rows stay stacked in one dropdown',
     );
     assert.match(
       APP_CSS,
@@ -1130,19 +1206,102 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-funds__display\s*\{[^}]*"priority label"[^}]*"claim value"/s,
       'each ETH title is directly above its amount while controls keep a left lane',
     );
+    assert.match(
+      APP_CSS,
+      /\.dec-funds__breakdown\[hidden\]\s*\{[^}]*display:\s*none !important/s,
+      'closing the disclosure removes the entire source-detail list from layout',
+    );
+    for (const selector of ['inv-disclosure__chevron', 'dec-funds__chevron', 'df-funds__chevron']) {
+      const rule = APP_CSS.match(new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`))?.[1] || '';
+      assert.match(rule, /width:\s*0\.42rem/);
+      assert.match(rule, /height:\s*0\.42rem/);
+      assert.match(rule, /border-right:\s*1\.5px solid currentColor/);
+      assert.match(rule, /translateY\(-0\.1rem\) rotate\(45deg\)/,
+        `${selector} uses the shared closed-arrow geometry`);
+    }
     el.disconnectedCallback();
   });
 
-  test('wallet display includes the acting player AFKing funding', async () => {
+  test('Available Funds groups large ETH balances with commas', async () => {
+    contractsMod.setProvider(makeFakeProvider(CONNECTED, 12_345_670_000_000_000n));
+    _fetchHandler = async (url) => (
+      String(url).includes('/game/state')
+        ? DEFAULT_GAME_STATE
+        : { claimableEth: '1', flipBalance: '0', pending: {} }
+    );
+
+    const el = instantiate();
+    await settle(60);
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
+    assert.equal(
+      el.querySelector('[data-bind="dec-funds-wallet"]').textContent,
+      '12,345.67 ETH',
+    );
+    el.disconnectedCallback();
+  });
+
+  test('Available Funds defaults to Claimable then expands to AFKING and Wallet', async () => {
     installAfkingReadState({ fundingWei: 875_000_000_000n });
+    const price = lootboxMod.scaledTicketPriceWei(12);
+    _fetchHandler = async (url) => {
+      const u = String(url);
+      if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
+      if (u.includes('/foil')) return { present: false, level: 12 };
+      return { claimableEth: String((price / 2n) + 1n) };
+    };
     const el = instantiate();
     await settle(60);
 
-    assert.equal(
-      el.querySelector('[data-bind="dec-funds-wallet"]').textContent,
-      '4 ETH',
-      '3.125 wallet ETH plus 0.875 AFKing funding is shown as one spendable total',
+    assert.equal(el.querySelector('[data-bind="dec-funds-total"]').textContent, '4.02',
+      'collapsed Total includes Claimable, AFKING, and Wallet');
+    assert.equal(el.querySelector('[data-bind="dec-funds-claimable-display"]').hidden, true,
+      'individual sources wait for the disclosure to open');
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, '3.12 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="dec-funds-afking"]').textContent, '0.87 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-funds-afking-display"]').hidden, true,
+      'AFKING waits for the disclosure to open');
+    assert.ok(el.querySelectorAll('.dec-funds__priority').every((button) => button.hidden),
+      'all USE actions stay hidden while collapsed');
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="dec-funds-afking-display"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="dec-funds-use-afking"]').getAttribute('aria-pressed'), 'false',
+      'AFKING is available without displacing the selected first source');
+    assert.equal(el.querySelector('[data-bind="dec-funds-use-claimable"]').hidden, true,
+      'the active top row has no redundant USE action');
+    assert.equal(el.querySelector('[data-bind="dec-funds-use-afking"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="dec-funds-use-wallet"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="dec-funds-afking-claim"]').hidden, false,
+      'AFKING has its own left-lane claim action');
+    assert.doesNotMatch(el.innerHTML, /AFKING FUNDING/,
+      'the source label is simply AFKING');
+    const claimableRow = el.querySelector('[data-bind="dec-funds-claimable-display"]');
+    const afkingRow = el.querySelector('[data-bind="dec-funds-afking-display"]');
+    const walletRow = el.querySelector('[data-bind="dec-funds-wallet-display"]');
+    assert.deepEqual(
+      [claimableRow.style.order, afkingRow.style.order, walletRow.style.order],
+      ['0', '1', '2'],
+      'the default waterfall is Claimable, AFKING, Wallet',
     );
+    el.querySelector('[data-bind="dec-funds-use-afking"]').dispatchEvent({ type: 'click' });
+    assert.deepEqual(
+      [afkingRow.style.order, claimableRow.style.order, walletRow.style.order],
+      ['0', '1', '2'],
+      'USE AFKING promotes it and shifts the other rows down intact',
+    );
+    assert.equal(el.querySelector('[data-bind="dec-funds-use-afking"]').hidden, true,
+      'the newly promoted row loses its now-redundant button');
+    assert.equal(el.querySelector('[data-bind="dec-funds-use-claimable"]').hidden, false,
+      'the displaced funded row gains a promotion action');
+    el.querySelector('[data-bind="dec-funds-use-wallet"]').dispatchEvent({ type: 'click' });
+    assert.deepEqual(
+      [walletRow.style.order, afkingRow.style.order, claimableRow.style.order],
+      ['0', '1', '2'],
+      'USE WALLET repeats the same move-to-front behavior',
+    );
+    assert.equal(el.querySelector('[data-bind="dec-funds-use-wallet"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="dec-funds-use-afking"]').hidden, false);
     assert.equal(el.querySelector('[data-bind="dec-funds-faucet"]').hidden, true);
     el.disconnectedCallback();
   });
@@ -1153,6 +1312,11 @@ describe('combined ticket + lootbox buy', () => {
     const el = instantiate();
     await settle(60);
 
+    assert.equal(el.querySelector('[data-bind="dec-funds-total"]').textContent, '0');
+    assert.equal(el.querySelector('[data-bind="dec-funds-claimable-display"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, true);
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, false);
     assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').hidden, true);
     assert.equal(el.querySelector('[data-bind="dec-funds-faucet"]').hidden, false);
     assert.match(
@@ -1168,9 +1332,14 @@ describe('combined ticket + lootbox buy', () => {
     const el = instantiate();
     await settle(60);
 
-    assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').hidden, false,
-      'the combined spendable AFKing amount remains visible');
-    assert.equal(el.querySelector('[data-bind="dec-funds-wallet"]').textContent, '0.87 ETH');
+    assert.equal(el.querySelector('[data-bind="dec-funds-total"]').textContent, '0.87');
+    assert.equal(el.querySelector('[data-bind="dec-funds-claimable-display"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, true,
+      'wallet waits for the disclosure even when it needs gas');
+    assert.equal(el.querySelector('[data-bind="dec-funds-afking"]').textContent, '0.87 ETH');
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="dec-funds-afking-display"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, false);
     assert.equal(el.querySelector('[data-bind="dec-funds-faucet"]').hidden, false,
       'native-wallet zero, not the combined total, drives the gas faucet');
     el.disconnectedCallback();
@@ -1192,13 +1361,28 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(el.querySelector('[data-bind="dec-funds-claimable-unit"]').textContent, 'ETH',
       'the balance unit remains visible beside the dash');
     assert.equal(claim.disabled, true);
+    assert.equal(claim.hidden, true, 'collapsed Available Funds keeps every row action hidden');
     assert.notEqual(claim.getAttribute('data-write-locked'), null,
       'domain lock prevents the global signer manager from lighting a zero claim');
     assert.match(claim.getAttribute('data-write-lock-title'), /No ETH winnings/i);
+    const useClaimable = el.querySelector('[data-bind="dec-funds-use-claimable"]');
+    const useWallet = el.querySelector('[data-bind="dec-funds-use-wallet"]');
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
+    assert.equal(claim.hidden, false, 'expanded Claimable always retains its CLAIM position');
+    assert.equal(claim.disabled, true, 'an empty Claimable action is visibly grey and inert');
+    assert.equal(useClaimable.hidden, true, 'top Claimable still omits its redundant USE action');
+    assert.equal(useWallet.hidden, false, 'the non-top Wallet always retains its USE action');
+    useWallet.dispatchEvent({ type: 'click' });
+    assert.equal(useClaimable.hidden, false,
+      'empty Claimable still has USE CLAIMABLE whenever it is not the top source');
+    assert.equal(useClaimable.disabled, false,
+      'funding order can be selected before a source receives funds');
+    assert.equal(claim.hidden, false);
+    assert.equal(claim.disabled, true);
     el.disconnectedCallback();
   });
 
-  test('claimable stays blurred and unclaimable until the main jackpot is revealed', async () => {
+  test('claimable blur toggles without disabling the ETH claim', async () => {
     storeMod.update('app.lastDay', { day: 67 });
     _fetchHandler = async (url) => {
       const u = String(url);
@@ -1213,22 +1397,44 @@ describe('combined ticket + lootbox buy', () => {
     const value = el.querySelector('[data-bind="dec-funds-claimable"]');
     const unit = el.querySelector('[data-bind="dec-funds-claimable-unit"]');
     const claim = el.querySelector('[data-bind="dec-funds-claim"]');
+    const total = el.querySelector('[data-bind="dec-funds-total"]');
+    const totalDisplay = el.querySelector('[data-bind="dec-funds-total-display"]');
     assert.ok(display.classList.contains('dec-funds__display--spoiler'));
+    assert.ok(totalDisplay.classList.contains('dec-funds__total--spoiler'));
+    assert.equal(total.textContent, '••••', 'the aggregate cannot spoil an unseen jackpot either');
     assert.equal(value.textContent, '••••', 'the amount DOM only contains a fixed-length mask');
     assert.equal(unit.textContent, 'ETH', 'the currency unit stays readable beside the mask');
     assert.doesNotMatch(value.textContent, /\d/, 'the hidden balance cannot leak through blurred digits');
     assert.equal(value.getAttribute('role'), 'button', 'the spoiler is explicitly revealable');
+    total.dispatchEvent({ type: 'click', preventDefault() {} });
+    assert.doesNotMatch(total.textContent, /•/, 'clicking Available Funds unmasks its current total');
+    total.dispatchEvent({ type: 'click', preventDefault() {} });
+    assert.equal(total.textContent, '••••', 'clicking the total again reblurs it');
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
+    assert.equal(claim.hidden, false);
+    assert.equal(claim.disabled, false, 'privacy masking never gates a valid ETH claim');
     value.dispatchEvent({ type: 'click', preventDefault() {} });
     assert.notEqual(value.textContent, '••••', 'clicking the number reveals the current balance');
-    assert.equal(claim.disabled, true, 'visual opt-out does not bypass claim eligibility');
+    assert.equal(claim.disabled, false);
+    value.dispatchEvent({ type: 'click', preventDefault() {} });
+    assert.equal(value.textContent, '••••', 'clicking the revealed number reblurs it');
+    assert.equal(claim.disabled, false, 'reblurring leaves Claim live');
+    value.dispatchEvent({ type: 'click', preventDefault() {} });
 
     globalThis.localStorage.setItem('spun_day_84532_67', '1');
     storeMod.update('app.lastDay', { day: 67 });
     assert.ok(!display.classList.contains('dec-funds__display--spoiler'));
+    assert.ok(!totalDisplay.classList.contains('dec-funds__total--spoiler'));
+    assert.doesNotMatch(total.textContent, /•/, 'the aggregate returns after the jackpot is viewed');
     assert.notEqual(value.textContent, '••••', 'the real balance is inserted only after reveal');
     assert.equal(unit.textContent, 'ETH');
     assert.equal(value.getAttribute('aria-hidden'), null);
     assert.equal(claim.disabled, false);
+    value.dispatchEvent({ type: 'click', preventDefault() {} });
+    assert.equal(value.textContent, '••••', 'the player can reblur even after the jackpot is viewed');
+    assert.equal(claim.disabled, false);
+    value.dispatchEvent({ type: 'click', preventDefault() {} });
+    assert.notEqual(value.textContent, '••••', 'the same control toggles it visible again');
     assert.match(
       APP_CSS,
       /\.dec-funds__display--spoiler \.dec-funds__number\s*\{[^}]*filter:\s*blur\(0\.38rem\)/s,
@@ -1238,15 +1444,73 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-funds__display--spoiler \.dec-funds__value\s*\{[^}]*filter:\s*blur/s,
       'the spoiler blur does not include the ETH unit',
     );
-    assert.match(
+    assert.doesNotMatch(
       APP_CSS,
       /\.dec-funds__display--spoiler \.dec-funds__claim\[data-write\][\s\S]*?background:\s*rgba\(0, 0, 0, 0\.16\)[\s\S]*?box-shadow:\s*none/s,
-      'Claim has a fixed dormant appearance while the balance is masked',
+      'the privacy mask does not paint a live Claim as dormant',
     );
     el.disconnectedCallback();
   });
 
-  test('funding selectors default to claimable first and wallet selection changes the real buy', async () => {
+  test('collapsed Total masks only pending results that can change ETH', async () => {
+    const el = instantiate();
+    await settle(60);
+    const total = el.querySelector('[data-bind="dec-funds-total"]');
+    const totalDisplay = el.querySelector('[data-bind="dec-funds-total-display"]');
+    assert.equal(total.textContent, '3.12');
+
+    pendingActionsMod.publishPendingActions('degenerette-live', [{
+      id: 'degenerette:eth:1', kind: 'degenerette', currency: 0, mayAddEth: true,
+      phase: 'waiting-rng', state: 'waiting', label: '1 spin',
+    }]);
+    assert.equal(total.textContent, '••••');
+    assert.ok(totalDisplay.classList.contains('dec-funds__total--spoiler'));
+    assert.doesNotMatch(total.textContent, /\d/, 'masked Total never leaves hidden digits in the DOM');
+
+    pendingActionsMod.publishPendingActions('degenerette-live', [{
+      id: 'degenerette:flip:1', kind: 'degenerette', currency: 1, mayAddEth: false,
+      phase: 'waiting-rng', state: 'waiting', label: '1 spin',
+    }]);
+    assert.equal(total.textContent, '3.12', 'a FLIP-only result cannot change the ETH aggregate');
+    assert.ok(!totalDisplay.classList.contains('dec-funds__total--spoiler'));
+
+    pendingActionsMod.publishPendingActions('lootbox-live', [{
+      id: 'lootbox:1', kind: 'lootbox', resolved: true, mayAddEth: true,
+      phase: 'result-ready', state: 'ready', label: 'Lootbox',
+    }]);
+    assert.equal(total.textContent, '••••', 'an indexed unseen lootbox result also protects Total');
+    el.disconnectedCallback();
+  });
+
+  test('ALL IN uses known ETH even while the ordinary balance remains spoiler-masked', async () => {
+    storeMod.update('app.lastDay', { day: 67 });
+    _fetchHandler = async (url) => {
+      const u = String(url);
+      if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
+      if (u.includes('/foil')) return { present: false, level: 12 };
+      return { claimableEth: String(lootboxMod.scaledTicketPriceWei(12)), flipBalance: '0' };
+    };
+
+    const el = instantiate();
+    await settle(60);
+    pendingActionsMod.publishPendingActions('lootbox-live', [{
+      id: 'lootbox:all-in-spoiler', kind: 'lootbox', mayAddEth: true,
+      phase: 'waiting-rng', state: 'waiting', label: 'Lootbox',
+    }]);
+    assert.equal(el.querySelector('[data-bind="dec-funds-total"]').textContent, '••••');
+
+    let opened = null;
+    el.addEventListener('app-all-in:open', (event) => { opened = event.detail; });
+    el.querySelector('[data-bind="dec-all-in"]').dispatchEvent({ type: 'click' });
+    assert.ok(opened);
+    const quote = opened.quote({ currency: 'ETH', target: 'lootbox', spins: 5 });
+    assert.equal(quote.valid, true,
+      'an explicit ALL IN quote can use known ETH without waiting for the reveal mask');
+    assert.doesNotMatch(quote.message || '', /hidden|pending/i);
+    el.disconnectedCallback();
+  });
+
+  test('USE CLAIMABLE defaults first and USE WALLET promotes wallet for the real buy', async () => {
     const price = lootboxMod.scaledTicketPriceWei(12);
     const fake = makeFakePurchaseContract({ claimableRaw: price * 2n + 1n });
     lootboxMod.__setContractFactoryForTest(() => fake);
@@ -1259,15 +1523,17 @@ describe('combined ticket + lootbox buy', () => {
 
     const el = instantiate();
     await settle(60);
-    const walletFirst = el.querySelector('[data-bind="dec-funds-wallet-first"]');
-    const claimableFirst = el.querySelector('[data-bind="dec-funds-claimable-first"]');
-    assert.equal(claimableFirst.checked, true, 'claimable remains the default preference');
-    assert.equal(walletFirst.checked, false, 'only one funding source is selected');
-
-    walletFirst.checked = true;
-    walletFirst.dispatchEvent({ type: 'change' });
-    assert.equal(walletFirst.checked, true);
-    assert.equal(claimableFirst.checked, false, 'funding controls stay mutually exclusive');
+    const useClaimable = el.querySelector('[data-bind="dec-funds-use-claimable"]');
+    const useWallet = el.querySelector('[data-bind="dec-funds-use-wallet"]');
+    assert.equal(useClaimable.getAttribute('aria-pressed'), 'true',
+      'claimable remains the default first source');
+    assert.equal(useClaimable.hidden, true, 'the selected top source is label-only');
+    assert.equal(useWallet.hidden, true, 'source actions are not available while collapsed');
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
+    assert.equal(useWallet.hidden, false);
+    useWallet.dispatchEvent({ type: 'click' });
+    assert.equal(useWallet.getAttribute('aria-pressed'), 'true');
+    assert.equal(useClaimable.getAttribute('aria-pressed'), 'false');
 
     const input = el.querySelector('[name="dec-tickets"]');
     input.value = '1';
@@ -1293,12 +1559,57 @@ describe('combined ticket + lootbox buy', () => {
 
     const el = instantiate();
     await settle(60);
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
     el.querySelector('[data-bind="dec-funds-claim"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
     const sends = fake._calls.filter((call) => call[0] === 'send' && call[1] === 'claimWinnings');
     assert.deepEqual(sends, [['send', 'claimWinnings', CONNECTED]]);
     claimsMod.__resetContractFactoryForTest();
+    el.disconnectedCallback();
+  });
+
+  test('AFKing funding CLAIM uses the existing full-withdrawal transaction path', async () => {
+    const funding = 875_000_000_000n;
+    const calls = [];
+    const withdraw = Object.assign(
+      async (amount) => {
+        calls.push(['send', amount]);
+        return makeFakeTx(makeFakeReceipt());
+      },
+      {
+        staticCall: async (amount) => {
+          calls.push(['static', amount]);
+          return true;
+        },
+      },
+    );
+    const fake = {
+      afkingFundingOf: async (player) => {
+        calls.push(['read', player]);
+        return funding;
+      },
+      withdrawAfkingFunding: withdraw,
+      connect() { return this; },
+    };
+    passesMod.__setContractFactoryForTest(() => fake);
+    installAfkingReadState({ fundingWei: funding });
+
+    const el = instantiate();
+    await settle(60);
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
+    const claim = el.querySelector('[data-bind="dec-funds-afking-claim"]');
+    assert.equal(claim.hidden, false);
+    assert.equal(claim.disabled, false);
+    claim.dispatchEvent({ type: 'click' });
+    await settle(60);
+
+    assert.deepEqual(calls, [
+      ['read', '0xAB12000000000000000000000000000000000000'],
+      ['static', funding],
+      ['send', funding],
+    ]);
+    passesMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
   });
 
@@ -1318,6 +1629,7 @@ describe('combined ticket + lootbox buy', () => {
 
     const el = instantiate();
     await settle(60);
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
     const mode = el.querySelector('[data-bind="dec-flip-check"]');
     mode.checked = true;
     mode.dispatchEvent({ type: 'change' });
@@ -1376,6 +1688,229 @@ describe('combined ticket + lootbox buy', () => {
       0n,
       'the reserved dust keeps a just-short claimable slice below the threshold',
     );
+  });
+
+  test('ALL IN opens a non-mutating currency/format quote at quarter-ticket precision', async () => {
+    const { allInTicketAmount, allInDestinations } = await import('../app-decimator-panel.js');
+    assert.equal(allInTicketAmount({ availableWei: 8n, priceWei: 10n }), '0.75',
+      'the helper follows the contract integer floor at quarter-ticket precision');
+    assert.equal(allInTicketAmount({ availableWei: 13n, reservedWei: 3n, priceWei: 10n }), '1',
+      'selected non-ticket legs are reserved before filling tickets');
+
+    const el = instantiate();
+    await settle(60);
+    const allIn = el.querySelector('[data-bind="dec-all-in"]');
+    const tickets = el.querySelector('[name="dec-tickets"]');
+    const originalTickets = tickets.value;
+    let opened = null;
+    el.addEventListener('app-all-in:open', (event) => { opened = event.detail; });
+    assert.equal(allIn.hidden, false);
+    assert.equal(allIn.disabled, false);
+    assert.equal(allIn.title, 'Choose a currency and where to go all in');
+    allIn.dispatchEvent({ type: 'click' });
+    assert.ok(opened, 'the standalone ALL IN sheet receives its quote/confirm contract');
+    assert.equal(tickets.value, originalTickets, 'opening ALL IN never rewrites the ordinary ticket draft');
+    assert.deepEqual(opened.destinations.ETH, ['tickets', 'lootbox', 'degenerette']);
+    assert.deepEqual(opened.destinations.FLIP, ['coinflip', 'degenerette']);
+    assert.deepEqual(allInDestinations('FLIP', true), ['coinflip', 'degenerette', 'tickets']);
+    const quote = opened.quote({ currency: 'ETH', target: 'tickets', spins: 5 });
+    assert.equal(quote.valid, true);
+    assert.equal(quote.ticketAmount, '77.75',
+      'ALL IN leaves one ETH cent for gas before filling quarter-granular tickets');
+    assert.equal(quote.buttonLabel, 'ALL IN: 3.11 ETH FOR 77.75 TICKETS');
+    assert.match(el.innerHTML,
+      /class="dec-all-in__label">ALL IN<\/strong>[\s\S]*?src="\/whitepaper\/flame-center\.svg"/,
+      'the action carries white copy with the black Degenerus flame below it');
+    assert.match(APP_CSS,
+      /\.dec-all-in\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*border-radius:\s*6px;[^}]*linear-gradient\(135deg, #a8090c, #ed0e11 52%, #a20709\)/s,
+      'ALL IN is a normal red action button instead of a circular badge');
+    assert.doesNotMatch(APP_CSS, /\.dec-all-in\s*\{[^}]*flame-logo\.svg/s,
+      'the clipping white logo circle is gone');
+    assert.doesNotMatch(APP_CSS, /\.dec-all-in::before\s*\{/,
+      'no circular center overlay remains');
+    assert.match(APP_CSS,
+      /\.dec-all-in__flame\s*\{[^}]*display:\s*block;[^}]*width:\s*0\.9rem[^}]*height:\s*0\.9rem/s,
+      'the black flame sits as the second line beneath ALL IN');
+    assert.match(APP_CSS,
+      /\.dec-all-in\s*\{[^}]*width:\s*100%[^}]*height:\s*3rem[^}]*min-height:\s*3rem[^}]*max-height:\s*3rem/s,
+      'ALL IN matches the normal half-width BUY IN footprint');
+    assert.match(APP_CSS,
+      /\.dec-all-in\s*\{[^}]*grid-row:\s*1[^}]*grid-column:\s*2[^}]*justify-self:\s*stretch/s,
+      'the action is pinned above the right side of the ETH bar');
+    assert.match(APP_CSS,
+      /\.dec-funds-stack:has\(\.dec-flip-balance:not\(\[hidden\]\)\) \.dec-all-in\s*\{[^}]*margin-bottom:\s*-0\.34rem/s,
+      'a visible FLIP balance closes the normal extra space beneath ALL IN');
+    assert.ok(
+      PANEL_SRC.indexOf('data-bind="dec-all-in"') < PANEL_SRC.indexOf('data-bind="dec-funds"'),
+      'ALL IN is a sibling above Available Funds, not a child inside its green box',
+    );
+    el.disconnectedCallback();
+  });
+
+  test('FLIP ALL IN includes wallet, settled Coinflip, and accrued AFKing FLIP', async () => {
+    const FLIP = 10n ** 18n;
+    coinflipMod.__setClaimableReaderForTest(async () => 500n * FLIP);
+    installAfkingReadState({ hasToken: true, pendingFlipWhole: 275n });
+    _fetchHandler = async (url) => (
+      String(url).includes('/game/state')
+        ? DEFAULT_GAME_STATE
+        : { claimableEth: '0', flipBalance: String(2_250n * FLIP), pending: {} }
+    );
+    const el = instantiate();
+    await settle(60);
+    let opened = null;
+    el.addEventListener('app-all-in:open', (event) => { opened = event.detail; });
+    el.querySelector('[data-bind="dec-all-in"]').dispatchEvent({ type: 'click' });
+
+    const quote = opened.quote({ currency: 'FLIP', target: 'coinflip', spins: 5 });
+    assert.equal(quote.valid, true);
+    assert.equal(quote.spendWei, 3_025n * FLIP);
+    assert.equal(quote.buttonLabel, "ALL IN: 3,025 FLIP FOR TODAY'S COINFLIP");
+    assert.deepEqual(quote.flipSources, {
+      walletWei: 2_250n * FLIP,
+      coinflipClaimableWei: 500n * FLIP,
+      afkingPendingWei: 275n * FLIP,
+      totalWei: 3_025n * FLIP,
+    });
+    assert.match(PANEL_SRC, /claimAfkingSubscriptionFlip\(\)/,
+      'AFKing FLIP is materialized before the destination transaction');
+    assert.match(PANEL_SRC, /quote\.target !== 'coinflip'[\s\S]*claimFlip/,
+      'wallet-only burn routes materialize settled Coinflip FLIP first');
+    el.disconnectedCallback();
+  });
+
+  test('wallet-only FLIP formats claim every settled source before submitting', async () => {
+    const FLIP = 10n ** 18n;
+    const sends = [];
+    coinflipMod.__setClaimableReaderForTest(async () => 500n * FLIP);
+    installAfkingReadState({ hasToken: true, pendingFlipWhole: 275n });
+    passesMod.__setContractFactoryForTest(() => ({
+      claimAfkingFlip: Object.assign(
+        async () => { sends.push('afking'); return makeFakeTx(makeFakeReceipt()); },
+        { staticCall: async () => undefined },
+      ),
+      connect() {
+        return this;
+      },
+    }));
+    const claimContract = makeFakeFundsClaimContract();
+    claimContract.claimCoinflips = Object.assign(
+      async (...args) => {
+        claimContract._calls.push(['send', 'claimCoinflips', ...args]);
+        sends.push('coinflip');
+        return makeFakeTx(makeFakeReceipt());
+      },
+      { staticCall: async (...args) => {
+        claimContract._calls.push(['static', 'claimCoinflips', ...args]);
+      } },
+    );
+    claimsMod.__setContractFactoryForTest(() => claimContract);
+    _fetchHandler = async (url) => (
+      String(url).includes('/game/state')
+        ? DEFAULT_GAME_STATE
+        : { claimableEth: '0', flipBalance: String(2_250n * FLIP), pending: {} }
+    );
+    const el = instantiate();
+    await settle(60);
+    let opened = null;
+    el.addEventListener('app-all-in:open', (event) => { opened = event.detail; });
+    el.querySelector('[data-bind="dec-all-in"]').dispatchEvent({ type: 'click' });
+    const selection = { currency: 'FLIP', target: 'degenerette', spins: 5 };
+    const quote = opened.quote(selection);
+
+    await opened.confirm(selection, quote.fingerprint);
+    assert.deepEqual(sends, ['afking', 'coinflip'],
+      'AFKing and Coinflip FLIP become wallet balance before the burn-only wager');
+    assert.ok(claimContract._calls.some((call) => (
+      call[0] === 'send'
+      && call[1] === 'claimCoinflips'
+      && call[3] === 500n * FLIP
+    )));
+    el.disconnectedCallback();
+  });
+
+  test('ALL IN quote enforces each currency route and Degenerette spin split', async () => {
+    const {
+      allInSelectionQuote,
+      allInWalletAfterGasReserveWei,
+      floorAllInEthBudgetWei,
+    } = await import('../app-decimator-panel.js');
+    const FLIP = 10n ** 18n;
+    const ethLootbox = allInSelectionQuote({
+      currency: 'ETH',
+      target: 'lootbox',
+      purchaseEthWei: 2n * 10n ** 12n,
+    });
+    assert.equal(ethLootbox.valid, true);
+    assert.equal(ethLootbox.spendWei, 2n * 10n ** 12n);
+    assert.equal(ethLootbox.outputLabel, '1 LOOTBOX');
+
+    const groupedEth = allInSelectionQuote({
+      currency: 'ETH',
+      target: 'lootbox',
+      purchaseEthWei: 1_234_500_000_000_000n,
+    });
+    assert.equal(groupedEth.buttonLabel, 'ALL IN: 1,234.5 ETH FOR 1 LOOTBOX',
+      'the quote CTA groups a large ETH balance');
+
+    const unroundedEth = 3_129_999_999_999n;
+    assert.equal(floorAllInEthBudgetWei(unroundedEth), 3_120_000_000_000n);
+    assert.equal(allInWalletAfterGasReserveWei(unroundedEth), 3_119_999_999_999n,
+      'one displayed ETH cent remains in the native wallet for gas');
+    const flooredEth = allInSelectionQuote({
+      currency: 'ETH',
+      target: 'degenerette',
+      spins: 5,
+      degeneretteEthWei: unroundedEth,
+    });
+    assert.equal(flooredEth.valid, true);
+    assert.equal(flooredEth.spendWei, 3_120_000_000_000n,
+      'the real ALL IN transaction budget floors to one displayed ETH cent');
+    assert.equal(flooredEth.buttonLabel, 'ALL IN: 3.12 ETH FOR 5 SPINS');
+
+    const noGas = allInSelectionQuote({
+      currency: 'FLIP', target: 'coinflip', flipWei: 2_500n * FLIP, gasReady: false,
+    });
+    assert.equal(noGas.valid, false);
+    assert.match(noGas.message, /0\.01 ETH.*gas/i,
+      'token ALL IN routes also require the native gas reserve');
+
+    const flipCoin = allInSelectionQuote({
+      currency: 'FLIP',
+      target: 'coinflip',
+      flipWei: 2_500n * FLIP,
+    });
+    assert.equal(flipCoin.valid, true);
+    assert.equal(flipCoin.buttonLabel, "ALL IN: 2,500 FLIP FOR TODAY'S COINFLIP");
+
+    const groupedTickets = allInSelectionQuote({
+      currency: 'FLIP',
+      target: 'tickets',
+      flipWei: 1_234_250n * FLIP,
+      flipTicketsOpen: true,
+    });
+    assert.equal(groupedTickets.outputLabel, '1,234.25 TICKETS');
+    assert.equal(groupedTickets.buttonLabel, 'ALL IN: 1,234,250 FLIP FOR 1,234.25 TICKETS',
+      'the quote CTA groups both the spend and output quantity');
+
+    const spins = allInSelectionQuote({
+      currency: 'FLIP',
+      target: 'degenerette',
+      spins: 5,
+      flipWei: 2_500n * FLIP,
+    });
+    assert.equal(spins.valid, true);
+    assert.equal(spins.spins, 5);
+    assert.equal(spins.amountPerSpin, 500n * FLIP);
+    assert.equal(spins.outputLabel, '5 SPINS');
+
+    const closedTickets = allInSelectionQuote({
+      currency: 'FLIP',
+      target: 'tickets',
+      flipWei: 2_500n * FLIP,
+      flipTicketsOpen: false,
+    });
+    assert.equal(closedTickets.valid, false, 'FLIP tickets disappear with the redemption window');
   });
 
   test('Buy and the optional bonus use a stable compact half-width action rail', async () => {
@@ -1641,6 +2176,10 @@ describe('combined ticket + lootbox buy', () => {
 
     el.querySelector('[data-bind="dec-presale-max"]').dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[name="dec-presale-box-eth"]').value, '0.02');
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent,
+      'Buy presale box',
+      'a standalone presale box is not presented as a game buy-in');
+    assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.02 ETH');
     el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(100);
 
@@ -2330,26 +2869,108 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     }));
     const el = instantiate();
     await settle(60);
-    assert.equal(el.querySelector('[data-bind="dec-flip-buy"]').hidden, false,
-      'the packed ticketRedemptionOpen latch survives the intermediate lock');
+    assert.equal(el.querySelector('[data-bind="dec-flip-buy"]').hidden, true,
+      'the in-balance copy stays hidden until FLIP is selected');
+    assert.equal(el.querySelector('[data-bind="dec-funds-total-flip"]').hidden, false,
+      'the live control is pinned just above Available Funds');
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="dec-funds-total-flip"]').hidden, false,
+      'opening the ETH disclosure does not move the inactive FLIP control');
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
   });
 
-  test('window OPEN → wallet checkbox shows and the CTA quotes 1,000 FLIP per whole ticket', async () => {
+  test('window OPEN pins USE FLIP above funds, then moves it into the FLIP balance', async () => {
     claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract());
     const el = instantiate();
     await settle(60);
     const block = el.querySelector('[data-bind="dec-flip-buy"]');
-    assert.equal(block.hidden, false, 'FLIP block visible when the probe passes');
+    const compactToggle = el.querySelector('[data-bind="dec-funds-total-flip"]');
+    const useEth = el.querySelector('[data-bind="dec-funds-total-eth"]');
+    const allIn = el.querySelector('[data-bind="dec-all-in"]');
+    const mode = el.querySelector('[data-bind="dec-flip-check"]');
+    const foilRow = el.querySelector('[data-bind="dec-foil-row"]');
+    assert.equal(block.hidden, true, 'the in-balance selector waits for FLIP mode');
+    assert.equal(compactToggle.hidden, false, 'the window-gated button is pinned above funds');
+    assert.equal(useEth.hidden, true, 'USE ETH only appears after FLIP is selected');
+    assert.equal(allIn.hidden, false, 'ALL IN sits above the ETH balance in ETH mode');
+    assert.equal(compactToggle.tagName, 'BUTTON');
+    assert.equal(foilRow.hidden, false, 'the verified foil offer is available in ETH mode');
+    compactToggle.dispatchEvent({ type: 'click' });
+    assert.equal(mode.checked, true);
+    assert.equal(compactToggle.hidden, true, 'the external copy leaves once the balance appears');
+    assert.equal(block.hidden, false, 'the synchronized control moves inside the FLIP balance');
+    assert.equal(useEth.hidden, false, 'a matching switch-back action appears in Available Funds');
+    assert.equal(allIn.hidden, false, 'ALL IN stays against the active FLIP balance');
+    assert.equal(allIn.getAttribute('aria-label'), 'Open ALL IN choices');
+    assert.equal(useEth.textContent, 'USE ETH');
+    assert.equal(block.getAttribute('aria-pressed'), 'true');
+    assert.equal(foilRow.hidden, true, 'the tickets-only FLIP route hides the incompatible foil add-on');
+    assert.equal(el.querySelector('[data-bind="dec-flip-balance"]').hidden, false,
+      'selecting FLIP tethers its balance directly above Available Funds');
+    useEth.dispatchEvent({ type: 'click' });
+    assert.equal(mode.checked, false);
+    assert.equal(compactToggle.hidden, false);
+    assert.equal(block.hidden, true);
+    assert.equal(useEth.hidden, true);
+    assert.equal(allIn.hidden, false);
+    assert.equal(foilRow.hidden, false, 'returning to ETH restores the pinned foil offer');
+    assert.match(
+      APP_CSS,
+      /\.app-decimator-panel\s+\.dec-funds-stack__flip-mode\s*\{[^}]*align-self:\s*end;[^}]*justify-self:\s*start;[^}]*margin:\s*0 0 0\.5rem 0\.16rem/s,
+      'the inactive FLIP action is pinned to the upper-left edge of funds',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-flip-toggle\s*\{[^}]*border:\s*1px solid rgba\(253, 230, 138, 0\.72\)[^}]*background:\s*linear-gradient\(180deg, rgba\(127, 29, 29, 0\.42\), rgba\(69, 10, 10, 0\.32\)\)[^}]*color:\s*#fde68a/s,
+      'left-side FLIP controls use yellow ink and trim while retaining the red background',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-flip-balance\s*\{[^}]*border:\s*1px solid rgba\(253, 230, 138, 0\.5\)[^}]*#140707/s,
+      'the FLIP balance keeps its existing background with a yellow frame',
+    );
+    assert.match(APP_CSS, /\.dec-flip-balance__value\s*\{[^}]*color:\s*#fde68a/s,
+      'the left-side FLIP balance value is yellow');
+    assert.match(
+      APP_CSS,
+      /\.app-decimator-panel \.dec-funds__priority,[\s\S]*?\.app-daily-flip \.df-funds \.df-burn-sdgnrs-cta\[data-write\][\s\S]*?height:\s*1\.3rem;[\s\S]*?border-radius:\s*4px;[\s\S]*?font-size:\s*0\.52rem;/,
+      'ETH and Protocol Coins actions share one compact size and type rhythm',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-funds__total-value\s*\{[^}]*grid-column:\s*1;[^}]*width:\s*100%;[^}]*margin-left:\s*auto;[^}]*justify-self:\s*end;[^}]*text-align:\s*right/s,
+      'the collapsed available-funds balance stays right-aligned',
+    );
     assert.ok(
-      PANEL_SRC.indexOf('dec-funds__display--wallet') < PANEL_SRC.indexOf('data-bind="dec-flip-buy"'),
-      'the USE FLIP checkbox lives inside the ETH wallet display',
+      PANEL_SRC.indexOf('data-bind="dec-flip-balance"') < PANEL_SRC.indexOf('data-bind="dec-flip-buy"'),
+      'the active USE FLIP control lives inside the FLIP balance',
+    );
+    assert.ok(
+      PANEL_SRC.indexOf('data-bind="dec-funds-total-display"')
+        < PANEL_SRC.indexOf('data-bind="dec-funds-total-eth"'),
+      'USE ETH lives inside the collapsed ETH balance area',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-funds__total\.dec-funds__total--flip-active\s*\{[^}]*grid-template-areas:\s*"action value"/s,
+      'the switch-back button occupies the upper-left balance action slot',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-funds:has\(\.dec-funds__summary\[aria-expanded="false"\]\)[\s\S]*?\.dec-funds__eth-mode\s*\{[^}]*transform:\s*translateY\(-0\.34rem\)/s,
+      'compressed USE ETH is optically centered across its heading and value rows like USING FLIP',
     );
     assert.match(PANEL_SRC, />USE FLIP</);
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, true,
+      'collapsed Total keeps every individual source out of the compact row');
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, false,
+      'opening Available Funds exposes the Wallet controls');
+    assert.equal(block.hidden, true, 'expanding ETH funds does not move the inactive FLIP control');
+    assert.equal(compactToggle.hidden, false);
 
     const ticketsInput = el.querySelector('[name="dec-tickets"]');
-    const mode = el.querySelector('[data-bind="dec-flip-check"]');
     mode.checked = true;
     mode.dispatchEvent({ type: 'change' });
     ticketsInput.value = '2';
@@ -2376,17 +2997,54 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     el.disconnectedCallback();
   });
 
-  test('USE FLIP is exclusive with USE FIRST, hides lootboxes, and seeds only a zero ticket field', async () => {
+  test('ALL IN quotes the active FLIP balance without changing the active ticket draft', async () => {
+    claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract());
+    _fetchHandler = async (url) => (
+      String(url).includes('/game/state')
+        ? DEFAULT_GAME_STATE
+        : {
+          claimableEth: '0',
+          flipBalance: String(2_250n * 10n ** 18n),
+          pending: {},
+        }
+    );
+    const el = instantiate();
+    await settle(60);
+    el.querySelector('[data-bind="dec-funds-total-flip"]').dispatchEvent({ type: 'click' });
+
+    const allIn = el.querySelector('[data-bind="dec-all-in"]');
+    const tickets = el.querySelector('[name="dec-tickets"]');
+    const originalTickets = tickets.value;
+    let opened = null;
+    el.addEventListener('app-all-in:open', (event) => { opened = event.detail; });
+    assert.equal(allIn.hidden, false);
+    assert.equal(allIn.disabled, false);
+    assert.equal(allIn.title, 'Choose a currency and where to go all in');
+    allIn.dispatchEvent({ type: 'click' });
+    assert.ok(opened);
+    assert.deepEqual(opened.destinations.FLIP, ['coinflip', 'degenerette', 'tickets']);
+    const quote = opened.quote({ currency: 'FLIP', target: 'tickets', spins: 5 });
+    assert.equal(quote.valid, true);
+    assert.equal(quote.ticketAmount, '2.25');
+    assert.equal(quote.spendWei, 2_250n * 10n ** 18n);
+    assert.equal(quote.buttonLabel, 'ALL IN: 2,250 FLIP FOR 2.25 TICKETS');
+    assert.equal(tickets.value, originalTickets, 'the popup leaves the FLIP ticket form untouched');
+    claimsMod.__resetContractFactoryForTest();
+    el.disconnectedCallback();
+  });
+
+  test('USE FLIP leaves the ordered funding buttons intact and a source button exits FLIP', async () => {
     claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract());
     const el = instantiate();
     await settle(60);
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
 
     const tickets = el.querySelector('[name="dec-tickets"]');
     const lootbox = el.querySelector('[name="dec-lootbox-eth"]');
     const lootboxGroup = el.querySelector('[data-bind="dec-lootbox-group"]');
     const mode = el.querySelector('[data-bind="dec-flip-check"]');
-    const walletFirst = el.querySelector('[data-bind="dec-funds-wallet-first"]');
-    const claimableFirst = el.querySelector('[data-bind="dec-funds-claimable-first"]');
+    const useClaimable = el.querySelector('[data-bind="dec-funds-use-claimable"]');
+    const useWallet = el.querySelector('[data-bind="dec-funds-use-wallet"]');
 
     tickets.value = '0';
     lootbox.value = '0.08';
@@ -2395,24 +3053,25 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.equal(tickets.value, '1', 'zero tickets seed to one when USE FLIP is selected');
     assert.equal(lootbox.value, '0', 'the incompatible lootbox amount is cleared');
     assert.equal(lootboxGroup.hidden, true, 'the whole lootbox control is removed in FLIP mode');
-    assert.equal(walletFirst.checked, false);
-    assert.equal(claimableFirst.checked, false, 'no USE FIRST source stays selected with USE FLIP');
+    assert.equal(useClaimable.getAttribute('aria-pressed'), 'true',
+      'the selected ETH priority is not rewritten by USE FLIP');
+    assert.equal(useWallet.getAttribute('aria-pressed'), 'false');
 
     mode.checked = false;
     mode.dispatchEvent({ type: 'change' });
     assert.equal(lootboxGroup.hidden, false, 'lootboxes return when FLIP mode is left');
-    assert.equal(claimableFirst.checked, true, 'the saved ETH preference is restored');
+    assert.equal(useClaimable.getAttribute('aria-pressed'), 'true');
+    assert.equal(useWallet.getAttribute('aria-pressed'), 'false');
 
     tickets.value = '2.25';
     mode.checked = true;
     mode.dispatchEvent({ type: 'change' });
     assert.equal(tickets.value, '2.25', 'an existing nonzero ticket amount is preserved');
 
-    walletFirst.checked = true;
-    walletFirst.dispatchEvent({ type: 'change' });
-    assert.equal(mode.checked, false, 'choosing USE FIRST exits FLIP mode');
-    assert.equal(walletFirst.checked, true);
-    assert.equal(claimableFirst.checked, false);
+    useWallet.dispatchEvent({ type: 'click' });
+    assert.equal(mode.checked, false, 'choosing another ETH source exits FLIP mode');
+    assert.equal(useClaimable.getAttribute('aria-pressed'), 'false');
+    assert.equal(useWallet.getAttribute('aria-pressed'), 'true');
     assert.equal(lootboxGroup.hidden, false);
 
     claimsMod.__resetContractFactoryForTest();
@@ -2451,11 +3110,42 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     el.disconnectedCallback();
   });
 
+  test('confirming a REDEEM FLIP quest submits its amount without selecting USE FLIP', async () => {
+    const fake = makeFakeRedeemFlipContract();
+    claimsMod.__setContractFactoryForTest(() => fake);
+    const el = instantiate();
+    await settle(60);
+    const tickets = el.querySelector('[name="dec-tickets"]');
+    const lootbox = el.querySelector('[name="dec-lootbox-eth"]');
+    const flip = el.querySelector('[data-bind="dec-flip-check"]');
+    tickets.value = '2.25';
+    lootbox.value = '0.08';
+    flip.checked = false;
+
+    document.dispatchEvent(new CustomEvent('quest:activate', {
+      detail: {
+        questType: 9, target: '2', variant: 'daily',
+        configuredAmount: true, submit: true,
+      },
+    }));
+    await settle(100);
+
+    const sends = fake._calls.filter((call) => call[0] !== 'static');
+    assert.equal(sends.length, 1);
+    assert.equal(sends[0][1], 800n, 'the confirmed two-ticket quest amount is redeemed');
+    assert.equal(tickets.value, '2.25', 'the normal ticket draft is preserved');
+    assert.equal(lootbox.value, '0.08', 'the normal lootbox draft is preserved');
+    assert.equal(flip.checked, false, 'the quest does not select USE FLIP in the normal form');
+    claimsMod.__resetContractFactoryForTest();
+    el.disconnectedCallback();
+  });
+
   test('window OPEN stays visible even when this wallet cannot afford one whole ticket', async () => {
     claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract({ amountRejected: true }));
     const el = instantiate();
     await settle(60);
-    assert.equal(el.querySelector('[data-bind="dec-flip-buy"]').hidden, false,
+    assert.equal(el.querySelector('[data-bind="dec-flip-buy"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="dec-funds-total-flip"]').hidden, false,
       'availability comes from the window, not a one-ticket affordability simulation');
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
@@ -2469,6 +3159,7 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
 
     const el = instantiate();
     await settle(60);
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
     el.querySelector('[name="dec-tickets"]').value = '2';
     const mode = el.querySelector('[data-bind="dec-flip-check"]');
     mode.checked = true;
@@ -2489,6 +3180,7 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     claimsMod.__setContractFactoryForTest(() => fake);
     const el = instantiate();
     await settle(60);
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
     el.querySelector('[name="dec-tickets"]').value = '0';
     const mode = el.querySelector('[data-bind="dec-flip-check"]');
     mode.checked = true;

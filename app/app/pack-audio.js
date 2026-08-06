@@ -1,7 +1,8 @@
 // play/app/pack-audio.js -- Web Audio wrapper for PACKS-05 / D-10
 //
 // Fail-silent on 404 or unsupported API. localStorage mute persistence
-// at STORAGE_KEY='play.audio.muted'. First play() serves as the browser
+// at the app-wide SFX key. The former play.audio.muted key remains readable so
+// an existing player preference survives this UI consolidation. First play()
 // autoplay-unlock user gesture (pack click is a user gesture -- D-10).
 // Volume fixed at 0.4 in a GainNode (D-10).
 //
@@ -12,7 +13,8 @@
 //
 // SHELL-01: zero imports (pure module).
 
-const STORAGE_KEY = 'play.audio.muted';
+const STORAGE_KEY = 'degenerus.sfxMuted';
+const LEGACY_STORAGE_KEY = 'play.audio.muted';
 const VOLUME = 0.4;
 const ASSET_PATH = '/app/assets/audio/pack-open.mp3';
 
@@ -42,7 +44,8 @@ async function ensureLoaded() {
 export function isMuted() {
   try {
     return typeof localStorage !== 'undefined'
-      && localStorage.getItem(STORAGE_KEY) === '1';
+      && (localStorage.getItem(STORAGE_KEY) === '1'
+        || localStorage.getItem(LEGACY_STORAGE_KEY) === '1');
   } catch {
     return false;
   }
@@ -51,7 +54,9 @@ export function isMuted() {
 export function setMuted(muted) {
   try {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, muted ? '1' : '0');
+      if (muted) localStorage.setItem(STORAGE_KEY, '1');
+      else localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
     }
   } catch {
     // Privacy-mode browsers block localStorage; in-memory session fallback

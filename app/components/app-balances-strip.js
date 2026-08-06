@@ -28,7 +28,7 @@
 // T-58-18 discipline: ALL server-derived strings via textContent.
 
 import { CHAIN } from '../app/chain-config.js';
-import { displayEth, displayToken } from '../app/scaling.js';
+import { displayEthCompact, displayToken } from '../app/scaling.js';
 import { getViewedAddress, get, subscribe } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 // Inline ETH-winnings claim (user call: the big claims banner is gone; the
@@ -263,8 +263,8 @@ class AppBalancesStrip extends HTMLElement {
     if (!d) return vals;
     // Winnings tile = CURRENT claimable (not all-time). All-time credited rides
     // a sub-line so both are visible without conflating them.
-    try { vals.winnings = `${displayEth(BigInt(d.claimableEth || '0'))} ETH`; } catch (_e) { /* keep null */ }
-    try { vals.winningsAllTime = `${displayEth(BigInt(d.totalCredited || '0'))} ETH won all-time`; } catch (_e) { /* keep null */ }
+    try { vals.winnings = `${displayEthCompact(BigInt(d.claimableEth || '0'))} ETH`; } catch (_e) { /* keep null */ }
+    try { vals.winningsAllTime = `${displayEthCompact(BigInt(d.totalCredited || '0'))} ETH won all-time`; } catch (_e) { /* keep null */ }
     try { vals.flip = this.#fmtWhole(d.flipBalance); } catch (_e) { /* keep null */ }
     try { vals.dgnrs = this.#fmtWhole(d.dgnrsBalance); } catch (_e) { /* keep null */ }
     if (Array.isArray(d.tickets)) {
@@ -283,7 +283,7 @@ class AppBalancesStrip extends HTMLElement {
     const d = this.#combined;
     const vals = { winnings: null, winningsAllTime: null, flip: null, tickets: null, dgnrs: null };
     if (!d) return vals;
-    try { vals.winnings = `${displayEth(BigInt(d.claimableEth || '0'))} ETH`; } catch (_e) { /* keep null */ }
+    try { vals.winnings = `${displayEthCompact(BigInt(d.claimableEth || '0'))} ETH`; } catch (_e) { /* keep null */ }
     try { vals.flip = this.#fmtWhole(d.flipBalance); } catch (_e) { /* keep null */ }
     try { vals.dgnrs = this.#fmtWhole(d.dgnrsBalance); } catch (_e) { /* keep null */ }
     if (Array.isArray(d.tickets)) {

@@ -51,7 +51,7 @@
 //
 // T-58-18 discipline: every server-derived string goes in via textContent.
 
-import { displayEth } from '../app/scaling.js';
+import { displayEthCompact } from '../app/scaling.js';
 import { subscribe } from '../app/store.js';
 
 // Count-up duration. Long enough to read as motion, short enough that the next
@@ -82,7 +82,7 @@ function groupEth(formatted) {
  * (the /app/ single-source-of-truth rule in scaling.js's header).
  */
 function fmtEth(rawWei, digits = HEADLINE_DIGITS) {
-  return groupEth(displayEth(rawWei, digits));
+  return groupEth(displayEthCompact(rawWei, digits));
 }
 
 /** Width bucket used by the narrow-screen CSS; punctuation consumes room too. */

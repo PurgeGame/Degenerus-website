@@ -54,6 +54,25 @@ _registerFoilError('StaleAdvance', {
 // and falls back to the legacy await sendTx path on stale cache (R11).
 const PREWARM_TTL_MS = 30_000;
 
+// DegenerusGameStorage.lootboxRngPacked is slot 33 in both the production and
+// testnet layouts. The deployed GAME intentionally exposes no getter for this
+// operational queue, so the UI reads the packed slot directly just as the
+// Reverse FLIP and redemption readers do for their deployment-pinned fields.
+// Layout (DegenerusGameStorage.sol): index [0:47], pending ETH [48:111],
+// threshold [112:175], max basefee [176:183], pending FLIP [184:223].
+const LOOTBOX_RNG_STORAGE_SLOT = 33n;
+const GAME_TIMING_STORAGE_SLOT = 0n;
+const UINT48_MASK = (1n << 48n) - 1n;
+const UINT64_MASK = (1n << 64n) - 1n;
+const UINT40_MASK = (1n << 40n) - 1n;
+const RNG_REQUEST_TIME_SHIFT = 48n;
+const RNG_LOCKED_SHIFT = 152n;
+const LR_PENDING_ETH_SHIFT = 48n;
+const LR_THRESHOLD_SHIFT = 112n;
+const LR_PENDING_FLIP_SHIFT = 184n;
+const MILLI_ETH_WEI = 10n ** 15n;
+let _rngQueueReadProvider = null;
+
 // ---------------------------------------------------------------------------
 // GAME_ABI fragment — minimal human-readable ABI, reconciled against the
 // Base Sepolia redeploy #7 GAME ABI (degenerus-sim/deployments/abis/GAME.json):
@@ -86,6 +105,7 @@ export const GAME_ABI = [
   'function presaleBoxCreditOf(address player) view returns (uint256 credit)',
   'function presaleBoxEthRemaining() view returns (uint256 remaining)',
   'function claimableWinningsOf(address player) view returns (uint256)',
+  'function afkingFundingOf(address player) view returns (uint256)',
   'function purchaseInfo() view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei)',
   'function buyPresaleBox(address buyer, uint256 boxAmount) payable',
   'function buyLootboxAndPresaleBox(address buyer, uint256 entryQuantityScaled, uint256 lootBoxAmount, bytes32 affiliateCode, uint8 payKind, uint256 boxAmount) payable',
@@ -116,13 +136,16 @@ export const MINT_PAYMENT_KIND_DIRECT_ETH = 0;
 export const MINT_PAYMENT_KIND_CLAIMABLE = 1;
 export const MINT_PAYMENT_KIND_COMBINED = 2;
 export const PURCHASE_FUNDING_PRIORITY_KEY = `purchase-funding-priority:${CHAIN.id}`;
+export const PURCHASE_USE_AFKING_KEY = `purchase-use-afking:${CHAIN.id}`;
 let _purchaseFundingPriorityMemory = 'claimable';
+let _purchaseUseAfkingMemory = true;
 
 /** Shared ETH funding preference used by purchases and Degenerette wagers. */
 export function readPurchaseFundingPriority() {
   try {
-    _purchaseFundingPriorityMemory = localStorage.getItem(PURCHASE_FUNDING_PRIORITY_KEY) === 'wallet'
-      ? 'wallet'
+    const stored = localStorage.getItem(PURCHASE_FUNDING_PRIORITY_KEY);
+    _purchaseFundingPriorityMemory = stored === 'wallet' || stored === 'afking'
+      ? stored
       : 'claimable';
     return _purchaseFundingPriorityMemory;
   } catch (_e) {
@@ -131,13 +154,32 @@ export function readPurchaseFundingPriority() {
 }
 
 export function writePurchaseFundingPriority(priority) {
-  _purchaseFundingPriorityMemory = priority === 'wallet' ? 'wallet' : 'claimable';
+  _purchaseFundingPriorityMemory = priority === 'wallet' || priority === 'afking'
+    ? priority
+    : 'claimable';
   try {
     localStorage.setItem(
       PURCHASE_FUNDING_PRIORITY_KEY,
       _purchaseFundingPriorityMemory,
     );
   } catch (_e) { /* private mode: shared in-memory choice remains authoritative */ }
+}
+
+/** Whether manual ETH purchases may draw the acting player's prepaid AFKing funds. */
+export function readPurchaseUseAfking() {
+  try {
+    const stored = localStorage.getItem(PURCHASE_USE_AFKING_KEY);
+    _purchaseUseAfkingMemory = stored == null ? true : stored === '1';
+    return _purchaseUseAfkingMemory;
+  } catch (_e) {
+    return _purchaseUseAfkingMemory;
+  }
+}
+
+export function writePurchaseUseAfking(enabled) {
+  _purchaseUseAfkingMemory = enabled !== false;
+  try { localStorage.setItem(PURCHASE_USE_AFKING_KEY, _purchaseUseAfkingMemory ? '1' : '0'); }
+  catch (_e) { /* private mode: shared in-memory choice remains authoritative */ }
 }
 /** Foil pack = ten ticket prices at the target level (DegenerusGameStorage.sol:2552). */
 export const FOIL_PACK_TICKETS = 10n;
@@ -399,25 +441,55 @@ export function claimableFirstPayment(totalCostWei, rawClaimableWei = 0n) {
   return { payKind, msgValueWei, claimableUsedWei, totalCostWei: total };
 }
 
-async function _claimableFirstPaymentFor(contract, buyer, totalCostWei, preferClaimable = true) {
-  if (!preferClaimable || !contract || typeof contract.claimableWinningsOf !== 'function') {
-    return claimableFirstPayment(totalCostWei, 0n);
+export function purchaseFundingPayment(
+  totalCostWei,
+  rawClaimableWei = 0n,
+  rawAfkingWei = 0n,
+  { useClaimable = true, useAfking = false } = {},
+) {
+  const base = claimableFirstPayment(totalCostWei, useClaimable ? rawClaimableWei : 0n);
+  let afking = 0n;
+  try { afking = BigInt(rawAfkingWei ?? 0); } catch (_e) { afking = 0n; }
+  if (afking < 0n || !useAfking) afking = 0n;
+  const afkingUsedWei = afking < base.msgValueWei ? afking : base.msgValueWei;
+  return {
+    ...base,
+    msgValueWei: base.msgValueWei - afkingUsedWei,
+    afkingUsedWei,
+  };
+}
+
+async function _purchaseFundingFor(
+  contract,
+  buyer,
+  totalCostWei,
+  { useClaimable = true, useAfking = false } = {},
+) {
+  if (!contract) {
+    return purchaseFundingPayment(totalCostWei, 0n, 0n, { useClaimable, useAfking });
   }
-  try {
-    const raw = await contract.claimableWinningsOf(buyer);
-    return claimableFirstPayment(totalCostWei, raw);
-  } catch (_e) {
-    // A read failure must not disable purchases. Fall back to the exact
-    // fresh-ETH path; the static call remains the authoritative gate.
-    return claimableFirstPayment(totalCostWei, 0n);
-  }
+  const reads = await Promise.allSettled([
+    useClaimable && typeof contract.claimableWinningsOf === 'function'
+      ? contract.claimableWinningsOf(buyer) : 0n,
+    useAfking && typeof contract.afkingFundingOf === 'function'
+      ? contract.afkingFundingOf(buyer) : 0n,
+  ]);
+  const claimable = reads[0].status === 'fulfilled' ? reads[0].value : 0n;
+  const afking = reads[1].status === 'fulfilled' ? reads[1].value : 0n;
+  // A read failure must not disable purchases. The unknown source simply
+  // falls back to fresh ETH; the exact static-call remains authoritative.
+  return purchaseFundingPayment(totalCostWei, claimable, afking, {
+    useClaimable,
+    useAfking,
+  });
 }
 
 /**
  * @param {{ticketQuantity: number, lootboxQuantity: number, affiliateCode?: string,
  *          lootBoxAmountWei?: bigint, ticketCostWei?: bigint,
  *          foil?: boolean, foilCostWei?: bigint, presaleBoxAmountWei?: bigint,
- *          preferClaimable?: boolean}} args
+ *          preferClaimable?: boolean, useAfking?: boolean,
+ *          onSubmitted?: function(import('ethers').TransactionResponse): void}} args
  *   ticketCostWei — scaled per-purchase ticket cost (scaledTicketPriceWei(target) ×
  *   quantity), computed by the panel from /game/state level + phase. It is part
  *   of the exact total; claimableFirstPayment decides the wallet shortfall.
@@ -484,11 +556,20 @@ export async function purchaseEth(args) {
   const provider = getProvider();
   const signer = provider ? await provider.getSigner() : null;
   const signerContract = signer ? _buildContract(signer) : null;
-  const payment = await _claimableFirstPaymentFor(
+  // The foil module accepts fresh ETH plus claimable winnings, but explicitly
+  // never taps AFKing principal. Counting AFKing here reduced msg.value before
+  // the foil delegatecall and made an otherwise funded purchase revert with
+  // DirectEthInsufficient. Ordinary ticket/lootbox purchases keep their full
+  // claimable -> AFKing -> wallet waterfall.
+  const useAfkingForPurchase = args.useAfking === true && !foil;
+  const payment = await _purchaseFundingFor(
     signerContract,
     buyer,
     totalCostWei,
-    args.preferClaimable !== false,
+    {
+      useClaimable: args.preferClaimable !== false,
+      useAfking: useAfkingForPurchase,
+    },
   );
 
   // Static-call gate (Phase 56 D-05) — runs only if a signer is available.
@@ -539,7 +620,8 @@ export async function purchaseEth(args) {
     `${presaleBoxAmountWei > 0n ? 'Buy in + presale box'
       : foil ? 'Buy foil pack' : ticketQuantity > 0 ? 'Buy tickets' : 'Buy lootbox'} (${
       args.preferClaimable === false ? 'wallet ETH' : 'claimable first'
-    })`
+    })`,
+    { onSubmitted: args.onSubmitted },
   );
 
   // Build a contract bound to the provider (signer-free) for log parsing.
@@ -591,13 +673,17 @@ export async function readPresaleBoxState({ player } = {}) {
  * helper re-reads both immediately before simulation so an old UI quote cannot
  * turn a close-boundary clamp into unexpected AFKing credit.
  *
- * @param {{boxAmountWei: bigint|string|number, player?: string, preferClaimable?: boolean}} args
+ * @param {{boxAmountWei: bigint|string|number, player?: string, preferClaimable?: boolean,
+ *          useAfking?: boolean,
+ *          onSubmitted?: function(import('ethers').TransactionResponse): void}} args
  * @returns {Promise<{receipt,contract,payment,state}>}
  */
 export async function purchasePresaleBox({
   boxAmountWei,
   player,
   preferClaimable = true,
+  useAfking = false,
+  onSubmitted,
 } = {}) {
   const buyer = player || _readBuyer();
   let requested;
@@ -616,11 +702,14 @@ export async function purchasePresaleBox({
   if (requested > state.creditWei) throw new Error('Presale credit is lower than that box size.');
   if (requested > state.remainingWei) throw new Error('Only a smaller presale box remains available.');
 
-  const payment = await _claimableFirstPaymentFor(
+  const payment = await _purchaseFundingFor(
     contract,
     buyer,
     requested,
-    preferClaimable !== false,
+    {
+      useClaimable: preferClaimable !== false,
+      useAfking: useAfking === true,
+    },
   );
   const callArgs = [buyer, requested, { value: payment.msgValueWei }];
   const sim = await requireStaticCall(contract, 'buyPresaleBox', callArgs, signer);
@@ -629,6 +718,7 @@ export async function purchasePresaleBox({
   const receipt = await sendTx(
     (s) => _buildContract(s).buyPresaleBox(...callArgs),
     'Buy presale box',
+    { onSubmitted },
   );
   return { receipt, contract: _buildContract(provider), payment, state };
 }
@@ -746,7 +836,7 @@ export async function openLootBox(args) {
 /**
  * @param {import('ethers').TransactionReceipt | null | undefined} receipt
  * @param {import('ethers').Contract} contract
- * @returns {Array<{lootboxIndex: bigint, day: bigint | null}>}
+ * @returns {Array<{lootboxIndex: bigint, day: bigint | null, amountWei: bigint | null}>}
  */
 export function parseLootboxIdxFromReceipt(receipt, contract) {
   const out = [];
@@ -759,11 +849,13 @@ export function parseLootboxIdxFromReceipt(receipt, contract) {
         out.push({
           lootboxIndex: BigInt(parsed.args.index ?? parsed.args[1]),
           day: null,
+          amountWei: BigInt(parsed.args.amount ?? parsed.args[2] ?? 0),
         });
       } else if (parsed.name === 'LootBoxIdx') {
         out.push({
           lootboxIndex: BigInt(parsed.args.index ?? parsed.args[1]),
           day: BigInt(parsed.args.day ?? parsed.args[2]),
+          amountWei: null,
         });
       }
     } catch (_e) {
@@ -841,6 +933,96 @@ export async function isLootboxIndexComplete(lootboxIndex) {
   const contract = _buildContract(provider);
   if (typeof contract?.boxIndexComplete !== 'function') return false;
   return Boolean(await contract.boxIndexComplete(BigInt(lootboxIndex)));
+}
+
+/** Decode the two packed GAME slots that describe the shared mid-day RNG queue. */
+export function decodeLootboxRngQueueState(
+  queuePackedValue,
+  timingPackedValue = 0n,
+  blockNumber = null,
+) {
+  const packed = BigInt(queuePackedValue ?? 0n);
+  const timing = BigInt(timingPackedValue ?? 0n);
+  const index = packed & UINT48_MASK;
+  const pendingMilliEth = (packed >> LR_PENDING_ETH_SHIFT) & UINT64_MASK;
+  const thresholdMilliEth = (packed >> LR_THRESHOLD_SHIFT) & UINT64_MASK;
+  const pendingFlipWhole = (packed >> LR_PENDING_FLIP_SHIFT) & UINT40_MASK;
+  const requestTime = (timing >> RNG_REQUEST_TIME_SHIFT) & UINT48_MASK;
+  const rngLocked = ((timing >> RNG_LOCKED_SHIFT) & 0xffn) !== 0n;
+  const hasPending = pendingMilliEth !== 0n || pendingFlipWhole !== 0n;
+  const queueReady = thresholdMilliEth === 0n
+    ? hasPending
+    : pendingMilliEth >= thresholdMilliEth;
+  const rawFillBps = thresholdMilliEth === 0n
+    ? (hasPending ? 10_000n : 0n)
+    : (pendingMilliEth * 10_000n) / thresholdMilliEth;
+  const fillBps = thresholdMilliEth === 0n
+    ? (hasPending ? 10_000 : 0)
+    : Number(rawFillBps > 10_000n ? 10_000n : rawFillBps);
+  return {
+    index,
+    pendingMilliEth,
+    thresholdMilliEth,
+    pendingEthWei: pendingMilliEth * MILLI_ETH_WEI,
+    thresholdWei: thresholdMilliEth * MILLI_ETH_WEI,
+    pendingFlipWhole,
+    hasPending,
+    queueReady,
+    fillBps,
+    requestTime,
+    rngLocked,
+    middayRequestInFlight: requestTime !== 0n && !rngLocked,
+    blockNumber: blockNumber != null && Number.isInteger(Number(blockNumber))
+      ? Number(blockNumber)
+      : null,
+  };
+}
+
+async function _readGameStorage(provider, slot, blockNumber) {
+  if (typeof provider?.getStorage === 'function') {
+    return provider.getStorage(CONTRACTS.GAME, slot, blockNumber ?? 'latest');
+  }
+  if (typeof provider?.send === 'function') {
+    const blockTag = Number.isInteger(blockNumber)
+      ? `0x${blockNumber.toString(16)}`
+      : 'latest';
+    return provider.send('eth_getStorageAt', [
+      CONTRACTS.GAME,
+      `0x${slot.toString(16)}`,
+      blockTag,
+    ]);
+  }
+  throw new Error('Provider cannot read the shared RNG queue.');
+}
+
+/**
+ * Read the authoritative shared mid-day RNG queue and request latch.
+ * Values are returned in the contract's native milli-ETH / whole-FLIP units
+ * so consumers can render progress without floating-point rounding.
+ */
+export async function readLootboxRngQueueState({ provider = null } = {}) {
+  let reader = provider || getProvider();
+  if (!reader && CHAIN.rpcUrl) {
+    if (!_rngQueueReadProvider) {
+      _rngQueueReadProvider = new ethers.JsonRpcProvider(
+        CHAIN.rpcUrl,
+        Number(CHAIN.id),
+        { staticNetwork: true, batchMaxCount: 1 },
+      );
+    }
+    reader = _rngQueueReadProvider;
+  }
+  if (!reader || !CONTRACTS.GAME) return null;
+  let blockNumber = null;
+  try {
+    const head = Number(await reader.getBlockNumber?.());
+    if (Number.isInteger(head) && head >= 0) blockNumber = head;
+  } catch (_e) { /* an unpinned latest read is still useful */ }
+  const [queuePacked, timingPacked] = await Promise.all([
+    _readGameStorage(reader, LOOTBOX_RNG_STORAGE_SLOT, blockNumber),
+    _readGameStorage(reader, GAME_TIMING_STORAGE_SLOT, blockNumber),
+  ]);
+  return decodeLootboxRngQueueState(queuePacked, timingPacked, blockNumber);
 }
 
 /** Whether the connected account can permissionlessly request the pending RNG now. */
@@ -998,7 +1180,7 @@ function readSiteRef(chainId, address) {
  *
  * @param {{ticketQuantity:number, lootboxQuantity:number,
  *          affiliateCode?:string, lootBoxAmountWei?:bigint,
- *          ticketCostWei?:bigint, preferClaimable?:boolean}} args
+ *          ticketCostWei?:bigint, preferClaimable?:boolean, useAfking?:boolean}} args
  * @returns {Promise<{buildTx:()=>Promise<import('ethers').TransactionResponse>,
  *                    abort:()=>void, expiresAt:number, payment:object}>}
  */
@@ -1029,11 +1211,14 @@ export async function prewarmLootboxBuy(args) {
   const lootBoxAmountWei = args.lootBoxAmountWei
     ?? (LOOTBOX_MIN_WEI * BigInt(Math.max(0, Number(args.lootboxQuantity ?? 0))));
   const ticketCostWei = args.ticketCostWei ?? 0n;
-  const payment = await _claimableFirstPaymentFor(
+  const payment = await _purchaseFundingFor(
     contract,
     buyer,
     lootBoxAmountWei + ticketCostWei,
-    args.preferClaimable !== false,
+    {
+      useClaimable: args.preferClaimable !== false,
+      useAfking: args.useAfking === true,
+    },
   );
   const affiliateCode = args.affiliateCode ?? readAffiliateCode(CHAIN.id, buyer);
   const unsignedTx = await contract.purchase.populateTransaction(

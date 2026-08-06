@@ -35,6 +35,7 @@ import {
   SALVAGE_MAX_LINES,
 } from '../app/salvage.js';
 import { compactUiError } from '../app/ui-error.js';
+import { applyTicketLevelTone } from '../app/ticket-level-tone.js';
 import {
   applyDgnTicketAccent,
   DGN_TICKET_COPY_EVENT,
@@ -317,12 +318,9 @@ export function formatTicketEntryHoldings(entryCount) {
   const entries = Math.max(0, Math.floor(Number(entryCount) || 0));
   const whole = Math.floor(entries / ENTRIES_PER_CARD);
   const loose = entries % ENTRIES_PER_CARD;
-  const parts = [];
-  if (whole > 0) {
-    parts.push(`${whole.toLocaleString('en-US')} ticket${whole === 1 ? '' : 's'}`);
-  }
-  if (loose > 0) parts.push(`${loose} ${loose === 1 ? 'entry' : 'entries'}`);
-  return parts.length > 0 ? parts.join(' + ') : '0 tickets';
+  const fraction = ['', '.25', '.5', '.75'][loose];
+  const quantity = `${whole.toLocaleString('en-US')}${fraction}`;
+  return `${quantity} ticket${entries === ENTRIES_PER_CARD ? '' : 's'}`;
 }
 
 const SALVAGE_PURCHASE_UNITS_PER_TICKET = 400n;
@@ -449,6 +447,8 @@ class AppTicketsInventory extends HTMLElement {
   #zoom = 100;
   #viewportHeight = INV_HEIGHT_DEFAULT;
   #heightCustomized = false;
+  #expanded = false;
+  #focusSalvageOnRender = false;
   #resizeObserver = null;
   #packRevealListener = null;
   #visibilityListener = null;
@@ -551,26 +551,33 @@ class AppTicketsInventory extends HTMLElement {
             <span class="inv-total-value__label">TOTAL VALUE</span>
             <strong data-bind="inv-total-value">—</strong>
           </span>
+          <button type="button" class="inv-salvage-jump" data-bind="inv-salvage-jump"
+                  title="Open long-term ticket holdings at Salvage Swap" disabled>SALVAGE</button>
           <span class="inv-level-cluster">
+            <span class="inv-meta" data-bind="inv-meta">—</span>
             <span class="inv-level-nav">
               <button type="button" class="inv-level-btn" data-bind="inv-prev" title="Previous level">←</button>
               <span class="inv-level-display">Lv <b data-bind="inv-level">—</b> <span class="inv-level-tag" data-bind="inv-tag"></span></span>
               <button type="button" class="inv-level-btn" data-bind="inv-next" title="Next level">→</button>
               <button type="button" class="inv-level-btn" data-bind="inv-jump" title="Jump to active level">⟳</button>
             </span>
-            <span class="inv-meta" data-bind="inv-meta">—</span>
           </span>
-          <span class="inv-mode-toggle">
+          <span class="inv-mode-toggle inv-expanded-control" hidden>
             <button type="button" class="inv-mode-btn is-active" data-bind="inv-mode-cards">Cards</button>
             <button type="button" class="inv-mode-btn" data-bind="inv-mode-chart">Chart</button>
           </span>
-          <span class="inv-zoom-controls" aria-label="Ticket zoom">
+          <span class="inv-zoom-controls inv-expanded-control" aria-label="Ticket zoom" hidden>
             <button type="button" class="inv-view-btn" data-bind="inv-zoom-out" title="Zoom tickets out" aria-label="Zoom tickets out">−</button>
             <output class="inv-zoom-value" data-bind="inv-zoom-value" aria-live="polite">100%</output>
             <button type="button" class="inv-view-btn" data-bind="inv-zoom-in" title="Zoom tickets in" aria-label="Zoom tickets in">+</button>
           </span>
+          <button type="button" class="inv-disclosure" data-bind="inv-toggle"
+                  aria-expanded="false" aria-controls="ticket-inventory-details"
+                  aria-label="Show ticket details">
+            <span class="inv-disclosure__chevron" aria-hidden="true"></span>
+          </button>
         </div>
-        <div class="inv-window" data-bind="inv-window">
+        <div id="ticket-inventory-details" class="inv-window" data-bind="inv-window" hidden>
           <div class="inv-viewport" data-bind="inv-viewport">
             <div class="inv-cards" data-bind="inv-cards"></div>
             <div class="inv-chart" data-bind="inv-chart" hidden></div>
@@ -590,6 +597,14 @@ class AppTicketsInventory extends HTMLElement {
   }
 
   #wireControls() {
+    const toggle = this.querySelector('[data-bind="inv-toggle"]');
+    if (toggle) toggle.addEventListener('click', () => {
+      this.#expanded = !this.#expanded;
+      this.#syncDisclosure();
+      if (this.#expanded) this.#render();
+    });
+    const salvageJump = this.querySelector('[data-bind="inv-salvage-jump"]');
+    if (salvageJump) salvageJump.addEventListener('click', () => this.#openSalvage());
     const prev = this.querySelector('[data-bind="inv-prev"]');
     if (prev) prev.addEventListener('click', () => this.#navLevel(Math.max(1, (this.#viewLevel ?? 1) - 1)));
     const next = this.querySelector('[data-bind="inv-next"]');
@@ -631,6 +646,23 @@ class AppTicketsInventory extends HTMLElement {
         this.#heightCustomized = height !== INV_HEIGHT_DEFAULT;
       }
     } catch (_) { /* storage can be unavailable in private contexts */ }
+  }
+
+  #syncDisclosure() {
+    const toggle = this.querySelector('[data-bind="inv-toggle"]');
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', String(this.#expanded));
+      toggle.setAttribute(
+        'aria-label',
+        this.#expanded ? 'Hide tickets owned' : 'Show tickets owned',
+      );
+      toggle.title = this.#expanded ? 'Hide tickets owned' : 'Show tickets owned';
+    }
+    for (const control of this.querySelectorAll?.('.inv-expanded-control') || []) {
+      control.hidden = !this.#expanded;
+    }
+    const window = this.querySelector('[data-bind="inv-window"]');
+    if (window) window.hidden = !this.#expanded;
   }
 
   #persistViewPreference(key, value) {
@@ -711,6 +743,16 @@ class AppTicketsInventory extends HTMLElement {
     if (lvl === this.#viewLevel) return;
     this.#viewLevel = lvl;
     this.#refresh();
+  }
+
+  #openSalvage() {
+    if (get('ui.mode') === 'combined' || this.#activeLevel == null || !this.#address) return;
+    this.#expanded = true;
+    this.#focusSalvageOnRender = true;
+    this.#syncDisclosure();
+    const longTermLevel = this.#activeLevel + FAR_FUTURE_OFFSET + 1;
+    if (this.#viewLevel === longTermLevel) this.#render();
+    else this.#navLevel(longTermLevel);
   }
 
   #setMode(mode, { render = true } = {}) {
@@ -1243,7 +1285,10 @@ class AppTicketsInventory extends HTMLElement {
   #renderHeader() {
     this.#renderTotalValue();
     const levelEl = this.querySelector('[data-bind="inv-level"]');
-    if (levelEl) levelEl.textContent = this.#viewLevel == null ? '—' : String(this.#viewLevel);
+    if (levelEl) {
+      levelEl.textContent = this.#viewLevel == null ? '—' : String(this.#viewLevel);
+      applyTicketLevelTone(levelEl, this.#viewLevel, this.#activeLevel);
+    }
     const tagEl = this.querySelector('[data-bind="inv-tag"]');
     if (tagEl) {
       let tag = '';
@@ -1254,24 +1299,31 @@ class AppTicketsInventory extends HTMLElement {
       }
       tagEl.textContent = tag;
     }
+    const salvageJump = this.querySelector('[data-bind="inv-salvage-jump"]');
+    if (salvageJump) {
+      salvageJump.hidden = false;
+      salvageJump.disabled = !this.#address || this.#activeLevel == null;
+    }
     const meta = this.querySelector('[data-bind="inv-meta"]');
     if (meta) {
       if (this.#isFarFuture()) {
-        meta.textContent = 'Long-term holdings — traits roll when each level goes live.';
+        const lo = this.#activeLevel + 1;
+        const hi = this.#activeLevel + FAR_FUTURE_SPAN;
+        const totalEntries = this.#holdings
+          .filter((row) => row.level >= lo && row.level <= hi)
+          .reduce((sum, row) => sum + row.entryCount, 0);
+        meta.textContent = this.#holdingsLoaded
+          ? `${formatTicketEntryHoldings(totalEntries)} · long term`
+          : 'Loading tickets…';
       } else {
         const d = this.#data;
         if (!d) {
-          meta.textContent = this.#address ? 'No tickets at this level.' : 'Pick a player to see tickets.';
+          meta.textContent = this.#address ? '0 tickets' : 'Pick a player to see tickets.';
         } else {
           const totalEntries = Math.max(0, Math.floor(Number(d.totalEntries || 0)));
-          const cards = Math.floor(totalEntries / ENTRIES_PER_CARD);
-          const looseEntries = totalEntries % ENTRIES_PER_CARD;
           const pending = (Array.isArray(d.cards) ? d.cards : [])
             .filter((c) => c && c.status === 'pending').length;
-          meta.textContent = `${cards} card${cards === 1 ? '' : 's'}`
-            + (looseEntries
-              ? ` · ${looseEntries} ${looseEntries === 1 ? 'entry' : 'entries'}`
-              : '')
+          meta.textContent = formatTicketEntryHoldings(totalEntries)
             + (pending ? ` · ${pending} pending` : '');
         }
       }
@@ -1316,6 +1368,14 @@ class AppTicketsInventory extends HTMLElement {
 
   #render() {
     if (get('ui.mode') === 'combined') {
+      this.#renderTotalValue(
+        Array.isArray(this.#combined?.tickets) ? this.#combined.tickets : [],
+      );
+      this.#renderCombinedHeader();
+      const salvageJump = this.querySelector('[data-bind="inv-salvage-jump"]');
+      if (salvageJump) salvageJump.hidden = true;
+      this.#syncDisclosure();
+      if (!this.#expanded) return;
       this.#renderCombinedView();
       return;
     }
@@ -1324,6 +1384,11 @@ class AppTicketsInventory extends HTMLElement {
     const combinedHost = this.querySelector('[data-bind="inv-combined"]');
     if (combinedHost) combinedHost.hidden = true;
     this.#renderHeader();
+    this.#syncDisclosure();
+    // Do not construct any badge <img> nodes until the player asks for the
+    // detail. This is materially lighter than merely hiding a prebuilt SVG
+    // grid, especially for large inventories on phones.
+    if (!this.#expanded) return;
     if (this.#isFarFuture()) this.#renderFarFuture();
     else if (this.#mode === 'chart') this.#renderChart();
     else this.#renderCards();
@@ -1338,6 +1403,38 @@ class AppTicketsInventory extends HTMLElement {
   // this renders a level + owner-tagged list instead of the cards/chart UI.
   // ---------------------------------------------------------------------
 
+  #renderCombinedHeader() {
+    const levelEl = this.querySelector('[data-bind="inv-level"]');
+    const tagEl = this.querySelector('[data-bind="inv-tag"]');
+    if (levelEl) {
+      levelEl.textContent = 'ALL';
+      applyTicketLevelTone(levelEl, null, this.#activeLevel);
+    }
+    if (tagEl) tagEl.textContent = 'combined';
+
+    const rows = (Array.isArray(this.#combined?.tickets) ? this.#combined.tickets : [])
+      .map((r) => ({
+        level: Number(r?.level),
+        entryCount: Math.max(0, Math.floor(Number(r?.entryCount || 0))),
+        owner: r?.owner,
+      }))
+      .filter((r) => Number.isFinite(r.level) && r.entryCount > 0)
+      .sort((a, b) => a.level - b.level || String(a.owner).localeCompare(String(b.owner)));
+    const addrCount = Array.isArray(this.#combined?.addresses) ? this.#combined.addresses.length : 0;
+    const meta = this.querySelector('[data-bind="inv-meta"]');
+    if (meta) {
+      if (rows.length === 0) {
+        meta.textContent = addrCount > 0
+          ? `No tickets across ${addrCount} combined accounts.`
+          : 'No tickets across the combined accounts.';
+      } else {
+        const totalEntries = rows.reduce((sum, row) => sum + row.entryCount, 0);
+        meta.textContent = `${formatTicketEntryHoldings(totalEntries)} across ${addrCount} account${addrCount === 1 ? '' : 's'}`;
+      }
+    }
+    return { rows, addrCount };
+  }
+
   #renderCombinedView() {
     const cards = this.querySelector('[data-bind="inv-cards"]');
     const chart = this.querySelector('[data-bind="inv-chart"]');
@@ -1350,37 +1447,16 @@ class AppTicketsInventory extends HTMLElement {
     combinedHost.hidden = false;
     combinedHost.textContent = '';
 
-    const levelEl = this.querySelector('[data-bind="inv-level"]');
-    const tagEl = this.querySelector('[data-bind="inv-tag"]');
-    if (levelEl) levelEl.textContent = '—';
-    if (tagEl) tagEl.textContent = '';
-
-    const rows = Array.isArray(this.#combined?.tickets) ? this.#combined.tickets : [];
-    this.#renderTotalValue(rows);
-    const addrCount = Array.isArray(this.#combined?.addresses) ? this.#combined.addresses.length : 0;
-    const meta = this.querySelector('[data-bind="inv-meta"]');
-
-    const withEntries = rows
-      .map((r) => ({
-        level: Number(r?.level),
-        entryCount: Math.max(0, Math.floor(Number(r?.entryCount || 0))),
-        owner: r?.owner,
-      }))
-      .filter((r) => Number.isFinite(r.level) && r.entryCount > 0)
-      .sort((a, b) => a.level - b.level || String(a.owner).localeCompare(String(b.owner)));
+    const rawRows = Array.isArray(this.#combined?.tickets) ? this.#combined.tickets : [];
+    this.#renderTotalValue(rawRows);
+    const { rows: withEntries, addrCount } = this.#renderCombinedHeader();
 
     if (withEntries.length === 0) {
-      if (meta) meta.textContent = addrCount > 0 ? `No tickets across ${addrCount} combined accounts.` : 'No tickets across the combined accounts.';
       const empty = document.createElement('p');
       empty.className = 'inv-empty';
       empty.textContent = 'No tickets across the combined accounts.';
       combinedHost.appendChild(empty);
       return;
-    }
-
-    const totalEntries = withEntries.reduce((sum, row) => sum + row.entryCount, 0);
-    if (meta) {
-      meta.textContent = `${formatTicketEntryHoldings(totalEntries)} across ${addrCount} account${addrCount === 1 ? '' : 's'}`;
     }
 
     const list = document.createElement('div');
@@ -1391,6 +1467,10 @@ class AppTicketsInventory extends HTMLElement {
       const lvl = document.createElement('span');
       lvl.className = 'inv-combined-level';
       lvl.textContent = `L${r.level}`;
+      // Combined mode returns from #refresh before the single-account
+      // #activeLevel bootstrap. Let the shared helper read the authoritative
+      // roll1.purchaseLevel (or app.gameState fallback) directly from store.
+      applyTicketLevelTone(lvl, r.level);
       row.appendChild(lvl);
       const count = document.createElement('span');
       count.className = 'inv-combined-count';
@@ -1450,67 +1530,71 @@ class AppTicketsInventory extends HTMLElement {
       : `No far-future tickets held (levels ${lo}–${hi}).`;
     host.appendChild(head);
 
-    if (rows.length === 0) return;
-    const list = document.createElement('div');
-    list.className = 'inv-ff__rows';
-    for (const t of rows) {
-      const row = document.createElement('div');
-      row.className = 'inv-ff__row';
-      if (t.level === this.#viewLevel) row.classList.add('is-viewed');
-      const salvage = salvageByLevel.get(t.level);
-      const selected = this.#salvageSelection.get(t.level) || 0;
-      if (salvage) row.classList.add('is-salvageable');
-      if (selected > 0) row.classList.add('is-selected');
+    if (rows.length > 0) {
+      const list = document.createElement('div');
+      list.className = 'inv-ff__rows';
+      for (const t of rows) {
+        const row = document.createElement('div');
+        row.className = 'inv-ff__row';
+        if (t.level === this.#viewLevel) row.classList.add('is-viewed');
+        const salvage = salvageByLevel.get(t.level);
+        const selected = this.#salvageSelection.get(t.level) || 0;
+        if (salvage) row.classList.add('is-salvageable');
+        if (selected > 0) row.classList.add('is-selected');
 
-      if (salvage) {
-        const pick = document.createElement('input');
-        pick.className = 'inv-ff__pick';
-        pick.type = 'checkbox';
-        pick.checked = selected > 0;
-        pick.disabled = this.#salvageBusy;
-        pick.setAttribute('aria-label', `Select level ${t.level} for salvage`);
-        pick.addEventListener('change', () => {
-          this.#setSalvageQuantity(t.level, pick.checked ? salvage.wholeTickets : 0);
-        });
-        row.appendChild(pick);
-      }
-      const lvl = document.createElement('span');
-      lvl.className = 'inv-ff__level';
-      lvl.textContent = `L${t.level}`;
-      row.appendChild(lvl);
-      const count = document.createElement('span');
-      count.className = 'inv-ff__count';
-      count.textContent = formatTicketEntryHoldings(t.entryCount);
-      row.appendChild(count);
+        if (salvage) {
+          const pick = document.createElement('input');
+          pick.className = 'inv-ff__pick';
+          pick.type = 'checkbox';
+          pick.checked = selected > 0;
+          pick.disabled = this.#salvageBusy;
+          pick.setAttribute('aria-label', `Select level ${t.level} for salvage`);
+          pick.addEventListener('change', () => {
+            this.#setSalvageQuantity(t.level, pick.checked ? salvage.wholeTickets : 0);
+          });
+          row.appendChild(pick);
+        }
+        const lvl = document.createElement('span');
+        lvl.className = 'inv-ff__level';
+        lvl.textContent = `L${t.level}`;
+        applyTicketLevelTone(lvl, t.level, this.#activeLevel);
+        row.appendChild(lvl);
+        const count = document.createElement('span');
+        count.className = 'inv-ff__count';
+        count.textContent = formatTicketEntryHoldings(t.entryCount);
+        row.appendChild(count);
 
-      if (salvage) {
-        const qty = document.createElement('label');
-        qty.className = 'inv-ff__qty';
-        const qtyLabel = document.createElement('span');
-        qtyLabel.textContent = 'SELL';
-        qty.appendChild(qtyLabel);
-        const input = document.createElement('input');
-        input.type = 'number';
-        input.min = '0';
-        input.max = String(salvage.wholeTickets);
-        input.step = '1';
-        input.inputMode = 'numeric';
-        input.value = String(selected);
-        input.disabled = this.#salvageBusy;
-        input.setAttribute('aria-label', `Level ${t.level} tickets to salvage`);
-        input.addEventListener('change', () => this.#setSalvageQuantity(t.level, input.value));
-        qty.appendChild(input);
-        row.appendChild(qty);
+        if (salvage) {
+          const qty = document.createElement('label');
+          qty.className = 'inv-ff__qty';
+          const qtyLabel = document.createElement('span');
+          qtyLabel.textContent = 'SELL';
+          qty.appendChild(qtyLabel);
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.min = '0';
+          input.max = String(salvage.wholeTickets);
+          input.step = '1';
+          input.inputMode = 'numeric';
+          input.value = String(selected);
+          input.disabled = this.#salvageBusy;
+          input.setAttribute('aria-label', `Level ${t.level} tickets to salvage`);
+          input.addEventListener('change', () => this.#setSalvageQuantity(t.level, input.value));
+          qty.appendChild(input);
+          row.appendChild(qty);
+        }
+        list.appendChild(row);
       }
-      list.appendChild(row);
+      host.appendChild(list);
     }
-    host.appendChild(list);
 
     const eligible = this.#salvageEligibleRows();
     const lines = this.#selectedSalvageLines();
     const selectedTickets = lines.reduce((sum, line) => sum + line.ticketQuantity, 0);
     const panel = document.createElement('section');
     panel.className = 'inv-salvage';
+    panel.setAttribute('data-bind', 'inv-salvage-panel');
+    panel.setAttribute('tabindex', '-1');
 
     const panelHead = document.createElement('div');
     panelHead.className = 'inv-salvage__head';
@@ -1616,6 +1700,15 @@ class AppTicketsInventory extends HTMLElement {
     execute.addEventListener('click', () => { void this.#activateSalvage(); });
     panel.appendChild(execute);
     host.appendChild(panel);
+    if (this.#focusSalvageOnRender) {
+      this.#focusSalvageOnRender = false;
+      const reveal = () => {
+        try { panel.scrollIntoView?.({ behavior: 'smooth', block: 'end' }); } catch (_e) { /* fake DOM */ }
+        try { panel.focus?.({ preventScroll: true }); } catch (_e) { /* fake DOM */ }
+      };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(reveal);
+      else reveal();
+    }
   }
 
   // Cards mode — dedup identical 4-trait combos into ×N cards (sketch

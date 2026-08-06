@@ -105,6 +105,7 @@ test('the x4/x99 Decimator burn card is first and prominent inside Side Bets', (
   const cards = /<div class="pari-books">([\s\S]*?)<\/div>/.exec(source)?.[1] || '';
   assert.ok(cards.indexOf('data-bind="pari-decimator"') >= 0);
   assert.ok(cards.indexOf('data-bind="pari-decimator"') < cards.indexOf('data-bind="pari-growth"'));
-  assert.match(source, /BURN WINDOW OPEN/);
+  assert.match(source, /title\.textContent = 'DECIMATOR'/);
+  assert.match(source, /burnPrompt\.textContent = 'BURN FLIP'/);
   assert.match(source, /return \(level % 10 === 4 && level % 100 !== 94\) \|\| level % 100 === 99/);
 });

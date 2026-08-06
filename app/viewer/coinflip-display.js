@@ -4,6 +4,7 @@
 
 import { formatEth } from './utils.js';
 import gsap from 'gsap';
+import { celebrateProtocol } from '../protocol-celebration.js';
 
 /**
  * Compute the multiplier tier label from rewardPercent.
@@ -119,15 +120,9 @@ export function render(coinflipData, container) {
     }
   });
 
-  // Optional win celebration via canvas-confetti (dynamic import -- does not block rendering)
+  // A compact coin-centered energy seal celebrates the win without covering
+  // the viewer in unrelated falling decoration.
   if (win === true) {
-    import('canvas-confetti').then(mod => {
-      mod.default({
-        particleCount: 20,
-        spread: 60,
-        origin: { y: 0.7 },
-        colors: ['#22c55e', '#f5a623']
-      });
-    }).catch(() => {}); // silent fail if confetti unavailable
+    celebrateProtocol({ target: panel, tone: 'coinflip' });
   }
 }

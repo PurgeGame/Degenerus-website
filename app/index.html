@@ -25,7 +25,6 @@
       "gsap": "https://esm.sh/gsap@3.14",
       "gsap/Flip": "https://esm.sh/gsap@3.14/Flip",
       "gsap/TextPlugin": "https://esm.sh/gsap@3.14/TextPlugin",
-      "canvas-confetti": "https://esm.sh/canvas-confetti@1.9",
       "lean-qr": "https://esm.sh/lean-qr@2.5",
       "@walletconnect/ethereum-provider": "https://esm.sh/@walletconnect/ethereum-provider@2.23.9"
     }
@@ -112,7 +111,7 @@
            on 2026-07-29 (user call: "the ugly foil tickets and the big list of
            what everyone else won") — the widget is the draw and the scratch.
            The DAY SUMMARY button is still owned by last-day-jackpot (it carries
-           the gates) and replaces Reveal Draw in that button's existing action
+           the gates) and replaces SPIN JACKPOT in that button's existing action
            row once BOTH the board and the flip have played out. -->
       <section class="jackpot-hero" aria-label="Purchase, daily jackpot draw, and coinflip">
         <div class="jackpot-hero__draw">
@@ -120,7 +119,7 @@
           <last-day-jackpot></last-day-jackpot>
           <replay-panel single-button></replay-panel>
           <div class="jackpot-load-status" data-bind="jackpot-load-status"
-               aria-live="polite">(loading)</div>
+               aria-live="polite">JACKPOT PROCESSING · SPIN AVAILABLE SOON</div>
           <nav class="jackpot-day-history" data-bind="jackpot-day-history" hidden
                aria-label="Jackpot day history">
             <button type="button" data-bind="jackpot-day-prev"
@@ -154,6 +153,10 @@
         <app-parimutuel-panel></app-parimutuel-panel>
       </section>
 
+      <!-- Deity holders act from a compact daily-power desk outside the
+           pass shop, immediately above the inventory those boons can affect. -->
+      <app-deity-desk></app-deity-desk>
+
       <!-- Task #12: ticket inventory — deduped ticket cards + the wide
            all-symbols × per-level chart (app-tickets-inventory.js) -->
       <app-tickets-inventory></app-tickets-inventory>
@@ -166,6 +169,10 @@
           <app-pass-section></app-pass-section>
         </div>
       </details>
+
+      <!-- Full activity history is intentionally last and collapsed. Its
+           component does not touch the indexer until this dropdown opens. -->
+      <app-transaction-history></app-transaction-history>
     </main>
 
     <footer>
@@ -178,6 +185,10 @@
     <!-- One-time first-visit choice: connect now or learn the flow in the
          fully off-chain scripted tutorial. -->
     <app-onboarding></app-onboarding>
+
+    <!-- Standalone currency/format chooser for the purchase widget's ALL IN
+         action. It quotes and submits without rewriting any ordinary form. -->
+    <app-all-in-dialog></app-all-in-dialog>
 
     <!-- Headless lootbox lifecycle controller. Ready boxes are exposed only
          through the same fixed bottom tray used by ticket packs. -->
@@ -199,6 +210,7 @@
   <script type="module" src="/app/components/testnet-beta-banner.js"></script>
   <script type="module" src="/app/app/main.js"></script>
   <script type="module" src="/app/components/app-referral-input.js"></script>
+  <script type="module" src="/app/components/app-sound-toggle.js"></script>
   <script type="module" src="/app/components/app-feedback-button.js"></script>
   <script type="module" src="/app/components/wallet-picker.js"></script>
   <script type="module" src="/app/components/app-onboarding.js"></script>
@@ -208,12 +220,14 @@
   <script type="module" src="/app/components/app-pool-progress.js"></script>
   <script type="module" src="/app/components/replay-panel.js"></script>
   <script type="module" src="/app/components/last-day-jackpot.js"></script>
+  <script type="module" src="/app/components/app-deity-desk.js"></script>
   <script type="module" src="/app/components/app-tickets-inventory.js"></script>
   <script type="module" src="/app/components/app-daily-flip.js"></script>
   <script type="module" src="/app/components/app-parimutuel-panel.js"></script>
   <script type="module" src="/app/components/app-mine-flip.js"></script>
   <script type="module" src="/app/components/app-jackpot-resolutions.js"></script>
   <script type="module" src="/app/components/app-decimator-panel.js"></script>
+  <script type="module" src="/app/components/app-all-in-dialog.js"></script>
   <script type="module" src="/app/components/app-box-strip.js"></script>
   <script type="module" src="/app/components/app-day-history-replays.js"></script>
   <script type="module" src="/app/components/app-sdgnrs-redemptions.js"></script>
@@ -222,5 +236,6 @@
   <script type="module" src="/app/components/app-degenerette-panel.js"></script>
   <script type="module" src="/app/components/app-quest-panel.js"></script>
   <script type="module" src="/app/components/app-pass-section.js"></script>
+  <script type="module" src="/app/components/app-transaction-history.js"></script>
 </body>
 </html>

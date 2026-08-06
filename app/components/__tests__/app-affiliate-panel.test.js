@@ -445,15 +445,15 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     assert.ok(el.querySelector('[data-bind="aff-referees"]'), 'aff-referees container present');
   });
 
-  test('Default URL renders with defaultCodeForAddress on mount', async () => {
+  test('Default URL renders with the readable player address on mount', async () => {
     const el = instantiate();
     await settle(20);
     const input = el.querySelector('[data-bind="aff-url"]');
     assert.ok(input, 'aff-url input present');
     const url = input.value || input._value || '';
-    const expectedCode = '0x' + '0'.repeat(24) + CONNECTED.slice(2).toLowerCase();
-    assert.match(url, new RegExp(expectedCode), `URL contains default LEFT-padded code ${expectedCode}`);
-    assert.match(url, /https:\/\/degener\.us\/\?ref=/, 'URL has the current site base + ?ref=');
+    const expectedCode = CONNECTED.toLowerCase();
+    assert.match(url, new RegExp(expectedCode), `URL contains player address ${expectedCode}`);
+    assert.match(url, /https:\/\/degener\.us\/app\/\?ref=/, 'URL has the app base + ?ref=');
   });
 
   test('Copy CTA + Customize submit carry data-write attribute (CF-15 view-mode disable hook)', async () => {
@@ -474,7 +474,7 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     copyBtn.dispatchEvent({ type: 'click' });
     await settle(20);
     assert.ok(_clipboardCalls.length >= 1, 'clipboard.writeText called at least once');
-    const expectedCode = '0x' + '0'.repeat(24) + CONNECTED.slice(2).toLowerCase();
+    const expectedCode = CONNECTED.toLowerCase();
     assert.match(_clipboardCalls[0], new RegExp(expectedCode), 'clipboard call contains the URL');
   });
 

@@ -703,7 +703,10 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(foil.title, `FOIL PACK · LEVEL ${LEVEL}`);
     assert.equal(foil.tickets.length, 4);
     assert.ok(foil.tickets.every((ticket) => ticket.foil), 'foil pack contains only foil lines');
-    assert.notEqual(standard.batchId, foil.batchId, 'OPEN ALL cannot skip the foil opening');
+    assert.equal(standard.batchId, foil.batchId, 'OPEN ALL includes the final foil pack');
+    assert.deepEqual([standard.packIndex, foil.packIndex], [1, 2]);
+    assert.ok([standard, foil].every((pack) => pack.packCount === 2));
+    assert.ok([standard, foil].every((pack) => pack.totalCount === 5));
   });
 
   test('a resolved foil-only purchase cannot stay pending behind an empty generic ticket feed', async () => {

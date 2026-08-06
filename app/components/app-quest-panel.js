@@ -330,6 +330,18 @@ function _questProgressPercent(progress, target, completed) {
   return 0;
 }
 
+export function questGoalMet(progress, target) {
+  try {
+    const current = BigInt(String(progress ?? 0));
+    const goal = BigInt(String(target ?? 0));
+    return goal > 0n && current >= goal;
+  } catch (_e) {
+    const current = Number(progress);
+    const goal = Number(target);
+    return Number.isFinite(current) && Number.isFinite(goal) && goal > 0 && current >= goal;
+  }
+}
+
 function _trimGrouped(value) {
   const trimmed = String(value)
     .replace(/(\.\d*?[1-9])0+$/, '$1')
@@ -376,6 +388,7 @@ class AppQuestPanel extends HTMLElement {
   #questDefs = null;    // /game/quests/day/:day slots — per DAY, always both
   #questDay = null;     // the day #questDefs describes
   #questStreak = null;
+  #shields = null;
   #scoreBreakdown = null;
   #levelQuest = null;   // optional DB projection: active level quest view
   #gameState = null;    // live routing state; foil quests must use the level a buy reaches NOW
@@ -436,7 +449,9 @@ class AppQuestPanel extends HTMLElement {
       <section class="panel app-quest-panel">
         <header class="qst-header">
           <h2><a class="qst-learn-link" href="/learn/quests/">QUESTS</a></h2>
-          <div class="qst-streak-chip" title="Complete the daily quest to extend your streak">
+          <div class="qst-streak-chip"
+               data-streak-status="Complete the daily quest to extend your streak"
+               title="Complete the daily quest to extend your streak">
             <span class="qst-streak-flame" aria-hidden="true">◆</span>
             <strong class="qst-streak" data-bind="qst-streak">—</strong>
             <span class="qst-streak-label">STREAK</span>
@@ -609,7 +624,11 @@ class AppQuestPanel extends HTMLElement {
     let progress = 0n;
     try { target = BigInt(model?.target ?? 0); } catch (_e) { target = 0n; }
     try { progress = BigInt(model?.progress ?? 0); } catch (_e) { progress = 0n; }
-    let remaining = target > progress ? target - progress : target;
+    // Once the amount goal is banked, the contract still needs one matching
+    // action after the eligibility gate clears. Quote that action's real floor
+    // below—not the entire target again. The old fallback to `target` is why a
+    // 40K / 20K Coinflip quest kept asking the player for another 20K.
+    let remaining = target > progress ? target - progress : 0n;
     const type = Number(model?.questType);
     // These actions have hard contract floors. If a partially completed quest
     // leaves less than one valid action, the floor is the true minimum that can
@@ -1109,6 +1128,7 @@ class AppQuestPanel extends HTMLElement {
       this.#resetQuestCompletionState();
       this.#questData = null;
       this.#questStreak = null;
+      this.#shields = null;
       this.#scoreBreakdown = null;
       this.#levelQuest = null;
       this.#renderEmpty('Per-account stat. Pick a single account.');
@@ -1125,6 +1145,7 @@ class AppQuestPanel extends HTMLElement {
       this.#resetQuestCompletionState();
       this.#questData = null;
       this.#questStreak = null;
+      this.#shields = null;
       this.#scoreBreakdown = null;
       this.#levelQuest = null;
       this.#renderEmpty('Connect a wallet to see your quests.');
@@ -1169,6 +1190,10 @@ class AppQuestPanel extends HTMLElement {
       // contract-known components instead of blanking the whole HUD.
       const identity = mergeQuestIdentitySnapshot(data, liveBoard);
       this.#questStreak = identity.questStreak;
+      const shieldValue = liveBoard?.shields ?? data?.shields;
+      this.#shields = shieldValue == null
+        ? null
+        : Math.max(0, Math.trunc(Number(shieldValue) || 0));
       this.#scoreBreakdown = identity.scoreBreakdown;
       this.#levelQuest = liveBoard?.levelQuest && typeof liveBoard.levelQuest === 'object'
         ? liveBoard.levelQuest
@@ -1180,6 +1205,7 @@ class AppQuestPanel extends HTMLElement {
       this.#renderQuests();
     } catch (_e) {
       // Network blip — render empty/error message; next cycle retries.
+      this.#shields = null;
       this.#renderEmpty('Could not load quests.');
     }
   }
@@ -1274,6 +1300,27 @@ class AppQuestPanel extends HTMLElement {
     try { void chip.offsetWidth; } catch (_e) { /* fake DOM / detached element */ }
     gain.textContent = `+${delta}`;
     chip.classList.add('qst-streak-chip--increased');
+  }
+
+  #renderShieldHoldings() {
+    const chip = this.querySelector('.qst-streak-chip');
+    if (!chip?.classList) return;
+    const shields = Math.max(0, Math.trunc(Number(this.#shields) || 0));
+    const status = chip.getAttribute('data-streak-status')
+      || 'Complete the daily quest to extend your streak';
+    chip.classList.toggle('qst-streak-chip--shielded', shields > 0);
+    chip.setAttribute('title', status);
+    if (shields <= 0) {
+      chip.removeAttribute('data-streak-shields');
+      chip.removeAttribute('aria-label');
+      chip.removeAttribute('tabindex');
+      return;
+    }
+    const description = `${shields} streak shield${shields === 1 ? '' : 's'} · Each shield protects one missed quest day`;
+    chip.setAttribute('data-streak-shields', String(shields));
+    chip.setAttribute('title', `${status} · ${description}`);
+    chip.setAttribute('aria-label', `${status}. ${description}`);
+    chip.setAttribute('tabindex', '0');
   }
 
   #captureQuestCompletions(sorted, day) {
@@ -1479,6 +1526,7 @@ class AppQuestPanel extends HTMLElement {
     // Streak — textContent only.
     const streakValue = this.#questStreak?.baseStreak ?? 0;
     this.#renderStreakIncrease(streakEl, streakValue, completion.newlyCompleted.size);
+    this.#renderShieldHoldings();
     this.#renderScoreBreakdown();
     if (completion.newlyCompleted.size > 0) {
       try { sfxQuestComplete(); } catch (_e) { /* decoration must not stop polling */ }
@@ -1491,10 +1539,12 @@ class AppQuestPanel extends HTMLElement {
     chip.classList.toggle('qst-streak-chip--primary-open', !primaryComplete);
     chip.classList.toggle('qst-streak-chip--primary-done', primaryComplete && !allDailyComplete);
     chip.classList.toggle('qst-streak-chip--all-done', allDailyComplete);
-    chip.setAttribute('title', allDailyComplete
+    const status = allDailyComplete
       ? 'Both daily quests complete'
       : primaryComplete ? 'Daily quest complete · bonus quest still open'
-        : 'Daily quest incomplete');
+        : 'Daily quest incomplete';
+    chip.setAttribute('data-streak-status', status);
+    chip.setAttribute('title', status);
   }
 
   #renderScoreBreakdown() {
@@ -1602,15 +1652,19 @@ class AppQuestPanel extends HTMLElement {
     }
     const questType = Number(quest.questType ?? 0);
     const assigned = questType > 0;
-    const isDone = Boolean(quest.completed);
-    // Contract eligibility gates COMPLETION only. Progress still accumulates
-    // while this is false, so the card must remain active/clickable instead of
-    // looking like the quest itself is unavailable.
-    const completionLocked = assigned && !quest.eligible && !isDone;
     const progress = quest.progress ?? 0;
     const target = quest.target ?? 0;
     // Absent on older API builds — default to true so an unknown field never blanks the bar.
     const progressAvailable = quest.progressAvailable !== false;
+    const goalMet = progressAvailable && questGoalMet(progress, target);
+    // The target-crossing action is the completion action. The auxiliary
+    // completion/eligibility projection can lag or disagree with the banked
+    // amount, so it must never manufacture another player-facing step.
+    const isDone = Boolean(quest.completed) || goalMet;
+    // Contract eligibility gates COMPLETION only. Progress still accumulates
+    // while this is false, so the card must remain active/clickable instead of
+    // looking like the quest itself is unavailable.
+    const completionLocked = assigned && !quest.eligible && !isDone;
     const label = assigned ? (QUEST_TYPE_LABELS[questType] || 'Level quest') : 'Next level quest';
     const passKind = String(this.#scoreBreakdown?.passBonus?.kind || '').toLowerCase();
     const streak = Number(this.#questStreak?.baseStreak ?? 0);
@@ -1625,8 +1679,8 @@ class AppQuestPanel extends HTMLElement {
     const completionGateLabel = completionLocked
       ? loyaltyQualified
         ? this.#afkingActive
-          ? `${loyaltyLabel}; progress banks now, and the next qualifying afKing purchase clears the activity prerequisite`
-          : `${loyaltyLabel}; progress banks now, and one ticket-price of current-level ticket or lootbox activity clears the reward prerequisite`
+          ? `${loyaltyLabel}; progress banks now, and four active-level ticket entries from afKing or a manual purchase clear the activity prerequisite`
+          : `${loyaltyLabel}; progress banks now, and four current- or next-level ticket entries clear the activity prerequisite`
         : 'Progress banks now; completion also needs current-level purchase activity plus a 5-day streak or pass'
       : '';
 
@@ -1675,6 +1729,7 @@ class AppQuestPanel extends HTMLElement {
       progress,
       target,
       level: quest.level,
+      noteText: null,
       justCompleted,
     });
   }
@@ -1732,6 +1787,12 @@ class AppQuestPanel extends HTMLElement {
     nameEl.className = 'qst-slot-name';
     nameEl.textContent = model.label;
     copyEl.appendChild(nameEl);
+    if (model.noteText) {
+      const noteEl = document.createElement('span');
+      noteEl.className = 'qst-slot-note';
+      noteEl.textContent = model.noteText;
+      copyEl.appendChild(noteEl);
+    }
     if (model.rewardText) {
       const rewardEl = document.createElement('span');
       rewardEl.className = 'qst-slot-reward';
@@ -1831,7 +1892,12 @@ class AppQuestPanel extends HTMLElement {
         'qst-streak-chip--primary-done',
         'qst-streak-chip--all-done',
       );
+      const status = 'Complete the daily quest to extend your streak';
+      streakChip.setAttribute('data-streak-status', status);
+      streakChip.setAttribute('title', status);
     }
+    this.#shields = null;
+    this.#renderShieldHoldings();
     if (emptyEl) {
       emptyEl.hidden = false;
       emptyEl.textContent = String(msg || 'Loading quests…');

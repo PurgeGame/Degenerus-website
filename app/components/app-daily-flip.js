@@ -260,7 +260,7 @@ function compactBetAmount(value) {
   return String(Math.round(amount));
 }
 
-/** Compact only the sDGNRS ledger balance using its player-facing convention. */
+/** Compact the sDGNRS ledger balance to at most three significant figures. */
 export function formatSdgnrsBalance(weiValue) {
   let raw;
   try { raw = BigInt(weiValue ?? 0); }
@@ -268,29 +268,41 @@ export function formatSdgnrsBalance(weiValue) {
   if (raw <= 0n) return '0';
 
   const unit = 10n ** 18n;
-  const tenThousand = 10_000n * unit;
-  const thousand = 1_000n * unit;
-  const tenMillion = 10_000_000n * unit;
-  const hundredMillion = 100_000_000n * unit;
-  if (raw < tenThousand) {
-    return (raw / unit).toLocaleString('en-US');
-  }
-  if (raw < tenMillion) {
-    const roundedThousands = (raw + (thousand / 2n)) / thousand;
-    return `${roundedThousands.toLocaleString('en-US')}K`;
-  }
+  if (raw < 1_000n * unit) return (raw / unit).toLocaleString('en-US');
 
-  if (raw >= hundredMillion) {
-    const million = 1_000_000n * unit;
-    const roundedMillions = (raw + (million / 2n)) / million;
-    return `${roundedMillions.toLocaleString('en-US')}M`;
-  }
+  const tiers = [
+    [1_000_000_000_000n * unit, 'T'],
+    [1_000_000_000n * unit, 'B'],
+    [1_000_000n * unit, 'M'],
+    [1_000n * unit, 'K'],
+  ];
+  let tierIndex = tiers.findIndex(([scale]) => raw >= scale);
+  if (tierIndex < 0) tierIndex = tiers.length - 1;
 
-  // One decimal million below 100M: each display unit is 100,000 sDGNRS.
-  const tenthMillion = 100_000n * unit;
-  const tenths = (raw + (tenthMillion / 2n)) / tenthMillion;
-  const millions = tenths / 10n;
-  return `${millions.toLocaleString('en-US')}.${tenths % 10n}M`;
+  // Re-evaluate precision after a rounding carry (9.999M -> 10.0M), and
+  // promote a 999.9K carry to 1.00M instead of displaying 1,000K.
+  for (;;) {
+    const [scale, suffix] = tiers[tierIndex];
+    const whole = raw / scale;
+    let decimals = whole >= 100n ? 0 : whole >= 10n ? 1 : 2;
+    let factor = 10n ** BigInt(decimals);
+    let rounded = ((raw * factor) + (scale / 2n)) / scale;
+
+    while (decimals > 0 && rounded >= 1_000n) {
+      decimals -= 1;
+      factor = 10n ** BigInt(decimals);
+      rounded = ((raw * factor) + (scale / 2n)) / scale;
+    }
+    if (rounded >= 1_000n && tierIndex > 0) {
+      tierIndex -= 1;
+      continue;
+    }
+
+    const integer = rounded / factor;
+    if (decimals === 0) return `${integer.toLocaleString('en-US')}${suffix}`;
+    const fraction = String(rounded % factor).padStart(decimals, '0');
+    return `${integer.toLocaleString('en-US')}.${fraction}${suffix}`;
+  }
 }
 
 function parseTokenAmount(value) {
@@ -1170,6 +1182,10 @@ class AppDailyFlip extends HTMLElement {
     // no longer run at coin landing while the thermometer is still moving.
     this.#renderModifierMeter();
     this.#renderPosition();
+    // Protocol Coins includes today's newly claimable FLIP. Commit it on the
+    // same boundary as the resolved bet and BAF score so the balance cannot
+    // announce the win while the final modifier is still settling.
+    this.#renderFunds();
     // Today's green receipt is now authoritative. Carry that exact +FLIP
     // figure into BAF before committing the score increase; reduced-motion or
     // unavailable-layout environments fall back to the immediate count-up.
@@ -1624,14 +1640,6 @@ class AppDailyFlip extends HTMLElement {
     this.innerHTML = `
       <section class="panel app-daily-flip">
         <h2 class="df-section-title">DAILY COINFLIP</h2>
-        <a class="df-baf-eve" data-bind="df-baf-eve" href="/learn/baf/" hidden
-           aria-label="Big Ass Flip tomorrow. A winning daily coinflip triggers the draw. Learn more.">
-          <span class="df-baf-eve__sigil" aria-hidden="true">BAF</span>
-          <span class="df-baf-eve__copy">
-            <strong>BAF TOMORROW</strong>
-            <small>WIN TRIGGERS THE DRAW</small>
-          </span>
-        </a>
         <div class="df-coin-stage">
           <div class="df-coin-zone" data-bind="df-coin-zone"></div>
           <div class="df-modifier-meter-slot" data-bind="df-modifier-meter-slot"></div>
@@ -1646,9 +1654,11 @@ class AppDailyFlip extends HTMLElement {
         <div class="df-position" data-bind="df-position">
           <div class="df-position-slot" data-bind="df-position-today"></div>
           <div class="df-baf-score" data-bind="df-baf-score-box" aria-label="Big Ass Flip score">
-            <span class="df-baf-score__label">BIG ASS FLIP SCORE</span>
-            <span class="df-baf-score__title">
+            <span class="df-baf-score__label">
               <a class="df-baf-score__info" href="/learn/baf/" aria-label="Learn about Big Ass Flip" title="Learn about Big Ass Flip">i</a>
+              <span>BIG ASS FLIP SCORE</span>
+            </span>
+            <span class="df-baf-score__title">
               <span class="df-baf-score__unit">BAF</span>
               <small class="df-baf-score__rank" data-bind="df-baf-rank">RANK —</small>
             </span>
@@ -1855,9 +1865,7 @@ class AppDailyFlip extends HTMLElement {
 
   #renderBafFlipEve() {
     const panel = this.querySelector('.app-daily-flip');
-    const notice = this.querySelector('[data-bind="df-baf-eve"]');
     const visible = this.#browsingDay == null && this.#bafFlipEve?.targetLevel != null;
-    if (notice) notice.hidden = !visible;
     panel?.classList?.toggle('app-daily-flip--baf-eve', visible);
   }
 
@@ -2528,18 +2536,35 @@ class AppDailyFlip extends HTMLElement {
     return reverse;
   }
 
-  #appendSpinningCoin(zone, { resolving = false, disabled = false } = {}) {
+  #appendSpinningCoin(zone, {
+    resolving = false,
+    disabled = false,
+    reverseQueued = null,
+    resolutionLocked = false,
+  } = {}) {
     const renderedDay = this.#day;
+    let queued = null;
+    try {
+      if (reverseQueued != null) queued = BigInt(reverseQueued);
+    } catch (_e) { /* unavailable/corrupt quotes keep the neutral face */ }
+    const queuedSideIsEth = queued != null && (queued & 1n) === 1n;
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = `df-coin df-coin--spinning${resolving ? ' df-coin--resolving' : ''}${disabled ? ' df-coin--syncing' : ''}`;
+    btn.className = `df-coin df-coin--spinning${resolving ? ' df-coin--resolving' : ''}${disabled ? ' df-coin--syncing' : ''}${resolutionLocked ? ' df-coin--resolution-locked' : ''}${queuedSideIsEth ? ' df-coin--queued-eth' : ''}`;
     btn.disabled = Boolean(disabled);
+    if (resolving && queued != null) {
+      btn.setAttribute('data-reverse-flips', String(queued));
+      btn.setAttribute('data-current-side', queuedSideIsEth ? 'eth' : 'wwxrp');
+    }
+    const queuedSideLabel = resolving && queued != null
+      ? ` ${queued} Reverse Flip${queued === 1n ? '' : 's'} queued; current side ${queuedSideIsEth ? 'ETH' : 'WWXRP'}.`
+      : '';
     btn.setAttribute(
       'aria-label',
       disabled
-        ? 'Daily jackpot and coinflip are syncing'
+        ? `Daily jackpot and coinflip are syncing.${queuedSideLabel}`
         : resolving
-        ? 'Daily coinflip is resolving — click to reveal when ready'
+        ? `Daily coinflip is resolving — click to reveal when ready.${queuedSideLabel}`
         : 'Reveal the daily coinflip result',
     );
     const inner = document.createElement('span');
@@ -2594,7 +2619,12 @@ class AppDailyFlip extends HTMLElement {
     if (!this.#dayAvailabilityReady()) {
       if (outcome) outcome.textContent = '';
       if (this.#day != null && !this.#revealed()) {
-        this.#appendSpinningCoin(zone, { resolving: true, disabled: true });
+        this.#appendSpinningCoin(zone, {
+          resolving: true,
+          disabled: true,
+          reverseQueued: this.#reverseFlipQuote?.queued,
+          resolutionLocked: Boolean(this.#reverseFlipQuote?.locked),
+        });
       }
       return;
     }
@@ -2607,7 +2637,11 @@ class AppDailyFlip extends HTMLElement {
       // the dedicated result read. Keep the neutral two-faced coin mounted and
       // clickable during that gap; a click queues the reveal for the exact day.
       if (this.#day != null && !this.#revealed()) {
-        this.#appendSpinningCoin(zone, { resolving: true });
+        this.#appendSpinningCoin(zone, {
+          resolving: true,
+          reverseQueued: this.#reverseFlipQuote?.queued,
+          resolutionLocked: Boolean(this.#reverseFlipQuote?.locked),
+        });
       }
       return;
     }
@@ -3009,7 +3043,10 @@ class AppDailyFlip extends HTMLElement {
     const hasResult = this.#day != null
       && this.#flipFetchedDay === this.#day
       && this.#flipResult != null;
-    const revealComplete = hasResult && this.#revealed() && !this.#landing;
+    const revealComplete = hasResult
+      && this.#revealed()
+      && !this.#landing
+      && !(Boolean(this.#flipResult?.win) && this.#meterSettling);
     const flipTotalVisible = revealComplete
       || this.#flipTotalSpoilerOverrideKey === this.#spoilerOverrideKey('flip-total');
     if (flipUnit) flipUnit.textContent = 'FLIP';
@@ -3060,6 +3097,12 @@ class AppDailyFlip extends HTMLElement {
       format: (raw) => raw === 0n ? '- sDGNRS' : `${this.#fmtSdgnrs(raw)} sDGNRS`,
       formatDelta: (delta) => `+${this.#fmtSdgnrs(delta)} sDGNRS`,
     });
+    if (sdgnrs) {
+      const exact = sdgnrsWei == null ? null : `${tokenAmountInput(sdgnrsWei)} sDGNRS`;
+      sdgnrs.title = exact || '';
+      if (exact) sdgnrs.setAttribute('aria-label', `sDGNRS balance: ${exact}`);
+      else sdgnrs.removeAttribute('aria-label');
+    }
     this.#renderWwxrpBurn();
     this.#renderSdgnrsBurn();
   }
@@ -3464,6 +3507,9 @@ class AppDailyFlip extends HTMLElement {
         'df-reveal-active',
         `df-reveal-track--${revealPlan.profile}`,
         `df-reveal-bias--${revealPlan.bias}`,
+        revealPlan.openingMs === REVEAL_BIASED_END_MS
+          ? 'df-reveal-opening--biased'
+          : 'df-reveal-opening--standard',
         `df-reveal-ending--${revealPlan.ending}`,
       );
       inner.setAttribute('data-reveal-profile', revealPlan.profile);
@@ -3593,12 +3639,19 @@ class AppDailyFlip extends HTMLElement {
     if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
     this.#questActivateListener = async (event) => {
       if (Number(event?.detail?.questType) !== 2) return;
-      const input = this.querySelector('[name="df-amount"]');
-      if (!input) return;
       let targetWei;
       try { targetWei = BigInt(event?.detail?.target ?? 0); }
       catch (_e) { targetWei = 0n; }
       if (targetWei <= 0n) targetWei = 2_000n * (10n ** 18n);
+      // The quest sheet already displayed and confirmed this exact amount.
+      // Submit it as a one-off payload; do not replace the player's ordinary
+      // Tomorrow's Bet draft just to route the transaction through this panel.
+      if (event?.detail?.submit) {
+        await this.#runAction('flip', { amount: targetWei });
+        return;
+      }
+      const input = this.querySelector('[name="df-amount"]');
+      if (!input) return;
       const unit = 10n ** 18n;
       const whole = targetWei / unit;
       const fraction = String(targetWei % unit).padStart(18, '0').replace(/0+$/, '');
@@ -3610,12 +3663,11 @@ class AppDailyFlip extends HTMLElement {
       this.#renderBetTooltip();
       try { this.scrollIntoView?.({ behavior: 'smooth', block: 'center' }); } catch (_e) {}
       try { input.focus?.({ preventScroll: true }); } catch (_e) {}
-      if (event?.detail?.submit) await this.#runAction('flip');
     };
     document.addEventListener('quest:activate', this.#questActivateListener);
   }
 
-  async #runAction(kind) {
+  async #runAction(kind, options = {}) {
     if (this.#busy) return;
     this.#busy = true;
     this.#renderFunds();
@@ -3625,13 +3677,19 @@ class AppDailyFlip extends HTMLElement {
       const player = get('connected.address');
       if (!player) throw new Error('Connect a wallet first.');
       if (kind === 'flip') {
-        const input = this.querySelector('[name="df-amount"]');
-        const amountFloat = Number(input ? input.value : '0');
-        if (!Number.isFinite(amountFloat) || amountFloat <= 0) {
-          throw new Error('Stake must be greater than 0 FLIP.');
+        let amount;
+        try { amount = options?.amount == null ? null : BigInt(options.amount); }
+        catch (_e) { amount = null; }
+        if (amount == null) {
+          const input = this.querySelector('[name="df-amount"]');
+          const amountFloat = Number(input ? input.value : '0');
+          if (!Number.isFinite(amountFloat) || amountFloat <= 0) {
+            throw new Error('Stake must be greater than 0 FLIP.');
+          }
+          // FLIP is UNSCALED 18-dec on every chain (only ETH /1M-scales).
+          amount = BigInt(Math.round(amountFloat * 1e6)) * (10n ** 12n);
         }
-        // FLIP is UNSCALED 18-dec on every chain (only ETH /1M-scales).
-        const amount = BigInt(Math.round(amountFloat * 1e6)) * (10n ** 12n);
+        if (amount == null || amount <= 0n) throw new Error('Stake must be greater than 0 FLIP.');
         // The current contract handles its own claimable-first waterfall in
         // this one deposit. No separate claim signature is needed.
         await depositCoinflip({ player, amount });

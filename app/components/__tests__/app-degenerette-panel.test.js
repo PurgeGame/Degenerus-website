@@ -830,6 +830,12 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
 
     assert.equal(fake._calls.placeDegeneretteBet.length, 0,
       'bare quest activations only configure the wager');
+    const normalDraft = {
+      currency: el.querySelector('[name="deg-currency"]').value,
+      spins: el.querySelector('[name="deg-ticket-count"]').value,
+      amount: el.querySelector('[name="deg-amount"]').value,
+      ticket: el.getTicketDraft(),
+    };
     document.dispatchEvent(new CustomEvent('quest:activate', {
       detail: {
         questType: 8,
@@ -856,6 +862,12 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     );
     assert.equal(fake._calls.placeDegeneretteBet[0][5], 2,
       'the popup Hero quadrant is preserved through submission');
+    assert.deepEqual({
+      currency: el.querySelector('[name="deg-currency"]').value,
+      spins: el.querySelector('[name="deg-ticket-count"]').value,
+      amount: el.querySelector('[name="deg-amount"]').value,
+      ticket: el.getTicketDraft(),
+    }, normalDraft, 'the quest bet leaves every ordinary Degenerette setting untouched');
     el.disconnectedCallback();
   });
 
@@ -1118,6 +1130,12 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     let requestSubmitted = false;
     let requestWrites = 0;
     let postReceiptRequestabilityReads = 0;
+    const queuePacked = 7n | (420n << 48n) | (1_000n << 112n);
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => 119,
+      getStorage: async (_address, slot) => slot === 33n ? queuePacked : 0n,
+    });
     degeneretteMod.__setContractFactoryForTest(() => ({
       degeneretteBetInfo: async () => 13n,
       resolveDegeneretteBets: Object.assign(
@@ -1132,7 +1150,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         async () => {
           requestSubmitted = true;
           requestWrites += 1;
-          return makeFakeTx(makeFakeReceipt());
+          return makeFakeTx({ ...makeFakeReceipt(), blockNumber: 120 });
         },
         {
           staticCall: async () => {
@@ -1153,6 +1171,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     let [pending] = pendingActionsMod.getPendingActions();
     assert.equal(pending.phase, 'request-ready');
     assert.equal(pending.state, 'ready');
+    assert.equal(pending.rngQueuePendingMilliEth, '420');
+    assert.equal(pending.rngQueueThresholdMilliEth, '1000',
+      'the pending descriptor carries the shared contract queue, not this bet count');
 
     await pending.run();
     [pending] = pendingActionsMod.getPendingActions();
@@ -1163,6 +1184,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(pending.detail, 'RNG requested · waiting for Chainlink result');
     assert.equal(pending.pinned, true);
     assert.equal(pending.progress, 'indeterminate');
+    assert.equal(pending.rngRequestBlock, 120);
+    assert.equal(pending.rngCurrentBlock, 120);
+    assert.equal(pending.rngConfirmations, 10);
     assert.equal(pending.run, null, 'a submitted request cannot be submitted twice');
     await settle(80);
     [pending] = pendingActionsMod.getPendingActions();
@@ -1173,6 +1197,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     let stored = JSON.parse(localStorage.getItem(storageKey));
     assert.equal(stored.rngRequestPending, true);
     assert.ok(stored.rngRequestStartedAt > 0);
+    assert.equal(stored.rngRequestBlock, 120);
+    assert.equal(stored.rngObservedBlock, 120);
 
     el.disconnectedCallback();
     el = instantiate();
@@ -1180,6 +1206,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     [pending] = pendingActionsMod.getPendingActions();
     assert.equal(pending.phase, 'waiting-rng', 'refresh restores the submitted request card');
     assert.equal(pending.pinned, true);
+    assert.equal(pending.rngRequestBlock, 120, 'refresh preserves the real request block');
     assert.equal(el.querySelector('[data-bind="deg-state"]').textContent, '');
     el.disconnectedCallback();
 
@@ -1406,6 +1433,92 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.equal(recordedValue, (10n ** 16n) / BigInt(ETH_DIVISOR),
       'wallet-first sends the full ETH wager');
 
+    el.disconnectedCallback();
+  });
+
+  test('a confirmed placement enters Pending immediately even when receipt logs need indexing recovery', async () => {
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      placeDegeneretteBet: Object.assign(
+        async () => makeFakeTx(makeFakeReceipt([])),
+        { staticCall: async () => undefined },
+      ),
+      resolveDegeneretteBets: Object.assign(
+        async () => makeFakeTx(makeFakeReceipt([])),
+        { staticCall: async () => undefined },
+      ),
+      interface: { parseLog: () => null },
+      connect(_s) { return this; },
+    }));
+    localStorage.setItem(lootboxMod.PURCHASE_FUNDING_PRIORITY_KEY, 'wallet');
+    const el = instantiate();
+    await flushMicrotasks();
+    el.querySelector('[name="deg-amount"]').value = '0.01';
+    el.querySelector('[name="deg-ticket-count"]').value = '1';
+
+    el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
+    await settle(40);
+
+    const pending = pendingActionsMod.getPendingActions()
+      .find((item) => item.kind === 'degenerette');
+    assert.ok(pending, 'the mined bet does not disappear while its ids are being recovered');
+    assert.equal(pending.id, 'degenerette:sync:0xreceipt');
+    assert.equal(pending.state, 'waiting');
+    assert.equal(pending.phase, 'awaitingRng');
+    assert.equal(pending.sharedRng, true);
+    assert.equal(pending.detail, 'Bet confirmed · syncing RNG queue');
+    assert.equal(pending.run, null, 'a syncing receipt cannot offer a duplicate write');
+    el.disconnectedCallback();
+  });
+
+  test('broadcast bet appears before confirmation and failure retires only that submission', async () => {
+    let rejectWait;
+    const wait = new Promise((_resolve, reject) => { rejectWait = reject; });
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      placeDegeneretteBet: Object.assign(
+        async () => ({ hash: '0xpendingbet', wait: async () => wait }),
+        { staticCall: async () => undefined },
+      ),
+      resolveDegeneretteBets: Object.assign(
+        async () => makeFakeTx(makeFakeReceipt([])),
+        { staticCall: async () => undefined },
+      ),
+      interface: { parseLog: () => null },
+      connect(_s) { return this; },
+    }));
+    pendingActionsMod.publishPendingActions('unrelated-test', [{
+      id: 'lootbox:already-waiting',
+      kind: 'lootbox',
+      label: 'Existing lootbox',
+      state: 'waiting',
+      pinned: true,
+    }]);
+    const errors = [];
+    const unsubscribe = pendingActionsMod.subscribePendingActionErrors((message) => errors.push(message));
+    localStorage.setItem(lootboxMod.PURCHASE_FUNDING_PRIORITY_KEY, 'wallet');
+    const el = instantiate();
+    await flushMicrotasks();
+    el.querySelector('[name="deg-amount"]').value = '0.01';
+    el.querySelector('[name="deg-ticket-count"]').value = '1';
+
+    el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    let pending = pendingActionsMod.getPendingActions();
+    const submitted = pending.find((item) => item.id === 'degenerette:submitted:0xpendingbet');
+    assert.ok(submitted, 'the bet enters Pending immediately after wallet broadcast');
+    assert.equal(submitted.phase, 'submitting');
+    assert.equal(submitted.shortLabel, 'Transaction sent');
+    assert.ok(pending.some((item) => item.id === 'lootbox:already-waiting'));
+
+    rejectWait(new Error('Transaction reverted after broadcast'));
+    await settle(40);
+    pending = pendingActionsMod.getPendingActions();
+    assert.equal(pending.some((item) => item.id === 'degenerette:submitted:0xpendingbet'), false,
+      'the failed Degenerette submission disappears');
+    assert.ok(pending.some((item) => item.id === 'lootbox:already-waiting'),
+      'an unrelated pending action survives the failure');
+    assert.equal(errors.length, 1, 'the tray receives one short failure message');
+
+    unsubscribe();
     el.disconnectedCallback();
   });
 

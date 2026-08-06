@@ -36,7 +36,7 @@
 
 import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
 import { displayEth } from '../app/scaling.js';
-import { isAddress, parseEther } from 'ethers';
+import { parseEther } from 'ethers';
 import { get, subscribe, getViewedAddress, getActingAddress, deriveCanSign } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 import {
@@ -50,11 +50,7 @@ import {
   fundAfkingSubscription,
   withdrawAfkingSubscriptionFunding,
   claimAfkingSubscriptionFlip,
-  readDeityBoonSlots,
-  issueDeityBoon,
-  smiteWithDeity,
 } from '../app/passes.js';
-import { boonTypePresentation } from '../app/boons.js';
 import { scaledTicketPriceWei } from '../app/decimator.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { decodeRevertReason } from '../app/reason-map.js';
@@ -231,16 +227,12 @@ class AppPassSection extends HTMLElement {
   #busyAfkingFunding = false;
   #busyAfkingWithdrawal = false;
   #busyAfkingClaim = false;
-  #busyBoonSlot = null;
-  #busyCurse = false;
   // Per-symbol-id debounce for the deity grid (T-62-02-05 mitigation).
   #busySymbols = new Set();
   #errorTimerWhale = null;
   #errorTimerDeity = null;
   #errorTimerLazy = null;
   #errorTimerAfking = null;
-  #errorTimerBoon = null;
-  #errorTimerCurse = null;
   // --- Panel-owned 30s poll lifecycle (Phase 61 D-04 LOCKED — NOT polling.js) ---
   #pollHandle = null;
   #pollController = null;
@@ -265,12 +257,6 @@ class AppPassSection extends HTMLElement {
   #afkingState = null;
   #afkingFormAddress = null;
   #afkingFundingSeededAddress = null;
-  #deityBoonState = null;
-  #deityBoonAddress = null;
-  #deityBoonFormAddress = null;
-  // A holder's deity desk opens once when their owned pass resolves. Later
-  // polls preserve an intentional manual collapse instead of snapping it open.
-  #deityAutoOpenedFor = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -322,14 +308,6 @@ class AppPassSection extends HTMLElement {
       try { clearTimeout(this.#errorTimerAfking); } catch (_) { /* defensive */ }
       this.#errorTimerAfking = null;
     }
-    if (this.#errorTimerBoon != null) {
-      try { clearTimeout(this.#errorTimerBoon); } catch (_) { /* defensive */ }
-      this.#errorTimerBoon = null;
-    }
-    if (this.#errorTimerCurse != null) {
-      try { clearTimeout(this.#errorTimerCurse); } catch (_) { /* defensive */ }
-      this.#errorTimerCurse = null;
-    }
     this.#busySymbols.clear();
     for (const u of this.#unsubs) {
       try { u(); } catch (_e) { /* defensive */ }
@@ -359,7 +337,7 @@ class AppPassSection extends HTMLElement {
         <div class="pass-shop-heading" data-bind="pass-shop-heading">
           <div>
             <strong>PASS SHOP</strong>
-            <span>Every pass includes an AFKing automation seat.</span>
+            <span data-bind="pass-shop-seat-copy">Every pass includes an AFKing automation seat.</span>
           </div>
           <small>ONE-TIME PURCHASES</small>
         </div>
@@ -381,7 +359,7 @@ class AppPassSection extends HTMLElement {
             <span class="pass-lootbox-perk pass-lazy-lootbox-perk" data-bind="pass-lazy-lootbox">BONUS LOOTBOX · 10% OF PASS</span>
             <span>1 TICKET / LEVEL</span>
             <span data-bind="pass-lazy-score">+85% DEGEN SCORE</span>
-            <span>AFKING SEAT</span>
+            <span data-bind="pass-lazy-afking-seat">AFKING SEAT</span>
           </span>
           <span class="pass-product-checkout pass-product-checkout--lazy">
             <span class="pass-product-price">
@@ -408,9 +386,8 @@ class AppPassSection extends HTMLElement {
           </span>
           <span class="pass-product-perks" aria-label="Whale pass benefits">
             <span class="pass-lootbox-perk pass-whale-lootbox-perk" data-bind="pass-whale-lootbox">BONUS LOOTBOX · 10% OF PASS</span>
-            <span>1 TICKET / 2 LEVELS</span>
             <span data-bind="pass-whale-score">+115% DEGEN SCORE</span>
-            <span>AFKING SEAT</span>
+            <span class="pass-whale-afking-seat" data-bind="pass-whale-afking-seat">AFKING SEAT</span>
           </span>
           <span class="pass-product-checkout pass-product-checkout--whale">
             <label class="pass-product-quantity" for="pass-whale-qty-input">
@@ -418,12 +395,8 @@ class AppPassSection extends HTMLElement {
               <input type="number" name="pass-whale-qty" id="pass-whale-qty-input"
                      class="pass-whale-input" min="1" max="100" step="1" value="1" aria-label="Whale pass quantity">
             </label>
-            <span class="pass-product-price">
-              <small>UNIT PRICE</small>
-              <strong class="pass-whale-price" data-bind="pass-whale-price">—</strong>
-            </span>
             <button type="button" class="pass-whale-buy" data-write data-bind="pass-whale-buy">
-              BUY WHALE PASS
+              BUY WHALE PASS · …
             </button>
           </span>
         </div>
@@ -448,7 +421,7 @@ class AppPassSection extends HTMLElement {
               <span data-bind="pass-deity-score">+155% DEGEN SCORE</span>
               <span>3 DAILY BOONS</span>
               <span>10% LOOTBOX</span>
-              <span>AFKING SEAT</span>
+              <span data-bind="pass-deity-afking-seat">AFKING SEAT</span>
             </span>
             <span class="pass-deity-price">
               <small data-bind="pass-deity-meta-label">LIVE PRICE</small>
@@ -467,52 +440,6 @@ class AppPassSection extends HTMLElement {
             </div>
             <div class="pass-deity-error" data-bind="pass-deity-error" hidden role="alert"></div>
 
-            <section class="pass-deity-boons" data-bind="pass-deity-boons" hidden>
-              <div class="pass-deity-boons__head">
-                <div>
-                  <strong>Daily boons</strong>
-                  <span>Give one to another player</span>
-                </div>
-                <span class="pass-deity-boons__status" data-bind="pass-deity-boons-status">SYNCING</span>
-              </div>
-              <label class="pass-deity-boons__recipient">
-                <span>Recipient</span>
-                <input type="text" name="pass-deity-boon-recipient"
-                       placeholder="0x wallet address" autocomplete="off" spellcheck="false">
-              </label>
-              <div class="pass-deity-boons__slots" aria-label="Today's deity boons">
-                <button type="button" class="pass-deity-boon-slot" data-write
-                        data-bind="pass-deity-boon-slot-0" disabled>
-                  <span data-bind="pass-deity-boon-name-0">Waiting for RNG</span>
-                  <strong data-bind="pass-deity-boon-effect-0">SLOT 1</strong>
-                </button>
-                <button type="button" class="pass-deity-boon-slot" data-write
-                        data-bind="pass-deity-boon-slot-1" disabled>
-                  <span data-bind="pass-deity-boon-name-1">Waiting for RNG</span>
-                  <strong data-bind="pass-deity-boon-effect-1">SLOT 2</strong>
-                </button>
-                <button type="button" class="pass-deity-boon-slot" data-write
-                        data-bind="pass-deity-boon-slot-2" disabled>
-                  <span data-bind="pass-deity-boon-name-2">Waiting for RNG</span>
-                  <strong data-bind="pass-deity-boon-effect-2">SLOT 3</strong>
-                </button>
-              </div>
-              <div class="pass-deity-boon-error" data-bind="pass-deity-boon-error" hidden role="alert"></div>
-            </section>
-
-            <section class="pass-deity-curse" data-bind="pass-deity-curse" hidden
-                     title="Burn 200 FLIP to add two curse points. Active AFKing subscribers are immune.">
-              <div class="pass-deity-curse__label">
-                <strong>Quick curse</strong>
-                <span>+2 curse · burns 200 FLIP</span>
-              </div>
-              <input type="text" name="pass-deity-curse-target"
-                     placeholder="0x target wallet" aria-label="Wallet to curse"
-                     autocomplete="off" spellcheck="false">
-              <button type="button" class="pass-deity-curse__button" data-write
-                      data-bind="pass-deity-curse-button">Curse · 200 FLIP</button>
-              <div class="pass-deity-curse-error" data-bind="pass-deity-curse-error" hidden role="alert"></div>
-            </section>
           </div>
         </details>
       </section>
@@ -537,7 +464,7 @@ class AppPassSection extends HTMLElement {
                 <span class="pass-afking__funding" data-bind="pass-afking-funding">—</span>
               </span>
               <button type="button" class="pass-afking__claim-button" data-write
-                      data-bind="pass-afking-flip-claim" hidden>Claim bonus FLIP</button>
+                      data-bind="pass-afking-flip-claim" hidden>CLAIM</button>
               <button type="button" class="pass-afking__withdraw" data-write
                       data-bind="pass-afking-withdraw" hidden>Withdraw all</button>
             </span>
@@ -621,7 +548,10 @@ class AppPassSection extends HTMLElement {
     const whaleBuy = this.querySelector('[data-bind="pass-whale-buy"]');
     if (whaleBuy) whaleBuy.addEventListener('click', (e) => this.#onWhaleBuyClick(e));
     const whaleQty = this.querySelector('[name="pass-whale-qty"]');
-    if (whaleQty) whaleQty.addEventListener('input', () => this.#renderWhaleLootboxBenefit());
+    if (whaleQty) whaleQty.addEventListener('input', () => {
+      this.#renderWhaleLootboxBenefit();
+      this.#renderWhaleBuyLabel();
+    });
     const lazyBuy = this.querySelector('[data-bind="pass-lazy-buy"]');
     if (lazyBuy) lazyBuy.addEventListener('click', (e) => this.#onLazyBuyClick(e));
     const deityBuy = this.querySelector('[data-bind="pass-deity-buy"]');
@@ -644,12 +574,6 @@ class AppPassSection extends HTMLElement {
     if (afkingWithdraw) afkingWithdraw.addEventListener('click', (e) => this.#onAfkingWithdraw(e));
     const afkingFlipClaim = this.querySelector('[data-bind="pass-afking-flip-claim"]');
     if (afkingFlipClaim) afkingFlipClaim.addEventListener('click', (e) => this.#onAfkingFlipClaim(e));
-    for (let slot = 0; slot < 3; slot += 1) {
-      const boonButton = this.querySelector(`[data-bind="pass-deity-boon-slot-${slot}"]`);
-      if (boonButton) boonButton.addEventListener('click', (e) => this.#onDeityBoonClick(e, slot));
-    }
-    const curseButton = this.querySelector('[data-bind="pass-deity-curse-button"]');
-    if (curseButton) curseButton.addEventListener('click', (e) => this.#onDeityCurseClick(e));
   }
 
   // ---------------------------------------------------------------------
@@ -687,21 +611,15 @@ class AppPassSection extends HTMLElement {
         this.#afkingFormAddress = null;
         this.#afkingFundingSeededAddress = null;
       }
-      if (String(actionTarget || '').toLowerCase() !== String(this.#deityBoonAddress || '').toLowerCase()) {
-        this.#deityBoonState = null;
-        this.#deityBoonFormAddress = null;
-      }
       this.#pinnedAddress = addr;
-      this.#deityBoonAddress = actionTarget;
       // Level comes from /game/state. Deity availability and issued count come
       // from the pass NFT, because /player has neither a global count nor the
       // 32-symbol ownership catalog.
-      const [stateRes, playerRes, deityRes, afkingRes, deityBoonRes] = await Promise.allSettled([
+      const [stateRes, playerRes, deityRes, afkingRes] = await Promise.allSettled([
         fetchJSON('/game/state'),
         addr ? fetchJSON(`/player/${addr}`) : Promise.resolve(null),
         readDeityPassCatalog(),
         actionTarget ? readAfkingSubscription(actionTarget) : Promise.resolve(null),
-        actionTarget ? readDeityBoonSlots(actionTarget) : Promise.resolve(null),
       ]);
       if (signal.aborted) return;
       const gs = stateRes.status === 'fulfilled' ? stateRes.value : null;
@@ -709,7 +627,6 @@ class AppPassSection extends HTMLElement {
       const freshCatalog = deityRes.status === 'fulfilled' ? deityRes.value : null;
       if (freshCatalog) this.#deityCatalog = freshCatalog;
       this.#afkingState = afkingRes.status === 'fulfilled' ? afkingRes.value : null;
-      this.#deityBoonState = deityBoonRes.status === 'fulfilled' ? deityBoonRes.value : null;
       this.#playerData = data || null;
       this.#gameState = gs;
       const level = gs?.level ?? data?.level ?? data?.currentLevel ?? null;
@@ -749,7 +666,6 @@ class AppPassSection extends HTMLElement {
     const u3 = subscribe('ui.mode', () => {
       this.#renderCombinedGate();
       this.#renderDeityCatalog();
-      this.#renderDeityBoons();
     });
     this.#unsubs.push(u1, u2, u3);
   }
@@ -778,7 +694,10 @@ class AppPassSection extends HTMLElement {
     // gate (which only runs when NOT combined below).
     if (lazyRow && isCombined) lazyRow.hidden = true;
     const deitySection = this.querySelector('.pass-deity-section');
-    if (deitySection) deitySection.hidden = isCombined;
+    if (deitySection) {
+      const ownsDeityPass = deitySection.getAttribute('data-deity-owned') === 'true';
+      deitySection.hidden = isCombined || ownsDeityPass;
+    }
     const afkingSection = this.querySelector('[data-bind="pass-afking"]');
     if (afkingSection && isCombined) afkingSection.hidden = true;
   }
@@ -792,16 +711,9 @@ class AppPassSection extends HTMLElement {
   #renderPricing() {
     const p = this.#pricingData;
     this.#renderPassScoreBenefits();
-    const priceEl = this.querySelector('[data-bind="pass-whale-price"]');
-    if (priceEl) {
-      if (!p || p.whaleUnitPriceWei == null) {
-        priceEl.textContent = 'Loading price…';
-      } else {
-        try { priceEl.textContent = `${formatPassEth(p.whaleUnitPriceWei)} ETH`; }
-        catch (_e) { priceEl.textContent = '—'; }
-      }
-    }
+    this.#renderWhaleBuyLabel();
     this.#renderWhaleLootboxBenefit();
+    this.#renderPassSeatBenefits();
     this.#renderLazyLootboxBenefit();
     const hintEl = this.querySelector('[data-bind="pass-deity-hint"]');
     const deityMetaLabel = this.querySelector('[data-bind="pass-deity-meta-label"]');
@@ -830,7 +742,6 @@ class AppPassSection extends HTMLElement {
       }
     }
     this.#renderDeityCatalog();
-    this.#renderDeityBoons();
     this.#renderAfking();
     // Lazy row — visible ONLY when the level window is open (user ask).
     const lazyRow = this.querySelector('[data-bind="pass-lazy-row"]');
@@ -850,13 +761,18 @@ class AppPassSection extends HTMLElement {
 
   #renderPassScoreBenefits() {
     const score = this.#playerData?.scoreBreakdown || null;
+    const ownsDeityPass = this.#ownedDeitySymbolId() != null;
     for (const [bind, bonus] of [
       ['pass-lazy-score', 10],
       ['pass-whale-score', 40],
       ['pass-deity-score', 80],
     ]) {
       const el = this.querySelector(`[data-bind="${bind}"]`);
-      if (el) el.textContent = `+${projectedPassScoreGain(score, bonus)}% DEGEN SCORE`;
+      if (el) {
+        const gain = ownsDeityPass ? 0 : projectedPassScoreGain(score, bonus);
+        el.textContent = gain > 0 ? `+${gain}% DEGEN SCORE` : '';
+        el.hidden = gain <= 0;
+      }
     }
   }
 
@@ -871,7 +787,46 @@ class AppPassSection extends HTMLElement {
       return;
     }
     const lootboxValue = (BigInt(unit) * BigInt(quantity)) / 10n;
-    benefit.textContent = `BONUS LOOTBOX · ${formatPassEth(lootboxValue)} ETH${quantity > 1 ? ' TOTAL' : ''}`;
+    benefit.textContent = `BONUS LOOTBOX · ${formatPassEth(lootboxValue)} ETH`;
+  }
+
+  #renderWhaleBuyLabel() {
+    const buy = this.querySelector('[data-bind="pass-whale-buy"]');
+    if (!buy || this.#busyWhale) return;
+    const unit = this.#pricingData?.whaleUnitPriceWei;
+    const quantityInput = this.querySelector('[name="pass-whale-qty"]');
+    // Real number inputs expose .value even when empty. The fallback only
+    // covers pre-hydration/minimal DOMs where the markup's value property has
+    // not been reflected yet.
+    const quantityValue = quantityInput && 'value' in quantityInput
+      ? quantityInput.value
+      : '1';
+    const rawQuantity = Number.parseInt(quantityValue || '', 10);
+    if (unit == null || !Number.isInteger(rawQuantity)
+      || rawQuantity < 1 || rawQuantity > 100) {
+      buy.textContent = 'BUY WHALE PASS · —';
+      return;
+    }
+    const finalPrice = BigInt(unit) * BigInt(rawQuantity);
+    buy.textContent = `BUY WHALE PASS · ${formatPassEth(finalPrice)} ETH`;
+  }
+
+  #renderPassSeatBenefits() {
+    // Every premium pass can grant the same AFKing seat, but seats never
+    // stack. Deity ownership is authoritative even if the seat token's index
+    // is briefly behind, so do not advertise another seat on any pass card.
+    const ownsSeat = Boolean(
+      this.#afkingState?.hasToken || this.#ownedDeitySymbolId() != null,
+    );
+    for (const bind of [
+      'pass-lazy-afking-seat',
+      'pass-whale-afking-seat',
+      'pass-deity-afking-seat',
+      'pass-shop-seat-copy',
+    ]) {
+      const benefit = this.querySelector(`[data-bind="${bind}"]`);
+      if (benefit) benefit.hidden = ownsSeat;
+    }
   }
 
   #renderLazyLootboxBenefit() {
@@ -898,10 +853,16 @@ class AppPassSection extends HTMLElement {
     const catalog = this.#deityCatalog;
     const known = Boolean(catalog?.takenSymbols instanceof Set);
     const ownedSymbolId = this.#ownedDeitySymbolId();
+    const ownsDeityPass = ownedSymbolId != null;
     const canSign = deriveCanSign();
+    const deitySection = this.querySelector('[data-bind="pass-deity-details"]');
     const select = this.querySelector('[data-bind="pass-deity-select"]');
     const buy = this.querySelector('[data-bind="pass-deity-buy"]');
     const ownedName = this.querySelector('[data-bind="pass-deity-owned-name"]');
+    if (deitySection) {
+      deitySection.setAttribute('data-deity-owned', String(ownsDeityPass));
+      deitySection.hidden = get('ui.mode') === 'combined' || ownsDeityPass;
+    }
     if (!select || !buy) return;
 
     const previous = Number(select.value);
@@ -992,90 +953,6 @@ class AppPassSection extends HTMLElement {
     preview.src = badge.path;
     preview.alt = badge.name;
     preview.hidden = false;
-  }
-
-  #renderDeityBoons() {
-    const section = this.querySelector('[data-bind="pass-deity-boons"]');
-    const curseSection = this.querySelector('[data-bind="pass-deity-curse"]');
-    if (!section && !curseSection) return;
-    const holderAddress = this.#deityBoonAddress || getActingAddress() || this.#pinnedAddress;
-    const deityId = this.#ownedDeitySymbolId(holderAddress);
-    const ownsPass = deityId != null;
-    const visible = Boolean(ownsPass && get('ui.mode') !== 'combined');
-    // smite() is stricter than the operator-aware boon path: msg.sender must
-    // directly own this deity token, so never offer it while acting for another
-    // account in operator mode.
-    const connectedDeityId = this.#ownedDeitySymbolId(get('connected.address'));
-    const curseVisible = Boolean(visible && get('ui.mode') === 'self' && connectedDeityId === deityId);
-    if (section) section.hidden = !visible;
-    if (curseSection) curseSection.hidden = !curseVisible;
-
-    const details = this.querySelector('[data-bind="pass-deity-details"]');
-    details?.classList?.toggle('pass-deity-section--holder', visible);
-    const summary = this.querySelector('[data-bind="pass-deity-summary"]');
-    const addressKey = String(holderAddress || '').toLowerCase();
-    if (visible && details && this.#deityAutoOpenedFor !== addressKey) {
-      details.open = true;
-      details.setAttribute?.('open', '');
-      this.#deityAutoOpenedFor = addressKey;
-    }
-    if (!visible) this.#deityAutoOpenedFor = null;
-    if (summary) summary.hidden = false;
-    if (!visible) return;
-
-    const recipient = this.querySelector('[name="pass-deity-boon-recipient"]');
-    const curseTarget = this.querySelector('[name="pass-deity-curse-target"]');
-    if (this.#deityBoonFormAddress !== addressKey) {
-      if (recipient) recipient.value = '';
-      if (curseTarget) curseTarget.value = '';
-      this.#deityBoonFormAddress = addressKey;
-    }
-
-    // Cursing is not RNG/day gated. Ownership, signer state, and the contract's
-    // static-call are the complete gate; the latter catches AFKing immunity and
-    // the five-stack ceiling before the wallet opens.
-    const curseButton = this.querySelector('[data-bind="pass-deity-curse-button"]');
-    const canCurse = Boolean(curseVisible && deriveCanSign() && !this.#busyCurse);
-    if (curseTarget) curseTarget.disabled = !canCurse;
-    if (curseButton) {
-      curseButton.disabled = !canCurse;
-      curseButton.textContent = this.#busyCurse ? 'Cursing…' : 'Curse · 200 FLIP';
-    }
-
-    const state = this.#deityBoonState;
-    const usedMask = Number(state?.usedMask ?? 0) & 0b111;
-    const usedCount = [0, 1, 2].filter((slot) => (usedMask & (1 << slot)) !== 0).length;
-    const remaining = 3 - usedCount;
-    const status = this.querySelector('[data-bind="pass-deity-boons-status"]');
-    if (status) {
-      if (!state) status.textContent = 'SYNCING';
-      else if (!state.ready) status.textContent = `DAY ${state.day} · RNG PENDING`;
-      else status.textContent = `DAY ${state.day} · ${remaining}/3 LEFT`;
-    }
-
-    const canIssue = Boolean(state?.ready && remaining > 0 && deriveCanSign());
-    if (recipient) recipient.disabled = !canIssue || this.#busyBoonSlot != null;
-
-    for (let slot = 0; slot < 3; slot += 1) {
-      const button = this.querySelector(`[data-bind="pass-deity-boon-slot-${slot}"]`);
-      const name = this.querySelector(`[data-bind="pass-deity-boon-name-${slot}"]`);
-      const effect = this.querySelector(`[data-bind="pass-deity-boon-effect-${slot}"]`);
-      if (!button || !name || !effect) continue;
-
-      const boonType = Number(state?.slots?.[slot] ?? 0);
-      const used = (usedMask & (1 << slot)) !== 0;
-      const presentation = boonType > 0 ? boonTypePresentation(boonType) : null;
-      name.textContent = presentation?.name || (state?.ready ? 'Boon unavailable' : 'Waiting for RNG');
-      effect.textContent = used
-        ? 'ISSUED'
-        : (presentation?.effect || `SLOT ${slot + 1}`);
-      button.disabled = !canIssue || used || this.#busyBoonSlot != null;
-      button.classList.toggle('pass-deity-boon-slot--used', used);
-      button.classList.toggle('pass-deity-boon-slot--busy', this.#busyBoonSlot === slot);
-      button.title = used
-        ? 'Already issued today'
-        : (presentation?.detail || 'Available after today\'s RNG resolves');
-    }
   }
 
   #afkingMintPriceWei() {
@@ -1270,9 +1147,13 @@ class AppPassSection extends HTMLElement {
       const pendingKnown = Boolean(state.pendingFlipKnown);
       const pending = pendingKnown ? BigInt(state.pendingFlipWhole ?? 0n) : 0n;
       flipClaim.hidden = !pendingKnown || pending <= 0n;
+      const pendingLabel = pending.toLocaleString('en-US');
       flipClaim.textContent = this.#busyAfkingClaim
-        ? 'Claiming…'
-        : `CLAIM ${pending.toLocaleString('en-US')} FLIP`;
+        ? `CLAIMING ${pendingLabel} FLIP…`
+        : `CLAIM ${pendingLabel} FLIP`;
+      const claimDescription = `Claim ${pendingLabel} bonus FLIP`;
+      flipClaim.setAttribute?.('aria-label', claimDescription);
+      flipClaim.title = claimDescription;
       const claimLocked = pending <= 0n
         || this.#busyAfking
         || this.#busyAfkingFunding
@@ -1284,7 +1165,7 @@ class AppPassSection extends HTMLElement {
         claimLocked ? 'AFKing transaction pending' : '',
       );
       if (!claimLocked) {
-        flipClaim.title = 'Claim accrued AFKing daily and ticket-bonus FLIP';
+        flipClaim.title = claimDescription;
       }
     }
 
@@ -1437,7 +1318,10 @@ class AppPassSection extends HTMLElement {
         btn.textContent = originalLabel;
       }
       // Release debounce after window expires.
-      setTimeout(() => { this.#busyWhale = false; }, DEBOUNCE_MS);
+      setTimeout(() => {
+        this.#busyWhale = false;
+        this.#renderWhaleBuyLabel();
+      }, DEBOUNCE_MS);
     }
   }
 
@@ -1533,91 +1417,6 @@ class AppPassSection extends HTMLElement {
         this.#busySymbols.delete(symbolId);
         this.#renderDeityCatalog();
       }, DEBOUNCE_MS);
-    }
-  }
-
-  async #onDeityBoonClick(e, slot) {
-    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busyBoonSlot != null || !deriveCanSign()) return;
-    const actingAddress = getActingAddress();
-    if (!actingAddress || this.#ownedDeitySymbolId(actingAddress) == null) return;
-    if (!this.#deityBoonState?.ready) return;
-    const slotNumber = Number(slot);
-    if (!Number.isInteger(slotNumber) || slotNumber < 0 || slotNumber > 2) return;
-    if ((Number(this.#deityBoonState.usedMask || 0) & (1 << slotNumber)) !== 0) return;
-
-    const recipientInput = this.querySelector('[name="pass-deity-boon-recipient"]');
-    const recipient = String(recipientInput?.value || '').trim();
-    if (!isAddress(recipient)) {
-      this.#renderBoonError('Enter a valid recipient wallet address.');
-      return;
-    }
-    if (recipient.toLowerCase() === String(actingAddress).toLowerCase()) {
-      this.#renderBoonError('Choose someone other than yourself.');
-      return;
-    }
-
-    this.#busyBoonSlot = slotNumber;
-    this.#clearBoonError();
-    this.#renderDeityBoons();
-    try {
-      await issueDeityBoon({ recipient, slot: slotNumber });
-      // The receipt has confirmed at this point, so lock the consumed slot now;
-      // the debounced read below reconciles the new mask from chain state.
-      this.#deityBoonState = {
-        ...this.#deityBoonState,
-        usedMask: Number(this.#deityBoonState.usedMask || 0) | (1 << slotNumber),
-      };
-      if (recipientInput) recipientInput.value = '';
-      this.#clearAllErrorStates();
-      try {
-        this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
-          detail: { kind: 'deity-boon', slot: slotNumber, recipient },
-          bubbles: true,
-        }));
-      } catch (_error) { /* defensive */ }
-      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
-    } catch (error) {
-      const decoded = error?.userMessage ? error : decodeRevertReason(error);
-      this.#renderBoonError(decoded?.userMessage || error?.message || 'Could not give that boon.');
-    } finally {
-      this.#busyBoonSlot = null;
-      this.#renderDeityBoons();
-    }
-  }
-
-  async #onDeityCurseClick(e) {
-    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busyCurse || !deriveCanSign() || get('ui.mode') !== 'self') return;
-    const deityId = this.#ownedDeitySymbolId(get('connected.address'));
-    if (deityId == null) return;
-
-    const targetInput = this.querySelector('[name="pass-deity-curse-target"]');
-    const target = String(targetInput?.value || '').trim();
-    if (!isAddress(target) || /^0x0{40}$/i.test(target)) {
-      this.#renderCurseError('Enter a valid target wallet address.');
-      return;
-    }
-
-    this.#busyCurse = true;
-    this.#clearCurseError();
-    this.#renderDeityBoons();
-    try {
-      await smiteWithDeity({ deityId, target });
-      if (targetInput) targetInput.value = '';
-      this.#clearAllErrorStates();
-      try {
-        this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
-          detail: { kind: 'deity-curse', deityId, target },
-          bubbles: true,
-        }));
-      } catch (_error) { /* defensive */ }
-    } catch (error) {
-      const decoded = error?.userMessage ? error : decodeRevertReason(error);
-      this.#renderCurseError(decoded?.userMessage || error?.message || 'Could not curse that player.');
-    } finally {
-      this.#busyCurse = false;
-      this.#renderDeityBoons();
     }
   }
 
@@ -1908,66 +1707,12 @@ class AppPassSection extends HTMLElement {
     }
   }
 
-  #renderBoonError(msg) {
-    const errEl = this.querySelector('[data-bind="pass-deity-boon-error"]');
-    if (!errEl) return;
-    errEl.textContent = String(msg);
-    errEl.hidden = false;
-    if (this.#errorTimerBoon != null) {
-      try { clearTimeout(this.#errorTimerBoon); } catch (_) { /* defensive */ }
-    }
-    this.#errorTimerBoon = setTimeout(() => this.#clearBoonError(), ERROR_AUTO_CLEAR_MS);
-    if (this.#errorTimerBoon && typeof this.#errorTimerBoon.unref === 'function') {
-      try { this.#errorTimerBoon.unref(); } catch (_) { /* defensive */ }
-    }
-  }
-
-  #clearBoonError() {
-    const errEl = this.querySelector('[data-bind="pass-deity-boon-error"]');
-    if (errEl) {
-      errEl.textContent = '';
-      errEl.hidden = true;
-    }
-    if (this.#errorTimerBoon != null) {
-      try { clearTimeout(this.#errorTimerBoon); } catch (_) { /* defensive */ }
-      this.#errorTimerBoon = null;
-    }
-  }
-
-  #renderCurseError(msg) {
-    const errEl = this.querySelector('[data-bind="pass-deity-curse-error"]');
-    if (!errEl) return;
-    errEl.textContent = String(msg);
-    errEl.hidden = false;
-    if (this.#errorTimerCurse != null) {
-      try { clearTimeout(this.#errorTimerCurse); } catch (_) { /* defensive */ }
-    }
-    this.#errorTimerCurse = setTimeout(() => this.#clearCurseError(), ERROR_AUTO_CLEAR_MS);
-    if (this.#errorTimerCurse && typeof this.#errorTimerCurse.unref === 'function') {
-      try { this.#errorTimerCurse.unref(); } catch (_) { /* defensive */ }
-    }
-  }
-
-  #clearCurseError() {
-    const errEl = this.querySelector('[data-bind="pass-deity-curse-error"]');
-    if (errEl) {
-      errEl.textContent = '';
-      errEl.hidden = true;
-    }
-    if (this.#errorTimerCurse != null) {
-      try { clearTimeout(this.#errorTimerCurse); } catch (_) { /* defensive */ }
-      this.#errorTimerCurse = null;
-    }
-  }
-
   // Cross-section error clearing (next-success-anywhere). Mirrors Phase 61 D-05.
   #clearAllErrorStates() {
     this.#clearWhaleError();
     this.#clearDeityError();
     this.#clearLazyError();
     this.#clearAfkingError();
-    this.#clearBoonError();
-    this.#clearCurseError();
   }
 }
 

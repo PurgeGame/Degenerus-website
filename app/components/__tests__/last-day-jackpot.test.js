@@ -9,6 +9,11 @@ import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+const REPLAY_PANEL_SRC = readFileSync(new URL('../replay-panel.js', import.meta.url), 'utf8');
+const LAST_DAY_SRC = readFileSync(new URL('../last-day-jackpot.js', import.meta.url), 'utf8');
+const INDEX_SRC = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+
 // ---------------------------------------------------------------------------
 // Fake DOM (mirrors view-mode-banner.test.js fake-DOM scaffolding)
 // + globalThis.localStorage shim (forward-compat with Plan 59-03 idempotency tests).
@@ -291,15 +296,67 @@ import { CHAIN } from '../../app/chain-config.js';
 // Tests
 // ---------------------------------------------------------------------------
 
-test('the host does not add day-wide confetti over a losing scratch phase', () => {
+test('the host does not add a day-wide winner effect over a losing scratch phase', () => {
   const src = readFileSync(new URL('../last-day-jackpot.js', import.meta.url), 'utf8');
   const handler = src.match(/#onPanelScratchComplete\(e\)\s*\{([\s\S]*?)\n  \}/)?.[1] || '';
-  assert.doesNotMatch(handler, /#fireConfetti|canvas-confetti/);
-  assert.doesNotMatch(src, /import\(['"]canvas-confetti['"]\)/,
-    'the replay board is the sole, phase-aware owner of jackpot scratch confetti');
+  assert.doesNotMatch(handler, /celebrateProtocol|#celebrate/);
+  assert.doesNotMatch(src, /celebrateProtocol/,
+    'the replay board is the sole, phase-aware owner of the jackpot winner effect');
 });
 
 describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
+  test('the jackpot uses one fancy Spin control and an explicit processing state', () => {
+    assert.match(REPLAY_PANEL_SRC, /const MAIN_SPIN_LABEL = 'SPIN JACKPOT'/);
+    assert.match(REPLAY_PANEL_SRC, /const BONUS_SPIN_LABEL = 'BONUS SPIN'/);
+    assert.match(REPLAY_PANEL_SRC, /const SPIN_AGAIN_LABEL = 'SPIN AGAIN'/);
+    assert.match(REPLAY_PANEL_SRC, /const SPIN_PROCESSING_LABEL = 'JACKPOT PROCESSING'/);
+    assert.doesNotMatch(REPLAY_PANEL_SRC, /textContent = '(?:Reveal Draw|Revealing\.\.\.|Bonus Roll|Replay)'/);
+    assert.match(LAST_DAY_SRC, /JACKPOT PROCESSING · SPIN AVAILABLE SOON/);
+    assert.match(INDEX_SRC, /JACKPOT PROCESSING · SPIN AVAILABLE SOON/);
+    assert.match(APP_CSS, /\.replay-reveal-btn\s*\{[^}]*linear-gradient\(135deg, #8f080b, #ed0e11 52%, #8d0709\)[^}]*letter-spacing:\s*0\.12em/s);
+    assert.match(APP_CSS, /\.replay-reveal-btn\.is-processing\s*\{[^}]*cursor:\s*wait[^}]*opacity:\s*1/s);
+    assert.doesNotMatch(
+      APP_CSS,
+      /replay-panel\[data-day-(?:warming|loading)\] \.replay-controls[^\{]*\{\s*visibility:\s*hidden/s,
+      'processing leaves the stable action row visible',
+    );
+  });
+
+  test('the loading attract reel keeps ownership-aware pink and blue faces', () => {
+    assert.match(
+      APP_CSS,
+      /replay-panel\[data-day-loading\] \.replay-tq\.q-has-trait:not\(\.q-gold-trait\)\s*\{[^}]*background:\s*#b8d4e8/s,
+    );
+    assert.match(
+      APP_CSS,
+      /replay-panel\[data-day-loading\] \.replay-tq\.q-no-tickets\s*\{[^}]*background:\s*rgba\(239, 120, 120, 0\.5\)/s,
+    );
+    assert.doesNotMatch(
+      APP_CSS,
+      /replay-panel\[data-day-loading\] \.replay-tq\s*\{[^}]*background:\s*#bfc2c7/s,
+      'the loading mask must not flatten the ownership reel to gray',
+    );
+    const dayChange = REPLAY_PANEL_SRC.match(
+      /async #onDayChange\(e\)\s*\{([\s\S]*?)\n  #onPlayerChange/,
+    )?.[1] || '';
+    assert.match(
+      dayChange,
+      /await this\.#loadPlayerTraits\(\);[\s\S]*const rollDataReady/,
+      'loading colors hydrate from the target purchase-level holdings before the gate clears',
+    );
+  });
+  test('solo bucket receipts use the truncating ETH formatter in either viewer state', () => {
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /currencyWinnerCount === 1[\s\S]*?formatEthTruncated\(summary\.perWinWei\.toString\(\)\)/,
+      'a public ×1 bucket uses the compact payout',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /const isSoloBucket = Number\(this\.#quadPublicSummaries\[qIdx\]\?\.winnerCount\) === 1[\s\S]*?isSoloBucket[\s\S]*?formatEthTruncated\(ethTotal\.toString\(\)\)/,
+      'the winner-facing YOU WON receipt uses the same compact payout',
+    );
+  });
   beforeEach(async () => {
     storeMod.__resetForTest();
     resetDom();
@@ -1529,7 +1586,7 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       assert.deepEqual(queued.prizes, [{ type: 'wwxrp', amount: 10n ** 18n }]);
       assert.equal(queued.noWin, null, 'the WWXRP result replaces the generic NO HIT card');
       assert.equal(queued.consolationOnly, true,
-        'the reveal layer can play the consolation horn instead of confetti');
+        'the reveal layer can play the consolation horn instead of a winner effect');
       assert.equal(queued.activity.hasCoinflipBet, true);
       assert.equal(queued.activity.coinflipWon, false);
       assert.equal(queued.activity.coinflipStakeAmount, '250000000000000000000');

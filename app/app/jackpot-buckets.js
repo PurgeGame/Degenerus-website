@@ -18,6 +18,8 @@
  *   ticketUniqueWinnerCount: number,
  *   ticketEntriesTotal: bigint,
  *   ticketEntriesPerWinner: bigint,
+ *   ticketEntriesMin: bigint,
+ *   ticketEntriesMax: bigint,
  * }|null>}
  */
 export function buildRoll1BucketSummaries(
@@ -50,6 +52,8 @@ export function buildRoll1BucketSummaries(
         winners: new Set(),
         ticketRows: 0,
         ticketTotal: 0n,
+        ticketMin: null,
+        ticketMax: 0n,
         ticketWinners: new Set(),
       };
       byTrait.set(traitId, group);
@@ -62,6 +66,8 @@ export function buildRoll1BucketSummaries(
     } else {
       group.ticketRows += 1;
       group.ticketTotal += amount;
+      if (group.ticketMin == null || amount < group.ticketMin) group.ticketMin = amount;
+      if (amount > group.ticketMax) group.ticketMax = amount;
       if (winner) group.ticketWinners.add(winner);
     }
   }
@@ -82,6 +88,8 @@ export function buildRoll1BucketSummaries(
         ticketEntriesPerWinner: group?.ticketRows
           ? group.ticketTotal / BigInt(group.ticketRows)
           : 0n,
+        ticketEntriesMin: group?.ticketMin ?? 0n,
+        ticketEntriesMax: group?.ticketMax ?? 0n,
         ...(payoutCurrency === 'FLIP' ? { currency: 'FLIP' } : {}),
       };
     }
@@ -96,6 +104,8 @@ export function buildRoll1BucketSummaries(
       ticketEntriesPerWinner: group.ticketRows
         ? group.ticketTotal / BigInt(group.ticketRows)
         : 0n,
+      ticketEntriesMin: group.ticketMin ?? 0n,
+      ticketEntriesMax: group.ticketMax ?? 0n,
       ...(payoutCurrency === 'FLIP' ? { currency: 'FLIP' } : {}),
     };
   });
@@ -152,6 +162,8 @@ export function splitOpeningFlipDraw(distributions, mainTraits, bonusTraits) {
  *   ticketUniqueWinnerCount: number,
  *   ticketEntriesTotal: bigint,
  *   ticketEntriesPerWinner: bigint,
+ *   ticketEntriesMin: bigint,
+ *   ticketEntriesMax: bigint,
  * }|null>}
  */
 export function buildRoll2BucketSummaries(wins, displayTraits) {
@@ -177,6 +189,8 @@ export function buildRoll2BucketSummaries(wins, displayTraits) {
         winners: new Set(),
         ticketRows: 0,
         ticketTotal: 0n,
+        ticketMin: null,
+        ticketMax: 0n,
         ticketWinners: new Set(),
       };
       byTrait.set(traitId, group);
@@ -189,6 +203,8 @@ export function buildRoll2BucketSummaries(wins, displayTraits) {
     } else {
       group.ticketRows += 1;
       group.ticketTotal += amount;
+      if (group.ticketMin == null || amount < group.ticketMin) group.ticketMin = amount;
+      if (amount > group.ticketMax) group.ticketMax = amount;
       if (winner) group.ticketWinners.add(winner);
     }
   }
@@ -210,6 +226,8 @@ export function buildRoll2BucketSummaries(wins, displayTraits) {
         ticketEntriesPerWinner: group?.ticketRows
           ? group.ticketTotal / BigInt(group.ticketRows)
           : 0n,
+        ticketEntriesMin: group?.ticketMin ?? 0n,
+        ticketEntriesMax: group?.ticketMax ?? 0n,
       };
     }
     return {
@@ -224,6 +242,8 @@ export function buildRoll2BucketSummaries(wins, displayTraits) {
       ticketEntriesPerWinner: group.ticketRows
         ? group.ticketTotal / BigInt(group.ticketRows)
         : 0n,
+      ticketEntriesMin: group.ticketMin ?? 0n,
+      ticketEntriesMax: group.ticketMax ?? 0n,
     };
   });
 }

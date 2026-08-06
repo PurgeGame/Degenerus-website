@@ -632,7 +632,16 @@ function makeFakeRngContract(opts = {}) {
     openBox: [],
     lootboxRngWordByIndex: [],
   };
+  const state = { rngWord: opts.rngWord ?? 0n };  // tests mutate to drive RNG progression
   const stk = (name) => async () => {
+    // Production readiness is now the exact openBox simulation. Preserve the
+    // old mutable RNG seam by making that simulation reject until the fake
+    // word arrives.
+    if (name === 'openBox' && state.rngWord === 0n) {
+      const err = new Error('static-call revert');
+      err.revert = { name: 'RngNotReady' };
+      throw err;
+    }
     if (opts.staticCallShouldRevert?.[name]) {
       const err = new Error('static-call revert');
       err.revert = { name: opts.staticCallRevertName?.[name] || 'RngNotReady' };
@@ -640,7 +649,6 @@ function makeFakeRngContract(opts = {}) {
     }
   };
   let txCounter = 0n;
-  const state = { rngWord: opts.rngWord ?? 0n };  // tests mutate to drive RNG progression
   const c = {
     purchase: Object.assign(
       async (...args) => {
@@ -1602,8 +1610,8 @@ describe('Plan 63-02 (D-02 LOCKED): iOS Safari user-gesture pre-warm refactor', 
     clickByDataBind(el, 'lbx-buy-button');
     await settle(60);
     const sentTx = fakeProvider._signer._sendCalls[0].tx;
-    assert.equal(sentTx.gasLimit, 21000n,
-      'populated tx carried pre-estimated gasLimit (signer round-trip avoided at click moment)');
+    assert.equal(sentTx.gasLimit, contractsMod.gasEstimateWithHeadroom(21000n),
+      'populated tx carried the padded pre-estimated gasLimit (signer round-trip avoided at click moment)');
     el.disconnectedCallback();
   });
 

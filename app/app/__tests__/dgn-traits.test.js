@@ -115,6 +115,21 @@ describe('dgnPartitionTicketEntries', () => {
     assert.deepEqual(partitioned.entries.map((entry) => entry.traitId), [1, 72]);
     assert.deepEqual(partitioned.entries.map((entry) => entry.key), ['entry:0', 'entry:1']);
   });
+
+  test('unrevealed entries (traitId null) never coerce to trait 0 = crypto/pink/XRP', () => {
+    const cards = [
+      { cardIndex: 0, entries: [0, 72, 130, 201]
+        .map((traitId, entryId) => ({ traitId, entryId })) },
+      // A wholly unrevealed card: Number(null) is 0, a real trait, so a naive
+      // coercion both invents four pink-XRP singletons and splits the card above.
+      { cardIndex: 1, entries: [null, null, null, null]
+        .map((traitId, offset) => ({ traitId, entryId: offset + 4 })) },
+    ];
+
+    const partitioned = dgnPartitionTicketEntries(cards);
+    assert.deepEqual(partitioned.tickets.map((ticket) => ticket.traitIds), [[0, 72, 130, 201]]);
+    assert.deepEqual(partitioned.entries, []);
+  });
 });
 
 describe('dgnComputeMatches', () => {
