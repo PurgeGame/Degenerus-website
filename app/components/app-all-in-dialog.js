@@ -70,6 +70,7 @@ class AppAllInDialog extends HTMLElement {
   #target = 'tickets';
   #spins = 5;
   #blindSelection = null;
+  #refreshSeq = 0;
   #targetByCurrency = { ETH: 'tickets', FLIP: 'coinflip' };
   #openListener = (event) => this.#show(event);
 
@@ -183,6 +184,10 @@ class AppAllInDialog extends HTMLElement {
     dialog.hidden = false;
     dialog.removeAttribute?.('hidden');
     this.#render();
+    // Privacy blur belongs only to presentation. Warm the real FLIP sources
+    // as soon as the chooser opens so switching currency cannot strand the
+    // quote at "balance loading" until the player reveals the number.
+    void this.#refreshCurrency('FLIP');
     try { this.querySelector('[data-currency="ETH"]')?.focus?.({ preventScroll: true }); }
     catch (_e) { /* focus is progressive enhancement */ }
   }
@@ -195,6 +200,7 @@ class AppAllInDialog extends HTMLElement {
       dialog.setAttribute?.('hidden', '');
     }
     this.#open = false;
+    this.#refreshSeq += 1;
     this.#detail = null;
     unlock();
     try { this.#returnFocus?.focus?.({ preventScroll: true }); } catch (_e) { /* optional */ }
@@ -233,6 +239,17 @@ class AppAllInDialog extends HTMLElement {
     this.#blindSelection = null;
     this.#target = this.#firstTarget(next, this.#targetByCurrency[next]);
     this.#targetByCurrency[next] = this.#target;
+    this.#render();
+    if (next === 'FLIP') void this.#refreshCurrency(next);
+  }
+
+  async #refreshCurrency(currency) {
+    const detail = this.#detail;
+    if (!detail || typeof detail.refreshCurrency !== 'function') return;
+    const seq = ++this.#refreshSeq;
+    try { await detail.refreshCurrency(currency); }
+    catch (_error) { /* the existing indexed quote remains a valid fallback */ }
+    if (!this.#open || this.#detail !== detail || seq !== this.#refreshSeq) return;
     this.#render();
   }
 

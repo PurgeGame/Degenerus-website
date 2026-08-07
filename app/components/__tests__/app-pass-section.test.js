@@ -819,7 +819,6 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'pass-lazy-afking-seat',
       'pass-whale-afking-seat',
       'pass-deity-afking-seat',
-      'pass-shop-seat-copy',
     ]) {
       assert.equal(el.querySelector(`[data-bind="${bind}"]`).hidden, true,
         `${bind} does not advertise a second non-stackable seat`);
@@ -839,15 +838,18 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
   test('mobile pass desk keeps AFKING state and daily actions compact while settings use a popup', () => {
     const el = instantiate();
-    assert.ok(el.querySelector('[data-bind="pass-shop-heading"]'), 'pass products have a shop heading');
+    assert.equal(el.querySelector('[data-bind="pass-shop-heading"]'), null,
+      'the redundant PASS SHOP divider is absent');
     assert.ok(el.querySelector('.pass-afking__quick'), 'state, top up, and claim use a compact action rail');
     assert.ok(el.querySelector('[data-bind="pass-afking-dialog"]'), 'setup and editing use a focused dialog');
     assert.ok(el.querySelector('.pass-afking__order-card'), 'subscription order has its own card');
     assert.ok(el.querySelector('.pass-afking__funding-card'), 'initial subscription funding has its own card');
     assert.ok(el.querySelector('.pass-afking__actions'), 'subscription actions have their own row');
-    assert.match(el.innerHTML, /NEXT JACKPOT/);
-    assert.doesNotMatch(el.innerHTML, /DAY CROSSOVER/i,
-      'player-facing subscription copy uses the jackpot event name');
+    assert.match(el.innerHTML, /DAILY ORDER/);
+    assert.match(el.innerHTML, /Runs automatically once per day\./,
+      'the subscription states its real daily cadence');
+    assert.doesNotMatch(el.innerHTML, /NEXT JACKPOT|\/ JACKPOT|each jackpot begins/i,
+      'player-facing subscription copy does not imply one order per jackpot');
 
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.match(css,
@@ -859,6 +861,24 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.match(css,
       /@media \(max-width: 640px\)[\s\S]*?\.pass-afking__quick\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s,
       'mobile quick actions use a stable compact grid');
+    assert.match(css,
+      /\.pass-afking\s*\{[^}]*grid-template-columns:\s*minmax\(17rem, 0\.9fr\) minmax\(26rem, 1\.1fr\)[^}]*align-items:\s*center/s,
+      'desktop AFKing state and daily actions share the available horizontal space');
+    assert.match(css,
+      /\.pass-afking__quick\s*\{[^}]*display:\s*grid[^}]*align-items:\s*center/s,
+      'all daily controls share one vertical centerline');
+    assert.match(css,
+      /\.pass-afking__topup-field,[\s\S]*?\.pass-afking__quick > \.pass-afking__edit\s*\{[^}]*height:\s*2\.2rem;[^}]*min-height:\s*2\.2rem;[^}]*max-height:\s*2\.2rem/s,
+      'the top-up field and every adjacent desktop action have exactly the same box height');
+    assert.match(css,
+      /\.pass-afking__topup-field\s*\{[^}]*margin:\s*0;/s,
+      'the inline field resets the shared form-label margin that would shift it above the buttons');
+    assert.match(css,
+      /\.pass-afking__topup-field input\s*\{[^}]*display:\s*block;[^}]*text-align:\s*right;/s,
+      'the input has no inline baseline gap and keeps its amount right-aligned');
+    assert.match(css,
+      /@media \(max-width: 640px\)[\s\S]*?\.pass-afking__topup-field,[\s\S]*?\.pass-afking__quick > \.pass-afking__edit\s*\{[^}]*height:\s*2\.75rem;[^}]*min-height:\s*2\.75rem;[^}]*max-height:\s*2\.75rem/s,
+      'the field grows with the buttons at the mobile touch-size breakpoint');
     assert.match(css,
       /\.pass-afking__dialog\s*\{[^}]*position:\s*fixed[^}]*place-items:\s*center/s,
       'the infrequent editor is a real modal surface');
@@ -924,7 +944,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     await settle(60);
     assert.equal(el.querySelector('[data-bind="pass-afking"]').hidden, false);
     assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, true);
-    assert.equal(el.querySelector('[data-bind="pass-afking-current"]').textContent, '2 LUCKBOX / JACKPOT');
+    assert.equal(el.querySelector('[data-bind="pass-afking-current"]').textContent, '2 LUCKBOX / DAY');
     assert.equal(el.querySelector('[data-bind="pass-afking-policy"]').textContent, 'CLAIMABLE FIRST');
     assert.equal(el.querySelector('[data-bind="pass-afking-edit"]').textContent, 'EDIT');
     assert.equal(el.querySelector('[name="pass-afking-topup"]').value, '0.4',
@@ -955,7 +975,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     ]);
     assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, true,
       'saving returns to the compact state card');
-    assert.equal(el.querySelector('[data-bind="pass-afking-current"]').textContent, '3 TICKETS / JACKPOT');
+    assert.equal(el.querySelector('[data-bind="pass-afking-current"]').textContent, '3 TICKETS / DAY');
     assert.equal(el.querySelector('[data-bind="pass-afking-policy"]').textContent, 'PREPAID FIRST');
 
     const fundInput = el.querySelector('[name="pass-afking-topup"]');
@@ -988,13 +1008,19 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     await settle(60);
 
     const notice = el.querySelector('[data-bind="pass-afking-lock"]');
+    const dialog = el.querySelector('[data-bind="pass-afking-dialog"]');
     const save = el.querySelector('[data-bind="pass-afking-save"]');
     const cancel = el.querySelector('[data-bind="pass-afking-cancel"]');
     const fundOnly = el.querySelector('[data-bind="pass-afking-fund-button"]');
-    assert.equal(notice.hidden, false, 'the reason for disabled settings is visible');
-    assert.match(notice.textContent, /RNG SETTLING/);
+    assert.equal(dialog.hidden, true);
+    assert.ok(
+      PANEL_SRC.indexOf('data-bind="pass-afking-lock"')
+        > PANEL_SRC.indexOf('data-bind="pass-afking-dialog"'),
+      'the RNG explanation lives in the editor instead of interrupting the compact subscription card');
     el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
-    assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, false);
+    assert.equal(dialog.hidden, false);
+    assert.equal(notice.hidden, false, 'the popup explains why its settings are disabled');
+    assert.match(notice.textContent, /RNG SETTLING/);
     assert.equal(save.textContent, 'RNG SETTLING');
     assert.equal(save.disabled, true);
     assert.equal(cancel.disabled, true);

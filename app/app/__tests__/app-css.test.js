@@ -272,6 +272,18 @@ describe('app.css LOC budget', () => {
     // 20250 → 20500 for the AFKing subscription workspace (head, quick strip,
     // edit dialog) and the determinate --jp-progress fill on the jackpot
     // processing button. Two deliberate features.
-    assert.ok(cssLines.length <= 20500, `total <=20500, got ${cssLines.length}`);
+    // 20500 → 21500 for the 2026-08-07 play-surface refinement pass. Unlike
+    // every bump above it, this one is NOT a new block appended at the end: the
+    // ~650 added lines are distributed through the existing reveal, parimutuel,
+    // foil/ticket, jackpot-board and pass-desk sections (section starts moved
+    // 18594 → 19273, 13721 → 14138, 11603 → 11800), so it is refinement of
+    // surfaces already here rather than new surface area.
+    //
+    // Distributed growth is the shape this guard is least able to police — no
+    // single block to point at, so it accretes quietly. The 350-line headroom is
+    // deliberately tight for that reason: the next bump should have to justify
+    // itself again, and the note at 8800 above about splitting into a component
+    // stylesheet is now overdue, not aspirational.
+    assert.ok(cssLines.length <= 21500, `total <=21500, got ${cssLines.length}`);
   });
 });

@@ -695,10 +695,27 @@ describe('app-box-strip', () => {
       getSigner: async () => ({ getAddress: async () => ADDR }),
     });
     lootboxMod.__setContractFactoryForTest(() => fake);
-    globalThis.fetch = async () => ({
+    let indexed = false;
+    const settledLeg = {
+      uid: 'indexed-after-sync-8',
+      player: ADDR_LC,
+      legType: 'opened',
+      lootboxIndex: 8,
+      transactionHash: '0xsettledaftersync',
+      blockNumber: '101',
+      logIndex: 5,
+      ord: 106,
+      rewardData: {
+        amount: '123', futureLevel: 9, futureTickets: 0,
+        roundedUp: false, flip: '0',
+      },
+    };
+    globalThis.fetch = async (url) => ({
       ok: true,
       status: 200,
-      json: async () => ({ items: [] }),
+      json: async () => indexed && String(url).includes('/lootbox/legs')
+        ? { items: [settledLeg] }
+        : { items: [] },
     });
 
     const el = instantiate();
@@ -722,9 +739,31 @@ describe('app-box-strip', () => {
     assert.ok(recovering, 'a cleared slot remains visible while its indexed result catches up');
     assert.equal(recovering.state, 'ready');
     assert.equal(recovering.resolved, true);
-    assert.equal(recovering.shortLabel, 'View result');
+    assert.equal(recovering.shortLabel, 'Syncing result');
+    assert.equal(recovering.detail, 'Settlement confirmed · loading the reveal receipt');
+    assert.equal(recovering.phase, 'indexing');
+    assert.equal(recovering.progress, 'indeterminate');
     assert.ok(globalThis.localStorage.getItem(KEY), 'the receipt row survives the settlement race');
     assert.deepEqual(revealMod.__takeQueuedForTest(), []);
+
+    indexed = true;
+    assert.equal(await recovering.run(), true,
+      'the same retry opens once its indexed receipt arrives');
+    assert.equal(revealMod.__takeQueuedForTest()[0]?.lootboxIndex, 8);
+    assert.equal(pendingActionsMod.getPendingActions().length, 0,
+      'the loaded reveal temporarily hides its pending receipt');
+
+    document.dispatchEvent(new CustomEvent(revealMod.LOOTBOX_REVEAL_ABORT_EVENT, {
+      detail: { releases: [{ address: ADDR, key: '8' }] },
+    }));
+    await tick();
+    const restored = pendingActionsMod.getPendingActions()
+      .find((action) => action.id === 'lootbox:8');
+    assert.equal(restored?.shortLabel, 'View result',
+      'closing a loaded reveal cannot regress to the stale syncing label');
+    assert.equal(restored?.detail, 'Result indexed · ready to replay');
+    assert.equal(restored?.phase, 'result-ready');
+    assert.equal(restored?.progress, null);
     el.disconnectedCallback();
   });
 

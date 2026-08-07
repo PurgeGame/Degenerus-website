@@ -1023,7 +1023,7 @@ class AppBoxStrip extends HTMLElement {
         box.opening = false;
         box.ready = true;
         box.resolved = true;
-        this.#renderError('Result syncing — auto-open will retry when the receipt is ready.');
+        box.resultSyncing = true;
         this.#render();
         return false;
       }
@@ -1130,7 +1130,10 @@ class AppBoxStrip extends HTMLElement {
     box.opening = false;
     box.ready = true;
     box.resolved = true;
-    this.#renderError('Result syncing — auto-open will retry when the receipt is ready.');
+    // Indexing lag is an expected lifecycle state, not a failed action. Keep
+    // the ready lane armed for its existing retry cadence without painting a
+    // ten-second error on every miss.
+    box.resultSyncing = true;
     if (this.#addr) _writePending(this.#addr, this.#boxes);
     this.#render();
     return false;
@@ -1165,6 +1168,9 @@ class AppBoxStrip extends HTMLElement {
     // Hide the action while its presentation is active, but keep its durable
     // receipt until completion. If the overlay aborts or the page reloads, the
     // player gets the result action back instead of losing it from Pending.
+    // The indexed legs are now in hand, so an aborted presentation is a normal
+    // "View result" retry instead of falling back to the stale syncing label.
+    box.resultSyncing = false;
     this.#activeRevealKeys.add(key);
     box.opening = true;
     _writePending(address, this.#boxes);
@@ -1209,6 +1215,7 @@ class AppBoxStrip extends HTMLElement {
     const visibleBoxes = this.#boxes.filter((box) => !this.#activeRevealKeys.has(_boxKey(box)));
     publishPendingActions(PENDING_SOURCE, visibleBoxes.map((box) => {
       const value = _boxValuePresentation(box);
+      const resultSyncing = Boolean(box.resolved && box.resultSyncing);
       return {
       id: `lootbox:${_boxKey(box)}`,
       dismissScope: this.#addr,
@@ -1227,11 +1234,15 @@ class AppBoxStrip extends HTMLElement {
       lootboxLabel: _boxLabel(box, true),
       shortLabel: box.optimistic
         ? 'Transaction sent'
-        : box.index == null ? 'Syncing purchase' : box.resolved ? 'View result' : 'Open box',
+        : box.index == null
+          ? 'Syncing purchase'
+          : resultSyncing ? 'Syncing result' : box.resolved ? 'View result' : 'Open box',
       detail: box.optimistic
         ? 'Purchase sent · waiting for confirmation'
         : box.index == null
           ? 'Purchase confirmed · syncing RNG queue'
+        : resultSyncing
+          ? 'Settlement confirmed · loading the reveal receipt'
         : box.opening
         ? box.resolved ? 'Loading indexed result' : 'Opening on-chain'
         : box.ready
@@ -1245,7 +1256,7 @@ class AppBoxStrip extends HTMLElement {
       sharedRng: !box.optimistic,
       phase: box.optimistic
         ? 'submitting'
-        : box.opening ? 'resolving' : box.ready ? 'result-ready' : 'awaitingRng',
+        : resultSyncing ? 'indexing' : box.opening ? 'resolving' : box.ready ? 'result-ready' : 'awaitingRng',
       // Pending/RNG-ready boxes cannot spoil a payout that does not exist yet.
       // Consumers may gate balances only after an indexed settlement exists.
       resolved: Boolean(box.resolved),
@@ -1253,7 +1264,7 @@ class AppBoxStrip extends HTMLElement {
       // Readiness changes what clicking the receipt does, not its shape. The
       // compact amount + box-glyph label remains the entire open target.
       compact: true,
-      progress: !box.ready && !box.opening ? 'indeterminate' : null,
+      progress: resultSyncing || (!box.ready && !box.opening) ? 'indeterminate' : null,
       write: !box.resolved,
       // A resolved/indexed box only replays its popup. An unresolved ready box
       // still needs an explicit openBox wallet transaction and is never run by

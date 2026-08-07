@@ -1,5 +1,6 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 globalThis.HTMLElement = globalThis.HTMLElement || class HTMLElement {};
 globalThis.customElements = globalThis.customElements || {
@@ -103,21 +104,54 @@ describe('bingo event watcher', () => {
     assert.equal(counts.reduce((sum, count) => sum + count, 0), 1);
   });
 
-  test('publishes one durable reveal, then consumed overlap logs cannot reopen it', async () => {
-    const claimLogs = [
-      log('FirstSymbolBingo', [PLAYER, 31, 2], { index: 4, tx: '0xbeef' }),
-      log('BingoClaimed', [PLAYER, 31, 2, 2_000n * 10n ** 18n, 77n], {
-        index: 5, tx: '0xbeef',
-      }),
-    ];
+  // The chain scan this file used to carry walked every block since deploy in
+  // 2,000-block getLogs chunks, per player, at the shared project RPC — and it
+  // ran precisely when the API was failing, turning an API wobble into a
+  // bulk-RPC storm. Bingo state is derived from entries the indexer already
+  // holds, so nothing was lost by deleting it. Decoding the CLAIM RECEIPT'S own
+  // logs is fine and stays: that comes back from the wallet write, not a read.
+  test('reads no chain logs — the indexed API is the only reader', () => {
+    const source = readFileSync(new URL('../bingo-watch.js', import.meta.url), 'utf8');
+    const code = source.split('\n')
+      .filter((line) => !line.trim().startsWith('//') && !line.trim().startsWith('*'))
+      .join('\n');
+    assert.doesNotMatch(code, /getLogs/, 'no getLogs anywhere in this module');
+    assert.doesNotMatch(code, /JsonRpcProvider/, 'no provider construction');
+    assert.doesNotMatch(code, /getProvider/, 'no wallet provider read either');
+    assert.doesNotMatch(code, /CHAIN\.rpcUrl/, 'nothing points at the shared RPC');
+    assert.doesNotMatch(code, /deployBlock/, 'no scan-from-deploy cursor');
+    assert.match(code, /fetchJSON\(`\/player\/\$\{address\}\/bingos`\)/,
+      'the indexed route is the reader');
+    // The receipt decoder is deliberately still here.
+    assert.match(code, /export function decodeBingoLogs/);
+  });
+
+  test('carries no polling interval — main.js already triggers it on every real change', () => {
+    const source = readFileSync(new URL('../bingo-watch.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /setInterval/, 'no clock; refreshBingoWatch is event-driven');
+  });
+
+  test('publishes one durable reveal, then a repeat API read cannot reopen it', async () => {
+    // The indexed `claimed` row is the same receipt the chain used to supply,
+    // and the API keeps returning it forever — so the consumed set, not a scan
+    // cursor, is what stops a dismissed reveal from coming back.
     bingo.__setBingoReadersForTest({
-      logs: async ({ headOnly, fromBlock, toBlock }) => headOnly
-        ? { head: TEST_BLOCK + 5, logs: [] }
-        : {
-            logs: claimLogs.filter((entry) => (
-              entry.blockNumber >= fromBlock && entry.blockNumber <= toBlock
-            )),
-          },
+      index: async () => ({
+        player: PLAYER,
+        claimable: [],
+        claimed: [{
+          id: '0xbeef:5',
+          transactionHash: '0xbeef',
+          logIndex: 5,
+          blockNumber: TEST_BLOCK,
+          player: PLAYER,
+          level: 31,
+          symbol: 2,
+          tier: 'first-symbol',
+          flipReward: String(2_000n * 10n ** 18n),
+          dgnrsPaid: '77',
+        }],
+      }),
       tickets: async () => ({
         cards: Array.from({ length: 8 }, (_unused, color) => ({
           entries: [{ traitId: (color * 8) + 2 }],
@@ -144,7 +178,7 @@ describe('bingo event watcher', () => {
 
     await bingo.refreshBingoWatch();
     rows = pending.getPendingActions().filter((row) => row.kind === 'bingo');
-    assert.equal(rows.length, 0, 'reorg-overlap rescan respects the consumed receipt id');
+    assert.equal(rows.length, 0, 'a repeat API read respects the consumed receipt id');
   });
 
   test('DB proof becomes a write action, then its receipt becomes the Bingo reveal', async () => {

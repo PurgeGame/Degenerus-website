@@ -4337,6 +4337,7 @@ body.layout-basic .df-coin3d__inner {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
   animation: df-spin-idle 1.1s linear infinite;
   will-change: transform;
 }
@@ -4369,7 +4370,8 @@ body.layout-basic .df-coin--syncing .df-coin3d__inner {
 body.layout-basic .df-coin3d__face {
   position: absolute;
   inset: 0;
-  transform-style: preserve-3d;
+  display: block;
+  transform-origin: 50% 50%;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
@@ -4377,12 +4379,13 @@ body.layout-basic .df-coin3d__face img {
   display: block;
   width: 100%;
   height: 100%;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
+  pointer-events: none;
 }
-body.layout-basic .df-coin3d__face--red { transform: translateZ(0.5px); }
-body.layout-basic .df-coin3d__face--eth { transform: rotateX(180deg) translateZ(0.5px); }
+/* Keep the artwork 2D inside two explicit opposing planes. Nesting another
+   translated/backface-hidden layer around each SVG occasionally made Chromium
+   composite the red plane's reverse as the back face too. */
+body.layout-basic .df-coin3d__face--red { transform: rotateX(0deg) translateZ(1px); }
+body.layout-basic .df-coin3d__face--eth { transform: rotateX(180deg) translateZ(1px); }
 
 body.layout-basic .df-coin3d__inner.df-reveal-active {
   --df-track-duration: 3300ms;
@@ -10402,12 +10405,15 @@ body.layout-basic .pool-progress {
 
 body.layout-basic .pool-progress__special-jackpot {
   display: flex;
+  grid-column: 2;
   flex: 0 1 auto;
   min-width: 0;
   align-items: baseline;
-  justify-content: flex-end;
+  justify-content: center;
+  justify-self: center;
   gap: 0.32rem;
-  margin: 0 0 0 auto;
+  max-width: 100%;
+  margin: 0;
   overflow: hidden;
   color: #f87171;
   font-size: clamp(0.6rem, 1.35vw, 0.72rem);
@@ -10415,7 +10421,7 @@ body.layout-basic .pool-progress__special-jackpot {
   font-weight: 950;
   letter-spacing: 0.09em;
   line-height: 1;
-  text-align: right;
+  text-align: center;
   white-space: nowrap;
   text-shadow: 0 0 8px rgba(248, 113, 113, 0.3);
 }
@@ -10442,10 +10448,10 @@ body.layout-basic .pool-progress__special-jackpot[data-kind="both"] {
 }
 
 body.layout-basic .pool-progress__head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   min-width: 0;
   align-items: center;
-  justify-content: space-between;
   gap: 0.6rem;
   /* The phase and live amount share the first visual row; the bar is row two. */
   margin: 0 0 0.38rem;
@@ -10865,12 +10871,22 @@ body.layout-basic .pool-progress__track.is-depleting .pool-progress__fill {
 
 @media (max-width: 560px) {
   body.layout-basic .pool-progress__special-jackpot {
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
     gap: 0.22rem;
     font-size: clamp(0.51rem, 2.45vw, 0.62rem);
     letter-spacing: 0.055em;
   }
   body.layout-basic .pool-progress__head {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
     gap: 0.36rem;
+  }
+  body.layout-basic .pool-progress__day {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: center;
   }
   body.layout-basic .pool-progress__metrics {
     gap: 0.24rem;
@@ -19287,44 +19303,6 @@ body.layout-basic .pass-combined-note {
   order: -3;
 }
 
-body.layout-basic .pass-shop-heading {
-  display: flex;
-  order: -1;
-  align-items: end;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.24rem 0.12rem 0.08rem;
-}
-
-body.layout-basic .pass-shop-heading[hidden],
-body.layout-basic .pass-shop-heading [hidden] {
-  display: none !important;
-}
-
-body.layout-basic .pass-shop-heading > div {
-  display: grid;
-  gap: 0.08rem;
-}
-
-body.layout-basic .pass-shop-heading strong {
-  color: #dbe6f2;
-  font-size: 0.7rem;
-  letter-spacing: 0.14em;
-}
-
-body.layout-basic .pass-shop-heading span,
-body.layout-basic .pass-shop-heading small {
-  color: var(--text-secondary, #8f9cab);
-  font-size: 0.62rem;
-  line-height: 1.3;
-}
-
-body.layout-basic .pass-shop-heading small {
-  font-family: var(--font-mono, "Roboto Mono", monospace);
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-}
-
 body.layout-basic .pass-product-row {
   position: relative;
   display: grid;
@@ -19604,9 +19582,11 @@ body.layout-basic .pass-lazy-row[hidden] {
 
 body.layout-basic .pass-afking {
   display: grid;
-  gap: 0.65rem;
+  grid-template-columns: minmax(17rem, 0.9fr) minmax(26rem, 1.1fr);
+  align-items: center;
+  gap: 0.5rem 0.78rem;
   margin: 0;
-  padding: 0.82rem;
+  padding: 0.68rem 0.74rem;
   border: 1px solid rgba(110, 184, 255, 0.34);
   border-radius: 12px;
   background:
@@ -19617,6 +19597,7 @@ body.layout-basic .pass-afking {
 
 body.layout-basic .pass-afking__head {
   display: grid;
+  grid-column: 1;
   grid-template-columns: minmax(13.5rem, 1fr) auto;
   align-items: center;
   gap: 0.75rem;
@@ -19689,10 +19670,10 @@ body.layout-basic .pass-afking__wallet {
 }
 
 body.layout-basic .pass-afking__balance {
-  display: grid;
-  gap: 0.12rem;
-  min-width: 6.5rem;
-  justify-items: end;
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.38rem;
 }
 
 body.layout-basic .pass-afking__balance > small {
@@ -19702,58 +19683,90 @@ body.layout-basic .pass-afking__balance > small {
 }
 
 body.layout-basic .pass-afking__quick {
-  display: flex;
+  display: grid;
+  grid-column: 2;
+  grid-template-columns: auto minmax(13rem, 1fr) auto auto;
   min-width: 0;
-  align-items: flex-end;
-  gap: 0.48rem;
-  padding-top: 0.52rem;
-  border-top: 1px solid rgba(129, 190, 240, 0.16);
+  align-items: center;
+  gap: 0.4rem;
+  padding-left: 0.72rem;
+  border-left: 1px solid rgba(129, 190, 240, 0.16);
 }
 
 body.layout-basic .pass-afking__quick > .pass-afking__balance {
-  min-width: 7.25rem;
-  margin-right: auto;
-  justify-items: start;
+  min-width: 6.65rem;
 }
 
 body.layout-basic .pass-afking__topup {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 1fr) auto;
   min-width: 0;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.38rem;
 }
 
 body.layout-basic .pass-afking__topup-field {
   position: relative;
-  display: grid;
-  width: clamp(7.25rem, 15vw, 9.25rem);
-  gap: 0.18rem;
+  display: block;
+  width: 100%;
+  margin: 0;
   color: #8abce8;
   font: 850 0.48rem/1 var(--font-mono, "Roboto Mono", monospace);
   letter-spacing: 0.1em;
 }
 
 body.layout-basic .pass-afking__topup-field input {
+  display: block;
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
+  height: 2.2rem;
   min-height: 2.2rem;
-  padding: 0.4rem 2.35rem 0.4rem 0.56rem;
+  max-height: 2.2rem;
+  padding: 0.4rem 2.35rem 0.4rem 3.55rem;
   border: 1px solid rgba(105, 185, 255, 0.3);
   border-radius: 8px;
   color: #e5f3ff;
   background: rgba(4, 8, 16, 0.62);
   font: 800 0.78rem/1 var(--font-mono, "Roboto Mono", monospace);
   font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+body.layout-basic .pass-afking__topup-field > span {
+  position: absolute;
+  z-index: 1;
+  left: 0.56rem;
+  top: 50%;
+  color: #73afe0;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 body.layout-basic .pass-afking__topup-field small {
   position: absolute;
   right: 0.55rem;
-  bottom: 0.72rem;
+  top: 50%;
   color: #8abce8;
   font: 800 0.58rem/1 var(--font-mono, "Roboto Mono", monospace);
   pointer-events: none;
+  transform: translateY(-50%);
+}
+
+body.layout-basic .pass-afking__topup-field,
+body.layout-basic .pass-afking__topup > .pass-afking__fund-button,
+body.layout-basic .pass-afking__quick > .pass-afking__claim-button,
+body.layout-basic .pass-afking__quick > .pass-afking__edit {
+  box-sizing: border-box;
+  height: 2.2rem;
+  min-height: 2.2rem;
+  max-height: 2.2rem;
+  align-self: center;
+}
+
+body.layout-basic .pass-afking__lock,
+body.layout-basic .pass-afking-error--inline {
+  grid-column: 1 / -1;
 }
 
 body.layout-basic .pass-afking__withdraw {
@@ -20270,6 +20283,18 @@ body.layout-basic .pass-deity-buy {
   body.layout-basic .pass-afking__controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  body.layout-basic .pass-afking {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body.layout-basic .pass-afking__head,
+  body.layout-basic .pass-afking__quick {
+    grid-column: 1;
+  }
+  body.layout-basic .pass-afking__quick {
+    padding: 0.5rem 0 0;
+    border-top: 1px solid rgba(129, 190, 240, 0.16);
+    border-left: 0;
+  }
   body.layout-basic .pass-afking__day-cost { justify-self: end; }
 }
 
@@ -20277,11 +20302,6 @@ body.layout-basic .pass-deity-buy {
   body.layout-basic .app-pass-section,
   body.layout-basic .pass-afking {
     padding: 0.68rem;
-  }
-  body.layout-basic .pass-shop-heading {
-    align-items: start;
-    flex-direction: column;
-    gap: 0.25rem;
   }
   body.layout-basic .pass-product-row--whale,
   body.layout-basic .pass-product-row--lazy {
@@ -20379,7 +20399,7 @@ body.layout-basic .pass-deity-buy {
   body.layout-basic .pass-afking__quick {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: end;
+    align-items: center;
   }
   body.layout-basic .pass-afking__quick > .pass-afking__balance,
   body.layout-basic .pass-afking__topup {
@@ -20388,9 +20408,17 @@ body.layout-basic .pass-deity-buy {
     margin-right: 0;
   }
   body.layout-basic .pass-afking__topup-field {
-    width: auto;
+    width: 100%;
     min-width: 0;
-    flex: 1 1 auto;
+  }
+  body.layout-basic .pass-afking__topup-field,
+  body.layout-basic .pass-afking__topup-field input,
+  body.layout-basic .pass-afking__topup > .pass-afking__fund-button,
+  body.layout-basic .pass-afking__quick > .pass-afking__claim-button,
+  body.layout-basic .pass-afking__quick > .pass-afking__edit {
+    height: 2.75rem;
+    min-height: 2.75rem;
+    max-height: 2.75rem;
   }
   body.layout-basic .pass-afking__quick > .pass-afking__claim-button,
   body.layout-basic .pass-afking__quick > .pass-afking__edit {

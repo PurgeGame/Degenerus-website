@@ -529,9 +529,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(rotorRule, /transform-style:\s*preserve-3d/);
     assert.doesNotMatch(rotorRule, /isolation:\s*isolate/,
       'the rotor cannot use a grouping property that flattens its two 3D faces');
-    assert.match(APP_CSS, /\.df-coin3d__face--red\s*\{[^}]*translateZ\(0\.5px\)/s);
-    assert.match(APP_CSS, /\.df-coin3d__face--eth\s*\{[^}]*rotateX\(180deg\) translateZ\(0\.5px\)/s,
+    assert.match(APP_CSS, /\.df-coin3d__face--red\s*\{[^}]*rotateX\(0deg\) translateZ\(1px\)/s);
+    assert.match(APP_CSS, /\.df-coin3d__face--eth\s*\{[^}]*rotateX\(180deg\) translateZ\(1px\)/s,
       'the ETH and WWXRP artwork occupy distinct backface-hidden planes');
+    assert.doesNotMatch(APP_CSS,
+      /\.df-coin3d__face img\s*\{[^}]*translateZ|\.df-coin3d__face img\s*\{[^}]*backface-visibility/s,
+      'the nested SVGs cannot become independent 3D layers and expose the WWXRP reverse');
     const revealHint = el.querySelector('[data-bind="df-reveal-hint"]');
     assert.equal(revealHint.hidden, false, 'small instruction graphic is visible while unrevealed');
     assert.equal(revealHint.tagName, 'BUTTON', 'the instruction graphic is itself a reveal control');

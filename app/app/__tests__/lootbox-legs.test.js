@@ -352,6 +352,37 @@ describe('openLegsFromFeed', () => {
       },
     ], { player: PLAYER, lootboxIndex: 7 }), []);
   });
+
+  test('accepts a spin-only row whose deterministic bet id supplied the exact index', () => {
+    const tx = `0x${'de'.repeat(32)}`;
+    const packed = packSpin(3n, 4n, 5) | (1n << 216n);
+    const spin = decodeBoxSpin((1n << 63n) | (2n << 60n) | 29n, packed);
+    const rows = [
+      {
+        player: PLAYER, transactionHash: tx, logIndex: 20, legType: 'reward',
+        lootboxIndex: 7, rewardData: { rewardType: 12, amount: '1' },
+      },
+      {
+        player: PLAYER, transactionHash: tx, logIndex: 21, legType: 'spin',
+        lootboxIndex: 7,
+        spin: { ...spin, payout: '900', ethShare: '600' },
+      },
+      {
+        // A recirculated child spin is part of the same receipt even though its
+        // own entropy does not reconstruct the purchased box's id.
+        player: PLAYER, transactionHash: tx, logIndex: 22, legType: 'spin',
+        lootboxIndex: 7,
+        spin: { ...spin, payout: '300', ethShare: '200' },
+      },
+    ];
+
+    const legs = openLegsFromFeed(rows, { player: PLAYER, lootboxIndex: 7 });
+    assert.deepEqual(legs.map((leg) => leg.legType), ['reward', 'spin', 'spin']);
+    assert.equal(legs[0].label, 'Quest streak shield');
+    assert.equal(legs[1].spinType, 'eth');
+    assert.equal(legs[1].payout, 900n);
+    assert.equal(legs[2].payout, 300n);
+  });
 });
 
 describe('openLegsFromDegenerettePayouts', () => {

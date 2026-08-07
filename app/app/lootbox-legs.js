@@ -512,9 +512,9 @@ export function openLegsFromDegenerettePayouts(items) {
  * The exact-index settlement event is used only as a transaction anchor; every
  * same-player leg in that transaction is then included, which preserves split
  * boxes, boons, passes, and BoxSpin reels in their original log order. A
- * spin-only resolution has no index in the BoxSpin event, so it cannot be
- * attributed safely from that feed and deliberately returns [] rather than
- * replaying somebody else's result.
+ * A raw spin-only resolution has no index in the BoxSpin event. The exact API
+ * lookup can safely reconstruct that index from the spin's deterministic bet
+ * id; only a spin carrying that verified index is accepted as an anchor.
  *
  * @param {Array<object>} items
  * @param {{player: string, lootboxIndex?: bigint|number, transactionHash?: string}} args
@@ -531,7 +531,7 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
     .filter((item) => String(item?.player || '').toLowerCase() === wantPlayer
       && item?.lootboxIndex != null
       && String(item.lootboxIndex) === wantIndex
-      && ['opened', 'presale', 'flipOpened'].includes(String(item?.legType || '')))
+      && ['opened', 'presale', 'flipOpened', 'spin'].includes(String(item?.legType || '')))
     .sort((a, b) => Number(b?.ord ?? b?.logIndex ?? 0) - Number(a?.ord ?? a?.logIndex ?? 0));
   const txHash = wantTx || anchors[0]?.transactionHash;
   if (!txHash) return [];

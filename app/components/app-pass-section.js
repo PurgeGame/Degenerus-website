@@ -353,14 +353,6 @@ class AppPassSection extends HTMLElement {
              rows in mode 'combined' (see #renderCombinedGate). -->
         <p class="pass-combined-note" data-bind="pass-combined-note" hidden></p>
 
-        <div class="pass-shop-heading" data-bind="pass-shop-heading">
-          <div>
-            <strong>PASS SHOP</strong>
-            <span data-bind="pass-shop-seat-copy">Every pass includes an AFKing automation seat.</span>
-          </div>
-          <small>ONE-TIME PURCHASES</small>
-        </div>
-
         <!-- LAZY ROW — visible ONLY when the level window is open
              (levels 0-2 / x9 / x0; WhaleModule.sol:431-438). It is the
              shorter commitment, so it leads the premium-product shelf. -->
@@ -477,10 +469,6 @@ class AppPassSection extends HTMLElement {
           </span>
           <strong class="pass-afking__status" data-bind="pass-afking-status">READY</strong>
         </div>
-        <div class="pass-afking__lock" data-bind="pass-afking-lock" hidden role="status">
-          <strong>RNG SETTLING</strong>
-          <span>Settings unlock automatically. Top ups and claims stay open.</span>
-        </div>
         <div class="pass-afking__quick">
           <span class="pass-afking__balance">
             <small>PREPAID</small>
@@ -513,12 +501,16 @@ class AppPassSection extends HTMLElement {
               </span>
               <span class="pass-afking__dialog-state" data-bind="pass-afking-dialog-state">READY</span>
             </header>
+            <div class="pass-afking__lock" data-bind="pass-afking-lock" hidden role="status">
+              <strong>RNG SETTLING</strong>
+              <span>Settings unlock automatically. Top ups and claims stay open.</span>
+            </div>
             <div class="pass-afking__controls" data-bind="pass-afking-controls" hidden>
               <section class="pass-afking__control-card pass-afking__order-card">
                 <header class="pass-afking__control-head">
-                  <span>NEXT JACKPOT</span>
+                  <span>DAILY ORDER</span>
                   <strong>Automatic order</strong>
-                  <small>Runs when each jackpot begins.</small>
+                  <small>Runs automatically once per day.</small>
                 </header>
                 <div class="pass-afking__order-fields">
                   <label class="pass-afking__field">
@@ -755,8 +747,6 @@ class AppPassSection extends HTMLElement {
       note.hidden = !isCombined;
       if (isCombined) note.textContent = 'Per-account stat. Pick a single account.';
     }
-    const shopHeading = this.querySelector('[data-bind="pass-shop-heading"]');
-    if (shopHeading) shopHeading.hidden = isCombined;
     const whaleRow = this.querySelector('.pass-whale-row');
     if (whaleRow) whaleRow.hidden = isCombined;
     const lazyRow = this.querySelector('[data-bind="pass-lazy-row"]');
@@ -897,7 +887,6 @@ class AppPassSection extends HTMLElement {
       'pass-lazy-afking-seat',
       'pass-whale-afking-seat',
       'pass-deity-afking-seat',
-      'pass-shop-seat-copy',
     ]) {
       const benefit = this.querySelector(`[data-bind="${bind}"]`);
       if (benefit) benefit.hidden = ownsSeat;
@@ -1061,8 +1050,8 @@ class AppPassSection extends HTMLElement {
     const dayCost = mintPrice * BigInt(quantity);
     if (cost) {
       cost.textContent = dayCost > 0n
-        ? `NEXT JACKPOT · ${formatPassEth(dayCost)} ETH`
-        : 'NEXT JACKPOT · —';
+        ? `DAILY COST · ${formatPassEth(dayCost)} ETH`
+        : 'DAILY COST · —';
     }
 
     const addedFunding = this.#afkingFundingInputWei();
@@ -1072,7 +1061,7 @@ class AppPassSection extends HTMLElement {
       } else {
         const available = BigInt(this.#afkingState?.fundingWei ?? 0n) + addedFunding;
         const days = available / dayCost;
-        coverage.textContent = `COVERS · ${days} JACKPOT${days === 1n ? '' : 'S'}`;
+        coverage.textContent = `COVERS · ${days} DAY${days === 1n ? '' : 'S'}`;
       }
     }
 
@@ -1228,7 +1217,7 @@ class AppPassSection extends HTMLElement {
         const product = state.settingsKnown
           ? (state.useTickets ? (quantity === 1 ? 'TICKET' : 'TICKETS') : 'LUCKBOX')
           : (quantity === 1 ? 'ITEM' : 'ITEMS');
-        current.textContent = `${quantity} ${product} / JACKPOT`;
+        current.textContent = `${quantity} ${product} / DAY`;
       } else {
         current.textContent = state.hasToken ? 'NO AUTOMATIC ORDER' : 'NO AFKING SEAT';
       }
@@ -1718,7 +1707,7 @@ class AppPassSection extends HTMLElement {
     const fundInput = this.querySelector('[name="pass-afking-fund"]');
     const dailyQuantity = Number.parseInt(qtyInput?.value || '0', 10);
     if (!Number.isInteger(dailyQuantity) || dailyQuantity < 1 || dailyQuantity > 255) {
-      this.#renderAfkingError('Jackpot quantity must be 1-255.');
+      this.#renderAfkingError('Daily quantity must be 1-255.');
       return;
     }
 

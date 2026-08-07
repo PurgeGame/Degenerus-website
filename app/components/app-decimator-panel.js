@@ -1426,6 +1426,12 @@ class AppDecimatorPanel extends HTMLElement {
         ),
       },
       quote: (selection) => this.#allInQuote(selection),
+      // Balance visibility is a privacy preference, not an eligibility gate.
+      // The dialog refreshes these direct values behind the blur before it
+      // decides whether a FLIP route is affordable.
+      refreshCurrency: (currency) => String(currency).toUpperCase() === 'FLIP'
+        ? this.#refreshAllInFlipSources()
+        : Promise.resolve(),
       confirm: (selection, fingerprint) => this.#confirmAllIn(selection, fingerprint),
     };
     try {

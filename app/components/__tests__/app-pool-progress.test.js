@@ -396,8 +396,15 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     const lockIn = component.indexOf('data-el="pool-special-jackpot"', headStart);
     assert.ok(headStart >= 0 && phaseDay > headStart && lockIn > phaseDay && lockIn < headEnd,
       'the lock-in countdown shares the PURCHASE DAY ... (FINAL) header line');
-    assert.match(css, /\.pool-progress__special-jackpot\s*\{[^}]*margin:\s*0 0 0 auto/s,
-      'the lock-in countdown occupies the right side of the shared phase line');
+    assert.match(css,
+      /\.pool-progress__special-jackpot\s*\{[^}]*grid-column:\s*2[^}]*justify-content:\s*center[^}]*justify-self:\s*center[^}]*margin:\s*0/s,
+      'the large lock-in countdown is centered instead of clipping against the right edge');
+    assert.match(css,
+      /\.pool-progress__head\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\)/s,
+      'equal side tracks keep the lock-in cue centered across the whole strip');
+    assert.match(css,
+      /@media \(max-width: 560px\)[\s\S]*?\.pool-progress__special-jackpot\s*\{[^}]*grid-column:\s*1[^}]*grid-row:\s*2[^}]*width:\s*100%[\s\S]*?\.pool-progress__head\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
+      'phones place the centered lock-in cue on its own line instead of overlapping the phase label');
     assert.match(component, /if \(body\) body\.hidden = true/,
       'the purchase thermometer is absent throughout jackpot phase');
     assert.match(css, /\.pool-progress__jackpot\s*\{[^}]*display:\s*grid[^}]*white-space:\s*nowrap/s,

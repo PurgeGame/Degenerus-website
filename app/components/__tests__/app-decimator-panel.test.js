@@ -3304,7 +3304,7 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     el.disconnectedCallback();
   });
 
-  test('ALL IN quotes the active FLIP balance without changing the active ticket draft', async () => {
+  test('ALL IN quotes FLIP while Protocol Coins stays privacy-blurred', async () => {
     claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract());
     _fetchHandler = async (url) => (
       String(url).includes('/game/state')
@@ -3317,6 +3317,16 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     );
     const el = instantiate();
     await settle(60);
+    storeMod.update('ui.protocolCoinsFlipDisclosure', {
+      address: CONNECTED.toLowerCase(),
+      visible: false,
+    });
+    await settle(10);
+    assert.equal(
+      el.querySelector('[data-bind="dec-flip-balance"]').classList.contains('dec-flip-balance--spoiler'),
+      true,
+      'the amount remains visually private',
+    );
     el.querySelector('[data-bind="dec-funds-total-flip"]').dispatchEvent({ type: 'click' });
 
     const allIn = el.querySelector('[data-bind="dec-all-in"]');
@@ -3332,6 +3342,11 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.deepEqual(opened.destinations.FLIP, ['coinflip', 'degenerette', 'tickets']);
     const quote = opened.quote({ currency: 'FLIP', target: 'tickets', spins: 5 });
     assert.equal(quote.valid, true);
+    assert.equal(
+      el.querySelector('[data-bind="dec-flip-balance"]').classList.contains('dec-flip-balance--spoiler'),
+      true,
+      'quoting ALL IN does not reveal the balance',
+    );
     assert.equal(quote.ticketAmount, '2.25');
     assert.equal(quote.spendWei, 2_250n * 10n ** 18n);
     assert.equal(quote.buttonLabel, 'ALL IN: 2,250 FLIP FOR 2.25 TICKETS');
