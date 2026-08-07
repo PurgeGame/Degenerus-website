@@ -257,7 +257,10 @@ const LOOTBOX_AUTO_RESULT_MS = 1_750;
 const LOOTBOX_AUTO_RESULT_REDUCED_MS = 1_200;
 const BOX_CURRENCY_FLIP_MS = 900;
 const BOX_CURRENCY_RESULT_MS = 560;
-const SURVIVAL_FLIP_MS = 1_900;
+// Match the ordinary daily coinflip: one 3.3s toss plus its 0.7s truthful
+// landing. Survival never inherits reel/reveal speed and never gets a Reverse
+// Flip correction, so the double-or-nothing result is readable every time.
+const SURVIVAL_FLIP_MS = 4_000;
 const SURVIVAL_RESULT_MS = 950;
 
 const TRAIT_LABEL_OVERRIDES = Object.freeze({ cashsack: 'CASH SACK' });
@@ -1487,6 +1490,7 @@ class RevealOverlay extends HTMLElement {
   #aborted = false;
   #timers = new Set();
   #tapResolve = null;
+  #tapLocked = false;
   #currentSequence = null;
   #openAllBatchId = null;
   #openAllPacks = false;
@@ -2281,17 +2285,18 @@ class RevealOverlay extends HTMLElement {
   }
 
   #tap(value = 'tap') {
+    if (this.#tapLocked) return;
     if (this.#tapResolve) { const r = this.#tapResolve; this.#tapResolve = null; r(value); }
   }
 
   // Cancellable wait: resolves after ms OR on tap/abort (whichever first).
-  #wait(ms) {
+  #wait(ms, { fixedSpeed = false } = {}) {
     return new Promise((resolve) => {
       if (this.#aborted) { resolve(); return; }
       // Degenerette applies its live slider at each reel/frame. Every other
       // reveal uses the same browser preference here, giving Pending one
       // honest global speed control without double-scaling Degenerette.
-      const speed = this.#currentSequence?.kind === 'degenerette'
+      const speed = fixedSpeed ? 1 : this.#currentSequence?.kind === 'degenerette'
         ? 1
         : readDegeneretteSpeed();
       const delay = Math.max(0, Math.round((Number(ms) || 0) / speed));
@@ -2304,6 +2309,18 @@ class RevealOverlay extends HTMLElement {
       this.#timers.add(t);
       this.#tapResolve = (v) => { clearTimeout(t); this.#timers.delete(t); resolve(v); };
     });
+  }
+
+  // A resolved coinflip is a result, not a skippable transition. Preserve the
+  // close/abort path, but ignore backdrop taps and local speed preferences
+  // until the normal four-second toss reaches its truthful face.
+  async #waitForCoinflip(ms) {
+    this.#tapLocked = true;
+    try {
+      await this.#wait(ms, { fixedSpeed: true });
+    } finally {
+      this.#tapLocked = false;
+    }
   }
 
   // Wait for an explicit tap (no timeout) — the TAP TO OPEN gate.
@@ -3883,10 +3900,31 @@ class RevealOverlay extends HTMLElement {
     halo.className = 'rvl-survival-halo';
     const shell = document.createElement('span');
     shell.className = 'rvl-survival-coin-shell';
-    const coin = document.createElement('img');
-    coin.className = 'rvl-survival-coin';
-    coin.src = ICONS.flipFace;
-    coin.alt = '';
+    const coin = document.createElement(hasResult ? 'span' : 'img');
+    coin.className = hasResult
+      ? `rvl-survival-coin rvl-survival-coin--${board.survived ? 'win' : 'bust'}`
+      : 'rvl-survival-coin';
+    if (hasResult) {
+      const redFace = document.createElement('span');
+      redFace.className = 'df-coin3d__face df-coin3d__face--red';
+      const redImage = document.createElement('img');
+      redImage.src = ICONS.wwxrp;
+      redImage.alt = '';
+      redFace.appendChild(redImage);
+
+      const ethFace = document.createElement('span');
+      ethFace.className = 'df-coin3d__face df-coin3d__face--eth';
+      const ethImage = document.createElement('img');
+      ethImage.src = ICONS.ethFace;
+      ethImage.alt = '';
+      ethFace.appendChild(ethImage);
+
+      coin.appendChild(redFace);
+      coin.appendChild(ethFace);
+    } else {
+      coin.src = ICONS.flip;
+      coin.alt = '';
+    }
     const shadow = document.createElement('span');
     shadow.className = 'rvl-survival-shadow';
     shell.appendChild(coin);
@@ -3913,7 +3951,6 @@ class RevealOverlay extends HTMLElement {
     // has no preliminary payout and the contract deliberately draws no coin.
     if (!hasResult) {
       flipEl.classList?.add('is-empty');
-      coin.src = ICONS.flip;
       eyebrow.textContent = 'SURVIVAL GATE';
       label.textContent = 'NO PAYOUT TO RISK';
       detail.textContent = 'THREE REELS MISSED · SURVIVAL NOT DRAWN';
@@ -3926,14 +3963,13 @@ class RevealOverlay extends HTMLElement {
     if (!reducedMotion) {
       flipEl.classList?.add('is-flipping');
       sfxSpinStart(SURVIVAL_FLIP_MS);
-      await this.#wait(this.#scaledDgnDelay(rendered, SURVIVAL_FLIP_MS));
+      await this.#waitForCoinflip(SURVIVAL_FLIP_MS);
       if (this.#aborted) return;
     }
     flipEl.classList?.remove('is-flipping');
     if (flipEl.classList) flipEl.classList.add(board.survived ? 'is-win' : 'is-bust');
-    // A surviving FLIP result crosses to the green ETH side; a bust settles on
-    // the red WWXRP side. The prior code left the red face in place for both.
-    coin.src = board.survived ? ICONS.ethFace : ICONS.wwxrp;
+    // The two-faced coin's normal landing already ends on green ETH for a
+    // survivor or red WWXRP for a bust; no late image swap or reversal occurs.
     eyebrow.textContent = 'SURVIVAL RESULT';
     label.textContent = board.boxSpin
       ? (board.survived

@@ -39,6 +39,7 @@ import { displayEth } from '../app/scaling.js';
 import { parseEther } from 'ethers';
 import { get, subscribe, getViewedAddress, getActingAddress, deriveCanSign } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
+import { readGameState } from '../app/game-state.js';
 import {
   purchaseWhaleBundle,
   purchaseDeityPass,
@@ -678,7 +679,7 @@ class AppPassSection extends HTMLElement {
       // from the pass NFT, because /player has neither a global count nor the
       // 32-symbol ownership catalog.
       const [stateRes, playerRes, deityRes, afkingRes] = await Promise.allSettled([
-        fetchJSON('/game/state'),
+        readGameState(),
         addr ? fetchJSON(`/player/${addr}`) : Promise.resolve(null),
         readDeityPassCatalog(),
         actionTarget ? readAfkingSubscription(actionTarget) : Promise.resolve(null),

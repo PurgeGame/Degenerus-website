@@ -42,6 +42,7 @@
 import { get, update, subscribe, getViewedAddress } from '../app/store.js';
 import { ETH_DIVISOR } from '../app/chain-config.js';
 import { fetchJSON } from '../app/api.js';
+import { readGameState } from '../app/game-state.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { LOOTBOX_MIN_WEI, scaledTicketPriceWei } from '../app/lootbox.js';
 import { activeTicketLevel } from '../app/active-level.js';
@@ -1234,7 +1235,7 @@ class AppQuestPanel extends HTMLElement {
         // remain empty until the row appears on a later poll.
         fetchJSON(`/player/${addr}`).catch(() => null),
         day != null ? fetchJSON(`/game/quests/day/${day}`).catch(() => null) : Promise.resolve(null),
-        fetchJSON('/game/state').catch(() => null),
+        readGameState(),
         readLiveQuestBoard(addr).catch(() => null),
       ]);
       if (signal.aborted) return;

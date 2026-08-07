@@ -30,6 +30,7 @@ import { CHAIN } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { get, update, subscribe, getViewedAddress } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
+import { readGameState } from '../app/game-state.js';
 import {
   depositCoinflip,
   readClaimableCoinflip,
@@ -1561,7 +1562,7 @@ class AppDailyFlip extends HTMLElement {
       this.#runRefreshTask(
         seq,
         addr
-          ? fetchJSON('/game/state').then(async (state) => {
+          ? readGameState().then(async (state) => {
             const level = activeBafScoreLevel(state?.level);
             if (level == null) return { level: null, score: null };
             const lookupKey = `${address}:${level}`;

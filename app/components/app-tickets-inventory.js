@@ -24,6 +24,7 @@
 
 import { get, subscribe, getViewedAddress, deriveCanSign } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
+import { readGameState } from '../app/game-state.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { ethers, getProvider } from '../app/contracts.js';
 import { CHAIN, CONTRACTS } from '../app/chain-config.js';
@@ -870,7 +871,7 @@ class AppTicketsInventory extends HTMLElement {
         this.#activeLevel = pl;
       } else {
         try {
-          const gs = await fetchJSON('/game/state');
+          const gs = await readGameState();
           if (seq !== this.#fetchSeq) return;
           // Contract port (app/active-level.js) — NOT the raw game_state level,
           // and not the `jackpotPhase ? level : level + 1` shorthand this used

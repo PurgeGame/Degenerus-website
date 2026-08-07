@@ -29,6 +29,7 @@ import { CHAIN, ETH_DIVISOR, VOLUME_WINDOW } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import { get, update, subscribe, getViewedAddress, getActingAddress } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
+import { readGameState } from '../app/game-state.js';
 import {
   readGrowthMarket, readVolumeMarket, readVolumeCredit, readMarketBetGates,
   placeGrowthBet, placeVolumeBet, claimGrowth, claimVolume,
@@ -327,7 +328,7 @@ class AppParimutuelPanel extends HTMLElement {
     // clock, so it never waits on the API.
     let level = this.#level;
     try {
-      const state = await fetchJSON('/game/state');
+      const state = await readGameState();
       if (state && Number.isFinite(Number(state.level))) level = Number(state.level);
       if (state && typeof state === 'object') this.#gameState = state;
     } catch (_e) { /* keep the last known level — the books still render */ }

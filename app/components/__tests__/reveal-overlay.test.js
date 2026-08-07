@@ -1069,10 +1069,17 @@ describe('buildBoxSpinBoard', () => {
       /MORE FLIP SPINS · THEN SURVIVAL/,
       'the FLIP landing explicitly introduces its two remaining reels and final gate',
     );
-    assert.match(REVEAL_SRC, /const SURVIVAL_FLIP_MS = 1_900/,
-      'the survival toss has a deliberate suspense window');
-    assert.match(APP_CSS, /@keyframes rvl-survival-toss[\s\S]*?@keyframes rvl-survival-turn/,
-      'the survival beat combines a toss arc with a slowing multi-turn coin');
+    assert.match(REVEAL_SRC, /const SURVIVAL_FLIP_MS = 4_000/,
+      'the survival toss gets the same four-second window as a normal daily coinflip');
+    assert.match(REVEAL_SRC, /#waitForCoinflip\(SURVIVAL_FLIP_MS\)/,
+      'the survival toss cannot be shortened by a backdrop tap or reel-speed preference');
+    assert.match(
+      APP_CSS,
+      /\.rvl-survival\.is-flipping \.rvl-survival-coin--win\s*\{[^}]*animation-name:\s*df-reveal-track-comet, df-reveal-end-win;[^}]*\}[\s\S]*?\.rvl-survival\.is-flipping \.rvl-survival-coin--bust\s*\{[^}]*animation-name:\s*df-reveal-track-comet, df-reveal-end-loss;/s,
+      'survival reuses the normal truthful win/loss coin track without a reversal ending',
+    );
+    assert.doesNotMatch(APP_CSS, /@keyframes rvl-survival-(?:toss|turn|land)/,
+      'the old short single-image survival motion is gone');
     assert.match(
       REVEAL_SRC,
       /#renderFullSpinStage\(board, \{ speedEnabled: !board\.boxSpin \}\)/,
@@ -2694,8 +2701,15 @@ describe('reveal-overlay element', () => {
 
     const survival = el.querySelector('.rvl-survival');
     assert.ok(survival?.classList.contains('is-win'));
-    assert.equal(survival.querySelector('.rvl-survival-coin')?.src,
-      '/shared/coinflip-face-eth.svg');
+    assert.equal(
+      survival.querySelector('.df-coin3d__face--eth')?.querySelector('img')?.src,
+      '/shared/coinflip-face-eth.svg',
+    );
+    assert.equal(
+      survival.querySelector('.df-coin3d__face--red')?.querySelector('img')?.src,
+      '/shared/coinflip-face-red.svg',
+      'survival is a genuine two-faced coin rather than an image swapped after the timer',
+    );
     assert.match(survival.textContent, /SURVIVED/);
 
     const collect = el.querySelector('.rvl-dgn-spin-cta');

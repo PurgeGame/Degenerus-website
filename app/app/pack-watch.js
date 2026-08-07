@@ -25,6 +25,7 @@
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { getProvider, ethers } from './contracts.js';
 import { fetchJSON } from './api.js';
+import { readGameState } from './game-state.js';
 import { publishPendingActions, clearPendingActions } from './pending-actions.js';
 import { dgnPartitionTicketEntries } from './dgn-traits.js';
 import {
@@ -1209,7 +1210,7 @@ async function _publishPackActions(address, publishSeq = null) {
     clearPendingActions(PENDING_SOURCE);
     return;
   }
-  const gameState = await fetchJSON('/game/state').catch(() => null);
+  const gameState = await readGameState();
   const drainLevels = pendingTicketDrainLevels(gameState);
   await _syncChainOwedRecords(addr, drainLevels);
   // The queue can be awarded and fully drained between two 45-second RPC

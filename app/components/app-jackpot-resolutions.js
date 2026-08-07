@@ -6,6 +6,7 @@
 // wheel; genuine permissionless claims remain available until mined.
 
 import { fetchJSON } from '../app/api.js';
+import { readGameState } from '../app/game-state.js';
 import { CHAIN } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import {
@@ -270,7 +271,7 @@ class AppJackpotResolutions extends HTMLElement {
     this.#address = viewed ? String(viewed).toLowerCase() : null;
 
     let gameState;
-    try { gameState = await fetchJSON('/game/state'); }
+    try { gameState = await readGameState(); }
     catch (_e) {
       if (seq === this.#fetchSeq) {
         clearPendingActions(PENDING_SOURCE);

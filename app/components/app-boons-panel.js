@@ -37,6 +37,7 @@ import './boons-panel.js';
 import { update as updateBeta } from '../app/reactive-store.js';
 import { subscribe as subscribeApp, getViewedAddress, get as getApp } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
+import { readGameState, gameDay } from '../app/game-state.js';
 
 // Account-switcher (2026-07-16) identity-panel note — matches app-quest-panel.js /
 // app-activity-panel.js copy. Boons are per-account event history; combine.js has
@@ -191,8 +192,10 @@ class AppBoonsPanel extends HTMLElement {
       return;
     }
     try {
-      const stateData = await fetchJSON('/game/state');
-      const day = stateData?.currentDay;
+      // gameDay(), not stateData.currentDay: /game/state has no such field, so
+      // this read was always null and the panel returned here every time —
+      // player.boons was never populated. Same bug the boon indicator had.
+      const day = gameDay(await readGameState());
       if (day == null) return;
       const res = await fetchJSON(`/player/${addr}/boons/${day}`);
       updateBeta('player.boons', res?.boons || []);

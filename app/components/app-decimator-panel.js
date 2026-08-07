@@ -33,6 +33,7 @@ import { compactUiError } from '../app/ui-error.js';
 import { get, getActingAddress, subscribe } from '../app/store.js';
 import { getProvider } from '../app/contracts.js';
 import { fetchJSON } from '../app/api.js';
+import { readGameState } from '../app/game-state.js';
 import {
   reportPendingActionError,
   subscribePendingActions,
@@ -1446,7 +1447,7 @@ class AppDecimatorPanel extends HTMLElement {
     }
     if (String(selection?.target) === 'decimator') {
       try {
-        const freshState = await fetchJSON('/game/state');
+        const freshState = await readGameState({ fresh: true });
         if (freshState && typeof freshState === 'object') this.#gameState = freshState;
       } catch (_error) { /* the contract preflight remains authoritative */ }
     }

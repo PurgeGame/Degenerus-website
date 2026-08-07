@@ -37,6 +37,9 @@
 // inside polling.js's stop()/pauseAllTimers (which owns timers only, no store writes).
 
 import { API_BASE } from './constants.js';
+import {
+  isCoolingDown, noteShedLoad, clearApiCooldown, isShedStatus, cooldownUntil,
+} from './api-cooldown.js';
 import { update, get } from './store.js';
 import { mergePlayerPayloads } from './combine.js';
 import { ethers, TX_CONFIRMED_EVENT } from './contracts.js';
@@ -241,36 +244,16 @@ function buildGoldRushFallbackPayload(gameState, health, yieldAccumulatorWei, pr
 // wrong. Retry-After wins when the server sends one.
 // ---------------------------------------------------------------------------
 
-const COOLDOWN_BASE_MS = 2_000;
-const COOLDOWN_MAX_MS = 60_000;
-let _cooldownUntil = 0;
-let _consecutiveShed = 0;
-
 /** ±20% around the nominal period. See the call sites in start(). */
 function jittered(ms) {
   return Math.round(ms * (0.8 + Math.random() * 0.4));
 }
 
-/** Exposed for tests + the visibility path; also reset by a successful read. */
-function clearApiCooldown() {
-  _cooldownUntil = 0;
-  _consecutiveShed = 0;
-}
-
-function noteShedLoad(res) {
-  _consecutiveShed += 1;
-  const retryAfterSec = Number(res?.headers?.get?.('Retry-After'));
-  const base = Number.isFinite(retryAfterSec) && retryAfterSec > 0
-    ? retryAfterSec * 1000
-    : Math.min(COOLDOWN_MAX_MS, COOLDOWN_BASE_MS * 2 ** (_consecutiveShed - 1));
-  // ±20% so a shed cohort does not all return in lockstep and re-shed itself.
-  _cooldownUntil = Date.now() + Math.min(COOLDOWN_MAX_MS, base) * (0.8 + Math.random() * 0.4);
-}
-
 async function fetchJSONWithSignal(path, { signal } = {}) {
-  if (Date.now() < _cooldownUntil) throw new Error(`API cooling down: ${path}`);
+  // Gate is shared with api.js's fetchJSON — see api-cooldown.js.
+  if (isCoolingDown()) throw new Error(`API cooling down: ${path}`);
   const res = await fetch(API_BASE + path, { signal });
-  if (res.status === 429 || res.status === 503) {
+  if (isShedStatus(res.status)) {
     noteShedLoad(res);
     throw new Error(`API ${res.status}: ${path}`);
   }
@@ -807,7 +790,7 @@ export const _testing = {
   runPlayerCycle,
   clearApiCooldown,
   jittered,
-  get cooldownUntil() { return _cooldownUntil; },
+  get cooldownUntil() { return cooldownUntil(); },
   pauseAllTimers,
   fetchJSONWithSignal,
   pollApprovers,
