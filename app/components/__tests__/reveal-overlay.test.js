@@ -1495,6 +1495,16 @@ describe('reveal-overlay element', () => {
       'the live lootbox reveal uses the largest pack branding');
     assert.match(APP_CSS, /\.rvl-stage--lootbox \.rvl-summary-grid[^}]*minmax\(180px, 216px\)/,
       'lootbox receipt cards use the available screen area');
+    assert.match(
+      APP_CSS,
+      /data-card-count="5"[^}]*repeat\(6, minmax\(0, 101px\)\)[\s\S]*?data-card-count="5"[^}]*nth-child\(4\)[^}]*grid-column:\s*2 \/ span 2/s,
+      'a five-reward receipt centers its final pair instead of stranding one tile',
+    );
+    assert.match(
+      APP_CSS,
+      /data-card-count="7"[^}]*repeat\(8, minmax\(0, 99px\)\)[\s\S]*?data-card-count="7"[^}]*nth-child\(5\)[^}]*grid-column:\s*2 \/ span 2/s,
+      'a seven-reward receipt resolves as a balanced four-plus-three grid',
+    );
     assert.match(REVEAL_SRC, /if \(seq\.kind === 'lootbox'\)[\s\S]*contents first, child reel next/,
       'motion lootboxes show their receipt before a granted child spin without duplicating it');
 
@@ -1529,8 +1539,18 @@ describe('reveal-overlay element', () => {
     );
     assert.match(
       APP_CSS,
-      /\.rvl-stage--lootbox \.rvl-summary-grid \.rvl-card-icon--sdgnrs\s*\{\s*width:\s*100px;\s*height:\s*100px/,
+      /\.rvl-stage--lootbox \.rvl-summary-grid \.rvl-card-icon--sdgnrs\s*\{\s*width:\s*142px;\s*height:\s*142px/,
       'the complete purple reward badge is larger on the box receipt',
+    );
+    assert.match(
+      APP_CSS,
+      /\.rvl-stage--lootbox \.rvl-summary-grid \.rvl-card-inner\s*\{[^}]*min-height:\s*238px;[^}]*justify-content:\s*center/s,
+      'lootbox reward contents use the full centered receipt-card stage',
+    );
+    assert.match(
+      APP_CSS,
+      /\.rvl-stage--lootbox \.rvl-summary-grid \.rvl-card-icon\s*\{[^}]*width:\s*124px;[^}]*height:\s*124px/s,
+      'currency and reward badges no longer occupy only one third of the tile',
     );
     assert.doesNotMatch(REVEAL_SRC, /special_dgnrs\.svg/,
       'the orange whale asset is no longer the sDGNRS reward icon');
@@ -2952,6 +2972,7 @@ describe('reveal-overlay element', () => {
     window.matchMedia = () => ({ matches: false });
     globalThis.requestAnimationFrame = (fn) => setTimeout(() => fn(performance.now()), 0);
     try {
+      localStorage.setItem(DEGENERETTE_PREFERENCES_KEY, JSON.stringify({ speed: 3 }));
       const el = instantiate();
       queueReveal({
         kind: 'lootbox',

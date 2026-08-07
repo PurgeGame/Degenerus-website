@@ -18,6 +18,7 @@ import {
   bafResolutionLevel,
   claimBafConsolation,
   decimatorResolutionLevel,
+  decimatorFinalIsNews,
   isDecimatorResolutionLevel,
   readBafConsolation,
   readDecimatorClaimState,
@@ -341,7 +342,14 @@ class AppJackpotResolutions extends HTMLElement {
     });
     const decFinal = this.#decimator?.roundStatus === 'closed';
     const decSeen = _wasSeen('decimator', this.#address, decLevel);
-    const decUnseen = decFinal && !decSeen;
+    // Rule lives in jackpot-resolutions.js so it is testable; see the note there
+    // for why a bare `closed && !seen` surfaced a level-15 draw at level 18.
+    const decUnseen = decimatorFinalIsNews({
+      closed: decFinal,
+      seen: decSeen,
+      currentLevel: current,
+      windowOpen: this.#gameState.decWindowOpen === true,
+    });
     // At an x5/x00 level the Decimator owns the shared jackpot action even if
     // its indexed player row is a poll behind. Showing an explicit processing
     // state prevents the normal jackpot control from slipping past it.

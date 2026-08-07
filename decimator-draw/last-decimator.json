@@ -1,0 +1,679 @@
+{
+  "network": "Base Sepolia",
+  "ethDisplayScale": "1000000",
+  "run": 28,
+  "gameAddress": "0x9f6f2d323982001f9034ed11eb14c83a6a323f53",
+  "level": 15,
+  "resolvedBlock": 45103921,
+  "blockHash": "0x86aaece48972c0f8bf8f77905d5ff6a59ebf436bc7344cd6ea8022b44200b045",
+  "poolWei": "211416580140976",
+  "totalFlipBurned": "2844677691809469226345514",
+  "winningScore": "173448799336035907503206",
+  "packedOffsets": "4969548021761",
+  "defaultPlayer": "0x3e2fff2fdb28c9ce33a7750d62583e6297ad95da",
+  "winningSubbuckets": {
+    "2": 1,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 5,
+    "7": 2,
+    "8": 0,
+    "9": 1,
+    "10": 5,
+    "11": 8,
+    "12": 4
+  },
+  "subbucketTotals": [
+    {
+      "bucket": 11,
+      "subbucket": 3,
+      "score": "24275735545536167161593"
+    },
+    {
+      "bucket": 11,
+      "subbucket": 6,
+      "score": "41412172573916873021296"
+    },
+    {
+      "bucket": 10,
+      "subbucket": 3,
+      "score": "45685635706924313470165"
+    },
+    {
+      "bucket": 9,
+      "subbucket": 0,
+      "score": "2534715642462080433516"
+    },
+    {
+      "bucket": 9,
+      "subbucket": 2,
+      "score": "1935959540840975867943"
+    },
+    {
+      "bucket": 9,
+      "subbucket": 3,
+      "score": "8059854091595361874713"
+    },
+    {
+      "bucket": 9,
+      "subbucket": 6,
+      "score": "27661079782149636215645"
+    },
+    {
+      "bucket": 8,
+      "subbucket": 1,
+      "score": "35576372435767044692118"
+    },
+    {
+      "bucket": 8,
+      "subbucket": 2,
+      "score": "8414603833671934121292"
+    },
+    {
+      "bucket": 8,
+      "subbucket": 3,
+      "score": "267352329699617632394741"
+    },
+    {
+      "bucket": 8,
+      "subbucket": 4,
+      "score": "3329949716462513413944"
+    },
+    {
+      "bucket": 8,
+      "subbucket": 5,
+      "score": "13415800271870556399747"
+    },
+    {
+      "bucket": 8,
+      "subbucket": 6,
+      "score": "138705548717407016890429"
+    },
+    {
+      "bucket": 8,
+      "subbucket": 7,
+      "score": "32759869604191688693188"
+    },
+    {
+      "bucket": 7,
+      "subbucket": 0,
+      "score": "183854697037749472727148"
+    },
+    {
+      "bucket": 7,
+      "subbucket": 1,
+      "score": "33760822126826698029539"
+    },
+    {
+      "bucket": 7,
+      "subbucket": 2,
+      "score": "173448799336035907503206"
+    },
+    {
+      "bucket": 7,
+      "subbucket": 3,
+      "score": "853638131714340190809216"
+    },
+    {
+      "bucket": 7,
+      "subbucket": 4,
+      "score": "141523468710373680124850"
+    },
+    {
+      "bucket": 7,
+      "subbucket": 5,
+      "score": "522734581393633594959790"
+    },
+    {
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "773151590166576561318598"
+    },
+    {
+      "bucket": 6,
+      "subbucket": 1,
+      "score": "277027741052391298433390"
+    },
+    {
+      "bucket": 6,
+      "subbucket": 2,
+      "score": "196788417545569337070905"
+    },
+    {
+      "bucket": 6,
+      "subbucket": 3,
+      "score": "293312670862737618411850"
+    }
+  ],
+  "players": [
+    {
+      "address": "0xaa713969c65cb162fcf809e78ad3cb23429b0301",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "293670208374158991442941"
+    },
+    {
+      "address": "0x6bd1a59653692b41e2c43677c8ea8e119ac66695",
+      "bucket": 6,
+      "subbucket": 3,
+      "score": "293312670862737618411850"
+    },
+    {
+      "address": "0xe2746a6177c5ee7de29d06be1038c9842702053d",
+      "bucket": 7,
+      "subbucket": 3,
+      "score": "288040757666070600702032"
+    },
+    {
+      "address": "0xcc14c748e6799e8dfe9cb13baef66d8d4b0aa4c8",
+      "bucket": 7,
+      "subbucket": 3,
+      "score": "286437308130571754139017"
+    },
+    {
+      "address": "0x32a481cb93f47eecfb6f6b97a17348939db66e1e",
+      "bucket": 8,
+      "subbucket": 3,
+      "score": "255522646825110163981795"
+    },
+    {
+      "address": "0x849eea27b3860c5085afd5cd44696ea087c589aa",
+      "bucket": 7,
+      "subbucket": 5,
+      "score": "220160844836899241245647"
+    },
+    {
+      "address": "0x803215a3496064c24ba8ffd10f0ffe8c7ac5859d",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "210497672745167940249432"
+    },
+    {
+      "address": "0x2c5a8324a97becf1293f24ee2c0551b800ece3af",
+      "bucket": 7,
+      "subbucket": 3,
+      "score": "200704785755751184757413"
+    },
+    {
+      "address": "0x5cdfea912ee6cf0342a18084953e57e293f1bdfe",
+      "bucket": 6,
+      "subbucket": 1,
+      "score": "175189741069673552567390"
+    },
+    {
+      "address": "0xa3ca6239ba556144b0432fa6ebc5083fc0d20330",
+      "bucket": 6,
+      "subbucket": 2,
+      "score": "159670317545569337070905"
+    },
+    {
+      "address": "0x984c55cf2b8df426ce3c0b9da51a744389cfc2e4",
+      "bucket": 7,
+      "subbucket": 5,
+      "score": "139539194690290781946967"
+    },
+    {
+      "address": "0x5bfdf3591b13969b28efd9bf9b6bdc4ef1e69a05",
+      "bucket": 7,
+      "subbucket": 0,
+      "score": "110541172295371716009096"
+    },
+    {
+      "address": "0xf3fcb60eab7d06b11516023c4e4ce449b7cd563b",
+      "bucket": 8,
+      "subbucket": 6,
+      "score": "110309778246147189652541"
+    },
+    {
+      "address": "0x12b56589792754c4dd201306502a838448971f4c",
+      "bucket": 6,
+      "subbucket": 1,
+      "score": "101837999982717745866000"
+    },
+    {
+      "address": "0x6f5bf09ddbf22699a4dcf2ae37e923c601317cef",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "94057320850918195204925"
+    },
+    {
+      "address": "0xb5b240510cbe581ea9c21638d389f7847d59668c",
+      "bucket": 7,
+      "subbucket": 4,
+      "score": "87433565816927440562443"
+    },
+    {
+      "address": "0x3e2fff2fdb28c9ce33a7750d62583e6297ad95da",
+      "bucket": 7,
+      "subbucket": 2,
+      "score": "79933535744251015158408"
+    },
+    {
+      "address": "0xc1cfade9b27e98e784bb6e35c96368c5dd6be6b6",
+      "bucket": 7,
+      "subbucket": 5,
+      "score": "62666742440754190061000"
+    },
+    {
+      "address": "0xc60c3db917f871b59a05fd4c55a658c88974493a",
+      "bucket": 10,
+      "subbucket": 3,
+      "score": "45685635706924313470165"
+    },
+    {
+      "address": "0x217f227c62ded19c42386f0051f952c3886db28b",
+      "bucket": 7,
+      "subbucket": 3,
+      "score": "45132071203654124404542"
+    },
+    {
+      "address": "0xa6d2257e3441adc5843ef231bdb0b6bb7fba541a",
+      "bucket": 7,
+      "subbucket": 5,
+      "score": "45031516355472451202262"
+    },
+    {
+      "address": "0x7dc0aec116f3d36201241ca7228cf520a12d026a",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "41479975095386214142746"
+    },
+    {
+      "address": "0x2e2437c1dc20eacbf51537f9a487f190a1c686a6",
+      "bucket": 11,
+      "subbucket": 6,
+      "score": "41412172573916873021296"
+    },
+    {
+      "address": "0x89849a44a7b2737e1d641aec2aa3928dc9d492c4",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "40489410545281773873948"
+    },
+    {
+      "address": "0x16207c3fdb602c14e9a6bad52ee0c4b7c24df7c8",
+      "bucket": 6,
+      "subbucket": 2,
+      "score": "37118100000000000000000"
+    },
+    {
+      "address": "0xadeb74fe23bf87e46235dbbb5b42adf788a49939",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "36474420000000000000000"
+    },
+    {
+      "address": "0x012207753b3819b566207981c5aab0a29dc308be",
+      "bucket": 7,
+      "subbucket": 4,
+      "score": "31905825000000000000000"
+    },
+    {
+      "address": "0x62f01609828ba185cca5a764ff5ac3b920edc1b8",
+      "bucket": 7,
+      "subbucket": 0,
+      "score": "31531352898148674341958"
+    },
+    {
+      "address": "0xfdc0daf064ea957ae29849a244db8f3a2f7e8489",
+      "bucket": 7,
+      "subbucket": 2,
+      "score": "30529380000000000000000"
+    },
+    {
+      "address": "0xd21d8fc0bba0c7a26555d2d9e200fd5bc6eff39c",
+      "bucket": 7,
+      "subbucket": 5,
+      "score": "29975340000000000000000"
+    },
+    {
+      "address": "0xfbb75959f66d74c1df24a0d4cce722d91d1a03b1",
+      "bucket": 7,
+      "subbucket": 2,
+      "score": "29178000000000000000000"
+    },
+    {
+      "address": "0xd4a35b5431cf9290f8e1fa59f1e6e12e0a916044",
+      "bucket": 7,
+      "subbucket": 1,
+      "score": "28938000000000000000000"
+    },
+    {
+      "address": "0x3da6a3edad5437ca8f34cb6120255eecee412532",
+      "bucket": 9,
+      "subbucket": 6,
+      "score": "27661079782149636215645"
+    },
+    {
+      "address": "0x1b0ec02ba44a2b9e93339af8d5d338c1f3559c33",
+      "bucket": 8,
+      "subbucket": 1,
+      "score": "26005157302559714888078"
+    },
+    {
+      "address": "0xcf9c6e61e0968bc5e47905fb13f5c1972248561f",
+      "bucket": 11,
+      "subbucket": 3,
+      "score": "24275735545536167161593"
+    },
+    {
+      "address": "0x7551fd8063b4f25935732bb4d848dc995ad9d2cf",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "24274134361965514739909"
+    },
+    {
+      "address": "0x7919add42a7665e7a3ce9ae0e753352d398f789a",
+      "bucket": 8,
+      "subbucket": 6,
+      "score": "21471952999408214476588"
+    },
+    {
+      "address": "0x4efc5a2c3ecf900800fbf0083da9f60971fe3b45",
+      "bucket": 7,
+      "subbucket": 0,
+      "score": "21456605584031573138178"
+    },
+    {
+      "address": "0x3b0aed593605c62e66f9964cba76b3606253e49d",
+      "bucket": 7,
+      "subbucket": 2,
+      "score": "20061485202522056007113"
+    },
+    {
+      "address": "0xf35caa94ce599dec7909f6f0c4cf0e744863b924",
+      "bucket": 8,
+      "subbucket": 7,
+      "score": "18084301276265427945429"
+    },
+    {
+      "address": "0x5a6f5bf4726332a259b60f7667d7986ca9d44c4e",
+      "bucket": 7,
+      "subbucket": 3,
+      "score": "16537214995649770363447"
+    },
+    {
+      "address": "0x606aa6ae440385a52e27950dba43248f22a5b346",
+      "bucket": 7,
+      "subbucket": 5,
+      "score": "12223312910924000026640"
+    },
+    {
+      "address": "0xa240a59e7022a0712a328471c417f131c9cc0619",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "11880427404444650045149"
+    },
+    {
+      "address": "0x094a0ab5fac258cbc0e7b9435b137435e19097df",
+      "bucket": 8,
+      "subbucket": 3,
+      "score": "11829682874507468412946"
+    },
+    {
+      "address": "0x96004e668761318583c549e021e251992746b834",
+      "bucket": 7,
+      "subbucket": 4,
+      "score": "8727438339007654942149"
+    },
+    {
+      "address": "0xf545cfc64dc97af26291691d0425f42028b03dac",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "6850952312428859387634"
+    },
+    {
+      "address": "0xb361d5191be3ab79d8dea549c36c1e5e1def61e0",
+      "bucket": 7,
+      "subbucket": 0,
+      "score": "6743476729429698220680"
+    },
+    {
+      "address": "0x441ae7a1de9d8cef6c94123b3bda415140b6f6d2",
+      "bucket": 7,
+      "subbucket": 3,
+      "score": "6593307443576087171445"
+    },
+    {
+      "address": "0xe1c017f8cf78cb2e8f4858a169c4268782b6c657",
+      "bucket": 7,
+      "subbucket": 3,
+      "score": "6501306519066669271320"
+    },
+    {
+      "address": "0xda4c7c7d9ca52a7c7ac133d3e2f5f06311d4b909",
+      "bucket": 7,
+      "subbucket": 5,
+      "score": "6468165259957160615344"
+    },
+    {
+      "address": "0xb49b2133d2ef0fd7d773ce915ea7af1723a58c99",
+      "bucket": 8,
+      "subbucket": 5,
+      "score": "6221311504850556399747"
+    },
+    {
+      "address": "0x8a0dcbeee80137282c10cbba45b75d11b11e0233",
+      "bucket": 8,
+      "subbucket": 7,
+      "score": "6200022557535223578645"
+    },
+    {
+      "address": "0x6584c05d503106be9194bd8de3dfc5320eff3d91",
+      "bucket": 8,
+      "subbucket": 7,
+      "score": "5753497647060504913728"
+    },
+    {
+      "address": "0x8906eee57402ff81493815303a70b8f224979454",
+      "bucket": 8,
+      "subbucket": 5,
+      "score": "5590454875020000000000"
+    },
+    {
+      "address": "0x685638af29477c041b30b6739d4907c6e590fbae",
+      "bucket": 9,
+      "subbucket": 3,
+      "score": "5243093397669840357509"
+    },
+    {
+      "address": "0x6ab37d2472f24413c8bfe9d453b4439f65795021",
+      "bucket": 8,
+      "subbucket": 6,
+      "score": "4998512579462583995457"
+    },
+    {
+      "address": "0x41a8405772daf48f13b003750411ec939a2d2496",
+      "bucket": 8,
+      "subbucket": 1,
+      "score": "4976980933950000000000"
+    },
+    {
+      "address": "0xbc292a57ecbfc905471db9ba9d3b2ce251ff71ed",
+      "bucket": 7,
+      "subbucket": 5,
+      "score": "4847457073205599918676"
+    },
+    {
+      "address": "0xe2382bd73ce7d1e5ec8d04ced479e0d08ba535cc",
+      "bucket": 7,
+      "subbucket": 1,
+      "score": "4822822126826698029539"
+    },
+    {
+      "address": "0x208a6ee443794bcba247f2d774df43f1a53e1f8f",
+      "bucket": 8,
+      "subbucket": 2,
+      "score": "4388119717493340109209"
+    },
+    {
+      "address": "0xd0aa4359cf85ba7f1b02ab1b6ffa1a50fc87f383",
+      "bucket": 7,
+      "subbucket": 4,
+      "score": "4143678000000000000000"
+    },
+    {
+      "address": "0xe2a8da8ffa25120d04767a0bff33f1ebfb92efba",
+      "bucket": 7,
+      "subbucket": 0,
+      "score": "4137075553657811017236"
+    },
+    {
+      "address": "0x9ee1a65299201d50e55fc9a40496b41f05918100",
+      "bucket": 7,
+      "subbucket": 4,
+      "score": "4085466000000000000000"
+    },
+    {
+      "address": "0xbf5fb41e516a0bb22d44b186a6ab0765f3ccdd40",
+      "bucket": 8,
+      "subbucket": 2,
+      "score": "4026484116178594012083"
+    },
+    {
+      "address": "0xd0f721e61e47c0f56dd37d16df3be9b9032b380e",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "3759420000000000000000"
+    },
+    {
+      "address": "0xe4668cf63b390cacd07c2abb3058198ee9011dc8",
+      "bucket": 7,
+      "subbucket": 4,
+      "score": "3759420000000000000000"
+    },
+    {
+      "address": "0x60ee4c4a199f232afbeb9bbaa440252f782df84c",
+      "bucket": 7,
+      "subbucket": 2,
+      "score": "3751860000000000000000"
+    },
+    {
+      "address": "0x17300713b73f77c0743f252191ff5e1f932330d6",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "3725539331337583230936"
+    },
+    {
+      "address": "0x2e33f306b7372219405084e8491d32ee920a0019",
+      "bucket": 7,
+      "subbucket": 2,
+      "score": "3691380000000000000000"
+    },
+    {
+      "address": "0x32f0b0428d5c9a10ffe1cd8a39d8253662c15b04",
+      "bucket": 7,
+      "subbucket": 3,
+      "score": "3691380000000000000000"
+    },
+    {
+      "address": "0x897cfa3bc8ab56f007e332401e22f4420a9f0142",
+      "bucket": 7,
+      "subbucket": 0,
+      "score": "3676260000000000000000"
+    },
+    {
+      "address": "0xc320181ea9ceaa9952e8e78229704d5b848b9f5f",
+      "bucket": 7,
+      "subbucket": 0,
+      "score": "3668700000000000000000"
+    },
+    {
+      "address": "0x2584bc7f161b9dc361b46e608f361dd385b55fa1",
+      "bucket": 7,
+      "subbucket": 2,
+      "score": "3360494848165250133381"
+    },
+    {
+      "address": "0x798a0ffa3cacf21e6dea27322302ebfae1f4932a",
+      "bucket": 8,
+      "subbucket": 4,
+      "score": "3329949716462513413944"
+    },
+    {
+      "address": "0x10d0fb1a97ee9c59c0971aa2c31446fc90c5a08c",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "3176848077194434936328"
+    },
+    {
+      "address": "0x7470914483c5444c3856dc902bbdae925756ea2f",
+      "bucket": 7,
+      "subbucket": 2,
+      "score": "2942663541097586204304"
+    },
+    {
+      "address": "0x32cfece86a6e3da70a52fddec1743eea131af47a",
+      "bucket": 8,
+      "subbucket": 1,
+      "score": "2833332270826432312852"
+    },
+    {
+      "address": "0x8484d65fa0b3d671deff33c0e966bf372247f4bc",
+      "bucket": 9,
+      "subbucket": 3,
+      "score": "2816760693925521517204"
+    },
+    {
+      "address": "0xcb68af50efc854885456c9202fa367dfba1ab5fc",
+      "bucket": 7,
+      "subbucket": 6,
+      "score": "2815261068292404064650"
+    },
+    {
+      "address": "0x1d09cb95d761a0b016f298fa4a6ca06a18d1a92b",
+      "bucket": 8,
+      "subbucket": 7,
+      "score": "2722048123330532255386"
+    },
+    {
+      "address": "0xe0688b7639cf40ab5a43d3534398b297945a4d16",
+      "bucket": 9,
+      "subbucket": 0,
+      "score": "2534715642462080433516"
+    },
+    {
+      "address": "0x621f125fd292cad7914dab7ac18f5200c3d7be68",
+      "bucket": 7,
+      "subbucket": 0,
+      "score": "2100053977110000000000"
+    },
+    {
+      "address": "0x6bc067ea99e2cec56f0e61ce2ffe47c63bac5811",
+      "bucket": 9,
+      "subbucket": 2,
+      "score": "1935959540840975867943"
+    },
+    {
+      "address": "0xe3b448317b8f2c77586ab1b13993203962d14659",
+      "bucket": 8,
+      "subbucket": 6,
+      "score": "1925304892389028765843"
+    },
+    {
+      "address": "0x65d7e26ce167a263f59f17db19972cee75e76e14",
+      "bucket": 7,
+      "subbucket": 5,
+      "score": "1822007826130169943254"
+    },
+    {
+      "address": "0x3a610d35bf2fb37582de5f5751925112d1abb565",
+      "bucket": 8,
+      "subbucket": 1,
+      "score": "1760901928430897491188"
+    },
+    {
+      "address": "0xfdc777b3aabfbcada4195e57f15cf06ae7bc8f49",
+      "bucket": 8,
+      "subbucket": 5,
+      "score": "1604033892000000000000"
+    },
+    {
+      "address": "0xaf686c1e9bfb9262bf5f893954692daa7eeff0fb",
+      "bucket": 7,
+      "subbucket": 4,
+      "score": "1468075554438584620258"
+    }
+  ]
+}

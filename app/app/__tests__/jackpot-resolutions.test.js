@@ -50,6 +50,32 @@ describe('resolution level routing', () => {
     assert.equal(resolutions.decimatorResolutionLevel(42, true), 43, 'exact open latch targets level + 1');
   });
 
+  // Reported from production: a "Level 15 final draw" card with nothing to do
+  // was showing at level 18, because decimatorResolutionLevel's backward scan
+  // always returns SOME past x5/x00 round and the card only tested closed+unseen.
+  test('a finished draw is only news while the Decimator is the live event', () => {
+    const news = (currentLevel, extra = {}) => resolutions.decimatorFinalIsNews({
+      closed: true, seen: false, currentLevel, ...extra,
+    });
+
+    assert.equal(news(18), false, 'level 18 is not Decimator time — this was the bug');
+    assert.equal(news(17), false);
+    assert.equal(news(16), false);
+
+    assert.equal(news(15), true, 'x5 IS the resolution level');
+    assert.equal(news(25), true);
+    assert.equal(news(20), false, 'x0 means a multiple of 100, not "ends in 0"');
+    assert.equal(news(100), true);
+    assert.equal(news(95), false, 'x95 is excluded from the ladder');
+
+    assert.equal(news(18, { windowOpen: true }), true,
+      'an open window overrides the level test');
+
+    assert.equal(news(15, { seen: true }), false, 'dismissed stays dismissed');
+    assert.equal(news(15, { closed: false }), false, 'an unfinished round is not a final');
+    assert.equal(resolutions.decimatorFinalIsNews(), false, 'no args is not news');
+  });
+
   test('BAF keeps the latest x10 bracket and previews the first one', () => {
     assert.equal(resolutions.bafResolutionLevel(1), 10);
     assert.equal(resolutions.bafResolutionLevel(9), 10);

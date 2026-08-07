@@ -8657,11 +8657,41 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   justify-content: center;
   gap: clamp(0.65rem, 1.5vw, 0.9rem);
 }
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="1"] {
+  grid-template-columns: minmax(0, 240px);
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="2"] {
+  grid-template-columns: repeat(2, minmax(210px, 240px));
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="3"] {
+  grid-template-columns: repeat(3, minmax(190px, 226px));
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="5"] {
+  grid-template-columns: repeat(6, minmax(0, 101px));
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="5"] > .rvl-card--mini {
+  grid-column: span 2;
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="5"] > .rvl-card--mini:nth-child(4) {
+  grid-column: 2 / span 2;
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="6"] {
+  grid-template-columns: repeat(3, minmax(180px, 216px));
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="7"] {
+  grid-template-columns: repeat(8, minmax(0, 99px));
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="7"] > .rvl-card--mini {
+  grid-column: span 2;
+}
+.rvl-stage--lootbox .rvl-summary-grid[data-card-count="7"] > .rvl-card--mini:nth-child(5) {
+  grid-column: 2 / span 2;
+}
 .rvl-stage--lootbox .rvl-summary-grid > .rvl-card--mini {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  min-height: 252px;
+  min-height: 272px;
   padding: 1rem 0.85rem;
   overflow: hidden;
   border-width: 2px;
@@ -8671,9 +8701,17 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
     linear-gradient(165deg, #25213c, #11101e 74%);
   box-shadow: 0 14px 30px rgba(0,0,0,0.38), inset 0 0 0 1px rgba(255,255,255,0.04);
 }
-.rvl-stage--lootbox .rvl-summary-grid .rvl-card-inner { gap: 0.48rem; }
-.rvl-stage--lootbox .rvl-summary-grid .rvl-card-icon { width: 84px; height: 84px; }
-.rvl-stage--lootbox .rvl-summary-grid .rvl-card-icon--sdgnrs { width: 100px; height: 100px; }
+.rvl-stage--lootbox .rvl-summary-grid .rvl-card-inner {
+  box-sizing: border-box;
+  min-height: 238px;
+  justify-content: center;
+  gap: 0.55rem;
+}
+.rvl-stage--lootbox .rvl-summary-grid .rvl-card-icon {
+  width: 124px;
+  height: 124px;
+}
+.rvl-stage--lootbox .rvl-summary-grid .rvl-card-icon--sdgnrs { width: 142px; height: 142px; }
 .rvl-stage--lootbox .rvl-summary-grid .rvl-card-icon--pack,
 .rvl-stage--lootbox .rvl-summary-grid .rvl-card-icon--lootbox { width: auto; height: auto; }
 .rvl-stage--lootbox .rvl-summary-grid .rvl-reward-pack.rvl-pack { width: 158px; height: 215px; }
@@ -8690,11 +8728,17 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 .rvl-stage--lootbox .rvl-summary-grid .rvl-reward-pack .rvl-pack-count { font-size: 0.72rem; }
 .rvl-stage--lootbox .rvl-summary-grid > .rvl-card--pack-only {
-  min-height: 252px;
+  min-height: 272px;
   padding: 0.7rem;
 }
 .rvl-stage--lootbox .rvl-summary-grid .rvl-reward-lootbox { width: 140px; height: auto; }
-.rvl-stage--lootbox .rvl-summary-grid .rvl-card-value { min-height: auto; font-size: 1.55rem; line-height: 1; }
+.rvl-stage--lootbox .rvl-summary-grid .rvl-card-value {
+  min-height: auto;
+  color: #f7f2ff;
+  font-size: clamp(1.72rem, 3vw, 1.95rem);
+  line-height: 1;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.44);
+}
 .rvl-stage--lootbox .rvl-summary-grid .rvl-card-label { color: #e8d5a3; font-size: 0.68rem; line-height: 1.25; }
 .rvl-stage--lootbox .rvl-summary-grid .rvl-card-sub { max-width: 23ch; color: rgba(226,222,239,0.68); font-size: 0.62rem; line-height: 1.35; }
 
@@ -8715,12 +8759,27 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
   .rvl-stage--lootbox > .rvl-card-zone .rvl-card--pack-only .rvl-reward-pack.rvl-pack { width: 224px; height: 304px; }
   .rvl-stage--lootbox > .rvl-card-zone .rvl-card-value { font-size: clamp(2rem, 10vw, 2.8rem); }
   .rvl-stage--lootbox > .rvl-card-zone .rvl-card-sub { align-self: center; }
-  .rvl-stage--lootbox .rvl-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rvl-stage--lootbox .rvl-summary-grid > .rvl-card--mini { min-height: 238px; padding-inline: 0.55rem; }
+  .rvl-stage--lootbox .rvl-summary-grid,
+  .rvl-stage--lootbox .rvl-summary-grid[data-card-count] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rvl-stage--lootbox .rvl-summary-grid[data-card-count] > .rvl-card--mini {
+    grid-column: auto !important;
+  }
+  .rvl-stage--lootbox .rvl-summary-grid[data-card-count="1"] {
+    grid-template-columns: minmax(0, 260px);
+  }
+  .rvl-stage--lootbox .rvl-summary-grid > .rvl-card--mini { min-height: 258px; padding: 0.8rem 0.55rem; }
+  .rvl-stage--lootbox .rvl-summary-grid .rvl-card-inner { min-height: 230px; }
+  .rvl-stage--lootbox .rvl-summary-grid .rvl-card-icon { width: 112px; height: 112px; }
+  .rvl-stage--lootbox .rvl-summary-grid .rvl-card-icon--sdgnrs { width: 128px; height: 128px; }
   .rvl-stage--lootbox .rvl-summary-grid .rvl-reward-pack.rvl-pack { width: 136px; height: 185px; }
 }
 @media (max-width: 350px) {
-  .rvl-stage--lootbox .rvl-summary-grid { grid-template-columns: minmax(0, 226px); }
+  .rvl-stage--lootbox .rvl-summary-grid,
+  .rvl-stage--lootbox .rvl-summary-grid[data-card-count] {
+    grid-template-columns: minmax(0, 226px);
+  }
 }
 
 /* --- Degenerette spin sub-stage ----------------------------------------- */

@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07080d">
+  <title>Decimator Draw · Degenerus</title>
+  <meta name="description" content="Animated replay of the latest resolved Degenerus Decimator draw.">
+  <link rel="stylesheet" href="/decimator-draw/draw.css">
+</head>
+<body>
+  <main class="draw-shell">
+    <header class="draw-head">
+      <a class="draw-brand" href="/app/" aria-label="Back to Degenerus">
+        <img src="/whitepaper/flame-logo.svg" alt="">
+        <span>DEGENERUS<small>PROTOCOL</small></span>
+      </a>
+      <div class="draw-title">
+        <span class="draw-kicker"><span data-bind="round-context">LAST RESOLVED</span> · <span data-bind="round-level">LEVEL —</span></span>
+        <h1>DECIMATOR DRAW</h1>
+        <span class="draw-title__rule" aria-hidden="true"></span>
+      </div>
+      <div class="draw-viewer">
+        <label for="player-select">VIEWING</label>
+        <select id="player-select" data-bind="player-select" aria-label="Viewed Decimator player"></select>
+      </div>
+    </header>
+
+    <section class="bucket-board" aria-label="Decimator bucket draw order">
+      <strong><img src="/whitepaper/flame-center-silver.svg" alt="">MIN DEGEN SCORE:</strong>
+      <div class="bucket-rail" data-bind="bucket-rail"></div>
+    </section>
+
+    <section class="draw-stage">
+      <div class="wheel-column">
+        <div class="draw-status" aria-live="polite">
+          <span data-bind="draw-phase">READY</span>
+          <strong data-bind="active-bucket">ACTIVE SCORE GROUP</strong>
+          <span data-bind="active-detail">POSSIBLE SLICES</span>
+        </div>
+
+        <div class="wheel-wrap" data-bind="wheel-wrap">
+          <svg class="draw-wheel" data-bind="draw-wheel" viewBox="0 0 600 600"
+               role="img" aria-labelledby="wheel-title wheel-desc">
+            <title id="wheel-title">Animated Decimator subbucket wheel</title>
+            <desc id="wheel-desc">Only populated score groups play. Each selected slice moves into the ordered green lock lane before the next score group replaces the losing slices.</desc>
+            <defs>
+              <filter id="segment-glow" x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur stdDeviation="7" result="blur"></feGaussianBlur>
+                <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+              </filter>
+              <filter id="needle-glow" x="-80%" y="-20%" width="260%" height="140%">
+                <feGaussianBlur stdDeviation="5" result="blur"></feGaussianBlur>
+                <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+              </filter>
+              <filter id="hub-aura" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur stdDeviation="9" result="blur"></feGaussianBlur>
+                <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+              </filter>
+              <radialGradient id="hub-fill" cx="45%" cy="35%">
+                <stop offset="0" stop-color="#4a111a"></stop>
+                <stop offset="0.38" stop-color="#17090d"></stop>
+                <stop offset="0.72" stop-color="#09090d"></stop>
+                <stop offset="1" stop-color="#020204"></stop>
+              </radialGradient>
+              <radialGradient id="live-gold-a" cx="35%" cy="20%" r="85%">
+                <stop offset="0" stop-color="#ffd963"></stop>
+                <stop offset="0.46" stop-color="#e2a11d"></stop>
+                <stop offset="1" stop-color="#7e4408"></stop>
+              </radialGradient>
+              <radialGradient id="live-gold-b" cx="30%" cy="18%" r="90%">
+                <stop offset="0" stop-color="#ffc94b"></stop>
+                <stop offset="0.5" stop-color="#bd7510"></stop>
+                <stop offset="1" stop-color="#673306"></stop>
+              </radialGradient>
+              <radialGradient id="live-gold-hot" cx="42%" cy="18%" r="90%">
+                <stop offset="0" stop-color="#fff5b0"></stop>
+                <stop offset="0.38" stop-color="#ffc637"></stop>
+                <stop offset="1" stop-color="#a85d08"></stop>
+              </radialGradient>
+              <linearGradient id="winner-green" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#2ad978"></stop>
+                <stop offset="0.58" stop-color="#107b47"></stop>
+                <stop offset="1" stop-color="#064829"></stop>
+              </linearGradient>
+              <linearGradient id="player-share-fill" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#c6fff2"></stop>
+                <stop offset="0.42" stop-color="#3de6bd"></stop>
+                <stop offset="1" stop-color="#087f69"></stop>
+              </linearGradient>
+              <linearGradient id="rim-stroke" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#f1f3f5"></stop>
+                <stop offset="0.16" stop-color="#515761"></stop>
+                <stop offset="0.34" stop-color="#111217"></stop>
+                <stop offset="0.52" stop-color="#8d0917"></stop>
+                <stop offset="0.7" stop-color="#19070b"></stop>
+                <stop offset="0.86" stop-color="#c6cbd1"></stop>
+                <stop offset="1" stop-color="#3c4149"></stop>
+              </linearGradient>
+              <linearGradient id="rim-crown" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#ffffff"></stop>
+                <stop offset="0.18" stop-color="#6f747c"></stop>
+                <stop offset="0.38" stop-color="#ed0e11"></stop>
+                <stop offset="0.58" stop-color="#42040b"></stop>
+                <stop offset="0.8" stop-color="#d8dce0"></stop>
+                <stop offset="1" stop-color="#ed0e11"></stop>
+              </linearGradient>
+              <linearGradient id="needle-metal" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#36040a"></stop>
+                <stop offset="0.22" stop-color="#ed0e11"></stop>
+                <stop offset="0.46" stop-color="#f7f8f9"></stop>
+                <stop offset="0.58" stop-color="#8d949c"></stop>
+                <stop offset="0.78" stop-color="#c90d1e"></stop>
+                <stop offset="1" stop-color="#250308"></stop>
+              </linearGradient>
+              <radialGradient id="bolt-metal" cx="35%" cy="25%" r="78%">
+                <stop offset="0" stop-color="#ffffff"></stop>
+                <stop offset="0.3" stop-color="#aeb4bb"></stop>
+                <stop offset="0.58" stop-color="#3b3f47"></stop>
+                <stop offset="0.8" stop-color="#9b0b18"></stop>
+                <stop offset="1" stop-color="#090a0d"></stop>
+              </radialGradient>
+              <linearGradient id="segment-sheen" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#ffffff" stop-opacity="0.34"></stop>
+                <stop offset="0.24" stop-color="#fff6cb" stop-opacity="0.08"></stop>
+                <stop offset="0.52" stop-color="#ffffff" stop-opacity="0"></stop>
+                <stop offset="0.82" stop-color="#ffcb56" stop-opacity="0.13"></stop>
+                <stop offset="1" stop-color="#ffffff" stop-opacity="0"></stop>
+              </linearGradient>
+            </defs>
+            <g class="wheel-ambient" aria-hidden="true">
+              <circle class="wheel-ambient__halo" cx="300" cy="300" r="291"></circle>
+              <circle class="wheel-energy-ring wheel-energy-ring--outer" cx="300" cy="300" r="286"></circle>
+              <circle class="wheel-energy-ring wheel-energy-ring--counter" cx="300" cy="300" r="281"></circle>
+            </g>
+            <circle class="wheel-bed" cx="300" cy="300" r="266"></circle>
+            <circle class="wheel-rim wheel-rim--shadow" cx="300" cy="300" r="276"></circle>
+            <circle class="wheel-rim wheel-rim--outer" cx="300" cy="300" r="274"></circle>
+            <circle class="wheel-rim wheel-rim--crown" cx="300" cy="300" r="278"></circle>
+            <circle class="wheel-rim wheel-rim--bevel" cx="300" cy="300" r="264"></circle>
+            <circle class="wheel-rim wheel-rim--inner" cx="300" cy="300" r="116"></circle>
+            <g class="wheel-brand-marks" aria-hidden="true">
+              <image class="wheel-brand-mark wheel-brand-mark--left" href="/whitepaper/flame-center-silver.svg" x="11" y="287" width="18" height="26"></image>
+              <image class="wheel-brand-mark wheel-brand-mark--right" href="/whitepaper/flame-center-silver.svg" x="571" y="287" width="18" height="26"></image>
+              <image class="wheel-brand-mark wheel-brand-mark--bottom" href="/whitepaper/flame-center-silver.svg" x="291" y="568" width="18" height="26"></image>
+            </g>
+            <g class="wheel-hardware" data-bind="wheel-hardware" aria-hidden="true"></g>
+            <g data-bind="wheel-segments"></g>
+            <g class="wheel-player-shares" data-bind="wheel-player-shares"></g>
+            <g class="wheel-highlights" data-bind="wheel-highlights" aria-hidden="true"></g>
+            <g data-bind="wheel-labels"></g>
+            <g class="winner-pie" data-bind="winner-pie" aria-hidden="true"></g>
+            <g class="wheel-selector" data-bind="wheel-selector">
+              <path class="wheel-selector__blade" d="M 292 300 L 293 82 L 300 55 L 307 82 L 308 300 Z"></path>
+              <line class="wheel-selector__rail" x1="300" y1="300" x2="300" y2="58"></line>
+              <line class="wheel-selector__beam" x1="300" y1="286" x2="300" y2="61"></line>
+              <circle class="wheel-selector__sensor" cx="300" cy="76" r="7"></circle>
+              <path class="wheel-selector__tip" d="M 300 30 L 280 72 L 300 63 L 320 72 Z"></path>
+              <circle class="wheel-selector__axle" cx="300" cy="300" r="13"></circle>
+            </g>
+            <circle class="wheel-hub-aura" cx="300" cy="300" r="107"></circle>
+            <circle class="wheel-hub" cx="300" cy="300" r="94"></circle>
+            <circle class="wheel-hub-ring wheel-hub-ring--outer" cx="300" cy="300" r="87"></circle>
+            <circle class="wheel-hub-ring wheel-hub-ring--inner" cx="300" cy="300" r="78"></circle>
+            <text class="wheel-pool-label" x="300" y="251" text-anchor="middle">TOTAL PRIZE POOL</text>
+            <text class="wheel-pool-value" data-bind="prize-pool" x="300" y="281" text-anchor="middle">—</text>
+            <text class="wheel-pool-unit" x="300" y="297" text-anchor="middle">ETH</text>
+            <line class="wheel-hub-divider" x1="260" y1="309" x2="340" y2="309"></line>
+            <text class="wheel-burn-label" data-bind="hub-flip-label" x="300" y="326" text-anchor="middle">TOTAL FLIP BURNED</text>
+            <text class="wheel-burn-value" data-bind="hub-flip-value" x="300" y="350" text-anchor="middle">—</text>
+            <text class="wheel-burn-unit" x="300" y="363" text-anchor="middle">FLIP</text>
+          </svg>
+
+          <div class="result-pop" data-bind="result-pop" role="status" aria-live="assertive" hidden>
+            <strong data-bind="result-pop-title"></strong>
+            <span data-bind="result-pop-copy"></span>
+          </div>
+        </div>
+
+        <div class="draw-controls">
+          <button type="button" class="draw-button draw-button--primary" data-bind="replay">REPLAY DRAW</button>
+          <button type="button" class="draw-button" data-bind="skip">SKIP TO RESULT</button>
+          <button type="button" class="draw-button draw-button--speed" data-bind="speed" aria-label="Change replay speed">1×</button>
+        </div>
+      </div>
+
+      <aside class="score-board" aria-label="Decimator payout and burn totals">
+        <div class="score-payout" data-bind="player-payout-card">
+          <span data-bind="player-payout-label">IF YOUR SLICE HITS</span>
+          <strong data-bind="player-payout">—</strong>
+          <small>ETH</small>
+          <em data-bind="player-payout-detail">LIVE PRO-RATA ESTIMATE</em>
+        </div>
+
+        <div class="score-player" data-bind="player-score-card">
+          <span>YOUR EFFECTIVE BURN</span>
+          <strong data-bind="player-score">—</strong>
+          <small data-bind="player-position">NO ENTRY</small>
+          <em data-bind="player-outcome">WAITING FOR YOUR BUCKET</em>
+        </div>
+
+        <div class="score-effective">
+          <span>WINNING EFFECTIVE BURN</span>
+          <strong data-bind="winning-score">0</strong>
+          <small>FLIP</small>
+          <em data-bind="winning-progress">0 WINNING SLICES LOCKED</em>
+        </div>
+
+        <section class="winner-allocation" data-bind="winner-allocation" hidden
+                 aria-label="Final Decimator payout shares">
+          <header class="winner-allocation__head">
+            <span><img src="/whitepaper/flame-center-silver.svg" alt="">FINAL PAYOUT PIE</span>
+            <strong data-bind="winner-count">—</strong>
+          </header>
+          <div class="winner-legend" data-bind="winner-legend"></div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script type="module" src="/decimator-draw/draw.js"></script>
+</body>
+</html>
