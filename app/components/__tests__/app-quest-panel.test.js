@@ -613,6 +613,55 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
+  test('a bonus lootbox quest stays actionable before slot 0 because one purchase can complete both', async () => {
+    const events = [];
+    const listener = (event) => events.push(event.detail);
+    document.addEventListener('quest:activate', listener);
+    _fetchHandler = async () => makeQuestsPayload({
+      quests: [
+        {
+          day: 1, slot: 0, questType: 1, progress: '0', target: '10000000000',
+          completed: false,
+        },
+        {
+          day: 1, slot: 1, questType: 6, progress: '0', target: '20000000000',
+          completed: false,
+        },
+      ],
+    });
+
+    const el = instantiate();
+    await settle(40);
+
+    const lootbox = el.querySelectorAll('.qst-slot')[1];
+    assert.equal(lootbox.classList.contains('qst-slot--gated'), false);
+    assert.equal(lootbox.classList.contains('qst-slot--actionable'), true);
+    assert.equal(lootbox.classList.contains('qst-slot--explainable'), false);
+    lootbox.dispatchEvent({ type: 'click' });
+
+    const dialog = el.querySelector('[data-bind="qst-action-dialog"]');
+    const confirm = el.querySelector('[data-bind="qst-action-confirm"]');
+    assert.equal(dialog.hidden, false);
+    assert.equal(confirm.disabled, false);
+    assert.equal(
+      el.querySelector('[data-bind="qst-action-copy"]').textContent,
+      'Buy a 0.02 ETH lootbox.',
+    );
+    assert.doesNotMatch(confirm.textContent, /DAILY QUEST FIRST/);
+
+    confirm.dispatchEvent({ type: 'click' });
+    assert.deepEqual(events, [{
+      questType: 6,
+      target: '20000000000',
+      variant: 'secondary',
+      submit: true,
+      configuredAmount: true,
+    }]);
+
+    document.removeEventListener('quest:activate', listener);
+    el.disconnectedCallback();
+  });
+
   test('the main daily popup toggles between the minimum ticket and lootbox setup', async () => {
     const events = [];
     const listener = (event) => events.push(event.detail);

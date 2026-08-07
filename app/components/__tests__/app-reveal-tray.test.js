@@ -172,19 +172,25 @@ describe('<app-reveal-tray>', () => {
     assert.equal(action.getAttribute('data-lootbox-value-tone'), 'purple');
     assert.equal(action.querySelector('.rrt-lootbox-summary__amount').textContent, '0.04 ETH');
     assert.equal(action.querySelector('.rrt-lootbox-summary__box'), null,
-      'Pending does not put an icon before LOOTBOX');
+      'the receipt copy does not put a second icon inline before LOOTBOX');
     assert.match(action.querySelector('.rrt-lootbox-summary').textContent, /0\.04 ETH.*LOOTBOX/);
     const summaryParts = action.querySelector('.rrt-lootbox-summary').children;
     assert.match(summaryParts[0].className, /rrt-lootbox-summary__amount/,
       'the ETH amount owns the first line');
     assert.match(summaryParts[1].className, /rrt-lootbox-summary__unit/,
       'the plain LOOTBOX label owns the separate second line');
-    assert.equal(action.querySelector('.rrt-action__art'), null,
-      'the exact inline receipt does not duplicate the box glyph at the left');
+    const lootboxArt = action.querySelector('.rrt-action__art--lootbox');
+    assert.ok(lootboxArt, 'Pending gives the lootbox the same left-hand visual slot as packs and spins');
+    const lootboxIcon = lootboxArt.querySelector('.rrt-lootbox-mini');
+    assert.ok(lootboxIcon);
+    assert.match(lootboxIcon.src, /degenerus-lootbox-case-v3\.webp$/,
+      'the left-hand visual is the recognizable protocol lootbox miniature');
     assert.equal(action.querySelector('.rrt-action__cta'), null);
     assert.equal(action.querySelector('.rrt-action__progress'), null);
     assert.match(action.title, /4× ticket price/);
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    assert.match(css, /\.rrt-action--lootbox-summary\s*\{[^}]*grid-template-columns:\s*2\.2rem auto/s,
+      'the compact receipt reserves a dedicated left icon lane');
     assert.match(css, /\.rrt-lootbox-summary\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*auto(?:;|\s)/s,
       'the amount and lootbox receipt use two compact lines');
     assert.match(css, /\.rrt-lootbox-summary__amount\s*\{[^}]*grid-column:\s*1 \/ -1/s);

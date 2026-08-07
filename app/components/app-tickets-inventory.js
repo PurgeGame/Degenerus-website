@@ -448,6 +448,7 @@ class AppTicketsInventory extends HTMLElement {
   #viewportHeight = INV_HEIGHT_DEFAULT;
   #heightCustomized = false;
   #expanded = false;
+  #expandRenderTimer = null;
   #focusSalvageOnRender = false;
   #resizeObserver = null;
   #packRevealListener = null;
@@ -520,6 +521,10 @@ class AppTicketsInventory extends HTMLElement {
     if (this.#pollHandle != null) {
       try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
+    }
+    if (this.#expandRenderTimer != null) {
+      try { clearTimeout(this.#expandRenderTimer); } catch (_) { /* defensive */ }
+      this.#expandRenderTimer = null;
     }
     if (this.#resizeObserver) {
       try { this.#resizeObserver.disconnect(); } catch (_) { /* defensive */ }
@@ -601,7 +606,23 @@ class AppTicketsInventory extends HTMLElement {
     if (toggle) toggle.addEventListener('click', () => {
       this.#expanded = !this.#expanded;
       this.#syncDisclosure();
-      if (this.#expanded) this.#render();
+      if (!this.#expanded) {
+        if (this.#expandRenderTimer != null) clearTimeout(this.#expandRenderTimer);
+        this.#expandRenderTimer = null;
+        toggle.removeAttribute?.('aria-busy');
+        return;
+      }
+
+      // Building a large ticket grid is intentionally deferred one browser
+      // task. That gives the pressed color + rotated chevron a paint before
+      // the many SVG nodes are constructed, so slower phones acknowledge the
+      // tap immediately instead of looking unresponsive.
+      toggle.setAttribute('aria-busy', 'true');
+      this.#expandRenderTimer = setTimeout(() => {
+        this.#expandRenderTimer = null;
+        if (this.#expanded) this.#render();
+        toggle.removeAttribute?.('aria-busy');
+      }, 0);
     });
     const salvageJump = this.querySelector('[data-bind="inv-salvage-jump"]');
     if (salvageJump) salvageJump.addEventListener('click', () => this.#openSalvage());
@@ -1375,7 +1396,7 @@ class AppTicketsInventory extends HTMLElement {
       const salvageJump = this.querySelector('[data-bind="inv-salvage-jump"]');
       if (salvageJump) salvageJump.hidden = true;
       this.#syncDisclosure();
-      if (!this.#expanded) return;
+      if (!this.#expanded || this.#expandRenderTimer != null) return;
       this.#renderCombinedView();
       return;
     }
@@ -1388,7 +1409,7 @@ class AppTicketsInventory extends HTMLElement {
     // Do not construct any badge <img> nodes until the player asks for the
     // detail. This is materially lighter than merely hiding a prebuilt SVG
     // grid, especially for large inventories on phones.
-    if (!this.#expanded) return;
+    if (!this.#expanded || this.#expandRenderTimer != null) return;
     if (this.#isFarFuture()) this.#renderFarFuture();
     else if (this.#mode === 'chart') this.#renderChart();
     else this.#renderCards();

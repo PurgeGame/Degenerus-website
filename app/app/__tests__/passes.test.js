@@ -141,6 +141,31 @@ function makeFakeProvider(connectedAddr) {
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
 
+describe('pass bonus lootbox receipt parsing', () => {
+  test('decodes raw LootBoxBuy logs without relying on the pass writer ABI', () => {
+    const iface = new contractsMod.ethers.Interface([
+      'event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount)',
+    ]);
+    const encoded = iface.encodeEventLog(iface.getEvent('LootBoxBuy'), [CONNECTED, 19n, 24n]);
+    const boxes = passesMod.parsePassLootboxesFromReceipt({
+      logs: [{ topics: encoded.topics, data: encoded.data }],
+    });
+
+    assert.equal(boxes.length, 1);
+    assert.equal(boxes[0].buyer.toLowerCase(), CONNECTED.toLowerCase());
+    assert.equal(boxes[0].lootboxIndex, 19n);
+    assert.equal(boxes[0].amountWei, 24n);
+  });
+
+  test('accepts already-parsed logs and ignores foreign receipt events', () => {
+    const boxes = passesMod.parsePassLootboxesFromReceipt({ logs: [
+      { parsed: { name: 'WhalePassPurchased', args: {} } },
+      { parsed: { name: 'LootBoxBuy', args: { buyer: CONNECTED, index: 7n, amount: 40n } } },
+    ] });
+    assert.deepEqual(boxes, [{ buyer: CONNECTED, lootboxIndex: 7n, amountWei: 40n }]);
+  });
+});
+
 function makeUnmintedDeityError() {
   const error = new Error('execution reverted: InvalidToken()');
   error.data = '0xc1ab6dc1';

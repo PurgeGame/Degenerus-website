@@ -1780,14 +1780,19 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-all-in\s*\{[^}]*width:\s*100%[^}]*height:\s*3rem[^}]*min-height:\s*3rem[^}]*max-height:\s*3rem/s,
       'ALL IN matches the normal half-width BUY IN footprint');
     assert.match(APP_CSS,
-      /\.dec-all-in\s*\{[^}]*grid-row:\s*1[^}]*justify-self:\s*stretch/s,
-      'ALL IN stays pinned to the top action row');
+      /\.dec-all-in\s*\{[^}]*justify-self:\s*stretch[^}]*margin:\s*0/s,
+      'ALL IN stays in its compact action row without adding a second gutter');
     assert.match(APP_CSS,
       /\.dec-all-in\s*\{[^}]*grid-column:\s*2/s,
       'the action is pinned above the right side of the ETH bar');
     assert.match(APP_CSS,
-      /\.dec-flip-balance\s*\{[^}]*grid-row:\s*1;[^}]*grid-column:\s*1/s,
-      'the FLIP balance occupies the matching left action slot');
+      /\.dec-flip-balance\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s,
+      'the FLIP balance receives the entire ledger row');
+    assert.ok(
+      PANEL_SRC.indexOf('data-bind="dec-all-in"')
+        < PANEL_SRC.indexOf('data-bind="dec-flip-balance"'),
+      'ALL IN is structurally above the full-width FLIP ledger',
+    );
     assert.ok(
       PANEL_SRC.indexOf('data-bind="dec-all-in"') < PANEL_SRC.indexOf('data-bind="dec-funds"'),
       'ALL IN is a sibling above Available Funds, not a child inside its green box',
@@ -2265,12 +2270,19 @@ describe('combined ticket + lootbox buy', () => {
       'Buy presale box',
       'a standalone presale box is not presented as a game buy-in');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-amount"]').textContent, '0.02 ETH');
+    let confirmed = null;
+    el.addEventListener('app-decimator:tx-confirmed', (event) => { confirmed = event.detail; });
     el.querySelector('[data-bind="dec-buy-cta"]').dispatchEvent({ type: 'click' });
     await settle(100);
 
     assert.equal(fakeContract._calls.buyPresaleBox.length, 1);
     assert.equal(fakeContract._calls.buyLootboxAndPresaleBox.length, 0);
     assert.equal(fakeContract._calls.buyPresaleBox[0][1], 2n * min);
+    assert.equal(confirmed?.boxes?.length, 1);
+    assert.equal(confirmed?.boxes?.[0]?.hasLootboxLeg, false);
+    assert.equal(confirmed?.boxes?.[0]?.hasPresaleLeg, true);
+    assert.equal(confirmed?.boxes?.[0]?.amountWei, 2n * min);
+    assert.equal(confirmed?.presaleBoxAmountWei, 2n * min);
     el.disconnectedCallback();
   });
 });
@@ -2965,7 +2977,7 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     el.disconnectedCallback();
   });
 
-  test('window OPEN keeps the FLIP balance and its toggle beside ALL IN', async () => {
+  test('window OPEN keeps the full-width FLIP balance and its toggle beneath ALL IN', async () => {
     claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract());
     const el = instantiate();
     await settle(60);
@@ -3014,13 +3026,13 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.equal(foilRow.hidden, false, 'returning to ETH restores the pinned foil offer');
     assert.match(
       APP_CSS,
-      /\.dec-flip-balance\s*\{[^}]*min-height:\s*3rem;[^}]*height:\s*3rem/s,
-      'the left balance shares the three-rem top footprint',
+      /\.dec-flip-balance\s*\{[^}]*grid-column:\s*1\s*\/\s*-1;[^}]*min-height:\s*2\.6rem;[^}]*height:\s*2\.6rem/s,
+      'FLIP owns one full row at the compressed ETH ledger height',
     );
     assert.match(
       APP_CSS,
-      /\.dec-flip-balance__mode\s*\{[^}]*linear-gradient\(180deg, #fef3c7, #fbbf24 58%, #d97706\)[^}]*color:\s*#991b1b/s,
-      'inactive USE FLIP is yellow with red text',
+      /\.dec-flip-balance__mode\s*\{[^}]*linear-gradient\(180deg, #fef3c7, #fbbf24 58%, #d97706\)[^}]*color:\s*#111/s,
+      'inactive USE FLIP is yellow with normal black text',
     );
     assert.match(
       APP_CSS,
@@ -3029,16 +3041,31 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     );
     assert.match(
       APP_CSS,
-      /\.dec-flip-balance\s*\{[^}]*height:\s*3rem;[^}]*grid-template-areas:\s*"action label" "value value"[^}]*padding:\s*0\.2rem 0\.48rem 0\.24rem;[^}]*border:\s*1px solid rgba\(239, 68, 68, 0\.42\)[^}]*#140707/s,
-      'the left FLIP balance gives its amount a collision-free full second line',
+      /\.dec-flip-balance\s*\{[^}]*height:\s*2\.6rem;[^}]*grid-template-areas:\s*"action label" "action value"[^}]*padding:\s*0\.18rem 0\.48rem 0\.2rem;[^}]*border:\s*1px solid rgba\(239, 68, 68, 0\.42\)[^}]*#140707/s,
+      'the full FLIP row mirrors compressed ETH with a centered action and two-line ledger',
     );
     assert.match(
       APP_CSS,
       /\.dec-flip-balance__label\s*\{[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis/s,
       'the optional balance label yields before colliding with USE FLIP',
     );
+    assert.match(
+      APP_CSS,
+      /\.dec-flip-balance__label\s*\{[^}]*color:\s*rgba\(254, 202, 202, 0\.58\);[^}]*text-align:\s*right/s,
+      'FLIP BALANCE is right aligned and uses the right-side ledger-title color',
+    );
     assert.match(APP_CSS, /\.dec-flip-balance__value\s*\{[^}]*width:\s*100%;[^}]*overflow:\s*hidden;[^}]*color:\s*#fde68a/s,
-      'the yellow FLIP value clips inside its own full-width line');
+      'the yellow FLIP value clips inside its full-width ledger lane');
+    assert.match(
+      APP_CSS,
+      /\.dec-flip-balance__label\s*\{[^}]*font-family:\s*"Inter", system-ui, sans-serif;[^}]*font-size:\s*0\.5rem;[^}]*font-weight:\s*900/s,
+      'FLIP uses the same compact label type as AVAILABLE FUNDS',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-flip-balance__value\s*\{[^}]*font-family:\s*"OCR A Std", "Share Tech Mono", "Lucida Console", ui-monospace, monospace;[^}]*font-size:\s*clamp\(0\.92rem, 2\.8vw, 1\.16rem\);[^}]*font-weight:\s*700/s,
+      'FLIP uses the same compact numeric type as the ETH balance',
+    );
     assert.match(
       APP_CSS,
       /\.app-decimator-panel \.dec-funds__priority,[\s\S]*?\.app-daily-flip \.df-funds \.df-burn-sdgnrs-cta\[data-write\][\s\S]*?height:\s*1\.3rem;[\s\S]*?border-radius:\s*4px;[\s\S]*?font-size:\s*0\.52rem;/,

@@ -43,6 +43,7 @@ import {
   purchaseWhaleBundle,
   purchaseDeityPass,
   purchaseLazyPass,
+  parsePassLootboxesFromReceipt,
   deityPassErrorOverride,
   readDeityPassCatalog,
   readAfkingSubscription,
@@ -55,6 +56,29 @@ import { scaledTicketPriceWei } from '../app/decimator.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { decodeRevertReason } from '../app/reason-map.js';
 import './boon-product-indicator.js';
+
+function passPurchaseConfirmationDetail(receipt, metadata = {}) {
+  const parsed = parsePassLootboxesFromReceipt(receipt);
+  const player = parsed[0]?.buyer || getActingAddress() || '';
+  const owner = String(player).toLowerCase();
+  const boxes = parsed
+    .filter((box) => !owner || String(box.buyer || '').toLowerCase() === owner)
+    .map((box) => ({
+      index: Number(box.lootboxIndex),
+      day: null,
+      amountWei: box.amountWei,
+      hasLootboxLeg: true,
+      hasPresaleLeg: false,
+    }));
+  return {
+    ...metadata,
+    player,
+    transactionHash: receipt?.hash || receipt?.transactionHash || null,
+    boxes,
+    lootBoxAmountWei: boxes.reduce((sum, box) => sum + BigInt(box.amountWei ?? 0), 0n),
+    presaleBoxAmountWei: 0n,
+  };
+}
 
 // Deity symbolId (0-31) → trait symbol: fullSymId = quadrant*8 + symIdx
 // (JackpotModule.sol:1444-1446). Rendered as GOLD badges — "the real symbols"
@@ -1229,11 +1253,11 @@ class AppPassSection extends HTMLElement {
         this.#renderLazyError('Price unavailable — try again in a moment.');
         return;
       }
-      await purchaseLazyPass({ msgValueWei: cost });
+      const { receipt } = await purchaseLazyPass({ msgValueWei: cost });
 
       try {
         this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
-          detail: { kind: 'lazy' },
+          detail: passPurchaseConfirmationDetail(receipt, { kind: 'lazy' }),
           bubbles: true,
         }));
       } catch (_e) { /* defensive */ }
@@ -1302,11 +1326,11 @@ class AppPassSection extends HTMLElement {
       const unit = this.#pricingData?.whaleUnitPriceWei ?? 0n;
       const msgValueWei = unit * BigInt(quantity);
 
-      await purchaseWhaleBundle({ quantity, msgValueWei });
+      const { receipt } = await purchaseWhaleBundle({ quantity, msgValueWei });
 
       try {
         this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
-          detail: { kind: 'whale', quantity },
+          detail: passPurchaseConfirmationDetail(receipt, { kind: 'whale', quantity }),
           bubbles: true,
         }));
       } catch (_e) { /* defensive — fakeDOM CustomEvent shim */ }
@@ -1370,7 +1394,7 @@ class AppPassSection extends HTMLElement {
         return;
       }
       const msgValueWei = this.#pricingData.deityNextPriceWei;
-      await purchaseDeityPass({ symbolId, msgValueWei });
+      const { receipt } = await purchaseDeityPass({ symbolId, msgValueWei });
 
       // Receipt confirmation is authoritative enough to update the catalog
       // immediately; the 250ms poll below reconciles owner/address details.
@@ -1391,7 +1415,7 @@ class AppPassSection extends HTMLElement {
 
       try {
         this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
-          detail: { kind: 'deity', symbolId },
+          detail: passPurchaseConfirmationDetail(receipt, { kind: 'deity', symbolId }),
           bubbles: true,
         }));
       } catch (_e) { /* defensive */ }

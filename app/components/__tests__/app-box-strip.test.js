@@ -215,6 +215,20 @@ function fireTxConfirmed(boxes, extra = {}) {
   }));
 }
 
+function firePassTxConfirmed(boxes, extra = {}) {
+  document.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
+    detail: {
+      player: ADDR,
+      transactionHash: '0xpassbox',
+      lootBoxAmountWei: 10_000_000_000n,
+      presaleBoxAmountWei: 0n,
+      boxes,
+      ...extra,
+    },
+    bubbles: true,
+  }));
+}
+
 function fireTxSubmitted(transactionHash) {
   document.dispatchEvent(new CustomEvent('app-decimator:tx-submitted', {
     detail: {
@@ -299,6 +313,27 @@ describe('app-box-strip', () => {
       'receipt-confirmed boxes join the shared RNG widget before indexer discovery');
     assert.ok(pending.every((item) => item.resolved === false),
       'an unresolved box is visible without pretending its prizes exist');
+  });
+
+  test('pass purchase bonus boxes enter the same Pending feed', async () => {
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    firePassTxConfirmed([{
+      index: 18,
+      day: null,
+      amountWei: 40_000_000_000n,
+      hasLootboxLeg: true,
+      hasPresaleLeg: false,
+    }]);
+    await tick();
+
+    const pending = pendingActionsMod.getPendingActions();
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].id, 'lootbox:18');
+    assert.equal(pending[0].label, 'Lootbox');
+    assert.equal(pending[0].amountLabel, '0.04 ETH');
+    el.disconnectedCallback();
   });
 
   test('broadcast purchase appears immediately and a failed tx removes only its placeholder', async () => {
@@ -600,6 +635,41 @@ describe('app-box-strip', () => {
     );
     assert.equal(el.querySelectorAll('.bxs-chip').length, 0);
     assert.equal(el.querySelector('[data-bind="bxs-strip"]').hidden, true);
+    el.disconnectedCallback();
+  });
+
+  test('a later purchase sharing a cleared RNG index reappears in Pending', async () => {
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxConfirmed([{
+      index: 8, amountWei: 10_000_000_000n,
+      hasLootboxLeg: true, hasPresaleLeg: false,
+    }], { player: ADDR, transactionHash: '0xoldpurchase' });
+    await tick();
+
+    const [oldAction] = pendingActionsMod.getPendingActions();
+    const oldDismissKey = oldAction.dismissKey;
+    await pendingActionsMod.dismissPendingActionItems([oldAction]);
+    assert.equal(pendingActionsMod.getPendingActions().length, 0);
+    assert.deepEqual(
+      JSON.parse(globalThis.localStorage.getItem(revealedBoxesKey(CHAIN.id, ADDR))),
+      ['8'],
+    );
+
+    firePassTxConfirmed([{
+      index: 8, amountWei: 20_000_000_000n,
+      hasLootboxLeg: true, hasPresaleLeg: false,
+    }], { transactionHash: '0xnewpasspurchase' });
+    await tick();
+
+    const [newAction] = pendingActionsMod.getPendingActions();
+    assert.ok(newAction, 'the new purchase is not eaten by the prior CLEAR');
+    assert.equal(newAction.id, 'lootbox:8', 'the shared RNG index remains one open action');
+    assert.notEqual(newAction.dismissKey, oldDismissKey,
+      'the new receipt has a fresh presentation identity');
+    assert.equal(globalThis.localStorage.getItem(revealedBoxesKey(CHAIN.id, ADDR)), null,
+      'the new mined purchase retires the stale index-only presentation marker');
     el.disconnectedCallback();
   });
 

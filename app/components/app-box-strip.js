@@ -150,6 +150,27 @@ function _markRevealed(addr, key) {
   } catch (_e) { /* private mode: replay may reappear after refresh */ }
 }
 
+function _unmarkRevealed(addr, key) {
+  if (!addr || !key) return;
+  try {
+    const seen = _readRevealed(addr);
+    if (!seen.delete(String(key))) return;
+    if (seen.size === 0) localStorage.removeItem(revealedBoxesKey(CHAIN.id, addr));
+    else localStorage.setItem(revealedBoxesKey(CHAIN.id, addr), JSON.stringify([...seen]));
+  } catch (_e) { /* private mode */ }
+}
+
+function _boxDismissKey(box) {
+  const key = _boxKey(box);
+  const hashes = [...new Set([
+    ...(Array.isArray(box?.transactionHashes) ? box.transactionHashes : []),
+    box?.transactionHash,
+  ].filter(Boolean).map((hash) => String(hash).toLowerCase()))].sort();
+  return hashes.length > 0
+    ? `lootbox:${key}:purchases:${hashes.join(',')}`
+    : `lootbox:${key}`;
+}
+
 function _readPending(addr) {
   try {
     const raw = typeof localStorage !== 'undefined'
@@ -326,6 +347,8 @@ class AppBoxStrip extends HTMLElement {
       && typeof document.removeEventListener === 'function') {
       try { document.removeEventListener('app-decimator:tx-confirmed', this.#docListener); }
       catch (_) { /* defensive */ }
+      try { document.removeEventListener('app-pass:tx-confirmed', this.#docListener); }
+      catch (_) { /* defensive */ }
       try { document.removeEventListener('app-decimator:tx-submitted', this.#submittedListener); }
       catch (_) { /* defensive */ }
       try { document.removeEventListener('app-decimator:tx-failed', this.#failedListener); }
@@ -489,6 +512,7 @@ class AppBoxStrip extends HTMLElement {
           const addsNewLeg = (Boolean(b?.hasLootboxLeg) && !existing.hasLootboxLeg)
             || (Boolean(b?.hasPresaleLeg) && !existing.hasPresaleLeg);
           const addsPurchase = incomingHash ? !knownHashes.has(incomingHash) : addsNewLeg;
+          if (addsPurchase) _unmarkRevealed(this.#addr, String(index));
           if (addsPurchase && b?.amountWei != null) {
             try {
               existing.amountWei = String(
@@ -512,6 +536,10 @@ class AppBoxStrip extends HTMLElement {
           this.#emptyIndexes.delete(index);
           continue;
         }
+        // CLEAR historically marked only the shared RNG index. A newly mined
+        // purchase can legitimately join that same still-open batch, so its
+        // receipt must retire the stale presentation marker.
+        _unmarkRevealed(this.#addr, String(index));
         this.#boxes.push({
           index,
           resultKey: String(index),
@@ -551,6 +579,7 @@ class AppBoxStrip extends HTMLElement {
     document.addEventListener('app-decimator:tx-submitted', this.#submittedListener);
     document.addEventListener('app-decimator:tx-failed', this.#failedListener);
     document.addEventListener('app-decimator:tx-confirmed', this.#docListener);
+    document.addEventListener('app-pass:tx-confirmed', this.#docListener);
 
     // A direct Degenerette settlement and the durable box feed can discover the
     // same index-zero box independently. Hide that exact tray copy while the
@@ -1168,6 +1197,10 @@ class AppBoxStrip extends HTMLElement {
       return {
       id: `lootbox:${_boxKey(box)}`,
       dismissScope: this.#addr,
+      // Several buys can share one live RNG index. Version the presentation
+      // tombstone by its mined purchase receipts so clearing an older box does
+      // not hide a later pass or presale purchase in the same batch.
+      dismissKey: _boxDismissKey(box),
       kind: 'lootbox',
       mayAddEth: Boolean(box.resolved),
       amountWei: box.amountWei == null ? null : String(box.amountWei),

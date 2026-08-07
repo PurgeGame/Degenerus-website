@@ -1412,6 +1412,12 @@ class AppRevealTray extends HTMLElement {
         pack.appendChild(level);
         pack.appendChild(quantity);
         art.appendChild(pack);
+      } else if (compactLootbox) {
+        const box = document.createElement('img');
+        box.className = 'rrt-lootbox-mini';
+        box.src = '/app/assets/lootbox/degenerus-lootbox-case-v3.webp';
+        box.alt = '';
+        art.appendChild(box);
       } else if (item.icon) {
         const logo = document.createElement('img');
         logo.src = item.icon;
@@ -1479,7 +1485,7 @@ class AppRevealTray extends HTMLElement {
       cta.className = 'rrt-action__cta';
       cta.textContent = actionVerb;
 
-      if ((!passive || item.kind === 'tickets') && !compactLootbox) button.appendChild(art);
+      if (!passive || item.kind === 'tickets') button.appendChild(art);
       button.appendChild(copy);
       if (!compact && !passive && !ticketOpenReady) button.appendChild(cta);
       if (!passive && !button.disabled) button.addEventListener('click', () => this.#run(item));

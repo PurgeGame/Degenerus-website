@@ -395,12 +395,22 @@ describe('app-tickets-inventory — cards + chart', () => {
       'no badge SVG request exists in the initial inventory DOM');
 
     toggle.dispatchEvent({ type: 'click' });
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true',
+      'the disclosure acknowledges the press before building ticket art');
+    assert.equal(toggle.getAttribute('aria-busy'), 'true',
+      'the highlighted disclosure confirms that the expanded view is loading');
+    assert.equal(el.querySelectorAll('img').length, 0,
+      'expensive badge construction is deferred long enough for feedback to paint');
     await flushMicrotasks();
     assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(toggle.getAttribute('aria-busy'), null);
     assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, false);
     assert.ok(el.querySelectorAll('.inv-card').length > 0);
     assert.ok(el.querySelectorAll('img').length > 0,
       'badge SVG nodes are constructed only after explicit expansion');
+    assert.match(APP_CSS,
+      /\.inv-disclosure\[aria-busy="true"\]\s*\{[^}]*color:\s*#ffc04d;[^}]*box-shadow:/s,
+      'the deferred render has an immediate visible pressed/loading state');
     el.disconnectedCallback();
   });
 

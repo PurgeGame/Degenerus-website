@@ -694,9 +694,17 @@ class AppDecimatorPanel extends HTMLElement {
         <!-- Error display (T-58-18: textContent-only target) -->
         <div class="dec-error" data-bind="dec-error" hidden role="alert"></div>
 
-        <!-- Keep the FLIP ledger in the left action slot for the entire redemption
-             window. Its embedded mode button and USE ETH both return to ETH mode. -->
+        <!-- ALL IN keeps its normal half-width action footprint above the ledgers.
+             During the redemption window FLIP then receives a full compact row,
+             matching the collapsed ETH ledger beneath it. -->
         <div class="dec-funds-stack">
+          <button type="button" class="dec-all-in" data-bind="dec-all-in" disabled
+                  aria-label="Use all available ETH for tickets">
+            <strong class="dec-all-in__label">ALL IN</strong>
+            <img class="dec-all-in__flame" src="/whitepaper/flame-center.svg"
+                 alt="" aria-hidden="true">
+          </button>
+
           <div class="dec-flip-balance" data-bind="dec-flip-balance" hidden
                aria-label="Available FLIP balance">
             <button type="button" class="dec-flip-toggle dec-flip-balance__mode"
@@ -709,13 +717,6 @@ class AppDecimatorPanel extends HTMLElement {
               <span class="dec-flip-balance__unit">FLIP</span>
             </strong>
           </div>
-
-          <button type="button" class="dec-all-in" data-bind="dec-all-in" disabled
-                  aria-label="Use all available ETH for tickets">
-            <strong class="dec-all-in__label">ALL IN</strong>
-            <img class="dec-all-in__flame" src="/whitepaper/flame-center.svg"
-                 alt="" aria-hidden="true">
-          </button>
 
           <!-- Protocol-Coins-style funds disclosure: the collapsed row is an
                aggregate only; opening it swaps in the ordered source rows. -->

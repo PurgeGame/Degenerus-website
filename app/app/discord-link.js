@@ -38,6 +38,7 @@ let _btn = null;
 let _busy = false;
 let _discordUser = null;   // /auth/discord/me session user (null = not connected)
 let _sessionPlayer = null; // /api/player row once the session holds a wallet
+let _focusListener = null;
 
 function _toHex(str) {
   const bytes = new TextEncoder().encode(str);
@@ -121,13 +122,25 @@ async function _onClick() {
   const addr = get('connected.address');
 
   // Not discord-connected: bind the wallet first when we have one, so the
-  // OAuth callback persists the link in the same round-trip; then redirect.
+  // OAuth callback persists the link in the same round-trip. Open the tab
+  // synchronously so a wallet signature wait cannot trigger popup blocking.
   if (!_discordUser) {
+    let authTab = null;
+    try {
+      authTab = window.open('about:blank', '_blank');
+      if (authTab) authTab.opener = null;
+    } catch (_e) { /* popup policy fallback below */ }
     if (addr) {
       _busy = true; _render();
       try { await _bindWallet(addr); } catch { /* still worth doing OAuth */ }
     }
-    window.location.href = SESSION_API + '/auth/discord';
+    const authUrl = SESSION_API + '/auth/discord';
+    try {
+      if (authTab && !authTab.closed) authTab.location.href = authUrl;
+      else window.open(authUrl, '_blank', 'noopener');
+    } catch (_e) {
+      window.open(authUrl, '_blank', 'noopener');
+    }
     return;
   }
 
@@ -159,6 +172,16 @@ function _mount() {
   _btn = btn;
   btn.addEventListener('click', () => { _onClick(); });
   subscribe('connected.address', _render);
+  // OAuth completes in the new tab. Refresh the original app when the player
+  // returns so its Discord/link state updates without a page reload.
+  if (!_focusListener && typeof window !== 'undefined'
+    && typeof window.addEventListener === 'function') {
+    _focusListener = () => {
+      if (!_btn) return;
+      _refresh().then(_render).catch(() => _render());
+    };
+    window.addEventListener('focus', _focusListener);
+  }
   _refresh().then(_render).catch(() => _render());
   return true;
 }
@@ -172,5 +195,10 @@ export function initDiscordLink({ retries = MOUNT_RETRIES } = {}) {
 }
 
 export function __resetForTest() {
+  if (_focusListener && typeof window !== 'undefined'
+    && typeof window.removeEventListener === 'function') {
+    try { window.removeEventListener('focus', _focusListener); } catch (_e) { /* defensive */ }
+  }
+  _focusListener = null;
   _btn = null; _busy = false; _discordUser = null; _sessionPlayer = null;
 }

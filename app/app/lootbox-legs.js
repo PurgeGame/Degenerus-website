@@ -45,6 +45,10 @@ const SPIN_STRIDE = 72n;
 const COUNT_SHIFT = 216n;
 const SURVIVED_SHIFT = 224n;
 const U32 = 0xFFFFFFFFn;
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+const TRANSFER_EVENTS_ABI = [
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
+];
 
 // LootBoxReward rewardType → display label (contract NatSpec, LootboxModule:128).
 // Unknown IDs deliberately stay visibly unknown; calling one a "bonus reward"
@@ -264,23 +268,34 @@ export function wholeTicketsFromOpened(futureTickets, roundedUp) {
 }
 
 let _ifaceCache = null;
+let _transferIfaceCache = null;
 function _iface() {
   if (!_ifaceCache) _ifaceCache = new ethers.Interface(OPEN_EVENTS_ABI);
   return _ifaceCache;
 }
+function _transferIface() {
+  if (!_transferIfaceCache) _transferIfaceCache = new ethers.Interface(TRANSFER_EVENTS_ABI);
+  return _transferIfaceCache;
+}
 
 /** Test-only — drop the cached Interface (harmless in production). */
-export function __resetForTest() { _ifaceCache = null; }
+export function __resetForTest() {
+  _ifaceCache = null;
+  _transferIfaceCache = null;
+}
 
 /**
  * Parse an openBox receipt into normalized prize legs, in log order.
- * Only logs emitted by the GAME contract are considered (delegatecalled
- * modules emit from the GAME address).
+ * GAME logs carry the settlement itself. An immediately preceding WWXRP mint
+ * is also retained because it is the contract's cold-bust consolation for a
+ * fractional ticket roll that did not round up.
  *
  * @param {import('ethers').TransactionReceipt|null|undefined} receipt
  * @param {string} [playerFilter] lowercase address — keep only this player's legs
  * @returns {Array<object>} legs:
- *   {legType:'opened',    lootboxIndex, amount, futureLevel, wholeTickets, flip}
+ *   {legType:'opened',    lootboxIndex, amount, futureLevel, futureTickets,
+ *                         roundedUp, wholeTickets, flip}
+ *   {legType:'wwxrp',     amount, consolation:true}
  *   {legType:'dgnrs',     amount}
  *   {legType:'whalepass', targetLevel, entriesPerLevel}
  *   {legType:'reward',    rewardType, label, amount}
@@ -292,10 +307,23 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
   const receiptHash = String(receipt.hash || receipt.transactionHash || '').toLowerCase();
   const iface = _iface();
   const gameAddr = String(CONTRACTS.GAME || '').toLowerCase();
+  const wwxrpAddr = String(CONTRACTS.WWXRP || '').toLowerCase();
   const want = playerFilter ? String(playerFilter).toLowerCase() : null;
-  for (const log of receipt.logs) {
+  let pendingWwxrpMint = null;
+  for (let position = 0; position < receipt.logs.length; position += 1) {
+    const log = receipt.logs[position];
     try {
-      if (gameAddr && String(log.address || '').toLowerCase() !== gameAddr) continue;
+      const logAddress = String(log.address || '').toLowerCase();
+      if (wwxrpAddr && logAddress === wwxrpAddr) {
+        const transfer = _transferIface().parseLog(log);
+        const from = String(transfer?.args?.from ?? transfer?.args?.[0] ?? '').toLowerCase();
+        const to = String(transfer?.args?.to ?? transfer?.args?.[1] ?? '').toLowerCase();
+        pendingWwxrpMint = from === ZERO_ADDRESS && (!want || to === want)
+          ? { position, amount: BigInt(transfer.args.value ?? transfer.args[2] ?? 0) }
+          : null;
+        continue;
+      }
+      if (gameAddr && logAddress !== gameAddr) continue;
       const parsed = iface.parseLog(log);
       if (!parsed) continue;
       const player = String(parsed.args.player ?? parsed.args[0] ?? '').toLowerCase();
@@ -304,14 +332,31 @@ export function parseOpenLegsFromReceipt(receipt, playerFilter) {
         case 'LootBoxOpened': {
           const futureTickets = Number(parsed.args.futureTickets);
           const roundedUp = Boolean(parsed.args.roundedUp);
+          const wholeTickets = wholeTicketsFromOpened(futureTickets, roundedUp);
+          const flip = BigInt(parsed.args.flip);
+          // mintPrize emits its Transfer immediately before LootBoxOpened. Do
+          // not treat an unrelated WWXRP mint elsewhere in the receipt as box
+          // contents; adjacency is the provenance check.
+          if (futureTickets > 0
+              && wholeTickets === 0
+              && flip === 0n
+              && pendingWwxrpMint?.position === position - 1) {
+            out.push({
+              legType: 'wwxrp',
+              amount: pendingWwxrpMint.amount,
+              consolation: true,
+            });
+          }
           out.push({
             legType: 'opened',
             transactionHash: String(log.transactionHash || receiptHash || '').toLowerCase() || null,
             lootboxIndex: BigInt(parsed.args.lootboxIndex),
             amount: BigInt(parsed.args.amount),
             futureLevel: Number(parsed.args.futureLevel),
-            wholeTickets: wholeTicketsFromOpened(futureTickets, roundedUp),
-            flip: BigInt(parsed.args.flip),
+            futureTickets,
+            roundedUp,
+            wholeTickets,
+            flip,
           });
           break;
         }
@@ -403,6 +448,8 @@ export function openLegsFromDegenerettePayouts(items) {
         lootboxIndex: _feedBigInt(item?.lootboxIndex ?? data.lootboxIndex ?? 0),
         amount: _feedBigInt(data.amount ?? item?.boxAmountRawWei),
         futureLevel: Number(data.futureLevel ?? item?.levelAtOpen ?? 0),
+        futureTickets: Number(data.futureTickets ?? 0),
+        roundedUp: Boolean(data.roundedUp),
         wholeTickets: wholeTicketsFromOpened(
           Number(data.futureTickets ?? 0),
           Boolean(data.roundedUp),
@@ -502,6 +549,8 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
           lootboxIndex: BigInt(item.lootboxIndex),
           amount: _feedBigInt(data.amount ?? item.boxAmountRawWei),
           futureLevel: Number(data.futureLevel ?? item.levelAtOpen ?? 0),
+          futureTickets,
+          roundedUp,
           wholeTickets: wholeTicketsFromOpened(futureTickets, roundedUp),
           flip: _feedBigInt(data.flip),
         });
@@ -518,6 +567,8 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
           lootboxIndex: BigInt(item.lootboxIndex ?? 0),
           amount: _feedBigInt(data.flipAmount),
           futureLevel: Number(data.ticketLevel ?? data.futureLevel ?? item.levelAtOpen ?? 0),
+          futureTickets,
+          roundedUp,
           wholeTickets: wholeTicketsFromOpened(futureTickets, roundedUp),
           flip: _feedBigInt(data.flipReward ?? data.flip),
         });

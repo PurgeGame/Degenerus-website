@@ -434,7 +434,7 @@
     dBtn.innerHTML = DISCORD_SVG + '<span class="btn-label">Discord</span>';
     dBtn.addEventListener('click', function () {
       if (discord) disconnectDiscord();
-      else window.location.href = API + '/auth/discord';
+      else window.open(API + '/auth/discord', '_blank', 'noopener');
     });
     auth.appendChild(dBtn);
 

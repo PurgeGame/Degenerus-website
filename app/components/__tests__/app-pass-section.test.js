@@ -315,14 +315,14 @@ function makeFakePassContract(opts = {}) {
     purchaseWhalePass: Object.assign(
       async (...args) => {
         calls.purchaseWhalePass.push(args);
-        return makeFakeTx(makeFakeReceipt());
+        return makeFakeTx(makeFakeReceipt(opts.purchaseWhalePassLogs));
       },
       { staticCall: stk('purchaseWhalePass') }
     ),
     purchaseDeityPass: Object.assign(
       async (...args) => {
         calls.purchaseDeityPass.push(args);
-        return makeFakeTx(makeFakeReceipt());
+        return makeFakeTx(makeFakeReceipt(opts.purchaseDeityPassLogs));
       },
       { staticCall: stk('purchaseDeityPass') }
     ),
@@ -671,6 +671,39 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(recordedArgs[0], CONNECTED, 'buyer = connected.address');
     assert.equal(recordedArgs[1], 3n, 'quantity = BigInt(3)');
 
+    el.disconnectedCallback();
+  });
+
+  test('pass confirmation publishes its receipt bonus lootbox for Pending', async () => {
+    const amountWei = 400_000_000_000_000_000n;
+    passesMod.__setContractFactoryForTest(() => makeFakePassContract({
+      purchaseWhalePassLogs: [{
+        parsed: {
+          name: 'LootBoxBuy',
+          args: { buyer: CONNECTED, index: 23n, amount: amountWei },
+        },
+      }],
+    }));
+
+    const el = instantiate();
+    await flushMicrotasks();
+    let confirmed = null;
+    el.addEventListener('app-pass:tx-confirmed', (event) => { confirmed = event.detail; });
+    el.querySelector('[name="pass-whale-qty"]').value = '1';
+    el.querySelector('.pass-whale-buy').dispatchEvent({ type: 'click' });
+    await settle(60);
+
+    assert.equal(confirmed?.kind, 'whale');
+    assert.equal(confirmed?.player, CONNECTED);
+    assert.equal(confirmed?.transactionHash, '0xreceipt');
+    assert.equal(confirmed?.lootBoxAmountWei, amountWei);
+    assert.deepEqual(confirmed?.boxes, [{
+      index: 23,
+      day: null,
+      amountWei,
+      hasLootboxLeg: true,
+      hasPresaleLeg: false,
+    }]);
     el.disconnectedCallback();
   });
 

@@ -109,6 +109,32 @@ const PASSES_ABI = [
   'event AfkingWithdrew(address indexed player, uint256 amount)',
 ];
 
+// Every pass can bundle a purchased lootbox. Keep this receipt decoder
+// independent of the writer contract ABI: the lazy-pass writer uses its own
+// minimal interface, while tests and injected wallets can also hand us parsed
+// logs directly.
+const PASS_LOOTBOX_RECEIPT_INTERFACE = new ethers.Interface([
+  'event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount)',
+]);
+
+/** Return the bonus lootboxes minted by a confirmed pass purchase. */
+export function parsePassLootboxesFromReceipt(receipt) {
+  const out = [];
+  if (!receipt || !Array.isArray(receipt.logs)) return out;
+  for (const log of receipt.logs) {
+    try {
+      const parsed = log?.parsed ?? PASS_LOOTBOX_RECEIPT_INTERFACE.parseLog(log);
+      if (parsed?.name !== 'LootBoxBuy') continue;
+      out.push({
+        buyer: String(parsed.args.buyer ?? parsed.args[0]),
+        lootboxIndex: BigInt(parsed.args.index ?? parsed.args[1]),
+        amountWei: BigInt(parsed.args.amount ?? parsed.args[2] ?? 0),
+      });
+    } catch (_e) { /* foreign receipt log */ }
+  }
+  return out;
+}
+
 // The GAME no longer exposes the old deityPassTotalIssuedCount() view. The
 // soulbound pass NFT remains the canonical 32-slot catalog: tokenId is the
 // symbol id, so ownerOf() tells us both which symbols are unavailable and how

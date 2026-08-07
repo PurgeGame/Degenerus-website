@@ -1467,8 +1467,16 @@ class AppQuestPanel extends HTMLElement {
       const slotIndex = Number(s?.slot ?? 0);
       const isAuto = this.#afkingActive && slotIndex === 0 && !s?.completed;
       const isDone = !!s?.completed || isAuto;
-      const isGated = slotIndex === 1 && !primaryComplete && !isDone;
       const questTypeRaw = Number(s?.questType ?? -1);
+      // A bonus lootbox purchase is also MINT_ETH progress. The game handles
+      // slot 0 before slot 1 in the same purchase, so a qualifying lootbox can
+      // legitimately complete both at once even when the primary is currently
+      // empty. Other bonus actions still need the ordinary primary gate.
+      const completesPrimaryInSameAction = slotIndex === 1 && questTypeRaw === 6;
+      const isGated = slotIndex === 1
+        && !primaryComplete
+        && !isDone
+        && !completesPrimaryInSameAction;
       const label = QUEST_TYPE_LABELS[questTypeRaw] || 'Unknown';
       let stateLabel;
       let statusText;
