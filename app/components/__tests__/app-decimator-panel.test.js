@@ -1275,7 +1275,7 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
-  test('Available Funds defaults to Claimable then expands to AFKING and Wallet', async () => {
+  test('Available Funds defaults to Claimable, Wallet, then AFKING', async () => {
     installAfkingReadState({ fundingWei: 875_000_000_000n });
     const price = lootboxMod.scaledTicketPriceWei(12);
     _fetchHandler = async (url) => {
@@ -1315,9 +1315,9 @@ describe('combined ticket + lootbox buy', () => {
     const afkingRow = el.querySelector('[data-bind="dec-funds-afking-display"]');
     const walletRow = el.querySelector('[data-bind="dec-funds-wallet-display"]');
     assert.deepEqual(
-      [claimableRow.style.order, afkingRow.style.order, walletRow.style.order],
+      [claimableRow.style.order, walletRow.style.order, afkingRow.style.order],
       ['0', '1', '2'],
-      'the default waterfall is Claimable, AFKING, Wallet',
+      'the default waterfall is Claimable, Wallet, AFKING',
     );
     el.querySelector('[data-bind="dec-funds-use-afking"]').dispatchEvent({ type: 'click' });
     assert.deepEqual(
@@ -3029,11 +3029,16 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     );
     assert.match(
       APP_CSS,
-      /\.dec-flip-balance\s*\{[^}]*height:\s*3rem;[^}]*grid-template-areas:\s*"action label" "action value"[^}]*padding:\s*0\.2rem 0\.48rem 0\.24rem;[^}]*border:\s*1px solid rgba\(239, 68, 68, 0\.42\)[^}]*#140707/s,
-      'the left FLIP balance mirrors the compact Protocol Coins frame',
+      /\.dec-flip-balance\s*\{[^}]*height:\s*3rem;[^}]*grid-template-areas:\s*"action label" "value value"[^}]*padding:\s*0\.2rem 0\.48rem 0\.24rem;[^}]*border:\s*1px solid rgba\(239, 68, 68, 0\.42\)[^}]*#140707/s,
+      'the left FLIP balance gives its amount a collision-free full second line',
     );
-    assert.match(APP_CSS, /\.dec-flip-balance__value\s*\{[^}]*color:\s*#fde68a/s,
-      'the left-side FLIP balance value is yellow');
+    assert.match(
+      APP_CSS,
+      /\.dec-flip-balance__label\s*\{[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis/s,
+      'the optional balance label yields before colliding with USE FLIP',
+    );
+    assert.match(APP_CSS, /\.dec-flip-balance__value\s*\{[^}]*width:\s*100%;[^}]*overflow:\s*hidden;[^}]*color:\s*#fde68a/s,
+      'the yellow FLIP value clips inside its own full-width line');
     assert.match(
       APP_CSS,
       /\.app-decimator-panel \.dec-funds__priority,[\s\S]*?\.app-daily-flip \.df-funds \.df-burn-sdgnrs-cta\[data-write\][\s\S]*?height:\s*1\.3rem;[\s\S]*?border-radius:\s*4px;[\s\S]*?font-size:\s*0\.52rem;/,

@@ -322,13 +322,6 @@ class AppPassSection extends HTMLElement {
   #renderShell() {
     this.innerHTML = `
       <section class="panel app-pass-section">
-        <div class="panel-header pass-desk-header">
-          <div>
-            <h2>PASSES</h2>
-            <p>Long-term perks, daily powers, and automated play.</p>
-          </div>
-        </div>
-
         <!-- Account-switcher (2026-07-16): pass purchases are per-account
              writes with no combined-view analog — hidden alongside the buy
              rows in mode 'combined' (see #renderCombinedGate). -->

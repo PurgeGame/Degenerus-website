@@ -454,6 +454,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
   test('Panel puts Lazy above Whale and retains the deity dropdown and local boon markers', () => {
     const el = instantiate();
     assert.ok(el.innerHTML.length > 100, 'innerHTML populated');
+    assert.doesNotMatch(
+      el.innerHTML,
+      /pass-desk-header|<h2>PASSES<|Long-term perks, daily powers, and automated play/,
+      'the outer AFKING PASSES bar is the only generic pass heading',
+    );
     assert.ok(
       el.innerHTML.indexOf('pass-product-row--lazy') < el.innerHTML.indexOf('pass-product-row--whale'),
       'the shorter Lazy product is offered before Whale',

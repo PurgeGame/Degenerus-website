@@ -205,7 +205,12 @@ describe('transaction history composition', () => {
     assert.match(element.innerHTML, /class="txh section-disclosure"/,
       'history uses the shared section disclosure shell');
     assert.match(element.innerHTML, /class="txh__summary section-disclosure__bar"[\s\S]*class="section-disclosure__chevron"/,
-      'history uses the same bar and arrow as Tickets and afKing Passes');
+      'history uses the same bar and arrow as Tickets and AFKING PASSES');
+    assert.doesNotMatch(
+      element.innerHTML,
+      /txh__summary-(?:icon|copy|meta)|Purchases, awards, and replayable results|ON DEMAND/,
+      'the disclosure bar is only its title and shared chevron',
+    );
     assert.equal(calls.length, 0, 'mounting a collapsed history performs no request');
 
     const details = element.querySelector('[data-bind="txh-details"]');

@@ -5216,12 +5216,6 @@ body.layout-basic .df-claim-flip-cta {
   cursor: pointer;
 }
 
-/* Brand casing: "afKing Passes" must not be uppercased by the baseline
-   summary style. */
-body.layout-basic .more-ways__summary {
-  text-transform: none;
-}
-
 /* ============================================================================
    Progress section (user ask): activity score + streaks (app-activity-panel)
    beside the daily quests (app-quest-panel). Append-only region.
@@ -12986,7 +12980,7 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write] {
   min-width: 0;
   min-height: 3rem;
   height: 3rem;
-  grid-template-areas: "action label" "action value";
+  grid-template-areas: "action label" "value value";
   grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   align-items: center;
@@ -13046,18 +13040,23 @@ body.layout-basic .app-decimator-panel .dec-buy-row > .dec-buy-cta[data-write] {
 .dec-flip-balance[hidden] { display: none !important; }
 .dec-flip-balance__label {
   grid-area: label;
+  width: 100%;
+  min-width: 0;
   align-self: end;
   justify-self: end;
+  overflow: hidden;
   color: rgba(253, 230, 138, 0.68);
   font-family: "Inter", system-ui, sans-serif;
   font-size: 0.5rem;
   font-weight: 900;
   letter-spacing: 0.15em;
   line-height: 1;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .dec-flip-balance__value {
   grid-area: value;
+  width: 100%;
   min-width: 0;
   align-self: center;
   justify-self: end;
@@ -18356,8 +18355,33 @@ body.layout-basic .jackpot-hero replay-panel .replay-controls > .ldj-results-cta
     min-height: 0;
     grid-template-rows: auto auto;
     align-self: start;
+    gap: 0.48rem;
     margin-left: 0;
+    padding: 0.62rem;
   }
+  body.layout-basic .deg-referral-card__copy {
+    min-height: 4rem;
+    padding-right: 4.2rem;
+    align-content: center;
+  }
+  body.layout-basic .deg-referral-card__copy > strong {
+    grid-template-columns: max-content max-content;
+    justify-content: start;
+    gap: 0.16rem 0.38rem;
+  }
+  body.layout-basic .deg-referral-card__copy > strong > span { font-size: clamp(0.78rem, 4.2vw, 0.96rem); letter-spacing: 0.055em; }
+  body.layout-basic .deg-referral-card__copy > strong > span:first-child { grid-column: 1 / -1; font-size: clamp(0.94rem, 5vw, 1.1rem); }
+  body.layout-basic .deg-referral-card__forever { gap: 0; }
+  body.layout-basic .deg-referral-card__coin {
+    position: absolute;
+    top: 50%;
+    right: 0.08rem;
+    width: 3.7rem;
+    flex-basis: 3.7rem;
+    transform: translateY(-50%);
+  }
+  body.layout-basic .deg-referral-card__actions { grid-template-columns: minmax(0, 1fr) 2.75rem; margin-left: 2.35rem; }
+  body.layout-basic .deg-referral-card__info-btn { width: 2.75rem; height: 2.75rem; min-width: 2.75rem; min-height: 2.75rem; padding: 0; aspect-ratio: 1; border-radius: 50%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -18380,24 +18404,6 @@ body.layout-basic .app-pass-section {
 body.layout-basic app-pass-section {
   display: grid;
   gap: 0.72rem;
-}
-
-body.layout-basic .app-pass-section > .panel-header {
-  order: -4;
-  margin-bottom: 0.05rem;
-}
-
-body.layout-basic .app-pass-section > .panel-header h2 {
-  margin-bottom: 0.16rem;
-  letter-spacing: 0.13em;
-  text-shadow: 0 0 18px rgba(111, 183, 255, 0.18);
-}
-
-body.layout-basic .pass-desk-header p {
-  margin: 0;
-  color: var(--text-secondary, #9aa4b2);
-  font-size: 0.72rem;
-  line-height: 1.35;
 }
 
 body.layout-basic .pass-combined-note {
@@ -19415,7 +19421,7 @@ body.layout-basic .txh {
 body.layout-basic .txh__summary {
   display: grid;
   min-height: 4.2rem;
-  grid-template-columns: 2.25rem minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.75rem;
   padding: 0.7rem 1rem;
@@ -19435,44 +19441,6 @@ body.layout-basic .txh__summary::after {
 }
 body.layout-basic .txh[open] > .txh__summary::after { transform: rotate(90deg); }
 body.layout-basic .txh__summary:hover { background: rgba(255, 255, 255, 0.025); }
-body.layout-basic .txh__summary-icon {
-  display: grid;
-  width: 2.15rem;
-  height: 2.15rem;
-  place-items: center;
-  border: 1px solid rgba(245, 166, 35, 0.35);
-  border-radius: 9px;
-  background: rgba(245, 166, 35, 0.09);
-  color: #ffd56f;
-  font-size: 1.05rem;
-  font-weight: 900;
-}
-body.layout-basic .txh__summary-copy {
-  display: grid;
-  min-width: 0;
-  gap: 0.16rem;
-}
-body.layout-basic .txh__summary-copy strong {
-  font-size: 0.92rem;
-  letter-spacing: 0.11em;
-}
-body.layout-basic .txh__summary-copy small {
-  overflow: hidden;
-  color: var(--text-secondary, #9ca3af);
-  font-size: 0.74rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-body.layout-basic .txh__summary-meta {
-  padding: 0.25rem 0.48rem;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 999px;
-  color: #9298aa;
-  font-size: 0.62rem;
-  font-weight: 900;
-  letter-spacing: 0.09em;
-  white-space: nowrap;
-}
 body.layout-basic .txh__content {
   padding: 0 0.85rem 0.85rem;
   border-top: 1px solid rgba(148, 163, 184, 0.14);
@@ -19737,14 +19705,10 @@ body.layout-basic .txh__replay-button:disabled { opacity: 0.5; cursor: wait; }
 @media (max-width: 700px) {
   body.layout-basic .txh__summary {
     min-height: 3.9rem;
-    grid-template-columns: 2rem minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.58rem;
     padding: 0.65rem 0.72rem;
   }
-  body.layout-basic .txh__summary::after { grid-column: 3; grid-row: 1; }
-  body.layout-basic .txh__summary-icon { width: 1.9rem; height: 1.9rem; }
-  body.layout-basic .txh__summary-meta { display: none; }
-  body.layout-basic .txh__summary-copy small { font-size: 0.61rem; }
   body.layout-basic .txh__content { padding: 0 0.55rem 0.55rem; }
   body.layout-basic .txh__toolbar { align-items: stretch; justify-content: space-between; }
   body.layout-basic .txh__filters {
@@ -19899,7 +19863,7 @@ body.layout-basic :is(
   white-space: nowrap;
 }
 
-/* Tickets, afKing Passes, and Transaction History are one disclosure family. */
+/* Tickets, AFKING PASSES, and Transaction History are one disclosure family. */
 body.layout-basic :is(.app-tickets-inventory, .more-ways, .txh).section-disclosure {
   box-sizing: border-box;
   overflow: hidden;

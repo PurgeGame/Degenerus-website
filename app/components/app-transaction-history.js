@@ -1173,12 +1173,7 @@ class AppTransactionHistory extends HTMLElement {
     this.innerHTML = `
       <details class="txh section-disclosure" data-bind="txh-details">
         <summary class="txh__summary section-disclosure__bar">
-          <span class="txh__summary-icon" aria-hidden="true">⇄</span>
-          <span class="txh__summary-copy">
-            <strong class="section-disclosure__title">TRANSACTION HISTORY</strong>
-            <small>Purchases, awards, and replayable results</small>
-          </span>
-          <span class="txh__summary-meta" data-bind="txh-summary-meta">ON DEMAND</span>
+          <strong class="section-disclosure__title">TRANSACTION HISTORY</strong>
           <span class="section-disclosure__chevron" aria-hidden="true"></span>
         </summary>
         <div class="txh__content">
@@ -1489,7 +1484,6 @@ class AppTransactionHistory extends HTMLElement {
     const wrap = this.querySelector('[data-bind="txh-table-wrap"]');
     const message = this.querySelector('[data-bind="txh-message"]');
     const warning = this.querySelector('[data-bind="txh-warning"]');
-    const meta = this.querySelector('[data-bind="txh-summary-meta"]');
     const refresh = this.querySelector('[data-bind="txh-refresh"]');
     const previous = this.querySelector('[data-bind="txh-prev"]');
     const next = this.querySelector('[data-bind="txh-next"]');
@@ -1508,10 +1502,6 @@ class AppTransactionHistory extends HTMLElement {
     if (previous) previous.disabled = this.#loading || this.#page <= 0;
     if (next) next.disabled = this.#loading || !this.#hasNext;
     if (page) page.textContent = `PAGE ${this.#page + 1}`;
-    if (meta) meta.textContent = this.#loadedKey
-      ? `${visibleRows.length}/${this.#rows.length} SHOWN · P${this.#page + 1}`
-      : this.#loading ? 'LOADING' : 'ON DEMAND';
-
     let text = '';
     if (!this.#address) text = 'Connect or select a player to load history.';
     else if (this.#loading) text = 'Loading indexed activity…';

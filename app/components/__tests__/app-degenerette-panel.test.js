@@ -1649,6 +1649,18 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.match(APP_CSS,
         /\.deg-referral-card\s*\{\s*width:\s*100%;\s*height:\s*auto;\s*min-height:\s*0;\s*grid-template-rows:\s*auto auto;/s,
         'phones shrink-wrap the referral bubble instead of inheriting its desktop height');
+      assert.match(APP_CSS,
+        /@media \(max-width: 520px\)[\s\S]*?\.deg-referral-card__copy\s*\{[^}]*min-height:\s*4rem;[^}]*padding-right:\s*4\.2rem[^}]*align-content:\s*center/s,
+        'the phone banner reserves a balanced visual zone on the right');
+      assert.match(APP_CSS,
+        /@media \(max-width: 520px\)[\s\S]*?\.deg-referral-card__copy > strong\s*\{[^}]*grid-template-columns:\s*max-content max-content[^}]*gap:\s*0\.16rem 0\.38rem/s,
+        'phone copy condenses into a legible two-line lockup');
+      assert.match(APP_CSS,
+        /@media \(max-width: 520px\)[\s\S]*?\.deg-referral-card__coin\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0\.08rem;[^}]*width:\s*3\.7rem;[^}]*translateY\(-50%\)/s,
+        'the animated coin fills the reserved right side instead of crowding FOREVER');
+      assert.match(APP_CSS,
+        /@media \(max-width: 520px\)[\s\S]*?\.deg-referral-card__info-btn\s*\{[^}]*width:\s*2\.75rem;[^}]*height:\s*2\.75rem;[^}]*min-width:\s*2\.75rem;[^}]*min-height:\s*2\.75rem;[^}]*aspect-ratio:\s*1;[^}]*border-radius:\s*50%/s,
+        'the phone info control stays a true circular tap target');
       assert.match(APP_CSS, /\.deg-referral-card__logo\s*\{[^}]*bottom:\s*0\.52rem[^}]*left:\s*0\.58rem/s,
         'the Degenerus mark sits in the lower-left corner');
       assert.match(

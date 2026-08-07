@@ -456,7 +456,7 @@ class AppDecimatorPanel extends HTMLElement {
   #claimBusy = null;          // 'eth' while the footer claim is signing.
   #preferClaimable = true;    // ETH purchase funding preference; persisted per chain.
   #useAfking = true;          // Allow prepaid AFKing funds to cover purchase shortfalls.
-  #fundingOrder = ['claimable', 'afking', 'wallet'];
+  #fundingOrder = ['claimable', 'wallet', 'afking'];
   #fundsExpanded = false;     // Available Funds mirrors Protocol Coins disclosure.
   #pendingActions = [];       // Unseen ETH-capable RNG results mask the compact total.
   #claimableSpoilerOverrideKey = null;
@@ -1935,7 +1935,7 @@ class AppDecimatorPanel extends HTMLElement {
       this.#renderFlipBuyRow();
       return;
     }
-    // Do not simulate a one-ticket burn here. Doing so hides Redeem FLIP
+    // Do not simulate a one-ticket burn here. Doing so hides the FLIP balance
     // from players holding less than 1,000 FLIP even while the window is open.
     // The entered amount is simulated only when the player presses Buy.
     let open = false;
