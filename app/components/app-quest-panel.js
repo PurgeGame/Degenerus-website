@@ -135,12 +135,12 @@ function _fmtDailyQuestAmount(questType, raw) {
 // type 0, and MINT_FLIP is 9. Types 4 (FOIL) and 9 were missing entirely, so a foil-pack
 // day or a redeem-window day rendered "Unknown" as its bonus quest.
 const QUEST_TYPE_LABELS = {
-  1: 'Buy tickets or lootboxes',
+  1: 'Buy Tickets or Luckbox',
   2: 'Coinflip',
   3: 'Affiliate',
   4: 'Foil pack',
   5: 'Decimator',
-  6: 'Lootbox',
+  6: 'Luckbox',
   7: 'Degenerette (ETH)',
   8: 'Degenerette (FLIP)',
   9: 'Redeem FLIP',
@@ -228,8 +228,14 @@ function _liveOnlyScoreBreakdown(liveBoard, streak) {
     totalBps: total,
     liveOnly: true,
   };
-  const streakNumber = _finiteNullable(streak);
-  if (streakNumber != null) score.questStreakPoints = streakNumber;
+  const streakNumber = _finiteNullable(liveBoard?.scoreQuestStreak)
+    ?? _finiteNullable(streak);
+  let attributed = 0;
+  if (streakNumber != null) {
+    score.questStreakPoints = streakNumber;
+    score.questStreakCreditedPoints = Math.floor(Math.max(0, streakNumber) / 2);
+    attributed += score.questStreakCreditedPoints;
+  }
   // A deity pass deterministically replaces the two participation components
   // with their maxima and adds the permanent +80 pass component. These rows
   // are therefore safe to show even when the indexer has no player record.
@@ -237,7 +243,12 @@ function _liveOnlyScoreBreakdown(liveBoard, streak) {
     score.mintLevelStreakPoints = 50;
     score.mintCountPoints = 25;
     score.passBonus = { kind: 'deity', points: 80 };
+    attributed += 155;
   }
+  // Without the component lens, the authoritative total can contain mint,
+  // referral, pass, or curse terms we cannot name safely. Keep that residual
+  // explicitly unattributed instead of pretending it all came from quests.
+  score.unattributedPoints = Math.max(0, total - attributed);
   return score;
 }
 
@@ -273,8 +284,12 @@ export function mergeQuestIdentitySnapshot(data, liveBoard) {
     ? data.scoreBreakdown
     : null;
   const liveScore = _finiteNullable(liveBoard?.activityScore);
-  let scoreBreakdown = indexedScore;
-  if (liveScore != null) {
+  const exactLiveBreakdown = liveBoard?.activityBreakdown
+    && typeof liveBoard.activityBreakdown === 'object'
+    ? liveBoard.activityBreakdown
+    : null;
+  let scoreBreakdown = exactLiveBreakdown ? { ...exactLiveBreakdown } : indexedScore;
+  if (!exactLiveBreakdown && liveScore != null) {
     const indexedTotal = _finiteNullable(indexedScore?.totalBps);
     const indexedDeity = String(indexedScore?.passBonus?.kind || '').toLowerCase() === 'deity';
     const deityMismatch = liveBoard?.hasDeityPass != null
@@ -301,6 +316,10 @@ export function degenScoreBreakdownBarPercent(key, value) {
   const cap = SCORE_COMPONENT_CAPS[key];
   if (cap) return Math.max(0, Math.min(100, (points / cap) * 100));
   if (key === 'questStreakPoints' || key === 'cursePoints') {
+    if (points === 0) return 0;
+    return Math.min(99.5, (points / (points + QUEST_STREAK_HALF_FILL_POINTS)) * 100);
+  }
+  if (key === 'unattributedPoints') {
     if (points === 0) return 0;
     return Math.min(99.5, (points / (points + QUEST_STREAK_HALF_FILL_POINTS)) * 100);
   }
@@ -479,13 +498,30 @@ class AppQuestPanel extends HTMLElement {
         <section class="qst-action-dialog__card">
           <button type="button" class="qst-action-dialog__close"
                   data-bind="qst-action-close" aria-label="Close quest action">×</button>
-          <span class="qst-action-dialog__eyebrow" data-bind="qst-action-role"></span>
-          <h3 id="qst-action-title" data-bind="qst-action-title"></h3>
-          <p class="qst-action-dialog__copy" data-bind="qst-action-copy"></p>
+          <header class="qst-action-dialog__hero">
+            <span class="qst-action-dialog__sigil" aria-hidden="true">
+              <span data-bind="qst-action-icon">?</span>
+            </span>
+            <span class="qst-action-dialog__heading">
+              <span class="qst-action-dialog__eyebrow" data-bind="qst-action-role"></span>
+              <h3 id="qst-action-title" data-bind="qst-action-title"></h3>
+              <span class="qst-action-dialog__copy" data-bind="qst-action-copy"></span>
+            </span>
+            <span class="qst-action-dialog__reward" data-bind="qst-action-reward-panel">
+              <span class="qst-action-dialog__reward-label">REWARD</span>
+              <span class="qst-action-dialog__reward-value">
+                <img src="/whitepaper/flame-logo-split.svg" alt="" aria-hidden="true">
+                <strong data-bind="qst-action-reward">—</strong>
+              </span>
+              <small data-bind="qst-action-reward-extra" hidden></small>
+            </span>
+          </header>
+          <span class="qst-action-dialog__state" data-bind="qst-action-state"
+                aria-live="polite"></span>
           <div class="qst-action-choice" data-bind="qst-action-choice" hidden
-               role="group" aria-label="Choose ticket or lootbox">
+               role="group" aria-label="Choose ticket or luckbox">
             <button type="button" data-bind="qst-action-ticket" data-choice="ticket">TICKET</button>
-            <button type="button" data-bind="qst-action-lootbox" data-choice="lootbox">LOOTBOX</button>
+            <button type="button" data-bind="qst-action-lootbox" data-choice="lootbox">LUCKBOX</button>
           </div>
           <label class="qst-action-adjust" data-bind="qst-action-adjust" hidden>
             <span class="qst-action-dgn__field-head">
@@ -653,7 +689,7 @@ class AppQuestPanel extends HTMLElement {
     }
     if ((type === 1 && purchaseChoice === 'lootbox') || type === 6) {
       return {
-        kind: 'eth', label: 'LOOTBOX VALUE', unit: 'ETH', min: LOOTBOX_MIN_WEI,
+        kind: 'eth', label: 'LUCKBOX VALUE', unit: 'ETH', min: LOOTBOX_MIN_WEI,
         step: price != null && price > 0n ? price : LOOTBOX_MIN_WEI,
         required, price,
       };
@@ -783,7 +819,7 @@ class AppQuestPanel extends HTMLElement {
       const base = required < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : required;
       const cost = selected == null ? base : (selected < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : selected);
       return {
-        label: `BUY LOOTBOX · ${format(1, cost)}`,
+        label: `BUY LUCKBOX · ${format(1, cost)}`,
         target: cost,
         purchaseKind: 'lootbox',
         completes: cost >= required,
@@ -820,7 +856,7 @@ class AppQuestPanel extends HTMLElement {
       const base = required < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : required;
       const cost = selected == null ? base : (selected < LOOTBOX_MIN_WEI ? LOOTBOX_MIN_WEI : selected);
       return {
-        label: `BUY LOOTBOX · ${format(6, cost)}`, target: cost,
+        label: `BUY LUCKBOX · ${format(6, cost)}`, target: cost,
         completes: cost >= required, adjustable: true,
       };
     }
@@ -870,9 +906,15 @@ class AppQuestPanel extends HTMLElement {
   #renderQuestDialog() {
     const model = this.#questDialogModel;
     if (!model) return;
+    const card = this.querySelector('.qst-action-dialog__card');
     const role = this.querySelector('[data-bind="qst-action-role"]');
+    const icon = this.querySelector('[data-bind="qst-action-icon"]');
     const title = this.querySelector('[data-bind="qst-action-title"]');
     const copy = this.querySelector('[data-bind="qst-action-copy"]');
+    const rewardPanel = this.querySelector('[data-bind="qst-action-reward-panel"]');
+    const reward = this.querySelector('[data-bind="qst-action-reward"]');
+    const rewardExtra = this.querySelector('[data-bind="qst-action-reward-extra"]');
+    const state = this.querySelector('[data-bind="qst-action-state"]');
     const choice = this.querySelector('[data-bind="qst-action-choice"]');
     const ticket = this.querySelector('[data-bind="qst-action-ticket"]');
     const lootbox = this.querySelector('[data-bind="qst-action-lootbox"]');
@@ -897,14 +939,38 @@ class AppQuestPanel extends HTMLElement {
     // noise and makes the confirmation sheet feel like a second game form.
     const adjustConfig = hasPurchaseChoice ? this.#questAdjustConfig(model) : null;
     const action = this.#questAction(model);
+    const variant = ['primary', 'secondary', 'level'].includes(String(model.variant))
+      ? String(model.variant)
+      : 'primary';
+    const completes = action.completes !== false;
+    const blocked = Boolean(model.isGated);
+    const actionState = blocked ? 'locked' : completes ? 'ready' : 'partial';
+    card?.setAttribute?.('data-variant', variant);
+    card?.setAttribute?.('data-state', actionState);
     if (role) role.textContent = `${String(model.role || 'QUEST')} QUEST`;
+    if (icon) icon.textContent = String(model.icon || '?');
     if (title) title.textContent = String(model.label || 'Complete quest');
+    if (rewardPanel) {
+      rewardPanel.hidden = !model.rewardText;
+      if (model.rewardTitle) rewardPanel.setAttribute?.('title', model.rewardTitle);
+      else rewardPanel.removeAttribute?.('title');
+    }
+    if (reward) reward.textContent = String(model.rewardText || '—');
+    if (rewardExtra) {
+      rewardExtra.textContent = String(model.rewardExtraText || '');
+      rewardExtra.hidden = !model.rewardExtraText;
+    }
+    if (state) {
+      state.textContent = blocked
+        ? 'DAILY QUEST REQUIRED'
+        : completes ? 'COMPLETES QUEST' : 'PARTIAL PROGRESS';
+    }
     if (copy) {
       const type = Number(model.questType);
       if (isDgn) {
         copy.textContent = 'Choose the bet per spin and number of spins, then confirm.';
       } else if (hasPurchaseChoice) {
-        copy.textContent = 'Choose tickets or a lootbox and the amount, then confirm.';
+        copy.textContent = 'Choose Tickets or Luckbox and the amount, then confirm.';
       } else if (type === 2) {
         copy.textContent = `Add ${_fmtDailyQuestAmount(2, action.target)} to Tomorrow's Bet.`;
       } else if (type === 4) {
@@ -912,7 +978,7 @@ class AppQuestPanel extends HTMLElement {
       } else if (type === 5) {
         copy.textContent = `Burn ${_fmtDailyQuestAmount(5, action.target)} in the Decimator.`;
       } else if (type === 6) {
-        copy.textContent = `Buy a ${_fmtDailyQuestAmount(6, action.target)} lootbox.`;
+        copy.textContent = `Buy a ${_fmtDailyQuestAmount(6, action.target)} luckbox.`;
       } else if (type === 9) {
         copy.textContent = `Redeem ${BigInt(action.target ?? 0n).toLocaleString('en-US')} ticket${BigInt(action.target ?? 0n) === 1n ? '' : 's'} for FLIP.`;
       } else {
@@ -926,7 +992,7 @@ class AppQuestPanel extends HTMLElement {
       ticket.setAttribute?.('aria-pressed', String(this.#questDialogChoice === 'ticket'));
     }
     if (lootbox) {
-      lootbox.textContent = 'LOOTBOX';
+      lootbox.textContent = 'LUCKBOX';
       lootbox.classList?.toggle('is-selected', this.#questDialogChoice === 'lootbox');
       lootbox.setAttribute?.('aria-pressed', String(this.#questDialogChoice === 'lootbox'));
     }
@@ -985,8 +1051,6 @@ class AppQuestPanel extends HTMLElement {
       copy.textContent = 'Complete the daily quest first. You can still preview the exact action here.';
     }
     if (confirm) {
-      const completes = action.completes !== false;
-      const blocked = Boolean(model.isGated);
       confirm.classList?.toggle('is-incomplete', !completes);
       confirm.disabled = blocked;
       confirm.textContent = blocked
@@ -1597,6 +1661,10 @@ class AppQuestPanel extends HTMLElement {
       if (curse !== 0) {
         rows.push({ key: 'cursePoints', label: 'Cashout curse', points: curse, negative: true });
       }
+      const unattributed = _scoreNumber(score.unattributedPoints);
+      if (unattributed !== 0) {
+        rows.push({ key: 'unattributedPoints', label: 'Other score', points: unattributed });
+      }
 
       for (const model of rows) {
         const row = document.createElement('div');
@@ -1651,7 +1719,8 @@ class AppQuestPanel extends HTMLElement {
         isGated: true,
         rewardText: '800 FLIP',
         rewardExtraText: '+5 STREAK',
-        rewardTitle: 'Completion credits 800 FLIP and adds 5 to the quest streak',
+        rewardTitle: 'Reward: 800 FLIP +5 quest streak',
+        hoverTitle: 'Level quest data syncing. Reward: 800 FLIP +5 quest streak',
         questType: 0,
         progress: 0,
         target: 0,
@@ -1730,9 +1799,12 @@ class AppQuestPanel extends HTMLElement {
       isGated: !assigned,
       rewardText: '800 FLIP',
       rewardExtraText: '+5 STREAK',
-      rewardTitle: completionGateLabel
-        ? `Completion credits 800 FLIP and adds 5 to the quest streak. ${completionGateLabel}`
-        : 'Completion credits 800 FLIP and adds 5 to the quest streak',
+      // Native mouseover copy belongs to the reward itself. Eligibility and
+      // banked-progress details remain in the card's accessible state label.
+      rewardTitle: 'Reward: 800 FLIP +5 quest streak',
+      hoverTitle: assigned
+        ? `${label}: ${statusText}. Reward: 800 FLIP +5 quest streak`
+        : 'Next level quest. Reward: 800 FLIP +5 quest streak',
       questType,
       progress,
       target,
@@ -1850,7 +1922,10 @@ class AppQuestPanel extends HTMLElement {
 
     const aria = `${model.roleLabel} quest: ${model.label}. ${model.stateLabel}.${interactive ? ' Open its action setup.' : ''}`;
     slotDiv.setAttribute('aria-label', aria);
-    slotDiv.setAttribute('title', aria);
+    // Keep the complete state description available to assistive tech without
+    // turning it into an oversized native mouse tooltip. Cards can opt into a
+    // concise, player-facing hover summary instead.
+    slotDiv.setAttribute('title', model.hoverTitle || aria);
     slotsEl.appendChild(slotDiv);
   }
 

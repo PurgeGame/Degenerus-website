@@ -108,6 +108,10 @@ export function decimatorResolutionLevel(currentLevel, windowOpen = false) {
   if (!Number.isInteger(lvl) || lvl < 0) return null;
   const mod100 = lvl % 100;
   const deterministicWindow = (lvl % 10 === 4 && mod100 !== 94) || mod100 === 99;
+  // Once the target level has actually started, it outranks a stale indexed
+  // `decWindowOpen` latch from x4/x99. Advancing to level 15 while that flag
+  // still reads true must resolve level 15, not incorrectly probe level 16.
+  if (isDecimatorResolutionLevel(lvl)) return lvl;
   if (windowOpen || deterministicWindow) return lvl + 1;
 
   for (let candidate = lvl; candidate > 0; candidate -= 1) {

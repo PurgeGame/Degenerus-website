@@ -39,7 +39,7 @@
 import { API_BASE } from './constants.js';
 import { update, get } from './store.js';
 import { mergePlayerPayloads } from './combine.js';
-import { ethers } from './contracts.js';
+import { ethers, TX_CONFIRMED_EVENT } from './contracts.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { decodePackedBoons } from './boons.js';
 
@@ -51,7 +51,14 @@ export const POLL_INTERVALS = {
   gameState: 15_000,   // 15s
   playerData: 30_000,  // 30s
   health: 60_000,      // 60s
-  lastDay: 15_000,
+  // NO lastDay interval. /game/jackpot/last-day is keyed to the last SEALED day:
+  // once sealed the record is permanent, so a timer re-downloads ~13.4 KB of
+  // identical bytes every tick — 83% of everything the client transferred, for a
+  // value that changes once a day. It is fetched eagerly at start() and then only
+  // when the day actually moves: publishGameState() fires it whenever the resolved
+  // day runs ahead of the displayed one (and keeps retrying each game tick until
+  // the indexer catches up at rollover), and refreshForDayShift() forces it from
+  // the direct chain-day watcher.
   // Gold-rush headline ticker — the FLOOR of an adaptive cadence, not a fixed
   // interval (see GOLD_RUSH_CADENCE). 5s is the fastest useful rate: the indexer
   // samples once per follow-mode batch (~5s at POLLING_INTERVAL_MS=5000), so polling
@@ -80,7 +87,8 @@ const GOLD_RUSH_CADENCE = {
 };
 
 const VISIBILITY_DEBOUNCE_MS = 100; // Pitfall 3 mitigation
-const TIMER_HANDLES = { game: null, player: null, health: null, lastDay: null, goldRush: null };
+// No lastDay slot: that cycle is event-driven, not timed (see POLL_INTERVALS).
+const TIMER_HANDLES = { game: null, player: null, health: null, goldRush: null };
 const ACTIVE_CYCLES = new Map(); // timerName → AbortController
 
 // Module-level state captured by start() so the visibilitychange handler
@@ -214,9 +222,60 @@ function buildGoldRushFallbackPayload(gameState, health, yieldAccumulatorWei, pr
 // D-04 satisfied — cross-import API_BASE only, no /beta/ edit, no fetchJSON cross-import.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Shed-load cooldown.
+//
+// Every timer here used to fire on schedule regardless of what came back, so a
+// 429 or a 503 changed nothing: the client kept knocking at full cadence and an
+// API already shedding load could not climb back out. That is the difference
+// between a slow afternoon and an unrecoverable one, and it matters most at the
+// moment it is least affordable — the whole player base is watching the same
+// jackpot, so the overload and the traffic peak are the same event.
+//
+// One module-level gate rather than per-cycle handling: every read in this file
+// goes through fetchJSONWithSignal, so throttling here covers all of them and
+// stays correct when a new poller is added.
+//
+// 503 is included deliberately — it is what the lag guard returns when the
+// indexer has fallen behind, and hammering a struggling indexer is exactly
+// wrong. Retry-After wins when the server sends one.
+// ---------------------------------------------------------------------------
+
+const COOLDOWN_BASE_MS = 2_000;
+const COOLDOWN_MAX_MS = 60_000;
+let _cooldownUntil = 0;
+let _consecutiveShed = 0;
+
+/** ±20% around the nominal period. See the call sites in start(). */
+function jittered(ms) {
+  return Math.round(ms * (0.8 + Math.random() * 0.4));
+}
+
+/** Exposed for tests + the visibility path; also reset by a successful read. */
+function clearApiCooldown() {
+  _cooldownUntil = 0;
+  _consecutiveShed = 0;
+}
+
+function noteShedLoad(res) {
+  _consecutiveShed += 1;
+  const retryAfterSec = Number(res?.headers?.get?.('Retry-After'));
+  const base = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+    ? retryAfterSec * 1000
+    : Math.min(COOLDOWN_MAX_MS, COOLDOWN_BASE_MS * 2 ** (_consecutiveShed - 1));
+  // ±20% so a shed cohort does not all return in lockstep and re-shed itself.
+  _cooldownUntil = Date.now() + Math.min(COOLDOWN_MAX_MS, base) * (0.8 + Math.random() * 0.4);
+}
+
 async function fetchJSONWithSignal(path, { signal } = {}) {
+  if (Date.now() < _cooldownUntil) throw new Error(`API cooling down: ${path}`);
   const res = await fetch(API_BASE + path, { signal });
+  if (res.status === 429 || res.status === 503) {
+    noteShedLoad(res);
+    throw new Error(`API ${res.status}: ${path}`);
+  }
   if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
+  clearApiCooldown();
   return res.json();
 }
 
@@ -268,7 +327,12 @@ async function pollCurrentBoons(addr, signal) {
   const address = addr ? String(addr).toLowerCase() : null;
   if (!address) return { address: null, day: null, boons: [] };
   const state = await pollGame(signal);
-  const day = Number(state?.currentDay);
+  // resolvedDayFromGameState, NOT state.currentDay: /game/state carries the day
+  // as `dailyRng.day` and has no `currentDay` field at all, so the bare read was
+  // always NaN and this function returned an empty boon list before it ever
+  // reached the indexed route or the packed chain state. The indicator could
+  // never light up. That helper already encodes the correct fallback chain.
+  const day = resolvedDayFromGameState(state);
   if (!Number.isInteger(day) || day < 1) return { address, day: null, boons: [] };
   const [indexed, exact] = await Promise.allSettled([
     fetchJSONWithSignal(`/player/${address}/boons/${day}`, { signal }),
@@ -449,19 +513,17 @@ function buildPlayerFetchers() {
   const fetchers = [(s) => pollPlayer(_activePlayerAddress, s)];
   const meta = [{ kind: 'viewed' }];
 
-  // Combined mode has no single boon owner. Its product writes are disabled,
-  // so publish an empty payload instead of showing one account's boon on the
-  // aggregate view.
-  const boonAddress = mode === 'combined' ? null : _activePlayerAddress;
-  fetchers.push((s) => pollCurrentBoons(boonAddress, s));
-  meta.push({ kind: 'boons', address: boonAddress });
-
-  // Approvers — the ONLY source of operator approvals (combine.js header note).
-  // Fetched whenever a wallet is connected, independent of viewing target/mode.
-  if (connected) {
-    fetchers.push((s) => pollApprovers(connected, s));
-    meta.push({ kind: 'approvers' });
-  }
+  // Boons and approvers used to ride this 30s timer. Neither is time-driven:
+  //   - approvals change only when someone sends setApprovalForAll — a rare,
+  //     deliberate transaction. Read once per start() (which also covers account
+  //     switch and tab return).
+  //   - boons change when the player opens a box or buys (their own tx, which
+  //     fires degenerus:tx-confirmed), when a deity issues one of its 3 daily
+  //     grants, or at day rollover. A boon only alters the value of the NEXT
+  //     purchase, so a buy surface appearing is the moment the answer matters —
+  //     boon-product-indicator asks on mount.
+  // Between them they cost 4 requests a minute to move 148 bytes.
+  // See refreshApprovers() / refreshBoons() below.
 
   // Combined mode — fetch every account's /player/:addr in the SAME cycle
   // (same AbortController) so one slow/failed account can't blank the rest
@@ -484,27 +546,6 @@ function buildPlayerFetchers() {
  * endpoint never wipes a previously-good approvals.list or playerCombined.
  */
 function processPlayerCycleResults(results, meta, mode, connected) {
-  for (let i = 0; i < results.length; i += 1) {
-    const m = meta[i];
-    const r = results[i];
-    if (m.kind === 'approvers' && r.status === 'fulfilled' && r.value) {
-      const raw = Array.isArray(r.value.approvers) ? r.value.approvers : [];
-      const connectedLc = String(connected).toLowerCase();
-      const seen = new Set();
-      const normalized = [];
-      for (const row of raw) {
-        const owner = row && row.owner != null ? String(row.owner).toLowerCase() : null;
-        if (!owner || owner === connectedLc || seen.has(owner)) continue;
-        seen.add(owner);
-        normalized.push(owner);
-      }
-      update('approvals.list', normalized);
-    }
-    if (m.kind === 'boons' && r.status === 'fulfilled' && r.value) {
-      update('app.boons', r.value);
-    }
-  }
-
   if (mode === 'combined' && connected) {
     const payloads = results
       .filter((_r, i) => meta[i].kind === 'combined')
@@ -557,6 +598,88 @@ function runGoldRushCycle() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Event-driven refreshes. Neither of these has a timer; see buildPlayerFetchers.
+//
+// Both coalesce concurrent callers onto one in-flight request. That matters for
+// boons in particular: several <boon-product-indicator> elements mount together
+// when a buy surface opens, and each one asks. Without coalescing that is one
+// request per product marker instead of one per surface.
+// ---------------------------------------------------------------------------
+
+let _approversInflight = null;
+let _boonsInflight = null;
+
+/**
+ * Re-read operator approvals for the connected wallet and republish
+ * approvals.list. Called from start(), which covers first connect, account
+ * switch, and return-from-hidden. Soft-fails: a rejected read leaves the
+ * previous good list in place rather than blanking the account switcher.
+ */
+export function refreshApprovers() {
+  const connected = get('connected.address');
+  if (!connected) return Promise.resolve(null);
+  if (_approversInflight) return _approversInflight;
+
+  _approversInflight = (async () => {
+    try {
+      const payload = await pollApprovers(connected, undefined);
+      const raw = Array.isArray(payload?.approvers) ? payload.approvers : [];
+      const connectedLc = String(connected).toLowerCase();
+      const seen = new Set();
+      const normalized = [];
+      for (const row of raw) {
+        const owner = row && row.owner != null ? String(row.owner).toLowerCase() : null;
+        if (!owner || owner === connectedLc || seen.has(owner)) continue;
+        seen.add(owner);
+        normalized.push(owner);
+      }
+      update('approvals.list', normalized);
+      return normalized;
+    } catch (_e) {
+      return null;
+    } finally {
+      _approversInflight = null;
+    }
+  })();
+  return _approversInflight;
+}
+
+/**
+ * Re-read the viewed account's boons and republish app.boons. Triggered by a
+ * buy surface mounting, by the player's own confirmed transaction, and by day
+ * rollover. Combined mode has no single boon owner, so it publishes empty
+ * rather than showing one account's boon on the aggregate view.
+ */
+export function refreshBoons() {
+  if (_boonsInflight) return _boonsInflight;
+  const address = get('ui.mode') === 'combined' ? null : _activePlayerAddress;
+
+  _boonsInflight = (async () => {
+    try {
+      const payload = await pollCurrentBoons(address, undefined);
+      if (payload) update('app.boons', payload);
+      return payload;
+    } catch (_e) {
+      return null;
+    } finally {
+      _boonsInflight = null;
+    }
+  })();
+  return _boonsInflight;
+}
+
+// The two moments boons can go stale under the player's nose:
+//   - their own confirmed transaction (they opened a box, or spent a boon on a
+//     purchase). contracts.js dispatches TX_CONFIRMED_EVENT for every write.
+//   - a buy surface appearing, which is when a deity's grant since the last
+//     refresh starts to matter. boon-product-indicator announces its own mount.
+// Day rollover is handled by the lastDay fan-out in start().
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener(TX_CONFIRMED_EVENT, () => { void refreshBoons(); });
+  document.addEventListener('degenerus:boon-surface-open', () => { void refreshBoons(); });
+}
+
 /**
  * Immediate, coalesced API reconciliation requested by the direct chain-day
  * watcher. These are the same abort-per-cycle functions as normal polling;
@@ -588,7 +711,12 @@ export function start({ playerAddress = null } = {}) {
   }
   // Clear any previously registered handles before re-registering.
   pauseAllTimers();
-  const lastDay  = () => runCycle('lastDay',  [(s) => pollLastDay(s)]);
+  // A new sealed day zeroes the previous day's boons (playerBoonState is keyed
+  // on player+day), so the day-change fan-out carries boons with it.
+  const lastDay  = () => {
+    void refreshBoons();
+    return runCycle('lastDay', [(s) => pollLastDay(s)]);
+  };
   const game     = () => runCycle('game',     [
     (s) => pollGame(s).then((payload) => publishGameState(payload, lastDay)),
   ]);
@@ -607,11 +735,18 @@ export function start({ playerAddress = null } = {}) {
   // its own re-arm treats a null slot as "cancelled, do not resurrect").
   scheduleGoldRush();
   // Eager first cycle (each timer fires immediately, before the first tick).
-  game(); player(); health(); lastDay(); runGoldRushCycle();
-  TIMER_HANDLES.game     = setInterval(game,     POLL_INTERVALS.gameState);
-  TIMER_HANDLES.player   = setInterval(player,   POLL_INTERVALS.playerData);
-  TIMER_HANDLES.health   = setInterval(health,   POLL_INTERVALS.health);
-  TIMER_HANDLES.lastDay  = setInterval(lastDay,  POLL_INTERVALS.lastDay);
+  // refreshApprovers covers first connect, account switch and return-from-hidden,
+  // which is every moment the approval set can differ from what we hold.
+  game(); player(); health(); lastDay(); runGoldRushCycle(); void refreshApprovers();
+  // Jittered periods, not the nominal ones. Players arrive together — a link
+  // drop, a jackpot, a tab-visible burst — and identical intervals keep that
+  // cohort phase-locked forever, so the origin sees a spike every 15s instead of
+  // a flat line. A per-client ±20% period makes them drift apart within a few
+  // ticks. The mean cadence is unchanged, so nothing gets staler on average.
+  TIMER_HANDLES.game     = setInterval(game,     jittered(POLL_INTERVALS.gameState));
+  TIMER_HANDLES.player   = setInterval(player,   jittered(POLL_INTERVALS.playerData));
+  TIMER_HANDLES.health   = setInterval(health,   jittered(POLL_INTERVALS.health));
+  // lastDay is deliberately NOT on an interval — see POLL_INTERVALS.
 }
 
 export function stop() {
@@ -669,6 +804,10 @@ export const _testing = {
   get TIMER_HANDLES() { return TIMER_HANDLES; },
   get ACTIVE_CYCLES() { return ACTIVE_CYCLES; },
   runCycle,
+  runPlayerCycle,
+  clearApiCooldown,
+  jittered,
+  get cooldownUntil() { return _cooldownUntil; },
   pauseAllTimers,
   fetchJSONWithSignal,
   pollApprovers,

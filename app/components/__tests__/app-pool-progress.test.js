@@ -87,6 +87,36 @@ describe('next-pool progression model', () => {
     assert.equal(over.growthOver, true);
   });
 
+  test('prior-level final pools become exact notches only after the guarantee clears', () => {
+    const history = [
+      { level: 1, poolWei: 80n },
+      { level: 2, poolWei: 100n },
+      { level: 3, poolWei: 999n }, // current level is not historical yet
+    ];
+    const below = poolProgressModel({
+      nextWei: 120n,
+      targetWei: 120n,
+      history,
+      currentLevel: 3,
+    });
+    assert.deepEqual(below.historyMarkers, [],
+      'the historical scale stays quiet until progression is actually secured');
+
+    const ready = poolProgressModel({
+      nextWei: 121n,
+      targetWei: 120n,
+      history,
+      currentLevel: 3,
+    });
+    assert.deepEqual(ready.historyMarkers.map(({ level, poolWei }) => ({ level, poolWei })), [
+      { level: 1, poolWei: 80n },
+      { level: 2, poolWei: 100n },
+    ]);
+    assert.ok(ready.historyMarkers[0].position < ready.historyMarkers[1].position);
+    assert.ok(ready.historyMarkers[1].position < 100,
+      'headroom keeps the final-pool notches inside the tube');
+  });
+
   test('prints the realized prior-level growth as the O/U line', () => {
     assert.equal(growthLinePercent({ prev: 100n, current: 109n }), 9);
     assert.equal(growthLinePercent({ prev: 100n, current: 95n }), -5);
@@ -270,6 +300,7 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
 
   test('existing side-bet refresh publishes contract-exact shared benchmarks', () => {
     assert.match(pari, /readPrizePoolTarget/);
+    assert.match(pari, /readGrowthRatchetHistory/);
     assert.match(pari, /update\('app\.poolBenchmarks'/);
     assert.match(pari, /lastPurchaseDay:\s*phaseContext\.lastPurchaseDay === true/,
       'the phase strip receives the contract last-purchase latch');
@@ -278,6 +309,7 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     assert.match(css, /\.pool-progress__track\s*\{/);
     assert.match(component, /data-el="pool-target-marker"/);
     assert.match(component, /data-el="pool-growth-marker"/);
+    assert.match(component, /data-el="pool-history-markers"/);
     assert.match(component, /pool-target-marker" title="Level guarantee" tabindex="0"/,
       'thresholds are keyboard-focusable as well as hoverable');
     assert.match(component, /`\$\{levelLabel\} guarantee · \$\{_formatMarkerEth\(model\.target\)\} ETH prize pool`/,
@@ -288,6 +320,10 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
       'the formerly faint lines are wider real hover targets');
     assert.match(css, /\.pool-progress__marker::before\s*\{[^}]*content:\s*none/s,
       'threshold lines remain but their decorative diamond caps do not');
+    assert.match(component, /Level \$\{row\.level\} final prize pool · \$\{_formatMarkerEth\(row\.poolWei\)\} ETH/,
+      'each historical notch names its exact level and final pool');
+    assert.match(css, /\.pool-progress__marker--history\s*\{[^}]*bottom:\s*-0\.42rem[^}]*background:\s*#facc15/s,
+      'historical finals use visible gold notches beneath the tube');
     assert.ok(
       pari.indexOf('void this.#loadPoolBenchmarks(seq, level)')
         < pari.indexOf('const [growth, volume, credit, decimatorPosition, decimatorContext]'),

@@ -133,9 +133,11 @@ describe('actionableRevealItems', () => {
       { kind: 'batch-resolution', state: 'ready' },
       { kind: 'bingo', state: 'ready' },
       { kind: 'foil-match', state: 'ready' },
+      { kind: 'decimator', state: 'ready', primarySurface: 'jackpot' },
+      { kind: 'decimator', state: 'ready' },
     ]);
     assert.deepEqual(rows.map((row) => row.kind), [
-      'lootbox', 'degenerette', 'degenerette', 'lootbox', 'tickets', 'growth-claim', 'volume-claim', 'whale-pass-claim', 'batch-resolution', 'bingo', 'foil-match',
+      'lootbox', 'degenerette', 'degenerette', 'lootbox', 'tickets', 'growth-claim', 'volume-claim', 'whale-pass-claim', 'batch-resolution', 'bingo', 'foil-match', 'decimator',
     ]);
   });
 
@@ -152,13 +154,37 @@ describe('actionableRevealItems', () => {
       'elapsed time fills the incoming lights but can never fill readiness',
     );
   });
+
+  test('large Pending token amounts use short readable suffixes without rounding ETH', () => {
+    assert.equal(trayModule.abbreviatePendingTokenAmounts('200000 FLIP'), '200k FLIP');
+    assert.equal(trayModule.abbreviatePendingTokenAmounts('12,345 DGNRS ready'), '12.3k DGNRS ready');
+    assert.equal(trayModule.abbreviatePendingTokenAmounts('1250000 WWXRP'), '1.25m WWXRP');
+    assert.equal(trayModule.abbreviatePendingTokenAmounts('0.025 ETH'), '0.025 ETH');
+    assert.equal(trayModule.abbreviatePendingTokenAmounts('750 tickets'), '750 tickets');
+  });
 });
 
 describe('<app-reveal-tray>', () => {
+  test('a large FLIP spin receipt is abbreviated in the visible Pending amount', () => {
+    pending.publishPendingActions('degenerette', [{
+      id: 'degenerette:large', kind: 'degenerette', label: '3 spins',
+      amountLabel: '200000 FLIP', spinCount: 3,
+      state: 'waiting', phase: 'awaitingRng', pinned: true,
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    assert.equal(
+      el.querySelector('.rrt-degenerette-summary__amount').textContent,
+      '200k FLIP',
+    );
+    el.disconnectedCallback();
+  });
+
   test('a lootbox stays x ETH and LOOTBOX when it becomes openable', async () => {
     let opened = 0;
     pending.publishPendingActions('lootboxes', [{
-      id: 'lootbox:submitted:0xabc', kind: 'lootbox', label: 'Lootbox purchase',
+      id: 'lootbox:submitted:0xabc', kind: 'lootbox', label: 'Luckbox purchase',
       amountLabel: '0.04 ETH', lootboxValueTone: 'purple',
       lootboxTicketUnitsLabel: '4×', compact: true,
       detail: 'Purchase sent · waiting for confirmation',
@@ -173,7 +199,9 @@ describe('<app-reveal-tray>', () => {
     assert.equal(action.querySelector('.rrt-lootbox-summary__amount').textContent, '0.04 ETH');
     assert.equal(action.querySelector('.rrt-lootbox-summary__box'), null,
       'the receipt copy does not put a second icon inline before LOOTBOX');
-    assert.match(action.querySelector('.rrt-lootbox-summary').textContent, /0\.04 ETH.*LOOTBOX/);
+    assert.match(action.querySelector('.rrt-lootbox-summary').textContent, /0\.04 ETH.*LUCKBOX/);
+    assert.doesNotMatch(action.title, /purchase/i,
+      'legacy purchase wording never leaks into the compact Pending receipt');
     const summaryParts = action.querySelector('.rrt-lootbox-summary').children;
     assert.match(summaryParts[0].className, /rrt-lootbox-summary__amount/,
       'the ETH amount owns the first line');
@@ -183,8 +211,8 @@ describe('<app-reveal-tray>', () => {
     assert.ok(lootboxArt, 'Pending gives the lootbox the same left-hand visual slot as packs and spins');
     const lootboxIcon = lootboxArt.querySelector('.rrt-lootbox-mini');
     assert.ok(lootboxIcon);
-    assert.match(lootboxIcon.src, /degenerus-lootbox-case-v3\.webp$/,
-      'the left-hand visual is the recognizable protocol lootbox miniature');
+    assert.equal(lootboxIcon.getAttribute('data-lootbox-value-tone'), 'purple',
+      'the miniature receives the same ticket-price color tier as the full lootbox');
     assert.equal(action.querySelector('.rrt-action__cta'), null);
     assert.equal(action.querySelector('.rrt-action__progress'), null);
     assert.match(action.title, /4× ticket price/);
@@ -194,11 +222,14 @@ describe('<app-reveal-tray>', () => {
     assert.match(css, /\.rrt-lootbox-summary\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*auto(?:;|\s)/s,
       'the amount and lootbox receipt use two compact lines');
     assert.match(css, /\.rrt-lootbox-summary__amount\s*\{[^}]*grid-column:\s*1 \/ -1/s);
+    assert.match(css,
+      /\.rrt-lootbox-mini::after\s*\{[^}]*background:\s*var\(--lootbox-tone[^}]*mask:\s*url\('\/app\/assets\/lootbox\/degenerus-lootbox-case-v3\.webp'\)/s,
+      'the mini case uses the value-tier tone through the same case silhouette mask');
     assert.doesNotMatch(css, /\.rrt-action:hover:not\(:disabled\)[^}]*transform:\s*translateY\(-1px\)/s,
       'pending cards glow in place instead of clipping their top edge');
 
     pending.publishPendingActions('lootboxes', [{
-      id: 'lootbox:submitted:0xabc', kind: 'lootbox', label: 'Lootbox purchase',
+      id: 'lootbox:submitted:0xabc', kind: 'lootbox', label: 'Luckbox purchase',
       amountLabel: '0.04 ETH', lootboxValueTone: 'purple',
       lootboxTicketUnitsLabel: '4×', compact: true,
       detail: 'RNG ready · prizes locked', state: 'ready', pinned: true, write: true,
@@ -206,7 +237,7 @@ describe('<app-reveal-tray>', () => {
     }]);
     const ready = el.querySelector('.rrt-action--lootbox-summary');
     assert.equal(ready.disabled, false);
-    assert.match(ready.querySelector('.rrt-lootbox-summary').textContent, /0\.04 ETH.*LOOTBOX/);
+    assert.match(ready.querySelector('.rrt-lootbox-summary').textContent, /0\.04 ETH.*LUCKBOX/);
     assert.equal(ready.querySelector('.rrt-action__cta'), null,
       'the openable compact receipt has no redundant OPEN on the right');
     ready.dispatchEvent({ type: 'click' });
@@ -317,7 +348,7 @@ describe('<app-reveal-tray>', () => {
 
     let ran = 0;
     pending.publishPendingActions('box', [{
-      id: 'box:7', kind: 'lootbox', label: 'Lootbox #7', shortLabel: 'Open box',
+      id: 'box:7', kind: 'lootbox', label: 'Luckbox #7', shortLabel: 'Open box',
       detail: 'Prizes ready', state: 'ready',
       run: async () => {
         ran += 1;
@@ -824,6 +855,51 @@ describe('<app-reveal-tray>', () => {
     el.disconnectedCallback();
   });
 
+  test('a waiting lootbox says auto-open is armed and explains inert clicks', () => {
+    localStorage.setItem('degenerus:reveal-tray:auto-open:v1', '1');
+    pending.publishPendingActions('box', [{
+      id: 'box:syncing', kind: 'lootbox', compact: true,
+      label: 'Luckbox purchase', lootboxLabel: 'LOOTBOX PURCHASE',
+      amountLabel: '0.16 ETH', detail: 'Result syncing',
+      state: 'waiting', phase: 'indexing', pinned: true, autoOpen: true,
+      run: async () => {},
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    const action = el.querySelector('.rrt-action--lootbox-summary');
+    assert.equal(action.disabled, false, 'the status row can explain itself instead of eating clicks');
+    assert.match(action.className, /is-auto-armed/);
+    assert.equal(action.querySelector('.rrt-auto-armed').textContent, 'AUTO-OPEN WHEN READY');
+    assert.doesNotMatch(action.textContent, /purchase/i);
+    action.dispatchEvent({ type: 'click' });
+    assert.match(el.querySelector('[data-bind="rrt-error"]').textContent, /No click is needed/i);
+    el.disconnectedCallback();
+  });
+
+  test('one unresolved auto-open replay cannot block the next ready result', async () => {
+    localStorage.setItem('degenerus:reveal-tray:auto-open:v1', '1');
+    const runs = [];
+    pending.publishPendingActions('box', [
+      {
+        id: 'box:stale', kind: 'lootbox', compact: true, label: 'Luckbox',
+        state: 'ready', autoOpen: true, run: async () => { runs.push('stale'); return false; },
+      },
+      {
+        id: 'box:next', kind: 'lootbox', compact: true, label: 'Luckbox',
+        state: 'ready', autoOpen: true,
+        run: async () => { runs.push('next'); pending.clearPendingActions('box'); },
+      },
+    ]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+    for (let i = 0; i < 12; i += 1) await Promise.resolve();
+
+    assert.deepEqual(runs, ['stale', 'next'],
+      'a syncing receipt yields the automatic continuation lane immediately');
+    el.disconnectedCallback();
+  });
+
   test('Pending controls restore and persist the shared reveal speed', () => {
     localStorage.setItem(preferences.DEGENERETTE_PREFERENCES_KEY, JSON.stringify({
       version: 1, speed: 2.5, bets: { 1: '500' },
@@ -857,7 +933,7 @@ describe('<app-reveal-tray>', () => {
     localStorage.setItem('degenerus:reveal-tray:auto-open:v1', '1');
     drawGate.setMajorDrawActivity('jackpot-replay', true);
     pending.publishPendingActions('box', [{
-      id: 'box:88', kind: 'lootbox', label: 'Lootbox #88',
+      id: 'box:88', kind: 'lootbox', label: 'Luckbox #88',
       detail: 'Result ready', state: 'ready', autoOpen: true,
       run: async () => {
         ran += 1;
@@ -910,7 +986,7 @@ describe('<app-reveal-tray>', () => {
       detail: 'RNG ready', state: 'ready', phase: 'result-ready', run: async () => {},
     }]);
     pending.publishPendingActions('box', [{
-      id: 'lootbox:9', kind: 'lootbox', label: 'Lootbox #9',
+      id: 'lootbox:9', kind: 'lootbox', label: 'Luckbox #9',
       detail: 'Waiting for RNG · Day 71', state: 'waiting', pinned: true,
       progress: 'indeterminate',
     }]);
@@ -1089,11 +1165,11 @@ describe('<app-reveal-tray>', () => {
     };
     pending.publishPendingActions('box', [
       {
-        id: 'box:7', kind: 'lootbox', label: 'Lootbox #7', state: 'ready',
+        id: 'box:7', kind: 'lootbox', label: 'Luckbox #7', state: 'ready',
         run: async () => {}, clearAll,
       },
       {
-        id: 'box:8', kind: 'lootbox', label: 'Lootbox #8', state: 'ready',
+        id: 'box:8', kind: 'lootbox', label: 'Luckbox #8', state: 'ready',
         run: async () => {}, clearAll,
       },
     ]);
@@ -1109,7 +1185,7 @@ describe('<app-reveal-tray>', () => {
     assert.equal(pendingSurfaceVisible(el), false);
 
     pending.publishPendingActions('box', [{
-      id: 'box:7', kind: 'lootbox', label: 'Lootbox #7', detail: 'Now ready again',
+      id: 'box:7', kind: 'lootbox', label: 'Luckbox #7', detail: 'Now ready again',
       state: 'ready', run: async () => {},
     }]);
     assert.equal(pendingSurfaceVisible(el), false,
@@ -1117,11 +1193,11 @@ describe('<app-reveal-tray>', () => {
 
     pending.publishPendingActions('box', [
       {
-        id: 'box:7', kind: 'lootbox', label: 'Lootbox #7', detail: 'Now ready again',
+        id: 'box:7', kind: 'lootbox', label: 'Luckbox #7', detail: 'Now ready again',
         state: 'ready', run: async () => {},
       },
       {
-        id: 'box:9', kind: 'lootbox', label: 'Lootbox #9', detail: 'Genuinely new work',
+        id: 'box:9', kind: 'lootbox', label: 'Luckbox #9', detail: 'Genuinely new work',
         state: 'ready', run: async () => {},
       },
     ]);

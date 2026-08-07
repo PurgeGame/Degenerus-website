@@ -32,6 +32,7 @@ let _provider = null;
 export const GAS_ESTIMATE_HEADROOM_BPS = 12_000n;
 const RECEIPT_RECOVERY_POLL_MS = 300;
 const RECEIPT_RECOVERY_ATTEMPTS = 11;
+export const TX_CONFIRMED_EVENT = 'degenerus:tx-confirmed';
 
 export function gasEstimateWithHeadroom(estimate) {
   const gas = BigInt(estimate ?? 0);
@@ -248,6 +249,25 @@ export async function sendTx(buildTx, action, { onSubmitted } = {}) {
     }
   }
   if (Number(receipt?.status) === 0) throw new Error(`Reverted: ${tx.hash}`);
+  // Publish one app-wide mined-transaction signal from the write chokepoint.
+  // Balance widgets can now refresh after spends made from any protocol
+  // surface instead of knowing every component-specific confirmation event.
+  try {
+    if (typeof document !== 'undefined'
+      && typeof document.dispatchEvent === 'function'
+      && typeof CustomEvent === 'function') {
+      document.dispatchEvent(new CustomEvent(TX_CONFIRMED_EVENT, {
+        detail: {
+          action: String(action || 'Transaction'),
+          transactionHash: receipt?.hash || receipt?.transactionHash || tx?.hash || null,
+          blockNumber: receipt?.blockNumber ?? null,
+        },
+      }));
+    }
+  } catch (_error) {
+    // A presentation refresh can never turn a confirmed chain write into an
+    // apparent failure.
+  }
   return receipt;
 }
 

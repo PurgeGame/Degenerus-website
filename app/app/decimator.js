@@ -50,6 +50,26 @@ const DECIMATOR_BOON_CAP = 50_000n * 10n ** 18n;
 /** FLIP.sol DECIMATOR_MIN — FLIP is an unscaled 18-decimal token. */
 export const DECIMATOR_MIN_FLIP_WEI = 1_000n * 10n ** 18n;
 
+/**
+ * Whether the normal Decimator burn window is live.
+ *
+ * The indexed flags are preferred. The level rule is a safe positive fallback
+ * while the API crosses the x4/x99 transition; every write still performs the
+ * contract static call before sending.
+ */
+export function decimatorWindowIsOpen(gameState, position = null) {
+  if (gameState?.decWindowOpen === true
+    || gameState?.decimator?.windowOpen === true
+    || position?.windowOpen === true
+    || String(position?.roundStatus || '').toLowerCase() === 'open') {
+    return true;
+  }
+
+  const level = Number(gameState?.level);
+  if (!Number.isInteger(level) || level < 0) return false;
+  return (level % 10 === 4 && level % 100 !== 94) || level % 100 === 99;
+}
+
 let _contractFactory = null;
 let _contextReaderForTest = null;
 let _readProvider = null;

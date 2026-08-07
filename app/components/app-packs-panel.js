@@ -150,10 +150,10 @@ class AppPacksPanel extends HTMLElement {
 
         <!-- Lootbox quantity picker (D-01 step 2: default 1, max 10) -->
         <div class="lbx-quantity-picker" data-bind="lbx-lootboxes-picker">
-          <span class="lbx-quantity-picker__label">Lootboxes</span>
-          <button type="button" class="lbx-quantity-picker__btn" data-bind="lbx-lootboxes-minus" aria-label="Decrease lootboxes">-</button>
+          <span class="lbx-quantity-picker__label">Luckbox</span>
+          <button type="button" class="lbx-quantity-picker__btn" data-bind="lbx-lootboxes-minus" aria-label="Decrease Luckbox quantity">-</button>
           <span class="lbx-quantity-picker__display" data-bind="lbx-lootboxes-display">1</span>
-          <button type="button" class="lbx-quantity-picker__btn" data-bind="lbx-lootboxes-plus" aria-label="Increase lootboxes">+</button>
+          <button type="button" class="lbx-quantity-picker__btn" data-bind="lbx-lootboxes-plus" aria-label="Increase Luckbox quantity">+</button>
         </div>
 
         <!-- Buy CTA (D-01 step 3: disabled if both quantities 0; Plan 60-02 wires click) -->

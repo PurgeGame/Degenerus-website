@@ -241,7 +241,7 @@ describe('deity daily boons', () => {
     storeMod.__resetForTest();
   });
 
-  test('mirrors the viewer weighting deterministically, including conditional pools', () => {
+  test('mirrors the viewer static gift-slot weighting regardless of live product flags', () => {
     const base = {
       dailySeed: 123456789n,
       deity: CONNECTED,
@@ -249,12 +249,24 @@ describe('deity daily boons', () => {
     };
     assert.deepEqual(
       passesMod.deriveDeityBoonSlots({ ...base, decimatorOpen: true, deityPassAvailable: true }),
-      [4, 8, 17],
+      [5, 4, 8],
     );
     assert.deepEqual(
       passesMod.deriveDeityBoonSlots({ ...base, decimatorOpen: false, deityPassAvailable: false }),
       [5, 4, 8],
     );
+  });
+
+  test('matches the emitted day-20 slot that the old conditional UI mislabeled', () => {
+    const slots = passesMod.deriveDeityBoonSlots({
+      dailySeed: 11621158837047785902248431115065076657481296476413078720687728983663490809916n,
+      deity: '0x411087a5F752D3b5545E8301aD7e6cEf1351E480',
+      day: 20,
+      decimatorOpen: false,
+      deityPassAvailable: true,
+    });
+    assert.deepEqual(slots, [7, 17, 5]);
+    assert.equal(slots[0], 7, 'slot 0 is the emitted +5% ticket boon, not type 9 (+25%)');
   });
 
   test('returns the three slots with the authoritative used mask', async () => {
@@ -265,7 +277,7 @@ describe('deity daily boons', () => {
     assert.equal(state.day, 7);
     assert.equal(state.usedMask, 0b101);
     assert.equal(state.ready, true);
-    assert.deepEqual(state.slots, [4, 8, 17]);
+    assert.deepEqual(state.slots, [5, 4, 8]);
   });
 
   test('issues a slot for the acting deity only after a static call', async () => {
@@ -409,6 +421,25 @@ describe('AFKing seat entitlement and claim', () => {
     const state = await passesMod.readAfkingSubscription(CONNECTED);
     assert.equal(state.pendingFlipKnown, true);
     assert.equal(state.pendingFlipWhole, 275n);
+  });
+
+  test('decodes the current AFKing product and funding priority from packed lens flags', async () => {
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 1n },
+      game: {
+        subInfo: async () => [true, 3n, 8n, 12n],
+        afkingSnapshot: async () => [10n, false, [0n], [0n]],
+      },
+      lens: {
+        // bit 1 = claimable/game credit first; bit 2 = Tickets.
+        subInfoFull: async () => ({ flags: 6n, pendingFlip: 0n }),
+      },
+    }));
+
+    const state = await passesMod.readAfkingSubscription(CONNECTED);
+    assert.equal(state.settingsKnown, true);
+    assert.equal(state.drainGameCreditFirst, true);
+    assert.equal(state.useTickets, true);
   });
 });
 

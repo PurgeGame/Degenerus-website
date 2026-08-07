@@ -21,12 +21,26 @@ import * as storeMod from '../store.js';
 // `document.addEventListener('visibilitychange', ...)` registration sees the stub.
 // ---------------------------------------------------------------------------
 
+// A real (tiny) event target, not a no-op: polling.js now registers document
+// listeners for the boon refresh triggers, and a stubbed-out addEventListener
+// would silently make those untestable.
 if (typeof globalThis.document === 'undefined') {
+  const listeners = new Map();
   globalThis.document = {
     visibilityState: 'visible',
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: (type, fn) => {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(fn);
+    },
+    removeEventListener: (type, fn) => { listeners.get(type)?.delete(fn); },
+    dispatchEvent: (evt) => {
+      for (const fn of listeners.get(evt?.type) ?? []) fn(evt);
+      return true;
+    },
   };
+}
+if (typeof globalThis.CustomEvent === 'undefined') {
+  globalThis.CustomEvent = class { constructor(type, init) { this.type = type; this.detail = init?.detail; } };
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +76,10 @@ beforeEach(() => {
   };
   // Plan 59-02: clear store between tests so app.lastDay assertions are deterministic.
   storeMod.__resetForTest();
+  // Same reason, for the shed-load gate: any case that answers 429/503 arms a
+  // module-level cooldown that would otherwise fail every later test with
+  // "API cooling down" instead of exercising what they assert.
+  _testing.clearApiCooldown();
   _testing.resetGoldRushYieldReader();
   // Existing polling tests exercise the indexed soft-fallback unless a case
   // installs an exact packed-state reader explicitly.
@@ -78,11 +96,17 @@ afterEach(() => {
 // ===========================================================================
 
 describe('POLL_INTERVALS (D-04 LOCKED cadence)', () => {
-  test('cadence is 15s/30s/60s/15s', () => {
+  test('cadence is 15s/30s/60s', () => {
     assert.equal(POLL_INTERVALS.gameState, 15_000);
     assert.equal(POLL_INTERVALS.playerData, 30_000);
     assert.equal(POLL_INTERVALS.health, 60_000);
-    assert.equal(POLL_INTERVALS.lastDay, 15_000);
+  });
+
+  test('lastDay has NO interval — it is day-change driven, not timed', () => {
+    // A sealed day's jackpot record is permanent. Polling it re-sent ~13.4 KB of
+    // identical bytes every 15s (83% of all client transfer) for a value that
+    // changes once a day. publishGameState fires it on day change instead.
+    assert.equal(POLL_INTERVALS.lastDay, undefined);
   });
 });
 
@@ -90,8 +114,8 @@ describe('POLL_INTERVALS (D-04 LOCKED cadence)', () => {
 // start() registers 4 timers + fires eager cycle
 // ===========================================================================
 
-describe('start() registers 4 timers + fires eager first cycle', () => {
-  test('start() schedules 4 intervals + eager first cycle hits 3 endpoints (no playerAddress)', async () => {
+describe('start() registers 3 timers + fires eager first cycle', () => {
+  test('start() schedules 3 intervals + eager first cycle hits 3 endpoints (no playerAddress)', async () => {
     start();
     // Eager cycles fired synchronously; allow any microtasks + queued fetches to run.
     await new Promise((r) => setTimeout(r, 30));
@@ -105,7 +129,8 @@ describe('start() registers 4 timers + fires eager first cycle', () => {
     assert.ok(handles.game !== null, 'game interval registered');
     assert.ok(handles.player !== null, 'player interval registered');
     assert.ok(handles.health !== null, 'health interval registered');
-    assert.ok(handles.lastDay !== null, 'lastDay interval registered');
+    // lastDay is fetched eagerly above but carries no recurring timer.
+    assert.ok(!('lastDay' in handles), 'no lastDay timer slot');
   });
 
   test('start() with playerAddress also polls /player/:addr', async () => {
@@ -115,7 +140,7 @@ describe('start() registers 4 timers + fires eager first cycle', () => {
     assert.ok(paths.some((p) => p.endsWith('/player/0xabc')), 'player polled when addr supplied');
   });
 
-  test('stop() clears all 4 intervals', async () => {
+  test('stop() clears all 3 intervals', async () => {
     start();
     await new Promise((r) => setTimeout(r, 10));
     stop();
@@ -123,7 +148,6 @@ describe('start() registers 4 timers + fires eager first cycle', () => {
     assert.equal(handles.game, null, 'game cleared');
     assert.equal(handles.player, null, 'player cleared');
     assert.equal(handles.health, null, 'health cleared');
-    assert.equal(handles.lastDay, null, 'lastDay cleared');
   });
 
   test('subsequent start() re-registers fresh handles', async () => {
@@ -299,7 +323,6 @@ describe('visibilitychange handler (D-04 + Pitfall 3)', () => {
     assert.equal(handles.game, null, 'game timer cleared after hidden');
     assert.equal(handles.player, null, 'player timer cleared after hidden');
     assert.equal(handles.health, null, 'health timer cleared after hidden');
-    assert.equal(handles.lastDay, null, 'lastDay timer cleared after hidden');
     // Restore for later tests.
     globalThis.document.visibilityState = 'visible';
   });
@@ -336,8 +359,8 @@ describe('visibilitychange handler (D-04 + Pitfall 3)', () => {
     assert.ok(paths.some((p) => p.endsWith('/game/jackpot/last-day')), 'lastDay re-polled on visible');
   });
 
-  // CR-01 regression: visible → re-arm all 4 setIntervals after hidden cleared them.
-  test('visible after hidden re-arms all 4 setIntervals (CR-01 regression)', async () => {
+  // CR-01 regression: visible → re-arm all 3 setIntervals after hidden cleared them.
+  test('visible after hidden re-arms all 3 setIntervals (CR-01 regression)', async () => {
     start({ playerAddress: '0xabc' });
     await new Promise((r) => setTimeout(r, 10));
     globalThis.document.visibilityState = 'hidden';
@@ -346,7 +369,6 @@ describe('visibilitychange handler (D-04 + Pitfall 3)', () => {
     assert.equal(_testing.TIMER_HANDLES.game, null, 'precondition: game cleared on hidden');
     assert.equal(_testing.TIMER_HANDLES.player, null, 'precondition: player cleared on hidden');
     assert.equal(_testing.TIMER_HANDLES.health, null, 'precondition: health cleared on hidden');
-    assert.equal(_testing.TIMER_HANDLES.lastDay, null, 'precondition: lastDay cleared on hidden');
 
     globalThis.document.visibilityState = 'visible';
     handleVisibilityChange();
@@ -354,7 +376,6 @@ describe('visibilitychange handler (D-04 + Pitfall 3)', () => {
     assert.ok(_testing.TIMER_HANDLES.game !== null, 'game re-armed on visible');
     assert.ok(_testing.TIMER_HANDLES.player !== null, 'player re-armed on visible');
     assert.ok(_testing.TIMER_HANDLES.health !== null, 'health re-armed on visible');
-    assert.ok(_testing.TIMER_HANDLES.lastDay !== null, 'lastDay re-armed on visible');
   });
 
   // WR-01 regression: visible after hidden preserves the playerAddress captured at start().
@@ -538,6 +559,56 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
     assert.equal(refreshes, 4, 'a lower day after redeploy is also a real epoch change');
     assert.equal(storeMod.get('app.gameState').dailyRng.day, 10);
   });
+
+  // The guard behind removing the 15s lastDay interval. Asserting on fetch counts
+  // after a short wait would prove nothing — a re-added 15s timer would not have
+  // fired yet. Spying on setInterval registration is exact and time-independent.
+  test('start() registers no recurring timer that fetches last-day', async () => {
+    const realSetInterval = globalThis.setInterval;
+    const registered = [];
+    globalThis.setInterval = (fn, ms) => {
+      registered.push(ms);
+      return realSetInterval(fn, ms);
+    };
+    try {
+      start();
+      await new Promise((r) => setTimeout(r, 30));
+    } finally {
+      globalThis.setInterval = realSetInterval;
+    }
+
+    // Periods are jittered ±20%, so match each to its nominal by band rather
+    // than by equality. The three bands do not overlap.
+    const nominals = [POLL_INTERVALS.gameState, POLL_INTERVALS.playerData, POLL_INTERVALS.health]
+      .sort((a, b) => a - b);
+    const got = registered.sort((a, b) => a - b);
+    assert.equal(got.length, 3, `exactly three intervals — nothing for last-day; saw ${got}`);
+    for (let i = 0; i < 3; i += 1) {
+      assert.ok(
+        got[i] >= nominals[i] * 0.8 && got[i] <= nominals[i] * 1.2,
+        `interval ${got[i]} within ±20% of nominal ${nominals[i]}`,
+      );
+    }
+    assert.equal(
+      fetchCalls.filter((c) => c.url.endsWith('/game/jackpot/last-day')).length, 1,
+      'last-day still fetched once, eagerly, at start',
+    );
+  });
+
+  test('a steady sealed day never re-requests the jackpot payload', () => {
+    const STEADY = { dailyRng: { day: 200 } };
+    storeMod.update('app.lastDay', { day: 200 });
+    // publishGameState is what the game cycle calls every tick. On a steady day it
+    // must not invoke the refresh callback at all.
+    for (let i = 0; i < 5; i += 1) {
+      _testing.publishGameState(STEADY, () => { throw new Error('must not refresh'); });
+    }
+
+    // A real rollover still pulls it, through the same path.
+    let refreshed = 0;
+    _testing.publishGameState({ dailyRng: { day: 201 } }, () => { refreshed += 1; });
+    assert.equal(refreshed, 1, 'rollover still refreshes immediately');
+  });
 });
 
 // ===========================================================================
@@ -548,8 +619,141 @@ const CONNECTED = '0xc0ffee0000000000000000000000000000c0ff';
 const APPROVER_A = '0xaaaa000000000000000000000000000000a001';
 const APPROVER_B = '0xbbbb000000000000000000000000000000b002';
 
+describe('shed-load cooldown (429 / 503)', () => {
+  for (const status of [429, 503]) {
+    test(`${status} arms a cooldown that suppresses the next read without a network call`, async () => {
+      let calls = 0;
+      fetchImpl = async () => { calls += 1; return { ok: false, status, json: async () => ({}) }; };
+
+      await assert.rejects(() => _testing.fetchJSONWithSignal('/game/state', {}));
+      assert.equal(calls, 1, 'the shedding response was a real request');
+      assert.ok(_testing.cooldownUntil > Date.now(), 'cooldown armed');
+
+      // The point: the client stops knocking. Not "retries more politely" —
+      // makes no request at all until the window passes.
+      await assert.rejects(
+        () => _testing.fetchJSONWithSignal('/game/state', {}),
+        /cooling down/,
+      );
+      assert.equal(calls, 1, 'no second request while shedding');
+    });
+  }
+
+  test('a plain 500 is not treated as shed load', async () => {
+    fetchImpl = async () => ({ ok: false, status: 500, json: async () => ({}) });
+    await assert.rejects(() => _testing.fetchJSONWithSignal('/game/state', {}), /API 500/);
+    assert.equal(_testing.cooldownUntil, 0, '500 is a bug, not backpressure — keep polling');
+  });
+
+  test('Retry-After is honoured over the exponential default', async () => {
+    fetchImpl = async () => ({
+      ok: false,
+      status: 429,
+      headers: { get: (h) => (h === 'Retry-After' ? '30' : null) },
+      json: async () => ({}),
+    });
+    await assert.rejects(() => _testing.fetchJSONWithSignal('/game/state', {}));
+    const waitMs = _testing.cooldownUntil - Date.now();
+    // 30s ±20% jitter, versus the 2s first-step default it would otherwise pick.
+    assert.ok(waitMs > 20_000 && waitMs <= 36_000, `expected ~30s window, got ${waitMs}ms`);
+  });
+
+  test('a successful read clears the cooldown and resets the backoff step', async () => {
+    fetchImpl = async () => ({ ok: false, status: 503, json: async () => ({}) });
+    await assert.rejects(() => _testing.fetchJSONWithSignal('/game/state', {}));
+    assert.ok(_testing.cooldownUntil > Date.now());
+
+    _testing.clearApiCooldown();
+    fetchImpl = async (url, opts) => {
+      fetchCalls.push({ url, opts });
+      return { ok: true, status: 200, json: async () => ({ ok: 1 }) };
+    };
+    await _testing.fetchJSONWithSignal('/game/state', {});
+    assert.equal(_testing.cooldownUntil, 0, 'recovery clears the gate');
+  });
+
+  test('jitter keeps a cohort from returning in lockstep', () => {
+    const seen = new Set();
+    for (let i = 0; i < 40; i += 1) seen.add(_testing.jittered(15_000));
+    assert.ok(seen.size > 20, `expected spread across clients, saw ${seen.size} distinct periods`);
+    for (const ms of seen) {
+      assert.ok(ms >= 12_000 && ms <= 18_000, `${ms} inside ±20% of 15s`);
+    }
+  });
+});
+
+describe('boons + approvers are event-driven, not timed', () => {
+  test('the recurring player cycle fetches neither approvers nor boons', async () => {
+    storeMod.update('connected.address', CONNECTED);
+    start({ playerAddress: '0xviewed' });
+    await new Promise((r) => setTimeout(r, 30));
+
+    // Everything above is the eager start(). What matters is the RECURRING tick.
+    fetchCalls = [];
+    await _testing.runPlayerCycle();
+    await new Promise((r) => setTimeout(r, 20));
+
+    const paths = fetchCalls.map((c) => c.url);
+    assert.ok(paths.some((p) => p.endsWith('/player/0xviewed')), 'still polls player position');
+    assert.ok(!paths.some((p) => p.includes('/approvers')), 'approvers left the timer');
+    assert.ok(!paths.some((p) => p.includes('/boons/')), 'boons left the timer');
+  });
+
+  // /game/state carries the day as dailyRng.day — there is no currentDay field.
+  const withDay = (day) => async (url, opts) => {
+    fetchCalls.push({ url, opts });
+    const body = url.endsWith('/game/state') ? { dailyRng: { day } } : { url };
+    return { ok: true, status: 200, json: async () => body };
+  };
+
+  test('a buy surface opening refreshes boons, and simultaneous markers coalesce', async () => {
+    fetchImpl = withDay(58);
+    start({ playerAddress: '0xviewed' });
+    await new Promise((r) => setTimeout(r, 30));
+    fetchCalls = [];
+
+    // Several <boon-product-indicator> elements mount together on one surface.
+    for (let i = 0; i < 4; i += 1) {
+      globalThis.document.dispatchEvent(new globalThis.CustomEvent('degenerus:boon-surface-open'));
+    }
+    await new Promise((r) => setTimeout(r, 30));
+
+    const boonHits = fetchCalls.filter((c) => c.url.includes('/boons/')).length;
+    assert.equal(boonHits, 1, 'four markers, one request');
+  });
+
+  // Regression: pollCurrentBoons read `state.currentDay`, a field /game/state has
+  // never returned. The day was always NaN, so it returned an empty boon list
+  // without ever calling the indexed route or the packed chain read — the boon
+  // indicator could not light up in production. The day lives at dailyRng.day.
+  test('resolves the day from dailyRng.day, not a currentDay field that does not exist', async () => {
+    fetchImpl = withDay(58);
+    const result = await _testing.pollCurrentBoons('0xViewed', undefined);
+    assert.equal(result.day, 58, 'day resolved from dailyRng.day');
+    assert.ok(
+      fetchCalls.some((c) => c.url.endsWith('/player/0xviewed/boons/58')),
+      `expected the indexed boons route to be reached; saw ${JSON.stringify(fetchCalls.map((c) => c.url))}`,
+    );
+  });
+
+  test("the player's own confirmed transaction refreshes boons", async () => {
+    fetchImpl = withDay(58);
+    start({ playerAddress: '0xviewed' });
+    await new Promise((r) => setTimeout(r, 30));
+    fetchCalls = [];
+
+    globalThis.document.dispatchEvent(new globalThis.CustomEvent('degenerus:tx-confirmed'));
+    await new Promise((r) => setTimeout(r, 30));
+
+    assert.ok(
+      fetchCalls.some((c) => c.url.includes('/boons/')),
+      'a confirmed write re-reads boons — it may have consumed one',
+    );
+  });
+});
+
 describe('approvers fetch + approvals.list (account-switcher)', () => {
-  test('connected wallet triggers /player/:connected/approvers in the same player cycle', async () => {
+  test('connected wallet triggers /player/:connected/approvers on start', async () => {
     storeMod.update('connected.address', CONNECTED);
     start({ playerAddress: '0xviewed' });
     await new Promise((r) => setTimeout(r, 30));

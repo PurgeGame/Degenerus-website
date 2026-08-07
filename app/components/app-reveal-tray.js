@@ -61,6 +61,7 @@ const REVEAL_KINDS = new Set([
 const ERROR_AUTO_CLEAR_MS = 10_000;
 const CLEAR_ALL_BUSY_ID = 'reveal-tray:clear-all';
 const AUTO_OPEN_STORAGE_KEY = 'degenerus:reveal-tray:auto-open:v1';
+const AUTO_OPEN_RETRY_MS = 7_000;
 const RNG_PHASES = new Set([
   'awaitingRng',
   'request-ready',
@@ -355,8 +356,43 @@ function _rngPresentation(item, localBusy = false) {
   };
 }
 
+/** Compact large fungible-token figures only; ETH and ticket quantities keep
+ * their exact display because small decimal precision is meaningful there. */
+export function abbreviatePendingTokenAmounts(value) {
+  return String(value ?? '').replace(
+    /([+-]?[\d,]+(?:\.\d+)?)\s*(FLIP|DGNRS|WWXRP)\b/gi,
+    (match, numericText, unit) => {
+      const numeric = Number(String(numericText).replace(/,/g, ''));
+      if (!Number.isFinite(numeric) || Math.abs(numeric) < 1_000) return match;
+      const magnitude = Math.abs(numeric);
+      const [divisor, suffix] = magnitude >= 1e12
+        ? [1e12, 't']
+        : magnitude >= 1e9
+          ? [1e9, 'b']
+          : magnitude >= 1e6
+            ? [1e6, 'm']
+            : [1e3, 'k'];
+      const scaled = numeric / divisor;
+      const decimals = Math.abs(scaled) >= 100 ? 0 : Math.abs(scaled) >= 10 ? 1 : 2;
+      const compact = scaled.toFixed(decimals).replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1');
+      return `${compact}${suffix} ${String(unit).toUpperCase()}`;
+    },
+  );
+}
+
+function _luckboxUiText(value) {
+  return String(value ?? '').replace(/\bloot[\s-]?box(?:es)?\b/gi, (match) => {
+    const replacement = 'luckbox';
+    if (match === match.toUpperCase()) return replacement.toUpperCase();
+    if (match[0] === match[0].toUpperCase()) {
+      return replacement[0].toUpperCase() + replacement.slice(1);
+    }
+    return replacement;
+  });
+}
+
 function _compactActionLabel(item) {
-  const label = String(item?.label || _kindLabel(item?.kind)).trim();
+  const label = _luckboxUiText(item?.label || _kindLabel(item?.kind)).trim();
   if (item?.kind === 'tickets') {
     const meta = _ticketPackMeta(item);
     if (meta.level != null && meta.count != null) {
@@ -382,16 +418,16 @@ function _compactActionLabel(item) {
   if (item?.kind === 'bingo') {
     return label.replace(/^level\s+\d+\s+/i, '').toUpperCase();
   }
-  return label.toUpperCase();
+  return abbreviatePendingTokenAmounts(label.toUpperCase());
 }
 
 export function degenerettePendingSummary(item) {
-  const amount = String(item?.amountLabel || '').trim();
+  const amount = abbreviatePendingTokenAmounts(String(item?.amountLabel || '').trim());
   const spins = Math.max(1, Math.floor(Number(item?.spinCount) || 1));
   return {
     amount,
     spins,
-    text: `${amount ? `${amount} · ` : ''}lootbox ×${spins} ${spins === 1 ? 'spin' : 'spins'}`,
+    text: `${amount ? `${amount} · ` : ''}luckbox ×${spins} ${spins === 1 ? 'spin' : 'spins'}`,
   };
 }
 
@@ -414,8 +450,15 @@ function _appendDegenerettePendingLabel(label, item) {
 }
 
 export function lootboxPendingSummary(item) {
-  const amount = String(item?.amountLabel || '').trim();
-  const unit = String(item?.lootboxLabel || 'LOOTBOX').trim().toUpperCase();
+  const amount = abbreviatePendingTokenAmounts(String(item?.amountLabel || '').trim());
+  // Old locally-persisted rows may still carry "LOOTBOX PURCHASE". Pending is
+  // a receipt, not a transaction-history sentence, so normalize every source
+  // to the same terse noun.
+  const unit = _luckboxUiText(item?.lootboxLabel || 'LUCKBOX')
+    .replace(/\bPURCHASE\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase() || 'LUCKBOX';
   return { amount, unit, text: `${amount ? `${amount} · ` : ''}${unit.toLowerCase()}` };
 }
 
@@ -536,6 +579,9 @@ function _appendTicketActionLabel(label, meta, { passive = false } = {}) {
 export function actionableRevealItems(items) {
   return (Array.isArray(items) ? items : []).filter((item) => (
     REVEAL_KINDS.has(String(item?.kind || ''))
+    // Decimator owns the main jackpot control while due; do not duplicate the
+    // same action in the compact Pending tray.
+    && item?.primarySurface !== 'jackpot'
     && (
       item?.state === 'ready'
       || item?.state === 'busy'
@@ -545,7 +591,7 @@ export function actionableRevealItems(items) {
 }
 
 function _kindLabel(kind) {
-  if (kind === 'lootbox') return 'LOOTBOX';
+  if (kind === 'lootbox') return 'LUCKBOX';
   if (kind === 'degenerette') return 'DEGENERETTE';
   if (kind === 'growth-claim') return 'GROWTH BET';
   if (kind === 'volume-claim') return 'VOLUME BET';
@@ -568,6 +614,7 @@ class AppRevealTray extends HTMLElement {
   #errorTimer = null;
   #autoOpen = false;
   #autoAttempted = new Set();
+  #autoRetryTimers = new Map();
   #autoScheduledId = null;
   #popupGateUnsubscribe = null;
   #expandedPendingId = null;
@@ -605,6 +652,7 @@ class AppRevealTray extends HTMLElement {
       autoOpen.addEventListener('change', () => {
         this.#autoOpen = Boolean(autoOpen.checked);
         _writeAutoOpenPreference(this.#autoOpen);
+        if (!this.#autoOpen) this.#clearAutoRetryTimers();
         this.#maybeAutoOpen();
       });
     }
@@ -681,6 +729,7 @@ class AppRevealTray extends HTMLElement {
     }
     this.#hiddenFingerprint = null;
     this.#autoScheduledId = null;
+    this.#clearAutoRetryTimers();
     this.#expandedPendingId = null;
     this.#rngItem = null;
     this.#cancelRngMonitor();
@@ -956,7 +1005,7 @@ class AppRevealTray extends HTMLElement {
   }
 
   async #run(item) {
-    if (this.#busyId != null || item?.state !== 'ready' || typeof item.run !== 'function') return;
+    if (this.#busyId != null || item?.state !== 'ready' || typeof item.run !== 'function') return false;
     const isRngRequest = String(item?.phase || '') === 'request-ready';
     if (isRngRequest) {
       this.#rngRequestFlashActive = false;
@@ -970,8 +1019,7 @@ class AppRevealTray extends HTMLElement {
     this.#render();
     let completed = false;
     try {
-      await item.run();
-      completed = true;
+      completed = await item.run() !== false;
     } catch (error) {
       if (isRngRequest) {
         // A shared request commonly loses a same-block race after another
@@ -993,6 +1041,25 @@ class AppRevealTray extends HTMLElement {
       this.#render();
       this.#maybeAutoOpen();
     }
+    return completed;
+  }
+
+  #clearAutoRetryTimers() {
+    for (const timer of this.#autoRetryTimers.values()) {
+      try { clearTimeout(timer); } catch (_e) { /* defensive */ }
+    }
+    this.#autoRetryTimers.clear();
+  }
+
+  #scheduleAutoRetry(id) {
+    if (!id || this.#autoRetryTimers.has(id)) return;
+    const timer = setTimeout(() => {
+      this.#autoRetryTimers.delete(id);
+      this.#autoAttempted.delete(id);
+      this.#maybeAutoOpen();
+    }, AUTO_OPEN_RETRY_MS);
+    if (timer && typeof timer.unref === 'function') timer.unref();
+    this.#autoRetryTimers.set(id, timer);
   }
 
   #maybeAutoOpen() {
@@ -1014,7 +1081,9 @@ class AppRevealTray extends HTMLElement {
       const current = this.#items.find((candidate) => candidate.id === id);
       if (!canAutoOpenReveal(current) || this.#autoAttempted.has(id)) return;
       this.#autoAttempted.add(id);
-      void this.#run(current);
+      void this.#run(current).then((completed) => {
+        if (!completed && this.#initialized && this.#autoOpen) this.#scheduleAutoRetry(id);
+      });
     });
   }
 
@@ -1199,6 +1268,8 @@ class AppRevealTray extends HTMLElement {
       const compactDegenerette = item.kind === 'degenerette';
       const compact = item.compact === true || compactDegenerette;
       const compactLootbox = item.kind === 'lootbox' && item.compact === true;
+      const autoArmed = compactLootbox && this.#autoOpen && item.autoOpen === true && !busy;
+      const waitingFeedback = compactLootbox && waiting && !busy;
       const passive = item.passive === true;
       const ticketOpenReady = item.kind === 'tickets'
         && item.state === 'ready'
@@ -1221,6 +1292,8 @@ class AppRevealTray extends HTMLElement {
         resultReady ? 'is-result-ready' : '',
         compact ? 'rrt-action--compact' : '',
         compactLootbox ? 'rrt-action--lootbox-summary' : '',
+        autoArmed ? 'is-auto-armed' : '',
+        waitingFeedback ? 'is-status-clickable' : '',
         ticketOpenReady ? 'rrt-action--ticket-ready' : '',
         passive ? 'rrt-action--passive' : '',
         passive && item.kind === 'tickets' ? 'rrt-action--pack-pending' : '',
@@ -1229,7 +1302,7 @@ class AppRevealTray extends HTMLElement {
       const rngButtonOwnsRequest = item.kind === 'degenerette' && item.phase === 'request-ready';
       const domainLocked = busy || waiting || clearingAll
         || rngButtonOwnsRequest || typeof item.run !== 'function';
-      button.disabled = canInspectPending ? false : domainLocked;
+      button.disabled = canInspectPending ? false : domainLocked && !waitingFeedback;
       if (passive && !canInspectPending) {
         button.setAttribute('role', 'status');
         button.setAttribute('aria-disabled', 'true');
@@ -1237,7 +1310,7 @@ class AppRevealTray extends HTMLElement {
         button.setAttribute('aria-controls', 'rrt-pending-details');
         button.setAttribute('aria-expanded', String(this.#expandedPendingId === item.id));
       }
-      if (item.write === true) {
+      if (item.write === true && !waitingFeedback) {
         button.setAttribute('data-write', '');
         if (domainLocked) {
           button.setAttribute('data-write-locked', '');
@@ -1262,9 +1335,11 @@ class AppRevealTray extends HTMLElement {
             ? degenerettePendingSummary(item).text
             : compactLootbox
               ? lootboxPendingSummary(item).text
-            : String(item.label || item.shortLabel || 'Open')
-        : `${actionVerb}: ${item.label}${item.detail ? `. ${item.detail}` : ''}`);
-      button.title = `${item.label}${item.detail ? ` · ${item.detail}` : ''}`
+            : _luckboxUiText(item.label || item.shortLabel || 'Open')
+        : _luckboxUiText(`${actionVerb}: ${item.label}${item.detail ? `. ${item.detail}` : ''}`));
+      button.title = `${compactLootbox
+        ? lootboxPendingSummary(item).text
+        : _luckboxUiText(`${item.label}${item.detail ? ` · ${item.detail}` : ''}`)}`
         + (item.lootboxTicketUnitsLabel ? ` · ${item.lootboxTicketUnitsLabel} ticket price` : '');
 
       const art = document.createElement('span');
@@ -1413,10 +1488,10 @@ class AppRevealTray extends HTMLElement {
         pack.appendChild(quantity);
         art.appendChild(pack);
       } else if (compactLootbox) {
-        const box = document.createElement('img');
+        const box = document.createElement('span');
         box.className = 'rrt-lootbox-mini';
-        box.src = '/app/assets/lootbox/degenerus-lootbox-case-v3.webp';
-        box.alt = '';
+        box.setAttribute('data-lootbox-value-tone', item.lootboxValueTone || 'unknown');
+        box.setAttribute('aria-hidden', 'true');
         art.appendChild(box);
       } else if (item.icon) {
         const logo = document.createElement('img');
@@ -1458,13 +1533,19 @@ class AppRevealTray extends HTMLElement {
       } else {
         const kind = document.createElement('span');
         kind.className = 'rrt-action__kind';
-        kind.textContent = item.kindLabel || _kindLabel(item.kind);
+        kind.textContent = _luckboxUiText(item.kindLabel || _kindLabel(item.kind));
         const detail = document.createElement('span');
         detail.className = 'rrt-action__detail';
-        detail.textContent = item.detail;
+        detail.textContent = abbreviatePendingTokenAmounts(_luckboxUiText(item.detail));
         copy.appendChild(kind);
         copy.appendChild(label);
         copy.appendChild(detail);
+      }
+      if (autoArmed) {
+        const cue = document.createElement('span');
+        cue.className = 'rrt-auto-armed';
+        cue.textContent = item.state === 'ready' ? 'AUTO-OPEN ARMED' : 'AUTO-OPEN WHEN READY';
+        copy.appendChild(cue);
       }
       const ownsRngLane = pendingRngItem != null
         && item.id === pendingRngItem.id
@@ -1488,7 +1569,17 @@ class AppRevealTray extends HTMLElement {
       if (!passive || item.kind === 'tickets') button.appendChild(art);
       button.appendChild(copy);
       if (!compact && !passive && !ticketOpenReady) button.appendChild(cta);
-      if (!passive && !button.disabled) button.addEventListener('click', () => this.#run(item));
+      if (waitingFeedback) {
+        button.addEventListener('click', () => this.#showError(
+          autoArmed
+            ? 'Auto-open is armed. No click is needed.'
+            : item.phase === 'submitting'
+              ? 'Transaction is still confirming. No click is needed yet.'
+              : 'Waiting for RNG. This will light up when it needs you.',
+        ));
+      } else if (!passive && !button.disabled) {
+        button.addEventListener('click', () => this.#run(item));
+      }
       if (canInspectPending) {
         button.addEventListener('click', () => {
           this.#expandedPendingId = this.#expandedPendingId === item.id ? null : item.id;

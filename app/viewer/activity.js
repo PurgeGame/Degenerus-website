@@ -28,10 +28,10 @@ export function render(activity, container) {
     panel.appendChild(empty);
   } else {
     // --- a) Lootbox Purchases section ---
-    panel.appendChild(makeSectionTitle('Lootbox Purchases'));
+    panel.appendChild(makeSectionTitle('Luckbox Purchases'));
 
     if (activity.lootboxPurchases.length === 0) {
-      panel.appendChild(makeDimText('No lootbox activity at this level'));
+      panel.appendChild(makeDimText('No luckbox activity at this level'));
     } else {
       // Build a Map from lootboxResults keyed by lootboxIndex for correlation
       const resultsByIndex = new Map();
@@ -45,7 +45,7 @@ export function render(activity, container) {
 
         const labelEl = document.createElement('span');
         labelEl.className = 'info-label';
-        labelEl.textContent = `Lootbox #${purchase.lootboxIndex ?? '?'}`;
+        labelEl.textContent = `Luckbox #${purchase.lootboxIndex ?? '?'}`;
 
         const valueEl = document.createElement('span');
         valueEl.className = 'info-value';

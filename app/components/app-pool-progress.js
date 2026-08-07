@@ -45,6 +45,22 @@ function _position(value, scale) {
   return _clampPercent(Number((value * 10_000n) / scale) / 100);
 }
 
+function _historicalPools(history, currentLevel) {
+  const limit = Number(currentLevel);
+  const hasLimit = Number.isInteger(limit) && limit > 0;
+  const byLevel = new Map();
+  for (const row of Array.isArray(history) ? history : []) {
+    const level = Number(row?.level);
+    const poolWei = _wei(row?.poolWei ?? row?.value ?? row?.pool);
+    if (!Number.isInteger(level) || level < 1 || (hasLimit && level >= limit)) continue;
+    if (poolWei == null || poolWei <= 0n) continue;
+    byLevel.set(level, poolWei);
+  }
+  return [...byLevel.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([level, poolWei]) => ({ level, poolWei }));
+}
+
 /** Level 1 has no prior pool to ratchet from; the contract bootstraps it at 50 ETH. */
 export function prizePoolTargetForLevel(level, targetWei) {
   if (Number(level) === 1) return LEVEL_ONE_TARGET_WEI;
@@ -69,11 +85,23 @@ export function growthLinePercent(ratchets) {
 }
 
 /** Pure purchase-phase layout model shared with the component tests. */
-export function poolProgressModel({ nextWei, targetWei, ratchets } = {}) {
+export function poolProgressModel({
+  nextWei,
+  targetWei,
+  ratchets,
+  history,
+  currentLevel,
+} = {}) {
   const next = _wei(nextWei);
   const target = _wei(targetWei);
   const growthTarget = growthOverTargetWei(ratchets);
-  const values = [next, target, growthTarget].filter((value) => value != null && value > 0n);
+  const historicalPools = _historicalPools(history, currentLevel);
+  const values = [
+    next,
+    target,
+    growthTarget,
+    ...historicalPools.map((row) => row.poolWei),
+  ].filter((value) => value != null && value > 0n);
   const high = values.reduce((max, value) => value > max ? value : max, 1n);
   const scale = (high * SCALE_HEADROOM_BPS + 9_999n) / 10_000n;
   const levelReady = next != null && target != null && target > 0n && next > target;
@@ -99,6 +127,12 @@ export function poolProgressModel({ nextWei, targetWei, ratchets } = {}) {
     growthPercent: _position(growthTarget, scale),
     levelReady,
     growthOver,
+    historyMarkers: levelReady
+      ? historicalPools.map((row) => ({
+        ...row,
+        position: _position(row.poolWei, scale),
+      }))
+      : [],
     levelPercent: levelBps == null ? null : levelBps / 10,
     referenceKind: levelReady ? 'CURRENT' : 'GUARANTEE',
     referenceWei,
@@ -409,6 +443,8 @@ class AppPoolProgress extends HTMLElement {
                role="progressbar" aria-label="Level prize pool progress"
                aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <span class="pool-progress__fill" data-el="pool-fill"></span>
+            <span class="pool-progress__history" data-el="pool-history-markers"
+                  aria-label="Prior level final prize pools"></span>
             <span class="pool-progress__marker pool-progress__marker--target"
                   data-el="pool-target-marker" title="Level guarantee" tabindex="0"></span>
             <span class="pool-progress__marker pool-progress__marker--growth"
@@ -501,6 +537,28 @@ class AppPoolProgress extends HTMLElement {
     marker.setAttribute('aria-label', title);
   }
 
+  #renderHistoryMarkers(markers) {
+    const host = this.querySelector('[data-el="pool-history-markers"]');
+    if (!host) return;
+    host.textContent = '';
+    const rows = Array.isArray(markers)
+      ? markers.filter((row) => row?.position != null)
+      : [];
+    host.hidden = rows.length === 0;
+    host.setAttribute('aria-hidden', rows.length === 0 ? 'true' : 'false');
+    for (const row of rows) {
+      const marker = document.createElement('span');
+      marker.className = 'pool-progress__marker pool-progress__marker--history';
+      marker.dataset.level = String(row.level);
+      marker.style.left = `${row.position}%`;
+      const label = `Level ${row.level} final prize pool · ${_formatMarkerEth(row.poolWei)} ETH`;
+      marker.title = label;
+      marker.tabIndex = 0;
+      marker.setAttribute('aria-label', label);
+      host.appendChild(marker);
+    }
+  }
+
   #render() {
     const gameState = get('app.gameState');
     const goldRush = get('app.goldRush');
@@ -511,6 +569,7 @@ class AppPoolProgress extends HTMLElement {
       || (Number.isInteger(benchmarkLevel) && benchmarkLevel === stateLevel);
     const benchmarkTargetWei = sameLevel ? benchmarks?.targetWei : null;
     const ratchets = sameLevel ? benchmarks?.ratchets : null;
+    const history = sameLevel ? benchmarks?.history : null;
     const contractPhase = sameLevel ? benchmarks?.contractPhase : null;
     const phase = phaseStripModel({
       gameState,
@@ -556,6 +615,7 @@ class AppPoolProgress extends HTMLElement {
     shell?.setAttribute('data-mode', phase.jackpot ? 'jackpot' : 'purchase');
 
     if (phase.jackpot) {
+      this.#renderHistoryMarkers([]);
       if (head) head.hidden = true;
       if (body) body.hidden = true;
       if (jackpotSummary) jackpotSummary.hidden = false;
@@ -612,7 +672,13 @@ class AppPoolProgress extends HTMLElement {
     const nextWei = goldRush?.components?.nextWei
       ?? gameState?.prizePools?.nextPrizePool
       ?? null;
-    const model = poolProgressModel({ nextWei, targetWei, ratchets });
+    const model = poolProgressModel({
+      nextWei,
+      targetWei,
+      ratchets,
+      history,
+      currentLevel: phase.level,
+    });
     const referenceKind = this.#set('pool-reference-kind', model.levelReady ? '' : 'GUARANTEE');
     if (referenceKind) referenceKind.hidden = model.levelReady;
     this.#set('pool-target-inline', _formatWholeEth(model.referenceWei));
@@ -633,6 +699,7 @@ class AppPoolProgress extends HTMLElement {
       model.growthTarget == null
         ? `${levelLabel} growth O/U`
         : `${levelLabel} growth O/U · ${_formatMarkerEth(model.growthTarget)} ETH prize pool (${_formatGrowth(model.growthLinePercent)} line)`);
+    this.#renderHistoryMarkers(model.historyMarkers);
     const referenceLabel = this.querySelector('[data-el="pool-reference-label"]');
     if (referenceLabel) {
       referenceLabel.hidden = model.referencePercent == null;

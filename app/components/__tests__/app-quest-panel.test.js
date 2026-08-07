@@ -450,6 +450,34 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     );
   });
 
+  test('quest action sheets have themed completion hierarchy and motion-safe polish', () => {
+    assert.match(
+      PANEL_SRC,
+      /qst-action-dialog__sigil[\s\S]*?data-bind="qst-action-icon"[\s\S]*?qst-action-dialog__reward[\s\S]*?data-bind="qst-action-state"/,
+      'the popup header owns a quest sigil, its reward, and an explicit completion state',
+    );
+    assert.match(
+      PANEL_SRC,
+      /setAttribute\?\.\('data-variant', variant\)[\s\S]*?setAttribute\?\.\('data-state', actionState\)/,
+      'the live quest model themes the popup and reports whether the preset completes it',
+    );
+    assert.match(
+      APP_CSS,
+      /qst-action-dialog__card\[data-variant="secondary"\][\s\S]*?qst-action-dialog__card\[data-variant="level"\]/,
+      'Daily, Bonus, and Level sheets have distinct color identities',
+    );
+    assert.match(
+      APP_CSS,
+      /@keyframes qst-action-card-in[\s\S]*?@keyframes qst-action-sigil-in/,
+      'the sheet and quest sigil receive a short entrance moment',
+    );
+    assert.match(
+      APP_CSS,
+      /prefers-reduced-motion:\s*reduce[\s\S]*?qst-action-dialog__backdrop,[\s\S]*?qst-action-dialog__sigil\s*\{[^}]*animation:\s*none !important/s,
+      'the new entrance treatment respects reduced-motion preferences',
+    );
+  });
+
   test('On mount, panel calls fetchJSON for /player/:address with the connected address', async () => {
     const el = instantiate();
     await settle(40);
@@ -484,8 +512,8 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     const slots = el.querySelectorAll('.qst-slot');
     assert.equal(slots.length, 3,
       'two current daily definitions plus the stable level placeholder render');
-    assert.match(slots[0].textContent, /Buy tickets or lootboxes/);
-    assert.match(slots[1].textContent, /Lootbox/);
+    assert.match(slots[0].textContent, /Buy Tickets or Luckbox/);
+    assert.match(slots[1].textContent, /Luckbox/);
     assert.doesNotMatch(el.textContent, /Could not load quests/);
     el.disconnectedCallback();
   });
@@ -513,7 +541,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(roles[1]?.textContent, 'BONUS', 'secondary slot uses compact BONUS role chip');
     assert.equal(roles[2]?.textContent, 'LEVEL', 'level quest has its own role chip');
     assert.equal(el.querySelectorAll('.qst-slot-icon').length, 3, 'each quest has a game-style icon tile');
-    assert.match(slot0Text, /Buy tickets or lootboxes/, 'purchase quests use plural player-facing copy');
+    assert.match(slot0Text, /Buy Tickets or Luckbox/, 'purchase quest uses the branded, capitalized player-facing copy');
 
     assert.equal(slots[1].classList.contains('qst-slot--gated'), true,
       'bonus quest is muted until the main quest is complete');
@@ -561,15 +589,22 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.deepEqual(events, [], 'opening the bubble does not configure or submit anything');
     const dialog = el.querySelector('[data-bind="qst-action-dialog"]');
     assert.equal(dialog.hidden, false);
+    const card = el.querySelector('.qst-action-dialog__card');
+    assert.equal(card.getAttribute('data-variant'), 'level');
+    assert.equal(card.getAttribute('data-state'), 'ready');
+    assert.equal(el.querySelector('[data-bind="qst-action-icon"]').textContent, '◆');
+    assert.equal(el.querySelector('[data-bind="qst-action-reward"]').textContent, '800 FLIP');
+    assert.equal(el.querySelector('[data-bind="qst-action-reward-extra"]').textContent, '+5 STREAK');
+    assert.equal(el.querySelector('[data-bind="qst-action-state"]').textContent, 'COMPLETES QUEST');
     assert.equal(
       el.querySelector('[data-bind="qst-action-requirement"]').textContent,
-      'BUY LOOTBOX · 1.2 ETH',
+      'BUY LUCKBOX · 1.2 ETH',
       'the popup subtracts existing progress and presents only the remaining minimum',
     );
     assert.equal(el.querySelector('[data-bind="qst-action-adjust"]').hidden, true,
       'one-click quest presets do not repeat the destination form controls');
     assert.equal(el.querySelector('[data-bind="qst-action-copy"]').textContent,
-      'Buy a 1.2 ETH lootbox.');
+      'Buy a 1.2 ETH luckbox.');
     assert.equal(el.querySelector('[data-bind="qst-action-confirm"]').textContent, 'CONFIRM');
 
     el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
@@ -645,7 +680,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(confirm.disabled, false);
     assert.equal(
       el.querySelector('[data-bind="qst-action-copy"]').textContent,
-      'Buy a 0.02 ETH lootbox.',
+      'Buy a 0.02 ETH luckbox.',
     );
     assert.doesNotMatch(confirm.textContent, /DAILY QUEST FIRST/);
 
@@ -706,10 +741,10 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(ticket.getAttribute('aria-pressed'), 'false');
     assert.equal(
       el.querySelector('[data-bind="qst-action-requirement"]').textContent,
-      'BUY LOOTBOX · 0.04 ETH',
+      'BUY LUCKBOX · 0.04 ETH',
     );
     assert.match(el.querySelector('[data-bind="qst-action-confirm"]').textContent,
-      /CONFIRM · BUY LOOTBOX · 0\.04 ETH/);
+      /CONFIRM · BUY LUCKBOX · 0\.04 ETH/);
 
     el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
     assert.deepEqual(events, [{
@@ -743,7 +778,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     await settle(40);
 
     const level = el.querySelectorAll('.qst-slot')[2];
-    assert.match(level.textContent, /Buy tickets or lootboxes/);
+    assert.match(level.textContent, /Buy Tickets or Luckbox/);
     level.dispatchEvent({ type: 'click' });
     const choice = el.querySelector('[data-bind="qst-action-choice"]');
     const lootbox = el.querySelector('[data-bind="qst-action-lootbox"]');
@@ -752,7 +787,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(lootbox.getAttribute('aria-pressed'), 'true');
     assert.equal(
       el.querySelector('[data-bind="qst-action-requirement"]').textContent,
-      'BUY LOOTBOX · 1.6 ETH',
+      'BUY LUCKBOX · 1.6 ETH',
     );
     el.querySelector('[data-bind="qst-action-confirm"]').dispatchEvent({ type: 'click' });
     assert.deepEqual(events, [{
@@ -1014,6 +1049,19 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     );
     assert.match(levelSlot.getAttribute('aria-label') || '', /Deity pass recognized/);
     assert.match(levelSlot.getAttribute('aria-label') || '', /four active-level ticket entries/);
+    const levelReward = levelSlot.querySelector('.qst-slot-reward');
+    assert.equal(levelReward?.getAttribute('title'), 'Reward: 800 FLIP +5 quest streak');
+    assert.doesNotMatch(levelReward?.getAttribute('title') || '', /pass|afKing|prerequisite/i,
+      'level-quest mouseover contains reward information only');
+    assert.equal(
+      levelSlot.getAttribute('title'),
+      'Coinflip: 8,000 FLIP / 20,000 FLIP. Reward: 800 FLIP +5 quest streak',
+      'the level-card mouseover stays focused on its action, progress, and reward',
+    );
+    assert.doesNotMatch(levelSlot.getAttribute('title') || '', /pass|afKing|prerequisite/i,
+      'the level-card native tooltip omits eligibility internals');
+    assert.match(levelSlot.getAttribute('aria-label') || '', /Deity pass recognized/,
+      'the complete card description remains available to assistive technology');
     assert.equal(levelSlot.classList.contains('qst-slot--gated'), false,
       'a completion prerequisite no longer greys out progress that the contract is banking');
     assert.equal(levelSlot.classList.contains('qst-slot--actionable'), true);
@@ -1355,6 +1403,59 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(identity.scoreBreakdown.totalBps, 157);
     assert.equal(identity.scoreBreakdown.questStreakPoints, 5);
     assert.equal(identity.scoreBreakdown.passBonus.kind, 'deity');
+  });
+
+  test('the exact live lens breakdown keeps a 17-point score aligned with a streak of 2', async () => {
+    const { mergeQuestIdentitySnapshot } = await import('../app-quest-panel.js');
+    const exact = {
+      totalBps: 17,
+      questStreakPoints: 2,
+      questStreakCreditedPoints: 1,
+      mintLevelStreakPoints: 10,
+      mintCountPoints: 6,
+      affiliatePoints: 0,
+      passBonus: null,
+      cursePoints: 0,
+      liveExact: true,
+    };
+    const identity = mergeQuestIdentitySnapshot({
+      currentStreak: 99,
+      scoreBreakdown: {
+        totalBps: 17,
+        questStreakPoints: 34,
+        mintLevelStreakPoints: 0,
+        mintCountPoints: 0,
+        affiliatePoints: 0,
+        passBonus: null,
+      },
+    }, {
+      afkingActive: false,
+      effectiveQuestStreak: 2,
+      effectiveQuestStreakExact: true,
+      activityScore: 17,
+      activityBreakdown: exact,
+      questStreak: { baseStreak: 2, lastCompletedDay: 4 },
+    });
+
+    assert.equal(identity.questStreak.baseStreak, 2);
+    assert.deepEqual(identity.scoreBreakdown, exact);
+  });
+
+  test('a missing component lens labels the unknown score residual instead of calling it quest streak', async () => {
+    const { mergeQuestIdentitySnapshot } = await import('../app-quest-panel.js');
+    const { questStreakScorePoints } = await import('../../app/activity-score.js');
+    const identity = mergeQuestIdentitySnapshot(null, {
+      afkingActive: false,
+      effectiveQuestStreak: 2,
+      effectiveQuestStreakExact: true,
+      scoreQuestStreak: 2,
+      activityScore: 17,
+      hasDeityPass: false,
+      questStreak: { baseStreak: 2, lastCompletedDay: 4 },
+    });
+
+    assert.equal(questStreakScorePoints(identity.scoreBreakdown), 1);
+    assert.equal(identity.scoreBreakdown.unattributedPoints, 16);
   });
 
   test('Degen Score mouseover shows the credited quest-streak points, not the raw streak count', async () => {

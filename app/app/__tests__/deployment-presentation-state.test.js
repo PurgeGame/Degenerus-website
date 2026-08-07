@@ -21,15 +21,16 @@ test('a deploy change clears colliding jackpot/flip receipts and preserves unrel
     [`flip_day_${CHAIN.id}_7`]: '1',
     [`spun_day_${CHAIN.id}_7`]: '1',
     [`jackpot_complete_day_${CHAIN.id}_7`]: '1',
+    [`jackpot-resolution-seen:${CHAIN.id}:decimator:0xabc:15`]: '1',
     'affiliate-ref': '0xref',
   });
   assert.equal(resetPresentationStateForDeployment(storage), true);
   assert.equal(storage.has(`flip_day_${CHAIN.id}_7`), false);
   assert.equal(storage.has(`spun_day_${CHAIN.id}_7`), false);
   assert.equal(storage.has(`jackpot_complete_day_${CHAIN.id}_7`), false);
+  assert.equal(storage.has(`jackpot-resolution-seen:${CHAIN.id}:decimator:0xabc:15`), false);
   assert.equal(storage.getItem('affiliate-ref'), '0xref');
   assert.equal(storage.getItem(`presentation_deploy_${CHAIN.id}`), String(CHAIN.deployBlock));
   assert.equal(resetPresentationStateForDeployment(storage), false,
     'the same deployment never clears current-session reveal state');
 });
-

@@ -48,6 +48,18 @@ export function randomAllInSelection({
   return { target, spins: Number(randomAllInTarget(spinsByTarget.get(target), random)) || 1 };
 }
 
+export function allInTargetState({ target, currency = 'ETH', destinations = [] } = {}) {
+  const choices = Array.isArray(destinations) ? destinations.filter(Boolean) : [];
+  const isRandom = target === 'random';
+  const available = isRandom ? choices.length > 0 : choices.includes(target);
+  const redemptionClosed = currency === 'FLIP' && target === 'tickets' && !available;
+  return {
+    available,
+    visible: available || redemptionClosed,
+    unavailableLabel: redemptionClosed ? 'REDEMPTION CLOSED' : '',
+  };
+}
+
 class AppAllInDialog extends HTMLElement {
   #initialized = false;
   #open = false;
@@ -112,9 +124,10 @@ class AppAllInDialog extends HTMLElement {
             <span class="allin-step__label">2 · FORMAT</span>
             <div class="qst-action-choice allin-targets" role="group" aria-label="ALL IN format">
               <button type="button" data-target="tickets">▦ TICKETS</button>
-              <button type="button" data-target="lootbox">◇ LOOTBOX</button>
+              <button type="button" data-target="lootbox">◇ LUCKBOX</button>
               <button type="button" data-target="degenerette">✦ DEGENERETTE</button>
               <button type="button" data-target="coinflip">◐ COINFLIP</button>
+              <button type="button" data-target="decimator">◆ DECIMATOR</button>
               <button type="button" data-target="random" aria-label="Choose a hidden random format">🎲 RANDOM</button>
             </div>
           </div>
@@ -262,6 +275,10 @@ class AppAllInDialog extends HTMLElement {
   #render() {
     if (!this.#detail) return;
     const destinations = this.#destinations();
+    this.querySelector('.allin-targets')?.classList?.toggle(
+      'has-decimator',
+      destinations.includes('decimator'),
+    );
     // RANDOM is a chooser state rather than a concrete destination. Keep it
     // selected after its hidden destination has been rolled; otherwise every
     // render immediately falls back to the first visible format and the dice
@@ -275,15 +292,27 @@ class AppAllInDialog extends HTMLElement {
       button.setAttribute?.('aria-pressed', String(selected));
     }
     for (const button of this.querySelectorAll('[data-target]')) {
-      const isRandom = button.dataset.target === 'random';
-      const available = isRandom ? destinations.length > 0 : destinations.includes(button.dataset.target);
-      const selected = available && button.dataset.target === this.#target;
-      button.hidden = !available;
-      if (available) button.removeAttribute?.('hidden');
+      const state = allInTargetState({
+        target: button.dataset.target,
+        currency: this.#currency,
+        destinations,
+      });
+      const selected = state.available && button.dataset.target === this.#target;
+      button.hidden = !state.visible;
+      if (state.visible) button.removeAttribute?.('hidden');
       else button.setAttribute?.('hidden', '');
-      button.disabled = !available || this.#busy;
+      button.disabled = !state.available || this.#busy;
       button.classList?.toggle('is-selected', selected);
+      button.classList?.toggle('is-unavailable', state.visible && !state.available);
       button.setAttribute?.('aria-pressed', String(selected));
+      button.setAttribute?.('aria-disabled', String(!state.available || this.#busy));
+      if (state.unavailableLabel) {
+        button.setAttribute?.('data-availability-label', state.unavailableLabel);
+        button.title = 'FLIP ticket redemption is not open';
+      } else {
+        button.removeAttribute?.('data-availability-label');
+        if (button.dataset.target === 'tickets') button.removeAttribute?.('title');
+      }
     }
     const spinsWrap = this.querySelector('[data-bind="allin-spins"]');
     const showSpins = this.#target === 'degenerette';

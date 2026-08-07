@@ -47,12 +47,12 @@ describe('lootboxRewardPresentation', () => {
     assert.deepEqual(lootboxRewardPresentation(10, 50n), {
       label: 'DEGEN SCORE BOON',
       value: '+25',
-      detail: 'Your next lootbox opening adds +50 quest streak, worth 25 Degen Score',
+      detail: 'Your next luckbox opening adds +50 quest streak, worth 25 Degen Score',
     });
     assert.deepEqual(lootboxRewardPresentation(10, 25n), {
       label: 'DEGEN SCORE BOON',
       value: '+12.5',
-      detail: 'Your next lootbox opening adds +25 quest streak, worth 12.5 Degen Score',
+      detail: 'Your next luckbox opening adds +25 quest streak, worth 12.5 Degen Score',
     });
     assert.deepEqual(lootboxRewardPresentation(10, 3_500n), {
       label: 'DEITY PASS DISCOUNT',
@@ -65,7 +65,7 @@ describe('lootboxRewardPresentation', () => {
     const boost = lootboxRewardPresentation(6, 2_500n);
     assert.equal(boost.label, 'PURCHASE BOOST');
     assert.equal(boost.value, '+25%');
-    assert.match(boost.detail, /Lootbox or ETH Ticket purchase/i);
+    assert.match(boost.detail, /Luckbox or ETH Ticket purchase/i);
     assert.match(boost.detail, /Buy button shows the \+25% BOON badge/i);
 
     assert.deepEqual(lootboxRewardPresentation(2, 5_000n * (10n ** 18n)), {
@@ -198,12 +198,21 @@ describe('wholeTicketsFromOpened', () => {
 // ---------------------------------------------------------------------------
 
 const iface = new ethers.Interface(OPEN_EVENTS_ABI);
+const transferIface = new ethers.Interface([
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
+]);
 const GAME = CONTRACTS.GAME;
 const PLAYER = '0x19986e1466bd20e2a7db92762eb52fa7f3f1987c';
 const OTHER = '0x0000000000000000000000000000000000000bad';
+const ZERO = '0x0000000000000000000000000000000000000000';
 
 function log(eventName, args, address = GAME) {
   const encoded = iface.encodeEventLog(iface.getEvent(eventName), args);
+  return { address, topics: encoded.topics, data: encoded.data };
+}
+
+function transferLog(from, to, value, address = CONTRACTS.WWXRP) {
+  const encoded = transferIface.encodeEventLog(transferIface.getEvent('Transfer'), [from, to, value]);
   return { address, topics: encoded.topics, data: encoded.data };
 }
 
@@ -227,6 +236,8 @@ describe('parseOpenLegsFromReceipt', () => {
     assert.equal(legs[0].transactionHash, receipt.hash,
       'the direct-box presentation keeps the settlement identity');
     assert.equal(legs[0].futureLevel, 6);
+    assert.equal(legs[0].futureTickets, 1094);
+    assert.equal(legs[0].roundedUp, true);
     assert.equal(legs[0].wholeTickets, 11, 'scaled 1094 + roundedUp → 11');
     assert.equal(legs[0].flip, ethers.parseEther('120'));
 
@@ -254,6 +265,22 @@ describe('parseOpenLegsFromReceipt', () => {
     assert.equal(legs[0].legType, 'whalepass');
     assert.equal(legs[0].targetLevel, 13);
     assert.equal(legs[0].entriesPerLevel, 400);
+  });
+
+  test('retains the WWXRP cold-bust mint and exact fractional ticket miss', () => {
+    const receipt = {
+      logs: [
+        transferLog(ZERO, PLAYER, ethers.parseEther('9')),
+        log('LootBoxOpened', [PLAYER, 7n, 10_000_000_000n, 8, 42, 0n, false]),
+      ],
+    };
+    const legs = parseOpenLegsFromReceipt(receipt, PLAYER);
+    assert.deepEqual(legs.map((leg) => leg.legType), ['wwxrp', 'opened']);
+    assert.equal(legs[0].amount, ethers.parseEther('9'));
+    assert.equal(legs[0].consolation, true);
+    assert.equal(legs[1].futureTickets, 42);
+    assert.equal(legs[1].roundedUp, false);
+    assert.equal(legs[1].wholeTickets, 0);
   });
 
   test('player filter drops other players; foreign address logs skipped', () => {
@@ -306,6 +333,8 @@ describe('openLegsFromFeed', () => {
     const legs = openLegsFromFeed(rows, { player: PLAYER.toUpperCase(), lootboxIndex: 7n });
     assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'reward', 'spin']);
     assert.equal(legs[0].wholeTickets, 11);
+    assert.equal(legs[0].futureTickets, 1094);
+    assert.equal(legs[0].roundedUp, true);
     assert.equal(legs[0].futureLevel, 6);
     assert.equal(legs[1].label, 'Lazy pass discount boon');
     assert.equal(legs[2].payout, 55n);
@@ -351,6 +380,8 @@ describe('openLegsFromDegenerettePayouts', () => {
     assert.deepEqual(legs.map((leg) => leg.legType), ['reward', 'opened', 'dgnrs']);
     assert.equal(legs[0].label, 'Quest streak shield');
     assert.equal(legs[1].wholeTickets, 4);
+    assert.equal(legs[1].futureTickets, 325);
+    assert.equal(legs[1].roundedUp, true);
     assert.equal(legs[1].futureLevel, 44);
     assert.equal(legs[1].transactionHash, '0xdegenerette-result');
     assert.equal(legs[1].blockNumber, '5001');
@@ -389,6 +420,100 @@ describe('readOpenLegsFromChain', () => {
     assert.deepEqual(legs.map((leg) => leg.legType), ['opened', 'reward']);
     assert.equal(legs[0].wholeTickets, 4);
     assert.equal(legs[1].label, 'Lazy pass discount boon');
+  });
+
+  test('recovers a spin-only result by matching the openBox transaction calldata', async () => {
+    const txHash = `0x${'fa'.repeat(32)}`;
+    const betId = (1n << 63n) | (1n << 60n) | 42n;
+    const packed = packSpin(1n, 2n, 4) | (1n << 216n) | (1n << 224n);
+    const spin = {
+      ...log('BoxSpin', [PLAYER, betId, packed, ethers.parseEther('12'), 0n]),
+      transactionHash: txHash,
+      blockNumber: CHAIN.deployBlock + 4_999,
+      logIndex: 5,
+    };
+    const openCall = new ethers.Interface([
+      'function openBox(address player, uint48 index)',
+    ]);
+    contractsMod.setProvider({
+      getBlockNumber: async () => CHAIN.deployBlock + 5_000,
+      getLogs: async (filter) => (
+        filter.topics?.[0] === iface.getEvent('BoxSpin').topicHash ? [spin] : []
+      ),
+      getTransaction: async (hash) => {
+        assert.equal(hash, txHash);
+        return {
+          to: GAME,
+          data: openCall.encodeFunctionData('openBox', [PLAYER, 7n]),
+          value: 0n,
+        };
+      },
+      getTransactionReceipt: async (hash) => {
+        assert.equal(hash, txHash);
+        return { hash: txHash, logs: [spin] };
+      },
+    });
+
+    const legs = await readOpenLegsFromChain({ player: PLAYER, lootboxIndex: 7 });
+    assert.deepEqual(legs.map((leg) => leg.legType), ['spin']);
+    assert.equal(legs[0].spinType, 'flip');
+    assert.equal(legs[0].payout, ethers.parseEther('12'));
+    assert.equal(legs[0].reels.length, 1);
+  });
+
+  test('uses the purchase receipt to recover an old spin-only result outside the recent scan', async () => {
+    const purchaseHash = `0x${'bc'.repeat(32)}`;
+    const openHash = `0x${'cd'.repeat(32)}`;
+    const purchaseBlock = CHAIN.deployBlock + 125;
+    const spinBlock = purchaseBlock + 240;
+    const head = purchaseBlock + 50_000;
+    const betId = (1n << 63n) | (1n << 60n) | 77n;
+    const packed = packSpin(7n, 8n, 6) | (1n << 216n) | (1n << 224n);
+    const spin = {
+      ...log('BoxSpin', [PLAYER, betId, packed, ethers.parseEther('3'), 0n]),
+      transactionHash: openHash,
+      blockNumber: spinBlock,
+      logIndex: 2,
+    };
+    const openCall = new ethers.Interface([
+      'function openBox(address player, uint48 index)',
+    ]);
+    const searchedRanges = [];
+    contractsMod.setProvider({
+      getBlockNumber: async () => head,
+      getLogs: async (filter) => {
+        searchedRanges.push([filter.fromBlock, filter.toBlock]);
+        const containsSpin = filter.fromBlock <= spinBlock && filter.toBlock >= spinBlock;
+        return filter.topics?.[0] === iface.getEvent('BoxSpin').topicHash && containsSpin
+          ? [spin]
+          : [];
+      },
+      getTransaction: async (hash) => {
+        assert.equal(hash, openHash);
+        return {
+          to: GAME,
+          data: openCall.encodeFunctionData('openBox', [PLAYER, 7n]),
+          value: 0n,
+        };
+      },
+      getTransactionReceipt: async (hash) => {
+        if (hash === purchaseHash) return { hash, blockNumber: purchaseBlock, logs: [] };
+        assert.equal(hash, openHash);
+        return { hash, blockNumber: spinBlock, logs: [spin] };
+      },
+    });
+
+    const legs = await readOpenLegsFromChain({
+      player: PLAYER,
+      lootboxIndex: 7,
+      purchaseTransactionHashes: [purchaseHash],
+    });
+    assert.deepEqual(legs.map((leg) => leg.legType), ['spin']);
+    assert.equal(legs[0].payout, ethers.parseEther('3'));
+    assert.ok(searchedRanges.some(([from]) => from === purchaseBlock),
+      'recovery starts at the immutable purchase receipt instead of the recent head');
+    assert.ok(head - spinBlock > 18_000,
+      'the fixture stays beyond the unhinted ten-chunk replay window');
   });
 
   test('names the real quest shield and never invents a generic bonus boon', () => {

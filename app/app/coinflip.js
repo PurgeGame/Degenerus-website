@@ -385,6 +385,18 @@ function _fulfilledBigInt(result) {
   catch (_e) { return null; }
 }
 
+/** Effective Protocol Coins balance shared by every FLIP ledger.
+ * Coinflip winnings are spendable before they are minted, so balanceOf alone
+ * is not the amount the player can actually use across protocol surfaces. */
+export function protocolFlipTotalWei(walletWei, claimableWei = 0n) {
+  if (walletWei == null) return null;
+  try {
+    return BigInt(walletWei) + BigInt(claimableWei ?? 0n);
+  } catch (_e) {
+    return null;
+  }
+}
+
 /** Direct, same-deployment balances rendered inside the FLIP widget. */
 export async function readFlipWidgetBalances({ player } = {}) {
   const target = player || getActingAddress();

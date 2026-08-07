@@ -477,10 +477,12 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const descriptions = [
       'One ticket every level for the next 10 levels.',
       'One ticket every other level for the next 100 levels.',
-      'Place an automatic order at each jackpot.',
       'Permanent symbol coverage and three boons every day.',
     ];
     for (const copy of descriptions) assert.match(el.innerHTML, new RegExp(copy.replace('+', '\\+')));
+    assert.match(el.innerHTML, /AFKING SUBSCRIPTION/);
+    assert.match(el.innerHTML, /NO AUTOMATIC ORDER/,
+      'the compact AFKING identity prioritizes current state over explanatory copy');
     assert.equal(el.querySelectorAll('.pass-product-sigil').length, 4);
 
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
@@ -494,6 +496,12 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'Whale quantity and Buy controls share a desktop height');
     assert.match(css, /\.pass-product-checkout--whale\s*\{[^}]*align-items:\s*center/s,
       'Whale quantity and Buy are vertically centered');
+    assert.match(css,
+      /@media \(max-width:\s*640px\)[\s\S]*?\.pass-product-checkout--whale\s*\{[^}]*grid-template-columns:\s*minmax\(6\.25rem, 0\.42fr\) minmax\(0, 1fr\)[\s\S]*?\.pass-product-checkout--whale :is\([^}]*width:\s*100%;[^}]*min-width:\s*0/s,
+      'the phone checkout gives quantity a stable lane without letting the priced Buy button crush it');
+    assert.match(css,
+      /\.pass-product-row \.pass-whale-input\s*\{[^}]*min-width:\s*0/s,
+      'the native number input may shrink inside its mobile grid instead of overflowing it');
     assert.ok(el.querySelector('[data-bind="pass-whale-qty-up"]'),
       'the styled quantity instrument has an explicit up arrow');
     assert.ok(el.querySelector('[data-bind="pass-whale-qty-down"]'),
@@ -510,7 +518,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const el = instantiate();
     for (const benefit of [
       '+85% DEGEN SCORE',
-      '+115% DEGEN SCORE', '+155% DEGEN SCORE', '10% LOOTBOX',
+      '+115% DEGEN SCORE', '+155% DEGEN SCORE', '10% LUCKBOX',
       '3 DAILY BOONS', 'AFKING SEAT',
     ]) {
       assert.match(el.innerHTML, new RegExp(benefit.replace(/[+]/g, '\\+')));
@@ -548,7 +556,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const benefit = el.querySelector('[data-bind="pass-whale-lootbox"]');
     const buy = el.querySelector('[data-bind="pass-whale-buy"]');
     const seat = el.querySelector('[data-bind="pass-whale-afking-seat"]');
-    assert.equal(benefit.textContent, 'BONUS LOOTBOX · 0.4 ETH',
+    assert.equal(benefit.textContent, 'BONUS LUCKBOX · 0.4 ETH',
       'a standard 4 ETH pass advertises its actual 0.4 ETH lootbox');
     assert.equal(buy.textContent, 'BUY WHALE PASS · 4 ETH',
       'the purchase action contains the final one-pass price');
@@ -556,7 +564,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const quantity = el.querySelector('[name="pass-whale-qty"]');
     quantity.value = '2';
     quantity.dispatchEvent({ type: 'input' });
-    assert.equal(benefit.textContent, 'BONUS LOOTBOX · 0.8 ETH');
+    assert.equal(benefit.textContent, 'BONUS LUCKBOX · 0.8 ETH');
     assert.equal(buy.textContent, 'BUY WHALE PASS · 8 ETH',
       'changing quantity updates the final total directly in the purchase action');
 
@@ -575,7 +583,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
     const benefit = el.querySelector('[data-bind="pass-lazy-lootbox"]');
     const buy = el.querySelector('[data-bind="pass-lazy-buy"]');
-    assert.equal(benefit.textContent, 'BONUS LOOTBOX · 0.024 ETH');
+    assert.equal(benefit.textContent, 'BONUS LUCKBOX · 0.024 ETH');
     assert.equal(buy.textContent, 'BUY LAZY PASS · 0.24 ETH',
       'Lazy puts its final price in the Buy action just like Whale');
     assert.ok(benefit.classList.contains('pass-lootbox-perk'),
@@ -829,11 +837,13 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('mobile pass desk separates shopping, jackpot order, funding, and actions', () => {
+  test('mobile pass desk keeps AFKING state and daily actions compact while settings use a popup', () => {
     const el = instantiate();
     assert.ok(el.querySelector('[data-bind="pass-shop-heading"]'), 'pass products have a shop heading');
+    assert.ok(el.querySelector('.pass-afking__quick'), 'state, top up, and claim use a compact action rail');
+    assert.ok(el.querySelector('[data-bind="pass-afking-dialog"]'), 'setup and editing use a focused dialog');
     assert.ok(el.querySelector('.pass-afking__order-card'), 'subscription order has its own card');
-    assert.ok(el.querySelector('.pass-afking__funding-card'), 'subscription funding has its own card');
+    assert.ok(el.querySelector('.pass-afking__funding-card'), 'initial subscription funding has its own card');
     assert.ok(el.querySelector('.pass-afking__actions'), 'subscription actions have their own row');
     assert.match(el.innerHTML, /NEXT JACKPOT/);
     assert.doesNotMatch(el.innerHTML, /DAY CROSSOVER/i,
@@ -845,13 +855,19 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'mobile pass benefits use a stable two-column grid');
     assert.match(css,
       /@media \(max-width: 640px\)[\s\S]*?\.pass-afking__controls\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
-      'mobile subscription groups stack in one readable column');
+      'mobile popup groups stack in one readable column');
+    assert.match(css,
+      /@media \(max-width: 640px\)[\s\S]*?\.pass-afking__quick\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s,
+      'mobile quick actions use a stable compact grid');
+    assert.match(css,
+      /\.pass-afking__dialog\s*\{[^}]*position:\s*fixed[^}]*place-items:\s*center/s,
+      'the infrequent editor is a real modal surface');
     assert.match(css,
       /\.pass-afking__actions\s*\{[^}]*grid-column:\s*1 \/ -1/s,
       'save and cancel are grouped away from price metadata');
   });
 
-  test('a pass holder with an auto-minted seat goes straight to the subscription editor', async () => {
+  test('a pass holder with an auto-minted seat gets compact state and opens setup on demand', async () => {
     // Seats auto-mint with the pass now (GAME _grantSeatCoin -> token mintSeatFor), so there is
     // no claim row and no claim button: holding the seat IS the entry condition.
     passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(new Map([
@@ -876,8 +892,14 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'the claim row is gone entirely');
     assert.equal(el.querySelector('[data-bind="pass-afking-claim-button"]'), null,
       'the claim button is gone entirely');
-    assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, false,
-      'the subscription editor is available immediately');
+    assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, true,
+      'the full subscription editor stays out of the inline card');
+    assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="pass-afking-edit"]').textContent, 'SET UP');
+    el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, false,
+      'setup opens only when requested');
+    assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, false);
     assert.equal(el.querySelector('[data-bind="pass-afking-save"]').disabled, false,
       'start is not gated on any seat transaction');
     assert.equal(el.querySelector('[data-bind="pass-afking-symbol"]'), null,
@@ -886,7 +908,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('an existing AFKing holder gets all subscription options and a ten-price funding top-up', async () => {
+  test('an existing AFKING holder shows its real state, edits in the popup, and tops up inline', async () => {
     const passContract = makeFakePassContract();
     passesMod.__setContractFactoryForTest(() => passContract);
     passesMod.__setAfkingReadContractFactoryForTest(() => ({
@@ -895,22 +917,30 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
         subInfo: async () => [true, 2n, 8n, 12n],
         afkingSnapshot: async () => [40_000_000_000n, false, [0n], [80_000_000_000n]],
       },
+      lens: { subInfoFull: async () => ({ flags: 2n, pendingFlip: 0n }) },
     }));
 
     const el = instantiate();
     await settle(60);
     assert.equal(el.querySelector('[data-bind="pass-afking"]').hidden, false);
+    assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="pass-afking-current"]').textContent, '2 LUCKBOX / JACKPOT');
+    assert.equal(el.querySelector('[data-bind="pass-afking-policy"]').textContent, 'CLAIMABLE FIRST');
+    assert.equal(el.querySelector('[data-bind="pass-afking-edit"]').textContent, 'EDIT');
+    assert.equal(el.querySelector('[name="pass-afking-topup"]').value, '0.4',
+      'the inline top-up starts at ten ticket prices');
+    el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, false);
     assert.equal(el.querySelector('[data-bind="pass-afking-mode"]').value, 'lootbox');
     assert.equal(el.querySelector('[name="pass-afking-qty"]').value, '2');
-    assert.equal(el.querySelector('[name="pass-afking-fund"]').value, '0.4',
-      'active subscriptions also default top-up funding to ten ticket prices');
+    assert.equal(el.querySelector('[data-bind="pass-afking-initial-funding"]').hidden, true,
+      'editing does not duplicate the inline top-up control');
+    assert.equal(el.querySelector('[name="pass-afking-fund"]').value, '0');
     assert.match(el.querySelector('[data-bind="pass-afking-funding"]').textContent, /0\.08 ETH/);
 
     el.querySelector('[data-bind="pass-afking-mode"]').value = 'tickets';
     el.querySelector('[name="pass-afking-qty"]').value = '3';
     el.querySelector('[name="pass-afking-claimable-first"]').checked = false;
-    el.querySelector('[name="pass-afking-fund"]').value = '0.25';
     el.querySelector('[data-bind="pass-afking-save"]').dispatchEvent({ type: 'click' });
     await settle(60);
 
@@ -921,10 +951,14 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       true,
       3,
       '0x0000000000000000000000000000000000000000',
-      { value: 250_000_000_000n },
+      { value: 0n },
     ]);
+    assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, true,
+      'saving returns to the compact state card');
+    assert.equal(el.querySelector('[data-bind="pass-afking-current"]').textContent, '3 TICKETS / JACKPOT');
+    assert.equal(el.querySelector('[data-bind="pass-afking-policy"]').textContent, 'PREPAID FIRST');
 
-    const fundInput = el.querySelector('[name="pass-afking-fund"]');
+    const fundInput = el.querySelector('[name="pass-afking-topup"]');
     const fundOnly = el.querySelector('[data-bind="pass-afking-fund-button"]');
     assert.equal(fundOnly.hidden, false, 'an active subscription exposes independent funding');
     fundInput.value = '0.5';
@@ -947,6 +981,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
         subInfo: async () => [true, 2n, 8n, 12n],
         afkingSnapshot: async () => [40_000_000_000n, true, [0n], [80_000_000_000n]],
       },
+      lens: { subInfoFull: async () => ({ flags: 2n, pendingFlip: 0n }) },
     }));
 
     const el = instantiate();
@@ -958,7 +993,9 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const fundOnly = el.querySelector('[data-bind="pass-afking-fund-button"]');
     assert.equal(notice.hidden, false, 'the reason for disabled settings is visible');
     assert.match(notice.textContent, /RNG SETTLING/);
-    assert.equal(save.textContent, 'RNG settling');
+    el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, false);
+    assert.equal(save.textContent, 'RNG SETTLING');
     assert.equal(save.disabled, true);
     assert.equal(cancel.disabled, true);
     assert.notEqual(save.getAttribute('data-write-locked'), null,
@@ -988,7 +1025,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
     const withdraw = el.querySelector('[data-bind="pass-afking-withdraw"]');
     assert.equal(withdraw.hidden, false);
-    assert.equal(withdraw.textContent, 'Withdraw all');
+    assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, true,
+      'withdrawal is kept out of the everyday inline controls');
+    el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="pass-afking-dialog"]').hidden, false);
+    assert.equal(withdraw.textContent, 'WITHDRAW ALL');
     assert.match(withdraw.title, /subscription remains active/i);
 
     withdraw.dispatchEvent({ type: 'click' });
@@ -1046,7 +1087,12 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(el.querySelector('[data-bind="pass-afking"]').hidden, false);
     assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, true);
     assert.equal(el.querySelector('[data-bind="pass-afking-withdraw"]').hidden, false);
-    assert.equal(el.querySelector('[data-bind="pass-afking-status"]').textContent, 'FUNDS READY');
+    assert.equal(el.querySelector('[data-bind="pass-afking-status"]').textContent, 'FUNDS ONLY');
+    assert.equal(el.querySelector('[data-bind="pass-afking-edit"]').textContent, 'MANAGE');
+    el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, false,
+      'a funded wallet can reach withdrawal without falsely showing order settings');
+    assert.equal(el.querySelector('.pass-afking__order-card').hidden, true);
     el.disconnectedCallback();
   });
 

@@ -559,8 +559,8 @@ describe('app-parimutuel-panel', () => {
       /\.pari-decimator__head-copy\s*\{[^}]*flex-direction:\s*column;[^}]*justify-content:\s*space-between/s,
       'the title and win prompt form one compact two-line lead-in beside the payout');
     assert.match(APP_CSS,
-      /\.pari-decimator__win-prompt\s*\{[^}]*align-self:\s*flex-end;[^}]*text-align:\s*right/s,
-      'the win prompt is aligned against the payout bubble');
+      /\.pari-decimator__win-prompt\s*\{[^}]*align-self:\s*center;[^}]*text-align:\s*center/s,
+      'the Decimator warning is centered instead of hanging against the right edge');
     assert.match(APP_CSS, /\.pari-decimator__win-prompt-burn\s*\{[^}]*#f87171/);
     assert.match(APP_CSS, /\.pari-decimator__win-prompt-win\s*\{[^}]*#86efac/);
     assert.doesNotMatch(card.textContent, /Burn FLIP to enter\./);
@@ -597,6 +597,9 @@ describe('app-parimutuel-panel', () => {
       '+5,523 SCORE',
     );
     assert.equal(card.querySelector('.pari-decimator__cta-action').textContent, 'BURN FOR');
+    assert.match(APP_CSS,
+      /\.pari-decimator__entry\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
+      'the FLIP entry control and Decimator action use equal-width columns');
     assert.match(APP_CSS,
       /\.pari-decimator__cta\s*\{[^}]*flex-direction:\s*column/s,
       'the Decimator CTA stacks its action and score on two lines');

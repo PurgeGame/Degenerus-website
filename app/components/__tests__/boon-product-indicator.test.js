@@ -45,7 +45,8 @@ describe('<boon-product-indicator>', () => {
     });
     assert.equal(el.hidden, false);
     assert.equal(el.textContent, 'BOON +15%');
-    assert.match(el.title, /lootbox purchase/i);
+    // `lootbox` stays the product key; the player-facing word is "luckbox".
+    assert.match(el.title, /luckbox purchase/i);
     assert.equal(el.getAttribute('data-boon-type'), '6');
 
     storeMod.update('app.boons', {
@@ -60,7 +61,7 @@ describe('<boon-product-indicator>', () => {
 
   test('glows the affected purchase field and exposes the exact bonus on hover', () => {
     const host = new FakeHTMLElement();
-    host.setAttribute('title', 'Lootbox amount');
+    host.setAttribute('title', 'Luckbox amount');
     const el = new BoonProductIndicator();
     el.setAttribute('product', 'lootbox');
     el.closest = () => host;
@@ -76,8 +77,8 @@ describe('<boon-product-indicator>', () => {
     assert.equal(host.getAttribute('data-active-boon-product'), 'lootbox');
     assert.equal(host.getAttribute('data-active-boon-type'), '6');
     assert.equal(host.getAttribute('data-boon-effect'), '+15%');
-    assert.match(host.getAttribute('title'), /lootbox purchase.*15%/i);
-    assert.match(el.getAttribute('aria-label'), /lootbox purchase.*15%/i);
+    assert.match(host.getAttribute('title'), /luckbox purchase.*15%/i);
+    assert.match(el.getAttribute('aria-label'), /luckbox purchase.*15%/i);
     assert.equal(el.getAttribute('tabindex'), '0', 'the hover description is keyboard reachable');
 
     storeMod.update('app.boons', {
@@ -87,7 +88,7 @@ describe('<boon-product-indicator>', () => {
     });
     assert.equal(host.classList.contains('has-active-boon'), false);
     assert.equal(host.getAttribute('data-active-boon-product'), null);
-    assert.equal(host.getAttribute('title'), 'Lootbox amount', 'the original field tooltip is restored');
+    assert.equal(host.getAttribute('title'), 'Luckbox amount', 'the original field tooltip is restored');
     el.disconnectedCallback();
   });
 });

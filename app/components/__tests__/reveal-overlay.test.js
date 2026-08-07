@@ -189,6 +189,22 @@ const storeMod = await import('../../app/store.js');
 const REVEAL_SRC = readFileSync(new URL('../reveal-overlay.js', import.meta.url), 'utf8');
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 
+test('ticket packs keep their own reveal art without protocol flame overlays', () => {
+  const packStart = REVEAL_SRC.indexOf('async #playTicketGrid');
+  const packEnd = REVEAL_SRC.indexOf('#buildTicketLesson', packStart);
+  const goldStart = REVEAL_SRC.indexOf('async #playGoldTicketHit');
+  const goldEnd = REVEAL_SRC.indexOf('#buildPaperTicket', goldStart);
+  assert.ok(packStart >= 0 && packEnd > packStart);
+  assert.ok(goldStart >= 0 && goldEnd > goldStart);
+  assert.doesNotMatch(REVEAL_SRC.slice(packStart, packEnd), /#celebrateWin|celebrateProtocol/);
+  assert.doesNotMatch(REVEAL_SRC.slice(goldStart, goldEnd), /#celebrateGold|celebrateProtocol/);
+  assert.doesNotMatch(REVEAL_SRC, /#celebrateGold\s*\(/,
+    'the global gold flame burst is not part of a ticket-pack reveal');
+  assert.match(REVEAL_SRC, /const hasTicketGrid = Array\.isArray\(seq\.ticketGrid\)/);
+  assert.match(REVEAL_SRC, /!hasSpins && !hasTicketGrid && !seq\.ticketLesson/,
+    'the sealed-wrapper burst also excludes ticket hands from the global effect');
+});
+
 const tick = () => new Promise((r) => setTimeout(r, 5));
 
 // ---------------------------------------------------------------------------
@@ -306,7 +322,7 @@ describe('normalizeSequence', () => {
         ['LAZY PASS DISCOUNT', '−50%'],
       ],
     );
-    assert.match(seq.cards[0].sub, /Lootbox or ETH Ticket purchase/i);
+    assert.match(seq.cards[0].sub, /Luckbox or ETH Ticket purchase/i);
     assert.match(seq.cards[1].sub, /Decimator burn/i);
     assert.match(seq.cards[2].sub, /\+25 quest streak/i);
     assert.match(seq.cards[2].sub, /12\.5 Degen Score/i);
@@ -332,16 +348,12 @@ describe('normalizeSequence', () => {
     assert.equal(seq.cards[2].value, '3');
   });
 
-  test('an indexed replay miss still presents an honest already-resolved box card', () => {
-    const seq = normalizeSequence({
+  test('a settlement marker is never presented as if it were box contents', () => {
+    assert.equal(normalizeSequence({
       kind: 'lootbox',
       lootboxIndex: 9,
       legs: [{ legType: 'settled' }],
-    });
-    assert.equal(seq.cards.length, 1);
-    assert.equal(seq.cards[0].type, 'settled');
-    assert.equal(seq.cards[0].label, 'BOX ALREADY RESOLVED');
-    assert.match(seq.cards[0].sub, /credited on-chain/i);
+    }), null);
   });
 
   test('multiple BoxSpin legs remain separate verified presentations in receipt order', () => {
@@ -366,11 +378,11 @@ describe('normalizeSequence', () => {
     assert.ok(seq.cards.every((card) => card.label === 'MYSTERY BOX SPIN'));
     assert.ok(seq.cards.every((card) => card.rarity === 'rare'),
       'pre-spin card styling cannot leak the currency lane');
-    assert.deepEqual(seq.cards.map((card) => card.revealedLabel), ['WWXRP SPIN', null],
-      'a zero-payout loss does not disclose which mystery currency it used');
+    assert.deepEqual(seq.cards.map((card) => card.revealedLabel), ['WWXRP SPIN', 'FLIP SPINS'],
+      'the mandatory post-reel flip discloses every currency, including a zero payout');
     assert.deepEqual(seq.cards.map((card) => card.value), ['?', '?'],
       'one-reel and three-reel lanes look identical before the first spin');
-    assert.deepEqual(seq.cards.map((card) => card.revealedValue), ['×1', null]);
+    assert.deepEqual(seq.cards.map((card) => card.revealedValue), ['×1', '×3']);
     assert.equal(seq.boxSpinCount, 4, 'all emitted reels are scheduled, not collapsed');
   });
 
@@ -381,16 +393,30 @@ describe('normalizeSequence', () => {
   test('an awarded, already-settled box with only fractional progress remains visible', () => {
     const seq = normalizeSequence({
       kind: 'lootbox',
-      title: 'DEGENERETTE LOOTBOX',
+      title: 'DEGENERETTE LUCKBOX',
       settledExpected: true,
       legs: [{
-        legType: 'opened', futureLevel: 8, wholeTickets: 0, flip: 0n,
+        legType: 'opened', futureLevel: 8, futureTickets: 42,
+        roundedUp: false, wholeTickets: 0, flip: 0n,
       }],
     });
     assert.ok(seq, 'the awarded box is not discarded as an empty sequence');
     assert.equal(seq.cards.length, 1);
-    assert.equal(seq.cards[0].type, 'settled');
-    assert.equal(seq.cards[0].label, 'BOX ALREADY RESOLVED');
+    assert.equal(seq.cards[0].type, 'tickets');
+    assert.equal(seq.cards[0].value, '0');
+    assert.equal(seq.cards[0].label, 'LEVEL 8 TICKET ROLL');
+    assert.match(seq.cards[0].sub, /did not round up/i);
+  });
+
+  test('a legacy contentless opened event reports its actual zero main-prize result', () => {
+    const seq = normalizeSequence({
+      kind: 'lootbox',
+      legs: [{ legType: 'opened', futureLevel: 8, wholeTickets: 0, flip: 0n }],
+    });
+    assert.equal(seq.cards.length, 1);
+    assert.equal(seq.cards[0].type, 'nowin');
+    assert.equal(seq.cards[0].label, 'LUCKBOX RESULT');
+    assert.equal(seq.cards[0].value, '0 TICKETS · 0 FLIP');
   });
 
   test('pack: sealed tickets card with level + count', () => {
@@ -619,9 +645,28 @@ describe('normalizeSequence', () => {
     assert.equal(seq.title, 'DAY 15 SUMMARY');
     assert.equal(seq.cards.length, 2, 'zero-amount flip dropped');
     assert.equal(seq.cards[0].type, 'eth');
-    assert.equal(seq.cards[0].icon, '/shared/eth-blue.svg',
-      'Daily Summary uses the plain ETH mark, not the sDGNRS three-flame logo');
+    assert.equal(seq.cards[0].icon, '/shared/coinflip-face-eth.svg',
+      'Daily Summary uses the familiar green ETH badge');
+    assert.doesNotMatch(REVEAL_SRC, /eth-blue\.svg/,
+      'reveal receipts do not fall back to the old blue ETH mark');
     assert.equal(seq.cards[1].label, 'LEVEL 3 TICKETS');
+    assert.equal(seq.cards[1].packOnly, true,
+      'the pack artwork owns its level and count without duplicate receipt copy');
+    assert.match(REVEAL_SRC,
+      /grid\.setAttribute\('data-card-count', String\(summaryCards\.length\)\)/,
+      'the receipt publishes its actual card count for balanced layouts');
+    assert.match(APP_CSS,
+      /\.rvl-stage--day-summary \.rvl-card-icon\s*\{[^}]*width:\s*clamp\(96px, 10vw, 112px\)[^}]*height:\s*clamp\(96px, 10vw, 112px\)/s,
+      'ordinary reward badges share one day-summary visual scale');
+    assert.match(APP_CSS,
+      /data-card-count="2"[^}]*max-width:\s*760px[^}]*repeat\(2, minmax\(0, 1fr\)\)/s,
+      'two-card receipts expand into two equal tracks');
+    assert.match(APP_CSS,
+      /data-card-count="7"[^}]*repeat\(8, minmax\(0, 1fr\)\)[\s\S]*?data-card-count="7"[^}]*nth-child\(5\)[^}]*grid-column:\s*2 \/ span 2/s,
+      'a seven-card receipt centers its final three equal-width cards');
+    assert.match(APP_CSS,
+      /\.rvl-stage--day-summary \.rvl-card--pack-only \.rvl-reward-pack\.rvl-pack\s*\{[^}]*width:\s*124px[^}]*height:\s*169px/s,
+      'pack-only daily rewards fit the same visual stage as currency badges');
   });
 
   test('daily summary renders Decimator direct and lootbox ETH as one clear result', () => {
@@ -638,9 +683,9 @@ describe('normalizeSequence', () => {
     assert.equal(seq.cards.length, 1);
     assert.equal(seq.cards[0].type, 'decimator');
     assert.equal(seq.cards[0].label, 'DECIMATOR WIN');
-    assert.equal(seq.cards[0].icon, '/shared/eth-blue.svg');
+    assert.equal(seq.cards[0].icon, '/shared/coinflip-face-eth.svg');
     assert.equal(seq.cards[0].value, '2 ETH');
-    assert.equal(seq.cards[0].sub, '0.5 ETH LOOTBOX');
+    assert.equal(seq.cards[0].sub, '0.5 ETH LUCKBOX');
   });
 
   test('an empty-draw coinflip participant gets a full 1 WWXRP reward card', () => {
@@ -681,7 +726,7 @@ describe('normalizeSequence', () => {
     assert.equal(normalizeSequence({ kind: 'jackpot', day: 9, prizes: [{ type: 'eth', amount: 0n }] }), null);
   });
 
-  test('day summary includes actual DB-backed lootbox rewards alongside its activity counts', () => {
+  test('day summary keeps actual DB-backed lootbox rewards but omits reveal/open activity rows', () => {
     const seq = normalizeSequence({
       kind: 'jackpot',
       day: 9,
@@ -702,16 +747,14 @@ describe('normalizeSequence', () => {
     });
     assert.equal(seq.title, 'DAY 9 SUMMARY');
     assert.deepEqual(seq.cards.map((card) => card.type), [
-      'nowin', 'tickets-revealed', 'lootboxes-bought', 'tickets', 'flip', 'dgnrs',
+      'nowin', 'tickets', 'flip', 'dgnrs',
     ]);
-    assert.equal(seq.cards[1].label, 'TICKETS REVEALED');
-    assert.equal(seq.cards[1].value, '14');
-    assert.equal(seq.cards[2].value, '×3');
-    assert.match(seq.cards[2].sub, /2 opened/);
-    assert.equal(seq.cards[3].value, '2');
-    assert.equal(seq.cards[4].value, '4');
-    assert.equal(seq.cards[5].value, '7');
-    assert.ok(seq.cards.slice(3).every((card) => /LOOTBOX #17/.test(card.sub)),
+    assert.doesNotMatch(seq.cards.map((card) => card.label).join(' '), /REVEALED|LUCKBOX BOUGHT/,
+      'raw ticket-reveal and lootbox activity is not repeated in the receipt');
+    assert.equal(seq.cards[1].value, '2');
+    assert.equal(seq.cards[2].value, '4');
+    assert.equal(seq.cards[3].value, '7');
+    assert.ok(seq.cards.slice(1).every((card) => /LUCKBOX #17/.test(card.sub)),
       'each reward says which resolved box produced it');
   });
 
@@ -953,6 +996,15 @@ describe('buildBoxSpinBoard', () => {
       'the UI never invents per-reel money the event does not publish');
     assert.equal(board.total, 900n);
     assert.equal(board.survived, true);
+    assert.equal(board.survivalStage, true);
+    assert.equal(board.survivalStake, true);
+    const legacy = buildBoxSpinBoard({
+      spinType: 'flip',
+      payout: 900n,
+      reels: [{ playerTicket: 1n, resultTicket: 2n, score: 2 }],
+    });
+    assert.equal(legacy.survived, true,
+      'a positive final payout proves survival when an older feed omits the packed bit');
     assert.match(board.headline, /CURRENCY HIDDEN/);
     assert.doesNotMatch(board.headline, /ETH|FLIP|WWXRP/,
       'the board heading stays neutral until the first reel lands');
@@ -971,7 +1023,7 @@ describe('buildBoxSpinBoard', () => {
     assert.equal(board.survived, null);
   });
 
-  test('zero-payout FLIP box result does not stage a survival flip', () => {
+  test('an all-miss FLIP lane reaches the survival gate without fabricating a draw', () => {
     const board = buildBoxSpinBoard({
       spinType: 'flip',
       survived: false,
@@ -980,6 +1032,18 @@ describe('buildBoxSpinBoard', () => {
     });
     assert.equal(board.total, 0n);
     assert.equal(board.survived, null);
+    assert.equal(board.survivalStage, true);
+    assert.equal(board.survivalStake, false);
+
+    const busted = buildBoxSpinBoard({
+      spinType: 'flip',
+      survived: false,
+      payout: 0n,
+      reels: [{ playerTicket: 1n, resultTicket: 2n, score: 2 }],
+    });
+    assert.equal(busted.survived, false,
+      'a payout-bearing reel plus a false packed bit is a real survival bust');
+    assert.equal(busted.survivalStake, true);
   });
 
   test('rejects unknown or empty spin payloads instead of fabricating reels', () => {
@@ -987,14 +1051,28 @@ describe('buildBoxSpinBoard', () => {
     assert.equal(buildBoxSpinBoard({ spinType: 'wwxrp', reels: [] }), null);
   });
 
-  test('winning mystery policy reveals currency after reel one and losses keep it sealed', () => {
+  test('every mystery currency flips after reel one; FLIP then runs two reels and survival', () => {
     assert.match(
       REVEAL_SRC,
-      /completed = i \+ 1;[\s\S]*?if \(board\.boxSpin && i === 0 && board\.total > 0n\)[\s\S]*?#appendBoxSpinCurrencyReveal[\s\S]*?interstitial: count > 1/,
-      'the reveal beat is attached to the first settled reel, not the end of the board',
+      /completed = i \+ 1;[\s\S]*?if \(board\.boxSpin && i === 0\)[\s\S]*?#appendBoxSpinCurrencyReveal[\s\S]*?interstitial: count > 1/,
+      'the reveal beat is unconditional after the first settled reel',
+    );
+    assert.doesNotMatch(
+      REVEAL_SRC,
+      /if \(board\.boxSpin && i === 0 && board\.total > 0n\)/,
+      'a miss cannot suppress the currency flip',
     );
     assert.match(REVEAL_SRC, /const countIsRevealed = !board\.boxSpin \|\| i > 0/,
       'the FLIP-identifying reel count stays hidden before reel one');
+    assert.match(
+      REVEAL_SRC,
+      /MORE FLIP SPINS · THEN SURVIVAL/,
+      'the FLIP landing explicitly introduces its two remaining reels and final gate',
+    );
+    assert.match(REVEAL_SRC, /const SURVIVAL_FLIP_MS = 1_900/,
+      'the survival toss has a deliberate suspense window');
+    assert.match(APP_CSS, /@keyframes rvl-survival-toss[\s\S]*?@keyframes rvl-survival-turn/,
+      'the survival beat combines a toss arc with a slowing multi-turn coin');
     assert.match(
       REVEAL_SRC,
       /#renderFullSpinStage\(board, \{ speedEnabled: !board\.boxSpin \}\)/,
@@ -1261,6 +1339,9 @@ describe('reveal-overlay element', () => {
     assert.match(APP_CSS,
       /\.rvl-card--foil-match\.rvl-card--mini \.rvl-card-icon--foil-match\s*\{[^}]*width:\s*100%[^}]*height:\s*auto/s,
       'the foil receipt overrides the later generic 26px mini-icon box');
+    assert.match(APP_CSS,
+      /body\.layout-basic \.rvl-card--foil-match\.rvl-card--mini \.rvl-rq\s*\{[^}]*width:\s*auto;[^}]*height:\s*auto;/s,
+      'compact foil quadrants override the generic 19px thumbnail rule');
   });
 
   test('full foil comparison waits for explicit input before advancing', async () => {
@@ -1294,6 +1375,11 @@ describe('reveal-overlay element', () => {
     await tick();
     assert.equal(el.querySelector('[data-bind="rvl-summary"]').hidden, false,
       'Continue advances to the terminal receipt');
+    assert.equal(el.querySelector('[data-bind="rvl-summary"] .rvl-card--foil-match'), null,
+      'the already-shown foil comparison is not duplicated in the terminal receipt');
+    assert.match(REVEAL_SRC,
+      /card\?\.type === 'bingo' \|\| card\?\.type === 'foil-match'/,
+      'the already-shown foil comparison is also excluded from the carry-forward tray');
   });
 
   test('pack shell carries the Degenerus mark plus dynamic edition and level hooks', () => {
@@ -1456,7 +1542,7 @@ describe('reveal-overlay element', () => {
 
   test('a lootbox receipt can open the next pending box without returning to the tray', async () => {
     pendingActionsMod.publishPendingActions('next-box', [{
-      id: 'lootbox:2', kind: 'lootbox', label: 'Lootbox #2', state: 'ready',
+      id: 'lootbox:2', kind: 'lootbox', label: 'Luckbox #2', state: 'ready',
       run: async () => {
         pendingActionsMod.clearPendingActions('next-box');
         queueReveal({
@@ -1473,7 +1559,7 @@ describe('reveal-overlay element', () => {
     await tick();
 
     let summary = el.querySelector('[data-bind="rvl-summary"]');
-    assert.equal(summary.querySelector('.rvl-collect-cta').textContent, 'OPEN NEXT BOX');
+    assert.equal(summary.querySelector('.rvl-collect-cta').textContent, 'OPEN NEXT LUCKBOX');
     summary.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     for (let i = 0; i < 4; i += 1) await tick();
@@ -1549,7 +1635,7 @@ describe('reveal-overlay element', () => {
   test('OPEN ALL BOXES queues every ready box and pauses on the final receipt', async () => {
     for (const [source, index] of [['box-two', 2], ['box-three', 3]]) {
       pendingActionsMod.publishPendingActions(source, [{
-        id: `lootbox:${index}`, kind: 'lootbox', label: `Lootbox #${index}`,
+        id: `lootbox:${index}`, kind: 'lootbox', label: `Luckbox #${index}`,
         state: 'ready', order: index,
         run: async () => {
           pendingActionsMod.clearPendingActions(source);
@@ -1570,7 +1656,7 @@ describe('reveal-overlay element', () => {
     const summary = el.querySelector('[data-bind="rvl-summary"]');
     const openAll = summary.querySelector('.rvl-open-all-cta--lootboxes');
     assert.ok(openAll);
-    assert.equal(openAll.textContent, 'OPEN ALL 2 BOXES');
+    assert.equal(openAll.textContent, 'OPEN ALL 2 LUCKBOX');
     openAll.dispatchEvent({ type: 'click', stopPropagation() {} });
     await new Promise((resolve) => setTimeout(resolve, 240));
     await tick();
@@ -1578,7 +1664,7 @@ describe('reveal-overlay element', () => {
     const lingeringSummary = el.querySelector('[data-bind="rvl-summary"]');
     assert.equal(lingeringSummary.querySelector('.rvl-card-value').textContent, '2',
       'auto mode leaves the intermediate reward readable instead of flashing past it');
-    assert.equal(lingeringSummary.querySelector('.rvl-collect-cta').textContent, 'OPENING NEXT BOX…');
+    assert.equal(lingeringSummary.querySelector('.rvl-collect-cta').textContent, 'OPENING NEXT LUCKBOX…');
 
     await new Promise((resolve) => setTimeout(resolve, 1_100));
     await tick();
@@ -2188,7 +2274,7 @@ describe('reveal-overlay element', () => {
   test('fullscreen CLEAR PENDING drops the reveal queue and hard-dismisses current reminders', async () => {
     let ownerClears = 0;
     pendingActionsMod.publishPendingActions('boxes', [{
-      id: 'lootbox:77', kind: 'lootbox', label: 'Lootbox #77', state: 'ready',
+      id: 'lootbox:77', kind: 'lootbox', label: 'Luckbox #77', state: 'ready',
       run: async () => {},
       clearAll: async () => { ownerClears += 1; },
     }]);
@@ -2336,15 +2422,15 @@ describe('reveal-overlay element', () => {
     // Nothing to count up on this path, so the tracker shows the settled total.
     const running = zone.querySelector('.is-running');
     assert.ok(running, 'winnings tracker is present in the top facts');
-    assert.doesNotMatch(running.textContent, /ACTUAL ETH|LOOTBOX ETH/,
+    assert.doesNotMatch(running.textContent, /ACTUAL ETH|LUCKBOX ETH/,
       'the split does not add a second tier of miniature labels');
-    assert.match(running.textContent, /ETH.*ETH LOOTBOX/,
+    assert.match(running.textContent, /ETH.*ETH LUCKBOX/,
       'the two regular value lines state cash first and lootbox ETH second');
     const ethValues = running.querySelectorAll('.rvl-dgn-eth-split__value');
     assert.equal(ethValues.length, 2, 'gross ETH is presented as two explicit destinations');
     assert.match(ethValues[0].textContent, /^15,?000 ETH$/,
       'Base Sepolia presentation scaling is applied to the actual-ETH share');
-    assert.match(ethValues[1].textContent, /^5,?000 ETH LOOTBOX$/,
+    assert.match(ethValues[1].textContent, /^5,?000 ETH LUCKBOX$/,
       'Base Sepolia presentation scaling is applied to the lootbox-ETH share');
     assert.ok(ethValues[0].classList.contains('is-win'), 'claimable ETH lights independently');
     assert.ok(ethValues[1].classList.contains('is-win'), 'lootbox ETH lights independently');
@@ -2382,7 +2468,7 @@ describe('reveal-overlay element', () => {
     const running = el.querySelector('[data-bind="rvl-spin-zone"]').querySelector('.is-running');
     const values = running.querySelectorAll('.rvl-dgn-eth-split__value');
     assert.equal(values.length, 1, 'the lootbox destination is absent until it is positive');
-    assert.doesNotMatch(running.textContent, /ETH LOOTBOX/);
+    assert.doesNotMatch(running.textContent, /ETH LUCKBOX/);
   });
 
   test('a Degenerette box win is named on the result and opens directly from its final button', async () => {
@@ -2404,7 +2490,7 @@ describe('reveal-overlay element', () => {
       ],
     });
     queueReveal({
-      kind: 'lootbox', title: 'DEGENERETTE LOOTBOX',
+      kind: 'lootbox', title: 'DEGENERETTE LUCKBOX',
       legs: [{ legType: 'dgnrs', amount: 7n * 10n ** 18n }],
       lootboxRelease: {
         address: '0x0000000000000000000000000000000000000001',
@@ -2417,9 +2503,9 @@ describe('reveal-overlay element', () => {
     await tick();
 
     const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
-    assert.match(zone.querySelector('.rvl-dgn-facts--result').textContent, /LOOTBOX WON/);
+    assert.match(zone.querySelector('.rvl-dgn-facts--result').textContent, /LUCKBOX WON/);
     const cta = zone.querySelector('.rvl-dgn-spin-cta');
-    assert.equal(cta.textContent, 'OPEN LOOTBOX');
+    assert.equal(cta.textContent, 'OPEN LUCKBOX');
     cta.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
 
@@ -2433,7 +2519,7 @@ describe('reveal-overlay element', () => {
     await tick();
     assert.equal(duplicateRuns, 0, 'the duplicate pending action never runs');
     assert.equal(queueReveal({
-      kind: 'lootbox', title: 'DEGENERETTE LOOTBOX',
+      kind: 'lootbox', title: 'DEGENERETTE LUCKBOX',
       legs: [{ legType: 'dgnrs', amount: 7n * 10n ** 18n }],
       lootboxRelease: {
         address: '0x0000000000000000000000000000000000000001',
@@ -2536,7 +2622,17 @@ describe('reveal-overlay element', () => {
     assert.ok(currency, 'a dedicated post-reel currency result is present');
     assert.ok(currency.classList.contains('is-revealed'));
     assert.equal(currency.getAttribute('data-currency'), 'ETH');
-    assert.match(currency.textContent, /MYSTERY CURRENCYETHCURRENCY REVEALED/);
+    assert.equal(currency.querySelector('img')?.src, '/shared/coinflip-face-eth.svg');
+    assert.match(currency.textContent, /CURRENCY FLIPETHCURRENCY REVEALED/);
+    assert.equal(zone.querySelector('.rvl-dgn-auto-cta'), null,
+      'a mystery-currency spin never mounts AUTOSPIN');
+    assert.equal(zone.querySelector('.rvl-dgn-skip-cta'), null,
+      'a mystery-currency spin never mounts SKIP TO RESULTS');
+    assert.deepEqual(
+      zone.querySelector('.rvl-dgn-actions').children.map((node) => node.className),
+      ['rvl-collect-cta rvl-dgn-spin-cta'],
+      'the BoxSpin action rail contains only its required manual action',
+    );
     assert.equal(zone.querySelector('.rvl-dgn-spin-cta').textContent, 'COLLECT');
 
     zone.querySelector('.rvl-dgn-spin-cta')
@@ -2687,8 +2783,10 @@ describe('reveal-overlay element', () => {
       /\.rvl-gamepiece \.rvl-rq\.q-miss\s*\{[^}]*background:\s*rgba\(225, 71, 91, 0\.34\)/s,
       'a fully locked miss settles to the deeper miss color',
     );
-    assert.match(REVEAL_SRC, /dgnEthBadge:\s*'\/badges-circular\/crypto_06_ethereum_blue\.svg'/,
-      'Degenerette ETH results reuse the blue ticket-trait badge');
+    assert.match(REVEAL_SRC, /ethFace:\s*'\/shared\/coinflip-face-eth\.svg'/,
+      'Degenerette ETH results reuse the familiar green ETH coin');
+    assert.doesNotMatch(REVEAL_SRC, /dgnEthBadge|crypto_06_ethereum_blue\.svg/,
+      'the blue ticket-trait badge is not reused as an ETH result badge');
     assert.match(APP_CSS, /\.rvl-dgn-speed\s*\{[^}]*position:\s*absolute[^}]*right:\s*0/s,
       'the speed control stays tucked into the heading instead of adding resolver height');
     assert.match(APP_CSS, /\.rvl-dgn-eth-split\s*\{[^}]*flex-direction:\s*column/s,
@@ -2894,18 +2992,30 @@ describe('reveal-overlay element', () => {
       assert.doesNotMatch(head.textContent, /ETH|FLIP|WWXRP/);
 
       const cta = stage.querySelector('.rvl-dgn-spin-cta');
-      const skip = stage.querySelector('.rvl-dgn-skip-cta');
+      assert.equal(stage.querySelector('.rvl-dgn-auto-cta'), null,
+        'BoxSpin does not expose AUTOSPIN');
+      assert.equal(stage.querySelector('.rvl-dgn-skip-cta'), null,
+        'BoxSpin does not expose SKIP TO RESULTS');
+      assert.match(
+        APP_CSS,
+        /\.rvl-dgn-actions--box\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
+        'the remaining manual control owns a centered one-column action rail',
+      );
       cta.dispatchEvent({ type: 'click', stopPropagation() {} });
       await tick();
       assert.equal(cta.hidden, true);
-      skip.dispatchEvent({ type: 'click', stopPropagation() {} });
-      await tick();
 
-      const sealed = stage.querySelector('.rvl-box-currency-reveal');
+      let sealed = stage.querySelector('.rvl-box-currency-reveal');
+      for (let i = 0; i < 100 && !sealed; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        sealed = stage.querySelector('.rvl-box-currency-reveal');
+      }
       assert.ok(sealed, 'the reveal beat begins only after the result has landed');
       assert.equal(sealed.classList.contains('is-revealed'), false,
         'the currency badge starts face-down');
-      await new Promise((resolve) => setTimeout(resolve, 950));
+      assert.equal(sealed.classList.contains('is-flipping'), true,
+        'a real currency coin flip bridges reel one and the result');
+      await new Promise((resolve) => setTimeout(resolve, 1_600));
 
       const currency = stage.querySelector('.rvl-box-currency-reveal');
       assert.ok(currency.classList.contains('is-revealed'));

@@ -28,7 +28,7 @@
 
 import { CHAIN } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
-import { get, subscribe, getViewedAddress } from '../app/store.js';
+import { get, update, subscribe, getViewedAddress } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 import {
   depositCoinflip,
@@ -36,6 +36,7 @@ import {
   readCurrentCoinflipStake,
   readBafFlipEve,
   readFlipWidgetBalances,
+  protocolFlipTotalWei,
   readLatestCoinflipResult,
   readResolvedCoinflipStake,
   readReverseFlipQuote,
@@ -52,6 +53,7 @@ import {
 import { burnWwxrp, MIN_WWXRP_BURN_WEI } from '../app/wwxrp.js';
 import { readCharityVoteState, voteForCharity } from '../app/charity-vote.js';
 import { compactUiError } from '../app/ui-error.js';
+import { TX_CONFIRMED_EVENT } from '../app/contracts.js';
 import { updateBalanceDisplay, resetBalanceDisplay } from '../app/balance-countup.js';
 import { activeBafScoreLevel } from '../app/jackpot-resolutions.js';
 import { setMajorDrawActivity } from '../app/major-draw-activity.js';
@@ -95,6 +97,7 @@ const FLIP_REVEAL_PROFILES = Object.freeze([
 const REVEAL_PROFILE_WEIGHT_TOTAL = 200;
 const REVEAL_TRACK_MS = 3300;
 const REVEAL_END_MS = 700;
+const FLIP_FINISH_CUE_MS = 250;
 const REVEAL_FAKE_END_MS = 1600;
 const REVEAL_DOUBLE_END_MS = 2500;
 const REVEAL_TRIPLE_END_MS = 3400;
@@ -151,6 +154,23 @@ function _revealDayHash(day, salt) {
   x = Math.imul(x ^ (x >>> 16), 0x7feb352d) >>> 0;
   x = Math.imul(x ^ (x >>> 15), 0x846ca68b) >>> 0;
   return (x ^ (x >>> 16)) >>> 0;
+}
+
+/** Stable ten-percent easter-egg gate: one result per day, never per render. */
+function shouldFlashAllInDoIt(day) {
+  return _revealDayHash(day, 0xd0170001) % 10 === 0;
+}
+
+/**
+ * Losses deliberately carry no payout modifier on-chain. A fake apparent win
+ * still needs a believable thermometer stop, though: clamping that zero to
+ * the rail floor made multi-Reverse reveals appear frozen at 0. Keep this
+ * presentation-only value day-wide and comfortably away from either edge.
+ */
+function fakeoutModifierPercent(day) {
+  const lower = 72;
+  const upper = 138;
+  return lower + (_revealDayHash(day, 0xfa6e0ff1) % (upper - lower + 1));
 }
 
 /**
@@ -305,15 +325,15 @@ export function formatSdgnrsBalance(weiValue) {
   }
 }
 
-/** Whole-FLIP display rounded to at most five significant digits. */
-export function formatTomorrowBet(weiValue, significantDigits = 5) {
+/** Whole-FLIP display rounded to at most four significant digits. */
+export function formatTomorrowBet(weiValue, significantDigits = 4) {
   let raw;
   try { raw = BigInt(weiValue ?? 0); }
   catch (_e) { return '0'; }
   const unit = 10n ** 18n;
   const negative = raw < 0n;
   let whole = (negative ? -raw : raw) / unit;
-  const digits = Math.max(1, Math.trunc(Number(significantDigits) || 5));
+  const digits = Math.max(1, Math.trunc(Number(significantDigits) || 4));
   const length = String(whole).length;
   if (length > digits) {
     const quantum = 10n ** BigInt(length - digits);
@@ -368,6 +388,8 @@ class AppDailyFlip extends HTMLElement {
   #pollHandle = null;
   #resultRetryHandle = null;
   #visibilityListener = null;
+  #txConfirmedListener = null;
+  #postTxRefreshHandle = null;
   #landing = false;        // coin is mid-landing animation
   #revealRequestedDay = null; // click accepted while a rollover result is still loading
   #meterSettling = false;
@@ -381,6 +403,7 @@ class AppDailyFlip extends HTMLElement {
   #fakeoutMeterTimers = new Set();
   #coinSfxTimers = new Set();
   #revealTimer = null;
+  #revealFinishingTimer = null;
   #busy = false;
   #errorTimer = null;
   #reverseFlipQuote = null;
@@ -657,6 +680,23 @@ class AppDailyFlip extends HTMLElement {
         if (document.visibilityState === 'visible') this.#scheduleRefresh();
       };
       document.addEventListener('visibilitychange', this.#visibilityListener);
+      this.#txConfirmedListener = () => {
+        // Refresh both minted FLIP and the claimable-first spending ledger.
+        // The immediate read normally lands on the receipt block; one short
+        // follow-up covers injected RPC replicas that trail it briefly.
+        this.#scheduleRefresh();
+        if (this.#postTxRefreshHandle != null) {
+          try { clearTimeout(this.#postTxRefreshHandle); } catch (_e) { /* defensive */ }
+        }
+        this.#postTxRefreshHandle = setTimeout(() => {
+          this.#postTxRefreshHandle = null;
+          this.#scheduleRefresh();
+        }, 900);
+        if (this.#postTxRefreshHandle && typeof this.#postTxRefreshHandle.unref === 'function') {
+          try { this.#postTxRefreshHandle.unref(); } catch (_e) { /* defensive */ }
+        }
+      };
+      document.addEventListener(TX_CONFIRMED_EVENT, this.#txConfirmedListener);
     }
     this.#scheduleRefresh();
   }
@@ -671,6 +711,10 @@ class AppDailyFlip extends HTMLElement {
     this.#refreshQueued = false;
     this.#refreshAgain = false;
     this.#revealRequestedDay = null;
+    if (this.#postTxRefreshHandle != null) {
+      try { clearTimeout(this.#postTxRefreshHandle); } catch (_e) { /* defensive */ }
+      this.#postTxRefreshHandle = null;
+    }
     for (const u of this.#unsubs) {
       try { u(); } catch (_e) { /* defensive */ }
     }
@@ -696,6 +740,9 @@ class AppDailyFlip extends HTMLElement {
       if (this.#visibilityListener) {
         document.removeEventListener('visibilitychange', this.#visibilityListener);
       }
+      if (this.#txConfirmedListener) {
+        document.removeEventListener(TX_CONFIRMED_EVENT, this.#txConfirmedListener);
+      }
       if (this.#daySelectionListener) {
         document.removeEventListener('replay:day-selected', this.#daySelectionListener);
       }
@@ -705,6 +752,7 @@ class AppDailyFlip extends HTMLElement {
     this.#lootboxAbortListener = null;
     this.#jackpotRevealListener = null;
     this.#visibilityListener = null;
+    this.#txConfirmedListener = null;
     this.#daySelectionListener = null;
     this.#activeLootboxRevealIds.clear();
     this.#pendingLootboxCount = 0;
@@ -735,10 +783,16 @@ class AppDailyFlip extends HTMLElement {
   }
 
   #clearRevealTimer() {
-    const wasAnimating = this.#revealTimer != null || this.#landing;
+    const wasAnimating = this.#revealTimer != null
+      || this.#revealFinishingTimer != null
+      || this.#landing;
     if (this.#revealTimer != null) {
       try { clearTimeout(this.#revealTimer); } catch (_) { /* defensive */ }
       this.#revealTimer = null;
+    }
+    if (this.#revealFinishingTimer != null) {
+      try { clearTimeout(this.#revealFinishingTimer); } catch (_) { /* defensive */ }
+      this.#revealFinishingTimer = null;
     }
     this.#clearCoinSfxTimers();
     if (wasAnimating) setMajorDrawActivity('daily-flip', false);
@@ -1771,7 +1825,7 @@ class AppDailyFlip extends HTMLElement {
             <h3 id="df-burn-title">Burn sDGNRS</h3>
             <p class="df-reverse-dialog__copy">
               <span>Live-game burns settle on the next daily RNG at 25%–175% of the previewed ETH value.</span>
-              <span>The payout normally splits between claimable ETH and a lootbox; FLIP backing pays only if the next flip wins.</span>
+              <span>The payout normally splits between claimable ETH and a luckbox; FLIP backing pays only if the next flip wins.</span>
             </p>
             <label class="df-burn-dialog__amount">
               <span>Amount</span>
@@ -2747,9 +2801,15 @@ class AppDailyFlip extends HTMLElement {
       return;
     }
 
+    const rawPct = Number(this.#flipResult.rewardPercent || 0);
+    const displayPct = showFakeoutMeter
+      && !won
+      && rawPct < MODIFIER_MIN_PERCENT
+      ? fakeoutModifierPercent(this.#day)
+      : rawPct;
     const pct = Math.max(
       MODIFIER_MIN_PERCENT,
-      Math.min(MODIFIER_MAX_PERCENT, Number(this.#flipResult.rewardPercent || 0)),
+      Math.min(MODIFIER_MAX_PERCENT, displayPct),
     );
     const position = ((pct - MODIFIER_MIN_PERCENT)
       / (MODIFIER_MAX_PERCENT - MODIFIER_MIN_PERCENT)) * 100;
@@ -2803,6 +2863,12 @@ class AppDailyFlip extends HTMLElement {
       meter.style.setProperty('--df-meter-rebound-duration', `${METER_REBOUND_MS}ms`);
       meter.style.setProperty('--df-meter-recovery-tail-duration', `${METER_RECOVERY_TAIL_MS}ms`);
       meter.style.setProperty('--df-meter-terminal-drain-duration', `${METER_TERMINAL_DRAIN_MS}ms`);
+      // Precompute the bounce points in JS instead of relying on nested CSS
+      // min()/max() custom-property math. This keeps the rare triple-Reverse
+      // handoff reliable in every browser and gives it a real full-rail loop.
+      meter.style.setProperty('--df-meter-handoff', `${Math.min(96, position + 14)}%`);
+      meter.style.setProperty('--df-meter-low', `${Math.max(4, position - 6)}%`);
+      meter.style.setProperty('--df-meter-bounce', `${Math.min(96, position + 3)}%`);
     }
     meter.setAttribute('role', 'img');
     meter.setAttribute(
@@ -3030,7 +3096,7 @@ class AppDailyFlip extends HTMLElement {
         result.setAttribute('title', 'Show this value anyway');
         result.setAttribute(
           'aria-label',
-          'Hidden until jackpot and lootbox rewards are revealed. Activate to show anyway.',
+          'Hidden until jackpot and luckbox rewards are revealed. Activate to show anyway.',
         );
         result.addEventListener('click', (event) => this.#activateSpoilerValue('tomorrow', event));
         result.addEventListener('keydown', (event) => this.#activateSpoilerValue('tomorrow', event));
@@ -3055,7 +3121,7 @@ class AppDailyFlip extends HTMLElement {
       : null;
     const walletRaw = liveBalances?.flipBalance ?? this.#dashboard?.flipBalance ?? null;
     const walletWei = walletRaw == null ? null : this.#asWei(walletRaw);
-    const protocolFlipWei = walletWei == null ? null : walletWei + visibleClaimable;
+    const protocolFlipWei = protocolFlipTotalWei(walletWei, visibleClaimable);
     const wwxrpWei = this.#wwxrpBalanceWei();
     const sdgnrsWei = this.#sdgnrsBalanceWei();
     const hasResult = this.#day != null
@@ -3097,6 +3163,20 @@ class AppDailyFlip extends HTMLElement {
       }
     }
     flipTotalBox?.classList?.toggle('df-funds__display--spoiler', !flipTotalVisible);
+    // Publish the disclosure result only after the owning Protocol Coins cell
+    // has adopted it. The left-side FLIP Balance mirrors this account-scoped
+    // state instead of attempting to recreate the reveal/landing rules.
+    const disclosureAddress = this.#dashboardAddress == null
+      ? null
+      : String(this.#dashboardAddress).toLowerCase();
+    const currentDisclosure = get('ui.protocolCoinsFlipDisclosure');
+    if (currentDisclosure?.address !== disclosureAddress
+      || currentDisclosure?.visible !== flipTotalVisible) {
+      update('ui.protocolCoinsFlipDisclosure', {
+        address: disclosureAddress,
+        visible: flipTotalVisible,
+      });
+    }
     if (claim) {
       const connected = Boolean(get('connected.address'));
       const canClaim = revealComplete && !this.#busy && visibleClaimable > 0n && connected;
@@ -3459,6 +3539,10 @@ class AppDailyFlip extends HTMLElement {
     this.#markRevealed();
     const finish = () => {
       this.#revealTimer = null;
+      if (this.#revealFinishingTimer != null) {
+        try { clearTimeout(this.#revealFinishingTimer); } catch (_) { /* defensive */ }
+        this.#revealFinishingTimer = null;
+      }
       this.#clearFakeoutMeter();
       this.#landing = false;
       setMajorDrawActivity('daily-flip', false);
@@ -3560,6 +3644,31 @@ class AppDailyFlip extends HTMLElement {
     this.#renderModifierMeter();
     const outcome = this.querySelector('[data-bind="df-outcome"]');
     if (outcome) outcome.textContent = '';
+    if (shouldFlashAllInDoIt(revealDay)) {
+      // Cue the first normal landing, not the final Reverse-card landing. A
+      // multi-reversal day therefore gets the same tiny wink at the same beat
+      // as an ordinary flip, before any correction cards extend the sequence.
+      const normalLandingMs = revealPlan.trackMs + revealPlan.openingMs;
+      const finishing = setTimeout(() => {
+        this.#revealFinishingTimer = null;
+        if (!this.#landing || this.#day !== revealDay) return;
+        try {
+          const ev = (typeof CustomEvent === 'function')
+            ? new CustomEvent('flip:finishing', {
+              detail: { day: revealDay, durationMs: FLIP_FINISH_CUE_MS },
+            })
+            : {
+              type: 'flip:finishing',
+              detail: { day: revealDay, durationMs: FLIP_FINISH_CUE_MS },
+            };
+          document.dispatchEvent(ev);
+        } catch (_e) { /* headless — best-effort */ }
+      }, Math.max(0, normalLandingMs - FLIP_FINISH_CUE_MS));
+      this.#revealFinishingTimer = finishing;
+      if (finishing && typeof finishing.unref === 'function') {
+        try { finishing.unref(); } catch (_) { /* defensive */ }
+      }
+    }
     const h = setTimeout(finish, revealPlan.totalMs);
     this.#revealTimer = h;
     if (h && typeof h.unref === 'function') {
@@ -3843,6 +3952,9 @@ if (typeof customElements !== 'undefined' && typeof customElements.define === 'f
 export {
   AppDailyFlip,
   FLIP_REVEAL_PROFILES,
+  FLIP_FINISH_CUE_MS,
+  shouldFlashAllInDoIt,
+  fakeoutModifierPercent,
   REVEAL_TRACK_MS,
   REVEAL_END_MS,
   REVEAL_BIASED_END_MS,

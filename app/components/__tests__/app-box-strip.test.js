@@ -305,7 +305,7 @@ describe('app-box-strip', () => {
     assert.equal(chips[0].querySelector('.bxs-chip-status'), null,
       'the compact chip does not repeat a waiting sentence');
     assert.equal(chips[0].querySelector('.bxs-chip-amount').textContent, '0.01 ETH');
-    assert.equal(chips[0].querySelector('.bxs-chip-title').textContent, 'LOOTBOX');
+    assert.equal(chips[0].querySelector('.bxs-chip-title').textContent, 'LUCKBOX');
     const pending = pendingActionsMod.getPendingActions();
     assert.equal(pending.length, 2, 'purchased boxes enter the shared pending area immediately');
     assert.ok(pending.every((item) => item.state === 'waiting' && item.pinned === true));
@@ -331,7 +331,7 @@ describe('app-box-strip', () => {
     const pending = pendingActionsMod.getPendingActions();
     assert.equal(pending.length, 1);
     assert.equal(pending[0].id, 'lootbox:18');
-    assert.equal(pending[0].label, 'Lootbox');
+    assert.equal(pending[0].label, 'Luckbox');
     assert.equal(pending[0].amountLabel, '0.04 ETH');
     el.disconnectedCallback();
   });
@@ -409,8 +409,8 @@ describe('app-box-strip', () => {
 
     const pending = pendingActionsMod.getPendingActions();
     assert.equal(pending.length, 1, 'one RNG batch remains one click target');
-    assert.equal(pending[0].label, 'Lootbox + presale box');
-    assert.equal(pending[0].lootboxLabel, 'LOOTBOX + PRESALE BOX');
+    assert.equal(pending[0].label, 'Luckbox + presale box');
+    assert.equal(pending[0].lootboxLabel, 'LUCKBOX + PRESALE BOX');
     assert.equal(pending[0].amountLabel, '0.03 ETH');
     const stored = JSON.parse(globalThis.localStorage.getItem(KEY));
     assert.equal(stored.length, 1);
@@ -478,7 +478,7 @@ describe('app-box-strip', () => {
 
     const pending = pendingActionsMod.getPendingActions();
     assert.equal(pending.length, 1);
-    assert.equal(pending[0].label, 'Lootbox + presale box');
+    assert.equal(pending[0].label, 'Luckbox + presale box');
     assert.equal(pending[0].amountLabel, '0.03 ETH');
     const stored = JSON.parse(globalThis.localStorage.getItem(KEY));
     assert.equal(stored[0].hasPresaleLeg, true,
@@ -507,11 +507,11 @@ describe('app-box-strip', () => {
     assert.equal(el.__setReadyForTest(8), true);
     const chip = el.querySelector('.bxs-chip');
     const cta = chip.querySelector('.bxs-open-cta');
-    assert.equal(chip.querySelector('.bxs-chip-title').textContent, 'LOOTBOX');
+    assert.equal(chip.querySelector('.bxs-chip-title').textContent, 'LUCKBOX');
     assert.equal(chip.querySelector('.bxs-chip-amount').textContent, '0.01 ETH');
     assert.equal(cta.disabled, false);
-    assert.equal(cta.textContent, 'OPEN LOOTBOX');
-    assert.match(cta.getAttribute('aria-label'), /Open lootbox 8/);
+    assert.equal(cta.textContent, 'OPEN LUCKBOX');
+    assert.match(cta.getAttribute('aria-label'), /Open luckbox 8/);
 
     const pending = pendingActionsMod.getPendingActions();
     assert.equal(pending.length, 1);
@@ -711,7 +711,8 @@ describe('app-box-strip', () => {
     const pending = pendingActionsMod.getPendingActions()
       .find((action) => action.id === 'lootbox:8');
     assert.ok(pending, 'the tracked box publishes its open action');
-    await pending.run();
+    assert.equal(await pending.run(), false,
+      'a contentless settled receipt reports that recovery is still pending');
 
     assert.ok(calls.status.length >= 1, 'the slot is checked before attempting a write');
     assert.ok(calls.status.every(([owner, index]) => owner === ADDR_LC && index === 8n));
@@ -767,7 +768,8 @@ describe('app-box-strip', () => {
     el.__setReadyForTest(8);
     const action = pendingActionsMod.getPendingActions()
       .find((item) => item.id === 'lootbox:8');
-    await action.run();
+    assert.equal(await action.run(), false,
+      'losing the opener race yields the auto-retry lane instead of a fake completion');
 
     assert.equal(calls.open, 1, 'this wallet reached the write before losing the race');
     assert.ok(calls.status >= 2, 'the failed write rechecks the cleared amount slot');
@@ -1025,7 +1027,7 @@ describe('app-box-strip', () => {
 
     const chips = el.querySelectorAll('.bxs-chip');
     assert.equal(chips.length, 1, 'only the latest DB-only opening is offered as catch-up');
-    assert.equal(chips[0].querySelector('.bxs-chip-title').textContent, 'LOOTBOX');
+    assert.equal(chips[0].querySelector('.bxs-chip-title').textContent, 'LUCKBOX');
     assert.equal(chips[0].querySelector('.bxs-open-cta').textContent, 'VIEW RESULT');
 
     const pending = pendingActionsMod.getPendingActions()

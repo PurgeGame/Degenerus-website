@@ -34,7 +34,8 @@ import {
   placeGrowthBet, placeVolumeBet, claimGrowth, claimVolume,
   claimGrowthRound, claimVolumeRound, readRoundWinners,
   volumeWindow, volumeRoundNow,
-  readLastVolumeSeal, readCurrentTicketVolume, readGrowthRatchets, readPrizePoolTarget,
+  readLastVolumeSeal, readCurrentTicketVolume, readGrowthRatchets, readGrowthRatchetHistory,
+  readPrizePoolTarget,
   readJackpotPhaseContext,
   growthBps, payoutPerWinner, UNITS_PER_TICKET,
   STAKE_WEI, SIDE_OVER, SIDE_UNDER,
@@ -42,11 +43,13 @@ import {
 import {
   burnForDecimator,
   DECIMATOR_MIN_FLIP_WEI,
+  decimatorWindowIsOpen,
   decimatorCurrentMultiplierBps,
   decimatorEntryScoreWei,
   decimatorPoolWei,
   readDecimatorContext,
 } from '../app/decimator.js';
+export { decimatorWindowIsOpen };
 import { degenScoreLootTier } from '../app/activity-score.js';
 import { activeBoonForProduct } from '../app/boons.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
@@ -219,28 +222,6 @@ export function thermometerScale(current, target) {
   };
 }
 
-/**
- * Whether the normal Decimator entry window is live.
- *
- * The indexed boolean is the preferred signal, but older/newer API payloads
- * have exposed it in more than one place and the game-state projection can lag
- * the implicit x4/x99 level transition.  The level rule is deterministic, so
- * it is a safe positive fallback; the write still has to pass its contract
- * static call before anything is sent.
- */
-export function decimatorWindowIsOpen(gameState, position = null) {
-  if (gameState?.decWindowOpen === true
-    || gameState?.decimator?.windowOpen === true
-    || position?.windowOpen === true
-    || String(position?.roundStatus || '').toLowerCase() === 'open') {
-    return true;
-  }
-
-  const level = Number(gameState?.level);
-  if (!Number.isInteger(level) || level < 0) return false;
-  return (level % 10 === 4 && level % 100 !== 94) || level % 100 === 99;
-}
-
 // One book's fetched state. `rounds` is newest-first.
 function _emptyBook() {
   return { openRound: 0, rounds: [], credit: 0n, questReward: 0n, error: false };
@@ -265,6 +246,7 @@ class AppParimutuelPanel extends HTMLElement {
   #decimatorContext = null;
   #decimatorDraft = '1000';
   #questActivateListener = null;
+  #decimatorBurnListener = null;
   #pollHandle = null;
   #tickHandle = null;
   #postActionRefreshHandle = null;
@@ -283,6 +265,8 @@ class AppParimutuelPanel extends HTMLElement {
         if (Number(detail?.questType) === 5 && detail?.submit) void this.#enterDecimator();
       };
       document.addEventListener('quest:activate', this.#questActivateListener);
+      this.#decimatorBurnListener = () => this.#refresh();
+      document.addEventListener('app-decimator:burn-confirmed', this.#decimatorBurnListener);
     }
     this.#unsubs.push(subscribe('connected.address', () => this.#refresh()));
     this.#unsubs.push(subscribe('viewing.address', () => this.#refresh()));
@@ -299,6 +283,11 @@ class AppParimutuelPanel extends HTMLElement {
       try { document.removeEventListener('quest:activate', this.#questActivateListener); }
       catch (_e) { /* defensive */ }
       this.#questActivateListener = null;
+    }
+    if (this.#decimatorBurnListener && typeof document !== 'undefined') {
+      try { document.removeEventListener('app-decimator:burn-confirmed', this.#decimatorBurnListener); }
+      catch (_e) { /* defensive */ }
+      this.#decimatorBurnListener = null;
     }
     for (const h of [
       this.#pollHandle,
@@ -422,10 +411,11 @@ class AppParimutuelPanel extends HTMLElement {
   // player or market history. Keeping them isolated is what lets the strip
   // paint promptly on cold load and at a phase transition.
   async #loadPoolBenchmarks(seq, level) {
-    const [ratchets, poolTarget, phaseContext] = await Promise.all([
+    const [ratchets, poolTarget, phaseContext, history] = await Promise.all([
       readGrowthRatchets({ round: level }).catch(() => null),
       readPrizePoolTarget().catch(() => null),
       readJackpotPhaseContext().catch(() => null),
+      readGrowthRatchetHistory({ throughLevel: level }).catch(() => null),
     ]);
     if (seq !== this.#fetchSeq) return;
     const benchmarkLevel = Number(level);
@@ -448,6 +438,12 @@ class AppParimutuelPanel extends HTMLElement {
           next: BigInt(ratchets.next ?? 0).toString(),
         }
         : sameLevel ? prior?.ratchets ?? null : null;
+      const historicalPools = Array.isArray(history)
+        ? history.map((row) => ({
+          level: Number(row.level),
+          poolWei: BigInt(row.poolWei).toString(),
+        }))
+        : sameLevel ? prior?.history ?? [] : [];
       // The full-width pool thermometer consumes the same contract reads as
       // this book. Publish before the historical volume scan so that an RPC's
       // log latency cannot hold up the page-wide progression display.
@@ -455,6 +451,7 @@ class AppParimutuelPanel extends HTMLElement {
         level: benchmarkLevel,
         targetWei,
         ratchets: growth,
+        history: historicalPools,
         contractPhase: phaseContext
           ? {
             level: phaseContext.level != null && Number.isInteger(Number(phaseContext.level))

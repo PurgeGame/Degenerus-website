@@ -740,10 +740,11 @@
    ETH amount, ticket amount, and one combined winning-entry count. */
 .replay-prize-reveal.replay-bucket-reveal {
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) clamp(2.2rem, 9vw, 2.5rem);
   align-items: center;
-  justify-content: center;
+  justify-items: center;
   gap: 0.22rem;
   text-align: center;
   padding: 0.1rem;
@@ -757,13 +758,108 @@
 .replay-prize-reveal.replay-bucket-reveal--q2 { padding: 14% 14% 4% 4%; }
 .replay-prize-reveal.replay-bucket-reveal--q3 { padding: 14% 4% 4% 14%; }
 
-/* Still smaller than the live/reel badge, but large enough to read comfortably
-   on the scratched-off public-result surface. */
+/* Ordinary public results use one badge scale in both draws. The main draw's
+   loss tint and the bonus draw's neutral surface must not change its size. */
+.replay-bucket-badge-stage {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+}
+
 .replay-bucket-badge {
-  width: 48%;
+  width: 68%;
   aspect-ratio: 1;
   object-fit: contain;
-  flex: 0 0 auto;
+  grid-area: 1 / 1;
+}
+
+/* Preserve the main draw's pink loss language after the cover is gone without
+   moving or muting the public winning badge and payout underneath. */
+.replay-prize-reveal.replay-bucket-reveal--main-miss {
+  background:
+    repeating-linear-gradient(135deg, rgba(105, 20, 31, 0.045) 0 1px, transparent 1px 8px),
+    rgba(239, 120, 120, 0.16);
+  box-shadow: inset 0 0 0 2px rgba(111, 25, 36, 0.22);
+}
+
+/* The solo ETH result is only one step larger than an ordinary public result.
+   Its auto-height receipt leaves the rest of the quadrant to a top-anchored
+   badge, so the payout can never cover the artwork. */
+.replay-prize-reveal.replay-bucket-reveal--solo-eth {
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0.42rem;
+}
+
+.replay-bucket-reveal--solo-eth .replay-bucket-badge-stage {
+  place-items: start center;
+}
+
+.replay-bucket-reveal--main-miss.replay-bucket-reveal--solo-eth .replay-bucket-badge {
+  width: 76%;
+  height: 100%;
+  aspect-ratio: auto;
+  object-position: 50% 0;
+  transform: translateY(-0.18rem);
+}
+
+/* The fixed receipt lane keeps badge centers identical even when a bucket has
+   no ticket award or the solo ETH capsule uses larger type. */
+.replay-bucket-receipt {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.22rem;
+}
+
+/* A solo receipt remains one compact row when the bucket also has tickets.
+   This preserves badge height instead of stacking rewards into its lane. */
+.replay-bucket-reveal--solo-eth .replay-bucket-receipt {
+  height: auto;
+  flex-direction: row;
+  justify-content: center;
+  gap: 0.3rem;
+  transform: translateY(-0.28rem);
+}
+
+/* The lower quadrants have more open paper beneath the center diamond. Raise
+   their rewards slightly in both the main and bonus draws. */
+.replay-bucket-reveal--q2 .replay-bucket-amount,
+.replay-bucket-reveal--q2 .replay-bucket-tickets,
+.replay-bucket-reveal--q3 .replay-bucket-amount,
+.replay-bucket-reveal--q3 .replay-bucket-tickets {
+  transform: translateY(-0.16rem);
+}
+
+/* Protect the intentionally separated solo badge/receipt lanes. */
+.replay-bucket-reveal--solo-eth.replay-bucket-reveal--q2 .replay-bucket-amount,
+.replay-bucket-reveal--solo-eth.replay-bucket-reveal--q2 .replay-bucket-tickets,
+.replay-bucket-reveal--solo-eth.replay-bucket-reveal--q3 .replay-bucket-amount,
+.replay-bucket-reveal--solo-eth.replay-bucket-reveal--q3 .replay-bucket-tickets {
+  transform: none;
+}
+
+.replay-bucket-reveal--solo-eth .replay-bucket-amount {
+  gap: 0.22em;
+  font-size: clamp(0.82rem, 2.55vw, 1.18rem);
+}
+
+/* Keep the solo payout in the same muted loss-result language as every other
+   amount. Its slightly larger type, not a win-like plate, provides emphasis. */
+.replay-bucket-amount--solo-eth {
+  background: transparent;
+  color: #5c1616;
+  box-shadow: none;
+}
+
+.replay-bucket-reveal--solo-eth .replay-bucket-eth {
+  height: 1.28em;
 }
 
 .replay-bucket-amount {

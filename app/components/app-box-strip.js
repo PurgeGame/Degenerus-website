@@ -14,7 +14,7 @@
 //     (chainId-scoped, mirrors the revealed-packs:* convention).
 //   - openBox is permissionless (anyone can open; rewards credit the owner) —
 //     a fresh status read avoids doomed writes, and an already-open race replays
-//     the indexed prizes (or an honest settled card) instead of erroring.
+//     the receipt's actual prize legs instead of replacing them with an error.
 //
 // One chip = one RNG batch index. Multiple boxes bought in one purchase()
 // share the index and open together in one openBox call (LootboxModule
@@ -103,10 +103,10 @@ function _boxKey(box) {
 
 function _boxLabel(box, upper = false) {
   const label = box?.hasPresaleLeg
-    ? box?.hasLootboxLeg ? 'Lootbox + presale box' : 'Presale box'
+    ? box?.hasLootboxLeg ? 'Luckbox + presale box' : 'Presale box'
     : box?.index == null || !Number.isFinite(Number(box.index))
-      ? 'Lootbox purchase'
-      : Number(box.index) === 0 ? 'AFKing lootbox' : 'Lootbox';
+      ? 'Luckbox'
+      : Number(box.index) === 0 ? 'AFKing luckbox' : 'Luckbox';
   return upper ? label.toUpperCase() : label;
 }
 
@@ -290,6 +290,16 @@ function _mergeLegRows(...groups) {
     merged.set(key, item);
   }
   return [...merged.values()];
+}
+
+function _needsReceiptRecovery(legs) {
+  if (!Array.isArray(legs) || legs.length === 0) return true;
+  return legs.some((leg) => {
+    if (leg?.legType !== 'opened' || leg?.source === 'presale') return false;
+    let flip = 0n;
+    try { flip = BigInt(leg.flip ?? 0); } catch (_e) { /* malformed feed value */ }
+    return Number(leg.wholeTickets ?? 0) === 0 && flip === 0n;
+  });
 }
 
 class AppBoxStrip extends HTMLElement {
@@ -969,15 +979,14 @@ class AppBoxStrip extends HTMLElement {
   // -------------------------------------------------------------------------
 
   async #onOpenClick(box) {
-    if (box.opening || !box.ready) return;
+    if (box.opening || !box.ready) return false;
     box.opening = true;
     this.#render();
     this.#clearError();
     const presaleOnly = Boolean(box.hasPresaleLeg && !box.hasLootboxLeg);
     try {
       if (box.resolved) {
-        await this.#replayResolvedBox(box);
-        return;
+        return await this.#replayResolvedBox(box);
       }
       // The indexer can learn about a settlement between polling cycles (or
       // while the connected RPC is still serving the pre-settlement block).
@@ -993,8 +1002,7 @@ class AppBoxStrip extends HTMLElement {
         lootboxIndex: box.index,
       }).catch(() => null);
       if (!presaleOnly && status && status.amount === 0n) {
-        await this.#replayResolvedBox(box);
-        return;
+        return await this.#replayResolvedBox(box);
       }
 
       const { receipt } = await openLootBox({
@@ -1008,15 +1016,16 @@ class AppBoxStrip extends HTMLElement {
       });
       if (legs.length > 0) {
         box.transactionHash = receipt?.hash || receipt?.transactionHash || box.transactionHash || null;
-        this.#queueBoxReveal(box, legs);
+        return this.#queueBoxReveal(box, legs);
       } else {
         // The transaction landed, but its result ABI was newer than this
         // client. Keep the item ready so the DB leg feed can recover it.
         box.opening = false;
         box.ready = true;
         box.resolved = true;
-        this.#renderError('Result syncing — try again shortly.');
+        this.#renderError('Result syncing — auto-open will retry when the receipt is ready.');
         this.#render();
+        return false;
       }
     } catch (error) {
       box.opening = false;
@@ -1032,10 +1041,11 @@ class AppBoxStrip extends HTMLElement {
       // recover the indexed result and replay it, without dropping the receipt
       // row while its settlement legs are still indexing.
       if (clearedByRace || /already|nothing|no box|resolved/i.test(String(rawMsg))) {
-        await this.#replayResolvedBox(box);
+        return await this.#replayResolvedBox(box);
       } else {
         this.#renderError(compactUiError(error, 'Box did not open. Try again.'));
         this.#render();
+        return false;
       }
     }
   }
@@ -1068,15 +1078,20 @@ class AppBoxStrip extends HTMLElement {
     } catch (_e) {
       // Fall through to the exact chain-event replay below.
     }
-    if (legs.length === 0 && Number(box.index) > 0) {
+    if (_needsReceiptRecovery(legs) && Number(box.index) > 0) {
       try {
-        legs = await readOpenLegsFromChain({
+        const receiptLegs = await readOpenLegsFromChain({
           player: this.#addr,
           lootboxIndex: box.index,
+          purchaseTransactionHashes: [
+            ...(Array.isArray(box.transactionHashes) ? box.transactionHashes : []),
+            box.transactionHash,
+          ].filter(Boolean),
         });
+        if (receiptLegs.length > 0) legs = receiptLegs;
       } catch (_e) {
-        // A spin-only outcome carries no index-bearing event. The honest
-        // settled presentation below handles that irreducible case.
+        // Keep the indexed result if receipt recovery is temporarily
+        // unavailable; its concrete zero/fractional result is still truthful.
       }
     }
 
@@ -1115,10 +1130,10 @@ class AppBoxStrip extends HTMLElement {
     box.opening = false;
     box.ready = true;
     box.resolved = true;
-    this.#renderError('Result syncing — try again shortly.');
+    this.#renderError('Result syncing — auto-open will retry when the receipt is ready.');
     if (this.#addr) _writePending(this.#addr, this.#boxes);
     this.#render();
-    return true;
+    return false;
   }
 
   #queueBoxReveal(box, legs, { title = null, settledExpected = false } = {}) {
@@ -1302,8 +1317,8 @@ class AppBoxStrip extends HTMLElement {
         : box.ready ? box.resolved ? 'VIEW RESULT' : `OPEN ${_boxLabel(box, true)}` : 'RNG PENDING';
       cta.setAttribute('aria-label', box.ready
         ? Number(box.index) === 0
-          ? `${box.resolved ? 'View result for' : 'Open'} AFKing lootbox`
-          : `${box.resolved ? 'View result for' : 'Open'} lootbox ${box.index}`
+          ? `${box.resolved ? 'View result for' : 'Open'} AFKing luckbox`
+          : `${box.resolved ? 'View result for' : 'Open'} luckbox ${box.index}`
         : `${_boxLabel(box)} waiting for RNG`);
       if (box.ready && !box.opening) {
         cta.addEventListener('click', () => this.#onOpenClick(box));

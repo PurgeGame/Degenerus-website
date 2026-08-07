@@ -41,6 +41,10 @@ const GAME_LENS_ABI = [
     + 'uint24 lastAutoBoughtDay,uint24 lastOpenedDay,uint24 afkCoveredThroughDay,'
     + 'uint24 afkingStartDay,uint32 affiliateBase,uint24 pendingFlip,'
     + 'uint16 subStreakLatch,uint32 effectiveStreak) s)',
+  'function activityScoreBreakdown(address game,address player) view returns (('
+    + 'uint256 total,uint32 questStreak,uint256 questStreakPoints,bool deityPass,'
+    + 'uint256 mintStreakPoints,uint256 mintCountPoints,uint256 affiliatePoints,'
+    + 'uint256 passBonusPoints,uint256 cursePoints) b)',
 ];
 
 let _contractFactory = null;
@@ -111,24 +115,87 @@ function _safeWholeNumber(value) {
   }
 }
 
+function _decodeActivityBreakdown(value) {
+  if (value == null) return null;
+  const totalBps = _safeWholeNumber(_value(value, 'total', 0, null));
+  const questStreakPoints = _safeWholeNumber(_value(value, 'questStreak', 1, null));
+  const questStreakCreditedPoints = _safeWholeNumber(
+    _value(value, 'questStreakPoints', 2, null),
+  );
+  const mintLevelStreakPoints = _safeWholeNumber(_value(value, 'mintStreakPoints', 4, null));
+  const mintCountPoints = _safeWholeNumber(_value(value, 'mintCountPoints', 5, null));
+  const affiliatePoints = _safeWholeNumber(_value(value, 'affiliatePoints', 6, null));
+  const passBonusPoints = _safeWholeNumber(_value(value, 'passBonusPoints', 7, null));
+  const cursePoints = _safeWholeNumber(_value(value, 'cursePoints', 8, null));
+  const numbers = [
+    totalBps,
+    questStreakPoints,
+    questStreakCreditedPoints,
+    mintLevelStreakPoints,
+    mintCountPoints,
+    affiliatePoints,
+    passBonusPoints,
+    cursePoints,
+  ];
+  if (numbers.some((number) => number == null)) return null;
+  if (questStreakCreditedPoints !== Math.floor(questStreakPoints / 2)) return null;
+
+  // The lens mirrors GAME storage directly. Refuse a stale-layout lens unless
+  // every mirrored component reconciles with GAME's authoritative total.
+  const uncapped = mintLevelStreakPoints
+    + mintCountPoints
+    + questStreakCreditedPoints
+    + affiliatePoints
+    + passBonusPoints
+    - cursePoints;
+  const expectedTotal = Math.min(65_534, Math.max(0, uncapped));
+  if (expectedTotal !== totalBps) return null;
+
+  const deityPass = Boolean(_value(value, 'deityPass', 3, false));
+  const passKind = deityPass
+    ? 'deity'
+    : passBonusPoints === 40 ? 'whale_100'
+      : passBonusPoints === 10 ? 'whale_10'
+        : null;
+  return {
+    totalBps,
+    questStreakPoints,
+    questStreakCreditedPoints,
+    mintLevelStreakPoints,
+    mintCountPoints,
+    affiliatePoints,
+    passBonus: passKind ? { kind: passKind, points: passBonusPoints } : null,
+    cursePoints,
+    deityPass,
+    liveExact: true,
+  };
+}
+
 async function _readGameQuestContext(provider, player, overrides) {
   const game = _gameContract(provider);
   const lens = _lensContract(provider);
-  const [scoreRead, deityRead, subRead, lensRead] = await Promise.allSettled([
+  const [scoreRead, deityRead, subRead, lensRead, breakdownRead] = await Promise.allSettled([
     game.playerActivityScore(player, overrides),
     game.hasDeityPass(player, overrides),
     game.subInfo(player, overrides),
     lens
       ? lens.subInfoFull(CONTRACTS.GAME, player, overrides)
       : Promise.reject(new Error('no lens')),
+    lens && typeof lens.activityScoreBreakdown === 'function'
+      ? lens.activityScoreBreakdown(CONTRACTS.GAME, player, overrides)
+      : Promise.reject(new Error('no activity breakdown lens')),
   ]);
   const sub = subRead.status === 'fulfilled' ? subRead.value : null;
   const lensSub = lensRead.status === 'fulfilled' ? lensRead.value : null;
+  const activityBreakdown = breakdownRead.status === 'fulfilled'
+    ? _decodeActivityBreakdown(breakdownRead.value)
+    : null;
   return {
-    activityScore: scoreRead.status === 'fulfilled'
-      ? _safeWholeNumber(scoreRead.value)
-      : null,
-    hasDeityPass: deityRead.status === 'fulfilled' ? Boolean(deityRead.value) : null,
+    activityScore: activityBreakdown?.totalBps
+      ?? (scoreRead.status === 'fulfilled' ? _safeWholeNumber(scoreRead.value) : null),
+    hasDeityPass: activityBreakdown?.deityPass
+      ?? (deityRead.status === 'fulfilled' ? Boolean(deityRead.value) : null),
+    activityBreakdown,
     sub: sub == null ? null : {
       active: Boolean(_value(sub, 'active', 0, false)),
       startDay: Number(_value(sub, 'afkingStartDay', 2, 0)),
@@ -209,9 +276,22 @@ export async function readLiveQuestBoard(player) {
     };
   });
   const day = quests.find((quest) => quest.day > 0)?.day || 0;
-  const manualStreak = Number(_value(currentState, 'streak', 0,
-    _value(effective, 'streak', 0, _value(daily, 'baseStreak', 4, 0))));
+  const rawManualStreak = Number(_value(currentState, 'streak', 0,
+    _value(daily, 'baseStreak', 4, 0)));
+  const decayAwareStreak = Number(_value(effective, 'streak', 0,
+    _value(daily, 'baseStreak', 4, rawManualStreak)));
   const afkingActive = Boolean(_value(effective, 'afking', 1, false));
+
+  // Before the first write of a new quest day, playerQuestStates.streak can be
+  // a stale pre-lapse high-water mark. Once today's progress/completion exists,
+  // the write path has synchronized the reset and rawManualStreak also includes
+  // the streak earned today. This keeps a dormant 1 from surviving a real reset
+  // without hiding today's newly earned 1/2.
+  const hasCurrentDayQuestState = quests.some((quest) => {
+    if (quest.completed) return true;
+    try { return BigInt(quest.progress) > 0n; } catch (_e) { return false; }
+  });
+  const manualStreak = hasCurrentDayQuestState ? rawManualStreak : decayAwareStreak;
 
   // During an afKing run the Quest contract intentionally freezes its manual
   // counter, so the live streak has to come from the Game-side Sub record.
@@ -224,23 +304,35 @@ export async function readLiveQuestBoard(player) {
   // which is the failure the old hardcoded slot-53 decode was exposed to.
   // Address freshness is db/sync-deployment.mjs's job, not this check's.
   //
-  // A zero is the contract's own decay gate firing, not a read failure; fall
-  // back rather than show a stale afKing high-water mark. When the lens is
-  // unavailable entirely, leaving this inexact lets the panel prefer the indexed
-  // /player streak, which is already afKing-correct.
+  // A zero is the contract's own decay gate firing, not a read failure. Accept
+  // it as exact instead of reviving a stale manual/indexed high-water mark. If
+  // the lens is unavailable entirely, leaving this inexact lets the panel use
+  // the indexed /player streak as a fallback.
   let effectiveQuestStreak = manualStreak;
   let effectiveQuestStreakExact = !afkingActive;
   const sub = gameContext?.sub;
   const lensSub = gameContext?.lensSub;
-  if (afkingActive && sub?.active && sub.startDay > 0
+  const scoreStreak = gameContext?.activityBreakdown?.questStreakPoints;
+  if (afkingActive && Number.isFinite(scoreStreak) && scoreStreak >= 0) {
+    // The parity-checked score breakdown exposes the exact unified streak GAME
+    // consumed, even if the older Sub-only lens call is unavailable.
+    effectiveQuestStreak = scoreStreak;
+    effectiveQuestStreakExact = true;
+  } else if (afkingActive && sub?.active && sub.startDay > 0
     && sub.coveredThroughDay >= sub.startDay
     && lensSub
     && lensSub.startDay === sub.startDay
     && lensSub.coveredThroughDay === sub.coveredThroughDay
-    && lensSub.effectiveStreak > 0) {
+    && Number.isFinite(lensSub.effectiveStreak)
+    && lensSub.effectiveStreak >= 0) {
     effectiveQuestStreak = lensSub.effectiveStreak;
     effectiveQuestStreakExact = true;
   }
+  const scoreQuestStreak = Number.isFinite(scoreStreak)
+    ? scoreStreak
+    : !afkingActive ? decayAwareStreak
+      : effectiveQuestStreakExact ? effectiveQuestStreak
+        : null;
 
   return {
     day,
@@ -265,7 +357,9 @@ export async function readLiveQuestBoard(player) {
     afkingActive,
     effectiveQuestStreak,
     effectiveQuestStreakExact,
+    scoreQuestStreak,
     activityScore: gameContext?.activityScore ?? null,
+    activityBreakdown: gameContext?.activityBreakdown ?? null,
     hasDeityPass: gameContext?.hasDeityPass ?? null,
     shields: Number(_value(shieldState, 'shields', 0, 0)),
     blockNumber,

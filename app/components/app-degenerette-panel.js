@@ -3142,7 +3142,7 @@ class AppDegenerettePanel extends HTMLElement {
       // second wallet transaction.
       queueReveal({
         kind: 'lootbox',
-        title: 'DEGENERETTE LOOTBOX',
+        title: 'DEGENERETTE LUCKBOX',
         legs: directBoxLegs,
         settledExpected: true,
         // OPEN LOOTBOX on the finished Degenerette board arms this already

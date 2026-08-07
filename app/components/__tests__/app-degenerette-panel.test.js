@@ -2323,7 +2323,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     assert.equal(sequence?.lootboxEth, 3n * 10n ** 16n,
       'the direct opened leg is retained for the actual-ETH/lootbox-ETH split');
     assert.equal(lootboxSequence?.kind, 'lootbox');
-    assert.equal(lootboxSequence?.title, 'DEGENERETTE LOOTBOX');
+    assert.equal(lootboxSequence?.title, 'DEGENERETTE LUCKBOX');
     assert.equal(lootboxSequence?.settledExpected, true,
       'an auto-resolved fractional-only box still has a visible result');
     assert.notEqual(lootboxSequence?.noVessel, true,

@@ -27,7 +27,9 @@ import { API_BASE, BADGE_QUADRANTS, BADGE_COLORS, BADGE_ITEMS, badgeCircularPath
 import { batch, update } from '../app/reactive-store.js';
 import { setMajorDrawActivity } from '../app/major-draw-activity.js';
 import { isMuted as isSfxMuted } from '../app/jackpot-sfx.js';
+import { subscribePendingActions } from '../app/pending-actions.js';
 import { celebrateProtocol } from '../protocol-celebration.js';
+import { latchedJackpotProcessingStage } from '../app/jackpot-processing.js';
 
 const DAY_DATA_RETRY_BASE_MS = 1_500;
 const DAY_DATA_RETRY_MAX_MS = 15_000;
@@ -104,6 +106,10 @@ const BUCKET_REVEAL_POSITION_CLASSES = [
   'replay-bucket-reveal--q1',
   'replay-bucket-reveal--q2',
   'replay-bucket-reveal--q3',
+];
+const BUCKET_REVEAL_VARIANT_CLASSES = [
+  'replay-bucket-reveal--solo-eth',
+  'replay-bucket-reveal--main-miss',
 ];
 
 function isGoldTrait(traitId) {
@@ -228,6 +234,7 @@ class ReplayPanel extends HTMLElement {
 
   #audioCtx = null;             // Web Audio context for SFX
   #sfxBus = null;               // dry, compressed slot-cabinet output
+  #soloEthCuePlayed = false;    // replaces the generic roll fanfare for this reveal
   #scratchNode = null;          // active scratch noise node
   #mouseIsDown = false;         // global mouse button state
   #badgeCache = new Map();      // path → warmed Image (preloaded badge SVG cache)
@@ -262,6 +269,17 @@ class ReplayPanel extends HTMLElement {
   // still runs this component's real buttons, reel timing, scratch canvases,
   // sounds, and result renderers; this replaces network reads, not gameplay UI.
   #tutorialFixture = null;
+  // A due Decimator temporarily owns the app's primary jackpot action. Keep a
+  // complete snapshot of the ordinary spin control so closing the draw returns
+  // to exactly the prior day-summary/spin state.
+  #primaryDecimatorAction = null;
+  #primaryDecimatorBusy = false;
+  #primaryDecimatorError = '';
+  #pendingActionUnsubscribe = null;
+  #revealStateBeforeDecimator = null;
+  // Highest processing-milestone count seen for the day being handed off, so a
+  // retry that re-requests a roll cannot slide the progress bar backwards.
+  #jpProgressLatch = null;
 
   connectedCallback() {
     this.innerHTML = `
@@ -352,6 +370,10 @@ class ReplayPanel extends HTMLElement {
     this.querySelector('[data-bind="day-select"]').addEventListener('change', (e) => this.#onDayChange(e));
     this.querySelector('[data-bind="player-select"]').addEventListener('change', (e) => this.#onPlayerChange(e));
     this.querySelector('[data-bind="reveal-btn"]').addEventListener('click', () => {
+      if (this.#primaryDecimatorAction) {
+        void this.#triggerPrimaryDecimator();
+        return;
+      }
       if (this.#btnMode === 'bonus') this.#triggerBonusRoll();
       else this.#triggerReveal();
     });
@@ -393,6 +415,9 @@ class ReplayPanel extends HTMLElement {
       });
     }
 
+    this.#pendingActionUnsubscribe = subscribePendingActions((items) => {
+      this.#setPrimaryDecimatorAction(items);
+    });
     this.#syncSpinControlState();
     this.refreshDays();
     this.#preloadBadges(); // warm browser cache for all badge SVGs in background
@@ -417,6 +442,13 @@ class ReplayPanel extends HTMLElement {
     this.#dayReloadTarget = null;
     this.#skipSpinId = null;
     this.#interactiveRevealKey = null;
+    try { this.#pendingActionUnsubscribe?.(); } catch { /* defensive */ }
+    this.#pendingActionUnsubscribe = null;
+    this.#primaryDecimatorAction = null;
+    this.#primaryDecimatorBusy = false;
+    this.#primaryDecimatorError = '';
+    this.#revealStateBeforeDecimator = null;
+    this.removeAttribute?.('data-primary-action');
     this.#stopIdleSpin();
     this.#sfxScratchStop();
     document.removeEventListener('mousedown', this._onMouseDown);
@@ -638,20 +670,91 @@ class ReplayPanel extends HTMLElement {
     this.#syncSpinControlState();
   }
 
+  /**
+   * The four exact-day handoff milestones, read from the same state
+   * `#hasExactDayRolls` gates on. Kept deliberately in sync with that method:
+   * if a new precondition is added there, add it here or the bar will read
+   * complete while the board is still unspinnable.
+   */
+  #jackpotProcessingMilestones(day = this.#selectedDay) {
+    const target = Number(day);
+    if (!Number.isInteger(target) || target <= 0) {
+      return { draw: false, rolls: false, sealed: false };
+    }
+    const rng = this.#rngDays.find((entry) => Number(entry?.day) === target);
+    let hasFinalWord = false;
+    try { hasFinalWord = BigInt(rng?.finalWord ?? 0) > 0n; } catch { /* malformed row */ }
+    return {
+      draw: Boolean(hasFinalWord && rng?.mainTraitsPacked != null && rng?.bonusTraitsPacked != null),
+      // One milestone: #loadDayRolls resolves both endpoints together and the
+      // caller assigns both fields in one block, so a half-loaded pair is a
+      // failed fetch awaiting retry, never an intermediate state to render.
+      rolls: Number(this.#dayRoll1?.day) === target && Array.isArray(this.#dayRoll1?.wins)
+        && Number(this.#dayRoll2?.day) === target && Array.isArray(this.#dayRoll2?.wins),
+      // The seal is what makes a non-empty winner array trustworthy; see the
+      // DailyWinningTraits note in #hasExactDayRolls.
+      sealed: !this.hasAttribute('data-day-warming'),
+    };
+  }
+
+  #jackpotProcessingStage() {
+    const day = Number(this.#selectedDay);
+    const { stage, latch } = latchedJackpotProcessingStage({
+      day,
+      milestones: this.#jackpotProcessingMilestones(day),
+      latch: this.#jpProgressLatch,
+    });
+    this.#jpProgressLatch = latch;
+    return stage;
+  }
+
   #syncSpinControlState() {
     const btn = this.querySelector?.('[data-bind="reveal-btn"]');
     if (!btn) return;
+    const decimator = this.#primaryDecimatorAction;
+    if (decimator) {
+      const busy = this.#primaryDecimatorBusy || decimator.state === 'busy';
+      const ready = decimator.state === 'ready' && typeof decimator.run === 'function';
+      btn.hidden = false;
+      btn.classList?.add('is-decimator');
+      btn.classList?.remove('is-bonus');
+      btn.classList?.toggle('is-processing', busy);
+      btn.disabled = busy || this.#spinning || !ready;
+      btn.textContent = this.#primaryDecimatorError
+        ? 'DECIMATOR DRAW · TRY AGAIN'
+        : busy
+          ? (decimator.write === true ? 'RESOLVING DECIMATOR…' : 'LOADING DECIMATOR…')
+          : (decimator.write === true ? 'RESOLVE + RUN DECIMATOR' : 'RUN DECIMATOR DRAW');
+      btn.setAttribute?.('aria-label', btn.textContent);
+      if (busy) btn.setAttribute?.('aria-busy', 'true');
+      else btn.removeAttribute?.('aria-busy');
+      btn.title = this.#primaryDecimatorError
+        ? 'The draw could not be loaded. Press to try again.'
+        : 'Open the resolved Decimator wheel';
+      return;
+    }
+    btn.classList?.remove('is-decimator');
     const processing = this.hasAttribute('data-day-warming')
       || this.hasAttribute('data-day-loading');
     btn.classList?.toggle('is-processing', processing);
     if (processing) {
+      const stage = this.#jackpotProcessingStage();
       btn.disabled = true;
       btn.textContent = SPIN_PROCESSING_LABEL;
+      // The fill and the flame cadence are both driven off this one number, so
+      // there is exactly one place where progress can disagree with itself.
+      btn.style?.setProperty?.('--jp-progress', String(stage.progress));
+      btn.setAttribute?.('data-jp-stage', stage.key);
       btn.setAttribute?.('aria-busy', 'true');
-      btn.setAttribute?.('aria-label', 'Jackpot processing. Spin will be available soon.');
-      btn.title = 'Jackpot processing — spin will be available soon';
+      btn.setAttribute?.(
+        'aria-label',
+        `Jackpot processing. ${stage.label}. Step ${stage.done} of ${stage.total}.`,
+      );
+      btn.title = `Jackpot processing — ${stage.label} (${stage.done}/${stage.total})`;
       return;
     }
+    btn.style?.removeProperty?.('--jp-progress');
+    btn.removeAttribute?.('data-jp-stage');
     btn.removeAttribute?.('aria-busy');
     btn.removeAttribute?.('aria-label');
     btn.classList?.toggle('is-bonus', this.#btnMode === 'bonus');
@@ -664,6 +767,88 @@ class ReplayPanel extends HTMLElement {
       btn.textContent = MAIN_SPIN_LABEL;
       btn.disabled = !this.#dayDataReady(this.#selectedDay);
       btn.title = '';
+    }
+  }
+
+  #setPrimaryDecimatorAction(items) {
+    const next = (Array.isArray(items) ? items : []).find((item) => (
+      item?.kind === 'decimator' && item?.primarySurface === 'jackpot'
+    )) || null;
+    const btn = this.querySelector?.('[data-bind="reveal-btn"]');
+
+    if (next && !this.#primaryDecimatorAction && btn) {
+      this.#revealStateBeforeDecimator = {
+        hidden: Boolean(btn.hidden),
+        disabled: Boolean(btn.disabled),
+        textContent: btn.textContent,
+        title: btn.title || '',
+        ariaBusy: btn.getAttribute?.('aria-busy'),
+        ariaLabel: btn.getAttribute?.('aria-label'),
+        isBonus: Boolean(btn.classList?.contains('is-bonus')),
+        isProcessing: Boolean(btn.classList?.contains('is-processing')),
+        isSpinning: Boolean(btn.classList?.contains('is-spinning')),
+        jpProgress: btn.style?.getPropertyValue?.('--jp-progress') || '',
+        jpStage: btn.getAttribute?.('data-jp-stage'),
+      };
+      this.setAttribute?.('data-primary-action', 'decimator');
+    }
+
+    const hadAction = Boolean(this.#primaryDecimatorAction);
+    this.#primaryDecimatorAction = next;
+    if (next) {
+      this.#primaryDecimatorError = '';
+      this.#syncSpinControlState();
+      return;
+    }
+    if (!hadAction) return;
+
+    this.removeAttribute?.('data-primary-action');
+    this.#primaryDecimatorBusy = false;
+    this.#primaryDecimatorError = '';
+    if (btn && this.#revealStateBeforeDecimator) {
+      const saved = this.#revealStateBeforeDecimator;
+      const resultsCta = this.querySelector?.('.ldj-results-cta');
+      btn.hidden = resultsCta && resultsCta.hidden === false ? true : saved.hidden;
+      btn.disabled = saved.disabled;
+      btn.textContent = saved.textContent;
+      btn.title = saved.title;
+      btn.classList?.remove('is-decimator');
+      btn.classList?.toggle('is-bonus', saved.isBonus);
+      btn.classList?.toggle('is-processing', saved.isProcessing);
+      btn.classList?.toggle('is-spinning', saved.isSpinning);
+      if (saved.jpProgress) btn.style?.setProperty?.('--jp-progress', saved.jpProgress);
+      else btn.style?.removeProperty?.('--jp-progress');
+      if (saved.jpStage == null) btn.removeAttribute?.('data-jp-stage');
+      else btn.setAttribute?.('data-jp-stage', saved.jpStage);
+      if (saved.ariaBusy == null) btn.removeAttribute?.('aria-busy');
+      else btn.setAttribute?.('aria-busy', saved.ariaBusy);
+      if (saved.ariaLabel == null) btn.removeAttribute?.('aria-label');
+      else btn.setAttribute?.('aria-label', saved.ariaLabel);
+    }
+    this.#revealStateBeforeDecimator = null;
+    // The ordinary draw may have finished loading while Decimator owned this
+    // button. Recompute from today's live readiness instead of leaving the
+    // stale pre-takeover "JACKPOT PROCESSING" snapshot disabled forever.
+    this.#syncSpinControlState();
+  }
+
+  async #triggerPrimaryDecimator() {
+    const action = this.#primaryDecimatorAction;
+    if (!action || this.#primaryDecimatorBusy || this.#spinning
+      || action.state !== 'ready' || typeof action.run !== 'function') return false;
+    this.#primaryDecimatorBusy = true;
+    this.#primaryDecimatorError = '';
+    this.#syncSpinControlState();
+    try {
+      await action.run();
+      return true;
+    } catch (error) {
+      console.warn('[replay-panel] Decimator draw failed', error);
+      this.#primaryDecimatorError = 'retry';
+      return false;
+    } finally {
+      this.#primaryDecimatorBusy = false;
+      if (this.#primaryDecimatorAction) this.#syncSpinControlState();
     }
   }
 
@@ -1538,7 +1723,7 @@ class ReplayPanel extends HTMLElement {
         if (r.claimed) {
           const ethStr = formatEth(r.claimedEthAmount || '0');
           const lbStr  = formatEth(r.claimedLootboxAmount || '0');
-          const lbPart = (r.claimedLootboxAmount && BigInt(r.claimedLootboxAmount) > 0n) ? ` + ${lbStr} ETH lootbox` : '';
+          const lbPart = (r.claimedLootboxAmount && BigInt(r.claimedLootboxAmount) > 0n) ? ` + ${lbStr} ETH luckbox` : '';
           status = '<span class="replay-dec-status replay-dec-claimed">Claimed</span>';
           amountText = `${ethStr} ETH${lbPart}`;
         } else if (r.isWinner && BigInt(r.claimableEth || '0') > 0n) {
@@ -1863,6 +2048,7 @@ class ReplayPanel extends HTMLElement {
 
     // After Roll 1 spin: show bonus section
     this.#showBonusSection();
+    if (this.#primaryDecimatorAction) this.#syncSpinControlState();
     return true;
   }
 
@@ -2157,6 +2343,7 @@ class ReplayPanel extends HTMLElement {
         btn.textContent = SPIN_AGAIN_LABEL;
       }
     }
+    if (this.#primaryDecimatorAction) this.#syncSpinControlState();
     return true;
   }
 
@@ -2302,6 +2489,7 @@ class ReplayPanel extends HTMLElement {
           'replay-bucket-reveal',
           'replay-player-win-reveal',
           ...BUCKET_REVEAL_POSITION_CLASSES,
+          ...BUCKET_REVEAL_VARIANT_CLASSES,
         );
         prize.innerHTML = '';
         prize.removeAttribute('aria-label');
@@ -2375,6 +2563,7 @@ class ReplayPanel extends HTMLElement {
     this.#quadBadgeBounds = [null, null, null, null];
     this.#centerScratched = false;
     this.#centerScratchGrid = null;
+    this.#soloEthCuePlayed = false;
     this.#sfxScratchStop();
 
     // Start flame spinning animation
@@ -2408,6 +2597,7 @@ class ReplayPanel extends HTMLElement {
           'replay-bucket-reveal',
           'replay-player-win-reveal',
           ...BUCKET_REVEAL_POSITION_CLASSES,
+          ...BUCKET_REVEAL_VARIANT_CLASSES,
         );
         prize.innerHTML = '';
         prize.removeAttribute('aria-label');
@@ -2857,25 +3047,46 @@ class ReplayPanel extends HTMLElement {
     const host = quads[qIdx] && quads[qIdx].querySelector('.replay-prize-reveal');
     if (!host) return;
     host.textContent = '';
-    host.classList.remove('replay-player-win-reveal', ...BUCKET_REVEAL_POSITION_CLASSES);
+    host.classList.remove(
+      'replay-player-win-reveal',
+      ...BUCKET_REVEAL_POSITION_CLASSES,
+      ...BUCKET_REVEAL_VARIANT_CLASSES,
+    );
     host.classList.add('replay-bucket-reveal', `replay-bucket-reveal--q${qIdx}`);
+    if (!this.#bonusPhase) host.classList.add('replay-bucket-reveal--main-miss');
+
+    const currencyWinnerCount = summary.winnerCount == null
+      ? null
+      : Number(summary.winnerCount);
+    const currency = summary.currency === 'FLIP' ? 'FLIP' : 'ETH';
+    const isSoloEth = currency === 'ETH' && currencyWinnerCount === 1;
+    if (isSoloEth) {
+      host.classList.add('replay-bucket-reveal--solo-eth');
+    }
 
     const badge = traitToBadge(summary.traitId);
+    // Keep badge geometry independent from the variable-height receipt below.
+    // A solo result may use larger type or omit tickets entirely; neither may
+    // move the badge off the center shared by its neighboring quadrant.
+    const badgeStage = document.createElement('div');
+    badgeStage.className = 'replay-bucket-badge-stage';
     if (badge) {
       const badgeImg = document.createElement('img');
       badgeImg.className = 'replay-bucket-badge';
       badgeImg.src = badge.path;
       badgeImg.alt = '';
-      host.appendChild(badgeImg);
+      badgeStage.appendChild(badgeImg);
     }
+    host.appendChild(badgeStage);
+
+    const receipt = document.createElement('div');
+    receipt.className = 'replay-bucket-receipt';
 
     const amount = document.createElement('div');
     amount.className = 'replay-bucket-amount';
-    const currencyWinnerCount = summary.winnerCount == null
-      ? null
-      : Number(summary.winnerCount);
+    if (isSoloEth) amount.classList.add('replay-bucket-amount--solo-eth');
     const num = document.createElement('span');
-    const currency = summary.currency === 'FLIP' ? 'FLIP' : 'ETH';
+    num.className = 'replay-bucket-value';
     const formattedCurrencyAward = summary.perWinWei == null
       ? '—'
       : currency === 'FLIP'
@@ -2897,11 +3108,15 @@ class ReplayPanel extends HTMLElement {
       amount.appendChild(num);
       amount.appendChild(currencyIcon);
     }
-    const currencyWinners = document.createElement('span');
-    currencyWinners.className = 'replay-bucket-row-count replay-bucket-row-count--currency';
-    currencyWinners.textContent = `×${Number.isFinite(currencyWinnerCount) ? currencyWinnerCount : '—'}`;
-    amount.appendChild(currencyWinners);
-    host.appendChild(amount);
+    // The featured treatment already communicates that this is the lone ETH
+    // winner; repeating ×1 beside it adds noise without adding information.
+    if (!isSoloEth) {
+      const currencyWinners = document.createElement('span');
+      currencyWinners.className = 'replay-bucket-row-count replay-bucket-row-count--currency';
+      currencyWinners.textContent = `×${Number.isFinite(currencyWinnerCount) ? currencyWinnerCount : '—'}`;
+      amount.appendChild(currencyWinners);
+    }
+    receipt.appendChild(amount);
 
     const ticketEntriesMin = Number(
       summary.ticketEntriesMin ?? summary.ticketEntriesPerWinner,
@@ -2958,8 +3173,9 @@ class ReplayPanel extends HTMLElement {
       ticketWinners.className = 'replay-bucket-row-count replay-bucket-row-count--tickets';
       ticketWinners.textContent = `×${Number.isFinite(ticketWinnerCount) ? ticketWinnerCount : '—'}`;
       tickets.appendChild(ticketWinners);
-      host.appendChild(tickets);
+      receipt.appendChild(tickets);
     }
+    host.appendChild(receipt);
 
     const perWin = summary.perWinWei == null
       ? `unknown ${currency}`
@@ -2978,7 +3194,7 @@ class ReplayPanel extends HTMLElement {
       : '';
     host.setAttribute(
       'aria-label',
-      `Currency award ${perWin}, ${currencyWinnersLabel}${ticketAwardLabel}`,
+      `You did not win this quadrant. Bucket result: currency award ${perWin}, ${currencyWinnersLabel}${ticketAwardLabel}`,
     );
   }
 
@@ -3042,7 +3258,11 @@ class ReplayPanel extends HTMLElement {
     if (lines.length === 0) lines.push(`${wins.length} win${wins.length === 1 ? '' : 's'}`);
 
     host.textContent = '';
-    host.classList.remove('replay-bucket-reveal', ...BUCKET_REVEAL_POSITION_CLASSES);
+    host.classList.remove(
+      'replay-bucket-reveal',
+      ...BUCKET_REVEAL_POSITION_CLASSES,
+      ...BUCKET_REVEAL_VARIANT_CLASSES,
+    );
     host.classList.add('replay-player-win-reveal');
     const receipt = document.createElement('div');
     receipt.className = 'replay-win-description';
@@ -3350,12 +3570,24 @@ class ReplayPanel extends HTMLElement {
     canvas.style.pointerEvents = 'none';
 
     const isWin = this.#quadWinArrays[qIdx].some(d => d.awardType !== 'overflow');
+    const isSoloEthWin = isWin && !this.#bonusPhase && this.#isSoloEthWinner(qIdx);
+    const publicSummary = this.#quadPublicSummaries[qIdx];
+    const isSoloEthLoss = !isWin
+      && !this.#bonusPhase
+      && String(publicSummary?.currency || 'ETH').toUpperCase() !== 'FLIP'
+      && Number(publicSummary?.winnerCount) === 1;
     // q-result-pending means the cover was blue/gold and the player could not
     // know the outcome yet. Give that specific blue→pink miss a small cue;
     // already-red guaranteed losses keep the ordinary quiet loss landing.
     const wasPotentialWin = quad.classList.contains('q-result-pending');
     if (!silent) {
-      if (isWin) this.#sfxReveal(true);
+      if (isSoloEthWin) {
+        this.#soloEthCuePlayed = true;
+        this.#sfxSoloEthReveal();
+      } else if (isSoloEthLoss) {
+        // The special cue belongs only to the actual solo winner. A losing
+        // viewer uncovering the public solo bucket gets no reveal sound.
+      } else if (isWin) this.#sfxReveal(true);
       else if (wasPotentialWin) this.#sfxPinkReveal();
       else this.#sfxReveal(false);
     }
@@ -3429,7 +3661,7 @@ class ReplayPanel extends HTMLElement {
       this.#syncDrawToggleAffordance();
       const anyWon = this.#quadWinArrays.some(w => w.some(d => d.awardType !== 'overflow')) || this.#centerWins.length > 0;
       if (!silent) {
-        if (anyWon) this.#celebrate();
+        if (anyWon) this.#celebrate({ sound: !this.#soloEthCuePlayed });
         this.#dispatchScratchComplete();
       }
     } else {
@@ -3437,6 +3669,27 @@ class ReplayPanel extends HTMLElement {
       if (centerPending) remaining++;
       if (hint) hint.textContent = remaining + ' area' + (remaining !== 1 ? 's' : '') + ' left to scratch';
     }
+  }
+
+  #isSoloEthWinner(qIdx) {
+    const wins = (this.#quadWinArrays[qIdx] || [])
+      .filter((win) => win.awardType !== 'overflow');
+    const summary = this.#quadPublicSummaries[qIdx];
+    if (String(summary?.currency || 'ETH').toUpperCase() === 'FLIP') return false;
+    const positive = (value) => {
+      try { return BigInt(value || '0') > 0n; }
+      catch { return false; }
+    };
+    const hasEth = wins.some((win) => {
+      const type = String(win.awardType || '').toLowerCase();
+      if (type === 'aggregated' || win.isSolo) return positive(win.ethTotal);
+      return (type === 'eth' || String(win.currency || '').toUpperCase() === 'ETH')
+        && positive(win.amount ?? win.ethTotal);
+    });
+    return hasEth && (
+      Number(summary?.winnerCount) === 1
+      || wins.some((win) => win.isSolo)
+    );
   }
 
   // --- Scattered win badges ---
@@ -3592,6 +3845,7 @@ class ReplayPanel extends HTMLElement {
           'replay-bucket-reveal',
           'replay-player-win-reveal',
           ...BUCKET_REVEAL_POSITION_CLASSES,
+          ...BUCKET_REVEAL_VARIANT_CLASSES,
         );
         prize.innerHTML = '';
         prize.removeAttribute('aria-label');
@@ -3654,8 +3908,8 @@ class ReplayPanel extends HTMLElement {
     if (hint) hint.textContent = '';
   }
 
-  #celebrate() {
-    this.#sfxFanfare();
+  #celebrate({ sound = true } = {}) {
+    if (sound) this.#sfxFanfare();
     celebrateProtocol({
       target: this.querySelector('[data-bind="card-grid"]') || this,
       tone: 'jackpot',
@@ -3891,6 +4145,42 @@ class ReplayPanel extends HTMLElement {
         frequency: 170, endFrequency: 72, type: 'triangle', gain: 0.145, duration: 0.09,
       });
     }
+  }
+
+  #sfxSoloEthReveal() {
+    // A solo bucket is the main draw's rare one-wallet ETH hit. Give it a
+    // two-stage vault-open cue: a low rising foundation, then a crystalline
+    // C-major coin burst. It replaces both the ordinary two-note reveal and
+    // the end-of-roll fanfare so the identity stays unmistakable.
+    this.#slotNoise({
+      center: 6400, type: 'highpass', q: 0.5, gain: 0.085, duration: 0.022,
+    });
+    this.#slotTone({
+      frequency: 130.81, endFrequency: 261.63,
+      type: 'sawtooth', gain: 0.075, duration: 0.56,
+    });
+    this.#slotTone({
+      frequency: 261.63, endFrequency: 523.25,
+      type: 'triangle', gain: 0.15, delay: 0.025, duration: 0.5,
+    });
+    [523.25, 659.25, 783.99, 1046.5].forEach((frequency, index) => {
+      this.#slotTone({
+        frequency,
+        type: 'triangle',
+        gain: 0.245 - (index * 0.022),
+        delay: 0.075 + (index * 0.075),
+        duration: 0.34,
+      });
+    });
+    [1568, 2093, 3136].forEach((frequency, index) => {
+      this.#slotTone({
+        frequency,
+        type: 'sine',
+        gain: 0.105 - (index * 0.018),
+        delay: 0.24 + (index * 0.06),
+        duration: 0.42,
+      });
+    });
   }
 
   #sfxFanfare() {

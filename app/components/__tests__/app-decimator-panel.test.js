@@ -293,7 +293,9 @@ globalThis.fetch = async (url) => {
 
 function resetDom() {
   pendingActionsMod.__resetPendingActionsForTest();
+  decimatorMod.__resetContractFactoryForTest();
   coinflipMod.__setClaimableReaderForTest(null);
+  coinflipMod.__resetWidgetBalancesReaderForTest();
   passesMod.__resetContractFactoryForTest();
   _docBody = makeFakeElement('body');
   globalThis.document.body = _docBody;
@@ -649,7 +651,7 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       /class="dec-purchase-help" href="\/learn\/purchases\/"/,
       'the compact info control opens the purchase overview',
     );
-    assert.match(el.innerHTML, /aria-label="Learn about tickets, lootboxes, and foil packs"/);
+    assert.match(el.innerHTML, /aria-label="Learn about tickets, Luckbox, and foil packs"/);
     for (const href of ['/learn/tickets/', '/learn/lootboxes/', '/learn/foil-packs/']) {
       assert.match(PURCHASE_LEARN_SRC, new RegExp(`href="${href}"`));
     }
@@ -660,13 +662,13 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     const el = instantiate();
     assert.match(el.innerHTML, /<span data-bind="dec-ticket-action-label">Buy tickets<\/span>/);
     assert.match(el.innerHTML, /<boon-product-indicator product="purchase"/);
-    assert.match(el.innerHTML, /<span>Buy lootbox<\/span>/);
+    assert.match(el.innerHTML, /<span>Buy luckbox<\/span>/);
     assert.match(el.innerHTML, /<boon-product-indicator product="lootbox"/);
-    assert.doesNotMatch(el.innerHTML, /Lootbox value/i);
+    assert.doesNotMatch(el.innerHTML, /Luckbox value/i);
     assert.match(
       APP_CSS,
       /\.app-decimator-panel \.dec-input-label\s*\{[^}]*font-size:\s*clamp\(0\.72rem, 1\.55vw, 0\.82rem\)/s,
-      'Buy Tickets and Buy Lootbox use the larger matched label size',
+      'Buy Tickets and Buy Luckbox use the larger matched label size',
     );
     assert.match(
       APP_CSS,
@@ -1080,7 +1082,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(fakeContract._calls.purchase.length, 0, 'no tx');
     const err = el.querySelector('[data-bind="dec-error"]');
     assert.equal(err.hidden, false, 'error shown');
-    assert.match(err.textContent, /ticket amount|lootbox/i, 'validation copy');
+    assert.match(err.textContent, /ticket amount|luckbox/i, 'validation copy');
     el.disconnectedCallback();
   });
 
@@ -1099,7 +1101,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(fakeContract._calls.purchase.length, 0, 'no tx');
     const err = el.querySelector('[data-bind="dec-error"]');
     assert.equal(err.hidden, false, 'error shown');
-    assert.match(err.textContent, /Minimum lootbox spend/, 'minimum copy');
+    assert.match(err.textContent, /Minimum luckbox spend/, 'minimum copy');
     el.disconnectedCallback();
   });
 
@@ -1225,8 +1227,13 @@ describe('combined ticket + lootbox buy', () => {
       assert.match(rule, /width:\s*0\.42rem/);
       assert.match(rule, /height:\s*0\.42rem/);
       assert.match(rule, /border-right:\s*1\.5px solid currentColor/);
-      assert.match(rule, /translateY\(-0\.1rem\) rotate\(45deg\)/,
-        `${selector} uses the shared closed-arrow geometry`);
+      assert.match(
+        rule,
+        selector === 'inv-disclosure__chevron'
+          ? /transform:\s*rotate\(45deg\)/
+          : /translateY\(-0\.1rem\) rotate\(45deg\)/,
+        `${selector} uses its shared closed-arrow geometry`,
+      );
     }
     el.disconnectedCallback();
   });
@@ -1472,7 +1479,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.notEqual(value.textContent, '••••', 'the same control toggles it visible again');
     assert.match(
       APP_CSS,
-      /\.dec-funds__display--spoiler \.dec-funds__number\s*\{[^}]*filter:\s*blur\(0\.38rem\)/s,
+      /\.dec-funds__display--spoiler \.dec-funds__number\s*\{[^}]*filter:\s*blur\(var\(--main-balance-spoiler-blur\)\)/s,
     );
     assert.doesNotMatch(
       APP_CSS,
@@ -1511,7 +1518,7 @@ describe('combined ticket + lootbox buy', () => {
 
     pendingActionsMod.publishPendingActions('lootbox-live', [{
       id: 'lootbox:1', kind: 'lootbox', resolved: true, mayAddEth: true,
-      phase: 'result-ready', state: 'ready', label: 'Lootbox',
+      phase: 'result-ready', state: 'ready', label: 'Luckbox',
     }]);
     assert.equal(total.textContent, '••••', 'an indexed unseen lootbox result also protects Total');
     el.disconnectedCallback();
@@ -1530,7 +1537,7 @@ describe('combined ticket + lootbox buy', () => {
     await settle(60);
     pendingActionsMod.publishPendingActions('lootbox-live', [{
       id: 'lootbox:all-in-spoiler', kind: 'lootbox', mayAddEth: true,
-      phase: 'waiting-rng', state: 'waiting', label: 'Lootbox',
+      phase: 'waiting-rng', state: 'waiting', label: 'Luckbox',
     }]);
     assert.equal(el.querySelector('[data-bind="dec-funds-total"]').textContent, '••••');
 
@@ -1755,27 +1762,38 @@ describe('combined ticket + lootbox buy', () => {
     assert.deepEqual(opened.destinations.ETH, ['tickets', 'lootbox', 'degenerette']);
     assert.deepEqual(opened.destinations.FLIP, ['coinflip', 'degenerette']);
     assert.deepEqual(allInDestinations('FLIP', true), ['coinflip', 'degenerette', 'tickets']);
+    assert.deepEqual(
+      allInDestinations('FLIP', true, true),
+      ['coinflip', 'degenerette', 'tickets', 'decimator'],
+      'ticket redemption and Decimator burns are independent FLIP destinations',
+    );
     const quote = opened.quote({ currency: 'ETH', target: 'tickets', spins: 5 });
     assert.equal(quote.valid, true);
     assert.equal(quote.ticketAmount, '77.75',
       'ALL IN leaves one ETH cent for gas before filling quarter-granular tickets');
     assert.equal(quote.buttonLabel, 'ALL IN: 3.11 ETH FOR 77.75 TICKETS');
     assert.match(el.innerHTML,
-      /class="dec-all-in__label">ALL IN<\/strong>[\s\S]*?src="\/whitepaper\/flame-center\.svg"/,
-      'the action carries white copy with the black Degenerus flame below it');
+      /src="\/whitepaper\/flame-center\.svg"[\s\S]*?class="dec-all-in__label">ALL IN<\/strong>[\s\S]*?src="\/whitepaper\/flame-center\.svg"/,
+      'the centered ALL IN label is flanked by two black Degenerus flames');
     assert.match(APP_CSS,
-      /\.dec-all-in\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*border-radius:\s*6px/s,
-      'ALL IN is a normal red action button instead of a circular badge');
+      /\.dec-all-in\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*row;[^}]*justify-content:\s*space-between;[^}]*border-radius:\s*6px/s,
+      'ALL IN is a normal action button instead of a circular badge');
     assert.match(APP_CSS,
       /\.dec-all-in\s*\{[^}]*linear-gradient\(135deg, #a8090c, #ed0e11 52%, #a20709\)/s,
-      'ALL IN retains its red Degenerus treatment');
+      'ALL IN restores its pre-gold red Degenerus treatment');
     assert.doesNotMatch(APP_CSS, /\.dec-all-in\s*\{[^}]*flame-logo\.svg/s,
       'the clipping white logo circle is gone');
     assert.doesNotMatch(APP_CSS, /\.dec-all-in::before\s*\{/,
       'no circular center overlay remains');
     assert.match(APP_CSS,
-      /\.dec-all-in__flame\s*\{[^}]*display:\s*block;[^}]*width:\s*0\.9rem[^}]*height:\s*0\.9rem/s,
-      'the black flame sits as the second line beneath ALL IN');
+      /\.dec-all-in__flame\s*\{[^}]*display:\s*block;[^}]*width:\s*1\.25rem[^}]*height:\s*1\.45rem/s,
+      'the two black flames frame the centered ALL IN label');
+    assert.match(APP_CSS,
+      /\.dec-all-in__label\s*\{[^}]*color:\s*#fff[^}]*font-size:\s*1\.06rem[^}]*letter-spacing:\s*0\.04em/s,
+      'the white label restores its pre-gold display treatment');
+    assert.match(APP_CSS,
+      /\.dec-all-in__label\s*\{[^}]*font-size:\s*1\.06rem/s,
+      'the centered ALL IN label has the larger display scale');
     assert.match(APP_CSS,
       /\.dec-all-in\s*\{[^}]*width:\s*100%[^}]*height:\s*3rem[^}]*min-height:\s*3rem[^}]*max-height:\s*3rem/s,
       'ALL IN matches the normal half-width BUY IN footprint');
@@ -1819,9 +1837,42 @@ describe('combined ticket + lootbox buy', () => {
     unlocked.disconnectedCallback();
   });
 
-  test('FLIP ALL IN includes wallet, settled Coinflip, and accrued AFKing FLIP', async () => {
+  test('ALL IN briefly becomes DO IT during the final coinflip beat', async () => {
+    const el = instantiate();
+    await settle(60);
+    const allIn = el.querySelector('[data-bind="dec-all-in"]');
+    const label = el.querySelector('.dec-all-in__label');
+    assert.equal(allIn.hidden, false);
+
+    document.dispatchEvent({
+      type: 'flip:finishing',
+      detail: { day: 67, durationMs: 250 },
+    });
+    assert.equal(label.textContent, 'DO IT');
+    assert.equal(allIn.classList.contains('dec-all-in--do-it'), true,
+      'the visible copy change gets one restrained brightness pulse');
+    assert.equal(allIn.getAttribute('aria-label'), 'Open ALL IN choices',
+      'the transient joke does not replace the stable accessible action name');
+
+    document.dispatchEvent({ type: 'flip:revealed', detail: { day: 67 } });
+    assert.equal(label.textContent, 'ALL IN');
+    assert.equal(allIn.classList.contains('dec-all-in--do-it'), false,
+      'the normal label returns on the exact settled frame');
+    assert.match(APP_CSS,
+      /\.dec-all-in--do-it\s*\{[^}]*animation:\s*dec-all-in-do-it-flash 0\.25s/s,
+      'the DO IT beat is visually brief');
+
+    el.disconnectedCallback();
+    assert.equal((_docListeners.get('flip:finishing') || []).length, 0,
+      'the cross-panel cue listener is removed with the panel');
+    assert.equal((_docListeners.get('flip:revealed') || []).length, 0,
+      'the restoration listener is removed with the panel');
+  });
+
+  test('FLIP ALL IN uses wallet plus settled Coinflip without double-counting AFKing stake credit', async () => {
     const FLIP = 10n ** 18n;
     coinflipMod.__setClaimableReaderForTest(async () => 500n * FLIP);
+    coinflipMod.__setWidgetBalancesReaderForTest(async () => ({ flipBalance: 2_250n * FLIP }));
     installAfkingReadState({ hasToken: true, pendingFlipWhole: 275n });
     _fetchHandler = async (url) => (
       String(url).includes('/game/state')
@@ -1836,25 +1887,33 @@ describe('combined ticket + lootbox buy', () => {
 
     const quote = opened.quote({ currency: 'FLIP', target: 'coinflip', spins: 5 });
     assert.equal(quote.valid, true);
-    assert.equal(quote.spendWei, 3_025n * FLIP);
-    assert.equal(quote.buttonLabel, "ALL IN: 3,025 FLIP FOR TODAY'S COINFLIP");
+    assert.equal(quote.spendWei, 2_750n * FLIP);
+    assert.equal(quote.buttonLabel, "ALL IN: 2,750 FLIP FOR TODAY'S COINFLIP");
     assert.deepEqual(quote.flipSources, {
       walletWei: 2_250n * FLIP,
       coinflipClaimableWei: 500n * FLIP,
-      afkingPendingWei: 275n * FLIP,
-      totalWei: 3_025n * FLIP,
+      spendableWei: 2_750n * FLIP,
+      burnSpendableWei: 2_750n * FLIP,
+      rngLocked: false,
+      totalWei: 2_750n * FLIP,
     });
-    assert.match(PANEL_SRC, /claimAfkingSubscriptionFlip\(\)/,
-      'AFKing FLIP is materialized before the destination transaction');
-    assert.match(PANEL_SRC, /quote\.target !== 'coinflip'[\s\S]*claimFlip/,
-      'wallet-only burn routes materialize settled Coinflip FLIP first');
+    assert.equal(quote.transactionWei, 2_750n * FLIP,
+      'the destination receives exactly the protocol-spendable total');
+    let submitted = null;
+    document.addEventListener('quest:activate', (event) => { submitted = event.detail; });
+    await opened.confirm({ currency: 'FLIP', target: 'coinflip', spins: 5 }, quote.fingerprint);
+    assert.equal(submitted.target, 2_750n * FLIP,
+      'the destination transaction receives only wallet plus settled Coinflip FLIP');
+    assert.doesNotMatch(PANEL_SRC, /claimAfkingSubscriptionFlip\(\)|claimFlip\(/,
+      'ALL IN never inserts a separate claim transaction');
     el.disconnectedCallback();
   });
 
-  test('wallet-only FLIP formats claim every settled source before submitting', async () => {
+  test('FLIP burn formats submit against claimable directly without a preliminary claim', async () => {
     const FLIP = 10n ** 18n;
     const sends = [];
     coinflipMod.__setClaimableReaderForTest(async () => 500n * FLIP);
+    coinflipMod.__setWidgetBalancesReaderForTest(async () => ({ flipBalance: 2_250n * FLIP }));
     installAfkingReadState({ hasToken: true, pendingFlipWhole: 275n });
     passesMod.__setContractFactoryForTest(() => ({
       claimAfkingFlip: Object.assign(
@@ -1891,13 +1950,60 @@ describe('combined ticket + lootbox buy', () => {
     const quote = opened.quote(selection);
 
     await opened.confirm(selection, quote.fingerprint);
-    assert.deepEqual(sends, ['afking', 'coinflip'],
-      'AFKing and Coinflip FLIP become wallet balance before the burn-only wager');
-    assert.ok(claimContract._calls.some((call) => (
-      call[0] === 'send'
-      && call[1] === 'claimCoinflips'
-      && call[3] === 500n * FLIP
-    )));
+    assert.deepEqual(sends, [], 'the destination contract consumes settled Coinflip FLIP itself');
+    assert.equal(claimContract._calls.length, 0, 'no claim static-call or transaction is inserted');
+    el.disconnectedCallback();
+  });
+
+  test('FLIP ALL IN offers and submits a distinct Decimator burn only while that window is open', async () => {
+    const FLIP = 10n ** 18n;
+    const calls = [];
+    const decimatorBurn = Object.assign(
+      async (...args) => {
+        calls.push(['send', ...args]);
+        return makeFakeTx(makeFakeReceipt());
+      },
+      {
+        staticCall: async (...args) => { calls.push(['static', ...args]); },
+      },
+    );
+    decimatorMod.__setContractFactoryForTest(() => ({
+      decimatorBurn,
+      connect() { return this; },
+    }));
+    coinflipMod.__setClaimableReaderForTest(async () => 500n * FLIP);
+    coinflipMod.__setWidgetBalancesReaderForTest(async () => ({ flipBalance: 2_250n * FLIP }));
+    _fetchHandler = async (url) => (
+      String(url).includes('/game/state')
+        ? { ...DEFAULT_GAME_STATE, level: 24, decWindowOpen: true }
+        : { claimableEth: '0', flipBalance: String(2_250n * FLIP), pending: {} }
+    );
+
+    const el = instantiate();
+    await settle(60);
+    let opened = null;
+    let confirmed = null;
+    el.addEventListener('app-all-in:open', (event) => { opened = event.detail; });
+    el.addEventListener('app-decimator:burn-confirmed', (event) => { confirmed = event.detail; });
+    el.querySelector('[data-bind="dec-all-in"]').dispatchEvent({ type: 'click' });
+
+    assert.ok(opened.destinations.FLIP.includes('decimator'));
+    assert.equal(opened.destinations.FLIP.includes('tickets'), false,
+      'an open Decimator does not pretend FLIP ticket redemption is open');
+    const selection = { currency: 'FLIP', target: 'decimator', spins: 5 };
+    const quote = opened.quote(selection);
+    assert.equal(quote.valid, true);
+    assert.equal(quote.spendWei, 2_750n * FLIP);
+    assert.equal(quote.buttonLabel, 'ALL IN: 2,750 FLIP FOR DECIMATOR');
+
+    await opened.confirm(selection, quote.fingerprint);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0][0], 'static');
+    assert.equal(calls[1][0], 'send');
+    assert.equal(calls[1][1], CONNECTED);
+    assert.equal(calls[1][2], 2_750n * FLIP,
+      'the Decimator contract consumes wallet plus settled Coinflip FLIP directly');
+    assert.equal(confirmed.amountWei, 2_750n * FLIP);
     el.disconnectedCallback();
   });
 
@@ -1915,14 +2021,14 @@ describe('combined ticket + lootbox buy', () => {
     });
     assert.equal(ethLootbox.valid, true);
     assert.equal(ethLootbox.spendWei, 2n * 10n ** 12n);
-    assert.equal(ethLootbox.outputLabel, '1 LOOTBOX');
+    assert.equal(ethLootbox.outputLabel, '1 LUCKBOX');
 
     const groupedEth = allInSelectionQuote({
       currency: 'ETH',
       target: 'lootbox',
       purchaseEthWei: 1_234_500_000_000_000n,
     });
-    assert.equal(groupedEth.buttonLabel, 'ALL IN: 1,234.5 ETH FOR 1 LOOTBOX',
+    assert.equal(groupedEth.buttonLabel, 'ALL IN: 1,234.5 ETH FOR 1 LUCKBOX',
       'the quote CTA groups a large ETH balance');
 
     const unroundedEth = 3_129_999_999_999n;
@@ -1983,6 +2089,24 @@ describe('combined ticket + lootbox buy', () => {
       flipTicketsOpen: false,
     });
     assert.equal(closedTickets.valid, false, 'FLIP tickets disappear with the redemption window');
+
+    const decimator = allInSelectionQuote({
+      currency: 'FLIP',
+      target: 'decimator',
+      flipWei: 2_500n * FLIP,
+      decimatorOpen: true,
+    });
+    assert.equal(decimator.valid, true);
+    assert.equal(decimator.spendWei, 2_500n * FLIP);
+    assert.equal(decimator.buttonLabel, 'ALL IN: 2,500 FLIP FOR DECIMATOR');
+    const closedDecimator = allInSelectionQuote({
+      currency: 'FLIP',
+      target: 'decimator',
+      flipWei: 2_500n * FLIP,
+      decimatorOpen: false,
+    });
+    assert.equal(closedDecimator.valid, false,
+      'Decimator is independent of the FLIP ticket-redemption window');
   });
 
   test('Buy and the optional bonus use a stable compact half-width action rail', async () => {
@@ -3122,6 +3246,60 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     await settle(30);
     assert.equal(ctaAction.textContent, 'Burn 250 FLIP', '0.25 tickets = 250 FLIP');
     assert.equal(ctaAmount.textContent, 'for 0.25 tickets');
+    claimsMod.__resetContractFactoryForTest();
+    el.disconnectedCallback();
+  });
+
+  test('left FLIP Balance uses the same live wallet-plus-claimable total as Protocol Coins', async () => {
+    const FLIP = 10n ** 18n;
+    claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract());
+    coinflipMod.__setWidgetBalancesReaderForTest(async () => ({ flipBalance: 2_250n * FLIP }));
+    coinflipMod.__setClaimableReaderForTest(async () => 500n * FLIP);
+    _fetchHandler = async (url) => String(url).includes('/game/state')
+      ? DEFAULT_GAME_STATE
+      : { claimableEth: '0', flipBalance: String(1n * FLIP), coinflip: { claimablePreview: '0' } };
+    storeMod.update('ui.protocolCoinsFlipDisclosure', {
+      address: CONNECTED.toLowerCase(),
+      visible: false,
+    });
+
+    const el = instantiate();
+    await settle(60);
+    const balance = el.querySelector('[data-bind="dec-flip-balance"]');
+    const value = el.querySelector('[data-bind="dec-flip-balance-value"]');
+    assert.match(el.innerHTML, /dec-flip-balance__label">FLIP BALANCE</);
+    assert.equal(value.textContent, '••••', 'the left copy starts behind the Protocol Coins mask');
+    assert.ok(balance.classList.contains('dec-flip-balance--spoiler'));
+
+    storeMod.update('ui.protocolCoinsFlipDisclosure', {
+      address: CONNECTED.toLowerCase(),
+      visible: true,
+    });
+    assert.equal(value.textContent, '2,750');
+    assert.ok(!balance.classList.contains('dec-flip-balance--spoiler'));
+
+    storeMod.update('ui.protocolCoinsFlipDisclosure', {
+      address: CONNECTED.toLowerCase(),
+      visible: false,
+    });
+    assert.equal(value.textContent, '••••', 'reblurring Protocol Coins reblurs its left mirror');
+    assert.ok(balance.classList.contains('dec-flip-balance--spoiler'));
+    assert.match(
+      APP_CSS,
+      /:root\s*\{[^}]*--main-balance-spoiler-blur:\s*0\.3rem/s,
+      'main balance boxes share one privacy-blur token',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-flip-balance--spoiler[^{]*\{[^}]*filter:\s*blur\(var\(--main-balance-spoiler-blur\)\)/s,
+      'the buy-side FLIP mirror uses the shared blur treatment',
+    );
+    assert.match(
+      APP_CSS,
+      /\.df-position-row--spoiler \.df-position-number,[\s\S]*?\.df-funds__display--spoiler \.df-funds__number\s*\{[^}]*filter:\s*blur\(var\(--main-balance-spoiler-blur\)\)/s,
+      'Protocol Coins and the primary bet boxes use that same blur treatment',
+    );
+
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
   });

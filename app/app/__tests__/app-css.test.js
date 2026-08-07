@@ -229,7 +229,7 @@ describe('app.css legacy coverage and append marker', () => {
 // ===========================================================================
 
 describe('app.css LOC budget', () => {
-  test('total file is in 1700-20000 line range (baseline + deliberate app UI feature blocks)', () => {
+  test('total file is in 1700-20250 line range (baseline + deliberate app UI feature blocks)', () => {
     assert.ok(cssLines.length >= 1700, `total >=1700, got ${cssLines.length}`);
     // Ceiling raised 4400 → 4600 for the ~157-line gold-rush headline block
     // (the last section in the file). Still a hard guard against this file
@@ -267,6 +267,11 @@ describe('app.css LOC budget', () => {
     // resolution presentation, the quest/coinflip/BAF instruments, responsive
     // pass checkout, reveal choreography, and lazy transaction history. Keep a
     // narrow ceiling so future growth still requires an explicit decision.
-    assert.ok(cssLines.length <= 20000, `total <=20000, got ${cssLines.length}`);
+    // 20000 → 20250 adds the full-screen Decimator draw host and its temporary
+    // primary-jackpot action treatment. This remains a narrow feature bump.
+    // 20250 → 20500 for the AFKing subscription workspace (head, quick strip,
+    // edit dialog) and the determinate --jp-progress fill on the jackpot
+    // processing button. Two deliberate features.
+    assert.ok(cssLines.length <= 20500, `total <=20500, got ${cssLines.length}`);
   });
 });

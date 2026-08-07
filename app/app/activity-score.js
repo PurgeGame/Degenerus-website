@@ -12,6 +12,12 @@ function _number(value) {
 }
 
 export function questStreakScorePoints(score) {
+  // The live game lens exposes the credited term directly. Prefer it whenever
+  // present so an incomplete fallback breakdown cannot attribute every
+  // otherwise-unexplained score point to the quest streak.
+  if (score?.questStreakCreditedPoints != null) {
+    return Math.max(0, Math.floor(_number(score.questStreakCreditedPoints)));
+  }
   if (!score || score.totalBps == null) {
     return Math.floor(Math.max(0, _number(score?.questStreakPoints)) / 2);
   }

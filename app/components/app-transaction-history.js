@@ -46,7 +46,7 @@ const HISTORY_FILTERS = Object.freeze([
   ['buys', 'BUYS'],
   ['jackpots', 'JACKPOTS'],
   ['pack-opens', 'PACK OPENS'],
-  ['lootboxes', 'LOOTBOXES'],
+  ['lootboxes', 'LUCKBOX'],
   ['degenerette', 'DEGENERETTE'],
 ]);
 const HISTORY_FILTER_KEYS = Object.freeze(HISTORY_FILTERS.map(([key]) => key));
@@ -226,6 +226,10 @@ function _assetGroup(asset) {
   return 'items';
 }
 
+function _displayAsset(asset) {
+  return asset === 'LOOTBOX' ? 'LUCKBOX' : asset;
+}
+
 function _deltaMap() {
   return new Map();
 }
@@ -327,7 +331,7 @@ export function formatHistoryDelta(delta) {
   const { negative, amount } = _historyDeltaParts(delta);
   const asset = delta.asset === 'TICKETS' && _ticketLevel(delta.level) != null
     ? `L${_ticketLevel(delta.level)} TICKETS`
-    : delta.asset;
+    : _displayAsset(delta.asset);
   return `${negative ? '−' : '+'}${amount} ${asset}`;
 }
 
@@ -335,7 +339,7 @@ function _formatHistoryDeltaExact(delta) {
   const { negative, amount } = _historyDeltaParts(delta, { exact: true });
   const asset = delta.asset === 'TICKETS' && _ticketLevel(delta.level) != null
     ? `L${_ticketLevel(delta.level)} TICKETS`
-    : delta.asset;
+    : _displayAsset(delta.asset);
   return `${negative ? '−' : '+'}${amount} ${asset}`;
 }
 
@@ -432,13 +436,13 @@ function _afkingPurchaseRows(history, owner) {
     _addRaw(map, 'ETH', -cost, 'eth');
     if (useTickets === true) _addCount(map, 'TICKETS', quantity);
 
-    const product = useTickets === true ? 'ticket' : useTickets === false ? 'lootbox' : '';
+    const product = useTickets === true ? 'ticket' : useTickets === false ? 'Luckbox' : '';
     const unit = product || 'order';
     rows.push(_historyRow({
       id: `afking-purchase:${transactionHash || `${item?.blockNumber}:${item?.logIndex}`}`,
       type: 'afking-purchase',
       title: product ? `AFKing ${product} purchase` : 'AFKing purchase',
-      detail: `Day ${Number(item?.day) || '—'} · ${quantity} ${unit}${quantity === 1 ? '' : 's'}`,
+      detail: `Day ${Number(item?.day) || '—'} · ${quantity} ${unit}${quantity === 1 || product === 'Luckbox' ? '' : 's'}`,
       blockNumber: item?.blockNumber,
       logIndex: item?.logIndex,
       day: item?.day,
@@ -517,7 +521,7 @@ function _lootboxPurchaseRows(feed, owner, excludedTransactions = new Set()) {
       return _historyRow({
         id: `lootbox-buy:${item?.transactionHash || item?.id}`,
         type: 'lootbox-purchase',
-        title: 'Lootbox purchase',
+        title: 'Luckbox purchase',
         detail: `Paid with ${asset}`,
         blockNumber: item?.blockNumber,
         logIndex: item?.logIndex,
@@ -602,7 +606,7 @@ function _lootboxResultRows(legsFeed, owner, excludedTransactions = new Set()) {
     startBlock: 0,
     excludedTransactions,
   }).map((result) => {
-    const sequence = { ...result.sequence, title: 'LOOTBOX RESULT' };
+    const sequence = { ...result.sequence, title: 'LUCKBOX RESULT' };
     const autoOpen = Number(result?.lootboxIndex ?? 0) === 0;
     const anchor = items.find((item) => (
       _lower(item?.transactionHash) === _lower(result.transactionHash)
@@ -611,10 +615,10 @@ function _lootboxResultRows(legsFeed, owner, excludedTransactions = new Set()) {
     return _historyRow({
       id: `lootbox-result:${result.transactionHash || result.id}`,
       type: 'lootbox-result',
-      title: 'Lootbox opened',
+      title: 'Luckbox opened',
       detail: autoOpen
         ? 'Automatic settlement'
-        : `Lootbox #${String(result?.lootboxIndex ?? '—')}`,
+        : `Luckbox #${String(result?.lootboxIndex ?? '—')}`,
       blockNumber: sequence?.legs?.[0]?.blockNumber
         ?? anchor?.blockNumber
         ?? items.find((item) => _lower(item?.transactionHash) === _lower(result.transactionHash))?.blockNumber,
@@ -976,8 +980,8 @@ export async function loadTransactionHistory(address, { limit = DEFAULT_LIMIT, p
   const feedLimit = Math.min(SOURCE_PAGE_CAP, Math.max(safeLimit, wantedRows));
   const legLimit = Math.min(SOURCE_PAGE_CAP, Math.max(100, wantedRows * 4));
   const requests = [
-    ['lootbox purchases', () => fetchJSON(`/lootbox/feed?limit=${feedLimit}&player=${player}`)],
-    ['lootbox results', () => fetchJSON(`/lootbox/legs?limit=${legLimit}&player=${player}`)],
+    ['luckbox purchases', () => fetchJSON(`/lootbox/feed?limit=${feedLimit}&player=${player}`)],
+    ['luckbox results', () => fetchJSON(`/lootbox/legs?limit=${legLimit}&player=${player}`)],
     ['Degenerette', () => fetchJSON(`/degenerette/feed?limit=${feedLimit}&player=${player}`)],
     ['ticket reveals', () => fetchJSON(`/player/${player}/packs`)],
     ['jackpot awards', () => fetchJSON(`/player/${player}/jackpot-history`)],
@@ -1321,7 +1325,7 @@ class AppTransactionHistory extends HTMLElement {
         if (row.type === 'degenerette-result' && row.sequence.lootboxLegs?.length) {
           queueReveal({
             kind: 'lootbox',
-            title: 'DEGENERETTE LOOTBOX',
+            title: 'DEGENERETTE LUCKBOX',
             legs: row.sequence.lootboxLegs,
             settledExpected: true,
             noVessel: true,

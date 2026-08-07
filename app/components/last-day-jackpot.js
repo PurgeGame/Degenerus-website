@@ -98,6 +98,7 @@ class LastDayJackpot extends HTMLElement {
   #bridgeTimer = null;
   #bridgeAttempts = 0;
   #scratchCompleteListener = null;
+  #decimatorOpenedListener = null;
   #foilClaimBusy = false; // one in-flight foil claim at a time
   #locallyClaimedFoilMatches = new Set(); // bridge tx receipt → indexer catch-up
   // --- "Whole board played out" gates for the results CTA (user call: the
@@ -227,16 +228,16 @@ class LastDayJackpot extends HTMLElement {
   // FULLY scratched (replay:scratch-complete) — spin end alone would spoil
   // still-covered prizes. It remains the claims-panel spoiler gate.
   // ---------------------------------------------------------------------------
-  #spunKey() {
-    return `spun_day_${CHAIN.id}_${this.#pinnedDay}`;
+  #spunKey(day = this.#pinnedDay) {
+    return `spun_day_${CHAIN.id}_${Number(day)}`;
   }
 
-  #boardCompleteKey() {
-    return `jackpot_complete_day_${CHAIN.id}_${this.#pinnedDay}`;
+  #boardCompleteKey(day = this.#pinnedDay) {
+    return `jackpot_complete_day_${CHAIN.id}_${Number(day)}`;
   }
 
-  #bonusPendingKey() {
-    return `jackpot_bonus_pending_day_${CHAIN.id}_${this.#pinnedDay}`;
+  #bonusPendingKey(day = this.#pinnedDay) {
+    return `jackpot_bonus_pending_day_${CHAIN.id}_${Number(day)}`;
   }
 
   #hasSpunPinnedDay() {
@@ -248,10 +249,10 @@ class LastDayJackpot extends HTMLElement {
     }
   }
 
-  #markSpunPinnedDay() {
-    if (this.#pinnedDay == null) return;
+  #markSpunPinnedDay(day = this.#pinnedDay) {
+    if (!Number.isInteger(Number(day)) || Number(day) <= 0) return;
     try {
-      localStorage.setItem(this.#spunKey(), '1');
+      localStorage.setItem(this.#spunKey(day), '1');
     } catch {
       // QuotaExceededError / SecurityError — swallow; user re-spins next visit
     }
@@ -263,17 +264,17 @@ class LastDayJackpot extends HTMLElement {
     catch { return false; }
   }
 
-  #markCompletedPinnedDay() {
-    if (this.#pinnedDay == null) return;
-    try { localStorage.setItem(this.#boardCompleteKey(), '1'); }
+  #markCompletedPinnedDay(day = this.#pinnedDay) {
+    if (!Number.isInteger(Number(day)) || Number(day) <= 0) return;
+    try { localStorage.setItem(this.#boardCompleteKey(day), '1'); }
     catch { /* private browsing: only this refresh loses the preferred view */ }
   }
 
-  #markBonusPending(pending) {
-    if (this.#pinnedDay == null) return;
+  #markBonusPending(pending, day = this.#pinnedDay) {
+    if (!Number.isInteger(Number(day)) || Number(day) <= 0) return;
     try {
-      if (pending) localStorage.setItem(this.#bonusPendingKey(), '1');
-      else localStorage.removeItem(this.#bonusPendingKey());
+      if (pending) localStorage.setItem(this.#bonusPendingKey(day), '1');
+      else localStorage.removeItem(this.#bonusPendingKey(day));
     } catch { /* same-tab event still carries the authoritative final state */ }
   }
 
@@ -737,39 +738,53 @@ class LastDayJackpot extends HTMLElement {
   // UI. Fires per roll (Roll 1, then bonus Roll 2); every step below is
   // idempotent, and the winner effect is additionally once-per-day guarded.
   #onPanelScratchComplete(e) {
-    this.#markSpunPinnedDay();
-    this.#sawScratchEvent = true;
-    // The spoiler gate is open, so a claimable foil match can surface now.
-    this.#renderFoil();
+    const d = e?.detail;
+    const reportedDay = Number(d?.day);
+    const eventDay = Number.isInteger(reportedDay) && reportedDay > 0
+      ? reportedDay
+      : Number(this.#pinnedDay);
+    if (!Number.isInteger(eventDay) || eventDay <= 0) return;
+
+    // The chain clock can pin tomorrow while yesterday's still-mounted board
+    // remains scratchable. Persist against the board that emitted the event,
+    // never whichever day the host happened to pin a few milliseconds later.
+    const appliesToPinnedDay = eventDay === Number(this.#pinnedDay);
+    this.#markSpunPinnedDay(eventDay);
+    if (appliesToPinnedDay) {
+      this.#sawScratchEvent = true;
+      // The spoiler gate is open, so a claimable foil match can surface now.
+      this.#renderFoil();
+    }
     // The replay board itself knows whether THIS scratch phase contained an
     // actual personal payout and owns its phase-scoped celebration. Do not add
     // day-wide host celebration here: a player who wins only the other roll
     // would otherwise get a winner effect over a losing scratchoff.
-    const viewed = getViewedAddress();
+    const viewed = d?.player || (appliesToPinnedDay ? getViewedAddress() : null);
     const target = viewed ? String(viewed).toLowerCase() : null;
-    const mine = Boolean(target && (this.#winners || []).some(
+    const mine = Boolean(appliesToPinnedDay && target && (this.#winners || []).some(
       (w) => String(w.address || '').toLowerCase() === target,
     ));
     // Final roll? (bonus phase completing, or roll 1 with no bonus ahead).
     // A detail-less event (older panel / tests) counts as final.
-    const d = e?.detail;
     const final = !d || d.bonusPhase === true || !d.bonusAvailable;
     if (final) {
-      this.#boardDone = true;
-      this.#manualReplayDay = null;
-      this.#markCompletedPinnedDay();
-      this.#markBonusPending(false);
+      if (appliesToPinnedDay) {
+        this.#boardDone = true;
+        this.#manualReplayDay = null;
+      }
+      this.#markCompletedPinnedDay(eventDay);
+      this.#markBonusPending(false, eventDay);
     } else {
       // `spun_day` predates the all-roll completion key and is written after
       // Roll 1. Persist the distinction so a reload cannot mistake a still-
       // available bonus roll for a fully played legacy board.
-      this.#markBonusPending(true);
+      this.#markBonusPending(true, eventDay);
     }
-    this.#maybeShowResultsCta();
+    if (appliesToPinnedDay) this.#maybeShowResultsCta();
     // Same-tab signal consumed by the winnings banner (app-claims-panel).
     try {
       const detail = {
-        day: this.#pinnedDay,
+        day: eventDay,
         mine,
         complete: final,
         bonusPending: !final,
@@ -779,6 +794,38 @@ class LastDayJackpot extends HTMLElement {
         : { type: 'jackpot:revealed', detail };
       document.dispatchEvent(ev);
     } catch { /* headless / fakeDOM — signal is best-effort */ }
+  }
+
+  // A due Decimator owns the transition before the ordinary daily jackpot.
+  // Older builds could accidentally persist the previous board's late
+  // scratch event against this incoming day, making the fresh draw jump from
+  // PROCESSING straight to its completed state. Once the Decimator really
+  // opens, clear only this exact day's reveal receipts and re-arm its board.
+  #onDecimatorOpened(e) {
+    const eventDay = Number(e?.detail?.day);
+    const eventLevel = Number(e?.detail?.level);
+    if (!Number.isInteger(eventDay) || eventDay <= 0
+      || eventDay !== Number(this.#pinnedDay)) return;
+    if (this.#pinnedLevel != null
+      && Number.isInteger(eventLevel)
+      && eventLevel !== Number(this.#pinnedLevel)) return;
+
+    try {
+      localStorage.removeItem(this.#spunKey(eventDay));
+      localStorage.removeItem(this.#boardCompleteKey(eventDay));
+      localStorage.removeItem(this.#bonusPendingKey(eventDay));
+    } catch { /* private browsing: the in-memory reset still repairs this tab */ }
+    this.#boardDone = false;
+    this.#sawScratchEvent = false;
+    this.#manualReplayDay = null;
+    this.#setResultsCtaVisible(this.#resultsCta(), false);
+
+    const panel = this.#panel();
+    if (!this.#syncWarming()
+      && this.#replayShowsPinnedDay(panel)
+      && typeof panel?.setPersistedRevealState === 'function') {
+      panel.setPersistedRevealState(false, false);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -872,7 +919,9 @@ class LastDayJackpot extends HTMLElement {
     const reveal = replay?.querySelector?.('[data-bind="reveal-btn"]');
     // Never force Spin Jackpot back on: replay-panel owns when that button is
     // valid. We only guarantee that the two actions cannot coexist.
-    if (visible && reveal) reveal.hidden = true;
+    if (visible && reveal && replay?.getAttribute?.('data-primary-action') !== 'decimator') {
+      reveal.hidden = true;
+    }
     const slot = document.querySelector('[data-bind="day-summary-slot"]');
     if (slot) slot.hidden = controls ? true : !visible;
   }
@@ -1410,6 +1459,8 @@ class LastDayJackpot extends HTMLElement {
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
       this.#scratchCompleteListener = (e) => this.#onPanelScratchComplete(e);
       document.addEventListener('replay:scratch-complete', this.#scratchCompleteListener);
+      this.#decimatorOpenedListener = (e) => this.#onDecimatorOpened(e);
+      document.addEventListener('decimator:opened', this.#decimatorOpenedListener);
       // Coin-flip reveal (app-daily-flip) — the other half of the CTA gate.
       this.#flipListener = () => this.#maybeShowResultsCta();
       document.addEventListener('flip:revealed', this.#flipListener);
@@ -1441,6 +1492,13 @@ class LastDayJackpot extends HTMLElement {
       catch { /* defensive */ }
     }
     this.#scratchCompleteListener = null;
+    if (this.#decimatorOpenedListener
+      && typeof document !== 'undefined'
+      && typeof document.removeEventListener === 'function') {
+      try { document.removeEventListener('decimator:opened', this.#decimatorOpenedListener); }
+      catch { /* defensive */ }
+    }
+    this.#decimatorOpenedListener = null;
     if (this.#flipListener
       && typeof document !== 'undefined'
       && typeof document.removeEventListener === 'function') {

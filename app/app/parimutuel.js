@@ -75,6 +75,16 @@ const GAME_GROWTH_ABI = [
   'event EntriesBought(address indexed buyer, uint256 entryQuantityScaled, uint256 weiIn)',
 ];
 
+// Canonical Multicall3 deployment on Base Sepolia and Ethereum. Historical
+// growth ratchets are immutable, so one batched read per level transition can
+// recover every prior level's final prize pool without turning page load into
+// one RPC request per level.
+const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11';
+const MULTICALL3_ABI = [
+  'function aggregate3(tuple(address target,bool allowFailure,bytes callData)[] calls) payable returns (tuple(bool success,bytes returnData)[] returnData)',
+];
+const GROWTH_HISTORY_BATCH_SIZE = 120;
+
 // Eligibility lives in DegenerusQuests, not in either global market quote.
 // `mayBet` is the lifetime participation gate; `earnsReward` is deliberately
 // stricter and is the only flag the UI may use when advertising BET BONUS.
@@ -110,16 +120,29 @@ export function __setContractFactoryForTest(fn) {
 // The GAME reader behind the growth benchmark has its own seam: it is a
 // different contract from the parimutuel, so the book stub cannot serve it.
 let _gameFactory = null;
+let _growthHistoryCache = new Map();
+let _growthHistoryThrough = 0;
+
+function _clearGrowthHistoryCache() {
+  _growthHistoryCache = new Map();
+  _growthHistoryThrough = 0;
+}
 
 // The quest gate is a third contract, so keep its test seam separate from the
 // Parimutuel and Game readers rather than making one fake impersonate all three.
 let _questFactory = null;
 
 /** Test-only: replace the GAME growth-state reader. */
-export function __setGameFactoryForTest(fn) { _gameFactory = fn; }
+export function __setGameFactoryForTest(fn) {
+  _gameFactory = fn;
+  _clearGrowthHistoryCache();
+}
 
 /** Test-only: restore the real GAME reader. */
-export function __resetGameFactoryForTest() { _gameFactory = null; }
+export function __resetGameFactoryForTest() {
+  _gameFactory = null;
+  _clearGrowthHistoryCache();
+}
 
 /** Test-only: replace the QUESTS market-gate reader. */
 export function __setQuestFactoryForTest(fn) { _questFactory = fn; }
@@ -351,6 +374,93 @@ export async function readGrowthRatchets({ round } = {}) {
   } catch (_e) {
     return null;
   }
+}
+
+async function _readGrowthHistoryTriplets(contract, centers) {
+  if (_gameFactory) {
+    const rows = await Promise.allSettled(
+      centers.map((round) => contract.growthState(round)),
+    );
+    if (rows.some((row) => row.status !== 'fulfilled')) return null;
+    return rows.map((row) => row.value);
+  }
+
+  try {
+    const multicall = new ethers.Contract(
+      MULTICALL3_ADDRESS,
+      MULTICALL3_ABI,
+      _readerProvider(),
+    );
+    const decoded = [];
+    for (let offset = 0; offset < centers.length; offset += GROWTH_HISTORY_BATCH_SIZE) {
+      const batch = centers.slice(offset, offset + GROWTH_HISTORY_BATCH_SIZE);
+      const calls = batch.map((round) => ({
+        target: CONTRACTS.GAME,
+        allowFailure: true,
+        callData: contract.interface.encodeFunctionData('growthState', [round]),
+      }));
+      const rows = await multicall.aggregate3.staticCall(calls);
+      if (!rows || rows.length !== batch.length) return null;
+      for (const row of rows) {
+        const success = Boolean(row?.success ?? row?.[0]);
+        const returnData = row?.returnData ?? row?.[1];
+        if (!success || !returnData) return null;
+        decoded.push(contract.interface.decodeFunctionResult('growthState', returnData));
+      }
+    }
+    return decoded;
+  } catch (_e) {
+    return null;
+  }
+}
+
+/**
+ * Final, write-once prize pools for every completed level through `throughLevel`.
+ * growthState(center) exposes center-1 / center / center+1, so centers 2, 5, 8…
+ * cover the history with one third as many calls. Production batches those
+ * calls through Multicall3 and caches them because completed ratchets never
+ * change; test fakes keep the direct growthState surface.
+ *
+ * @param {{throughLevel:number}} args
+ * @returns {Promise<Array<{level:number,poolWei:bigint}>|null>}
+ */
+export async function readGrowthRatchetHistory({ throughLevel } = {}) {
+  const through = Number(throughLevel);
+  if (!Number.isInteger(through) || through < 0 || through > 0xFFFFFF) return null;
+  if (through === 0) return [];
+  if (_growthHistoryThrough < through) {
+    const firstMissing = Math.max(1, _growthHistoryThrough + 1);
+    const firstGroup = Math.floor((firstMissing - 1) / 3);
+    const lastGroup = Math.floor((through - 1) / 3);
+    const centers = Array.from(
+      { length: lastGroup - firstGroup + 1 },
+      (_unused, index) => ((firstGroup + index) * 3) + 2,
+    );
+    const contract = _gameContract();
+    const triplets = await _readGrowthHistoryTriplets(contract, centers);
+    if (!triplets || triplets.length !== centers.length) return null;
+
+    const nextCache = new Map(_growthHistoryCache);
+    for (let index = 0; index < centers.length; index += 1) {
+      const center = centers[index];
+      const values = triplets[index];
+      for (let valueIndex = 0; valueIndex < 3; valueIndex += 1) {
+        const level = center + valueIndex - 1;
+        if (level < 1 || level > through) continue;
+        try {
+          const poolWei = BigInt(values[valueIndex]);
+          if (poolWei > 0n) nextCache.set(level, poolWei);
+        } catch (_e) { /* malformed row: omit that notch */ }
+      }
+    }
+    _growthHistoryCache = nextCache;
+    _growthHistoryThrough = through;
+  }
+
+  return [..._growthHistoryCache.entries()]
+    .filter(([level, poolWei]) => level >= 1 && level <= through && poolWei > 0n)
+    .sort(([a], [b]) => a - b)
+    .map(([level, poolWei]) => ({ level, poolWei }));
 }
 
 /** Contract-authoritative phase flag, last-purchase latch, and jackpot cadence. */
@@ -749,7 +859,7 @@ register('AlreadyBet', {
 register('NotEligible', {
   code: 'NotEligible',
   userMessage: 'You need to have bought something before you can bet on the game.',
-  recoveryAction: 'Buy a ticket or a lootbox first.',
+  recoveryAction: 'Buy a ticket or a luckbox first.',
 });
 
 register('NothingToSettle', {

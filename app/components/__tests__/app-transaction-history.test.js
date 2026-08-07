@@ -152,10 +152,10 @@ describe('transaction history composition', () => {
       '+5 FLIP', '+2 L6 TICKETS',
     ]);
     assert.deepEqual(rows[2].deltas.map(history.formatHistoryDelta), [
-      '−1.00 ETH', '+1 LOOTBOX',
+      '−1.00 ETH', '+1 LUCKBOX',
     ]);
     assert.deepEqual(rows[3].deltas.map(history.formatHistoryDelta), ['+1 L7 TICKETS']);
-    assert.equal(rows[1].title, 'Lootbox opened',
+    assert.equal(rows[1].title, 'Luckbox opened',
       'AFKing boxes use the same result activity as every other opened box');
     assert.equal(rows[1].sequence.kind, 'lootbox', 'settlement rows retain an exact replay');
     assert.equal(rows[3].replaySequences[0].tickets[0].traitIds.length, 4,
@@ -333,7 +333,7 @@ describe('transaction history composition', () => {
       row.children[4].querySelector('.txh__ticket-level').getAttribute('data-ticket-level-tone'),
       'white',
     );
-    assert.match(row.children[4].textContent, /\+1 LOOTBOX/);
+    assert.match(row.children[4].textContent, /\+1 LUCKBOX/);
     assert.match(row.children[4].textContent, /\+1 BOON/);
     assert.match(row.children[2].querySelector('.txh__delta').title, /Exact net: \+1 ETH/,
       'the compact visual amount retains its more precise hover value');
@@ -386,7 +386,7 @@ describe('transaction history composition', () => {
     });
 
     assert.deepEqual(rows.map((row) => row.title), [
-      'AFKing ticket purchase', 'AFKing lootbox purchase',
+      'AFKing ticket purchase', 'AFKing Luckbox purchase',
     ]);
     assert.deepEqual(rows[0].deltas.map(history.formatHistoryDelta), [
       '−0.12 ETH', '+3 TICKETS',
@@ -438,13 +438,13 @@ describe('transaction history composition', () => {
       'Deity pass purchase', 'Lazy pass purchase', 'Whale pass purchase',
     ]);
     assert.deepEqual(rows[0].deltas.map(history.formatHistoryDelta), [
-      '−10.00 ETH', '+1 LOOTBOX', '+1 PASS',
+      '−10.00 ETH', '+1 LUCKBOX', '+1 PASS',
     ]);
     assert.deepEqual(rows[1].deltas.map(history.formatHistoryDelta), [
-      '−0.24 ETH', '+1 LOOTBOX', '+1 PASS',
+      '−0.24 ETH', '+1 LUCKBOX', '+1 PASS',
     ]);
     assert.deepEqual(rows[2].deltas.map(history.formatHistoryDelta), [
-      '−2.40 ETH', '+1 LOOTBOX', '+2 PASS',
+      '−2.40 ETH', '+1 LUCKBOX', '+2 PASS',
     ]);
     assert.equal(rows.some((row) => row.type === 'lootbox-purchase'), false,
       'a bundled bonus box is not misreported as a second paid purchase');

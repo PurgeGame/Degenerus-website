@@ -173,7 +173,7 @@ export const QUEST_TYPE_LABELS = {
   3: 'Affiliate Earnings',
   4: 'Reserved',
   5: 'Decimator Burns',
-  6: 'Lootbox',
+  6: 'Luckbox',
   7: 'Degenerette (ETH)',
   8: 'Degenerette (FLIP)',
 };

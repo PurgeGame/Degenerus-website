@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { CHAIN } from '../../app/chain-config.js';
 
 globalThis.HTMLElement ??= class {};
 globalThis.customElements ??= {
@@ -14,9 +15,18 @@ globalThis.customElements ??= {
 const {
   decimatorResolutionView,
   bafResolutionView,
+  jackpotResolutionSeenKey,
 } = await import('../app-jackpot-resolutions.js');
 
 describe('Decimator resolution presentation', () => {
+  test('seen receipts are scoped to the exact deployment', () => {
+    const key = jackpotResolutionSeenKey('decimator', '0xAbC', 15);
+    assert.equal(
+      key,
+      `jackpot-resolution-seen:${CHAIN.id}:${CHAIN.deployBlock}:decimator:0xabc:15`,
+    );
+  });
+
   test('a winning unclaimed subbucket becomes an honest resolve action', () => {
     const view = decimatorResolutionView({
       currentLevel: 25,
@@ -100,6 +110,37 @@ test('the headless watcher is mounted between the jackpot hero and Side Bets row
   assert.match(html, /src="\/app\/components\/app-jackpot-resolutions\.js"/);
 });
 
+test('a due Decimator replaces the primary jackpot action and opens the full wheel', () => {
+  const resolutions = readFileSync(new URL('../app-jackpot-resolutions.js', import.meta.url), 'utf8');
+  const replay = readFileSync(new URL('../replay-panel.js', import.meta.url), 'utf8');
+  const tray = readFileSync(new URL('../app-reveal-tray.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+
+  assert.match(resolutions, /primarySurface:\s*'jackpot'/);
+  assert.match(resolutions, /subscribe\('app\.daySync'/,
+    'the Decimator takeover rechecks immediately at the day boundary');
+  assert.match(resolutions, /const viewed = getViewedAddress\(\)/,
+    'combined/read-only presentation still receives the global Decimator draw');
+  assert.match(resolutions, /decWaiting[\s\S]*?state: this\.#busy === 'decimator' \|\| decWaiting \? 'busy' : 'ready'/,
+    'a due Decimator holds the shared action while its indexed result catches up');
+  assert.match(resolutions, /await openDecimatorDraw\(\{ level, player: this\.#address \}\)/);
+  assert.match(resolutions, /new CustomEvent\('decimator:opened'/,
+    'opening the takeover re-arms the ordinary jackpot underneath it');
+  assert.match(resolutions,
+    /const bafUnseen = Number\(bafLevel\) === current[\s\S]*?&& bafFinal/,
+    'a stale prior BAF cannot interrupt a later Decimator takeover');
+  assert.match(replay, /subscribePendingActions[\s\S]*?#setPrimaryDecimatorAction/);
+  assert.match(replay, /'RUN DECIMATOR DRAW'/);
+  assert.match(replay,
+    /this\.#revealStateBeforeDecimator = null;[\s\S]{0,400}?this\.#syncSpinControlState\(\);/,
+    'returning from Decimator recomputes the jackpot button instead of restoring stale processing');
+  assert.match(tray, /item\?\.primarySurface !== 'jackpot'/,
+    'the same Decimator action is not repeated in Pending');
+  assert.match(css, /\.decimator-draw-modal\s*\{[^}]*position:\s*fixed[^}]*inset:\s*0/s);
+  assert.match(css, /@media \(max-width: 520px\)[\s\S]*?\.decimator-draw-modal__close/,
+    'the takeover has an explicit phone treatment');
+});
+
 test('the x4/x99 Decimator burn card is first and prominent inside Side Bets', () => {
   const source = readFileSync(new URL('../app-parimutuel-panel.js', import.meta.url), 'utf8');
   const cards = /<div class="pari-books">([\s\S]*?)<\/div>/.exec(source)?.[1] || '';
@@ -107,5 +148,16 @@ test('the x4/x99 Decimator burn card is first and prominent inside Side Bets', (
   assert.ok(cards.indexOf('data-bind="pari-decimator"') < cards.indexOf('data-bind="pari-growth"'));
   assert.match(source, /title\.textContent = 'DECIMATOR'/);
   assert.match(source, /burnPrompt\.textContent = 'BURN FLIP'/);
-  assert.match(source, /return \(level % 10 === 4 && level % 100 !== 94\) \|\| level % 100 === 99/);
+
+  // The x4/x99 window rule lives in decimator.js, not in the panel. The panel
+  // imports it so the write path and the card agree on one predicate.
+  const decimator = readFileSync(
+    new URL('../../app/decimator.js', import.meta.url), 'utf8');
+  assert.match(decimator,
+    /return \(level % 10 === 4 && level % 100 !== 94\) \|\| level % 100 === 99/);
+  assert.match(source,
+    /import \{[\s\S]*?decimatorWindowIsOpen[\s\S]*?\} from '\.\.\/app\/decimator\.js'/,
+    'the panel imports the window rule rather than reimplementing it');
+  assert.doesNotMatch(source, /level % 10 === 4/,
+    'no second copy of the level arithmetic in the panel');
 });

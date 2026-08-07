@@ -574,11 +574,11 @@ body.layout-basic .df-modifier-meter--rebounding .df-modifier-meter__marker {
 }
 @keyframes df-meter-rebound-from-min {
   0%, 6.086957% { left: 50%; bottom: 0%; transform: translate(-50%, 50%) scale(1.18, 0.78); }
-  22.608696% { left: 50%; bottom: 18%; transform: translate(-50%, 50%) scale(0.88, 1.16); }
-  56.521739% { left: 50%; bottom: min(96%, calc(var(--df-meter-stop, 50%) + 30%)); transform: translate(-50%, 50%) scale(0.94, 1.08); }
-  78.26087% { left: 50%; bottom: min(96%, calc(var(--df-meter-stop, 50%) + 14%)); transform: translate(-50%, 50%) scale(0.97, 1.04); }
-  87.826087% { left: 50%; bottom: max(4%, calc(var(--df-meter-stop, 50%) - 6%)); transform: translate(-50%, 50%) scale(1.03, 0.97); }
-  94.782609% { left: 50%; bottom: min(96%, calc(var(--df-meter-stop, 50%) + 3%)); transform: translate(-50%, 50%) scale(0.99, 1.02); }
+  39.130435% { left: 50%; bottom: 98%; transform: translate(-50%, 50%) scale(0.88, 1.16); }
+  65.217391% { left: 50%; bottom: 8%; transform: translate(-50%, 50%) scale(1.08, 0.9); }
+  78.26087% { left: 50%; bottom: var(--df-meter-handoff, 64%); transform: translate(-50%, 50%) scale(0.97, 1.04); }
+  87.826087% { left: 50%; bottom: var(--df-meter-low, 44%); transform: translate(-50%, 50%) scale(1.03, 0.97); }
+  94.782609% { left: 50%; bottom: var(--df-meter-bounce, 53%); transform: translate(-50%, 50%) scale(0.99, 1.02); }
   100% { left: 50%; bottom: var(--df-meter-stop, 50%); transform: translate(-50%, 50%) scale(1); }
 }
 
@@ -590,9 +590,9 @@ body.layout-basic .df-modifier-meter--recovery-tail .df-modifier-meter__marker {
     linear forwards;
 }
 @keyframes df-meter-recovery-tail {
-  0% { left: 50%; bottom: min(96%, calc(var(--df-meter-stop, 50%) + 14%)); transform: translate(-50%, 50%) scale(0.97, 1.04); }
-  44% { left: 50%; bottom: max(4%, calc(var(--df-meter-stop, 50%) - 6%)); transform: translate(-50%, 50%) scale(1.03, 0.97); }
-  76% { left: 50%; bottom: min(96%, calc(var(--df-meter-stop, 50%) + 3%)); transform: translate(-50%, 50%) scale(0.99, 1.02); }
+  0% { left: 50%; bottom: var(--df-meter-handoff, 64%); transform: translate(-50%, 50%) scale(0.97, 1.04); }
+  44% { left: 50%; bottom: var(--df-meter-low, 44%); transform: translate(-50%, 50%) scale(1.03, 0.97); }
+  76% { left: 50%; bottom: var(--df-meter-bounce, 53%); transform: translate(-50%, 50%) scale(0.99, 1.02); }
   100% { left: 50%; bottom: var(--df-meter-stop, 50%); transform: translate(-50%, 50%) scale(1); }
 }
 

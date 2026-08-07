@@ -645,7 +645,7 @@ export async function purchaseEth(args) {
       );
     },
     `${presaleBoxAmountWei > 0n ? 'Buy in + presale box'
-      : foil ? 'Buy foil pack' : ticketQuantity > 0 ? 'Buy tickets' : 'Buy lootbox'} (${
+      : foil ? 'Buy foil pack' : ticketQuantity > 0 ? 'Buy tickets' : 'Buy luckbox'} (${
       args.preferClaimable === false ? 'wallet ETH' : 'claimable first'
     })`,
     { onSubmitted: args.onSubmitted },
@@ -894,7 +894,7 @@ export async function openLootBox(args) {
       const c = _buildContract(s);
       return c.openBox(player, lootboxIndex);
     },
-    'Open lootbox'
+    'Open luckbox'
   );
 
   const contract = _buildContract(provider);

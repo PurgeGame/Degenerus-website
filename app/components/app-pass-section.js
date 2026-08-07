@@ -281,6 +281,8 @@ class AppPassSection extends HTMLElement {
   #afkingState = null;
   #afkingFormAddress = null;
   #afkingFundingSeededAddress = null;
+  #afkingTopupSeededAddress = null;
+  #afkingDialogOpen = false;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -373,7 +375,7 @@ class AppPassSection extends HTMLElement {
             </span>
           </span>
           <span class="pass-product-perks" aria-label="Lazy pass benefits">
-            <span class="pass-lootbox-perk pass-lazy-lootbox-perk" data-bind="pass-lazy-lootbox">BONUS LOOTBOX · 10% OF PASS</span>
+            <span class="pass-lootbox-perk pass-lazy-lootbox-perk" data-bind="pass-lazy-lootbox">BONUS LUCKBOX · 10% OF PASS</span>
             <span data-bind="pass-lazy-score">+85% DEGEN SCORE</span>
             <span data-bind="pass-lazy-afking-seat">AFKING SEAT</span>
           </span>
@@ -397,7 +399,7 @@ class AppPassSection extends HTMLElement {
             </span>
           </span>
           <span class="pass-product-perks" aria-label="Whale pass benefits">
-            <span class="pass-lootbox-perk pass-whale-lootbox-perk" data-bind="pass-whale-lootbox">BONUS LOOTBOX · 10% OF PASS</span>
+            <span class="pass-lootbox-perk pass-whale-lootbox-perk" data-bind="pass-whale-lootbox">BONUS LUCKBOX · 10% OF PASS</span>
             <span data-bind="pass-whale-score">+115% DEGEN SCORE</span>
             <span class="pass-whale-afking-seat" data-bind="pass-whale-afking-seat">AFKING SEAT</span>
           </span>
@@ -436,7 +438,7 @@ class AppPassSection extends HTMLElement {
               <span>PERMANENT</span>
               <span data-bind="pass-deity-score">+155% DEGEN SCORE</span>
               <span>3 DAILY BOONS</span>
-              <span>10% LOOTBOX</span>
+              <span>10% LUCKBOX</span>
               <span data-bind="pass-deity-afking-seat">AFKING SEAT</span>
             </span>
             <span class="pass-deity-price">
@@ -460,87 +462,113 @@ class AppPassSection extends HTMLElement {
         </details>
       </section>
 
-      <!-- AFKING SUBSCRIPTION is its own instrument below the premium passes.
-           The seat arrives automatically with any pass, so every holder sees
-           the complete editor immediately — there is no claim step. -->
+      <!-- AFKING SUBSCRIPTION is its own compact instrument below the premium
+           passes. Day-to-day state, funding, and claims stay in view; initial
+           setup and infrequent settings live in a focused popup. -->
       <section class="panel pass-afking" data-bind="pass-afking" hidden>
         <div class="pass-afking__head">
           <span class="pass-product-heading">
             <span class="pass-product-sigil pass-product-sigil--afking" aria-hidden="true">AUTO</span>
             <span class="pass-product-copy">
-              <span class="pass-section-title">AFKing subscription</span>
-              <span class="pass-product-description">Place an automatic order at each jackpot.</span>
+              <span class="pass-section-title">AFKING SUBSCRIPTION</span>
+              <strong class="pass-afking__current" data-bind="pass-afking-current">NO AUTOMATIC ORDER</strong>
+              <span class="pass-afking__policy" data-bind="pass-afking-policy" hidden></span>
             </span>
           </span>
-          <div class="pass-afking__meta">
-            <strong class="pass-afking__status" data-bind="pass-afking-status">SEAT READY</strong>
-            <span class="pass-afking__wallet">
-              <span class="pass-afking__balance">
-                <small>PREPAID BALANCE</small>
-                <span class="pass-afking__funding" data-bind="pass-afking-funding">—</span>
-              </span>
-              <button type="button" class="pass-afking__claim-button" data-write
-                      data-bind="pass-afking-flip-claim" hidden>CLAIM</button>
-              <button type="button" class="pass-afking__withdraw" data-write
-                      data-bind="pass-afking-withdraw" hidden>Withdraw all</button>
-            </span>
-          </div>
+          <strong class="pass-afking__status" data-bind="pass-afking-status">READY</strong>
         </div>
         <div class="pass-afking__lock" data-bind="pass-afking-lock" hidden role="status">
           <strong>RNG SETTLING</strong>
-          <span>Settings and cancel unlock automatically. Funding and withdrawals stay open.</span>
+          <span>Settings unlock automatically. Top ups and claims stay open.</span>
         </div>
-        <div class="pass-afking__controls" data-bind="pass-afking-controls" hidden>
-          <section class="pass-afking__control-card pass-afking__order-card">
-            <header class="pass-afking__control-head">
-              <span>NEXT JACKPOT</span>
-              <strong>Automatic order</strong>
-              <small>Runs when the next jackpot begins.</small>
-            </header>
-            <div class="pass-afking__order-fields">
-              <label class="pass-afking__field">
-                <span>Product</span>
-                <select name="pass-afking-mode" data-bind="pass-afking-mode">
-                  <option value="lootbox">Lootboxes</option>
-                  <option value="tickets">Tickets</option>
-                </select>
-              </label>
-              <label class="pass-afking__field pass-afking__field--qty">
-                <span>Quantity</span>
-                <input type="number" name="pass-afking-qty" min="1" max="255" step="1" value="1">
-              </label>
-            </div>
-          </section>
-          <section class="pass-afking__control-card pass-afking__funding-card">
-            <header class="pass-afking__control-head">
-              <span>PREPAID ETH</span>
-              <strong>Subscription funding</strong>
-              <small>Add funds now or top up without changing the order.</small>
-            </header>
-            <div class="pass-afking__funding-controls">
-              <label class="pass-afking__field pass-afking__field--fund">
-                <span>Add funds</span>
-                <input type="number" name="pass-afking-fund" min="0" step="0.01" value="0" inputmode="decimal">
-                <small>ETH</small>
-              </label>
-              <button type="button" class="pass-afking__fund-button" data-write
-                      data-bind="pass-afking-fund-button" hidden>Fund only</button>
-            </div>
-          </section>
-          <label class="pass-afking__credit">
-            <input type="checkbox" name="pass-afking-claimable-first" checked>
-            <span>Use claimable ETH before prepaid funds</span>
-          </label>
-          <span class="pass-afking__costs">
-            <span class="pass-afking__day-cost" data-bind="pass-afking-day-cost">—</span>
-            <span class="pass-afking__coverage" data-bind="pass-afking-coverage">—</span>
+        <div class="pass-afking__quick">
+          <span class="pass-afking__balance">
+            <small>PREPAID</small>
+            <span class="pass-afking__funding" data-bind="pass-afking-funding">—</span>
           </span>
-          <div class="pass-afking__actions">
-            <button type="button" class="pass-afking__save" data-write data-bind="pass-afking-save">Start</button>
-            <button type="button" class="pass-afking__cancel" data-write data-bind="pass-afking-cancel" hidden>Cancel</button>
+          <div class="pass-afking__topup" data-bind="pass-afking-topup" hidden>
+            <label class="pass-afking__topup-field">
+              <span>TOP UP</span>
+              <input type="number" name="pass-afking-topup" min="0" step="0.01" value="0"
+                     inputmode="decimal" aria-label="AFKING top up amount in ETH">
+              <small>ETH</small>
+            </label>
+            <button type="button" class="pass-afking__fund-button" data-write
+                    data-bind="pass-afking-fund-button">TOP UP</button>
+          </div>
+          <button type="button" class="pass-afking__claim-button" data-write
+                  data-bind="pass-afking-flip-claim" hidden>CLAIM</button>
+          <button type="button" class="pass-afking__edit" data-bind="pass-afking-edit"
+                  aria-haspopup="dialog" aria-expanded="false">SET UP</button>
+        </div>
+        <div class="pass-afking-error pass-afking-error--inline" data-bind="pass-afking-error" hidden role="alert"></div>
+
+        <div class="pass-afking__dialog" data-bind="pass-afking-dialog" hidden
+             role="dialog" aria-modal="true" aria-labelledby="pass-afking-dialog-title">
+          <div class="pass-afking__dialog-card">
+            <header class="pass-afking__dialog-head">
+              <span>
+                <small>AFKING SUBSCRIPTION</small>
+                <strong id="pass-afking-dialog-title" data-bind="pass-afking-dialog-title">SET UP</strong>
+              </span>
+              <span class="pass-afking__dialog-state" data-bind="pass-afking-dialog-state">READY</span>
+            </header>
+            <div class="pass-afking__controls" data-bind="pass-afking-controls" hidden>
+              <section class="pass-afking__control-card pass-afking__order-card">
+                <header class="pass-afking__control-head">
+                  <span>NEXT JACKPOT</span>
+                  <strong>Automatic order</strong>
+                  <small>Runs when each jackpot begins.</small>
+                </header>
+                <div class="pass-afking__order-fields">
+                  <label class="pass-afking__field">
+                    <span>Product</span>
+                    <select name="pass-afking-mode" data-bind="pass-afking-mode">
+                      <option value="lootbox">Luckbox</option>
+                      <option value="tickets">Tickets</option>
+                    </select>
+                  </label>
+                  <label class="pass-afking__field pass-afking__field--qty">
+                    <span>Quantity</span>
+                    <input type="number" name="pass-afking-qty" min="1" max="255" step="1" value="1">
+                  </label>
+                </div>
+              </section>
+              <section class="pass-afking__control-card pass-afking__funding-card" data-bind="pass-afking-initial-funding">
+                <header class="pass-afking__control-head">
+                  <span>STARTING BALANCE</span>
+                  <strong>Initial funding</strong>
+                  <small>You can top up from the main card after setup.</small>
+                </header>
+                <label class="pass-afking__field pass-afking__field--fund">
+                  <span>Add funds</span>
+                  <input type="number" name="pass-afking-fund" min="0" step="0.01" value="0" inputmode="decimal">
+                  <small>ETH</small>
+                </label>
+              </section>
+              <label class="pass-afking__credit">
+                <input type="checkbox" name="pass-afking-claimable-first" checked>
+                <span>Use claimable ETH before prepaid funds</span>
+              </label>
+              <span class="pass-afking__costs">
+                <span class="pass-afking__day-cost" data-bind="pass-afking-day-cost">—</span>
+                <span class="pass-afking__coverage" data-bind="pass-afking-coverage">—</span>
+              </span>
+              <div class="pass-afking-error pass-afking-error--dialog"
+                   data-bind="pass-afking-dialog-error" hidden role="alert"></div>
+              <div class="pass-afking__actions">
+                <button type="button" class="pass-afking__withdraw" data-write
+                        data-bind="pass-afking-withdraw" hidden>WITHDRAW ALL</button>
+                <button type="button" class="pass-afking__cancel" data-write
+                        data-bind="pass-afking-cancel" hidden>CANCEL SUBSCRIPTION</button>
+                <button type="button" class="pass-afking__dialog-close"
+                        data-bind="pass-afking-dialog-close">BACK</button>
+                <button type="button" class="pass-afking__save" data-write
+                        data-bind="pass-afking-save">START</button>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="pass-afking-error" data-bind="pass-afking-error" hidden role="alert"></div>
       </section>
     `;
   }
@@ -593,12 +621,27 @@ class AppPassSection extends HTMLElement {
     if (afkingMode) afkingMode.addEventListener('change', () => this.#renderAfkingDayCost());
     const afkingFund = this.querySelector('[name="pass-afking-fund"]');
     if (afkingFund) afkingFund.addEventListener('input', () => this.#renderAfkingDayCost());
+    const afkingTopup = this.querySelector('[name="pass-afking-topup"]');
+    if (afkingTopup) afkingTopup.addEventListener('input', () => this.#renderAfkingTopup());
     const afkingFundButton = this.querySelector('[data-bind="pass-afking-fund-button"]');
     if (afkingFundButton) afkingFundButton.addEventListener('click', (e) => this.#onAfkingFund(e));
     const afkingWithdraw = this.querySelector('[data-bind="pass-afking-withdraw"]');
     if (afkingWithdraw) afkingWithdraw.addEventListener('click', (e) => this.#onAfkingWithdraw(e));
     const afkingFlipClaim = this.querySelector('[data-bind="pass-afking-flip-claim"]');
     if (afkingFlipClaim) afkingFlipClaim.addEventListener('click', (e) => this.#onAfkingFlipClaim(e));
+    const afkingEdit = this.querySelector('[data-bind="pass-afking-edit"]');
+    if (afkingEdit) afkingEdit.addEventListener('click', (e) => this.#openAfkingDialog(e));
+    const afkingDialogClose = this.querySelector('[data-bind="pass-afking-dialog-close"]');
+    if (afkingDialogClose) afkingDialogClose.addEventListener('click', (e) => this.#closeAfkingDialog(e));
+    const afkingDialog = this.querySelector('[data-bind="pass-afking-dialog"]');
+    if (afkingDialog) {
+      afkingDialog.addEventListener('click', (e) => {
+        if (e?.target === e?.currentTarget) this.#closeAfkingDialog(e);
+      });
+      afkingDialog.addEventListener('keydown', (e) => {
+        if (e?.key === 'Escape') this.#closeAfkingDialog(e);
+      });
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -635,6 +678,8 @@ class AppPassSection extends HTMLElement {
       if (String(addr || '').toLowerCase() !== String(this.#pinnedAddress || '').toLowerCase()) {
         this.#afkingFormAddress = null;
         this.#afkingFundingSeededAddress = null;
+        this.#afkingTopupSeededAddress = null;
+        this.#afkingDialogOpen = false;
       }
       this.#pinnedAddress = addr;
       // Level comes from /game/state. Deity availability and issued count come
@@ -804,11 +849,11 @@ class AppPassSection extends HTMLElement {
     const quantityInput = this.querySelector('[name="pass-whale-qty"]');
     const quantity = Math.max(1, Math.min(100, Math.trunc(Number(quantityInput?.value) || 1)));
     if (unit == null) {
-      benefit.textContent = 'BONUS LOOTBOX · 10% OF PASS';
+      benefit.textContent = 'BONUS LUCKBOX · 10% OF PASS';
       return;
     }
     const lootboxValue = (BigInt(unit) * BigInt(quantity)) / 10n;
-    benefit.textContent = `BONUS LOOTBOX · ${formatPassEth(lootboxValue)} ETH`;
+    benefit.textContent = `BONUS LUCKBOX · ${formatPassEth(lootboxValue)} ETH`;
   }
 
   #renderWhaleBuyLabel() {
@@ -864,10 +909,10 @@ class AppPassSection extends HTMLElement {
     if (!benefit) return;
     const cost = this.#pricingData?.lazyCostWei;
     if (cost == null) {
-      benefit.textContent = 'BONUS LOOTBOX · 10% OF PASS';
+      benefit.textContent = 'BONUS LUCKBOX · 10% OF PASS';
       return;
     }
-    benefit.textContent = `BONUS LOOTBOX · ${formatPassEth(BigInt(cost) / 10n, 3)} ETH`;
+    benefit.textContent = `BONUS LUCKBOX · ${formatPassEth(BigInt(cost) / 10n, 3)} ETH`;
   }
 
   #ownedDeitySymbolId(ownerAddress = this.#pinnedAddress) {
@@ -994,8 +1039,8 @@ class AppPassSection extends HTMLElement {
     catch (_error) { return 0n; }
   }
 
-  #afkingFundingInputWei() {
-    const input = this.querySelector('[name="pass-afking-fund"]');
+  #afkingFundingInputWei(name = 'pass-afking-fund') {
+    const input = this.querySelector(`[name="${name}"]`);
     const value = String(input?.value || '0').trim();
     try {
       const wei = parseEther(value || '0') / ETH_DIVISOR;
@@ -1010,8 +1055,7 @@ class AppPassSection extends HTMLElement {
     const coverage = this.querySelector('[data-bind="pass-afking-coverage"]');
     const qtyInput = this.querySelector('[name="pass-afking-qty"]');
     const save = this.querySelector('[data-bind="pass-afking-save"]');
-    const fundButton = this.querySelector('[data-bind="pass-afking-fund-button"]');
-    if (!cost && !coverage && !save && !fundButton) return;
+    if (!cost && !coverage && !save) return;
     const quantity = Math.min(255, Math.max(1, Number.parseInt(qtyInput?.value || '1', 10) || 1));
     const mintPrice = this.#afkingMintPriceWei();
     const dayCost = mintPrice * BigInt(quantity);
@@ -1034,9 +1078,11 @@ class AppPassSection extends HTMLElement {
 
     if (save && !this.#busyAfking) {
       if (this.#afkingState?.rngLocked) {
-        save.textContent = 'RNG settling';
+        save.textContent = 'RNG SETTLING';
+      } else if (this.#afkingState?.active && !this.#afkingState?.settingsKnown) {
+        save.textContent = 'LOADING SETTINGS';
       } else {
-        const action = this.#afkingState?.active ? 'Update' : 'Start';
+        const action = this.#afkingState?.active ? 'SAVE CHANGES' : 'START';
         const fundingLabel = addedFunding != null && addedFunding > 0n
           ? ` + ${formatPassEth(addedFunding, 6)} ETH`
           : '';
@@ -1044,33 +1090,59 @@ class AppPassSection extends HTMLElement {
       }
     }
 
-    if (fundButton) {
-      const active = Boolean(this.#afkingState?.hasToken && this.#afkingState?.active);
-      fundButton.hidden = !active;
-      fundButton.textContent = this.#busyAfkingFunding
-        ? 'Funding…'
-        : (addedFunding != null && addedFunding > 0n
-          ? `Fund only · ${formatPassEth(addedFunding, 6)} ETH`
-          : 'Fund only');
-      const fundLocked = !active
-        || this.#busyAfking
-        || this.#busyAfkingFunding
-        || this.#busyAfkingWithdrawal
-        || this.#busyAfkingClaim
-        || addedFunding == null
-        || addedFunding <= 0n;
-      const fundLockTitle = !active
-        ? 'Start the subscription with funding first'
-        : this.#busyAfking || this.#busyAfkingFunding || this.#busyAfkingWithdrawal || this.#busyAfkingClaim
-          ? 'AFKing transaction pending'
-          : addedFunding == null || addedFunding <= 0n
-            ? 'Enter an ETH amount to add'
-            : '';
-      _setDomainWriteLock(fundButton, fundLocked, fundLockTitle);
-      if (!fundLocked) {
-        fundButton.title = 'Add prepaid ETH without changing the daily settings; available during RNG locks';
-      }
+  }
+
+  #renderAfkingTopup() {
+    const topup = this.querySelector('[data-bind="pass-afking-topup"]');
+    const fundButton = this.querySelector('[data-bind="pass-afking-fund-button"]');
+    const active = Boolean(this.#afkingState?.hasToken && this.#afkingState?.active);
+    if (topup) topup.hidden = !active;
+    if (!fundButton) return;
+    const addedFunding = this.#afkingFundingInputWei('pass-afking-topup');
+    fundButton.textContent = this.#busyAfkingFunding
+      ? 'TOPPING UP…'
+      : (addedFunding != null && addedFunding > 0n
+        ? `TOP UP · ${formatPassEth(addedFunding, 6)} ETH`
+        : 'TOP UP');
+    const busy = this.#busyAfking
+      || this.#busyAfkingFunding
+      || this.#busyAfkingWithdrawal
+      || this.#busyAfkingClaim;
+    const fundLocked = !active || busy || addedFunding == null || addedFunding <= 0n;
+    const fundLockTitle = !active
+      ? 'Start the subscription first'
+      : busy
+        ? 'AFKing transaction pending'
+        : addedFunding == null || addedFunding <= 0n
+          ? 'Enter an ETH amount to add'
+          : '';
+    _setDomainWriteLock(fundButton, fundLocked, fundLockTitle);
+    if (!fundLocked) {
+      fundButton.title = 'Add prepaid ETH without changing the subscription';
     }
+  }
+
+  #openAfkingDialog(e) {
+    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+    const state = this.#afkingState;
+    if (!state || (!state.hasToken && BigInt(state.fundingWei ?? 0n) <= 0n)) return;
+    this.#afkingDialogOpen = true;
+    this.#clearAfkingError();
+    this.#renderAfking();
+    const firstControl = state.hasToken
+      ? this.querySelector('[data-bind="pass-afking-mode"]')
+      : this.querySelector('[data-bind="pass-afking-withdraw"]');
+    try { firstControl?.focus?.(); } catch (_) { /* defensive */ }
+  }
+
+  #closeAfkingDialog(e) {
+    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+    if (this.#busyAfking || this.#busyAfkingWithdrawal) return;
+    this.#afkingDialogOpen = false;
+    this.#clearAfkingError();
+    this.#renderAfking();
+    try { this.querySelector('[data-bind="pass-afking-edit"]')?.focus?.(); }
+    catch (_) { /* defensive */ }
   }
 
   #syncAfkingLockPolling() {
@@ -1102,6 +1174,9 @@ class AppPassSection extends HTMLElement {
     );
     section.hidden = !visible;
     if (!visible) {
+      this.#afkingDialogOpen = false;
+      const closedDialog = this.querySelector('[data-bind="pass-afking-dialog"]');
+      if (closedDialog) closedDialog.hidden = true;
       this.#syncAfkingLockPolling();
       return;
     }
@@ -1110,50 +1185,106 @@ class AppPassSection extends HTMLElement {
     const controls = this.querySelector('[data-bind="pass-afking-controls"]');
     if (lockNotice) {
       lockNotice.hidden = !state.hasToken || !state.rngLocked;
-      lockNotice.textContent = 'RNG SETTLING · Settings and cancel unlock automatically. Funding and withdrawals stay open.';
+      lockNotice.textContent = 'RNG SETTLING · Settings unlock automatically. Top ups and claims stay open.';
     }
-    // A funded wallet can reclaim its ETH even if it has no seat. Only holders
-    // get the subscription editor itself.
-    if (controls) controls.hidden = !state.hasToken;
 
     const addressKey = String(this.#pinnedAddress || '').toLowerCase();
     const qtyInput = this.querySelector('[name="pass-afking-qty"]');
     const modeInput = this.querySelector('[data-bind="pass-afking-mode"]');
     const fundInput = this.querySelector('[name="pass-afking-fund"]');
+    const topupInput = this.querySelector('[name="pass-afking-topup"]');
     const creditInput = this.querySelector('[name="pass-afking-claimable-first"]');
     if (this.#afkingFormAddress !== addressKey) {
       if (qtyInput) qtyInput.value = String(state.active ? Math.max(1, state.dailyQuantity) : 1);
-      if (modeInput) modeInput.value = 'lootbox';
+      if (modeInput) modeInput.value = state.settingsKnown && state.useTickets ? 'tickets' : 'lootbox';
       if (fundInput) fundInput.value = '0';
-      if (creditInput) creditInput.checked = true;
+      if (topupInput) topupInput.value = '0';
+      if (creditInput) {
+        creditInput.checked = state.settingsKnown ? Boolean(state.drainGameCreditFirst) : true;
+      }
       this.#afkingFormAddress = addressKey;
     }
     const mintPrice = this.#afkingMintPriceWei();
     if (this.#afkingFundingSeededAddress !== addressKey && mintPrice > 0n) {
-      // A funding field is useful for top-ups as well as first activation.
-      // Seed both active and inactive holders with ten ticket prices once per
-      // account, then leave their edits alone across the 30-second poll cycle.
-      if (fundInput) fundInput.value = formatPassEth(mintPrice * 10n, 6);
+      // Initial setup starts with a useful ten-price suggestion. Existing
+      // subscriptions use the always-visible top-up control instead.
+      if (fundInput) fundInput.value = state.active ? '0' : formatPassEth(mintPrice * 10n, 6);
       this.#afkingFundingSeededAddress = addressKey;
+    }
+    if (state.active && this.#afkingTopupSeededAddress !== addressKey && mintPrice > 0n) {
+      if (topupInput) topupInput.value = formatPassEth(mintPrice * 10n, 6);
+      this.#afkingTopupSeededAddress = addressKey;
     }
 
     const status = this.querySelector('[data-bind="pass-afking-status"]');
     if (status) {
-      status.textContent = state.active
-        ? `ACTIVE · ${state.dailyQuantity}/JACKPOT`
-        : (state.hasToken ? 'SEAT READY' : 'FUNDS READY');
+      status.textContent = state.active ? 'ACTIVE' : (state.hasToken ? 'READY' : 'FUNDS ONLY');
       status.classList.toggle('pass-afking__status--active', Boolean(state.active));
+    }
+    const current = this.querySelector('[data-bind="pass-afking-current"]');
+    if (current) {
+      if (state.active) {
+        const quantity = Math.max(1, Number(state.dailyQuantity) || 1);
+        const product = state.settingsKnown
+          ? (state.useTickets ? (quantity === 1 ? 'TICKET' : 'TICKETS') : 'LUCKBOX')
+          : (quantity === 1 ? 'ITEM' : 'ITEMS');
+        current.textContent = `${quantity} ${product} / JACKPOT`;
+      } else {
+        current.textContent = state.hasToken ? 'NO AUTOMATIC ORDER' : 'NO AFKING SEAT';
+      }
+    }
+    const policy = this.querySelector('[data-bind="pass-afking-policy"]');
+    if (policy) {
+      policy.hidden = !state.active || !state.settingsKnown;
+      policy.textContent = state.drainGameCreditFirst ? 'CLAIMABLE FIRST' : 'PREPAID FIRST';
     }
     const funding = this.querySelector('[data-bind="pass-afking-funding"]');
     if (funding) {
       funding.textContent = `${formatPassEth(state.fundingWei)} ETH`;
     }
 
+    const edit = this.querySelector('[data-bind="pass-afking-edit"]');
+    if (edit) {
+      edit.hidden = !state.hasToken && !hasFunding;
+      edit.textContent = state.active ? 'EDIT' : (state.hasToken ? 'SET UP' : 'MANAGE');
+      edit.disabled = this.#busyAfking || this.#busyAfkingWithdrawal;
+      edit.setAttribute('aria-expanded', String(this.#afkingDialogOpen));
+    }
+
+    const dialog = this.querySelector('[data-bind="pass-afking-dialog"]');
+    const dialogVisible = Boolean(this.#afkingDialogOpen && (state.hasToken || hasFunding));
+    if (dialog) {
+      dialog.hidden = !dialogVisible;
+      dialog.setAttribute('aria-hidden', String(!dialogVisible));
+    }
+    if (controls) {
+      controls.hidden = !dialogVisible;
+      controls.classList.toggle('pass-afking__controls--editing', Boolean(state.active));
+      controls.classList.toggle('pass-afking__controls--funds-only', !state.hasToken);
+    }
+    const dialogTitle = this.querySelector('[data-bind="pass-afking-dialog-title"]');
+    if (dialogTitle) {
+      dialogTitle.textContent = state.active
+        ? 'EDIT SUBSCRIPTION'
+        : (state.hasToken ? 'START SUBSCRIPTION' : 'MANAGE FUNDS');
+    }
+    const dialogState = this.querySelector('[data-bind="pass-afking-dialog-state"]');
+    if (dialogState) dialogState.textContent = status?.textContent || 'READY';
+
+    const orderCard = this.querySelector('.pass-afking__order-card');
+    const initialFunding = this.querySelector('[data-bind="pass-afking-initial-funding"]');
+    const credit = this.querySelector('.pass-afking__credit');
+    const costs = this.querySelector('.pass-afking__costs');
+    if (orderCard) orderCard.hidden = !state.hasToken;
+    if (initialFunding) initialFunding.hidden = !state.hasToken || state.active;
+    if (credit) credit.hidden = !state.hasToken;
+    if (costs) costs.hidden = !state.hasToken;
+
     const withdraw = this.querySelector('[data-bind="pass-afking-withdraw"]');
     if (withdraw) {
       const selfMode = get('ui.mode') === 'self';
       withdraw.hidden = !selfMode || !hasFunding;
-      withdraw.textContent = this.#busyAfkingWithdrawal ? 'Withdrawing…' : 'Withdraw all';
+      withdraw.textContent = this.#busyAfkingWithdrawal ? 'WITHDRAWING…' : 'WITHDRAW ALL';
       const withdrawLocked = !selfMode
         || !hasFunding
         || this.#busyAfking
@@ -1201,28 +1332,35 @@ class AppPassSection extends HTMLElement {
 
     const save = this.querySelector('[data-bind="pass-afking-save"]');
     const cancel = this.querySelector('[data-bind="pass-afking-cancel"]');
+    const settingsUnavailable = Boolean(state.active && !state.settingsKnown);
     const locked = Boolean(
       state.rngLocked
+      || settingsUnavailable
       || this.#busyAfking
       || this.#busyAfkingFunding
       || this.#busyAfkingWithdrawal
       || this.#busyAfkingClaim
     );
     if (save) {
+      save.hidden = !state.hasToken;
       save.textContent = this.#busyAfking
-        ? 'Saving…'
+        ? 'SAVING…'
         : state.rngLocked
-          ? 'RNG settling'
-          : (state.active ? 'Update' : 'Start');
+          ? 'RNG SETTLING'
+          : settingsUnavailable
+            ? 'LOADING SETTINGS'
+            : (state.active ? 'SAVE CHANGES' : 'START');
       const saveLockTitle = state.rngLocked
         ? 'Settings unlock automatically after RNG resolves'
+        : settingsUnavailable
+          ? 'Waiting for current on-chain settings'
         : this.#busyAfking || this.#busyAfkingFunding || this.#busyAfkingWithdrawal || this.#busyAfkingClaim
           ? 'Transaction pending'
           : '';
       _setDomainWriteLock(save, locked, saveLockTitle);
     }
     if (cancel) {
-      cancel.hidden = !state.active;
+      cancel.hidden = !state.hasToken || !state.active;
       _setDomainWriteLock(
         cancel,
         locked,
@@ -1230,6 +1368,7 @@ class AppPassSection extends HTMLElement {
       );
     }
     this.#renderAfkingDayCost();
+    this.#renderAfkingTopup();
     this.#syncAfkingLockPolling();
   }
 
@@ -1459,7 +1598,7 @@ class AppPassSection extends HTMLElement {
       || this.#busyAfkingClaim
       || !this.#afkingState?.active
     ) return;
-    const msgValueWei = this.#afkingFundingInputWei();
+    const msgValueWei = this.#afkingFundingInputWei('pass-afking-topup');
     if (msgValueWei == null || msgValueWei <= 0n) {
       this.#renderAfkingError('Enter an ETH amount to add.');
       return;
@@ -1470,7 +1609,7 @@ class AppPassSection extends HTMLElement {
     this.#renderAfking();
     try {
       await fundAfkingSubscription({ msgValueWei });
-      const fundInput = this.querySelector('[name="pass-afking-fund"]');
+      const fundInput = this.querySelector('[name="pass-afking-topup"]');
       if (fundInput) fundInput.value = '0';
       this.#clearAllErrorStates();
       try {
@@ -1479,6 +1618,7 @@ class AppPassSection extends HTMLElement {
           bubbles: true,
         }));
       } catch (_error) { /* defensive */ }
+      this.#afkingDialogOpen = false;
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
       this.#renderAfkingError(error?.userMessage || error?.message || 'Funding failed.');
@@ -1511,6 +1651,8 @@ class AppPassSection extends HTMLElement {
           bubbles: true,
         }));
       } catch (_error) { /* defensive */ }
+      this.#afkingState = { ...this.#afkingState, fundingWei: 0n };
+      this.#afkingDialogOpen = false;
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
       this.#renderAfkingError(error?.userMessage || error?.message || 'Withdrawal failed.');
@@ -1566,6 +1708,7 @@ class AppPassSection extends HTMLElement {
       || this.#busyAfkingWithdrawal
       || this.#busyAfkingClaim
       || this.#afkingState?.rngLocked
+      || (this.#afkingState?.active && !this.#afkingState?.settingsKnown)
       || !this.#afkingState?.hasToken
     ) return;
 
@@ -1593,14 +1736,24 @@ class AppPassSection extends HTMLElement {
     this.#clearAfkingError();
     this.#renderAfking();
     try {
+      const useTickets = modeInput?.value !== 'lootbox';
+      const drainGameCreditFirst = Boolean(creditInput?.checked);
       await updateAfkingSubscription({
         dailyQuantity,
-        useTickets: modeInput?.value !== 'lootbox',
-        drainGameCreditFirst: Boolean(creditInput?.checked),
+        useTickets,
+        drainGameCreditFirst,
         msgValueWei,
       });
-      this.#afkingState = { ...this.#afkingState, active: true, dailyQuantity };
+      this.#afkingState = {
+        ...this.#afkingState,
+        active: true,
+        dailyQuantity,
+        settingsKnown: true,
+        useTickets,
+        drainGameCreditFirst,
+      };
       if (fundInput) fundInput.value = '0';
+      this.#afkingDialogOpen = false;
       this.#clearAllErrorStates();
       try {
         this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
@@ -1639,6 +1792,7 @@ class AppPassSection extends HTMLElement {
     try {
       await updateAfkingSubscription({ dailyQuantity: 0, msgValueWei: 0n });
       this.#afkingState = { ...this.#afkingState, active: false, dailyQuantity: 0 };
+      this.#afkingDialogOpen = false;
       this.#clearAllErrorStates();
       try {
         this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
@@ -1712,10 +1866,15 @@ class AppPassSection extends HTMLElement {
   }
 
   #renderAfkingError(msg) {
-    const errEl = this.querySelector('[data-bind="pass-afking-error"]');
-    if (!errEl) return;
-    errEl.textContent = String(msg);
-    errEl.hidden = false;
+    const errEls = [
+      this.querySelector('[data-bind="pass-afking-error"]'),
+      this.querySelector('[data-bind="pass-afking-dialog-error"]'),
+    ].filter(Boolean);
+    if (errEls.length === 0) return;
+    for (const errEl of errEls) {
+      errEl.textContent = String(msg);
+      errEl.hidden = false;
+    }
     if (this.#errorTimerAfking != null) {
       try { clearTimeout(this.#errorTimerAfking); } catch (_) { /* defensive */ }
     }
@@ -1726,8 +1885,10 @@ class AppPassSection extends HTMLElement {
   }
 
   #clearAfkingError() {
-    const errEl = this.querySelector('[data-bind="pass-afking-error"]');
-    if (errEl) {
+    for (const errEl of [
+      this.querySelector('[data-bind="pass-afking-error"]'),
+      this.querySelector('[data-bind="pass-afking-dialog-error"]'),
+    ].filter(Boolean)) {
       errEl.textContent = '';
       errEl.hidden = true;
     }

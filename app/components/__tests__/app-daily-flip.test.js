@@ -310,11 +310,11 @@ describe('day-wide reveal planning', () => {
     assert.equal(revealPlanning.formatSdgnrsBalance(123_450_000n * unit), '123M');
   });
 
-  test("Tomorrow's Bet keeps at most five significant whole-FLIP digits", () => {
+  test("Tomorrow's Bet keeps at most four significant whole-FLIP digits", () => {
     const unit = 10n ** 18n;
-    assert.equal(revealPlanning.formatTomorrowBet(43_844n * unit), '43,844');
-    assert.equal(revealPlanning.formatTomorrowBet(123_456n * unit), '123,460');
-    assert.equal(revealPlanning.formatTomorrowBet(12_345_678n * unit), '12,346,000');
+    assert.equal(revealPlanning.formatTomorrowBet(43_844n * unit), '43,840');
+    assert.equal(revealPlanning.formatTomorrowBet(123_456n * unit), '123,500');
+    assert.equal(revealPlanning.formatTomorrowBet(12_345_678n * unit), '12,350,000');
   });
 
   test('BAF eve is only the unlocked final-purchase day before an x10 level', () => {
@@ -394,6 +394,13 @@ describe('day-wide reveal planning', () => {
     assert.equal(revealPlanning.REVEAL_BIASED_END_MS, 1350);
     assert.equal(revealPlanning.REVERSE_CARD_ENTRY_WAIT_MS, 100);
     assert.equal(revealPlanning.REVERSE_CARD_ANIMATION_MS, 600);
+    for (let day = 1; day <= 250; day += 1) {
+      const fakePct = revealPlanning.fakeoutModifierPercent(day);
+      assert.ok(fakePct >= 72 && fakePct <= 138,
+        `loss fakeout ${day} stays away from the thermometer floor and ceiling`);
+      assert.equal(fakePct, revealPlanning.fakeoutModifierPercent(day),
+        'the presentation-only loss modifier is stable for the whole day');
+    }
     for (const ending of [
       'double-to-win', 'double-to-loss', 'triple-to-win', 'triple-to-loss',
     ]) {
@@ -427,6 +434,21 @@ describe('day-wide reveal planning', () => {
         );
       }
     }
+  });
+
+  test('DO IT uses a stable ten-percent day gate', () => {
+    let shown = 0;
+    const days = 100_000;
+    for (let day = 1; day <= days; day += 1) {
+      if (revealPlanning.shouldFlashAllInDoIt(day)) shown += 1;
+    }
+    assert.ok(Math.abs((shown / days) * 100 - 10) < 0.2,
+      `DO IT observed ${(shown / days * 100).toFixed(2)}%`);
+    assert.equal(
+      revealPlanning.shouldFlashAllInDoIt(12_345),
+      revealPlanning.shouldFlashAllInDoIt(12_345),
+      'reloads cannot reroll the easter egg',
+    );
   });
 });
 
@@ -805,6 +827,49 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
+  test('any confirmed protocol transaction refreshes wallet and claimable FLIP totals', async () => {
+    const unit = 10n ** 18n;
+    let wallet = 1_000n * unit;
+    let claimable = 200n * unit;
+    let balanceReads = 0;
+    let claimableReads = 0;
+    coinflipMod.__setWidgetBalancesReaderForTest(async () => {
+      balanceReads += 1;
+      return { flipBalance: wallet, wwxrpBalance: 0n, sdgnrsBalance: 0n };
+    });
+    coinflipMod.__setClaimableReaderForTest(async () => {
+      claimableReads += 1;
+      return claimable;
+    });
+    const dashboard = dashboardPayload();
+    dashboard.flipBalance = '0';
+    dashboard.coinflip.claimablePreview = '0';
+    _fetchResponses = {
+      dashboard,
+      flipDay: { day: 67, win: false, rewardPercent: 96 },
+    };
+    localStorage.setItem('flip_day_84532_67', '1');
+
+    const el = mount();
+    await flushMicrotasks();
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '1,200');
+    const initialBalanceReads = balanceReads;
+    const initialClaimableReads = claimableReads;
+
+    // Model an external protocol action spending claimable FLIP first and
+    // minted wallet FLIP second. The shared confirmation event must repaint
+    // the aggregate even though this widget did not initiate the transaction.
+    wallet = 700n * unit;
+    claimable = 50n * unit;
+    document.dispatchEvent({ type: contractsMod.TX_CONFIRMED_EVENT });
+    await flushMicrotasks();
+
+    assert.ok(balanceReads > initialBalanceReads, 'minted FLIP is re-read after confirmation');
+    assert.ok(claimableReads > initialClaimableReads, 'claimable FLIP is re-read after confirmation');
+    assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '750');
+    el.disconnectedCallback();
+  });
+
   test("an unresolved ticket pack never masks Tomorrow's bet", async () => {
     _currentStakeWei = '12000000000000000000000';
     _fetchResponses = {
@@ -844,7 +909,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       flipDay: { day: 67, win: true, rewardPercent: 96 },
     };
     pendingActionsMod.publishPendingActions('lootboxes', [{
-      id: 'lootbox:9', kind: 'lootbox', label: 'Lootbox #9',
+      id: 'lootbox:9', kind: 'lootbox', label: 'Luckbox #9',
       detail: 'Prizes ready', state: 'ready', resolved: true, run: async () => {},
     }]);
     pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
@@ -877,7 +942,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       flipDay: { day: 67, win: true, rewardPercent: 96 },
     };
     pendingActionsMod.publishPendingActions('lootboxes', [{
-      id: 'lootbox:10', kind: 'lootbox', label: 'Lootbox #10',
+      id: 'lootbox:10', kind: 'lootbox', label: 'Luckbox #10',
       detail: 'Waiting for RNG', state: 'waiting', resolved: false, pinned: true,
     }]);
     pendingActionsMod.publishPendingActions('sdgnrs-redemptions', []);
@@ -900,8 +965,16 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const claim = el.querySelector('[data-bind="df-claim-flip-cta"]');
     assert.equal(value.textContent, '••••');
     assert.equal(value.getAttribute('role'), 'button');
+    assert.deepEqual(storeMod.get('ui.protocolCoinsFlipDisclosure'), {
+      address: TEST_ADDR.toLowerCase(),
+      visible: false,
+    });
     value.dispatchEvent({ type: 'click', preventDefault() {} });
     assert.notEqual(value.textContent, '••••');
+    assert.deepEqual(storeMod.get('ui.protocolCoinsFlipDisclosure'), {
+      address: TEST_ADDR.toLowerCase(),
+      visible: true,
+    }, 'the owning Protocol Coins cell publishes its exact disclosure state');
     assert.equal(claim.disabled, true, 'unblurring is visual and does not bypass claim eligibility');
     el.disconnectedCallback();
   });
@@ -1014,6 +1087,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const realAudioContext = globalThis.AudioContext;
     let revealDelay = 0;
     let revealFinish = null;
+    const revealEvents = [];
     const scheduled = [];
     class RecordingAudioContext {
       static last = null;
@@ -1060,6 +1134,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
         if ((Number(delay) || 0) >= 4_000) revealFinish = fn;
         return handle;
       };
+      globalThis.document.addEventListener('flip:finishing', (event) => {
+        revealEvents.push(['finishing', event?.detail?.durationMs]);
+      });
+      globalThis.document.addEventListener('flip:revealed', () => {
+        revealEvents.push(['revealed']);
+      });
       el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
       const launchOscillators = RecordingAudioContext.last.oscillators.length;
 
@@ -1078,8 +1158,24 @@ describe('app-daily-flip — coin reveal + actions', () => {
       assert.ok(fakeoutCard, 'loss-to-win fakeout mounts the flying Reverse card');
       assert.equal(fakeoutCard.getAttribute('data-fakeout-target'), 'eth');
       assert.equal(fakeoutCard.querySelector('img').src, '/shared/reverse-flip-card.svg');
+      const revealPlan = revealPlanning.selectFlipRevealPlan(67, true);
+      assert.equal(revealPlanning.shouldFlashAllInDoIt(67), true,
+        'the motion fixture is one of the deterministic ten-percent cue days');
+      const finishingCue = scheduled.filter((entry) => (
+        entry.delay === revealPlan.trackMs
+          + revealPlan.openingMs
+          - revealPlanning.FLIP_FINISH_CUE_MS
+      )).at(-1);
+      assert.ok(finishingCue, 'the button cue is scheduled only for the final quarter-second');
+      assert.ok(finishingCue.delay < revealPlan.totalMs - revealPlanning.FLIP_FINISH_CUE_MS,
+        'Reverse-card extensions do not move DO IT away from the normal landing');
+      finishingCue.fn();
+      assert.deepEqual(revealEvents, [['finishing', 250]],
+        'the finishing cue precedes the settled reveal event');
       assert.equal(typeof revealFinish, 'function');
       revealFinish();
+      assert.deepEqual(revealEvents, [['finishing', 250], ['revealed']],
+        'the settled frame closes the brief finishing cue');
       assert.equal(RecordingAudioContext.last.oscillators.length, launchOscillators,
         'the winning chord stays silent while the final thermometer is moving');
       const meter = el.querySelector('.df-modifier-meter--settling');
@@ -1266,8 +1362,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
         'the thermometer stays mounted through the intermediate red face');
       assert.match(
         STATUS_CSS,
-        /@keyframes df-meter-rebound-from-min[\s\S]*?0%, 6\.086957%[^}]*bottom:\s*0%[\s\S]*?56\.521739%[^}]*\+ 30%[\s\S]*?100%[^}]*var\(--df-meter-stop/,
-        'the next Reverse card carries the marker through a high overshoot and recovery',
+        /@keyframes df-meter-rebound-from-min[\s\S]*?0%, 6\.086957%[^}]*bottom:\s*0%[\s\S]*?39\.130435%[^}]*bottom:\s*98%[\s\S]*?65\.217391%[^}]*bottom:\s*8%[\s\S]*?100%[^}]*var\(--df-meter-stop/,
+        'the next Reverse card carries the marker through a complete rail loop and recovery',
       );
 
       const finalLanding = scheduled.find((entry) => (
@@ -1296,7 +1392,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
     storeMod.update('app.lastDay', { day: tripleDay, status: 'resolved' });
     _fetchResponses = {
       dashboard: dashboardPayload(),
-      flipDay: { day: tripleDay, win: false, rewardPercent: 96 },
+      // Real loss payloads intentionally carry no payout modifier. This is
+      // the production shape that previously pinned the fakeout marker at 0.
+      flipDay: { day: tripleDay, win: false, rewardPercent: 0 },
     };
     const el = mount();
     await flushMicrotasks();
@@ -1323,6 +1421,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
       scheduled.find((entry) => (
         entry.delay === revealPlanning.REVEAL_TRACK_MS + triplePlan.openingMs
       )).fn();
+      const openingMarker = el.querySelector('[data-bind="df-modifier-marker"]');
+      assert.notEqual(openingMarker.style.bottom, '0%',
+        'a loss fakeout receives a stable presentation stop instead of the on-chain zero sentinel');
       scheduled.find((entry) => (
         entry.delay === revealPlanning.REVEAL_TRACK_MS + triplePlan.openingMs + 900 - 350
       )).fn();
@@ -1512,7 +1613,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     );
     assert.match(el.querySelector('[data-position="today"]').textContent, /43,844 FLIP/,
       'today shows the committed pre-flip amount');
-    assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /43,844 FLIP/,
+    assert.match(el.querySelector('[data-position="tomorrow"]').textContent, /43,840 FLIP/,
       'tomorrow remains visible');
     assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '••••',
       'the wallet FLIP balance stays masked until the result is revealed');
@@ -1581,6 +1682,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /body\.layout-basic \.df-funds__value\s*\{[^}]*font-size:\s*clamp\(0\.92rem,\s*2\.8vw,\s*1\.16rem\)/s,
       'Protocol Coins FLIP uses the same numeric scale as the neighboring bet boxes',
     );
+    assert.match(
+      APP_CSS,
+      /\.jackpot-hero :is\([\s\S]*?\.dec-flip-balance__value,[\s\S]*?\.dec-funds__value,[\s\S]*?\.df-position-value,[\s\S]*?\.df-funds__value[\s\S]*?font-size:\s*var\(--hero-box-currency-font-size\)/,
+      'every currency readout in the top hero row shares one responsive font size',
+    );
     assert.match(el.innerHTML, /class="df-funds__title df-funds__toggle"[\s\S]*?<span>PROTOCOL COINS<\/span>/,
       'the shared instrument has one Protocol Coins label');
     assert.match(APP_CSS,
@@ -1618,8 +1724,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /@media \(max-width: 520px\)[\s\S]*?\.app-daily-flip\s*\{\s*--df-action-font-size:\s*0\.49rem;/,
       'phone labels grow slightly without changing the compact button heights');
     assert.match(APP_CSS,
-      /\.df-tomorrow-layout \.df-position-unit\s*\{[^}]*margin-left:\s*0\.28em/s,
-      'Tomorrow’s numeric total has a deliberate gap before FLIP');
+      /\.df-tomorrow-layout \.df-position-unit\s*\{[^}]*margin-left:\s*1ch/s,
+      'Tomorrow’s numeric total uses the full monospace gap before FLIP');
     assert.match(APP_CSS,
       /body\.layout-basic \.df-funds\s*\{[^}]*padding:\s*0\.2rem 0\.24rem 0\.24rem/s,
       'Protocol Coins uses the same outer right inset as Tomorrow’s Bet');
@@ -1630,14 +1736,14 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /body\.layout-basic \.df-funds__value\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*baseline[^}]*justify-content:\s*flex-end/s,
       'Protocol Coins and Tomorrow align the number/unit pair on one baseline');
     assert.match(APP_CSS,
-      /body\.layout-basic \.df-funds__unit\s*\{[^}]*margin-left:\s*0\.28em/s,
-      'both FLIP units use identical spacing');
+      /body\.layout-basic \.df-funds__unit\s*\{[^}]*margin-left:\s*1ch/s,
+      'both lower FLIP units match the full-space rhythm of Today’s Bet');
     const claim = el.querySelector('[data-bind="df-claim-flip-cta"]');
     assert.ok(claim.disabled, 'claim stays unlit while its balance is masked');
     el.disconnectedCallback();
   });
 
-  test("Tomorrow's live stake uses the five-significant-digit formatter", async () => {
+  test("Tomorrow's live stake uses the four-significant-digit formatter", async () => {
     _currentStakeWei = String(123_456n * (10n ** 18n));
     _fetchResponses = {
       dashboard: dashboardPayload(),
@@ -1647,7 +1753,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
     assert.equal(
       el.querySelector('[data-position="tomorrow"]').querySelector('.df-position-number').textContent,
-      '123,460',
+      '123,500',
     );
     el.disconnectedCallback();
   });
@@ -1996,6 +2102,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(APP_CSS,
       /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*align-self:\s*center/s,
       'the compressed Add Bet action is vertically centered');
+    assert.match(APP_CSS,
+      /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*margin-left:\s*0\.12rem/s,
+      'Add Bet keeps a small visual gap from the amount arrows');
     assert.match(APP_CSS,
       /body\.layout-basic \.df-funds \.df-claim-flip-cta\[data-write\],[\s\S]*?align-self:\s*center/s,
       'Claim is vertically centered in the compressed Protocol Coins bar too');

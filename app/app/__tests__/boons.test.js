@@ -14,7 +14,7 @@ describe('active boon product mapping', () => {
     const slot0 = (
       // Coinflip +10 from a lootbox on day 61: active through day 63.
       (61n << 0n) | (2n << 48n)
-      // Lootbox +25 deity boon from day 61: expired at day rollover.
+      // Luckbox +25 deity boon from day 61: expired at day rollover.
       | (61n << 56n) | (61n << 80n) | (3n << 104n)
       // Ticket purchase +15 from day 60: active through day 64.
       | (60n << 112n) | (2n << 160n)

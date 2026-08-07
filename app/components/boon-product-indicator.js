@@ -16,6 +16,16 @@ class BoonProductIndicator extends HTMLElement {
     if (!this.#unsub) {
       this.#unsub = subscribe('app.boons', () => this.#render());
     }
+    // A boon only changes the value of the NEXT purchase, so this marker
+    // appearing beside a buy control is exactly when the answer starts to
+    // matter. Announce it rather than importing polling.js: this file is a
+    // display marker, and the app has no bundler — a direct import would pull
+    // the polling/contracts/ethers stack onto every page that shows a boon.
+    // polling.js listens and coalesces, so several markers mounting together
+    // cost one request.
+    if (typeof document !== 'undefined' && typeof CustomEvent === 'function') {
+      document.dispatchEvent?.(new CustomEvent('degenerus:boon-surface-open'));
+    }
     this.#render();
   }
 

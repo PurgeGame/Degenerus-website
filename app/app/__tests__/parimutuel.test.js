@@ -289,6 +289,28 @@ describe('view decoding', () => {
     });
     assert.deepEqual(calls, [0]);
   });
+
+  test('historical final pools cover three levels per growthState read and stay cached', async () => {
+    const calls = [];
+    pari.__setGameFactoryForTest(() => ({
+      growthState: async (round) => {
+        calls.push(round);
+        if (round === 2) return [50n, 64n, 81n, 4, false, 0];
+        if (round === 5) return [100n, 0n, 0n, 4, false, 0];
+        throw new Error('unexpected history center');
+      },
+    }));
+    assert.deepEqual(await pari.readGrowthRatchetHistory({ throughLevel: 4 }), [
+      { level: 1, poolWei: 50n },
+      { level: 2, poolWei: 64n },
+      { level: 3, poolWei: 81n },
+      { level: 4, poolWei: 100n },
+    ]);
+    assert.deepEqual(calls, [2, 5], 'centers 2 and 5 cover levels 1 through 4');
+
+    await pari.readGrowthRatchetHistory({ throughLevel: 4 });
+    assert.deepEqual(calls, [2, 5], 'write-once ratchets are not re-read on every panel poll');
+  });
 });
 
 // ===========================================================================

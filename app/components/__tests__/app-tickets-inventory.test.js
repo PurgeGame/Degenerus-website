@@ -414,6 +414,32 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
+  test('a second arrow press retracts immediately during the deferred open', async () => {
+    _byLevel.set(17, byTraitPayload({ cards: [card('opened'), card('opened')] }));
+    const el = mount({ expanded: false });
+    await flushMicrotasks();
+    const toggle = el.querySelector('[data-bind="inv-toggle"]');
+    const window = el.querySelector('[data-bind="inv-window"]');
+
+    toggle.dispatchEvent({ type: 'click' });
+    assert.equal(toggle.getAttribute('aria-busy'), 'true');
+    toggle.dispatchEvent({ type: 'click' });
+    assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+    assert.equal(toggle.getAttribute('aria-busy'), null);
+    assert.equal(window.hidden, true);
+
+    await flushMicrotasks();
+    assert.equal(toggle.getAttribute('aria-expanded'), 'false',
+      'the cancelled deferred render cannot reopen the inventory');
+    assert.equal(window.hidden, true);
+    assert.equal(el.querySelectorAll('img').length, 0,
+      'a cancelled open never starts the expensive ticket SVG build');
+    assert.match(APP_CSS,
+      /\.inv-disclosure\s*\{[^}]*z-index:\s*3[^}]*width:\s*2\.75rem[^}]*height:\s*2\.75rem[^}]*touch-action:\s*manipulation/s,
+      'the arrow owns a reliable 44px touch target above expanded controls');
+    el.disconnectedCallback();
+  });
+
   test('ticket quantities use quarter decimals instead of a second entry unit', () => {
     assert.equal(inventoryMod.formatTicketEntryHoldings(0), '0 tickets');
     assert.equal(inventoryMod.formatTicketEntryHoldings(1), '0.25 tickets');

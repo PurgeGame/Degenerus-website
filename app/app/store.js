@@ -56,6 +56,11 @@ const _state = {
     walletPickerOpen: false,
     proEligible: false,    // Phase 64 — connected wallet's activity score > 80 pts (pro-gate.js)
     foilQuest: null,       // current account's unfinished daily foil quest + routed purchase level
+    // The right-side Protocol Coins instrument owns the FLIP spoiler gate.
+    // Its compact mirror on the buy side subscribes to this exact disclosure
+    // state so the same balance is never visible in one column and masked in
+    // the other. `{ address, visible }` is intentionally account-scoped.
+    protocolCoinsFlipDisclosure: null,
   },
   // Phase 60+ adds: game.*, player.*, claims.*, ... (mirroring /beta/app/store.js shape)
 };
@@ -328,6 +333,7 @@ export function __resetForTest() {
   _state.ui.walletPickerOpen = false;
   _state.ui.proEligible = false;
   _state.ui.foilQuest = null;
+  _state.ui.protocolCoinsFlipDisclosure = null;
   // Phase 59 Plan 59-02: clear dynamic top-level namespaces (e.g. `app.*`) added
   // via setPath. polling-store-wired tests assert app.lastDay === undefined after
   // a failed fetch — without this, prior-test state leaks across cases.

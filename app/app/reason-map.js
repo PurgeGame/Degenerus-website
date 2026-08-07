@@ -24,8 +24,8 @@ const ERROR_REGISTRY = new Map([
   }],
   ['MustMintToday', {
     code: 'MustMintToday',
-    userMessage: 'You must mint a lootbox today before claiming.',
-    recoveryAction: 'Open a lootbox first, then retry.',
+    userMessage: 'You must mint a luckbox today before claiming.',
+    recoveryAction: 'Open a luckbox first, then retry.',
   }],
   ['RngNotReady', {
     code: 'RngNotReady',

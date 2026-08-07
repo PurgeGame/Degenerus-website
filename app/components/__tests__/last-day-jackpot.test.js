@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+const REPLAY_CSS = readFileSync(new URL('../../styles/replay.css', import.meta.url), 'utf8');
 const REPLAY_PANEL_SRC = readFileSync(new URL('../replay-panel.js', import.meta.url), 'utf8');
 const LAST_DAY_SRC = readFileSync(new URL('../last-day-jackpot.js', import.meta.url), 'utf8');
 const INDEX_SRC = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
@@ -356,6 +357,121 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       REPLAY_PANEL_SRC,
       /const isSoloBucket = Number\(this\.#quadPublicSummaries\[qIdx\]\?\.winnerCount\) === 1[\s\S]*?isSoloBucket[\s\S]*?formatEthTruncated\(ethTotal\.toString\(\)\)/,
       'the winner-facing YOU WON receipt uses the same compact payout',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /currency === 'ETH' && currencyWinnerCount === 1[\s\S]*?replay-bucket-reveal--solo-eth/,
+      'the public losing-viewer solo ETH result gets its dedicated larger treatment',
+    );
+  });
+  test('public jackpot results keep badges and rewards clear in both draws', () => {
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /if \(!this\.#bonusPhase\) host\.classList\.add\('replay-bucket-reveal--main-miss'\)/,
+      'only the main-draw underside receives the missed-result scale hook',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-bucket-badge\s*\{[^}]*width:\s*68%/s,
+      'ordinary public badges use the same 68% scale in the main and bonus draws',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-bucket-reveal--main-miss\.replay-bucket-reveal--solo-eth \.replay-bucket-badge\s*\{[^}]*width:\s*76%[^}]*height:\s*100%[^}]*aspect-ratio:\s*auto[^}]*object-position:\s*50% 0[^}]*transform:\s*translateY\(-0\.18rem\)/s,
+      'the solo-ETH badge is only one step larger and stays inside its upper lane',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /badgeStage\.className = 'replay-bucket-badge-stage'[\s\S]*?receipt\.className = 'replay-bucket-receipt'/,
+      'public results separate badge geometry from their variable-height receipt',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-prize-reveal\.replay-bucket-reveal\s*\{[^}]*display:\s*grid[^}]*grid-template-rows:\s*minmax\(0, 1fr\) clamp\(2\.2rem, 9vw, 2\.5rem\)/s,
+      'every neighboring badge receives the same fixed vertical stage',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-prize-reveal\.replay-bucket-reveal--solo-eth\s*\{[^}]*grid-template-rows:\s*minmax\(0, 1fr\) auto[^}]*gap:\s*0\.42rem/s,
+      'the solo result gives its payout an auto-height row below the badge',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-bucket-reveal--solo-eth \.replay-bucket-receipt\s*\{[^}]*height:\s*auto[^}]*flex-direction:\s*row[^}]*gap:\s*0\.3rem[^}]*transform:\s*translateY\(-0\.28rem\)/s,
+      'a solo bucket with tickets keeps both rewards in one compact lane near the badge',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-bucket-reveal--q2 \.replay-bucket-amount,[\s\S]*?\.replay-bucket-reveal--q3 \.replay-bucket-tickets\s*\{[^}]*transform:\s*translateY\(-0\.16rem\)/s,
+      'bottom-row rewards sit slightly higher in both draws',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-bucket-reveal--solo-eth\.replay-bucket-reveal--q2 \.replay-bucket-amount,[\s\S]*?\.replay-bucket-reveal--solo-eth\.replay-bucket-reveal--q3 \.replay-bucket-tickets\s*\{[^}]*transform:\s*none/s,
+      'the bottom-row adjustment cannot move a solo payout back over its badge',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /if \(!isSoloEth\)\s*\{[\s\S]*?currencyWinners\.textContent = `×\$\{Number\.isFinite\(currencyWinnerCount\)/,
+      'the featured solo ETH amount drops the redundant ×1 counter',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-bucket-reveal--solo-eth \.replay-bucket-amount\s*\{[^}]*font-size:\s*clamp\(0\.82rem, 2\.55vw, 1\.18rem\)/s,
+      'the solo amount is only modestly larger than an ordinary payout',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-bucket-amount--solo-eth\s*\{[^}]*background:\s*transparent[^}]*color:\s*#5c1616[^}]*box-shadow:\s*none/s,
+      'the solo amount keeps the muted red loss-result treatment without a plate',
+    );
+    assert.doesNotMatch(
+      REPLAY_CSS,
+      /#160806|#451407|\.replay-bucket-amount--solo-eth \.replay-bucket-value\s*\{[^}]*color:\s*#fff/s,
+      'the solo loss payout does not borrow the white-on-dark winner treatment',
+    );
+    assert.doesNotMatch(
+      REPLAY_PANEL_SRC,
+      /SOLO ETH WINNER|replay-bucket-solo-stamp/,
+      'the solo treatment stays visual instead of adding a literal label',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-prize-reveal\.replay-bucket-reveal--main-miss\s*\{[^}]*rgba\(239, 120, 120, 0\.16\)[^}]*inset 0 0 0 2px rgba\(111, 25, 36, 0\.22\)/s,
+      'the revealed underside keeps the pink/red loss language',
+    );
+    assert.doesNotMatch(
+      REPLAY_PANEL_SRC + REPLAY_CSS,
+      /replay-bucket-miss-mark|missMark\.textContent = 'MISS'/,
+      'the loss surface does not add a literal MISS stamp',
+    );
+  });
+
+  test('an actual solo ETH winner gets its own reveal cue', () => {
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /const isSoloEthWin = isWin && !this\.#bonusPhase && this\.#isSoloEthWinner\(qIdx\)/,
+      'the cue is restricted to an actual main-draw player win',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /if \(isSoloEthWin\)\s*\{\s*this\.#soloEthCuePlayed = true;\s*this\.#sfxSoloEthReveal\(\);/s,
+      'the solo branch replaces the ordinary per-quadrant win sound',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /const isSoloEthLoss = !isWin[\s\S]*?Number\(publicSummary\?\.winnerCount\) === 1;[\s\S]*?else if \(isSoloEthLoss\)\s*\{[\s\S]*?gets no reveal sound\./,
+      'a losing viewer uncovers the public solo bucket in complete silence',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /#sfxSoloEthReveal\(\)\s*\{[\s\S]*?frequency:\s*130\.81, endFrequency:\s*261\.63[\s\S]*?\[523\.25, 659\.25, 783\.99, 1046\.5\][\s\S]*?\[1568, 2093, 3136\]/,
+      'the dedicated cue has a low vault-open rise and a separate crystalline burst',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /this\.#celebrate\(\{ sound: !this\.#soloEthCuePlayed \}\)/,
+      'the generic end-of-roll fanfare cannot mask the solo cue',
     );
   });
   beforeEach(async () => {
@@ -955,6 +1071,24 @@ describe('new-day auto-follow', () => {
     assert.equal(persisted.length, priorPersistenceCalls,
       'incoming-day persistence cannot reset the prior draw or its bonus button');
 
+    // The old board is deliberately still playable here. Its completion must
+    // never pre-mark the just-pinned incoming day as already watched.
+    globalThis.document.dispatchEvent({
+      type: 'replay:scratch-complete',
+      detail: {
+        day: 5,
+        player: connected,
+        bonusPhase: false,
+        bonusAvailable: false,
+      },
+    });
+    await flushMicrotasks();
+    assert.equal(globalThis.localStorage.getItem(`spun_day_${CHAIN.id}_5`), '1');
+    assert.equal(globalThis.localStorage.getItem(`jackpot_complete_day_${CHAIN.id}_5`), '1');
+    assert.equal(globalThis.localStorage.getItem(`spun_day_${CHAIN.id}_6`), null,
+      'a late prior-day scratch cannot skip the incoming jackpot');
+    assert.equal(globalThis.localStorage.getItem(`jackpot_complete_day_${CHAIN.id}_6`), null);
+
     daySelect.options.push({ value: '6' });
     storeMod.update('app.lastDay', DAY6);
     await flushMicrotasks();
@@ -972,6 +1106,44 @@ describe('new-day auto-follow', () => {
     assert.equal(daySelect.value, '6');
     assert.equal(replay.getAttribute('data-day-warming'), null,
       'the jackpot unlocks from its own exact-day lane without waiting for coinflip');
+    el.disconnectedCallback();
+  });
+
+  test('opening the current Decimator repairs a poisoned current-day jackpot receipt', async () => {
+    const connected = '0xab15000000000000000000000000000000000000';
+    storeMod.update('connected.address', connected);
+    const replay = makeFakeElement('replay-panel');
+    const daySelect = makeFakeElement('select');
+    daySelect.attributes['data-bind'] = 'day-select';
+    daySelect.options = [{ value: '5' }];
+    daySelect.value = '5';
+    const playerSelect = makeFakeElement('select');
+    playerSelect.attributes['data-bind'] = 'player-select';
+    playerSelect.options = [{ value: connected }];
+    playerSelect.value = connected;
+    replay.append(daySelect, playerSelect);
+    const persisted = [];
+    replay.setPersistedRevealState = (...state) => persisted.push(state);
+    _docBody.appendChild(replay);
+
+    const el = instantiate();
+    storeMod.update('app.lastDay', { ...DAY5, level: 15, status: 'resolved' });
+    await flushMicrotasks();
+    globalThis.localStorage.setItem(`spun_day_${CHAIN.id}_5`, '1');
+    globalThis.localStorage.setItem(`jackpot_complete_day_${CHAIN.id}_5`, '1');
+    globalThis.localStorage.setItem(`jackpot_bonus_pending_day_${CHAIN.id}_5`, '1');
+
+    globalThis.document.dispatchEvent({
+      type: 'decimator:opened',
+      detail: { day: 5, level: 15 },
+    });
+    await flushMicrotasks();
+
+    assert.equal(globalThis.localStorage.getItem(`spun_day_${CHAIN.id}_5`), null);
+    assert.equal(globalThis.localStorage.getItem(`jackpot_complete_day_${CHAIN.id}_5`), null);
+    assert.equal(globalThis.localStorage.getItem(`jackpot_bonus_pending_day_${CHAIN.id}_5`), null);
+    assert.deepEqual(persisted.at(-1), [false, false],
+      'the normal jackpot underneath the Decimator becomes playable again');
     el.disconnectedCallback();
   });
 });

@@ -43,6 +43,8 @@ describe('resolution level routing', () => {
     assert.equal(resolutions.decimatorResolutionLevel(94), 85, 'x94/x95 round is excluded');
     assert.equal(resolutions.decimatorResolutionLevel(99), 100);
     assert.equal(resolutions.decimatorResolutionLevel(100), 100);
+    assert.equal(resolutions.decimatorResolutionLevel(15, true), 15,
+      'the active resolved level wins over a stale open-window latch');
     assert.equal(resolutions.decimatorResolutionLevel(117), 115);
     assert.equal(resolutions.decimatorResolutionLevel(2), 5, 'first round is a useful upcoming target');
     assert.equal(resolutions.decimatorResolutionLevel(42, true), 43, 'exact open latch targets level + 1');

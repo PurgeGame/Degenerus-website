@@ -13,8 +13,8 @@ describe('seeded codes (D-11 LOCKED + Pitfall 4 reconciliation)', () => {
       "It's not time for this action yet — wait for the next phase.",
       'Wait and try again.'],
     ['MustMintToday',
-      'You must mint a lootbox today before claiming.',
-      'Open a lootbox first, then retry.'],
+      'You must mint a luckbox today before claiming.',
+      'Open a luckbox first, then retry.'],
     ['RngNotReady',
       'Random outcome is still being generated. Try again in a few seconds.',
       'Wait 10s and retry.'],
@@ -87,12 +87,12 @@ describe('register() extension', () => {
   test('register adds new mapping; decodeRevertReason returns it', () => {
     register('LootboxSoldOut', {
       code: 'LootboxSoldOut',
-      userMessage: 'No lootboxes left for today.',
+      userMessage: 'No Luckbox left for today.',
       recoveryAction: 'Try again tomorrow.',
     });
     const result = decodeRevertReason({ revert: { name: 'LootboxSoldOut' } });
     assert.equal(result.code, 'LootboxSoldOut');
-    assert.equal(result.userMessage, 'No lootboxes left for today.');
+    assert.equal(result.userMessage, 'No Luckbox left for today.');
     assert.equal(result.recoveryAction, 'Try again tomorrow.');
   });
 

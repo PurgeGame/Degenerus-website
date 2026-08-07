@@ -265,7 +265,9 @@ class AppSdgnrsRedemptions extends HTMLElement {
         throw new Error('The sDGNRS box result is still syncing. Try again shortly.');
       }
       const legs = [..._claimCards(claim), ...boxLegs];
-      if (legs.length === 0) legs.push({ legType: 'settled' });
+      if (legs.length === 0) {
+        throw new Error('The sDGNRS result is still syncing. Try again shortly.');
+      }
       const transactionHash = String(
         receipt?.hash || receipt?.transactionHash || claim?.transactionHash || row.transactionHash || '',
       ).toLowerCase();

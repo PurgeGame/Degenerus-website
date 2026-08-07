@@ -396,21 +396,25 @@ export async function readDeityPassCatalog() {
   };
 }
 
-// Exact ordered weight table from DeityBoonViewer._boonFromRoll(). Conditional
-// entries are omitted (including their weight) when that product is unavailable.
-// Keeping the order here is load-bearing: the slot hash selects a point on this
-// cumulative line, so sorting the rows would change every displayed boon.
+// Exact ordered weight table from DeityBoonViewer._boonFromRoll(). Keeping the
+// order here is load-bearing: the slot hash selects a point on this cumulative
+// line, so sorting the rows would change every displayed boon.
 const DEITY_BOON_WEIGHTS = Object.freeze([
   [1, 200], [2, 40], [3, 8],
   [5, 200], [6, 30], [22, 8],
   [7, 400], [8, 80], [9, 16],
-  [13, 40, 'decimator'], [14, 8, 'decimator'], [15, 2, 'decimator'],
+  [13, 40], [14, 8], [15, 2],
   [16, 28], [23, 10], [24, 2],
-  [25, 28, 'deity'], [26, 10, 'deity'], [27, 2, 'deity'],
+  [25, 28], [26, 10], [27, 2],
   [17, 100], [18, 30], [19, 8],
   [4, 200], [28, 8],
   [29, 30], [30, 8], [31, 2],
 ]);
+const DEITY_BOON_GIFT_WEIGHT = 1_408;
+const DEITY_BOON_PRE_DECIMATOR = 982;
+const DEITY_BOON_DECIMATOR_WEIGHT = 50;
+const DEITY_BOON_PRE_DEITY_PASS = 1_072;
+const DEITY_BOON_DEITY_PASS_WEIGHT = 40;
 
 function _normalizedHexAddress(value) {
   const raw = String(value || '').trim();
@@ -428,8 +432,6 @@ export function deriveDeityBoonSlots({
   dailySeed,
   deity,
   day,
-  decimatorOpen,
-  deityPassAvailable,
 } = {}) {
   const address = _normalizedHexAddress(deity);
   if (!address) throw new Error('Invalid deity address.');
@@ -440,11 +442,6 @@ export function deriveDeityBoonSlots({
   }
   if (seed === 0n) return [0, 0, 0];
 
-  const activeRows = DEITY_BOON_WEIGHTS.filter((row) => (
-    (row[2] !== 'decimator' || Boolean(decimatorOpen))
-    && (row[2] !== 'deity' || Boolean(deityPassAvailable))
-  ));
-  const totalWeight = activeRows.reduce((sum, row) => sum + row[1], 0);
   const coder = ethers.AbiCoder.defaultAbiCoder();
 
   return Array.from({ length: 3 }, (_unused, slot) => {
@@ -452,9 +449,14 @@ export function deriveDeityBoonSlots({
       ['uint256', 'address', 'uint24', 'uint8'],
       [seed, address, dayNumber, slot],
     );
-    const roll = Number(BigInt(ethers.keccak256(encoded)) % BigInt(totalWeight));
+    // Gift slots exclude Decimator and Deity-pass families unconditionally.
+    // Mirror the contract's reduced modulus followed by its two band skips;
+    // filtering based on the live availability flags remaps the same slot.
+    let roll = Number(BigInt(ethers.keccak256(encoded)) % BigInt(DEITY_BOON_GIFT_WEIGHT));
+    if (roll >= DEITY_BOON_PRE_DECIMATOR) roll += DEITY_BOON_DECIMATOR_WEIGHT;
+    if (roll >= DEITY_BOON_PRE_DEITY_PASS) roll += DEITY_BOON_DEITY_PASS_WEIGHT;
     let cursor = 0;
-    for (const [boonType, weight] of activeRows) {
+    for (const [boonType, weight] of DEITY_BOON_WEIGHTS) {
       cursor += weight;
       if (roll < cursor) return boonType;
     }
@@ -475,8 +477,6 @@ export async function readDeityBoonSlots(player) {
     const dailySeed = BigInt(raw?.dailySeed ?? raw?.[0] ?? 0);
     const day = Number(raw?.day ?? raw?.[1] ?? 0);
     const usedMask = Number(raw?.usedMask ?? raw?.[2] ?? 0);
-    const decimatorOpen = Boolean(raw?.decimatorOpen ?? raw?.[3]);
-    const deityPassAvailable = Boolean(raw?.deityPassAvailable ?? raw?.[4]);
     return {
       day,
       usedMask,
@@ -485,8 +485,6 @@ export async function readDeityBoonSlots(player) {
         dailySeed,
         deity,
         day,
-        decimatorOpen,
-        deityPassAvailable,
       }),
     };
   } catch (_error) {
@@ -556,7 +554,7 @@ export async function smiteWithDeity({ deityId, target } = {}) {
  * A null result means the RPC/config is unavailable; it never means "no seat".
  *
  * @param {string} player
- * @returns {Promise<null|{hasToken:boolean,tokenBalance:bigint,active:boolean,dailyQuantity:number,startDay:number,coveredThroughDay:number,mintPriceWei:bigint,rngLocked:boolean,claimableWei:bigint,fundingWei:bigint,pendingFlipWhole:bigint|null,pendingFlipKnown:boolean}>}
+ * @returns {Promise<null|{hasToken:boolean,tokenBalance:bigint,active:boolean,dailyQuantity:number,startDay:number,coveredThroughDay:number,mintPriceWei:bigint,rngLocked:boolean,claimableWei:bigint,fundingWei:bigint,settingsKnown:boolean,drainGameCreditFirst:boolean|null,useTickets:boolean|null,pendingFlipWhole:bigint|null,pendingFlipKnown:boolean}>}
  */
 export async function readAfkingSubscription(player) {
   const address = String(player || '').trim();
@@ -594,6 +592,13 @@ export async function readAfkingSubscription(player) {
     const fullSub = value(pendingRes, null);
     const claimables = snapshot?.claimables ?? snapshot?.[2] ?? [];
     const fundings = snapshot?.afkingFundings ?? snapshot?.[3] ?? [];
+    // DegenerusGameLens.SubFull.flags mirrors the packed GAME subscription:
+    // bit 1 drains claimable game credit first; bit 2 selects Tickets instead
+    // of Luckboxes. Keep "unknown" distinct from a legitimate zero bitfield
+    // when the optional lens is unavailable.
+    const packedFlags = fullSub?.flags ?? fullSub?.[2];
+    const settingsKnown = packedFlags != null;
+    const flags = settingsKnown ? Number(packedFlags) : 0;
     const pendingFlip = fullSub?.pendingFlip ?? fullSub?.[10];
     return {
       hasToken: tokenBalance > 0n,
@@ -606,6 +611,9 @@ export async function readAfkingSubscription(player) {
       rngLocked: Boolean(snapshot?.rngLocked_ ?? snapshot?.[1]),
       claimableWei: BigInt(claimables?.[0] ?? 0),
       fundingWei: BigInt(fundings?.[0] ?? 0),
+      settingsKnown,
+      drainGameCreditFirst: settingsKnown ? Boolean(flags & 2) : null,
+      useTickets: settingsKnown ? Boolean(flags & 4) : null,
       pendingFlipWhole: pendingFlip == null ? null : BigInt(pendingFlip),
       pendingFlipKnown: pendingFlip != null,
     };

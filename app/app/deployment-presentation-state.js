@@ -13,6 +13,7 @@ const PRESENTATION_PREFIXES = Object.freeze([
   `flip_reward_reveal_gate_${CHAIN.id}_`,
   `coinflip_resolved_stake_v2:${CHAIN.id}:`,
   `pari-results-seen:${CHAIN.id}:`,
+  `jackpot-resolution-seen:${CHAIN.id}:`,
 ]);
 
 export function resetPresentationStateForDeployment(storage = globalThis.localStorage) {
@@ -37,4 +38,3 @@ export function resetPresentationStateForDeployment(storage = globalThis.localSt
     return false;
   }
 }
-

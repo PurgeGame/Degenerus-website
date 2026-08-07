@@ -44,7 +44,7 @@ describe('standalone ALL IN chooser', () => {
   });
 
   test('random is a peer format that keeps its destination and spin count blind', () => {
-    for (const target of ['tickets', 'lootbox', 'degenerette', 'coinflip', 'random']) {
+    for (const target of ['tickets', 'lootbox', 'degenerette', 'coinflip', 'decimator', 'random']) {
       assert.match(DIALOG_SRC, new RegExp(`data-target="${target}"`));
     }
     assert.match(DIALOG_SRC, /🎲 RANDOM/);
@@ -63,6 +63,59 @@ describe('standalone ALL IN chooser', () => {
     assert.doesNotMatch(DIALOG_SRC, /Your existing balance mode and form amounts stay unchanged/);
     assert.doesNotMatch(DIALOG_SRC, /Ready for one exact transaction/);
     assert.doesNotMatch(DIALOG_SRC, /data-bind="allin-quote"/);
+  });
+
+  test('format slots stay fixed while closed FLIP tickets remain visibly unavailable', async () => {
+    const { allInTargetState } = await import('../app-all-in-dialog.js');
+    assert.deepEqual(allInTargetState({
+      target: 'tickets', currency: 'FLIP', destinations: ['coinflip', 'degenerette'],
+    }), {
+      available: false,
+      visible: true,
+      unavailableLabel: 'REDEMPTION CLOSED',
+    });
+    assert.deepEqual(allInTargetState({
+      target: 'tickets', currency: 'FLIP', destinations: ['coinflip', 'degenerette', 'tickets'],
+    }), {
+      available: true,
+      visible: true,
+      unavailableLabel: '',
+    });
+    assert.deepEqual(allInTargetState({
+      target: 'lootbox', currency: 'FLIP', destinations: ['coinflip', 'degenerette'],
+    }), {
+      available: false,
+      visible: false,
+      unavailableLabel: '',
+    });
+    assert.deepEqual(allInTargetState({
+      target: 'decimator', currency: 'FLIP', destinations: ['coinflip', 'degenerette'],
+    }), {
+      available: false,
+      visible: false,
+      unavailableLabel: '',
+    });
+    assert.deepEqual(allInTargetState({
+      target: 'decimator', currency: 'FLIP', destinations: ['coinflip', 'degenerette', 'decimator'],
+    }), {
+      available: true,
+      visible: true,
+      unavailableLabel: '',
+    });
+    assert.match(APP_CSS,
+      /\.allin-targets\s*\{[^}]*grid-template-areas:\s*"tickets primary" "degenerette random"/s,
+      'the four visible format positions never repack between currencies');
+    assert.match(APP_CSS,
+      /button:is\(\[data-target="lootbox"\], \[data-target="coinflip"\]\)\s*\{[^}]*grid-area:\s*primary/s,
+      'ETH Luckbox and FLIP Coinflip occupy the same fixed slot');
+    assert.match(APP_CSS,
+      /\.allin-targets\.has-decimator\s*\{[^}]*grid-template-areas:\s*"tickets primary" "degenerette random" "decimator decimator"/s,
+      'an open Decimator adds its own full-width burn route without displacing the fixed four slots');
+    assert.match(DIALOG_SRC,
+      /destinations\.includes\('decimator'\)/,
+      'the Decimator row appears only when the purchase controller reports its burn window open');
+    assert.match(APP_CSS, /\.allin-targets button\.is-unavailable\s*\{[^}]*grayscale\(1\)[^}]*not-allowed/s,
+      'closed FLIP tickets remain visible with an unmistakably disabled treatment');
   });
 
   test('the app mounts a scroll-locked red sheet with a large final button', () => {

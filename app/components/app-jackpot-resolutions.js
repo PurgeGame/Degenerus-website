@@ -1,15 +1,14 @@
 // Headless watcher for the two level-transition drawings.
 //
 // The page does not carry a permanent Decimator/BAF dashboard. Once a round
-// closes, this controller publishes one compact VIEW/RESOLVE action into the
-// shared bottom tray. Opening it plays a one-time final-draw receipt through
-// reveal-overlay; genuine permissionless claims remain available until mined.
+// closes, this controller publishes the Decimator into the main jackpot action
+// and BAF into the shared Pending tray. The Decimator opens its reconstructed
+// wheel; genuine permissionless claims remain available until mined.
 
 import { fetchJSON } from '../app/api.js';
 import { CHAIN } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
 import {
-  get,
   subscribe,
   getViewedAddress,
   getActingAddress,
@@ -19,12 +18,14 @@ import {
   bafResolutionLevel,
   claimBafConsolation,
   decimatorResolutionLevel,
+  isDecimatorResolutionLevel,
   readBafConsolation,
   readDecimatorClaimState,
   summarizeBafAwards,
 } from '../app/jackpot-resolutions.js';
 import { clearPendingActions, publishPendingActions } from '../app/pending-actions.js';
 import { queueReveal } from './reveal-overlay.js';
+import { openDecimatorDraw } from './app-decimator-draw-overlay.js';
 
 const PENDING_SOURCE = 'jackpot-resolutions';
 const POLL_MS = 15_000;
@@ -197,17 +198,17 @@ export function bafResolutionView({ outcome, consolation, awards, currentLevel, 
     : { status: 'NO BAF ROUND', tone: 'muted', message: `No BAF result is indexed for Level ${lvl}.`, actionable: false };
 }
 
-function _seenKey(kind, address, level) {
-  return `jackpot-resolution-seen:${CHAIN.id}:${kind}:${String(address || '').toLowerCase()}:${Number(level)}`;
+export function jackpotResolutionSeenKey(kind, address, level) {
+  return `jackpot-resolution-seen:${CHAIN.id}:${Number(CHAIN.deployBlock || 0)}:${kind}:${String(address || '').toLowerCase()}:${Number(level)}`;
 }
 
 function _wasSeen(kind, address, level) {
-  try { return localStorage.getItem(_seenKey(kind, address, level)) === '1'; }
+  try { return localStorage.getItem(jackpotResolutionSeenKey(kind, address, level)) === '1'; }
   catch (_e) { return false; }
 }
 
 function _markSeen(kind, address, level) {
-  try { localStorage.setItem(_seenKey(kind, address, level), '1'); }
+  try { localStorage.setItem(jackpotResolutionSeenKey(kind, address, level), '1'); }
   catch (_e) { /* private browsing: result can be offered again next load */ }
 }
 
@@ -238,6 +239,7 @@ class AppJackpotResolutions extends HTMLElement {
       subscribe('viewing.address', () => this.#refresh()),
       subscribe('viewing.combined', () => this.#refresh()),
       subscribe('ui.mode', () => this.#refresh()),
+      subscribe('app.daySync', () => this.#refresh()),
     );
     this.#refresh();
   }
@@ -260,8 +262,10 @@ class AppJackpotResolutions extends HTMLElement {
 
   async #refresh() {
     const seq = ++this.#fetchSeq;
-    const combined = get('ui.mode') === 'combined' || get('viewing.combined') === true;
-    const viewed = combined ? null : getViewedAddress();
+    // Combined mode is read-only, but the resolved draw is still global and
+    // can use the connected/viewed account as its highlighted slice. Only the
+    // claim path below needs getActingAddress(); presentation must not vanish.
+    const viewed = getViewedAddress();
     this.#address = viewed ? String(viewed).toLowerCase() : null;
 
     let gameState;
@@ -336,9 +340,17 @@ class AppJackpotResolutions extends HTMLElement {
       level: decLevel,
     });
     const decFinal = this.#decimator?.roundStatus === 'closed';
-    const decUnseen = decFinal && !_wasSeen('decimator', this.#address, decLevel);
+    const decSeen = _wasSeen('decimator', this.#address, decLevel);
+    const decUnseen = decFinal && !decSeen;
+    // At an x5/x00 level the Decimator owns the shared jackpot action even if
+    // its indexed player row is a poll behind. Showing an explicit processing
+    // state prevents the normal jackpot control from slipping past it.
+    const decWaiting = !decSeen
+      && !decFinal
+      && Number(decLevel) === current
+      && isDecimatorResolutionLevel(current);
     const decCanResolve = canAct && decView.actionable;
-    if (decUnseen || decCanResolve) {
+    if (decWaiting || decUnseen || decCanResolve) {
       const willWrite = decCanResolve;
       rows.push({
         id: `decimator-resolution:${this.#address}:${decLevel}`,
@@ -347,15 +359,18 @@ class AppJackpotResolutions extends HTMLElement {
         mayAddEth: true,
         kindLabel: 'DECIMATOR FINAL',
         label: `Level ${decLevel} final draw`,
-        shortLabel: willWrite ? 'Resolve + view' : 'View draw',
+        shortLabel: decWaiting ? 'Processing' : (willWrite ? 'Resolve + view' : 'View draw'),
         detail: this.#busy === 'decimator'
           ? 'Resolving on-chain'
           : decView.message,
-        state: this.#busy === 'decimator' ? 'busy' : 'ready',
+        state: this.#busy === 'decimator' || decWaiting ? 'busy' : 'ready',
         write: willWrite,
-        autoOpen: !willWrite,
+        autoOpen: false,
+        primarySurface: 'jackpot',
         order: 12,
-        run: () => this.#runDecimator(decLevel, { resolve: willWrite, show: decUnseen }),
+        run: decWaiting
+          ? null
+          : () => this.#runDecimator(decLevel, { resolve: willWrite, show: true }),
       });
     }
 
@@ -368,7 +383,13 @@ class AppJackpotResolutions extends HTMLElement {
       level: bafLevel,
     });
     const bafFinal = ['closed', 'skipped'].includes(String(this.#baf?.roundStatus || ''));
-    const bafUnseen = bafFinal && !_wasSeen('baf', this.#address, bafLevel);
+    // A BAF final is transition chrome only at its x10 boundary. Do not revive
+    // an older unseen x10 receipt during a later x5 Decimator takeover; that
+    // reads as a BAF button opening the Decimator even though they are two
+    // separate resolved draws. Actionable consolation remains available below.
+    const bafUnseen = Number(bafLevel) === current
+      && bafFinal
+      && !_wasSeen('baf', this.#address, bafLevel);
     const bafCanResolve = canAct && bafView.actionable;
     if (bafUnseen || bafCanResolve) {
       const willWrite = bafCanResolve;
@@ -391,35 +412,21 @@ class AppJackpotResolutions extends HTMLElement {
     publishPendingActions(PENDING_SOURCE, rows);
   }
 
-  #queueDecimator(level) {
-    const row = this.#decimator || {};
-    const bucket = Number(row.bucket);
-    const yours = Number(row.subbucket);
-    const winning = Number(row.winningSubbucket);
-    const entered = Number.isInteger(bucket) && bucket > 0;
-    const won = entered && Number.isInteger(yours) && yours === winning && _big(row.payoutAmount) > 0n;
-    const drawDetail = entered
-      ? `Bucket ${bucket} · yours ${Number.isInteger(yours) ? yours : '—'} · drawn ${Number.isInteger(winning) ? winning : '—'}`
-      : 'No Decimator entry was recorded for this account.';
-    const cards = [{
-      type: 'decimator-final',
-      outcome: won ? 'win' : 'loss',
-      rarity: won ? 'epic' : 'common',
-      glyph: 'Ⅹ',
-      label: 'DECIMATOR FINAL',
-      value: won ? 'WINNING SUBBUCKET' : (entered ? 'NO HIT' : 'NO ENTRY'),
-      sub: drawDetail,
-    }];
-    const payout = _big(row.payoutAmount);
-    if (payout > 0n) {
-      cards.push({
-        type: 'decimator-share', outcome: 'win', rarity: 'epic', glyph: 'Ξ',
-        label: 'YOUR POOL SHARE', value: `${_formatEth(payout)} ETH`,
-        sub: this.#decimatorClaimState === 'claimed' ? 'Resolution credited on-chain' : 'Ready to credit on-chain',
-      });
-    }
-    queueReveal({ kind: 'resolution', title: `LEVEL ${level} DECIMATOR DRAW`, big: won, cards });
+  async #queueDecimator(level) {
+    const opened = await openDecimatorDraw({ level, player: this.#address });
+    if (!opened) return false;
     _markSeen('decimator', this.#address, level);
+    // Re-arm the ordinary jackpot underneath the takeover. Besides enforcing
+    // the intended Decimator -> Jackpot order, this repairs browsers whose
+    // current-day reveal receipt was poisoned by the old rollover race.
+    try {
+      const detail = { level: Number(level), day: Number(this.#gameState?.day) };
+      const event = typeof CustomEvent === 'function'
+        ? new CustomEvent('decimator:opened', { detail })
+        : { type: 'decimator:opened', detail };
+      document.dispatchEvent(event);
+    } catch (_e) { /* headless: the overlay itself remains authoritative */ }
+    return true;
   }
 
   #queueBaf(level) {
@@ -462,7 +469,7 @@ class AppJackpotResolutions extends HTMLElement {
         await claimDecimatorLevels({ player: this.#address, levels: [level] });
         this.#decimatorClaimState = 'claimed';
       }
-      if (show) this.#queueDecimator(level);
+      if (show) await this.#queueDecimator(level);
     } finally {
       this.#busy = null;
       this.#publish();

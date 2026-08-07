@@ -901,7 +901,7 @@ describe('Plan 60-04: affiliate-code helpers + purchaseEth auto-read', () => {
 // the v6 method-attached `purchase.populateTransaction(args)` form is used
 // (NOT v5's `populateTransaction.purchase(args)`); abort() invalidates the
 // closure synchronously; expiresAt is 30s in the future; estimateGas attaches
-// gracefully or fails open; lootboxQuantity=0 produces value=0n. Lootboxes are
+// gracefully or fails open; lootboxQuantity=0 produces value=0n. Luckbox are
 // ETH-only, so pre-warm always routes to purchase.populateTransaction.
 // ===========================================================================
 

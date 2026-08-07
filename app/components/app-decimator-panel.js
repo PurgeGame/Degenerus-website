@@ -40,9 +40,14 @@ import {
 // Eager import — triggers Phase 60's reason-map registrations as a side-effect
 // (GameOverPossible / AfKingLockActive / NotApproved). decimator.js is a thin
 // re-export of lootbox.js's purchaseEth + purchaseCoin per Plan 62-01 D-01.
-import { purchaseEth, scaledTicketPriceWei } from '../app/decimator.js';
 import {
-  claimAfkingSubscriptionFlip,
+  purchaseEth,
+  scaledTicketPriceWei,
+  burnForDecimator,
+  DECIMATOR_MIN_FLIP_WEI,
+  decimatorWindowIsOpen,
+} from '../app/decimator.js';
+import {
   readAfkingFunding,
   readAfkingSubscription,
   withdrawAfkingSubscriptionFunding,
@@ -81,12 +86,15 @@ import { activeTicketLevel } from '../app/active-level.js';
 // whether the current player can afford one whole ticket.
 import {
   claimEth,
-  claimFlip,
   redeemFlip,
   probeRedeemFlipWindow,
   flipCostFromTickets,
 } from '../app/claims.js';
-import { readClaimableCoinflip } from '../app/coinflip.js';
+import {
+  protocolFlipTotalWei,
+  readClaimableCoinflip,
+  readFlipWidgetBalances,
+} from '../app/coinflip.js';
 import { formatFlip } from '../viewer/utils.js';
 import { queueReveal } from './reveal-overlay.js';
 import { updateBalanceDisplay, resetBalanceDisplay } from '../app/balance-countup.js';
@@ -299,9 +307,18 @@ const FLIP_WEI = 10n ** 18n;
 // LOOTBOX_MIN_WEI already expresses exactly 0.01 ETH in the active chain scale.
 const ALL_IN_GAS_RESERVE_WEI = LOOTBOX_MIN_WEI;
 
-export function allInDestinations(currency, flipTicketsOpen = false) {
+export function allInDestinations(
+  currency,
+  flipTicketsOpen = false,
+  decimatorOpen = false,
+) {
   if (String(currency).toUpperCase() === 'FLIP') {
-    return ['coinflip', 'degenerette', ...(flipTicketsOpen ? ['tickets'] : [])];
+    return [
+      'coinflip',
+      'degenerette',
+      ...(flipTicketsOpen ? ['tickets'] : []),
+      ...(decimatorOpen ? ['decimator'] : []),
+    ];
   }
   return ['tickets', 'lootbox', 'degenerette'];
 }
@@ -336,6 +353,7 @@ export function allInSelectionQuote({
   flipWei = null,
   ticketPriceWei = null,
   flipTicketsOpen = false,
+  decimatorOpen = false,
   gasReady = true,
 } = {}) {
   const unit = String(currency).toUpperCase() === 'FLIP' ? 'FLIP' : 'ETH';
@@ -351,7 +369,7 @@ export function allInSelectionQuote({
     buttonLabel: 'ALL IN UNAVAILABLE',
   });
   if (!gasReady) return fail('Keep at least 0.01 ETH in your wallet for gas.');
-  if (!allInDestinations(unit, flipTicketsOpen).includes(target)) {
+  if (!allInDestinations(unit, flipTicketsOpen, decimatorOpen).includes(target)) {
     return fail('That format is not available for this currency right now.');
   }
   let budget = null;
@@ -382,11 +400,16 @@ export function allInSelectionQuote({
       : ticketCostFromTickets(price, Number(ticketAmount));
     outputLabel = `${groupAllInNumber(ticketAmount)} ${ticketAmount === '1' ? 'TICKET' : 'TICKETS'}`;
   } else if (target === 'lootbox') {
-    if (budget < LOOTBOX_MIN_WEI) return fail('At least 0.01 ETH is required for a lootbox.');
-    outputLabel = '1 LOOTBOX';
+    if (budget < LOOTBOX_MIN_WEI) return fail('At least 0.01 ETH is required for a luckbox.');
+    outputLabel = '1 LUCKBOX';
   } else if (target === 'coinflip') {
     if (budget < ALL_IN_COINFLIP_MIN_WEI) return fail('At least 100 FLIP is required for Coinflip.');
     outputLabel = "TODAY'S COINFLIP";
+  } else if (target === 'decimator') {
+    if (budget < DECIMATOR_MIN_FLIP_WEI) {
+      return fail('At least 1,000 FLIP is required for the Decimator.');
+    }
+    outputLabel = 'DECIMATOR';
   } else {
     const lane = unit === 'ETH' ? 0 : 1;
     const limits = degeneretteLimits(lane);
@@ -430,6 +453,9 @@ class AppDecimatorPanel extends HTMLElement {
   #lastPollAt = 0;
   #visibilityListener = null;
   #jackpotRevealListener = null;
+  #coinflipFinishingListener = null;
+  #coinflipRevealedListener = null;
+  #allInCueTimer = null;
   #storageListener = null;
   #questActivateListener = null;
   // --- Pinned data (server-derived; rendered via textContent) ---
@@ -508,6 +534,7 @@ class AppDecimatorPanel extends HTMLElement {
     ];
     this.#renderShell();
     this.#wireEventHandlers();
+    this.#wireAllInCoinflipCue();
     this.#wireQuestPresets();
     this.#wireVisibilityRePoll();
     this.#wireClaimableSpoilerGate();
@@ -546,6 +573,21 @@ class AppDecimatorPanel extends HTMLElement {
       catch (_) { /* defensive */ }
     }
     this.#jackpotRevealListener = null;
+    if (this.#coinflipFinishingListener
+      && typeof document !== 'undefined'
+      && typeof document.removeEventListener === 'function') {
+      try { document.removeEventListener('flip:finishing', this.#coinflipFinishingListener); }
+      catch (_) { /* defensive */ }
+    }
+    this.#coinflipFinishingListener = null;
+    if (this.#coinflipRevealedListener
+      && typeof document !== 'undefined'
+      && typeof document.removeEventListener === 'function') {
+      try { document.removeEventListener('flip:revealed', this.#coinflipRevealedListener); }
+      catch (_) { /* defensive */ }
+    }
+    this.#coinflipRevealedListener = null;
+    this.#restoreAllInLabel();
     if (this.#storageListener
       && typeof window !== 'undefined'
       && typeof window.removeEventListener === 'function') {
@@ -586,7 +628,7 @@ class AppDecimatorPanel extends HTMLElement {
           <div class="dec-header-title">
             <h2 class="dec-purchase-heading">BUY IN</h2>
             <a class="dec-purchase-help" href="/learn/purchases/"
-               aria-label="Learn about tickets, lootboxes, and foil packs"
+               aria-label="Learn about tickets, Luckbox, and foil packs"
                title="Learn about purchase options"><span aria-hidden="true">i</span></a>
           </div>
           <span class="dec-price" data-bind="dec-price">Price - —</span>
@@ -626,16 +668,16 @@ class AppDecimatorPanel extends HTMLElement {
           </span>
           <span class="dec-input-group dec-input-group--lootbox" data-bind="dec-lootbox-group">
             <label class="dec-input-label" for="dec-lootbox-eth-input">
-              <span>Buy lootbox</span>
+              <span>Buy luckbox</span>
               <boon-product-indicator product="lootbox"></boon-product-indicator>
             </label>
             <span class="dec-stepper">
               <input type="number" name="dec-lootbox-eth" id="dec-lootbox-eth-input"
                      class="dec-input" min="0" step="0.01" value="0"
-                     inputmode="decimal" aria-label="Buy lootbox amount in ETH">
+                     inputmode="decimal" aria-label="Buy luckbox amount in ETH">
               <span class="dec-stepper-btns">
-                <button type="button" class="dec-step" data-step-for="dec-lootbox-eth" data-dir="1" aria-label="Increase lootbox size by one ticket price" tabindex="-1">▲</button>
-                <button type="button" class="dec-step" data-step-for="dec-lootbox-eth" data-dir="-1" aria-label="Decrease lootbox size by one ticket price" tabindex="-1">▼</button>
+                <button type="button" class="dec-step" data-step-for="dec-lootbox-eth" data-dir="1" aria-label="Increase luckbox size by one ticket price" tabindex="-1">▲</button>
+                <button type="button" class="dec-step" data-step-for="dec-lootbox-eth" data-dir="-1" aria-label="Decrease luckbox size by one ticket price" tabindex="-1">▼</button>
               </span>
             </span>
           </span>
@@ -700,13 +742,15 @@ class AppDecimatorPanel extends HTMLElement {
         <div class="dec-funds-stack">
           <button type="button" class="dec-all-in" data-bind="dec-all-in" disabled
                   aria-label="Use all available ETH for tickets">
+            <img class="dec-all-in__flame" src="/whitepaper/flame-center.svg"
+                 alt="" aria-hidden="true">
             <strong class="dec-all-in__label">ALL IN</strong>
             <img class="dec-all-in__flame" src="/whitepaper/flame-center.svg"
                  alt="" aria-hidden="true">
           </button>
 
           <div class="dec-flip-balance" data-bind="dec-flip-balance" hidden
-               aria-label="Available FLIP balance">
+               aria-label="FLIP balance">
             <button type="button" class="dec-flip-toggle dec-flip-balance__mode"
                     data-bind="dec-funds-total-flip" aria-pressed="false" hidden>
               USE FLIP
@@ -1162,6 +1206,51 @@ class AppDecimatorPanel extends HTMLElement {
     }
   }
 
+  // Give the high-score ALL IN action one tiny final-landing wink without
+  // changing its accessible name or click behavior. app-daily-flip announces
+  // the last quarter-second of the normal landing separately from
+  // flip:revealed so Reverse cards never move the cue to the extended ending.
+  #wireAllInCoinflipCue() {
+    if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
+    this.#coinflipFinishingListener = (event) => {
+      const button = this.querySelector('[data-bind="dec-all-in"]');
+      const label = button?.querySelector?.('.dec-all-in__label')
+        || this.querySelector('.dec-all-in__label');
+      if (!button || !label || button.hidden || button.disabled) return;
+      if (this.#allInCueTimer != null) {
+        try { clearTimeout(this.#allInCueTimer); } catch (_) { /* defensive */ }
+        this.#allInCueTimer = null;
+      }
+      const requested = Number(event?.detail?.durationMs);
+      const durationMs = Number.isFinite(requested)
+        ? Math.max(180, Math.min(900, requested))
+        : 250;
+      label.textContent = 'DO IT';
+      button.classList?.remove('dec-all-in--do-it');
+      // Force a fresh pulse if a replay cue arrives before the old class has
+      // painted; this is visual only and is safe in the lightweight test DOM.
+      void button.offsetWidth;
+      button.classList?.add('dec-all-in--do-it');
+      this.#allInCueTimer = setTimeout(() => this.#restoreAllInLabel(), durationMs);
+      this.#allInCueTimer?.unref?.();
+    };
+    this.#coinflipRevealedListener = () => this.#restoreAllInLabel();
+    document.addEventListener('flip:finishing', this.#coinflipFinishingListener);
+    document.addEventListener('flip:revealed', this.#coinflipRevealedListener);
+  }
+
+  #restoreAllInLabel() {
+    if (this.#allInCueTimer != null) {
+      try { clearTimeout(this.#allInCueTimer); } catch (_) { /* defensive */ }
+      this.#allInCueTimer = null;
+    }
+    const button = this.querySelector('[data-bind="dec-all-in"]');
+    const label = button?.querySelector?.('.dec-all-in__label')
+      || this.querySelector('.dec-all-in__label');
+    if (label) label.textContent = 'ALL IN';
+    button?.classList?.remove('dec-all-in--do-it');
+  }
+
   // Step a number input by an explicit button step, or by its native step when
   // no override is supplied. Clamp at min and round away floating-point dust.
   #stepInput(input, dir, stepOverride = null) {
@@ -1239,17 +1328,45 @@ class AppDecimatorPanel extends HTMLElement {
         && this.#coinflipClaimableAddress === actingLower
         ? BigInt(this.#coinflipClaimableWei)
         : 0n;
-      const afkingPendingWei = this.#afkingPendingFlipKnown
-        && this.#afkingPendingFlipAddress === actingLower
-        ? BigInt(this.#afkingPendingFlipWei)
-        : 0n;
+      const spendableWei = protocolFlipTotalWei(walletWei, coinflipClaimableWei);
+      if (spendableWei == null) return null;
+      const rngLocked = Boolean(this.#purchaseQuote?.rngLocked);
+      // Generic GAME burns can consume settled Coinflip winnings directly,
+      // except while the RNG lock freezes that settlement path. Coinflip's own
+      // deposit has a native claimable-first waterfall and needs no claim tx.
+      const burnSpendableWei = protocolFlipTotalWei(
+        walletWei,
+        rngLocked ? 0n : coinflipClaimableWei,
+      );
       return {
         walletWei,
         coinflipClaimableWei,
-        afkingPendingWei,
-        totalWei: walletWei + coinflipClaimableWei + afkingPendingWei,
+        spendableWei,
+        burnSpendableWei,
+        rngLocked,
+        totalWei: spendableWei,
       };
     } catch (_e) { return null; }
+  }
+
+  async #refreshAllInFlipSources() {
+    const acting = getActingAddress();
+    const actingLower = acting ? String(acting).toLowerCase() : null;
+    if (!actingLower) return;
+    const [balances, claimable] = await Promise.allSettled([
+      readFlipWidgetBalances({ player: actingLower }),
+      readClaimableCoinflip({ player: actingLower }),
+    ]);
+    if (balances.status === 'fulfilled' && balances.value?.flipBalance != null) {
+      this.#flipBalanceWei = BigInt(balances.value.flipBalance);
+      this.#flipBalanceAddress = actingLower;
+    }
+    if (claimable.status === 'fulfilled' && claimable.value != null) {
+      this.#coinflipClaimableWei = BigInt(claimable.value);
+      this.#coinflipClaimableAddress = actingLower;
+      this.#coinflipClaimableKnown = true;
+    }
+    this.#renderFundsFooter();
   }
 
   #allInGasReady() {
@@ -1266,22 +1383,32 @@ class AppDecimatorPanel extends HTMLElement {
     const flipSources = String(selection?.currency).toUpperCase() === 'FLIP'
       ? this.#allInFlipSourcesWei()
       : null;
+    const coinflipTarget = String(selection?.target) === 'coinflip';
     const quote = allInSelectionQuote({
       ...selection,
       purchaseEthWei: this.#allInEthAvailableWei({ includeAfking: true }),
       degeneretteEthWei: this.#allInEthAvailableWei(),
-      flipWei: flipSources?.totalWei ?? null,
+      flipWei: flipSources == null
+        ? null
+        : coinflipTarget ? flipSources.spendableWei : flipSources.burnSpendableWei,
       ticketPriceWei: this.#ticketPriceWei(),
       flipTicketsOpen: this.#flipBuyOpen,
+      decimatorOpen: decimatorWindowIsOpen(this.#gameState),
       gasReady: this.#allInGasReady(),
     });
+    if (coinflipTarget && flipSources?.rngLocked) {
+      quote.valid = false;
+      quote.message = 'Coinflip is locked while RNG is settling.';
+      quote.buttonLabel = 'ALL IN UNAVAILABLE';
+    }
     if (quote.valid && flipSources) {
       quote.flipSources = flipSources;
+      quote.transactionWei = quote.spendWei;
       quote.fingerprint = [
         quote.fingerprint,
         flipSources.walletWei,
         flipSources.coinflipClaimableWei,
-        flipSources.afkingPendingWei,
+        flipSources.rngLocked,
       ].join(':');
     }
     return quote;
@@ -1292,7 +1419,11 @@ class AppDecimatorPanel extends HTMLElement {
     const detail = {
       destinations: {
         ETH: allInDestinations('ETH'),
-        FLIP: allInDestinations('FLIP', this.#flipBuyOpen),
+        FLIP: allInDestinations(
+          'FLIP',
+          this.#flipBuyOpen,
+          decimatorWindowIsOpen(this.#gameState),
+        ),
       },
       quote: (selection) => this.#allInQuote(selection),
       confirm: (selection, fingerprint) => this.#confirmAllIn(selection, fingerprint),
@@ -1304,23 +1435,23 @@ class AppDecimatorPanel extends HTMLElement {
 
   async #confirmAllIn(selection, fingerprint) {
     if (this.#busy) throw new Error('Another purchase is already in progress.');
+    if (String(selection?.currency).toUpperCase() === 'FLIP') {
+      await this.#refreshAllInFlipSources();
+    }
+    if (String(selection?.target) === 'decimator') {
+      try {
+        const freshState = await fetchJSON('/game/state');
+        if (freshState && typeof freshState === 'object') this.#gameState = freshState;
+      } catch (_error) { /* the contract preflight remains authoritative */ }
+    }
     const quote = this.#allInQuote(selection);
     if (!quote.valid) throw new Error(quote.message || 'ALL IN is unavailable.');
     if (fingerprint && quote.fingerprint !== fingerprint) {
       throw new Error('Your available balance changed. Review the updated ALL IN amount.');
     }
-    if (quote.currency === 'FLIP') {
-      const player = getActingAddress();
-      const sources = quote.flipSources;
-      if (sources?.afkingPendingWei > 0n) {
-        await claimAfkingSubscriptionFlip();
-      }
-      // Coinflip deposits consume their settled ledger natively. Every other
-      // FLIP route burns ERC-20 balance, so materialize that source first.
-      if (quote.target !== 'coinflip' && sources?.coinflipClaimableWei > 0n) {
-        await claimFlip({ player, amount: sources.coinflipClaimableWei });
-      }
-    }
+    // Every FLIP destination consumes the protocol ledger in its own call:
+    // Coinflip is claimable-first, while GAME burns draw any wallet shortfall
+    // straight from settled Coinflip winnings. Never insert a claim tx here.
     if (quote.target === 'tickets') {
       if (quote.currency === 'FLIP') {
         return this.#onBuyWithFlipClick(undefined, {
@@ -1349,6 +1480,9 @@ class AppDecimatorPanel extends HTMLElement {
         allIn: true,
       });
     }
+    if (quote.target === 'decimator') {
+      return this.#onAllInDecimatorBurn(quote.spendWei);
+    }
     const questType = quote.target === 'coinflip'
       ? 2
       : quote.currency === 'ETH' ? 7 : 8;
@@ -1356,7 +1490,7 @@ class AppDecimatorPanel extends HTMLElement {
       document.dispatchEvent(new CustomEvent('quest:activate', {
         detail: {
           questType,
-          target: quote.spendWei,
+          target: quote.target === 'coinflip' ? quote.transactionWei : quote.spendWei,
           amountPerSpin: quote.amountPerSpin,
           spinCount: quote.spins,
           submit: true,
@@ -1368,6 +1502,38 @@ class AppDecimatorPanel extends HTMLElement {
       throw new Error('The selected ALL IN surface is not ready.');
     }
     return true;
+  }
+
+  async #onAllInDecimatorBurn(amountWei) {
+    const player = getActingAddress();
+    if (!player) throw new Error('Connect a wallet to enter the Decimator.');
+    this.#busy = true;
+    const allIn = this.querySelector('[data-bind="dec-all-in"]');
+    if (allIn) allIn.disabled = true;
+    this.#clearError();
+    try {
+      const { receipt } = await burnForDecimator({ player, amount: amountWei });
+      try {
+        this.dispatchEvent(new CustomEvent('app-decimator:burn-confirmed', {
+          detail: {
+            player,
+            amountWei,
+            transactionHash: receipt?.hash || receipt?.transactionHash || null,
+          },
+          bubbles: true,
+        }));
+      } catch (_error) { /* refresh event is progressive enhancement */ }
+      setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
+      return true;
+    } catch (error) {
+      const message = compactUiError(error, 'Decimator ALL IN did not go through. Try again.');
+      this.#renderError(message);
+      throw new Error(message, { cause: error });
+    } finally {
+      this.#busy = false;
+      if (allIn) allIn.disabled = false;
+      this.#renderFundsFooter();
+    }
   }
 
   #presaleAvailableForDraft(mintCostWei = this.#draftMintCostWei()) {
@@ -1630,6 +1796,7 @@ class AppDecimatorPanel extends HTMLElement {
       gameResult,
       purchaseResult,
       playerResult,
+      flipBalancesResult,
       walletResult,
       coinflipResult,
       afkingFundingResult,
@@ -1639,6 +1806,7 @@ class AppDecimatorPanel extends HTMLElement {
       fetchJSON('/game/state'),
       readPurchaseQuote(),
       actingLower ? fetchJSON(`/player/${actingLower}`) : Promise.resolve(null),
+      actingLower ? readFlipWidgetBalances({ player: actingLower }) : Promise.resolve(null),
       walletBalancePromise,
       actingLower ? readClaimableCoinflip({ player: actingLower }) : Promise.resolve(null),
       actingLower ? readAfkingFunding(actingLower) : Promise.resolve(null),
@@ -1693,6 +1861,16 @@ class AppDecimatorPanel extends HTMLElement {
       this.#claimableWei = 0n;
       this.#claimableAddress = actingLower;
       this.#claimableKnown = false;
+    }
+    // Use the same direct ERC-20 read as the right-side Protocol Coins ledger.
+    // The indexed player snapshot remains a fallback when the RPC is unavailable.
+    if (flipBalancesResult.status === 'fulfilled'
+      && flipBalancesResult.value?.flipBalance != null
+      && actingLower) {
+      try {
+        this.#flipBalanceWei = BigInt(flipBalancesResult.value.flipBalance);
+        this.#flipBalanceAddress = actingLower;
+      } catch (_e) { /* retain the indexed fallback */ }
     }
     if (coinflipResult.status === 'fulfilled' && coinflipResult.value != null && actingLower) {
       try {
@@ -2041,13 +2219,32 @@ class AppDecimatorPanel extends HTMLElement {
       if (showFlipBalance) flipBalanceDisplay.removeAttribute?.('hidden');
       else flipBalanceDisplay.setAttribute?.('hidden', '');
     }
+    const flipWalletWei = this.#flipBalanceAddress === actingLower
+      ? this.#flipBalanceWei
+      : null;
+    const flipClaimableWei = this.#coinflipClaimableKnown
+      && this.#coinflipClaimableAddress === actingLower
+      ? this.#coinflipClaimableWei
+      : 0n;
+    const protocolFlipWei = protocolFlipTotalWei(flipWalletWei, flipClaimableWei);
+    const protocolCoinsDisclosure = get('ui.protocolCoinsFlipDisclosure');
+    const flipBalanceVisible = Boolean(
+      actingLower
+      && protocolCoinsDisclosure?.address === actingLower
+      && protocolCoinsDisclosure?.visible === true
+    );
+    flipBalanceDisplay?.classList?.toggle(
+      'dec-flip-balance--spoiler',
+      !flipBalanceVisible,
+    );
     updateBalanceDisplay(flipBalanceValue, {
       container: flipBalanceDisplay,
-      scope: this.#flipBalanceAddress,
-      value: this.#flipBalanceAddress === actingLower ? this.#flipBalanceWei : null,
-      format: (raw) => formatFlip(String(raw)),
+      scope: actingLower == null ? null : `${actingLower}:flip-total`,
+      value: protocolFlipWei,
+      visible: flipBalanceVisible,
+      format: (raw) => raw === 0n ? '-' : formatFlip(String(raw)),
       formatDelta: (delta) => `+${formatFlip(String(delta))} FLIP`,
-      hiddenText: '—',
+      hiddenText: '••••',
     });
 
     let claimable = 0n;
@@ -2542,6 +2739,7 @@ class AppDecimatorPanel extends HTMLElement {
     // the day-scoped key read by #claimableSpoilerOpen().
     const u5 = subscribe('app.lastDay', () => this.#renderFundsFooter());
     const u7 = subscribe('app.daySync', () => this.#renderFundsFooter());
+    const u9 = subscribe('ui.protocolCoinsFlipDisclosure', () => this.#renderFundsFooter());
     const u8 = subscribePendingActions((items) => {
       this.#pendingActions = Array.isArray(items) ? items : [];
       this.#renderFundsFooter();
@@ -2553,7 +2751,7 @@ class AppDecimatorPanel extends HTMLElement {
       this.#renderSnapshot();
       this.#refreshFoilStatus();
     });
-    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7, u8);
+    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7, u8, u9);
   }
 
   // ---------------------------------------------------------------------
@@ -2677,13 +2875,13 @@ class AppDecimatorPanel extends HTMLElement {
         || String(boxInput.value).trim() === '' ? '0' : String(boxInput.value);
       const boxFloat = Number(boxRaw);
       if (questPurchase == null && (!Number.isFinite(boxFloat) || boxFloat < 0)) {
-        return rejectPurchase('Lootbox ETH must be 0 or at least 0.01.');
+        return rejectPurchase('Luckbox ETH must be 0 or at least 0.01.');
       }
       const lootBoxAmountWei = questPurchase?.lootBoxAmountWei == null
         ? (boxFloat > 0 ? BigInt(Math.round(boxFloat * 1e18)) / ETH_DIVISOR : 0n)
         : BigInt(questPurchase.lootBoxAmountWei);
       if (lootBoxAmountWei > 0n && lootBoxAmountWei < LOOTBOX_MIN_WEI) {
-        return rejectPurchase('Minimum lootbox spend is 0.01 ETH.');
+        return rejectPurchase('Minimum luckbox spend is 0.01 ETH.');
       }
       const presaleInput = this.querySelector('[name="dec-presale-box-eth"]');
       const presaleRaw = presaleInput == null || presaleInput.value == null
@@ -2706,7 +2904,7 @@ class AppDecimatorPanel extends HTMLElement {
       }
       if (ticketQuantity < 0 || (ticketQuantity <= 0 && lootBoxAmountWei <= 0n
         && presaleBoxAmountWei <= 0n && !foilWanted)) {
-        return rejectPurchase('Enter tickets, a lootbox amount, a presale box amount, or select the foil pack.');
+        return rejectPurchase('Enter tickets, a luckbox amount, a presale box amount, or select the foil pack.');
       }
 
       // Match lootbox.js's actual write target (self or the owner selected in

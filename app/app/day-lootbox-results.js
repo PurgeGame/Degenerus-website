@@ -228,7 +228,7 @@ export function historicalLootboxReplayRows(rows, {
         transactionHash,
         sequence: {
           kind: 'lootbox',
-          title: `DAY ${day} LOOTBOX`,
+          title: `DAY ${day} LUCKBOX`,
           lootboxIndex: anchor?.lootboxIndex ?? null,
           legs,
           settledExpected: true,

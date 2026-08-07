@@ -39,6 +39,7 @@ export const OPEN_EVENTS_ABI = [
   'event PresaleBoxOpened(address indexed player, uint48 indexed index, uint256 amount, uint256 flip, uint256 dgnrs, uint256 wwxrp, bool closing)',
   'event BoxSpin(address indexed player, uint64 betId, uint256 packedSpins, uint256 payout, uint256 ethShare)',
 ];
+const OPEN_CALL_ABI = ['function openBox(address player, uint48 index)'];
 
 const SPIN_TYPES = ['wwxrp', 'flip', 'eth'];
 const SPIN_STRIDE = 72n;
@@ -113,7 +114,7 @@ export function lootboxRewardPresentation(rewardType, amount, { boonBps = null }
     return {
       label: 'PURCHASE BOOST',
       value: `+${pct}%`,
-      detail: `Applies to your next Lootbox or ETH Ticket purchase; the affected Buy button shows the +${pct}% BOON badge`,
+      detail: `Applies to your next Luckbox or ETH Ticket purchase; the affected Buy button shows the +${pct}% BOON badge`,
     };
   }
   if (type === 8) {
@@ -144,7 +145,7 @@ export function lootboxRewardPresentation(rewardType, amount, { boonBps = null }
       return {
         label: 'DEGEN SCORE BOON',
         value: `+${score}`,
-        detail: `Your next lootbox opening adds +${raw} quest streak, worth ${score} Degen Score`,
+        detail: `Your next luckbox opening adds +${raw} quest streak, worth ${score} Degen Score`,
       };
     }
     const pct = _bpsPercent(raw);
@@ -269,6 +270,7 @@ export function wholeTicketsFromOpened(futureTickets, roundedUp) {
 
 let _ifaceCache = null;
 let _transferIfaceCache = null;
+let _openCallIfaceCache = null;
 function _iface() {
   if (!_ifaceCache) _ifaceCache = new ethers.Interface(OPEN_EVENTS_ABI);
   return _ifaceCache;
@@ -277,11 +279,16 @@ function _transferIface() {
   if (!_transferIfaceCache) _transferIfaceCache = new ethers.Interface(TRANSFER_EVENTS_ABI);
   return _transferIfaceCache;
 }
+function _openCallIface() {
+  if (!_openCallIfaceCache) _openCallIfaceCache = new ethers.Interface(OPEN_CALL_ABI);
+  return _openCallIfaceCache;
+}
 
 /** Test-only — drop the cached Interface (harmless in production). */
 export function __resetForTest() {
   _ifaceCache = null;
   _transferIfaceCache = null;
+  _openCallIfaceCache = null;
 }
 
 /**
@@ -645,14 +652,20 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
 
 const REPLAY_LOG_CHUNK_BLOCKS = 1800;
 const REPLAY_LOG_CHUNK_LIMIT = 10;
+const REPLAY_HINTED_CHUNK_LIMIT = 40;
+const REPLAY_SPIN_TX_LIMIT = 60;
 
 /**
- * Recover a resolved box receipt straight from its indexed LootBoxOpened event.
- * This covers the indexer-lag window after another wallet opens the box. Some
- * spin-only outcomes emit no index-bearing leg; those correctly return [] so
- * the caller can use its honest generic settled presentation.
+ * Recover a resolved box receipt straight from chain. Normal outcomes anchor
+ * on their indexed LootBoxOpened event. Spin-only outcomes deliberately omit
+ * that event, so match their player-filtered BoxSpin transaction by decoding
+ * the original openBox(player,index) calldata instead.
  */
-export async function readOpenLegsFromChain({ player, lootboxIndex } = {}) {
+export async function readOpenLegsFromChain({
+  player,
+  lootboxIndex,
+  purchaseTransactionHashes = [],
+} = {}) {
   if (!player || lootboxIndex == null) return [];
   let index;
   try { index = BigInt(lootboxIndex); } catch (_e) { return []; }
@@ -667,20 +680,45 @@ export async function readOpenLegsFromChain({ player, lootboxIndex } = {}) {
   catch (_e) { return []; }
   if (!Number.isFinite(head) || head < 0) return [];
 
+  // A locally tracked purchase gives us a much stronger search origin than
+  // "recent blocks". Search forward from that immutable receipt so even an
+  // old Pending row finds the result near the time it actually opened.
+  let purchaseBlock = null;
+  const purchaseHashes = [...new Set([
+    ...(Array.isArray(purchaseTransactionHashes) ? purchaseTransactionHashes : []),
+  ].filter(Boolean).map((hash) => String(hash).toLowerCase()))];
+  for (const hash of purchaseHashes) {
+    try {
+      const receipt = await provider.getTransactionReceipt(hash);
+      const block = Number(receipt?.blockNumber);
+      if (Number.isFinite(block) && block >= 0) {
+        purchaseBlock = purchaseBlock == null ? block : Math.min(purchaseBlock, block);
+      }
+    } catch (_e) { /* another reader or the index feed may still recover it */ }
+  }
+
   let topicSets;
+  let spinTopics;
   try {
     topicSets = ['LootBoxOpened', 'PresaleBoxOpened'].map((name) => (
       _iface().encodeFilterTopics(_iface().getEvent(name), [player, index])
     ));
+    spinTopics = _iface().encodeFilterTopics(_iface().getEvent('BoxSpin'), [player]);
   } catch (_e) {
     return [];
   }
 
-  for (let i = 0; i < REPLAY_LOG_CHUNK_LIMIT; i += 1) {
-    const toBlock = head - i * REPLAY_LOG_CHUNK_BLOCKS;
-    if (toBlock < 0) break;
-    const deployBlock = Number(CHAIN.deployBlock || 0);
-    const fromBlock = Math.max(deployBlock, toBlock - REPLAY_LOG_CHUNK_BLOCKS + 1);
+  let inspectedSpinTransactions = 0;
+  const deployBlock = Number(CHAIN.deployBlock || 0);
+  const rangeCount = purchaseBlock == null ? REPLAY_LOG_CHUNK_LIMIT : REPLAY_HINTED_CHUNK_LIMIT;
+  for (let i = 0; i < rangeCount; i += 1) {
+    const fromBlock = purchaseBlock == null
+      ? Math.max(deployBlock, head - i * REPLAY_LOG_CHUNK_BLOCKS - REPLAY_LOG_CHUNK_BLOCKS + 1)
+      : Math.max(deployBlock, purchaseBlock + i * REPLAY_LOG_CHUNK_BLOCKS);
+    const toBlock = purchaseBlock == null
+      ? head - i * REPLAY_LOG_CHUNK_BLOCKS
+      : Math.min(head, fromBlock + REPLAY_LOG_CHUNK_BLOCKS - 1);
+    if (toBlock < fromBlock || fromBlock > head) break;
     let logs;
     try {
       const groups = await Promise.all(topicSets.map((topics) => provider.getLogs({
@@ -706,7 +744,52 @@ export async function readOpenLegsFromChain({ player, lootboxIndex } = {}) {
         return [];
       }
     }
-    if (fromBlock === deployBlock) break;
+
+    // BoxSpin omits the lootbox index, but the permissionless open call that
+    // produced it does not. This is what lets the original owner recover the
+    // reveal even when somebody else's wallet won the open race.
+    if (typeof provider.getTransaction === 'function'
+        && inspectedSpinTransactions < REPLAY_SPIN_TX_LIMIT) {
+      let spinLogs;
+      try {
+        spinLogs = await provider.getLogs({
+          address: CONTRACTS.GAME,
+          topics: spinTopics,
+          fromBlock,
+          toBlock,
+        });
+      } catch (_e) {
+        spinLogs = [];
+      }
+      const candidates = (Array.isArray(spinLogs) ? spinLogs : []).slice().sort((a, b) => (
+        Number(b?.blockNumber ?? 0) - Number(a?.blockNumber ?? 0)
+        || Number(b?.index ?? b?.logIndex ?? 0) - Number(a?.index ?? a?.logIndex ?? 0)
+      ));
+      for (const candidate of candidates) {
+        if (inspectedSpinTransactions >= REPLAY_SPIN_TX_LIMIT) break;
+        inspectedSpinTransactions += 1;
+        if (!candidate?.transactionHash) continue;
+        try {
+          const tx = await provider.getTransaction(candidate.transactionHash);
+          const to = String(tx?.to || '').toLowerCase();
+          if (to && to !== String(CONTRACTS.GAME || '').toLowerCase()) continue;
+          const data = tx?.data ?? tx?.input;
+          if (!data) continue;
+          const call = _openCallIface().parseTransaction({ data, value: tx?.value ?? 0 });
+          if (!call || call.name !== 'openBox') continue;
+          const callPlayer = String(call.args.player ?? call.args[0] ?? '').toLowerCase();
+          const callIndex = BigInt(call.args.index ?? call.args[1] ?? -1);
+          if (callPlayer !== String(player).toLowerCase() || callIndex !== index) continue;
+          const receipt = await provider.getTransactionReceipt(candidate.transactionHash);
+          const legs = parseOpenLegsFromReceipt(receipt, player);
+          if (legs.length > 0) return legs;
+        } catch (_e) {
+          // Not an openBox call (foil/redemption/other box-origin spin), or the
+          // RPC has not retained the transaction yet. Keep scanning candidates.
+        }
+      }
+    }
+    if (purchaseBlock == null ? fromBlock === deployBlock : toBlock === head) break;
   }
   return [];
 }

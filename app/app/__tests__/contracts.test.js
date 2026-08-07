@@ -17,9 +17,8 @@ import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ---------------------------------------------------------------------------
-// Minimal globals (contracts.js does not touch window/document directly,
-// but we keep parity with wallet.test.js so the live store.js + polling.js
-// modules import cleanly).
+// Minimal globals for the store imports and the mined-transaction refresh
+// signal published by contracts.js.
 // ---------------------------------------------------------------------------
 
 if (typeof globalThis.window === 'undefined') {
@@ -48,7 +47,7 @@ import * as contractsMod from '../contracts.js';
 
 const {
   setProvider, clearProvider, requireSelf, sendTx, assertChain, assertChainOrBlank,
-  gasEstimateWithHeadroom,
+  gasEstimateWithHeadroom, TX_CONFIRMED_EVENT,
 } = contractsMod;
 
 function resetStore() {
@@ -360,6 +359,39 @@ describe('sendTx receipt handling', () => {
     const tx = { hash: '0xdeadbeef', wait: async () => ({ status: 1, hash: '0xdeadbeef' }) };
     const receipt = await sendTx(() => Promise.resolve(tx), 'happy');
     assert.equal(receipt.status, 1);
+  });
+
+  test('publishes one app-wide confirmation after a successful mined receipt', async () => {
+    const provider = makeProvider({ signerAddress: '0xabcdef0000000000000000000000000000000000' });
+    setProvider(provider);
+    storeMod.update('ui.mode', 'self');
+    storeMod.update('connected.address', '0xabcdef0000000000000000000000000000000000');
+    const events = [];
+    const priorDocument = globalThis.document;
+    const priorCustomEvent = globalThis.CustomEvent;
+    globalThis.document = { dispatchEvent: (event) => { events.push(event); return true; } };
+    globalThis.CustomEvent = class {
+      constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
+    };
+    try {
+      const tx = {
+        hash: '0xprotocol-spend',
+        wait: async () => ({ status: 1, hash: '0xprotocol-spend', blockNumber: 123 }),
+      };
+      await sendTx(() => Promise.resolve(tx), 'Spend FLIP');
+    } finally {
+      if (priorDocument === undefined) delete globalThis.document;
+      else globalThis.document = priorDocument;
+      if (priorCustomEvent === undefined) delete globalThis.CustomEvent;
+      else globalThis.CustomEvent = priorCustomEvent;
+    }
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, TX_CONFIRMED_EVENT);
+    assert.deepEqual(events[0].detail, {
+      action: 'Spend FLIP',
+      transactionHash: '0xprotocol-spend',
+      blockNumber: 123,
+    });
   });
 
   test('throws "Reverted: <hash>" when receipt.status === 0', async () => {

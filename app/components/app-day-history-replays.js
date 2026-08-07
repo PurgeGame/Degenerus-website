@@ -180,7 +180,7 @@ class AppDayHistoryReplays extends HTMLElement {
       phase: row.kind === 'degenerette' ? 'result-ready' : 'history-replay',
       label: row.kind === 'degenerette'
         ? `Day ${day} Degenerette #${row.betId}`
-        : `Day ${day} Lootbox`,
+        : `Day ${day} Luckbox`,
       shortLabel: 'Replay',
       detail: `Day ${day} · replay only`,
       state: 'ready',
@@ -198,7 +198,7 @@ class AppDayHistoryReplays extends HTMLElement {
         if (row.kind === 'degenerette' && row.sequence.lootboxLegs?.length) {
           queueReveal({
             kind: 'lootbox',
-            title: `DAY ${day} DEGENERETTE LOOTBOX`,
+            title: `DAY ${day} DEGENERETTE LUCKBOX`,
             legs: row.sequence.lootboxLegs,
             settledExpected: true,
             noVessel: true,
