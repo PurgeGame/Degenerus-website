@@ -356,6 +356,15 @@ export function shouldCelebrateDegenerette({ total, totalWager, boxSpin = false 
   return wager <= 0n || payout >= wager;
 }
 
+/** Reserve the negative verdict for a return strictly below 40% of stake. */
+export function isUnluckyDegenerette({ total, totalWager, boxSpin = false } = {}) {
+  if (boxSpin) return false;
+  const payout = _safeBigInt(total);
+  const wager = _safeBigInt(totalWager);
+  if (wager <= 0n) return payout <= 0n;
+  return payout * 5n < wager * 2n;
+}
+
 /**
  * Project a partial Degenerette ETH total into its two final receipt lanes.
  *
@@ -1058,6 +1067,7 @@ export function normalizeSequence(seq) {
     })();
     const won = total > 0n;
     const celebrate = shouldCelebrateDegenerette({ total, totalWager });
+    const unlucky = isUnluckyDegenerette({ total, totalWager });
     const hits = rows.filter((r) => r.payout > 0n).length;
     // FLIP per-spin payouts are the hits entering its final survival flip. A
     // zero settled total after one or more hits is a survival bust, not a
@@ -1077,13 +1087,13 @@ export function normalizeSequence(seq) {
       // board plays under a neutral heading and swaps to it at the end.
       boardTitle: 'DEGENERETTE',
       big: celebrate,
-      unlucky: !celebrate,
+      unlucky,
       // The board owns its own TAP TO SPIN gate, so the sequence-level vessel
       // gate is off and there is no chest to open.
       autoStart: false,
       noVessel: true,
       spinBoard: {
-        rows, currency, unit, total, spinSum, survived, amountPerSpin, totalWager, celebrate,
+        rows, currency, unit, total, spinSum, survived, amountPerSpin, totalWager, celebrate, unlucky,
         headline: seq.headline == null ? null : String(seq.headline),
         heroIdx: seq.heroIdx == null ? null : (Number(seq.heroIdx) & 3),
         lootboxAwarded: Boolean(seq.lootboxAwarded),
@@ -2075,7 +2085,10 @@ class RevealOverlay extends HTMLElement {
     const queued = _withLootboxPresentationId(rawSeq);
     _emitLootboxQueued(queued);
     const seq = normalizeSequence(queued);
-    if (!seq) return;
+    if (!seq) {
+      this.#emitLootboxAbort([queued]);
+      return;
+    }
     this.#queue.push(seq);
     // Same-tick pack releases are ordered before the runner claims the first
     // item. This prevents a foil-only record from becoming the current pack
@@ -3917,7 +3930,7 @@ class RevealOverlay extends HTMLElement {
       if (celebrate) {
         sfxFanfare(Boolean(sequence.big));
         this.#celebrateWin(Boolean(sequence.big));
-      } else {
+      } else if (sequence.unlucky) {
         sfxNoWin();
       }
     }
@@ -3925,7 +3938,7 @@ class RevealOverlay extends HTMLElement {
     const pendingAction = sequence && !finalLabel && this.#queue.length === 0
       ? this.#nextReadyPendingAction(sequence?.lootboxRelease)
       : null;
-    const unlucky = Boolean(sequence && !celebrate && !finalLabel && !pendingAction);
+    const unlucky = Boolean(sequence?.unlucky && !finalLabel && !pendingAction);
     if (pendingAction) {
       this.#setPendingContinuation(rendered.cta, pendingAction);
     } else {

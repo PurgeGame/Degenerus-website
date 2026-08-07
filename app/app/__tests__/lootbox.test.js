@@ -203,7 +203,9 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
   test('foil delegatecall errors decode by ABI name and raw selector', () => {
     const cases = [
       ['FoilAlreadyBought', '0x11e18a55'],
-      ['DirectEthInsufficient', '0x309a7b3c'],
+      // Audit c19a1088 deleted DirectEthInsufficient; the foil leg's shortfall now
+      // surfaces as the canonical spend waterfall's shared Insolvent().
+      ['Insolvent', '0xfc220038'],
       ['StaleAdvance', '0x933e332f'],
     ];
     for (const [name, selector] of cases) {
@@ -229,11 +231,11 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
 
     lastFakeContract = makeFakeContract({
       staticCallShouldRevert: { purchase: true },
-      staticCallRevertName: { purchase: 'DirectEthInsufficient' },
+      staticCallRevertName: { purchase: 'Insolvent' },
     });
     lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
     assert.equal(await lootboxMod.probeFoilPackAvailability({ buyer: CONNECTED }), true,
-      'DirectEthInsufficient proves the route passed every earlier foil gate');
+      'Insolvent proves the route passed every earlier foil gate');
 
     for (const name of ['FoilAlreadyBought', 'StaleAdvance', 'GameOverPossible', 'NotApproved']) {
       lastFakeContract = makeFakeContract({
@@ -391,7 +393,10 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(result.payment.afkingUsedWei, funding);
   });
 
-  test('foil purchases never underfund msg.value by counting unusable AFKing principal', async () => {
+  // Audit c19a1088 funds the foil leg through the canonical spend waterfall, so AFKing
+  // principal IS drawable for foil now. Before it, the module reverted rather than tap
+  // AFKing, and these two tests asserted the carve-out that kept it out of the quote.
+  test('foil purchases draw AFKing principal, so the wallet covers only the remainder', async () => {
     const foilCostWei = 1_000n;
     lastFakeContract = makeFakeContract({ afkingRaw: 900n });
     lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
@@ -406,15 +411,15 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     });
 
     const [args] = lastFakeContract._calls.purchase;
+    // DirectEth still blocks the CLAIMABLE tier, but the AFKing tier runs on every kind,
+    // so 900 AFKing + 100 wallet covers the pack.
     assert.equal(args[4], lootboxMod.MINT_PAYMENT_KIND_DIRECT_ETH);
-    assert.equal(args[6].value, foilCostWei,
-      'wallet funds the full foil cost when claimable is empty');
-    assert.deepEqual(lastFakeContract._calls.afkingFundingOf, [],
-      'the unsupported AFKing source is not included in the foil quote');
-    assert.equal(result.payment.afkingUsedWei, 0n);
+    assert.equal(args[6].value, 100n,
+      'the wallet funds only what AFKing principal leaves uncovered');
+    assert.equal(result.payment.afkingUsedWei, 900n);
   });
 
-  test('foil purchases use claimable then wallet while leaving AFKing untouched', async () => {
+  test('foil purchases use claimable, then AFKing, before touching the wallet', async () => {
     const foilCostWei = 1_000n;
     lastFakeContract = makeFakeContract({ claimableRaw: 301n, afkingRaw: 900n });
     lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
@@ -429,10 +434,11 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     });
 
     const [args] = lastFakeContract._calls.purchase;
+    // 300 claimable (301 less the 1-wei sentinel) + 700 AFKing == the full cost.
     assert.equal(args[4], lootboxMod.MINT_PAYMENT_KIND_COMBINED);
-    assert.equal(args[6].value, 700n);
+    assert.equal(args[6].value, 0n, 'the two internal tiers cover the pack outright');
     assert.equal(result.payment.claimableUsedWei, 300n);
-    assert.equal(result.payment.afkingUsedWei, 0n);
+    assert.equal(result.payment.afkingUsedWei, 700n);
   });
 
   test('purchaseEth uses claimable only when it covers the full purchase', async () => {
@@ -649,6 +655,31 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       [{ lootboxIndex: 17n, day: null, amountWei: amount }],
       'the pending chip can show its purchased ETH amount before the indexer catches up',
     );
+  });
+
+  test('purchase receipt distinguishes regular and presale legs sharing one index', async () => {
+    const other = '0xcd34000000000000000000000000000000000000';
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getTransactionReceipt: async () => ({
+        logs: [
+          { parsed: { name: 'LootBoxBuy', args: { buyer: CONNECTED, index: 12n, amount: 3n } } },
+          { parsed: { name: 'PresaleBoxBuy', args: { buyer: CONNECTED, index: 12n, amount: 4n } } },
+          { parsed: { name: 'PresaleBoxBuy', args: { buyer: other, index: 12n, amount: 99n } } },
+          { parsed: { name: 'PresaleBoxBuy', args: { buyer: CONNECTED, index: 13n, amount: 88n } } },
+        ],
+      }),
+    });
+
+    assert.deepEqual(await lootboxMod.readLootboxPurchaseReceipt({
+      transactionHash: '0xpurchased',
+      player: CONNECTED,
+      lootboxIndex: 12n,
+    }), {
+      hasLootboxLeg: true,
+      hasPresaleLeg: true,
+      amountWei: 7n,
+    });
   });
 
   test('parseLootboxIdxFromReceipt ignores FlipLootBuy logs (FLIP lootbox path removed)', () => {

@@ -305,6 +305,23 @@ export function formatSdgnrsBalance(weiValue) {
   }
 }
 
+/** Whole-FLIP display rounded to at most five significant digits. */
+export function formatTomorrowBet(weiValue, significantDigits = 5) {
+  let raw;
+  try { raw = BigInt(weiValue ?? 0); }
+  catch (_e) { return '0'; }
+  const unit = 10n ** 18n;
+  const negative = raw < 0n;
+  let whole = (negative ? -raw : raw) / unit;
+  const digits = Math.max(1, Math.trunc(Number(significantDigits) || 5));
+  const length = String(whole).length;
+  if (length > digits) {
+    const quantum = 10n ** BigInt(length - digits);
+    whole = ((whole + (quantum / 2n)) / quantum) * quantum;
+  }
+  return `${negative ? '-' : ''}${whole.toLocaleString('en-US')}`;
+}
+
 function parseTokenAmount(value) {
   const match = /^\s*(\d+)(?:\.(\d{0,18}))?\s*$/.exec(String(value ?? ''));
   if (!match) return null;
@@ -1694,7 +1711,8 @@ class AppDailyFlip extends HTMLElement {
                 <span class="df-funds__number" data-bind="df-funds-flip-total">—</span>
                 <span class="df-funds__unit" data-bind="df-funds-flip-unit">FLIP</span>
               </strong>
-              <button type="button" class="df-claim-flip-cta" data-write
+              <button type="button" class="df-claim-flip-cta" data-write data-write-locked
+                      data-write-lock-title="Coinflip result is loading"
                       data-bind="df-claim-flip-cta" disabled>CLAIM</button>
             </div>
             <div class="df-funds__display df-funds__display--wwxrp" data-bind="df-funds-wwxrp-box" hidden
@@ -2946,7 +2964,7 @@ class AppDailyFlip extends HTMLElement {
         number: !tomorrowKnown
           ? '—'
           : tomorrowGateOpen
-            ? this.#fmtWhole(this.#currentBetWei)
+            ? formatTomorrowBet(this.#currentBetWei)
             : '••••',
         unit: tomorrowKnown ? 'FLIP' : '',
         spoiler: tomorrowKnown && !tomorrowGateOpen,
@@ -3080,8 +3098,24 @@ class AppDailyFlip extends HTMLElement {
     }
     flipTotalBox?.classList?.toggle('df-funds__display--spoiler', !flipTotalVisible);
     if (claim) {
-      claim.disabled = !revealComplete || this.#busy || visibleClaimable <= 0n || !get('connected.address');
+      const connected = Boolean(get('connected.address'));
+      const canClaim = revealComplete && !this.#busy && visibleClaimable > 0n && connected;
+      claim.disabled = !canClaim;
       claim.textContent = this.#busy ? 'WAIT' : 'CLAIM';
+      if (canClaim) {
+        claim.removeAttribute('data-write-locked');
+        claim.removeAttribute('data-write-lock-title');
+      } else {
+        const reason = this.#busy
+          ? 'Another Coinflip action is processing'
+          : !connected
+            ? 'Connect a wallet to claim'
+            : !revealComplete
+              ? 'Reveal the Coinflip result before claiming'
+              : 'No FLIP winnings to claim';
+        claim.setAttribute('data-write-locked', '');
+        claim.setAttribute('data-write-lock-title', reason);
+      }
     }
     updateBalanceDisplay(wwxrp, {
       container: wwxrpBox,

@@ -305,15 +305,16 @@ test('the host does not add a day-wide winner effect over a losing scratch phase
 });
 
 describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
-  test('the jackpot uses one fancy Spin control and an explicit processing state', () => {
+  test('the jackpot uses one fancy Spin control without a duplicate processing bubble', () => {
     assert.match(REPLAY_PANEL_SRC, /const MAIN_SPIN_LABEL = 'SPIN JACKPOT'/);
     assert.match(REPLAY_PANEL_SRC, /const BONUS_SPIN_LABEL = 'BONUS SPIN'/);
     assert.match(REPLAY_PANEL_SRC, /const SPIN_AGAIN_LABEL = 'SPIN AGAIN'/);
     assert.match(REPLAY_PANEL_SRC, /const SPIN_PROCESSING_LABEL = 'JACKPOT PROCESSING'/);
     assert.doesNotMatch(REPLAY_PANEL_SRC, /textContent = '(?:Reveal Draw|Revealing\.\.\.|Bonus Roll|Replay)'/);
-    assert.match(LAST_DAY_SRC, /JACKPOT PROCESSING · SPIN AVAILABLE SOON/);
-    assert.match(INDEX_SRC, /JACKPOT PROCESSING · SPIN AVAILABLE SOON/);
-    assert.match(APP_CSS, /\.replay-reveal-btn\s*\{[^}]*linear-gradient\(135deg, #8f080b, #ed0e11 52%, #8d0709\)[^}]*letter-spacing:\s*0\.12em/s);
+    assert.doesNotMatch(LAST_DAY_SRC, /SPIN AVAILABLE SOON/);
+    assert.doesNotMatch(INDEX_SRC, /SPIN AVAILABLE SOON|jackpot-load-status/);
+    assert.match(APP_CSS, /\.replay-reveal-btn\s*\{[^}]*linear-gradient\(135deg, #9a4300, #f7931a 52%, #a84a00\)[^}]*letter-spacing:\s*0\.12em/s,
+      'the first/main Spin uses Bitcoin orange while bonus and processing keep their own states');
     assert.match(APP_CSS, /\.replay-reveal-btn\.is-processing\s*\{[^}]*cursor:\s*wait[^}]*opacity:\s*1/s);
     assert.doesNotMatch(
       APP_CSS,

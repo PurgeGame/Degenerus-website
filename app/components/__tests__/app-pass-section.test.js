@@ -485,8 +485,14 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.doesNotMatch(css, /\.pass-product-row:hover\s*\{[^}]*translateY/s,
       'hovering a pass cannot move the whole bar');
     assert.match(css,
-      /\.pass-product-row \.pass-whale-input\s*\{[^}]*height:\s*2\.15rem[\s\S]*?\.pass-product-row--whale \.pass-whale-buy\s*\{[^}]*height:\s*2\.15rem/s,
+      /\.pass-product-quantity\s*\{[^}]*height:\s*2\.15rem[\s\S]*?\.pass-product-row--whale \.pass-whale-buy\s*\{[^}]*height:\s*2\.15rem/s,
       'Whale quantity and Buy controls share a desktop height');
+    assert.match(css, /\.pass-product-checkout--whale\s*\{[^}]*align-items:\s*center/s,
+      'Whale quantity and Buy are vertically centered');
+    assert.ok(el.querySelector('[data-bind="pass-whale-qty-up"]'),
+      'the styled quantity instrument has an explicit up arrow');
+    assert.ok(el.querySelector('[data-bind="pass-whale-qty-down"]'),
+      'the styled quantity instrument has an explicit down arrow');
     assert.match(css,
       /\.pass-afking__wallet\s*\{[^}]*width:\s*100%[^}]*flex-wrap:\s*wrap/s,
       'the AFKing wallet controls can wrap cleanly on a phone');
@@ -498,15 +504,14 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
   test('premium pass cards state their contract-backed bonuses and elevate live pricing', () => {
     const el = instantiate();
     for (const benefit of [
-      '1 TICKET / LEVEL', '+85% DEGEN SCORE',
+      '+85% DEGEN SCORE',
       '+115% DEGEN SCORE', '+155% DEGEN SCORE', '10% LOOTBOX',
       '3 DAILY BOONS', 'AFKING SEAT',
     ]) {
       assert.match(el.innerHTML, new RegExp(benefit.replace(/[+]/g, '\\+')));
     }
-    assert.match(el.innerHTML, /PASS PRICE/);
-    assert.doesNotMatch(el.innerHTML, /UNIT PRICE|pass-whale-price/,
-      'Whale has no separate per-unit price instrument');
+    assert.doesNotMatch(el.innerHTML, /PASS PRICE|UNIT PRICE|pass-(?:whale|lazy)-price/,
+      'Whale and Lazy put their final price directly in the purchase action');
     assert.match(el.innerHTML, /LIVE PRICE/);
     assert.match(el.innerHTML, /data-bind="pass-whale-lootbox"/,
       'the Whale card promotes its bundled lootbox as a first-class bonus');
@@ -514,12 +519,18 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'the Lazy card promotes its bundled lootbox as a first-class bonus');
     assert.doesNotMatch(el.innerHTML, />1 TICKET \/ 2 LEVELS</,
       'the Whale description already explains its ticket cadence');
+    assert.doesNotMatch(el.innerHTML, />1 TICKET \/ LEVEL</,
+      'the Lazy description already explains its ticket cadence');
 
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.match(css, /\.pass-product-price > strong\s*\{[^}]*font:\s*900 0\.9rem/s,
       'price is treated as a primary instrument, not muted helper text');
     assert.match(css, /\.pass-product-perks > span\s*\{[^}]*border-radius:\s*999px/s,
       'purchase bonuses are compact premium chips');
+    assert.match(css, /\.pass-product-perks\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(2, max-content\)/s,
+      'Whale and Lazy perks share the same desktop grid');
+    assert.match(css, /\.pass-product-perks > \.pass-lootbox-perk\s*\{[^}]*grid-column:\s*1 \/ -1[^}]*justify-self:\s*start/s,
+      'both bonus-lootbox bubbles occupy the same aligned grid line');
   });
 
   test('Whale pass shows the concrete bundled lootbox value and follows quantity', async () => {
@@ -558,7 +569,10 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     await settle(40);
 
     const benefit = el.querySelector('[data-bind="pass-lazy-lootbox"]');
+    const buy = el.querySelector('[data-bind="pass-lazy-buy"]');
     assert.equal(benefit.textContent, 'BONUS LOOTBOX · 0.024 ETH');
+    assert.equal(buy.textContent, 'BUY LAZY PASS · 0.24 ETH',
+      'Lazy puts its final price in the Buy action just like Whale');
     assert.ok(benefit.classList.contains('pass-lootbox-perk'),
       'Lazy and Whale share the highlighted bonus-lootbox treatment');
     el.disconnectedCallback();

@@ -357,17 +357,12 @@ class AppPassSection extends HTMLElement {
           </span>
           <span class="pass-product-perks" aria-label="Lazy pass benefits">
             <span class="pass-lootbox-perk pass-lazy-lootbox-perk" data-bind="pass-lazy-lootbox">BONUS LOOTBOX · 10% OF PASS</span>
-            <span>1 TICKET / LEVEL</span>
             <span data-bind="pass-lazy-score">+85% DEGEN SCORE</span>
             <span data-bind="pass-lazy-afking-seat">AFKING SEAT</span>
           </span>
           <span class="pass-product-checkout pass-product-checkout--lazy">
-            <span class="pass-product-price">
-              <small>PASS PRICE</small>
-              <strong class="pass-lazy-price" data-bind="pass-lazy-price">—</strong>
-            </span>
             <button type="button" class="pass-lazy-buy" data-write data-bind="pass-lazy-buy">
-              BUY LAZY PASS
+              BUY LAZY PASS · …
             </button>
           </span>
         </div>
@@ -390,11 +385,15 @@ class AppPassSection extends HTMLElement {
             <span class="pass-whale-afking-seat" data-bind="pass-whale-afking-seat">AFKING SEAT</span>
           </span>
           <span class="pass-product-checkout pass-product-checkout--whale">
-            <label class="pass-product-quantity" for="pass-whale-qty-input">
+            <span class="pass-product-quantity">
               <small>QTY</small>
               <input type="number" name="pass-whale-qty" id="pass-whale-qty-input"
                      class="pass-whale-input" min="1" max="100" step="1" value="1" aria-label="Whale pass quantity">
-            </label>
+              <span class="pass-whale-steps">
+                <button type="button" data-bind="pass-whale-qty-up" aria-label="Increase Whale pass quantity">▲</button>
+                <button type="button" data-bind="pass-whale-qty-down" aria-label="Decrease Whale pass quantity">▼</button>
+              </span>
+            </span>
             <button type="button" class="pass-whale-buy" data-write data-bind="pass-whale-buy">
               BUY WHALE PASS · …
             </button>
@@ -548,10 +547,19 @@ class AppPassSection extends HTMLElement {
     const whaleBuy = this.querySelector('[data-bind="pass-whale-buy"]');
     if (whaleBuy) whaleBuy.addEventListener('click', (e) => this.#onWhaleBuyClick(e));
     const whaleQty = this.querySelector('[name="pass-whale-qty"]');
-    if (whaleQty) whaleQty.addEventListener('input', () => {
+    const updateWhaleQty = () => {
       this.#renderWhaleLootboxBenefit();
       this.#renderWhaleBuyLabel();
-    });
+    };
+    if (whaleQty) whaleQty.addEventListener('input', updateWhaleQty);
+    for (const [bind, delta] of [['pass-whale-qty-up', 1], ['pass-whale-qty-down', -1]]) {
+      const step = this.querySelector(`[data-bind="${bind}"]`);
+      if (step) step.addEventListener('click', () => {
+        const current = Number.parseInt(whaleQty?.value || '1', 10) || 1;
+        if (whaleQty) whaleQty.value = String(Math.min(100, Math.max(1, current + delta)));
+        updateWhaleQty();
+      });
+    }
     const lazyBuy = this.querySelector('[data-bind="pass-lazy-buy"]');
     if (lazyBuy) lazyBuy.addEventListener('click', (e) => this.#onLazyBuyClick(e));
     const deityBuy = this.querySelector('[data-bind="pass-deity-buy"]');
@@ -712,6 +720,7 @@ class AppPassSection extends HTMLElement {
     const p = this.#pricingData;
     this.#renderPassScoreBenefits();
     this.#renderWhaleBuyLabel();
+    this.#renderLazyBuyLabel();
     this.#renderWhaleLootboxBenefit();
     this.#renderPassSeatBenefits();
     this.#renderLazyLootboxBenefit();
@@ -748,11 +757,6 @@ class AppPassSection extends HTMLElement {
     if (lazyRow) {
       const open = Boolean(p?.lazyOpen && p?.lazyCostWei != null);
       lazyRow.hidden = !open;
-      const lazyPrice = this.querySelector('[data-bind="pass-lazy-price"]');
-      if (lazyPrice && open) {
-        try { lazyPrice.textContent = `${formatPassEth(p.lazyCostWei)} ETH`; }
-        catch (_e) { lazyPrice.textContent = '—'; }
-      }
     }
     // Re-assert the combined-mode gate — this poll tick's price-window logic
     // above may have just re-revealed the lazy row; combined mode wins.
@@ -809,6 +813,15 @@ class AppPassSection extends HTMLElement {
     }
     const finalPrice = BigInt(unit) * BigInt(rawQuantity);
     buy.textContent = `BUY WHALE PASS · ${formatPassEth(finalPrice)} ETH`;
+  }
+
+  #renderLazyBuyLabel() {
+    const buy = this.querySelector('[data-bind="pass-lazy-buy"]');
+    if (!buy || this.#busyLazy) return;
+    const cost = this.#pricingData?.lazyCostWei;
+    buy.textContent = cost == null
+      ? 'BUY LAZY PASS · —'
+      : `BUY LAZY PASS · ${formatPassEth(cost)} ETH`;
   }
 
   #renderPassSeatBenefits() {

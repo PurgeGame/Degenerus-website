@@ -44,9 +44,6 @@ import { readResolvedCoinflipStake } from '../app/coinflip.js';
 import { loadDayLootboxResults } from '../app/day-lootbox-results.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
 
-const JACKPOT_PROCESSING_STATUS = 'JACKPOT PROCESSING · SPIN AVAILABLE SOON';
-const JACKPOT_SYNCING_STATUS = 'JACKPOT DATA SYNCING · SPIN AVAILABLE SOON';
-
 const FOIL_MATCH_ACTION_SOURCE = 'foil-match';
 
 function _isExactDayPayload(payload, day, player) {
@@ -130,14 +127,6 @@ class LastDayJackpot extends HTMLElement {
     this.querySelector('[data-bind="skeleton"]')?.remove();
     const el = this.querySelector('[data-bind="content"]');
     if (el) el.style.display = '';
-  }
-
-  #setJackpotLoadStatus(text = '') {
-    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
-    const status = document.querySelector('[data-bind="jackpot-load-status"]');
-    if (!status) return;
-    status.textContent = String(text || '');
-    status.setAttribute('aria-hidden', text ? 'false' : 'true');
   }
 
   #syncAppliesToPinned() {
@@ -371,7 +360,6 @@ class LastDayJackpot extends HTMLElement {
     if (cold) cold.style.display = 'none';
     if (empty) empty.style.display = 'none';
     if (resolved) resolved.style.display = 'none';
-    this.#setJackpotLoadStatus(JACKPOT_PROCESSING_STATUS);
   }
 
   #renderDeploymentMismatch(mismatch) {
@@ -403,7 +391,6 @@ class LastDayJackpot extends HTMLElement {
     if (resolved) resolved.style.display = 'none';
     const day = this.querySelector('[data-bind="day"]');
     if (day) day.textContent = 'SYNC';
-    this.#setJackpotLoadStatus(JACKPOT_SYNCING_STATUS);
   }
 
   #renderEmptyDay(day) {
@@ -413,7 +400,6 @@ class LastDayJackpot extends HTMLElement {
     if (cold) cold.style.display = 'none';
     if (empty) empty.style.display = '';
     if (resolved) resolved.style.display = 'none';
-    this.#setJackpotLoadStatus('');
     const copy = this.querySelector('[data-bind="ldj-empty-copy"]');
     if (copy) copy.textContent = `Day ${day} had no winners — pot rolled to day ${Number(day) + 1}.`;
     const dayLbl = this.querySelector('[data-bind="day"]');
@@ -428,7 +414,6 @@ class LastDayJackpot extends HTMLElement {
     if (cold) cold.style.display = 'none';
     if (empty) empty.style.display = 'none';
     if (resolved) resolved.style.display = '';
-    this.#setJackpotLoadStatus('');
 
     if (!this.#hasNewDayAvailable) this.#hideNewDayBanner();
 
@@ -1430,7 +1415,6 @@ class LastDayJackpot extends HTMLElement {
       document.addEventListener('flip:revealed', this.#flipListener);
     }
 
-    this.#setJackpotLoadStatus(JACKPOT_PROCESSING_STATUS);
     this.#showContent();
     this.#wireHistoryNav();
   }

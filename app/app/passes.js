@@ -588,6 +588,20 @@ export async function readAfkingSubscription(player) {
   }
 }
 
+/**
+ * Lightweight funding-only read for purchase balance aggregation. The full
+ * subscription snapshot also probes the seat, subscription and lens; none of
+ * those optional calls should be able to erase an otherwise-known ETH total.
+ */
+export async function readAfkingFunding(player) {
+  const address = String(player || '').trim();
+  if (!address) return null;
+  const contract = _afkingReadContracts()?.game;
+  if (!contract || typeof contract.afkingFundingOf !== 'function') return null;
+  try { return BigInt(await contract.afkingFundingOf(address)); }
+  catch (_error) { return null; }
+}
+
 // `claimAfkingSeat` was REMOVED — the token dropped `claimSeat` when seats became auto-minted with
 // the pass. Restyling a seat is still supported on-chain via `setSeatTraits(tokenId, symbol, bg,
 // trim)`, but that needs the holder's tokenId and the token exposes no
@@ -962,10 +976,16 @@ register('AlreadySwept', {
   recoveryAction: 'The game has already completed its final sweep.',
 });
 
+// Shared across contexts, so the wording must stay context-neutral. Besides the
+// AFKing funding withdrawal here, audit c19a1088 made this the foil leg's shortfall
+// revert too (the canonical spend waterfall reverts Insolvent when claimable +
+// prepaid AFKing together fall short). The registry is keyed by name OR selector and
+// is last-write-wins; lootbox.js registers only the SELECTOR form, so this NAME entry
+// is what a decoded revert lands on from either path.
 register('Insolvent', {
   code: 'Insolvent',
-  userMessage: 'That AFKing funding amount is no longer available.',
-  recoveryAction: 'Refresh the pass section and retry with the current balance.',
+  userMessage: "Your available balance doesn't cover that amount.",
+  recoveryAction: 'Refresh and retry with the current balance.',
 });
 
 register('TransferFailed', {

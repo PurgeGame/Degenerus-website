@@ -135,10 +135,12 @@ export function lootboxRewardPresentation(rewardType, amount, { boonBps = null }
   if (type === 10) {
     const raw = _rewardAmount(amount);
     if (raw > 0n && raw < 100n) {
+      const wholeScore = raw / 2n;
+      const score = raw % 2n === 0n ? `${wholeScore}` : `${wholeScore}.5`;
       return {
         label: 'DEGEN SCORE BOON',
-        value: `+${raw}`,
-        detail: `Your next lootbox opening adds ${raw} Degen Score and +${raw} quest streak`,
+        value: `+${score}`,
+        detail: `Your next lootbox opening adds +${raw} quest streak, worth ${score} Degen Score`,
       };
     }
     const pct = _bpsPercent(raw);

@@ -402,11 +402,6 @@ function _appendDegenerettePendingLabel(label, item) {
   amount.className = 'rrt-degenerette-summary__amount';
   amount.textContent = summary.amount;
   if (summary.amount) label.appendChild(amount);
-  const box = document.createElement('span');
-  box.className = 'rrt-degenerette-summary__box';
-  box.setAttribute('aria-hidden', 'true');
-  _appendLineIcon(box, 'lootbox');
-  label.appendChild(box);
   const count = document.createElement('span');
   count.className = 'rrt-degenerette-summary__count';
   count.textContent = `×${summary.spins}`;
@@ -420,7 +415,8 @@ function _appendDegenerettePendingLabel(label, item) {
 
 export function lootboxPendingSummary(item) {
   const amount = String(item?.amountLabel || '').trim();
-  return { amount, text: `${amount ? `${amount} · ` : ''}lootbox` };
+  const unit = String(item?.lootboxLabel || 'LOOTBOX').trim().toUpperCase();
+  return { amount, unit, text: `${amount ? `${amount} · ` : ''}${unit.toLowerCase()}` };
 }
 
 function _appendLootboxPendingLabel(label, item) {
@@ -432,13 +428,9 @@ function _appendLootboxPendingLabel(label, item) {
     amount.textContent = summary.amount;
     label.appendChild(amount);
   }
-  const box = document.createElement('span');
-  box.className = 'rrt-lootbox-summary__box';
-  box.setAttribute('aria-hidden', 'true');
-  _appendLineIcon(box, 'lootbox');
-  label.appendChild(box);
   const unit = document.createElement('span');
-  unit.textContent = 'LOOTBOX';
+  unit.className = 'rrt-lootbox-summary__unit';
+  unit.textContent = summary.unit;
   label.appendChild(unit);
   return summary;
 }

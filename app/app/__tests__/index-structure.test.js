@@ -46,7 +46,7 @@ describe('index.html basic-mode skeleton', () => {
       '<app-degenerette-panel>',
       '<app-parimutuel-panel>',
       '<app-tickets-inventory>',
-      'class="more-ways"',
+      'class="more-ways section-disclosure"',
       '<app-pass-section>',
       '<footer>',
     ];
@@ -111,16 +111,22 @@ describe('index.html basic-mode skeleton', () => {
 
 
   test('more-ways is the afKing Passes drawer (packs panel gone — combined buy owns lootboxes)', () => {
-    const detailsMatch = html.match(/<details class="more-ways"[^>]*>([\s\S]*?)<\/details>/);
+    const detailsMatch = html.match(/<details class="more-ways section-disclosure"[^>]*>([\s\S]*?)<\/details>/);
     assert.ok(detailsMatch, '<details class="more-ways"> block present');
-    assert.match(detailsMatch[0], /^<details class="more-ways"[^>]*\bopen\b[^>]*>/,
+    assert.match(detailsMatch[0], /^<details class="more-ways section-disclosure"[^>]*\bopen\b[^>]*>/,
       'the pass desk is open by default');
     assert.match(detailsMatch[0], /\bid="afking-passes"/,
       'the purchase shortcut has a stable drawer target');
-    assert.match(detailsMatch[1], /<summary class="more-ways__summary">afKing Passes<\/summary>/);
+    assert.match(detailsMatch[1], /<summary class="more-ways__summary section-disclosure__bar">[\s\S]*section-disclosure__title">afKing Passes<[\s\S]*section-disclosure__chevron/);
     assert.match(detailsMatch[1], /<app-pass-section>/);
     assert.equal(html.indexOf('<app-packs-panel>'), -1, 'packs panel unmounted');
     assert.equal(html.indexOf('components/app-packs-panel.js'), -1, 'packs script removed');
+  });
+
+  test('Tickets, afKing Passes, and Transaction History share one disclosure-bar treatment', () => {
+    assert.match(appCss, /\.section-disclosure__bar\s*\{[\s\S]*?min-height:\s*4\.2rem;[\s\S]*?padding:\s*0\.7rem 1rem;/);
+    assert.match(appCss, /\.section-disclosure__chevron\s*\{[\s\S]*?width:\s*0\.48rem;[\s\S]*?border-right:\s*1\.5px solid currentColor;/);
+    assert.match(html, /class="more-ways section-disclosure"/);
   });
 
   test('boons / affiliate / coinflip-deposit panels absent (pro-mode surfaces)', () => {

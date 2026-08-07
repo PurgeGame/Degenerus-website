@@ -310,6 +310,13 @@ describe('day-wide reveal planning', () => {
     assert.equal(revealPlanning.formatSdgnrsBalance(123_450_000n * unit), '123M');
   });
 
+  test("Tomorrow's Bet keeps at most five significant whole-FLIP digits", () => {
+    const unit = 10n ** 18n;
+    assert.equal(revealPlanning.formatTomorrowBet(43_844n * unit), '43,844');
+    assert.equal(revealPlanning.formatTomorrowBet(123_456n * unit), '123,460');
+    assert.equal(revealPlanning.formatTomorrowBet(12_345_678n * unit), '12,346,000');
+  });
+
   test('BAF eve is only the unlocked final-purchase day before an x10 level', () => {
     const quote = (overrides = {}) => ({
       lvl: 39,
@@ -1086,6 +1093,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
         'Protocol Coins cannot reveal or add the payout before the result is final');
       assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, true,
         'the new payout cannot be claimed during the modifier settle');
+      assert.notEqual(
+        el.querySelector('[data-bind="df-claim-flip-cta"]').getAttribute('data-write-locked'),
+        null,
+        'the global signer manager cannot re-enable a domain-locked claim',
+      );
 
       const settle = scheduled.find((entry) => entry.delay === 1_600);
       assert.ok(settle, 'the rail gets a readable 1.6-second settle window');
@@ -1102,6 +1114,11 @@ describe('app-daily-flip — coin reveal + actions', () => {
         'Protocol Coins opens on the same completion event as the final result');
       assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, false,
         'claim unlocks only after the result sequence completes');
+      assert.equal(
+        el.querySelector('[data-bind="df-claim-flip-cta"]').getAttribute('data-write-locked'),
+        null,
+        'the domain lock retires only when the claim is actually ready',
+      );
       assert.equal(el.querySelector('.df-modifier-flash').textContent, '196%',
         'the rail collapses into the total multiplier');
       settle.fn();
@@ -1603,8 +1620,35 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(APP_CSS,
       /\.df-tomorrow-layout \.df-position-unit\s*\{[^}]*margin-left:\s*0\.28em/s,
       'Tomorrow’s numeric total has a deliberate gap before FLIP');
+    assert.match(APP_CSS,
+      /body\.layout-basic \.df-funds\s*\{[^}]*padding:\s*0\.2rem 0\.24rem 0\.24rem/s,
+      'Protocol Coins uses the same outer right inset as Tomorrow’s Bet');
+    assert.match(APP_CSS,
+      /body\.layout-basic \.df-funds__display\s*\{[^}]*padding:\s*0\.18rem 0\.22rem/s,
+      'the Protocol Coins value lane matches Tomorrow’s inner right inset');
+    assert.match(APP_CSS,
+      /body\.layout-basic \.df-funds__value\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*baseline[^}]*justify-content:\s*flex-end/s,
+      'Protocol Coins and Tomorrow align the number/unit pair on one baseline');
+    assert.match(APP_CSS,
+      /body\.layout-basic \.df-funds__unit\s*\{[^}]*margin-left:\s*0\.28em/s,
+      'both FLIP units use identical spacing');
     const claim = el.querySelector('[data-bind="df-claim-flip-cta"]');
     assert.ok(claim.disabled, 'claim stays unlit while its balance is masked');
+    el.disconnectedCallback();
+  });
+
+  test("Tomorrow's live stake uses the five-significant-digit formatter", async () => {
+    _currentStakeWei = String(123_456n * (10n ** 18n));
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    const el = mount();
+    await flushMicrotasks();
+    assert.equal(
+      el.querySelector('[data-position="tomorrow"]').querySelector('.df-position-number').textContent,
+      '123,460',
+    );
     el.disconnectedCallback();
   });
 

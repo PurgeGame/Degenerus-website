@@ -274,7 +274,15 @@ let _fetchHandler = async (url) => (
   String(url).includes('/game/state') ? DEFAULT_GAME_STATE : { player: null, pending: {} }
 );
 globalThis.fetch = async (url) => {
-  const data = await _fetchHandler(url);
+  const raw = await _fetchHandler(url);
+  const playerRoute = String(url).includes('/player/');
+  const data = playerRoute
+    && raw
+    && typeof raw === 'object'
+    && !Object.prototype.hasOwnProperty.call(raw, 'scoreBreakdown')
+    && !Object.prototype.hasOwnProperty.call(raw, 'activityScore')
+    ? { ...raw, scoreBreakdown: { totalBps: 100 } }
+    : raw;
   return {
     ok: true,
     status: 200,
@@ -338,6 +346,7 @@ function installAfkingReadState({
       balanceOf: async () => hasToken ? 1n : 0n,
     },
     game: {
+      afkingFundingOf: async () => fundingWei,
       subInfo: async () => [active, active ? 1 : 0, 0, 0],
       afkingSnapshot: async () => [1n, false, [0n], [fundingWei]],
     },
@@ -1222,6 +1231,32 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
+  test('Available Funds still aggregates known sources when optional AFKing reads fail', async () => {
+    const price = lootboxMod.scaledTicketPriceWei(12);
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => { throw new Error('optional seat RPC unavailable'); } },
+      game: {
+        afkingFundingOf: async () => { throw new Error('optional funding RPC unavailable'); },
+        subInfo: async () => { throw new Error('optional subscription RPC unavailable'); },
+        afkingSnapshot: async () => { throw new Error('optional snapshot RPC unavailable'); },
+      },
+    }));
+    _fetchHandler = async (url) => String(url).includes('/game/state')
+      ? DEFAULT_GAME_STATE
+      : { claimableEth: String((price / 2n) + 1n), flipBalance: '0' };
+
+    const el = instantiate();
+    await settle(60);
+    assert.equal(el.querySelector('[data-bind="dec-funds-total"]').textContent, '3.14',
+      'Wallet plus Claimable remain available when the independent AFKing source is unknown');
+    assert.equal(el.querySelector('[data-bind="dec-funds"]').getAttribute('data-funds-complete'), 'false');
+    assert.match(
+      el.querySelector('[data-bind="dec-funds-total"]').getAttribute('title'),
+      /some sources are still loading/i,
+    );
+    el.disconnectedCallback();
+  });
+
   test('Available Funds groups large ETH balances with commas', async () => {
     contractsMod.setProvider(makeFakeProvider(CONNECTED, 12_345_670_000_000_000n));
     _fetchHandler = async (url) => (
@@ -1691,7 +1726,14 @@ describe('combined ticket + lootbox buy', () => {
   });
 
   test('ALL IN opens a non-mutating currency/format quote at quarter-ticket precision', async () => {
-    const { allInTicketAmount, allInDestinations } = await import('../app-decimator-panel.js');
+    const {
+      allInDegenScoreEligible,
+      allInDestinations,
+      allInTicketAmount,
+    } = await import('../app-decimator-panel.js');
+    assert.equal(allInDegenScoreEligible(60), false, 'exactly 60 is still locked');
+    assert.equal(allInDegenScoreEligible(60.01), true, 'the gate is strictly greater than 60');
+    assert.equal(allInDegenScoreEligible(null), false, 'unknown score never leaks the control');
     assert.equal(allInTicketAmount({ availableWei: 8n, priceWei: 10n }), '0.75',
       'the helper follows the contract integer floor at quarter-ticket precision');
     assert.equal(allInTicketAmount({ availableWei: 13n, reservedWei: 3n, priceWei: 10n }), '1',
@@ -1722,8 +1764,11 @@ describe('combined ticket + lootbox buy', () => {
       /class="dec-all-in__label">ALL IN<\/strong>[\s\S]*?src="\/whitepaper\/flame-center\.svg"/,
       'the action carries white copy with the black Degenerus flame below it');
     assert.match(APP_CSS,
-      /\.dec-all-in\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*border-radius:\s*6px;[^}]*linear-gradient\(135deg, #a8090c, #ed0e11 52%, #a20709\)/s,
+      /\.dec-all-in\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*border-radius:\s*6px/s,
       'ALL IN is a normal red action button instead of a circular badge');
+    assert.match(APP_CSS,
+      /\.dec-all-in\s*\{[^}]*linear-gradient\(135deg, #a8090c, #ed0e11 52%, #a20709\)/s,
+      'ALL IN retains its red Degenerus treatment');
     assert.doesNotMatch(APP_CSS, /\.dec-all-in\s*\{[^}]*flame-logo\.svg/s,
       'the clipping white logo circle is gone');
     assert.doesNotMatch(APP_CSS, /\.dec-all-in::before\s*\{/,
@@ -1735,16 +1780,38 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-all-in\s*\{[^}]*width:\s*100%[^}]*height:\s*3rem[^}]*min-height:\s*3rem[^}]*max-height:\s*3rem/s,
       'ALL IN matches the normal half-width BUY IN footprint');
     assert.match(APP_CSS,
-      /\.dec-all-in\s*\{[^}]*grid-row:\s*1[^}]*grid-column:\s*2[^}]*justify-self:\s*stretch/s,
+      /\.dec-all-in\s*\{[^}]*grid-row:\s*1[^}]*justify-self:\s*stretch/s,
+      'ALL IN stays pinned to the top action row');
+    assert.match(APP_CSS,
+      /\.dec-all-in\s*\{[^}]*grid-column:\s*2/s,
       'the action is pinned above the right side of the ETH bar');
     assert.match(APP_CSS,
-      /\.dec-funds-stack:has\(\.dec-flip-balance:not\(\[hidden\]\)\) \.dec-all-in\s*\{[^}]*margin-bottom:\s*-0\.34rem/s,
-      'a visible FLIP balance closes the normal extra space beneath ALL IN');
+      /\.dec-flip-balance\s*\{[^}]*grid-row:\s*1;[^}]*grid-column:\s*1/s,
+      'the FLIP balance occupies the matching left action slot');
     assert.ok(
       PANEL_SRC.indexOf('data-bind="dec-all-in"') < PANEL_SRC.indexOf('data-bind="dec-funds"'),
       'ALL IN is a sibling above Available Funds, not a child inside its green box',
     );
     el.disconnectedCallback();
+  });
+
+  test('ALL IN stays absent through 60 Degen Score and appears above 60', async () => {
+    _fetchHandler = async (url) => String(url).includes('/game/state')
+      ? DEFAULT_GAME_STATE
+      : { claimableEth: '0', flipBalance: '0', scoreBreakdown: { totalBps: 60 } };
+    const locked = instantiate();
+    await settle(60);
+    assert.equal(locked.querySelector('[data-bind="dec-all-in"]').hidden, true);
+    locked.disconnectedCallback();
+    locked.remove();
+
+    _fetchHandler = async (url) => String(url).includes('/game/state')
+      ? DEFAULT_GAME_STATE
+      : { claimableEth: '0', flipBalance: '0', scoreBreakdown: { totalBps: 61 } };
+    const unlocked = instantiate();
+    await settle(60);
+    assert.equal(unlocked.querySelector('[data-bind="dec-all-in"]').hidden, false);
+    unlocked.disconnectedCallback();
   });
 
   test('FLIP ALL IN includes wallet, settled Coinflip, and accrued AFKing FLIP', async () => {
@@ -1954,8 +2021,10 @@ describe('combined ticket + lootbox buy', () => {
       /\.dec-buy-row\s*>\s*\.dec-buy-cta\s*\{[^}]*grid-column:\s*2/s,
       'Buy owns the right half even while BONUS is hidden',
     );
-    assert.match(APP_CSS, /\.dec-flip-credit\s*>\s*img\s*\{[^}]*width:\s*1\.48rem/s);
-    assert.match(APP_CSS, /\.dec-flip-credit\s*>\s*span\s*\{[^}]*font-size:\s*0\.7rem/s);
+    assert.match(APP_CSS, /\.dec-flip-credit\s*>\s*img\s*\{[^}]*width:\s*1\.82rem/s);
+    assert.match(APP_CSS, /\.dec-flip-credit\s*>\s*span\s*\{[^}]*color:\s*#86efac[^}]*font-size:\s*0\.76rem/s);
+    assert.match(APP_CSS, /\.dec-flip-credit\s*>\s*strong\s*\{[^}]*color:\s*#4ade80/s,
+      'the enlarged purchase BONUS is green');
     assert.match(
       APP_CSS,
       /\.dec-buy-cta\[aria-label\$=" ETH"\] \.dec-buy-cta__amount\s*\{[^}]*font-size:\s*0\.84em/s,
@@ -2171,11 +2240,27 @@ describe('combined ticket + lootbox buy', () => {
       presaleRemaining: 50n * 10n ** 18n / 1_000_000n,
     });
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract());
     const el = instantiate();
     await settle(80);
 
+    const row = el.querySelector('[data-bind="dec-presale-row"]');
+    const input = el.querySelector('[name="dec-presale-box-eth"]');
     el.querySelector('[data-bind="dec-presale-max"]').dispatchEvent({ type: 'click' });
-    assert.equal(el.querySelector('[name="dec-presale-box-eth"]').value, '0.02');
+    assert.equal(input.value, '0.02');
+    const flip = el.querySelector('[data-bind="dec-flip-check"]');
+    flip.checked = true;
+    flip.dispatchEvent({ type: 'change' });
+    assert.equal(row.hidden, true, 'USE FLIP removes the incompatible presale box');
+    assert.equal(input.value, '0', 'entering FLIP cannot retain a hidden presale spend');
+    flip.checked = false;
+    flip.dispatchEvent({ type: 'change' });
+    assert.equal(row.hidden, false, 'returning to ETH restores the available presale box');
+    const tickets = el.querySelector('[name="dec-tickets"]');
+    tickets.value = '0';
+    tickets.dispatchEvent({ type: 'input' });
+    el.querySelector('[data-bind="dec-presale-max"]').dispatchEvent({ type: 'click' });
+    assert.equal(input.value, '0.02');
     assert.equal(el.querySelector('[data-bind="dec-buy-cta-action"]').textContent,
       'Buy presale box',
       'a standalone presale box is not presented as a game buy-in');
@@ -2301,14 +2386,14 @@ describe('Foil pack buy leg', () => {
     el.disconnectedCallback();
   });
 
-  test('DirectEthInsufficient from the zero-value probe means the foil route is available', async () => {
+  test('Insolvent from the zero-value probe means the foil route is available', async () => {
     _fetchHandler = async (url) => {
       const u = String(url);
       if (u.includes('/game/state')) return DEFAULT_GAME_STATE;
       if (u.includes('/foil')) throw new Error('indexer unavailable');
       return { player: null, pending: {} };
     };
-    const fakeContract = makeFakePurchaseContract({ foilProbeRevertName: 'DirectEthInsufficient' });
+    const fakeContract = makeFakePurchaseContract({ foilProbeRevertName: 'Insolvent' });
     lootboxMod.__setContractFactoryForTest(() => fakeContract);
     const el = instantiate();
     await settle(60);
@@ -2589,7 +2674,7 @@ describe('Foil pack buy leg', () => {
     assert.equal(args[2], 0n, 'zero lootbox leg');
     assert.equal(args[5], true, 'foil flag passed');
     // Exact msg.value: 10 × priceForLevel(12)/1M = 4e11 wei (overpay would
-    // silently credit afking; underpay reverts DirectEthInsufficient).
+    // silently credit afking; underpay reverts Insolvent).
     assert.equal(args[6].value, lootboxMod.scaledFoilPackCostWei(12), 'msg.value = exact foil cost');
     el.disconnectedCallback();
   });
@@ -2832,7 +2917,7 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     await import('../app-decimator-panel.js');
   });
 
-  test('window CLOSED (pool has not cleared target) → the wallet USE FLIP checkbox stays hidden', async () => {
+  test('window CLOSED (pool has not cleared target) → FLIP balance stays hidden', async () => {
     claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract({ windowClosed: true }));
     _fetchHandler = async (url) => (
       String(url).includes('/game/state')
@@ -2841,17 +2926,19 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     );
     const el = instantiate();
     await settle(60);
-    assert.equal(el.querySelector('[data-bind="dec-flip-buy"]').hidden, true,
+    assert.equal(el.querySelector('[data-bind="dec-flip-balance"]').hidden, true,
+      'no FLIP balance while the redemption window is closed');
+    assert.equal(el.querySelector('[data-bind="dec-funds-total-flip"]').hidden, true,
       'no FLIP affordance while the redemption window is closed');
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
   });
 
-  test('jackpot phase alone does not show USE FLIP when the exact window is closed', async () => {
+  test('jackpot phase alone does not show the FLIP balance when the exact window is closed', async () => {
     claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract({ windowClosed: true }));
     const el = instantiate();
     await settle(60);
-    assert.equal(el.querySelector('[data-bind="dec-flip-buy"]').hidden, true,
+    assert.equal(el.querySelector('[data-bind="dec-funds-total-flip"]').hidden, true,
       'phase metadata cannot override the deployed redemption predicate');
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
@@ -2869,10 +2956,8 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     }));
     const el = instantiate();
     await settle(60);
-    assert.equal(el.querySelector('[data-bind="dec-flip-buy"]').hidden, true,
-      'the in-balance copy stays hidden until FLIP is selected');
     assert.equal(el.querySelector('[data-bind="dec-funds-total-flip"]').hidden, false,
-      'the live control is pinned just above Available Funds');
+      'the one live control is pinned just above Available Funds');
     el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="dec-funds-total-flip"]').hidden, false,
       'opening the ETH disclosure does not move the inactive FLIP control');
@@ -2880,55 +2965,72 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     el.disconnectedCallback();
   });
 
-  test('window OPEN pins USE FLIP above funds, then moves it into the FLIP balance', async () => {
+  test('window OPEN keeps the FLIP balance and its toggle beside ALL IN', async () => {
     claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract());
     const el = instantiate();
     await settle(60);
-    const block = el.querySelector('[data-bind="dec-flip-buy"]');
-    const compactToggle = el.querySelector('[data-bind="dec-funds-total-flip"]');
+    const useFlip = el.querySelector('[data-bind="dec-funds-total-flip"]');
+    const flipBalance = el.querySelector('[data-bind="dec-flip-balance"]');
     const useEth = el.querySelector('[data-bind="dec-funds-total-eth"]');
     const allIn = el.querySelector('[data-bind="dec-all-in"]');
     const mode = el.querySelector('[data-bind="dec-flip-check"]');
     const foilRow = el.querySelector('[data-bind="dec-foil-row"]');
-    assert.equal(block.hidden, true, 'the in-balance selector waits for FLIP mode');
-    assert.equal(compactToggle.hidden, false, 'the window-gated button is pinned above funds');
+    assert.equal(flipBalance.hidden, false, 'the left FLIP balance is visible for the whole window');
+    assert.equal(useFlip.hidden, false, 'the balance owns the window-gated mode action');
+    assert.equal(useFlip.textContent, 'USE FLIP');
+    assert.equal(useFlip.getAttribute('aria-pressed'), 'false');
     assert.equal(useEth.hidden, true, 'USE ETH only appears after FLIP is selected');
     assert.equal(allIn.hidden, false, 'ALL IN sits above the ETH balance in ETH mode');
-    assert.equal(compactToggle.tagName, 'BUTTON');
+    assert.equal(useFlip.tagName, 'BUTTON');
     assert.equal(foilRow.hidden, false, 'the verified foil offer is available in ETH mode');
-    compactToggle.dispatchEvent({ type: 'click' });
+    useFlip.dispatchEvent({ type: 'click' });
     assert.equal(mode.checked, true);
-    assert.equal(compactToggle.hidden, true, 'the external copy leaves once the balance appears');
-    assert.equal(block.hidden, false, 'the synchronized control moves inside the FLIP balance');
+    assert.equal(flipBalance.hidden, false, 'the FLIP balance does not move or disappear in FLIP mode');
+    assert.equal(useFlip.textContent, 'USING FLIP');
+    assert.equal(useFlip.getAttribute('aria-pressed'), 'true');
     assert.equal(useEth.hidden, false, 'a matching switch-back action appears in Available Funds');
     assert.equal(allIn.hidden, false, 'ALL IN stays against the active FLIP balance');
     assert.equal(allIn.getAttribute('aria-label'), 'Open ALL IN choices');
     assert.equal(useEth.textContent, 'USE ETH');
-    assert.equal(block.getAttribute('aria-pressed'), 'true');
     assert.equal(foilRow.hidden, true, 'the tickets-only FLIP route hides the incompatible foil add-on');
-    assert.equal(el.querySelector('[data-bind="dec-flip-balance"]').hidden, false,
-      'selecting FLIP tethers its balance directly above Available Funds');
+    useFlip.dispatchEvent({ type: 'click' });
+    assert.equal(mode.checked, false, 'clicking USING FLIP switches back to ETH');
+    assert.equal(useFlip.textContent, 'USE FLIP');
+    useFlip.dispatchEvent({ type: 'click' });
+    assert.equal(mode.checked, true, 'the embedded button can select FLIP again');
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
+    assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, false,
+      'opening Available Funds exposes the Wallet controls');
+    assert.equal(flipBalance.hidden, false, 'expanded funds do not move or hide the FLIP balance');
+    assert.equal(allIn.hidden, false, 'expanded funds do not move or hide ALL IN');
     useEth.dispatchEvent({ type: 'click' });
     assert.equal(mode.checked, false);
-    assert.equal(compactToggle.hidden, false);
-    assert.equal(block.hidden, true);
+    assert.equal(flipBalance.hidden, false);
+    assert.equal(useFlip.hidden, false);
+    assert.equal(useFlip.textContent, 'USE FLIP');
+    assert.equal(useFlip.getAttribute('aria-pressed'), 'false');
     assert.equal(useEth.hidden, true);
     assert.equal(allIn.hidden, false);
     assert.equal(foilRow.hidden, false, 'returning to ETH restores the pinned foil offer');
     assert.match(
       APP_CSS,
-      /\.app-decimator-panel\s+\.dec-funds-stack__flip-mode\s*\{[^}]*align-self:\s*end;[^}]*justify-self:\s*start;[^}]*margin:\s*0 0 0\.5rem 0\.16rem/s,
-      'the inactive FLIP action is pinned to the upper-left edge of funds',
+      /\.dec-flip-balance\s*\{[^}]*min-height:\s*3rem;[^}]*height:\s*3rem/s,
+      'the left balance shares the three-rem top footprint',
     );
     assert.match(
       APP_CSS,
-      /\.dec-flip-toggle\s*\{[^}]*border:\s*1px solid rgba\(253, 230, 138, 0\.72\)[^}]*background:\s*linear-gradient\(180deg, rgba\(127, 29, 29, 0\.42\), rgba\(69, 10, 10, 0\.32\)\)[^}]*color:\s*#fde68a/s,
-      'left-side FLIP controls use yellow ink and trim while retaining the red background',
+      /\.dec-flip-balance__mode\s*\{[^}]*linear-gradient\(180deg, #fef3c7, #fbbf24 58%, #d97706\)[^}]*color:\s*#991b1b/s,
+      'inactive USE FLIP is yellow with red text',
     );
     assert.match(
       APP_CSS,
-      /\.dec-flip-balance\s*\{[^}]*border:\s*1px solid rgba\(253, 230, 138, 0\.5\)[^}]*#140707/s,
-      'the FLIP balance keeps its existing background with a yellow frame',
+      /\.dec-flip-balance__mode\.is-active,[\s\S]*?\[aria-pressed="true"\]\s*\{[^}]*linear-gradient\(180deg, #dc2626, #991b1b\)[^}]*color:\s*#fde68a/s,
+      'active USING FLIP is red with yellow text',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-flip-balance\s*\{[^}]*height:\s*3rem;[^}]*grid-template-areas:\s*"action label" "action value"[^}]*padding:\s*0\.2rem 0\.48rem 0\.24rem;[^}]*border:\s*1px solid rgba\(239, 68, 68, 0\.42\)[^}]*#140707/s,
+      'the left FLIP balance mirrors the compact Protocol Coins frame',
     );
     assert.match(APP_CSS, /\.dec-flip-balance__value\s*\{[^}]*color:\s*#fde68a/s,
       'the left-side FLIP balance value is yellow');
@@ -2942,9 +3044,13 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
       /\.dec-funds__total-value\s*\{[^}]*grid-column:\s*1;[^}]*width:\s*100%;[^}]*margin-left:\s*auto;[^}]*justify-self:\s*end;[^}]*text-align:\s*right/s,
       'the collapsed available-funds balance stays right-aligned',
     );
+    assert.doesNotMatch(PANEL_SRC, /data-bind="dec-flip-buy"/);
+    assert.match(PANEL_SRC, />\s*USE FLIP\s*</);
+    assert.doesNotMatch(PANEL_SRC, />\s*REDEEM FLIP\s*</);
     assert.ok(
-      PANEL_SRC.indexOf('data-bind="dec-flip-balance"') < PANEL_SRC.indexOf('data-bind="dec-flip-buy"'),
-      'the active USE FLIP control lives inside the FLIP balance',
+      PANEL_SRC.indexOf('data-bind="dec-flip-balance"')
+        < PANEL_SRC.indexOf('data-bind="dec-funds-total-flip"'),
+      'USE FLIP is nested in the left FLIP balance',
     );
     assert.ok(
       PANEL_SRC.indexOf('data-bind="dec-funds-total-display"')
@@ -2961,15 +3067,6 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
       /\.dec-funds:has\(\.dec-funds__summary\[aria-expanded="false"\]\)[\s\S]*?\.dec-funds__eth-mode\s*\{[^}]*transform:\s*translateY\(-0\.34rem\)/s,
       'compressed USE ETH is optically centered across its heading and value rows like USING FLIP',
     );
-    assert.match(PANEL_SRC, />USE FLIP</);
-    assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, true,
-      'collapsed Total keeps every individual source out of the compact row');
-    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click' });
-    assert.equal(el.querySelector('[data-bind="dec-funds-wallet-display"]').hidden, false,
-      'opening Available Funds exposes the Wallet controls');
-    assert.equal(block.hidden, true, 'expanding ETH funds does not move the inactive FLIP control');
-    assert.equal(compactToggle.hidden, false);
-
     const ticketsInput = el.querySelector('[name="dec-tickets"]');
     mode.checked = true;
     mode.dispatchEvent({ type: 'change' });
@@ -3144,7 +3241,6 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract({ amountRejected: true }));
     const el = instantiate();
     await settle(60);
-    assert.equal(el.querySelector('[data-bind="dec-flip-buy"]').hidden, true);
     assert.equal(el.querySelector('[data-bind="dec-funds-total-flip"]').hidden, false,
       'availability comes from the window, not a one-ticket affordability simulation');
     claimsMod.__resetContractFactoryForTest();
@@ -3200,8 +3296,9 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
   });
 
   test('the FLIP leg stays tickets-only without an extra helper sentence', () => {
-    assert.match(PANEL_SRC, />USE FLIP</);
-    assert.doesNotMatch(PANEL_SRC, />Redeem FLIP</);
+    assert.match(PANEL_SRC, />\s*USE FLIP\s*</);
+    assert.doesNotMatch(PANEL_SRC, />\s*REDEEM FLIP\s*</);
+    assert.doesNotMatch(PANEL_SRC, /data-bind="dec-flip-buy"/);
     assert.doesNotMatch(PANEL_SRC, /Mint with FLIP/i);
     assert.match(PANEL_SRC, /lootboxInput\.disabled = flipMode/);
     assert.match(PANEL_SRC, /lootboxGroup\.hidden = flipMode/);

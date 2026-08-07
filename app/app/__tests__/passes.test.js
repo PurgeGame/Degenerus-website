@@ -341,6 +341,20 @@ describe('AFKing seat entitlement and claim', () => {
     assert.equal('canClaimSeat' in state, false);
   });
 
+  test('funding-only reads do not depend on seat or subscription snapshots', async () => {
+    const calls = [];
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      game: {
+        afkingFundingOf: async (player) => {
+          calls.push(player);
+          return 875n;
+        },
+      },
+    }));
+    assert.equal(await passesMod.readAfkingFunding(CONNECTED), 875n);
+    assert.deepEqual(calls, [CONNECTED]);
+  });
+
   test('a seat holder is surfaced as having one', async () => {
     passesMod.__setAfkingReadContractFactoryForTest(() => ({
       token: { balanceOf: async () => 1n },
@@ -495,7 +509,9 @@ describe('AFKing subscription configuration and funding', () => {
 
     await assert.rejects(
       passesMod.withdrawAfkingSubscriptionFunding(),
-      (error) => error?.code === 'Insolvent' && /no longer available/i.test(error.userMessage),
+      // Wording is context-neutral: audit c19a1088 made Insolvent the foil leg's
+      // shortfall revert too, so this one registration serves both paths.
+      (error) => error?.code === 'Insolvent' && /doesn't cover that amount/i.test(error.userMessage),
     );
     assert.equal(fake._calls.withdrawAfkingFunding.length, 0);
   });

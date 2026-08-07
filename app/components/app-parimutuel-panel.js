@@ -1283,7 +1283,7 @@ class AppParimutuelPanel extends HTMLElement {
       return;
     }
 
-    for (const side of [SIDE_OVER, SIDE_UNDER]) {
+    for (const side of [SIDE_UNDER, SIDE_OVER]) {
       const isOver = side === SIDE_OVER;
       const sideText = isOver ? 'OVER' : 'UNDER';
       const cell = document.createElement('div');

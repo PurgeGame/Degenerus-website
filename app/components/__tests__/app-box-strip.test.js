@@ -349,11 +349,114 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
-  test('ready RNG gets an explicit OPEN LOOTBOX button and a shared ready action', async () => {
+  test('regular and presale purchases sharing one RNG index merge into one complete open action', async () => {
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+
+    fireTxConfirmed([{
+      index: 8, day: 4, amountWei: 10_000_000_000n,
+      hasLootboxLeg: true, hasPresaleLeg: false,
+    }], {
+      transactionHash: '0xregular',
+      lootBoxAmountWei: 10_000_000_000n,
+      presaleBoxAmountWei: 0n,
+    });
+    fireTxConfirmed([{
+      index: 8, day: null, amountWei: 20_000_000_000n,
+      hasLootboxLeg: false, hasPresaleLeg: true,
+    }], {
+      transactionHash: '0xpresale',
+      lootBoxAmountWei: 0n,
+      presaleBoxAmountWei: 20_000_000_000n,
+    });
+    await tick();
+
+    const pending = pendingActionsMod.getPendingActions();
+    assert.equal(pending.length, 1, 'one RNG batch remains one click target');
+    assert.equal(pending[0].label, 'Lootbox + presale box');
+    assert.equal(pending[0].lootboxLabel, 'LOOTBOX + PRESALE BOX');
+    assert.equal(pending[0].amountLabel, '0.03 ETH');
+    const stored = JSON.parse(globalThis.localStorage.getItem(KEY));
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].hasLootboxLeg, true);
+    assert.equal(stored[0].hasPresaleLeg, true,
+      'the later presale leg is merged instead of discarded as a duplicate index');
+    assert.deepEqual(stored[0].transactionHashes.sort(), ['0xpresale', '0xregular'],
+      'both purchase receipts survive reload for durable kind recovery');
+    el.disconnectedCallback();
+  });
+
+  test('a reloaded regular row rediscovers a later presale purchase from both receipt hashes', async () => {
+    const regularWei = 10_000_000_000n;
+    const presaleWei = 20_000_000_000n;
+    globalThis.localStorage.setItem(KEY, JSON.stringify([{
+      index: 8,
+      resultKey: '8',
+      transactionHash: '0xregular',
+      amountWei: String(regularWei),
+      hasLootboxLeg: true,
+      hasPresaleLeg: false,
+      fromReceipt: true,
+      ready: false,
+      resolved: false,
+    }]));
+    const receiptFor = (hash) => ({
+      logs: [{
+        parsed: hash === '0xpresale'
+          ? { name: 'PresaleBoxBuy', args: { buyer: ADDR, index: 8n, amount: presaleWei } }
+          : { name: 'LootBoxBuy', args: { buyer: ADDR, index: 8n, amount: regularWei } },
+      }],
+    });
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+      getSigner: async () => ({ getAddress: async () => ADDR }),
+      getTransactionReceipt: async (hash) => receiptFor(hash),
+    });
+    lootboxMod.__setContractFactoryForTest(() => ({
+      interface: { parseLog: (log) => log.parsed },
+      lootboxStatus: async () => [regularWei, false],
+      openBox: { staticCall: async () => undefined },
+    }));
+    globalThis.fetch = async (url) => ({
+      ok: true,
+      status: 200,
+      json: async () => String(url).includes('/lootbox/feed')
+        ? {
+            items: [
+              {
+                player: ADDR_LC, resolvedIndex: 8, transactionHash: '0xregular',
+                costRawWei: String(regularWei), opened: false, rngReady: false, results: [],
+              },
+              {
+                player: ADDR_LC, resolvedIndex: 8, transactionHash: '0xpresale',
+                costRawWei: String(presaleWei), opened: false, rngReady: false, results: [],
+              },
+            ],
+          }
+        : { items: [] },
+    });
+
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    for (let i = 0; i < 8; i += 1) await tick();
+
+    const pending = pendingActionsMod.getPendingActions();
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].label, 'Lootbox + presale box');
+    assert.equal(pending[0].amountLabel, '0.03 ETH');
+    const stored = JSON.parse(globalThis.localStorage.getItem(KEY));
+    assert.equal(stored[0].hasPresaleLeg, true,
+      'immutable PresaleBoxBuy logs heal an old browser row even though the feed omits its kind');
+    assert.deepEqual(stored[0].transactionHashes.sort(), ['0xpresale', '0xregular']);
+    el.disconnectedCallback();
+  });
+
+  test('ready RNG keeps the compact shared receipt while the legacy inline chip can open', async () => {
     const el = instantiate();
     storeMod.update('connected.address', ADDR);
     await tick();
-    fireTxConfirmed([{ index: 8, day: 4 }]);
+    fireTxConfirmed([{ index: 8, day: 4 }], { transactionHash: '0xpurchase' });
     await tick();
 
     const waiting = pendingActionsMod.getPendingActions()
@@ -379,12 +482,13 @@ describe('app-box-strip', () => {
     assert.equal(pending.length, 1);
     assert.equal(pending[0].id, 'lootbox:8');
     assert.equal(pending[0].state, 'ready');
-    assert.equal(pending[0].compact, false, 'the ready box expands to expose OPEN');
+    assert.equal(pending[0].compact, true,
+      'the ready box stays x ETH + LOOTBOX instead of exposing a right-side OPEN');
     assert.equal(typeof pending[0].run, 'function');
     el.disconnectedCallback();
   });
 
-  test('a directly queued Degenerette box retires the matching pending replay immediately', async () => {
+  test('a directly queued Degenerette box hides until its presentation completes', async () => {
     const resultKey = 'tx:0xdegenerettebox';
     globalThis.localStorage.setItem(KEY, JSON.stringify([{
       index: 0,
@@ -417,13 +521,63 @@ describe('app-box-strip', () => {
     assert.equal(
       pendingActionsMod.getPendingActions().some((action) => action.id === `lootbox:${resultKey}`),
       false,
-      'queuing the direct reveal consumes the duplicate before its receipt is shown',
+      'queuing the direct reveal hides the duplicate before its receipt is shown',
     );
+    assert.equal(globalThis.localStorage.getItem(revealedBoxesKey(CHAIN.id, ADDR)), null,
+      'queuing alone cannot tombstone a result the player has not completed');
+    assert.ok(globalThis.localStorage.getItem(KEY),
+      'the receipt stays durable while the presentation is active');
+
+    document.dispatchEvent(new CustomEvent(revealMod.LOOTBOX_REVEAL_COMPLETE_EVENT, {
+      detail: { address: ADDR, key: resultKey },
+    }));
+    await tick();
     assert.deepEqual(
       JSON.parse(globalThis.localStorage.getItem(revealedBoxesKey(CHAIN.id, ADDR))),
       [resultKey],
-      'later indexer polls cannot rediscover the same opening',
+      'completion prevents later indexer polls from rediscovering the opening',
     );
+    assert.equal(globalThis.localStorage.getItem(KEY), null,
+      'completion removes the now-consumed durable receipt');
+    el.disconnectedCallback();
+  });
+
+  test('aborting a queued lootbox presentation restores its pending receipt', async () => {
+    const resultKey = 'tx:0xabortedbox';
+    globalThis.localStorage.setItem(KEY, JSON.stringify([{
+      index: 0,
+      resultKey,
+      transactionHash: '0xabortedbox',
+      ready: true,
+      resolved: true,
+      fromReceipt: false,
+    }]));
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+
+    revealMod.queueReveal({
+      kind: 'lootbox',
+      legs: [{ legType: 'opened', lootboxIndex: 0, amount: 1n }],
+      lootboxRelease: {
+        address: ADDR,
+        key: resultKey,
+        lootboxIndex: 0,
+        transactionHash: '0xabortedbox',
+      },
+    });
+    await tick();
+    assert.equal(pendingActionsMod.getPendingActions().length, 0);
+
+    document.dispatchEvent(new CustomEvent(revealMod.LOOTBOX_REVEAL_ABORT_EVENT, {
+      detail: { releases: [{ address: ADDR, key: resultKey }] },
+    }));
+    await tick();
+    assert.ok(pendingActionsMod.getPendingActions()
+      .some((action) => action.id === `lootbox:${resultKey}`),
+    'closing the overlay puts the uncollected result back in Pending');
+    assert.equal(globalThis.localStorage.getItem(revealedBoxesKey(CHAIN.id, ADDR)), null);
+    assert.ok(globalThis.localStorage.getItem(KEY));
     el.disconnectedCallback();
   });
 
@@ -558,6 +712,44 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
+  test('tray-only open failures report a visible Pending reason', async () => {
+    const failure = new Error('User rejected the request');
+    failure.code = 'ACTION_REJECTED';
+    const fake = {
+      lootboxStatus: async () => [10_000_000_000n, false],
+      openBox: Object.assign(async () => { throw failure; }, {
+        staticCall: async () => undefined,
+      }),
+      connect() { return this; },
+    };
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+      getSigner: async () => ({ getAddress: async () => ADDR }),
+    });
+    lootboxMod.__setContractFactoryForTest(() => fake);
+    const errors = [];
+    const unsubscribe = pendingActionsMod.subscribePendingActionErrors((message) => {
+      errors.push(message);
+    });
+
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxConfirmed([{ index: 8, day: 4 }]);
+    await tick();
+    el.__setReadyForTest(8);
+    const action = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:8');
+    await action.run();
+
+    assert.deepEqual(errors, ['Transaction cancelled.'],
+      'the production tray receives the reason even though the legacy inline error is absent');
+    assert.equal(pendingActionsMod.getPendingActions()[0].state, 'ready',
+      'a failed attempt remains available to retry');
+    unsubscribe();
+    el.disconnectedCallback();
+  });
+
   test('a newly indexed result wins over a stale non-zero RPC slot before openBox', async () => {
     const calls = { status: [], open: [] };
     const fake = {
@@ -626,6 +818,8 @@ describe('app-box-strip', () => {
     const [replay] = revealMod.__takeQueuedForTest();
     assert.equal(replay?.kind, 'lootbox');
     assert.equal(replay?.lootboxIndex, 8);
+    assert.equal(replay?.legs?.[0]?.transactionHash, '0xsettled',
+      'the purchase hash cannot mask the later settlement transaction');
     assert.equal(pendingActionsMod.getPendingActions().length, 0,
       'the indexed result becomes a reveal and leaves the pending tray');
     el.disconnectedCallback();
@@ -667,6 +861,46 @@ describe('app-box-strip', () => {
       'the bottom tray is not spammed by the stale row');
     assert.equal(globalThis.localStorage.getItem(KEY), null,
       'an unverified database candidate is not persisted as a receipt purchase');
+    el.disconnectedCallback();
+  });
+
+  test('a receipt-confirmed presale-only box survives the regular zero amount slot', async () => {
+    const fake = {
+      lootboxStatus: async () => [0n, false],
+      openBox: Object.assign(async () => ({ wait: async () => ({ logs: [] }) }), {
+        staticCall: async () => undefined,
+      }),
+    };
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: BigInt(CHAIN.id) }),
+      getSigner: async () => ({ getAddress: async () => ADDR }),
+    });
+    lootboxMod.__setContractFactoryForTest(() => fake);
+
+    const el = instantiate();
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    fireTxConfirmed([{
+      index: 91,
+      day: 8,
+      amountWei: lootboxMod.PRESALE_BOX_MIN_WEI,
+      hasLootboxLeg: false,
+      hasPresaleLeg: true,
+    }], {
+      lootBoxAmountWei: 0n,
+      presaleBoxAmountWei: lootboxMod.PRESALE_BOX_MIN_WEI,
+    });
+    for (let i = 0; i < 8; i += 1) await tick();
+
+    const chip = el.querySelector('.bxs-chip');
+    assert.ok(chip, 'the presale box remains present despite lootboxStatus amount zero');
+    assert.equal(chip.querySelector('.bxs-chip-title').textContent, 'PRESALE BOX');
+    assert.equal(chip.querySelector('.bxs-open-cta').textContent, 'OPEN PRESALE BOX');
+    const stored = JSON.parse(globalThis.localStorage.getItem(KEY));
+    assert.equal(stored[0].hasLootboxLeg, false);
+    assert.equal(stored[0].hasPresaleLeg, true);
+    assert.equal(stored[0].resolved, false,
+      'the regular mapping cannot falsely settle a presale-only purchase');
     el.disconnectedCallback();
   });
 
@@ -738,6 +972,12 @@ describe('app-box-strip', () => {
       pendingActionsMod.getPendingActions().some((action) => action.id === 'lootbox:77'),
       false,
     );
+    assert.equal(globalThis.localStorage.getItem(revealedBoxesKey(CHAIN.id, ADDR)), null,
+      'the active presentation is not yet a durable dismissal');
+    document.dispatchEvent(new CustomEvent(revealMod.LOOTBOX_REVEAL_COMPLETE_EVENT, {
+      detail: { address: ADDR, key: '77' },
+    }));
+    await tick();
     assert.deepEqual(
       JSON.parse(globalThis.localStorage.getItem(revealedBoxesKey(CHAIN.id, ADDR))),
       ['77'],

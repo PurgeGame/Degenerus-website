@@ -177,7 +177,7 @@ const {
   queueReveal, normalizeSequence, buildDegeneretteSpinFrames,
   degeneretteLockMatchType, shouldBobDegeneretteLock, buildBoxSpinBoard,
   goldTicketLabel, pickBiggestSpinResult, projectDegeneretteEthSplit,
-  shouldCelebrateDegenerette,
+  shouldCelebrateDegenerette, isUnluckyDegenerette,
   __resetForTest, __takeQueuedForTest, PACK_REVEAL_COMPLETE_EVENT,
 } =
   await import('../reveal-overlay.js');
@@ -302,13 +302,14 @@ describe('normalizeSequence', () => {
       [
         ['PURCHASE BOOST', '+15%'],
         ['DECIMATOR BOON', '+50%'],
-        ['DEGEN SCORE BOON', '+25'],
+        ['DEGEN SCORE BOON', '+12.5'],
         ['LAZY PASS DISCOUNT', '−50%'],
       ],
     );
     assert.match(seq.cards[0].sub, /Lootbox or ETH Ticket purchase/i);
     assert.match(seq.cards[1].sub, /Decimator burn/i);
-    assert.match(seq.cards[2].sub, /25 Degen Score/i);
+    assert.match(seq.cards[2].sub, /\+25 quest streak/i);
+    assert.match(seq.cards[2].sub, /12\.5 Degen Score/i);
     assert.match(seq.cards[3].sub, /50% less/i);
   });
 
@@ -876,7 +877,13 @@ describe('normalizeSequence', () => {
     assert.equal(seq.spinBoard.celebrate, false);
     assert.equal(seq.title, 'PARTIAL RETURN');
     assert.equal(seq.big, false);
-    assert.equal(seq.unlucky, true);
+    assert.equal(seq.unlucky, false, 'a 75% return is neutral rather than UNLUCKY');
+    assert.equal(isUnluckyDegenerette({ total: 39n, totalWager: 100n }), true);
+    assert.equal(isUnluckyDegenerette({ total: 40n, totalWager: 100n }), false,
+      'exactly 40% is the neutral boundary');
+    assert.equal(isUnluckyDegenerette({ total: 99n, totalWager: 100n }), false);
+    assert.equal(isUnluckyDegenerette({ total: 0n, totalWager: 100n, boxSpin: true }), false,
+      'free box spins are never judged against a player stake');
     assert.equal(shouldCelebrateDegenerette({ total: 15n, totalWager: 20n }), false);
     assert.equal(shouldCelebrateDegenerette({ total: 20n, totalWager: 20n }), true,
       'getting the full stake back meets the requested threshold');
@@ -886,8 +893,8 @@ describe('normalizeSequence', () => {
       'a granted lootbox spin has no player stake to lose');
     assert.match(
       REVEAL_SRC,
-      /const celebrate = shouldCelebrateDegenerette\(board\)[\s\S]*?if \(celebrate\) \{[\s\S]*?sfxFanfare[\s\S]*?#celebrateWin[\s\S]*?\} else \{[\s\S]*?sfxNoWin/,
-      'fanfare and the protocol win effect use net outcome rather than any positive payout',
+      /const celebrate = shouldCelebrateDegenerette\(board\)[\s\S]*?if \(celebrate\) \{[\s\S]*?sfxFanfare[\s\S]*?#celebrateWin[\s\S]*?\} else if \(sequence\.unlucky\) \{[\s\S]*?sfxNoWin/,
+      'fanfare follows net outcome and the loss sound is reserved for unlucky returns',
     );
   });
 
@@ -2267,7 +2274,7 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
-  test('a one-item consolation summary renders once with the red WWXRP UNLUCKY action', async () => {
+  test('a one-item consolation summary renders once with the neutral WWXRP UNLUCKY action', async () => {
     const el = instantiate();
     queueReveal({
       kind: 'jackpot', day: 9, consolationOnly: true,
@@ -2453,7 +2460,7 @@ describe('reveal-overlay element', () => {
     const cta = el.querySelector('.rvl-dgn-spin-cta');
     assert.equal(cta.textContent, 'UNLUCKY');
     assert.ok(cta.classList.contains('rvl-collect-cta--unlucky'),
-      'the shared red treatment supplies the WWXRP logo');
+      'the shared gray treatment lets the red WWXRP logo stand out');
     cta.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
   });
@@ -2475,6 +2482,12 @@ describe('reveal-overlay element', () => {
     assert.match(total.textContent, /RETURNED/);
     assert.doesNotMatch(total.textContent, /NET LOSS/,
       'the payout and signed NET amount already communicate the result');
+    const cta = el.querySelector('.rvl-dgn-spin-cta');
+    assert.equal(cta.textContent, 'COLLECT');
+    assert.equal(cta.classList.contains('rvl-collect-cta--unlucky'), false,
+      'a 50% return uses the neutral collection action');
+    cta.dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
   });
 
   test('reduced-motion BoxSpin shows the full settled reel, then its currency reveal', async () => {

@@ -543,9 +543,9 @@ class AppTicketsInventory extends HTMLElement {
 
   #renderShell() {
     this.innerHTML = `
-      <section class="panel app-tickets-inventory">
-        <div class="panel-header inv-head">
-          <h2>YOUR TICKETS</h2>
+      <section class="panel app-tickets-inventory section-disclosure">
+        <div class="panel-header inv-head section-disclosure__bar">
+          <h2 class="section-disclosure__title">YOUR TICKETS</h2>
           <span class="inv-total-value"
                 title="Face value of current and future tickets; fully resolved past levels are excluded.">
             <span class="inv-total-value__label">TOTAL VALUE</span>
@@ -574,7 +574,7 @@ class AppTicketsInventory extends HTMLElement {
           <button type="button" class="inv-disclosure" data-bind="inv-toggle"
                   aria-expanded="false" aria-controls="ticket-inventory-details"
                   aria-label="Show ticket details">
-            <span class="inv-disclosure__chevron" aria-hidden="true"></span>
+            <span class="inv-disclosure__chevron section-disclosure__chevron" aria-hidden="true"></span>
           </button>
         </div>
         <div id="ticket-inventory-details" class="inv-window" data-bind="inv-window" hidden>

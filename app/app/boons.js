@@ -17,9 +17,9 @@ const BOON_UI = Object.freeze({
   14: { product: 'decimator', label: 'BOON +25%', detail: 'Your next Decimator burn gets +25%' },
   15: { product: 'decimator', label: 'BOON +50%', detail: 'Your next Decimator burn gets +50%' },
   16: { product: 'whale', label: 'BOON −10%', detail: 'Your next whale pass purchase costs 10% less' },
-  17: { product: 'activity', label: 'BOON +10 SCORE', detail: 'Your pending activity boon adds 10 Degen Score' },
-  18: { product: 'activity', label: 'BOON +25 SCORE', detail: 'Your pending activity boon adds 25 Degen Score' },
-  19: { product: 'activity', label: 'BOON +50 SCORE', detail: 'Your pending activity boon adds 50 Degen Score' },
+  17: { product: 'activity', label: 'BOON +5 SCORE', detail: 'Adds +10 quest streak, worth 5 Degen Score' },
+  18: { product: 'activity', label: 'BOON +12.5 SCORE', detail: 'Adds +25 quest streak, worth 12.5 Degen Score' },
+  19: { product: 'activity', label: 'BOON +25 SCORE', detail: 'Adds +50 quest streak, worth 25 Degen Score' },
   22: { product: 'lootbox', label: 'BOON +25%', detail: 'Your next lootbox purchase gets +25% value' },
   23: { product: 'whale', label: 'BOON −20%', detail: 'Your next whale pass purchase costs 20% less' },
   24: { product: 'whale', label: 'BOON −35%', detail: 'Your next whale pass purchase costs 35% less' },
@@ -166,6 +166,16 @@ function _boonStrength(ui) {
   return amount ? Number(amount[1]) : 0;
 }
 
+/** Activity boons store raw quest streak; each streak is worth 0.5 Degen Score. */
+export function activityBoonScore(rawStreak) {
+  const streak = Number(rawStreak);
+  return Number.isFinite(streak) && streak > 0 ? streak / 2 : 0;
+}
+
+function _formatScore(value) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, '');
+}
+
 /** Return the strongest unconsumed boon that applies to one visible product. */
 export function activeBoonForProduct(payload, product) {
   const wanted = String(product || '');
@@ -186,11 +196,12 @@ export function boonIndicatorModel(payload, product) {
   const activityAmount = active.ui.product === 'activity'
     ? Number(active.row?.boostAmount ?? 0)
     : 0;
+  const activityScore = activityBoonScore(activityAmount);
   return {
     boonType: Number(active.row.boonType),
-    label: activityAmount > 0 ? `BOON +${activityAmount} SCORE` : active.ui.label,
+    label: activityAmount > 0 ? `BOON +${_formatScore(activityScore)} SCORE` : active.ui.label,
     title: `${activityAmount > 0
-      ? `Your pending activity boon adds ${activityAmount} Degen Score`
+      ? `Adds +${activityAmount} quest streak, worth ${_formatScore(activityScore)} Degen Score`
       : active.ui.detail}${Number.isInteger(day) && day > 0 ? ` · Day ${day}` : ''}`,
   };
 }

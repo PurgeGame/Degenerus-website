@@ -155,7 +155,8 @@ describe('actionableRevealItems', () => {
 });
 
 describe('<app-reveal-tray>', () => {
-  test('a bought lootbox waits as x ETH, box glyph, LOOTBOX instead of a wide purchase row', () => {
+  test('a lootbox stays x ETH and LOOTBOX when it becomes openable', async () => {
+    let opened = 0;
     pending.publishPendingActions('lootboxes', [{
       id: 'lootbox:submitted:0xabc', kind: 'lootbox', label: 'Lootbox purchase',
       amountLabel: '0.04 ETH', lootboxValueTone: 'purple',
@@ -170,25 +171,41 @@ describe('<app-reveal-tray>', () => {
     assert.ok(action);
     assert.equal(action.getAttribute('data-lootbox-value-tone'), 'purple');
     assert.equal(action.querySelector('.rrt-lootbox-summary__amount').textContent, '0.04 ETH');
-    assert.ok(action.querySelector('.rrt-lootbox-summary__box .rrt-action__glyph')
-      || action.querySelector('.rrt-lootbox-summary__box')?.querySelector('.rrt-action__glyph'));
+    assert.equal(action.querySelector('.rrt-lootbox-summary__box'), null,
+      'Pending does not put an icon before LOOTBOX');
     assert.match(action.querySelector('.rrt-lootbox-summary').textContent, /0\.04 ETH.*LOOTBOX/);
     const summaryParts = action.querySelector('.rrt-lootbox-summary').children;
     assert.match(summaryParts[0].className, /rrt-lootbox-summary__amount/,
       'the ETH amount owns the first line');
-    assert.match(summaryParts[1].className, /rrt-lootbox-summary__box/,
-      'the lootbox glyph starts the separate second line');
+    assert.match(summaryParts[1].className, /rrt-lootbox-summary__unit/,
+      'the plain LOOTBOX label owns the separate second line');
     assert.equal(action.querySelector('.rrt-action__art'), null,
       'the exact inline receipt does not duplicate the box glyph at the left');
     assert.equal(action.querySelector('.rrt-action__cta'), null);
     assert.equal(action.querySelector('.rrt-action__progress'), null);
     assert.match(action.title, /4× ticket price/);
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
-    assert.match(css, /\.rrt-lootbox-summary\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*auto auto/s,
+    assert.match(css, /\.rrt-lootbox-summary\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*auto(?:;|\s)/s,
       'the amount and lootbox receipt use two compact lines');
     assert.match(css, /\.rrt-lootbox-summary__amount\s*\{[^}]*grid-column:\s*1 \/ -1/s);
     assert.doesNotMatch(css, /\.rrt-action:hover:not\(:disabled\)[^}]*transform:\s*translateY\(-1px\)/s,
       'pending cards glow in place instead of clipping their top edge');
+
+    pending.publishPendingActions('lootboxes', [{
+      id: 'lootbox:submitted:0xabc', kind: 'lootbox', label: 'Lootbox purchase',
+      amountLabel: '0.04 ETH', lootboxValueTone: 'purple',
+      lootboxTicketUnitsLabel: '4×', compact: true,
+      detail: 'RNG ready · prizes locked', state: 'ready', pinned: true, write: true,
+      run: async () => { opened += 1; },
+    }]);
+    const ready = el.querySelector('.rrt-action--lootbox-summary');
+    assert.equal(ready.disabled, false);
+    assert.match(ready.querySelector('.rrt-lootbox-summary').textContent, /0\.04 ETH.*LOOTBOX/);
+    assert.equal(ready.querySelector('.rrt-action__cta'), null,
+      'the openable compact receipt has no redundant OPEN on the right');
+    ready.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    assert.equal(opened, 1, 'the entire compact receipt remains the open target');
     el.disconnectedCallback();
   });
 
@@ -464,12 +481,10 @@ describe('<app-reveal-tray>', () => {
     assert.equal(pendingSpin.querySelector('.rrt-degenerette-summary__count').textContent, '×1');
     const spinSummaryParts = pendingSpin.querySelector('.rrt-degenerette-summary').children;
     assert.match(spinSummaryParts[0].textContent, /ETH$/);
-    assert.match(spinSummaryParts[1].className, /rrt-degenerette-summary__box/,
-      'the lootbox glyph comes immediately after ETH');
-    assert.equal(spinSummaryParts[2].textContent, '×1');
-    assert.ok(pendingSpin.querySelector('.rrt-degenerette-summary__box .rrt-action__glyph')
-      || pendingSpin.querySelector('.rrt-degenerette-summary__box')?.querySelector('.rrt-action__glyph'),
-    'the compact spin count carries the lootbox glyph');
+    assert.equal(spinSummaryParts[1].textContent, '×1');
+    assert.equal(spinSummaryParts[2].textContent, 'SPIN');
+    assert.equal(pendingSpin.querySelector('.rrt-degenerette-summary__box'), null,
+      'the pending spin count has no redundant leading icon');
     assert.equal(pendingSpin.querySelector('.rrt-action__progress'), null);
     assert.equal(pendingSpin.querySelector('.rrt-action__cta'), null);
     assert.doesNotMatch(pendingSpin.className, /is-rng-waiting/,
@@ -624,10 +639,10 @@ describe('<app-reveal-tray>', () => {
     assert.match(css, /@media \(max-width: 560px\)[\s\S]*?\.rrt-action--degenerette \.rrt-action__art\s*\{[^}]*width:\s*2\.12rem;[^}]*height:\s*2\.12rem/s,
       'the narrow Degenerette art stays below the row content height');
     assert.match(css, /\.rrt-action--degenerette\.is-result-ready\s*\{[^}]*animation:\s*rrt-degenerette-ready-glow/s);
-    assert.match(css, /\.rrt-degenerette-summary\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*auto auto auto[^}]*row-gap:\s*0\.06rem/s,
+    assert.match(css, /\.rrt-degenerette-summary\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*auto auto[^}]*row-gap:\s*0\.06rem/s,
       'ETH and the spin receipt occupy two tightly spaced rows');
     assert.match(css, /\.rrt-degenerette-summary__amount\s*\{[^}]*grid-column:\s*1 \/ -1/s,
-      'the ETH amount owns its line above the icon and spin count');
+      'the ETH amount owns its line above the spin count');
     assert.match(css, /\.rrt-rng__request\.is-requestable\s*\{[^}]*animation:\s*rrt-rng-requestable/s);
     assert.match(css, /\.rrt-rng__request\.is-requesting \.rrt-rng__art\s*\{[^}]*animation:\s*rrt-rng-art-pending 1\.7s ease-in-out infinite/s,
       'only an in-flight request gives the fixed state artwork a restrained pulse');

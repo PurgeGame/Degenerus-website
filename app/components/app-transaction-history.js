@@ -40,6 +40,7 @@ const ACTIVITY_MARKS = Object.freeze({
   'degenerette-wager': 'D',
   'degenerette-result': 'D',
   'afking-purchase': 'A',
+  'pass-purchase': 'P',
 });
 const HISTORY_FILTERS = Object.freeze([
   ['buys', 'BUYS'],
@@ -67,6 +68,9 @@ const AFKING_HISTORY_ABI = Object.freeze([
   'event SubscriptionUpdated(address indexed player,uint8 dailyQuantity,bool drainGameCreditFirst,bool useTickets,address indexed fundingSource)',
   'event AfkingDelivered(address indexed player,uint24 day,uint256 weiIn,uint24 pendingFlipAfter,uint32 affiliateBaseAfter)',
   'event LootBoxBuy(address indexed buyer,uint48 indexed index,uint256 amount)',
+  'event WhalePassPurchased(address indexed buyer,uint256 quantity,uint256 weiIn)',
+  'event LazyPassPurchased(address indexed buyer,uint24 startLevel,uint256 weiIn)',
+  'event DeityPassPurchased(address indexed buyer,uint8 symbolId,uint256 price,uint24 level)',
 ]);
 
 let _afkingHistoryProvider = null;
@@ -129,11 +133,21 @@ function _eventItem(log, parsed) {
     item.weiIn = String(values.weiIn ?? 0);
   } else if (eventName === 'LootBoxBuy') {
     item.amount = String(values.amount ?? 0);
+  } else if (eventName === 'WhalePassPurchased') {
+    item.quantity = Number(values.quantity ?? 0);
+    item.weiIn = String(values.weiIn ?? 0);
+  } else if (eventName === 'LazyPassPurchased') {
+    item.startLevel = Number(values.startLevel ?? 0);
+    item.weiIn = String(values.weiIn ?? 0);
+  } else if (eventName === 'DeityPassPurchased') {
+    item.symbolId = Number(values.symbolId ?? 0);
+    item.price = String(values.price ?? 0);
+    item.level = Number(values.level ?? 0);
   }
   return item;
 }
 
-/** Lazy chain-backed AFKing purchase stream; called only after history opens. */
+/** Lazy chain-backed AFKing + pass purchase stream; called only after history opens. */
 export async function loadAfkingPurchaseHistory(address, { provider = null } = {}) {
   const owner = _lower(address);
   const reader = provider || _historyReadProvider();
@@ -144,7 +158,10 @@ export async function loadAfkingPurchaseHistory(address, { provider = null } = {
     || !CONTRACTS?.GAME) return { items: [] };
 
   const iface = new ethers.Interface(AFKING_HISTORY_ABI);
-  const eventTopics = ['SubscriptionUpdated', 'AfkingDelivered', 'LootBoxBuy']
+  const eventTopics = [
+    'SubscriptionUpdated', 'AfkingDelivered', 'LootBoxBuy',
+    'WhalePassPurchased', 'LazyPassPurchased', 'DeityPassPurchased',
+  ]
     .map((name) => iface.getEvent(name)?.topicHash)
     .filter(Boolean);
   const playerTopic = ethers.zeroPadValue(owner, 32);
@@ -432,9 +449,66 @@ function _afkingPurchaseRows(history, owner) {
   return rows;
 }
 
-function _lootboxPurchaseRows(feed, owner) {
+function _passPurchaseRows(history, owner) {
+  const items = (Array.isArray(history?.items) ? history.items : [])
+    .filter((item) => !owner || _lower(item?.player ?? item?.buyer) === owner);
+  const bonusBoxTransactions = new Set(items
+    .filter((item) => String(item?.eventName || '') === 'LootBoxBuy')
+    .map((item) => _lower(item?.transactionHash))
+    .filter(Boolean));
+  const transactions = new Set();
+  const rows = [];
+  for (const item of items) {
+    const eventName = String(item?.eventName || '');
+    if (!['WhalePassPurchased', 'LazyPassPurchased', 'DeityPassPurchased'].includes(eventName)) {
+      continue;
+    }
+    const transactionHash = _lower(item?.transactionHash);
+    if (transactionHash) transactions.add(transactionHash);
+    const map = _deltaMap();
+    let title;
+    let detail;
+    if (eventName === 'WhalePassPurchased') {
+      const quantity = Math.max(1, Math.trunc(Number(item?.quantity) || 1));
+      title = 'Whale pass purchase';
+      detail = `${quantity} whale pass${quantity === 1 ? '' : 'es'}`;
+      _addRaw(map, 'ETH', -_big(item?.weiIn), 'eth');
+      _addCount(map, 'PASS', quantity);
+    } else if (eventName === 'LazyPassPurchased') {
+      const startLevel = Math.max(0, Math.trunc(Number(item?.startLevel) || 0));
+      title = 'Lazy pass purchase';
+      detail = startLevel > 0 ? `Levels ${startLevel}–${startLevel + 9}` : '10-level pass';
+      _addRaw(map, 'ETH', -_big(item?.weiIn), 'eth');
+      _addCount(map, 'PASS', 1);
+    } else {
+      const symbolId = Math.max(0, Math.trunc(Number(item?.symbolId) || 0));
+      const level = Math.max(0, Math.trunc(Number(item?.level) || 0));
+      title = 'Deity pass purchase';
+      detail = `Symbol ${symbolId}${level > 0 ? ` · Level ${level}` : ''}`;
+      _addRaw(map, 'ETH', -_big(item?.price), 'eth');
+      _addCount(map, 'PASS', 1);
+    }
+    if (transactionHash && bonusBoxTransactions.has(transactionHash)) {
+      _addCount(map, 'LOOTBOX', 1);
+    }
+    rows.push(_historyRow({
+      id: `pass-purchase:${transactionHash || `${item?.blockNumber}:${item?.logIndex}`}`,
+      type: 'pass-purchase',
+      title,
+      detail,
+      blockNumber: item?.blockNumber,
+      logIndex: item?.logIndex,
+      transactionHash: item?.transactionHash,
+      deltas: _deltas(map),
+    }));
+  }
+  return { rows, transactions };
+}
+
+function _lootboxPurchaseRows(feed, owner, excludedTransactions = new Set()) {
   return (Array.isArray(feed?.items) ? feed.items : [])
     .filter((item) => !owner || _lower(item?.player) === owner)
+    .filter((item) => !excludedTransactions.has(_lower(item?.transactionHash)))
     .map((item) => {
       const map = _deltaMap();
       const asset = String(item?.kind).toLowerCase() === 'flip' ? 'FLIP' : 'ETH';
@@ -733,13 +807,15 @@ export function buildTransactionHistoryRows({
 } = {}) {
   const owner = _lower(address);
   const degenerette = _degeneretteRows(degeneretteFeed, owner);
+  const passes = _passPurchaseRows(afkingHistory, owner);
   const rows = [
-    ..._lootboxPurchaseRows(lootboxFeed, owner),
+    ..._lootboxPurchaseRows(lootboxFeed, owner, passes.transactions),
     ..._lootboxResultRows(lootboxLegs, owner, degenerette.excludedLootboxTransactions),
     ...degenerette.rows,
     ..._ticketRows(packs),
     ..._jackpotRows(jackpotHistory, jackpotBlocks),
     ..._afkingPurchaseRows(afkingHistory, owner),
+    ...passes.rows,
   ];
   const unique = new Map();
   for (const row of rows) {
@@ -905,7 +981,7 @@ export async function loadTransactionHistory(address, { limit = DEFAULT_LIMIT, p
     ['Degenerette', () => fetchJSON(`/degenerette/feed?limit=${feedLimit}&player=${player}`)],
     ['ticket reveals', () => fetchJSON(`/player/${player}/packs`)],
     ['jackpot awards', () => fetchJSON(`/player/${player}/jackpot-history`)],
-    ['AFKing purchases', () => loadAfkingPurchaseHistory(owner)],
+    ['AFKing/pass purchases', () => loadAfkingPurchaseHistory(owner)],
     ['level/day labels', () => fetchJSON('/replay/rng')],
   ];
   const settled = await Promise.allSettled(requests.map(([, load]) => load()));
@@ -1095,14 +1171,15 @@ class AppTransactionHistory extends HTMLElement {
 
   #renderShell() {
     this.innerHTML = `
-      <details class="txh" data-bind="txh-details">
-        <summary class="txh__summary">
+      <details class="txh section-disclosure" data-bind="txh-details">
+        <summary class="txh__summary section-disclosure__bar">
           <span class="txh__summary-icon" aria-hidden="true">⇄</span>
           <span class="txh__summary-copy">
-            <strong>TRANSACTION HISTORY</strong>
+            <strong class="section-disclosure__title">TRANSACTION HISTORY</strong>
             <small>Purchases, awards, and replayable results</small>
           </span>
           <span class="txh__summary-meta" data-bind="txh-summary-meta">ON DEMAND</span>
+          <span class="section-disclosure__chevron" aria-hidden="true"></span>
         </summary>
         <div class="txh__content">
           <div class="txh__toolbar">

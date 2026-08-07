@@ -37,9 +37,16 @@ _registerFoilError('FoilAlreadyBought', {
   userMessage: 'Foil pack purchase is unavailable for this transaction.',
   recoveryAction: 'Refresh the level and try again.',
 });
-_registerFoilError('DirectEthInsufficient', {
-  code: 'DirectEthInsufficient',
-  userMessage: "The ETH sent doesn't cover this purchase.",
+// The foil leg no longer has a shortfall error of its own. Audit c19a1088 routed it
+// through the canonical spend waterfall (_settleShortfall: claimable — skipped on
+// DirectEth — then prepaid AFKing), which reverts the SHARED `Insolvent()` when the
+// tiers together fall short; `DirectEthInsufficient()` was deleted from the module and
+// can never fire again. `Insolvent` already has a name mapping from passes.js and the
+// registry is last-write-wins, so only the SELECTOR form is added here — a delegatecall
+// revert often reaches us as raw `error.data` with no name attached.
+register(ethers.id('Insolvent()').slice(0, 10), {
+  code: 'Insolvent',
+  userMessage: "Your available balance doesn't cover this purchase.",
   recoveryAction: 'Refresh and retry — the level price may have just changed.',
 });
 _registerFoilError('StaleAdvance', {
@@ -112,7 +119,7 @@ export const GAME_ABI = [
   // Foil module errors bubble through GAME.purchase via delegatecall. Keeping
   // them in this interface lets ethers populate error.revert.name.
   'error FoilAlreadyBought()',
-  'error DirectEthInsufficient()',
+  'error Insolvent()',
   'error StaleAdvance()',
   // Events
   // Current deploy: the queue index moved directly onto LootBoxBuy and the
@@ -258,6 +265,17 @@ function _buildContract(signerOrProvider) {
   return new ethers.Contract(CONTRACTS.GAME, GAME_ABI, signerOrProvider);
 }
 
+function _publicLootboxReadProvider() {
+  if (!_rngQueueReadProvider && CHAIN.rpcUrl) {
+    _rngQueueReadProvider = new ethers.JsonRpcProvider(
+      CHAIN.rpcUrl,
+      Number(CHAIN.id),
+      { staticNetwork: true, batchMaxCount: 1 },
+    );
+  }
+  return _rngQueueReadProvider;
+}
+
 function _readBuyer() {
   // getActingAddress() → connected in 'self', viewed owner in 'operator', null
   // in 'view'/'combined' (read-only). purchase/openBox take a player/buyer arg
@@ -299,8 +317,15 @@ export async function readPurchaseQuote() {
 /**
  * Ask the deployed purchase route whether the acting buyer can add a foil pack
  * right now. A zero-value DirectEth probe is deliberately unaffordable: the
- * foil module reaches DirectEthInsufficient only after all availability,
- * liveness, routing, and one-per-level checks have passed.
+ * foil module reaches its PAYMENT stage only after all availability, liveness,
+ * routing, and one-per-level checks have passed, so a shortfall revert there is
+ * proof the route itself is open.
+ *
+ * Since audit c19a1088 that shortfall surfaces as the shared `Insolvent()` — the
+ * canonical waterfall's revert — rather than the deleted `DirectEthInsufficient()`.
+ * DirectEth skips the claimable tier, so a buyer with no prepaid AFKing lands on
+ * Insolvent; a buyer holding enough AFKing instead SUCCEEDS the static call and is
+ * caught by the success path above (the staticCall commits nothing either way).
  *
  * Success is accepted as well for forward compatibility with a zero-priced
  * deployment. Every other revert (including FoilAlreadyBought, StaleAdvance,
@@ -336,7 +361,7 @@ export async function probeFoilPackAvailabilityState({ buyer } = {}) {
     const decoded = decodeRevertReason(error);
     const rawName = typeof error?.revert?.name === 'string' ? error.revert.name : null;
     const code = decoded.code === 'UNKNOWN' && rawName ? rawName : decoded.code;
-    if (code === 'DirectEthInsufficient') {
+    if (code === 'Insolvent') {
       return { available: true, definitive: true, code };
     }
     // Ownership and authorization cannot heal on another poll for this exact
@@ -556,12 +581,14 @@ export async function purchaseEth(args) {
   const provider = getProvider();
   const signer = provider ? await provider.getSigner() : null;
   const signerContract = signer ? _buildContract(signer) : null;
-  // The foil module accepts fresh ETH plus claimable winnings, but explicitly
-  // never taps AFKing principal. Counting AFKing here reduced msg.value before
-  // the foil delegatecall and made an otherwise funded purchase revert with
-  // DirectEthInsufficient. Ordinary ticket/lootbox purchases keep their full
-  // claimable -> AFKing -> wallet waterfall.
-  const useAfkingForPurchase = args.useAfking === true && !foil;
+  // Audit c19a1088 funds the foil leg through the SAME canonical waterfall as every
+  // other purchase (claimable, then prepaid AFKing), so the old `&& !foil` carve-out
+  // is obsolete: the module now taps AFKing principal instead of reverting on it.
+  // Excluding AFKing here would inflate msg.value and make the buyer overpay from the
+  // wallet for funds the contract would have drawn. The static-call gate below stays
+  // authoritative, and _purchaseFundingFor falls back to fresh ETH if the balance
+  // reads fail, so a stale read cannot brick the purchase.
+  const useAfkingForPurchase = args.useAfking === true;
   const payment = await _purchaseFundingFor(
     signerContract,
     buyer,
@@ -740,6 +767,53 @@ export function parsePresaleBoxBuyFromReceipt(receipt, contract) {
     } catch (_e) { /* foreign log */ }
   }
   return out;
+}
+
+/**
+ * Recover the two purchase legs sharing one RNG index from a mined transaction.
+ * This is the only reliable presale-only existence check on the current GAME:
+ * lootboxStatus() exposes lootboxEth, but intentionally does not expose the
+ * separate presaleBoxEth mapping.
+ */
+export async function readLootboxPurchaseReceipt({ transactionHash, player, lootboxIndex } = {}) {
+  const hash = String(transactionHash || '');
+  const owner = String(player || '').toLowerCase();
+  let index;
+  try { index = BigInt(lootboxIndex); } catch (_e) { return null; }
+  if (!hash || !owner) return null;
+  const connected = getProvider();
+  const readers = [connected];
+  // Wallet RPCs occasionally omit an older receipt (notably after Firefox
+  // reconnects). The public read RPC is authoritative enough for immutable
+  // mined logs and lets Pending recover a presale leg after a reload.
+  if (!_contractFactory) readers.push(_publicLootboxReadProvider());
+  for (const reader of [...new Set(readers.filter(Boolean))]) {
+    if (typeof reader.getTransactionReceipt !== 'function') continue;
+    try {
+      const receipt = await reader.getTransactionReceipt(hash);
+      if (!receipt || !Array.isArray(receipt.logs)) continue;
+      const contract = _buildContract(reader);
+      let hasLootboxLeg = false;
+      let hasPresaleLeg = false;
+      let amountWei = 0n;
+      for (const log of receipt.logs) {
+        try {
+          const parsed = contract.interface.parseLog(log);
+          if (!['LootBoxBuy', 'PresaleBoxBuy'].includes(parsed?.name)) continue;
+          const buyer = String(parsed.args.buyer ?? parsed.args[0] ?? '').toLowerCase();
+          const eventIndex = BigInt(parsed.args.index ?? parsed.args[1]);
+          if (buyer !== owner || eventIndex !== index) continue;
+          amountWei += BigInt(parsed.args.amount ?? parsed.args[2] ?? 0);
+          if (parsed.name === 'PresaleBoxBuy') hasPresaleLeg = true;
+          else hasLootboxLeg = true;
+        } catch (_e) { /* foreign log */ }
+      }
+      return { hasLootboxLeg, hasPresaleLeg, amountWei };
+    } catch (_e) {
+      // Try the public reader after an injected-wallet RPC miss.
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1003,14 +1077,7 @@ async function _readGameStorage(provider, slot, blockNumber) {
 export async function readLootboxRngQueueState({ provider = null } = {}) {
   let reader = provider || getProvider();
   if (!reader && CHAIN.rpcUrl) {
-    if (!_rngQueueReadProvider) {
-      _rngQueueReadProvider = new ethers.JsonRpcProvider(
-        CHAIN.rpcUrl,
-        Number(CHAIN.id),
-        { staticNetwork: true, batchMaxCount: 1 },
-      );
-    }
-    reader = _rngQueueReadProvider;
+    reader = _publicLootboxReadProvider();
   }
   if (!reader || !CONTRACTS.GAME) return null;
   let blockNumber = null;

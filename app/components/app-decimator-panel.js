@@ -43,6 +43,7 @@ import {
 import { purchaseEth, scaledTicketPriceWei } from '../app/decimator.js';
 import {
   claimAfkingSubscriptionFlip,
+  readAfkingFunding,
   readAfkingSubscription,
   withdrawAfkingSubscriptionFunding,
 } from '../app/passes.js';
@@ -319,6 +320,12 @@ export function allInWalletAfterGasReserveWei(raw) {
   return wallet > ALL_IN_GAS_RESERVE_WEI ? wallet - ALL_IN_GAS_RESERVE_WEI : 0n;
 }
 
+/** ALL IN is an earned high-variance surface, unlocked above 60 Degen Score. */
+export function allInDegenScoreEligible(value) {
+  const score = Number(value);
+  return Number.isFinite(score) && score > 60;
+}
+
 /** Exact, non-mutating quote for the dedicated ALL IN confirmation sheet. */
 export function allInSelectionQuote({
   currency = 'ETH',
@@ -431,6 +438,8 @@ class AppDecimatorPanel extends HTMLElement {
   #claimableWei = 0n;  // Acting player's indexed claimable balance (quote only).
   #claimableAddress = null;
   #claimableKnown = false;
+  #degenScore = null;
+  #degenScoreAddress = null;
   #flipBalanceWei = null;      // Acting player's spendable FLIP balance.
   #flipBalanceAddress = null;
   #coinflipClaimableWei = 0n; // Settled/mintable Coinflip FLIP.
@@ -685,20 +694,16 @@ class AppDecimatorPanel extends HTMLElement {
         <!-- Error display (T-58-18: textContent-only target) -->
         <div class="dec-error" data-bind="dec-error" hidden role="alert"></div>
 
-        <!-- Keep both ledgers in one bottom-anchored stack. Selecting FLIP adds
-             its yellow-accented balance immediately above Available Funds; it never floats
-             upward when the ETH disclosure is closed. -->
+        <!-- Keep the FLIP ledger in the left action slot for the entire redemption
+             window. Its embedded mode button and USE ETH both return to ETH mode. -->
         <div class="dec-funds-stack">
-          <button type="button"
-                  class="dec-flip-toggle dec-funds-stack__flip-mode"
-                  data-bind="dec-funds-total-flip" aria-pressed="false" hidden>
-            USE FLIP
-          </button>
           <div class="dec-flip-balance" data-bind="dec-flip-balance" hidden
                aria-label="Available FLIP balance">
-            <button type="button" class="dec-flip-toggle dec-flip-balance__toggle"
-                    data-bind="dec-flip-buy" aria-pressed="false" hidden>USE FLIP</button>
-            <span class="dec-flip-balance__label">BALANCE</span>
+            <button type="button" class="dec-flip-toggle dec-flip-balance__mode"
+                    data-bind="dec-funds-total-flip" aria-pressed="false" hidden>
+              USE FLIP
+            </button>
+            <span class="dec-flip-balance__label">FLIP BALANCE</span>
             <strong class="dec-flip-balance__value">
               <span data-bind="dec-flip-balance-value">—</span>
               <span class="dec-flip-balance__unit">FLIP</span>
@@ -859,7 +864,7 @@ class AppDecimatorPanel extends HTMLElement {
         this.#renderPurchaseMode();
       });
     }
-    for (const bind of ['dec-flip-buy', 'dec-funds-total-flip', 'dec-funds-total-eth']) {
+    for (const bind of ['dec-funds-total-flip', 'dec-funds-total-eth']) {
       const toggle = this.querySelector(`[data-bind="${bind}"]`);
       if (!toggle) continue;
       toggle.addEventListener('click', () => {
@@ -1393,15 +1398,18 @@ class AppDecimatorPanel extends HTMLElement {
     );
     const available = live ? this.#presaleAvailableForDraft(mintCostWei) : 0n;
     const foilSelected = this.#foilWanted();
+    const flipMode = this.#flipModeEnabled();
     // The deployed combined selector has no foil flag. Once foil is selected,
     // remove the incompatible presale leg instead of leaving behind a disabled
     // control that looks like a broken option. Also keep the row out of sight
     // until the player has enough current or same-purchase credit to buy the
     // contract's minimum box.
-    const visible = live && !foilSelected && available >= PRESALE_BOX_MIN_WEI;
+    const visible = live && !foilSelected && !flipMode && available >= PRESALE_BOX_MIN_WEI;
     row.hidden = !visible;
+    if (row.hidden) row.setAttribute?.('hidden', '');
+    else row.removeAttribute?.('hidden');
     if (!visible) {
-      if (foilSelected || (live && available < PRESALE_BOX_MIN_WEI)) input.value = '0';
+      if (foilSelected || flipMode || (live && available < PRESALE_BOX_MIN_WEI)) input.value = '0';
       if (this.#presaleState && this.#presaleAddress === buyerKey && !this.#presaleState.active) {
         input.value = '0';
       }
@@ -1411,11 +1419,10 @@ class AppDecimatorPanel extends HTMLElement {
     availableEl.textContent = `${formatPurchaseEth(available)} ETH AVAILABLE`;
     input.max = formatPurchaseEth(available);
     input.setAttribute?.('max', input.max);
-    const unavailable = this.#flipModeEnabled();
-    input.disabled = unavailable;
-    maxButton.disabled = unavailable || available < PRESALE_BOX_MIN_WEI;
+    input.disabled = false;
+    maxButton.disabled = available < PRESALE_BOX_MIN_WEI;
     const wanted = this.#presaleWantedWei();
-    row.classList?.toggle('dec-presale--selected', wanted > 0n && !unavailable);
+    row.classList?.toggle('dec-presale--selected', wanted > 0n);
     row.classList?.toggle('dec-presale--over-limit', wanted > available);
   }
 
@@ -1460,6 +1467,10 @@ class AppDecimatorPanel extends HTMLElement {
     // away the fraction and quoted the wrong number.
     const tq = this.#ticketsWanted();
     if (this.#flipModeEnabled()) {
+      // FLIP is tickets-only. Run the presale renderer before this branch's
+      // early return so switching payment modes cannot leave the ETH-only row
+      // painted from the previous quote.
+      this.#renderPresaleRow(0n);
       // FLIP is burned, not paid as ETH. Give the full-width action rail an
       // explicit exchange quote so cost and output read as one action.
       let burn = '';
@@ -1594,6 +1605,10 @@ class AppDecimatorPanel extends HTMLElement {
       this.#presaleState = null;
       this.#renderPresaleRow();
     }
+    if (this.#degenScoreAddress !== actingLower) {
+      this.#degenScore = null;
+      this.#degenScoreAddress = actingLower;
+    }
     if (this.#flipBalanceAddress !== actingLower) {
       this.#flipBalanceWei = null;
       this.#flipBalanceAddress = actingLower;
@@ -1610,12 +1625,22 @@ class AppDecimatorPanel extends HTMLElement {
     const walletBalancePromise = connectedLower && typeof provider?.getBalance === 'function'
       ? provider.getBalance(connectedLower)
       : Promise.resolve(null);
-    const [gameResult, purchaseResult, playerResult, walletResult, coinflipResult, afkingResult, presaleResult] = await Promise.allSettled([
+    const [
+      gameResult,
+      purchaseResult,
+      playerResult,
+      walletResult,
+      coinflipResult,
+      afkingFundingResult,
+      afkingResult,
+      presaleResult,
+    ] = await Promise.allSettled([
       fetchJSON('/game/state'),
       readPurchaseQuote(),
       actingLower ? fetchJSON(`/player/${actingLower}`) : Promise.resolve(null),
       walletBalancePromise,
       actingLower ? readClaimableCoinflip({ player: actingLower }) : Promise.resolve(null),
+      actingLower ? readAfkingFunding(actingLower) : Promise.resolve(null),
       actingLower ? readAfkingSubscription(actingLower) : Promise.resolve(null),
       actingLower ? readPresaleBoxState({ player: actingLower }) : Promise.resolve(null),
     ]);
@@ -1633,6 +1658,12 @@ class AppDecimatorPanel extends HTMLElement {
       this.#claimableWei = claimable;
       this.#claimableAddress = actingLower;
       this.#claimableKnown = true;
+      const score = Number(
+        playerResult.value.scoreBreakdown?.totalBps
+        ?? playerResult.value.activityScore,
+      );
+      this.#degenScore = Number.isFinite(score) ? score : null;
+      this.#degenScoreAddress = actingLower;
       try {
         this.#flipBalanceWei = BigInt(playerResult.value.flipBalance ?? 0n);
         this.#flipBalanceAddress = actingLower;
@@ -1683,20 +1714,31 @@ class AppDecimatorPanel extends HTMLElement {
       this.#walletEthAddress = connectedLower;
     }
 
+    let fundingReadSettled = false;
+    if (afkingFundingResult.status === 'fulfilled'
+      && afkingFundingResult.value != null
+      && actingLower) {
+      try {
+        this.#afkingFundingWei = BigInt(afkingFundingResult.value);
+        this.#afkingFundingAddress = actingLower;
+        this.#afkingFundingKnown = true;
+        fundingReadSettled = true;
+      } catch (_e) { /* fall through to the full snapshot */ }
+    }
+
     if (afkingResult.status === 'fulfilled'
       && afkingResult.value != null
       && actingLower === this.#afkingPassAddress) {
       const state = afkingResult.value;
       // `canClaimSeat` is gone — seats auto-mint with the pass, so holding one IS the signal.
       this.#hasAfkingPass = Boolean(state.hasToken || state.active);
-      try {
-        this.#afkingFundingWei = BigInt(state.fundingWei ?? 0);
-        this.#afkingFundingAddress = actingLower;
-        this.#afkingFundingKnown = true;
-      } catch (_e) {
-        this.#afkingFundingWei = 0n;
-        this.#afkingFundingAddress = actingLower;
-        this.#afkingFundingKnown = false;
+      if (!fundingReadSettled) {
+        try {
+          this.#afkingFundingWei = BigInt(state.fundingWei ?? 0);
+          this.#afkingFundingAddress = actingLower;
+          this.#afkingFundingKnown = true;
+          fundingReadSettled = true;
+        } catch (_e) { /* handled below */ }
       }
       try {
         this.#afkingPendingFlipWei = state.pendingFlipKnown
@@ -1710,14 +1752,16 @@ class AppDecimatorPanel extends HTMLElement {
         this.#afkingPendingFlipKnown = false;
       }
     } else {
-      // A failed pass snapshot must not leave a stale funding amount folded
-      // into the wallet total for the same player.
-      this.#afkingFundingWei = 0n;
-      this.#afkingFundingAddress = actingLower;
-      this.#afkingFundingKnown = false;
       this.#afkingPendingFlipWei = 0n;
       this.#afkingPendingFlipAddress = actingLower;
       this.#afkingPendingFlipKnown = false;
+    }
+    if (!fundingReadSettled) {
+      // Keep the optional AFKing source unknown without making the independent
+      // Wallet and Claimable sources disappear from Available Funds.
+      this.#afkingFundingWei = 0n;
+      this.#afkingFundingAddress = actingLower;
+      this.#afkingFundingKnown = false;
     }
 
     if (presaleResult.status === 'fulfilled'
@@ -1780,7 +1824,9 @@ class AppDecimatorPanel extends HTMLElement {
 
   // ---------------------------------------------------------------------
   // Foil pack availability comes from the exact deployed purchase route. The
-  // zero-value probe identifies a buyable route by DirectEthInsufficient; the
+  // zero-value probe identifies a buyable route by Insolvent — the canonical
+  // waterfall's shortfall revert since audit c19a1088, which replaced the
+  // deleted DirectEthInsufficient; the
   // amount-accurate submit preflight remains the race guard.
   // ---------------------------------------------------------------------
 
@@ -1901,11 +1947,6 @@ class AppDecimatorPanel extends HTMLElement {
   }
 
   #renderFlipBuyRow() {
-    const row = this.querySelector('[data-bind="dec-flip-buy"]');
-    if (!row) return;
-    // The active toggle lives inside the FLIP balance. Its paired inactive
-    // toggle is pinned just above Available Funds by #renderFundsFooter.
-    row.hidden = !this.#flipBuyOpen || !this.#flipModeEnabled();
     if (!this.#flipBuyOpen) {
       const check = this.querySelector('[data-bind="dec-flip-check"]');
       if (check) check.checked = false;
@@ -1920,12 +1961,12 @@ class AppDecimatorPanel extends HTMLElement {
 
   #renderPurchaseMode() {
     const flipMode = this.#flipModeEnabled();
-    for (const bind of ['dec-flip-buy', 'dec-funds-total-flip']) {
-      const toggle = this.querySelector(`[data-bind="${bind}"]`);
-      if (!toggle) continue;
+    const toggle = this.querySelector('[data-bind="dec-funds-total-flip"]');
+    if (toggle) {
       toggle.setAttribute?.('aria-pressed', String(flipMode));
       toggle.classList?.toggle('is-active', flipMode);
       toggle.textContent = flipMode ? 'USING FLIP' : 'USE FLIP';
+      toggle.setAttribute?.('aria-label', flipMode ? 'Use ETH instead of FLIP' : 'Use FLIP for tickets');
     }
     const useEth = this.querySelector('[data-bind="dec-funds-total-eth"]');
     if (useEth) {
@@ -1981,7 +2022,6 @@ class AppDecimatorPanel extends HTMLElement {
     const afkingClaimBtn = this.querySelector('[data-bind="dec-funds-afking-claim"]');
     const useAfking = this.querySelector('[data-bind="dec-funds-use-afking"]');
     const useWallet = this.querySelector('[data-bind="dec-funds-use-wallet"]');
-    const flipBuy = this.querySelector('[data-bind="dec-flip-buy"]');
     const totalFlip = this.querySelector('[data-bind="dec-funds-total-flip"]');
     const totalEth = this.querySelector('[data-bind="dec-funds-total-eth"]');
     const allIn = this.querySelector('[data-bind="dec-all-in"]');
@@ -1995,8 +2035,9 @@ class AppDecimatorPanel extends HTMLElement {
     const acting = getActingAddress();
     const actingLower = acting ? String(acting).toLowerCase() : null;
     if (flipBalanceDisplay) {
-      flipBalanceDisplay.hidden = !flipMode;
-      if (flipMode) flipBalanceDisplay.removeAttribute?.('hidden');
+      const showFlipBalance = this.#flipBuyOpen && get('ui.mode') !== 'combined';
+      flipBalanceDisplay.hidden = !showFlipBalance;
+      if (showFlipBalance) flipBalanceDisplay.removeAttribute?.('hidden');
       else flipBalanceDisplay.setAttribute?.('hidden', '');
     }
     updateBalanceDisplay(flipBalanceValue, {
@@ -2086,13 +2127,8 @@ class AppDecimatorPanel extends HTMLElement {
       else button.removeAttribute?.('hidden');
       button.title = selected ? `${source.toUpperCase()} is used first` : `Use ${source.toUpperCase()} first`;
     }
-    if (flipBuy) {
-      flipBuy.hidden = !this.#flipBuyOpen || !flipMode;
-      if (flipBuy.hidden) flipBuy.setAttribute?.('hidden', '');
-      else flipBuy.removeAttribute?.('hidden');
-    }
     if (totalFlip) {
-      totalFlip.hidden = !this.#flipBuyOpen || flipMode;
+      totalFlip.hidden = !this.#flipBuyOpen || get('ui.mode') === 'combined';
       if (totalFlip.hidden) totalFlip.setAttribute?.('hidden', '');
       else totalFlip.removeAttribute?.('hidden');
       totalFlip.setAttribute?.('aria-pressed', String(flipMode));
@@ -2105,7 +2141,9 @@ class AppDecimatorPanel extends HTMLElement {
     }
     let showAllIn = false;
     if (allIn) {
-      showAllIn = !this.#fundsExpanded && get('ui.mode') !== 'combined';
+      showAllIn = get('ui.mode') !== 'combined'
+        && this.#degenScoreAddress === actingLower
+        && allInDegenScoreEligible(this.#degenScore);
       allIn.hidden = !showAllIn;
       if (allIn.hidden) allIn.setAttribute?.('hidden', '');
       else allIn.removeAttribute?.('hidden');
@@ -2114,10 +2152,14 @@ class AppDecimatorPanel extends HTMLElement {
       allIn.title = 'Choose a currency and where to go all in';
     }
     root.setAttribute?.('data-primary-funding', compactSource);
-    const totalKnown = this.#claimableKnown && fundingKnown && walletKnown;
+    const totalComplete = this.#claimableKnown && fundingKnown && walletKnown;
+    const totalKnown = this.#claimableKnown || fundingKnown || walletKnown;
     const totalBalance = totalKnown
-      ? spendableClaimable + afkingBalance + walletBalance
+      ? (this.#claimableKnown ? spendableClaimable : 0n)
+        + (fundingKnown ? afkingBalance : 0n)
+        + (walletKnown ? walletBalance : 0n)
       : null;
+    root.setAttribute?.('data-funds-complete', String(totalComplete));
     if (totalDisplay) {
       totalDisplay.hidden = this.#fundsExpanded;
       if (totalDisplay.hidden) totalDisplay.setAttribute?.('hidden', '');
@@ -2136,8 +2178,10 @@ class AppDecimatorPanel extends HTMLElement {
     if (totalValue) {
       totalValue.setAttribute('role', 'button');
       totalValue.setAttribute('tabindex', '0');
-      totalValue.setAttribute('title', totalDisplayOpen ? 'Hide available funds' : 'Show available funds');
-      totalValue.setAttribute('aria-label', totalDisplayOpen ? 'Hide available funds' : 'Show available funds');
+      const totalAction = totalDisplayOpen ? 'Hide available funds' : 'Show available funds';
+      const totalLabel = totalComplete ? totalAction : `${totalAction}; some sources are still loading`;
+      totalValue.setAttribute('title', totalLabel);
+      totalValue.setAttribute('aria-label', totalLabel);
     }
     updateBalanceDisplay(totalValue, {
       container: totalDisplay,
@@ -2783,6 +2827,8 @@ class AppDecimatorPanel extends HTMLElement {
             index: Number(b.lootboxIndex),
             day: b.day != null ? Number(b.day) : null,
             amountWei: b.amountWei ?? lootBoxAmountWei,
+            hasLootboxLeg: true,
+            hasPresaleLeg: false,
             ticketPriceWei: purchaseTicketPriceWei,
           });
         }
@@ -2791,11 +2837,14 @@ class AppDecimatorPanel extends HTMLElement {
           const prior = byIndex.get(index);
           if (prior) {
             prior.amountWei = BigInt(prior.amountWei ?? 0) + BigInt(b.amountWei ?? 0);
+            prior.hasPresaleLeg = true;
           } else {
             byIndex.set(index, {
               index,
               day: null,
               amountWei: b.amountWei,
+              hasLootboxLeg: false,
+              hasPresaleLeg: true,
               ticketPriceWei: purchaseTicketPriceWei,
             });
           }

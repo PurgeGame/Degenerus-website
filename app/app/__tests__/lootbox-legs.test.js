@@ -46,8 +46,13 @@ describe('lootboxRewardPresentation', () => {
     });
     assert.deepEqual(lootboxRewardPresentation(10, 50n), {
       label: 'DEGEN SCORE BOON',
-      value: '+50',
-      detail: 'Your next lootbox opening adds 50 Degen Score and +50 quest streak',
+      value: '+25',
+      detail: 'Your next lootbox opening adds +50 quest streak, worth 25 Degen Score',
+    });
+    assert.deepEqual(lootboxRewardPresentation(10, 25n), {
+      label: 'DEGEN SCORE BOON',
+      value: '+12.5',
+      detail: 'Your next lootbox opening adds +25 quest streak, worth 12.5 Degen Score',
     });
     assert.deepEqual(lootboxRewardPresentation(10, 3_500n), {
       label: 'DEITY PASS DISCOUNT',

@@ -202,6 +202,10 @@ describe('transaction history composition', () => {
     const element = new history.AppTransactionHistory();
     element.connectedCallback();
     await Promise.resolve();
+    assert.match(element.innerHTML, /class="txh section-disclosure"/,
+      'history uses the shared section disclosure shell');
+    assert.match(element.innerHTML, /class="txh__summary section-disclosure__bar"[\s\S]*class="section-disclosure__chevron"/,
+      'history uses the same bar and arrow as Tickets and afKing Passes');
     assert.equal(calls.length, 0, 'mounting a collapsed history performs no request');
 
     const details = element.querySelector('[data-bind="txh-details"]');
@@ -386,6 +390,62 @@ describe('transaction history composition', () => {
     assert.equal(rows[0].transactionHash, ticketTx);
   });
 
+  test('includes whale, lazy, and deity buys while folding each bundled lootbox into the pass row', () => {
+    const player = '0x4444444444444444444444444444444444444444';
+    const whaleTx = `0x${'1'.repeat(64)}`;
+    const lazyTx = `0x${'2'.repeat(64)}`;
+    const deityTx = `0x${'3'.repeat(64)}`;
+    const rows = history.buildTransactionHistoryRows({
+      address: player,
+      lootboxFeed: { items: [{
+        id: 1, player, kind: 'eth', costRawWei: '10000000000',
+        blockNumber: '120', logIndex: 2, transactionHash: whaleTx,
+      }] },
+      afkingHistory: { items: [
+        {
+          eventName: 'WhalePassPurchased', player, quantity: 2, weiIn: '2400000000000',
+          blockNumber: '120', logIndex: 3, transactionHash: whaleTx,
+        },
+        {
+          eventName: 'LootBoxBuy', player, amount: '10000000000',
+          blockNumber: '120', logIndex: 2, transactionHash: whaleTx,
+        },
+        {
+          eventName: 'LazyPassPurchased', player, startLevel: 12, weiIn: '240000000000',
+          blockNumber: '121', logIndex: 3, transactionHash: lazyTx,
+        },
+        {
+          eventName: 'LootBoxBuy', player, amount: '10000000000',
+          blockNumber: '121', logIndex: 2, transactionHash: lazyTx,
+        },
+        {
+          eventName: 'DeityPassPurchased', player, symbolId: 31, price: '10000000000000', level: 15,
+          blockNumber: '122', logIndex: 3, transactionHash: deityTx,
+        },
+        {
+          eventName: 'LootBoxBuy', player, amount: '10000000000',
+          blockNumber: '122', logIndex: 2, transactionHash: deityTx,
+        },
+      ] },
+    });
+
+    assert.deepEqual(rows.map((row) => row.title), [
+      'Deity pass purchase', 'Lazy pass purchase', 'Whale pass purchase',
+    ]);
+    assert.deepEqual(rows[0].deltas.map(history.formatHistoryDelta), [
+      '−10.00 ETH', '+1 LOOTBOX', '+1 PASS',
+    ]);
+    assert.deepEqual(rows[1].deltas.map(history.formatHistoryDelta), [
+      '−0.24 ETH', '+1 LOOTBOX', '+1 PASS',
+    ]);
+    assert.deepEqual(rows[2].deltas.map(history.formatHistoryDelta), [
+      '−2.40 ETH', '+1 LOOTBOX', '+2 PASS',
+    ]);
+    assert.equal(rows.some((row) => row.type === 'lootbox-purchase'), false,
+      'a bundled bonus box is not misreported as a second paid purchase');
+    assert.equal(history.transactionHistoryCategory({ type: 'pass-purchase' }), 'buys');
+  });
+
   test('repartitions malformed all-time groups and opens history replays on the ticket hand', async () => {
     const rows = history.buildTransactionHistoryRows({
       packs: { ticketRevealPacks: [{
@@ -441,10 +501,25 @@ describe('transaction history composition', () => {
       'the absolute day remains a safe fallback while replay metadata catches up');
   });
 
-  test('derives the protocol game day from an indexed block timestamp', () => {
-    const timestamp = Date.parse('2026-08-06T06:28:08Z');
-    assert.equal(history.gameDayForHistoryTimestamp(timestamp), 72);
-    assert.match(history.formatHistoryTimestamp(timestamp), /2026/);
+  test('derives the protocol game day from an indexed block timestamp', async () => {
+    // Derived from the live chain-config, NOT hardcoded: `deployDayBoundary` moves with EVERY
+    // redeploy, so a pinned epoch that meant day 72 on one run read as pre-deploy (null) on the
+    // next. Building the timestamp from the same anchor/period still exercises the real
+    // arithmetic — the floor, the boundary subtraction, and the 1-based day — because the
+    // expected day is chosen here and the function has to land back on it.
+    const { VOLUME_WINDOW } = await import('../../app/chain-config.sepolia.js');
+    const { anchor, period, deployDayBoundary } = VOLUME_WINDOW;
+    const day = 72;
+    const startMs = ((deployDayBoundary + day - 1) * period + anchor) * 1000;
+    assert.equal(history.gameDayForHistoryTimestamp(startMs), day,
+      'the first instant of the day maps to that day');
+    assert.equal(history.gameDayForHistoryTimestamp(startMs + (period * 1000) - 1), day,
+      'the last instant before the next boundary is still that day');
+    assert.equal(history.gameDayForHistoryTimestamp(startMs + (period * 1000)), day + 1,
+      'crossing the boundary advances exactly one day');
+    assert.equal(history.gameDayForHistoryTimestamp((deployDayBoundary * period + anchor) * 1000 - 1), null,
+      'a pre-deploy timestamp has no game day');
+    assert.match(history.formatHistoryTimestamp(startMs), /20\d\d/);
   });
 
   test('is the final main section with 25, 50, and 100 row choices', () => {

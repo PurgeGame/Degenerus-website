@@ -360,8 +360,12 @@ describe('app-tickets-inventory — cards + chart', () => {
     await flushMicrotasks();
 
     const toggle = el.querySelector('[data-bind="inv-toggle"]');
-    assert.match(el.innerHTML, /<h2>YOUR TICKETS<\/h2>/,
+    assert.match(el.innerHTML, /<h2 class="section-disclosure__title">YOUR TICKETS<\/h2>/,
       'the section title is plain text rather than the disclosure control');
+    assert.match(el.innerHTML, /class="panel app-tickets-inventory section-disclosure"/,
+      'ticket holdings use the shared section disclosure shell');
+    assert.match(el.innerHTML, /inv-disclosure__chevron section-disclosure__chevron/,
+      'the far-right ticket arrow uses the shared disclosure chevron');
     assert.match(
       el.innerHTML,
       /class="inv-level-cluster">[\s\S]*?data-bind="inv-meta"[\s\S]*?class="inv-level-nav"/,

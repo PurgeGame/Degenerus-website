@@ -118,8 +118,6 @@
           <h2 class="jackpot-hero__draw-title">DAILY JACKPOT</h2>
           <last-day-jackpot></last-day-jackpot>
           <replay-panel single-button></replay-panel>
-          <div class="jackpot-load-status" data-bind="jackpot-load-status"
-               aria-live="polite">JACKPOT PROCESSING · SPIN AVAILABLE SOON</div>
           <nav class="jackpot-day-history" data-bind="jackpot-day-history" hidden
                aria-label="Jackpot day history">
             <button type="button" data-bind="jackpot-day-prev"
@@ -163,8 +161,11 @@
 
       <!-- Collapsed passes (user call: tickets+lootboxes live in the buy
            panel now, so the packs panel is gone and this is just passes) -->
-      <details class="more-ways" open id="afking-passes">
-        <summary class="more-ways__summary">afKing Passes</summary>
+      <details class="more-ways section-disclosure" open id="afking-passes">
+        <summary class="more-ways__summary section-disclosure__bar">
+          <span class="section-disclosure__title">afKing Passes</span>
+          <span class="section-disclosure__chevron" aria-hidden="true"></span>
+        </summary>
         <div class="more-ways__content">
           <app-pass-section></app-pass-section>
         </div>

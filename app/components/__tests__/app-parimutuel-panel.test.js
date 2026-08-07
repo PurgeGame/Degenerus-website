@@ -705,7 +705,7 @@ describe('app-parimutuel-panel', () => {
     assert.equal(bar.querySelector('.pari-split__under').style.width, '25%');
 
     const actions = card.querySelectorAll('.pari-side__action').map((n) => n.textContent);
-    assert.deepEqual(actions, ['OVER', 'UNDER']);
+    assert.deepEqual(actions, ['UNDER', 'OVER']);
     assert.equal(card.querySelectorAll('.pari-side__stake').length, 0,
       'fixed 1,000 FLIP stake is not repeated in the choices');
     assert.deepEqual(
@@ -731,7 +731,7 @@ describe('app-parimutuel-panel', () => {
     const card = growthCard(el);
     assert.deepEqual(
       card.querySelectorAll('.pari-side__action').map((node) => node.textContent),
-      ['OVER', 'UNDER'],
+      ['UNDER', 'OVER'],
       'the weaker mayBet gate still permits the choices',
     );
     assert.equal(card.querySelector('.pari-prebet-bonus'), null,
@@ -870,7 +870,7 @@ describe('app-parimutuel-panel', () => {
     const calls = [];
     installContract({ growth: { [LEVEL]: { openRound: LEVEL, over: 1n, under: 2n } }, calls });
     const el = await mount();
-    growthCard(el).querySelectorAll('.pari-side__cta')[0].click();
+    growthCard(el).querySelectorAll('.pari-side__cta')[1].click();
     await flush();
     assert.deepEqual(calls[0], ['placeBet', TEST_ADDR, true]);
   });
@@ -976,7 +976,7 @@ describe('app-parimutuel-panel', () => {
     assert.match(card.querySelector('[data-bind="pari-clock"]').textContent, /closes in 8:59/);
     assert.deepEqual(
       card.querySelectorAll('.pari-side__action').map((n) => n.textContent),
-      ['OVER 3 tickets', 'UNDER 3 tickets'],
+      ['UNDER 3 tickets', 'OVER 3 tickets'],
     );
     assert.equal(card.querySelector('.pari-prebet-bonus').textContent,
       'BET: 1,000 FLIP\u00a0\u00a0\u00a0BONUS: +25 FLIP',
@@ -1036,7 +1036,7 @@ describe('app-parimutuel-panel', () => {
     assert.doesNotMatch(bench.className, /--won|--lost/, 'surrounding explanation stays neutral');
     assert.deepEqual(
       growthCard(el).querySelectorAll('.pari-side__action').map((n) => n.textContent),
-      ['OVER 105.8 ETH', 'UNDER 105.8 ETH'],
+      ['UNDER 105.8 ETH', 'OVER 105.8 ETH'],
       'both growth choices carry the actionable ETH threshold',
     );
   });
@@ -1084,7 +1084,7 @@ describe('app-parimutuel-panel', () => {
     // …and the split reads off the bet counts, 2 v 6.
     assert.deepEqual(
       card.querySelectorAll('.pari-side__action').map((n) => n.textContent),
-      ['OVER 3 tickets', 'UNDER 3 tickets'],
+      ['UNDER 3 tickets', 'OVER 3 tickets'],
     );
     assert.deepEqual(
       card.querySelectorAll('.pari-side__target').map((n) => n.textContent),
@@ -1137,7 +1137,7 @@ describe('app-parimutuel-panel', () => {
       'the immediately preceding UNDER result is fetched and painted red');
     assert.deepEqual(
       card.querySelectorAll('.pari-side__action').map((node) => node.textContent),
-      ['OVER 4 tickets', 'UNDER 4 tickets'],
+      ['UNDER 4 tickets', 'OVER 4 tickets'],
       'both choices retain the actual chain benchmark despite the stale local anchor',
     );
     el.disconnectedCallback();
@@ -1239,7 +1239,7 @@ describe('app-parimutuel-panel', () => {
     const card = growthCard(el);
     assert.deepEqual(
       card.querySelectorAll('.pari-side__action').map((n) => n.textContent),
-      ['OVER', 'UNDER'],
+      ['UNDER', 'OVER'],
     );
     assert.deepEqual(
       card.querySelectorAll('.pari-split__label').map((n) => n.textContent),
