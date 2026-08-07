@@ -469,6 +469,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
     storeMod.__resetForTest();
     resetDom();
     coinflipMod.__setCurrentStakeReaderForTest(async () => _currentStakeWei);
+    coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
+      enabled: false,
+      takeProfitWei: 0n,
+      carryWei: 0n,
+      startDay: 0,
+    }));
     coinflipMod.__setResolvedStakeReaderForTest(async () => _resolvedStakeWei);
     coinflipMod.__setClaimableReaderForTest(async () => null);
     coinflipMod.__setLatestResultReaderForTest(async () => null);
@@ -485,6 +491,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
   afterEach(() => {
     coinflipMod.__resetCurrentStakeReaderForTest();
+    coinflipMod.__resetAutoRebuyInfoReaderForTest();
     coinflipMod.__resetResolvedStakeReaderForTest();
     coinflipMod.__resetClaimableReaderForTest();
     coinflipMod.__resetLatestResultReaderForTest();
@@ -2128,6 +2135,94 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
+  test('the small header pill opens the live auto-rebuy and take-profit settings', async () => {
+    coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
+      enabled: true,
+      takeProfitWei: 2_000n * 10n ** 18n,
+      carryWei: 475n * 10n ** 18n,
+      startDay: 64,
+    }));
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+    const el = mount();
+    await flushMicrotasks();
+
+    const trigger = el.querySelector('[data-bind="df-auto-rebuy-cta"]');
+    assert.ok(trigger, 'compact Auto Rebuy header control is mounted');
+    assert.equal(el.querySelector('[data-bind="df-auto-rebuy-cta-status"]').textContent, 'ON');
+    assert.equal(trigger.classList.contains('is-active'), true);
+    trigger.dispatchEvent({ type: 'click' });
+
+    const dialog = el.querySelector('[data-bind="df-auto-rebuy-dialog"]');
+    const toggle = el.querySelector('[name="df-auto-rebuy-enabled"]');
+    const input = el.querySelector('[name="df-auto-rebuy-take-profit"]');
+    const save = el.querySelector('[data-bind="df-auto-rebuy-save"]');
+    assert.equal(dialog.hidden, false);
+    assert.equal(toggle.checked, true);
+    assert.equal(input.value, '2000');
+    assert.equal(el.querySelector('[data-bind="df-auto-rebuy-carry"]').textContent, '475 FLIP');
+    assert.match(el.innerHTML, /unbanked part of each win rolling/i);
+    assert.match(el.innerHTML, /Take profit chunk/i);
+
+    toggle.checked = false;
+    toggle.dispatchEvent({ type: 'change' });
+    assert.equal(input.disabled, true, 'take profit is inactive when auto rebuy is off');
+    assert.equal(save.disabled, false, 'the changed off state is ready to save');
+    dialog.dispatchEvent({ type: 'click', target: dialog });
+    assert.equal(dialog.hidden, true, 'the backdrop closes without changing settings');
+    el.disconnectedCallback();
+  });
+
+  test('saving auto rebuy enables it on-chain with the entered take-profit chunk', async () => {
+    let chainEnabled = false;
+    const takeProfit = 2_500n * 10n ** 18n;
+    const calls = [];
+    coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
+      enabled: chainEnabled,
+      takeProfitWei: chainEnabled ? takeProfit : 0n,
+      carryWei: 0n,
+      startDay: chainEnabled ? 67 : 0,
+    }));
+    const enable = Object.assign(
+      async (...args) => {
+        calls.push(['send', ...args]);
+        chainEnabled = true;
+        return { hash: '0xauto', wait: async () => ({ status: 1, logs: [] }) };
+      },
+      { staticCall: async (...args) => { calls.push(['static', ...args]); } },
+    );
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: 84532n }),
+      getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
+    });
+    coinflipMod.__setContractFactoryForTest(() => ({
+      setCoinflipAutoRebuy: enable,
+      connect() { return this; },
+    }));
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+    const el = mount();
+    await flushMicrotasks();
+
+    el.querySelector('[data-bind="df-auto-rebuy-cta"]').dispatchEvent({ type: 'click' });
+    const toggle = el.querySelector('[name="df-auto-rebuy-enabled"]');
+    const input = el.querySelector('[name="df-auto-rebuy-take-profit"]');
+    toggle.checked = true;
+    toggle.dispatchEvent({ type: 'change' });
+    input.value = '2500';
+    input.dispatchEvent({ type: 'input' });
+    const save = el.querySelector('[data-bind="df-auto-rebuy-save"]');
+    assert.equal(save.disabled, false);
+    save.dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    assert.deepEqual(calls, [
+      ['static', TEST_ADDR, true, takeProfit],
+      ['send', TEST_ADDR, true, takeProfit],
+    ]);
+    assert.equal(el.querySelector('[data-bind="df-auto-rebuy-dialog"]').hidden, true);
+    assert.equal(el.querySelector('[data-bind="df-auto-rebuy-cta-status"]').textContent, 'ON');
+    el.disconnectedCallback();
+  });
+
   test('WWXRP replaces the wallet box and opens a minimum-safe burn dialog', async () => {
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
     const el = mount();
@@ -2645,6 +2740,12 @@ describe('new-day rollover (codex-found race)', () => {
     storeMod.__resetForTest();
     resetDom();
     coinflipMod.__setCurrentStakeReaderForTest(async () => _currentStakeWei);
+    coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
+      enabled: false,
+      takeProfitWei: 0n,
+      carryWei: 0n,
+      startDay: 0,
+    }));
     coinflipMod.__setResolvedStakeReaderForTest(async () => _resolvedStakeWei);
     coinflipMod.__setClaimableReaderForTest(async () => null);
     coinflipMod.__setLatestResultReaderForTest(async () => null);
@@ -2660,6 +2761,7 @@ describe('new-day rollover (codex-found race)', () => {
 
   afterEach(() => {
     coinflipMod.__resetCurrentStakeReaderForTest();
+    coinflipMod.__resetAutoRebuyInfoReaderForTest();
     coinflipMod.__resetResolvedStakeReaderForTest();
     coinflipMod.__resetClaimableReaderForTest();
     coinflipMod.__resetLatestResultReaderForTest();

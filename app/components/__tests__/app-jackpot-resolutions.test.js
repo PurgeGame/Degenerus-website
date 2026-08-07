@@ -161,3 +161,31 @@ test('the x4/x99 Decimator burn card is first and prominent inside Side Bets', (
   assert.doesNotMatch(source, /level % 10 === 4/,
     'no second copy of the level arithmetic in the panel');
 });
+
+// Reported from production: /player/:addr/decimator was the second-heaviest
+// endpoint on a page load — 21 of 138 requests — for an event that happens once
+// every ten levels. Two separate causes, both pinned here at the source level
+// because the fetch paths are private to their components.
+test('the Decimator position read is gated on the window being open', () => {
+  const src = readFileSync(
+    new URL('../app-parimutuel-panel.js', import.meta.url), 'utf8');
+  const block = /const decimatorRead = [\s\S]{0,400}?Promise\.resolve\(null\);/.exec(src)?.[0] || '';
+  assert.match(block, /decimatorWindowIsOpen\(this\.#gameState\)/,
+    'the position read must carry the same gate as the context read below it');
+  // level + 1 only names a real round during an x4/x99 burn window, so an
+  // ungated read asks about a round that cannot exist.
+  assert.match(block, /decimatorLevel != null/);
+});
+
+test('a settled Decimator/BAF round is latched and not refetched', () => {
+  const src = readFileSync(
+    new URL('../app-jackpot-resolutions.js', import.meta.url), 'utf8');
+  assert.match(src, /#settled = \{ dec: null, baf: null \}/,
+    'a settled-round cache exists');
+  assert.match(src, /this\.#settled\.dec\?\.level === decLevel/,
+    'the cache is keyed on level, so a new round still reads fresh');
+  assert.match(src, /\['closed', 'skipped'\]\.includes/,
+    "only terminal statuses latch — an 'open' round keeps polling");
+  assert.match(src, /if \(nextAddress !== this\.#address\) this\.#settled =/,
+    'switching accounts invalidates the latch');
+});

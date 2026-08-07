@@ -45,6 +45,8 @@ function makeFakeTx(receipt) {
 function makeFakeContract(opts = {}) {
   const calls = {
     depositCoinflip: [],
+    setCoinflipAutoRebuy: [],
+    setCoinflipAutoRebuyTakeProfit: [],
   };
   const order = [];
   const staticCallStub = (methodName) => async (..._args) => {
@@ -75,6 +77,20 @@ function makeFakeContract(opts = {}) {
         return sendTxStub('depositCoinflip')(...args);
       },
       { staticCall: staticCallStub('depositCoinflip') }
+    ),
+    setCoinflipAutoRebuy: Object.assign(
+      async (...args) => {
+        calls.setCoinflipAutoRebuy.push(args);
+        return sendTxStub('setCoinflipAutoRebuy')(...args);
+      },
+      { staticCall: staticCallStub('setCoinflipAutoRebuy') },
+    ),
+    setCoinflipAutoRebuyTakeProfit: Object.assign(
+      async (...args) => {
+        calls.setCoinflipAutoRebuyTakeProfit.push(args);
+        return sendTxStub('setCoinflipAutoRebuyTakeProfit')(...args);
+      },
+      { staticCall: staticCallStub('setCoinflipAutoRebuyTakeProfit') },
     ),
     interface: { parseLog: (log) => log.parsed ?? null },
     connect(_signer) { return this; },
@@ -160,6 +176,7 @@ describe('Plan 62-03: coinflip.js reason-map registrations', () => {
 describe('coinflip stake reads', () => {
   afterEach(() => {
     coinflipMod.__resetCurrentStakeReaderForTest();
+    coinflipMod.__resetAutoRebuyInfoReaderForTest();
     coinflipMod.__resetResolvedStakeReaderForTest();
     coinflipMod.__resetStakeReadContractFactoryForTest();
     contractsMod.clearProvider();
@@ -175,6 +192,25 @@ describe('coinflip stake reads', () => {
     assert.equal(
       coinflipMod.effectiveCoinflipStake(stored, { enabled: false, carry }),
       stored,
+    );
+  });
+
+  test('normalizes the live auto-rebuy settings tuple', async () => {
+    coinflipMod.__setAutoRebuyInfoReaderForTest(async () => [
+      true,
+      2_000n * 10n ** 18n,
+      475n * 10n ** 18n,
+      91,
+    ]);
+
+    assert.deepEqual(
+      await coinflipMod.readCoinflipAutoRebuyInfo({ player: CONNECTED }),
+      {
+        enabled: true,
+        takeProfitWei: 2_000n * 10n ** 18n,
+        carryWei: 475n * 10n ** 18n,
+        startDay: 91,
+      },
     );
   });
 
@@ -450,6 +486,41 @@ describe('Plan 62-03: depositCoinflip', () => {
     const [args] = lastFakeContract._calls.depositCoinflip;
     assert.equal(args[0], CONNECTED, 'player = connected.address');
     assert.equal(args[1], 200n * 10n ** 18n, 'amount converted to BigInt wei');
+  });
+
+  test('enables auto rebuy with its take-profit chunk after a static call', async () => {
+    const takeProfit = 2_500n * 10n ** 18n;
+    await coinflipMod.setCoinflipAutoRebuy({ enabled: true, takeProfit });
+    assert.deepEqual(lastFakeContract._calls.setCoinflipAutoRebuy, [
+      [CONNECTED, true, takeProfit],
+    ]);
+    assert.deepEqual(lastFakeContract._order, [
+      'static:setCoinflipAutoRebuy',
+      'send:setCoinflipAutoRebuy',
+    ]);
+  });
+
+  test('updates take profit without toggling an enabled auto rebuy', async () => {
+    const takeProfit = 750n * 10n ** 18n;
+    await coinflipMod.setCoinflipAutoRebuyTakeProfit({ takeProfit });
+    assert.deepEqual(lastFakeContract._calls.setCoinflipAutoRebuyTakeProfit, [
+      [CONNECTED, takeProfit],
+    ]);
+    assert.deepEqual(lastFakeContract._order, [
+      'static:setCoinflipAutoRebuyTakeProfit',
+      'send:setCoinflipAutoRebuyTakeProfit',
+    ]);
+  });
+
+  test('rejects take profit values that would truncate into uint128 storage', async () => {
+    await assert.rejects(
+      coinflipMod.setCoinflipAutoRebuy({
+        enabled: true,
+        takeProfit: coinflipMod.MAX_AUTO_REBUY_TAKE_PROFIT_WEI + 1n,
+      }),
+      /too large/i,
+    );
+    assert.equal(lastFakeContract._calls.setCoinflipAutoRebuy.length, 0);
   });
 
   test('rejects amount below 100 FLIP minimum (AmountLTMin defense-in-depth)', async () => {

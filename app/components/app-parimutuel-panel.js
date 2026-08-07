@@ -349,7 +349,13 @@ class AppParimutuelPanel extends HTMLElement {
     const win = volumeWindow();
     const wantCredit = win.open || win.secondsToOpen <= (VOLUME_WINDOW.leadSeconds || 0);
     const decimatorLevel = Number.isInteger(level) && level >= 0 ? level + 1 : null;
+    // Gated on the same condition as the context read below. It was not, and the
+    // asymmetry cost: the Decimator runs once every ten levels, but this fired
+    // every cycle at whatever level happened to be current — asking for a round
+    // that cannot exist and can only come back empty. It was the second-heaviest
+    // endpoint on a live page load, 21 of 138 requests.
     const decimatorRead = player && decimatorLevel != null
+      && decimatorWindowIsOpen(this.#gameState)
       ? fetchJSON(`/player/${player}/decimator?level=${decimatorLevel}`).catch(() => null)
       : Promise.resolve(null);
     const decimatorContextRead = decimatorLevel != null
@@ -368,7 +374,13 @@ class AppParimutuelPanel extends HTMLElement {
     this.#growth = this.#foldBook(growth);
     this.#volume = this.#foldBook(volume);
     this.#volume.credit = credit;
-    this.#decimatorPosition = decimatorPosition;
+    // Retain the last known position when the read was skipped. #visible() and
+    // the open-state checks pass #decimatorPosition back into
+    // decimatorWindowIsOpen(), where `roundStatus === 'open'` is what keeps a
+    // burned-but-unresolved entry on screen after the x4 window closes. Nulling
+    // it on every gated cycle would blank the player's own pending entry at
+    // exactly the moment they are waiting on it.
+    if (decimatorPosition) this.#decimatorPosition = decimatorPosition;
     if (decimatorContext) this.#decimatorContext = decimatorContext;
 
     // The round anchors are off-chain guesses — the level comes from the

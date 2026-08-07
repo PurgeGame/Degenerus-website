@@ -224,6 +224,10 @@ class AppJackpotResolutions extends HTMLElement {
   #decimator = null;
   #baf = null;
   #history = [];
+  // Settled rounds, keyed by the level they belong to. See the note in the
+  // fetch: a closed round is immutable, and re-asking is the same waste the
+  // last-day poll was. A level change invalidates by key, not by clearing.
+  #settled = { dec: null, baf: null };
   #decimatorClaimState = 'unknown';
   #bafConsolation = null;
   #busy = null;
@@ -268,7 +272,11 @@ class AppJackpotResolutions extends HTMLElement {
     // can use the connected/viewed account as its highlighted slice. Only the
     // claim path below needs getActingAddress(); presentation must not vanish.
     const viewed = getViewedAddress();
-    this.#address = viewed ? String(viewed).toLowerCase() : null;
+    const nextAddress = viewed ? String(viewed).toLowerCase() : null;
+    // Settled rounds are per player. Switching accounts must not show the
+    // previous one's Decimator/BAF result.
+    if (nextAddress !== this.#address) this.#settled = { dec: null, baf: null };
+    this.#address = nextAddress;
 
     let gameState;
     try { gameState = await readGameState(); }
@@ -292,10 +300,32 @@ class AppJackpotResolutions extends HTMLElement {
     }
 
     const addr = encodeURIComponent(this.#address);
+
+    // A settled round never changes again. The Decimator runs once every ten
+    // levels and BAF once per bracket, so between them these two answers are
+    // final for the overwhelming majority of the time this panel is mounted —
+    // yet each was refetched every 15s, and jackpot-history (26.5 KB) with
+    // them. On a live page load that was 21 Decimator + 8 BAF + 7 history
+    // requests for data that had already stopped moving.
+    //
+    // Latch on 'closed'/'skipped' per level: a later level gets a fresh read
+    // because the cache key includes it, and an OPEN round keeps polling
+    // because that one genuinely is still moving.
+    const decDone = this.#settled.dec?.level === decLevel ? this.#settled.dec.value : null;
+    const bafDone = this.#settled.baf?.level === bafLevel ? this.#settled.baf.value : null;
+
     const [decResult, bafResult, historyResult] = await Promise.allSettled([
-      fetchJSON(`/player/${addr}/decimator?level=${encodeURIComponent(decLevel)}`),
-      fetchJSON(`/player/${addr}/baf?level=${encodeURIComponent(bafLevel)}`),
-      fetchJSON(`/player/${addr}/jackpot-history`),
+      decDone
+        ? Promise.resolve(decDone)
+        : fetchJSON(`/player/${addr}/decimator?level=${encodeURIComponent(decLevel)}`),
+      bafDone
+        ? Promise.resolve(bafDone)
+        : fetchJSON(`/player/${addr}/baf?level=${encodeURIComponent(bafLevel)}`),
+      // History only grows when a jackpot resolves, which is what moves decLevel
+      // or bafLevel. Refetch only when one of them is still live.
+      (decDone && bafDone)
+        ? Promise.resolve({ wins: this.#history })
+        : fetchJSON(`/player/${addr}/jackpot-history`),
     ]);
     if (seq !== this.#fetchSeq) return;
     this.#decimator = decResult.status === 'fulfilled' ? decResult.value : null;
@@ -303,6 +333,13 @@ class AppJackpotResolutions extends HTMLElement {
     this.#history = historyResult.status === 'fulfilled' && Array.isArray(historyResult.value?.wins)
       ? historyResult.value.wins
       : [];
+
+    if (this.#decimator && ['closed', 'skipped'].includes(String(this.#decimator.roundStatus || ''))) {
+      this.#settled.dec = { level: decLevel, value: this.#decimator };
+    }
+    if (this.#baf && ['closed', 'skipped'].includes(String(this.#baf.roundStatus || ''))) {
+      this.#settled.baf = { level: bafLevel, value: this.#baf };
+    }
 
     const [claimProbe, consolationProbe] = await Promise.allSettled([
       readDecimatorClaimState({ player: this.#address, level: decLevel }),

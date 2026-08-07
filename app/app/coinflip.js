@@ -50,6 +50,8 @@ const COINFLIP_ABI = [
   // Auto-rebuy carry is an implicit part of the next effective stake. It is
   // deliberately not copied into the day-keyed coinflipAmount storage slot.
   'function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stop, uint256 carry, uint24 startDay)',
+  'function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external',
+  'function setCoinflipAutoRebuyTakeProfit(address player, uint256 takeProfit) external',
   // Packed three-state result: 0 unresolved, 1 resolved loss, 50..156 win.
   'function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win)',
   // Coinflip.sol:46 — CoinflipDeposit emitted on every deposit (CF-05).
@@ -59,6 +61,11 @@ const COINFLIP_ABI = [
   'event CoinflipStakeUpdated(address indexed player, uint24 indexed day, uint256 amount, uint256 newTotal)',
   'event CoinflipDayResolved(uint24 indexed day, bool win, uint16 rewardPercent, uint128 bountyAfter, uint128 bountyPaid, address bountyRecipient)',
   'event CoinflipClaimState(address indexed player, uint128 claimableStored, uint128 autoRebuyCarry, uint24 lastClaim)',
+  'event CoinflipAutoRebuyToggled(address indexed player, bool enabled)',
+  'event CoinflipAutoRebuyStopSet(address indexed player, uint256 stopAmount)',
+  'error RngLocked()',
+  'error AutoRebuyAlreadyEnabled()',
+  'error AutoRebuyNotEnabled()',
 ];
 
 // reverseFlip is a GAME action, despite living beside the coinflip UX. It
@@ -108,6 +115,7 @@ const GAME_BAF_EVE_READ_ABI = [
 const ERC20_BALANCE_ABI = ['function balanceOf(address owner) external view returns (uint256)'];
 
 let _currentStakeReader = null;
+let _autoRebuyInfoReader = null;
 let _resolvedStakeReader = null;
 let _claimableReader = null;
 let _latestResultReader = null;
@@ -123,6 +131,7 @@ let _nudgeQuoteViaView = null;
 let _publicReadProvider = null;
 const _resolvedStakeCache = new Map();
 const _currentStakeInflight = new Map();
+const _autoRebuyInfoInflight = new Map();
 const _resolvedStakeInflight = new Map();
 const _claimableInflight = new Map();
 const _widgetBalancesInflight = new Map();
@@ -138,6 +147,12 @@ const RESOLVED_STAKE_STORAGE_PREFIX = 'coinflip_resolved_stake_v2';
 export function __setCurrentStakeReaderForTest(fn) {
   _currentStakeReader = typeof fn === 'function' ? fn : null;
   _currentStakeInflight.clear();
+}
+
+/** Test-only: replace the player's live auto-rebuy settings read. */
+export function __setAutoRebuyInfoReaderForTest(fn) {
+  _autoRebuyInfoReader = typeof fn === 'function' ? fn : null;
+  _autoRebuyInfoInflight.clear();
 }
 
 /** Test-only: replace the read contract used by live/historical stake reads. */
@@ -193,10 +208,18 @@ export function __resetCurrentStakeReaderForTest() {
   _publicReadProvider = null;
 }
 
+/** Test-only: restore the production auto-rebuy settings reader. */
+export function __resetAutoRebuyInfoReaderForTest() {
+  _autoRebuyInfoReader = null;
+  _autoRebuyInfoInflight.clear();
+  _publicReadProvider = null;
+}
+
 /** Test-only: restore the production stake-read contract. */
 export function __resetStakeReadContractFactoryForTest() {
   _stakeReadContractFactory = null;
   _currentStakeInflight.clear();
+  _autoRebuyInfoInflight.clear();
   _resolvedStakeCache.clear();
   _resolvedStakeInflight.clear();
 }
@@ -616,6 +639,68 @@ async function _latestLogBefore(contract, filter, lowerBlock, boundary) {
   return _latestLog(contract, filter, lowerBlock, boundaryBlock - 1);
 }
 
+/** Normalize the tuple returned by Coinflip.coinflipAutoRebuyInfo. */
+export function normalizeCoinflipAutoRebuyInfo(value) {
+  if (value == null) return null;
+  try {
+    const startDay = Number(value?.startDay ?? value?.[3] ?? 0);
+    return {
+      enabled: Boolean(value?.enabled ?? value?.[0]),
+      takeProfitWei: BigInt(
+        value?.takeProfitWei ?? value?.stopWei ?? value?.stop ?? value?.[1] ?? 0,
+      ),
+      carryWei: BigInt(value?.carryWei ?? value?.carry ?? value?.[2] ?? 0),
+      startDay: Number.isInteger(startDay) && startDay >= 0 ? startDay : 0,
+    };
+  } catch (_e) {
+    return null;
+  }
+}
+
+/**
+ * Read the player's current auto-rebuy mode, take-profit chunk, and rolling
+ * carry directly from the Coinflip deployment.
+ *
+ * @param {{player?: string}} [args]
+ * @returns {Promise<{enabled: boolean, takeProfitWei: bigint, carryWei: bigint, startDay: number}|null>}
+ */
+export async function readCoinflipAutoRebuyInfo({ player } = {}) {
+  const target = player || getActingAddress();
+  if (!target) return null;
+  const key = `${CHAIN.id}:${String(target).toLowerCase()}`;
+  if (_autoRebuyInfoInflight.has(key)) return _autoRebuyInfoInflight.get(key);
+
+  const request = (async () => {
+    try {
+      if (_autoRebuyInfoReader) {
+        return normalizeCoinflipAutoRebuyInfo(
+          await _autoRebuyInfoReader({ player: target }),
+        );
+      }
+      const provider = _readerProvider();
+      if (!provider || !CONTRACTS.COINFLIP) return null;
+      let overrides = [];
+      if (typeof provider.getBlockNumber === 'function') {
+        try { overrides = [{ blockTag: await provider.getBlockNumber() }]; }
+        catch (_e) { /* an unpinned best-effort read is still useful */ }
+      }
+      return normalizeCoinflipAutoRebuyInfo(
+        await _stakeReadContract(provider).coinflipAutoRebuyInfo(target, ...overrides),
+      );
+    } catch (_e) {
+      return null;
+    }
+  })();
+  _autoRebuyInfoInflight.set(key, request);
+  try {
+    return await request;
+  } finally {
+    if (_autoRebuyInfoInflight.get(key) === request) {
+      _autoRebuyInfoInflight.delete(key);
+    }
+  }
+}
+
 /**
  * Read the player's effective live stake for the upcoming flip day.
  *
@@ -832,6 +917,10 @@ export async function readResolvedCoinflipStake({ player, day } = {}) {
 // RESEARCH Q5: FLIP is unscaled on Sepolia — 1 FLIP = 1e18 wei.
 const COINFLIP_MIN_FLIP_WEI = 100n * 10n ** 18n;
 
+// PlayerCoinflipState stores the take-profit chunk as uint128. Solidity's
+// explicit narrowing conversion would otherwise truncate a larger UI value.
+export const MAX_AUTO_REBUY_TAKE_PROFIT_WEI = (1n << 128n) - 1n;
+
 // ---------------------------------------------------------------------------
 // Test seam — production path uses default `new ethers.Contract(...)`.
 // Tests inject a fake via __setContractFactoryForTest; reset via
@@ -917,6 +1006,40 @@ function _reverseFlipRevertError(error, context) {
   return _structuredRevertError(error, context);
 }
 
+function _autoRebuyRevertError(error, context) {
+  const revertName = error?.revert?.name || error?.errorName || null;
+  let message = null;
+  let recoveryAction = null;
+  if (revertName === 'RngLocked') {
+    message = 'Auto rebuy cannot change while the next result is settling.';
+    recoveryAction = 'Wait for settlement to finish, then try again.';
+  } else if (revertName === 'AutoRebuyAlreadyEnabled') {
+    message = 'Auto rebuy is already enabled.';
+    recoveryAction = 'Refresh the settings before trying again.';
+  } else if (revertName === 'AutoRebuyNotEnabled') {
+    message = 'Auto rebuy is no longer enabled.';
+    recoveryAction = 'Refresh the settings and turn it on first.';
+  }
+  if (!message) return _structuredRevertError(error, context);
+  const wrapped = new Error(message);
+  wrapped.code = revertName;
+  wrapped.userMessage = message;
+  wrapped.recoveryAction = recoveryAction;
+  wrapped.cause = error;
+  return wrapped;
+}
+
+function _autoRebuyTakeProfit(value) {
+  let amount;
+  try { amount = BigInt(value ?? 0); }
+  catch (_e) { throw new Error('Take profit must be a numeric FLIP amount.'); }
+  if (amount < 0n) throw new Error('Take profit cannot be negative.');
+  if (amount > MAX_AUTO_REBUY_TAKE_PROFIT_WEI) {
+    throw new Error('Take profit is too large for coinflip auto rebuy.');
+  }
+  return amount;
+}
+
 // ---------------------------------------------------------------------------
 // depositCoinflip — BUY-04 — synchronous FLIP deposit.
 //
@@ -970,6 +1093,98 @@ export async function depositCoinflip({
     'Coinflip deposit',
   );
   return { receipt };
+}
+
+/**
+ * Turn coinflip auto-rebuy on or off. Disabling settles every resolved day and
+ * cashes out the remaining carry; the contract blocks this while RNG is
+ * locked so a known pending loss cannot be dodged.
+ *
+ * @param {{player?: string, enabled: boolean, takeProfit?: bigint|string|number}} args
+ * @returns {Promise<{receipt: import('ethers').TransactionReceipt}>}
+ */
+export async function setCoinflipAutoRebuy({
+  player, enabled, takeProfit = 0n,
+} = {}) {
+  const target = player || getActingAddress();
+  if (!target) throw new Error('Wallet not connected.');
+  const nextEnabled = Boolean(enabled);
+  const takeProfitWei = nextEnabled ? _autoRebuyTakeProfit(takeProfit) : 0n;
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+
+  if (signer) {
+    const contract = _buildContract(signer);
+    const simulation = await requireStaticCall(
+      contract,
+      'setCoinflipAutoRebuy',
+      [target, nextEnabled, takeProfitWei],
+      signer,
+    );
+    if (!simulation.ok) {
+      throw _autoRebuyRevertError(simulation.error, 'static-call setCoinflipAutoRebuy');
+    }
+  }
+
+  try {
+    const receipt = await sendTx(
+      (s) => _buildContract(s).setCoinflipAutoRebuy(
+        target,
+        nextEnabled,
+        takeProfitWei,
+      ),
+      nextEnabled ? 'Enable coinflip auto rebuy' : 'Disable coinflip auto rebuy',
+    );
+    return { receipt };
+  } catch (error) {
+    if (error?.revert?.name || error?.errorName) {
+      throw _autoRebuyRevertError(error, 'setCoinflipAutoRebuy');
+    }
+    throw error;
+  }
+}
+
+/** Update only the take-profit chunk while auto-rebuy remains enabled. */
+export async function setCoinflipAutoRebuyTakeProfit({
+  player, takeProfit = 0n,
+} = {}) {
+  const target = player || getActingAddress();
+  if (!target) throw new Error('Wallet not connected.');
+  const takeProfitWei = _autoRebuyTakeProfit(takeProfit);
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+
+  if (signer) {
+    const contract = _buildContract(signer);
+    const simulation = await requireStaticCall(
+      contract,
+      'setCoinflipAutoRebuyTakeProfit',
+      [target, takeProfitWei],
+      signer,
+    );
+    if (!simulation.ok) {
+      throw _autoRebuyRevertError(
+        simulation.error,
+        'static-call setCoinflipAutoRebuyTakeProfit',
+      );
+    }
+  }
+
+  try {
+    const receipt = await sendTx(
+      (s) => _buildContract(s).setCoinflipAutoRebuyTakeProfit(
+        target,
+        takeProfitWei,
+      ),
+      'Update coinflip take profit',
+    );
+    return { receipt };
+  } catch (error) {
+    if (error?.revert?.name || error?.errorName) {
+      throw _autoRebuyRevertError(error, 'setCoinflipAutoRebuyTakeProfit');
+    }
+    throw error;
+  }
 }
 
 /**

@@ -28,11 +28,19 @@
 
 import { CHAIN } from '../app/chain-config.js';
 import { displayEth, displayToken } from '../app/scaling.js';
-import { get, update, subscribe, getViewedAddress } from '../app/store.js';
+import {
+  get,
+  update,
+  subscribe,
+  getActingAddress,
+  getViewedAddress,
+} from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
 import {
   depositCoinflip,
+  MAX_AUTO_REBUY_TAKE_PROFIT_WEI,
+  readCoinflipAutoRebuyInfo,
   readClaimableCoinflip,
   readCurrentCoinflipStake,
   readBafFlipEve,
@@ -43,6 +51,8 @@ import {
   readReverseFlipQuote,
   reverseFlip,
   reverseFlipCostWei,
+  setCoinflipAutoRebuy,
+  setCoinflipAutoRebuyTakeProfit,
 } from '../app/coinflip.js';
 import { claimFlip } from '../app/claims.js';
 import {
@@ -378,6 +388,9 @@ class AppDailyFlip extends HTMLElement {
   // score (or when the player/day target changes).
   #bafLookupKey = null;
   #currentBetWei = null;   // live coinflipAmount(player), scoped to the current target day
+  #autoRebuyInfo = null;   // direct Coinflip auto-rebuy settings for #autoRebuyAddress
+  #autoRebuyAddress = null;
+  #autoRebuyError = '';
   #resolvedBetWei = null;  // final CoinflipStakeUpdated.newTotal for the exact result day
   #rolloverBetCarry = null; // last live stake, promoted only after the new day reads zero
   #liveClaimableWei = null; // direct previewClaimCoinflips, bypassing indexer lag
@@ -624,6 +637,9 @@ class AppDailyFlip extends HTMLElement {
       this.#liveBalances = null;
       this.#liveBalancesAddress = null;
       this.#currentBetWei = null;
+      this.#autoRebuyInfo = null;
+      this.#autoRebuyAddress = null;
+      this.#autoRebuyError = '';
       this.#resolvedBetWei = null;
       this.#rolloverBetCarry = null;
       this.#liveClaimableWei = null;
@@ -633,6 +649,7 @@ class AppDailyFlip extends HTMLElement {
       this.#bafLookupKey = null;
       this.#bafFlipEve = null;
       this.#revealRequestedDay = null;
+      this.#closeAutoRebuyDialog({ restoreFocus: false });
       this.#scheduleRefresh();
       const ballot = this.querySelector('[data-bind="df-charity-dialog"]');
       if (ballot && !ballot.hidden) this.#loadCharityVote();
@@ -645,6 +662,9 @@ class AppDailyFlip extends HTMLElement {
       this.#liveBalances = null;
       this.#liveBalancesAddress = null;
       this.#currentBetWei = null;
+      this.#autoRebuyInfo = null;
+      this.#autoRebuyAddress = null;
+      this.#autoRebuyError = '';
       this.#resolvedBetWei = null;
       this.#rolloverBetCarry = null;
       this.#liveClaimableWei = null;
@@ -653,6 +673,7 @@ class AppDailyFlip extends HTMLElement {
       this.#bafAddress = null;
       this.#bafLookupKey = null;
       this.#revealRequestedDay = null;
+      this.#closeAutoRebuyDialog({ restoreFocus: false });
       this.#scheduleRefresh();
       const ballot = this.querySelector('[data-bind="df-charity-dialog"]');
       if (ballot && !ballot.hidden) this.#loadCharityVote();
@@ -1502,6 +1523,9 @@ class AppDailyFlip extends HTMLElement {
       this.#liveBalances = null;
       this.#liveBalancesAddress = address;
       this.#currentBetWei = null;
+      this.#autoRebuyInfo = null;
+      this.#autoRebuyAddress = address;
+      this.#autoRebuyError = '';
       this.#resolvedBetWei = null;
       this.#rolloverBetCarry = null;
       this.#liveClaimableWei = null;
@@ -1625,6 +1649,18 @@ class AppDailyFlip extends HTMLElement {
       ),
       this.#runRefreshTask(
         seq,
+        addr ? readCoinflipAutoRebuyInfo({ player: addr }) : Promise.resolve(null),
+        (value) => {
+          this.#autoRebuyAddress = address;
+          this.#autoRebuyInfo = value;
+        },
+        () => {
+          this.#autoRebuyAddress = address;
+          this.#autoRebuyInfo = null;
+        },
+      ),
+      this.#runRefreshTask(
+        seq,
         addr ? readClaimableCoinflip({ player: addr }) : Promise.resolve(null),
         (value) => {
           this.#liveClaimableWei = value == null ? null : this.#asWei(value);
@@ -1711,7 +1747,16 @@ class AppDailyFlip extends HTMLElement {
   #renderShell() {
     this.innerHTML = `
       <section class="panel app-daily-flip">
-        <h2 class="df-section-title">DAILY COINFLIP</h2>
+        <div class="df-section-head">
+          <h2 class="df-section-title">DAILY COINFLIP</h2>
+          <button type="button" class="df-auto-rebuy-cta"
+                  data-bind="df-auto-rebuy-cta" aria-haspopup="dialog"
+                  aria-controls="df-auto-rebuy-dialog" aria-expanded="false">
+            <span class="df-auto-rebuy-cta__dot" aria-hidden="true"></span>
+            <span>AUTO REBUY</span>
+            <strong data-bind="df-auto-rebuy-cta-status">—</strong>
+          </button>
+        </div>
         <div class="df-coin-stage">
           <div class="df-coin-zone" data-bind="df-coin-zone"></div>
           <div class="df-modifier-meter-slot" data-bind="df-modifier-meter-slot"></div>
@@ -1787,6 +1832,68 @@ class AppDailyFlip extends HTMLElement {
                         data-write-lock-title="sDGNRS balance is loading"
                         data-bind="df-burn-sdgnrs-cta" aria-haspopup="dialog">BURN</button>
               </span>
+            </div>
+          </div>
+        </div>
+        <div class="df-reverse-dialog df-auto-rebuy-dialog"
+             id="df-auto-rebuy-dialog" data-bind="df-auto-rebuy-dialog" hidden
+             role="dialog" aria-modal="true" aria-labelledby="df-auto-rebuy-title">
+          <div class="df-reverse-dialog__card df-auto-rebuy-dialog__card">
+            <button type="button" class="df-reverse-dialog__close"
+                    data-bind="df-auto-rebuy-close" aria-label="Close auto rebuy settings">×</button>
+            <header class="df-auto-rebuy-dialog__head">
+              <span class="df-auto-rebuy-dialog__mark" aria-hidden="true">↻</span>
+              <span>
+                <small>DAILY COINFLIP</small>
+                <h3 id="df-auto-rebuy-title">Auto rebuy</h3>
+              </span>
+            </header>
+            <p class="df-auto-rebuy-dialog__intro">
+              Keep the unbanked part of each win rolling into the next daily flip.
+            </p>
+            <div class="df-auto-rebuy-dialog__summary">
+              <span>
+                <small>STATUS</small>
+                <strong data-bind="df-auto-rebuy-current">LOADING</strong>
+              </span>
+              <span>
+                <small>ROLLING NOW</small>
+                <strong data-bind="df-auto-rebuy-carry">—</strong>
+              </span>
+            </div>
+            <label class="df-auto-rebuy-toggle">
+              <span>
+                <strong>Auto rebuy</strong>
+                <small>Roll wins forward automatically</small>
+              </span>
+              <input type="checkbox" name="df-auto-rebuy-enabled" role="switch"
+                     aria-label="Enable coinflip auto rebuy">
+              <span class="df-auto-rebuy-toggle__track" aria-hidden="true">
+                <span></span>
+              </span>
+            </label>
+            <label class="df-auto-rebuy-profit">
+              <span class="df-auto-rebuy-profit__label">
+                <strong>Take profit chunk</strong>
+                <small>FLIP</small>
+              </span>
+              <span class="df-auto-rebuy-profit__field">
+                <input type="number" name="df-auto-rebuy-take-profit" min="0" step="any"
+                       inputmode="decimal" value="0" aria-label="Take profit chunk in FLIP">
+                <span>FLIP</span>
+              </span>
+              <small class="df-auto-rebuy-profit__help" data-bind="df-auto-rebuy-help">
+                Set 0 to roll the full winning payout.
+              </small>
+            </label>
+            <p class="df-auto-rebuy-dialog__status" data-bind="df-auto-rebuy-status"
+               hidden role="alert"></p>
+            <div class="df-reverse-dialog__actions df-auto-rebuy-dialog__actions">
+              <button type="button" class="df-reverse-dialog__later"
+                      data-bind="df-auto-rebuy-close">Cancel</button>
+              <button type="button" class="df-reverse-dialog__accept"
+                      data-bind="df-auto-rebuy-save" data-write data-write-locked
+                      data-write-lock-title="Auto rebuy settings are loading">Save</button>
             </div>
           </div>
         </div>
@@ -1929,6 +2036,7 @@ class AppDailyFlip extends HTMLElement {
     this.#renderCoin();
     this.#renderModifierMeter();
     this.#renderPosition();
+    this.#renderAutoRebuy();
     this.#renderFunds();
     this.#renderBafScore();
     this.#renderReverseFlip();
@@ -1974,6 +2082,126 @@ class AppDailyFlip extends HTMLElement {
       ? String(next)
       : String(Number(next.toFixed(6)));
     this.#renderBetTooltip();
+  }
+
+  #activeAutoRebuyInfo() {
+    if (this.#autoRebuyAddress !== this.#dashboardAddress) return null;
+    return this.#autoRebuyInfo;
+  }
+
+  #canEditAutoRebuy() {
+    const acting = getActingAddress();
+    return Boolean(acting && this.#dashboardAddress
+      && String(acting).toLowerCase() === String(this.#dashboardAddress).toLowerCase());
+  }
+
+  #renderAutoRebuy({ syncDraft = false } = {}) {
+    const trigger = this.querySelector('[data-bind="df-auto-rebuy-cta"]');
+    const triggerStatus = this.querySelector('[data-bind="df-auto-rebuy-cta-status"]');
+    const dialog = this.querySelector('[data-bind="df-auto-rebuy-dialog"]');
+    const current = this.querySelector('[data-bind="df-auto-rebuy-current"]');
+    const carry = this.querySelector('[data-bind="df-auto-rebuy-carry"]');
+    const toggle = this.querySelector('[name="df-auto-rebuy-enabled"]');
+    const input = this.querySelector('[name="df-auto-rebuy-take-profit"]');
+    const help = this.querySelector('[data-bind="df-auto-rebuy-help"]');
+    const status = this.querySelector('[data-bind="df-auto-rebuy-status"]');
+    const save = this.querySelector('[data-bind="df-auto-rebuy-save"]');
+    const info = this.#activeAutoRebuyInfo();
+    const isOpen = Boolean(dialog && !dialog.hidden);
+    const enabled = Boolean(info?.enabled);
+
+    if (triggerStatus) triggerStatus.textContent = info ? (enabled ? 'ON' : 'OFF') : '—';
+    if (trigger) {
+      trigger.classList?.toggle('is-active', Boolean(info && enabled));
+      trigger.setAttribute('aria-expanded', String(isOpen));
+      trigger.setAttribute(
+        'aria-label',
+        info
+          ? `Auto rebuy settings, ${enabled ? 'on' : 'off'}`
+          : 'Auto rebuy settings, loading',
+      );
+    }
+    if (current) {
+      current.textContent = info ? (enabled ? 'ON' : 'OFF') : 'LOADING';
+      current.classList?.toggle('is-active', Boolean(info && enabled));
+    }
+    if (carry) {
+      carry.textContent = info ? `${this.#fmtWhole(info.carryWei)} FLIP` : '—';
+    }
+
+    if (syncDraft || !isOpen) {
+      if (toggle) toggle.checked = enabled;
+      if (input) input.value = tokenAmountInput(info?.takeProfitWei ?? 0n);
+    }
+    const draftEnabled = Boolean(toggle?.checked);
+    const takeProfitWei = parseTokenAmount(input?.value);
+    const amountValid = !draftEnabled || (takeProfitWei != null
+      && takeProfitWei <= MAX_AUTO_REBUY_TAKE_PROFIT_WEI);
+    const editable = this.#canEditAutoRebuy();
+    const changed = Boolean(info) && (
+      draftEnabled !== enabled
+      || (draftEnabled && takeProfitWei !== info.takeProfitWei)
+    );
+
+    if (toggle) toggle.disabled = this.#busy || !editable || !info;
+    if (input) input.disabled = this.#busy || !editable || !info || !draftEnabled;
+    if (help) {
+      if (!draftEnabled) {
+        help.textContent = 'Turn auto rebuy on to choose how much of each win gets banked.';
+      } else if (!amountValid) {
+        help.textContent = 'Enter a valid non-negative FLIP amount.';
+      } else if (takeProfitWei === 0n) {
+        help.textContent = '0 rolls the full winning payout into the next daily flip.';
+      } else {
+        help.textContent = `Each full ${tokenAmountInput(takeProfitWei)} FLIP chunk is banked; the remainder keeps rolling.`;
+      }
+    }
+    if (status) {
+      status.textContent = this.#autoRebuyError;
+      status.hidden = !this.#autoRebuyError;
+      status.classList?.toggle('is-error', Boolean(this.#autoRebuyError));
+    }
+    if (save) {
+      let lockedReason = '';
+      if (this.#busy) lockedReason = 'Another Coinflip action is processing';
+      else if (!editable) lockedReason = 'Connect to this player account to change auto rebuy';
+      else if (!info) lockedReason = 'Auto rebuy settings are loading';
+      else if (!amountValid) lockedReason = 'Enter a valid take profit amount';
+      else if (!changed) lockedReason = 'No auto rebuy changes to save';
+      save.disabled = Boolean(lockedReason);
+      save.textContent = this.#busy ? 'Saving…' : 'Save';
+      if (lockedReason) {
+        save.setAttribute('data-write-locked', '');
+        save.setAttribute('data-write-lock-title', lockedReason);
+      } else {
+        save.removeAttribute('data-write-locked');
+        save.removeAttribute('data-write-lock-title');
+      }
+    }
+  }
+
+  #openAutoRebuyDialog() {
+    const dialog = this.querySelector('[data-bind="df-auto-rebuy-dialog"]');
+    if (!dialog) return;
+    this.#autoRebuyError = '';
+    this.#renderAutoRebuy({ syncDraft: true });
+    dialog.hidden = false;
+    this.#renderAutoRebuy();
+    try {
+      this.querySelector('[name="df-auto-rebuy-enabled"]')?.focus?.({ preventScroll: true });
+    } catch (_e) { /* headless */ }
+  }
+
+  #closeAutoRebuyDialog({ restoreFocus = true } = {}) {
+    const dialog = this.querySelector('[data-bind="df-auto-rebuy-dialog"]');
+    if (dialog) dialog.hidden = true;
+    this.#autoRebuyError = '';
+    this.#renderAutoRebuy({ syncDraft: true });
+    if (restoreFocus) {
+      try {
+        this.querySelector('[data-bind="df-auto-rebuy-cta"]')?.focus?.({ preventScroll: true });
+      } catch (_e) { /* headless */ }
+    }
   }
 
   #renderReverseFlip() {
@@ -3690,6 +3918,38 @@ class AppDailyFlip extends HTMLElement {
     if (flip) flip.addEventListener('click', () => this.#runAction('flip'));
     const amount = this.querySelector('[name="df-amount"]');
     if (amount) amount.addEventListener('input', () => this.#renderBetTooltip());
+    const autoRebuy = this.querySelector('[data-bind="df-auto-rebuy-cta"]');
+    if (autoRebuy) autoRebuy.addEventListener('click', () => this.#openAutoRebuyDialog());
+    const autoRebuyToggle = this.querySelector('[name="df-auto-rebuy-enabled"]');
+    if (autoRebuyToggle) {
+      autoRebuyToggle.addEventListener('change', () => {
+        this.#autoRebuyError = '';
+        this.#renderAutoRebuy();
+      });
+    }
+    const autoRebuyProfit = this.querySelector('[name="df-auto-rebuy-take-profit"]');
+    if (autoRebuyProfit) {
+      autoRebuyProfit.addEventListener('input', () => {
+        this.#autoRebuyError = '';
+        this.#renderAutoRebuy();
+      });
+    }
+    const autoRebuySave = this.querySelector('[data-bind="df-auto-rebuy-save"]');
+    if (autoRebuySave) {
+      autoRebuySave.addEventListener('click', () => this.#runAction('auto-rebuy'));
+    }
+    for (const close of this.querySelectorAll('[data-bind="df-auto-rebuy-close"]')) {
+      close.addEventListener('click', () => this.#closeAutoRebuyDialog());
+    }
+    const autoRebuyDialog = this.querySelector('[data-bind="df-auto-rebuy-dialog"]');
+    if (autoRebuyDialog) {
+      autoRebuyDialog.addEventListener('keydown', (event) => {
+        if (event?.key === 'Escape') this.#closeAutoRebuyDialog();
+      });
+      autoRebuyDialog.addEventListener('click', (event) => {
+        if (event?.target === autoRebuyDialog) this.#closeAutoRebuyDialog();
+      });
+    }
     const betUp = this.querySelector('[data-bind="df-bet-up"]');
     if (betUp) betUp.addEventListener('click', () => this.#stepBetAmount(1));
     const betDown = this.querySelector('[data-bind="df-bet-down"]');
@@ -3814,7 +4074,9 @@ class AppDailyFlip extends HTMLElement {
   async #runAction(kind, options = {}) {
     if (this.#busy) return;
     this.#busy = true;
+    if (kind === 'auto-rebuy') this.#autoRebuyError = '';
     this.#renderFunds();
+    this.#renderAutoRebuy();
     this.#clearError();
     this.#setStatus('');
     try {
@@ -3837,6 +4099,49 @@ class AppDailyFlip extends HTMLElement {
         // The current contract handles its own claimable-first waterfall in
         // this one deposit. No separate claim signature is needed.
         await depositCoinflip({ player, amount });
+      } else if (kind === 'auto-rebuy') {
+        const info = this.#activeAutoRebuyInfo();
+        if (!info) throw new Error('Auto rebuy settings are still loading.');
+        const target = getActingAddress();
+        if (!target || !this.#dashboardAddress
+          || String(target).toLowerCase() !== String(this.#dashboardAddress).toLowerCase()) {
+          throw new Error('Connect to this player account to change auto rebuy.');
+        }
+        const toggle = this.querySelector('[name="df-auto-rebuy-enabled"]');
+        const input = this.querySelector('[name="df-auto-rebuy-take-profit"]');
+        const nextEnabled = Boolean(toggle?.checked);
+        const parsedTakeProfit = parseTokenAmount(input?.value);
+        if (nextEnabled && parsedTakeProfit == null) {
+          throw new Error('Enter a valid non-negative take profit amount.');
+        }
+        const takeProfitWei = nextEnabled ? parsedTakeProfit : 0n;
+        if (takeProfitWei > MAX_AUTO_REBUY_TAKE_PROFIT_WEI) {
+          throw new Error('Take profit is too large for coinflip auto rebuy.');
+        }
+        if (nextEnabled !== Boolean(info.enabled)) {
+          await setCoinflipAutoRebuy({
+            player: target,
+            enabled: nextEnabled,
+            takeProfit: takeProfitWei,
+          });
+        } else if (nextEnabled && takeProfitWei !== info.takeProfitWei) {
+          await setCoinflipAutoRebuyTakeProfit({
+            player: target,
+            takeProfit: takeProfitWei,
+          });
+        } else {
+          this.#closeAutoRebuyDialog();
+          return;
+        }
+        this.#autoRebuyInfo = {
+          ...info,
+          enabled: nextEnabled,
+          takeProfitWei: nextEnabled ? takeProfitWei : info.takeProfitWei,
+          carryWei: nextEnabled ? info.carryWei : 0n,
+          startDay: nextEnabled ? info.startDay : 0,
+        };
+        this.#autoRebuyAddress = this.#dashboardAddress;
+        this.#closeAutoRebuyDialog();
       } else if (kind === 'claim-flip') {
         // Coinflip FLIP winnings — amount from the dashboard's
         // claimablePreview plus any just-landed win that the next dashboard
@@ -3897,11 +4202,17 @@ class AppDailyFlip extends HTMLElement {
       setTimeout(() => this.#scheduleRefresh(), 250);
     } catch (error) {
       this.#setStatus('');
-      this.#renderError(compactUiError(error));
+      if (kind === 'auto-rebuy') {
+        this.#autoRebuyError = compactUiError(error);
+        this.#renderAutoRebuy();
+      } else {
+        this.#renderError(compactUiError(error));
+      }
     } finally {
       setTimeout(() => {
         this.#busy = false;
         this.#renderFunds();
+        this.#renderAutoRebuy();
         this.#renderBafScore();
         this.#renderReverseFlip();
       }, 500);

@@ -21155,3 +21155,324 @@ body.decimator-draw-open { overflow: hidden !important; }
 @media (prefers-reduced-motion: reduce) {
   .decimator-draw-modal__loading::after { animation: none; }
 }
+
+/* Coinflip auto-rebuy stays a small header utility; its settings live in a
+   compact modal so Tomorrow's Bet keeps its full three-column instrument. */
+body.layout-basic .df-section-head {
+  position: relative;
+  display: flex;
+  min-height: 2.55rem;
+  align-items: center;
+}
+body.layout-basic .df-section-head .df-section-title { width: 100%; }
+body.layout-basic .df-auto-rebuy-cta {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  right: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  width: auto;
+  min-width: 0;
+  height: 1.45rem;
+  min-height: 1.45rem;
+  max-height: 1.45rem;
+  align-items: center;
+  gap: 0.24rem;
+  padding: 0 0.4rem;
+  border: 1px solid rgba(248, 113, 113, 0.34);
+  border-radius: 999px;
+  background: rgba(20, 7, 7, 0.84);
+  color: rgba(254, 202, 202, 0.62);
+  font: 900 0.44rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+body.layout-basic .df-auto-rebuy-cta:hover,
+body.layout-basic .df-auto-rebuy-cta:focus-visible {
+  border-color: rgba(253, 230, 138, 0.7);
+  color: #fde68a;
+  outline: 0;
+}
+body.layout-basic .df-auto-rebuy-cta__dot {
+  width: 0.36rem;
+  height: 0.36rem;
+  flex: 0 0 0.36rem;
+  border-radius: 50%;
+  background: rgba(248, 113, 113, 0.52);
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.08);
+}
+body.layout-basic .df-auto-rebuy-cta strong {
+  color: rgba(254, 202, 202, 0.44);
+  font: inherit;
+}
+body.layout-basic .df-auto-rebuy-cta.is-active {
+  border-color: rgba(74, 222, 128, 0.52);
+  background: rgba(20, 83, 45, 0.16);
+  color: #bbf7d0;
+}
+body.layout-basic .df-auto-rebuy-cta.is-active .df-auto-rebuy-cta__dot {
+  background: #4ade80;
+  box-shadow: 0 0 7px rgba(74, 222, 128, 0.72);
+}
+body.layout-basic .df-auto-rebuy-cta.is-active strong { color: #86efac; }
+
+body.layout-basic .df-auto-rebuy-dialog__card {
+  width: min(92vw, 390px);
+  padding: 1rem;
+  border: 1px solid rgba(253, 230, 138, 0.68);
+  border-radius: 15px;
+  background:
+    radial-gradient(circle at 92% 2%, rgba(245, 158, 11, 0.14), transparent 32%),
+    radial-gradient(circle at 0 100%, rgba(34, 197, 94, 0.08), transparent 35%),
+    linear-gradient(150deg, #180708, #310b0d 54%, #100506);
+  box-shadow:
+    0 25px 75px rgba(0, 0, 0, 0.72),
+    inset 0 0 0 4px rgba(255, 255, 255, 0.025);
+  color: #fff7ed;
+  text-align: left;
+}
+body.layout-basic .df-auto-rebuy-dialog__head {
+  display: flex;
+  align-items: center;
+  gap: 0.62rem;
+  padding-right: 1.8rem;
+}
+body.layout-basic .df-auto-rebuy-dialog__head > span:last-child {
+  display: grid;
+  gap: 0.08rem;
+}
+body.layout-basic .df-auto-rebuy-dialog__head small {
+  color: rgba(253, 230, 138, 0.66);
+  font-size: 0.46rem;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+}
+body.layout-basic .df-auto-rebuy-dialog__head h3 {
+  margin: 0;
+  color: #fff7ed;
+  font-size: 1.12rem;
+  line-height: 1.05;
+  text-align: left;
+}
+body.layout-basic .df-auto-rebuy-dialog__mark {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  flex: 0 0 2.2rem;
+  place-items: center;
+  border: 1px solid rgba(253, 230, 138, 0.54);
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.12);
+  color: #fde68a;
+  font: 900 1.15rem/1 "Inter", system-ui, sans-serif;
+  box-shadow: inset 0 0 12px rgba(245, 158, 11, 0.08);
+}
+body.layout-basic .df-auto-rebuy-dialog__intro {
+  margin: 0.62rem 0;
+  color: rgba(255, 247, 237, 0.68);
+  font-size: 0.66rem;
+  line-height: 1.42;
+}
+body.layout-basic .df-auto-rebuy-dialog__summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.38rem;
+  margin-bottom: 0.48rem;
+}
+body.layout-basic .df-auto-rebuy-dialog__summary > span {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+  padding: 0.48rem 0.52rem;
+  border: 1px solid rgba(253, 230, 138, 0.16);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+body.layout-basic .df-auto-rebuy-dialog__summary small {
+  color: rgba(254, 202, 202, 0.5);
+  font-size: 0.43rem;
+  font-weight: 950;
+  letter-spacing: 0.13em;
+}
+body.layout-basic .df-auto-rebuy-dialog__summary strong {
+  overflow: hidden;
+  color: #fde68a;
+  font: 800 0.7rem/1.15 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.layout-basic .df-auto-rebuy-dialog__summary strong.is-active { color: #86efac; }
+body.layout-basic .df-auto-rebuy-toggle {
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.48rem;
+  padding: 0.58rem 0.62rem;
+  border: 1px solid rgba(248, 113, 113, 0.22);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+body.layout-basic .df-auto-rebuy-toggle > span:first-child {
+  display: grid;
+  gap: 0.14rem;
+}
+body.layout-basic .df-auto-rebuy-toggle strong {
+  color: #fff7ed;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+}
+body.layout-basic .df-auto-rebuy-toggle small {
+  color: rgba(255, 247, 237, 0.5);
+  font-size: 0.53rem;
+}
+body.layout-basic .df-auto-rebuy-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+body.layout-basic .df-auto-rebuy-toggle__track {
+  position: relative;
+  box-sizing: border-box;
+  display: block;
+  width: 2.35rem;
+  height: 1.25rem;
+  border: 1px solid rgba(248, 113, 113, 0.42);
+  border-radius: 999px;
+  background: rgba(127, 29, 29, 0.46);
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+body.layout-basic .df-auto-rebuy-toggle__track > span {
+  position: absolute;
+  top: 0.16rem;
+  left: 0.17rem;
+  width: 0.79rem;
+  height: 0.79rem;
+  border-radius: 50%;
+  background: #fecaca;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  transition: left 0.16s ease, background 0.16s ease;
+}
+body.layout-basic .df-auto-rebuy-toggle input:checked + .df-auto-rebuy-toggle__track {
+  border-color: rgba(74, 222, 128, 0.7);
+  background: rgba(22, 101, 52, 0.62);
+}
+body.layout-basic .df-auto-rebuy-toggle input:checked + .df-auto-rebuy-toggle__track > span {
+  left: 1.21rem;
+  background: #86efac;
+}
+body.layout-basic .df-auto-rebuy-toggle input:focus-visible + .df-auto-rebuy-toggle__track {
+  outline: 2px solid rgba(253, 230, 138, 0.8);
+  outline-offset: 2px;
+}
+body.layout-basic .df-auto-rebuy-toggle:has(input:disabled) { cursor: default; opacity: 0.58; }
+body.layout-basic .df-auto-rebuy-profit {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 0.62rem;
+}
+body.layout-basic .df-auto-rebuy-profit__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+body.layout-basic .df-auto-rebuy-profit__label strong {
+  color: rgba(255, 247, 237, 0.78);
+  font-size: 0.58rem;
+  font-weight: 950;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+body.layout-basic .df-auto-rebuy-profit__label small {
+  color: rgba(253, 230, 138, 0.5);
+  font-size: 0.48rem;
+  font-weight: 900;
+}
+body.layout-basic .df-auto-rebuy-profit__field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid rgba(253, 230, 138, 0.34);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.24);
+}
+body.layout-basic .df-auto-rebuy-profit__field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 0.58rem 0.65rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #fde68a;
+  font: 800 0.86rem/1 "OCR A Std", "Share Tech Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+body.layout-basic .df-auto-rebuy-profit__field > span {
+  display: grid;
+  min-width: 3.2rem;
+  place-items: center;
+  border-left: 1px solid rgba(253, 230, 138, 0.16);
+  color: rgba(253, 230, 138, 0.72);
+  font-size: 0.52rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+}
+body.layout-basic .df-auto-rebuy-profit__field:focus-within {
+  border-color: rgba(253, 230, 138, 0.72);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.09);
+}
+body.layout-basic .df-auto-rebuy-profit__field:has(input:disabled) { opacity: 0.42; }
+body.layout-basic .df-auto-rebuy-profit__help {
+  min-height: 1.4em;
+  color: rgba(255, 247, 237, 0.5);
+  font-size: 0.52rem;
+  line-height: 1.4;
+}
+body.layout-basic .df-auto-rebuy-dialog__status {
+  margin: -0.18rem 0 0.58rem;
+  padding: 0.42rem 0.5rem;
+  border: 1px solid rgba(248, 113, 113, 0.24);
+  border-radius: 7px;
+  background: rgba(127, 29, 29, 0.16);
+  color: #fca5a5;
+  font-size: 0.58rem;
+  line-height: 1.35;
+}
+body.layout-basic .df-auto-rebuy-dialog__status[hidden] { display: none !important; }
+body.layout-basic .df-auto-rebuy-dialog__actions {
+  grid-template-columns: 0.85fr 1.15fr;
+}
+body.layout-basic .df-auto-rebuy-dialog__actions button {
+  min-height: 2.35rem;
+  border-radius: 8px;
+  font-size: 0.68rem;
+}
+
+@media (max-width: 520px) {
+  body.layout-basic .df-auto-rebuy-cta {
+    right: 0;
+    height: 1.4rem;
+    min-height: 1.4rem;
+    max-height: 1.4rem;
+    padding-inline: 0.34rem;
+    font-size: 0.4rem;
+  }
+  body.layout-basic .df-auto-rebuy-dialog__card { padding: 0.88rem 0.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.layout-basic .df-auto-rebuy-cta,
+  body.layout-basic .df-auto-rebuy-toggle__track,
+  body.layout-basic .df-auto-rebuy-toggle__track > span { transition: none; }
+}
