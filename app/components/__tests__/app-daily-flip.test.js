@@ -2135,7 +2135,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test('the small header pill opens the live auto-rebuy and take-profit settings', async () => {
+  test("the small square on Today's Bet opens the live auto-rebuy settings", async () => {
     coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
       enabled: true,
       takeProfitWei: 2_000n * 10n ** 18n,
@@ -2147,7 +2147,17 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
 
     const trigger = el.querySelector('[data-bind="df-auto-rebuy-cta"]');
-    assert.ok(trigger, 'compact Auto Rebuy header control is mounted');
+    assert.ok(trigger, 'compact Auto Rebuy control is mounted');
+    assert.ok(
+      el.innerHTML.indexOf('data-bind="df-position-today"')
+        < el.innerHTML.indexOf('data-bind="df-auto-rebuy-cta"')
+        && el.innerHTML.indexOf('data-bind="df-auto-rebuy-cta"')
+          < el.innerHTML.indexOf('data-bind="df-baf-score-box"'),
+      "the square is attached immediately after Today's Bet, not placed in the header",
+    );
+    assert.match(APP_CSS,
+      /\.df-auto-rebuy-cta\s*\{[^}]*position:\s*absolute[^}]*top:\s*-1\.92rem[^}]*width:\s*1\.62rem[^}]*height:\s*1\.62rem/s,
+      "the larger square sits above Today's Bet with room for its outline");
     assert.equal(el.querySelector('[data-bind="df-auto-rebuy-cta-status"]').textContent, 'ON');
     assert.equal(trigger.classList.contains('is-active'), true);
     trigger.dispatchEvent({ type: 'click' });
@@ -2166,6 +2176,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
     toggle.checked = false;
     toggle.dispatchEvent({ type: 'change' });
     assert.equal(input.disabled, true, 'take profit is inactive when auto rebuy is off');
+    assert.match(el.querySelector('[data-bind="df-auto-rebuy-help"]').textContent, /cashes out/i,
+      'turning an active rebuy off explains what happens to its rolling carry');
     assert.equal(save.disabled, false, 'the changed off state is ready to save');
     dialog.dispatchEvent({ type: 'click', target: dialog });
     assert.equal(dialog.hidden, true, 'the backdrop closes without changing settings');
@@ -2865,6 +2877,7 @@ describe('new-day rollover (codex-found race)', () => {
     _fetchResponses.flipDay = null;
     localStorage.setItem('jackpot_complete_day_84532_68', '1');
     storeMod.update('app.lastDay', { day: 68, status: 'resolved' });
+    await flushMicrotasks();
     await flushMicrotasks();
 
     assert.match(el.querySelector('[data-position="today"]').textContent, /Today's bet12,000 FLIP/,

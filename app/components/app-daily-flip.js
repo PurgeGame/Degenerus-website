@@ -36,6 +36,7 @@ import {
   getViewedAddress,
 } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
+import { readPlayerSnapshot } from '../app/player-snapshot.js';
 import { readGameState } from '../app/game-state.js';
 import {
   depositCoinflip,
@@ -391,6 +392,8 @@ class AppDailyFlip extends HTMLElement {
   #autoRebuyInfo = null;   // direct Coinflip auto-rebuy settings for #autoRebuyAddress
   #autoRebuyAddress = null;
   #autoRebuyError = '';
+  #autoRebuyDraftAddress = null;
+  #autoRebuyDraftReady = false;
   #resolvedBetWei = null;  // final CoinflipStakeUpdated.newTotal for the exact result day
   #rolloverBetCarry = null; // last live stake, promoted only after the new day reads zero
   #liveClaimableWei = null; // direct previewClaimCoinflips, bypassing indexer lag
@@ -640,6 +643,8 @@ class AppDailyFlip extends HTMLElement {
       this.#autoRebuyInfo = null;
       this.#autoRebuyAddress = null;
       this.#autoRebuyError = '';
+      this.#autoRebuyDraftAddress = null;
+      this.#autoRebuyDraftReady = false;
       this.#resolvedBetWei = null;
       this.#rolloverBetCarry = null;
       this.#liveClaimableWei = null;
@@ -649,7 +654,7 @@ class AppDailyFlip extends HTMLElement {
       this.#bafLookupKey = null;
       this.#bafFlipEve = null;
       this.#revealRequestedDay = null;
-      this.#closeAutoRebuyDialog({ restoreFocus: false });
+      this.#renderAutoRebuy({ syncDraft: true });
       this.#scheduleRefresh();
       const ballot = this.querySelector('[data-bind="df-charity-dialog"]');
       if (ballot && !ballot.hidden) this.#loadCharityVote();
@@ -665,6 +670,8 @@ class AppDailyFlip extends HTMLElement {
       this.#autoRebuyInfo = null;
       this.#autoRebuyAddress = null;
       this.#autoRebuyError = '';
+      this.#autoRebuyDraftAddress = null;
+      this.#autoRebuyDraftReady = false;
       this.#resolvedBetWei = null;
       this.#rolloverBetCarry = null;
       this.#liveClaimableWei = null;
@@ -673,7 +680,7 @@ class AppDailyFlip extends HTMLElement {
       this.#bafAddress = null;
       this.#bafLookupKey = null;
       this.#revealRequestedDay = null;
-      this.#closeAutoRebuyDialog({ restoreFocus: false });
+      this.#renderAutoRebuy({ syncDraft: true });
       this.#scheduleRefresh();
       const ballot = this.querySelector('[data-bind="df-charity-dialog"]');
       if (ballot && !ballot.hidden) this.#loadCharityVote();
@@ -1549,7 +1556,7 @@ class AppDailyFlip extends HTMLElement {
     const tasks = [
       this.#runRefreshTask(
         seq,
-        addr ? fetchJSON(`/player/${address}`) : Promise.resolve(null),
+        addr ? readPlayerSnapshot(address) : Promise.resolve(null),
         (value) => {
           if (value) this.#dashboard = value;
           else this.#dashboard = null;
@@ -1747,16 +1754,7 @@ class AppDailyFlip extends HTMLElement {
   #renderShell() {
     this.innerHTML = `
       <section class="panel app-daily-flip">
-        <div class="df-section-head">
-          <h2 class="df-section-title">DAILY COINFLIP</h2>
-          <button type="button" class="df-auto-rebuy-cta"
-                  data-bind="df-auto-rebuy-cta" aria-haspopup="dialog"
-                  aria-controls="df-auto-rebuy-dialog" aria-expanded="false">
-            <span class="df-auto-rebuy-cta__dot" aria-hidden="true"></span>
-            <span>AUTO REBUY</span>
-            <strong data-bind="df-auto-rebuy-cta-status">—</strong>
-          </button>
-        </div>
+        <h2 class="df-section-title">DAILY COINFLIP</h2>
         <div class="df-coin-stage">
           <div class="df-coin-zone" data-bind="df-coin-zone"></div>
           <div class="df-modifier-meter-slot" data-bind="df-modifier-meter-slot"></div>
@@ -1770,6 +1768,13 @@ class AppDailyFlip extends HTMLElement {
         <div class="df-error" data-bind="df-error" hidden role="alert"></div>
         <div class="df-position" data-bind="df-position">
           <div class="df-position-slot" data-bind="df-position-today"></div>
+          <button type="button" class="df-auto-rebuy-cta"
+                  data-bind="df-auto-rebuy-cta" aria-haspopup="dialog"
+                  aria-controls="df-auto-rebuy-dialog" aria-expanded="false">
+            <span class="df-auto-rebuy-cta__icon" aria-hidden="true">↻</span>
+            <strong class="df-auto-rebuy-cta__status"
+                    data-bind="df-auto-rebuy-cta-status">—</strong>
+          </button>
           <div class="df-baf-score" data-bind="df-baf-score-box" aria-label="Big Ass Flip score">
             <span class="df-baf-score__label">
               <a class="df-baf-score__info" href="/learn/baf/" aria-label="Learn about Big Ass Flip" title="Learn about Big Ass Flip">i</a>
@@ -2120,6 +2125,9 @@ class AppDailyFlip extends HTMLElement {
           ? `Auto rebuy settings, ${enabled ? 'on' : 'off'}`
           : 'Auto rebuy settings, loading',
       );
+      trigger.title = info
+        ? `Auto rebuy · ${enabled ? 'ON' : 'OFF'}`
+        : 'Auto rebuy settings';
     }
     if (current) {
       current.textContent = info ? (enabled ? 'ON' : 'OFF') : 'LOADING';
@@ -2129,9 +2137,16 @@ class AppDailyFlip extends HTMLElement {
       carry.textContent = info ? `${this.#fmtWhole(info.carryWei)} FLIP` : '—';
     }
 
-    if (syncDraft || !isOpen) {
+    const draftTargetChanged = this.#autoRebuyDraftAddress !== this.#dashboardAddress;
+    const shouldSyncDraft = syncDraft
+      || !isOpen
+      || draftTargetChanged
+      || (Boolean(info) && !this.#autoRebuyDraftReady);
+    if (shouldSyncDraft) {
       if (toggle) toggle.checked = enabled;
       if (input) input.value = tokenAmountInput(info?.takeProfitWei ?? 0n);
+      this.#autoRebuyDraftAddress = this.#dashboardAddress;
+      this.#autoRebuyDraftReady = Boolean(info);
     }
     const draftEnabled = Boolean(toggle?.checked);
     const takeProfitWei = parseTokenAmount(input?.value);
@@ -2147,7 +2162,9 @@ class AppDailyFlip extends HTMLElement {
     if (input) input.disabled = this.#busy || !editable || !info || !draftEnabled;
     if (help) {
       if (!draftEnabled) {
-        help.textContent = 'Turn auto rebuy on to choose how much of each win gets banked.';
+        help.textContent = info?.enabled
+          ? 'Saving OFF settles resolved flips and cashes out any remaining rolling FLIP.'
+          : 'Turn auto rebuy on to choose how much of each win gets banked.';
       } else if (!amountValid) {
         help.textContent = 'Enter a valid non-negative FLIP amount.';
       } else if (takeProfitWei === 0n) {
