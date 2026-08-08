@@ -55,6 +55,11 @@ import {
 
 const RNG_POLL_INTERVAL_MS = 7_000;   // Phase 60 packs-panel cadence.
 const ERROR_AUTO_CLEAR_MS = 10_000;
+// Replay attempts allowed for a settled box whose legs have not indexed yet
+// before the strip stops advertising an open it cannot perform. Indexer lag is
+// seconds; this is generous. Without a ceiling the miss path re-arms itself
+// forever and the box reads as permanently stuck.
+const MAX_REPLAY_MISSES = 5;
 const PENDING_SOURCE = 'lootboxes';
 
 function _setIntervalUnref(fn, ms) {
@@ -881,7 +886,12 @@ class AppBoxStrip extends HTMLElement {
         }
         const presaleOnly = hasPresaleLeg && !hasLootboxLeg;
         let chainReady = false;
-        if ((hasAmount || presaleOnly) && !box.ready) {
+        // Re-probe a box that has actually failed. `ready` used to latch: once
+        // true it was never checked again, so a box the chain had stopped
+        // accepting stayed armed forever and every click failed the same way.
+        // Healthy ready boxes still skip the RPC — only failures pay for it.
+        const suspect = Number(box.openFailures) > 0;
+        if ((hasAmount || presaleOnly) && (!box.ready || suspect)) {
           chainReady = await canOpenLootbox({
             player: owner,
             lootboxIndex: box.index,
@@ -898,7 +908,8 @@ class AppBoxStrip extends HTMLElement {
           hasPresaleLeg,
           presaleOnly,
           receiptAmountWei,
-          ready: (hasAmount || presaleOnly) && (Boolean(box.ready) || chainReady),
+          ready: (hasAmount || presaleOnly)
+            && (suspect ? chainReady : (Boolean(box.ready) || chainReady)),
         };
       }));
       if (this.#addr !== owner) return;
@@ -1043,6 +1054,11 @@ class AppBoxStrip extends HTMLElement {
       if (clearedByRace || /already|nothing|no box|resolved/i.test(String(rawMsg))) {
         return await this.#replayResolvedBox(box);
       } else {
+        // Record the failure so the next poll RE-PROBES this box instead of
+        // trusting its latched `ready`. A box the chain has stopped accepting
+        // (the terminal liveness gate reverts every openBox, LootboxModule:648)
+        // otherwise stays armed and fails identically on every click.
+        box.openFailures = Math.max(0, Number(box.openFailures) || 0) + 1;
         this.#renderError(compactUiError(error, 'Box did not open. Try again.'));
         this.#render();
         return false;
@@ -1124,16 +1140,47 @@ class AppBoxStrip extends HTMLElement {
     // to the fresh amount-slot check without changing the button's busy state.
     if (silentIfMissing) return false;
 
-    // Do not retire an indexed result just because a companion leg is still
-    // catching up. It remains actionable and the next poll/click can rebuild
-    // the complete transaction result instead of losing it forever.
+    // A miss here used to unconditionally re-arm `ready + resolved`, which put
+    // the box straight back into this same branch on the next click: a silent
+    // loop that never opened and never gave up, because `resultSyncing`
+    // suppresses the error toast. Ask the chain what is actually true before
+    // deciding whether waiting is even the right thing to do.
     box.opening = false;
-    box.ready = true;
+    const status = await readLootboxStatus({
+      player: this.#addr,
+      lootboxIndex: box.index,
+    }).catch(() => null);
+
+    if (status != null && BigInt(status.amount ?? 0) > 0n) {
+      // The slot still holds ETH, so the box is NOT settled and there are no
+      // legs to replay — it was marked resolved in error (the poll matches the
+      // leg feed by index, this path re-filters it by a different rule, and the
+      // two can disagree). Hand it back to the normal open path.
+      box.resolved = false;
+      box.resultSyncing = false;
+      box.replayMisses = 0;
+      if (this.#addr) _writePending(this.#addr, this.#boxes);
+      this.#render();
+      return false;
+    }
+
+    // Settled on chain, legs still indexing. That is a real lifecycle state, so
+    // keep waiting — but bounded. Past the ceiling stop pretending an open is
+    // available and say so, instead of re-arming a button that cannot work.
+    box.replayMisses = Math.max(0, Number(box.replayMisses) || 0) + 1;
     box.resolved = true;
-    // Indexing lag is an expected lifecycle state, not a failed action. Keep
-    // the ready lane armed for its existing retry cadence without painting a
-    // ten-second error on every miss.
-    box.resultSyncing = true;
+    if (box.replayMisses >= MAX_REPLAY_MISSES) {
+      box.ready = false;
+      box.resultSyncing = false;
+      box.resultUnavailable = true;
+      this.#renderError(
+        'This luckbox is settled, but its result has not finished indexing. '
+        + 'Your rewards are already credited — refresh later to view the reveal.',
+      );
+    } else {
+      box.ready = true;
+      box.resultSyncing = true;
+    }
     if (this.#addr) _writePending(this.#addr, this.#boxes);
     this.#render();
     return false;
