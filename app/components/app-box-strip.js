@@ -221,6 +221,7 @@ function _writePending(addr, entries) {
       index: e.index == null || !Number.isFinite(Number(e.index)) ? null : Number(e.index),
       resultKey: e.resultKey ?? null,
       transactionHash: e.transactionHash ?? null,
+      resultTransactionHash: e.resultTransactionHash ?? null,
       transactionHashes: [...new Set([
         ...(Array.isArray(e.transactionHashes) ? e.transactionHashes : []),
         e.transactionHash,
@@ -265,6 +266,12 @@ export function resolvedBoxRowsFromLegs(items, player) {
         index,
         resultKey,
         transactionHash: transactionHash || null,
+        // The SETTLEMENT transaction, distinct from the purchase hash a
+        // receipt-discovered box carries. This row exists because a leg proved
+        // the open, so the opening tx is already known — replay must reuse this
+        // exact key instead of re-deriving one from a fresh anchor lookup that
+        // can miss and leave the box latched resolved with nothing to show.
+        resultTransactionHash: transactionHash || null,
         amountWei: String(
           item?.rewardData?.amount
           ?? item?.boxAmountRawWei
@@ -1085,11 +1092,15 @@ class AppBoxStrip extends HTMLElement {
       legs = openLegsFromFeed(rows, {
         player: this.#addr,
         lootboxIndex: box.index,
-        // `box.transactionHash` belongs to the PURCHASE. Nonzero batches must
-        // anchor replay by index so the feed can select the later OPEN tx.
-        // Index-zero AFKing results have no collision-free key except their
-        // opening transaction hash.
-        transactionHash: Number(box.index) === 0 ? box.transactionHash : null,
+        // Prefer the settlement hash recorded when the leg feed proved this box
+        // was opened (resolvedBoxRowsFromLegs). Discarding it and re-deriving an
+        // anchor by index is what let the two matching rules disagree: the poll
+        // marked the box resolved, this lookup found no anchor, and the box
+        // latched resolved with nothing to replay. Falling back to
+        // `box.transactionHash` only for index zero preserves the old behaviour
+        // for receipt-discovered boxes, where that hash IS the purchase.
+        transactionHash: box.resultTransactionHash
+          || (Number(box.index) === 0 ? box.transactionHash : null),
       });
     } catch (_e) {
       // Fall through to the exact chain-event replay below.
@@ -1173,10 +1184,7 @@ class AppBoxStrip extends HTMLElement {
       box.ready = false;
       box.resultSyncing = false;
       box.resultUnavailable = true;
-      this.#renderError(
-        'This luckbox is settled, but its result has not finished indexing. '
-        + 'Your rewards are already credited — refresh later to view the reveal.',
-      );
+      this.#renderError('Reward claimed. Reveal still syncing.');
     } else {
       box.ready = true;
       box.resultSyncing = true;
