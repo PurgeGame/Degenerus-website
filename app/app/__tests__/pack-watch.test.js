@@ -210,6 +210,93 @@ describe('pack-watch — deferred ticket reveals', () => {
       'collecting the pack retires it from the widget');
   });
 
+  // ------------------------------------------------------------------
+  // Request cost. A pending record is durable for months, so what the
+  // watcher asks for every 45s is the app's largest source of API load.
+  // ------------------------------------------------------------------
+
+  /** Route that records the level of every /tickets/by-trait read. */
+  function countingByTrait(seen, cards = []) {
+    return (url) => {
+      const match = /level=(\d+)/.exec(String(url));
+      seen.push(Number(match?.[1]));
+      return byTrait(cards);
+    };
+  }
+
+  test('a far-future pack record is not polled until the sweep reaches its level', async () => {
+    // level 12 + the six-key window: nothing past level 17 can have rolled.
+    const farLevel = LEVEL + 40;
+    const seen = [];
+    _routes['/tickets/by-trait'] = countingByTrait(seen);
+    await packWatch.recordPendingPack({ address: ADDR, level: farLevel, expectedTickets: 4 });
+    seen.length = 0;   // the seed read at purchase time is not the poll cost
+
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((r) => setTimeout(r, 10));
+    packWatch.refreshPackWatch();
+    await new Promise((r) => setTimeout(r, 10));
+
+    assert.deepEqual(seen, [],
+      'a level weeks out from its draw is never asked whether its traits rolled');
+    assert.equal(packWatch.pendingPacks().length, 1,
+      'the record survives so the level inspects normally once it goes live');
+  });
+
+  test('an unknown game state gates nothing', async () => {
+    // Number(null) is 0 — a null cap must not read as "cap every level".
+    delete _routes['/game/state'];
+    const seen = [];
+    _routes['/tickets/by-trait'] = countingByTrait(seen, [card(0, true)]);
+    await packWatch.recordPendingPack({ address: ADDR, level: LEVEL + 40, expectedTickets: 1 });
+    seen.length = 0;
+
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(seen, [LEVEL + 40],
+      'without a snapshot the watcher must fall back to asking');
+  });
+
+  test('a settled level is read once, then served from the cache', async () => {
+    // jackpotPhaseFlag at level 12 puts the unresolved floor at 12, so level 5
+    // has drawn and drained: its by-trait answer can no longer change.
+    const seen = [];
+    _routes['/tickets/by-trait'] = countingByTrait(seen, [card(0, false)]);
+    await packWatch.recordPendingPack({ address: ADDR, level: 5, expectedTickets: 1 });
+    packWatch.clearSettledCardCache();   // recording already inspects once
+    seen.length = 0;
+
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(seen, [5], 'first inspection still reads the endpoint');
+
+    packWatch.refreshPackWatch();
+    await new Promise((r) => setTimeout(r, 10));
+    packWatch.refreshPackWatch();
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(seen, [5], 'a finished level is not re-asked every cycle');
+
+    packWatch.clearSettledCardCache();
+    packWatch.refreshPackWatch();
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(seen, [5, 5],
+      'dropping the cache (confirmed write, day shift) re-reads it');
+  });
+
+  test('a live level is re-read every cycle', async () => {
+    const seen = [];
+    _routes['/tickets/by-trait'] = countingByTrait(seen, [card(0, false)]);
+    await packWatch.recordPendingPack({ address: ADDR, level: LEVEL, expectedTickets: 1 });
+    seen.length = 0;
+
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((r) => setTimeout(r, 10));
+    packWatch.refreshPackWatch();
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(seen, [LEVEL, LEVEL],
+      'the draw this level is waiting on is exactly what polling is for');
+  });
+
   test('purchase-phase future packs publish a passive receipt without posing as an action', async () => {
     _routes['/game/state'] = {
       level: LEVEL - 1,

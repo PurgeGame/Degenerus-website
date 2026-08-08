@@ -1810,7 +1810,10 @@ class AppDecimatorPanel extends HTMLElement {
       afkingResult,
       presaleResult,
     ] = await Promise.allSettled([
-      fetchJSON('/game/state'),
+      // Display only: the click-time path below refetches fresh before pricing
+      // anything, so the 15s shared snapshot is already fresher than this 30s
+      // cycle was achieving on its own.
+      readGameState(),
       readPurchaseQuote(),
       actingLower ? fetchJSON(`/player/${actingLower}`) : Promise.resolve(null),
       actingLower ? readFlipWidgetBalances({ player: actingLower }) : Promise.resolve(null),

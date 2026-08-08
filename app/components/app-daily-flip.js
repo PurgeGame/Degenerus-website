@@ -36,7 +36,6 @@ import {
   getViewedAddress,
 } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
-import { readPlayerSnapshot } from '../app/player-snapshot.js';
 import { readGameState } from '../app/game-state.js';
 import {
   depositCoinflip,
@@ -1556,7 +1555,7 @@ class AppDailyFlip extends HTMLElement {
     const tasks = [
       this.#runRefreshTask(
         seq,
-        addr ? readPlayerSnapshot(address) : Promise.resolve(null),
+        addr ? fetchJSON(`/player/${address}`) : Promise.resolve(null),
         (value) => {
           if (value) this.#dashboard = value;
           else this.#dashboard = null;

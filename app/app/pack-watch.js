@@ -23,8 +23,9 @@
 // quota errors must never break a buy or a poll (Pitfall F).
 
 import { CHAIN, CONTRACTS } from './chain-config.js';
-import { getProvider, ethers } from './contracts.js';
+import { getProvider, ethers, TX_CONFIRMED_EVENT } from './contracts.js';
 import { fetchJSON } from './api.js';
+import { get } from './store.js';
 import { readGameState } from './game-state.js';
 import { publishPendingActions, clearPendingActions } from './pending-actions.js';
 import { dgnPartitionTicketEntries } from './dgn-traits.js';
@@ -98,6 +99,7 @@ const _activePackCards = new Map();
 let _completeListener = null;
 let _abortListener = null;
 let _jackpotRevealListener = null;
+let _settledResetListener = null;
 const _revealedJackpotDays = new Set();
 
 /** Test-only: pin the clock used for TTL expiry. */
@@ -296,8 +298,26 @@ function _openedPieces(payload) {
   });
 }
 
-async function _fetchCards(address, level) {
-  return fetchJSON(`/player/${_lower(address)}/tickets/by-trait?level=${level}`);
+// A level under the unresolved floor has finished its draw and drained its
+// ticket queue, so no further entry can be filed against it: its by-trait
+// payload is final. The watcher was re-asking for every such level every 45s,
+// and a wallet holding unopened packs across a dozen past levels made this the
+// most requested endpoint in the app. Cache the settled answer for the page
+// session; a confirmed write or a day shift drops it, so even a wrong
+// immutability assumption self-heals within one player action.
+const _settledCards = new Map();   // `${addr}:${level}` -> by-trait payload
+
+/** Drop the settled-level payloads (confirmed write, day shift, teardown). */
+export function clearSettledCardCache() {
+  _settledCards.clear();
+}
+
+async function _fetchCards(address, level, { settled = false } = {}) {
+  const key = `${_lower(address)}:${Number(level)}`;
+  if (settled && _settledCards.has(key)) return _settledCards.get(key);
+  const payload = await fetchJSON(`/player/${_lower(address)}/tickets/by-trait?level=${level}`);
+  if (settled) _settledCards.set(key, payload);
+  return payload;
 }
 
 /**
@@ -326,6 +346,25 @@ export function pendingTicketDrainLevels(gameState) {
   if (!Number.isInteger(level) || level < 0 || floor == null) return [];
   return Array.from({ length: LIVE_TICKET_WINDOW }, (_unused, offset) => level + offset)
     .filter((candidate) => candidate >= floor);
+}
+
+/**
+ * The band a pending record can actually learn anything from.
+ *
+ * `cap` is the top of the contract's six-key sweep. Entries for a level past it
+ * have not been generated, so /tickets/by-trait can only answer "nothing yet" —
+ * and a far-future ticket buy leaves a record that would poll that guaranteed
+ * answer every 45 seconds until its level goes live, which is weeks out at
+ * mainnet pace. `settledBelow` is the unresolved floor: under it a level's draw
+ * is done and its payload will not change again.
+ *
+ * Both are null when the snapshot is missing, which reads as "no gate" — an
+ * unknown game state must never suppress a reveal.
+ */
+export function packInspectionWindow(gameState) {
+  const level = Number(gameState?.level);
+  if (!Number.isInteger(level) || level < 0) return { cap: null, settledBelow: null };
+  return { cap: level + LIVE_TICKET_WINDOW - 1, settledBelow: _unresolvedTicketFloor(gameState) };
 }
 
 async function _readEntriesOwed(address, levels) {
@@ -1010,7 +1049,7 @@ async function _foilState(address, level) {
   }
 }
 
-async function _inspectOne(address, rec) {
+async function _inspectOne(address, rec, sweep = null) {
   const level = Number(rec?.level);
   if (!Number.isInteger(level)) return null;
   const chainOwedEntries = Math.max(0, Math.floor(Number(rec?.chainOwedEntries) || 0));
@@ -1033,9 +1072,29 @@ async function _inspectOne(address, rec) {
       && (chainOwedEntries > 0 || trackedReleasedEntries < trackedExpectedEntries))) {
     return { level, expired: true, ready: false, fresh: [], unseen: [], rec };
   }
+  // `?? NaN` and not Number(): Number(null) is 0, which would read as "cap
+  // every level" and silently gate every pending pack in the app.
+  const cap = Number(sweep?.cap ?? NaN);
+  if (Number.isInteger(cap) && level > cap) {
+    // Past the contract's live sweep: the traits have not rolled, so there is
+    // nothing to read. Same shape as an unreachable endpoint — the pending
+    // receipt keeps counting from the record rather than from a payload, and
+    // the level inspects normally as soon as the sweep reaches it.
+    return {
+      level,
+      unrolled: true,
+      ready: false,
+      fresh: [],
+      unseen: [],
+      rec,
+      pendingEntries: uninspectedPendingEntries,
+    };
+  }
+  const settledBelow = Number(sweep?.settledBelow ?? NaN);
+  const settled = Number.isInteger(settledBelow) && level < settledBelow;
   let payload;
   try {
-    payload = await _fetchCards(address, level);
+    payload = await _fetchCards(address, level, { settled });
   } catch (_e) {
     return {
       level,
@@ -1196,11 +1255,11 @@ async function _inspectOne(address, rec) {
  * Read-only readiness snapshot for the unified pending widget.
  * No reveal is queued and no record is retired here.
  */
-export async function inspectPendingPacks({ address } = {}) {
+export async function inspectPendingPacks({ address, sweep = null } = {}) {
   const addr = _lower(address);
   if (!addr) return [];
   const mine = pendingPacks().filter((rec) => rec && _lower(rec.address) === addr);
-  const inspected = await Promise.all(mine.map((rec) => _inspectOne(addr, rec)));
+  const inspected = await Promise.all(mine.map((rec) => _inspectOne(addr, rec, sweep)));
   return inspected.filter(Boolean);
 }
 
@@ -1212,12 +1271,13 @@ async function _publishPackActions(address, publishSeq = null) {
   }
   const gameState = await readGameState();
   const drainLevels = pendingTicketDrainLevels(gameState);
+  const sweep = packInspectionWindow(gameState);
   await _syncChainOwedRecords(addr, drainLevels);
   // The queue can be awarded and fully drained between two 45-second RPC
   // samples. Indexed JackpotTicketWin history is the durable bridge for that
   // blind spot; release only levels the contract can process in this sweep.
   await _releaseJackpotTicketAwards(addr, drainLevels);
-  const rows = await inspectPendingPacks({ address: addr });
+  const rows = await inspectPendingPacks({ address: addr, sweep });
   // A wallet switch can land while the ticket/foil endpoints are in flight.
   // Never let that old response repopulate the shared widget for the prior
   // account.
@@ -1394,18 +1454,21 @@ export async function checkPendingPacks({ address, levels = null } = {}) {
 
   let queued = 0;
   const done = new Set();
+  // Store-only: this is a click path and must not add a /game/state fetch of
+  // its own. An empty store yields a null sweep, which gates nothing.
+  const sweep = packInspectionWindow(get('app.gameState'));
 
   for (const rec of mine) {
     const lvl = Number(rec.level);
     const activeKey = _packKey(addr, lvl);
     if (_activePackCards.has(activeKey)) continue;
-    const inspected = await _inspectOne(addr, rec);
+    const inspected = await _inspectOne(addr, rec, sweep);
     if (!inspected) continue;
     if (inspected.expired) {
       done.add(`${lvl}`);
       continue;
     }
-    if (inspected.error) continue;
+    if (inspected.error || inspected.unrolled) continue;
     const {
       revealed, unseen, fresh, foilTickets, foilBlocked,
     } = inspected;
@@ -1529,9 +1592,16 @@ export function startPackWatch({ getAddress } = {}) {
       if (Number.isInteger(day) && day > 0) _revealedJackpotDays.add(day);
       refreshPackWatch();
     };
+    // The settled-level cache assumes a drawn level's entries are final. A
+    // confirmed write or a day shift are the only moments that assumption is
+    // worth re-testing, so drop it there rather than living with a page-long
+    // window where a surprise could not be seen.
+    _settledResetListener = () => clearSettledCardCache();
     document.addEventListener(PACK_REVEAL_COMPLETE_EVENT, _completeListener);
     document.addEventListener(PACK_REVEAL_ABORT_EVENT, _abortListener);
     document.addEventListener('jackpot:revealed', _jackpotRevealListener);
+    document.addEventListener(TX_CONFIRMED_EVENT, _settledResetListener);
+    document.addEventListener('game:day-shift', _settledResetListener);
   }
   _timer = setInterval(refreshPackWatch, WATCH_INTERVAL_MS);
   if (_timer && typeof _timer.unref === 'function') {
@@ -1573,10 +1643,16 @@ export function stopPackWatch() {
     if (_completeListener) document.removeEventListener(PACK_REVEAL_COMPLETE_EVENT, _completeListener);
     if (_abortListener) document.removeEventListener(PACK_REVEAL_ABORT_EVENT, _abortListener);
     if (_jackpotRevealListener) document.removeEventListener('jackpot:revealed', _jackpotRevealListener);
+    if (_settledResetListener) {
+      document.removeEventListener(TX_CONFIRMED_EVENT, _settledResetListener);
+      document.removeEventListener('game:day-shift', _settledResetListener);
+    }
   }
   _completeListener = null;
   _abortListener = null;
   _jackpotRevealListener = null;
+  _settledResetListener = null;
+  clearSettledCardCache();
   _revealedJackpotDays.clear();
   _activePackCards.clear();
   _historyBackfilled.clear();
