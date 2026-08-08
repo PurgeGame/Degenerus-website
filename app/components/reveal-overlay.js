@@ -255,8 +255,11 @@ const LOOTBOX_MANUAL_BURST_MS = 360;
 const LOOTBOX_AUTO_BURST_MS = 260;
 const LOOTBOX_AUTO_RESULT_MS = 1_750;
 const LOOTBOX_AUTO_RESULT_REDUCED_MS = 1_200;
-const BOX_CURRENCY_FLIP_MS = 900;
-const BOX_CURRENCY_RESULT_MS = 560;
+// The denomination lock is part of the result, not a disposable transition.
+// Give it the same 3.3s airborne track as the daily coin and hold the landing
+// long enough to read before the next reel begins.
+const BOX_CURRENCY_FLIP_MS = 3_300;
+const BOX_CURRENCY_RESULT_MS = 850;
 // Match the ordinary daily coinflip: one 3.3s toss plus its 0.7s truthful
 // landing. Survival never inherits reel/reveal speed and never gets a Reverse
 // Flip correction, so the double-or-nothing result is readable every time.
@@ -3860,7 +3863,7 @@ class RevealOverlay extends HTMLElement {
     if (!reducedMotion) {
       reveal.classList?.add('is-flipping');
       sfxSpinStart(BOX_CURRENCY_FLIP_MS);
-      await this.#wait(this.#scaledDgnDelay(rendered, BOX_CURRENCY_FLIP_MS));
+      await this.#waitForCoinflip(BOX_CURRENCY_FLIP_MS);
       if (this.#aborted) return;
     }
 

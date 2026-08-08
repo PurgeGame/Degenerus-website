@@ -374,7 +374,8 @@ class AppPassSection extends HTMLElement {
           </span>
           <span class="pass-product-checkout pass-product-checkout--lazy">
             <button type="button" class="pass-lazy-buy" data-write data-bind="pass-lazy-buy">
-              BUY LAZY PASS · …
+              BUY LAZY PASS
+              …
             </button>
           </span>
         </div>
@@ -408,7 +409,8 @@ class AppPassSection extends HTMLElement {
               </span>
             </span>
             <button type="button" class="pass-whale-buy" data-write data-bind="pass-whale-buy">
-              BUY WHALE PASS · …
+              BUY WHALE PASS
+              …
             </button>
           </span>
         </div>
@@ -449,7 +451,8 @@ class AppPassSection extends HTMLElement {
               </span>
               <select class="pass-deity-select" name="pass-deity-symbol"
                       data-bind="pass-deity-select" aria-label="Deity pass symbol"></select>
-              <button type="button" class="pass-deity-buy" data-write data-bind="pass-deity-buy">Buy</button>
+              <button type="button" class="pass-deity-buy" data-write data-bind="pass-deity-buy">BUY DEITY PASS
+                …</button>
             </div>
             <div class="pass-deity-error" data-bind="pass-deity-error" hidden role="alert"></div>
 
@@ -864,11 +867,11 @@ class AppPassSection extends HTMLElement {
     const rawQuantity = Number.parseInt(quantityValue || '', 10);
     if (unit == null || !Number.isInteger(rawQuantity)
       || rawQuantity < 1 || rawQuantity > 100) {
-      buy.textContent = 'BUY WHALE PASS · —';
+      buy.textContent = 'BUY WHALE PASS\n—';
       return;
     }
     const finalPrice = BigInt(unit) * BigInt(rawQuantity);
-    buy.textContent = `BUY WHALE PASS · ${formatPassEth(finalPrice)} ETH`;
+    buy.textContent = `BUY WHALE PASS\n${formatPassEth(finalPrice)} ETH`;
   }
 
   #renderLazyBuyLabel() {
@@ -876,8 +879,8 @@ class AppPassSection extends HTMLElement {
     if (!buy || this.#busyLazy) return;
     const cost = this.#pricingData?.lazyCostWei;
     buy.textContent = cost == null
-      ? 'BUY LAZY PASS · —'
-      : `BUY LAZY PASS · ${formatPassEth(cost)} ETH`;
+      ? 'BUY LAZY PASS\n—'
+      : `BUY LAZY PASS\n${formatPassEth(cost)} ETH`;
   }
 
   #renderPassSeatBenefits() {
@@ -1012,8 +1015,8 @@ class AppPassSection extends HTMLElement {
       }
     }
     buy.textContent = this.#pricingData?.deityNextPriceWei == null
-      ? 'Buy'
-      : `Buy · ${formatPassEth(this.#pricingData.deityNextPriceWei)} ETH`;
+      ? 'BUY DEITY PASS\n—'
+      : `BUY DEITY PASS\n${formatPassEth(this.#pricingData.deityNextPriceWei)} ETH`;
     this.#renderDeityPreview();
   }
 
@@ -1103,11 +1106,7 @@ class AppPassSection extends HTMLElement {
     if (topup) topup.hidden = !active;
     if (!fundButton) return;
     const addedFunding = this.#afkingFundingInputWei('pass-afking-topup');
-    fundButton.textContent = this.#busyAfkingFunding
-      ? 'TOPPING UP…'
-      : (addedFunding != null && addedFunding > 0n
-        ? `TOP UP · ${formatPassEth(addedFunding, 6)} ETH`
-        : 'TOP UP');
+    fundButton.textContent = this.#busyAfkingFunding ? 'TOPPING UP…' : 'TOP UP';
     const busy = this.#busyAfking
       || this.#busyAfkingFunding
       || this.#busyAfkingWithdrawal

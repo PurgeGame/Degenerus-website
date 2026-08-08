@@ -562,15 +562,15 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const seat = el.querySelector('[data-bind="pass-whale-afking-seat"]');
     assert.equal(benefit.textContent, 'BONUS LUCKBOX · 0.4 ETH',
       'a standard 4 ETH pass advertises its actual 0.4 ETH lootbox');
-    assert.equal(buy.textContent, 'BUY WHALE PASS · 4 ETH',
-      'the purchase action contains the final one-pass price');
+    assert.equal(buy.textContent, 'BUY WHALE PASS\n4 ETH',
+      'the purchase action puts the final one-pass price on its own line');
     assert.equal(seat.hidden, false, 'a wallet without a seat sees the one-time seat benefit');
     const quantity = el.querySelector('[name="pass-whale-qty"]');
     quantity.value = '2';
     quantity.dispatchEvent({ type: 'input' });
     assert.equal(benefit.textContent, 'BONUS LUCKBOX · 0.8 ETH');
-    assert.equal(buy.textContent, 'BUY WHALE PASS · 8 ETH',
-      'changing quantity updates the final total directly in the purchase action');
+    assert.equal(buy.textContent, 'BUY WHALE PASS\n8 ETH',
+      'changing quantity updates the second-line total in the purchase action');
 
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.match(css, /\.pass-lootbox-perk\s*\{[^}]*font-size:\s*0\.67rem/s,
@@ -588,8 +588,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const benefit = el.querySelector('[data-bind="pass-lazy-lootbox"]');
     const buy = el.querySelector('[data-bind="pass-lazy-buy"]');
     assert.equal(benefit.textContent, 'BONUS LUCKBOX · 0.024 ETH');
-    assert.equal(buy.textContent, 'BUY LAZY PASS · 0.24 ETH',
-      'Lazy puts its final price in the Buy action just like Whale');
+    assert.equal(buy.textContent, 'BUY LAZY PASS\n0.24 ETH',
+      'Lazy puts its final price on a second line just like Whale');
     assert.ok(benefit.classList.contains('pass-lootbox-perk'),
       'Lazy and Whale share the highlighted bonus-lootbox treatment');
     el.disconnectedCallback();
@@ -603,7 +603,10 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     await settle(40);
 
     const benefit = el.querySelector('[data-bind="pass-deity-lootbox"]');
+    const buy = el.querySelector('[data-bind="pass-deity-buy"]');
     assert.equal(benefit.textContent, 'BONUS LUCKBOX · 2.4 ETH');
+    assert.equal(buy.textContent, 'BUY DEITY PASS\n24 ETH',
+      'Deity uses the same pass-name / second-line-price action layout');
     assert.ok(benefit.classList.contains('pass-lootbox-perk'),
       'Deity shares the highlighted bonus bubble used by Whale and Lazy');
     el.disconnectedCallback();
@@ -1001,6 +1004,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(fundOnly.hidden, false, 'an active subscription exposes independent funding');
     fundInput.value = '0.5';
     fundInput.dispatchEvent({ type: 'input' });
+    assert.equal(fundOnly.textContent, 'TOP UP',
+      'the amount stays in the input instead of being repeated in the button');
     fundOnly.dispatchEvent({ type: 'click' });
     await settle(60);
     assert.deepEqual(passContract._calls.depositAfkingFunding, [[

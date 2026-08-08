@@ -48,6 +48,33 @@ describe('authoritative day rollover reducer', () => {
     assert.equal(shifted.ready, false);
     assert.equal(shifted.jackpotReady, false);
     assert.equal(shifted.coinflipReady, false);
+    assert.equal(shifted.rngRequested, false,
+      'the wall-clock boundary alone is not presented as an RNG request');
+  });
+
+  test('the request lock starts processing and preserves its Reverse Flip parity after consumption', () => {
+    let state = apply(null, {
+      day: 41, blockNumber: 110, coinflip: null,
+      rngLocked: false, reverseQueued: '3',
+    }, { day: 40, status: 'resolved' });
+    assert.equal(state.rngRequested, false);
+    assert.equal(state.reverseQueued, '3');
+
+    state = apply(state, {
+      day: 41, blockNumber: 111, coinflip: null,
+      rngLocked: true, reverseQueued: '3',
+    }, { day: 40, status: 'resolved' });
+    assert.equal(state.rngRequested, true);
+    assert.equal(state.rngLocked, true);
+    assert.equal(state.reverseQueued, '3');
+
+    state = apply(state, {
+      day: 41, blockNumber: 112, coinflip: win(41),
+      rngLocked: false, reverseQueued: '0',
+    }, { day: 40, status: 'resolved' });
+    assert.equal(state.rngRequested, true, 'request evidence remains latched for the day');
+    assert.equal(state.reverseQueued, '3',
+      'the consumed live quote cannot reset the waiting coin to the wrong side');
   });
 
   test('stale and duplicate responses cannot regress a ready target', () => {

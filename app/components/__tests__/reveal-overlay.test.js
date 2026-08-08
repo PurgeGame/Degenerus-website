@@ -1078,6 +1078,18 @@ describe('buildBoxSpinBoard', () => {
       /MORE FLIP SPINS · THEN SURVIVAL/,
       'the FLIP landing explicitly introduces its two remaining reels and final gate',
     );
+    assert.match(REVEAL_SRC, /const BOX_CURRENCY_FLIP_MS = 3_300/,
+      'the box currency coin gets a full normal-length airborne track');
+    assert.match(
+      REVEAL_SRC,
+      /#waitForCoinflip\(BOX_CURRENCY_FLIP_MS\)/,
+      'taps and reveal-speed preferences cannot shorten the currency result',
+    );
+    assert.match(
+      APP_CSS,
+      /\.rvl-box-currency-reveal\.is-flipping \.rvl-box-currency-icon\s*\{[^}]*animation:\s*rvl-box-currency-toss 3\.3s/s,
+      'the visual currency toss stays synchronized with its full wait',
+    );
     assert.match(REVEAL_SRC, /const SURVIVAL_FLIP_MS = 4_000/,
       'the survival toss gets the same four-second window as a normal daily coinflip');
     assert.match(REVEAL_SRC, /#waitForCoinflip\(SURVIVAL_FLIP_MS\)/,
@@ -3082,7 +3094,7 @@ describe('reveal-overlay element', () => {
         'the currency badge starts face-down');
       assert.equal(sealed.classList.contains('is-flipping'), true,
         'a real currency coin flip bridges reel one and the result');
-      await new Promise((resolve) => setTimeout(resolve, 1_600));
+      await new Promise((resolve) => setTimeout(resolve, 4_300));
 
       const currency = stage.querySelector('.rvl-box-currency-reveal');
       assert.ok(currency.classList.contains('is-revealed'));

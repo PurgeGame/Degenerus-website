@@ -514,6 +514,17 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       10_000_000_000n,
       'testnet ETH input is converted through the active 1M divisor',
     );
+    assert.equal(
+      parseDegeneretteAmountInput('.1', 0),
+      parseDegeneretteAmountInput('0.1', 0),
+      'a leading decimal is accepted exactly like the equivalent zero-prefixed wager',
+    );
+    assert.equal(
+      parseDegeneretteAmountInput('.1', 1),
+      parseDegeneretteAmountInput('0.1', 1),
+      'leading-decimal token wagers use the same exact base-unit amount',
+    );
+    assert.equal(parseDegeneretteAmountInput('.', 0), null, 'an incomplete decimal remains invalid');
     assert.equal(parseDegeneretteAmountInput('1.0000000000000000001', 1), null);
   });
 

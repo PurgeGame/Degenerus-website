@@ -1037,7 +1037,7 @@ describe('new-day auto-follow', () => {
     assert.equal(cta.hidden, true, 'day 6 starts with fresh board/flip gates');
   });
 
-  test('direct day shift leaves yesterday playable until the new jackpot day is mounted', async () => {
+  test('the RNG request reloads the jackpot into processing while a bare clock shift does not', async () => {
     const connected = '0xab12000000000000000000000000000000000000';
     storeMod.update('connected.address', connected);
     const replay = makeFakeElement('replay-panel');
@@ -1052,6 +1052,13 @@ describe('new-day auto-follow', () => {
     replay.append(daySelect, playerSelect);
     const persisted = [];
     replay.setPersistedRevealState = (...state) => persisted.push(state);
+    const refreshOptions = [];
+    const refreshSelections = [];
+    replay.refreshDays = async (options) => {
+      refreshOptions.push(options);
+      refreshSelections.push(daySelect.value);
+      return false;
+    };
     _docBody.appendChild(replay);
 
     const el = instantiate();
@@ -1060,19 +1067,42 @@ describe('new-day auto-follow', () => {
     const priorPersistenceCalls = persisted.length;
     storeMod.update('app.daySync', {
       day: 6, jackpotReady: false, coinflipReady: false, ready: false,
+      rngLocked: false, rngRequested: false,
+      phase: 'waiting-both', coinflipResult: null,
+    });
+    await flushMicrotasks();
+
+    assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 5/,
+      'the wall-clock boundary alone does not discard the completed draw');
+    assert.equal(daySelect.value, '5');
+    assert.equal(replay.getAttribute('data-day-warming'), null,
+      'processing does not start before the request exists');
+    assert.equal(persisted.length, priorPersistenceCalls,
+      'a clock-only transition cannot reset the prior draw or its bonus button');
+
+    storeMod.update('app.daySync', {
+      day: 6, jackpotReady: false, coinflipReady: false, ready: false,
+      rngLocked: true, rngRequested: true, reverseQueued: '3',
       phase: 'waiting-both', coinflipResult: null,
     });
     await flushMicrotasks();
 
     assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 6/);
-    assert.equal(daySelect.value, '5', 'the last resolved draw remains mounted');
-    assert.equal(replay.getAttribute('data-day-warming'), null,
-      'the old scratch board keeps its result colors and pointer events');
-    assert.equal(persisted.length, priorPersistenceCalls,
-      'incoming-day persistence cannot reset the prior draw or its bonus button');
+    assert.equal(daySelect.value, '6', 'the requested day mounts immediately');
+    assert.ok(daySelect.options.some((option) => (
+      option.value === '6' && option.dataset?.processingDay === 'true'
+    )), 'a processing placeholder exists before the replay index catches up');
+    assert.equal(replay.getAttribute('data-day-warming'), '',
+      'mounting the request starts the existing jackpot processing control');
+    assert.deepEqual(refreshOptions, [{ force: true }],
+      'the request force-refreshes the jackpot replay feed once');
+    assert.deepEqual(refreshSelections, ['6'],
+      'the reload snapshots the processing day instead of restoring yesterday');
+    assert.deepEqual(persisted.at(-1), [false, false],
+      'the incoming board starts fresh instead of inheriting yesterday');
 
-    // The old board is deliberately still playable here. Its completion must
-    // never pre-mark the just-pinned incoming day as already watched.
+    // A detached prior-day board can still finish a late event. Its explicit
+    // day must never pre-mark the just-pinned incoming day as watched.
     globalThis.document.dispatchEvent({
       type: 'replay:scratch-complete',
       detail: {
@@ -1089,16 +1119,16 @@ describe('new-day auto-follow', () => {
       'a late prior-day scratch cannot skip the incoming jackpot');
     assert.equal(globalThis.localStorage.getItem(`jackpot_complete_day_${CHAIN.id}_6`), null);
 
-    daySelect.options.push({ value: '6' });
     storeMod.update('app.lastDay', DAY6);
     await flushMicrotasks();
     assert.equal(daySelect.value, '6');
     assert.equal(replay.getAttribute('data-day-warming'), '',
-      'the warming mask applies once the incoming day is actually mounted');
+      'the request remains processing until the exact jackpot lane is ready');
 
     storeMod.update('app.daySync', {
       day: 6, jackpotDay: 6, coinflipDay: null,
       jackpotReady: true, coinflipReady: false, ready: false,
+      rngLocked: false, rngRequested: true, reverseQueued: '3',
       phase: 'waiting-coinflip', coinflipResult: null,
     });
     await flushMicrotasks();

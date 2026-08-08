@@ -317,9 +317,9 @@ async function boot() {
   // reveals. Jackpot and coinflip consumers each unlock from their own exact-
   // day lane; app.daySync.ready only reports when the whole handoff is done.
   startDayRollover({
-    onRefreshNeeded: ({ dayChanged, readyChanged }) => {
-      void refreshForDayShift({ includePlayer: dayChanged || readyChanged });
-      if (dayChanged || readyChanged) {
+    onRefreshNeeded: ({ dayChanged, readyChanged, requestChanged }) => {
+      void refreshForDayShift({ includePlayer: dayChanged || readyChanged || requestChanged });
+      if (dayChanged || readyChanged || requestChanged) {
         refreshPackWatch();
         refreshBingoWatch();
         refreshWhalePassClaims();

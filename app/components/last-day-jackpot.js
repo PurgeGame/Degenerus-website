@@ -142,6 +142,13 @@ class LastDayJackpot extends HTMLElement {
     );
   }
 
+  #rngRequestStarted(sync = this.#daySync) {
+    return sync?.rngRequested === true
+      || sync?.rngLocked === true
+      || sync?.jackpotReady === true
+      || sync?.coinflipReady === true;
+  }
+
   #replayShowsPinnedDay(panel = this.#panel()) {
     const daySelect = panel?.querySelector?.('[data-bind="day-select"]');
     const replayDay = Number(daySelect?.value);
@@ -195,6 +202,10 @@ class LastDayJackpot extends HTMLElement {
     const day = Number(sync?.day);
     this.#daySync = Number.isInteger(day) && day > 0 ? sync : null;
     if (!this.#daySync) return;
+    // currentDayView crosses at the wall-clock boundary. Keep the completed
+    // draw mounted until the daily request is real; the RNG lock/result lanes
+    // are what begin the visible jackpot-processing handoff.
+    if (!this.#rngRequestStarted(sync) && day !== Number(this.#pinnedDay)) return;
     const genuinelyNew = this.#latestDaySeen == null || day > this.#latestDaySeen;
     if (genuinelyNew) this.#latestDaySeen = day;
     if (this.#pinnedDay == null
@@ -530,10 +541,27 @@ class LastDayJackpot extends HTMLElement {
     if (!panel || this.#pinnedDay == null) return false;
     const daySelect = panel.querySelector('[data-bind="day-select"]');
     const playerSelect = panel.querySelector('[data-bind="player-select"]');
-    const hasPinnedDay = daySelect?.options
+    let insertedProcessingDay = false;
+    let hasPinnedDay = daySelect?.options
       && Array.from(daySelect.options).some(
         (option) => String(option.value) === String(this.#pinnedDay),
       );
+    if (!hasPinnedDay && this.#syncWarming() && daySelect
+      && typeof document !== 'undefined' && typeof document.createElement === 'function') {
+      // The request exists before the indexer's replay row. Mount a temporary
+      // target immediately so replay-panel clears yesterday's board and its
+      // existing determinate JACKPOT PROCESSING button starts at step zero.
+      const option = document.createElement('option');
+      option.value = String(this.#pinnedDay);
+      option.textContent = `Day ${this.#pinnedDay} — processing`;
+      option.dataset.processingDay = 'true';
+      daySelect.appendChild(option);
+      if (Array.isArray(daySelect.options) && !daySelect.options.includes(option)) {
+        daySelect.options.push(option);
+      }
+      hasPinnedDay = true;
+      insertedProcessingDay = true;
+    }
     if (!hasPinnedDay) {
       // replay-panel historically loaded this list only once. Ask it to
       // refresh when the latest resolved day is not present; its public method
@@ -548,6 +576,14 @@ class LastDayJackpot extends HTMLElement {
       return false;
     }
     const dayOk = this.#setSelectAndFire(daySelect, this.#pinnedDay);
+    // Start the forced feed reload only after selecting the placeholder. The
+    // replay loader snapshots the current selection before its first await;
+    // doing this earlier would snapshot yesterday and restore it over the new
+    // processing board when an early /rng response still omitted today.
+    if (insertedProcessingDay && typeof panel.refreshDays === 'function') {
+      try { Promise.resolve(panel.refreshDays({ force: true })).catch(() => {}); }
+      catch { /* older replay-panel / fakeDOM */ }
+    }
     // Player defaults are seeded by main.js (sDGNRS house view when nothing
     // else is connected), so getViewedAddress() is the single source of truth.
     const addr = getViewedAddress();

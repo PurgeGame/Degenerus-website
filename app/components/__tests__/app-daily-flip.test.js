@@ -2911,7 +2911,7 @@ describe('new-day rollover (codex-found race)', () => {
     el.disconnectedCallback();
   });
 
-  test('the chain day advances immediately but jackpot and coinflip unlock together', async () => {
+  test('the RNG request starts a frozen parity coin; a bare clock shift does not', async () => {
     coinflipMod.__setLatestResultReaderForTest(async () => ({
       day: 67, win: true, rewardPercent: 96, resolved: true,
     }));
@@ -2920,22 +2920,45 @@ describe('new-day rollover (codex-found race)', () => {
       // Deliberately stale same-number/indexed input: app.daySync must win.
       flipDay: { day: 67, win: true, rewardPercent: 96 },
     };
-    const exact = { day: 68, win: true, rewardPercent: 81, resolved: true, source: 'chain' };
-    storeMod.update('app.daySync', {
-      day: 68,
-      jackpotReady: false,
-      coinflipDay: 68,
-      coinflipReady: true,
-      ready: false,
-      phase: 'waiting-jackpot',
-      coinflipResult: exact,
-    });
     const el = mount();
     await flushMicrotasks();
 
+    storeMod.update('app.daySync', {
+      day: 68,
+      jackpotReady: false,
+      coinflipReady: false,
+      rngLocked: false,
+      rngRequested: false,
+      ready: false,
+      phase: 'waiting-both',
+      coinflipResult: null,
+    });
+    await flushMicrotasks();
+
+    assert.equal(el.querySelector('.df-coin--syncing'), null,
+      'the wall-clock boundary alone leaves the completed coin mounted');
+    assert.ok(el.querySelector('.df-coin--spinning'));
+
+    storeMod.update('app.daySync', {
+      day: 68,
+      jackpotReady: false,
+      coinflipReady: false,
+      rngLocked: true,
+      rngRequested: true,
+      reverseQueued: '3',
+      ready: false,
+      phase: 'waiting-both',
+      coinflipResult: null,
+    });
+    await flushMicrotasks();
+
     const warming = el.querySelector('.df-coin--syncing');
-    assert.ok(warming, 'the new chain day replaces yesterday immediately');
+    assert.ok(warming, 'the observed request replaces yesterday immediately');
     assert.equal(warming.disabled, true, 'the coin cannot outrun the jackpot lane');
+    assert.equal(warming.getAttribute('data-reverse-flips'), '3');
+    assert.equal(warming.getAttribute('data-current-side'), 'eth');
+    assert.match(warming.className, /\bdf-coin--queued-eth\b/,
+      'odd request-time parity freezes the ETH face');
     assert.match(
       APP_CSS,
       /\.df-coin--syncing \.df-coin3d__inner\s*\{[^}]*animation:\s*none/s,
@@ -2945,6 +2968,7 @@ describe('new-day rollover (codex-found race)', () => {
     assert.equal(localStorage.getItem('flip_day_84532_68'), null);
     assert.equal(el.querySelector('[data-bind="df-reveal-hint"]').hidden, true);
 
+    const exact = { day: 68, win: true, rewardPercent: 81, resolved: true, source: 'chain' };
     storeMod.update('app.lastDay', { day: 68, status: 'resolved' });
     storeMod.update('app.daySync', {
       day: 68,
@@ -2952,6 +2976,9 @@ describe('new-day rollover (codex-found race)', () => {
       coinflipDay: 68,
       jackpotReady: true,
       coinflipReady: true,
+      rngLocked: false,
+      rngRequested: true,
+      reverseQueued: '3',
       ready: true,
       phase: 'synced',
       coinflipResult: exact,

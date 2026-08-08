@@ -170,11 +170,12 @@ const DEGENERETTE_TOKEN_SCALE = 10n ** 18n;
 
 /** Parse the player-facing decimal without crossing through lossy Number math. */
 export function parseDegeneretteAmountInput(value, currency) {
-  const match = /^\s*(\d+)(?:\.(\d{0,18}))?\s*$/.exec(String(value ?? ''));
+  const match = /^\s*(?:(\d+)(?:\.(\d{0,18}))?|\.(\d{1,18}))\s*$/.exec(String(value ?? ''));
   if (!match) return null;
   try {
-    const fraction = (match[2] || '').padEnd(18, '0');
-    const fullScale = (BigInt(match[1]) * DEGENERETTE_TOKEN_SCALE)
+    const whole = match[1] || '0';
+    const fraction = (match[2] || match[3] || '').padEnd(18, '0');
+    const fullScale = (BigInt(whole) * DEGENERETTE_TOKEN_SCALE)
       + BigInt(fraction || '0');
     return Number(currency) === 0 ? fullScale / BigInt(ETH_DIVISOR) : fullScale;
   } catch (_e) {

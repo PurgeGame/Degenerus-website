@@ -464,6 +464,11 @@ class AppDailyFlip extends HTMLElement {
   #jackpotRevealListener = null;
   #latestDaySeen = null;
   #daySync = null;         // direct GAME day + exact-day jackpot/FLIP readiness
+  // Request-time Reverse Flip count. The contract consumes/resets the live
+  // queue when the word lands, but the waiting coin must stay parked on the
+  // side players actually left it on until the reveal becomes available.
+  #resolutionReverseQueued = null;
+  #resolutionReverseDay = null;
   #browsingDay = null;
   #forceReplayDay = null;
   #daySelectionListener = null;
@@ -498,6 +503,36 @@ class AppDailyFlip extends HTMLElement {
       : null;
   }
 
+  #rngRequestStarted(sync = this.#daySync) {
+    return sync?.rngRequested === true
+      || sync?.rngLocked === true
+      || sync?.jackpotReady === true
+      || sync?.coinflipReady === true;
+  }
+
+  #latchResolutionReverse(sync = this.#daySync) {
+    const day = Number(sync?.day);
+    if (!Number.isInteger(day) || day <= 0 || !this.#rngRequestStarted(sync)) return;
+    let queued = null;
+    try {
+      const raw = sync?.reverseQueued
+        ?? this.#reverseFlipQuote?.queued
+        ?? this.#reverseVisualQueued;
+      if (raw != null) queued = BigInt(raw);
+    } catch (_e) { /* unavailable quote leaves the current face untouched */ }
+    if (queued == null) return;
+    if (this.#resolutionReverseDay !== day || sync?.rngLocked === true) {
+      this.#resolutionReverseDay = day;
+      this.#resolutionReverseQueued = queued;
+    }
+  }
+
+  #resolvingReverseQueued() {
+    return this.#resolutionReverseDay === Number(this.#day)
+      ? this.#resolutionReverseQueued
+      : this.#reverseFlipQuote?.queued;
+  }
+
   #dayAvailabilityReady(day = this.#day) {
     const sync = this.#activeDaySync(day);
     // Preserve historical replay and the pre-coordinator fallback. Once a
@@ -518,14 +553,19 @@ class AppDailyFlip extends HTMLElement {
       this.#render();
       return;
     }
+    // The wall-clock day can advance before advanceGame has requested VRF.
+    // Leave the prior result intact until the request lock/result proves this
+    // day has actually begun processing.
+    if (!this.#rngRequestStarted(sync) && day !== Number(this.#day)) return;
     const genuinelyNew = this.#latestDaySeen == null || day > this.#latestDaySeen;
     if (genuinelyNew) this.#latestDaySeen = day;
     if (this.#day == null
       || (genuinelyNew && day !== Number(this.#day))
       || (this.#browsingDay == null && day !== Number(this.#day))) {
-      this.#adoptDay(day);
+      this.#adoptDay(day, { lockedReverseQueued: sync?.reverseQueued });
     }
     if (Number(this.#day) !== day || this.#browsingDay != null) return;
+    this.#latchResolutionReverse(sync);
     const result = this.#syncedCoinflipResult(day);
     if (result) {
       this.#flipResult = result;
@@ -541,13 +581,19 @@ class AppDailyFlip extends HTMLElement {
     this.#maybeStartQueuedReveal();
   }
 
-  #adoptDay(value, { forceReplay = false, browsing = false } = {}) {
+  #adoptDay(value, {
+    forceReplay = false,
+    browsing = false,
+    lockedReverseQueued = null,
+  } = {}) {
     const day = Number(value);
     if (!Number.isInteger(day) || day <= 0) return false;
     const sameDay = day === Number(this.#day);
     if (sameDay && !forceReplay) return false;
     const previousDay = Number(this.#day);
     const previousCurrentBet = this.#currentBetWei;
+    const carriedReverseQuote = this.#reverseFlipQuote;
+    const carriedReverseQueued = carriedReverseQuote?.queued ?? this.#reverseVisualQueued;
     const rolloverCarry = !forceReplay
       && !browsing
       && Number.isInteger(previousDay)
@@ -593,8 +639,19 @@ class AppDailyFlip extends HTMLElement {
     this.#bafLookupKey = null;
     this.#clearLiveReverseAnimation();
     this.#clearResultTruthWindow();
-    this.#reverseFlipQuote = null;
-    this.#reverseVisualQueued = null;
+    let frozenQueued = null;
+    try {
+      const raw = lockedReverseQueued ?? carriedReverseQueued;
+      if (!forceReplay && !browsing && raw != null) frozenQueued = BigInt(raw);
+    } catch (_e) { /* malformed quote resets to the neutral face */ }
+    this.#resolutionReverseDay = frozenQueued == null ? null : day;
+    this.#resolutionReverseQueued = frozenQueued;
+    this.#reverseFlipQuote = frozenQueued == null ? null : {
+      queued: frozenQueued,
+      costWei: carriedReverseQuote?.costWei ?? reverseFlipCostWei(frozenQueued),
+      locked: true,
+    };
+    this.#reverseVisualQueued = frozenQueued;
     this.#showLiveSideOnCoin = false;
     this.#render();
     this.#scheduleRefresh();
@@ -1727,6 +1784,12 @@ class AppDailyFlip extends HTMLElement {
           };
           this.#reverseFlipQuote = nextQuote;
           if (nextQuote == null) return;
+          const sync = this.#activeDaySync(requestedDay);
+          if (sync && this.#rngRequestStarted(sync) && sync.ready !== true
+            && (this.#resolutionReverseDay !== Number(requestedDay) || nextQuote.locked)) {
+            this.#resolutionReverseDay = Number(requestedDay);
+            this.#resolutionReverseQueued = nextQuote.queued;
+          }
           if (this.#reverseVisualQueued == null
             || nextQuote.queued < this.#reverseVisualQueued) {
             this.#reverseVisualQueued = nextQuote.queued;
@@ -2963,8 +3026,9 @@ class AppDailyFlip extends HTMLElement {
         this.#appendSpinningCoin(zone, {
           resolving: true,
           disabled: true,
-          reverseQueued: this.#reverseFlipQuote?.queued,
-          resolutionLocked: Boolean(this.#reverseFlipQuote?.locked),
+          reverseQueued: this.#resolvingReverseQueued(),
+          resolutionLocked: this.#rngRequestStarted(this.#activeDaySync())
+            || Boolean(this.#reverseFlipQuote?.locked),
         });
       }
       return;
@@ -2980,7 +3044,7 @@ class AppDailyFlip extends HTMLElement {
       if (this.#day != null && !this.#revealed()) {
         this.#appendSpinningCoin(zone, {
           resolving: true,
-          reverseQueued: this.#reverseFlipQuote?.queued,
+          reverseQueued: this.#resolvingReverseQueued(),
           resolutionLocked: Boolean(this.#reverseFlipQuote?.locked),
         });
       }

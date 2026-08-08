@@ -12,7 +12,11 @@ import { ethers } from './contracts.js';
 import { CHAIN, CONTRACTS, VOLUME_WINDOW } from './chain-config.js';
 import { get, subscribe, update } from './store.js';
 
-const GAME_DAY_ABI = ['function currentDayView() external view returns (uint24)'];
+const GAME_DAY_ABI = [
+  'function currentDayView() external view returns (uint24)',
+  'function rngLocked() external view returns (bool)',
+  'function rngNudgeQuote() external view returns (uint256 queued, uint256 cost)',
+];
 const COINFLIP_DAY_ABI = [
   'function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win)',
 ];
@@ -98,6 +102,34 @@ export function reconcileDaySync({ snapshot, lastDay = null, previous = null, no
     || Boolean(sameTarget && previous?.jackpotReady);
   const coinflipReady = Boolean(coinflipResult?.resolved)
     || Boolean(sameTarget && previous?.coinflipReady);
+  // currentDayView follows the wall clock, so it can move before anybody has
+  // actually submitted the daily VRF request. Keep that boundary distinct
+  // from the request itself: the jackpot/coin surfaces use rngRequested to
+  // begin their processing handoff only once the lock (or a completed exact-
+  // day result) proves the request happened.
+  const hasLockReading = typeof snapshot?.rngLocked === 'boolean';
+  const rngLocked = hasLockReading
+    ? snapshot.rngLocked
+    : Boolean(sameTarget && previous?.rngLocked);
+  const rngRequested = rngLocked
+    || indexedJackpotResolved
+    || Boolean(coinflipResult?.resolved)
+    || Boolean(sameTarget && previous?.rngRequested);
+  let incomingReverseQueued = null;
+  try {
+    if (snapshot?.reverseQueued != null) incomingReverseQueued = BigInt(snapshot.reverseQueued);
+  } catch { /* malformed/legacy quote */ }
+  let reverseQueued = incomingReverseQueued;
+  if (sameTarget && previous?.reverseQueued != null) {
+    try {
+      const previousQueued = BigInt(previous.reverseQueued);
+      // _applyDailyRng consumes the queue and resets the live quote to zero.
+      // Preserve the request-time parity until both UI lanes have caught up.
+      reverseQueued = previous?.rngRequested && !rngLocked && incomingReverseQueued === 0n
+        ? previousQueued
+        : (incomingReverseQueued ?? previousQueued);
+    } catch { /* malformed previous state cannot poison the new sample */ }
+  }
   const ready = jackpotReady && coinflipReady;
 
   return {
@@ -111,6 +143,9 @@ export function reconcileDaySync({ snapshot, lastDay = null, previous = null, no
     coinflipDay: coinflipReady ? day : null,
     jackpotReady,
     coinflipReady,
+    rngLocked,
+    rngRequested,
+    reverseQueued: reverseQueued == null ? null : reverseQueued.toString(),
     ready,
     phase: _phase(jackpotReady, coinflipReady),
     coinflipResult: coinflipReady ? (coinflipResult ?? previous?.coinflipResult ?? null) : null,
@@ -123,6 +158,9 @@ function _materialKey(state) {
     state.day,
     state.jackpotReady ? 1 : 0,
     state.coinflipReady ? 1 : 0,
+    state.rngLocked ? 1 : 0,
+    state.rngRequested ? 1 : 0,
+    state.reverseQueued ?? '',
     state.coinflipResult?.win ? 1 : 0,
     state.coinflipResult?.rewardPercent ?? '',
   ].join(':');
@@ -148,11 +186,21 @@ async function _readSnapshot() {
   const overrides = blockNumber == null ? [] : [{ blockTag: blockNumber }];
   const day = _positiveDay(await game.currentDayView(...overrides));
   if (day == null) throw new Error('Invalid chain day');
-  const raw = await coinflip.getCoinflipDayResult(day, ...overrides);
+  const [coinflipResult, lockResult, nudgeResult] = await Promise.allSettled([
+    coinflip.getCoinflipDayResult(day, ...overrides),
+    game.rngLocked(...overrides),
+    game.rngNudgeQuote(...overrides),
+  ]);
+  if (coinflipResult.status !== 'fulfilled') throw coinflipResult.reason;
+  const raw = coinflipResult.value;
   return {
     day,
     blockNumber,
     coinflip: _normalizedCoinflip(day, raw),
+    rngLocked: lockResult.status === 'fulfilled' ? Boolean(lockResult.value) : null,
+    reverseQueued: nudgeResult.status === 'fulfilled'
+      ? String(nudgeResult.value?.queued ?? nudgeResult.value?.[0] ?? 0)
+      : null,
   };
 }
 
@@ -203,12 +251,14 @@ function _promptRefresh(previous, next) {
   if (typeof _onRefreshNeeded !== 'function' || !next) return;
   const dayChanged = Boolean(previous && Number(previous.day) !== Number(next.day));
   const readyChanged = Boolean(previous && previous.ready !== next.ready);
+  const requestChanged = Boolean(previous && previous.rngRequested !== next.rngRequested);
   const now = Date.now();
-  if (!dayChanged && !readyChanged && (next.ready || now - _lastRefreshPromptAt < API_REFRESH_MIN_MS)) {
+  if (!dayChanged && !readyChanged && !requestChanged
+    && (next.ready || now - _lastRefreshPromptAt < API_REFRESH_MIN_MS)) {
     return;
   }
   _lastRefreshPromptAt = now;
-  try { _onRefreshNeeded({ dayChanged, readyChanged, state: next }); }
+  try { _onRefreshNeeded({ dayChanged, readyChanged, requestChanged, state: next }); }
   catch (_e) { /* normal cadence remains armed */ }
 }
 
@@ -259,6 +309,8 @@ export function startDayRollover({ onRefreshNeeded = null } = {}) {
       day: current.day,
       blockNumber: current.chainBlock,
       coinflip: current.coinflipResult,
+      rngLocked: current.rngLocked,
+      reverseQueued: current.reverseQueued,
     });
   });
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
