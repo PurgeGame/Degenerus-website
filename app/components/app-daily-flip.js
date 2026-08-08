@@ -3323,7 +3323,14 @@ class AppDailyFlip extends HTMLElement {
     const info = this.#autoRebuyAddress === this.#dashboardAddress
       ? this.#autoRebuyInfo
       : null;
-    const carry = info?.enabled ? this.#asWei(info.carryWei) : 0n;
+    // Both sources above are chain reads. When neither is usable — no provider,
+    // a failed RPC, or an address the auto-rebuy read is not scoped to — this
+    // used to fall through with carry 0 and silently understate the player's
+    // coinflip FLIP by the entire carry, which is where auto-rebuy keeps the
+    // winnings. The indexed mirror covers that gap.
+    const carry = info?.enabled
+      ? this.#asWei(info.carryWei)
+      : this.#asWei(this.#dashboard?.coinflip?.autoRebuyCarry);
     return claimable + carry;
   }
 
