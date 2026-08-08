@@ -16011,9 +16011,14 @@ body.layout-basic .deg-referral-card__coin {
   aspect-ratio: 1;
   padding: 0;
   border: 0;
+  border-radius: 50%;
+  outline: 0;
   background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
   filter: drop-shadow(0 0 10px rgba(196, 181, 253, 0.2));
   transform: translate(0.22rem, 0.22rem);
+  transition: none;
   cursor: pointer;
 }
 body.layout-basic .deg-referral-card__coin-inner {
@@ -16021,6 +16026,7 @@ body.layout-basic .deg-referral-card__coin-inner {
   inset: 0;
   visibility: hidden;
   animation: deg-referral-coin-tumble 1.6s ease-in-out infinite;
+  transform-origin: center;
   will-change: transform;
 }
 body.layout-basic .deg-referral-card__coin-static,
@@ -16061,15 +16067,20 @@ body.layout-basic .deg-referral-card__coin.is-paused .deg-referral-card__coin-in
 body.layout-basic .deg-referral-card__coin.is-paused .deg-referral-card__coin-face {
   animation: none;
 }
+body.layout-basic .deg-referral-card__coin.is-tactile-pressed,
+body.layout-basic .deg-referral-card__coin:active {
+  outline: 0 !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 0 10px rgba(196, 181, 253, 0.2)) !important;
+  transform: translate(0.22rem, 0.22rem) !important;
+}
 body.layout-basic .deg-referral-card__coin:focus-visible {
-  outline: 2px solid #c4b5fd;
-  outline-offset: 3px;
-  border-radius: 50%;
+  outline: 0;
+  filter: drop-shadow(0 0 12px rgba(196, 181, 253, 0.58));
 }
 @keyframes deg-referral-coin-tumble {
-  0%, 50%, 100% { transform: translateY(0) scaleX(1) rotate(0deg); }
-  25% { transform: translateY(-0.12rem) scaleX(0.08) rotate(-4deg); }
-  75% { transform: translateY(-0.12rem) scaleX(0.08) rotate(4deg); }
+  0%, 50%, 100% { transform: translateY(0) scaleY(1); }
+  25%, 75% { transform: translateY(-0.08rem) scaleY(0.08); }
 }
 @keyframes deg-referral-face-wwxrp {
   0%, 24.99%, 75%, 100% { opacity: 1; }
@@ -19331,6 +19342,10 @@ body.layout-basic .jackpot-hero replay-panel .replay-controls > .ldj-results-cta
     width: 3.7rem;
     flex-basis: 3.7rem;
     transform: translateY(-50%);
+  }
+  body.layout-basic .deg-referral-card__coin.is-tactile-pressed,
+  body.layout-basic .deg-referral-card__coin:active {
+    transform: translateY(-50%) !important;
   }
   body.layout-basic .deg-referral-card__actions { grid-template-columns: minmax(0, 1fr) 2.75rem; margin-left: 2.35rem; }
   body.layout-basic .deg-referral-card__info-btn { width: 2.75rem; height: 2.75rem; min-width: 2.75rem; min-height: 2.75rem; padding: 0; aspect-ratio: 1; border-radius: 50%; }

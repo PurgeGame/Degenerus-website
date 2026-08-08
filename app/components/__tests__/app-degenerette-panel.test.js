@@ -1606,6 +1606,16 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.match(APP_CSS,
         /\.deg-referral-card__coin-inner\s*\{[^}]*animation:\s*deg-referral-coin-tumble 1\.6s ease-in-out infinite/s,
         'the referral coin continuously tumbles through its two explicit faces');
+      assert.match(APP_CSS,
+        /@keyframes deg-referral-coin-tumble\s*\{[^}]*scaleY\(1\)[\s\S]*?scaleY\(0\.08\)/s,
+        'the coin flips top-to-bottom instead of rolling sideways');
+      assert.doesNotMatch(
+        APP_CSS.slice(
+          APP_CSS.indexOf('@keyframes deg-referral-coin-tumble'),
+          APP_CSS.indexOf('@keyframes deg-referral-face-wwxrp'),
+        ),
+        /scaleX/,
+      );
       const referralCoin = el.querySelector('[data-bind="deg-referral-coin-toggle"]');
       const referralCoinInner = el.querySelector('.deg-referral-card__coin-inner');
       const referralCoinFallback = el.querySelector('.deg-referral-card__coin-static');
@@ -1655,6 +1665,12 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.match(APP_CSS,
         /\.deg-referral-card__coin-static\[hidden\],[\s\S]*?\.deg-referral-card__coin-inner\[hidden\]\s*\{[^}]*display:\s*none !important/s,
         'the inactive layer is removed from layout and cannot bleed through');
+      assert.match(APP_CSS,
+        /\.deg-referral-card__coin\.is-tactile-pressed,[^}]*\{[^}]*box-shadow:\s*none !important;[^}]*transform:\s*translate\(0\.22rem, 0\.22rem\) !important/s,
+        'click feedback cannot draw a box or nudge the referral artwork');
+      assert.match(APP_CSS,
+        /\.deg-referral-card__coin:focus-visible\s*\{[^}]*outline:\s*0;[^}]*drop-shadow/s,
+        'keyboard focus uses an artwork glow rather than a control box');
       assert.match(el.innerHTML, /class="deg-referral-card__logo" src="\/whitepaper\/flame-logo\.svg"/,
         'one clean Degenerus mark anchors the referral action row');
       assert.doesNotMatch(el.innerHTML, /deg-referral-card__(?:graphic|link|flame)/,
