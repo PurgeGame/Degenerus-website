@@ -32,6 +32,8 @@ import { readExactBoonState } from './polling.js';
 // Minimal open-receipt event ABI — parse-only (no writes here; openLootBox
 // lives in lootbox.js).
 export const OPEN_EVENTS_ABI = [
+  'event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount)',
+  'event LootboxRngApplied(uint48 index, uint256 word, uint256 requestId)',
   'event LootBoxOpened(address indexed player, uint48 indexed lootboxIndex, uint256 amount, uint24 futureLevel, uint32 futureTickets, uint256 flip, bool roundedUp)',
   'event LootBoxDgnrsReward(address indexed player, uint256 lootboxAmount, uint256 dgnrsAmount)',
   'event LootBoxWhalePassJackpot(address indexed player, uint256 lootboxAmount, uint24 targetLevel, uint32 entriesPerLevel, uint24 statsBoost, uint24 frozenUntilLevel)',
@@ -42,6 +44,13 @@ export const OPEN_EVENTS_ABI = [
 const OPEN_CALL_ABI = ['function openBox(address player, uint48 index)'];
 
 const SPIN_TYPES = ['wwxrp', 'flip', 'eth'];
+const BOX_BET_ID_SENTINEL = 1n << 63n;
+const BOX_BET_ID_ENTROPY_MASK = (1n << 60n) - 1n;
+const BOX_SPIN_TAGS = [
+  0x57777872705370696en, // "WwxrpSpin"
+  0x4275726e69655370696en, // "BurnieSpin" / FLIP
+  0x4574685370696en, // "EthSpin"
+];
 const SPIN_STRIDE = 72n;
 const COUNT_SHIFT = 216n;
 const SURVIVED_SHIFT = 224n;
@@ -50,6 +59,46 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const TRANSFER_EVENTS_ABI = [
   'event Transfer(address indexed from, address indexed to, uint256 value)',
 ];
+
+function _entropyHash2(a, b) {
+  const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
+    ['uint256', 'uint256'],
+    [BigInt(a), BigInt(b)],
+  );
+  return BigInt(ethers.keccak256(encoded));
+}
+
+/**
+ * Rebuild the six possible BoxSpin ids for one human Luckbox. Spin-only
+ * settlements omit LootBoxOpened and the shared RNG index, but their low
+ * 60-bit entropy is a commitment to this exact (word, player, amount) tuple.
+ */
+export function deriveHumanLootboxSpinBetIds({ rngWord, player, amountWei } = {}) {
+  let word;
+  let amount;
+  try {
+    word = BigInt(rngWord ?? 0);
+    amount = BigInt(amountWei ?? 0);
+  } catch (_e) {
+    return [];
+  }
+  if (!player || word === 0n || amount === 0n) return [];
+  try {
+    const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
+      ['uint256', 'address', 'uint256'],
+      [word, player, amount],
+    );
+    const rootSeed = BigInt(ethers.keccak256(encoded));
+    const rollSeeds = [rootSeed, _entropyHash2(rootSeed, 1n)];
+    return rollSeeds.flatMap((rollSeed) => BOX_SPIN_TAGS.map((tag, spinType) => (
+      BOX_BET_ID_SENTINEL
+      | (BigInt(spinType) << 60n)
+      | (_entropyHash2(rollSeed, tag) & BOX_BET_ID_ENTROPY_MASK)
+    )));
+  } catch (_e) {
+    return [];
+  }
+}
 
 // LootBoxReward rewardType → display label (contract NatSpec, LootboxModule:128).
 // Unknown IDs deliberately stay visibly unknown; calling one a "bonus reward"
@@ -658,8 +707,8 @@ const REPLAY_SPIN_TX_LIMIT = 60;
 /**
  * Recover a resolved box receipt straight from chain. Normal outcomes anchor
  * on their indexed LootBoxOpened event. Spin-only outcomes deliberately omit
- * that event, so match their player-filtered BoxSpin transaction by decoding
- * the original openBox(player,index) calldata instead.
+ * that event, so match BoxSpin either by its exact RNG-derived bet id or, for
+ * legacy direct opens, by decoding openBox(player,index) calldata.
  */
 export async function readOpenLegsFromChain({
   player,
@@ -684,6 +733,7 @@ export async function readOpenLegsFromChain({
   // "recent blocks". Search forward from that immutable receipt so even an
   // old Pending row finds the result near the time it actually opened.
   let purchaseBlock = null;
+  let purchaseAmountWei = 0n;
   const purchaseHashes = [...new Set([
     ...(Array.isArray(purchaseTransactionHashes) ? purchaseTransactionHashes : []),
   ].filter(Boolean).map((hash) => String(hash).toLowerCase()))];
@@ -694,21 +744,36 @@ export async function readOpenLegsFromChain({
       if (Number.isFinite(block) && block >= 0) {
         purchaseBlock = purchaseBlock == null ? block : Math.min(purchaseBlock, block);
       }
+      for (const log of Array.isArray(receipt?.logs) ? receipt.logs : []) {
+        try {
+          const parsed = _iface().parseLog(log);
+          if (parsed?.name !== 'LootBoxBuy') continue;
+          const buyer = String(parsed.args.buyer ?? parsed.args[0] ?? '').toLowerCase();
+          const eventIndex = BigInt(parsed.args.index ?? parsed.args[1] ?? -1);
+          if (buyer !== String(player).toLowerCase() || eventIndex !== index) continue;
+          purchaseAmountWei += BigInt(parsed.args.amount ?? parsed.args[2] ?? 0);
+        } catch (_e) { /* foreign purchase-receipt log */ }
+      }
     } catch (_e) { /* another reader or the index feed may still recover it */ }
   }
 
   let topicSets;
   let spinTopics;
+  let purchaseTopics;
+  let rngAppliedTopics;
   try {
     topicSets = ['LootBoxOpened', 'PresaleBoxOpened'].map((name) => (
       _iface().encodeFilterTopics(_iface().getEvent(name), [player, index])
     ));
     spinTopics = _iface().encodeFilterTopics(_iface().getEvent('BoxSpin'), [player]);
+    purchaseTopics = _iface().encodeFilterTopics(_iface().getEvent('LootBoxBuy'), [player, index]);
+    rngAppliedTopics = _iface().encodeFilterTopics(_iface().getEvent('LootboxRngApplied'), []);
   } catch (_e) {
     return [];
   }
 
   let inspectedSpinTransactions = 0;
+  let rngWord = 0n;
   const deployBlock = Number(CHAIN.deployBlock || 0);
   const rangeCount = purchaseBlock == null ? REPLAY_LOG_CHUNK_LIMIT : REPLAY_HINTED_CHUNK_LIMIT;
   for (let i = 0; i < rangeCount; i += 1) {
@@ -720,19 +785,56 @@ export async function readOpenLegsFromChain({
       : Math.min(head, fromBlock + REPLAY_LOG_CHUNK_BLOCKS - 1);
     if (toBlock < fromBlock || fromBlock > head) break;
     let logs;
+    let rngLogs;
+    let purchaseLogs;
     try {
-      const groups = await Promise.all(topicSets.map((topics) => provider.getLogs({
+      const [groups, applied, purchases] = await Promise.all([
+        Promise.all(topicSets.map((topics) => provider.getLogs({
           address: CONTRACTS.GAME,
           topics,
           fromBlock,
           toBlock,
-        })));
+        }))),
+        provider.getLogs({
+          address: CONTRACTS.GAME,
+          topics: rngAppliedTopics,
+          fromBlock,
+          toBlock,
+        }),
+        purchaseAmountWei > 0n
+          ? Promise.resolve([])
+          : provider.getLogs({
+              address: CONTRACTS.GAME,
+              topics: purchaseTopics,
+              fromBlock,
+              toBlock,
+            }),
+      ]);
       logs = groups.flat().sort((a, b) => (
         Number(a?.blockNumber ?? 0) - Number(b?.blockNumber ?? 0)
         || Number(a?.index ?? a?.logIndex ?? 0) - Number(b?.index ?? b?.logIndex ?? 0)
       ));
+      rngLogs = applied;
+      purchaseLogs = purchases;
     } catch (_e) {
       return [];
+    }
+
+    for (const log of Array.isArray(rngLogs) ? rngLogs : []) {
+      try {
+        const parsed = _iface().parseLog(log);
+        if (parsed?.name !== 'LootboxRngApplied') continue;
+        const eventIndex = BigInt(parsed.args.index ?? parsed.args[0] ?? -1);
+        if (eventIndex === index) rngWord = BigInt(parsed.args.word ?? parsed.args[1] ?? 0);
+      } catch (_e) { /* unrelated RNG event */ }
+    }
+    for (const log of Array.isArray(purchaseLogs) ? purchaseLogs : []) {
+      try {
+        const parsed = _iface().parseLog(log);
+        if (parsed?.name === 'LootBoxBuy') {
+          purchaseAmountWei += BigInt(parsed.args.amount ?? parsed.args[2] ?? 0);
+        }
+      } catch (_e) { /* malformed purchase log */ }
     }
     const anchor = Array.isArray(logs) ? logs.at(-1) : null;
     if (anchor?.transactionHash) {
@@ -745,10 +847,11 @@ export async function readOpenLegsFromChain({
       }
     }
 
-    // BoxSpin omits the lootbox index, but the permissionless open call that
-    // produced it does not. This is what lets the original owner recover the
-    // reveal even when somebody else's wallet won the open race.
-    if (typeof provider.getTransaction === 'function'
+    // BoxSpin omits the lootbox index. Its bet id still commits to the applied
+    // RNG word, player, and summed purchase amount, which identifies results
+    // emitted by permissionless batch opens. Keep direct-call decoding as a
+    // fallback for legacy results whose deterministic inputs are unavailable.
+    if ((typeof provider.getTransaction === 'function' || (rngWord > 0n && purchaseAmountWei > 0n))
         && inspectedSpinTransactions < REPLAY_SPIN_TX_LIMIT) {
       let spinLogs;
       try {
@@ -765,21 +868,35 @@ export async function readOpenLegsFromChain({
         Number(b?.blockNumber ?? 0) - Number(a?.blockNumber ?? 0)
         || Number(b?.index ?? b?.logIndex ?? 0) - Number(a?.index ?? a?.logIndex ?? 0)
       ));
+      const deterministicBetIds = new Set(deriveHumanLootboxSpinBetIds({
+        rngWord,
+        player,
+        amountWei: purchaseAmountWei,
+      }).map(String));
       for (const candidate of candidates) {
         if (inspectedSpinTransactions >= REPLAY_SPIN_TX_LIMIT) break;
         inspectedSpinTransactions += 1;
         if (!candidate?.transactionHash) continue;
         try {
-          const tx = await provider.getTransaction(candidate.transactionHash);
-          const to = String(tx?.to || '').toLowerCase();
-          if (to && to !== String(CONTRACTS.GAME || '').toLowerCase()) continue;
-          const data = tx?.data ?? tx?.input;
-          if (!data) continue;
-          const call = _openCallIface().parseTransaction({ data, value: tx?.value ?? 0 });
-          if (!call || call.name !== 'openBox') continue;
-          const callPlayer = String(call.args.player ?? call.args[0] ?? '').toLowerCase();
-          const callIndex = BigInt(call.args.index ?? call.args[1] ?? -1);
-          if (callPlayer !== String(player).toLowerCase() || callIndex !== index) continue;
+          let matches = false;
+          if (deterministicBetIds.size > 0) {
+            const parsedSpin = _iface().parseLog(candidate);
+            const candidateBetId = String(parsedSpin?.args?.betId ?? parsedSpin?.args?.[1] ?? '');
+            matches = deterministicBetIds.has(candidateBetId);
+          }
+          if (!matches && typeof provider.getTransaction === 'function') {
+            const tx = await provider.getTransaction(candidate.transactionHash);
+            const to = String(tx?.to || '').toLowerCase();
+            if (to && to !== String(CONTRACTS.GAME || '').toLowerCase()) continue;
+            const data = tx?.data ?? tx?.input;
+            if (!data) continue;
+            const call = _openCallIface().parseTransaction({ data, value: tx?.value ?? 0 });
+            if (!call || call.name !== 'openBox') continue;
+            const callPlayer = String(call.args.player ?? call.args[0] ?? '').toLowerCase();
+            const callIndex = BigInt(call.args.index ?? call.args[1] ?? -1);
+            matches = callPlayer === String(player).toLowerCase() && callIndex === index;
+          }
+          if (!matches) continue;
           const receipt = await provider.getTransactionReceipt(candidate.transactionHash);
           const legs = parseOpenLegsFromReceipt(receipt, player);
           if (legs.length > 0) return legs;

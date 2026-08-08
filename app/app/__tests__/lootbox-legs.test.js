@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import {
   OPEN_EVENTS_ABI,
   decodeBoxSpin,
+  deriveHumanLootboxSpinBetIds,
   enrichLootboxBoonLegs,
   lootboxRewardPresentation,
   wholeTicketsFromOpened,
@@ -545,6 +546,68 @@ describe('readOpenLegsFromChain', () => {
       'recovery starts at the immutable purchase receipt instead of the recent head');
     assert.ok(head - spinBlock > 18_000,
       'the fixture stays beyond the unhinted ten-chunk replay window');
+  });
+
+  test('recovers a batch-opened spin by its deterministic RNG id without openBox calldata', async () => {
+    const purchaseHash = `0x${'12'.repeat(32)}`;
+    const batchHash = `0x${'34'.repeat(32)}`;
+    const purchaseBlock = CHAIN.deployBlock + 220;
+    const spinBlock = purchaseBlock + 18;
+    const rngWord = 0x123456789abcdefn;
+    const amountWei = 181_136_200_000n;
+    const [betId] = deriveHumanLootboxSpinBetIds({ rngWord, player: PLAYER, amountWei });
+    const purchase = {
+      ...log('LootBoxBuy', [PLAYER, 7n, amountWei]),
+      transactionHash: purchaseHash,
+      blockNumber: purchaseBlock,
+      logIndex: 1,
+    };
+    const applied = {
+      ...log('LootboxRngApplied', [7n, rngWord, 99n]),
+      transactionHash: batchHash,
+      blockNumber: spinBlock,
+      logIndex: 2,
+    };
+    const packed = packSpin(9n, 10n, 5) | (1n << 216n);
+    const spin = {
+      ...log('BoxSpin', [PLAYER, betId, packed, 0n, 0n]),
+      transactionHash: batchHash,
+      blockNumber: spinBlock,
+      logIndex: 3,
+    };
+    let transactionReads = 0;
+    contractsMod.setProvider({
+      getBlockNumber: async () => spinBlock + 500,
+      getLogs: async (filter) => {
+        const containsResult = filter.fromBlock <= spinBlock && filter.toBlock >= spinBlock;
+        if (!containsResult) return [];
+        if (filter.topics?.[0] === iface.getEvent('LootboxRngApplied').topicHash) return [applied];
+        if (filter.topics?.[0] === iface.getEvent('BoxSpin').topicHash) return [spin];
+        return [];
+      },
+      getTransaction: async () => {
+        transactionReads += 1;
+        return { to: GAME, data: '0x12345678', value: 0n };
+      },
+      getTransactionReceipt: async (hash) => {
+        if (hash === purchaseHash) {
+          return { hash, blockNumber: purchaseBlock, logs: [purchase] };
+        }
+        assert.equal(hash, batchHash);
+        return { hash, blockNumber: spinBlock, logs: [applied, spin] };
+      },
+    });
+
+    const legs = await readOpenLegsFromChain({
+      player: PLAYER,
+      lootboxIndex: 7,
+      purchaseTransactionHashes: [purchaseHash],
+    });
+    assert.deepEqual(legs.map((leg) => leg.legType), ['spin']);
+    assert.equal(legs[0].spinType, 'wwxrp');
+    assert.equal(legs[0].reels[0].score, 5);
+    assert.equal(transactionReads, 0,
+      'the exact RNG commitment identifies a permissionless batch result without calldata guesses');
   });
 
   test('names the real quest shield and never invents a generic bonus boon', () => {

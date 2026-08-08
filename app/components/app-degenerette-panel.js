@@ -876,6 +876,7 @@ class AppDegenerettePanel extends HTMLElement {
   #referralBusy = false;
   #referralCopied = false;
   #referralCopyTimer = null;
+  #referralCoinWatchdogTimer = null;
   #referralDialogReturnFocus = null;
   #basicsDialogReturnFocus = null;
   #ticketCopyListener = (event) => this.#copyInventoryTicket(event?.detail);
@@ -947,6 +948,7 @@ class AppDegenerettePanel extends HTMLElement {
       try { clearTimeout(this.#referralCopyTimer); } catch (_) { /* defensive */ }
       this.#referralCopyTimer = null;
     }
+    this.#clearReferralCoinWatchdog();
     for (const u of this.#unsubs) {
       try { u(); } catch (_e) { /* defensive */ }
     }
@@ -1217,18 +1219,11 @@ class AppDegenerettePanel extends HTMLElement {
     this.querySelector('[data-bind="deg-referral-copy"]')
       ?.addEventListener('click', (event) => this.#copyReferralLink(event));
     const referralCoin = this.querySelector('[data-bind="deg-referral-coin-toggle"]');
-    const referralCoinInner = referralCoin?.querySelector('.deg-referral-card__coin-inner');
+    const referralCoinInner = this.querySelector('.deg-referral-card__coin-inner');
     referralCoin?.addEventListener('click', (event) => this.#toggleReferralCoin(event));
-    const markReferralCoinAnimating = () => {
-      if (!referralCoin?.classList?.contains('is-paused')) {
-        referralCoin?.classList?.add('is-animating');
-      }
-    };
-    referralCoinInner?.addEventListener('animationstart', markReferralCoinAnimating);
-    referralCoinInner?.addEventListener('animationiteration', markReferralCoinAnimating);
-    referralCoinInner?.addEventListener('animationcancel', () => {
-      referralCoin?.classList?.remove('is-animating');
-    });
+    referralCoinInner?.addEventListener('animationstart', () => this.#showReferralCoinAnimation());
+    referralCoinInner?.addEventListener('animationiteration', () => this.#showReferralCoinAnimation());
+    referralCoinInner?.addEventListener('animationcancel', () => this.#showReferralCoinFallback());
     this.querySelector('[data-bind="deg-referral-url"]')
       ?.addEventListener('click', (event) => this.#copyReferralLink(event));
     this.querySelector('[data-bind="deg-referral-info"]')
@@ -1374,13 +1369,65 @@ class AppDegenerettePanel extends HTMLElement {
     if (!coin) return;
     const paused = !coin.classList?.contains('is-paused');
     coin.classList?.toggle('is-paused', paused);
-    if (paused) coin.classList?.remove('is-animating');
+    if (paused) {
+      this.#showReferralCoinFallback();
+    } else {
+      const inner = this.querySelector('.deg-referral-card__coin-inner');
+      if (inner) {
+        inner.hidden = false;
+        inner.style.visibility = 'hidden';
+      }
+    }
     coin.setAttribute('aria-pressed', paused ? 'true' : 'false');
     coin.setAttribute('aria-label', paused
       ? 'Resume animation and copy referral link'
       : 'Pause animation and copy referral link');
     coin.title = paused ? 'Resume coin + copy link' : 'Pause coin + copy link';
     void this.#copyReferralLink(event);
+  }
+
+  #clearReferralCoinWatchdog() {
+    if (this.#referralCoinWatchdogTimer == null) return;
+    try { clearTimeout(this.#referralCoinWatchdogTimer); } catch (_) { /* defensive */ }
+    this.#referralCoinWatchdogTimer = null;
+  }
+
+  #showReferralCoinFallback() {
+    this.#clearReferralCoinWatchdog();
+    const coin = this.querySelector('[data-bind="deg-referral-coin-toggle"]');
+    const fallback = this.querySelector('.deg-referral-card__coin-static');
+    const inner = this.querySelector('.deg-referral-card__coin-inner');
+    coin?.classList?.remove('is-animating');
+    if (fallback) fallback.hidden = false;
+    if (inner) {
+      inner.hidden = true;
+      inner.style.visibility = 'hidden';
+    }
+  }
+
+  #showReferralCoinAnimation() {
+    const coin = this.querySelector('[data-bind="deg-referral-coin-toggle"]');
+    if (!coin || coin.classList?.contains('is-paused')) return;
+    const fallback = this.querySelector('.deg-referral-card__coin-static');
+    const inner = this.querySelector('.deg-referral-card__coin-inner');
+    if (fallback) fallback.hidden = true;
+    if (inner) {
+      inner.hidden = false;
+      inner.style.visibility = 'visible';
+    }
+    coin.classList?.add('is-animating');
+    this.#clearReferralCoinWatchdog();
+    this.#referralCoinWatchdogTimer = setTimeout(() => {
+      this.#referralCoinWatchdogTimer = null;
+      if (typeof document !== 'undefined' && document.hidden) {
+        this.#showReferralCoinAnimation();
+        return;
+      }
+      this.#showReferralCoinFallback();
+    }, 2_400);
+    if (typeof this.#referralCoinWatchdogTimer?.unref === 'function') {
+      try { this.#referralCoinWatchdogTimer.unref(); } catch (_) { /* defensive */ }
+    }
   }
 
   async #copyReferralLink(event) {

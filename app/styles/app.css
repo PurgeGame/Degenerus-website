@@ -16012,7 +16012,6 @@ body.layout-basic .deg-referral-card__coin {
   padding: 0;
   border: 0;
   background: transparent;
-  perspective: 10rem;
   filter: drop-shadow(0 0 10px rgba(196, 181, 253, 0.2));
   transform: translate(0.22rem, 0.22rem);
   cursor: pointer;
@@ -16021,9 +16020,8 @@ body.layout-basic .deg-referral-card__coin-inner {
   position: absolute;
   inset: 0;
   visibility: hidden;
-  -webkit-transform-style: preserve-3d;
-  transform-style: preserve-3d;
-  animation: deg-referral-coin-flip 1.6s linear infinite;
+  animation: deg-referral-coin-tumble 1.6s ease-in-out infinite;
+  will-change: transform;
 }
 body.layout-basic .deg-referral-card__coin-static,
 body.layout-basic .deg-referral-card__coin-face {
@@ -16037,11 +16035,19 @@ body.layout-basic .deg-referral-card__coin-static {
   visibility: visible;
 }
 body.layout-basic .deg-referral-card__coin-face {
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
+  opacity: 0;
+  will-change: opacity;
 }
-body.layout-basic .deg-referral-card__coin-face--wwxrp { transform: rotateX(0deg) translateZ(1px); }
-body.layout-basic .deg-referral-card__coin-face--eth { transform: rotateX(180deg) translateZ(1px); }
+body.layout-basic .deg-referral-card__coin-face--wwxrp {
+  animation: deg-referral-face-wwxrp 1.6s steps(1, end) infinite;
+}
+body.layout-basic .deg-referral-card__coin-face--eth {
+  animation: deg-referral-face-eth 1.6s steps(1, end) infinite;
+}
+body.layout-basic .deg-referral-card__coin-static[hidden],
+body.layout-basic .deg-referral-card__coin-inner[hidden] {
+  display: none !important;
+}
 body.layout-basic .deg-referral-card__coin.is-animating:not(.is-paused) .deg-referral-card__coin-static {
   visibility: hidden;
 }
@@ -16052,14 +16058,26 @@ body.layout-basic .deg-referral-card__coin.is-paused .deg-referral-card__coin-in
   visibility: hidden;
   animation: none;
 }
+body.layout-basic .deg-referral-card__coin.is-paused .deg-referral-card__coin-face {
+  animation: none;
+}
 body.layout-basic .deg-referral-card__coin:focus-visible {
   outline: 2px solid #c4b5fd;
   outline-offset: 3px;
   border-radius: 50%;
 }
-@keyframes deg-referral-coin-flip {
-  from { transform: rotateX(0deg); }
-  to { transform: rotateX(360deg); }
+@keyframes deg-referral-coin-tumble {
+  0%, 50%, 100% { transform: translateY(0) scaleX(1) rotate(0deg); }
+  25% { transform: translateY(-0.12rem) scaleX(0.08) rotate(-4deg); }
+  75% { transform: translateY(-0.12rem) scaleX(0.08) rotate(4deg); }
+}
+@keyframes deg-referral-face-wwxrp {
+  0%, 24.99%, 75%, 100% { opacity: 1; }
+  25%, 74.99% { opacity: 0; }
+}
+@keyframes deg-referral-face-eth {
+  0%, 24.99%, 75%, 100% { opacity: 0; }
+  25%, 74.99% { opacity: 1; }
 }
 body.layout-basic .deg-referral-card__actions {
   position: relative;
@@ -19320,6 +19338,7 @@ body.layout-basic .jackpot-hero replay-panel .replay-controls > .ldj-results-cta
 
 @media (prefers-reduced-motion: reduce) {
   body.layout-basic .deg-referral-card__coin-inner { visibility: hidden; animation: none; }
+  body.layout-basic .deg-referral-card__coin-face { animation: none; }
   body.layout-basic .deg-referral-card__coin-static { visibility: visible; }
   body.layout-basic .dgn-inline-ticket--rolling { transform: none; }
   body.layout-basic .dgn-inline-ticket--match,

@@ -1604,9 +1604,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         /\.deg-referral-card__coin\s*\{[^}]*position:\s*relative[^}]*display:\s*block[^}]*width:\s*2\.75rem[^}]*transform:\s*translate\(0\.22rem, 0\.22rem\)/s,
         'the larger referral coin is always visible down-right of the word');
       assert.match(APP_CSS,
-        /\.deg-referral-card__coin-inner\s*\{[^}]*animation:\s*deg-referral-coin-flip 1\.6s linear infinite/s,
-        'the referral coin flips continuously without stop-go easing');
+        /\.deg-referral-card__coin-inner\s*\{[^}]*animation:\s*deg-referral-coin-tumble 1\.6s ease-in-out infinite/s,
+        'the referral coin continuously tumbles through its two explicit faces');
       const referralCoin = el.querySelector('[data-bind="deg-referral-coin-toggle"]');
+      const referralCoinInner = el.querySelector('.deg-referral-card__coin-inner');
+      const referralCoinFallback = el.querySelector('.deg-referral-card__coin-static');
       assert.equal(referralCoin.tagName, 'BUTTON', 'the flipping coin is keyboard accessible');
       assert.match(el.innerHTML,
         /data-bind="deg-referral-coin-toggle" aria-pressed="false"[\s\S]*?aria-label="Pause animation and copy referral link"/,
@@ -1614,6 +1616,16 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.match(APP_CSS,
         /\.deg-referral-card__coin\.is-paused \.deg-referral-card__coin-inner\s*\{[^}]*visibility:\s*hidden;[^}]*animation:\s*none/s,
         'the paused state removes both outcome faces so only FLIP remains');
+      referralCoinInner.dispatchEvent({ type: 'animationstart' });
+      assert.equal(referralCoinFallback.hidden, true,
+        'the fallback is physically removed once the outcome animation starts');
+      assert.equal(referralCoinInner.hidden, false);
+      assert.equal(referralCoin.classList.contains('is-animating'), true);
+      referralCoinInner.dispatchEvent({ type: 'animationcancel' });
+      assert.equal(referralCoinFallback.hidden, false,
+        'a stopped animation immediately restores the FLIP-only fallback');
+      assert.equal(referralCoinInner.hidden, true,
+        'stopped outcome artwork cannot remain layered over the fallback');
       referralCoin.dispatchEvent({ type: 'click', preventDefault() {} });
       await settle(80);
       assert.equal(referralCoin.classList.contains('is-paused'), true);
@@ -1627,14 +1639,22 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.equal(referralCoin.getAttribute('aria-label'), 'Pause animation and copy referral link');
       assert.equal(copied.length, 2, 'resuming the coin copies the link too');
       assert.match(APP_CSS,
-        /\.deg-referral-card__coin-face--wwxrp\s*\{[^}]*rotateX\(0deg\) translateZ\(1px\)[^}]*\}[\s\S]*?\.deg-referral-card__coin-face--eth\s*\{[^}]*rotateX\(180deg\) translateZ\(1px\)[^}]*\}[\s\S]*?@keyframes deg-referral-coin-flip\s*\{[^}]*rotateX\(0deg\)[\s\S]*?rotateX\(360deg\)/s,
-        'explicit separated faces prevent WWXRP from rendering on both sides');
+        /\.deg-referral-card__coin-face--wwxrp\s*\{[^}]*deg-referral-face-wwxrp[^}]*\}[\s\S]*?\.deg-referral-card__coin-face--eth\s*\{[^}]*deg-referral-face-eth[^}]*\}[\s\S]*?@keyframes deg-referral-face-wwxrp[\s\S]*?@keyframes deg-referral-face-eth/s,
+        'complementary two-dimensional face swaps prevent WWXRP from rendering on both sides');
+      assert.doesNotMatch(APP_CSS.slice(
+        APP_CSS.indexOf('body.layout-basic .deg-referral-card__coin {'),
+        APP_CSS.indexOf('body.layout-basic .deg-referral-card__actions {'),
+      ), /backface-visibility|preserve-3d|rotateX/,
+      'the referral coin no longer depends on browser-fragile 3D backface rendering');
       assert.match(PANEL_SRC,
-        /add\('is-animating'\)[\s\S]*?animationstart[\s\S]*?animationcancel[\s\S]*?remove\('is-animating'\)/s,
+        /animationstart[\s\S]*?#showReferralCoinAnimation[\s\S]*?animationcancel[\s\S]*?#showReferralCoinFallback/s,
         'animated artwork is exposed only after the browser actually starts it');
+      assert.match(PANEL_SRC,
+        /fallback\.hidden = true[\s\S]*?inner\.hidden = false[\s\S]*?#showReferralCoinFallback\(\);[\s\S]*?2_400/s,
+        'a watchdog restores FLIP if animation iterations ever stop');
       assert.match(APP_CSS,
-        /\.deg-referral-card__coin\.is-animating:not\(\.is-paused\) \.deg-referral-card__coin-static\s*\{[^}]*visibility:\s*hidden/s,
-        'the FLIP fallback cannot bleed through a running coin');
+        /\.deg-referral-card__coin-static\[hidden\],[\s\S]*?\.deg-referral-card__coin-inner\[hidden\]\s*\{[^}]*display:\s*none !important/s,
+        'the inactive layer is removed from layout and cannot bleed through');
       assert.match(el.innerHTML, /class="deg-referral-card__logo" src="\/whitepaper\/flame-logo\.svg"/,
         'one clean Degenerus mark anchors the referral action row');
       assert.doesNotMatch(el.innerHTML, /deg-referral-card__(?:graphic|link|flame)/,
