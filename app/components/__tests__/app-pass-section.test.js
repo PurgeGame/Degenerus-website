@@ -497,11 +497,13 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.match(css, /\.pass-product-checkout--whale\s*\{[^}]*align-items:\s*center/s,
       'Whale quantity and Buy are vertically centered');
     assert.match(css,
-      /@media \(max-width:\s*640px\)[\s\S]*?\.pass-product-checkout--whale\s*\{[^}]*grid-template-columns:\s*minmax\(6\.25rem, 0\.42fr\) minmax\(0, 1fr\)[\s\S]*?\.pass-product-checkout--whale :is\([^}]*width:\s*100%;[^}]*min-width:\s*0/s,
-      'the phone checkout gives quantity a stable lane without letting the priced Buy button crush it');
+      /@media \(max-width:\s*640px\)[\s\S]*?\.pass-product-checkout--whale\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[\s\S]*?\.pass-product-checkout--whale \.pass-product-quantity\s*\{[^}]*grid-template-columns:\s*auto minmax\(3rem, 1fr\) 5\.5rem/s,
+      'the phone checkout gives quantity a full-width row with two large step controls');
     assert.match(css,
-      /\.pass-product-row \.pass-whale-input\s*\{[^}]*min-width:\s*0/s,
-      'the native number input may shrink inside its mobile grid instead of overflowing it');
+      /\.pass-product-row \.pass-whale-input\s*\{[^}]*min-width:\s*0[^}]*height:\s*2\.15rem[^}]*max-height:\s*2\.15rem/s,
+      'the number input has a bounded height instead of overflowing its quantity shell');
+    assert.match(el.innerHTML, /name="pass-whale-qty"[^>]*inputmode="numeric"[^>]*pattern="\[0-9\]\*"/,
+      'phones receive the numeric keypad for Whale quantity');
     assert.ok(el.querySelector('[data-bind="pass-whale-qty-up"]'),
       'the styled quantity instrument has an explicit up arrow');
     assert.ok(el.querySelector('[data-bind="pass-whale-qty-down"]'),
@@ -518,7 +520,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const el = instantiate();
     for (const benefit of [
       '+85% DEGEN SCORE',
-      '+115% DEGEN SCORE', '+155% DEGEN SCORE', '10% LUCKBOX',
+      '+115% DEGEN SCORE', '+155% DEGEN SCORE', 'BONUS LUCKBOX',
       '3 DAILY BOONS', 'AFKING SEAT',
     ]) {
       assert.match(el.innerHTML, new RegExp(benefit.replace(/[+]/g, '\\+')));
@@ -530,6 +532,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'the Whale card promotes its bundled lootbox as a first-class bonus');
     assert.match(el.innerHTML, /data-bind="pass-lazy-lootbox"/,
       'the Lazy card promotes its bundled lootbox as a first-class bonus');
+    assert.match(el.innerHTML, /data-bind="pass-deity-lootbox"/,
+      'the Deity card uses the same concrete bonus-lootbox treatment');
     assert.doesNotMatch(el.innerHTML, />1 TICKET \/ 2 LEVELS</,
       'the Whale description already explains its ticket cadence');
     assert.doesNotMatch(el.innerHTML, />1 TICKET \/ LEVEL</,
@@ -588,6 +592,20 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'Lazy puts its final price in the Buy action just like Whale');
     assert.ok(benefit.classList.contains('pass-lootbox-perk'),
       'Lazy and Whale share the highlighted bonus-lootbox treatment');
+    el.disconnectedCallback();
+  });
+
+  test('Deity pass shows the concrete bundled Luckbox value like the other passes', async () => {
+    _fetchHandler = async (url) => String(url).includes('/player/')
+      ? { level: 12 }
+      : { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
+    const el = instantiate();
+    await settle(40);
+
+    const benefit = el.querySelector('[data-bind="pass-deity-lootbox"]');
+    assert.equal(benefit.textContent, 'BONUS LUCKBOX · 2.4 ETH');
+    assert.ok(benefit.classList.contains('pass-lootbox-perk'),
+      'Deity shares the highlighted bonus bubble used by Whale and Lazy');
     el.disconnectedCallback();
   });
 

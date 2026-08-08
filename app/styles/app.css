@@ -11960,6 +11960,25 @@ body.layout-basic .rvl-ticket-grid-stage--foil {
   overflow: visible;
 }
 
+/* One shared geometry for normal and foil hands. Pack sizes top out at nine:
+   one ticket gets the hero treatment, up to four uses a roomy 2x2 hand, and
+   the full pack uses 3x3. Later single/lesson rules only refine those modes. */
+body.layout-basic .rvl-ticket-grid-stage--size-1 {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(70vw, 430px, 58dvh);
+  max-width: 430px;
+}
+body.layout-basic .rvl-ticket-grid-stage--size-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(88vw, 470px, 64dvh);
+  max-width: 470px;
+}
+body.layout-basic .rvl-ticket-grid-stage--size-9 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(92vw, 510px, 68dvh);
+  max-width: 510px;
+}
+
 body.layout-basic .rvl-foil-presentation {
   display: flex;
   align-items: center;
@@ -16001,20 +16020,37 @@ body.layout-basic .deg-referral-card__coin {
 body.layout-basic .deg-referral-card__coin-inner {
   position: absolute;
   inset: 0;
+  visibility: hidden;
+  -webkit-transform-style: preserve-3d;
   transform-style: preserve-3d;
   animation: deg-referral-coin-flip 1.6s linear infinite;
 }
-body.layout-basic .deg-referral-card__coin img {
+body.layout-basic .deg-referral-card__coin-static,
+body.layout-basic .deg-referral-card__coin-face {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+body.layout-basic .deg-referral-card__coin-static {
+  visibility: visible;
+}
+body.layout-basic .deg-referral-card__coin-face {
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
-body.layout-basic .deg-referral-card__coin img + img { transform: rotateX(180deg); }
+body.layout-basic .deg-referral-card__coin-face--wwxrp { transform: rotateX(0deg) translateZ(1px); }
+body.layout-basic .deg-referral-card__coin-face--eth { transform: rotateX(180deg) translateZ(1px); }
+body.layout-basic .deg-referral-card__coin.is-animating:not(.is-paused) .deg-referral-card__coin-static {
+  visibility: hidden;
+}
+body.layout-basic .deg-referral-card__coin.is-animating:not(.is-paused) .deg-referral-card__coin-inner {
+  visibility: visible;
+}
 body.layout-basic .deg-referral-card__coin.is-paused .deg-referral-card__coin-inner {
-  animation-play-state: paused;
+  visibility: hidden;
+  animation: none;
 }
 body.layout-basic .deg-referral-card__coin:focus-visible {
   outline: 2px solid #c4b5fd;
@@ -19283,7 +19319,8 @@ body.layout-basic .jackpot-hero replay-panel .replay-controls > .ldj-results-cta
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.layout-basic .deg-referral-card__coin-inner { animation: none; }
+  body.layout-basic .deg-referral-card__coin-inner { visibility: hidden; animation: none; }
+  body.layout-basic .deg-referral-card__coin-static { visibility: visible; }
   body.layout-basic .dgn-inline-ticket--rolling { transform: none; }
   body.layout-basic .dgn-inline-ticket--match,
   body.layout-basic .dgn-inline-ticket--landed,
@@ -19456,7 +19493,7 @@ body.layout-basic .pass-product-price {
 }
 
 body.layout-basic .pass-product-quantity {
-  display: grid; width: 5.15rem; height: 2.15rem; grid-template-columns: auto minmax(0, 1fr) 1.05rem;
+  box-sizing: border-box; display: grid; width: 5.15rem; height: 2.15rem; grid-template-columns: auto minmax(0, 1fr) 1.05rem;
   align-items: center; overflow: hidden; border: 1px solid rgba(111, 183, 255, 0.42); border-radius: 8px;
   background: linear-gradient(180deg, rgba(45, 111, 170, 0.2), rgba(1, 8, 17, 0.58));
   box-shadow: inset 0 1px 0 rgba(219, 239, 255, 0.08), 0 0 12px rgba(66, 153, 225, 0.08);
@@ -19483,7 +19520,7 @@ body.layout-basic .pass-product-price > strong {
 body.layout-basic .pass-product-row .pass-whale-input {
   box-sizing: border-box;
   min-width: 0;
-  width: 100%; height: 100%; padding: 0.25rem 0.12rem; border: 0; border-left: 1px solid rgba(111, 183, 255, 0.22);
+  width: 100%; height: 2.15rem; min-height: 0; max-height: 2.15rem; padding: 0.25rem 0.12rem; border: 0; border-left: 1px solid rgba(111, 183, 255, 0.22);
   border-radius: 0; background: transparent; appearance: textfield;
   font-family: var(--font-mono, "Roboto Mono", monospace);
   font-weight: 850;
@@ -19493,7 +19530,8 @@ body.layout-basic .pass-product-quantity > small { padding-left: 0.38rem; }
 body.layout-basic .pass-whale-input::-webkit-inner-spin-button { margin: 0; appearance: none; }
 body.layout-basic .pass-whale-steps { display: grid; align-self: stretch; grid-template-rows: 1fr 1fr; }
 body.layout-basic .pass-whale-steps button { display: grid; min-width: 0; padding: 0; place-items: center; border: 0; border-left: 1px solid rgba(111, 183, 255, 0.28); color: #bde2ff; background: rgba(57, 139, 207, 0.14); font-size: 0.43rem; cursor: pointer; }
-body.layout-basic .pass-whale-steps button:first-child { border-bottom: 1px solid rgba(111, 183, 255, 0.22); }
+body.layout-basic .pass-whale-steps [data-bind="pass-whale-qty-up"] { grid-row: 1; }
+body.layout-basic .pass-whale-steps [data-bind="pass-whale-qty-down"] { grid-row: 2; border-top: 1px solid rgba(111, 183, 255, 0.22); }
 body.layout-basic .pass-whale-steps button:hover { color: #fff; background: rgba(75, 163, 232, 0.3); }
 
 body.layout-basic .pass-product-row .pass-whale-buy,
@@ -20344,7 +20382,7 @@ body.layout-basic .pass-deity-buy {
     grid-template-columns: minmax(0, 1fr);
   }
   body.layout-basic .pass-product-checkout--whale {
-    grid-template-columns: minmax(6.25rem, 0.42fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
   body.layout-basic .pass-product-checkout--whale :is(.pass-product-quantity, .pass-whale-buy) {
     width: 100%;
@@ -20352,9 +20390,29 @@ body.layout-basic .pass-deity-buy {
     height: 2.75rem;
     min-height: 2.75rem;
   }
-  body.layout-basic .pass-product-checkout--whale .pass-product-quantity { grid-template-columns: auto minmax(0, 1fr) 1.5rem; }
-  body.layout-basic .pass-product-checkout--whale .pass-whale-buy {
+  body.layout-basic .pass-product-checkout--whale .pass-product-quantity {
+    grid-column: 1;
+    grid-template-columns: auto minmax(3rem, 1fr) 5.5rem;
+  }
+  body.layout-basic .pass-product-checkout--whale .pass-whale-input {
+    height: 2.75rem;
+    max-height: 2.75rem;
+  }
+  body.layout-basic .pass-product-checkout--whale .pass-whale-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr);
+  }
+  body.layout-basic .pass-product-checkout--whale .pass-whale-steps [data-bind="pass-whale-qty-down"] {
+    grid-column: 1;
+    grid-row: 1;
+    border-top: 0;
+  }
+  body.layout-basic .pass-product-checkout--whale .pass-whale-steps [data-bind="pass-whale-qty-up"] {
     grid-column: 2;
+    grid-row: 1;
+  }
+  body.layout-basic .pass-product-checkout--whale .pass-whale-buy {
+    grid-column: 1;
     width: 100%;
     white-space: normal;
     line-height: 1.1;

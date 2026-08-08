@@ -45,6 +45,9 @@ const COINFLIP_ABI = [
   'function depositCoinflip(address player, uint256 amount) external',
   // Coinflip.sol:1195 — claimable coinflip FLIP (settled + this day's mintable).
   'function previewClaimCoinflips(address player) external view returns (uint256 mintable)',
+  // Carry-inclusive backing: everything the player could withdraw from the
+  // coinflip position after settling resolved days.
+  'function previewSalvageFlipBacking(address player) external view returns (uint256 backing)',
   // Coinflip.sol:1238 — the live stake for the upcoming/current flip day.
   'function coinflipAmount(address player) external view returns (uint256)',
   // Auto-rebuy carry is an implicit part of the next effective stake. It is
@@ -118,6 +121,7 @@ let _currentStakeReader = null;
 let _autoRebuyInfoReader = null;
 let _resolvedStakeReader = null;
 let _claimableReader = null;
+let _backingReader = null;
 let _latestResultReader = null;
 let _widgetBalancesReader = null;
 let _reverseFlipQuoteReader = null;
@@ -134,6 +138,7 @@ const _currentStakeInflight = new Map();
 const _autoRebuyInfoInflight = new Map();
 const _resolvedStakeInflight = new Map();
 const _claimableInflight = new Map();
+const _backingInflight = new Map();
 const _widgetBalancesInflight = new Map();
 let _latestResultInflight = null;
 let _reverseFlipQuoteInflight = null;
@@ -141,7 +146,9 @@ let _bafFlipEveInflight = null;
 const LOG_CHUNK_BLOCKS = 1_800;
 // v1 persisted only CoinflipStakeUpdated.newTotal and therefore permanently
 // under-reported any day resolved with auto-rebuy carry (most visibly sDGNRS).
-const RESOLVED_STAKE_STORAGE_PREFIX = 'coinflip_resolved_stake_v2';
+// v2 used the most recent emitted carry, which is stale when an ordinary
+// player lets auto-rebuy roll through more than one unclaimed day.
+const RESOLVED_STAKE_STORAGE_PREFIX = 'coinflip_resolved_stake_v3';
 
 /** Test-only: replace the live current-day stake read. */
 export function __setCurrentStakeReaderForTest(fn) {
@@ -174,6 +181,12 @@ export function __setResolvedStakeReaderForTest(fn) {
 export function __setClaimableReaderForTest(fn) {
   _claimableReader = typeof fn === 'function' ? fn : null;
   _claimableInflight.clear();
+}
+
+/** Test-only: replace the carry-inclusive coinflip backing read. */
+export function __setBackingReaderForTest(fn) {
+  _backingReader = typeof fn === 'function' ? fn : null;
+  _backingInflight.clear();
 }
 
 /** Test-only: replace the live current-day/result pair read. */
@@ -236,6 +249,13 @@ export function __resetResolvedStakeReaderForTest() {
 export function __resetClaimableReaderForTest() {
   _claimableReader = null;
   _claimableInflight.clear();
+  _publicReadProvider = null;
+}
+
+/** Test-only: restore the production carry-inclusive backing reader. */
+export function __resetBackingReaderForTest() {
+  _backingReader = null;
+  _backingInflight.clear();
   _publicReadProvider = null;
 }
 
@@ -411,10 +431,10 @@ function _fulfilledBigInt(result) {
 /** Effective Protocol Coins balance shared by every FLIP ledger.
  * Coinflip winnings are spendable before they are minted, so balanceOf alone
  * is not the amount the player can actually use across protocol surfaces. */
-export function protocolFlipTotalWei(walletWei, claimableWei = 0n) {
+export function protocolFlipTotalWei(walletWei, backingWei = 0n) {
   if (walletWei == null) return null;
   try {
-    return BigInt(walletWei) + BigInt(claimableWei ?? 0n);
+    return BigInt(walletWei) + BigInt(backingWei ?? 0n);
   } catch (_e) {
     return null;
   }
@@ -798,12 +818,52 @@ export async function readClaimableCoinflip({ player } = {}) {
 }
 
 /**
+ * Read all FLIP the player could withdraw from the coinflip position.
+ *
+ * Unlike `previewClaimCoinflips`, this includes the active auto-rebuy carry
+ * after replaying every resolved day in the claim window. This is a value
+ * read, not an action-availability check: an RNG lock may temporarily block a
+ * carry withdrawal, but it does not make that backing stop belonging to the
+ * player.
+ *
+ * @param {{player?: string}} [args]
+ * @returns {Promise<bigint|null>} null when the read is unavailable
+ */
+export async function readCoinflipBacking({ player } = {}) {
+  const target = player || getActingAddress();
+  if (!target) return null;
+  const key = `${CHAIN.id}:${String(target).toLowerCase()}`;
+  if (_backingInflight.has(key)) return _backingInflight.get(key);
+
+  const request = (async () => {
+    try {
+      if (_backingReader) {
+        const value = await _backingReader({ player: target });
+        return value == null ? null : BigInt(value);
+      }
+      const provider = _readerProvider();
+      if (!provider || !CONTRACTS.COINFLIP) return null;
+      const coinflip = new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, provider);
+      return BigInt(await coinflip.previewSalvageFlipBacking(target));
+    } catch (_e) {
+      return null;
+    }
+  })();
+  _backingInflight.set(key, request);
+  try {
+    return await request;
+  } finally {
+    if (_backingInflight.get(key) === request) _backingInflight.delete(key);
+  }
+}
+
+/**
  * Read the cumulative stake for one completed flip day.
  *
  * `CoinflipStakeUpdated.newTotal` is authoritative for the stored-credit leg.
- * If auto-rebuy was active, the latest CoinflipClaimState before the resolution
- * supplies the carry leg that the contract added lazily. Together they avoid
- * both misleading alternatives exposed by the general dashboard:
+ * If auto-rebuy was active, the two historical preview views replay all prior
+ * resolved days and expose the exact carry entering this resolution. Together
+ * they avoid both misleading alternatives exposed by the general dashboard:
  * `depositedAmount` is merely the newest day, while `coinflipAmount()` is the
  * still-unresolved next day. The final exact-day event is immutable, so reads
  * are cached by player/day.
@@ -873,9 +933,32 @@ export async function readResolvedCoinflipStake({ player, day } = {}) {
         ? 0n
         : BigInt(stakeLog.args?.newTotal ?? stakeLog.args?.[3] ?? 0);
 
-      // Avoid a historical log scan for ordinary accounts that have never
-      // enabled auto-rebuy. sDGNRS is permanently armed after its seed window,
-      // so always reconstruct it even if the optional live info call fails.
+      // Read both previews immediately before the day's resolution. Their
+      // common claimable/banked legs cancel, leaving only the rolling carry
+      // after every earlier resolved day has been replayed. This is what the
+      // contract adds to day N's stored stake when that day is eventually
+      // settled. It fixes multi-day auto-rebuy accounts whose last emitted
+      // CoinflipClaimState predates one or more intervening wins/losses.
+      if (
+        resolvedBlock > deployBlock
+        && typeof contract.previewClaimCoinflips === 'function'
+        && typeof contract.previewSalvageFlipBacking === 'function'
+      ) {
+        const historicalBlock = resolvedBlock - 1;
+        const [claimableResult, backingResult] = await Promise.allSettled([
+          contract.previewClaimCoinflips(target, { blockTag: historicalBlock }),
+          contract.previewSalvageFlipBacking(target, { blockTag: historicalBlock }),
+        ]);
+        const claimable = _fulfilledBigInt(claimableResult);
+        const backing = _fulfilledBigInt(backingResult);
+        if (claimable != null && backing != null) {
+          const carry = backing > claimable ? backing - claimable : 0n;
+          return storedStake + carry;
+        }
+      }
+
+      // Older deployments and non-archive RPCs may not support the historical
+      // views. Retain the event reconstruction as a best-effort fallback.
       let rebuyInfo = null;
       try { rebuyInfo = await contract.coinflipAutoRebuyInfo(target); }
       catch (_e) { /* older deployments degrade to stored stake */ }

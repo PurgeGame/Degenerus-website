@@ -41,6 +41,7 @@ import {
   depositCoinflip,
   MAX_AUTO_REBUY_TAKE_PROFIT_WEI,
   readCoinflipAutoRebuyInfo,
+  readCoinflipBacking,
   readClaimableCoinflip,
   readCurrentCoinflipStake,
   readBafFlipEve,
@@ -396,6 +397,7 @@ class AppDailyFlip extends HTMLElement {
   #resolvedBetWei = null;  // final CoinflipStakeUpdated.newTotal for the exact result day
   #rolloverBetCarry = null; // last live stake, promoted only after the new day reads zero
   #liveClaimableWei = null; // direct previewClaimCoinflips, bypassing indexer lag
+  #liveBackingWei = null;   // claimable plus active auto-rebuy carry after replay
   #fetchSeq = 0;
   #refreshQueued = false;
   #refreshInFlight = false;
@@ -584,6 +586,7 @@ class AppDailyFlip extends HTMLElement {
     this.#resolvedBetWei = null;
     this.#rolloverBetCarry = rolloverCarry;
     this.#liveClaimableWei = null;
+    this.#liveBackingWei = null;
     this.#bafScore = null;
     this.#bafLevel = null;
     this.#bafAddress = null;
@@ -647,6 +650,7 @@ class AppDailyFlip extends HTMLElement {
       this.#resolvedBetWei = null;
       this.#rolloverBetCarry = null;
       this.#liveClaimableWei = null;
+      this.#liveBackingWei = null;
       this.#bafScore = null;
       this.#bafLevel = null;
       this.#bafAddress = null;
@@ -674,6 +678,7 @@ class AppDailyFlip extends HTMLElement {
       this.#resolvedBetWei = null;
       this.#rolloverBetCarry = null;
       this.#liveClaimableWei = null;
+      this.#liveBackingWei = null;
       this.#bafScore = null;
       this.#bafLevel = null;
       this.#bafAddress = null;
@@ -946,6 +951,16 @@ class AppDailyFlip extends HTMLElement {
 
   #tomorrowRewardGateOpen() {
     return this.#bonusJackpotCleared() && !this.#lootboxRewardGatePending();
+  }
+
+  #tomorrowAutoRebuyGateOpen(hasResult) {
+    // Auto rebuy folds the resolved payout into the next live stake. Until the
+    // player flips that coin, showing Tomorrow's Bet would disclose the result
+    // (including a loss that clears the carry). An unknown settings read is
+    // treated conservatively so a faster stake RPC cannot flash the spoiler.
+    if (this.#browsingDay != null || !hasResult || this.#revealed()) return true;
+    const info = this.#activeAutoRebuyInfo();
+    return Boolean(info && !info.enabled);
   }
 
   #wireRewardSpoilerGate() {
@@ -1535,6 +1550,7 @@ class AppDailyFlip extends HTMLElement {
       this.#resolvedBetWei = null;
       this.#rolloverBetCarry = null;
       this.#liveClaimableWei = null;
+      this.#liveBackingWei = null;
       this.#bafScore = null;
       this.#bafLevel = null;
       this.#bafAddress = address;
@@ -1676,6 +1692,14 @@ class AppDailyFlip extends HTMLElement {
       ),
       this.#runRefreshTask(
         seq,
+        addr ? readCoinflipBacking({ player: addr }) : Promise.resolve(null),
+        (value) => {
+          this.#liveBackingWei = value == null ? null : this.#asWei(value);
+        },
+        () => { this.#liveBackingWei = null; },
+      ),
+      this.#runRefreshTask(
+        seq,
         addr && requestedDay != null
           ? readResolvedCoinflipStake({ player: addr, day: requestedDay })
           : Promise.resolve(null),
@@ -1810,7 +1834,7 @@ class AppDailyFlip extends HTMLElement {
           </button>
           <div class="df-funds__coins" id="df-protocol-coins" data-bind="df-funds-coins">
             <div class="df-funds__display df-funds__display--claimable df-funds__display--flip-total"
-                 data-bind="df-funds-flip-total-box" aria-label="Owned plus claimable FLIP">
+                 data-bind="df-funds-flip-total-box" aria-label="Wallet plus withdrawable coinflip FLIP">
               <strong class="df-funds__value df-funds__value--flip-total">
                 <span class="df-funds__number" data-bind="df-funds-flip-total">—</span>
                 <span class="df-funds__unit" data-bind="df-funds-flip-unit">FLIP</span>
@@ -3221,6 +3245,24 @@ class AppDailyFlip extends HTMLElement {
     return settledTotal > visible ? settledTotal : visible;
   }
 
+  #visibleBackingWei() {
+    const claimable = this.#visibleClaimableWei();
+    // The direct preview replays pending resolved days and includes the active
+    // carry. It remains part of the player's balance during RNG lock; the lock
+    // limits when a withdrawal transaction can execute, not what they own.
+    if (this.#liveBackingWei != null) {
+      return this.#liveBackingWei > claimable ? this.#liveBackingWei : claimable;
+    }
+
+    // Best effort for a transient preview failure. This raw carry can lag an
+    // unsettled result, so the replayed backing view above is always preferred.
+    const info = this.#autoRebuyAddress === this.#dashboardAddress
+      ? this.#autoRebuyInfo
+      : null;
+    const carry = info?.enabled ? this.#asWei(info.carryWei) : 0n;
+    return claimable + carry;
+  }
+
   #renderPosition() {
     const host = this.querySelector('[data-bind="df-position"]');
     if (!host) return;
@@ -3245,8 +3287,8 @@ class AppDailyFlip extends HTMLElement {
     // with its settled receipt. A zero stake is equally safe and clearer as an
     // immediate NO BET than as a concealed placeholder.
     const noBet = resolvedStake != null && this.#asWei(resolvedStake) === 0n;
-    const tomorrowGateOpen = this.#tomorrowRewardGateOpen()
-      || this.#tomorrowSpoilerOverrideKey === this.#spoilerOverrideKey('tomorrow');
+    const tomorrowGateOpen = this.#tomorrowSpoilerOverrideKey === this.#spoilerOverrideKey('tomorrow')
+      || (this.#tomorrowRewardGateOpen() && this.#tomorrowAutoRebuyGateOpen(hasResult));
     const tomorrowKnown = this.#currentBetWei != null;
     const rows = [
       {
@@ -3361,12 +3403,13 @@ class AppDailyFlip extends HTMLElement {
     const sdgnrs = this.querySelector('[data-bind="df-funds-sdgnrs"]');
     const sdgnrsBox = this.querySelector('[data-bind="df-funds-sdgnrs-box"]');
     const visibleClaimable = this.#visibleClaimableWei();
+    const visibleBacking = this.#visibleBackingWei();
     const liveBalances = this.#liveBalancesAddress === this.#dashboardAddress
       ? this.#liveBalances
       : null;
     const walletRaw = liveBalances?.flipBalance ?? this.#dashboard?.flipBalance ?? null;
     const walletWei = walletRaw == null ? null : this.#asWei(walletRaw);
-    const protocolFlipWei = protocolFlipTotalWei(walletWei, visibleClaimable);
+    const protocolFlipWei = protocolFlipTotalWei(walletWei, visibleBacking);
     const wwxrpWei = this.#wwxrpBalanceWei();
     const sdgnrsWei = this.#sdgnrsBalanceWei();
     const hasResult = this.#day != null
@@ -3383,10 +3426,10 @@ class AppDailyFlip extends HTMLElement {
       updateBalanceDisplay(flipTotal, {
         container: flipTotalBox,
         scope: this.#dashboardAddress == null ? null : `${this.#dashboardAddress}:flip-total`,
-        // Protocol Coins is the player's effective FLIP total: minted wallet
-        // FLIP plus every still-unclaimed coinflip payout. Claiming merely
-        // moves value between those two ledgers, so the displayed total stays
-        // stable through the transaction.
+        // Protocol Coins is minted wallet FLIP plus every withdrawable
+        // coinflip ledger: ordinary claimable winnings and active auto-rebuy
+        // carry. Claiming merely moves value between those ledgers, so the
+        // displayed total stays stable through the transaction.
         value: protocolFlipWei,
         visible: flipTotalVisible,
         format: (raw) => raw === 0n ? '-' : this.#fmtWhole(raw),

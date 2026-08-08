@@ -93,6 +93,7 @@ import {
 } from '../app/claims.js';
 import {
   protocolFlipTotalWei,
+  readCoinflipBacking,
   readClaimableCoinflip,
   readFlipWidgetBalances,
 } from '../app/coinflip.js';
@@ -472,6 +473,9 @@ class AppDecimatorPanel extends HTMLElement {
   #coinflipClaimableWei = 0n; // Settled/mintable Coinflip FLIP.
   #coinflipClaimableAddress = null;
   #coinflipClaimableKnown = false;
+  #coinflipBackingWei = 0n; // Claimable plus active auto-rebuy carry.
+  #coinflipBackingAddress = null;
+  #coinflipBackingKnown = false;
   #afkingPendingFlipWei = 0n; // Accrued AFKing FLIP, converted from whole tokens.
   #afkingPendingFlipAddress = null;
   #afkingPendingFlipKnown = false;
@@ -1354,9 +1358,10 @@ class AppDecimatorPanel extends HTMLElement {
     const acting = getActingAddress();
     const actingLower = acting ? String(acting).toLowerCase() : null;
     if (!actingLower) return;
-    const [balances, claimable] = await Promise.allSettled([
+    const [balances, claimable, backing] = await Promise.allSettled([
       readFlipWidgetBalances({ player: actingLower }),
       readClaimableCoinflip({ player: actingLower }),
+      readCoinflipBacking({ player: actingLower }),
     ]);
     if (balances.status === 'fulfilled' && balances.value?.flipBalance != null) {
       this.#flipBalanceWei = BigInt(balances.value.flipBalance);
@@ -1366,6 +1371,11 @@ class AppDecimatorPanel extends HTMLElement {
       this.#coinflipClaimableWei = BigInt(claimable.value);
       this.#coinflipClaimableAddress = actingLower;
       this.#coinflipClaimableKnown = true;
+    }
+    if (backing.status === 'fulfilled' && backing.value != null) {
+      this.#coinflipBackingWei = BigInt(backing.value);
+      this.#coinflipBackingAddress = actingLower;
+      this.#coinflipBackingKnown = true;
     }
     this.#renderFundsFooter();
   }
@@ -1789,6 +1799,9 @@ class AppDecimatorPanel extends HTMLElement {
       this.#coinflipClaimableWei = 0n;
       this.#coinflipClaimableAddress = actingLower;
       this.#coinflipClaimableKnown = false;
+      this.#coinflipBackingWei = 0n;
+      this.#coinflipBackingAddress = actingLower;
+      this.#coinflipBackingKnown = false;
       this.#afkingPendingFlipWei = 0n;
       this.#afkingPendingFlipAddress = actingLower;
       this.#afkingPendingFlipKnown = false;
@@ -1806,6 +1819,7 @@ class AppDecimatorPanel extends HTMLElement {
       flipBalancesResult,
       walletResult,
       coinflipResult,
+      coinflipBackingResult,
       afkingFundingResult,
       afkingResult,
       presaleResult,
@@ -1819,6 +1833,7 @@ class AppDecimatorPanel extends HTMLElement {
       actingLower ? readFlipWidgetBalances({ player: actingLower }) : Promise.resolve(null),
       walletBalancePromise,
       actingLower ? readClaimableCoinflip({ player: actingLower }) : Promise.resolve(null),
+      actingLower ? readCoinflipBacking({ player: actingLower }) : Promise.resolve(null),
       actingLower ? readAfkingFunding(actingLower) : Promise.resolve(null),
       actingLower ? readAfkingSubscription(actingLower) : Promise.resolve(null),
       actingLower ? readPresaleBoxState({ player: actingLower }) : Promise.resolve(null),
@@ -1888,6 +1903,17 @@ class AppDecimatorPanel extends HTMLElement {
         this.#coinflipClaimableAddress = actingLower;
         this.#coinflipClaimableKnown = true;
       } catch (_e) { /* retain the indexed fallback */ }
+    }
+    if (
+      coinflipBackingResult.status === 'fulfilled'
+      && coinflipBackingResult.value != null
+      && actingLower
+    ) {
+      try {
+        this.#coinflipBackingWei = BigInt(coinflipBackingResult.value);
+        this.#coinflipBackingAddress = actingLower;
+        this.#coinflipBackingKnown = true;
+      } catch (_e) { /* retain claimable-only fallback */ }
     }
     if (walletResult.status === 'fulfilled' && walletResult.value != null && connectedLower) {
       try {
@@ -2236,7 +2262,13 @@ class AppDecimatorPanel extends HTMLElement {
       && this.#coinflipClaimableAddress === actingLower
       ? this.#coinflipClaimableWei
       : 0n;
-    const protocolFlipWei = protocolFlipTotalWei(flipWalletWei, flipClaimableWei);
+    const flipBackingWei = this.#coinflipBackingKnown
+      && this.#coinflipBackingAddress === actingLower
+      ? this.#coinflipBackingWei
+      : flipClaimableWei;
+    // Display all coinflip value the player could withdraw, including active
+    // auto-rebuy carry. RNG lock affects execution timing, not this balance.
+    const protocolFlipWei = protocolFlipTotalWei(flipWalletWei, flipBackingWei);
     const protocolCoinsDisclosure = get('ui.protocolCoinsFlipDisclosure');
     const flipBalanceVisible = Boolean(
       actingLower

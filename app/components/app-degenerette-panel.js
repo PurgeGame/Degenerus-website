@@ -1073,9 +1073,13 @@ class AppDegenerettePanel extends HTMLElement {
                           data-bind="deg-referral-coin-toggle" aria-pressed="false"
                           aria-label="Pause animation and copy referral link"
                           title="Pause coin + copy link">
+                    <img class="deg-referral-card__coin-static"
+                         src="/whitepaper/flame-logo-split.svg" alt="" aria-hidden="true">
                     <span class="deg-referral-card__coin-inner">
-                      <img src="/shared/coinflip-face-red.svg" alt="">
-                      <img src="/shared/coinflip-face-eth.svg" alt="">
+                      <img class="deg-referral-card__coin-face deg-referral-card__coin-face--wwxrp"
+                           src="/shared/coinflip-face-red.svg" alt="">
+                      <img class="deg-referral-card__coin-face deg-referral-card__coin-face--eth"
+                           src="/shared/coinflip-face-eth.svg" alt="">
                     </span>
                   </button>
                 </span>
@@ -1212,8 +1216,19 @@ class AppDegenerettePanel extends HTMLElement {
 
     this.querySelector('[data-bind="deg-referral-copy"]')
       ?.addEventListener('click', (event) => this.#copyReferralLink(event));
-    this.querySelector('[data-bind="deg-referral-coin-toggle"]')
-      ?.addEventListener('click', (event) => this.#toggleReferralCoin(event));
+    const referralCoin = this.querySelector('[data-bind="deg-referral-coin-toggle"]');
+    const referralCoinInner = referralCoin?.querySelector('.deg-referral-card__coin-inner');
+    referralCoin?.addEventListener('click', (event) => this.#toggleReferralCoin(event));
+    const markReferralCoinAnimating = () => {
+      if (!referralCoin?.classList?.contains('is-paused')) {
+        referralCoin?.classList?.add('is-animating');
+      }
+    };
+    referralCoinInner?.addEventListener('animationstart', markReferralCoinAnimating);
+    referralCoinInner?.addEventListener('animationiteration', markReferralCoinAnimating);
+    referralCoinInner?.addEventListener('animationcancel', () => {
+      referralCoin?.classList?.remove('is-animating');
+    });
     this.querySelector('[data-bind="deg-referral-url"]')
       ?.addEventListener('click', (event) => this.#copyReferralLink(event));
     this.querySelector('[data-bind="deg-referral-info"]')
@@ -1359,6 +1374,7 @@ class AppDegenerettePanel extends HTMLElement {
     if (!coin) return;
     const paused = !coin.classList?.contains('is-paused');
     coin.classList?.toggle('is-paused', paused);
+    if (paused) coin.classList?.remove('is-animating');
     coin.setAttribute('aria-pressed', paused ? 'true' : 'false');
     coin.setAttribute('aria-label', paused
       ? 'Resume animation and copy referral link'

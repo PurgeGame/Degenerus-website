@@ -322,6 +322,13 @@ function _ticketQuantityText(value) {
   return count.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
+export function ticketGridSizeClass(count) {
+  const ticketCount = Math.max(0, Math.floor(Number(count) || 0));
+  if (ticketCount <= 1) return 'rvl-ticket-grid-stage--size-1';
+  if (ticketCount <= 4) return 'rvl-ticket-grid-stage--size-4';
+  return 'rvl-ticket-grid-stage--size-9';
+}
+
 /**
  * Loose entries keep their real quadrant and share a ticket-sized silhouette
  * only when they can occupy different positions. Duplicate quadrants start a
@@ -1736,6 +1743,7 @@ class RevealOverlay extends HTMLElement {
     grid.className = (seq.foilPack
       ? 'rvl-ticket-grid-stage rvl-ticket-grid-stage--foil'
       : 'rvl-ticket-grid-stage')
+      + ` ${ticketGridSizeClass(seq.ticketGrid.length)}`
       + (singlePiece ? ' rvl-ticket-grid-stage--single' : '')
       + (singleEntry ? ' rvl-ticket-grid-stage--single-entry' : '')
       + (seq.ticketLesson ? ' rvl-ticket-grid-stage--lesson' : '')
@@ -2809,6 +2817,7 @@ class RevealOverlay extends HTMLElement {
     grid.className = (seq.foilPack
       ? 'rvl-ticket-grid-stage rvl-ticket-grid-stage--foil'
       : 'rvl-ticket-grid-stage')
+      + ` ${ticketGridSizeClass(seq.ticketGrid.length)}`
       + (singlePiece ? ' rvl-ticket-grid-stage--single' : '')
       + (singleEntry ? ' rvl-ticket-grid-stage--single-entry' : '')
       + (showLesson ? ' rvl-ticket-grid-stage--lesson' : '')

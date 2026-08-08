@@ -229,7 +229,7 @@ describe('app.css legacy coverage and append marker', () => {
 // ===========================================================================
 
 describe('app.css LOC budget', () => {
-  test('total file is in 1700-20250 line range (baseline + deliberate app UI feature blocks)', () => {
+  test('total file is in 1700-21600 line range (baseline + deliberate app UI feature blocks)', () => {
     assert.ok(cssLines.length >= 1700, `total >=1700, got ${cssLines.length}`);
     // Ceiling raised 4400 → 4600 for the ~157-line gold-rush headline block
     // (the last section in the file). Still a hard guard against this file
@@ -284,6 +284,9 @@ describe('app.css LOC budget', () => {
     // deliberately tight for that reason: the next bump should have to justify
     // itself again, and the note at 8800 above about splitting into a component
     // stylesheet is now overdue, not aspirational.
-    assert.ok(cssLines.length <= 21500, `total <=21500, got ${cssLines.length}`);
+    // 21500 → 21600 covers the tightly scoped referral-coin face isolation,
+    // three ticket-reveal size buckets, and corrected phone Whale quantity
+    // controls. These refine three existing sections rather than add a surface.
+    assert.ok(cssLines.length <= 21600, `total <=21600, got ${cssLines.length}`);
   });
 });

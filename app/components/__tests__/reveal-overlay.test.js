@@ -178,6 +178,7 @@ const {
   degeneretteLockMatchType, shouldBobDegeneretteLock, buildBoxSpinBoard,
   goldTicketLabel, pickBiggestSpinResult, projectDegeneretteEthSplit,
   shouldCelebrateDegenerette, isUnluckyDegenerette,
+  ticketGridSizeClass,
   __resetForTest, __takeQueuedForTest, PACK_REVEAL_COMPLETE_EVENT,
 } =
   await import('../reveal-overlay.js');
@@ -212,6 +213,14 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
 // ---------------------------------------------------------------------------
 
 describe('normalizeSequence', () => {
+  test('ticket hands use the 1x1, 2x2, and 3x3 size buckets', () => {
+    assert.equal(ticketGridSizeClass(1), 'rvl-ticket-grid-stage--size-1');
+    assert.equal(ticketGridSizeClass(2), 'rvl-ticket-grid-stage--size-4');
+    assert.equal(ticketGridSizeClass(4), 'rvl-ticket-grid-stage--size-4');
+    assert.equal(ticketGridSizeClass(5), 'rvl-ticket-grid-stage--size-9');
+    assert.equal(ticketGridSizeClass(9), 'rvl-ticket-grid-stage--size-9');
+  });
+
   test('Degenerette ETH animation keeps the final receipt split ratio', () => {
     const quarter = projectDegeneretteEthSplit({
       gross: 400n,
@@ -1732,7 +1741,9 @@ describe('reveal-overlay element', () => {
     const zone = el.querySelector('[data-bind="rvl-card-zone"]');
     assert.equal(zone.querySelector('.rvl-foil-presentation'), null,
       'the explanatory foil copy no longer crowds the result hand');
-    assert.ok(zone.querySelector('.rvl-ticket-grid-stage--foil'), 'dedicated 2-column foil grid');
+    assert.ok(zone.querySelector('.rvl-ticket-grid-stage--foil'), 'dedicated foil grid');
+    assert.ok(zone.querySelector('.rvl-ticket-grid-stage--size-4'),
+      'four foil tickets use the same roomy 2x2 hand as ordinary tickets');
     assert.equal(zone.querySelectorAll('.rvl-paper--foil').length, 4);
     assert.equal(zone.querySelectorAll('.rvl-paper-tag').length, 0,
       'foil is communicated by the ticket material instead of a text sticker');
@@ -1764,6 +1775,26 @@ describe('reveal-overlay element', () => {
     );
     assert.equal(el.querySelector('[data-bind="rvl-summary"]').hidden, true,
       'ticket hand never collapses into the generic summary');
+    el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
+    await tick();
+  });
+
+  test('a full nine-ticket hand uses the compact 3x3 reveal size', async () => {
+    const tickets = Array.from({ length: 9 }, (_, i) => ({
+      traitIds: [i, 64 + i, 128 + i, 192 + i],
+    }));
+    queueReveal({ kind: 'pack', level: 12, count: 9, tickets });
+    const el = instantiate();
+    await tick();
+
+    const grid = el.querySelector('.rvl-ticket-grid-stage--size-9');
+    assert.ok(grid);
+    assert.equal(grid.querySelectorAll('.rvl-paper').length, 9);
+    assert.match(
+      APP_CSS,
+      /\.rvl-ticket-grid-stage--size-9\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)[^}]*width:\s*min\(92vw, 510px, 68dvh\)/s,
+    );
+
     el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
     await tick();
   });
@@ -1817,6 +1848,7 @@ describe('reveal-overlay element', () => {
       'SKIP is not offered when the ticket itself is already on screen');
     assert.equal(el.querySelector('[data-bind="rvl-card-zone"]').hidden, false);
     assert.ok(el.querySelector('.rvl-ticket-grid-stage--single'));
+    assert.ok(el.querySelector('.rvl-ticket-grid-stage--size-1'));
     const packBadge = el.querySelector('.rvl-single-pack-badge');
     assert.ok(packBadge?.querySelector('.rvl-pack-logo'),
       'the direct ticket reveal retains a compact pack logo');

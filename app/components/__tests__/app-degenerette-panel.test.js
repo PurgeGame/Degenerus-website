@@ -1594,6 +1594,9 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.match(el.innerHTML,
         /deg-referral-card__forever[\s\S]*?FOREVER[\s\S]*?deg-referral-card__coin[\s\S]*?coinflip-face-red\.svg[\s\S]*?coinflip-face-eth\.svg/,
         'the two-sided flipping coin sits directly after FOREVER');
+      assert.match(el.innerHTML,
+        /deg-referral-card__coin-static[\s\S]*?flame-logo-split\.svg[\s\S]*?coin-face--wwxrp[\s\S]*?coin-face--eth/,
+        'the isolated FLIP fallback precedes distinct WWXRP and ETH faces');
       assert.match(APP_CSS,
         /\.deg-referral-card__forever\s*\{[^}]*display:\s*flex[^}]*gap:\s*0\.62rem/s,
         'the coin is spaced just to the right of FOREVER');
@@ -1609,8 +1612,8 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
         /data-bind="deg-referral-coin-toggle" aria-pressed="false"[\s\S]*?aria-label="Pause animation and copy referral link"/,
         'the toggle advertises both pause and copy behavior');
       assert.match(APP_CSS,
-        /\.deg-referral-card__coin\.is-paused \.deg-referral-card__coin-inner\s*\{[^}]*animation-play-state:\s*paused/s,
-        'the paused state freezes the current face instead of resetting the animation');
+        /\.deg-referral-card__coin\.is-paused \.deg-referral-card__coin-inner\s*\{[^}]*visibility:\s*hidden;[^}]*animation:\s*none/s,
+        'the paused state removes both outcome faces so only FLIP remains');
       referralCoin.dispatchEvent({ type: 'click', preventDefault() {} });
       await settle(80);
       assert.equal(referralCoin.classList.contains('is-paused'), true);
@@ -1624,8 +1627,14 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       assert.equal(referralCoin.getAttribute('aria-label'), 'Pause animation and copy referral link');
       assert.equal(copied.length, 2, 'resuming the coin copies the link too');
       assert.match(APP_CSS,
-        /\.deg-referral-card__coin img \+ img\s*\{[^}]*rotateX\(180deg\)[^}]*\}[\s\S]*?@keyframes deg-referral-coin-flip\s*\{[^}]*rotateX\(0deg\)[\s\S]*?rotateX\(360deg\)/s,
-        'both faces use an end-over-end vertical flip');
+        /\.deg-referral-card__coin-face--wwxrp\s*\{[^}]*rotateX\(0deg\) translateZ\(1px\)[^}]*\}[\s\S]*?\.deg-referral-card__coin-face--eth\s*\{[^}]*rotateX\(180deg\) translateZ\(1px\)[^}]*\}[\s\S]*?@keyframes deg-referral-coin-flip\s*\{[^}]*rotateX\(0deg\)[\s\S]*?rotateX\(360deg\)/s,
+        'explicit separated faces prevent WWXRP from rendering on both sides');
+      assert.match(PANEL_SRC,
+        /add\('is-animating'\)[\s\S]*?animationstart[\s\S]*?animationcancel[\s\S]*?remove\('is-animating'\)/s,
+        'animated artwork is exposed only after the browser actually starts it');
+      assert.match(APP_CSS,
+        /\.deg-referral-card__coin\.is-animating:not\(\.is-paused\) \.deg-referral-card__coin-static\s*\{[^}]*visibility:\s*hidden/s,
+        'the FLIP fallback cannot bleed through a running coin');
       assert.match(el.innerHTML, /class="deg-referral-card__logo" src="\/whitepaper\/flame-logo\.svg"/,
         'one clean Degenerus mark anchors the referral action row');
       assert.doesNotMatch(el.innerHTML, /deg-referral-card__(?:graphic|link|flame)/,

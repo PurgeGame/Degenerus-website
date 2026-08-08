@@ -295,6 +295,7 @@ function resetDom() {
   pendingActionsMod.__resetPendingActionsForTest();
   decimatorMod.__resetContractFactoryForTest();
   coinflipMod.__setClaimableReaderForTest(null);
+  coinflipMod.__setBackingReaderForTest(async () => null);
   coinflipMod.__resetWidgetBalancesReaderForTest();
   passesMod.__resetContractFactoryForTest();
   _docBody = makeFakeElement('body');
@@ -3250,11 +3251,12 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     el.disconnectedCallback();
   });
 
-  test('left FLIP Balance uses the same live wallet-plus-claimable total as Protocol Coins', async () => {
+  test('left FLIP Balance uses the same carry-inclusive total as Protocol Coins', async () => {
     const FLIP = 10n ** 18n;
     claimsMod.__setContractFactoryForTest(() => makeFakeRedeemFlipContract());
     coinflipMod.__setWidgetBalancesReaderForTest(async () => ({ flipBalance: 2_250n * FLIP }));
     coinflipMod.__setClaimableReaderForTest(async () => 500n * FLIP);
+    coinflipMod.__setBackingReaderForTest(async () => 675n * FLIP);
     _fetchHandler = async (url) => String(url).includes('/game/state')
       ? DEFAULT_GAME_STATE
       : { claimableEth: '0', flipBalance: String(1n * FLIP), coinflip: { claimablePreview: '0' } };
@@ -3275,7 +3277,8 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
       address: CONNECTED.toLowerCase(),
       visible: true,
     });
-    assert.equal(value.textContent, '2,750');
+    assert.equal(value.textContent, '2,925',
+      'the mirror adds full withdrawable backing, including 175 FLIP of auto-rebuy carry');
     assert.ok(!balance.classList.contains('dec-flip-balance--spoiler'));
 
     storeMod.update('ui.protocolCoinsFlipDisclosure', {

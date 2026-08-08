@@ -400,10 +400,11 @@ class AppPassSection extends HTMLElement {
             <span class="pass-product-quantity">
               <small>QTY</small>
               <input type="number" name="pass-whale-qty" id="pass-whale-qty-input"
-                     class="pass-whale-input" min="1" max="100" step="1" value="1" aria-label="Whale pass quantity">
+                     class="pass-whale-input" min="1" max="100" step="1" value="1"
+                     inputmode="numeric" pattern="[0-9]*" aria-label="Whale pass quantity">
               <span class="pass-whale-steps">
-                <button type="button" data-bind="pass-whale-qty-up" aria-label="Increase Whale pass quantity">▲</button>
-                <button type="button" data-bind="pass-whale-qty-down" aria-label="Decrease Whale pass quantity">▼</button>
+                <button type="button" data-bind="pass-whale-qty-down" aria-label="Decrease Whale pass quantity">−</button>
+                <button type="button" data-bind="pass-whale-qty-up" aria-label="Increase Whale pass quantity">+</button>
               </span>
             </span>
             <button type="button" class="pass-whale-buy" data-write data-bind="pass-whale-buy">
@@ -431,7 +432,8 @@ class AppPassSection extends HTMLElement {
               <span>PERMANENT</span>
               <span data-bind="pass-deity-score">+155% DEGEN SCORE</span>
               <span>3 DAILY BOONS</span>
-              <span>10% LUCKBOX</span>
+              <span class="pass-lootbox-perk pass-deity-lootbox-perk"
+                    data-bind="pass-deity-lootbox">BONUS LUCKBOX · 10% OF PASS</span>
               <span data-bind="pass-deity-afking-seat">AFKING SEAT</span>
             </span>
             <span class="pass-deity-price">
@@ -777,6 +779,7 @@ class AppPassSection extends HTMLElement {
     this.#renderWhaleLootboxBenefit();
     this.#renderPassSeatBenefits();
     this.#renderLazyLootboxBenefit();
+    this.#renderDeityLootboxBenefit();
     const hintEl = this.querySelector('[data-bind="pass-deity-hint"]');
     const deityMetaLabel = this.querySelector('[data-bind="pass-deity-meta-label"]');
     const deityEyebrow = this.querySelector('[data-bind="pass-deity-eyebrow"]');
@@ -898,6 +901,17 @@ class AppPassSection extends HTMLElement {
     const benefit = this.querySelector('[data-bind="pass-lazy-lootbox"]');
     if (!benefit) return;
     const cost = this.#pricingData?.lazyCostWei;
+    if (cost == null) {
+      benefit.textContent = 'BONUS LUCKBOX · 10% OF PASS';
+      return;
+    }
+    benefit.textContent = `BONUS LUCKBOX · ${formatPassEth(BigInt(cost) / 10n, 3)} ETH`;
+  }
+
+  #renderDeityLootboxBenefit() {
+    const benefit = this.querySelector('[data-bind="pass-deity-lootbox"]');
+    if (!benefit) return;
+    const cost = this.#pricingData?.deityNextPriceWei;
     if (cost == null) {
       benefit.textContent = 'BONUS LUCKBOX · 10% OF PASS';
       return;

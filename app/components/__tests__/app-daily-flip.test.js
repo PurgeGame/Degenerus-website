@@ -477,6 +477,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     }));
     coinflipMod.__setResolvedStakeReaderForTest(async () => _resolvedStakeWei);
     coinflipMod.__setClaimableReaderForTest(async () => null);
+    coinflipMod.__setBackingReaderForTest(async () => null);
     coinflipMod.__setLatestResultReaderForTest(async () => null);
     coinflipMod.__setWidgetBalancesReaderForTest(async () => null);
     coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({
@@ -494,6 +495,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     coinflipMod.__resetAutoRebuyInfoReaderForTest();
     coinflipMod.__resetResolvedStakeReaderForTest();
     coinflipMod.__resetClaimableReaderForTest();
+    coinflipMod.__resetBackingReaderForTest();
     coinflipMod.__resetLatestResultReaderForTest();
     coinflipMod.__resetWidgetBalancesReaderForTest();
     coinflipMod.__resetReverseFlipQuoteReaderForTest();
@@ -880,6 +882,50 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
+  test('Protocol Coins includes auto-rebuy carry even while RNG is locked', async () => {
+    const unit = 10n ** 18n;
+    coinflipMod.__setWidgetBalancesReaderForTest(async () => ({
+      flipBalance: 1_000n * unit,
+      wwxrpBalance: 0n,
+      sdgnrsBalance: 0n,
+    }));
+    coinflipMod.__setClaimableReaderForTest(async () => 200n * unit);
+    coinflipMod.__setBackingReaderForTest(async () => 675n * unit);
+    coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
+      enabled: true,
+      takeProfitWei: 0n,
+      carryWei: 475n * unit,
+      startDay: 64,
+    }));
+    coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({
+      queued: 0n,
+      locked: true,
+    }));
+    const dashboard = dashboardPayload();
+    dashboard.flipBalance = '0';
+    dashboard.coinflip.claimablePreview = '0';
+    _fetchResponses = {
+      dashboard,
+      flipDay: { day: 67, win: false, rewardPercent: 0 },
+    };
+    localStorage.setItem('flip_day_84532_67', '1');
+
+    const el = mount();
+    await flushMicrotasks();
+
+    assert.equal(
+      el.querySelector('[data-bind="df-funds-flip-total"]').textContent,
+      '1,675',
+      'wallet plus ordinary claimable plus the 475 FLIP rolling carry is shown',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="df-claim-flip-cta"]').disabled,
+      false,
+      'the ordinary CLAIM action remains based on its separate 200 FLIP preview',
+    );
+    el.disconnectedCallback();
+  });
+
   test("an unresolved ticket pack never masks Tomorrow's bet", async () => {
     _currentStakeWei = '12000000000000000000000';
     _fetchResponses = {
@@ -1008,6 +1054,39 @@ describe('app-daily-flip — coin reveal + actions', () => {
     localStorage.setItem('jackpot_complete_day_84532_67', '1');
     document.dispatchEvent({ type: 'jackpot:revealed', detail: { day: 67 } });
     assert.match(tomorrow().textContent, /12,000 FLIP/);
+    el.disconnectedCallback();
+  });
+
+  test("auto rebuy keeps Tomorrow's effective stake masked until its coin is revealed", async () => {
+    const unit = 10n ** 18n;
+    // readCurrentCoinflipStake is carry-inclusive: 12,000 stored plus the
+    // 475 FLIP that auto rebuy rolled forward from this unresolved result.
+    _currentStakeWei = String(12_475n * unit);
+    coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
+      enabled: true,
+      takeProfitWei: 0n,
+      carryWei: 475n * unit,
+      startDay: 64,
+    }));
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    // The jackpot/box reward gate is already clear. Auto rebuy still makes the
+    // live next-day amount an outcome spoiler until this coin is opened.
+    const el = mount();
+    await flushMicrotasks();
+
+    const tomorrow = () => el.querySelector('[data-position="tomorrow"]');
+    assert.match(tomorrow().textContent, /•••• FLIP/);
+    assert.doesNotMatch(tomorrow().textContent, /12,480/,
+      'the carry-inclusive next bet cannot leak the unresolved auto-rebuy outcome');
+
+    el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    assert.match(tomorrow().textContent, /12,480 FLIP/,
+      'the full stored stake plus rolling carry appears after the coin reveal');
     el.disconnectedCallback();
   });
 
@@ -1817,6 +1896,32 @@ describe('app-daily-flip — coin reveal + actions', () => {
       'the resolved payout is shown in its own box after reveal');
     assert.equal(el.querySelector('.df-modifier-result'), null,
       'the old expanded result is gone');
+    el.disconnectedCallback();
+  });
+
+  test("Today's Bet settles the full stored stake plus auto-rebuy carry", async () => {
+    const unit = 10n ** 18n;
+    _resolvedStakeWei = String(1_006_807n * unit);
+    coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
+      enabled: true,
+      takeProfitWei: 0n,
+      carryWei: 919_901n * unit,
+      startDay: 64,
+    }));
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 100 },
+    };
+    localStorage.setItem('flip_day_84532_67', '1');
+
+    const el = mount();
+    await flushMicrotasks();
+
+    assert.match(
+      el.querySelector('[data-position="today"]').textContent,
+      /Today's betWIN200%\+2,013,614 FLIP/,
+      'the receipt and payout use the effective 1,006,807 FLIP position, not only stored credits',
+    );
     el.disconnectedCallback();
   });
 
@@ -2760,6 +2865,7 @@ describe('new-day rollover (codex-found race)', () => {
     }));
     coinflipMod.__setResolvedStakeReaderForTest(async () => _resolvedStakeWei);
     coinflipMod.__setClaimableReaderForTest(async () => null);
+    coinflipMod.__setBackingReaderForTest(async () => null);
     coinflipMod.__setLatestResultReaderForTest(async () => null);
     coinflipMod.__setWidgetBalancesReaderForTest(async () => null);
     coinflipMod.__setReverseFlipQuoteReaderForTest(async () => ({
@@ -2776,6 +2882,7 @@ describe('new-day rollover (codex-found race)', () => {
     coinflipMod.__resetAutoRebuyInfoReaderForTest();
     coinflipMod.__resetResolvedStakeReaderForTest();
     coinflipMod.__resetClaimableReaderForTest();
+    coinflipMod.__resetBackingReaderForTest();
     coinflipMod.__resetLatestResultReaderForTest();
     coinflipMod.__resetWidgetBalancesReaderForTest();
     coinflipMod.__resetReverseFlipQuoteReaderForTest();

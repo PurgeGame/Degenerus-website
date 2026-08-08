@@ -178,6 +178,7 @@ describe('coinflip stake reads', () => {
     coinflipMod.__resetCurrentStakeReaderForTest();
     coinflipMod.__resetAutoRebuyInfoReaderForTest();
     coinflipMod.__resetResolvedStakeReaderForTest();
+    coinflipMod.__resetBackingReaderForTest();
     coinflipMod.__resetStakeReadContractFactoryForTest();
     contractsMod.clearProvider();
   });
@@ -212,6 +213,21 @@ describe('coinflip stake reads', () => {
         startDay: 91,
       },
     );
+  });
+
+  test('reads carry-inclusive withdrawable coinflip backing', async () => {
+    const backing = 675n * 10n ** 18n;
+    let seenPlayer = null;
+    coinflipMod.__setBackingReaderForTest(async ({ player }) => {
+      seenPlayer = player;
+      return String(backing);
+    });
+
+    assert.equal(
+      await coinflipMod.readCoinflipBacking({ player: CONNECTED }),
+      backing,
+    );
+    assert.equal(seenPlayer, CONNECTED);
   });
 
   test('live stake read includes the contract auto-rebuy carry', async () => {
@@ -292,6 +308,60 @@ describe('coinflip stake reads', () => {
     );
   });
 
+  test('resolved stake replays multi-day auto-rebuy carry at the pre-resolution block', async () => {
+    const unit = 10n ** 18n;
+    const base = Number(CHAIN.deployBlock);
+    const previousResolution = { blockNumber: base + 100, index: 8 };
+    const stakeUpdate = {
+      blockNumber: base + 250,
+      index: 4,
+      args: { newTotal: 86_906n * unit },
+    };
+    const resolution = { blockNumber: base + 300, index: 20 };
+    const seen = [];
+    const contract = {
+      filters: {
+        CoinflipDayResolved: (day) => ({ type: 'resolved', day: Number(day) }),
+        CoinflipStakeUpdated: (player, day) => ({
+          type: 'stake', player: String(player).toLowerCase(), day: Number(day),
+        }),
+        CoinflipClaimState: (player) => ({
+          type: 'state', player: String(player).toLowerCase(),
+        }),
+      },
+      previewClaimCoinflips: async (player, overrides) => {
+        seen.push(['claimable', player, overrides?.blockTag]);
+        return 1_467_374n * unit;
+      },
+      previewSalvageFlipBacking: async (player, overrides) => {
+        seen.push(['backing', player, overrides?.blockTag]);
+        return (1_467_374n + 919_901n) * unit;
+      },
+      queryFilter: async (filter, from, to) => {
+        let logs = [];
+        if (filter.type === 'resolved' && filter.day === 168) logs = [previousResolution];
+        if (filter.type === 'resolved' && filter.day === 169) logs = [resolution];
+        if (filter.type === 'stake' && filter.day === 169) logs = [stakeUpdate];
+        return logs.filter((log) => log.blockNumber >= from && log.blockNumber <= to);
+      },
+    };
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => base + 400,
+    });
+    coinflipMod.__setStakeReadContractFactoryForTest(() => contract);
+
+    assert.equal(
+      await coinflipMod.readResolvedCoinflipStake({ player: CONNECTED, day: 169 }),
+      1_006_807n * unit,
+      'Today’s Bet includes the carry produced by every prior unclaimed rebuy day',
+    );
+    assert.deepEqual(seen, [
+      ['claimable', CONNECTED, base + 299],
+      ['backing', CONNECTED, base + 299],
+    ], 'both replay views use the same block immediately before resolution');
+  });
+
   test('returns the contract-scoped current-day stake as bigint', async () => {
     let seenPlayer = null;
     coinflipMod.__setCurrentStakeReaderForTest(async ({ player }) => {
@@ -367,7 +437,7 @@ describe('coinflip stake reads', () => {
   test('restores an immutable resolved stake from browser storage without RPC', async () => {
     const priorStorage = globalThis.localStorage;
     const values = new Map([
-      [`coinflip_resolved_stake_v2:84532:${CONNECTED}:311`, '7000000000000000000000'],
+      [`coinflip_resolved_stake_v3:84532:${CONNECTED}:311`, '7000000000000000000000'],
     ]);
     globalThis.localStorage = {
       getItem: (key) => values.get(key) ?? null,
