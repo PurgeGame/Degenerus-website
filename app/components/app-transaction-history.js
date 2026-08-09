@@ -16,7 +16,7 @@ import {
   degeneretteRevealSequenceFromFeedItem,
   mergeDegeneretteFeedItems,
 } from './app-degenerette-panel.js';
-import { queueReveal } from './reveal-overlay.js';
+import { queueReveal, projectDegeneretteEthSplit } from './reveal-overlay.js';
 
 const DEFAULT_LIMIT = 10;
 const LIMITS = new Set([10, 25, 50, 100]);
@@ -230,6 +230,18 @@ function _displayAsset(asset) {
   return asset === 'LOOTBOX' ? 'LUCKBOX' : asset;
 }
 
+/**
+ * Label for a delta chip. A LUCKBOX carries an ETH balance rather than a bare
+ * count, so its amount is denominated to keep it from reading as a quantity.
+ */
+function _deltaAssetLabel(delta) {
+  if (delta?.asset === 'TICKETS' && _ticketLevel(delta?.level) != null) {
+    return `L${_ticketLevel(delta.level)} TICKETS`;
+  }
+  if (delta?.asset === 'LOOTBOX' && delta?.kind === 'eth') return 'ETH LUCKBOX';
+  return _displayAsset(delta?.asset);
+}
+
 function _deltaMap() {
   return new Map();
 }
@@ -329,18 +341,12 @@ function _historyDeltaParts(delta, { exact = false } = {}) {
 export function formatHistoryDelta(delta) {
   if (!delta) return '';
   const { negative, amount } = _historyDeltaParts(delta);
-  const asset = delta.asset === 'TICKETS' && _ticketLevel(delta.level) != null
-    ? `L${_ticketLevel(delta.level)} TICKETS`
-    : _displayAsset(delta.asset);
-  return `${negative ? '−' : '+'}${amount} ${asset}`;
+  return `${negative ? '−' : '+'}${amount} ${_deltaAssetLabel(delta)}`;
 }
 
 function _formatHistoryDeltaExact(delta) {
   const { negative, amount } = _historyDeltaParts(delta, { exact: true });
-  const asset = delta.asset === 'TICKETS' && _ticketLevel(delta.level) != null
-    ? `L${_ticketLevel(delta.level)} TICKETS`
-    : _displayAsset(delta.asset);
-  return `${negative ? '−' : '+'}${amount} ${asset}`;
+  return `${negative ? '−' : '+'}${amount} ${_deltaAssetLabel(delta)}`;
 }
 
 /** Exact wallet deltas proven by normalized lootbox settlement legs. */
@@ -516,13 +522,25 @@ function _lootboxPurchaseRows(feed, owner, excludedTransactions = new Set()) {
     .map((item) => {
       const map = _deltaMap();
       const asset = String(item?.kind).toLowerCase() === 'flip' ? 'FLIP' : 'ETH';
-      _addCount(map, 'LOOTBOX', 1);
+      // What the box holds, not what the buy cost. A consumed purchase boost
+      // credits the box above the paid amount, and LootBoxBuy emits only the
+      // pre-boost figure — boxAmountRawWei is the feed's boost-inclusive value.
+      // Without it (a FLIP-paid box) fall back to the bare count.
+      const boxAmount = _big(item?.boxAmountRawWei);
+      if (item?.boxAmountRawWei != null && boxAmount > 0n) {
+        _addRaw(map, 'LOOTBOX', boxAmount, 'eth');
+      } else {
+        _addCount(map, 'LOOTBOX', 1);
+      }
       _addRaw(map, asset, -_big(item?.costRawWei), asset === 'ETH' ? 'eth' : 'token');
+      const boostBps = Math.max(0, Math.trunc(Number(item?.boostBps) || 0));
       return _historyRow({
         id: `lootbox-buy:${item?.transactionHash || item?.id}`,
         type: 'lootbox-purchase',
         title: 'Luckbox purchase',
-        detail: `Paid with ${asset}`,
+        detail: boostBps > 0
+          ? `Paid with ${asset} · +${_trimFixed((boostBps / 100).toFixed(1))}% boon`
+          : `Paid with ${asset}`,
         blockNumber: item?.blockNumber,
         logIndex: item?.logIndex,
         transactionHash: item?.transactionHash,
@@ -566,8 +584,23 @@ function _degeneretteRows(feed, owner) {
     const payoutMap = _deltaMap();
     const gross = sequence?.totalPayout ?? resolved?.resultData?.totalPayout ?? resolved?.payout ?? 0;
     if (asset === 'ETH') {
-      const boxEth = sequence?.lootboxEth ?? 0n;
-      const liquid = _big(gross) - (_big(boxEth) > _big(gross) ? _big(gross) : _big(boxEth));
+      // NOT sequence.lootboxEth. That is the LootBoxOpened amount, which is
+      // wrong twice over for this: it is suppressed entirely when a box rolls
+      // as a Degenerette spin (BoxSpin is emitted instead), and when it is
+      // present it carries the post-EV value rather than the share actually
+      // deducted from the payout. Subtracting it credited the FULL gross as
+      // liquid ETH on every box-spin bet and understated it by the player's
+      // activity-score bonus on the rest. The contract's 3-tier rule gives the
+      // real claimable lane. See projectDegeneretteEthSplit.
+      const spins = Array.isArray(sequence?.spins) ? sequence.spins : [];
+      const perSpin = _big(sequence?.amountPerSpin ?? 0) > 0n
+        ? _big(sequence.amountPerSpin)
+        : (spins.length > 0 ? _big(sequence?.totalWager ?? 0) / BigInt(spins.length) : 0n);
+      const { actual: liquid } = projectDegeneretteEthSplit({
+        gross: _big(gross),
+        rows: spins,
+        amountPerSpin: perSpin,
+      });
       _addRaw(payoutMap, 'ETH', liquid, 'eth');
     } else {
       _addRaw(payoutMap, asset, gross, 'token');
@@ -696,9 +729,16 @@ function _ticketRows(packsPayload) {
     ? packsPayload.ticketRevealPacks : []) {
     const block = _block(pack?.revealBlock);
     const level = _ticketPackLevel(pack);
-    const keyRoot = block == null ? String(pack?.packId || groups.size) : `block:${block}`;
+    // Prefer the reveal transaction: it is the opening the player performed.
+    // Block alone is a coarser bucket, and it silently merges every pack in a
+    // payload whose packs all carry the same stamp.
+    const transactionHash = /^0x[0-9a-f]{64}$/i.test(String(pack?.transactionHash || ''))
+      ? _lower(pack.transactionHash) : null;
+    const keyRoot = transactionHash != null
+      ? `tx:${transactionHash}`
+      : block == null ? String(pack?.packId || groups.size) : `block:${block}`;
     const key = `${keyRoot}:level:${level == null ? 'unknown' : level}`;
-    if (!groups.has(key)) groups.set(key, { block, level, packs: [] });
+    if (!groups.has(key)) groups.set(key, { block, level, transactionHash, packs: [] });
     const group = groups.get(key);
     group.packs.push(pack);
   }
@@ -746,6 +786,7 @@ function _ticketRows(packsPayload) {
         ? `${countLabel} ${ticketLabel} · ${sequences.length} replay pack${sequences.length === 1 ? '' : 's'}`
         : `${countLabel} ${ticketLabel} · reveal data indexing`,
       blockNumber: group.block,
+      transactionHash: group.transactionHash,
       deltas: _deltas(map),
       replaySequences: sequences,
     });
@@ -983,7 +1024,9 @@ export async function loadTransactionHistory(address, { limit = DEFAULT_LIMIT, p
     ['luckbox purchases', () => fetchJSON(`/lootbox/feed?limit=${feedLimit}&player=${player}`)],
     ['luckbox results', () => fetchJSON(`/lootbox/legs?limit=${legLimit}&player=${player}`)],
     ['Degenerette', () => fetchJSON(`/degenerette/feed?limit=${feedLimit}&player=${player}`)],
-    ['ticket reveals', () => fetchJSON(`/player/${player}/packs`)],
+    // Paginated like every other source here. This used to call /packs with no
+    // day, which returned the player's entire reveal history on every open.
+    ['ticket reveals', () => fetchJSON(`/player/${player}/reveals?limit=${feedLimit}`)],
     ['jackpot awards', () => fetchJSON(`/player/${player}/jackpot-history`)],
     ['AFKing/pass purchases', () => loadAfkingPurchaseHistory(owner)],
     ['level/day labels', () => fetchJSON('/replay/rng')],

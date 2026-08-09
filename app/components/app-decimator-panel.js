@@ -25,7 +25,8 @@
 //          when ui.mode === 'view-others'.
 //
 // Class palette: .dec-* prefix (RESEARCH R10 verified non-colliding against
-// existing 9 prefixes: .app-/.chain-/.clm-/.last-/.lbx-/.ldj-/.player-/.view-/.wallet-).
+// the then-existing prefixes: .app-/.chain-/.last-/.ldj-/.player-/.view-/
+// .wallet-. .clm- and .lbx- were retired with their panels 2026-08-08.)
 
 import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
 import { displayEth } from '../app/scaling.js';
@@ -471,6 +472,10 @@ class AppDecimatorPanel extends HTMLElement {
   #coinflipClaimableWei = 0n; // Settled/mintable Coinflip FLIP.
   #coinflipClaimableAddress = null;
   #coinflipClaimableKnown = false;
+  // Indexed auto-rebuy carry: FLIP the player owns that claimable excludes.
+  // Only ever added to TOTALS — no single transaction can spend it.
+  #coinflipCarryWeiIndexed = 0n;
+  #coinflipCarryAddress = null;
   #coinflipBackingWei = 0n; // Claimable plus active auto-rebuy carry.
   #coinflipBackingAddress = null;
   #coinflipBackingKnown = false;
@@ -1354,6 +1359,19 @@ class AppDecimatorPanel extends HTMLElement {
     } catch (_e) { return null; }
   }
 
+  /**
+   * Indexed auto-rebuy carry for the acting account, or 0n when it belongs to
+   * another address. TOTALS only: no deposit or burn reaches the carry, so it
+   * must never widen an action's spend cap.
+   */
+  #coinflipCarryWei() {
+    const acting = getActingAddress();
+    const actingLower = acting ? String(acting).toLowerCase() : null;
+    if (!actingLower || this.#coinflipCarryAddress !== actingLower) return 0n;
+    try { return BigInt(this.#coinflipCarryWeiIndexed); }
+    catch (_e) { return 0n; }
+  }
+
   async #refreshAllInFlipSources() {
     const acting = getActingAddress();
     const actingLower = acting ? String(acting).toLowerCase() : null;
@@ -1868,6 +1886,12 @@ class AppDecimatorPanel extends HTMLElement {
         this.#coinflipClaimableAddress = actingLower;
         this.#coinflipClaimableKnown = false;
       }
+      try {
+        this.#coinflipCarryWeiIndexed = BigInt(playerResult.value.coinflip?.autoRebuyCarry ?? 0n);
+      } catch (_e) {
+        this.#coinflipCarryWeiIndexed = 0n;
+      }
+      this.#coinflipCarryAddress = actingLower;
       const affiliate = playerResult.value.affiliate;
       if (affiliate && Object.prototype.hasOwnProperty.call(affiliate, 'referrer')) {
         const referrer = String(affiliate.referrer || '').toLowerCase();
@@ -2254,10 +2278,14 @@ class AppDecimatorPanel extends HTMLElement {
       && this.#coinflipClaimableAddress === actingLower
       ? this.#coinflipClaimableWei
       : 0n;
+    // The chain backing read is claimable + active carry. Falling back to
+    // claimable alone dropped the carry entirely, understating the player's
+    // coinflip FLIP by whatever auto-rebuy had accumulated. The indexed carry
+    // mirror keeps the total honest when that read is unavailable.
     const flipBackingWei = this.#coinflipBackingKnown
       && this.#coinflipBackingAddress === actingLower
       ? this.#coinflipBackingWei
-      : flipClaimableWei;
+      : flipClaimableWei + this.#coinflipCarryWei();
     // Display all coinflip value the player could withdraw, including active
     // auto-rebuy carry. RNG lock affects execution timing, not this balance.
     const protocolFlipWei = protocolFlipTotalWei(flipWalletWei, flipBackingWei);

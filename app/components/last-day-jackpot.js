@@ -1051,10 +1051,23 @@ class LastDayJackpot extends HTMLElement {
     const viewer = _isExactDayPayload(viewerCandidate, day, player) ? viewerCandidate : null;
     const ticketRevealPacks = Array.isArray(packs?.ticketRevealPacks)
       ? packs.ticketRevealPacks : [];
-    const ticketsRevealed = ticketRevealPacks.reduce(
-      (sum, pack) => sum + Math.max(0, Number(pack?.ticketCount) || 0),
-      0,
-    );
+    // Count entries, not each pack's rounded-up ticketCount. A reveal drain can
+    // stop mid-ticket, so summing per-pack ceilings double-counts a ticket whose
+    // four entries land across two packs. Four entries make a ticket.
+    const revealedEntries = ticketRevealPacks.reduce((sum, pack) => sum + (
+      Array.isArray(pack?.tickets)
+        ? pack.tickets.reduce(
+            (inner, ticket) => inner + (Array.isArray(ticket?.traits) ? ticket.traits.length : 0),
+            0,
+          )
+        : 0
+    ), 0);
+    const ticketsRevealed = revealedEntries > 0
+      ? revealedEntries / 4
+      : ticketRevealPacks.reduce(
+          (sum, pack) => sum + Math.max(0, Number(pack?.ticketCount) || 0),
+          0,
+        );
     const activity = viewer?.activity;
     const openedLootboxes = Array.isArray(packs?.lootboxPacks)
       ? packs.lootboxPacks.length : 0;
