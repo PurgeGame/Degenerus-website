@@ -57,6 +57,13 @@ const CLAIMS_ABI = [
   'function whalePassClaimAmount(address player) view returns (uint256)',
 ];
 
+// Keep the partial overload in its own ABI. Ethers can address overloaded
+// methods by signature, but a one-fragment contract also keeps injected test
+// doubles and wallet simulation straightforward.
+const PARTIAL_CLAIMS_ABI = [
+  'function claimWinnings(address player, uint256 amount) external',
+];
+
 // Verified: degenerus-audit/contracts/Coinflip.sol:332-337.
 // CRITICAL: /beta/app/constants.js:79 has WRONG signature `(address, address)`.
 // Phase 61 uses canonical `(address player, uint256 amount)`.
@@ -87,6 +94,14 @@ const AFFILIATE_DGNRS_ABI = [
   'function claimAffiliateDgnrs(address player) external',
 ];
 
+const AFFILIATE_DGNRS_BATCH_ABI = [
+  'function claimAffiliateDgnrs(address[] affiliates) external',
+];
+
+const GOLDEN_TICKET_ABI = [
+  'function claimGoldenTicket(address player, uint24 level) external',
+];
+
 // ---------------------------------------------------------------------------
 // Test seam — production path uses default `new ethers.Contract(...)`.
 // Tests inject a fake via __setContractFactoryForTest; reset via
@@ -110,6 +125,11 @@ function _buildGameContract(signerOrProvider) {
   return new ethers.Contract(CONTRACTS.GAME, CLAIMS_ABI, signerOrProvider);
 }
 
+function _buildPartialGameContract(signerOrProvider) {
+  if (_contractFactory) return _contractFactory(signerOrProvider);
+  return new ethers.Contract(CONTRACTS.GAME, PARTIAL_CLAIMS_ABI, signerOrProvider);
+}
+
 function _buildCoinflipContract(signerOrProvider) {
   if (_contractFactory) return _contractFactory(signerOrProvider);
   return new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, signerOrProvider);
@@ -124,6 +144,16 @@ function _buildDecimatorContract(signerOrProvider) {
 function _buildAffiliateDgnrsContract(signerOrProvider) {
   if (_contractFactory) return _contractFactory(signerOrProvider);
   return new ethers.Contract(CONTRACTS.GAME, AFFILIATE_DGNRS_ABI, signerOrProvider);
+}
+
+function _buildAffiliateDgnrsBatchContract(signerOrProvider) {
+  if (_contractFactory) return _contractFactory(signerOrProvider);
+  return new ethers.Contract(CONTRACTS.GAME, AFFILIATE_DGNRS_BATCH_ABI, signerOrProvider);
+}
+
+function _buildGoldenTicketContract(signerOrProvider) {
+  if (_contractFactory) return _contractFactory(signerOrProvider);
+  return new ethers.Contract(CONTRACTS.GAME, GOLDEN_TICKET_ABI, signerOrProvider);
 }
 
 // ---------------------------------------------------------------------------
@@ -220,6 +250,43 @@ export async function claimEth({ player } = {}) {
 
   // Phase 58 chokepoint — closure form mandatory.
   const receipt = await sendTx((s) => _buildGameContract(s).claimWinnings(playerArg), 'Claim ETH winnings');
+  return { receipt };
+}
+
+/**
+ * Claim at most `amount` wei from the player's accrued ETH balance. The
+ * contract clamps to the currently available amount and retains its 1-wei
+ * storage sentinel. A partial cashout intentionally follows the same curse
+ * rules as a full cashout.
+ *
+ * @param {{player?: string, amount: bigint|string|number}} args
+ * @returns {Promise<{receipt: import('ethers').TransactionReceipt}>}
+ */
+export async function claimEthAmount({ player, amount } = {}) {
+  const playerArg = player ?? getActingAddress();
+  if (!playerArg) throw new Error('Wallet not connected.');
+  let amountBI;
+  try { amountBI = BigInt(amount); }
+  catch (_e) { throw new Error('Enter an ETH amount to claim.'); }
+  if (amountBI <= 0n) throw new Error('Enter an ETH amount to claim.');
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (signer) {
+    const contract = _buildPartialGameContract(signer);
+    const sim = await requireStaticCall(
+      contract,
+      'claimWinnings',
+      [playerArg, amountBI],
+      signer,
+    );
+    if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call partial claimWinnings');
+  }
+
+  const receipt = await sendTx(
+    (s) => _buildPartialGameContract(s).claimWinnings(playerArg, amountBI),
+    'Claim ETH winnings',
+  );
   return { receipt };
 }
 
@@ -390,6 +457,48 @@ export async function claimAffiliateDgnrs({ player } = {}) {
     'Claim affiliate DGNRS',
   );
   return { receipt };
+}
+
+/**
+ * Settle many current-level affiliate bonuses in one permissionless call.
+ * The contract catches an ineligible/already-claimed address per item, so a
+ * stale community work list cannot revert every other valid settlement.
+ *
+ * @param {{players: string[]}} args
+ */
+export async function claimAffiliateDgnrsBatch({ players } = {}) {
+  const unique = [...new Set(
+    (Array.isArray(players) ? players : [])
+      .filter(Boolean)
+      .map((value) => String(value).toLowerCase()),
+  )];
+  if (unique.length === 0) throw new Error('No affiliate bonuses to process.');
+  const receipt = await sendTx(
+    (s) => _buildAffiliateDgnrsBatchContract(s).claimAffiliateDgnrs(unique),
+    `Process ${unique.length} affiliate bonus${unique.length === 1 ? '' : 'es'}`,
+  );
+  return { receipt, players: unique };
+}
+
+/** Permissionlessly settle one resolved foil-pack Golden Ticket ladder. */
+export async function claimGoldenTicket({ player, level } = {}) {
+  const playerArg = player ?? getActingAddress();
+  if (!playerArg) throw new Error('Wallet not connected.');
+  const lvl = Number(level);
+  if (!Number.isInteger(lvl) || lvl < 0) throw new Error('Invalid Golden Ticket level.');
+
+  const provider = getProvider();
+  const signer = provider ? await provider.getSigner() : null;
+  if (signer) {
+    const contract = _buildGoldenTicketContract(signer);
+    const sim = await requireStaticCall(contract, 'claimGoldenTicket', [playerArg, lvl], signer);
+    if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call claimGoldenTicket');
+  }
+  const receipt = await sendTx(
+    (s) => _buildGoldenTicketContract(s).claimGoldenTicket(playerArg, lvl),
+    `Claim level ${lvl} Golden Ticket`,
+  );
+  return { receipt, level: lvl };
 }
 
 // ---------------------------------------------------------------------------

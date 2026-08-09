@@ -1,0 +1,490 @@
+// Full-width Decimator event rail. The ordinary side-bet card yields to this
+// surface on the main app, while its legacy renderer remains available to
+// standalone embeds that do not mount <app-decimator-burn>.
+
+import { displayEth, displayToken } from '../app/scaling.js';
+import { get, getActingAddress, getViewedAddress, subscribe } from '../app/store.js';
+import { readGameState } from '../app/game-state.js';
+import { activeBoonForProduct } from '../app/boons.js';
+import {
+  burnForDecimator,
+  DECIMATOR_MIN_FLIP_WEI,
+  decimatorActivityMultiplierBps,
+  decimatorCurrentMultiplierBps,
+  decimatorEntryScoreWei,
+  decimatorPoolWei,
+  decimatorWindowIsOpen,
+  readDecimatorContext,
+  readDecimatorRawBurnTotal,
+} from '../app/decimator.js';
+import { compactUiError } from '../app/ui-error.js';
+
+const POLL_MS = 15_000;
+const POST_BURN_REFRESH_MS = 350;
+const FLIP = 10n ** 18n;
+
+let _readGame = readGameState;
+let _readContext = readDecimatorContext;
+let _readRawBurn = readDecimatorRawBurnTotal;
+let _burn = burnForDecimator;
+
+function _fmtFlip(raw) {
+  try {
+    const value = displayToken(BigInt(raw || 0), 0);
+    const number = Number(value);
+    return Number.isSafeInteger(number) ? number.toLocaleString('en-US') : value;
+  } catch (_e) { return '—'; }
+}
+
+function _fmtEth(raw) {
+  try {
+    const value = displayEth(BigInt(raw || 0), 3)
+      .replace(/\.000$/, '')
+      .replace(/(\.\d*?)0+$/, '$1');
+    const [whole, fraction] = value.split('.');
+    const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return fraction == null ? grouped : `${grouped}.${fraction}`;
+  } catch (_e) { return '—'; }
+}
+
+function _parseFlip(raw) {
+  const match = String(raw ?? '').trim().replace(/,/g, '')
+    .match(/^(\d+)(?:\.(\d{1,18}))?$/);
+  if (!match) return null;
+  return BigInt(match[1]) * FLIP + BigInt(String(match[2] || '').padEnd(18, '0'));
+}
+
+function _inputFlip(raw) {
+  const value = BigInt(raw || 0);
+  const whole = value / FLIP;
+  const remainder = value % FLIP;
+  if (remainder === 0n) return String(whole);
+  return `${whole}.${String(remainder).padStart(18, '0').replace(/0+$/, '')}`;
+}
+
+function _percentFromBps(value, { signed = false } = {}) {
+  const bps = Number(value || 0);
+  if (!Number.isFinite(bps)) return '—';
+  const percent = bps / 100;
+  const text = Number.isInteger(percent)
+    ? String(percent)
+    : percent.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+  return `${signed && percent > 0 ? '+' : ''}${text}%`;
+}
+
+export function decimatorBoonBps(payload) {
+  const type = Number(activeBoonForProduct(payload, 'decimator')?.row?.boonType || 0);
+  if (type === 13) return 1_000;
+  if (type === 14) return 2_500;
+  if (type === 15) return 5_000;
+  return 0;
+}
+
+/** Visual modifier rail derived from the exact inputs used by score math. */
+export function decimatorModifierModel(context = {}, boonPayload = null) {
+  const score = Number(context?.activityScore);
+  const scoreKnown = Number.isFinite(score) && score >= 0;
+  const activityBps = scoreKnown
+    ? decimatorActivityMultiplierBps(Math.trunc(score))
+    : null;
+  const boonBps = decimatorBoonBps(boonPayload);
+  const chips = [];
+  if (activityBps != null && activityBps > 10_000n) {
+    chips.push({
+      kind: 'boost',
+      label: `DEGEN ${Math.trunc(score).toLocaleString('en-US')}`,
+      value: _percentFromBps(activityBps - 10_000n, { signed: true }),
+    });
+  }
+  if (context?.dayOneActive === true) {
+    chips.push({ kind: 'boost', label: 'EARLY WINDOW', value: '+20%' });
+  }
+  if (context?.lastPurchaseDay === true) {
+    chips.push({ kind: 'malus', label: 'LATE BURN', value: '−10%' });
+  }
+  if (boonBps > 0) {
+    chips.push({
+      kind: 'boon',
+      label: 'BOON',
+      value: `${_percentFromBps(boonBps, { signed: true })} WEIGHT`,
+    });
+  }
+  if (chips.length === 0) {
+    chips.push({ kind: 'base', label: scoreKnown ? `DEGEN ${Math.trunc(score)}` : 'BASE WEIGHT', value: '100%' });
+  }
+  const liveMultiplierBps = scoreKnown
+    ? decimatorCurrentMultiplierBps({
+        activityScore: Math.trunc(score),
+        dayOneActive: context?.dayOneActive === true,
+        lastPurchaseDay: context?.lastPurchaseDay === true,
+      })
+    : null;
+  return { chips, boonBps, activityBps, liveMultiplierBps };
+}
+
+class AppDecimatorBurn extends HTMLElement {
+  #initialized = false;
+  #unsubs = [];
+  #timer = null;
+  #postBurnTimer = null;
+  #errorTimer = null;
+  #questListener = null;
+  #burnListener = null;
+  #seq = 0;
+  #gameState = null;
+  #context = null;
+  #targetLevel = null;
+  #open = false;
+  #busy = false;
+  #draft = '1000';
+
+  connectedCallback() {
+    if (this.#initialized) return;
+    this.#initialized = true;
+    this.#renderShell();
+    this.#wire();
+    for (const key of ['connected.address', 'viewing.address', 'ui.mode', 'app.boons']) {
+      this.#unsubs.push(subscribe(key, () => {
+        if (key === 'app.boons' || key === 'ui.mode') this.#render();
+        else void this.#refresh();
+      }));
+    }
+    this.#timer = setInterval(() => { void this.#refresh(); }, POLL_MS);
+    try { this.#timer?.unref?.(); } catch (_e) { /* browser timer */ }
+    void this.#refresh();
+  }
+
+  disconnectedCallback() {
+    for (const unsubscribe of this.#unsubs) {
+      try { unsubscribe(); } catch (_e) { /* defensive */ }
+    }
+    this.#unsubs = [];
+    if (this.#timer != null) clearInterval(this.#timer);
+    if (this.#postBurnTimer != null) clearTimeout(this.#postBurnTimer);
+    if (this.#errorTimer != null) clearTimeout(this.#errorTimer);
+    if (typeof document !== 'undefined') {
+      if (this.#questListener) document.removeEventListener?.('quest:activate', this.#questListener);
+      if (this.#burnListener) document.removeEventListener?.('app-decimator:burn-confirmed', this.#burnListener);
+    }
+    this.#timer = null;
+    this.#postBurnTimer = null;
+    this.#errorTimer = null;
+    this.#questListener = null;
+    this.#burnListener = null;
+    this.#seq += 1;
+    this.#initialized = false;
+  }
+
+  #renderShell() {
+    this.hidden = true;
+    this.innerHTML = `
+      <section class="dbb" data-bind="dbb-shell" hidden aria-labelledby="dbb-title">
+        <header class="dbb__identity">
+          <span class="dbb__reactor" aria-hidden="true">
+            <span class="dbb__reactor-ring"></span>
+            <img src="/whitepaper/flame-center.svg" alt="">
+          </span>
+          <span class="dbb__identity-copy">
+            <small>LEVEL <span data-bind="dbb-level">—</span> EVENT</small>
+            <h2 id="dbb-title">DECIMATOR</h2>
+            <span class="dbb__live"><i></i>BURN WINDOW OPEN</span>
+          </span>
+        </header>
+
+        <div class="dbb__stats" aria-label="Live Decimator totals">
+          <article class="dbb-stat dbb-stat--prize">
+            <span class="dbb-stat__icon"><img src="/badges-circular/crypto_06_ethereum_green.svg" alt=""></span>
+            <span><small>PRIZE POOL</small><strong><b data-bind="dbb-prize">—</b> ETH</strong></span>
+          </article>
+          <article class="dbb-stat dbb-stat--burned">
+            <span class="dbb-stat__icon"><img src="/whitepaper/flame-center.svg" alt=""></span>
+            <span><small>FLIP BURNED</small><strong><b data-bind="dbb-burned">—</b> FLIP</strong></span>
+          </article>
+          <article class="dbb-stat dbb-stat--weight">
+            <span><small>TOTAL WEIGHT</small><strong data-bind="dbb-total-weight">—</strong></span>
+          </article>
+          <article class="dbb-stat dbb-stat--mine">
+            <span><small>YOUR WEIGHT</small><strong data-bind="dbb-player-weight">—</strong></span>
+          </article>
+        </div>
+
+        <div class="dbb__modifiers">
+          <small class="dbb__modifiers-title">TODAY'S MODIFIERS</small>
+          <div class="dbb__modifier-list" data-bind="dbb-modifiers"></div>
+          <span class="dbb__live-multi" data-bind="dbb-live-multi" hidden></span>
+        </div>
+
+        <div class="dbb__entry">
+          <label class="dbb__input">
+            <span>BURN AMOUNT</span>
+            <span class="dbb__input-control">
+              <input type="text" inputmode="decimal" name="dbb-amount" value="1000"
+                     aria-label="Decimator burn amount in FLIP">
+              <b>FLIP</b>
+              <span class="dbb__stepper">
+                <button type="button" data-bind="dbb-up" aria-label="Add 1,000 FLIP">▲</button>
+                <button type="button" data-bind="dbb-down" aria-label="Remove 1,000 FLIP">▼</button>
+              </span>
+            </span>
+          </label>
+          <button type="button" class="dbb__burn" data-write data-bind="dbb-burn">
+            <span data-bind="dbb-burn-action">BURN FLIP</span>
+            <strong data-bind="dbb-quote">WEIGHT —</strong>
+          </button>
+          <p class="dbb__feedback" data-bind="dbb-feedback" hidden role="status"></p>
+        </div>
+      </section>
+    `;
+  }
+
+  #wire() {
+    const input = this.querySelector('[name="dbb-amount"]');
+    input?.addEventListener('input', () => {
+      this.#draft = String(input.value || '');
+      this.#paintQuote();
+    });
+    input?.addEventListener('keydown', (event) => {
+      if (event?.key === 'Enter') void this.#enter();
+    });
+    this.querySelector('[data-bind="dbb-up"]')?.addEventListener('click', () => this.#step(1));
+    this.querySelector('[data-bind="dbb-down"]')?.addEventListener('click', () => this.#step(-1));
+    this.querySelector('[data-bind="dbb-burn"]')?.addEventListener('click', () => this.#enter());
+    if (typeof document !== 'undefined') {
+      this.#questListener = (event) => {
+        if (Number(event?.detail?.questType) !== 5) return;
+        let amount;
+        try { amount = BigInt(event?.detail?.target ?? 0); } catch (_e) { amount = 0n; }
+        if (amount < DECIMATOR_MIN_FLIP_WEI) amount = 2_000n * FLIP;
+        this.#draft = _inputFlip(amount);
+        if (input) input.value = this.#draft;
+        this.#paintQuote();
+        try { this.scrollIntoView?.({ behavior: 'smooth', block: 'center' }); } catch (_e) {}
+        if (event?.detail?.submit) void this.#enter();
+      };
+      this.#burnListener = (event) => {
+        if (event?.target === this) return;
+        void this.#refresh();
+      };
+      document.addEventListener?.('quest:activate', this.#questListener);
+      document.addEventListener?.('app-decimator:burn-confirmed', this.#burnListener);
+    }
+  }
+
+  #step(direction) {
+    const input = this.querySelector('[name="dbb-amount"]');
+    const parsed = _parseFlip(input?.value);
+    const current = parsed == null ? DECIMATOR_MIN_FLIP_WEI : parsed;
+    const stepped = current + BigInt(direction) * 1_000n * FLIP;
+    const next = stepped < DECIMATOR_MIN_FLIP_WEI ? DECIMATOR_MIN_FLIP_WEI : stepped;
+    this.#draft = _inputFlip(next);
+    if (input) input.value = this.#draft;
+    this.#paintQuote();
+  }
+
+  async #refresh() {
+    const seq = ++this.#seq;
+    let state = null;
+    try { state = await _readGame(); } catch (_e) { state = null; }
+    if (seq !== this.#seq) return;
+    this.#gameState = state;
+    const level = Number(state?.level);
+    this.#targetLevel = Number.isInteger(level) && level >= 0 ? level + 1 : null;
+    this.#open = this.#targetLevel != null && decimatorWindowIsOpen(state);
+    if (!this.#open) {
+      this.#context = null;
+      this.#render();
+      return;
+    }
+
+    // Paint the open rail immediately, then fill chain/indexed numbers as each
+    // read arrives. Raw burn scanning is cursor-cached and intentionally does
+    // not hold the prize or modifier rail hostage on its first pass.
+    this.#render();
+    const viewed = (typeof getViewedAddress === 'function' ? getViewedAddress() : null)
+      || getActingAddress()
+      || null;
+    const contextPromise = _readContext(viewed, this.#targetLevel).catch(() => null);
+    const rawPromise = _readRawBurn({
+      level: this.#targetLevel,
+      // The API normally supplies this exact boundary. If it is temporarily
+      // null, decimator.js falls back to the indexed stage-7 opening block.
+      sinceTimestamp: state?.levelStartTime,
+    }).catch(() => null);
+    const context = await contextPromise;
+    if (seq !== this.#seq) return;
+    if (context) this.#context = context;
+    this.#render();
+    const raw = await rawPromise;
+    if (seq !== this.#seq) return;
+    if (raw != null) this.#context = { ...(this.#context || {}), totalRawBurnWei: BigInt(raw) };
+    this.#render();
+  }
+
+  #render() {
+    const shell = this.querySelector('[data-bind="dbb-shell"]');
+    this.hidden = !this.#open;
+    if (shell) shell.hidden = !this.#open;
+    if (!this.#open || !shell) return;
+
+    const level = this.querySelector('[data-bind="dbb-level"]');
+    if (level) level.textContent = this.#targetLevel == null ? '—' : String(this.#targetLevel);
+    const futurePool = this.#context?.futurePoolWei
+      ?? this.#gameState?.prizePools?.futurePrizePool;
+    const prize = this.#targetLevel == null ? null : decimatorPoolWei(futurePool, this.#targetLevel);
+    const values = [
+      ['dbb-prize', prize == null ? '—' : _fmtEth(prize)],
+      ['dbb-burned', this.#context?.totalRawBurnWei == null ? '—' : _fmtFlip(this.#context.totalRawBurnWei)],
+      ['dbb-total-weight', this.#context?.totalRoundScore == null ? '—' : _fmtFlip(this.#context.totalRoundScore)],
+      ['dbb-player-weight', this.#context?.totalBurnWeight == null ? '—' : _fmtFlip(this.#context.totalBurnWeight)],
+    ];
+    for (const [bind, value] of values) {
+      const node = this.querySelector(`[data-bind="${bind}"]`);
+      if (node) node.textContent = value;
+    }
+
+    const modifierModel = decimatorModifierModel(this.#context || {}, get('app.boons'));
+    const modifiers = this.querySelector('[data-bind="dbb-modifiers"]');
+    if (modifiers) {
+      modifiers.textContent = '';
+      for (const model of modifierModel.chips) {
+        const chip = document.createElement('span');
+        chip.className = `dbb-mod dbb-mod--${model.kind}`;
+        const labelNode = document.createElement('small');
+        labelNode.textContent = model.label;
+        const valueNode = document.createElement('strong');
+        valueNode.textContent = model.value;
+        chip.appendChild(labelNode);
+        chip.appendChild(valueNode);
+        modifiers.appendChild(chip);
+      }
+    }
+    const liveMulti = this.querySelector('[data-bind="dbb-live-multi"]');
+    if (liveMulti) {
+      liveMulti.hidden = modifierModel.liveMultiplierBps == null;
+      liveMulti.textContent = modifierModel.liveMultiplierBps == null
+        ? ''
+        : `${_percentFromBps(modifierModel.liveMultiplierBps)} LIVE MULTI`;
+    }
+    this.#paintQuote(modifierModel.boonBps);
+  }
+
+  #canWrite() {
+    const acting = getActingAddress();
+    const connected = get('connected.address');
+    return Boolean(
+      acting
+      && connected
+      && String(acting).toLowerCase() === String(connected).toLowerCase()
+      && get('ui.mode') === 'self'
+    );
+  }
+
+  #paintQuote(knownBoonBps = null) {
+    const input = this.querySelector('[name="dbb-amount"]');
+    const quote = this.querySelector('[data-bind="dbb-quote"]');
+    const button = this.querySelector('[data-bind="dbb-burn"]');
+    const action = this.querySelector('[data-bind="dbb-burn-action"]');
+    const amount = _parseFlip(input?.value);
+    const score = Number(this.#context?.activityScore);
+    let weight = null;
+    if (amount != null && amount >= DECIMATOR_MIN_FLIP_WEI && Number.isFinite(score)) {
+      let previous = 0n;
+      try { previous = BigInt(this.#context?.totalBurnWeight ?? 0); } catch (_e) { previous = 0n; }
+      weight = decimatorEntryScoreWei({
+        amountWei: amount,
+        previousScoreWei: previous,
+        activityScore: Math.max(0, Math.trunc(score)),
+        dayOneActive: this.#context?.dayOneActive === true,
+        lastPurchaseDay: this.#context?.lastPurchaseDay === true,
+        boonBps: knownBoonBps ?? decimatorBoonBps(get('app.boons')),
+      });
+    }
+    if (quote) {
+      quote.textContent = amount != null && amount < DECIMATOR_MIN_FLIP_WEI
+        ? 'MIN 1,000 FLIP'
+        : weight == null ? 'WEIGHT —' : `+${_fmtFlip(weight)} WEIGHT`;
+    }
+    if (action) action.textContent = this.#busy ? 'BURNING…' : 'BURN FLIP';
+    if (button) {
+      button.disabled = this.#busy
+        || !this.#open
+        || !this.#canWrite()
+        || amount == null
+        || amount < DECIMATOR_MIN_FLIP_WEI;
+    }
+  }
+
+  #setFeedback(message, error = false) {
+    const node = this.querySelector('[data-bind="dbb-feedback"]');
+    if (!node) return;
+    node.textContent = String(message || '');
+    node.hidden = !message;
+    node.classList?.toggle('is-error', Boolean(error));
+    if (this.#errorTimer != null) clearTimeout(this.#errorTimer);
+    this.#errorTimer = null;
+    if (message) {
+      this.#errorTimer = setTimeout(() => {
+        node.hidden = true;
+        node.textContent = '';
+      }, 10_000);
+      try { this.#errorTimer?.unref?.(); } catch (_e) { /* browser timer */ }
+    }
+  }
+
+  async #enter() {
+    if (this.#busy || !this.#open || !this.#canWrite()) return;
+    const input = this.querySelector('[name="dbb-amount"]');
+    const amount = _parseFlip(input?.value);
+    if (amount == null || amount < DECIMATOR_MIN_FLIP_WEI) {
+      this.#setFeedback('Minimum burn is 1,000 FLIP.', true);
+      return;
+    }
+    const player = getActingAddress();
+    if (!player) return;
+    this.#busy = true;
+    this.#setFeedback('');
+    this.#paintQuote();
+    try {
+      const { receipt } = await _burn({ player, amount });
+      this.#setFeedback('BURN CONFIRMED');
+      try {
+        this.dispatchEvent(new CustomEvent('app-decimator:burn-confirmed', {
+          bubbles: true,
+          detail: {
+            player,
+            amountWei: amount,
+            transactionHash: receipt?.hash || receipt?.transactionHash || null,
+          },
+        }));
+      } catch (_e) { /* progressive refresh event */ }
+      if (this.#postBurnTimer != null) clearTimeout(this.#postBurnTimer);
+      this.#postBurnTimer = setTimeout(() => { void this.#refresh(); }, POST_BURN_REFRESH_MS);
+      try { this.#postBurnTimer?.unref?.(); } catch (_e) { /* browser timer */ }
+    } catch (error) {
+      this.#setFeedback(compactUiError(error, 'Decimator burn did not go through.'), true);
+    } finally {
+      this.#busy = false;
+      this.#paintQuote();
+    }
+  }
+}
+
+if (typeof customElements !== 'undefined' && !customElements.get('app-decimator-burn')) {
+  customElements.define('app-decimator-burn', AppDecimatorBurn);
+}
+
+export function __setDecimatorBurnWidgetDepsForTest({ game, context, rawBurn, burn } = {}) {
+  if (typeof game === 'function') _readGame = game;
+  if (typeof context === 'function') _readContext = context;
+  if (typeof rawBurn === 'function') _readRawBurn = rawBurn;
+  if (typeof burn === 'function') _burn = burn;
+}
+
+export function __resetDecimatorBurnWidgetDepsForTest() {
+  _readGame = readGameState;
+  _readContext = readDecimatorContext;
+  _readRawBurn = readDecimatorRawBurnTotal;
+  _burn = burnForDecimator;
+}
+
+export { _parseFlip as parseDecimatorFlipInput };

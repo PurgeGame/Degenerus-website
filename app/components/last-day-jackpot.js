@@ -43,8 +43,35 @@ import { parseOpenLegsFromReceipt } from '../app/lootbox-legs.js';
 import { readResolvedCoinflipStake } from '../app/coinflip.js';
 import { loadDayLootboxResults } from '../app/day-lootbox-results.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
+import { dailyJackpotProcessingSignals } from '../app/jackpot-processing.js';
 
 const FOIL_MATCH_ACTION_SOURCE = 'foil-match';
+
+function _terminalFoilClaimError(error) {
+  const seen = new Set();
+  const pending = [error];
+  while (pending.length > 0) {
+    const current = pending.shift();
+    if (!current || (typeof current !== 'object' && typeof current !== 'function')
+      || seen.has(current)) continue;
+    seen.add(current);
+    for (const value of [
+      current.code,
+      current.errorName,
+      current.revert?.name,
+      current.reason,
+      current.shortMessage,
+      current.message,
+    ]) {
+      const match = /(NoClaimableMatch|GameOver)/.exec(String(value || ''));
+      if (match) return match[1];
+    }
+    for (const nested of [current.cause, current.error, current.info?.error]) {
+      if (nested) pending.push(nested);
+    }
+  }
+  return null;
+}
 
 function _isExactDayPayload(payload, day, player) {
   const expectedDay = Number(day);
@@ -89,6 +116,7 @@ class LastDayJackpot extends HTMLElement {
   #latestDaySeen = null;
   #lastPayload = null;
   #daySync = null;       // direct GAME day; jackpot and coinflip expose independent lanes
+  #gameState = null;     // /game/state exposes the ticket-drain phase between those lanes
   #hasNewDayAvailable = false; // Legacy banner fallback; normal flow auto-follows.
   #winners = [];
   // Phase 64 — foil strip state + panel bridge state.
@@ -135,18 +163,32 @@ class LastDayJackpot extends HTMLElement {
       && Number(this.#daySync?.day) === Number(this.#pinnedDay);
   }
 
-  #syncWarming() {
-    return this.#syncAppliesToPinned() && (
-      this.#daySync?.jackpotReady !== true
-      || Number(this.#lastPayload?.day) !== Number(this.#pinnedDay)
-    );
+  #hasExactResolvedJackpotPayload() {
+    return Number(this.#lastPayload?.day) === Number(this.#pinnedDay)
+      && (this.#lastPayload?.status === 'resolved'
+        || this.#lastPayload?.status === 'resolved-no-winners');
   }
 
-  #rngRequestStarted(sync = this.#daySync) {
-    return sync?.rngRequested === true
-      || sync?.rngLocked === true
-      || sync?.jackpotReady === true
-      || sync?.coinflipReady === true;
+  #syncWarming() {
+    // The exact resolved jackpot payload is the data the board needs. It is
+    // sufficient even if app.daySync has not latched the same app.lastDay
+    // update yet; requiring both copies could strand a completed draw.
+    return this.#syncAppliesToPinned() && !this.#hasExactResolvedJackpotPayload();
+  }
+
+  #syncReplayProcessingState(panel = this.#panel()) {
+    if (!panel || typeof panel.setJackpotProcessingState !== 'function') return;
+    panel.setJackpotProcessingState(dailyJackpotProcessingSignals({
+      day: this.#pinnedDay,
+      daySync: this.#daySync,
+      gameState: this.#gameState,
+      jackpotPayload: this.#lastPayload,
+    }));
+  }
+
+  #onGameState(state) {
+    this.#gameState = state && typeof state === 'object' ? state : null;
+    this.#syncReplayProcessingState();
   }
 
   #replayShowsPinnedDay(panel = this.#panel()) {
@@ -202,10 +244,9 @@ class LastDayJackpot extends HTMLElement {
     const day = Number(sync?.day);
     this.#daySync = Number.isInteger(day) && day > 0 ? sync : null;
     if (!this.#daySync) return;
-    // currentDayView crosses at the wall-clock boundary. Keep the completed
-    // draw mounted until the daily request is real; the RNG lock/result lanes
-    // are what begin the visible jackpot-processing handoff.
-    if (!this.#rngRequestStarted(sync) && day !== Number(this.#pinnedDay)) return;
+    // This is the same direct day boundary that re-fuzzes player amounts. Move
+    // the board with it immediately: clear yesterday, start the slow attract
+    // roll, and expose the RNG-INCOMING progress state in one visual handoff.
     const genuinelyNew = this.#latestDaySeen == null || day > this.#latestDaySeen;
     if (genuinelyNew) this.#latestDaySeen = day;
     if (this.#pinnedDay == null
@@ -213,11 +254,12 @@ class LastDayJackpot extends HTMLElement {
       || (this.#manualReplayDay == null && day !== Number(this.#pinnedDay))) {
       this.#primeChainDay(day);
     }
+    this.#syncReplayProcessingState();
     if (Number(this.#pinnedDay) !== day || this.#manualReplayDay != null) return;
     // Coinflip normally resolves first, but it is an independent result. The
     // jackpot becomes playable as soon as its own exact-day payload is ready;
     // a slow or missing coinflip response must never keep this board inert.
-    if (!sync.jackpotReady) {
+    if (!sync.jackpotReady && !this.#hasExactResolvedJackpotPayload()) {
       this.#renderColdStart();
       this.#setReplayWarming(true);
       this.#syncReplayPanel();
@@ -539,6 +581,7 @@ class LastDayJackpot extends HTMLElement {
   #trySyncOnce() {
     const panel = this.#panel();
     if (!panel || this.#pinnedDay == null) return false;
+    this.#syncReplayProcessingState(panel);
     const daySelect = panel.querySelector('[data-bind="day-select"]');
     const playerSelect = panel.querySelector('[data-bind="player-select"]');
     let insertedProcessingDay = false;
@@ -1008,23 +1051,10 @@ class LastDayJackpot extends HTMLElement {
     const viewer = _isExactDayPayload(viewerCandidate, day, player) ? viewerCandidate : null;
     const ticketRevealPacks = Array.isArray(packs?.ticketRevealPacks)
       ? packs.ticketRevealPacks : [];
-    // Count entries, not each pack's rounded-up ticketCount. A reveal drain can
-    // stop mid-ticket, so summing per-pack ceilings double-counts a ticket whose
-    // four entries land across two packs. Four entries make a ticket.
-    const revealedEntries = ticketRevealPacks.reduce((sum, pack) => sum + (
-      Array.isArray(pack?.tickets)
-        ? pack.tickets.reduce(
-            (inner, ticket) => inner + (Array.isArray(ticket?.traits) ? ticket.traits.length : 0),
-            0,
-          )
-        : 0
-    ), 0);
-    const ticketsRevealed = revealedEntries > 0
-      ? revealedEntries / 4
-      : ticketRevealPacks.reduce(
-          (sum, pack) => sum + Math.max(0, Number(pack?.ticketCount) || 0),
-          0,
-        );
+    const ticketsRevealed = ticketRevealPacks.reduce(
+      (sum, pack) => sum + Math.max(0, Number(pack?.ticketCount) || 0),
+      0,
+    );
     const activity = viewer?.activity;
     const openedLootboxes = Array.isArray(packs?.lootboxPacks)
       ? packs.lootboxPacks.length : 0;
@@ -1335,19 +1365,15 @@ class LastDayJackpot extends HTMLElement {
       return;
     }
 
-    const exact = best.grade.faces.filter((face) => face === 2).length;
-    const symbolOnly = best.grade.faces.filter((face) => face === 1).length;
-    const drawLabel = best.grade.drawKind === 1 ? 'BONUS JACKPOT' : 'MAIN JACKPOT';
     const rewardFaces = FOIL_TIER_FACES[best.grade.score] ?? 0;
-    const rewardFacesText = Number(rewardFaces).toLocaleString('en-US');
     publishPendingActions(FOIL_MATCH_ACTION_SOURCE, [{
       id: `foil-match:${best.key}`,
       dismissScope: player,
       kind: 'foil-match',
       kindLabel: 'FOIL TICKET MATCH',
-      label: `T${best.grade.score} → ${rewardFacesText}-FACE BONUS`,
-      shortLabel: `Claim T${best.grade.score}`,
-      detail: `Day ${day} · ${drawLabel} · ${exact} exact + ${symbolOnly} symbol · Degenerette`,
+      label: `T${best.grade.score} FOIL LUCKBOX MATCH`,
+      shortLabel: `T${best.grade.score} FOIL LUCKBOX MATCH`,
+      detail: '',
       lineTraits: best.lineTraits,
       winningTraits: best.winningTraits,
       matchFaces: best.grade.faces,
@@ -1356,7 +1382,9 @@ class LastDayJackpot extends HTMLElement {
       rewardFaces,
       state: this.#foilClaimBusy ? 'busy' : 'ready',
       write: true,
-      autoOpen: false,
+      // The claim is permissionless and always credits `player`. AUTO may
+      // safely settle it; a keeper winning the same race is reconciled below.
+      autoOpen: true,
       order: 15,
       chronology: (day * 100_000) + (best.ticketIndex * 2) + best.grade.drawKind,
       run: () => this.#onFoilClaim(best),
@@ -1377,7 +1405,13 @@ class LastDayJackpot extends HTMLElement {
         ticketIndex,
         drawKind: grade.drawKind ?? 0,
       });
-      const claimedInfo = parseFoilMatchClaimedFromReceipt(receipt, contract);
+      // Receipt confirmation is the authority. Retire the immutable tuple
+      // before presentation parsing so a malformed/foreign log can never
+      // strand an already-settled row in Pending.
+      this.#locallyClaimedFoilMatches.add(candidate.key);
+      let claimedInfo = [];
+      try { claimedInfo = parseFoilMatchClaimedFromReceipt(receipt, contract); }
+      catch (_e) { /* fallback to the already-graded candidate */ }
       const claimed = claimedInfo.find((row) => (
         Number(row?.day) === Number(day)
         && Number(row?.ticketIndex) === Number(ticketIndex)
@@ -1385,8 +1419,9 @@ class LastDayJackpot extends HTMLElement {
       )) || claimedInfo[0] || null;
       const tier = claimed?.tier ?? grade.score;
       const rewardFaces = claimed?.faces ?? FOIL_TIER_FACES[tier] ?? 0;
-      const legs = parseOpenLegsFromReceipt(receipt, player);
-      this.#locallyClaimedFoilMatches.add(candidate.key);
+      let legs = [];
+      try { legs = parseOpenLegsFromReceipt(receipt, player); }
+      catch (_e) { /* the match card can still explain the settled tier */ }
       queueReveal({
         kind: 'foil-match',
         day,
@@ -1402,6 +1437,19 @@ class LastDayJackpot extends HTMLElement {
       });
       this.#renderFoil();
       void this.#refreshFoil();
+      return true;
+    } catch (error) {
+      if (_terminalFoilClaimError(error)) {
+        // Another wallet/keeper settled this permissionless tuple first, or
+        // the game permanently closed it. The indexed claim will reconcile on
+        // refresh; keeping the stale write visible only guarantees repeat
+        // failures.
+        this.#locallyClaimedFoilMatches.add(candidate.key);
+        this.#renderFoil();
+        void this.#refreshFoil();
+        return true;
+      }
+      throw error;
     } finally {
       this.#foilClaimBusy = false;
       this.#renderFoil();
@@ -1480,6 +1528,9 @@ class LastDayJackpot extends HTMLElement {
     );
     this.#unsubs.push(
       subscribe('app.daySync', (sync) => this.#onDaySync(sync))
+    );
+    this.#unsubs.push(
+      subscribe('app.gameState', (state) => this.#onGameState(state))
     );
     this.#unsubs.push(
       subscribe('app.deploymentMismatch', (payload) => this.#renderDeploymentMismatch(payload))

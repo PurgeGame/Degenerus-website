@@ -87,7 +87,7 @@ describe('next-pool progression model', () => {
     assert.equal(over.growthOver, true);
   });
 
-  test('prior-level final pools become exact notches only after the guarantee clears', () => {
+  test('prior-level final pools become thermometer notches only after 100%', () => {
     const history = [
       { level: 1, poolWei: 80n },
       { level: 2, poolWei: 100n },
@@ -100,7 +100,7 @@ describe('next-pool progression model', () => {
       currentLevel: 3,
     });
     assert.deepEqual(below.historyMarkers, [],
-      'the historical scale stays quiet until progression is actually secured');
+      'the historical scale stays off the tube until progression is secured');
 
     const ready = poolProgressModel({
       nextWei: 121n,
@@ -115,6 +115,31 @@ describe('next-pool progression model', () => {
     assert.ok(ready.historyMarkers[0].position < ready.historyMarkers[1].position);
     assert.ok(ready.historyMarkers[1].position < 100,
       'headroom keeps the final-pool notches inside the tube');
+  });
+
+  test('the completed history ruler uses a bounded log pre-target section and linear over-target section', () => {
+    const ready = poolProgressModel({
+      nextWei: 125n,
+      targetWei: 100n,
+      history: [
+        { level: 1, poolWei: 1n },
+        { level: 2, poolWei: 10n },
+        { level: 3, poolWei: 50n },
+        { level: 4, poolWei: 100n },
+      ],
+      currentLevel: 5,
+    });
+
+    assert.equal(ready.targetPercent, 68,
+      'the guarantee is a stable hinge between history and over-target space');
+    assert.equal(ready.historyMarkers[0].position, 2,
+      'the smallest completed pool starts inside the rounded endcap');
+    assert.ok(ready.historyMarkers[1].position > 30,
+      'a true bounded log scale keeps early historical pools out of a left-edge barcode');
+    assert.ok(ready.historyMarkers[1].position < ready.historyMarkers[2].position);
+    assert.equal(ready.historyMarkers[3].position, 68);
+    assert.ok(ready.fillPercent > 68 && ready.fillPercent < 100,
+      'the live over-target amount stays linear and retains endpoint headroom');
   });
 
   test('prints the realized prior-level growth as the O/U line', () => {
@@ -322,8 +347,28 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
       'threshold lines remain but their decorative diamond caps do not');
     assert.match(component, /Level \$\{row\.level\} final prize pool · \$\{_formatMarkerEth\(row\.poolWei\)\} ETH/,
       'each historical notch names its exact level and final pool');
-    assert.match(css, /\.pool-progress__marker--history\s*\{[^}]*bottom:\s*-0\.42rem[^}]*background:\s*#facc15/s,
-      'historical finals use visible gold notches beneath the tube');
+    assert.match(component, /const major = Number\(row\.level\) % 5 === 0/,
+      'every fifth historical level receives the major thermometer graduation');
+    assert.match(css, /\.pool-progress__marker--history\s*\{[^}]*top:\s*auto[^}]*bottom:\s*1px[^}]*width:\s*1px[^}]*min-width:\s*1px[^}]*max-width:\s*1px[^}]*height:\s*42%[^}]*box-shadow:\s*none/s,
+      'every ordinary historical final is one consistent hairline rising from inside the tube');
+    assert.match(css, /\.pool-progress__marker--history-major\s*\{[^}]*width:\s*2px[^}]*min-width:\s*2px[^}]*max-width:\s*2px[^}]*height:\s*72%[^}]*box-shadow:\s*none/s,
+      'only five-level graduations are longer and two pixels thick');
+    assert.match(css, /\.pool-progress__track\.is-ready \.pool-progress__fill\s*\{[^}]*background:\s*#93c5fd/s,
+      'the post-guarantee thermometer switches to a solid light blue fill');
+    assert.match(css, /\.pool-progress__track::before\s*\{[^}]*background:\s*none/s,
+      'the old always-on white grid does not compete with the post-guarantee graduations');
+    assert.match(css, /\.pool-progress__marker--history\s*\{[^}]*background:\s*rgba\(0, 0, 0, 0\.82\)/s,
+      'the level graduations become black against the post-guarantee light blue');
+    assert.match(css, /\.pool-progress__marker--history-major\s*\{[^}]*background:\s*#050505/s,
+      'major five-level graduations use the same black treatment');
+    assert.match(css, /\.pool-progress__track\.is-ready \.pool-progress__marker--target\s*\{[^}]*width:\s*2px[^}]*background:\s*#111827/s,
+      'the guarantee remains the strongest dark ruler hinge');
+    assert.match(css, /\.pool-progress__track\.is-ready \.pool-progress__marker--growth\s*\{[^}]*width:\s*1px[^}]*background:\s*#334155/s,
+      'the growth line is subordinate to the guarantee and current endpoint');
+    assert.match(component, /mobileSkip = !major && Number\(row\.level\) % 2 !== 0/,
+      'narrow screens can suppress alternate minor ticks without losing fifth-level majors');
+    assert.match(css, /@media \(max-width:\s*560px\)[^}]*\.pool-progress__marker--history-mobile-skip\s*\{\s*display:\s*none/s,
+      'mobile uses the art-directed sparse history ruler');
     assert.ok(
       pari.indexOf('void this.#loadPoolBenchmarks(seq, level)')
         < pari.indexOf('const [growth, volume, credit, decimatorPosition, decimatorContext]'),
@@ -361,6 +406,9 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     assert.match(css, /\.pool-progress__track\s*\{[^}]*margin-right:\s*0/s,
       'the target callout no longer shortens the graph');
     assert.match(css, /\.pool-progress__percent\s*\{[^}]*position:\s*absolute/s);
+    assert.match(component, /if \(percent\) percent\.hidden = model\.levelReady/,
+      'the percentage disappears once the thermometer has switched to its post-guarantee state');
+    assert.match(css, /\.pool-progress__percent\[hidden\]\s*\{[^}]*display:\s*none !important/s);
     assert.match(css, /app-pool-progress \+ \.jackpot-hero\s*\{[^}]*margin-top:\s*0\.3rem/s);
   });
 

@@ -12,6 +12,7 @@ import * as decimatorMod from '../decimator.js';
 import * as lootboxMod from '../lootbox.js';
 import * as storeMod from '../store.js';
 import * as contractsMod from '../contracts.js';
+import { CHAIN } from '../chain-config.js';
 
 const DECIMATOR_SRC = readFileSync(
   new URL('../decimator.js', import.meta.url),
@@ -163,6 +164,63 @@ describe('live Decimator display math', () => {
       ),
       '0xdb9cca4b04e4fa8cc2558955384e79623b0e53611c4b9159a845b8303ffc27f6',
     );
+  });
+});
+
+describe('live Decimator raw-burn total', () => {
+  afterEach(() => {
+    decimatorMod.__resetContractFactoryForTest();
+    contractsMod.clearProvider();
+  });
+
+  test('scans only the current level window and advances its cached log cursor', async () => {
+    const base = Number(CHAIN.deployBlock);
+    let head = base + 10;
+    const iface = new contractsMod.ethers.Interface([
+      'event DecimatorBurn(address indexed player, uint256 amountBurned, uint8 bucket)',
+    ]);
+    const encoded = (amount, blockNumber) => ({
+      ...iface.encodeEventLog(iface.getEvent('DecimatorBurn'), [CONNECTED, amount, 0]),
+      blockNumber,
+    });
+    const emitted = [
+      encoded(1_250n * FLIP, base + 6),
+      encoded(750n * FLIP, base + 12),
+    ];
+    const ranges = [];
+    contractsMod.setProvider({
+      getBlockNumber: async () => head,
+      getBlock: async (block) => ({ timestamp: 1_000 + (Number(block) - base) * 2 }),
+      getLogs: async ({ fromBlock, toBlock }) => {
+        ranges.push([Number(fromBlock), Number(toBlock)]);
+        return emitted.filter((log) => (
+          log.blockNumber >= Number(fromBlock) && log.blockNumber <= Number(toBlock)
+        ));
+      },
+    });
+
+    assert.equal(await decimatorMod.readDecimatorRawBurnTotal({
+      level: 35,
+      sinceTimestamp: 1_008,
+    }), 1_250n * FLIP);
+    assert.deepEqual(ranges, [[base + 4, base + 10]],
+      'the binary-searched level boundary excludes older burns');
+
+    head = base + 12;
+    assert.equal(await decimatorMod.readDecimatorRawBurnTotal({
+      level: 35,
+      sinceTimestamp: 1_008,
+    }), 2_000n * FLIP);
+    assert.deepEqual(ranges.at(-1), [base + 11, base + 12],
+      'the second poll reads only blocks after the cached cursor');
+
+    ranges.length = 0;
+    assert.equal(await decimatorMod.readDecimatorRawBurnTotal({
+      level: 36,
+      sinceBlock: base + 8,
+    }), 750n * FLIP);
+    assert.deepEqual(ranges, [[base + 8, base + 12]],
+      'an indexed stage-7 block can anchor the window without a timestamp');
   });
 });
 

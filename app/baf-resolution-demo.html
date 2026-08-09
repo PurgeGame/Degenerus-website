@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BAF Resolution Demo</title>
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/baf-resolution.css">
+  <link rel="stylesheet" href="/app/styles/baf-resolution-demo.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "ethers": "https://esm.sh/ethers@6.16.0"
+    }
+  }
+  </script>
+</head>
+<body class="layout-basic baf-resolution-demo-page">
+  <main class="baf-resolution-demo">
+    <small>LOCAL VISUAL DEMO</small>
+    <h1>BAF RESOLUTION</h1>
+    <p>Close the final to switch outcomes.</p>
+    <nav aria-label="BAF demo states">
+      <button type="button" data-state="winner">PLAYER WINS</button>
+      <button type="button" data-state="miss">PLAYER MISSES</button>
+      <button type="button" data-state="skipped">BAF SKIPPED</button>
+      <a href="/app/event-rails-demo.html">EVENT RAILS</a>
+    </nav>
+  </main>
+  <script type="module" src="/app/baf-resolution-demo.js"></script>
+</body>
+</html>
+

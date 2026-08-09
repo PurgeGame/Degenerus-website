@@ -81,6 +81,13 @@ describe('<app-deity-desk>', () => {
     assert.match(DESK_SRC, /\[0, 1, 2\]\.map/);
     assert.match(DESK_SRC, /data-bind="deity-desk-smite"/);
     assert.match(DESK_SRC, />SMITE</);
+    assert.match(DESK_SRC, /<strong>-2 SCORE<\/strong>/);
+    assert.match(DESK_SRC, /deity-desk__smite-cost">COST:<img src="\/whitepaper\/flame-logo-split\.svg" alt="FLIP">200/);
+    assert.ok(
+      DESK_SRC.indexOf('data-bind="deity-desk-smite"')
+        < DESK_SRC.indexOf('data-bind="deity-desk-boon-${slot}"'),
+      'smite is the top-left action before the three boon cards',
+    );
     assert.doesNotMatch(DESK_SRC, />CURSE<|Curse confirmed|deity-curse/);
     assert.equal(deityBoonActionLabel({ name: 'Tickets' }, 0), 'Tickets BOON');
     assert.equal(deityBoonActionLabel({ name: 'Mystery boon' }, 1), 'Mystery boon');
@@ -106,5 +113,9 @@ describe('<app-deity-desk>', () => {
       'the pass seal has an etched outer ring');
     assert.match(APP_CSS, /\.deity-desk__actions button::after\s*\{[^}]*rgb\(var\(--boon-rgb\)\)/s,
       'each action carries a small product-colored power light');
+    assert.match(APP_CSS, /\.deity-desk__smite-cost\s*\{[^}]*position:\s*absolute[^}]*right:\s*0\.54rem[^}]*bottom:\s*0\.2rem[^}]*font:\s*950 0\.5rem/s,
+      'Smite leaves its name on the first line and moves a larger FLIP cost to the bottom-right');
+    assert.match(APP_CSS, /\.deity-desk__smite-cost img\s*\{[^}]*width:\s*0\.8rem[^}]*height:\s*0\.8rem/s,
+      'the proper FLIP cost mark is large enough to read');
   });
 });

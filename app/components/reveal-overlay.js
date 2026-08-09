@@ -14,7 +14,7 @@
 //            then shrink to the tray; 'spins' cards expand into the
 //            Degenerette reel sub-stage first)
 //   → summary (ordinary rewards) OR persistent full result (Degenerette), with
-//              COLLECT + optional SHARE MY WIN (share-win.js affiliate QR)
+//              an outcome-specific exit + optional SHARE MY WIN
 // Queue: multiple sequences chain under one backdrop (multi-box opens).
 //
 // Juice sources: app/app/jackpot-sfx.js (WebAudio cues — first production
@@ -69,12 +69,14 @@ import {
   readDegeneretteSpeed,
   writeDegeneretteSpeed,
 } from '../app/degenerette-preferences.js';
+import { degenerettePayoutTable } from '../app/degenerette.js';
 import { applyTicketLevelTone } from '../app/ticket-level-tone.js';
 import {
   lootboxTicketPriceForLevel,
   lootboxValuePresentation,
 } from '../app/lootbox-value-tone.js';
 import { celebrateProtocol } from '../protocol-celebration.js';
+import { appendCoinFaces } from '../app/coin-faces.js';
 
 // ---------------------------------------------------------------------------
 // Module-level queue — components can enqueue before the element mounts.
@@ -256,9 +258,9 @@ const LOOTBOX_AUTO_BURST_MS = 260;
 const LOOTBOX_AUTO_RESULT_MS = 1_750;
 const LOOTBOX_AUTO_RESULT_REDUCED_MS = 1_200;
 // The denomination lock is part of the result, not a disposable transition.
-// Give it the same 3.3s airborne track as the daily coin and hold the landing
-// long enough to read before the next reel begins.
-const BOX_CURRENCY_FLIP_MS = 3_300;
+// Give it the Daily Flip's complete 3.3s airborne track plus 0.7s ordinary
+// landing, then hold the result long enough to read before the next reel.
+const BOX_CURRENCY_FLIP_MS = 4_000;
 const BOX_CURRENCY_RESULT_MS = 850;
 // Match the ordinary daily coinflip: one 3.3s toss plus its 0.7s truthful
 // landing. Survival never inherits reel/reveal speed and never gets a Reverse
@@ -382,6 +384,29 @@ export function isUnluckyDegenerette({ total, totalWager, boxSpin = false } = {}
 }
 
 /**
+ * Terminal copy describes the screen the player is leaving, not a fictional
+ * transfer. Rewards shown here are already indexed/credited; only explicitly
+ * named Pending actions such as CLAIM or OPEN perform another operation.
+ */
+export function revealTerminalActionLabel(sequence = null, board = null) {
+  const seq = sequence && typeof sequence === 'object' ? sequence : {};
+  const boardResult = board && typeof board === 'object' ? board : null;
+  const lost = Boolean(seq.unlucky || seq.consolationOnly)
+    || (boardResult != null && _safeBigInt(boardResult.total) <= 0n);
+  if (lost) return 'UNLUCKY';
+  if (seq.kind === 'pack') return 'TICKETS READY';
+  if (boardResult) {
+    return shouldCelebrateDegenerette(boardResult) ? 'TAKE THE WIN' : 'BACK TO GAME';
+  }
+  if (seq.daySummary) return 'BACK TO GAME';
+  if (seq.kind === 'pari') {
+    const paid = Array.isArray(seq.cards) && seq.cards.some((card) => card?.type === 'flip');
+    return paid ? 'TAKE THE WIN' : 'BACK TO GAME';
+  }
+  return 'CONTINUE';
+}
+
+/**
  * Project a partial Degenerette ETH total into its two final receipt lanes.
  *
  * `lootboxEth` is emitted only as a final aggregate, so attributing each
@@ -427,6 +452,86 @@ function _reelTicket(reel, side) {
   return _packedTraits(reel?.[side === 'player' ? 'playerTraits' : 'resultTraits']);
 }
 
+/** Box-spin payout tables are zero at S0/S1 for every supported currency. */
+export function boxSpinScorePays(score) {
+  const value = Number(score);
+  return Number.isFinite(value) && value >= 2;
+}
+
+function _boxSpinScoreForHero(row, heroQuadrant) {
+  if (row?.houseTraits == null) return null;
+  const player = dgnUnpackTicket(row.playerTraits);
+  const house = dgnUnpackTicket(row.houseTraits);
+  let score = 0;
+  for (let q = 0; q < 4; q += 1) {
+    if (player[q]?.sym !== house[q]?.sym) continue;
+    score += q === heroQuadrant ? 2 : 1;
+    if (player[q]?.col === house[q]?.col) score += 1;
+  }
+  return score;
+}
+
+// The BoxSpin event publishes the final group payout rather than three row
+// payouts. FLIP rows all share one stake and one ROI, so their relative payout
+// weights are still recoverable exactly from the emitted ticket + score table.
+// When the packed score leaves more than one possible hero, average only if the
+// candidate table weights differ and mark the eventual amount as approximate.
+function _boxSpinFlipWeight(row) {
+  if (!boxSpinScorePays(row?.score)) return { weight: 0n, ambiguous: false };
+  const candidates = [];
+  for (let hero = 0; hero < 4; hero += 1) {
+    if (_boxSpinScoreForHero(row, hero) !== Number(row.score)) continue;
+    try {
+      const table = degenerettePayoutTable({
+        currency: 1,
+        customTicket: row.playerTraits,
+        heroQuadrant: hero,
+        activityScore: 0,
+      });
+      candidates.push(BigInt(table.rows[Number(row.score)]?.basePayoutCentiX ?? 0));
+    } catch (_e) { /* malformed reel falls through to an equal hit weight */ }
+  }
+  const positive = candidates.filter((weight) => weight > 0n);
+  if (positive.length === 0) return { weight: 1n, ambiguous: true };
+  const unique = new Set(positive.map(String));
+  if (unique.size === 1) return { weight: positive[0], ambiguous: false };
+  return {
+    weight: positive.reduce((sum, weight) => sum + weight, 0n) / BigInt(positive.length),
+    ambiguous: true,
+  };
+}
+
+function _allocateBoxSpinPreview(rows, amount) {
+  const total = _safeBigInt(amount);
+  if (total <= 0n) return false;
+  const weighted = rows.map(_boxSpinFlipWeight);
+  const weightTotal = weighted.reduce((sum, item) => sum + item.weight, 0n);
+  if (weightTotal <= 0n) return false;
+  let allocated = 0n;
+  let lastPaid = -1;
+  weighted.forEach((item, index) => { if (item.weight > 0n) lastPaid = index; });
+  const paidRows = weighted.filter((item) => item.weight > 0n).length;
+  rows.forEach((row, index) => {
+    const item = weighted[index];
+    if (item.weight <= 0n) {
+      row.previewPayout = 0n;
+      row.previewApproximate = false;
+      return;
+    }
+    const value = index === lastPaid
+      ? total - allocated
+      : (total * item.weight) / weightTotal;
+    row.previewPayout = value;
+    // A lone hit owns the whole survival stake. With multiple hits, the
+    // score-table split is still exact unless the packed reel permits more
+    // than one hero interpretation with different payout weights.
+    row.previewApproximate = paidRows > 1 && item.ambiguous;
+    row.previewWeightAmbiguous = item.ambiguous;
+    allocated += value;
+  });
+  return true;
+}
+
 /**
  * A receipt-decoded BoxSpin → the same verified eight-lock board used by the
  * standalone Degenerette reveal. BoxSpin only publishes one group payout
@@ -439,19 +544,36 @@ export function buildBoxSpinBoard(spin) {
   if (currency == null) return null;
   const reels = (Array.isArray(spin?.reels) ? spin.reels : []).slice(0, 3);
   if (reels.length === 0) return null;
-  const rows = reels.map((reel, i) => ({
-    spinIndex: Number.isFinite(Number(reel?.spinIndex)) ? Number(reel.spinIndex) : i,
-    playerTraits: _reelTicket(reel, 'player') ?? 0,
-    houseTraits: _reelTicket(reel, 'result'),
-    score: Number.isFinite(Number(reel?.score)) ? Number(reel.score) : 0,
-    payout: null,
-  }));
+  const rows = reels.map((reel, i) => {
+    const score = Number.isFinite(Number(reel?.score)) ? Number(reel.score) : 0;
+    return {
+      spinIndex: Number.isFinite(Number(reel?.spinIndex)) ? Number(reel.spinIndex) : i,
+      playerTraits: _reelTicket(reel, 'player') ?? 0,
+      houseTraits: _reelTicket(reel, 'result'),
+      score,
+      won: boxSpinScorePays(score),
+      payout: null,
+      previewPayout: 0n,
+      previewApproximate: false,
+    };
+  });
   const grossPayout = _safeBigInt(spin?.payout);
   const total = spinType === 'eth' ? _safeBigInt(spin?.ethShare) : grossPayout;
   // FLIP's score table pays from S2 upward. The packed survival bit is false
   // both when all three reels miss and when a real preliminary payout loses
   // its double-or-nothing draw, so preserve that distinction for the reveal.
-  const survivalStake = spinType === 'flip' && rows.some((row) => row.score >= 2);
+  const survivalStake = spinType === 'flip' && rows.some((row) => row.won);
+  const explicitAtRisk = _safeBigInt(
+    spin?.preSurvivalPayout ?? spin?.survivalPayout ?? spin?.payoutAtRisk,
+  );
+  // Existing BoxSpin events omit the pre-survival sum, but survival is a
+  // straight double-or-nothing. A successful result therefore reveals the
+  // exact stake as one half of its final payout.
+  const inferredAtRisk = survivalStake && total > 0n ? total / 2n : 0n;
+  const payoutAtRisk = explicitAtRisk > 0n ? explicitAtRisk : inferredAtRisk;
+  const payoutAtRiskApproximate = false;
+  if (spinType === 'flip') _allocateBoxSpinPreview(rows, payoutAtRisk);
+  else if (rows[0]) rows[0].previewPayout = total;
   return {
     rows,
     currency,
@@ -461,18 +583,21 @@ export function buildBoxSpinBoard(spin) {
     // A positive final FLIP payout is itself authoritative evidence that the
     // gate survived, which also keeps older feeds without the packed bit sane.
     survived: survivalStake ? (total > 0n || spin?.survived === true) : null,
-    // Every FLIP lane proceeds through the survival gate after reel three.
-    // `survivalStake=false` means the gate reports that no payout reached it;
-    // it must not fabricate a coin toss the contract never performed.
-    survivalStage: spinType === 'flip',
+    // A survival stage exists only when at least one reel produced a payout to
+    // risk. An all-miss FLIP lane has no gate and should settle immediately.
+    survivalStage: survivalStake,
     survivalStake,
+    payoutAtRisk,
+    payoutAtRiskApproximate,
+    survivalWinPayout: _safeBigInt(spin?.survivalWinPayout) || (
+      total > 0n ? total : (payoutAtRisk > 0n ? payoutAtRisk * 2n : 0n)
+    ),
     heroIdx: null,
     boxSpin: true,
     grossPayout,
-    // The first verified reel is the mystery beat. Keep the internal unit for
-    // payout math, but do not put it (or the telltale reel count) anywhere in
-    // the pre-spin UI; both become visible only after reel one lands.
-    headline: 'LUCKBOX SPIN · CURRENCY HIDDEN',
+    // Keep the internal unit (and its telltale reel count) out of the pre-spin
+    // UI; both become visible only after reel one lands.
+    headline: 'LUCKBOX SPIN',
   };
 }
 
@@ -646,7 +771,7 @@ function _cardsFromLeg(leg) {
           ? (leg.spinType === 'eth' ? 'epic' : 'rare')
           : null,
         icon: ICONS.flame, glyph: null,
-        label: 'MYSTERY BOX SPIN',
+        label: 'BOX SPIN',
         revealedLabel: revealsCurrency ? revealedLabel : null,
         // Three reels identifies the FLIP lane. Keep both the currency and its
         // telltale reel count sealed until reel one has actually landed.
@@ -695,6 +820,7 @@ export function normalizeSequence(seq) {
       (c.revealedRarity || c.rarity) === 'epic'
       || (c.revealedRarity || c.rarity) === 'legendary'
     ));
+    const unlucky = cards.every((card) => card?.type === 'nowin');
     const opened = openedLegs.find((leg) => leg?.lootboxIndex != null) ?? openedLegs[0];
     const amountWei = seq.amountWei ?? opened?.amount ?? null;
     const routedPriceWei = seq.ticketPriceWei
@@ -737,6 +863,7 @@ export function normalizeSequence(seq) {
       // such as "FOIL MATCH T4".
       hideTitle: !seq.title,
       big,
+      unlucky,
       autoStart: false,
       noVessel: Boolean(seq.noVessel),
       boxIndex,
@@ -1223,6 +1350,20 @@ export function normalizeSequence(seq) {
       try { stake = BigInt(activity.coinflipStakeAmount ?? 0); } catch (_e) { stake = 0n; }
       const rewardPercent = Math.max(0, Math.trunc(Number(activity.coinflipRewardPercent) || 0));
       const flipWon = activity.coinflipWon;
+      let consolationWwxrp = 0n;
+      if (!flipWon) {
+        // The protocol's +1 WWXRP is part of losing the daily flip, not a
+        // second independent prize. Fold every indexed consolation row into
+        // this receipt and retain the guaranteed +1 even while that row lags.
+        for (const prize of prizes) {
+          if (prize?.type === 'wwxrp') consolationWwxrp += _safeBigInt(prize.amount);
+        }
+        for (let index = cards.length - 1; index >= 0; index -= 1) {
+          if (cards[index]?.type !== 'wwxrp') continue;
+          cards.splice(index, 1);
+        }
+        if (consolationWwxrp <= 0n) consolationWwxrp = 10n ** 18n;
+      }
       const payout = flipWon
         ? stake + ((stake * BigInt(rewardPercent)) / 100n)
         : stake;
@@ -1232,15 +1373,18 @@ export function normalizeSequence(seq) {
         rarity: flipWon ? 'epic' : 'common',
         icon: flipWon ? ICONS.ethFace : ICONS.wwxrp,
         glyph: null,
-        label: 'COINFLIP',
+        label: flipWon ? 'COINFLIP' : 'COINFLIP LOSS',
         value: flipWon
           ? `+${_tokenText(payout)} FLIP`
           : `-${_tokenText(stake)} FLIP`,
         // Keep the amount as the visual headline and put the outcome on its
         // own line in the fullscreen day-summary card.
-        sub: flipWon ? `WIN ${100 + rewardPercent}%` : 'LOSS',
-        outcomeLabel: flipWon ? 'WIN' : 'LOSS',
+        sub: flipWon
+          ? `WIN ${100 + rewardPercent}%`
+          : `+${_tokenText(consolationWwxrp)} WWXRP`,
+        outcomeLabel: flipWon ? 'WIN' : null,
         outcomePercent: flipWon ? `${100 + rewardPercent}%` : null,
+        consolationWwxrp: flipWon ? null : `+${_tokenText(consolationWwxrp)} WWXRP`,
         summaryDetail: true,
         countText: null,
         spin: null,
@@ -1272,7 +1416,7 @@ export function normalizeSequence(seq) {
     if (cards.length === 0) return null;
     // Activity cards are context, and WWXRP is the consolation side of a
     // losing flip. Derive the terminal treatment from the complete summary so
-    // callers cannot accidentally leave a full loss on the yellow COLLECT
+    // callers cannot accidentally leave a full loss on the positive terminal
     // action merely because they omitted the old consolationOnly hint.
     const hasNonConsolationWin = cards.some((card) => {
       if (card.type === 'coinflip-result') return card.outcome === 'win';
@@ -1320,10 +1464,15 @@ export function normalizeSequence(seq) {
         };
       });
     if (cards.length === 0) return null;
+    const won = cards.some((card) => card.outcome === 'win');
+    const lost = !won && cards.some((card) => (
+      card.outcome === 'loss' || card.outcome === 'skipped'
+    ));
     return {
       kind,
       title: String(seq.title || 'FINAL DRAW'),
-      big: Boolean(seq.big || cards.some((card) => card.outcome === 'win')),
+      big: Boolean(seq.big || won),
+      unlucky: lost,
       autoStart: true,
       noVessel: true,
       cards,
@@ -1992,14 +2141,16 @@ class RevealOverlay extends HTMLElement {
     return String(action?.shortLabel || 'CONTINUE').toUpperCase();
   }
 
-  #setPendingContinuation(button, action, fallback = 'COLLECT') {
+  #setPendingContinuation(button, action, fallback = null) {
     if (!button) return;
+    const terminal = fallback || button.__rvlTerminalLabel || 'CONTINUE';
+    button.__rvlTerminalLabel = terminal;
     button.__rvlPendingAction = action || null;
     button.dataset.mode = action ? 'pending-action' : 'continue';
-    button.textContent = action ? this.#pendingContinuationLabel(action) : fallback;
+    button.textContent = action ? this.#pendingContinuationLabel(action) : terminal;
     button.classList?.toggle(
       'rvl-collect-cta--unlucky',
-      !action && fallback === 'UNLUCKY',
+      !action && terminal === 'UNLUCKY',
     );
     button.disabled = false;
   }
@@ -2110,7 +2261,7 @@ class RevealOverlay extends HTMLElement {
       // Claim the runner synchronously, but start on a microtask so every
       // same-tick enqueue (multi-box opens, buy legs + pack) lands in the
       // queue before the first sequence renders — the summary CTA can then
-      // correctly say NEXT instead of COLLECT.
+      // correctly name the next reveal instead of showing a terminal action.
       this.#running = true;
       Promise.resolve().then(() => this.#run());
     }
@@ -2713,7 +2864,7 @@ class RevealOverlay extends HTMLElement {
     let anyWin = false;
     if (seq.spinBoard) {
       // A resolved Degenerette stays on the large reel/result surface until
-      // COLLECT. Do not collapse it back into the old 84px summary card.
+      // acknowledgement. Do not collapse it back into the old 84px summary card.
       await this.#playSpinBoard(seq.spinBoard, {
         sequence: seq,
         finalLabel: this.#queuedContinuationLabel(),
@@ -2948,18 +3099,20 @@ class RevealOverlay extends HTMLElement {
     next.className = 'rvl-collect-cta';
     const queuedLabel = hasMore ? null : this.#queuedContinuationLabel();
     const pendingAction = !hasMore && !queuedLabel ? this.#nextReadyPendingAction() : null;
+    const terminalLabel = revealTerminalActionLabel(seq);
+    next.__rvlTerminalLabel = terminalLabel;
     next.textContent = hasMore
       ? 'OPEN NEXT PACK'
       : showLesson
         ? 'CONTINUE'
-        : queuedLabel || (pendingAction ? this.#pendingContinuationLabel(pendingAction) : 'COLLECT');
+        : queuedLabel || (pendingAction ? this.#pendingContinuationLabel(pendingAction) : terminalLabel);
     next.dataset.mode = pendingAction ? 'pending-action' : 'continue';
     next.__rvlPendingAction = pendingAction;
     next.addEventListener('click', (e) => {
       try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
       if (next.dataset.mode === 'pending-action' && next.__rvlPendingAction) {
         void this.#runPendingContinuation(next.__rvlPendingAction, next, () => {
-          this.#setPendingContinuation(next, this.#nextReadyPendingAction());
+          this.#setPendingContinuation(next, this.#nextReadyPendingAction(), terminalLabel);
         });
         return;
       }
@@ -3282,9 +3435,9 @@ class RevealOverlay extends HTMLElement {
       .filter(Boolean);
     if (boards.length === 0) return false;
 
-    // This is the parent reveal: it names the granted MYSTERY BOX SPIN but
-    // keeps its denomination and outcome hidden. The next screen is the one
-    // actual spin, not a replay of a result already shown here.
+    // This parent reveal names the granted BOX SPIN while keeping its
+    // denomination and outcome hidden. The next screen is the one actual
+    // spin, not a replay of a result already shown here.
     this.#renderSummary(seq, {
       spinGrant: true,
       spinCount: boards.length,
@@ -3331,6 +3484,99 @@ class RevealOverlay extends HTMLElement {
 
   #formatDgnAmount(board, amount) {
     return board.currency === 0 ? _ethText(amount) : _tokenText(amount);
+  }
+
+  #boxSpinAmountText(board, amount, approximate = false) {
+    const value = this.#formatDgnAmount(board, amount);
+    return `${approximate ? '≈' : ''}${value} ${board.unit}`;
+  }
+
+  #boxSpinRowPresentation(row, board, currencyRevealed) {
+    const won = boxSpinScorePays(row?.score);
+    const number = `#${Number(row?.spinIndex ?? 0) + 1}`;
+    if (!currencyRevealed) {
+      return {
+        won,
+        className: won || Number(row?.score) > 0 ? 'is-score' : 'is-miss',
+        chip: `${number} · ${Number(row?.score) > 0 ? `S ${row.score}` : 'MISS'}`,
+        pop: Number(row?.score) > 0 ? `SCORE ${row.score}` : 'NO MATCH',
+      };
+    }
+    if (!won) {
+      return {
+        won: false,
+        className: 'is-miss',
+        chip: `${number} · MISS${Number(row?.score) > 0 ? ` · S ${row.score}` : ''}`,
+        pop: 'NO PAYOUT',
+      };
+    }
+    const preview = _safeBigInt(row?.previewPayout);
+    const amount = preview > 0n
+      ? this.#boxSpinAmountText(board, preview, row?.previewApproximate === true)
+      : '';
+    return {
+      won: true,
+      className: 'is-win',
+      chip: `${number} · WIN${amount ? ` · ${amount}` : ` · S ${row.score}`}`,
+      pop: amount ? `WIN · ${amount}` : `WIN · S ${row.score}`,
+    };
+  }
+
+  #refreshBoxSpinSelectors(rendered, board) {
+    if (!rendered?.currencyRevealed || !board?.boxSpin) return;
+    for (const selector of rendered.resultSelectors || []) {
+      const presentation = this.#boxSpinRowPresentation(selector.row, board, true);
+      selector.element.classList?.remove('is-score', 'is-win', 'is-miss');
+      selector.element.classList?.add(presentation.className);
+      selector.element.textContent = presentation.chip;
+      selector.element.setAttribute?.(
+        'aria-label',
+        `Show reel ${Number(selector.row.spinIndex) + 1}: ${presentation.pop}`,
+      );
+    }
+    this.#syncFullSpinSelection(rendered);
+  }
+
+  #syncBoxSpinPayoutMeter(rendered, board, revealedCount = 0) {
+    const meter = rendered?.boxPayoutMeter;
+    if (!meter || !board?.boxSpin || !rendered.currencyRevealed) return;
+    const count = Math.max(0, Math.min(board.rows.length, Number(revealedCount) || 0));
+    rendered.boxReelsRevealed = Math.max(Number(rendered.boxReelsRevealed) || 0, count);
+    const revealed = board.rows.slice(0, rendered.boxReelsRevealed);
+    const winningRows = revealed.filter((row) => boxSpinScorePays(row.score));
+    const built = winningRows.reduce((sum, row) => sum + _safeBigInt(row.previewPayout), 0n);
+    const remaining = Math.max(0, board.rows.length - rendered.boxReelsRevealed);
+    meter.hidden = false;
+    meter.classList?.toggle('is-win', winningRows.length > 0);
+    if (winningRows.length === 0) {
+      rendered.boxPayoutLabel.textContent = 'PAYOUT BUILT';
+      rendered.boxPayoutValue.textContent = `0 ${board.unit}`;
+      rendered.boxPayoutDetail.textContent = remaining > 0
+        ? `${remaining} REEL${remaining === 1 ? '' : 'S'} LEFT`
+        : 'NO PAYOUT';
+      return;
+    }
+    rendered.boxPayoutLabel.textContent = board.survivalStage ? 'PAYOUT AT RISK' : 'PAYOUT';
+    rendered.boxPayoutValue.textContent = built > 0n
+      ? this.#boxSpinAmountText(
+          board,
+          built,
+          board.payoutAtRiskApproximate === true
+            || winningRows.some((row) => row.previewApproximate === true),
+        )
+      : 'WIN LOCKED';
+    if (remaining > 0) {
+      rendered.boxPayoutDetail.textContent = `${remaining} REEL${remaining === 1 ? '' : 'S'} LEFT`;
+    } else if (board.survivalStage && board.survivalWinPayout > 0n) {
+      rendered.boxPayoutDetail.textContent = `DOUBLE OR NOTHING · WIN ${this.#formatDgnAmount(
+        board,
+        board.survivalWinPayout,
+      )} ${board.unit}`;
+    } else if (board.survivalStage) {
+      rendered.boxPayoutDetail.textContent = 'DOUBLE OR NOTHING';
+    } else {
+      rendered.boxPayoutDetail.textContent = 'FINAL PAYOUT';
+    }
   }
 
   #buildDgnFact(labelText, valueText, tone = '') {
@@ -3536,14 +3782,29 @@ class RevealOverlay extends HTMLElement {
     if (!board.boxSpin) actions.appendChild(skipCta);
     const history = document.createElement('div');
     history.className = 'rvl-dgn-history';
+    const boxPayoutMeter = document.createElement('div');
+    boxPayoutMeter.className = 'rvl-box-payout-meter';
+    boxPayoutMeter.hidden = true;
+    const boxPayoutLabel = document.createElement('span');
+    boxPayoutLabel.className = 'rvl-box-payout-meter__label';
+    const boxPayoutValue = document.createElement('strong');
+    boxPayoutValue.className = 'rvl-box-payout-meter__value';
+    const boxPayoutDetail = document.createElement('span');
+    boxPayoutDetail.className = 'rvl-box-payout-meter__detail';
+    boxPayoutMeter.appendChild(boxPayoutLabel);
+    boxPayoutMeter.appendChild(boxPayoutValue);
+    boxPayoutMeter.appendChild(boxPayoutDetail);
     stage.appendChild(compare);
     stage.appendChild(pop);
+    if (board.boxSpin) stage.appendChild(boxPayoutMeter);
     stage.appendChild(actions);
     stage.appendChild(history);
     zone.appendChild(stage);
     return {
       zone, head, headTitle, stage, compare, pop, speedState,
       actions, autoCta, cta, skipCta, history, runAmount,
+      boxPayoutMeter, boxPayoutLabel, boxPayoutValue, boxPayoutDetail,
+      boxReelsRevealed: 0, currencyRevealed: false,
       resultSelectors: [], selectionEnabled: false, selectedSpinIndex: null,
     };
   }
@@ -3564,10 +3825,12 @@ class RevealOverlay extends HTMLElement {
     rendered.compare.appendChild(player.el);
     rendered.compare.appendChild(vs);
     rendered.compare.appendChild(house.el);
-    return {
+    const pair = {
       row, board, rendered, player, house, playerTraits,
       targetTraits: row.houseTraits == null ? null : dgnUnpackTicket(row.houseTraits),
     };
+    rendered.activePair = pair;
+    return pair;
   }
 
   #applyFullSpinFrame(pair, frame) {
@@ -3641,8 +3904,9 @@ class RevealOverlay extends HTMLElement {
       }
     }
     const hasRowPayout = typeof row.payout === 'bigint';
-    const won = hasRowPayout && row.payout > 0n;
-    if (!board.boxSpin) {
+    const boxResultVisible = board.boxSpin && pair.rendered?.currencyRevealed === true;
+    const won = boxResultVisible ? boxSpinScorePays(row.score) : hasRowPayout && row.payout > 0n;
+    if (!board.boxSpin || boxResultVisible) {
       for (const center of [pair.player.center, pair.house.center]) {
         if (center?.classList) center.classList.add(won ? 'is-win' : 'is-miss');
       }
@@ -3671,9 +3935,13 @@ class RevealOverlay extends HTMLElement {
 
   #showFullSpinPop(rendered, row, board) {
     if (board.boxSpin) {
-      const scored = row.score > 0;
-      rendered.pop.textContent = scored ? `SCORE ${row.score}` : 'NO MATCH';
-      rendered.pop.className = `rvl-dgn-roll-pop ${scored ? 'is-score' : 'is-miss'}`;
+      const presentation = this.#boxSpinRowPresentation(
+        row,
+        board,
+        rendered.currencyRevealed === true,
+      );
+      rendered.pop.textContent = presentation.pop;
+      rendered.pop.className = `rvl-dgn-roll-pop ${presentation.className}`;
       if (rendered.pop.classList) {
         rendered.pop.classList.remove('is-show');
         void rendered.pop.offsetWidth;
@@ -3697,9 +3965,13 @@ class RevealOverlay extends HTMLElement {
     const chip = document.createElement('button');
     chip.type = 'button';
     if (board.boxSpin) {
-      const scored = row.score > 0;
-      chip.className = `rvl-dgn-history-chip ${scored ? 'is-score' : 'is-miss'}`;
-      chip.textContent = `#${row.spinIndex + 1} · ${scored ? `S ${row.score}` : 'MISS'}`;
+      const presentation = this.#boxSpinRowPresentation(
+        row,
+        board,
+        rendered.currencyRevealed === true,
+      );
+      chip.className = `rvl-dgn-history-chip ${presentation.className}`;
+      chip.textContent = presentation.chip;
       this.#registerFullSpinSelector(rendered, chip, row, board);
       rendered.history.appendChild(chip);
       return;
@@ -3717,7 +3989,15 @@ class RevealOverlay extends HTMLElement {
   #registerFullSpinSelector(rendered, element, row, board) {
     if (!rendered || !element || !row) return;
     element.disabled = !rendered.selectionEnabled;
-    element.setAttribute('aria-label', `Show spin ${Number(row.spinIndex) + 1}`);
+    const boxPresentation = board?.boxSpin
+      ? this.#boxSpinRowPresentation(row, board, rendered.currencyRevealed === true)
+      : null;
+    element.setAttribute(
+      'aria-label',
+      boxPresentation
+        ? `Show reel ${Number(row.spinIndex) + 1}: ${boxPresentation.pop}`
+        : `Show spin ${Number(row.spinIndex) + 1}`,
+    );
     element.addEventListener('click', (event) => {
       try { event.stopPropagation(); } catch (_e) { /* fakeDOM */ }
       if (!rendered.selectionEnabled) return;
@@ -3828,9 +4108,6 @@ class RevealOverlay extends HTMLElement {
     if (!board.boxSpin || this.#aborted) return;
     const currencyKey = DGN_CARD_TYPES[board.currency] || 'flip';
     const flipContinues = board.currency === 1 && board.rows.length > 1;
-    const resultIcon = board.currency === 0
-      ? ICONS.ethFace
-      : (ICONS[currencyKey] || ICONS.flip);
     const reveal = document.createElement('div');
     reveal.className = `rvl-box-currency-reveal rvl-box-currency-reveal--${currencyKey}`;
     reveal.setAttribute('data-currency', board.unit);
@@ -3838,11 +4115,26 @@ class RevealOverlay extends HTMLElement {
 
     const icon = document.createElement('div');
     icon.className = 'rvl-box-currency-icon';
-    const image = document.createElement('img');
-    // The neutral flame face keeps the lane secret while the coin is moving.
-    image.src = ICONS.flip;
-    image.alt = '';
-    icon.appendChild(image);
+    const coin = document.createElement('span');
+    coin.className = [
+      'rvl-box-currency-coin',
+      `rvl-box-currency-coin--${currencyKey}`,
+      'df-coin3d__inner',
+    ].join(' ');
+    const coinFaces = appendCoinFaces(coin, {
+      frontSrc: ICONS.wwxrp,
+      backSrc: ICONS.ethFace,
+    });
+    // Keep one physical back plane—the same structure as Daily Flip—and place
+    // the FLIP art inside it. For a FLIP result the overlay appears while that
+    // plane is edge-on, so the last ordinary turn genuinely reveals the logo
+    // without Chromium ever having to composite two competing back faces.
+    const flipImage = document.createElement('img');
+    flipImage.className = 'rvl-box-currency-flip-face';
+    flipImage.src = ICONS.flip;
+    flipImage.alt = '';
+    coinFaces?.backFace.appendChild(flipImage);
+    icon.appendChild(coin);
 
     const eyebrow = document.createElement('span');
     eyebrow.className = 'rvl-box-currency-eyebrow';
@@ -3862,15 +4154,27 @@ class RevealOverlay extends HTMLElement {
 
     if (!reducedMotion) {
       reveal.classList?.add('is-flipping');
+      coin.classList?.add(
+        'df-reveal-active',
+        'df-reveal-track--comet',
+        board.currency === 3 ? 'df-reveal-ending--loss' : 'df-reveal-ending--win',
+      );
       sfxSpinStart(BOX_CURRENCY_FLIP_MS);
       await this.#waitForCoinflip(BOX_CURRENCY_FLIP_MS);
       if (this.#aborted) return;
     }
 
-    image.src = resultIcon;
+    const landedImage = document.createElement('img');
+    landedImage.className = 'rvl-box-currency-landed';
+    landedImage.src = board.currency === 0
+      ? ICONS.ethFace
+      : (ICONS[currencyKey] || ICONS.flip);
+    landedImage.alt = '';
+    icon.textContent = '';
+    icon.appendChild(landedImage);
     name.textContent = board.unit;
     sub.textContent = flipContinues
-      ? `${board.rows.length - 1} MORE FLIP SPINS · THEN SURVIVAL`
+      ? `${board.rows.length - 1} MORE FLIP SPINS`
       : 'CURRENCY REVEALED';
     reveal.classList?.remove('is-flipping');
     if (reveal.classList) reveal.classList.add('is-revealed');
@@ -3879,6 +4183,16 @@ class RevealOverlay extends HTMLElement {
         board.rows.length === 1 ? '' : 'S'
       }`;
     }
+    // Currency is the information gate. Only now may an S2+ reel become an
+    // explicit WIN and carry a denominated amount in the board/history UI.
+    rendered.currencyRevealed = true;
+    this.#refreshBoxSpinSelectors(rendered, board);
+    if (rendered.activePair) this.#settleFullSpinPair(rendered.activePair);
+    this.#syncBoxSpinPayoutMeter(
+      rendered,
+      board,
+      Math.max(1, Number(rendered.boxReelsRevealed) || 0),
+    );
     // This sound confirms the currency lock, not the eventual wager outcome.
     sfxRollDone(true);
     if (!reducedMotion) {
@@ -3892,11 +4206,17 @@ class RevealOverlay extends HTMLElement {
       if (!reducedMotion) await this.#wait(this.#scaledDgnDelay(rendered, 220));
       reveal.remove?.();
     }
+    if (rendered.activePair && !this.#aborted && !reducedMotion) {
+      this.#showFullSpinPop(rendered, rendered.activePair.row, board);
+    }
   }
 
   async #appendFullSpinSurvival(rendered, board, reducedMotion) {
     const hasResult = board.survived === true || board.survived === false;
-    if (!hasResult && !board.survivalStage) return;
+    // No preliminary payout means there was no survival flip. Move directly
+    // to the verdict instead of rendering a disabled gate for a nonexistent
+    // contract draw.
+    if (!hasResult) return;
     if (this.#aborted) return;
     const flipEl = document.createElement('div');
     flipEl.className = 'rvl-survival';
@@ -3904,54 +4224,55 @@ class RevealOverlay extends HTMLElement {
 
     const eyebrow = document.createElement('span');
     eyebrow.className = 'rvl-survival-eyebrow';
-    eyebrow.textContent = 'FINAL GATE';
+    eyebrow.textContent = 'SURVIVAL FLIP';
 
     const arena = document.createElement('div');
     arena.className = 'rvl-survival-arena';
-    const halo = document.createElement('span');
-    halo.className = 'rvl-survival-halo';
     const shell = document.createElement('span');
     shell.className = 'rvl-survival-coin-shell';
-    const coin = document.createElement(hasResult ? 'span' : 'img');
-    coin.className = hasResult
-      ? `rvl-survival-coin rvl-survival-coin--${board.survived ? 'win' : 'bust'}`
-      : 'rvl-survival-coin';
-    if (hasResult) {
-      const redFace = document.createElement('span');
-      redFace.className = 'df-coin3d__face df-coin3d__face--red';
-      const redImage = document.createElement('img');
-      redImage.src = ICONS.wwxrp;
-      redImage.alt = '';
-      redFace.appendChild(redImage);
-
-      const ethFace = document.createElement('span');
-      ethFace.className = 'df-coin3d__face df-coin3d__face--eth';
-      const ethImage = document.createElement('img');
-      ethImage.src = ICONS.ethFace;
-      ethImage.alt = '';
-      ethFace.appendChild(ethImage);
-
-      coin.appendChild(redFace);
-      coin.appendChild(ethFace);
-    } else {
-      coin.src = ICONS.flip;
-      coin.alt = '';
-    }
-    const shadow = document.createElement('span');
-    shadow.className = 'rvl-survival-shadow';
+    const coin = document.createElement('span');
+    coin.className = [
+      'rvl-survival-coin',
+      `rvl-survival-coin--${board.survived ? 'win' : 'bust'}`,
+      'df-coin3d__inner',
+    ].join(' ');
+    appendCoinFaces(coin, {
+      frontSrc: ICONS.wwxrp,
+      backSrc: ICONS.ethFace,
+    });
     shell.appendChild(coin);
-    arena.appendChild(halo);
+    // Preload the authoritative landing in a separate, non-transformed plane.
+    // Revealing this sibling (instead of replacing a will-change compositor
+    // layer) prevents a stale upside-down WWXRP frame surviving the landing.
+    const landedImage = document.createElement('img');
+    landedImage.className = 'rvl-survival-landed';
+    landedImage.src = board.survived ? ICONS.ethFace : ICONS.wwxrp;
+    landedImage.alt = board.survived
+      ? 'Green ETH face — survived'
+      : 'Red WWXRP face — busted';
+    landedImage.decoding = 'sync';
+    landedImage.hidden = true;
+    shell.appendChild(landedImage);
     arena.appendChild(shell);
-    arena.appendChild(shadow);
+    const resultMark = document.createElement('span');
+    resultMark.className = 'rvl-survival-result-mark';
+    resultMark.setAttribute('aria-hidden', 'true');
+    resultMark.hidden = true;
+    arena.appendChild(resultMark);
 
     const label = document.createElement('span');
     label.className = 'rvl-survival-label';
-    label.textContent = 'SURVIVAL FLIP';
+    label.textContent = 'DOUBLE OR NOTHING';
     const detail = document.createElement('span');
     detail.className = 'rvl-survival-detail';
-    detail.textContent = board.boxSpin
-      ? 'THREE FLIP REELS · DOUBLE OR NOTHING'
-      : `${_tokenText(board.spinSum)} FLIP AT RISK · DOUBLE OR NOTHING`;
+    const atRisk = board.boxSpin ? _safeBigInt(board.payoutAtRisk) : _safeBigInt(board.spinSum);
+    const atRiskText = atRisk > 0n
+      ? `${board.boxSpin && board.payoutAtRiskApproximate ? '≈' : ''}${_tokenText(atRisk)} FLIP AT RISK`
+      : 'REEL PAYOUT AT RISK';
+    const survivalWin = board.boxSpin ? _safeBigInt(board.survivalWinPayout) : atRisk * 2n;
+    detail.textContent = survivalWin > 0n
+      ? `${atRiskText} · WIN ${_tokenText(survivalWin)} FLIP`
+      : `${atRiskText} · DOUBLE OR NOTHING`;
 
     flipEl.appendChild(eyebrow);
     flipEl.appendChild(arena);
@@ -3959,38 +4280,47 @@ class RevealOverlay extends HTMLElement {
     flipEl.appendChild(detail);
     rendered.stage.appendChild(flipEl);
 
-    // All three FLIP reels still arrive at this gate, but an all-miss result
-    // has no preliminary payout and the contract deliberately draws no coin.
-    if (!hasResult) {
-      flipEl.classList?.add('is-empty');
-      eyebrow.textContent = 'SURVIVAL GATE';
-      label.textContent = 'NO PAYOUT TO RISK';
-      detail.textContent = 'THREE REELS MISSED · SURVIVAL NOT DRAWN';
-      if (!reducedMotion) {
-        await this.#wait(this.#scaledDgnDelay(rendered, 650));
-      }
-      return;
-    }
-
     if (!reducedMotion) {
       flipEl.classList?.add('is-flipping');
+      coin.classList?.add(
+        'df-reveal-active',
+        'df-reveal-track--comet',
+        board.survived ? 'df-reveal-ending--win' : 'df-reveal-ending--loss',
+      );
       sfxSpinStart(SURVIVAL_FLIP_MS);
       await this.#waitForCoinflip(SURVIVAL_FLIP_MS);
       if (this.#aborted) return;
     }
+    coin.classList?.remove(
+      'df-reveal-active',
+      'df-reveal-track--comet',
+      'df-reveal-ending--win',
+      'df-reveal-ending--loss',
+    );
+    coin.hidden = true;
+    if (coin.style) {
+      coin.style.animation = 'none';
+      coin.style.transform = 'none';
+      coin.style.display = 'none';
+    }
+    landedImage.hidden = false;
+    resultMark.textContent = board.survived ? '✓' : '×';
+    resultMark.hidden = false;
     flipEl.classList?.remove('is-flipping');
     if (flipEl.classList) flipEl.classList.add(board.survived ? 'is-win' : 'is-bust');
     // The two-faced coin's normal landing already ends on green ETH for a
     // survivor or red WWXRP for a bust; no late image swap or reversal occurs.
-    eyebrow.textContent = 'SURVIVAL RESULT';
-    label.textContent = board.boxSpin
+    eyebrow.textContent = board.survived ? 'PAYOUT KEPT' : 'PAYOUT LOST';
+    label.textContent = board.survived ? 'SURVIVED' : 'BUSTED';
+    detail.textContent = board.boxSpin
       ? (board.survived
-        ? 'SURVIVED — FINAL PAYOUT UNLOCKED'
-        : 'BUSTED — FINAL PAYOUT LOST')
+          ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} PAID`
+          : atRisk > 0n
+            ? `${atRiskText} · LOST`
+            : 'FINAL PAYOUT LOST')
       : board.survived
-        ? `SURVIVED — ${_tokenText(board.spinSum)} FLIP PAID DOUBLE`
-        : `BUSTED — ${_tokenText(board.spinSum)} FLIP GONE`;
-    detail.textContent = board.survived ? 'DOUBLE-OR-NOTHING CLEARED' : 'DOUBLE-OR-NOTHING LOST';
+        ? `${_tokenText(board.spinSum)} FLIP PAID DOUBLE`
+        : `${_tokenText(board.spinSum)} FLIP LOST`;
     this.#setRunningTotal(rendered, board, board.total, reducedMotion ? 0 : 600);
     if (!reducedMotion) {
       sfxRollDone(Boolean(board.survived) && shouldCelebrateDegenerette(board));
@@ -4005,7 +4335,9 @@ class RevealOverlay extends HTMLElement {
     currencyRevealed = false,
   } = {}) {
     if (!currencyRevealed && board.boxSpin) {
-      await this.#appendBoxSpinCurrencyReveal(rendered, board, reducedMotion);
+      await this.#appendBoxSpinCurrencyReveal(rendered, board, reducedMotion, {
+        interstitial: board.rows.length > 1,
+      });
     }
     if (this.#aborted) return board.total > 0n;
 
@@ -4029,7 +4361,7 @@ class RevealOverlay extends HTMLElement {
       ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} ${
         celebrate ? 'WON' : 'RETURNED'
       }`
-      : (board.survived === false ? 'HIT — SURVIVAL FLIP BUSTED' : 'NO HIT');
+      : (board.survived === false ? 'HIT — SURVIVAL FLIP BUSTED' : 'UNLUCKY');
     rendered.stage.appendChild(totalEl);
 
     if (sequence) {
@@ -4048,15 +4380,15 @@ class RevealOverlay extends HTMLElement {
     const pendingAction = sequence && !finalLabel && this.#queue.length === 0
       ? this.#nextReadyPendingAction(sequence?.lootboxRelease)
       : null;
-    const unlucky = Boolean(sequence?.unlucky && !finalLabel && !pendingAction);
+    const terminalLabel = revealTerminalActionLabel(sequence, board);
+    const unlucky = terminalLabel === 'UNLUCKY' && !finalLabel && !pendingAction;
+    rendered.cta.__rvlTerminalLabel = terminalLabel;
     if (pendingAction) {
-      this.#setPendingContinuation(rendered.cta, pendingAction);
+      this.#setPendingContinuation(rendered.cta, pendingAction, terminalLabel);
     } else {
       rendered.cta.__rvlPendingAction = null;
       rendered.cta.dataset.mode = 'continue';
-      rendered.cta.textContent = finalLabel
-        || (sequence ? (unlucky ? 'UNLUCKY' : 'COLLECT')
-          : (board.boxSpin ? 'CONTINUE' : 'COLLECT'));
+      rendered.cta.textContent = finalLabel || terminalLabel;
       rendered.cta.classList?.toggle('rvl-collect-cta--unlucky', unlucky);
       rendered.cta.disabled = false;
     }
@@ -4082,6 +4414,7 @@ class RevealOverlay extends HTMLElement {
     );
     this.#settleFullSpinPair(pair);
     rendered.selectedSpinIndex = Number(last.spinIndex);
+    rendered.boxReelsRevealed = board.rows.length;
     rendered.cta.hidden = true;
     if (rendered.autoCta) rendered.autoCta.hidden = true;
     if (rendered.skipCta) rendered.skipCta.hidden = true;
@@ -4449,10 +4782,16 @@ class RevealOverlay extends HTMLElement {
             this.#setRunningTotal(rendered, board, running, 520);
           }
         }
-        const rowWon = board.boxSpin ? row.score > 0 : row.payout > 0n;
+        const rowWon = board.boxSpin ? boxSpinScorePays(row.score) : row.payout > 0n;
         sfxRollDone(rowWon);
         autoPauseMs = autoSpinning && rowWon ? 900 : 420;
         completed = i + 1;
+        if (board.boxSpin) {
+          rendered.boxReelsRevealed = completed;
+          if (rendered.currencyRevealed) {
+            this.#syncBoxSpinPayoutMeter(rendered, board, completed);
+          }
+        }
         if (board.boxSpin && i === 0) {
           await this.#appendBoxSpinCurrencyReveal(rendered, board, false, {
             interstitial: count > 1,
@@ -4481,7 +4820,7 @@ class RevealOverlay extends HTMLElement {
         this.#showFullSpinPop(rendered, last, board);
         if (!board.boxSpin) this.#setRunningTotal(rendered, board, board.spinSum, 0);
         sfxRollDone(board.boxSpin
-          ? board.rows.some((row) => row.score > 0)
+          ? board.rows.some((row) => boxSpinScorePays(row.score))
           : board.spinSum > 0n);
       } else if (!board.boxSpin) {
         this.#setRunningTotal(rendered, board, board.spinSum, 0);
@@ -4749,6 +5088,29 @@ class RevealOverlay extends HTMLElement {
     return chart;
   }
 
+  #buildCardSub(card, positiveResult = false) {
+    const sub = document.createElement('div');
+    sub.className = `rvl-card-sub${positiveResult ? ' is-win' : ''}${card.type === 'coinflip-result' ? ' rvl-card-sub--coinflip' : ''}`;
+    if (card.type === 'coinflip-result' && (card.outcomeLabel || card.outcomePercent)) {
+      sub.setAttribute('aria-label', card.sub);
+      if (card.outcomeLabel) {
+        const outcome = document.createElement('span');
+        outcome.className = 'rvl-card-coinflip-outcome';
+        outcome.textContent = card.outcomeLabel;
+        sub.appendChild(outcome);
+      }
+      if (card.outcomePercent) {
+        const percent = document.createElement('span');
+        percent.className = 'rvl-card-coinflip-percent';
+        percent.textContent = card.outcomePercent;
+        sub.appendChild(percent);
+      }
+    } else {
+      sub.textContent = card.sub;
+    }
+    return sub;
+  }
+
   #buildCard(card, compact) {
     const el = document.createElement('div');
     const rarity = compact && card.revealedRarity ? card.revealedRarity : card.rarity;
@@ -4812,6 +5174,16 @@ class RevealOverlay extends HTMLElement {
     }
 
     if (!card.packOnly) {
+      const coinflipConsolation = card.type === 'coinflip-result' && card.consolationWwxrp;
+      if (coinflipConsolation) {
+        // A lost flip still awards WWXRP. It is a peer of the FLIP amount,
+        // not a footnote or a second branded badge, so give it the same
+        // typographic lane immediately above the lost stake.
+        const consolation = document.createElement('div');
+        consolation.className = 'rvl-card-coinflip-consolation';
+        consolation.textContent = card.consolationWwxrp;
+        inner.appendChild(consolation);
+      }
       const value = document.createElement('div');
       value.className = 'rvl-card-value';
       // Center-stage cards start empty and count up (#playCard drives
@@ -4838,25 +5210,8 @@ class RevealOverlay extends HTMLElement {
         inner.appendChild(label);
       }
 
-      if (!compact && card.sub) {
-        const sub = document.createElement('div');
-        sub.className = `rvl-card-sub${card.type === 'coinflip-result' ? ' rvl-card-sub--coinflip' : ''}`;
-        if (card.type === 'coinflip-result' && card.outcomeLabel) {
-          sub.setAttribute('aria-label', card.sub);
-          const outcome = document.createElement('span');
-          outcome.className = 'rvl-card-coinflip-outcome';
-          outcome.textContent = card.outcomeLabel;
-          sub.appendChild(outcome);
-          if (card.outcomePercent) {
-            const percent = document.createElement('span');
-            percent.className = 'rvl-card-coinflip-percent';
-            percent.textContent = card.outcomePercent;
-            sub.appendChild(percent);
-          }
-        } else {
-          sub.textContent = card.sub;
-        }
-        inner.appendChild(sub);
+      if (!compact && card.sub && !coinflipConsolation) {
+        inner.appendChild(this.#buildCardSub(card));
       }
     }
     el.appendChild(inner);
@@ -4967,16 +5322,14 @@ class RevealOverlay extends HTMLElement {
       // A bet board's card is the only thing left on screen once the rows are
       // gone, so it keeps its sub line (compact cards normally drop it).
       if (!card.packOnly
+          && !(card.type === 'coinflip-result' && card.consolationWwxrp)
           && (seq.spinBoard || card.summaryDetail
             || (seq.kind === 'lootbox' && (!card.spin || spinGrant)))
           && card.sub) {
-        const sub = document.createElement('div');
         const positiveResult = card.outcome === 'win'
           || (seq.spinBoard != null && _safeBigInt(seq.spinBoard.total) > 0n);
-        sub.className = `rvl-card-sub${positiveResult ? ' is-win' : ''}`;
-        sub.textContent = card.sub;
         const inner = el.querySelector('.rvl-card-inner');
-        if (inner) inner.appendChild(sub);
+        if (inner) inner.appendChild(this.#buildCardSub(card, positiveResult));
       }
       // Spin cards show their outcome in the summary.
       if (card.spin && !spinGrant) {
@@ -5049,13 +5402,15 @@ class RevealOverlay extends HTMLElement {
       && !queuedLabel
       && !pendingAction
     );
+    const terminalLabel = revealTerminalActionLabel(seq);
+    cta.__rvlTerminalLabel = terminalLabel;
     cta.textContent = unlucky
       ? 'UNLUCKY'
       : hasMorePacks
       ? 'OPEN NEXT PACK'
       : hasMoreLootboxes ? 'OPEN NEXT LUCKBOX'
         : autoNextLootbox ? 'OPENING NEXT LUCKBOX…'
-          : queuedLabel || (pendingAction ? this.#pendingContinuationLabel(pendingAction) : 'COLLECT');
+          : queuedLabel || (pendingAction ? this.#pendingContinuationLabel(pendingAction) : terminalLabel);
     cta.classList?.toggle('rvl-collect-cta--unlucky', unlucky);
     cta.disabled = autoNextLootbox;
     cta.dataset.mode = pendingAction ? 'pending-action' : 'continue';

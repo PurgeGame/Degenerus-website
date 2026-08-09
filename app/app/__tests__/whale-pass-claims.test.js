@@ -9,6 +9,15 @@ import * as contracts from '../contracts.js';
 import * as pending from '../pending-actions.js';
 import * as store from '../store.js';
 import * as watcher from '../whale-pass-claims.js';
+import { CHAIN } from '../chain-config.js';
+
+globalThis.localStorage = globalThis.localStorage || {
+  _values: new Map(),
+  getItem(key) { return this._values.get(String(key)) ?? null; },
+  setItem(key, value) { this._values.set(String(key), String(value)); },
+  removeItem(key) { this._values.delete(String(key)); },
+  clear() { this._values.clear(); },
+};
 
 const PLAYER = '0xab12000000000000000000000000000000000000';
 const OTHER = '0xdef0000000000000000000000000000000000000';
@@ -98,6 +107,8 @@ describe('whale-pass Pending publisher', () => {
   let readFails;
 
   beforeEach(() => {
+    store.__resetForTest();
+    localStorage.clear();
     pending.__resetPendingActionsForTest();
     watcher.__resetWhalePassClaimsForTest();
     address = PLAYER;
@@ -162,6 +173,23 @@ describe('whale-pass Pending publisher', () => {
     readFails = true;
     await watcher.refreshWhalePassClaims();
     assert.equal(pending.getPendingActions().length, 1);
+  });
+
+  test('a new jackpot-awarded balance delta stays hidden until the board is complete', async () => {
+    await startAndRefresh();
+    assert.equal(pending.getPendingActions()[0]?.whalePassHalfCount, 2n);
+
+    store.update('app.daySync', { day: 55, rngRequested: true, jackpotReady: true });
+    store.update('app.gameState', { level: 31, dailyRng: { day: 55, finalWord: '1' } });
+    amount = 5n;
+    await watcher.refreshWhalePassClaims();
+    assert.equal(pending.getPendingActions()[0]?.whalePassHalfCount, 2n,
+      'the pre-existing claim remains while the covered three-half increase is withheld');
+
+    localStorage.setItem(`jackpot_complete_day_${CHAIN.id}_55`, '1');
+    await watcher.refreshWhalePassClaims();
+    assert.equal(pending.getPendingActions()[0]?.whalePassHalfCount, 5n,
+      'the full authoritative balance appears after the final scratch');
   });
 
   test('switching the acting player retires the captured action immediately', async () => {

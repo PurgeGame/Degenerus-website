@@ -5,7 +5,7 @@
 //   - cards mode dedups identical 4-trait combos into ×N cards
 //   - chart mode: 4 × (8×8) grids; cell trait_id = q*64 + color*8 + symbol,
 //     .has + count only where the player holds the trait
-//   - level nav refetches with the new ?level= (never a day param)
+//   - five level buttons + Future refetch with the new ?level= (never a day param)
 //   - pending packs render a placeholder card
 //   - badge path uses the canonical decode (sym = tid%8, col = (tid%64)/8)
 
@@ -69,6 +69,8 @@ function makeFakeElement(tag = 'div') {
         const child = makeFakeElement(tagName);
         const dataBindMatch = /data-bind="([^"]+)"/.exec(attrs);
         if (dataBindMatch) child.attributes['data-bind'] = dataBindMatch[1];
+        const levelOffsetMatch = /data-level-offset="([^"]+)"/.exec(attrs);
+        if (levelOffsetMatch) child.attributes['data-level-offset'] = levelOffsetMatch[1];
         const classMatch = /\bclass="([^"]+)"/.exec(attrs);
         if (classMatch) {
           for (const c of classMatch[1].split(/\s+/)) child.classList.add(c);
@@ -354,89 +356,117 @@ describe('app-tickets-inventory — cards + chart', () => {
     );
   });
 
-  test('starts collapsed and creates no ticket SVG nodes until expanded', async () => {
+  test('the normal-width ticket bar keeps five levels, Future, and Total Value on one line', () => {
+    assert.match(
+      APP_CSS,
+      /\.app-tickets-inventory \.inv-head\s*\{[^}]*flex-wrap:\s*nowrap/s,
+      'the desktop bar does not wrap its controls onto a second row',
+    );
+    assert.match(
+      APP_CSS,
+      /\.inv-level-cluster\s*\{[^}]*width:\s*auto[^}]*min-width:\s*0[^}]*flex:\s*1 1 32rem/s,
+      'the level-and-value cluster flexes into the remaining header width',
+    );
+    assert.match(
+      APP_CSS,
+      /\.inv-level-nav\s*\{[^}]*width:\s*100%[^}]*max-width:\s*none/s,
+      'the level rail uses all of that width instead of leaving a dead gap',
+    );
+    assert.match(
+      APP_CSS,
+      /@media \(max-width: 900px\)\s*\{[\s\S]*?\.app-tickets-inventory \.inv-head\s*\{\s*flex-wrap:\s*wrap/s,
+      'wrapping is retained only as a narrow-screen fallback',
+    );
+  });
+
+  test('a level tile expands its tickets and the selected tile contracts them', async () => {
     _byLevel.set(17, byTraitPayload({ cards: [card('opened'), card('opened')] }));
     const el = mount({ expanded: false });
     await flushMicrotasks();
 
     const toggle = el.querySelector('[data-bind="inv-toggle"]');
+    const level = el.querySelectorAll('[data-bind="inv-level-tab"]')[0];
+    const window = el.querySelector('[data-bind="inv-window"]');
     assert.match(el.innerHTML, /<h2 class="section-disclosure__title">YOUR TICKETS<\/h2>/,
       'the section title is plain text rather than the disclosure control');
     assert.match(el.innerHTML, /class="panel app-tickets-inventory section-disclosure"/,
       'ticket holdings use the shared section disclosure shell');
-    assert.match(el.innerHTML, /inv-disclosure__chevron section-disclosure__chevron/,
-      'the far-right ticket arrow uses the shared disclosure chevron');
+    assert.equal(toggle.hidden, true,
+      'the generic far-right dropdown is removed when concrete level tiles exist');
+    assert.match(el.innerHTML, /data-bind="inv-level-tab"[\s\S]*?aria-expanded="false" aria-controls="ticket-inventory-details"/,
+      'each level tile is the disclosure control for the shared ticket details');
     assert.match(
       el.innerHTML,
-      /class="inv-level-cluster">[\s\S]*?data-bind="inv-meta"[\s\S]*?class="inv-level-nav"/,
-      'the count remains on the opposite side of the level selector',
+      /class="inv-meta" data-bind="inv-meta" hidden aria-hidden="true"/,
+      'the redundant prose total stays out of the visible ticket row',
     );
-    assert.ok(
-      el.innerHTML.indexOf('data-bind="inv-toggle"')
-        > el.innerHTML.indexOf('data-bind="inv-zoom-controls"'),
-      'the disclosure is the far-right property of the bar, after its content controls',
-    );
-    assert.equal(toggle.textContent.trim(), '', 'the dropdown control contains no ticket text');
     assert.match(APP_CSS,
-      /\.inv-disclosure\s*\{[^}]*position:\s*absolute[^}]*right:\s*0[^}]*background:\s*transparent/s,
-      'the chevron is pinned to the right edge instead of wrapping a text label');
-    assert.match(APP_CSS,
-      /\.inv-head:has\(> \.inv-disclosure\[aria-expanded="false"\]\)\s*\{[^}]*margin-bottom:\s*0[^}]*border-bottom-color:\s*transparent/s,
+      /\.app-tickets-inventory:not\(\.is-expanded\) \.inv-head\s*\{[^}]*margin-bottom:\s*0[^}]*border-bottom-color:\s*transparent/s,
       'the closed ticket bar has no divider underneath it');
-    assert.equal(toggle.getAttribute('aria-expanded'), 'false');
-    assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, true);
+    assert.equal(level.getAttribute('aria-expanded'), 'false');
+    assert.equal(window.hidden, true);
     assert.equal(el.querySelector('.inv-level-cluster').hidden, false,
       'level switching remains visible in the compressed header');
     assert.equal(el.querySelector('[data-bind="inv-meta"]').textContent, '2 tickets',
-      'compressed header keeps the exact owned-ticket quantity visible');
+      'the hidden compatibility status still tracks the exact quantity');
+    assert.equal(el.querySelector('[data-bind="inv-meta"]').hidden, true,
+      'owned quantities are painted only inside the level buttons');
     assert.equal(el.querySelectorAll('.inv-card').length, 0,
       'collapsed data refreshes cannot construct ticket cards');
     assert.equal(el.querySelectorAll('img').length, 0,
       'no badge SVG request exists in the initial inventory DOM');
 
-    toggle.dispatchEvent({ type: 'click' });
-    assert.equal(toggle.getAttribute('aria-expanded'), 'true',
-      'the disclosure acknowledges the press before building ticket art');
-    assert.equal(toggle.getAttribute('aria-busy'), 'true',
-      'the highlighted disclosure confirms that the expanded view is loading');
+    level.dispatchEvent({ type: 'click' });
+    assert.equal(level.getAttribute('aria-expanded'), 'true',
+      'the chosen level acknowledges the press before building ticket art');
+    assert.equal(level.getAttribute('aria-busy'), 'true',
+      'the chosen tile confirms that its ticket view is loading');
+    assert.equal(level.classList.contains('is-active'), true);
+    assert.equal(window.hidden, false, 'the ticket surface drops from the selected level');
     assert.equal(el.querySelectorAll('img').length, 0,
       'expensive badge construction is deferred long enough for feedback to paint');
     await flushMicrotasks();
-    assert.equal(toggle.getAttribute('aria-expanded'), 'true');
-    assert.equal(toggle.getAttribute('aria-busy'), null);
-    assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, false);
+    assert.equal(level.getAttribute('aria-expanded'), 'true');
+    assert.equal(level.getAttribute('aria-busy'), null);
     assert.ok(el.querySelectorAll('.inv-card').length > 0);
     assert.ok(el.querySelectorAll('img').length > 0,
       'badge SVG nodes are constructed only after explicit expansion');
     assert.match(APP_CSS,
-      /\.inv-disclosure\[aria-busy="true"\]\s*\{[^}]*color:\s*#ffc04d;[^}]*box-shadow:/s,
+      /\.inv-level-btn\[aria-busy="true"\]\s*\{[^}]*border-color:[^}]*box-shadow:/s,
       'the deferred render has an immediate visible pressed/loading state');
+    assert.match(APP_CSS, /\.inv-window:not\(\[hidden\]\)\s*\{[^}]*animation:\s*inv-window-drop/s,
+      'opening a level visibly drops its ticket surface');
+
+    level.dispatchEvent({ type: 'click' });
+    assert.equal(level.getAttribute('aria-expanded'), 'false');
+    assert.equal(level.classList.contains('is-active'), false);
+    assert.equal(window.hidden, true, 'pressing the selected level contracts the ticket surface');
     el.disconnectedCallback();
   });
 
-  test('a second arrow press retracts immediately during the deferred open', async () => {
+  test('a second level press retracts immediately during the deferred open', async () => {
     _byLevel.set(17, byTraitPayload({ cards: [card('opened'), card('opened')] }));
     const el = mount({ expanded: false });
     await flushMicrotasks();
-    const toggle = el.querySelector('[data-bind="inv-toggle"]');
+    const level = el.querySelectorAll('[data-bind="inv-level-tab"]')[0];
     const window = el.querySelector('[data-bind="inv-window"]');
 
-    toggle.dispatchEvent({ type: 'click' });
-    assert.equal(toggle.getAttribute('aria-busy'), 'true');
-    toggle.dispatchEvent({ type: 'click' });
-    assert.equal(toggle.getAttribute('aria-expanded'), 'false');
-    assert.equal(toggle.getAttribute('aria-busy'), null);
+    level.dispatchEvent({ type: 'click' });
+    assert.equal(level.getAttribute('aria-busy'), 'true');
+    level.dispatchEvent({ type: 'click' });
+    assert.equal(level.getAttribute('aria-expanded'), 'false');
+    assert.equal(level.getAttribute('aria-busy'), null);
     assert.equal(window.hidden, true);
 
     await flushMicrotasks();
-    assert.equal(toggle.getAttribute('aria-expanded'), 'false',
+    assert.equal(level.getAttribute('aria-expanded'), 'false',
       'the cancelled deferred render cannot reopen the inventory');
     assert.equal(window.hidden, true);
     assert.equal(el.querySelectorAll('img').length, 0,
       'a cancelled open never starts the expensive ticket SVG build');
     assert.match(APP_CSS,
-      /\.inv-disclosure\s*\{[^}]*z-index:\s*3[^}]*width:\s*2\.75rem[^}]*height:\s*2\.75rem[^}]*touch-action:\s*manipulation/s,
-      'the arrow owns a reliable 44px touch target above expanded controls');
+      /\.inv-level-btn\s*\{[^}]*min-height:\s*2\.75rem[^}]*touch-action:\s*manipulation/s,
+      'each level owns a reliable 44px touch target');
     el.disconnectedCallback();
   });
 
@@ -445,9 +475,67 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.equal(inventoryMod.formatTicketEntryHoldings(1), '0.25 tickets');
     assert.equal(inventoryMod.formatTicketEntryHoldings(5), '1.25 tickets');
     assert.equal(inventoryMod.formatTicketEntryHoldings(4), '1 ticket');
+    assert.equal(inventoryMod.formatTicketEntryQuantity(5), '1.25');
   });
 
-  test('red SALVAGE shortcut opens long-term holdings with its panel pinned below', async () => {
+  test('five level buttons and Future show owned ticket quantities', async () => {
+    _dashboardTickets = [
+      { level: 17, entryCount: 5 },  // 1.25 tickets
+      { level: 18, entryCount: 8 },  // 2 tickets
+      { level: 22, entryCount: 12 }, // Future: 3 tickets
+      { level: 25, entryCount: 4 },  // Future: +1 ticket
+    ];
+    _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
+
+    const el = mount({ expanded: false });
+    await flushMicrotasks();
+
+    const buttons = el.querySelectorAll('[data-bind="inv-level-tab"]');
+    const labels = el.querySelectorAll('[data-bind="inv-level-tab-label"]');
+    const counts = el.querySelectorAll('[data-bind="inv-level-tab-count"]');
+    const future = el.querySelector('[data-bind="inv-level-future"]');
+
+    assert.equal(buttons.length, 5, 'the compact picker exposes exactly five concrete levels');
+    assert.deepEqual(labels.map((node) => node.textContent), ['L17', 'L18', 'L19', 'L20', 'L21']);
+    assert.deepEqual(counts.map((node) => node.textContent), ['1.25', '2', '0', '0', '0']);
+    assert.doesNotMatch(el.innerHTML, /inv-level-btn__offset|>CURRENT<|>\+[1-5]\+?</,
+      'the compact picker does not repeat relative offsets already conveyed by color');
+    assert.doesNotMatch(APP_CSS, /\.inv-level-btn strong::after\s*\{[^}]*content:\s*'TIX'/s,
+      'the ticket context does not repeat a TIX suffix inside every quantity');
+    assert.deepEqual(
+      buttons.map((node) => node.getAttribute('data-ticket-level-tone')),
+      ['white', 'blue', 'green', 'yellow', 'orange'],
+      'every button carries the level-relative color signal',
+    );
+    assert.deepEqual(buttons.map((node) => node.classList.contains('is-empty')),
+      [false, false, true, true, true], 'empty levels recede without disappearing');
+    assert.equal(el.querySelector('[data-bind="inv-level-future-count"]').textContent, '4',
+      'Future aggregates every owned ticket beyond the five concrete buttons');
+    assert.equal(future.getAttribute('data-ticket-level-tone'), 'red',
+      'the +5-and-beyond aggregate completes the level color ladder');
+    const totalValue = el.querySelector('[data-bind="inv-total-value-action"]');
+    assert.ok(totalValue, 'Total Value is a matching tile directly after Future');
+    assert.ok(el.innerHTML.indexOf('data-bind="inv-total-value-action"')
+      > el.innerHTML.indexOf('data-bind="inv-level-future"'));
+    assert.equal(el.querySelector('[data-bind="inv-salvage-jump"]'), null,
+      'there is no separate salvage shortcut competing for header space');
+    assert.equal(buttons[0].getAttribute('aria-expanded'), 'false',
+      'a remembered view level is not selected while the ticket surface is contracted');
+    assert.match(future.getAttribute('aria-label'), /Future levels 22 through 117, 4 tickets owned/);
+
+    future.dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.equal(future.getAttribute('aria-expanded'), 'true', 'Future highlights when its aggregate opens');
+    assert.equal(buttons[0].getAttribute('aria-expanded'), 'false');
+    assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, false);
+
+    future.dispatchEvent({ type: 'click' });
+    assert.equal(future.getAttribute('aria-expanded'), 'false', 'pressing Future again contracts it');
+    assert.equal(el.querySelector('[data-bind="inv-window"]').hidden, true);
+    el.disconnectedCallback();
+  });
+
+  test('the Total Value tile opens long-term holdings with its panel pinned below', async () => {
     storeMod.update('app.lastDay', {
       day: 67,
       status: 'resolved',
@@ -459,14 +547,14 @@ describe('app-tickets-inventory — cards + chart', () => {
     const el = mount({ expanded: false });
     await flushMicrotasks();
 
-    const shortcut = el.querySelector('[data-bind="inv-salvage-jump"]');
+    const shortcut = el.querySelector('[data-bind="inv-total-value-action"]');
     assert.equal(shortcut.disabled, false);
     shortcut.dispatchEvent({ type: 'click' });
     await flushMicrotasks();
 
     assert.equal(el.querySelector('[data-bind="inv-toggle"]').getAttribute('aria-expanded'), 'true');
     assert.equal(el.querySelector('[data-bind="inv-level"]').textContent, '22',
-      'shortcut enters the first aggregate long-term level');
+      'the value tile enters the first aggregate long-term level');
     assert.equal(el.querySelector('[data-bind="inv-ff"]').hidden, false);
     assert.ok(el.querySelector('[data-bind="inv-salvage-panel"]'),
       'the salvage section is mounted even before the player selects a line');
@@ -492,11 +580,7 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.equal(counts.length, 1, 'exactly one badge — only the duplicate carries it');
     const meta = el.querySelector('[data-bind="inv-meta"]');
     assert.match(meta.textContent, /3 tickets/, 'meta counts totalEntries/4');
-    assert.match(
-      el.innerHTML,
-      /class="inv-level-cluster">[\s\S]*?data-bind="inv-meta"[\s\S]*?class="inv-level-nav"[\s\S]*?<\/span>/,
-      'the ticket count sits on the opposite side of the level selector',
-    );
+    assert.equal(meta.hidden, true, 'the duplicate prose count is not painted beside the buttons');
     el.disconnectedCallback();
   });
 
@@ -804,25 +888,25 @@ describe('app-tickets-inventory — cards + chart', () => {
     await flushMicrotasks();
     // active 17 → level 22 enters the aggregate far-future view; salvage itself
     // begins at distance 6, so the owned L23/L25 rows are both eligible.
-    for (let i = 0; i < 5; i += 1) {
-      el.querySelector('[data-bind="inv-next"]').dispatchEvent({ type: 'click' });
-    }
+    el.querySelector('[data-bind="inv-level-future"]').dispatchEvent({ type: 'click' });
     await flushMicrotasks();
 
-    let picks = el.querySelectorAll('.inv-ff__pick');
-    assert.equal(picks.length, 2, 'dashboard holdings remain selectable without the queue endpoint');
-    picks[0].checked = true;
-    picks[0].dispatchEvent({ type: 'change' });
-    picks = el.querySelectorAll('.inv-ff__pick');
-    picks[1].checked = true;
-    picks[1].dispatchEvent({ type: 'change' });
+    const rows = el.querySelectorAll('.inv-ff__row')
+      .filter((row) => row.classList.contains('is-salvageable'));
+    assert.equal(rows.length, 2, 'dashboard holdings remain selectable without the queue endpoint');
+    rows[0].dispatchEvent({
+      type: 'pointerdown', button: 0, pointerType: 'mouse', preventDefault() {},
+    });
+    rows[1].dispatchEvent({ type: 'pointerenter', buttons: 1, pointerType: 'mouse' });
+    rows[1].dispatchEvent({ type: 'pointerup', pointerType: 'mouse' });
     await flushMicrotasks();
 
     assert.deepEqual(quoteCalls.at(-1), {
       player: TEST_ADDR,
       levels: [23n, 25n],
       quantities: [8n, 4n],
-    }, 'one exact preview bundles both selected levels in entry units');
+    }, 'one mouse paint gesture bundles both selected levels in entry units');
+    assert.match(el.textContent, /DRAG ACROSS LEVELS TO SELECT/);
     assert.equal(el.querySelector('.inv-salvage__selected').textContent,
       '3 tickets selected');
     assert.equal(el.querySelector('.inv-salvage__metrics'), null,
@@ -946,13 +1030,15 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
-  test('level nav refetches with the new level; never sends a day param', async () => {
+  test('level buttons refetch with the new level; never send a day param', async () => {
     _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
     _byLevel.set(18, byTraitPayload({ level: 18, cards: [] }));
     const el = mount();
     await flushMicrotasks();
 
-    el.querySelector('[data-bind="inv-next"]').dispatchEvent({ type: 'click' });
+    const levelButtons = el.querySelectorAll('[data-bind="inv-level-tab"]');
+    levelButtons.find((button) => button.getAttribute('data-level-offset') === '1')
+      .dispatchEvent({ type: 'click' });
     await flushMicrotasks();
 
     assert.ok(_fetchLog.some((u) => u.includes('by-trait?level=18')), 'refetched level 18');
@@ -960,7 +1046,8 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.equal(el.querySelector('[data-bind="inv-level"]').textContent, '18', 'level display updated');
     assert.match(el.querySelector('[data-bind="inv-tag"]').textContent, /future/, 'future tag past active level');
 
-    el.querySelector('[data-bind="inv-jump"]').dispatchEvent({ type: 'click' });
+    levelButtons.find((button) => button.getAttribute('data-level-offset') === '0')
+      .dispatchEvent({ type: 'click' });
     await flushMicrotasks();
     assert.equal(el.querySelector('[data-bind="inv-level"]').textContent, '17', 'jump returns to active');
     assert.match(el.querySelector('[data-bind="inv-tag"]').textContent, /active/, 'active tag');
@@ -981,25 +1068,32 @@ describe('app-tickets-inventory — cards + chart', () => {
 
   test('new pack tickets stay out of inventory until that pack is opened', async () => {
     const oldTicket = cardAt(0, 'opened', COMBO);
-    const newIds = [2, 73, 130, 201];
-    const waitingTicket = cardAt(1, 'pending', newIds);
-    _byLevel.set(17, byTraitPayload({ cards: [oldTicket, waitingTicket] }));
+    const secondTicket = cardAt(1, 'opened', [2, 73, 130, 201]);
+    const newIds = [3, 74, 131, 202];
+    const waitingTicket = cardAt(2, 'pending', newIds);
+    _dashboardTickets = [{ level: 17, entryCount: 12 }];
+    _byLevel.set(17, byTraitPayload({ cards: [oldTicket, secondTicket, waitingTicket] }));
     await packWatchMod.recordPendingPack({ address: TEST_ADDR, level: 17 });
 
-    const rolledTicket = cardAt(1, 'opened', newIds);
-    _byLevel.set(17, byTraitPayload({ cards: [oldTicket, rolledTicket] }));
+    const rolledTicket = cardAt(2, 'opened', newIds);
+    _byLevel.set(17, byTraitPayload({ cards: [oldTicket, secondTicket, rolledTicket] }));
     const el = mount();
     await flushMicrotasks();
 
-    assert.equal(el.querySelectorAll('.ticket-card').length, 1,
+    assert.equal(el.querySelectorAll('.ticket-card').length, 2,
       'the newly indexed ticket does not appear before its pack');
-    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^1 ticket/,
+    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^2 tickets/,
       'the headline count does not spoil the unopened ticket either');
+    assert.equal(
+      el.querySelector('[data-bind="inv-level-tab-count"]').textContent,
+      '2',
+      'a raw total of 3 cannot reintroduce the hidden ticket above 2 visible tickets',
+    );
 
     await packWatchMod.completePackReveal({
       address: TEST_ADDR,
       level: 17,
-      cardIndexes: [1],
+      cardIndexes: [2],
     });
     storeMod.update('app.lastDay', {
       day: 67,
@@ -1009,13 +1103,95 @@ describe('app-tickets-inventory — cards + chart', () => {
     });
     await flushMicrotasks();
 
-    assert.equal(el.querySelectorAll('.ticket-card').length, 2,
+    assert.equal(el.querySelectorAll('.ticket-card').length, 3,
       'the ticket display refreshes immediately after the pack is consumed');
-    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^2 tickets/);
+    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^3 tickets/);
+    assert.equal(el.querySelector('[data-bind="inv-level-tab-count"]').textContent, '3');
+    el.disconnectedCallback();
+  });
+
+  test('an unopened level is filtered before its first press, so its count cannot jump', async () => {
+    const oldTicket = cardAt(0, 'opened', COMBO);
+    const secondTicket = cardAt(1, 'opened', [2, 73, 130, 201]);
+    const waitingTicket = cardAt(2, 'pending', [3, 74, 131, 202]);
+    _dashboardTickets = [{ level: 18, entryCount: 12 }];
+    _byLevel.set(17, byTraitPayload({ cards: [] }));
+    _byLevel.set(18, byTraitPayload({ level: 18, cards: [oldTicket, secondTicket, waitingTicket] }));
+    await packWatchMod.recordPendingPack({ address: TEST_ADDR, level: 18 });
+    _byLevel.set(18, byTraitPayload({
+      level: 18,
+      cards: [oldTicket, secondTicket, cardAt(2, 'opened', [3, 74, 131, 202])],
+    }));
+
+    const el = mount({ expanded: false });
+    await flushMicrotasks();
+    const level18 = el.querySelectorAll('[data-bind="inv-level-tab"]')[1];
+    const count18 = el.querySelectorAll('[data-bind="inv-level-tab-count"]')[1];
+    assert.equal(count18.textContent, '2',
+      'the unopened third ticket is removed before L18 is selected');
+
+    level18.dispatchEvent({ type: 'click' });
+    assert.equal(count18.textContent, '2', 'pressing L18 cannot change 3 to 2');
+    await flushMicrotasks();
+    assert.equal(count18.textContent, '2');
+    assert.equal(el.querySelectorAll('.ticket-card').length, 2);
+    el.disconnectedCallback();
+  });
+
+  test('switching levels cannot paint the previous level count onto the new tile', async () => {
+    const level17Cards = [cardAt(0, 'opened', COMBO), cardAt(1, 'opened', [2, 73, 130, 201])];
+    const level18Cards = Array.from(
+      { length: 13 },
+      (_unused, index) => cardAt(index, 'opened', COMBO),
+    );
+    _dashboardTickets = [
+      { level: 17, entryCount: 8 },
+      { level: 18, entryCount: 52 },
+    ];
+    _byLevel.set(17, byTraitPayload({ cards: level17Cards }));
+    _byLevel.set(18, byTraitPayload({ level: 18, cards: level18Cards }));
+    const el = mount({ expanded: false });
+    await flushMicrotasks();
+    const levels = el.querySelectorAll('[data-bind="inv-level-tab"]');
+    const counts = el.querySelectorAll('[data-bind="inv-level-tab-count"]');
+
+    levels[1].dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.equal(counts[1].textContent, '13');
+
+    levels[0].dispatchEvent({ type: 'click' });
+    assert.equal(counts[0].textContent, '2',
+      'L17 keeps its own total while L17 data loads, rather than borrowing L18\'s 13');
+    await flushMicrotasks();
+    assert.equal(counts[0].textContent, '2');
+    assert.equal(el.querySelector('[data-bind="inv-level"]').textContent, '17');
+    el.disconnectedCallback();
+  });
+
+  test('a tile press opens the level painted on it during an active-level refresh', async () => {
+    _byLevel.set(17, byTraitPayload({ cards: [card('opened')] }));
+    _byLevel.set(18, byTraitPayload({ level: 18, cards: [card('opened')] }));
+    const el = mount({ expanded: false });
+    await flushMicrotasks();
+    const paintedL18 = el.querySelectorAll('[data-bind="inv-level-tab"]')[1];
+    assert.equal(paintedL18.getAttribute('data-ticket-level'), '18');
+
+    // The subscriber starts an async refresh, leaving the old label painted
+    // for this event turn. The press must honor that label, not 12 + offset 1.
+    storeMod.update('app.lastDay', {
+      day: 68,
+      status: 'resolved',
+      level: 12,
+      roll1: { purchaseLevel: 12 },
+    });
+    paintedL18.dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.equal(el.querySelector('[data-bind="inv-level"]').textContent, '18');
     el.disconnectedCallback();
   });
 
   test('a rolled fractional entry stays behind its reveal, then appears as a quarter-ticket', async () => {
+    _dashboardTickets = [{ level: 17, entryCount: 1 }];
     _byLevel.set(17, byTraitPayload({ cards: [] }));
     await packWatchMod.recordPendingPack({
       address: TEST_ADDR,
@@ -1032,6 +1208,8 @@ describe('app-tickets-inventory — cards + chart', () => {
     assert.equal(el.querySelectorAll('.ticket-entry-card').length, 0,
       'the rolled trait cannot leak before its pack is consumed');
     assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^0 tickets/);
+    assert.equal(el.querySelector('[data-bind="inv-level-tab-count"]').textContent, '0',
+      'the raw quarter entry stays out of the level tile while its pack is unopened');
 
     await packWatchMod.completePackReveal({
       address: TEST_ADDR,
@@ -1049,6 +1227,7 @@ describe('app-tickets-inventory — cards + chart', () => {
 
     assert.equal(el.querySelectorAll('.ticket-entry-card').length, 1);
     assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^0\.25 tickets/);
+    assert.equal(el.querySelector('[data-bind="inv-level-tab-count"]').textContent, '0.25');
     el.disconnectedCallback();
   });
 
@@ -1161,7 +1340,7 @@ describe('app-tickets-inventory — combined mode (account-switcher)', () => {
     assert.deepEqual(levels, ['L17', 'L18'], 'sorted by level ascending');
     assert.deepEqual(
       rows.map((r) => r.querySelector('.inv-combined-level').getAttribute('data-ticket-level-tone')),
-      ['white', 'green'],
+      ['white', 'blue'],
       'combined ticket levels use the same purchase-level-relative threat ladder',
     );
     const owners = rows.map((r) => r.querySelector('.inv-combined-owner').textContent);

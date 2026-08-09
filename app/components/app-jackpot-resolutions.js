@@ -26,8 +26,8 @@ import {
   summarizeBafAwards,
 } from '../app/jackpot-resolutions.js';
 import { clearPendingActions, publishPendingActions } from '../app/pending-actions.js';
-import { queueReveal } from './reveal-overlay.js';
 import { openDecimatorDraw } from './app-decimator-draw-overlay.js';
+import { openBafResolution } from './app-baf-resolution-overlay.js';
 
 const PENDING_SOURCE = 'jackpot-resolutions';
 const POLL_MS = 15_000;
@@ -55,13 +55,6 @@ function _formatEth(value) {
 
 function _formatToken(value, digits = 0) {
   try { return _trimFixed(displayToken(_big(value), digits)); } catch (_e) { return '0'; }
-}
-
-function _formatRank(rank, total) {
-  const r = Number(rank);
-  const t = Number(total);
-  if (!Number.isInteger(r) || r <= 0) return 'UNRANKED';
-  return Number.isInteger(t) && t > 0 ? `#${r} / ${t}` : `#${r}`;
 }
 
 export function decimatorResolutionView({ outcome, claimState, currentLevel, level } = {}) {
@@ -475,35 +468,19 @@ class AppJackpotResolutions extends HTMLElement {
     return true;
   }
 
-  #queueBaf(level) {
-    const awards = summarizeBafAwards(this.#history, level);
-    const score = _big(this.#baf?.score);
-    const skipped = this.#baf?.roundStatus === 'skipped';
-    const won = awards.eth > 0n || awards.tickets > 0n;
-    const cards = [{
-      type: 'baf-final', outcome: skipped ? 'skipped' : (won ? 'win' : 'loss'),
-      rarity: won ? 'epic' : 'common', glyph: 'BAF',
-      label: skipped ? 'BAF DRAW SKIPPED' : 'FINAL BAF RANK',
-      value: skipped ? 'CONSOLATION ROUND' : _formatRank(this.#baf?.rank, this.#baf?.totalParticipants),
-      sub: `${_formatToken(score)} FLIP score${skipped ? ' frozen for consolation' : ''}`,
-    }];
-    if (won) {
-      const pieces = [];
-      if (awards.eth > 0n) pieces.push(`${_formatEth(awards.eth)} ETH`);
-      if (awards.tickets > 0n) pieces.push(`${awards.tickets} TICKET${awards.tickets === 1n ? '' : 'S'}`);
-      cards.push({
-        type: 'baf-prize', outcome: 'win', rarity: 'epic', glyph: '★',
-        label: 'YOUR BAF PAYOUT', value: pieces.join(' + '), sub: 'Paid automatically at transition',
-      });
-    } else if (skipped && _big(this.#bafConsolation) > 0n) {
-      cards.push({
-        type: 'baf-consolation', outcome: 'win', rarity: 'rare', glyph: 'W',
-        label: 'WWXRP CONSOLATION', value: `${_formatToken(this.#bafConsolation, 4)} WWXRP`,
-        sub: 'Credited by the consolation claim',
-      });
-    }
-    queueReveal({ kind: 'resolution', title: `LEVEL ${level} BAF FINAL`, big: won, cards });
+  async #queueBaf(level, consolation = this.#bafConsolation) {
+    const opened = await openBafResolution({
+      level,
+      player: this.#address,
+      consolation: _big(consolation),
+      // Reuse the watcher data that made the notification actionable. This
+      // keeps a slow duplicate player/history request from holding the final.
+      playerOutcome: this.#baf,
+      history: { wins: this.#history },
+    });
+    if (!opened) return false;
     _markSeen('baf', this.#address, level);
+    return true;
   }
 
   async #runDecimator(level, { resolve, show }) {
@@ -527,12 +504,13 @@ class AppJackpotResolutions extends HTMLElement {
     if (this.#busy) return;
     this.#busy = 'baf';
     this.#publish();
+    const revealConsolation = this.#bafConsolation;
     try {
       if (resolve) {
         await claimBafConsolation({ player: this.#address, level });
         this.#bafConsolation = 0n;
       }
-      if (show) this.#queueBaf(level);
+      if (show) await this.#queueBaf(level, revealConsolation);
     } finally {
       this.#busy = null;
       this.#publish();

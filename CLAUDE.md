@@ -1,5 +1,11 @@
 # Degenerus Protocol — Website & Papers Repo
 
+## Verification Rules
+
+### Verify Before Asserting
+
+Never explain contract/sim behavior from memory or inference. Trace the actual code path (contract source → event → indexer → UI) and cite file:line before stating a causal explanation. If you cannot trace it, say "I need to trace this" rather than proposing a theory.
+
 ## Economics Reference
 
 **CRITICAL: The ONLY source of truth for Degenerus contract code and economics is `/home/zak/Dev/PurgeGame/degenerus-audit/contracts/`. NEVER read contracts from `degenerus-contracts/` or `testing/contracts/` as they are stale and will give you wrong numbers.**

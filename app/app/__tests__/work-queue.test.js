@@ -72,9 +72,26 @@ describe('source gates', () => {
 
   test('pins the deployed selector and keeper-tested gas ceiling', () => {
     assert.equal(mineFlipTesting.NO_WORK_SELECTOR, '0x5c78c46f');
+    assert.equal(mineFlipTesting.MINE_FLIP_MIN_GAS_LIMIT, 10_000_000n);
     assert.equal(mineFlipTesting.MINE_FLIP_MAX_GAS_LIMIT, 16_000_000n);
     assert.match(mineFlipSource, /gasEstimateWithHeadroom\(estimate\)/);
     assert.match(mineFlipSource, /balance\s*>=\s*requiredWei/);
+    assert.match(mineFlipSource, /contract\.mineFlip\(\{ gasLimit \}\)/,
+      'every sent Mine FLIP transaction carries the shared gas floor');
+  });
+
+  test('the affordability quote and send path share a 10m minimum gas budget', async () => {
+    const mine = Object.assign(async () => {}, { estimateGas: async () => 125_000n });
+    const budget = await mineFlipTesting.mineFlipGasBudget(
+      { mineFlip: mine, connect() { return this; } },
+      { getAddress: async () => '0xab12000000000000000000000000000000000000' },
+      {
+        getBalance: async () => 10n ** 18n,
+        getFeeData: async () => ({ maxFeePerGas: 1_000_000_000n }),
+      },
+    );
+    assert.equal(budget.gasLimit, 10_000_000n);
+    assert.equal(budget.requiredWei, 10_000_000n * 1_000_000_000n);
   });
 
   test('uses only the deployed mineFlip entrypoint and closure-form sendTx', () => {

@@ -55,6 +55,19 @@ const COINFLIP_ABI = [
   'function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stop, uint256 carry, uint24 startDay)',
   'function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external',
   'function setCoinflipAutoRebuyTakeProfit(address player, uint256 takeProfit) external',
+  // Audit 0a1dc11f6 retired the bounty ladder and unified the four all-time records
+  // onto ONE shared FLIP pool. Both surfaces are declared: the app must keep working
+  // against a deployment on either side of that change, and every call site guards
+  // individually rather than inside one Promise.all (see readBiggestFlipRecord).
+  'function recordPool() external view returns (uint128)',
+  'function biggestFlipEver() external view returns (uint128)',
+  'function biggestSpinEver() external view returns (uint128)',
+  'function biggestLuckboxEver() external view returns (uint128)',
+  'function biggestBuyEver() external view returns (uint128)',
+  // RETIRED in 0a1dc11f6 — kept so an older live deployment still reads.
+  'function currentBounty() external view returns (uint128)',
+  'function bountyOwedTo() external view returns (address)',
+  'function bountyLocked() external view returns (bool)',
   // Packed three-state result: 0 unresolved, 1 resolved loss, 50..156 win.
   'function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win)',
   // Coinflip.sol:46 — CoinflipDeposit emitted on every deposit (CF-05).
@@ -62,7 +75,11 @@ const COINFLIP_ABI = [
   // Exact-day cumulative STORED credit. Auto-rebuy carry is added lazily while
   // resolving and therefore never appears in newTotal.
   'event CoinflipStakeUpdated(address indexed player, uint24 indexed day, uint256 amount, uint256 newTotal)',
-  'event CoinflipDayResolved(uint24 indexed day, bool win, uint16 rewardPercent, uint128 bountyAfter, uint128 bountyPaid, address bountyRecipient)',
+  // kind: 0 FLIP, 1 SPIN, 2 LUCKBOX, 3 BUY. `paid == 0` is a bare ratchet, not a claim.
+  'event BigRecordUpdated(uint8 indexed kind, address indexed player, uint256 value, uint128 paid, uint256 sdgnrsPaid)',
+  'event CoinflipDayResolved(uint24 indexed day, bool win, uint16 rewardPercent, uint128 recordPoolAfter)',
+  // RETIRED — kept so a queryFilter walk over pre-#34 blocks still decodes.
+  'event BiggestFlipUpdated(address indexed player, uint256 recordAmount)',
   'event CoinflipClaimState(address indexed player, uint128 claimableStored, uint128 autoRebuyCarry, uint24 lastClaim)',
   'event CoinflipAutoRebuyToggled(address indexed player, bool enabled)',
   'event CoinflipAutoRebuyStopSet(address indexed player, uint256 stopAmount)',
@@ -115,6 +132,11 @@ const GAME_DAY_READ_ABI = ['function currentDayView() external view returns (uin
 const GAME_BAF_EVE_READ_ABI = [
   'function purchaseInfo() external view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei)',
 ];
+const GAME_FLIP_BONUS_READ_ABI = [
+  ...GAME_BAF_EVE_READ_ABI,
+  'function jackpotCompressionTier() external view returns (uint8)',
+  'function growthState(uint24 round) external view returns (uint256 ratchetPrev, uint256 ratchetRound, uint256 ratchetNext, uint24 currentLevel, bool bettingOpen, uint8 phaseDay)',
+];
 const ERC20_BALANCE_ABI = ['function balanceOf(address owner) external view returns (uint256)'];
 
 let _currentStakeReader = null;
@@ -126,6 +148,8 @@ let _latestResultReader = null;
 let _widgetBalancesReader = null;
 let _reverseFlipQuoteReader = null;
 let _bafFlipEveReader = null;
+let _upcomingFlipBonusReader = null;
+let _biggestFlipReader = null;
 let _stakeReadContractFactory = null;
 // null = unprobed; true = deploy has rngNudgeQuote() (run23+ signature);
 // false = legacy deploy (storage-slot quote + no-arg reverseFlip). Probed once
@@ -140,32 +164,40 @@ const _resolvedStakeInflight = new Map();
 const _claimableInflight = new Map();
 const _backingInflight = new Map();
 const _widgetBalancesInflight = new Map();
+const _displaySnapshotInflight = new Map();
 let _latestResultInflight = null;
 let _reverseFlipQuoteInflight = null;
 let _bafFlipEveInflight = null;
+let _upcomingFlipBonusInflight = null;
+let _biggestFlipInflight = null;
+let _biggestFlipLocator = null;
 const LOG_CHUNK_BLOCKS = 1_800;
 // v1 persisted only CoinflipStakeUpdated.newTotal and therefore permanently
 // under-reported any day resolved with auto-rebuy carry (most visibly sDGNRS).
 // v2 used the most recent emitted carry, which is stale when an ordinary
 // player lets auto-rebuy roll through more than one unclaimed day.
 const RESOLVED_STAKE_STORAGE_PREFIX = 'coinflip_resolved_stake_v3';
+const BIGGEST_FLIP_LOCATOR_STORAGE_PREFIX = 'coinflip_biggest_record_v1';
 
 /** Test-only: replace the live current-day stake read. */
 export function __setCurrentStakeReaderForTest(fn) {
   _currentStakeReader = typeof fn === 'function' ? fn : null;
   _currentStakeInflight.clear();
+  _displaySnapshotInflight.clear();
 }
 
 /** Test-only: replace the player's live auto-rebuy settings read. */
 export function __setAutoRebuyInfoReaderForTest(fn) {
   _autoRebuyInfoReader = typeof fn === 'function' ? fn : null;
   _autoRebuyInfoInflight.clear();
+  _displaySnapshotInflight.clear();
 }
 
 /** Test-only: replace the read contract used by live/historical stake reads. */
 export function __setStakeReadContractFactoryForTest(fn) {
   _stakeReadContractFactory = typeof fn === 'function' ? fn : null;
   _currentStakeInflight.clear();
+  _displaySnapshotInflight.clear();
   _resolvedStakeCache.clear();
   _resolvedStakeInflight.clear();
 }
@@ -181,12 +213,14 @@ export function __setResolvedStakeReaderForTest(fn) {
 export function __setClaimableReaderForTest(fn) {
   _claimableReader = typeof fn === 'function' ? fn : null;
   _claimableInflight.clear();
+  _displaySnapshotInflight.clear();
 }
 
 /** Test-only: replace the carry-inclusive coinflip backing read. */
 export function __setBackingReaderForTest(fn) {
   _backingReader = typeof fn === 'function' ? fn : null;
   _backingInflight.clear();
+  _displaySnapshotInflight.clear();
 }
 
 /** Test-only: replace the live current-day/result pair read. */
@@ -199,6 +233,7 @@ export function __setLatestResultReaderForTest(fn) {
 export function __setWidgetBalancesReaderForTest(fn) {
   _widgetBalancesReader = typeof fn === 'function' ? fn : null;
   _widgetBalancesInflight.clear();
+  _displaySnapshotInflight.clear();
 }
 
 /** Test-only: replace the live reverseFlip storage/lock read. */
@@ -214,10 +249,24 @@ export function __setBafFlipEveReaderForTest(fn) {
   _bafFlipEveInflight = null;
 }
 
+/** Test-only: replace the GAME reads used by the upcoming bonus-flip badge. */
+export function __setUpcomingFlipBonusReaderForTest(fn) {
+  _upcomingFlipBonusReader = typeof fn === 'function' ? fn : null;
+  _upcomingFlipBonusInflight = null;
+}
+
+/** Test-only: replace the chain-global Biggest Flip / bounty read. */
+export function __setBiggestFlipReaderForTest(fn) {
+  _biggestFlipReader = typeof fn === 'function' ? fn : null;
+  _biggestFlipInflight = null;
+  _biggestFlipLocator = null;
+}
+
 /** Test-only: restore the production current-day stake reader. */
 export function __resetCurrentStakeReaderForTest() {
   _currentStakeReader = null;
   _currentStakeInflight.clear();
+  _displaySnapshotInflight.clear();
   _publicReadProvider = null;
 }
 
@@ -225,6 +274,7 @@ export function __resetCurrentStakeReaderForTest() {
 export function __resetAutoRebuyInfoReaderForTest() {
   _autoRebuyInfoReader = null;
   _autoRebuyInfoInflight.clear();
+  _displaySnapshotInflight.clear();
   _publicReadProvider = null;
 }
 
@@ -233,6 +283,7 @@ export function __resetStakeReadContractFactoryForTest() {
   _stakeReadContractFactory = null;
   _currentStakeInflight.clear();
   _autoRebuyInfoInflight.clear();
+  _displaySnapshotInflight.clear();
   _resolvedStakeCache.clear();
   _resolvedStakeInflight.clear();
 }
@@ -249,6 +300,7 @@ export function __resetResolvedStakeReaderForTest() {
 export function __resetClaimableReaderForTest() {
   _claimableReader = null;
   _claimableInflight.clear();
+  _displaySnapshotInflight.clear();
   _publicReadProvider = null;
 }
 
@@ -256,6 +308,7 @@ export function __resetClaimableReaderForTest() {
 export function __resetBackingReaderForTest() {
   _backingReader = null;
   _backingInflight.clear();
+  _displaySnapshotInflight.clear();
   _publicReadProvider = null;
 }
 
@@ -270,6 +323,7 @@ export function __resetLatestResultReaderForTest() {
 export function __resetWidgetBalancesReaderForTest() {
   _widgetBalancesReader = null;
   _widgetBalancesInflight.clear();
+  _displaySnapshotInflight.clear();
   _publicReadProvider = null;
 }
 
@@ -285,6 +339,21 @@ export function __resetReverseFlipQuoteReaderForTest() {
 export function __resetBafFlipEveReaderForTest() {
   _bafFlipEveReader = null;
   _bafFlipEveInflight = null;
+  _publicReadProvider = null;
+}
+
+/** Test-only: restore the production upcoming bonus-flip state reader. */
+export function __resetUpcomingFlipBonusReaderForTest() {
+  _upcomingFlipBonusReader = null;
+  _upcomingFlipBonusInflight = null;
+  _publicReadProvider = null;
+}
+
+/** Test-only: restore the production Biggest Flip / bounty read. */
+export function __resetBiggestFlipReaderForTest() {
+  _biggestFlipReader = null;
+  _biggestFlipInflight = null;
+  _biggestFlipLocator = null;
   _publicReadProvider = null;
 }
 
@@ -310,40 +379,44 @@ function _stakeReadContract(provider) {
     : new ethers.Contract(CONTRACTS.COINFLIP, COINFLIP_ABI, provider);
 }
 
-/**
- * Convert GAME.purchaseInfo() into the one pre-draw state worth celebrating.
- *
- * BAF resolves while the game advances into levels 10, 20, 30, ... . The
- * public final-purchase latch is true for the full deposit window immediately
- * before that advance. Once RNG locks, the deciding day is already underway,
- * so it is no longer "tomorrow" and this notice deliberately retires.
- */
-export function bafFlipEveFromPurchaseInfo(raw) {
+/** Exact final-purchase BAF window, retained while the deciding RNG is locked. */
+export function bafFinalPurchaseDayFromPurchaseInfo(raw) {
   if (!raw) return null;
   const currentLevel = Number(raw?.lvl ?? raw?.currentLevel ?? raw?.[0]);
   const inJackpotPhase = Boolean(raw?.inJackpotPhase ?? raw?.[1]);
   const lastPurchaseDay = Boolean(raw?.lastPurchaseDay_ ?? raw?.lastPurchaseDay ?? raw?.[2]);
   const rngLocked = Boolean(raw?.rngLocked_ ?? raw?.rngLocked ?? raw?.[3]);
   if (!Number.isInteger(currentLevel) || currentLevel < 0) return null;
-  if (inJackpotPhase || !lastPurchaseDay || rngLocked) return null;
-  const targetLevel = currentLevel + 1;
+  if (inJackpotPhase || !lastPurchaseDay) return null;
+  // The transition request pre-promotes `level` before exposing the lock.
+  const targetLevel = currentLevel + (rngLocked ? 0 : 1);
   if (targetLevel <= 0 || targetLevel % 10 !== 0) return null;
-  return { currentLevel, targetLevel };
+  return { currentLevel, targetLevel, rngLocked };
 }
 
-/** Read whether tomorrow's daily FLIP is the x10 BAF-triggering flip. */
-export async function readBafFlipEve() {
+/**
+ * Convert GAME.purchaseInfo() into the one pre-draw state worth celebrating.
+ * Once RNG locks, the deciding flip is underway rather than upcoming, so the
+ * tomorrow treatment deliberately retires even though the BAF rail stays live.
+ */
+export function bafFlipEveFromPurchaseInfo(raw) {
+  const finalDay = bafFinalPurchaseDayFromPurchaseInfo(raw);
+  return finalDay && !finalDay.rngLocked
+    ? { currentLevel: finalDay.currentLevel, targetLevel: finalDay.targetLevel }
+    : null;
+}
+
+async function _readBafPurchaseInfo() {
   if (_bafFlipEveInflight) return _bafFlipEveInflight;
   const request = (async () => {
     try {
-      const raw = _bafFlipEveReader
+      return _bafFlipEveReader
         ? await _bafFlipEveReader()
         : await new ethers.Contract(
           CONTRACTS.GAME,
           GAME_BAF_EVE_READ_ABI,
           _readerProvider(),
         ).purchaseInfo();
-      return bafFlipEveFromPurchaseInfo(raw);
     } catch (_e) {
       return null;
     }
@@ -353,6 +426,78 @@ export async function readBafFlipEve() {
     return await request;
   } finally {
     if (_bafFlipEveInflight === request) _bafFlipEveInflight = null;
+  }
+}
+
+/** Read whether tomorrow's daily FLIP is the x10 BAF-triggering flip. */
+export async function readBafFlipEve() {
+  return bafFlipEveFromPurchaseInfo(await _readBafPurchaseInfo());
+}
+
+/** Read the full x9 final-purchase state, including the locked decision beat. */
+export async function readBafFinalPurchaseDay() {
+  return bafFinalPurchaseDayFromPurchaseInfo(await _readBafPurchaseInfo());
+}
+
+/** Mirror AdvanceModule's exact bonus-day predicate for the next unlocked FLIP. */
+export function upcomingFlipBonusFromGameReads(raw) {
+  const purchase = raw?.purchaseInfo ?? raw?.purchase ?? raw?.[0];
+  const growth = raw?.growthState ?? raw?.growth ?? raw?.[2];
+  const level = Number(purchase?.lvl ?? purchase?.currentLevel ?? purchase?.[0]
+    ?? growth?.currentLevel ?? growth?.[3]);
+  const inJackpot = Boolean(purchase?.inJackpotPhase ?? purchase?.[1]);
+  const lastPurchase = Boolean(purchase?.lastPurchaseDay_ ?? purchase?.lastPurchaseDay ?? purchase?.[2]);
+  const locked = Boolean(purchase?.rngLocked_ ?? purchase?.rngLocked ?? purchase?.[3]);
+  const compression = Number(raw?.compressionTier ?? raw?.jackpotCompressionTier ?? raw?.[1]);
+  const phaseDay = Number(growth?.phaseDay ?? growth?.[5]);
+  if (!Number.isInteger(level) || level < 0 || !Number.isInteger(compression)
+    || !Number.isInteger(phaseDay) || locked) return null;
+  const jackpotBonus = inJackpot && phaseDay === 1;
+  const levelZeroBonus = level === 0;
+  const postTurboBonus = !inJackpot
+    && (compression === 3 || (!lastPurchase && compression === 2));
+  if (!jackpotBonus && !levelZeroBonus && !postTurboBonus) return null;
+  const points = level !== 0 && level % 10 === 0 ? 6 : 2;
+  return {
+    level,
+    points,
+    kind: points === 6 ? 'x0' : 'standard',
+    reason: jackpotBonus ? 'jackpot' : levelZeroBonus ? 'level-zero' : 'post-turbo',
+  };
+}
+
+/** Chain-global preview for the bonus attached to the next daily FLIP. */
+export async function readUpcomingFlipBonus() {
+  if (_upcomingFlipBonusInflight) return _upcomingFlipBonusInflight;
+  const request = (async () => {
+    try {
+      let raw;
+      if (_upcomingFlipBonusReader) {
+        raw = await _upcomingFlipBonusReader();
+      } else {
+        const provider = _readerProvider();
+        if (!provider || !CONTRACTS.GAME) return null;
+        const game = new ethers.Contract(CONTRACTS.GAME, GAME_FLIP_BONUS_READ_ABI, provider);
+        let blockTag = null;
+        try { blockTag = await provider.getBlockNumber(); } catch (_e) { /* latest is acceptable */ }
+        const overrides = blockTag == null ? [] : [{ blockTag }];
+        const [purchaseInfo, compressionTier, growthState] = await Promise.all([
+          game.purchaseInfo(...overrides),
+          game.jackpotCompressionTier(...overrides),
+          game.growthState(0, ...overrides),
+        ]);
+        raw = { purchaseInfo, compressionTier, growthState };
+      }
+      return upcomingFlipBonusFromGameReads(raw);
+    } catch (_e) {
+      return null;
+    }
+  })();
+  _upcomingFlipBonusInflight = request;
+  try {
+    return await request;
+  } finally {
+    if (_upcomingFlipBonusInflight === request) _upcomingFlipBonusInflight = null;
   }
 }
 
@@ -440,6 +585,43 @@ export function protocolFlipTotalWei(walletWei, backingWei = 0n) {
   }
 }
 
+/**
+ * Carry left after replaying every resolved auto-rebuy day.
+ *
+ * `coinflipAutoRebuyInfo().carry` is storage, not a live projection. Until a
+ * write settles the account it can still describe the carry that ENTERED the
+ * latest result. The two preview views replay that result and deliberately
+ * differ by exactly the carry that remains, so prefer `backing - claimable`
+ * whenever both values came from the same snapshot.
+ */
+export function effectiveAutoRebuyCarryWei({
+  claimableWei = null,
+  backingWei = null,
+  autoRebuyInfo = null,
+} = {}) {
+  try {
+    if (claimableWei != null && backingWei != null) {
+      const claimable = BigInt(claimableWei);
+      const backing = BigInt(backingWei);
+      return backing > claimable ? backing - claimable : 0n;
+    }
+  } catch (_e) { /* fall through to the stored compatibility value */ }
+
+  const enabled = Boolean(autoRebuyInfo?.enabled ?? autoRebuyInfo?.[0]);
+  if (!enabled) return 0n;
+  try {
+    return BigInt(
+      autoRebuyInfo?.effectiveCarryWei
+      ?? autoRebuyInfo?.carryWei
+      ?? autoRebuyInfo?.carry
+      ?? autoRebuyInfo?.[2]
+      ?? 0,
+    );
+  } catch (_e) {
+    return 0n;
+  }
+}
+
 /** Direct, same-deployment balances rendered inside the FLIP widget. */
 export async function readFlipWidgetBalances({ player } = {}) {
   const target = player || getActingAddress();
@@ -501,12 +683,7 @@ export function effectiveCoinflipStake(storedStake, autoRebuyInfo = null) {
   catch (_e) { return 0n; }
   const enabled = Boolean(autoRebuyInfo?.enabled ?? autoRebuyInfo?.[0]);
   if (!enabled) return stored;
-  try {
-    const carry = BigInt(autoRebuyInfo?.carry ?? autoRebuyInfo?.[2] ?? 0);
-    return stored + carry;
-  } catch (_e) {
-    return stored;
-  }
+  return stored + effectiveAutoRebuyCarryWei({ autoRebuyInfo });
 }
 
 /**
@@ -728,8 +905,11 @@ export async function readCoinflipAutoRebuyInfo({ player } = {}) {
  * resolved day's stake is intentionally retained in that history, so after a
  * resolution it cannot reliably answer "what is my bet now?" The contract's
  * `coinflipAmount(player)` view is explicitly scoped to the current target day,
- * but contains only stored credits. When auto-rebuy is enabled, its carry is
- * folded into that stake lazily at resolution and must be added here.
+ * but contains only stored credits. Auto-rebuy carry is settled lazily, so the
+ * raw settings tuple can still contain yesterday's carry after today's result
+ * exists. Replay the two preview views at the same block and derive the live
+ * carry from `backing - claimable`; use the raw tuple only as a compatibility
+ * fallback when those views are unavailable.
  *
  * @param {{player?: string}} [args]
  * @returns {Promise<bigint|null>} null when the read is unavailable
@@ -757,13 +937,32 @@ export async function readCurrentCoinflipStake({ player } = {}) {
         try { readOverrides = [{ blockTag: await provider.getBlockNumber() }]; }
         catch (_e) { /* an unpinned best-effort read is still useful */ }
       }
-      const [storedResult, rebuyResult] = await Promise.allSettled([
+      const canReplayCarry = typeof coinflip.previewClaimCoinflips === 'function'
+        && typeof coinflip.previewSalvageFlipBacking === 'function';
+      const [storedResult, rebuyResult, claimableResult, backingResult] = await Promise.allSettled([
         coinflip.coinflipAmount(target, ...readOverrides),
         coinflip.coinflipAutoRebuyInfo(target, ...readOverrides),
+        canReplayCarry
+          ? coinflip.previewClaimCoinflips(target, ...readOverrides)
+          : Promise.reject(new Error('Carry preview unavailable')),
+        canReplayCarry
+          ? coinflip.previewSalvageFlipBacking(target, ...readOverrides)
+          : Promise.reject(new Error('Backing preview unavailable')),
       ]);
       if (storedResult.status !== 'fulfilled') return null;
+      const stored = BigInt(storedResult.value);
+      const claimable = _fulfilledBigInt(claimableResult);
+      const backing = _fulfilledBigInt(backingResult);
+      if (claimable != null && backing != null) {
+        const replayedCarry = effectiveAutoRebuyCarryWei({
+          claimableWei: claimable,
+          backingWei: backing,
+          autoRebuyInfo: rebuyResult.status === 'fulfilled' ? rebuyResult.value : null,
+        });
+        return stored + replayedCarry;
+      }
       return effectiveCoinflipStake(
-        storedResult.value,
+        stored,
         rebuyResult.status === 'fulfilled' ? rebuyResult.value : null,
       );
     } catch (_e) {
@@ -817,6 +1016,188 @@ export async function readClaimableCoinflip({ player } = {}) {
   }
 }
 
+function _biggestFlipLocatorStorageKey() {
+  return `${BIGGEST_FLIP_LOCATOR_STORAGE_PREFIX}:${CHAIN.id}:${String(CONTRACTS.COINFLIP || '').toLowerCase()}`;
+}
+
+function _loadBiggestFlipLocator() {
+  if (_biggestFlipLocator) return _biggestFlipLocator;
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = JSON.parse(localStorage.getItem(_biggestFlipLocatorStorageKey()) || 'null');
+    const recordWei = BigInt(raw?.recordWei ?? -1);
+    const day = Number(raw?.day);
+    const blockNumber = Number(raw?.blockNumber);
+    const result = raw?.result === 'win' || raw?.result === 'loss' ? raw.result : null;
+    if (recordWei < 0n || !Number.isInteger(day) || day < 0
+      || !Number.isInteger(blockNumber) || blockNumber < 0) return null;
+    _biggestFlipLocator = {
+      recordWei,
+      day,
+      blockNumber,
+      player: String(raw?.player || '').toLowerCase() || null,
+      result,
+    };
+    return _biggestFlipLocator;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function _storeBiggestFlipLocator(locator) {
+  _biggestFlipLocator = locator;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(_biggestFlipLocatorStorageKey(), JSON.stringify({
+        ...locator,
+        recordWei: String(locator.recordWei),
+      }));
+    }
+  } catch (_e) { /* private browsing / quota */ }
+}
+
+function _eventArg(log, name, index) {
+  return log?.args?.[name] ?? log?.args?.[index];
+}
+
+/** Locate the record-setting stake once, then retain its immutable target day. */
+async function _resolveBiggestFlipLocator(contract, provider, recordWei) {
+  const cached = _loadBiggestFlipLocator();
+  if (cached?.recordWei === recordWei) return cached;
+  if (recordWei <= 0n || typeof contract?.queryFilter !== 'function') return null;
+  const recordFilter = contract.filters?.BiggestFlipUpdated?.();
+  if (!recordFilter) return null;
+
+  const head = Number(await provider.getBlockNumber());
+  const deployBlock = Math.max(0, Number(CHAIN.deployBlock || 0));
+  const lowerBlock = cached?.blockNumber >= deployBlock ? cached.blockNumber : deployBlock;
+  let recordLog = await _latestLog(contract, recordFilter, lowerBlock, head);
+  if (recordLog && BigInt(_eventArg(recordLog, 'recordAmount', 1) ?? 0) !== recordWei
+    && lowerBlock > deployBlock) {
+    recordLog = await _latestLog(contract, recordFilter, deployBlock, head);
+  }
+  if (!recordLog || BigInt(_eventArg(recordLog, 'recordAmount', 1) ?? 0) !== recordWei) return null;
+
+  const player = String(_eventArg(recordLog, 'player', 0) || '').toLowerCase();
+  const blockNumber = Number(recordLog.blockNumber);
+  const stakeFilter = contract.filters?.CoinflipStakeUpdated?.(player || null, null);
+  if (!stakeFilter || !Number.isInteger(blockNumber)) return null;
+  const recordTx = String(recordLog.transactionHash || '').toLowerCase();
+  const recordIndex = _logIndex(recordLog);
+  const stakes = await contract.queryFilter(stakeFilter, blockNumber, blockNumber);
+  const matching = stakes.filter((log) => {
+    const tx = String(log?.transactionHash || '').toLowerCase();
+    if (recordTx && tx && tx !== recordTx) return false;
+    const index = _logIndex(log);
+    return recordIndex < 0 || index < 0 || index < recordIndex;
+  });
+  const stakeLog = matching.at(-1) || null;
+  const day = Number(_eventArg(stakeLog, 'day', 1));
+  if (!Number.isInteger(day) || day < 0) return null;
+
+  const locator = { recordWei, day, blockNumber, player: player || null, result: null };
+  _storeBiggestFlipLocator(locator);
+  return locator;
+}
+
+async function _resolveBiggestFlipResult(contract, locator) {
+  if (!locator) return null;
+  if (locator.result === 'win' || locator.result === 'loss') return locator.result;
+  const raw = await contract.getCoinflipDayResult(locator.day);
+  const rewardPercent = Number(raw?.rewardPercent ?? raw?.[0] ?? 0);
+  if (!Number.isFinite(rewardPercent) || rewardPercent <= 0) return null;
+  const result = Boolean(raw?.win ?? raw?.[1]) ? 'win' : 'loss';
+  _storeBiggestFlipLocator({ ...locator, result });
+  return result;
+}
+
+/**
+ * Price the deposit needed to take the bounty right now, and the one that also
+ * locks it. Both thresholds use the standing record, including when a larger
+ * losing flip was what most recently ratcheted that record.
+ */
+function _bountyBars(recordWei, armed, locked) {
+  if (recordWei === 0n) return { claimWei: 1n, lockWei: null };
+  if (locked) {
+    const override = recordWei * 2n;
+    return { claimWei: override, lockWei: override };
+  }
+  const onePercent = recordWei / 100n;
+  const claimWei = armed
+    ? recordWei + (onePercent === 0n ? 1n : onePercent)
+    : recordWei + 1n;
+  return { claimWei, lockWei: recordWei + recordWei / 10n };
+}
+
+/**
+ * Read the global Biggest Flip record, its resolved win/loss, and the live
+ * bounty. The record setter's target day is reconstructed from its immutable
+ * event pair once and cached; unresolved records remain neutral until that
+ * exact day's on-chain three-state result becomes nonzero.
+ *
+ * @returns {Promise<null|{recordWei: bigint, bountyWei: bigint, armedBy: string|null,
+ *                        locked: boolean, claimWei: bigint, lockWei: bigint|null,
+ *                        result: ('win'|'loss'|null), recordDay: number|null}>}
+ */
+export async function readBiggestFlipRecord({ resolveResult = true } = {}) {
+  if (_biggestFlipReader) return _biggestFlipReader({ resolveResult });
+  if (_biggestFlipInflight) return _biggestFlipInflight;
+  const request = (async () => {
+    try {
+      const provider = _readerProvider();
+      if (!provider || !CONTRACTS.COINFLIP) return null;
+      const coinflip = _stakeReadContract(provider);
+      // ⛔ EVERY GETTER IS READ INDEPENDENTLY, DELIBERATELY.
+      // These used to sit in one bare Promise.all, so a single missing getter rejected
+      // the whole thing and the outer catch returned null — blanking the entire panel
+      // rather than the one field that was gone. Audit 0a1dc11f6 then removed THREE of
+      // them at once (currentBounty / bountyOwedTo / bountyLocked, replaced by the
+      // shared recordPool), which would have silently emptied the record UI on run #34.
+      // Guarding per-call also keeps the app working against an older deployment.
+      const opt = (fn) => Promise.resolve().then(fn).catch(() => null);
+      const [record, pool, legacyBounty, owner, locked] = await Promise.all([
+        opt(() => coinflip.biggestFlipEver()),
+        opt(() => coinflip.recordPool()),      // 0a1dc11f6+ — the shared record pool
+        opt(() => coinflip.currentBounty()),   // pre-0a1dc11f6 — the retired per-day bounty
+        opt(() => coinflip.bountyOwedTo()),
+        opt(() => coinflip.bountyLocked()),
+      ]);
+      // The pool succeeds the bounty as "the FLIP a record claim pays from", so the
+      // panel's existing amount slot keeps meaning the same thing on both deployments.
+      const bounty = pool ?? legacyBounty;
+      const recordWei = BigInt(record ?? 0);
+      let locator = null;
+      let result = null;
+      if (resolveResult) {
+        try {
+          locator = await _resolveBiggestFlipLocator(coinflip, provider, recordWei);
+          result = await _resolveBiggestFlipResult(coinflip, locator);
+        } catch (_e) { /* amount + bounty remain useful if historical RPC reads fail */ }
+      }
+      const ownerText = String(owner || '').toLowerCase();
+      const armed = !/^0x0{40}$/.test(ownerText) && Boolean(ownerText);
+      const isLocked = Boolean(locked);
+      return {
+        recordWei,
+        bountyWei: BigInt(bounty ?? 0),
+        armedBy: armed ? ownerText : null,
+        locked: isLocked,
+        ..._bountyBars(recordWei, armed, isLocked),
+        result,
+        recordDay: locator?.day ?? null,
+      };
+    } catch (_e) {
+      return null;
+    }
+  })();
+  _biggestFlipInflight = request;
+  try {
+    return await request;
+  } finally {
+    if (_biggestFlipInflight === request) _biggestFlipInflight = null;
+  }
+}
+
 /**
  * Read all FLIP the player could withdraw from the coinflip position.
  *
@@ -854,6 +1235,180 @@ export async function readCoinflipBacking({ player } = {}) {
     return await request;
   } finally {
     if (_backingInflight.get(key) === request) _backingInflight.delete(key);
+  }
+}
+
+function _displaySnapshotUsesTestSeams() {
+  return Boolean(
+    _currentStakeReader
+    || _autoRebuyInfoReader
+    || _claimableReader
+    || _backingReader
+    || _widgetBalancesReader
+  );
+}
+
+function _snapshotValue(result) {
+  return result?.status === 'fulfilled' ? result.value : null;
+}
+
+function _decorateSnapshotAutoRebuyInfo(info, carryWei) {
+  if (!info) return null;
+  return {
+    ...info,
+    // Keep the raw storage value available for diagnostics. Every player-facing
+    // display consumes carryWei, which is the replayed/live value.
+    storedCarryWei: BigInt(info.carryWei ?? 0n),
+    carryWei: BigInt(carryWei ?? 0n),
+  };
+}
+
+/**
+ * One block-pinned source of truth for every live FLIP ledger display.
+ *
+ * Tomorrow's Bet, the auto-rebuy dialog, Protocol Coins, and the purchase-side
+ * FLIP balance must not mix a pre-resolution carry with a post-resolution
+ * claimable value (or one side of a just-confirmed claim with the other). This
+ * snapshot reads every leg at one block and exposes the replayed carry once.
+ *
+ * @param {{player?: string, blockTag?: number|string|bigint|null}} [args]
+ * @returns {Promise<null|{
+ *   blockTag:number|string|bigint|null,
+ *   balances:null|{flipBalance:bigint|null,wwxrpBalance:bigint|null,sdgnrsBalance:bigint|null},
+ *   currentStakeWei:bigint|null,
+ *   autoRebuyInfo:object|null,
+ *   claimableWei:bigint|null,
+ *   backingWei:bigint|null,
+ *   ledgerComplete:boolean
+ * }>}
+ */
+export async function readCoinflipDisplaySnapshot({ player, blockTag = null } = {}) {
+  const target = player || getActingAddress();
+  if (!target) return null;
+  const addressKey = `${CHAIN.id}:${String(target).toLowerCase()}`;
+  const requestKey = `${addressKey}:${blockTag == null ? 'head' : String(blockTag)}`;
+  if (_displaySnapshotInflight.has(requestKey)) {
+    return _displaySnapshotInflight.get(requestKey);
+  }
+
+  const request = (async () => {
+    try {
+      // Component tests replace the narrow readers individually. Compose those
+      // same seams here so tests exercise the production aggregation rules
+      // without falling through to a real RPC for any unmocked leg.
+      if (_displaySnapshotUsesTestSeams()) {
+        const [balancesResult, stakeResult, infoResult, claimableResult, backingResult]
+          = await Promise.allSettled([
+            _widgetBalancesReader
+              ? readFlipWidgetBalances({ player: target })
+              : Promise.resolve(null),
+            _currentStakeReader
+              ? readCurrentCoinflipStake({ player: target })
+              : Promise.resolve(null),
+            _autoRebuyInfoReader
+              ? readCoinflipAutoRebuyInfo({ player: target })
+              : Promise.resolve(null),
+            _claimableReader
+              ? readClaimableCoinflip({ player: target })
+              : Promise.resolve(null),
+            _backingReader
+              ? readCoinflipBacking({ player: target })
+              : Promise.resolve(null),
+          ]);
+        const balances = _snapshotValue(balancesResult);
+        const currentStake = _snapshotValue(stakeResult);
+        const rawInfo = _snapshotValue(infoResult);
+        const claimable = _snapshotValue(claimableResult);
+        const backing = _snapshotValue(backingResult);
+        const carry = effectiveAutoRebuyCarryWei({
+          claimableWei: claimable,
+          backingWei: backing,
+          autoRebuyInfo: rawInfo,
+        });
+        return {
+          blockTag,
+          balances,
+          currentStakeWei: currentStake == null ? null : BigInt(currentStake),
+          autoRebuyInfo: _decorateSnapshotAutoRebuyInfo(rawInfo, carry),
+          claimableWei: claimable == null ? null : BigInt(claimable),
+          backingWei: backing == null ? null : BigInt(backing),
+          ledgerComplete: balances?.flipBalance != null
+            && claimable != null
+            && backing != null,
+        };
+      }
+
+      const provider = _readerProvider();
+      if (!provider || !CONTRACTS.COINFLIP) return null;
+      let snapshotBlock = blockTag;
+      if (snapshotBlock == null && typeof provider.getBlockNumber === 'function') {
+        try { snapshotBlock = await provider.getBlockNumber(); }
+        catch (_e) { /* retain an unpinned best-effort snapshot */ }
+      }
+      const overrides = snapshotBlock == null ? [] : [{ blockTag: snapshotBlock }];
+      const coinflip = _stakeReadContract(provider);
+      const flip = new ethers.Contract(CONTRACTS.COIN, ERC20_BALANCE_ABI, provider);
+      const wwxrp = new ethers.Contract(CONTRACTS.WWXRP, ERC20_BALANCE_ABI, provider);
+      const sdgnrs = new ethers.Contract(CONTRACTS.SDGNRS, ERC20_BALANCE_ABI, provider);
+      const [
+        flipResult,
+        wwxrpResult,
+        sdgnrsResult,
+        storedResult,
+        infoResult,
+        claimableResult,
+        backingResult,
+      ] = await Promise.allSettled([
+        flip.balanceOf(target, ...overrides),
+        wwxrp.balanceOf(target, ...overrides),
+        sdgnrs.balanceOf(target, ...overrides),
+        coinflip.coinflipAmount(target, ...overrides),
+        coinflip.coinflipAutoRebuyInfo(target, ...overrides),
+        coinflip.previewClaimCoinflips(target, ...overrides),
+        coinflip.previewSalvageFlipBacking(target, ...overrides),
+      ]);
+      const balances = {
+        flipBalance: _fulfilledBigInt(flipResult),
+        wwxrpBalance: _fulfilledBigInt(wwxrpResult),
+        sdgnrsBalance: _fulfilledBigInt(sdgnrsResult),
+      };
+      const stored = _fulfilledBigInt(storedResult);
+      const rawInfo = infoResult.status === 'fulfilled'
+        ? normalizeCoinflipAutoRebuyInfo(infoResult.value)
+        : null;
+      const claimable = _fulfilledBigInt(claimableResult);
+      const backing = _fulfilledBigInt(backingResult);
+      const carry = effectiveAutoRebuyCarryWei({
+        claimableWei: claimable,
+        backingWei: backing,
+        autoRebuyInfo: rawInfo,
+      });
+      const hasBalances = Object.values(balances).some((value) => value != null);
+      const hasLedger = stored != null || rawInfo != null || claimable != null || backing != null;
+      if (!hasBalances && !hasLedger) return null;
+      return {
+        blockTag: snapshotBlock,
+        balances: hasBalances ? balances : null,
+        currentStakeWei: stored == null ? null : stored + carry,
+        autoRebuyInfo: _decorateSnapshotAutoRebuyInfo(rawInfo, carry),
+        claimableWei: claimable,
+        backingWei: backing,
+        ledgerComplete: balances.flipBalance != null
+          && claimable != null
+          && backing != null,
+      };
+    } catch (_e) {
+      return null;
+    }
+  })();
+
+  _displaySnapshotInflight.set(requestKey, request);
+  try {
+    return await request;
+  } finally {
+    if (_displaySnapshotInflight.get(requestKey) === request) {
+      _displaySnapshotInflight.delete(requestKey);
+    }
   }
 }
 

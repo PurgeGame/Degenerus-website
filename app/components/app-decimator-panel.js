@@ -25,8 +25,7 @@
 //          when ui.mode === 'view-others'.
 //
 // Class palette: .dec-* prefix (RESEARCH R10 verified non-colliding against
-// the then-existing prefixes: .app-/.chain-/.last-/.ldj-/.player-/.view-/
-// .wallet-. .clm- and .lbx- were retired with their panels 2026-08-08.)
+// existing 9 prefixes: .app-/.chain-/.clm-/.last-/.lbx-/.ldj-/.player-/.view-/.wallet-).
 
 import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
 import { displayEth } from '../app/scaling.js';
@@ -94,9 +93,7 @@ import {
 } from '../app/claims.js';
 import {
   protocolFlipTotalWei,
-  readCoinflipBacking,
-  readClaimableCoinflip,
-  readFlipWidgetBalances,
+  readCoinflipDisplaySnapshot,
 } from '../app/coinflip.js';
 import { formatFlip } from '../viewer/utils.js';
 import { queueReveal } from './reveal-overlay.js';
@@ -474,10 +471,6 @@ class AppDecimatorPanel extends HTMLElement {
   #coinflipClaimableWei = 0n; // Settled/mintable Coinflip FLIP.
   #coinflipClaimableAddress = null;
   #coinflipClaimableKnown = false;
-  // Indexed auto-rebuy carry: FLIP the player owns that claimable excludes.
-  // Only ever added to TOTALS — no single transaction can spend it.
-  #coinflipCarryWeiIndexed = 0n;
-  #coinflipCarryAddress = null;
   #coinflipBackingWei = 0n; // Claimable plus active auto-rebuy carry.
   #coinflipBackingAddress = null;
   #coinflipBackingKnown = false;
@@ -658,7 +651,8 @@ class AppDecimatorPanel extends HTMLElement {
           <span class="dec-input-group dec-input-group--tickets">
             <label class="dec-input-label" for="dec-tickets-input">
               <span data-bind="dec-ticket-action-label">Buy tickets</span>
-              <boon-product-indicator product="purchase"></boon-product-indicator>
+              <boon-product-indicator product="purchase"
+                                      variant="purchase-control"></boon-product-indicator>
             </label>
             <span class="dec-stepper">
               <span class="dec-quarter-stepper">
@@ -679,7 +673,8 @@ class AppDecimatorPanel extends HTMLElement {
           <span class="dec-input-group dec-input-group--lootbox" data-bind="dec-lootbox-group">
             <label class="dec-input-label" for="dec-lootbox-eth-input">
               <span>Buy luckbox</span>
-              <boon-product-indicator product="lootbox"></boon-product-indicator>
+              <boon-product-indicator product="lootbox"
+                                      variant="purchase-control"></boon-product-indicator>
             </label>
             <span class="dec-stepper">
               <input type="number" name="dec-lootbox-eth" id="dec-lootbox-eth-input"
@@ -1359,39 +1354,22 @@ class AppDecimatorPanel extends HTMLElement {
     } catch (_e) { return null; }
   }
 
-  /**
-   * Indexed auto-rebuy carry for the acting account, or 0n when it belongs to
-   * another address. TOTALS only: no deposit or burn reaches the carry, so it
-   * must never widen an action's spend cap.
-   */
-  #coinflipCarryWei() {
-    const acting = getActingAddress();
-    const actingLower = acting ? String(acting).toLowerCase() : null;
-    if (!actingLower || this.#coinflipCarryAddress !== actingLower) return 0n;
-    try { return BigInt(this.#coinflipCarryWeiIndexed); }
-    catch (_e) { return 0n; }
-  }
-
   async #refreshAllInFlipSources() {
     const acting = getActingAddress();
     const actingLower = acting ? String(acting).toLowerCase() : null;
     if (!actingLower) return;
-    const [balances, claimable, backing] = await Promise.allSettled([
-      readFlipWidgetBalances({ player: actingLower }),
-      readClaimableCoinflip({ player: actingLower }),
-      readCoinflipBacking({ player: actingLower }),
-    ]);
-    if (balances.status === 'fulfilled' && balances.value?.flipBalance != null) {
-      this.#flipBalanceWei = BigInt(balances.value.flipBalance);
+    const snapshot = await readCoinflipDisplaySnapshot({ player: actingLower });
+    if (snapshot?.balances?.flipBalance != null) {
+      this.#flipBalanceWei = BigInt(snapshot.balances.flipBalance);
       this.#flipBalanceAddress = actingLower;
     }
-    if (claimable.status === 'fulfilled' && claimable.value != null) {
-      this.#coinflipClaimableWei = BigInt(claimable.value);
+    if (snapshot?.claimableWei != null) {
+      this.#coinflipClaimableWei = BigInt(snapshot.claimableWei);
       this.#coinflipClaimableAddress = actingLower;
       this.#coinflipClaimableKnown = true;
     }
-    if (backing.status === 'fulfilled' && backing.value != null) {
-      this.#coinflipBackingWei = BigInt(backing.value);
+    if (snapshot?.backingWei != null) {
+      this.#coinflipBackingWei = BigInt(snapshot.backingWei);
       this.#coinflipBackingAddress = actingLower;
       this.#coinflipBackingKnown = true;
     }
@@ -1834,10 +1812,8 @@ class AppDecimatorPanel extends HTMLElement {
       gameResult,
       purchaseResult,
       playerResult,
-      flipBalancesResult,
+      flipLedgerResult,
       walletResult,
-      coinflipResult,
-      coinflipBackingResult,
       afkingFundingResult,
       afkingResult,
       presaleResult,
@@ -1848,10 +1824,10 @@ class AppDecimatorPanel extends HTMLElement {
       readGameState(),
       readPurchaseQuote(),
       actingLower ? fetchJSON(`/player/${actingLower}`) : Promise.resolve(null),
-      actingLower ? readFlipWidgetBalances({ player: actingLower }) : Promise.resolve(null),
+      actingLower
+        ? readCoinflipDisplaySnapshot({ player: actingLower })
+        : Promise.resolve(null),
       walletBalancePromise,
-      actingLower ? readClaimableCoinflip({ player: actingLower }) : Promise.resolve(null),
-      actingLower ? readCoinflipBacking({ player: actingLower }) : Promise.resolve(null),
       actingLower ? readAfkingFunding(actingLower) : Promise.resolve(null),
       actingLower ? readAfkingSubscription(actingLower) : Promise.resolve(null),
       actingLower ? readPresaleBoxState({ player: actingLower }) : Promise.resolve(null),
@@ -1892,12 +1868,6 @@ class AppDecimatorPanel extends HTMLElement {
         this.#coinflipClaimableAddress = actingLower;
         this.#coinflipClaimableKnown = false;
       }
-      try {
-        this.#coinflipCarryWeiIndexed = BigInt(playerResult.value.coinflip?.autoRebuyCarry ?? 0n);
-      } catch (_e) {
-        this.#coinflipCarryWeiIndexed = 0n;
-      }
-      this.#coinflipCarryAddress = actingLower;
       const affiliate = playerResult.value.affiliate;
       if (affiliate && Object.prototype.hasOwnProperty.call(affiliate, 'referrer')) {
         const referrer = String(affiliate.referrer || '').toLowerCase();
@@ -1911,30 +1881,28 @@ class AppDecimatorPanel extends HTMLElement {
       this.#claimableAddress = actingLower;
       this.#claimableKnown = false;
     }
-    // Use the same direct ERC-20 read as the right-side Protocol Coins ledger.
-    // The indexed player snapshot remains a fallback when the RPC is unavailable.
-    if (flipBalancesResult.status === 'fulfilled'
-      && flipBalancesResult.value?.flipBalance != null
-      && actingLower) {
+    // Adopt wallet, claimable, and carry-inclusive backing together. They were
+    // read at one block, so the left FLIP balance cannot show one side of a
+    // claim transaction while ALL IN prices against the other.
+    const flipLedger = flipLedgerResult.status === 'fulfilled'
+      ? flipLedgerResult.value
+      : null;
+    if (flipLedger?.balances?.flipBalance != null && actingLower) {
       try {
-        this.#flipBalanceWei = BigInt(flipBalancesResult.value.flipBalance);
+        this.#flipBalanceWei = BigInt(flipLedger.balances.flipBalance);
         this.#flipBalanceAddress = actingLower;
       } catch (_e) { /* retain the indexed fallback */ }
     }
-    if (coinflipResult.status === 'fulfilled' && coinflipResult.value != null && actingLower) {
+    if (flipLedger?.claimableWei != null && actingLower) {
       try {
-        this.#coinflipClaimableWei = BigInt(coinflipResult.value);
+        this.#coinflipClaimableWei = BigInt(flipLedger.claimableWei);
         this.#coinflipClaimableAddress = actingLower;
         this.#coinflipClaimableKnown = true;
       } catch (_e) { /* retain the indexed fallback */ }
     }
-    if (
-      coinflipBackingResult.status === 'fulfilled'
-      && coinflipBackingResult.value != null
-      && actingLower
-    ) {
+    if (flipLedger?.backingWei != null && actingLower) {
       try {
-        this.#coinflipBackingWei = BigInt(coinflipBackingResult.value);
+        this.#coinflipBackingWei = BigInt(flipLedger.backingWei);
         this.#coinflipBackingAddress = actingLower;
         this.#coinflipBackingKnown = true;
       } catch (_e) { /* retain claimable-only fallback */ }
@@ -2286,14 +2254,10 @@ class AppDecimatorPanel extends HTMLElement {
       && this.#coinflipClaimableAddress === actingLower
       ? this.#coinflipClaimableWei
       : 0n;
-    // The chain backing read is claimable + active carry. Falling back to
-    // claimable alone dropped the carry entirely, understating the player's
-    // coinflip FLIP by whatever auto-rebuy had accumulated. The indexed carry
-    // mirror keeps the total honest when that read is unavailable.
     const flipBackingWei = this.#coinflipBackingKnown
       && this.#coinflipBackingAddress === actingLower
       ? this.#coinflipBackingWei
-      : flipClaimableWei + this.#coinflipCarryWei();
+      : flipClaimableWei;
     // Display all coinflip value the player could withdraw, including active
     // auto-rebuy carry. RNG lock affects execution timing, not this balance.
     const protocolFlipWei = protocolFlipTotalWei(flipWalletWei, flipBackingWei);

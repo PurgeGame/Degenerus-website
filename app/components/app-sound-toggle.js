@@ -9,10 +9,13 @@ import {
 } from '../app/jackpot-sfx.js';
 import {
   isMuted as isPackMuted,
+  preloadPackOpen,
   setMuted as setPackMuted,
+  warmupPackAudio,
 } from '../app/pack-audio.js';
 
 const BUTTON_ID = 'unav-sound';
+const _armedDocuments = new WeakSet();
 
 function _soundIcon(muted) {
   return `
@@ -40,6 +43,36 @@ function _persist(muted) {
   setPackMuted(muted);
 }
 
+/** Prime every shared sound engine while browser user activation is live. */
+export function primeSoundEngines() {
+  if (isSfxMuted() || isPackMuted()) return false;
+  warmup();
+  warmupPackAudio();
+  void preloadPackOpen();
+  return true;
+}
+
+function _armFirstGesture(root) {
+  const target = root?.nodeType === 9
+    ? root
+    : root?.ownerDocument || (typeof document !== 'undefined' ? document : null);
+  if (!target?.addEventListener || _armedDocuments.has(target)) return;
+  _armedDocuments.add(target);
+  let done = false;
+  const finish = () => {
+    if (done || !primeSoundEngines()) return;
+    done = true;
+    try { target.removeEventListener('pointerdown', finish, true); } catch (_e) {}
+    try { target.removeEventListener('keydown', finish, true); } catch (_e) {}
+    try { target.removeEventListener('click', finish, true); } catch (_e) {}
+  };
+  // pointerdown is early enough for Safari/iOS; click covers older browsers,
+  // and keydown gives keyboard-only players the same first-use behavior.
+  target.addEventListener('pointerdown', finish, { capture: true, passive: true });
+  target.addEventListener('keydown', finish, { capture: true });
+  target.addEventListener('click', finish, { capture: true });
+}
+
 export function mountSoundToggle(root = document) {
   if (!root?.querySelector) return null;
   const existing = root.getElementById?.(BUTTON_ID) || root.querySelector(`#${BUTTON_ID}`);
@@ -56,12 +89,14 @@ export function mountSoundToggle(root = document) {
   let muted = Boolean(isSfxMuted() || isPackMuted());
   _persist(muted);
   _paint(button, muted);
+  _armFirstGesture(root);
+  if (!muted) void preloadPackOpen();
 
   button.addEventListener('click', () => {
     muted = !muted;
     _persist(muted);
     _paint(button, muted);
-    if (!muted) warmup();
+    if (!muted) primeSoundEngines();
     try {
       window.dispatchEvent(new CustomEvent('degenerus:sound-preference', {
         detail: { muted },

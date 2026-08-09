@@ -133,12 +133,18 @@ describe('actionableRevealItems', () => {
       { kind: 'batch-resolution', state: 'ready' },
       { kind: 'bingo', state: 'ready' },
       { kind: 'foil-match', state: 'ready' },
+      { kind: 'funds-claim', state: 'ready' },
       { kind: 'decimator', state: 'ready', primarySurface: 'jackpot' },
       { kind: 'decimator', state: 'ready' },
     ]);
     assert.deepEqual(rows.map((row) => row.kind), [
       'lootbox', 'degenerette', 'degenerette', 'lootbox', 'tickets', 'growth-claim', 'volume-claim', 'whale-pass-claim', 'batch-resolution', 'bingo', 'foil-match', 'decimator',
     ]);
+    assert.doesNotMatch(
+      readFileSync(new URL('../../app/launch-claims.js', import.meta.url), 'utf8'),
+      /funds-claim|readClaimableEth|readClaimableCoinflip/,
+      'ordinary ETH/FLIP claims are dedicated widgets, never Pending work',
+    );
   });
 
   test('incoming RNG estimates advance four lights across the expected ready window', () => {
@@ -267,7 +273,8 @@ describe('<app-reveal-tray>', () => {
     el.disconnectedCallback();
   });
 
-  test('a foil match shows the actual foil ticket and names the scoring reason', () => {
+  test('a foil match is one terse clickable receipt with no comparison or CTA', async () => {
+    let claimed = 0;
     pending.publishPendingActions('foil-match', [{
       id: 'foil-match:44:2:0', kind: 'foil-match', kindLabel: 'FOIL TICKET MATCH',
       label: 'Day 44 · Foil T5', shortLabel: 'Claim T5',
@@ -278,40 +285,29 @@ describe('<app-reveal-tray>', () => {
       drawKind: 0,
       score: 5,
       rewardFaces: 6,
-      state: 'ready', write: true, run: async () => {},
+      state: 'ready', write: true, autoOpen: true,
+      run: async () => { claimed += 1; },
     }]);
     const el = new trayModule.AppRevealTray();
     el.connectedCallback();
 
     const action = el.querySelector('.rrt-action--foil-match');
     assert.ok(action);
-    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'FOIL TICKET MATCH');
-    assert.match(action.querySelector('.rrt-action__detail').textContent,
-      /MAIN JACKPOT · 2 exact \+ 1 symbol · 6-face Degenerette bonus/);
-    assert.equal(action.querySelectorAll('.rrt-foil-match-ticket').length, 2,
-      'Pending shows the foil and the jackpot ticket as one comparison');
-    assert.equal(action.querySelectorAll('.rrt-foil-match-ticket__q').length, 8,
-      'both real four-quadrant tickets remain intact at compact size');
-    assert.match(action.querySelector('.rrt-foil-match-ticket--foil').className, /(?:^|\s)ticket-card--foil(?:\s|$)/,
-      'the Pending thumbnail uses the same visible foil material as the full ticket');
-    assert.equal(action.querySelectorAll('.trait-quadrant--gold').length, 2,
-      'real gold traits keep their gold surface instead of being painted silver');
-    assert.equal(action.querySelectorAll('.q-full').length, 4,
-      'exact quadrants are colored on both sides of the comparison');
-    assert.equal(action.querySelectorAll('.q-sym').length, 2,
-      'symbol-only quadrants are colored on both sides of the comparison');
-    assert.equal(action.querySelectorAll('.q-miss').length, 2,
-      'misses are colored on both sides of the comparison');
-    assert.match(action.querySelector('.rrt-foil-match-preview').textContent, /FOILVSMAIN/,
-      'compact roles distinguish the foil from the main jackpot');
-    assert.equal(
-      action.querySelector('.rrt-foil-match-ticket--foil')
-        ?.querySelector('.rrt-foil-match-ticket__center')?.querySelector('img')?.src,
-      '/whitepaper/flame-center-silver.svg',
-      'the compact Pending ticket uses the same silver centre flame',
-    );
-    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'CLAIM');
+    assert.match(action.className, /rrt-action--compact/);
+    assert.equal(action.querySelector('.rrt-action__label').textContent, 'T5 FOILMATCH');
+    assert.ok(action.querySelector('.rrt-foil-match-summary__luckbox .rrt-action__glyph')
+      || action.querySelector('.rrt-foil-match-summary__luckbox')?.querySelector('.rrt-action__glyph'),
+    'the [LB] position is a compact Luckbox glyph');
+    assert.equal(action.getAttribute('aria-label'), 'T5 FOIL LUCKBOX MATCH');
+    assert.equal(action.querySelector('.rrt-action__art'), null);
+    assert.equal(action.querySelector('.rrt-action__kind'), null);
+    assert.equal(action.querySelector('.rrt-action__detail'), null);
+    assert.equal(action.querySelector('.rrt-action__cta'), null);
+    assert.equal(action.querySelector('.rrt-foil-match-preview'), null);
     assert.notEqual(action.getAttribute('data-write'), null);
+    action.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    assert.equal(claimed, 1, 'the whole concise row remains the claim target');
     el.disconnectedCallback();
   });
 
@@ -418,10 +414,13 @@ describe('<app-reveal-tray>', () => {
     assert.equal(details.hidden, false);
     assert.equal(details.querySelectorAll('.rrt-pending-pack-preview').length, 1);
     assert.equal(details.querySelector('.rvl-pack-level').textContent, 'LEVEL 77');
-    assert.equal(details.querySelector('.rvl-pack-level').getAttribute('data-ticket-level-tone'), 'green');
-    assert.equal(details.querySelector('.rrt-pending-pack-preview__art').getAttribute('data-pack-level-tone'), 'green');
+    assert.equal(details.querySelector('.rvl-pack-level').getAttribute('data-ticket-level-tone'), 'blue');
+    assert.equal(details.querySelector('.rrt-pending-pack-preview__art').getAttribute('data-pack-level-tone'), 'blue');
     assert.equal(details.querySelector('.rvl-pack-count').textContent, '4 TICKETS');
-    assert.equal(details.querySelector('.rrt-pending-pack-preview__caption').textContent, 'PENDING');
+    assert.equal(details.querySelector('.rrt-pending-pack-preview__caption'), null,
+      'one pack needs no redundant status caption below its on-pack ticket count');
+    assert.doesNotMatch(details.textContent, /PACKS ON THE WAY|PENDING/i,
+      'the dropdown relies on its enclosing Pending surface instead of repeating status copy');
 
     pending.publishPendingActions('pack', [{
       id: 'ticket-pack:77', kind: 'tickets', label: 'Level 77 ticket pack',
@@ -437,9 +436,9 @@ describe('<app-reveal-tray>', () => {
       'the lit clickable pack does not repeat the self-evident OPEN action');
     assert.match(action.className, /\brrt-action--ticket-ready\b/);
     assert.equal(action.querySelector('.rrt-action__label').textContent, '4 Lvl 77\nTickets');
-    assert.equal(action.querySelector('.rrt-ticket-level').getAttribute('data-ticket-level-tone'), 'green');
-    assert.equal(action.querySelector('.rrt-pack-level').getAttribute('data-ticket-level-tone'), 'green');
-    assert.equal(action.querySelector('.rrt-pack-art').getAttribute('data-pack-level-tone'), 'green');
+    assert.equal(action.querySelector('.rrt-ticket-level').getAttribute('data-ticket-level-tone'), 'blue');
+    assert.equal(action.querySelector('.rrt-pack-level').getAttribute('data-ticket-level-tone'), 'blue');
+    assert.equal(action.querySelector('.rrt-pack-art').getAttribute('data-pack-level-tone'), 'blue');
     el.disconnectedCallback();
   });
 
@@ -464,6 +463,36 @@ describe('<app-reveal-tray>', () => {
     }]);
     assert.equal(pendingSurfaceVisible(el), false,
       'the cleared waiting hand cannot return under its ready opener id');
+    el.disconnectedCallback();
+  });
+
+  test('pending pack dropdown stamps each split-pack ticket count without status filler', () => {
+    pending.publishPendingActions('pack', [{
+      id: 'ticket-packs:pending', kind: 'tickets', label: '12 TICKETS PENDING',
+      ticketCount: 12, state: 'waiting', pinned: true, passive: true, compact: true,
+      pendingPacks: [
+        { level: 77, count: 9, foilPack: false, packIndex: 1, packCount: 2 },
+        { level: 77, count: 3, foilPack: false, packIndex: 2, packCount: 2 },
+      ],
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+    el.querySelector('.rrt-action--pack-pending').dispatchEvent({ type: 'click' });
+
+    const details = el.querySelector('[data-bind="rrt-pending-details"]');
+    assert.deepEqual(
+      details.querySelectorAll('.rvl-pack-count')
+        .map((node) => node.textContent),
+      ['9 TICKETS', '3 TICKETS'],
+      'each physical wrapper carries its own authoritative quantity',
+    );
+    assert.deepEqual(
+      details.querySelectorAll('.rrt-pending-pack-preview__caption')
+        .map((node) => node.textContent),
+      ['PACK 1 OF 2', 'PACK 2 OF 2'],
+      'multi-pack ordinals remain without repeating Pending',
+    );
+    assert.doesNotMatch(details.textContent, /PACKS ON THE WAY|PENDING/i);
     el.disconnectedCallback();
   });
 
@@ -1235,10 +1264,11 @@ describe('<app-reveal-tray>', () => {
     assert.match(css, /\.rrt-pack-art\.rvl-pack\s*\{[^}]*flex:\s*0 0 auto[^}]*aspect-ratio:\s*118 \/ 160/s,
       'the compact button cannot flex-squash its portrait wrapper');
     assert.match(css,
-      /\.rrt-pack-art\.rvl-pack\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*minmax\(1\.05rem, 1fr\) 0\.38rem 0\.28rem/s,
+      /\.rrt-pack-art\.rvl-pack\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*minmax\(1\.05rem, 1fr\) 0\.38rem 0\.44rem/s,
       'tiny pack art preserves separate brand, level, and quantity zones');
-    assert.match(css, /\.rvl-pack-count::before\s*\{[^}]*border:\s*1px solid currentColor/s,
-      'ticket quantity keeps a stacked-ticket pictogram when its copy is too small to read');
+    assert.match(css,
+      /\.rrt-pack-art \.rrt-pack-count\s*\{[^}]*font-size:\s*0\.3rem/s,
+      'the tiny Pending wrapper gives its ticket quantity the larger readable line');
     el.disconnectedCallback();
   });
 

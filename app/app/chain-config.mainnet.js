@@ -54,6 +54,8 @@ export const CONTRACTS = {
   VAULT:                   null,
   SDGNRS:                  null,
   DGNRS:                   null,
+  ADMIN:                   null,
+  LINK_TOKEN:              null,
 };
 
 // Ticket-volume parimutuel window, for the COUNTDOWN ONLY (the contract's

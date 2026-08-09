@@ -17,13 +17,25 @@
 
 import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
-import { decodeRevertReason } from './reason-map.js';
+import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS } from './chain-config.js';
 
 export const FOIL_CLAIM_ABI = [
   'function claimFoilMatch(address player, uint256 day, uint256 ticketIndex, uint8 drawKind)',
+  'error NoClaimableMatch()',
+  'error GameOver()',
   'event FoilMatchClaimed(address indexed player, uint24 day, uint8 ticketIndex, uint8 drawKind, uint8 tier, uint256 faces)',
 ];
+
+// These errors are reachable before the payout spin. In particular,
+// NoClaimableMatch is the normal permissionless race: another caller already
+// settled the immutable (player, day, ticket, draw) tuple between our indexed
+// read and static call.
+register('NoClaimableMatch', {
+  code: 'NoClaimableMatch',
+  userMessage: 'This foil match is already settled.',
+  recoveryAction: 'Refresh foil results.',
+});
 
 /** Tier → faces staked into the payout spin (FoilPackModule.sol:70-74). */
 export const FOIL_TIER_FACES = Object.freeze({ 4: 2, 5: 6, 6: 35, 7: 400, 8: 10_000 });

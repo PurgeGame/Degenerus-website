@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prize Pool Thermometer Demo</title>
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/panels.css">
+  <link rel="stylesheet" href="/app/styles/buttons.css">
+  <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/thermometer-demo.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "ethers": "https://esm.sh/ethers@6.16.0"
+    }
+  }
+  </script>
+</head>
+<body class="layout-basic thermometer-demo-page">
+  <main class="thermometer-demo">
+    <header class="thermometer-demo__header">
+      <a href="/app/">← APP</a>
+      <span>
+        <small>LOCAL VISUAL DEMO</small>
+        <h1>PRIZE POOL THERMOMETER</h1>
+      </span>
+      <b>SIMULATED</b>
+    </header>
+    <nav class="thermometer-demo__controls" aria-label="Simulated thermometer state">
+      <button type="button" data-percent="62">62% · LIVE</button>
+      <button type="button" data-percent="101">101% · RULER</button>
+      <button type="button" data-percent="115" class="is-active">115% · RULER</button>
+    </nav>
+    <section class="thermometer-demo__stage" id="thermometer-demo-host"></section>
+  </main>
+  <script type="module" src="/app/thermometer-demo.js"></script>
+</body>
+</html>

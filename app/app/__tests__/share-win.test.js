@@ -13,7 +13,8 @@ import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { ethers } from 'ethers';
 import {
-  buildShareRefUrl, extractWinLines, canShareWin, renderShareCard, displayShareUrl,
+  buildShareRefUrl, extractWinLines, clearsShareWinMultiple, canShareWin,
+  renderShareCard, displayShareUrl,
 } from '../share-win.js';
 import { update, __resetForTest } from '../store.js';
 import { ETH_DIVISOR } from '../chain-config.js';
@@ -173,6 +174,21 @@ describe('canShareWin', () => {
   test('view mode → false (not your win, not your link)', () => {
     update('ui.mode', 'view');
     assert.equal(canShareWin(winSeq), false);
+  });
+
+  test('paid Degenerette shares only at a real 2x return or better', () => {
+    const result = (total, totalWager) => ({
+      kind: 'degenerette',
+      cards: [{ type: 'flip', value: String(total) }],
+      spinBoard: { total, totalWager, currency: 1, unit: 'FLIP' },
+    });
+    assert.equal(clearsShareWinMultiple(result(199n, 100n)), false);
+    assert.equal(canShareWin(result(199n, 100n)), false);
+    assert.equal(canShareWin(result(200n, 100n)), true,
+      'exactly double the buy-in reaches the share threshold');
+    assert.equal(canShareWin(result(500n, 100n)), true);
+    assert.equal(canShareWin(result(500n, 0n)), false,
+      'a paid result without a provable buy-in does not claim a multiple');
   });
 });
 

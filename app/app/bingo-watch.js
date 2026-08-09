@@ -15,6 +15,10 @@ import { DGN_QUADRANTS, DGN_SYMBOLS, dgnBadgePath } from './dgn-traits.js';
 import { publishPendingActions, clearPendingActions } from './pending-actions.js';
 import { queueReveal } from '../components/reveal-overlay.js';
 import { claimBingo } from './bingo.js';
+import {
+  currentUnresolvedJackpotContext,
+  jackpotProcessingCoversLevel,
+} from './jackpot-spoiler.js';
 
 const SOURCE = 'bingo-claims';
 const STORAGE_PREFIX = `degenerus:bingo:${CHAIN.id}:${String(CONTRACTS.GAME || '').toLowerCase()}`;
@@ -34,6 +38,7 @@ const BINGO_INTERFACE = new ethers.Interface(BINGO_ABI);
 
 
 let _onTxConfirmed = null;
+let _onJackpotRevealed = null;
 let _running = false;
 let _getAddress = null;
 let _refreshInFlight = null;
@@ -339,20 +344,27 @@ async function _publish(address, seq = null) {
   }
   const state = _readState(addr);
   if (seq != null && seq !== _publishSeq) return;
+  const jackpotContext = currentUnresolvedJackpotContext();
+  const visibleReceipts = state.rows.filter((row) => (
+    !jackpotProcessingCoversLevel(row?.level, jackpotContext)
+  ));
+  const visibleClaimables = (_claimableRows.get(addr) || []).filter((row) => (
+    !jackpotProcessingCoversLevel(row?.level, jackpotContext)
+  ));
   const clearAll = async () => {
-    const current = _readState(addr);
-    const claimables = _claimableRows.get(addr) || [];
-    // CLEAR means the whole Bingo source, including proofs that have not yet
-    // produced receipts. Previously only reveal receipts were consumed, so a
-    // stuck Claim Bingo row came straight back after refresh/reload.
+    // CLEAR consumes every currently visible Bingo proof/receipt. Covered
+    // jackpot rows are deliberately outside the surface and cannot be cleared
+    // accidentally before the player sees them.
     _consume(addr, [
-      ...current.rows.map((row) => row.id),
-      ...claimables.map((row) => row.id),
+      ...visibleReceipts.map((row) => row.id),
+      ...visibleClaimables.map((row) => row.id),
     ]);
-    _claimableRows.set(addr, []);
+    const visibleIds = new Set(visibleClaimables.map((row) => row.id));
+    _claimableRows.set(addr, (_claimableRows.get(addr) || [])
+      .filter((row) => !visibleIds.has(row.id)));
     if (_lower(_getAddress?.()) === addr) await _publish(addr, ++_publishSeq);
   };
-  const revealRows = state.rows.map((receipt) => {
+  const revealRows = visibleReceipts.map((receipt) => {
     const quadrant = Number(receipt.symbol) >> 3;
     const quadrantName = String(DGN_QUADRANTS[quadrant] || 'trait').toUpperCase();
     const symbolName = _symbolLabel(receipt);
@@ -398,7 +410,7 @@ async function _publish(address, seq = null) {
   });
 
   const consumed = new Set(state.consumed.map(String));
-  const claimRows = (_claimableRows.get(addr) || [])
+  const claimRows = visibleClaimables
     .filter((candidate) => !consumed.has(candidate.id))
     .map((candidate) => {
       const quadrant = candidate.quadrant;
@@ -533,7 +545,9 @@ export function startBingoWatch({ getAddress } = {}) {
   _getAddress = typeof getAddress === 'function' ? getAddress : null;
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     _onTxConfirmed = () => { void refreshBingoWatch(); };
+    _onJackpotRevealed = () => { void refreshBingoWatch(); };
     document.addEventListener(TX_CONFIRMED_EVENT, _onTxConfirmed);
+    document.addEventListener('jackpot:revealed', _onJackpotRevealed);
   }
   refreshBingoWatch();
 }
@@ -544,6 +558,11 @@ export function stopBingoWatch() {
     catch (_e) { /* defensive */ }
   }
   _onTxConfirmed = null;
+  if (_onJackpotRevealed && typeof document !== 'undefined') {
+    try { document.removeEventListener('jackpot:revealed', _onJackpotRevealed); }
+    catch (_e) { /* defensive */ }
+  }
+  _onJackpotRevealed = null;
   _running = false;
   _getAddress = null;
   _refreshAgain = false;

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Degenerus Event Rails Demo</title>
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/panels.css">
+  <link rel="stylesheet" href="/app/styles/buttons.css">
+  <link rel="stylesheet" href="/app/styles/forms.css">
+  <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/baf-eve.css">
+  <link rel="stylesheet" href="/app/styles/event-rails-demo.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "ethers": "https://esm.sh/ethers@6.16.0"
+    }
+  }
+  </script>
+</head>
+<body class="layout-basic event-rails-demo-page">
+  <main class="event-rails-demo">
+    <header class="event-rails-demo__header">
+      <a href="/app/">← APP</a>
+      <span>
+        <small>LOCAL VISUAL DEMO</small>
+        <h1>EVENT RAILS</h1>
+      </span>
+      <b>SIMULATED</b>
+    </header>
+
+    <p class="event-rails-demo__resolution-link"><a href="/app/baf-resolution-demo.html">OPEN FULLSCREEN BAF FINAL →</a></p>
+
+    <section class="event-rails-demo__stage event-rails-demo__stage--baf">
+      <p><span>BAF EVE</span><b>LEVEL 39 → 40</b></p>
+      <div id="baf-demo-host"></div>
+    </section>
+
+    <section class="event-rails-demo__stage event-rails-demo__stage--decimator">
+      <p><span>DECIMATOR</span><b>OPEN WINDOW</b></p>
+      <div id="decimator-demo-host"></div>
+    </section>
+  </main>
+  <script type="module" src="/app/event-rails-demo.js"></script>
+</body>
+</html>

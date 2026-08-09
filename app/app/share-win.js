@@ -102,10 +102,30 @@ export function extractWinLines(seq) {
   return lines;
 }
 
+/**
+ * True when a paid result is large enough to advertise as a win.
+ * Degenerette carries an exact same-currency wager and payout, so require a
+ * genuine 2x return. Granted box spins and jackpot prizes do not have a
+ * directly comparable buy-in in their reveal payload and remain governed by
+ * the normal winnings-line check.
+ */
+export function clearsShareWinMultiple(seq, multiple = 2n) {
+  if (seq?.kind !== 'degenerette') return true;
+  const board = seq?.spinBoard;
+  if (board?.boxSpin) return true;
+  let payout = 0n;
+  let wager = 0n;
+  try { payout = BigInt(board?.total ?? 0); } catch (_e) { return false; }
+  try { wager = BigInt(board?.totalWager ?? 0); } catch (_e) { return false; }
+  if (wager <= 0n || payout <= 0n) return false;
+  const threshold = typeof multiple === 'bigint' && multiple > 0n ? multiple : 2n;
+  return payout >= wager * threshold;
+}
+
 /** True when the summary should offer a share button for this sequence. */
 export function canShareWin(seq) {
   if (get('ui.mode') === 'view') return false; // not YOUR win
-  return extractWinLines(seq).length > 0;
+  return clearsShareWinMultiple(seq) && extractWinLines(seq).length > 0;
 }
 
 // ---------------------------------------------------------------------------

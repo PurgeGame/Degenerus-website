@@ -17,8 +17,8 @@ describe('ticket level RPG tones', () => {
   test('uses the requested purchase-level-relative ladder', () => {
     assert.equal(ticketLevelTone(28, 28), 'white');
     assert.equal(ticketLevelTone(21, 28), 'white', 'older ticket levels stay neutral');
-    assert.equal(ticketLevelTone(29, 28), 'green');
-    assert.equal(ticketLevelTone(30, 28), 'yellow');
+    assert.equal(ticketLevelTone(29, 28), 'blue');
+    assert.equal(ticketLevelTone(30, 28), 'green');
     assert.equal(ticketLevelTone(31, 28), 'yellow');
     assert.equal(ticketLevelTone(32, 28), 'orange');
     assert.equal(ticketLevelTone(33, 28), 'red', 'red starts one level earlier');
@@ -51,8 +51,8 @@ describe('ticket level RPG tones', () => {
     assert.equal(attrs['data-ticket-level-tone'], 'orange');
   });
 
-  test('ships all five readable inline and pack-badge palettes', () => {
-    for (const tone of ['white', 'green', 'yellow', 'orange', 'red']) {
+  test('ships all six readable inline and pack-badge palettes', () => {
+    for (const tone of ['white', 'blue', 'green', 'yellow', 'orange', 'red']) {
       assert.match(APP_CSS, new RegExp(`data-ticket-level-tone="${tone}"`));
       assert.match(APP_CSS, new RegExp(`data-pack-level-tone="${tone}"`));
     }

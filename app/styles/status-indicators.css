@@ -122,19 +122,46 @@ body.layout-basic .app-decimator-panel .dec-input-label {
   gap: 0.16rem 0.28rem;
 }
 
-body.layout-basic .app-decimator-panel .dec-input-label boon-product-indicator {
-  font-size: 0.41rem;
-  letter-spacing: 0;
+body.layout-basic .app-decimator-panel .dec-input-group.has-active-boon > .dec-input-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: flex-start;
 }
 
-body.layout-basic .df-tomorrow-layout { position: relative; }
+body.layout-basic .app-decimator-panel .dec-input-label > boon-product-indicator[variant="purchase-control"] {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  min-height: 0;
+  align-self: flex-end;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: #4ade80;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 0.5rem;
+  font-weight: 950;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  text-shadow: 0 0 7px rgba(74, 222, 128, 0.38);
+  animation: none;
+}
 
+body.layout-basic .app-decimator-panel .dec-input-label > boon-product-indicator[variant="purchase-control"]::before {
+  display: none;
+}
+
+/* The coinflip chip sits in the add-bet dialog card, under the amount it
+   modifies. It cannot overhang the card edge: the card clips its own overflow
+   to keep the rounded corners and gradients clean, so an outdented badge loses
+   its top edge. */
 body.layout-basic .df-boon-indicator {
-  position: absolute;
-  top: -0.42rem;
-  left: 0.22rem;
-  z-index: 2;
-  font-size: 0.38rem;
+  display: flex;
+  width: fit-content;
+  margin: 0.42rem 0 0;
+  font-size: 0.4rem;
 }
 
 body.layout-basic .app-pass-section .pass-section-title {
@@ -151,6 +178,16 @@ body.layout-basic .qst-score-label boon-product-indicator {
   font-size: 0.42rem;
   letter-spacing: 0;
   vertical-align: middle;
+}
+
+/* The score control is column 3 of an auto-sized header rail whose column 2
+   holds the centred QUESTS heading, so anything that widens the control pushes
+   it left into that heading. Sitting the chip on its own row under DEGEN SCORE
+   keeps the rail's width unchanged at every desktop width. */
+body.layout-basic .qst-score-label boon-product-indicator {
+  display: flex;
+  width: fit-content;
+  margin: 0.16rem 0 0 auto;
 }
 
 /* Fakeout ending cue: after the coin visibly settles on the wrong face, the

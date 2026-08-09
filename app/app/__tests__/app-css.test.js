@@ -229,7 +229,7 @@ describe('app.css legacy coverage and append marker', () => {
 // ===========================================================================
 
 describe('app.css LOC budget', () => {
-  test('total file is in 1700-21600 line range (baseline + deliberate app UI feature blocks)', () => {
+  test('total file is in 1700-22500 line range (baseline + deliberate app UI feature blocks)', () => {
     assert.ok(cssLines.length >= 1700, `total >=1700, got ${cssLines.length}`);
     // Ceiling raised 4400 → 4600 for the ~157-line gold-rush headline block
     // (the last section in the file). Still a hard guard against this file
@@ -287,6 +287,11 @@ describe('app.css LOC budget', () => {
     // 21500 → 21600 covers the tightly scoped referral-coin face isolation,
     // three ticket-reveal size buckets, and corrected phone Whale quantity
     // controls. These refine three existing sections rather than add a surface.
-    assert.ok(cssLines.length <= 21600, `total <=21600, got ${cssLines.length}`);
+    // 21600 → 22400 covers the launch-claim/boon review refinements and the
+    // responsive, full-width Decimator burn rail. The latter is one deliberate
+    // new surface; the remaining 100-line margin keeps the ceiling tight.
+    // 22400 → 22500 adds the compact Box Spin payout-at-risk ledger and its
+    // phone stack, making S2+ wins readable before the survival toss.
+    assert.ok(cssLines.length <= 22500, `total <=22500, got ${cssLines.length}`);
   });
 });

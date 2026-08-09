@@ -18,6 +18,9 @@ import { formatJackpotCountdown, secondsUntilDayCrossover } from '../app/jackpot
 import { get, subscribe } from '../app/store.js';
 
 const SCALE_HEADROOM_BPS = 11_250n;
+const POST_TARGET_BREAK_PERCENT = 68;
+const POST_TARGET_START_PERCENT = 2;
+const POSITION_RATIO_SCALE = 1_000_000n;
 const JACKPOT_DAY_CAP = 5;
 const DAILY_CURRENT_BPS_MAX = 1_400n;
 const DAILY_ETH_BPS = 8_000n; // 20% of each physical draw buys tickets.
@@ -43,6 +46,45 @@ function _clampPercent(value) {
 function _position(value, scale) {
   if (value == null || scale <= 0n) return null;
   return _clampPercent(Number((value * 10_000n) / scale) / 100);
+}
+
+function _ratio(value, total) {
+  if (value == null || total == null || total <= 0n) return 0;
+  const clamped = value < 0n ? 0n : value > total ? total : value;
+  return Number((clamped * POSITION_RATIO_SCALE) / total) / Number(POSITION_RATIO_SCALE);
+}
+
+/**
+ * Completed-pool history ruler.
+ *
+ * The guarantee is a stable visual hinge at 68%. Prior level finals use a
+ * true bounded logarithmic scale from the smallest completed pool to the
+ * guarantee. That keeps the early levels from collapsing into a barcode while
+ * values above the guarantee retain an honest linear comparison.
+ */
+function _postTargetPosition(value, target, scale, floor) {
+  if (value == null || target == null || target <= 0n || scale <= 0n) return null;
+  if (value <= target) {
+    const lower = floor != null && floor > 0n && floor < target ? floor : null;
+    if (lower == null) {
+      return _clampPercent(_ratio(value, target) * POST_TARGET_BREAK_PERCENT);
+    }
+    if (value <= lower) return POST_TARGET_START_PERCENT;
+    const lowerNumber = Number(lower);
+    const targetNumber = Number(target);
+    const valueNumber = Number(value);
+    const normalized = Math.log(valueNumber / lowerNumber)
+      / Math.log(targetNumber / lowerNumber);
+    return _clampPercent(
+      POST_TARGET_START_PERCENT
+      + (normalized * (POST_TARGET_BREAK_PERCENT - POST_TARGET_START_PERCENT)),
+    );
+  }
+  if (scale <= target) return 100;
+  const over = _ratio(value - target, scale - target);
+  return _clampPercent(
+    POST_TARGET_BREAK_PERCENT + (over * (100 - POST_TARGET_BREAK_PERCENT)),
+  );
 }
 
 function _historicalPools(history, currentLevel) {
@@ -96,15 +138,15 @@ export function poolProgressModel({
   const target = _wei(targetWei);
   const growthTarget = growthOverTargetWei(ratchets);
   const historicalPools = _historicalPools(history, currentLevel);
+  const levelReady = next != null && target != null && target > 0n && next > target;
   const values = [
     next,
     target,
     growthTarget,
-    ...historicalPools.map((row) => row.poolWei),
+    ...(levelReady ? historicalPools.map((row) => row.poolWei) : []),
   ].filter((value) => value != null && value > 0n);
   const high = values.reduce((max, value) => value > max ? value : max, 1n);
   const scale = (high * SCALE_HEADROOM_BPS + 9_999n) / 10_000n;
-  const levelReady = next != null && target != null && target > 0n && next > target;
   const growthOver = next != null && growthTarget != null && next >= growthTarget;
   const levelBps = next != null && target != null && target > 0n
     ? Number((next * 1_000n) / target)
@@ -113,25 +155,34 @@ export function poolProgressModel({
   // actually been cleared, keep that marker as historical context but let the
   // visible amount ride the live edge of the pool instead.
   const referenceWei = levelReady ? next : target;
-  const referencePercent = levelReady
-    ? _position(next, scale)
-    : _position(target, scale);
+  const historyFloor = levelReady
+    ? historicalPools.reduce(
+        (floor, row) => floor == null || row.poolWei < floor ? row.poolWei : floor,
+        null,
+      )
+    : null;
+  const position = levelReady && target != null
+    ? (value) => _postTargetPosition(value, target, scale, historyFloor)
+    : (value) => _position(value, scale);
+  const referencePercent = position(levelReady ? next : target);
 
   return {
     next,
     target: target != null && target > 0n ? target : null,
     growthTarget,
     growthLinePercent: growthLinePercent(ratchets),
-    fillPercent: _position(next ?? 0n, scale),
-    targetPercent: _position(target, scale),
-    growthPercent: _position(growthTarget, scale),
+    fillPercent: position(next ?? 0n),
+    targetPercent: position(target),
+    growthPercent: position(growthTarget),
     levelReady,
     growthOver,
+    // Prior final pools become the thermometer's graduations only after the
+    // current guarantee is cleared. Below 100% the tube stays visually clean.
     historyMarkers: levelReady
       ? historicalPools.map((row) => ({
-        ...row,
-        position: _position(row.poolWei, scale),
-      }))
+          ...row,
+          position: position(row.poolWei),
+        }))
       : [],
     levelPercent: levelBps == null ? null : levelBps / 10,
     referenceKind: levelReady ? 'CURRENT' : 'GUARANTEE',
@@ -548,7 +599,14 @@ class AppPoolProgress extends HTMLElement {
     host.setAttribute('aria-hidden', rows.length === 0 ? 'true' : 'false');
     for (const row of rows) {
       const marker = document.createElement('span');
-      marker.className = 'pool-progress__marker pool-progress__marker--history';
+      const major = Number(row.level) % 5 === 0;
+      const mobileSkip = !major && Number(row.level) % 2 !== 0;
+      marker.className = [
+        'pool-progress__marker',
+        'pool-progress__marker--history',
+        major ? 'pool-progress__marker--history-major' : '',
+        mobileSkip ? 'pool-progress__marker--history-mobile-skip' : '',
+      ].filter(Boolean).join(' ');
       marker.dataset.level = String(row.level);
       marker.style.left = `${row.position}%`;
       const label = `Level ${row.level} final prize pool · ${_formatMarkerEth(row.poolWei)} ETH`;
@@ -682,7 +740,8 @@ class AppPoolProgress extends HTMLElement {
     const referenceKind = this.#set('pool-reference-kind', model.levelReady ? '' : 'GUARANTEE');
     if (referenceKind) referenceKind.hidden = model.levelReady;
     this.#set('pool-target-inline', _formatWholeEth(model.referenceWei));
-    this.#set('pool-percent', _formatBarPercent(model.levelPercent));
+    const percent = this.#set('pool-percent', _formatBarPercent(model.levelPercent));
+    if (percent) percent.hidden = model.levelReady;
     if (fill?.style) {
       fill.style.width = `${model.fillPercent}%`;
       const span = model.targetPercent != null && model.fillPercent > 0 && !model.levelReady
@@ -705,6 +764,15 @@ class AppPoolProgress extends HTMLElement {
       referenceLabel.hidden = model.referencePercent == null;
       if (referenceLabel.style && model.referencePercent != null) {
         referenceLabel.style.left = `${model.referencePercent}%`;
+      }
+      if (referenceLabel.dataset) {
+        referenceLabel.dataset.edge = model.referencePercent == null
+          ? 'middle'
+          : model.referencePercent >= 90
+            ? 'right'
+            : model.referencePercent <= 10
+              ? 'left'
+              : 'middle';
       }
       referenceLabel.title = model.referenceWei == null
         ? 'Prize pool amount'

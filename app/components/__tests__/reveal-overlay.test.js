@@ -176,9 +176,10 @@ globalThis.localStorage = {
 const {
   queueReveal, normalizeSequence, buildDegeneretteSpinFrames,
   degeneretteLockMatchType, shouldBobDegeneretteLock, buildBoxSpinBoard,
+  boxSpinScorePays,
   goldTicketLabel, pickBiggestSpinResult, projectDegeneretteEthSplit,
   shouldCelebrateDegenerette, isUnluckyDegenerette,
-  ticketGridSizeClass,
+  ticketGridSizeClass, revealTerminalActionLabel,
   __resetForTest, __takeQueuedForTest, PACK_REVEAL_COMPLETE_EVENT,
 } =
   await import('../reveal-overlay.js');
@@ -213,6 +214,29 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
 // ---------------------------------------------------------------------------
 
 describe('normalizeSequence', () => {
+  test('terminal actions describe the outcome instead of pretending to collect it', () => {
+    assert.equal(revealTerminalActionLabel({ unlucky: true }), 'UNLUCKY');
+    assert.equal(revealTerminalActionLabel({ kind: 'pack' }), 'TICKETS READY');
+    assert.equal(revealTerminalActionLabel({ daySummary: true }), 'BACK TO GAME');
+    assert.equal(revealTerminalActionLabel({
+      kind: 'pari', cards: [{ type: 'flip' }],
+    }), 'TAKE THE WIN');
+    assert.equal(revealTerminalActionLabel({ kind: 'pari', cards: [{ type: 'nowin' }] }),
+      'BACK TO GAME');
+    assert.equal(revealTerminalActionLabel({ kind: 'lootbox' }), 'CONTINUE');
+    assert.equal(revealTerminalActionLabel(null, {
+      total: 200n, totalWager: 100n, boxSpin: false,
+    }), 'TAKE THE WIN');
+    assert.equal(revealTerminalActionLabel(null, {
+      total: 50n, totalWager: 100n, boxSpin: false,
+    }), 'BACK TO GAME');
+    assert.equal(revealTerminalActionLabel(null, {
+      total: 0n, totalWager: 100n, boxSpin: false,
+    }), 'UNLUCKY');
+    assert.doesNotMatch(REVEAL_SRC, /(['"])COLLECT\1/,
+      'the reveal engine has no player-facing COLLECT fallback');
+  });
+
   test('ticket hands use the 1x1, 2x2, and 3x3 size buckets', () => {
     assert.equal(ticketGridSizeClass(1), 'rvl-ticket-grid-stage--size-1');
     assert.equal(ticketGridSizeClass(2), 'rvl-ticket-grid-stage--size-4');
@@ -274,7 +298,7 @@ describe('normalizeSequence', () => {
     assert.equal(seq.cards[2].type, 'spins');
     assert.equal(seq.cards[2].rarity, 'rare', 'the mystery card has a neutral rarity');
     assert.equal(seq.cards[2].revealedRarity, 'epic', 'ETH becomes epic after the reveal');
-    assert.equal(seq.cards[2].label, 'MYSTERY BOX SPIN');
+    assert.equal(seq.cards[2].label, 'BOX SPIN');
     assert.equal(seq.cards[2].value, '?', 'the mystery card does not leak its reel count');
     assert.equal(seq.cards[2].revealedValue, '×1', 'the reel count appears with the result');
     assert.doesNotMatch(seq.cards[2].label, /ETH|FLIP|WWXRP/,
@@ -384,7 +408,7 @@ describe('normalizeSequence', () => {
       ],
     });
     assert.deepEqual(seq.cards.map((card) => card.spin.spinType), ['wwxrp', 'flip']);
-    assert.ok(seq.cards.every((card) => card.label === 'MYSTERY BOX SPIN'));
+    assert.ok(seq.cards.every((card) => card.label === 'BOX SPIN'));
     assert.ok(seq.cards.every((card) => card.rarity === 'rare'),
       'pre-spin card styling cannot leak the currency lane');
     assert.deepEqual(seq.cards.map((card) => card.revealedLabel), ['WWXRP SPIN', 'FLIP SPINS'],
@@ -426,6 +450,24 @@ describe('normalizeSequence', () => {
     assert.equal(seq.cards[0].type, 'nowin');
     assert.equal(seq.cards[0].label, 'LUCKBOX RESULT');
     assert.equal(seq.cards[0].value, '0 TICKETS · 0 FLIP');
+    assert.equal(seq.unlucky, true);
+    assert.equal(revealTerminalActionLabel(seq), 'UNLUCKY');
+  });
+
+  test('generic resolutions distinguish a loss from an already-paid win', () => {
+    const lost = normalizeSequence({
+      kind: 'resolution',
+      cards: [{ outcome: 'loss', label: 'FINAL DRAW', value: 'NO PAYOUT' }],
+    });
+    assert.equal(lost.unlucky, true);
+    assert.equal(revealTerminalActionLabel(lost), 'UNLUCKY');
+
+    const won = normalizeSequence({
+      kind: 'resolution',
+      cards: [{ outcome: 'win', label: 'FINAL DRAW', value: '1 ETH' }],
+    });
+    assert.equal(won.unlucky, false);
+    assert.equal(revealTerminalActionLabel(won), 'CONTINUE');
   });
 
   test('pack: sealed tickets card with level + count', () => {
@@ -802,10 +844,14 @@ describe('normalizeSequence', () => {
     const lossCard = lost.cards.find((card) => card.type === 'coinflip-result');
     assert.ok(lossCard);
     assert.equal(lossCard.value, '-250 FLIP');
-    assert.equal(lossCard.sub, 'LOSS', 'the loss outcome gets its own line');
-    assert.equal(lossCard.outcomeLabel, 'LOSS');
+    assert.equal(lossCard.label, 'COINFLIP LOSS');
+    assert.equal(lossCard.sub, '+1 WWXRP');
+    assert.equal(lossCard.outcomeLabel, null);
     assert.equal(lossCard.outcomePercent, null);
+    assert.equal(lossCard.consolationWwxrp, '+1 WWXRP');
     assert.equal(lossCard.outcome, 'loss');
+    assert.equal(lost.cards.some((card) => card.type === 'wwxrp'), false,
+      'the consolation is folded into the flip loss instead of becoming another card');
     assert.equal(lost.consolationOnly, true,
       'WWXRP plus a lost flip is still a full loss, even without a caller hint');
   });
@@ -908,7 +954,7 @@ describe('normalizeSequence', () => {
     // all present so a caller-side sort is the only ordering contract.
     assert.equal(seq.spinBoard.rows.length, 3);
     assert.equal(seq.title, 'NO HITS');
-    assert.equal(seq.unlucky, true, 'a zero-payout result has nothing to collect');
+    assert.equal(seq.unlucky, true, 'a zero-payout result is a genuine loss');
   });
 
   test('degenerette: a positive payout below the wager is a return, not a celebration', () => {
@@ -1007,6 +1053,14 @@ describe('buildBoxSpinBoard', () => {
     assert.equal(board.survived, true);
     assert.equal(board.survivalStage, true);
     assert.equal(board.survivalStake, true);
+    assert.equal(board.payoutAtRisk, 450n);
+    assert.equal(board.payoutAtRiskApproximate, false,
+      'double-or-nothing makes a successful final payout exactly twice the stake');
+    assert.equal(
+      board.rows.reduce((sum, row) => sum + row.previewPayout, 0n),
+      450n,
+      'the visible row payouts add back to the exact pre-survival stake',
+    );
     const legacy = buildBoxSpinBoard({
       spinType: 'flip',
       payout: 900n,
@@ -1014,9 +1068,33 @@ describe('buildBoxSpinBoard', () => {
     });
     assert.equal(legacy.survived, true,
       'a positive final payout proves survival when an older feed omits the packed bit');
-    assert.match(board.headline, /CURRENCY HIDDEN/);
+    assert.equal(board.headline, 'LUCKBOX SPIN');
     assert.doesNotMatch(board.headline, /ETH|FLIP|WWXRP/,
       'the board heading stays neutral until the first reel lands');
+  });
+
+  test('S2 is the payout floor and a lone first-reel hit gets the visible amount', () => {
+    const oneFlip = 10n ** 18n;
+    const board = buildBoxSpinBoard({
+      spinType: 'flip',
+      survived: true,
+      payout: 119_500n * oneFlip,
+      reels: [
+        { spinIndex: 0, playerTicket: 3903807507n, resultTicket: 3548862479n, score: 3 },
+        { spinIndex: 1, playerTicket: 3618336562n, resultTicket: 4156442126n, score: 1 },
+        { spinIndex: 2, playerTicket: 3685501986n, resultTicket: 3297265676n, score: 0 },
+      ],
+    });
+    assert.equal(boxSpinScorePays(1), false);
+    assert.equal(boxSpinScorePays(2), true);
+    assert.deepEqual(board.rows.map((row) => row.won), [true, false, false]);
+    assert.equal(board.payoutAtRisk, 59_750n * oneFlip);
+    assert.deepEqual(
+      board.rows.map((row) => row.previewPayout),
+      [59_750n * oneFlip, 0n, 0n],
+    );
+    assert.equal(board.rows[0].previewApproximate, false,
+      'the only winning reel owns the exact 59,750 FLIP survival stake');
   });
 
   test('ETH box result presents only the claimable share as winnings', () => {
@@ -1032,7 +1110,7 @@ describe('buildBoxSpinBoard', () => {
     assert.equal(board.survived, null);
   });
 
-  test('an all-miss FLIP lane reaches the survival gate without fabricating a draw', () => {
+  test('an all-miss FLIP lane has no survival stage or fabricated draw', () => {
     const board = buildBoxSpinBoard({
       spinType: 'flip',
       survived: false,
@@ -1041,7 +1119,7 @@ describe('buildBoxSpinBoard', () => {
     });
     assert.equal(board.total, 0n);
     assert.equal(board.survived, null);
-    assert.equal(board.survivalStage, true);
+    assert.equal(board.survivalStage, false);
     assert.equal(board.survivalStake, false);
 
     const busted = buildBoxSpinBoard({
@@ -1075,30 +1153,40 @@ describe('buildBoxSpinBoard', () => {
       'the FLIP-identifying reel count stays hidden before reel one');
     assert.match(
       REVEAL_SRC,
-      /MORE FLIP SPINS · THEN SURVIVAL/,
-      'the FLIP landing explicitly introduces its two remaining reels and final gate',
+      /MORE FLIP SPINS/,
+      'the FLIP landing introduces its two remaining reels without promising a nonexistent gate',
     );
-    assert.match(REVEAL_SRC, /const BOX_CURRENCY_FLIP_MS = 3_300/,
-      'the box currency coin gets a full normal-length airborne track');
+    assert.doesNotMatch(REVEAL_SRC, /MORE FLIP SPINS · THEN SURVIVAL/);
+    assert.match(REVEAL_SRC, /const BOX_CURRENCY_FLIP_MS = 4_000/,
+      'the box currency coin gets the complete Daily Flip track and landing');
     assert.match(
       REVEAL_SRC,
       /#waitForCoinflip\(BOX_CURRENCY_FLIP_MS\)/,
       'taps and reveal-speed preferences cannot shorten the currency result',
     );
     assert.match(
-      APP_CSS,
-      /\.rvl-box-currency-reveal\.is-flipping \.rvl-box-currency-icon\s*\{[^}]*animation:\s*rvl-box-currency-toss 3\.3s/s,
-      'the visual currency toss stays synchronized with its full wait',
+      REVEAL_SRC,
+      /rvl-box-currency-coin[\s\S]*?df-coin3d__inner[\s\S]*?df-reveal-active[\s\S]*?df-reveal-track--comet[\s\S]*?df-reveal-ending--loss[\s\S]*?df-reveal-ending--win/,
+      'the currency selector uses the normal Daily Flip track and truthful ordinary endings',
     );
+    assert.match(
+      APP_CSS,
+      /rvl-box-currency-coin--flip \.rvl-box-currency-flip-face\s*\{[^}]*animation:\s*rvl-box-currency-flip-face-reveal 1ms step-end 3300ms forwards/s,
+      'a FLIP currency swaps in its logo only while the last turn is edge-on',
+    );
+    assert.doesNotMatch(APP_CSS, /@keyframes rvl-box-currency-(?:toss|face)/,
+      'the old ring-shaped pseudo flip is gone');
     assert.match(REVEAL_SRC, /const SURVIVAL_FLIP_MS = 4_000/,
       'the survival toss gets the same four-second window as a normal daily coinflip');
     assert.match(REVEAL_SRC, /#waitForCoinflip\(SURVIVAL_FLIP_MS\)/,
       'the survival toss cannot be shortened by a backdrop tap or reel-speed preference');
     assert.match(
-      APP_CSS,
-      /\.rvl-survival\.is-flipping \.rvl-survival-coin--win\s*\{[^}]*animation-name:\s*df-reveal-track-comet, df-reveal-end-win;[^}]*\}[\s\S]*?\.rvl-survival\.is-flipping \.rvl-survival-coin--bust\s*\{[^}]*animation-name:\s*df-reveal-track-comet, df-reveal-end-loss;/s,
+      REVEAL_SRC,
+      /rvl-survival-coin[\s\S]*?df-coin3d__inner[\s\S]*?board\.survived \? 'df-reveal-ending--win' : 'df-reveal-ending--loss'/,
       'survival reuses the normal truthful win/loss coin track without a reversal ending',
     );
+    assert.doesNotMatch(REVEAL_SRC, /rvl-survival-(?:halo|shadow)/,
+      'survival has no decorative circle around the real coin');
     assert.doesNotMatch(APP_CSS, /@keyframes rvl-survival-(?:toss|turn|land)/,
       'the old short single-image survival motion is gone');
     assert.match(
@@ -1287,7 +1375,7 @@ describe('reveal-overlay element', () => {
     const summary = el.querySelector('[data-bind="rvl-summary"]');
     assert.equal(summary.hidden, false, 'summary rendered directly');
     assert.equal(summary.querySelectorAll('.rvl-card').length, 1);
-    // Tap dismisses (COLLECT path shares the same tap resolver).
+    // Tap dismisses (the terminal action shares the same tap resolver).
     backdrop.dispatchEvent({ type: 'click' });
     await tick();
     assert.equal(backdrop.hidden, true, 'backdrop hidden after tap');
@@ -1614,7 +1702,7 @@ describe('reveal-overlay element', () => {
 
     summary = el.querySelector('[data-bind="rvl-summary"]');
     assert.equal(summary.querySelector('.rvl-card-value').textContent, '2');
-    assert.equal(summary.querySelector('.rvl-collect-cta').textContent, 'COLLECT');
+    assert.equal(summary.querySelector('.rvl-collect-cta').textContent, 'CONTINUE');
     summary.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
@@ -1647,7 +1735,7 @@ describe('reveal-overlay element', () => {
 
     summary = el.querySelector('[data-bind="rvl-summary"]');
     assert.match(summary.textContent, /GROWTH BET/);
-    assert.equal(summary.querySelector('.rvl-collect-cta').textContent, 'COLLECT');
+    assert.equal(summary.querySelector('.rvl-collect-cta').textContent, 'TAKE THE WIN');
     summary.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
@@ -1669,7 +1757,7 @@ describe('reveal-overlay element', () => {
 
     const summary = el.querySelector('[data-bind="rvl-summary"]');
     const collect = summary.querySelector('.rvl-collect-cta');
-    assert.equal(collect.textContent, 'COLLECT');
+    assert.equal(collect.textContent, 'BACK TO GAME');
     collect.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
 
@@ -1719,7 +1807,7 @@ describe('reveal-overlay element', () => {
 
     const finalSummary = el.querySelector('[data-bind="rvl-summary"]');
     assert.equal(finalSummary.querySelector('.rvl-card-value').textContent, '3');
-    assert.equal(finalSummary.querySelector('.rvl-collect-cta').textContent, 'COLLECT');
+    assert.equal(finalSummary.querySelector('.rvl-collect-cta').textContent, 'CONTINUE');
     finalSummary.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
@@ -1811,7 +1899,7 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
-  test('pack cards are released to inventory only after the player collects the hand', async () => {
+  test('pack cards are released to inventory only after the player acknowledges the hand', async () => {
     const completed = [];
     const onComplete = (event) => completed.push(event.detail);
     document.addEventListener(PACK_REVEAL_COMPLETE_EVENT, onComplete);
@@ -2210,7 +2298,7 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelector('[data-bind="rvl-vessel"]').hidden, true,
       'open-all does not cut back to the full sealed-pack scene');
     assert.equal(zone.querySelector('.rvl-open-all-cta'), null, 'no open-all button on final pack');
-    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'COLLECT');
+    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'TICKETS READY');
     const historyLabel = zone.querySelector('.rvl-pack-history-label');
     const previousPack = zone.querySelector('.rvl-pack-history-nav--previous');
     const nextPack = zone.querySelector('.rvl-pack-history-nav--next');
@@ -2280,7 +2368,7 @@ describe('reveal-overlay element', () => {
     assert.equal(pendingRuns, 1, 'the ordinary Pending pack was pulled ahead of queued foil');
     assert.match(el.querySelector('[data-bind="rvl-title"]').textContent, /FOIL PACK/,
       'the foil hand is the final readable hand in the combined opening');
-    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'COLLECT');
+    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'TICKETS READY');
 
     el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
     await tick();
@@ -2323,7 +2411,7 @@ describe('reveal-overlay element', () => {
 
     assert.equal(pendingRuns, 1, 'the next ready Pending pack was materialized once');
     assert.match(el.querySelector('[data-bind="rvl-title"]').textContent, /LEVEL 9 TICKETS/);
-    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'COLLECT',
+    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'TICKETS READY',
       'OPEN ALL pauses on the final Pending pack');
 
     el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
@@ -2409,7 +2497,7 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
-  test('a multi-card full loss still ends on the WWXRP UNLUCKY action', async () => {
+  test('a flip loss folds +1 WWXRP into its card and still ends UNLUCKY', async () => {
     const el = instantiate();
     queueReveal({
       kind: 'jackpot',
@@ -2422,8 +2510,23 @@ describe('reveal-overlay element', () => {
       },
     });
     await tick();
-    // Reduced-motion tests arrive directly at the two-card receipt.
+    // Reduced-motion tests arrive directly at the single combined receipt.
     const summary = el.querySelector('[data-bind="rvl-summary"]');
+    assert.equal(summary.querySelectorAll('.rvl-card').length, 1);
+    assert.equal(summary.querySelector('.rvl-card-label')?.textContent, 'COINFLIP LOSS');
+    assert.equal(summary.querySelector('.rvl-card-coinflip-outcome'), null,
+      'LOSS is folded into the label instead of repeated beside the consolation');
+    const consolation = summary.querySelector('.rvl-card-coinflip-consolation');
+    const value = summary.querySelector('.rvl-card-value');
+    const inner = summary.querySelector('.rvl-card-inner');
+    assert.equal(consolation?.textContent, '+1 WWXRP');
+    assert.equal(consolation?.querySelector('img'), null,
+      'the text amount does not repeat the WWXRP logo');
+    assert.ok(inner.children.indexOf(consolation) < inner.children.indexOf(value),
+      'the WWXRP amount sits above the lost FLIP amount');
+    assert.match(APP_CSS,
+      /\.rvl-stage--day-summary \.rvl-card--coinflip-result \.rvl-card-coinflip-consolation\s*\{[^}]*font-size:\s*clamp\(1\.35rem, 2\.6vw, 1\.72rem\)/s,
+      'the WWXRP line uses the same summary font size as the FLIP value');
     const collect = summary.querySelector('.rvl-collect-cta');
     assert.equal(collect.textContent, 'UNLUCKY');
     assert.ok(collect.classList.contains('rvl-collect-cta--unlucky'));
@@ -2518,7 +2621,7 @@ describe('reveal-overlay element', () => {
     assert.match(resultFacts, /PAYOUT/);
     assert.match(resultFacts, /NET/);
     const cta = zone.querySelector('.rvl-dgn-spin-cta');
-    assert.equal(cta.textContent, 'COLLECT');
+    assert.equal(cta.textContent, 'TAKE THE WIN');
     cta.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
   });
@@ -2584,7 +2687,7 @@ describe('reveal-overlay element', () => {
       'reduced motion skips the chest and advances straight into the settled box contents');
     assert.match(el.querySelector('[data-bind="rvl-summary"]').textContent, /DGNRS/);
     const collect = el.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta');
-    assert.equal(collect.textContent, 'COLLECT',
+    assert.equal(collect.textContent, 'CONTINUE',
       'the tray copy of this exact settled box is not offered as a second open');
     collect.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
@@ -2601,7 +2704,7 @@ describe('reveal-overlay element', () => {
     }), false, 'an indexer refresh after collection cannot reopen the settled box');
   });
 
-  test('a settled Degenerette loss ends with WWXRP UNLUCKY instead of COLLECT', async () => {
+  test('a settled Degenerette loss ends with the neutral WWXRP UNLUCKY action', async () => {
     queueReveal({
       kind: 'degenerette', currency: 0,
       amountPerSpin: 10n ** 16n, totalWager: 10n ** 16n,
@@ -2640,9 +2743,9 @@ describe('reveal-overlay element', () => {
     assert.doesNotMatch(total.textContent, /NET LOSS/,
       'the payout and signed NET amount already communicate the result');
     const cta = el.querySelector('.rvl-dgn-spin-cta');
-    assert.equal(cta.textContent, 'COLLECT');
+    assert.equal(cta.textContent, 'BACK TO GAME');
     assert.equal(cta.classList.contains('rvl-collect-cta--unlucky'), false,
-      'a 50% return uses the neutral collection action');
+      'a 50% return uses a neutral exit action');
     cta.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
   });
@@ -2670,7 +2773,7 @@ describe('reveal-overlay element', () => {
     const rootStage = el.querySelector('[data-bind="rvl-stage"]');
     const grant = el.querySelector('[data-bind="rvl-summary"]');
     assert.equal(grant.hidden, false, 'the parent lootbox contents land first');
-    assert.equal(grant.querySelector('.rvl-card-label').textContent, 'MYSTERY BOX SPIN');
+    assert.equal(grant.querySelector('.rvl-card-label').textContent, 'BOX SPIN');
     assert.equal(grant.querySelector('.rvl-card-value').textContent, '?');
     assert.doesNotMatch(grant.textContent, /ETH BOX SPIN|ETH SPIN|won .* ETH/i,
       'the granted spin cannot disclose its currency before it is played');
@@ -2693,7 +2796,10 @@ describe('reveal-overlay element', () => {
     assert.ok(currency, 'a dedicated post-reel currency result is present');
     assert.ok(currency.classList.contains('is-revealed'));
     assert.equal(currency.getAttribute('data-currency'), 'ETH');
-    assert.equal(currency.querySelector('img')?.src, '/shared/coinflip-face-eth.svg');
+    assert.equal(
+      currency.querySelector('.rvl-box-currency-landed')?.src,
+      '/shared/coinflip-face-eth.svg',
+    );
     assert.match(currency.textContent, /CURRENCY FLIPETHCURRENCY REVEALED/);
     assert.equal(zone.querySelector('.rvl-dgn-auto-cta'), null,
       'a mystery-currency spin never mounts AUTOSPIN');
@@ -2704,7 +2810,7 @@ describe('reveal-overlay element', () => {
       ['rvl-collect-cta rvl-dgn-spin-cta'],
       'the BoxSpin action rail contains only its required manual action',
     );
-    assert.equal(zone.querySelector('.rvl-dgn-spin-cta').textContent, 'COLLECT');
+    assert.equal(zone.querySelector('.rvl-dgn-spin-cta').textContent, 'TAKE THE WIN');
 
     zone.querySelector('.rvl-dgn-spin-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
@@ -2718,6 +2824,7 @@ describe('reveal-overlay element', () => {
   });
 
   test('a successful survival flip settles on the green ETH face', async () => {
+    const oneFlip = 10n ** 18n;
     queueReveal({
       kind: 'lootbox',
       lootboxIndex: 8,
@@ -2725,12 +2832,12 @@ describe('reveal-overlay element', () => {
         legType: 'spin',
         spinType: 'flip',
         survived: true,
-        payout: 900n,
+        payout: 900n * oneFlip,
         reels: [0, 1, 2].map((spinIndex) => ({
           spinIndex,
           playerTicket: 0xC3824100n + BigInt(spinIndex),
           resultTicket: 0xC7864504n + BigInt(spinIndex),
-          score: spinIndex + 1,
+          score: [3, 1, 0][spinIndex],
         })),
       }],
     });
@@ -2746,22 +2853,60 @@ describe('reveal-overlay element', () => {
     const survival = el.querySelector('.rvl-survival');
     assert.ok(survival?.classList.contains('is-win'));
     assert.equal(
-      survival.querySelector('.df-coin3d__face--eth')?.querySelector('img')?.src,
+      survival.querySelector('.rvl-survival-landed')?.src,
       '/shared/coinflip-face-eth.svg',
     );
-    assert.equal(
-      survival.querySelector('.df-coin3d__face--red')?.querySelector('img')?.src,
-      '/shared/coinflip-face-red.svg',
-      'survival is a genuine two-faced coin rather than an image swapped after the timer',
-    );
+    const animatedCoin = survival.querySelector('.rvl-survival-coin');
+    assert.equal(animatedCoin?.hidden, true);
+    assert.equal(animatedCoin?.style?.display, 'none',
+      'the transformed coin is compositor-hidden before the preloaded static face appears');
     assert.match(survival.textContent, /SURVIVED/);
+    const history = el.querySelectorAll('.rvl-dgn-history-chip');
+    assert.ok(history[0].classList.contains('is-win'));
+    assert.match(history[0].textContent, /#1 · WIN · 450 FLIP/);
+    assert.ok(history[1].classList.contains('is-miss'), 'S1 is visibly a miss, not a win');
+    assert.match(history[1].textContent, /#2 · MISS · S 1/);
+    const payoutMeter = el.querySelector('.rvl-box-payout-meter');
+    assert.equal(payoutMeter.hidden, false);
+    assert.match(payoutMeter.textContent, /PAYOUT AT RISK450 FLIPDOUBLE OR NOTHING · WIN 900 FLIP/);
 
     const collect = el.querySelector('.rvl-dgn-spin-cta');
-    assert.equal(collect.textContent, 'COLLECT');
+    assert.equal(collect.textContent, 'TAKE THE WIN');
     collect
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
+  });
+
+  test('an all-miss FLIP BoxSpin settles as UNLUCKY without a survival section', async () => {
+    queueReveal({
+      kind: 'lootbox',
+      lootboxIndex: 9,
+      legs: [{
+        legType: 'spin',
+        spinType: 'flip',
+        survived: false,
+        payout: 0n,
+        reels: [0, 1, 2].map((spinIndex) => ({
+          spinIndex,
+          playerTicket: 0xC3824100n + BigInt(spinIndex),
+          resultTicket: 0xC7864504n + BigInt(spinIndex),
+          score: 0,
+        })),
+      }],
+    });
+    const el = instantiate();
+    await tick();
+
+    const grant = el.querySelector('[data-bind="rvl-summary"]');
+    assert.equal(grant.querySelector('.rvl-card-label').textContent, 'BOX SPIN');
+    grant.querySelector('.rvl-collect-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
+
+    assert.equal(el.querySelector('.rvl-survival'), null,
+      'nothing about survival is rendered when no preliminary payout exists');
+    assert.equal(el.querySelector('.rvl-spin-total').textContent, 'UNLUCKY');
   });
 
   test('a hit that loses its final FLIP shows the hit, survival bust, and zero settlement', async () => {
@@ -2873,7 +3018,7 @@ describe('reveal-overlay element', () => {
       'both winnings lines inherit the same value font as the other fact boxes');
   });
 
-  test('motion path offers the full token spin and keeps its complete result until COLLECT', async () => {
+  test('motion path offers the full token spin and keeps its complete result until acknowledged', async () => {
     const previousMatchMedia = window.matchMedia;
     const previousRaf = globalThis.requestAnimationFrame;
     window.matchMedia = () => ({ matches: false });
@@ -2952,7 +3097,8 @@ describe('reveal-overlay element', () => {
       skip.dispatchEvent({ type: 'click', stopPropagation() {} });
       await tick();
 
-      assert.equal(cta.textContent, 'COLLECT', 'verified final frame stays up through collection');
+      assert.equal(cta.textContent, 'TAKE THE WIN',
+        'verified final frame stays up through acknowledgement');
       assert.equal(stage.querySelectorAll('.rvl-dgn-history-chip').length, 2,
         'skip keeps every spin in the result trail');
       assert.equal(stage.querySelectorAll('.rvl-rq').length, 8,
@@ -2971,7 +3117,7 @@ describe('reveal-overlay element', () => {
 
       cta.dispatchEvent({ type: 'click', stopPropagation() {} });
       await tick();
-      assert.equal(backdrop.hidden, true, 'COLLECT closes the persistent result');
+      assert.equal(backdrop.hidden, true, 'the terminal action closes the persistent result');
     } finally {
       window.matchMedia = previousMatchMedia;
       if (previousRaf === undefined) delete globalThis.requestAnimationFrame;
@@ -3066,8 +3212,10 @@ describe('reveal-overlay element', () => {
       assert.equal(stage.querySelectorAll('.rvl-rq').length, 8);
       assert.equal(stage.querySelector('.rvl-box-currency-reveal'), null,
         'currency has not appeared before the verified reel runs');
+      assert.equal(stage.querySelector('.rvl-box-payout-meter')?.hidden, true,
+        'no denominated payout leaks before the currency coin lands');
       const head = el.querySelector('.rvl-spin-head');
-      assert.match(head.textContent, /CURRENCY HIDDEN/);
+      assert.equal(head.textContent, 'LUCKBOX SPIN');
       assert.doesNotMatch(head.textContent, /ETH|FLIP|WWXRP/);
 
       const cta = stage.querySelector('.rvl-dgn-spin-cta');
@@ -3101,7 +3249,14 @@ describe('reveal-overlay element', () => {
       assert.equal(currency.getAttribute('data-currency'), 'WWXRP');
       assert.match(currency.textContent, /WWXRP/);
       assert.match(head.textContent, /WWXRP BOX SPIN · 1 REEL/);
-      assert.equal(cta.textContent, 'COLLECT',
+      const history = stage.querySelector('.rvl-dgn-history-chip');
+      assert.ok(history.classList.contains('is-win'));
+      assert.match(history.textContent, /#1 · WIN · 2 WWXRP/,
+        'the first reel becomes an explicit denominated win only after currency reveal');
+      const payoutMeter = stage.querySelector('.rvl-box-payout-meter');
+      assert.equal(payoutMeter.hidden, false);
+      assert.match(payoutMeter.textContent, /PAYOUT2 WWXRPFINAL PAYOUT/);
+      assert.equal(cta.textContent, 'TAKE THE WIN',
         'the completed reel and currency remain until acknowledged');
 
       cta.dispatchEvent({ type: 'click', stopPropagation() {} });

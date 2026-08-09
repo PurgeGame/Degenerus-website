@@ -152,10 +152,10 @@ export function lootboxRewardPresentation(rewardType, amount, { boonBps = null }
       ?? _bpsPercent(amount);
     return {
       label: 'COINFLIP BOON',
-      value: exactPct == null ? 'BOOST' : `+${exactPct}%`,
+      value: exactPct == null ? 'BOOST' : `${exactPct}% BONUS FLIP`,
       detail: exactPct == null
         ? 'Boosts your next manual Coinflip deposit, calculated on up to 100K FLIP'
-        : `Your next manual Coinflip deposit gets +${exactPct}%, calculated on up to 100K FLIP`,
+        : `Your next manual Coinflip deposit gets ${exactPct}% bonus FLIP, calculated on up to 100K FLIP`,
     };
   }
   if (type >= 4 && type <= 6) {

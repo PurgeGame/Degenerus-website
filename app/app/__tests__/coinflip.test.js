@@ -178,7 +178,10 @@ describe('coinflip stake reads', () => {
     coinflipMod.__resetCurrentStakeReaderForTest();
     coinflipMod.__resetAutoRebuyInfoReaderForTest();
     coinflipMod.__resetResolvedStakeReaderForTest();
+    coinflipMod.__resetClaimableReaderForTest();
     coinflipMod.__resetBackingReaderForTest();
+    coinflipMod.__resetWidgetBalancesReaderForTest();
+    coinflipMod.__resetBiggestFlipReaderForTest();
     coinflipMod.__resetStakeReadContractFactoryForTest();
     contractsMod.clearProvider();
   });
@@ -194,6 +197,181 @@ describe('coinflip stake reads', () => {
       coinflipMod.effectiveCoinflipStake(stored, { enabled: false, carry }),
       stored,
     );
+    assert.equal(
+      coinflipMod.effectiveCoinflipStake(stored, { enabled: true, carryWei: carry }),
+      stored + carry,
+      'the normalized settings shape uses carryWei too',
+    );
+  });
+
+  test('ties the all-time Biggest Flip to its exact resolved day and loss', async () => {
+    const base = Number(CHAIN.deployBlock);
+    const transactionHash = '0xrecord';
+    const player = '0x411087a5f752d3b5545e8301ad7e6cef1351e480';
+    const recordWei = 6_195_297n * 10n ** 18n;
+    const recordLog = {
+      blockNumber: base + 2_644,
+      index: 18,
+      transactionHash,
+      args: { player, recordAmount: recordWei },
+    };
+    const stakeLog = {
+      blockNumber: base + 2_644,
+      index: 17,
+      transactionHash,
+      args: { player, day: 10, amount: recordWei, newTotal: recordWei },
+    };
+    let historyReads = 0;
+    const contract = {
+      filters: {
+        BiggestFlipUpdated: () => ({ type: 'record' }),
+        CoinflipStakeUpdated: (wantedPlayer) => ({
+          type: 'stake', player: String(wantedPlayer || '').toLowerCase(),
+        }),
+      },
+      biggestFlipEver: async () => recordWei,
+      currentBounty: async () => 1_750n * 10n ** 18n,
+      bountyOwedTo: async () => '0x0000000000000000000000000000000000000000',
+      bountyLocked: async () => { throw new Error('older deploy has no getter'); },
+      getCoinflipDayResult: async (day) => {
+        assert.equal(Number(day), 10, 'reads the record setter\'s target day');
+        return [1, false];
+      },
+      queryFilter: async (filter, from, to) => {
+        historyReads += 1;
+        const logs = filter.type === 'record' ? [recordLog]
+          : filter.type === 'stake' && filter.player === player ? [stakeLog]
+            : [];
+        return logs.filter((log) => log.blockNumber >= from && log.blockNumber <= to);
+      },
+    };
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => base + 4_000,
+    });
+    coinflipMod.__setStakeReadContractFactoryForTest(() => contract);
+
+    assert.deepEqual(await coinflipMod.readBiggestFlipRecord({ resolveResult: false }), {
+      recordWei,
+      bountyWei: 1_750n * 10n ** 18n,
+      armedBy: null,
+      locked: false,
+      claimWei: recordWei + 1n,
+      lockWei: recordWei + recordWei / 10n,
+      result: null,
+      recordDay: null,
+    }, 'public record and bounty amounts do not wait on historical color lookup');
+    assert.equal(historyReads, 0, 'the fast headline read performs no log scan');
+    assert.deepEqual(await coinflipMod.readBiggestFlipRecord(), {
+      recordWei,
+      bountyWei: 1_750n * 10n ** 18n,
+      armedBy: null,
+      locked: false,
+      claimWei: recordWei + 1n,
+      lockWei: recordWei + recordWei / 10n,
+      result: 'loss',
+      recordDay: 10,
+    });
+    assert.ok(historyReads > 0, 'the follow-up resolves immutable win/loss color');
+  });
+
+  test('replayed previews override stale stored auto-rebuy carry', () => {
+    const unit = 10n ** 18n;
+    assert.equal(
+      coinflipMod.effectiveAutoRebuyCarryWei({
+        claimableWei: 20_000n * unit,
+        backingWei: 21_286n * unit,
+        autoRebuyInfo: { enabled: true, carryWei: 1_300n * unit },
+      }),
+      1_286n * unit,
+    );
+    assert.equal(
+      coinflipMod.effectiveAutoRebuyCarryWei({
+        autoRebuyInfo: { enabled: false, carryWei: 1_300n * unit },
+      }),
+      0n,
+      'disabled leftover storage is not presented as rolling stake',
+    );
+  });
+
+  test('auto-rebuy display math covers pending, win, loss, full-roll, and disabled states', () => {
+    const unit = 10n ** 18n;
+    const cases = [
+      {
+        label: 'pending carry', claimable: 500n, backing: 975n, raw: 475n, expected: 475n,
+      },
+      {
+        label: 'take-profit win', claimable: 20_000n, backing: 21_286n, raw: 1_300n, expected: 1_286n,
+      },
+      {
+        label: 'loss clears carry', claimable: 20_000n, backing: 20_000n, raw: 1_300n, expected: 0n,
+      },
+      {
+        label: 'zero take-profit rolls all', claimable: 0n, backing: 21_286n, raw: 1_300n, expected: 21_286n,
+      },
+      {
+        label: 'disabled carry cashes out', claimable: 21_286n, backing: 21_286n, raw: 1_300n, expected: 0n,
+        enabled: false,
+      },
+    ];
+    for (const row of cases) {
+      assert.equal(
+        coinflipMod.effectiveAutoRebuyCarryWei({
+          claimableWei: row.claimable * unit,
+          backingWei: row.backing * unit,
+          autoRebuyInfo: {
+            enabled: row.enabled ?? true,
+            carryWei: row.raw * unit,
+          },
+        }),
+        row.expected * unit,
+        row.label,
+      );
+    }
+    assert.equal(
+      coinflipMod.effectiveAutoRebuyCarryWei({
+        autoRebuyInfo: { enabled: true, carryWei: 475n * unit },
+      }),
+      475n * unit,
+      'a temporary preview failure retains the raw compatibility fallback',
+    );
+  });
+
+  test('one display snapshot reconciles Tomorrow, Rolling Now, and Protocol Coins', async () => {
+    const unit = 10n ** 18n;
+    coinflipMod.__setCurrentStakeReaderForTest(async () => 1_286n * unit);
+    coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
+      enabled: true,
+      takeProfitWei: 10_000n * unit,
+      carryWei: 1_300n * unit,
+      startDay: 20,
+    }));
+    coinflipMod.__setClaimableReaderForTest(async () => 20_000n * unit);
+    coinflipMod.__setBackingReaderForTest(async () => 21_286n * unit);
+    coinflipMod.__setWidgetBalancesReaderForTest(async () => ({
+      flipBalance: 165_186n * unit,
+      wwxrpBalance: 0n,
+      sdgnrsBalance: 0n,
+    }));
+
+    const snapshot = await coinflipMod.readCoinflipDisplaySnapshot({
+      player: CONNECTED,
+      blockTag: 12_345,
+    });
+    assert.equal(snapshot.blockTag, 12_345);
+    assert.equal(snapshot.currentStakeWei, 1_286n * unit);
+    assert.equal(snapshot.autoRebuyInfo.storedCarryWei, 1_300n * unit);
+    assert.equal(snapshot.autoRebuyInfo.carryWei, 1_286n * unit);
+    assert.equal(snapshot.claimableWei, 20_000n * unit);
+    assert.equal(snapshot.backingWei, 21_286n * unit);
+    assert.equal(
+      coinflipMod.protocolFlipTotalWei(
+        snapshot.balances.flipBalance,
+        snapshot.backingWei,
+      ),
+      186_472n * unit,
+    );
+    assert.equal(snapshot.ledgerComplete, true);
   });
 
   test('normalizes the live auto-rebuy settings tuple', async () => {
@@ -254,6 +432,48 @@ describe('coinflip stake reads', () => {
     );
     assert.deepEqual(seenBlockTags, [blockTag, blockTag],
       'stored credit and carry come from one atomic chain snapshot');
+  });
+
+  test('live stake replays a resolved win instead of showing stale raw carry', async () => {
+    const unit = 10n ** 18n;
+    const blockTag = Number(CHAIN.deployBlock) + 501;
+    const seen = [];
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => blockTag,
+    });
+    coinflipMod.__setStakeReadContractFactoryForTest(() => ({
+      coinflipAmount: async (_player, overrides) => {
+        seen.push(['stored', overrides?.blockTag]);
+        return 0n;
+      },
+      // Storage has not been settled yet and still reports the previous 1,300
+      // carry—the exact stale-state shape that produced a zero/old Tomorrow row.
+      coinflipAutoRebuyInfo: async (_player, overrides) => {
+        seen.push(['raw-carry', overrides?.blockTag]);
+        return [true, 10_000n * unit, 1_300n * unit, 20];
+      },
+      previewClaimCoinflips: async (_player, overrides) => {
+        seen.push(['claimable', overrides?.blockTag]);
+        return 20_000n * unit;
+      },
+      previewSalvageFlipBacking: async (_player, overrides) => {
+        seen.push(['backing', overrides?.blockTag]);
+        return 21_286n * unit;
+      },
+    }));
+
+    assert.equal(
+      await coinflipMod.readCurrentCoinflipStake({ player: CONNECTED }),
+      1_286n * unit,
+      '21,286 payout minus two 10,000 take-profit chunks leaves 1,286 live',
+    );
+    assert.deepEqual(seen, [
+      ['stored', blockTag],
+      ['raw-carry', blockTag],
+      ['claimable', blockTag],
+      ['backing', blockTag],
+    ], 'all four legs share one chain snapshot');
   });
 
   test('resolved sDGNRS stake adds the carry state from before that resolution', async () => {

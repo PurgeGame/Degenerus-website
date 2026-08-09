@@ -217,7 +217,7 @@ describe('transaction history composition', () => {
     details.open = true;
     details.dispatchEvent({ type: 'toggle' });
     for (let index = 0; index < 5; index += 1) await Promise.resolve();
-    assert.deepEqual(calls, [{ address: player, options: { limit: 25, page: 0 } }]);
+    assert.deepEqual(calls, [{ address: player, options: { limit: 10, page: 0 } }]);
 
     details.open = false;
     details.dispatchEvent({ type: 'toggle' });
@@ -228,7 +228,7 @@ describe('transaction history composition', () => {
 
     element.querySelector('[data-bind="txh-next"]').dispatchEvent({ type: 'click' });
     for (let index = 0; index < 5; index += 1) await Promise.resolve();
-    assert.deepEqual(calls.at(-1), { address: player, options: { limit: 25, page: 1 } });
+    assert.deepEqual(calls.at(-1), { address: player, options: { limit: 10, page: 1 } });
     assert.equal(element.querySelector('[data-bind="txh-page"]').textContent, 'PAGE 2');
 
     element.querySelector('[data-bind="txh-prev"]').dispatchEvent({ type: 'click' });
@@ -527,11 +527,12 @@ describe('transaction history composition', () => {
     assert.match(history.formatHistoryTimestamp(startMs), /20\d\d/);
   });
 
-  test('is the final main section with 25, 50, and 100 row choices', () => {
+  test('is the final main section with 10 rows by default and larger choices', () => {
     const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     const source = readFileSync(new URL('../app-transaction-history.js', import.meta.url), 'utf8');
     assert.ok(html.indexOf('<app-transaction-history>') > html.indexOf('id="afking-passes"'));
-    assert.match(source, /<option value="25" selected>25<\/option>/);
+    assert.match(source, /<option value="10" selected>10<\/option>/);
+    assert.match(source, /<option value="25">25<\/option>/);
     assert.match(source, /<option value="50">50<\/option>/);
     assert.match(source, /<option value="100">100<\/option>/);
     assert.match(source, /data-bind="txh-next"/);

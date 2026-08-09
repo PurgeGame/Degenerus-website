@@ -23,7 +23,7 @@ export function currentPurchaseTicketLevel() {
 
 /**
  * RPG threat ladder relative to the current purchase level:
- * current/past = white, +1 = green, +2..3 = yellow,
+ * current/past = white, +1 = blue, +2 = green, +3 = yellow,
  * +4 = orange, +5 and beyond = red.
  */
 export function ticketLevelTone(ticketLevel, purchaseLevel = currentPurchaseTicketLevel()) {
@@ -32,8 +32,9 @@ export function ticketLevelTone(ticketLevel, purchaseLevel = currentPurchaseTick
   const current = _level(purchaseLevel);
   if (current == null || ticket <= current) return 'white';
   const distance = ticket - current;
-  if (distance === 1) return 'green';
-  if (distance <= 3) return 'yellow';
+  if (distance === 1) return 'blue';
+  if (distance === 2) return 'green';
+  if (distance === 3) return 'yellow';
   if (distance === 4) return 'orange';
   return 'red';
 }

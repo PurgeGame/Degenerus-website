@@ -34,6 +34,7 @@ import {
   startWhalePassClaims,
   refreshWhalePassClaims,
 } from './whale-pass-claims.js';
+import { startLaunchClaims, refreshLaunchClaims } from './launch-claims.js';
 import { resetPresentationStateForDeployment } from './deployment-presentation-state.js';
 import { initButtonFeedback } from './button-feedback.js';
 import { mountJackpotCountdown } from './jackpot-countdown.js';
@@ -282,6 +283,17 @@ async function boot() {
   subscribe('connected.address', () => refreshWhalePassClaims());
   subscribe('viewing.address', () => refreshWhalePassClaims());
   subscribe('ui.mode', () => refreshWhalePassClaims());
+  // Launch claim manifest: current-level affiliate bonus, WWXRP draw
+  // result/claim, and rare foil Golden Tickets. Ordinary ETH/FLIP claims use
+  // their dedicated Protocol Coins controls and never appear in Pending.
+  startLaunchClaims({
+    getAddress: () => getActingAddress(),
+    getLevel: () => get('app.gameState')?.level,
+  });
+  subscribe('connected.address', () => refreshLaunchClaims());
+  subscribe('viewing.address', () => refreshLaunchClaims());
+  subscribe('ui.mode', () => refreshLaunchClaims());
+  subscribe('app.gameState', () => refreshLaunchClaims());
   // 3. Polling starts with the resolved viewing target (?as= OR connected OR
   //    null). Store subscriptions fire immediately, so startup and a connected
   //    self-view used to restart the complete five-poller stack 2–3 times in
@@ -323,6 +335,7 @@ async function boot() {
         refreshPackWatch();
         refreshBingoWatch();
         refreshWhalePassClaims();
+        refreshLaunchClaims();
       }
     },
   });

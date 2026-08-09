@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Active Boon UI Review</title>
+  <link rel="stylesheet" href="/app/styles/base.css">
+  <link rel="stylesheet" href="/app/styles/panels.css">
+  <link rel="stylesheet" href="/app/styles/buttons.css">
+  <link rel="stylesheet" href="/app/styles/forms.css">
+  <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/status-indicators.css">
+  <link rel="stylesheet" href="/app/styles/boon-review.css">
+</head>
+<body class="layout-basic boon-review-page">
+  <main class="boon-review">
+    <header class="boon-review__hero">
+      <span class="boon-review__eyebrow">UI REVIEW FIXTURE</span>
+      <h1>EVERY ACTIVE BOON</h1>
+      <p>All nine player-facing effects, shown together at their strongest tier.</p>
+      <span class="boon-review__status"><i aria-hidden="true"></i> ALL ACTIVE</span>
+    </header>
+
+    <section class="boon-review__grid" aria-label="Active boon surfaces">
+      <article class="boon-review__surface boon-review__surface--wide"
+               data-review-products="purchase lootbox">
+        <header class="boon-review__surface-head">
+          <span>01</span>
+          <h2>TICKETS + LUCKBOX</h2>
+          <div class="boon-review__effects">
+            <strong>25% MORE TICKETS</strong><strong>25% BIGGER LUCKBOX</strong>
+          </div>
+        </header>
+        <div class="jackpot-hero boon-review__production">
+          <app-decimator-panel>
+            <section class="panel app-decimator-panel">
+              <div class="dec-input-row dec-input-row--pair">
+                <span class="dec-input-group dec-input-group--tickets">
+                  <label class="dec-input-label" for="review-tickets">
+                    <span>Buy tickets</span>
+                    <boon-product-indicator product="purchase"
+                                            variant="purchase-control"></boon-product-indicator>
+                  </label>
+                  <span class="dec-stepper">
+                    <span class="dec-quarter-stepper">
+                      <button type="button" class="dec-quarter-step" tabindex="-1">+.25</button>
+                      <button type="button" class="dec-quarter-step" tabindex="-1">−.25</button>
+                    </span>
+                    <input id="review-tickets" class="dec-input" type="number" value="4.25"
+                           aria-label="Review ticket quantity" readonly>
+                    <span class="dec-stepper-btns">
+                      <button type="button" class="dec-step" tabindex="-1">▲</button>
+                      <button type="button" class="dec-step" tabindex="-1">▼</button>
+                    </span>
+                  </span>
+                </span>
+                <span class="dec-input-group dec-input-group--lootbox">
+                  <label class="dec-input-label" for="review-luckbox">
+                    <span>Buy luckbox</span>
+                    <boon-product-indicator product="lootbox"
+                                            variant="purchase-control"></boon-product-indicator>
+                  </label>
+                  <span class="dec-stepper">
+                    <input id="review-luckbox" class="dec-input" type="number" value="0.25"
+                           aria-label="Review luckbox amount" readonly>
+                    <span class="dec-stepper-btns">
+                      <button type="button" class="dec-step" tabindex="-1">▲</button>
+                      <button type="button" class="dec-step" tabindex="-1">▼</button>
+                    </span>
+                  </span>
+                </span>
+              </div>
+            </section>
+          </app-decimator-panel>
+        </div>
+      </article>
+
+      <article class="boon-review__surface" data-review-products="coinflip">
+        <header class="boon-review__surface-head">
+          <span>02</span>
+          <h2>COINFLIP</h2>
+          <div class="boon-review__effects"><strong>25% BONUS FLIP</strong></div>
+        </header>
+        <div class="boon-review__production boon-review__coinflip">
+          <section class="panel app-daily-flip">
+            <h2 class="df-section-title">DAILY COINFLIP</h2>
+            <div class="df-reverse-dialog__card df-add-bet-dialog__card">
+              <header class="df-add-bet-dialog__head">
+                <img src="/specials/special_flip_static.svg" alt="" aria-hidden="true">
+                <span><small>DAILY COINFLIP</small><h3>Add to tomorrow</h3></span>
+              </header>
+              <output class="df-add-bet-dialog__value">1,000 FLIP</output>
+              <input type="range" min="100" max="1000" step="1" value="1000"
+                     aria-label="Review coinflip amount" tabindex="-1">
+              <div class="df-add-bet-dialog__range" aria-hidden="true">
+                <span>100</span><span>AVAILABLE 25,000</span>
+              </div>
+              <boon-product-indicator class="df-boon-indicator"
+                                      product="coinflip"></boon-product-indicator>
+              <div class="df-reverse-dialog__actions">
+                <button type="button" class="df-reverse-dialog__later" tabindex="-1">Cancel</button>
+                <button type="button" class="df-reverse-dialog__accept" tabindex="-1">Add bet</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </article>
+
+      <article class="boon-review__surface" data-review-products="decimator">
+        <header class="boon-review__surface-head">
+          <span>03</span>
+          <h2>DECIMATOR</h2>
+          <div class="boon-review__effects"><strong>50% MORE ENTRY WEIGHT</strong></div>
+        </header>
+        <div class="play-grid boon-review__production">
+          <section class="panel app-parimutuel">
+            <div class="pari-book pari-decimator">
+              <div class="pari-book__head">
+                <div class="pari-decimator__head-copy">
+                  <h3 class="pari-book__title">DECIMATOR
+                    <boon-product-indicator product="decimator"></boon-product-indicator>
+                  </h3>
+                  <span class="pari-decimator__win-prompt"><span class="pari-decimator__win-prompt-burn">BURN FLIP</span><span class="pari-decimator__win-prompt-win"> TO WIN:</span></span>
+                </div>
+                <div class="pari-decimator__prize"><strong>2.48</strong><span>ETH</span></div>
+              </div>
+              <p class="pari-decimator__ask">Your active boon increases the weight of this entry.</p>
+            </div>
+          </section>
+        </div>
+      </article>
+
+      <article class="boon-review__surface boon-review__surface--wide"
+               data-review-products="quests activity">
+        <header class="boon-review__surface-head">
+          <span>04</span>
+          <h2>QUEST STREAK + DEGEN SCORE</h2>
+          <div class="boon-review__effects">
+            <strong>1 MISSED DAY SHIELDED</strong><strong>+25 DEGEN SCORE</strong>
+          </div>
+        </header>
+        <div class="play-grid boon-review__production boon-review__quests">
+          <section class="panel app-quest-panel">
+            <header class="qst-header">
+              <h2><span class="qst-learn-link">QUESTS</span></h2>
+              <div class="qst-streak-chip qst-streak-chip--all-done qst-streak-chip--shielded"
+                   data-streak-shields="1" tabindex="0"
+                   title="1 streak shield · Protects one missed quest day">
+                <span class="qst-streak-flame" aria-hidden="true">◆</span>
+                <strong class="qst-streak">42</strong>
+                <span class="qst-streak-label">STREAK</span>
+              </div>
+              <div class="qst-score-control" tabindex="0">
+                <strong class="qst-score-value" data-score-tier="purple">315</strong>
+                <span class="qst-score-label">DEGEN SCORE
+                  <boon-product-indicator product="activity"></boon-product-indicator>
+                </span>
+              </div>
+            </header>
+          </section>
+        </div>
+      </article>
+
+      <article class="boon-review__surface boon-review__surface--wide"
+               data-review-products="lazy whale deity">
+        <header class="boon-review__surface-head">
+          <span>05</span>
+          <h2>PASS SHOP</h2>
+          <div class="boon-review__effects">
+            <strong>50% OFF LAZY</strong><strong>35% OFF WHALE</strong><strong>35% OFF DEITY</strong>
+          </div>
+        </header>
+        <div class="boon-review__production boon-review__passes">
+          <app-pass-section>
+            <section class="panel app-pass-section">
+              <div class="pass-lazy-row pass-product-row pass-product-row--lazy">
+                <span class="pass-product-heading">
+                  <span class="pass-product-sigil pass-product-sigil--lazy" aria-hidden="true">10</span>
+                  <span class="pass-product-copy">
+                    <span class="pass-section-title">Lazy pass
+                      <boon-product-indicator product="lazy"></boon-product-indicator>
+                    </span>
+                    <span class="pass-product-description">One ticket every level for the next 10 levels.</span>
+                  </span>
+                </span>
+                <span class="pass-product-perks"><span>BONUS LUCKBOX</span><span>AFKING SEAT</span></span>
+                <span class="pass-product-checkout pass-product-checkout--lazy"><button type="button" class="pass-lazy-buy">BUY LAZY PASS<br>0.40 ETH</button></span>
+              </div>
+
+              <div class="pass-whale-row pass-product-row pass-product-row--whale">
+                <span class="pass-product-heading">
+                  <span class="pass-product-sigil pass-product-sigil--whale" aria-hidden="true">100</span>
+                  <span class="pass-product-copy">
+                    <span class="pass-section-title">Whale pass
+                      <boon-product-indicator product="whale"></boon-product-indicator>
+                    </span>
+                    <span class="pass-product-description">One ticket every other level for the next 100 levels.</span>
+                  </span>
+                </span>
+                <span class="pass-product-perks"><span>BONUS LUCKBOX</span><span>AFKING SEAT</span></span>
+                <span class="pass-product-checkout pass-product-checkout--whale"><button type="button" class="pass-whale-buy">BUY WHALE PASS<br>2.60 ETH</button></span>
+              </div>
+
+              <details class="pass-deity-section">
+                <summary class="pass-deity-summary">
+                  <span class="pass-product-heading">
+                    <span class="pass-product-sigil pass-product-sigil--deity" aria-hidden="true">∞</span>
+                    <span class="pass-product-copy">
+                      <span class="pass-product-eyebrow">LIFETIME PASS</span>
+                      <span class="pass-section-title">Deity pass
+                        <boon-product-indicator product="deity"></boon-product-indicator>
+                      </span>
+                      <span class="pass-product-description">Permanent symbol coverage and three boons every day.</span>
+                    </span>
+                  </span>
+                  <span class="pass-product-perks pass-product-perks--deity"><span>PERMANENT</span><span>3 DAILY BOONS</span></span>
+                  <span class="pass-deity-price"><small>LIVE PRICE</small><strong class="pass-deity-hint">12.00 ETH</strong></span>
+                </summary>
+              </details>
+            </section>
+          </app-pass-section>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script type="module" src="/app/app/boon-review.js"></script>
+</body>
+</html>

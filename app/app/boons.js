@@ -4,9 +4,9 @@
 // while the contract discounts for those tiers are 20%/35%.
 
 const BOON_UI = Object.freeze({
-  1:  { product: 'coinflip', label: 'BOON +5%', detail: 'Your next coinflip deposit gets +5%' },
-  2:  { product: 'coinflip', label: 'BOON +10%', detail: 'Your next coinflip deposit gets +10%' },
-  3:  { product: 'coinflip', label: 'BOON +25%', detail: 'Your next coinflip deposit gets +25%' },
+  1:  { product: 'coinflip', label: 'BOON +5%', detail: 'Your next coinflip deposit gets 5% bonus FLIP' },
+  2:  { product: 'coinflip', label: 'BOON +10%', detail: 'Your next coinflip deposit gets 10% bonus FLIP' },
+  3:  { product: 'coinflip', label: 'BOON +25%', detail: 'Your next coinflip deposit gets 25% bonus FLIP' },
   4:  { product: 'quests', label: 'BOON SHIELD', detail: "Protects today's quest streak" },
   5:  { product: 'lootbox', label: 'BOON +5%', detail: 'Your next luckbox purchase gets +5% value' },
   6:  { product: 'lootbox', label: 'BOON +15%', detail: 'Your next luckbox purchase gets +15% value' },
@@ -218,6 +218,26 @@ const BOON_PRODUCT_NAMES = Object.freeze({
   lazy: 'Lazy pass',
 });
 
+function _issuanceEffect(ui, boonType) {
+  const compact = String(ui?.label || '').replace(/^BOON\s*/i, '');
+  if (Number(boonType) === 28) return 'WHALE BOON ACTIVE';
+  if (ui?.product === 'quests') return '1 MISSED DAY SHIELDED';
+  if (ui?.product === 'activity') return compact.replace(/SCORE$/i, 'DEGEN SCORE');
+  const amount = /([+−-]?\d+(?:\.\d+)?)%/.exec(compact)?.[1];
+  if (!amount) return compact;
+  const pct = `${amount.replace(/^\+/, '')}%`;
+  switch (ui.product) {
+    case 'coinflip': return `${pct} BONUS FLIP`;
+    case 'lootbox': return `${pct} BIGGER LUCKBOX`;
+    case 'purchase': return `${pct} MORE TICKETS`;
+    case 'decimator': return `${pct} MORE ENTRY WEIGHT`;
+    case 'whale': return `${pct.replace(/^−/, '')} OFF WHALE PASS`;
+    case 'deity': return `${pct.replace(/^−/, '')} OFF DEITY PASS`;
+    case 'lazy': return `${pct.replace(/^−/, '')} OFF LAZY PASS`;
+    default: return compact;
+  }
+}
+
 /** Compact, effective-value copy for a deity holder's daily issuance slots. */
 export function boonTypePresentation(boonType) {
   const ui = BOON_UI[Number(boonType)];
@@ -227,7 +247,7 @@ export function boonTypePresentation(boonType) {
   return {
     product: ui.product,
     name: Number(boonType) === 28 ? 'Whale pass' : (BOON_PRODUCT_NAMES[ui.product] || 'Boon'),
-    effect: String(ui.label || '').replace(/^BOON\s*/i, ''),
+    effect: _issuanceEffect(ui, boonType),
     detail: ui.detail,
   };
 }

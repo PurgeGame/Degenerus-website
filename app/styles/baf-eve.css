@@ -1,0 +1,561 @@
+/* Big Ass Flip eve — full-width x9 event rail. */
+
+body.layout-basic app-baf-eve {
+  display: block;
+  min-width: 0;
+  margin: 0 0 0.82rem;
+}
+
+body.layout-basic app-baf-eve[hidden],
+body.layout-basic .baf-eve[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .baf-eve {
+  --baf-blue: 76, 125, 255;
+  --baf-cyan: 56, 189, 248;
+  --baf-gold: 251, 191, 36;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(13.2rem, 0.78fr) minmax(14.4rem, 1.12fr) minmax(7.8rem, 0.52fr) minmax(25rem, 2.12fr);
+  min-height: 7.05rem;
+  align-items: stretch;
+  gap: 0.54rem;
+  padding: 0.62rem;
+  overflow: hidden;
+  border: 1px solid rgba(var(--baf-blue), 0.55);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 8% 50%, rgba(37, 99, 235, 0.26), transparent 18rem),
+    radial-gradient(circle at 42% -70%, rgba(var(--baf-gold), 0.12), transparent 24rem),
+    radial-gradient(circle at 94% 140%, rgba(var(--baf-cyan), 0.11), transparent 23rem),
+    linear-gradient(112deg, #080f29 0%, #0c1020 45%, #080b17 100%);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.36),
+    0 0 26px rgba(37, 99, 235, 0.09),
+    inset 0 1px rgba(191, 219, 254, 0.15),
+    inset 0 0 0 1px rgba(30, 64, 175, 0.1);
+}
+
+body.layout-basic .baf-eve::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    linear-gradient(105deg, transparent 0 22%, rgba(147, 197, 253, 0.04) 22.2% 22.5%, transparent 22.7% 100%),
+    repeating-linear-gradient(118deg, transparent 0 43px, rgba(255, 255, 255, 0.017) 44px, transparent 45px);
+  content: '';
+  pointer-events: none;
+}
+
+body.layout-basic .baf-eve::after {
+  position: absolute;
+  z-index: -1;
+  top: -90%;
+  bottom: -90%;
+  left: -18%;
+  width: 9%;
+  background: linear-gradient(90deg, transparent, rgba(147, 197, 253, 0.08), transparent);
+  content: '';
+  pointer-events: none;
+  transform: rotate(12deg);
+  animation: baf-eve-scan 9s ease-in-out infinite;
+}
+
+@keyframes baf-eve-scan {
+  0%, 55% { left: -18%; opacity: 0; }
+  62% { opacity: 1; }
+  92%, 100% { left: 112%; opacity: 0; }
+}
+
+body.layout-basic .baf-eve__identity {
+  display: grid;
+  grid-template-columns: 3.3rem minmax(0, 1fr);
+  min-width: 0;
+  align-items: center;
+  gap: 0.68rem;
+  padding: 0.34rem 0.48rem 0.34rem 0.12rem;
+  border-right: 1px solid rgba(var(--baf-blue), 0.16);
+}
+
+body.layout-basic .baf-eve__mark {
+  position: relative;
+  display: grid;
+  width: 3.2rem;
+  height: 3.2rem;
+  box-sizing: border-box;
+  align-content: center;
+  justify-items: center;
+  gap: 0.13rem;
+  overflow: hidden;
+  border: 1px solid rgba(147, 197, 253, 0.66);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 82% 13%, rgba(250, 204, 21, 0.3), transparent 36%),
+    linear-gradient(145deg, #2563eb, #172554 72%);
+  box-shadow:
+    0 7px 18px rgba(0, 0, 0, 0.3),
+    0 0 18px rgba(37, 99, 235, 0.24),
+    inset 0 1px rgba(219, 234, 254, 0.24);
+}
+
+body.layout-basic .baf-eve__mark::before {
+  position: absolute;
+  top: 0;
+  right: 0.38rem;
+  left: 0.38rem;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #fde047, transparent);
+  content: '';
+  pointer-events: none;
+}
+
+body.layout-basic .baf-eve__mark b {
+  position: relative;
+  z-index: 1;
+  color: #f8fafc;
+  font: 1000 0.9rem/0.92 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.075em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+body.layout-basic .baf-eve__mark small {
+  position: relative;
+  z-index: 1;
+  color: #fde68a;
+  font: 950 0.43rem/1 "Roboto Mono", monospace;
+  letter-spacing: 0.06em;
+}
+
+body.layout-basic .baf-eve__identity-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.13rem;
+}
+
+body.layout-basic .baf-eve__identity-copy > small {
+  color: rgba(147, 197, 253, 0.68);
+  font: 900 0.47rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__identity-copy > small b { color: #fde68a; font: inherit; }
+
+body.layout-basic .baf-eve__identity h2 {
+  margin: 0;
+  color: #eff6ff;
+  font: 1000 clamp(0.94rem, 1.5vw, 1.2rem)/0.96 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.052em;
+  text-shadow: 0 0 17px rgba(var(--baf-blue), 0.4);
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__countdown {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.28rem;
+  color: #93c5fd;
+  font: 900 0.48rem/1 "Roboto Mono", monospace;
+  letter-spacing: 0.045em;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__countdown i {
+  width: 0.34rem;
+  height: 0.34rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #facc15;
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.82);
+  animation: baf-eve-pulse 1.9s ease-in-out infinite;
+}
+
+@keyframes baf-eve-pulse { 50% { opacity: 0.44; transform: scale(0.72); } }
+
+body.layout-basic .baf-eve__pool,
+body.layout-basic .baf-eve__mine {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(30, 64, 175, 0.19), rgba(3, 7, 18, 0.46));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.045);
+}
+
+body.layout-basic .baf-eve__pool {
+  align-content: center;
+  gap: 0.28rem;
+  padding: 0.62rem 0.78rem;
+  overflow: visible;
+  border-color: rgba(74, 222, 128, 0.55);
+  background:
+    radial-gradient(circle at 100% 0, rgba(74, 222, 128, 0.2), transparent 52%),
+    linear-gradient(145deg, rgba(6, 78, 59, 0.52), rgba(3, 15, 19, 0.68));
+  box-shadow:
+    inset 0 1px rgba(220, 252, 231, 0.11),
+    0 0 18px rgba(34, 197, 94, 0.1);
+}
+
+body.layout-basic .baf-eve__pool::before {
+  position: absolute;
+  top: -1px;
+  right: 12%;
+  left: 12%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(134, 239, 172, 0.82), transparent);
+  content: '';
+  pointer-events: none;
+}
+
+body.layout-basic .baf-eve__pool > header,
+body.layout-basic .baf-eve__pool > footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+body.layout-basic .baf-eve__pool > header { gap: 0.36rem; }
+body.layout-basic .baf-eve__pool > footer { gap: 0.36rem; }
+
+body.layout-basic .baf-eve__pool-icon {
+  display: grid;
+  width: 1.32rem;
+  height: 1.32rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(5, 46, 22, 0.62);
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.16);
+}
+
+body.layout-basic .baf-eve__pool-icon img { width: 1.16rem; height: 1.16rem; object-fit: contain; }
+
+body.layout-basic .baf-eve__pool-status {
+  margin-left: auto;
+  padding: 0.18rem 0.3rem;
+  border: 1px solid rgba(134, 239, 172, 0.25);
+  border-radius: 4px;
+  background: rgba(5, 46, 22, 0.44);
+  color: rgba(187, 247, 208, 0.68);
+  font: 900 0.35rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.1em;
+}
+
+body.layout-basic .baf-eve__pool small,
+body.layout-basic .baf-eve__mine small,
+body.layout-basic .baf-eve__board > header {
+  color: rgba(191, 219, 254, 0.57);
+  font: 900 0.44rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.115em;
+}
+
+body.layout-basic .baf-eve__pool strong {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.38rem;
+  color: #bbf7d0;
+  font: 1000 clamp(1.42rem, 2.35vw, 1.92rem)/0.98 "Roboto Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 13px rgba(74, 222, 128, 0.23);
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__pool strong b {
+  overflow: hidden;
+  font: inherit;
+  text-overflow: ellipsis;
+}
+
+body.layout-basic .baf-eve__pool strong em {
+  color: rgba(187, 247, 208, 0.72);
+  font: 900 0.64rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.06em;
+}
+
+body.layout-basic .baf-eve__pool > footer > span,
+body.layout-basic .baf-eve__pool > footer > i {
+  color: rgba(134, 239, 172, 0.58);
+  font: 850 0.42rem/1 "Roboto Mono", monospace;
+  letter-spacing: 0.04em;
+}
+
+body.layout-basic .baf-eve__pool > footer > i {
+  padding-left: 0.36rem;
+  border-left: 1px solid rgba(134, 239, 172, 0.2);
+  color: rgba(191, 219, 254, 0.42);
+  font-style: normal;
+}
+
+body.layout-basic .baf-eve__mine {
+  gap: 0.16rem;
+  padding: 0.55rem 0.62rem;
+  border-color: rgba(var(--baf-gold), 0.22);
+  background:
+    radial-gradient(circle at 92% 4%, rgba(var(--baf-gold), 0.14), transparent 50%),
+    linear-gradient(145deg, rgba(67, 48, 12, 0.23), rgba(8, 11, 24, 0.48));
+}
+
+body.layout-basic .baf-eve__mine strong {
+  overflow: hidden;
+  color: #fde68a;
+  font: 1000 clamp(0.78rem, 1.26vw, 1rem)/1 "Roboto Mono", monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__mine > span {
+  overflow: hidden;
+  color: rgba(191, 219, 254, 0.57);
+  font: 850 0.44rem/1.1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.045em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__mine > span b {
+  color: #bfdbfe;
+  font: 950 0.62rem/1 "Roboto Mono", monospace;
+}
+
+body.layout-basic .baf-eve__board {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 0.36rem;
+  padding: 0.38rem 0.05rem 0.38rem 0.48rem;
+  border-left: 1px solid rgba(var(--baf-blue), 0.16);
+}
+
+body.layout-basic .baf-eve__board > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0 0.12rem;
+}
+
+body.layout-basic .baf-eve__board > header strong {
+  color: #bfdbfe;
+  font: 950 0.5rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em;
+}
+
+body.layout-basic .baf-eve__board > header span {
+  overflow: hidden;
+  color: rgba(147, 197, 253, 0.49);
+  font: 850 0.42rem/1 "Roboto Mono", monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__leaders {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.27rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+body.layout-basic .baf-eve__leaders.has-final-flip {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(7.2rem, 1.3fr);
+}
+
+body.layout-basic .baf-eve__leaders li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.12rem minmax(0, 1fr);
+  min-width: 0;
+  min-height: 3.55rem;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.36rem 0.31rem;
+  overflow: hidden;
+  border: 1px solid rgba(96, 165, 250, 0.17);
+  border-radius: 8px;
+  background: linear-gradient(150deg, rgba(30, 58, 138, 0.2), rgba(3, 7, 18, 0.5));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
+}
+
+body.layout-basic .baf-eve__leaders li::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(147, 197, 253, 0.3), transparent);
+  content: '';
+}
+
+body.layout-basic .baf-eve__place {
+  display: grid;
+  width: 1.16rem;
+  height: 1.16rem;
+  place-items: center;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 50%;
+  color: #93c5fd;
+  font: 1000 0.54rem/1 "Roboto Mono", monospace;
+}
+
+body.layout-basic .baf-eve__leader-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+body.layout-basic .baf-eve__leader-copy small {
+  overflow: hidden;
+  color: rgba(191, 219, 254, 0.48);
+  font: 750 0.43rem/1 "Roboto Mono", monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__leader-copy strong {
+  overflow: hidden;
+  color: #dbeafe;
+  font: 1000 clamp(0.62rem, 0.92vw, 0.78rem)/1 "Roboto Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .baf-eve__leaders li[data-rank="1"] {
+  border-color: rgba(var(--baf-gold), 0.46);
+  background:
+    radial-gradient(circle at 15% 20%, rgba(var(--baf-gold), 0.2), transparent 60%),
+    linear-gradient(150deg, rgba(92, 66, 13, 0.37), rgba(8, 9, 18, 0.52));
+  box-shadow: inset 0 1px rgba(254, 240, 138, 0.09), 0 0 13px rgba(var(--baf-gold), 0.07);
+}
+
+body.layout-basic .baf-eve__leaders li[data-rank="1"] .baf-eve__place {
+  border-color: rgba(253, 224, 71, 0.64);
+  background: rgba(133, 77, 14, 0.36);
+  color: #fde047;
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.18);
+}
+
+body.layout-basic .baf-eve__leaders li[data-rank="1"] .baf-eve__leader-copy strong { color: #fef3c7; }
+body.layout-basic .baf-eve__leaders li[data-rank="2"] .baf-eve__place { border-color: rgba(226, 232, 240, 0.48); color: #e2e8f0; }
+body.layout-basic .baf-eve__leaders li[data-rank="3"] .baf-eve__place { border-color: rgba(251, 146, 60, 0.52); color: #fdba74; }
+
+body.layout-basic .baf-eve__leaders li.is-you {
+  border-color: rgba(var(--baf-cyan), 0.78);
+  box-shadow: inset 0 0 0 1px rgba(var(--baf-cyan), 0.12), 0 0 14px rgba(var(--baf-cyan), 0.14);
+}
+
+body.layout-basic .baf-eve__leaders li.is-you::before {
+  position: absolute;
+  top: 0.18rem;
+  right: 0.22rem;
+  color: #67e8f9;
+  font: 1000 0.32rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  content: 'YOU';
+}
+
+body.layout-basic .baf-eve__leaders li.is-empty { opacity: 0.34; }
+
+body.layout-basic .baf-eve__leaders .baf-eve__daily-flip {
+  grid-template-columns: 1.45rem minmax(0, 1fr);
+  border-color: rgba(74, 222, 128, 0.48);
+  background: radial-gradient(circle at 12% 20%, rgba(74, 222, 128, 0.18), transparent 58%), linear-gradient(150deg, rgba(6, 78, 59, 0.4), rgba(6, 15, 20, 0.58));
+  box-shadow: inset 0 1px rgba(187, 247, 208, 0.08), 0 0 13px rgba(34, 197, 94, 0.08);
+}
+body.layout-basic .baf-eve__daily-flip .baf-eve__place { width: 1.38rem; height: 1.38rem; border-color: rgba(74, 222, 128, 0.64); color: #86efac; font-size: 0.42rem; }
+body.layout-basic .baf-eve__daily-copy { display: grid; min-width: 0; gap: 0.12rem; }
+body.layout-basic .baf-eve__daily-copy small { overflow: hidden; color: rgba(134, 239, 172, 0.7); font: 900 0.36rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.08em; text-overflow: ellipsis; white-space: nowrap; }
+body.layout-basic .baf-eve__daily-copy strong { overflow: hidden; color: #dcfce7; font: 950 0.53rem/1 "Roboto Mono", monospace; text-overflow: ellipsis; white-space: nowrap; }
+body.layout-basic .baf-eve__daily-copy > span { color: #86efac; font: 900 0.47rem/1 "Roboto Mono", monospace; white-space: nowrap; }
+
+@media (max-width: 930px) {
+  body.layout-basic .baf-eve {
+    grid-template-columns: minmax(11rem, 0.76fr) minmax(13.5rem, 1.1fr) minmax(8rem, 0.62fr);
+  }
+  body.layout-basic .baf-eve__board {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding: 0.48rem 0.1rem 0.08rem;
+    border-top: 1px solid rgba(var(--baf-blue), 0.14);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  body.layout-basic .baf-eve {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    padding: 0.58rem;
+  }
+  body.layout-basic .baf-eve__pool {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    min-height: 5.6rem;
+  }
+  body.layout-basic .baf-eve__identity {
+    grid-column: 1;
+    grid-row: 2;
+    border-right: 0;
+  }
+  body.layout-basic .baf-eve__mine {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  body.layout-basic .baf-eve__board { grid-column: 1 / -1; grid-row: 3; }
+  body.layout-basic .baf-eve__leaders li {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 0.22rem;
+    padding: 0.35rem 0.16rem;
+    text-align: center;
+  }
+  body.layout-basic .baf-eve__leaders.has-final-flip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  body.layout-basic .baf-eve__leaders .baf-eve__daily-flip { grid-column: 1 / -1; grid-template-columns: 1.6rem minmax(0, 1fr); justify-items: stretch; text-align: left; }
+  body.layout-basic .baf-eve__daily-copy { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  body.layout-basic .baf-eve__daily-copy small { grid-column: 1 / -1; }
+  body.layout-basic .baf-eve__leader-copy { width: 100%; }
+  body.layout-basic .baf-eve__leader-copy small { display: none; }
+}
+
+@media (max-width: 430px) {
+  body.layout-basic .baf-eve { grid-template-columns: minmax(0, 1fr); }
+  body.layout-basic .baf-eve__pool { grid-column: 1; grid-row: 1; padding: 0.58rem 0.68rem; }
+  body.layout-basic .baf-eve__identity {
+    grid-column: 1;
+    grid-row: 2;
+    grid-template-columns: 2.8rem minmax(0, 1fr);
+    gap: 0.48rem;
+  }
+  body.layout-basic .baf-eve__mark { width: 2.68rem; height: 2.68rem; border-radius: 10px; }
+  body.layout-basic .baf-eve__mark b { font-size: 0.76rem; }
+  body.layout-basic .baf-eve__mine {
+    grid-column: 1;
+    grid-row: 3;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.55rem;
+  }
+  body.layout-basic .baf-eve__mine > span { text-align: right; }
+  body.layout-basic .baf-eve__board { grid-row: 4; }
+  body.layout-basic .baf-eve__identity h2 { font-size: 0.83rem; }
+  body.layout-basic .baf-eve__identity-copy > small { font-size: 0.39rem; }
+  body.layout-basic .baf-eve__countdown { font-size: 0.4rem; }
+  body.layout-basic .baf-eve__pool strong { font-size: 1.42rem; }
+  body.layout-basic .baf-eve__leaders { gap: 0.18rem; }
+  body.layout-basic .baf-eve__leader-copy strong { font-size: 0.56rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-basic .baf-eve::after,
+  body.layout-basic .baf-eve__countdown i { animation: none; }
+}

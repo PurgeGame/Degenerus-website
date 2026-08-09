@@ -293,6 +293,15 @@ function mount() {
 const revealPlanning = await import('../app-daily-flip.js');
 
 describe('day-wide reveal planning', () => {
+  test('the multiplier number uses red at 150 and blue from 250 upward', () => {
+    assert.equal(revealPlanning.dailyFlipMultiplierTone(149), 'low');
+    assert.equal(revealPlanning.dailyFlipMultiplierTone(150), 'low');
+    assert.equal(revealPlanning.dailyFlipMultiplierTone(151), null);
+    assert.equal(revealPlanning.dailyFlipMultiplierTone(249), null);
+    assert.equal(revealPlanning.dailyFlipMultiplierTone(250), 'high');
+    assert.equal(revealPlanning.dailyFlipMultiplierTone(300), 'high');
+  });
+
   test('sDGNRS stays within three significant figures and promotes suffix carries', () => {
     const unit = 10n ** 18n;
     assert.equal(revealPlanning.formatSdgnrsBalance(999n * unit), '999');
@@ -333,6 +342,40 @@ describe('day-wide reveal planning', () => {
     assert.equal(coinflipMod.bafFlipEveFromPurchaseInfo(quote({ lastPurchaseDay_: false })), null);
     assert.equal(coinflipMod.bafFlipEveFromPurchaseInfo(quote({ rngLocked_: true })), null);
     assert.equal(coinflipMod.bafFlipEveFromPurchaseInfo(quote({ inJackpotPhase: true })), null);
+    assert.deepEqual(
+      coinflipMod.bafFinalPurchaseDayFromPurchaseInfo(quote({ lvl: 40, rngLocked_: true })),
+      { currentLevel: 40, targetLevel: 40, rngLocked: true },
+      'the BAF rail keeps the locked final-day state after level pre-promotion',
+    );
+  });
+
+  test('upcoming bonus preview mirrors ordinary, x0, and post-turbo contract days', () => {
+    const reads = (overrides = {}) => ({
+      purchaseInfo: {
+        lvl: 31,
+        inJackpotPhase: true,
+        lastPurchaseDay_: false,
+        rngLocked_: false,
+        ...(overrides.purchaseInfo || {}),
+      },
+      compressionTier: overrides.compressionTier ?? 0,
+      growthState: { currentLevel: 31, phaseDay: overrides.phaseDay ?? 1 },
+    });
+    assert.deepEqual(coinflipMod.upcomingFlipBonusFromGameReads(reads()), {
+      level: 31, points: 2, kind: 'standard', reason: 'jackpot',
+    });
+    assert.deepEqual(coinflipMod.upcomingFlipBonusFromGameReads(reads({
+      purchaseInfo: { lvl: 40 },
+    })), { level: 40, points: 6, kind: 'x0', reason: 'jackpot' });
+    assert.deepEqual(coinflipMod.upcomingFlipBonusFromGameReads(reads({
+      purchaseInfo: { lvl: 40, inJackpotPhase: false, lastPurchaseDay_: false },
+      compressionTier: 2,
+      phaseDay: 0,
+    })), { level: 40, points: 6, kind: 'x0', reason: 'post-turbo' });
+    assert.equal(coinflipMod.upcomingFlipBonusFromGameReads(reads({ phaseDay: 2 })), null);
+    assert.equal(coinflipMod.upcomingFlipBonusFromGameReads(reads({
+      purchaseInfo: { rngLocked_: true },
+    })), null, 'a locked flip is already underway, not upcoming');
   });
 
   test('four distinct tracks publish the requested conditional win odds', () => {
@@ -485,6 +528,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       locked: false,
     }));
     coinflipMod.__setBafFlipEveReaderForTest(async () => null);
+    coinflipMod.__setUpcomingFlipBonusReaderForTest(async () => null);
     storeMod.update('connected.address', TEST_ADDR);
     storeMod.update('app.lastDay', { day: 67, status: 'resolved' });
     await import('../app-daily-flip.js');
@@ -500,12 +544,13 @@ describe('app-daily-flip — coin reveal + actions', () => {
     coinflipMod.__resetWidgetBalancesReaderForTest();
     coinflipMod.__resetReverseFlipQuoteReaderForTest();
     coinflipMod.__resetBafFlipEveReaderForTest();
+    coinflipMod.__resetUpcomingFlipBonusReaderForTest();
     coinflipMod.__resetContractFactoryForTest();
     charityVoteMod.__resetCharityVoteForTest();
     contractsMod.clearProvider();
   });
 
-  test('unrevealed → clickable 3D coin with a small left-side reveal graphic and no extra button', async () => {
+  test('unrevealed → clickable single-surface coin with a small left-side reveal graphic and no extra button', async () => {
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: { day: 67, win: true, rewardPercent: 96 } };
     const el = mount();
     await flushMicrotasks();
@@ -528,22 +573,28 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const coin = el.querySelector('.df-coin--spinning');
     assert.ok(coin, 'spinning coin rendered');
     assert.equal(coin.tagName, 'BUTTON', 'coin is clickable too');
-    assert.ok(coin.querySelector('.df-coin3d__inner'), '3D rotor present (idle spin loop)');
+    assert.ok(coin.querySelector('.df-coin3d__inner'), 'rotor present (idle spin loop)');
+    assert.ok(coin.querySelector('.df-coin3d__surface'),
+      'one physical surface owns both preloaded artworks');
     const faces = coin.querySelectorAll('.df-coin3d__face');
-    assert.equal(faces.length, 2, 'two faces');
+    assert.equal(faces.length, 2, 'two artworks are preloaded');
+    assert.equal(faces.filter((face) => !face.hidden).length, 1,
+      'only one artwork can be composited at a time');
     const srcs = coin.querySelectorAll('img').map((i) => i.src);
     assert.ok(srcs.includes('/shared/coinflip-face-red.svg'), 'red WWXRP face');
     assert.ok(srcs.includes('/shared/coinflip-face-eth.svg'), 'green ETH face');
     const rotorRule = APP_CSS.match(/\.df-coin3d__inner\s*\{[^}]*\}/s)?.[0] || '';
-    assert.match(rotorRule, /transform-style:\s*preserve-3d/);
-    assert.doesNotMatch(rotorRule, /isolation:\s*isolate/,
-      'the rotor cannot use a grouping property that flattens its two 3D faces');
-    assert.match(APP_CSS, /\.df-coin3d__face--red\s*\{[^}]*rotateX\(0deg\) translateZ\(1px\)/s);
-    assert.match(APP_CSS, /\.df-coin3d__face--eth\s*\{[^}]*rotateX\(180deg\) translateZ\(1px\)/s,
-      'the ETH and WWXRP artwork occupy distinct backface-hidden planes');
+    assert.match(rotorRule, /transform-style:\s*flat/);
+    assert.match(APP_CSS,
+      /\.df-coin3d__surface\s*\{[^}]*contain:\s*paint[^}]*transform-style:\s*flat/s,
+      'the artwork is isolated on one flat compositor surface');
+    assert.match(APP_CSS, /\.df-coin3d__face\[hidden\]\s*\{[^}]*display:\s*none !important/s,
+      'the opposite artwork is removed from compositing rather than backface-culled');
+    assert.match(APP_CSS, /\.df-coin3d__face--eth\s*\{[^}]*scaleY\(-1\)/s,
+      'the one plane pre-inverts ETH so its projected reverse remains upright');
     assert.doesNotMatch(APP_CSS,
-      /\.df-coin3d__face img\s*\{[^}]*translateZ|\.df-coin3d__face img\s*\{[^}]*backface-visibility/s,
-      'the nested SVGs cannot become independent 3D layers and expose the WWXRP reverse');
+      /\.df-coin3d__face--(?:red|eth)\s*\{[^}]*(?:rotateX|translateZ)/s,
+      'no second 3D plane can expose an upside-down WWXRP reverse');
     const revealHint = el.querySelector('[data-bind="df-reveal-hint"]');
     assert.equal(revealHint.hidden, false, 'small instruction graphic is visible while unrevealed');
     assert.equal(revealHint.tagName, 'BUTTON', 'the instruction graphic is itself a reveal control');
@@ -593,6 +644,36 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.doesNotMatch(el.innerHTML, /BAF TOMORROW|WIN TRIGGERS THE DRAW/);
     assert.doesNotMatch(APP_CSS, /\.df-baf-eve(?:__|\s|\[)/);
     assert.match(APP_CSS, /\.app-daily-flip--baf-eve \.df-tomorrow-layout\s*\{[^}]*border-color:/s);
+    el.disconnectedCallback();
+  });
+
+  test('an exact upcoming bonus day puts plain green bonus copy beside Tomorrow', async () => {
+    coinflipMod.__setUpcomingFlipBonusReaderForTest(async () => ({
+      purchaseInfo: { lvl: 31, inJackpotPhase: true, lastPurchaseDay_: false, rngLocked_: false },
+      compressionTier: 0,
+      growthState: { currentLevel: 31, phaseDay: 1 },
+    }));
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+      gameState: { level: 31 },
+      baf: { score: '0', rank: null },
+    };
+    const el = mount();
+    await flushMicrotasks();
+
+    const badge = el.querySelector('[data-bind="df-bonus-flip"]');
+    assert.ok(badge);
+    assert.equal(badge.dataset.tier, 'standard');
+    assert.equal(badge.textContent, '+2% BONUS');
+    assert.equal(badge.parentElement.children[1], badge,
+      'the plain bonus follows Tomorrow in the same title row');
+    assert.match(APP_CSS, /\.df-position-bonus\s*\{[^}]*color:\s*#4ade80/s);
+    assert.doesNotMatch(APP_CSS,
+      /\.df-position-bonus\s*\{[^}]*(?:border|border-radius|background|box-shadow):/s,
+      'the inline green bonus has no badge or box chrome');
+    assert.doesNotMatch(APP_CSS, /\.df-tomorrow-layout\.has-bonus-flip/,
+      'the bonus no longer turns the whole Tomorrow instrument into a green box');
     el.disconnectedCallback();
   });
 
@@ -698,7 +779,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test('BAF rank loads once per bracket and refreshes once after a winning reveal', async () => {
+  test('BAF rank accepts the live eve position and refreshes once after a winning reveal', async () => {
     _fetchResponses = {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 96 },
@@ -722,6 +803,28 @@ describe('app-daily-flip — coin reveal + actions', () => {
     await flushMicrotasks();
     assert.equal(_fetchCounts.get(bafUrl), 1,
       'ordinary widget refreshes reuse the cached rank instead of rerunning the DB rank query');
+
+    storeMod.update('app.bafPosition', {
+      address: '0x9999999999999999999999999999999999999999',
+      level: 10,
+      score: String(9_000n * 10n ** 18n),
+      rank: 1,
+    });
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, 'RANK #3',
+      'another account cannot overwrite the viewed player position');
+
+    storeMod.update('app.bafPosition', {
+      address: TEST_ADDR,
+      level: 10,
+      score: String(1_500n * 10n ** 18n),
+      rank: 7,
+      totalParticipants: 20,
+      roundStatus: 'open',
+    });
+    assert.equal(el.querySelector('[data-bind="df-baf-rank"]').textContent, 'RANK #7',
+      'the compact score lane immediately adopts the full-width BAF rail rank');
+    assert.equal(_fetchCounts.get(bafUrl), 1,
+      'sharing the live BAF row does not add another API request');
 
     el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
     await flushMicrotasks();
@@ -1010,7 +1113,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test('clicking a blurred FLIP value reveals it without opening the gated claim action', async () => {
+  test('the restored inline Claim opens the FLIP funds popup independently of disclosure', async () => {
     _fetchResponses = {
       dashboard: dashboardPayload(),
       flipDay: { day: 67, win: true, rewardPercent: 96 },
@@ -1031,7 +1134,21 @@ describe('app-daily-flip — coin reveal + actions', () => {
       address: TEST_ADDR.toLowerCase(),
       visible: true,
     }, 'the owning Protocol Coins cell publishes its exact disclosure state');
-    assert.equal(claim.disabled, true, 'unblurring is visual and does not bypass claim eligibility');
+    assert.equal(claim.disabled, false,
+      'the popup opener remains available independently of the FLIP disclosure');
+    assert.equal(el.querySelector('[data-bind="df-claim-eth-cta"]'), null,
+      'Protocol Coins no longer hides a separate ETH claim widget');
+    assert.equal(el.querySelector('[data-bind="df-link-donation-cta"]'), null,
+      'Protocol Coins no longer hides a separate LINK funding widget');
+    assert.equal(el.querySelector('[data-bind="df-player-fund-actions"]'), null,
+      'the old three-widget strip is removed entirely');
+    const openedModes = [];
+    document.addEventListener('degenerus:player-funds:open', (event) => {
+      openedModes.push(event?.detail?.mode);
+    });
+    claim.dispatchEvent({ type: 'click' });
+    assert.deepEqual(openedModes, ['flip'],
+      'the old inline Claim opens the popup focused on FLIP');
     el.disconnectedCallback();
   });
 
@@ -1276,12 +1393,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
         "Today's bet stays neutral until the win sound can play");
       assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '••••',
         'Protocol Coins cannot reveal or add the payout before the result is final');
-      assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, true,
-        'the new payout cannot be claimed during the modifier settle');
-      assert.notEqual(
+      assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, false,
+        'the shared popup remains available for older ETH/FLIP while this new payout settles');
+      assert.equal(
         el.querySelector('[data-bind="df-claim-flip-cta"]').getAttribute('data-write-locked'),
         null,
-        'the global signer manager cannot re-enable a domain-locked claim',
+        'the popup opener is not itself a transaction',
       );
 
       const settle = scheduled.find((entry) => entry.delay === 1_600);
@@ -1579,6 +1696,10 @@ describe('app-daily-flip — coin reveal + actions', () => {
       'the win outcome sits prominently at the left of the resolved row');
     assert.equal(today.querySelector('.df-position-percentage').textContent, '196%',
       'the UI shows the total payout multiplier, not only the 96% bonus');
+    assert.equal(today.querySelector('.df-position-percentage--low'), null,
+      'a middle multiplier keeps the existing green treatment');
+    assert.equal(today.querySelector('.df-position-percentage--high'), null,
+      'a middle multiplier keeps the existing green treatment');
     assert.equal(today.querySelector('.df-position-value').textContent, '+85,934 FLIP',
       "Today's Bet keeps the signed payout on the right");
     assert.ok(today.className.includes('df-position-row--win'));
@@ -1587,6 +1708,43 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(el.querySelector('.df-modifier-result'), null,
       'there is no duplicate permanent result display');
     el.disconnectedCallback();
+  });
+
+  test("Today's Bet colors only the 150% and 250%+ multiplier number", async () => {
+    const cases = [
+      { rewardPercent: 50, text: '150%', tone: 'low' },
+      { rewardPercent: 114, text: '214%', tone: null },
+      { rewardPercent: 150, text: '250%', tone: 'high' },
+      { rewardPercent: 200, text: '300%', tone: 'high' },
+    ];
+
+    for (const sample of cases) {
+      _fetchResponses = {
+        dashboard: dashboardPayload(),
+        flipDay: { day: 67, win: true, rewardPercent: sample.rewardPercent },
+      };
+      globalThis.localStorage.setItem('flip_day_84532_67', '1');
+      const el = mount();
+      await flushMicrotasks();
+
+      const today = el.querySelector('[data-position="today"]');
+      const percent = today.querySelector('.df-position-percentage');
+      assert.equal(percent.textContent, sample.text);
+      assert.equal(
+        percent.className,
+        sample.tone
+          ? `df-position-percentage df-position-percentage--${sample.tone}`
+          : 'df-position-percentage',
+      );
+      assert.equal(today.querySelector('.df-position-outcome').className, 'df-position-outcome',
+        'WIN itself does not receive the threshold color class');
+      assert.equal(today.querySelector('.df-position-value').className,
+        'df-position-value df-position-value--win',
+        'the payout does not receive the threshold color class');
+
+      el.disconnectedCallback();
+      el.remove();
+    }
   });
 
   test('revealed LOSS day → red face + explicit signed Today result', async () => {
@@ -1725,10 +1883,16 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(displays[0].hidden, false, 'FLIP is the default visible balance');
     assert.equal(displays[1].hidden, true, 'WWXRP starts collapsed');
     assert.equal(displays[2].hidden, true, 'sDGNRS starts collapsed');
+    const claim = el.querySelector('[data-bind="df-claim-flip-cta"]');
+    assert.ok(claim, 'the compact FLIP Claim stays in the default visible row');
+    assert.equal(el.querySelector('[data-bind="df-player-fund-actions"]'), null,
+      'there is no hidden claim/fund strip inside Protocol Coins');
     fundsToggle.dispatchEvent({ type: 'click' });
     assert.equal(fundsToggle.getAttribute('aria-expanded'), 'true');
     assert.equal(displays[1].hidden, false, 'the dropdown restores WWXRP');
     assert.equal(displays[2].hidden, false, 'the dropdown restores sDGNRS');
+    assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]'), claim,
+      'expanding the balances does not move or replace the FLIP Claim action');
     assert.match(APP_CSS,
       /\.df-funds__display--flip-total \.df-funds__value\s*\{[^}]*color:\s*#fde68a[^}]*245, 158, 11/s,
       'the FLIP balance retains its yellow protocol-coin accent');
@@ -1804,8 +1968,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /\.df-modifier-meter__marker\s*\{[^}]*bottom:/s,
       'modifier marker travels vertically');
     assert.match(APP_CSS,
-      /\.df-next-bet__stepper\s*\{[^}]*height:\s*1\.65rem/s,
-      'the amount stepper stays short inside the Tomorrow row');
+      /\.df-tomorrow-layout\s*\{[^}]*grid-template-areas:\s*"action total"[^}]*grid-template-columns:\s*calc\(3\.55rem \+ 0\.22rem\) minmax\(0, 1fr\)/s,
+      'Tomorrow gives the popup trigger the same inset action lane as Claim');
     assert.match(APP_CSS,
       /\.app-daily-flip :is\([\s\S]*?\.df-burn-sdgnrs-cta[\s\S]*?font-size:\s*var\(--df-action-font-size, 0\.56rem\)/,
       'the five visible flip actions share the slightly larger desktop label size');
@@ -1827,8 +1991,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(APP_CSS,
       /body\.layout-basic \.df-funds__unit\s*\{[^}]*margin-left:\s*1ch/s,
       'both lower FLIP units match the full-space rhythm of Today’s Bet');
-    const claim = el.querySelector('[data-bind="df-claim-flip-cta"]');
-    assert.ok(claim.disabled, 'claim stays unlit while its balance is masked');
+    assert.equal(claim.disabled, false,
+      'the focused FLIP claim popup remains reachable while the number is masked');
     el.disconnectedCallback();
   });
 
@@ -2190,20 +2354,52 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     const flip = el.querySelector('[data-bind="df-flip-cta"]');
     assert.ok(flip, 'Add Bet CTA');
-    assert.match(el.innerHTML, /aria-label="Add bet"[^>]*>ADD BET<\/button>/,
+    assert.match(el.innerHTML, /aria-label="Add to tomorrow's bet"[^>]*>ADD BET<\/button>/,
       'the transaction control names its full Add Bet action');
     const amount = el.querySelector('[name="df-amount"]');
+    assert.match(el.innerHTML,
+      /df-add-bet-dialog__value[\s\S]*?type="number" name="df-amount"[^>]*data-bind="df-add-bet-number"/,
+      'the amount headliner itself accepts an exact numeric amount');
+    assert.doesNotMatch(el.innerHTML, /EXACT AMOUNT|df-add-bet-dialog__number-field/,
+      'there is no redundant exact-amount input below the headliner');
+    assert.match(el.innerHTML, /type="range" data-bind="df-add-bet-slider"/,
+      'the dialog retains its quick amount slider');
+    assert.match(el.innerHTML,
+      /df-add-bet-dialog__head[\s\S]*?src="\/whitepaper\/flame-logo-split\.svg"/,
+      'the popup header uses the FLIP split-flame mark');
+    assert.doesNotMatch(el.innerHTML,
+      /df-add-bet-dialog__head[\s\S]*?src="\/specials\/special_flip_static\.svg"/,
+      'the popup no longer shows the WWXRP-style face');
+    const dialog = el.querySelector('[data-bind="df-add-bet-dialog"]');
+    assert.equal(dialog.hidden, true, 'the slider stays out of the Tomorrow row until requested');
+    flip.dispatchEvent({ type: 'click' });
+    assert.equal(dialog.hidden, false, 'Add Bet opens its amount dialog without sending a transaction');
+    const reuse = el.querySelector('[data-bind="df-add-bet-reuse"]');
+    assert.equal(reuse.hidden, false);
+    assert.equal(reuse.textContent, 'REUSED WINNINGS +0.75% · +7.5 FLIP',
+      'the default 1,000-FLIP rebet previews its claimable-winnings bonus');
     amount.value = '54000';
     amount.dispatchEvent({ type: 'input' });
-    assert.equal(flip.title, 'Bet 54k', 'button tooltip abbreviates the entered stake');
-    el.querySelector('[data-bind="df-bet-up"]').dispatchEvent({ type: 'click' });
-    assert.equal(amount.value, '54100', 'custom up arrow adds the explicit 100 FLIP step');
-    el.querySelector('[data-bind="df-bet-down"]').dispatchEvent({ type: 'click' });
-    assert.equal(amount.value, '54000', 'custom down arrow removes the same step');
+    assert.equal(amount.value, '54000', 'the prominent amount headliner retains the typed selection');
+    assert.equal(reuse.textContent, 'REUSED WINNINGS +0.75% · +405 FLIP',
+      'the reuse bonus follows the exact typed amount');
+    const slider = el.querySelector('[data-bind="df-add-bet-slider"]');
+    assert.equal(slider.step, '100', 'large totals make the slider use round 100-FLIP stops');
+    assert.equal(slider.value, '54000', 'the number field keeps the slider synchronized');
+    amount.value = '54123';
+    amount.dispatchEvent({ type: 'input' });
+    assert.equal(amount.value, '54123', 'typing can still retain an exact whole-FLIP amount');
+    assert.equal(slider.value, '54100', 'the slider thumb follows the nearest round stop');
+    slider.value = '54149';
+    slider.dispatchEvent({ type: 'input' });
+    assert.equal(slider.value, '54100', 'a large-total slider selection snaps to its nearest round stop');
+    assert.equal(amount.value, '54100', 'a snapped slider selection updates the exact number field');
+    assert.equal(el.querySelector('[data-bind="df-bet-up"]'), null);
+    assert.equal(el.querySelector('[data-bind="df-bet-down"]'), null);
     assert.ok(
       el.innerHTML.indexOf('data-bind="df-add-bet-controls"')
         < el.innerHTML.indexOf('data-bind="df-position-tomorrow"'),
-      'the amount + Add Bet group is laid out to the left of Tomorrow’s Bet',
+      'the Add Bet trigger is laid out to the left of Tomorrow’s Bet',
     );
     assert.equal(el.querySelector('[data-bind="df-claim-cta"]'), null,
       'Claim DGNRS CTA removed from the coinflip column');
@@ -2212,31 +2408,101 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /\.df-next-bet \.df-flip-cta\s*\{[^}]*background:\s*linear-gradient\(180deg, #fde68a, #f59e0b\)/s,
       'Add Bet uses the yellow FLIP action treatment');
     assert.match(APP_CSS,
-      /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*width:\s*auto[^}]*min-width:\s*3rem[^}]*height:\s*1\.3rem[^}]*min-height:\s*1\.3rem[^}]*max-height:\s*1\.3rem/s,
-      'Add Bet uses the same bounded geometry as its neighboring actions');
+      /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*width:\s*3\.55rem[^}]*min-width:\s*3\.55rem[^}]*max-width:\s*3\.55rem/s,
+      'Add Bet uses one fixed compact footprint');
     assert.match(APP_CSS,
       /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*align-self:\s*center/s,
       'the compressed Add Bet action is vertically centered');
     assert.match(APP_CSS,
-      /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*margin-left:\s*0\.12rem/s,
-      'Add Bet keeps a small visual gap from the amount arrows');
+      /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*justify-self:\s*start[^}]*margin-left:\s*0\.22rem/s,
+      'Add Bet uses the same inner left inset as the Claim action below it');
     assert.match(APP_CSS,
-      /body\.layout-basic \.df-funds \.df-claim-flip-cta\[data-write\],[\s\S]*?align-self:\s*center/s,
-      'Claim is vertically centered in the compressed Protocol Coins bar too');
+      /\.df-add-bet-dialog__value\s*\{[^}]*text-align:\s*center[^}]*text-overflow:\s*ellipsis/s,
+      'the popup gives the selected amount a stable prominent readout');
     assert.match(APP_CSS,
-      /\.df-funds:has\(\.df-funds__toggle\[aria-expanded="false"\]\)[\s\S]*?\.df-claim-flip-cta\[data-write\]\s*\{[^}]*transform:\s*translateY\(-0\.38rem\)/s,
-      'the collapsed heading offset is removed from Claim’s visual center');
+      /\.df-add-bet-dialog__value input\s*\{[^}]*font:\s*inherit[^}]*text-align:\s*center/s,
+      'the editable input inherits the prominent amount treatment');
+    assert.doesNotMatch(APP_CSS, /\.df-player-fund-actions|\.df-player-fund-widget/,
+      'the removed three-widget strip leaves no dormant styling behind');
+    assert.match(APP_CSS,
+      /\.app-daily-flip :is\([\s\S]*?\.df-next-bet \.df-flip-cta\[data-write\],[\s\S]*?\.df-funds \.df-claim-flip-cta\[data-write\][\s\S]*?\)\s*\{[^}]*width:\s*3\.55rem[^}]*min-width:\s*3\.55rem[^}]*max-width:\s*3\.55rem/s,
+      'the right-side Claim is exactly the same width as Add Bet');
     assert.match(APP_CSS,
       /\.app-daily-flip \.df-next-bet \.df-flip-cta\[data-write\],[\s\S]*?height:\s*1\.3rem/s,
       'Add Bet participates in the shared action-control rule');
+    assert.doesNotMatch(APP_CSS, /\.df-next-bet__stepper|\.df-next-bet__arrows/,
+      'the removed inline amount and arrow controls leave no dormant styling');
     assert.match(APP_CSS,
-      /@media \(max-width: 520px\)[\s\S]*?\.df-next-bet__arrows button\s*\{[^}]*min-width:\s*0[^}]*min-height:\s*0/s,
-      'the two compact stepper halves cannot inherit 44px mobile button minimums');
+      /\.df-funds \.df-claim-flip-cta\[data-write\]\s*\{[^}]*background:\s*linear-gradient\(180deg, #fde68a, #f59e0b\)/s,
+      'the restored FLIP Claim retains the protocol yellow asset treatment');
     assert.match(APP_CSS,
-      /\.df-claim-flip-cta\[data-write\]\s*\{[^}]*background:\s*linear-gradient\(180deg, #fde68a, #f59e0b\)/s,
-      'Claim uses the same yellow FLIP action treatment');
+      /\.pfd-input-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 3\.5rem 6\.5rem/s,
+      'the funds popup reserves one fixed action column for every claim/fund mode');
     assert.equal(el.querySelector('[data-bind="df-redeem-group"]'), null,
       'FLIP redemption lives only in the purchase panel');
+    el.disconnectedCallback();
+  });
+
+  test("Tomorrow's Add Bet number input submits its selected whole-FLIP amount", async () => {
+    const calls = [];
+    const deposit = Object.assign(
+      async (...args) => {
+        calls.push(['send', ...args]);
+        return { hash: '0xcompact', wait: async () => ({ status: 1, logs: [] }) };
+      },
+      { staticCall: async (...args) => { calls.push(['static', ...args]); } },
+    );
+    contractsMod.setProvider({
+      getNetwork: async () => ({ chainId: 84532n }),
+      getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
+    });
+    coinflipMod.__setContractFactoryForTest(() => ({
+      depositCoinflip: deposit,
+      connect() { return this; },
+    }));
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
+    const el = mount();
+    await flushMicrotasks();
+    const input = el.querySelector('[name="df-amount"]');
+    const button = el.querySelector('[data-bind="df-flip-cta"]');
+    const confirm = el.querySelector('[data-bind="df-add-bet-confirm"]');
+    const unit = 10n ** 18n;
+    for (const [draft, expected] of [
+      ['100', 100n * unit],
+      ['2000', 2_000n * unit],
+      ['5237', 5_237n * unit],
+    ]) {
+      button.dispatchEvent({ type: 'click' });
+      input.value = draft;
+      input.dispatchEvent({ type: 'input' });
+      confirm.dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      assert.deepEqual(calls.slice(-2), [
+        ['static', TEST_ADDR, expected],
+        ['send', TEST_ADDR, expected],
+      ], `${draft} selected FLIP reaches the contract exactly`);
+      await new Promise((resolve) => setTimeout(resolve, 525));
+    }
+    el.disconnectedCallback();
+  });
+
+  test('Add Bet bonuses only the portion funded by reused winnings', async () => {
+    const unit = 10n ** 18n;
+    const dashboard = dashboardPayload();
+    dashboard.flipBalance = String(1_000n * unit);
+    dashboard.coinflip.claimablePreview = String(200n * unit);
+    _fetchResponses = { dashboard, flipDay: null };
+    const el = mount();
+    await flushMicrotasks();
+
+    el.querySelector('[data-bind="df-flip-cta"]').dispatchEvent({ type: 'click' });
+    const input = el.querySelector('[data-bind="df-add-bet-number"]');
+    const reuse = el.querySelector('[data-bind="df-add-bet-reuse"]');
+    assert.equal(input.value, '1000');
+    assert.equal(reuse.textContent, 'REUSED WINNINGS +0.75% · +1.5 FLIP',
+      'the wallet-funded 800 FLIP receives no reuse bonus');
+    assert.equal(reuse.getAttribute('title'), '200 FLIP of this bet comes from winnings.');
+
     el.disconnectedCallback();
   });
 
@@ -2286,6 +2552,123 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(save.disabled, false, 'the changed off state is ready to save');
     dialog.dispatchEvent({ type: 'click', target: dialog });
     assert.equal(dialog.hidden, true, 'the backdrop closes without changing settings');
+    el.disconnectedCallback();
+  });
+
+  test('every live FLIP display uses the replayed auto-rebuy remainder', async () => {
+    const unit = 10n ** 18n;
+    _currentStakeWei = String(1_286n * unit);
+    coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
+      enabled: true,
+      takeProfitWei: 10_000n * unit,
+      // Deliberately stale storage: this is the carry that entered the win.
+      carryWei: 1_300n * unit,
+      startDay: 64,
+    }));
+    coinflipMod.__setClaimableReaderForTest(async () => 20_000n * unit);
+    coinflipMod.__setBackingReaderForTest(async () => 21_286n * unit);
+    coinflipMod.__setWidgetBalancesReaderForTest(async () => ({
+      flipBalance: 165_186n * unit,
+      wwxrpBalance: 0n,
+      sdgnrsBalance: 0n,
+    }));
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 114 },
+    };
+    localStorage.setItem('flip_day_84532_67', '1');
+    localStorage.setItem('jackpot_complete_day_84532_67', '1');
+
+    const el = mount();
+    await flushMicrotasks();
+
+    assert.match(
+      el.querySelector('[data-position="tomorrow"]').textContent,
+      /Tomorrow's bet1,286 FLIP/,
+      'Tomorrow uses the replayed remainder, not stale carry storage',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="df-funds-flip-total"]').textContent,
+      '186,472',
+      'Protocol Coins is wallet plus the same claimable + replayed carry backing',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="df-claim-flip-cta"]').disabled,
+      false,
+      'CLAIM remains limited to the separately banked 20,000 FLIP',
+    );
+
+    el.querySelector('[data-bind="df-auto-rebuy-cta"]').dispatchEvent({ type: 'click' });
+    assert.equal(
+      el.querySelector('[data-bind="df-auto-rebuy-carry"]').textContent,
+      '1,286 FLIP',
+      'Rolling Now uses the replayed remainder too',
+    );
+    el.disconnectedCallback();
+  });
+
+  test('a confirmed claim moves FLIP between ledgers without double-counting the reveal floor', async () => {
+    const unit = 10n ** 18n;
+    let wallet = 165_186n * unit;
+    let claimable = 20_000n * unit;
+    let backing = 21_286n * unit;
+    _currentStakeWei = String(1_286n * unit);
+    _resolvedStakeWei = String(10_000n * unit);
+    coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
+      enabled: true,
+      takeProfitWei: 10_000n * unit,
+      carryWei: 1_300n * unit,
+      startDay: 64,
+    }));
+    coinflipMod.__setClaimableReaderForTest(async () => claimable);
+    coinflipMod.__setBackingReaderForTest(async () => backing);
+    coinflipMod.__setWidgetBalancesReaderForTest(async () => ({
+      flipBalance: wallet,
+      wwxrpBalance: 0n,
+      sdgnrsBalance: 0n,
+    }));
+    const dashboard = dashboardPayload();
+    dashboard.flipBalance = String(wallet);
+    dashboard.coinflip.claimablePreview = String(claimable);
+    _fetchResponses = {
+      dashboard,
+      flipDay: { day: 67, win: true, rewardPercent: 100 },
+    };
+
+    const el = mount();
+    await flushMicrotasks();
+    el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+    assert.equal(
+      el.querySelector('[data-bind="df-funds-flip-total"]').textContent,
+      '186,472',
+      'pre-claim total is wallet plus banked FLIP plus the rolling remainder',
+    );
+
+    // A normal claim mints the banked 20,000 into the wallet. The combined
+    // value must stay unchanged even while the indexed dashboard still has
+    // the old claimable amount and the reveal receipt remains mounted.
+    wallet += claimable;
+    claimable = 0n;
+    backing = 1_286n * unit;
+    document.dispatchEvent({
+      type: contractsMod.TX_CONFIRMED_EVENT,
+      detail: { blockNumber: 9_001 },
+    });
+    await flushMicrotasks();
+
+    assert.equal(
+      el.querySelector('[data-bind="df-funds-flip-total"]').textContent,
+      '186,472',
+      'the same 20,000 is not counted in both wallet and claimable after confirmation',
+    );
+    assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, false,
+      'the unified funds popup remains available after one ledger is emptied');
+    assert.match(
+      el.querySelector('[data-position="tomorrow"]').textContent,
+      /1,286 FLIP/,
+      'the already-rolling remainder stays in Tomorrow’s Bet',
+    );
     el.disconnectedCallback();
   });
 
@@ -2392,7 +2775,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(el.querySelector('[data-bind="df-funds-flip-unit"]').textContent, 'FLIP');
     assert.equal(el.querySelector('[data-bind="df-funds-wwxrp"]').textContent, '- WWXRP');
     assert.equal(el.querySelector('[data-bind="df-funds-sdgnrs"]').textContent, '- sDGNRS');
-    assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, true);
+    assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, false,
+      'the focused FLIP funds popup remains reachable while balances are zero');
     assert.equal(el.querySelector('[data-bind="df-burn-wwxrp-cta"]').disabled, true);
     assert.equal(el.querySelector('[data-bind="df-burn-sdgnrs-cta"]').disabled, true);
     el.disconnectedCallback();
@@ -2548,8 +2932,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
     const amount = el.querySelector('[name="df-amount"]');
     const add = el.querySelector('[data-bind="df-flip-cta"]');
-    assert.equal(amount.value, '2000', '18-decimal quest target becomes an ordinary FLIP input');
-    assert.equal(add.title, 'Bet 2k', 'the normal form UI reflects the configured quest amount');
+    assert.equal(amount.value, '2000', '18-decimal quest target becomes an exact slider selection');
+    assert.equal(el.querySelector('[data-bind="df-add-bet-dialog"]').hidden, false,
+      'the quest opens the same Add Bet popup for review');
+    assert.equal(el.querySelector('[data-bind="df-add-bet-value"]'), null,
+      'the quest target is not duplicated into a read-only amount box');
+    assert.equal(add.getAttribute('aria-expanded'), 'true');
     assert.equal(_currentStakeWei, '43844000000000000000000',
       'configuring a quest does not submit or mutate the live bet');
 
@@ -2835,19 +3223,24 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test('flip action with zero amount renders an error via textContent', async () => {
-    _fetchResponses = { dashboard: dashboardPayload(), flipDay: { day: 67, win: true, rewardPercent: 96 } };
+  test('Add Bet slider locks cleanly when less than the 100 FLIP minimum is usable', async () => {
+    const dashboard = dashboardPayload();
+    dashboard.flipBalance = '50000000000000000000';
+    dashboard.coinflip.claimablePreview = '0';
+    _fetchResponses = { dashboard, flipDay: { day: 67, win: true, rewardPercent: 96 } };
     const el = mount();
     await flushMicrotasks();
 
-    const input = el.querySelector('[name="df-amount"]');
-    input.value = '0';
     el.querySelector('[data-bind="df-flip-cta"]').dispatchEvent({ type: 'click' });
-    await flushMicrotasks();
-
-    const err = el.querySelector('[data-bind="df-error"]');
-    assert.equal(err.hidden, false, 'error visible');
-    assert.match(err.textContent, /greater than 0/, 'validation message');
+    const slider = el.querySelector('[data-bind="df-add-bet-slider"]');
+    const number = el.querySelector('[data-bind="df-add-bet-number"]');
+    const confirm = el.querySelector('[data-bind="df-add-bet-confirm"]');
+    assert.equal(slider.disabled, true);
+    assert.equal(number.disabled, true);
+    assert.equal(confirm.disabled, true);
+    assert.equal(number.value, '');
+    assert.equal(number.placeholder, 'NOT ENOUGH');
+    assert.match(confirm.getAttribute('data-write-lock-title'), /At least 100 FLIP/);
     el.disconnectedCallback();
   });
 });
@@ -2974,20 +3367,21 @@ describe('new-day rollover (codex-found race)', () => {
       day: 68,
       jackpotDay: 68,
       coinflipDay: 68,
-      jackpotReady: true,
+      jackpotReady: false,
       coinflipReady: true,
       rngLocked: false,
       rngRequested: true,
       reverseQueued: '3',
-      ready: true,
-      phase: 'synced',
+      ready: false,
+      phase: 'waiting-jackpot',
       coinflipResult: exact,
     });
     await flushMicrotasks();
 
     const ready = el.querySelector('.df-coin--spinning');
     assert.ok(ready);
-    assert.equal(ready.disabled, false);
+    assert.equal(ready.disabled, false,
+      'the Coinflip opens on its own processed result without waiting for jackpot processing');
     assert.equal(el.querySelector('[data-bind="df-reveal-hint"]').hidden, false,
       'the same store transition makes the flip actionable');
     el.disconnectedCallback();

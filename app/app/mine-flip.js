@@ -41,10 +41,10 @@ const MINE_FLIP_ABI = [
 ];
 
 const CRANK_NAME = 'mineFlip';
+const MINE_FLIP_MIN_GAS_LIMIT = 10_000_000n;
 // The protocol keeper's measured ceiling, kept below Base's 16,777,216
-// per-transaction cap. Browser sends use the smaller live estimate + shared
-// headroom when possible so low-balance players are not forced to reserve the
-// entire worst-case amount for a cheap crank branch.
+// per-transaction cap. Browser sends retain the live estimate + shared
+// headroom, but never go below the 10m floor required by the heaviest branches.
 const MINE_FLIP_MAX_GAS_LIMIT = 16_000_000n;
 
 let _contractFactory = null;
@@ -129,7 +129,9 @@ async function _mineFlipGasBudget(contract, signer, provider) {
     const padded = gasEstimateWithHeadroom(estimate);
     const gasLimit = padded > MINE_FLIP_MAX_GAS_LIMIT
       ? MINE_FLIP_MAX_GAS_LIMIT
-      : padded;
+      : padded < MINE_FLIP_MIN_GAS_LIMIT
+        ? MINE_FLIP_MIN_GAS_LIMIT
+        : padded;
     const feeRaw = feeData?.maxFeePerGas ?? feeData?.gasPrice;
     if (feeRaw == null) return null;
     const feePerGas = BigInt(feeRaw);
@@ -225,9 +227,10 @@ export async function mineFlip({ player } = {}) {
   // Phase 58 chokepoint — closure form mandatory (stale-signer capture guard).
   const receipt = await sendTx((s) => {
     const contract = _buildGameContract(s);
-    return probe.gasLimit != null
-      ? contract.mineFlip({ gasLimit: probe.gasLimit })
-      : contract.mineFlip();
+    const gasLimit = probe.gasLimit != null && BigInt(probe.gasLimit) > MINE_FLIP_MIN_GAS_LIMIT
+      ? BigInt(probe.gasLimit)
+      : MINE_FLIP_MIN_GAS_LIMIT;
+    return contract.mineFlip({ gasLimit });
   }, 'Mine FLIP');
   return { receipt, entrypoint: CRANK_NAME };
 }
@@ -235,6 +238,7 @@ export async function mineFlip({ player } = {}) {
 export const _testing = {
   CRANK_NAME,
   NO_WORK_SELECTOR,
+  MINE_FLIP_MIN_GAS_LIMIT,
   MINE_FLIP_MAX_GAS_LIMIT,
   mineFlipGasBudget: _mineFlipGasBudget,
 };

@@ -98,8 +98,8 @@ class AppDeityDesk extends HTMLElement {
                  autocomplete="off" spellcheck="false" aria-label="Wallet address or Discord user ID">
         </label>
         <div class="deity-desk__actions" aria-label="Deity actions">
+          <button type="button" class="deity-desk__smite" data-write data-bind="deity-desk-smite" disabled title="Burn 200 FLIP to smite this player"><span>SMITE</span><strong>-2 SCORE</strong><small class="deity-desk__smite-cost">COST:<img src="/whitepaper/flame-logo-split.svg" alt="FLIP">200</small></button>
           ${[0, 1, 2].map((slot) => `<button type="button" data-write data-slot="${slot}" data-bind="deity-desk-boon-${slot}" disabled><span data-bind="deity-desk-boon-name-${slot}">BOON ${slot + 1}</span><strong data-bind="deity-desk-boon-effect-${slot}">RNG PENDING</strong></button>`).join('')}
-          <button type="button" class="deity-desk__smite" data-write data-bind="deity-desk-smite" disabled title="Burn 200 FLIP to smite this player"><span>SMITE</span><strong>200 FLIP</strong></button>
         </div>
         <p class="deity-desk__feedback" data-bind="deity-desk-feedback" hidden role="status"></p>
       </section>`;

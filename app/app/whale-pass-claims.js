@@ -8,6 +8,7 @@
 
 import { claimWhalePass, readWhalePassClaimAmount } from './claims.js';
 import { clearPendingActions, publishPendingActions } from './pending-actions.js';
+import { currentUnresolvedJackpotContext } from './jackpot-spoiler.js';
 
 const SOURCE = 'whale-pass-claims';
 const WATCH_INTERVAL_MS = 30_000;
@@ -20,6 +21,8 @@ let _writer = null;
 let _refreshSeq = 0;
 let _activeAddress = null;
 let _activeAmount = null;
+let _visibleAmount = null;
+let _jackpotRevealListener = null;
 
 function _lower(value) {
   return value ? String(value).toLowerCase() : null;
@@ -47,6 +50,7 @@ function _isNothingToClaim(error) {
 function _clear(address = null) {
   _activeAddress = address;
   _activeAmount = 0n;
+  _visibleAmount = 0n;
   clearPendingActions(SOURCE);
 }
 
@@ -117,6 +121,7 @@ export async function refreshWhalePassClaims() {
     _refreshSeq += 1;
     _activeAddress = address;
     _activeAmount = null;
+    _visibleAmount = null;
     clearPendingActions(SOURCE);
   }
 
@@ -142,11 +147,22 @@ export async function refreshWhalePassClaims() {
     return;
   }
 
-  _activeAmount = amount;
   if (amount <= 0n) {
-    clearPendingActions(SOURCE);
+    _clear(address);
     return;
   }
+  _activeAmount = amount;
+  if (currentUnresolvedJackpotContext()) {
+    // Preserve a claim that was already visible before the request, but hide
+    // any new balance delta until the jackpot board is finished. On a reload
+    // during processing there is no trustworthy baseline, so hide it all.
+    const visible = _visibleAmount == null ? 0n : amount < _visibleAmount ? amount : _visibleAmount;
+    _visibleAmount = visible;
+    if (visible > 0n) _publish(address, visible);
+    else clearPendingActions(SOURCE);
+    return;
+  }
+  _visibleAmount = amount;
   _publish(address, amount);
 }
 
@@ -159,6 +175,10 @@ export function startWhalePassClaims({ getAddress } = {}) {
     _timer = setInterval(refreshWhalePassClaims, WATCH_INTERVAL_MS);
     try { _timer?.unref?.(); } catch (_e) { /* browser timer */ }
   }
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    _jackpotRevealListener = () => { void refreshWhalePassClaims(); };
+    document.addEventListener('jackpot:revealed', _jackpotRevealListener);
+  }
   void refreshWhalePassClaims();
 }
 
@@ -167,11 +187,17 @@ export function stopWhalePassClaims() {
     try { clearInterval(_timer); } catch (_e) { /* defensive */ }
   }
   _timer = null;
+  if (_jackpotRevealListener && typeof document !== 'undefined') {
+    try { document.removeEventListener('jackpot:revealed', _jackpotRevealListener); }
+    catch (_e) { /* defensive */ }
+  }
+  _jackpotRevealListener = null;
   _running = false;
   _getAddress = null;
   _refreshSeq += 1;
   _activeAddress = null;
   _activeAmount = null;
+  _visibleAmount = null;
   clearPendingActions(SOURCE);
 }
 

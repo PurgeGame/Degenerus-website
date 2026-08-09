@@ -23,6 +23,7 @@ const { ethers } = await import('../contracts.js');
 const pending = await import('../pending-actions.js');
 const reveal = await import('../../components/reveal-overlay.js');
 const bingo = await import('../bingo-watch.js');
+const store = await import('../store.js');
 const { CHAIN } = await import('../chain-config.js');
 
 const PLAYER = '0xab12000000000000000000000000000000000000';
@@ -54,6 +55,7 @@ describe('bingo event watcher', () => {
     pending.__resetPendingActionsForTest();
     reveal.__resetForTest();
     bingo.__resetBingoWatchForTest();
+    store.__resetForTest();
   });
 
   afterEach(() => bingo.__resetBingoWatchForTest());
@@ -179,6 +181,36 @@ describe('bingo event watcher', () => {
     await bingo.refreshBingoWatch();
     rows = pending.getPendingActions().filter((row) => row.kind === 'bingo');
     assert.equal(rows.length, 0, 'a repeat API read respects the consumed receipt id');
+  });
+
+  test('a newly indexed Bingo stays out of Pending until the jackpot board is complete', async () => {
+    store.update('app.daySync', { day: 55, rngRequested: true, jackpotReady: true });
+    store.update('app.gameState', { level: 31, dailyRng: { day: 55, finalWord: '1' } });
+    bingo.__setBingoReadersForTest({
+      index: async () => ({
+        player: PLAYER,
+        claimable: [{
+          player: PLAYER,
+          level: 31,
+          quadrant: 0,
+          symbol: 2,
+          slots: [1, 2, 3, 4, 5, 6, 7, 8],
+        }],
+        claimed: [],
+      }),
+    });
+
+    bingo.startBingoWatch({ getAddress: () => PLAYER });
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+    assert.equal(pending.getPendingActions().some((row) => row.kind === 'bingo'), false,
+      'the proof cannot announce a covered jackpot result');
+
+    localStorage.setItem(`jackpot_complete_day_${CHAIN.id}_55`, '1');
+    await bingo.refreshBingoWatch();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+    assert.equal(pending.getPendingActions().find((row) => row.kind === 'bingo')?.shortLabel,
+      'Claim Bingo', 'the same proof appears immediately after the board opens');
   });
 
   test('DB proof becomes a write action, then its receipt becomes the Bingo reveal', async () => {

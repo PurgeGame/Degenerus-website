@@ -30,6 +30,9 @@ const DECIMATOR_CONTEXT_ABI = [
 const DECIMATOR_SCORE_EVENT_ABI = [
   'event DecBurnRecorded(address indexed player, uint24 indexed lvl, uint8 bucket, uint8 subBucket, uint256 effectiveAmount, uint256 newTotalBurn)',
 ];
+const DECIMATOR_BURN_EVENT_ABI = [
+  'event DecimatorBurn(address indexed player, uint256 amountBurned, uint8 bucket)',
+];
 
 // DegenerusGameStorage slot 0 is deliberately full. `decDayOneActive` occupies
 // its final byte ([31:32]), so bit 248 is the exact live +20% latch used by
@@ -74,6 +77,8 @@ let _contractFactory = null;
 let _contextReaderForTest = null;
 let _readProvider = null;
 const _roundScoreCache = new Map();
+const _roundRawBurnCache = new Map();
+const _roundStartBlockCache = new Map();
 
 /** Test-only contract-construction seam. */
 export function __setContractFactoryForTest(factory) {
@@ -91,6 +96,8 @@ export function __resetContractFactoryForTest() {
   _contextReaderForTest = null;
   _readProvider = null;
   _roundScoreCache.clear();
+  _roundRawBurnCache.clear();
+  _roundStartBlockCache.clear();
 }
 
 function _buildContract(signerOrProvider) {
@@ -337,24 +344,154 @@ async function _readFastDecimatorRoundScore(provider, level) {
   return indexed == null ? _readDecimatorRoundScore(provider, level) : indexed;
 }
 
+function _unixSeconds(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.trunc(parsed > 10_000_000_000 ? parsed / 1_000 : parsed);
+}
+
+async function _firstBlockAtOrAfter(provider, timestamp, head) {
+  let low = Math.max(0, Number(CHAIN.deployBlock) || 0);
+  let high = Math.max(low, Number(head) || low);
+  while (low < high) {
+    const mid = low + Math.floor((high - low) / 2);
+    const block = await provider.getBlock(mid);
+    const blockTime = Number(block?.timestamp || 0);
+    if (blockTime >= timestamp) high = mid;
+    else low = mid + 1;
+  }
+  return low;
+}
+
+/** Indexed stage-7 block that opens the burn window for target level N+1. */
+async function _readIndexedDecimatorWindowStartBlock(targetLevel) {
+  const target = Number(targetLevel);
+  const windowLevel = target - 1;
+  if (!Number.isInteger(windowLevel) || windowLevel < 0) return null;
+  if (_roundStartBlockCache.has(target)) return _roundStartBlockCache.get(target);
+  try {
+    const { fetchJSON } = await import('./api.js');
+    let cursor = null;
+    // The history feed is ascending and capped at 100 rows. A Decimator only
+    // opens once per ten levels, so this cold lookup is rare and its answer is
+    // cached for the browser session.
+    for (let page = 0; page < 200; page += 1) {
+      const suffix = cursor
+        ? `?limit=100&cursor=${encodeURIComponent(cursor)}`
+        : '?limit=100';
+      const payload = await fetchJSON(`/history/levels${suffix}`);
+      const rows = Array.isArray(payload?.items) ? payload.items : [];
+      const opening = rows
+        .filter((row) => Number(row?.level) === windowLevel && Number(row?.stage) === 7)
+        .map((row) => Number(row?.blockNumber))
+        .filter((block) => Number.isInteger(block) && block >= 0)
+        .sort((a, b) => b - a)[0];
+      if (opening != null) {
+        _roundStartBlockCache.set(target, opening);
+        return opening;
+      }
+      // Once an ascending page has moved beyond this level, a missing stage-7
+      // row is genuinely not indexed yet. Let the next widget poll retry.
+      if (rows.some((row) => Number(row?.level) > windowLevel)) return null;
+      cursor = payload?.nextCursor ? String(payload.nextCursor) : null;
+      if (!cursor) return null;
+    }
+  } catch (_e) { /* rolling API / local indexer may not expose history yet */ }
+  return null;
+}
+
+/** Sum the unweighted FLIP actually destroyed in the current level's window. */
+export async function readDecimatorRawBurnTotal({ level, sinceTimestamp, sinceBlock } = {}) {
+  const lvl = Number(level);
+  const startTime = _unixSeconds(sinceTimestamp);
+  let startBlock = Number(sinceBlock);
+  if (!Number.isInteger(startBlock) || startBlock < 0) startBlock = null;
+  if (!Number.isInteger(lvl) || lvl < 1) return null;
+  if (startTime == null && startBlock == null) {
+    startBlock = await _readIndexedDecimatorWindowStartBlock(lvl);
+  }
+  if (startTime == null && startBlock == null) return null;
+  const provider = _contextProvider();
+  if (typeof provider?.getLogs !== 'function'
+    || typeof provider?.getBlock !== 'function'
+    || typeof provider?.getBlockNumber !== 'function') return null;
+
+  const boundaryKey = startBlock == null ? `t${startTime}` : `b${startBlock}`;
+  const cacheKey = `${Number(CHAIN.id)}:${lvl}:${boundaryKey}`;
+  const cached = _roundRawBurnCache.get(cacheKey);
+  const state = cached?.provider === provider
+    ? cached
+    : { provider, nextBlock: null, total: 0n, pending: null };
+  if (!cached || cached.provider !== provider) _roundRawBurnCache.set(cacheKey, state);
+  if (state.pending) return state.pending;
+
+  state.pending = (async () => {
+    const head = Number(await provider.getBlockNumber());
+    if (!Number.isInteger(head) || head < 0) return state.total;
+    if (state.nextBlock == null) {
+      state.nextBlock = startBlock == null
+        ? await _firstBlockAtOrAfter(provider, startTime, head)
+        : startBlock;
+    }
+    if (head < state.nextBlock) return state.total;
+
+    const iface = new ethers.Interface(DECIMATOR_BURN_EVENT_ABI);
+    const event = iface.getEvent('DecimatorBurn');
+    for (let from = state.nextBlock; from <= head; from += DECIMATOR_LOG_CHUNK_BLOCKS) {
+      const to = Math.min(head, from + DECIMATOR_LOG_CHUNK_BLOCKS - 1);
+      const logs = await provider.getLogs({
+        address: CONTRACTS.COIN,
+        topics: [event.topicHash],
+        fromBlock: from,
+        toBlock: to,
+      });
+      for (const log of logs || []) {
+        try { state.total += BigInt(iface.parseLog(log)?.args?.amountBurned ?? 0); }
+        catch (_e) { /* unrelated/malformed log */ }
+      }
+      // Advance after each successful chunk so a later RPC-range failure can
+      // resume without counting the completed chunks twice.
+      state.nextBlock = to + 1;
+    }
+    return state.total;
+  })();
+
+  try {
+    return await state.pending;
+  } finally {
+    state.pending = null;
+  }
+}
+
 /**
  * Read the exact score and timing modifiers consumed by a burn right now.
  * Each leg soft-fails independently so a provider without raw-storage support
  * can still show the score or last-day state.
  */
-export async function readDecimatorContext(player, targetLevel = null) {
-  if (_contextReaderForTest) return _contextReaderForTest(player, targetLevel);
+export async function readDecimatorContext(player, targetLevel = null, options = {}) {
+  if (_contextReaderForTest) return _contextReaderForTest(player, targetLevel, options);
 
   const provider = _contextProvider();
   const game = new ethers.Contract(CONTRACTS.GAME, DECIMATOR_CONTEXT_ABI, provider);
   const burnSlot = player ? decimatorBurnStorageSlot(player, targetLevel) : null;
-  const [scoreRead, purchaseRead, slotRead, futureRead, burnRead, roundScoreRead] = await Promise.allSettled([
+  const [
+    scoreRead,
+    purchaseRead,
+    slotRead,
+    futureRead,
+    burnRead,
+    roundScoreRead,
+    rawBurnRead,
+  ] = await Promise.allSettled([
     player ? game.playerActivityScore(player) : Promise.resolve(null),
     game.purchaseInfo(),
     _storageSlotZero(provider),
     game.futurePrizePoolView(),
     burnSlot == null ? Promise.resolve(null) : _storageAt(provider, burnSlot),
     _readFastDecimatorRoundScore(provider, targetLevel),
+    options?.sinceTimestamp == null
+      ? Promise.resolve(null)
+      : readDecimatorRawBurnTotal({ level: targetLevel, sinceTimestamp: options.sinceTimestamp }),
   ]);
 
   let activityScore = null;
@@ -390,6 +527,11 @@ export async function readDecimatorContext(player, targetLevel = null) {
     try { totalRoundScore = BigInt(roundScoreRead.value); } catch (_e) { /* unknown */ }
   }
 
+  let totalRawBurnWei = null;
+  if (rawBurnRead.status === 'fulfilled' && rawBurnRead.value != null) {
+    try { totalRawBurnWei = BigInt(rawBurnRead.value); } catch (_e) { /* unknown */ }
+  }
+
   return {
     activityScore,
     dayOneActive,
@@ -397,6 +539,7 @@ export async function readDecimatorContext(player, targetLevel = null) {
     futurePoolWei,
     totalBurnWeight,
     totalRoundScore,
+    totalRawBurnWei,
   };
 }
 

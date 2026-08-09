@@ -1,18 +1,10 @@
 // /app/app/jackpot-processing.js — determinate progress for the JACKPOT
 // PROCESSING button (replay-panel.js `[data-bind="reveal-btn"]`).
 //
-// The button used to carry a single indefinite pulse: identical at 0% and 95%,
-// so a player waiting out a slow indexer handoff had no way to tell a healthy
-// wait from a stuck one. The exact-day handoff passes through three observable
-// milestones on its way to a spinnable board, and `#hasExactDayRolls` in
-// replay-panel.js gates on exactly these:
-//
-//   draw   — the day's RNG row carries finalWord + main/bonus packed traits
-//   rolls  — roll-1 AND roll-2 winner rows are loaded for the selected day
-//   sealed — `data-day-warming` cleared, i.e. PrizePoolDailySnapshot sealed the
-//            day. Until then even a non-empty winner array can be incomplete,
-//            because DailyWinningTraits is emitted before the remaining rows in
-//            the same block.
+// The button used to carry a single indefinite pulse. The live handoff now
+// narrates the same order as advanceGame: Chainlink word, Coinflip settlement,
+// queued ticket materialization, jackpot settlement, then the three indexed
+// records needed to build the player's spin board.
 //
 // ROLL-1 AND ROLL-2 ARE ONE MILESTONE, NOT TWO. `#loadDayRolls` issues them as a
 // single `Promise.allSettled` pair and its caller assigns `#dayRoll1` and
@@ -21,35 +13,131 @@
 // (A partial endpoint failure leaves one null, but that is a failed load which
 // refetches both, not an ordering.)
 //
-// Progress is nevertheless a COUNT of completed milestones rather than an index,
-// because `sealed` is NOT ordered against the other two: it is an attribute
-// owned by last-day-jackpot.js, so a day that was never marked warming reads
-// sealed from the first frame while the draw is still being fetched. An index
-// would misreport that as "waiting on the seal".
-//
-// Nothing here is time-derived: the bar moves only when something real finished.
+// The source milestones are real state, not a cosmetic percentage. Browsers can
+// observe several atomic contract stages in one poll, though, so the presentation
+// helper lets the control briefly walk through completed beats instead of jumping
+// from Chainlink straight to Spin. It never advances ahead of confirmed state.
 
 /** Milestones in the order a player would narrate them, for labelling only. */
-export const JACKPOT_PROCESSING_MILESTONES = ['draw', 'rolls', 'sealed'];
+export const JACKPOT_PROCESSING_MILESTONES = [
+  'rng',
+  'coinflip',
+  'packs',
+  'jackpot',
+  'draw',
+  'rolls',
+  'sealed',
+];
 
 /** What the panel is still waiting on, keyed by the first incomplete milestone. */
 const STAGE_LABELS = {
-  draw: 'Waiting for the draw',
-  rolls: 'Reading the rolls',
-  sealed: 'Sealing the day',
-  ready: 'Ready',
+  rng: 'RNG INCOMING',
+  'rng-arrived': 'RNG ARRIVED',
+  coinflip: 'COINFLIP PROCESSING',
+  packs: 'DELIVERING PACKS',
+  jackpot: 'JACKPOT PROCESSING',
+  draw: 'PREPARING SPIN',
+  rolls: 'PREPARING SPIN',
+  sealed: 'PREPARING SPIN',
+  ready: 'SPIN READY',
 };
+
+function _positiveDay(value) {
+  const day = Number(value);
+  return Number.isInteger(day) && day > 0 ? day : null;
+}
+
+function _positiveWord(value) {
+  try { return BigInt(value ?? 0) > 0n; }
+  catch { return false; }
+}
+
+/**
+ * Exact live contract/indexer signals for the player-facing pipeline.
+ * `jackpotReady` implies every earlier contract phase even when a 15-second
+ * `/game/state` sample skipped over one of them.
+ */
+export function dailyJackpotProcessingSignals({
+  day = null,
+  daySync = null,
+  gameState = null,
+  jackpotPayload = null,
+} = {}) {
+  const target = _positiveDay(day);
+  const syncExact = target != null && _positiveDay(daySync?.day) === target;
+  const gameExact = target != null
+    && _positiveDay(gameState?.dailyRng?.day ?? gameState?.currentDay) === target;
+  const payloadExact = target != null
+    && _positiveDay(jackpotPayload?.day) === target
+    && (jackpotPayload?.status === 'resolved'
+      || jackpotPayload?.status === 'resolved-no-winners');
+  // The resolved payload is itself the exact indexed jackpot lane. Accept it
+  // directly as a fallback in case the day-sync reducer has not consumed the
+  // same store update yet.
+  const jackpotReady = Boolean(
+    payloadExact || (syncExact && daySync?.jackpotReady === true),
+  );
+  const coinflipReady = Boolean(
+    jackpotReady || (syncExact && daySync?.coinflipReady === true),
+  );
+  // The direct contract watcher sees the request lock rise and fall on its
+  // 1.5-second processing cadence. Once that exact-day request has been seen,
+  // an unlocked sample is authoritative evidence that the Chainlink word was
+  // applied. Use it immediately instead of leaving the control on RNG INCOMING
+  // until the slower /game/state or indexer sample catches up.
+  const rngApplied = Boolean(
+    syncExact
+    && daySync?.rngRequested === true
+    && daySync?.rngLocked === false
+  );
+  const rngReady = Boolean(
+    coinflipReady
+    || jackpotReady
+    || rngApplied
+    || (gameExact && _positiveWord(gameState?.dailyRng?.finalWord)),
+  );
+  const ticketsReady = Boolean(
+    jackpotReady
+    || (coinflipReady && (
+      rngApplied
+      || (gameExact && gameState?.ticketsFullyProcessed === true)
+    )),
+  );
+  return {
+    day: target,
+    // The direct day boundary is also the balance-spoiler boundary. Keep the
+    // jackpot board and its progress rail on that exact same clock instead of
+    // leaving yesterday's result mounted until the later RNG-request poll.
+    active: syncExact,
+    requested: Boolean(syncExact && (
+      daySync?.rngRequested === true
+      || daySync?.rngLocked === true
+      || coinflipReady
+      || jackpotReady
+    )),
+    rngReady,
+    coinflipReady,
+    ticketsReady,
+    jackpotReady,
+  };
+}
 
 /**
  * Determinate stage for the processing button.
  *
- * @param {{draw?: boolean, rolls?: boolean, sealed?: boolean}} milestones
+ * @param {Record<string, boolean>} milestones
  * @returns {{done: number, total: number, progress: number, key: string, label: string}}
  *   `progress` is 0..1 for the CSS fill; `key` is the milestone still pending
  *   ('ready' when all four are in); `label` is human-facing text for title/aria.
  */
 export function jackpotProcessingStage(milestones = {}) {
-  const flags = JACKPOT_PROCESSING_MILESTONES.map((name) => milestones?.[name] === true);
+  // Enforce the contract order even when independently-polled sources arrive
+  // out of order. A sealed endpoint cannot visually complete a step before RNG.
+  let priorComplete = true;
+  const flags = JACKPOT_PROCESSING_MILESTONES.map((name) => {
+    priorComplete = priorComplete && milestones?.[name] === true;
+    return priorComplete;
+  });
   const total = JACKPOT_PROCESSING_MILESTONES.length;
   const done = flags.filter(Boolean).length;
   const pendingIndex = flags.indexOf(false);
@@ -61,6 +149,124 @@ export function jackpotProcessingStage(milestones = {}) {
     key,
     label: STAGE_LABELS[key] ?? STAGE_LABELS.ready,
   };
+}
+
+function _stageAtDone(done) {
+  const completed = Math.max(0, Math.min(
+    JACKPOT_PROCESSING_MILESTONES.length,
+    Math.trunc(Number(done) || 0),
+  ));
+  return jackpotProcessingStage(Object.fromEntries(
+    JACKPOT_PROCESSING_MILESTONES.map((name, index) => [name, index < completed]),
+  ));
+}
+
+/**
+ * Keep the progress label and the button's actual clickability on one gate.
+ * A source fetch can remain marked loading for a final microtask after all
+ * seven visual milestones complete; never expose a disabled SPIN READY state.
+ */
+export function jackpotSpinControlState({
+  sourceProcessing = false,
+  presentationPending = false,
+  presentationArmed = false,
+  stage = null,
+  dayReady = false,
+} = {}) {
+  const current = stage && typeof stage === 'object' ? stage : null;
+  const ready = current?.key === 'ready' && dayReady === true;
+  const pipelineBusy = Boolean(
+    sourceProcessing
+    || presentationPending
+    || (presentationArmed && current?.key !== 'ready'),
+  );
+  return {
+    ready,
+    processing: pipelineBusy && !ready,
+    // If raw milestones beat the final exact-day latch, keep describing the
+    // remaining work truthfully instead of presenting a dead ready control.
+    stage: !ready && current?.key === 'ready'
+      ? _stageAtDone(JACKPOT_PROCESSING_MILESTONES.length - 1)
+      : current,
+  };
+}
+
+/**
+ * Advance the visible phase by at most one confirmed beat.
+ *
+ * A single block commonly supplies the RNG and Coinflip result together. The
+ * transient RNG ARRIVED beat and short chase keep that real order legible. The
+ * returned stage never exceeds `target.done`, so this cannot fake progress.
+ */
+export function jackpotProcessingPresentationStep({
+  target = jackpotProcessingStage(),
+  state = null,
+  day = null,
+  now = Date.now(),
+} = {}) {
+  const targetDay = _positiveDay(day);
+  const targetDone = Math.max(0, Math.min(
+    JACKPOT_PROCESSING_MILESTONES.length,
+    Math.trunc(Number(target?.done) || 0),
+  ));
+  let next = state && state.day === targetDay
+    ? { ...state }
+    : { day: targetDay, done: 0, rngArrivedShown: false, mode: null, holdUntil: 0 };
+  next.done = Math.min(Math.max(0, Math.trunc(Number(next.done) || 0)), targetDone);
+  const clock = Number.isFinite(Number(now)) ? Number(now) : Date.now();
+
+  if (Number(next.holdUntil) > clock) {
+    const arrived = next.mode === 'rng-arrived';
+    return {
+      stage: arrived
+        ? {
+            ..._stageAtDone(0),
+            key: 'rng-arrived',
+            label: STAGE_LABELS['rng-arrived'],
+            progress: 0.5 / JACKPOT_PROCESSING_MILESTONES.length,
+          }
+        : _stageAtDone(next.done),
+      state: next,
+      pending: arrived || next.done < targetDone,
+      delay: Math.max(1, Math.ceil(Number(next.holdUntil) - clock)),
+    };
+  }
+
+  if (next.mode === 'rng-arrived') next.mode = null;
+  if (targetDone > 0 && next.done === 0 && next.rngArrivedShown !== true) {
+    next = {
+      ...next,
+      rngArrivedShown: true,
+      mode: 'rng-arrived',
+      holdUntil: clock + 900,
+    };
+    return {
+      stage: {
+        ..._stageAtDone(0),
+        key: 'rng-arrived',
+        label: STAGE_LABELS['rng-arrived'],
+        progress: 0.5 / JACKPOT_PROCESSING_MILESTONES.length,
+      },
+      state: next,
+      pending: true,
+      delay: 900,
+    };
+  }
+
+  if (next.done < targetDone) {
+    next.done += 1;
+    const pending = next.done < targetDone;
+    next.holdUntil = pending ? clock + 650 : 0;
+    return {
+      stage: _stageAtDone(next.done),
+      state: next,
+      pending,
+      delay: pending ? 650 : 0,
+    };
+  }
+
+  next.holdUntil = 0;
+  return { stage: target, state: next, pending: false, delay: 0 };
 }
 
 /**

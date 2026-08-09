@@ -53,6 +53,7 @@ globalThis.fetch = async (url) => {
 const packWatch = await import('../pack-watch.js');
 const pendingActions = await import('../pending-actions.js');
 const overlay = await import('../../components/reveal-overlay.js');
+const store = await import('../store.js');
 
 // queueReveal buffers whenever no <reveal-overlay> is mounted, and
 // __takeQueuedForTest drains that buffer — so the assertion surface is what the
@@ -103,6 +104,7 @@ describe('pack-watch — deferred ticket reveals', () => {
     };
     overlay.__resetForTest();
     pendingActions.__resetPendingActionsForTest();
+    store.__resetForTest();
   });
 
   afterEach(() => {
@@ -423,6 +425,49 @@ describe('pack-watch — deferred ticket reveals', () => {
       'the chain-backed record retires after its real entries are opened');
   });
 
+  test('jackpot processing hides an unattributed award but keeps receipt-backed packs visible', async () => {
+    _routes['/game/state'] = {
+      level: LEVEL,
+      phase: 'JACKPOT',
+      jackpotPhaseFlag: true,
+      rngLockedFlag: true,
+      dailyRng: { day: 55, finalWord: '1' },
+    };
+    _routes['/tickets/by-trait'] = byTrait([]);
+    store.update('app.daySync', { day: 55, rngRequested: true, jackpotReady: false });
+    packWatch.__setEntriesOwedReaderForTest(async (_address, level) => (
+      level === LEVEL ? 72 : 0
+    ));
+
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(pendingActions.getPendingActions().length, 0,
+      'a newly discovered 18-ticket jackpot award cannot enter Pending under the covered board');
+    assert.equal(packWatch.pendingPacks().length, 0,
+      'the hidden chain discovery is deferred instead of becoming durable spoiler state');
+
+    packWatch.stopPackWatch();
+    await packWatch.recordPendingPack({
+      address: ADDR,
+      level: LEVEL,
+      expectedTickets: 2,
+      sourceKey: 'degenerette-receipt:1',
+      publish: false,
+    });
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const [known] = pendingActions.getPendingActions();
+    assert.equal(known?.ticketCount, 2,
+      'the known player-started pack remains visible while the unexplained jackpot tail is withheld');
+
+    localStorage.setItem(`jackpot_complete_day_${CHAIN.id}_55`, '1');
+    packWatch.refreshPackWatch();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const [openedGate] = pendingActions.getPendingActions();
+    assert.equal(openedGate?.ticketCount, 18,
+      'finishing the jackpot lets the same authoritative queue amount surface');
+  });
+
   test('a drained receipt clears phantom Pending and promptly promotes when the index catches up', async () => {
     let owedEntries = 4;
     let cards = [card(0, false)];
@@ -610,7 +655,8 @@ describe('pack-watch — deferred ticket reveals', () => {
     );
 
     await packWatch.completePackReveal(seq.packRelease);
-    assert.equal(packWatch.pendingPacks().length, 0, 'record retires after COLLECT');
+    assert.equal(packWatch.pendingPacks().length, 0,
+      'record retires after the terminal acknowledgement');
 
     await packWatch.checkPendingPacks({ address: ADDR });
     assert.equal(takeQueued().length, 0, 'nothing left pending');

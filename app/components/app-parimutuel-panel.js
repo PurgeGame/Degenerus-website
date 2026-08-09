@@ -63,6 +63,13 @@ const POLL_HOT_MS = 5_000;
 const ERROR_AUTO_CLEAR_MS = 10_000;
 const PENDING_SOURCE = 'parimutuel';
 
+function _dedicatedDecimatorMounted() {
+  return Boolean(
+    typeof document !== 'undefined'
+    && document.querySelector?.('app-decimator-burn')
+  );
+}
+
 function _seenKey(address) {
   return `pari-results-seen:${CHAIN.id}:${String(address || '').toLowerCase()}`;
 }
@@ -262,6 +269,7 @@ class AppParimutuelPanel extends HTMLElement {
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
       this.#questActivateListener = (event) => {
         const detail = event?.detail;
+        if (_dedicatedDecimatorMounted() && Number(detail?.questType) === 5) return;
         this.#applyQuestPreset(detail);
         if (Number(detail?.questType) === 5 && detail?.submit) void this.#enterDecimator();
       };
@@ -354,11 +362,12 @@ class AppParimutuelPanel extends HTMLElement {
     // every cycle at whatever level happened to be current — asking for a round
     // that cannot exist and can only come back empty. It was the second-heaviest
     // endpoint on a live page load, 21 of 138 requests.
-    const decimatorRead = player && decimatorLevel != null
+    const dedicatedDecimator = _dedicatedDecimatorMounted();
+    const decimatorRead = !dedicatedDecimator && player && decimatorLevel != null
       && decimatorWindowIsOpen(this.#gameState)
       ? fetchJSON(`/player/${player}/decimator?level=${decimatorLevel}`).catch(() => null)
       : Promise.resolve(null);
-    const decimatorContextRead = decimatorLevel != null
+    const decimatorContextRead = !dedicatedDecimator && decimatorLevel != null
       && decimatorWindowIsOpen(this.#gameState)
       ? readDecimatorContext(player, decimatorLevel).catch(() => null)
       : Promise.resolve(null);
@@ -674,6 +683,11 @@ class AppParimutuelPanel extends HTMLElement {
   #renderDecimator() {
     const host = this.querySelector('[data-bind="pari-decimator"]');
     if (!host) return;
+    if (_dedicatedDecimatorMounted()) {
+      host.hidden = true;
+      host.textContent = '';
+      return;
+    }
     const open = decimatorWindowIsOpen(this.#gameState, this.#decimatorPosition);
     host.hidden = !open;
     host.textContent = '';

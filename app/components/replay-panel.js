@@ -29,7 +29,11 @@ import { setMajorDrawActivity } from '../app/major-draw-activity.js';
 import { isMuted as isSfxMuted } from '../app/jackpot-sfx.js';
 import { subscribePendingActions } from '../app/pending-actions.js';
 import { celebrateProtocol } from '../protocol-celebration.js';
-import { latchedJackpotProcessingStage } from '../app/jackpot-processing.js';
+import {
+  jackpotProcessingPresentationStep,
+  jackpotSpinControlState,
+  latchedJackpotProcessingStage,
+} from '../app/jackpot-processing.js';
 
 const DAY_DATA_RETRY_BASE_MS = 1_500;
 const DAY_DATA_RETRY_MAX_MS = 15_000;
@@ -38,7 +42,6 @@ const MAIN_SPIN_LABEL = 'SPIN JACKPOT';
 const BONUS_SPIN_LABEL = 'BONUS SPIN';
 const BONUS_SPIN_LOCKED_LABEL = 'SCRATCH TO UNLOCK BONUS';
 const SPIN_AGAIN_LABEL = 'SPIN AGAIN';
-const SPIN_PROCESSING_LABEL = 'JACKPOT PROCESSING';
 let replayApiRetryAfterUntil = 0;
 
 function noteReplayApiResponse(response, now = Date.now()) {
@@ -280,6 +283,10 @@ class ReplayPanel extends HTMLElement {
   // Highest processing-milestone count seen for the day being handed off, so a
   // retry that re-requests a roll cannot slide the progress bar backwards.
   #jpProgressLatch = null;
+  #jpProcessingSignals = null;
+  #jpPresentationState = null;
+  #jpPresentationTimer = null;
+  #jpPresentationArmed = false;
 
   connectedCallback() {
     this.innerHTML = `
@@ -437,6 +444,10 @@ class ReplayPanel extends HTMLElement {
     if (this.#dayReloadTimer != null) {
       try { clearTimeout(this.#dayReloadTimer); } catch { /* defensive */ }
       this.#dayReloadTimer = null;
+    }
+    if (this.#jpPresentationTimer != null) {
+      try { clearTimeout(this.#jpPresentationTimer); } catch { /* defensive */ }
+      this.#jpPresentationTimer = null;
     }
     this.#dayReloadAttempt = 0;
     this.#dayReloadTarget = null;
@@ -651,6 +662,38 @@ class ReplayPanel extends HTMLElement {
     return this.#dayDataReady(day);
   }
 
+  /** App-shell hook: exact contract/indexer phases for the incoming live day. */
+  setJackpotProcessingState(signals = null) {
+    const day = Number(signals?.day);
+    const normalizedDay = Number.isInteger(day) && day > 0 ? day : null;
+    const priorDay = Number(this.#jpProcessingSignals?.day);
+    if (normalizedDay !== (Number.isInteger(priorDay) ? priorDay : null)) {
+      if (this.#jpPresentationTimer != null) {
+        try { clearTimeout(this.#jpPresentationTimer); } catch { /* defensive */ }
+        this.#jpPresentationTimer = null;
+      }
+      this.#jpProgressLatch = null;
+      this.#jpPresentationState = null;
+      this.#jpPresentationArmed = false;
+    }
+    this.#jpProcessingSignals = normalizedDay == null ? null : {
+      day: normalizedDay,
+      active: signals?.active === true,
+      requested: signals?.requested === true,
+      rngReady: signals?.rngReady === true,
+      coinflipReady: signals?.coinflipReady === true,
+      ticketsReady: signals?.ticketsReady === true,
+      jackpotReady: signals?.jackpotReady === true,
+    };
+    // Only a day observed while genuinely incomplete replays the full visual
+    // pipeline. Opening an already-finished historical day starts at its real
+    // PREPARING SPIN fetch instead of pretending to request Chainlink again.
+    if (this.#jpProcessingSignals?.active && !this.#jpProcessingSignals.jackpotReady) {
+      this.#jpPresentationArmed = true;
+    }
+    this.#syncSpinControlState();
+  }
+
   #setDayDataLoading(day, loading) {
     const target = Number(day);
     const btn = this.querySelector('[data-bind="reveal-btn"]');
@@ -670,21 +713,29 @@ class ReplayPanel extends HTMLElement {
     this.#syncSpinControlState();
   }
 
-  /**
-   * The four exact-day handoff milestones, read from the same state
-   * `#hasExactDayRolls` gates on. Kept deliberately in sync with that method:
-   * if a new precondition is added there, add it here or the bar will read
-   * complete while the board is still unspinnable.
-   */
+  /** Every confirmed contract and indexed step needed before Spin is enabled. */
   #jackpotProcessingMilestones(day = this.#selectedDay) {
     const target = Number(day);
     if (!Number.isInteger(target) || target <= 0) {
-      return { draw: false, rolls: false, sealed: false };
+      return {
+        rng: false, coinflip: false, packs: false, jackpot: false,
+        draw: false, rolls: false, sealed: false,
+      };
     }
+    const live = Number(this.#jpProcessingSignals?.day) === target
+      && this.#jpProcessingSignals?.active === true
+      ? this.#jpProcessingSignals
+      : null;
     const rng = this.#rngDays.find((entry) => Number(entry?.day) === target);
     let hasFinalWord = false;
     try { hasFinalWord = BigInt(rng?.finalWord ?? 0) > 0n; } catch { /* malformed row */ }
     return {
+      // Historical/non-app loads have no live pipeline feed. Their contract
+      // work is already complete, so begin at the board-fetch phase.
+      rng: live ? live.rngReady : true,
+      coinflip: live ? live.coinflipReady : true,
+      packs: live ? live.ticketsReady : true,
+      jackpot: live ? live.jackpotReady : true,
       draw: Boolean(hasFinalWord && rng?.mainTraitsPacked != null && rng?.bonusTraitsPacked != null),
       // One milestone: #loadDayRolls resolves both endpoints together and the
       // caller assigns both fields in one block, so a half-loaded pair is a
@@ -706,6 +757,26 @@ class ReplayPanel extends HTMLElement {
     });
     this.#jpProgressLatch = latch;
     return stage;
+  }
+
+  #presentJackpotProcessingStage(target) {
+    const out = jackpotProcessingPresentationStep({
+      target,
+      state: this.#jpPresentationState,
+      day: this.#selectedDay,
+    });
+    this.#jpPresentationState = out.state;
+    if (out.pending && this.#jpPresentationTimer == null && typeof setTimeout === 'function') {
+      this.#jpPresentationTimer = setTimeout(() => {
+        this.#jpPresentationTimer = null;
+        this.#syncSpinControlState();
+      }, Math.max(1, Number(out.delay) || 1));
+      try { this.#jpPresentationTimer?.unref?.(); } catch { /* browser timer */ }
+    } else if (!out.pending && this.#jpPresentationTimer != null) {
+      try { clearTimeout(this.#jpPresentationTimer); } catch { /* defensive */ }
+      this.#jpPresentationTimer = null;
+    }
+    return out;
   }
 
   #syncSpinControlState() {
@@ -734,13 +805,38 @@ class ReplayPanel extends HTMLElement {
       return;
     }
     btn.classList?.remove('is-decimator');
-    const processing = this.hasAttribute('data-day-warming')
+    const sourceProcessing = this.hasAttribute('data-day-warming')
       || this.hasAttribute('data-day-loading');
+    let stage = null;
+    let presentationPending = false;
+    if (sourceProcessing || this.#jpPresentationArmed) {
+      const target = this.#jackpotProcessingStage();
+      if (this.#jpPresentationArmed) {
+        const presentation = this.#presentJackpotProcessingStage(target);
+        stage = presentation.stage;
+        presentationPending = presentation.pending;
+        if (!presentationPending && stage.key === 'ready') {
+          this.#jpPresentationArmed = false;
+        }
+      } else {
+        stage = target;
+      }
+    }
+    const exactDayReady = this.#dayDataReady(this.#selectedDay);
+    const control = jackpotSpinControlState({
+      sourceProcessing,
+      presentationPending,
+      presentationArmed: this.#jpPresentationArmed,
+      stage,
+      dayReady: exactDayReady,
+    });
+    stage = control.stage;
+    const processing = control.processing;
     btn.classList?.toggle('is-processing', processing);
     if (processing) {
-      const stage = this.#jackpotProcessingStage();
+      stage ||= this.#jackpotProcessingStage();
       btn.disabled = true;
-      btn.textContent = SPIN_PROCESSING_LABEL;
+      btn.textContent = stage.label;
       // The fill and the flame cadence are both driven off this one number, so
       // there is exactly one place where progress can disagree with itself.
       btn.style?.setProperty?.('--jp-progress', String(stage.progress));
@@ -748,9 +844,9 @@ class ReplayPanel extends HTMLElement {
       btn.setAttribute?.('aria-busy', 'true');
       btn.setAttribute?.(
         'aria-label',
-        `Jackpot processing. ${stage.label}. Step ${stage.done} of ${stage.total}.`,
+        `${stage.label}. Step ${stage.done} of ${stage.total}.`,
       );
-      btn.title = `Jackpot processing — ${stage.label} (${stage.done}/${stage.total})`;
+      btn.title = stage.label;
       return;
     }
     btn.style?.removeProperty?.('--jp-progress');
@@ -765,7 +861,7 @@ class ReplayPanel extends HTMLElement {
       btn.title = ready ? '' : 'Scratch the main draw first';
     } else {
       btn.textContent = MAIN_SPIN_LABEL;
-      btn.disabled = !this.#dayDataReady(this.#selectedDay);
+      btn.disabled = !exactDayReady;
       btn.title = '';
     }
   }
@@ -3245,17 +3341,36 @@ class ReplayPanel extends HTMLElement {
       const formattedEth = isSoloBucket
         ? formatEthTruncated(ethTotal.toString())
         : formatEth(ethTotal.toString());
-      lines.push(`${formattedEth} ETH`);
+      lines.push({ text: `${formattedEth} ETH`, aria: `${formattedEth} ETH` });
     }
-    if (flipTotal > 0n) lines.push(`${formatFlip(flipTotal.toString())} FLIP`);
-    if (dgnrsTotal > 0n) lines.push(`${formatFlip(dgnrsTotal.toString())} DGNRS`);
+    if (flipTotal > 0n) {
+      const amount = formatFlip(flipTotal.toString());
+      lines.push({
+        text: amount,
+        aria: `${amount} FLIP`,
+        icon: '/whitepaper/flame-logo-split.svg',
+      });
+    }
+    if (dgnrsTotal > 0n) {
+      const amount = formatFlip(dgnrsTotal.toString());
+      lines.push({ text: `${amount} DGNRS`, aria: `${amount} DGNRS` });
+    }
     // JackpotTicketWin stores entryCount (4 entries = one whole ticket).
     // Day Summary already uses this conversion; keeping raw entries here is
     // what produced contradictory receipts such as 56 tickets versus 14.
     const ticketCount = joScaledToTickets(ticketEntries);
-    if (ticketCount > 0) lines.push(`${ticketCount} ticket${ticketCount === 1 ? '' : 's'}`);
-    if (whaleCount > 0) lines.push(`${whaleCount} whale pass${whaleCount === 1 ? '' : 'es'}`);
-    if (lines.length === 0) lines.push(`${wins.length} win${wins.length === 1 ? '' : 's'}`);
+    if (ticketCount > 0) {
+      const text = `${ticketCount} ticket${ticketCount === 1 ? '' : 's'}`;
+      lines.push({ text, aria: text });
+    }
+    if (whaleCount > 0) {
+      const text = `${whaleCount} whale pass${whaleCount === 1 ? '' : 'es'}`;
+      lines.push({ text, aria: text });
+    }
+    if (lines.length === 0) {
+      const text = `${wins.length} win${wins.length === 1 ? '' : 's'}`;
+      lines.push({ text, aria: text });
+    }
 
     host.textContent = '';
     host.classList.remove(
@@ -3275,12 +3390,22 @@ class ReplayPanel extends HTMLElement {
     for (const line of lines) {
       const item = document.createElement('span');
       item.className = 'replay-win-description__line';
-      item.textContent = line;
+      if (line.icon) {
+        const icon = document.createElement('img');
+        icon.className = 'replay-win-description__currency-icon';
+        icon.src = line.icon;
+        icon.alt = '';
+        item.appendChild(icon);
+      }
+      const copy = document.createElement('span');
+      copy.className = 'replay-win-description__line-copy';
+      copy.textContent = line.text;
+      item.appendChild(copy);
       details.appendChild(item);
     }
     receipt.appendChild(details);
     host.appendChild(receipt);
-    host.setAttribute('aria-label', `You won ${lines.join(', ')}`);
+    host.setAttribute('aria-label', `You won ${lines.map((line) => line.aria).join(', ')}`);
   }
 
   #initScratchCanvasWithBadge(canvas, badgeSrc, fillColor) {

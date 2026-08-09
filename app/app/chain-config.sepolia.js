@@ -18,7 +18,7 @@ export const CHAIN = {
   // (eth_call, eth_getStorageAt, eth_getLogs). sepolia.base.org is retained
   // below as the wallet-add fallback.
   rpcUrl: 'https://base-sepolia-rpc.publicnode.com',
-  deployBlock: 45_161_197,
+  deployBlock: 45_259_680,
   indexerBase: 'http://localhost:3000',
   etherscanBase: 'https://sepolia.basescan.org',
   nativeAddEntry: {
@@ -32,40 +32,43 @@ export const CHAIN = {
   },
 };
 
-// 27 contract addresses from the current Base Sepolia deploy manifest
-// (GAME 0x54ad8e5f...1044, deploy block 45005925). ADMIN excluded per Plan 56-01
-// (deployer-only EOA reference, not a player-facing contract).
+// Current Base Sepolia deployment. ADMIN and LINK_TOKEN are included because
+// the player-facing ERC-677 donation rail sends LINK directly to ADMIN's
+// onTokenTransfer callback.
 export const CONTRACTS = {
-  ICONS_32:                '0x250ef2594d904e053df350d5d35ad2cee2cf9554',
-  GAME_MINT_MODULE:        '0x4b70a9a509ac8c0cfc633b3bc492a4bc77ef7842',
-  GAME_ADVANCE_MODULE:     '0xe888458177757805ef302bb26974a087de1f2baa',
-  GAME_WHALE_MODULE:       '0xdcd62630124adebe71dd0d4764b0dfccc509719f',
-  GAME_JACKPOT_MODULE:     '0x5f66e54e834a61b6efba0815d1e8118fa276be21',
-  GAME_DECIMATOR_MODULE:   '0x4907cc578417a48d74cffede0ca21131278e2529',
-  GAME_GAMEOVER_MODULE:    '0xa028320aea04202f62da51ebe06e61b8596a990b',
-  GAME_LOOTBOX_MODULE:     '0xc57638f0e5b9a281a1d0c7527bc4e0c74a52a214',
-  GAME_BOON_MODULE:        '0x9014a36e58ec8b661e9b807e8e36501d983fead6',
-  GAME_DEGENERETTE_MODULE: '0xa4e42fc6bac118dc7506a816ba5552cc440f09e4',
-  GAME_BINGO_MODULE:       '0x592bc665bba6ad5ddd1143639bce4384d5af8feb',
-  GAME_AFKING_MODULE:      '0x22c458bc37e7658ee9442d9ffd12230b9af02a04',
-  GAME_FOILPACK_MODULE:    '0x9f668b6dba7c995489b778a65146487b4227702e',
-  AFKING_SUB_TOKEN:        '0x5285fc1768ed66707755cf66f5110f78f9b14040',
-  COIN:                    '0x3cb8572f87d5989cc5855c0005a3b9350689479a',
-  COINFLIP:                '0x06ae635963f9c0a716b609e5e23c7a3073facb90',
-  GAME:                    '0xef9de925f59382293d4e394aebb0ab4399e0d4b9',
+  ICONS_32:                '0x6da8481557604fc36bf7d7f3acc3fbf4002010f1',
+  GAME_MINT_MODULE:        '0x0c8b86aa59d405d87b83b85656969b519331913a',
+  GAME_ADVANCE_MODULE:     '0xa79ac640644bc52387a846969b09ddd86e8c1030',
+  GAME_WHALE_MODULE:       '0x77052da80c26cddb0aaf4ef9ca3a6fab25f56644',
+  GAME_JACKPOT_MODULE:     '0x57613b25f85ac79c1522d1a296d34edf74a19bc6',
+  GAME_DECIMATOR_MODULE:   '0x7de830410f76db22a2b2944649f8a6defe459a32',
+  GAME_GAMEOVER_MODULE:    '0x8384f34115186e2869fff05b89c94d0480f6d566',
+  GAME_LOOTBOX_MODULE:     '0x0ba4800b4a2a59f32e008d72786eeb0bcb1ee9b3',
+  GAME_BOON_MODULE:        '0x13cb58eb46df93c9497c5f94d199cf438f256aff',
+  GAME_DEGENERETTE_MODULE: '0xf37dc854fba827aac9efd07ec40d661e804c0009',
+  GAME_BINGO_MODULE:       '0x7382c59ff3fb7aed7760b76ecf93ace6cc4c12db',
+  GAME_AFKING_MODULE:      '0xee24af90d39888dfd756ea07ee5ad6714171e5f7',
+  GAME_FOILPACK_MODULE:    '0x482507d4989d4086e8ec554a8b2b38d3c729ec70',
+  AFKING_SUB_TOKEN:        '0x4146742c466a412a21f85f2935f7b12d360c148a',
+  COIN:                    '0x6fbfa03372d67cbdf2c28e91cb2216653065cff2',
+  COINFLIP:                '0xe860d2d854affb86d36461de188e224d435301ec',
+  GAME:                    '0xed4a96048615c73bc2344e8ce3df2e76a79c4769',
   // Read-only periphery (DegenerusGameLens). Redeployed every run — it bakes
   // QUESTS and DEPLOY_DAY_BOUNDARY as compile-time constants.
-  GAME_LENS:               '0x47804351c3c506cfb818126272cbf9445eb5bc49',
-  WWXRP:                   '0xd383800983fe2d02271494c44056d30411765ec1',
-  AFFILIATE:               '0xf6be2b5487632c203e7db922f13d5732b54ac90f',
-  JACKPOTS:                '0x4c7869599c04ab848bd50bed4fea2f35cae0a6c2',
-  QUESTS:                  '0x42f4c5c6cc57b0e30e5b637d3334c861156565fc',
-  PARIMUTUEL:              '0x1fdeb40cdbe8fce4f54285fd374a8fad27f65f19',
-  DEITY_PASS:              '0x9058d2d151ae556226a16cfc71608646a701d164',
-  VAULT:                   '0xff3af941321335849498d64bc56da75ed56642ea',
-  SDGNRS:                  '0xa7b0d20278f3e1ba84d6b43d23e4b05bcae47be6',
-  DGNRS:                   '0x3104b793ee09a312319ed29b4d23a85c39225c71',
-  GNRUS:                   '0xbeb45b2d3c31a1a020c71a4195a447b0dec0df18',
+  GAME_LENS:               '0x77ce7474d7e310e01475f0c2613ffc04845298b6',
+  WWXRP:                   '0xa0b221c3692d23865096adcbd4bd89273435fc20',
+  AFFILIATE:               '0x79adfc024818270ce8a9f299b50bce73d3548c55',
+  JACKPOTS:                '0xde6c113c4bbc7e7604b3d85b9ba1f0e37a1e1dfa',
+  QUESTS:                  '0xe160e6e647a94481b9ec9a4d46c9e4d2b7b43226',
+  PARIMUTUEL:              '0xa10926995e547ae4e145a3c3ba26d52135f193bd',
+  DEITY_PASS:              '0x3ccafd36c396de8851935cba2dbb3a03e5743407',
+  VAULT:                   '0xa28eac4efa9f19302351e859629c9971649a6bfb',
+  SDGNRS:                  '0x256af97455901f44ad596b8df124c7bd3b1ea6a5',
+  DGNRS:                   '0xe0b810840c4f676d936c81d37c86d0657cee41f6',
+  GNRUS:                   '0x01e30526468aaf32d42f461b99b6075b8071fe6e',
+  ADMIN:                   '0xaac88445bdc24799ec4ef0dfdfc7c262df924daf',
+  // Exact LINK constant compiled into this deployment's verified ADMIN.
+  LINK_TOKEN:              '0xe4ab69c077896252fafbd49efd26b5d171a32410',
 };
 
 // Ticket-volume parimutuel window, for the COUNTDOWN ONLY — the contract's own
@@ -90,7 +93,7 @@ export const VOLUME_WINDOW = {
   // deploy; it is `deployDayBoundary` in the sim's sepolia-manifest.json and
   // must be re-copied alongside the addresses above. Verified against live
   // VolumeRoundSealed logs (round 22 sealed on day index 22).
-  deployDayBoundary: 2_976_680, // 0xef9de925… @ 45161197
+  deployDayBoundary: 2_977_008, // 0xed4a9604… @ 45259680
 };
 
 export const ETH_DIVISOR = 1_000_000n;     // /1M scaleEth on testnet (Phase 51 51-03 decision; Base Sepolia run keeps it)

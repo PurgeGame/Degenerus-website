@@ -30,6 +30,11 @@ import { readGameState } from './game-state.js';
 import { publishPendingActions, clearPendingActions } from './pending-actions.js';
 import { dgnPartitionTicketEntries } from './dgn-traits.js';
 import {
+  JACKPOT_TICKET_PROCESSING_LEVELS,
+  jackpotProcessingCoversLevel,
+  unresolvedJackpotContext,
+} from './jackpot-spoiler.js';
+import {
   queueReveal,
   PACK_REVEAL_COMPLETE_EVENT,
   PACK_REVEAL_ABORT_EVENT,
@@ -48,7 +53,7 @@ const JACKPOT_AWARD_KEY = `pack_jackpot_awards_${CHAIN.id}_${DEPLOY_SCOPE}`;
 const LEGACY_PENDING_KEY = `pack_pending_${CHAIN.id}`;
 const PENDING_SOURCE = 'ticket-packs';
 const ENTRIES_PER_TICKET = 4;
-const LIVE_TICKET_WINDOW = 6;
+const LIVE_TICKET_WINDOW = JACKPOT_TICKET_PROCESSING_LEVELS;
 const ENTRIES_OWED_ABI = [
   'function entriesOwedView(uint24 lvl, address player) view returns (uint32)',
 ];
@@ -438,7 +443,7 @@ async function _readEntriesOwed(address, levels) {
  * Existing purchase/lootbox records are upgraded in place rather than added
  * again, since entriesOwedView describes those same tickets.
  */
-async function _syncChainOwedRecords(address, levels) {
+async function _syncChainOwedRecords(address, levels, { jackpotContext = null } = {}) {
   const owedRows = await _readEntriesOwed(address, levels);
   if (owedRows.length === 0) return;
 
@@ -450,6 +455,13 @@ async function _syncChainOwedRecords(address, levels) {
       row && _lower(row.address) === addr && Number(row.level) === Number(level)
     ));
     if (!rec && entries <= 0) continue;
+
+    const coveredByJackpot = jackpotProcessingCoversLevel(level, jackpotContext);
+    // A queue entry first discovered after the daily request has no purchase
+    // receipt tying it to player-started work. During this narrow window it is
+    // overwhelmingly the just-materialized jackpot award, so defer discovery
+    // until the board opens instead of publishing its exact amount as a spoiler.
+    if (!rec && coveredByJackpot) continue;
 
     if (!rec) {
       let seedPending = false;
@@ -484,21 +496,27 @@ async function _syncChainOwedRecords(address, levels) {
       _expectedEntries(rec.expectedTickets),
       Math.floor(Number(rec.expectedEntries) || 0),
     );
-    const expectedEntries = Math.max(previousExpected, released + entries);
     const previousOwed = Math.max(0, Math.floor(Number(rec.chainOwedEntries) || 0));
+    // Existing receipt-backed purchases stay visible. Only an unexplained
+    // increase above their known outstanding amount is held behind the board.
+    const knownOutstanding = Math.max(previousOwed, previousExpected - released);
+    const visibleEntries = coveredByJackpot
+      ? Math.min(entries, knownOutstanding)
+      : entries;
+    const expectedEntries = Math.max(previousExpected, released + visibleEntries);
     const previousDrainedAt = Math.max(0, Number(rec.chainDrainedAt) || 0);
-    const chainDrainedAt = entries > 0
+    const chainDrainedAt = visibleEntries > 0
       ? 0
       : previousOwed > 0 || !rec.chainTracked || previousDrainedAt === 0
         ? _now()
         : previousDrainedAt;
     const next = {
       chainTracked: true,
-      chainOwedEntries: entries,
+      chainOwedEntries: visibleEntries,
       chainDrainedAt,
       expectedEntries,
       expectedTickets: _ticketCountFromEntries(expectedEntries),
-      standardExpected: Boolean(_standardPackExpected(rec) || entries > 0),
+      standardExpected: Boolean(_standardPackExpected(rec) || visibleEntries > 0),
     };
     for (const [key, value] of Object.entries(next)) {
       if (rec[key] === value) continue;
@@ -1049,7 +1067,7 @@ async function _foilState(address, level) {
   }
 }
 
-async function _inspectOne(address, rec, sweep = null) {
+async function _inspectOne(address, rec, sweep = null, { jackpotCovered = false } = {}) {
   const level = Number(rec?.level);
   if (!Number.isInteger(level)) return null;
   const chainOwedEntries = Math.max(0, Math.floor(Number(rec?.chainOwedEntries) || 0));
@@ -1171,7 +1189,19 @@ async function _inspectOne(address, rec, sweep = null) {
     withheldKeys.add(String(piece.key));
     withholdEntries -= piece.entryCount;
   }
-  const fresh = allFresh.filter((piece) => !withheldKeys.has(String(piece.key)));
+  const ledgerVisibleFresh = allFresh.filter((piece) => !withheldKeys.has(String(piece.key)));
+  // The by-trait index can beat JackpotTicketWin history. While the result is
+  // covered, cap newly materialized cards to the exact amount already backed
+  // by pre-request receipts. Lootbox/Degenerette/purchase packs keep working;
+  // an unexplained tail waits for the jackpot reveal event.
+  let visibleEntryBudget = Math.max(0, trackedExpectedEntries - trackedReleasedEntries);
+  const fresh = jackpotCovered
+    ? ledgerVisibleFresh.filter((piece) => {
+        if (piece.entryCount > visibleEntryBudget) return false;
+        visibleEntryBudget -= piece.entryCount;
+        return true;
+      })
+    : ledgerVisibleFresh;
   // The foil projection is authoritative for foil tickets. They are filed in
   // separate foil entry rows on the current deploy, so requiring them to also
   // appear in /tickets/by-trait creates a permanent "still indexing" deadlock
@@ -1202,7 +1232,9 @@ async function _inspectOne(address, rec, sweep = null) {
   const accountedEntries = releasedEntries
     + allReadyEntries
     + chainOwedEntries;
-  const expectedEntries = Math.max(existingExpectedEntries, accountedEntries);
+  const expectedEntries = jackpotCovered
+    ? existingExpectedEntries
+    : Math.max(existingExpectedEntries, accountedEntries);
   if (expectedEntries !== Number(rec.expectedEntries)
     || rec.expectedTickets !== _ticketCountFromEntries(expectedEntries)) {
     rec.expectedEntries = expectedEntries;
@@ -1255,11 +1287,13 @@ async function _inspectOne(address, rec, sweep = null) {
  * Read-only readiness snapshot for the unified pending widget.
  * No reveal is queued and no record is retired here.
  */
-export async function inspectPendingPacks({ address, sweep = null } = {}) {
+export async function inspectPendingPacks({ address, sweep = null, jackpotContext = null } = {}) {
   const addr = _lower(address);
   if (!addr) return [];
   const mine = pendingPacks().filter((rec) => rec && _lower(rec.address) === addr);
-  const inspected = await Promise.all(mine.map((rec) => _inspectOne(addr, rec, sweep)));
+  const inspected = await Promise.all(mine.map((rec) => _inspectOne(addr, rec, sweep, {
+    jackpotCovered: jackpotProcessingCoversLevel(rec?.level, jackpotContext),
+  })));
   return inspected.filter(Boolean);
 }
 
@@ -1272,12 +1306,17 @@ async function _publishPackActions(address, publishSeq = null) {
   const gameState = await readGameState();
   const drainLevels = pendingTicketDrainLevels(gameState);
   const sweep = packInspectionWindow(gameState);
-  await _syncChainOwedRecords(addr, drainLevels);
+  const jackpotContext = unresolvedJackpotContext({
+    daySync: get('app.daySync'),
+    gameState,
+    lastDay: get('app.lastDay'),
+  });
+  await _syncChainOwedRecords(addr, drainLevels, { jackpotContext });
   // The queue can be awarded and fully drained between two 45-second RPC
   // samples. Indexed JackpotTicketWin history is the durable bridge for that
   // blind spot; release only levels the contract can process in this sweep.
   await _releaseJackpotTicketAwards(addr, drainLevels);
-  const rows = await inspectPendingPacks({ address: addr, sweep });
+  const rows = await inspectPendingPacks({ address: addr, sweep, jackpotContext });
   // A wallet switch can land while the ticket/foil endpoints are in flight.
   // Never let that old response repopulate the shared widget for the prior
   // account.

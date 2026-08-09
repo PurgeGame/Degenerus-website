@@ -446,18 +446,28 @@
 }
 
 .replay-win-description__lines {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.14rem 0.22rem;
+  display: grid;
+  justify-items: center;
+  gap: 0.14rem;
 }
 
 .replay-win-description__line {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.16em;
   font-size: clamp(0.58rem, 1.8vw, 0.78rem);
   font-weight: 850;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
   white-space: nowrap;
+}
+
+.replay-win-description__currency-icon {
+  display: block;
+  width: 1.05em;
+  height: 1.05em;
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 /* --- Scattered win badges --- */

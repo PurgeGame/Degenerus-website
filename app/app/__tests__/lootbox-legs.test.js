@@ -80,8 +80,8 @@ describe('lootboxRewardPresentation', () => {
       { boonBps: 1_000 },
     ), {
       label: 'COINFLIP BOON',
-      value: '+10%',
-      detail: 'Your next manual Coinflip deposit gets +10%, calculated on up to 100K FLIP',
+      value: '10% BONUS FLIP',
+      detail: 'Your next manual Coinflip deposit gets 10% bonus FLIP, calculated on up to 100K FLIP',
     });
 
     assert.deepEqual(lootboxRewardPresentation(12, 1n), {
@@ -126,7 +126,7 @@ describe('enrichLootboxBoonLegs', () => {
       enriched[0].rewardType,
       enriched[0].amount,
       { boonBps: enriched[0].boonBps },
-    ).value, '+10%');
+    ).value, '10% BONUS FLIP');
   });
 });
 

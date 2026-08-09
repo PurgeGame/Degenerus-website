@@ -1,0 +1,85 @@
+.thermometer-demo-page {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(30, 64, 175, 0.2), transparent 38rem),
+    #08070a;
+}
+
+.thermometer-demo {
+  box-sizing: border-box;
+  width: min(76rem, 100%);
+  margin: 0 auto;
+  padding: clamp(1rem, 5vw, 4rem) clamp(0.65rem, 2vw, 1.4rem);
+}
+
+.thermometer-demo__header {
+  display: grid;
+  grid-template-columns: minmax(4rem, 1fr) auto minmax(4rem, 1fr);
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  color: #bae6fd;
+  text-align: center;
+}
+.thermometer-demo__header a {
+  justify-self: start;
+  color: #7dd3fc;
+  font: 850 0.68rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+}
+.thermometer-demo__header span { display: grid; gap: 0.18rem; }
+.thermometer-demo__header small {
+  color: rgba(186, 230, 253, 0.62);
+  font: 900 0.5rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.16em;
+}
+.thermometer-demo__header h1 {
+  margin: 0;
+  color: #e0f2fe;
+  font: 1000 clamp(1rem, 2.4vw, 1.5rem)/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.1em;
+}
+.thermometer-demo__header > b {
+  justify-self: end;
+  padding: 0.3rem 0.48rem;
+  border: 1px solid rgba(125, 211, 252, 0.46);
+  border-radius: 999px;
+  color: #bae6fd;
+  font: 900 0.5rem/1 "Roboto Mono", monospace;
+  letter-spacing: 0.08em;
+}
+
+.thermometer-demo__controls {
+  display: flex;
+  justify-content: center;
+  gap: 0.45rem;
+  margin: 0 0 1rem;
+}
+.thermometer-demo__controls button {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.74);
+  color: #94a3b8;
+  font: 900 0.56rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.07em;
+  cursor: pointer;
+}
+.thermometer-demo__controls button.is-active {
+  border-color: rgba(147, 197, 253, 0.72);
+  background: rgba(30, 64, 175, 0.3);
+  color: #dbeafe;
+}
+.thermometer-demo__stage {
+  padding-top: 0.8rem;
+}
+.thermometer-demo__stage app-pool-progress { display: block; }
+
+@media (max-width: 560px) {
+  .thermometer-demo__header { grid-template-columns: 1fr auto; text-align: left; }
+  .thermometer-demo__header > a { display: none; }
+  .thermometer-demo__controls { gap: 0.28rem; }
+  .thermometer-demo__controls button { padding-inline: 0.46rem; font-size: 0.48rem; }
+}

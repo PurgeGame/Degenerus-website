@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 const REPLAY_CSS = readFileSync(new URL('../../styles/replay.css', import.meta.url), 'utf8');
+const PROCESSING_CSS = readFileSync(new URL('../../styles/jackpot-processing.css', import.meta.url), 'utf8');
 const REPLAY_PANEL_SRC = readFileSync(new URL('../replay-panel.js', import.meta.url), 'utf8');
 const LAST_DAY_SRC = readFileSync(new URL('../last-day-jackpot.js', import.meta.url), 'utf8');
 const INDEX_SRC = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
@@ -310,13 +311,40 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     assert.match(REPLAY_PANEL_SRC, /const MAIN_SPIN_LABEL = 'SPIN JACKPOT'/);
     assert.match(REPLAY_PANEL_SRC, /const BONUS_SPIN_LABEL = 'BONUS SPIN'/);
     assert.match(REPLAY_PANEL_SRC, /const SPIN_AGAIN_LABEL = 'SPIN AGAIN'/);
-    assert.match(REPLAY_PANEL_SRC, /const SPIN_PROCESSING_LABEL = 'JACKPOT PROCESSING'/);
+    assert.match(REPLAY_PANEL_SRC, /btn\.textContent = stage\.label/);
+    assert.match(REPLAY_PANEL_SRC, /setJackpotProcessingState\(signals = null\)/);
+    assert.match(REPLAY_PANEL_SRC, /jackpotProcessingPresentationStep/);
     assert.doesNotMatch(REPLAY_PANEL_SRC, /textContent = '(?:Reveal Draw|Revealing\.\.\.|Bonus Roll|Replay)'/);
     assert.doesNotMatch(LAST_DAY_SRC, /SPIN AVAILABLE SOON/);
     assert.doesNotMatch(INDEX_SRC, /SPIN AVAILABLE SOON|jackpot-load-status/);
     assert.match(APP_CSS, /\.replay-reveal-btn\s*\{[^}]*linear-gradient\(135deg, #9a4300, #f7931a 52%, #a84a00\)[^}]*letter-spacing:\s*0\.12em/s,
       'the first/main Spin uses Bitcoin orange while bonus and processing keep their own states');
     assert.match(APP_CSS, /\.replay-reveal-btn\.is-processing\s*\{[^}]*cursor:\s*wait[^}]*opacity:\s*1/s);
+    assert.match(PROCESSING_CSS, /crypto_05_chainlink_blue\.svg/,
+      'the two RNG beats carry a small Chainlink mark');
+    assert.match(
+      PROCESSING_CSS,
+      /data-jp-stage="rng"[\s\S]*?rgba\(20, 22, 26, 0\.98\)[\s\S]*?rgba\(34, 34, 40, 0\.97\)/,
+      'the Chainlink mark sits on a graphite field instead of a blue block',
+    );
+    assert.match(PROCESSING_CSS, /height:\s*4px[\s\S]*?14\.285714%/,
+      'the seven-step pipeline uses readable compact cells rather than a hairline');
+    assert.match(PROCESSING_CSS, /14\.285714%/,
+      'the compact control visualizes all seven confirmed phases without a second copy row');
+    assert.match(
+      PROCESSING_CSS,
+      /data-jp-stage="rng"\][^}]*::after\s*\{[^}]*jackpot-rng-progress 20s steps\(3, end\) forwards/s,
+      'RNG INCOMING advances the same five-light confirmation instrument used below',
+    );
+    assert.match(PROCESSING_CSS, /to\s*\{\s*--jp-rng-progress:\s*0\.8;/,
+      'elapsed time can light only four of five RNG bars');
+    assert.match(
+      PROCESSING_CSS,
+      /data-jp-stage="rng-arrived"\][^}]*::after\s*\{[^}]*--jp-rng-progress:\s*1;/s,
+      'only the actual RNG-arrived state lights the final bar',
+    );
+    assert.match(INDEX_SRC, /jackpot-processing\.css/,
+      'the state visualization is loaded after the app surface it augments');
     assert.doesNotMatch(
       APP_CSS,
       /replay-panel\[data-day-(?:warming|loading)\] \.replay-controls[^\{]*\{\s*visibility:\s*hidden/s,
@@ -362,6 +390,26 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       REPLAY_PANEL_SRC,
       /currency === 'ETH' && currencyWinnerCount === 1[\s\S]*?replay-bucket-reveal--solo-eth/,
       'the public losing-viewer solo ETH result gets its dedicated larger treatment',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /aria: `\$\{amount\} FLIP`[\s\S]*?icon: '\/whitepaper\/flame-logo-split\.svg'/,
+      'the YOU WON receipt replaces the FLIP word with the standard FLIP mark while retaining an accessible label',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-win-description__currency-icon\s*\{[^}]*width:\s*1\.05em[^}]*height:\s*1\.05em/s,
+      'the inline FLIP mark stays proportional to the compact payout copy',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /if \(line\.icon\)[\s\S]*?item\.appendChild\(icon\)[\s\S]*?copy\.textContent = line\.text[\s\S]*?item\.appendChild\(copy\)/,
+      'the FLIP mark is placed before its amount',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-win-description__lines\s*\{[^}]*display:\s*grid[^}]*justify-items:\s*center/s,
+      'YOU WON, each currency reward, and tickets occupy deliberate separate lines',
     );
   });
   test('public jackpot results keep badges and rewards clear in both draws', () => {
@@ -1037,7 +1085,7 @@ describe('new-day auto-follow', () => {
     assert.equal(cta.hidden, true, 'day 6 starts with fresh board/flip gates');
   });
 
-  test('the RNG request reloads the jackpot into processing while a bare clock shift does not', async () => {
+  test('the balance-fuzz day boundary resets the jackpot into its slow processing roll', async () => {
     const connected = '0xab12000000000000000000000000000000000000';
     storeMod.update('connected.address', connected);
     const replay = makeFakeElement('replay-panel');
@@ -1072,13 +1120,21 @@ describe('new-day auto-follow', () => {
     });
     await flushMicrotasks();
 
-    assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 5/,
-      'the wall-clock boundary alone does not discard the completed draw');
-    assert.equal(daySelect.value, '5');
-    assert.equal(replay.getAttribute('data-day-warming'), null,
-      'processing does not start before the request exists');
-    assert.equal(persisted.length, priorPersistenceCalls,
-      'a clock-only transition cannot reset the prior draw or its bonus button');
+    assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 6/,
+      'the board changes on the same direct day signal that fuzzes amounts');
+    assert.equal(daySelect.value, '6', 'the incoming day mounts immediately');
+    assert.ok(daySelect.options.some((option) => (
+      option.value === '6' && option.dataset?.processingDay === 'true'
+    )), 'a processing placeholder exists before the replay index catches up');
+    assert.equal(replay.getAttribute('data-day-warming'), '',
+      'the progress control appears before the RNG request bit lands');
+    assert.ok(persisted.length > priorPersistenceCalls,
+      'the new day publishes a fresh reveal state immediately');
+    assert.deepEqual(persisted.at(-1), [false, false],
+      'the incoming board clears into replay-panel\'s slow attract roll');
+    assert.deepEqual(refreshOptions, [{ force: true }],
+      'the incoming jackpot feed starts loading at the fuzz boundary');
+    assert.deepEqual(refreshSelections, ['6']);
 
     storeMod.update('app.daySync', {
       day: 6, jackpotReady: false, coinflipReady: false, ready: false,
@@ -1088,16 +1144,13 @@ describe('new-day auto-follow', () => {
     await flushMicrotasks();
 
     assert.match(el.querySelector('[data-bind="day"]').textContent, /Day 6/);
-    assert.equal(daySelect.value, '6', 'the requested day mounts immediately');
-    assert.ok(daySelect.options.some((option) => (
-      option.value === '6' && option.dataset?.processingDay === 'true'
-    )), 'a processing placeholder exists before the replay index catches up');
+    assert.equal(daySelect.value, '6');
     assert.equal(replay.getAttribute('data-day-warming'), '',
-      'mounting the request starts the existing jackpot processing control');
+      'the later RNG lock continues the already-mounted processing control');
     assert.deepEqual(refreshOptions, [{ force: true }],
-      'the request force-refreshes the jackpot replay feed once');
+      'the request does not reload/reset the board a second time');
     assert.deepEqual(refreshSelections, ['6'],
-      'the reload snapshots the processing day instead of restoring yesterday');
+      'the active reload remains pinned to the incoming day');
     assert.deepEqual(persisted.at(-1), [false, false],
       'the incoming board starts fresh instead of inheriting yesterday');
 
@@ -1122,8 +1175,8 @@ describe('new-day auto-follow', () => {
     storeMod.update('app.lastDay', DAY6);
     await flushMicrotasks();
     assert.equal(daySelect.value, '6');
-    assert.equal(replay.getAttribute('data-day-warming'), '',
-      'the request remains processing until the exact jackpot lane is ready');
+    assert.equal(replay.getAttribute('data-day-warming'), null,
+      'the exact resolved payload releases the board even if daySync is one update behind');
 
     storeMod.update('app.daySync', {
       day: 6, jackpotDay: 6, coinflipDay: null,
@@ -1229,6 +1282,16 @@ describe('foil match pending action', () => {
     assert.match(src, /claimFoilMatch\(/);
     assert.match(src, /parseFoilMatchClaimedFromReceipt\(/);
     assert.match(src, /queueReveal\(\{\s*kind:\s*'foil-match'/s);
+    assert.match(src, /autoOpen:\s*true/,
+      'AUTO is allowed to settle the permissionless fixed-player claim');
+    const handler = src.slice(src.indexOf('async #onFoilClaim'), src.indexOf('// Mount / unmount'));
+    assert.ok(
+      handler.indexOf('this.#locallyClaimedFoilMatches.add(candidate.key)')
+        < handler.indexOf('parseFoilMatchClaimedFromReceipt(receipt, contract)'),
+      'receipt confirmation retires the row before optional presentation parsing',
+    );
+    assert.match(handler, /_terminalFoilClaimError\(error\)/,
+      'a keeper winning the same claim race retires the stale action');
   });
 
   test('a revealed T8 line appears in pending with its actual ticket and match reason', async () => {
@@ -1271,8 +1334,8 @@ describe('foil match pending action', () => {
 
       const [action] = pendingActionsMod.getPendingActions();
       assert.equal(action.kind, 'foil-match');
-      assert.equal(action.label, 'T8 → 10,000-FACE BONUS');
-      assert.match(action.detail, /Day 44 · MAIN JACKPOT · 4 exact .* Degenerette/);
+      assert.equal(action.label, 'T8 FOIL LUCKBOX MATCH');
+      assert.equal(action.detail, '');
       assert.deepEqual(action.lineTraits, traits);
       assert.deepEqual(action.winningTraits, traits,
         'Pending receives the actual jackpot ticket as well as the foil');
@@ -1281,6 +1344,8 @@ describe('foil match pending action', () => {
       assert.equal(action.score, 8);
       assert.equal(action.rewardFaces, 10_000,
         'Pending can name the deterministic bonus before the claim is sent');
+      assert.equal(action.autoOpen, true,
+        'AUTO may settle the permissionless claim for its fixed player');
       assert.equal(typeof action.run, 'function');
       el.disconnectedCallback();
       assert.equal(pendingActionsMod.getPendingActions().length, 0,

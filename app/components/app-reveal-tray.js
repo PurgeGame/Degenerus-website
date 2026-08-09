@@ -25,7 +25,6 @@ import { briefTxError } from '../app/ui-error.js';
 import {
   applyDgnTicketAccent,
   dgnBadgePath,
-  dgnTraitIdsToQuadrants,
   dgnUnpackTicket,
 } from '../app/dgn-traits.js';
 import {
@@ -55,6 +54,9 @@ const REVEAL_KINDS = new Set([
   'baf',
   'bingo',
   'foil-match',
+  'affiliate-bonus',
+  'wwxrp-draw',
+  'golden-ticket',
   'mass-resolution',
   'batch-resolution',
 ]);
@@ -94,6 +96,9 @@ const CLAIM_KINDS = new Set([
   'volume-claim',
   'whale-pass-claim',
   'foil-match',
+  'affiliate-bonus',
+  'wwxrp-draw',
+  'golden-ticket',
 ]);
 
 // Generic rows used to fall back to punctuation, letters, or a question mark.
@@ -115,6 +120,18 @@ const ACTION_ICON_PATHS = Object.freeze({
   'whale-pass-claim': [
     'M4 7h16v10H4V7Z',
     'M8 7v2M8 15v2M12 10h5M12 14h3',
+  ],
+  'affiliate-bonus': [
+    'M7 19v-5a5 5 0 0 1 10 0v5',
+    'M12 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
+  ],
+  'wwxrp-draw': [
+    'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z',
+    'M8 8l8 8M16 8l-8 8',
+  ],
+  'golden-ticket': [
+    'M4 7h16v10H4V7Z',
+    'M8 7v3M8 14v3M12 10h5M12 14h3',
   ],
   decimator: [
     'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z',
@@ -478,6 +495,33 @@ function _appendLootboxPendingLabel(label, item) {
   return summary;
 }
 
+export function foilMatchPendingSummary(item) {
+  let tier = Number(item?.score);
+  if (!Number.isInteger(tier) || tier < 1) {
+    const match = /\bT(\d+)\b/i.exec(`${item?.shortLabel || ''} ${item?.label || ''}`);
+    tier = Number(match?.[1]);
+  }
+  const tierText = Number.isInteger(tier) && tier > 0 ? `T${tier}` : 'T?';
+  return { tier, tierText, text: `${tierText} FOIL LUCKBOX MATCH` };
+}
+
+function _appendFoilMatchPendingLabel(label, item) {
+  const summary = foilMatchPendingSummary(item);
+  label.classList?.add('rrt-foil-match-summary');
+  const lead = document.createElement('span');
+  lead.textContent = `${summary.tierText} FOIL`;
+  label.appendChild(lead);
+  const luckbox = document.createElement('span');
+  luckbox.className = 'rrt-foil-match-summary__luckbox';
+  luckbox.setAttribute('aria-hidden', 'true');
+  _appendLineIcon(luckbox, 'lootbox');
+  label.appendChild(luckbox);
+  const tail = document.createElement('span');
+  tail.textContent = 'MATCH';
+  label.appendChild(tail);
+  return summary;
+}
+
 function _actionVerb(item, { busy = false, waiting = false } = {}) {
   if (waiting) return String(item?.phase || '') === 'indexing' ? 'LOADING' : 'WAITING';
   if (busy) {
@@ -600,6 +644,9 @@ function _kindLabel(kind) {
   if (kind === 'baf') return 'BAF CONSOLATION';
   if (kind === 'bingo') return 'BINGO';
   if (kind === 'foil-match') return 'FOIL TICKET MATCH';
+  if (kind === 'affiliate-bonus') return 'AFFILIATE BONUS';
+  if (kind === 'wwxrp-draw') return 'WWXRP DRAW';
+  if (kind === 'golden-ticket') return 'GOLDEN TICKET';
   if (kind === 'mass-resolution' || kind === 'batch-resolution') return 'PROTOCOL RESOLUTION';
   return 'TICKET PACK';
 }
@@ -1266,7 +1313,8 @@ class AppRevealTray extends HTMLElement {
       // Keep even a ready result compact; the lit card itself is the action and
       // does not need a trailing VIEW label.
       const compactDegenerette = item.kind === 'degenerette';
-      const compact = item.compact === true || compactDegenerette;
+      const compactFoilMatch = item.kind === 'foil-match';
+      const compact = item.compact === true || compactDegenerette || compactFoilMatch;
       const compactLootbox = item.kind === 'lootbox' && item.compact === true;
       const autoArmed = compactLootbox && this.#autoOpen && item.autoOpen === true && !busy;
       const waitingFeedback = compactLootbox && waiting && !busy;
@@ -1333,12 +1381,15 @@ class AppRevealTray extends HTMLElement {
           ? `Show ${String(item.label || 'pending tickets')}`
           : compactDegenerette
             ? degenerettePendingSummary(item).text
+            : compactFoilMatch
+              ? foilMatchPendingSummary(item).text
             : compactLootbox
               ? lootboxPendingSummary(item).text
             : _luckboxUiText(item.label || item.shortLabel || 'Open')
         : _luckboxUiText(`${actionVerb}: ${item.label}${item.detail ? `. ${item.detail}` : ''}`));
-      button.title = `${compactLootbox
-        ? lootboxPendingSummary(item).text
+      button.title = `${compactFoilMatch
+        ? foilMatchPendingSummary(item).text
+        : compactLootbox ? lootboxPendingSummary(item).text
         : _luckboxUiText(`${item.label}${item.detail ? ` · ${item.detail}` : ''}`)}`
         + (item.lootboxTicketUnitsLabel ? ` · ${item.lootboxTicketUnitsLabel} ticket price` : '');
 
@@ -1376,66 +1427,9 @@ class AppRevealTray extends HTMLElement {
         badge.src = item.badgePath;
         badge.alt = '';
         art.appendChild(badge);
-      } else if (item.kind === 'foil-match' && Array.isArray(item.lineTraits)) {
-        const faces = Array.from({ length: 4 }, (_unused, quadrant) => {
-          const face = Number(item.matchFaces?.[quadrant]);
-          return face === 2 ? 2 : face === 1 ? 1 : 0;
-        });
-        const states = faces.map((face) => face === 2 ? 'full' : face === 1 ? 'sym' : 'miss');
-        const preview = document.createElement('span');
-        preview.className = 'rrt-foil-match-preview';
-
-        const makeTicket = (traitIds, labelText, { foil = false } = {}) => {
-          const side = document.createElement('span');
-          side.className = 'rrt-foil-match-preview__side';
-          const tag = document.createElement('small');
-          tag.className = 'rrt-foil-match-preview__tag';
-          tag.textContent = labelText;
-          side.appendChild(tag);
-
-          const mini = document.createElement('span');
-          mini.className = [
-            'ticket-card tc-small dgn-ticket rrt-foil-match-ticket',
-            foil ? 'ticket-card--foil rrt-foil-match-ticket--foil' : 'rrt-foil-match-ticket--jackpot',
-          ].join(' ');
-          const traits = dgnTraitIdsToQuadrants(traitIds);
-          applyDgnTicketAccent(mini, traitIds);
-          traits.forEach((trait, quadrant) => {
-            const cell = document.createElement('span');
-            cell.className = `trait-quadrant dgn-q rrt-foil-match-ticket__q q-${states[quadrant]}`;
-            if (trait?.col === 7) cell.classList?.add('trait-quadrant--gold');
-            cell.setAttribute('data-quadrant', String(quadrant));
-            if (trait) {
-              const badge = document.createElement('img');
-              badge.src = dgnBadgePath(quadrant, trait.sym, trait.col);
-              badge.alt = '';
-              cell.appendChild(badge);
-            }
-            mini.appendChild(cell);
-          });
-          const center = document.createElement('span');
-          center.className = 'ticket-card-center rrt-foil-match-ticket__center';
-          const mark = document.createElement('img');
-          mark.src = foil
-            ? '/whitepaper/flame-center-silver.svg'
-            : '/whitepaper/flame-center.svg';
-          mark.alt = '';
-          center.appendChild(mark);
-          mini.appendChild(center);
-          side.appendChild(mini);
-          return side;
-        };
-
-        preview.appendChild(makeTicket(item.lineTraits, 'FOIL', { foil: true }));
-        const vs = document.createElement('span');
-        vs.className = 'rrt-foil-match-preview__vs';
-        vs.textContent = 'VS';
-        preview.appendChild(vs);
-        preview.appendChild(makeTicket(
-          Array.isArray(item.winningTraits) ? item.winningTraits : [],
-          Number(item.drawKind) === 1 ? 'BONUS' : 'MAIN',
-        ));
-        art.appendChild(preview);
+      } else if (compactFoilMatch) {
+        // The full match comparison belongs in the reveal. Pending is only a
+        // terse transaction receipt, so it intentionally has no leading art.
       } else if (item.kind === 'tickets' && passive) {
         const pack = document.createElement('span');
         pack.className = 'rvl-pack rrt-pending-pack-art';
@@ -1514,6 +1508,8 @@ class AppRevealTray extends HTMLElement {
       label.className = 'rrt-action__label';
       if (compactDegenerette) {
         _appendDegenerettePendingLabel(label, item);
+      } else if (compactFoilMatch) {
+        _appendFoilMatchPendingLabel(label, item);
       } else if (compactLootbox) {
         _appendLootboxPendingLabel(label, item);
       } else if (compact && passive && item.kind === 'tickets') {
@@ -1566,7 +1562,7 @@ class AppRevealTray extends HTMLElement {
       cta.className = 'rrt-action__cta';
       cta.textContent = actionVerb;
 
-      if (!passive || item.kind === 'tickets') button.appendChild(art);
+      if ((!passive || item.kind === 'tickets') && !compactFoilMatch) button.appendChild(art);
       button.appendChild(copy);
       if (!compact && !passive && !ticketOpenReady) button.appendChild(cta);
       if (waitingFeedback) {
@@ -1603,10 +1599,6 @@ class AppRevealTray extends HTMLElement {
       return;
     }
     host.hidden = false;
-    const head = document.createElement('span');
-    head.className = 'rrt-pending-details__head';
-    const title = document.createElement('strong');
-    title.textContent = 'PACKS ON THE WAY';
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'rrt-pending-details__close';
@@ -1616,9 +1608,7 @@ class AppRevealTray extends HTMLElement {
       this.#expandedPendingId = null;
       this.#render();
     });
-    head.appendChild(title);
-    head.appendChild(close);
-    host.appendChild(head);
+    host.appendChild(close);
 
     const list = document.createElement('span');
     list.className = 'rrt-pending-details__packs';
@@ -1654,11 +1644,14 @@ class AppRevealTray extends HTMLElement {
       pack.appendChild(quantity);
       const caption = document.createElement('span');
       caption.className = 'rrt-pending-pack-preview__caption';
-      caption.textContent = packs.length > 1
-        ? `PACK ${pendingPack.packIndex} OF ${pendingPack.packCount} · PENDING`
-        : 'PENDING';
       tile.appendChild(pack);
-      tile.appendChild(caption);
+      // The wrapper already says its level and exact ticket quantity. Keep an
+      // ordinal only when several physical packs share the dropdown; the
+      // enclosing Pending surface already explains their unresolved state.
+      if (packs.length > 1) {
+        caption.textContent = `PACK ${pendingPack.packIndex} OF ${pendingPack.packCount}`;
+        tile.appendChild(caption);
+      }
       list.appendChild(tile);
     }
     host.appendChild(list);

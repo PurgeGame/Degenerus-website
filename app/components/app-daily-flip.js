@@ -1,8 +1,9 @@
 // /app/components/app-daily-flip.js — the daily coinflip widget (user ask).
 //
 // Lives INSIDE the jackpot hero as its right column (user call: the coinflip
-// is part of the jackpot widget, not a sibling panel). The coin is a CSS-3D
-// two-facer (shared/coinflip-face-red.svg = WWXRP/Purge side,
+// is part of the jackpot widget, not a sibling panel). The coin uses one
+// physical flipping surface with two synchronized artworks
+// (shared/coinflip-face-red.svg = WWXRP/Purge side,
 // shared/coinflip-face-eth.svg = green ETH side, both derived from the
 // user's coinflip-coin.svg):
 //
@@ -21,8 +22,9 @@
 //   FLIP — depositCoinflip(player, amount) stake (FLIP wei, UNSCALED).
 // Ticket redemption belongs to the purchase panel, so this side only owns the
 // coinflip stake, its winnings claim, and the post-result Reverse Flip card.
-// (CLAIM DGNRS removed — user call: no DGNRS claim in the coinflip column.
-// The inline FLIP-winnings claim chip on the Claimable row stays.)
+// (CLAIM DGNRS removed — user call: no DGNRS claim in the coinflip column.)
+// ETH claim, FLIP claim, and LINK funding are three focused Protocol Coins
+// widgets; none of them is routed through Pending.
 //
 // T-58-18: server-derived strings via textContent.
 
@@ -40,12 +42,9 @@ import { readGameState } from '../app/game-state.js';
 import {
   depositCoinflip,
   MAX_AUTO_REBUY_TAKE_PROFIT_WEI,
-  readCoinflipAutoRebuyInfo,
-  readCoinflipBacking,
-  readClaimableCoinflip,
-  readCurrentCoinflipStake,
   readBafFlipEve,
-  readFlipWidgetBalances,
+  readUpcomingFlipBonus,
+  readCoinflipDisplaySnapshot,
   protocolFlipTotalWei,
   readLatestCoinflipResult,
   readResolvedCoinflipStake,
@@ -55,7 +54,7 @@ import {
   setCoinflipAutoRebuy,
   setCoinflipAutoRebuyTakeProfit,
 } from '../app/coinflip.js';
-import { claimFlip } from '../app/claims.js';
+import { openPlayerFundsDialog } from '../app/player-funds.js';
 import {
   burnSdgnrs,
   MIN_SDGNRS_BURN_WEI,
@@ -67,6 +66,7 @@ import { readCharityVoteState, voteForCharity } from '../app/charity-vote.js';
 import { compactUiError } from '../app/ui-error.js';
 import { TX_CONFIRMED_EVENT } from '../app/contracts.js';
 import { updateBalanceDisplay, resetBalanceDisplay } from '../app/balance-countup.js';
+import { appendCoinFaces } from '../app/coin-faces.js';
 import { activeBafScoreLevel } from '../app/jackpot-resolutions.js';
 import { setMajorDrawActivity } from '../app/major-draw-activity.js';
 import {
@@ -146,8 +146,18 @@ const REVERSE_CARD_POST_REVEAL_DELAY_MS = 3_000;
 // the live side after this window, but it cannot overwrite the just-shown
 // result while the player is taking it in.
 const RESULT_TRUTH_WINDOW_MS = 15_000;
+const COINFLIP_REUSE_BONUS_BPS = 75n;
+const BPS_DENOMINATOR = 10_000n;
 const MODIFIER_MIN_PERCENT = 50;
 const MODIFIER_MAX_PERCENT = 156;
+
+/** Color only the multiplier number at the requested payout boundaries. */
+export function dailyFlipMultiplierTone(totalPercent) {
+  const value = Math.max(0, Math.trunc(Number(totalPercent) || 0));
+  if (value <= 150) return 'low';
+  if (value >= 250) return 'high';
+  return null;
+}
 const ERROR_AUTO_CLEAR_MS = 10_000;
 const POLL_INTERVAL_MS = 15_000;
 const RESULT_PENDING_POLL_MS = 2_000;
@@ -276,22 +286,6 @@ function _settleWithin(promise, ms) {
   });
 }
 
-function compactBetAmount(value) {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount <= 0) return '0';
-  const tiers = [
-    [1e12, 't'],
-    [1e9, 'b'],
-    [1e6, 'm'],
-    [1e3, 'k'],
-  ];
-  for (const [size, suffix] of tiers) {
-    if (amount < size) continue;
-    return `${Math.round(amount / size)}${suffix}`;
-  }
-  return String(Math.round(amount));
-}
-
 /** Compact the sDGNRS ledger balance to at most three significant figures. */
 export function formatSdgnrsBalance(weiValue) {
   let raw;
@@ -384,20 +378,24 @@ class AppDailyFlip extends HTMLElement {
   #bafLevel = null;
   #bafAddress = null;
   #bafFlipEve = null;      // exact GAME.purchaseInfo x9-final-day signal
-  // Rank is useful context, not a live ledger. Cache one lookup per
-  // player/bracket and invalidate it only when a revealed win can change the
-  // score (or when the player/day target changes).
+  #upcomingFlipBonus = null; // exact AdvanceModule bonus for the next unlocked flip
+  // Cache the direct lookup per player/bracket, but accept the live position
+  // published by the full-width BAF rail. Both visible BAF surfaces therefore
+  // share the same freshly polled rank without adding a second DB query.
   #bafLookupKey = null;
-  #currentBetWei = null;   // live coinflipAmount(player), scoped to the current target day
+  #currentBetWei = null;   // live stored target-day stake plus replayed auto-rebuy carry
   #autoRebuyInfo = null;   // direct Coinflip auto-rebuy settings for #autoRebuyAddress
   #autoRebuyAddress = null;
   #autoRebuyError = '';
+  #addBetError = '';
   #autoRebuyDraftAddress = null;
   #autoRebuyDraftReady = false;
   #resolvedBetWei = null;  // final CoinflipStakeUpdated.newTotal for the exact result day
   #rolloverBetCarry = null; // last live stake, promoted only after the new day reads zero
   #liveClaimableWei = null; // direct previewClaimCoinflips, bypassing indexer lag
   #liveBackingWei = null;   // claimable plus active auto-rebuy carry after replay
+  #ledgerTruthBlock = null; // confirmed tx block the next atomic ledger read must include
+  #retireSettlementFloor = false; // exact post-tx ledger supersedes reveal optimism
   #fetchSeq = 0;
   #refreshQueued = false;
   #refreshInFlight = false;
@@ -533,16 +531,32 @@ class AppDailyFlip extends HTMLElement {
       : this.#reverseFlipQuote?.queued;
   }
 
+  #adoptSharedBafPosition(position) {
+    if (!position) return;
+    const address = String(this.#viewedAddress() || '').toLowerCase();
+    const sharedAddress = String(position.address || '').toLowerCase();
+    const level = Number(position.level);
+    if (!address || sharedAddress !== address || !Number.isInteger(level) || level <= 0) return;
+    if (this.#bafLevel != null && Number(this.#bafLevel) !== level) return;
+    this.#bafAddress = address;
+    this.#bafLevel = level;
+    this.#bafScore = position;
+    this.#bafLookupKey = `${address}:${level}`;
+    this.#repairSettlement();
+    this.#render();
+  }
+
   #dayAvailabilityReady(day = this.#day) {
     const sync = this.#activeDaySync(day);
     // Preserve historical replay and the pre-coordinator fallback. Once a
-    // direct target exists, both jackpot and coinflip unlock together.
-    return sync == null || sync.ready === true;
+    // direct target exists, the Coinflip follows its own exact-day lane; it
+    // must not stay closed while the jackpot/ticket lane keeps processing.
+    return sync == null || sync.coinflipReady === true;
   }
 
   #syncedCoinflipResult(day = this.#day) {
     const sync = this.#activeDaySync(day);
-    if (!sync?.ready || Number(sync.coinflipResult?.day) !== Number(day)) return null;
+    if (!sync?.coinflipReady || Number(sync.coinflipResult?.day) !== Number(day)) return null;
     return sync.coinflipResult;
   }
 
@@ -633,6 +647,8 @@ class AppDailyFlip extends HTMLElement {
     this.#rolloverBetCarry = rolloverCarry;
     this.#liveClaimableWei = null;
     this.#liveBackingWei = null;
+    this.#ledgerTruthBlock = null;
+    this.#retireSettlementFloor = false;
     this.#bafScore = null;
     this.#bafLevel = null;
     this.#bafAddress = null;
@@ -670,6 +686,9 @@ class AppDailyFlip extends HTMLElement {
     this.#wireRewardSpoilerGate();
 
     this.#unsubs.push(subscribe('app.daySync', (sync) => this.#onDaySync(sync)));
+    this.#unsubs.push(subscribe('app.bafPosition', (position) => {
+      this.#adoptSharedBafPosition(position);
+    }));
 
     // On a NEW day: cancel any in-flight landing, re-render immediately so
     // the stale coin can't take clicks against the new day's key, then
@@ -708,11 +727,14 @@ class AppDailyFlip extends HTMLElement {
       this.#rolloverBetCarry = null;
       this.#liveClaimableWei = null;
       this.#liveBackingWei = null;
+      this.#ledgerTruthBlock = null;
+      this.#retireSettlementFloor = false;
       this.#bafScore = null;
       this.#bafLevel = null;
       this.#bafAddress = null;
       this.#bafLookupKey = null;
       this.#bafFlipEve = null;
+      this.#upcomingFlipBonus = null;
       this.#revealRequestedDay = null;
       this.#renderAutoRebuy({ syncDraft: true });
       this.#scheduleRefresh();
@@ -736,10 +758,13 @@ class AppDailyFlip extends HTMLElement {
       this.#rolloverBetCarry = null;
       this.#liveClaimableWei = null;
       this.#liveBackingWei = null;
+      this.#ledgerTruthBlock = null;
+      this.#retireSettlementFloor = false;
       this.#bafScore = null;
       this.#bafLevel = null;
       this.#bafAddress = null;
       this.#bafLookupKey = null;
+      this.#upcomingFlipBonus = null;
       this.#revealRequestedDay = null;
       this.#renderAutoRebuy({ syncDraft: true });
       this.#scheduleRefresh();
@@ -770,10 +795,19 @@ class AppDailyFlip extends HTMLElement {
         if (document.visibilityState === 'visible') this.#scheduleRefresh();
       };
       document.addEventListener('visibilitychange', this.#visibilityListener);
-      this.#txConfirmedListener = () => {
+      this.#txConfirmedListener = (event) => {
         // Refresh both minted FLIP and the claimable-first spending ledger.
-        // The immediate read normally lands on the receipt block; one short
-        // follow-up covers injected RPC replicas that trail it briefly.
+        // Pin the first reconciliation to the receipt block so wallet,
+        // claimable, carry, and Tomorrow's Bet cannot straddle the write.
+        // Once that complete snapshot lands it also supersedes the optimistic
+        // reveal-time claimable floor retained for slow pre-result RPCs.
+        const confirmedBlock = Number(event?.detail?.blockNumber);
+        if (Number.isSafeInteger(confirmedBlock) && confirmedBlock >= 0) {
+          this.#ledgerTruthBlock = this.#ledgerTruthBlock == null
+            ? confirmedBlock
+            : Math.max(Number(this.#ledgerTruthBlock), confirmedBlock);
+        }
+        if (this.#activeSettlement()) this.#retireSettlementFloor = true;
         this.#scheduleRefresh();
         if (this.#postTxRefreshHandle != null) {
           try { clearTimeout(this.#postTxRefreshHandle); } catch (_e) { /* defensive */ }
@@ -1437,6 +1471,7 @@ class AppDailyFlip extends HTMLElement {
         betWei: state.betWei == null ? null : String(state.betWei),
         claimableBaseWei: String(state.claimableBaseWei),
         claimableTotalWei: String(state.claimableTotalWei ?? 0n),
+        claimableFloorRetired: Boolean(state.claimableFloorRetired),
         rewardPercent: Number(state.rewardPercent || 0),
         won: Boolean(state.won),
         bafGainWei: state.bafGainWei == null ? null : String(state.bafGainWei),
@@ -1463,6 +1498,7 @@ class AppDailyFlip extends HTMLElement {
         claimableTotalWei: saved.claimableTotalWei == null
           ? null
           : this.#asWei(saved.claimableTotalWei),
+        claimableFloorRetired: Boolean(saved.claimableFloorRetired),
         rewardPercent: Number(saved.rewardPercent || 0),
         won: Boolean(saved.won),
         bafGainWei: saved.bafGainWei == null ? null : this.#asWei(saved.bafGainWei),
@@ -1608,6 +1644,8 @@ class AppDailyFlip extends HTMLElement {
       this.#rolloverBetCarry = null;
       this.#liveClaimableWei = null;
       this.#liveBackingWei = null;
+      this.#ledgerTruthBlock = null;
+      this.#retireSettlementFloor = false;
       this.#bafScore = null;
       this.#bafLevel = null;
       this.#bafAddress = address;
@@ -1625,6 +1663,7 @@ class AppDailyFlip extends HTMLElement {
       Promise.resolve().then(() => readLatestCoinflipResult()),
       EXACT_RESULT_TIMEOUT_MS,
     ).catch(() => null);
+    const ledgerTruthBlock = this.#ledgerTruthBlock;
     const tasks = [
       this.#runRefreshTask(
         seq,
@@ -1664,6 +1703,12 @@ class AppDailyFlip extends HTMLElement {
       ),
       this.#runRefreshTask(
         seq,
+        readUpcomingFlipBonus(),
+        (value) => { this.#upcomingFlipBonus = value; },
+        () => { this.#upcomingFlipBonus = null; },
+      ),
+      this.#runRefreshTask(
+        seq,
         addr
           ? readGameState().then(async (state) => {
             const level = activeBafScoreLevel(state?.level);
@@ -1684,6 +1729,13 @@ class AppDailyFlip extends HTMLElement {
           this.#bafAddress = address;
           this.#bafLevel = value?.level ?? null;
           this.#bafScore = value?.score ?? null;
+          if (value?.score && address && value?.level != null) {
+            update('app.bafPosition', {
+              ...value.score,
+              address,
+              level: Number(value.level),
+            });
+          }
           this.#repairSettlement();
         },
         () => {
@@ -1698,22 +1750,24 @@ class AppDailyFlip extends HTMLElement {
       ),
       this.#runRefreshTask(
         seq,
-        addr ? readFlipWidgetBalances({ player: addr }) : Promise.resolve(null),
-        (value) => {
+        addr
+          ? readCoinflipDisplaySnapshot({ player: addr, blockTag: ledgerTruthBlock })
+          : Promise.resolve(null),
+        (snapshot) => {
           this.#liveBalancesAddress = address;
-          this.#liveBalances = value;
-        },
-        () => {
-          this.#liveBalancesAddress = address;
-          this.#liveBalances = null;
-        },
-      ),
-      this.#runRefreshTask(
-        seq,
-        addr ? readCurrentCoinflipStake({ player: addr }) : Promise.resolve(null),
-        (value) => {
-          const next = value == null ? null : this.#asWei(value);
+          this.#liveBalances = snapshot?.balances ?? null;
+          const next = snapshot?.currentStakeWei == null
+            ? null
+            : this.#asWei(snapshot.currentStakeWei);
           this.#currentBetWei = next;
+          this.#autoRebuyAddress = address;
+          this.#autoRebuyInfo = snapshot?.autoRebuyInfo ?? null;
+          this.#liveClaimableWei = snapshot?.claimableWei == null
+            ? null
+            : this.#asWei(snapshot.claimableWei);
+          this.#liveBackingWei = snapshot?.backingWei == null
+            ? null
+            : this.#asWei(snapshot.backingWei);
           const carry = this.#rolloverBetCarry;
           if (
             next === 0n
@@ -1723,37 +1777,26 @@ class AppDailyFlip extends HTMLElement {
             carry.promoted = true;
             if (this.#resolvedBetWei == null) this.#resolvedBetWei = carry.wei;
           }
-        },
-        () => { this.#currentBetWei = null; },
-      ),
-      this.#runRefreshTask(
-        seq,
-        addr ? readCoinflipAutoRebuyInfo({ player: addr }) : Promise.resolve(null),
-        (value) => {
-          this.#autoRebuyAddress = address;
-          this.#autoRebuyInfo = value;
-        },
-        () => {
-          this.#autoRebuyAddress = address;
-          this.#autoRebuyInfo = null;
-        },
-      ),
-      this.#runRefreshTask(
-        seq,
-        addr ? readClaimableCoinflip({ player: addr }) : Promise.resolve(null),
-        (value) => {
-          this.#liveClaimableWei = value == null ? null : this.#asWei(value);
+          if (this.#retireSettlementFloor && snapshot?.ledgerComplete) {
+            const settlement = this.#activeSettlement();
+            if (settlement) {
+              settlement.claimableFloorRetired = true;
+              this.#saveSettlement(settlement);
+            }
+            this.#retireSettlementFloor = false;
+            if (this.#ledgerTruthBlock === ledgerTruthBlock) this.#ledgerTruthBlock = null;
+          }
           this.#repairSettlement();
         },
-        () => { this.#liveClaimableWei = null; },
-      ),
-      this.#runRefreshTask(
-        seq,
-        addr ? readCoinflipBacking({ player: addr }) : Promise.resolve(null),
-        (value) => {
-          this.#liveBackingWei = value == null ? null : this.#asWei(value);
+        () => {
+          this.#liveBalancesAddress = address;
+          this.#liveBalances = null;
+          this.#currentBetWei = null;
+          this.#autoRebuyAddress = address;
+          this.#autoRebuyInfo = null;
+          this.#liveClaimableWei = null;
+          this.#liveBackingWei = null;
         },
-        () => { this.#liveBackingWei = null; },
       ),
       this.#runRefreshTask(
         seq,
@@ -1785,7 +1828,7 @@ class AppDailyFlip extends HTMLElement {
           this.#reverseFlipQuote = nextQuote;
           if (nextQuote == null) return;
           const sync = this.#activeDaySync(requestedDay);
-          if (sync && this.#rngRequestStarted(sync) && sync.ready !== true
+          if (sync && this.#rngRequestStarted(sync) && sync.coinflipReady !== true
             && (this.#resolutionReverseDay !== Number(requestedDay) || nextQuote.locked)) {
             this.#resolutionReverseDay = Number(requestedDay);
             this.#resolutionReverseQueued = nextQuote.queued;
@@ -1874,16 +1917,10 @@ class AppDailyFlip extends HTMLElement {
           </div>
           <div class="df-tomorrow-layout">
             <span class="df-flip-group df-next-bet" data-bind="df-add-bet-controls">
-              <span class="df-next-bet__stepper">
-                <input type="number" name="df-amount" class="df-amount" min="0" step="100" value="1000" aria-label="FLIP to add to tomorrow's bet">
-                <span class="df-next-bet__arrows" aria-hidden="false">
-                  <button type="button" data-bind="df-bet-up" aria-label="Increase bet by 100 FLIP">▲</button>
-                  <button type="button" data-bind="df-bet-down" aria-label="Decrease bet by 100 FLIP">▼</button>
-                </span>
-                <boon-product-indicator class="df-boon-indicator"
-                                        product="coinflip"></boon-product-indicator>
-              </span>
-              <button type="button" class="df-flip-cta" data-write data-bind="df-flip-cta" aria-label="Add bet" title="Bet 1k">ADD BET</button>
+              <button type="button" class="df-flip-cta" data-write
+                      data-bind="df-flip-cta" aria-label="Add to tomorrow's bet"
+                      aria-haspopup="dialog" aria-controls="df-add-bet-dialog"
+                      aria-expanded="false" title="Add to tomorrow's bet">ADD BET</button>
             </span>
             <div class="df-position-slot" data-bind="df-position-tomorrow"></div>
           </div>
@@ -1902,9 +1939,8 @@ class AppDailyFlip extends HTMLElement {
                 <span class="df-funds__number" data-bind="df-funds-flip-total">—</span>
                 <span class="df-funds__unit" data-bind="df-funds-flip-unit">FLIP</span>
               </strong>
-              <button type="button" class="df-claim-flip-cta" data-write data-write-locked
-                      data-write-lock-title="Coinflip result is loading"
-                      data-bind="df-claim-flip-cta" disabled>CLAIM</button>
+              <button type="button" class="df-claim-flip-cta" data-write
+                      data-bind="df-claim-flip-cta" aria-haspopup="dialog">CLAIM</button>
             </div>
             <div class="df-funds__display df-funds__display--wwxrp" data-bind="df-funds-wwxrp-box" hidden
                  aria-label="WWXRP balance">
@@ -1923,6 +1959,43 @@ class AppDailyFlip extends HTMLElement {
                         data-write-lock-title="sDGNRS balance is loading"
                         data-bind="df-burn-sdgnrs-cta" aria-haspopup="dialog">BURN</button>
               </span>
+            </div>
+          </div>
+        </div>
+        <div class="df-reverse-dialog df-add-bet-dialog"
+             id="df-add-bet-dialog" data-bind="df-add-bet-dialog" hidden
+             role="dialog" aria-modal="true" aria-labelledby="df-add-bet-title">
+          <div class="df-reverse-dialog__card df-add-bet-dialog__card">
+            <button type="button" class="df-reverse-dialog__close"
+                    data-bind="df-add-bet-close" aria-label="Close add bet">×</button>
+            <header class="df-add-bet-dialog__head">
+              <img src="/whitepaper/flame-logo-split.svg" alt="" aria-hidden="true">
+              <span><small>DAILY COINFLIP</small><h3 id="df-add-bet-title">Add to tomorrow</h3></span>
+            </header>
+            <label class="df-add-bet-dialog__value">
+              <input type="number" name="df-amount" data-bind="df-add-bet-number"
+                     min="100" step="1" value="1000" inputmode="numeric" autocomplete="off"
+                     aria-label="FLIP to add to tomorrow's bet">
+              <b aria-hidden="true">FLIP</b>
+            </label>
+            <input type="range" data-bind="df-add-bet-slider"
+                   min="100" max="1000" step="1" value="1000"
+                   aria-label="FLIP to add to tomorrow's bet">
+            <div class="df-add-bet-dialog__range" aria-hidden="true">
+              <span>100</span><span data-bind="df-add-bet-available">AVAILABLE —</span>
+            </div>
+            <p class="df-add-bet-dialog__reuse" data-bind="df-add-bet-reuse"
+               hidden role="status"></p>
+            <boon-product-indicator class="df-boon-indicator"
+                                    product="coinflip"></boon-product-indicator>
+            <p class="df-add-bet-dialog__status" data-bind="df-add-bet-status"
+               hidden role="alert"></p>
+            <div class="df-reverse-dialog__actions">
+              <button type="button" class="df-reverse-dialog__later"
+                      data-bind="df-add-bet-close">Cancel</button>
+              <button type="button" class="df-reverse-dialog__accept"
+                      data-write data-write-locked data-write-lock-title="FLIP balance is loading"
+                      data-bind="df-add-bet-confirm">Add bet</button>
             </div>
           </div>
         </div>
@@ -2131,7 +2204,7 @@ class AppDailyFlip extends HTMLElement {
     this.#renderFunds();
     this.#renderBafScore();
     this.#renderReverseFlip();
-    this.#renderBetTooltip();
+    this.#renderAddBetDialog();
     this.#maybeStartLiveReverseAnimation();
   }
 
@@ -2150,29 +2223,155 @@ class AppDailyFlip extends HTMLElement {
     return whole.toLocaleString('en-US');
   }
 
-  #renderBetTooltip() {
-    const input = this.querySelector('[name="df-amount"]');
-    const add = this.querySelector('[data-bind="df-flip-cta"]');
-    if (!add) return;
-    const abbreviated = compactBetAmount(input?.value ?? 0);
-    add.title = `Bet ${abbreviated}`;
+  #addBetAvailableWei() {
+    const acting = getActingAddress();
+    if (!acting || !this.#dashboardAddress
+      || String(acting).toLowerCase() !== String(this.#dashboardAddress).toLowerCase()) return null;
+    const balances = this.#liveBalancesAddress === this.#dashboardAddress
+      ? this.#liveBalances
+      : null;
+    const walletRaw = balances?.flipBalance ?? this.#dashboard?.flipBalance ?? null;
+    if (walletRaw == null) return null;
+    return protocolFlipTotalWei(this.#asWei(walletRaw), this.#visibleClaimableWei());
   }
 
-  #stepBetAmount(direction) {
-    const input = this.querySelector('[name="df-amount"]');
-    if (!input) return;
-    const current = Number(input.value);
-    const step = Number(input.step || 100);
-    const minimum = Number(input.min || 0);
-    const next = Math.max(
-      Number.isFinite(minimum) ? minimum : 0,
-      (Number.isFinite(current) ? current : 0)
-        + (Number(direction) < 0 ? -1 : 1) * (Number.isFinite(step) && step > 0 ? step : 100),
-    );
-    input.value = Number.isInteger(next)
-      ? String(next)
-      : String(Number(next.toFixed(6)));
-    this.#renderBetTooltip();
+  #addBetSliderStep(maxWhole) {
+    if (maxWhole >= 100_000n) return 100n;
+    if (maxWhole >= 10_000n) return 10n;
+    return 1n;
+  }
+
+  #snapAddBetSliderWhole(value, minWhole, maxWhole, step) {
+    let raw;
+    try { raw = BigInt(String(value || '0')); }
+    catch (_e) { raw = minWhole; }
+    const upper = minWhole + (((maxWhole - minWhole) / step) * step);
+    const offset = raw > minWhole ? raw - minWhole : 0n;
+    const snapped = minWhole + (((offset + (step / 2n)) / step) * step);
+    return snapped < minWhole ? minWhole : snapped > upper ? upper : snapped;
+  }
+
+  #renderAddBetDialog({ reset = false } = {}) {
+    const dialog = this.querySelector('[data-bind="df-add-bet-dialog"]');
+    const opener = this.querySelector('[data-bind="df-flip-cta"]');
+    const slider = this.querySelector('[data-bind="df-add-bet-slider"]');
+    const number = this.querySelector('[data-bind="df-add-bet-number"]');
+    const availableLabel = this.querySelector('[data-bind="df-add-bet-available"]');
+    const reuse = this.querySelector('[data-bind="df-add-bet-reuse"]');
+    const confirm = this.querySelector('[data-bind="df-add-bet-confirm"]');
+    const status = this.querySelector('[data-bind="df-add-bet-status"]');
+    if (!dialog || !slider || !number || !confirm) return;
+
+    const unit = 10n ** 18n;
+    const minWhole = 100n;
+    const available = this.#addBetAvailableWei();
+    const maxWhole = available == null ? 0n : available / unit;
+    const validRange = maxWhole >= minWhole;
+    const sliderStep = validRange ? this.#addBetSliderStep(maxWhole) : 1n;
+    slider.min = String(minWhole);
+    slider.max = validRange ? String(maxWhole) : String(minWhole);
+    slider.step = String(sliderStep);
+    number.min = String(minWhole);
+    number.max = validRange ? String(maxWhole) : String(minWhole);
+    number.step = '1';
+    if (reset) {
+      number.value = validRange ? String(maxWhole < 1_000n ? maxWhole : 1_000n) : '';
+    }
+    if (!validRange) number.value = '';
+    number.placeholder = validRange
+      ? `${minWhole.toLocaleString('en-US')}–${maxWhole.toLocaleString('en-US')}`
+      : available == null ? 'LOADING' : 'NOT ENOUGH';
+    const rawNumber = String(number.value || '').trim();
+    let selectedWhole = null;
+    if (validRange && /^\d+$/.test(rawNumber)) {
+      const parsed = BigInt(rawNumber);
+      if (parsed >= minWhole && parsed <= maxWhole) selectedWhole = parsed;
+    }
+    const validSelection = selectedWhole != null;
+    if (validSelection) {
+      slider.value = String(this.#snapAddBetSliderWhole(
+        selectedWhole,
+        minWhole,
+        maxWhole,
+        sliderStep,
+      ));
+    }
+    slider.disabled = !validRange || this.#busy;
+    number.disabled = !validRange || this.#busy;
+    if (validRange && !validSelection) number.setAttribute('aria-invalid', 'true');
+    else number.removeAttribute('aria-invalid');
+    const sliderWhole = validRange ? BigInt(slider.value || minWhole) : 0n;
+    slider.setAttribute('aria-valuetext', validRange ? `${sliderWhole.toLocaleString('en-US')} FLIP` : 'Unavailable');
+    if (availableLabel) {
+      availableLabel.textContent = available == null
+        ? 'AVAILABLE —'
+        : `AVAILABLE ${this.#fmtWhole(available)} FLIP`;
+    }
+    if (reuse) {
+      const selectedWei = (selectedWhole ?? 0n) * unit;
+      const claimableWei = this.#visibleClaimableWei();
+      const reusedWei = validSelection && claimableWei > 0n
+        ? (selectedWei < claimableWei ? selectedWei : claimableWei)
+        : 0n;
+      const bonusWei = (reusedWei * COINFLIP_REUSE_BONUS_BPS) / BPS_DENOMINATOR;
+      reuse.hidden = bonusWei === 0n;
+      reuse.textContent = bonusWei === 0n
+        ? ''
+        : `REUSED WINNINGS +0.75% · +${tokenAmountInput(bonusWei)} FLIP`;
+      if (bonusWei === 0n) reuse.removeAttribute('title');
+      else reuse.setAttribute(
+        'title',
+        `${this.#fmtWhole(reusedWei)} FLIP of this bet comes from winnings.`,
+      );
+    }
+    confirm.disabled = !validSelection || this.#busy;
+    if (validSelection && !this.#busy) {
+      confirm.removeAttribute('data-write-locked');
+      confirm.removeAttribute('data-write-lock-title');
+    } else {
+      confirm.setAttribute('data-write-locked', '');
+      confirm.setAttribute(
+        'data-write-lock-title',
+        this.#busy
+          ? 'Adding bet'
+          : available == null
+            ? 'FLIP balance is loading'
+            : validRange
+              ? `Enter a whole FLIP amount from 100 to ${maxWhole.toLocaleString('en-US')}`
+              : 'At least 100 FLIP is required',
+      );
+    }
+    opener?.setAttribute('aria-expanded', String(!dialog.hidden));
+    if (status) {
+      status.textContent = this.#addBetError;
+      status.hidden = !this.#addBetError;
+    }
+  }
+
+  #openAddBetDialog({ reset = true } = {}) {
+    const dialog = this.querySelector('[data-bind="df-add-bet-dialog"]');
+    if (!dialog) return;
+    this.#addBetError = '';
+    dialog.hidden = false;
+    dialog.removeAttribute('hidden');
+    this.#renderAddBetDialog({ reset });
+    const number = this.querySelector('[data-bind="df-add-bet-number"]');
+    queueMicrotask(() => {
+      try {
+        number?.focus?.({ preventScroll: true });
+        number?.select?.();
+      } catch (_e) { /* headless */ }
+    });
+  }
+
+  #closeAddBetDialog({ force = false } = {}) {
+    if (this.#busy && !force) return;
+    const dialog = this.querySelector('[data-bind="df-add-bet-dialog"]');
+    if (!dialog) return;
+    dialog.hidden = true;
+    dialog.setAttribute('hidden', '');
+    this.#addBetError = '';
+    this.#renderAddBetDialog();
   }
 
   #activeAutoRebuyInfo() {
@@ -2973,20 +3172,7 @@ class AppDailyFlip extends HTMLElement {
     );
     const inner = document.createElement('span');
     inner.className = 'df-coin3d__inner';
-    const faceRed = document.createElement('span');
-    faceRed.className = 'df-coin3d__face df-coin3d__face--red';
-    const redImg = document.createElement('img');
-    redImg.src = '/shared/coinflip-face-red.svg';
-    redImg.alt = '';
-    faceRed.appendChild(redImg);
-    inner.appendChild(faceRed);
-    const faceEth = document.createElement('span');
-    faceEth.className = 'df-coin3d__face df-coin3d__face--eth';
-    const ethImg = document.createElement('img');
-    ethImg.src = '/shared/coinflip-face-eth.svg';
-    ethImg.alt = '';
-    faceEth.appendChild(ethImg);
-    inner.appendChild(faceEth);
+    appendCoinFaces(inner, { initialSide: queuedSideIsEth ? 'eth' : 'red' });
     btn.appendChild(inner);
     // Capture the rendered day. A detached previous-day button must never
     // queue or reveal whichever day the component has since adopted.
@@ -3147,6 +3333,7 @@ class AppDailyFlip extends HTMLElement {
     const position = ((pct - MODIFIER_MIN_PERCENT)
       / (MODIFIER_MAX_PERCENT - MODIFIER_MIN_PERCENT)) * 100;
     const totalPct = 100 + pct;
+    const numberTone = dailyFlipMultiplierTone(totalPct);
 
     if (showWinningMeter && this.#meterFlashVisible) {
       const displayKey = `${this.#day}:${totalPct}:flash`;
@@ -3154,7 +3341,10 @@ class AppDailyFlip extends HTMLElement {
       if (current?.getAttribute('data-meter-key') === displayKey) return;
       host.textContent = '';
       const flash = document.createElement('div');
-      flash.className = 'df-modifier-flash';
+      flash.className = [
+        'df-modifier-flash',
+        numberTone ? `df-modifier-flash--${numberTone}` : '',
+      ].filter(Boolean).join(' ');
       flash.textContent = `${totalPct}%`;
       flash.setAttribute('data-meter-key', displayKey);
       flash.setAttribute('role', 'status');
@@ -3239,7 +3429,10 @@ class AppDailyFlip extends HTMLElement {
     meter.appendChild(track);
 
     const readout = document.createElement('div');
-    readout.className = 'df-modifier-meter__readout';
+    readout.className = [
+      'df-modifier-meter__readout',
+      numberTone ? `df-modifier-meter__readout--${numberTone}` : '',
+    ].filter(Boolean).join(' ');
     readout.textContent = this.#landing
       ? (this.#fakeoutMeterDraining ? '150%' : `${totalPct}%`)
       : `${totalPct}%`;
@@ -3302,6 +3495,13 @@ class AppDailyFlip extends HTMLElement {
     const settlement = this.#activeSettlement();
     let visible = this.#liveClaimableWei == null ? indexed : this.#liveClaimableWei;
     if (!settlement) return visible;
+    // A complete snapshot at/after a confirmed transaction is newer than the
+    // reveal receipt and the indexer. In particular, a claim moves this value
+    // into wallet FLIP; retaining the old optimistic floor would double-count
+    // it in Protocol Coins and leave CLAIM enabled for an empty ledger.
+    if (settlement.claimableFloorRetired && this.#liveClaimableWei != null) {
+      return this.#liveClaimableWei;
+    }
     const settledTotal = settlement.claimableTotalWei == null
       ? settlement.claimableBaseWei + this.#settlementGainWei(settlement)
       : this.#asWei(settlement.claimableTotalWei);
@@ -3323,14 +3523,7 @@ class AppDailyFlip extends HTMLElement {
     const info = this.#autoRebuyAddress === this.#dashboardAddress
       ? this.#autoRebuyInfo
       : null;
-    // Both sources above are chain reads. When neither is usable — no provider,
-    // a failed RPC, or an address the auto-rebuy read is not scoped to — this
-    // used to fall through with carry 0 and silently understate the player's
-    // coinflip FLIP by the entire carry, which is where auto-rebuy keeps the
-    // winnings. The indexed mirror covers that gap.
-    const carry = info?.enabled
-      ? this.#asWei(info.carryWei)
-      : this.#asWei(this.#dashboard?.coinflip?.autoRebuyCarry);
+    const carry = info?.enabled ? this.#asWei(info.carryWei) : 0n;
     return claimable + carry;
   }
 
@@ -3353,6 +3546,7 @@ class AppDailyFlip extends HTMLElement {
     const resolvedStake = this.#resultStakeWei();
     const won = Boolean(this.#flipResult?.win);
     const modifier = Math.max(0, Math.trunc(Number(this.#flipResult?.rewardPercent) || 0));
+    const totalMultiplier = 100 + modifier;
     // The stake is not an outcome spoiler: show the exact committed amount
     // while the coin is waiting to be revealed, then replace that same value
     // with its settled receipt. A zero stake is equally safe and clearer as an
@@ -3361,6 +3555,9 @@ class AppDailyFlip extends HTMLElement {
     const tomorrowGateOpen = this.#tomorrowSpoilerOverrideKey === this.#spoilerOverrideKey('tomorrow')
       || (this.#tomorrowRewardGateOpen() && this.#tomorrowAutoRebuyGateOpen(hasResult));
     const tomorrowKnown = this.#currentBetWei != null;
+    const upcomingBonusPoints = Number(this.#upcomingFlipBonus?.points);
+    const upcomingBonusVisible = this.#browsingDay == null
+      && (upcomingBonusPoints === 2 || upcomingBonusPoints === 6);
     const rows = [
       {
         key: 'today',
@@ -3377,7 +3574,11 @@ class AppDailyFlip extends HTMLElement {
         status: resolvedStake == null || !revealComplete || noBet
           ? null
           : won
-            ? { outcome: 'WIN', percent: `${100 + modifier}%` }
+            ? {
+              outcome: 'WIN',
+              percent: `${totalMultiplier}%`,
+              percentTone: dailyFlipMultiplierTone(totalMultiplier),
+            }
             : { outcome: 'LOSS', percent: null },
         outcome: noBet ? 'no-bet' : revealComplete ? (won ? 'win' : 'loss') : null,
         spoiler: false,
@@ -3407,7 +3608,25 @@ class AppDailyFlip extends HTMLElement {
       row.setAttribute('data-position', item.key);
       const l = document.createElement('span');
       l.className = 'df-position-label';
-      l.textContent = item.label;
+      if (item.key === 'tomorrow' && upcomingBonusVisible) {
+        const copy = document.createElement('span');
+        copy.className = 'df-position-label__copy';
+        copy.textContent = item.label;
+        l.appendChild(copy);
+        const bonus = document.createElement('span');
+        bonus.className = 'df-position-bonus';
+        bonus.setAttribute('data-bind', 'df-bonus-flip');
+        bonus.setAttribute('role', 'status');
+        bonus.dataset.tier = upcomingBonusPoints === 6 ? 'x0' : 'standard';
+        bonus.setAttribute(
+          'aria-label',
+          `Tomorrow's daily FLIP receives a ${upcomingBonusPoints} percent bonus.`,
+        );
+        bonus.textContent = `+${upcomingBonusPoints}% BONUS`;
+        l.appendChild(bonus);
+      } else {
+        l.textContent = item.label;
+      }
       // Every red ledger instrument uses the same hierarchy: title directly
       // above its right-aligned FLIP figure. The add controls remain a separate
       // compact lane inside Tomorrow's Bet.
@@ -3425,7 +3644,12 @@ class AppDailyFlip extends HTMLElement {
         multi.appendChild(outcome);
         if (item.status.percent) {
           const percent = document.createElement('span');
-          percent.className = 'df-position-percentage';
+          percent.className = [
+            'df-position-percentage',
+            item.status.percentTone
+              ? `df-position-percentage--${item.status.percentTone}`
+              : '',
+          ].filter(Boolean).join(' ');
           percent.textContent = item.status.percent;
           multi.appendChild(percent);
         }
@@ -3468,12 +3692,11 @@ class AppDailyFlip extends HTMLElement {
     const flipTotal = this.querySelector('[data-bind="df-funds-flip-total"]');
     const flipUnit = this.querySelector('[data-bind="df-funds-flip-unit"]');
     const flipTotalBox = this.querySelector('[data-bind="df-funds-flip-total-box"]');
-    const claim = this.querySelector('[data-bind="df-claim-flip-cta"]');
+    const claimFlip = this.querySelector('[data-bind="df-claim-flip-cta"]');
     const wwxrp = this.querySelector('[data-bind="df-funds-wwxrp"]');
     const wwxrpBox = this.querySelector('[data-bind="df-funds-wwxrp-box"]');
     const sdgnrs = this.querySelector('[data-bind="df-funds-sdgnrs"]');
     const sdgnrsBox = this.querySelector('[data-bind="df-funds-sdgnrs-box"]');
-    const visibleClaimable = this.#visibleClaimableWei();
     const visibleBacking = this.#visibleBackingWei();
     const liveBalances = this.#liveBalancesAddress === this.#dashboardAddress
       ? this.#liveBalances
@@ -3536,25 +3759,10 @@ class AppDailyFlip extends HTMLElement {
         visible: flipTotalVisible,
       });
     }
-    if (claim) {
-      const connected = Boolean(get('connected.address'));
-      const canClaim = revealComplete && !this.#busy && visibleClaimable > 0n && connected;
-      claim.disabled = !canClaim;
-      claim.textContent = this.#busy ? 'WAIT' : 'CLAIM';
-      if (canClaim) {
-        claim.removeAttribute('data-write-locked');
-        claim.removeAttribute('data-write-lock-title');
-      } else {
-        const reason = this.#busy
-          ? 'Another Coinflip action is processing'
-          : !connected
-            ? 'Connect a wallet to claim'
-            : !revealComplete
-              ? 'Reveal the Coinflip result before claiming'
-              : 'No FLIP winnings to claim';
-        claim.setAttribute('data-write-locked', '');
-        claim.setAttribute('data-write-lock-title', reason);
-      }
+    const connected = Boolean(getActingAddress());
+    if (claimFlip) {
+      claimFlip.disabled = !connected;
+      claimFlip.title = connected ? 'Claim FLIP' : 'Connect a wallet first';
     }
     updateBalanceDisplay(wwxrp, {
       container: wwxrpBox,
@@ -3883,6 +4091,7 @@ class AppDailyFlip extends HTMLElement {
       betWei: settledBet,
       claimableBaseWei: this.#asWei(this.#dashboard?.coinflip?.claimablePreview),
       claimableTotalWei: this.#liveClaimableWei,
+      claimableFloorRetired: false,
       rewardPercent,
       won,
       // Snapshot every not-yet-recorded winning payout. The current win is a
@@ -4045,9 +4254,54 @@ class AppDailyFlip extends HTMLElement {
     const revealHint = this.querySelector('[data-bind="df-reveal-hint"]');
     if (revealHint) revealHint.addEventListener('click', () => this.#onCoinClick(this.#day));
     const flip = this.querySelector('[data-bind="df-flip-cta"]');
-    if (flip) flip.addEventListener('click', () => this.#runAction('flip'));
-    const amount = this.querySelector('[name="df-amount"]');
-    if (amount) amount.addEventListener('input', () => this.#renderBetTooltip());
+    if (flip) flip.addEventListener('click', () => this.#openAddBetDialog());
+    const amountSlider = this.querySelector('[data-bind="df-add-bet-slider"]');
+    const amountNumber = this.querySelector('[data-bind="df-add-bet-number"]');
+    if (amountSlider) {
+      amountSlider.addEventListener('input', () => {
+        this.#addBetError = '';
+        const minWhole = BigInt(amountSlider.min || 100);
+        const maxWhole = BigInt(amountSlider.max || minWhole);
+        const step = BigInt(amountSlider.step || 1);
+        amountSlider.value = String(this.#snapAddBetSliderWhole(
+          amountSlider.value,
+          minWhole,
+          maxWhole,
+          step,
+        ));
+        if (amountNumber) amountNumber.value = amountSlider.value;
+        this.#renderAddBetDialog();
+      });
+      amountSlider.addEventListener('keydown', (event) => {
+        if (event?.key === 'Enter') this.#runAction('flip');
+      });
+    }
+    if (amountNumber) {
+      amountNumber.addEventListener('input', () => {
+        this.#addBetError = '';
+        this.#renderAddBetDialog();
+      });
+      amountNumber.addEventListener('keydown', (event) => {
+        if (event?.key === 'Enter'
+          && !this.querySelector('[data-bind="df-add-bet-confirm"]')?.disabled) {
+          this.#runAction('flip');
+        }
+      });
+    }
+    const addBetConfirm = this.querySelector('[data-bind="df-add-bet-confirm"]');
+    if (addBetConfirm) addBetConfirm.addEventListener('click', () => this.#runAction('flip'));
+    for (const close of this.querySelectorAll('[data-bind="df-add-bet-close"]')) {
+      close.addEventListener('click', () => this.#closeAddBetDialog());
+    }
+    const addBetDialog = this.querySelector('[data-bind="df-add-bet-dialog"]');
+    if (addBetDialog) {
+      addBetDialog.addEventListener('keydown', (event) => {
+        if (event?.key === 'Escape') this.#closeAddBetDialog();
+      });
+      addBetDialog.addEventListener('click', (event) => {
+        if (event?.target === addBetDialog) this.#closeAddBetDialog();
+      });
+    }
     const autoRebuy = this.querySelector('[data-bind="df-auto-rebuy-cta"]');
     if (autoRebuy) autoRebuy.addEventListener('click', () => this.#openAutoRebuyDialog());
     const autoRebuyToggle = this.querySelector('[name="df-auto-rebuy-enabled"]');
@@ -4080,12 +4334,8 @@ class AppDailyFlip extends HTMLElement {
         if (event?.target === autoRebuyDialog) this.#closeAutoRebuyDialog();
       });
     }
-    const betUp = this.querySelector('[data-bind="df-bet-up"]');
-    if (betUp) betUp.addEventListener('click', () => this.#stepBetAmount(1));
-    const betDown = this.querySelector('[data-bind="df-bet-down"]');
-    if (betDown) betDown.addEventListener('click', () => this.#stepBetAmount(-1));
-    const claim = this.querySelector('[data-bind="df-claim-flip-cta"]');
-    if (claim) claim.addEventListener('click', () => this.#runAction('claim-flip'));
+    const claimFlip = this.querySelector('[data-bind="df-claim-flip-cta"]');
+    if (claimFlip) claimFlip.addEventListener('click', () => openPlayerFundsDialog('flip'));
     const flipTotal = this.querySelector('[data-bind="df-funds-flip-total"]');
     if (flipTotal) {
       flipTotal.addEventListener('click', (event) => this.#activateSpoilerValue('flip-total', event));
@@ -4192,9 +4442,10 @@ class AppDailyFlip extends HTMLElement {
       input.value = fraction ? `${whole}.${fraction}` : String(whole);
       try { input.dispatchEvent(new Event('input', { bubbles: true })); }
       catch (_e) { try { input.dispatchEvent({ type: 'input', bubbles: true }); } catch (_e2) {} }
-      // Keep the control coherent even in browsers/webviews that reject a
+      this.#openAddBetDialog({ reset: false });
+      // Keep the slider coherent even in browsers/webviews that reject a
       // synthetic Event constructor from a different realm.
-      this.#renderBetTooltip();
+      this.#renderAddBetDialog();
       try { this.scrollIntoView?.({ behavior: 'smooth', block: 'center' }); } catch (_e) {}
       try { input.focus?.({ preventScroll: true }); } catch (_e) {}
     };
@@ -4205,8 +4456,10 @@ class AppDailyFlip extends HTMLElement {
     if (this.#busy) return;
     this.#busy = true;
     if (kind === 'auto-rebuy') this.#autoRebuyError = '';
+    if (kind === 'flip') this.#addBetError = '';
     this.#renderFunds();
     this.#renderAutoRebuy();
+    this.#renderAddBetDialog();
     this.#clearError();
     this.#setStatus('');
     try {
@@ -4217,18 +4470,19 @@ class AppDailyFlip extends HTMLElement {
         try { amount = options?.amount == null ? null : BigInt(options.amount); }
         catch (_e) { amount = null; }
         if (amount == null) {
-          const input = this.querySelector('[name="df-amount"]');
-          const amountFloat = Number(input ? input.value : '0');
-          if (!Number.isFinite(amountFloat) || amountFloat <= 0) {
-            throw new Error('Stake must be greater than 0 FLIP.');
+          const input = this.querySelector('[data-bind="df-add-bet-number"]');
+          amount = parseTokenAmount(input?.value);
+          if (amount == null) {
+            throw new Error('Choose a valid FLIP amount.');
           }
-          // FLIP is UNSCALED 18-dec on every chain (only ETH /1M-scales).
-          amount = BigInt(Math.round(amountFloat * 1e6)) * (10n ** 12n);
         }
-        if (amount == null || amount <= 0n) throw new Error('Stake must be greater than 0 FLIP.');
+        if (amount == null || amount < 100n * (10n ** 18n)) {
+          throw new Error('Minimum coinflip bet is 100 FLIP.');
+        }
         // The current contract handles its own claimable-first waterfall in
         // this one deposit. No separate claim signature is needed.
         await depositCoinflip({ player, amount });
+        if (options?.amount == null) this.#closeAddBetDialog({ force: true });
       } else if (kind === 'auto-rebuy') {
         const info = this.#activeAutoRebuyInfo();
         if (!info) throw new Error('Auto rebuy settings are still loading.');
@@ -4272,13 +4526,6 @@ class AppDailyFlip extends HTMLElement {
         };
         this.#autoRebuyAddress = this.#dashboardAddress;
         this.#closeAutoRebuyDialog();
-      } else if (kind === 'claim-flip') {
-        // Coinflip FLIP winnings — amount from the dashboard's
-        // claimablePreview plus any just-landed win that the next dashboard
-        // refresh has not absorbed yet.
-        const amount = this.#visibleClaimableWei();
-        if (amount <= 0n) throw new Error('Nothing to claim.');
-        await claimFlip({ player, amount });
       } else if (kind === 'burn-wwxrp') {
         const input = this.querySelector('[name="df-wwxrp-amount"]');
         const amount = parseTokenAmount(input?.value);
@@ -4335,6 +4582,10 @@ class AppDailyFlip extends HTMLElement {
       if (kind === 'auto-rebuy') {
         this.#autoRebuyError = compactUiError(error);
         this.#renderAutoRebuy();
+      } else if (kind === 'flip'
+        && !this.querySelector('[data-bind="df-add-bet-dialog"]')?.hidden) {
+        this.#addBetError = compactUiError(error);
+        this.#renderAddBetDialog();
       } else {
         this.#renderError(compactUiError(error));
       }
@@ -4343,6 +4594,7 @@ class AppDailyFlip extends HTMLElement {
         this.#busy = false;
         this.#renderFunds();
         this.#renderAutoRebuy();
+        this.#renderAddBetDialog();
         this.#renderBafScore();
         this.#renderReverseFlip();
       }, 500);

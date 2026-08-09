@@ -17,6 +17,10 @@
   <link rel="stylesheet" href="/app/styles/replay.css">
   <link rel="stylesheet" href="/app/styles/boons.css">
   <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/baf-eve.css">
+  <link rel="stylesheet" href="/app/styles/records-rail.css">
+  <link rel="stylesheet" href="/app/styles/baf-resolution.css">
+  <link rel="stylesheet" href="/app/styles/jackpot-processing.css">
   <link rel="stylesheet" href="/app/styles/status-indicators.css">
   <script type="importmap">
   {
@@ -137,6 +141,14 @@
            tray. Neither needs a permanent dashboard card. -->
       <app-jackpot-resolutions hidden aria-hidden="true"></app-jackpot-resolutions>
 
+      <!-- The level before each x10 BAF gets a full-width event preview with
+           the live pool, this player's position, and the five-player race. -->
+      <app-baf-eve></app-baf-eve>
+
+      <!-- Open only during the live Decimator burn window. This full-width
+           event rail replaces the small duplicate entry card in Side Bets. -->
+      <app-decimator-burn></app-decimator-burn>
+
       <!-- Claims banner and aggregate winnings strip are intentionally
            unmounted. Gameplay-specific resolution stays with its owning
            surface; app-claims-panel.js and app-balances-strip.js remain on
@@ -150,6 +162,12 @@
         <app-degenerette-panel></app-degenerette-panel>
         <app-parimutuel-panel></app-parimutuel-panel>
       </section>
+
+      <!-- The only permanent scoreboard in the game: four all-time marks and
+           the shared FLIP pool they claim from. Sits under the play grid
+           because three of the four are set by the surfaces directly above it
+           (spin, lootbox, ticket buy). -->
+      <app-records-rail></app-records-rail>
 
       <!-- Deity holders act from a compact daily-power desk outside the
            pass shop, immediately above the inventory those boons can affect. -->
@@ -202,6 +220,7 @@
     <!-- Full-screen prize reveal engine (reveal-overlay.js) — lootbox opens,
          ticket-pack creation, jackpot winnings. Hidden until a sequence is
          queued via queueReveal(). -->
+    <app-player-funds-dialog></app-player-funds-dialog>
     <app-reveal-tray></app-reveal-tray>
     <reveal-overlay></reveal-overlay>
   </div>
@@ -225,6 +244,9 @@
   <script type="module" src="/app/components/app-tickets-inventory.js"></script>
   <script type="module" src="/app/components/app-daily-flip.js"></script>
   <script type="module" src="/app/components/app-parimutuel-panel.js"></script>
+  <script type="module" src="/app/components/app-baf-eve.js"></script>
+  <script type="module" src="/app/components/app-records-rail.js"></script>
+  <script type="module" src="/app/components/app-decimator-burn.js"></script>
   <script type="module" src="/app/components/app-mine-flip.js"></script>
   <script type="module" src="/app/components/app-jackpot-resolutions.js"></script>
   <script type="module" src="/app/components/app-decimator-panel.js"></script>
@@ -232,6 +254,7 @@
   <script type="module" src="/app/components/app-box-strip.js"></script>
   <script type="module" src="/app/components/app-day-history-replays.js"></script>
   <script type="module" src="/app/components/app-sdgnrs-redemptions.js"></script>
+  <script type="module" src="/app/components/app-player-funds-dialog.js"></script>
   <script type="module" src="/app/components/app-reveal-tray.js"></script>
   <script type="module" src="/app/components/reveal-overlay.js"></script>
   <script type="module" src="/app/components/app-degenerette-panel.js"></script>

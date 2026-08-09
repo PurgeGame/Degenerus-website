@@ -141,6 +141,22 @@ test('a due Decimator replaces the primary jackpot action and opens the full whe
     'the takeover has an explicit phone treatment');
 });
 
+test('a due BAF opens its dedicated staged fullscreen final', () => {
+  const resolutions = readFileSync(new URL('../app-jackpot-resolutions.js', import.meta.url), 'utf8');
+  const overlay = readFileSync(new URL('../app-baf-resolution-overlay.js', import.meta.url), 'utf8');
+  assert.match(resolutions, /import \{ openBafResolution \}/);
+  assert.match(resolutions, /await openBafResolution\(\{[\s\S]*?level,[\s\S]*?player: this\.\#address/);
+  assert.match(resolutions, /playerOutcome:\s*this\.\#baf/,
+    'the final reuses the already-fetched terminal player result');
+  assert.match(resolutions, /history:\s*\{ wins: this\.\#history \}/,
+    'the final reuses the already-fetched award history');
+  assert.match(resolutions, /const revealConsolation = this\.\#bafConsolation/,
+    'a claim-before-view keeps the consolation amount in the ceremony');
+  assert.match(overlay, /TOP FOUR/);
+  assert.match(overlay, /PRIZE MAP/);
+  assert.match(overlay, /YOU WON/);
+});
+
 test('the x4/x99 Decimator burn card is first and prominent inside Side Bets', () => {
   const source = readFileSync(new URL('../app-parimutuel-panel.js', import.meta.url), 'utf8');
   const cards = /<div class="pari-books">([\s\S]*?)<\/div>/.exec(source)?.[1] || '';

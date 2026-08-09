@@ -376,6 +376,8 @@ function decimatorCard(el) { return el.querySelector('[data-bind="pari-decimator
 const revealMod = await import('../reveal-overlay.js');
 const { thermometerScale, decimatorWindowIsOpen } = await import('../app-parimutuel-panel.js');
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+const PARI_SOURCE = readFileSync(new URL('../app-parimutuel-panel.js', import.meta.url), 'utf8');
+const DAILY_FLIP_SOURCE = readFileSync(new URL('../app-daily-flip.js', import.meta.url), 'utf8');
 
 test('thermometer color scale is target-anchored and becomes solid green after crossing', () => {
   const below = thermometerScale(50n, 100n);
@@ -443,6 +445,14 @@ describe('app-parimutuel-panel', () => {
     assert.match(el.innerHTML,
       /<h2><a class="pari-learn-link" href="\/learn\/side-bets\/">SIDE BETS<\/a><\/h2>/,
       'the Side Bets heading links directly to its Learn page');
+    assert.equal(el.querySelector('[data-bind="pari-bounty-strip"]'), null,
+      'Side Bets has no bounty strip');
+    assert.doesNotMatch(PARI_SOURCE, /readBiggestFlipRecord|pari-record-strip|pari-bounty-strip/,
+      'Side Bets neither renders nor reads the removed record and bounty strip');
+    assert.doesNotMatch(APP_CSS, /\.pari-record-strip/,
+      'the removed strip leaves no dead styling behind');
+    assert.doesNotMatch(DAILY_FLIP_SOURCE, /record-strip|readBiggestFlipRecord/,
+      'the record rail no longer consumes space in the daily coinflip');
     assert.match(APP_CSS,
       /\.app-parimutuel > \.panel-header\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*place-items:\s*center/s,
       'the Side Bets heading is centered at every viewport width');

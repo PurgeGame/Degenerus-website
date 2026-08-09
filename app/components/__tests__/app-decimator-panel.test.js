@@ -372,6 +372,10 @@ const APP_CSS = readFileSync(
   new URL('../../styles/app.css', import.meta.url),
   'utf8',
 );
+const STATUS_CSS = readFileSync(
+  new URL('../../styles/status-indicators.css', import.meta.url),
+  'utf8',
+);
 const PURCHASE_LEARN_SRC = readFileSync(
   new URL('../../../learn/purchases/index.html', import.meta.url),
   'utf8',
@@ -662,14 +666,36 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
   test('purchase fields use action labels and become finger-sized full-width phone rows', () => {
     const el = instantiate();
     assert.match(el.innerHTML, /<span data-bind="dec-ticket-action-label">Buy tickets<\/span>/);
-    assert.match(el.innerHTML, /<boon-product-indicator product="purchase"/);
+    assert.match(el.innerHTML,
+      /<boon-product-indicator product="purchase"\s+variant="purchase-control"/);
     assert.match(el.innerHTML, /<span>Buy luckbox<\/span>/);
-    assert.match(el.innerHTML, /<boon-product-indicator product="lootbox"/);
+    assert.match(el.innerHTML,
+      /<boon-product-indicator product="lootbox"\s+variant="purchase-control"/);
     assert.doesNotMatch(el.innerHTML, /Luckbox value/i);
     assert.match(
       APP_CSS,
       /\.app-decimator-panel \.dec-input-label\s*\{[^}]*font-size:\s*clamp\(0\.72rem, 1\.55vw, 0\.82rem\)/s,
       'Buy Tickets and Buy Luckbox use the larger matched label size',
+    );
+    assert.match(
+      STATUS_CSS,
+      /\.app-decimator-panel \.dec-input-group\.has-active-boon > \.dec-input-label\s*\{[^}]*flex:\s*1 1 auto;[^}]*align-items:\s*flex-start;/s,
+      'the boon label uses free label space without moving the numeric control',
+    );
+    assert.doesNotMatch(
+      STATUS_CSS,
+      /\.dec-input-group\.has-active-boon\s*\{[^}]*display:\s*grid/s,
+      'an active boon never changes the ticket or luckbox control columns',
+    );
+    assert.match(
+      STATUS_CSS,
+      /boon-product-indicator\[variant="purchase-control"\]\s*\{[^}]*align-self:\s*flex-end;[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*none;[^}]*box-shadow:\s*none;[^}]*color:\s*#4ade80;[^}]*font-size:\s*0\.5rem;[^}]*animation:\s*none;/s,
+      'the input-side purchase boon is larger all-green text without a pill bubble',
+    );
+    assert.match(
+      STATUS_CSS,
+      /boon-product-indicator\[variant="purchase-control"\]::before\s*\{[^}]*display:\s*none;/s,
+      'the compact purchase boon has no detached status dot',
     );
     assert.match(
       APP_CSS,
@@ -1804,6 +1830,9 @@ describe('combined ticket + lootbox buy', () => {
     assert.match(APP_CSS,
       /\.dec-all-in\s*\{[^}]*grid-column:\s*2/s,
       'the action is pinned above the right side of the ETH bar');
+    assert.match(APP_CSS,
+      /\.dec-funds-stack:has\(> \.dec-funds > \.dec-funds__summary\[aria-expanded="false"\]\) > \.dec-all-in\s*\{[^}]*transform:\s*translateY\(-0\.2rem\)/s,
+      'ALL IN rises slightly while Available Funds is collapsed');
     assert.match(APP_CSS,
       /\.dec-flip-balance\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s,
       'the FLIP balance receives the entire ledger row');

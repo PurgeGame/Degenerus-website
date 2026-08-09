@@ -74,9 +74,18 @@ describe('active boon product mapping', () => {
     assert.equal(activityBoonScore(10), 5);
     assert.equal(activityBoonScore(25), 12.5);
     assert.equal(activityBoonScore(50), 25);
-    assert.equal(boonTypePresentation(17).effect, '+5 SCORE');
-    assert.equal(boonTypePresentation(18).effect, '+12.5 SCORE');
-    assert.equal(boonTypePresentation(19).effect, '+25 SCORE');
+    assert.equal(boonTypePresentation(17).effect, '+5 DEGEN SCORE');
+    assert.equal(boonTypePresentation(18).effect, '+12.5 DEGEN SCORE');
+    assert.equal(boonTypePresentation(19).effect, '+25 DEGEN SCORE');
+  });
+
+  test('deity choices state the concrete player benefit instead of a bare percent', () => {
+    assert.equal(boonTypePresentation(5).effect, '5% BIGGER LUCKBOX');
+    assert.equal(boonTypePresentation(9).effect, '25% MORE TICKETS');
+    assert.equal(boonTypePresentation(3).effect, '25% BONUS FLIP');
+    assert.equal(boonTypePresentation(15).effect, '50% MORE ENTRY WEIGHT');
+    assert.equal(boonTypePresentation(24).effect, '35% OFF WHALE PASS');
+    assert.equal(boonTypePresentation(4).effect, '1 MISSED DAY SHIELDED');
   });
 
   test('exposes the affected product for color-coded Deity boon controls', () => {

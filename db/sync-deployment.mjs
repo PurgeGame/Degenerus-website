@@ -9,9 +9,19 @@
  *
  * TARGETS (addresses + deploy blocks):
  *   website/app/app/chain-config.sepolia.js   CONTRACTS{}          (addresses)
- *   website/beta/app/constants.js             CONTRACTS{}          (addresses)
+ *                                             CHAIN.deployBlock    (scalar)
+ *                                             VOLUME_WINDOW.deployDayBoundary (scalar)
  *   website/db/deployment.json                JSON mirror          (addresses + deployBlock + chainId)
  *   ../database/src/config/contracts.ts       SEPOLIA_CONTRACTS{}  (addresses + per-contract deployBlock)
+ *
+ * (website/beta/app/constants.js was a target until 2026-08-05; /beta/ was
+ * absorbed into /app/ when /app/ became the definitive UI.)
+ *
+ * The two CHAIN scalars were REPORT-ONLY until 2026-08-05 — a manual copy after
+ * every redeploy, and both fail silently when stale: deployBlock is the floor for
+ * the app's log queries, and deployDayBoundary drives parimutuel round→timestamp
+ * arithmetic (app/app/parimutuel.js:234-241), which just computes wrong seal
+ * times rather than erroring. They are written automatically now.
  *
  * Only keys ALREADY present in a file are touched — the script never adds or
  * removes contracts. Addresses are lowercased. It does NOT touch ABIs (run the
@@ -109,6 +119,68 @@ function processJsAddresses(absPath, startMarker) {
   return { path: absPath, present: true, changes, matched, newContent };
 }
 
+/**
+ * The two REDEPLOY-SENSITIVE scalars in chain-config.sepolia.js.
+ *
+ * ⛔ These used to be report-only, i.e. a manual copy after every redeploy — and
+ * both fail SILENTLY when stale, which is the worst combination:
+ *   CHAIN.deployBlock            — the floor for every log query the app runs
+ *   VOLUME_WINDOW.deployDayBoundary — parimutuel round→timestamp arithmetic
+ *     (app/app/parimutuel.js:234-241). A stale value does not throw; it just
+ *     computes wrong seal times for every round.
+ * Underscore separators are preserved because the file uses them for legibility
+ * (45_005_925), and the trailing run comment is refreshed so the provenance of
+ * the number stays readable rather than pointing at the previous run.
+ */
+function processChainScalars(absPath, seedContent = null) {
+  if (!existsSync(absPath)) return { path: absPath, present: false, changes: [] };
+  // ⛔ Seed from the PREVIOUS processor's output, not from disk.
+  //
+  // Two processors target chain-config.sepolia.js. Both used to read the file
+  // at startup and each computed its result from that same original text, so the
+  // write loop applied addresses and then overwrote them with the scalars-only
+  // version — silently reverting all 28 addresses. That shipped during the run
+  // #28 relaunch: deployBlock/deployDayBoundary were run 28 while every CONTRACTS
+  // address was still run 27, which would have pointed the app at dead contracts
+  // while looking freshly synced.
+  let content = seedContent ?? readFileSync(absPath, 'utf8');
+  const changes = [];
+  const grp = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '_');
+
+  // Each scalar carries its OWN replacement builder. Sharing one template and
+  // referencing `$4` blew up here: deployBlock's pattern has three groups, so
+  // `$4` is not a backreference and Node emits it LITERALLY — it wrote
+  // `deployBlock: 44_763_385,$4` and produced a file that will not parse.
+  // Caught by round-tripping the write against an old manifest and running
+  // `node --check`, which is why that test exists.
+  const scalars = [
+    {
+      field: 'deployBlock',
+      want: gameBlock,
+      re: /(\bdeployBlock:\s*)([\d_]+)(,)/,
+      repl: (v) => `$1${grp(v)}$3`,
+    },
+    {
+      field: 'deployDayBoundary',
+      want: Number(manifest.deployDayBoundary),
+      re: /(\bdeployDayBoundary:\s*)([\d_]+)(,)([^\n]*)/,
+      // Refresh the provenance comment too, so the number never sits next to a
+      // note naming the PREVIOUS run.
+      repl: (v) => `$1${grp(v)}$3 // ${M.GAME?.address?.slice(0, 10)}… @ ${gameBlock}`,
+    },
+  ];
+  for (const s of scalars) {
+    if (!Number.isFinite(s.want)) continue;
+    const m = content.match(s.re);
+    if (!m) { hadError = true; console.error(`  ! ${rpath(absPath)}: ${s.field} not found`); continue; }
+    const old = Number(m[2].replace(/_/g, ''));
+    if (old === s.want) continue;
+    changes.push({ key: 'CHAIN', field: s.field, old, new: s.want });
+    content = content.replace(s.re, s.repl(s.want));
+  }
+  return { path: absPath, present: true, changes, newContent: changes.length ? content : null };
+}
+
 // TS: SEPOLIA_CONTRACTS = { KEY: { address: '0x...', deployBlock: N n }, ... }
 function processTsContracts(absPath) {
   if (!existsSync(absPath)) return { path: absPath, present: false, changes: [] };
@@ -169,9 +241,21 @@ function processDeploymentJson(absPath) {
 }
 
 // ── run all targets ─────────────────────────────────────────────────────
+// chain-config.sepolia.js is touched by TWO processors. They must be CHAINED —
+// the scalar pass builds on the address pass's output — or the second write
+// silently discards the first. See processChainScalars for what that cost.
+const chainCfgPath = resolve(WEBSITE_ROOT, 'app/app/chain-config.sepolia.js');
+const chainCfgAddrs = processJsAddresses(chainCfgPath, 'export const CONTRACTS');
+const chainCfgScalars = processChainScalars(chainCfgPath, chainCfgAddrs.newContent);
+
 const targets = [
-  processJsAddresses(resolve(WEBSITE_ROOT, 'app/app/chain-config.sepolia.js'), 'export const CONTRACTS'),
-  processJsAddresses(resolve(WEBSITE_ROOT, 'beta/app/constants.js'), 'export const CONTRACTS'),
+  // Order matters and is safe BECAUSE of the chaining: the scalar pass's output
+  // is a superset of the address pass's, so writing addresses then scalars lands
+  // both. Reorder these and you reintroduce the silent address revert.
+  chainCfgAddrs,
+  chainCfgScalars,
+  // (beta/app/constants.js dropped 2026-08-05 — /app/ is the definitive UI and
+  // /beta/ was absorbed into it, so there is no second mirror to keep in step.)
   processDeploymentJson(resolve(WEBSITE_ROOT, 'db/deployment.json')),
 ];
 if (!NO_INDEXER) {

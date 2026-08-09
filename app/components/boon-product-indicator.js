@@ -3,8 +3,15 @@
 import { get, subscribe } from '../app/store.js';
 import { boonIndicatorModel } from '../app/boons.js';
 
+export function purchaseControlBoonLabel(label, product) {
+  const compact = String(label || '').replace(/^BOON\s*/i, '');
+  if (product === 'purchase') return `BOON: ${compact} MORE TICKETS`;
+  if (product === 'lootbox') return `BOON: ${compact} BIGGER LUCKBOX`;
+  return String(label || '');
+}
+
 class BoonProductIndicator extends HTMLElement {
-  static get observedAttributes() { return ['product']; }
+  static get observedAttributes() { return ['product', 'variant']; }
 
   #unsub = null;
   #decoratedHost = null;
@@ -56,7 +63,7 @@ class BoonProductIndicator extends HTMLElement {
   #decorateHost(product, model) {
     const selector = [
       '.dec-input-group',
-      '.df-next-bet__stepper',
+      '.df-add-bet-dialog__card',
       '.pass-product-row',
       '.pass-deity-section',
       '.pari-book',
@@ -96,7 +103,9 @@ class BoonProductIndicator extends HTMLElement {
       return;
     }
     const effect = String(model.label || '').replace(/^BOON\s*/i, '');
-    this.textContent = model.label;
+    this.textContent = this.getAttribute?.('variant') === 'purchase-control'
+      ? purchaseControlBoonLabel(model.label, product)
+      : model.label;
     this.title = model.title;
     this.setAttribute?.('aria-label', model.title);
     this.setAttribute?.('data-boon-type', String(model.boonType));
