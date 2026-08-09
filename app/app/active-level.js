@@ -27,16 +27,24 @@ export const JACKPOT_LEVEL_CAP = 5;
 /**
  * @param {object|null} gameState /game/state payload (level, jackpotPhaseFlag,
  *   phase, phaseTransitionActive, rngLockedFlag, jackpotCounter).
+ * @param {object|null} contractPhase Direct purchaseInfo/growthState cadence
+ *   snapshot ({level, jackpot, rngLocked, day, compressedFlag}). It wins only
+ *   while it describes the same level, so an old side-bet poll can never move
+ *   a newly advanced game backwards.
  * @returns {number|null} the routed buy level, or null when the payload has no
  *   usable level (caller should treat as "unknown", not as level 0).
  */
-export function activeTicketLevel(gameState) {
-  const level = Number(gameState?.level);
+export function activeTicketLevel(gameState, contractPhase = null) {
+  const level = Number(gameState?.level ?? contractPhase?.level);
   if (!Number.isFinite(level)) return null;
 
-  const jackpotPhase = Boolean(
-    gameState?.jackpotPhaseFlag ?? (gameState?.phase === 'JACKPOT'),
-  );
+  const directLevel = Number(contractPhase?.level);
+  const directIsCurrent = typeof contractPhase?.jackpot === 'boolean'
+    && (!Number.isFinite(directLevel) || directLevel === level);
+
+  const jackpotPhase = directIsCurrent
+    ? contractPhase.jackpot
+    : Boolean(gameState?.jackpotPhaseFlag ?? (gameState?.phase === 'JACKPOT'));
   if (!jackpotPhase) return level + 1;
 
   // _endPhase ran: jackpotCounter is already zeroed, so the counter test below
@@ -44,14 +52,16 @@ export function activeTicketLevel(gameState) {
   // that the level's draws have ended.
   if (gameState?.phaseTransitionActive === true) return level + 1;
 
-  if (gameState?.rngLockedFlag === true) {
-    const cnt = Number(gameState?.jackpotCounter) || 0;
-    // compressedJackpotFlag is not carried by /game/state today. 0
-    // (uncompressed, step 1) is the conservative default: it only ever
-    // UNDER-fires this branch, leaving today's behaviour in place for
-    // compressed levels rather than advancing the level early. Exposing the
-    // field on /game/state would make the port exact.
-    const comp = Number(gameState?.compressedJackpotFlag) || 0;
+  const rngLocked = directIsCurrent && typeof contractPhase?.rngLocked === 'boolean'
+    ? contractPhase.rngLocked
+    : gameState?.rngLockedFlag === true;
+  if (rngLocked) {
+    const cnt = Number(directIsCurrent ? contractPhase?.day : gameState?.jackpotCounter) || 0;
+    // /game/state currently omits this tier, so the direct contract snapshot
+    // is what makes the three-day and one-day final locked windows exact.
+    const comp = Number(
+      directIsCurrent ? contractPhase?.compressedFlag : gameState?.compressedJackpotFlag,
+    ) || 0;
     const step = comp === 2
       ? JACKPOT_LEVEL_CAP
       : (comp === 1 && cnt > 0 && cnt < JACKPOT_LEVEL_CAP - 1 ? 2 : 1);

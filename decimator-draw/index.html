@@ -168,7 +168,7 @@
             <line class="wheel-hub-divider" x1="260" y1="309" x2="340" y2="309"></line>
             <text class="wheel-burn-label" data-bind="hub-flip-label" x="300" y="326" text-anchor="middle">TOTAL FLIP BURNED</text>
             <text class="wheel-burn-value" data-bind="hub-flip-value" x="300" y="350" text-anchor="middle">—</text>
-            <text class="wheel-burn-unit" x="300" y="363" text-anchor="middle">FLIP</text>
+            <text class="wheel-burn-unit" data-bind="hub-flip-unit" x="300" y="363" text-anchor="middle">FLIP</text>
           </svg>
 
           <div class="result-pop" data-bind="result-pop" role="status" aria-live="assertive" hidden>
@@ -184,7 +184,7 @@
         </div>
       </div>
 
-      <aside class="score-board" aria-label="Decimator payout and burn totals">
+      <aside class="score-board" aria-label="Decimator payout and score results">
         <div class="score-payout" data-bind="player-payout-card">
           <span data-bind="player-payout-label">IF YOUR SLICE HITS</span>
           <strong data-bind="player-payout">—</strong>
@@ -193,16 +193,16 @@
         </div>
 
         <div class="score-player" data-bind="player-score-card">
-          <span>YOUR EFFECTIVE BURN</span>
+          <span>YOUR SCORE</span>
           <strong data-bind="player-score">—</strong>
           <small data-bind="player-position">NO ENTRY</small>
           <em data-bind="player-outcome">WAITING FOR YOUR BUCKET</em>
         </div>
 
         <div class="score-effective">
-          <span>WINNING EFFECTIVE BURN</span>
+          <span>WINNING SCORE</span>
           <strong data-bind="winning-score">0</strong>
-          <small>FLIP</small>
+          <small>SCORE</small>
           <em data-bind="winning-progress">0 WINNING SLICES LOCKED</em>
         </div>
 

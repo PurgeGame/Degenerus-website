@@ -735,7 +735,10 @@ class AppPassSection extends HTMLElement {
       this.#renderCombinedGate();
       this.#renderDeityCatalog();
     });
-    this.#unsubs.push(u1, u2, u3);
+    const u4 = subscribe('app.poolBenchmarks', (benchmarks) => {
+      if (benchmarks?.contractPhase) this.#renderAfkingDayCost();
+    });
+    this.#unsubs.push(u1, u2, u3, u4);
   }
 
   // ---------------------------------------------------------------------
@@ -1040,7 +1043,10 @@ class AppPassSection extends HTMLElement {
   #afkingMintPriceWei() {
     const snapshotPrice = BigInt(this.#afkingState?.mintPriceWei ?? 0n);
     if (snapshotPrice > 0n) return snapshotPrice;
-    const targetLevel = activeTicketLevel(this.#gameState);
+    const targetLevel = activeTicketLevel(
+      this.#gameState,
+      get('app.poolBenchmarks')?.contractPhase,
+    );
     if (targetLevel == null) return 0n;
     try { return scaledTicketPriceWei(targetLevel); }
     catch (_error) { return 0n; }

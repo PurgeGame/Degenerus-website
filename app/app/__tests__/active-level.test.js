@@ -80,6 +80,31 @@ describe('activeTicketLevel — port of _activeTicketLevel()', () => {
     assert.equal(activeTicketLevel(state({ rngLockedFlag: true, jackpotCounter: 2 })), 25);
   });
 
+  test('direct compressed cadence fixes a stale /game/state final lock', () => {
+    const stale = state({ rngLockedFlag: false, jackpotCounter: 0 });
+    assert.equal(activeTicketLevel(stale, {
+      level: 25,
+      jackpot: true,
+      rngLocked: true,
+      day: 3,
+      compressedFlag: 1,
+    }), 26);
+    assert.equal(activeTicketLevel(stale, {
+      level: 25,
+      jackpot: true,
+      rngLocked: false,
+      day: 3,
+      compressedFlag: 1,
+    }), 25);
+  });
+
+  test('a stale direct snapshot from another level is ignored', () => {
+    assert.equal(activeTicketLevel(
+      state({ rngLockedFlag: false, jackpotCounter: 1 }),
+      { level: 24, jackpot: false, rngLocked: true, day: 4, compressedFlag: 0 },
+    ), 25);
+  });
+
   test('the target never goes backwards across a normal cycle', () => {
     const seen = [
       activeTicketLevel({ level: 24, jackpotPhaseFlag: false }),                 // L24 purchase

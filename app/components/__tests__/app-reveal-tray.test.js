@@ -138,7 +138,7 @@ describe('actionableRevealItems', () => {
       { kind: 'decimator', state: 'ready' },
     ]);
     assert.deepEqual(rows.map((row) => row.kind), [
-      'lootbox', 'degenerette', 'degenerette', 'lootbox', 'tickets', 'growth-claim', 'volume-claim', 'whale-pass-claim', 'batch-resolution', 'bingo', 'foil-match', 'decimator',
+      'lootbox', 'degenerette', 'degenerette', 'lootbox', 'tickets', 'growth-claim', 'volume-claim', 'whale-pass-claim', 'batch-resolution', 'bingo', 'foil-match', 'decimator', 'decimator',
     ]);
     assert.doesNotMatch(
       readFileSync(new URL('../../app/launch-claims.js', import.meta.url), 'utf8'),
@@ -328,6 +328,35 @@ describe('<app-reveal-tray>', () => {
     assert.equal(action.querySelector('.rrt-action__art--bingo').querySelector('img').src,
       '/badges-circular/crypto_06_ethereum_gold.svg');
     assert.equal(action.querySelector('.rrt-action__cta').textContent, 'VIEW');
+    el.disconnectedCallback();
+  });
+
+  test('a jackpot-primary Decimator final is still a visible Pending opener', async () => {
+    let opened = 0;
+    pending.publishPendingActions('jackpot-resolutions', [{
+      id: 'decimator-resolution:0xabc:25',
+      kind: 'decimator',
+      kindLabel: 'DECIMATOR FINAL',
+      label: 'Level 25 final draw',
+      detail: 'Your resolved Decimator score is ready to view.',
+      state: 'ready',
+      primarySurface: 'jackpot',
+      autoOpen: true,
+      run: async () => { opened += 1; },
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+
+    assert.equal(pendingSurfaceVisible(el), true,
+      'the jackpot button is not the only path to the fullscreen draw');
+    const action = el.querySelector('.rrt-action--decimator');
+    assert.ok(action);
+    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'DECIMATOR FINAL');
+    assert.equal(action.querySelector('.rrt-action__label').textContent, 'DECIMATOR · L25');
+    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'VIEW');
+    action.dispatchEvent({ type: 'click' });
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    assert.equal(opened, 1);
     el.disconnectedCallback();
   });
 

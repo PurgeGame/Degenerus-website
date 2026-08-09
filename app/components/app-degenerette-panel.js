@@ -100,6 +100,10 @@ import {
   reportPendingActionError,
 } from '../app/pending-actions.js';
 import { queueReveal } from './reveal-overlay.js';
+import {
+  candidateClaimsRecord,
+  RECORD_KIND_SPIN,
+} from '../app/records.js';
 
 function _setIntervalUnref(fn, ms) {
   const h = setInterval(fn, ms);
@@ -1996,7 +2000,8 @@ class AppDegenerettePanel extends HTMLElement {
       this.#syncPickerContext();
       this.#runPollCycle();
     });
-    this.#unsubs.push(u1, u2, u3, u4);
+    const u5 = subscribe('app.records', () => this.#renderPlaceLabel());
+    this.#unsubs.push(u1, u2, u3, u4, u5);
   }
 
   #restorePendingBet() {
@@ -2330,8 +2335,10 @@ class AppDegenerettePanel extends HTMLElement {
   #renderPlaceLabel() {
     const button = this.querySelector('[data-bind="deg-place-cta"]');
     if (!button) return;
-    const amount = Number(this.querySelector('[name="deg-amount"]')?.value || 0);
-    const spins = Math.max(1, Number(this.querySelector('[name="deg-ticket-count"]')?.value || 1));
+    const amountInput = this.querySelector('[name="deg-amount"]');
+    const spinsInput = this.querySelector('[name="deg-ticket-count"]');
+    const amount = Number(amountInput?.value || 0);
+    const spins = Math.max(1, Number(spinsInput?.value || 1));
     const currency = Number(this.querySelector('[name="deg-currency"]')?.value || 0);
     const unit = degeneretteLimits(currency)?.unit || 'FLIP';
     const total = amount * spins;
@@ -2344,6 +2351,42 @@ class AppDegenerettePanel extends HTMLElement {
       'aria-label',
       `${verb} ${formatted} ${unit} total across ${spins} spin${spins === 1 ? '' : 's'}`,
     );
+
+    // DegenerusGameDegeneretteModule judges the whole ETH wager — amount per
+    // spin multiplied by the selected spin count. FLIP and WWXRP bets never
+    // enter the biggest-spin record, no matter how large their displayed sum.
+    const rawPerSpin = parseDegeneretteAmountInput(amountInput?.value, currency);
+    const claimsBounty = currency === 0
+      && rawPerSpin != null
+      && rawPerSpin > 0n
+      && Number.isInteger(spins)
+      && spins > 0
+      && candidateClaimsRecord(
+        get('app.records'),
+        RECORD_KIND_SPIN,
+        rawPerSpin * BigInt(spins),
+      );
+    for (const control of [
+      amountInput,
+      spinsInput,
+      this.querySelector('.deg-amount-shell'),
+      this.querySelector('.deg-spin-shell'),
+    ]) {
+      control?.classList?.toggle('is-bounty-trigger', claimsBounty);
+    }
+    for (const control of [amountInput, spinsInput]) {
+      if (!control) continue;
+      if (claimsBounty) {
+        control.setAttribute('data-bounty-trigger', 'true');
+        control.setAttribute(
+          'aria-description',
+          'This total ETH wager reaches the live Biggest Degenerette bounty target.',
+        );
+      } else {
+        control.removeAttribute('data-bounty-trigger');
+        control.removeAttribute('aria-description');
+      }
+    }
   }
 
   #renderCurrencyPicker() {

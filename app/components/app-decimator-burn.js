@@ -106,11 +106,11 @@ export function decimatorModifierModel(context = {}, boonPayload = null) {
     chips.push({
       kind: 'boon',
       label: 'BOON',
-      value: `${_percentFromBps(boonBps, { signed: true })} WEIGHT`,
+      value: `${_percentFromBps(boonBps, { signed: true })} SCORE`,
     });
   }
   if (chips.length === 0) {
-    chips.push({ kind: 'base', label: scoreKnown ? `DEGEN ${Math.trunc(score)}` : 'BASE WEIGHT', value: '100%' });
+    chips.push({ kind: 'base', label: scoreKnown ? `DEGEN ${Math.trunc(score)}` : 'BASE SCORE', value: '100%' });
   }
   const liveMultiplierBps = scoreKnown
     ? decimatorCurrentMultiplierBps({
@@ -191,20 +191,15 @@ class AppDecimatorBurn extends HTMLElement {
           </span>
         </header>
 
-        <div class="dbb__stats" aria-label="Live Decimator totals">
+        <div class="dbb__stats" aria-label="Live Decimator results">
           <article class="dbb-stat dbb-stat--prize">
-            <span class="dbb-stat__icon"><img src="/badges-circular/crypto_06_ethereum_green.svg" alt=""></span>
-            <span><small>PRIZE POOL</small><strong><b data-bind="dbb-prize">—</b> ETH</strong></span>
+            <span><small>PRIZE POOL</small><strong><b data-bind="dbb-prize">—</b><em>ETH</em></strong></span>
           </article>
           <article class="dbb-stat dbb-stat--burned">
-            <span class="dbb-stat__icon"><img src="/whitepaper/flame-center.svg" alt=""></span>
-            <span><small>FLIP BURNED</small><strong><b data-bind="dbb-burned">—</b> FLIP</strong></span>
+            <span><small>FLIP BURNED</small><strong><b data-bind="dbb-burned">—</b><em>FLIP</em></strong></span>
           </article>
-          <article class="dbb-stat dbb-stat--weight">
-            <span><small>TOTAL WEIGHT</small><strong data-bind="dbb-total-weight">—</strong></span>
-          </article>
-          <article class="dbb-stat dbb-stat--mine">
-            <span><small>YOUR WEIGHT</small><strong data-bind="dbb-player-weight">—</strong></span>
+          <article class="dbb-stat dbb-stat--score">
+            <span><small>YOUR SCORE</small><strong data-bind="dbb-player-score">—</strong></span>
           </article>
         </div>
 
@@ -334,8 +329,7 @@ class AppDecimatorBurn extends HTMLElement {
     const values = [
       ['dbb-prize', prize == null ? '—' : _fmtEth(prize)],
       ['dbb-burned', this.#context?.totalRawBurnWei == null ? '—' : _fmtFlip(this.#context.totalRawBurnWei)],
-      ['dbb-total-weight', this.#context?.totalRoundScore == null ? '—' : _fmtFlip(this.#context.totalRoundScore)],
-      ['dbb-player-weight', this.#context?.totalBurnWeight == null ? '—' : _fmtFlip(this.#context.totalBurnWeight)],
+      ['dbb-player-score', this.#context?.totalBurnWeight == null ? '—' : _fmtFlip(this.#context.totalBurnWeight)],
     ];
     for (const [bind, value] of values) {
       const node = this.querySelector(`[data-bind="${bind}"]`);
@@ -402,7 +396,7 @@ class AppDecimatorBurn extends HTMLElement {
     if (quote) {
       quote.textContent = amount != null && amount < DECIMATOR_MIN_FLIP_WEI
         ? 'MIN 1,000 FLIP'
-        : weight == null ? 'WEIGHT —' : `+${_fmtFlip(weight)} WEIGHT`;
+        : weight == null ? 'SCORE —' : `+${_fmtFlip(weight)} SCORE`;
     }
     if (action) action.textContent = this.#busy ? 'BURNING…' : 'BURN FLIP';
     if (button) {

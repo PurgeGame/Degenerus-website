@@ -374,9 +374,53 @@ describe('app-tickets-inventory — cards + chart', () => {
     );
     assert.match(
       APP_CSS,
+      /\.inv-level-tab:not\(\.inv-level-tab--future\)\s*\{[^}]*grid-template:[^}]*"level" auto[^}]*"count" auto[^}]*justify-items:\s*center[^}]*row-gap:\s*0\.18rem/s,
+      'each concrete level is stacked directly above its quantity',
+    );
+    assert.match(
+      APP_CSS,
       /@media \(max-width: 900px\)\s*\{[\s\S]*?\.app-tickets-inventory \.inv-head\s*\{\s*flex-wrap:\s*wrap/s,
       'wrapping is retained only as a narrow-screen fallback',
     );
+  });
+
+  test('a settled final jackpot removes its resolved level from the ticket rail', async () => {
+    _byLevel.set(17, byTraitPayload({ level: 17, cards: [card('opened')] }));
+    _byLevel.set(18, byTraitPayload({ level: 18, cards: [] }));
+    storeMod.update('app.lastDay', {
+      day: 67, status: 'resolved', level: 17,
+      roll1: { day: 67, purchaseLevel: 17, wins: [] },
+    });
+    storeMod.update('app.gameState', {
+      level: 17,
+      phase: 'JACKPOT',
+      jackpotPhaseFlag: true,
+      phaseTransitionActive: false,
+    });
+    const el = mount();
+    await flushMicrotasks();
+    assert.equal(
+      el.querySelector('[data-bind="inv-level-tab-label"]').textContent,
+      'LEVEL 17',
+    );
+
+    storeMod.update('app.gameState', {
+      level: 17,
+      phase: 'JACKPOT',
+      jackpotPhaseFlag: true,
+      rngLockedFlag: true,
+      phaseTransitionActive: true,
+    });
+    await flushMicrotasks();
+
+    const labels = el.querySelectorAll('[data-bind="inv-level-tab-label"]')
+      .map((node) => node.textContent);
+    assert.equal(labels[0], 'LEVEL 18');
+    assert.equal(labels.includes('LEVEL 17'), false,
+      'the completed level cannot return as a stale first tile');
+    assert.equal(el.querySelector('[data-bind="inv-level"]').textContent, '18',
+      'an old selected level advances with the rail boundary');
+    el.disconnectedCallback();
   });
 
   test('a level tile expands its tickets and the selected tile contracts them', async () => {
@@ -496,7 +540,10 @@ describe('app-tickets-inventory — cards + chart', () => {
     const future = el.querySelector('[data-bind="inv-level-future"]');
 
     assert.equal(buttons.length, 5, 'the compact picker exposes exactly five concrete levels');
-    assert.deepEqual(labels.map((node) => node.textContent), ['L17', 'L18', 'L19', 'L20', 'L21']);
+    assert.deepEqual(
+      labels.map((node) => node.textContent),
+      ['LEVEL 17', 'LEVEL 18', 'LEVEL 19', 'LEVEL 20', 'LEVEL 21'],
+    );
     assert.deepEqual(counts.map((node) => node.textContent), ['1.25', '2', '0', '0', '0']);
     assert.doesNotMatch(el.innerHTML, /inv-level-btn__offset|>CURRENT<|>\+[1-5]\+?</,
       'the compact picker does not repeat relative offsets already conveyed by color');
@@ -716,8 +763,8 @@ describe('app-tickets-inventory — cards + chart', () => {
       'all four physical foil tickets receive the shared metallic face');
     assert.ok(foils.every((foil) => (
       foil.querySelector('.ticket-card-center')?.querySelector('img')?.src
-        === '/whitepaper/flame-center-silver.svg'
-    )), 'every foil centre uses the dedicated silver flame');
+        === '/whitepaper/flame-center.svg'
+    )), 'every foil centre uses the canonical shipped flame with its CSS silver treatment');
     assert.equal(el.querySelectorAll('.inv-count').length, 0,
       'the foil pack is not collapsed into one ×4 inventory card');
     el.disconnectedCallback();

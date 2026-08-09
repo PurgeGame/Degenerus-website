@@ -786,7 +786,12 @@ class AppQuestPanel extends HTMLElement {
 
   #questTicketPrice(model) {
     let level = Number(model?.level);
-    if (!Number.isInteger(level) || level < 0) level = activeTicketLevel(this.#gameState);
+    if (!Number.isInteger(level) || level < 0) {
+      level = activeTicketLevel(
+        this.#gameState,
+        get('app.poolBenchmarks')?.contractPhase,
+      );
+    }
     if (!Number.isInteger(level) || level < 0) return null;
     try { return scaledTicketPriceWei(level); } catch (_e) { return null; }
   }
@@ -1322,7 +1327,10 @@ class AppQuestPanel extends HTMLElement {
       if (this.#questDay != null && Number(d) === Number(this.#questDay)) return;
       this.#runMountFetch();
     });
-    this.#unsubs.push(u1, u2, u3, u4);
+    const u5 = subscribe('app.poolBenchmarks', (benchmarks) => {
+      if (benchmarks?.contractPhase) this.#renderQuests();
+    });
+    this.#unsubs.push(u1, u2, u3, u4, u5);
   }
 
   // ---------------------------------------------------------------------
@@ -1458,7 +1466,10 @@ class AppQuestPanel extends HTMLElement {
     // panel check the prior level, find the prior foil pack, and hide the new
     // quest-completing pack. Prefer the contract-equivalent route from the live
     // /game/state payload. The last-day value remains only a degraded fallback.
-    const livePurchaseLevel = activeTicketLevel(this.#gameState);
+    const livePurchaseLevel = activeTicketLevel(
+      this.#gameState,
+      get('app.poolBenchmarks')?.contractPhase,
+    );
     const rawLastDayPurchaseLevel = Number(get('app.lastDay')?.roll1?.purchaseLevel);
     const fallbackPurchaseLevel = Number.isInteger(rawLastDayPurchaseLevel)
       && rawLastDayPurchaseLevel >= 0

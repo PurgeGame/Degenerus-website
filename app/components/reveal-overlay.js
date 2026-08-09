@@ -820,7 +820,16 @@ export function normalizeSequence(seq) {
       (c.revealedRarity || c.rarity) === 'epic'
       || (c.revealedRarity || c.rarity) === 'legendary'
     ));
-    const unlucky = cards.every((card) => card?.type === 'nowin');
+    const isEmptyResult = (card) => card?.type === 'nowin'
+      || (card?.type === 'tickets' && card?.value === '0');
+    const isWwxrpResult = (card) => card?.type === 'wwxrp'
+      || (card?.type === 'spins' && card?.spin?.spinType === 'wwxrp');
+    // WWXRP is the Luckbox consolation lane. If it is the only credited
+    // result (a zero-ticket roll may accompany it), the reveal is a loss—not
+    // a TAKE THE WIN outcome. A real prize beside it keeps the normal result.
+    const wwxrpOnly = cards.some(isWwxrpResult)
+      && cards.every((card) => isWwxrpResult(card) || isEmptyResult(card));
+    const unlucky = cards.every((card) => isWwxrpResult(card) || isEmptyResult(card));
     const opened = openedLegs.find((leg) => leg?.lootboxIndex != null) ?? openedLegs[0];
     const amountWei = seq.amountWei ?? opened?.amount ?? null;
     const routedPriceWei = seq.ticketPriceWei
@@ -864,6 +873,7 @@ export function normalizeSequence(seq) {
       hideTitle: !seq.title,
       big,
       unlucky,
+      wwxrpOnly,
       autoStart: false,
       noVessel: Boolean(seq.noVessel),
       boxIndex,
@@ -3344,9 +3354,9 @@ class RevealOverlay extends HTMLElement {
     const center = document.createElement('div');
     center.className = 'ticket-card-center';
     const flame = document.createElement('img');
-    flame.src = foil
-      ? '/whitepaper/flame-center-silver.svg'
-      : '/whitepaper/flame-center.svg';
+    // One guaranteed asset path; `.ticket-card--foil` supplies the silver
+    // material treatment without relying on a deploy-specific second SVG.
+    flame.src = '/whitepaper/flame-center.svg';
     flame.alt = '';
     center.appendChild(flame);
     card.appendChild(center);
@@ -4236,10 +4246,13 @@ class RevealOverlay extends HTMLElement {
       `rvl-survival-coin--${board.survived ? 'win' : 'bust'}`,
       'df-coin3d__inner',
     ].join(' ');
-    appendCoinFaces(coin, {
-      frontSrc: ICONS.wwxrp,
-      backSrc: ICONS.ethFace,
-    });
+    // Survival owns a single physical face. CSS changes that one surface's
+    // artwork only while it is edge-on, synchronized to this exact toss. It
+    // cannot expose a second WWXRP back and does not depend on a rAF tracker.
+    const coinFace = document.createElement('span');
+    coinFace.className = 'rvl-survival-coin-face';
+    coinFace.setAttribute('aria-hidden', 'true');
+    coin.appendChild(coinFace);
     shell.appendChild(coin);
     // Preload the authoritative landing in a separate, non-transformed plane.
     // Revealing this sibling (instead of replacing a will-change compositor
@@ -4303,6 +4316,10 @@ class RevealOverlay extends HTMLElement {
       coin.style.transform = 'none';
       coin.style.display = 'none';
     }
+    // The animated rotor contains the red WWXRP plane. Remove it completely
+    // before exposing the authoritative static landing so Chromium cannot
+    // composite that stale plane over a successful green ETH result.
+    coin.remove?.();
     landedImage.hidden = false;
     resultMark.textContent = board.survived ? '✓' : '×';
     resultMark.hidden = false;
@@ -4345,7 +4362,8 @@ class RevealOverlay extends HTMLElement {
     if (this.#aborted) return board.total > 0n;
 
     const won = board.total > 0n;
-    const celebrate = shouldCelebrateDegenerette(board);
+    const wwxrpOnly = sequence?.wwxrpOnly === true && board.unit === 'WWXRP';
+    const celebrate = !wwxrpOnly && shouldCelebrateDegenerette(board);
     // When there is no survival beat, settle the tracker on the authoritative
     // final payout. This matters for a FLIP round whose per-spin rows contain
     // hits but whose final payout is zero.
@@ -4357,7 +4375,9 @@ class RevealOverlay extends HTMLElement {
 
     const totalEl = document.createElement('div');
     totalEl.className = `rvl-spin-total ${celebrate ? 'is-win' : 'is-miss'}`;
-    totalEl.textContent = won
+    totalEl.textContent = wwxrpOnly
+      ? (won ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} · UNLUCKY` : 'UNLUCKY')
+      : won
       ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} ${
         celebrate ? 'WON' : 'RETURNED'
       }`
@@ -4972,8 +4992,6 @@ class RevealOverlay extends HTMLElement {
       );
       if (foil) {
         ticket.grid?.classList?.add('rvl-ticket-grid--foil');
-        const flame = ticket.center?.querySelector?.('img');
-        if (flame) flame.src = '/whitepaper/flame-center-silver.svg';
       }
       ticket.cells.forEach((cell, quadrant) => {
         cell.classList?.add(`q-${states[quadrant]}`);

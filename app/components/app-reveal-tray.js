@@ -623,9 +623,9 @@ function _appendTicketActionLabel(label, meta, { passive = false } = {}) {
 export function actionableRevealItems(items) {
   return (Array.isArray(items) ? items : []).filter((item) => (
     REVEAL_KINDS.has(String(item?.kind || ''))
-    // Decimator owns the main jackpot control while due; do not duplicate the
-    // same action in the compact Pending tray.
-    && item?.primarySurface !== 'jackpot'
+    // The Decimator also owns the main jackpot control while due, but Pending is
+    // its durable fallback. If the player misses that hero handoff, the resolved
+    // fullscreen draw must remain visible here until it is actually opened.
     && (
       item?.state === 'ready'
       || item?.state === 'busy'

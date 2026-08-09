@@ -70,6 +70,11 @@ import { appendCoinFaces } from '../app/coin-faces.js';
 import { activeBafScoreLevel } from '../app/jackpot-resolutions.js';
 import { setMajorDrawActivity } from '../app/major-draw-activity.js';
 import {
+  candidateRecordPayoutWei,
+  candidateClaimsRecord,
+  RECORD_KIND_FLIP,
+} from '../app/records.js';
+import {
   warmup as warmupCoinflipSfx,
   sfxCoinflipLand,
   sfxCoinflipStart,
@@ -688,6 +693,9 @@ class AppDailyFlip extends HTMLElement {
     this.#unsubs.push(subscribe('app.daySync', (sync) => this.#onDaySync(sync)));
     this.#unsubs.push(subscribe('app.bafPosition', (position) => {
       this.#adoptSharedBafPosition(position);
+    }));
+    this.#unsubs.push(subscribe('app.records', () => {
+      this.#renderAddBetDialog();
     }));
 
     // On a NEW day: cancel any in-flight landing, re-render immediately so
@@ -1984,6 +1992,8 @@ class AppDailyFlip extends HTMLElement {
             <div class="df-add-bet-dialog__range" aria-hidden="true">
               <span>100</span><span data-bind="df-add-bet-available">AVAILABLE —</span>
             </div>
+            <p class="df-add-bet-dialog__bounty" data-bind="df-add-bet-bounty"
+               hidden role="status"></p>
             <p class="df-add-bet-dialog__reuse" data-bind="df-add-bet-reuse"
                hidden role="status"></p>
             <boon-product-indicator class="df-boon-indicator"
@@ -2257,6 +2267,7 @@ class AppDailyFlip extends HTMLElement {
     const slider = this.querySelector('[data-bind="df-add-bet-slider"]');
     const number = this.querySelector('[data-bind="df-add-bet-number"]');
     const availableLabel = this.querySelector('[data-bind="df-add-bet-available"]');
+    const bounty = this.querySelector('[data-bind="df-add-bet-bounty"]');
     const reuse = this.querySelector('[data-bind="df-add-bet-reuse"]');
     const confirm = this.querySelector('[data-bind="df-add-bet-confirm"]');
     const status = this.querySelector('[data-bind="df-add-bet-status"]');
@@ -2288,6 +2299,50 @@ class AppDailyFlip extends HTMLElement {
       if (parsed >= minWhole && parsed <= maxWhole) selectedWhole = parsed;
     }
     const validSelection = selectedWhole != null;
+    const claimsBounty = validSelection && candidateClaimsRecord(
+      get('app.records'),
+      RECORD_KIND_FLIP,
+      selectedWhole * unit,
+    );
+    const bountyWei = claimsBounty
+      ? candidateRecordPayoutWei({
+        state: get('app.records'),
+        kind: RECORD_KIND_FLIP,
+        candidate: selectedWhole * unit,
+        today: Number(get('app.daySync')?.day ?? get('app.lastDay')?.day) || null,
+      })
+      : 0n;
+    number.classList?.toggle('is-bounty-trigger', claimsBounty);
+    number.parentElement?.classList?.toggle('is-bounty-trigger', claimsBounty);
+    slider.classList?.toggle('is-bounty-trigger', claimsBounty);
+    confirm.classList?.toggle('is-bounty-trigger', claimsBounty);
+    this.querySelector('.df-add-bet-dialog__card')
+      ?.classList?.toggle('is-bounty-trigger', claimsBounty);
+    if (claimsBounty) {
+      number.setAttribute('data-bounty-trigger', 'true');
+      number.setAttribute(
+        'aria-description',
+        bountyWei == null
+          ? 'This deposit reaches the live Biggest Flip bounty target; its live payout is loading.'
+          : `This deposit reaches the live Biggest Flip bounty target and adds ${this.#fmtWhole(bountyWei)} FLIP.`,
+      );
+    } else {
+      number.removeAttribute('data-bounty-trigger');
+      number.removeAttribute('aria-description');
+    }
+    if (bounty) {
+      bounty.hidden = !claimsBounty;
+      bounty.textContent = !claimsBounty
+        ? ''
+        : bountyWei == null
+          ? 'THE BIGGEST BOUNTY · LIVE AMOUNT LOADING'
+          : `THE BIGGEST BOUNTY · +${this.#fmtWhole(bountyWei)} FLIP`;
+      if (!claimsBounty) bounty.removeAttribute('title');
+      else bounty.setAttribute(
+        'title',
+        'This FLIP credit is paid from the live shared record pool when the transaction confirms.',
+      );
+    }
     if (validSelection) {
       slider.value = String(this.#snapAddBetSliderWhole(
         selectedWhole,
@@ -3616,10 +3671,6 @@ class AppDailyFlip extends HTMLElement {
       const l = document.createElement('span');
       l.className = 'df-position-label';
       if (item.key === 'tomorrow' && upcomingBonusVisible) {
-        const copy = document.createElement('span');
-        copy.className = 'df-position-label__copy';
-        copy.textContent = item.label;
-        l.appendChild(copy);
         const bonus = document.createElement('span');
         bonus.className = 'df-position-bonus';
         bonus.setAttribute('data-bind', 'df-bonus-flip');
@@ -3631,6 +3682,10 @@ class AppDailyFlip extends HTMLElement {
         );
         bonus.textContent = `+${upcomingBonusPoints}% BONUS`;
         l.appendChild(bonus);
+        const copy = document.createElement('span');
+        copy.className = 'df-position-label__copy';
+        copy.textContent = item.label;
+        l.appendChild(copy);
       } else {
         l.textContent = item.label;
       }

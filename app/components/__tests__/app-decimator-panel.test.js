@@ -1132,6 +1132,72 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
+  test('ticket and Luckbox fields glow independently at their live bounty floors', async () => {
+    storeMod.update('app.records', {
+      records: [
+        { kind: 2, held: false, value: 0n, barToBeat: 0n },
+        { kind: 3, held: false, value: 0n, barToBeat: 0n },
+      ],
+    });
+    const el = instantiate();
+    await flushMicrotasks();
+    const tickets = el.querySelector('[name="dec-tickets"]');
+    const luckbox = el.querySelector('[name="dec-lootbox-eth"]');
+
+    tickets.value = '99.75';
+    tickets.dispatchEvent({ type: 'input' });
+    assert.equal(tickets.classList.contains('is-bounty-trigger'), false);
+    tickets.value = '100';
+    tickets.dispatchEvent({ type: 'input' });
+    assert.equal(tickets.classList.contains('is-bounty-trigger'), true);
+
+    luckbox.value = '4.99';
+    luckbox.dispatchEvent({ type: 'input' });
+    assert.equal(luckbox.classList.contains('is-bounty-trigger'), false);
+    luckbox.value = '5';
+    luckbox.dispatchEvent({ type: 'input' });
+    assert.equal(luckbox.classList.contains('is-bounty-trigger'), true);
+    assert.equal(luckbox.getAttribute('data-bounty-trigger'), 'true');
+    el.disconnectedCallback();
+  });
+
+  test('normal bonus includes a qualifying ticket or Luckbox bounty credit', async () => {
+    const unit = 10n ** 18n;
+    storeMod.update('app.daySync', { day: 11 });
+    storeMod.update('app.records', {
+      recordPoolWei: 100_000n * unit,
+      records: [
+        { kind: 2, held: false, value: 0n, barToBeat: 0n, clockDay: null },
+        { kind: 3, held: false, value: 0n, barToBeat: 0n, clockDay: null },
+      ],
+    });
+    const el = instantiate();
+    await settle(60);
+    const tickets = el.querySelector('[name="dec-tickets"]');
+    const luckbox = el.querySelector('[name="dec-lootbox-eth"]');
+    const tally = el.querySelector('[data-bind="dec-flip-credit"]');
+    const label = el.querySelector('[data-bind="dec-flip-credit-label"]');
+    const total = el.querySelector('[data-bind="dec-flip-credit-total"]');
+
+    tickets.value = '100';
+    tickets.dispatchEvent({ type: 'input' });
+    assert.equal(tally.hidden, false);
+    assert.equal(label.textContent, 'BONUS + BOUNTY');
+    assert.equal(total.textContent, '+25,000 FLIP',
+      '15,000 ordinary ticket bonus plus the 10,000 live bounty');
+    assert.equal(tally.getAttribute('data-includes-bounty'), 'true');
+    assert.match(tally.getAttribute('title'), /\+10,000 FLIP/);
+
+    tickets.value = '0';
+    tickets.dispatchEvent({ type: 'input' });
+    luckbox.value = '5';
+    luckbox.dispatchEvent({ type: 'input' });
+    assert.equal(tally.hidden, false, 'a bounty makes the otherwise bonus-free Luckbox tally visible');
+    assert.equal(label.textContent, 'BONUS + BOUNTY');
+    assert.equal(total.textContent, '+10,000 FLIP');
+    el.disconnectedCallback();
+  });
+
   test('tickets-owned display removed from the buy panel (inventory widget owns it)', async () => {
     const el = instantiate();
     await flushMicrotasks();
@@ -1717,7 +1783,10 @@ describe('combined ticket + lootbox buy', () => {
   });
 
   test('base and bulk FLIP bonuses count whole tickets only', async () => {
-    const { purchaseFlipCreditBreakdown } = await import('../app-decimator-panel.js');
+    const {
+      purchaseFlipCreditBreakdown,
+      purchaseRecordBountyWei,
+    } = await import('../app-decimator-panel.js');
     const FLIP = 10n ** 18n;
     assert.equal(
       purchaseFlipCreditBreakdown({ tickets: 0.75 }).total,
@@ -1733,6 +1802,27 @@ describe('combined ticket + lootbox buy', () => {
       purchaseFlipCreditBreakdown({ tickets: 10.75 }).total,
       1_500n * FLIP,
       'ten whole tickets earn the base plus bulk credit',
+    );
+    assert.equal(
+      purchaseFlipCreditBreakdown({ tickets: 1, bountyWei: 2_500n * FLIP }).total,
+      2_600n * FLIP,
+      'the normal bonus total includes a separately quoted record bounty',
+    );
+    assert.equal(
+      purchaseRecordBountyWei({
+        state: {
+          recordPoolWei: 100_000n * FLIP,
+          records: [
+            { kind: 2, held: true, barToBeat: 5n, clockDay: 10 },
+            { kind: 3, held: true, barToBeat: 100n, clockDay: 20 },
+          ],
+        },
+        tickets: 100,
+        luckboxWei: 5n,
+        today: 20,
+      }),
+      14_500n * FLIP,
+      'Luckbox takes 10% first, then the ticket record takes 5% of the reduced pool',
     );
     const price = lootboxMod.scaledTicketPriceWei(12);
     assert.equal(

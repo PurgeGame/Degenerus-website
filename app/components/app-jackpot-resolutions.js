@@ -2,8 +2,9 @@
 //
 // The page does not carry a permanent Decimator/BAF dashboard. Once a round
 // closes, this controller publishes the Decimator into the main jackpot action
-// and BAF into the shared Pending tray. The Decimator opens its reconstructed
-// wheel; genuine permissionless claims remain available until mined.
+// and mirrors it in the shared Pending tray so the full draw cannot be missed.
+// The Decimator opens its reconstructed wheel; genuine permissionless claims
+// remain available until mined.
 
 import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
@@ -57,6 +58,11 @@ function _formatToken(value, digits = 0) {
   try { return _trimFixed(displayToken(_big(value), digits)); } catch (_e) { return '0'; }
 }
 
+export function hasDecimatorPosition(outcome) {
+  const bucket = Number(outcome?.bucket);
+  return Number.isInteger(bucket) && bucket > 0;
+}
+
 export function decimatorResolutionView({ outcome, claimState, currentLevel, level } = {}) {
   const lvl = Number(level);
   const current = Number(currentLevel);
@@ -71,7 +77,7 @@ export function decimatorResolutionView({ outcome, claimState, currentLevel, lev
   const bucket = Number(outcome.bucket);
   const sub = Number(outcome.subbucket);
   const winning = Number(outcome.winningSubbucket);
-  const entered = Number.isInteger(bucket) && bucket > 0;
+  const entered = hasDecimatorPosition(outcome);
   const payout = _big(outcome.payoutAmount);
 
   if (status === 'open') {
@@ -228,8 +234,8 @@ class AppJackpotResolutions extends HTMLElement {
   connectedCallback() {
     if (this.#initialized) return;
     this.#initialized = true;
-    // Intentionally headless: final results live in the bottom tray only while
-    // unviewed/actionable, then in the full-screen receipt for one interaction.
+    // Intentionally headless: final results live in the shared action surfaces
+    // while unviewed/actionable, then in the full-screen receipt.
     this.innerHTML = '';
     this.hidden = true;
     this.setAttribute?.('aria-hidden', 'true');
@@ -372,19 +378,23 @@ class AppJackpotResolutions extends HTMLElement {
       level: decLevel,
     });
     const decFinal = this.#decimator?.roundStatus === 'closed';
+    const decHasPosition = hasDecimatorPosition(this.#decimator);
     const decSeen = _wasSeen('decimator', this.#address, decLevel);
-    // Rule lives in jackpot-resolutions.js so it is testable; see the note there
-    // for why a bare `closed && !seen` surfaced a level-15 draw at level 18.
-    const decUnseen = decimatorFinalIsNews({
-      closed: decFinal,
-      seen: decSeen,
-      currentLevel: current,
-      windowOpen: this.#gameState.decWindowOpen === true,
-    });
+    // Keep the latest unseen fullscreen receipt through the levels after its
+    // transition. Opening or clearing it retires the row; the next Decimator
+    // level replaces it naturally.
+    const decUnseen = decHasPosition
+      && decimatorFinalIsNews({
+        closed: decFinal,
+        seen: decSeen,
+        currentLevel: current,
+        windowOpen: this.#gameState.decWindowOpen === true,
+      });
     // At an x5/x00 level the Decimator owns the shared jackpot action even if
     // its indexed player row is a poll behind. Showing an explicit processing
     // state prevents the normal jackpot control from slipping past it.
-    const decWaiting = !decSeen
+    const decWaiting = decHasPosition
+      && !decSeen
       && !decFinal
       && Number(decLevel) === current
       && isDecimatorResolutionLevel(current);
@@ -404,7 +414,9 @@ class AppJackpotResolutions extends HTMLElement {
           : decView.message,
         state: this.#busy === 'decimator' || decWaiting ? 'busy' : 'ready',
         write: willWrite,
-        autoOpen: false,
+        // A read-only final honors the Pending tray's Auto open preference.
+        // A claimable winner still requires an explicit transaction click.
+        autoOpen: !willWrite,
         primarySurface: 'jackpot',
         order: 12,
         run: decWaiting

@@ -28,6 +28,7 @@ export const RECORD_KIND_BUY = 3;
 /** Session API — the only place an address maps to a Discord display identity. */
 const SESSION_API = 'https://api.degener.us';
 const RECORD_POOL_ABI = ['function recordPool() external view returns (uint128)'];
+const TOKEN_UNIT = 10n ** 18n;
 
 let _publicPoolProvider = null;
 let _poolReadInflight = null;
@@ -43,10 +44,9 @@ let _readRecordPool = readLiveRecordPool;
  * record (`entryQuantityScaled / (4 * QTY_SCALE)` —
  * DegenerusGameFoilPackModule.sol:199-202, so no ticket divisor applies).
  *
- * `floorText` is the entry floor below which a candidate never even reads the
- * record slot. The FLIP and ticket floors are chain-invariant so they are
- * stated outright; the two ETH floors are contract literals that the testnet
- * deploy carries at /1M scale, so they are only named on mainnet.
+ * `floorText` is the player-facing entry floor below which a candidate never
+ * even reads the record slot. ETH values use the same mainnet-equivalent
+ * display scale as every other amount in the app, including on testnet.
  */
 export const RECORD_KINDS = [
   {
@@ -55,7 +55,8 @@ export const RECORD_KINDS = [
     label: 'BIGGEST FLIP',
     short: 'FLIP',
     // Coinflip.sol:174 BIGGEST_FLIP_MIN = 200_000 ether (FLIP, unscaled).
-    floorText: '200,000+ FLIP takes it',
+    floorText: '200,000 FLIP',
+    floorValue: 200_000n * TOKEN_UNIT,
     verb: 'flip',
   },
   {
@@ -64,7 +65,8 @@ export const RECORD_KINDS = [
     label: 'BIGGEST DEGENERETTE',
     short: 'DEGENERETTE',
     // DegenerusGameDegeneretteModule.sol:256 BIGGEST_SPIN_MIN_ETH = 1 ether.
-    floorText: ETH_DIVISOR === 1n ? '1+ ETH takes it' : 'any qualifying spin takes it',
+    floorText: '1 ETH',
+    floorValue: TOKEN_UNIT / ETH_DIVISOR,
     verb: 'spin',
   },
   {
@@ -73,7 +75,8 @@ export const RECORD_KINDS = [
     label: 'BIGGEST LUCKBOX',
     short: 'LUCKBOX',
     // DegenerusGameMintModule.sol:131 BIGGEST_BOX_MIN_ETH = 5 ether.
-    floorText: ETH_DIVISOR === 1n ? '5+ ETH takes it' : 'any qualifying lootbox takes it',
+    floorText: '5 ETH',
+    floorValue: (5n * TOKEN_UNIT) / ETH_DIVISOR,
     verb: 'lootbox',
   },
   {
@@ -82,7 +85,8 @@ export const RECORD_KINDS = [
     label: 'BIGGEST DEGEN',
     short: 'DEGEN',
     // DegenerusGame.sol:162 BIGGEST_BUY_MIN_TICKETS = 100 (whole tickets).
-    floorText: '100+ tickets takes it',
+    floorText: '100 TICKETS',
+    floorValue: 100n,
     verb: 'buy',
   },
 ];
@@ -166,6 +170,31 @@ export function barToBeat(mark) {
 }
 
 /**
+ * Exact candidate that would claim this kind's live bounty right now.
+ *
+ * The first holder clears the contract entry floor. Once a mark exists, the
+ * live `barToBeat` is the +20% claim predicate; merely nudging the record above
+ * its mark does not pay the bounty and therefore must not light a wager field.
+ */
+export function recordClaimTarget(state, kind) {
+  const meta = recordKindMeta(kind);
+  const record = Array.isArray(state?.records)
+    ? state.records.find((entry) => Number(entry?.kind) === Number(kind))
+    : null;
+  if (!meta || !record) return null;
+  return record.held ? toBigInt(record.barToBeat) : toBigInt(meta.floorValue);
+}
+
+/** True only when `candidate` reaches the exact live bounty-paying target. */
+export function candidateClaimsRecord(state, kind, candidate) {
+  const target = recordClaimTarget(state, kind);
+  if (target == null || target <= 0n) return false;
+  let value;
+  try { value = BigInt(candidate); } catch (_e) { return false; }
+  return value >= target;
+}
+
+/**
  * The share curve a record claim takes from the pool — Coinflip.sol:166-168.
  * A 5% floor, +0.5% per day since THAT kind last stamped its clock, capped at
  * 75% (reached 140 days out). Mirrored here rather than read on chain: the
@@ -178,24 +207,32 @@ const SHARE_CEIL_BPS = 7_500;
 /**
  * What a claim on this record would take from the pool right now, in bps.
  *
- * ⛔ AN UNSET MARK IS ALWAYS ZERO. The contract only stamps a clock when a mark
- * is written, so an unset record reads day 0 and the curve would saturate
- * straight to the 75% ceiling — while the `mark == 0` bootstrap branch
- * (Coinflip.sol:863-867) in fact pays nothing at all. Returns null when the
- * clock is unknown (a row indexed before clockDay existed), which renders as
- * "share unknown" rather than a fabricated number.
+ * An unset mark still has a live bounty. Coinflip's constructor stamps every
+ * category at deploy day 1, and the `mark == 0` branch pays the share accrued
+ * from that clock when somebody clears the category's entry floor. The API has
+ * no event from which to reconstruct that untouched clock, so a null clock is
+ * exactly inferable as day 1 only while `held` is false. A held record with no
+ * indexed clock remains unknown rather than inventing a claim date.
  *
  * @returns {number|null} bps, or null when it cannot be known
  */
 export function accruedShareBps({ held, clockDay, today }) {
-  if (!held) return 0;
-  // Explicit null guards before coercion: Number(null) is 0 and passes
-  // isInteger, which would read an unknown clock as "stamped on day zero" and
-  // hand back a fully accrued share.
-  if (clockDay == null || today == null) return null;
-  const stamped = Number(clockDay);
+  if (today == null) return null;
+  // GameTimeLib is 1-indexed. Untouched categories have no BigRecordUpdated
+  // event, but their constructor clock is known exactly. Some early indexed
+  // deploy-day claims were stored as zero; normalize that impossible contract
+  // day to day 1 as well.
+  let stamped;
+  if (clockDay == null) {
+    if (held) return null;
+    stamped = 1;
+  } else {
+    stamped = Number(clockDay);
+    if (stamped === 0) stamped = 1;
+  }
   const now = Number(today);
-  if (!Number.isInteger(stamped) || !Number.isInteger(now) || now <= 0) return null;
+  if (!Number.isInteger(stamped) || stamped <= 0
+    || !Number.isInteger(now) || now <= 0) return null;
   const elapsed = now > stamped ? now - stamped : 0;
   return Math.min(SHARE_FLOOR_BPS + elapsed * SHARE_PER_DAY_BPS, SHARE_CEIL_BPS);
 }
@@ -204,6 +241,33 @@ export function accruedShareBps({ held, clockDay, today }) {
 export function accruedPayoutWei(poolWei, shareBps) {
   if (shareBps == null) return null;
   return (toBigInt(poolWei) * BigInt(shareBps)) / 10_000n;
+}
+
+/**
+ * Exact FLIP credit a live candidate would take from the shared pool.
+ *
+ * `0n` means the candidate does not clear this record's bounty bar. `null`
+ * means it does clear the bar, but an old indexed row is missing the clock
+ * needed to quote the accrued share without guessing.
+ */
+export function candidateRecordPayoutWei({
+  state,
+  kind,
+  candidate,
+  today,
+  poolWei = state?.recordPoolWei,
+} = {}) {
+  if (!candidateClaimsRecord(state, kind, candidate)) return 0n;
+  const record = Array.isArray(state?.records)
+    ? state.records.find((entry) => Number(entry?.kind) === Number(kind))
+    : null;
+  if (!record) return 0n;
+  const shareBps = accruedShareBps({
+    held: Boolean(record.held),
+    clockDay: record.clockDay,
+    today,
+  });
+  return accruedPayoutWei(poolWei, shareBps);
 }
 
 function group(value) {

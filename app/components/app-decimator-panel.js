@@ -103,6 +103,13 @@ import { degeneretteLimits } from '../app/degenerette.js';
 // Ticket reveals are deferred until the traits roll — see app/app/pack-watch.js.
 import { recordPendingPack, recordLootboxTicketPacks } from '../app/pack-watch.js';
 import { BASE_SEPOLIA_FAUCET_URL, isBaseSepolia } from './testnet-beta-banner.js';
+import {
+  candidateRecordPayoutWei,
+  candidateClaimsRecord,
+  RECORD_KIND_BUY,
+  RECORD_KIND_LUCKBOX,
+  toBigInt,
+} from '../app/records.js';
 import './boon-product-indicator.js';
 
 // Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for the
@@ -164,6 +171,45 @@ const ETH_BALANCE_RNG_PHASES = new Set([
   'indexing',
 ]);
 
+/**
+ * Exact shared-pool FLIP credit for a normal ticket + luckbox purchase.
+ *
+ * The mint module arms the luckbox record first; DegenerusGame arms the plain
+ * ticket leg after that delegatecall returns. When one transaction clears both
+ * bars, the second share is therefore taken from the already-reduced pool.
+ * `null` means a qualifying legacy record is missing the clock needed for an
+ * exact preview; callers must not invent a bounty amount in that case.
+ */
+export function purchaseRecordBountyWei({
+  state,
+  tickets = 0,
+  luckboxWei = 0n,
+  today = null,
+} = {}) {
+  const parsedTickets = Number(tickets);
+  const ticketCandidate = Number.isFinite(parsedTickets) && parsedTickets > 0
+    ? BigInt(Math.floor(parsedTickets))
+    : 0n;
+  let pool = toBigInt(state?.recordPoolWei);
+  let total = 0n;
+  for (const [kind, candidate] of [
+    [RECORD_KIND_LUCKBOX, luckboxWei],
+    [RECORD_KIND_BUY, ticketCandidate],
+  ]) {
+    const paid = candidateRecordPayoutWei({
+      state,
+      kind,
+      candidate,
+      today,
+      poolWei: pool,
+    });
+    if (paid == null) return null;
+    total += paid;
+    pool = paid < pool ? pool - paid : 0n;
+  }
+  return total;
+}
+
 /** Whether unseen player work can still make the displayed ETH total a spoiler. */
 export function pendingMayChangeEth(items = []) {
   return (Array.isArray(items) ? items : []).some((item) => {
@@ -201,6 +247,7 @@ export function purchaseFlipCreditBreakdown({
   presaleCostWei = 0n,
   claimableWei = 0n,
   preferClaimable = true,
+  bountyWei = 0n,
 } = {}) {
   const parsedTickets = Number(tickets);
   const ticketCount = Number.isFinite(parsedTickets) && parsedTickets > 0
@@ -223,11 +270,14 @@ export function purchaseFlipCreditBreakdown({
   let mintCost = 0n;
   let foilCost = 0n;
   let presaleCost = 0n;
+  let bounty = 0n;
   try { price = BigInt(priceWei); } catch (_e) { price = 0n; }
   try { total = BigInt(totalCostWei); } catch (_e) { total = 0n; }
   try { mintCost = BigInt(mintCostWei); } catch (_e) { mintCost = 0n; }
   try { foilCost = BigInt(foilCostWei); } catch (_e) { foilCost = 0n; }
   try { presaleCost = BigInt(presaleCostWei); } catch (_e) { presaleCost = 0n; }
+  try { bounty = BigInt(bountyWei); } catch (_e) { bounty = 0n; }
+  if (bounty < 0n) bounty = 0n;
 
   let rebuy = 0n;
   if (price > 0n && total > 0n) {
@@ -262,7 +312,7 @@ export function purchaseFlipCreditBreakdown({
     }
   }
 
-  return { purchase, bulk, rebuy, total: purchase + bulk + rebuy };
+  return { purchase, bulk, rebuy, bounty, total: purchase + bulk + rebuy + bounty };
 }
 
 /** Maximum presale box that can be attached to the current draft purchase.
@@ -726,7 +776,7 @@ class AppDecimatorPanel extends HTMLElement {
         <div class="dec-buy-row">
           <div class="dec-flip-credit" data-bind="dec-flip-credit" hidden>
             <img src="/whitepaper/flame-logo-split.svg" alt="">
-            <span>BONUS</span>
+            <span data-bind="dec-flip-credit-label">BONUS</span>
             <strong data-bind="dec-flip-credit-total">+0 FLIP</strong>
           </div>
           <!-- CF-15: data-write triggers Phase 58 view-mode disable manager. -->
@@ -1659,6 +1709,7 @@ class AppDecimatorPanel extends HTMLElement {
   }
 
   #updateTotalLabel() {
+    this.#renderBountyTriggers();
     const btn = this.querySelector('[data-bind="dec-buy-cta"]');
     if (!btn || this.#busy) return;
     // Tickets are divisible to the entry (0.25), so parseFloat — parseInt threw
@@ -1714,6 +1765,12 @@ class AppDecimatorPanel extends HTMLElement {
       ? (hasPrimaryDraft ? 'Buy in + presale box' : 'Buy presale box')
       : 'Buy in';
     this.#setBuyLabel(action, amount);
+    const recordBountyWei = purchaseRecordBountyWei({
+      state: get('app.records'),
+      tickets: tq,
+      luckboxWei: this.#ethInputWei('dec-lootbox-eth'),
+      today: Number(get('app.daySync')?.day ?? get('app.lastDay')?.day) || null,
+    });
     this.#renderFlipCredit({
       tickets: tq,
       priceWei,
@@ -1723,13 +1780,75 @@ class AppDecimatorPanel extends HTMLElement {
       presaleCostWei,
       claimableWei: this.#claimableWei,
       preferClaimable: this.#preferClaimable,
+      bountyWei: recordBountyWei ?? 0n,
     });
+  }
+
+  #renderBountyTriggers() {
+    const state = get('app.records');
+    const ethPurchase = !this.#flipModeEnabled();
+    const tickets = this.#ticketsWanted();
+    // The contract records `entryQuantityScaled / (4 * QTY_SCALE)`, so a
+    // fractional entry tail cannot round a ticket candidate upward.
+    const ticketCandidate = Number.isFinite(tickets) && tickets > 0
+      ? BigInt(Math.floor(tickets))
+      : 0n;
+    const ticketClaims = ethPurchase && candidateClaimsRecord(
+      state,
+      RECORD_KIND_BUY,
+      ticketCandidate,
+    );
+    const luckboxClaims = ethPurchase && candidateClaimsRecord(
+      state,
+      RECORD_KIND_LUCKBOX,
+      this.#ethInputWei('dec-lootbox-eth'),
+    );
+
+    const paint = (input, group, active, description) => {
+      input?.classList?.toggle('is-bounty-trigger', active);
+      group?.classList?.toggle('is-bounty-trigger', active);
+      if (!input) return;
+      if (active) {
+        input.setAttribute('data-bounty-trigger', 'true');
+        input.setAttribute('aria-description', description);
+      } else {
+        input.removeAttribute('data-bounty-trigger');
+        input.removeAttribute('aria-description');
+      }
+    };
+    paint(
+      this.querySelector('[name="dec-tickets"]'),
+      this.querySelector('.dec-input-group--tickets'),
+      ticketClaims,
+      'This manual ETH ticket buy reaches the live Biggest Degen bounty target.',
+    );
+    paint(
+      this.querySelector('[name="dec-lootbox-eth"]'),
+      this.querySelector('.dec-input-group--lootbox'),
+      luckboxClaims,
+      'This deposit reaches the live Biggest Luckbox bounty target.',
+    );
   }
 
   #renderFlipCredit(args) {
     const box = this.querySelector('[data-bind="dec-flip-credit"]');
     if (!box) return;
     const parts = args ? purchaseFlipCreditBreakdown(args) : null;
+    const bounty = parts?.bounty ?? 0n;
+    const includesBounty = bounty > 0n;
+    const label = this.querySelector('[data-bind="dec-flip-credit-label"]');
+    if (label) label.textContent = includesBounty ? 'BONUS + BOUNTY' : 'BONUS';
+    box.classList?.toggle('dec-flip-credit--bounty', includesBounty);
+    if (includesBounty) {
+      box.setAttribute('data-includes-bounty', 'true');
+      box.setAttribute(
+        'title',
+        `Includes +${formatFlip(bounty.toString())} FLIP from The Biggest Bounty.`,
+      );
+    } else {
+      box.removeAttribute('data-includes-bounty');
+      box.removeAttribute('title');
+    }
     const show = Boolean(
       args
       && args.priceWei != null
@@ -1738,12 +1857,21 @@ class AppDecimatorPanel extends HTMLElement {
       && parts.total > 0n
     );
     box.hidden = !show;
-    if (!show) return;
+    if (!show) {
+      box.removeAttribute('aria-label');
+      return;
+    }
 
     const total = this.querySelector('[data-bind="dec-flip-credit-total"]');
     if (!total) return;
     total.textContent = `+${formatFlip(parts.total.toString())} FLIP`;
     total.classList?.toggle('is-zero', parts.total === 0n);
+    box.setAttribute(
+      'aria-label',
+      includesBounty
+        ? `Bonus total ${formatFlip(parts.total.toString())} FLIP, including ${formatFlip(bounty.toString())} FLIP from The Biggest Bounty.`
+        : `Bonus total ${formatFlip(parts.total.toString())} FLIP.`,
+    );
   }
 
   // ---------------------------------------------------------------------
@@ -2742,7 +2870,10 @@ class AppDecimatorPanel extends HTMLElement {
   // shorthand kept the foil row hidden past the point the contract would sell
   // the next level's pack. Returns null when /game/state hasn't loaded.
   #targetLevel() {
-    const fallback = activeTicketLevel(this.#gameState);
+    const fallback = activeTicketLevel(
+      this.#gameState,
+      get('app.poolBenchmarks')?.contractPhase,
+    );
     const current = Number(this.#purchaseQuote?.currentLevel);
     let price = 0n;
     try { price = BigInt(this.#purchaseQuote?.priceWei ?? 0n); } catch (_e) { price = 0n; }
@@ -2799,8 +2930,14 @@ class AppDecimatorPanel extends HTMLElement {
     });
     // A newly resolved day closes the spoiler gate immediately and supplies
     // the day-scoped key read by #claimableSpoilerOpen().
-    const u5 = subscribe('app.lastDay', () => this.#renderFundsFooter());
-    const u7 = subscribe('app.daySync', () => this.#renderFundsFooter());
+    const u5 = subscribe('app.lastDay', () => {
+      this.#renderFundsFooter();
+      this.#updateTotalLabel();
+    });
+    const u7 = subscribe('app.daySync', () => {
+      this.#renderFundsFooter();
+      this.#updateTotalLabel();
+    });
     const u9 = subscribe('ui.protocolCoinsFlipDisclosure', () => this.#renderFundsFooter());
     const u8 = subscribePendingActions((items) => {
       this.#pendingActions = Array.isArray(items) ? items : [];
@@ -2813,7 +2950,12 @@ class AppDecimatorPanel extends HTMLElement {
       this.#renderSnapshot();
       this.#refreshFoilStatus();
     });
-    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7, u8, u9);
+    const u10 = subscribe('app.records', () => this.#updateTotalLabel());
+    const u11 = subscribe('app.poolBenchmarks', () => {
+      this.#renderSnapshot();
+      this.#refreshFoilStatus();
+    });
+    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11);
   }
 
   // ---------------------------------------------------------------------

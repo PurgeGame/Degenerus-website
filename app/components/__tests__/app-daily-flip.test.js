@@ -22,6 +22,7 @@ import * as jackpotSfxMod from '../../app/jackpot-sfx.js';
 
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 const STATUS_CSS = readFileSync(new URL('../../styles/status-indicators.css', import.meta.url), 'utf8');
+const BOUNTY_CSS = readFileSync(new URL('../../styles/records-rail.css', import.meta.url), 'utf8');
 
 const TEST_ADDR = '0xab12000000000000000000000000000000000000';
 
@@ -647,7 +648,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
-  test('an exact upcoming bonus day puts plain green bonus copy beside Tomorrow', async () => {
+  test('an exact upcoming bonus day puts plain green bonus copy left of Tomorrow', async () => {
     coinflipMod.__setUpcomingFlipBonusReaderForTest(async () => ({
       purchaseInfo: { lvl: 31, inJackpotPhase: true, lastPurchaseDay_: false, rngLocked_: false },
       compressionTier: 0,
@@ -666,8 +667,13 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.ok(badge);
     assert.equal(badge.dataset.tier, 'standard');
     assert.equal(badge.textContent, '+2% BONUS');
-    assert.equal(badge.parentElement.children[1], badge,
-      'the plain bonus follows Tomorrow in the same title row');
+    const tomorrow = el.querySelector('[data-position="tomorrow"]');
+    const tomorrowLabel = tomorrow.querySelector('.df-position-label');
+    assert.equal(badge.parentElement, tomorrowLabel,
+      'the upcoming bonus stays in the Tomorrow title row');
+    assert.equal(tomorrowLabel.children[0], badge,
+      'the bonus appears on the left side of the Tomorrow words');
+    assert.equal(tomorrowLabel.children[1].textContent, "Tomorrow's bet");
     assert.match(APP_CSS, /\.df-position-bonus\s*\{[^}]*color:\s*#4ade80/s);
     assert.doesNotMatch(APP_CSS,
       /\.df-position-bonus\s*\{[^}]*(?:border|border-radius|background|box-shadow):/s,
@@ -3241,6 +3247,46 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(number.value, '');
     assert.equal(number.placeholder, 'NOT ENOUGH');
     assert.match(confirm.getAttribute('data-write-lock-title'), /At least 100 FLIP/);
+    el.disconnectedCallback();
+  });
+
+  test('Add Bet glows only when the fresh deposit reaches the live Flip bounty target', async () => {
+    const unit = 10n ** 18n;
+    storeMod.update('app.records', {
+      recordPoolWei: 100_000n * unit,
+      records: [{ kind: 0, held: false, value: 0n, barToBeat: 0n }],
+    });
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+    };
+    const el = mount();
+    await flushMicrotasks();
+    el.querySelector('[data-bind="df-flip-cta"]').dispatchEvent({ type: 'click' });
+    const input = el.querySelector('[data-bind="df-add-bet-number"]');
+
+    input.value = '199999';
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(input.classList.contains('is-bounty-trigger'), false);
+
+    input.value = '200000';
+    input.dispatchEvent({ type: 'input' });
+    assert.equal(input.classList.contains('is-bounty-trigger'), true);
+    assert.equal(input.getAttribute('data-bounty-trigger'), 'true');
+    assert.match(input.getAttribute('aria-description'), /Biggest Flip bounty.*38,000 FLIP/);
+    assert.equal(
+      el.querySelector('[data-bind="df-add-bet-bounty"]').textContent,
+      'THE BIGGEST BOUNTY · +38,000 FLIP',
+    );
+    assert.equal(el.querySelector('.df-add-bet-dialog__card')
+      .classList.contains('is-bounty-trigger'), true);
+    assert.equal(el.querySelector('[data-bind="df-add-bet-slider"]')
+      .classList.contains('is-bounty-trigger'), true);
+    assert.equal(el.querySelector('[data-bind="df-add-bet-confirm"]')
+      .classList.contains('is-bounty-trigger'), true);
+    assert.match(BOUNTY_CSS, /\.df-add-bet-dialog__card\.is-bounty-trigger\s*\{[^}]*box-shadow:/s);
+    assert.match(BOUNTY_CSS, /\.df-add-bet-dialog__bounty\s*\{[^}]*color:\s*#fde68a/s);
+    assert.equal(BigInt(input.value) * unit, 200_000n * unit);
     el.disconnectedCallback();
   });
 });

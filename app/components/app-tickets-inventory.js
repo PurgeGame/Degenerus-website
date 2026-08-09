@@ -418,7 +418,7 @@ class AppTicketsInventory extends HTMLElement {
   #initialized = false;
   #mode = 'cards';        // 'cards' | 'chart'
   #viewLevel = null;      // level being browsed (nav state)
-  #activeLevel = null;    // the running jackpot level (app.lastDay.level)
+  #activeLevel = null;    // first live/unresolved ticket level shown in the rail
   #address = null;
   #data = null;           // by-trait payload for (#address, #viewLevel)
   #dataLevel = null;      // level that #data actually belongs to during async nav
@@ -492,8 +492,9 @@ class AppTicketsInventory extends HTMLElement {
     this.#unsubs.push(subscribe('app.lastDay', (payload) => {
       const pl = Number(payload?.roll1?.purchaseLevel);
       if (Number.isFinite(pl) && pl > 0) {
-        this.#activeLevel = pl;
-        if (this.#viewLevel == null) this.#viewLevel = pl;
+        // Levels are monotonic. A late last-day poll must not put a resolved
+        // level back after gameState has already advanced the rail boundary.
+        this.#reconcileLevelFloor(pl);
       }
       this.#refresh();
     }));
@@ -503,10 +504,24 @@ class AppTicketsInventory extends HTMLElement {
     };
     this.#unsubs.push(subscribe('connected.address', onAddr));
     this.#unsubs.push(subscribe('viewing.address', onAddr));
-    // The unresolved-level boundary can advance before the next dashboard
-    // poll. Recalculate the already-loaded aggregate immediately; no refetch
-    // is needed because the per-level rows are durable inventory history.
-    this.#unsubs.push(subscribe('app.gameState', () => this.#renderTotalValue()));
+    // The unresolved-level boundary can advance before the next last-day or
+    // dashboard poll. Once the final jackpot settles, move both the visible
+    // rail and an old selected level forward immediately.
+    this.#unsubs.push(subscribe('app.gameState', (gameState) => {
+      const floorChanged = this.#reconcileLevelFloor(unresolvedTicketLevel(gameState));
+      // Keep the value drop synchronous with the settlement signal; the
+      // refetch below then replaces the old level's detail payload.
+      this.#renderTotalValue();
+      if (floorChanged) this.#refresh();
+    }));
+    this.#unsubs.push(subscribe('app.poolBenchmarks', (benchmarks) => {
+      if (benchmarks?.contractPhase?.rngLocked !== true) return;
+      const live = activeTicketLevel(
+        get('app.gameState'),
+        benchmarks.contractPhase,
+      );
+      if (this.#reconcileLevelFloor(live)) this.#refresh();
+    }));
     // Account-switcher (2026-07-16): mode flips the data source; the merged
     // payload updates live as polling.js's combined-mode cycle refreshes.
     this.#unsubs.push(subscribe('ui.mode', () => this.#refresh()));
@@ -522,6 +537,22 @@ class AppTicketsInventory extends HTMLElement {
       }, POLL_INTERVAL_MS);
     }
     this.#refresh();
+  }
+
+  #reconcileLevelFloor(value) {
+    const next = Number(value);
+    if (!Number.isInteger(next) || next <= 0) return false;
+    let changed = false;
+    if (!Number.isInteger(Number(this.#activeLevel)) || next > Number(this.#activeLevel)) {
+      this.#activeLevel = next;
+      changed = true;
+    }
+    const floor = Number(this.#activeLevel);
+    if (this.#viewLevel == null || Number(this.#viewLevel) < floor) {
+      this.#viewLevel = floor;
+      changed = true;
+    }
+    return changed;
   }
 
   disconnectedCallback() {
@@ -570,7 +601,7 @@ class AppTicketsInventory extends HTMLElement {
                 <button type="button" class="inv-level-btn inv-level-tab"
                         data-bind="inv-level-tab" data-level-offset="${offset}"
                         aria-expanded="false" aria-controls="ticket-inventory-details">
-                  <small data-bind="inv-level-tab-label">L—</small>
+                  <small data-bind="inv-level-tab-label">LEVEL —</small>
                   <strong data-bind="inv-level-tab-count">—</strong>
                 </button>`).join('')}
               <button type="button" class="inv-level-btn inv-level-tab inv-level-tab--future"
@@ -976,7 +1007,10 @@ class AppTicketsInventory extends HTMLElement {
           // and not the `jackpotPhase ? level : level + 1` shorthand this used
           // to inline, which lags by one level in the sealed window at the end
           // of a jackpot phase.
-          const active = activeTicketLevel(gs);
+          const active = activeTicketLevel(
+            gs,
+            get('app.poolBenchmarks')?.contractPhase,
+          );
           if (active != null) this.#activeLevel = active;
         } catch (_e) { /* state blip — keep prior activeLevel */ }
       }
@@ -1593,7 +1627,7 @@ class AppTicketsInventory extends HTMLElement {
         : '—';
 
       if (label) {
-        label.textContent = level == null ? 'L—' : `L${level}`;
+        label.textContent = level == null ? 'LEVEL —' : `LEVEL ${level}`;
         applyTicketLevelTone(label, level, hasActive ? active : null);
       }
       if (count) count.textContent = quantity;
@@ -2270,9 +2304,10 @@ class AppTicketsInventory extends HTMLElement {
       const center = document.createElement('div');
       center.className = 'ticket-card-center';
       const flame = document.createElement('img');
-      flame.src = combo.foil
-        ? '/whitepaper/flame-center-silver.svg'
-        : '/whitepaper/flame-center.svg';
+      // Use the canonical shipped flame for both materials. The foil face
+      // turns it silver in CSS; a separate silver URL previously fell through
+      // to the production HTML shell and rendered as a broken image.
+      flame.src = '/whitepaper/flame-center.svg';
       flame.alt = '';
       flame.loading = 'lazy';
       flame.decoding = 'async';

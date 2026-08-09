@@ -902,7 +902,7 @@ class DecimatorDrawReplay {
 
     if (raw(allocation.total) <= 0n || allocation.entries.length === 0) {
       this.bind('active-bucket').textContent = 'NO PAYOUT WINNERS';
-      this.bind('active-detail').textContent = 'WINNING EFFECTIVE BURN WAS ZERO';
+      this.bind('active-detail').textContent = 'WINNING SCORE WAS ZERO';
       this.#renderWinnerLegend(allocation);
       return;
     }
@@ -1085,7 +1085,7 @@ class DecimatorDrawReplay {
         if (locked) share.classList.add('is-locked');
         if (justLocked && justLocked === locked) share.classList.add('is-just-locked');
         const title = svg('title');
-        title.textContent = `Your ${formatScore(this.player.score)} FLIP is ${formatSharePercent(shareBps)} of this subbucket`;
+        title.textContent = `Your ${formatScore(this.player.score)} score is ${formatSharePercent(shareBps)} of this subbucket`;
         share.appendChild(title);
         playerShareHost.appendChild(share);
       }
@@ -1164,7 +1164,7 @@ class DecimatorDrawReplay {
     const wheel = this.bind('draw-wheel');
     wheel.setAttribute(
       'aria-label',
-      `${this.frames.length} populated Degen Score groups. The ${bucketScoreLabel(frame.bucket)} minimum group has ${frame.bucket} possible slices; one winning slice is selected. Slice values are effective FLIP burn totals.${this.player?.bucket === frame.bucket ? ` Your mint-colored area is ${formatSharePercent(playerSubbucketShareBps(this.snapshot, this.player))} of your subbucket.` : ''}`,
+      `${this.frames.length} populated Degen Score groups. The ${bucketScoreLabel(frame.bucket)} minimum group has ${frame.bucket} possible slices; one winning slice is selected. Slice values are Decimator scores.${this.player?.bucket === frame.bucket ? ` Your mint-colored area is ${formatSharePercent(playerSubbucketShareBps(this.snapshot, this.player))} of your subbucket.` : ''}`,
     );
   }
 
@@ -1371,6 +1371,7 @@ class DecimatorDrawReplay {
   #showHubBurned() {
     this.bind('wheel-wrap').classList.remove('is-winning-total');
     this.bind('hub-flip-label').textContent = 'TOTAL FLIP BURNED';
+    this.bind('hub-flip-unit').textContent = 'FLIP';
     this.bind('hub-flip-value').textContent = this.totalBurned == null
       ? '—'
       : formatScore(this.totalBurned);
@@ -1378,7 +1379,8 @@ class DecimatorDrawReplay {
 
   #showHubWinning(value = this.runningTotal) {
     this.bind('wheel-wrap').classList.add('is-winning-total');
-    this.bind('hub-flip-label').textContent = 'TOTAL WINNING FLIP';
+    this.bind('hub-flip-label').textContent = 'TOTAL WINNING SCORE';
+    this.bind('hub-flip-unit').textContent = 'SCORE';
     this.bind('hub-flip-value').textContent = formatScore(value);
   }
 

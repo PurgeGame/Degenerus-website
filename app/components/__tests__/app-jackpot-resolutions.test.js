@@ -14,11 +14,19 @@ globalThis.customElements ??= {
 
 const {
   decimatorResolutionView,
+  hasDecimatorPosition,
   bafResolutionView,
   jackpotResolutionSeenKey,
 } = await import('../app-jackpot-resolutions.js');
 
 describe('Decimator resolution presentation', () => {
+  test('only an account with a recorded bucket has a Decimator position', () => {
+    assert.equal(hasDecimatorPosition(null), false);
+    assert.equal(hasDecimatorPosition({ bucket: null }), false);
+    assert.equal(hasDecimatorPosition({ bucket: 0, roundStatus: 'closed' }), false);
+    assert.equal(hasDecimatorPosition({ bucket: 7, roundStatus: 'closed' }), true);
+  });
+
   test('seen receipts are scoped to the exact deployment', () => {
     const key = jackpotResolutionSeenKey('decimator', '0xAbC', 15);
     assert.equal(
@@ -117,6 +125,12 @@ test('a due Decimator replaces the primary jackpot action and opens the full whe
   const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 
   assert.match(resolutions, /primarySurface:\s*'jackpot'/);
+  assert.match(resolutions,
+    /const decUnseen = decHasPosition\s*&&\s*decimatorFinalIsNews/,
+    'an old global draw is not added to Pending for a player with no position');
+  assert.match(resolutions,
+    /const decWaiting = decHasPosition\s*&&\s*!decSeen/,
+    'the transition state is also limited to participating players');
   assert.match(resolutions, /subscribe\('app\.daySync'/,
     'the Decimator takeover rechecks immediately at the day boundary');
   assert.match(resolutions, /const viewed = getViewedAddress\(\)/,
@@ -124,6 +138,8 @@ test('a due Decimator replaces the primary jackpot action and opens the full whe
   assert.match(resolutions, /decWaiting[\s\S]*?state: this\.#busy === 'decimator' \|\| decWaiting \? 'busy' : 'ready'/,
     'a due Decimator holds the shared action while its indexed result catches up');
   assert.match(resolutions, /await openDecimatorDraw\(\{ level, player: this\.#address \}\)/);
+  assert.match(resolutions, /autoOpen:\s*!willWrite,[\s\S]{0,100}?primarySurface:\s*'jackpot'/,
+    'a view-only Decimator final honors the Pending Auto open preference');
   assert.match(resolutions, /new CustomEvent\('decimator:opened'/,
     'opening the takeover re-arms the ordinary jackpot underneath it');
   assert.match(resolutions,
@@ -134,8 +150,8 @@ test('a due Decimator replaces the primary jackpot action and opens the full whe
   assert.match(replay,
     /this\.#revealStateBeforeDecimator = null;[\s\S]{0,400}?this\.#syncSpinControlState\(\);/,
     'returning from Decimator recomputes the jackpot button instead of restoring stale processing');
-  assert.match(tray, /item\?\.primarySurface !== 'jackpot'/,
-    'the same Decimator action is not repeated in Pending');
+  assert.doesNotMatch(tray, /item\?\.primarySurface !== 'jackpot'/,
+    'Pending retains the Decimator as a fallback if its jackpot handoff is missed');
   assert.match(css, /\.decimator-draw-modal\s*\{[^}]*position:\s*fixed[^}]*inset:\s*0/s);
   assert.match(css, /@media \(max-width: 520px\)[\s\S]*?\.decimator-draw-modal__close/,
     'the takeover has an explicit phone treatment');

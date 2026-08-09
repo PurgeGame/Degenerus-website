@@ -20,7 +20,7 @@ import {
 } from '../app/records.js';
 import { displayToken } from '../app/scaling.js';
 import { TX_CONFIRMED_EVENT } from '../app/contracts.js';
-import { get, getActingAddress, getViewedAddress, subscribe } from '../app/store.js';
+import { get, getActingAddress, getViewedAddress, subscribe, update } from '../app/store.js';
 
 const POLL_MS = 15_000;
 
@@ -34,6 +34,35 @@ function group(value) {
   const [whole, fraction] = String(value ?? '').split('.');
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return fraction == null ? grouped : `${grouped}.${fraction}`;
+}
+
+/** Poker-chip-sized FLIP amount with at most two significant figures. */
+export function formatCompactBountyWei(value) {
+  let raw;
+  try { raw = BigInt(value ?? 0); } catch (_e) { return '—'; }
+  if (raw < 0n) raw = -raw;
+  const whole = raw / (10n ** 18n);
+  if (whole === 0n) return raw > 0n ? '<1' : '0';
+  const digits = whole.toString().length;
+  const quantum = digits > 2 ? 10n ** BigInt(digits - 2) : 1n;
+  const rounded = quantum > 1n
+    ? ((whole + (quantum / 2n)) / quantum) * quantum
+    : whole;
+  const units = [
+    [10n ** 15n, 'Q'],
+    [10n ** 12n, 'T'],
+    [10n ** 9n, 'B'],
+    [10n ** 6n, 'M'],
+    [10n ** 3n, 'K'],
+  ];
+  const unit = units.find(([threshold]) => rounded >= threshold);
+  if (!unit) return group(rounded.toString());
+  const [divisor, suffix] = unit;
+  const tenths = (rounded * 10n) / divisor;
+  if (tenths < 100n && tenths % 10n !== 0n) {
+    return `${tenths / 10n}.${tenths % 10n}${suffix}`;
+  }
+  return `${rounded / divisor}${suffix}`;
 }
 
 /** Escape for interpolation into innerHTML. Holder names are user-controlled. */
@@ -121,26 +150,42 @@ class AppRecordsRail extends HTMLElement {
     this.hidden = true;
     this.innerHTML = `
       <section class="records-rail" data-bind="records-shell" hidden aria-labelledby="records-rail-title">
-        <header class="records-rail__top">
-          <div class="records-rail__identity">
+        <details class="records-rail__disclosure">
+          <summary class="records-rail__summary" title="Show or hide full bounty details">
+          <span class="records-rail__identity">
             <span class="records-rail__crest" aria-hidden="true">
-              <img src="/whitepaper/flame-logo-split.svg" alt="">
+              <img src="/app/assets/biggest-bounty-emblem.png" alt="">
             </span>
             <span class="records-rail__identity-copy">
-              <span class="records-rail__eyebrow">4 ALL-TIME RECORDS · 1 SHARED PRIZE</span>
-              <h2 id="records-rail-title">THE BIGGEST BOUNTY</h2>
-              <span class="records-rail__rule">Beat a standing record by 20% to claim its live share.</span>
+              <span class="records-rail__eyebrow">4 ALL-TIME RECORDS</span>
+              <span class="records-rail__title" id="records-rail-title" role="heading" aria-level="2">
+                <span class="records-rail__title-name">THE BIGGEST</span>
+                <span class="records-rail__title-descriptor">BOUNTY</span>
+              </span>
             </span>
-          </div>
+          </span>
 
-          <article class="records-rail__pot" aria-label="Shared record bounty">
-            <span class="records-rail__pot-label">LIVE BOUNTY POOL</span>
+          <span class="records-rail__leaders" data-bind="records-leaders"
+                role="list" aria-label="The four current Biggest records"></span>
+
+          <span class="records-rail__pot" aria-label="Shared record bounty">
+            <span class="records-rail__pot-label">LIVE BOUNTY</span>
             <strong><b data-bind="records-pool">—</b><em>FLIP</em></strong>
-            <span class="records-rail__pot-growth"><b>+2,000 FLIP</b> every unbroken day</span>
-          </article>
-        </header>
+          </span>
 
-        <ol class="records-rail__cards" data-bind="records-cards" aria-label="The four all-time records"></ol>
+          <span class="records-rail__toggle" aria-hidden="true">
+            <span class="records-rail__chevron"></span>
+          </span>
+          </summary>
+
+          <div class="records-rail__expanded">
+            <div class="records-rail__expanded-intro">
+              <span class="records-rail__rule">Hit an open minimum or clear a standing record by 20% to collect its live share.</span>
+              <span class="records-rail__pot-growth"><b>+2,000 FLIP</b> every unbroken day</span>
+            </div>
+            <ol class="records-rail__cards" data-bind="records-cards" aria-label="Full details for the four all-time records"></ol>
+          </div>
+        </details>
       </section>
     `;
   }
@@ -156,6 +201,10 @@ class AppRecordsRail extends HTMLElement {
     }
     if (seq !== this.#seq) return;
     this.#state = state;
+    // One authoritative snapshot powers both the board and the qualifying
+    // glow on the four wager inputs. Publishing it here keeps every surface on
+    // the rail's immediate post-transaction refresh and 15-second live poll.
+    update('app.records', state);
     this.#viewedAddress = getViewedAddress?.() || getActingAddress?.() || null;
     this.#render();
 
@@ -181,6 +230,14 @@ class AppRecordsRail extends HTMLElement {
     const pool = this.querySelector('[data-bind="records-pool"]');
     if (pool) pool.textContent = group(displayToken(state.recordPoolWei, 0));
 
+    const leaders = this.querySelector('[data-bind="records-leaders"]');
+    if (leaders) {
+      leaders.innerHTML = '';
+      for (const record of state.records) {
+        leaders.appendChild(this.#renderLeader(record));
+      }
+    }
+
     const list = this.querySelector('[data-bind="records-cards"]');
     if (!list) return;
     list.innerHTML = '';
@@ -189,6 +246,50 @@ class AppRecordsRail extends HTMLElement {
     for (const record of state.records) {
       list.appendChild(this.#renderCard(record, viewed));
     }
+  }
+
+  #renderLeader(record) {
+    const item = document.createElement('span');
+    item.className = 'records-rail__leader';
+    item.dataset.kind = String(record.kind);
+    item.setAttribute('role', 'listitem');
+    if (!record.held) item.classList.add('is-open');
+
+    const value = formatRecordValue(record.kind, record.value);
+    const compactSuffix = record.meta.unit === 'flip' ? '' : value.suffix;
+    const profile = record.player ? this.#profiles.get(record.player) : null;
+    const holder = profile?.name || shortAddress(record.player);
+    const payoutWei = this.#recordPayoutWei(record);
+    const compactPayout = payoutWei == null ? '—' : formatCompactBountyWei(payoutWei);
+    item.title = record.held
+      ? `${record.meta.label}: ${value.amount} ${value.suffix}, held by ${holder}; bounty ${compactPayout} FLIP`
+      : `${record.meta.label}: unhit, minimum ${record.meta.floorText}; bounty ${compactPayout} FLIP`;
+    item.innerHTML = `
+      <span class="records-rail__target">
+        <span class="records-rail__bounty-sight"
+              aria-label="Current bounty ${escapeHtml(compactPayout)} FLIP"
+              title="Current payout for breaking this record">
+          <span class="records-rail__crosshair" aria-hidden="true"></span>
+          <b aria-hidden="true">${escapeHtml(compactPayout)}</b>
+        </span>
+        ${record.held
+          ? this.#portrait(record.player, profile)
+          : '<span class="records-rail__portrait records-rail__portrait--open" aria-hidden="true">?</span>'}
+      </span>
+      <span class="records-rail__leader-copy">
+        <span class="records-rail__leader-label">
+          <small>BIGGEST</small>
+          <b>${escapeHtml(record.meta.short)}</b>
+        </span>
+        <strong class="records-rail__leader-value">${record.held
+          ? `${escapeHtml(value.amount)}${compactSuffix
+            ? ` <em>${escapeHtml(compactSuffix)}</em>`
+            : ''}`
+          : `<i>MIN</i> ${escapeHtml(record.meta.floorText)}`}</strong>
+      </span>
+    `;
+    this.#wirePortraitFallback(item, record.player);
+    return item;
   }
 
   #renderCard(record, viewed) {
@@ -205,9 +306,9 @@ class AppRecordsRail extends HTMLElement {
     // What breaking this record pays right now. Null when the clock is unknown
     // (a row indexed before clockDay existed) — the card then shows the bar
     // alone rather than inventing a share.
-    const today = Number(get('app.daySync')?.day) || null;
+    const today = Number(get('app.daySync')?.day ?? get('app.lastDay')?.day) || null;
     const shareBps = accruedShareBps({ held: record.held, clockDay: record.clockDay, today });
-    const payoutWei = accruedPayoutWei(this.#state?.recordPoolWei, shareBps);
+    const payoutWei = this.#recordPayoutWei(record, today);
     const title = record.claimCount > 0
       ? `${record.meta.label} — paid out ${record.claimCount}×`
       : record.meta.label;
@@ -257,7 +358,7 @@ class AppRecordsRail extends HTMLElement {
         : `
           <div class="records-rail__metric records-rail__metric--open">
             <small>CURRENT RECORD</small>
-            <strong class="records-rail__mark records-rail__mark--open">OPEN</strong>
+            <strong class="records-rail__mark records-rail__mark--open">UNHIT</strong>
           </div>
           <div class="records-rail__holder records-rail__holder--open">
             <span class="records-rail__portrait records-rail__portrait--open" aria-hidden="true">?</span>
@@ -266,9 +367,17 @@ class AppRecordsRail extends HTMLElement {
               <b class="records-rail__holder-name">Nobody yet</b>
             </span>
           </div>
-          <div class="records-rail__open-callout">
-            <small>FIRST MARK TO SET</small>
-            <b>${escapeHtml(record.meta.floorText)}</b>
+          <div class="records-rail__stakes">
+            <span class="records-rail__pays">
+              <small>CURRENT BOUNTY</small>
+              <b>${payoutWei == null
+                ? '—'
+                : escapeHtml(group(displayToken(payoutWei, 0)))} <em>FLIP</em></b>
+            </span>
+            <span class="records-rail__beat">
+              <small>MIN TO HIT</small>
+              <b>${escapeHtml(record.meta.floorText)}</b>
+            </span>
           </div>
         `}
     `;
@@ -276,18 +385,33 @@ class AppRecordsRail extends HTMLElement {
     // A Discord avatar can 404 long after the record was set (deleted account,
     // rotated hash). Fall back to the monogram rather than leaving a broken
     // image in the hall of fame.
-    const portrait = item.querySelector('img.records-rail__portrait');
+    this.#wirePortraitFallback(item, record.player);
+    return item;
+  }
+
+  #recordPayoutWei(record, today = Number(
+    get('app.daySync')?.day ?? get('app.lastDay')?.day,
+  ) || null) {
+    const shareBps = accruedShareBps({
+      held: record.held,
+      clockDay: record.clockDay,
+      today,
+    });
+    return accruedPayoutWei(this.#state?.recordPoolWei, shareBps);
+  }
+
+  #wirePortraitFallback(root, address) {
+    const portrait = root?.querySelector?.('img.records-rail__portrait');
     if (portrait) {
       portrait.addEventListener('error', () => {
         const fallback = document.createElement('span');
         fallback.className = 'records-rail__portrait records-rail__portrait--monogram';
         fallback.setAttribute('aria-hidden', 'true');
-        fallback.style.setProperty('--portrait-hue', String(addressHue(record.player)));
-        fallback.textContent = addressMonogram(record.player);
+        fallback.style.setProperty('--portrait-hue', String(addressHue(address)));
+        fallback.textContent = addressMonogram(address);
         portrait.replaceWith(fallback);
       }, { once: true });
     }
-    return item;
   }
 
   #portrait(address, profile) {

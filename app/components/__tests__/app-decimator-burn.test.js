@@ -43,7 +43,7 @@ describe('<app-decimator-burn>', () => {
       { kind: 'boost', label: 'DEGEN 235', value: '+70.49%' },
       { kind: 'boost', label: 'EARLY WINDOW', value: '+20%' },
       { kind: 'malus', label: 'LATE BURN', value: '−10%' },
-      { kind: 'boon', label: 'BOON', value: '+50% WEIGHT' },
+      { kind: 'boon', label: 'BOON', value: '+50% SCORE' },
     ]);
     assert.equal(model.liveMultiplierBps, 18_412n);
   });
@@ -60,15 +60,27 @@ describe('<app-decimator-burn>', () => {
     assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
   });
 
-  test('renders raw burn, prize, weights, modifiers, and one exact burn action', () => {
+  test('renders raw burn, prize, player score, modifiers, and one exact burn action', () => {
     assert.match(COMPONENT, /data-bind="dbb-prize"/);
     assert.match(COMPONENT, /data-bind="dbb-burned"/);
-    assert.match(COMPONENT, /data-bind="dbb-total-weight"/);
-    assert.match(COMPONENT, /data-bind="dbb-player-weight"/);
+    assert.doesNotMatch(COMPONENT, /dbb-total-weight|TOTAL WEIGHT/);
+    assert.match(COMPONENT, /YOUR SCORE[\s\S]*data-bind="dbb-player-score"/);
+    assert.doesNotMatch(COMPONENT, /YOUR WEIGHT/);
+    assert.match(COMPONENT, /SCORE —/);
     assert.match(COMPONENT, /readDecimatorRawBurnTotal/);
     assert.equal((COMPONENT.match(/<button[^>]*data-bind="dbb-burn"/g) || []).length, 1);
     assert.match(SIDE_BETS, /querySelector\?\.\('app-decimator-burn'\)/,
       'the old side-bet entry yields when the full-width rail is mounted');
+  });
+
+  test('uses the full rail for legible primary values and controls', () => {
+    assert.match(CSS, /\.dbb\s*\{[^}]*min-height:\s*8\.8rem/s);
+    assert.match(CSS, /\.dbb-stat strong\s*\{[^}]*font:\s*950 clamp\(0\.88rem, 1\.35vw, 1\.08rem\)/s);
+    assert.match(CSS, /\.dbb-stat--score\s*\{[^}]*grid-column:\s*1 \/ -1/s);
+    assert.match(CSS, /\.dbb-stat--score strong\s*\{[^}]*font-size:\s*clamp\(1\.08rem, 1\.8vw, 1\.38rem\)/s);
+    assert.match(CSS, /\.dbb__input-control\s*\{[^}]*height:\s*3\.4rem/s);
+    assert.match(CSS, /@media \(max-width: 900px\)[\s\S]*\.dbb__entry\s*\{[^}]*grid-column:\s*1 \/ -1/s);
+    assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb__entry\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
   });
 
   test('has a forced-open visual demo with every modifier family active', () => {

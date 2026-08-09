@@ -97,22 +97,18 @@ export function isDecimatorResolutionLevel(level) {
 }
 
 /**
- * Should a finished, undismissed Decimator draw be surfaced?
+ * Should the latest finished, undismissed Decimator draw be surfaced?
  *
- * Only while the Decimator is the LIVE event. decimatorResolutionLevel() below
- * ends in a backward scan that always returns some past x5/x00 level, so a bare
- * `closed && !seen` test kept surfacing a level-15 draw at level 18 — no payout,
- * nothing to do, and a "view draw" button on a round four levels stale.
+ * A resolved draw is now a real fullscreen receipt, not an empty historical
+ * action. Keep that latest receipt available until the player opens/clears it;
+ * decimatorResolutionLevel() naturally replaces it when the next Decimator
+ * resolves. Claimable payouts remain independently actionable as before.
  *
- * This deliberately does NOT gate a claimable payout. That is the player's
- * money and stays visible whenever it exists, regardless of level.
- *
- * @param {{closed?: boolean, seen?: boolean, currentLevel?: number, windowOpen?: boolean}} args
+ * @param {{closed?: boolean, seen?: boolean}} args
  * @returns {boolean}
  */
-export function decimatorFinalIsNews({ closed, seen, currentLevel, windowOpen = false } = {}) {
-  if (!closed || seen) return false;
-  return isDecimatorResolutionLevel(currentLevel) || windowOpen === true;
+export function decimatorFinalIsNews({ closed, seen } = {}) {
+  return closed === true && seen !== true;
 }
 
 /**

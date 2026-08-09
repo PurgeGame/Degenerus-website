@@ -17,8 +17,20 @@ function _level(value) {
 
 export function currentPurchaseTicketLevel() {
   const indexed = _level(get('app.lastDay')?.roll1?.purchaseLevel);
-  if (indexed != null) return indexed;
-  return _level(activeTicketLevel(get('app.gameState')));
+  const contractPhase = get('app.poolBenchmarks')?.contractPhase;
+  const live = _level(activeTicketLevel(
+    get('app.gameState'),
+    contractPhase,
+  ));
+  // The resolved-day level stays the durable default. The only point at which
+  // a compressed cadence must outrank it is the sealed final RNG request,
+  // where new purchases already route to the next level on chain.
+  if (indexed != null) {
+    return contractPhase?.rngLocked === true && live != null
+      ? Math.max(indexed, live)
+      : indexed;
+  }
+  return live;
 }
 
 /**

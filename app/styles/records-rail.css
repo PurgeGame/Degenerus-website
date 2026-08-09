@@ -1,4 +1,4 @@
-/* The Biggest Bounty — four permanent records backed by one growing FLIP pool.
+/* The Biggest — a bounty on four permanent records backed by one FLIP pool.
  *
  * This follows the app's dark red / jackpot-gold visual language and gives each
  * fact one job: the hero owns the shared pool, while every card names the
@@ -46,56 +46,64 @@ body.layout-basic .records-rail::before {
   pointer-events: none;
 }
 
-body.layout-basic .records-rail__top {
+body.layout-basic .records-rail__disclosure {
+  display: block;
+}
+
+body.layout-basic .records-rail__summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.42fr);
-  align-items: stretch;
-  gap: 0.65rem;
-  padding: 0.78rem 0.85rem 0.68rem;
+  min-width: 0;
+  grid-template-columns: minmax(13rem, 0.78fr) minmax(28rem, 1.7fr) minmax(10rem, 0.5fr) 1.5rem;
+  align-items: center;
+  gap: 0.72rem;
+  padding: 0.68rem 0.78rem;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+body.layout-basic .records-rail__summary::-webkit-details-marker { display: none; }
+
+body.layout-basic .records-rail__summary:focus-visible {
+  outline: 2px solid rgba(var(--rec-yellow), 0.82);
+  outline-offset: -3px;
+}
+
+body.layout-basic .records-rail__disclosure[open] > .records-rail__summary {
+  border-bottom: 1px solid rgba(var(--rec-gold), 0.16);
 }
 
 body.layout-basic .records-rail__identity {
   display: grid;
-  grid-template-columns: 3.25rem minmax(0, 1fr);
+  grid-template-columns: 3.35rem minmax(0, 1fr);
   min-width: 0;
   align-items: center;
-  gap: 0.68rem;
-  padding: 0.18rem 0;
+  gap: 0.62rem;
+  padding: 0;
 }
 
 body.layout-basic .records-rail__crest {
   position: relative;
   display: grid;
-  width: 3.25rem;
-  height: 3.25rem;
+  width: 3.35rem;
+  height: 3.35rem;
   box-sizing: border-box;
   place-items: center;
-  border: 1px solid rgba(var(--rec-yellow), 0.54);
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 32%, rgba(var(--rec-red), 0.34), transparent 52%),
-    linear-gradient(145deg, rgba(74, 18, 8, 0.96), rgba(18, 8, 10, 0.96));
   box-shadow:
-    0 0 0 4px rgba(var(--rec-gold), 0.055),
-    0 8px 20px rgba(0, 0, 0, 0.42),
-    inset 0 1px rgba(255, 238, 191, 0.15);
-}
-
-body.layout-basic .records-rail__crest::after {
-  position: absolute;
-  inset: 0.35rem;
-  border: 1px solid rgba(var(--rec-gold), 0.13);
-  border-radius: inherit;
-  content: '';
+    0 10px 22px rgba(0, 0, 0, 0.34),
+    0 0 24px rgba(var(--rec-gold), 0.11);
 }
 
 body.layout-basic .records-rail__crest img {
   position: relative;
   z-index: 1;
-  width: 2.28rem;
-  height: 2.28rem;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 0 8px rgba(var(--rec-red), 0.32));
+  filter:
+    drop-shadow(0 7px 10px rgba(0, 0, 0, 0.44))
+    drop-shadow(0 0 8px rgba(var(--rec-red), 0.24));
 }
 
 body.layout-basic .records-rail__identity-copy {
@@ -105,25 +113,209 @@ body.layout-basic .records-rail__identity-copy {
 }
 
 body.layout-basic .records-rail__eyebrow {
-  color: rgba(var(--rec-yellow), 0.72);
-  font: 900 0.52rem/1.2 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.16em;
+  color: rgba(var(--rec-yellow), 0.78);
+  font: 900 clamp(0.5rem, 0.8vw, 0.58rem)/1.2 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.14em;
 }
 
-body.layout-basic .records-rail__identity h2 {
+body.layout-basic .records-rail__title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.48rem;
   margin: 0;
-  color: rgb(var(--rec-cream));
-  font: 1000 clamp(1.22rem, 2.9vw, 1.9rem)/0.98 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.045em;
+  font-family: "Inter", system-ui, sans-serif;
   text-shadow:
     0 0 22px rgba(var(--rec-gold), 0.18),
     0 5px 12px rgba(0, 0, 0, 0.55);
 }
 
+body.layout-basic .records-rail__title-name {
+  color: rgb(var(--rec-cream));
+  font-size: clamp(1.2rem, 2vw, 1.55rem);
+  font-weight: 1000;
+  letter-spacing: 0.035em;
+  line-height: 0.96;
+}
+
+body.layout-basic .records-rail__title-descriptor {
+  padding: 0.24rem 0.38rem 0.21rem;
+  border: 1px solid rgba(var(--rec-yellow), 0.48);
+  border-radius: 5px;
+  background: rgba(var(--rec-gold), 0.08);
+  color: rgb(var(--rec-yellow));
+  font-size: clamp(0.52rem, 0.8vw, 0.62rem);
+  font-weight: 950;
+  letter-spacing: 0.16em;
+  line-height: 1;
+}
+
 body.layout-basic .records-rail__rule {
-  color: rgba(var(--rec-cream), 0.6);
-  font: 650 clamp(0.62rem, 1.3vw, 0.72rem)/1.35 "Inter", system-ui, sans-serif;
+  max-width: 49rem;
+  color: rgba(var(--rec-cream), 0.7);
+  font: 650 clamp(0.68rem, 1.1vw, 0.78rem)/1.4 "Inter", system-ui, sans-serif;
   letter-spacing: 0.01em;
+}
+
+body.layout-basic .records-rail__leaders {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.42rem;
+}
+
+body.layout-basic .records-rail__leader {
+  display: grid;
+  min-width: 0;
+  min-height: 3.7rem;
+  grid-template-columns: 2.85rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.44rem;
+  padding: 0.28rem 0.46rem;
+  overflow: hidden;
+  border: 1px solid rgba(var(--rec-gold), 0.15);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+body.layout-basic .records-rail__leader .records-rail__portrait {
+  width: 2.05rem;
+  height: 2.05rem;
+}
+
+body.layout-basic .records-rail__target {
+  position: relative;
+  display: grid;
+  width: 2.85rem;
+  height: 3.2rem;
+  align-items: end;
+  justify-items: center;
+}
+
+body.layout-basic .records-rail__target::after {
+  position: absolute;
+  right: 0.15rem;
+  bottom: -0.02rem;
+  left: 0.15rem;
+  height: 1.55rem;
+  border-right: 1px solid rgba(var(--rec-yellow), 0.36);
+  border-left: 1px solid rgba(var(--rec-yellow), 0.36);
+  border-radius: 50%;
+  content: '';
+  pointer-events: none;
+}
+
+body.layout-basic .records-rail__bounty-sight {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 50%;
+  display: inline-flex;
+  min-width: 2.75rem;
+  height: 1.28rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0 0.25rem;
+  border: 1px solid rgba(var(--rec-yellow), 0.62);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(129, 29, 18, 0.98), rgba(45, 10, 10, 0.98));
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.48),
+    0 0 8px rgba(var(--rec-gold), 0.2);
+  color: #fff0b8;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+body.layout-basic .records-rail__bounty-sight > b {
+  font: 950 0.54rem/1 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+}
+
+body.layout-basic .records-rail__crosshair {
+  position: relative;
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 0.5rem;
+  border: 1px solid #fcd34d;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(69, 10, 10, 0.72);
+}
+
+body.layout-basic .records-rail__crosshair::before,
+body.layout-basic .records-rail__crosshair::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  background: #fcd34d;
+  content: '';
+  transform: translate(-50%, -50%);
+}
+
+body.layout-basic .records-rail__crosshair::before {
+  width: 0.72rem;
+  height: 1px;
+}
+
+body.layout-basic .records-rail__crosshair::after {
+  width: 1px;
+  height: 0.72rem;
+}
+
+body.layout-basic .records-rail__leader-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+body.layout-basic .records-rail__leader-label {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  gap: 0.08rem;
+}
+
+body.layout-basic .records-rail__leader-label > small {
+  color: rgba(var(--rec-yellow), 0.94);
+  font: 1000 clamp(0.56rem, 0.75vw, 0.64rem)/0.95 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 9px rgba(var(--rec-gold), 0.24);
+}
+
+body.layout-basic .records-rail__leader-label > b {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(var(--rec-cream), 0.56);
+  font: 850 0.53rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .records-rail__leader-value {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff0c7;
+  font: 950 clamp(0.7rem, 1vw, 0.82rem)/1.05 "Roboto Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .records-rail__leader-value :is(em, i) {
+  color: rgba(var(--rec-yellow), 0.76);
+  font: 900 0.46rem/1 "Inter", system-ui, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.05em;
+}
+
+body.layout-basic .records-rail__leader.is-open {
+  border-style: dashed;
+  background: rgba(var(--rec-gold), 0.035);
 }
 
 body.layout-basic .records-rail__pot {
@@ -132,8 +324,8 @@ body.layout-basic .records-rail__pot {
   min-width: 0;
   align-content: center;
   justify-items: end;
-  gap: 0.22rem;
-  padding: 0.58rem 0.76rem;
+  gap: 0.24rem;
+  padding: 0.58rem 0.7rem;
   overflow: hidden;
   border: 1px solid rgba(var(--rec-gold), 0.38);
   border-radius: 12px;
@@ -158,9 +350,9 @@ body.layout-basic .records-rail__pot::before {
 }
 
 body.layout-basic .records-rail__pot-label {
-  color: rgba(var(--rec-cream), 0.55);
-  font: 900 0.48rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.15em;
+  color: rgba(var(--rec-cream), 0.64);
+  font: 900 0.62rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em;
 }
 
 body.layout-basic .records-rail__pot strong {
@@ -170,7 +362,7 @@ body.layout-basic .records-rail__pot strong {
   justify-content: flex-end;
   gap: 0.4rem;
   color: #ffe6a3;
-  font: 1000 clamp(1.55rem, 3.2vw, 2.08rem)/0.98 "Roboto Mono", ui-monospace, monospace;
+  font: 1000 clamp(1.24rem, 2.1vw, 1.62rem)/0.98 "Roboto Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.045em;
   text-shadow: 0 0 18px rgba(var(--rec-gold), 0.27);
@@ -186,13 +378,13 @@ body.layout-basic .records-rail__pot strong b {
 
 body.layout-basic .records-rail__pot strong em {
   color: rgb(var(--rec-yellow));
-  font: 950 0.62rem/1 "Inter", system-ui, sans-serif;
+  font: 950 0.72rem/1 "Inter", system-ui, sans-serif;
   letter-spacing: 0.08em;
 }
 
 body.layout-basic .records-rail__pot-growth {
-  color: rgba(var(--rec-cream), 0.5);
-  font: 700 0.48rem/1.2 "Inter", system-ui, sans-serif;
+  color: rgba(var(--rec-cream), 0.58);
+  font: 700 0.62rem/1.25 "Inter", system-ui, sans-serif;
 }
 
 body.layout-basic .records-rail__pot-growth b {
@@ -200,13 +392,47 @@ body.layout-basic .records-rail__pot-growth b {
   font-weight: 900;
 }
 
+body.layout-basic .records-rail__toggle {
+  display: grid;
+  width: 1.5rem;
+  height: 2.5rem;
+  place-items: center;
+  color: rgba(var(--rec-yellow), 0.82);
+}
+
+body.layout-basic .records-rail__chevron {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform 160ms ease;
+}
+
+body.layout-basic .records-rail__disclosure[open] .records-rail__chevron {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+
+body.layout-basic .records-rail__expanded {
+  min-width: 0;
+}
+
+body.layout-basic .records-rail__expanded-intro {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.66rem 1rem 0.12rem;
+}
+
 body.layout-basic .records-rail__cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   min-width: 0;
   margin: 0;
-  padding: 0 0.85rem 0.85rem;
-  gap: 0.45rem;
+  padding: 0 1rem 1rem;
+  gap: 0.65rem;
   list-style: none;
 }
 
@@ -216,8 +442,8 @@ body.layout-basic .records-rail__card {
   min-width: 0;
   align-content: start;
   grid-template-rows: auto auto auto auto 1fr;
-  gap: 0.4rem;
-  padding: 0.6rem;
+  gap: 0.56rem;
+  padding: 0.78rem;
   overflow: hidden;
   border: 1px solid rgba(var(--rec-gold), 0.22);
   border-radius: 11px;
@@ -242,22 +468,23 @@ body.layout-basic .records-rail__card::before {
 body.layout-basic .records-rail__card-head {
   display: grid;
   min-width: 0;
-  grid-template-columns: 1.55rem minmax(0, 1fr) auto;
+  min-height: 2.25rem;
+  grid-template-columns: 1.8rem minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.34rem;
+  gap: 0.46rem;
 }
 
 body.layout-basic .records-rail__number {
   display: grid;
-  width: 1.55rem;
-  height: 1.55rem;
+  width: 1.8rem;
+  height: 1.8rem;
   box-sizing: border-box;
   place-items: center;
   border: 1px solid rgba(var(--rec-gold), 0.32);
   border-radius: 6px;
   background: rgba(var(--rec-gold), 0.07);
   color: rgba(var(--rec-yellow), 0.76);
-  font: 950 0.54rem/1 "Roboto Mono", ui-monospace, monospace;
+  font: 950 0.64rem/1 "Roboto Mono", ui-monospace, monospace;
 }
 
 body.layout-basic .records-rail__card-title {
@@ -268,30 +495,27 @@ body.layout-basic .records-rail__card-title {
 
 body.layout-basic .records-rail__metric > small,
 body.layout-basic .records-rail__holder-copy > small,
-body.layout-basic .records-rail__stakes small,
-body.layout-basic .records-rail__open-callout small {
-  color: rgba(var(--rec-cream), 0.48);
-  font: 850 0.42rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.11em;
+body.layout-basic .records-rail__stakes small {
+  color: rgba(var(--rec-cream), 0.58);
+  font: 850 0.54rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.095em;
 }
 
 body.layout-basic .records-rail__card-title > b {
-  overflow: hidden;
   color: rgba(var(--rec-cream), 0.9);
-  font: 950 clamp(0.6rem, 1.2vw, 0.72rem)/1.08 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.055em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font: 950 clamp(0.74rem, 1.25vw, 0.9rem)/1.08 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
 }
 
 body.layout-basic .records-rail__card-head i {
   flex: 0 0 auto;
-  padding: 0.18rem 0.25rem;
+  padding: 0.24rem 0.32rem;
   border: 1px solid rgba(var(--rec-yellow), 0.38);
   border-radius: 999px;
   background: rgba(var(--rec-gold), 0.08);
   color: #fcd34d;
-  font: 950 0.38rem/1 "Roboto Mono", ui-monospace, monospace;
+  font: 950 0.5rem/1 "Roboto Mono", ui-monospace, monospace;
   font-style: normal;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -300,8 +524,8 @@ body.layout-basic .records-rail__card-head i {
 body.layout-basic .records-rail__metric {
   display: grid;
   min-width: 0;
-  gap: 0.22rem;
-  padding: 0.5rem 0.55rem;
+  gap: 0.3rem;
+  padding: 0.62rem 0.68rem;
   border: 1px solid rgba(var(--rec-gold), 0.13);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.24);
@@ -314,7 +538,7 @@ body.layout-basic .records-rail__mark {
   gap: 0.32rem;
   overflow: hidden;
   color: #fff0c7;
-  font: 1000 clamp(0.94rem, 1.8vw, 1.22rem)/1 "Roboto Mono", ui-monospace, monospace;
+  font: 1000 clamp(1.08rem, 1.9vw, 1.42rem)/1 "Roboto Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.045em;
   text-overflow: ellipsis;
@@ -324,22 +548,22 @@ body.layout-basic .records-rail__mark {
 
 body.layout-basic .records-rail__mark em {
   color: rgba(var(--rec-yellow), 0.75);
-  font: 900 0.45rem/1 "Inter", system-ui, sans-serif;
+  font: 900 0.56rem/1 "Inter", system-ui, sans-serif;
   letter-spacing: 0.07em;
 }
 
 body.layout-basic .records-rail__holder {
   display: grid;
   min-width: 0;
-  grid-template-columns: 1.58rem minmax(0, 1fr);
+  grid-template-columns: 1.85rem minmax(0, 1fr);
   align-items: center;
-  gap: 0.38rem;
+  gap: 0.48rem;
 }
 
 body.layout-basic .records-rail__portrait {
   display: grid;
-  width: 1.58rem;
-  height: 1.58rem;
+  width: 1.85rem;
+  height: 1.85rem;
   box-sizing: border-box;
   place-items: center;
   overflow: hidden;
@@ -358,7 +582,7 @@ body.layout-basic .records-rail__portrait--monogram {
       hsl(var(--portrait-hue, 30) 42% 32%),
       hsl(calc(var(--portrait-hue, 30) + 40) 38% 15%));
   color: rgba(255, 244, 224, 0.88);
-  font: 1000 0.52rem/1 "Roboto Mono", ui-monospace, monospace;
+  font: 1000 0.62rem/1 "Roboto Mono", ui-monospace, monospace;
   letter-spacing: 0.02em;
 }
 
@@ -371,7 +595,7 @@ body.layout-basic .records-rail__holder-copy {
 body.layout-basic .records-rail__holder-name {
   overflow: hidden;
   color: rgba(var(--rec-cream), 0.78);
-  font: 850 0.58rem/1.1 "Inter", system-ui, sans-serif;
+  font: 850 0.7rem/1.15 "Inter", system-ui, sans-serif;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -380,8 +604,8 @@ body.layout-basic .records-rail__holder-name {
  * five-sixths of it; the bright end tick is the precise +20% target. */
 body.layout-basic .records-rail__track {
   position: relative;
-  height: 4px;
-  margin: 0.05rem 0;
+  height: 5px;
+  margin: 0.08rem 0;
   border-radius: 999px;
   background: rgba(var(--rec-red), 0.18);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.44);
@@ -417,21 +641,19 @@ body.layout-basic .records-rail__stakes {
 
 body.layout-basic .records-rail__beat,
 body.layout-basic .records-rail__pays {
-  display: flex;
+  display: grid;
   min-width: 0;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.38rem 0 0;
+  gap: 0.22rem;
+  padding: 0.5rem 0 0;
 }
 
 body.layout-basic .records-rail__beat > b,
 body.layout-basic .records-rail__pays > b {
   min-width: 0;
   overflow: hidden;
-  font: 950 0.65rem/1 "Roboto Mono", ui-monospace, monospace;
+  font: 950 clamp(0.72rem, 1.15vw, 0.84rem)/1.1 "Roboto Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -445,7 +667,7 @@ body.layout-basic .records-rail__pays > b {
 body.layout-basic .records-rail__beat em,
 body.layout-basic .records-rail__pays em {
   color: currentColor;
-  font: 850 0.42rem/1 "Inter", system-ui, sans-serif;
+  font: 850 0.5rem/1 "Inter", system-ui, sans-serif;
   font-style: normal;
   letter-spacing: 0.055em;
   opacity: 0.76;
@@ -467,26 +689,11 @@ body.layout-basic .records-rail__portrait--open {
   border-color: rgba(var(--rec-gold), 0.36);
   background: rgba(var(--rec-gold), 0.05);
   color: rgba(var(--rec-yellow), 0.52);
-  font: 1000 0.68rem/1 "Roboto Mono", ui-monospace, monospace;
+  font: 1000 0.78rem/1 "Roboto Mono", ui-monospace, monospace;
 }
 
 body.layout-basic .records-rail__holder--open .records-rail__holder-name {
   color: rgba(var(--rec-cream), 0.48);
-}
-
-body.layout-basic .records-rail__open-callout {
-  display: grid;
-  align-self: end;
-  gap: 0.32rem;
-  padding: 0.62rem 0.68rem;
-  border: 1px dashed rgba(var(--rec-yellow), 0.24);
-  border-radius: 8px;
-  background: rgba(var(--rec-gold), 0.045);
-}
-
-body.layout-basic .records-rail__open-callout b {
-  color: #fcd34d;
-  font: 850 0.64rem/1.25 "Inter", system-ui, sans-serif;
 }
 
 body.layout-basic .records-rail__card.is-open {
@@ -505,51 +712,157 @@ body.layout-basic .records-rail__card.is-you .records-rail__card-title > b::afte
   margin-left: 0.3rem;
   color: #fcd34d;
   content: '· YOU';
-  font-size: 0.52rem;
+  font-size: 0.6rem;
+}
+
+/* Live bounty qualification cue. The state comes from the same 15-second,
+ * post-transaction records snapshot as the board; shells glow so borderless
+ * inner fields still read as one deliberate control. */
+body.layout-basic :is(
+  .df-add-bet-dialog__value,
+  .deg-amount-shell,
+  .deg-spin-shell,
+  .app-decimator-panel .dec-input-group
+).is-bounty-trigger {
+  border-color: rgba(250, 204, 21, 0.92) !important;
+  box-shadow:
+    0 0 0 2px rgba(250, 204, 21, 0.14),
+    0 0 16px rgba(245, 166, 35, 0.48),
+    0 0 32px rgba(237, 14, 17, 0.18),
+    inset 0 0 12px rgba(250, 204, 21, 0.08) !important;
+  animation: records-bounty-input-glow 1.8s ease-in-out infinite;
+}
+
+body.layout-basic :is(
+  .df-add-bet-dialog__value input,
+  .deg-amount-input,
+  .deg-ticket-count-select,
+  .app-decimator-panel .dec-input
+).is-bounty-trigger {
+  color: #fff3b0 !important;
+  text-shadow: 0 0 9px rgba(250, 204, 21, 0.45);
+}
+
+body.layout-basic .df-add-bet-dialog__card.is-bounty-trigger {
+  border-color: rgba(250, 204, 21, 0.88);
+  box-shadow:
+    0 25px 75px rgba(0, 0, 0, 0.72),
+    0 0 30px rgba(245, 166, 35, 0.24),
+    inset 0 0 0 1px rgba(255, 243, 176, 0.08);
+}
+
+body.layout-basic .df-add-bet-dialog input[type="range"].is-bounty-trigger {
+  accent-color: #facc15;
+  filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.55));
+}
+
+body.layout-basic .df-add-bet-dialog .df-reverse-dialog__accept.is-bounty-trigger {
+  border-color: rgba(250, 204, 21, 0.82);
+  background: linear-gradient(180deg, #f59e0b, #b45309);
+  box-shadow: 0 0 18px rgba(250, 204, 21, 0.32);
+  color: #fffbea;
+}
+
+body.layout-basic .df-add-bet-dialog__bounty {
+  margin: 0.5rem 0 0;
+  padding: 0.42rem 0.5rem;
+  border: 1px solid rgba(250, 204, 21, 0.34);
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, rgba(245, 158, 11, 0.14), rgba(250, 204, 21, 0.07)),
+    rgba(0, 0, 0, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 243, 176, 0.08);
+  color: #fde68a;
+  font: 950 0.58rem/1.2 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.065em;
+  text-align: center;
+}
+
+body.layout-basic .df-add-bet-dialog__bounty[hidden] { display: none !important; }
+
+body.layout-basic .dec-flip-credit--bounty {
+  border-color: rgba(250, 204, 21, 0.58) !important;
+  background:
+    linear-gradient(180deg, rgba(250, 204, 21, 0.12), transparent 48%),
+    linear-gradient(100deg, rgba(18, 91, 49, 0.34), rgba(95, 55, 8, 0.38)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 243, 176, 0.12),
+    0 0 15px rgba(245, 166, 35, 0.18) !important;
+}
+
+body.layout-basic .dec-flip-credit--bounty > span { color: #fde68a; }
+body.layout-basic .dec-flip-credit--bounty > strong { color: #facc15; }
+
+@keyframes records-bounty-input-glow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-basic :is(
+    .df-add-bet-dialog__value,
+    .deg-amount-shell,
+    .deg-spin-shell,
+    .app-decimator-panel .dec-input-group
+  ).is-bounty-trigger { animation: none; }
 }
 
 @media (max-width: 930px) {
-  body.layout-basic .records-rail__top {
-    grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.55fr);
+  body.layout-basic .records-rail__summary {
+    grid-template-columns: minmax(0, 1fr) minmax(10rem, 0.42fr) 1.5rem;
+    grid-template-areas:
+      "identity pot toggle"
+      "leaders leaders leaders";
+  }
+
+  body.layout-basic .records-rail__identity { grid-area: identity; }
+  body.layout-basic .records-rail__leaders { grid-area: leaders; }
+  body.layout-basic .records-rail__pot { grid-area: pot; }
+  body.layout-basic .records-rail__toggle { grid-area: toggle; }
+
+  body.layout-basic .records-rail__leader {
+    padding-block: 0.34rem;
   }
 
   body.layout-basic .records-rail__cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  body.layout-basic .records-rail__card-title > b { font-size: 0.72rem; }
+  body.layout-basic .records-rail__card-title > b { font-size: 0.88rem; }
 }
 
 @media (max-width: 620px) {
-  body.layout-basic .records-rail__top {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.7rem;
-    padding: 0.85rem 0.85rem 0.72rem;
+  body.layout-basic .records-rail__summary {
+    grid-template-columns: minmax(0, 1fr) minmax(8.5rem, auto) 1.25rem;
+    gap: 0.56rem;
+    padding: 0.62rem 0.68rem;
   }
 
   body.layout-basic .records-rail__identity {
-    grid-template-columns: 3.2rem minmax(0, 1fr);
-    gap: 0.68rem;
+    grid-template-columns: 3rem minmax(0, 1fr);
+    gap: 0.54rem;
   }
 
-  body.layout-basic .records-rail__crest { width: 3.2rem; height: 3.2rem; }
-  body.layout-basic .records-rail__crest img { width: 2.25rem; height: 2.25rem; }
+  body.layout-basic .records-rail__crest { width: 3rem; height: 3rem; }
+
+  body.layout-basic .records-rail__leaders {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
   body.layout-basic .records-rail__pot {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: baseline;
-    justify-items: start;
-    column-gap: 0.65rem;
-    text-align: left;
+    padding-inline: 0.58rem;
   }
 
   body.layout-basic .records-rail__pot strong {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    align-self: center;
+    font-size: 1.2rem;
   }
 
-  body.layout-basic .records-rail__pot-growth { grid-column: 1; }
+  body.layout-basic .records-rail__expanded-intro {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.58rem 0.85rem 0.1rem;
+  }
 
   body.layout-basic .records-rail__cards {
     padding: 0 0.85rem 0.85rem;
@@ -557,23 +870,46 @@ body.layout-basic .records-rail__card.is-you .records-rail__card-title > b::afte
 }
 
 @media (max-width: 430px) {
-  body.layout-basic .records-rail__identity h2 { font-size: 1.22rem; }
-  body.layout-basic .records-rail__eyebrow { font-size: 0.45rem; }
+  body.layout-basic .records-rail__summary {
+    grid-template-columns: minmax(0, 1fr) 1.25rem;
+    grid-template-areas:
+      "identity toggle"
+      "pot pot"
+      "leaders leaders";
+  }
+
+  body.layout-basic .records-rail__identity {
+    grid-template-columns: 2.75rem minmax(0, 1fr);
+  }
+  body.layout-basic .records-rail__crest { width: 2.75rem; height: 2.75rem; }
+  body.layout-basic .records-rail__title-name { font-size: 1.2rem; }
+  body.layout-basic .records-rail__eyebrow { font-size: 0.48rem; }
 
   body.layout-basic .records-rail__pot {
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    text-align: left;
   }
 
   body.layout-basic .records-rail__pot strong {
-    grid-column: 1;
-    grid-row: auto;
-    justify-content: flex-start;
-    font-size: 1.7rem;
+    font-size: 1.25rem;
+  }
+
+  body.layout-basic .records-rail__leader {
+    grid-template-columns: 2.85rem minmax(0, 1fr);
+    gap: 0.38rem;
+    padding: 0.34rem 0.38rem;
+  }
+
+  body.layout-basic .records-rail__leader .records-rail__portrait {
+    width: 1.9rem;
+    height: 1.9rem;
   }
 
   body.layout-basic .records-rail__cards {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  body.layout-basic .records-rail__mark { font-size: 1.24rem; }
+  body.layout-basic .records-rail__mark { font-size: 1.32rem; }
 }

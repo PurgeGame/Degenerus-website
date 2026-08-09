@@ -212,9 +212,10 @@ describe('standalone Decimator draw replay', () => {
 
   test('page includes the complete top bucket rail, player score, and replay controls', () => {
     assert.match(html, /MIN DEGEN SCORE:/);
-    assert.match(html, /WINNING EFFECTIVE BURN/);
+    assert.match(html, /WINNING SCORE/);
     assert.match(html, /TOTAL FLIP BURNED/);
-    assert.match(html, /YOUR EFFECTIVE BURN/);
+    assert.match(html, /YOUR SCORE/);
+    assert.doesNotMatch(html, /EFFECTIVE BURN|TOTAL WEIGHT|YOUR WEIGHT/);
     assert.match(html, /data-bind="prize-pool"/);
     assert.match(html, /data-bind="hub-flip-label"/);
     assert.match(html, /data-bind="hub-flip-value"/);
@@ -239,8 +240,10 @@ describe('standalone Decimator draw replay', () => {
       'a locked player slice stops being described as hypothetical immediately');
     assert.match(drawSource, /this\.#resetView\(\);\s*this\.#showHubWinning\(0n\)/,
       'the hub switches from raw burn to a zeroed winning total as the draw starts');
-    assert.match(drawSource, /hub-flip-label'\)\.textContent = 'TOTAL WINNING FLIP'/,
-      'the active and completed draw identify the accumulated winning FLIP');
+    assert.match(drawSource, /hub-flip-label'\)\.textContent = 'TOTAL WINNING SCORE'/,
+      'the active and completed draw identify the accumulated winning score');
+    assert.match(drawSource, /hub-flip-unit'\)\.textContent = 'SCORE'/,
+      'the dynamic hub unit follows the score label');
     assert.match(drawSource, /hubOutput\.textContent = formatted/,
       'the hub winning total counts upward with the side-board score');
     assert.match(html, /REPLAY DRAW/);
@@ -281,7 +284,7 @@ describe('standalone Decimator draw replay', () => {
     assert.match(drawSource, /locked\.winningScore === 0n \? 'EMPTY'/,
       'a selected empty subbucket is explicit instead of looking like missing score data');
     assert.match(css, /@media \(max-width: 960px\)[\s\S]*?\.score-board\s*\{[^}]*repeat\(3, minmax\(0, 1fr\)\)/,
-      'payout, player burn, and winning effective burn form one organized stats row');
+      'payout, player score, and winning score form one organized stats row');
     assert.match(css, /@media \(max-width: 520px\)/);
     assert.match(css, /\.winner-pie__merge\s*\{[^}]*stroke-dasharray:\s*100/s,
       'locked pools expand into one complete annulus before the payout split');
@@ -300,5 +303,24 @@ describe('standalone Decimator draw replay', () => {
       'the full-screen app takeover has a dedicated compact layout');
     assert.match(drawSource, /sessionStorage\.getItem\(storageKey\)/,
       'the embedded wheel consumes the exact snapshot staged by the app');
+  });
+
+  test('embedded fullscreen draw fits its controls and expands the important results', () => {
+    assert.match(css, /@media \(min-width: 961px\) and \(min-height: 650px\)[\s\S]*?body\.is-embedded\s*\{[^}]*height:\s*100dvh[^}]*overflow:\s*hidden/s,
+      'desktop takeover owns one viewport instead of creating a clipped page');
+    assert.match(css, /body\.is-embedded \.draw-shell\s*\{[^}]*height:\s*100dvh[^}]*grid-template-rows:\s*auto auto minmax\(0, 1fr\)/s,
+      'header, score-group rail, and draw stage share the viewport explicitly');
+    assert.match(css, /body\.is-embedded \.wheel-column\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto/s,
+      'draw status, wheel, and replay controls all retain visible rows');
+    assert.match(css, /body\.is-embedded \.wheel-wrap\s*\{[^}]*calc\(100dvh - 15\.75rem\)[^}]*46rem/s,
+      'the wheel grows with the viewport while reserving room for its controls');
+    assert.match(css, /\.score-board:not\(\.has-winner-allocation\)\s*\{[^}]*repeat\(3, minmax\(0, 1fr\)\)/s,
+      'live payout, player score, and winning score use the full result rail');
+    assert.match(css, /\.score-board\.has-winner-allocation > \.score-player,[\s\S]*?\.score-effective\s*\{\s*display:\s*none/s,
+      'the final view removes only the two superseded score cards');
+    assert.doesNotMatch(css, /has-winner-allocation > :not\(\.winner-allocation\)/,
+      'the player payout remains visible beside the final allocation');
+    assert.match(css, /\.winner-legend__row\s*\{[^}]*min-height:\s*2\.85rem/s,
+      'winner identities and payouts are no longer packed into tiny rows');
   });
 });

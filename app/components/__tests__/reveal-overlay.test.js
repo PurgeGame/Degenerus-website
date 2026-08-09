@@ -454,6 +454,46 @@ describe('normalizeSequence', () => {
     assert.equal(revealTerminalActionLabel(seq), 'UNLUCKY');
   });
 
+  test('WWXRP with no real Luckbox prize is always UNLUCKY', () => {
+    const direct = normalizeSequence({
+      kind: 'lootbox',
+      legs: [
+        { legType: 'wwxrp', amount: 9n * 10n ** 18n },
+        {
+          legType: 'opened', futureLevel: 8, futureTickets: 42,
+          roundedUp: false, wholeTickets: 0, flip: 0n,
+        },
+      ],
+    });
+    assert.deepEqual(direct.cards.map((card) => card.type), ['wwxrp', 'tickets']);
+    assert.equal(direct.wwxrpOnly, true);
+    assert.equal(direct.unlucky, true);
+    assert.equal(revealTerminalActionLabel(direct), 'UNLUCKY');
+
+    const spin = normalizeSequence({
+      kind: 'lootbox',
+      legs: [{
+        legType: 'spin', spinType: 'wwxrp', payout: 2n,
+        reels: [{ playerTicket: 1n, resultTicket: 2n, score: 4 }],
+      }],
+    });
+    assert.equal(spin.wwxrpOnly, true);
+    assert.equal(spin.unlucky, true);
+    assert.equal(revealTerminalActionLabel(spin, { total: 2n, boxSpin: true }), 'UNLUCKY');
+  });
+
+  test('WWXRP beside a real Luckbox prize does not turn the whole reveal unlucky', () => {
+    const seq = normalizeSequence({
+      kind: 'lootbox',
+      legs: [
+        { legType: 'wwxrp', amount: 9n * 10n ** 18n },
+        { legType: 'opened', wholeTickets: 1, futureLevel: 8, flip: 0n },
+      ],
+    });
+    assert.equal(seq.wwxrpOnly, false);
+    assert.equal(seq.unlucky, false);
+  });
+
   test('generic resolutions distinguish a loss from an already-paid win', () => {
     const lost = normalizeSequence({
       kind: 'resolution',
@@ -991,8 +1031,8 @@ describe('normalizeSequence', () => {
       'a granted lootbox spin has no player stake to lose');
     assert.match(
       REVEAL_SRC,
-      /const celebrate = shouldCelebrateDegenerette\(board\)[\s\S]*?if \(celebrate\) \{[\s\S]*?sfxFanfare[\s\S]*?#celebrateWin[\s\S]*?\} else if \(sequence\.unlucky\) \{[\s\S]*?sfxNoWin/,
-      'fanfare follows net outcome and the loss sound is reserved for unlucky returns',
+      /const celebrate = !wwxrpOnly && shouldCelebrateDegenerette\(board\)[\s\S]*?if \(celebrate\) \{[\s\S]*?sfxFanfare[\s\S]*?#celebrateWin[\s\S]*?\} else if \(sequence\.unlucky\) \{[\s\S]*?sfxNoWin/,
+      'fanfare follows net outcome while a WWXRP-only box remains unlucky',
     );
   });
 
@@ -1184,6 +1224,19 @@ describe('buildBoxSpinBoard', () => {
       REVEAL_SRC,
       /rvl-survival-coin[\s\S]*?df-coin3d__inner[\s\S]*?board\.survived \? 'df-reveal-ending--win' : 'df-reveal-ending--loss'/,
       'survival reuses the normal truthful win/loss coin track without a reversal ending',
+    );
+    const survivalSource = REVEAL_SRC.slice(
+      REVEAL_SRC.indexOf('async #appendFullSpinSurvival'),
+      REVEAL_SRC.indexOf('async #finishFullSpinBoard'),
+    );
+    assert.match(survivalSource, /rvl-survival-coin-face/,
+      'survival uses one physical artwork surface');
+    assert.doesNotMatch(survivalSource, /appendCoinFaces\(/,
+      'the survival toss cannot expose a second compositor-owned coin face');
+    assert.match(
+      APP_CSS,
+      /@keyframes rvl-survival-face-track[\s\S]*?coinflip-face-red\.svg[\s\S]*?coinflip-face-eth\.svg/,
+      'the one surface alternates red and ETH artwork during the toss',
     );
     assert.doesNotMatch(REVEAL_SRC, /rvl-survival-(?:halo|shadow)/,
       'survival has no decorative circle around the real coin');
@@ -1441,7 +1494,7 @@ describe('reveal-overlay element', () => {
     const foilTicket = chart.querySelector('.rvl-foil-match__ticket--foil');
     assert.equal(
       foilTicket?.querySelector('.rvl-gamepiece-center')?.querySelector('img')?.src,
-      '/whitepaper/flame-center-silver.svg',
+      '/whitepaper/flame-center.svg',
       'the left ticket is visibly the earned foil rather than a second paper ticket',
     );
     assert.match(chart.querySelector('.rvl-foil-match__foot').textContent,
@@ -1856,8 +1909,8 @@ describe('reveal-overlay element', () => {
     );
     assert.ok(zone.querySelectorAll('.ticket-card--foil').every((ticket) => (
       ticket.querySelector('.ticket-card-center')?.querySelector('img')?.src
-        === '/whitepaper/flame-center-silver.svg'
-    )), 'every revealed foil ticket uses the dedicated silver flame asset');
+        === '/whitepaper/flame-center.svg'
+    )), 'every revealed foil ticket uses the shipped flame with its CSS silver treatment');
     assert.match(
       APP_CSS,
       /\.ticket-card--foil \.trait-quadrant:not\(\.trait-quadrant--gold\)\s*\{[^}]*linear-gradient\([^}]*#f4f7f9[^}]*#66727c/s,
@@ -2859,7 +2912,14 @@ describe('reveal-overlay element', () => {
     const animatedCoin = survival.querySelector('.rvl-survival-coin');
     assert.equal(animatedCoin?.hidden, true);
     assert.equal(animatedCoin?.style?.display, 'none',
-      'the transformed coin is compositor-hidden before the preloaded static face appears');
+      'the transformed red rotor is compositor-hidden before the static face appears');
+    assert.match(REVEAL_SRC, /coin\.remove\?\.\(\);/,
+      'a real browser also detaches the stale rotor from the settled result');
+    assert.match(
+      APP_CSS,
+      /\.rvl-survival-coin\[hidden\]\s*\{\s*display:\s*none !important;/,
+      'the hidden fallback also beats the rotor display rule',
+    );
     assert.match(survival.textContent, /SURVIVED/);
     const history = el.querySelectorAll('.rvl-dgn-history-chip');
     assert.ok(history[0].classList.contains('is-win'));
@@ -3256,8 +3316,9 @@ describe('reveal-overlay element', () => {
       const payoutMeter = stage.querySelector('.rvl-box-payout-meter');
       assert.equal(payoutMeter.hidden, false);
       assert.match(payoutMeter.textContent, /PAYOUT2 WWXRPFINAL PAYOUT/);
-      assert.equal(cta.textContent, 'TAKE THE WIN',
-        'the completed reel and currency remain until acknowledged');
+      assert.match(stage.querySelector('.rvl-spin-total').textContent, /2 WWXRP · UNLUCKY/);
+      assert.equal(cta.textContent, 'UNLUCKY',
+        'WWXRP with no other Luckbox prize never becomes TAKE THE WIN');
 
       cta.dispatchEvent({ type: 'click', stopPropagation() {} });
       await tick();

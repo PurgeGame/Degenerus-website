@@ -16,6 +16,7 @@ const {
   growthLinePercent,
   poolProgressModel,
   jackpotPoolModel,
+  jackpotCadenceModel,
   jackpotDrawCounter,
   jackpotPrizePoolWei,
   phaseStripModel,
@@ -189,6 +190,33 @@ describe('jackpot depletion model', () => {
     assert.equal(compressed.drawStart, 2);
     assert.equal(compressed.drawEnd, 3);
     assert.equal(compressed.maxWinWei, 8_960n);
+    assert.equal(compressed.physicalDraw, 2);
+    assert.equal(compressed.physicalDrawCount, 3);
+  });
+
+  test('physical cadence names 5-day, 3-day, and 1-day jackpots honestly', () => {
+    assert.deepEqual(
+      [0, 1, 2, 3, 4].map((counter) => jackpotCadenceModel({ counter }).drawNumber),
+      [1, 2, 3, 4, 5],
+    );
+    assert.deepEqual(
+      [0, 1, 3].map((counter) => jackpotCadenceModel({ counter, compressedFlag: 1 }).drawNumber),
+      [1, 2, 3],
+    );
+    assert.deepEqual(jackpotCadenceModel({ counter: 3, compressedFlag: 1 }), {
+      drawNumber: 3,
+      drawCount: 3,
+      logicalStart: 4,
+      logicalEnd: 5,
+      step: 2,
+    });
+    assert.deepEqual(jackpotCadenceModel({ counter: 0, compressedFlag: 2 }), {
+      drawNumber: 1,
+      drawCount: 1,
+      logicalStart: 1,
+      logicalEnd: 5,
+      step: 5,
+    });
   });
 });
 
@@ -216,16 +244,28 @@ describe('phase strip copy', () => {
     assert.deepEqual(phaseStripModel({
       gameState: { level: 37, phase: 'JACKPOT', jackpotPhaseFlag: true, jackpotCounter: 3 },
     }), {
-      jackpot: true, level: 37, day: 4, dayLabel: 'JACKPOT DAY 4',
+      jackpot: true,
+      level: 37,
+      day: 4,
+      dayCap: 5,
+      logicalStart: 4,
+      logicalEnd: 4,
+      dayLabel: 'JACKPOT DRAW 4 OF 5',
     });
   });
 
-  test('a compressed final draw is labelled day 5 whenever it says GRAND PRIZE', () => {
+  test('a compressed final draw is labelled physical draw 3 of 3', () => {
     assert.deepEqual(phaseStripModel({
       gameState: { level: 38, phase: 'JACKPOT', jackpotPhaseFlag: true, jackpotCounter: 0 },
       contractPhase: { jackpot: true, day: 3, compressedFlag: 1 },
     }), {
-      jackpot: true, level: 38, day: 5, dayLabel: 'JACKPOT DAY 5',
+      jackpot: true,
+      level: 38,
+      day: 3,
+      dayCap: 3,
+      logicalStart: 4,
+      logicalEnd: 5,
+      dayLabel: 'JACKPOT DRAW 3 OF 3',
     });
     assert.equal(jackpotPoolModel({
       currentWei: 100_000n,
@@ -235,12 +275,33 @@ describe('phase strip copy', () => {
     }).finalDraw, true);
   });
 
+  test('a turbo jackpot is one physical draw covering all five logical days', () => {
+    assert.deepEqual(phaseStripModel({
+      gameState: { level: 39, phase: 'JACKPOT', jackpotPhaseFlag: true, jackpotCounter: 0 },
+      contractPhase: { jackpot: true, day: 0, compressedFlag: 2 },
+    }), {
+      jackpot: true,
+      level: 39,
+      day: 1,
+      dayCap: 1,
+      logicalStart: 1,
+      logicalEnd: 5,
+      dayLabel: 'JACKPOT DRAW 1 OF 1',
+    });
+  });
+
   test('contract phase wins when the indexer briefly reports the opposite phase', () => {
     assert.deepEqual(phaseStripModel({
       gameState: { level: 37, phase: 'PURCHASE', jackpotPhaseFlag: false, jackpotCounter: 0 },
       contractPhase: { jackpot: true, day: 2 },
     }), {
-      jackpot: true, level: 37, day: 3, dayLabel: 'JACKPOT DAY 3',
+      jackpot: true,
+      level: 37,
+      day: 3,
+      dayCap: 5,
+      logicalStart: 3,
+      logicalEnd: 3,
+      dayLabel: 'JACKPOT DRAW 3 OF 5',
     });
     assert.deepEqual(phaseStripModel({
       gameState: { level: 37, phase: 'JACKPOT', jackpotPhaseFlag: true, jackpotCounter: 4 },
@@ -427,7 +488,7 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
       'the enlarged prize pool occupies the middle slot');
     assert.match(component, /pool-progress__jackpot-pool-label">LEVEL <strong data-el="pool-jackpot-level">—<\/strong> PRIZE POOL :/);
     assert.match(component, /JACKPOT PHASE/);
-    assert.match(component, /DAY <strong data-el="pool-jackpot-day">—\/5<\/strong>/);
+    assert.match(component, /DRAW <strong data-el="pool-jackpot-day">—\/—<\/strong>/);
     assert.match(component, /WIN UP TO/);
     assert.match(component, /model\.finalDraw \? 'GRAND PRIZE:' : 'WIN UP TO'/,
       'the deterministic final-day share is presented as the grand prize');

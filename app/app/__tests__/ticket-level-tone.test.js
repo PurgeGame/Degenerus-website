@@ -39,6 +39,24 @@ describe('ticket level RPG tones', () => {
     assert.equal(currentPurchaseTicketLevel(), 40);
   });
 
+  test('a direct compressed final lock advances past the resolved-day fallback', () => {
+    update('app.gameState', {
+      level: 25,
+      jackpotPhaseFlag: true,
+      rngLockedFlag: false,
+      jackpotCounter: 0,
+    });
+    update('app.lastDay', { roll1: { purchaseLevel: 25 } });
+    update('app.poolBenchmarks', { contractPhase: {
+      level: 25,
+      jackpot: true,
+      rngLocked: true,
+      day: 3,
+      compressedFlag: 1,
+    } });
+    assert.equal(currentPurchaseTicketLevel(), 26);
+  });
+
   test('marks an existing level node without disturbing its component classes', () => {
     const classes = new Set(['rvl-pack-level']);
     const attrs = {};

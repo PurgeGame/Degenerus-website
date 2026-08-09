@@ -13,9 +13,12 @@ const {
   accruedShareBps,
   accruedPayoutWei,
   barToBeat,
+  candidateRecordPayoutWei,
+  candidateClaimsRecord,
   fetchRecords,
   formatRecordValue,
   normalizeRecords,
+  recordClaimTarget,
   __resetRecordsReadersForTest,
   __setRecordsReadersForTest,
   shortAddress,
@@ -27,7 +30,11 @@ const {
   RECORD_KIND_BUY,
 } = await import('../../app/records.js');
 
-const { addressMonogram, addressHue } = await import('../app-records-rail.js');
+const {
+  addressMonogram,
+  addressHue,
+  formatCompactBountyWei,
+} = await import('../app-records-rail.js');
 
 const INDEX = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 const CSS = readFileSync(new URL('../../styles/records-rail.css', import.meta.url), 'utf8');
@@ -61,6 +68,24 @@ describe('record claim bar', () => {
     assert.equal(barToBeat(null), 0n);
     assert.equal(barToBeat('nonsense'), 0n);
   });
+
+  test('the live trigger uses the open floor, then the bounty-paying +20% bar', () => {
+    const open = normalizeRecords({ records: [] });
+    assert.equal(recordClaimTarget(open, RECORD_KIND_FLIP), 200_000n * FLIP);
+    assert.equal(candidateClaimsRecord(open, RECORD_KIND_FLIP, 199_999n * FLIP), false);
+    assert.equal(candidateClaimsRecord(open, RECORD_KIND_FLIP, 200_000n * FLIP), true);
+
+    const held = normalizeRecords({ records: [{
+      kind: RECORD_KIND_BUY,
+      player: '0xabc',
+      value: '101',
+      barToBeat: '122',
+    }] });
+    assert.equal(recordClaimTarget(held, RECORD_KIND_BUY), 122n);
+    assert.equal(candidateClaimsRecord(held, RECORD_KIND_BUY, 121n), false);
+    assert.equal(candidateClaimsRecord(held, RECORD_KIND_BUY, 122n), true);
+    assert.equal(recordClaimTarget(null, RECORD_KIND_BUY), null);
+  });
 });
 
 describe('record units are never interchangeable', () => {
@@ -83,6 +108,14 @@ describe('record units are never interchangeable', () => {
     assert.equal(suffix, 'TICKETS');
   });
 
+  test('compact poker bounties keep roughly two significant figures', () => {
+    assert.equal(formatCompactBountyWei(987n * FLIP), '990');
+    assert.equal(formatCompactBountyWei(1_234n * FLIP), '1.2K');
+    assert.equal(formatCompactBountyWei(12_345n * FLIP), '12K');
+    assert.equal(formatCompactBountyWei(987_654n * FLIP), '990K');
+    assert.equal(formatCompactBountyWei(999_999n * FLIP), '1M');
+  });
+
   test('every kind has presentation facts and a stated entry floor', () => {
     assert.equal(RECORD_KINDS.length, 4);
     for (const meta of RECORD_KINDS) {
@@ -94,6 +127,12 @@ describe('record units are never interchangeable', () => {
       'BIGGEST DEGENERETTE',
       'BIGGEST LUCKBOX',
       'BIGGEST DEGEN',
+    ]);
+    assert.deepEqual(RECORD_KINDS.map((meta) => meta.floorText), [
+      '200,000 FLIP',
+      '1 ETH',
+      '5 ETH',
+      '100 TICKETS',
     ]);
     assert.equal(recordKindMeta(9), null);
   });
@@ -200,11 +239,11 @@ describe('accrued claim share', () => {
     assert.equal(accruedShareBps({ held: true, clockDay: 90, today: 40 }), 500);
   });
 
-  test('⛔ an UNSET record is always zero, never the saturated ceiling', () => {
-    // The bootstrap branch (Coinflip.sol:863-867) pays nothing, but its clock is
-    // unstamped — reading day 0 would drive the curve straight to 7500.
-    assert.equal(accruedShareBps({ held: false, clockDay: null, today: 400 }), 0);
-    assert.equal(accruedShareBps({ held: false, clockDay: 0, today: 400 }), 0);
+  test('an unhit record accrues from its constructor clock on deploy day 1', () => {
+    assert.equal(accruedShareBps({ held: false, clockDay: null, today: 1 }), 500);
+    assert.equal(accruedShareBps({ held: false, clockDay: null, today: 3 }), 600);
+    assert.equal(accruedShareBps({ held: false, clockDay: null, today: 400 }), 7500);
+    assert.equal(accruedShareBps({ held: false, clockDay: 0, today: 3 }), 600);
   });
 
   test('is unknown, not invented, when the clock was never indexed', () => {
@@ -217,6 +256,49 @@ describe('accrued claim share', () => {
     const FLIP = 10n ** 18n;
     assert.equal(accruedPayoutWei(48_000n * FLIP, 2_500), 12_000n * FLIP);
     assert.equal(accruedPayoutWei(48_000n * FLIP, 0), 0n);
+  });
+
+  test('quotes a bounty only when the candidate clears the live record bar', () => {
+    const state = normalizeRecords({
+      recordPool: String(100_000n * FLIP),
+      records: [{
+        kind: RECORD_KIND_BUY,
+        player: '0xabc',
+        value: '100',
+        barToBeat: '120',
+        clockDay: 10,
+      }],
+    });
+    assert.equal(candidateRecordPayoutWei({
+      state,
+      kind: RECORD_KIND_BUY,
+      candidate: 119n,
+      today: 20,
+    }), 0n);
+    assert.equal(candidateRecordPayoutWei({
+      state,
+      kind: RECORD_KIND_BUY,
+      candidate: 120n,
+      today: 20,
+    }), 10_000n * FLIP);
+  });
+
+  test('does not invent a qualifying payout when a held record clock is unknown', () => {
+    const state = normalizeRecords({
+      recordPool: String(100_000n * FLIP),
+      records: [{
+        kind: RECORD_KIND_BUY,
+        player: '0xabc',
+        value: '100',
+        barToBeat: '120',
+      }],
+    });
+    assert.equal(candidateRecordPayoutWei({
+      state,
+      kind: RECORD_KIND_BUY,
+      candidate: 120n,
+      today: 20,
+    }), null);
   });
 
   test('normalizeRecords keeps a null clock null rather than day zero', () => {
@@ -256,11 +338,42 @@ describe('holder identity', () => {
 
 describe('rail wiring', () => {
   test('presents the board as The Biggest Bounty with explicit data labels', () => {
-    assert.match(COMPONENT, /THE BIGGEST BOUNTY/);
-    for (const label of ['CURRENT RECORD', 'HELD BY', 'TARGET TO CLAIM', 'PAYOUT NOW']) {
+    assert.match(COMPONENT, /records-rail__title-name">THE BIGGEST/);
+    assert.match(COMPONENT, /records-rail__title-descriptor">BOUNTY/);
+    assert.match(COMPONENT, /4 ALL-TIME RECORDS/);
+    for (const label of [
+      'CURRENT RECORD', 'HELD BY', 'TARGET TO CLAIM', 'PAYOUT NOW',
+      'CURRENT BOUNTY', 'MIN TO HIT',
+    ]) {
       assert.ok(COMPONENT.includes(label), `missing readable label: ${label}`);
     }
     assert.doesNotMatch(COMPONENT, />THE RECORDS</);
+  });
+
+  test('collapses to the live pool plus four portrait-and-amount leaders', () => {
+    assert.match(COMPONENT, /<details class="records-rail__disclosure">/);
+    assert.match(COMPONENT, /<summary class="records-rail__summary"/);
+    assert.match(COMPONENT, /data-bind="records-leaders"/);
+    assert.match(COMPONENT, /leaders\.appendChild\(this\.#renderLeader\(record\)\)/);
+    assert.match(COMPONENT, /this\.#portrait\(record\.player, profile\)/);
+    assert.match(COMPONENT, /record\.meta\.short/);
+    assert.match(COMPONENT, /value\.amount/);
+    assert.match(COMPONENT, /record\.meta\.unit === 'flip' \? '' : value\.suffix/,
+      'the FLIP record does not repeat its already-labeled currency');
+    assert.match(COMPONENT, /records-rail__bounty-sight/);
+    assert.match(COMPONENT, /records-rail__leader-label[\s\S]*?<small>BIGGEST<\/small>[\s\S]*?record\.meta\.short/);
+    assert.match(CSS, /records-rail__leader-label > small\s*\{[^}]*clamp\(0\.56rem, 0\.75vw, 0\.64rem\)/s,
+      'BIGGEST is the dominant, readable line in every compact record bubble');
+    assert.doesNotMatch(COMPONENT, /records-rail__bounty-sight-copy/,
+      'BIGGEST belongs with the record name, not inside its payout bubble');
+    assert.match(COMPONENT, /records-rail__crosshair/);
+    assert.match(COMPONENT, /formatCompactBountyWei\(payoutWei\)/);
+    assert.match(CSS, /\.records-rail__crosshair::before/);
+    assert.match(CSS, /\.records-rail__target\s*\{[^}]*position:\s*relative/s);
+    assert.match(COMPONENT, /records-rail__expanded/);
+    assert.doesNotMatch(COMPONENT, /<details class="records-rail__disclosure" open/,
+      'full details should start collapsed');
+    assert.match(CSS, /records-rail__disclosure\[open\].*records-rail__chevron/s);
   });
 
   test('is mounted under the play grid and above the deity desk', () => {

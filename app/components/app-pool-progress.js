@@ -201,6 +201,38 @@ function _jackpotStep(counter, compressedFlag) {
 }
 
 /**
+ * Map the contract's five LOGICAL jackpot-day counter onto physical draws.
+ *
+ * Normal:     counters 0,1,2,3,4 -> draws 1..5
+ * Compressed: counters 0,1,3     -> draws 1..3
+ * Turbo:      counter 0          -> draw 1/1
+ *
+ * The logical range remains available for payout copy, but it must never be
+ * presented as the number of real-world days a player has waited.
+ */
+export function jackpotCadenceModel({ counter = 0, compressedFlag = 0 } = {}) {
+  const completed = Math.max(0, Math.min(JACKPOT_DAY_CAP, Number(counter) || 0));
+  const compressed = Number(compressedFlag) || 0;
+  const starts = compressed === 2
+    ? [0]
+    : compressed === 1
+      ? [0, 1, 3]
+      : [0, 1, 2, 3, 4];
+  let drawNumber = 1;
+  for (let index = 0; index < starts.length; index += 1) {
+    if (completed >= starts[index]) drawNumber = index + 1;
+  }
+  const step = _jackpotStep(completed, compressed);
+  return {
+    drawNumber: Math.min(starts.length, drawNumber),
+    drawCount: starts.length,
+    logicalStart: Math.min(JACKPOT_DAY_CAP, completed + 1),
+    logicalEnd: Math.min(JACKPOT_DAY_CAP, completed + step),
+    step,
+  };
+}
+
+/**
  * Pure jackpot-phase model.
  *
  * Non-final draws can take at most 14% of the remaining current pool (28% on
@@ -215,10 +247,11 @@ export function jackpotPoolModel({ currentWei, baselineWei, counter = 0, compres
   const suppliedBaseline = _wei(baselineWei);
   const completed = Math.max(0, Math.min(JACKPOT_DAY_CAP, Number(counter) || 0));
   const compressed = Number(compressedFlag) || 0;
-  const step = _jackpotStep(completed, compressed);
+  const cadence = jackpotCadenceModel({ counter: completed, compressedFlag: compressed });
+  const step = cadence.step;
   const finalDraw = completed + step >= JACKPOT_DAY_CAP;
-  const drawStart = Math.min(JACKPOT_DAY_CAP, completed + 1);
-  const drawEnd = Math.min(JACKPOT_DAY_CAP, completed + step);
+  const drawStart = cadence.logicalStart;
+  const drawEnd = cadence.logicalEnd;
   const baseline = [current, suppliedBaseline]
     .filter((value) => value != null && value > 0n)
     .reduce((max, value) => value > max ? value : max, 0n);
@@ -246,6 +279,8 @@ export function jackpotPoolModel({ currentWei, baselineWei, counter = 0, compres
     step,
     drawStart,
     drawEnd,
+    physicalDraw: cadence.drawNumber,
+    physicalDrawCount: cadence.drawCount,
     remainingPercent,
     fillPercent: _clampPercent(remainingPercent),
   };
@@ -342,22 +377,18 @@ export function phaseStripModel({
       gameState: state,
       goldRush,
     });
-    // A compressed physical draw can consume more than one logical jackpot
-    // day. Label the draw by the day it resolves through, so a compressed
-    // final draw is DAY 5/5 whenever the payout model correctly says GRAND
-    // PRIZE (instead of the contradictory DAY 4/5 + GRAND PRIZE pairing).
     const compressedFlag = contractPhase?.compressedFlag
       ?? state?.compressedJackpotFlag
       ?? 0;
-    const drawDay = Math.min(
-      JACKPOT_DAY_CAP,
-      counter + _jackpotStep(counter, Number(compressedFlag) || 0),
-    );
+    const cadence = jackpotCadenceModel({ counter, compressedFlag });
     return {
       jackpot: true,
       level: Number.isInteger(level) && level >= 0 ? level : null,
-      day: drawDay,
-      dayLabel: `JACKPOT DAY ${drawDay}`,
+      day: cadence.drawNumber,
+      dayCap: cadence.drawCount,
+      logicalStart: cadence.logicalStart,
+      logicalEnd: cadence.logicalEnd,
+      dayLabel: `JACKPOT DRAW ${cadence.drawNumber} OF ${cadence.drawCount}`,
     };
   }
 
@@ -369,7 +400,10 @@ export function phaseStripModel({
       phaseTransitionActive: false,
     }
     : state;
-  const level = activeTicketLevel(effectiveState);
+  const level = activeTicketLevel(
+    effectiveState,
+    hasContractPhase ? contractPhase : null,
+  );
   const clockLevel = Number(phaseClock?.level);
   const clockDay = Number(phaseClock?.dayInPhase);
   const clockPhase = String(phaseClock?.phase || '').toUpperCase();
@@ -512,7 +546,7 @@ class AppPoolProgress extends HTMLElement {
           <span class="pool-progress__jackpot-context">
             <strong class="pool-progress__jackpot-phase pool-progress__jackpot-phase--full">JACKPOT PHASE</strong>
             <strong class="pool-progress__jackpot-phase pool-progress__jackpot-phase--compact">JP</strong>
-            <span>DAY <strong data-el="pool-jackpot-day">—/5</strong></span>
+            <span>DRAW <strong data-el="pool-jackpot-day">—/—</strong></span>
           </span>
           <span class="pool-progress__jackpot-pool">
             <span class="pool-progress__jackpot-pool-label">LEVEL <strong data-el="pool-jackpot-level">—</strong> PRIZE POOL :</span>
@@ -696,15 +730,15 @@ class AppPoolProgress extends HTMLElement {
       }
       this.#set('pool-jackpot-level', phase.level ?? '—');
       this.#set('pool-jackpot-pool', _formatWholeEth(fixedPoolWei));
-      this.#set('pool-jackpot-day', `${phase.day ?? '—'}/${JACKPOT_DAY_CAP}`);
+      this.#set('pool-jackpot-day', `${phase.day ?? '—'}/${phase.dayCap ?? '—'}`);
       this.#set('pool-jackpot-win-label-full', model.finalDraw ? 'GRAND PRIZE:' : 'WIN UP TO');
       this.#set('pool-jackpot-win-label-compact', model.finalDraw ? 'GRAND PRIZE:' : 'UP TO');
       this.#set('pool-jackpot-win', _formatWholeEth(model.maxWinWei));
       this.#set('pool-status', model.maxWinWei == null
         ? 'Loading jackpot pool'
         : model.finalDraw
-          ? `Level ${phase.level ?? '—'} final jackpot day; grand prize ${_formatWholeEth(model.maxWinWei)} ETH`
-          : `Level ${phase.level ?? '—'} jackpot phase, day ${phase.day ?? '—'} of ${JACKPOT_DAY_CAP}; maximum next win ${_formatWholeEth(model.maxWinWei)} ETH`);
+          ? `Level ${phase.level ?? '—'} final jackpot draw ${phase.day ?? '—'} of ${phase.dayCap ?? '—'}${model.drawStart === model.drawEnd ? '' : ` (logical days ${model.drawStart}–${model.drawEnd})`}; grand prize ${_formatWholeEth(model.maxWinWei)} ETH`
+          : `Level ${phase.level ?? '—'} jackpot draw ${phase.day ?? '—'} of ${phase.dayCap ?? '—'}${model.drawStart === model.drawEnd ? '' : ` (logical days ${model.drawStart}–${model.drawEnd})`}; maximum next win ${_formatWholeEth(model.maxWinWei)} ETH`);
       return;
     }
 

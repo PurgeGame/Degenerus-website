@@ -806,6 +806,32 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     el.disconnectedCallback();
   });
 
+  test('ETH wager controls glow when amount per spin times spins reaches the live bounty', () => {
+    storeMod.update('app.records', {
+      records: [{ kind: 1, held: false, value: 0n, barToBeat: 0n }],
+    });
+    const el = instantiate();
+    const amount = el.querySelector('[name="deg-amount"]');
+    const spins = el.querySelector('[name="deg-ticket-count"]');
+
+    amount.value = '0.199';
+    amount.dispatchEvent({ type: 'input' });
+    assert.equal(amount.classList.contains('is-bounty-trigger'), false);
+
+    amount.value = '0.2';
+    amount.dispatchEvent({ type: 'input' });
+    assert.equal(amount.classList.contains('is-bounty-trigger'), true);
+    assert.equal(spins.classList.contains('is-bounty-trigger'), true,
+      'spin count glows too because the contract judges the total ETH wager');
+
+    el.querySelector('[data-bind="deg-currency-option-1"]').dispatchEvent({ type: 'click' });
+    amount.value = '999999';
+    amount.dispatchEvent({ type: 'input' });
+    assert.equal(amount.classList.contains('is-bounty-trigger'), false,
+      'FLIP Degenerette bets never arm the ETH-only record');
+    el.disconnectedCallback();
+  });
+
   test('Degenerette quest clicks preset safely and confirmed actions place the exact bet', async () => {
     const fake = makeFakeDegContract();
     degeneretteMod.__setContractFactoryForTest(() => fake);
