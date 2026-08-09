@@ -125,3 +125,103 @@ The prior manifest is kept at `degenerus-sim/.testnet/sepolia-manifest.prev.json
 | Indexer | `database/.env` DATABASE_URL | ❌ step 2 (manual) |
 | Indexer | `handlers/`, `db/schema/`, `api/routes/` | ❌ step 4 (only if ABI diff) |
 | App | inline ABIs in `app/app/*.js` | ❌ step 4 (only if ABI diff) |
+
+---
+
+## 8. Fly production cutover (degenerus-db + degener.us)
+
+Steps 1–7 above are the LOCAL loop. Production is three separate deploys, and
+the order matters: schema, then indexer, then site.
+
+### 8.1 Reset the production DB for the new run
+
+The Fly deploy does NOT run `db:push` — schema changes reach production only
+by hand. From `database/`, with a proxy open
+(`flyctl proxy 15432:5432 -a degenerus-pg`) and
+`DATABASE_URL=postgres://degenerus_db:<pw>@127.0.0.1:15432/degenerus_db`:
+
+```bash
+psql -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+npx drizzle-kit push --force        # rebuilds tables + the 6 matviews + indexes
+```
+
+⛔ **RE-GRANT `api_readonly` AFTER EVERY SCHEMA DROP.** The API connects as
+`api_readonly`, and `DROP SCHEMA` destroys every grant it holds. The failure is
+misleading: the lag-guard's fence read fails closed, so all data routes answer
+`503 Maintenance in progress — derived state is being rewritten` while the
+indexer is perfectly healthy. Symptom to match: `permission denied for table
+indexer_cursor` in the api logs.
+
+```sql
+GRANT USAGE ON SCHEMA public TO api_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO api_readonly;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO api_readonly;
+REVOKE INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public FROM api_readonly;
+```
+
+(`scripts/setup-readonly-role.sql` holds the same grants but names the database
+`degenerus`, not `degenerus_db` — the GRANT CONNECT line needs editing, or run
+the four statements above directly.)
+
+A fresh `db:push` also drops the two indexes that exist only in
+`drizzle/0034_reveal_feed_indexes.sql` (they are not boot-ensured). Re-add with
+`node scripts/apply-sql.mjs --no-transaction drizzle/0034_reveal_feed_indexes.sql`.
+
+### 8.2 Deploy the indexer/API
+
+```bash
+cd database && flyctl deploy --ha=false
+```
+
+An empty `indexer_cursor` makes the indexer backfill from the lowest
+`deployBlock` in `SEPOLIA_CONTRACTS`, which is what a new run wants.
+
+Verify: `/health` should show `indexedBlock` climbing past the new deployBlock.
+⛔ `/health` looking perfect proves nothing on its own — an indexer still
+configured for the PREVIOUS run sits at chain tip with `lagSeconds: 1` and
+indexes zero events, because it is filtering for addresses that no longer emit.
+Confirm with a row count:
+`SELECT count(*), min("blockNumber") FROM raw_events;`
+
+### 8.3 Publish the site
+
+```bash
+git worktree add /tmp/deploy-ui deploy-ui     # prune first if stale
+rsync -a --delete \
+  --exclude='.git' --exclude='node_modules' \
+  --exclude='/theory/' --exclude='/affiliates/' --exclude='/learn/' \
+  --exclude='/whitepaper/' --exclude='/index.html' --exclude='/.planning/' \
+  --exclude='/_sketch/' --exclude='/design/' \
+  ./ /tmp/deploy-ui/
+cd /tmp/deploy-ui && git add -A && git commit && git push origin deploy-ui:main
+```
+
+⛔ **Anchor every exclude with a leading `/`.** Unanchored `--exclude='index.html'`
+matches at EVERY level, so it silently drops `app/index.html` too — the app ships
+with its stylesheets and custom elements unmounted, which looks like a broken
+build rather than a bad exclude.
+
+⛔ **`--delete` can revert work.** `deploy-ui` is based on `origin/main`; if main
+carries commits the local tree predates, the sync silently reverts them. Check
+before committing:
+
+```bash
+git log --name-only --pretty=format: origin/main ^HEAD | sort -u > /tmp/origin_only.txt
+comm -12 <(cd /tmp/deploy-ui && git status --short | grep '^ M' | awk '{print $2}' | sort) /tmp/origin_only.txt
+```
+
+Any overlap means a file the sync would roll back. Verify direction by grepping
+a distinctive added line from the newest origin/main commit against the local
+tree before publishing.
+
+### 8.4 Verify live
+
+```bash
+curl -s https://degenerus-db.fly.dev/health
+curl -s https://degenerus-db.fly.dev/records
+curl -s "https://degener.us/app/app/chain-config.sepolia.js?cb=$RANDOM" | grep -o "GAME: *'0x[0-9a-f]*'"
+```
+
+Site JS is `max-age=60`, so propagation is a minute, not the old 4h TTL — but
+different edge nodes flip over at different times. Poll several times and
+require consistency before calling it done.
