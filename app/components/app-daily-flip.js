@@ -151,6 +151,10 @@ const REVERSE_CARD_POST_REVEAL_DELAY_MS = 3_000;
 // the live side after this window, but it cannot overwrite the just-shown
 // result while the player is taking it in.
 const RESULT_TRUTH_WINDOW_MS = 15_000;
+// The range is a proportional convenience control; the adjacent number field
+// remains the exact 18-decimal source of truth. One thousand stops gives the
+// slider useful precision without converting a token balance through Number.
+const SDGNRS_BURN_SLIDER_STEPS = 1_000n;
 const COINFLIP_REUSE_BONUS_BPS = 75n;
 const BPS_DENOMINATOR = 10_000n;
 const MODIFIER_MIN_PERCENT = 50;
@@ -2116,6 +2120,13 @@ class AppDailyFlip extends HTMLElement {
                        inputmode="decimal" aria-label="sDGNRS to burn">
                 <button type="button" data-bind="df-burn-max">MAX</button>
               </span>
+              <span class="df-burn-dialog__slider">
+                <input type="range" min="0" max="1000" step="1" value="0"
+                       data-bind="df-burn-slider" aria-label="Choose sDGNRS burn amount">
+                <span class="df-burn-dialog__slider-ends" aria-hidden="true">
+                  <span>1 sDGNRS</span><span>MAX</span>
+                </span>
+              </span>
             </label>
             <div class="df-burn-dialog__quote" data-bind="df-burn-quote">
               <span>Expected ETH value</span>
@@ -2766,6 +2777,7 @@ class AppDailyFlip extends HTMLElement {
       && amount >= MIN_SDGNRS_BURN_WEI
       && balance != null
       && amount <= balance;
+    this.#syncSdgnrsBurnSliderFromInput();
 
     if (button) {
       const locked = this.#busy || !ownsBalance || !hasMinimum;
@@ -2800,6 +2812,54 @@ class AppDailyFlip extends HTMLElement {
         accept.removeAttribute('data-write-lock-title');
       }
     }
+    const slider = this.querySelector('[data-bind="df-burn-slider"]');
+    if (slider) slider.disabled = this.#busy || !ownsBalance || !hasMinimum;
+  }
+
+  #syncSdgnrsBurnSliderFromInput() {
+    const slider = this.querySelector('[data-bind="df-burn-slider"]');
+    const input = this.querySelector('[name="df-sdgnrs-amount"]');
+    const balance = this.#sdgnrsBalanceWei();
+    if (!slider) return;
+    let position = 0n;
+    const amount = parseTokenAmount(input?.value);
+    if (balance != null && balance > MIN_SDGNRS_BURN_WEI && amount != null) {
+      const clamped = amount < MIN_SDGNRS_BURN_WEI
+        ? MIN_SDGNRS_BURN_WEI
+        : amount > balance ? balance : amount;
+      const span = balance - MIN_SDGNRS_BURN_WEI;
+      position = ((clamped - MIN_SDGNRS_BURN_WEI) * SDGNRS_BURN_SLIDER_STEPS
+        + (span / 2n)) / span;
+    }
+    slider.value = String(position);
+    const progress = Number(position) / Number(SDGNRS_BURN_SLIDER_STEPS) * 100;
+    if (slider.style?.setProperty) {
+      slider.style.setProperty('--df-burn-slider-progress', `${progress}%`);
+    } else if (slider.style) {
+      slider.style['--df-burn-slider-progress'] = `${progress}%`;
+    }
+    const exact = amount == null ? 'Invalid amount' : `${tokenAmountInput(amount)} sDGNRS`;
+    slider.setAttribute?.('aria-valuetext', exact);
+  }
+
+  #setSdgnrsBurnFromSlider() {
+    const slider = this.querySelector('[data-bind="df-burn-slider"]');
+    const input = this.querySelector('[name="df-sdgnrs-amount"]');
+    const balance = this.#sdgnrsBalanceWei();
+    if (!slider || !input || balance == null || balance < MIN_SDGNRS_BURN_WEI) return;
+    const numeric = Math.max(0, Math.min(
+      Number(SDGNRS_BURN_SLIDER_STEPS),
+      Math.round(Number(slider.value) || 0),
+    ));
+    const position = BigInt(numeric);
+    const span = balance - MIN_SDGNRS_BURN_WEI;
+    const amount = position >= SDGNRS_BURN_SLIDER_STEPS
+      ? balance
+      : MIN_SDGNRS_BURN_WEI
+        + ((span * position) / SDGNRS_BURN_SLIDER_STEPS);
+    input.value = tokenAmountInput(amount);
+    this.#renderSdgnrsBurn();
+    this.#refreshSdgnrsBurnQuote();
   }
 
   #renderSdgnrsBurnQuote() {
@@ -4430,6 +4490,8 @@ class AppDailyFlip extends HTMLElement {
       this.#renderSdgnrsBurn();
       this.#refreshSdgnrsBurnQuote();
     });
+    const burnSlider = this.querySelector('[data-bind="df-burn-slider"]');
+    if (burnSlider) burnSlider.addEventListener('input', () => this.#setSdgnrsBurnFromSlider());
     const burnMax = this.querySelector('[data-bind="df-burn-max"]');
     if (burnMax) burnMax.addEventListener('click', () => this.#setMaxSdgnrsBurn());
     const burnAccept = this.querySelector('[data-bind="df-burn-accept"]');

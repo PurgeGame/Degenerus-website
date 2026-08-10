@@ -536,10 +536,43 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       'currency wins use their real FLIP and ETH marks');
     assert.match(REPLAY_PANEL_SRC, /addEventListener\('mouseenter', showReward, \{ once: true \}\)/,
       'each fresh badge performs its pop only on the first mouse entry');
-    assert.match(REPLAY_PANEL_SRC, /querySelectorAll\('\.replay-badge-wrap\.is-reward-pop'\)/,
-      'moving to another fresh win retires the prior popup instead of stacking them');
-    assert.match(REPLAY_CSS, /@keyframes replay-badge-reward-pop[\s\S]*scale\(1\.14\)[\s\S]*100% \{ opacity:\s*0/s,
-      'the reward expands, holds briefly, then fades');
+    assert.doesNotMatch(
+      REPLAY_PANEL_SRC,
+      /for \(const active of this\.querySelectorAll\('\.replay-badge-wrap\.is-reward-pop'\)\)/,
+      'fresh reward callouts may overlap instead of deleting the one already animating',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /const stack = Math\.max\(1, 20 - this\.#rewardPopSequence\+\+\)[\s\S]*--replay-reward-stack/,
+      'the first concurrently triggered reward remains in the foreground',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-tq\.q-result-revealed \.replay-badge-wrap\[tabindex="0"\]\.is-reward-pop\s*\{[^}]*z-index:\s*calc\(15 \+ var\(--replay-reward-stack, 1\)\)/s,
+      'the activation-order stack wins the normal revealed-badge layer specificity',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-tq\.q-result-revealed \.replay-badge-wrap\[tabindex="0"\]\s*\{[^}]*z-index:[^}]*pointer-events:\s*auto/s,
+      'partially uncovered multi-win badges stay beneath the scratch canvas and cannot steal its pointer',
+    );
+    assert.match(REPLAY_PANEL_SRC, /wrap\.tabIndex = -1/,
+      'new win badges begin inert beneath the scratch cover');
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /#revealQuadrant[\s\S]*for \(const badge of quad\.querySelectorAll\('\.replay-badge-wrap'\)\) badge\.tabIndex = 0/,
+      'badge reward hover arms only when the whole quadrant reaches its reveal threshold',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-badge-reward-pop\s*\{[\s\S]*rgba\(46, 25, 9, 0\.93\)[\s\S]*will-change:\s*opacity, transform/,
+      'the reward uses a crisp translucent game-HUD plate without an expensive live blur',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /animation:\s*replay-badge-reward-pop 0\.78s[\s\S]*@keyframes replay-badge-reward-pop[\s\S]*scale\(0\.76\)[\s\S]*scale\(1\.08\)[\s\S]*scale\(0\.98\)[\s\S]*scale\(1\.04\)/,
+      'the reward snaps in, settles for reading, and exits quickly instead of drifting',
+    );
   });
 
   test('the far-future center reveal is a focused FLIP bonus prize', () => {
@@ -1863,6 +1896,80 @@ describe('Results CTA gating (whole board + flip before the popup)', () => {
       }]);
       assert.equal(requested.some((path) => /\/decimator(?:\?|\/)/.test(path)), false,
         'the composed last-day winner row is reused instead of adding a DB request');
+    } finally {
+      if (el) el.disconnectedCallback();
+      globalThis.fetch = priorFetch;
+      revealMod.__resetForTest();
+    }
+  });
+
+  test('far-future center FLIP uses the Degenerus logo without inventing a pink XRP trait', async () => {
+    const { CHAIN } = await import('../../app/chain-config.js');
+    const revealMod = await import('../reveal-overlay.js');
+    revealMod.__resetForTest();
+    const address = '0xab12000000000000000000000000000000000000';
+    const farFutureAmount = 700n * 10n ** 18n;
+    storeMod.update('connected.address', address);
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const path = String(url);
+      if (path.includes('/packs?day=5')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ address, day: 5, ticketRevealPacks: [], lootboxPacks: [] }),
+        };
+      }
+      if (path.includes(`/viewer/player/${address}/day/5`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            address,
+            day: 5,
+            activity: { lootboxPurchases: [], lootboxResults: [], coinflip: null },
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => null };
+    };
+
+    let el = null;
+    try {
+      localStorage.setItem(`flip_day_${CHAIN.id}_5`, '1');
+      el = instantiate();
+      storeMod.update('app.lastDay', {
+        ...RESOLVED_PAYLOAD_DAY5,
+        winners: [{
+          ...RESOLVED_PAYLOAD_DAY5.winners[0],
+          totalEth: '0',
+          ticketCount: 0,
+          coinTotal: farFutureAmount.toString(),
+          breakdown: [{
+            awardType: 'flip',
+            amount: farFutureAmount.toString(),
+            count: 1,
+            traitId: null,
+            level: 2,
+          }],
+        }],
+      });
+      await flushMicrotasks();
+      document.dispatchEvent(scratchEvent({ bonusPhase: false, bonusAvailable: false }));
+      await flushMicrotasks();
+      el.querySelector('[data-bind="ldj-results-cta"]').dispatchEvent({ type: 'click' });
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      const [queued] = revealMod.__takeQueuedForTest();
+      assert.deepEqual(queued.prizes, [{
+        type: 'flip',
+        amount: farFutureAmount,
+        winningTraitIds: [],
+      }]);
+      const sequence = revealMod.normalizeSequence(queued);
+      assert.equal(sequence.cards[0].icon, '/whitepaper/flame-logo-split.svg');
+      assert.deepEqual(sequence.cards[0].winningTraitIds, []);
     } finally {
       if (el) el.disconnectedCallback();
       globalThis.fetch = priorFetch;

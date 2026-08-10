@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import {
   OPEN_EVENTS_ABI,
   decodeBoxSpin,
+  boxSpinHeroQuadrant,
   deriveHumanLootboxSpinBetIds,
   enrichLootboxBoonLegs,
   lootboxRewardPresentation,
@@ -46,12 +47,12 @@ describe('lootboxRewardPresentation', () => {
       detail: '',
     });
     assert.deepEqual(lootboxRewardPresentation(10, 50n), {
-      label: 'DEGEN SCORE BOON',
+      label: 'DEGEN RATING BOON',
       value: '+25',
       detail: '',
     });
     assert.deepEqual(lootboxRewardPresentation(10, 25n), {
-      label: 'DEGEN SCORE BOON',
+      label: 'DEGEN RATING BOON',
       value: '+12.5',
       detail: '',
     });
@@ -177,6 +178,7 @@ describe('decodeBoxSpin', () => {
     const d = decodeBoxSpin(betId, packed);
     assert.equal(d.boxOrigin, true);
     assert.equal(d.spinType, 'wwxrp');
+    assert.equal(d.heroQuadrant, 1, 'the low seed bits preserve the +2 hero quadrant');
     assert.equal(d.spinCount, 1);
     assert.equal(d.survived, null, 'survived is FLIP-only');
     assert.equal(d.reels.length, 1);
@@ -186,6 +188,21 @@ describe('decodeBoxSpin', () => {
     // Trait unpack: byte q → {sym: b&7, col: (b>>3)&7}. 0x44 = 0b01000100 →
     // sym 4, col 0 (quadrant bits 7-6 ignored).
     assert.deepEqual(d.reels[0].playerTraits[0], { sym: 4, col: 0 });
+  });
+
+  test('the live one-symbol WWXRP win decodes its matching cell as the hero', () => {
+    const betId = 9_350_854_869_760_465_101n;
+    const packed = (2n << 64n)
+      | (4_071_640_845n << 32n)
+      | 3_818_745_606n
+      | (1n << 216n);
+    const decoded = decodeBoxSpin(betId, packed);
+
+    assert.equal(boxSpinHeroQuadrant(betId), 1);
+    assert.equal(decoded.heroQuadrant, 1);
+    assert.equal(decoded.reels[0].score, 2);
+    assert.equal(decoded.reels[0].playerTraits[1].sym, decoded.reels[0].resultTraits[1].sym);
+    assert.notEqual(decoded.reels[0].playerTraits[1].col, decoded.reels[0].resultTraits[1].col);
   });
 
   test('three FLIP spins under one survival flip (survived=true)', () => {

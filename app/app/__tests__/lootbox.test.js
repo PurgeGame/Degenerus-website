@@ -537,6 +537,28 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
     assert.equal(out.payment.totalCostWei, ticketCostWei + presaleBoxAmountWei);
   });
 
+  test('an attached presale box leaves wallet ETH on the box when internal funds cover the mint', async () => {
+    const ticketCostWei = 4n * lootboxMod.PRESALE_BOX_MIN_WEI;
+    const presaleBoxAmountWei = lootboxMod.PRESALE_BOX_MIN_WEI;
+    lastFakeContract = makeFakeContract({ claimableRaw: ticketCostWei + 1n });
+    lootboxMod.__setContractFactoryForTest(() => lastFakeContract);
+
+    const out = await lootboxMod.purchaseEth({
+      ticketQuantity: 1,
+      lootBoxAmountWei: 0n,
+      ticketCostWei,
+      presaleBoxAmountWei,
+      preferClaimable: true,
+    });
+
+    const [args] = lastFakeContract._calls.buyLootboxAndPresaleBox;
+    assert.equal(args[4], lootboxMod.MINT_PAYMENT_KIND_CLAIMABLE,
+      'the mint spends claimable instead of losing its recycled-ETH bonus basis');
+    assert.equal(args[6].value, presaleBoxAmountWei,
+      'the unchanged wallet shortfall is allocated to the attached box');
+    assert.equal(out.payment.claimableUsedWei, ticketCostWei);
+  });
+
   test('standalone presale boxes read the live cap, simulate, send, and parse their index', async () => {
     const amount = lootboxMod.PRESALE_BOX_MIN_WEI;
     lastFakeContract = makeFakeContract({
@@ -565,6 +587,30 @@ describe('Plan 60-02: lootbox.js write helpers + parsers', () => {
       lootboxMod.parsePresaleBoxBuyFromReceipt(out.receipt, out.contract),
       [{ buyer: CONNECTED, lootboxIndex: 7n, amountWei: amount, closing: false }],
     );
+  });
+
+  test('presale queue rollover replaces compact E() with an actionable retry message', async () => {
+    const reverting = makeFakeContract({
+      staticCallShouldRevert: { buyLootboxAndPresaleBox: true },
+      staticCallRevertName: { buyLootboxAndPresaleBox: 'E' },
+    });
+    lootboxMod.__setContractFactoryForTest(() => reverting);
+
+    await assert.rejects(
+      lootboxMod.purchaseEth({
+        ticketQuantity: 1,
+        lootboxQuantity: 0,
+        ticketCostWei: 4n * lootboxMod.PRESALE_BOX_MIN_WEI,
+        presaleBoxAmountWei: lootboxMod.PRESALE_BOX_MIN_WEI,
+      }),
+      (error) => {
+        assert.equal(error.code, 'PresaleBoxQueueBusy');
+        assert.match(error.userMessage, /next box round/i);
+        return true;
+      },
+    );
+    assert.equal(reverting._calls.buyLootboxAndPresaleBox.length, 0,
+      'the rejected transition never reaches the wallet send');
   });
 
   test('purchaseEth static-call revert throws structured error with userMessage and code', async () => {

@@ -608,7 +608,7 @@ class DecimatorDrawReplay {
       const option = document.createElement('option');
       option.value = player.address.toLowerCase();
       const identity = this.winnerNames.get(player.address.toLowerCase()) || shortAddress(player.address);
-      option.textContent = `${identity} · ${bucketScoreLabel(player.bucket)} DEGEN SCORE`;
+      option.textContent = `${identity} · ${bucketScoreLabel(player.bucket)} DEGEN RATING`;
       select.appendChild(option);
     }
   }
@@ -1045,7 +1045,7 @@ class DecimatorDrawReplay {
       ? 'DRAWING'
       : phase === 'locked' ? 'LOCKED'
         : phase === 'complete' ? 'COMPLETE' : 'READY';
-    this.bind('active-bucket').textContent = `${bucketScoreLabel(frame.bucket)} DEGEN SCORE`;
+    this.bind('active-bucket').textContent = `${bucketScoreLabel(frame.bucket)} DEGEN RATING`;
     this.bind('active-detail').textContent = settled
       ? 'WINNER LOCKED'
       : `${frame.bucket} POSSIBLE SLICES`;
@@ -1067,16 +1067,16 @@ class DecimatorDrawReplay {
       const item = document.createElement('span');
       item.className = 'bucket-token';
       item.textContent = bucketScoreLabel(frame.bucket);
-      item.setAttribute('aria-label', `Minimum ${bucketScoreLabel(frame.bucket)} Degen Score`);
+      item.setAttribute('aria-label', `Minimum ${bucketScoreLabel(frame.bucket)} Degen Rating`);
       if (this.completed.includes(frame)) item.classList.add('is-complete');
       if (index === currentIndex) item.classList.add('is-current');
       if (this.player?.bucket === frame.bucket) item.classList.add('is-player');
       const locked = this.completed.includes(frame);
       item.title = locked
-        ? `${bucketScoreLabel(frame.bucket)} Degen Score winner locked`
+        ? `${bucketScoreLabel(frame.bucket)} Degen Rating winner locked`
         : this.player?.bucket === frame.bucket
-          ? `Your minimum-score group: ${bucketScoreLabel(frame.bucket)}`
-          : `Minimum Degen Score: ${bucketScoreLabel(frame.bucket)}`;
+          ? `Your minimum-rating group: ${bucketScoreLabel(frame.bucket)}`
+          : `Minimum Degen Rating: ${bucketScoreLabel(frame.bucket)}`;
       rail.appendChild(item);
     }
   }
@@ -1210,7 +1210,7 @@ class DecimatorDrawReplay {
     const wheel = this.bind('draw-wheel');
     wheel.setAttribute(
       'aria-label',
-      `${this.frames.length} populated Degen Score groups. The ${bucketScoreLabel(frame.bucket)} minimum group has ${frame.bucket} possible slices; one winning slice is selected. Slice values are Decimator scores.${this.player?.bucket === frame.bucket ? ` Your mint-colored area is ${formatSharePercent(playerSubbucketShareBps(this.snapshot, this.player))} of your subbucket.` : ''}`,
+      `${this.frames.length} populated Degen Rating groups. The ${bucketScoreLabel(frame.bucket)} minimum group has ${frame.bucket} possible slices; one winning slice is selected. Slice values are Decimator scores.${this.player?.bucket === frame.bucket ? ` Your mint-colored area is ${formatSharePercent(playerSubbucketShareBps(this.snapshot, this.player))} of your subbucket.` : ''}`,
     );
   }
 
@@ -1534,7 +1534,7 @@ class DecimatorDrawReplay {
     const result = playerResult(this.snapshot, this.player);
     this.bind('player-score').textContent = this.player ? formatScore(this.player.score) : '—';
     this.bind('player-position').textContent = this.player
-      ? `${bucketScoreLabel(this.player.bucket)} DEGEN SCORE`
+      ? `${bucketScoreLabel(this.player.bucket)} DEGEN RATING`
       : 'NO ENTRY';
     const outcome = this.bind('player-outcome');
     if (state === 'won') {

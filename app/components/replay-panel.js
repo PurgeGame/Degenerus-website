@@ -300,6 +300,7 @@ class ReplayPanel extends HTMLElement {
   #scratchNode = null;          // active scratch noise node
   #mouseIsDown = false;         // global mouse button state
   #badgeCache = new Map();      // path → warmed Image (preloaded badge SVG cache)
+  #rewardPopSequence = 0;       // earlier concurrent reward callouts stay in front
   #daysRefreshPromise = null;   // coalesce initial/new-day option reloads
   #lastDaysRefreshAt = 0;       // retry throttle while the indexer catches up
   // /app/ owns the persisted "already scratched" bit.  The replay component
@@ -3906,9 +3907,9 @@ class ReplayPanel extends HTMLElement {
       : soloEthFloatEth >= 1 ? 85
       : soloEthFloatEth >= 0.1 ? 75
       : 65;
-    // Pack badges into stable cells inside the art band. Cells are 6% larger
-    // than their stride at most, retaining a hint of the old scatter while
-    // preventing one result from covering most of another.
+    // Pack badges into stable cells inside the art band, then apply bounded
+    // deterministic scatter. That preserves every result while keeping large
+    // winning reveals loose and celebratory instead of grid-like.
     const layout = winningBadgeLayout({
       count: realWins.length,
       quadrant: qIdx,
@@ -3933,6 +3934,8 @@ class ReplayPanel extends HTMLElement {
       wrap.style.width = sizePct + '%';
       wrap.style.left = bestLeft + '%';
       wrap.style.top = bestTop + '%';
+      wrap.style.setProperty('--replay-badge-rotation', `${position.rotation || 0}deg`);
+      wrap.style.setProperty('--replay-badge-layer', String(position.layer || 1));
       const horizontalCenter = bestLeft + sizePct / 2;
       wrap.dataset.rewardAlign = horizontalCenter < 30 ? 'left' : horizontalCenter > 70 ? 'right' : 'center';
       wrap.dataset.rewardSide = bestTop + sizePct / 2 < 50 ? 'below' : 'above';
@@ -3969,9 +3972,11 @@ class ReplayPanel extends HTMLElement {
         const showReward = () => {
           if (wrap.dataset.rewardShown === 'true') return;
           wrap.dataset.rewardShown = 'true';
-          for (const active of this.querySelectorAll('.replay-badge-wrap.is-reward-pop')) {
-            active.classList.remove('is-reward-pop');
-          }
+          // Several fresh wins may be swept in one motion. Let their arcade
+          // callouts coexist briefly; descending layers keep the first one in
+          // front without forcing later rewards to wait or erase it.
+          const stack = Math.max(1, 20 - this.#rewardPopSequence++);
+          wrap.style.setProperty('--replay-reward-stack', String(stack));
           wrap.classList.add('is-reward-pop');
         };
         wrap.addEventListener('mouseenter', showReward, { once: true });
@@ -3995,6 +4000,7 @@ class ReplayPanel extends HTMLElement {
   }
 
   #clearScatteredBadges() {
+    this.#rewardPopSequence = 0;
     const els = this.querySelectorAll('.replay-badge-wrap, .replay-badge-overflow-label');
     for (const el of els) el.remove();
   }

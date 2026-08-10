@@ -236,6 +236,8 @@ body.layout-basic .records-rail__crosshair::after {
 body.layout-basic .records-rail__leader-copy {
   display: grid;
   min-width: 0;
+  grid-template-rows: minmax(0, auto) 1rem;
+  align-content: center;
   gap: 0.12rem;
 }
 
@@ -264,18 +266,27 @@ body.layout-basic .records-rail__leader-label > b {
 }
 
 body.layout-basic .records-rail__leader-value {
+  display: flex;
   min-width: 0;
   overflow: hidden;
+  align-items: baseline;
+  gap: 0.2rem;
   color: #fff0c7;
   font: 950 clamp(0.78rem, 1.1vw, 0.9rem)/1.05 "Roboto Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+body.layout-basic .records-rail__leader-amount {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 body.layout-basic .records-rail__leader-value :is(em, i) {
+  flex: 0 0 auto;
   color: rgba(var(--rec-yellow), 0.76);
-  font: 900 0.5rem/1 "Inter", system-ui, sans-serif;
+  font: 900 clamp(0.52rem, 0.68vw, 0.6rem)/1 "Inter", system-ui, sans-serif;
   font-style: normal;
   letter-spacing: 0.05em;
 }

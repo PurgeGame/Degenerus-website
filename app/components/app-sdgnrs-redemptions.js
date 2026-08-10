@@ -12,6 +12,7 @@ import { subscribe } from '../app/store.js';
 import {
   claimSdgnrsRedemption,
   discoverSdgnrsRedemptions,
+  formatSdgnrsRedemptionAmount,
   parseSdgnrsRedemptionReceipt,
   readSdgnrsRedemptionState,
   SDGNRS_REDEMPTION_SUBMITTED_EVENT,
@@ -170,8 +171,19 @@ class AppSdgnrsRedemptions extends HTMLElement {
     const periods = new Set(_readPeriods(this.#address));
     periods.add(periodIndex);
     _writePeriods(this.#address, [...periods]);
-    if (!this.#rows.some((row) => row.type === 'period' && row.periodIndex === periodIndex)) {
-      this.#rows.push({ type: 'period', periodIndex, state: 'waiting', ready: false });
+    let submittedAmount = 0n;
+    try { submittedAmount = BigInt(detail?.sdgnrsAmount ?? 0); }
+    catch (_e) { /* keep the durable period even if an old event omitted amount */ }
+    const existing = this.#rows.find((row) => (
+      row.type === 'period' && row.periodIndex === periodIndex
+    ));
+    if (existing) {
+      existing.sdgnrsAmount = BigInt(existing.sdgnrsAmount ?? 0) + submittedAmount;
+    } else {
+      this.#rows.push({
+        type: 'period', periodIndex, state: 'waiting', ready: false,
+        sdgnrsAmount: submittedAmount,
+      });
     }
     this.#publish();
     void this.#refresh();
@@ -194,7 +206,14 @@ class AppSdgnrsRedemptions extends HTMLElement {
       if (this.#address !== owner) return;
       const states = new Map();
       for (const state of [...(discovered?.periods || []), ...storedStates]) {
-        if (state?.exists) states.set(Number(state.periodIndex), state);
+        if (!state?.exists) continue;
+        const periodIndex = Number(state.periodIndex);
+        const prior = states.get(periodIndex);
+        states.set(periodIndex, {
+          ...prior,
+          ...state,
+          sdgnrsAmount: state.sdgnrsAmount ?? prior?.sdgnrsAmount ?? null,
+        });
       }
       const seen = _readSeen(owner);
       const periodRows = [...states.values()]
@@ -203,6 +222,7 @@ class AppSdgnrsRedemptions extends HTMLElement {
           type: 'period',
           periodIndex: state.periodIndex,
           roll: state.roll,
+          sdgnrsAmount: state.sdgnrsAmount ?? null,
           state: state.ready ? 'ready' : 'waiting',
           ready: state.ready,
         }));
@@ -302,14 +322,19 @@ class AppSdgnrsRedemptions extends HTMLElement {
       return;
     }
     publishPendingActions(PENDING_SOURCE, this.#rows.map((row) => {
-      const period = row.type === 'period' ? ` · Day ${row.periodIndex}` : '';
       const ready = row.state === 'ready';
+      const compactAmount = row.sdgnrsAmount != null && BigInt(row.sdgnrsAmount) > 0n
+        ? `${formatSdgnrsRedemptionAmount(row.sdgnrsAmount)} sDGNRS`
+        : '';
       return {
         id: `sdgnrs-redemption:${_rowKey(row)}`,
         dismissScope: this.#address,
         kind: 'lootbox',
         kindLabel: 'sDGNRS REDEMPTION',
-        label: row.type === 'claim' ? 'Redemption result' : `Redemption box${period}`,
+        label: `${compactAmount ? `${compactAmount} ` : ''}REDEMPTION`,
+        amountLabel: compactAmount,
+        lootboxLabel: 'REDEMPTION',
+        compact: true,
         shortLabel: row.type === 'claim' ? 'View result' : 'Claim & open',
         detail: row.state === 'busy'
           ? row.type === 'claim' ? 'Loading result' : 'Claiming on-chain'

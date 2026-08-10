@@ -270,6 +270,18 @@ async function flushMicrotasks() {
   await flushPromises();
 }
 
+async function waitForText(getElement, pattern, timeoutMs = 1_000) {
+  const startedAt = Date.now();
+  let element = getElement();
+  while (!pattern.test(element?.textContent || '')) {
+    if (Date.now() - startedAt >= timeoutMs) {
+      assert.match(element?.textContent || '', pattern);
+    }
+    await flushMicrotasks();
+    element = getElement();
+  }
+}
+
 function dashboardPayload() {
   return {
     player: TEST_ADDR,
@@ -1974,8 +1986,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /\.df-modifier-meter__marker\s*\{[^}]*bottom:/s,
       'modifier marker travels vertically');
     assert.match(APP_CSS,
-      /\.df-tomorrow-layout\s*\{[^}]*grid-template-areas:\s*"action total"[^}]*grid-template-columns:\s*calc\(3\.55rem \+ 0\.22rem\) minmax\(0, 1fr\)/s,
-      'Tomorrow gives the popup trigger the same inset action lane as Claim');
+      /\.df-tomorrow-layout\s*\{[^}]*grid-template-areas:\s*"action total"[^}]*grid-template-columns:\s*calc\(3rem \+ 0\.22rem\) minmax\(0, 1fr\)/s,
+      'Tomorrow gives its compact popup trigger the same inset action lane as Claim');
     assert.match(APP_CSS,
       /\.app-daily-flip :is\([\s\S]*?\.df-burn-sdgnrs-cta[\s\S]*?font-size:\s*var\(--df-action-font-size, 0\.56rem\)/,
       'the five visible flip actions share the slightly larger desktop label size');
@@ -2820,15 +2832,25 @@ describe('app-daily-flip — coin reveal + actions', () => {
     burn.dispatchEvent({ type: 'click' });
     const dialog = el.querySelector('[data-bind="df-burn-dialog"]');
     const input = el.querySelector('[name="df-sdgnrs-amount"]');
+    const slider = el.querySelector('[data-bind="df-burn-slider"]');
     assert.equal(dialog.hidden, false, 'Burn opens the explicit amount confirmation');
     assert.equal(input.value, '1', 'the destructive action defaults to the contract minimum');
+    assert.ok(slider, 'the burn amount also has a proportional slider');
+    assert.equal(slider.value, '0', 'the slider starts at the one-sDGNRS minimum');
     assert.match(el.innerHTML, /25%–175% of the previewed ETH value/,
       'confirmation explains the delayed RNG range');
     assert.ok(el.querySelector('[data-bind="df-burn-expected"]'),
       'confirmation reserves a live expected-value readout');
 
+    slider.value = '500';
+    slider.dispatchEvent({ type: 'input' });
+    assert.equal(input.value, '61725000.5',
+      'the midpoint is derived with BigInt precision rather than a lossy Number balance');
+    assert.match(slider.getAttribute('aria-valuetext') || '', /61725000\.5 sDGNRS/);
+
     el.querySelector('[data-bind="df-burn-max"]').dispatchEvent({ type: 'click' });
     assert.equal(input.value, '123450000', 'MAX preserves the exact burnable balance');
+    assert.equal(slider.value, '1000', 'MAX keeps the slider synchronized');
     assert.equal(el.querySelector('[data-bind="df-burn-accept"]').disabled, false);
 
     dialog.dispatchEvent({ type: 'click', target: dialog });
@@ -3451,8 +3473,10 @@ describe('new-day rollover (codex-found race)', () => {
     _fetchResponses.flipDay = null;
     localStorage.setItem('jackpot_complete_day_84532_68', '1');
     storeMod.update('app.lastDay', { day: 68, status: 'resolved' });
-    await flushMicrotasks();
-    await flushMicrotasks();
+    await waitForText(
+      () => el.querySelector('[data-position="today"]'),
+      /Today's bet12,000 FLIP/,
+    );
 
     assert.match(el.querySelector('[data-position="today"]').textContent, /Today's bet12,000 FLIP/,
       'the prior live stake moves into the newly unresolved result row');

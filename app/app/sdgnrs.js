@@ -37,6 +37,36 @@ export const SDGNRS_REDEMPTION_SUBMITTED_EVENT = 'degenerus:sdgnrs-redemption-su
 export const SDGNRS_REDEMPTION_LOOKBACK_BLOCKS = 120_000;
 const SDGNRS_LOG_CHUNK_BLOCKS = 5_000;
 
+/** Compact a burned sDGNRS amount to at most two significant figures. */
+export function formatSdgnrsRedemptionAmount(value) {
+  let raw;
+  try { raw = BigInt(value ?? 0); } catch (_e) { return '—'; }
+  if (raw < 0n) raw = -raw;
+  if (raw === 0n) return '0';
+  const token = 10n ** 18n;
+  if (raw < 10n * token) {
+    const tenths = ((raw * 10n) + (token / 2n)) / token;
+    return tenths % 10n === 0n
+      ? String(tenths / 10n)
+      : `${tenths / 10n}.${tenths % 10n}`;
+  }
+  let whole = (raw + (token / 2n)) / token;
+  const digits = whole.toString().length;
+  const quantum = digits > 2 ? 10n ** BigInt(digits - 2) : 1n;
+  if (quantum > 1n) whole = ((whole + (quantum / 2n)) / quantum) * quantum;
+  const units = [
+    [10n ** 15n, 'Q'], [10n ** 12n, 'T'], [10n ** 9n, 'B'],
+    [10n ** 6n, 'M'], [10n ** 3n, 'K'],
+  ];
+  const unit = units.find(([threshold]) => whole >= threshold);
+  if (!unit) return whole.toLocaleString('en-US');
+  const [divisor, suffix] = unit;
+  const tenths = (whole * 10n) / divisor;
+  return tenths < 100n && tenths % 10n !== 0n
+    ? `${tenths / 10n}.${tenths % 10n}${suffix}`
+    : `${whole / divisor}${suffix}`;
+}
+
 let _contractFactory = null;
 let _ifaceCache = null;
 
@@ -258,7 +288,7 @@ export async function discoverSdgnrsRedemptions({ player } = {}) {
   const provider = getProvider();
   if (!provider) return { periods: [], claims: [] };
   const logs = await _recentRedemptionLogs(provider, player);
-  const periods = new Set();
+  const periods = new Map();
   const claims = [];
   for (const log of Array.isArray(logs) ? logs : []) {
     try {
@@ -267,7 +297,9 @@ export async function discoverSdgnrsRedemptions({ player } = {}) {
       const owner = String(parsed.args.player ?? parsed.args[0] ?? '').toLowerCase();
       if (!_sameAddress(owner, player)) continue;
       if (parsed.name === 'RedemptionSubmitted') {
-        periods.add(Number(parsed.args.periodIndex));
+        const periodIndex = Number(parsed.args.periodIndex);
+        const amount = BigInt(parsed.args.sdgnrsAmount ?? parsed.args[1] ?? 0);
+        periods.set(periodIndex, (periods.get(periodIndex) || 0n) + amount);
       } else if (parsed.name === 'RedemptionClaimed') {
         claims.push({
           player: owner,
@@ -282,9 +314,10 @@ export async function discoverSdgnrsRedemptions({ player } = {}) {
       }
     } catch (_e) { /* unknown log */ }
   }
-  const states = await Promise.all([...periods].map((periodIndex) => (
-    readSdgnrsRedemptionState({ player, periodIndex })
-  )));
+  const states = await Promise.all([...periods].map(async ([periodIndex, sdgnrsAmount]) => {
+    const state = await readSdgnrsRedemptionState({ player, periodIndex });
+    return state ? { ...state, sdgnrsAmount } : null;
+  }));
   return {
     periods: states.filter((state) => state?.exists),
     claims: claims.sort((a, b) => b.blockNumber - a.blockNumber || b.logIndex - a.logIndex),

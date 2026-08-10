@@ -11,7 +11,7 @@ export const BOON_REVIEW_ROWS = Object.freeze([
   { boonType: 9, consumed: false },                    // Tickets +25%
   { boonType: 15, consumed: false },                   // Decimator +50%
   { boonType: 24, consumed: false },                   // Whale pass -35%
-  { boonType: 19, consumed: false, boostAmount: 50 },  // +25 Degen Score
+  { boonType: 19, consumed: false, boostAmount: 50 },  // +25 Degen Rating
   { boonType: 27, consumed: false },                   // Deity pass -35%
   { boonType: 31, consumed: false },                   // Lazy pass -50%
 ]);

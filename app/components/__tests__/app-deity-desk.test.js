@@ -10,7 +10,12 @@ globalThis.customElements ||= {
 };
 
 const { deitySymbolPresentation } = await import('../../app/deity-symbol.js');
-const { isDiscordSnowflake, resolvePlayerTarget } = await import('../../app/player-target.js');
+const {
+  fetchPlayerSuggestions,
+  filterPlayerSuggestions,
+  isDiscordSnowflake,
+  resolvePlayerTarget,
+} = await import('../../app/player-target.js');
 const { deityBoonActionLabel, deityDeskModel } = await import('../app-deity-desk.js');
 
 const DESK_SRC = readFileSync(new URL('../app-deity-desk.js', import.meta.url), 'utf8');
@@ -75,9 +80,54 @@ describe('<app-deity-desk>', () => {
     assert.equal(fetched.init.credentials, 'include');
   });
 
+  test('suggests linked Discord players by name without exposing their snowflake', async () => {
+    const burnie = '0xcd34000000000000000000000000000000000000';
+    const rows = [
+      {
+        eth_address: burnie,
+        discord_name: 'Burnie Degenerus',
+        discord_avatar: 'https://cdn.discordapp.com/burnie.png',
+        discord_id: '123456789012345678',
+      },
+      {
+        eth_address: '0xab12000000000000000000000000000000000000',
+        discord_name: 'WAR',
+        discord_avatar: 'javascript:alert(1)',
+      },
+    ];
+    assert.deepEqual(filterPlayerSuggestions(rows, '@burn'), [{
+      address: '0xCd34000000000000000000000000000000000000',
+      name: 'Burnie Degenerus',
+      avatar: 'https://cdn.discordapp.com/burnie.png',
+    }]);
+
+    let request = null;
+    const suggestions = await fetchPlayerSuggestions('war', {
+      baseUrl: 'https://session.example',
+      fetcher: async (url, init) => {
+        request = { url, init };
+        return { ok: true, json: async () => ({ leaderboard: rows }) };
+      },
+    });
+    assert.equal(request.url, 'https://session.example/api/leaderboard?limit=50');
+    assert.equal(request.init.credentials, 'omit');
+    assert.deepEqual(suggestions, [{
+      address: '0xAB12000000000000000000000000000000000000',
+      name: 'WAR',
+      avatar: null,
+    }]);
+    assert.equal(Object.hasOwn(suggestions[0], 'discord_id'), false);
+  });
+
   test('mounts the compact four-action desk above Tickets and removes the old controls', () => {
     assert.ok(INDEX_HTML.indexOf('<app-deity-desk>') < INDEX_HTML.indexOf('<app-tickets-inventory>'));
-    assert.match(DESK_SRC, /placeholder="0x address or Discord ID"/);
+    assert.match(DESK_SRC, />TARGET PLAYER<\/label>/);
+    assert.match(DESK_SRC, /placeholder="Wallet, Discord ID, or @name"/);
+    assert.match(DESK_SRC, /role="combobox"[^>]*aria-autocomplete="list"/);
+    assert.match(DESK_SRC, /fetchPlayerSuggestions\(query/);
+    assert.match(DESK_SRC, /input\.dataset\.targetAddress = address/,
+      'choosing a Discord name preserves its verified linked wallet beneath the display name');
+    assert.match(DESK_SRC, /resolvePlayerTarget\(input\?\.dataset\?\.targetAddress \|\| input\?\.value\)/);
     assert.match(DESK_SRC, /\[0, 1, 2\]\.map/);
     assert.match(DESK_SRC, /data-bind="deity-desk-smite"/);
     assert.match(DESK_SRC, />SMITE</);
@@ -111,6 +161,8 @@ describe('<app-deity-desk>', () => {
       'the pass seal has a layered gold treatment');
     assert.match(APP_CSS, /\.deity-desk__crest::after\s*\{[^}]*border:\s*1px dashed/s,
       'the pass seal has an etched outer ring');
+    assert.match(APP_CSS, /\.deity-desk__suggestions\s*\{[^}]*position:\s*absolute[^}]*max-height:/s,
+      'Discord matches open as a bounded dropdown beneath the target field');
     assert.match(APP_CSS, /\.deity-desk__actions button::after\s*\{[^}]*rgb\(var\(--boon-rgb\)\)/s,
       'each action carries a small product-colored power light');
     assert.match(APP_CSS, /\.deity-desk__smite-cost\s*\{[^}]*position:\s*absolute[^}]*right:\s*0\.54rem[^}]*bottom:\s*0\.2rem[^}]*font:\s*950 0\.5rem/s,

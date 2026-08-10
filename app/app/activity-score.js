@@ -2,7 +2,7 @@
 //
 // `scoreBreakdown.questStreakPoints` is a legacy field name: the indexer stores
 // the raw effective quest-streak count there, while the current contract adds
-// floor(count / 2) to the Degen Score. Recovering the credited term from the
+// floor(count / 2) to the Degen Rating. Recovering the credited term from the
 // authoritative total also keeps the UI compatible with older API responses
 // that briefly returned the already-halved value for active afKing players.
 
@@ -31,7 +31,7 @@ export function questStreakScorePoints(score) {
   return Math.max(0, Math.floor(total + curse - nonQuest));
 }
 
-/** Loot-style display tier shared by every Degen Score readout. */
+/** Loot-style display tier shared by every Degen Rating readout. */
 export function degenScoreLootTier(value) {
   const points = Number(value);
   if (!Number.isFinite(points)) return null;

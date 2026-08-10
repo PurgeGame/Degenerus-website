@@ -116,6 +116,7 @@ export const GAME_ABI = [
   'function purchaseInfo() view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei)',
   'function buyPresaleBox(address buyer, uint256 boxAmount) payable',
   'function buyLootboxAndPresaleBox(address buyer, uint256 entryQuantityScaled, uint256 lootBoxAmount, bytes32 affiliateCode, uint8 payKind, uint256 boxAmount) payable',
+  'error E()',
   // Foil module errors bubble through GAME.purchase via delegatecall. Keeping
   // them in this interface lets ethers populate error.revert.name.
   'error FoilAlreadyBought()',
@@ -388,6 +389,23 @@ function _structuredRevertError(error, context) {
   return wrapped;
 }
 
+/**
+ * The presale queue deliberately uses the contract's compact E() error for
+ * transient index states (the old index is committed / the next one is not yet
+ * usable) as well as duplicate-in-index protection. The UI preflights live
+ * credit, cap, and minimums, so replace the useless global E copy with the
+ * actionable queue-specific recovery.
+ */
+function _structuredPresaleRevertError(error, context) {
+  const wrapped = _structuredRevertError(error, context);
+  if (wrapped.code !== 'E') return wrapped;
+  wrapped.code = 'PresaleBoxQueueBusy';
+  wrapped.userMessage = 'Presale box unavailable this round. Wait for any queued box to open or the next box round, then try again.';
+  wrapped.recoveryAction = 'Wait for the next box index and retry.';
+  wrapped.message = wrapped.userMessage;
+  return wrapped;
+}
+
 // ---------------------------------------------------------------------------
 // purchaseEth — purchase() with claimable-first funding for the
 // ETH-denominated ticket/lootbox/foil combo. CONTEXT D-01 step 1 + D-04 wave 2.
@@ -484,14 +502,53 @@ export function purchaseFundingPayment(
   };
 }
 
+/**
+ * Keep an attached presale box from stealing the regular mint's recycled-ETH
+ * bonus basis.
+ *
+ * The combined selector has one important funding switch: Claimable assigns
+ * no msg.value to the mint, leaving the wallet shortfall for the presale box;
+ * Combined assigns msg.value to the mint first. When the selected internal
+ * balances already cover the entire mint, Claimable is therefore the exact
+ * same total payment with the useful allocation—the normal buy remains
+ * recycled and retains any FLIP bonus it earned.
+ */
+export function preserveMintBonusWithPresale(
+  payment,
+  mintCostWei = 0n,
+  presaleCostWei = 0n,
+) {
+  if (!payment || Number(payment.payKind) !== MINT_PAYMENT_KIND_COMBINED) return payment;
+  let mintCost = 0n;
+  let presaleCost = 0n;
+  try { mintCost = BigInt(mintCostWei ?? 0n); } catch (_e) { mintCost = 0n; }
+  try { presaleCost = BigInt(presaleCostWei ?? 0n); } catch (_e) { presaleCost = 0n; }
+  if (mintCost <= 0n || presaleCost <= 0n || BigInt(payment.msgValueWei ?? 0n) <= 0n) {
+    return payment;
+  }
+  const internalUsed = BigInt(payment.claimableUsedWei ?? 0n)
+    + BigInt(payment.afkingUsedWei ?? 0n);
+  if (internalUsed < mintCost) return payment;
+  return { ...payment, payKind: MINT_PAYMENT_KIND_CLAIMABLE };
+}
+
 async function _purchaseFundingFor(
   contract,
   buyer,
   totalCostWei,
-  { useClaimable = true, useAfking = false } = {},
+  {
+    useClaimable = true,
+    useAfking = false,
+    mintCostWei = 0n,
+    presaleCostWei = 0n,
+  } = {},
 ) {
   if (!contract) {
-    return purchaseFundingPayment(totalCostWei, 0n, 0n, { useClaimable, useAfking });
+    return preserveMintBonusWithPresale(
+      purchaseFundingPayment(totalCostWei, 0n, 0n, { useClaimable, useAfking }),
+      mintCostWei,
+      presaleCostWei,
+    );
   }
   const reads = await Promise.allSettled([
     useClaimable && typeof contract.claimableWinningsOf === 'function'
@@ -503,10 +560,14 @@ async function _purchaseFundingFor(
   const afking = reads[1].status === 'fulfilled' ? reads[1].value : 0n;
   // A read failure must not disable purchases. The unknown source simply
   // falls back to fresh ETH; the exact static-call remains authoritative.
-  return purchaseFundingPayment(totalCostWei, claimable, afking, {
-    useClaimable,
-    useAfking,
-  });
+  return preserveMintBonusWithPresale(
+    purchaseFundingPayment(totalCostWei, claimable, afking, {
+      useClaimable,
+      useAfking,
+    }),
+    mintCostWei,
+    presaleCostWei,
+  );
 }
 
 /**
@@ -596,6 +657,8 @@ export async function purchaseEth(args) {
     {
       useClaimable: args.preferClaimable !== false,
       useAfking: useAfkingForPurchase,
+      mintCostWei,
+      presaleCostWei: presaleBoxAmountWei,
     },
   );
 
@@ -616,40 +679,52 @@ export async function purchaseEth(args) {
       callArgs,
       signer
     );
-    if (!sim.ok) throw _structuredRevertError(sim.error, `static-call ${method}`);
+    if (!sim.ok) {
+      throw presaleBoxAmountWei > 0n
+        ? _structuredPresaleRevertError(sim.error, `static-call ${method}`)
+        : _structuredRevertError(sim.error, `static-call ${method}`);
+    }
   }
 
   // Phase 58 chokepoint — closure form mandatory.
-  const receipt = await sendTx(
-    (s) => {
-      const c = _buildContract(s);
-      if (presaleBoxAmountWei > 0n) {
-        return c.buyLootboxAndPresaleBox(
+  let receipt;
+  try {
+    receipt = await sendTx(
+      (s) => {
+        const c = _buildContract(s);
+        if (presaleBoxAmountWei > 0n) {
+          return c.buyLootboxAndPresaleBox(
+            buyer,
+            entryQuantityScaled,
+            lootBoxAmountWei,
+            affiliateCode,
+            payment.payKind,
+            presaleBoxAmountWei,
+            { value: payment.msgValueWei }
+          );
+        }
+        return c.purchase(
           buyer,
           entryQuantityScaled,
           lootBoxAmountWei,
           affiliateCode,
           payment.payKind,
-          presaleBoxAmountWei,
+          foil,
           { value: payment.msgValueWei }
         );
-      }
-      return c.purchase(
-        buyer,
-        entryQuantityScaled,
-        lootBoxAmountWei,
-        affiliateCode,
-        payment.payKind,
-        foil,
-        { value: payment.msgValueWei }
-      );
-    },
-    `${presaleBoxAmountWei > 0n ? 'Buy in + presale box'
-      : foil ? 'Buy foil pack' : ticketQuantity > 0 ? 'Buy tickets' : 'Buy luckbox'} (${
-      args.preferClaimable === false ? 'wallet ETH' : 'claimable first'
-    })`,
-    { onSubmitted: args.onSubmitted },
-  );
+      },
+      `${presaleBoxAmountWei > 0n ? 'Buy in + presale box'
+        : foil ? 'Buy foil pack' : ticketQuantity > 0 ? 'Buy tickets' : 'Buy luckbox'} (${
+        args.preferClaimable === false ? 'wallet ETH' : 'claimable first'
+      })`,
+      { onSubmitted: args.onSubmitted },
+    );
+  } catch (error) {
+    if (presaleBoxAmountWei > 0n) {
+      throw _structuredPresaleRevertError(error, 'send buyLootboxAndPresaleBox');
+    }
+    throw error;
+  }
 
   // Build a contract bound to the provider (signer-free) for log parsing.
   const contract = _buildContract(provider);
@@ -740,13 +815,18 @@ export async function purchasePresaleBox({
   );
   const callArgs = [buyer, requested, { value: payment.msgValueWei }];
   const sim = await requireStaticCall(contract, 'buyPresaleBox', callArgs, signer);
-  if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call buyPresaleBox');
+  if (!sim.ok) throw _structuredPresaleRevertError(sim.error, 'static-call buyPresaleBox');
 
-  const receipt = await sendTx(
-    (s) => _buildContract(s).buyPresaleBox(...callArgs),
-    'Buy presale box',
-    { onSubmitted },
-  );
+  let receipt;
+  try {
+    receipt = await sendTx(
+      (s) => _buildContract(s).buyPresaleBox(...callArgs),
+      'Buy presale box',
+      { onSubmitted },
+    );
+  } catch (error) {
+    throw _structuredPresaleRevertError(error, 'send buyPresaleBox');
+  }
   return { receipt, contract: _buildContract(provider), payment, state };
 }
 

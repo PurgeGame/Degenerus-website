@@ -35,6 +35,7 @@ const APP_BTN_ID = 'unav-discord-app';
 const MOUNT_RETRY_MS = 100;
 const MOUNT_RETRIES = 30;
 const PROFILE_LINKED_EVENT = 'degenerus:discord-profile-linked';
+const DISCORD_GUIDE_URL = new URL('../discord-connect.html', import.meta.url).toString();
 
 let _btn = null;
 let _busy = false;
@@ -141,19 +142,32 @@ async function _refresh() {
       : null;
 }
 
+/**
+ * Open a useful handoff synchronously while the click is still a trusted user
+ * gesture. The wallet signature is asynchronous, so waiting until it resolves
+ * before opening Discord is routinely blocked by browsers. This real page
+ * keeps that window available without marooning the player on about:blank.
+ */
+function _openDiscordGuide() {
+  try {
+    const tab = window.open(DISCORD_GUIDE_URL, '_blank');
+    if (tab) tab.opener = null;
+    return tab;
+  } catch (_e) {
+    return null;
+  }
+}
+
 async function _onClick() {
   if (_busy) return;
   const addr = get('connected.address');
 
   // Not discord-connected: bind the wallet first when we have one, so the
-  // OAuth callback persists the link in the same round-trip. Open the tab
-  // synchronously so a wallet signature wait cannot trigger popup blocking.
+  // OAuth callback persists the link in the same round-trip. Open the guided
+  // handoff synchronously so a wallet signature wait cannot trigger popup
+  // blocking, and so the player knows the signature comes before Discord.
   if (!_discordUser) {
-    let authTab = null;
-    try {
-      authTab = window.open('about:blank', '_blank');
-      if (authTab) authTab.opener = null;
-    } catch (_e) { /* popup policy fallback below */ }
+    const authTab = addr ? _openDiscordGuide() : null;
     let discordLinkToken = null;
     if (addr) {
       _busy = true; _render();

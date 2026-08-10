@@ -34,6 +34,14 @@ const RECORD_POOL_ABI = [
   'function biggestBuyEver() external view returns (uint128)',
 ];
 const TOKEN_UNIT = 10n ** 18n;
+// Coinflip storage layout for this immutable deployment. Slot 4 packs the
+// claimable-day latch, one bool, then the four uint24 record clocks at byte
+// offsets 4/7/10/13. There is no public Solidity getter for these clocks, so a
+// single eth_getStorageAt keeps accrued bounty shares exact while an indexer
+// migration or replay is catching up.
+const RECORD_CLOCK_STORAGE_SLOT = 4n;
+const RECORD_CLOCK_BYTE_OFFSETS = Object.freeze([4n, 7n, 10n, 13n]);
+const UINT24_MASK = (1n << 24n) - 1n;
 
 const RECORD_GETTER_BY_KIND = new Map([
   [RECORD_KIND_FLIP, 'biggestFlipEver'],
@@ -45,8 +53,11 @@ const RECORD_GETTER_BY_KIND = new Map([
 let _publicPoolProvider = null;
 let _poolReadInflight = null;
 let _lastLiveRecordPool = null;
+let _clockReadInflight = null;
+let _lastLiveRecordClocks = null;
 let _fetchRecordsJSON = fetchJSON;
 let _readRecordPool = readLiveRecordPool;
+let _readRecordClocks = readLiveRecordClocks;
 
 /**
  * Per-kind presentation facts.
@@ -165,6 +176,48 @@ export async function readLiveRecordPool() {
   }
 }
 
+/** Decode Coinflip's four packed uint24 record claim clocks. */
+export function decodeRecordClockSlot(raw) {
+  let packed;
+  try { packed = BigInt(raw ?? 0); } catch (_e) { return null; }
+  return RECORD_CLOCK_BYTE_OFFSETS.map((byteOffset) => {
+    const day = Number((packed >> (byteOffset * 8n)) & UINT24_MASK);
+    return Number.isInteger(day) && day > 0 ? day : null;
+  });
+}
+
+/**
+ * Exact per-kind record clocks from the deployed Coinflip storage.
+ *
+ * The API remains the normal indexed source, but rows created before its
+ * clockDay migration legitimately return null. Reading one packed slot avoids
+ * flattening every category to the 5% safety floor in that state.
+ */
+export async function readLiveRecordClocks() {
+  if (_clockReadInflight) return _clockReadInflight;
+  const request = (async () => {
+    try {
+      const provider = recordPoolProvider();
+      if (!provider || !CONTRACTS.COINFLIP || typeof provider.getStorage !== 'function') {
+        return _lastLiveRecordClocks;
+      }
+      const raw = await provider.getStorage(CONTRACTS.COINFLIP, RECORD_CLOCK_STORAGE_SLOT);
+      const decoded = decodeRecordClockSlot(raw);
+      if (!decoded || !decoded.some((day) => day != null)) return _lastLiveRecordClocks;
+      _lastLiveRecordClocks = decoded;
+      return decoded;
+    } catch (_e) {
+      return _lastLiveRecordClocks;
+    }
+  })();
+  _clockReadInflight = request;
+  try {
+    return await request;
+  } finally {
+    if (_clockReadInflight === request) _clockReadInflight = null;
+  }
+}
+
 /**
  * The smallest candidate that CLAIMS a share of the pool rather than merely
  * ratcheting the mark.
@@ -256,12 +309,16 @@ const SHARE_CEIL_BPS = 7_500;
  * category at deploy day 1, and the `mark == 0` branch pays the share accrued
  * from that clock when somebody clears the category's entry floor. The API has
  * no event from which to reconstruct that untouched clock, so a null clock is
- * exactly inferable as day 1 only while `held` is false. A held record with no
- * indexed clock remains unknown rather than inventing a claim date.
+ * exactly inferable as day 1 only while `held` is false. For a held record whose
+ * indexer clock is missing, the exact accrual is unknown but the contract's 5%
+ * floor is not: show that guaranteed minimum rather than a misleading dash.
  *
  * @returns {number|null} bps, or null when it cannot be known
  */
 export function accruedShareBps({ held, clockDay, today }) {
+  // A held row without its clock can always be quoted at the contract floor,
+  // even during the brief boot window before the app's current day arrives.
+  if (clockDay == null && held) return SHARE_FLOOR_BPS;
   if (today == null) return null;
   // GameTimeLib is 1-indexed. Untouched categories have no BigRecordUpdated
   // event, but their constructor clock is known exactly. Some early indexed
@@ -269,7 +326,6 @@ export function accruedShareBps({ held, clockDay, today }) {
   // day to day 1 as well.
   let stamped;
   if (clockDay == null) {
-    if (held) return null;
     stamped = 1;
   } else {
     stamped = Number(clockDay);
@@ -292,8 +348,9 @@ export function accruedPayoutWei(poolWei, shareBps) {
  * Exact FLIP credit a live candidate would take from the shared pool.
  *
  * `0n` means the candidate does not clear this record's bounty bar. `null`
- * means it does clear the bar, but an old indexed row is missing the clock
- * needed to quote the accrued share without guessing.
+ * means it clears the bar but the current day is unavailable for a record
+ * whose exact clock is known; a missing held clock still returns its guaranteed
+ * 5% floor.
  */
 export function candidateRecordPayoutWei({
   state,
@@ -352,7 +409,7 @@ export function shortAddress(value) {
  * The route already zero-fills missing kinds, but a stale deploy or a partial
  * response must still produce four cards rather than a collapsing row.
  */
-export function normalizeRecords(payload, liveRecordPool = null) {
+export function normalizeRecords(payload, liveRecordPool = null, liveRecordClocks = null) {
   const rows = Array.isArray(payload?.records) ? payload.records : [];
   const byKind = new Map(rows.map((row) => [Number(row?.kind), row]));
 
@@ -364,6 +421,15 @@ export function normalizeRecords(payload, liveRecordPool = null) {
       const row = byKind.get(meta.kind) ?? null;
       const value = toBigInt(row?.value);
       const player = String(row?.player || '').toLowerCase() || null;
+      const indexedClock = row?.clockDay == null || !Number.isInteger(Number(row.clockDay))
+        ? null
+        : Number(row.clockDay);
+      const rawLiveClock = Array.isArray(liveRecordClocks)
+        ? liveRecordClocks[meta.kind]
+        : null;
+      const liveClock = Number.isInteger(Number(rawLiveClock)) && Number(rawLiveClock) > 0
+        ? Number(rawLiveClock)
+        : null;
       return {
         kind: meta.kind,
         meta,
@@ -374,11 +440,10 @@ export function normalizeRecords(payload, liveRecordPool = null) {
         barToBeat: row?.barToBeat != null ? toBigInt(row.barToBeat) : barToBeat(value),
         claimCount: Number(row?.claimCount ?? 0) || 0,
         totalPaidFlip: toBigInt(row?.totalPaidFlip),
-        // Explicit null guard: Number(null) is 0, and a 0 here would read as
-        // "stamped on day zero" and max the share instead of suppressing it.
-        clockDay: row?.clockDay == null || !Number.isInteger(Number(row.clockDay))
-          ? null
-          : Number(row.clockDay),
+        // The packed chain clock is authoritative and also fills pre-migration
+        // API rows. Explicit guards matter: Number(null) is 0, which would
+        // otherwise max the accrued share instead of suppressing it.
+        clockDay: liveClock ?? indexedClock,
         held: value > 0n,
       };
     }),
@@ -387,24 +452,33 @@ export function normalizeRecords(payload, liveRecordPool = null) {
 
 /** GET the four records plus the shared pool. Throws on a failed read. */
 export async function fetchRecords() {
-  const [payload, liveRecordPool] = await Promise.all([
+  const [payload, liveRecordPool, liveRecordClocks] = await Promise.all([
     _fetchRecordsJSON('/records'),
     Promise.resolve().then(() => _readRecordPool()).catch(() => null),
+    Promise.resolve().then(() => _readRecordClocks()).catch(() => null),
   ]);
-  return normalizeRecords(payload, liveRecordPool);
+  return normalizeRecords(payload, liveRecordPool, liveRecordClocks);
 }
 
 /** Test-only readers for the API history and authoritative pool getter. */
-export function __setRecordsReadersForTest({ json, pool } = {}) {
+export function __setRecordsReadersForTest({ json, pool, clocks } = {}) {
   if (typeof json === 'function') _fetchRecordsJSON = json;
   if (typeof pool === 'function') _readRecordPool = pool;
+  if (typeof clocks === 'function') _readRecordClocks = clocks;
+  else if (typeof json === 'function' || typeof pool === 'function') {
+    // Existing reader-seam tests must never leak a public-RPC request.
+    _readRecordClocks = async () => null;
+  }
 }
 
 export function __resetRecordsReadersForTest() {
   _fetchRecordsJSON = fetchJSON;
   _readRecordPool = readLiveRecordPool;
+  _readRecordClocks = readLiveRecordClocks;
   _poolReadInflight = null;
   _lastLiveRecordPool = null;
+  _clockReadInflight = null;
+  _lastLiveRecordClocks = null;
 }
 
 /**

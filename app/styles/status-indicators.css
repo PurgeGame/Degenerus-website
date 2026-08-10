@@ -182,7 +182,7 @@ body.layout-basic .qst-score-label boon-product-indicator {
 
 /* The score control is column 3 of an auto-sized header rail whose column 2
    holds the centred QUESTS heading, so anything that widens the control pushes
-   it left into that heading. Sitting the chip on its own row under DEGEN SCORE
+   it left into that heading. Sitting the chip on its own row under DEGEN RATING
    keeps the rail's width unchanged at every desktop width. */
 body.layout-basic .qst-score-label boon-product-indicator {
   display: flex;

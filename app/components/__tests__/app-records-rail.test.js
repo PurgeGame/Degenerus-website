@@ -15,6 +15,7 @@ const {
   barToBeat,
   candidateRecordPayoutWei,
   candidateClaimsRecord,
+  decodeRecordClockSlot,
   fetchRecords,
   formatRecordValue,
   normalizeRecords,
@@ -286,6 +287,14 @@ describe('record units are never interchangeable', () => {
     });
     assert.equal(formatRecordValue(RECORD_KIND_BUY, 3_968n).amount, '3,968',
       'the expanded card keeps the exact record');
+    assert.deepEqual(formatCompactRecordValue(RECORD_KIND_BUY, 100n), {
+      amount: '100',
+      suffix: 'TIX',
+    });
+    assert.deepEqual(formatCompactRecordValue(RECORD_KIND_FLIP, 200_000n * FLIP), {
+      amount: '200K',
+      suffix: 'FLIP',
+    }, 'open entry floors use the same compact treatment as held records');
   });
 
   test('the Biggest widget puts Pack Ripped third and FLIP last', () => {
@@ -369,9 +378,28 @@ describe('normalizeRecords', () => {
     const state = normalizeRecords({ recordPool: '48000' }, 36_000n);
     assert.equal(state.recordPoolWei, 36_000n);
   });
+
+  test('authoritative packed clocks fill null API rows and override stale indexed clocks', () => {
+    const state = normalizeRecords({
+      records: [
+        { kind: 0, player: '0xa', value: '1', clockDay: null },
+        { kind: 1, player: '0xb', value: '1', clockDay: 2 },
+      ],
+    }, null, [8, 5, 3, 6]);
+    assert.deepEqual(state.records.map((record) => record.clockDay), [8, 5, 3, 6]);
+  });
 });
 
 describe('live bounty pool', () => {
+  test('decodes all four uint24 clocks from Coinflip storage slot 4', () => {
+    const packed = 9n
+      | (8n << 32n)
+      | (5n << 56n)
+      | (3n << 80n)
+      | (6n << 104n);
+    assert.deepEqual(decodeRecordClockSlot(`0x${packed.toString(16)}`), [8, 5, 3, 6]);
+  });
+
   test('fetches record history from the API but the displayed pool from chain', async () => {
     let requested = null;
     __setRecordsReadersForTest({
@@ -385,6 +413,24 @@ describe('live bounty pool', () => {
       const state = await fetchRecords();
       assert.equal(requested, '/records');
       assert.equal(state.recordPoolWei, 36_000n);
+    } finally {
+      __resetRecordsReadersForTest();
+    }
+  });
+
+  test('fetches the exact per-record clocks alongside the live pool', async () => {
+    __setRecordsReadersForTest({
+      json: async () => ({
+        recordPool: '48000',
+        records: [{ kind: 0, player: '0xa', value: '5', clockDay: null }],
+      }),
+      pool: async () => 36_000n,
+      clocks: async () => [8, 5, 3, 6],
+    });
+    try {
+      const state = await fetchRecords();
+      assert.equal(state.recordPoolWei, 36_000n);
+      assert.deepEqual(state.records.map((record) => record.clockDay), [8, 5, 3, 6]);
     } finally {
       __resetRecordsReadersForTest();
     }
@@ -431,8 +477,10 @@ describe('accrued claim share', () => {
     assert.equal(accruedShareBps({ held: false, clockDay: 0, today: 3 }), 600);
   });
 
-  test('is unknown, not invented, when the clock was never indexed', () => {
-    assert.equal(accruedShareBps({ held: true, clockDay: null, today: 40 }), null);
+  test('falls back to the guaranteed 5% floor when a held clock was not indexed', () => {
+    assert.equal(accruedShareBps({ held: true, clockDay: null, today: 40 }), 500);
+    assert.equal(accruedShareBps({ held: true, clockDay: null, today: null }), 500,
+      'the guaranteed floor does not wait for the app day to finish loading');
     assert.equal(accruedShareBps({ held: true, clockDay: 40, today: null }), null);
     assert.equal(accruedPayoutWei(10n ** 24n, null), null);
   });
@@ -468,7 +516,7 @@ describe('accrued claim share', () => {
     }), 10_000n * FLIP);
   });
 
-  test('does not invent a qualifying payout when a held record clock is unknown', () => {
+  test('quotes the guaranteed floor when a held record clock is unknown', () => {
     const state = normalizeRecords({
       recordPool: String(100_000n * FLIP),
       records: [{
@@ -483,7 +531,7 @@ describe('accrued claim share', () => {
       kind: RECORD_KIND_BUY,
       candidate: 120n,
       today: 20,
-    }), null);
+    }), 5_000n * FLIP);
   });
 
   test('normalizeRecords keeps a null clock null rather than day zero', () => {
@@ -547,12 +595,17 @@ describe('rail wiring', () => {
     assert.match(COMPONENT, /leaders\.appendChild\(this\.#renderLeader\(record\)\)/);
     assert.match(COMPONENT, /this\.#portrait\(record\.player, profile\)/);
     assert.match(COMPONENT, /record\.meta\.short/);
-    assert.match(COMPONENT, /formatCompactRecordValue\(record\.kind, record\.value\)/);
+    assert.match(
+      COMPONENT,
+      /formatCompactRecordValue\(\s*record\.kind,\s*record\.held \? record\.value : record\.meta\.floorValue/s,
+    );
     assert.match(COMPONENT, /compactValue\.amount/);
     assert.match(COMPONENT, /compactValue\.suffix/,
       'compact leaders use short units while expanded cards keep exact units');
-    assert.match(COMPONENT, /: 'UNHIT'/,
-      'an open compact record is identified without repeating its minimum');
+    assert.match(COMPONENT, /record\.held \? record\.value : record\.meta\.floorValue/,
+      'an open compact record formats its real floor without restoring a MIN prefix');
+    assert.match(COMPONENT, /records-rail__leader-amount/,
+      'the compact amount and unit have separate sizing slots');
     assert.doesNotMatch(COMPONENT, /<i>MIN<\/i>/,
       'the collapsed Biggest Bounties row leaves exact entry floors to expanded details');
     assert.match(COMPONENT, /records-rail__bounty-sight/);
@@ -574,6 +627,10 @@ describe('rail wiring', () => {
     assert.match(CSS, /records-rail__leader-label > small\s*\{[^}]*clamp\(0\.64rem, 0\.82vw, 0\.72rem\)/s,
       'BIGGEST is the dominant, readable line in every compact record bubble');
     assert.match(CSS, /records-rail__leader-value\s*\{[^}]*clamp\(0\.78rem, 1\.1vw, 0\.9rem\)/s);
+    assert.match(CSS, /records-rail__leader-value :is\(em, i\)\s*\{[^}]*"Inter"/s,
+      'TIX and other compact units retain the label font instead of inheriting numeric mono');
+    assert.match(CSS, /records-rail__leader-amount\s*\{[^}]*text-overflow:\s*ellipsis/s,
+      'a pathological value truncates before it can push its unit out of the bubble');
     assert.match(CSS, /records-rail__bounty-sight > b\s*\{[^}]*0\.6rem/s,
       'both the record and its compact bounty amount are deliberately enlarged');
     assert.doesNotMatch(COMPONENT, /records-rail__bounty-sight-copy/,

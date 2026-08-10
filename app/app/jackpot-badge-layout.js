@@ -1,6 +1,6 @@
 // Deterministic packing for the jackpot scratchoff's winning-trait badges.
-// A small (at most ~6% of the grid stride) overlap keeps the loose scratch-ticket feel without
-// allowing later badges to hide the result underneath them.
+// The cells keep every win readable; bounded jitter, rotation, and shuffled
+// layers stop a busy reveal from looking like a spreadsheet.
 
 export const WIN_RECEIPT_BAND_PERCENT = 40;
 export const WIN_ART_GAP_PERCENT = 2;
@@ -11,6 +11,20 @@ function _overlapArea(a, b) {
   const width = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
   const height = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
   return width * height;
+}
+
+function _unitNoise(seed) {
+  let value = Math.trunc(Number(seed) || 0) >>> 0;
+  value ^= value >>> 16;
+  value = Math.imul(value, 0x7feb352d);
+  value ^= value >>> 15;
+  value = Math.imul(value, 0x846ca68b);
+  value ^= value >>> 16;
+  return (value >>> 0) / 0xffffffff;
+}
+
+function _clamp(value, minimum, maximum) {
+  return Math.max(minimum, Math.min(maximum, value));
 }
 
 /**
@@ -57,7 +71,7 @@ export function winningBadgeLayout({
   }
 
   const tierMax = total === 1 ? 65 : total <= 3 ? 50 : total <= 8 ? 35 : 26;
-  let size = Math.min(tierMax, WIN_BADGE_MAX_PERCENT, cellFit * 1.06, artHeight);
+  let size = Math.min(tierMax, WIN_BADGE_MAX_PERCENT, cellFit * 1.04, artHeight);
   if (total === 1 && soloIndex === 0 && Number(soloSize) > 0) {
     size = Math.min(Number(soloSize), WIN_BADGE_MAX_PERCENT, artHeight);
   }
@@ -88,9 +102,34 @@ export function winningBadgeLayout({
     }
   }
 
-  return candidates
+  const packed = candidates
     .sort((a, b) => a.diamondOverlap - b.diamondOverlap || a.row - b.row || a.column - b.column)
     .slice(0, total)
-    .sort((a, b) => a.row - b.row || a.column - b.column)
-    .map(({ left, top, size: badgeSize }) => ({ left, top, size: badgeSize }));
+    .sort((a, b) => a.row - b.row || a.column - b.column);
+
+  return packed.map(({ left, top, size: badgeSize, row, column }, index) => {
+    // At 1.3% of badge width per axis, neighbors still look hand-scattered
+    // without spending the layout's full 12% overlap budget.
+    const jitter = total === 1 ? 0 : badgeSize * 0.013;
+    const seed = 0x9e3779b9
+      ^ Math.imul(qIdx + 1, 0x85ebca6b)
+      ^ Math.imul(total + 3, 0xc2b2ae35)
+      ^ Math.imul(row + 5, 0x27d4eb2d)
+      ^ Math.imul(column + 7, 0x165667b1)
+      ^ Math.imul(index + 11, 0xd3a2646c);
+    const xOffset = (_unitNoise(seed) * 2 - 1) * jitter;
+    const yOffset = (_unitNoise(seed ^ 0xa511e9b3) * 2 - 1) * jitter;
+    const rotationNoise = _unitNoise(seed ^ 0x63d83595) * 2 - 1;
+    const rotation = total === 1
+      ? (qIdx - 1.5) * 1.4
+      : Math.round(rotationNoise * 130) / 10;
+    const layer = 1 + Math.floor(_unitNoise(seed ^ 0xb5297a4d) * 5);
+    return {
+      left: _clamp(left + xOffset, artLeft, artRight - badgeSize),
+      top: _clamp(top + yOffset, artStart, artEnd - badgeSize),
+      size: badgeSize,
+      rotation,
+      layer,
+    };
+  });
 }

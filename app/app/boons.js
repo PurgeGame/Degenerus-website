@@ -17,9 +17,9 @@ const BOON_UI = Object.freeze({
   14: { product: 'decimator', label: 'BOON +25%', detail: 'Your next Decimator burn gets +25%' },
   15: { product: 'decimator', label: 'BOON +50%', detail: 'Your next Decimator burn gets +50%' },
   16: { product: 'whale', label: 'BOON −10%', detail: 'Your next whale pass purchase costs 10% less' },
-  17: { product: 'activity', label: 'BOON +5 SCORE', detail: 'Adds +10 quest streak, worth 5 Degen Score' },
-  18: { product: 'activity', label: 'BOON +12.5 SCORE', detail: 'Adds +25 quest streak, worth 12.5 Degen Score' },
-  19: { product: 'activity', label: 'BOON +25 SCORE', detail: 'Adds +50 quest streak, worth 25 Degen Score' },
+  17: { product: 'activity', label: 'BOON +5 RATING', detail: 'Adds +10 quest streak, worth 5 Degen Rating' },
+  18: { product: 'activity', label: 'BOON +12.5 RATING', detail: 'Adds +25 quest streak, worth 12.5 Degen Rating' },
+  19: { product: 'activity', label: 'BOON +25 RATING', detail: 'Adds +50 quest streak, worth 25 Degen Rating' },
   22: { product: 'lootbox', label: 'BOON +25%', detail: 'Your next luckbox purchase gets +25% value' },
   23: { product: 'whale', label: 'BOON −20%', detail: 'Your next whale pass purchase costs 20% less' },
   24: { product: 'whale', label: 'BOON −35%', detail: 'Your next whale pass purchase costs 35% less' },
@@ -166,7 +166,7 @@ function _boonStrength(ui) {
   return amount ? Number(amount[1]) : 0;
 }
 
-/** Activity boons store raw quest streak; each streak is worth 0.5 Degen Score. */
+/** Activity boons store raw quest streak; each streak is worth 0.5 Degen Rating. */
 export function activityBoonScore(rawStreak) {
   const streak = Number(rawStreak);
   return Number.isFinite(streak) && streak > 0 ? streak / 2 : 0;
@@ -199,9 +199,9 @@ export function boonIndicatorModel(payload, product) {
   const activityScore = activityBoonScore(activityAmount);
   return {
     boonType: Number(active.row.boonType),
-    label: activityAmount > 0 ? `BOON +${_formatScore(activityScore)} SCORE` : active.ui.label,
+    label: activityAmount > 0 ? `BOON +${_formatScore(activityScore)} RATING` : active.ui.label,
     title: `${activityAmount > 0
-      ? `Adds +${activityAmount} quest streak, worth ${_formatScore(activityScore)} Degen Score`
+      ? `Adds +${activityAmount} quest streak, worth ${_formatScore(activityScore)} Degen Rating`
       : active.ui.detail}${Number.isInteger(day) && day > 0 ? ` · Day ${day}` : ''}`,
   };
 }
@@ -213,7 +213,7 @@ const BOON_PRODUCT_NAMES = Object.freeze({
   purchase: 'Tickets',
   decimator: 'Decimator',
   whale: 'Whale',
-  activity: 'Degen score',
+  activity: 'Degen rating',
   deity: 'Deity pass',
   lazy: 'Lazy pass',
 });
@@ -222,7 +222,7 @@ function _issuanceEffect(ui, boonType) {
   const compact = String(ui?.label || '').replace(/^BOON\s*/i, '');
   if (Number(boonType) === 28) return 'WHALE BOON ACTIVE';
   if (ui?.product === 'quests') return '1 MISSED DAY SHIELDED';
-  if (ui?.product === 'activity') return compact.replace(/SCORE$/i, 'DEGEN SCORE');
+  if (ui?.product === 'activity') return compact.replace(/RATING$/i, 'DEGEN RATING');
   const amount = /([+−-]?\d+(?:\.\d+)?)%/.exec(compact)?.[1];
   if (!amount) return compact;
   const pct = `${amount.replace(/^\+/, '')}%`;

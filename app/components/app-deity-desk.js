@@ -8,10 +8,11 @@ import {
 import { boonTypePresentation } from '../app/boons.js';
 import { decodeRevertReason } from '../app/reason-map.js';
 import { deitySymbolPresentation } from '../app/deity-symbol.js';
-import { resolvePlayerTarget } from '../app/player-target.js';
+import { fetchPlayerSuggestions, resolvePlayerTarget } from '../app/player-target.js';
 
 const POLL_MS = 30_000;
 const ERROR_MS = 10_000;
+const SUGGEST_DEBOUNCE_MS = 220;
 
 function _ownedSymbolId(catalog, owner) {
   const wanted = String(owner || '').toLowerCase();
@@ -53,6 +54,10 @@ class AppDeityDesk extends HTMLElement {
   #requestId = 0;
   #errorTimer = null;
   #passEvent = null;
+  #suggestTimer = null;
+  #suggestAbort = null;
+  #suggestIndex = -1;
+  #outsideTarget = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -76,6 +81,14 @@ class AppDeityDesk extends HTMLElement {
     this.#poll = null;
     if (this.#errorTimer != null) clearTimeout(this.#errorTimer);
     this.#errorTimer = null;
+    if (this.#suggestTimer != null) clearTimeout(this.#suggestTimer);
+    this.#suggestTimer = null;
+    this.#suggestAbort?.abort?.();
+    this.#suggestAbort = null;
+    if (typeof document !== 'undefined') {
+      document.removeEventListener?.('click', this.#outsideTarget);
+    }
+    this.#outsideTarget = null;
     if (typeof document !== 'undefined') {
       document.removeEventListener?.('app-pass:tx-confirmed', this.#passEvent);
     }
@@ -92,11 +105,18 @@ class AppDeityDesk extends HTMLElement {
           <span class="deity-desk__crest"><img data-bind="deity-desk-symbol" src="" alt=""></span>
           <span class="deity-desk__identity-copy"><small>DEITY PASS</small><strong data-bind="deity-desk-title">God of —</strong></span>
         </header>
-        <label class="deity-desk__target">
-          <span>PLAYER</span>
-          <input type="text" name="deity-desk-target" placeholder="0x address or Discord ID"
-                 autocomplete="off" spellcheck="false" aria-label="Wallet address or Discord user ID">
-        </label>
+        <div class="deity-desk__target">
+          <label for="deity-desk-target-input">TARGET PLAYER</label>
+          <span class="deity-desk__target-control">
+            <input id="deity-desk-target-input" type="text" name="deity-desk-target"
+                   placeholder="Wallet, Discord ID, or @name" autocomplete="off" spellcheck="false"
+                   role="combobox" aria-autocomplete="list" aria-expanded="false"
+                   aria-controls="deity-desk-target-results"
+                   aria-label="Target player wallet, Discord user ID, or Discord name">
+            <ul id="deity-desk-target-results" class="deity-desk__suggestions"
+                data-bind="deity-desk-suggestions" role="listbox" hidden></ul>
+          </span>
+        </div>
         <div class="deity-desk__actions" aria-label="Deity actions">
           <button type="button" class="deity-desk__smite" data-write data-bind="deity-desk-smite" disabled title="Burn 200 FLIP to smite this player"><span>SMITE</span><strong>-2 SCORE</strong><small class="deity-desk__smite-cost">COST:<img src="/whitepaper/flame-logo-split.svg" alt="FLIP">200</small></button>
           ${[0, 1, 2].map((slot) => `<button type="button" data-write data-slot="${slot}" data-bind="deity-desk-boon-${slot}" disabled><span data-bind="deity-desk-boon-name-${slot}">BOON ${slot + 1}</span><strong data-bind="deity-desk-boon-effect-${slot}">RNG PENDING</strong></button>`).join('')}
@@ -112,6 +132,168 @@ class AppDeityDesk extends HTMLElement {
     }
     this.querySelector('[data-bind="deity-desk-smite"]')
       ?.addEventListener('click', (event) => this.#act(event, 'smite'));
+    const input = this.querySelector('[name="deity-desk-target"]');
+    input?.addEventListener('input', () => {
+      delete input.dataset.targetAddress;
+      delete input.dataset.targetName;
+      input.classList?.remove('is-player-selected');
+      this.#scheduleSuggestions(input.value);
+    });
+    input?.addEventListener('keydown', (event) => this.#onTargetKeydown(event));
+    this.#outsideTarget = (event) => {
+      if (event?.target && this.contains?.(event.target)) return;
+      this.#closeSuggestions();
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener?.('click', this.#outsideTarget);
+    }
+  }
+
+  #scheduleSuggestions(value) {
+    if (this.#suggestTimer != null) clearTimeout(this.#suggestTimer);
+    this.#suggestTimer = null;
+    const query = String(value || '').trim().replace(/^@/, '');
+    if (query.length < 2 || !/[a-z]/i.test(query)) {
+      this.#suggestAbort?.abort?.();
+      this.#suggestAbort = null;
+      this.#closeSuggestions();
+      return;
+    }
+    this.#suggestTimer = setTimeout(() => {
+      this.#suggestTimer = null;
+      void this.#loadSuggestions(query);
+    }, SUGGEST_DEBOUNCE_MS);
+    this.#suggestTimer?.unref?.();
+  }
+
+  async #loadSuggestions(query) {
+    this.#suggestAbort?.abort?.();
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    this.#suggestAbort = controller;
+    try {
+      const suggestions = await fetchPlayerSuggestions(query, {
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+      if (controller?.signal?.aborted || this.#suggestAbort !== controller) return;
+      this.#renderSuggestions(suggestions);
+    } catch (error) {
+      if (error?.name !== 'AbortError') this.#closeSuggestions();
+    } finally {
+      if (this.#suggestAbort === controller) this.#suggestAbort = null;
+    }
+  }
+
+  #renderSuggestions(suggestions) {
+    const list = this.querySelector('[data-bind="deity-desk-suggestions"]');
+    const input = this.querySelector('[name="deity-desk-target"]');
+    if (!list || !input) return;
+    list.textContent = '';
+    this.#suggestIndex = -1;
+    for (const [index, suggestion] of (suggestions || []).entries()) {
+      const option = document.createElement('li');
+      option.id = `deity-desk-target-option-${index}`;
+      option.className = 'deity-desk__suggestion';
+      option.tabIndex = -1;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', 'false');
+      option.dataset.address = suggestion.address;
+      option.dataset.name = suggestion.name;
+
+      if (suggestion.avatar) {
+        const avatar = document.createElement('img');
+        avatar.className = 'deity-desk__suggestion-avatar';
+        avatar.src = suggestion.avatar;
+        avatar.alt = '';
+        option.appendChild(avatar);
+      } else {
+        const fallback = document.createElement('span');
+        fallback.className = 'deity-desk__suggestion-avatar is-fallback';
+        fallback.textContent = suggestion.name.slice(0, 1).toUpperCase();
+        fallback.setAttribute('aria-hidden', 'true');
+        option.appendChild(fallback);
+      }
+
+      const identity = document.createElement('span');
+      identity.className = 'deity-desk__suggestion-identity';
+      const name = document.createElement('strong');
+      name.textContent = `@${suggestion.name}`;
+      const address = document.createElement('small');
+      address.textContent = `${suggestion.address.slice(0, 6)}…${suggestion.address.slice(-4)}`;
+      identity.appendChild(name);
+      identity.appendChild(address);
+      option.appendChild(identity);
+      option.addEventListener('mouseenter', () => this.#setSuggestionIndex(index));
+      option.addEventListener('mousedown', (event) => event?.preventDefault?.());
+      option.addEventListener('click', (event) => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        this.#selectSuggestion(option);
+      });
+      list.appendChild(option);
+    }
+    const hasSuggestions = list.children.length > 0;
+    list.hidden = !hasSuggestions;
+    input.setAttribute('aria-expanded', String(hasSuggestions));
+    this.querySelector('[data-bind="deity-desk"]')
+      ?.classList?.toggle('has-target-suggestions', hasSuggestions);
+  }
+
+  #suggestionRows() {
+    return Array.from(this.querySelectorAll('.deity-desk__suggestion'));
+  }
+
+  #setSuggestionIndex(index) {
+    const rows = this.#suggestionRows();
+    if (rows.length === 0) return;
+    this.#suggestIndex = Math.max(0, Math.min(rows.length - 1, Number(index) || 0));
+    const input = this.querySelector('[name="deity-desk-target"]');
+    rows.forEach((row, rowIndex) => {
+      const active = rowIndex === this.#suggestIndex;
+      row.classList?.toggle('is-active', active);
+      row.setAttribute('aria-selected', String(active));
+    });
+    input?.setAttribute('aria-activedescendant', rows[this.#suggestIndex].id);
+  }
+
+  #onTargetKeydown(event) {
+    const rows = this.#suggestionRows();
+    if (event?.key === 'Escape') {
+      this.#closeSuggestions();
+      return;
+    }
+    if (rows.length === 0 || !['ArrowDown', 'ArrowUp', 'Enter'].includes(event?.key)) return;
+    event.preventDefault?.();
+    if (event.key === 'Enter') {
+      this.#selectSuggestion(rows[Math.max(0, this.#suggestIndex)]);
+      return;
+    }
+    const direction = event.key === 'ArrowDown' ? 1 : -1;
+    const current = this.#suggestIndex < 0 ? (direction > 0 ? -1 : 0) : this.#suggestIndex;
+    this.#setSuggestionIndex((current + direction + rows.length) % rows.length);
+  }
+
+  #selectSuggestion(option) {
+    const input = this.querySelector('[name="deity-desk-target"]');
+    const address = String(option?.dataset?.address || '');
+    const name = String(option?.dataset?.name || '');
+    if (!input || !address || !name) return;
+    input.value = `@${name}`;
+    input.dataset.targetAddress = address;
+    input.dataset.targetName = name;
+    input.classList?.add('is-player-selected');
+    this.#closeSuggestions();
+    input.focus?.();
+  }
+
+  #closeSuggestions() {
+    const list = this.querySelector('[data-bind="deity-desk-suggestions"]');
+    const input = this.querySelector('[name="deity-desk-target"]');
+    if (list) list.hidden = true;
+    input?.setAttribute('aria-expanded', 'false');
+    input?.removeAttribute?.('aria-activedescendant');
+    this.querySelector('[data-bind="deity-desk"]')
+      ?.classList?.remove('has-target-suggestions');
+    this.#suggestIndex = -1;
   }
 
   async #refresh() {
@@ -127,7 +309,13 @@ class AppDeityDesk extends HTMLElement {
       this.#catalog = null;
       this.#boonState = null;
       const input = this.querySelector('[name="deity-desk-target"]');
-      if (input) input.value = '';
+      if (input) {
+        input.value = '';
+        delete input.dataset.targetAddress;
+        delete input.dataset.targetName;
+        input.classList?.remove('is-player-selected');
+      }
+      this.#closeSuggestions();
     }
     this.#address = address;
     const [catalog, boons] = await Promise.allSettled([
@@ -166,6 +354,7 @@ class AppDeityDesk extends HTMLElement {
     const canSign = deriveCanSign();
     const input = this.querySelector('[name="deity-desk-target"]');
     if (input) input.disabled = !canSign || this.#busy != null;
+    if (input?.disabled) this.#closeSuggestions();
     for (let slot = 0; slot < 3; slot += 1) {
       const button = this.querySelector(`[data-bind="deity-desk-boon-${slot}"]`);
       const name = this.querySelector(`[data-bind="deity-desk-boon-name-${slot}"]`);
@@ -206,7 +395,7 @@ class AppDeityDesk extends HTMLElement {
     this.#setFeedback(action === 'smite' ? 'Resolving target…' : 'Resolving recipient…', false);
     this.#render();
     try {
-      const target = await resolvePlayerTarget(input?.value);
+      const target = await resolvePlayerTarget(input?.dataset?.targetAddress || input?.value);
       if (action === 'smite') {
         await smiteWithDeity({ deityId: model.symbolId, target });
       } else {
@@ -216,7 +405,13 @@ class AppDeityDesk extends HTMLElement {
           usedMask: Number(this.#boonState?.usedMask || 0) | (1 << action),
         };
       }
-      if (input) input.value = '';
+      if (input) {
+        input.value = '';
+        delete input.dataset.targetAddress;
+        delete input.dataset.targetName;
+        input.classList?.remove('is-player-selected');
+      }
+      this.#closeSuggestions();
       this.#setFeedback(action === 'smite' ? 'Smite confirmed.' : 'Boon issued.', false);
       this.dispatchEvent(new CustomEvent('app-pass:tx-confirmed', {
         detail: { kind: action === 'smite' ? 'deity-smite' : 'deity-boon', target, slot: action },

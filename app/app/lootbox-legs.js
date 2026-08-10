@@ -60,6 +60,20 @@ const TRANSFER_EVENTS_ABI = [
   'event Transfer(address indexed from, address indexed to, uint256 value)',
 ];
 
+/**
+ * A BoxSpin's low seed bits are preserved in its synthetic bet id. The
+ * contract chooses the hero quadrant with `seed & 3`, so the same two bits are
+ * the authoritative explanation for a one-symbol S2 payout in the reveal.
+ */
+export function boxSpinHeroQuadrant(betId) {
+  try {
+    const id = BigInt(betId ?? 0);
+    return ((id >> 63n) & 1n) === 1n ? Number(id & 3n) : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
 function _entropyHash2(a, b) {
   const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
     ['uint256', 'uint256'],
@@ -141,7 +155,7 @@ const BOON_REVEAL_LABELS = Object.freeze({
   purchase: 'TICKET BOON',
   decimator: 'DECIMATOR BOON',
   whale: 'WHALE PASS BOON',
-  activity: 'DEGEN SCORE BOON',
+  activity: 'DEGEN RATING BOON',
   deity: 'DEITY PASS BOON',
   lazy: 'LAZY PASS BOON',
 });
@@ -217,7 +231,7 @@ export function lootboxRewardPresentation(
       const wholeScore = raw / 2n;
       const score = raw % 2n === 0n ? `${wholeScore}` : `${wholeScore}.5`;
       return {
-        label: 'DEGEN SCORE BOON',
+        label: 'DEGEN RATING BOON',
         value: `+${score}`,
         detail: '',
       };
@@ -306,6 +320,7 @@ export async function enrichLootboxBoonLegs(legs, {
  * @param {bigint} betId
  * @param {bigint} packed
  * @returns {{boxOrigin: boolean, spinType: string, spinCount: number,
+ *            heroQuadrant: number|null,
  *            survived: boolean|null,
  *            reels: Array<{spinIndex: number, score: number,
  *                          playerTicket: bigint, resultTicket: bigint,
@@ -316,6 +331,7 @@ export function decodeBoxSpin(betId, packed) {
   const id = BigInt(betId ?? 0);
   const p = BigInt(packed ?? 0);
   const boxOrigin = ((id >> 63n) & 1n) === 1n;
+  const heroQuadrant = boxSpinHeroQuadrant(id);
   const typeCode = Number((id >> 60n) & 0x7n);
   const spinType = SPIN_TYPES[typeCode] ?? `unknown_${typeCode}`;
   const spinCount = Number((p >> COUNT_SHIFT) & 0xFFn);
@@ -335,7 +351,7 @@ export function decodeBoxSpin(betId, packed) {
       resultTraits: dgnUnpackTicket(resultTicket),
     });
   }
-  return { boxOrigin, spinType, spinCount, survived, reels };
+  return { boxOrigin, spinType, spinCount, heroQuadrant, survived, reels };
 }
 
 /**
@@ -574,6 +590,10 @@ export function openLegsFromDegenerettePayouts(items) {
         out.push({
           legType: 'spin',
           boxOrigin: true,
+          betId: data.betId == null ? null : String(data.betId),
+          heroQuadrant: data.heroQuadrant == null
+            ? boxSpinHeroQuadrant(data.betId)
+            : (Number(data.heroQuadrant) & 3),
           spinType: String(data.spinType || ''),
           spinCount: Number(data.spinCount ?? data.reels.length),
           survived: data.survived == null ? null : Boolean(data.survived),
@@ -716,6 +736,10 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
         out.push({
           legType: 'spin',
           boxOrigin: true,
+          betId: spin.betId == null ? null : String(spin.betId),
+          heroQuadrant: spin.heroQuadrant == null
+            ? boxSpinHeroQuadrant(spin.betId)
+            : (Number(spin.heroQuadrant) & 3),
           spinType: String(spin.spinType || ''),
           spinCount: Number(spin.spinCount ?? spin.reels?.length ?? 0),
           survived: spin.survived == null ? null : Boolean(spin.survived),

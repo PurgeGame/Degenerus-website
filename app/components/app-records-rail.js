@@ -1014,7 +1014,14 @@ class AppRecordsRail extends HTMLElement {
     if (!record.held) item.classList.add('is-open');
 
     const value = formatRecordValue(record.kind, record.value);
-    const compactValue = formatCompactRecordValue(record.kind, record.value);
+    // Open records still show their real entry floor, but that floor must use
+    // the same compact number/unit treatment as a held record. Rendering the
+    // raw `floorText` here regressed 200,000 FLIP / 100 TICKETS back into one
+    // oversized monospace string.
+    const compactValue = formatCompactRecordValue(
+      record.kind,
+      record.held ? record.value : record.meta.floorValue,
+    );
     const profile = record.player ? this.#profiles.get(record.player) : null;
     const holder = profile?.name || shortAddress(record.player);
     const payoutWei = this.#recordPayoutWei(record);
@@ -1040,11 +1047,12 @@ class AppRecordsRail extends HTMLElement {
           <small>BIGGEST</small>
           <b>${escapeHtml(record.meta.short)}</b>
         </span>
-        <strong class="records-rail__leader-value">${record.held
-          ? `${escapeHtml(compactValue.amount)}${compactValue.suffix
-            ? ` <em>${escapeHtml(compactValue.suffix)}</em>`
-            : ''}`
-          : 'UNHIT'}</strong>
+        <strong class="records-rail__leader-value">
+          <span class="records-rail__leader-amount">${escapeHtml(compactValue.amount)}</span>
+          ${compactValue.suffix
+            ? `<em>${escapeHtml(compactValue.suffix)}</em>`
+            : ''}
+        </strong>
       </span>
     `;
     item.addEventListener('click', (event) => {
@@ -1067,9 +1075,9 @@ class AppRecordsRail extends HTMLElement {
     const bar = formatRecordValue(record.kind, record.barToBeat);
     const profile = record.player ? this.#profiles.get(record.player) : null;
 
-    // What breaking this record pays right now. Null when the clock is unknown
-    // (a row indexed before clockDay existed) — the card then shows the bar
-    // alone rather than inventing a share.
+    // What breaking this record pays right now. A missing indexed clock uses
+    // the contract-guaranteed 5% floor, so a freshly hit record never flashes
+    // a dash while its exact clock metadata catches up.
     const today = Number(get('app.daySync')?.day ?? get('app.lastDay')?.day) || null;
     const shareBps = accruedShareBps({ held: record.held, clockDay: record.clockDay, today });
     const payoutWei = this.#recordPayoutWei(record, today);

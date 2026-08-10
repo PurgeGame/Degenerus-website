@@ -147,9 +147,9 @@ test('shows the production-style modifier meter only for real or apparent wins',
   assert.match(statusCss, /@keyframes df-meter-drain-to-min[\s\S]*?bottom:\s*0%/);
   assert.match(
     statusCss,
-    /@keyframes df-meter-rebound-from-min[\s\S]*?0%, 6\.086957%[^}]*bottom:\s*0%[\s\S]*?56\.521739%[^}]*\+ 30%[\s\S]*?100%[^}]*var\(--df-meter-stop/,
+    /@keyframes df-meter-rebound-from-min[\s\S]*?0%, 6\.086957%[^}]*bottom:\s*0%[\s\S]*?39\.130435%[^}]*bottom:\s*98%[\s\S]*?65\.217391%[^}]*bottom:\s*8%[\s\S]*?78\.26087%[^}]*var\(--df-meter-handoff[\s\S]*?100%[^}]*var\(--df-meter-stop/,
   );
-  assert.match(statusCss, /@keyframes df-meter-recovery-tail[\s\S]*?0%[^}]*\+ 14%[\s\S]*?100%[^}]*var\(--df-meter-stop/);
+  assert.match(statusCss, /@keyframes df-meter-recovery-tail[\s\S]*?0%[^}]*var\(--df-meter-handoff[\s\S]*?44%[^}]*var\(--df-meter-low[\s\S]*?76%[^}]*var\(--df-meter-bounce[\s\S]*?100%[^}]*var\(--df-meter-stop/);
   assert.match(js, /recoveryTail: reversalCountForEnding\(ending\) >= 2/);
   assert.match(js, /if \(won\) \{\s*renderMeter\(meterHost, \{ recoveryTail:/);
   assert.match(js, /df-modifier-meter--settling/);

@@ -445,7 +445,7 @@ class AppPassSection extends HTMLElement {
           </span>
           <span class="pass-product-perks" aria-label="Lazy pass benefits">
             <span class="pass-lootbox-perk pass-lazy-lootbox-perk" data-bind="pass-lazy-lootbox">BONUS LUCKBOX · 10% OF PASS</span>
-            <span data-bind="pass-lazy-score">+85% DEGEN SCORE</span>
+            <span data-bind="pass-lazy-score">+85% DEGEN RATING</span>
             <span data-bind="pass-lazy-afking-seat">AFKING SEAT</span>
           </span>
           <span class="pass-product-checkout pass-product-checkout--lazy">
@@ -470,7 +470,7 @@ class AppPassSection extends HTMLElement {
           </span>
           <span class="pass-product-perks" aria-label="Whale pass benefits">
             <span class="pass-lootbox-perk pass-whale-lootbox-perk" data-bind="pass-whale-lootbox">BONUS LUCKBOX · 10% OF PASS</span>
-            <span data-bind="pass-whale-score">+115% DEGEN SCORE</span>
+            <span data-bind="pass-whale-score">+115% DEGEN RATING</span>
             <span class="pass-whale-afking-seat" data-bind="pass-whale-afking-seat">AFKING SEAT</span>
           </span>
           <span class="pass-product-checkout pass-product-checkout--whale">
@@ -509,7 +509,7 @@ class AppPassSection extends HTMLElement {
             <span class="pass-product-perks pass-product-perks--deity" aria-label="Deity pass benefits">
               <span class="pass-lootbox-perk pass-deity-lootbox-perk"
                     data-bind="pass-deity-lootbox">BONUS LUCKBOX · 10% OF PASS</span>
-              <span data-bind="pass-deity-score">+155% DEGEN SCORE</span>
+              <span data-bind="pass-deity-score">+155% DEGEN RATING</span>
               <span data-bind="pass-deity-afking-seat">AFKING SEAT</span>
             </span>
             <button type="button" class="pass-deity-open" data-bind="pass-deity-open"
@@ -1008,7 +1008,7 @@ class AppPassSection extends HTMLElement {
       const el = this.querySelector(`[data-bind="${bind}"]`);
       if (el) {
         const gain = ownsDeityPass ? 0 : projectedPassScoreGain(score, bonus);
-        el.textContent = gain > 0 ? `+${gain}% DEGEN SCORE` : '';
+        el.textContent = gain > 0 ? `+${gain}% DEGEN RATING` : '';
         el.hidden = gain <= 0;
       }
     }

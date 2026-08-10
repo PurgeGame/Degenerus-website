@@ -98,6 +98,13 @@ describe('burnSdgnrs', () => {
     assert.equal(result.receipt.status, 1);
   });
 
+  test('formats redemption receipts with no more than two significant figures', () => {
+    assert.equal(sdgnrsMod.formatSdgnrsRedemptionAmount(15n * TOKEN / 10n), '1.5');
+    assert.equal(sdgnrsMod.formatSdgnrsRedemptionAmount(25n * TOKEN), '25');
+    assert.equal(sdgnrsMod.formatSdgnrsRedemptionAmount(123_450_000n * TOKEN), '120M');
+    assert.equal(sdgnrsMod.formatSdgnrsRedemptionAmount(999_999n * TOKEN), '1M');
+  });
+
   test('reads the current ETH expectation and contingent FLIP backing', async () => {
     const fake = makeFakeContract({ preview: [42n, 9000n] });
     sdgnrsMod.__setContractFactoryForTest(() => fake);
@@ -204,5 +211,38 @@ describe('burnSdgnrs', () => {
     assert.deepEqual(fake._order, ['claim-static', 'claim-send']);
     assert.equal(result.claim.lootboxEth, 4n);
     assert.equal(result.claim.flipPaid, 500n);
+  });
+
+  test('discovery retains and aggregates the burned amount for each pending period', async () => {
+    const iface = new contractsMod.ethers.Interface([
+      'event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 flipEscrowed, uint24 periodIndex)',
+    ]);
+    const logs = [12n, 13n].map((amount, index) => {
+      const event = iface.encodeEventLog(iface.getEvent('RedemptionSubmitted'), [
+        CONNECTED, amount * TOKEN, 4n, 5n, 67,
+      ]);
+      return {
+        address: CONTRACTS.SDGNRS,
+        topics: event.topics,
+        data: event.data,
+        blockNumber: 1_000 + index,
+        transactionHash: `0x${index + 1}`,
+        index,
+      };
+    });
+    contractsMod.setProvider({
+      ...makeFakeProvider(),
+      getBlockNumber: async () => 1_100,
+      getLogs: async () => logs,
+    });
+    sdgnrsMod.__setContractFactoryForTest(() => makeFakeContract({
+      pending: [8n, 156, 500n],
+      roll: 0,
+    }));
+
+    const discovered = await sdgnrsMod.discoverSdgnrsRedemptions({ player: CONNECTED });
+    assert.equal(discovered.periods.length, 1);
+    assert.equal(discovered.periods[0].periodIndex, 67);
+    assert.equal(discovered.periods[0].sdgnrsAmount, 25n * TOKEN);
   });
 });

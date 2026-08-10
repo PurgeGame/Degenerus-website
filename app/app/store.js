@@ -55,7 +55,7 @@ const _state = {
     chainOk: null,         // boolean | null — null = no wallet; true/false = on/off Sepolia
     walletPickerOpen: false,
     proEligible: false,    // Phase 64 — connected wallet's activity score > 80 pts (pro-gate.js)
-    allInEligible: false,  // connected self-view currently clears the >60 Degen Score ALL IN gate
+    allInEligible: false,  // connected self-view currently clears the >60 Degen Rating ALL IN gate
     foilQuest: null,       // current account's unfinished daily foil quest + routed purchase level
     // The right-side Protocol Coins instrument owns the FLIP spoiler gate.
     // Its compact mirror on the buy side subscribes to this exact disclosure

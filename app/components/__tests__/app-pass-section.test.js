@@ -612,8 +612,8 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
   test('premium pass cards state their contract-backed bonuses and elevate live pricing', () => {
     const el = instantiate();
     for (const benefit of [
-      '+85% DEGEN SCORE',
-      '+115% DEGEN SCORE', '+155% DEGEN SCORE', 'BONUS LUCKBOX',
+      '+85% DEGEN RATING',
+      '+115% DEGEN RATING', '+155% DEGEN RATING', 'BONUS LUCKBOX',
       'three boons per day forever', 'AFKING SEAT',
     ]) {
       assert.match(el.innerHTML, new RegExp(benefit.replace(/[+]/g, '\\+')));
@@ -725,13 +725,13 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       : { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
     const el = instantiate();
     await settle(40);
-    assert.equal(el.querySelector('[data-bind="pass-lazy-score"]').textContent, '+35% DEGEN SCORE');
-    assert.equal(el.querySelector('[data-bind="pass-whale-score"]').textContent, '+65% DEGEN SCORE');
-    assert.equal(el.querySelector('[data-bind="pass-deity-score"]').textContent, '+105% DEGEN SCORE');
+    assert.equal(el.querySelector('[data-bind="pass-lazy-score"]').textContent, '+35% DEGEN RATING');
+    assert.equal(el.querySelector('[data-bind="pass-whale-score"]').textContent, '+65% DEGEN RATING');
+    assert.equal(el.querySelector('[data-bind="pass-deity-score"]').textContent, '+105% DEGEN RATING');
     el.disconnectedCallback();
   });
 
-  test('a zero projected Degen Score gain leaves no empty bonus chip', async () => {
+  test('a zero projected Degen Rating gain leaves no empty bonus chip', async () => {
     const maxed = {
       mintLevelStreakPoints: 50,
       mintCountPoints: 25,

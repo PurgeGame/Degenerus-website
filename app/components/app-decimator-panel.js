@@ -72,8 +72,10 @@ import {
   PRESALE_BOX_MIN_WEI,
   // A ticket is 4 entries; the contract takes entries and charges per entry, so
   // both the quote and the call go through these (see lootbox.js UNITS note).
-  // claimableFirstPayment mirrors the click-time funding split for the bonus preview.
-  ticketCostFromTickets, ENTRIES_PER_TICKET, claimableFirstPayment,
+  // These mirror the click-time funding split for the bonus preview, including
+  // the Claimable allocation that protects a regular mint beside a presale box.
+  ticketCostFromTickets, ENTRIES_PER_TICKET, purchaseFundingPayment,
+  preserveMintBonusWithPresale, MINT_PAYMENT_KIND_CLAIMABLE,
   readPurchaseFundingPriority as _readFundingPriority,
   writePurchaseFundingPriority as _writeFundingPriority,
   readPurchaseUseAfking as _readUseAfking,
@@ -286,7 +288,9 @@ export function purchaseFlipCreditBreakdown({
   foilCostWei = 0n,
   presaleCostWei = 0n,
   claimableWei = 0n,
+  afkingWei = 0n,
   preferClaimable = true,
+  useAfking = false,
   bountyWei = 0n,
 } = {}) {
   const parsedTickets = Number(tickets);
@@ -310,18 +314,33 @@ export function purchaseFlipCreditBreakdown({
   let mintCost = 0n;
   let foilCost = 0n;
   let presaleCost = 0n;
+  let claimable = 0n;
+  let afking = 0n;
   let bounty = 0n;
   try { price = BigInt(priceWei); } catch (_e) { price = 0n; }
   try { total = BigInt(totalCostWei); } catch (_e) { total = 0n; }
   try { mintCost = BigInt(mintCostWei); } catch (_e) { mintCost = 0n; }
   try { foilCost = BigInt(foilCostWei); } catch (_e) { foilCost = 0n; }
   try { presaleCost = BigInt(presaleCostWei); } catch (_e) { presaleCost = 0n; }
+  try { claimable = BigInt(claimableWei); } catch (_e) { claimable = 0n; }
+  try { afking = BigInt(afkingWei); } catch (_e) { afking = 0n; }
   try { bounty = BigInt(bountyWei); } catch (_e) { bounty = 0n; }
+  if (claimable < 0n) claimable = 0n;
+  if (afking < 0n) afking = 0n;
   if (bounty < 0n) bounty = 0n;
 
   let rebuy = 0n;
   if (price > 0n && total > 0n) {
-    const payment = claimableFirstPayment(total, preferClaimable ? claimableWei : 0n);
+    const payment = preserveMintBonusWithPresale(
+      purchaseFundingPayment(
+        total,
+        claimable,
+        afking,
+        { useClaimable: preferClaimable, useAfking },
+      ),
+      mintCost,
+      presaleCost,
+    );
     const threshold = price * 3n;
     const coinPerTicket = flipCostFromTickets(1);
     const creditFor = (claimableUsed) => (
@@ -344,10 +363,16 @@ export function purchaseFlipCreditBreakdown({
       // A combined mint + presale-box call allocates fresh ETH to the mint leg
       // first, then spends claimable on the rest. Only claimable consumed by
       // the mint earns this recycle bonus; the presale box itself does not.
-      const freshForMint = payment.msgValueWei < mintCost
-        ? payment.msgValueWei
-        : mintCost;
-      const mintClaimable = mintCost > freshForMint ? mintCost - freshForMint : 0n;
+      const freshForMint = payment.payKind === MINT_PAYMENT_KIND_CLAIMABLE
+        ? 0n
+        : payment.msgValueWei < mintCost ? payment.msgValueWei : mintCost;
+      const mintShortfall = mintCost > freshForMint ? mintCost - freshForMint : 0n;
+      const spendableClaimable = preferClaimable && claimable > 1n
+        ? claimable - 1n
+        : 0n;
+      const mintClaimable = spendableClaimable < mintShortfall
+        ? spendableClaimable
+        : mintShortfall;
       rebuy = creditFor(presaleCost > 0n ? mintClaimable : payment.claimableUsedWei);
     }
   }
@@ -428,7 +453,7 @@ export function allInWalletAfterGasReserveWei(raw) {
   return wallet > ALL_IN_GAS_RESERVE_WEI ? wallet - ALL_IN_GAS_RESERVE_WEI : 0n;
 }
 
-/** ALL IN is an earned high-variance surface, unlocked above 60 Degen Score. */
+/** ALL IN is an earned high-variance surface, unlocked above 60 Degen Rating. */
 export function allInDegenScoreEligible(value) {
   const score = Number(value);
   return Number.isFinite(score) && score > 60;
@@ -1836,7 +1861,9 @@ class AppDecimatorPanel extends HTMLElement {
       foilCostWei,
       presaleCostWei,
       claimableWei: this.#claimableWei,
+      afkingWei: this.#afkingFundingWei,
       preferClaimable: this.#preferClaimable,
+      useAfking: this.#useAfking,
       bountyWei: recordBountyWei ?? 0n,
     });
   }
@@ -2858,13 +2885,24 @@ class AppDecimatorPanel extends HTMLElement {
     }
   }
 
+  #clearCompletedBuyDraft() {
+    // A mined buy should not leave the visible form armed with the same
+    // amounts. Programmatic quest/all-in buys deliberately bypass this helper
+    // so their temporary values cannot erase a player's normal draft.
+    const tickets = this.querySelector('[name="dec-tickets"]');
+    const luckbox = this.querySelector('[name="dec-lootbox-eth"]');
+    if (tickets) tickets.value = '0';
+    if (luckbox) luckbox.value = '0';
+  }
+
   async #onBuyWithFlipClick(e, options = {}) {
     try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
     const allInFlow = options?.allIn === true;
     if (this.#busy) return false;
     const btn = this.querySelector('[data-bind="dec-buy-cta"]');
     const override = Number(options?.tickets);
-    const tickets = Number.isFinite(override) && override > 0
+    const hasTicketOverride = Number.isFinite(override) && override > 0;
+    const tickets = hasTicketOverride
       ? Math.round(override * ENTRIES_PER_TICKET) / ENTRIES_PER_TICKET
       : this.#ticketsWanted();
     if (tickets <= 0) {
@@ -2887,6 +2925,7 @@ class AppDecimatorPanel extends HTMLElement {
     }
     try {
       const { receipt } = await redeemFlip({ player, tickets });
+      if (!hasTicketOverride) this.#clearCompletedBuyDraft();
       // Same as the ETH ticket leg: FLIP-bought entries are trait-less until
       // the level draw, so no popup here — pack-watch pops the reveal once the
       // symbols are real. Fire-and-forget.
@@ -3282,6 +3321,8 @@ class AppDecimatorPanel extends HTMLElement {
             useAfking: questPurchase?.useAfking ?? this.#useAfking,
             onSubmitted,
           });
+
+      if (questPurchase == null) this.#clearCompletedBuyDraft();
 
       // Receipt-log-first reveal plumbing (CF-05):
       //   - LootBoxIdx entries → pending boxes for the app-root box controller

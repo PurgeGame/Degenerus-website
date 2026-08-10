@@ -789,12 +789,12 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       APP_CSS,
-      /\.app-decimator-panel \.dec-funds :is\([\s\S]*?\.dec-funds__priority,[\s\S]*?\.dec-funds__claim,[\s\S]*?\.dec-flip-toggle[\s\S]*?\)\s*\{[^}]*width:\s*5rem;[^}]*min-width:\s*5rem;[^}]*max-width:\s*5rem/s,
-      'Available Funds action buttons all occupy the same fixed column width',
+      /\.app-decimator-panel \.dec-funds :is\([\s\S]*?\.dec-funds__priority,[\s\S]*?\.dec-funds__claim,[\s\S]*?\.dec-flip-toggle[\s\S]*?\)\s*\{[^}]*width:\s*4rem;[^}]*min-width:\s*4rem;[^}]*max-width:\s*4rem/s,
+      'Available Funds action buttons all occupy the same compact column width',
     );
     assert.match(
       APP_CSS,
-      /\.app-decimator-panel \.dec-funds \.dec-funds__display \.dec-funds__priority,[\s\S]*?\.app-decimator-panel \.dec-funds \.dec-funds__claim\[data-write\]\s*\{[^}]*width:\s*5rem;[^}]*min-width:\s*5rem;[^}]*max-width:\s*5rem/s,
+      /\.app-decimator-panel \.dec-funds \.dec-funds__display \.dec-funds__priority,[\s\S]*?\.app-decimator-panel \.dec-funds \.dec-funds__claim\[data-write\]\s*\{[^}]*width:\s*4rem;[^}]*min-width:\s*4rem;[^}]*max-width:\s*4rem/s,
       'USE FIRST and the ETH Claim transaction override cannot diverge from that column',
     );
   });
@@ -1070,6 +1070,32 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(args[1], 800n, '2 tickets = 8 entries = 800 purchase units');
     const { LOOTBOX_MIN_WEI } = await import('../../app/lootbox.js');
     assert.equal(args[2], LOOTBOX_MIN_WEI * 3n, 'lootBoxAmountWei = 0.03 ETH scaled');
+    assert.equal(el.querySelector('[name="dec-tickets"]').value, '0',
+      'a mined buy clears the ticket draft');
+    assert.equal(el.querySelector('[name="dec-lootbox-eth"]').value, '0',
+      'a mined buy clears the luckbox draft');
+    el.disconnectedCallback();
+  });
+
+  test('a failed buy keeps both amounts available for retry', async () => {
+    const fakeContract = makeFakePurchaseContract({
+      staticCallShouldRevert: { purchase: true },
+    });
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+
+    const el = instantiate();
+    await flushMicrotasks();
+    const tickets = el.querySelector('[name="dec-tickets"]');
+    const luckbox = el.querySelector('[name="dec-lootbox-eth"]');
+    tickets.value = '2';
+    luckbox.value = '0.03';
+
+    el.querySelector('[data-write]').dispatchEvent({ type: 'click' });
+    await settle(60);
+
+    assert.equal(fakeContract._calls.purchase.length, 0, 'reverted simulation never sends');
+    assert.equal(tickets.value, '2', 'ticket draft is retained after failure');
+    assert.equal(luckbox.value, '0.03', 'luckbox draft is retained after failure');
     el.disconnectedCallback();
   });
 
@@ -1859,6 +1885,17 @@ describe('combined ticket + lootbox buy', () => {
       0n,
       'the reserved dust keeps a just-short claimable slice below the threshold',
     );
+    assert.equal(
+      purchaseFlipCreditBreakdown({
+        priceWei: price,
+        totalCostWei: price * 4n,
+        mintCostWei: price * 3n,
+        presaleCostWei: price,
+        claimableWei: price * 3n + 1n,
+      }).rebuy,
+      300n * FLIP,
+      'an attached presale box keeps the normal mint bonus when claimable covers the mint',
+    );
   });
 
   test('ALL IN opens a non-mutating currency/format quote at quarter-ticket precision', async () => {
@@ -1950,7 +1987,7 @@ describe('combined ticket + lootbox buy', () => {
     el.disconnectedCallback();
   });
 
-  test('ALL IN stays absent through 60 Degen Score and appears above 60', async () => {
+  test('ALL IN stays absent through 60 Degen Rating and appears above 60', async () => {
     _fetchHandler = async (url) => String(url).includes('/game/state')
       ? DEFAULT_GAME_STATE
       : { claimableEth: '0', flipBalance: '0', scoreBreakdown: { totalBps: 60 } };
@@ -3721,6 +3758,8 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
     assert.equal(sends.length, 1, 'exactly one redeemFlip send');
     assert.equal(sends[0][1], 800n, '2 tickets = 800 purchase units (400 per whole ticket)');
     assert.equal(purchase._calls.purchase.length, 0, 'the ETH purchase() path is untouched');
+    assert.equal(el.querySelector('[name="dec-tickets"]').value, '0',
+      'a mined FLIP buy clears the visible ticket draft');
     claimsMod.__resetContractFactoryForTest();
     el.disconnectedCallback();
   });

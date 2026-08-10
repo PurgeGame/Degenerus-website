@@ -52,7 +52,7 @@ describe('standalone Decimator draw replay', () => {
       'the full protocol denominator order remains available for other rounds');
   });
 
-  test('uses the protocol minimum Degen Score ladder and one-decimal K scores', () => {
+  test('uses the protocol minimum Degen Rating ladder and one-decimal K ratings', () => {
     assert.deepEqual(
       [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2].map(minDegenScoreForBucket),
       [0, 10, 30, 55, 85, 120, 180, 250, 300, 500, 1_000],
@@ -226,7 +226,7 @@ describe('standalone Decimator draw replay', () => {
   });
 
   test('page includes the complete top bucket rail, player score, and replay controls', () => {
-    assert.match(html, /MIN DEGEN SCORE:/);
+    assert.match(html, /MIN DEGEN RATING:/);
     assert.match(html, /WINNING SCORE/);
     assert.match(html, /TOTAL FLIP BURNED/);
     assert.match(html, /YOUR SCORE/);

@@ -32,11 +32,11 @@ describe('active boon product mapping', () => {
     assert.equal(rows.find((row) => row.boonType === 19)?.boostAmount, 75);
     assert.equal(
       boonIndicatorModel({ day: 62, boons: rows }, 'activity').label,
-      'BOON +37.5 SCORE',
+      'BOON +37.5 RATING',
     );
     assert.match(
       boonIndicatorModel({ day: 62, boons: rows }, 'activity').title,
-      /\+75 quest streak, worth 37\.5 Degen Score/,
+      /\+75 quest streak, worth 37\.5 Degen Rating/,
     );
   });
 
@@ -64,19 +64,19 @@ describe('active boon product mapping', () => {
     assert.equal(boonIndicatorModel(payload, 'purchase').label, 'BOON +25%');
     assert.equal(boonIndicatorModel(payload, 'decimator').label, 'BOON +50%');
     assert.equal(boonIndicatorModel(payload, 'whale').label, 'BOON −35%');
-    assert.equal(boonIndicatorModel(payload, 'activity').label, 'BOON +25 SCORE');
+    assert.equal(boonIndicatorModel(payload, 'activity').label, 'BOON +25 RATING');
     assert.equal(boonIndicatorModel(payload, 'deity').label, 'BOON −35%');
     assert.equal(boonIndicatorModel(payload, 'lazy').label, 'BOON −50%');
     assert.match(boonIndicatorModel(payload, 'purchase').title, /Day 62/);
   });
 
-  test('activity boon labels halve raw quest streak into Degen Score', () => {
+  test('activity boon labels halve raw quest streak into Degen Rating', () => {
     assert.equal(activityBoonScore(10), 5);
     assert.equal(activityBoonScore(25), 12.5);
     assert.equal(activityBoonScore(50), 25);
-    assert.equal(boonTypePresentation(17).effect, '+5 DEGEN SCORE');
-    assert.equal(boonTypePresentation(18).effect, '+12.5 DEGEN SCORE');
-    assert.equal(boonTypePresentation(19).effect, '+25 DEGEN SCORE');
+    assert.equal(boonTypePresentation(17).effect, '+5 DEGEN RATING');
+    assert.equal(boonTypePresentation(18).effect, '+12.5 DEGEN RATING');
+    assert.equal(boonTypePresentation(19).effect, '+25 DEGEN RATING');
   });
 
   test('deity choices state the concrete player benefit instead of a bare percent', () => {

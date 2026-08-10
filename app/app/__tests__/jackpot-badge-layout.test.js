@@ -51,4 +51,16 @@ describe('jackpot winning-badge layout', () => {
     assert.equal(badge.size, 52);
     assert.ok(badge.top >= WIN_RECEIPT_BAND_PERCENT + WIN_ART_GAP_PERCENT);
   });
+
+  test('breaks up the grid with deterministic tilt, stagger, and depth', () => {
+    const layout = winningBadgeLayout({ count: 12, quadrant: 0 });
+    assert.ok(new Set(layout.map((badge) => badge.rotation)).size >= 6,
+      'the reveal uses several visibly different badge angles');
+    assert.ok(layout.some((badge) => Math.abs(badge.rotation) >= 6),
+      'at least one badge has a noticeable tilt');
+    assert.ok(new Set(layout.map((badge) => badge.top.toFixed(4))).size >= 8,
+      'badges in the same logical row are vertically staggered');
+    assert.ok(new Set(layout.map((badge) => badge.layer)).size >= 3,
+      'badges occupy several controlled paint layers');
+  });
 });

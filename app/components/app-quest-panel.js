@@ -307,7 +307,7 @@ export function mergeQuestIdentitySnapshot(data, liveBoard) {
 }
 
 /**
- * Visual fill for one Degen Score breakdown row. Capped categories compare to
+ * Visual fill for one Degen Rating breakdown row. Capped categories compare to
  * their own contract maximum; quest streak uses a diminishing curve where 20
  * credited points is exactly half-full and can approach, but never reach,
  * 100%. Cashout curse is uncapped and uses the same non-relative curve.
@@ -328,7 +328,7 @@ export function degenScoreBreakdownBarPercent(key, value) {
 }
 
 // Keep the existing component export stable for callers while the tier palette
-// itself lives with the other shared Activity/Degen Score helpers.
+// itself lives with the other shared Activity/Degen Rating helpers.
 export { degenScoreLootTier };
 
 function _questProgressPercent(progress, target, completed) {
@@ -479,7 +479,7 @@ class AppQuestPanel extends HTMLElement {
           </div>
           <div class="qst-score-control" data-bind="qst-score-control" tabindex="0">
             <strong class="qst-score-value" data-bind="qst-score-value">—</strong>
-            <span class="qst-score-label">DEGEN SCORE
+            <span class="qst-score-label">DEGEN RATING
               <boon-product-indicator product="activity"></boon-product-indicator>
             </span>
             <div class="ac-pop qst-score-pop" data-bind="qst-score-pop" hidden>
@@ -1645,8 +1645,8 @@ class AppQuestPanel extends HTMLElement {
     if (scoreTier) valueEl.setAttribute('data-score-tier', scoreTier);
     else valueEl.removeAttribute('data-score-tier');
     headEl.textContent = points == null
-      ? 'No Degen Score yet'
-      : `Degen Score · ${points.toLocaleString('en-US')}%`;
+      ? 'No Degen Rating yet'
+      : `Degen Rating · ${points.toLocaleString('en-US')}%`;
 
     if (typeof rowsEl.replaceChildren === 'function') rowsEl.replaceChildren();
     else { rowsEl.children = []; rowsEl._innerHTML = ''; }
@@ -1932,7 +1932,7 @@ class AppQuestPanel extends HTMLElement {
     meterEl.appendChild(fillEl);
     slotDiv.appendChild(meterEl);
 
-    const aria = `${model.roleLabel} quest: ${model.label}. ${model.stateLabel}.${interactive ? ' Open its action setup.' : ''}`;
+    const aria = `${model.roleLabel} quest: ${model.label}. ${model.stateLabel}.${interactive ? ' Click to complete.' : ''}`;
     slotDiv.setAttribute('aria-label', aria);
     // Keep the complete state description available to assistive tech without
     // turning it into an oversized native mouse tooltip. Cards can opt into a

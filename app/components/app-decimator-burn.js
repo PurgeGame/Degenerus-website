@@ -169,7 +169,7 @@ class AppDecimatorBurn extends HTMLElement {
                 <strong><b data-bind="dbb-bracket-number">—</b></strong>
               </span>
               <span class="dbb__bracket-score">
-                <small>DEGEN SCORE</small>
+                <small>DEGEN RATING</small>
                 <strong data-bind="dbb-bracket-range">—</strong>
               </span>
             </span>

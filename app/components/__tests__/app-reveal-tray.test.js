@@ -997,7 +997,8 @@ describe('<app-reveal-tray>', () => {
   test('an sDGNRS redemption stays pinned while its daily roll is pending', () => {
     pending.publishPendingActions('sdgnrs-redemptions', [{
       id: 'sdgnrs-redemption:period:67', kind: 'lootbox',
-      kindLabel: 'sDGNRS REDEMPTION', label: 'Redemption box · Day 67',
+      kindLabel: 'sDGNRS REDEMPTION', label: '120M sDGNRS REDEMPTION',
+      amountLabel: '120M sDGNRS', lootboxLabel: 'REDEMPTION', compact: true,
       shortLabel: 'Claim & open', detail: 'Waiting for the daily RNG result',
       state: 'waiting', pinned: true, progress: 'indeterminate',
     }]);
@@ -1006,15 +1007,20 @@ describe('<app-reveal-tray>', () => {
 
     const action = el.querySelector('.rrt-action--lootbox');
     assert.equal(pendingSurfaceVisible(el), true);
-    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'sDGNRS REDEMPTION');
-    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'WAITING');
+    assert.equal(action.querySelector('.rrt-lootbox-summary__amount').textContent, '120M sDGNRS');
+    assert.equal(action.querySelector('.rrt-lootbox-summary__unit').textContent, 'REDEMPTION');
+    assert.equal(action.querySelector('.rrt-action__kind'), null,
+      'the compact redemption omits its redundant kind line');
+    assert.equal(action.querySelector('.rrt-action__cta'), null,
+      'the compact redemption omits the redundant WAITING footer');
     assert.equal(action.querySelector('.rrt-action__progress'), null,
       'the shared RNG rail owns fulfillment progress instead of duplicating it in the row');
     assert.equal(el.querySelector('[data-bind="rrt-rng"]').getAttribute('data-rng-phase'),
       'fulfilling');
     assert.equal(el.querySelector('[data-bind="rrt-rng-status"]').textContent,
       'WAITING FOR RNG', 'a generic daily wait does not claim a Chainlink request was submitted');
-    assert.equal(action.disabled, true);
+    assert.equal(action.disabled, false,
+      'the terse waiting receipt remains clickable for its compact status explanation');
     el.disconnectedCallback();
   });
 
@@ -1306,7 +1312,22 @@ describe('<app-reveal-tray>', () => {
     assert.match(
       css,
       /@media \(max-width: 560px\)[\s\S]*?\.rrt-actions\s*\{[^}]*max-height:\s*7\.9rem/s,
-      'the single-column phone tray likewise fits two compact rows without nuisance scrollbars',
+      'the phone tray fits two compact rows without nuisance scrollbars',
+    );
+    assert.match(
+      css,
+      /@media \(max-width: 560px\)[\s\S]*?\.rrt-actions\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
+      'phone Pending uses both columns for compact cards instead of wasting a full row per card',
+    );
+    assert.match(
+      css,
+      /@media \(max-width: 560px\)[\s\S]*?\.rrt-controls__actions\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)[^}]*grid-template-rows:\s*minmax\(0, 1fr\)/s,
+      'phone HIDE and CLEAR share a short horizontal rail',
+    );
+    assert.match(
+      css,
+      /\.rrt-actions > \.rrt-action:only-child,[\s\S]*?\.rrt-action:last-child:nth-child\(odd\)\s*\{[^}]*grid-column:\s*1 \/ -1/s,
+      'a lone or unmatched compact card reclaims the full available width',
     );
     assert.match(css, /\.rrt-stage\s*\{[^}]*display:\s*block/s,
       'the contextual RNG control and Pending use one unified compact stage');

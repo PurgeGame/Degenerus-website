@@ -494,16 +494,22 @@
 /* --- Scattered win badges --- */
 
 .replay-badge-wrap {
+  --replay-badge-rotation: 0deg;
+  --replay-badge-layer: 1;
   position: absolute;
   pointer-events: none;
   z-index: 1;
   text-align: center;
 }
 
-.replay-tq.q-result-revealed .replay-badge-wrap {
-  z-index: 6;
+/* Hitting one badge turns the prize paper green before the quadrant reaches
+   its completion threshold. Keep every badge below the live scratch canvas
+   until #revealQuadrant promotes it to tabindex=0; otherwise a multi-win
+   quadrant exposes all badges at once and they steal subsequent scratches. */
+.replay-tq.q-result-revealed .replay-badge-wrap[tabindex="0"] {
+  z-index: calc(5 + var(--replay-badge-layer));
   pointer-events: auto;
-  cursor: help;
+  cursor: default;
 }
 
 .replay-badge-wrap:focus-visible {
@@ -518,33 +524,60 @@
   opacity: 0.85;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.25));
   object-fit: contain;
+  transform: rotate(var(--replay-badge-rotation));
+  transform-origin: 50% 50%;
+  transition: transform 150ms ease, filter 150ms ease, opacity 150ms ease;
+}
+
+.replay-tq.q-result-revealed .replay-badge-wrap[tabindex="0"]:hover .replay-scattered-badge,
+.replay-tq.q-result-revealed .replay-badge-wrap[tabindex="0"]:focus-visible .replay-scattered-badge {
+  opacity: 1;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.4));
+  transform: rotate(var(--replay-badge-rotation)) scale(1.055);
 }
 
 .replay-badge-reward-pop {
   --replay-reward-x: -50%;
-  --replay-reward-rise: -8px;
+  --replay-reward-enter: 4px;
+  --replay-reward-exit: -8px;
   position: absolute;
   z-index: 12;
   left: 50%;
-  bottom: calc(100% + 2px);
+  bottom: calc(100% + 4px);
   display: grid;
-  min-width: 3.9rem;
+  min-width: 4.25rem;
   gap: 0.14rem;
-  padding: 0.3rem 0.42rem;
+  padding: 0.34rem 0.5rem;
   visibility: hidden;
-  border: 1px solid rgba(255, 237, 171, 0.82);
-  border-radius: 8px;
-  background: linear-gradient(145deg, rgba(31, 17, 8, 0.97), rgba(8, 9, 15, 0.97));
-  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.52), 0 0 12px rgba(245, 166, 35, 0.24), inset 0 1px rgba(255, 247, 211, 0.16);
+  overflow: hidden;
+  border: 1px solid rgba(255, 214, 105, 0.62);
+  border-radius: 9px;
+  background:
+    linear-gradient(180deg, rgba(255, 224, 133, 0.14), transparent 38%),
+    linear-gradient(145deg, rgba(46, 25, 9, 0.93), rgba(8, 12, 25, 0.94));
+  box-shadow:
+    0 5px 14px rgba(0, 0, 0, 0.42),
+    0 0 10px rgba(250, 190, 58, 0.25),
+    inset 0 0 0 1px rgba(255, 247, 211, 0.07);
   opacity: 0;
   pointer-events: none;
-  transform: translateX(var(--replay-reward-x)) translateY(4px) scale(0.68);
+  transform: translateX(var(--replay-reward-x)) translateY(var(--replay-reward-enter)) scale(0.76);
   transform-origin: 50% 100%;
+  will-change: opacity, transform;
+}
+
+.replay-badge-reward-pop::before {
+  position: absolute;
+  inset: 0 12% auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 239, 174, 0.9), transparent);
+  content: '';
 }
 
 .replay-badge-wrap[data-reward-side="below"] .replay-badge-reward-pop {
-  --replay-reward-rise: 8px;
-  top: calc(100% + 2px);
+  --replay-reward-enter: -4px;
+  --replay-reward-exit: 8px;
+  top: calc(100% + 4px);
   bottom: auto;
   transform-origin: 50% 0;
 }
@@ -564,10 +597,16 @@
 
 .replay-badge-wrap[data-reward-side="below"][data-reward-align="left"] .replay-badge-reward-pop { transform-origin: 0 0; }
 .replay-badge-wrap[data-reward-side="below"][data-reward-align="right"] .replay-badge-reward-pop { transform-origin: 100% 0; }
-.replay-badge-wrap.is-reward-pop { z-index: 14; }
+.replay-tq.q-result-revealed .replay-badge-wrap[tabindex="0"].is-reward-pop {
+  z-index: calc(15 + var(--replay-reward-stack, 1));
+}
 .replay-badge-wrap.is-reward-pop .replay-badge-reward-pop {
   visibility: visible;
-  animation: replay-badge-reward-pop 1.45s cubic-bezier(0.2, 0.78, 0.3, 1) both;
+  animation: replay-badge-reward-pop 0.78s cubic-bezier(0.2, 0.78, 0.24, 1) both;
+}
+
+.replay-badge-wrap.is-reward-pop .replay-scattered-badge {
+  animation: replay-badge-reward-hit 0.3s cubic-bezier(0.18, 0.86, 0.3, 1) both;
 }
 
 .replay-badge-reward-pop__row {
@@ -581,8 +620,9 @@
 
 .replay-badge-reward-pop__row b {
   color: inherit;
-  font: 950 clamp(0.54rem, 1.8vw, 0.68rem)/1 "Roboto Mono", ui-monospace, monospace;
+  font: 1000 clamp(0.68rem, 2vw, 0.84rem)/1 "Roboto Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 8px currentColor;
 }
 
 .replay-badge-reward-pop__row--flip { color: #ffcf64; }
@@ -591,21 +631,44 @@
 
 .replay-badge-reward-pop__icon,
 .replay-badge-reward-pop__ticket {
-  width: 1.08rem;
-  height: 1.08rem;
+  width: 1.1rem;
+  height: 1.1rem;
   flex: 0 0 auto;
   object-fit: contain;
 }
 
 @keyframes replay-badge-reward-pop {
-  0% { opacity: 0; transform: translateX(var(--replay-reward-x)) translateY(4px) scale(0.68); }
-  16% { opacity: 1; transform: translateX(var(--replay-reward-x)) translateY(-2px) scale(1.14); }
-  48%, 76% { opacity: 1; transform: translateX(var(--replay-reward-x)) translateY(0) scale(1); }
-  100% { opacity: 0; transform: translateX(var(--replay-reward-x)) translateY(var(--replay-reward-rise)) scale(0.94); }
+  0% {
+    opacity: 0;
+    transform: translateX(var(--replay-reward-x)) translateY(var(--replay-reward-enter)) scale(0.76);
+  }
+  18% {
+    opacity: 1;
+    transform: translateX(var(--replay-reward-x)) translateY(0) scale(1.08);
+  }
+  31% {
+    opacity: 1;
+    transform: translateX(var(--replay-reward-x)) translateY(0) scale(0.98);
+  }
+  44%, 68% {
+    opacity: 0.96;
+    transform: translateX(var(--replay-reward-x)) translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(var(--replay-reward-x)) translateY(var(--replay-reward-exit)) scale(1.04);
+  }
+}
+
+@keyframes replay-badge-reward-hit {
+  0% { transform: rotate(var(--replay-badge-rotation)) scale(1); }
+  46% { transform: rotate(var(--replay-badge-rotation)) scale(1.11); }
+  100% { transform: rotate(var(--replay-badge-rotation)) scale(1.055); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .replay-badge-wrap.is-reward-pop .replay-badge-reward-pop { animation-duration: 0.7s; }
+  .replay-badge-wrap.is-reward-pop .replay-badge-reward-pop { animation-duration: 0.3s; }
+  .replay-badge-wrap.is-reward-pop .replay-scattered-badge { animation: none; }
 }
 
 /* "+N more" label shown when win count exceeds the 20-badge visual cap */

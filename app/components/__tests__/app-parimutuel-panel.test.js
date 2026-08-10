@@ -564,7 +564,7 @@ describe('app-parimutuel-panel', () => {
     assert.equal(multiplierValue.getAttribute('data-score-tier'), 'purple');
     assert.equal(card.querySelector('.pari-decimator__multiplier-label').textContent, 'MULTI');
     assert.match(card.textContent, /235%DEGEN=184%MULTI/);
-    assert.doesNotMatch(card.textContent, /DEGEN SCORE/);
+    assert.doesNotMatch(card.textContent, /DEGEN RATING/);
     assert.match(APP_CSS,
       /\.pari-decimator__head-copy\s*\{[^}]*flex-direction:\s*column;[^}]*justify-content:\s*space-between/s,
       'the title and win prompt form one compact two-line lead-in beside the payout');

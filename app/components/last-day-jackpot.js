@@ -1149,7 +1149,13 @@ class LastDayJackpot extends HTMLElement {
           const traits = new Set();
           for (const row of breakdown) {
             if (!accepted.has(String(row?.awardType || '').toLowerCase())) continue;
-            const traitId = Number(row?.traitId);
+            // Far-future FLIP is a center prize and intentionally has no
+            // traitId. Number(null) is 0, which used to turn that missing
+            // value into the pink XRP badge in the Day Summary. Only actual
+            // trait values belong in the winning-badge strip.
+            const rawTraitId = row?.traitId;
+            if (rawTraitId == null || String(rawTraitId).trim() === '') continue;
+            const traitId = Number(rawTraitId);
             if (Number.isInteger(traitId) && traitId >= 0 && traitId <= 255) traits.add(traitId);
           }
           return [...traits];

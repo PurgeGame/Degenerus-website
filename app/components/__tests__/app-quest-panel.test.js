@@ -478,6 +478,44 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     );
   });
 
+  test('quest action inputs use the sheet width for legibility without oversized number fields', () => {
+    assert.match(
+      APP_CSS,
+      /qst-action-dialog__card\s*\{[^}]*width:\s*min\(94vw, 40rem\)/s,
+      'the action sheet has enough desktop room for useful labels and controls',
+    );
+    assert.match(
+      APP_CSS,
+      /qst-action-adjust\s*\{[^}]*grid-template-columns:\s*minmax\(9rem, 1fr\) minmax\(15rem, 19rem\)/s,
+      'purchase amount copy and its compact stepper share a row instead of stretching the input edge to edge',
+    );
+    assert.match(
+      APP_CSS,
+      /qst-action-adjust__stepper input\s*\{[^}]*font:\s*950 1\.12rem\/1[^}]*text-align:\s*center/s,
+      'the important purchase value is large and centered',
+    );
+    assert.match(
+      APP_CSS,
+      /qst-action-dgn__stepper\.qst-action-adjust__stepper\s*\{[^}]*grid-template-columns:\s*2\.7rem minmax\(5\.2rem, 1fr\) auto 2\.7rem/s,
+      'the amount stepper keeps both minus and plus on one row despite sharing the Degenerette control class',
+    );
+    assert.match(
+      APP_CSS,
+      /qst-action-dgn__wager\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.25fr\) minmax\(9\.5rem, 0\.9fr\)/s,
+      'bet and spin steppers use the available horizontal room as two compact controls',
+    );
+    assert.match(
+      APP_CSS,
+      /qst-action-(?:adjust__stepper|dgn__stepper):focus-within[\s\S]*?0 0 20px/,
+      'keyboard entry gets the same thematic glow as pointer entry',
+    );
+    assert.match(
+      APP_CSS,
+      /@media\s*\(max-width:\s*600px\)[\s\S]*?qst-action-adjust\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[\s\S]*?qst-action-dgn__wager\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
+      'the compact desktop rows stack cleanly on narrow screens',
+    );
+  });
+
   test('On mount, panel calls fetchJSON for /player/:address with the connected address', async () => {
     const el = instantiate();
     await settle(40);
@@ -585,6 +623,8 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     const level = el.querySelectorAll('.qst-slot')[2];
     assert.equal(level.getAttribute('role'), 'button');
     assert.equal(level.getAttribute('tabindex'), '0');
+    assert.match(level.getAttribute('aria-label') || '', /Click to complete/);
+    assert.doesNotMatch(level.getAttribute('aria-label') || '', /Open its action setup/);
     level.dispatchEvent({ type: 'click' });
     assert.deepEqual(events, [], 'opening the bubble does not configure or submit anything');
     const dialog = el.querySelector('[data-bind="qst-action-dialog"]');
@@ -1321,7 +1361,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
-  test('Degen Score uses loot colors at the exact tier boundaries', async () => {
+  test('Degen Rating uses loot colors at the exact tier boundaries', async () => {
     const { degenScoreLootTier } = await import('../app-quest-panel.js');
     assert.deepEqual(
       [59, 60, 149, 150, 299, 300, 999, 1_000].map(degenScoreLootTier),
@@ -1458,7 +1498,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(identity.scoreBreakdown.unattributedPoints, 16);
   });
 
-  test('Degen Score mouseover shows the credited quest-streak points, not the raw streak count', async () => {
+  test('Degen Rating mouseover shows the credited quest-streak points, not the raw streak count', async () => {
     _fetchHandler = async () => makeQuestsPayload({
       questStreak: { baseStreak: 7, lastCompletedDay: 0 },
       scoreBreakdown: {
@@ -1487,7 +1527,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     el.disconnectedCallback();
   });
 
-  test('Degen Score mouseover bars use independent category maxima and a diminishing quest curve', async () => {
+  test('Degen Rating mouseover bars use independent category maxima and a diminishing quest curve', async () => {
     const { degenScoreBreakdownBarPercent } = await import('../app-quest-panel.js');
     assert.equal(degenScoreBreakdownBarPercent('mintCountPoints', 25), 100);
     assert.equal(degenScoreBreakdownBarPercent('affiliatePoints', 50), 100);

@@ -63,7 +63,7 @@ import {
   dismissPendingActionItems,
   getPendingActions,
 } from '../app/pending-actions.js';
-import { lootboxRewardPresentation } from '../app/lootbox-legs.js';
+import { boxSpinHeroQuadrant, lootboxRewardPresentation } from '../app/lootbox-legs.js';
 import { FOIL_CLAIM_THRESHOLD } from '../app/foil-match.js';
 import {
   readDegeneretteSpeed,
@@ -394,7 +394,7 @@ export function revealTerminalActionLabel(sequence = null, board = null) {
   const lost = Boolean(seq.unlucky || seq.consolationOnly)
     || (boardResult != null && _safeBigInt(boardResult.total) <= 0n);
   if (lost) return 'UNLUCKY';
-  if (seq.kind === 'pack') return 'TICKETS READY';
+  if (seq.kind === 'pack') return 'GOOD LUCK';
   if (boardResult) {
     return shouldCelebrateDegenerette(boardResult) ? 'TAKE THE WIN' : 'BACK TO GAME';
   }
@@ -403,7 +403,7 @@ export function revealTerminalActionLabel(sequence = null, board = null) {
     const paid = Array.isArray(seq.cards) && seq.cards.some((card) => card?.type === 'flip');
     return paid ? 'TAKE THE WIN' : 'BACK TO GAME';
   }
-  return 'CONTINUE';
+  return 'GOOD LUCK';
 }
 
 /**
@@ -559,6 +559,10 @@ export function buildBoxSpinBoard(spin) {
   });
   const grossPayout = _safeBigInt(spin?.payout);
   const total = spinType === 'eth' ? _safeBigInt(spin?.ethShare) : grossPayout;
+  const decodedHero = spin?.heroQuadrant == null
+    ? boxSpinHeroQuadrant(spin?.betId)
+    : Number(spin.heroQuadrant);
+  const heroIdx = Number.isInteger(decodedHero) ? (decodedHero & 3) : null;
   // FLIP's score table pays from S2 upward. The packed survival bit is false
   // both when all three reels miss and when a real preliminary payout loses
   // its double-or-nothing draw, so preserve that distinction for the reveal.
@@ -592,7 +596,7 @@ export function buildBoxSpinBoard(spin) {
     survivalWinPayout: _safeBigInt(spin?.survivalWinPayout) || (
       total > 0n ? total : (payoutAtRisk > 0n ? payoutAtRisk * 2n : 0n)
     ),
-    heroIdx: null,
+    heroIdx,
     boxSpin: true,
     grossPayout,
     // Keep the internal unit (and its telltale reel count) out of the pre-spin
@@ -781,6 +785,10 @@ function _cardsFromLeg(leg) {
         sub: 'Land the first reel to reveal its currency',
         countText: null,
         spin: {
+          betId: leg.betId ?? null,
+          heroQuadrant: leg.heroQuadrant == null
+            ? boxSpinHeroQuadrant(leg.betId)
+            : Number(leg.heroQuadrant),
           spinType: leg.spinType,
           survived: leg.survived,
           payout: leg.payout ?? 0n,
@@ -2149,12 +2157,12 @@ class RevealOverlay extends HTMLElement {
     if (action?.kind === 'tickets') return 'OPEN TICKETS';
     if (action?.kind === 'bingo') return 'REVEAL BINGO';
     if (action?.kind === 'foil-match') return 'CLAIM FOIL MATCH';
-    return String(action?.shortLabel || 'CONTINUE').toUpperCase();
+    return String(action?.shortLabel || 'GOOD LUCK').toUpperCase();
   }
 
   #setPendingContinuation(button, action, fallback = null) {
     if (!button) return;
-    const terminal = fallback || button.__rvlTerminalLabel || 'CONTINUE';
+    const terminal = fallback || button.__rvlTerminalLabel || 'GOOD LUCK';
     button.__rvlTerminalLabel = terminal;
     button.__rvlPendingAction = action || null;
     button.dataset.mode = action ? 'pending-action' : 'continue';
@@ -3115,7 +3123,7 @@ class RevealOverlay extends HTMLElement {
     next.textContent = hasMore
       ? 'OPEN NEXT PACK'
       : showLesson
-        ? 'CONTINUE'
+        ? 'GOOD LUCK'
         : queuedLabel || (pendingAction ? this.#pendingContinuationLabel(pendingAction) : terminalLabel);
     next.dataset.mode = pendingAction ? 'pending-action' : 'continue';
     next.__rvlPendingAction = pendingAction;
@@ -3415,7 +3423,7 @@ class RevealOverlay extends HTMLElement {
       const action = document.createElement('button');
       action.type = 'button';
       action.className = 'rvl-foil-match__continue';
-      action.textContent = 'CONTINUE';
+      action.textContent = 'GOOD LUCK';
       action.setAttribute('aria-label', 'Continue from the foil match comparison');
       action.addEventListener('click', (event) => {
         try { event.stopPropagation(); } catch (_e) { /* fakeDOM */ }
@@ -3505,12 +3513,26 @@ class RevealOverlay extends HTMLElement {
   #boxSpinRowPresentation(row, board, currencyRevealed) {
     const won = boxSpinScorePays(row?.score);
     const number = `#${Number(row?.spinIndex ?? 0) + 1}`;
+    const hero = board?.heroIdx != null && Number.isInteger(Number(board.heroIdx))
+      ? dgnUnpackTicket(row?.playerTraits)?.[Number(board.heroIdx) & 3]
+      : null;
+    const houseHero = hero && row?.houseTraits != null
+      ? dgnUnpackTicket(row.houseTraits)?.[Number(board.heroIdx) & 3]
+      : null;
+    const heroPoints = hero && houseHero && hero.sym === houseHero.sym
+      ? 2 + (hero.col === houseHero.col ? 1 : 0)
+      : 0;
+    const heroText = heroPoints > 0 ? `HERO +${heroPoints}` : '';
     if (!currencyRevealed) {
       return {
         won,
         className: won || Number(row?.score) > 0 ? 'is-score' : 'is-miss',
-        chip: `${number} · ${Number(row?.score) > 0 ? `S ${row.score}` : 'MISS'}`,
-        pop: Number(row?.score) > 0 ? `SCORE ${row.score}` : 'NO MATCH',
+        chip: `${number} · ${Number(row?.score) > 0 ? `S ${row.score}` : 'MISS'}${
+          heroText ? ` · ${heroText}` : ''
+        }`,
+        pop: Number(row?.score) > 0
+          ? `SCORE ${row.score}${heroText ? ` · ${heroText}` : ''}`
+          : 'NO MATCH',
       };
     }
     if (!won) {
@@ -3528,8 +3550,10 @@ class RevealOverlay extends HTMLElement {
     return {
       won: true,
       className: 'is-win',
-      chip: `${number} · WIN${amount ? ` · ${amount}` : ` · S ${row.score}`}`,
-      pop: amount ? `WIN · ${amount}` : `WIN · S ${row.score}`,
+      chip: `${number} · WIN${heroText ? ` · ${heroText}` : ''}${
+        amount ? ` · ${amount}` : ` · S ${row.score}`
+      }`,
+      pop: `${heroText ? `${heroText} · ` : ''}WIN · ${amount || `S ${row.score}`}`,
     };
   }
 
@@ -3783,10 +3807,11 @@ class RevealOverlay extends HTMLElement {
     const skipCta = document.createElement('button');
     skipCta.type = 'button';
     skipCta.className = 'rvl-dgn-skip-cta';
+    skipCta.dataset.mode = 'skip';
     skipCta.textContent = 'SKIP TO RESULTS';
     skipCta.addEventListener('click', (e) => {
       try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
-      this.#tap('skip');
+      this.#tap(skipCta.dataset.mode === 'exit' ? 'continue' : 'skip');
     });
     if (!board.boxSpin) actions.appendChild(autoCta);
     actions.appendChild(cta);
@@ -4245,11 +4270,11 @@ class RevealOverlay extends HTMLElement {
     coin.className = [
       'rvl-survival-coin',
       `rvl-survival-coin--${board.survived ? 'win' : 'bust'}`,
-      'df-coin3d__inner',
     ].join(' ');
-    // Survival owns a single physical face. CSS changes that one surface's
-    // artwork only while it is edge-on, synchronized to this exact toss. It
-    // cannot expose a second WWXRP back and does not depend on a rAF tracker.
+    // Survival owns its own single-surface rotor. It deliberately does not use
+    // the shared Daily Flip rotor class: that installs its easing at higher
+    // specificity, which can desynchronize these exact edge-on artwork swaps
+    // and briefly project an upside-down WWXRP face.
     const coinFace = document.createElement('span');
     coinFace.className = 'rvl-survival-coin-face';
     coinFace.setAttribute('aria-hidden', 'true');
@@ -4351,6 +4376,7 @@ class RevealOverlay extends HTMLElement {
     sequence = null,
     finalLabel = null,
     currencyRevealed = false,
+    skippedToResults = false,
   } = {}) {
     if (!currencyRevealed && board.boxSpin) {
       await this.#appendBoxSpinCurrencyReveal(rendered, board, reducedMotion, {
@@ -4413,9 +4439,23 @@ class RevealOverlay extends HTMLElement {
       rendered.cta.classList?.toggle('rvl-collect-cta--unlucky', unlucky);
       rendered.cta.disabled = false;
     }
-    rendered.cta.hidden = false;
     if (rendered.autoCta) rendered.autoCta.hidden = true;
-    if (rendered.skipCta) rendered.skipCta.hidden = true;
+    if (skippedToResults && !board.boxSpin && rendered.skipCta) {
+      // Keep the shortcut under the player's pointer after it has done its
+      // job. Replacing it with a differently positioned terminal CTA made the
+      // fullscreen resolver feel like it had ignored the click.
+      rendered.cta.hidden = true;
+      rendered.skipCta.dataset.mode = 'exit';
+      rendered.skipCta.textContent = 'BACK TO GAME';
+      rendered.skipCta.setAttribute?.('aria-label', 'Exit Degenerette results');
+      rendered.skipCta.disabled = false;
+      rendered.skipCta.hidden = false;
+      rendered.skipCta.classList?.add('is-result-exit');
+      rendered.actions?.classList?.add('rvl-dgn-actions--result-exit');
+    } else {
+      rendered.cta.hidden = false;
+      if (rendered.skipCta) rendered.skipCta.hidden = true;
+    }
     if (rendered.actions) rendered.stage.appendChild(rendered.actions);
     else rendered.stage.appendChild(rendered.cta);
     await this.#waitTap();
@@ -4860,6 +4900,7 @@ class RevealOverlay extends HTMLElement {
       return await this.#finishFullSpinBoard(rendered, board, {
         ...options,
         currencyRevealed,
+        skippedToResults: skipped,
       });
     } finally {
       this.#controlsOnly = priorControlsOnly;
@@ -5319,7 +5360,7 @@ class RevealOverlay extends HTMLElement {
 
     const grid = document.createElement('div');
     grid.className = `rvl-summary-grid${seq.kind === 'bingo' ? ' rvl-summary-grid--bingo' : ''}`;
-    // A foil comparison already held on its own explicit CONTINUE frame. The
+    // A foil comparison already held on its own explicit GOOD LUCK frame. The
     // terminal receipt should contain its rewards, not redraw the same board.
     const summaryCards = seq.cards.filter((item) => (
       includeFoilMatch || item?.type !== 'foil-match'

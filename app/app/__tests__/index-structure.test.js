@@ -156,7 +156,7 @@ describe('index.html basic-mode skeleton', () => {
     assert.ok(degenerette < pari, 'Degenerette is middle and side bets are right');
   });
 
-  test('standalone and nav activity widgets are removed (Degen Score lives in Quests)', () => {
+  test('standalone and nav activity widgets are removed (Degen Rating lives in Quests)', () => {
     assert.equal(html.indexOf('<app-activity-panel'), -1, 'standalone activity panel unmounted');
     assert.equal(html.indexOf('components/app-activity-panel.js'), -1, 'activity panel script removed');
     assert.equal(html.indexOf('components/app-activity-chip.js'), -1, 'nav activity chip script removed');

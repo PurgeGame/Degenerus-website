@@ -65,9 +65,9 @@ describe('<app-decimator-burn>', () => {
       'the strip labels selected-burn score divided by spend, after contract caps');
     assert.match(COMPONENT, /data-bind="dbb-bracket-number"/);
     assert.match(COMPONENT, /data-bind="dbb-bracket-range"/,
-      'the contract bracket gets a dedicated number slot beside its Degen Score range');
+      'the contract bracket gets a dedicated number slot beside its Degen Rating range');
     assert.match(COMPONENT, /degenScoreLootTier\(bracketScore\)/,
-      'the range uses the shared Degen Score loot color');
+      'the range uses the shared Degen Rating loot color');
     assert.doesNotMatch(COMPONENT, /dbb__modifier-list|dbb-mod--|TODAY'S MODIFIERS/,
       'activity, timing, and boon contributors collapse into the actual multiplier');
     assert.match(COMPONENT, /data-bind="dbb-multi-cap" hidden/);
@@ -84,7 +84,7 @@ describe('<app-decimator-burn>', () => {
 
   test('uses the full rail for legible primary values and controls', () => {
     assert.match(CSS, /\.dbb\s*\{[^}]*grid-template-areas:\s*"identity stats entry score"/s,
-      'the wide layout puts accumulated score beyond the input and Degen Score context');
+      'the wide layout puts accumulated score beyond the input and Degen Rating context');
     assert.match(CSS, /\.dbb\s*\{[^}]*min-height:\s*6\.1rem/s,
       'the desktop event rail stays compact without shrinking its primary values');
     assert.match(CSS, /\.dbb__stats\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
@@ -98,9 +98,9 @@ describe('<app-decimator-burn>', () => {
     assert.match(CSS, /\.dbb__actual-multi strong\s*\{[^}]*font:\s*1000 clamp\(0\.86rem, 1\.15vw, 1\.12rem\)/s,
       'the actual multiplier is the dominant context value');
     assert.match(CSS, /\.dbb__bracket-score strong\[data-score-tier="gold"\]/,
-      'Degen Score ranges share the normal tier palette');
+      'Degen Rating ranges share the normal tier palette');
     assert.match(CSS, /\.dbb__bracket-score\s*\{[^}]*justify-items:\s*center[^}]*text-align:\s*center/s,
-      'the Degen Score range is centered in its half of the bracket plate');
+      'the Degen Rating range is centered in its half of the bracket plate');
     assert.match(CSS, /\.dbb__entry-controls\s*\{[^}]*grid-template-columns:\s*minmax\(9\.5rem, 1\.08fr\) minmax\(7\.4rem, 0\.82fr\)/s);
     assert.match(CSS, /\.dbb-stat strong\s*\{[^}]*font:\s*950 clamp\(0\.96rem, 1\.25vw, 1\.14rem\)/s);
     assert.match(CSS, /\.dbb-stat--score strong\s*\{[^}]*font-size:\s*clamp\(1\.04rem, 1\.45vw, 1\.26rem\)/s);

@@ -216,14 +216,14 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
 describe('normalizeSequence', () => {
   test('terminal actions describe the outcome instead of pretending to collect it', () => {
     assert.equal(revealTerminalActionLabel({ unlucky: true }), 'UNLUCKY');
-    assert.equal(revealTerminalActionLabel({ kind: 'pack' }), 'TICKETS READY');
+    assert.equal(revealTerminalActionLabel({ kind: 'pack' }), 'GOOD LUCK');
     assert.equal(revealTerminalActionLabel({ daySummary: true }), 'BACK TO GAME');
     assert.equal(revealTerminalActionLabel({
       kind: 'pari', cards: [{ type: 'flip' }],
     }), 'TAKE THE WIN');
     assert.equal(revealTerminalActionLabel({ kind: 'pari', cards: [{ type: 'nowin' }] }),
       'BACK TO GAME');
-    assert.equal(revealTerminalActionLabel({ kind: 'lootbox' }), 'CONTINUE');
+    assert.equal(revealTerminalActionLabel({ kind: 'lootbox' }), 'GOOD LUCK');
     assert.equal(revealTerminalActionLabel(null, {
       total: 200n, totalWager: 100n, boxSpin: false,
     }), 'TAKE THE WIN');
@@ -353,7 +353,7 @@ describe('normalizeSequence', () => {
       [
         ['LUCKBOX BOON', '+15%'],
         ['DECIMATOR BOON', '+50%'],
-        ['DEGEN SCORE BOON', '+12.5'],
+        ['DEGEN RATING BOON', '+12.5'],
         ['LAZY PASS BOON', '−50%'],
       ],
     );
@@ -506,7 +506,7 @@ describe('normalizeSequence', () => {
       cards: [{ outcome: 'win', label: 'FINAL DRAW', value: '1 ETH' }],
     });
     assert.equal(won.unlucky, false);
-    assert.equal(revealTerminalActionLabel(won), 'CONTINUE');
+    assert.equal(revealTerminalActionLabel(won), 'GOOD LUCK');
   });
 
   test('pack: sealed tickets card with level + count', () => {
@@ -1136,6 +1136,23 @@ describe('buildBoxSpinBoard', () => {
       'the only winning reel owns the exact 59,750 FLIP survival stake');
   });
 
+  test('a one-symbol box win carries the seed-selected hero into the board', () => {
+    const board = buildBoxSpinBoard({
+      betId: 9_350_854_869_760_465_101n,
+      spinType: 'wwxrp',
+      payout: 1_436_259_825n,
+      reels: [{
+        playerTicket: 3_818_745_606n,
+        resultTicket: 4_071_640_845n,
+        score: 2,
+      }],
+    });
+
+    assert.equal(board.heroIdx, 1,
+      'the matching Aquarius cell is visibly marked as the +2 hero quadrant');
+    assert.equal(board.rows[0].won, true);
+  });
+
   test('ETH box result presents only the claimable share as winnings', () => {
     const board = buildBoxSpinBoard({
       spinType: 'eth',
@@ -1221,8 +1238,8 @@ describe('buildBoxSpinBoard', () => {
       'the survival toss cannot be shortened by a backdrop tap or reel-speed preference');
     assert.match(
       REVEAL_SRC,
-      /rvl-survival-coin[\s\S]*?df-coin3d__inner[\s\S]*?board\.survived \? 'df-reveal-ending--win' : 'df-reveal-ending--loss'/,
-      'survival reuses the normal truthful win/loss coin track without a reversal ending',
+      /rvl-survival-coin[\s\S]*?board\.survived \? 'df-reveal-ending--win' : 'df-reveal-ending--loss'/,
+      'survival selects the truthful win/loss ending without a reversal ending',
     );
     const survivalSource = REVEAL_SRC.slice(
       REVEAL_SRC.indexOf('async #appendFullSpinSurvival'),
@@ -1230,12 +1247,21 @@ describe('buildBoxSpinBoard', () => {
     );
     assert.match(survivalSource, /rvl-survival-coin-face/,
       'survival uses one physical artwork surface');
+    assert.doesNotMatch(survivalSource, /df-coin3d__inner/,
+      'the Daily Flip rotor cannot override and desynchronize the survival edge swaps');
     assert.doesNotMatch(survivalSource, /appendCoinFaces\(/,
       'the survival toss cannot expose a second compositor-owned coin face');
     assert.match(
       APP_CSS,
       /@keyframes rvl-survival-face-track[\s\S]*?coinflip-face-red\.svg[\s\S]*?coinflip-face-eth\.svg/,
       'the one surface alternates red and ETH artwork during the toss',
+    );
+    assert.match(APP_CSS, /\.rvl-survival\s*\{[^}]*overflow:\s*hidden/s,
+      'the compact survival toss remains inside its result card');
+    assert.match(
+      APP_CSS,
+      /@keyframes rvl-survival-coin-track[\s\S]*?20%[^}]*translate3d\(0, -9px, 0\)/,
+      'the contained toss keeps its lift inside the compact arena',
     );
     assert.doesNotMatch(REVEAL_SRC, /rvl-survival-(?:halo|shadow)/,
       'survival has no decorative circle around the real coin');
@@ -1754,7 +1780,7 @@ describe('reveal-overlay element', () => {
 
     summary = el.querySelector('[data-bind="rvl-summary"]');
     assert.equal(summary.querySelector('.rvl-card-value').textContent, '2');
-    assert.equal(summary.querySelector('.rvl-collect-cta').textContent, 'CONTINUE');
+    assert.equal(summary.querySelector('.rvl-collect-cta').textContent, 'GOOD LUCK');
     summary.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
@@ -1859,7 +1885,7 @@ describe('reveal-overlay element', () => {
 
     const finalSummary = el.querySelector('[data-bind="rvl-summary"]');
     assert.equal(finalSummary.querySelector('.rvl-card-value').textContent, '3');
-    assert.equal(finalSummary.querySelector('.rvl-collect-cta').textContent, 'CONTINUE');
+    assert.equal(finalSummary.querySelector('.rvl-collect-cta').textContent, 'GOOD LUCK');
     finalSummary.querySelector('.rvl-collect-cta')
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
@@ -2350,7 +2376,7 @@ describe('reveal-overlay element', () => {
     assert.equal(el.querySelector('[data-bind="rvl-vessel"]').hidden, true,
       'open-all does not cut back to the full sealed-pack scene');
     assert.equal(zone.querySelector('.rvl-open-all-cta'), null, 'no open-all button on final pack');
-    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'TICKETS READY');
+    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'GOOD LUCK');
     const historyLabel = zone.querySelector('.rvl-pack-history-label');
     const previousPack = zone.querySelector('.rvl-pack-history-nav--previous');
     const nextPack = zone.querySelector('.rvl-pack-history-nav--next');
@@ -2420,7 +2446,7 @@ describe('reveal-overlay element', () => {
     assert.equal(pendingRuns, 1, 'the ordinary Pending pack was pulled ahead of queued foil');
     assert.match(el.querySelector('[data-bind="rvl-title"]').textContent, /FOIL PACK/,
       'the foil hand is the final readable hand in the combined opening');
-    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'TICKETS READY');
+    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'GOOD LUCK');
 
     el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
     await tick();
@@ -2463,7 +2489,7 @@ describe('reveal-overlay element', () => {
 
     assert.equal(pendingRuns, 1, 'the next ready Pending pack was materialized once');
     assert.match(el.querySelector('[data-bind="rvl-title"]').textContent, /LEVEL 9 TICKETS/);
-    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'TICKETS READY',
+    assert.equal(zone.querySelector('.rvl-collect-cta').textContent, 'GOOD LUCK',
       'OPEN ALL pauses on the final Pending pack');
 
     el.querySelector('[data-bind="rvl-backdrop"]').dispatchEvent({ type: 'click' });
@@ -2739,7 +2765,7 @@ describe('reveal-overlay element', () => {
       'reduced motion skips the chest and advances straight into the settled box contents');
     assert.match(el.querySelector('[data-bind="rvl-summary"]').textContent, /DGNRS/);
     const collect = el.querySelector('[data-bind="rvl-summary"]').querySelector('.rvl-collect-cta');
-    assert.equal(collect.textContent, 'CONTINUE',
+    assert.equal(collect.textContent, 'GOOD LUCK',
       'the tray copy of this exact settled box is not offered as a second open');
     collect.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
@@ -3156,8 +3182,14 @@ describe('reveal-overlay element', () => {
       skip.dispatchEvent({ type: 'click', stopPropagation() {} });
       await tick();
 
-      assert.equal(cta.textContent, 'TAKE THE WIN',
-        'verified final frame stays up through acknowledgement');
+      assert.equal(cta.hidden, true,
+        'skip does not jump the pointer to a replacement terminal control');
+      assert.equal(skip.hidden, false);
+      assert.equal(skip.textContent, 'BACK TO GAME',
+        'the shortcut becomes an honest exit once the verified result is up');
+      assert.equal(skip.dataset.mode, 'exit');
+      assert.ok(stage.querySelector('.rvl-dgn-actions')
+        .classList.contains('rvl-dgn-actions--result-exit'));
       assert.equal(stage.querySelectorAll('.rvl-dgn-history-chip').length, 2,
         'skip keeps every spin in the result trail');
       assert.equal(stage.querySelectorAll('.rvl-rq').length, 8,
@@ -3174,9 +3206,10 @@ describe('reveal-overlay element', () => {
       assert.equal(el.querySelector('[data-bind="rvl-summary"]').hidden, true,
         'the large result never collapses into the old mini summary');
 
-      cta.dispatchEvent({ type: 'click', stopPropagation() {} });
+      skip.dispatchEvent({ type: 'click', stopPropagation() {} });
       await tick();
-      assert.equal(backdrop.hidden, true, 'the terminal action closes the persistent result');
+      assert.equal(backdrop.hidden, true,
+        'BACK TO GAME closes the persistent fullscreen result');
     } finally {
       window.matchMedia = previousMatchMedia;
       if (previousRaf === undefined) delete globalThis.requestAnimationFrame;

@@ -229,7 +229,7 @@ describe('app.css legacy coverage and append marker', () => {
 // ===========================================================================
 
 describe('app.css LOC budget', () => {
-  test('total file is in 1700-22500 line range (baseline + deliberate app UI feature blocks)', () => {
+  test('total file is in 1700-22700 line range (baseline + deliberate app UI feature blocks)', () => {
     assert.ok(cssLines.length >= 1700, `total >=1700, got ${cssLines.length}`);
     // Ceiling raised 4400 → 4600 for the ~157-line gold-rush headline block
     // (the last section in the file). Still a hard guard against this file
@@ -292,6 +292,9 @@ describe('app.css LOC budget', () => {
     // new surface; the remaining 100-line margin keeps the ceiling tight.
     // 22400 → 22500 adds the compact Box Spin payout-at-risk ledger and its
     // phone stack, making S2+ wins readable before the survival toss.
-    assert.ok(cssLines.length <= 22500, `total <=22500, got ${cssLines.length}`);
+    // 22500 → 22700 covers the compact deity target suggestions, responsive
+    // Pending control rail, and the sDGNRS burn slider. These are refinements
+    // to existing controls; the small remainder keeps the guard deliberate.
+    assert.ok(cssLines.length <= 22700, `total <=22700, got ${cssLines.length}`);
   });
 });
