@@ -31,7 +31,11 @@
 import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
 import { displayEth } from '../app/scaling.js';
 import { compactUiError } from '../app/ui-error.js';
-import { get, getActingAddress, subscribe } from '../app/store.js';
+import { get, getActingAddress, getViewedAddress, subscribe, update } from '../app/store.js';
+import {
+  readAllInButtonPreference,
+  subscribeUiPreferences,
+} from '../app/ui-preferences.js';
 import { getProvider } from '../app/contracts.js';
 import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
@@ -147,6 +151,35 @@ function groupAllInNumber(raw) {
   return `${match[1]}${grouped}${match[3] || ''}`;
 }
 
+/** Compact the visible buy-bonus tally without ever rounding the reward up. */
+export function formatPurchaseBonusFlip(value) {
+  let raw;
+  try { raw = BigInt(value ?? 0); } catch (_e) { return '0'; }
+  const negative = raw < 0n;
+  const whole = (negative ? -raw : raw) / (10n ** 18n);
+  const sign = negative && whole > 0n ? '-' : '';
+  if (whole < 1_000n) return `${sign}${whole.toLocaleString('en-US')}`;
+
+  const tiers = [
+    [10n ** 15n, 'Q'],
+    [10n ** 12n, 'T'],
+    [10n ** 9n, 'B'],
+    [10n ** 6n, 'M'],
+    [10n ** 3n, 'K'],
+  ];
+  const [divisor, suffix] = tiers.find(([threshold]) => whole >= threshold);
+  const leading = whole / divisor;
+  const decimals = leading >= 100n ? 0 : leading >= 10n ? 1 : 2;
+  const factor = 10n ** BigInt(decimals);
+  const truncated = (whole * factor) / divisor;
+  const integer = truncated / factor;
+  if (decimals === 0) return `${sign}${integer}${suffix}`;
+  const fraction = String(truncated % factor)
+    .padStart(decimals, '0')
+    .replace(/0+$/, '');
+  return `${sign}${integer}${fraction ? `.${fraction}` : ''}${suffix}`;
+}
+
 // The active testnet displays ETH in the protocol's /1M-normalized units,
 // including the connected wallet readout. Keep the same multiplier and the
 // purchase panel's no-trailing-zero convention in one place.
@@ -158,6 +191,13 @@ function formatFundsEth(raw) {
   const [whole, fraction] = trimmed.split('.');
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return fraction == null ? grouped : `${grouped}.${fraction}`;
+}
+
+// Read-only account views still need their public balances. Combined mode is
+// the exception: it has its own aggregate payload and no single display target.
+function decimatorReadAddress() {
+  if (get('ui.mode') === 'combined') return null;
+  return getViewedAddress() || getActingAddress();
 }
 
 const ETH_BALANCE_RNG_PHASES = new Set([
@@ -668,6 +708,7 @@ class AppDecimatorPanel extends HTMLElement {
       try { u(); } catch (_e) { /* defensive */ }
     }
     this.#unsubs = [];
+    if (get('ui.allInEligible') === true) update('ui.allInEligible', false);
   }
 
   // ---------------------------------------------------------------------
@@ -1125,13 +1166,25 @@ class AppDecimatorPanel extends HTMLElement {
     const price = this.#ticketPriceWei();
     if (questType === 1 && detail?.purchaseKind !== 'lootbox') {
       let ticketQuantity = 1;
-      if (price != null && price > 0n && target > 0n) {
+      const explicitTickets = detail?.source === 'records-bounty'
+        ? Number(detail?.ticketQuantity)
+        : null;
+      if (Number.isSafeInteger(explicitTickets) && explicitTickets > 0) {
+        // The Biggest Degen is denominated in whole tickets, while ordinary
+        // buy quests are denominated in ETH. Preserve the exact live record
+        // target instead of reverse-quoting it through floating-point ETH.
+        ticketQuantity = explicitTickets;
+      } else if (price != null && price > 0n && target > 0n) {
         const entries = (target * BigInt(ENTRIES_PER_TICKET) + price - 1n) / price;
         ticketQuantity = Math.max(0.25, Number(entries) / ENTRIES_PER_TICKET);
       }
       return {
         kind: 'eth', ticketQuantity, lootBoxAmountWei: 0n,
         presaleBoxAmountWei: 0n, foilWanted: false,
+        ...(detail?.source === 'records-bounty' ? {
+          preferClaimable: true,
+          useAfking: true,
+        } : {}),
       };
     }
     if ((questType === 1 && detail?.purchaseKind === 'lootbox') || questType === 6) {
@@ -1141,6 +1194,10 @@ class AppDecimatorPanel extends HTMLElement {
       return {
         kind: 'eth', ticketQuantity: 0, lootBoxAmountWei: amount,
         presaleBoxAmountWei: 0n, foilWanted: false,
+        ...(detail?.source === 'records-bounty' ? {
+          preferClaimable: true,
+          useAfking: true,
+        } : {}),
       };
     }
     if (questType === 4) {
@@ -1410,13 +1467,13 @@ class AppDecimatorPanel extends HTMLElement {
   }
 
   /**
-   * Indexed auto-rebuy carry for the acting account, or 0n when it belongs to
+   * Indexed auto-rebuy carry for the viewed account, or 0n when it belongs to
    * another address. TOTALS only: no deposit or burn reaches the carry, so it
    * must never widen an action's spend cap.
    */
   #coinflipCarryWei() {
-    const acting = getActingAddress();
-    const actingLower = acting ? String(acting).toLowerCase() : null;
+    const displayTarget = decimatorReadAddress();
+    const actingLower = displayTarget ? String(displayTarget).toLowerCase() : null;
     if (!actingLower || this.#coinflipCarryAddress !== actingLower) return 0n;
     try { return BigInt(this.#coinflipCarryWeiIndexed); }
     catch (_e) { return 0n; }
@@ -1864,7 +1921,7 @@ class AppDecimatorPanel extends HTMLElement {
 
     const total = this.querySelector('[data-bind="dec-flip-credit-total"]');
     if (!total) return;
-    total.textContent = `+${formatFlip(parts.total.toString())} FLIP`;
+    total.textContent = `+${formatPurchaseBonusFlip(parts.total)} FLIP`;
     total.classList?.toggle('is-zero', parts.total === 0n);
     box.setAttribute(
       'aria-label',
@@ -1900,11 +1957,14 @@ class AppDecimatorPanel extends HTMLElement {
     const signal = this.#pollController.signal;
     this.#lastPollAt = Date.now();
 
-    // Price and the acting player's claimable quote are independent. The
+    // Price and the viewed player's claimable quote are independent. The
     // shared purchase helper re-reads claimable from chain at click time; this
     // indexed value exists only to explain the expected wallet/claimable split.
-    const acting = getActingAddress();
-    const actingLower = acting ? String(acting).toLowerCase() : null;
+    // Reads follow the viewed account even when no signer exists. This keeps
+    // the disconnected sDGNRS protocol-wallet view useful while every write
+    // handler continues to require getActingAddress().
+    const displayTarget = decimatorReadAddress();
+    const actingLower = displayTarget ? String(displayTarget).toLowerCase() : null;
     // Retire a prior wallet's answer synchronously. For the same wallet and
     // routed level, #refreshFoilStatus keeps the definitive result pinned.
     this.#renderFoilRow();
@@ -2391,8 +2451,8 @@ class AppDecimatorPanel extends HTMLElement {
     walletLabel.textContent = 'WALLET';
     if (claimableUnit) claimableUnit.textContent = 'ETH';
     const flipMode = this.#flipModeEnabled();
-    const acting = getActingAddress();
-    const actingLower = acting ? String(acting).toLowerCase() : null;
+    const displayTarget = decimatorReadAddress();
+    const actingLower = displayTarget ? String(displayTarget).toLowerCase() : null;
     if (flipBalanceDisplay) {
       const showFlipBalance = this.#flipBuyOpen && get('ui.mode') !== 'combined';
       flipBalanceDisplay.hidden = !showFlipBalance;
@@ -2529,9 +2589,14 @@ class AppDecimatorPanel extends HTMLElement {
     }
     let showAllIn = false;
     if (allIn) {
-      showAllIn = get('ui.mode') !== 'combined'
+      const rawAllInEligible = get('ui.mode') === 'self'
+        && actingLower != null
         && this.#degenScoreAddress === actingLower
         && allInDegenScoreEligible(this.#degenScore);
+      if (get('ui.allInEligible') !== rawAllInEligible) {
+        update('ui.allInEligible', rawAllInEligible);
+      }
+      showAllIn = rawAllInEligible && readAllInButtonPreference();
       allIn.hidden = !showAllIn;
       if (allIn.hidden) allIn.setAttribute?.('hidden', '');
       else allIn.removeAttribute?.('hidden');
@@ -2728,7 +2793,7 @@ class AppDecimatorPanel extends HTMLElement {
 
   #claimableSpoilerKey() {
     const day = get('app.daySync')?.day ?? get('app.lastDay')?.day ?? '';
-    const address = getActingAddress() || '';
+    const address = decimatorReadAddress() || '';
     return `${day}:${String(address).toLowerCase()}`;
   }
 
@@ -2955,7 +3020,10 @@ class AppDecimatorPanel extends HTMLElement {
       this.#renderSnapshot();
       this.#refreshFoilStatus();
     });
-    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11);
+    const u12 = subscribeUiPreferences(({ name }) => {
+      if (name === 'allInButton') this.#renderFundsFooter();
+    });
+    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12);
   }
 
   // ---------------------------------------------------------------------

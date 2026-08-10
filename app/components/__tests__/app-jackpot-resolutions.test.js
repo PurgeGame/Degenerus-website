@@ -58,6 +58,8 @@ describe('Decimator resolution presentation', () => {
     });
     assert.equal(claimed.status, 'RESOLVED');
     assert.equal(claimed.actionable, false);
+    assert.match(claimed.message, /claimable ETH/);
+    assert.match(claimed.message, /Luckbox \/ Whale Half-Pass/);
 
     const lost = decimatorResolutionView({
       currentLevel: 26, level: 25, claimState: 'lost',

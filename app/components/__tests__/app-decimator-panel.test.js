@@ -335,6 +335,7 @@ import * as claimsMod from '../../app/claims.js';
 import * as passesMod from '../../app/passes.js';
 import * as coinflipMod from '../../app/coinflip.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
+import * as uiPreferencesMod from '../../app/ui-preferences.js';
 
 // Seats auto-mint with the pass, so `claimSeat`/`canClaimSeat` are gone — holding one is the
 // whole signal.
@@ -791,6 +792,11 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
       /\.app-decimator-panel \.dec-funds :is\([\s\S]*?\.dec-funds__priority,[\s\S]*?\.dec-funds__claim,[\s\S]*?\.dec-flip-toggle[\s\S]*?\)\s*\{[^}]*width:\s*5rem;[^}]*min-width:\s*5rem;[^}]*max-width:\s*5rem/s,
       'Available Funds action buttons all occupy the same fixed column width',
     );
+    assert.match(
+      APP_CSS,
+      /\.app-decimator-panel \.dec-funds \.dec-funds__display \.dec-funds__priority,[\s\S]*?\.app-decimator-panel \.dec-funds \.dec-funds__claim\[data-write\]\s*\{[^}]*width:\s*5rem;[^}]*min-width:\s*5rem;[^}]*max-width:\s*5rem/s,
+      'USE FIRST and the ETH Claim transaction override cannot diverge from that column',
+    );
   });
 
   test('the purchase panel leaves referral editing in the top bar', async () => {
@@ -1183,7 +1189,7 @@ describe('combined ticket + lootbox buy', () => {
     tickets.dispatchEvent({ type: 'input' });
     assert.equal(tally.hidden, false);
     assert.equal(label.textContent, 'BONUS + BOUNTY');
-    assert.equal(total.textContent, '+25,000 FLIP',
+    assert.equal(total.textContent, '+25K FLIP',
       '15,000 ordinary ticket bonus plus the 10,000 live bounty');
     assert.equal(tally.getAttribute('data-includes-bounty'), 'true');
     assert.match(tally.getAttribute('title'), /\+10,000 FLIP/);
@@ -1194,7 +1200,7 @@ describe('combined ticket + lootbox buy', () => {
     luckbox.dispatchEvent({ type: 'input' });
     assert.equal(tally.hidden, false, 'a bounty makes the otherwise bonus-free Luckbox tally visible');
     assert.equal(label.textContent, 'BONUS + BOUNTY');
-    assert.equal(total.textContent, '+10,000 FLIP');
+    assert.equal(total.textContent, '+10K FLIP');
     el.disconnectedCallback();
   });
 
@@ -1784,10 +1790,16 @@ describe('combined ticket + lootbox buy', () => {
 
   test('base and bulk FLIP bonuses count whole tickets only', async () => {
     const {
+      formatPurchaseBonusFlip,
       purchaseFlipCreditBreakdown,
       purchaseRecordBountyWei,
     } = await import('../app-decimator-panel.js');
     const FLIP = 10n ** 18n;
+    assert.equal(formatPurchaseBonusFlip(999n * FLIP), '999');
+    assert.equal(formatPurchaseBonusFlip(1_999n * FLIP), '1.99K');
+    assert.equal(formatPurchaseBonusFlip(12_999n * FLIP), '12.9K');
+    assert.equal(formatPurchaseBonusFlip(999_999n * FLIP), '999K');
+    assert.equal(formatPurchaseBonusFlip(1_000_000n * FLIP), '1M');
     assert.equal(
       purchaseFlipCreditBreakdown({ tickets: 0.75 }).total,
       0n,
@@ -1954,7 +1966,72 @@ describe('combined ticket + lootbox buy', () => {
     const unlocked = instantiate();
     await settle(60);
     assert.equal(unlocked.querySelector('[data-bind="dec-all-in"]').hidden, false);
+    assert.equal(storeMod.get('ui.allInEligible'), true,
+      'the settings menu receives raw eligibility independently of visibility preference');
     unlocked.disconnectedCallback();
+  });
+
+  test('eligible players can hide ALL IN without losing the settings row', async () => {
+    const el = instantiate();
+    await settle(60);
+    const allIn = el.querySelector('[data-bind="dec-all-in"]');
+    assert.equal(allIn.hidden, false);
+    assert.equal(storeMod.get('ui.allInEligible'), true);
+
+    uiPreferencesMod.writeAllInButtonPreference(false);
+    assert.equal(allIn.hidden, true, 'the browser preference hides the shortcut immediately');
+    assert.equal(storeMod.get('ui.allInEligible'), true,
+      'raw account eligibility remains true so the off toggle stays discoverable');
+
+    uiPreferencesMod.writeAllInButtonPreference(true);
+    assert.equal(allIn.hidden, false, 'turning it back on restores the eligible shortcut');
+    el.disconnectedCallback();
+    assert.equal(storeMod.get('ui.allInEligible'), false,
+      'a detached account panel cannot leave stale eligibility in the top bar');
+  });
+
+  test('the disconnected sDGNRS protocol view never exposes ALL IN', async () => {
+    const el = instantiate();
+    await settle(60);
+    storeMod.update('connected.address', null);
+    storeMod.update('viewing.address', '0x73bba33c98356dd4d876ef8fbf6edf3e0631a6da');
+    storeMod.update('ui.mode', 'view');
+    await settle(20);
+
+    assert.equal(el.querySelector('[data-bind="dec-all-in"]').hidden, true);
+    assert.equal(storeMod.get('ui.allInEligible'), false);
+    el.disconnectedCallback();
+  });
+
+  test('the disconnected sDGNRS protocol view includes its claimable ETH in Available Funds', async () => {
+    const protocol = '0x73bba33c98356dd4d876ef8fbf6edf3e0631a6da';
+    const claimable = (lootboxMod.scaledTicketPriceWei(12) / 2n) + 1n;
+    const playerReads = [];
+    _fetchHandler = async (url) => {
+      const value = String(url);
+      if (value.includes('/game/state')) return DEFAULT_GAME_STATE;
+      if (value.includes(`/player/${protocol}`)) {
+        playerReads.push(value);
+        return { claimableEth: String(claimable), flipBalance: '0' };
+      }
+      return { player: null, pending: {} };
+    };
+    storeMod.update('connected.address', null);
+    storeMod.update('viewing.address', protocol);
+    storeMod.update('ui.mode', 'view');
+
+    const el = instantiate();
+    await settle(60);
+
+    assert.ok(playerReads.length > 0, 'the read-only panel fetches the viewed protocol account');
+    assert.equal(el.querySelector('[data-bind="dec-funds-total"]').textContent, '0.02',
+      'collapsed Available Funds includes claimable ETH without a connected wallet');
+    el.querySelector('[data-bind="dec-funds-toggle"]').dispatchEvent({ type: 'click', detail: 1 });
+    assert.equal(el.querySelector('[data-bind="dec-funds-claimable"]').textContent, '0.02');
+    assert.equal(el.querySelector('[data-bind="dec-funds-claim"]').disabled, true,
+      'the public balance remains read-only without a signer');
+    assert.equal(el.querySelector('[data-bind="dec-all-in"]').hidden, true);
+    el.disconnectedCallback();
   });
 
   test('ALL IN briefly becomes DO IT during the final coinflip beat', async () => {
@@ -2240,7 +2317,7 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(tally.hidden, false);
     assert.equal(
       el.querySelector('[data-bind="dec-flip-credit-total"]').textContent,
-      '+1,500 FLIP',
+      '+1.5K FLIP',
     );
     assert.equal(el.querySelectorAll('[data-bind="dec-flip-credit-total"]').length, 1);
     assert.doesNotMatch(tally.textContent, /purchase|bulk|rebuy/i, 'no detailed breakdown');
@@ -2414,6 +2491,36 @@ describe('combined ticket + lootbox buy', () => {
     const args = fakeContract._calls.purchase[0];
     assert.equal(args[1], 0n, 'the lootbox choice does not add tickets');
     assert.equal(args[2], target, 'the submitted lootbox spend is the exact displayed minimum');
+    el.disconnectedCallback();
+  });
+
+  test('a confirmed Biggest Degen preset buys its exact whole-ticket record target', async () => {
+    const fakeContract = makeFakePurchaseContract();
+    lootboxMod.__setContractFactoryForTest(() => fakeContract);
+    const el = instantiate();
+    await settle(60);
+
+    const ticketQuantity = 120;
+    const price = lootboxMod.scaledTicketPriceWei(12);
+    document.dispatchEvent(new CustomEvent('quest:activate', {
+      detail: {
+        source: 'records-bounty',
+        variant: 'bounty',
+        questType: 1,
+        target: String(price * BigInt(ticketQuantity)),
+        ticketQuantity: String(ticketQuantity),
+        purchaseKind: 'ticket',
+        submit: true,
+      },
+    }));
+    await settle(100);
+
+    assert.equal(fakeContract._calls.purchase.length, 1);
+    assert.equal(fakeContract._calls.purchase[0][1], 48_000n,
+      '120 whole tickets become exactly 48,000 purchase units');
+    assert.equal(fakeContract._calls.purchase[0][2], 0n, 'the record shot adds no Luckbox leg');
+    assert.equal(el.querySelector('[name="dec-tickets"]').value, '0',
+      'the one-off bounty transaction does not overwrite the ordinary buy draft');
     el.disconnectedCallback();
   });
 

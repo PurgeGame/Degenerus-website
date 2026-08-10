@@ -139,6 +139,21 @@ describe('live Decimator display math', () => {
     }), 18_412n);
   });
 
+  test('reports the exact protocol bracket and score range for normal and century rounds', () => {
+    assert.deepEqual(decimatorMod.decimatorBracket(0, { level: 25 }), {
+      bucket: 12, minScore: 0, maxScore: 9,
+    });
+    assert.deepEqual(decimatorMod.decimatorBracket(235, { level: 25 }), {
+      bucket: 6, minScore: 180, maxScore: 249,
+    });
+    assert.deepEqual(decimatorMod.decimatorBracket(1_000, { level: 25 }), {
+      bucket: 5, minScore: 250, maxScore: null,
+    }, 'normal rounds clamp every 250+ score into bracket 5');
+    assert.deepEqual(decimatorMod.decimatorBracket(1_000, { level: 100 }), {
+      bucket: 2, minScore: 1_000, maxScore: null,
+    }, 'century rounds expose the full ladder through bracket 2');
+  });
+
   test('quotes added Decimator score with boon and multiplier caps', () => {
     assert.equal(decimatorMod.decimatorEntryScoreWei({
       amountWei: 1_000n * FLIP,
@@ -152,6 +167,54 @@ describe('live Decimator display math', () => {
       activityScore: 30_000,
       boonBps: 5_000,
     }), 125_000n * FLIP, 'past the multiplier cap, only the capped boon base remains');
+    assert.equal(decimatorMod.decimatorEffectiveMultiplierBps({
+      amountWei: 1_000n * FLIP,
+      previousScoreWei: 284_500n * FLIP,
+      activityScore: 235,
+      dayOneActive: true,
+      lastPurchaseDay: true,
+      boonBps: 5_000,
+    }), 15_000n, 'the displayed total multiplier keeps the boon after the regular multiplier caps');
+    assert.equal(decimatorMod.decimatorEffectiveBaseMultiplierBps({
+      amountWei: 1_000n * FLIP,
+      previousScoreWei: 284_500n * FLIP,
+      activityScore: 235,
+      dayOneActive: true,
+      lastPurchaseDay: true,
+      boonBps: 5_000,
+    }), 10_000n, 'the cap note isolates the non-boon portion at 100%');
+    assert.equal(decimatorMod.decimatorMultiplierCapApplied({
+      amountWei: 1_000n * FLIP,
+      previousScoreWei: 284_500n * FLIP,
+      activityScore: 235,
+      dayOneActive: true,
+      lastPurchaseDay: true,
+    }), true);
+    assert.equal(decimatorMod.decimatorEffectiveMultiplierBps({
+      amountWei: 1_000n * FLIP,
+      activityScore: 235,
+      dayOneActive: true,
+      lastPurchaseDay: true,
+    }), 18_412n, 'an uncapped burn still reports its full timing multiplier');
+    assert.equal(decimatorMod.decimatorMultiplierCapApplied({
+      amountWei: 1_000n * FLIP,
+      activityScore: 235,
+      dayOneActive: true,
+      lastPurchaseDay: true,
+    }), false);
+  });
+
+  test('floors a last-day 90% nominal multiplier to 100% base weight', () => {
+    const args = {
+      amountWei: 1_000n * FLIP,
+      previousScoreWei: 200_000n * FLIP,
+      activityScore: 0,
+      lastPurchaseDay: true,
+    };
+    assert.equal(decimatorMod.decimatorCurrentMultiplierBps(args), 9_000n);
+    assert.equal(decimatorMod.decimatorEffectiveBaseMultiplierBps(args), 10_000n);
+    assert.equal(decimatorMod.decimatorEffectiveMultiplierBps(args), 10_000n);
+    assert.equal(decimatorMod.decimatorMultiplierCapApplied(args), true);
   });
 
   test('decodes the day-one byte and current nested burn slot exactly', () => {

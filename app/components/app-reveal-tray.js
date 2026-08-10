@@ -32,9 +32,9 @@ import {
   subscribeAutomaticPopupGate,
 } from '../app/major-draw-activity.js';
 import {
-  readDegeneretteSpeed,
-  writeDegeneretteSpeed,
-} from '../app/degenerette-preferences.js';
+  readRevealAutoOpenPreference,
+  subscribeUiPreferences,
+} from '../app/ui-preferences.js';
 import { applyTicketLevelTone } from '../app/ticket-level-tone.js';
 import {
   canRequestLootboxRng,
@@ -62,7 +62,6 @@ const REVEAL_KINDS = new Set([
 ]);
 const ERROR_AUTO_CLEAR_MS = 10_000;
 const CLEAR_ALL_BUSY_ID = 'reveal-tray:clear-all';
-const AUTO_OPEN_STORAGE_KEY = 'degenerus:reveal-tray:auto-open:v1';
 const AUTO_OPEN_RETRY_MS = 7_000;
 const RNG_PHASES = new Set([
   'awaitingRng',
@@ -133,26 +132,10 @@ const ACTION_ICON_PATHS = Object.freeze({
     'M4 7h16v10H4V7Z',
     'M8 7v3M8 14v3M12 10h5M12 14h3',
   ],
-  decimator: [
-    'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z',
-    'm8.5 8.5 7 7m0-7-7 7',
-  ],
   baf: [
     'm12 3 1.7 5.2H19l-4.3 3.1 1.7 5.2-4.4-3.2-4.4 3.2 1.7-5.2L5 8.2h5.3L12 3Z',
   ],
 });
-
-function _readAutoOpenPreference() {
-  if (typeof localStorage === 'undefined') return false;
-  try { return localStorage.getItem(AUTO_OPEN_STORAGE_KEY) === '1'; }
-  catch (_e) { return false; }
-}
-
-function _writeAutoOpenPreference(enabled) {
-  if (typeof localStorage === 'undefined') return;
-  try { localStorage.setItem(AUTO_OPEN_STORAGE_KEY, enabled ? '1' : '0'); }
-  catch (_e) { /* private mode: keep the in-memory choice */ }
-}
 
 export function canAutoOpenReveal(item) {
   return item?.state === 'ready'
@@ -421,7 +404,8 @@ function _compactActionLabel(item) {
   if (item?.kind === 'degenerette') return label.toUpperCase();
   if (item?.kind === 'decimator' || item?.kind === 'baf') {
     const level = /\blevel\s+(\d+)/i.exec(label)?.[1];
-    return `${item.kind === 'baf' ? 'BAF' : 'DECIMATOR'}${level ? ` · L${level}` : ''}`;
+    if (item.kind === 'decimator') return `${level ? `L${level} ` : ''}DECIMATOR`;
+    return `BAF${level ? ` · L${level}` : ''}`;
   }
   if (item?.kind === 'growth-claim') {
     const level = /\blevel\s+(\d+)/i.exec(label)?.[1];
@@ -446,6 +430,19 @@ export function degenerettePendingSummary(item) {
     spins,
     text: `${amount ? `${amount} · ` : ''}luckbox ×${spins} ${spins === 1 ? 'spin' : 'spins'}`,
   };
+}
+
+function _appendDecimatorPendingLabel(label, item) {
+  const level = /\blevel\s+(\d+)/i.exec(String(item?.label || ''))?.[1];
+  label.classList?.add('rrt-decimator-summary');
+  const levelLine = document.createElement('span');
+  levelLine.className = 'rrt-decimator-summary__level';
+  levelLine.textContent = level ? `L${level}` : 'L—';
+  const name = document.createElement('span');
+  name.className = 'rrt-decimator-summary__name';
+  name.textContent = 'DECIMATOR';
+  label.appendChild(levelLine);
+  label.appendChild(name);
 }
 
 function _appendDegenerettePendingLabel(label, item) {
@@ -664,6 +661,7 @@ class AppRevealTray extends HTMLElement {
   #autoRetryTimers = new Map();
   #autoScheduledId = null;
   #popupGateUnsubscribe = null;
+  #preferenceUnsubscribe = null;
   #expandedPendingId = null;
   #rngItem = null;
   #rngQueueState = null;
@@ -683,7 +681,7 @@ class AppRevealTray extends HTMLElement {
   connectedCallback() {
     if (this.#initialized) return;
     this.#initialized = true;
-    this.#autoOpen = _readAutoOpenPreference();
+    this.#autoOpen = readRevealAutoOpenPreference();
     this.#renderShell();
     const clear = this.querySelector('[data-bind="rrt-clear"]');
     if (clear) clear.addEventListener('click', () => this.#clearAll());
@@ -693,32 +691,12 @@ class AppRevealTray extends HTMLElement {
     if (rngRequest) rngRequest.addEventListener('click', () => {
       if (this.#rngItem) void this.#run(this.#rngItem);
     });
-    const autoOpen = this.querySelector('[data-bind="rrt-auto-open"]');
-    if (autoOpen) {
-      autoOpen.checked = this.#autoOpen;
-      autoOpen.addEventListener('change', () => {
-        this.#autoOpen = Boolean(autoOpen.checked);
-        _writeAutoOpenPreference(this.#autoOpen);
-        if (!this.#autoOpen) this.#clearAutoRetryTimers();
-        this.#maybeAutoOpen();
-      });
-    }
-    const speed = this.querySelector('[data-bind="rrt-speed"]');
-    const speedValue = this.querySelector('[data-bind="rrt-speed-value"]');
-    if (speed) {
-      speed.min = '0.5';
-      speed.max = '3';
-      speed.step = '0.5';
-      speed.value = String(readDegeneretteSpeed());
-      const syncSpeed = ({ persist = false } = {}) => {
-        const multiplier = Math.max(0.5, Math.min(3, Number(speed.value) || 1));
-        if (speedValue) speedValue.textContent = `${multiplier}×`;
-        if (persist) writeDegeneretteSpeed(multiplier);
-      };
-      syncSpeed();
-      speed.addEventListener('input', () => syncSpeed());
-      speed.addEventListener('change', () => syncSpeed({ persist: true }));
-    }
+    this.#preferenceUnsubscribe = subscribeUiPreferences(({ name, value }) => {
+      if (name !== 'revealAutoOpen') return;
+      this.#autoOpen = Boolean(value);
+      if (!this.#autoOpen) this.#clearAutoRetryTimers();
+      this.#maybeAutoOpen();
+    });
     this.#unsubscribe = subscribePendingActions((items) => {
       // CLEAR tombstones are owned by pending-actions, so the same logical row
       // stays gone across publisher polls and tray remounts. HIDE remains the
@@ -767,6 +745,8 @@ class AppRevealTray extends HTMLElement {
     this.#errorUnsubscribe = null;
     try { this.#popupGateUnsubscribe?.(); } catch (_e) { /* defensive */ }
     this.#popupGateUnsubscribe = null;
+    try { this.#preferenceUnsubscribe?.(); } catch (_e) { /* defensive */ }
+    this.#preferenceUnsubscribe = null;
     for (const unsubscribe of this.#storeUnsubs.splice(0)) {
       try { unsubscribe?.(); } catch (_e) { /* defensive */ }
     }
@@ -1010,17 +990,6 @@ class AppRevealTray extends HTMLElement {
           </section>
           <div class="rrt-actions" data-bind="rrt-actions"></div>
           <div class="rrt-controls" data-bind="rrt-controls" aria-label="Pending controls">
-            <span class="rrt-controls__settings">
-              <label class="rrt-auto-open">
-                <input type="checkbox" data-bind="rrt-auto-open">
-                <span>AUTO</span>
-              </label>
-              <label class="rrt-speed" title="Reveal animation speed">
-                <span class="rrt-speed__label">SPEED</span>
-                <input type="range" data-bind="rrt-speed" aria-label="Reveal animation speed">
-                <output data-bind="rrt-speed-value">1×</output>
-              </label>
-            </span>
             <span class="rrt-controls__actions">
               <button type="button" class="rrt-hide" data-bind="rrt-hide" hidden
                       aria-label="Hide pending actions until their status changes">HIDE</button>
@@ -1314,7 +1283,9 @@ class AppRevealTray extends HTMLElement {
       // does not need a trailing VIEW label.
       const compactDegenerette = item.kind === 'degenerette';
       const compactFoilMatch = item.kind === 'foil-match';
-      const compact = item.compact === true || compactDegenerette || compactFoilMatch;
+      const compactDecimator = item.kind === 'decimator';
+      const compact = item.compact === true || compactDegenerette || compactFoilMatch
+        || compactDecimator;
       const compactLootbox = item.kind === 'lootbox' && item.compact === true;
       const autoArmed = compactLootbox && this.#autoOpen && item.autoOpen === true && !busy;
       const waitingFeedback = compactLootbox && waiting && !busy;
@@ -1385,6 +1356,8 @@ class AppRevealTray extends HTMLElement {
               ? foilMatchPendingSummary(item).text
             : compactLootbox
               ? lootboxPendingSummary(item).text
+            : compactDecimator
+              ? _compactActionLabel(item)
             : _luckboxUiText(item.label || item.shortLabel || 'Open')
         : _luckboxUiText(`${actionVerb}: ${item.label}${item.detail ? `. ${item.detail}` : ''}`));
       button.title = `${compactFoilMatch
@@ -1487,6 +1460,12 @@ class AppRevealTray extends HTMLElement {
         box.setAttribute('data-lootbox-value-tone', item.lootboxValueTone || 'unknown');
         box.setAttribute('aria-hidden', 'true');
         art.appendChild(box);
+      } else if (item.kind === 'decimator') {
+        const logo = document.createElement('img');
+        logo.className = 'rrt-decimator-mark';
+        logo.src = '/app/assets/decimator-draw-mark.svg';
+        logo.alt = '';
+        art.appendChild(logo);
       } else if (item.icon) {
         const logo = document.createElement('img');
         logo.src = item.icon;
@@ -1508,6 +1487,8 @@ class AppRevealTray extends HTMLElement {
       label.className = 'rrt-action__label';
       if (compactDegenerette) {
         _appendDegenerettePendingLabel(label, item);
+      } else if (compactDecimator) {
+        _appendDecimatorPendingLabel(label, item);
       } else if (compactFoilMatch) {
         _appendFoilMatchPendingLabel(label, item);
       } else if (compactLootbox) {
@@ -1562,7 +1543,9 @@ class AppRevealTray extends HTMLElement {
       cta.className = 'rrt-action__cta';
       cta.textContent = actionVerb;
 
-      if ((!passive || item.kind === 'tickets') && !compactFoilMatch) button.appendChild(art);
+      if ((!passive || item.kind === 'tickets') && !compactFoilMatch) {
+        button.appendChild(art);
+      }
       button.appendChild(copy);
       if (!compact && !passive && !ticketOpenReady) button.appendChild(cta);
       if (waitingFeedback) {

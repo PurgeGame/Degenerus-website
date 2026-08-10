@@ -6,12 +6,15 @@ import { displayEth, displayToken } from '../app/scaling.js';
 import { get, getActingAddress, getViewedAddress, subscribe } from '../app/store.js';
 import { readGameState } from '../app/game-state.js';
 import { activeBoonForProduct } from '../app/boons.js';
+import { degenScoreLootTier } from '../app/activity-score.js';
 import {
   burnForDecimator,
   DECIMATOR_MIN_FLIP_WEI,
-  decimatorActivityMultiplierBps,
-  decimatorCurrentMultiplierBps,
+  decimatorBracket,
+  decimatorEffectiveBaseMultiplierBps,
+  decimatorEffectiveMultiplierBps,
   decimatorEntryScoreWei,
+  decimatorMultiplierCapApplied,
   decimatorPoolWei,
   decimatorWindowIsOpen,
   readDecimatorContext,
@@ -80,48 +83,6 @@ export function decimatorBoonBps(payload) {
   return 0;
 }
 
-/** Visual modifier rail derived from the exact inputs used by score math. */
-export function decimatorModifierModel(context = {}, boonPayload = null) {
-  const score = Number(context?.activityScore);
-  const scoreKnown = Number.isFinite(score) && score >= 0;
-  const activityBps = scoreKnown
-    ? decimatorActivityMultiplierBps(Math.trunc(score))
-    : null;
-  const boonBps = decimatorBoonBps(boonPayload);
-  const chips = [];
-  if (activityBps != null && activityBps > 10_000n) {
-    chips.push({
-      kind: 'boost',
-      label: `DEGEN ${Math.trunc(score).toLocaleString('en-US')}`,
-      value: _percentFromBps(activityBps - 10_000n, { signed: true }),
-    });
-  }
-  if (context?.dayOneActive === true) {
-    chips.push({ kind: 'boost', label: 'EARLY WINDOW', value: '+20%' });
-  }
-  if (context?.lastPurchaseDay === true) {
-    chips.push({ kind: 'malus', label: 'LATE BURN', value: '−10%' });
-  }
-  if (boonBps > 0) {
-    chips.push({
-      kind: 'boon',
-      label: 'BOON',
-      value: `${_percentFromBps(boonBps, { signed: true })} SCORE`,
-    });
-  }
-  if (chips.length === 0) {
-    chips.push({ kind: 'base', label: scoreKnown ? `DEGEN ${Math.trunc(score)}` : 'BASE SCORE', value: '100%' });
-  }
-  const liveMultiplierBps = scoreKnown
-    ? decimatorCurrentMultiplierBps({
-        activityScore: Math.trunc(score),
-        dayOneActive: context?.dayOneActive === true,
-        lastPurchaseDay: context?.lastPurchaseDay === true,
-      })
-    : null;
-  return { chips, boonBps, activityBps, liveMultiplierBps };
-}
-
 class AppDecimatorBurn extends HTMLElement {
   #initialized = false;
   #unsubs = [];
@@ -182,12 +143,12 @@ class AppDecimatorBurn extends HTMLElement {
         <header class="dbb__identity">
           <span class="dbb__reactor" aria-hidden="true">
             <span class="dbb__reactor-ring"></span>
-            <img src="/whitepaper/flame-center.svg" alt="">
+            <img src="/app/assets/decimator-draw-mark.svg" alt="">
           </span>
           <span class="dbb__identity-copy">
             <small>LEVEL <span data-bind="dbb-level">—</span> EVENT</small>
             <h2 id="dbb-title">DECIMATOR</h2>
-            <span class="dbb__live"><i></i>BURN WINDOW OPEN</span>
+            <span class="dbb__live">BURN <img src="/whitepaper/flame-logo-split.svg" alt="FLIP"> TO WIN</span>
           </span>
         </header>
 
@@ -198,36 +159,53 @@ class AppDecimatorBurn extends HTMLElement {
           <article class="dbb-stat dbb-stat--burned">
             <span><small>FLIP BURNED</small><strong><b data-bind="dbb-burned">—</b><em>FLIP</em></strong></span>
           </article>
-          <article class="dbb-stat dbb-stat--score">
-            <span><small>YOUR SCORE</small><strong data-bind="dbb-player-score">—</strong></span>
-          </article>
-        </div>
-
-        <div class="dbb__modifiers">
-          <small class="dbb__modifiers-title">TODAY'S MODIFIERS</small>
-          <div class="dbb__modifier-list" data-bind="dbb-modifiers"></div>
-          <span class="dbb__live-multi" data-bind="dbb-live-multi" hidden></span>
         </div>
 
         <div class="dbb__entry">
-          <label class="dbb__input">
-            <span>BURN AMOUNT</span>
-            <span class="dbb__input-control">
-              <input type="text" inputmode="decimal" name="dbb-amount" value="1000"
-                     aria-label="Decimator burn amount in FLIP">
-              <b>FLIP</b>
-              <span class="dbb__stepper">
-                <button type="button" data-bind="dbb-up" aria-label="Add 1,000 FLIP">▲</button>
-                <button type="button" data-bind="dbb-down" aria-label="Remove 1,000 FLIP">▼</button>
+          <span class="dbb__entry-meta">
+            <span class="dbb__bracket">
+              <span class="dbb__bracket-id">
+                <small>BRACKET</small>
+                <strong><b data-bind="dbb-bracket-number">—</b></strong>
+              </span>
+              <span class="dbb__bracket-score">
+                <small>DEGEN SCORE</small>
+                <strong data-bind="dbb-bracket-range">—</strong>
               </span>
             </span>
-          </label>
-          <button type="button" class="dbb__burn" data-write data-bind="dbb-burn">
-            <span data-bind="dbb-burn-action">BURN FLIP</span>
-            <strong data-bind="dbb-quote">WEIGHT —</strong>
-          </button>
+            <span class="dbb__actual-multi"
+                  title="Total includes activity, timing, and any boon. CAPPED applies to the non-boon base.">
+              <small>YOUR MULTIPLIER</small>
+              <strong>
+                <b data-bind="dbb-live-multi">—</b>
+                <em data-bind="dbb-multi-cap" hidden></em>
+              </strong>
+            </span>
+          </span>
+          <div class="dbb__entry-controls">
+            <label class="dbb__input">
+              <span class="dbb__input-control">
+                <small>BURN AMOUNT</small>
+                <input type="text" inputmode="decimal" name="dbb-amount" value="1000"
+                       aria-label="Decimator burn amount in FLIP">
+                <b>FLIP</b>
+                <span class="dbb__stepper">
+                  <button type="button" data-bind="dbb-up" aria-label="Add 1,000 FLIP">▲</button>
+                  <button type="button" data-bind="dbb-down" aria-label="Remove 1,000 FLIP">▼</button>
+                </span>
+              </span>
+            </label>
+            <button type="button" class="dbb__burn" data-write data-bind="dbb-burn">
+              <span data-bind="dbb-burn-action">BURN FLIP</span>
+              <strong data-bind="dbb-quote">SCORE —</strong>
+            </button>
+          </div>
           <p class="dbb__feedback" data-bind="dbb-feedback" hidden role="status"></p>
         </div>
+
+        <article class="dbb-stat dbb-stat--score">
+          <span><small>YOUR DECIMATOR SCORE</small><strong data-bind="dbb-player-score">—</strong></span>
+        </article>
       </section>
     `;
   }
@@ -336,30 +314,25 @@ class AppDecimatorBurn extends HTMLElement {
       if (node) node.textContent = value;
     }
 
-    const modifierModel = decimatorModifierModel(this.#context || {}, get('app.boons'));
-    const modifiers = this.querySelector('[data-bind="dbb-modifiers"]');
-    if (modifiers) {
-      modifiers.textContent = '';
-      for (const model of modifierModel.chips) {
-        const chip = document.createElement('span');
-        chip.className = `dbb-mod dbb-mod--${model.kind}`;
-        const labelNode = document.createElement('small');
-        labelNode.textContent = model.label;
-        const valueNode = document.createElement('strong');
-        valueNode.textContent = model.value;
-        chip.appendChild(labelNode);
-        chip.appendChild(valueNode);
-        modifiers.appendChild(chip);
-      }
+    const bracketScore = this.#context?.activityScore;
+    const bracket = bracketScore == null
+      ? null
+      : decimatorBracket(bracketScore, { level: this.#targetLevel });
+    const bracketNumber = this.querySelector('[data-bind="dbb-bracket-number"]');
+    const bracketRange = this.querySelector('[data-bind="dbb-bracket-range"]');
+    if (bracketNumber) bracketNumber.textContent = bracket == null ? '—' : String(bracket.bucket);
+    if (bracketRange) {
+      const range = bracket == null
+        ? null
+        : bracket.maxScore == null
+          ? `${bracket.minScore.toLocaleString('en-US')}+`
+          : `${bracket.minScore.toLocaleString('en-US')}–${bracket.maxScore.toLocaleString('en-US')}`;
+      bracketRange.textContent = range || '—';
+      const scoreTier = degenScoreLootTier(bracketScore);
+      if (scoreTier) bracketRange.setAttribute('data-score-tier', scoreTier);
+      else bracketRange.removeAttribute('data-score-tier');
     }
-    const liveMulti = this.querySelector('[data-bind="dbb-live-multi"]');
-    if (liveMulti) {
-      liveMulti.hidden = modifierModel.liveMultiplierBps == null;
-      liveMulti.textContent = modifierModel.liveMultiplierBps == null
-        ? ''
-        : `${_percentFromBps(modifierModel.liveMultiplierBps)} LIVE MULTI`;
-    }
-    this.#paintQuote(modifierModel.boonBps);
+    this.#paintQuote(decimatorBoonBps(get('app.boons')));
   }
 
   #canWrite() {
@@ -381,17 +354,24 @@ class AppDecimatorBurn extends HTMLElement {
     const amount = _parseFlip(input?.value);
     const score = Number(this.#context?.activityScore);
     let weight = null;
+    let actualMultiplierBps = null;
+    let baseMultiplierBps = null;
+    let multiplierCapped = false;
     if (amount != null && amount >= DECIMATOR_MIN_FLIP_WEI && Number.isFinite(score)) {
       let previous = 0n;
       try { previous = BigInt(this.#context?.totalBurnWeight ?? 0); } catch (_e) { previous = 0n; }
-      weight = decimatorEntryScoreWei({
+      const scoreArgs = {
         amountWei: amount,
         previousScoreWei: previous,
         activityScore: Math.max(0, Math.trunc(score)),
         dayOneActive: this.#context?.dayOneActive === true,
         lastPurchaseDay: this.#context?.lastPurchaseDay === true,
         boonBps: knownBoonBps ?? decimatorBoonBps(get('app.boons')),
-      });
+      };
+      weight = decimatorEntryScoreWei(scoreArgs);
+      actualMultiplierBps = decimatorEffectiveMultiplierBps(scoreArgs);
+      baseMultiplierBps = decimatorEffectiveBaseMultiplierBps(scoreArgs);
+      multiplierCapped = decimatorMultiplierCapApplied(scoreArgs);
     }
     if (quote) {
       quote.textContent = amount != null && amount < DECIMATOR_MIN_FLIP_WEI
@@ -399,6 +379,22 @@ class AppDecimatorBurn extends HTMLElement {
         : weight == null ? 'SCORE —' : `+${_fmtFlip(weight)} SCORE`;
     }
     if (action) action.textContent = this.#busy ? 'BURNING…' : 'BURN FLIP';
+    const liveMulti = this.querySelector('[data-bind="dbb-live-multi"]');
+    if (liveMulti) {
+      liveMulti.textContent = actualMultiplierBps == null
+        ? '—'
+        : _percentFromBps(actualMultiplierBps);
+    }
+    const cap = this.querySelector('[data-bind="dbb-multi-cap"]');
+    if (cap) {
+      const showCap = multiplierCapped
+        && actualMultiplierBps != null
+        && actualMultiplierBps <= 10_000n;
+      cap.hidden = !showCap;
+      cap.textContent = !showCap
+        ? ''
+        : baseMultiplierBps === actualMultiplierBps ? '(CAPPED)' : '(BASE CAPPED)';
+    }
     if (button) {
       button.disabled = this.#busy
         || !this.#open

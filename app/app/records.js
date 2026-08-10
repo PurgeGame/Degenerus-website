@@ -2,9 +2,8 @@
 //
 // One shared FLIP pool (Coinflip.sol:218 `recordPool`) backs four permanent
 // high-water marks: biggest flip, biggest Degenerette spin, biggest lootbox
-// deposit, biggest ticket buy. The pool takes a 2,000 FLIP drip every
-// settlement (:1133) plus level-transition funding, so it grows every day
-// nobody breaks a record.
+// deposit, biggest ticket buy. Settlement and level-transition paths fund the
+// pool, while successful record claims reduce it immediately.
 //
 // ⛔ THE MARKS ARE ON CHAIN; THE HOLDERS ARE NOT. Every `biggest*Ever` slot
 // holds a bare uint128 — no address. The holder exists only in
@@ -27,8 +26,21 @@ export const RECORD_KIND_BUY = 3;
 
 /** Session API — the only place an address maps to a Discord display identity. */
 const SESSION_API = 'https://api.degener.us';
-const RECORD_POOL_ABI = ['function recordPool() external view returns (uint128)'];
+const RECORD_POOL_ABI = [
+  'function recordPool() external view returns (uint128)',
+  'function biggestFlipEver() external view returns (uint128)',
+  'function biggestSpinEver() external view returns (uint128)',
+  'function biggestLuckboxEver() external view returns (uint128)',
+  'function biggestBuyEver() external view returns (uint128)',
+];
 const TOKEN_UNIT = 10n ** 18n;
+
+const RECORD_GETTER_BY_KIND = new Map([
+  [RECORD_KIND_FLIP, 'biggestFlipEver'],
+  [RECORD_KIND_SPIN, 'biggestSpinEver'],
+  [RECORD_KIND_LUCKBOX, 'biggestLuckboxEver'],
+  [RECORD_KIND_BUY, 'biggestBuyEver'],
+]);
 
 let _publicPoolProvider = null;
 let _poolReadInflight = null;
@@ -82,8 +94,8 @@ export const RECORD_KINDS = [
   {
     kind: RECORD_KIND_BUY,
     unit: 'tickets',
-    label: 'BIGGEST DEGEN',
-    short: 'DEGEN',
+    label: 'BIGGEST PACK RIPPED',
+    short: 'PACK RIPPED',
     // DegenerusGame.sol:162 BIGGEST_BUY_MIN_TICKETS = 100 (whole tickets).
     floorText: '100 TICKETS',
     floorValue: 100n,
@@ -169,6 +181,14 @@ export function barToBeat(mark) {
   return value + (value + 4n) / 5n;
 }
 
+/** Exact bounty-paying target when the current on-chain mark is already known. */
+export function recordClaimTargetForMark(kind, mark) {
+  const meta = recordKindMeta(kind);
+  if (!meta) return null;
+  const value = toBigInt(mark);
+  return value > 0n ? barToBeat(value) : toBigInt(meta.floorValue);
+}
+
 /**
  * Exact candidate that would claim this kind's live bounty right now.
  *
@@ -182,7 +202,32 @@ export function recordClaimTarget(state, kind) {
     ? state.records.find((entry) => Number(entry?.kind) === Number(kind))
     : null;
   if (!meta || !record) return null;
-  return record.held ? toBigInt(record.barToBeat) : toBigInt(meta.floorValue);
+  return record.held
+    ? toBigInt(record.barToBeat)
+    : recordClaimTargetForMark(kind, 0n);
+}
+
+/**
+ * Read one permanent record directly from Coinflip.
+ *
+ * The API remains necessary for holder identity and claim history, but it can
+ * trail a mined BigRecordUpdated event. Transaction presets use this getter so
+ * the amount placed in the wallet is based on the head-chain mark, not a stale
+ * indexer row.
+ */
+export async function readLiveRecordMark(kind) {
+  const getter = RECORD_GETTER_BY_KIND.get(Number(kind));
+  if (!getter) return null;
+  try {
+    const provider = recordPoolProvider();
+    if (!provider || !CONTRACTS.COINFLIP) return null;
+    const contract = new ethers.Contract(CONTRACTS.COINFLIP, RECORD_POOL_ABI, provider);
+    if (typeof contract[getter] !== 'function') return null;
+    const value = await contract[getter]();
+    return value == null ? null : toBigInt(value);
+  } catch (_e) {
+    return null;
+  }
 }
 
 /** True only when `candidate` reaches the exact live bounty-paying target. */

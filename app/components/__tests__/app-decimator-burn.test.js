@@ -11,7 +11,6 @@ globalThis.customElements ||= {
 
 const {
   decimatorBoonBps,
-  decimatorModifierModel,
   parseDecimatorFlipInput,
 } = await import('../app-decimator-burn.js');
 
@@ -31,21 +30,11 @@ describe('<app-decimator-burn>', () => {
     assert.equal(parseDecimatorFlipInput('-1'), null);
   });
 
-  test('shows every active boost and malus that feeds the burn quote', () => {
-    const boons = { boons: [{ boonType: 15, consumed: false }] };
-    assert.equal(decimatorBoonBps(boons), 5_000);
-    const model = decimatorModifierModel({
-      activityScore: 235,
-      dayOneActive: true,
-      lastPurchaseDay: true,
-    }, boons);
-    assert.deepEqual(model.chips.map(({ kind, label, value }) => ({ kind, label, value })), [
-      { kind: 'boost', label: 'DEGEN 235', value: '+70.49%' },
-      { kind: 'boost', label: 'EARLY WINDOW', value: '+20%' },
-      { kind: 'malus', label: 'LATE BURN', value: '−10%' },
-      { kind: 'boon', label: 'BOON', value: '+50% SCORE' },
-    ]);
-    assert.equal(model.liveMultiplierBps, 18_412n);
+  test('maps the active Decimator boon into the aggregate quote', () => {
+    assert.equal(decimatorBoonBps({ boons: [{ boonType: 13, consumed: false }] }), 1_000);
+    assert.equal(decimatorBoonBps({ boons: [{ boonType: 14, consumed: false }] }), 2_500);
+    assert.equal(decimatorBoonBps({ boons: [{ boonType: 15, consumed: false }] }), 5_000);
+    assert.equal(decimatorBoonBps({ boons: [] }), 0);
   });
 
   test('mounts full-width between the main jackpot and the secondary play grid', () => {
@@ -57,16 +46,36 @@ describe('<app-decimator-burn>', () => {
     assert.match(CSS, /app-decimator-burn\s*\{[^}]*display:\s*block/s);
     assert.match(CSS, /\.dbb\s*\{[^}]*grid-template-columns:/s);
     assert.match(CSS, /\.dbb__reactor::before[\s\S]*animation:\s*dbb-reactor-spin/s);
+    assert.match(COMPONENT, /src="\/app\/assets\/decimator-draw-mark\.svg"/,
+      'the burn strip uses the dedicated Decimator wheel and selector mark');
+    assert.match(COMPONENT, /BURN <img src="\/whitepaper\/flame-logo-split\.svg" alt="FLIP"> TO WIN/,
+      'the event cue uses the FLIP mark rather than a generic live-window dot');
     assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
   });
 
-  test('renders raw burn, prize, player score, modifiers, and one exact burn action', () => {
+  test('renders raw burn, prize, player score, bracket, and one aggregate multiplier', () => {
     assert.match(COMPONENT, /data-bind="dbb-prize"/);
     assert.match(COMPONENT, /data-bind="dbb-burned"/);
     assert.doesNotMatch(COMPONENT, /dbb-total-weight|TOTAL WEIGHT/);
-    assert.match(COMPONENT, /YOUR SCORE[\s\S]*data-bind="dbb-player-score"/);
+    assert.match(COMPONENT, /YOUR DECIMATOR SCORE[\s\S]*data-bind="dbb-player-score"/);
     assert.doesNotMatch(COMPONENT, /YOUR WEIGHT/);
     assert.match(COMPONENT, /SCORE —/);
+    assert.match(COMPONENT, /decimatorEffectiveMultiplierBps/);
+    assert.match(COMPONENT, /<small>YOUR MULTIPLIER<\/small>/,
+      'the strip labels selected-burn score divided by spend, after contract caps');
+    assert.match(COMPONENT, /data-bind="dbb-bracket-number"/);
+    assert.match(COMPONENT, /data-bind="dbb-bracket-range"/,
+      'the contract bracket gets a dedicated number slot beside its Degen Score range');
+    assert.match(COMPONENT, /degenScoreLootTier\(bracketScore\)/,
+      'the range uses the shared Degen Score loot color');
+    assert.doesNotMatch(COMPONENT, /dbb__modifier-list|dbb-mod--|TODAY'S MODIFIERS/,
+      'activity, timing, and boon contributors collapse into the actual multiplier');
+    assert.match(COMPONENT, /data-bind="dbb-multi-cap" hidden/);
+    assert.match(COMPONENT, /\(BASE CAPPED\)|\(CAPPED\)/,
+      'the small cap note stays inline with the multiplier without a bubble');
+    assert.match(COMPONENT, /Total includes activity, timing, and any boon/);
+    assert.match(COMPONENT, /actualMultiplierBps <= 10_000n/,
+      'a total multiplier above 100% never receives a misleading capped note');
     assert.match(COMPONENT, /readDecimatorRawBurnTotal/);
     assert.equal((COMPONENT.match(/<button[^>]*data-bind="dbb-burn"/g) || []).length, 1);
     assert.match(SIDE_BETS, /querySelector\?\.\('app-decimator-burn'\)/,
@@ -74,16 +83,45 @@ describe('<app-decimator-burn>', () => {
   });
 
   test('uses the full rail for legible primary values and controls', () => {
-    assert.match(CSS, /\.dbb\s*\{[^}]*min-height:\s*8\.8rem/s);
-    assert.match(CSS, /\.dbb-stat strong\s*\{[^}]*font:\s*950 clamp\(0\.88rem, 1\.35vw, 1\.08rem\)/s);
-    assert.match(CSS, /\.dbb-stat--score\s*\{[^}]*grid-column:\s*1 \/ -1/s);
-    assert.match(CSS, /\.dbb-stat--score strong\s*\{[^}]*font-size:\s*clamp\(1\.08rem, 1\.8vw, 1\.38rem\)/s);
-    assert.match(CSS, /\.dbb__input-control\s*\{[^}]*height:\s*3\.4rem/s);
-    assert.match(CSS, /@media \(max-width: 900px\)[\s\S]*\.dbb__entry\s*\{[^}]*grid-column:\s*1 \/ -1/s);
-    assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb__entry\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
+    assert.match(CSS, /\.dbb\s*\{[^}]*grid-template-areas:\s*"identity stats entry score"/s,
+      'the wide layout puts accumulated score beyond the input and Degen Score context');
+    assert.match(CSS, /\.dbb\s*\{[^}]*min-height:\s*6\.1rem/s,
+      'the desktop event rail stays compact without shrinking its primary values');
+    assert.match(CSS, /\.dbb__stats\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
+      'prize and burned FLIP remain grouped before the entry controls');
+    assert.match(CSS, /\.dbb-stat--score\s*\{[^}]*grid-area:\s*score/s,
+      'the player score owns the far-side grid slot');
+    assert.match(CSS, /\.dbb__entry-meta\s*\{[^}]*grid-template-columns:\s*minmax\(9\.5rem, 1\.08fr\) minmax\(7\.4rem, 0\.82fr\)[^}]*min-height:\s*2\.82rem/s,
+      'bracket and aggregate multiplier align over the input and action columns');
+    assert.match(CSS, /\.dbb__bracket-id strong\s*\{[^}]*font:\s*1000 1\.62rem/s,
+      'the bracket number has a large dedicated score-plate slot');
+    assert.match(CSS, /\.dbb__actual-multi strong\s*\{[^}]*font:\s*1000 clamp\(0\.86rem, 1\.15vw, 1\.12rem\)/s,
+      'the actual multiplier is the dominant context value');
+    assert.match(CSS, /\.dbb__bracket-score strong\[data-score-tier="gold"\]/,
+      'Degen Score ranges share the normal tier palette');
+    assert.match(CSS, /\.dbb__bracket-score\s*\{[^}]*justify-items:\s*center[^}]*text-align:\s*center/s,
+      'the Degen Score range is centered in its half of the bracket plate');
+    assert.match(CSS, /\.dbb__entry-controls\s*\{[^}]*grid-template-columns:\s*minmax\(9\.5rem, 1\.08fr\) minmax\(7\.4rem, 0\.82fr\)/s);
+    assert.match(CSS, /\.dbb-stat strong\s*\{[^}]*font:\s*950 clamp\(0\.96rem, 1\.25vw, 1\.14rem\)/s);
+    assert.match(CSS, /\.dbb-stat--score strong\s*\{[^}]*font-size:\s*clamp\(1\.04rem, 1\.45vw, 1\.26rem\)/s);
+    assert.match(CSS, /\.dbb__input-control\s*\{[^}]*height:\s*2\.58rem/s);
+    assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb__entry-controls\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
+    assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb__input-control\s*\{[^}]*height:\s*4rem/s,
+      'phone burn entry matches the full-height Tickets and Luckbox touch controls');
+    assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb__stepper\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s,
+      'phone increment controls sit side by side instead of in a tiny vertical rail');
   });
 
-  test('has a forced-open visual demo with every modifier family active', () => {
+  test('the shared mini wheel has ten slots, one green lower slot, and a gold selector', () => {
+    const mark = readFileSync(new URL('../../assets/decimator-draw-mark.svg', import.meta.url), 'utf8');
+    assert.match(mark, /stroke="url\(#dec-red\)"[\s\S]*stroke-dasharray="9\.45 4\.53"/);
+    assert.match(mark, /stroke="url\(#dec-green\)"[\s\S]*stroke-dasharray="9\.45 130\.35"[\s\S]*rotate\(90 32 32\)/);
+    assert.match(mark, /fill="url\(#dec-gold\)"/);
+    assert.doesNotMatch(mark, /stroke-dasharray="7\.1 4\.55"/,
+      'the previous twelve-slot cadence is gone');
+  });
+
+  test('has a forced-open visual demo with every aggregate input active', () => {
     assert.match(DEMO_HTML, /DECIMATOR BURN WINDOW/);
     assert.match(DEMO_HTML, /src="\/app\/decimator-demo\.js"/);
     assert.match(DEMO_JS, /decWindowOpen:\s*true/);

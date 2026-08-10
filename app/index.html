@@ -17,6 +17,10 @@
   <link rel="stylesheet" href="/app/styles/replay.css">
   <link rel="stylesheet" href="/app/styles/boons.css">
   <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/deity-pass-purchase.css">
+  <link rel="stylesheet" href="/app/styles/settings-menu.css">
+  <link rel="stylesheet" href="/app/styles/protocol-wallet-banner.css">
+  <link rel="stylesheet" href="/app/styles/eth-onramp.css">
   <link rel="stylesheet" href="/app/styles/baf-eve.css">
   <link rel="stylesheet" href="/app/styles/records-rail.css">
   <link rel="stylesheet" href="/app/styles/baf-resolution.css">
@@ -96,6 +100,16 @@
       <!-- The level-wide objective: live nextPrizePool against both the
            progression threshold and the growth-market O/U line. -->
       <app-pool-progress></app-pool-progress>
+
+      <!-- Disconnected sessions deliberately inspect the live sDGNRS protocol
+           account. Keep that context between the prize-pool instrument and the
+           player-centric daily jackpot, with a direct path into wallet connect. -->
+      <app-protocol-wallet-banner hidden></app-protocol-wallet-banner>
+
+      <!-- Connected wallets that are genuinely low on native ETH get one
+           funding assist in this same wallet-context slot. Testnet offers only
+           its free faucet; production opens the external fiat on-ramp. -->
+      <app-eth-onramp hidden></app-eth-onramp>
 
       <!-- Mine FLIP has no top-bar control. app-mine-flip.js is a headless
            probe that publishes ready crank work into the fixed pending-actions
@@ -179,9 +193,28 @@
 
       <!-- Collapsed passes (user call: tickets+lootboxes live in the buy
            panel now, so the packs panel is gone and this is just passes) -->
-      <details class="more-ways section-disclosure" open id="afking-passes">
+      <details class="more-ways section-disclosure" id="afking-passes">
         <summary class="more-ways__summary section-disclosure__bar">
           <span class="section-disclosure__title">AFKING PASSES</span>
+          <span class="more-ways__summary-closed" data-bind="pass-summary-closed" hidden>
+            <span class="more-ways__sub-state" data-bind="pass-summary-state" hidden>
+              <b data-bind="pass-summary-subscription"></b>
+              <b data-bind="pass-summary-funding" hidden></b>
+            </span>
+            <span class="more-ways__deity-ticket" data-bind="pass-summary-deity" hidden>
+              <span class="more-ways__deity-art" aria-hidden="true">
+                <img data-bind="pass-summary-deity-badge" src="" alt="">
+              </span>
+              <span class="more-ways__deity-copy">
+                <small>DEITY</small>
+                <b data-bind="pass-summary-deity-name"></b>
+              </span>
+            </span>
+            <span class="more-ways__active-pass" data-bind="pass-summary-active-pass" hidden>
+              <i data-bind="pass-summary-active-pass-sigil" aria-hidden="true"></i>
+              <b data-bind="pass-summary-active-pass-label"></b>
+            </span>
+          </span>
           <span class="section-disclosure__chevron" aria-hidden="true"></span>
         </summary>
         <div class="more-ways__content">
@@ -232,6 +265,9 @@
   <script type="module" src="/app/components/app-referral-input.js"></script>
   <script type="module" src="/app/components/app-sound-toggle.js"></script>
   <script type="module" src="/app/components/app-feedback-button.js"></script>
+  <script type="module" src="/app/components/app-settings-menu.js"></script>
+  <script type="module" src="/app/components/app-protocol-wallet-banner.js"></script>
+  <script type="module" src="/app/components/app-eth-onramp.js"></script>
   <script type="module" src="/app/components/wallet-picker.js"></script>
   <script type="module" src="/app/components/app-onboarding.js"></script>
   <script type="module" src="/app/components/account-switcher.js"></script>

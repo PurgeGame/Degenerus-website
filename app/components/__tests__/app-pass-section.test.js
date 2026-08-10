@@ -1,7 +1,7 @@
 // /app/components/__tests__/app-pass-section.test.js — Phase 62 Plan 62-02 (BUY-02 + BUY-03)
 // Run: cd website && node --test app/components/__tests__/app-pass-section.test.js
 //
-// Tests <app-pass-section> Custom Element: whale row + compact deity dropdown + buy
+// Tests <app-pass-section> Custom Element: whale row + focused deity picker + buy
 // handlers + view-mode disable hook (data-write attribute) + error rendering via
 // textContent (T-58-18) + NEVER optimistic balance subtraction (CF-06 / D-05) + click
 // debouncing (#busyWhale + #busySymbols Set) + CONTEXT D-05 LOCKED 'E' override on
@@ -285,6 +285,8 @@ const PANEL_SRC = readFileSync(
   'utf8',
 );
 const INDEX_HTML = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+const STATUS_CSS = readFileSync(new URL('../../styles/status-indicators.css', import.meta.url), 'utf8');
+const DEITY_CSS = readFileSync(new URL('../../styles/deity-pass-purchase.css', import.meta.url), 'utf8');
 
 // ---------------------------------------------------------------------------
 // Fake contract harness
@@ -451,7 +453,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(ctor, ctor2, 'same ctor reference after re-import (idempotent)');
   });
 
-  test('Panel puts Lazy above Whale and retains the deity dropdown and local boon markers', () => {
+  test('Panel puts Lazy above Whale and moves Deity symbol choice into a focused dialog', () => {
     const el = instantiate();
     assert.ok(el.innerHTML.length > 100, 'innerHTML populated');
     assert.doesNotMatch(
@@ -465,8 +467,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     );
     const whaleBuyBtn = el.querySelector('.pass-whale-buy');
     assert.ok(whaleBuyBtn, 'whale buy CTA rendered');
-    assert.ok(el.querySelector('[data-bind="pass-deity-select"]'), 'deity symbol dropdown rendered');
-    assert.ok(el.querySelector('[data-bind="pass-deity-buy"]'), 'deity buy CTA rendered');
+    assert.ok(el.querySelector('[data-bind="pass-deity-open"]'), 'single priced Deity opener rendered');
+    assert.equal(el.querySelector('[data-bind="pass-deity-dialog"]').hidden, true,
+      'symbol picker starts closed');
+    assert.ok(el.querySelector('[data-bind="pass-deity-symbol-grid"]'), 'dialog owns the symbol grid');
+    assert.ok(el.querySelector('[data-bind="pass-deity-buy"]'), 'dialog keeps a final buy confirmation');
     for (const product of ['whale', 'lazy', 'deity']) {
       assert.match(el.innerHTML, new RegExp(`<boon-product-indicator product="${product}"`));
     }
@@ -477,7 +482,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const descriptions = [
       'One ticket every level for the next 10 levels.',
       'One ticket every other level for the next 100 levels.',
-      'Permanent symbol coverage and three boons every day.',
+      '15 entries every level and three boons per day forever.',
     ];
     for (const copy of descriptions) assert.match(el.innerHTML, new RegExp(copy.replace('+', '\\+')));
     assert.match(el.innerHTML, /AFKING SUBSCRIPTION/);
@@ -516,18 +521,107 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       'WITHDRAW ALL keeps enough button width without overflowing');
   });
 
+  test('Deity purchase styling keeps the shelf compact and the symbol dialog aligned', () => {
+    assert.match(INDEX_HTML, /\/app\/styles\/deity-pass-purchase\.css/,
+      'the focused Deity override loads after the main application stylesheet');
+    assert.match(DEITY_CSS,
+      /\.pass-deity-summary\s*\{[^}]*grid-template-columns:\s*minmax\(18rem, 1fr\)[^}]*10\.5rem/s,
+      'desktop shelf reserves one deliberate column for the priced opener');
+    assert.match(DEITY_CSS,
+      /\.pass-deity-summary \.pass-product-perks--deity > \.pass-deity-lootbox-perk\s*\{[^}]*grid-column:\s*1 \/ -1[^}]*grid-row:\s*1[^}]*width:\s*100%[^}]*justify-content:\s*center/s,
+      'the bonus Luckbox is centered across its own complete perk row');
+    assert.match(DEITY_CSS,
+      /\.pass-deity-dialog\s*\{[^}]*position:\s*fixed[^}]*place-items:\s*center/s,
+      'symbol choice uses a focused modal rather than an expanding inline shelf');
+    assert.match(DEITY_CSS,
+      /\.pass-deity-grid\s*\{[^}]*grid-template-columns:\s*repeat\(8, minmax\(0, 1fr\)\)/s,
+      'desktop categories retain eight stable symbol slots');
+    assert.match(DEITY_CSS,
+      /\.pass-deity-symbol img\s*\{[^}]*width:\s*min\(3\.55rem, 94%\)[^}]*height:\s*min\(3\.55rem, 94%\)/s,
+      'deity badges use the available tile instead of the old tiny icon cap');
+    assert.match(DEITY_CSS,
+      /@media \(max-width: 640px\)[\s\S]*?\.pass-deity-grid\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/s,
+      'phone categories fold to four equally sized symbol slots');
+  });
+
+  test('closed AFKING drawer summarizes the subscription, prepaid days, Deity art, and active pass', async () => {
+    const {
+      activePassSummary,
+      afkingClosedSummary,
+      inferActiveWhalePassCount,
+    } = await import('../app-pass-section.js');
+    const tickets = Array.from({ length: 12 }, (_unused, index) => ({
+      level: 101 + index,
+      entryCount: (101 + index) % 2 === 0 ? 8 : 4,
+    }));
+    assert.equal(inferActiveWhalePassCount(tickets, 100), 3,
+      'the two Whale parity lanes preserve a stacked quantity');
+    assert.deepEqual(activePassSummary({
+      scoreBreakdown: { passBonus: { kind: 'whale_100', points: 40 } },
+      tickets,
+    }, 100), {
+      kind: 'whale',
+      sigil: '100',
+      label: '3 ACTIVE WHALE PASSES',
+    });
+    const twoWhaleStreams = Array.from({ length: 12 }, (_unused, index) => ({
+      level: 101 + index,
+      entryCount: 4,
+    }));
+    assert.deepEqual(activePassSummary({
+      scoreBreakdown: { passBonus: { kind: 'deity', points: 80 } },
+      tickets: twoWhaleStreams,
+    }, 100), {
+      kind: 'whale',
+      sigil: '100',
+      label: '2 ACTIVE WHALE PASSES',
+    }, 'Deity score precedence does not hide two active Whale ticket streams');
+    assert.equal(inferActiveWhalePassCount([{ level: 101, entryCount: 4 }], 100), 0,
+      'one ordinary future ticket is not mislabeled as a Whale pass');
+    assert.equal(activePassSummary({
+      scoreBreakdown: { passBonus: { kind: 'whale_10', points: 10 } },
+    }, 100)?.label, 'ACTIVE LAZY PASS');
+    assert.deepEqual(afkingClosedSummary({
+      active: true,
+      hasToken: true,
+      dailyQuantity: 2,
+      settingsKnown: true,
+      useTickets: false,
+      fundingWei: 400n,
+    }, 40n), {
+      subscription: 'SUB ACTIVE: 2 LUCKBOX',
+      funding: 'FUNDED FOR: 5 DAYS',
+      fundedDays: 5n,
+    });
+    assert.match(INDEX_HTML, /data-bind="pass-summary-deity-badge"/);
+    assert.match(STATUS_CSS, /\.more-ways__deity-art\s*\{[^}]*clip-path:/s,
+      'the closed strip retains the small spiked Deity-ticket treatment');
+    assert.match(STATUS_CSS,
+      /\.more-ways__deity-ticket\[data-symbol="ethereum"\][^{]*\.more-ways__deity-art img\s*\{[^}]*width:\s*84%[^}]*height:\s*84%/s,
+      'the compact God of Ethereum portrait enlarges its unusually small source glyph');
+    assert.match(STATUS_CSS, /\.more-ways\[open\][^{]*\.more-ways__summary-closed\s*\{[^}]*display:\s*none/s,
+      'summary details disappear when the full pass desk is open');
+    assert.match(STATUS_CSS,
+      /@media \(max-width: 620px\)[\s\S]*?\.more-ways__summary-closed\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)[\s\S]*?\.more-ways__sub-state\s*\{[^}]*grid-column:\s*1 \/ -1/s,
+      'Whale/Lazy and Deity pass summaries share one line beneath subscription state');
+    assert.match(STATUS_CSS,
+      /\.more-ways__sub-state\s*\{[^}]*min-height:\s*2\.15rem[\s\S]*?\.more-ways__sub-state > b\s*\{[^}]*min-height:\s*2\.15rem/s,
+      'subscription coverage uses the same height as the neighboring Deity and Whale chips');
+  });
+
   test('premium pass cards state their contract-backed bonuses and elevate live pricing', () => {
     const el = instantiate();
     for (const benefit of [
       '+85% DEGEN SCORE',
       '+115% DEGEN SCORE', '+155% DEGEN SCORE', 'BONUS LUCKBOX',
-      '3 DAILY BOONS', 'AFKING SEAT',
+      'three boons per day forever', 'AFKING SEAT',
     ]) {
       assert.match(el.innerHTML, new RegExp(benefit.replace(/[+]/g, '\\+')));
     }
     assert.doesNotMatch(el.innerHTML, /PASS PRICE|UNIT PRICE|pass-(?:whale|lazy)-price/,
       'Whale and Lazy put their final price directly in the purchase action');
-    assert.match(el.innerHTML, /LIVE PRICE/);
+    assert.match(el.innerHTML, /data-bind="pass-deity-open"/,
+      'Deity puts live price directly in its only shelf action');
     assert.match(el.innerHTML, /data-bind="pass-whale-lootbox"/,
       'the Whale card promotes its bundled lootbox as a first-class bonus');
     assert.match(el.innerHTML, /data-bind="pass-lazy-lootbox"/,
@@ -604,7 +698,10 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
 
     const benefit = el.querySelector('[data-bind="pass-deity-lootbox"]');
     const buy = el.querySelector('[data-bind="pass-deity-buy"]');
+    const opener = el.querySelector('[data-bind="pass-deity-open"]');
     assert.equal(benefit.textContent, 'BONUS LUCKBOX · 2.4 ETH');
+    assert.equal(opener.textContent, 'BUY DEITY PASS\n24 ETH',
+      'the closed shelf is just a two-line priced purchase action');
     assert.equal(buy.textContent, 'BUY DEITY PASS\n24 ETH',
       'Deity uses the same pass-name / second-line-price action layout');
     assert.ok(benefit.classList.contains('pass-lootbox-perk'),
@@ -736,7 +833,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('Deity dropdown selection invokes purchaseDeityPass with symbolId', async () => {
+  test('Deity dialog symbol selection invokes purchaseDeityPass with symbolId', async () => {
     let recordedArgs = null;
     passesMod.__setContractFactoryForTest(() => ({
       purchaseWhalePass: Object.assign(
@@ -757,11 +854,16 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     const el = instantiate();
     await settle(60);
 
+    const opener = el.querySelector('[data-bind="pass-deity-open"]');
+    const dialog = el.querySelector('[data-bind="pass-deity-dialog"]');
+    opener.dispatchEvent({ type: 'click' });
+    assert.equal(dialog.hidden, false, 'priced shelf action opens the symbol picker');
     const select = el.querySelector('[data-bind="pass-deity-select"]');
     const buy = el.querySelector('[data-bind="pass-deity-buy"]');
     assert.ok(select.children.some((option) => option.value === '7'), 'symbol-id=7 option present');
-    select.value = '7';
-    select.dispatchEvent({ type: 'change' });
+    el.querySelector('[data-symbol-id="7"]').dispatchEvent({ type: 'click' });
+    assert.equal(select.value, '7', 'visual symbol tile drives the canonical selection');
+    assert.equal(el.querySelector('[data-bind="pass-deity-selected-name"]').textContent, 'GOD OF BITCOIN');
     buy.dispatchEvent({ type: 'click' });
     await settle(60);
 
@@ -772,7 +874,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.disconnectedCallback();
   });
 
-  test('Deity dropdown excludes taken symbols and prices from the minted count', async () => {
+  test('Deity dialog keeps taken symbols aligned and prices from the minted count', async () => {
     const otherA = '0x1111000000000000000000000000000000000000';
     const otherB = '0x2222000000000000000000000000000000000000';
     passesMod.__setDeityReadContractFactoryForTest(() => makeFakeDeityReadContract(new Map([
@@ -789,12 +891,18 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(ids.includes('2'), false, 'first minted symbol omitted');
     assert.equal(ids.includes('7'), false, 'second minted symbol omitted');
     assert.equal(ids.includes('8'), true, 'unminted symbol remains available');
-    assert.equal(select.disabled, false, 'available dropdown remains usable');
+    assert.equal(select.disabled, false, 'an available canonical selection remains usable');
+    assert.equal(el.querySelectorAll('.pass-deity-symbol').length, 32,
+      'all symbols keep stable positions in four category rows');
+    assert.equal(el.querySelector('[data-symbol-id="2"]').disabled, true,
+      'a taken symbol remains visible but cannot be selected');
+    assert.equal(el.querySelector('[data-symbol-id="8"]').disabled, false,
+      'an available symbol tile can be selected');
     assert.equal(el.querySelector('[data-bind="pass-deity-buy"]').disabled, false,
       'buy action remains usable');
-    assert.match(
-      el.querySelector('[data-bind="pass-deity-hint"]').textContent,
-      /next pass 27 ETH/,
+    assert.equal(
+      el.querySelector('[data-bind="pass-deity-open"]').textContent,
+      'BUY DEITY PASS\n27 ETH',
       'two issued passes produce the 24 + triangular(2) = 27 ETH quote',
     );
 

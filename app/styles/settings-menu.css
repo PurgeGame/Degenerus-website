@@ -1,0 +1,243 @@
+body.layout-basic .nav-settings {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+body.layout-basic .nav-settings__trigger {
+  width: var(--app-nav-pill-height, 2rem);
+  min-width: var(--app-nav-pill-height, 2rem);
+  padding-inline: 0;
+  border: 1px solid rgba(245, 166, 35, 0.34);
+  background: linear-gradient(145deg, rgba(91, 33, 182, 0.26), rgba(124, 45, 18, 0.32));
+  color: #ffd56f;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+body.layout-basic .nav-settings__trigger:hover,
+body.layout-basic .nav-settings__trigger:focus-visible,
+body.layout-basic .nav-settings.is-open .nav-settings__trigger {
+  border-color: rgba(255, 213, 111, 0.75);
+  background: linear-gradient(145deg, rgba(109, 40, 217, 0.44), rgba(154, 52, 18, 0.48));
+  color: #fff2b8;
+  box-shadow: 0 0 16px rgba(245, 166, 35, 0.22);
+}
+
+body.layout-basic .nav-settings__trigger svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+body.layout-basic .nav-settings__panel {
+  position: absolute;
+  z-index: 2500;
+  top: calc(100% + 0.55rem);
+  right: 0;
+  box-sizing: border-box;
+  width: min(19rem, calc(100vw - 1rem));
+  overflow: hidden;
+  border: 1px solid rgba(245, 166, 35, 0.38);
+  border-radius: 13px;
+  background:
+    radial-gradient(circle at 8% 0, rgba(245, 166, 35, 0.15), transparent 34%),
+    radial-gradient(circle at 96% 100%, rgba(109, 40, 217, 0.16), transparent 40%),
+    linear-gradient(155deg, rgba(24, 26, 42, 0.99), rgba(8, 10, 20, 0.99));
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+}
+
+body.layout-basic .nav-settings__panel[hidden],
+body.layout-basic .nav-settings__row[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .nav-settings__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.68rem 0.72rem 0.62rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.layout-basic .nav-settings__head > span {
+  display: grid;
+  gap: 0.08rem;
+}
+
+body.layout-basic .nav-settings__head small {
+  color: #a78bfa;
+  font: 850 0.5rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.17em;
+}
+
+body.layout-basic .nav-settings__head strong {
+  color: #fff3c4;
+  font: 950 0.9rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+}
+
+body.layout-basic .nav-settings__close {
+  display: grid;
+  width: 1.65rem;
+  height: 1.65rem;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.045);
+  color: #94a3b8;
+  font: 500 1.1rem/1 sans-serif;
+  cursor: pointer;
+}
+
+body.layout-basic .nav-settings__close:hover,
+body.layout-basic .nav-settings__close:focus-visible {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+body.layout-basic .nav-settings__body {
+  display: grid;
+  gap: 0.38rem;
+  padding: 0.55rem;
+}
+
+body.layout-basic .nav-settings__actions {
+  display: grid;
+  grid-template-columns: 0.82fr 1.18fr;
+  gap: 0.38rem;
+}
+
+body.layout-basic .nav-settings__actions .nav-btn {
+  box-sizing: border-box;
+  width: 100%;
+  height: 2.35rem;
+  min-height: 2.35rem;
+  justify-content: center;
+  border-radius: 8px;
+  padding-inline: 0.5rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+}
+
+body.layout-basic .nav-settings__actions .nav-btn .btn-label {
+  display: inline !important;
+}
+
+body.layout-basic .nav-settings__row {
+  position: relative;
+  display: grid;
+  box-sizing: border-box;
+  min-height: 3.15rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.62rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.48);
+  cursor: pointer;
+}
+
+body.layout-basic .nav-settings__row:hover,
+body.layout-basic .nav-settings__row:focus-within {
+  border-color: rgba(245, 166, 35, 0.36);
+  background: rgba(30, 41, 59, 0.62);
+}
+
+body.layout-basic .nav-settings__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+body.layout-basic .nav-settings__copy strong {
+  color: #e8edf6;
+  font: 900 0.63rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.075em;
+}
+
+body.layout-basic .nav-settings__copy small {
+  color: #77839a;
+  font: 600 0.57rem/1.2 "Inter", system-ui, sans-serif;
+}
+
+body.layout-basic .nav-settings__row--toggle > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+body.layout-basic .nav-settings__switch {
+  position: relative;
+  width: 2rem;
+  height: 1.05rem;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 999px;
+  background: rgba(51, 65, 85, 0.72);
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+body.layout-basic .nav-settings__switch::after {
+  content: "";
+  position: absolute;
+  top: 0.14rem;
+  left: 0.14rem;
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 50%;
+  background: #a8b0bf;
+  transition: transform 0.16s ease, background 0.16s ease;
+}
+
+body.layout-basic .nav-settings__row--toggle > input:checked + .nav-settings__switch {
+  border-color: rgba(74, 222, 128, 0.74);
+  background: rgba(22, 163, 74, 0.52);
+  box-shadow: 0 0 9px rgba(34, 197, 94, 0.18);
+}
+
+body.layout-basic .nav-settings__row--toggle > input:checked + .nav-settings__switch::after {
+  transform: translateX(0.95rem);
+  background: #dcfce7;
+}
+
+body.layout-basic .nav-settings__row--toggle > input:focus-visible + .nav-settings__switch {
+  outline: 2px solid rgba(255, 213, 111, 0.72);
+  outline-offset: 2px;
+}
+
+body.layout-basic .nav-settings__row--speed {
+  grid-template-columns: minmax(0, 1fr) minmax(6.7rem, 0.9fr);
+  cursor: default;
+}
+
+body.layout-basic .nav-settings__speed-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1.75rem;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+body.layout-basic .nav-settings__speed-control input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  accent-color: #f5a623;
+  cursor: pointer;
+}
+
+body.layout-basic .nav-settings__speed-control output {
+  color: #ffd56f;
+  font: 900 0.66rem/1 "Inter", system-ui, sans-serif;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  body.layout-basic .nav-settings__panel {
+    position: fixed;
+    top: max(3.55rem, calc(env(safe-area-inset-top) + 3rem));
+    right: 0.5rem;
+    width: min(19rem, calc(100vw - 1rem));
+  }
+}

@@ -43,36 +43,46 @@ describe('lootboxRewardPresentation', () => {
     assert.deepEqual(lootboxRewardPresentation(8, 2_500n), {
       label: 'DECIMATOR BOON',
       value: '+25%',
-      detail: 'Adds +25% entry weight to your next Decimator burn, calculated on up to 50K FLIP',
+      detail: '',
     });
     assert.deepEqual(lootboxRewardPresentation(10, 50n), {
       label: 'DEGEN SCORE BOON',
       value: '+25',
-      detail: 'Your next luckbox opening adds +50 quest streak, worth 25 Degen Score',
+      detail: '',
     });
     assert.deepEqual(lootboxRewardPresentation(10, 25n), {
       label: 'DEGEN SCORE BOON',
       value: '+12.5',
-      detail: 'Your next luckbox opening adds +25 quest streak, worth 12.5 Degen Score',
+      detail: '',
     });
     assert.deepEqual(lootboxRewardPresentation(10, 3_500n), {
-      label: 'DEITY PASS DISCOUNT',
+      label: 'DEITY PASS BOON',
       value: '−35%',
-      detail: 'Your deity pass purchase costs 35% less',
+      detail: '',
     });
   });
 
   test('honestly names the one event family whose product category is not encoded', () => {
     const boost = lootboxRewardPresentation(6, 2_500n);
-    assert.equal(boost.label, 'PURCHASE BOOST');
+    assert.equal(boost.label, 'LUCKBOX / TICKET BOON');
     assert.equal(boost.value, '+25%');
-    assert.match(boost.detail, /Luckbox or ETH Ticket purchase/i);
-    assert.match(boost.detail, /Buy button shows the \+25% BOON badge/i);
+    assert.equal(boost.detail, '');
+
+    assert.deepEqual(lootboxRewardPresentation(5, 1_500n, { boonType: 6 }), {
+      label: 'LUCKBOX BOON',
+      value: '+15%',
+      detail: '',
+    });
+    assert.deepEqual(lootboxRewardPresentation(5, 1_500n, { boonType: 8 }), {
+      label: 'TICKET BOON',
+      value: '+15%',
+      detail: '',
+    });
 
     assert.deepEqual(lootboxRewardPresentation(2, 5_000n * (10n ** 18n)), {
       label: 'COINFLIP BOON',
       value: 'BOOST',
-      detail: 'Boosts your next manual Coinflip deposit, calculated on up to 100K FLIP',
+      detail: '',
     });
     assert.deepEqual(lootboxRewardPresentation(
       2,
@@ -80,14 +90,14 @@ describe('lootboxRewardPresentation', () => {
       { boonBps: 1_000 },
     ), {
       label: 'COINFLIP BOON',
-      value: '10% BONUS FLIP',
-      detail: 'Your next manual Coinflip deposit gets 10% bonus FLIP, calculated on up to 100K FLIP',
+      value: '+10%',
+      detail: '',
     });
 
     assert.deepEqual(lootboxRewardPresentation(12, 1n), {
-      label: 'QUEST STREAK PROTECTION',
-      value: '1 MISSED DAY',
-      detail: 'Forgives one missed quest day before your streak can reset',
+      label: 'QUEST SHIELD',
+      value: '1 DAY',
+      detail: '',
     });
   });
 });
@@ -126,7 +136,35 @@ describe('enrichLootboxBoonLegs', () => {
       enriched[0].rewardType,
       enriched[0].amount,
       { boonBps: enriched[0].boonBps },
-    ).value, '10% BONUS FLIP');
+    ).value, '+10%');
+  });
+
+  test('resolves a shared boost event to the actual Ticket or Luckbox boon', async () => {
+    pollingTesting.setBoonStateReader(async () => ({
+      // Purchase tier 2 (+15%), awarded on the current day.
+      slot0: (2n << 160n) | (62n << 112n),
+      slot1: 0n,
+      currentDay: 62,
+    }));
+    const [enriched] = await enrichLootboxBoonLegs([{
+      legType: 'reward',
+      rewardType: 5,
+      amount: 1_500n,
+    }], {
+      player: PLAYER,
+      blockNumber: 12_346,
+    });
+
+    assert.equal(enriched.boonType, 8);
+    assert.deepEqual(lootboxRewardPresentation(
+      enriched.rewardType,
+      enriched.amount,
+      { boonType: enriched.boonType },
+    ), {
+      label: 'TICKET BOON',
+      value: '+15%',
+      detail: '',
+    });
   });
 });
 

@@ -17,7 +17,7 @@ import { CONTRACTS } from './chain-config.js';
 import { start as startPolling, refreshForDayShift } from './polling.js';
 import { startDayRollover } from './day-rollover.js';
 import { initRouter, getViewedAddress } from './router.js';
-import { autoReconnect, hasInstalledWallet } from './wallet.js';
+import { autoReconnect } from './wallet.js';
 import { subscribe, get, getActingAddress, update } from './store.js';
 import { initProGate } from './pro-gate.js';
 import { initNavWallet } from './nav-wallet.js';
@@ -39,20 +39,22 @@ import { resetPresentationStateForDeployment } from './deployment-presentation-s
 import { initButtonFeedback } from './button-feedback.js';
 import { mountJackpotCountdown } from './jackpot-countdown.js';
 
-// The public sDGNRS account is a demo fallback only for browsers with no
-// installed wallet. Never silently move an injected-wallet user into it while
-// their extension is locked, disconnected, or still auto-reconnecting.
-const DEFAULT_PLAYER = String(CONTRACTS.SDGNRS).toLowerCase();
+// A disconnected app still needs a useful live account to render. After the
+// silent reconnect attempt, use the public sDGNRS protocol wallet until the
+// player connects; an explicit ?as= view always wins.
+const DEFAULT_PLAYER = CONTRACTS.SDGNRS
+  ? String(CONTRACTS.SDGNRS).toLowerCase()
+  : null;
 let _defaultPlayerSeeded = false;
 
-function seedNoWalletDemoIfNeeded() {
-  if (get('viewing.address') || get('connected.address') || hasInstalledWallet()) return false;
+function seedDisconnectedProtocolWalletIfNeeded() {
+  if (!DEFAULT_PLAYER || get('viewing.address') || get('connected.address')) return false;
   update('viewing.address', DEFAULT_PLAYER);
   _defaultPlayerSeeded = true;
   return true;
 }
 
-function clearUntouchedDemo() {
+function clearUntouchedProtocolWallet() {
   if (!_defaultPlayerSeeded || get('viewing.address') !== DEFAULT_PLAYER) return;
   _defaultPlayerSeeded = false;
   update('viewing.address', null);
@@ -196,29 +198,22 @@ async function boot() {
   //     discord_id↔address mapping actually persists (nav.js alone never
   //     learns the app-stack wallet). Lazy — nothing runs until clicked.
   initDiscordLink();
-  // A late EIP-6963 injection must immediately retire an untouched demo view.
-  // No account request is made; this only reacts to provider availability.
-  try {
-    window.addEventListener('eip6963:announceProvider', clearUntouchedDemo);
-    window.addEventListener('ethereum#initialized', clearUntouchedDemo);
-  } catch (_e) { /* headless */ }
   // 2. Auto-reconnect via persisted rdns (silent — eth_accounts only, no popup).
   await autoReconnect().catch(() => {});
-  // 2b. Only after silent reconnect has had its chance, seed the public demo
-  //     for a browser that genuinely has no installed wallet.
-  seedNoWalletDemoIfNeeded();
-  // 2c. Wallet connected (now or later) → drop the untouched demo so the
+  // 2b. Only after silent reconnect has had its chance, seed the public
+  //     protocol-wallet view for every genuinely disconnected session.
+  seedDisconnectedProtocolWalletIfNeeded();
+  // 2c. Wallet connected (now or later) → drop the untouched protocol view so the
   //     player lands on their own view (ui.mode flips back to 'self').
   subscribe('connected.address', (addr) => {
     if (addr && _defaultPlayerSeeded && get('viewing.address') === DEFAULT_PLAYER) {
-      clearUntouchedDemo();
+      clearUntouchedProtocolWallet();
       return;
     }
-    // A true no-wallet browser can keep the useful public demo after a
-    // WalletConnect session ends. Installed-wallet users stay on their own
-    // empty/connect state instead of silently jumping accounts.
+    // Return to the same useful public protocol account after a wallet session
+    // ends, unless the player is intentionally viewing another address.
     if (!addr && !get('viewing.address')) {
-      seedNoWalletDemoIfNeeded();
+      seedDisconnectedProtocolWalletIfNeeded();
     }
   });
   // 2d. Deferred ticket reveals. A bought ticket has no symbols until the level

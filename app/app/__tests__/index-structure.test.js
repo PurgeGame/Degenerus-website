@@ -113,11 +113,17 @@ describe('index.html basic-mode skeleton', () => {
   test('more-ways is the AFKING PASSES drawer (packs panel gone — combined buy owns lootboxes)', () => {
     const detailsMatch = html.match(/<details class="more-ways section-disclosure"[^>]*>([\s\S]*?)<\/details>/);
     assert.ok(detailsMatch, '<details class="more-ways"> block present');
-    assert.match(detailsMatch[0], /^<details class="more-ways section-disclosure"[^>]*\bopen\b[^>]*>/,
-      'the pass desk is open by default');
+    assert.doesNotMatch(detailsMatch[0], /^<details class="more-ways section-disclosure"[^>]*\bopen\b[^>]*>/,
+      'the pass desk is closed by default');
     assert.match(detailsMatch[0], /\bid="afking-passes"/,
       'the purchase shortcut has a stable drawer target');
     assert.match(detailsMatch[1], /<summary class="more-ways__summary section-disclosure__bar">[\s\S]*section-disclosure__title">AFKING PASSES<[\s\S]*section-disclosure__chevron/);
+    for (const bind of [
+      'pass-summary-subscription',
+      'pass-summary-funding',
+      'pass-summary-deity',
+      'pass-summary-active-pass',
+    ]) assert.match(detailsMatch[1], new RegExp(`data-bind="${bind}"`));
     assert.match(detailsMatch[1], /<app-pass-section>/);
     assert.equal(html.indexOf('<app-packs-panel>'), -1, 'packs panel unmounted');
     assert.equal(html.indexOf('components/app-packs-panel.js'), -1, 'packs script removed');

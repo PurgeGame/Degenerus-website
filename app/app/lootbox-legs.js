@@ -26,7 +26,7 @@
 import { ethers, getProvider } from './contracts.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { dgnUnpackTicket } from './dgn-traits.js';
-import { decodePackedBoons } from './boons.js';
+import { boonTypePresentation, decodePackedBoons } from './boons.js';
 import { readExactBoonState } from './polling.js';
 
 // Minimal open-receipt event ABI — parse-only (no writes here; openLootBox
@@ -135,6 +135,31 @@ function _bpsPercent(raw, fallback = null) {
   return fallback == null ? null : String(fallback);
 }
 
+const BOON_REVEAL_LABELS = Object.freeze({
+  coinflip: 'COINFLIP BOON',
+  lootbox: 'LUCKBOX BOON',
+  purchase: 'TICKET BOON',
+  decimator: 'DECIMATOR BOON',
+  whale: 'WHALE PASS BOON',
+  activity: 'DEGEN SCORE BOON',
+  deity: 'DEITY PASS BOON',
+  lazy: 'LAZY PASS BOON',
+});
+
+function _exactBoonReveal(boonType) {
+  const presentation = boonTypePresentation(boonType);
+  const label = BOON_REVEAL_LABELS[presentation.product];
+  if (!label) return null;
+  const amount = /([+\u2212-]?\d+(?:\.\d+)?)(%)?/.exec(presentation.effect || '');
+  if (!amount) return null;
+  const magnitude = amount[1].replace(/^[+\u2212-]/, '');
+  const discount = ['whale', 'deity', 'lazy'].includes(presentation.product);
+  const value = presentation.product === 'activity'
+    ? `+${magnitude}`
+    : `${discount ? '\u2212' : '+'}${magnitude}%`;
+  return { label, value, detail: '' };
+}
+
 /**
  * Turn the compact LootBoxReward event into useful player-facing copy.
  * Types 4/5/6 intentionally combine the two purchase-boost categories because
@@ -142,8 +167,14 @@ function _bpsPercent(raw, fallback = null) {
  * lootbox or ETH-ticket field. Everything else can be named exactly from its
  * type + amount.
  */
-export function lootboxRewardPresentation(rewardType, amount, { boonBps = null } = {}) {
+export function lootboxRewardPresentation(
+  rewardType,
+  amount,
+  { boonBps = null, boonType = null } = {},
+) {
   const type = Number(rewardType);
+  const exact = boonType == null ? null : _exactBoonReveal(boonType);
+  if (exact) return exact;
   if (type === 2) {
     const exactPct = _bpsPercent(boonBps)
       // Future event versions may emit the tier's BPS directly. The current
@@ -152,18 +183,16 @@ export function lootboxRewardPresentation(rewardType, amount, { boonBps = null }
       ?? _bpsPercent(amount);
     return {
       label: 'COINFLIP BOON',
-      value: exactPct == null ? 'BOOST' : `${exactPct}% BONUS FLIP`,
-      detail: exactPct == null
-        ? 'Boosts your next manual Coinflip deposit, calculated on up to 100K FLIP'
-        : `Your next manual Coinflip deposit gets ${exactPct}% bonus FLIP, calculated on up to 100K FLIP`,
+      value: exactPct == null ? 'BOOST' : `+${exactPct}%`,
+      detail: '',
     };
   }
   if (type >= 4 && type <= 6) {
     const pct = _bpsPercent(amount, ({ 4: 5, 5: 15, 6: 25 })[type]);
     return {
-      label: 'PURCHASE BOOST',
+      label: 'LUCKBOX / TICKET BOON',
       value: `+${pct}%`,
-      detail: `Applies to your next Luckbox or ETH Ticket purchase; the affected Buy button shows the +${pct}% BOON badge`,
+      detail: '',
     };
   }
   if (type === 8) {
@@ -171,19 +200,15 @@ export function lootboxRewardPresentation(rewardType, amount, { boonBps = null }
     return {
       label: 'DECIMATOR BOON',
       value: pct == null ? 'BOOST' : `+${pct}%`,
-      detail: pct == null
-        ? 'Boosts the entry weight of your next Decimator FLIP burn'
-        : `Adds +${pct}% entry weight to your next Decimator burn, calculated on up to 50K FLIP`,
+      detail: '',
     };
   }
   if (type === 9) {
     const pct = _bpsPercent(amount);
     return {
-      label: 'WHALE PASS DISCOUNT',
+      label: 'WHALE PASS BOON',
       value: pct == null ? 'DISCOUNT' : `−${pct}%`,
-      detail: pct == null
-        ? 'Your next whale pass purchase costs less'
-        : `Your next whale pass purchase costs ${pct}% less`,
+      detail: '',
     };
   }
   if (type === 10) {
@@ -194,34 +219,30 @@ export function lootboxRewardPresentation(rewardType, amount, { boonBps = null }
       return {
         label: 'DEGEN SCORE BOON',
         value: `+${score}`,
-        detail: `Your next luckbox opening adds +${raw} quest streak, worth ${score} Degen Score`,
+        detail: '',
       };
     }
     const pct = _bpsPercent(raw);
     return {
-      label: 'DEITY PASS DISCOUNT',
+      label: 'DEITY PASS BOON',
       value: pct == null ? 'DISCOUNT' : `−${pct}%`,
-      detail: pct == null
-        ? 'Your deity pass purchase costs less'
-        : `Your deity pass purchase costs ${pct}% less`,
+      detail: '',
     };
   }
   if (type === 11) {
     const pct = _bpsPercent(amount);
     return {
-      label: 'LAZY PASS DISCOUNT',
+      label: 'LAZY PASS BOON',
       value: pct == null ? 'DISCOUNT' : `−${pct}%`,
-      detail: pct == null
-        ? 'Your next lazy pass purchase costs less'
-        : `Your next lazy pass purchase costs ${pct}% less`,
+      detail: '',
     };
   }
   if (type === 12) {
     const count = _rewardAmount(amount) || 1n;
     return {
-      label: 'QUEST STREAK PROTECTION',
-      value: `${count} MISSED DAY${count === 1n ? '' : 'S'}`,
-      detail: `Forgives ${count === 1n ? 'one' : count} missed quest day${count === 1n ? '' : 's'} before your streak can reset`,
+      label: 'QUEST SHIELD',
+      value: `${count} DAY${count === 1n ? '' : 'S'}`,
+      detail: '',
     };
   }
   return {
@@ -232,22 +253,28 @@ export function lootboxRewardPresentation(rewardType, amount, { boonBps = null }
 }
 
 const COINFLIP_BOON_BPS = Object.freeze({ 1: 500, 2: 1_000, 3: 2_500 });
+const SHARED_BOON_TYPES = Object.freeze({
+  4: [5, 7],
+  5: [6, 8],
+  6: [22, 9],
+});
 
 /**
- * The deployed LootBoxReward(type=2) event identifies the coinflip-boon
- * category but emits its maximum FLIP value, not the selected 5/10/25% tier.
- * Read the post-settlement packed boon state (at the receipt block when known)
- * and attach the exact effective BPS to that reward leg before presentation.
- * A failed optional read leaves the honest non-numeric BOOST label in place.
+ * The compact reward event loses the coinflip tier and shares IDs 4/5/6 between
+ * Luckbox and Ticket boons. Read the post-settlement packed state and attach
+ * the exact boon type before presentation. A failed optional read leaves a
+ * concise but honest category fallback in place.
  */
 export async function enrichLootboxBoonLegs(legs, {
   player,
   blockNumber = null,
 } = {}) {
   const rows = Array.isArray(legs) ? legs : [];
-  if (!player || !rows.some((leg) => (
-    leg?.legType === 'reward' && Number(leg?.rewardType) === 2
-  ))) return rows;
+  if (!player || !rows.some((leg) => {
+    const rewardType = Number(leg?.rewardType);
+    return leg?.legType === 'reward'
+      && (rewardType === 2 || SHARED_BOON_TYPES[rewardType]);
+  })) return rows;
   let exact;
   try {
     exact = await readExactBoonState(player, { blockTag: blockNumber });
@@ -258,14 +285,20 @@ export async function enrichLootboxBoonLegs(legs, {
     exact?.slot0,
     exact?.slot1,
     exact?.currentDay,
-  ).find((boon) => Number(boon?.boonType) >= 1 && Number(boon?.boonType) <= 3);
-  const boonBps = COINFLIP_BOON_BPS[Number(active?.boonType)] || null;
-  if (boonBps == null) return rows;
-  return rows.map((leg) => (
-    leg?.legType === 'reward' && Number(leg?.rewardType) === 2
-      ? { ...leg, boonType: Number(active.boonType), boonBps }
-      : leg
-  ));
+  );
+  const activeTypes = new Set(active.map((boon) => Number(boon?.boonType)));
+  return rows.map((leg) => {
+    if (leg?.legType !== 'reward') return leg;
+    const rewardType = Number(leg?.rewardType);
+    if (rewardType === 2) {
+      const boonType = [3, 2, 1].find((candidate) => activeTypes.has(candidate));
+      const boonBps = COINFLIP_BOON_BPS[boonType] || null;
+      return boonBps == null ? leg : { ...leg, boonType, boonBps };
+    }
+    const matches = (SHARED_BOON_TYPES[rewardType] || [])
+      .filter((candidate) => activeTypes.has(candidate));
+    return matches.length === 1 ? { ...leg, boonType: matches[0] } : leg;
+  });
 }
 
 /**

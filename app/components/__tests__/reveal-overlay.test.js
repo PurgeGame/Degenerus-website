@@ -329,10 +329,12 @@ describe('normalizeSequence', () => {
       ],
     });
     assert.deepEqual(seq.cards.map((card) => card.type), ['boon', 'quest-shield', 'reward']);
-    assert.equal(seq.cards[0].label, 'WHALE PASS DISCOUNT');
+    assert.equal(seq.cards[0].label, 'WHALE PASS BOON');
     assert.equal(seq.cards[0].value, '−20%');
-    assert.equal(seq.cards[0].sub, 'Your next whale pass purchase costs 20% less');
-    assert.match(seq.cards[1].sub, /forgives one missed quest day/i);
+    assert.equal(seq.cards[0].sub, '');
+    assert.equal(seq.cards[1].label, 'QUEST SHIELD');
+    assert.equal(seq.cards[1].value, '1 DAY');
+    assert.equal(seq.cards[1].sub, '');
     assert.doesNotMatch(seq.cards[2].label, /bonus/i);
   });
 
@@ -340,7 +342,7 @@ describe('normalizeSequence', () => {
     const seq = normalizeSequence({
       kind: 'lootbox',
       legs: [
-        { legType: 'reward', rewardType: 5, amount: 1_500n },
+        { legType: 'reward', rewardType: 5, amount: 1_500n, boonType: 6 },
         { legType: 'reward', rewardType: 8, amount: 5_000n },
         { legType: 'reward', rewardType: 10, amount: 25n },
         { legType: 'reward', rewardType: 11, amount: 5_000n },
@@ -349,17 +351,14 @@ describe('normalizeSequence', () => {
     assert.deepEqual(
       seq.cards.map(({ label, value }) => [label, value]),
       [
-        ['PURCHASE BOOST', '+15%'],
+        ['LUCKBOX BOON', '+15%'],
         ['DECIMATOR BOON', '+50%'],
         ['DEGEN SCORE BOON', '+12.5'],
-        ['LAZY PASS DISCOUNT', '−50%'],
+        ['LAZY PASS BOON', '−50%'],
       ],
     );
-    assert.match(seq.cards[0].sub, /Luckbox or ETH Ticket purchase/i);
-    assert.match(seq.cards[1].sub, /Decimator burn/i);
-    assert.match(seq.cards[2].sub, /\+25 quest streak/i);
-    assert.match(seq.cards[2].sub, /12\.5 Degen Score/i);
-    assert.match(seq.cards[3].sub, /50% less/i);
+    assert.ok(seq.cards.every((card) => card.sub === ''),
+      'boon cards stop after the exact type and size');
   });
 
   test('an sDGNRS redemption receipt shows its direct ETH and contingent FLIP beside box rewards', () => {

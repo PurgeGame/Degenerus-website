@@ -184,12 +184,23 @@
         </div>
       </div>
 
-      <aside class="score-board" aria-label="Decimator payout and score results">
+      <aside class="score-board" aria-label="Decimator prize and score results">
         <div class="score-payout" data-bind="player-payout-card">
           <span data-bind="player-payout-label">IF YOUR SLICE HITS</span>
           <strong data-bind="player-payout">—</strong>
-          <small>ETH</small>
+          <small data-bind="player-payout-unit">ETH</small>
           <em data-bind="player-payout-detail">LIVE PRO-RATA ESTIMATE</em>
+          <div class="score-payout__settlement" data-bind="player-payout-settlement" hidden>
+            <span>
+              <small>CLAIMABLE</small>
+              <strong data-bind="player-payout-eth">—</strong>
+            </span>
+            <span>
+              <small>REWARD</small>
+              <strong data-bind="player-payout-reward">—</strong>
+            </span>
+            <em data-bind="player-payout-rule">FINAL ON-CHAIN SETTLEMENT</em>
+          </div>
         </div>
 
         <div class="score-player" data-bind="player-score-card">
@@ -207,9 +218,9 @@
         </div>
 
         <section class="winner-allocation" data-bind="winner-allocation" hidden
-                 aria-label="Final Decimator payout shares">
+                 aria-label="Final Decimator prize shares">
           <header class="winner-allocation__head">
-            <span><img src="/whitepaper/flame-center-silver.svg" alt="">FINAL PAYOUT PIE</span>
+            <span><img src="/whitepaper/flame-center-silver.svg" alt="">FINAL PRIZE PIE</span>
             <strong data-bind="winner-count">—</strong>
           </header>
           <div class="winner-legend" data-bind="winner-legend"></div>

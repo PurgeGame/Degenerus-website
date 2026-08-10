@@ -1,0 +1,402 @@
+/* Focused Deity-pass storefront and symbol picker. Loaded after app.css so
+   this replaces the legacy expanding-details layout without growing app.css. */
+
+body.layout-basic .pass-deity-section {
+  display: block;
+  margin-top: 0.15rem;
+  padding: 0;
+  overflow: visible;
+  border: 1px solid rgba(226, 190, 83, 0.32);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 0 50%, rgba(250, 204, 21, 0.1), transparent 28%),
+    linear-gradient(135deg, rgba(76, 54, 8, 0.2), rgba(21, 18, 12, 0.4));
+  box-shadow: inset 0 1px 0 rgba(255, 240, 176, 0.06);
+}
+
+body.layout-basic .pass-deity-summary {
+  display: grid;
+  grid-template-columns: minmax(18rem, 1fr) minmax(14rem, auto) 10.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.72rem 0.78rem;
+  cursor: default;
+}
+
+body.layout-basic .pass-deity-summary::after { content: none; }
+
+body.layout-basic .pass-deity-summary .pass-section-title {
+  min-width: 0;
+  margin: 0;
+  color: #f2dfa1;
+}
+
+body.layout-basic .pass-deity-summary .pass-product-description {
+  max-width: 35rem;
+  color: #c8ba86;
+  font-size: 0.69rem;
+  line-height: 1.35;
+}
+
+body.layout-basic .pass-product-perks--deity {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.32rem;
+  justify-content: stretch;
+}
+
+body.layout-basic .pass-product-perks--deity > span {
+  box-sizing: border-box;
+  display: grid;
+  min-width: 0;
+  min-height: 1.5rem;
+  place-items: center;
+  padding: 0.28rem 0.42rem;
+  border-color: rgba(226, 190, 83, 0.3);
+  color: #eddda7;
+  line-height: 1.12;
+  text-align: center;
+  white-space: normal;
+}
+
+body.layout-basic .pass-deity-summary .pass-product-perks--deity > .pass-deity-lootbox-perk {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  width: 100%;
+  align-self: stretch;
+  justify-self: stretch;
+  justify-content: center;
+  text-align: center;
+}
+
+body.layout-basic .pass-product-perks--deity > [data-bind="pass-deity-score"] {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+body.layout-basic .pass-product-perks--deity > [data-bind="pass-deity-afking-seat"] {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+body.layout-basic .pass-product-perks--deity:has([data-bind="pass-deity-score"][hidden])
+  > [data-bind="pass-deity-afking-seat"] {
+  grid-column: 1 / -1;
+}
+
+body.layout-basic .pass-deity-open,
+body.layout-basic .pass-deity-buy {
+  box-sizing: border-box;
+  display: grid;
+  min-height: 3rem;
+  place-items: center;
+  padding: 0.48rem 0.75rem;
+  border: 1px solid rgba(245, 200, 69, 0.68);
+  border-radius: 9px;
+  color: #fff0b5;
+  background:
+    radial-gradient(circle at 50% 0, rgba(255, 236, 151, 0.17), transparent 65%),
+    linear-gradient(180deg, rgba(196, 145, 22, 0.38), rgba(104, 70, 5, 0.26));
+  box-shadow: inset 0 1px 0 rgba(255, 244, 193, 0.11), 0 0 18px rgba(218, 166, 30, 0.11);
+  font: 950 0.66rem/1.16 var(--font-mono, "Roboto Mono", monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.055em;
+  text-align: center;
+  white-space: pre-line;
+  cursor: pointer;
+}
+
+body.layout-basic .pass-deity-open:hover:not(:disabled),
+body.layout-basic .pass-deity-buy:hover:not(:disabled) {
+  border-color: #f7d66d;
+  color: #fff8d8;
+  background:
+    radial-gradient(circle at 50% 0, rgba(255, 241, 180, 0.24), transparent 65%),
+    linear-gradient(180deg, rgba(218, 166, 33, 0.48), rgba(121, 82, 7, 0.3));
+  box-shadow: inset 0 1px 0 rgba(255, 248, 213, 0.16), 0 0 22px rgba(231, 182, 50, 0.2);
+}
+
+body.layout-basic .pass-deity-open:disabled,
+body.layout-basic .pass-deity-buy:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+body.layout-basic .pass-deity-dialog[hidden],
+body.layout-basic .pass-deity-select[hidden],
+body.layout-basic .pass-deity-open[hidden],
+body.layout-basic .pass-deity-buy[hidden] {
+  display: none !important;
+}
+
+body.layout-basic .pass-deity-dialog {
+  position: fixed;
+  z-index: 12020;
+  inset: 0;
+  display: grid;
+  box-sizing: border-box;
+  place-items: center;
+  padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+    max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+  background: rgba(5, 6, 9, 0.86);
+  backdrop-filter: blur(9px);
+}
+
+body.layout-basic .pass-deity-dialog__card {
+  box-sizing: border-box;
+  display: grid;
+  width: min(54rem, 100%);
+  max-height: min(94dvh, 48rem);
+  gap: 0.75rem;
+  overflow: auto;
+  padding: clamp(0.78rem, 2.2vw, 1rem);
+  border: 1px solid rgba(235, 196, 76, 0.56);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 10% 0, rgba(241, 190, 47, 0.18), transparent 35%),
+    radial-gradient(circle at 92% 100%, rgba(126, 87, 10, 0.14), transparent 38%),
+    linear-gradient(145deg, #19170f, #0b0b0d 72%);
+  box-shadow: 0 1.4rem 5rem rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 245, 199, 0.08);
+}
+
+body.layout-basic .pass-deity-dialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid rgba(235, 196, 76, 0.18);
+}
+
+body.layout-basic .pass-deity-dialog__head > span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+body.layout-basic .pass-deity-dialog__head small,
+body.layout-basic .pass-deity-dialog__selection small {
+  color: #b99a45;
+  font: 900 0.5rem/1 var(--font-mono, "Roboto Mono", monospace);
+  letter-spacing: 0.13em;
+}
+
+body.layout-basic .pass-deity-dialog__head strong {
+  color: #fff0b5;
+  font-size: clamp(1rem, 3vw, 1.28rem);
+  letter-spacing: 0.035em;
+}
+
+body.layout-basic .pass-deity-dialog__close {
+  display: grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(235, 196, 76, 0.26);
+  border-radius: 50%;
+  color: #d8c384;
+  background: rgba(74, 58, 19, 0.26);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+body.layout-basic .pass-deity-dialog__selection {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 3.8rem;
+  padding: 0.48rem 0.62rem;
+  border: 1px solid rgba(235, 196, 76, 0.24);
+  border-radius: 11px;
+  background: linear-gradient(90deg, rgba(103, 76, 13, 0.26), rgba(35, 29, 16, 0.16));
+}
+
+body.layout-basic .pass-deity-dialog__selection > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+}
+
+body.layout-basic .pass-deity-dialog__selection strong {
+  overflow: hidden;
+  color: #ffe7a0;
+  font: 950 0.95rem/1.1 var(--font-mono, "Roboto Mono", monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .pass-deity-preview {
+  display: grid;
+  width: 3.4rem;
+  height: 3.4rem;
+  place-items: center;
+  border: 1px solid rgba(241, 204, 89, 0.28);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 234, 152, 0.18), rgba(110, 76, 8, 0.1));
+  box-shadow: 0 0 18px rgba(229, 180, 43, 0.1);
+}
+
+body.layout-basic .pass-deity-preview img {
+  width: 94%;
+  height: 94%;
+  object-fit: contain;
+}
+
+body.layout-basic .pass-deity-symbol-groups {
+  display: grid;
+  gap: 0.45rem;
+}
+
+body.layout-basic .pass-deity-symbol-group {
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.48rem;
+}
+
+body.layout-basic .pass-deity-symbol-group__title {
+  color: rgba(226, 206, 145, 0.68);
+  font: 900 0.54rem/1 var(--font-mono, "Roboto Mono", monospace);
+  letter-spacing: 0.12em;
+}
+
+body.layout-basic .pass-deity-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.34rem;
+}
+
+body.layout-basic .pass-deity-symbol {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 4.8rem;
+  grid-template-rows: minmax(3.5rem, 1fr) auto;
+  place-items: center;
+  gap: 0.08rem;
+  padding: 0.18rem 0.1rem 0.24rem;
+  overflow: hidden;
+  border: 1px solid rgba(225, 197, 115, 0.18);
+  border-radius: 9px;
+  color: #d8c98f;
+  background: linear-gradient(145deg, rgba(82, 63, 20, 0.26), rgba(17, 16, 13, 0.6));
+  cursor: pointer;
+}
+
+body.layout-basic .pass-deity-symbol img {
+  width: min(3.55rem, 94%);
+  height: min(3.55rem, 94%);
+  object-fit: contain;
+  transition: transform 0.14s ease;
+}
+
+body.layout-basic .pass-deity-symbol > span {
+  max-width: 100%;
+  overflow: hidden;
+  color: inherit;
+  font: 850 0.46rem/1 var(--font-mono, "Roboto Mono", monospace);
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .pass-deity-symbol:hover:not(:disabled) {
+  border-color: rgba(245, 210, 99, 0.58);
+  color: #fff0b5;
+  background: linear-gradient(145deg, rgba(126, 94, 21, 0.36), rgba(34, 28, 16, 0.7));
+}
+
+body.layout-basic .pass-deity-symbol:hover:not(:disabled) img { transform: scale(1.06); }
+
+body.layout-basic .pass-deity-symbol--selected,
+body.layout-basic .pass-deity-symbol--selected:hover:not(:disabled) {
+  outline: none;
+  border-color: #f4ce5b;
+  color: #fff3c3;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(255, 231, 139, 0.2), transparent 56%),
+    linear-gradient(145deg, rgba(151, 111, 20, 0.42), rgba(49, 36, 10, 0.72));
+  box-shadow: inset 0 0 0 1px rgba(255, 235, 158, 0.16), 0 0 14px rgba(239, 190, 53, 0.2);
+}
+
+body.layout-basic .pass-deity-symbol--taken {
+  opacity: 0.22;
+  filter: grayscale(0.9);
+  cursor: not-allowed;
+}
+
+body.layout-basic .pass-deity-buy {
+  width: 100%;
+  min-height: 3.2rem;
+  font-size: 0.72rem;
+}
+
+body.layout-basic .pass-deity-error {
+  padding: 0.48rem 0.62rem;
+  border-radius: 8px;
+  font-size: 0.74rem;
+}
+
+@media (max-width: 980px) {
+  body.layout-basic .pass-deity-summary {
+    grid-template-columns: minmax(16rem, 1fr) 10.5rem;
+  }
+
+  body.layout-basic .pass-deity-summary .pass-product-perks {
+    grid-column: 1;
+    width: min(24rem, 100%);
+  }
+
+  body.layout-basic .pass-deity-open {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+
+@media (max-width: 640px) {
+  body.layout-basic .pass-deity-summary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.58rem;
+    padding: 0.7rem;
+  }
+
+  body.layout-basic .pass-deity-summary .pass-product-perks,
+  body.layout-basic .pass-deity-open {
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+  }
+
+  body.layout-basic .pass-deity-open { min-height: 2.8rem; }
+
+  body.layout-basic .pass-deity-dialog {
+    place-items: end center;
+    padding: 0.45rem;
+  }
+
+  body.layout-basic .pass-deity-dialog__card {
+    max-height: calc(100dvh - 0.9rem);
+    padding: 0.7rem;
+    border-radius: 14px;
+  }
+
+  body.layout-basic .pass-deity-symbol-group {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.28rem;
+  }
+
+  body.layout-basic .pass-deity-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  body.layout-basic .pass-deity-symbol {
+    min-height: 4.55rem;
+    grid-template-rows: minmax(3.3rem, 1fr) auto;
+  }
+}

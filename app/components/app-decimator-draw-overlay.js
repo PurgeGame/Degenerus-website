@@ -94,4 +94,3 @@ export async function openDecimatorDraw({ level, player } = {}) {
     throw error;
   }
 }
-

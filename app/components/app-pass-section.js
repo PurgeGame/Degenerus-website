@@ -29,8 +29,8 @@
 //          balance / pricing stays visible; 250ms post-confirm refetch via
 //          #runPollCycle.
 //   CF-07: T-58-18 — error.userMessage rendered via .textContent NOT innerHTML.
-//   CF-15: data-write attribute on whale buy CTA + each of 32 deity cells →
-//          Phase 58 disable manager auto-disables when ui.mode === 'view-others'.
+//   CF-15: data-write attributes stay on the transaction CTAs; the 32 Deity
+//          tiles only choose a symbol and inherit the dialog's domain lock.
 //
 // Class palette: .pass-* prefix with sub-prefixes .pass-whale-* + .pass-deity-*.
 
@@ -242,6 +242,80 @@ export function projectedPassScoreGain(scoreBreakdown, passBonusPoints) {
     + Math.max(0, finite(passBonusPoints) - currentPass);
 }
 
+/**
+ * Infer how many live Whale-pass ticket streams are represented by the indexed
+ * future queue. One pass is four entries every second level; two passes become
+ * four entries every level, and higher quantities add those two parity lanes.
+ * Taking the lowest repeated whole-ticket count in each lane ignores one-off
+ * ticket buys while preserving stacked Whale quantities.
+ */
+export function inferActiveWhalePassCount(tickets, currentLevel) {
+  const level = Math.max(0, Math.trunc(Number(currentLevel) || 0));
+  const lanes = [[], []];
+  for (const row of Array.isArray(tickets) ? tickets : []) {
+    const target = Math.trunc(Number(row?.level));
+    const entries = Math.max(0, Math.trunc(Number(row?.entryCount) || 0));
+    if (!Number.isInteger(target) || target <= level || target > level + 24 || entries < 4) continue;
+    lanes[target & 1].push(Math.floor(entries / 4));
+  }
+  const repeated = lanes.filter((lane) => lane.length >= 3);
+  // A single ordinary future ticket is not evidence of a Whale pass. Require
+  // the repeating queue signature here; callers with an authoritative active
+  // whale score can still fall back to one pass while the indexer catches up.
+  if (repeated.length === 0) return 0;
+  const inferred = repeated.reduce((sum, lane) => sum + Math.min(...lane), 0);
+  return Math.max(0, Math.min(100, inferred));
+}
+
+/** Compact active premium-pass status for the closed AFKING drawer. */
+export function activePassSummary(playerData, currentLevel) {
+  const kind = String(playerData?.scoreBreakdown?.passBonus?.kind || '').toLowerCase();
+  // Deity is the higher activity-score tier, so a player who owns both reports
+  // `kind: deity` even though their Whale ticket streams remain active. Read
+  // those streams independently instead of hiding the Whale passes behind the
+  // Deity score label.
+  const inferredWhales = inferActiveWhalePassCount(playerData?.tickets, currentLevel);
+  if (kind === 'whale_100' || inferredWhales > 0) {
+    const count = inferredWhales || 1;
+    return {
+      kind: 'whale',
+      sigil: '100',
+      label: `${count} ACTIVE WHALE PASS${count === 1 ? '' : 'ES'}`,
+    };
+  }
+  if (kind === 'whale_10') {
+    return { kind: 'lazy', sigil: '10', label: 'ACTIVE LAZY PASS' };
+  }
+  return null;
+}
+
+/** Exact subscription and prepaid-day copy used only by the closed drawer. */
+export function afkingClosedSummary(state, mintPriceWei) {
+  if (!state) return { subscription: null, funding: null, fundedDays: null };
+  if (!state.active) {
+    return {
+      subscription: state.hasToken ? 'SUB INACTIVE' : null,
+      funding: null,
+      fundedDays: null,
+    };
+  }
+  const quantity = Math.max(1, Math.trunc(Number(state.dailyQuantity) || 1));
+  const product = state.settingsKnown
+    ? (state.useTickets ? (quantity === 1 ? 'TICKET' : 'TICKETS') : 'LUCKBOX')
+    : (quantity === 1 ? 'ITEM' : 'ITEMS');
+  let fundedDays = null;
+  try {
+    const unit = BigInt(mintPriceWei ?? 0n);
+    const daily = unit * BigInt(quantity);
+    if (daily > 0n) fundedDays = BigInt(state.fundingWei ?? 0n) / daily;
+  } catch (_error) { /* leave coverage unknown */ }
+  return {
+    subscription: `SUB ACTIVE: ${quantity} ${product}`,
+    funding: `FUNDED FOR: ${fundedDays == null ? '\u2014' : fundedDays} ${fundedDays === 1n ? 'DAY' : 'DAYS'}`,
+    fundedDays,
+  };
+}
+
 class AppPassSection extends HTMLElement {
   // --- Phase 60 / 61 / 62-01 idempotency-guard pattern ---
   #unsubs = [];
@@ -284,6 +358,7 @@ class AppPassSection extends HTMLElement {
   #afkingFundingSeededAddress = null;
   #afkingTopupSeededAddress = null;
   #afkingDialogOpen = false;
+  #deityDialogOpen = false;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -319,6 +394,7 @@ class AppPassSection extends HTMLElement {
       catch (_) { /* defensive */ }
     }
     this.#visibilityListener = null;
+    this.#deityDialogOpen = false;
     if (this.#errorTimerWhale != null) {
       try { clearTimeout(this.#errorTimerWhale); } catch (_) { /* defensive */ }
       this.#errorTimerWhale = null;
@@ -416,10 +492,10 @@ class AppPassSection extends HTMLElement {
         </div>
         <div class="pass-whale-error" data-bind="pass-whale-error" hidden role="alert"></div>
 
-        <!-- DEITY PASS — buyers use the compact dropdown; holders get their
-             owned symbol and daily controls already open. -->
-        <details class="pass-deity-section" data-bind="pass-deity-details">
-          <summary class="pass-deity-summary" data-bind="pass-deity-summary">
+        <!-- DEITY PASS — the shelf stays concise; symbol selection happens in
+             a focused purchase dialog instead of spilling across the row. -->
+        <section class="pass-deity-section" data-bind="pass-deity-details">
+          <div class="pass-deity-summary" data-bind="pass-deity-summary">
             <span class="pass-product-heading">
               <span class="pass-product-sigil pass-product-sigil--deity" aria-hidden="true">∞</span>
               <span class="pass-product-copy">
@@ -427,37 +503,54 @@ class AppPassSection extends HTMLElement {
                 <span class="pass-section-title">Deity pass
                   <boon-product-indicator product="deity"></boon-product-indicator>
                 </span>
-                <span class="pass-product-description">Permanent symbol coverage and three boons every day.</span>
+                <span class="pass-product-description">15 entries every level and three boons per day forever.</span>
               </span>
             </span>
             <span class="pass-product-perks pass-product-perks--deity" aria-label="Deity pass benefits">
-              <span>PERMANENT</span>
-              <span data-bind="pass-deity-score">+155% DEGEN SCORE</span>
-              <span>3 DAILY BOONS</span>
               <span class="pass-lootbox-perk pass-deity-lootbox-perk"
                     data-bind="pass-deity-lootbox">BONUS LUCKBOX · 10% OF PASS</span>
+              <span data-bind="pass-deity-score">+155% DEGEN SCORE</span>
               <span data-bind="pass-deity-afking-seat">AFKING SEAT</span>
             </span>
-            <span class="pass-deity-price">
-              <small data-bind="pass-deity-meta-label">LIVE PRICE</small>
-              <strong class="pass-deity-hint" data-bind="pass-deity-hint">pick your symbol</strong>
-            </span>
-          </summary>
-          <div class="pass-deity-body">
-            <div class="pass-deity-picker">
-              <strong class="pass-deity-owned-name" data-bind="pass-deity-owned-name" hidden></strong>
+            <button type="button" class="pass-deity-open" data-bind="pass-deity-open"
+                    aria-haspopup="dialog" aria-expanded="false">BUY DEITY PASS
+              …</button>
+          </div>
+
+          <div class="pass-deity-dialog" data-bind="pass-deity-dialog" hidden
+               role="dialog" aria-modal="true" aria-labelledby="pass-deity-dialog-title"
+               tabindex="-1">
+            <div class="pass-deity-dialog__card">
+              <header class="pass-deity-dialog__head">
+                <span>
+                  <small>YOUR PERMANENT SYMBOL</small>
+                  <strong id="pass-deity-dialog-title">CHOOSE YOUR DEITY</strong>
+                </span>
+                <button type="button" class="pass-deity-dialog__close"
+                        data-bind="pass-deity-dialog-close" aria-label="Close deity symbol picker">×</button>
+              </header>
+
+              <div class="pass-deity-dialog__selection" aria-live="polite">
               <span class="pass-deity-preview" aria-hidden="true">
                 <img data-bind="pass-deity-preview" src="" alt="">
               </span>
+                <span>
+                  <small>SELECTED</small>
+                  <strong data-bind="pass-deity-selected-name">—</strong>
+                </span>
+              </div>
+
+              <div class="pass-deity-symbol-groups" data-bind="pass-deity-symbol-grid"
+                   aria-label="Available deity pass symbols"></div>
               <select class="pass-deity-select" name="pass-deity-symbol"
-                      data-bind="pass-deity-select" aria-label="Deity pass symbol"></select>
+                      data-bind="pass-deity-select" aria-label="Selected deity pass symbol"
+                      hidden tabindex="-1"></select>
+              <div class="pass-deity-error" data-bind="pass-deity-error" hidden role="alert"></div>
               <button type="button" class="pass-deity-buy" data-write data-bind="pass-deity-buy">BUY DEITY PASS
                 …</button>
             </div>
-            <div class="pass-deity-error" data-bind="pass-deity-error" hidden role="alert"></div>
-
           </div>
-        </details>
+        </section>
       </section>
 
       <!-- AFKING SUBSCRIPTION is its own compact instrument below the premium
@@ -578,11 +671,14 @@ class AppPassSection extends HTMLElement {
       select.setAttribute('data-write-locked', '');
       select.setAttribute('data-write-lock-title', 'Checking symbol availability');
     }
-    const buy = this.querySelector('[data-bind="pass-deity-buy"]');
-    if (buy) {
-      buy.disabled = true;
-      buy.setAttribute('data-write-locked', '');
-      buy.setAttribute('data-write-lock-title', 'Checking symbol availability');
+    for (const control of [
+      this.querySelector('[data-bind="pass-deity-open"]'),
+      this.querySelector('[data-bind="pass-deity-buy"]'),
+    ]) {
+      if (!control) continue;
+      control.disabled = true;
+      control.setAttribute('data-write-locked', '');
+      control.setAttribute('data-write-lock-title', 'Checking symbol availability');
     }
   }
 
@@ -605,10 +701,25 @@ class AppPassSection extends HTMLElement {
     }
     const lazyBuy = this.querySelector('[data-bind="pass-lazy-buy"]');
     if (lazyBuy) lazyBuy.addEventListener('click', (e) => this.#onLazyBuyClick(e));
+    const deityOpen = this.querySelector('[data-bind="pass-deity-open"]');
+    if (deityOpen) deityOpen.addEventListener('click', (e) => this.#openDeityDialog(e));
     const deityBuy = this.querySelector('[data-bind="pass-deity-buy"]');
     if (deityBuy) deityBuy.addEventListener('click', (e) => this.#onDeityBuyClick(e));
     const deitySelect = this.querySelector('[data-bind="pass-deity-select"]');
     if (deitySelect) deitySelect.addEventListener('change', () => this.#renderDeityPreview());
+    const deityDialogClose = this.querySelector('[data-bind="pass-deity-dialog-close"]');
+    if (deityDialogClose) {
+      deityDialogClose.addEventListener('click', (e) => this.#closeDeityDialog(e));
+    }
+    const deityDialog = this.querySelector('[data-bind="pass-deity-dialog"]');
+    if (deityDialog) {
+      deityDialog.addEventListener('click', (e) => {
+        if (e?.target === e?.currentTarget) this.#closeDeityDialog(e);
+      });
+      deityDialog.addEventListener('keydown', (e) => {
+        if (e?.key === 'Escape') this.#closeDeityDialog(e);
+      });
+    }
     const afkingSave = this.querySelector('[data-bind="pass-afking-save"]');
     if (afkingSave) afkingSave.addEventListener('click', (e) => this.#onAfkingSave(e));
     const afkingCancel = this.querySelector('[data-bind="pass-afking-cancel"]');
@@ -640,6 +751,30 @@ class AppPassSection extends HTMLElement {
         if (e?.key === 'Escape') this.#closeAfkingDialog(e);
       });
     }
+  }
+
+  #openDeityDialog(e) {
+    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+    const opener = this.querySelector('[data-bind="pass-deity-open"]');
+    const dialog = this.querySelector('[data-bind="pass-deity-dialog"]');
+    if (!dialog || opener?.disabled || this.#ownedDeitySymbolId() != null) return;
+    this.#deityDialogOpen = true;
+    dialog.hidden = false;
+    opener?.setAttribute('aria-expanded', 'true');
+    this.#clearDeityError();
+    this.#renderDeityPreview();
+    try { dialog.focus?.({ preventScroll: true }); } catch (_) { /* defensive */ }
+  }
+
+  #closeDeityDialog(e) {
+    try { e?.preventDefault?.(); } catch (_) { /* defensive */ }
+    const dialog = this.querySelector('[data-bind="pass-deity-dialog"]');
+    const opener = this.querySelector('[data-bind="pass-deity-open"]');
+    this.#deityDialogOpen = false;
+    if (dialog) dialog.hidden = true;
+    opener?.setAttribute('aria-expanded', 'false');
+    this.#clearDeityError();
+    try { opener?.focus?.({ preventScroll: true }); } catch (_) { /* defensive */ }
   }
 
   // ---------------------------------------------------------------------
@@ -678,6 +813,7 @@ class AppPassSection extends HTMLElement {
         this.#afkingFundingSeededAddress = null;
         this.#afkingTopupSeededAddress = null;
         this.#afkingDialogOpen = false;
+        this.#deityDialogOpen = false;
       }
       this.#pinnedAddress = addr;
       // Level comes from /game/state. Deity availability and issued count come
@@ -734,6 +870,7 @@ class AppPassSection extends HTMLElement {
     const u3 = subscribe('ui.mode', () => {
       this.#renderCombinedGate();
       this.#renderDeityCatalog();
+      this.#renderClosedDrawerSummary();
     });
     const u4 = subscribe('app.poolBenchmarks', (benchmarks) => {
       if (benchmarks?.contractPhase) this.#renderAfkingDayCost();
@@ -751,6 +888,7 @@ class AppPassSection extends HTMLElement {
 
   #renderCombinedGate() {
     const isCombined = get('ui.mode') === 'combined';
+    if (isCombined && this.#deityDialogOpen) this.#closeDeityDialog();
     const note = this.querySelector('[data-bind="pass-combined-note"]');
     if (note) {
       note.hidden = !isCombined;
@@ -786,32 +924,6 @@ class AppPassSection extends HTMLElement {
     this.#renderPassSeatBenefits();
     this.#renderLazyLootboxBenefit();
     this.#renderDeityLootboxBenefit();
-    const hintEl = this.querySelector('[data-bind="pass-deity-hint"]');
-    const deityMetaLabel = this.querySelector('[data-bind="pass-deity-meta-label"]');
-    const deityEyebrow = this.querySelector('[data-bind="pass-deity-eyebrow"]');
-    if (hintEl) {
-      const ownedSymbolId = this.#ownedDeitySymbolId();
-      if (ownedSymbolId != null) {
-        const ownedName = passSymbolBadge(ownedSymbolId).name;
-        const ownedSymbol = ownedName.split(/\s+/).at(-1) || 'symbol';
-        hintEl.textContent = `God of ${ownedSymbol.charAt(0).toUpperCase()}${ownedSymbol.slice(1)}`;
-        if (deityMetaLabel) deityMetaLabel.textContent = 'OWNED';
-        if (deityEyebrow) deityEyebrow.textContent = 'YOUR DEITY PASS';
-      } else if (this.#deityCatalog?.issuedCount >= 32) {
-        hintEl.textContent = 'sold out';
-        if (deityMetaLabel) deityMetaLabel.textContent = 'STATUS';
-        if (deityEyebrow) deityEyebrow.textContent = 'LIFETIME PASS';
-      } else if (p?.deityNextPriceWei != null) {
-        try { hintEl.textContent = `pick your symbol · next pass ${formatPassEth(p.deityNextPriceWei)} ETH`; }
-        catch (_e) { hintEl.textContent = 'pick your symbol'; }
-        if (deityMetaLabel) deityMetaLabel.textContent = 'LIVE PRICE';
-        if (deityEyebrow) deityEyebrow.textContent = 'LIFETIME PASS';
-      } else {
-        hintEl.textContent = 'checking availability…';
-        if (deityMetaLabel) deityMetaLabel.textContent = 'LIVE PRICE';
-        if (deityEyebrow) deityEyebrow.textContent = 'LIFETIME PASS';
-      }
-    }
     this.#renderDeityCatalog();
     this.#renderAfking();
     // Lazy row — visible ONLY when the level window is open (user ask).
@@ -823,6 +935,66 @@ class AppPassSection extends HTMLElement {
     // Re-assert the combined-mode gate — this poll tick's price-window logic
     // above may have just re-revealed the lazy row; combined mode wins.
     this.#renderCombinedGate();
+    this.#renderClosedDrawerSummary();
+  }
+
+  #renderClosedDrawerSummary() {
+    const drawer = this.closest?.('#afking-passes')
+      || (typeof document !== 'undefined' ? document.querySelector?.('#afking-passes') : null);
+    if (!drawer) return;
+    const closed = drawer.querySelector('[data-bind="pass-summary-closed"]');
+    if (!closed) return;
+    if (get('ui.mode') === 'combined') {
+      closed.hidden = true;
+      return;
+    }
+
+    const afking = afkingClosedSummary(this.#afkingState, this.#afkingMintPriceWei());
+    const stateGroup = drawer.querySelector('[data-bind="pass-summary-state"]');
+    const subscription = drawer.querySelector('[data-bind="pass-summary-subscription"]');
+    const funding = drawer.querySelector('[data-bind="pass-summary-funding"]');
+    if (subscription) subscription.textContent = afking.subscription || '';
+    if (funding) {
+      funding.textContent = afking.funding || '';
+      funding.hidden = !afking.funding;
+    }
+    if (stateGroup) {
+      stateGroup.hidden = !afking.subscription;
+      stateGroup.setAttribute('data-active', String(Boolean(this.#afkingState?.active)));
+    }
+
+    const deityId = this.#ownedDeitySymbolId();
+    const deity = drawer.querySelector('[data-bind="pass-summary-deity"]');
+    if (deity) {
+      deity.hidden = deityId == null;
+      if (deityId == null) deity.removeAttribute('data-symbol');
+    }
+    if (deityId != null) {
+      const badge = passSymbolBadge(deityId);
+      const symbol = String(badge.name || '').trim().split(/\s+/).at(-1) || 'Symbol';
+      if (deity) deity.setAttribute('data-symbol', symbol.toLowerCase());
+      const badgeImage = drawer.querySelector('[data-bind="pass-summary-deity-badge"]');
+      const deityName = drawer.querySelector('[data-bind="pass-summary-deity-name"]');
+      if (badgeImage) {
+        badgeImage.src = badge.path;
+        badgeImage.alt = `${symbol} deity pass`;
+      }
+      if (deityName) deityName.textContent = `GOD OF ${symbol.toUpperCase()}`;
+    }
+
+    const premium = activePassSummary(this.#playerData, this.#pricingData?.currentLevel);
+    const activePass = drawer.querySelector('[data-bind="pass-summary-active-pass"]');
+    const activePassSigil = drawer.querySelector('[data-bind="pass-summary-active-pass-sigil"]');
+    const activePassLabel = drawer.querySelector('[data-bind="pass-summary-active-pass-label"]');
+    if (activePass) {
+      activePass.hidden = !premium;
+      if (premium) activePass.setAttribute('data-kind', premium.kind);
+      else activePass.removeAttribute('data-kind');
+    }
+    if (activePassSigil) activePassSigil.textContent = premium?.sigil || '';
+    if (activePassLabel) activePassLabel.textContent = premium?.label || '';
+
+    closed.hidden = !afking.subscription && deityId == null && !premium;
   }
 
   #renderPassScoreBenefits() {
@@ -943,31 +1115,34 @@ class AppPassSection extends HTMLElement {
     const deitySection = this.querySelector('[data-bind="pass-deity-details"]');
     const select = this.querySelector('[data-bind="pass-deity-select"]');
     const buy = this.querySelector('[data-bind="pass-deity-buy"]');
-    const ownedName = this.querySelector('[data-bind="pass-deity-owned-name"]');
+    const opener = this.querySelector('[data-bind="pass-deity-open"]');
+    const symbolGroups = this.querySelector('[data-bind="pass-deity-symbol-grid"]');
+    const dialog = this.querySelector('[data-bind="pass-deity-dialog"]');
     if (deitySection) {
       deitySection.setAttribute('data-deity-owned', String(ownsDeityPass));
       deitySection.hidden = get('ui.mode') === 'combined' || ownsDeityPass;
     }
-    if (!select || !buy) return;
+    if (!select || !buy || !opener || !symbolGroups) return;
 
     const previous = Number(select.value);
     while (select.children?.length) select.removeChild(select.children[0]);
+    while (symbolGroups.children?.length) symbolGroups.removeChild(symbolGroups.children[0]);
 
-    let ids = [];
+    let availableIds = [];
     if (ownedSymbolId != null) {
-      ids = [ownedSymbolId];
+      availableIds = [ownedSymbolId];
     } else if (known) {
-      ids = Array.from({ length: 32 }, (_unused, id) => id)
+      availableIds = Array.from({ length: 32 }, (_unused, id) => id)
         .filter((id) => !catalog.takenSymbols.has(id));
     }
 
-    if (!ids.length) {
+    if (!availableIds.length) {
       const option = document.createElement('option');
       option.value = '';
       option.textContent = known ? 'No symbols available' : 'Checking availability…';
       select.appendChild(option);
     } else {
-      for (const symbolId of ids) {
+      for (const symbolId of availableIds) {
         const badge = passSymbolBadge(symbolId);
         const option = document.createElement('option');
         option.value = String(symbolId);
@@ -977,38 +1152,72 @@ class AppPassSection extends HTMLElement {
           .join(' · ');
         select.appendChild(option);
       }
-      const selected = ids.includes(previous) ? previous : ids[0];
+      const selected = availableIds.includes(previous) ? previous : availableIds[0];
       select.value = String(selected);
     }
 
-    const busy = ids.some((id) => this.#busySymbols.has(id));
+    const busy = this.#busySymbols.size > 0;
     let lockTitle = '';
     if (!known) lockTitle = 'Checking symbol availability';
     else if (ownedSymbolId != null) lockTitle = 'You already own this deity pass';
-    else if (!ids.length) lockTitle = 'All deity symbols are taken';
+    else if (!availableIds.length) lockTitle = 'All deity symbols are taken';
     else if (busy) lockTitle = 'Purchase pending';
 
     const domainLocked = Boolean(lockTitle);
-    if (ownedSymbolId != null) {
-      const badge = passSymbolBadge(ownedSymbolId);
-      const symbol = String(badge.name || '').trim().split(/\s+/).at(-1) || 'Symbol';
-      if (ownedName) {
-        ownedName.textContent = `God of ${symbol.charAt(0).toUpperCase()}${symbol.slice(1)}`;
-        ownedName.hidden = false;
+    const selectedId = Number(select.value);
+
+    // Four stable rows keep all 32 choices aligned. Taken symbols remain in
+    // place as disabled context instead of making every later icon jump.
+    for (let quadrant = 0; quadrant < PASS_QUADRANTS.length; quadrant += 1) {
+      const category = PASS_QUADRANTS[quadrant];
+      const group = document.createElement('section');
+      group.className = 'pass-deity-symbol-group';
+      const groupTitle = document.createElement('strong');
+      groupTitle.className = 'pass-deity-symbol-group__title';
+      groupTitle.textContent = category.toUpperCase();
+      const grid = document.createElement('div');
+      grid.className = 'pass-deity-grid';
+      group.append(groupTitle, grid);
+
+      for (let offset = 0; offset < 8; offset += 1) {
+        const symbolId = quadrant * 8 + offset;
+        const badge = passSymbolBadge(symbolId);
+        const symbol = String(badge.name || '').trim().split(/\s+/).at(-1) || 'Symbol';
+        const taken = Boolean(known && catalog.takenSymbols.has(symbolId));
+        const symbolBusy = this.#busySymbols.has(symbolId);
+        const button = document.createElement('button');
+        button.className = `pass-deity-symbol${taken ? ' pass-deity-symbol--taken' : ''}`;
+        button.setAttribute('type', 'button');
+        button.setAttribute('data-symbol-id', String(symbolId));
+        button.setAttribute('aria-label', `${symbol} deity symbol${taken ? ', taken' : ''}`);
+        button.setAttribute('aria-pressed', String(symbolId === selectedId));
+        button.disabled = !known || taken || domainLocked || !canSign || symbolBusy;
+        button.title = taken ? `${symbol} is already taken` : `Choose ${symbol}`;
+
+        const image = document.createElement('img');
+        image.src = badge.path;
+        image.alt = '';
+        image.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span');
+        label.textContent = symbol.toUpperCase();
+        button.append(image, label);
+        button.addEventListener('click', () => {
+          if (button.disabled) return;
+          select.value = String(symbolId);
+          this.#renderDeityPreview();
+        });
+        grid.appendChild(button);
       }
-      select.hidden = true;
-      buy.hidden = true;
-    } else {
-      if (ownedName) {
-        ownedName.textContent = '';
-        ownedName.hidden = true;
-      }
-      select.hidden = false;
-      buy.hidden = false;
+      symbolGroups.appendChild(group);
     }
+
+    select.hidden = true;
+    buy.hidden = ownsDeityPass;
+    opener.hidden = ownsDeityPass;
     select.disabled = domainLocked || !canSign;
     buy.disabled = domainLocked || !canSign;
-    for (const control of [select, buy]) {
+    opener.disabled = domainLocked || !canSign;
+    for (const control of [select, buy, opener]) {
       if (domainLocked) {
         control.setAttribute('data-write-locked', '');
         control.setAttribute('data-write-lock-title', lockTitle);
@@ -1017,27 +1226,54 @@ class AppPassSection extends HTMLElement {
         control.removeAttribute('data-write-lock-title');
       }
     }
-    buy.textContent = this.#pricingData?.deityNextPriceWei == null
-      ? 'BUY DEITY PASS\n—'
-      : `BUY DEITY PASS\n${formatPassEth(this.#pricingData.deityNextPriceWei)} ETH`;
+
+    const price = this.#pricingData?.deityNextPriceWei;
+    const label = !known
+      ? 'BUY DEITY PASS\nCHECKING…'
+      : !availableIds.length && !ownsDeityPass
+        ? 'DEITY PASS\nSOLD OUT'
+        : price == null
+          ? 'BUY DEITY PASS\n—'
+          : `BUY DEITY PASS\n${formatPassEth(price)} ETH`;
+    opener.textContent = label;
+    buy.textContent = busy
+      ? 'PURCHASE PENDING…'
+      : price == null
+        ? 'BUY DEITY PASS\n—'
+        : `BUY DEITY PASS\n${formatPassEth(price)} ETH`;
+
+    if (ownsDeityPass || (known && !availableIds.length) || get('ui.mode') === 'combined') {
+      this.#deityDialogOpen = false;
+    }
+    if (dialog) dialog.hidden = !this.#deityDialogOpen;
+    opener.setAttribute('aria-expanded', String(this.#deityDialogOpen));
     this.#renderDeityPreview();
   }
 
   #renderDeityPreview() {
     const select = this.querySelector('[data-bind="pass-deity-select"]');
     const preview = this.querySelector('[data-bind="pass-deity-preview"]');
+    const selectedName = this.querySelector('[data-bind="pass-deity-selected-name"]');
     if (!preview) return;
     const symbolId = Number(select?.value);
     if (!Number.isInteger(symbolId) || symbolId < 0 || symbolId > 31) {
       preview.src = '';
       preview.alt = '';
       preview.hidden = true;
+      if (selectedName) selectedName.textContent = '—';
       return;
     }
     const badge = passSymbolBadge(symbolId);
+    const symbol = String(badge.name || '').trim().split(/\s+/).at(-1) || 'Symbol';
     preview.src = badge.path;
-    preview.alt = badge.name;
+    preview.alt = `${symbol} deity symbol`;
     preview.hidden = false;
+    if (selectedName) selectedName.textContent = `GOD OF ${symbol.toUpperCase()}`;
+    for (const button of this.querySelectorAll('.pass-deity-symbol')) {
+      const selected = Number(button.getAttribute('data-symbol-id')) === symbolId;
+      button.classList.toggle('pass-deity-symbol--selected', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    }
   }
 
   #afkingMintPriceWei() {
@@ -1569,6 +1805,7 @@ class AppPassSection extends HTMLElement {
       } catch (_e) { /* defensive */ }
 
       this.#clearAllErrorStates();
+      this.#closeDeityDialog();
       setTimeout(() => this.#runPollCycle(), POST_CONFIRM_REFETCH_MS);
     } catch (error) {
       // CONTEXT D-05 LOCKED override path. Use error.code if pre-decoded

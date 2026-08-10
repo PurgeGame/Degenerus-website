@@ -14,23 +14,58 @@ label {
 }
 
 /* ------------------------------------------------------------------ */
-/* Text and number inputs                                               */
+/* Game fields                                                         */
 /* ------------------------------------------------------------------ */
-input[type="number"],
-input[type="text"],
-select {
+:where(
+  input:not([type]),
+  input[type="email"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="text"],
+  input[type="url"],
+  select,
+  textarea
+) {
+  --game-field-rgb: 245, 166, 35;
+  box-sizing: border-box;
   width: 100%;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(var(--game-field-rgb), 0.34);
+  border-radius: 9px;
+  outline: none;
+  background:
+    linear-gradient(135deg, rgba(var(--game-field-rgb), 0.11), transparent 34%),
+    repeating-linear-gradient(125deg, transparent 0 13px, rgba(255, 255, 255, 0.014) 14px 15px),
+    linear-gradient(180deg, rgba(20, 22, 35, 0.98), rgba(6, 7, 13, 0.98));
   color: var(--text-primary);
   padding: 0.5rem 0.75rem;
-  border-radius: 6px;
+  box-shadow:
+    inset 3px 0 rgba(var(--game-field-rgb), 0.13),
+    inset 0 1px rgba(255, 255, 255, 0.055),
+    inset 0 -10px 20px rgba(0, 0, 0, 0.16),
+    0 5px 14px rgba(0, 0, 0, 0.16);
   font-family: inherit;
   font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
-  transition: border-color 0.15s;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
   appearance: none;
   -webkit-appearance: none;
+}
+
+:where(
+  input:not([type]),
+  input[type="email"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="text"],
+  input[type="url"],
+  select,
+  textarea
+):hover:not(:disabled) {
+  border-color: rgba(var(--game-field-rgb), 0.52);
 }
 
 /* Kill the native number-input spinner. `appearance: none` on the input alone
@@ -47,27 +82,143 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-input[type="number"]:focus,
-input[type="text"]:focus,
-select:focus {
+:where(
+  input:not([type]),
+  input[type="email"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="text"],
+  input[type="url"],
+  select,
+  textarea
+):focus {
   outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.15);
+  border-color: rgba(var(--game-field-rgb), 0.88);
+  box-shadow:
+    0 0 0 2px rgba(var(--game-field-rgb), 0.13),
+    0 0 20px rgba(var(--game-field-rgb), 0.2),
+    inset 3px 0 rgba(var(--game-field-rgb), 0.34),
+    inset 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 -10px 20px rgba(0, 0, 0, 0.18);
 }
 
-input::placeholder {
+:where(input, textarea)::placeholder {
   color: var(--text-dim);
+  opacity: 0.82;
+}
+
+:where(input, select, textarea):disabled {
+  opacity: 0.46;
+  cursor: not-allowed;
+  filter: grayscale(0.55);
+}
+
+body :is(input, textarea)[readonly] {
+  border-style: dashed;
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+body :is(input, select, textarea)[aria-invalid="true"],
+body :is(input, select, textarea):user-invalid {
+  --game-field-rgb: 248, 113, 113;
+}
+
+:where(input, textarea)::selection {
+  background: rgba(245, 166, 35, 0.34);
+  color: #fff;
+}
+
+/* Bare/legacy controls share the same instrument frame. Product controls
+   already housed inside Tickets, Luckbox, Daily Flip, Pass, and Decimator
+   shells keep their stronger scoped styling later in app.css. */
+body :is(
+  .acct-switcher-select,
+  .player-search-input,
+  .status-input,
+  .replay-select,
+  .viewer-select,
+  .viewer-scrubber__jump,
+  .dec-input,
+  .dec-select,
+  .pass-whale-input,
+  .cf-amount-input,
+  .deg-currency-select,
+  .deg-ticket-count-select,
+  .deg-quadrant-select,
+  .deg-amount-input,
+  .deg-custom-ticket-input,
+  .aff-url-input,
+  .aff-customize-input,
+  .dec-affiliate__input,
+  .feedback-form input,
+  .feedback-form textarea
+) {
+  border: 1px solid rgba(var(--game-field-rgb), 0.4);
+  border-radius: 9px;
+  outline: none;
+  background:
+    linear-gradient(135deg, rgba(var(--game-field-rgb), 0.12), transparent 36%),
+    repeating-linear-gradient(125deg, transparent 0 13px, rgba(255, 255, 255, 0.014) 14px 15px),
+    linear-gradient(180deg, rgba(20, 22, 35, 0.98), rgba(6, 7, 13, 0.98));
+  box-shadow:
+    inset 3px 0 rgba(var(--game-field-rgb), 0.15),
+    inset 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 -10px 20px rgba(0, 0, 0, 0.17),
+    0 5px 14px rgba(0, 0, 0, 0.16);
+}
+
+body :is(
+  .acct-switcher-select,
+  .player-search-input,
+  .replay-select,
+  .viewer-select,
+  .viewer-scrubber__jump
+) { --game-field-rgb: 96, 165, 250; }
+
+body :is(.feedback-form input, .feedback-form textarea) {
+  --game-field-rgb: 34, 211, 238;
+}
+
+body :is(
+  .acct-switcher-select,
+  .player-search-input,
+  .status-input,
+  .replay-select,
+  .viewer-select,
+  .viewer-scrubber__jump,
+  .cf-amount-input,
+  .aff-url-input,
+  .aff-customize-input,
+  .dec-affiliate__input,
+  .feedback-form input,
+  .feedback-form textarea
+):is(:hover:not(:disabled), :focus) {
+  border-color: rgba(var(--game-field-rgb), 0.88);
+  box-shadow:
+    0 0 0 2px rgba(var(--game-field-rgb), 0.13),
+    0 0 20px rgba(var(--game-field-rgb), 0.2),
+    inset 3px 0 rgba(var(--game-field-rgb), 0.34),
+    inset 0 1px rgba(255, 255, 255, 0.08);
 }
 
 /* ------------------------------------------------------------------ */
 /* Select                                                               */
 /* ------------------------------------------------------------------ */
 select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b8d' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23f5a623' stroke-width='1.7' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
   padding-right: 2rem;
   cursor: pointer;
+}
+
+body :is(.acct-switcher-select, .replay-select, .viewer-select) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2360a5fa' stroke-width='1.7' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
 }
 
 select option {

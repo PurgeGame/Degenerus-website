@@ -744,6 +744,7 @@ function _cardsFromLeg(leg) {
         const isShield = rewardType === 12;
         const presentation = lootboxRewardPresentation(rewardType, leg.amount, {
           boonBps: leg.boonBps,
+          boonType: leg.boonType,
         });
         cards.push({
           type: isBoon ? 'boon' : (isShield ? 'quest-shield' : 'reward'),

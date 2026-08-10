@@ -20,6 +20,7 @@ const {
   jackpotDrawCounter,
   jackpotPrizePoolWei,
   phaseStripModel,
+  poolTargetMarkerLabel,
   prizePoolTargetForLevel,
   transitionJackpotCountdownModel,
   transitionJackpotLockedLabel,
@@ -116,6 +117,18 @@ describe('next-pool progression model', () => {
     assert.ok(ready.historyMarkers[0].position < ready.historyMarkers[1].position);
     assert.ok(ready.historyMarkers[1].position < 100,
       'headroom keeps the final-pool notches inside the tube');
+  });
+
+  test('the completed target keeps its special notch but uses completed-level hover copy', () => {
+    const target = 120_000_000_000_000n;
+    assert.equal(
+      poolTargetMarkerLabel({ level: 7, targetWei: target }),
+      'Level 7 guarantee · 120 ETH prize pool',
+    );
+    assert.equal(
+      poolTargetMarkerLabel({ level: 7, targetWei: target, complete: true }),
+      'Level 7 final prize pool · 120 ETH',
+    );
   });
 
   test('the completed history ruler uses a bounded log pre-target section and linear over-target section', () => {
@@ -317,7 +330,7 @@ describe('special level-transition jackpot countdown', () => {
     assert.deepEqual(transitionJackpotCountdownModel({
       level: 34, jackpot: false, lastPurchaseDay: true,
     }), {
-      kind: 'decimator', label: 'DECIMATOR CROSSOVER IN:', level: 35,
+      kind: 'decimator', label: 'DECIMATOR DRAWING IN:', level: 35,
     });
     assert.equal(transitionJackpotCountdownModel({
       level: 34, jackpot: false, lastPurchaseDay: false,
@@ -398,8 +411,8 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     assert.match(component, /data-el="pool-history-markers"/);
     assert.match(component, /pool-target-marker" title="Level guarantee" tabindex="0"/,
       'thresholds are keyboard-focusable as well as hoverable');
-    assert.match(component, /`\$\{levelLabel\} guarantee · \$\{_formatMarkerEth\(model\.target\)\} ETH prize pool`/,
-      'the guarantee tooltip names its level and ETH position');
+    assert.match(component, /complete:\s*model\.levelReady/,
+      'the target tooltip switches vocabulary only after the level target is complete');
     assert.match(component, /`\$\{levelLabel\} growth O\/U · \$\{_formatMarkerEth\(model\.growthTarget\)\} ETH prize pool/,
       'the growth tooltip names its level and ETH position');
     assert.match(css, /\.pool-progress__marker\s*\{[^}]*width:\s*5px[^}]*pointer-events:\s*auto/s,
@@ -410,10 +423,10 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
       'each historical notch names its exact level and final pool');
     assert.match(component, /const major = Number\(row\.level\) % 5 === 0/,
       'every fifth historical level receives the major thermometer graduation');
-    assert.match(css, /\.pool-progress__marker--history\s*\{[^}]*top:\s*auto[^}]*bottom:\s*1px[^}]*width:\s*1px[^}]*min-width:\s*1px[^}]*max-width:\s*1px[^}]*height:\s*42%[^}]*box-shadow:\s*none/s,
-      'every ordinary historical final is one consistent hairline rising from inside the tube');
-    assert.match(css, /\.pool-progress__marker--history-major\s*\{[^}]*width:\s*2px[^}]*min-width:\s*2px[^}]*max-width:\s*2px[^}]*height:\s*72%[^}]*box-shadow:\s*none/s,
-      'only five-level graduations are longer and two pixels thick');
+    assert.match(css, /\.pool-progress__marker--history\s*\{[^}]*top:\s*auto[^}]*bottom:\s*1px[^}]*width:\s*2px[^}]*min-width:\s*2px[^}]*max-width:\s*2px[^}]*height:\s*42%[^}]*box-shadow:\s*none/s,
+      'every ordinary historical final uses one consistent, crisp width inside the tube');
+    assert.match(css, /\.pool-progress__marker--history-major\s*\{[^}]*width:\s*3px[^}]*min-width:\s*3px[^}]*max-width:\s*3px[^}]*height:\s*72%[^}]*box-shadow:\s*none/s,
+      'only five-level graduations are longer and one pixel thicker');
     assert.match(css, /\.pool-progress__track\.is-ready \.pool-progress__fill\s*\{[^}]*background:\s*#93c5fd/s,
       'the post-guarantee thermometer switches to a solid light blue fill');
     assert.match(css, /\.pool-progress__track::before\s*\{[^}]*background:\s*none/s,
@@ -496,7 +509,8 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     assert.match(component, /pool-jackpot-countdown/);
     assert.match(component, /secondsUntilDayCrossover/,
       'the strip shares the top-bar countdown clock');
-    assert.match(component, /DECIMATOR CROSSOVER IN:/);
+    assert.match(component, /DECIMATOR DRAWING IN:/);
+    assert.doesNotMatch(component, /DECIMATOR CROSSOVER/);
     assert.match(component, /BIG ASS FLIP LOCKS IN:/);
     assert.match(component, /pool-special-jackpot-countdown/);
     const headStart = component.indexOf('<header class="pool-progress__head">');

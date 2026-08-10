@@ -651,3 +651,194 @@ body.layout-basic .df-modifier-meter--terminal-draining .df-modifier-meter__read
 @media (prefers-reduced-motion: reduce) {
   body.layout-basic .df-fakeout-reverse-card { display: none !important; }
 }
+
+/* Closed AFKING PASSES strip: live subscription coverage plus the compact
+   pass art/status that would otherwise disappear with the drawer contents. */
+body.layout-basic .more-ways__summary.section-disclosure__bar {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+body.layout-basic .more-ways__summary-closed {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.42rem;
+}
+
+body.layout-basic :is(
+  .more-ways__summary-closed,
+  .more-ways__sub-state,
+  .more-ways__sub-state > b,
+  .more-ways__deity-ticket,
+  .more-ways__active-pass
+)[hidden],
+body.layout-basic .more-ways[open] > .more-ways__summary .more-ways__summary-closed {
+  display: none !important;
+}
+
+body.layout-basic .more-ways__sub-state {
+  box-sizing: border-box;
+  display: inline-flex;
+  min-width: 0;
+  min-height: 2.15rem;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(21, 91, 58, 0.24), rgba(9, 35, 48, 0.42));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+body.layout-basic .more-ways__sub-state[data-active="false"] {
+  border-color: rgba(125, 196, 255, 0.26);
+  background: rgba(46, 94, 135, 0.12);
+}
+
+body.layout-basic .more-ways__sub-state > b {
+  box-sizing: border-box;
+  display: grid;
+  min-height: 2.15rem;
+  align-items: center;
+  padding: 0.36rem 0.52rem;
+  color: #a7f3d0;
+  font: 900 0.58rem/1.08 var(--font-mono, "Roboto Mono", monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.035em;
+  white-space: nowrap;
+}
+
+body.layout-basic .more-ways__sub-state[data-active="false"] > b { color: #b9dcfa; }
+
+body.layout-basic .more-ways__sub-state > b + b {
+  border-left: 1px solid rgba(148, 216, 255, 0.16);
+  color: #d8ecff;
+}
+
+body.layout-basic .more-ways__deity-ticket,
+body.layout-basic .more-ways__active-pass {
+  box-sizing: border-box;
+  display: inline-grid;
+  min-width: 0;
+  min-height: 2.15rem;
+  align-items: center;
+  border-radius: 9px;
+}
+
+body.layout-basic .more-ways__deity-ticket {
+  grid-template-columns: 1.75rem minmax(0, auto);
+  gap: 0.36rem;
+  padding: 0.18rem 0.5rem 0.18rem 0.25rem;
+  border: 1px solid rgba(255, 218, 106, 0.42);
+  background:
+    radial-gradient(circle at 12% 50%, rgba(250, 204, 21, 0.16), transparent 34%),
+    linear-gradient(145deg, rgba(44, 48, 57, 0.92), rgba(18, 21, 28, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 0 11px rgba(234, 179, 8, 0.1);
+}
+
+body.layout-basic .more-ways__deity-art {
+  position: relative;
+  display: grid;
+  width: 1.72rem;
+  height: 1.72rem;
+  place-items: center;
+  background:
+    radial-gradient(circle, #1a1c23 0 39%, rgba(255, 241, 166, 0.42) 40% 51%, transparent 52%),
+    conic-gradient(from 22.5deg, #dca915, #fff0a3, #bc7c08, #ffe797, #dca915);
+  clip-path: polygon(50% 0, 59% 10%, 71% 4%, 76% 17%, 91% 15%, 89% 31%, 100% 39%, 90% 50%, 100% 61%, 87% 68%, 91% 84%, 75% 82%, 69% 96%, 58% 89%, 50% 100%, 41% 89%, 29% 96%, 24% 82%, 8% 84%, 12% 68%, 0 61%, 10% 50%, 0 39%, 12% 31%, 9% 15%, 24% 17%, 29% 4%, 41% 10%);
+  filter: drop-shadow(0 0 4px rgba(250, 204, 21, 0.38));
+}
+
+body.layout-basic .more-ways__deity-art img {
+  display: block;
+  width: 62%;
+  height: 62%;
+  object-fit: contain;
+}
+
+/* Ethereum's glyph occupies less of its source badge than the other deity
+   symbols. Let this one compact summary portrait breathe past the shared scale
+   so the ETH diamond stays recognizable at strip size. */
+body.layout-basic .more-ways__deity-ticket[data-symbol="ethereum"] .more-ways__deity-art img {
+  width: 84%;
+  height: 84%;
+}
+
+body.layout-basic .more-ways__deity-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+body.layout-basic .more-ways__deity-copy small {
+  color: rgba(255, 218, 106, 0.65);
+  font: 900 0.43rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.13em;
+}
+
+body.layout-basic .more-ways__deity-copy b {
+  max-width: 8.5rem;
+  overflow: hidden;
+  color: #ffe8a3;
+  font: 900 0.57rem/1.05 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.layout-basic .more-ways__active-pass {
+  grid-template-columns: 1.55rem minmax(0, auto);
+  gap: 0.4rem;
+  padding: 0.24rem 0.58rem 0.24rem 0.3rem;
+  border: 1px solid rgba(111, 183, 255, 0.36);
+  background: linear-gradient(135deg, rgba(21, 73, 126, 0.32), rgba(15, 28, 46, 0.52));
+  color: #cce8ff;
+}
+
+body.layout-basic .more-ways__active-pass[data-kind="lazy"] {
+  border-color: rgba(196, 181, 253, 0.38);
+  background: linear-gradient(135deg, rgba(91, 67, 142, 0.3), rgba(33, 25, 58, 0.52));
+  color: #e7dcff;
+}
+
+body.layout-basic .more-ways__active-pass > i {
+  display: grid;
+  width: 1.48rem;
+  height: 1.48rem;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: rgba(4, 10, 20, 0.48);
+  font: 950 0.5rem/1 var(--font-mono, "Roboto Mono", monospace);
+  font-style: normal;
+}
+
+body.layout-basic .more-ways__active-pass > b {
+  color: inherit;
+  font: 900 0.57rem/1.08 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.035em;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  body.layout-basic .more-ways__summary.section-disclosure__bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  body.layout-basic .more-ways__summary-closed {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 620px) {
+  body.layout-basic .more-ways__summary-closed {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  body.layout-basic .more-ways__sub-state { grid-column: 1 / -1; width: 100%; }
+  body.layout-basic .more-ways__sub-state > b { min-width: 0; flex: 1 1 50%; }
+  body.layout-basic .more-ways__deity-ticket,
+  body.layout-basic .more-ways__active-pass { width: 100%; max-width: 100%; }
+  body.layout-basic .more-ways__active-pass > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+}

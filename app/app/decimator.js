@@ -172,6 +172,57 @@ export function decimatorActivityMultiplierBps(score) {
   return 17_676n + ((points - 500n) * 157n) / 29_500n;
 }
 
+const DECIMATOR_BUCKET_MIN_SCORE = Object.freeze({
+  12: 0,
+  11: 10,
+  10: 30,
+  9: 55,
+  8: 85,
+  7: 120,
+  6: 180,
+  5: 250,
+  4: 300,
+  3: 500,
+  2: 1_000,
+});
+
+/** Exact ActivityCurveLib.decBucket bracket and its visible score range. */
+export function decimatorBracket(score, { level = null } = {}) {
+  let points;
+  try {
+    if (typeof score === 'number') {
+      if (!Number.isFinite(score) || score < 0) return null;
+      points = BigInt(Math.trunc(score));
+    } else {
+      points = BigInt(score ?? 0);
+    }
+  } catch (_e) {
+    return null;
+  }
+  if (points < 0n) return null;
+
+  let bucket = 12;
+  if (points >= 1_000n) bucket = 2;
+  else if (points >= 500n) bucket = 3;
+  else if (points >= 300n) bucket = 4;
+  else if (points >= 250n) bucket = 5;
+  else if (points >= 180n) bucket = 6;
+  else if (points >= 120n) bucket = 7;
+  else if (points >= 85n) bucket = 8;
+  else if (points >= 55n) bucket = 9;
+  else if (points >= 30n) bucket = 10;
+  else if (points >= 10n) bucket = 11;
+
+  const lvl = Number(level);
+  const floor = Number.isInteger(lvl) && lvl > 0 && lvl % 100 === 0 ? 2 : 5;
+  if (bucket < floor) bucket = floor;
+  return {
+    bucket,
+    minScore: DECIMATOR_BUCKET_MIN_SCORE[bucket],
+    maxScore: bucket === floor ? null : DECIMATOR_BUCKET_MIN_SCORE[bucket - 1] - 1,
+  };
+}
+
 /** Activity plus the two live timing adjustments, with Solidity's floor order. */
 export function decimatorCurrentMultiplierBps({
   activityScore = 0,
@@ -229,6 +280,30 @@ export function decimatorEntryScoreWei({
   const maxMultBase = (remaining * BPS_DENOMINATOR) / multiplier;
   const multiplied = (maxMultBase * multiplier) / BPS_DENOMINATOR;
   return multiplied + (baseAmount - maxMultBase);
+}
+
+/** Effective total score multiplier for this burn, including the active boon. */
+export function decimatorEffectiveMultiplierBps(args = {}) {
+  let amount;
+  try { amount = BigInt(args?.amountWei ?? 0); } catch (_e) { return null; }
+  if (amount <= 0n) return null;
+  return (decimatorEntryScoreWei(args) * BPS_DENOMINATOR) / amount;
+}
+
+/** Effective activity/timing portion before the separate boon score is added. */
+export function decimatorEffectiveBaseMultiplierBps(args = {}) {
+  return decimatorEffectiveMultiplierBps({ ...args, boonBps: 0 });
+}
+
+/** Whether the 200k allowance reduces the non-boon multiplier for this burn. */
+export function decimatorMultiplierCapApplied(args = {}) {
+  try {
+    if (BigInt(args?.previousScoreWei ?? 0) >= DECIMATOR_MULTIPLIER_CAP) return true;
+  } catch (_e) { /* fall through to the effective quote */ }
+  const effective = decimatorEffectiveBaseMultiplierBps(args);
+  if (effective == null) return false;
+  const nominal = decimatorCurrentMultiplierBps(args);
+  return nominal > effective;
 }
 
 /** The open x00 Decimator is 30%; every ordinary x5 Decimator is 10%. */

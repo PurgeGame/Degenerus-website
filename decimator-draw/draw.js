@@ -1,3 +1,5 @@
+import { decimatorPayoutBreakdown } from '../app/app/decimator-payout.js';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const UNIT = 10n ** 18n;
 const DISCORD_DIRECTORY_URL = 'https://api.degener.us/api/leaderboard?limit=50';
@@ -46,6 +48,50 @@ export function formatScore(value) {
 export function formatEth(value, displayScale = 1n, maxFraction = 2) {
   const scale = raw(displayScale) || 1n;
   return formatUnits(raw(value) * scale, maxFraction);
+}
+
+function settlementEthLabel(value, displayScale = 1n) {
+  const displayed = raw(value) * (raw(displayScale) || 1n);
+  const digits = displayed >= 100n * UNIT ? 1 : displayed >= UNIT ? 3 : 5;
+  return `${formatEth(value, displayScale, digits)} ETH`;
+}
+
+/** Exact player-facing settlement shown only after the resolved wheel ends. */
+export function formatDecimatorSettlement(totalWei, displayScale = 1n, options = {}) {
+  const split = decimatorPayoutBreakdown(totalWei, options);
+  const claimable = settlementEthLabel(split.claimableEthWei, displayScale);
+  if (split.rewardKind === 'eth') {
+    return {
+      ...split,
+      claimableLabel: claimable,
+      rewardLabel: 'NO REWARD LEG',
+      ruleLabel: 'TERMINAL PAYOUT · 100% CLAIMABLE ETH',
+    };
+  }
+  if (split.rewardKind === 'luckbox') {
+    return {
+      ...split,
+      claimableLabel: claimable,
+      rewardLabel: `${settlementEthLabel(split.luckboxWei, displayScale)} LUCKBOX`,
+      ruleLabel: '50% CLAIMABLE ETH · 50% LUCKBOX',
+    };
+  }
+
+  const passCount = split.halfPasses.toLocaleString('en-US');
+  const rewardParts = [
+    `${passCount} WHALE HALF-${split.halfPasses === 1n ? 'PASS' : 'PASSES'}`,
+  ];
+  if (split.luckboxWei > 0n) {
+    rewardParts.push(`${settlementEthLabel(split.luckboxWei, displayScale)} LUCKBOX`);
+  }
+  return {
+    ...split,
+    claimableLabel: claimable,
+    rewardLabel: rewardParts.join(' + '),
+    ruleLabel: split.recirculatedDustWei > 0n
+      ? 'WHALE HALF-PASSES · SMALL ON-CHAIN REMAINDER RECIRCULATED'
+      : 'WHALE HALF-PASSES · LUCKBOX REMAINDER WHEN ELIGIBLE',
+  };
 }
 
 export function minDegenScoreForBucket(bucket) {
@@ -1393,12 +1439,27 @@ class DecimatorDrawReplay {
     );
   }
 
+  #renderSettlement(value = null) {
+    const settlement = this.bind('player-payout-settlement');
+    const unit = this.bind('player-payout-unit');
+    if (unit) unit.textContent = value == null ? 'ETH' : 'TOTAL ETH VALUE';
+    if (!settlement) return null;
+    settlement.hidden = value == null;
+    if (value == null) return null;
+    const formatted = formatDecimatorSettlement(value, this.ethDisplayScale);
+    this.bind('player-payout-eth').textContent = formatted.claimableLabel;
+    this.bind('player-payout-reward').textContent = formatted.rewardLabel;
+    this.bind('player-payout-rule').textContent = formatted.ruleLabel;
+    return formatted;
+  }
+
   #renderPayout(value = this.#projectedPayout()) {
     const card = this.bind('player-payout-card');
     const label = this.bind('player-payout-label');
     const output = this.bind('player-payout');
     const detail = this.bind('player-payout-detail');
     card.classList.remove('is-win', 'is-loss');
+    this.#renderSettlement();
     output.textContent = value == null
       ? '—'
       : formatEth(value, this.ethDisplayScale, 2);
@@ -1415,8 +1476,9 @@ class DecimatorDrawReplay {
       detail.textContent = 'YOUR SLICE WAS NOT SELECTED';
     } else if (this.completed.length === this.frames.length && result?.won) {
       card.classList.add('is-win');
-      label.textContent = 'YOUR FINAL PAYOUT';
-      detail.textContent = 'FINAL PRO-RATA PAYOUT';
+      label.textContent = 'YOUR FINAL PRIZE';
+      detail.textContent = 'FINAL PRO-RATA SHARE';
+      this.#renderSettlement(value);
     } else if (playerFrame && result?.won) {
       card.classList.add('is-win');
       label.textContent = 'YOUR LIVE PAYOUT';
@@ -1426,11 +1488,16 @@ class DecimatorDrawReplay {
       detail.textContent = 'LIVE PRO-RATA ESTIMATE';
     }
     const payoutKind = playerFrame ? 'current' : 'projected';
+    const finalSettlement = this.completed.length === this.frames.length && result?.won
+      ? formatDecimatorSettlement(value, this.ethDisplayScale)
+      : null;
     output.setAttribute(
       'aria-label',
       value == null
-        ? `${payoutKind[0].toUpperCase()}${payoutKind.slice(1)} payout unavailable`
-        : `${formatEth(value, this.ethDisplayScale, 4)} ETH ${payoutKind} payout`,
+        ? `${payoutKind[0].toUpperCase()}${payoutKind.slice(1)} prize unavailable`
+        : finalSettlement
+          ? `${formatEth(value, this.ethDisplayScale, 4)} ETH total prize value; ${finalSettlement.claimableLabel} claimable; ${finalSettlement.rewardLabel}`
+          : `${formatEth(value, this.ethDisplayScale, 4)} ETH ${payoutKind} prize value`,
     );
   }
 

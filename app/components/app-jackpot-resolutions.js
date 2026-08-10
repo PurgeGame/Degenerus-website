@@ -102,7 +102,7 @@ export function decimatorResolutionView({ outcome, claimState, currentLevel, lev
     if (claimState === 'claimed') {
       return {
         status: 'RESOLVED', tone: 'won',
-        message: `${_formatEth(payout)} ETH payout record.`,
+        message: 'Settled as claimable ETH plus the final Luckbox / Whale Half-Pass reward.',
         actionable: false,
       };
     }
@@ -408,6 +408,7 @@ class AppJackpotResolutions extends HTMLElement {
         mayAddEth: true,
         kindLabel: 'DECIMATOR FINAL',
         label: `Level ${decLevel} final draw`,
+        compact: true,
         shortLabel: decWaiting ? 'Processing' : (willWrite ? 'Resolve + view' : 'View draw'),
         detail: this.#busy === 'decimator'
           ? 'Resolving on-chain'

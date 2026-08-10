@@ -105,7 +105,7 @@ globalThis.customElements = {
 
 const pending = await import('../../app/pending-actions.js');
 const drawGate = await import('../../app/major-draw-activity.js');
-const preferences = await import('../../app/degenerette-preferences.js');
+const uiPreferences = await import('../../app/ui-preferences.js');
 const store = await import('../../app/store.js');
 const trayModule = await import('../app-reveal-tray.js');
 
@@ -351,9 +351,19 @@ describe('<app-reveal-tray>', () => {
       'the jackpot button is not the only path to the fullscreen draw');
     const action = el.querySelector('.rrt-action--decimator');
     assert.ok(action);
-    assert.equal(action.querySelector('.rrt-action__kind').textContent, 'DECIMATOR FINAL');
-    assert.equal(action.querySelector('.rrt-action__label').textContent, 'DECIMATOR · L25');
-    assert.equal(action.querySelector('.rrt-action__cta').textContent, 'VIEW');
+    assert.match(action.className, /rrt-action--compact/);
+    assert.equal(action.querySelector('.rrt-decimator-summary__level').textContent, 'L25');
+    assert.equal(action.querySelector('.rrt-decimator-summary__name').textContent, 'DECIMATOR');
+    assert.equal(action.getAttribute('aria-label'), 'L25 DECIMATOR');
+    assert.equal(action.querySelector('.rrt-action__cta'), null, 'the terse row has no redundant VIEW');
+    assert.equal(action.querySelector('.rrt-decimator-mark').src,
+      '/app/assets/decimator-draw-mark.svg', 'Pending keeps the dedicated Decimator wheel');
+    const mark = readFileSync(new URL('../../assets/decimator-draw-mark.svg', import.meta.url), 'utf8');
+    assert.match(mark, /id="dec-green"/);
+    assert.match(mark, /stroke="url\(#dec-green\)"[\s\S]*?transform="rotate\(90 32 32\)"/,
+      'one bottom miniature wheel segment is visibly locked green');
+    assert.match(mark, /M32 4\.8[\s\S]*?fill="url\(#dec-gold\)"/,
+      'the top selector arrow remains gold');
     action.dispatchEvent({ type: 'click' });
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
     assert.equal(opened, 1);
@@ -877,7 +887,7 @@ describe('<app-reveal-tray>', () => {
     el.disconnectedCallback();
   });
 
-  test('OPEN WHEN READY persists and auto-runs only presentation-safe resolved work', async () => {
+  test('the top-bar AUTO preference live-updates Pending and runs only presentation-safe resolved work', async () => {
     let ran = 0;
     pending.publishPendingActions('pack', [{
       id: 'ticket-pack:77', kind: 'tickets', label: 'Level 77 ticket pack',
@@ -887,11 +897,9 @@ describe('<app-reveal-tray>', () => {
     const el = new trayModule.AppRevealTray();
     el.connectedCallback();
 
-    const checkbox = el.querySelector('[data-bind="rrt-auto-open"]');
-    assert.ok(checkbox, 'the compact control block carries the preference');
-    assert.equal(checkbox.checked, false, 'automatic popups are opt-in');
-    checkbox.checked = true;
-    checkbox.dispatchEvent({ type: 'change' });
+    assert.equal(el.querySelector('[data-bind="rrt-auto-open"]'), null,
+      'Pending no longer duplicates the top-bar preference');
+    uiPreferences.writeRevealAutoOpenPreference(true);
     assert.equal(localStorage.getItem('degenerus:reveal-tray:auto-open:v1'), '1');
     await Promise.resolve();
     assert.equal(ran, 0, 'a waiting row is never run');
@@ -955,34 +963,6 @@ describe('<app-reveal-tray>', () => {
 
     assert.deepEqual(runs, ['stale', 'next'],
       'a syncing receipt yields the automatic continuation lane immediately');
-    el.disconnectedCallback();
-  });
-
-  test('Pending controls restore and persist the shared reveal speed', () => {
-    localStorage.setItem(preferences.DEGENERETTE_PREFERENCES_KEY, JSON.stringify({
-      version: 1, speed: 2.5, bets: { 1: '500' },
-    }));
-    pending.publishPendingActions('pack', [{
-      id: 'ticket-pack:4', kind: 'tickets', label: 'Level 4 ticket pack',
-      detail: '4 tickets ready', state: 'ready', run: async () => {},
-    }]);
-    const el = new trayModule.AppRevealTray();
-    el.connectedCallback();
-
-    const speed = el.querySelector('[data-bind="rrt-speed"]');
-    const output = el.querySelector('[data-bind="rrt-speed-value"]');
-    assert.equal(speed.min, '0.5');
-    assert.equal(speed.max, '3');
-    assert.equal(speed.value, '2.5');
-    assert.equal(output.textContent, '2.5×');
-    speed.value = '3';
-    speed.dispatchEvent({ type: 'input' });
-    assert.equal(output.textContent, '3×');
-    speed.dispatchEvent({ type: 'change' });
-    const saved = JSON.parse(localStorage.getItem(preferences.DEGENERETTE_PREFERENCES_KEY));
-    assert.equal(saved.speed, 3);
-    assert.equal(saved.bets['1'], '500', 'changing reveal speed preserves saved wager sizes');
-
     el.disconnectedCallback();
   });
 
@@ -1345,14 +1325,12 @@ describe('<app-reveal-tray>', () => {
       'the top Pending/logo header is gone');
     assert.equal(el.innerHTML.includes('data-bind="rrt-title"'), false,
       'Pending and Ready title copy is gone');
-    const autoAt = el.innerHTML.indexOf('data-bind="rrt-auto-open"');
-    const speedAt = el.innerHTML.indexOf('data-bind="rrt-speed"');
     const hideAt = el.innerHTML.indexOf('data-bind="rrt-hide"');
     const clearAt = el.innerHTML.indexOf('data-bind="rrt-clear"');
-    assert.ok(autoAt >= 0 && autoAt < speedAt && speedAt < hideAt && hideAt < clearAt,
-      'AUTO and SPEED precede the stacked HIDE and CLEAR controls');
-    assert.match(el.innerHTML, /data-bind="rrt-auto-open"[^>]*>[\s\S]*?<span>AUTO<\/span>/,
-      'the checkbox button uses the concise AUTO label');
+    assert.ok(hideAt >= 0 && hideAt < clearAt,
+      'Pending retains only the stacked HIDE and CLEAR controls');
+    assert.doesNotMatch(el.innerHTML, /rrt-auto-open|rrt-speed/,
+      'AUTO and default speed live exclusively in the top-bar settings menu');
     assert.match(css,
       /\.rrt-tray\s*\{[^}]*grid-template-areas:[^}]*"actions controls"/s,
       'actions and controls share the reclaimed main row');
@@ -1366,11 +1344,11 @@ describe('<app-reveal-tray>', () => {
     assert.doesNotMatch(pendingCss, /var\(--font-display|font:\s*[^;]*\bsans-serif\b/,
       'no Pending sub-control swaps to the display or generic sans fallback');
     assert.match(css,
-      /\.rrt-controls\s*\{[^}]*width:\s*9\.25rem;[^}]*height:\s*var\(--rrt-row-height\);[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 3\.8rem/s,
-      'AUTO/SPEED sit to the left of the action-button column');
+      /\.rrt-controls\s*\{[^}]*display:\s*block;[^}]*width:\s*3\.8rem;[^}]*height:\s*var\(--rrt-row-height\)/s,
+      'the reclaimed control column is only as wide as HIDE/CLEAR');
     assert.match(css,
-      /\.rrt-controls__settings,[\s\S]*?\.rrt-controls__actions\s*\{[^}]*grid-template-rows:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
-      'AUTO over SPEED and HIDE over CLEAR form two aligned stacks');
+      /\.rrt-controls__actions\s*\{[^}]*grid-template-rows:\s*repeat\(2, minmax\(0, 1fr\)\)/s,
+      'HIDE over CLEAR fills the compact action stack');
     assert.ok(
       el.innerHTML.indexOf('class="rrt-rng__flow"')
         < el.innerHTML.indexOf('class="rrt-rng__brand"'),
@@ -1381,16 +1359,10 @@ describe('<app-reveal-tray>', () => {
     assert.match(css, /\.rrt-rng__step\s*\{[^}]*width:\s*0\.44rem[^}]*height:\s*0\.44rem/s,
       'five larger bubbles remain compact beside the logo');
     assert.match(css,
-      /\.rrt-auto-open\s*\{[^}]*height:\s*100%[\s\S]*?\.rrt-speed\s*\{[^}]*height:\s*100%[\s\S]*?\.rrt-hide,[\s\S]*?\.rrt-clear\s*\{[^}]*height:\s*100%/s,
-      'every half-height control fills one of two equal rows within the shared control height');
-    assert.doesNotMatch(css, /\.rrt-auto-open:has\(input:checked\)/,
-      'AUTO does not highlight its whole tile when enabled');
-    assert.match(css,
-      /\.rrt-auto-open input\s*\{[^}]*appearance:\s*none;[^}]*background:\s*transparent/s,
-      'the unchecked AUTO indicator is clear');
-    assert.match(css,
-      /\.rrt-auto-open input:checked\s*\{[^}]*border-color:\s*#4ade80;[^}]*background:\s*#22c55e/s,
-      'only the checked AUTO indicator turns green');
+      /\.rrt-hide,[\s\S]*?\.rrt-clear\s*\{[^}]*height:\s*100%/s,
+      'each remaining control fills one of the two equal rows');
+    assert.doesNotMatch(css, /\.rrt-auto-open|\.rrt-speed/,
+      'retired Pending preference styling is removed with the controls');
     assert.match(css, /\.rrt-action__kind,[\s\S]*?\.rrt-action__detail\s*\{[^}]*clip-path:\s*inset\(50%\)/s,
       'verbose publisher copy remains accessible without being cut off in the visual tray');
     el.disconnectedCallback();

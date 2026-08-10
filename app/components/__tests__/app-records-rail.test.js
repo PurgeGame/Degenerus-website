@@ -19,6 +19,7 @@ const {
   formatRecordValue,
   normalizeRecords,
   recordClaimTarget,
+  recordClaimTargetForMark,
   __resetRecordsReadersForTest,
   __setRecordsReadersForTest,
   shortAddress,
@@ -34,7 +35,16 @@ const {
   addressMonogram,
   addressHue,
   formatCompactBountyWei,
+  formatCompactRecordValue,
+  BIGGEST_SPIN_MAX_SPINS,
+  BIGGEST_SPIN_PRICE_STEP_WEI,
+  orderBiggestRecords,
+  parseRecordBountyEthInput,
+  recordBountyActivationDetail,
+  recordBountySpinSelection,
+  recordBountyTransactionQuote,
 } = await import('../app-records-rail.js');
+const { ETH_DIVISOR } = await import('../../app/chain-config.js');
 
 const INDEX = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 const CSS = readFileSync(new URL('../../styles/records-rail.css', import.meta.url), 'utf8');
@@ -85,7 +95,156 @@ describe('record claim bar', () => {
     assert.equal(candidateClaimsRecord(held, RECORD_KIND_BUY, 121n), false);
     assert.equal(candidateClaimsRecord(held, RECORD_KIND_BUY, 122n), true);
     assert.equal(recordClaimTarget(null, RECORD_KIND_BUY), null);
+    assert.equal(recordClaimTargetForMark(RECORD_KIND_BUY, 101n), 122n);
+    assert.equal(recordClaimTargetForMark(RECORD_KIND_BUY, 0n), 100n);
   });
+});
+
+describe('one-confirm Biggest transaction presets', () => {
+  const state = normalizeRecords({
+    recordPool: String(100_000n * FLIP),
+    records: [{
+      kind: RECORD_KIND_BUY,
+      player: '0xabc',
+      value: '100',
+      barToBeat: '120',
+      clockDay: 10,
+    }],
+  });
+
+  test('quotes the head-chain target and exact ticket cost', () => {
+    const quote = recordBountyTransactionQuote({
+      state,
+      kind: RECORD_KIND_BUY,
+      liveMarkWei: 100n,
+      ticketPriceWei: 10n,
+      today: 20,
+    });
+    assert.equal(quote.targetWei, 120n);
+    assert.equal(quote.costWei, 1_200n);
+    assert.equal(quote.currency, 'ETH');
+    assert.equal(quote.payoutWei, 10_000n * FLIP);
+  });
+
+  test('a newer chain mark replaces a stale API target without inventing its payout', () => {
+    const quote = recordBountyTransactionQuote({
+      state,
+      kind: RECORD_KIND_BUY,
+      liveMarkWei: 125n,
+      ticketPriceWei: 10n,
+      today: 20,
+    });
+    assert.equal(quote.targetWei, 150n);
+    assert.equal(quote.costWei, 1_500n);
+    assert.equal(quote.payoutWei, null, 'the stale indexed clock cannot price the new mark');
+  });
+
+  test('ticket activation carries an explicit whole-ticket count into the guarded buy path', () => {
+    const quote = recordBountyTransactionQuote({
+      state,
+      kind: RECORD_KIND_BUY,
+      liveMarkWei: 100n,
+      ticketPriceWei: 10n,
+      today: 20,
+    });
+    assert.deepEqual(recordBountyActivationDetail(quote), {
+      source: 'records-bounty',
+      variant: 'bounty',
+      submit: true,
+      questType: 1,
+      target: '1200',
+      ticketQuantity: '120',
+      purchaseKind: 'ticket',
+      preferClaimable: true,
+      useAfking: true,
+    });
+  });
+
+  test('splits the Degenerette bounty floor across spins without ever dropping below it', () => {
+    const quote = recordBountyTransactionQuote({
+      state,
+      kind: RECORD_KIND_SPIN,
+      liveMarkWei: 1_000n * BIGGEST_SPIN_PRICE_STEP_WEI,
+      today: 20,
+    });
+    assert.equal(quote.targetWei, 1_200n * BIGGEST_SPIN_PRICE_STEP_WEI);
+    assert.equal(quote.spinCount, 1);
+    assert.equal(quote.amountPerSpinWei, 1_200n * BIGGEST_SPIN_PRICE_STEP_WEI);
+
+    const fiveSpins = recordBountySpinSelection(quote, {
+      spinCount: 5,
+      amountPerSpinWei: 1n,
+    });
+    assert.equal(fiveSpins.minimumPerSpinWei, 240n * BIGGEST_SPIN_PRICE_STEP_WEI);
+    assert.equal(fiveSpins.amountPerSpinWei, 240n * BIGGEST_SPIN_PRICE_STEP_WEI,
+      'a low draft clamps to the live floor');
+    assert.equal(fiveSpins.costWei, 1_200n * BIGGEST_SPIN_PRICE_STEP_WEI);
+    assert.deepEqual(recordBountyActivationDetail(fiveSpins), {
+      source: 'records-bounty',
+      variant: 'bounty',
+      submit: true,
+      questType: 7,
+      target: String(1_200n * BIGGEST_SPIN_PRICE_STEP_WEI),
+      amountPerSpin: String(240n * BIGGEST_SPIN_PRICE_STEP_WEI),
+      spinCount: 5,
+      preferClaimable: true,
+    });
+  });
+
+  test('rounds price per spin upward to .001 ETH and submits its true total', () => {
+    const quote = recordBountyTransactionQuote({
+      state,
+      kind: RECORD_KIND_SPIN,
+      liveMarkWei: 1_000n * BIGGEST_SPIN_PRICE_STEP_WEI,
+      today: 20,
+    });
+    const selected = recordBountySpinSelection(quote, {
+      spinCount: 5,
+      amountPerSpinWei: (300n * BIGGEST_SPIN_PRICE_STEP_WEI) + 1n,
+    });
+    assert.equal(selected.amountPerSpinWei, 301n * BIGGEST_SPIN_PRICE_STEP_WEI);
+    assert.equal(selected.costWei, 1_505n * BIGGEST_SPIN_PRICE_STEP_WEI);
+    assert.equal(
+      recordBountyActivationDetail(selected).target,
+      String(1_505n * BIGGEST_SPIN_PRICE_STEP_WEI),
+    );
+    assert.equal(recordBountyActivationDetail({
+      ...selected,
+      amountPerSpinWei: selected.minimumPerSpinWei - 1n,
+    }), null, 'the activation route rejects a below-floor total defensively');
+    assert.equal(recordBountySpinSelection(quote, {
+      spinCount: BIGGEST_SPIN_MAX_SPINS + 1,
+    }), null);
+  });
+
+  test('rounds a divided bounty floor up to the next .001 ETH notch', () => {
+    const quote = recordBountyTransactionQuote({
+      state,
+      kind: RECORD_KIND_SPIN,
+      liveMarkWei: 1_000n * BIGGEST_SPIN_PRICE_STEP_WEI,
+      today: 20,
+    });
+    const selected = recordBountySpinSelection({
+      ...quote,
+      targetWei: 1_201n * BIGGEST_SPIN_PRICE_STEP_WEI,
+    }, {
+      spinCount: 5,
+      amountPerSpinWei: 0n,
+    });
+    assert.equal(selected.minimumPerSpinWei, 241n * BIGGEST_SPIN_PRICE_STEP_WEI);
+    assert.equal(selected.costWei, 1_205n * BIGGEST_SPIN_PRICE_STEP_WEI);
+  });
+
+  test('parses the popup ETH field at the deployment scale without Number rounding', () => {
+    assert.equal(
+      parseRecordBountyEthInput('1.25'),
+      (125n * 10n ** 16n) / BigInt(ETH_DIVISOR),
+    );
+    assert.equal(parseRecordBountyEthInput('.000000000000000001'), 1n / BigInt(ETH_DIVISOR));
+    assert.equal(parseRecordBountyEthInput('.'), null);
+    assert.equal(parseRecordBountyEthInput('1.0000000000000000001'), null);
+  });
+
 });
 
 describe('record units are never interchangeable', () => {
@@ -116,6 +275,26 @@ describe('record units are never interchangeable', () => {
     assert.equal(formatCompactBountyWei(999_999n * FLIP), '1M');
   });
 
+  test('compact leaders truncate long records without overstating the exact mark', () => {
+    assert.deepEqual(formatCompactRecordValue(RECORD_KIND_BUY, 3_968n), {
+      amount: '3.9K',
+      suffix: 'TIX',
+    });
+    assert.deepEqual(formatCompactRecordValue(RECORD_KIND_FLIP, 8_497_000n * FLIP), {
+      amount: '8.4M',
+      suffix: 'FLIP',
+    });
+    assert.equal(formatRecordValue(RECORD_KIND_BUY, 3_968n).amount, '3,968',
+      'the expanded card keeps the exact record');
+  });
+
+  test('the Biggest widget puts Pack Ripped third and FLIP last', () => {
+    const records = [0, 1, 2, 3].map((kind) => ({ kind }));
+    assert.deepEqual(orderBiggestRecords(records).map((record) => record.kind), [1, 2, 3, 0]);
+    assert.deepEqual(records.map((record) => record.kind), [0, 1, 2, 3],
+      'display sorting does not mutate the authoritative record snapshot');
+  });
+
   test('every kind has presentation facts and a stated entry floor', () => {
     assert.equal(RECORD_KINDS.length, 4);
     for (const meta of RECORD_KINDS) {
@@ -126,7 +305,13 @@ describe('record units are never interchangeable', () => {
       'BIGGEST FLIP',
       'BIGGEST DEGENERETTE',
       'BIGGEST LUCKBOX',
-      'BIGGEST DEGEN',
+      'BIGGEST PACK RIPPED',
+    ]);
+    assert.deepEqual(RECORD_KINDS.map((meta) => meta.short), [
+      'FLIP',
+      'DEGENERETTE',
+      'LUCKBOX',
+      'PACK RIPPED',
     ]);
     assert.deepEqual(RECORD_KINDS.map((meta) => meta.floorText), [
       '200,000 FLIP',
@@ -337,10 +522,15 @@ describe('holder identity', () => {
 });
 
 describe('rail wiring', () => {
-  test('presents the board as The Biggest Bounty with explicit data labels', () => {
-    assert.match(COMPONENT, /records-rail__title-name">THE BIGGEST/);
-    assert.match(COMPONENT, /records-rail__title-descriptor">BOUNTY/);
-    assert.match(COMPONENT, /4 ALL-TIME RECORDS/);
+  test('presents the board with the plural Biggest Bounties wordmark and explicit data labels', () => {
+    assert.match(COMPONENT, /records-rail__wordmark[^>]*id="records-rail-title"[^>]*aria-label="The Biggest Bounties"/);
+    assert.match(COMPONENT, /src="\/app\/assets\/biggest-bounty-wordmark-v4-bounties\.png"/);
+    assert.doesNotMatch(COMPONENT, /records-rail__title-(?:name|descriptor)/,
+      'the generated wordmark replaces the old duplicate text treatment');
+    assert.match(CSS, /records-rail__wordmark img\s*\{[^}]*width:\s*100%[^}]*max-height:\s*3\.85rem/s,
+      'the wordmark is constrained to the collapsed rail instead of increasing its height');
+    assert.doesNotMatch(COMPONENT, /4 ALL-TIME RECORDS/,
+      'the wordmark stands alone without a redundant record-count subtitle');
     for (const label of [
       'CURRENT RECORD', 'HELD BY', 'TARGET TO CLAIM', 'PAYOUT NOW',
       'CURRENT BOUNTY', 'MIN TO HIT',
@@ -357,13 +547,35 @@ describe('rail wiring', () => {
     assert.match(COMPONENT, /leaders\.appendChild\(this\.#renderLeader\(record\)\)/);
     assert.match(COMPONENT, /this\.#portrait\(record\.player, profile\)/);
     assert.match(COMPONENT, /record\.meta\.short/);
-    assert.match(COMPONENT, /value\.amount/);
-    assert.match(COMPONENT, /record\.meta\.unit === 'flip' \? '' : value\.suffix/,
-      'the FLIP record does not repeat its already-labeled currency');
+    assert.match(COMPONENT, /formatCompactRecordValue\(record\.kind, record\.value\)/);
+    assert.match(COMPONENT, /compactValue\.amount/);
+    assert.match(COMPONENT, /compactValue\.suffix/,
+      'compact leaders use short units while expanded cards keep exact units');
+    assert.match(COMPONENT, /: 'UNHIT'/,
+      'an open compact record is identified without repeating its minimum');
+    assert.doesNotMatch(COMPONENT, /<i>MIN<\/i>/,
+      'the collapsed Biggest Bounties row leaves exact entry floors to expanded details');
     assert.match(COMPONENT, /records-rail__bounty-sight/);
+    assert.match(COMPONENT, /document\.createElement\('button'\)/,
+      'each compact record bubble is a real keyboard-accessible action');
+    assert.match(COMPONENT, /this\.#openBountyDialog\(record\.kind\)/);
+    assert.match(COMPONENT, /FLIP_LOGO = '\/whitepaper\/flame-logo-split\.svg'/);
+    assert.match(COMPONENT, /records-rail__pot-label">BOUNTY POOL/);
+    assert.match(COMPONENT, /records-rail__pot-logo/,
+      'the main bounty pool total uses the FLIP mark instead of a FLIP word');
+    assert.match(COMPONENT, /records-rail__pot-logo[\s\S]*data-bind="records-pool"/,
+      'the plain FLIP mark leads the bounty amount');
+    assert.doesNotMatch(COMPONENT, /records-rail__pot-mark/,
+      'the main pool logo has no crosshair treatment');
+    assert.doesNotMatch(COMPONENT, /records-rail__bounty-logo/,
+      'the small crosshair payouts stay numeric and uncluttered');
+    assert.match(CSS, /records-rail__pot-logo\s*\{[^}]*width:\s*1\.45rem/s);
     assert.match(COMPONENT, /records-rail__leader-label[\s\S]*?<small>BIGGEST<\/small>[\s\S]*?record\.meta\.short/);
-    assert.match(CSS, /records-rail__leader-label > small\s*\{[^}]*clamp\(0\.56rem, 0\.75vw, 0\.64rem\)/s,
+    assert.match(CSS, /records-rail__leader-label > small\s*\{[^}]*clamp\(0\.64rem, 0\.82vw, 0\.72rem\)/s,
       'BIGGEST is the dominant, readable line in every compact record bubble');
+    assert.match(CSS, /records-rail__leader-value\s*\{[^}]*clamp\(0\.78rem, 1\.1vw, 0\.9rem\)/s);
+    assert.match(CSS, /records-rail__bounty-sight > b\s*\{[^}]*0\.6rem/s,
+      'both the record and its compact bounty amount are deliberately enlarged');
     assert.doesNotMatch(COMPONENT, /records-rail__bounty-sight-copy/,
       'BIGGEST belongs with the record name, not inside its payout bubble');
     assert.match(COMPONENT, /records-rail__crosshair/);
@@ -371,6 +583,39 @@ describe('rail wiring', () => {
     assert.match(CSS, /\.records-rail__crosshair::before/);
     assert.match(CSS, /\.records-rail__target\s*\{[^}]*position:\s*relative/s);
     assert.match(COMPONENT, /records-rail__expanded/);
+    assert.match(COMPONENT, /records-bounty-dialog/);
+    assert.match(COMPONENT, /THE BIGGEST BOUNTY/);
+    assert.match(COMPONENT, /BOUNTY ON THE LINE/);
+    assert.match(COMPONENT, /records-bounty-dialog__headline/,
+      'the live bounty is the popup headline rather than a small side card');
+    assert.match(COMPONENT, /records-bounty-confirm-action/);
+    assert.match(COMPONENT, /records-bounty-confirm-amount/,
+      'the exact transaction amount lives in the confirm action');
+    assert.match(COMPONENT, /data-bind="records-bounty-spins"/,
+      'Degenerette bounties expose a bounded spin-count control');
+    assert.match(COMPONENT, /data-bind="records-bounty-spin-price"/,
+      'Degenerette bounties expose a separate ETH price-per-spin field');
+    assert.match(COMPONENT, /recordBountySpinSelection/,
+      'spin edits are normalized against the live total bounty floor');
+    assert.match(COMPONENT, /PRICE BELOW BOUNTY FLOOR/);
+    assert.match(CSS, /records-bounty-dialog__spin-controls\.is-invalid/,
+      'a below-floor draft is visibly rejected as well as transaction-blocked');
+    assert.doesNotMatch(COMPONENT, /records-bounty-dialog__confirm"[\s\S]{0,160}<img/,
+      'the transaction CTA does not mislabel an ETH spend with the FLIP bounty mark');
+    assert.doesNotMatch(COMPONENT, /records-bounty-(?:target|cost|available)"/,
+      'the popup does not repeat the amount or expose the player balance');
+    assert.doesNotMatch(COMPONENT, /AVAILABLE TO SPEND|NEED .* AVAILABLE/,
+      'balance copy stays out of both the popup and its insufficient-funds notice');
+    assert.doesNotMatch(COMPONENT, /recordBountyAffordability|_readWalletBalance|WALLET READY|quote\.funds/,
+      'the shortcut does not guess wallet affordability before opening the real transaction path');
+    assert.match(COMPONENT, /action: `BUY \$\{tickets\}`[\s\S]*?amount: fullCost/,
+      'ticket confirmation keeps its distinct ticket count and ETH cost together in the CTA');
+    assert.match(COMPONENT, /readLiveRecordMark/,
+      'the confirmation target is refreshed directly from chain');
+    assert.match(COMPONENT, /TARGET OR PRICE MOVED · REVIEW THE UPDATED TX/,
+      'a moved target must be reviewed rather than silently submitted');
+    assert.doesNotMatch(COMPONENT, /\+2,000 FLIP<\/b> every unbroken day/,
+      'the inaccurate fixed daily-growth claim is gone');
     assert.doesNotMatch(COMPONENT, /<details class="records-rail__disclosure" open/,
       'full details should start collapsed');
     assert.match(CSS, /records-rail__disclosure\[open\].*records-rail__chevron/s);

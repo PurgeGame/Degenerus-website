@@ -342,7 +342,7 @@ export function transitionJackpotCountdownModel({
     return { kind: 'both', label: 'DECIMATOR + BIG ASS FLIP LOCK IN:', level: target };
   }
   return decimator
-    ? { kind: 'decimator', label: 'DECIMATOR CROSSOVER IN:', level: target }
+    ? { kind: 'decimator', label: 'DECIMATOR DRAWING IN:', level: target }
     : { kind: 'baf', label: 'BIG ASS FLIP LOCKS IN:', level: target };
 }
 
@@ -452,6 +452,23 @@ function _formatMarkerEth(raw) {
   const [whole, fraction = ''] = displayEth(value, 2).split('.');
   const trimmed = fraction.replace(/0+$/, '');
   return `${_groupWhole(whole)}${trimmed ? `.${trimmed}` : ''}`;
+}
+
+/**
+ * The current target keeps its stronger ruler styling after completion, but
+ * its tooltip joins the completed-level vocabulary used by every other notch.
+ */
+export function poolTargetMarkerLabel({ level, targetWei, complete = false } = {}) {
+  const levelLabel = level == null ? 'Current level' : `Level ${level}`;
+  const target = _wei(targetWei);
+  if (complete) {
+    return target == null
+      ? `${levelLabel} final prize pool`
+      : `${levelLabel} final prize pool · ${_formatMarkerEth(target)} ETH`;
+  }
+  return target == null
+    ? `${levelLabel} guarantee`
+    : `${levelLabel} guarantee · ${_formatMarkerEth(target)} ETH prize pool`;
 }
 
 function _formatGrowth(value) {
@@ -784,10 +801,11 @@ class AppPoolProgress extends HTMLElement {
       fill.style.backgroundSize = `${span}% 100%`;
     }
     const levelLabel = phase.level == null ? 'Current level' : `Level ${phase.level}`;
-    this.#setMarker('pool-target-marker', model.targetPercent,
-      model.target == null
-        ? `${levelLabel} guarantee`
-        : `${levelLabel} guarantee · ${_formatMarkerEth(model.target)} ETH prize pool`);
+    this.#setMarker('pool-target-marker', model.targetPercent, poolTargetMarkerLabel({
+      level: phase.level,
+      targetWei: model.target,
+      complete: model.levelReady,
+    }));
     this.#setMarker('pool-growth-marker', model.growthPercent,
       model.growthTarget == null
         ? `${levelLabel} growth O/U`

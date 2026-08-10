@@ -11,11 +11,12 @@
 //
 // So inside /app/ the nav's Discord button is REPLACED (same pattern as
 // nav-wallet.js: clone the node, retire the id so nav.js's updateDiscordBtn()
-// null-guards out) with one that binds the connected wallet into the session
-// (nonce → personal_sign → verify, EIP-191 to match the server's ethers
-// verifyMessage) before or after the OAuth leg, so whichever side connects
-// second completes the link. LAZY: no request and no signature prompt until
-// the user clicks the button.
+// null-guards out) with one that proves the connected wallet before OAuth. The
+// verify response includes a short-lived, one-use link ticket which is carried
+// into /auth/discord. That ticket is important: popup/top-level cookies can be
+// separate from the app's fetch cookies (especially on localhost), so relying
+// on both identities landing in one browser session silently loses the link.
+// LAZY: no request and no signature prompt until the user clicks the button.
 //
 // States: no discord session → "Discord" (click: bind wallet if connected,
 // then OAuth). Discord session + connected wallet not yet linked → "Link
@@ -33,6 +34,7 @@ const NAV_BTN_ID = 'unav-discord';
 const APP_BTN_ID = 'unav-discord-app';
 const MOUNT_RETRY_MS = 100;
 const MOUNT_RETRIES = 30;
+const PROFILE_LINKED_EVENT = 'degenerus:discord-profile-linked';
 
 let _btn = null;
 let _busy = false;
@@ -97,6 +99,15 @@ function _render() {
   _btn.classList.add('connected');
 }
 
+function _announceProfileRefresh(address) {
+  if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+  try {
+    document.dispatchEvent(new CustomEvent(PROFILE_LINKED_EVENT, {
+      detail: { address: String(address || '').toLowerCase() || null },
+    }));
+  } catch (_e) { /* an older/fake DOM can wait for the normal records poll */ }
+}
+
 /** Bind the connected wallet into the api.degener.us session (one signature).
  *  The server copies the session's discord user onto the row when present. */
 async function _bindWallet(address) {
@@ -107,14 +118,27 @@ async function _bindWallet(address) {
     method: 'personal_sign',
     params: [_toHex(message), address],
   });
-  const { player } = await _postJson('/api/wallet/verify', { address, signature });
+  const { player, discordLinkToken } = await _postJson('/api/wallet/verify', { address, signature });
   _sessionPlayer = player ?? null;
+  return typeof discordLinkToken === 'string' && discordLinkToken
+    ? discordLinkToken
+    : null;
 }
 
 async function _refresh() {
   const me = await _getJson('/auth/discord/me').catch(() => null);
-  _discordUser = me && me.user ? me.user : null;
   _sessionPlayer = (await _getJson('/api/player').catch(() => null))?.player ?? null;
+  // The OAuth popup and the app fetch can legitimately hold different cookies.
+  // Once the one-use ticket has joined the DB row, /api/player is sufficient to
+  // show the linked state even when /auth/discord/me belongs to the popup cookie.
+  _discordUser = me && me.user
+    ? me.user
+    : _sessionPlayer?.discord_id
+      ? {
+          username: _sessionPlayer.discord_name || 'Discord',
+          avatarUrl: _sessionPlayer.discord_avatar || null,
+        }
+      : null;
 }
 
 async function _onClick() {
@@ -130,17 +154,31 @@ async function _onClick() {
       authTab = window.open('about:blank', '_blank');
       if (authTab) authTab.opener = null;
     } catch (_e) { /* popup policy fallback below */ }
+    let discordLinkToken = null;
     if (addr) {
       _busy = true; _render();
-      try { await _bindWallet(addr); } catch { /* still worth doing OAuth */ }
+      try {
+        discordLinkToken = await _bindWallet(addr);
+        if (!discordLinkToken) throw new Error('session API did not issue a Discord link ticket');
+      } catch (err) {
+        // Do not open a Discord-only session and call it linked. That was the
+        // old failure mode: OAuth looked successful, but bounty portraits had
+        // no wallet-keyed profile to load.
+        console.error('[discord-link]', err);
+        try { authTab?.close?.(); } catch (_e) { /* popup may already be gone */ }
+        _busy = false; _render();
+        return;
+      }
     }
-    const authUrl = SESSION_API + '/auth/discord';
+    const authUrl = new URL(SESSION_API + '/auth/discord');
+    if (discordLinkToken) authUrl.searchParams.set('walletLink', discordLinkToken);
     try {
-      if (authTab && !authTab.closed) authTab.location.href = authUrl;
-      else window.open(authUrl, '_blank', 'noopener');
+      if (authTab && !authTab.closed) authTab.location.href = authUrl.toString();
+      else window.open(authUrl.toString(), '_blank', 'noopener');
     } catch (_e) {
-      window.open(authUrl, '_blank', 'noopener');
+      window.open(authUrl.toString(), '_blank', 'noopener');
     }
+    _busy = false; _render();
     return;
   }
 
@@ -150,6 +188,7 @@ async function _onClick() {
     try {
       await _bindWallet(addr);
       await _refresh();
+      _announceProfileRefresh(addr);
     } catch (err) {
       console.error('[discord-link]', err);
     }
@@ -178,7 +217,12 @@ function _mount() {
     && typeof window.addEventListener === 'function') {
     _focusListener = () => {
       if (!_btn) return;
-      _refresh().then(_render).catch(() => _render());
+      _refresh()
+        .then(() => {
+          _render();
+          _announceProfileRefresh(get('connected.address'));
+        })
+        .catch(() => _render());
     };
     window.addEventListener('focus', _focusListener);
   }

@@ -2414,8 +2414,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
       /\.df-next-bet \.df-flip-cta\s*\{[^}]*background:\s*linear-gradient\(180deg, #fde68a, #f59e0b\)/s,
       'Add Bet uses the yellow FLIP action treatment');
     assert.match(APP_CSS,
-      /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*width:\s*3\.55rem[^}]*min-width:\s*3\.55rem[^}]*max-width:\s*3\.55rem/s,
-      'Add Bet uses one fixed compact footprint');
+      /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*width:\s*3rem[^}]*min-width:\s*3rem[^}]*max-width:\s*3rem/s,
+      'Add Bet uses the same compact footprint as Claim');
     assert.match(APP_CSS,
       /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*align-self:\s*center/s,
       'the compressed Add Bet action is vertically centered');
@@ -2431,8 +2431,8 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.doesNotMatch(APP_CSS, /\.df-player-fund-actions|\.df-player-fund-widget/,
       'the removed three-widget strip leaves no dormant styling behind');
     assert.match(APP_CSS,
-      /\.app-daily-flip :is\([\s\S]*?\.df-next-bet \.df-flip-cta\[data-write\],[\s\S]*?\.df-funds \.df-claim-flip-cta\[data-write\][\s\S]*?\)\s*\{[^}]*width:\s*3\.55rem[^}]*min-width:\s*3\.55rem[^}]*max-width:\s*3\.55rem/s,
-      'the right-side Claim is exactly the same width as Add Bet');
+      /\.app-daily-flip \.df-next-bet \.df-flip-cta\[data-write\],[\s\S]*?\.app-daily-flip \.df-funds \.df-claim-flip-cta\[data-write\]\s*\{[^}]*width:\s*3rem[^}]*min-width:\s*3rem[^}]*max-width:\s*3rem/s,
+      'Add Bet and Protocol Coins Claim share one exact footprint');
     assert.match(APP_CSS,
       /\.app-daily-flip \.df-next-bet \.df-flip-cta\[data-write\],[\s\S]*?height:\s*1\.3rem/s,
       'Add Bet participates in the shared action-control rule');

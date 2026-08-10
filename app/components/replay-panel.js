@@ -13,6 +13,7 @@ import {
   buildRoll2BucketSummaries,
   splitOpeningFlipDraw,
 } from '../app/jackpot-buckets.js';
+import { winningBadgeLayout } from '../app/jackpot-badge-layout.js';
 // SHELL-01 patch (Phase 52 followup, mirrors D-09 from jackpot-panel.js):
 // swap the wallet-tainted utils.js import for the wallet-free viewer/utils.js
 // equivalents so play/ can consume this component via a recursive-import walk
@@ -100,10 +101,6 @@ const FINAL_LOCK_SETTLE_MS = 260;
 // the ticket's outer edge (top for TL/TR, bottom for BL/BR); badges stay in the
 // remaining art band beside the center diamond instead of being scattered
 // underneath the payout copy.
-const WIN_RECEIPT_BAND_PERCENT = 40;
-const WIN_ART_GAP_PERCENT = 2;
-const WIN_ART_EDGE_GUTTER_PERCENT = 3;
-const WIN_BADGE_MAX_PERCENT = 52;
 const BUCKET_REVEAL_POSITION_CLASSES = [
   'replay-bucket-reveal--q0',
   'replay-bucket-reveal--q1',
@@ -163,6 +160,68 @@ function gridCoverage(grid) {
 function formatPrizeAmount(weiString, currency) {
   if (currency === 'FLIP') return formatFlip(weiString);
   return formatEth(weiString);
+}
+
+function positiveBigInt(value) {
+  try {
+    const parsed = BigInt(value || 0);
+    return parsed > 0n ? parsed : 0n;
+  } catch (_error) {
+    return 0n;
+  }
+}
+
+/** Compact icon-and-amount rows shown the first time a paid badge is hovered. */
+export function winningBadgeRewardLines(win = {}) {
+  const rows = [];
+  const awardType = String(win.awardType || '').toLowerCase();
+  const eth = positiveBigInt(win.ethTotal ?? (awardType === 'eth' ? win.amount : 0));
+  const flip = positiveBigInt(win.flipTotal ?? (
+    ['flip', 'farfuturecoin'].includes(awardType) ? win.amount : 0
+  ));
+  const rawTicketEntries = Number(win.ticketTotal ?? (
+    ['ticket', 'tickets'].includes(awardType) ? win.amount : 0
+  ));
+  const tickets = Number.isFinite(rawTicketEntries) && rawTicketEntries > 0
+    ? joScaledToTickets(rawTicketEntries)
+    : 0;
+  if (eth > 0n) {
+    const amount = win.isSolo
+      ? formatEthTruncated(eth.toString())
+      : formatEth(eth.toString());
+    rows.push({ kind: 'eth', amount, aria: `${amount} ETH` });
+  }
+  if (flip > 0n) {
+    const amount = formatFlip(flip.toString());
+    rows.push({ kind: 'flip', amount, aria: `${amount} FLIP` });
+  }
+  if (tickets > 0) {
+    const amount = tickets.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    rows.push({ kind: 'tickets', amount, aria: `${amount} ticket${tickets === 1 ? '' : 's'}` });
+  }
+  return rows;
+}
+
+/** Miniature four-trait ticket shared by jackpot receipts and badge popups. */
+function createJackpotTicketIcon(extraClass = '') {
+  const ticketIcon = document.createElement('span');
+  ticketIcon.className = `replay-bucket-ticket-icon ${extraClass}`.trim();
+  ticketIcon.setAttribute('aria-hidden', 'true');
+  [1, 74, 147, 228].forEach((traitId, miniQ) => {
+    const miniBadge = traitToBadge(traitId);
+    if (!miniBadge) return;
+    const miniBadgeImg = document.createElement('img');
+    miniBadgeImg.className = `replay-bucket-ticket-badge replay-bucket-ticket-badge--q${miniQ}`;
+    miniBadgeImg.src = miniBadge.path;
+    miniBadgeImg.alt = '';
+    ticketIcon.appendChild(miniBadgeImg);
+  });
+  const ticketFlame = document.createElement('img');
+  ticketFlame.className = 'replay-bucket-ticket-flame';
+  ticketFlame.src = '/whitepaper/flame-center.svg';
+  ticketFlame.alt = '';
+  ticketIcon.appendChild(ticketFlame);
+  return ticketIcon;
 }
 
 // --- Component ---
@@ -782,6 +841,16 @@ class ReplayPanel extends HTMLElement {
   #syncSpinControlState() {
     const btn = this.querySelector?.('[data-bind="reveal-btn"]');
     if (!btn) return;
+    // Contract/indexer polling continues while the reels animate. Those
+    // refreshes own the processing labels, but they must never repaint an
+    // already-running main or bonus action back to its idle CTA. The class is
+    // set before the async trait reads begin, while #spinning covers the reel
+    // loop itself, so together they close both sides of that race.
+    if (this.#spinning || btn.classList?.contains('is-spinning')) {
+      btn.disabled = true;
+      btn.setAttribute?.('aria-busy', 'true');
+      return;
+    }
     const decimator = this.#primaryDecimatorAction;
     if (decimator) {
       const busy = this.#primaryDecimatorBusy || decimator.state === 'busy';
@@ -2123,6 +2192,7 @@ class ReplayPanel extends HTMLElement {
     const completed = await this.#runSpin(displayTraits, { instant, announce: !persisted });
     if (!completed || this.#selectionKey() !== selectionKey) return false;
     btn.classList?.remove('is-spinning');
+    btn.removeAttribute?.('aria-busy');
 
     if (this.#singleButton()) {
       // Same button carries Roll 2; with no bonus ahead the day is played out.
@@ -2428,6 +2498,7 @@ class ReplayPanel extends HTMLElement {
     const completed = await this.#runSpin(displayTraits);
     if (!completed || this.#selectionKey() !== selectionKey || !this.#bonusPhase) return false;
     btn?.classList?.remove('is-spinning');
+    btn?.removeAttribute?.('aria-busy');
 
     if (btn) {
       if (this.#singleButton()) {
@@ -3241,28 +3312,12 @@ class ReplayPanel extends HTMLElement {
       const perWinnerTickets = document.createElement('span');
       perWinnerTickets.className = 'replay-bucket-ticket-count';
       perWinnerTickets.textContent = ticketCountLabel;
-      const ticketIcon = document.createElement('span');
-      ticketIcon.className = 'replay-bucket-ticket-icon';
-      ticketIcon.setAttribute('aria-hidden', 'true');
       // Keep the award icon recognizably Degenerus at its tiny display size: it
       // is a complete four-badge ticket, not a blank admission-ticket glyph.
       // Mix both symbol and color across the four quadrants. The old 0/64/128/192
       // sample picked color slot zero four times, so the award looked like four
       // copies of the same pink/red ticket rather than a real inventory ticket.
-      [1, 74, 147, 228].forEach((traitId, miniQ) => {
-        const miniBadge = traitToBadge(traitId);
-        if (!miniBadge) return;
-        const miniBadgeImg = document.createElement('img');
-        miniBadgeImg.className = `replay-bucket-ticket-badge replay-bucket-ticket-badge--q${miniQ}`;
-        miniBadgeImg.src = miniBadge.path;
-        miniBadgeImg.alt = '';
-        ticketIcon.appendChild(miniBadgeImg);
-      });
-      const ticketFlame = document.createElement('img');
-      ticketFlame.className = 'replay-bucket-ticket-flame';
-      ticketFlame.src = '/whitepaper/flame-center.svg';
-      ticketFlame.alt = '';
-      ticketIcon.appendChild(ticketFlame);
+      const ticketIcon = createJackpotTicketIcon();
       tickets.appendChild(perWinnerTickets);
       tickets.appendChild(ticketIcon);
       const ticketWinners = document.createElement('span');
@@ -3667,8 +3722,12 @@ class ReplayPanel extends HTMLElement {
 
     if (prize) {
       const totalFlip = this.#centerWins.reduce((s, d) => s + BigInt(d.amount || '0'), 0n);
-      const amountStr = formatFlip(totalFlip.toString()) + ' FLIP';
-      prize.innerHTML = `<span class="ff-amount">${amountStr}</span><span class="ff-label">Far Future</span>`;
+      const amountStr = formatFlip(totalFlip.toString());
+      prize.innerHTML = `
+        <img class="ff-logo" src="/whitepaper/flame-logo-split.svg" alt="" aria-hidden="true">
+        <span class="ff-amount">${amountStr}</span>
+        <span class="ff-label">BONUS</span>`;
+      prize.setAttribute('aria-label', `${amountStr} FLIP bonus`);
       prize.style.display = 'flex';
       prize.classList.remove('visible');
       if (instant) prize.classList.add('visible');
@@ -3721,6 +3780,7 @@ class ReplayPanel extends HTMLElement {
     quad.classList.add('q-result-revealed');
     if (isWin) {
       quad.classList.add('q-has-tickets');
+      for (const badge of quad.querySelectorAll('.replay-badge-wrap')) badge.tabIndex = 0;
     } else {
       quad.classList.add('q-no-tickets');
       // Show main badge again for non-win owned quadrants
@@ -3826,21 +3886,12 @@ class ReplayPanel extends HTMLElement {
     if (!wins || wins.length === 0) return;
 
     // Separate overflow sentinel (awardType='overflow') from real badge entries
-    const overflowEntry = wins.find(w => w.awardType === 'overflow');
     const realWins = wins.filter(w => w.awardType !== 'overflow');
     if (realWins.length === 0) return;
 
     // Default badge for this quadrant (used for wins without traitId)
     const defaultBadge = traitToBadge(traitId);
     const defaultPath = defaultBadge ? defaultBadge.path : '';
-    const count = realWins.length;
-    let maxSize, minSize;
-    if (count === 1) { minSize = 30; maxSize = 65; }
-    else if (count <= 3) { minSize = 25; maxSize = 50; }
-    else if (count <= 8) { minSize = 18; maxSize = 35; }
-    else { minSize = 14; maxSize = 26; }
-
-    const placed = [];
     const allBounds = [];
     // Solo-bucket entry (ETH + whale_pass + dgnrs merged) gets a dominant badge.
     // Scale up more aggressively when the solo ETH slice is large — main
@@ -3855,63 +3906,21 @@ class ReplayPanel extends HTMLElement {
       : soloEthFloatEth >= 1 ? 85
       : soloEthFloatEth >= 0.1 ? 75
       : 65;
-    const topRow = qIdx < 2;
-    const leftColumn = qIdx % 2 === 0;
-    const artStart = topRow
-      ? WIN_RECEIPT_BAND_PERCENT + WIN_ART_GAP_PERCENT
-      : WIN_ART_EDGE_GUTTER_PERCENT;
-    const artEnd = topRow
-      ? 100 - WIN_ART_EDGE_GUTTER_PERCENT
-      : 100 - WIN_RECEIPT_BAND_PERCENT - WIN_ART_GAP_PERCENT;
+    // Pack badges into stable cells inside the art band. Cells are 6% larger
+    // than their stride at most, retaining a hint of the old scatter while
+    // preventing one result from covering most of another.
+    const layout = winningBadgeLayout({
+      count: realWins.length,
+      quadrant: qIdx,
+      soloIndex: soloIdx,
+      soloSize,
+    });
     for (let w = 0; w < realWins.length; w++) {
-      let sizePct = minSize + (w / Math.max(1, realWins.length - 1)) * (maxSize - minSize);
-      if (realWins.length === 1) sizePct = maxSize;
-      if (w === soloIdx) sizePct = soloSize;
-      // Even a huge solo payout must leave its receipt readable. The badge is
-      // still the dominant art in the complementary band, just no longer 75–95%
-      // of the entire quadrant underneath the words.
-      sizePct = Math.min(sizePct, WIN_BADGE_MAX_PERCENT, artEnd - artStart);
-      let bestLeft = null, bestTop = null, bestOverlap = Infinity;
-      const maxTop = Math.max(artStart, artEnd - sizePct);
-      const attempts = realWins.length === 1 ? 1 : 50;
-      for (let a = 0; a < attempts; a++) {
-        // A single win gets a stable hero position at the outer side. Multiple
-        // wins retain their loose scatter, but only inside the dedicated art
-        // band and with a penalty for crossing under the center diamond.
-        const tryLeft = realWins.length === 1
-          ? (leftColumn ? WIN_ART_EDGE_GUTTER_PERCENT : 100 - WIN_ART_EDGE_GUTTER_PERCENT - sizePct)
-          : WIN_ART_EDGE_GUTTER_PERCENT
-            + Math.random() * Math.max(0, 100 - (2 * WIN_ART_EDGE_GUTTER_PERCENT) - sizePct);
-        const tryTop = realWins.length === 1
-          ? artStart + (artEnd - artStart - sizePct) / 2
-          : artStart + Math.random() * Math.max(0, maxTop - artStart);
-        const tryCX = tryLeft + sizePct / 2, tryCY = tryTop + sizePct / 2;
-        let overlap = 0;
-        for (const p of placed) {
-          const dx = tryCX - p.cx, dy = tryCY - p.cy;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const minDist = (sizePct + p.size) / 2;
-          if (dist < minDist) overlap += minDist - dist;
-        }
-        // The center diamond occupies the inner 28% corner of each quadrant.
-        // Prefer the available outer side before accepting art underneath it.
-        const diamondLeft = leftColumn ? 72 : 0;
-        const diamondRight = leftColumn ? 100 : 28;
-        const diamondTop = topRow ? 72 : 0;
-        const diamondBottom = topRow ? 100 : 28;
-        const diamondOverlapW = Math.max(
-          0,
-          Math.min(tryLeft + sizePct, diamondRight) - Math.max(tryLeft, diamondLeft),
-        );
-        const diamondOverlapH = Math.max(
-          0,
-          Math.min(tryTop + sizePct, diamondBottom) - Math.max(tryTop, diamondTop),
-        );
-        overlap += Math.sqrt(diamondOverlapW * diamondOverlapH) * 2;
-        if (overlap < bestOverlap) { bestOverlap = overlap; bestLeft = tryLeft; bestTop = tryTop; }
-        if (overlap === 0) break;
-      }
-      placed.push({ cx: bestLeft + sizePct / 2, cy: bestTop + sizePct / 2, size: sizePct });
+      const position = layout[w];
+      if (!position) continue;
+      const sizePct = position.size;
+      const bestLeft = position.left;
+      const bestTop = position.top;
       allBounds.push({ left: bestLeft, top: bestTop, right: bestLeft + sizePct, bottom: bestTop + sizePct });
 
       // Use each win's own traitId for its badge; fall back to quadrant default
@@ -3920,12 +3929,57 @@ class ReplayPanel extends HTMLElement {
 
       const wrap = document.createElement('div');
       wrap.className = 'replay-badge-wrap';
+      wrap.tabIndex = -1;
       wrap.style.width = sizePct + '%';
       wrap.style.left = bestLeft + '%';
       wrap.style.top = bestTop + '%';
+      const horizontalCenter = bestLeft + sizePct / 2;
+      wrap.dataset.rewardAlign = horizontalCenter < 30 ? 'left' : horizontalCenter > 70 ? 'right' : 'center';
+      wrap.dataset.rewardSide = bestTop + sizePct / 2 < 50 ? 'below' : 'above';
       const img = document.createElement('img');
       img.src = winPath; img.className = 'replay-scattered-badge'; img.alt = '';
       wrap.appendChild(img);
+      const rewardLines = winningBadgeRewardLines(realWins[w]);
+      if (rewardLines.length > 0) {
+        wrap.setAttribute('role', 'img');
+        wrap.setAttribute('aria-label', `Winning badge: ${rewardLines.map((line) => line.aria).join(', ')}`);
+        const reward = document.createElement('span');
+        reward.className = 'replay-badge-reward-pop';
+        reward.setAttribute('aria-hidden', 'true');
+        for (const line of rewardLines) {
+          const row = document.createElement('span');
+          row.className = `replay-badge-reward-pop__row replay-badge-reward-pop__row--${line.kind}`;
+          if (line.kind === 'tickets') {
+            row.appendChild(createJackpotTicketIcon('replay-badge-reward-pop__ticket'));
+          } else {
+            const icon = document.createElement('img');
+            icon.className = 'replay-badge-reward-pop__icon';
+            icon.src = line.kind === 'flip'
+              ? '/whitepaper/flame-logo-split.svg'
+              : '/symbols/crypto_06_ethereum_silver.svg';
+            icon.alt = '';
+            row.appendChild(icon);
+          }
+          const amount = document.createElement('b');
+          amount.textContent = line.amount;
+          row.appendChild(amount);
+          reward.appendChild(row);
+        }
+        wrap.appendChild(reward);
+        const showReward = () => {
+          if (wrap.dataset.rewardShown === 'true') return;
+          wrap.dataset.rewardShown = 'true';
+          for (const active of this.querySelectorAll('.replay-badge-wrap.is-reward-pop')) {
+            active.classList.remove('is-reward-pop');
+          }
+          wrap.classList.add('is-reward-pop');
+        };
+        wrap.addEventListener('mouseenter', showReward, { once: true });
+        wrap.addEventListener('focus', showReward, { once: true });
+        reward.addEventListener('animationend', () => {
+          wrap.classList.remove('is-reward-pop');
+        }, { once: true });
+      }
       quad.appendChild(wrap);
     }
 
@@ -4015,6 +4069,7 @@ class ReplayPanel extends HTMLElement {
     if (revealBtn) {
       revealBtn.hidden = false;
       revealBtn.classList?.remove('is-bonus', 'is-spinning');
+      revealBtn.removeAttribute?.('aria-busy');
       revealBtn.textContent = MAIN_SPIN_LABEL;
     }
     const bonusSection = this.querySelector('[data-bind="bonus-section"]');

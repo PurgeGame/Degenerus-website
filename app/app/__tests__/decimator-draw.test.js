@@ -8,6 +8,7 @@ import {
   buildDrawFrames,
   buildFullDemoSnapshot,
   buildWinnerAllocation,
+  formatDecimatorSettlement,
   formatEth,
   formatScore,
   loadKnownWinnerNames,
@@ -93,6 +94,20 @@ describe('standalone Decimator draw replay', () => {
       0n,
       'a resolved losing slice immediately drops its hypothetical payout to zero',
     );
+  });
+
+  test('keeps the replay in ETH, then itemizes only the player final settlement', () => {
+    const small = formatDecimatorSettlement(8n * 10n ** 18n);
+    assert.equal(small.claimableLabel, '4 ETH');
+    assert.equal(small.rewardLabel, '4 ETH LUCKBOX');
+    const large = formatDecimatorSettlement(13n * 10n ** 18n);
+    assert.equal(large.claimableLabel, '6.5 ETH');
+    assert.equal(large.rewardLabel, '2 WHALE HALF-PASSES + 2 ETH LUCKBOX');
+    assert.match(html, /data-bind="player-payout-settlement" hidden/);
+    assert.match(drawSource,
+      /this\.completed\.length === this\.frames\.length && result\?\.won[\s\S]*this\.\#renderSettlement\(value\)/,
+      'the component does not expose the settlement split before the final winning state');
+    assert.match(css, /\.score-payout__settlement\[hidden\]\s*\{\s*display:\s*none/);
   });
 
   test('separates raw FLIP destroyed from effective burn and measures the player share', () => {
@@ -227,7 +242,7 @@ describe('standalone Decimator draw replay', () => {
     assert.match(html, /class="wheel-brand-marks"/);
     assert.match(html, /\/whitepaper\/flame-logo\.svg/,
       'the draw uses the red Degenerus protocol mark rather than a generic wheel badge');
-    assert.match(html, /FINAL PAYOUT PIE/);
+    assert.match(html, /FINAL PRIZE PIE/);
     assert.match(html, /data-bind="player-score"/);
     assert.match(html, /data-bind="player-payout-label"/);
     assert.doesNotMatch(html, /LOCKED WINNERS/,

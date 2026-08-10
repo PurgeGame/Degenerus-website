@@ -352,6 +352,28 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
   });
 
+  test('a processing refresh cannot repaint an active main or bonus spin CTA', async () => {
+    await import('../replay-panel.js');
+    const Ctor = customElements.get('replay-panel');
+    assert.ok(Ctor, 'replay panel is registered');
+
+    for (const label of ['SPINNING…', 'BONUS SPINNING…']) {
+      const panel = new Ctor();
+      panel.innerHTML = '<button data-bind="reveal-btn"></button>';
+      const button = panel.querySelector('[data-bind="reveal-btn"]');
+      button.textContent = label;
+      button.disabled = false;
+      button.classList.add('is-spinning');
+
+      panel.attributeChangedCallback('data-day-warming', null, '');
+
+      assert.equal(button.textContent, label,
+        'the live spin wording survives a background processing repaint');
+      assert.equal(button.disabled, true, 'the running action remains inert');
+      assert.equal(button.getAttribute('aria-busy'), 'true');
+    }
+  });
+
   test('the loading attract reel keeps ownership-aware pink and blue faces', () => {
     assert.match(
       APP_CSS,
@@ -493,6 +515,50 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       /replay-bucket-miss-mark|missMark\.textContent = 'MISS'/,
       'the loss surface does not add a literal MISS stamp',
     );
+  });
+
+  test('fresh winning badges pop their exact icon-and-amount reward once on hover', async () => {
+    const { winningBadgeRewardLines } = await import('../replay-panel.js');
+    const rows = winningBadgeRewardLines({
+      awardType: 'aggregated',
+      ethTotal: '1000000000000000000',
+      flipTotal: '2500000000000000000000',
+      ticketTotal: 8,
+    });
+    assert.deepEqual(rows.map((row) => row.kind), ['eth', 'flip', 'tickets']);
+    assert.equal(rows[2].amount, '2', 'eight jackpot entries render as two whole tickets');
+    assert.match(REPLAY_PANEL_SRC, /export function winningBadgeRewardLines/);
+    assert.match(REPLAY_PANEL_SRC, /rows\.push\(\{ kind: 'eth'[\s\S]*rows\.push\(\{ kind: 'flip'[\s\S]*kind: 'tickets'/,
+      'ETH, FLIP, and ticket wins each have a compact reward row');
+    assert.match(REPLAY_PANEL_SRC, /createJackpotTicketIcon\('replay-badge-reward-pop__ticket'\)/,
+      'ticket wins reuse the recognizable four-trait ticket icon');
+    assert.match(REPLAY_PANEL_SRC, /\/whitepaper\/flame-logo-split\.svg[\s\S]*\/symbols\/crypto_06_ethereum_silver\.svg/,
+      'currency wins use their real FLIP and ETH marks');
+    assert.match(REPLAY_PANEL_SRC, /addEventListener\('mouseenter', showReward, \{ once: true \}\)/,
+      'each fresh badge performs its pop only on the first mouse entry');
+    assert.match(REPLAY_PANEL_SRC, /querySelectorAll\('\.replay-badge-wrap\.is-reward-pop'\)/,
+      'moving to another fresh win retires the prior popup instead of stacking them');
+    assert.match(REPLAY_CSS, /@keyframes replay-badge-reward-pop[\s\S]*scale\(1\.14\)[\s\S]*100% \{ opacity:\s*0/s,
+      'the reward expands, holds briefly, then fades');
+  });
+
+  test('the far-future center reveal is a focused FLIP bonus prize', () => {
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /class="ff-logo" src="\/whitepaper\/flame-logo-split\.svg"[\s\S]*?class="ff-amount"[\s\S]*?class="ff-label">BONUS/,
+      'the center contains only the FLIP mark, amount, and bonus label',
+    );
+    assert.doesNotMatch(REPLAY_PANEL_SRC, /ff-label">Far Future/,
+      'the internal distribution name is not repeated in the prize art');
+    assert.match(REPLAY_PANEL_SRC, /setAttribute\('aria-label', `\$\{amountStr\} FLIP bonus`\)/,
+      'the logo-only currency treatment keeps its full accessible meaning');
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-ticket-center\.revealed::before\s*\{[\s\S]*?#071a2c[\s\S]*?#172554[\s\S]*?#2e1065[\s\S]*?border-color:\s*#67e8f9/,
+      'the far-future prize uses the indigo and teal reward palette',
+    );
+    assert.match(REPLAY_CSS, /\.replay-center-prize \.ff-logo\s*\{[^}]*drop-shadow/s,
+      'the FLIP mark remains readable at center-diamond scale');
   });
 
   test('an actual solo ETH winner gets its own reveal cue', () => {
