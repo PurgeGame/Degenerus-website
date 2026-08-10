@@ -35,7 +35,13 @@ const PRESENTATION_PREFIXES = Object.freeze([
 
 export function resetPresentationStateForDeployment(storage = globalThis.localStorage) {
   if (!storage) return false;
-  const markerKey = `presentation_deploy_${CHAIN.id}`;
+  // `_v2` bump: the marker is what makes this run ONCE per deployment, so widening
+  // PRESENTATION_PREFIXES does nothing for a browser that already swept this
+  // deployment under the narrower list — it would carry the missed keys until the
+  // NEXT redeploy. Renaming the marker reads as unset once and re-sweeps with the
+  // corrected list. Bump it again whenever a prefix is ADDED mid-run; the cost is
+  // one extra reveal replay, which the network state immediately re-derives.
+  const markerKey = `presentation_deploy_v2_${CHAIN.id}`;
   const deployment = String(CHAIN.deployBlock || 0);
   try {
     if (storage.getItem(markerKey) === deployment) return false;

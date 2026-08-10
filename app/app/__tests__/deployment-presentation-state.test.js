@@ -30,7 +30,7 @@ test('a deploy change clears colliding jackpot/flip receipts and preserves unrel
   assert.equal(storage.has(`jackpot_complete_day_${CHAIN.id}_7`), false);
   assert.equal(storage.has(`jackpot-resolution-seen:${CHAIN.id}:decimator:0xabc:15`), false);
   assert.equal(storage.getItem('affiliate-ref'), '0xref');
-  assert.equal(storage.getItem(`presentation_deploy_${CHAIN.id}`), String(CHAIN.deployBlock));
+  assert.equal(storage.getItem(`presentation_deploy_v2_${CHAIN.id}`), String(CHAIN.deployBlock));
   assert.equal(resetPresentationStateForDeployment(storage), false,
     'the same deployment never clears current-session reveal state');
 });
@@ -66,4 +66,22 @@ test('sweeps the key formats their writers actually build (v2->v3 drift guard)',
   assert.equal(storage.has(daySummary), false, 'day_summary collides on day number across runs');
   assert.equal(storage.has(bingo), true, 'GAME-scoped keys self-namespace; sweeping them is waste');
   assert.equal(storage.has(biggest), true, 'COINFLIP-scoped keys self-namespace');
+});
+
+// A browser that already swept THIS deployment under the old, narrower prefix list
+// would otherwise carry the missed keys until the next redeploy — the marker is what
+// makes the sweep once-per-deployment. Renaming it re-sweeps exactly once.
+test('the marker bump re-sweeps a deployment already swept under the old list', () => {
+  const addr = '0x00000000000000000000000000000000000000ab';
+  const missed = `coinflip_resolved_stake_v3:${CHAIN.id}:${addr}:7`;
+  const storage = storageOf({
+    // what the PREVIOUS build left behind: swept, marker stamped, v3 key untouched
+    [`presentation_deploy_${CHAIN.id}`]: String(CHAIN.deployBlock),
+    [missed]: '123',
+  });
+
+  assert.equal(resetPresentationStateForDeployment(storage), true,
+    'the old marker must NOT satisfy the new one, or the corrected list never runs');
+  assert.equal(storage.has(missed), false, 'the previously-missed key is swept on the bump');
+  assert.equal(resetPresentationStateForDeployment(storage), false, 'and only once');
 });
