@@ -61,6 +61,27 @@ describe('lootboxRewardPresentation', () => {
       value: '−35%',
       detail: '',
     });
+    assert.deepEqual(lootboxRewardPresentation(13, 32n), {
+      label: 'ETH DEGENERETTE BOON',
+      value: '+4%',
+      detail: '',
+    });
+    assert.deepEqual(lootboxRewardPresentation(13, 36n), {
+      label: 'FLIP DEGENERETTE BOON',
+      value: '+8%',
+      detail: '',
+    });
+    assert.deepEqual(lootboxRewardPresentation(13, 40n), {
+      label: 'WWXRP DEGENERETTE BOON',
+      value: '+12%',
+      detail: '',
+    });
+    assert.deepEqual(lootboxRewardPresentation(13, 0n), {
+      label: 'DEGENERETTE BOON',
+      value: 'BOOST',
+      detail: '',
+    });
+    assert.equal(REWARD_TYPE_LABELS[13], 'Degenerette boon');
   });
 
   test('honestly names the one event family whose product category is not encoded', () => {

@@ -102,8 +102,14 @@ class AppDeityDesk extends HTMLElement {
     this.innerHTML = `
       <section class="deity-desk" data-bind="deity-desk" hidden>
         <header class="deity-desk__identity">
-          <span class="deity-desk__crest"><img data-bind="deity-desk-symbol" src="" alt=""></span>
-          <span class="deity-desk__identity-copy"><small>DEITY PASS</small><strong data-bind="deity-desk-title">God of —</strong></span>
+          <span class="deity-desk__identity-copy">
+            <span class="deity-pass-lockup deity-desk__wordmark">
+              <img class="deity-pass-lockup__symbol" data-bind="deity-desk-symbol" src="" alt="">
+              <img class="deity-pass-lockup__frame" src="/app/assets/deity-pass-lockup-v3.png"
+                   width="1400" height="320" alt="Deity Pass">
+            </span>
+            <strong data-bind="deity-desk-title">God of —</strong>
+          </span>
         </header>
         <div class="deity-desk__target">
           <label for="deity-desk-target-input">TARGET PLAYER</label>

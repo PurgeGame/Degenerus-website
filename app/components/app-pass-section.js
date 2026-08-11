@@ -499,8 +499,13 @@ class AppPassSection extends HTMLElement {
             <span class="pass-product-heading pass-product-heading--deity">
               <span class="pass-product-copy">
                 <span class="pass-deity-title-lockup">
-                  <img class="pass-deity-wordmark" src="/app/assets/deity-pass-wordmark-v1.png"
-                       width="1200" height="320" alt="Deity Pass">
+                  <span class="deity-pass-lockup pass-deity-wordmark">
+                    <img class="deity-pass-lockup__symbol" data-bind="pass-deity-brand-symbol"
+                         src="" alt="" aria-hidden="true" hidden>
+                    <img class="deity-pass-lockup__frame"
+                         src="/app/assets/deity-pass-lockup-v3.png"
+                         width="1400" height="320" alt="Deity Pass">
+                  </span>
                   <boon-product-indicator product="deity"></boon-product-indicator>
                 </span>
                 <span class="pass-product-description">15 entries every level and three boons per day forever.</span>
@@ -523,9 +528,13 @@ class AppPassSection extends HTMLElement {
             <div class="pass-deity-dialog__card">
               <header class="pass-deity-dialog__head">
                 <span>
-                  <img class="pass-deity-dialog__wordmark"
-                       src="/app/assets/deity-pass-wordmark-v1.png"
-                       width="1200" height="320" alt="" aria-hidden="true">
+                  <span class="deity-pass-lockup pass-deity-dialog__wordmark" aria-hidden="true">
+                    <img class="deity-pass-lockup__symbol" data-bind="pass-deity-brand-symbol"
+                         src="" alt="" hidden>
+                    <img class="deity-pass-lockup__frame"
+                         src="/app/assets/deity-pass-lockup-v3.png"
+                         width="1400" height="320" alt="">
+                  </span>
                   <strong id="pass-deity-dialog-title">CHOOSE YOUR DEITY</strong>
                 </span>
                 <button type="button" class="pass-deity-dialog__close"
@@ -1280,12 +1289,17 @@ class AppPassSection extends HTMLElement {
     const select = this.querySelector('[data-bind="pass-deity-select"]');
     const preview = this.querySelector('[data-bind="pass-deity-preview"]');
     const selectedName = this.querySelector('[data-bind="pass-deity-selected-name"]');
+    const brandSymbols = this.querySelectorAll('[data-bind="pass-deity-brand-symbol"]');
     if (!preview) return;
     const symbolId = Number(select?.value);
     if (!Number.isInteger(symbolId) || symbolId < 0 || symbolId > 31) {
       preview.src = '';
       preview.alt = '';
       preview.hidden = true;
+      for (const brandSymbol of brandSymbols) {
+        brandSymbol.src = '';
+        brandSymbol.hidden = true;
+      }
       if (selectedName) selectedName.textContent = '—';
       return;
     }
@@ -1294,6 +1308,10 @@ class AppPassSection extends HTMLElement {
     preview.src = badge.path;
     preview.alt = `${symbol} deity symbol`;
     preview.hidden = false;
+    for (const brandSymbol of brandSymbols) {
+      brandSymbol.src = badge.path;
+      brandSymbol.hidden = false;
+    }
     if (selectedName) selectedName.textContent = `GOD OF ${symbol.toUpperCase()}`;
     for (const button of this.querySelectorAll('.pass-deity-symbol')) {
       const selected = Number(button.getAttribute('data-symbol-id')) === symbolId;

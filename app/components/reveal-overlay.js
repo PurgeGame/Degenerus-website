@@ -744,7 +744,7 @@ function _cardsFromLeg(leg) {
     case 'reward':
       {
         const rewardType = Number(leg.rewardType);
-        const isBoon = [2, 4, 5, 6, 8, 9, 10, 11].includes(rewardType);
+        const isBoon = [2, 4, 5, 6, 8, 9, 10, 11, 13].includes(rewardType);
         const isShield = rewardType === 12;
         const presentation = lootboxRewardPresentation(rewardType, leg.amount, {
           boonBps: leg.boonBps,

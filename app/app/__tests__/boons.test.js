@@ -7,6 +7,7 @@ import {
   boonTypePresentation,
   decodePackedBoons,
 } from '../boons.js';
+import { BOON_BOOST_PCT, BOON_FULL_NAMES, BOON_TYPE_NAMES } from '../boon-types.js';
 
 describe('active boon product mapping', () => {
   test('decodes only currently consumable boons from GAME boonPacked state', () => {
@@ -26,9 +27,15 @@ describe('active boon product mapping', () => {
       75n | (61n << 24n)
       // Lazy -25 deity boon from today.
       | (62n << 128n) | (62n << 152n) | (2n << 176n)
+      // ETH +8 lootbox boon from yesterday: active through day 63.
+      | (((61n << 3n) | 2n) << 184n)
+      // FLIP +12 deity boon from yesterday: expired at midnight.
+      | (((61n << 3n) | 4n | 3n) << 208n)
+      // WWXRP +4 lootbox boon from day 60: active through today.
+      | (((60n << 3n) | 1n) << 232n)
     );
     const rows = decodePackedBoons(slot0, slot1, day);
-    assert.deepEqual(rows.map((row) => row.boonType), [2, 8, 15, 19, 30]);
+    assert.deepEqual(rows.map((row) => row.boonType), [2, 8, 15, 19, 30, 33, 38]);
     assert.equal(rows.find((row) => row.boonType === 19)?.boostAmount, 75);
     assert.equal(
       boonIndicatorModel({ day: 62, boons: rows }, 'activity').label,
@@ -57,6 +64,9 @@ describe('active boon product mapping', () => {
         { boonType: 19, consumed: false },
         { boonType: 27, consumed: false },
         { boonType: 31, consumed: false },
+        { boonType: 34, consumed: false },
+        { boonType: 37, consumed: false },
+        { boonType: 40, consumed: false },
       ],
     };
     assert.equal(boonIndicatorModel(payload, 'coinflip').label, 'BOON +25%');
@@ -67,6 +77,9 @@ describe('active boon product mapping', () => {
     assert.equal(boonIndicatorModel(payload, 'activity').label, 'BOON +25 RATING');
     assert.equal(boonIndicatorModel(payload, 'deity').label, 'BOON −35%');
     assert.equal(boonIndicatorModel(payload, 'lazy').label, 'BOON −50%');
+    assert.equal(boonIndicatorModel(payload, 'degenerette-eth').label, 'BOON +12%');
+    assert.equal(boonIndicatorModel(payload, 'degenerette-flip').label, 'BOON +12%');
+    assert.equal(boonIndicatorModel(payload, 'degenerette-wwxrp').label, 'BOON +12%');
     assert.match(boonIndicatorModel(payload, 'purchase').title, /Day 62/);
   });
 
@@ -86,12 +99,23 @@ describe('active boon product mapping', () => {
     assert.equal(boonTypePresentation(15).effect, '50% MORE ENTRY WEIGHT');
     assert.equal(boonTypePresentation(24).effect, '35% OFF WHALE PASS');
     assert.equal(boonTypePresentation(4).effect, '1 MISSED DAY SHIELDED');
+    assert.equal(boonTypePresentation(32).effect, '4% EXTRA ETH STAKE');
+    assert.equal(boonTypePresentation(36).effect, '8% EXTRA FLIP STAKE');
+    assert.equal(boonTypePresentation(40).effect, '12% EXTRA WWXRP STAKE');
   });
 
   test('exposes the affected product for color-coded Deity boon controls', () => {
     assert.equal(boonTypePresentation(6).product, 'lootbox');
     assert.equal(boonTypePresentation(15).product, 'decimator');
     assert.equal(boonTypePresentation(30).product, 'lazy');
+  });
+
+  test('names Degenerette boons in the active-boon history instead of generic type IDs', () => {
+    assert.equal(BOON_TYPE_NAMES[32], 'DGN_ETH_4');
+    assert.equal(BOON_TYPE_NAMES[36], 'DGN_FLIP_8');
+    assert.equal(BOON_TYPE_NAMES[40], 'DGN_WWXRP_12');
+    assert.equal(BOON_FULL_NAMES[36], 'FLIP Degenerette +8%');
+    assert.equal(BOON_BOOST_PCT[40], 12);
   });
 
   test('consumed boons do not remain lit beside a product', () => {

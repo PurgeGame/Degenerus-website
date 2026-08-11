@@ -13,6 +13,7 @@
 //     LootBoxReward(player, rewardType, lootboxAmount, amount)
 //       rewardType: 2=CoinflipBoon 4=Boost5 5=Boost15 6=Boost25 8=DecimatorBoost
 //                   9=WhaleBoon 10=ActivityBoon/DeityPassBoon 11=LazyPassBoon
+//                   12=QuestShield 13=DegeneretteBoon (amount = boonType 32-40)
 //   modules/DegenerusGameDegeneretteModule.sol
 //     BoxSpin(player, betId, packedSpins, payout, ethShare)
 //       betId: bit 63 = box-origin sentinel, bits 62-60 = spin type
@@ -127,6 +128,7 @@ export const REWARD_TYPE_LABELS = Object.freeze({
   10: 'Activity / deity pass boon',
   11: 'Lazy pass discount boon',
   12: 'Quest streak shield',
+  13: 'Degenerette boon',
 });
 
 export function rewardTypeLabel(rewardType) {
@@ -158,6 +160,9 @@ const BOON_REVEAL_LABELS = Object.freeze({
   activity: 'RATING BOON',
   deity: 'DEITY PASS BOON',
   lazy: 'LAZY PASS BOON',
+  'degenerette-eth': 'ETH DEGENERETTE BOON',
+  'degenerette-flip': 'FLIP DEGENERETTE BOON',
+  'degenerette-wwxrp': 'WWXRP DEGENERETTE BOON',
 });
 
 function _exactBoonReveal(boonType) {
@@ -256,6 +261,19 @@ export function lootboxRewardPresentation(
     return {
       label: 'QUEST SHIELD',
       value: `${count} DAY${count === 1n ? '' : 'S'}`,
+      detail: '',
+    };
+  }
+  if (type === 13) {
+    // Type 13 carries the exact rolled boonType in `amount`: 32-34 ETH,
+    // 35-37 FLIP, and 38-40 WWXRP; each lane is +4/+8/+12%.
+    const rolledBoonType = Number(_rewardAmount(amount));
+    const rolled = rolledBoonType >= 32 && rolledBoonType <= 40
+      ? _exactBoonReveal(rolledBoonType)
+      : null;
+    return rolled || {
+      label: 'DEGENERETTE BOON',
+      value: 'BOOST',
       detail: '',
     };
   }

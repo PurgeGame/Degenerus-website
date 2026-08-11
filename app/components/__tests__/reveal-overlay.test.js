@@ -350,6 +350,7 @@ describe('normalizeSequence', () => {
         { legType: 'reward', rewardType: 8, amount: 5_000n },
         { legType: 'reward', rewardType: 10, amount: 25n },
         { legType: 'reward', rewardType: 11, amount: 5_000n },
+        { legType: 'reward', rewardType: 13, amount: 37n },
       ],
     });
     assert.deepEqual(
@@ -359,6 +360,7 @@ describe('normalizeSequence', () => {
         ['DECIMATOR BOON', '+50%'],
         ['RATING BOON', '+12.5'],
         ['LAZY PASS BOON', '−50%'],
+        ['FLIP DEGENERETTE BOON', '+12%'],
       ],
     );
     assert.ok(seq.cards.every((card) => card.sub === ''),

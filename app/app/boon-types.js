@@ -2,7 +2,7 @@
 // Mirrored from contracts/DeityBoonViewer.sol. Per Phase 44 D-05.
 //
 // Single-day boons issued by deities; expire at end of their issue day.
-// Reserved/unused IDs (4, 10, 11, 12, 20, 21) are omitted. 25 entries total.
+// Reserved/unused IDs (4, 10, 11, 12, 20, 21) are omitted. 34 entries total.
 //
 // This module is imported by both <jackpot-panel> (handoff work) and
 // <boons-panel> (Phase 44 BOON-03) — neither component should redefine
@@ -34,6 +34,15 @@ export const BOON_TYPE_NAMES = {
   29: 'LAZY_10',
   30: 'LAZY_25',
   31: 'LAZY_50',
+  32: 'DGN_ETH_4',
+  33: 'DGN_ETH_8',
+  34: 'DGN_ETH_12',
+  35: 'DGN_FLIP_4',
+  36: 'DGN_FLIP_8',
+  37: 'DGN_FLIP_12',
+  38: 'DGN_WWXRP_4',
+  39: 'DGN_WWXRP_8',
+  40: 'DGN_WWXRP_12',
 };
 
 // Full human-readable names for tooltips. WHPASS has no numeric boost (pass-type).
@@ -63,6 +72,15 @@ export const BOON_FULL_NAMES = {
   29: 'Lazy +10%',
   30: 'Lazy +25%',
   31: 'Lazy +50%',
+  32: 'ETH Degenerette +4%',
+  33: 'ETH Degenerette +8%',
+  34: 'ETH Degenerette +12%',
+  35: 'FLIP Degenerette +4%',
+  36: 'FLIP Degenerette +8%',
+  37: 'FLIP Degenerette +12%',
+  38: 'WWXRP Degenerette +4%',
+  39: 'WWXRP Degenerette +8%',
+  40: 'WWXRP Degenerette +12%',
 };
 
 // Percent boost parsed from the numeric suffix of each BOON_TYPE_NAMES entry.

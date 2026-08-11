@@ -491,7 +491,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(el.querySelectorAll('.pass-product-sigil').length, 3,
       'Whale, Lazy, and AFKing retain compact code-native sigils');
     assert.match(el.innerHTML,
-      /class="pass-deity-wordmark" src="\/app\/assets\/deity-pass-wordmark-v1\.png"[^>]*alt="Deity Pass"/,
+      /class="deity-pass-lockup pass-deity-wordmark"[\s\S]*?data-bind="pass-deity-brand-symbol"[\s\S]*?deity-pass-lockup-v3\.png/,
       'Deity uses its dedicated art-directed title instead of a generic infinity tile');
 
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
@@ -598,10 +598,14 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       fundedDays: 5n,
     });
     assert.match(INDEX_HTML, /data-bind="pass-summary-deity-badge"/);
-    assert.match(STATUS_CSS, /\.more-ways__deity-art\s*\{[^}]*clip-path:/s,
-      'the closed strip retains the small spiked Deity-ticket treatment');
+    assert.match(INDEX_HTML,
+      /class="deity-pass-lockup more-ways__deity-lockup"[\s\S]*?data-bind="pass-summary-deity-badge"[\s\S]*?deity-pass-lockup-v3\.png/,
+      'the owned-pass chip places the real selected symbol inside the shared identity art');
     assert.match(STATUS_CSS,
-      /\.more-ways__deity-ticket\[data-symbol="ethereum"\][^{]*\.more-ways__deity-art img\s*\{[^}]*width:\s*84%[^}]*height:\s*84%/s,
+      /\.more-ways__deity-lockup\s*\{[^}]*width:\s*7\.2rem/s,
+      'the integrated identity remains compact enough for the closed strip');
+    assert.match(STATUS_CSS,
+      /\.more-ways__deity-ticket\[data-symbol="ethereum"\][\s\S]*?\.deity-pass-lockup__symbol\s*\{[^}]*scale\(1\.14\)/s,
       'the compact God of Ethereum portrait enlarges its unusually small source glyph');
     assert.match(STATUS_CSS, /\.more-ways\[open\][^{]*\.more-ways__summary-closed\s*\{[^}]*display:\s*none/s,
       'summary details disappear when the full pass desk is open');
@@ -868,6 +872,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.querySelector('[data-symbol-id="7"]').dispatchEvent({ type: 'click' });
     assert.equal(select.value, '7', 'visual symbol tile drives the canonical selection');
     assert.equal(el.querySelector('[data-bind="pass-deity-selected-name"]').textContent, 'GOD OF BITCOIN');
+    for (const brandSymbol of el.querySelectorAll('[data-bind="pass-deity-brand-symbol"]')) {
+      assert.equal(brandSymbol.src, '/badges-circular/crypto_07_bitcoin_gold.svg',
+        'the selected symbol fills every visible Deity Pass art socket');
+      assert.equal(brandSymbol.hidden, false);
+    }
     buy.dispatchEvent({ type: 'click' });
     await settle(60);
 

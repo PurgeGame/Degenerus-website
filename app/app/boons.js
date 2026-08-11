@@ -30,6 +30,15 @@ const BOON_UI = Object.freeze({
   29: { product: 'lazy', label: 'BOON −10%', detail: 'Your lazy pass purchase costs 10% less' },
   30: { product: 'lazy', label: 'BOON −25%', detail: 'Your lazy pass purchase costs 25% less' },
   31: { product: 'lazy', label: 'BOON −50%', detail: 'Your lazy pass purchase costs 50% less' },
+  32: { product: 'degenerette-eth', label: 'BOON +4%', detail: 'Your next ETH Degenerette bet gets 4% bonus stake' },
+  33: { product: 'degenerette-eth', label: 'BOON +8%', detail: 'Your next ETH Degenerette bet gets 8% bonus stake' },
+  34: { product: 'degenerette-eth', label: 'BOON +12%', detail: 'Your next ETH Degenerette bet gets 12% bonus stake' },
+  35: { product: 'degenerette-flip', label: 'BOON +4%', detail: 'Your next FLIP Degenerette bet gets 4% bonus stake' },
+  36: { product: 'degenerette-flip', label: 'BOON +8%', detail: 'Your next FLIP Degenerette bet gets 8% bonus stake' },
+  37: { product: 'degenerette-flip', label: 'BOON +12%', detail: 'Your next FLIP Degenerette bet gets 12% bonus stake' },
+  38: { product: 'degenerette-wwxrp', label: 'BOON +4%', detail: 'Your next WWXRP Degenerette bet gets 4% bonus stake' },
+  39: { product: 'degenerette-wwxrp', label: 'BOON +8%', detail: 'Your next WWXRP Degenerette bet gets 8% bonus stake' },
+  40: { product: 'degenerette-wwxrp', label: 'BOON +12%', detail: 'Your next WWXRP Degenerette bet gets 12% bonus stake' },
 });
 
 const MASK_24 = (1n << 24n) - 1n;
@@ -153,6 +162,22 @@ export function decodePackedBoons(slot0Raw, slot1Raw, currentDayRaw) {
     expiresAfter: 4,
   }));
 
+  // Three independent 24-bit Degenerette lanes finish slot1. Each lane packs
+  // tier in bits 0-1, deity provenance in bit 2, and a masked award day in
+  // bits 3-23. Lootbox boons live through award day + 2; deity boons only live
+  // on their issue day. This mirrors _degeneretteLaneLive on-chain.
+  const currentDayMasked = currentDay % (2 ** 21);
+  for (let laneIndex = 0; laneIndex < 3; laneIndex += 1) {
+    const lane = _packedBits(slot1, 184 + laneIndex * 24, MASK_24);
+    const tier = lane & 0x3;
+    const deity = (lane & 0x4) !== 0;
+    const stampDay = Math.floor(lane / 8) & 0x1FFFFF;
+    const active = tier > 0 && (deity
+      ? stampDay === currentDayMasked
+      : (stampDay === 0 || currentDayMasked <= stampDay + 2));
+    addTier(tier > 0 ? 32 + laneIndex * 3 + tier - 1 : null, active);
+  }
+
   return rows;
 }
 
@@ -216,6 +241,9 @@ const BOON_PRODUCT_NAMES = Object.freeze({
   activity: 'Degen rating',
   deity: 'Deity pass',
   lazy: 'Lazy pass',
+  'degenerette-eth': 'ETH Degenerette',
+  'degenerette-flip': 'FLIP Degenerette',
+  'degenerette-wwxrp': 'WWXRP Degenerette',
 });
 
 function _issuanceEffect(ui, boonType) {
@@ -234,6 +262,9 @@ function _issuanceEffect(ui, boonType) {
     case 'whale': return `${pct.replace(/^−/, '')} OFF WHALE PASS`;
     case 'deity': return `${pct.replace(/^−/, '')} OFF DEITY PASS`;
     case 'lazy': return `${pct.replace(/^−/, '')} OFF LAZY PASS`;
+    case 'degenerette-eth': return `${pct} EXTRA ETH STAKE`;
+    case 'degenerette-flip': return `${pct} EXTRA FLIP STAKE`;
+    case 'degenerette-wwxrp': return `${pct} EXTRA WWXRP STAKE`;
     default: return compact;
   }
 }

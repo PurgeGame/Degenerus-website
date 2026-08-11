@@ -726,58 +726,39 @@ body.layout-basic .more-ways__active-pass {
 }
 
 body.layout-basic .more-ways__deity-ticket {
-  grid-template-columns: 1.75rem minmax(0, auto);
-  gap: 0.36rem;
-  padding: 0.18rem 0.5rem 0.18rem 0.25rem;
-  border: 1px solid rgba(255, 218, 106, 0.42);
+  grid-template-columns: 7.2rem minmax(0, auto);
+  gap: 0.28rem;
+  padding: 0.2rem 0.5rem 0.2rem 0.3rem;
+  border: 1px solid rgba(255, 218, 106, 0.48);
   background:
-    radial-gradient(circle at 12% 50%, rgba(250, 204, 21, 0.16), transparent 34%),
+    radial-gradient(circle at 10% 50%, rgba(250, 204, 21, 0.14), transparent 30%),
+    radial-gradient(circle at 55% 0, rgba(126, 34, 206, 0.08), transparent 46%),
     linear-gradient(145deg, rgba(44, 48, 57, 0.92), rgba(18, 21, 28, 0.96));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 0 11px rgba(234, 179, 8, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 12px rgba(234, 179, 8, 0.12);
 }
 
-body.layout-basic .more-ways__deity-art {
-  position: relative;
-  display: grid;
-  width: 1.72rem;
-  height: 1.72rem;
-  place-items: center;
-  background:
-    radial-gradient(circle, #1a1c23 0 39%, rgba(255, 241, 166, 0.42) 40% 51%, transparent 52%),
-    conic-gradient(from 22.5deg, #dca915, #fff0a3, #bc7c08, #ffe797, #dca915);
-  clip-path: polygon(50% 0, 59% 10%, 71% 4%, 76% 17%, 91% 15%, 89% 31%, 100% 39%, 90% 50%, 100% 61%, 87% 68%, 91% 84%, 75% 82%, 69% 96%, 58% 89%, 50% 100%, 41% 89%, 29% 96%, 24% 82%, 8% 84%, 12% 68%, 0 61%, 10% 50%, 0 39%, 12% 31%, 9% 15%, 24% 17%, 29% 4%, 41% 10%);
-  filter: drop-shadow(0 0 4px rgba(250, 204, 21, 0.38));
+body.layout-basic .more-ways__deity-lockup {
+  width: 7.2rem;
+  max-width: 100%;
+  filter: drop-shadow(0 0 4px rgba(250, 204, 21, 0.14));
 }
 
-body.layout-basic .more-ways__deity-art img {
-  display: block;
-  width: 62%;
-  height: 62%;
-  object-fit: contain;
-}
-
-/* Ethereum's glyph occupies less of its source badge than the other deity
-   symbols. Let this one compact summary portrait breathe past the shared scale
-   so the ETH diamond stays recognizable at strip size. */
-body.layout-basic .more-ways__deity-ticket[data-symbol="ethereum"] .more-ways__deity-art img {
-  width: 84%;
-  height: 84%;
+/* The Ethereum glyph is unusually small inside its source badge. The frame
+   masks the extra scale, so the diamond stays visible without escaping the
+   integrated socket. */
+body.layout-basic .more-ways__deity-ticket[data-symbol="ethereum"]
+  .deity-pass-lockup__symbol {
+  transform: scale(1.14);
 }
 
 body.layout-basic .more-ways__deity-copy {
-  display: grid;
+  display: flex;
   min-width: 0;
-  gap: 0.12rem;
-}
-
-body.layout-basic .more-ways__deity-copy small {
-  color: rgba(255, 218, 106, 0.65);
-  font: 900 0.43rem/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.13em;
+  align-items: center;
 }
 
 body.layout-basic .more-ways__deity-copy b {
-  max-width: 8.5rem;
+  max-width: 7.2rem;
   overflow: hidden;
   color: #ffe8a3;
   font: 900 0.57rem/1.05 "Inter", system-ui, sans-serif;

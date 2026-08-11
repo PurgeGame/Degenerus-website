@@ -16921,16 +16921,46 @@ body.layout-basic .deg-block--wager .deg-place-cta {
   white-space: nowrap;
 }
 
+/* Shared Deity Pass art: the frame stays constant while each surface places
+   the selected on-chain symbol behind its transparent socket. */
+body.layout-basic .deity-pass-lockup {
+  position: relative;
+  isolation: isolate;
+  display: block;
+  min-width: 0;
+  aspect-ratio: 1400 / 320;
+}
+body.layout-basic .deity-pass-lockup__frame {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+body.layout-basic .deity-pass-lockup__symbol {
+  position: absolute;
+  z-index: 1;
+  left: 4.86%;
+  top: 15.31%;
+  display: block;
+  width: 16%;
+  height: 70%;
+  border-radius: 50%;
+  object-fit: contain;
+}
+body.layout-basic .deity-pass-lockup__symbol[hidden] { display: none !important; }
+
 body.layout-basic .deity-desk[hidden] { display: none !important; }
 body.layout-basic .deity-desk { position: relative; isolation: isolate; display: grid; grid-template-columns: auto minmax(13rem, 0.8fr) minmax(24rem, 1.55fr); align-items: center; gap: 0.68rem; margin: 0 0 0.78rem; padding: 0.66rem 0.74rem; overflow: hidden; border: 1px solid rgba(250, 204, 21, 0.56); border-radius: 13px; background: radial-gradient(circle at 3rem 50%, rgba(250, 204, 21, 0.2), transparent 20%), radial-gradient(circle at 92% 0, rgba(168, 85, 247, 0.1), transparent 34%), linear-gradient(145deg, rgba(31, 24, 8, 0.97), rgba(10, 10, 18, 0.96) 66%); box-shadow: 0 8px 26px rgba(0, 0, 0, 0.26), inset 0 1px rgba(255, 241, 171, 0.16), inset 0 0 0 1px rgba(234, 179, 8, 0.06); }
 body.layout-basic .deity-desk::before { position: absolute; z-index: -1; inset: 0; background: linear-gradient(105deg, transparent 0 34%, rgba(255, 238, 170, 0.045) 45%, transparent 56%); content: ''; pointer-events: none; }
 body.layout-basic .deity-desk::after { position: absolute; z-index: -1; right: -1.5rem; top: 50%; width: 8rem; height: 8rem; background: url('/whitepaper/flame-center.svg') center / contain no-repeat; content: ''; filter: grayscale(1); opacity: 0.025; pointer-events: none; transform: translateY(-50%) rotate(-10deg); }
-body.layout-basic .deity-desk__identity { display: grid; grid-template-columns: 3.35rem auto; align-items: center; gap: 0.62rem; min-width: 11.2rem; }
-body.layout-basic .deity-desk__crest { position: relative; display: grid; width: 3.35rem; height: 3.35rem; place-items: center; border: 1px solid rgba(255, 226, 123, 0.66); border-radius: 50%; background: radial-gradient(circle at 38% 30%, rgba(255, 249, 210, 0.22), rgba(137, 94, 9, 0.12) 58%, rgba(7, 7, 12, 0.72) 72%); box-shadow: 0 0 18px rgba(250, 204, 21, 0.19), inset 0 0 0 3px rgba(255, 226, 123, 0.055); }
-body.layout-basic .deity-desk__crest::after { position: absolute; inset: -4px; border: 1px dashed rgba(255, 226, 123, 0.24); border-radius: 50%; content: ''; }
-body.layout-basic .deity-desk__crest > img { width: 88%; height: 88%; object-fit: contain; filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.42)); }
-body.layout-basic .deity-desk__identity-copy { display: grid; gap: 0.09rem; }
-body.layout-basic .deity-desk__identity small, body.layout-basic .deity-desk__target > label { color: #a8914d; font: 850 0.5rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.12em; }
+body.layout-basic .deity-desk__identity { display: block; min-width: 11.4rem; }
+body.layout-basic .deity-desk__identity-copy { display: grid; gap: 0.02rem; }
+body.layout-basic .deity-desk__wordmark { width: min(11.2rem, 100%); filter: drop-shadow(0 0 7px rgba(250, 204, 21, 0.18)); }
+body.layout-basic .deity-desk__target > label { color: #a8914d; font: 850 0.5rem/1 "Inter", system-ui, sans-serif; letter-spacing: 0.12em; }
 body.layout-basic .deity-desk__identity strong { color: #ffeba9; font: 950 0.98rem/1.08 "Inter", system-ui, sans-serif; text-shadow: 0 0 12px rgba(250, 204, 21, 0.28); white-space: nowrap; }
 body.layout-basic .deity-desk__target { position: relative; z-index: 4; display: grid; gap: 0.2rem; min-width: 0; }
 body.layout-basic .deity-desk__target-control { position: relative; display: block; min-width: 0; }

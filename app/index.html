@@ -203,11 +203,14 @@
               <b data-bind="pass-summary-funding" hidden></b>
             </span>
             <span class="more-ways__deity-ticket" data-bind="pass-summary-deity" hidden>
-              <span class="more-ways__deity-art" aria-hidden="true">
-                <img data-bind="pass-summary-deity-badge" src="" alt="">
+              <span class="deity-pass-lockup more-ways__deity-lockup">
+                <img class="deity-pass-lockup__symbol" data-bind="pass-summary-deity-badge"
+                     src="" alt="">
+                <img class="deity-pass-lockup__frame"
+                     src="/app/assets/deity-pass-lockup-v3.png"
+                     width="1400" height="320" alt="Deity Pass">
               </span>
               <span class="more-ways__deity-copy">
-                <small>DEITY</small>
                 <b data-bind="pass-summary-deity-name"></b>
               </span>
             </span>

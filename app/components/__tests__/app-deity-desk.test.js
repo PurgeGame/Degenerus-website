@@ -24,6 +24,12 @@ const INDEX_HTML = readFileSync(new URL('../../index.html', import.meta.url), 'u
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 
 describe('<app-deity-desk>', () => {
+  test('active holders retain the Deity Pass wordmark beside their chosen symbol', () => {
+    assert.match(DESK_SRC,
+      /class="deity-pass-lockup deity-desk__wordmark"[\s\S]*?data-bind="deity-desk-symbol"[\s\S]*?deity-pass-lockup-v3\.png/);
+    assert.match(APP_CSS, /\.deity-desk__wordmark\s*\{[^}]*width:\s*min\(11\.2rem, 100%\)/s);
+  });
+
   test('uses the holder gold symbol and player-facing God title', () => {
     assert.deepEqual(deitySymbolPresentation(7), {
       id: 7,
@@ -155,12 +161,11 @@ describe('<app-deity-desk>', () => {
       'daily boon labels are larger');
     assert.match(APP_CSS, /\.deity-desk__actions button\[data-boon-product="decimator"\]/,
       'boon buttons use product-specific color treatments');
-    assert.match(DESK_SRC, /class="deity-desk__crest"/,
-      'the owned symbol sits in a premium pass seal');
-    assert.match(APP_CSS, /\.deity-desk__crest\s*\{[^}]*radial-gradient/s,
-      'the pass seal has a layered gold treatment');
-    assert.match(APP_CSS, /\.deity-desk__crest::after\s*\{[^}]*border:\s*1px dashed/s,
-      'the pass seal has an etched outer ring');
+    assert.match(DESK_SRC, /deity-pass-lockup__symbol" data-bind="deity-desk-symbol"/,
+      'the owned symbol occupies the branded pass socket');
+    assert.match(APP_CSS,
+      /\.deity-pass-lockup__symbol\s*\{[^}]*left:\s*4\.86%[^}]*top:\s*15\.31%[^}]*width:\s*16%[^}]*height:\s*70%/s,
+      'every Deity surface shares the measured transparent symbol opening');
     assert.match(APP_CSS, /\.deity-desk__suggestions\s*\{[^}]*position:\s*absolute[^}]*max-height:/s,
       'Discord matches open as a bounded dropdown beneath the target field');
     assert.match(APP_CSS, /\.deity-desk__actions button::after\s*\{[^}]*rgb\(var\(--boon-rgb\)\)/s,
