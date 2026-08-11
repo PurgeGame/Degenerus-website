@@ -543,13 +543,33 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
     );
     assert.match(
       REPLAY_PANEL_SRC,
-      /const stack = Math\.max\(1, 20 - this\.#rewardPopSequence\+\+\)[\s\S]*--replay-reward-stack/,
+      /const sequence = this\.#rewardPopSequence\+\+;[\s\S]*const stack = Math\.max\(1, 20 - sequence\)[\s\S]*--replay-reward-stack/,
       'the first concurrently triggered reward remains in the foreground',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /winningBadgeRewardDirection\(\{[\s\S]*randomValue: this\.#rewardDirectionPhase,[\s\S]*sequence,[\s\S]*wrap\.dataset\.rewardDirection = direction/,
+      'a randomized starting side and activation sequence fan aligned rewards in different directions',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /data-reward-direction="below"[\s\S]*data-reward-direction="right"[\s\S]*data-reward-direction="left"/,
+      'the HUD plate supports vertical and horizontal popup directions',
     );
     assert.match(
       REPLAY_CSS,
       /\.replay-tq\.q-result-revealed \.replay-badge-wrap\[tabindex="0"\]\.is-reward-pop\s*\{[^}]*z-index:\s*calc\(15 \+ var\(--replay-reward-stack, 1\)\)/s,
       'the activation-order stack wins the normal revealed-badge layer specificity',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /--replay-quadrant-reward-stack[\s\S]*q-reward-pop-active[\s\S]*!quad\.querySelector\('\.replay-badge-wrap\.is-reward-pop'\)/,
+      'the owning quadrant stays elevated until its final active reward has cleared',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-tq\.q-reward-pop-active\s*\{[^}]*z-index:\s*calc\(30 \+ var\(--replay-quadrant-reward-stack, 1\)\);[^}]*overflow:\s*visible/s,
+      'an active reward promotes its quadrant above neighboring scratch canvases without clipping',
     );
     assert.match(
       REPLAY_CSS,
@@ -560,8 +580,18 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       'new win badges begin inert beneath the scratch cover');
     assert.match(
       REPLAY_PANEL_SRC,
-      /#revealQuadrant[\s\S]*for \(const badge of quad\.querySelectorAll\('\.replay-badge-wrap'\)\) badge\.tabIndex = 0/,
+      /#revealQuadrant[\s\S]*const badges = quad\.querySelectorAll\('\.replay-badge-wrap'\);\s*for \(const badge of badges\) badge\.tabIndex = 0/,
       'badge reward hover arms only when the whole quadrant reaches its reveal threshold',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /#revealQuadrant[\s\S]*if \(!instant && !silent\)\s*\{\s*for \(const badge of badges\) this\.#activateBadgeReward\(badge\);/,
+      'finishing a live quadrant activates every untouched winner callout in that quadrant',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /#activateBadgeReward\(wrap\)[\s\S]*wrap\.dataset\.rewardShown === 'true'[\s\S]*\.replay-badge-reward-pop/,
+      'bulk activation preserves the once-only guard and skips badges without a reward popup',
     );
     assert.match(
       REPLAY_CSS,
@@ -572,6 +602,29 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       REPLAY_CSS,
       /animation:\s*replay-badge-reward-pop 0\.78s[\s\S]*@keyframes replay-badge-reward-pop[\s\S]*scale\(0\.76\)[\s\S]*scale\(1\.08\)[\s\S]*scale\(0\.98\)[\s\S]*scale\(1\.04\)/,
       'the reward snaps in, settles for reading, and exits quickly instead of drifting',
+    );
+  });
+
+  test('YOU WON waits until every active badge reward popup has cleared', () => {
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /receipt\.className = 'replay-win-description is-waiting-for-reward-popups'[\s\S]*receipt\.dataset\.rewardPopGate = 'pending'/,
+      'the receipt begins behind an opening gate instead of racing the first callout',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /const rewardPopActive = Boolean\([\s\S]*this\.querySelector\('\.replay-badge-wrap\.is-reward-pop'\)[\s\S]*openingGateActive \|\| rewardPopActive/,
+      'the gate considers every concurrently active reward popup in the widget',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /wrap\.classList\.add\('is-reward-pop'\);\s*this\.#syncWinReceiptVisibility\(\)[\s\S]*animationend[\s\S]*wrap\.classList\.remove\('is-reward-pop'\);[\s\S]*this\.#syncWinReceiptVisibility\(\)/,
+      'starting and finishing each popup immediately resynchronizes the receipt',
+    );
+    assert.match(
+      REPLAY_CSS,
+      /\.replay-win-description\.is-waiting-for-reward-popups\s*\{[^}]*visibility:\s*hidden[^}]*opacity:\s*0/s,
+      'the gated receipt takes no visual focus while rewards are popping',
     );
   });
 

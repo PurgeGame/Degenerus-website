@@ -9,8 +9,10 @@ import {
   writeDegeneretteSpeed,
 } from '../app/degenerette-preferences.js';
 import {
+  readAfkingLowFundWarningPreference,
   readAllInButtonPreference,
   readRevealAutoOpenPreference,
+  writeAfkingLowFundWarningPreference,
   writeAllInButtonPreference,
   writeRevealAutoOpenPreference,
 } from '../app/ui-preferences.js';
@@ -100,6 +102,14 @@ export function mountSettingsMenu(root = document) {
           <output data-bind="settings-reveal-speed-value">1×</output>
         </span>
       </label>
+      <label class="nav-settings__row nav-settings__row--toggle">
+        <span class="nav-settings__copy">
+          <strong>AFKING FUNDING ALERT</strong>
+          <small>Warn when fewer than 7 funded days remain</small>
+        </span>
+        <input type="checkbox" data-bind="settings-afking-funding-warning">
+        <i class="nav-settings__switch" aria-hidden="true"></i>
+      </label>
       <label class="nav-settings__row nav-settings__row--toggle"
              data-bind="settings-all-in-row" hidden>
         <span class="nav-settings__copy">
@@ -138,6 +148,16 @@ export function mountSettingsMenu(root = document) {
     paintSpeed();
     speed.addEventListener('input', () => paintSpeed());
     speed.addEventListener('change', () => paintSpeed({ persist: true }));
+  }
+
+  const afkingFundingWarning = panel.querySelector(
+    '[data-bind="settings-afking-funding-warning"]',
+  );
+  if (afkingFundingWarning) {
+    afkingFundingWarning.checked = readAfkingLowFundWarningPreference();
+    afkingFundingWarning.addEventListener('change', () => {
+      writeAfkingLowFundWarningPreference(afkingFundingWarning.checked);
+    });
   }
 
   const allInRow = panel.querySelector('[data-bind="settings-all-in-row"]');

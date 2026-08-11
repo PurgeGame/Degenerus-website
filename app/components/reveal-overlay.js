@@ -793,6 +793,14 @@ function _cardsFromLeg(leg) {
           survived: leg.survived,
           payout: leg.payout ?? 0n,
           ethShare: leg.ethShare ?? 0n,
+          // Newer result sources may carry the exact FLIP stake before its
+          // final double-or-nothing. Keep it intact so even a survival bust
+          // can name the amount earned by each winning reel.
+          preSurvivalPayout: leg.preSurvivalPayout
+            ?? leg.survivalPayout
+            ?? leg.payoutAtRisk
+            ?? null,
+          survivalWinPayout: leg.survivalWinPayout ?? null,
           boxOrigin: Boolean(leg.boxOrigin),
           reels,
         },
@@ -4223,7 +4231,13 @@ class RevealOverlay extends HTMLElement {
     // explicit WIN and carry a denominated amount in the board/history UI.
     rendered.currencyRevealed = true;
     this.#refreshBoxSpinSelectors(rendered, board);
-    if (rendered.activePair) this.#settleFullSpinPair(rendered.activePair);
+    if (rendered.activePair) {
+      this.#settleFullSpinPair(rendered.activePair);
+      // The live popout is not one of the registered history selectors. It
+      // used to remain frozen on the pre-currency SCORE/WIN copy while the
+      // history chip beside it correctly changed to the actual payout.
+      this.#showFullSpinPop(rendered, rendered.activePair.row, board);
+    }
     this.#syncBoxSpinPayoutMeter(
       rendered,
       board,

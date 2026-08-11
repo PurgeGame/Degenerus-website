@@ -90,6 +90,7 @@ export const DEATH_CLOCK = {
 
 export const COINFLIP_ABI = [
   'function depositCoinflip(address player, uint256 amount) external',
+  'function depositCoinflipWithCarry(address player, uint256 amount) external',
   'function claimCoinflips(address player, address to) external',
   'function previewClaimCoinflips(address player) external view returns (uint256)',
   'function coinflipAmount(address player) external view returns (uint256)',

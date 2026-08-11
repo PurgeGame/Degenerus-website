@@ -873,6 +873,49 @@ describe('pack-watch — deferred ticket reveals', () => {
     assert.equal(packWatch.unopenedFoilPackPending({ address: ADDR, level: LEVEL }), false);
   });
 
+  test('a foil auto-open no-op reports failure so the reveal tray can retry it', async () => {
+    _routes['/tickets/by-trait'] = byTrait([]);
+    _routes['/foil'] = { present: false, level: LEVEL, lines: null };
+    await packWatch.recordPendingPack({
+      address: ADDR,
+      level: LEVEL,
+      foilExpected: true,
+      standardExpected: false,
+      expectedTickets: 4,
+      sourceKey: 'foil-auto-retry',
+      publish: false,
+    });
+    packWatch.startPackWatch({ getAddress: () => ADDR });
+
+    const foilLines = Array.from({ length: 4 }, (_unused, i) => (
+      card(i + 12, true).entries.map((entry) => entry.traitId)
+    ));
+    _routes['/foil'] = { present: true, level: LEVEL, lines: foilLines };
+    packWatch.refreshPackWatch();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    let [item] = pendingActions.getPendingActions();
+    assert.equal(item?.id, `ticket-pack:${LEVEL}`);
+    assert.equal(item?.foilPack, true);
+    assert.equal(item?.state, 'ready');
+    assert.equal(item?.autoOpen, true);
+
+    // Model the short projection race seen online: the poll saw the complete
+    // foil, but the opener's immediate re-read did not. A false result is the
+    // tray's retry signal; undefined used to disarm AUTO forever.
+    _routes['/foil'] = { present: false, level: LEVEL, lines: null };
+    assert.equal(await item.run(), false);
+    assert.equal(takeQueued().length, 0);
+
+    _routes['/foil'] = { present: true, level: LEVEL, lines: foilLines };
+    packWatch.refreshPackWatch();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    [item] = pendingActions.getPendingActions();
+    assert.equal(item?.state, 'ready');
+    assert.equal(await item.run(), true);
+    assert.equal(takeQueued().length, 1, 'the next attempt stages the foil pack');
+  });
+
   test('bottom-panel indexing copy follows foil-only versus mixed pack identity', async () => {
     _routes['/tickets/by-trait'] = byTrait([card(0, false)]);
     await packWatch.recordPendingPack({

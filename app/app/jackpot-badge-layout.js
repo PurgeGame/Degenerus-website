@@ -6,6 +6,7 @@ export const WIN_RECEIPT_BAND_PERCENT = 40;
 export const WIN_ART_GAP_PERCENT = 2;
 export const WIN_ART_EDGE_GUTTER_PERCENT = 3;
 export const WIN_BADGE_MAX_PERCENT = 52;
+export const WIN_REWARD_DIRECTIONS = Object.freeze(['above', 'right', 'below', 'left']);
 
 function _overlapArea(a, b) {
   const width = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
@@ -25,6 +26,72 @@ function _unitNoise(seed) {
 
 function _clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
+}
+
+/**
+ * Pick a readable side for one jackpot badge reward popup.
+ *
+ * The browser supplies pixel bounds at activation time. Directions that would
+ * clip against the quadrant are removed first; `randomValue` chooses a random
+ * starting side while `sequence` rotates simultaneous wins around the badge
+ * instead of stacking an aligned row into one vertical popup lane.
+ */
+export function winningBadgeRewardDirection({
+  badge,
+  popup,
+  container,
+  gap = 4,
+  padding = 3,
+  randomValue = Math.random(),
+  sequence = 0,
+} = {}) {
+  const width = Math.max(0, Number(container?.width) || 0);
+  const height = Math.max(0, Number(container?.height) || 0);
+  const badgeLeft = Math.max(0, Number(badge?.left) || 0);
+  const badgeTop = Math.max(0, Number(badge?.top) || 0);
+  const badgeWidth = Math.max(0, Number(badge?.width) || 0);
+  const badgeHeight = Math.max(0, Number(badge?.height) || 0);
+  const popupWidth = Math.max(0, Number(popup?.width) || 0);
+  const popupHeight = Math.max(0, Number(popup?.height) || 0);
+  const safeGap = Math.max(0, Number(gap) || 0);
+  const inset = Math.max(0, Number(padding) || 0);
+  const badgeRight = badgeLeft + badgeWidth;
+  const badgeBottom = badgeTop + badgeHeight;
+  const centerX = badgeLeft + badgeWidth / 2;
+  const centerY = badgeTop + badgeHeight / 2;
+
+  const horizontalFits = centerX - popupWidth / 2 >= inset
+    && centerX + popupWidth / 2 <= width - inset;
+  const verticalFits = centerY - popupHeight / 2 >= inset
+    && centerY + popupHeight / 2 <= height - inset;
+  const candidates = [];
+  if (horizontalFits && badgeTop - safeGap - popupHeight >= inset) candidates.push('above');
+  if (verticalFits && badgeRight + safeGap + popupWidth <= width - inset) candidates.push('right');
+  if (horizontalFits && badgeBottom + safeGap + popupHeight <= height - inset) candidates.push('below');
+  if (verticalFits && badgeLeft - safeGap - popupWidth >= inset) candidates.push('left');
+
+  // A very large reward plate may not fit wholly on any side. Keep its exit
+  // pointed toward the side with the most room; overflow clipping is then the
+  // smallest possible instead of reverting every such plate to "above".
+  if (candidates.length === 0) {
+    const clearance = {
+      above: badgeTop,
+      right: width - badgeRight,
+      below: height - badgeBottom,
+      left: badgeLeft,
+    };
+    return WIN_REWARD_DIRECTIONS.reduce((best, direction) => (
+      clearance[direction] > clearance[best] ? direction : best
+    ), 'above');
+  }
+
+  const rawRandom = Number(randomValue);
+  const unitRandom = Number.isFinite(rawRandom)
+    ? ((rawRandom % 1) + 1) % 1
+    : 0;
+  const start = Math.floor(unitRandom * candidates.length);
+  const offset = Math.max(0, Math.trunc(Number(sequence) || 0));
+  return candidates[(start + offset) % candidates.length];
 }
 
 /**

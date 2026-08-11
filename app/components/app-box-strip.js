@@ -55,11 +55,6 @@ import {
 
 const RNG_POLL_INTERVAL_MS = 7_000;   // Phase 60 packs-panel cadence.
 const ERROR_AUTO_CLEAR_MS = 10_000;
-// Replay attempts allowed for a settled box whose legs have not indexed yet
-// before the strip stops advertising an open it cannot perform. Indexer lag is
-// seconds; this is generous. Without a ceiling the miss path re-arms itself
-// forever and the box reads as permanently stuck.
-const MAX_REPLAY_MISSES = 5;
 const PENDING_SOURCE = 'lootboxes';
 
 function _setIntervalUnref(fn, ms) {
@@ -104,6 +99,15 @@ function _boxKey(box) {
   if (box?.resultKey != null && String(box.resultKey)) return String(box.resultKey);
   const index = Number(box?.index);
   return Number.isFinite(index) ? String(index) : '';
+}
+
+function _firstPositiveAmount(...values) {
+  for (const value of values) {
+    try {
+      if (value != null && BigInt(value) > 0n) return String(value);
+    } catch (_e) { /* malformed optional source */ }
+  }
+  return values.find((value) => value != null) ?? null;
 }
 
 function _boxLabel(box, upper = false) {
@@ -188,6 +192,9 @@ function _readPending(addr) {
         index: e.index == null || !Number.isFinite(Number(e.index)) ? null : Number(e.index),
         resultKey: e.resultKey == null ? null : String(e.resultKey),
         transactionHash: e.transactionHash == null ? null : String(e.transactionHash),
+        resultTransactionHash: e.resultTransactionHash == null
+          ? null
+          : String(e.resultTransactionHash),
         transactionHashes: [...new Set([
           ...(Array.isArray(e.transactionHashes) ? e.transactionHashes : []),
           e.transactionHash,
@@ -204,7 +211,8 @@ function _readPending(addr) {
         hasLootboxLeg: Boolean(e.hasLootboxLeg),
         hasPresaleLeg: Boolean(e.hasPresaleLeg),
         optimistic: Boolean(e.optimistic),
-        ready: Boolean(e.ready || e.resolved),
+        resultSyncing: Boolean(e.resultSyncing),
+        ready: Boolean(!e.resultSyncing && (e.ready || e.resolved)),
         resolved: Boolean(e.resolved),
       }));
   } catch (_e) {
@@ -235,6 +243,7 @@ function _writePending(addr, entries) {
       hasLootboxLeg: Boolean(e.hasLootboxLeg),
       hasPresaleLeg: Boolean(e.hasPresaleLeg),
       optimistic: Boolean(e.optimistic),
+      resultSyncing: Boolean(e.resultSyncing),
       ready: Boolean(e.ready),
       resolved: Boolean(e.resolved),
     }))));
@@ -251,7 +260,12 @@ export function resolvedBoxRowsFromLegs(items, player) {
   const rows = new Map();
   for (const item of Array.isArray(items) ? items : []) {
     if (String(item?.player || '').toLowerCase() !== wantPlayer) continue;
-    if (!['opened', 'flipOpened', 'presale'].includes(String(item?.legType || ''))) continue;
+    const legType = String(item?.legType || '');
+    if (!['opened', 'flipOpened', 'presale', 'spin'].includes(legType)) continue;
+    // The normal player feed cannot infer an index for BoxSpin. Treating its
+    // null as Number(null) === 0 would fabricate an AFKing result; only an
+    // exact-index response is allowed to promote a spin-only settlement.
+    if (legType === 'spin' && item?.lootboxIndex == null) continue;
     const index = Number(item?.lootboxIndex);
     if (!Number.isFinite(index) || index < 0) continue;
     const transactionHash = String(item?.transactionHash || '').toLowerCase();
@@ -259,7 +273,7 @@ export function resolvedBoxRowsFromLegs(items, player) {
     const resultKey = index === 0 ? `tx:${transactionHash}` : String(index);
     const ord = Number(item?.ord ?? item?.logIndex ?? 0);
     const prior = rows.get(resultKey);
-    const hasPresaleLeg = String(item?.legType || '') === 'presale';
+    const hasPresaleLeg = legType === 'presale';
     const hasLootboxLeg = !hasPresaleLeg;
     if (!prior || ord > prior.ord) {
       rows.set(resultKey, {
@@ -335,6 +349,10 @@ class AppBoxStrip extends HTMLElement {
   // refresh can restore the result instead of permanently eating the box.
   #activeRevealKeys = new Set();
   #purchaseReceipts = new Map();
+  // Once a background sync has assembled a complete result, hold those exact
+  // legs until the pending action consumes them. This prevents a transient API
+  // miss between the poll and the click from dropping the row back into sync.
+  #resolvedLegCache = new Map();
   // [{index, day, ready, opening, fromReceipt, createdAt}]
   #boxes = [];
   #addr = null;
@@ -357,6 +375,7 @@ class AppBoxStrip extends HTMLElement {
     this.#emptyIndexes.clear();
     this.#activeRevealKeys.clear();
     this.#purchaseReceipts.clear();
+    this.#resolvedLegCache.clear();
     if (this.#pollHandle != null) {
       try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
@@ -419,10 +438,11 @@ class AppBoxStrip extends HTMLElement {
       this.#emptyIndexes.clear();
       this.#activeRevealKeys.clear();
       this.#purchaseReceipts.clear();
+      this.#resolvedLegCache.clear();
       this.#boxes = this.#addr
         ? _readPending(this.#addr).map((e) => ({
             ...e,
-            ready: Boolean(e.ready || e.resolved),
+            ready: Boolean(!e.resultSyncing && (e.ready || e.resolved)),
             resolved: Boolean(e.resolved),
             opening: false,
           }))
@@ -722,7 +742,14 @@ class AppBoxStrip extends HTMLElement {
         if (row.transactionHash && !row.transactionHashes.includes(row.transactionHash)) {
           row.transactionHashes.push(row.transactionHash);
         }
-        try { row.amountWei = String(BigInt(row.amountWei) + BigInt(item?.costRawWei ?? 0)); }
+        try {
+          // costRawWei is the pre-boon spend. The credited box amount is what
+          // the deterministic BoxSpin id commits to, so retain it when the
+          // feed supplies it and use cost only for older API rows.
+          row.amountWei = String(
+            BigInt(row.amountWei) + BigInt(item?.boxAmountRawWei ?? item?.costRawWei ?? 0),
+          );
+        }
         catch (_e) { /* retain the sum recovered so far */ }
         if (item?.presale === true) row.hasPresaleLeg = true;
         if (item?.presale === false) row.hasLootboxLeg = true;
@@ -789,7 +816,11 @@ class AppBoxStrip extends HTMLElement {
               ...(Array.isArray(prior?.transactionHashes) ? prior.transactionHashes : []),
               ...(Array.isArray(feed?.transactionHashes) ? feed.transactionHashes : []),
             ].filter(Boolean).map((hash) => String(hash).toLowerCase()))],
-            amountWei: prior?.amountWei ?? feed?.amountWei ?? settled.amountWei,
+            amountWei: _firstPositiveAmount(
+              feed?.amountWei,
+              prior?.amountWei,
+              settled.amountWei,
+            ),
             hasLootboxLeg: Boolean(
               prior?.hasLootboxLeg || feed?.hasLootboxLeg || settled.hasLootboxLeg,
             ),
@@ -798,6 +829,7 @@ class AppBoxStrip extends HTMLElement {
             ),
             ready: true,
             resolved: true,
+            resultSyncing: false,
           });
         } else if (feed) {
           local.set(key, {
@@ -838,7 +870,11 @@ class AppBoxStrip extends HTMLElement {
             ...(Array.isArray(prior?.transactionHashes) ? prior.transactionHashes : []),
             ...(Array.isArray(feed?.transactionHashes) ? feed.transactionHashes : []),
           ].filter(Boolean).map((hash) => String(hash).toLowerCase()))],
-          amountWei: prior?.amountWei ?? feed?.amountWei ?? settled.amountWei,
+          amountWei: _firstPositiveAmount(
+            feed?.amountWei,
+            prior?.amountWei,
+            settled.amountWei,
+          ),
           hasLootboxLeg: Boolean(
             prior?.hasLootboxLeg || feed?.hasLootboxLeg || settled.hasLootboxLeg,
           ),
@@ -847,6 +883,7 @@ class AppBoxStrip extends HTMLElement {
           ),
           ready: true,
           resolved: true,
+          resultSyncing: false,
           opening: false,
           fromReceipt: Boolean(prior?.fromReceipt),
         });
@@ -955,8 +992,9 @@ class AppBoxStrip extends HTMLElement {
             local.set(key, {
               ...candidate,
               ...prior,
-              ready: true,
+              ready: false,
               resolved: true,
+              resultSyncing: true,
               opening: false,
               amountWei: prior?.amountWei ?? candidate?.amountWei ?? amountWei,
             });
@@ -983,12 +1021,42 @@ class AppBoxStrip extends HTMLElement {
         (Number(b.ord) || 0) - (Number(a.ord) || 0)
         || Number(b.index) - Number(a.index)
       ));
+      await this.#refreshSyncingResults(owner);
+      if (this.#addr !== owner) return;
       _writePending(owner, this.#boxes);
       this.#render();
     } catch (_e) {
       // API/indexer blip — keep the last honest state and retry next tick.
     } finally {
       this.#pollBusy = false;
+    }
+  }
+
+  async #refreshSyncingResults(owner) {
+    const syncing = this.#boxes.filter((box) => (
+      box.resolved
+      && box.resultSyncing
+      && !this.#activeRevealKeys.has(_boxKey(box))
+    ));
+    if (syncing.length === 0) return;
+
+    // A settled slot is no longer an action the wallet can perform. Poll for
+    // its immutable result in the background and promote it exactly once when
+    // a complete replay is available; never make Auto retry the same miss.
+    for (const box of syncing) box.ready = false;
+    const recovered = await Promise.allSettled(syncing.map(async (box) => ({
+      key: _boxKey(box),
+      legs: await this.#readResolvedBoxLegs(box),
+    })));
+    if (this.#addr !== owner) return;
+    for (const result of recovered) {
+      if (result.status !== 'fulfilled' || result.value.legs.length === 0) continue;
+      const box = this.#boxes.find((candidate) => _boxKey(candidate) === result.value.key);
+      if (!box) continue;
+      const resultHash = result.value.legs.find((leg) => leg?.transactionHash)?.transactionHash;
+      if (resultHash) box.resultTransactionHash = String(resultHash).toLowerCase();
+      box.ready = true;
+      box.resultSyncing = false;
     }
   }
 
@@ -1032,17 +1100,24 @@ class AppBoxStrip extends HTMLElement {
         player: this.#addr,
         blockNumber: receipt?.blockNumber ?? null,
       });
+      const settlementHash = receipt?.hash || receipt?.transactionHash || null;
       if (legs.length > 0) {
-        box.transactionHash = receipt?.hash || receipt?.transactionHash || box.transactionHash || null;
+        box.resultTransactionHash = settlementHash || box.resultTransactionHash || null;
+        box.transactionHash = settlementHash || box.transactionHash || null;
         return this.#queueBoxReveal(box, legs);
       } else {
         // The transaction landed, but its result ABI was newer than this
-        // client. Keep the item ready so the DB leg feed can recover it.
+        // client. Persist the settlement hash and let the background result
+        // reader recover it; this is no longer an open action and must not be
+        // auto-clicked every polling interval.
+        box.resultTransactionHash = settlementHash || box.resultTransactionHash || null;
         box.opening = false;
-        box.ready = true;
+        box.ready = false;
         box.resolved = true;
         box.resultSyncing = true;
+        if (this.#addr) _writePending(this.#addr, this.#boxes);
         this.#render();
+        void this.#runPollCycle();
         return false;
       }
     } catch (error) {
@@ -1074,6 +1149,9 @@ class AppBoxStrip extends HTMLElement {
   }
 
   async #readResolvedBoxLegs(box) {
+    const key = _boxKey(box);
+    const cached = this.#resolvedLegCache.get(key);
+    if (Array.isArray(cached) && cached.length > 0) return cached;
     let legs = [];
     try {
       // Ask for both the exact index and the player's newest legs. Current APIs
@@ -1110,7 +1188,9 @@ class AppBoxStrip extends HTMLElement {
         const receiptLegs = await readOpenLegsFromChain({
           player: this.#addr,
           lootboxIndex: box.index,
+          boxAmountWei: box.amountWei,
           purchaseTransactionHashes: [
+            box.resultTransactionHash,
             ...(Array.isArray(box.transactionHashes) ? box.transactionHashes : []),
             box.transactionHash,
           ].filter(Boolean),
@@ -1126,6 +1206,7 @@ class AppBoxStrip extends HTMLElement {
       player: this.#addr,
       blockNumber: box.blockNumber ?? null,
     });
+    if (key && legs.length > 0) this.#resolvedLegCache.set(key, legs);
     return legs;
   }
 
@@ -1169,26 +1250,18 @@ class AppBoxStrip extends HTMLElement {
       // two can disagree). Hand it back to the normal open path.
       box.resolved = false;
       box.resultSyncing = false;
-      box.replayMisses = 0;
+      this.#resolvedLegCache.delete(_boxKey(box));
       if (this.#addr) _writePending(this.#addr, this.#boxes);
       this.#render();
       return false;
     }
 
-    // Settled on chain, legs still indexing. That is a real lifecycle state, so
-    // keep waiting — but bounded. Past the ceiling stop pretending an open is
-    // available and say so, instead of re-arming a button that cannot work.
-    box.replayMisses = Math.max(0, Number(box.replayMisses) || 0) + 1;
+    // Settled on chain, legs still indexing. This is passive synchronization,
+    // not a repeatable player action: disarm the row and let the normal poll
+    // promote it once a complete result is available.
+    box.ready = false;
     box.resolved = true;
-    if (box.replayMisses >= MAX_REPLAY_MISSES) {
-      box.ready = false;
-      box.resultSyncing = false;
-      box.resultUnavailable = true;
-      this.#renderError('Reward claimed. Reveal still syncing.');
-    } else {
-      box.ready = true;
-      box.resultSyncing = true;
-    }
+    box.resultSyncing = true;
     if (this.#addr) _writePending(this.#addr, this.#boxes);
     this.#render();
     return false;
@@ -1236,6 +1309,7 @@ class AppBoxStrip extends HTMLElement {
   #removeBox(keyOrIndex) {
     const key = String(keyOrIndex);
     this.#activeRevealKeys.delete(key);
+    this.#resolvedLegCache.delete(key);
     this.#boxes = this.#boxes.filter((box) => _boxKey(box) !== key);
     if (this.#addr) _writePending(this.#addr, this.#boxes);
     this.#render();
@@ -1253,6 +1327,7 @@ class AppBoxStrip extends HTMLElement {
       if (key) _markRevealed(address, key);
     }
     this.#boxes = [];
+    this.#resolvedLegCache.clear();
     _writePending(address, this.#boxes);
     this.#render();
     return true;
@@ -1303,7 +1378,7 @@ class AppBoxStrip extends HTMLElement {
         : box.ready
           ? box.resolved ? 'Result indexed · ready to replay' : 'RNG ready · prizes locked'
           : `Waiting for RNG${box.day == null ? '' : ` · Day ${box.day}`}`,
-      state: box.opening ? 'busy' : box.ready ? 'ready' : 'waiting',
+      state: box.opening ? 'busy' : resultSyncing ? 'waiting' : box.ready ? 'ready' : 'waiting',
       // Normal purchased boxes and Degenerette share the mid-day Chainlink
       // batch. Publishing that relationship explicitly lets the permanent RNG
       // widget appear on the receipt paint, inherit the real queue fill, and
@@ -1324,7 +1399,7 @@ class AppBoxStrip extends HTMLElement {
       // A resolved/indexed box only replays its popup. An unresolved ready box
       // still needs an explicit openBox wallet transaction and is never run by
       // the tray's OPEN WHEN READY preference.
-      autoOpen: Boolean(box.resolved && box.ready && !box.opening),
+      autoOpen: Boolean(box.resolved && box.ready && !box.opening && !resultSyncing),
       order: 20,
       chronology: Number.isFinite(Number(box.createdAt))
         ? Number(box.createdAt)
@@ -1402,6 +1477,9 @@ class AppBoxStrip extends HTMLElement {
     this.#render();
     return true;
   }
+
+  /** Test-only deterministic polling seam. */
+  async __pollForTest() { await this.#runPollCycle(); }
 
   #renderError(msg) {
     const errEl = this.#bind('bxs-error');

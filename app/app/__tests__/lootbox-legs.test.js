@@ -47,12 +47,12 @@ describe('lootboxRewardPresentation', () => {
       detail: '',
     });
     assert.deepEqual(lootboxRewardPresentation(10, 50n), {
-      label: 'DEGEN RATING BOON',
+      label: 'RATING BOON',
       value: '+25',
       detail: '',
     });
     assert.deepEqual(lootboxRewardPresentation(10, 25n), {
-      label: 'DEGEN RATING BOON',
+      label: 'RATING BOON',
       value: '+12.5',
       detail: '',
     });
@@ -369,7 +369,13 @@ describe('openLegsFromFeed', () => {
     const rows = [
       {
         player: PLAYER, transactionHash: tx, logIndex: 13, legType: 'spin',
-        spin: { ...spin, payout: '55', ethShare: '4' },
+        spin: {
+          ...spin,
+          payout: '55',
+          ethShare: '4',
+          preSurvivalPayout: '27',
+          survivalWinPayout: '54',
+        },
       },
       {
         player: PLAYER, transactionHash: tx, logIndex: 11, legType: 'opened',
@@ -394,6 +400,9 @@ describe('openLegsFromFeed', () => {
     assert.equal(legs[0].futureLevel, 6);
     assert.equal(legs[1].label, 'Lazy pass discount boon');
     assert.equal(legs[2].payout, 55n);
+    assert.equal(legs[2].preSurvivalPayout, 27n,
+      'an indexed exact pre-survival amount survives feed normalization');
+    assert.equal(legs[2].survivalWinPayout, 54n);
     assert.equal(legs[2].reels.length, 1);
   });
 
@@ -603,14 +612,19 @@ describe('readOpenLegsFromChain', () => {
       'the fixture stays beyond the unhinted ten-chunk replay window');
   });
 
-  test('recovers a batch-opened spin by its deterministic RNG id without openBox calldata', async () => {
+  test('recovers a boosted batch-opened spin by its credited deterministic amount', async () => {
     const purchaseHash = `0x${'12'.repeat(32)}`;
     const batchHash = `0x${'34'.repeat(32)}`;
     const purchaseBlock = CHAIN.deployBlock + 220;
     const spinBlock = purchaseBlock + 18;
     const rngWord = 0x123456789abcdefn;
     const amountWei = 181_136_200_000n;
-    const [betId] = deriveHumanLootboxSpinBetIds({ rngWord, player: PLAYER, amountWei });
+    const creditedAmountWei = amountWei * 115n / 100n;
+    const [betId] = deriveHumanLootboxSpinBetIds({
+      rngWord,
+      player: PLAYER,
+      amountWei: creditedAmountWei,
+    });
     const purchase = {
       ...log('LootBoxBuy', [PLAYER, 7n, amountWei]),
       transactionHash: purchaseHash,
@@ -657,12 +671,13 @@ describe('readOpenLegsFromChain', () => {
       player: PLAYER,
       lootboxIndex: 7,
       purchaseTransactionHashes: [purchaseHash],
+      boxAmountWei: creditedAmountWei,
     });
     assert.deepEqual(legs.map((leg) => leg.legType), ['spin']);
     assert.equal(legs[0].spinType, 'wwxrp');
     assert.equal(legs[0].reels[0].score, 5);
     assert.equal(transactionReads, 0,
-      'the exact RNG commitment identifies a permissionless batch result without calldata guesses');
+      'the boost-inclusive RNG commitment identifies the batch result without calldata guesses');
   });
 
   test('names the real quest shield and never invents a generic bonus boon', () => {

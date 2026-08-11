@@ -5,6 +5,7 @@ import {
   WIN_ART_GAP_PERCENT,
   WIN_RECEIPT_BAND_PERCENT,
   winningBadgeLayout,
+  winningBadgeRewardDirection,
 } from '../jackpot-badge-layout.js';
 
 function overlapFraction(a, b) {
@@ -62,5 +63,33 @@ describe('jackpot winning-badge layout', () => {
       'badges in the same logical row are vertically staggered');
     assert.ok(new Set(layout.map((badge) => badge.layer)).size >= 3,
       'badges occupy several controlled paint layers');
+  });
+
+  test('fans an aligned popup burst around every safe side from a random start', () => {
+    const bounds = {
+      badge: { left: 80, top: 80, width: 40, height: 40 },
+      popup: { width: 48, height: 24 },
+      container: { width: 200, height: 200 },
+      randomValue: 0.51,
+    };
+    const directions = Array.from({ length: 4 }, (_unused, sequence) => (
+      winningBadgeRewardDirection({ ...bounds, sequence })
+    ));
+    assert.deepEqual(new Set(directions), new Set(['above', 'right', 'below', 'left']));
+  });
+
+  test('removes popup directions that would clip against a quadrant edge', () => {
+    const bounds = {
+      badge: { left: 4, top: 4, width: 30, height: 30 },
+      popup: { width: 52, height: 22 },
+      container: { width: 180, height: 180 },
+      randomValue: 0,
+    };
+    const directions = Array.from({ length: 8 }, (_unused, sequence) => (
+      winningBadgeRewardDirection({ ...bounds, sequence })
+    ));
+    assert.equal(directions.includes('above'), false);
+    assert.equal(directions.includes('left'), false);
+    assert.ok(directions.every((direction) => direction === 'right' || direction === 'below'));
   });
 });

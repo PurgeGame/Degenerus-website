@@ -2475,7 +2475,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
     });
     coinflipMod.__setContractFactoryForTest(() => ({
-      depositCoinflip: deposit,
+      depositCoinflipWithCarry: deposit,
       connect() { return this; },
     }));
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };
@@ -2992,7 +2992,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
       getSigner: async () => ({ getAddress: async () => TEST_ADDR }),
     });
     coinflipMod.__setContractFactoryForTest(() => ({
-      depositCoinflip: deposit,
+      depositCoinflipWithCarry: deposit,
       connect() { return this; },
     }));
     _fetchResponses = { dashboard: dashboardPayload(), flipDay: null };

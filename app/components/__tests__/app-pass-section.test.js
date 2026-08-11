@@ -488,12 +488,16 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.match(el.innerHTML, /AFKING SUBSCRIPTION/);
     assert.match(el.innerHTML, /NO AUTOMATIC ORDER/,
       'the compact AFKING identity prioritizes current state over explanatory copy');
-    assert.equal(el.querySelectorAll('.pass-product-sigil').length, 4);
+    assert.equal(el.querySelectorAll('.pass-product-sigil').length, 3,
+      'Whale, Lazy, and AFKing retain compact code-native sigils');
+    assert.match(el.innerHTML,
+      /class="pass-deity-wordmark" src="\/app\/assets\/deity-pass-wordmark-v1\.png"[^>]*alt="Deity Pass"/,
+      'Deity uses its dedicated art-directed title instead of a generic infinity tile');
 
     const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
     assert.match(css, /\.pass-product-row--whale\s*\{[^}]*linear-gradient/s);
     assert.match(css, /\.pass-product-row--lazy\s*\{[^}]*linear-gradient/s);
-    assert.match(css, /\.pass-product-sigil--deity\s*\{[^}]*radial-gradient/s);
+    assert.match(DEITY_CSS, /\.pass-deity-wordmark\s*\{[^}]*width:\s*min\(13\.75rem, 100%\)/s);
     assert.doesNotMatch(css, /\.pass-product-row:hover\s*\{[^}]*translateY/s,
       'hovering a pass cannot move the whole bar');
     assert.match(css,
@@ -1076,8 +1080,17 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(el.querySelector('[data-bind="pass-afking-current"]').textContent, '2 LUCKBOX / DAY');
     assert.equal(el.querySelector('[data-bind="pass-afking-policy"]').textContent, 'CLAIMABLE FIRST');
     assert.equal(el.querySelector('[data-bind="pass-afking-edit"]').textContent, 'EDIT');
-    assert.equal(el.querySelector('[name="pass-afking-topup"]').value, '0.4',
-      'the inline top-up starts at ten ticket prices');
+    assert.equal(el.querySelector('[name="pass-afking-topup"]').value, '0.8',
+      'the inline top-up starts at ten full days for the configured quantity');
+    assert.deepEqual(storeMod.get('app.afkingSubscription'), {
+      address: CONNECTED.toLowerCase(),
+      known: true,
+      active: true,
+      fundedDays: 1n,
+      dailyQuantity: 2,
+      settingsKnown: true,
+      useTickets: false,
+    }, 'the warning receives the same quantity-aware funded-day snapshot as the closed strip');
     el.querySelector('[data-bind="pass-afking-edit"]').dispatchEvent({ type: 'click' });
     assert.equal(el.querySelector('[data-bind="pass-afking-controls"]').hidden, false);
     assert.equal(el.querySelector('[data-bind="pass-afking-mode"]').value, 'lootbox');

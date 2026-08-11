@@ -45,12 +45,19 @@ function makeFakeTx(receipt) {
 function makeFakeContract(opts = {}) {
   const calls = {
     depositCoinflip: [],
+    depositCoinflipWithCarry: [],
     setCoinflipAutoRebuy: [],
     setCoinflipAutoRebuyTakeProfit: [],
   };
   const order = [];
   const staticCallStub = (methodName) => async (..._args) => {
     order.push(`static:${methodName}`);
+    if (opts.staticCallMissingSelector?.[methodName]) {
+      const err = new Error('missing revert data');
+      err.code = 'CALL_EXCEPTION';
+      err.data = '0x';
+      throw err;
+    }
     if (opts.staticCallShouldRevert?.[methodName]) {
       const err = new Error('static-call revert');
       err.revert = {
@@ -77,6 +84,13 @@ function makeFakeContract(opts = {}) {
         return sendTxStub('depositCoinflip')(...args);
       },
       { staticCall: staticCallStub('depositCoinflip') }
+    ),
+    depositCoinflipWithCarry: Object.assign(
+      async (...args) => {
+        calls.depositCoinflipWithCarry.push(args);
+        return sendTxStub('depositCoinflipWithCarry')(...args);
+      },
+      { staticCall: staticCallStub('depositCoinflipWithCarry') },
     ),
     setCoinflipAutoRebuy: Object.assign(
       async (...args) => {
@@ -769,13 +783,79 @@ describe('Plan 62-03: depositCoinflip', () => {
     contractsMod.clearProvider();
   });
 
-  test('invokes depositCoinflip(buyer, amount) with closure-form sendTx', async () => {
+  test('uses the carry-aware selector by default with closure-form sendTx', async () => {
     const amount = '200000000000000000000'; // 200 FLIP
     await coinflipMod.depositCoinflip({ amount });
-    assert.equal(lastFakeContract._calls.depositCoinflip.length, 1);
-    const [args] = lastFakeContract._calls.depositCoinflip;
+    assert.equal(lastFakeContract._calls.depositCoinflipWithCarry.length, 1);
+    assert.equal(lastFakeContract._calls.depositCoinflip.length, 0);
+    const [args] = lastFakeContract._calls.depositCoinflipWithCarry;
     assert.equal(args[0], CONNECTED, 'player = connected.address');
     assert.equal(args[1], 200n * 10n ** 18n, 'amount converted to BigInt wei');
+  });
+
+  test('falls back once when a rolling deploy does not have the carry selector', async () => {
+    const legacy = makeFakeContract({
+      staticCallMissingSelector: { depositCoinflipWithCarry: true },
+    });
+    coinflipMod.__setContractFactoryForTest(() => legacy);
+    const amount = 200n * 10n ** 18n;
+
+    await coinflipMod.depositCoinflip({ amount });
+    await coinflipMod.depositCoinflip({ amount });
+
+    assert.deepEqual(legacy._order, [
+      'static:depositCoinflipWithCarry',
+      'static:depositCoinflip',
+      'send:depositCoinflip',
+      'static:depositCoinflip',
+      'send:depositCoinflip',
+    ]);
+    assert.equal(legacy._calls.depositCoinflipWithCarry.length, 0);
+    assert.equal(legacy._calls.depositCoinflip.length, 2);
+  });
+
+  test('never falls back to wallet funding when the carry selector reports RngLocked', async () => {
+    const locked = makeFakeContract({
+      staticCallShouldRevert: { depositCoinflipWithCarry: true },
+      staticCallRevertName: { depositCoinflipWithCarry: 'RngLocked' },
+    });
+    coinflipMod.__setContractFactoryForTest(() => locked);
+
+    await assert.rejects(
+      coinflipMod.depositCoinflip({ amount: 200n * 10n ** 18n }),
+      /RNG|settling/i,
+    );
+    assert.deepEqual(locked._order, ['static:depositCoinflipWithCarry']);
+    assert.equal(locked._calls.depositCoinflip.length, 0);
+    assert.equal(locked._calls.depositCoinflipWithCarry.length, 0);
+  });
+
+  test('a previously proven carry selector never treats stripped revert data as legacy', async () => {
+    const options = {};
+    const flakyRpc = makeFakeContract(options);
+    coinflipMod.__setContractFactoryForTest(() => flakyRpc);
+    const amount = 200n * 10n ** 18n;
+    await coinflipMod.depositCoinflip({ amount });
+
+    options.staticCallMissingSelector = { depositCoinflipWithCarry: true };
+    await assert.rejects(coinflipMod.depositCoinflip({ amount }));
+
+    assert.equal(flakyRpc._calls.depositCoinflip.length, 0,
+      'an ambiguous empty revert never reaches the wallet-funded selector');
+    assert.deepEqual(flakyRpc._order, [
+      'static:depositCoinflipWithCarry',
+      'send:depositCoinflipWithCarry',
+      'static:depositCoinflipWithCarry',
+    ]);
+  });
+
+  test('can explicitly retain the legacy claimable-to-wallet selector', async () => {
+    const amount = 200n * 10n ** 18n;
+    await coinflipMod.depositCoinflip({ amount, useCarry: false });
+    assert.deepEqual(lastFakeContract._order, [
+      'static:depositCoinflip',
+      'send:depositCoinflip',
+    ]);
   });
 
   test('enables auto rebuy with its take-profit chunk after a static call', async () => {
@@ -831,13 +911,13 @@ describe('Plan 62-03: depositCoinflip', () => {
 
   test('accepts amount as string and converts to BigInt', async () => {
     await coinflipMod.depositCoinflip({ amount: '500000000000000000000' });
-    const [args] = lastFakeContract._calls.depositCoinflip;
+    const [args] = lastFakeContract._calls.depositCoinflipWithCarry;
     assert.equal(args[1], 500n * 10n ** 18n, 'string amount converted to 500e18 BigInt');
   });
 
   test('accepts amount as bigint directly', async () => {
     await coinflipMod.depositCoinflip({ amount: 250n * 10n ** 18n });
-    const [args] = lastFakeContract._calls.depositCoinflip;
+    const [args] = lastFakeContract._calls.depositCoinflipWithCarry;
     assert.equal(args[1], 250n * 10n ** 18n);
   });
 
@@ -874,15 +954,15 @@ describe('Plan 62-03: depositCoinflip', () => {
 
   test('static-call gate runs BEFORE sendTx — order verification', async () => {
     const reverting = makeFakeContract({
-      staticCallShouldRevert: { depositCoinflip: true },
-      staticCallRevertName: { depositCoinflip: 'AmountLTMin' },
+      staticCallShouldRevert: { depositCoinflipWithCarry: true },
+      staticCallRevertName: { depositCoinflipWithCarry: 'AmountLTMin' },
     });
     coinflipMod.__setContractFactoryForTest(() => reverting);
     await assert.rejects(
       coinflipMod.depositCoinflip({ amount: '200000000000000000000' }),
     );
     assert.equal(
-      reverting._calls.depositCoinflip.length, 0,
+      reverting._calls.depositCoinflipWithCarry.length, 0,
       'sendTx NOT invoked when static-call gate trips',
     );
     // Order: static-call before sendTx
@@ -909,17 +989,28 @@ describe('Plan 62-03: coinflip.js source-level invariants', () => {
     assert.ok(SRC.includes("'Coinflip deposit'"), 'literal action label present');
   });
 
-  test('funding is one deposit transaction; the contract owns claimable-first consumption', () => {
+  test('funding is one deposit transaction; the contract owns the complete waterfall', () => {
     assert.doesNotMatch(SRC, /claimFirst|readFlipFunding|from ['"]\.\/claims\.js['"]/,
       'the frontend must not add an obsolete preliminary claim transaction');
-    assert.match(SRC, /claimableStored first, then burns only the wallet remainder/,
-      'the current contract waterfall is documented beside the write path');
+    assert.match(SRC, /claimableStored first, unlocked auto-rebuy carry second, then burns only/,
+      'the carry-aware contract waterfall is documented beside the write path');
+    assert.match(SRC, /RngLocked revert is never converted into a[\s\S]*wallet-funded deposit/,
+      'the frontend must not bypass the carry safety lock with wallet FLIP');
+    assert.match(SRC, /provider\.getCode\(CONTRACTS\.COINFLIP\)[\s\S]*CARRY_DEPOSIT_SELECTOR_HEX/,
+      'rolling-deploy support comes from deployed bytecode rather than ambiguous revert data');
   });
 
   test('canonical ABI: depositCoinflip(address player, uint256 amount) external', () => {
     assert.ok(
       SRC.includes('function depositCoinflip(address player, uint256 amount) external'),
       'canonical COINFLIP_ABI fragment present',
+    );
+  });
+
+  test('canonical ABI: depositCoinflipWithCarry(address player, uint256 amount) external', () => {
+    assert.ok(
+      SRC.includes('function depositCoinflipWithCarry(address player, uint256 amount) external'),
+      'carry-aware COINFLIP_ABI fragment present',
     );
   });
 

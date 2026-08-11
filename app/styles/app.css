@@ -5564,8 +5564,11 @@ body.layout-basic app-reveal-tray {
   transform: translateX(-50%);
 }
 body.layout-basic .rrt-stage {
-  display: block;
+  --rrt-font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  display: grid;
   max-width: 100%;
+  justify-items: center;
+  gap: 0.42rem;
   pointer-events: none;
 }
 body.layout-basic .rrt-tray {
@@ -5579,8 +5582,7 @@ body.layout-basic .rrt-tray {
   min-height: 4.45rem;
   grid-template-areas:
     "actions controls"
-    "details details"
-    "error error";
+    "details details";
   grid-template-columns: minmax(0, auto) auto;
   align-items: start;
   gap: 0 0.55rem;
@@ -5614,19 +5616,6 @@ body.layout-basic .rrt-tray[data-has-pending="false"] {
   box-shadow: none;
   backdrop-filter: none;
   pointer-events: none;
-}
-body.layout-basic .rrt-tray[data-has-pending="false"][data-has-error="true"] {
-  min-height: 0;
-  padding: 0.52rem 0.72rem;
-  overflow: hidden;
-  border: 1px solid rgba(248, 113, 113, 0.5);
-  border-radius: 10px;
-  background: rgba(31, 9, 15, 0.96);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.52);
-  pointer-events: auto;
-}
-body.layout-basic .rrt-tray[data-has-pending="false"][data-has-error="true"] .rrt-error {
-  margin-top: 0;
 }
 body.layout-basic .rrt-tray[data-has-pending="false"] > .rrt-actions,
 body.layout-basic .rrt-tray[data-has-pending="false"] > .rrt-controls,
@@ -6480,15 +6469,37 @@ body.layout-basic .rrt-pending-pack-preview__caption {
   white-space: nowrap;
 }
 body.layout-basic .rrt-error {
-  grid-area: error;
-  margin-top: 0.45rem;
+  position: relative;
+  z-index: 2;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(30rem, calc(100vw - 1rem));
+  padding: 0.58rem 0.82rem;
+  overflow: hidden;
+  border: 1px solid rgba(248, 113, 113, 0.58);
+  border-radius: 11px;
+  background:
+    linear-gradient(135deg, rgba(78, 18, 30, 0.96), rgba(28, 9, 17, 0.97));
+  box-shadow:
+    0 14px 38px rgba(0, 0, 0, 0.56),
+    inset 0 1px 0 rgba(254, 202, 202, 0.1),
+    0 0 18px rgba(239, 68, 68, 0.13);
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
   color: #fca5a5;
-  font-size: 0.68rem;
+  font: 800 0.72rem/1.32 var(--rrt-font-family);
+  letter-spacing: 0.01em;
   text-align: center;
+  text-wrap: balance;
+  animation: rrt-error-pop 0.2s ease-out both;
 }
 body.layout-basic .rrt-error[hidden] { display: none !important; }
 @keyframes rrt-rise {
   from { opacity: 0; transform: translateY(1rem) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes rrt-error-pop {
+  from { opacity: 0; transform: translateY(0.35rem) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes rrt-rng-progress {

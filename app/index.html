@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="/app/styles/app.css">
   <link rel="stylesheet" href="/app/styles/deity-pass-purchase.css">
   <link rel="stylesheet" href="/app/styles/settings-menu.css">
+  <link rel="stylesheet" href="/app/styles/afking-funding-warning.css">
   <link rel="stylesheet" href="/app/styles/protocol-wallet-banner.css">
   <link rel="stylesheet" href="/app/styles/eth-onramp.css">
   <link rel="stylesheet" href="/app/styles/baf-eve.css">
@@ -242,6 +243,11 @@
          action. It quotes and submits without rewriting any ordinary form. -->
     <app-all-in-dialog></app-all-in-dialog>
 
+    <!-- Account-scoped runway warning for an active AFKing subscription. The
+         pass desk publishes its exact prepaid-day coverage; this popup never
+         performs a duplicate contract read. -->
+    <app-afking-funding-warning hidden></app-afking-funding-warning>
+
     <!-- Headless lootbox lifecycle controller. Ready boxes are exposed only
          through the same fixed bottom tray used by ticket packs. -->
     <app-box-strip tray-only></app-box-strip>
@@ -287,6 +293,7 @@
   <script type="module" src="/app/components/app-jackpot-resolutions.js"></script>
   <script type="module" src="/app/components/app-decimator-panel.js"></script>
   <script type="module" src="/app/components/app-all-in-dialog.js"></script>
+  <script type="module" src="/app/components/app-afking-funding-warning.js"></script>
   <script type="module" src="/app/components/app-box-strip.js"></script>
   <script type="module" src="/app/components/app-day-history-replays.js"></script>
   <script type="module" src="/app/components/app-sdgnrs-redemptions.js"></script>

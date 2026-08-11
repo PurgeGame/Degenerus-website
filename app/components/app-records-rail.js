@@ -422,7 +422,7 @@ class AppRecordsRail extends HTMLElement {
           <span class="records-rail__identity">
             <span class="records-rail__wordmark" id="records-rail-title" role="heading"
                   aria-level="2" aria-label="The Biggest Bounties">
-              <img src="/app/assets/biggest-bounty-wordmark-v4-bounties.png"
+              <img src="/app/assets/biggest-bounty-wordmark-v5-puffy-the.png"
                    alt="" aria-hidden="true">
             </span>
           </span>

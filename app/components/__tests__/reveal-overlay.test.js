@@ -274,7 +274,9 @@ describe('normalizeSequence', () => {
         { legType: 'opened', wholeTickets: 11, futureLevel: 6, flip: 12_345n * 10n ** 18n },
         {
           legType: 'spin', spinType: 'eth', spinCount: 1, survived: null,
-          payout: 100n, ethShare: 40n, reels: [{ spinIndex: 0, score: 2, playerTraits: [], resultTraits: [] }],
+          payout: 100n, ethShare: 40n,
+          preSurvivalPayout: 50n, survivalWinPayout: 100n,
+          reels: [{ spinIndex: 0, score: 2, playerTraits: [], resultTraits: [] }],
         },
       ],
     });
@@ -305,6 +307,8 @@ describe('normalizeSequence', () => {
       'the pre-spin card does not spoil the currency');
     assert.equal(seq.cards[2].revealedLabel, 'ETH SPIN');
     assert.equal(seq.cards[2].spin.reels.length, 1);
+    assert.equal(seq.cards[2].spin.preSurvivalPayout, 50n);
+    assert.equal(seq.cards[2].spin.survivalWinPayout, 100n);
     assert.equal(seq.boxIndex, '47', 'the branded box can identify the RNG batch');
     assert.equal(seq.boxSpinCount, 1);
     assert.equal(seq.big, true, 'epic card marks the sequence big');
@@ -353,7 +357,7 @@ describe('normalizeSequence', () => {
       [
         ['LUCKBOX BOON', '+15%'],
         ['DECIMATOR BOON', '+50%'],
-        ['DEGEN RATING BOON', '+12.5'],
+        ['RATING BOON', '+12.5'],
         ['LAZY PASS BOON', '−50%'],
       ],
     );
@@ -3345,6 +3349,9 @@ describe('reveal-overlay element', () => {
       assert.ok(history.classList.contains('is-win'));
       assert.match(history.textContent, /#1 · WIN · 2 WWXRP/,
         'the first reel becomes an explicit denominated win only after currency reveal');
+      const liveResult = stage.querySelector('.rvl-dgn-roll-pop');
+      assert.match(liveResult.textContent, /WIN · 2 WWXRP/,
+        'the live result bubble refreshes to the amount at the same reveal boundary');
       const payoutMeter = stage.querySelector('.rvl-box-payout-meter');
       assert.equal(payoutMeter.hidden, false);
       assert.match(payoutMeter.textContent, /PAYOUT2 WWXRPFINAL PAYOUT/);

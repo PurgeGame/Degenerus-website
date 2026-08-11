@@ -4,6 +4,7 @@
 
 export const REVEAL_AUTO_OPEN_STORAGE_KEY = 'degenerus:reveal-tray:auto-open:v1';
 export const ALL_IN_BUTTON_STORAGE_KEY = 'degenerus:all-in-button:v1';
+export const AFKING_LOW_FUND_WARNING_STORAGE_KEY = 'degenerus:afking-low-fund-warning:v1';
 
 const _listeners = new Set();
 
@@ -50,6 +51,19 @@ export function writeAllInButtonPreference(enabled) {
   const value = Boolean(enabled);
   _write(ALL_IN_BUTTON_STORAGE_KEY, value ? '1' : '0');
   _emit('allInButton', value);
+  return value;
+}
+
+// A running subscription can silently exhaust its prepaid balance, so the
+// below-seven-days warning is on unless this browser explicitly hides it.
+export function readAfkingLowFundWarningPreference() {
+  return _read(AFKING_LOW_FUND_WARNING_STORAGE_KEY) !== '0';
+}
+
+export function writeAfkingLowFundWarningPreference(enabled) {
+  const value = Boolean(enabled);
+  _write(AFKING_LOW_FUND_WARNING_STORAGE_KEY, value ? '1' : '0');
+  _emit('afkingLowFundWarning', value);
   return value;
 }
 

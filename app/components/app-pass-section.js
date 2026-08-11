@@ -37,7 +37,7 @@
 import { CHAIN, ETH_DIVISOR } from '../app/chain-config.js';
 import { displayEth } from '../app/scaling.js';
 import { parseEther } from 'ethers';
-import { get, subscribe, getViewedAddress, getActingAddress, deriveCanSign } from '../app/store.js';
+import { get, update, subscribe, getViewedAddress, getActingAddress, deriveCanSign } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
 import { readGameState } from '../app/game-state.js';
 import {
@@ -496,11 +496,11 @@ class AppPassSection extends HTMLElement {
              a focused purchase dialog instead of spilling across the row. -->
         <section class="pass-deity-section" data-bind="pass-deity-details">
           <div class="pass-deity-summary" data-bind="pass-deity-summary">
-            <span class="pass-product-heading">
-              <span class="pass-product-sigil pass-product-sigil--deity" aria-hidden="true">∞</span>
+            <span class="pass-product-heading pass-product-heading--deity">
               <span class="pass-product-copy">
-                <span class="pass-product-eyebrow" data-bind="pass-deity-eyebrow">LIFETIME PASS</span>
-                <span class="pass-section-title">Deity pass
+                <span class="pass-deity-title-lockup">
+                  <img class="pass-deity-wordmark" src="/app/assets/deity-pass-wordmark-v1.png"
+                       width="1200" height="320" alt="Deity Pass">
                   <boon-product-indicator product="deity"></boon-product-indicator>
                 </span>
                 <span class="pass-product-description">15 entries every level and three boons per day forever.</span>
@@ -523,7 +523,9 @@ class AppPassSection extends HTMLElement {
             <div class="pass-deity-dialog__card">
               <header class="pass-deity-dialog__head">
                 <span>
-                  <small>YOUR PERMANENT SYMBOL</small>
+                  <img class="pass-deity-dialog__wordmark"
+                       src="/app/assets/deity-pass-wordmark-v1.png"
+                       width="1200" height="320" alt="" aria-hidden="true">
                   <strong id="pass-deity-dialog-title">CHOOSE YOUR DEITY</strong>
                 </span>
                 <button type="button" class="pass-deity-dialog__close"
@@ -844,6 +846,30 @@ class AppPassSection extends HTMLElement {
         lazyOpen: lazyPassLevelOpen(level, jackpotPhase),
         lazyCostWei: lazyPassCostWei(level),
       };
+      if (afkingRes.status === 'fulfilled' && this.#afkingState) {
+        const coverage = afkingClosedSummary(this.#afkingState, this.#afkingMintPriceWei());
+        update('app.afkingSubscription', Object.freeze({
+          address: String(actionTarget || '').toLowerCase() || null,
+          known: true,
+          active: Boolean(this.#afkingState.active),
+          fundedDays: coverage.fundedDays,
+          dailyQuantity: Math.max(1, Math.trunc(Number(this.#afkingState.dailyQuantity) || 1)),
+          settingsKnown: Boolean(this.#afkingState.settingsKnown),
+          useTickets: this.#afkingState.settingsKnown
+            ? Boolean(this.#afkingState.useTickets)
+            : null,
+        }));
+      } else if (!actionTarget) {
+        update('app.afkingSubscription', Object.freeze({
+          address: null,
+          known: false,
+          active: false,
+          fundedDays: null,
+          dailyQuantity: 0,
+          settingsKnown: false,
+          useTickets: null,
+        }));
+      }
       this.#renderPricing();
     } catch (_e) {
       // Network blip — next cycle retries. Don't crash the panel.
@@ -1457,7 +1483,8 @@ class AppPassSection extends HTMLElement {
       this.#afkingFundingSeededAddress = addressKey;
     }
     if (state.active && this.#afkingTopupSeededAddress !== addressKey && mintPrice > 0n) {
-      if (topupInput) topupInput.value = formatPassEth(mintPrice * 10n, 6);
+      const dailyQuantity = BigInt(Math.max(1, Math.trunc(Number(state.dailyQuantity) || 1)));
+      if (topupInput) topupInput.value = formatPassEth(mintPrice * dailyQuantity * 10n, 6);
       this.#afkingTopupSeededAddress = addressKey;
     }
 

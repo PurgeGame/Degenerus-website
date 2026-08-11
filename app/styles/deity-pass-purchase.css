@@ -25,6 +25,33 @@ body.layout-basic .pass-deity-summary {
 
 body.layout-basic .pass-deity-summary::after { content: none; }
 
+body.layout-basic .pass-product-heading--deity {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.layout-basic .pass-deity-title-lockup {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.48rem;
+}
+
+body.layout-basic .pass-deity-wordmark {
+  display: block;
+  width: min(13.75rem, 100%);
+  max-width: 100%;
+  height: auto;
+  max-height: 3.65rem;
+  flex: 0 1 13.75rem;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 0.3rem 0.5rem rgba(92, 52, 2, 0.28));
+}
+
+body.layout-basic .pass-deity-title-lockup boon-product-indicator {
+  flex: 0 0 auto;
+}
+
 body.layout-basic .pass-deity-summary .pass-section-title {
   min-width: 0;
   margin: 0;
@@ -173,6 +200,14 @@ body.layout-basic .pass-deity-dialog__head {
 body.layout-basic .pass-deity-dialog__head > span {
   display: grid;
   gap: 0.2rem;
+}
+
+body.layout-basic .pass-deity-dialog__wordmark {
+  display: block;
+  width: clamp(9.5rem, 28vw, 12.5rem);
+  max-width: 100%;
+  height: auto;
+  filter: drop-shadow(0 0.3rem 0.55rem rgba(92, 52, 2, 0.32));
 }
 
 body.layout-basic .pass-deity-dialog__head small,

@@ -13,7 +13,10 @@ import {
   buildRoll2BucketSummaries,
   splitOpeningFlipDraw,
 } from '../app/jackpot-buckets.js';
-import { winningBadgeLayout } from '../app/jackpot-badge-layout.js';
+import {
+  winningBadgeLayout,
+  winningBadgeRewardDirection,
+} from '../app/jackpot-badge-layout.js';
 // SHELL-01 patch (Phase 52 followup, mirrors D-09 from jackpot-panel.js):
 // swap the wallet-tainted utils.js import for the wallet-free viewer/utils.js
 // equivalents so play/ can consume this component via a recursive-import walk
@@ -301,6 +304,7 @@ class ReplayPanel extends HTMLElement {
   #mouseIsDown = false;         // global mouse button state
   #badgeCache = new Map();      // path → warmed Image (preloaded badge SVG cache)
   #rewardPopSequence = 0;       // earlier concurrent reward callouts stay in front
+  #rewardDirectionPhase = Math.random(); // random starting side; sequence fans a burst around
   #daysRefreshPromise = null;   // coalesce initial/new-day option reloads
   #lastDaysRefreshAt = 0;       // retry throttle while the indexer catches up
   // /app/ owns the persisted "already scratched" bit.  The replay component
@@ -3436,7 +3440,12 @@ class ReplayPanel extends HTMLElement {
     );
     host.classList.add('replay-player-win-reveal');
     const receipt = document.createElement('div');
-    receipt.className = 'replay-win-description';
+    // Hold the receipt through the quadrant's opening beat. If one or more
+    // badge reward callouts start under the pointer, #syncWinReceiptVisibility
+    // keeps every YOU WON receipt out of their way until the last callout has
+    // finished. The gate is released alongside the prize layer below.
+    receipt.className = 'replay-win-description is-waiting-for-reward-popups';
+    receipt.dataset.rewardPopGate = 'pending';
     const title = document.createElement('strong');
     title.className = 'replay-win-description__title';
     title.textContent = 'YOU WON';
@@ -3462,6 +3471,25 @@ class ReplayPanel extends HTMLElement {
     receipt.appendChild(details);
     host.appendChild(receipt);
     host.setAttribute('aria-label', `You won ${lines.map((line) => line.aria).join(', ')}`);
+    return receipt;
+  }
+
+  #syncWinReceiptVisibility() {
+    const rewardPopActive = Boolean(
+      this.querySelector('.replay-badge-wrap.is-reward-pop'),
+    );
+    for (const receipt of this.querySelectorAll('.replay-win-description')) {
+      const openingGateActive = receipt.dataset.rewardPopGate === 'pending';
+      receipt.classList.toggle(
+        'is-waiting-for-reward-popups',
+        openingGateActive || rewardPopActive,
+      );
+    }
+  }
+
+  #releaseWinReceipt(receipt) {
+    if (receipt) delete receipt.dataset.rewardPopGate;
+    this.#syncWinReceiptVisibility();
   }
 
   #initScratchCanvasWithBadge(canvas, badgeSrc, fillColor) {
@@ -3781,7 +3809,15 @@ class ReplayPanel extends HTMLElement {
     quad.classList.add('q-result-revealed');
     if (isWin) {
       quad.classList.add('q-has-tickets');
-      for (const badge of quad.querySelectorAll('.replay-badge-wrap')) badge.tabIndex = 0;
+      const badges = quad.querySelectorAll('.replay-badge-wrap');
+      for (const badge of badges) badge.tabIndex = 0;
+      // Crossing the full-quadrant threshold is itself a reveal action. Fire
+      // every untouched winner callout now so a player does not have to hunt
+      // over each scattered badge after uncovering the whole result. Silent
+      // instant restores deliberately remain inert on page refresh.
+      if (!instant && !silent) {
+        for (const badge of badges) this.#activateBadgeReward(badge);
+      }
     } else {
       quad.classList.add('q-no-tickets');
       // Show main badge again for non-win owned quadrants
@@ -3802,10 +3838,14 @@ class ReplayPanel extends HTMLElement {
     // payout copy. Restore it as a compact receipt inside the quadrant (not the
     // obsolete full-width winnings bar) and reveal it only after the cover is gone.
     if (prize && isWin) {
-      this.#renderPlayerWinReveal(qIdx, prize);
+      const receipt = this.#renderPlayerWinReveal(qIdx, prize);
       prize.classList.remove('visible');
-      if (instant) prize.classList.add('visible');
-      else setTimeout(() => prize.classList.add('visible'), 200);
+      const revealReceipt = () => {
+        prize.classList.add('visible');
+        this.#releaseWinReceipt(receipt);
+      };
+      if (instant) revealReceipt();
+      else setTimeout(revealReceipt, 200);
     }
 
     // Append "+N more" overflow label only now that the quadrant is revealed
@@ -3880,6 +3920,55 @@ class ReplayPanel extends HTMLElement {
 
   // --- Scattered win badges ---
 
+  #activateBadgeReward(wrap) {
+    if (!wrap || wrap.dataset.rewardShown === 'true') return;
+    const reward = wrap.querySelector?.('.replay-badge-reward-pop');
+    if (!reward) return;
+    wrap.dataset.rewardShown = 'true';
+    // Several fresh wins may reveal together. Let their arcade callouts
+    // coexist briefly; descending layers keep the first one in front without
+    // forcing later rewards to wait or erase it.
+    const sequence = this.#rewardPopSequence++;
+    const stack = Math.max(1, 20 - sequence);
+    wrap.style.setProperty('--replay-reward-stack', String(stack));
+    const quad = wrap.parentElement;
+    if (quad) {
+      const currentQuadStack = Number.parseInt(
+        quad.style.getPropertyValue('--replay-quadrant-reward-stack'),
+        10,
+      ) || 0;
+      quad.style.setProperty(
+        '--replay-quadrant-reward-stack',
+        String(Math.max(currentQuadStack, stack)),
+      );
+      quad.classList.add('q-reward-pop-active');
+    }
+    try {
+      const quadRect = quad?.getBoundingClientRect?.();
+      const badgeRect = wrap.getBoundingClientRect?.();
+      const popupRect = reward.getBoundingClientRect?.();
+      const direction = winningBadgeRewardDirection({
+        badge: {
+          left: badgeRect.left - quadRect.left,
+          top: badgeRect.top - quadRect.top,
+          width: badgeRect.width,
+          height: badgeRect.height,
+        },
+        popup: { width: popupRect.width, height: popupRect.height },
+        container: { width: quadRect.width, height: quadRect.height },
+        randomValue: this.#rewardDirectionPhase,
+        sequence,
+      });
+      wrap.dataset.rewardDirection = direction;
+    } catch (_e) {
+      // Headless/legacy DOM fallback still varies concurrent rewards instead
+      // of collapsing them back into the old always-above position.
+      wrap.dataset.rewardDirection = ['above', 'right', 'below', 'left'][sequence % 4];
+    }
+    wrap.classList.add('is-reward-pop');
+    this.#syncWinReceiptVisibility();
+  }
+
   #placeWinBadges(qIdx, traitId) {
     const quads = this.querySelectorAll('.replay-tq');
     const quad = quads[qIdx];
@@ -3936,9 +4025,6 @@ class ReplayPanel extends HTMLElement {
       wrap.style.top = bestTop + '%';
       wrap.style.setProperty('--replay-badge-rotation', `${position.rotation || 0}deg`);
       wrap.style.setProperty('--replay-badge-layer', String(position.layer || 1));
-      const horizontalCenter = bestLeft + sizePct / 2;
-      wrap.dataset.rewardAlign = horizontalCenter < 30 ? 'left' : horizontalCenter > 70 ? 'right' : 'center';
-      wrap.dataset.rewardSide = bestTop + sizePct / 2 < 50 ? 'below' : 'above';
       const img = document.createElement('img');
       img.src = winPath; img.className = 'replay-scattered-badge'; img.alt = '';
       wrap.appendChild(img);
@@ -3969,20 +4055,16 @@ class ReplayPanel extends HTMLElement {
           reward.appendChild(row);
         }
         wrap.appendChild(reward);
-        const showReward = () => {
-          if (wrap.dataset.rewardShown === 'true') return;
-          wrap.dataset.rewardShown = 'true';
-          // Several fresh wins may be swept in one motion. Let their arcade
-          // callouts coexist briefly; descending layers keep the first one in
-          // front without forcing later rewards to wait or erase it.
-          const stack = Math.max(1, 20 - this.#rewardPopSequence++);
-          wrap.style.setProperty('--replay-reward-stack', String(stack));
-          wrap.classList.add('is-reward-pop');
-        };
+        const showReward = () => this.#activateBadgeReward(wrap);
         wrap.addEventListener('mouseenter', showReward, { once: true });
         wrap.addEventListener('focus', showReward, { once: true });
         reward.addEventListener('animationend', () => {
           wrap.classList.remove('is-reward-pop');
+          if (!quad.querySelector('.replay-badge-wrap.is-reward-pop')) {
+            quad.classList.remove('q-reward-pop-active');
+            quad.style.removeProperty('--replay-quadrant-reward-stack');
+          }
+          this.#syncWinReceiptVisibility();
         }, { once: true });
       }
       quad.appendChild(wrap);
@@ -4001,8 +4083,14 @@ class ReplayPanel extends HTMLElement {
 
   #clearScatteredBadges() {
     this.#rewardPopSequence = 0;
+    this.#rewardDirectionPhase = Math.random();
     const els = this.querySelectorAll('.replay-badge-wrap, .replay-badge-overflow-label');
     for (const el of els) el.remove();
+    const activeQuads = this.querySelectorAll('.replay-tq.q-reward-pop-active');
+    for (const quad of activeQuads) {
+      quad.classList.remove('q-reward-pop-active');
+      quad.style.removeProperty('--replay-quadrant-reward-stack');
+    }
   }
 
   #resetCards() {

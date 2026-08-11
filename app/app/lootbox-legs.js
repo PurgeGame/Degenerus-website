@@ -155,7 +155,7 @@ const BOON_REVEAL_LABELS = Object.freeze({
   purchase: 'TICKET BOON',
   decimator: 'DECIMATOR BOON',
   whale: 'WHALE PASS BOON',
-  activity: 'DEGEN RATING BOON',
+  activity: 'RATING BOON',
   deity: 'DEITY PASS BOON',
   lazy: 'LAZY PASS BOON',
 });
@@ -231,7 +231,7 @@ export function lootboxRewardPresentation(
       const wholeScore = raw / 2n;
       const score = raw % 2n === 0n ? `${wholeScore}` : `${wholeScore}.5`;
       return {
-        label: 'DEGEN RATING BOON',
+        label: 'RATING BOON',
         value: `+${score}`,
         detail: '',
       };
@@ -532,6 +532,21 @@ function _feedBigInt(value) {
   try { return BigInt(value ?? 0); } catch (_e) { return 0n; }
 }
 
+function _feedSpinPayoutContext(data) {
+  const rawPreSurvival = data?.preSurvivalPayout
+    ?? data?.survivalPayout
+    ?? data?.payoutAtRisk;
+  const rawSurvivalWin = data?.survivalWinPayout;
+  return {
+    ...(rawPreSurvival == null
+      ? {}
+      : { preSurvivalPayout: _feedBigInt(rawPreSurvival) }),
+    ...(rawSurvivalWin == null
+      ? {}
+      : { survivalWinPayout: _feedBigInt(rawSurvivalWin) }),
+  };
+}
+
 /**
  * Degenerette's feed embeds the lootbox settlement events emitted in the same
  * resolve transaction. Rebuild those raw indexer rows into the exact prize-leg
@@ -585,6 +600,7 @@ export function openLegsFromDegenerettePayouts(items) {
           ...decoded,
           payout: _feedBigInt(data.payout),
           ethShare: _feedBigInt(data.ethShare),
+          ..._feedSpinPayoutContext(data),
         });
       } else if (Array.isArray(data.reels)) {
         out.push({
@@ -599,6 +615,7 @@ export function openLegsFromDegenerettePayouts(items) {
           survived: data.survived == null ? null : Boolean(data.survived),
           payout: _feedBigInt(data.payout),
           ethShare: _feedBigInt(data.ethShare),
+          ..._feedSpinPayoutContext(data),
           reels: data.reels,
         });
       }
@@ -745,6 +762,7 @@ export function openLegsFromFeed(items, { player, lootboxIndex, transactionHash 
           survived: spin.survived == null ? null : Boolean(spin.survived),
           payout: _feedBigInt(spin.payout),
           ethShare: _feedBigInt(spin.ethShare),
+          ..._feedSpinPayoutContext(spin),
           reels: Array.isArray(spin.reels) ? spin.reels : [],
         });
         break;
@@ -771,6 +789,7 @@ export async function readOpenLegsFromChain({
   player,
   lootboxIndex,
   purchaseTransactionHashes = [],
+  boxAmountWei = null,
 } = {}) {
   if (!player || lootboxIndex == null) return [];
   let index;
@@ -791,6 +810,9 @@ export async function readOpenLegsFromChain({
   // old Pending row finds the result near the time it actually opened.
   let purchaseBlock = null;
   let purchaseAmountWei = 0n;
+  let creditedAmountWei = 0n;
+  try { creditedAmountWei = BigInt(boxAmountWei ?? 0); }
+  catch (_e) { creditedAmountWei = 0n; }
   const purchaseHashes = [...new Set([
     ...(Array.isArray(purchaseTransactionHashes) ? purchaseTransactionHashes : []),
   ].filter(Boolean).map((hash) => String(hash).toLowerCase()))];
@@ -908,7 +930,8 @@ export async function readOpenLegsFromChain({
     // RNG word, player, and summed purchase amount, which identifies results
     // emitted by permissionless batch opens. Keep direct-call decoding as a
     // fallback for legacy results whose deterministic inputs are unavailable.
-    if ((typeof provider.getTransaction === 'function' || (rngWord > 0n && purchaseAmountWei > 0n))
+    if ((typeof provider.getTransaction === 'function'
+        || (rngWord > 0n && (purchaseAmountWei > 0n || creditedAmountWei > 0n)))
         && inspectedSpinTransactions < REPLAY_SPIN_TX_LIMIT) {
       let spinLogs;
       try {
@@ -925,11 +948,18 @@ export async function readOpenLegsFromChain({
         Number(b?.blockNumber ?? 0) - Number(a?.blockNumber ?? 0)
         || Number(b?.index ?? b?.logIndex ?? 0) - Number(a?.index ?? a?.logIndex ?? 0)
       ));
-      const deterministicBetIds = new Set(deriveHumanLootboxSpinBetIds({
-        rngWord,
-        player,
-        amountWei: purchaseAmountWei,
-      }).map(String));
+      // LootBoxBuy records what the player paid. A purchase boon can credit a
+      // larger amount to the box, and that credited amount is what the spin's
+      // deterministic bet id commits to. Try both so old receipt-only rows and
+      // boost-aware feed rows are equally recoverable.
+      const deterministicBetIds = new Set(
+        [...new Set([purchaseAmountWei, creditedAmountWei].filter((amount) => amount > 0n))]
+          .flatMap((amountWei) => deriveHumanLootboxSpinBetIds({
+            rngWord,
+            player,
+            amountWei,
+          }).map(String)),
+      );
       for (const candidate of candidates) {
         if (inspectedSpinTransactions >= REPLAY_SPIN_TX_LIMIT) break;
         inspectedSpinTransactions += 1;

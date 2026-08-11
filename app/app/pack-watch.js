@@ -1381,7 +1381,7 @@ async function _publishPackActions(address, publishSeq = null) {
       run: opening ? null : async () => {
         let current = null;
         try { current = _getAddress ? _getAddress() : null; } catch (_e) { current = null; }
-        if (_lower(current) !== addr) return;
+        if (_lower(current) !== addr) return false;
         publishPendingActions(PENDING_SOURCE, [{
           id: `ticket-pack:${row.level}`,
           dismissKey: _packDismissKey(row),
@@ -1395,11 +1395,16 @@ async function _publishPackActions(address, publishSeq = null) {
           state: 'busy',
           order: 10,
         }]);
-        await checkPendingPacks({ address: addr, levels: [row.level] });
+        // Readiness can race the ticket/foil projections between this action's
+        // poll and the click/auto-open microtask. Tell the reveal tray when no
+        // sequence was actually staged so AUTO keeps retrying instead of
+        // permanently considering this level opened after a no-op.
+        const queued = await checkPendingPacks({ address: addr, levels: [row.level] });
         try { current = _getAddress ? _getAddress() : null; } catch (_e) { current = null; }
-        if (_lower(current) !== addr) return;
+        if (_lower(current) !== addr) return false;
         const nextSeq = ++_publishSeq;
         await _publishPackActions(addr, nextSeq);
+        return queued > 0;
       },
     };
     });

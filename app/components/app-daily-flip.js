@@ -19,7 +19,8 @@
 // and top-level flipBalance.
 //
 // Actions (all Phase 58 sendTx chokepoint paths):
-//   FLIP — depositCoinflip(player, amount) stake (FLIP wei, UNSCALED).
+//   FLIP — depositCoinflipWithCarry(player, amount) stake (FLIP wei, UNSCALED),
+//          with rolling-deploy fallback to depositCoinflip.
 // Ticket redemption belongs to the purchase panel, so this side only owns the
 // coinflip stake, its winnings claim, and the post-result Reverse Flip card.
 // (CLAIM DGNRS removed — user call: no DGNRS claim in the coinflip column.)
@@ -4603,9 +4604,10 @@ class AppDailyFlip extends HTMLElement {
         if (amount == null || amount < 100n * (10n ** 18n)) {
           throw new Error('Minimum coinflip bet is 100 FLIP.');
         }
-        // The current contract handles its own claimable-first waterfall in
-        // this one deposit. No separate claim signature is needed.
-        await depositCoinflip({ player, amount });
+        // The current contract handles claimable -> unlocked auto-rebuy carry
+        // -> wallet in one deposit. No preliminary carry-claim signature is
+        // needed, and an RNG-locked carry leg never falls through to the wallet.
+        await depositCoinflip({ player, amount, useCarry: true });
         if (options?.amount == null) this.#closeAddBetDialog({ force: true });
       } else if (kind === 'auto-rebuy') {
         const info = this.#activeAutoRebuyInfo();

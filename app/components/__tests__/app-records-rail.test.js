@@ -572,7 +572,7 @@ describe('holder identity', () => {
 describe('rail wiring', () => {
   test('presents the board with the plural Biggest Bounties wordmark and explicit data labels', () => {
     assert.match(COMPONENT, /records-rail__wordmark[^>]*id="records-rail-title"[^>]*aria-label="The Biggest Bounties"/);
-    assert.match(COMPONENT, /src="\/app\/assets\/biggest-bounty-wordmark-v4-bounties\.png"/);
+    assert.match(COMPONENT, /src="\/app\/assets\/biggest-bounty-wordmark-v5-puffy-the\.png"/);
     assert.doesNotMatch(COMPONENT, /records-rail__title-(?:name|descriptor)/,
       'the generated wordmark replaces the old duplicate text treatment');
     assert.match(CSS, /records-rail__wordmark img\s*\{[^}]*width:\s*100%[^}]*max-height:\s*3\.85rem/s,

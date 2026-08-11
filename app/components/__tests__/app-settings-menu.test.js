@@ -8,12 +8,13 @@ const tray = readFileSync(new URL('../app-reveal-tray.js', import.meta.url), 'ut
 const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 
 describe('top-bar player settings', () => {
-  test('one gear menu owns sound, feedback, Auto, reveal speed, and eligible ALL IN', () => {
+  test('one gear menu owns sound, feedback, Auto, reveal speed, AFKing alerts, and eligible ALL IN', () => {
     for (const marker of [
       'id = BUTTON_ID',
       'data-bind="settings-actions"',
       'data-bind="settings-auto-reveals"',
       'data-bind="settings-reveal-speed"',
+      'data-bind="settings-afking-funding-warning"',
       'data-bind="settings-all-in-button"',
     ]) assert.match(settings, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.match(settings, /mountSoundToggle\(root\)/);
@@ -32,6 +33,8 @@ describe('top-bar player settings', () => {
     assert.match(settings, /readDegeneretteSpeed\(\)/);
     assert.match(settings, /writeDegeneretteSpeed\(value\)/);
     assert.match(settings, /writeRevealAutoOpenPreference\(auto\.checked\)/);
+    assert.match(settings, /readAfkingLowFundWarningPreference\(\)/);
+    assert.match(settings, /writeAfkingLowFundWarningPreference\(afkingFundingWarning\.checked\)/);
   });
 
   test('the menu is keyboard-accessible, responsive, and loaded after the original controls', () => {

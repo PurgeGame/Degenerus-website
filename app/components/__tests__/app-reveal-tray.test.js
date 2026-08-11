@@ -918,6 +918,9 @@ describe('<app-reveal-tray>', () => {
     assert.equal(trayModule.canAutoOpenReveal({
       state: 'ready', autoOpen: false, run() {},
     }), false, 'wallet/write work cannot opt itself in accidentally');
+    assert.equal(trayModule.canAutoOpenReveal({
+      state: 'ready', autoOpen: true, phase: 'indexing', run() {},
+    }), false, 'a claimed result still indexing cannot enter an automatic retry loop');
     el.disconnectedCallback();
   });
 
@@ -940,6 +943,37 @@ describe('<app-reveal-tray>', () => {
     assert.doesNotMatch(action.textContent, /purchase/i);
     action.dispatchEvent({ type: 'click' });
     assert.match(el.querySelector('[data-bind="rrt-error"]').textContent, /No click is needed/i);
+    el.disconnectedCallback();
+  });
+
+  test('action failures use a separate alert bubble outside the Pending panel', () => {
+    pending.publishPendingActions('box', [{
+      id: 'box:failed', kind: 'lootbox', compact: true,
+      label: 'Luckbox', amountLabel: '0.04 ETH', state: 'ready', run: async () => {},
+    }]);
+    const el = new trayModule.AppRevealTray();
+    el.connectedCallback();
+    pending.reportPendingActionError('Transaction cancelled.');
+
+    const stage = el.querySelector('[data-bind="rrt-stage"]');
+    const tray = el.querySelector('[data-bind="rrt-tray"]');
+    const error = el.querySelector('[data-bind="rrt-error"]');
+    assert.equal(error.textContent, 'Transaction cancelled.');
+    assert.equal(error.hidden, false);
+    assert.equal(stage.getAttribute('data-has-error'), 'true');
+    assert.equal(tray.getAttribute('data-has-error'), null,
+      'the Pending card no longer absorbs transaction errors');
+
+    const source = readFileSync(new URL('../app-reveal-tray.js', import.meta.url), 'utf8');
+    const shell = source.slice(source.indexOf('#renderShell()'), source.indexOf('#beginRngRequestFlash'));
+    assert.ok(shell.indexOf('class="rrt-error"') < shell.indexOf('<aside class="rrt-tray"'),
+      'the alert bubble is a stage sibling rendered above Pending');
+    const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+    assert.match(css, /\.rrt-stage\s*\{[^}]*display:\s*grid[^}]*gap:/s);
+    assert.match(css, /\.rrt-error\s*\{[^}]*border:[^}]*background:[^}]*box-shadow:/s,
+      'the standalone error has its own bordered toast treatment');
+    assert.doesNotMatch(css, /\.rrt-tray\[data-has-pending="false"\]\[data-has-error="true"\]/,
+      'the old error-inside-Pending fallback is gone');
     el.disconnectedCallback();
   });
 
@@ -1329,8 +1363,8 @@ describe('<app-reveal-tray>', () => {
       /\.rrt-actions > \.rrt-action:only-child,[\s\S]*?\.rrt-action:last-child:nth-child\(odd\)\s*\{[^}]*grid-column:\s*1 \/ -1/s,
       'a lone or unmatched compact card reclaims the full available width',
     );
-    assert.match(css, /\.rrt-stage\s*\{[^}]*display:\s*block/s,
-      'the contextual RNG control and Pending use one unified compact stage');
+    assert.match(css, /\.rrt-stage\s*\{[^}]*display:\s*grid/s,
+      'the contextual RNG control, Pending, and detached error bubble share one compact stage');
     assert.match(css,
       /\.rrt-tray\[data-has-pending="false"\]\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent/s,
       'an RNG-only state does not draw an empty Pending card');

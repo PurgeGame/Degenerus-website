@@ -140,6 +140,7 @@ const ACTION_ICON_PATHS = Object.freeze({
 export function canAutoOpenReveal(item) {
   return item?.state === 'ready'
     && item?.autoOpen === true
+    && String(item?.phase || '') !== 'indexing'
     && typeof item?.run === 'function';
 }
 
@@ -966,6 +967,7 @@ class AppRevealTray extends HTMLElement {
   #renderShell() {
     this.innerHTML = `
       <div class="rrt-stage" data-bind="rrt-stage">
+        <div class="rrt-error" data-bind="rrt-error" hidden role="alert"></div>
         <aside class="rrt-tray" data-bind="rrt-tray" data-has-pending="false" aria-live="polite"
                aria-label="Actions ready">
           <!-- RNG lives inside the Pending surface and is hidden unless a
@@ -999,7 +1001,6 @@ class AppRevealTray extends HTMLElement {
           </div>
           <section id="rrt-pending-details" class="rrt-pending-details"
                    data-bind="rrt-pending-details" hidden></section>
-          <div class="rrt-error" data-bind="rrt-error" hidden role="alert"></div>
         </aside>
       </div>
     `;
@@ -1554,6 +1555,8 @@ class AppRevealTray extends HTMLElement {
             ? 'Auto-open is armed. No click is needed.'
             : item.phase === 'submitting'
               ? 'Transaction is still confirming. No click is needed yet.'
+              : item.phase === 'indexing'
+                ? 'Reward claimed. The reveal will open when it finishes loading.'
               : 'Waiting for RNG. This will light up when it needs you.',
         ));
       } else if (!passive && !button.disabled) {
@@ -1645,9 +1648,7 @@ class AppRevealTray extends HTMLElement {
     if (!error) return;
     error.textContent = String(message || 'Could not complete this action.');
     error.hidden = false;
-    const tray = this.querySelector('[data-bind="rrt-tray"]');
-    tray?.setAttribute?.('data-has-error', 'true');
-    tray?.setAttribute?.('aria-label', 'Pending transaction failed');
+    this.querySelector('[data-bind="rrt-stage"]')?.setAttribute?.('data-has-error', 'true');
     if (this.#errorTimer != null) clearTimeout(this.#errorTimer);
     this.#errorTimer = setTimeout(() => this.#clearError(), ERROR_AUTO_CLEAR_MS);
     if (this.#errorTimer && typeof this.#errorTimer.unref === 'function') {
@@ -1661,7 +1662,7 @@ class AppRevealTray extends HTMLElement {
       error.textContent = '';
       error.hidden = true;
     }
-    this.querySelector('[data-bind="rrt-tray"]')?.setAttribute?.('data-has-error', 'false');
+    this.querySelector('[data-bind="rrt-stage"]')?.setAttribute?.('data-has-error', 'false');
     if (this.#errorTimer != null) {
       try { clearTimeout(this.#errorTimer); } catch (_e) { /* defensive */ }
       this.#errorTimer = null;

@@ -43,6 +43,8 @@ import { getActingAddress } from './store.js';
 const COINFLIP_ABI = [
   // Coinflip.sol:229 — depositCoinflip(player, amount)
   'function depositCoinflip(address player, uint256 amount) external',
+  // Carry-aware deposit: claimable -> unlocked auto-rebuy carry -> wallet.
+  'function depositCoinflipWithCarry(address player, uint256 amount) external',
   // Coinflip.sol:1195 — claimable coinflip FLIP (settled + this day's mintable).
   'function previewClaimCoinflips(address player) external view returns (uint256 mintable)',
   // Carry-inclusive backing: everything the player could withdraw from the
@@ -1554,6 +1556,9 @@ export async function readResolvedCoinflipStake({ player, day } = {}) {
 // Minimum FLIP deposit (Coinflip.sol:124 enforces via AmountLTMin).
 // RESEARCH Q5: FLIP is unscaled on Sepolia — 1 FLIP = 1e18 wei.
 const COINFLIP_MIN_FLIP_WEI = 100n * 10n ** 18n;
+// depositCoinflipWithCarry(address,uint256). Coinflip is a direct deployment,
+// so its dispatcher bytecode is authoritative for rolling-deploy detection.
+const CARRY_DEPOSIT_SELECTOR_HEX = '1475fb86';
 
 // PlayerCoinflipState stores the take-profit chunk as uint128. Solidity's
 // explicit narrowing conversion would otherwise truncate a larger UI value.
@@ -1567,15 +1572,19 @@ export const MAX_AUTO_REBUY_TAKE_PROFIT_WEI = (1n << 128n) - 1n;
 
 let _contractFactory = null;
 let _reverseFlipContractFactory = null;
+// null = unprobed; true = carry-aware selector deployed; false = legacy deploy.
+let _carryDepositSupported = null;
 
 /** Test-only: replace the `new Contract(...)` construction with a fake. */
 export function __setContractFactoryForTest(fn) {
   _contractFactory = fn;
+  _carryDepositSupported = null;
 }
 
 /** Test-only: clear the injected factory; subsequent calls use the real path. */
 export function __resetContractFactoryForTest() {
   _contractFactory = null;
+  _carryDepositSupported = null;
 }
 
 /** Test-only: replace GAME contract construction for reverseFlip. */
@@ -1678,6 +1687,32 @@ function _autoRebuyTakeProfit(value) {
   return amount;
 }
 
+function _missingCarryDepositSelector(error) {
+  if (error?.revert?.name || error?.errorName) return false;
+  const data = error?.data
+    ?? error?.error?.data
+    ?? error?.info?.error?.data
+    ?? error?.cause?.data
+    ?? null;
+  const code = error?.code ?? error?.cause?.code ?? null;
+  return (code === 'CALL_EXCEPTION' || code === 'BAD_DATA')
+    && (data == null || data === '0x');
+}
+
+async function _probeCarryDepositSupport(provider) {
+  if (_carryDepositSupported != null || _contractFactory
+    || typeof provider?.getCode !== 'function') return;
+  try {
+    const code = String(await provider.getCode(CONTRACTS.COINFLIP) || '').toLowerCase();
+    if (/^0x[0-9a-f]+$/.test(code) && code.length > 2) {
+      _carryDepositSupported = code.includes(CARRY_DEPOSIT_SELECTOR_HEX);
+    }
+  } catch (_e) {
+    // Leave support unknown. The safe next step is to try the carry selector
+    // and surface failure, never to guess legacy and spend wallet FLIP.
+  }
+}
+
 // ---------------------------------------------------------------------------
 // depositCoinflip — BUY-04 — synchronous FLIP deposit.
 //
@@ -1691,11 +1726,12 @@ function _autoRebuyTakeProfit(value) {
  * @param {{
  *   amount: bigint | string | number,
  *   player?: string,
+ *   useCarry?: boolean,
  * }} args
  * @returns {Promise<{receipt: import('ethers').TransactionReceipt}>}
  */
 export async function depositCoinflip({
-  amount, player,
+  amount, player, useCarry = true,
 } = {}) {
   const buyer = player || getActingAddress();
   if (!buyer) throw new Error('Wallet not connected.');
@@ -1710,24 +1746,60 @@ export async function depositCoinflip({
     throw new Error('Minimum coinflip deposit is 100 FLIP.');
   }
 
-  // Current deploy: Coinflip._depositCoinflip settles and consumes the
-  // player's claimableStored first, then burns only the wallet remainder.
-  // Calling claimCoinflips here would mint those winnings just to burn them in
-  // a second signature, forfeiting the contract-native recycling path.
+  // Current deploy: the carry-aware selector settles once and consumes
+  // claimableStored first, unlocked auto-rebuy carry second, then burns only
+  // the wallet remainder. Carry already received its roll bonus, so the
+  // contract deliberately does not bonus it again. A rolling deployment can
+  // fall back to the legacy claimable -> wallet selector when the new selector
+  // is genuinely absent; a real RngLocked revert is never converted into a
+  // wallet-funded deposit.
 
   const provider = getProvider();
   const signer = provider ? await provider.getSigner() : null;
+  if (useCarry) await _probeCarryDepositSupport(provider);
+  let method = useCarry && _carryDepositSupported !== false
+    ? 'depositCoinflipWithCarry'
+    : 'depositCoinflip';
 
   // Static-call gate (Phase 56 D-05) — runs only if a signer is available.
   if (signer) {
     const c = _buildContract(signer);
-    const sim = await requireStaticCall(c, 'depositCoinflip', [buyer, amountWei], signer);
-    if (!sim.ok) throw _structuredRevertError(sim.error, 'static-call depositCoinflip');
+    if (method === 'depositCoinflipWithCarry'
+      && typeof c?.depositCoinflipWithCarry?.staticCall !== 'function') {
+      _carryDepositSupported = false;
+      method = 'depositCoinflip';
+    }
+
+    if (method === 'depositCoinflipWithCarry') {
+      const carrySim = await requireStaticCall(c, method, [buyer, amountWei], signer);
+      if (carrySim.ok) {
+        _carryDepositSupported = true;
+      } else if (_carryDepositSupported !== true
+        && _contractFactory
+        && _missingCarryDepositSelector(carrySim.error)) {
+        // Test/legacy adapter seam. Production detects this from authoritative
+        // deployed bytecode above; ambiguous empty RPC reverts never fall back.
+        _carryDepositSupported = false;
+        method = 'depositCoinflip';
+      } else {
+        // A decoded revert proves the selector exists. In particular, preserve
+        // RngLocked so carry can never be silently replaced with wallet FLIP.
+        if (carrySim.error?.revert?.name || carrySim.error?.errorName) {
+          _carryDepositSupported = true;
+        }
+        throw _autoRebuyRevertError(carrySim.error, `static-call ${method}`);
+      }
+    }
+
+    if (method === 'depositCoinflip') {
+      const sim = await requireStaticCall(c, method, [buyer, amountWei], signer);
+      if (!sim.ok) throw _structuredRevertError(sim.error, `static-call ${method}`);
+    }
   }
 
   // Phase 58 chokepoint — closure form mandatory.
   const receipt = await sendTx(
-    (s) => _buildContract(s).depositCoinflip(buyer, amountWei),
+    (s) => _buildContract(s)[method](buyer, amountWei),
     'Coinflip deposit',
   );
   return { receipt };

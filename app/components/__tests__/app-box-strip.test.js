@@ -673,7 +673,7 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
-  test('an already-resolved box replays without sending openBox', async () => {
+  test('a spin-only settled box recovers in the background without sending openBox', async () => {
     const calls = { status: [], open: [] };
     const fake = {
       lootboxRngWordByIndex: async () => 1n,
@@ -699,21 +699,23 @@ describe('app-box-strip', () => {
     const settledLeg = {
       uid: 'indexed-after-sync-8',
       player: ADDR_LC,
-      legType: 'opened',
+      legType: 'spin',
       lootboxIndex: 8,
       transactionHash: '0xsettledaftersync',
       blockNumber: '101',
       logIndex: 5,
       ord: 106,
-      rewardData: {
-        amount: '123', futureLevel: 9, futureTickets: 0,
-        roundedUp: false, flip: '0',
+      spin: {
+        spinType: 'wwxrp', spinCount: 1, payout: '0', ethShare: '0',
+        reels: [{
+          spinIndex: 0, score: 0, playerTraits: [], resultTraits: [],
+        }],
       },
     };
     globalThis.fetch = async (url) => ({
       ok: true,
       status: 200,
-      json: async () => indexed && String(url).includes('/lootbox/legs')
+      json: async () => indexed && String(url).includes('lootboxIndex=8')
         ? { items: [settledLeg] }
         : { items: [] },
     });
@@ -723,32 +725,39 @@ describe('app-box-strip', () => {
     await tick();
     fireTxConfirmed([{ index: 8, day: 4 }]);
     await tick();
-    el.__setReadyForTest(8);
 
     const pending = pendingActionsMod.getPendingActions()
       .find((action) => action.id === 'lootbox:8');
-    assert.ok(pending, 'the tracked box publishes its open action');
-    assert.equal(await pending.run(), false,
-      'a contentless settled receipt reports that recovery is still pending');
+    assert.ok(pending, 'the tracked box remains visible while its result catches up');
 
-    assert.ok(calls.status.length >= 1, 'the slot is checked before attempting a write');
+    assert.ok(calls.status.length >= 1, 'the background poll checks the settled amount slot');
     assert.ok(calls.status.every(([owner, index]) => owner === ADDR_LC && index === 8n));
     assert.equal(calls.open.length, 0, 'no wallet write for a cleared on-chain slot');
     const recovering = pendingActionsMod.getPendingActions()
       .find((action) => action.id === 'lootbox:8');
     assert.ok(recovering, 'a cleared slot remains visible while its indexed result catches up');
-    assert.equal(recovering.state, 'ready');
+    assert.equal(recovering.state, 'waiting');
     assert.equal(recovering.resolved, true);
     assert.equal(recovering.shortLabel, 'Syncing result');
     assert.equal(recovering.detail, 'Settlement confirmed · loading the reveal receipt');
     assert.equal(recovering.phase, 'indexing');
     assert.equal(recovering.progress, 'indeterminate');
+    assert.equal(recovering.autoOpen, false,
+      'a missing reveal receipt is passive sync work, not an automatic retry action');
+    assert.equal(recovering.run, null,
+      'the claimed box cannot loop while its immutable result is indexing');
     assert.ok(globalThis.localStorage.getItem(KEY), 'the receipt row survives the settlement race');
     assert.deepEqual(revealMod.__takeQueuedForTest(), []);
 
     indexed = true;
-    assert.equal(await recovering.run(), true,
-      'the same retry opens once its indexed receipt arrives');
+    await el.__pollForTest();
+    const ready = pendingActionsMod.getPendingActions()
+      .find((action) => action.id === 'lootbox:8');
+    assert.equal(ready?.state, 'ready',
+      'background polling promotes the receipt once the indexed reveal arrives');
+    assert.equal(ready?.shortLabel, 'View result');
+    assert.equal(await ready.run(), true,
+      'the promoted result opens once without another wallet action');
     assert.equal(revealMod.__takeQueuedForTest()[0]?.lootboxIndex, 8);
     assert.equal(pendingActionsMod.getPendingActions().length, 0,
       'the loaded reveal temporarily hides its pending receipt');
@@ -808,7 +817,7 @@ describe('app-box-strip', () => {
     const action = pendingActionsMod.getPendingActions()
       .find((item) => item.id === 'lootbox:8');
     assert.equal(await action.run(), false,
-      'losing the opener race yields the auto-retry lane instead of a fake completion');
+      'losing the opener race yields passive result synchronization instead of fake completion');
 
     assert.equal(calls.open, 1, 'this wallet reached the write before losing the race');
     assert.ok(calls.status >= 2, 'the failed write rechecks the cleared amount slot');
@@ -816,7 +825,9 @@ describe('app-box-strip', () => {
       .find((item) => item.id === 'lootbox:8');
     assert.ok(recovered, 'the box stays present while settlement legs index');
     assert.equal(recovered.resolved, true);
-    assert.equal(recovered.state, 'ready');
+    assert.equal(recovered.state, 'waiting');
+    assert.equal(recovered.run, null,
+      'a competing opener cannot start a repeated replay loop while indexing catches up');
     assert.equal(recovered.write, false, 'retry becomes a result replay, not another doomed write');
     assert.equal(revealMod.__takeQueuedForTest().length, 0,
       'no incomplete popup is fabricated before indexed result legs arrive');
@@ -1128,6 +1139,32 @@ describe('app-box-strip', () => {
     storeMod.update('connected.address', ADDR_LC);
     await tick();
     assert.equal(el.querySelectorAll('.bxs-chip').length, 2, 'restored from storage');
+  });
+
+  test('reload preserves a claimed result as passive sync work with its settlement hash', async () => {
+    globalThis.localStorage.setItem(KEY, JSON.stringify([{
+      index: 8,
+      resultKey: '8',
+      transactionHash: '0xpurchase',
+      resultTransactionHash: '0xsettlement',
+      ready: false,
+      resolved: true,
+      resultSyncing: true,
+      fromReceipt: true,
+    }]));
+    const el = instantiate({ trayOnly: true });
+    storeMod.update('connected.address', ADDR);
+    await tick();
+
+    const restored = pendingActionsMod.getPendingActions()
+      .find((item) => item.id === 'lootbox:8');
+    assert.equal(restored?.state, 'waiting');
+    assert.equal(restored?.phase, 'indexing');
+    assert.equal(restored?.run, null);
+    const stored = JSON.parse(globalThis.localStorage.getItem(KEY));
+    assert.equal(stored[0].resultTransactionHash, '0xsettlement');
+    assert.equal(stored[0].resultSyncing, true);
+    el.disconnectedCallback();
   });
 
   test('disconnect clears the strip (no address → hidden)', async () => {
