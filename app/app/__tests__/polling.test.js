@@ -80,6 +80,7 @@ beforeEach(() => {
   // module-level cooldown that would otherwise fail every later test with
   // "API cooling down" instead of exercising what they assert.
   _testing.clearApiCooldown();
+  _testing.invalidateJSONCache();
   _testing.resetGoldRushYieldReader();
   // Existing polling tests exercise the indexed soft-fallback unless a case
   // installs an exact packed-state reader explicitly.
@@ -403,16 +404,24 @@ describe('visibilitychange handler (D-04 + Pitfall 3)', () => {
 // ===========================================================================
 
 describe('fetchJSONWithSignal (Pitfall 5)', () => {
-  test('passes signal through to native fetch + prepends API_BASE', async () => {
+  test('propagates caller abort to the brokered fetch + prepends API_BASE', async () => {
     let captured = null;
     fetchImpl = async (url, opts) => {
       captured = { url, opts };
-      return { ok: true, status: 200, json: async () => ({}) };
+      return new Promise((_resolve, reject) => {
+        opts.signal.addEventListener('abort', () => {
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
+        });
+      });
     };
     const ctrl = new AbortController();
-    await _testing.fetchJSONWithSignal('/foo', { signal: ctrl.signal });
+    const request = _testing.fetchJSONWithSignal('/foo', { signal: ctrl.signal });
     assert.equal(captured.url, 'http://localhost:3000/foo', 'API_BASE prepended');
-    assert.equal(captured.opts.signal, ctrl.signal, 'signal threaded to fetch');
+    ctrl.abort();
+    await assert.rejects(request, { name: 'AbortError' });
+    assert.equal(captured.opts.signal.aborted, true, 'last consumer abort cancels network work');
   });
 
   test('non-200 throws Error with status + path', async () => {
@@ -431,7 +440,8 @@ describe('fetchJSONWithSignal (Pitfall 5)', () => {
     };
     await _testing.fetchJSONWithSignal('/baz');
     assert.equal(captured.url, 'http://localhost:3000/baz');
-    assert.equal(captured.opts.signal, undefined);
+    assert.equal(captured.opts.signal instanceof AbortSignal, true);
+    assert.equal(captured.opts.signal.aborted, false);
   });
 });
 
@@ -690,6 +700,7 @@ describe('boons + approvers are event-driven, not timed', () => {
 
     // Everything above is the eager start(). What matters is the RECURRING tick.
     fetchCalls = [];
+    _testing.invalidateJSONCache();
     await _testing.runPlayerCycle();
     await new Promise((r) => setTimeout(r, 20));
 
@@ -711,6 +722,7 @@ describe('boons + approvers are event-driven, not timed', () => {
     start({ playerAddress: '0xviewed' });
     await new Promise((r) => setTimeout(r, 30));
     fetchCalls = [];
+    _testing.invalidateJSONCache();
 
     // Several <boon-product-indicator> elements mount together on one surface.
     for (let i = 0; i < 4; i += 1) {
@@ -742,6 +754,9 @@ describe('boons + approvers are event-driven, not timed', () => {
     await new Promise((r) => setTimeout(r, 30));
     fetchCalls = [];
 
+    // In production contracts.js clears the render-wave cache immediately
+    // before it dispatches this event. Mirror that write-chokepoint boundary.
+    _testing.invalidateJSONCache();
     globalThis.document.dispatchEvent(new globalThis.CustomEvent('degenerus:tx-confirmed'));
     await new Promise((r) => setTimeout(r, 30));
 

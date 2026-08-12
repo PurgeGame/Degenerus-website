@@ -20,6 +20,7 @@
 import { ethers, BrowserProvider } from 'ethers';
 import { CHAIN } from './chain-config.js';
 import { get } from './store.js';
+import { invalidateJSONCache } from './api.js';
 
 // Module-level state — only the BrowserProvider; NO signer cache (WLT-03 fix structural).
 let _provider = null;
@@ -249,6 +250,10 @@ export async function sendTx(buildTx, action, { onSubmitted } = {}) {
     }
   }
   if (Number(receipt?.status) === 0) throw new Error(`Reverted: ${tx.hash}`);
+  // The receipt is the hard freshness boundary for every REST consumer. Clear
+  // the short render-wave cache before any component receives the confirmation
+  // event, independent of listener registration order.
+  invalidateJSONCache();
   // Publish one app-wide mined-transaction signal from the write chokepoint.
   // Balance widgets can now refresh after spends made from any protocol
   // surface instead of knowing every component-specific confirmation event.

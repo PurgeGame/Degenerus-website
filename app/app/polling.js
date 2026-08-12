@@ -16,9 +16,9 @@
 // document.visibilitychange handler with 100ms debounce (Pitfall 3 iOS Safari double-fire):
 // hidden → pauseAllTimers + abortAllInflight; visible → immediate re-poll across all 4 cycles.
 //
-// Pitfall 5 reconciliation (D-04 satisfied): cross-imports ONLY the API_BASE constant
-// from /beta/app/constants.js (READ-ONLY — zero /beta/ edits). /beta/'s fetchJSON does
-// not accept {signal}, so polling.js wraps native fetch (~5 LOC) inline.
+// All reads share api.js's abort-aware request broker. A polling cycle keeps its
+// own AbortController, but an independently mounted panel can now consume the
+// same in-flight response without one caller's abort cancelling the other.
 //
 // abortAllInflight() exported as a stub for Phase 58 accountsChanged/disconnect wiring.
 //
@@ -36,10 +36,8 @@
 // place; approvals.list joins that same reset block rather than duplicating the logic
 // inside polling.js's stop()/pauseAllTimers (which owns timers only, no store writes).
 
-import { API_BASE } from './constants.js';
-import {
-  isCoolingDown, noteShedLoad, clearApiCooldown, isShedStatus, cooldownUntil,
-} from './api-cooldown.js';
+import { fetchJSON as sharedFetchJSON, invalidateJSONCache } from './api.js';
+import { clearApiCooldown, cooldownUntil } from './api-cooldown.js';
 import { update, get } from './store.js';
 import { mergePlayerPayloads } from './combine.js';
 import { ethers, TX_CONFIRMED_EVENT } from './contracts.js';
@@ -221,8 +219,8 @@ function buildGoldRushFallbackPayload(gameState, health, yieldAccumulatorWei, pr
 }
 
 // ---------------------------------------------------------------------------
-// Pitfall 5 reconciliation: own fetch wrapper that supports {signal}.
-// D-04 satisfied — cross-import API_BASE only, no /beta/ edit, no fetchJSON cross-import.
+// Named wrapper retained for the polling test seam. Transport, coalescing,
+// caching, and backpressure all live in api.js.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -249,17 +247,8 @@ function jittered(ms) {
   return Math.round(ms * (0.8 + Math.random() * 0.4));
 }
 
-async function fetchJSONWithSignal(path, { signal } = {}) {
-  // Gate is shared with api.js's fetchJSON — see api-cooldown.js.
-  if (isCoolingDown()) throw new Error(`API cooling down: ${path}`);
-  const res = await fetch(API_BASE + path, { signal });
-  if (isShedStatus(res.status)) {
-    noteShedLoad(res);
-    throw new Error(`API ${res.status}: ${path}`);
-  }
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-  clearApiCooldown();
-  return res.json();
+function fetchJSONWithSignal(path, { signal } = {}) {
+  return sharedFetchJSON(path, { signal });
 }
 
 // ---------------------------------------------------------------------------
@@ -659,7 +648,11 @@ export function refreshBoons() {
 //     refresh starts to matter. boon-product-indicator announces its own mount.
 // Day rollover is handled by the lastDay fan-out in start().
 if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
-  document.addEventListener(TX_CONFIRMED_EVENT, () => { void refreshBoons(); });
+  document.addEventListener(TX_CONFIRMED_EVENT, () => {
+    // contracts.js invalidates the shared read cache before dispatching this
+    // event, so every listener's follow-up starts beyond the receipt boundary.
+    void refreshBoons();
+  });
   document.addEventListener('degenerus:boon-surface-open', () => { void refreshBoons(); });
 }
 
@@ -751,6 +744,9 @@ function pauseAllTimers() {
     TIMER_HANDLES[k] = null;
   }
   abortAllInflight();
+  // Visibility return is an explicit eager-refresh boundary. Do not let a
+  // sub-second response from immediately before the tab hid suppress it.
+  invalidateJSONCache();
 }
 
 // ---------------------------------------------------------------------------
@@ -789,6 +785,7 @@ export const _testing = {
   runCycle,
   runPlayerCycle,
   clearApiCooldown,
+  invalidateJSONCache,
   jittered,
   get cooldownUntil() { return cooldownUntil(); },
   pauseAllTimers,
