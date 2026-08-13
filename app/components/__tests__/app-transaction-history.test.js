@@ -604,10 +604,11 @@ describe('transaction history composition', () => {
     assert.match(history.formatHistoryTimestamp(startMs), /20\d\d/);
   });
 
-  test('is the final main section with 10 rows by default and larger choices', () => {
+  test('precedes the bottom Referrals panel and has 10 rows by default with larger choices', () => {
     const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     const source = readFileSync(new URL('../app-transaction-history.js', import.meta.url), 'utf8');
     assert.ok(html.indexOf('<app-transaction-history>') > html.indexOf('id="afking-passes"'));
+    assert.ok(html.indexOf('<app-affiliate-panel>') > html.indexOf('<app-transaction-history>'));
     assert.match(source, /<option value="10" selected>10<\/option>/);
     assert.match(source, /<option value="25">25<\/option>/);
     assert.match(source, /<option value="50">50<\/option>/);

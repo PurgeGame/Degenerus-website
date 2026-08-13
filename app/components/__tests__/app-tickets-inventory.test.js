@@ -1118,75 +1118,24 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
-  test('new pack tickets stay out of inventory until that pack is opened', async () => {
+  test('tickets from a still-unopened pack appear in inventory immediately', async () => {
     const oldTicket = cardAt(0, 'opened', COMBO);
     const secondTicket = cardAt(1, 'opened', [2, 73, 130, 201]);
-    const newIds = [3, 74, 131, 202];
-    const waitingTicket = cardAt(2, 'pending', newIds);
+    const rolledTicket = cardAt(2, 'opened', [3, 74, 131, 202]);
     _dashboardTickets = [{ level: 17, entryCount: 12 }];
-    _byLevel.set(17, byTraitPayload({ cards: [oldTicket, secondTicket, waitingTicket] }));
+    // A pending-pack record must no longer hide anything (spoiler gate removed
+    // by user ask 2026-08-13); the reveal overlay is presentation-only now.
     await packWatchMod.recordPendingPack({ address: TEST_ADDR, level: 17 });
-
-    const rolledTicket = cardAt(2, 'opened', newIds);
     _byLevel.set(17, byTraitPayload({ cards: [oldTicket, secondTicket, rolledTicket] }));
+
     const el = mount();
     await flushMicrotasks();
 
-    assert.equal(el.querySelectorAll('.ticket-card').length, 2,
-      'the newly indexed ticket does not appear before its pack');
-    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^2 tickets/,
-      'the headline count does not spoil the unopened ticket either');
-    assert.equal(
-      el.querySelector('[data-bind="inv-level-tab-count"]').textContent,
-      '2',
-      'a raw total of 3 cannot reintroduce the hidden ticket above 2 visible tickets',
-    );
-
-    await packWatchMod.completePackReveal({
-      address: TEST_ADDR,
-      level: 17,
-      cardIndexes: [2],
-    });
-    storeMod.update('app.lastDay', {
-      day: 67,
-      status: 'resolved',
-      level: 17,
-      roll1: { purchaseLevel: 17 },
-    });
-    await flushMicrotasks();
-
     assert.equal(el.querySelectorAll('.ticket-card').length, 3,
-      'the ticket display refreshes immediately after the pack is consumed');
-    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^3 tickets/);
+      'the newly indexed ticket shows without waiting for its pack reveal');
+    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^3 tickets/,
+      'the headline count includes it too');
     assert.equal(el.querySelector('[data-bind="inv-level-tab-count"]').textContent, '3');
-    el.disconnectedCallback();
-  });
-
-  test('an unopened level is filtered before its first press, so its count cannot jump', async () => {
-    const oldTicket = cardAt(0, 'opened', COMBO);
-    const secondTicket = cardAt(1, 'opened', [2, 73, 130, 201]);
-    const waitingTicket = cardAt(2, 'pending', [3, 74, 131, 202]);
-    _dashboardTickets = [{ level: 18, entryCount: 12 }];
-    _byLevel.set(17, byTraitPayload({ cards: [] }));
-    _byLevel.set(18, byTraitPayload({ level: 18, cards: [oldTicket, secondTicket, waitingTicket] }));
-    await packWatchMod.recordPendingPack({ address: TEST_ADDR, level: 18 });
-    _byLevel.set(18, byTraitPayload({
-      level: 18,
-      cards: [oldTicket, secondTicket, cardAt(2, 'opened', [3, 74, 131, 202])],
-    }));
-
-    const el = mount({ expanded: false });
-    await flushMicrotasks();
-    const level18 = el.querySelectorAll('[data-bind="inv-level-tab"]')[1];
-    const count18 = el.querySelectorAll('[data-bind="inv-level-tab-count"]')[1];
-    assert.equal(count18.textContent, '2',
-      'the unopened third ticket is removed before L18 is selected');
-
-    level18.dispatchEvent({ type: 'click' });
-    assert.equal(count18.textContent, '2', 'pressing L18 cannot change 3 to 2');
-    await flushMicrotasks();
-    assert.equal(count18.textContent, '2');
-    assert.equal(el.querySelectorAll('.ticket-card').length, 2);
     el.disconnectedCallback();
   });
 
@@ -1242,9 +1191,9 @@ describe('app-tickets-inventory — cards + chart', () => {
     el.disconnectedCallback();
   });
 
-  test('a rolled fractional entry stays behind its reveal, then appears as a quarter-ticket', async () => {
+  test('a rolled fractional entry appears as a quarter-ticket immediately', async () => {
     _dashboardTickets = [{ level: 17, entryCount: 1 }];
-    _byLevel.set(17, byTraitPayload({ cards: [] }));
+    // Even with its pack still recorded pending, the quarter entry renders.
     await packWatchMod.recordPendingPack({
       address: TEST_ADDR,
       level: 17,
@@ -1257,27 +1206,9 @@ describe('app-tickets-inventory — cards + chart', () => {
 
     const el = mount();
     await flushMicrotasks();
-    assert.equal(el.querySelectorAll('.ticket-entry-card').length, 0,
-      'the rolled trait cannot leak before its pack is consumed');
-    assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^0 tickets/);
-    assert.equal(el.querySelector('[data-bind="inv-level-tab-count"]').textContent, '0',
-      'the raw quarter entry stays out of the level tile while its pack is unopened');
 
-    await packWatchMod.completePackReveal({
-      address: TEST_ADDR,
-      level: 17,
-      itemKeys: ['entry:0'],
-      entryCount: 1,
-    });
-    storeMod.update('app.lastDay', {
-      day: 67,
-      status: 'resolved',
-      level: 17,
-      roll1: { purchaseLevel: 17 },
-    });
-    await flushMicrotasks();
-
-    assert.equal(el.querySelectorAll('.ticket-entry-card').length, 1);
+    assert.equal(el.querySelectorAll('.ticket-entry-card').length, 1,
+      'the rolled quarter entry shows without waiting for a pack reveal');
     assert.match(el.querySelector('[data-bind="inv-meta"]').textContent, /^0\.25 tickets/);
     assert.equal(el.querySelector('[data-bind="inv-level-tab-count"]').textContent, '0.25');
     el.disconnectedCallback();

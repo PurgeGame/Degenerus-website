@@ -10,9 +10,9 @@
 //   - Customize CTA opens a hex-code + kickback% form; submit fires
 //     createAffiliateCode through Phase 58 chokepoint.
 //   - URL flips to registered code AFTER confirm (CF-06 — NEVER optimistic).
-//   - Referee table fetches /player/:address/referees and renders rows via
-//     textContent (T-58-18); honors FD-2 unavailable rows naturally.
-//   - Empty referee state copy: "No referees yet — share your link to get
+//   - Referral network renders both who referred this player and the direct
+//     referrals returned by /player/:address/referees.
+//   - Empty direct-referral state copy: "No referrals yet — share your link to get
 //     started."
 //   - data-write attribute on Copy + Customize-submit buttons (CF-15
 //     view-mode disable manager hook).
@@ -296,7 +296,13 @@ globalThis.localStorage = {
 };
 
 // fetch stub — panel reads /player/:address/referees on mount.
-let _fetchHandler = async () => ({ player: null, referees: [], total: 0 });
+let _fetchHandler = async () => ({
+  player: null,
+  referredBy: null,
+  referees: [],
+  total: 0,
+  counts: { direct: 0, level2: 0, level3: 0 },
+});
 let _fetchCalls = [];
 globalThis.fetch = async (url) => {
   _fetchCalls.push(url);
@@ -356,7 +362,13 @@ function resetDom() {
   globalThis.localStorage.clear();
   _docListeners.clear();
   _fetchCalls = [];
-  _fetchHandler = async () => ({ player: null, referees: [], total: 0 });
+  _fetchHandler = async () => ({
+    player: null,
+    referredBy: null,
+    referees: [],
+    total: 0,
+    counts: { direct: 0, level2: 0, level3: 0 },
+  });
   _clipboardCalls = [];
   _clipboardShouldFail = false;
 }
@@ -390,19 +402,26 @@ const PANEL_SRC = readFileSync(
 
 const CONNECTED = '0xab12000000000000000000000000000000000000';
 
-function instantiate() {
+function instantiate({ open = true } = {}) {
   const Ctor = customElements.get('app-affiliate-panel');
   const el = new Ctor();
   _docBody.appendChild(el);
   el.connectedCallback();
+  if (open) {
+    const details = el.querySelector('[data-bind="aff-details"]');
+    details.open = true;
+    details.dispatchEvent({ type: 'toggle' });
+  }
   return el;
 }
 
 function makeRefereesPayload(overrides = {}) {
   return {
     player: CONNECTED,
+    referredBy: null,
     referees: [],
     total: 0,
+    counts: { direct: 0, level2: 0, level3: 0 },
     ...overrides,
   };
 }
@@ -411,7 +430,7 @@ function makeRefereesPayload(overrides = {}) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + referee table', () => {
+describe('<app-affiliate-panel> — referral network + sharing controls', () => {
   beforeEach(async () => {
     storeMod.__resetForTest();
     resetDom();
@@ -430,11 +449,17 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     assert.equal(ctor, ctor2, 'same ctor reference after re-import (idempotent)');
   });
 
-  test('Panel renders shell with default URL row + Customize section + Referee table', async () => {
+  test('Panel renders Referred by + You referred with sharing controls', async () => {
     const el = instantiate();
     await flushMicrotasks();
     assert.ok(el.innerHTML.length > 100, 'innerHTML populated');
-    assert.match(el.innerHTML, /AFFILIATE/i, 'header contains AFFILIATE');
+    assert.match(el.innerHTML, /REFERRALS/i, 'header contains REFERRALS');
+    assert.match(el.innerHTML, /REFERRED BY/i, 'incoming relationship label present');
+    assert.match(el.innerHTML, /YOU REFERRED/i, 'outgoing relationship label present');
+    assert.ok(el.querySelector('[data-bind="aff-count-direct"]'), 'direct count present in summary');
+    assert.ok(el.querySelector('[data-bind="aff-count-level2"]'), 'level-2 count present in summary');
+    assert.ok(el.querySelector('[data-bind="aff-count-level3"]'), 'level-3 count present in summary');
+    assert.ok(el.querySelector('[data-bind="aff-referred-by"]'), 'referred-by identity present');
     // Default URL section.
     assert.ok(el.querySelector('[data-bind="aff-url"]'), 'aff-url input present');
     assert.ok(el.querySelector('[data-bind="aff-copy"]'), 'aff-copy button present');
@@ -443,6 +468,40 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     assert.ok(el.querySelector('input[name="aff-customize-pct"]'), 'aff-customize-pct input present');
     // Referee table.
     assert.ok(el.querySelector('[data-bind="aff-referees"]'), 'aff-referees container present');
+  });
+
+  test('Referrals starts closed but loads the counts shown in its summary bar', async () => {
+    _fetchHandler = async () => makeRefereesPayload({
+      total: 4,
+      counts: { direct: 4, level2: 12, level3: 37 },
+    });
+    const el = instantiate({ open: false });
+    await settle(40);
+    const details = el.querySelector('[data-bind="aff-details"]');
+    assert.ok(details, 'outer referrals disclosure present');
+    assert.notEqual(details.open, true, 'disclosure starts closed');
+    const openingTag = el.innerHTML.match(/<details\b[^>]*data-bind="aff-details"[^>]*>/)?.[0] || '';
+    assert.match(openingTag, /class="app-affiliate-panel aff-disclosure section-disclosure"/,
+      'uses the same shared disclosure shell as passes and history');
+    const openingClasses = openingTag.match(/class="([^"]+)"/)?.[1]?.split(/\s+/) || [];
+    assert.equal(openingClasses.includes('panel'), false,
+      'old standalone panel chrome is not layered over the shared disclosure shell');
+    assert.match(el.innerHTML,
+      /<summary class="aff-summary section-disclosure__bar">[\s\S]*?section-disclosure__title[\s\S]*?aff-summary-counts[\s\S]*?section-disclosure__chevron/,
+      'summary uses the shared title bar with network counts and a chevron');
+    assert.doesNotMatch(openingTag, /\sopen(?:\s|>)/, 'no open attribute ships in the shell');
+    assert.equal(_fetchCalls.some((url) => String(url).includes('/referees')), true,
+      'closed disclosure loads the account-scoped network counts');
+    assert.equal(el.querySelector('[data-bind="aff-count-direct"]').textContent, '4');
+    assert.equal(el.querySelector('[data-bind="aff-count-level2"]').textContent, '12');
+    assert.equal(el.querySelector('[data-bind="aff-count-level3"]').textContent, '37');
+
+    details.open = true;
+    details.dispatchEvent({ type: 'toggle' });
+    await settle(40);
+    assert.equal(details.open, true, 'the same payload is available when the disclosure opens');
+    assert.equal(el.querySelector('[data-bind="aff-count-level3"]').textContent, '37',
+      'opening preserves the loaded summary counts');
   });
 
   test('Default URL renders with the readable player address on mount', async () => {
@@ -616,19 +675,54 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     }
   });
 
-  test('Referee table fetches from /player/:address/referees on mount', async () => {
+  test('Referee table fetches from /player/:address/referees when opened', async () => {
     instantiate();
     await settle(40);
     const matched = _fetchCalls.find((u) => u && u.includes('/referees'));
     assert.ok(matched, `fetchJSON called with /referees path; calls=${JSON.stringify(_fetchCalls)}`);
   });
 
-  test('Referee table renders rows via textContent (T-58-18 + FD-2 honored)', async () => {
+  test('Referred by renders the incoming referrer as an explorer-linked address', async () => {
+    const upline = '0xfeed00000000000000000000000000000000cafe';
+    _fetchHandler = async () => makeRefereesPayload({ referredBy: upline });
+    const el = instantiate();
+    await settle(40);
+    const referredBy = el.querySelector('[data-bind="aff-referred-by"]');
+    assert.ok(referredBy, 'referred-by identity present');
+    assert.match(referredBy.textContent, /0xfeed…cafe/i, 'short upline address rendered');
+    const link = referredBy.querySelector('a');
+    assert.equal(link?.title, upline, 'full upline address is available on hover');
+    assert.match(link?.getAttribute('href') || '', /\/address\/0xfeed/i, 'upline links to explorer');
+  });
+
+  test('Referred by has an explicit empty state when no upline is recorded', async () => {
+    const el = instantiate();
+    await settle(40);
+    const referredBy = el.querySelector('[data-bind="aff-referred-by"]');
+    assert.equal(referredBy.textContent, 'No referrer recorded.');
+  });
+
+  test('a freshness 503 explains that the referral index is catching up', async () => {
+    _fetchHandler = async () => {
+      const error = new Error('stale indexer');
+      error.status = 503;
+      throw error;
+    };
+    const el = instantiate();
+    await settle(40);
+    const referredBy = el.querySelector('[data-bind="aff-referred-by"]');
+    const referrals = el.querySelector('[data-bind="aff-referees-empty"]');
+    assert.match(referredBy.textContent, /index is catching up/i);
+    assert.match(referrals.textContent, /retrying automatically/i);
+  });
+
+  test('Referral list renders only linked referral identities, never commission data', async () => {
     _fetchHandler = async () => makeRefereesPayload({
       referees: [
-        { address: '0xref1000000000000000000000000000000000001', referredAt: '12345', totalCommissionFlip: '0', available: false, reason: 'commission-aggregation-pending' },
+        { address: '0xref1000000000000000000000000000000000001', referredAt: '12345', totalCommissionFlip: '987654321', available: true, reason: null },
       ],
       total: 1,
+      counts: { direct: 1, level2: 0, level3: 0 },
     });
     const el = instantiate();
     await settle(40);
@@ -636,11 +730,13 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     assert.ok(table, 'referee table present');
     const txt = String(table.textContent || '');
     assert.match(txt, /0xref1/i, 'address rendered via textContent');
-    // FD-2 unavailable — commission column should show "—" or "pending".
-    assert.match(txt, /—|pending/i, 'unavailable commission shown as "—" or "pending" indicator');
+    assert.doesNotMatch(txt, /987654321|12345|commission/i,
+      'commission and block metadata are omitted from the referral list');
+    assert.doesNotMatch(el.innerHTML, /Commission ready to claim|Claims tray/i,
+      'stale commission claim copy is absent');
   });
 
-  test('Referee table empty state — "No referees yet — share your link to get started."', async () => {
+  test('Direct-referral empty state invites the player to share their link', async () => {
     _fetchHandler = async () => makeRefereesPayload({ referees: [], total: 0 });
     const el = instantiate();
     await settle(40);
@@ -648,7 +744,7 @@ describe('Plan 62-06: <app-affiliate-panel> — default URL + Customize CTA + re
     assert.ok(empty, 'aff-referees-empty element present');
     // Empty-state visible when zero referees.
     assert.equal(empty.hidden, false, 'empty-state visible');
-    assert.match(String(empty.textContent || el.innerHTML), /No referees yet/i, 'empty copy present');
+    assert.match(String(empty.textContent || el.innerHTML), /No referrals yet/i, 'empty copy present');
   });
 
   test('Customize-submit click is debounced — double-click invokes createAffiliateCode only once', async () => {

@@ -43,12 +43,6 @@ import {
   dgnPartitionTicketEntries,
   dgnReconstructTicketTraits,
 } from '../app/dgn-traits.js';
-import {
-  pendingPacks,
-  unopenedFoilPackPending,
-  unopenedPackItemKeys,
-} from '../app/pack-watch.js';
-import { PACK_REVEAL_COMPLETE_EVENT } from './reveal-overlay.js';
 import { readDeityPassCatalog } from '../app/passes.js';
 
 const ENTRIES_PER_CARD = 4;
@@ -193,10 +187,7 @@ function _foilLines(payload) {
 // ticket nodes and image elements once a minute.
 function _inventoryPayloadFingerprint(payload) {
   const cards = Array.isArray(payload?.cards) ? payload.cards : [];
-  const hidden = payload?._hiddenItemKeys instanceof Set
-    ? [...payload._hiddenItemKeys].map(String).sort()
-    : [];
-  const parts = [String(payload?.totalEntries ?? 0), String(cards.length), hidden.join(',')];
+  const parts = [String(payload?.totalEntries ?? 0), String(cards.length)];
   for (const card of cards) {
     parts.push(String(card?.cardIndex ?? ''), String(card?.status ?? ''));
     for (const entry of Array.isArray(card?.entries) ? card.entries : []) {
@@ -205,29 +196,6 @@ function _inventoryPayloadFingerprint(payload) {
     parts.push(';');
   }
   return parts.join('|');
-}
-
-/** Remove only cards still owed a pack presentation, including their headline count. */
-export function hideUnopenedPackTickets(payload, hiddenIndexes) {
-  if (!payload || typeof payload !== 'object') return payload;
-  const hidden = hiddenIndexes instanceof Set
-    ? hiddenIndexes
-    : new Set(Array.isArray(hiddenIndexes) ? hiddenIndexes.map(Number) : []);
-  if (hidden.size === 0) return payload;
-  const partitioned = dgnPartitionTicketEntries(payload.cards);
-  const hiddenKeys = new Set([...hidden].map(String));
-  const hiddenEntries = partitioned.tickets.reduce(
-    (sum, ticket) => sum + (hiddenKeys.has(String(ticket.key)) ? ENTRIES_PER_CARD : 0),
-    0,
-  ) + partitioned.entries.reduce(
-    (sum, entry) => sum + (hiddenKeys.has(String(entry.key)) ? 1 : 0),
-    0,
-  );
-  return {
-    ...payload,
-    totalEntries: Math.max(0, Number(payload.totalEntries || 0) - hiddenEntries),
-    _hiddenItemKeys: hiddenKeys,
-  };
 }
 
 /**
@@ -437,7 +405,6 @@ class AppTicketsInventory extends HTMLElement {
   #holdings = [];         // per-level {level, entryCount, wholeTickets} from /player/:addr
   #holdingsAddress = null;
   #holdingsLoaded = false;
-  #filteredLevelEntries = new Map(); // locally revealed totals for unopened pack levels
   #salvageQueue = [];     // exact {level, queueIndex, entryCount, remainder} mirror
   #salvageQueueLoaded = false;
   #salvageSelection = new Map(); // level -> whole-ticket quantity
@@ -462,7 +429,6 @@ class AppTicketsInventory extends HTMLElement {
   #expandRenderTimer = null;
   #focusSalvageOnRender = false;
   #resizeObserver = null;
-  #packRevealListener = null;
   #visibilityListener = null;
 
   connectedCallback() {
@@ -474,13 +440,6 @@ class AppTicketsInventory extends HTMLElement {
     this.#applyViewPreferences();
     this.#watchViewportSize();
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
-      this.#packRevealListener = () => {
-        // pack-watch updates its durable revealed set in the same event turn;
-        // defer the refetch one microtask so listener registration order cannot
-        // make the newly opened cards remain hidden for another poll cycle.
-        Promise.resolve().then(() => this.#refresh());
-      };
-      document.addEventListener(PACK_REVEAL_COMPLETE_EVENT, this.#packRevealListener);
       this.#visibilityListener = () => {
         if (document.visibilityState === 'visible') this.#refresh();
       };
@@ -573,12 +532,6 @@ class AppTicketsInventory extends HTMLElement {
       try { this.#resizeObserver.disconnect(); } catch (_) { /* defensive */ }
       this.#resizeObserver = null;
     }
-    if (this.#packRevealListener && typeof document !== 'undefined'
-      && typeof document.removeEventListener === 'function') {
-      try { document.removeEventListener(PACK_REVEAL_COMPLETE_EVENT, this.#packRevealListener); }
-      catch (_e) { /* defensive */ }
-    }
-    this.#packRevealListener = null;
     if (this.#visibilityListener && typeof document !== 'undefined'
       && typeof document.removeEventListener === 'function') {
       try { document.removeEventListener('visibilitychange', this.#visibilityListener); }
@@ -974,7 +927,6 @@ class AppTicketsInventory extends HTMLElement {
       this.#address = null;
       this.#data = null;
       this.#dataLevel = null;
-      this.#filteredLevelEntries = new Map();
       this.#deityPassSymbols = [];
       this.#deityExpectedEntries = new Map();
       this.#deityExpectedScope = '';
@@ -1028,7 +980,6 @@ class AppTicketsInventory extends HTMLElement {
       this.#holdings = [];
       this.#holdingsAddress = null;
       this.#holdingsLoaded = false;
-      this.#filteredLevelEntries = new Map();
       this.#resetSalvageState();
       this.#deityPassSymbols = [];
       this.#deityExpectedEntries = new Map();
@@ -1042,45 +993,16 @@ class AppTicketsInventory extends HTMLElement {
       this.#holdings = [];
       this.#holdingsAddress = lower;
       this.#holdingsLoaded = false;
-      this.#filteredLevelEntries = new Map();
       this.#resetSalvageState();
       this.#renderTotalValue();
     }
     const day = Number(get('app.lastDay')?.day);
-    let trackedPendingLevels = [];
-    try {
-      const active = Number(this.#activeLevel);
-      trackedPendingLevels = [...new Set(pendingPacks()
-        .filter((record) => String(record?.address || '').toLowerCase() === lower)
-        .map((record) => Number(record?.level))
-        .filter((level) => Number.isInteger(level)
-          && level >= active
-          && level <= active + FAR_FUTURE_OFFSET))];
-    } catch (_e) { /* local storage can be unavailable */ }
-    const pendingLevelReads = Promise.allSettled(
-      trackedPendingLevels
-        .filter((level) => level !== Number(lvl))
-        .map(async (level) => ({
-          level,
-          // Pending-pack filtering is a transition detector: a prior baseline
-          // read can be less than a second old while newly indexed traits are
-          // already available. Keep in-flight sharing, but bypass the completed
-          // render-wave cache until the pack has been presented.
-          payload: await fetchJSON(
-            `/player/${lower}/tickets/by-trait?level=${level}`,
-            { force: true },
-          ),
-        })),
-    );
-    const [byTrait, dashboard, foil, playerDay, deityCatalog, salvageQueue, pendingLevels] = await Promise.allSettled([
+    const [byTrait, dashboard, foil, playerDay, deityCatalog, salvageQueue] = await Promise.allSettled([
       // NO day param (tickets-fetch.js gotcha — see file header). Skipped in
       // far-future view — those levels can't have rolled traits yet.
       this.#isFarFuture()
         ? Promise.resolve(null)
-        : fetchJSON(
-            `/player/${lower}/tickets/by-trait?level=${lvl}`,
-            { force: trackedPendingLevels.includes(Number(lvl)) },
-          ),
+        : fetchJSON(`/player/${lower}/tickets/by-trait?level=${lvl}`),
       // Per-level entry counts for the far-future long-term view.
       fetchJSON(`/player/${lower}`),
       // Foil lines for this level — soft-fails to "no foil" (see #foilKeys).
@@ -1102,65 +1024,12 @@ class AppTicketsInventory extends HTMLElement {
       this.#isFarFuture()
         ? fetchJSON(`/player/${lower}/far-future-queue`)
         : Promise.resolve(null),
-      // Header counts for locally unopened packs must already be filtered
-      // before a tile is pressed; otherwise raw 3 visibly changes to 2 on open.
-      pendingLevelReads,
     ]);
     if (seq !== this.#fetchSeq) return;
-    const rawTicketData = byTrait.status === 'fulfilled' ? byTrait.value : null;
-    const hiddenPackItems = unopenedPackItemKeys({
-      address: lower,
-      level: lvl,
-      cards: rawTicketData?.cards,
-    });
-    this.#data = hideUnopenedPackTickets(rawTicketData, hiddenPackItems);
+    this.#data = byTrait.status === 'fulfilled' ? byTrait.value : null;
     this.#dataLevel = Number(lvl);
     this.#dataRenderKey = _inventoryPayloadFingerprint(this.#data);
-    const priorFilteredEntries = this.#filteredLevelEntries;
-    const nextFilteredEntries = new Map();
-    const resolvedPendingLevels = new Set();
-    if (trackedPendingLevels.includes(Number(lvl)) && rawTicketData) {
-      resolvedPendingLevels.add(Number(lvl));
-      if (hiddenPackItems.size > 0) {
-        nextFilteredEntries.set(
-          Number(lvl),
-          Math.max(0, Math.floor(Number(this.#data?.totalEntries ?? 0))),
-        );
-      }
-    }
-    if (pendingLevels.status === 'fulfilled') {
-      for (const read of pendingLevels.value) {
-        if (read.status !== 'fulfilled') continue;
-        const level = Number(read.value?.level);
-        const payload = read.value?.payload;
-        if (!Number.isInteger(level) || !payload) continue;
-        resolvedPendingLevels.add(level);
-        const hidden = unopenedPackItemKeys({ address: lower, level, cards: payload.cards });
-        if (hidden.size === 0) continue;
-        const filtered = hideUnopenedPackTickets(payload, hidden);
-        nextFilteredEntries.set(
-          level,
-          Math.max(0, Math.floor(Number(filtered?.totalEntries ?? 0))),
-        );
-      }
-    }
-    // A transient auxiliary fetch should not make a previously settled tile
-    // jump back to its raw total. Keep its last filtered value until retry.
-    for (const level of trackedPendingLevels) {
-      if (!resolvedPendingLevels.has(level) && priorFilteredEntries.has(level)) {
-        nextFilteredEntries.set(level, priorFilteredEntries.get(level));
-      }
-    }
-    this.#filteredLevelEntries = nextFilteredEntries;
-    // Do not let the direct foil projection bypass the unopened-pack spoiler
-    // gate. Once the reveal releases its card indexes, these four lines become
-    // the authoritative fallback if the generic ticket stream is incomplete.
-    this.#foilLines = hiddenPackItems.size === 0 && !unopenedFoilPackPending({
-      address: lower,
-      level: lvl,
-    })
-      ? _foilLines(foil.status === 'fulfilled' ? foil.value : null)
-      : [];
+    this.#foilLines = _foilLines(foil.status === 'fulfilled' ? foil.value : null);
     const deityRows = playerDay.status === 'fulfilled'
       && Array.isArray(playerDay.value?.store?.deityPassPurchases)
       ? playerDay.value.store.deityPassPurchases
@@ -1207,7 +1076,7 @@ class AppTicketsInventory extends HTMLElement {
             address: lower,
             unresolvedLevel: floor,
             knownLevel: lvl,
-            knownPayload: rawTicketData,
+            knownPayload: this.#data,
           });
           if (seq !== this.#fetchSeq) return;
           if (Array.isArray(fallback)) {
@@ -1595,28 +1464,15 @@ class AppTicketsInventory extends HTMLElement {
       if (!Number.isInteger(level) || entries <= 0) continue;
       entriesByLevel.set(level, Math.max(entries, entriesByLevel.get(level) || 0));
     }
-    // Pre-fetched pack-filtered totals override the raw dashboard before a
-    // level is clicked, keeping every visible tile stable through navigation.
-    for (const [level, entries] of this.#filteredLevelEntries) {
-      entriesByLevel.set(Number(level), Math.max(0, Math.floor(Number(entries) || 0)));
-    }
     if (!this.#isFarFuture()
       && this.#viewLevel != null
       && Number(this.#dataLevel) === Number(this.#viewLevel)
       && this.#data) {
       const entries = Math.max(0, Math.floor(Number(this.#data.totalEntries ?? 0)));
       const level = Number(this.#viewLevel);
-      const hidesPackEntries = this.#data._hiddenItemKeys instanceof Set
-        && this.#data._hiddenItemKeys.size > 0;
-      // A locally unopened pack deliberately subtracts its entries from the
-      // per-level payload. In that case it is the same filtered source used by
-      // the cards beneath the tile, so the raw dashboard total must not add the
-      // hidden ticket back. Otherwise keep max() to tolerate endpoint skew and
-      // retain real quarter-ticket entries while their traits finish indexing.
-      entriesByLevel.set(
-        level,
-        hidesPackEntries ? entries : Math.max(entries, entriesByLevel.get(level) || 0),
-      );
+      // max() tolerates endpoint skew and retains real quarter-ticket entries
+      // while their traits finish indexing.
+      entriesByLevel.set(level, Math.max(entries, entriesByLevel.get(level) || 0));
     }
 
     const levelButtons = [...this.querySelectorAll('[data-bind="inv-level-tab"]')];
@@ -2177,7 +2033,6 @@ class AppTicketsInventory extends HTMLElement {
     host.textContent = '';
     const d = this.#data;
     const cardsArr = Array.isArray(d?.cards) ? d.cards : [];
-    const hiddenItemKeys = d?._hiddenItemKeys instanceof Set ? d._hiddenItemKeys : new Set();
 
     const combos = new Map();
     let pendingCount = 0;
@@ -2191,8 +2046,7 @@ class AppTicketsInventory extends HTMLElement {
     }
     let foilOrdinal = 0;
     const partitioned = dgnPartitionTicketEntries(cardsArr);
-    for (const record of partitioned.tickets
-      .filter((ticket) => !hiddenItemKeys.has(String(ticket.key)))) {
+    for (const record of partitioned.tickets) {
       const ids = record.traitIds;
       const comboKey = invComboKey(ids);
       const foilLeft = foilRemaining.get(comboKey) || 0;
@@ -2237,8 +2091,7 @@ class AppTicketsInventory extends HTMLElement {
       (a, b) => displayTier(a) - displayTier(b) || b.count - a.count,
     );
     const looseByTrait = new Map();
-    for (const entry of partitioned.entries
-      .filter((item) => !hiddenItemKeys.has(String(item.key)))) {
+    for (const entry of partitioned.entries) {
       const traitId = Number(entry?.traitId);
       if (!Number.isInteger(traitId) || traitId < 0 || traitId > 255) continue;
       looseByTrait.set(traitId, (looseByTrait.get(traitId) || 0) + 1);
@@ -2439,17 +2292,14 @@ class AppTicketsInventory extends HTMLElement {
     host.textContent = '';
     const d = this.#data;
     const cardsArr = Array.isArray(d?.cards) ? d.cards : [];
-    const hiddenItemKeys = d?._hiddenItemKeys instanceof Set ? d._hiddenItemKeys : new Set();
 
     const counts = new Array(256).fill(0);
     const opened = cardsArr.filter((card) => card?.status === 'opened');
     const partitioned = dgnPartitionTicketEntries(opened);
-    for (const ticket of partitioned.tickets
-      .filter((item) => !hiddenItemKeys.has(String(item.key)))) {
+    for (const ticket of partitioned.tickets) {
       for (const tid of ticket.traitIds) counts[tid]++;
     }
-    for (const entry of partitioned.entries
-      .filter((item) => !hiddenItemKeys.has(String(item.key)))) {
+    for (const entry of partitioned.entries) {
       const tid = Number(entry?.traitId);
       if (Number.isInteger(tid) && tid >= 0 && tid < 256) counts[tid]++;
     }

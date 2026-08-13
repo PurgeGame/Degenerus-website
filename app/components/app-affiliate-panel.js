@@ -1,14 +1,15 @@
 // /app/components/app-affiliate-panel.js — Phase 62 Plan 62-06 (AFF-01 + AFF-02)
 //
-// Affiliate panel — default URL + Customize CTA + referee table.
+// Referrals panel — upline identity + default URL + Customize CTA + direct
+// referral list, with three-generation network counts in the summary bar.
 //
 // Plan history:
 //   - Plan 62-06: AFF-01 (default URL + Customize CTA) + AFF-02 (referee table)
 //                 + AFF-03 hook is in <app-claims-panel> via VISIBLE_PRIZE_KEYS
 //                 whitelist extension (THIS PLAN; separate file edit)
 //
-// Mount: <app-affiliate-panel></app-affiliate-panel> in /app/index.html below
-//        <app-boons-panel> per CONTEXT D-08 sequential execution.
+// Mount: <app-affiliate-panel></app-affiliate-panel> at the bottom of
+//        /app/index.html, directly below <app-transaction-history>.
 //
 // Custom Element shell mirrors Phase 60's app-packs-panel.js + Phase 61's
 // app-claims-panel.js + Phase 62-04's app-quest-panel.js: light DOM,
@@ -22,7 +23,8 @@
 //     1-line whitelist edit). NOT this panel.
 //
 // Read surface:
-//   - GET /player/:address/referees → AFF-02 referee table (Plan 62-00 deliverable).
+//   - GET /player/:address/referees → referred-by identity + AFF-02 direct
+//     referral table (Plan 62-00 deliverable, extended additively).
 //
 // CRITICAL — RESEARCH Pitfall 5:
 //   defaultCodeForAddress LEFT-pad enforcement lives in affiliate.js. The
@@ -87,6 +89,12 @@ const VISIBILITY_RESUME_GATE_MS = 1000; // ≥1s since last fetch → re-poll on
 const ERROR_AUTO_CLEAR_MS = 10_000;     // 10s auto-clear for inline errors (Phase 61 D-05 mirror).
 const COPY_FEEDBACK_MS = 2_000;         // 2s copy-success feedback.
 
+function _shortAddress(value) {
+  const address = String(value || '');
+  if (address.length <= 13) return address;
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
 class AppAffiliatePanel extends HTMLElement {
   // --- Phase 60/61/62 idempotency-guard pattern ---
   #unsubs = [];
@@ -96,11 +104,12 @@ class AppAffiliatePanel extends HTMLElement {
   #pollController = null;
   #lastFetchAt = 0;
   #visibilityListener = null;
+  #disclosureListener = null;
   // --- Pinned data ---
   #pinnedAddress = null;
   #defaultUrl = '';
   #registeredCode = null;   // bytes32 hex OR null (= use defaultCodeForAddress)
-  #refereesData = null;     // { referees: [...], total: number }
+  #refereesData = null;     // { referredBy, referees: [...], total, counts }
   // --- Click-handler debounce ---
   #busyCustomize = false;
   // --- Auto-clear timers (cleared on disconnect) ---
@@ -111,22 +120,17 @@ class AppAffiliatePanel extends HTMLElement {
     if (this.#initialized) return;
     this.#initialized = true;
     this.#renderShell();
+    this.#wireDisclosure();
     this.#wireVisibilityRePoll();
     this.#wireStoreSubscriptions();
     this.#wireClickHandlers();
-    this.#startPolling();
+    // Counts belong in the closed summary bar, so the first account-scoped
+    // referral read runs immediately even though the disclosure starts shut.
     this.#runMountFetch();
   }
 
   disconnectedCallback() {
-    if (this.#pollHandle != null) {
-      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
-      this.#pollHandle = null;
-    }
-    if (this.#pollController) {
-      try { this.#pollController.abort(); } catch (_) { /* defensive */ }
-      this.#pollController = null;
-    }
+    this.#stopPolling();
     if (this.#visibilityListener
       && typeof document !== 'undefined'
       && typeof document.removeEventListener === 'function') {
@@ -134,6 +138,12 @@ class AppAffiliatePanel extends HTMLElement {
       catch (_) { /* defensive */ }
     }
     this.#visibilityListener = null;
+    const details = this.querySelector('[data-bind="aff-details"]');
+    if (details && this.#disclosureListener) {
+      try { details.removeEventListener('toggle', this.#disclosureListener); }
+      catch (_) { /* defensive */ }
+    }
+    this.#disclosureListener = null;
     if (this.#copyFeedbackTimer != null) {
       try { clearTimeout(this.#copyFeedbackTimer); } catch (_) { /* defensive */ }
       this.#copyFeedbackTimer = null;
@@ -154,45 +164,58 @@ class AppAffiliatePanel extends HTMLElement {
 
   #renderShell() {
     this.innerHTML = `
-      <section class="panel app-affiliate-panel">
-        <header class="aff-header">
-          <h2>AFFILIATE <quest-objective-indicator product="affiliate"></quest-objective-indicator></h2>
-        </header>
-        <div class="aff-default-section">
-          <p class="aff-hint">Share your link to earn commission. Works immediately — no setup required.</p>
-          <div class="aff-url-row">
-            <input type="text" readonly class="aff-url-input" data-bind="aff-url" value="" />
-            <button type="button" class="aff-copy-cta" data-write data-bind="aff-copy">Copy link</button>
+      <details class="app-affiliate-panel aff-disclosure section-disclosure" data-bind="aff-details">
+        <summary class="aff-summary section-disclosure__bar">
+          <span class="aff-summary-main">
+            <strong class="section-disclosure__title">
+              REFERRALS <quest-objective-indicator product="affiliate"></quest-objective-indicator>
+            </strong>
+            <span class="aff-summary-counts" aria-label="Referral network counts">
+              <span class="aff-summary-count"><span>DIRECT</span> <strong data-bind="aff-count-direct">—</strong></span>
+              <span class="aff-summary-count"><span>LEVEL 2</span> <strong data-bind="aff-count-level2">—</strong></span>
+              <span class="aff-summary-count"><span>LEVEL 3</span> <strong data-bind="aff-count-level3">—</strong></span>
+            </span>
+          </span>
+          <span class="section-disclosure__chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="aff-content">
+          <div class="aff-network-section">
+            <span class="aff-network-label">REFERRED BY</span>
+            <div class="aff-referred-by" data-bind="aff-referred-by"></div>
           </div>
-          <div class="aff-copy-feedback" data-bind="aff-copy-feedback" hidden></div>
-        </div>
-        <details class="aff-customize-section">
-          <summary class="aff-customize-summary">Customize your code (optional)</summary>
-          <p class="aff-customize-hint">
-            The default URL works for sharing AND earns you commission immediately.
-            Customize your code if you want a shorter or vanity hex code, or want to share kickback % with referees.
-          </p>
-          <div class="aff-customize-form">
-            <label class="aff-customize-label">Hex code (3-31 alphanumeric):
-              <input type="text" name="aff-customize-code" pattern="[A-Za-z0-9]{3,31}" class="aff-customize-input" />
-            </label>
-            <label class="aff-customize-label">Kickback % (0-25):
-              <input type="number" name="aff-customize-pct" min="0" max="25" value="0" class="aff-customize-input" />
-            </label>
-            <button type="button" class="aff-customize-submit" data-write>Register code</button>
+          <div class="aff-default-section">
+            <p class="aff-hint">Share your referral link. It works immediately — no setup required.</p>
+            <div class="aff-url-row">
+              <input type="text" readonly class="aff-url-input" data-bind="aff-url" value="" />
+              <button type="button" class="aff-copy-cta" data-write data-bind="aff-copy">Copy link</button>
+            </div>
+            <div class="aff-copy-feedback" data-bind="aff-copy-feedback" hidden></div>
           </div>
-          <div class="aff-customize-error" data-bind="aff-customize-error" hidden></div>
-          <div class="aff-customize-success" data-bind="aff-customize-success" hidden></div>
-        </details>
-        <div class="aff-referees-section">
-          <h3 class="aff-referees-heading">Your referees</h3>
-          <div class="aff-referees-table" data-bind="aff-referees"></div>
-          <div class="aff-referees-empty" data-bind="aff-referees-empty" hidden>No referees yet — share your link to get started.</div>
+          <details class="aff-customize-section">
+            <summary class="aff-customize-summary">Customize your code (optional)</summary>
+            <p class="aff-customize-hint">
+              The default URL works immediately.
+              Customize your code if you want a shorter or vanity hex code, or want to share kickback % with people you refer.
+            </p>
+            <div class="aff-customize-form">
+              <label class="aff-customize-label">Hex code (3-31 alphanumeric):
+                <input type="text" name="aff-customize-code" pattern="[A-Za-z0-9]{3,31}" class="aff-customize-input" />
+              </label>
+              <label class="aff-customize-label">Kickback % (0-25):
+                <input type="number" name="aff-customize-pct" min="0" max="25" value="0" class="aff-customize-input" />
+              </label>
+              <button type="button" class="aff-customize-submit" data-write>Register code</button>
+            </div>
+            <div class="aff-customize-error" data-bind="aff-customize-error" hidden></div>
+            <div class="aff-customize-success" data-bind="aff-customize-success" hidden></div>
+          </details>
+          <div class="aff-referees-section">
+            <h3 class="aff-referees-heading">YOU REFERRED</h3>
+            <div class="aff-referees-table" data-bind="aff-referees"></div>
+            <div class="aff-referees-empty" data-bind="aff-referees-empty" hidden>No referrals yet — share your link to get started.</div>
+          </div>
         </div>
-        <p class="aff-claim-link">
-          Commission ready to claim? Visit the <a href="#claims" class="aff-claim-link-anchor">Claims tray</a>.
-        </p>
-      </section>
+      </details>
     `;
   }
 
@@ -201,6 +224,7 @@ class AppAffiliatePanel extends HTMLElement {
   // ---------------------------------------------------------------------
 
   #startPolling() {
+    if (!this.#isDisclosureOpen()) return;
     if (this.#pollHandle != null) {
       try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
     }
@@ -208,7 +232,38 @@ class AppAffiliatePanel extends HTMLElement {
     this.#pollHandle = _setIntervalUnref(() => this.#runMountFetch(), POLL_INTERVAL_MS);
   }
 
+  #stopPolling() {
+    if (this.#pollHandle != null) {
+      try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
+      this.#pollHandle = null;
+    }
+    if (this.#pollController) {
+      try { this.#pollController.abort(); } catch (_) { /* defensive */ }
+      this.#pollController = null;
+    }
+  }
+
+  #isDisclosureOpen() {
+    return this.querySelector('[data-bind="aff-details"]')?.open === true;
+  }
+
+  #wireDisclosure() {
+    const details = this.querySelector('[data-bind="aff-details"]');
+    if (!details) return;
+    this.#disclosureListener = () => {
+      if (details.open) {
+        this.#startPolling();
+        this.#runMountFetch();
+      } else {
+        this.#stopPolling();
+      }
+    };
+    details.addEventListener('toggle', this.#disclosureListener);
+  }
+
   async #runMountFetch() {
+    // The summary counts load while closed. The 30-second refresh loop still
+    // runs only while open, keeping the collapsed panel inexpensive.
     // Visibility guard — pause polling while tab hidden.
     if (typeof document !== 'undefined'
       && document.visibilityState
@@ -231,6 +286,8 @@ class AppAffiliatePanel extends HTMLElement {
       this.#registeredCode = null;
       this.#refereesData = null;
       this.#setUrl('');
+      this.#renderReferralCounts(null);
+      this.#renderReferredBy(null, 'Pick a single account to see who referred it.');
       this.#renderRefereesEmpty('Per-account stat. Pick a single account.');
       return;
     }
@@ -246,6 +303,8 @@ class AppAffiliatePanel extends HTMLElement {
       this.#registeredCode = null;
       this.#refereesData = null;
       this.#setUrl('');
+      this.#renderReferralCounts(null);
+      this.#renderReferredBy(null, 'Connect a wallet to see who referred you.');
       this.#renderRefereesEmpty('Connect a wallet to see your link.');
       return;
     }
@@ -265,12 +324,20 @@ class AppAffiliatePanel extends HTMLElement {
     }).catch(() => { /* resolver never throws, defensive */ });
 
     try {
-      const data = await fetchJSON(`/player/${addr}/referees`);
+      const data = await fetchJSON(`/player/${addr}/referees`, { signal });
       if (signal.aborted) return;
       this.#refereesData = data || null;
+      this.#renderReferralCounts(data?.counts, data?.total);
+      this.#renderReferredBy(data?.referredBy ?? null);
       this.#renderReferees(Array.isArray(data?.referees) ? data.referees : []);
-    } catch (_e) {
-      this.#renderRefereesEmpty('Could not load referees.');
+    } catch (error) {
+      if (signal.aborted || error?.name === 'AbortError') return;
+      const message = Number(error?.status) === 503
+        ? 'Referral index is catching up. Retrying automatically.'
+        : 'Referral service unavailable. Retrying automatically.';
+      this.#renderReferralCounts(null);
+      this.#renderReferredBy(null, message);
+      this.#renderRefereesEmpty(message);
     }
   }
 
@@ -445,9 +512,64 @@ class AppAffiliatePanel extends HTMLElement {
   }
 
   // ---------------------------------------------------------------------
-  // Referee table — server-derived strings via textContent (T-58-18).
-  // FD-2 honored: when row.available === false, render '—' with tooltip.
+  // Referral network — server-derived strings via textContent (T-58-18).
+  // The endpoint returns both sides of the relationship: `referredBy` is the
+  // single incoming edge and `referees` are the outgoing/direct edges. The
+  // collapsed bar shows the size of the first three outgoing generations.
   // ---------------------------------------------------------------------
+
+  #renderReferralCounts(counts, directFallback = null) {
+    const normalized = counts && typeof counts === 'object'
+      ? counts
+      : { direct: directFallback, level2: null, level3: null };
+    const bindings = [
+      ['aff-count-direct', normalized.direct],
+      ['aff-count-level2', normalized.level2],
+      ['aff-count-level3', normalized.level3],
+    ];
+
+    for (const [binding, raw] of bindings) {
+      const target = this.querySelector(`[data-bind="${binding}"]`);
+      if (!target) continue;
+      const value = Number(raw);
+      target.textContent = raw != null && raw !== ''
+        && Number.isSafeInteger(value) && value >= 0
+        ? value.toLocaleString('en-US')
+        : '—';
+    }
+  }
+
+  #renderReferredBy(address, emptyMessage = 'No referrer recorded.') {
+    const target = this.querySelector('[data-bind="aff-referred-by"]');
+    if (!target) return;
+    // textContent also resets any prior empty-state text in the lightweight
+    // test DOM before an address link is appended on a later poll.
+    target.textContent = '';
+    if (typeof target.replaceChildren === 'function') {
+      target.replaceChildren();
+    } else {
+      target.children = [];
+      target._innerHTML = '';
+    }
+
+    const normalized = String(address || '');
+    if (!normalized) {
+      target.classList?.add?.('is-empty');
+      target.textContent = String(emptyMessage);
+      return;
+    }
+
+    target.classList?.remove?.('is-empty');
+    const link = document.createElement('a');
+    link.className = 'aff-referral-person';
+    link.textContent = _shortAddress(normalized);
+    link.title = normalized;
+    link.setAttribute('aria-label', `View referrer ${normalized} on the block explorer`);
+    link.setAttribute('href', `${String(CHAIN.etherscanBase || '').replace(/\/$/, '')}/address/${encodeURIComponent(normalized)}`);
+    link.setAttribute('target', '_blank');
+    link.setAttribute('rel', 'noopener noreferrer');
+    target.appendChild(link);
+  }
 
   #renderReferees(rows) {
     const table = this.querySelector('[data-bind="aff-referees"]');
@@ -463,27 +585,10 @@ class AppAffiliatePanel extends HTMLElement {
 
     if (!Array.isArray(rows) || rows.length === 0) {
       empty.hidden = false;
-      empty.textContent = 'No referees yet — share your link to get started.';
+      empty.textContent = 'No referrals yet — share your link to get started.';
       return;
     }
     empty.hidden = true;
-
-    // Header row — static text via textContent on createElement-built nodes.
-    const header = document.createElement('div');
-    header.className = 'aff-referees-row aff-referees-row--header';
-    const hAddr = document.createElement('span');
-    hAddr.className = 'aff-referees-cell aff-referees-cell--addr';
-    hAddr.textContent = 'Address';
-    const hAt = document.createElement('span');
-    hAt.className = 'aff-referees-cell aff-referees-cell--at';
-    hAt.textContent = 'Referred at';
-    const hAmt = document.createElement('span');
-    hAmt.className = 'aff-referees-cell aff-referees-cell--amt';
-    hAmt.textContent = 'Commission (FLIP)';
-    header.appendChild(hAddr);
-    header.appendChild(hAt);
-    header.appendChild(hAmt);
-    table.appendChild(header);
 
     for (const r of rows) {
       const row = document.createElement('div');
@@ -491,24 +596,17 @@ class AppAffiliatePanel extends HTMLElement {
 
       const addrCell = document.createElement('span');
       addrCell.className = 'aff-referees-cell aff-referees-cell--addr';
-      addrCell.textContent = String(r?.address || '');
+      const referralAddress = String(r?.address || '');
+      const addrLink = document.createElement('a');
+      addrLink.className = 'aff-referral-person';
+      addrLink.textContent = _shortAddress(referralAddress);
+      addrLink.title = referralAddress;
+      addrLink.setAttribute('aria-label', `View referral ${referralAddress} on the block explorer`);
+      addrLink.setAttribute('href', `${String(CHAIN.etherscanBase || '').replace(/\/$/, '')}/address/${encodeURIComponent(referralAddress)}`);
+      addrLink.setAttribute('target', '_blank');
+      addrLink.setAttribute('rel', 'noopener noreferrer');
+      addrCell.appendChild(addrLink);
       row.appendChild(addrCell);
-
-      const atCell = document.createElement('span');
-      atCell.className = 'aff-referees-cell aff-referees-cell--at';
-      atCell.textContent = String(r?.referredAt ?? '');
-      row.appendChild(atCell);
-
-      const amtCell = document.createElement('span');
-      amtCell.className = 'aff-referees-cell aff-referees-cell--amt';
-      if (r?.available === false) {
-        // FD-2 honored — display "—" with reason as tooltip.
-        amtCell.textContent = '—';
-        amtCell.title = String(r?.reason || 'pending');
-      } else {
-        amtCell.textContent = String(r?.totalCommissionFlip ?? '0');
-      }
-      row.appendChild(amtCell);
 
       table.appendChild(row);
     }
@@ -527,7 +625,7 @@ class AppAffiliatePanel extends HTMLElement {
     }
     if (empty) {
       empty.hidden = false;
-      empty.textContent = String(msg || 'No referees yet — share your link to get started.');
+      empty.textContent = String(msg || 'No referrals yet — share your link to get started.');
     }
   }
 }

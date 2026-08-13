@@ -1692,8 +1692,93 @@ account-switcher[hidden] {
   margin-top: 1rem;
 }
 
-.aff-header {
-  margin-bottom: 0.75rem;
+.aff-summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.aff-summary::-webkit-details-marker {
+  display: none;
+}
+
+.aff-summary-main {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(0.75rem, 2vw, 1.35rem);
+}
+
+.aff-summary-counts {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: clamp(0.55rem, 1.6vw, 1rem);
+  color: var(--text-secondary, #aaa);
+  font: 800 0.62rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+}
+
+.aff-summary-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.28rem;
+}
+
+.aff-summary-count strong {
+  color: #f5a623;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.aff-content {
+  padding: 0.85rem 1rem 1rem;
+}
+
+.aff-network-section {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(245, 166, 35, 0.28);
+  border-radius: 6px;
+  background: rgba(245, 166, 35, 0.045);
+}
+
+.aff-network-label {
+  color: var(--text-secondary, #aaa);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+}
+
+.aff-referred-by {
+  min-width: 0;
+  justify-self: end;
+  font-family: monospace;
+  font-size: 0.82rem;
+}
+
+.aff-referred-by.is-empty {
+  color: var(--text-secondary, #aaa);
+  font-family: inherit;
+  font-style: italic;
+}
+
+.aff-referral-person {
+  color: var(--accent, #4caf50);
+  font-family: monospace;
+  text-decoration: none;
+}
+
+.aff-referral-person:hover,
+.aff-referral-person:focus-visible {
+  text-decoration: underline;
 }
 
 .aff-default-section {
@@ -1802,6 +1887,7 @@ account-switcher[hidden] {
 .aff-referees-heading {
   font-size: 1rem;
   margin: 0 0 0.5rem;
+  letter-spacing: 0.04em;
 }
 
 .aff-referees-table {
@@ -1810,18 +1896,11 @@ account-switcher[hidden] {
 }
 
 .aff-referees-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
-  gap: 0.5rem;
+  display: flex;
+  align-items: center;
   padding: 0.4rem 0.5rem;
   border-bottom: 1px solid var(--border, #333);
   font-size: 0.875rem;
-}
-
-.aff-referees-row--header {
-  font-weight: 600;
-  color: var(--text-secondary, #aaa);
-  border-bottom: 1px solid var(--border, #444);
 }
 
 .aff-referees-cell {
@@ -1841,17 +1920,6 @@ account-switcher[hidden] {
   font-style: italic;
   font-size: 0.875rem;
   padding: 0.5rem;
-}
-
-.aff-claim-link {
-  font-size: 0.875rem;
-  color: var(--text-secondary, #aaa);
-  margin-top: 1rem;
-}
-
-.aff-claim-link-anchor {
-  color: var(--accent, #4caf50);
-  text-decoration: underline;
 }
 
 /* === Phase 63 D-03 Tier 1 (MOB-02) — shell + chrome + scroll-lock-aware modals === */
@@ -1961,12 +2029,6 @@ account-switcher[hidden] {
   app-pass-section .pass-whale-row {
     flex-wrap: wrap;
     gap: 0.5rem;
-  }
-  /* Affiliate referee table — wrap in horizontal-scroll container so wide
-     tabular data doesn't blow out the viewport at 320px. */
-  app-affiliate-panel .aff-referees-table,
-  app-affiliate-panel .aff-referees-section {
-    overflow-x: auto;
   }
   /* Long URLs / hex codes wrap inside the affiliate panel. */
   app-affiliate-panel .aff-url-input,
@@ -22424,8 +22486,8 @@ body.layout-basic .app-decimator-panel .dec-funds-stack .dec-flip-balance .dec-f
   max-width: 4rem;
 }
 
-/* Tickets, AFKING PASSES, and Transaction History are one disclosure family. */
-body.layout-basic :is(.app-tickets-inventory, .more-ways, .txh).section-disclosure {
+/* Tickets, AFKING PASSES, Transaction History, and Referrals are one disclosure family. */
+body.layout-basic :is(.app-tickets-inventory, .more-ways, .txh, .aff-disclosure).section-disclosure {
   box-sizing: border-box;
   overflow: hidden;
   margin-bottom: clamp(1rem, 3vw, 1.5rem);
@@ -22434,7 +22496,7 @@ body.layout-basic :is(.app-tickets-inventory, .more-ways, .txh).section-disclosu
   background: radial-gradient(circle at 8% 0, rgba(245, 166, 35, 0.08), transparent 30%), var(--bg-secondary, #12131f);
 }
 body.layout-basic .app-tickets-inventory.section-disclosure { padding: 0; }
-body.layout-basic :is(.app-tickets-inventory .inv-head, .more-ways__summary, .txh__summary).section-disclosure__bar {
+body.layout-basic :is(.app-tickets-inventory .inv-head, .more-ways__summary, .txh__summary, .aff-summary).section-disclosure__bar {
   box-sizing: border-box;
   min-height: 4.2rem;
   margin: 0;
@@ -22445,13 +22507,13 @@ body.layout-basic :is(.app-tickets-inventory .inv-head, .more-ways__summary, .tx
 }
 body.layout-basic .app-tickets-inventory .inv-head.section-disclosure__bar { padding-right: 1rem; }
 body.layout-basic .app-tickets-inventory.is-combined .inv-head.section-disclosure__bar { padding-right: 3.5rem; }
-body.layout-basic .more-ways__summary.section-disclosure__bar {
+body.layout-basic :is(.more-ways__summary, .aff-summary).section-disclosure__bar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.75rem;
 }
-body.layout-basic :is(.app-tickets-inventory .inv-head, .more-ways__summary, .txh__summary).section-disclosure__bar:hover {
+body.layout-basic :is(.app-tickets-inventory .inv-head, .more-ways__summary, .txh__summary, .aff-summary).section-disclosure__bar:hover {
   background: rgba(255, 255, 255, 0.025);
 }
 body.layout-basic .section-disclosure__title {
@@ -22462,7 +22524,7 @@ body.layout-basic .section-disclosure__title {
   font: 900 0.92rem/1.1 "Inter", system-ui, sans-serif;
   letter-spacing: 0.1em;
 }
-body.layout-basic :is(.more-ways__summary, .txh__summary)::after { content: none; }
+body.layout-basic :is(.more-ways__summary, .txh__summary, .aff-summary)::after { content: none; }
 body.layout-basic .section-disclosure__chevron {
   box-sizing: border-box;
   display: block;
@@ -22474,20 +22536,30 @@ body.layout-basic .section-disclosure__chevron {
   transform: rotate(45deg);
   transition: transform 0.16s ease;
 }
-body.layout-basic :is(.inv-disclosure[aria-expanded="true"], .more-ways[open] > .more-ways__summary, .txh[open] > .txh__summary) .section-disclosure__chevron {
+body.layout-basic :is(.inv-disclosure[aria-expanded="true"], .more-ways[open] > .more-ways__summary, .txh[open] > .txh__summary, .aff-disclosure[open] > .aff-summary) .section-disclosure__chevron {
   transform: rotate(225deg);
 }
 body.layout-basic .app-tickets-inventory .inv-disclosure { right: 0.45rem; }
-body.layout-basic :is(.inv-window, .more-ways__content, .txh__content) { border-top: 1px solid rgba(148, 163, 184, 0.14); }
+body.layout-basic :is(.inv-window, .more-ways__content, .txh__content, .aff-content) { border-top: 1px solid rgba(148, 163, 184, 0.14); }
 body.layout-basic .app-tickets-inventory .inv-window { padding: 0 0.85rem 0.85rem; border-bottom: 0; }
 @media (max-width: 700px) {
-  body.layout-basic :is(.app-tickets-inventory .inv-head, .more-ways__summary, .txh__summary).section-disclosure__bar {
+  body.layout-basic :is(.app-tickets-inventory .inv-head, .more-ways__summary, .txh__summary, .aff-summary).section-disclosure__bar {
     min-height: 3.9rem;
     padding: 0.65rem 0.72rem;
   }
   body.layout-basic .app-tickets-inventory .inv-head.section-disclosure__bar { padding-right: 0.72rem; }
   body.layout-basic .app-tickets-inventory.is-combined .inv-head.section-disclosure__bar { padding-right: 3.25rem; }
   body.layout-basic .app-tickets-inventory .inv-disclosure { right: 0.1rem; }
+  body.layout-basic .aff-summary-main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.3rem;
+  }
+  body.layout-basic .aff-summary-counts {
+    justify-content: flex-start;
+    gap: 0.65rem;
+    font-size: 0.56rem;
+  }
+  body.layout-basic .aff-content { padding: 0.65rem 0.72rem 0.72rem; }
 }
 
 @media (prefers-reduced-motion: reduce) { body.layout-basic .inv-window:not([hidden]) { animation: none; } }

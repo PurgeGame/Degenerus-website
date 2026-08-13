@@ -226,9 +226,14 @@
         </div>
       </details>
 
-      <!-- Full activity history is intentionally last and collapsed. Its
-           component does not touch the indexer until this dropdown opens. -->
+      <!-- Full activity history stays collapsed and does not touch the indexer
+           until this dropdown opens. -->
       <app-transaction-history></app-transaction-history>
+
+      <!-- Account-scoped referral network: who referred this wallet, the
+           wallet's direct referrals, and its share link. User-requested final
+           panel, directly below Transaction History. -->
+      <app-affiliate-panel></app-affiliate-panel>
     </main>
 
     <footer>
@@ -307,5 +312,6 @@
   <script type="module" src="/app/components/app-quest-panel.js"></script>
   <script type="module" src="/app/components/app-pass-section.js"></script>
   <script type="module" src="/app/components/app-transaction-history.js"></script>
+  <script type="module" src="/app/components/app-affiliate-panel.js"></script>
 </body>
 </html>

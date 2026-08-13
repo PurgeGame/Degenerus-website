@@ -12,8 +12,8 @@
 //     tickets inventory → more-ways → footer
 //   - aggregate claims and winnings strips are unmounted
 //   - lootboxes + passes live inside the collapsed <details class="more-ways">
-//   - quests / boons / affiliate panels and their script tags are absent
-//     (files stay on disk; THE PIT re-adds them in pro mode)
+//   - boons and the legacy coinflip panel remain absent; Referrals is mounted
+//     at the page bottom, directly below Transaction History
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -129,20 +129,35 @@ describe('index.html basic-mode skeleton', () => {
     assert.equal(html.indexOf('components/app-packs-panel.js'), -1, 'packs script removed');
   });
 
-  test('Tickets, AFKING PASSES, and Transaction History share one disclosure-bar treatment', () => {
+  test('Tickets, AFKING PASSES, Transaction History, and Referrals share one disclosure-bar treatment', () => {
     assert.match(appCss, /\.section-disclosure__bar\s*\{[\s\S]*?min-height:\s*4\.2rem;[\s\S]*?padding:\s*0\.7rem 1rem;/);
     assert.match(appCss, /\.section-disclosure__chevron\s*\{[\s\S]*?width:\s*0\.48rem;[\s\S]*?border-right:\s*1\.5px solid currentColor;/);
     assert.match(html, /class="more-ways section-disclosure"/);
+    assert.match(appCss, /\.aff-disclosure[\s\S]*?section-disclosure/);
   });
 
-  test('boons / affiliate / coinflip-deposit panels absent (pro-mode surfaces)', () => {
+  test('boons / coinflip-deposit panels absent (pro-mode surfaces)', () => {
     // app-coinflip-panel unmounted (user call): the flip stake input lives in
     // the hero's coinflip column (app-daily-flip); the file stays on disk.
     // app-quest-panel is now MOUNTED (user ask: quests + activity + streaks).
-    for (const tag of ['app-boons-panel', 'app-affiliate-panel', 'app-coinflip-panel']) {
+    for (const tag of ['app-boons-panel', 'app-coinflip-panel']) {
       assert.equal(html.indexOf(`<${tag}`), -1, `<${tag}> element absent`);
       assert.equal(html.indexOf(`components/${tag}.js`), -1, `${tag}.js script tag absent`);
     }
+  });
+
+  test('Referrals is the bottom panel directly after Transaction History', () => {
+    const history = html.indexOf('<app-transaction-history>');
+    const referrals = html.indexOf('<app-affiliate-panel>');
+    const mainClose = html.indexOf('</main>');
+    assert.ok(history >= 0, 'Transaction History is mounted');
+    assert.ok(referrals > history, 'Referrals follows Transaction History');
+    assert.ok(referrals < mainClose, 'Referrals remains inside main');
+    assert.match(
+      html.slice(history, mainClose),
+      /<app-transaction-history><\/app-transaction-history>[\s\S]*?<app-affiliate-panel><\/app-affiliate-panel>/,
+      'no other panel is inserted between Transaction History and Referrals',
+    );
   });
 
   test('second three-panel block is Quests left, Degenerette middle, Side Bets right', () => {
@@ -194,6 +209,7 @@ describe('index.html basic-mode skeleton', () => {
       '/app/components/app-parimutuel-panel.js',
       '/app/components/app-quest-panel.js',
       '/app/components/app-day-history-replays.js',
+      '/app/components/app-affiliate-panel.js',
     ]) {
       assert.ok(html.includes(`src="${src}"`), `script tag: ${src}`);
     }
