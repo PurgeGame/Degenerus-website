@@ -5,15 +5,39 @@
 
 import { CHAIN } from '../app/chain-config.js';
 import { loadDecimatorDrawSnapshot } from '../app/decimator-draw-data.js';
+import {
+  sfxFanfare,
+  sfxNoWin,
+  sfxRollDone,
+  sfxSpinStart,
+  sfxTick,
+  warmup as warmupSfx,
+} from '../app/jackpot-sfx.js';
 
 const STORAGE_PREFIX = `degenerus:decimator-draw:${CHAIN.id}:`;
+const DRAW_BRIDGE_TYPE = 'degenerus:decimator-draw';
 let active = null;
+
+function playDrawSound(cue, args = []) {
+  if (cue === 'warmup') warmupSfx();
+  else if (cue === 'spin') {
+    const duration = Math.max(100, Math.min(5_000, Number(args[0]) || 700));
+    sfxSpinStart(duration);
+  } else if (cue === 'tick') {
+    sfxTick(Math.max(0, Math.min(64, Math.trunc(Number(args[0]) || 0))));
+  } else if (cue === 'lock') sfxRollDone(args[0] === true);
+  else if (cue === 'complete') {
+    if (args[1] === false) sfxNoWin();
+    else sfxFanfare(args[0] === true);
+  }
+}
 
 function removeActive() {
   if (!active) return;
-  const { overlay, storageKey, onKeydown } = active;
+  const { overlay, storageKey, onKeydown, onMessage } = active;
   active = null;
   try { document.removeEventListener('keydown', onKeydown); } catch (_error) { /* defensive */ }
+  try { window.removeEventListener('message', onMessage); } catch (_error) { /* defensive */ }
   try { sessionStorage.removeItem(storageKey); } catch (_error) { /* private mode */ }
   try { overlay.remove(); } catch (_error) { /* defensive */ }
   try { document.body?.classList?.remove('decimator-draw-open'); } catch (_error) { /* defensive */ }
@@ -25,6 +49,9 @@ export function closeDecimatorDraw() {
 
 export async function openDecimatorDraw({ level, player } = {}) {
   if (typeof document === 'undefined' || !document.body) return false;
+  // Run before the first await so a manual OPEN/RUN click unlocks WebAudio
+  // while browser user activation is still live.
+  try { warmupSfx(); } catch (_error) { /* sound is optional */ }
   removeActive();
 
   const overlay = document.createElement('section');
@@ -56,8 +83,25 @@ export async function openDecimatorDraw({ level, player } = {}) {
   const onKeydown = (event) => {
     if (event?.key === 'Escape') removeActive();
   };
-  active = { overlay, storageKey, onKeydown };
+  const onMessage = (event) => {
+    const current = active;
+    if (!current || current.overlay !== overlay || !current.frame) return;
+    if (event?.source !== current.frame.contentWindow) return;
+    if (event?.origin !== window.location.origin) return;
+    const message = event?.data;
+    if (!message || message.type !== DRAW_BRIDGE_TYPE) return;
+    if (message.action === 'exit') {
+      removeActive();
+      return;
+    }
+    if (message.action === 'sound') {
+      try { playDrawSound(String(message.cue || ''), Array.isArray(message.args) ? message.args : []); }
+      catch (_error) { /* sound remains decorative */ }
+    }
+  };
+  active = { overlay, storageKey, onKeydown, onMessage, frame: null };
   document.addEventListener('keydown', onKeydown);
+  window.addEventListener('message', onMessage);
   document.body.classList.add('decimator-draw-open');
   document.body.appendChild(overlay);
 
@@ -74,6 +118,7 @@ export async function openDecimatorDraw({ level, player } = {}) {
     frame.className = 'decimator-draw-modal__frame';
     frame.title = `Level ${Number(level)} Decimator draw`;
     frame.setAttribute('allow', 'autoplay');
+    active.frame = frame;
     const params = new URLSearchParams({
       embed: '1',
       snapshot: storageKey,

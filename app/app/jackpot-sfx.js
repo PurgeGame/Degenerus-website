@@ -138,6 +138,39 @@ function _noiseWhoosh(ctx, { intensity = 0.6, reverse = false } = {}) {
   return true;
 }
 
+// A very short, low-passed noise transient. Real impacts lead with broadband
+// energy before the struck object's resonances bloom; without this layer a
+// stack of oscillators reads as a game chirp instead of physical contact.
+function _impactTransient(ctx, strength = 1) {
+  if (typeof ctx.createBuffer !== 'function'
+    || typeof ctx.createBufferSource !== 'function'
+    || typeof ctx.createBiquadFilter !== 'function') return false;
+  const duration = 0.055;
+  const sampleRate = Math.max(8_000, Number(ctx.sampleRate) || 44_100);
+  const length = Math.max(1, Math.floor(sampleRate * duration));
+  const buffer = ctx.createBuffer(1, length, sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < length; i += 1) data[i] = (Math.random() * 2) - 1;
+
+  const source = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  const now = ctx.currentTime;
+  source.buffer = buffer;
+  filter.type = 'lowpass';
+  filter.Q.setValueAtTime(0.8, now);
+  filter.frequency.setValueAtTime(2_400, now);
+  filter.frequency.exponentialRampToValueAtTime(760, now + duration);
+  gain.gain.setValueAtTime(0.14 * strength, now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  source.start(now);
+  source.stop(now + duration + 0.01);
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Cues — every one is a guarded no-op when muted / no AudioContext.
 // ---------------------------------------------------------------------------
@@ -400,34 +433,35 @@ export function sfxReverseBonk(intensity = 1) {
   if (!ctx) return;
   try {
     const strength = Math.max(0.35, Math.min(1.2, Number(intensity) || 1));
-    // A short hard edge over two low, slightly detuned bodies gives a much
-    // more physical BONK than the former face-change chirp. No pitch direction
-    // is tied to the eventual result.
+    // Broadband contact plus short, damped wood-like resonances. Keeping the
+    // body under 180ms makes repeated Reverse cards punch without smearing
+    // together, and the neutral downward settling reveals no win/loss result.
+    _impactTransient(ctx, strength);
     _tone(ctx, {
-      freq: 118,
-      glideTo: 54,
+      freq: 168,
+      glideTo: 96,
       type: 'sine',
-      attack: 0.002,
-      decay: 0.25,
-      peak: 0.16 * strength,
+      attack: 0.0015,
+      decay: 0.145,
+      peak: 0.17 * strength,
     });
     _tone(ctx, {
-      freq: 205,
-      glideTo: 82,
+      freq: 410,
+      glideTo: 230,
       type: 'triangle',
-      at: 0.006,
-      attack: 0.002,
-      decay: 0.17,
-      peak: 0.13 * strength,
+      at: 0.003,
+      attack: 0.0015,
+      decay: 0.095,
+      peak: 0.09 * strength,
     });
     _tone(ctx, {
-      freq: 1_480,
-      glideTo: 390,
-      type: 'square',
-      at: 0.002,
+      freq: 1_180,
+      glideTo: 650,
+      type: 'sine',
+      at: 0.001,
       attack: 0.001,
-      decay: 0.055,
-      peak: 0.065 * strength,
+      decay: 0.028,
+      peak: 0.05 * strength,
     });
   } catch (_e) { /* audio is decoration */ }
 }

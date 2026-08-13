@@ -117,13 +117,16 @@ test('the headless watcher is mounted between the jackpot hero and Side Bets row
   const sideBets = html.indexOf('<section class="play-grid"');
   assert.ok(hero >= 0 && resolutions > hero && sideBets > resolutions);
   assert.match(html, /<app-jackpot-resolutions hidden aria-hidden="true"><\/app-jackpot-resolutions>/);
-  assert.match(html, /src="\/app\/components\/app-jackpot-resolutions\.js"/);
+  // Cold-load diet (2026-08-13): loads via the IDLE_MODULES registration,
+  // not an eager script tag (hidden headless watcher).
+  assert.match(html, /'\/app\/components\/app-jackpot-resolutions\.js'/);
 });
 
 test('a due Decimator replaces the primary jackpot action and opens the full wheel', () => {
   const resolutions = readFileSync(new URL('../app-jackpot-resolutions.js', import.meta.url), 'utf8');
   const replay = readFileSync(new URL('../replay-panel.js', import.meta.url), 'utf8');
   const tray = readFileSync(new URL('../app-reveal-tray.js', import.meta.url), 'utf8');
+  const overlay = readFileSync(new URL('../app-decimator-draw-overlay.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 
   assert.match(resolutions, /primarySurface:\s*'jackpot'/);
@@ -157,6 +160,18 @@ test('a due Decimator replaces the primary jackpot action and opens the full whe
   assert.match(css, /\.decimator-draw-modal\s*\{[^}]*position:\s*fixed[^}]*inset:\s*0/s);
   assert.match(css, /@media \(max-width: 520px\)[\s\S]*?\.decimator-draw-modal__close/,
     'the takeover has an explicit phone treatment');
+  assert.match(overlay,
+    /event\?\.source !== current\.frame\.contentWindow[\s\S]*?event\?\.origin !== window\.location\.origin/,
+    'the iframe bridge accepts commands only from the active same-origin draw');
+  assert.match(overlay,
+    /message\.action === 'exit'[\s\S]*?removeActive\(\)/,
+    'the completed draw can close its own app takeover');
+  assert.match(overlay,
+    /message\.action === 'sound'[\s\S]*?playDrawSound/,
+    'iframe motion cues use the main app’s already-unlocked sound engine');
+  assert.match(overlay,
+    /openDecimatorDraw[\s\S]*?warmupSfx\(\)[\s\S]*?removeActive\(\)/,
+    'manual draw launch warms WebAudio before the first asynchronous snapshot read');
 });
 
 test('a due BAF opens its dedicated staged fullscreen final', () => {

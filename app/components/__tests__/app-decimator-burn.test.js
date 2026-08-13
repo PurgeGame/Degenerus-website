@@ -126,7 +126,7 @@ describe('<app-decimator-burn>', () => {
       /<quest-objective-indicator product="decimator"><\/quest-objective-indicator>/,
       'click-to-open quest control lives on the burn CTA');
     assert.match(STATUS_CSS,
-      /\.dbb__burn > quest-objective-indicator\s*\{[^}]*top:\s*50%[^}]*right:\s*0\.42rem/s,
+      /\.dbb__burn > quest-objective-indicator\s*\{[^}]*position:\s*absolute[^}]*top:\s*50%[^}]*right:\s*0\.42rem/s,
       'the zero-footprint marker is pinned inside the action edge');
     assert.doesNotMatch(STATUS_CSS, /\.dbb__input-control > quest-objective-indicator/);
   });

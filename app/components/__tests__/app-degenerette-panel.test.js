@@ -1079,6 +1079,7 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       spinCount: 5,
       hero: 2,
       ticket: '13',
+      packedData: String(packed),
     }, 'the recovered bet is durable across another refresh');
     assert.doesNotMatch(PANEL_SRC, /manual resolve required/i);
 
@@ -1622,7 +1623,11 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
   });
 
   test('record bounties split from Luckbox spin types without changing types 0-2', async () => {
-    const { partitionDegeneretteRewardLegs } = await import('../app-degenerette-panel.js');
+    const {
+      dgnDecodePacked,
+      partitionDegeneretteRewardLegs,
+      withDegeneretteRecordContext,
+    } = await import('../app-degenerette-panel.js');
     const legs = [
       { legType: 'spin', spinType: 'wwxrp' },
       { legType: 'spin', spinType: 'flip' },
@@ -1634,6 +1639,21 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     const split = partitionDegeneretteRewardLegs(legs);
     assert.deepEqual(split.lootboxLegs.map((leg) => leg.spinType), ['wwxrp', 'flip', 'eth']);
     assert.deepEqual(split.recordBountySpins.map((leg) => leg.spinType), ['record', 'unknown_3']);
+
+    const packed = (305n << 202n) | (900n << 220n);
+    assert.equal(dgnDecodePacked(packed).recordBountyStake, 900n * 10n ** 18n);
+    assert.deepEqual(
+      withDegeneretteRecordContext(split.recordBountySpins, packed).map((spin) => ({
+        type: spin.spinType,
+        stake: spin.recordStake,
+        activity: spin.activityScore,
+      })),
+      [
+        { type: 'record', stake: 900n * 10n ** 18n, activity: 305 },
+        { type: 'unknown_3', stake: 900n * 10n ** 18n, activity: 305 },
+      ],
+      'indexed replay preserves the parent inputs needed to explain a survival bust',
+    );
   });
 
   test('a new placement invalidates an older in-flight result and luckbox replay', () => {
@@ -2550,7 +2570,10 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     revealMod.__takeQueuedForTest();
 
     const ready = readyFeedItem();
-    const packed = BigInt(ready.packedData);
+    const packed = BigInt(ready.packedData)
+      | (305n << 202n)
+      | (900n << 220n);
+    ready.packedData = String(packed);
     const payout = 5n * 10n ** 16n;
     let feedCalls = 0;
     _fetchHandler = async (url) => {
@@ -2559,6 +2582,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       if (feedCalls < 5) return { items: [ready] };
       return {
         items: [readyFeedItem({
+          packedData: String(packed),
           results: [
             {
               resultType: 'resolved',
@@ -2601,7 +2625,12 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
               ethShare: '0',
               reels: [
                 { spinIndex: 0, playerTicket: '1', resultTicket: '2', score: 0 },
-                { spinIndex: 1, playerTicket: '3', resultTicket: '4', score: 2 },
+                {
+                  spinIndex: 1,
+                  playerTicket: String(0x04030201n),
+                  resultTicket: String(0x07060509n),
+                  score: 2,
+                },
                 { spinIndex: 2, playerTicket: '5', resultTicket: '6', score: 1 },
               ],
             },
@@ -2668,10 +2697,16 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
     assert.equal(recordSequence?.spin?.spinType, 'record');
     assert.equal(recordSequence?.spin?.payout, 0n,
       'a zero final payout cannot suppress the authored record-bounty reels');
+    assert.equal(recordSequence?.spin?.recordStake, 900n * 10n ** 18n,
+      'the parent packed bet carries the bounty stake into its losing reel reveal');
+    assert.equal(recordSequence?.spin?.activityScore, 305);
     const normalizedRecord = revealMod.normalizeSequence(recordSequence);
     assert.equal(normalizedRecord?.noVessel, true,
       'the record bounty goes straight to its reel board without a Luckbox case');
     assert.equal(normalizedRecord?.spinBoard?.rows?.length, 3);
+    assert.equal(normalizedRecord?.spinBoard?.currencyKnown, true);
+    assert.ok(normalizedRecord?.spinBoard?.payoutAtRisk > 0n,
+      'a final survival bust still names the FLIP value produced by its reels');
     assert.equal(lootboxSequence?.kind, 'lootbox');
     assert.equal(lootboxSequence?.title, 'DEGENERETTE LUCKBOX');
     assert.equal(lootboxSequence?.settledExpected, true,

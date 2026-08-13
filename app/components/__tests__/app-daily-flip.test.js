@@ -713,6 +713,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     }));
     coinflipMod.__setBafFlipEveReaderForTest(async () => null);
     coinflipMod.__setUpcomingFlipBonusReaderForTest(async () => null);
+    coinflipMod.__setResolvedFlipBonusWordReaderForTest(async () => null);
     storeMod.update('connected.address', TEST_ADDR);
     storeMod.update('app.lastDay', { day: 67, status: 'resolved' });
     await import('../app-daily-flip.js');
@@ -729,6 +730,7 @@ describe('app-daily-flip — coin reveal + actions', () => {
     coinflipMod.__resetReverseFlipQuoteReaderForTest();
     coinflipMod.__resetBafFlipEveReaderForTest();
     coinflipMod.__resetUpcomingFlipBonusReaderForTest();
+    coinflipMod.__resetResolvedFlipBonusWordReaderForTest();
     coinflipMod.__resetContractFactoryForTest();
     charityVoteMod.__resetCharityVoteForTest();
     contractsMod.clearProvider();
@@ -864,6 +866,58 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.doesNotMatch(APP_CSS, /\.df-tomorrow-layout\.has-bonus-flip/,
       'the bonus no longer turns the whole Tomorrow instrument into a green box');
     el.disconnectedCallback();
+  });
+
+  test('resolved +2% and +6% bonus days put green bonus copy above WIN', async () => {
+    // For day 67 and RNG word 1 the contract's packed seed produces an 88%
+    // base reward. Final rewards of 90 and 94 therefore prove +2 and +6.
+    const cases = [
+      { rewardPercent: 90, points: 2, tier: 'standard', total: '190%' },
+      { rewardPercent: 94, points: 6, tier: 'x0', total: '194%' },
+      { rewardPercent: 88, points: null, tier: null, total: '188%' },
+    ];
+
+    for (const sample of cases) {
+      invalidateJSONCache();
+      coinflipMod.__setResolvedFlipBonusWordReaderForTest(async ({ day }) => {
+        assert.equal(day, 67);
+        return 1n;
+      });
+      _fetchResponses = {
+        dashboard: dashboardPayload(),
+        flipDay: { day: 67, win: true, rewardPercent: sample.rewardPercent },
+      };
+      localStorage.setItem('flip_day_84532_67', '1');
+      const el = mount();
+      await flushMicrotasks();
+
+      const today = el.querySelector('[data-position="today"]');
+      const bonus = today.querySelector('[data-bind="df-result-bonus-flip"]');
+      const multiplier = today.querySelector('.df-position-multiplier');
+      assert.equal(today.querySelector('.df-position-percentage').textContent, sample.total);
+      if (sample.points == null) {
+        assert.equal(bonus, null, 'an ordinary RNG-derived reward gets no bonus label');
+        assert.equal(multiplier.className, 'df-position-multiplier');
+      } else {
+        assert.ok(bonus);
+        assert.equal(bonus.textContent, `+${sample.points}% BONUS`);
+        assert.equal(bonus.dataset.tier, sample.tier);
+        assert.equal(bonus.parentElement, today,
+          'the bonus occupies the result row rather than squeezing the multiplier');
+        assert.equal(multiplier.textContent, `WIN${sample.total}`);
+        assert.match(today.className, /df-position-row--result-bonus/);
+      }
+
+      el.disconnectedCallback();
+      el.remove();
+    }
+
+    assert.match(APP_CSS,
+      /\.df-position-row--result-bonus\s*\{[^}]*grid-template-areas:\s*"bonus label"\s*"multiplier result"/s,
+      'the verified bonus uses the empty cell directly above WIN');
+    assert.match(APP_CSS,
+      /\.df-position-result-bonus\s*\{[^}]*text-shadow:/s,
+      'the result bonus receives the same restrained green glow as the preview');
   });
 
   test('new-day rollover mounts a clickable spinning coin before the result read catches up', async () => {

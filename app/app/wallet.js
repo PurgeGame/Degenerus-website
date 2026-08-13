@@ -35,7 +35,6 @@
 // And one preserved pattern: nav.js bridge events (verbatim from /beta/ L193-208).
 
 import { BrowserProvider } from 'ethers';
-import { EthereumProvider } from '@walletconnect/ethereum-provider';
 import { CHAIN, WALLETCONNECT_PROJECT_ID } from './chain-config.js';
 import { update, get } from './store.js';
 import { setProvider, clearProvider, switchToSepolia } from './contracts.js';
@@ -208,10 +207,30 @@ function _wcInitOpts() {
   };
 }
 
+// The WalletConnect SDK is the single heaviest dependency graph on the page
+// (hundreds of esm.sh module requests via its transitive imports), and only
+// two paths ever need it: an explicit WalletConnect connect click, and a
+// silent reconnect when the PERSISTED rdns is walletconnect:v2. Everyone
+// else — disconnected visitors and injected-wallet users — must not pay for
+// it at cold load (2026-08-13 cold-trace audit: 414 esm.sh requests). The
+// bare specifier resolves through the page importmap exactly like the old
+// static import did.
+let _wcSdkPromise = null;
+function _loadEthereumProvider() {
+  if (!_wcSdkPromise) {
+    _wcSdkPromise = import('@walletconnect/ethereum-provider')
+      .then((m) => m.EthereumProvider);
+    // A failed CDN fetch must not poison the singleton forever — the next
+    // click retries instead of rejecting instantly on a cached failure.
+    _wcSdkPromise.catch(() => { _wcSdkPromise = null; });
+  }
+  return _wcSdkPromise;
+}
+
 async function _ensureWcProvider() {
   // Issue #2930 mitigation: never re-init on the same page.
   if (_wcProvider) return _wcProvider;
-  const factory = _wcEthereumProviderFactory || EthereumProvider;
+  const factory = _wcEthereumProviderFactory || await _loadEthereumProvider();
   _wcProvider = await factory.init(_wcInitOpts());
   // VERIFIED (RESEARCH F-2): loadPersistedSession runs inside init();
   // _wcProvider.session is truthy iff a prior session was persisted.

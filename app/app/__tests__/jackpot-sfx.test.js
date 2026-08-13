@@ -87,6 +87,49 @@ class FakeAudioContext {
   close() {}
 }
 
+class FakeNoiseAudioContext extends FakeAudioContext {
+  constructor() {
+    super();
+    this.sampleRate = 44_100;
+    this.bufferSources = [];
+    this.filters = [];
+  }
+  createBuffer(_channels, length, sampleRate) {
+    const data = new Float32Array(length);
+    return {
+      length,
+      sampleRate,
+      getChannelData: () => data,
+    };
+  }
+  createBufferSource() {
+    const source = {
+      buffer: null,
+      connect: () => {},
+      start: () => {},
+      stop: () => {},
+    };
+    this.bufferSources.push(source);
+    return source;
+  }
+  createBiquadFilter() {
+    const makeParam = () => ({
+      values: [],
+      ramps: [],
+      setValueAtTime(value, at) { this.values.push({ value, at }); },
+      exponentialRampToValueAtTime(value, at) { this.ramps.push({ value, at }); },
+    });
+    const filter = {
+      type: 'lowpass',
+      Q: makeParam(),
+      frequency: makeParam(),
+      connect: () => {},
+    };
+    this.filters.push(filter);
+    return filter;
+  }
+}
+
 describe('headless safety (no AudioContext / no localStorage)', () => {
   beforeEach(() => {
     delete globalThis.AudioContext;
@@ -235,6 +278,28 @@ describe('cues with a stubbed AudioContext', () => {
     sample(() => sfxCoinflipLand(true));
     sample(() => sfxCoinflipLand(false));
     assert.deepEqual(counts, [3, 2, 3, 2, 2, 4, 2]);
+  });
+
+  test('Reverse bonk uses a filtered contact transient and damped thock body', () => {
+    globalThis.AudioContext = FakeNoiseAudioContext;
+    __resetForTest();
+    warmup();
+    sfxReverseBonk();
+
+    const ctx = FakeAudioContext.last;
+    assert.equal(ctx.bufferSources.length, 1, 'one broadband contact transient');
+    assert.equal(ctx.filters.length, 1, 'contact transient is filtered');
+    assert.equal(ctx.filters[0].type, 'lowpass');
+    assert.equal(ctx.filters[0].frequency.values[0].value, 2_400,
+      'impact starts with a crisp wooden edge');
+    assert.equal(ctx.filters[0].frequency.ramps[0].value, 760,
+      'edge rapidly damps into the body');
+    assert.deepEqual(ctx.oscillators.map((osc) => osc.type), ['sine', 'triangle', 'sine'],
+      'body avoids the former harsh square-wave chirp');
+    assert.deepEqual(
+      ctx.oscillators.map((osc) => osc.frequency.values[0].value),
+      [168, 410, 1_180],
+      'low body, wood resonance, and short knock partial are layered');
   });
 
   test('quest completion is a small two-note chime', () => {

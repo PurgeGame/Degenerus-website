@@ -1,7 +1,16 @@
 import { decimatorPayoutBreakdown } from '../app/app/decimator-payout.js';
+import {
+  sfxFanfare,
+  sfxNoWin,
+  sfxRollDone,
+  sfxSpinStart,
+  sfxTick,
+  warmup as warmupSfx,
+} from '../app/app/jackpot-sfx.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const UNIT = 10n ** 18n;
+const DRAW_BRIDGE_TYPE = 'degenerus:decimator-draw';
 const DISCORD_DIRECTORY_URL = 'https://api.degener.us/api/leaderboard?limit=50';
 const WINNER_COLORS = Object.freeze([
   '#ed0e11', '#f7931a', '#d7dce2', '#ff4d8d', '#2f9cff',
@@ -12,6 +21,62 @@ export const BUCKET_MIN_DEGEN_SCORE = Object.freeze({
   12: 0, 11: 10, 10: 30, 9: 55, 8: 85, 7: 120,
   6: 180, 5: 250, 4: 300, 3: 500, 2: 1_000,
 });
+
+const LOCAL_DRAW_SFX = Object.freeze({
+  warmup: () => warmupSfx(),
+  spin: (duration) => sfxSpinStart(duration),
+  tick: (index) => sfxTick(index),
+  lock: (scored) => sfxRollDone(scored === true),
+  complete: (playerWon, hasWinners) => (
+    hasWinners === false ? sfxNoWin() : sfxFanfare(playerWon === true)
+  ),
+});
+
+function embeddedDraw() {
+  if (typeof window === 'undefined' || !window.parent || window.parent === window) return false;
+  try { return new URLSearchParams(window.location.search).get('embed') === '1'; }
+  catch (_error) { return false; }
+}
+
+/**
+ * The embedded replay delegates audio to the main app. Its opening click has
+ * already unlocked that AudioContext, while browsers commonly block a fresh
+ * context created later inside the iframe. Standalone replays synthesize the
+ * exact same cues locally and honor the shared mute preference.
+ */
+export function playDecimatorDrawSound(cue, ...args) {
+  const local = LOCAL_DRAW_SFX[String(cue || '')];
+  if (!local) return false;
+  if (embeddedDraw()) {
+    try {
+      window.parent.postMessage({
+        type: DRAW_BRIDGE_TYPE,
+        action: 'sound',
+        cue: String(cue),
+        args,
+      }, window.location.origin);
+      return true;
+    } catch (_error) { /* fall through to same-origin local audio */ }
+  }
+  try { local(...args); } catch (_error) { /* audio never blocks a draw */ }
+  return true;
+}
+
+/** Close the app takeover, or return a standalone replay to the main app. */
+export function exitDecimatorDraw() {
+  if (typeof window === 'undefined') return false;
+  if (embeddedDraw()) {
+    try {
+      window.parent.postMessage({
+        type: DRAW_BRIDGE_TYPE,
+        action: 'exit',
+      }, window.location.origin);
+      return true;
+    } catch (_error) { /* use the standalone fallback below */ }
+  }
+  try { window.location.assign('/app/'); } catch (_error) { return false; }
+  return true;
+}
 
 function integer(value, fallback = 0) {
   const parsed = Number(value);
@@ -670,8 +735,18 @@ class DecimatorDrawReplay {
   }
 
   #wireControls() {
-    this.bind('replay').addEventListener('click', () => this.play());
-    this.bind('skip').addEventListener('click', () => this.finish());
+    this.bind('replay').addEventListener('click', () => {
+      playDecimatorDrawSound('warmup');
+      this.play();
+    });
+    this.bind('skip').addEventListener('click', () => {
+      if (this.bind('skip').dataset.action === 'exit') {
+        exitDecimatorDraw();
+        return;
+      }
+      playDecimatorDrawSound('warmup');
+      this.finish();
+    });
     this.bind('speed').addEventListener('click', () => {
       this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 4 : 1;
       this.bind('speed').textContent = `${this.speed}×`;
@@ -709,10 +784,30 @@ class DecimatorDrawReplay {
     this.bind('wheel-selector').style.transform = `rotate(${this.pointerAngle}deg)`;
     this.bind('winning-score').textContent = '0';
     this.#showHubBurned();
-    this.bind('skip').disabled = false;
+    this.#setSecondaryAction('skip');
     this.#renderPlayer('waiting');
     this.#renderPayout();
     this.#renderFrame(this.frames[0], { phase: 'ready', current: 0 });
+  }
+
+  #setSecondaryAction(action) {
+    const button = this.bind('skip');
+    if (!button) return;
+    button.dataset.action = action;
+    button.classList.toggle('draw-button--exit', action === 'exit');
+    if (action === 'exit') {
+      button.textContent = 'EXIT DRAW';
+      button.disabled = false;
+      button.setAttribute('aria-label', 'Exit Decimator draw and return to the game');
+    } else if (action === 'finalizing') {
+      button.textContent = 'FINALIZING…';
+      button.disabled = true;
+      button.setAttribute('aria-label', 'Finalizing Decimator draw results');
+    } else {
+      button.textContent = 'SKIP TO RESULTS';
+      button.disabled = false;
+      button.setAttribute('aria-label', 'Skip Decimator animation to the final results');
+    }
   }
 
   async play() {
@@ -781,10 +876,14 @@ class DecimatorDrawReplay {
     this.bind('draw-phase').textContent = 'COMPLETE';
     this.bind('active-bucket').textContent = 'SCORE GROUPS LOCKED';
     this.bind('active-detail').textContent = `${this.frames.length} RESULTS`;
-    this.bind('skip').disabled = true;
+    this.#setSecondaryAction('finalizing');
     this.#renderRail(null);
     this.#renderWheel(this.frames.at(-1), { settled: true, complete: true });
     await this.#showFinalAllocation(token, { fast });
+    if (token !== this.runToken) return;
+    const result = playerResult(this.snapshot, this.player);
+    playDecimatorDrawSound('complete', result?.won === true, this.runningTotal > 0n);
+    this.#setSecondaryAction('exit');
   }
 
   #winnerIdentity(entry) {
@@ -1246,6 +1345,7 @@ class DecimatorDrawReplay {
     const selector = this.bind('wheel-selector');
     const target = selectorAngle(frame.targetPhysical, frame.slotCount);
     if (this.reducedMotion) {
+      playDecimatorDrawSound('spin', 180);
       selector.style.transform = `rotate(${target}deg)`;
       this.pointerAngle = target;
       this.#setCurrentSelection(frame, frame.targetPhysical);
@@ -1268,6 +1368,9 @@ class DecimatorDrawReplay {
     const totalDistance = legs.reduce((sum, leg) => sum + leg.distance, 0) || 1;
     const duration = (2_250 + frame.bucket * 35) / this.speed;
     const started = performance.now();
+    let soundedPhysical = null;
+    let tickIndex = 0;
+    playDecimatorDrawSound('spin', duration);
 
     await new Promise((resolve) => {
       const tick = (now) => {
@@ -1289,7 +1392,13 @@ class DecimatorDrawReplay {
           remaining -= leg.distance;
         }
         selector.style.transform = `rotate(${angle}deg)`;
-        this.#setCurrentSelection(frame, this.#closestActivePhysical(frame, angle));
+        const physical = this.#closestActivePhysical(frame, angle);
+        this.#setCurrentSelection(frame, physical);
+        if (physical !== soundedPhysical) {
+          soundedPhysical = physical;
+          playDecimatorDrawSound('tick', tickIndex);
+          tickIndex += 1;
+        }
         if (elapsed < 1) requestAnimationFrame(tick);
         else resolve();
       };
@@ -1382,6 +1491,7 @@ class DecimatorDrawReplay {
       this.pointerAngle = lockAngle;
       this.bind('wheel-selector').style.transform = `rotate(${lockAngle}deg)`;
       this.bind('wheel-wrap').classList.remove('is-locking');
+      playDecimatorDrawSound('lock', frame.winningScore > 0n);
     }
   }
 

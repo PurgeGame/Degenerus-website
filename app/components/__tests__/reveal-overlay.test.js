@@ -233,6 +233,12 @@ describe('normalizeSequence', () => {
     assert.equal(revealTerminalActionLabel(null, {
       total: 0n, totalWager: 100n, boxSpin: false,
     }), 'UNLUCKY');
+    assert.equal(revealTerminalActionLabel(null, {
+      currency: 3, unit: 'WWXRP', total: 200n, totalWager: 100n, boxSpin: false,
+    }), 'BACK TO GAME', 'a positive WWXRP result is never presented as TAKE THE WIN');
+    assert.equal(revealTerminalActionLabel({ kind: 'lootbox', wwxrpOnly: false }, {
+      currency: 3, unit: 'WWXRP', total: 2n, boxSpin: true,
+    }), 'BACK TO GAME', 'a WWXRP spin stays neutral beside other Luckbox prizes');
     assert.doesNotMatch(REVEAL_SRC, /(['"])COLLECT\1/,
       'the reveal engine has no player-facing COLLECT fallback');
   });
@@ -1204,13 +1210,21 @@ describe('buildBoxSpinBoard', () => {
   });
 
   test('a zero-payout record bounty becomes a direct three-reel FLIP board', () => {
+    const oneFlip = 10n ** 18n;
     const spin = {
       spinType: 'record',
       survived: false,
       payout: 0n,
+      recordStake: 900n * oneFlip,
+      activityScore: 305,
       reels: [
         { spinIndex: 0, playerTicket: 1n, resultTicket: 2n, score: 0 },
-        { spinIndex: 1, playerTicket: 3n, resultTicket: 4n, score: 2 },
+        {
+          spinIndex: 1,
+          playerTicket: 0x04030201n,
+          resultTicket: 0x07060509n,
+          score: 2,
+        },
         { spinIndex: 2, playerTicket: 5n, resultTicket: 6n, score: 1 },
       ],
     };
@@ -1222,6 +1236,13 @@ describe('buildBoxSpinBoard', () => {
     assert.equal(board.rows.length, 3);
     assert.equal(board.survived, false);
     assert.equal(board.headline, 'BIGGEST SPIN BOUNTY');
+    assert.equal(board.currencyKnown, true,
+      'a biggest-spin bounty is authored as FLIP and needs no mystery-currency draw');
+    assert.ok(board.payoutAtRisk > 0n,
+      'the parent bounty stake reconstructs what its paying reels lost on the final flip');
+    assert.equal(board.payoutAtRiskApproximate, false,
+      'the emitted score identifies one hero interpretation for this reel');
+    assert.equal(board.survivalWinPayout, board.payoutAtRisk * 2n);
 
     const sequence = normalizeSequence({ kind: 'record-bounty', spin });
     assert.equal(sequence.kind, 'record-bounty');
@@ -1235,19 +1256,21 @@ describe('buildBoxSpinBoard', () => {
     assert.equal(buildBoxSpinBoard({ spinType: 'wwxrp', reels: [] }), null);
   });
 
-  test('every mystery currency flips after reel one; FLIP then runs two reels and survival', () => {
+  test('mystery box currency flips after reel one while a known-FLIP record bounty does not', () => {
     assert.match(
       REVEAL_SRC,
-      /completed = i \+ 1;[\s\S]*?if \(board\.boxSpin && i === 0\)[\s\S]*?#appendBoxSpinCurrencyReveal[\s\S]*?interstitial: true/,
-      'the reveal beat is unconditional after the first settled reel and then clears',
+      /completed = i \+ 1;[\s\S]*?if \(board\.boxSpin && i === 0 && !currencyRevealed\)[\s\S]*?#appendBoxSpinCurrencyReveal[\s\S]*?interstitial: true/,
+      'only a still-hidden denomination gets the reveal beat after reel one',
     );
+    assert.match(REVEAL_SRC, /currencyKnown:\s*spinType === 'record'/,
+      'record bounties declare their fixed FLIP currency on the canonical board');
     assert.doesNotMatch(
       REVEAL_SRC,
       /if \(board\.boxSpin && i === 0 && board\.total > 0n\)/,
       'a miss cannot suppress the currency flip',
     );
-    assert.match(REVEAL_SRC, /const countIsRevealed = !board\.boxSpin \|\| i > 0/,
-      'the FLIP-identifying reel count stays hidden before reel one');
+    assert.match(REVEAL_SRC, /const countIsRevealed = !board\.boxSpin \|\| currencyRevealed \|\| i > 0/,
+      'only mystery BoxSpins hide their reel count before reel one');
     assert.match(
       REVEAL_SRC,
       /MORE FLIP SPINS/,
@@ -2875,30 +2898,28 @@ describe('reveal-overlay element', () => {
     await tick();
   });
 
-  test('a partial WWXRP Degenerette return has one Back to Game action', async () => {
+  test('a positive WWXRP Degenerette result has one Back to Game action', async () => {
     queueReveal({
-      kind: 'degenerette', currency: 2,
+      kind: 'degenerette', currency: 3,
       amountPerSpin: 10n ** 16n, totalWager: 10n ** 16n,
-      totalPayout: 5n * 10n ** 15n,
+      totalPayout: 10n ** 16n,
       spins: [{
         spinIndex: 0, playerTraits: 13, houseTraits: 13,
-        score: 1, payout: 5n * 10n ** 15n,
+        score: 2, payout: 10n ** 16n,
       }],
     });
     const el = instantiate();
     await tick();
 
     const total = el.querySelector('.rvl-spin-total');
-    assert.match(total.textContent, /RETURNED/);
-    assert.doesNotMatch(total.textContent, /NET LOSS/,
-      'the payout and signed NET amount already communicate the result');
+    assert.match(total.textContent, /WWXRP/);
     const cta = el.querySelector('.rvl-dgn-spin-cta');
     assert.equal(cta.textContent, 'BACK TO GAME');
     assert.equal(cta.classList.contains('rvl-collect-cta--unlucky'), false,
-      'a 50% return uses a neutral exit action');
+      'a positive WWXRP result uses a neutral exit action');
     const extraExit = el.querySelector('.rvl-dgn-skip-cta');
     assert.equal(extraExit.hidden, true,
-      'a partial return never renders two Back to Game buttons');
+      'a WWXRP result never renders two Back to Game buttons');
     cta.dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
   });
@@ -3134,6 +3155,47 @@ describe('reveal-overlay element', () => {
       .dispatchEvent({ type: 'click', stopPropagation() {} });
     await tick();
     assert.equal(el.querySelector('[data-bind="rvl-backdrop"]').hidden, true);
+  });
+
+  test('a busted record bounty starts as FLIP and keeps its reel stake in the result', async () => {
+    const oneFlip = 10n ** 18n;
+    queueReveal({
+      kind: 'record-bounty',
+      spin: {
+        spinType: 'record',
+        survived: false,
+        payout: 0n,
+        recordStake: 900n * oneFlip,
+        activityScore: 305,
+        reels: [
+          { spinIndex: 0, playerTicket: 1n, resultTicket: 2n, score: 0 },
+          {
+            spinIndex: 1,
+            playerTicket: 0x04030201n,
+            resultTicket: 0x07060509n,
+            score: 2,
+          },
+          { spinIndex: 2, playerTicket: 5n, resultTicket: 6n, score: 1 },
+        ],
+      },
+    });
+    const el = instantiate();
+    await tick();
+
+    const zone = el.querySelector('[data-bind="rvl-spin-zone"]');
+    assert.match(zone.querySelector('.rvl-spin-head__title').textContent,
+      /BIGGEST SPIN BOUNTY · 3 FLIP REELS/);
+    assert.equal(zone.querySelector('.rvl-box-currency-reveal'), null,
+      'the fixed-FLIP bounty never mounts a currency-flip interstitial');
+    assert.match(zone.querySelector('.rvl-box-payout-meter').textContent,
+      /REEL PAYOUT.*FLIP.*DOUBLE OR NOTHING/s);
+    assert.match(zone.querySelector('.rvl-survival').textContent,
+      /BUSTED.*FLIP FROM REELS · LOST ON SURVIVAL FLIP/s);
+    assert.doesNotMatch(zone.textContent, /CURRENCY FLIP/);
+
+    zone.querySelector('.rvl-dgn-spin-cta')
+      .dispatchEvent({ type: 'click', stopPropagation() {} });
+    await tick();
   });
 
   test('a BoxSpin survival bust describes paying reels without inventing an unavailable amount', async () => {

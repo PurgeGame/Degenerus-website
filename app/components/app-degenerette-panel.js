@@ -293,6 +293,10 @@ function _readPendingBet(address) {
     const raw = localStorage.getItem(pendingDegeneretteKey(address));
     const row = raw ? JSON.parse(raw) : null;
     if (!row || row.betId == null || row.index == null) return null;
+    let packedData = null;
+    try {
+      if (row.packedData != null) packedData = BigInt(row.packedData);
+    } catch (_e) { packedData = null; }
     return {
       betId: BigInt(row.betId),
       index: BigInt(row.index),
@@ -301,6 +305,7 @@ function _readPendingBet(address) {
       spinCount: Math.max(1, Number(row.spinCount ?? 1)),
       hero: Number(row.hero ?? 0) & 3,
       ticket: row.ticket == null ? null : BigInt(row.ticket),
+      packedData,
       rngRequestPending: Boolean(row.rngRequestPending),
       rngRequestStartedAt: Math.max(0, Number(row.rngRequestStartedAt ?? 0)),
       rngRequestBlock: Math.max(0, Number(row.rngRequestBlock ?? 0)),
@@ -328,6 +333,7 @@ function _writePendingBet(address, row) {
       hero: Number(row.hero ?? 0) & 3,
     };
     if (row.ticket != null) payload.ticket = String(row.ticket);
+    if (row.packedData != null) payload.packedData = String(row.packedData);
     // Keep old pending-bet records compact, but persist a submitted shared RNG
     // request so its tray card survives a refresh until the word is ready.
     if (row.rngRequestPending) {
@@ -358,9 +364,11 @@ function _writePendingBet(address, row) {
 
 // v75 BetPlaced.packed layout (DegeneretteModule:377-398 repack; the indexer's
 // degenerette-feed route mirrors it): customTraits[0..31], spinCount[32..39],
-// currency[40..41], amountPerSpin[42..169], heroQuadrant[218..219].
+// currency[40..41], amountPerSpin[42..169], activityScore[202..217],
+// heroQuadrant[218..219], recordBountyWholeFlip[220..255].
 // (The pre-v75 layout — hero at 238 — is what app-compact still decodes; STALE.)
 const DGN_MASK128 = (1n << 128n) - 1n;
+const DGN_RECORD_MASK = (1n << 36n) - 1n;
 export function dgnDecodePacked(packedStr) {
   let p = 0n;
   try { p = BigInt(packedStr ?? 0); } catch (_e) { return null; }
@@ -369,7 +377,9 @@ export function dgnDecodePacked(packedStr) {
     spinCount: Number((p >> 32n) & 0xFFn),
     currency: Number((p >> 40n) & 0x3n),
     amountPerSpin: (p >> 42n) & DGN_MASK128,
+    activityScore: Number((p >> 202n) & 0xFFFFn),
     heroQuadrant: Number((p >> 218n) & 0x3n),
+    recordBountyStake: ((p >> 220n) & DGN_RECORD_MASK) * DEGENERETTE_TOKEN_SCALE,
   };
 }
 
@@ -659,7 +669,10 @@ export function degeneretteRevealSequenceFromFeedItem(item) {
   sequence.lootboxAwarded = lootboxLegs.length > 0;
   sequence.lootboxLegs = lootboxLegs;
   sequence.lootboxEth = degeneretteLootboxEthFromLegs(lootboxLegs);
-  sequence.recordBountySpins = recordBountySpins;
+  sequence.recordBountySpins = withDegeneretteRecordContext(
+    recordBountySpins,
+    merged.packedData,
+  );
   return sequence;
 }
 
@@ -680,6 +693,26 @@ export function partitionDegeneretteRewardLegs(legs) {
     }
   }
   return { lootboxLegs, recordBountySpins };
+}
+
+/**
+ * Type-3 BoxSpin emits the final post-survival value only. Preserve the parent
+ * bet's packed record stake and activity snapshot on that child so a losing
+ * double-or-nothing can still show what its reels had produced.
+ */
+export function withDegeneretteRecordContext(spins, packedData) {
+  const rows = Array.isArray(spins) ? spins : [];
+  const packed = dgnDecodePacked(packedData);
+  if (!packed || packed.recordBountyStake <= 0n) return rows.slice();
+  return rows.map((spin) => {
+    const spinType = String(spin?.spinType || '').toLowerCase();
+    if (spinType !== 'record' && spinType !== 'unknown_3') return spin;
+    return {
+      ...spin,
+      recordStake: packed.recordBountyStake,
+      activityScore: packed.activityScore,
+    };
+  });
 }
 
 /**
@@ -871,6 +904,7 @@ class AppDegenerettePanel extends HTMLElement {
   #currentCurrency = 0;        // currency of the in-flight bet (payout display)
   #currentAmountPerSpin = 0n;  // raw chain units, retained for the result board
   #currentSpinCount = 0;       // retained so the reveal can show the full wager
+  #currentPackedData = null;   // parent-only bounty stake/activity reveal context
   #draftCurrency = 0;          // selected setup currency; detects real switches
   // Receipt parsing is the fastest path, but a confirmed placement must remain
   // recoverable if a wallet/provider omits logs. The DB snapshot identifies the
@@ -1134,7 +1168,6 @@ class AppDegenerettePanel extends HTMLElement {
           </section>
 
           <aside class="deg-referral-card" aria-label="Refer friends and earn free FLIP forever">
-            <quest-objective-indicator product="affiliate"></quest-objective-indicator>
             <img class="deg-referral-card__logo" src="/whitepaper/flame-logo.svg" alt="" aria-hidden="true">
             <div class="deg-referral-card__copy">
               <strong>
@@ -1155,6 +1188,8 @@ class AppDegenerettePanel extends HTMLElement {
                            src="/shared/coinflip-face-eth.svg" alt="">
                     </span>
                   </button>
+                  <quest-objective-indicator product="affiliate"
+                                             data-quest-pointer="bottom-left"></quest-objective-indicator>
                 </span>
               </strong>
             </div>
@@ -2089,6 +2124,7 @@ class AppDegenerettePanel extends HTMLElement {
       this.#currentBetId = null;
       this.#currentLootboxIndex = null;
       this.#currentTicket = null;
+      this.#currentPackedData = null;
       this.#currentRngWord = 0n;
       this.#rngRequestPending = false;
       this.#rngRequestStartedAt = 0;
@@ -2105,6 +2141,7 @@ class AppDegenerettePanel extends HTMLElement {
     this.#currentSpinCount = row.spinCount;
     this.#currentHero = row.hero;
     this.#currentTicket = row.ticket;
+    this.#currentPackedData = row.packedData;
     this.#currentRngWord = 0n;
     this.#rngRequestPending = row.rngRequestPending;
     this.#rngRequestStartedAt = row.rngRequestStartedAt;
@@ -2206,6 +2243,7 @@ class AppDegenerettePanel extends HTMLElement {
           spinCount: decoded.spinCount,
           hero: decoded.heroQuadrant,
           ticket: decoded.customTicket,
+          packedData: packed,
         };
         if (!stillCurrent()) return false;
         this.#pendingAddress = address;
@@ -2217,6 +2255,7 @@ class AppDegenerettePanel extends HTMLElement {
         this.#currentSpinCount = row.spinCount;
         this.#currentHero = row.hero;
         this.#currentTicket = row.ticket;
+        this.#currentPackedData = row.packedData;
         this.#currentRngWord = 0n;
         this.#rngRequestPending = false;
         this.#rngRequestStartedAt = 0;
@@ -2512,6 +2551,7 @@ class AppDegenerettePanel extends HTMLElement {
       spinCount: this.#currentSpinCount,
       hero: this.#currentHero,
       ticket: this.#currentTicket,
+      packedData: this.#currentPackedData,
       rngRequestPending: this.#rngRequestPending,
       rngRequestStartedAt: this.#rngRequestStartedAt,
       rngRequestBlock: this.#rngRequestBlock,
@@ -2711,6 +2751,7 @@ class AppDegenerettePanel extends HTMLElement {
           spinCount: this.#currentSpinCount,
           hero: this.#currentHero,
           ticket: this.#currentTicket,
+          packedData: this.#currentPackedData,
           rngWord: this.#currentRngWord,
           rngRequestPending: this.#rngRequestPending,
           rngRequestStartedAt: this.#rngRequestStartedAt,
@@ -2849,6 +2890,7 @@ class AppDegenerettePanel extends HTMLElement {
         this.#currentSpinCount = ticketCount;
         this.#currentHero = heroQuadrant;
         this.#currentTicket = BigInt(customTicket);
+        this.#currentPackedData = null;
         this.#currentRngWord = 0n;
         this.#rngRequestPending = false;
         this.#rngRequestStartedAt = 0;
@@ -2869,6 +2911,7 @@ class AppDegenerettePanel extends HTMLElement {
       this.#currentSpinCount = ticketCount;
       this.#currentHero = heroQuadrant;
       this.#currentTicket = BigInt(customTicket);
+      this.#currentPackedData = placed[0].packed;
       this.#currentRngWord = 0n;
       this.#rngRequestPending = false;
       this.#rngRequestStartedAt = 0;
@@ -2885,6 +2928,7 @@ class AppDegenerettePanel extends HTMLElement {
         spinCount: this.#currentSpinCount,
         hero: this.#currentHero,
         ticket: this.#currentTicket,
+        packedData: this.#currentPackedData,
       });
       this.#setState(STATE.AWAITING_RNG);
       retireOptimistic();
@@ -2907,6 +2951,7 @@ class AppDegenerettePanel extends HTMLElement {
         this.#currentSpinCount = previousActive.spinCount;
         this.#currentHero = previousActive.hero;
         this.#currentTicket = previousActive.ticket;
+        this.#currentPackedData = previousActive.packedData;
         this.#currentRngWord = previousActive.rngWord;
         this.#rngRequestPending = previousActive.rngRequestPending;
         this.#rngRequestStartedAt = previousActive.rngRequestStartedAt;
@@ -3206,6 +3251,12 @@ class AppDegenerettePanel extends HTMLElement {
         }
         return;
       }
+      if (packed != null) {
+        // Also upgrades legacy pending rows that predate packed-context
+        // persistence before the resolver deletes this slot.
+        this.#currentPackedData = packed;
+        this.#persistPendingBet();
+      }
 
       const candidates = await this.#communityResolveCandidates(player, betId);
       if (!stillCurrent()) return;
@@ -3380,6 +3431,10 @@ class AppDegenerettePanel extends HTMLElement {
       lootboxLegs: directBoxLegs,
       recordBountySpins,
     } = partitionDegeneretteRewardLegs(lootboxLegs);
+    const contextualRecordBountySpins = withDegeneretteRecordContext(
+      recordBountySpins,
+      this.#currentPackedData,
+    );
     sequence.lootboxAwarded = directBoxLegs.length > 0;
     sequence.lootboxLegs = directBoxLegs;
     sequence.lootboxEth = degeneretteLootboxEthFromLegs(directBoxLegs);
@@ -3402,7 +3457,7 @@ class AppDegenerettePanel extends HTMLElement {
     if (!queueReveal(sequence)) return false;
     if (presentationKey) this.#presentedBetKeys.add(presentationKey);
     if (completesActiveSlot) _writePendingBet(this.#pendingAddress, null);
-    for (const spin of recordBountySpins) {
+    for (const spin of contextualRecordBountySpins) {
       queueReveal({
         kind: 'record-bounty',
         spin,
@@ -3441,6 +3496,7 @@ class AppDegenerettePanel extends HTMLElement {
       this.#currentBetId = null;
       this.#currentLootboxIndex = null;
       this.#currentTicket = null;
+      this.#currentPackedData = null;
       this.#currentRngWord = 0n;
       this.#setState(STATE.IDLE);
       void this.#recoverPendingBetFromDb();
@@ -3559,6 +3615,8 @@ class AppDegenerettePanel extends HTMLElement {
           continue;
         }
         const decoded = dgnDecodePacked(bet.packedData);
+        try { this.#currentPackedData = BigInt(bet.packedData); }
+        catch (_e) { this.#currentPackedData = null; }
         if (bet.betIndex != null) {
           try { this.#currentLootboxIndex = BigInt(bet.betIndex); } catch (_e) { /* malformed feed row */ }
         }
@@ -4042,6 +4100,7 @@ class AppDegenerettePanel extends HTMLElement {
       // placed several wagers while RNG was pending.
       this.#currentBetId = null;
       this.#currentLootboxIndex = null;
+      this.#currentPackedData = null;
       this.#currentRngWord = 0n;
       this.#setState(STATE.IDLE);
       void this.#recoverPendingBetFromDb();

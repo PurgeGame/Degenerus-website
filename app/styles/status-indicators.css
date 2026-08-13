@@ -319,6 +319,7 @@ body.layout-basic .df-next-bet__quest {
 }
 
 body.layout-basic .dbb__burn > quest-objective-indicator {
+  position: absolute;
   z-index: 3;
   top: 50%;
   right: 0.42rem;
@@ -339,25 +340,29 @@ body.layout-basic .deg-currency-option > quest-objective-indicator {
   height: 1.18rem;
 }
 
-body.layout-basic .deg-referral-card > quest-objective-indicator {
+body.layout-basic .deg-referral-card__forever {
+  position: relative;
+  width: fit-content;
+  justify-self: start;
+}
+
+body.layout-basic .deg-referral-card__forever > quest-objective-indicator {
   position: absolute;
   z-index: 3;
-  top: 0.48rem;
-  right: 0.5rem;
-}
-
-body.layout-basic .aff-header h2 {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-body.layout-basic .aff-header h2 > quest-objective-indicator {
-  top: 50%;
-  left: calc(100% + 0.34rem);
+  top: -0.5rem;
+  right: auto;
+  left: calc(100% + 0.35rem);
   width: 1.18rem;
   height: 1.18rem;
-  translate: 0 -50%;
+}
+
+@media (max-width: 520px) {
+  body.layout-basic .deg-referral-card__forever { position: static; }
+  body.layout-basic .deg-referral-card__forever > quest-objective-indicator {
+    top: -0.18rem;
+    right: -0.12rem;
+    left: auto;
+  }
 }
 
 body.layout-basic .app-decimator-panel .dec-input-label {

@@ -17,7 +17,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve as resolvePath } from 'node:path';
 
@@ -203,15 +203,37 @@ describe('index.html basic-mode skeleton', () => {
       '/app/components/replay-panel.js',
       '/app/components/app-decimator-panel.js',
       '/app/components/app-degenerette-panel.js',
-      '/app/components/app-pass-section.js',
       '/app/components/app-tickets-inventory.js',
       '/app/components/app-daily-flip.js',
       '/app/components/app-parimutuel-panel.js',
       '/app/components/app-quest-panel.js',
-      '/app/components/app-day-history-replays.js',
-      '/app/components/app-affiliate-panel.js',
     ]) {
       assert.ok(html.includes(`src="${src}"`), `script tag: ${src}`);
+    }
+    // Cold-load module diet (2026-08-13): these load through the inline
+    // LAZY_PANELS / IDLE_MODULES registrations instead of eager script tags.
+    // The path string must still appear — dynamic imports are invisible to
+    // the publish runbook's static module-resolution grep, so THESE asserts
+    // are what keep a renamed/deleted module from silently resolving to the
+    // no-404 HTML fallback. Disk existence is asserted too.
+    const lazyModules = [
+      '/app/components/app-pass-section.js',
+      '/app/components/app-transaction-history.js',
+      '/app/components/app-affiliate-panel.js',
+      '/app/components/app-sdgnrs-redemptions.js',
+      '/app/components/app-day-history-replays.js',
+      '/app/components/app-jackpot-resolutions.js',
+      '/app/components/app-all-in-dialog.js',
+      '/app/components/app-player-funds-dialog.js',
+      '/app/components/app-afking-funding-warning.js',
+    ];
+    for (const src of lazyModules) {
+      assert.ok(!html.includes(`src="${src}"`), `lazy module must not load eagerly: ${src}`);
+      assert.ok(html.includes(`'${src}'`), `lazy module registered in the loader lists: ${src}`);
+      assert.ok(
+        existsSync(resolvePath(__dirname, '../..', src.replace(/^\/app\//, ''))),
+        `lazy module exists on disk: ${src}`,
+      );
     }
   });
 });

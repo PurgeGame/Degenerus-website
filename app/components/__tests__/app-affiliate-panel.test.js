@@ -3,19 +3,13 @@
 //
 // Run: cd website && node --test app/components/__tests__/app-affiliate-panel.test.js
 //
-// Tests Custom Element shell for the affiliate panel:
-//   - Default URL renders for any connected user (RESEARCH R2 — no prior
-//     createAffiliateCode tx required; defaultCodeForAddress is enough).
-//   - Copy CTA writes URL to navigator.clipboard with feedback toast.
-//   - Customize CTA opens a hex-code + kickback% form; submit fires
-//     createAffiliateCode through Phase 58 chokepoint.
-//   - URL flips to registered code AFTER confirm (CF-06 — NEVER optimistic).
-//   - Referral network renders both who referred this player and the direct
-//     referrals returned by /player/:address/referees.
-//   - Empty direct-referral state copy: "No referrals yet — share your link to get
-//     started."
-//   - data-write attribute on Copy + Customize-submit buttons (CF-15
-//     view-mode disable manager hook).
+// Tests the read-only referral network shell:
+//   - The collapsed summary performs no referral lookup.
+//   - Direct, level-2, and level-3 counts load inside the open disclosure.
+//   - The expanded panel renders the incoming referrer and direct referrals.
+//   - Linked Discord identities replace the compact address fallback.
+//   - Referral identities are explorer-linked and never expose commission data.
+//   - Empty, combined-account, and temporarily unavailable states stay useful.
 //
 // fakeDOM scaffold inherited verbatim from app-quest-panel.test.js (Plan 62-04).
 
@@ -79,6 +73,8 @@ function makeFakeElement(tag = 'div') {
         if (hrefMatch) child.attributes.href = hrefMatch[1];
         const typeMatch = /\btype="([^"]+)"/.exec(attrs);
         if (typeMatch) child.attributes.type = typeMatch[1];
+        const roleMatch = /\brole="([^"]+)"/.exec(attrs);
+        if (roleMatch) child.attributes.role = roleMatch[1];
         const classMatch = /\bclass="([^"]+)"/.exec(attrs);
         if (classMatch) {
           for (const c of classMatch[1].split(/\s+/)) child.classList.add(c);
@@ -384,12 +380,11 @@ async function settle(loops = 30) {
 }
 
 // ---------------------------------------------------------------------------
-// Imports under test — store + affiliate-helper module + panel module
+// Imports under test — store + panel module
 // (panel dynamic-imported in beforeEach after globals installed).
 // ---------------------------------------------------------------------------
 
 import * as storeMod from '../../app/store.js';
-import * as affiliateMod from '../../app/affiliate.js';
 
 // ---------------------------------------------------------------------------
 // Read panel source for source-grep assertions.
@@ -430,7 +425,7 @@ function makeRefereesPayload(overrides = {}) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('<app-affiliate-panel> — referral network + sharing controls', () => {
+describe('<app-affiliate-panel> — referral network', () => {
   beforeEach(async () => {
     storeMod.__resetForTest();
     resetDom();
@@ -449,32 +444,34 @@ describe('<app-affiliate-panel> — referral network + sharing controls', () => 
     assert.equal(ctor, ctor2, 'same ctor reference after re-import (idempotent)');
   });
 
-  test('Panel renders Referred by + You referred with sharing controls', async () => {
+  test('Panel renders a compact read-only referral network', async () => {
     const el = instantiate();
     await flushMicrotasks();
     assert.ok(el.innerHTML.length > 100, 'innerHTML populated');
     assert.match(el.innerHTML, /REFERRALS/i, 'header contains REFERRALS');
     assert.match(el.innerHTML, /REFERRED BY/i, 'incoming relationship label present');
-    assert.match(el.innerHTML, /YOU REFERRED/i, 'outgoing relationship label present');
-    assert.ok(el.querySelector('[data-bind="aff-count-direct"]'), 'direct count present in summary');
-    assert.ok(el.querySelector('[data-bind="aff-count-level2"]'), 'level-2 count present in summary');
-    assert.ok(el.querySelector('[data-bind="aff-count-level3"]'), 'level-3 count present in summary');
+    assert.match(el.innerHTML, /DIRECT REFERRALS/i, 'direct-referral section label present');
+    assert.match(el.innerHTML, /class="aff-network-stats"/, 'three-level counts use an interior stats row');
+    assert.ok(el.querySelector('[data-bind="aff-count-direct"]'), 'direct count present inside');
+    assert.ok(el.querySelector('[data-bind="aff-count-level2"]'), 'level-2 count present inside');
+    assert.ok(el.querySelector('[data-bind="aff-count-level3"]'), 'level-3 count present inside');
+    assert.equal(el.querySelector('[data-bind="aff-direct-total"]'), null, 'direct total is not duplicated');
     assert.ok(el.querySelector('[data-bind="aff-referred-by"]'), 'referred-by identity present');
-    // Default URL section.
-    assert.ok(el.querySelector('[data-bind="aff-url"]'), 'aff-url input present');
-    assert.ok(el.querySelector('[data-bind="aff-copy"]'), 'aff-copy button present');
-    // Customize section.
-    assert.ok(el.querySelector('input[name="aff-customize-code"]'), 'aff-customize-code input present');
-    assert.ok(el.querySelector('input[name="aff-customize-pct"]'), 'aff-customize-pct input present');
-    // Referee table.
     assert.ok(el.querySelector('[data-bind="aff-referees"]'), 'aff-referees container present');
+    assert.equal(el.querySelector('[data-bind="aff-url"]'), null, 'sharing URL is not mixed into the panel');
+    assert.equal(el.querySelector('[data-bind="aff-copy"]'), null, 'copy control is absent');
+    assert.equal(el.querySelector('.aff-customize-submit'), null, 'customize control is absent');
+    assert.doesNotMatch(el.innerHTML, /commission|claims tray|kickback/i,
+      'financial and affiliate-code controls are absent');
   });
 
-  test('Referrals starts closed but loads the counts shown in its summary bar', async () => {
-    _fetchHandler = async () => makeRefereesPayload({
-      total: 4,
-      counts: { direct: 4, level2: 12, level3: 37 },
-    });
+  test('Referrals starts closed with no lookup, then loads counts inside when opened', async () => {
+    _fetchHandler = async (url) => String(url).includes('/api/profiles?')
+      ? { profiles: [] }
+      : makeRefereesPayload({
+        total: 4,
+        counts: { direct: 4, level2: 12, level3: 37 },
+      });
     const el = instantiate({ open: false });
     await settle(40);
     const details = el.querySelector('[data-bind="aff-details"]');
@@ -486,196 +483,27 @@ describe('<app-affiliate-panel> — referral network + sharing controls', () => 
     const openingClasses = openingTag.match(/class="([^"]+)"/)?.[1]?.split(/\s+/) || [];
     assert.equal(openingClasses.includes('panel'), false,
       'old standalone panel chrome is not layered over the shared disclosure shell');
-    assert.match(el.innerHTML,
-      /<summary class="aff-summary section-disclosure__bar">[\s\S]*?section-disclosure__title[\s\S]*?aff-summary-counts[\s\S]*?section-disclosure__chevron/,
-      'summary uses the shared title bar with network counts and a chevron');
+    const summaryMarkup = el.innerHTML.match(/<summary class="aff-summary section-disclosure__bar">[\s\S]*?<\/summary>/)?.[0] || '';
+    assert.match(summaryMarkup, /section-disclosure__title[\s\S]*?section-disclosure__chevron/,
+      'summary uses the shared title bar and chevron');
+    assert.doesNotMatch(summaryMarkup, /aff-count-|DIRECT|LEVEL 2|LEVEL 3/,
+      'the closed bar contains no referral totals');
     assert.doesNotMatch(openingTag, /\sopen(?:\s|>)/, 'no open attribute ships in the shell');
-    assert.equal(_fetchCalls.some((url) => String(url).includes('/referees')), true,
-      'closed disclosure loads the account-scoped network counts');
-    assert.equal(el.querySelector('[data-bind="aff-count-direct"]').textContent, '4');
-    assert.equal(el.querySelector('[data-bind="aff-count-level2"]').textContent, '12');
-    assert.equal(el.querySelector('[data-bind="aff-count-level3"]').textContent, '37');
+    assert.equal(_fetchCalls.some((url) => String(url).includes('/referees')), false,
+      'closed disclosure performs no account-scoped referral lookup');
 
     details.open = true;
     details.dispatchEvent({ type: 'toggle' });
     await settle(40);
-    assert.equal(details.open, true, 'the same payload is available when the disclosure opens');
-    assert.equal(el.querySelector('[data-bind="aff-count-level3"]').textContent, '37',
-      'opening preserves the loaded summary counts');
+    assert.equal(details.open, true, 'disclosure opens');
+    assert.equal(_fetchCalls.some((url) => String(url).includes('/referees')), true,
+      'opening performs the account-scoped referral lookup');
+    assert.equal(el.querySelector('[data-bind="aff-count-direct"]').textContent, '4');
+    assert.equal(el.querySelector('[data-bind="aff-count-level2"]').textContent, '12');
+    assert.equal(el.querySelector('[data-bind="aff-count-level3"]').textContent, '37');
   });
 
-  test('Default URL renders with the readable player address on mount', async () => {
-    const el = instantiate();
-    await settle(20);
-    const input = el.querySelector('[data-bind="aff-url"]');
-    assert.ok(input, 'aff-url input present');
-    const url = input.value || input._value || '';
-    const expectedCode = CONNECTED.toLowerCase();
-    assert.match(url, new RegExp(expectedCode), `URL contains player address ${expectedCode}`);
-    assert.match(url, /https:\/\/degener\.us\/app\/\?ref=/, 'URL has the app base + ?ref=');
-  });
-
-  test('Copy CTA + Customize submit carry data-write attribute (CF-15 view-mode disable hook)', async () => {
-    const el = instantiate();
-    await flushMicrotasks();
-    const copyBtn = el.querySelector('[data-bind="aff-copy"]');
-    const submitBtn = el.querySelector('.aff-customize-submit');
-    assert.ok(copyBtn, 'copy button present');
-    assert.equal(copyBtn.getAttribute('data-write'), '', 'copy button has data-write');
-    assert.ok(submitBtn, 'customize submit button present');
-    assert.equal(submitBtn.getAttribute('data-write'), '', 'customize submit has data-write');
-  });
-
-  test('Copy CTA invokes navigator.clipboard.writeText with the URL', async () => {
-    const el = instantiate();
-    await settle(20);
-    const copyBtn = el.querySelector('[data-bind="aff-copy"]');
-    copyBtn.dispatchEvent({ type: 'click' });
-    await settle(20);
-    assert.ok(_clipboardCalls.length >= 1, 'clipboard.writeText called at least once');
-    const expectedCode = CONNECTED.toLowerCase();
-    assert.match(_clipboardCalls[0], new RegExp(expectedCode), 'clipboard call contains the URL');
-  });
-
-  test('Copy success surfaces feedback via textContent (T-58-18)', async () => {
-    const el = instantiate();
-    await settle(20);
-    const copyBtn = el.querySelector('[data-bind="aff-copy"]');
-    copyBtn.dispatchEvent({ type: 'click' });
-    await settle(20);
-    const fb = el.querySelector('[data-bind="aff-copy-feedback"]');
-    assert.ok(fb, 'aff-copy-feedback element present');
-    assert.match(String(fb.textContent || ''), /copied/i, 'feedback contains "copied"');
-  });
-
-  test('Customize submit invokes createAffiliateCode with parsed form fields', async () => {
-    const el = instantiate();
-    await settle(20);
-    // Stub createAffiliateCode via __setContractFactoryForTest seam on affiliate.js.
-    // (affiliate.js helper is what the panel calls; we can't easily replace it
-    // mid-import, so we stub via the test seam injecting a fake contract.)
-    const calls = { createAffiliateCode: [] };
-    const fake = {
-      createAffiliateCode: Object.assign(
-        async (...args) => {
-          calls.createAffiliateCode.push(args);
-          return { hash: '0xtx', wait: async () => ({ status: 1, hash: '0xreceipt', logs: [] }) };
-        },
-        { staticCall: async () => undefined },
-      ),
-      connect(_) { return this; },
-      _calls: calls,
-    };
-    // Need provider for sendTx path.
-    const contractsMod = await import('../../app/contracts.js');
-    contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
-      getSigner: async () => ({ getAddress: async () => CONNECTED }),
-    });
-    affiliateMod.__setContractFactoryForTest(() => fake);
-    try {
-      // Fill form.
-      const codeInput = el.querySelector('input[name="aff-customize-code"]');
-      const pctInput = el.querySelector('input[name="aff-customize-pct"]');
-      codeInput.value = 'DEGEN';
-      pctInput.value = '10';
-      // Click submit.
-      const submitBtn = el.querySelector('.aff-customize-submit');
-      submitBtn.dispatchEvent({ type: 'click' });
-      await settle(40);
-      assert.equal(calls.createAffiliateCode.length, 1, 'createAffiliateCode called once');
-      const [args] = calls.createAffiliateCode;
-      // First arg is bytes32-encoded uppercase code. Second arg is uint8 pct.
-      assert.ok(/^0x[0-9a-f]{64}$/i.test(args[0]), 'bytes32 hex code');
-      assert.equal(args[1], 10, 'kickbackPct === 10');
-    } finally {
-      affiliateMod.__resetContractFactoryForTest();
-      contractsMod.clearProvider();
-    }
-  });
-
-  test('Customize error renders via textContent (T-58-18)', async () => {
-    const el = instantiate();
-    await settle(20);
-    // Inject a contract whose static-call reverts with Insufficient (code-taken).
-    const fake = {
-      createAffiliateCode: Object.assign(
-        async (..._args) => { return { hash: '0xtx', wait: async () => ({ status: 1, logs: [] }) }; },
-        {
-          staticCall: async () => {
-            const err = new Error('static-call revert');
-            err.revert = { name: 'Insufficient' };
-            throw err;
-          },
-        },
-      ),
-      connect(_) { return this; },
-    };
-    const contractsMod = await import('../../app/contracts.js');
-    contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
-      getSigner: async () => ({ getAddress: async () => CONNECTED }),
-    });
-    affiliateMod.__setContractFactoryForTest(() => fake);
-    try {
-      const codeInput = el.querySelector('input[name="aff-customize-code"]');
-      const pctInput = el.querySelector('input[name="aff-customize-pct"]');
-      codeInput.value = 'DEGEN';
-      pctInput.value = '0';
-      const submitBtn = el.querySelector('.aff-customize-submit');
-      submitBtn.dispatchEvent({ type: 'click' });
-      await settle(40);
-      const errEl = el.querySelector('[data-bind="aff-customize-error"]');
-      assert.ok(errEl, 'aff-customize-error element present');
-      assert.match(
-        String(errEl.textContent || ''),
-        /already taken|different/i,
-        'decoded userMessage rendered via textContent',
-      );
-    } finally {
-      affiliateMod.__resetContractFactoryForTest();
-      contractsMod.clearProvider();
-    }
-  });
-
-  test('NEVER optimistic URL flip — URL only updates AFTER confirmed Customize tx (CF-06)', async () => {
-    const el = instantiate();
-    await settle(20);
-    const input = el.querySelector('[data-bind="aff-url"]');
-    const beforeUrl = input.value || input._value || '';
-    // Inject a NEVER-resolving createAffiliateCode.
-    const fake = {
-      createAffiliateCode: Object.assign(
-        async (..._args) => new Promise(() => {}),
-        { staticCall: async () => undefined },
-      ),
-      connect(_) { return this; },
-    };
-    const contractsMod = await import('../../app/contracts.js');
-    contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
-      getSigner: async () => ({ getAddress: async () => CONNECTED }),
-    });
-    affiliateMod.__setContractFactoryForTest(() => fake);
-    try {
-      const codeInput = el.querySelector('input[name="aff-customize-code"]');
-      const pctInput = el.querySelector('input[name="aff-customize-pct"]');
-      codeInput.value = 'DEGEN';
-      pctInput.value = '5';
-      const submitBtn = el.querySelector('.aff-customize-submit');
-      submitBtn.dispatchEvent({ type: 'click' });
-      // Settle just enough microtasks for the click handler to start; the
-      // never-resolving sendTx blocks completion. URL must NOT have flipped.
-      for (let i = 0; i < 8; i += 1) await Promise.resolve();
-      const stillUrl = input.value || input._value || '';
-      assert.equal(stillUrl, beforeUrl, 'URL unchanged during pending Customize tx (no optimistic flip)');
-    } finally {
-      affiliateMod.__resetContractFactoryForTest();
-      contractsMod.clearProvider();
-    }
-  });
-
-  test('Referee table fetches from /player/:address/referees when opened', async () => {
+  test('Referral network fetches from /player/:address/referees when opened', async () => {
     instantiate();
     await settle(40);
     const matched = _fetchCalls.find((u) => u && u.includes('/referees'));
@@ -702,6 +530,69 @@ describe('<app-affiliate-panel> — referral network + sharing controls', () => 
     assert.equal(referredBy.textContent, 'No referrer recorded.');
   });
 
+  test('Linked Discord identity is preferred with the wallet kept as context', async () => {
+    const linked = '0x' + '1'.repeat(40);
+    _fetchHandler = async (url) => {
+      if (String(url).includes('/api/profiles?')) {
+        return {
+          profiles: [{
+            address: linked,
+            discord_name: 'Burnie',
+            discord_avatar: 'https://cdn.discordapp.com/avatars/burnie.png',
+          }],
+        };
+      }
+      return makeRefereesPayload({
+        referees: [{ address: linked, referredAt: '12345' }],
+        total: 1,
+        counts: { direct: 1, level2: 0, level3: 0 },
+      });
+    };
+    const el = instantiate();
+    await settle(60);
+    const list = el.querySelector('[data-bind="aff-referees"]');
+    assert.match(list.textContent, /Burnie/, 'Discord display name is primary');
+    assert.match(list.textContent, /0x1111…1111/, 'short wallet remains available as context');
+    const avatar = list.querySelector('.aff-referral-avatar');
+    assert.match(String(avatar?.src || ''), /^https:\/\/cdn\.discordapp\.com\//,
+      'validated Discord avatar is rendered');
+  });
+
+  test('Discord profile lookups respect the eight-address service batch limit', async () => {
+    const referrals = Array.from({ length: 9 }, (_, index) => {
+      const digit = (index + 1).toString(16);
+      return { address: `0x${digit.repeat(40)}`, referredAt: String(index + 1) };
+    });
+    const linked = referrals.at(-1).address;
+    const profileCalls = [];
+    _fetchHandler = async (url) => {
+      if (String(url).includes('/api/profiles?')) {
+        profileCalls.push(String(url));
+        const requested = new URL(String(url)).searchParams.get('addresses')?.split(',') || [];
+        return {
+          profiles: requested.includes(linked)
+            ? [{ address: linked, discord_name: 'Ninth Degen', discord_avatar: null }]
+            : [],
+        };
+      }
+      return makeRefereesPayload({
+        referees: referrals,
+        total: referrals.length,
+        counts: { direct: referrals.length, level2: 0, level3: 0 },
+      });
+    };
+
+    const el = instantiate();
+    await settle(80);
+    assert.equal(profileCalls.length, 2, 'nine wallets are resolved in two profile calls');
+    for (const url of profileCalls) {
+      const addresses = new URL(url).searchParams.get('addresses')?.split(',') || [];
+      assert.ok(addresses.length <= 8, `profile batch stays at or below eight; got ${addresses.length}`);
+    }
+    assert.match(el.querySelector('[data-bind="aff-referees"]').textContent, /Ninth Degen/,
+      'a Discord identity from the second batch is rendered');
+  });
+
   test('a freshness 503 explains that the referral index is catching up', async () => {
     _fetchHandler = async () => {
       const error = new Error('stale indexer');
@@ -726,9 +617,10 @@ describe('<app-affiliate-panel> — referral network + sharing controls', () => 
     });
     const el = instantiate();
     await settle(40);
-    const table = el.querySelector('[data-bind="aff-referees"]');
-    assert.ok(table, 'referee table present');
-    const txt = String(table.textContent || '');
+    const list = el.querySelector('[data-bind="aff-referees"]');
+    assert.ok(list, 'direct-referral list present');
+    assert.equal(list.getAttribute('role'), 'list', 'container exposes list semantics');
+    const txt = String(list.textContent || '');
     assert.match(txt, /0xref1/i, 'address rendered via textContent');
     assert.doesNotMatch(txt, /987654321|12345|commission/i,
       'commission and block metadata are omitted from the referral list');
@@ -736,7 +628,7 @@ describe('<app-affiliate-panel> — referral network + sharing controls', () => 
       'stale commission claim copy is absent');
   });
 
-  test('Direct-referral empty state invites the player to share their link', async () => {
+  test('Direct-referral empty state is concise', async () => {
     _fetchHandler = async () => makeRefereesPayload({ referees: [], total: 0 });
     const el = instantiate();
     await settle(40);
@@ -744,65 +636,7 @@ describe('<app-affiliate-panel> — referral network + sharing controls', () => 
     assert.ok(empty, 'aff-referees-empty element present');
     // Empty-state visible when zero referees.
     assert.equal(empty.hidden, false, 'empty-state visible');
-    assert.match(String(empty.textContent || el.innerHTML), /No referrals yet/i, 'empty copy present');
-  });
-
-  test('Customize-submit click is debounced — double-click invokes createAffiliateCode only once', async () => {
-    const el = instantiate();
-    await settle(20);
-    const calls = { createAffiliateCode: [] };
-    const fake = {
-      createAffiliateCode: Object.assign(
-        async (...args) => {
-          calls.createAffiliateCode.push(args);
-          return { hash: '0xtx', wait: async () => ({ status: 1, hash: '0xreceipt', logs: [] }) };
-        },
-        { staticCall: async () => undefined },
-      ),
-      connect(_) { return this; },
-      _calls: calls,
-    };
-    const contractsMod = await import('../../app/contracts.js');
-    contractsMod.setProvider({
-      getNetwork: async () => ({ chainId: 84532n }),
-      getSigner: async () => ({ getAddress: async () => CONNECTED }),
-    });
-    affiliateMod.__setContractFactoryForTest(() => fake);
-    try {
-      const codeInput = el.querySelector('input[name="aff-customize-code"]');
-      const pctInput = el.querySelector('input[name="aff-customize-pct"]');
-      codeInput.value = 'DEGEN';
-      pctInput.value = '5';
-      const submitBtn = el.querySelector('.aff-customize-submit');
-      submitBtn.dispatchEvent({ type: 'click' });
-      submitBtn.dispatchEvent({ type: 'click' });
-      await settle(40);
-      assert.equal(calls.createAffiliateCode.length, 1, 'debounced — exactly one call');
-    } finally {
-      affiliateMod.__resetContractFactoryForTest();
-      contractsMod.clearProvider();
-    }
-  });
-
-  test('Panel imports defaultCodeForAddress / buildAffiliateUrl / createAffiliateCode from affiliate.js', () => {
-    assert.match(
-      PANEL_SRC,
-      /from\s+['"]\.\.\/app\/affiliate\.js['"]/,
-      'panel imports from ../app/affiliate.js',
-    );
-    assert.match(PANEL_SRC, /defaultCodeForAddress/, 'imports defaultCodeForAddress');
-    assert.match(PANEL_SRC, /buildAffiliateUrl/, 'imports buildAffiliateUrl');
-    assert.match(PANEL_SRC, /createAffiliateCode/, 'imports createAffiliateCode');
-  });
-
-  test('Panel sources own code from affiliate.js readers, NOT lootbox readAffiliateCode', () => {
-    assert.match(PANEL_SRC, /readRegisteredCode/, 'sync own-code read (affiliate.js)');
-    assert.match(PANEL_SRC, /resolveRegisteredCode/, 'DB-first async refresh (affiliate.js)');
-    assert.doesNotMatch(
-      PANEL_SRC.replace(/^\s*\/\/.*$/gm, ''), // comments may mention it
-      /readAffiliateCode/,
-      'purchase-default helper (the code that referred YOU) must not build your own link',
-    );
+    assert.match(String(empty.textContent || el.innerHTML), /No direct referrals yet\./i, 'empty copy present');
   });
 
   test('Panel uses fetchJSON for /referees endpoint read', () => {
@@ -816,10 +650,6 @@ describe('<app-affiliate-panel> — referral network + sharing controls', () => 
       matches.length >= 5,
       `panel uses .textContent ≥ 5 times for server-derived strings; got ${matches.length}`,
     );
-  });
-
-  test('Panel includes 10s auto-clear timer for error states', () => {
-    assert.match(PANEL_SRC, /10000|10_000/, 'panel uses 10s auto-clear');
   });
 
   test('Panel registers idempotent customElements.define', () => {
@@ -837,9 +667,8 @@ describe('<app-affiliate-panel> — referral network + sharing controls', () => 
     assert.doesNotThrow(() => el.disconnectedCallback());
   });
 
-  // Account-switcher (2026-07-16) — combined mode renders the referee-table
-  // empty-state with the per-account note instead of fetching (the affiliate
-  // link + referee data are per-account identity, not summed by combine.js).
+  // Account-switcher (2026-07-16) — referral data is per-account identity,
+  // not a metric that can be summed by combine.js.
   test("mode 'combined' renders the per-account note via the existing referees empty-state", async () => {
     let fetched = false;
     _fetchHandler = async () => { fetched = true; return makeRefereesPayload(); };
@@ -852,7 +681,5 @@ describe('<app-affiliate-panel> — referral network + sharing controls', () => 
     assert.equal(emptyEl.hidden, false, 'referees empty-state visible in combined mode');
     assert.equal(emptyEl.textContent, 'Per-account stat. Pick a single account.');
     assert.equal(fetched, false, '/player/:address/referees never fetched in combined mode');
-    const urlInput = el.querySelector('[data-bind="aff-url"]');
-    assert.equal(urlInput.value, '', 'URL blanked in combined mode');
   });
 });

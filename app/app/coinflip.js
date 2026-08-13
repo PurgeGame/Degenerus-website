@@ -139,6 +139,11 @@ const GAME_FLIP_BONUS_READ_ABI = [
   'function jackpotCompressionTier() external view returns (uint8)',
   'function growthState(uint24 round) external view returns (uint256 ratchetPrev, uint256 ratchetRound, uint256 ratchetNext, uint24 currentLevel, bool bettingOpen, uint8 phaseDay)',
 ];
+const GAME_RESOLVED_FLIP_BONUS_READ_ABI = [
+  'function rngWordForDay(uint24 day) external view returns (uint256)',
+];
+const COINFLIP_EXTRA_MIN_PERCENT = 78n;
+const COINFLIP_EXTRA_RANGE = 38n;
 const ERC20_BALANCE_ABI = ['function balanceOf(address owner) external view returns (uint256)'];
 
 let _currentStakeReader = null;
@@ -151,6 +156,7 @@ let _widgetBalancesReader = null;
 let _reverseFlipQuoteReader = null;
 let _bafFlipEveReader = null;
 let _upcomingFlipBonusReader = null;
+let _resolvedFlipBonusWordReader = null;
 let _biggestFlipReader = null;
 let _stakeReadContractFactory = null;
 // null = unprobed; true = deploy has rngNudgeQuote() (run23+ signature);
@@ -171,6 +177,8 @@ let _latestResultInflight = null;
 let _reverseFlipQuoteInflight = null;
 let _bafFlipEveInflight = null;
 let _upcomingFlipBonusInflight = null;
+const _resolvedFlipBonusCache = new Map();
+const _resolvedFlipBonusInflight = new Map();
 let _biggestFlipInflight = null;
 let _biggestFlipLocator = null;
 const LOG_CHUNK_BLOCKS = 1_800;
@@ -255,6 +263,13 @@ export function __setBafFlipEveReaderForTest(fn) {
 export function __setUpcomingFlipBonusReaderForTest(fn) {
   _upcomingFlipBonusReader = typeof fn === 'function' ? fn : null;
   _upcomingFlipBonusInflight = null;
+}
+
+/** Test-only: replace the GAME daily-word read used to verify a resolved bonus. */
+export function __setResolvedFlipBonusWordReaderForTest(fn) {
+  _resolvedFlipBonusWordReader = typeof fn === 'function' ? fn : null;
+  _resolvedFlipBonusCache.clear();
+  _resolvedFlipBonusInflight.clear();
 }
 
 /** Test-only: replace the chain-global Biggest Flip / bounty read. */
@@ -348,6 +363,14 @@ export function __resetBafFlipEveReaderForTest() {
 export function __resetUpcomingFlipBonusReaderForTest() {
   _upcomingFlipBonusReader = null;
   _upcomingFlipBonusInflight = null;
+  _publicReadProvider = null;
+}
+
+/** Test-only: restore the production resolved-day bonus reader and immutable cache. */
+export function __resetResolvedFlipBonusWordReaderForTest() {
+  _resolvedFlipBonusWordReader = null;
+  _resolvedFlipBonusCache.clear();
+  _resolvedFlipBonusInflight.clear();
   _publicReadProvider = null;
 }
 
@@ -500,6 +523,97 @@ export async function readUpcomingFlipBonus() {
     return await request;
   } finally {
     if (_upcomingFlipBonusInflight === request) _upcomingFlipBonusInflight = null;
+  }
+}
+
+/**
+ * Recompute the contract's base reward from one day's frozen RNG word.
+ * A stored reward is considered a protocol bonus only when the difference is
+ * exactly 0, 2, or 6; mismatched/legacy formulas return null instead of
+ * presenting a guessed badge.
+ */
+export function resolvedFlipBonusFromRng(raw) {
+  const day = Number(raw?.day);
+  const rewardPercent = Number(raw?.rewardPercent);
+  if (!Number.isInteger(day) || day <= 0 || day > 0xff_ffff
+    || !Number.isInteger(rewardPercent) || rewardPercent < 0 || rewardPercent > 0xffff) {
+    return null;
+  }
+  let rngWord;
+  try {
+    rngWord = BigInt(raw?.rngWord ?? raw?.word);
+  } catch (_e) {
+    return null;
+  }
+  if (rngWord <= 0n || rngWord >= (1n << 256n)) return null;
+
+  let seedWord;
+  try {
+    seedWord = BigInt(ethers.solidityPackedKeccak256(
+      ['uint256', 'uint24'],
+      [rngWord, day],
+    ));
+  } catch (_e) {
+    return null;
+  }
+  const roll = seedWord % 20n;
+  const basePercent = roll === 0n
+    ? 50n
+    : roll === 1n
+      ? 150n
+      : (seedWord % COINFLIP_EXTRA_RANGE) + COINFLIP_EXTRA_MIN_PERCENT;
+  const points = BigInt(rewardPercent) - basePercent;
+  if (points !== 0n && points !== 2n && points !== 6n) return null;
+  return {
+    day,
+    rewardPercent,
+    basePercent: Number(basePercent),
+    points: Number(points),
+  };
+}
+
+/** Verify the immutable +2/+6 modifier attached to one resolved daily FLIP. */
+export async function readResolvedFlipBonus({ day, rewardPercent } = {}) {
+  const normalizedDay = Number(day);
+  const normalizedReward = Number(rewardPercent);
+  if (!Number.isInteger(normalizedDay) || normalizedDay <= 0 || normalizedDay > 0xff_ffff
+    || !Number.isInteger(normalizedReward) || normalizedReward < 0 || normalizedReward > 0xffff) {
+    return null;
+  }
+  const key = `${CHAIN.id}:${String(CONTRACTS.GAME || '').toLowerCase()}:${normalizedDay}:${normalizedReward}`;
+  if (_resolvedFlipBonusCache.has(key)) return _resolvedFlipBonusCache.get(key);
+  if (_resolvedFlipBonusInflight.has(key)) return _resolvedFlipBonusInflight.get(key);
+
+  const request = (async () => {
+    try {
+      const rngWord = _resolvedFlipBonusWordReader
+        ? await _resolvedFlipBonusWordReader({
+          day: normalizedDay,
+          rewardPercent: normalizedReward,
+        })
+        : await new ethers.Contract(
+          CONTRACTS.GAME,
+          GAME_RESOLVED_FLIP_BONUS_READ_ABI,
+          _readerProvider(),
+        ).rngWordForDay(normalizedDay);
+      const verified = resolvedFlipBonusFromRng({
+        day: normalizedDay,
+        rewardPercent: normalizedReward,
+        rngWord,
+      });
+      if (verified) _resolvedFlipBonusCache.set(key, verified);
+      return verified;
+    } catch (_e) {
+      return null;
+    }
+  })();
+  _resolvedFlipBonusInflight.set(key, request);
+  try {
+    return await request;
+  } finally {
+    if (_resolvedFlipBonusInflight.get(key) === request) {
+      _resolvedFlipBonusInflight.delete(key);
+    }
   }
 }
 

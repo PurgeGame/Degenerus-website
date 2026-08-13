@@ -120,7 +120,9 @@ describe('standalone ALL IN chooser', () => {
 
   test('the app mounts a scroll-locked red sheet with a large final button', () => {
     assert.match(INDEX_SRC, /<app-all-in-dialog><\/app-all-in-dialog>/);
-    assert.match(INDEX_SRC, /src="\/app\/components\/app-all-in-dialog\.js"/);
+    // Cold-load diet (2026-08-13): loads via the IDLE_MODULES registration,
+    // not an eager script tag (dialog; unreachable before idle fires).
+    assert.match(INDEX_SRC, /'\/app\/components\/app-all-in-dialog\.js'/);
     assert.match(DIALOG_SRC, /import \{ lock, unlock \} from '\.\.\/app\/scroll-lock\.js'/);
     assert.match(DIALOG_SRC, /app-all-in:open/);
     assert.match(DIALOG_SRC, /void this\.#refreshCurrency\('FLIP'\)/,

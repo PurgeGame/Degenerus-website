@@ -1,77 +1,14 @@
-// /app/components/app-affiliate-panel.js — Phase 62 Plan 62-06 (AFF-01 + AFF-02)
+// /app/components/app-affiliate-panel.js
 //
-// Referrals panel — upline identity + default URL + Customize CTA + direct
-// referral list, with three-generation network counts in the summary bar.
-//
-// Plan history:
-//   - Plan 62-06: AFF-01 (default URL + Customize CTA) + AFF-02 (referee table)
-//                 + AFF-03 hook is in <app-claims-panel> via VISIBLE_PRIZE_KEYS
-//                 whitelist extension (THIS PLAN; separate file edit)
-//
-// Mount: <app-affiliate-panel></app-affiliate-panel> at the bottom of
-//        /app/index.html, directly below <app-transaction-history>.
-//
-// Custom Element shell mirrors Phase 60's app-packs-panel.js + Phase 61's
-// app-claims-panel.js + Phase 62-04's app-quest-panel.js: light DOM,
-// idempotent customElements.define guard, symmetric connectedCallback /
-// disconnectedCallback, #unsubs[] for store subscriptions, panel-owned 30s
-// poll cycle (Phase 61 D-04 LOCKED — NOT polling.js).
-//
-// On-chain surface:
-//   - createAffiliateCode (Customize CTA — Phase 58 chokepoint via affiliate.js).
-//   - claimAffiliateDgnrs is dispatched FROM <app-claims-panel> (AFF-03 row;
-//     1-line whitelist edit). NOT this panel.
-//
-// Read surface:
-//   - GET /player/:address/referees → referred-by identity + AFF-02 direct
-//     referral table (Plan 62-00 deliverable, extended additively).
-//
-// CRITICAL — RESEARCH Pitfall 5:
-//   defaultCodeForAddress LEFT-pad enforcement lives in affiliate.js. The
-//   panel never directly constructs the URL; it always goes through
-//   buildAffiliateUrl (which calls defaultCodeForAddress under the hood).
-//
-// CRITICAL — RESEARCH R2 (HIGH confidence):
-//   Default URL works for ANY connected user with NO prior createAffiliateCode
-//   tx required AND full commission flows. Customize CTA copy guidance:
-//     "The default URL works for sharing AND earns you commission immediately.
-//      Customize your code if you want a shorter / vanity hex code OR want to
-//      share kickback % with referees."
-//
-// Own-code sourcing (semantics fixed 2026-07-16):
-//   readRegisteredCode (affiliate.js) paints the URL synchronously from the
-//   own-code localStorage key (written after a confirmed Customize tx), then
-//   resolveRegisteredCode refreshes DB-first (indexer affiliate.ownCode —
-//   knows codes registered on ANY device, and ownership-verifies legacy
-//   localStorage values). lootbox.js readAffiliateCode is NOT used here —
-//   that helper is the purchase-tx default (the code that referred YOU),
-//   never your own code.
-//
-// Carry-forwards (CONTEXT 62-CONTEXT.md):
-//   CF-01: Phase 58 closure-form sendTx (via affiliate.js helper).
-//   CF-02: Phase 56 reason-map (Zero/Insufficient/InvalidKickback registered
-//          by affiliate.js's module-load side effect).
-//   CF-03: Phase 56 requireStaticCall (via affiliate.js helper).
-//   CF-04: Phase 56 D-04 / Phase 61 D-04 — panel-owned 30s poll cycle with
-//          AbortController-per-cycle + visibility-aware foreground re-poll.
-//   CF-06: NEVER optimistic — URL only flips after confirmed Customize tx.
-//   CF-07: T-58-18 — server-derived strings via textContent.
-//   CF-15: Phase 58 [data-write] disable manager — Copy + Customize-submit
-//          buttons carry data-write so view-others mode auto-disables them.
-//
-// Class palette: .aff-* + .aff-customize-* (RESEARCH R10 verified non-colliding).
+// Read-only referral network: who referred the selected account, its direct
+// referral list, and direct/level-2/level-3 totals inside the disclosure.
+// Mounted below transaction history and intentionally free of payout,
+// commission, claim, or referral-code controls.
 
 import { CHAIN } from '../app/chain-config.js';
 import { get, subscribe, getViewedAddress } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
-import './quest-objective-indicator.js';
-import {
-  defaultCodeForAddress,
-  buildAffiliateUrl,
-  createAffiliateCode,
-  readRegisteredCode,
-  resolveRegisteredCode,
-} from '../app/affiliate.js';
+import { fetchProfiles } from '../app/profiles.js';
 
 // Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for the
 // 30s poll tick so node:test processes exit cleanly when no other open handles
@@ -86,8 +23,24 @@ function _setIntervalUnref(fn, ms) {
 
 const POLL_INTERVAL_MS = 30_000;        // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 const VISIBILITY_RESUME_GATE_MS = 1000; // ≥1s since last fetch → re-poll on foreground.
-const ERROR_AUTO_CLEAR_MS = 10_000;     // 10s auto-clear for inline errors (Phase 61 D-05 mirror).
-const COPY_FEEDBACK_MS = 2_000;         // 2s copy-success feedback.
+const ERROR_RETRY_MS = 4_000;           // Recover quickly from a mount-wave 429/503.
+const PROFILE_BATCH_SIZE = 8;           // Session API privacy/rate-limit contract.
+
+async function _fetchProfilesInBatches(addresses, signal) {
+  const unique = [...new Set(
+    (addresses || [])
+      .map((address) => String(address || '').toLowerCase())
+      .filter((address) => /^0x[0-9a-f]{40}$/.test(address)),
+  )];
+  const profiles = new Map();
+  for (let index = 0; index < unique.length; index += PROFILE_BATCH_SIZE) {
+    if (signal?.aborted) break;
+    const batch = await fetchProfiles(unique.slice(index, index + PROFILE_BATCH_SIZE));
+    if (signal?.aborted) break;
+    for (const [address, profile] of batch) profiles.set(address, profile);
+  }
+  return profiles;
+}
 
 function _shortAddress(value) {
   const address = String(value || '');
@@ -105,16 +58,10 @@ class AppAffiliatePanel extends HTMLElement {
   #lastFetchAt = 0;
   #visibilityListener = null;
   #disclosureListener = null;
-  // --- Pinned data ---
-  #pinnedAddress = null;
-  #defaultUrl = '';
-  #registeredCode = null;   // bytes32 hex OR null (= use defaultCodeForAddress)
   #refereesData = null;     // { referredBy, referees: [...], total, counts }
-  // --- Click-handler debounce ---
-  #busyCustomize = false;
-  // --- Auto-clear timers (cleared on disconnect) ---
-  #copyFeedbackTimer = null;
-  #errorClearTimer = null;
+  #profiles = new Map();
+  #profileLookups = new Set();
+  #retryTimer = null;
 
   connectedCallback() {
     if (this.#initialized) return;
@@ -123,10 +70,8 @@ class AppAffiliatePanel extends HTMLElement {
     this.#wireDisclosure();
     this.#wireVisibilityRePoll();
     this.#wireStoreSubscriptions();
-    this.#wireClickHandlers();
-    // Counts belong in the closed summary bar, so the first account-scoped
-    // referral read runs immediately even though the disclosure starts shut.
-    this.#runMountFetch();
+    // Referral data is intentionally lazy: the closed summary performs no
+    // account-scoped lookup. Opening the disclosure starts its refresh cycle.
   }
 
   disconnectedCallback() {
@@ -144,13 +89,9 @@ class AppAffiliatePanel extends HTMLElement {
       catch (_) { /* defensive */ }
     }
     this.#disclosureListener = null;
-    if (this.#copyFeedbackTimer != null) {
-      try { clearTimeout(this.#copyFeedbackTimer); } catch (_) { /* defensive */ }
-      this.#copyFeedbackTimer = null;
-    }
-    if (this.#errorClearTimer != null) {
-      try { clearTimeout(this.#errorClearTimer); } catch (_) { /* defensive */ }
-      this.#errorClearTimer = null;
+    if (this.#retryTimer != null) {
+      try { clearTimeout(this.#retryTimer); } catch (_) { /* defensive */ }
+      this.#retryTimer = null;
     }
     for (const u of this.#unsubs) {
       try { u(); } catch (_e) { /* defensive */ }
@@ -166,54 +107,35 @@ class AppAffiliatePanel extends HTMLElement {
     this.innerHTML = `
       <details class="app-affiliate-panel aff-disclosure section-disclosure" data-bind="aff-details">
         <summary class="aff-summary section-disclosure__bar">
-          <span class="aff-summary-main">
-            <strong class="section-disclosure__title">
-              REFERRALS <quest-objective-indicator product="affiliate"></quest-objective-indicator>
-            </strong>
-            <span class="aff-summary-counts" aria-label="Referral network counts">
-              <span class="aff-summary-count"><span>DIRECT</span> <strong data-bind="aff-count-direct">—</strong></span>
-              <span class="aff-summary-count"><span>LEVEL 2</span> <strong data-bind="aff-count-level2">—</strong></span>
-              <span class="aff-summary-count"><span>LEVEL 3</span> <strong data-bind="aff-count-level3">—</strong></span>
-            </span>
-          </span>
+          <strong class="section-disclosure__title">REFERRALS</strong>
           <span class="section-disclosure__chevron" aria-hidden="true"></span>
         </summary>
         <div class="aff-content">
+          <div class="aff-network-stats" aria-label="Referral network counts">
+            <div class="aff-network-stat">
+              <span>DIRECT</span>
+              <strong data-bind="aff-count-direct">…</strong>
+            </div>
+            <div class="aff-network-stat">
+              <span>LEVEL 2</span>
+              <strong data-bind="aff-count-level2">…</strong>
+            </div>
+            <div class="aff-network-stat">
+              <span>LEVEL 3</span>
+              <strong data-bind="aff-count-level3">…</strong>
+            </div>
+          </div>
           <div class="aff-network-section">
             <span class="aff-network-label">REFERRED BY</span>
             <div class="aff-referred-by" data-bind="aff-referred-by"></div>
           </div>
-          <div class="aff-default-section">
-            <p class="aff-hint">Share your referral link. It works immediately — no setup required.</p>
-            <div class="aff-url-row">
-              <input type="text" readonly class="aff-url-input" data-bind="aff-url" value="" />
-              <button type="button" class="aff-copy-cta" data-write data-bind="aff-copy">Copy link</button>
-            </div>
-            <div class="aff-copy-feedback" data-bind="aff-copy-feedback" hidden></div>
-          </div>
-          <details class="aff-customize-section">
-            <summary class="aff-customize-summary">Customize your code (optional)</summary>
-            <p class="aff-customize-hint">
-              The default URL works immediately.
-              Customize your code if you want a shorter or vanity hex code, or want to share kickback % with people you refer.
-            </p>
-            <div class="aff-customize-form">
-              <label class="aff-customize-label">Hex code (3-31 alphanumeric):
-                <input type="text" name="aff-customize-code" pattern="[A-Za-z0-9]{3,31}" class="aff-customize-input" />
-              </label>
-              <label class="aff-customize-label">Kickback % (0-25):
-                <input type="number" name="aff-customize-pct" min="0" max="25" value="0" class="aff-customize-input" />
-              </label>
-              <button type="button" class="aff-customize-submit" data-write>Register code</button>
-            </div>
-            <div class="aff-customize-error" data-bind="aff-customize-error" hidden></div>
-            <div class="aff-customize-success" data-bind="aff-customize-success" hidden></div>
-          </details>
-          <div class="aff-referees-section">
-            <h3 class="aff-referees-heading">YOU REFERRED</h3>
-            <div class="aff-referees-table" data-bind="aff-referees"></div>
-            <div class="aff-referees-empty" data-bind="aff-referees-empty" hidden>No referrals yet — share your link to get started.</div>
-          </div>
+          <section class="aff-referees-section">
+            <header class="aff-referees-header">
+              <h3 class="aff-referees-heading">DIRECT REFERRALS</h3>
+            </header>
+            <div class="aff-referees-table" data-bind="aff-referees" role="list"></div>
+            <div class="aff-referees-empty" data-bind="aff-referees-empty" hidden>No direct referrals yet.</div>
+          </section>
         </div>
       </details>
     `;
@@ -224,7 +146,6 @@ class AppAffiliatePanel extends HTMLElement {
   // ---------------------------------------------------------------------
 
   #startPolling() {
-    if (!this.#isDisclosureOpen()) return;
     if (this.#pollHandle != null) {
       try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
     }
@@ -241,10 +162,10 @@ class AppAffiliatePanel extends HTMLElement {
       try { this.#pollController.abort(); } catch (_) { /* defensive */ }
       this.#pollController = null;
     }
-  }
-
-  #isDisclosureOpen() {
-    return this.querySelector('[data-bind="aff-details"]')?.open === true;
+    if (this.#retryTimer != null) {
+      try { clearTimeout(this.#retryTimer); } catch (_) { /* defensive */ }
+      this.#retryTimer = null;
+    }
   }
 
   #wireDisclosure() {
@@ -262,8 +183,10 @@ class AppAffiliatePanel extends HTMLElement {
   }
 
   async #runMountFetch() {
-    // The summary counts load while closed. The 30-second refresh loop still
-    // runs only while open, keeping the collapsed panel inexpensive.
+    // Referral counts and identities are intentionally fetched only while the
+    // disclosure is open. The closed title bar is a zero-query surface.
+    const details = this.querySelector('[data-bind="aff-details"]');
+    if (!details?.open) return;
     // Visibility guard — pause polling while tab hidden.
     if (typeof document !== 'undefined'
       && document.visibilityState
@@ -277,15 +200,9 @@ class AppAffiliatePanel extends HTMLElement {
     const signal = this.#pollController.signal;
     this.#lastFetchAt = Date.now();
 
-    // Account-switcher (2026-07-16): the affiliate link + referee table are
-    // per-account identity data (combine.js intentionally omits `affiliate` —
-    // not summable across the combined view's accounts). Render the panel's
-    // existing empty-state instead of fetching.
+    // Referral identity is per-account and cannot be summed in combined mode.
     if (get('ui.mode') === 'combined') {
-      this.#defaultUrl = '';
-      this.#registeredCode = null;
       this.#refereesData = null;
-      this.#setUrl('');
       this.#renderReferralCounts(null);
       this.#renderReferredBy(null, 'Pick a single account to see who referred it.');
       this.#renderRefereesEmpty('Per-account stat. Pick a single account.');
@@ -296,48 +213,59 @@ class AppAffiliatePanel extends HTMLElement {
       || get('viewing.address')
       || get('connected.address')
       || null;
-    this.#pinnedAddress = addr;
 
     if (!addr) {
-      this.#defaultUrl = '';
-      this.#registeredCode = null;
       this.#refereesData = null;
-      this.#setUrl('');
       this.#renderReferralCounts(null);
       this.#renderReferredBy(null, 'Connect a wallet to see who referred you.');
-      this.#renderRefereesEmpty('Connect a wallet to see your link.');
+      this.#renderRefereesEmpty('Connect a wallet to see referrals.');
       return;
     }
-
-    // Own registered code: fast paint from the own-code localStorage key
-    // (this-device registrations), then DB-first async refresh so codes
-    // registered on other devices appear too. Absent → defaultCodeForAddress.
-    this.#registeredCode = readRegisteredCode(addr);
-    this.#defaultUrl = buildAffiliateUrl(addr, this.#registeredCode);
-    this.#setUrl(this.#defaultUrl);
-    resolveRegisteredCode(addr).then((code) => {
-      if (this.#pinnedAddress !== addr) return; // address churn — stale
-      if (!code || code === this.#registeredCode) return;
-      this.#registeredCode = code;
-      this.#defaultUrl = buildAffiliateUrl(addr, code);
-      this.#setUrl(this.#defaultUrl);
-    }).catch(() => { /* resolver never throws, defensive */ });
 
     try {
       const data = await fetchJSON(`/player/${addr}/referees`, { signal });
       if (signal.aborted) return;
+      if (this.#retryTimer != null) {
+        try { clearTimeout(this.#retryTimer); } catch (_) { /* defensive */ }
+        this.#retryTimer = null;
+      }
       this.#refereesData = data || null;
       this.#renderReferralCounts(data?.counts, data?.total);
       this.#renderReferredBy(data?.referredBy ?? null);
-      this.#renderReferees(Array.isArray(data?.referees) ? data.referees : []);
+      const referees = Array.isArray(data?.referees) ? data.referees : [];
+      this.#renderReferees(referees);
+
+      // Discord identity is optional decoration. Render address fallbacks
+      // immediately, then upgrade linked wallets when the public profile read
+      // returns; a profile-service outage never blanks the referral network.
+      const identities = [data?.referredBy, ...referees.map((row) => row?.address)]
+        .map((value) => String(value || '').toLowerCase())
+        .filter((value) => /^0x[0-9a-f]{40}$/.test(value));
+      const pendingProfiles = [...new Set(identities)]
+        .filter((identity) => !this.#profileLookups.has(identity));
+      if (pendingProfiles.length === 0) return;
+      const profiles = await _fetchProfilesInBatches(pendingProfiles, signal);
+      if (signal.aborted || !details.open) return;
+      for (const identity of pendingProfiles) this.#profileLookups.add(identity);
+      for (const [identity, profile] of profiles) this.#profiles.set(identity, profile);
+      this.#renderReferredBy(data?.referredBy ?? null);
+      this.#renderReferees(referees);
     } catch (error) {
       if (signal.aborted || error?.name === 'AbortError') return;
       const message = Number(error?.status) === 503
         ? 'Referral index is catching up. Retrying automatically.'
         : 'Referral service unavailable. Retrying automatically.';
-      this.#renderReferralCounts(null);
       this.#renderReferredBy(null, message);
       this.#renderRefereesEmpty(message);
+      if (this.#retryTimer == null && typeof setTimeout === 'function') {
+        this.#retryTimer = setTimeout(() => {
+          this.#retryTimer = null;
+          this.#runMountFetch();
+        }, ERROR_RETRY_MS);
+        if (this.#retryTimer && typeof this.#retryTimer.unref === 'function') {
+          try { this.#retryTimer.unref(); } catch (_) { /* defensive */ }
+        }
+      }
     }
   }
 
@@ -366,156 +294,10 @@ class AppAffiliatePanel extends HTMLElement {
   }
 
   // ---------------------------------------------------------------------
-  // Click handlers — Copy CTA + Customize submit.
-  // ---------------------------------------------------------------------
-
-  #wireClickHandlers() {
-    const copyBtn = this.querySelector('[data-bind="aff-copy"]');
-    if (copyBtn) {
-      copyBtn.addEventListener('click', (ev) => this.#onCopyClick(ev));
-    }
-    const submitBtn = this.querySelector('.aff-customize-submit');
-    if (submitBtn) {
-      submitBtn.addEventListener('click', (ev) => this.#onCustomizeSubmit(ev));
-    }
-  }
-
-  // ---------------------------------------------------------------------
-  // Copy CTA — navigator.clipboard.writeText + execCommand fallback.
-  // T-58-18: feedback rendered via textContent.
-  // ---------------------------------------------------------------------
-
-  async #onCopyClick(ev) {
-    try { ev?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (!this.#defaultUrl) return;
-    let copied = false;
-    try {
-      if (typeof navigator !== 'undefined'
-        && navigator.clipboard
-        && typeof navigator.clipboard.writeText === 'function') {
-        await navigator.clipboard.writeText(this.#defaultUrl);
-        copied = true;
-      }
-    } catch (_e) {
-      copied = false;
-    }
-    if (!copied) {
-      // Fallback for browsers without Clipboard API or non-secure context.
-      try {
-        const input = this.querySelector('[data-bind="aff-url"]');
-        if (input && typeof input.select === 'function') input.select();
-        if (typeof document !== 'undefined' && typeof document.execCommand === 'function') {
-          document.execCommand('copy');
-          copied = true;
-        }
-      } catch (_e) { /* defensive */ }
-    }
-    this.#renderCopyFeedback(copied ? 'Link copied!' : 'Could not copy — try selecting the text manually.');
-  }
-
-  #renderCopyFeedback(msg) {
-    const fb = this.querySelector('[data-bind="aff-copy-feedback"]');
-    if (!fb) return;
-    fb.hidden = false;
-    fb.textContent = String(msg || '');
-    if (this.#copyFeedbackTimer != null) {
-      try { clearTimeout(this.#copyFeedbackTimer); } catch (_) { /* defensive */ }
-    }
-    this.#copyFeedbackTimer = setTimeout(() => {
-      try {
-        fb.hidden = true;
-        fb.textContent = '';
-      } catch (_) { /* defensive */ }
-    }, COPY_FEEDBACK_MS);
-    if (this.#copyFeedbackTimer && typeof this.#copyFeedbackTimer.unref === 'function') {
-      try { this.#copyFeedbackTimer.unref(); } catch (_) { /* defensive */ }
-    }
-  }
-
-  // ---------------------------------------------------------------------
-  // Customize submit — fires createAffiliateCode through Phase 58 chokepoint.
-  // CF-06: NEVER optimistic — URL only flips after confirmed receipt.
-  // ---------------------------------------------------------------------
-
-  async #onCustomizeSubmit(ev) {
-    try { ev?.preventDefault?.(); } catch (_) { /* defensive */ }
-    if (this.#busyCustomize) return;
-    this.#busyCustomize = true;
-
-    const btn = this.querySelector('.aff-customize-submit');
-    const originalLabel = btn ? btn.textContent : '';
-    const errEl = this.querySelector('[data-bind="aff-customize-error"]');
-    const okEl = this.querySelector('[data-bind="aff-customize-success"]');
-    if (errEl) { errEl.hidden = true; errEl.textContent = ''; }
-    if (okEl) { okEl.hidden = true; okEl.textContent = ''; }
-    if (btn) { btn.disabled = true; btn.textContent = 'Registering…'; }
-
-    try {
-      const codeInput = this.querySelector('input[name="aff-customize-code"]');
-      const pctInput = this.querySelector('input[name="aff-customize-pct"]');
-      const codeStr = (codeInput && (codeInput.value || codeInput._value)) || '';
-      const pctStr = (pctInput && (pctInput.value || pctInput._value));
-      const kickbackPct = parseInt(pctStr == null ? '0' : pctStr, 10) || 0;
-
-      const { encodedCode } = await createAffiliateCode({ codeStr, kickbackPct });
-
-      // CF-06: ONLY flip URL after confirmed receipt.
-      this.#registeredCode = encodedCode;
-      const addr = this.#pinnedAddress
-        || (typeof getViewedAddress === 'function' ? getViewedAddress() : null)
-        || get('connected.address');
-      this.#defaultUrl = buildAffiliateUrl(addr, encodedCode);
-      this.#setUrl(this.#defaultUrl);
-
-      if (okEl) {
-        okEl.hidden = false;
-        okEl.textContent = 'Code registered.';
-      }
-    } catch (error) {
-      if (errEl) {
-        errEl.hidden = false;
-        errEl.textContent = String(
-          error?.userMessage || error?.message || 'Could not register code.',
-        );
-        // 10s auto-clear (Phase 61 D-05 mirror).
-        if (this.#errorClearTimer != null) {
-          try { clearTimeout(this.#errorClearTimer); } catch (_) { /* defensive */ }
-        }
-        this.#errorClearTimer = setTimeout(() => {
-          try {
-            errEl.hidden = true;
-            errEl.textContent = '';
-          } catch (_) { /* defensive */ }
-        }, ERROR_AUTO_CLEAR_MS);
-        if (this.#errorClearTimer && typeof this.#errorClearTimer.unref === 'function') {
-          try { this.#errorClearTimer.unref(); } catch (_) { /* defensive */ }
-        }
-      }
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = originalLabel || 'Register code'; }
-      this.#busyCustomize = false;
-    }
-  }
-
-  // ---------------------------------------------------------------------
-  // URL display — input.value assignment (form-control exempt from textContent
-  // rule — there is no innerHTML interpolation).
-  // ---------------------------------------------------------------------
-
-  #setUrl(url) {
-    const input = this.querySelector('[data-bind="aff-url"]');
-    if (!input) return;
-    input.value = String(url || '');
-    // Also reflect via _value for the fakeDOM in tests (which observes _value
-    // on initial-render attributes); production browsers ignore this.
-    if (typeof input._value !== 'undefined') input._value = String(url || '');
-  }
-
-  // ---------------------------------------------------------------------
   // Referral network — server-derived strings via textContent (T-58-18).
   // The endpoint returns both sides of the relationship: `referredBy` is the
   // single incoming edge and `referees` are the outgoing/direct edges. The
-  // collapsed bar shows the size of the first three outgoing generations.
+  // interior stat cards show the size of the first three generations.
   // ---------------------------------------------------------------------
 
   #renderReferralCounts(counts, directFallback = null) {
@@ -537,6 +319,51 @@ class AppAffiliatePanel extends HTMLElement {
         ? value.toLocaleString('en-US')
         : '—';
     }
+
+  }
+
+  #identityLink(address, context) {
+    const normalized = String(address || '');
+    const profile = this.#profiles.get(normalized.toLowerCase()) || null;
+    const link = document.createElement('a');
+    link.className = 'aff-referral-person';
+    link.title = normalized;
+    link.setAttribute('aria-label', `View ${context} ${profile?.name || normalized} on the block explorer`);
+    link.setAttribute('href', `${String(CHAIN.etherscanBase || '').replace(/\/$/, '')}/address/${encodeURIComponent(normalized)}`);
+    link.setAttribute('target', '_blank');
+    link.setAttribute('rel', 'noopener noreferrer');
+
+    if (profile?.avatar) {
+      const avatar = document.createElement('img');
+      avatar.className = 'aff-referral-avatar';
+      avatar.src = profile.avatar;
+      avatar.alt = '';
+      avatar.loading = 'lazy';
+      link.appendChild(avatar);
+    } else {
+      const avatar = document.createElement('span');
+      avatar.className = 'aff-referral-avatar is-fallback';
+      avatar.setAttribute('aria-hidden', 'true');
+      avatar.textContent = profile?.name
+        ? profile.name.slice(0, 1).toUpperCase()
+        : '0x';
+      link.appendChild(avatar);
+    }
+
+    const copy = document.createElement('span');
+    copy.className = 'aff-referral-copy';
+    const primary = document.createElement('strong');
+    primary.className = 'aff-referral-name';
+    primary.textContent = profile?.name || _shortAddress(normalized);
+    copy.appendChild(primary);
+    if (profile?.name) {
+      const secondary = document.createElement('small');
+      secondary.className = 'aff-referral-address';
+      secondary.textContent = _shortAddress(normalized);
+      copy.appendChild(secondary);
+    }
+    link.appendChild(copy);
+    return link;
   }
 
   #renderReferredBy(address, emptyMessage = 'No referrer recorded.') {
@@ -560,15 +387,7 @@ class AppAffiliatePanel extends HTMLElement {
     }
 
     target.classList?.remove?.('is-empty');
-    const link = document.createElement('a');
-    link.className = 'aff-referral-person';
-    link.textContent = _shortAddress(normalized);
-    link.title = normalized;
-    link.setAttribute('aria-label', `View referrer ${normalized} on the block explorer`);
-    link.setAttribute('href', `${String(CHAIN.etherscanBase || '').replace(/\/$/, '')}/address/${encodeURIComponent(normalized)}`);
-    link.setAttribute('target', '_blank');
-    link.setAttribute('rel', 'noopener noreferrer');
-    target.appendChild(link);
+    target.appendChild(this.#identityLink(normalized, 'referrer'));
   }
 
   #renderReferees(rows) {
@@ -585,7 +404,7 @@ class AppAffiliatePanel extends HTMLElement {
 
     if (!Array.isArray(rows) || rows.length === 0) {
       empty.hidden = false;
-      empty.textContent = 'No referrals yet — share your link to get started.';
+      empty.textContent = 'No direct referrals yet.';
       return;
     }
     empty.hidden = true;
@@ -593,20 +412,10 @@ class AppAffiliatePanel extends HTMLElement {
     for (const r of rows) {
       const row = document.createElement('div');
       row.className = 'aff-referees-row';
+      row.setAttribute('role', 'listitem');
 
-      const addrCell = document.createElement('span');
-      addrCell.className = 'aff-referees-cell aff-referees-cell--addr';
       const referralAddress = String(r?.address || '');
-      const addrLink = document.createElement('a');
-      addrLink.className = 'aff-referral-person';
-      addrLink.textContent = _shortAddress(referralAddress);
-      addrLink.title = referralAddress;
-      addrLink.setAttribute('aria-label', `View referral ${referralAddress} on the block explorer`);
-      addrLink.setAttribute('href', `${String(CHAIN.etherscanBase || '').replace(/\/$/, '')}/address/${encodeURIComponent(referralAddress)}`);
-      addrLink.setAttribute('target', '_blank');
-      addrLink.setAttribute('rel', 'noopener noreferrer');
-      addrCell.appendChild(addrLink);
-      row.appendChild(addrCell);
+      row.appendChild(this.#identityLink(referralAddress, 'referral'));
 
       table.appendChild(row);
     }
@@ -625,7 +434,7 @@ class AppAffiliatePanel extends HTMLElement {
     }
     if (empty) {
       empty.hidden = false;
-      empty.textContent = String(msg || 'No referrals yet — share your link to get started.');
+      empty.textContent = String(msg || 'No direct referrals yet.');
     }
   }
 }

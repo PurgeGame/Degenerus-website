@@ -13,6 +13,8 @@ import {
   formatScore,
   loadKnownWinnerNames,
   minDegenScoreForBucket,
+  exitDecimatorDraw,
+  playDecimatorDrawSound,
   playerResult,
   playerSubbucketShareBps,
   playerSubbucketScore,
@@ -262,7 +264,7 @@ describe('standalone Decimator draw replay', () => {
     assert.match(drawSource, /hubOutput\.textContent = formatted/,
       'the hub winning total counts upward with the side-board score');
     assert.match(html, /REPLAY DRAW/);
-    assert.match(html, /SKIP TO RESULT/);
+    assert.match(html, /SKIP TO RESULTS/);
     assert.doesNotMatch(html, /class="round-proof"/,
       'the redundant bottom block/pool strip is removed');
     assert.doesNotMatch(drawSource, /svg\('tspan', 'wheel-label__sub'\)/,
@@ -318,6 +320,58 @@ describe('standalone Decimator draw replay', () => {
       'the full-screen app takeover has a dedicated compact layout');
     assert.match(drawSource, /sessionStorage\.getItem\(storageKey\)/,
       'the embedded wheel consumes the exact snapshot staged by the app');
+  });
+
+  test('draw motion has shared audio cues and the completed secondary action exits', () => {
+    assert.match(drawSource, /playDecimatorDrawSound\('spin', duration\)/,
+      'each score-group sweep starts an anticipation cue');
+    assert.match(drawSource,
+      /if \(physical !== soundedPhysical\) \{[\s\S]*?playDecimatorDrawSound\('tick', tickIndex\)/,
+      'the selector emits one tick only when it crosses into another physical slice');
+    assert.match(drawSource, /playDecimatorDrawSound\('lock', frame\.winningScore > 0n\)/,
+      'each authoritative locked slice gets a scored or empty lock cue');
+    assert.match(drawSource,
+      /playDecimatorDrawSound\('complete', result\?\.won === true, this\.runningTotal > 0n\)/,
+      'the finale distinguishes a viewed-player win and an all-empty draw');
+    assert.match(drawSource,
+      /await this\.#showFinalAllocation\(token, \{ fast \}\);[\s\S]*?this\.#setSecondaryAction\('exit'\)/,
+      'Exit replaces the skip action only after the final payout view is ready');
+    assert.match(drawSource,
+      /dataset\.action === 'exit'[\s\S]*?exitDecimatorDraw\(\)/,
+      'the same secondary control closes the completed replay');
+    assert.match(css, /\.draw-button--exit\s*\{[^}]*#17653e[^}]*#0a3824/s,
+      'the final exit state is visibly distinct from Skip and Replay');
+  });
+
+  test('embedded sound and exit requests cross the same-origin parent bridge', () => {
+    const previousWindow = globalThis.window;
+    const messages = [];
+    const parent = {
+      postMessage(message, origin) { messages.push({ message, origin }); },
+    };
+    globalThis.window = {
+      parent,
+      location: { search: '?embed=1', origin: 'https://game.test' },
+    };
+    try {
+      assert.equal(playDecimatorDrawSound('lock', true), true);
+      assert.equal(exitDecimatorDraw(), true);
+      assert.deepEqual(messages, [
+        {
+          message: {
+            type: 'degenerus:decimator-draw', action: 'sound', cue: 'lock', args: [true],
+          },
+          origin: 'https://game.test',
+        },
+        {
+          message: { type: 'degenerus:decimator-draw', action: 'exit' },
+          origin: 'https://game.test',
+        },
+      ]);
+    } finally {
+      if (previousWindow === undefined) delete globalThis.window;
+      else globalThis.window = previousWindow;
+    }
   });
 
   test('embedded fullscreen draw fits its controls and expands the important results', () => {

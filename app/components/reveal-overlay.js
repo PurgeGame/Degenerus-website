@@ -400,6 +400,12 @@ export function revealTerminalActionLabel(sequence = null, board = null) {
   const lost = Boolean(seq.unlucky || seq.consolationOnly)
     || (boardResult != null && _safeBigInt(boardResult.total) <= 0n);
   if (lost) return 'UNLUCKY';
+  // WWXRP is a consolation result, not a win to claim. The landed board is
+  // authoritative here: mixed Luckboxes and legacy callers do not always set
+  // the sequence-level `wwxrpOnly` flag, but neither may show TAKE THE WIN.
+  if (boardResult?.unit === 'WWXRP' || Number(boardResult?.currency) === 3) {
+    return 'BACK TO GAME';
+  }
   if (seq.kind === 'pack') return 'GOOD LUCK';
   if (boardResult) {
     return shouldCelebrateDegenerette(boardResult) ? 'TAKE THE WIN' : 'BACK TO GAME';
@@ -538,6 +544,56 @@ function _allocateBoxSpinPreview(rows, amount) {
   return true;
 }
 
+// A losing survival draw publishes a final payout of zero, so the BoxSpin
+// event alone cannot say how much the three record reels produced first. The
+// parent Degenerette bet does retain both inputs needed by the contract's
+// payout formula: the whole-FLIP bounty stake and its snapshotted activity
+// score. Re-evaluate every hero interpretation compatible with the emitted
+// score; differing candidates are averaged and explicitly presented as an
+// estimate rather than hiding the stake altogether.
+function _recordSpinPayoutAtRisk(spin, rows) {
+  const totalStake = _safeBigInt(spin?.recordStake);
+  const activityScore = Number(spin?.activityScore);
+  if (totalStake <= 0n
+    || !Number.isInteger(activityScore)
+    || activityScore < 0
+    || activityScore > 0xFFFF) return null;
+
+  // The protocol's record chain is authored as exactly three FLIP spins. Its
+  // integer remainder is deliberately unstaked, matching totalStake / 3 here.
+  const perSpin = totalStake / 3n;
+  if (perSpin <= 0n) return null;
+  let amount = 0n;
+  let approximate = false;
+  for (const row of rows) {
+    if (!boxSpinScorePays(row?.score)) continue;
+    const candidates = [];
+    for (let hero = 0; hero < 4; hero += 1) {
+      if (_boxSpinScoreForHero(row, hero) !== Number(row.score)) continue;
+      try {
+        const payout = degenerettePayoutTable({
+          currency: 1,
+          customTicket: row.playerTraits,
+          heroQuadrant: hero,
+          activityScore,
+        }).rows[Number(row.score)];
+        const value = (perSpin * BigInt(payout?.multiplierNumerator ?? 0))
+          / BigInt(payout?.multiplierDenominator ?? 1);
+        if (value > 0n) candidates.push(value);
+      } catch (_e) { /* malformed candidate is excluded below */ }
+    }
+    const unique = [...new Set(candidates.map(String))].map(BigInt);
+    if (unique.length === 0) return null;
+    if (unique.length === 1) {
+      amount += unique[0];
+    } else {
+      amount += unique.reduce((sum, value) => sum + value, 0n) / BigInt(unique.length);
+      approximate = true;
+    }
+  }
+  return amount > 0n ? { amount, approximate } : null;
+}
+
 /**
  * A receipt-decoded BoxSpin → the same verified eight-lock board used by the
  * standalone Degenerette reveal. BoxSpin only publishes one group payout
@@ -578,12 +634,19 @@ export function buildBoxSpinBoard(spin) {
   const explicitAtRisk = _safeBigInt(
     spin?.preSurvivalPayout ?? spin?.survivalPayout ?? spin?.payoutAtRisk,
   );
+  const reconstructedAtRisk = spinType === 'record'
+    ? _recordSpinPayoutAtRisk(spin, rows)
+    : null;
   // Existing BoxSpin events omit the pre-survival sum, but survival is a
   // straight double-or-nothing. A successful result therefore reveals the
   // exact stake as one half of its final payout.
   const inferredAtRisk = survivalStake && total > 0n ? total / 2n : 0n;
-  const payoutAtRisk = explicitAtRisk > 0n ? explicitAtRisk : inferredAtRisk;
-  const payoutAtRiskApproximate = false;
+  const payoutAtRisk = explicitAtRisk > 0n
+    ? explicitAtRisk
+    : reconstructedAtRisk?.amount ?? inferredAtRisk;
+  const payoutAtRiskApproximate = explicitAtRisk <= 0n
+    && reconstructedAtRisk != null
+    && reconstructedAtRisk.approximate;
   if (flipLike) _allocateBoxSpinPreview(rows, payoutAtRisk);
   else if (rows[0]) rows[0].previewPayout = total;
   return {
@@ -606,6 +669,10 @@ export function buildBoxSpinBoard(spin) {
     ),
     heroIdx,
     boxSpin: true,
+    // A record bounty is never a mystery denomination: the contract routes it
+    // directly through the FLIP chain. Ordinary Luckbox spins still reveal
+    // their currency only after reel one.
+    currencyKnown: spinType === 'record',
     grossPayout,
     // Keep the internal unit (and its telltale reel count) out of the pre-spin
     // UI; both become visible only after reel one lands.
@@ -3767,8 +3834,12 @@ class RevealOverlay extends HTMLElement {
     head.className = 'rvl-spin-head';
     const headTitle = document.createElement('span');
     headTitle.className = 'rvl-spin-head__title';
-    headTitle.textContent = board.headline
-      || `${board.rows.length} SPIN${board.rows.length === 1 ? '' : 'S'} · ${board.unit}`;
+    headTitle.textContent = board.currencyKnown
+      ? `${board.headline || 'BOX SPIN'} · ${board.rows.length} ${board.unit} REEL${
+        board.rows.length === 1 ? '' : 'S'
+      }`
+      : board.headline
+        || `${board.rows.length} SPIN${board.rows.length === 1 ? '' : 'S'} · ${board.unit}`;
     head.appendChild(headTitle);
     // BoxSpin/foil child reels inherit the global reveal pacing through
     // #wait(). Only a full Degenerette resolver owns the visible reel slider.
@@ -3854,7 +3925,9 @@ class RevealOverlay extends HTMLElement {
     cta.type = 'button';
     cta.className = 'rvl-collect-cta rvl-dgn-spin-cta';
     cta.dataset.mode = 'spin';
-    cta.textContent = board.boxSpin ? 'SPIN 1' : `SPIN 1 OF ${board.rows.length}`;
+    cta.textContent = board.boxSpin && !board.currencyKnown
+      ? 'SPIN 1'
+      : `SPIN 1 OF ${board.rows.length}`;
     cta.addEventListener('click', (e) => {
       try { e.stopPropagation(); } catch (_e) { /* fakeDOM */ }
       if (cta.dataset.mode === 'pending-action' && cta.__rvlPendingAction) {
@@ -3902,7 +3975,7 @@ class RevealOverlay extends HTMLElement {
       zone, head, headTitle, stage, compare, pop, speedState,
       actions, autoCta, cta, skipCta, history, runAmount,
       boxPayoutMeter, boxPayoutLabel, boxPayoutValue, boxPayoutDetail,
-      boxReelsRevealed: 0, currencyRevealed: false,
+      boxReelsRevealed: 0, currencyRevealed: Boolean(board.currencyKnown),
       resultSelectors: [], selectionEnabled: false, selectedSpinIndex: null,
     };
   }
@@ -4461,7 +4534,7 @@ class RevealOverlay extends HTMLElement {
     currencyRevealed = false,
     skippedToResults = false,
   } = {}) {
-    if (!currencyRevealed && board.boxSpin) {
+    if (!currencyRevealed && !board.currencyKnown && board.boxSpin) {
       await this.#appendBoxSpinCurrencyReveal(rendered, board, reducedMotion, {
         // Once the denomination lands it is copied into the board heading,
         // reel history, live result, and payout meter. Keeping the large
@@ -4570,6 +4643,12 @@ class RevealOverlay extends HTMLElement {
     this.#settleFullSpinPair(pair);
     rendered.selectedSpinIndex = Number(last.spinIndex);
     rendered.boxReelsRevealed = board.rows.length;
+    if (board.boxSpin && rendered.currencyRevealed) {
+      // Mystery spins populate this meter when their denomination interstitial
+      // lands. A known-FLIP record bounty skips that interstitial, so reduced
+      // motion must settle the same meter directly.
+      this.#syncBoxSpinPayoutMeter(rendered, board, board.rows.length);
+    }
     rendered.cta.hidden = true;
     if (rendered.autoCta) rendered.autoCta.hidden = true;
     if (rendered.skipCta) rendered.skipCta.hidden = true;
@@ -4577,6 +4656,7 @@ class RevealOverlay extends HTMLElement {
     return this.#finishFullSpinBoard(rendered, board, {
       ...options,
       reducedMotion: true,
+      currencyRevealed: rendered.currencyRevealed,
     });
   }
 
@@ -4818,13 +4898,13 @@ class RevealOverlay extends HTMLElement {
       let usedAutoSpin = false;
       let autoPauseMs = 420;
       let completed = 0;
-      let currencyRevealed = false;
+      let currencyRevealed = rendered.currencyRevealed;
       const allowAcceleration = !board.boxSpin;
       const acceptedActions = allowAcceleration ? ['spin', 'skip'] : ['spin'];
       for (let i = 0; i < count; i++) {
         const row = board.rows[i];
         const plan = plans[i];
-        const countIsRevealed = !board.boxSpin || i > 0;
+        const countIsRevealed = !board.boxSpin || currencyRevealed || i > 0;
         rendered.cta.dataset.mode = 'spin';
         rendered.cta.textContent = countIsRevealed
           ? `SPIN ${i + 1} OF ${count}`
@@ -4953,7 +5033,7 @@ class RevealOverlay extends HTMLElement {
             this.#syncBoxSpinPayoutMeter(rendered, board, completed);
           }
         }
-        if (board.boxSpin && i === 0) {
+        if (board.boxSpin && i === 0 && !currencyRevealed) {
           await this.#appendBoxSpinCurrencyReveal(rendered, board, false, {
             interstitial: true,
           });

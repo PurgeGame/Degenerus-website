@@ -45,6 +45,7 @@ import {
   MAX_AUTO_REBUY_TAKE_PROFIT_WEI,
   readBafFlipEve,
   readUpcomingFlipBonus,
+  readResolvedFlipBonus,
   readCoinflipDisplaySnapshot,
   protocolFlipTotalWei,
   readLatestCoinflipResult,
@@ -560,6 +561,7 @@ class AppDailyFlip extends HTMLElement {
   #bafAddress = null;
   #bafFlipEve = null;      // exact GAME.purchaseInfo x9-final-day signal
   #upcomingFlipBonus = null; // exact AdvanceModule bonus for the next unlocked flip
+  #resolvedFlipBonus = null; // RNG-verified bonus included in this resolved day's percent
   // Cache the direct lookup per player/bracket, but accept the live position
   // published by the full-width BAF rail. Both visible BAF surfaces therefore
   // share the same freshly polled rank without adding a second DB query.
@@ -823,6 +825,7 @@ class AppDailyFlip extends HTMLElement {
     this.#forceReplayDay = forceReplay ? day : null;
     this.#flipResult = null;
     this.#flipFetchedDay = null;
+    this.#resolvedFlipBonus = null;
     this.#landing = false;
     this.#revealRequestedDay = null;
     this.#winningReceiptCommitted = true;
@@ -4016,6 +4019,41 @@ class AppDailyFlip extends HTMLElement {
     return claimable + carry;
   }
 
+  #ensureResolvedFlipBonus(day, rewardPercent) {
+    const normalizedDay = Number(day);
+    const normalizedReward = Number(rewardPercent);
+    if (!Number.isInteger(normalizedDay) || normalizedDay <= 0
+      || !Number.isInteger(normalizedReward) || normalizedReward < 0) {
+      this.#resolvedFlipBonus = null;
+      return;
+    }
+    const key = `${normalizedDay}:${normalizedReward}`;
+    if (this.#resolvedFlipBonus?.key === key) return;
+
+    const pending = { key, points: null, pending: true };
+    this.#resolvedFlipBonus = pending;
+    Promise.resolve(readResolvedFlipBonus({
+      day: normalizedDay,
+      rewardPercent: normalizedReward,
+    })).then(
+      (value) => {
+        if (this.#resolvedFlipBonus !== pending) return;
+        const points = Number(value?.points);
+        this.#resolvedFlipBonus = {
+          key,
+          points: points === 0 || points === 2 || points === 6 ? points : null,
+          pending: false,
+        };
+        if (this.#active) this.#renderPosition();
+      },
+      () => {
+        if (this.#resolvedFlipBonus !== pending) return;
+        this.#resolvedFlipBonus = { key, points: null, pending: false };
+        if (this.#active) this.#renderPosition();
+      },
+    );
+  }
+
   #renderPosition() {
     const host = this.querySelector('[data-bind="df-position"]');
     if (!host) return;
@@ -4035,6 +4073,7 @@ class AppDailyFlip extends HTMLElement {
     const resolvedStake = this.#resultStakeWei();
     const won = Boolean(this.#flipResult?.win);
     const modifier = Math.max(0, Math.trunc(Number(this.#flipResult?.rewardPercent) || 0));
+    this.#ensureResolvedFlipBonus(hasResult && won ? this.#day : null, modifier);
     const totalMultiplier = 100 + modifier;
     // The stake is not an outcome spoiler: show the exact committed amount
     // while the coin is waiting to be revealed, then replace that same value
@@ -4047,6 +4086,10 @@ class AppDailyFlip extends HTMLElement {
     const upcomingBonusPoints = Number(this.#upcomingFlipBonus?.points);
     const upcomingBonusVisible = this.#browsingDay == null
       && (upcomingBonusPoints === 2 || upcomingBonusPoints === 6);
+    const resolvedBonusPoints = Number(this.#resolvedFlipBonus?.points);
+    const resolvedBonusVisible = revealComplete
+      && won
+      && (resolvedBonusPoints === 2 || resolvedBonusPoints === 6);
     const rows = [
       {
         key: 'today',
@@ -4067,6 +4110,7 @@ class AppDailyFlip extends HTMLElement {
               outcome: 'WIN',
               percent: `${totalMultiplier}%`,
               percentTone: dailyFlipMultiplierTone(totalMultiplier),
+              bonusPoints: resolvedBonusVisible ? resolvedBonusPoints : null,
             }
             : { outcome: 'LOSS', percent: null },
         outcome: noBet ? 'no-bet' : revealComplete ? (won ? 'win' : 'loss') : null,
@@ -4088,11 +4132,14 @@ class AppDailyFlip extends HTMLElement {
       const slot = this.querySelector(`[data-bind="df-position-${item.key}"]`);
       if (!slot) continue;
       slot.textContent = '';
+      const rowBonusPoints = Number(item.status?.bonusPoints);
+      const rowHasResultBonus = rowBonusPoints === 2 || rowBonusPoints === 6;
       const row = document.createElement('div');
       row.className = [
         'df-position-row',
         item.spoiler ? 'df-position-row--spoiler' : '',
         item.outcome ? `df-position-row--${item.outcome}` : '',
+        rowHasResultBonus ? 'df-position-row--result-bonus' : '',
       ].filter(Boolean).join(' ');
       row.setAttribute('data-position', item.key);
       const l = document.createElement('span');
@@ -4121,11 +4168,24 @@ class AppDailyFlip extends HTMLElement {
       // compact lane inside Tomorrow's Bet.
       row.appendChild(l);
       if (item.status != null) {
+        if (rowHasResultBonus) {
+          const bonus = document.createElement('span');
+          bonus.className = 'df-position-bonus df-position-result-bonus';
+          bonus.setAttribute('data-bind', 'df-result-bonus-flip');
+          bonus.setAttribute('aria-hidden', 'true');
+          bonus.dataset.tier = rowBonusPoints === 6 ? 'x0' : 'standard';
+          bonus.textContent = `+${rowBonusPoints}% BONUS`;
+          row.appendChild(bonus);
+        }
         const multi = document.createElement('span');
         multi.className = 'df-position-multiplier';
         multi.setAttribute(
           'aria-label',
-          [item.status.outcome, item.status.percent].filter(Boolean).join(' '),
+          [
+            rowHasResultBonus ? `+${rowBonusPoints} percent bonus` : null,
+            item.status.outcome,
+            item.status.percent,
+          ].filter(Boolean).join(' '),
         );
         const outcome = document.createElement('span');
         outcome.className = 'df-position-outcome';

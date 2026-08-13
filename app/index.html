@@ -298,20 +298,54 @@
   <script type="module" src="/app/components/app-records-rail.js"></script>
   <script type="module" src="/app/components/app-decimator-burn.js"></script>
   <script type="module" src="/app/components/app-mine-flip.js"></script>
-  <script type="module" src="/app/components/app-jackpot-resolutions.js"></script>
   <script type="module" src="/app/components/app-decimator-panel.js"></script>
-  <script type="module" src="/app/components/app-all-in-dialog.js"></script>
-  <script type="module" src="/app/components/app-afking-funding-warning.js"></script>
   <script type="module" src="/app/components/app-box-strip.js"></script>
-  <script type="module" src="/app/components/app-day-history-replays.js"></script>
-  <script type="module" src="/app/components/app-sdgnrs-redemptions.js"></script>
-  <script type="module" src="/app/components/app-player-funds-dialog.js"></script>
   <script type="module" src="/app/components/app-reveal-tray.js"></script>
   <script type="module" src="/app/components/reveal-overlay.js"></script>
   <script type="module" src="/app/components/app-degenerette-panel.js"></script>
   <script type="module" src="/app/components/app-quest-panel.js"></script>
-  <script type="module" src="/app/components/app-pass-section.js"></script>
-  <script type="module" src="/app/components/app-transaction-history.js"></script>
-  <script type="module" src="/app/components/app-affiliate-panel.js"></script>
+  <script type="module">
+    // Cold-load module diet (2026-08-13 audit). Two off-critical-path tiers:
+    //
+    //  LAZY_PANELS — custom elements inside a CLOSED <details>: nothing
+    //  renders until opened, so first open (or the idle slot, whichever
+    //  first) imports the module. The toggle listener covers a user faster
+    //  than idle.
+    //
+    //  IDLE_MODULES — below-the-fold self-disclosing panels, hidden banners
+    //  and dialogs with ZERO static importers (verified 2026-08-13): they
+    //  self-initialize from current store state on upgrade, so arriving one
+    //  idle slot after paint changes nothing user-visible above the fold.
+    //  reveal-overlay is deliberately NOT here — 11 eager modules import it
+    //  statically, so demoting its tag would save nothing.
+    //
+    // ⚠ These are dynamic imports: the publish runbook's static
+    // module-resolution grep does NOT see them. index-structure.test.js
+    // asserts every path below exists — keep both lists in sync with it.
+    const LAZY_PANELS = [
+      ['afking-passes', '/app/components/app-pass-section.js'],
+    ];
+    const IDLE_MODULES = [
+      '/app/components/app-transaction-history.js',
+      '/app/components/app-affiliate-panel.js',
+      '/app/components/app-sdgnrs-redemptions.js',
+      '/app/components/app-day-history-replays.js',
+      '/app/components/app-jackpot-resolutions.js',
+      '/app/components/app-all-in-dialog.js',
+      '/app/components/app-player-funds-dialog.js',
+      '/app/components/app-afking-funding-warning.js',
+    ];
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2500));
+    for (const [detailsId, src] of LAZY_PANELS) {
+      const host = document.getElementById(detailsId);
+      if (!host) { import(src); continue; }
+      let requested = false;
+      const load = () => { if (!requested) { requested = true; import(src); } };
+      host.addEventListener('toggle', load, { once: true });
+      if (host.open) load();
+      idle(load);
+    }
+    idle(() => { for (const src of IDLE_MODULES) import(src); });
+  </script>
 </body>
 </html>

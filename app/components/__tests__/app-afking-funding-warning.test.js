@@ -105,7 +105,9 @@ describe('AFKing low-funding warning', () => {
   test('is mounted, accessible, preference-aware, and routes to the real top-up input', () => {
     assert.match(html, /href="\/app\/styles\/afking-funding-warning\.css"/);
     assert.match(html, /<app-afking-funding-warning hidden>/);
-    assert.match(html, /src="\/app\/components\/app-afking-funding-warning\.js"/);
+    // Cold-load diet (2026-08-13): loads via the IDLE_MODULES registration,
+    // not an eager script tag (hidden banner; self-initializes from store).
+    assert.match(html, /'\/app\/components\/app-afking-funding-warning\.js'/);
     assert.match(source, /role', 'dialog'/);
     assert.match(source, /aria-modal', 'true'/);
     assert.match(source, /subscribe\('app\.afkingSubscription'/);
