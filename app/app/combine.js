@@ -11,7 +11,7 @@
 // (the response builder at the bottom of the handler):
 //   - claimableEth / flipBalance / dgnrsBalance          → top-level string WEI
 //   - coinflip.depositedAmount / coinflip.claimablePreview → string WEI (nested)
-//   - decimator.claimablePerLevel[]                       → [{level, ethAmount:strWei, lootboxCount:num, claimed:bool}]
+//   - decimator.claimablePerLevel[]                       → [{level, ethAmount:strWei, lootboxAmount:strWei|null, claimed:bool}]
 //   - decimator.futurePoolTotal                          → GLOBAL string WEI (NOT per-account)
 //   - tickets[]                                           → [{level, entryCount:num}]
 //   - terminal.burns[]                                    → [{level, effectiveAmount, weightedAmount, timeMultBps}] | terminal===null
@@ -82,7 +82,7 @@ function _get(obj, path) {
  *   perAddress: Record<string, object>,
  *   claimableEth: string, flipBalance: string, dgnrsBalance: string,
  *   coinflip: {depositedAmount: string, claimablePreview: string} | null,
- *   decimator: {claimablePerLevel: Array<{level:any, ethAmount:string, lootboxCount:number, claimed:boolean}>, futurePoolTotal: string},
+ *   decimator: {claimablePerLevel: Array<{level:any, ethAmount:string, lootboxAmount:string|null, claimed:boolean}>, futurePoolTotal: string},
  *   terminal: {burns: Array<object & {owner:string}>} | null,
  *   tickets: Array<object & {owner:string}>,
  * }}
@@ -114,8 +114,10 @@ export function mergePlayerPayloads(payloads) {
       }
     : null;
 
-  // --- SUM: decimator per-level (ethAmount wei + lootboxCount); futurePoolTotal is GLOBAL (first) ---
-  const levelMap = new Map(); // level → {level, ethAmount:BigInt, lootboxCount:number, claimedAll:boolean}
+  // --- SUM: decimator per-level (ethAmount + lootboxAmount wei); futurePoolTotal is GLOBAL (first) ---
+  // v77 B3: the API dropped the hardcoded-zero lootboxCount and exposes the real
+  // lootboxAmount (wei string, null on AutoRebuyProcessed-sourced rows).
+  const levelMap = new Map(); // level → {level, ethAmount:BigInt, lootboxAmount:BigInt, claimedAll:boolean}
   let futurePoolTotal = '0';
   let futurePoolSeen = false;
   for (const p of list) {
@@ -129,9 +131,9 @@ export function mergePlayerPayloads(payloads) {
     const perLevel = Array.isArray(dec.claimablePerLevel) ? dec.claimablePerLevel : [];
     for (const row of perLevel) {
       const key = String(row.level);
-      const cur = levelMap.get(key) || { level: row.level, ethAmount: 0n, lootboxCount: 0, claimedAll: true };
+      const cur = levelMap.get(key) || { level: row.level, ethAmount: 0n, lootboxAmount: 0n, claimedAll: true };
       cur.ethAmount += _toBig(row.ethAmount);
-      cur.lootboxCount += Number(row.lootboxCount ?? 0) || 0;
+      cur.lootboxAmount += _toBig(row.lootboxAmount);
       // claimed row hides claimable amount; the aggregate row is "claimed" only
       // if EVERY contributing account has claimed it (so a single unclaimed
       // account keeps the summed amount visible in the combined panel).
@@ -144,7 +146,7 @@ export function mergePlayerPayloads(payloads) {
     .map((r) => ({
       level: r.level,
       ethAmount: r.ethAmount.toString(),
-      lootboxCount: r.lootboxCount,
+      lootboxAmount: r.lootboxAmount.toString(),
       claimed: r.claimedAll,
     }));
   const decimator = { claimablePerLevel, futurePoolTotal };

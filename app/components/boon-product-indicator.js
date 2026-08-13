@@ -3,13 +3,6 @@
 import { get, subscribe } from '../app/store.js';
 import { boonIndicatorModel } from '../app/boons.js';
 
-export function purchaseControlBoonLabel(label, product) {
-  const compact = String(label || '').replace(/^BOON\s*/i, '');
-  if (product === 'purchase') return `BOON: ${compact} MORE TICKETS`;
-  if (product === 'lootbox') return `BOON: ${compact} BIGGER LUCKBOX`;
-  return String(label || '');
-}
-
 class BoonProductIndicator extends HTMLElement {
   static get observedAttributes() { return ['product', 'variant']; }
 
@@ -53,6 +46,10 @@ class BoonProductIndicator extends HTMLElement {
     host.removeAttribute?.('data-active-boon-product');
     host.removeAttribute?.('data-active-boon-type');
     host.removeAttribute?.('data-boon-effect');
+    host.removeAttribute?.('data-boon-strength');
+    host.removeAttribute?.('data-boon-tier');
+    host.removeAttribute?.('data-boon-pips');
+    host.removeAttribute?.('data-boon-direction');
     if (this.#hostHadTitle) host.setAttribute?.('title', this.#hostTitle);
     else host.removeAttribute?.('title');
     this.#decoratedHost = null;
@@ -64,10 +61,13 @@ class BoonProductIndicator extends HTMLElement {
     const selector = [
       '.dec-input-group',
       '.df-add-bet-dialog__card',
+      '.df-tomorrow-layout',
       '.pass-product-row',
       '.pass-deity-section',
       '.pari-book',
       '.qst-score-control',
+      '.deg-currency-option',
+      '.dbb__input',
     ].join(', ');
     const host = this.closest?.(selector) || null;
     if (host !== this.#decoratedHost) {
@@ -84,6 +84,10 @@ class BoonProductIndicator extends HTMLElement {
     host.setAttribute?.('data-active-boon-product', product);
     host.setAttribute?.('data-active-boon-type', String(model.boonType));
     host.setAttribute?.('data-boon-effect', effect);
+    host.setAttribute?.('data-boon-strength', model.strength);
+    host.setAttribute?.('data-boon-tier', String(model.tier));
+    host.setAttribute?.('data-boon-pips', model.pips);
+    host.setAttribute?.('data-boon-direction', model.direction);
     host.setAttribute?.('title', model.title);
   }
 
@@ -99,19 +103,28 @@ class BoonProductIndicator extends HTMLElement {
       this.removeAttribute?.('data-boon-type');
       this.removeAttribute?.('data-boon-product');
       this.removeAttribute?.('data-boon-effect');
+      this.removeAttribute?.('data-boon-strength');
+      this.removeAttribute?.('data-boon-tier');
+      this.removeAttribute?.('data-boon-pips');
+      this.removeAttribute?.('data-boon-direction');
       this.removeAttribute?.('tabindex');
       return;
     }
     const effect = String(model.label || '').replace(/^BOON\s*/i, '');
-    this.textContent = this.getAttribute?.('variant') === 'purchase-control'
-      ? purchaseControlBoonLabel(model.label, product)
-      : model.label;
+    // The live indicator is intentionally icon-only. Its exact value and use
+    // live in the native hover tooltip and keyboard-accessible aria-label.
+    this.textContent = '';
     this.title = model.title;
     this.setAttribute?.('aria-label', model.title);
     this.setAttribute?.('data-boon-type', String(model.boonType));
     this.setAttribute?.('data-boon-product', product);
     this.setAttribute?.('data-boon-effect', effect);
-    this.setAttribute?.('tabindex', '0');
+    this.setAttribute?.('data-boon-strength', model.strength);
+    this.setAttribute?.('data-boon-tier', String(model.tier));
+    this.setAttribute?.('data-boon-pips', model.pips);
+    this.setAttribute?.('data-boon-direction', model.direction);
+    const nestedInButton = String(this.parentElement?.tagName || '').toUpperCase() === 'BUTTON';
+    this.setAttribute?.('tabindex', nestedInButton ? '-1' : '0');
     this.#decorateHost(product, model);
   }
 }

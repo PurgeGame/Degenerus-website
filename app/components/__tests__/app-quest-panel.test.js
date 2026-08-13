@@ -450,6 +450,38 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     );
   });
 
+  test('quest pictograms keep a flat small-scale visual language', () => {
+    const files = [
+      'buy-ticket-luckbox.svg',
+      'coinflip.svg',
+      'affiliate.svg',
+      'foil-pack.svg',
+      'luckbox.svg',
+      'degenerette-eth.svg',
+      'degenerette-flip.svg',
+      'redeem-flip.svg',
+    ];
+    for (const file of files) {
+      const svg = readFileSync(new URL(`../../assets/quests/${file}`, import.meta.url), 'utf8');
+      assert.doesNotMatch(svg, /<(?:linearGradient|radialGradient|filter)\b/,
+        `${file} stays flat instead of becoming a tiny faux-material illustration`);
+    }
+    const combined = readFileSync(
+      new URL('../../assets/quests/buy-ticket-luckbox.svg', import.meta.url),
+      'utf8',
+    );
+    const luckbox = readFileSync(
+      new URL('../../assets/quests/luckbox.svg', import.meta.url),
+      'utf8',
+    );
+    assert.match(combined, /<rect x="5" y="11" width="37" height="42"/,
+      'the combined quest uses an unmistakably square ticket silhouette');
+    assert.match(combined, /<circle cx="45" cy="40" r="6" fill="#ed0e11"/,
+      'the combined quest identifies its Luckbox leg with the red circle');
+    assert.match(luckbox, /<circle cx="32" cy="39" r="8" fill="#ed0e11"/,
+      'the standalone Luckbox icon uses the same red-circle language');
+  });
+
   test('quest action sheets have themed completion hierarchy and motion-safe polish', () => {
     assert.match(
       PANEL_SRC,
@@ -550,8 +582,8 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     const slots = el.querySelectorAll('.qst-slot');
     assert.equal(slots.length, 3,
       'two current daily definitions plus the stable level placeholder render');
-    assert.match(slots[0].textContent, /Buy Tickets or Luckbox/);
-    assert.match(slots[1].textContent, /Luckbox/);
+    assert.match(slots[0].textContent, /Buy a Ticket or Luckbox/);
+    assert.match(slots[1].textContent, /Buy Luckbox/);
     assert.doesNotMatch(el.textContent, /Could not load quests/);
     el.disconnectedCallback();
   });
@@ -579,7 +611,20 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(roles[1]?.textContent, 'BONUS', 'secondary slot uses compact BONUS role chip');
     assert.equal(roles[2]?.textContent, 'LEVEL', 'level quest has its own role chip');
     assert.equal(el.querySelectorAll('.qst-slot-icon').length, 3, 'each quest has a game-style icon tile');
-    assert.match(slot0Text, /Buy Tickets or Luckbox/, 'purchase quest uses the branded, capitalized player-facing copy');
+    assert.deepEqual(
+      el.querySelectorAll('.qst-slot-icon').map((icon) => icon.querySelector('img')?.src),
+      [
+        '/app/assets/quests/buy-ticket-luckbox.svg',
+        '/whitepaper/flame-logo-split.svg',
+        '/app/assets/quests/luckbox.svg',
+      ],
+      'quest cards use product-specific artwork and the canonical FLIP logo',
+    );
+    assert.match(APP_CSS,
+      /\.qst-slot-icon img\s*\{[^}]*width:\s*2\.15rem;[^}]*height:\s*2\.15rem;[^}]*object-fit:\s*contain/s,
+      'the richer icons stay inside the existing fixed tile');
+    assert.match(slot0Text, /Buy a Ticket or Luckbox/,
+      'the shared purchase quest names both valid completion routes');
 
     assert.equal(slots[1].classList.contains('qst-slot--gated'), true,
       'bonus quest is muted until the main quest is complete');
@@ -600,6 +645,14 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.doesNotMatch(rewards[0].textContent, /NEXT FLIP/,
       'reward copy stays concise without the removed next-flip suffix');
 
+    const objectives = storeMod.get('ui.questObjectives');
+    assert.equal(objectives.address, CONNECTED.toLowerCase());
+    assert.deepEqual(
+      objectives.quests.map((quest) => [quest.role, quest.questType]),
+      [['DAILY', 1], ['BONUS', 2], ['LEVEL', 6]],
+      'the exact unfinished daily, bonus, and level quests are published for control markers',
+    );
+
     const meters = el.querySelectorAll('.qst-meter');
     assert.equal(meters.length, 3, 'each quest has a progress meter');
     assert.equal(meters[0].getAttribute('role'), 'progressbar');
@@ -610,6 +663,24 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       'meter fill reflects progress',
     );
 
+    el.disconnectedCallback();
+  });
+
+  test('quest-facing copy calls type 3 Referral, never Affiliate', async () => {
+    _fetchHandler = async () => makeQuestsPayload({
+      quests: [
+        { day: 1, slot: 0, questType: 3, progress: 0, target: 2, completed: false },
+        { day: 1, slot: 1, questType: 2, progress: 0, target: 100, completed: false },
+      ],
+      levelQuest: null,
+    });
+    const el = instantiate();
+    await settle(40);
+
+    const primary = el.querySelectorAll('.qst-slot')[0];
+    assert.match(primary.textContent, /Referral/);
+    assert.doesNotMatch(primary.textContent, /Affiliate/i);
+    assert.match(primary.getAttribute('aria-label') || '', /Referral/);
     el.disconnectedCallback();
   });
 
@@ -632,7 +703,11 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     const card = el.querySelector('.qst-action-dialog__card');
     assert.equal(card.getAttribute('data-variant'), 'level');
     assert.equal(card.getAttribute('data-state'), 'ready');
-    assert.equal(el.querySelector('[data-bind="qst-action-icon"]').textContent, '◆');
+    assert.equal(
+      el.querySelector('[data-bind="qst-action-icon"]').querySelector('img')?.src,
+      '/app/assets/quests/luckbox.svg',
+      'the quest popup reuses the same product icon as its card',
+    );
     assert.equal(el.querySelector('[data-bind="qst-action-reward"]').textContent, '800 FLIP');
     assert.equal(el.querySelector('[data-bind="qst-action-reward-extra"]').textContent, '+5 STREAK');
     assert.equal(el.querySelector('[data-bind="qst-action-state"]').textContent, 'COMPLETES QUEST');
@@ -685,6 +760,29 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.deepEqual(events, [], 'the explanatory sheet cannot dispatch a premature bet preset');
 
     document.removeEventListener('quest:activate', listener);
+    el.disconnectedCallback();
+  });
+
+  test('an external quest icon opens the identical card confirmation flow', async () => {
+    const el = instantiate();
+    await settle(40);
+    const trigger = { focus() {} };
+    document.dispatchEvent({
+      type: 'quest:open',
+      detail: {
+        product: 'coinflip',
+        trigger,
+        quests: [{ questType: 2, role: 'BONUS' }],
+      },
+    });
+
+    const dialog = el.querySelector('[data-bind="qst-action-dialog"]');
+    assert.equal(dialog.hidden, false);
+    assert.equal(el.querySelector('.qst-action-dialog__card').getAttribute('data-variant'), 'secondary');
+    assert.match(el.querySelector('[data-bind="qst-action-copy"]').textContent,
+      /Complete the daily quest first/,
+      'the shortcut opens the same gated explanation as clicking its quest card');
+    assert.equal(el.querySelector('[data-bind="qst-action-confirm"]').disabled, true);
     el.disconnectedCallback();
   });
 
@@ -818,7 +916,7 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     await settle(40);
 
     const level = el.querySelectorAll('.qst-slot')[2];
-    assert.match(level.textContent, /Buy Tickets or Luckbox/);
+    assert.match(level.textContent, /Buy a Ticket or Luckbox/);
     level.dispatchEvent({ type: 'click' });
     const choice = el.querySelector('[data-bind="qst-action-choice"]');
     const lootbox = el.querySelector('[data-bind="qst-action-lootbox"]');
@@ -988,6 +1086,11 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
 
     const el = instantiate();
     await settle(40);
+    assert.match(el.querySelectorAll('.qst-slot')[1].textContent, /Buy Foil Pack/,
+      'the foil objective uses the same concise action-style quest name');
+    assert.match(PANEL_SRC, /label: cost == null \? 'BUY FOIL PACK'/,
+      'the confirmation action uses the quest name instead of ADD FOIL PACK');
+    assert.doesNotMatch(PANEL_SRC, /ADD FOIL PACK/);
     assert.deepEqual(storeMod.get('ui.foilQuest'), {
       active: true,
       completed: false,
@@ -1214,12 +1317,20 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
     assert.equal(el.querySelector('.qst-slot--just-completed'), null,
       'loading an existing completion does not pretend it just happened');
 
-    // Feedback stays local and synthesized; there is still no toast or direct
-    // HTMLAudioElement playback path in this read-only component.
+    const toast = el.querySelector('[data-bind="qst-complete-toast"]');
+    assert.ok(toast, 'the completion status toast is mounted once with the panel');
+    assert.equal(toast.hidden, true,
+      'loading an existing completion does not replay its toast');
+    assert.match(el.innerHTML,
+      /qst-complete-toast__sigil[\s\S]*?\/whitepaper\/flame-logo-split\.svg/,
+      'the completion moment uses the FLIP currency mark');
+
+    // Completion audio stays synthesized; there is no direct media-element
+    // playback path in this read-only component.
     assert.equal(
-      /toast|playAudio|new Audio|audio\.play/.test(PANEL_SRC_NOCOMMENT),
+      /playAudio|new Audio|audio\.play/.test(PANEL_SRC_NOCOMMENT),
       false,
-      'the panel does not add a toast or direct media-element player',
+      'the panel does not add a direct media-element player',
     );
 
     el.disconnectedCallback();
@@ -1301,6 +1412,17 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       'the streak HUD pulses in the same render as the quest card');
       assert.equal(RecordingAudioContext.last.oscillators.length, 2,
         'one restrained two-note chime accompanies the card pulse');
+      const toast = el.querySelector('[data-bind="qst-complete-toast"]');
+      assert.equal(toast.hidden, false, 'the transition opens the completion toast');
+      assert.equal(toast.classList.contains('is-visible'), true);
+      assert.equal(
+        el.querySelector('[data-bind="qst-complete-toast-title"]').textContent,
+        'Buy a Ticket or Luckbox',
+      );
+      assert.equal(
+        el.querySelector('[data-bind="qst-complete-toast-detail"]').textContent,
+        'DAILY · +100 FLIP',
+      );
 
       storeMod.update('connected.address', CONNECTED);
       await settle(60);
@@ -1313,12 +1435,163 @@ describe('Plan 62-04: <app-quest-panel> read-only quest display', () => {
       assert.match(APP_CSS, /@keyframes qst-complete-pulse/);
       assert.match(APP_CSS, /qst-slot--just-completed::after/);
       assert.match(APP_CSS, /@keyframes qst-streak-gain/);
+      assert.match(APP_CSS, /bottom:\s*24dvh/,
+        'the compact toast sits roughly one quarter up from the bottom edge');
+      assert.match(APP_CSS, /@keyframes qst-complete-toast/);
+      assert.match(APP_CSS, /animation:\s*qst-complete-toast 4s/,
+        'the completion banner remains readable for four seconds');
+      assert.match(APP_CSS,
+        /qst-complete-toast\s*\{[^}]*width:\s*min\(calc\(100vw - 2rem\), 21\.5rem\)/s,
+        'the toast is slightly larger without turning into a modal');
     } finally {
       el?.disconnectedCallback();
       jackpotSfxMod.__resetForTest();
       if (realAudioContext === undefined) delete globalThis.AudioContext;
       else globalThis.AudioContext = realAudioContext;
     }
+  });
+
+  test('one action that completes several quest rows produces one combined popup', async () => {
+    let completed = false;
+    _fetchHandler = async () => makeQuestsPayload({
+      quests: [
+        { day: 1, slot: 0, questType: 1, progress: completed ? 3 : 1, target: 3, completed },
+        { day: 1, slot: 1, questType: 2, progress: 0, target: 100, completed: false },
+      ],
+      levelQuest: {
+        level: 7,
+        questType: 6,
+        progress: completed ? '1600000000000' : '400000000000',
+        target: '1600000000000',
+        completed,
+        eligible: true,
+      },
+    });
+    const el = instantiate();
+    await settle(40);
+
+    completed = true;
+    storeMod.update('connected.address', CONNECTED);
+    await settle(60);
+
+    assert.equal(
+      el.querySelector('[data-bind="qst-complete-toast-kicker"]').textContent,
+      '2 QUESTS COMPLETE',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="qst-complete-toast-title"]').textContent,
+      'Buy Luckbox',
+      'when one luckbox purchase clears both objectives, the completion names the specific action',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="qst-complete-toast-detail"]').textContent,
+      '2 QUESTS · +900 FLIP · +5 STREAK',
+      'simultaneous daily and level rewards are folded into one visible notification',
+    );
+    el.disconnectedCallback();
+  });
+
+  test('an afKing automatic primary completion does not inflate a lootbox popup', async () => {
+    let completed = false;
+    _fetchHandler = async () => makeQuestsPayload({
+      afkingActive: true,
+      quests: [
+        { day: 1, slot: 0, questType: 1, progress: completed ? 3 : 1, target: 3, completed },
+        { day: 1, slot: 1, questType: 2, progress: 0, target: 100, completed: false },
+      ],
+      levelQuest: {
+        level: 7,
+        questType: 6,
+        progress: completed ? '1600000000000' : '400000000000',
+        target: '1600000000000',
+        completed,
+        eligible: true,
+      },
+    });
+    const el = instantiate();
+    await settle(40);
+
+    completed = true;
+    storeMod.update('connected.address', CONNECTED);
+    await settle(60);
+
+    assert.equal(
+      el.querySelector('[data-bind="qst-complete-toast-kicker"]').textContent,
+      'QUEST COMPLETE',
+      'the subscription-owned primary is not counted as a second paid quest',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="qst-complete-toast-title"]').textContent,
+      'Buy Luckbox',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="qst-complete-toast-detail"]').textContent,
+      'LEVEL · +800 FLIP · +5 STREAK',
+    );
+    assert.equal(
+      el.querySelectorAll('.qst-slot')[0].querySelector('.qst-slot-status')?.textContent,
+      'AUTO',
+      'the primary card keeps its afKing attribution after the event lands',
+    );
+    el.disconnectedCallback();
+  });
+
+  test('a delayed level payout contributes 800 FLIP even when its target was already met', async () => {
+    let paid = false;
+    _fetchHandler = async () => makeQuestsPayload({
+      quests: [
+        {
+          day: 1,
+          slot: 0,
+          questType: 1,
+          progress: paid ? 3 : 1,
+          target: 3,
+          completed: paid,
+        },
+        { day: 1, slot: 1, questType: 2, progress: 0, target: 100, completed: false },
+      ],
+      levelQuest: {
+        level: 7,
+        questType: 6,
+        // Progress can bank past target before the eligibility gate permits
+        // LevelQuestCompleted and its actual 800-FLIP credit.
+        progress: '1800000000000',
+        target: '1600000000000',
+        completed: paid,
+        eligible: paid,
+      },
+    });
+    const el = instantiate();
+    await settle(40);
+
+    assert.equal(
+      el.querySelectorAll('.qst-slot')[2]
+        .querySelector('.qst-slot-status')?.textContent,
+      'COMPLETE',
+      'target-met presentation remains complete while the payout is gated',
+    );
+    assert.equal(el.querySelector('[data-bind="qst-complete-toast"]').hidden, true,
+      'banked progress alone is not presented as an 800-FLIP receipt');
+
+    paid = true;
+    storeMod.update('connected.address', CONNECTED);
+    await settle(60);
+
+    assert.equal(
+      el.querySelector('[data-bind="qst-complete-toast-kicker"]').textContent,
+      '2 QUESTS COMPLETE',
+    );
+    assert.equal(
+      el.querySelector('[data-bind="qst-complete-toast-detail"]').textContent,
+      '2 QUESTS · +900 FLIP · +5 STREAK',
+      'the authoritative level completion adds 800 instead of being mistaken for another daily',
+    );
+    assert.ok(
+      el.querySelectorAll('.qst-slot')[2]
+        .classList.contains('qst-slot--just-completed'),
+      'the already-full card pulses when its reward is actually credited',
+    );
+    el.disconnectedCallback();
   });
 
   test('Streak count rendered via textContent', async () => {

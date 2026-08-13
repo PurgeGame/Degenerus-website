@@ -27,7 +27,8 @@ import {
   formatFlip,
   truncateAddress,
 } from '../viewer/utils.js';
-import { API_BASE, BADGE_QUADRANTS, BADGE_COLORS, BADGE_ITEMS, badgeCircularPath } from '../app/constants.js';
+import { BADGE_QUADRANTS, BADGE_COLORS, BADGE_ITEMS, badgeCircularPath } from '../app/constants.js';
+import { fetchJSON } from '../app/api.js';
 import { batch, update } from '../app/reactive-store.js';
 import { setMajorDrawActivity } from '../app/major-draw-activity.js';
 import { isMuted as isSfxMuted } from '../app/jackpot-sfx.js';
@@ -77,10 +78,16 @@ function dayDataRetryDelay(attempt, now = Date.now()) {
 }
 
 async function replayFetch(path, init) {
-  const res = await fetch(API_BASE + '/replay' + path, init);
-  noteReplayApiResponse(res);
-  if (!res.ok) throw new Error(`Replay API ${res.status}: ${path}`);
-  return res.json();
+  try {
+    return await fetchJSON('/replay' + path, {
+      signal: init?.signal,
+      force: init?.cache === 'no-store',
+      cache: init?.cache,
+    });
+  } catch (error) {
+    noteReplayApiResponse(error?.response);
+    throw error;
+  }
 }
 
 // How far above the day's level Roll 2 can still find rolled traits. Mirrors
@@ -172,6 +179,22 @@ function positiveBigInt(value) {
   } catch (_error) {
     return 0n;
   }
+}
+
+/**
+ * JackpotWhalePassWin.amount is a half-pass count. A purchased Whale Pass is
+ * two half-passes, so never present this raw contract unit as whole passes.
+ */
+export function formatWhalePassAward(halfPassValue) {
+  const halfPasses = positiveBigInt(halfPassValue);
+  const wholePasses = halfPasses / 2n;
+  const hasHalf = halfPasses % 2n === 1n;
+  const amount = hasHalf
+    ? (wholePasses === 0n ? '½' : `${wholePasses}½`)
+    : wholePasses.toString();
+  const singular = wholePasses === 1n && !hasHalf
+    || wholePasses === 0n && hasHalf;
+  return `${amount} whale pass${singular ? '' : 'es'}`;
 }
 
 /** Compact icon-and-amount rows shown the first time a paid badge is hovered. */
@@ -1304,22 +1327,6 @@ class ReplayPanel extends HTMLElement {
       if (this.#tutorialFixture) return true;
       const days = Array.isArray(data?.days) ? data.days : [];
       this.#rngDays = days;
-      // The replay feed already carries the DB-derived day-within-phase clock.
-      // Share its newest row with the headline/nav instead of making that bar
-      // issue a duplicate history request just to label PURCHASE DAY N.
-      const latestPhaseDay = days.length > 0
-        ? days.reduce((latest, row) => (
-          !latest || Number(row.day) > Number(latest.day) ? row : latest
-        ), null)
-        : null;
-      if (latestPhaseDay && typeof document !== 'undefined' && document.dispatchEvent) {
-        try {
-          const event = typeof CustomEvent === 'function'
-            ? new CustomEvent('replay:phase-clock', { detail: latestPhaseDay })
-            : { type: 'replay:phase-clock', detail: latestPhaseDay };
-          document.dispatchEvent(event);
-        } catch (_e) { /* headless — the replay selector still works */ }
-      }
       if (!select) return false;
       select.innerHTML = '<option value="">Pick a jackpot day</option>' +
         days.map(d => `<option value="${d.day}">Day ${d.day} — L${d.level} ${d.phase}${d.dayInPhase}</option>`).join('');
@@ -1433,17 +1440,13 @@ class ReplayPanel extends HTMLElement {
     let roll1 = null;
     let roll2 = null;
     const [r1Res, r2Res] = await Promise.allSettled([
-      fetch(`${API_BASE}/game/jackpot/day/${day}/roll1`, { cache: 'no-store' }),
-      fetch(`${API_BASE}/game/jackpot/day/${day}/roll2`, { cache: 'no-store' }),
+      fetchJSON(`/game/jackpot/day/${day}/roll1`, { force: true }),
+      fetchJSON(`/game/jackpot/day/${day}/roll2`, { force: true }),
     ]);
-    if (r1Res.status === 'fulfilled') noteReplayApiResponse(r1Res.value);
-    if (r2Res.status === 'fulfilled') noteReplayApiResponse(r2Res.value);
-    if (r1Res.status === 'fulfilled' && r1Res.value.ok) {
-      try { roll1 = await r1Res.value.json(); } catch {}
-    }
-    if (r2Res.status === 'fulfilled' && r2Res.value.ok) {
-      try { roll2 = await r2Res.value.json(); } catch {}
-    }
+    if (r1Res.status === 'fulfilled') roll1 = r1Res.value;
+    else noteReplayApiResponse(r1Res.reason?.response);
+    if (r2Res.status === 'fulfilled') roll2 = r2Res.value;
+    else noteReplayApiResponse(r2Res.reason?.response);
     if (!roll1) console.warn('[ReplayPanel] roll1 endpoint unavailable for day', day);
     if (!roll2) console.warn('[ReplayPanel] roll2 endpoint unavailable for day', day);
     return { roll1, roll2 };
@@ -1504,10 +1507,7 @@ class ReplayPanel extends HTMLElement {
     const dayLevel = Number(this.#dayRoll1?.purchaseLevel ?? this.#selectedLevel);
     if (!Number.isFinite(dayLevel)) return;
     try {
-      const url = `${API_BASE}/player/${encodeURIComponent(this.#selectedPlayer)}?day=${encodeURIComponent(this.#selectedDay)}`;
-      const res = await fetch(url);
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await fetchJSON(`/player/${encodeURIComponent(this.#selectedPlayer)}?day=${encodeURIComponent(this.#selectedDay)}`);
       const tickets = Array.isArray(data?.tickets) ? data.tickets : [];
       this.#playerHasFutureTickets = tickets.some((t) => Number(t.level) > dayLevel && Number(t.entryCount ?? 0) > 0);
     } catch {
@@ -1523,9 +1523,7 @@ class ReplayPanel extends HTMLElement {
       return;
     } catch {}
     try {
-      const res = await fetch(API_BASE + '/history/jackpots?level=' + level + '&limit=100');
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await fetchJSON('/history/jackpots?level=' + level + '&limit=100');
       this.#distributions = (data.items || []).map(d => ({
         level: d.level, winner: d.winner, amount: d.amount,
         traitId: d.traitId ?? null, ticketIndex: d.ticketIndex ?? null,
@@ -1560,9 +1558,8 @@ class ReplayPanel extends HTMLElement {
     try {
       const payloads = await Promise.all(levels.map(async (l) => {
         // No &day= param — same 404 gotcha as #loadPlayerTraits.
-        const res = await fetch(`${API_BASE}/player/${encodeURIComponent(this.#selectedPlayer)}/tickets/by-trait?level=${l}`);
-        if (!res.ok) return null;
-        return res.json();
+        return fetchJSON(`/player/${encodeURIComponent(this.#selectedPlayer)}/tickets/by-trait?level=${l}`)
+          .catch(() => null);
       }));
       for (const data of payloads) {
         for (const card of (Array.isArray(data?.cards) ? data.cards : [])) {
@@ -1610,9 +1607,7 @@ class ReplayPanel extends HTMLElement {
     try {
       // No &day= param — the endpoint 404s on days without an indexed
       // daily_rng row (same gotcha as app-tickets-inventory).
-      const res = await fetch(`${API_BASE}/player/${encodeURIComponent(this.#selectedPlayer)}/tickets/by-trait?level=${level}`);
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      const data = await res.json();
+      const data = await fetchJSON(`/player/${encodeURIComponent(this.#selectedPlayer)}/tickets/by-trait?level=${level}`);
       const owned = new Set();
       for (const card of (Array.isArray(data?.cards) ? data.cards : [])) {
         for (const entry of (Array.isArray(card?.entries) ? card.entries : [])) {
@@ -1736,20 +1731,13 @@ class ReplayPanel extends HTMLElement {
     let nextWinners = [];
     let nextSelectedLevel = null;
     try {
-      const wRes = await fetch(`${API_BASE}/game/jackpot/day/${dayNum}/winners`, {
-        cache: 'no-store',
-      });
-      noteReplayApiResponse(wRes);
-      if (wRes.ok) {
-        const wJson = await wRes.json();
-        nextSelectedLevel = this.#openingFlipDay
-          ? 0
-          : (wJson.level ?? (this.#distributions[0]?.level ?? null));
-        nextWinners = wJson.winners || [];
-      } else if (this.#distributions.length > 0) {
-        nextSelectedLevel = this.#distributions[0].level;
-      }
-    } catch {
+      const wJson = await fetchJSON(`/game/jackpot/day/${dayNum}/winners`, { force: true });
+      nextSelectedLevel = this.#openingFlipDay
+        ? 0
+        : (wJson.level ?? (this.#distributions[0]?.level ?? null));
+      nextWinners = wJson.winners || [];
+    } catch (error) {
+      noteReplayApiResponse(error?.response);
       if (this.#distributions.length > 0) {
         nextSelectedLevel = this.#distributions[0].level;
       }
@@ -1876,12 +1864,7 @@ class ReplayPanel extends HTMLElement {
     list.innerHTML = '<div class="jp-summary-note">Loading…</div>';
     container.hidden = false;
     try {
-      const res = await fetch(`${API_BASE}/game/decimator/player/${this.#selectedPlayer}`);
-      if (!res.ok) {
-        list.innerHTML = '<div class="jp-summary-note">Could not load decimator state.</div>';
-        return;
-      }
-      const data = await res.json();
+      const data = await fetchJSON(`/game/decimator/player/${this.#selectedPlayer}`);
       const rounds = Array.isArray(data.rounds) ? data.rounds : [];
       if (rounds.length === 0) {
         list.innerHTML = '<div class="jp-summary-note">Player has no decimator burns.</div>';
@@ -2055,7 +2038,7 @@ class ReplayPanel extends HTMLElement {
             const n = joScaledToTickets(e.amount);
             formatted = `${n} ticket${n !== 1 ? 's' : ''} (BAF)`;
           } else if (at === 'whale_pass') {
-            formatted = `${e.amount} whale pass${e.amount !== '1' ? 'es' : ''}`;
+            formatted = formatWhalePassAward(e.amount);
           } else {
             formatted = `${e.amount} ${at}`;
           }
@@ -3424,7 +3407,7 @@ class ReplayPanel extends HTMLElement {
       lines.push({ text, aria: text });
     }
     if (whaleCount > 0) {
-      const text = `${whaleCount} whale pass${whaleCount === 1 ? '' : 'es'}`;
+      const text = formatWhalePassAward(whaleCount);
       lines.push({ text, aria: text });
     }
     if (lines.length === 0) {

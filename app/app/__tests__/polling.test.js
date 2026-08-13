@@ -63,6 +63,7 @@ const {
   POLL_INTERVALS,
   start,
   stop,
+  refreshForDayShift,
   abortAllInflight,
   handleVisibilityChange,
   _testing,
@@ -81,7 +82,7 @@ beforeEach(() => {
   // "API cooling down" instead of exercising what they assert.
   _testing.clearApiCooldown();
   _testing.invalidateJSONCache();
-  _testing.resetGoldRushYieldReader();
+  _testing.resetGoldRushSnapshotReader();
   // Existing polling tests exercise the indexed soft-fallback unless a case
   // installs an exact packed-state reader explicitly.
   _testing.setBoonStateReader(async () => { throw new Error('RPC unavailable'); });
@@ -234,7 +235,7 @@ describe('Promise.allSettled fallback (Pitfall 7)', () => {
   });
 });
 
-describe('gold-rush local fallback', () => {
+describe('gold-rush direct chain reader', () => {
   const GAME_STATE = {
     level: 7,
     phase: 'JACKPOT',
@@ -247,64 +248,150 @@ describe('gold-rush local fallback', () => {
       frozen: true,
     },
   };
+  const SNAPSHOT = {
+    blockNumber: 456,
+    currentWei: 100n,
+    nextWei: 200n,
+    futureWei: 300n,
+    yieldAccumulatorWei: 40n,
+    currentDay: 167n,
+    phaseSlot0: 160n | (167n << 24n) | (40n << 96n),
+    source: 'wallet',
+  };
 
-  test('contract-exact fallback adds yield but excludes claimable', () => {
-    const payload = _testing.buildGoldRushFallbackPayload(
+  test('contract-exact payload adds yield but excludes claimable', () => {
+    const payload = _testing.buildGoldRushChainPayload(
+      SNAPSHOT,
       GAME_STATE,
-      { indexedBlock: 456, chainTip: null, lagBlocks: 0 },
-      40n,
     );
     assert.equal(payload.headlineWei, '640');
     assert.equal(payload.components.claimableWei, '9000');
     assert.equal(payload.components.yieldAccumulatorWei, '40');
     assert.equal(payload.grandEthWei, '75');
     assert.equal(payload.atBlock, 456);
+    assert.equal(payload.phaseClock.purchaseDay, 8);
+    assert.equal(payload.level, 40);
+    assert.equal(payload.phase, 'PURCHASE');
     assert.equal(payload.ready, true);
-    assert.equal(payload.fallback, true);
+    assert.equal(payload.source, 'wallet');
   });
 
-  test('a broken specialized route still publishes the local headline', async () => {
-    fetchImpl = async (url, opts) => {
-      fetchCalls.push({ url, opts });
-      if (String(url).endsWith('/game/jackpot/gold-rush')) {
-        return { ok: false, status: 500, json: async () => ({}) };
-      }
-      if (String(url).endsWith('/game/state')) {
-        return { ok: true, status: 200, json: async () => GAME_STATE };
-      }
-      if (String(url).endsWith('/health')) {
-        return { ok: true, status: 200, json: async () => ({ indexedBlock: 789, chainTip: null, lagBlocks: 0 }) };
-      }
-      throw new Error(`Unexpected URL ${url}`);
+  test('polls the chain without touching any API route', async () => {
+    fetchImpl = async (url) => {
+      fetchCalls.push({ url });
+      throw new Error(`Gold-rush must not fetch ${url}`);
     };
-    _testing.setGoldRushYieldReader(async () => 50n);
+    storeMod.update('app.gameState', GAME_STATE);
+    _testing.setGoldRushSnapshotReader(async () => ({
+      ...SNAPSHOT,
+      blockNumber: 789,
+      yieldAccumulatorWei: 50n,
+    }));
 
     const payload = await _testing.pollGoldRush(new AbortController().signal);
 
     assert.equal(payload.headlineWei, '650');
     assert.equal(payload.atBlock, 789);
     assert.equal(storeMod.get('app.goldRush').headlineWei, '650');
-    assert.ok(fetchCalls.some((call) => call.url.endsWith('/game/state')));
+    assert.equal(fetchCalls.length, 0, 'no /gold-rush, /game/state, or /health fetch');
   });
 
-  test('a failed yield read paints the known pools as warming-up, not blank', async () => {
-    fetchImpl = async (url, opts) => {
-      fetchCalls.push({ url, opts });
-      if (String(url).endsWith('/game/jackpot/gold-rush')) {
-        return { ok: false, status: 500, json: async () => ({}) };
-      }
-      if (String(url).endsWith('/game/state')) {
-        return { ok: true, status: 200, json: async () => GAME_STATE };
-      }
-      return { ok: false, status: 503, json: async () => ({}) };
+  test('day rollover forces the direct phase clock while indexed pollers are unavailable', async () => {
+    let reads = 0;
+    fetchImpl = async (url) => {
+      fetchCalls.push({ url });
+      throw new Error('indexer wedged');
     };
-    _testing.setGoldRushYieldReader(async () => { throw new Error('RPC unavailable'); });
+    _testing.setGoldRushSnapshotReader(async () => {
+      reads += 1;
+      return { ...SNAPSHOT, blockNumber: 800, currentDay: 168n };
+    });
+
+    const results = await refreshForDayShift();
+
+    assert.equal(results[0].status, 'fulfilled');
+    assert.equal(reads, 1);
+    assert.equal(storeMod.get('app.goldRush').phaseClock.purchaseDay, 9);
+    assert.equal(fetchCalls.length, 0,
+      'without registered indexed cycles, rollover still refreshes from chain only');
+  });
+
+  test('an RPC failure keeps the last good payload without consulting the API', async () => {
+    const prior = _testing.buildGoldRushChainPayload(SNAPSHOT, GAME_STATE);
+    storeMod.update('app.goldRush', prior);
+    _testing.setGoldRushSnapshotReader(async () => { throw new Error('RPC unavailable'); });
 
     const payload = await _testing.pollGoldRush(new AbortController().signal);
 
-    assert.equal(payload.headlineWei, '600');
-    assert.equal(payload.ready, false);
-    assert.equal(storeMod.get('app.goldRush').headlineWei, '600');
+    assert.equal(payload, null);
+    assert.equal(storeMod.get('app.goldRush'), prior);
+    assert.equal(fetchCalls.length, 0);
+  });
+
+  test('unchanged money keeps the move block pinned; a change advances it', () => {
+    const first = _testing.buildGoldRushChainPayload(SNAPSHOT, GAME_STATE);
+    const quiet = _testing.buildGoldRushChainPayload(
+      { ...SNAPSHOT, blockNumber: 500 },
+      GAME_STATE,
+      first,
+    );
+    const moved = _testing.buildGoldRushChainPayload(
+      { ...SNAPSHOT, blockNumber: 501, nextWei: 201n },
+      GAME_STATE,
+      quiet,
+    );
+    assert.equal(quiet.atBlock, 456, 'empty blocks do not reset adaptive cadence');
+    assert.equal(quiet.deltaWei, '0');
+    assert.equal(moved.atBlock, 501);
+    assert.equal(moved.fromBlock, 456);
+    assert.equal(moved.deltaWei, '1');
+  });
+
+  test('a new chain day advances the phase clock even when pool money is unchanged', () => {
+    const first = _testing.buildGoldRushChainPayload(SNAPSHOT, GAME_STATE);
+    const nextDay = _testing.buildGoldRushChainPayload(
+      { ...SNAPSHOT, blockNumber: 500, currentDay: 168n },
+      GAME_STATE,
+      first,
+    );
+
+    assert.equal(nextDay.headlineWei, first.headlineWei);
+    assert.equal(nextDay.deltaWei, '0');
+    assert.equal(nextDay.phaseClock.purchaseDay, 9);
+    assert.equal(nextDay.atBlock, 500,
+      'a player-visible phase change resets the direct-chain adaptive cadence');
+  });
+
+  test('packed GAME state supplies jackpot draw and transition flags without the indexer', () => {
+    const jackpotSlot = 160n
+      | (168n << 24n)
+      | (41n << 96n)
+      | (1n << 120n)
+      | (2n << 128n)
+      | (1n << 152n)
+      | (1n << 184n);
+    const payload = _testing.buildGoldRushChainPayload(
+      { ...SNAPSHOT, phaseSlot0: jackpotSlot, currentDay: 168n },
+      null,
+    );
+
+    assert.equal(payload.level, 41);
+    assert.equal(payload.phase, 'JACKPOT');
+    assert.equal(payload.phaseDay, 2);
+    assert.deepEqual(payload.phaseClock, {
+      currentDay: 168,
+      purchaseStartDay: 160,
+      level: 41,
+      jackpot: true,
+      jackpotCounter: 2,
+      purchaseDay: null,
+      lastPurchaseDay: false,
+      rngLocked: true,
+      transition: false,
+      gameOver: false,
+      compressedFlag: 1,
+      phase: 'JACKPOT',
+    });
   });
 });
 
@@ -337,14 +424,12 @@ describe('visibilitychange handler (D-04 + Pitfall 3)', () => {
     await new Promise((r) => setTimeout(r, 30));
     handleVisibilityChange();             // second call cancels first's setTimeout
     await new Promise((r) => setTimeout(r, 150));
-    // Visible-branch effect runs ONCE — fires up to 5 immediate re-poll fetches:
-    // /game/state, /health, /game/jackpot/last-day, /game/jackpot/gold-rush (and
-    // /player/:addr only if addr supplied). The visible branch in
-    // handleVisibilityChange passes addr=null, so 4 fetches.
-    // The assertion is debounce-correctness — we should see <= 5 fetches (single
-    // effect), not 8 (double effect).
-    assert.ok(fetchCalls.length <= 5, `debounce held; saw ${fetchCalls.length} fetches`);
-    assert.ok(fetchCalls.length >= 4, `effect ran at least once; saw ${fetchCalls.length} fetches`);
+    // Visible-branch effect runs ONCE — three API reads (/game/state, /health,
+    // /game/jackpot/last-day) plus the direct-chain Gold Rush read, which is
+    // deliberately absent from fetchCalls. /player/:addr is also absent because
+    // this visible branch carries addr=null. A double effect would make 6 API calls.
+    assert.ok(fetchCalls.length <= 4, `debounce held; saw ${fetchCalls.length} fetches`);
+    assert.ok(fetchCalls.length >= 3, `effect ran at least once; saw ${fetchCalls.length} fetches`);
   });
 
   test('visible → immediate re-poll runs all 4 cycles', async () => {
@@ -568,6 +653,24 @@ describe('pollLastDay store wiring (Phase 59 Plan 59-02)', () => {
     _testing.publishGameState({ dailyRng: { day: 10 } }, refreshLastDay);
     assert.equal(refreshes, 4, 'a lower day after redeploy is also a real epoch change');
     assert.equal(storeMod.get('app.gameState').dailyRng.day, 10);
+  });
+
+  test('same-day game polls retry an incomplete no-winners composition until it heals', () => {
+    let refreshes = 0;
+    storeMod.update('app.lastDay', {
+      day: 234,
+      status: 'resolved-no-winners',
+      winners: [],
+      summary: null,
+      roll1: { wins: [] },
+      roll2: { wins: [] },
+    });
+
+    _testing.publishGameState(
+      { dailyRng: { day: 234 } },
+      () => { refreshes += 1; },
+    );
+    assert.equal(refreshes, 1, 'same day does not make an unproven empty result permanent');
   });
 
   // The guard behind removing the 15s lastDay interval. Asserting on fetch counts

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Quest streak shield</title>
+  <path d="M32 3 55 11v18c0 15-8 25-23 32C17 54 9 44 9 29V11Z" fill="#34d399" stroke="#070a0f" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M32 9 49 15v14c0 11-5 19-17 25Z" fill="#0f766e"/>
+  <path d="m19 31 9 9 18-20" fill="none" stroke="#fffbd7" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

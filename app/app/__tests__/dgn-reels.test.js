@@ -11,7 +11,8 @@
 //   degenerus-audit/contracts/modules/DegenerusGameDegeneretteModule.sol
 //     (per-spin resultSeed assembly, _rigWwxrpResult, _score)
 // emitted 576 (rngWord × index × spinIdx × pick × hero) rows plus a 4000-case
-// pseudo-random sweep; this port matched all of them. Six rows are pinned here.
+// pseudo-random sweep. Six deterministic rows are pinned here, followed by a
+// current-deployment regression for the lower edge of the rigging band.
 //
 // CSV columns: rngWord, index, spinIdx, playerPick, hero, seed, traits,
 // riggedWwxrpTraits, score.
@@ -27,11 +28,11 @@ const VECTORS = [
   // spin 0 uses the short (37-byte) preimage; index 0 exercises the zero word.
   ['1', 0, 0, 66051, 0,
     '54563773627536592521444775552203127473189100646861316999417033431525509631980',
-    3751506983, 3751506471, 0],
+    3751506983, 3751506983, 0],
   // spin 3 → the 38-byte preimage with the spinIdx byte.
   ['1', 7, 3, 1061109567, 1,
     '89767951094207727465106638732841574777053465870579166324065181459775816641120',
-    3551810326, 3551810327, 0],
+    3551810326, 3551810326, 0],
   ['100720434724302814903610305981132438410357946783027813146856713896787785412351', 7, 0, 1061109567, 3,
     '36962743352121630359270447779448437739478612465861952230540408423993854550058',
     4119352877, 4119352877, 0],
@@ -45,7 +46,7 @@ const VECTORS = [
     3651815474, 3651815474, 0],
   ['74158540597562961298676378875079351819634584590352076869952930171588285113734', 4294967295, 3, 118957879, 3,
     '115436490784823612758593072696709701608786935507293936845360631204579206647804',
-    3498470432, 3498470439, 0],
+    3498470432, 3498470432, 0],
 ];
 
 describe('dgn-reels: contract parity', () => {
@@ -74,6 +75,27 @@ describe('dgn-reels: contract parity', () => {
     const a = dgnResultSeed(12345n, 3, 0);
     const b = dgnResultSeed(12345n, 3, 1);
     assert.notEqual(a, b, 'the short spin-0 preimage cannot collide with spin 1');
+  });
+
+  test('near-empty WWXRP reels stay honest on the current contract', () => {
+    // Live deployment: bet 437 / RNG index 793. Both emitted scores are zero.
+    // The old off-chain port rigged spin 1 to 3551744046, creating a score
+    // mismatch that made the UI leave the WWXRP reveal in its loading state.
+    const rngWord = 94785635529052655787036115730634316830314989858265885133859745622195257968941n;
+    const out = dgnDeriveSpins({
+      rngWord,
+      index: 793,
+      heroQuadrant: 0,
+      currency: 3,
+      resolvedResultTraits: 3750386740,
+      spins: [
+        { spinIndex: 0, playerTraits: 0, matches: 0, payout: 0n },
+        { spinIndex: 1, playerTraits: 0, matches: 0, payout: 0n },
+      ],
+    });
+
+    assert.equal(out.verified, true, out.reason || 'verified');
+    assert.deepEqual(out.rows.map((row) => row.houseTraits), [3750386740, 3551745582]);
   });
 });
 

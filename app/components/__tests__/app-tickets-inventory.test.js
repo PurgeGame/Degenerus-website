@@ -765,6 +765,11 @@ describe('app-tickets-inventory — cards + chart', () => {
       foil.querySelector('.ticket-card-center')?.querySelector('img')?.src
         === '/whitepaper/flame-center.svg'
     )), 'every foil centre uses the canonical shipped flame with its CSS silver treatment');
+    assert.ok(foils.every((foil) => (
+      JSON.stringify(foil.querySelectorAll('.trait-quadrant').map((quadrant) => (
+        quadrant.getAttribute('data-trait-color')
+      ))) === JSON.stringify(['pink', 'purple', 'pink', 'purple'])
+    )), 'foil quadrants expose their decoded badge hues to the shared metallic surface');
     assert.equal(el.querySelectorAll('.inv-count').length, 0,
       'the foil pack is not collapsed into one ×4 inventory card');
     el.disconnectedCallback();

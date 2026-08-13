@@ -1062,7 +1062,14 @@ class AppTicketsInventory extends HTMLElement {
         .filter((level) => level !== Number(lvl))
         .map(async (level) => ({
           level,
-          payload: await fetchJSON(`/player/${lower}/tickets/by-trait?level=${level}`),
+          // Pending-pack filtering is a transition detector: a prior baseline
+          // read can be less than a second old while newly indexed traits are
+          // already available. Keep in-flight sharing, but bypass the completed
+          // render-wave cache until the pack has been presented.
+          payload: await fetchJSON(
+            `/player/${lower}/tickets/by-trait?level=${level}`,
+            { force: true },
+          ),
         })),
     );
     const [byTrait, dashboard, foil, playerDay, deityCatalog, salvageQueue, pendingLevels] = await Promise.allSettled([
@@ -1070,7 +1077,10 @@ class AppTicketsInventory extends HTMLElement {
       // far-future view — those levels can't have rolled traits yet.
       this.#isFarFuture()
         ? Promise.resolve(null)
-        : fetchJSON(`/player/${lower}/tickets/by-trait?level=${lvl}`),
+        : fetchJSON(
+            `/player/${lower}/tickets/by-trait?level=${lvl}`,
+            { force: trackedPendingLevels.includes(Number(lvl)) },
+          ),
       // Per-level entry counts for the far-future long-term view.
       fetchJSON(`/player/${lower}`),
       // Foil lines for this level — soft-fails to "no foil" (see #foilKeys).
@@ -2291,6 +2301,7 @@ class AppTicketsInventory extends HTMLElement {
         const cell = document.createElement('div');
         cell.className = 'trait-quadrant';
         const { q, sym, col } = invTraitToQSC(Number(tid));
+        if (combo.foil) cell.setAttribute('data-trait-color', INV_COLORS[col]);
         // Gold is the top colour tier; give the cell behind it a metal.
         if (col === INV_GOLD_COLOR_IDX) cell.classList.add('trait-quadrant--gold');
         const img = document.createElement('img');

@@ -1,17 +1,15 @@
 // /app/components/gold-rush-headline.js — the headline jackpot number.
 //
 // DISPLAY NAME vs CODE NAME: players see "Golden Ticket Jackpot". Everything in
-// code stays "gold rush" on purpose — the contract calls it that (`_armGoldRush`,
-// `_payGoldRush`), the API route is `/game/jackpot/gold-rush`, and the store key
-// is `app.goldRush`. Renaming the internals would cut the widget loose from the
-// vocabulary of the thing it reports on. The display string below is the only
-// place the player-facing name lives.
+// code stays "gold rush" on purpose — it is the established internal name and the
+// store key is `app.goldRush`. The display string below is the only place the
+// player-facing name lives.
 //
-// THE NUMBER STAYS THE HERO. `headlineWei` from /game/jackpot/gold-rush is the
-// figure _payGoldRush's grand branch sizes the grand award off
-// (DegenerusGameJackpotModule.sol:1483-1491): currentPrizePool + nextPrizePool +
-// futurePrizePool + yieldAccumulator. claimablePool is excluded by the contract and
-// so excluded here — that is money already owed to players.
+// THE NUMBER STAYS THE HERO. `headlineWei` is read from GAME in one same-block
+// browser Multicall3 and matches the grand branch's sizing expression:
+// currentPrizePool + nextPrizePool + futurePrizePool + yieldAccumulator.
+// claimablePool is excluded by the contract and so excluded here — that is money
+// already owed to players.
 //
 // The small Degenerus Protocol lockup added above the title is identity, not another
 // data row: the jackpot amount remains the only headline. An earlier version broke
@@ -32,7 +30,7 @@
 // split of that is noise dressed as precision. The number's job is to be big and to
 // move, so: label, number, tick.
 //
-// THE TICK. The API's `atBlock` is the block the headline last MOVED at, and
+// THE TICK. `atBlock` is the chain-read block where the headline last MOVED, and
 // `deltaWei` is by how much. The widget remembers the last `atBlock` it rendered;
 // when a poll brings a new one it animates from the previous headline to the new
 // one instead of snapping, so money arriving on-chain reads as the number climbing.

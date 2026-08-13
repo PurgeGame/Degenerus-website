@@ -882,15 +882,21 @@ class AppParimutuelPanel extends HTMLElement {
     let previousScore = 0n;
     try { previousScore = BigInt(this.#decimatorContext?.totalBurnWeight ?? 0); }
     catch (_e) { previousScore = 0n; }
-    const score = decimatorEntryScoreWei({
+    const boonBps = _decimatorBoonBps(get('app.boons'));
+    const scoreArgs = {
       amountWei: amount,
       previousScoreWei: previousScore,
       activityScore: Math.max(0, Math.trunc(activityScore)),
       dayOneActive: this.#decimatorContext?.dayOneActive === true,
       lastPurchaseDay: this.#decimatorContext?.lastPurchaseDay === true,
-      boonBps: _decimatorBoonBps(get('app.boons')),
-    });
-    quote.textContent = `+${_fmtFlip(score)} SCORE`;
+      boonBps,
+    };
+    const score = decimatorEntryScoreWei(scoreArgs);
+    const baseScore = boonBps > 0
+      ? decimatorEntryScoreWei({ ...scoreArgs, boonBps: 0 })
+      : score;
+    const boonScore = score > baseScore ? score - baseScore : 0n;
+    quote.textContent = `+${_fmtFlip(score)} SCORE${boonScore > 0n ? ` · +${_fmtFlip(boonScore)} BOON` : ''}`;
   }
 
   #applyQuestPreset(detail) {

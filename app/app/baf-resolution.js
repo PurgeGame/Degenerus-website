@@ -7,6 +7,7 @@
 import { fetchJSON } from './api.js';
 import { ethers } from './contracts.js';
 import { summarizeBafAwards } from './jackpot-resolutions.js';
+import { normalizeBafDraw } from './baf-draw.js';
 
 const FLIP = 10n ** 18n;
 const ENTRIES_PER_TICKET = 4n;
@@ -20,7 +21,7 @@ function _address(value) { return String(value || '').toLowerCase(); }
 
 export const BAF_PRIZE_LANES = Object.freeze([
   Object.freeze({ id: 'leader', label: 'TOP SCORE', share: 10, detail: '#1' }),
-  Object.freeze({ id: 'daily', label: 'TOP DAILY FLIP', share: 5, detail: '24H' }),
+  Object.freeze({ id: 'daily', label: 'FINAL-DAY DRAW', share: 5, detail: 'WEIGHTED' }),
   Object.freeze({ id: 'cut', label: 'CUT SURVIVOR', share: 5, detail: '#3 / #4' }),
   Object.freeze({ id: 'future', label: 'FUTURE DRAWS', share: 10, detail: '2 DRAWS' }),
   Object.freeze({ id: 'scatter', label: 'SCATTER', share: 70, detail: '50 ROUNDS' }),
@@ -67,6 +68,7 @@ export function buildBafResolutionSnapshot({
   leaderboard,
   playerOutcome,
   history,
+  draw,
   consolation = 0,
 } = {}) {
   const lvl = Number(level);
@@ -89,6 +91,7 @@ export function buildBafResolutionSnapshot({
   const topFour = normalizeBafTopFour(leaderboard, lvl);
   const viewed = _address(player || playerOutcome?.player);
   const playerAwards = summarizeBafAwards(history?.wins ?? history, lvl);
+  const finalDayDraw = normalizeBafDraw(draw, metadata?.day, viewed);
   const rank = Number(playerOutcome?.rank);
   const playerRank = Number.isInteger(rank) && rank > 0 ? rank : null;
   const leaderSlicePct = gateWon && playerRank === 1
@@ -117,6 +120,7 @@ export function buildBafResolutionSnapshot({
       ? null
       : _big(metadata.estimatedPoolWei).toString(),
     topFour,
+    draw: finalDayDraw,
     player: {
       address: viewed || null,
       score: _big(playerOutcome?.score).toString(),
@@ -171,8 +175,16 @@ export async function loadBafResolutionSnapshot({
   if (!address) throw new Error('A player address is required for the BAF draw.');
   const encodedLevel = encodeURIComponent(lvl);
   const encodedPlayer = encodeURIComponent(address);
-  const [metadataResult, leaderboardResult, playerResult, historyResult] = await Promise.allSettled([
-    _fetchWithin(`/game/baf/${encodedLevel}/resolution`),
+  const metadataRequest = _fetchWithin(`/game/baf/${encodedLevel}/resolution`);
+  const drawRequest = metadataRequest.then((metadata) => {
+    const day = Number(metadata?.day);
+    if (!Number.isInteger(day) || day <= 0) return null;
+    return _fetchWithin(
+      `/leaderboards/coinflip?day=${encodeURIComponent(day)}&player=${encodedPlayer}`,
+    );
+  });
+  const [metadataResult, leaderboardResult, playerResult, historyResult, drawResult] = await Promise.allSettled([
+    metadataRequest,
     _fetchWithin(`/leaderboards/baf?level=${encodedLevel}`),
     seededPlayerOutcome != null
       ? Promise.resolve(seededPlayerOutcome)
@@ -180,6 +192,7 @@ export async function loadBafResolutionSnapshot({
     seededHistory != null
       ? Promise.resolve(seededHistory)
       : _fetchWithin(`/player/${encodedPlayer}/jackpot-history`),
+    drawRequest,
   ]);
 
   const playerOutcome = playerResult.status === 'fulfilled' ? playerResult.value : null;
@@ -206,6 +219,7 @@ export async function loadBafResolutionSnapshot({
   const history = historyResult.status === 'fulfilled'
     ? historyResult.value
     : { wins: [] };
+  const draw = drawResult.status === 'fulfilled' ? drawResult.value : null;
 
   return buildBafResolutionSnapshot({
     level: lvl,
@@ -214,6 +228,7 @@ export async function loadBafResolutionSnapshot({
     leaderboard,
     playerOutcome,
     history,
+    draw,
     consolation,
   });
 }

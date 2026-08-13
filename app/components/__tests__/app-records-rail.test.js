@@ -51,6 +51,8 @@ const INDEX = readFileSync(new URL('../../index.html', import.meta.url), 'utf8')
 const CSS = readFileSync(new URL('../../styles/records-rail.css', import.meta.url), 'utf8');
 const COMPONENT = readFileSync(new URL('../app-records-rail.js', import.meta.url), 'utf8');
 const DATA = readFileSync(new URL('../../app/records.js', import.meta.url), 'utf8');
+// Discord identity moved to app/profiles.js so chain-free components can use it.
+const PROFILES = readFileSync(new URL('../../app/profiles.js', import.meta.url), 'utf8');
 
 const FLIP = 10n ** 18n;
 
@@ -388,6 +390,24 @@ describe('normalizeRecords', () => {
     }, null, [8, 5, 3, 6]);
     assert.deepEqual(state.records.map((record) => record.clockDay), [8, 5, 3, 6]);
   });
+
+  test('a newly claimed chain mark replaces the stale indexed amount', () => {
+    const state = normalizeRecords({
+      records: [{
+        kind: RECORD_KIND_SPIN,
+        player: '0xoldholder',
+        value: '100',
+        barToBeat: '120',
+        clockDay: 10,
+      }],
+    }, null, [null, 14, null, null], [0n, 125n, 0n, 0n]);
+    const spin = state.records[RECORD_KIND_SPIN];
+    assert.equal(spin.value, 125n, 'the mined mark is visible before the indexer catches up');
+    assert.equal(spin.barToBeat, 150n, 'the next target follows the authoritative mark');
+    assert.equal(spin.clockDay, 14);
+    assert.equal(spin.player, null,
+      'the previous indexed holder is not mislabeled as owner of the new mark');
+  });
 });
 
 describe('live bounty pool', () => {
@@ -431,6 +451,41 @@ describe('live bounty pool', () => {
       const state = await fetchRecords();
       assert.equal(state.recordPoolWei, 36_000n);
       assert.deepEqual(state.records.map((record) => record.clockDay), [8, 5, 3, 6]);
+    } finally {
+      __resetRecordsReadersForTest();
+    }
+  });
+
+  test('fetches all four live marks so a claim amount updates in its mined block', async () => {
+    __setRecordsReadersForTest({
+      json: async () => ({
+        recordPool: '48000',
+        records: [{ kind: 1, player: '0xold', value: '100', clockDay: 8 }],
+      }),
+      pool: async () => 36_000n,
+      clocks: async () => [1, 9, 1, 1],
+      marks: async () => [5n, 125n, 7n, 8n],
+    });
+    try {
+      const state = await fetchRecords();
+      assert.deepEqual(state.records.map((record) => record.value), [5n, 125n, 7n, 8n]);
+      assert.equal(state.records[1].player, null);
+    } finally {
+      __resetRecordsReadersForTest();
+    }
+  });
+
+  test('keeps chain marks and pool usable while record history indexing is unavailable', async () => {
+    __setRecordsReadersForTest({
+      json: async () => { throw new Error('indexer restarting'); },
+      pool: async () => 36_000n,
+      clocks: async () => [1, 2, 3, 4],
+      marks: async () => [5n, 6n, 7n, 8n],
+    });
+    try {
+      const state = await fetchRecords();
+      assert.equal(state.recordPoolWei, 36_000n);
+      assert.deepEqual(state.records.map((record) => record.value), [5n, 6n, 7n, 8n]);
     } finally {
       __resetRecordsReadersForTest();
     }
@@ -559,7 +614,8 @@ describe('holder identity', () => {
   });
 
   test('only https avatars are accepted into an img src', () => {
-    assert.match(DATA, /\/\^https:\\\/\\\/\//);
+    assert.match(PROFILES, /\/\^https:\\\/\\\/\//);
+    assert.match(DATA, /export \{ fetchProfiles \} from '\.\/profiles\.js'/);
   });
 
   test('interpolated holder names are escaped', () => {
@@ -572,11 +628,13 @@ describe('holder identity', () => {
 describe('rail wiring', () => {
   test('presents the board with the plural Biggest Bounties wordmark and explicit data labels', () => {
     assert.match(COMPONENT, /records-rail__wordmark[^>]*id="records-rail-title"[^>]*aria-label="The Biggest Bounties"/);
-    assert.match(COMPONENT, /src="\/app\/assets\/biggest-bounty-wordmark-v5-puffy-the\.png"/);
+    assert.match(COMPONENT, /src="\/app\/assets\/biggest-bounty-wordmark-v39-clean-pillowed-painted-wood\.png"/);
     assert.doesNotMatch(COMPONENT, /records-rail__title-(?:name|descriptor)/,
       'the generated wordmark replaces the old duplicate text treatment');
-    assert.match(CSS, /records-rail__wordmark img\s*\{[^}]*width:\s*100%[^}]*max-height:\s*3\.85rem/s,
-      'the wordmark is constrained to the collapsed rail instead of increasing its height');
+    assert.match(CSS, /records-rail__wordmark\s*\{[^}]*width:\s*min\(100%, 18rem\)/s,
+      'the Texas wordmark uses the available desktop identity column');
+    assert.match(CSS, /records-rail__wordmark img\s*\{[^}]*width:\s*100%[^}]*max-height:\s*5\.75rem/s,
+      'the larger artwork remains bounded inside the collapsed rail');
     assert.doesNotMatch(COMPONENT, /4 ALL-TIME RECORDS/,
       'the wordmark stands alone without a redundant record-count subtitle');
     for (const label of [
@@ -722,5 +780,19 @@ describe('rail wiring', () => {
     assert.match(COMPONENT, /POLL_MS = 15_000/);
     assert.match(COMPONENT, /addEventListener\(TX_CONFIRMED_EVENT/);
     assert.match(COMPONENT, /removeEventListener\?\.\(TX_CONFIRMED_EVENT/);
+  });
+
+  test('honors ON, VIEW, and OFF without turning view-only records into transactions', () => {
+    assert.match(COMPONENT, /readBiggestBountiesModePreference/);
+    assert.match(COMPONENT, /name !== 'biggestBountiesMode'/);
+    assert.match(COMPONENT, /mode === 'off'[\s\S]*?this\.hidden = true/,
+      'OFF removes the complete widget');
+    assert.match(COMPONENT, /const interactive = readBiggestBountiesModePreference\(\) === 'on'/);
+    assert.match(COMPONENT, /item\.setAttribute\('aria-disabled', 'true'\)/,
+      'VIEW keeps the useful record tooltip but announces the shortcut as disabled');
+    assert.match(COMPONENT,
+      /if \(readBiggestBountiesModePreference\(\) !== 'on'\) return;[\s\S]*?#openBountyDialog/,
+      'both the click path and dialog path reject view-only activation');
+    assert.match(CSS, /\.records-rail__leader\.is-view-only/);
   });
 });

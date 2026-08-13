@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Deity pass boon up-arrow emblem</title>
+  <circle cx="32" cy="37" r="23" fill="#251608" stroke="#090b11" stroke-width="4"/>
+  <circle cx="32" cy="37" r="18" fill="none" stroke="#fbbf24" stroke-width="5"/>
+  <path d="M32 3 46 24h-8v17l-6 15-6-15V24h-8Z" fill="#fff1ad" stroke="#090b11" stroke-width="3" stroke-linejoin="round"/>
+  <path d="m32 18 7 14-7 12-7-12Z" fill="#a78bfa" stroke="#090b11" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M11 43c5 10 14 16 25 16" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

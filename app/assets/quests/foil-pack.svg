@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Foil ticket pack</title>
+  <defs><clipPath id="pack"><path d="m12 9 4-4 4 4 4-4 4 4 4-4 4 4 4-4 4 4 4-4 4 4v46l-4-4-4 4-4-4-4 4-4-4-4 4-4-4-4 4-4-4-4 4Z"/></clipPath></defs>
+  <path d="m12 9 4-4 4 4 4-4 4 4 4-4 4 4 4-4 4 4 4-4 4 4v46l-4-4-4 4-4-4-4 4-4-4-4 4-4-4-4 4-4-4-4 4Z" fill="#13272b" stroke="#67e8f9" stroke-width="4" stroke-linejoin="round"/>
+  <g clip-path="url(#pack)" fill="none" stroke-width="8">
+    <path d="M5 48 48 5" stroke="#67e8f9"/>
+    <path d="M14 57 57 14" stroke="#8b5cf6"/>
+    <path d="M25 64 64 25" stroke="#ec4899"/>
+  </g>
+  <path d="m32 19 3.2 9.8L45 32l-9.8 3.2L32 45l-3.2-9.8L19 32l9.8-3.2Z" fill="#fff"/>
+</svg>

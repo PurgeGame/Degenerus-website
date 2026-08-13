@@ -37,6 +37,7 @@ function paint(percent) {
       jackpot: false,
       lastPurchaseDay: false,
       rngLocked: false,
+      purchaseDay: 8,
     },
   });
 }

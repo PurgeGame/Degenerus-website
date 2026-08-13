@@ -18,6 +18,13 @@ const leaderboard = { entries: [
   { level: 40, player: PLAYERS[3], score: String(39_631_383n * FLIP), rank: 4 },
 ] };
 
+const drawLeaders = Array.from({ length: 10 }, (_, index) => ({
+  day: 200,
+  player: `0x${String(index + 100).padStart(40, '0')}`,
+  score: String(10_000_000 - (index * 640_000)),
+  rank: index + 1,
+}));
+
 let rankFourWord = 1n;
 while (bafCutSurvivorRank(rankFourWord) !== 4) rankFourWord += 2n;
 
@@ -59,6 +66,14 @@ function snapshotFor(state) {
       { level: 40, awardType: 'eth_baf', amount: '4593750000000' },
       { level: 40, awardType: 'tickets_baf', amount: '40' },
     ] } : { wins: [] },
+    draw: {
+      entries: drawLeaders,
+      totalWeight: '82000000',
+      totalParticipants: 247,
+      // Deliberately outside the top ten: the fullscreen ledger must still
+      // show the viewed player and their exact share.
+      player: { day: 200, player, score: '1250000', rank: 12 },
+    },
     consolation: skipped ? 12_846n * FLIP : 0n,
   });
 }
@@ -74,4 +89,3 @@ for (const button of document.querySelectorAll('[data-state]')) {
 
 const initial = new URLSearchParams(location.search).get('state') || 'winner';
 void show(initial);
-

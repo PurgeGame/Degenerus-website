@@ -1026,6 +1026,69 @@ describe('app-box-strip', () => {
     el.disconnectedCallback();
   });
 
+  test('index-0 opened result uses its raw afKing delivery spend and repairs a cached scaled amount', async () => {
+    const openingTransactionHash = '0xafking-open';
+    const rawCostWei = 1_000_000_000_000n;
+    const evScaledOpenedWei = 1_450_000_000_000n;
+    globalThis.localStorage.setItem(KEY, JSON.stringify([{
+      index: 0,
+      resultKey: `tx:${openingTransactionHash}`,
+      transactionHash: openingTransactionHash,
+      amountWei: String(evScaledOpenedWei),
+      ready: true,
+      resolved: true,
+    }]));
+    globalThis.fetch = async (url) => ({
+      ok: true,
+      status: 200,
+      json: async () => String(url).includes('/lootbox/feed')
+        ? { items: [] }
+        : {
+            items: [{
+              uid: 'afking-opened',
+              player: ADDR_LC,
+              legType: 'opened',
+              lootboxIndex: 0,
+              transactionHash: openingTransactionHash,
+              blockNumber: '200',
+              logIndex: 2,
+              ord: 200_000_002,
+              afkingSpendRawWei: String(rawCostWei),
+              rewardData: {
+                amount: String(evScaledOpenedWei),
+                futureTickets: 0,
+                roundedUp: false,
+                flip: '0',
+              },
+            }],
+          },
+    });
+
+    const el = instantiate();
+    storeMod.update('connected.address', ADDR);
+    await tick();
+    await el.__pollForTest();
+    for (let i = 0; i < 20
+      && !pendingActionsMod.getPendingActions().some((action) => (
+        action.id === `lootbox:tx:${openingTransactionHash}`
+      )); i += 1) {
+      await tick();
+    }
+
+    const pending = pendingActionsMod.getPendingActions()
+      .find((action) => action.id === `lootbox:tx:${openingTransactionHash}`);
+    assert.ok(pending, 'the auto-opened result is published by its transaction key');
+    assert.equal(pending.amountWei, String(rawCostWei),
+      'AfkingDelivered.weiIn replaces the cached EV-scaled LootBoxOpened amount');
+    assert.equal(pending.amountLabel, '1 ETH');
+    assert.equal(pending.label, 'Luckbox');
+    assert.equal(pending.lootboxLabel, 'LUCKBOX');
+    assert.equal(el.querySelector('.bxs-chip-title').textContent, 'LUCKBOX');
+    assert.equal(el.querySelector('.bxs-open-cta').getAttribute('aria-label'),
+      'View result for luckbox');
+    el.disconnectedCallback();
+  });
+
   test('discovers the newest DB-only result and replays every indexed BoxSpin reel', async () => {
     const txHash = '0xfeed';
     const reels = [

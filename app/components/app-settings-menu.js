@@ -11,9 +11,11 @@ import {
 import {
   readAfkingLowFundWarningPreference,
   readAllInButtonPreference,
+  readBiggestBountiesModePreference,
   readRevealAutoOpenPreference,
   writeAfkingLowFundWarningPreference,
   writeAllInButtonPreference,
+  writeBiggestBountiesModePreference,
   writeRevealAutoOpenPreference,
 } from '../app/ui-preferences.js';
 import { subscribe } from '../app/store.js';
@@ -91,6 +93,18 @@ export function mountSettingsMenu(root = document) {
         <input type="checkbox" data-bind="settings-auto-reveals">
         <i class="nav-settings__switch" aria-hidden="true"></i>
       </label>
+      <div class="nav-settings__row nav-settings__row--three-way">
+        <span class="nav-settings__copy">
+          <strong>BIGGEST BOUNTIES</strong>
+          <small data-bind="settings-bounties-description">Show records and purchase shortcuts</small>
+        </span>
+        <span class="nav-settings__three-way" role="group"
+              aria-label="Biggest Bounties visibility and interaction">
+          <button type="button" data-bounties-mode="on" aria-pressed="false">ON</button>
+          <button type="button" data-bounties-mode="view" aria-pressed="false">VIEW</button>
+          <button type="button" data-bounties-mode="off" aria-pressed="false">OFF</button>
+        </span>
+      </div>
       <label class="nav-settings__row nav-settings__row--speed">
         <span class="nav-settings__copy">
           <strong>DEFAULT SPEED</strong>
@@ -134,6 +148,29 @@ export function mountSettingsMenu(root = document) {
   if (auto) {
     auto.checked = readRevealAutoOpenPreference();
     auto.addEventListener('change', () => writeRevealAutoOpenPreference(auto.checked));
+  }
+
+  const bountyDescription = panel.querySelector('[data-bind="settings-bounties-description"]');
+  const bountyModes = [...panel.querySelectorAll('[data-bounties-mode]')];
+  const paintBountyMode = (mode = readBiggestBountiesModePreference()) => {
+    const selected = mode === 'view' || mode === 'off' ? mode : 'on';
+    for (const choice of bountyModes) {
+      choice.setAttribute('aria-pressed', String(choice.dataset.bountiesMode === selected));
+    }
+    if (bountyDescription) {
+      bountyDescription.textContent = selected === 'on'
+        ? 'Show records and purchase shortcuts'
+        : selected === 'view'
+          ? 'Show records without purchase shortcuts'
+          : 'Hide the Biggest Bounties widget';
+    }
+  };
+  paintBountyMode();
+  for (const choice of bountyModes) {
+    choice.addEventListener('click', () => {
+      const selected = writeBiggestBountiesModePreference(choice.dataset.bountiesMode);
+      paintBountyMode(selected);
+    });
   }
 
   const speed = panel.querySelector('[data-bind="settings-reveal-speed"]');

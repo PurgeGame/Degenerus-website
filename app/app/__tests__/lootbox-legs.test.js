@@ -249,6 +249,20 @@ describe('decodeBoxSpin', () => {
     assert.equal(d.spinType, 'eth');
     assert.equal(d.survived, null);
   });
+
+  test('record bounty type 3 preserves its identity and FLIP survival on zero payout', () => {
+    const betId = (1n << 63n) | (3n << 60n) | 101n;
+    const packed = packSpin(1n, 2n, 0)
+      | (packSpin(3n, 4n, 2) << 72n)
+      | (packSpin(5n, 6n, 1) << 144n)
+      | (3n << 216n);
+    const d = decodeBoxSpin(betId, packed);
+
+    assert.equal(d.spinType, 'record');
+    assert.equal(d.spinCount, 3);
+    assert.equal(d.survived, false);
+    assert.deepEqual(d.reels.map((reel) => reel.score), [0, 2, 1]);
+  });
 });
 
 // ---------------------------------------------------------------------------

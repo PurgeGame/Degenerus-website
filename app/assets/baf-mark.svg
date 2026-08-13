@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
+     role="img" aria-label="Big Ass Flip charge">
+  <defs>
+    <radialGradient id="bafCore" cx="38%" cy="30%" r="72%">
+      <stop offset="0" stop-color="#eaf6ff"/>
+      <stop offset="0.4" stop-color="#4aa3ff"/>
+      <stop offset="1" stop-color="#153f8f"/>
+    </radialGradient>
+    <linearGradient id="bafPlate" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#232833"/>
+      <stop offset="1" stop-color="#0d0f16"/>
+    </linearGradient>
+  </defs>
+
+  <!-- charge casing -->
+  <rect x="1.5" y="1.5" width="61" height="61" rx="15" fill="url(#bafPlate)"
+        stroke="#1e3a68" stroke-width="1.4"/>
+  <rect x="4.5" y="4.5" width="55" height="55" rx="12.5" fill="none"
+        stroke="#38a0ff" stroke-width="0.8" opacity="0.32"/>
+
+  <!-- blast ring: the pool coming apart -->
+  <circle cx="32" cy="32" r="19.5" fill="none" stroke="#38a0ff" stroke-width="1.1"
+          opacity="0.5" stroke-dasharray="3.4 4.6" stroke-linecap="round"/>
+
+  <!-- the core: the pool -->
+  <circle cx="32" cy="32" r="10.5" fill="url(#bafCore)"/>
+  <circle cx="32" cy="32" r="10.5" fill="none" stroke="#bfe0ff" stroke-width="0.9" opacity="0.6"/>
+
+  <!-- four sampled tickets, two paid: the scatter rule at mark scale -->
+  <circle cx="32" cy="8.6" r="3.5" fill="#e2f2ff"/>
+  <circle cx="55.4" cy="32" r="3.5" fill="#e2f2ff"/>
+  <circle cx="32" cy="55.4" r="2.9" fill="none" stroke="#6f737e" stroke-width="1.3"/>
+  <circle cx="8.6" cy="32" r="2.9" fill="none" stroke="#6f737e" stroke-width="1.3"/>
+</svg>

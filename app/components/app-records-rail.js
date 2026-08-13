@@ -35,6 +35,10 @@ import {
 import { ETH_DIVISOR } from '../app/chain-config.js';
 import { degeneretteLimits } from '../app/degenerette.js';
 import { get, getActingAddress, getViewedAddress, subscribe, update } from '../app/store.js';
+import {
+  readBiggestBountiesModePreference,
+  subscribeUiPreferences,
+} from '../app/ui-preferences.js';
 
 const POLL_MS = 15_000;
 const PROFILE_LINKED_EVENT = 'degenerus:discord-profile-linked';
@@ -372,6 +376,13 @@ class AppRecordsRail extends HTMLElement {
     // The accrued share grows every game day, so a rollover re-prices all four
     // cards without needing a poll.
     this.#unsubs.push(subscribe('app.daySync', () => { this.#render(); }));
+    this.#unsubs.push(subscribeUiPreferences(({ name }) => {
+      if (name !== 'biggestBountiesMode') return;
+      if (readBiggestBountiesModePreference() !== 'on') {
+        this.#closeBountyDialog({ restoreFocus: false });
+      }
+      this.#render();
+    }));
     // A record can be hit by a flip, Degenerette spin, luckbox, or ticket buy.
     // Every app write publishes this event after its receipt, so re-read the
     // authoritative on-chain pool immediately instead of leaving the winning
@@ -422,7 +433,7 @@ class AppRecordsRail extends HTMLElement {
           <span class="records-rail__identity">
             <span class="records-rail__wordmark" id="records-rail-title" role="heading"
                   aria-level="2" aria-label="The Biggest Bounties">
-              <img src="/app/assets/biggest-bounty-wordmark-v5-puffy-the.png"
+              <img src="/app/assets/biggest-bounty-wordmark-v39-clean-pillowed-painted-wood.png"
                    alt="" aria-hidden="true">
             </span>
           </span>
@@ -693,6 +704,7 @@ class AppRecordsRail extends HTMLElement {
   }
 
   async #openBountyDialog(kind) {
+    if (readBiggestBountiesModePreference() !== 'on') return;
     if (this.#bountyDialogBusy || this.#bountyDialogLoading || this.#bountyDialogQuote) return;
     const seq = ++this.#bountyDialogSeq;
     this.#bountyDialogLoading = true;
@@ -975,8 +987,9 @@ class AppRecordsRail extends HTMLElement {
   #render() {
     const shell = this.querySelector('[data-bind="records-shell"]');
     if (!shell) return;
+    const mode = readBiggestBountiesModePreference();
     const state = this.#state;
-    if (!state) {
+    if (!state || mode === 'off') {
       this.hidden = true;
       shell.hidden = true;
       return;
@@ -1026,9 +1039,22 @@ class AppRecordsRail extends HTMLElement {
     const holder = profile?.name || shortAddress(record.player);
     const payoutWei = this.#recordPayoutWei(record);
     const compactPayout = payoutWei == null ? '—' : formatCompactBountyWei(payoutWei);
+    const interactive = readBiggestBountiesModePreference() === 'on';
+    item.classList.toggle('is-view-only', !interactive);
+    if (interactive) {
+      item.removeAttribute('aria-disabled');
+      item.removeAttribute('tabindex');
+    } else {
+      // Keep the native button enabled so its useful record/bounty tooltip is
+      // still available in VIEW mode. The click guard below owns the no-write
+      // behavior, while aria-disabled removes it from the keyboard action path.
+      item.setAttribute('aria-disabled', 'true');
+      item.setAttribute('tabindex', '-1');
+    }
+    const instruction = interactive ? ' Click to prepare the exact record shot.' : '';
     item.title = record.held
-      ? `${record.meta.label}: ${value.amount} ${value.suffix}, held by ${holder}; bounty ${compactPayout} FLIP. Click to prepare the exact record shot.`
-      : `${record.meta.label}: unhit; bounty ${compactPayout} FLIP. Click to prepare the exact record shot.`;
+      ? `${record.meta.label}: ${value.amount} ${value.suffix}, held by ${holder}; bounty ${compactPayout} FLIP.${instruction}`
+      : `${record.meta.label}: unhit; bounty ${compactPayout} FLIP.${instruction}`;
     item.setAttribute('aria-label', item.title);
     item.innerHTML = `
       <span class="records-rail__target">
@@ -1058,6 +1084,7 @@ class AppRecordsRail extends HTMLElement {
     item.addEventListener('click', (event) => {
       event?.preventDefault?.();
       event?.stopPropagation?.();
+      if (readBiggestBountiesModePreference() !== 'on') return;
       void this.#openBountyDialog(record.kind);
     });
     this.#wirePortraitFallback(item, record.player);

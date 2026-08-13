@@ -320,7 +320,13 @@ export function clearSettledCardCache() {
 async function _fetchCards(address, level, { settled = false } = {}) {
   const key = `${_lower(address)}:${Number(level)}`;
   if (settled && _settledCards.has(key)) return _settledCards.get(key);
-  const payload = await fetchJSON(`/player/${_lower(address)}/tickets/by-trait?level=${level}`);
+  // This watcher is a transition detector, not a render-wave consumer: a
+  // receipt can be indexed between two adjacent checks. Bypass only the
+  // completed-response window while retaining shared in-flight coalescing.
+  const payload = await fetchJSON(
+    `/player/${_lower(address)}/tickets/by-trait?level=${level}`,
+    { force: true },
+  );
   if (settled) _settledCards.set(key, payload);
   return payload;
 }
@@ -818,7 +824,7 @@ export async function backfillRecentJackpotTicketAwards({ address, day = null } 
   if (!addr || _historyBackfilled.has(backfillKey)) return 0;
   _historyBackfilled.add(backfillKey);
   let payload;
-  try { payload = await fetchJSON(`/player/${addr}/jackpot-history`); }
+  try { payload = await fetchJSON(`/player/${addr}/jackpot-history`, { force: true }); }
   catch (_e) {
     // Allow a later reconnect to retry an outage; successful sessions stay at
     // one read regardless of the 15-second polling cadence.
@@ -1043,7 +1049,10 @@ function _comboKey(ids) {
  */
 async function _foilState(address, level) {
   try {
-    const payload = await fetchJSON(`/player/${_lower(address)}/foil?level=${level}`);
+    const payload = await fetchJSON(
+      `/player/${_lower(address)}/foil?level=${level}`,
+      { force: true },
+    );
     const lines = payload?.present ? payload.lines : null;
     if (!Array.isArray(lines)) {
       return { complete: false, lines: [], keys: new Set(), keyCounts: new Map() };

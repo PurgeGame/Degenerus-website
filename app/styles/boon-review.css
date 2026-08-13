@@ -168,6 +168,9 @@ body.boon-review-page {
 .boon-review__coinflip .df-add-bet-dialog__card { width: min(100%, 360px); margin: 0 auto; }
 
 .boon-review__quests .app-quest-panel { min-height: 0; padding: 0.7rem; }
+.boon-review__degenerette { display: block; }
+.boon-review__degenerette .app-degenerette-panel { width: min(100%, 28rem); min-height: 0; padding: 0.75rem; }
+.boon-review__degenerette .deg-currency-picker { margin: 0; }
 /* The live play-grid gives Quests one of three tracks. With only that panel
    present the empty siblings would still claim their minimums and squeeze the
    header rail below any width it ever gets in the app, so the fixture pins the

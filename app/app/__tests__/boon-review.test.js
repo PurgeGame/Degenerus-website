@@ -10,13 +10,15 @@ test('the review page activates every boon-consuming production surface', () => 
   for (const product of [
     'coinflip', 'quests', 'lootbox', 'purchase', 'decimator',
     'whale', 'activity', 'deity', 'lazy',
+    'degenerette-eth', 'degenerette-flip', 'degenerette-wwxrp',
   ]) {
     assert.match(HTML, new RegExp(`data-review-products="[^"]*\\b${product}\\b`));
   }
 
   for (const product of [
     'coinflip', 'lootbox', 'purchase', 'decimator',
-    'whale', 'activity', 'deity', 'lazy',
+    'whale', 'activity', 'deity', 'lazy', 'quests',
+    'degenerette-eth', 'degenerette-flip', 'degenerette-wwxrp',
   ]) {
     assert.match(HTML, new RegExp(`product="${product}"`));
   }
@@ -24,11 +26,11 @@ test('the review page activates every boon-consuming production surface', () => 
     'the quest boon uses the actual held-shield treatment');
 });
 
-test('the fixture publishes the strongest active row for every boon product', () => {
-  for (const boonType of [3, 4, 22, 9, 15, 24, 19, 27, 31]) {
+test('the fixture publishes every boon product across low, medium, and high tiers', () => {
+  for (const boonType of [3, 4, 6, 7, 15, 23, 18, 27, 29, 32, 36, 40]) {
     assert.match(JS, new RegExp(`boonType:\\s*${boonType}\\b`));
   }
-  assert.match(JS, /boostAmount:\s*50/);
+  assert.match(JS, /boostAmount:\s*25/);
   assert.match(JS, /update\('app\.boons'/);
 });
 

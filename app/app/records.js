@@ -8,10 +8,9 @@
 // ⛔ THE MARKS ARE ON CHAIN; THE HOLDERS ARE NOT. Every `biggest*Ever` slot
 // holds a bare uint128 — no address. The holder exists only in
 // `BigRecordUpdated(kind, player, value, paid, sdgnrsPaid)`, which the indexer
-// rolls into `coinflip_records`. The shared pool is different: a successful
-// claim subtracts `paid` immediately inside `_armBigRecord`, between settlement
-// snapshots, so its headline is read directly from `recordPool()` while the DB
-// remains the source for holder and record history.
+// rolls into `coinflip_records`. Both the permanent marks and shared pool move
+// in the claim transaction, so their headlines are read directly from the
+// contract while the DB remains the source for holder and record history.
 
 import { fetchJSON } from './api.js';
 import { CHAIN, CONTRACTS, ETH_DIVISOR } from './chain-config.js';
@@ -55,9 +54,13 @@ let _poolReadInflight = null;
 let _lastLiveRecordPool = null;
 let _clockReadInflight = null;
 let _lastLiveRecordClocks = null;
+let _markReadInflight = null;
+let _lastLiveRecordMarks = null;
+let _lastRecordsPayload = null;
 let _fetchRecordsJSON = fetchJSON;
 let _readRecordPool = readLiveRecordPool;
 let _readRecordClocks = readLiveRecordClocks;
+let _readRecordMarks = readLiveRecordMarks;
 
 /**
  * Per-kind presentation facts.
@@ -219,6 +222,39 @@ export async function readLiveRecordClocks() {
 }
 
 /**
+ * Authoritative permanent high-water marks, in RECORD_KIND_* order.
+ *
+ * A bounty claim updates its mark and pays down `recordPool` in the same
+ * transaction. Reading only the pool from chain made the bounty visibly move
+ * while its winning amount remained stuck on the indexer's previous row.
+ */
+export async function readLiveRecordMarks() {
+  if (_markReadInflight) return _markReadInflight;
+  const request = (async () => {
+    try {
+      const provider = recordPoolProvider();
+      if (!provider || !CONTRACTS.COINFLIP) return _lastLiveRecordMarks;
+      const contract = new ethers.Contract(CONTRACTS.COINFLIP, RECORD_POOL_ABI, provider);
+      const values = await Promise.all(RECORD_KINDS.map((meta) => {
+        const getter = RECORD_GETTER_BY_KIND.get(meta.kind);
+        return typeof contract[getter] === 'function' ? contract[getter]() : null;
+      }));
+      if (values.some((value) => value == null)) return _lastLiveRecordMarks;
+      _lastLiveRecordMarks = values.map((value) => toBigInt(value));
+      return _lastLiveRecordMarks;
+    } catch (_e) {
+      return _lastLiveRecordMarks;
+    }
+  })();
+  _markReadInflight = request;
+  try {
+    return await request;
+  } finally {
+    if (_markReadInflight === request) _markReadInflight = null;
+  }
+}
+
+/**
  * The smallest candidate that CLAIMS a share of the pool rather than merely
  * ratcheting the mark.
  *
@@ -269,18 +305,10 @@ export function recordClaimTarget(state, kind) {
  * indexer row.
  */
 export async function readLiveRecordMark(kind) {
-  const getter = RECORD_GETTER_BY_KIND.get(Number(kind));
-  if (!getter) return null;
-  try {
-    const provider = recordPoolProvider();
-    if (!provider || !CONTRACTS.COINFLIP) return null;
-    const contract = new ethers.Contract(CONTRACTS.COINFLIP, RECORD_POOL_ABI, provider);
-    if (typeof contract[getter] !== 'function') return null;
-    const value = await contract[getter]();
-    return value == null ? null : toBigInt(value);
-  } catch (_e) {
-    return null;
-  }
+  const recordKind = Number(kind);
+  if (!RECORD_GETTER_BY_KIND.has(recordKind)) return null;
+  const marks = await readLiveRecordMarks();
+  return Array.isArray(marks) ? marks[recordKind] ?? null : null;
 }
 
 /** True only when `candidate` reaches the exact live bounty-paying target. */
@@ -409,7 +437,12 @@ export function shortAddress(value) {
  * The route already zero-fills missing kinds, but a stale deploy or a partial
  * response must still produce four cards rather than a collapsing row.
  */
-export function normalizeRecords(payload, liveRecordPool = null, liveRecordClocks = null) {
+export function normalizeRecords(
+  payload,
+  liveRecordPool = null,
+  liveRecordClocks = null,
+  liveRecordMarks = null,
+) {
   const rows = Array.isArray(payload?.records) ? payload.records : [];
   const byKind = new Map(rows.map((row) => [Number(row?.kind), row]));
 
@@ -419,7 +452,15 @@ export function normalizeRecords(payload, liveRecordPool = null, liveRecordClock
       : toBigInt(liveRecordPool),
     records: RECORD_KINDS.map((meta) => {
       const row = byKind.get(meta.kind) ?? null;
-      const value = toBigInt(row?.value);
+      const indexedValue = toBigInt(row?.value);
+      const rawLiveMark = Array.isArray(liveRecordMarks)
+        ? liveRecordMarks[meta.kind]
+        : null;
+      const liveMark = rawLiveMark == null ? null : toBigInt(rawLiveMark);
+      // Permanent marks only ratchet upward. Taking the maximum prevents a
+      // briefly lagging RPC from rolling back an already-indexed newer mark.
+      const chainAhead = liveMark != null && liveMark > indexedValue;
+      const value = chainAhead ? liveMark : indexedValue;
       const player = String(row?.player || '').toLowerCase() || null;
       const indexedClock = row?.clockDay == null || !Number.isInteger(Number(row.clockDay))
         ? null
@@ -433,11 +474,11 @@ export function normalizeRecords(payload, liveRecordPool = null, liveRecordClock
       return {
         kind: meta.kind,
         meta,
-        player: value > 0n ? player : null,
+        // The contract has no holder getter. Never attach the old indexed
+        // holder to a newer chain mark while BigRecordUpdated is catching up.
+        player: value > 0n && !chainAhead ? player : null,
         value,
-        // Trust the server's bar when present so the two cannot drift, but
-        // recompute if an older deploy omits it.
-        barToBeat: row?.barToBeat != null ? toBigInt(row.barToBeat) : barToBeat(value),
+        barToBeat: barToBeat(value),
         claimCount: Number(row?.claimCount ?? 0) || 0,
         totalPaidFlip: toBigInt(row?.totalPaidFlip),
         // The packed chain clock is authoritative and also fills pre-migration
@@ -450,24 +491,35 @@ export function normalizeRecords(payload, liveRecordPool = null, liveRecordClock
   };
 }
 
-/** GET the four records plus the shared pool. Throws on a failed read. */
+/** GET indexed history plus the chain-authoritative pool, clocks, and marks. */
 export async function fetchRecords() {
-  const [payload, liveRecordPool, liveRecordClocks] = await Promise.all([
+  const [payloadResult, poolResult, clocksResult, marksResult] = await Promise.allSettled([
     _fetchRecordsJSON('/records'),
-    Promise.resolve().then(() => _readRecordPool()).catch(() => null),
-    Promise.resolve().then(() => _readRecordClocks()).catch(() => null),
+    Promise.resolve().then(() => _readRecordPool()),
+    Promise.resolve().then(() => _readRecordClocks()),
+    Promise.resolve().then(() => _readRecordMarks()),
   ]);
-  return normalizeRecords(payload, liveRecordPool, liveRecordClocks);
+  if (payloadResult.status === 'fulfilled') _lastRecordsPayload = payloadResult.value;
+  return normalizeRecords(
+    payloadResult.status === 'fulfilled' ? payloadResult.value : _lastRecordsPayload,
+    poolResult.status === 'fulfilled' ? poolResult.value : null,
+    clocksResult.status === 'fulfilled' ? clocksResult.value : null,
+    marksResult.status === 'fulfilled' ? marksResult.value : null,
+  );
 }
 
-/** Test-only readers for the API history and authoritative pool getter. */
-export function __setRecordsReadersForTest({ json, pool, clocks } = {}) {
+/** Test-only readers for indexed history and authoritative chain state. */
+export function __setRecordsReadersForTest({ json, pool, clocks, marks } = {}) {
   if (typeof json === 'function') _fetchRecordsJSON = json;
   if (typeof pool === 'function') _readRecordPool = pool;
   if (typeof clocks === 'function') _readRecordClocks = clocks;
-  else if (typeof json === 'function' || typeof pool === 'function') {
+  else if (typeof json === 'function' || typeof pool === 'function' || typeof marks === 'function') {
     // Existing reader-seam tests must never leak a public-RPC request.
     _readRecordClocks = async () => null;
+  }
+  if (typeof marks === 'function') _readRecordMarks = marks;
+  else if (typeof json === 'function' || typeof pool === 'function' || typeof clocks === 'function') {
+    _readRecordMarks = async () => null;
   }
 }
 
@@ -475,48 +527,16 @@ export function __resetRecordsReadersForTest() {
   _fetchRecordsJSON = fetchJSON;
   _readRecordPool = readLiveRecordPool;
   _readRecordClocks = readLiveRecordClocks;
+  _readRecordMarks = readLiveRecordMarks;
   _poolReadInflight = null;
   _lastLiveRecordPool = null;
   _clockReadInflight = null;
   _lastLiveRecordClocks = null;
+  _markReadInflight = null;
+  _lastLiveRecordMarks = null;
+  _lastRecordsPayload = null;
 }
 
-/**
- * Map record-holder addresses to their public Discord display identity.
- *
- * Unlinked addresses are simply absent from the response, so the caller keeps
- * its shortened-address fallback for them. Never throws: an identity layer
- * outage must not blank the records themselves.
- *
- * @returns {Promise<Map<string, {name: string, avatar: string|null}>>} keyed by
- *          lowercased address
- */
-export async function fetchProfiles(addresses) {
-  const unique = [...new Set(
-    (addresses || [])
-      .map((address) => String(address || '').toLowerCase())
-      .filter((address) => /^0x[0-9a-f]{40}$/.test(address)),
-  )];
-  const out = new Map();
-  if (unique.length === 0) return out;
-
-  try {
-    const url = `${SESSION_API}/api/profiles?addresses=${encodeURIComponent(unique.join(','))}`;
-    const res = await fetch(url, { credentials: 'omit' });
-    if (!res.ok) return out;
-    const body = await res.json();
-    for (const profile of (Array.isArray(body?.profiles) ? body.profiles : [])) {
-      const address = String(profile?.address || '').toLowerCase();
-      const name = String(profile?.discord_name || '').trim();
-      if (!address || !name) continue;
-      const avatar = String(profile?.discord_avatar || '').trim();
-      out.set(address, {
-        name,
-        // Only ever an https CDN URL. Anything else is dropped rather than
-        // written into an img src.
-        avatar: /^https:\/\//.test(avatar) ? avatar : null,
-      });
-    }
-  } catch (_e) { /* identity is decoration; the records still render */ }
-  return out;
-}
+// Discord display identity now lives in ./profiles.js so components that do
+// not touch the chain can use it too. Re-exported here for existing callers.
+export { fetchProfiles } from './profiles.js';

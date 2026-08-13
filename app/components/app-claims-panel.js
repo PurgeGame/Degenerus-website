@@ -207,7 +207,7 @@ class AppClaimsPanel extends HTMLElement {
 
   // Core poller — visibility-guarded, AbortController-flushed, Promise.allSettled
   // fan-out, render-once-on-success. Network blips are swallowed (next cycle retries).
-  async #runPollCycle() {
+  async #runPollCycle({ force = false } = {}) {
     // Visibility guard — pause polling while tab hidden (T-61-03-03 / Pitfall 13).
     if (typeof document !== 'undefined'
       && document.visibilityState
@@ -238,7 +238,10 @@ class AppClaimsPanel extends HTMLElement {
         this.#pendingData = null;
         this.#dashboardData = null;
         this.#combinedData = get('app.playerCombined');
-        const lastDayResult = await fetchJSON(`/game/jackpot/last-day`).catch(() => null);
+        const lastDayResult = await fetchJSON(
+          `/game/jackpot/last-day`,
+          { signal, force },
+        ).catch(() => null);
         if (signal.aborted) return;
         this.#lastDayData = lastDayResult || null;
         this.#pinnedDay = (lastDayResult && typeof lastDayResult.day === 'number') ? lastDayResult.day : null;
@@ -267,7 +270,7 @@ class AppClaimsPanel extends HTMLElement {
           ];
 
       const results = await Promise.allSettled(
-        urls.map((u) => (u ? fetchJSON(u) : Promise.resolve(null))),
+        urls.map((u) => (u ? fetchJSON(u, { signal, force }) : Promise.resolve(null))),
       );
       // Stale-cycle guard — if another cycle started + aborted us, discard
       // these results to avoid overwriting fresher data.
@@ -336,7 +339,9 @@ class AppClaimsPanel extends HTMLElement {
   // The 250ms is roadmap-locked (success criterion 2 verbatim).
   #wirePostConfirmDebounce() {
     this.#txConfirmListener = () => {
-      setTimeout(() => this.#runPollCycle(), 250);
+      // sendTx invalidates the shared cache globally; keep this local force as
+      // a defense-in-depth guarantee for alternate confirmed-event producers.
+      setTimeout(() => this.#runPollCycle({ force: true }), 250);
     };
     this.addEventListener('app-claims:tx-confirmed', this.#txConfirmListener);
   }

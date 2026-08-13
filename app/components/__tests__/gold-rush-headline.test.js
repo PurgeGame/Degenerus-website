@@ -250,7 +250,11 @@ describe('gold-rush headline wiring', () => {
 
   test('polling.js owns the goldRush cycle and writes app.goldRush', () => {
     assert.match(polling, /goldRush: 5_000/);
-    assert.match(polling, /\/game\/jackpot\/gold-rush/);
+    assert.match(polling, /blockAndAggregate\.staticCall\(calls\)/);
+    assert.match(polling, /CHAIN\.goldRushPublicRpcUrl/,
+      'disconnected fallback is explicitly keyless, never the generic app RPC');
+    assert.doesNotMatch(polling, /fetchJSONWithSignal\('\/game\/jackpot\/gold-rush'/,
+      'headline never traverses the API/database route');
     assert.match(polling, /update\('app\.goldRush', payload\)/);
     // Self-rescheduling setTimeout, NOT setInterval — the gap adapts.
     assert.match(polling, /TIMER_HANDLES\.goldRush = setTimeout\(runGoldRushCycle, _goldRushDelay\)/);
@@ -301,7 +305,7 @@ describe('gold-rush adaptive cadence', () => {
     assert.equal(goldRushNextDelay(at(101)), GOLD_RUSH_CADENCE.active, 'burst caught at the floor');
   });
 
-  test('a failed poll (null payload) backs off rather than hammering a down API', () => {
+  test('a failed poll (null payload) backs off rather than hammering a down RPC', () => {
     resetGoldRushCadence();
     goldRushNextDelay(at(100));
     goldRushNextDelay(null);

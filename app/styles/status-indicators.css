@@ -75,39 +75,86 @@ html[data-degenerus-tutorial] .testnet-beta-banner { display: none !important; }
 
 /* Active boons sit beside the exact control they modify. */
 boon-product-indicator {
-  display: inline-flex;
+  --boon-logo: none;
+  position: relative;
+  display: inline-grid;
   box-sizing: border-box;
-  align-items: center;
-  width: max-content;
-  max-width: 100%;
-  min-height: 0.84rem;
-  padding: 0.1rem 0.28rem;
-  border: 1px solid rgba(74, 222, 128, 0.52);
-  border-radius: 999px;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.07));
-  box-shadow: inset 0 0 8px rgba(34, 197, 94, 0.08), 0 0 7px rgba(34, 197, 94, 0.09);
-  color: #86efac;
-  font-family: "Inter", system-ui, sans-serif;
-  font-size: 0.48rem;
-  font-weight: 950;
-  letter-spacing: 0.025em;
-  line-height: 1;
-  text-transform: uppercase;
-  white-space: nowrap;
+  width: 1.58rem;
+  height: 1.58rem;
+  flex: 0 0 1.58rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
   cursor: help;
 }
 
 boon-product-indicator[hidden] { display: none !important; }
 
 boon-product-indicator::before {
-  flex: 0 0 auto;
-  width: 0.3rem;
-  height: 0.3rem;
-  margin-right: 0.2rem;
-  border-radius: 50%;
-  background: #4ade80;
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.86);
+  position: absolute;
+  inset: 0.03rem 0.14rem 0.04rem;
+  display: block;
+  background: linear-gradient(145deg, #f8fff9 0 8%, var(--boon-amount, #93c5fd) 34% 100%);
+  clip-path: polygon(50% 0, 94% 39%, 69% 39%, 69% 100%, 31% 100%, 31% 39%, 6% 39%);
   content: "";
+  filter:
+    drop-shadow(0 0 3px rgba(var(--boon-amount-rgb, 147, 197, 253), 0.82))
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.9));
+  transform-origin: 50% 50%;
+}
+
+boon-product-indicator::after {
+  position: absolute;
+  z-index: 1;
+  bottom: 0.08rem;
+  left: 50%;
+  width: 52%;
+  height: 52%;
+  background: var(--boon-logo, none) center / contain no-repeat;
+  content: "";
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.92));
+  translate: -50% 0;
+}
+
+boon-product-indicator[data-boon-direction="down"]::before { transform: rotate(180deg); }
+boon-product-indicator[data-boon-direction="down"]::after { top: 0.08rem; bottom: auto; }
+
+/* Pass-price reductions point down. Their arrow steps from red through silver
+   to gold as the discount tier increases. */
+body.layout-basic boon-product-indicator[data-boon-direction="down"] {
+  --boon-amount: #ef4444;
+  --boon-amount-rgb: 239, 68, 68;
+  --boon-logo: url('/badges-circular/crypto_06_ethereum_green.svg');
+}
+body.layout-basic boon-product-indicator[data-boon-direction="down"][data-boon-strength="mid"] {
+  --boon-amount: #cbd5e1;
+  --boon-amount-rgb: 203, 213, 225;
+}
+body.layout-basic boon-product-indicator[data-boon-direction="down"][data-boon-strength="high"] {
+  --boon-amount: #facc15;
+  --boon-amount-rgb: 250, 204, 21;
+}
+
+boon-product-indicator[data-boon-product="lootbox"] { --boon-logo: url('/app/assets/lootbox/degenerus-lootbox-case-v3.webp'); }
+boon-product-indicator[data-boon-product="coinflip"] { --boon-logo: url('/whitepaper/flame-logo-split.svg'); }
+boon-product-indicator[data-boon-product="quests"] { --boon-logo: url('/app/assets/boons/boon-quest-micro.svg'); }
+boon-product-indicator[data-boon-product="decimator"] { --boon-logo: url('/app/assets/decimator-draw-mark.svg'); }
+boon-product-indicator[data-boon-product="degenerette-eth"] { --boon-logo: url('/badges-circular/crypto_06_ethereum_green.svg'); }
+boon-product-indicator[data-boon-product="degenerette-flip"] { --boon-logo: url('/whitepaper/flame-logo-split.svg'); }
+boon-product-indicator[data-boon-product="degenerette-wwxrp"] { --boon-logo: url('/shared/coinflip-face-red.svg'); }
+
+/* A quest shield is the product itself, not an amount increase. Use the shield
+   silhouette at full size and remove the generic boon arrow behind it. */
+boon-product-indicator[data-boon-product="quests"]::before { display: none; }
+boon-product-indicator[data-boon-product="quests"]::after {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-size: contain;
+  filter: drop-shadow(0 0 5px rgba(52, 211, 153, 0.62));
+  translate: none;
 }
 
 boon-product-indicator:focus-visible {
@@ -115,79 +162,332 @@ boon-product-indicator:focus-visible {
   outline-offset: 2px;
 }
 
+/* In the live UI the emblem is always a badge on a control, never another
+   flex/grid child. Keeping it out of flow means activating a boon cannot grow
+   a row, widen a title, create a grid track, or move an input. */
+body.layout-basic boon-product-indicator {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  flex: none;
+  margin: 0;
+}
+
+/* Game-style objective waypoint. The bubble tail points at the action and the
+   exclamation reads at tiny sizes without adding another framed UI box. */
+quest-objective-indicator {
+  --quest-objective-art: url('/app/assets/quest-objective.svg');
+  position: relative;
+  display: inline-grid;
+  box-sizing: border-box;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: 0 0 1.5rem;
+  place-items: center;
+  cursor: help;
+  animation: quest-objective-pulse 1.8s ease-in-out infinite alternate;
+}
+
+quest-objective-indicator[hidden] { display: none !important; }
+
+quest-objective-indicator::before {
+  position: absolute;
+  inset: 0;
+  background: var(--quest-objective-art) center / contain no-repeat;
+  content: "";
+}
+
+/* Point the callout back toward controls that sit below and to its left. Other
+   placements keep the centered waypoint until their host selects a direction. */
+quest-objective-indicator[data-quest-pointer="bottom-left"] {
+  --quest-objective-art: url('/app/assets/quest-objective-tail-bottom-left.svg');
+}
+
+quest-objective-indicator[data-quest-count]:not([data-quest-count="1"])::after {
+  position: absolute;
+  right: -0.25rem;
+  bottom: -0.22rem;
+  display: grid;
+  min-width: 0.72rem;
+  height: 0.72rem;
+  place-items: center;
+  padding: 0 0.08rem;
+  border: 1px solid #090b11;
+  border-radius: 999px;
+  background: #7c3aed;
+  color: #fff7d6;
+  content: attr(data-quest-count);
+  font: 950 0.47rem/1 "Roboto Mono", monospace;
+}
+
+quest-objective-indicator:focus-visible {
+  outline: 2px solid rgba(251, 191, 36, 0.9);
+  outline-offset: 2px;
+}
+
+/* Objective marks use the same zero-footprint rule as boons. Their hosts own
+   a small corner/lane; the custom element never becomes another flex item,
+   grid item, line box, or source of wrapping. */
+body.layout-basic quest-objective-indicator {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  flex: none;
+  margin: 0;
+  cursor: pointer;
+  /* Enlarge the marker visually without changing any host's measured box. */
+  scale: 1.1;
+}
+
+@keyframes quest-objective-pulse {
+  from { filter: brightness(0.96); transform: translateY(0); }
+  to { filter: brightness(1.13); transform: translateY(-1px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  quest-objective-indicator { animation: none; }
+}
+
+/* Context placements keep the gold objective marker separate from the larger
+   tier arrow when a control has both an active boon and an unfinished quest. */
+/* Purchase rows own a fixed accessory lane between their label and stepper.
+   Boon and quest states therefore remain two readable badges instead of
+   colliding into a single diagonal glyph cluster. */
+body.layout-basic .app-decimator-panel .dec-input-accessories {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  right: 7rem;
+  display: block;
+  width: 3.05rem;
+  height: 1.45rem;
+  pointer-events: none;
+  translate: 0 -50%;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-accessories > boon-product-indicator {
+  top: 0;
+  left: 0;
+  width: 1.42rem;
+  height: 1.42rem;
+  animation: none;
+  pointer-events: auto;
+}
+
+body.layout-basic .app-decimator-panel .dec-input-accessories > quest-objective-indicator {
+  top: 0.14rem;
+  right: 0;
+  width: 1.08rem;
+  height: 1.08rem;
+  pointer-events: auto;
+}
+
+body.layout-basic .app-decimator-panel .dec-foil-label {
+  position: relative;
+  width: fit-content;
+  justify-self: start;
+}
+
+body.layout-basic .app-decimator-panel .dec-foil-label > quest-objective-indicator {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 0.3rem);
+  width: 1.02rem;
+  height: 1.02rem;
+  translate: 0 -50%;
+}
+
+body.layout-basic .app-decimator-panel .dec-flip-balance__action > .dec-redeem-quest {
+  position: absolute;
+  z-index: 3;
+  top: -0.32rem;
+  left: calc(100% + 0.43rem);
+  width: 1.18rem;
+  height: 1.18rem;
+  flex-basis: 1.18rem;
+  border-color: rgba(76, 29, 149, 0.62);
+}
+
+body.layout-basic .df-next-bet__quest {
+  z-index: 3;
+  right: auto;
+  bottom: auto;
+  top: 0.12rem;
+  left: 3.65rem;
+  width: 1.18rem;
+  height: 1.18rem;
+}
+
+body.layout-basic .dbb__burn > quest-objective-indicator {
+  z-index: 3;
+  top: 50%;
+  right: 0.42rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  translate: 0 -50%;
+}
+
+body.layout-basic .dbb__burn:has(> quest-objective-indicator:not([hidden])) {
+  padding-right: 2rem;
+}
+
+body.layout-basic .deg-currency-option > quest-objective-indicator {
+  z-index: 2;
+  top: 0.2rem;
+  left: 0.2rem;
+  width: 1.18rem;
+  height: 1.18rem;
+}
+
+body.layout-basic .deg-referral-card > quest-objective-indicator {
+  position: absolute;
+  z-index: 3;
+  top: 0.48rem;
+  right: 0.5rem;
+}
+
+body.layout-basic .aff-header h2 {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+body.layout-basic .aff-header h2 > quest-objective-indicator {
+  top: 50%;
+  left: calc(100% + 0.34rem);
+  width: 1.18rem;
+  height: 1.18rem;
+  translate: 0 -50%;
+}
+
 body.layout-basic .app-decimator-panel .dec-input-label {
+  position: relative;
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.16rem 0.28rem;
 }
 
-body.layout-basic .app-decimator-panel .dec-input-group.has-active-boon > .dec-input-label {
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: flex-start;
+body.layout-basic .app-decimator-panel .dec-input-accessories > boon-product-indicator[variant="purchase-control"]::before { display: block; }
+
+/* Coinflip badges sit inside their positioned cards so they remain fully
+   visible without reserving a line of dialog or Tomorrow-row layout. */
+body.layout-basic .df-add-bet-dialog .df-boon-indicator {
+  top: 0.52rem;
+  right: 2.9rem;
+  width: 1.42rem;
+  height: 1.42rem;
+  margin: 0;
 }
 
-body.layout-basic .app-decimator-panel .dec-input-label > boon-product-indicator[variant="purchase-control"] {
-  display: block;
-  width: max-content;
-  max-width: 100%;
-  min-height: 0;
-  align-self: flex-end;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  color: #4ade80;
-  font-family: "Inter", system-ui, sans-serif;
-  font-size: 0.5rem;
-  font-weight: 950;
-  line-height: 1.1;
-  letter-spacing: -0.025em;
-  text-shadow: 0 0 7px rgba(74, 222, 128, 0.38);
-  animation: none;
-}
-
-body.layout-basic .app-decimator-panel .dec-input-label > boon-product-indicator[variant="purchase-control"]::before {
-  display: none;
-}
-
-/* The coinflip chip sits in the add-bet dialog card, under the amount it
-   modifies. It cannot overhang the card edge: the card clips its own overflow
-   to keep the rounded corners and gradients clean, so an outdented badge loses
-   its top edge. */
-body.layout-basic .df-boon-indicator {
-  display: flex;
-  width: fit-content;
-  margin: 0.42rem 0 0;
-  font-size: 0.4rem;
+body.layout-basic .df-next-bet__boon {
+  z-index: 3;
+  right: auto;
+  bottom: 0.08rem;
+  left: 3.65rem;
+  top: auto;
+  width: 1.12rem;
+  height: 1.12rem;
 }
 
 body.layout-basic .app-pass-section .pass-section-title {
+  position: relative;
   display: inline-flex;
+  width: fit-content;
   align-items: center;
+  justify-self: start;
   flex-wrap: wrap;
   gap: 0.22rem;
 }
 
-body.layout-basic .app-pass-section .pass-section-title boon-product-indicator,
-body.layout-basic .pari-book__title boon-product-indicator,
-body.layout-basic .qst-score-label boon-product-indicator {
-  margin-left: 0.2rem;
-  font-size: 0.42rem;
-  letter-spacing: 0;
-  vertical-align: middle;
+body.layout-basic .app-pass-section .pass-section-title boon-product-indicator {
+  top: 50%;
+  left: calc(100% + 0.22rem);
+  width: 1.36rem;
+  height: 1.36rem;
+  translate: 0 -50%;
 }
 
-/* The score control is column 3 of an auto-sized header rail whose column 2
-   holds the centred QUESTS heading, so anything that widens the control pushes
-   it left into that heading. Sitting the chip on its own row under DEGEN RATING
-   keeps the rail's width unchanged at every desktop width. */
+body.layout-basic .pari-book__title,
+body.layout-basic .qst-header h2 {
+  position: relative;
+}
+
+body.layout-basic .pari-book__title boon-product-indicator,
+body.layout-basic .qst-header h2 boon-product-indicator {
+  top: 50%;
+  left: calc(100% + 0.24rem);
+  width: 1.34rem;
+  height: 1.34rem;
+  translate: 0 -50%;
+}
+
+/* The rating badge straddles its already-positioned card corner. In particular
+   it must not widen column 3 and push the centred QUESTS heading sideways. */
 body.layout-basic .qst-score-label boon-product-indicator {
-  display: flex;
-  width: fit-content;
-  margin: 0.16rem 0 0 auto;
+  top: -0.48rem;
+  right: -0.48rem;
+  width: 1.34rem;
+  height: 1.34rem;
+}
+
+body.layout-basic .pass-deity-title-lockup {
+  position: relative;
+}
+
+body.layout-basic .pass-deity-title-lockup boon-product-indicator {
+  top: -0.28rem;
+  right: -0.18rem;
+  width: 1.42rem;
+  height: 1.42rem;
+}
+
+body.layout-basic .app-pass-section :is(.pass-product-checkout, .pass-cost-action) {
+  position: relative;
+  overflow: visible;
+}
+
+body.layout-basic .app-pass-section :is(.pass-product-checkout, .pass-cost-action)
+  > boon-product-indicator.pass-cost-boon {
+  z-index: 8;
+  top: 50%;
+  right: 0.44rem;
+  width: 0.82rem;
+  height: 1.02rem;
+  translate: 0 -50%;
+}
+
+body.layout-basic .app-pass-section :is(.pass-product-checkout, .pass-cost-action)
+  > boon-product-indicator.pass-cost-boon::before {
+  inset: 0.02rem 0.06rem;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.88));
+}
+
+/* The price already names ETH and the applied BOON, so another currency badge
+   inside this tiny marker only reads as a detached square. */
+body.layout-basic .app-pass-section :is(.pass-product-checkout, .pass-cost-action)
+  > boon-product-indicator.pass-cost-boon::after {
+  display: none;
+}
+
+body.layout-basic .app-pass-section :is(.pass-product-row, .pass-deity-section).has-active-boon
+  :is(.pass-lazy-buy, .pass-whale-buy, .pass-deity-open, .pass-deity-buy) {
+  padding-right: 1.55rem;
+}
+
+/* Purchase labels become full grid tracks on phones. Keep the anchored badges
+   next to the visible label text rather than at (and partly beyond) the card's
+   far edge. This changes no row height or input width. */
+@media (max-width: 520px) {
+  body.layout-basic .app-decimator-panel .dec-input-label {
+    width: fit-content;
+    justify-self: start;
+  }
+  body.layout-basic .app-decimator-panel .dec-input-accessories {
+    top: 0.36rem;
+    right: 0.52rem;
+    translate: none;
+  }
 }
 
 /* Fakeout ending cue: after the coin visibly settles on the wrong face, the

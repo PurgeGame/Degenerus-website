@@ -14,10 +14,16 @@ const {
   bafPoolPercent,
   bafPrizePoolWei,
   bafFinalFlipTargetDay,
+  formatBafDrawPercent,
+  normalizeBafDraw,
   normalizeBafFinalFlipLeader,
   formatWholeFlipCompact,
   formatBafScoreCompact,
   normalizeBafLeaders,
+  BAF_SLICES,
+  BAF_GATED_PERCENT,
+  bafGateModel,
+  bafScatterFieldMarkup,
 } = await import('../app-baf-eve.js');
 
 const INDEX = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
@@ -76,6 +82,26 @@ describe('<app-baf-eve>', () => {
     assert.equal(formatWholeFlipCompact('6248200'), '6.2M');
   });
 
+  test('shows the viewed player exact final-day draw weight and share outside the top ten', () => {
+    const player = '0xba5e00000000000000000000000000000000cafe';
+    const draw = normalizeBafDraw({
+      entries: [
+        { day: 25, player: '0xleader', score: '6248200', rank: 1 },
+        { day: 24, player: 'stale', score: '9999999', rank: 1 },
+      ],
+      totalWeight: '10000000',
+      totalParticipants: 42,
+      player: { day: 25, player, score: '125000', rank: 14 },
+    }, 25, player);
+
+    assert.equal(draw.totalWeight, '10000000');
+    assert.equal(draw.totalParticipants, 42);
+    assert.deepEqual(draw.player, { day: 25, player, score: '125000', rank: 14 });
+    assert.equal(formatBafDrawPercent(draw.player.score, draw.totalWeight), '1.25%');
+    assert.equal(formatBafDrawPercent('1', '1000000'), '<0.01%');
+    assert.equal(formatBafDrawPercent('0', '1000000'), '0.00%');
+  });
+
   test('mounts ahead of Decimator in the full-width middle event rail', () => {
     const hero = INDEX.indexOf('<section class="jackpot-hero"');
     const baf = INDEX.indexOf('<app-baf-eve>');
@@ -86,27 +112,104 @@ describe('<app-baf-eve>', () => {
     assert.match(INDEX, /src="\/app\/components\/app-baf-eve\.js"/);
   });
 
-  test('makes the projected pool dominant, uses the clean BAF mark, and keeps the true prize lanes', () => {
+  test('sizes every lane by what the contract actually pays it', () => {
+    // DegenerusJackpots.runBafJackpot: 10% top BAF + 5% pick (rank), 5% weighted
+    // final-day draw, 10% far-future, 45%+25% scatter.
+    assert.equal(BAF_SLICES.reduce((total, slice) => total + slice.percent, 0), 100);
+    assert.deepEqual(
+      BAF_SLICES.map(({ key, percent }) => [key, percent]),
+      [['scatter', 70], ['far', 10], ['rank', 15], ['raffle', 5]],
+    );
+    // Far-future and scatter skip zero-score candidates and refund the share.
+    assert.equal(BAF_GATED_PERCENT, 80);
+    assert.equal(BAF_SLICES.filter((slice) => slice.gated).map((slice) => slice.key).join(), 'scatter,far');
+
+    // The pool column outweighs the ranked board, which pays only 15%.
+    assert.match(CSS, /grid-template-columns:\s*\n?\s*minmax\(10\.8rem, 0\.82fr\) minmax\(16rem, 1\.66fr\)\s*\n?\s*minmax\(8\.6rem, 0\.82fr\) minmax\(15rem, 1\.3fr\)/,
+      'the prize pool is the widest column and the ranked board is not');
+    assert.match(COMPONENT, /15% OF THE POOL/, 'the board states its own weight');
+    const poolClamp = CSS.match(/\.baf-eve__pool strong\s*\{[^}]*font:\s*800 clamp\([\d.]+rem, [\d.]+vw, ([\d.]+)rem\)/s);
+    const scoreClamp = CSS.match(/\.baf-eve__gate-score\s*\{[^}]*font:\s*800 clamp\([\d.]+rem, [\d.]+vw, ([\d.]+)rem\)/s);
+    assert.ok(poolClamp && scoreClamp, 'both figures are clamped');
+    assert.ok(Number(poolClamp[1]) > Number(scoreClamp[1]),
+      'the ETH total is the strongest number in the rail');
+  });
+
+  test('leads the player column with numbers, not a state word', () => {
+    const locked = bafGateModel({ score: 0n, rank: null, total: 247 });
+    assert.equal(locked.armed, false);
+    assert.equal(locked.score, '0');
+    assert.equal(locked.rank, '—');
+    assert.equal(locked.context, 'LOCKED OUT OF 80%');
+    assert.equal(locked.note, 'CLAIM A WON FLIP TO SCORE');
+
+    const armed = bafGateModel({ score: 12n * FLIP, rank: 12, total: 247 });
+    assert.equal(armed.armed, true);
+    assert.equal(armed.rank, '#12');
+    assert.equal(armed.context, 'OF 247');
+    // Ranked and unranked both score: the scatter never reads the board.
+    assert.equal(bafGateModel({ score: 12n * FLIP, rank: null }).context, 'UNRANKED');
+
+    assert.doesNotMatch(COMPONENT, /'ARMED'|'LOCKED'/, 'no big state word in the rail');
+    assert.match(COMPONENT, /classList\?\.toggle\('is-armed', gate\.armed\)/);
+    assert.match(CSS, /\.baf-eve\.is-armed/, 'armed still changes the rail quietly');
+  });
+
+  test('names the players it can name', () => {
+    assert.match(COMPONENT, /import \{ fetchProfiles \} from '\.\.\/app\/profiles\.js'/);
+    assert.match(COMPONENT, /profile\?\.name \? `@\$\{profile\.name\}` : \(row \? _shortAddress\(row\.player\) : '—'\)/,
+      'a linked player shows their Discord name and everyone else keeps the short address');
+    assert.match(COMPONENT, /baf-eve__avatar/);
+    assert.match(COMPONENT, /image\.src = profile\.avatar/);
+    // Identity is decoration: it must land after the numbers, never gate them.
+    assert.match(COMPONENT, /this\.#render\(\);\s*\n\s*void this\.#loadProfiles/);
+    assert.match(CSS, /\.baf-eve__avatar\.is-fallback/);
+  });
+
+  test('draws the scatter rule instead of decorating around it', () => {
+    const field = bafScatterFieldMarkup();
+    assert.equal((field.match(/<use /g) || []).length, 50, 'one cell per scatter round');
+    assert.equal((field.match(/class="baf-eve__ticket is-paid"/g) || []).length, 2);
+    assert.equal((field.match(/class="baf-eve__ticket"/g) || []).length, 2);
+    assert.match(field, /50 ROUNDS · 4 TICKETS EACH · TOP 2 BY SCORE/,
+      'the field is labelled, so it reads as a diagram and not as texture');
+    // User call: nothing on this rail moves, so there is no motion to reduce.
+    assert.doesNotMatch(CSS, /@keyframes|animation:|transition:/);
+  });
+
+  test('keeps the prize lanes honest and leaves gold to the deity pass', () => {
     assert.match(COMPONENT, /crypto_06_ethereum_green\.svg/);
-    assert.match(COMPONENT, /baf-eve__mark[^>]*><b>BAF<\/b><small>×10<\/small>/);
+    assert.match(COMPONENT, /baf-mark\.svg/);
     assert.doesNotMatch(COMPONENT, /baf-eve__crest|flame-center\.svg/);
     assert.match(COMPONENT, /BAF PRIZE POOL/);
     assert.match(COMPONENT, /PROJECTED/);
-    assert.match(COMPONENT, /YOUR POSITION/);
+    assert.match(COMPONENT, /YOUR SCORE/);
     assert.match(COMPONENT, /TOP 4/);
     assert.match(COMPONENT, /place <= LEADER_COUNT/);
-    assert.match(CSS, /\.baf-eve__leaders\s*\{[^}]*grid-template-columns:\s*repeat\(4,/s);
-    assert.match(COMPONENT, /FINAL-DAY FLIP/);
-    assert.match(COMPONENT, /5% BAF SLICE/);
-    assert.match(CSS, /\.baf-eve__leaders\.has-final-flip/);
-    assert.match(CSS, /grid-template-columns:\s*minmax\(13\.2rem, 0\.78fr\)\s+minmax\(14\.4rem, 1\.12fr\)/,
-      'the desktop prize card gets more room than the BAF identity');
-    assert.match(CSS, /\.baf-eve__pool strong\s*\{[^}]*font:\s*1000 clamp\(1\.42rem/s,
-      'the ETH total is the strongest number in the rail');
-    assert.match(CSS, /li\[data-rank="1"\][\s\S]*--baf-gold/s);
+    // A vertical list of four named rows, not four squeezed cards.
+    assert.match(CSS, /\.baf-eve__leaders\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
+    assert.match(CSS, /\.baf-eve__leaders li\s*\{[^}]*grid-template-columns:\s*[\d.]+rem [\d.]+rem minmax\(0, 1fr\) auto/s,
+      'each row is rank, avatar, name, score');
+
+    // The 5% slice is an amount-weighted draw over final-day deposits, so it
+    // must not sit in the ranked strip or read as a prize for the top staker.
+    assert.match(COMPONENT, /FINAL-DAY DRAW/);
+    assert.match(COMPONENT, /YOUR DRAW WEIGHT/);
+    assert.match(COMPONENT, /formatBafDrawPercent\(playerWeight, draw\?\.totalWeight\)/);
+    assert.match(COMPONENT, /baf-eve-draw-slot/);
+    assert.doesNotMatch(CSS, /\.baf-eve__leaders\s+\.baf-eve__daily-flip/);
+    assert.doesNotMatch(COMPONENT, /list\.appendChild\(daily\)/);
+
+    assert.doesNotMatch(CSS, /--baf-gold/, 'gold belongs to the deity pass, not the BAF');
+
+    // base.css styles the page `footer` element; nested component footers must
+    // reset it or the pool card grows 40px of phantom height.
+    assert.match(CSS, /\.baf-eve__pool > footer\s*\{[^}]*padding:\s*0/s);
+    assert.match(CSS, /\.baf-eve__band\s*\{[^}]*padding:\s*0\.5rem 0 0/s);
+
     assert.match(CSS, /@media \(max-width: 620px\)[\s\S]*?\.baf-eve__pool\s*\{[^}]*grid-column:\s*1 \/ -1/s,
       'the prize pool owns the full first row on phones');
-    assert.match(CSS, /@media \(prefers-reduced-motion: reduce\)/);
+    assert.doesNotMatch(CSS, /@keyframes|animation:|transition:/, 'the rail is a readout, not a show');
   });
 
   test('publishes one live player position for every visible BAF surface', () => {

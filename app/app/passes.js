@@ -406,11 +406,14 @@ const DEITY_BOON_WEIGHTS = Object.freeze([
   [13, 40], [14, 8], [15, 2],
   [16, 28], [23, 10], [24, 2],
   [25, 28], [26, 10], [27, 2],
-  [17, 100], [18, 30], [19, 8],
-  [4, 200], [28, 8],
+  [17, 100], [18, 30], [19, 4],
+  [4, 200], [28, 2],
   [29, 30], [30, 8], [31, 2],
+  [32, 200], [33, 50], [34, 10],
+  [35, 200], [36, 50], [37, 10],
+  [38, 200], [39, 200], [40, 200],
 ]);
-const DEITY_BOON_GIFT_WEIGHT = 1_408;
+const DEITY_BOON_GIFT_WEIGHT = 2_518;
 const DEITY_BOON_PRE_DECIMATOR = 982;
 const DEITY_BOON_DECIMATOR_WEIGHT = 50;
 const DEITY_BOON_PRE_DEITY_PASS = 1_072;
@@ -460,9 +463,10 @@ export function deriveDeityBoonSlots({
       cursor += weight;
       if (roll < cursor) return boonType;
     }
-    // Matches the viewer's fail-safe tail. The cumulative table should always
-    // return before this point, but a deterministic fallback is safer than 0.
-    return 19;
+    // Matches _boonFromRoll's final tail. The cumulative table should always
+    // return inside the loop; retaining the contract's terminal type keeps the
+    // mirror deterministic if a boundary is ever reached unexpectedly.
+    return 40;
   });
 }
 
@@ -585,7 +589,17 @@ export async function readAfkingSubscription(player) {
     const value = (result, fallback) => result.status === 'fulfilled' ? result.value : fallback;
     const balanceKnown = balanceRes.status === 'fulfilled';
     const tokenBalance = BigInt(value(balanceRes, 0n) ?? 0n);
-    if (!balanceKnown) return null;
+    // These three reads are the authoritative core of one AFKing snapshot.
+    // Never coerce a transient subInfo/afkingSnapshot RPC failure into an
+    // inactive subscription or zero funding: consumers would otherwise treat
+    // that synthetic zero as real and could raise a false low-funding alert.
+    // The optional lens may still fail independently because it only enriches
+    // product/settings and pending-FLIP presentation.
+    if (
+      !balanceKnown
+      || infoRes.status !== 'fulfilled'
+      || snapshotRes.status !== 'fulfilled'
+    ) return null;
 
     const info = value(infoRes, null);
     const snapshot = value(snapshotRes, null);

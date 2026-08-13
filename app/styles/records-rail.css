@@ -83,7 +83,7 @@ body.layout-basic .records-rail__identity {
 
 body.layout-basic .records-rail__wordmark {
   display: block;
-  width: min(100%, 14.25rem);
+  width: min(100%, 18rem);
   min-width: 0;
 }
 
@@ -91,7 +91,7 @@ body.layout-basic .records-rail__wordmark img {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 3.85rem;
+  max-height: 5.75rem;
   object-fit: contain;
   object-position: left center;
   filter:
@@ -139,6 +139,16 @@ body.layout-basic .records-rail__leader:hover {
   background: rgba(var(--rec-gold), 0.085);
   box-shadow: 0 0 16px rgba(var(--rec-gold), 0.12);
   transform: translateY(-1px);
+}
+
+body.layout-basic .records-rail__leader.is-view-only,
+body.layout-basic .records-rail__leader.is-view-only:hover {
+  opacity: 1;
+  border-color: rgba(var(--rec-gold), 0.15);
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: none;
+  cursor: default;
+  transform: none;
 }
 
 body.layout-basic .records-rail__leader:focus-visible {

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">ETH Degenerette boon up-arrow emblem</title>
+  <path d="M32 3 54 24h-8c7 5 11 12 11 20 0 11-11 17-25 17S7 54 7 42c0-8 4-14 11-18h-8Z" fill="#a855f7" stroke="#090b11" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M13 43c0 8 8 12 19 12s19-4 19-12" fill="none" stroke="#e9d5ff" stroke-width="3" stroke-linecap="round" stroke-dasharray="5 5"/>
+  <path d="m32 17 12 19-12 8-12-8Z" fill="#fff8dc" stroke="#090b11" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="m32 47 12-8-12 15-12-15Z" fill="#c4b5fd" stroke="#090b11" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M32 17v27l12-8Z" fill="#7c3aed"/>
+</svg>

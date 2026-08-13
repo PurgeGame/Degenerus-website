@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Luckbox boon up-arrow emblem</title>
+  <path d="M32 3 56 28h-6v5h5v25H9V33h5v-5H8Z" fill="#8b5cf6" stroke="#090b11" stroke-width="4" stroke-linejoin="round"/>
+  <path d="m32 8 18 19H38v5H26v-5H14Z" fill="#c4b5fd"/>
+  <path d="M11 34h42v22H11Z" fill="#5b21b6"/>
+  <path d="M11 34h42M32 11v21" fill="none" stroke="#fff3c4" stroke-width="3"/>
+  <path d="M24 31h16v18H24Z" fill="#fbbf24" stroke="#090b11" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M29 38a3 3 0 1 1 6 0c0 1-.5 2-1.5 2.6V44h-3v-3.4A3 3 0 0 1 29 38Z" fill="#fff8dc"/>
+</svg>

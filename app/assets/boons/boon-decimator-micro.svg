@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Ten-slot Decimator boon up-arrow emblem</title>
+  <circle cx="32" cy="36" r="25" fill="#151018" stroke="#090b11" stroke-width="4"/>
+  <g fill="#22d3ee" stroke="#090b11" stroke-width="2">
+    <rect x="29" y="13" width="6" height="10" rx="2" transform="rotate(36 32 36)"/>
+    <rect x="29" y="13" width="6" height="10" rx="2" transform="rotate(72 32 36)"/>
+    <rect x="29" y="13" width="6" height="10" rx="2" transform="rotate(108 32 36)"/>
+    <rect x="29" y="13" width="6" height="10" rx="2" transform="rotate(144 32 36)"/>
+    <rect x="29" y="13" width="6" height="10" rx="2" transform="rotate(180 32 36)"/>
+    <rect x="29" y="13" width="6" height="10" rx="2" transform="rotate(216 32 36)"/>
+    <rect x="29" y="13" width="6" height="10" rx="2" transform="rotate(252 32 36)"/>
+    <rect x="29" y="13" width="6" height="10" rx="2" transform="rotate(288 32 36)"/>
+    <rect x="29" y="13" width="6" height="10" rx="2" transform="rotate(324 32 36)"/>
+  </g>
+  <path d="M32 2 44 19h-7v14H27V19h-7Z" fill="#34d399" stroke="#090b11" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="32" cy="36" r="9" fill="#090b11" stroke="#7f1d2d" stroke-width="2.5"/>
+  <path d="M32 42c-4-2-5-5-3-8 1-1.5 2.5-2.5 2.8-5 3 3 2 5 4 6.5.5-1 .5-2 .8-3 2.5 4 1 8-4.6 9.5Z" fill="#fbbf24"/>
+</svg>

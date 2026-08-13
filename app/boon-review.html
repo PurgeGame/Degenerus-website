@@ -17,7 +17,7 @@
     <header class="boon-review__hero">
       <span class="boon-review__eyebrow">UI REVIEW FIXTURE</span>
       <h1>EVERY ACTIVE BOON</h1>
-      <p>All nine player-facing effects, shown together at their strongest tier.</p>
+      <p>All twelve player-facing boon families across low, medium, and high tiers.</p>
       <span class="boon-review__status"><i aria-hidden="true"></i> ALL ACTIVE</span>
     </header>
 
@@ -28,7 +28,7 @@
           <span>01</span>
           <h2>TICKETS + LUCKBOX</h2>
           <div class="boon-review__effects">
-            <strong>25% MORE TICKETS</strong><strong>25% BIGGER LUCKBOX</strong>
+            <strong>5% MORE TICKETS</strong><strong>15% BIGGER LUCKBOX</strong>
           </div>
         </header>
         <div class="jackpot-hero boon-review__production">
@@ -136,13 +136,15 @@
           <span>04</span>
           <h2>QUEST STREAK + DEGEN RATING</h2>
           <div class="boon-review__effects">
-            <strong>1 MISSED DAY SHIELDED</strong><strong>+25 DEGEN RATING</strong>
+            <strong>1 MISSED DAY SHIELDED</strong><strong>+12.5 DEGEN RATING</strong>
           </div>
         </header>
         <div class="play-grid boon-review__production boon-review__quests">
           <section class="panel app-quest-panel">
             <header class="qst-header">
-              <h2><span class="qst-learn-link">QUESTS</span></h2>
+              <h2><span class="qst-learn-link">QUESTS</span>
+                <boon-product-indicator product="quests"></boon-product-indicator>
+              </h2>
               <div class="qst-streak-chip qst-streak-chip--all-done qst-streak-chip--shielded"
                    data-streak-shields="1" tabindex="0"
                    title="1 streak shield · Protects one missed quest day">
@@ -162,12 +164,42 @@
       </article>
 
       <article class="boon-review__surface boon-review__surface--wide"
-               data-review-products="lazy whale deity">
+               data-review-products="degenerette-eth degenerette-flip degenerette-wwxrp">
         <header class="boon-review__surface-head">
           <span>05</span>
+          <h2>DEGENERETTE</h2>
+          <div class="boon-review__effects">
+            <strong>4% EXTRA ETH</strong><strong>8% EXTRA FLIP</strong><strong>12% EXTRA WWXRP</strong>
+          </div>
+        </header>
+        <div class="play-grid boon-review__production boon-review__degenerette">
+          <section class="panel app-degenerette-panel">
+            <span class="deg-wager-field__label deg-currency-picker__label">Currency</span>
+            <div class="deg-currency-picker" role="group" aria-label="Wager currency">
+              <button type="button" class="deg-currency-option" aria-label="Pay with ETH">
+                <img src="/badges-circular/crypto_06_ethereum_green.svg" alt="">
+                <boon-product-indicator product="degenerette-eth"></boon-product-indicator>
+              </button>
+              <button type="button" class="deg-currency-option" aria-label="Pay with FLIP">
+                <img src="/whitepaper/flame-logo-split.svg" alt="">
+                <boon-product-indicator product="degenerette-flip"></boon-product-indicator>
+              </button>
+              <button type="button" class="deg-currency-option" aria-label="Pay with WWXRP">
+                <img src="/shared/coinflip-face-red.svg" alt="">
+                <boon-product-indicator product="degenerette-wwxrp"></boon-product-indicator>
+              </button>
+            </div>
+          </section>
+        </div>
+      </article>
+
+      <article class="boon-review__surface boon-review__surface--wide"
+               data-review-products="lazy whale deity">
+        <header class="boon-review__surface-head">
+          <span>06</span>
           <h2>PASS SHOP</h2>
           <div class="boon-review__effects">
-            <strong>50% OFF LAZY</strong><strong>35% OFF WHALE</strong><strong>35% OFF DEITY</strong>
+            <strong>10% OFF LAZY</strong><strong>20% OFF WHALE</strong><strong>35% OFF DEITY</strong>
           </div>
         </header>
         <div class="boon-review__production boon-review__passes">

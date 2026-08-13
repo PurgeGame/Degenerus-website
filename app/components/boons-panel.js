@@ -5,6 +5,7 @@
 
 import { subscribe } from '../app/reactive-store.js';
 import { BOON_TYPE_NAMES, BOON_FULL_NAMES, BOON_BOOST_PCT } from '../app/boon-types.js';
+import { boonTypePresentation } from '../app/boons.js';
 
 class BoonsPanel extends HTMLElement {
   #unsubs = [];
@@ -76,8 +77,17 @@ class BoonsPanel extends HTMLElement {
       const suffix = b.consumed ? ' used' : '';
       const variant = b.consumed ? 'boon-badge--used' : 'boon-badge--active';
       const day = this.#currentDay != null ? this.#currentDay : '?';
-      return `<li class="boon-badge ${variant}" tabindex="0">`
-        + `BN-${name}${suffix}`
+      const visual = boonTypePresentation(b.boonType);
+      const amount = visual.effect || (pct != null ? `+${pct}%` : 'ACTIVE');
+      return `<li class="boon-badge ${variant}" tabindex="0"`
+        + ` data-boon-product="${visual.product}" data-boon-strength="${visual.strength}"`
+        + ` data-boon-tier="${visual.tier}" data-boon-pips="${visual.pips}"`
+        + ` data-boon-direction="${visual.direction}">`
+        + `<span class="boon-badge__mark" aria-hidden="true">`
+        + (visual.icon ? `<img class="boon-badge__icon" src="${visual.icon}" alt="">` : '')
+        + `</span>`
+        + `<span class="boon-badge__copy"><span class="boon-badge__name">${visual.name || `BN-${name}`}${suffix}</span>`
+        + `<strong class="boon-badge__amount">${b.consumed ? 'USED' : amount}</strong></span>`
         + `<span class="boon-tooltip">${full}${boostFragment} · Active until end of Day ${day}</span>`
         + `</li>`;
     }).join('');

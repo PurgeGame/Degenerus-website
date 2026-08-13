@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Coinflip boon up-arrow emblem</title>
+  <path d="M32 3 55 25h-9c6 4 9 10 9 17 0 11-10 18-23 18S9 52 9 40c0-6 3-11 9-15H9Z" fill="#fb7185"/>
+  <path d="M32 3 55 25h-9c6 4 9 10 9 17 0 11-8 18-14 18h-9Z" fill="#fbbf24"/>
+  <path d="M32 3 55 25h-9c6 4 9 10 9 17 0 11-10 18-23 18S9 52 9 40c0-6 3-11 9-15H9Z" fill="none" stroke="#090b11" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M17 38c2-7 9-11 17-10" fill="none" stroke="#fff8dc" stroke-width="4" stroke-linecap="round"/>
+  <path d="m35 24 8 6-10 3Z" fill="#fff8dc"/>
+  <path d="M47 45c-3 7-10 10-18 8" fill="none" stroke="#fff8dc" stroke-width="4" stroke-linecap="round"/>
+  <path d="m28 57-8-7 11-2Z" fill="#fff8dc"/>
+</svg>

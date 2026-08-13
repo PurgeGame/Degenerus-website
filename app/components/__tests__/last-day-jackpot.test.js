@@ -434,6 +434,25 @@ describe("Plan 59-01: <last-day-jackpot> Custom Element shell", () => {
       'YOU WON, each currency reward, and tickets occupy deliberate separate lines',
     );
   });
+
+  test('jackpot whale rewards convert contract half-pass units to whole-pass equivalents', async () => {
+    const { formatWhalePassAward } = await import('../replay-panel.js');
+
+    assert.equal(formatWhalePassAward(1), '½ whale pass');
+    assert.equal(formatWhalePassAward(2), '1 whale pass');
+    assert.equal(formatWhalePassAward(11), '5½ whale passes');
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /formatted = formatWhalePassAward\(e\.amount\)/,
+      'the winner detail never labels raw half-pass units as full passes',
+    );
+    assert.match(
+      REPLAY_PANEL_SRC,
+      /const text = formatWhalePassAward\(whaleCount\)/,
+      'the YOU WON receipt uses the same full-pass conversion',
+    );
+  });
+
   test('public jackpot results keep badges and rewards clear in both draws', () => {
     assert.match(
       REPLAY_PANEL_SRC,
@@ -807,6 +826,31 @@ describe('Plan 59-02: app.lastDay subscriber + status branch dispatch', () => {
     assert.match(copy.textContent, /day 6/, 'rolled-to-day-6 copy present');
     const dayLbl = el.querySelector('[data-bind="day"]');
     assert.match(dayLbl.textContent, /Day 5/);
+  });
+
+  test('contradictory no-winners status cannot hide winner evidence in the summary', async () => {
+    const el = instantiate();
+    storeMod.update('app.lastDay', {
+      day: 234, level: 47, winners: [],
+      summary: {
+        blockRange: { start: '45421295', end: null },
+        rollOne: {
+          eth: [{ traitId: 16, winnerCount: 20, uniqueCount: 17 }],
+          tickets: [],
+          solo: null,
+        },
+        rollTwo: { coin: [], bonusDraw: [], farFuture: { winnerCount: 0 } },
+      },
+      roll1: { day: 234, level: 47, purchaseLevel: null, wins: [] },
+      roll2: { day: 234, level: 47, purchaseLevel: null, wins: [] },
+      status: 'resolved-no-winners',
+    });
+    await flushMicrotasks();
+
+    const empty = el.querySelector('[data-bind="ldj-status-empty-day"]');
+    const resolved = el.querySelector('[data-bind="ldj-status-resolved"]');
+    assert.equal(empty.style.display, 'none', 'the false rollover sentence stays hidden');
+    assert.notEqual(resolved.style.display, 'none', 'the resolved draw stays visible');
   });
 
   test('status:resolved payload → resolved section visible + day label set + winners cached', async () => {

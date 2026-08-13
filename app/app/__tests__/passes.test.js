@@ -249,15 +249,15 @@ describe('deity daily boons', () => {
     };
     assert.deepEqual(
       passesMod.deriveDeityBoonSlots({ ...base, decimatorOpen: true, deityPassAvailable: true }),
-      [5, 4, 8],
+      [35, 35, 40],
     );
     assert.deepEqual(
       passesMod.deriveDeityBoonSlots({ ...base, decimatorOpen: false, deityPassAvailable: false }),
-      [5, 4, 8],
+      [35, 35, 40],
     );
   });
 
-  test('matches the emitted day-20 slot that the old conditional UI mislabeled', () => {
+  test('includes the deployed Degenerette bands in the static gift-slot walk', () => {
     const slots = passesMod.deriveDeityBoonSlots({
       dailySeed: 11621158837047785902248431115065076657481296476413078720687728983663490809916n,
       deity: '0x411087a5F752D3b5545E8301aD7e6cEf1351E480',
@@ -265,8 +265,27 @@ describe('deity daily boons', () => {
       decimatorOpen: false,
       deityPassAvailable: true,
     });
-    assert.deepEqual(slots, [7, 17, 5]);
-    assert.equal(slots[0], 7, 'slot 0 is the emitted +5% ticket boon, not type 9 (+25%)');
+    assert.deepEqual(slots, [38, 7, 36]);
+  });
+
+  test('matches both day-94 boon types emitted by the current deployment', () => {
+    const dailySeed = 88904332696311948919678638685246784339464390906126343802395035075230538782229n;
+
+    const firstDeity = passesMod.deriveDeityBoonSlots({
+      dailySeed,
+      deity: '0x411087a5F752D3b5545E8301aD7e6cEf1351E480',
+      day: 94,
+    });
+    const secondDeity = passesMod.deriveDeityBoonSlots({
+      dailySeed,
+      deity: '0xfe5b92e655d8b1732e47cb0a2f00ec6a50ea4200',
+      day: 94,
+    });
+
+    assert.deepEqual(firstDeity, [7, 38, 38]);
+    assert.equal(firstDeity[2], 38, 'slot 2 emitted the Degenerette WWXRP boon');
+    assert.deepEqual(secondDeity, [5, 40, 38]);
+    assert.equal(secondDeity[0], 5, 'slot 0 emitted the 5% Luckbox boon');
   });
 
   test('returns the three slots with the authoritative used mask', async () => {
@@ -277,7 +296,7 @@ describe('deity daily boons', () => {
     assert.equal(state.day, 7);
     assert.equal(state.usedMask, 0b101);
     assert.equal(state.ready, true);
-    assert.deepEqual(state.slots, [5, 4, 8]);
+    assert.deepEqual(state.slots, [35, 35, 40]);
   });
 
   test('issues a slot for the acting deity only after a static call', async () => {
@@ -404,6 +423,20 @@ describe('AFKing seat entitlement and claim', () => {
     const state = await passesMod.readAfkingSubscription(CONNECTED);
     assert.equal(state.hasToken, true);
     assert.equal(state.tokenBalance, 1n);
+  });
+
+  test('a failed core snapshot is unknown instead of synthetic zero funding', async () => {
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 1n },
+      game: {
+        subInfo: async () => [true, 5n, 8n, 12n],
+        afkingSnapshot: async () => { throw new Error('temporary RPC failure'); },
+      },
+    }));
+
+    const state = await passesMod.readAfkingSubscription(CONNECTED);
+    assert.equal(state, null,
+      'a missing funding snapshot cannot masquerade as an active account with zero funding');
   });
 
   test('reads the exact accrued AFKing bonus FLIP from the deployment lens', async () => {

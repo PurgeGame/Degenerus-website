@@ -168,10 +168,10 @@ export function bafResolutionView({ outcome, consolation, awards, currentLevel, 
       };
     }
     return {
-      status: score > 0n ? 'SKIPPED · SETTLED' : 'SKIPPED', tone: 'muted',
+      status: score > 0n ? 'LOSS · SETTLED' : 'LOSS', tone: 'muted',
       message: score > 0n
-        ? 'The BAF flip missed; no WWXRP consolation remains on-chain.'
-        : 'The BAF flip missed; this account had no consolation.',
+        ? 'The BAF was a loss; no WWXRP consolation remains on-chain.'
+        : 'The BAF was a loss; this account had no consolation.',
       actionable: false,
     };
   }

@@ -8,8 +8,9 @@
 //
 // Live pools prefer the same fast app.goldRush sample that drives the headline;
 // /game/state remains the rolling-deploy fallback. Contract benchmarks are
-// published by app-parimutuel-panel's existing refresh, so this component owns
-// no fetch or polling timer.
+// published by app-parimutuel-panel, while app.goldRush carries a phase clock
+// decoded from GAME.currentDayView + packed purchaseStartDay in the same direct-
+// chain multicall. The strip's day has no indexer dependency.
 
 import { displayEth } from '../app/scaling.js';
 import { activeTicketLevel } from '../app/active-level.js';
@@ -357,7 +358,6 @@ export function transitionJackpotLockedLabel(kind) {
 export function phaseStripModel({
   gameState = null,
   goldRush = null,
-  phaseClock = null,
   contractPhase = null,
 } = {}) {
   const state = gameState && typeof gameState === 'object'
@@ -404,28 +404,19 @@ export function phaseStripModel({
     effectiveState,
     hasContractPhase ? contractPhase : null,
   );
-  const clockLevel = Number(phaseClock?.level);
-  const clockDay = Number(phaseClock?.dayInPhase);
-  const clockPhase = String(phaseClock?.phase || '').toUpperCase();
-  const samePurchaseClock = clockPhase === 'P'
-    && level != null
-    && clockLevel === Number(level)
-    && Number.isFinite(clockDay)
-    && clockDay > 0;
-  const firstPurchaseDay = clockPhase === 'J'
-    && level != null
-    && Number.isFinite(clockLevel)
-    && clockLevel + 1 === Number(level);
-  const day = samePurchaseClock ? clockDay : firstPurchaseDay ? 1 : null;
+  const chainPurchaseDay = Number(contractPhase?.purchaseDay);
+  const hasChainPurchaseDay = hasContractPhase
+    && contractPhase.jackpot === false
+    && Number.isInteger(chainPurchaseDay)
+    && chainPurchaseDay > 0;
+  const day = hasChainPurchaseDay ? chainPurchaseDay : null;
   const finalPurchaseDay = contractPhase?.lastPurchaseDay === true;
 
   return {
     jackpot: false,
     level,
     day,
-    dayLabel: day == null
-      ? finalPurchaseDay ? 'PURCHASE (FINAL)' : 'PURCHASE'
-      : `PURCHASE DAY ${day}${finalPurchaseDay ? ' (FINAL)' : ''}`,
+    dayLabel: `PURCHASE DAY ${day ?? '—'}${finalPurchaseDay ? ' (FINAL)' : ''}`,
   };
 }
 
@@ -487,8 +478,6 @@ function _formatBarPercent(value) {
 class AppPoolProgress extends HTMLElement {
   #unsubs = [];
   #initialized = false;
-  #phaseClock = null;
-  #phaseClockListener = null;
   #countdownTimer = null;
   #specialJackpotClock = null;
 
@@ -503,13 +492,6 @@ class AppPoolProgress extends HTMLElement {
       subscribe('app.goldRush', () => this.#render()),
       subscribe('app.poolBenchmarks', () => this.#render()),
     );
-    if (typeof document !== 'undefined' && document.addEventListener) {
-      this.#phaseClockListener = (event) => {
-        this.#phaseClock = event?.detail || null;
-        this.#render();
-      };
-      document.addEventListener('replay:phase-clock', this.#phaseClockListener);
-    }
     this.#paintCountdown();
     this.#countdownTimer = setInterval(() => this.#paintCountdown(), 250);
     try { this.#countdownTimer?.unref?.(); } catch (_e) { /* browser timer */ }
@@ -520,10 +502,6 @@ class AppPoolProgress extends HTMLElement {
       try { off(); } catch (_e) { /* defensive */ }
     }
     this.#unsubs = [];
-    if (this.#phaseClockListener && typeof document !== 'undefined') {
-      document.removeEventListener?.('replay:phase-clock', this.#phaseClockListener);
-    }
-    this.#phaseClockListener = null;
     if (this.#countdownTimer != null) clearInterval(this.#countdownTimer);
     this.#countdownTimer = null;
     this.#initialized = false;
@@ -533,7 +511,7 @@ class AppPoolProgress extends HTMLElement {
     this.innerHTML = `
       <section class="pool-progress" data-mode="purchase" aria-label="Level prize pool">
         <header class="pool-progress__head">
-          <strong class="pool-progress__day" data-el="pool-day">PURCHASE</strong>
+          <strong class="pool-progress__day" data-el="pool-day">PURCHASE DAY —</strong>
           <div class="pool-progress__special-jackpot" data-el="pool-special-jackpot" hidden>
             <span data-el="pool-special-jackpot-label">NEXT JACKPOT IN:</span>
             <strong data-el="pool-special-jackpot-countdown">--:--</strong>
@@ -679,11 +657,24 @@ class AppPoolProgress extends HTMLElement {
     const benchmarkTargetWei = sameLevel ? benchmarks?.targetWei : null;
     const ratchets = sameLevel ? benchmarks?.ratchets : null;
     const history = sameLevel ? benchmarks?.history : null;
-    const contractPhase = sameLevel ? benchmarks?.contractPhase : null;
+    const benchmarkPhase = sameLevel ? benchmarks?.contractPhase : null;
+    const chainPhase = goldRush?.phaseClock || null;
+    const contractPhase = chainPhase || benchmarkPhase;
+    const chainLevel = Number(chainPhase?.level);
+    const phaseGameState = Number.isInteger(chainLevel)
+      ? {
+        ...(gameState || {}),
+        level: chainLevel,
+        jackpotPhaseFlag: chainPhase.jackpot === true,
+        phase: chainPhase.gameOver
+          ? 'GAMEOVER'
+          : chainPhase.jackpot ? 'JACKPOT' : 'PURCHASE',
+        phaseTransitionActive: chainPhase.transition === true,
+      }
+      : gameState;
     const phase = phaseStripModel({
-      gameState,
+      gameState: phaseGameState,
       goldRush,
-      phaseClock: this.#phaseClock,
       contractPhase,
     });
     const targetWei = prizePoolTargetForLevel(phase.level, benchmarkTargetWei);

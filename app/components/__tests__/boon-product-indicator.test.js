@@ -30,20 +30,12 @@ globalThis.customElements = {
   get(name) { return this._registry.get(name); },
 };
 
-const {
-  BoonProductIndicator,
-  purchaseControlBoonLabel,
-} = await import('../boon-product-indicator.js');
+const { BoonProductIndicator } = await import('../boon-product-indicator.js');
 
 describe('<boon-product-indicator>', () => {
   beforeEach(() => storeMod.__resetForTest());
 
-  test('purchase controls state the concrete green-line effect', () => {
-    assert.equal(purchaseControlBoonLabel('BOON +5%', 'purchase'),
-      'BOON: +5% MORE TICKETS');
-    assert.equal(purchaseControlBoonLabel('BOON +5%', 'lootbox'),
-      'BOON: +5% BIGGER LUCKBOX');
-
+  test('purchase controls stay icon-only and put the exact effect in hover text', () => {
     const el = new BoonProductIndicator();
     el.setAttribute('product', 'lootbox');
     el.setAttribute('variant', 'purchase-control');
@@ -53,7 +45,8 @@ describe('<boon-product-indicator>', () => {
       day: 62,
       boons: [{ boonType: 5, consumed: false }],
     });
-    assert.equal(el.textContent, 'BOON: +5% BIGGER LUCKBOX');
+    assert.equal(el.textContent, '');
+    assert.match(el.title, /next luckbox purchase gets \+5% value/i);
     el.disconnectedCallback();
   });
 
@@ -69,10 +62,14 @@ describe('<boon-product-indicator>', () => {
       boons: [{ boonType: 6, consumed: false }],
     });
     assert.equal(el.hidden, false);
-    assert.equal(el.textContent, 'BOON +15%');
+    assert.equal(el.textContent, '', 'the main UI uses the mark without words');
     // `lootbox` stays the product key; the player-facing word is "luckbox".
     assert.match(el.title, /luckbox purchase/i);
     assert.equal(el.getAttribute('data-boon-type'), '6');
+    assert.equal(el.getAttribute('data-boon-strength'), 'mid');
+    assert.equal(el.getAttribute('data-boon-tier'), '2');
+    assert.equal(el.getAttribute('data-boon-pips'), '●●');
+    assert.equal(el.getAttribute('data-boon-direction'), 'up');
 
     storeMod.update('app.boons', {
       address: '0xabc',
@@ -102,6 +99,9 @@ describe('<boon-product-indicator>', () => {
     assert.equal(host.getAttribute('data-active-boon-product'), 'lootbox');
     assert.equal(host.getAttribute('data-active-boon-type'), '6');
     assert.equal(host.getAttribute('data-boon-effect'), '+15%');
+    assert.equal(host.getAttribute('data-boon-strength'), 'mid');
+    assert.equal(host.getAttribute('data-boon-pips'), '●●');
+    assert.equal(host.getAttribute('data-boon-direction'), 'up');
     assert.match(host.getAttribute('title'), /luckbox purchase.*15%/i);
     assert.match(el.getAttribute('aria-label'), /luckbox purchase.*15%/i);
     assert.equal(el.getAttribute('tabindex'), '0', 'the hover description is keyboard reachable');
@@ -113,25 +113,58 @@ describe('<boon-product-indicator>', () => {
     });
     assert.equal(host.classList.contains('has-active-boon'), false);
     assert.equal(host.getAttribute('data-active-boon-product'), null);
+    assert.equal(host.getAttribute('data-boon-strength'), null);
+    assert.equal(host.getAttribute('data-boon-direction'), null);
     assert.equal(host.getAttribute('title'), 'Luckbox amount', 'the original field tooltip is restored');
     el.disconnectedCallback();
   });
 
-  test('the chip never costs its host layout room', () => {
-    // The add-bet dialog card clips its own overflow, so a chip outdented past
-    // the card edge loses its top. It has to sit in the card's flow.
+  test('the icon overlays dense controls without changing their box metrics', () => {
+    const liveRule = STATUS_CSS.match(
+      /body\.layout-basic boon-product-indicator\s*\{[^}]*position:\s*absolute;[^}]*display:\s*grid;[^}]*flex:\s*none;[^}]*\}/s,
+    )?.[0];
+    assert.ok(liveRule, 'live boon badges are removed from flex and grid flow globally');
+
+    // The add-bet card is positioned and clipped, so the badge stays inside
+    // its top edge while remaining absolutely overlaid.
     const coinflip = STATUS_CSS.match(/\.df-boon-indicator\s*\{[^}]*\}/)?.[0];
     assert.ok(coinflip, 'the coinflip chip still has a rule');
-    assert.doesNotMatch(coinflip, /position:\s*absolute/,
-      'the chip is clipped by .df-reverse-dialog__card overflow when it is lifted out of flow');
-    assert.doesNotMatch(coinflip, /top:\s*-/);
+    assert.match(coinflip, /top:\s*0\.52rem/);
+    assert.match(coinflip, /right:\s*2\.9rem/);
 
     // Column 3 of the quest header rail is auto-sized against a centred QUESTS
-    // heading in column 2, so widening the score control collides with it.
+    // heading in column 2, so the icon straddles the existing card corner.
     const quest = STATUS_CSS.match(
-      /\.qst-score-label boon-product-indicator\s*\{[^}]*display:\s*flex[^}]*\}/)?.[0];
-    assert.ok(quest, 'the quest chip drops to its own row instead of extending the label');
-    assert.match(quest, /width:\s*fit-content/, 'the chip keeps its own width on that row');
+      /\.qst-score-label boon-product-indicator\s*\{[^}]*\}/)?.[0];
+    assert.ok(quest, 'the quest boon is a compact icon rather than a text chip');
+    assert.match(quest, /top:\s*-0\.48rem/);
+    assert.match(quest, /right:\s*-0\.48rem/);
+  });
+
+  test('uses a standard tier-colored arrow with native product badges and a real shield', () => {
+    assert.match(STATUS_CSS,
+      /data-boon-product="degenerette-eth"[^}]*--boon-logo:\s*url\('\/badges-circular\/crypto_06_ethereum_green\.svg'\)/);
+    assert.match(STATUS_CSS,
+      /data-boon-product="degenerette-flip"[^}]*--boon-logo:\s*url\('\/whitepaper\/flame-logo-split\.svg'\)/);
+    assert.match(STATUS_CSS,
+      /data-boon-product="degenerette-wwxrp"[^}]*--boon-logo:\s*url\('\/shared\/coinflip-face-red\.svg'\)/);
+    assert.match(STATUS_CSS,
+      /data-boon-product="quests"[^}]*--boon-logo:\s*url\('\/app\/assets\/boons\/boon-quest-micro\.svg'\)/);
+    assert.match(STATUS_CSS,
+      /data-boon-product="quests"\]::before\s*\{[^}]*display:\s*none/,
+      'quest shields replace the arrow instead of sitting on it');
+    assert.match(STATUS_CSS,
+      /boon-product-indicator::before\s*\{[^}]*background:\s*linear-gradient\([^}]*var\(--boon-amount[^}]*clip-path:\s*polygon\(/s,
+      'the arrow itself carries the amount tier');
+    assert.match(STATUS_CSS,
+      /boon-product-indicator::after\s*\{[^}]*background:\s*var\(--boon-logo, none\) center \/ contain no-repeat/s,
+      'an established badge can sit directly on the arrow');
+    assert.doesNotMatch(STATUS_CSS,
+      /content:\s*attr\(data-boon-pips\)/s,
+      'redundant pips are absent');
+    assert.match(STATUS_CSS,
+      /data-boon-direction="down"\][^{}]*::before\s*\{[^}]*rotate\(180deg\)/,
+      'discounts point down');
   });
 
   test('an inactive chip collapses even though the rules set a display', () => {

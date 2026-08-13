@@ -336,6 +336,7 @@ import * as passesMod from '../../app/passes.js';
 import * as coinflipMod from '../../app/coinflip.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as uiPreferencesMod from '../../app/ui-preferences.js';
+import { invalidateJSONCache } from '../../app/api.js';
 
 // Seats auto-mint with the pass, so `claimSeat`/`canClaimSeat` are gone — holding one is the
 // whole signal.
@@ -672,16 +673,14 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     assert.match(el.innerHTML, /<span>Buy luckbox<\/span>/);
     assert.match(el.innerHTML,
       /<boon-product-indicator product="lootbox"\s+variant="purchase-control"/);
+    assert.match(el.innerHTML,
+      /class="dec-input-accessories" aria-label="Luckbox purchase modifiers"[\s\S]*?<boon-product-indicator[\s\S]*?<quest-objective-indicator product="lootbox"/,
+      'boon and quest markers have dedicated non-overlapping slots');
     assert.doesNotMatch(el.innerHTML, /Luckbox value/i);
     assert.match(
       APP_CSS,
       /\.app-decimator-panel \.dec-input-label\s*\{[^}]*font-size:\s*clamp\(0\.72rem, 1\.55vw, 0\.82rem\)/s,
       'Buy Tickets and Buy Luckbox use the larger matched label size',
-    );
-    assert.match(
-      STATUS_CSS,
-      /\.app-decimator-panel \.dec-input-group\.has-active-boon > \.dec-input-label\s*\{[^}]*flex:\s*1 1 auto;[^}]*align-items:\s*flex-start;/s,
-      'the boon label uses free label space without moving the numeric control',
     );
     assert.doesNotMatch(
       STATUS_CSS,
@@ -690,13 +689,28 @@ describe('Plan 62-01: <app-decimator-panel> Custom Element shell', () => {
     );
     assert.match(
       STATUS_CSS,
-      /boon-product-indicator\[variant="purchase-control"\]\s*\{[^}]*align-self:\s*flex-end;[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*none;[^}]*box-shadow:\s*none;[^}]*color:\s*#4ade80;[^}]*font-size:\s*0\.5rem;[^}]*animation:\s*none;/s,
-      'the input-side purchase boon is larger all-green text without a pill bubble',
+      /\.dec-input-accessories\s*\{[^}]*position:\s*absolute;[^}]*right:\s*7rem;[^}]*width:\s*3\.05rem;[^}]*pointer-events:\s*none;/s,
+      'the fixed purchase accessory lane cannot alter field dimensions',
     );
     assert.match(
       STATUS_CSS,
-      /boon-product-indicator\[variant="purchase-control"\]::before\s*\{[^}]*display:\s*none;/s,
-      'the compact purchase boon has no detached status dot',
+      /\.dec-input-accessories > boon-product-indicator\s*\{[^}]*left:\s*0;[^}]*width:\s*1\.42rem;[^}]*animation:\s*none;/s,
+      'the purchase boon occupies its own slot',
+    );
+    assert.match(
+      STATUS_CSS,
+      /\.dec-input-accessories > quest-objective-indicator\s*\{[^}]*right:\s*0;[^}]*width:\s*1\.08rem;/s,
+      'the quest marker occupies the other slot',
+    );
+    assert.match(
+      STATUS_CSS,
+      /boon-product-indicator::before\s*\{[^}]*var\(--boon-amount[^}]*clip-path:\s*polygon\(/s,
+      'the compact purchase boon uses the shared amount-colored arrow',
+    );
+    assert.match(
+      STATUS_CSS,
+      /boon-product-indicator::after\s*\{[^}]*background:\s*var\(--boon-logo, none\) center \/ contain no-repeat/s,
+      'native product badges can be overlaid without entering the field layout',
     );
     assert.match(
       APP_CSS,
@@ -1227,6 +1241,32 @@ describe('combined ticket + lootbox buy', () => {
     assert.equal(tally.hidden, false, 'a bounty makes the otherwise bonus-free Luckbox tally visible');
     assert.equal(label.textContent, 'BONUS + BOUNTY');
     assert.equal(total.textContent, '+10K FLIP');
+    el.disconnectedCallback();
+  });
+
+  test('boon-adjusted ticket and Luckbox buys show the concrete extra amount', async () => {
+    storeMod.update('app.boons', {
+      address: CONNECTED.toLowerCase(),
+      day: 62,
+      exact: true,
+      boons: [
+        { boonType: 9, consumed: false },
+        { boonType: 22, consumed: false },
+      ],
+    });
+    const el = instantiate();
+    await settle(60);
+    const tickets = el.querySelector('[name="dec-tickets"]');
+    const luckbox = el.querySelector('[name="dec-lootbox-eth"]');
+    const effect = el.querySelector('[data-bind="dec-purchase-boon-effect"]');
+
+    tickets.value = '100';
+    luckbox.value = '5';
+    luckbox.dispatchEvent({ type: 'input' });
+    assert.equal(effect.hidden, false);
+    assert.equal(effect.textContent, '+25 TICKETS BOON · +1.25 ETH BOON');
+    assert.match(el.querySelector('[data-bind="dec-flip-credit"]').getAttribute('aria-label'),
+      /Purchase boon: \+25 TICKETS BOON, \+1\.25 ETH BOON/);
     el.disconnectedCallback();
   });
 
@@ -1997,6 +2037,9 @@ describe('combined ticket + lootbox buy', () => {
     locked.disconnectedCallback();
     locked.remove();
 
+    // The second mount represents an independent server fixture for the same
+    // player URL; do not couple the two cases through the render-wave cache.
+    invalidateJSONCache();
     _fetchHandler = async (url) => String(url).includes('/game/state')
       ? DEFAULT_GAME_STATE
       : { claimableEth: '0', flipBalance: '0', scoreBreakdown: { totalBps: 61 } };
@@ -2846,7 +2889,12 @@ describe('Foil pack buy leg', () => {
     assert.equal(check.disabled, false, 'enabled when not owned');
     const price = el.querySelector('[data-bind="dec-foil-price"]');
     assert.equal(price.textContent, '0.4 ETH', '10 × level-12 ticket price');
-    assert.match(el.innerHTML, /<span class="dec-foil-label">Foil pack \(limit 1\)<\/span>/);
+    assert.match(el.innerHTML,
+      /<span class="dec-foil-label">Foil pack \(limit 1\)[\s\S]*?<quest-objective-indicator product="foil"><\/quest-objective-indicator>[\s\S]*?<\/span>/,
+      'the unfinished-quest marker is anchored inside the visible foil label');
+    assert.match(STATUS_CSS,
+      /\.app-decimator-panel \.dec-foil-label > quest-objective-indicator\s*\{[^}]*position:\s*absolute;[^}]*left:\s*calc\(100% \+ 0\.3rem\)/s,
+      'the foil quest icon is removed from the three-column checkbox row');
     assert.doesNotMatch(el.innerHTML, /dec-foil-card|dec-foil-sub|dec-foil-shine/,
       'the old promotional card and helper copy are gone');
     assert.match(APP_CSS,
@@ -3431,6 +3479,21 @@ describe('app-decimator-panel — FLIP ticket buy (redeemFlip)', () => {
       APP_CSS,
       /\.dec-flip-balance\s*\{[^}]*height:\s*2\.6rem;[^}]*grid-template-areas:\s*"action label" "action value"[^}]*padding:\s*0\.18rem 0\.48rem 0\.2rem;[^}]*border:\s*1px solid rgba\(239, 68, 68, 0\.42\)[^}]*#140707/s,
       'the full FLIP row mirrors compressed ETH with a centered action and two-line ledger',
+    );
+    assert.match(
+      PANEL_SRC,
+      /<span class="dec-flip-balance__action">[\s\S]*?data-bind="dec-funds-total-flip"[\s\S]*?<quest-objective-indicator class="dec-redeem-quest"[\s\S]*?data-quest-pointer="bottom-left"[\s\S]*?product="redeem-flip"><\/quest-objective-indicator>[\s\S]*?<\/span>/,
+      'the redeem quest marker is anchored to the USE FLIP action itself',
+    );
+    assert.match(
+      APP_CSS,
+      /\.dec-flip-balance__action\s*\{[^}]*position:\s*relative;[^}]*width:\s*fit-content;[^}]*grid-area:\s*action/s,
+      'the quest anchor follows the rendered action width',
+    );
+    assert.match(
+      STATUS_CSS,
+      /\.dec-flip-balance__action > \.dec-redeem-quest\s*\{[^}]*top:\s*-0\.32rem;[^}]*left:\s*calc\(100% \+ 0\.43rem\);[^}]*width:\s*1\.18rem;[^}]*height:\s*1\.18rem/s,
+      'the larger badge stays above/right while its lower-left tail aims at USE FLIP',
     );
     assert.match(
       APP_CSS,

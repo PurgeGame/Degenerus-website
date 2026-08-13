@@ -5,6 +5,16 @@ import { __setDecimatorBurnWidgetDepsForTest } from './components/app-decimator-
 
 const FLIP = 10n ** 18n;
 const DEMO_PLAYER = '0xba5e00000000000000000000000000000000cafe';
+const BAF_LOCKED = typeof location !== 'undefined'
+  && new URLSearchParams(location.search).has('locked');
+// Local stand-ins for the /api/profiles identity layer, so the demo shows the
+// linked-player treatment (avatar + @name) next to the unlinked fallback.
+const DEMO_PROFILES = new Map([
+  ['0xf3fcb60eab7d06b11516023c4e4ce449b7cd563b', { name: 'coinflipenjoyer', avatar: null }],
+  ['0x4efc5a2c3ecf900800fbf0083da9f60971fe3b45', { name: 'rugpull_rachel', avatar: null }],
+  ['0x62f01609828ba185cca5a764ff5ac3b920edc1b8', { name: 'GweiGremlin', avatar: null }],
+]);
+
 const bafLeaders = [
   { level: 40, player: '0xf3fcb60eab7d06b11516023c4e4ce449b7cd563b', score: 79_595_332n * FLIP, rank: 1 },
   { level: 40, player: '0x4efc5a2c3ecf900800fbf0083da9f60971fe3b45', score: 76_956_966n * FLIP, rank: 2 },
@@ -33,22 +43,37 @@ __setBafEveWidgetDepsForTest({
     prizePools: { futurePrizePool: '1837500000000000' },
   }),
   finalDay: async () => ({ currentLevel: 39, targetLevel: 40, rngLocked: false }),
+  profiles: async (addresses) => new Map(
+    addresses
+      .map((address) => [address, DEMO_PROFILES.get(address)])
+      .filter(([, profile]) => profile),
+  ),
   fetcher: async (path) => {
     if (path.startsWith('/leaderboards/baf')) {
       return { entries: bafLeaders.map((row) => ({ ...row, score: String(row.score) })) };
     }
     if (path.startsWith('/player/')) {
+      // ?locked previews the un-armed rail: a zero BAF score is skipped by the
+      // scatter and far-future slices, so 80% of the pool is out of reach.
       return {
         level: 40,
         player: DEMO_PLAYER,
-        score: String(12_846_250n * FLIP),
-        rank: 12,
+        score: String(BAF_LOCKED ? 0n : 12_846_250n * FLIP),
+        rank: BAF_LOCKED ? 0 : 12,
         totalParticipants: 247,
         roundStatus: 'open',
       };
     }
     if (path.startsWith('/leaderboards/coinflip')) {
-      return { entries: [{ day: 25, player: bafLeaders[1].player, score: '6248200', rank: 1 }] };
+      return {
+        entries: [
+          { day: 25, player: bafLeaders[1].player, score: '6248200', rank: 1 },
+          { day: 25, player: bafLeaders[0].player, score: '4820000', rank: 2 },
+        ],
+        totalWeight: '18450000',
+        totalParticipants: 38,
+        player: { day: 25, player: DEMO_PLAYER, score: '1284625', rank: 12 },
+      };
     }
     throw new Error(`Unknown demo path: ${path}`);
   },

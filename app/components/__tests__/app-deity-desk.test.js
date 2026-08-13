@@ -10,6 +10,7 @@ globalThis.customElements ||= {
 };
 
 const { deitySymbolPresentation } = await import('../../app/deity-symbol.js');
+const { boonTypePresentation } = await import('../../app/boons.js');
 const {
   fetchPlayerSuggestions,
   filterPlayerSuggestions,
@@ -56,6 +57,40 @@ describe('<app-deity-desk>', () => {
     assert.equal(model.canSmite, true);
     assert.equal(deityDeskModel({ catalog, owner, connected: owner, boonState: {}, mode: 'combined' }).visible,
       false, 'combined accounts do not expose an ambiguous write target');
+  });
+
+  test('uses the shared colored arrow with native badges where they exist', () => {
+    assert.equal(boonTypePresentation(7).icon, null);
+    assert.equal(boonTypePresentation(4).icon,
+      '/app/assets/boons/boon-quest-micro.svg',
+      'the shield choice carries the shield mark rather than an arrow');
+    assert.equal(boonTypePresentation(24).icon,
+      '/badges-circular/crypto_06_ethereum_green.svg',
+      'a pass cost reduction carries the green ETH badge');
+    assert.equal(boonTypePresentation(32).icon,
+      '/badges-circular/crypto_06_ethereum_green.svg');
+    assert.equal(boonTypePresentation(36).icon,
+      '/whitepaper/flame-logo-split.svg');
+    assert.equal(boonTypePresentation(40).icon,
+      '/shared/coinflip-face-red.svg');
+    assert.match(DESK_SRC, /icon\.src = presentation\.icon/,
+      'the desk consumes the canonical boon presentation instead of a local icon table');
+    assert.match(DESK_SRC, /mark\.hidden = !presentation/,
+      'the colored arrow remains visible when its contextual product needs no duplicate logo');
+    assert.match(DESK_SRC, /class="deity-desk__boon-mark"/,
+      'each slot has the same amount-colored arrow used by active boosts');
+    assert.match(APP_CSS,
+      /\.deity-desk__boon-mark::before\s*\{[^}]*var\(--boon-amount[^}]*clip-path:\s*polygon\(/s,
+      'the arrow itself carries the green, blue, or purple amount tier');
+    assert.match(APP_CSS,
+      /\.deity-desk__boon-icon\s*\{[^}]*width:\s*1\.1rem;[^}]*height:\s*1\.1rem;[^}]*border:\s*0;[^}]*background:\s*transparent;/s,
+      'native badges sit directly on the arrow without a generic icon box');
+    assert.match(APP_CSS,
+      /button\[data-boon-direction="down"\] \.deity-desk__boon-mark::before\s*\{[^}]*rotate\(180deg\)/s,
+      'pass discounts turn only the arrow down while native logos remain upright');
+    assert.match(APP_CSS,
+      /button\[data-boon-direction="down"\]\s*\{[^}]*--boon-amount:\s*#ef4444/s,
+      'pass cost reductions use the dedicated red down-arrow language');
   });
 
   test('operator mode retains boons but correctly locks the owner-only smite', () => {
@@ -128,6 +163,15 @@ describe('<app-deity-desk>', () => {
   test('mounts the compact four-action desk above Tickets and removes the old controls', () => {
     assert.ok(INDEX_HTML.indexOf('<app-deity-desk>') < INDEX_HTML.indexOf('<app-tickets-inventory>'));
     assert.match(DESK_SRC, />TARGET PLAYER<\/label>/);
+    assert.match(DESK_SRC,
+      /class="deity-desk__target-head"[\s\S]*?TARGET PLAYER[\s\S]*?data-bind="deity-desk-feedback"[\s\S]*?class="deity-desk__target-control"/,
+      'transaction feedback shares the fixed header immediately above the wallet field');
+    assert.match(APP_CSS,
+      /\.deity-desk__target-head\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\)[^}]*min-height:/s,
+      'the target header reserves one row so feedback cannot grow the desk');
+    assert.match(APP_CSS,
+      /\.deity-desk__feedback\s*\{[^}]*overflow:\s*hidden[^}]*text-align:\s*right[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,
+      'long status or error copy stays in the compact right-hand lane');
     assert.match(DESK_SRC, /placeholder="Wallet, Discord ID, or @name"/);
     assert.match(DESK_SRC, /role="combobox"[^>]*aria-autocomplete="list"/);
     assert.match(DESK_SRC, /fetchPlayerSuggestions\(query/);
@@ -137,7 +181,7 @@ describe('<app-deity-desk>', () => {
     assert.match(DESK_SRC, /\[0, 1, 2\]\.map/);
     assert.match(DESK_SRC, /data-bind="deity-desk-smite"/);
     assert.match(DESK_SRC, />SMITE</);
-    assert.match(DESK_SRC, /<strong>-2 SCORE<\/strong>/);
+    assert.match(DESK_SRC, /<strong>-2 DEGEN RATING<\/strong>/);
     assert.match(DESK_SRC, /deity-desk__smite-cost">COST:<img src="\/whitepaper\/flame-logo-split\.svg" alt="FLIP">200/);
     assert.ok(
       DESK_SRC.indexOf('data-bind="deity-desk-smite"')
@@ -146,6 +190,12 @@ describe('<app-deity-desk>', () => {
     );
     assert.doesNotMatch(DESK_SRC, />CURSE<|Curse confirmed|deity-curse/);
     assert.equal(deityBoonActionLabel({ name: 'Tickets' }, 0), 'Tickets BOON');
+    assert.equal(deityBoonActionLabel({ product: 'degenerette-eth', name: 'ETH Degenerette' }, 0),
+      'DEGENERETTE BOON');
+    assert.equal(deityBoonActionLabel({ product: 'degenerette-flip', name: 'FLIP Degenerette' }, 1),
+      'DEGENERETTE BOON');
+    assert.equal(deityBoonActionLabel({ product: 'degenerette-wwxrp', name: 'WWXRP Degenerette' }, 2),
+      'DEGENERETTE BOON');
     assert.equal(deityBoonActionLabel({ name: 'Mystery boon' }, 1), 'Mystery boon');
     assert.match(DESK_SRC, /issueDeityBoon\(\{ recipient: target, slot: action \}\)/);
     assert.match(DESK_SRC, /smiteWithDeity\(\{ deityId: model\.symbolId, target \}\)/);
@@ -153,12 +203,45 @@ describe('<app-deity-desk>', () => {
       'the identity side contains no day or RNG status copy');
     assert.doesNotMatch(PASS_SRC, /data-bind="pass-deity-(?:boons|curse)"/);
     assert.match(APP_CSS, /\.deity-desk__actions\s*\{[^}]*repeat\(4,/s);
+    assert.match(APP_CSS,
+      /boon-product-indicator::before,[\s\S]*?\.boon-badge__mark::before,[\s\S]*?\.rvl-card--boon \.rvl-card-icon::before,[\s\S]*?\.deity-desk__boon-mark::before\s*\{[^}]*drop-shadow\([^)]*--boon-amount-rgb[^}]*drop-shadow\([^)]*--boon-amount-rgb/s,
+      'every shared boon arrow gets a restrained colored core and outer halo');
     assert.match(DESK_SRC, /data-boon-product/,
       'daily boon buttons carry their affected product for color coding');
+    assert.match(DESK_SRC, /deity-desk__boon-icon/,
+      'each daily boon choice carries its product-specific icon');
+    assert.match(DESK_SRC,
+      /deity-desk__boon-mark deity-desk__smite-mark[\s\S]*?deity-desk__boon-icon deity-desk__smite-icon[\s\S]*?smite-down-micro\.svg/,
+      'Smite reuses the shared arrow silhouette with only a lightning badge inside');
+    assert.match(APP_CSS,
+      /\.deity-desk__actions\s*\{[^}]*--deity-action-arrow-size:\s*2\.42rem/s,
+      'the roomy action row defines one larger arrow size');
+    assert.match(APP_CSS,
+      /\.deity-desk__boon-mark\s*\{[^}]*width:\s*var\(--deity-action-arrow-size\)[^}]*height:\s*var\(--deity-action-arrow-size\)/s,
+      'up arrows consume the shared size');
+    assert.match(DESK_SRC,
+      /deity-desk__smite"[^>]*data-boon-direction="down"[^>]*data-boon-strength="low"/,
+      'Smite enters the same direction and tier pipeline as every other arrow');
+    assert.match(APP_CSS,
+      /button\.deity-desk__smite \.deity-desk__smite-icon\s*\{[^}]*top:\s*auto;[^}]*bottom:\s*0\.08rem;[^}]*width:\s*1\.18rem;[^}]*height:\s*1\.18rem/s,
+      'the larger bolt sits inside the lower arrowhead instead of above the arrow');
+    assert.match(DESK_SRC, /data-boon-strength/,
+      'each daily boon choice carries its relative amount tier');
     assert.match(APP_CSS, /\.deity-desk__actions button\s*\{[^}]*min-height:\s*3\.05rem/s,
       'daily boon buttons have a larger action target');
-    assert.match(APP_CSS, /\.deity-desk__actions button span\s*\{[^}]*0\.64rem/s,
-      'daily boon labels are larger');
+    assert.match(APP_CSS,
+      /\.deity-desk__smite strong\s*\{[^}]*font-size:\s*clamp\(0\.68rem, 0\.9vw, 0\.76rem\);[^}]*text-wrap:\s*balance;[^}]*white-space:\s*normal/s,
+      'the larger -2 DEGEN RATING result wraps rather than clipping in a narrow card');
+    // The product name labels; the effect is the payload. The name was sized
+    // down so it stops truncating ("LUCKBOX BO…") and the effect leads.
+    const boonName = APP_CSS.match(/\.deity-desk__actions button span\s*\{[^}]*font:\s*\d+ ([\d.]+)rem/s);
+    const boonEffect = APP_CSS.match(/\.deity-desk__actions button strong\s*\{[^}]*font:\s*\d+ ([\d.]+)rem/s);
+    assert.ok(boonName && boonEffect, 'both boon type sizes are declared');
+    assert.ok(Number(boonEffect[1]) > Number(boonName[1]),
+      'the boon effect outweighs its product label');
+    const boonNameRule = APP_CSS.match(/\.deity-desk__actions button span\s*\{[^}]*\}/s)?.[0] || '';
+    assert.doesNotMatch(boonNameRule, /text-overflow:\s*ellipsis|white-space:\s*nowrap/,
+      'Deity boon titles wrap cleanly instead of ever becoming an ellipsis');
     assert.match(APP_CSS, /\.deity-desk__actions button\[data-boon-product="decimator"\]/,
       'boon buttons use product-specific color treatments');
     assert.match(DESK_SRC, /deity-pass-lockup__symbol" data-bind="deity-desk-symbol"/,
@@ -168,8 +251,8 @@ describe('<app-deity-desk>', () => {
       'every Deity surface shares the measured transparent symbol opening');
     assert.match(APP_CSS, /\.deity-desk__suggestions\s*\{[^}]*position:\s*absolute[^}]*max-height:/s,
       'Discord matches open as a bounded dropdown beneath the target field');
-    assert.match(APP_CSS, /\.deity-desk__actions button::after\s*\{[^}]*rgb\(var\(--boon-rgb\)\)/s,
-      'each action carries a small product-colored power light');
+    assert.doesNotMatch(APP_CSS, /\.deity-desk__actions button::after\s*\{[^}]*attr\(data-boon-pips\)/s,
+      'tier color replaces the redundant amount-strength pips');
     assert.match(APP_CSS, /\.deity-desk__smite-cost\s*\{[^}]*position:\s*absolute[^}]*right:\s*0\.54rem[^}]*bottom:\s*0\.2rem[^}]*font:\s*950 0\.5rem/s,
       'Smite leaves its name on the first line and moves a larger FLIP cost to the bottom-right');
     assert.match(APP_CSS, /\.deity-desk__smite-cost img\s*\{[^}]*width:\s*0\.8rem[^}]*height:\s*0\.8rem/s,

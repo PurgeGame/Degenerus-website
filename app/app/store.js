@@ -37,6 +37,8 @@
 //     deferral preserves the 58-01 chokepoint test's synchronous-state-snapshot semantics
 //     while still flipping mode before any actual UI render or async signing flow.
 
+import { invalidateJSONCache } from './api.js';
+
 const _state = {
   connected: {
     address: null,    // 0x... lowercase | null — set by wallet.js
@@ -57,6 +59,7 @@ const _state = {
     proEligible: false,    // Phase 64 — connected wallet's activity score > 80 pts (pro-gate.js)
     allInEligible: false,  // connected self-view currently clears the >60 Degen Rating ALL IN gate
     foilQuest: null,       // current account's unfinished daily foil quest + routed purchase level
+    questObjectives: null, // unfinished daily/level quests published by app-quest-panel
     // The right-side Protocol Coins instrument owns the FLIP spoiler gate.
     // Its compact mirror on the buy side subscribes to this exact disclosure
     // state so the same balance is never visible in one column and masked in
@@ -323,6 +326,12 @@ _installInternalSubscribers();
 // ---------------------------------------------------------------------------
 
 export function __resetForTest() {
+  // The REST broker deliberately retains successful reads for one second so a
+  // browser render wave can coalesce. Unit cases replace their fetch fixtures
+  // much faster than that; resetting app state must therefore reset transport
+  // state too, or one case receives the previous case's cached payload. This
+  // helper is test-only, so production cache lifetime is unchanged.
+  invalidateJSONCache();
   _state.connected.address = null;
   _state.connected.chainId = null;
   _state.connected.rdns = null;
@@ -335,6 +344,7 @@ export function __resetForTest() {
   _state.ui.proEligible = false;
   _state.ui.allInEligible = false;
   _state.ui.foilQuest = null;
+  _state.ui.questObjectives = null;
   _state.ui.protocolCoinsFlipDisclosure = null;
   // Phase 59 Plan 59-02: clear dynamic top-level namespaces (e.g. `app.*`) added
   // via setPath. polling-store-wired tests assert app.lastDay === undefined after

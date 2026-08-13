@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Buy a ticket or luckbox</title>
+  <rect x="5" y="11" width="37" height="42" rx="4" fill="#241d15" stroke="#f6c85f" stroke-width="4"/>
+  <path d="M8 32h31M23.5 14v36" fill="none" stroke="#f6c85f" stroke-width="2" opacity=".52"/>
+  <path d="m23.5 26 6 6-6 6-6-6Z" fill="#fff0b3"/>
+  <path d="M31 23h27a3 3 0 0 1 3 3v25a4 4 0 0 1-4 4H32a4 4 0 0 1-4-4V26a3 3 0 0 1 3-3Z" fill="#101827" stroke="#67e8f9" stroke-width="4"/>
+  <path d="M37 23v-6h15v6M30 35h29" fill="none" stroke="#67e8f9" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="45" cy="40" r="6" fill="#ed0e11"/>
+  <circle cx="45" cy="40" r="2.2" fill="#fff0b3"/>
+</svg>

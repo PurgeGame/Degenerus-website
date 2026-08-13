@@ -30,16 +30,136 @@ const BOON_UI = Object.freeze({
   29: { product: 'lazy', label: 'BOON −10%', detail: 'Your lazy pass purchase costs 10% less' },
   30: { product: 'lazy', label: 'BOON −25%', detail: 'Your lazy pass purchase costs 25% less' },
   31: { product: 'lazy', label: 'BOON −50%', detail: 'Your lazy pass purchase costs 50% less' },
-  32: { product: 'degenerette-eth', label: 'BOON +4%', detail: 'Your next ETH Degenerette bet gets 4% bonus stake' },
-  33: { product: 'degenerette-eth', label: 'BOON +8%', detail: 'Your next ETH Degenerette bet gets 8% bonus stake' },
-  34: { product: 'degenerette-eth', label: 'BOON +12%', detail: 'Your next ETH Degenerette bet gets 12% bonus stake' },
-  35: { product: 'degenerette-flip', label: 'BOON +4%', detail: 'Your next FLIP Degenerette bet gets 4% bonus stake' },
-  36: { product: 'degenerette-flip', label: 'BOON +8%', detail: 'Your next FLIP Degenerette bet gets 8% bonus stake' },
-  37: { product: 'degenerette-flip', label: 'BOON +12%', detail: 'Your next FLIP Degenerette bet gets 12% bonus stake' },
-  38: { product: 'degenerette-wwxrp', label: 'BOON +4%', detail: 'Your next WWXRP Degenerette bet gets 4% bonus stake' },
-  39: { product: 'degenerette-wwxrp', label: 'BOON +8%', detail: 'Your next WWXRP Degenerette bet gets 8% bonus stake' },
-  40: { product: 'degenerette-wwxrp', label: 'BOON +12%', detail: 'Your next WWXRP Degenerette bet gets 12% bonus stake' },
+  32: { product: 'degenerette-eth', label: '4% BONUS ETH BET', detail: '4% bonus ETH bet on your next Degenerette spin' },
+  33: { product: 'degenerette-eth', label: '8% BONUS ETH BET', detail: '8% bonus ETH bet on your next Degenerette spin' },
+  34: { product: 'degenerette-eth', label: '12% BONUS ETH BET', detail: '12% bonus ETH bet on your next Degenerette spin' },
+  35: { product: 'degenerette-flip', label: '4% BONUS FLIP BET', detail: '4% bonus FLIP bet on your next Degenerette spin' },
+  36: { product: 'degenerette-flip', label: '8% BONUS FLIP BET', detail: '8% bonus FLIP bet on your next Degenerette spin' },
+  37: { product: 'degenerette-flip', label: '12% BONUS FLIP BET', detail: '12% bonus FLIP bet on your next Degenerette spin' },
+  38: { product: 'degenerette-wwxrp', label: '4% BONUS WWXRP BET', detail: '4% bonus WWXRP bet on your next Degenerette spin' },
+  39: { product: 'degenerette-wwxrp', label: '8% BONUS WWXRP BET', detail: '8% bonus WWXRP bet on your next Degenerette spin' },
+  40: { product: 'degenerette-wwxrp', label: '12% BONUS WWXRP BET', detail: '12% bonus WWXRP bet on your next Degenerette spin' },
 });
+
+/* Reuse real site art where it exists. Most controls already name/show the
+   affected product, so their marker is just the amount-colored arrow. Currency
+   boons keep the exact ETH / FLIP / WWXRP badge players already recognize. */
+export const BOON_PRODUCT_ICONS = Object.freeze({
+  purchase: null,
+  lootbox: '/app/assets/lootbox/degenerus-lootbox-case-v3.webp',
+  coinflip: '/whitepaper/flame-logo-split.svg',
+  quests: '/app/assets/boons/boon-quest-micro.svg',
+  decimator: '/app/assets/decimator-draw-mark.svg',
+  whale: '/badges-circular/crypto_06_ethereum_green.svg',
+  activity: null,
+  deity: '/badges-circular/crypto_06_ethereum_green.svg',
+  lazy: '/badges-circular/crypto_06_ethereum_green.svg',
+  'degenerette-eth': '/badges-circular/crypto_06_ethereum_green.svg',
+  'degenerette-flip': '/whitepaper/flame-logo-split.svg',
+  'degenerette-wwxrp': '/shared/coinflip-face-red.svg',
+});
+
+export const BOON_PRODUCT_COLORS = Object.freeze({
+  purchase: '#f5a623',
+  lootbox: '#a78bfa',
+  coinflip: '#fb7185',
+  quests: '#34d399',
+  decimator: '#22d3ee',
+  whale: '#60a5fa',
+  activity: '#818cf8',
+  deity: '#fbbf24',
+  lazy: '#facc15',
+  'degenerette-eth': '#a855f7',
+  'degenerette-flip': '#f59e0b',
+  'degenerette-wwxrp': '#ef4444',
+});
+
+export const BOON_AMOUNT_COLORS = Object.freeze({
+  low: '#60a5fa',
+  mid: '#cbd5e1',
+  high: '#facc15',
+  special: '#93c5fd',
+  utility: '#67e8f9',
+});
+
+const BOON_DISCOUNT_COLORS = Object.freeze({
+  low: '#ef4444',
+  mid: '#cbd5e1',
+  high: '#facc15',
+});
+
+const BOON_DIRECTION_BY_PRODUCT = Object.freeze({
+  whale: 'down',
+  deity: 'down',
+  lazy: 'down',
+});
+
+// Tier is relative to its own boon family. A +12% Degenerette boon and a +50%
+// Decimator boon are both the strongest roll in their lane and therefore share
+// the same high-tier amount treatment.
+const BOON_TIER_BY_TYPE = Object.freeze({
+  1: 1, 2: 2, 3: 3,
+  4: 0,
+  5: 1, 6: 2, 22: 3,
+  7: 1, 8: 2, 9: 3,
+  13: 1, 14: 2, 15: 3,
+  16: 1, 23: 2, 24: 3,
+  17: 1, 18: 2, 19: 3,
+  25: 1, 26: 2, 27: 3,
+  28: 0,
+  29: 1, 30: 2, 31: 3,
+  32: 1, 33: 2, 34: 3,
+  35: 1, 36: 2, 37: 3,
+  38: 1, 39: 2, 40: 3,
+});
+
+const BOON_STRENGTH_BY_TIER = Object.freeze({ 1: 'low', 2: 'mid', 3: 'high' });
+
+// Effective boost values used by the contracts' amount-bearing purchase
+// paths. Keep pass discounts out of this table: their historical boon names
+// do not always match the live discount and passBoonDiscountBps() is the
+// contract-identical source for those products.
+const BOON_BOOST_BPS_BY_TYPE = Object.freeze({
+  1: 500, 2: 1_000, 3: 2_500,
+  5: 500, 6: 1_500, 22: 2_500,
+  7: 500, 8: 1_500, 9: 2_500,
+  13: 1_000, 14: 2_500, 15: 5_000,
+  32: 400, 33: 800, 34: 1_200,
+  35: 400, 36: 800, 37: 1_200,
+  38: 400, 39: 800, 40: 1_200,
+});
+
+/** Product emblem plus a color/pip tier that can be shared by every surface. */
+export function boonVisualForProduct(product, tier = 0, strength = null, direction = null) {
+  const normalizedTier = [1, 2, 3].includes(Number(tier)) ? Number(tier) : 0;
+  const normalizedStrength = strength
+    || BOON_STRENGTH_BY_TIER[normalizedTier]
+    || 'special';
+  const normalizedDirection = direction || BOON_DIRECTION_BY_PRODUCT[product] || 'up';
+  const amountColors = normalizedDirection === 'down'
+    ? BOON_DISCOUNT_COLORS
+    : BOON_AMOUNT_COLORS;
+  return {
+    product: String(product || 'unknown'),
+    icon: BOON_PRODUCT_ICONS[product] || null,
+    color: BOON_PRODUCT_COLORS[product] || '#facc15',
+    tier: normalizedTier,
+    strength: normalizedStrength,
+    amountColor: amountColors[normalizedStrength] || BOON_AMOUNT_COLORS.special,
+    direction: normalizedDirection,
+    pips: normalizedTier > 0 ? '●'.repeat(normalizedTier) : '✦',
+  };
+}
+
+/** Exact visual metadata for one on-chain boon type. */
+export function boonTypeVisual(boonType) {
+  const type = Number(boonType);
+  const ui = BOON_UI[type];
+  if (!ui) return boonVisualForProduct('unknown');
+  const strength = type === 4 ? 'utility' : (type === 28 ? 'special' : null);
+  const direction = type === 28 ? 'up' : null;
+  return boonVisualForProduct(ui.product, BOON_TIER_BY_TYPE[type] || 0, strength, direction);
+}
 
 const MASK_24 = (1n << 24n) - 1n;
 const MASK_8 = 0xFFn;
@@ -187,7 +307,7 @@ function _boonRows(payload) {
 }
 
 function _boonStrength(ui) {
-  const amount = /[+\u2212-](\d+)/.exec(String(ui?.label || ''));
+  const amount = /[+\u2212-]?(\d+(?:\.\d+)?)%?/.exec(String(ui?.label || ''));
   return amount ? Number(amount[1]) : 0;
 }
 
@@ -213,6 +333,51 @@ export function activeBoonForProduct(payload, product) {
     ))[0] || null;
 }
 
+// Purchase discounts are encoded as boon types rather than carrying their BPS
+// in the indexed payload. Keep this table beside the canonical boon mapping so
+// every price surface uses the exact same contract tiers.
+const PASS_DISCOUNT_BPS_BY_TYPE = Object.freeze({
+  16: 1000, 23: 2000, 24: 3500,
+  25: 1000, 26: 2000, 27: 3500,
+  29: 1000, 30: 2500, 31: 5000,
+});
+
+/** Return the active Whale / Deity / Lazy cost reduction in basis points. */
+export function passBoonDiscountBps(payload, product) {
+  const active = activeBoonForProduct(payload, product);
+  return PASS_DISCOUNT_BPS_BY_TYPE[Number(active?.row?.boonType)] || 0;
+}
+
+/** Effective basis-point boost for an amount-bearing purchase draft. */
+export function boonBoostBps(payload, product) {
+  const active = activeBoonForProduct(payload, product);
+  return BOON_BOOST_BPS_BY_TYPE[Number(active?.row?.boonType)] || 0;
+}
+
+/** Exact integer delta applied to a wei/token amount by its active boon. */
+export function boonBoostDelta(amount, payload, product) {
+  let raw;
+  try { raw = BigInt(amount ?? 0); } catch (_error) { return 0n; }
+  if (raw <= 0n) return 0n;
+  return (raw * BigInt(boonBoostBps(payload, product))) / 10_000n;
+}
+
+// Coinflip.sol consumes the boon against at most 100,000 FLIP of one manual
+// deposit. Keep this product-specific: the raw deposit above the cap still
+// enters the coinflip and carries full BAF draw weight; it simply earns no
+// additional boon credit.
+export const COINFLIP_BOON_MAX_BASE_WEI = 100_000n * (10n ** 18n);
+
+export function coinflipBoonBoostDelta(amount, payload) {
+  let raw;
+  try { raw = BigInt(amount ?? 0); } catch (_error) { return 0n; }
+  if (raw <= 0n) return 0n;
+  const eligible = raw > COINFLIP_BOON_MAX_BASE_WEI
+    ? COINFLIP_BOON_MAX_BASE_WEI
+    : raw;
+  return boonBoostDelta(eligible, payload, 'coinflip');
+}
+
 /** Text/tooltip model shared by every <boon-product-indicator>. */
 export function boonIndicatorModel(payload, product) {
   const active = activeBoonForProduct(payload, product);
@@ -223,6 +388,7 @@ export function boonIndicatorModel(payload, product) {
     : 0;
   const activityScore = activityBoonScore(activityAmount);
   return {
+    ...boonTypeVisual(active.row.boonType),
     boonType: Number(active.row.boonType),
     label: activityAmount > 0 ? `BOON +${_formatScore(activityScore)} RATING` : active.ui.label,
     title: `${activityAmount > 0
@@ -241,9 +407,9 @@ const BOON_PRODUCT_NAMES = Object.freeze({
   activity: 'Degen rating',
   deity: 'Deity pass',
   lazy: 'Lazy pass',
-  'degenerette-eth': 'ETH Degenerette',
-  'degenerette-flip': 'FLIP Degenerette',
-  'degenerette-wwxrp': 'WWXRP Degenerette',
+  'degenerette-eth': 'Degenerette',
+  'degenerette-flip': 'Degenerette',
+  'degenerette-wwxrp': 'Degenerette',
 });
 
 function _issuanceEffect(ui, boonType) {
@@ -262,9 +428,9 @@ function _issuanceEffect(ui, boonType) {
     case 'whale': return `${pct.replace(/^−/, '')} OFF WHALE PASS`;
     case 'deity': return `${pct.replace(/^−/, '')} OFF DEITY PASS`;
     case 'lazy': return `${pct.replace(/^−/, '')} OFF LAZY PASS`;
-    case 'degenerette-eth': return `${pct} EXTRA ETH STAKE`;
-    case 'degenerette-flip': return `${pct} EXTRA FLIP STAKE`;
-    case 'degenerette-wwxrp': return `${pct} EXTRA WWXRP STAKE`;
+    case 'degenerette-eth': return `${pct} BONUS ETH BET`;
+    case 'degenerette-flip': return `${pct} BONUS FLIP BET`;
+    case 'degenerette-wwxrp': return `${pct} BONUS WWXRP BET`;
     default: return compact;
   }
 }
@@ -273,10 +439,15 @@ function _issuanceEffect(ui, boonType) {
 export function boonTypePresentation(boonType) {
   const ui = BOON_UI[Number(boonType)];
   if (!ui) {
-    return { product: 'unknown', name: 'Mystery boon', effect: '', detail: 'Daily deity boon' };
+    return {
+      ...boonTypeVisual(boonType),
+      name: 'Mystery boon',
+      effect: '',
+      detail: 'Daily deity boon',
+    };
   }
   return {
-    product: ui.product,
+    ...boonTypeVisual(boonType),
     name: Number(boonType) === 28 ? 'Whale pass' : (BOON_PRODUCT_NAMES[ui.product] || 'Boon'),
     effect: _issuanceEffect(ui, boonType),
     detail: ui.detail,

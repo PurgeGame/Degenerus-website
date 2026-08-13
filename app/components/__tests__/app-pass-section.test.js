@@ -299,6 +299,7 @@ function makeFakePassContract(opts = {}) {
   const calls = {
     purchaseWhalePass: [],
     purchaseDeityPass: [],
+    purchaseLazyPass: [],
     subscribe: [],
     depositAfkingFunding: [],
     afkingFundingOf: [],
@@ -327,6 +328,13 @@ function makeFakePassContract(opts = {}) {
         return makeFakeTx(makeFakeReceipt(opts.purchaseDeityPassLogs));
       },
       { staticCall: stk('purchaseDeityPass') }
+    ),
+    purchaseLazyPass: Object.assign(
+      async (...args) => {
+        calls.purchaseLazyPass.push(args);
+        return makeFakeTx(makeFakeReceipt(opts.purchaseLazyPassLogs));
+      },
+      { staticCall: stk('purchaseLazyPass') }
     ),
     subscribe: Object.assign(
       async (...args) => {
@@ -473,8 +481,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.ok(el.querySelector('[data-bind="pass-deity-symbol-grid"]'), 'dialog owns the symbol grid');
     assert.ok(el.querySelector('[data-bind="pass-deity-buy"]'), 'dialog keeps a final buy confirmation');
     for (const product of ['whale', 'lazy', 'deity']) {
-      assert.match(el.innerHTML, new RegExp(`<boon-product-indicator product="${product}"`));
+      assert.match(el.innerHTML, new RegExp(`<boon-product-indicator[^>]*product="${product}"`));
     }
+    assert.match(el.innerHTML,
+      /pass-product-checkout--whale[\s\S]*?boon-product-indicator[^>]*product="whale"[\s\S]*?data-bind="pass-whale-buy"/,
+      'the Whale discount marker is anchored to the priced action, not its title');
   });
 
   test('each pass has concise visible purpose copy and a compact identity mark', () => {
@@ -559,7 +570,7 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       entryCount: (101 + index) % 2 === 0 ? 8 : 4,
     }));
     assert.equal(inferActiveWhalePassCount(tickets, 100), 3,
-      'the two Whale parity lanes preserve a stacked quantity');
+      'all four half-pass residue lanes preserve a stacked quantity');
     assert.deepEqual(activePassSummary({
       scoreBreakdown: { passBonus: { kind: 'whale_100', points: 40 } },
       tickets,
@@ -580,6 +591,16 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       sigil: '100',
       label: '2 ACTIVE WHALE PASSES',
     }, 'Deity score precedence does not hide two active Whale ticket streams');
+    const elevenHalfPasses = Array.from({ length: 24 }, (_unused, index) => ({
+      level: 101 + index,
+      entryCount: [12, 12, 12, 8][index % 4],
+    }));
+    assert.equal(inferActiveWhalePassCount(elevenHalfPasses, 100), 5.5,
+      'an odd jackpot half-pass award remains a visible half instead of becoming six passes');
+    assert.equal(activePassSummary({
+      scoreBreakdown: { passBonus: { kind: 'whale_100', points: 40 } },
+      tickets: elevenHalfPasses,
+    }, 100)?.label, '5½ ACTIVE WHALE PASSES');
     assert.equal(inferActiveWhalePassCount([{ level: 101, entryCount: 4 }], 100), 0,
       'one ordinary future ticket is not mislabeled as a Whale pass');
     assert.equal(activePassSummary({
@@ -717,6 +738,94 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     el.disconnectedCallback();
   });
 
+  test('pass boon quotes mirror contract rounding and Whale first-pass-only pricing', async () => {
+    const { discountedPassPriceWei, whalePassPurchasePriceWei } = await import('../app-pass-section.js');
+    const highWhale = { boons: [{ boonType: 24, consumed: false }] };
+    assert.equal(whalePassPurchasePriceWei({
+      currentLevel: 12, quantity: 1, boonPayload: highWhale,
+    }), 2_600_000_000_000n);
+    assert.equal(whalePassPurchasePriceWei({
+      currentLevel: 12, quantity: 2, boonPayload: highWhale,
+    }), 6_600_000_000_000n,
+    'only the first Whale pass is 35% off; the second remains the standard 4 ETH');
+    assert.equal(whalePassPurchasePriceWei({
+      currentLevel: 1,
+      quantity: 1,
+      boonPayload: { boons: [{ boonType: 16, consumed: false }] },
+    }), 3_600_000_000_000n,
+    'the contract discount branch uses the standard Whale unit even during intro pricing');
+    assert.equal(discountedPassPriceWei(
+      24_000_000_000_000n,
+      { boons: [{ boonType: 27, consumed: false }] },
+      'deity',
+    ), 15_600_000_000_000n);
+    assert.equal(discountedPassPriceWei(
+      240_000_000_000n,
+      { boons: [{ boonType: 31, consumed: false }] },
+      'lazy',
+    ), 120_000_000_000n);
+  });
+
+  test('active cost boons change each button, its Luckbox value, and submitted ETH', async () => {
+    _fetchHandler = async (url) => String(url).includes('/player/')
+      ? { level: 12 }
+      : { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
+    storeMod.update('app.boons', {
+      address: CONNECTED.toLowerCase(),
+      day: 62,
+      exact: true,
+      boons: [
+        { boonType: 24, consumed: false },
+        { boonType: 27, consumed: false },
+        { boonType: 31, consumed: false },
+      ],
+    });
+    const contract = makeFakePassContract();
+    passesMod.__setContractFactoryForTest(() => contract);
+    const el = instantiate();
+    await settle(50);
+
+    const quantity = el.querySelector('[name="pass-whale-qty"]');
+    quantity.value = '2';
+    quantity.dispatchEvent({ type: 'input' });
+    assert.equal(el.querySelector('[data-bind="pass-whale-buy"]').textContent,
+      'BUY WHALE PASS\n6.6 ETH · BOON −35% 1ST');
+    assert.equal(el.querySelector('[data-bind="pass-whale-lootbox"]').textContent,
+      'BONUS LUCKBOX · 0.66 ETH');
+    assert.equal(el.querySelector('[data-bind="pass-lazy-row"]').hidden, false,
+      'a live Lazy discount opens its otherwise closed level-12 purchase gate');
+    assert.equal(el.querySelector('[data-bind="pass-lazy-buy"]').textContent,
+      'BUY LAZY PASS\n0.2 ETH · BOON −50%');
+    assert.equal(el.querySelector('[data-bind="pass-lazy-lootbox"]').textContent,
+      'BONUS LUCKBOX · 0.02 ETH');
+    assert.equal(el.querySelector('[data-bind="pass-deity-open"]').textContent,
+      'BUY DEITY PASS\n15.6 ETH · BOON −35%');
+    assert.equal(el.querySelector('[data-bind="pass-deity-lootbox"]').textContent,
+      'BONUS LUCKBOX · 1.56 ETH');
+
+    el.querySelector('[data-bind="pass-whale-buy"]').dispatchEvent({ type: 'click' });
+    await settle(30);
+    el.querySelector('[data-bind="pass-lazy-buy"]').dispatchEvent({ type: 'click' });
+    await settle(30);
+    el.querySelector('[data-bind="pass-deity-select"]').value = '7';
+    el.querySelector('[data-bind="pass-deity-buy"]').dispatchEvent({ type: 'click' });
+    await settle(50);
+
+    assert.equal(contract._calls.purchaseWhalePass[0].at(-1).value, 6_600_000_000_000n);
+    assert.equal(contract._calls.purchaseLazyPass[0].at(-1).value, 200_000_000_000n);
+    assert.equal(contract._calls.purchaseDeityPass[0].at(-1).value, 15_600_000_000_000n);
+    assert.match(STATUS_CSS,
+      /boon-product-indicator\[data-boon-direction="down"\][\s\S]*?--boon-amount:\s*#ef4444[\s\S]*?crypto_06_ethereum_green\.svg/,
+      'cost reductions use the red down-arrow and green ETH badge language');
+    assert.match(STATUS_CSS,
+      /> boon-product-indicator\.pass-cost-boon::after\s*\{[^}]*display:\s*none/s,
+      'pass buttons suppress the redundant ETH badge inside their discount arrow');
+    assert.match(STATUS_CSS,
+      /> boon-product-indicator\.pass-cost-boon\s*\{[^}]*top:\s*50%[^}]*right:\s*0\.44rem[^}]*translate:\s*0 -50%/s,
+      'the plain discount arrow sits inside the button gutter instead of straddling its border');
+    el.disconnectedCallback();
+  });
+
   test('pass score benefit includes the player-specific streak and mint-count floors', async () => {
     const { projectedPassScoreGain } = await import('../app-pass-section.js');
     const score = {
@@ -789,8 +898,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       connect(_s) { return this; },
     }));
 
+    _fetchHandler = async (url) => String(url).includes('/player/')
+      ? { level: 12 }
+      : { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
     const el = instantiate();
-    await flushMicrotasks();
+    await settle(40);
 
     const qtyInput = el.querySelector('[name="pass-whale-qty"]');
     assert.ok(qtyInput, 'quantity input rendered');
@@ -819,8 +931,11 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
       }],
     }));
 
+    _fetchHandler = async (url) => String(url).includes('/player/')
+      ? { level: 12 }
+      : { level: 12, phase: 'PURCHASE', jackpotPhaseFlag: false };
     const el = instantiate();
-    await flushMicrotasks();
+    await settle(40);
     let confirmed = null;
     el.addEventListener('app-pass:tx-confirmed', (event) => { confirmed = event.detail; });
     el.querySelector('[name="pass-whale-qty"]').value = '1';
@@ -1183,6 +1298,45 @@ describe('Plan 62-02: <app-pass-section> Custom Element', () => {
     assert.equal(fundOnly.disabled, false,
       'fund-only deposits remain usable because they are not contract RNG-locked');
     assert.equal(fundOnly.getAttribute('data-write-locked'), null);
+
+    el.disconnectedCallback();
+  });
+
+  test('a transient AFKing snapshot failure retains the verified balance but invalidates the warning', async () => {
+    let snapshotFails = false;
+    passesMod.__setAfkingReadContractFactoryForTest(() => ({
+      token: { balanceOf: async () => 1n },
+      game: {
+        subInfo: async () => [true, 5n, 8n, 12n],
+        afkingSnapshot: async () => {
+          if (snapshotFails) throw new Error('temporary RPC failure');
+          return [80_000_000_000n, false, [0n], [31_377_964_349_999n]];
+        },
+      },
+      lens: { subInfoFull: async () => ({ flags: 2n, pendingFlip: 0n }) },
+    }));
+
+    const el = instantiate();
+    await settle(60);
+    assert.equal(el.querySelector('[data-bind="pass-afking-funding"]').textContent, '31.37 ETH');
+    assert.equal(storeMod.get('app.afkingSubscription')?.known, true);
+    assert.equal(storeMod.get('app.afkingSubscription')?.fundedDays, 78n);
+
+    snapshotFails = true;
+    storeMod.update('connected.address', CONNECTED);
+    await settle(60);
+
+    assert.equal(el.querySelector('[data-bind="pass-afking-funding"]').textContent, '31.37 ETH',
+      'the panel keeps the last verified funding instead of rendering zero');
+    assert.deepEqual(storeMod.get('app.afkingSubscription'), {
+      address: CONNECTED.toLowerCase(),
+      known: false,
+      active: true,
+      fundedDays: null,
+      dailyQuantity: 5,
+      settingsKnown: true,
+      useTickets: false,
+    }, 'the alert store is explicitly unknown until a fresh core snapshot succeeds');
 
     el.disconnectedCallback();
   });

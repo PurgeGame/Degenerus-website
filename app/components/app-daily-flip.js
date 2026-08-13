@@ -75,6 +75,7 @@ import {
   candidateClaimsRecord,
   RECORD_KIND_FLIP,
 } from '../app/records.js';
+import { coinflipBoonBoostDelta } from '../app/boons.js';
 import {
   warmup as warmupCoinflipSfx,
   sfxCoinflipLand,
@@ -93,6 +94,7 @@ import {
   LOOTBOX_REVEAL_QUEUED_EVENT,
 } from './reveal-overlay.js';
 import './boon-product-indicator.js';
+import './quest-objective-indicator.js';
 
 // Four equally-common reveal profiles, with the requested conditional win
 // rates. The protocol result remains authoritative; the UI chooses a profile
@@ -124,6 +126,14 @@ const REVERSE_CARD_ENTRY_WAIT_MS = 100;
 const REVEAL_BIASED_EXTENSION_MS = 650;
 const REVEAL_BIASED_END_MS = REVEAL_END_MS + REVEAL_BIASED_EXTENSION_MS;
 const REVERSE_CARD_ANIMATION_MS = 600;
+// Five previously ordinary buckets become the sudden-stop easter egg. The
+// axial speed never eases; the coin simply freezes on one of five complete
+// presentations of the authoritative face.
+const HARD_STOP_BUCKET_MIN = 4;
+const HARD_STOP_BUCKET_MAX = 8;
+const HARD_STOP_FIRST_OCCURRENCE = 4;
+const HARD_STOP_OCCURRENCE_COUNT = 5;
+const HARD_STOP_HALF_TURN_MS = 260;
 // The final multiplier deserves a readable roulette sweep after the coin has
 // landed. Fakeout thermometers stay inside their fixed Reverse-card beat.
 const METER_SETTLE_MS = 1_600;
@@ -206,14 +216,18 @@ function fakeoutModifierPercent(day) {
 }
 
 /**
- * Public pure helper for tests/replays. The original one-card fakeout keeps
+ * Public pure helper for tests/replays. `realReversalCount`, when supplied,
+ * is the request-time Reverse queue frozen by the day-roll coordinator. It is
+ * a hard ceiling: presentation can choose fewer cards for variety, but can
+ * never invent more reversals than the protocol actually consumed that day.
+ * The original one-card fakeout keeps
  * its 10% day-wide chance (5% in each direction under a fair result). Three
  * disjoint hash buckets add exact 2% double- and 1% triple-reversal chances.
  * Every reversal toggles the visible face; even sequences therefore begin on
  * the authoritative face and odd sequences begin opposite it, so the final
  * face always remains the protocol result.
  */
-function selectFlipRevealPlan(day, won) {
+function selectFlipRevealPlan(day, won, realReversalCount = null) {
   const isWin = Boolean(won);
   const bucket = _revealDayHash(day, 0x51ed270b) % REVEAL_PROFILE_WEIGHT_TOTAL;
   let cursor = 0;
@@ -230,17 +244,46 @@ function selectFlipRevealPlan(day, won) {
   // Buckets 1, 2, and 3 were previously ordinary days, making the additions
   // disjoint and exactly 1% / 2% across the stable 100-bucket mixer.
   const reversalBucket = _revealDayHash(day, 0xa341316c) % 100;
-  const reversalCount = reversalBucket === 1
+  const hardStop = reversalBucket >= HARD_STOP_BUCKET_MIN
+    && reversalBucket <= HARD_STOP_BUCKET_MAX;
+  const plannedReversalCount = reversalBucket === 1
     ? 3
     : (reversalBucket === 2 || reversalBucket === 3)
       ? 2
       : reversalBucket % 10 === 0
         ? 1
         : 0;
+  let reversalCap = null;
+  if (realReversalCount != null) {
+    try {
+      const raw = BigInt(realReversalCount);
+      reversalCap = raw <= 0n ? 0 : Number(raw > 3n ? 3n : raw);
+    } catch (_e) { /* historical replays without a count keep the stable plan */ }
+  }
+  const reversalCount = reversalCap == null
+    ? plannedReversalCount
+    : Math.min(plannedReversalCount, reversalCap);
   const fakeOut = reversalCount > 0;
   const openingWon = reversalCount % 2 === 0 ? isWin : !isWin;
   const prefersWin = profile.winRate > 50;
-  const openingMs = openingWon === prefersWin ? REVEAL_BIASED_END_MS : REVEAL_END_MS;
+  const hardStopOccurrence = hardStop
+    ? HARD_STOP_FIRST_OCCURRENCE
+      + (_revealDayHash(day, isWin ? 0x57dd0a11 : 0x57dd0a12)
+        % HARD_STOP_OCCURRENCE_COUNT)
+    : null;
+  // Red is the front face at 0deg; ETH is the back face at 180deg. Therefore
+  // the nth complete ETH presentation lands on an odd half-turn, while the
+  // nth post-launch WWXRP presentation lands on an even half-turn.
+  const hardStopHalfTurns = hardStop
+    ? (isWin ? (hardStopOccurrence * 2) - 1 : hardStopOccurrence * 2)
+    : null;
+  const hardStopRotationDeg = hardStopHalfTurns == null ? null : hardStopHalfTurns * 180;
+  const hardStopMs = hardStopHalfTurns == null
+    ? null
+    : hardStopHalfTurns * HARD_STOP_HALF_TURN_MS;
+  const openingMs = hardStop
+    ? 0
+    : openingWon === prefersWin ? REVEAL_BIASED_END_MS : REVEAL_END_MS;
   let ending;
   if (reversalCount === 0) {
     ending = isWin ? 'win' : 'loss';
@@ -251,20 +294,25 @@ function selectFlipRevealPlan(day, won) {
   } else {
     ending = isWin ? 'triple-to-win' : 'triple-to-loss';
   }
-  const endingMs = openingMs + (reversalCount * REVERSE_CARD_STAGGER_MS);
+  const endingMs = hardStop ? 0 : openingMs + (reversalCount * REVERSE_CARD_STAGGER_MS);
+  const trackMs = hardStop ? hardStopMs : REVEAL_TRACK_MS;
 
   return Object.freeze({
     profile: profile.id,
     winRate: profile.winRate,
     ending,
     fakeOut,
+    hardStop,
+    hardStopOccurrence,
+    hardStopHalfTurns,
+    hardStopRotationDeg,
     reversalCount,
     bias: prefersWin ? 'win-heavy' : 'loss-heavy',
     openingWon,
     openingMs,
-    trackMs: REVEAL_TRACK_MS,
+    trackMs,
     endingMs,
-    totalMs: REVEAL_TRACK_MS + endingMs,
+    totalMs: trackMs + endingMs,
   });
 }
 
@@ -358,6 +406,128 @@ export function formatTomorrowBet(weiValue, significantDigits = 4) {
   return `${negative ? '-' : ''}${whole.toLocaleString('en-US')}`;
 }
 
+const COINFLIP_RECENT_WINDOW = 15;
+const COINFLIP_RECENT_BUFFER = COINFLIP_RECENT_WINDOW + 1;
+
+export function normalizeProtocolCoinflipStats(payload, recentLimit = COINFLIP_RECENT_WINDOW) {
+  const whole = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : 0;
+  };
+  const recent = (Array.isArray(payload?.recent) ? payload.recent : [])
+    .map((row) => ({
+      day: whole(row?.day),
+      win: row?.win === true,
+    }))
+    .filter((row) => row.day > 0)
+    .sort((a, b) => b.day - a.day)
+    .slice(0, Math.max(COINFLIP_RECENT_WINDOW, Math.trunc(Number(recentLimit) || 0)));
+  return {
+    wins: whole(payload?.wins),
+    losses: whole(payload?.losses),
+    recent,
+  };
+}
+
+const COINFLIP_STATS_FALLBACK_BATCH = 6;
+const protocolCoinflipOutcomes = new WeakMap();
+
+function protocolOutcomeCache(fetcher) {
+  let outcomes = protocolCoinflipOutcomes.get(fetcher);
+  if (!outcomes) {
+    outcomes = new Map();
+    protocolCoinflipOutcomes.set(fetcher, outcomes);
+  }
+  return outcomes;
+}
+
+/**
+ * Load the protocol-wide W–L record. There is one global CoinflipDayResolved per
+ * settled game day, so the fallback walks those immutable day rows directly;
+ * it must never infer the board from whichever player's wallet is being viewed.
+ */
+export async function loadProtocolCoinflipStats(latestDay, fetcher = fetchJSON) {
+  try {
+    return normalizeProtocolCoinflipStats(
+      await fetcher('/game/coinflip/stats'),
+      COINFLIP_RECENT_BUFFER,
+    );
+  } catch (error) {
+    if (Number(error?.status) !== 404) throw error;
+  }
+
+  const upperDay = Math.max(0, Math.trunc(Number(latestDay) || 0));
+  const protocolDays = Array.from({ length: upperDay }, (_, index) => upperDay - index);
+  const outcomeByDay = protocolOutcomeCache(fetcher);
+  const unknownDays = protocolDays.filter((day) => !outcomeByDay.has(day));
+
+  for (let offset = 0; offset < unknownDays.length; offset += COINFLIP_STATS_FALLBACK_BATCH) {
+    const batch = unknownDays.slice(offset, offset + COINFLIP_STATS_FALLBACK_BATCH);
+    const outcomes = await Promise.all(batch.map(async (day) => {
+      try {
+        const result = await fetcher(`/game/coinflip/day/${day}`);
+        return typeof result?.win === 'boolean' ? { day, win: result.win } : null;
+      } catch (error) {
+        // Today's row may still be unresolved. It is retried next refresh;
+        // immutable settled outcomes remain cached for the deployment.
+        if (Number(error?.status) === 404) return null;
+        throw error;
+      }
+    }));
+    for (const outcome of outcomes) {
+      if (outcome) outcomeByDay.set(outcome.day, outcome);
+    }
+  }
+  const settled = protocolDays.map((day) => outcomeByDay.get(day)).filter(Boolean);
+
+  return normalizeProtocolCoinflipStats({
+    wins: settled.filter((row) => row.win).length,
+    losses: settled.filter((row) => !row.win).length,
+    recent: settled.slice(0, COINFLIP_RECENT_BUFFER),
+  }, COINFLIP_RECENT_BUFFER);
+}
+
+/** Keep today's public result hidden from the board until its local reveal lands. */
+export function protocolCoinflipStatsForReveal(stats, {
+  day = null,
+  result = null,
+  revealComplete = false,
+  gateCurrentDay = true,
+} = {}) {
+  if (!stats) return null;
+  // Keep one settled result behind the visible bank. If today's indexed result
+  // is hidden until its local reveal, that backfill preserves the full
+  // fifteen-result history instead of briefly reducing the bank to fourteen entries.
+  const normalized = normalizeProtocolCoinflipStats(stats, COINFLIP_RECENT_BUFFER);
+  const visibleRecent = (rows) => rows.slice(0, COINFLIP_RECENT_WINDOW);
+  const targetDay = Math.trunc(Number(day) || 0);
+  const recentIndex = normalized.recent.findIndex((row) => row.day === targetDay);
+  const indexedResult = recentIndex >= 0 ? normalized.recent[recentIndex] : null;
+  const resolvedWin = typeof result?.win === 'boolean' ? result.win : indexedResult?.win;
+  if (!gateCurrentDay || targetDay <= 0 || typeof resolvedWin !== 'boolean') {
+    return { ...normalized, recent: visibleRecent(normalized.recent) };
+  }
+
+  const included = recentIndex >= 0;
+  if (!revealComplete && included) {
+    return {
+      wins: Math.max(0, normalized.wins - (resolvedWin ? 1 : 0)),
+      losses: Math.max(0, normalized.losses - (resolvedWin ? 0 : 1)),
+      recent: visibleRecent(normalized.recent.filter((row) => row.day !== targetDay)),
+    };
+  }
+  if (revealComplete && !included) {
+    return {
+      wins: normalized.wins + (resolvedWin ? 1 : 0),
+      losses: normalized.losses + (resolvedWin ? 0 : 1),
+      recent: [{ day: targetDay, win: resolvedWin }, ...normalized.recent]
+        .sort((a, b) => b.day - a.day)
+        .slice(0, COINFLIP_RECENT_WINDOW),
+    };
+  }
+  return { ...normalized, recent: visibleRecent(normalized.recent) };
+}
+
 function parseTokenAmount(value) {
   const match = /^\s*(\d+)(?:\.(\d{0,18}))?\s*$/.exec(String(value ?? ''));
   if (!match) return null;
@@ -382,6 +552,7 @@ class AppDailyFlip extends HTMLElement {
   #flipFetchedDay = null;
   #dashboard = null;
   #dashboardAddress = null;
+  #coinflipStats = null;
   #liveBalances = null;
   #liveBalancesAddress = null;
   #bafScore = null;        // indexed score for the active x10 BAF bracket
@@ -393,6 +564,7 @@ class AppDailyFlip extends HTMLElement {
   // published by the full-width BAF rail. Both visible BAF surfaces therefore
   // share the same freshly polled rank without adding a second DB query.
   #bafLookupKey = null;
+  #forceBafRefresh = false;
   #currentBetWei = null;   // live stored target-day stake plus replayed auto-rebuy carry
   #autoRebuyInfo = null;   // direct Coinflip auto-rebuy settings for #autoRebuyAddress
   #autoRebuyAddress = null;
@@ -419,6 +591,10 @@ class AppDailyFlip extends HTMLElement {
   #landing = false;        // coin is mid-landing animation
   #revealRequestedDay = null; // click accepted while a rollover result is still loading
   #meterSettling = false;
+  // This is deliberately separate from the animation's mounted/settling state.
+  // Only the authoritative meter completion callback may publish a live win;
+  // cleanup, refreshes, or an unrelated animation event cannot release it.
+  #winningReceiptCommitted = true;
   #meterRecoveryTail = false;
   #meterFlashVisible = false;
   #meterTimer = null;
@@ -430,6 +606,9 @@ class AppDailyFlip extends HTMLElement {
   #coinSfxTimers = new Set();
   #revealTimer = null;
   #revealFinishingTimer = null;
+  #coinflipScoreTickDay = null;
+  #coinflipScoreTickWin = null;
+  #coinflipScoreTickTimer = null;
   #busy = false;
   #errorTimer = null;
   #reverseFlipQuote = null;
@@ -637,6 +816,7 @@ class AppDailyFlip extends HTMLElement {
     // the newly adopted direct-chain day.
     this.#fetchSeq += 1;
     this.#clearRevealTimer();
+    this.#clearCoinflipScoreTick();
     this.#clearBafTransfer({ resetDone: true });
     this.#day = day;
     this.#browsingDay = browsing ? day : null;
@@ -645,6 +825,7 @@ class AppDailyFlip extends HTMLElement {
     this.#flipFetchedDay = null;
     this.#landing = false;
     this.#revealRequestedDay = null;
+    this.#winningReceiptCommitted = true;
     if (this.#resultRetryHandle != null) {
       try { clearTimeout(this.#resultRetryHandle); } catch (_e) { /* defensive */ }
       this.#resultRetryHandle = null;
@@ -663,6 +844,7 @@ class AppDailyFlip extends HTMLElement {
     this.#bafLevel = null;
     this.#bafAddress = null;
     this.#bafLookupKey = null;
+    this.#forceBafRefresh = false;
     this.#clearLiveReverseAnimation();
     this.#clearResultTruthWindow();
     let frozenQueued = null;
@@ -700,6 +882,9 @@ class AppDailyFlip extends HTMLElement {
       this.#adoptSharedBafPosition(position);
     }));
     this.#unsubs.push(subscribe('app.records', () => {
+      this.#renderAddBetDialog();
+    }));
+    this.#unsubs.push(subscribe('app.boons', () => {
       this.#renderAddBetDialog();
     }));
 
@@ -906,8 +1091,10 @@ class AppDailyFlip extends HTMLElement {
       this.#errorTimer = null;
     }
     this.#clearModifierMeter();
+    this.#winningReceiptCommitted = true;
     this.#clearFakeoutMeter();
     this.#clearRevealTimer();
+    this.#clearCoinflipScoreTick();
     this.#clearBafTransfer({ resetDone: true });
     this.#clearLiveReverseAnimation();
     this.#clearResultTruthWindow();
@@ -940,6 +1127,32 @@ class AppDailyFlip extends HTMLElement {
       try { clearTimeout(timer); } catch (_) { /* defensive */ }
     }
     this.#coinSfxTimers.clear();
+  }
+
+  #clearCoinflipScoreTick() {
+    if (this.#coinflipScoreTickTimer != null) {
+      try { clearTimeout(this.#coinflipScoreTickTimer); } catch (_) { /* defensive */ }
+    }
+    this.#coinflipScoreTickTimer = null;
+    this.#coinflipScoreTickDay = null;
+    this.#coinflipScoreTickWin = null;
+    this.querySelector('[data-bind="df-coinflip-wins"]')?.classList?.remove('is-ticking');
+    this.querySelector('[data-bind="df-coinflip-losses"]')?.classList?.remove('is-ticking');
+    this.querySelector('.df-coinflip-record__group--score')?.classList?.remove('is-resolving');
+    this.querySelector('.df-coinflip-record__group--recent')?.classList?.remove('is-resolving');
+    this.querySelector('[data-bind="df-coinflip-recent"]')?.classList?.remove('is-shifting');
+    this.querySelectorAll?.('.df-coinflip-record__mark')?.forEach?.((marker) => {
+      marker.classList?.remove('is-new');
+    });
+  }
+
+  #armCoinflipScoreTick(day, win) {
+    this.#clearCoinflipScoreTick();
+    this.#coinflipScoreTickDay = Number(day);
+    this.#coinflipScoreTickWin = Boolean(win);
+    if (typeof setTimeout !== 'function') return;
+    this.#coinflipScoreTickTimer = setTimeout(() => this.#clearCoinflipScoreTick(), 650);
+    this.#coinflipScoreTickTimer?.unref?.();
   }
 
   #scheduleCoinSfx(revealDay, delay, cue) {
@@ -982,6 +1195,9 @@ class AppDailyFlip extends HTMLElement {
         () => sfxCoinflipWhoosh(0.48 + (index * 0.11), index % 2 === 1),
       );
     });
+    // The rare hard stop must sound unplanned too: no deceleration sweep or
+    // pre-landing tell. The authoritative verdict cue still follows finish().
+    if (revealPlan?.hardStop) return;
     // One last soft sweep follows the visible deceleration without saying
     // which face will win. Verdict audio is scheduled only after finish().
     this.#scheduleCoinSfx(
@@ -1394,8 +1610,14 @@ class AppDailyFlip extends HTMLElement {
       this.#meterTimer = null;
     }
     this.#meterSettling = false;
+    this.#winningReceiptCommitted = true;
     this.#meterRecoveryTail = false;
     this.#meterFlashVisible = true;
+    // The locked percentage is the first authoritative win signal. Publish
+    // the W/L counter and slide LAST 15 on this exact frame so the record rail
+    // cannot spoil an apparent green landing while the gauge is still moving.
+    this.#armCoinflipScoreTick(revealDay, true);
+    this.#renderCoinflipStats();
     // Commit the final visual and its audio verdict in one task. The sound can
     // no longer run at coin landing while the thermometer is still moving.
     this.#renderModifierMeter();
@@ -1423,12 +1645,26 @@ class AppDailyFlip extends HTMLElement {
     const settleMs = this.#meterRecoveryTail
       ? METER_RECOVERY_TAIL_MS
       : METER_SETTLE_MS;
-    const settle = () => this.#completeWinningMeter(revealDay);
+    const expectedAnimation = this.#meterRecoveryTail
+      ? 'df-meter-recovery-tail'
+      : 'df-meter-settle';
     // animationend is the authoritative browser signal. The matching timer is
     // a fallback for headless/legacy environments where that event never fires.
     const marker = this.querySelector('[data-bind="df-modifier-marker"]');
+    let onAnimationEnd = null;
+    const settle = () => {
+      if (marker && onAnimationEnd) marker.removeEventListener('animationend', onAnimationEnd);
+      this.#completeWinningMeter(revealDay);
+    };
     if (marker && typeof marker.addEventListener === 'function') {
-      marker.addEventListener('animationend', settle, { once: true });
+      onAnimationEnd = (event) => {
+        // A marker can acquire decorative animations from theme/layout rules.
+        // Only the travel animation reaching its terminal frame publishes the
+        // payout; an earlier unrelated animationend must be ignored.
+        if (String(event?.animationName || '') !== expectedAnimation) return;
+        settle();
+      };
+      marker.addEventListener('animationend', onAnimationEnd);
     }
     this.#meterTimer = setTimeout(settle, settleMs);
     if (this.#meterTimer && typeof this.#meterTimer.unref === 'function') {
@@ -1663,6 +1899,7 @@ class AppDailyFlip extends HTMLElement {
       this.#bafLevel = null;
       this.#bafAddress = address;
       this.#bafLookupKey = null;
+      this.#forceBafRefresh = false;
     }
     const currentSettlement = this.#activeSettlement();
     if (!currentSettlement) {
@@ -1684,6 +1921,22 @@ class AppDailyFlip extends HTMLElement {
         (value) => {
           if (value) this.#dashboard = value;
           else this.#dashboard = null;
+        },
+      ),
+      this.#runRefreshTask(
+        seq,
+        requestedDay != null
+          ? loadProtocolCoinflipStats(Math.max(
+            Number(requestedDay) || 0,
+            Number(this.#latestDaySeen) || 0,
+          ))
+          : Promise.resolve(null),
+        (value) => {
+          this.#coinflipStats = value;
+        },
+        () => {
+          // The protocol record is immutable except for its newest row. Keep a
+          // previously loaded board visible through a transient API miss.
         },
       ),
       this.#runRefreshTask(
@@ -1734,7 +1987,12 @@ class AppDailyFlip extends HTMLElement {
             // real invalidation instead of becoming a hot retry loop on every
             // ordinary 15-second widget refresh.
             this.#bafLookupKey = lookupKey;
-            const score = await fetchJSON(`/player/${address}/baf?level=${level}`);
+            const force = this.#forceBafRefresh;
+            this.#forceBafRefresh = false;
+            const score = await fetchJSON(
+              `/player/${address}/baf?level=${level}`,
+              { force },
+            );
             return { level, score };
           })
           : Promise.resolve({ level: null, score: null }),
@@ -1909,14 +2167,33 @@ class AppDailyFlip extends HTMLElement {
         <p class="df-outcome" data-bind="df-outcome"></p>
         <div class="df-error" data-bind="df-error" hidden role="alert"></div>
         <div class="df-position" data-bind="df-position">
+          <div class="df-coinflip-record-rail">
+            <span class="df-coinflip-record-rail__spacer" aria-hidden="true"></span>
+            <span class="df-coinflip-record" data-bind="df-coinflip-record"
+                  aria-label="All-time coinflip record is loading">
+              <span class="df-coinflip-record__group df-coinflip-record__group--score" data-majority="neutral">
+                <small class="df-coinflip-record__label df-coinflip-record__label--record"
+                       aria-hidden="true">ALL TIME</small>
+                <strong class="df-coinflip-record__score">
+                  <b data-bind="df-coinflip-wins">—</b><i aria-hidden="true">–</i><b data-bind="df-coinflip-losses">—</b>
+                </strong>
+              </span>
+              <span class="df-coinflip-record__group df-coinflip-record__group--recent" data-majority="neutral">
+                <small class="df-coinflip-record__label df-coinflip-record__label--recent"
+                       aria-hidden="true">LAST 15</small>
+                <span class="df-coinflip-record__recent" data-bind="df-coinflip-recent"
+                      aria-label="Last fifteen coinflip results"></span>
+              </span>
+            </span>
+            <button type="button" class="df-auto-rebuy-cta"
+                    data-bind="df-auto-rebuy-cta" aria-haspopup="dialog"
+                    aria-controls="df-auto-rebuy-dialog" aria-expanded="false">
+              <span class="df-auto-rebuy-cta__icon" aria-hidden="true">↻</span>
+              <strong class="df-auto-rebuy-cta__status"
+                      data-bind="df-auto-rebuy-cta-status">—</strong>
+            </button>
+          </div>
           <div class="df-position-slot" data-bind="df-position-today"></div>
-          <button type="button" class="df-auto-rebuy-cta"
-                  data-bind="df-auto-rebuy-cta" aria-haspopup="dialog"
-                  aria-controls="df-auto-rebuy-dialog" aria-expanded="false">
-            <span class="df-auto-rebuy-cta__icon" aria-hidden="true">↻</span>
-            <strong class="df-auto-rebuy-cta__status"
-                    data-bind="df-auto-rebuy-cta-status">—</strong>
-          </button>
           <div class="df-baf-score" data-bind="df-baf-score-box" aria-label="Big Ass Flip score">
             <span class="df-baf-score__label">
               <a class="df-baf-score__info" href="/learn/baf/" aria-label="Learn about Big Ass Flip" title="Learn about Big Ass Flip">i</a>
@@ -1934,6 +2211,11 @@ class AppDailyFlip extends HTMLElement {
                       data-bind="df-flip-cta" aria-label="Add to tomorrow's bet"
                       aria-haspopup="dialog" aria-controls="df-add-bet-dialog"
                       aria-expanded="false" title="Add to tomorrow's bet">ADD BET</button>
+              <quest-objective-indicator class="df-next-bet__quest"
+                                         data-quest-pointer="bottom-left"
+                                         product="coinflip"></quest-objective-indicator>
+              <boon-product-indicator class="df-next-bet__boon"
+                                      product="coinflip"></boon-product-indicator>
             </span>
             <div class="df-position-slot" data-bind="df-position-tomorrow"></div>
           </div>
@@ -2000,6 +2282,8 @@ class AppDailyFlip extends HTMLElement {
             <p class="df-add-bet-dialog__bounty" data-bind="df-add-bet-bounty"
                hidden role="status"></p>
             <p class="df-add-bet-dialog__reuse" data-bind="df-add-bet-reuse"
+               hidden role="status"></p>
+            <p class="df-add-bet-dialog__boon" data-bind="df-add-bet-boon"
                hidden role="status"></p>
             <boon-product-indicator class="df-boon-indicator"
                                     product="coinflip"></boon-product-indicator>
@@ -2222,6 +2506,7 @@ class AppDailyFlip extends HTMLElement {
     this.#renderCoin();
     this.#renderModifierMeter();
     this.#renderPosition();
+    this.#renderCoinflipStats();
     this.#renderAutoRebuy();
     this.#renderFunds();
     this.#renderBafScore();
@@ -2281,6 +2566,7 @@ class AppDailyFlip extends HTMLElement {
     const availableLabel = this.querySelector('[data-bind="df-add-bet-available"]');
     const bounty = this.querySelector('[data-bind="df-add-bet-bounty"]');
     const reuse = this.querySelector('[data-bind="df-add-bet-reuse"]');
+    const boon = this.querySelector('[data-bind="df-add-bet-boon"]');
     const confirm = this.querySelector('[data-bind="df-add-bet-confirm"]');
     const status = this.querySelector('[data-bind="df-add-bet-status"]');
     if (!dialog || !slider || !number || !confirm) return;
@@ -2391,6 +2677,16 @@ class AppDailyFlip extends HTMLElement {
         `${this.#fmtWhole(reusedWei)} FLIP of this bet comes from winnings.`,
       );
     }
+    if (boon) {
+      const selectedWei = (selectedWhole ?? 0n) * unit;
+      const boonWei = validSelection
+        ? coinflipBoonBoostDelta(selectedWei, get('app.boons'))
+        : 0n;
+      boon.hidden = boonWei === 0n;
+      boon.textContent = boonWei > 0n
+        ? `+${tokenAmountInput(boonWei)} FLIP BOON`
+        : '';
+    }
     confirm.disabled = !validSelection || this.#busy;
     if (validSelection && !this.#busy) {
       confirm.removeAttribute('data-write-locked');
@@ -2450,6 +2746,76 @@ class AppDailyFlip extends HTMLElement {
     const acting = getActingAddress();
     return Boolean(acting && this.#dashboardAddress
       && String(acting).toLowerCase() === String(this.#dashboardAddress).toLowerCase());
+  }
+
+  #renderCoinflipStats() {
+    const host = this.querySelector('[data-bind="df-coinflip-record"]');
+    const wins = this.querySelector('[data-bind="df-coinflip-wins"]');
+    const losses = this.querySelector('[data-bind="df-coinflip-losses"]');
+    const recentHost = this.querySelector('[data-bind="df-coinflip-recent"]');
+    const scoreGroup = this.querySelector('.df-coinflip-record__group--score');
+    const recentGroup = this.querySelector('.df-coinflip-record__group--recent');
+    if (!host || !wins || !losses || !recentHost || !scoreGroup || !recentGroup) return;
+    const exactResult = this.#flipFetchedDay === this.#day ? this.#flipResult : null;
+    const recordRevealComplete = this.#revealed()
+      && !this.#landing
+      && (!Boolean(exactResult?.win) || this.#winningReceiptCommitted);
+    const stats = protocolCoinflipStatsForReveal(this.#coinflipStats, {
+      day: this.#day,
+      result: exactResult,
+      revealComplete: recordRevealComplete,
+      gateCurrentDay: this.#browsingDay == null,
+    });
+    const nextWins = stats ? stats.wins.toLocaleString('en-US') : '—';
+    const nextLosses = stats ? stats.losses.toLocaleString('en-US') : '—';
+    const scoreTickActive = stats != null
+      && this.#coinflipScoreTickDay === Number(this.#day)
+      && typeof this.#coinflipScoreTickWin === 'boolean';
+    const winsTicked = scoreTickActive && this.#coinflipScoreTickWin === true;
+    const lossesTicked = scoreTickActive && this.#coinflipScoreTickWin === false;
+    wins.classList?.toggle('is-ticking', winsTicked);
+    losses.classList?.toggle('is-ticking', lossesTicked);
+    scoreGroup.classList?.toggle('is-resolving', scoreTickActive);
+    recentGroup.classList?.toggle('is-resolving', scoreTickActive);
+    recentHost.classList?.toggle('is-shifting', scoreTickActive);
+    wins.textContent = nextWins;
+    losses.textContent = nextLosses;
+    recentHost.textContent = '';
+
+    const recent = stats?.recent || [];
+    const majority = (green, red) => green > red ? 'win' : (red > green ? 'loss' : 'neutral');
+    scoreGroup.setAttribute(
+      'data-majority',
+      stats ? majority(stats.wins, stats.losses) : 'neutral',
+    );
+    const recentWins = recent.filter((row) => row.win).length;
+    recentGroup.setAttribute(
+      'data-majority',
+      recent.length ? majority(recentWins, recent.length - recentWins) : 'neutral',
+    );
+    const ordered = [...recent];
+    for (let index = 0; index < COINFLIP_RECENT_WINDOW; index += 1) {
+      const result = ordered[index] || null;
+      const marker = document.createElement('span');
+      marker.className = result == null
+        ? 'df-coinflip-record__mark is-empty'
+        : `df-coinflip-record__mark ${result.win ? 'is-win' : 'is-loss'}${
+          result.day === Number(this.#day) && (winsTicked || lossesTicked) ? ' is-new' : ''
+        }`;
+      marker.setAttribute('aria-hidden', 'true');
+      if (result) marker.title = `${result.win ? 'Win' : 'Loss'} · Day ${result.day}`;
+      recentHost.appendChild(marker);
+    }
+
+    const recordCopy = stats
+      ? `${stats.wins.toLocaleString('en-US')} wins and ${stats.losses.toLocaleString('en-US')} losses`
+      : 'loading';
+    const recentCopy = recent.length
+      ? ordered.map((row) => row.win ? 'win' : 'loss').join(', ')
+      : 'no completed flips yet';
+    host.title = `All-time coinflip record: ${recordCopy}. Last 15: ${recentCopy}.`;
+    host.setAttribute('aria-label', host.title);
+    recentHost.setAttribute('aria-label', `Last fifteen coinflip results: ${recentCopy}`);
   }
 
   #renderAutoRebuy({ syncDraft = false } = {}) {
@@ -3665,7 +4031,7 @@ class AppDailyFlip extends HTMLElement {
     const revealComplete = hasResult
       && this.#revealed()
       && !this.#landing
-      && !(Boolean(this.#flipResult?.win) && this.#meterSettling);
+      && (!Boolean(this.#flipResult?.win) || this.#winningReceiptCommitted);
     const resolvedStake = this.#resultStakeWei();
     const won = Boolean(this.#flipResult?.win);
     const modifier = Math.max(0, Math.trunc(Number(this.#flipResult?.rewardPercent) || 0));
@@ -3835,7 +4201,7 @@ class AppDailyFlip extends HTMLElement {
     const revealComplete = hasResult
       && this.#revealed()
       && !this.#landing
-      && !(Boolean(this.#flipResult?.win) && this.#meterSettling);
+      && (!Boolean(this.#flipResult?.win) || this.#winningReceiptCommitted);
     const flipTotalVisible = revealComplete
       || this.#flipTotalSpoilerOverrideKey === this.#spoilerOverrideKey('flip-total');
     if (flipUnit) flipUnit.textContent = 'FLIP';
@@ -3948,7 +4314,7 @@ class AppDailyFlip extends HTMLElement {
     const revealComplete = hasResult
       && this.#revealed()
       && !this.#landing
-      && !(Boolean(this.#flipResult?.win) && this.#meterSettling);
+      && (!Boolean(this.#flipResult?.win) || this.#winningReceiptCommitted);
     const settlement = this.#activeSettlement();
     const sameBracket = settlement?.bafLevel == null
       || this.#bafLevel == null
@@ -4202,7 +4568,13 @@ class AppDailyFlip extends HTMLElement {
     // unknown stake remains an em dash and #repairSettlement fills it later.
     const settledBet = this.#resolvedBetWei;
     const won = Boolean(this.#flipResult.win);
-    const revealPlan = selectFlipRevealPlan(revealDay, won);
+    // Only the count frozen at the RNG request is authoritative. The live
+    // Reverse quote can move again after resolution and must not retroactively
+    // add cards to this day's reveal.
+    const realReversalCount = this.#resolutionReverseDay === Number(revealDay)
+      ? this.#resolutionReverseQueued
+      : null;
+    const revealPlan = selectFlipRevealPlan(revealDay, won, realReversalCount);
     const rewardPercent = Number(this.#flipResult.rewardPercent || 0);
     const currentWinCredit = won && settledBet != null
       ? this.#winPayoutWei(settledBet, rewardPercent)
@@ -4248,6 +4620,7 @@ class AppDailyFlip extends HTMLElement {
         && won
         && !reducedMotion
         && typeof setTimeout === 'function';
+      this.#winningReceiptCommitted = !stillCurrent || !won || !this.#meterSettling;
       if (stillCurrent) {
         // Production normally has the direct chain total already. If that read
         // was temporarily unavailable, preserve the old optimistic fallback
@@ -4259,6 +4632,7 @@ class AppDailyFlip extends HTMLElement {
         this.#settlementState = settlementState;
         this.#saveSettlement(settlementState);
         this.#startResultTruthWindow(revealDay);
+        if (!won || !this.#meterSettling) this.#armCoinflipScoreTick(revealDay, won);
       }
       this.#render();
       if (stillCurrent) {
@@ -4291,7 +4665,10 @@ class AppDailyFlip extends HTMLElement {
         // A win is the only flip result that can change BAF. Refresh its cached
         // score/rank once after reveal; losses and idle polling keep the cached
         // leaderboard row.
-        if (won) this.#bafLookupKey = null;
+        if (won) {
+          this.#bafLookupKey = null;
+          this.#forceBafRefresh = true;
+        }
         this.#scheduleRefresh();
       }
     };
@@ -4321,12 +4698,18 @@ class AppDailyFlip extends HTMLElement {
           : 'df-reveal-opening--standard',
         `df-reveal-ending--${revealPlan.ending}`,
       );
+      if (revealPlan.hardStop) inner.classList.add('df-reveal-hard-stop');
       inner.setAttribute('data-reveal-profile', revealPlan.profile);
       inner.setAttribute('data-reveal-win-rate', String(revealPlan.winRate));
       inner.setAttribute('data-reveal-ending', revealPlan.ending);
+      inner.setAttribute('data-reveal-mode', revealPlan.hardStop ? 'hard-stop' : 'choreographed');
       if (inner.style && typeof inner.style.setProperty === 'function') {
         inner.style.setProperty('--df-track-duration', `${revealPlan.trackMs}ms`);
         inner.style.setProperty('--df-ending-duration', `${revealPlan.endingMs}ms`);
+        if (revealPlan.hardStop) {
+          inner.style.setProperty('--df-hard-stop-duration', `${revealPlan.totalMs}ms`);
+          inner.style.setProperty('--df-hard-stop-rotation', `${revealPlan.hardStopRotationDeg}deg`);
+        }
       }
     }
     this.#mountFakeoutReverseCards(revealPlan, won);
@@ -4335,7 +4718,7 @@ class AppDailyFlip extends HTMLElement {
     this.#renderModifierMeter();
     const outcome = this.querySelector('[data-bind="df-outcome"]');
     if (outcome) outcome.textContent = '';
-    if (shouldFlashAllInDoIt(revealDay)) {
+    if (!revealPlan.hardStop && shouldFlashAllInDoIt(revealDay)) {
       // Cue the first normal landing, not the final Reverse-card landing. A
       // multi-reversal day therefore gets the same tiny wink at the same beat
       // as an ordinary flip, before any correction cards extend the sequence.

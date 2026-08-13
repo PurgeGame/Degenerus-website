@@ -109,6 +109,83 @@ afterEach(() => {
 });
 
 describe('transaction history composition', () => {
+  test('queues zero-payout record reels before a genuine Degenerette Luckbox replay', () => {
+    const sequence = {
+      kind: 'degenerette',
+      recordBountySpins: [{ spinType: 'record', payout: 0n, reels: [{}, {}, {}] }],
+      lootboxLegs: [{ legType: 'spin', spinType: 'eth', payout: 25n }],
+    };
+
+    const replay = history.transactionHistoryReplaySequences({
+      type: 'degenerette-result',
+      sequence,
+    });
+
+    assert.deepEqual(replay.map((item) => item.kind), [
+      'degenerette', 'record-bounty', 'lootbox',
+    ]);
+    assert.equal(replay[1].spin.payout, 0n);
+    assert.equal(replay[2].title, 'DEGENERETTE LUCKBOX');
+    assert.deepEqual(replay[2].legs.map((leg) => leg.spinType), ['eth']);
+  });
+
+  test('adds a winning record BoxSpin payout once while zero payout adds nothing', () => {
+    const player = '0x1111111111111111111111111111111111111111';
+    const resultTx = `0x${'9'.repeat(64)}`;
+    const packed = 13n | (1n << 32n) | ((10n ** 10n) << 42n);
+    const feedWithRecordPayout = (payout) => ({ items: [{
+      player,
+      betIndex: 7,
+      betId: '42',
+      packedData: String(packed),
+      rngReady: true,
+      rngWord: '43981',
+      blockNumber: '100',
+      transactionHash: `0x${'8'.repeat(64)}`,
+      logIndex: 1,
+      results: [{
+        resultType: 'result', payout: '5', blockNumber: '101',
+        transactionHash: resultTx, logIndex: 9,
+        resultData: { spinIndex: 0, playerTraits: '13', matches: 9 },
+      }, {
+        resultType: 'resolved', payout: '5', blockNumber: '101',
+        transactionHash: resultTx, logIndex: 10,
+        resultData: { spinCount: 1, totalPayout: '5', resultTraits: '13' },
+      }],
+      resultTickets: [{ spinIndex: 0, resultTicket: '13' }],
+      lootboxPayouts: [{
+        rewardType: 'BoxSpin', blockNumber: '101', transactionHash: resultTx,
+        logIndex: 11, lootboxIndex: null,
+        rewardData: {
+          betId: String((1n << 63n) | (3n << 60n) | 1n),
+          spinType: 'record', spinCount: 3, survived: payout !== '0',
+          payout, ethShare: '0',
+          reels: [
+            { spinIndex: 0, playerTicket: '1', resultTicket: '2', score: 0 },
+            { spinIndex: 1, playerTicket: '3', resultTicket: '4', score: 2 },
+            { spinIndex: 2, playerTicket: '5', resultTicket: '6', score: 1 },
+          ],
+        },
+      }],
+    }] });
+
+    const winning = history.buildTransactionHistoryRows({
+      address: player,
+      degeneretteFeed: feedWithRecordPayout('7'),
+    }).find((row) => row.type === 'degenerette-result');
+    const losing = history.buildTransactionHistoryRows({
+      address: player,
+      degeneretteFeed: feedWithRecordPayout('0'),
+    }).find((row) => row.type === 'degenerette-result');
+
+    assert.equal(winning.deltas.find((delta) => delta.asset === 'ETH')?.value, 5n,
+      'the base Degenerette total remains its own payout');
+    assert.equal(winning.deltas.find((delta) => delta.asset === 'FLIP')?.value, 7n,
+      'the independently minted record payout is credited exactly once');
+    assert.equal(losing.deltas.some((delta) => delta.asset === 'FLIP'), false,
+      'a zero record payout remains revealable without fabricating a balance delta');
+  });
+
   test('sorts indexed activity and exposes the net amount of every proven asset', () => {
     const player = '0x1111111111111111111111111111111111111111';
     const buyTx = `0x${'a'.repeat(64)}`;

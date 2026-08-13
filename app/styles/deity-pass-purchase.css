@@ -113,6 +113,24 @@ body.layout-basic .pass-product-perks--deity:has([data-bind="pass-deity-score"][
   grid-column: 1 / -1;
 }
 
+body.layout-basic .pass-deity-open-wrap,
+body.layout-basic .pass-deity-buy-wrap {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  overflow: visible;
+}
+
+body.layout-basic .pass-deity-open-wrap {
+  align-self: stretch;
+}
+
+body.layout-basic .pass-deity-open-wrap .pass-deity-open,
+body.layout-basic .pass-deity-buy-wrap .pass-deity-buy {
+  width: 100%;
+  height: 100%;
+}
+
 body.layout-basic .pass-deity-open,
 body.layout-basic .pass-deity-buy {
   box-sizing: border-box;
@@ -388,7 +406,7 @@ body.layout-basic .pass-deity-error {
     width: min(24rem, 100%);
   }
 
-  body.layout-basic .pass-deity-open {
+  body.layout-basic .pass-deity-open-wrap {
     grid-column: 2;
     grid-row: 1 / span 2;
   }
@@ -402,7 +420,7 @@ body.layout-basic .pass-deity-error {
   }
 
   body.layout-basic .pass-deity-summary .pass-product-perks,
-  body.layout-basic .pass-deity-open {
+  body.layout-basic .pass-deity-open-wrap {
     grid-column: 1;
     grid-row: auto;
     width: 100%;

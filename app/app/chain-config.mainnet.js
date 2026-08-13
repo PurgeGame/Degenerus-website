@@ -14,6 +14,9 @@ export const CHAIN = {
   hexId: '0x1',
   name: 'Ethereum',
   rpcUrl: '',  // WR-06: populate before cutover (e.g. 'https://eth.llamarpc.com')
+  // Must be a keyless public endpoint. Gold Rush never falls back to rpcUrl,
+  // because rpcUrl may eventually carry a metered provider key.
+  goldRushPublicRpcUrl: '',
   deployBlock: 0, // populate with the production deployment block at cutover
   indexerBase: 'https://api.degener.us',
   etherscanBase: 'https://etherscan.io',

@@ -8,11 +8,12 @@ const tray = readFileSync(new URL('../app-reveal-tray.js', import.meta.url), 'ut
 const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 
 describe('top-bar player settings', () => {
-  test('one gear menu owns sound, feedback, Auto, reveal speed, AFKing alerts, and eligible ALL IN', () => {
+  test('one gear menu owns sound, feedback, Auto, bounties, reveal speed, AFKing alerts, and eligible ALL IN', () => {
     for (const marker of [
       'id = BUTTON_ID',
       'data-bind="settings-actions"',
       'data-bind="settings-auto-reveals"',
+      'data-bind="settings-bounties-description"',
       'data-bind="settings-reveal-speed"',
       'data-bind="settings-afking-funding-warning"',
       'data-bind="settings-all-in-button"',
@@ -24,6 +25,16 @@ describe('top-bar player settings', () => {
     assert.match(settings, /subscribe\('ui\.allInEligible'/,
       'ALL IN preference row follows raw live eligibility');
     assert.match(settings, /allInRow\.hidden = eligible !== true/);
+    for (const mode of ['on', 'view', 'off']) {
+      assert.match(settings, new RegExp(`data-bounties-mode="${mode}"`));
+    }
+    assert.match(settings, /readBiggestBountiesModePreference\(\)/);
+    assert.match(settings, /writeBiggestBountiesModePreference\(choice\.dataset\.bountiesMode\)/);
+    assert.match(settingsCss,
+      /\.nav-settings__three-way\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*2\.25rem\)/s,
+      'the three choices share one compact selector');
+    assert.match(settingsCss, /\.nav-settings__three-way button\[aria-pressed="true"\]/,
+      'the persisted active mode is visibly selected');
   });
 
   test('Pending keeps only dismissal actions while preferences are in the gear menu', () => {

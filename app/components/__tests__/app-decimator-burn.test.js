@@ -16,6 +16,7 @@ const {
 
 const INDEX = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 const CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+const STATUS_CSS = readFileSync(new URL('../../styles/status-indicators.css', import.meta.url), 'utf8');
 const COMPONENT = readFileSync(new URL('../app-decimator-burn.js', import.meta.url), 'utf8');
 const SIDE_BETS = readFileSync(new URL('../app-parimutuel-panel.js', import.meta.url), 'utf8');
 const DEMO_HTML = readFileSync(new URL('../../decimator-demo.html', import.meta.url), 'utf8');
@@ -61,6 +62,8 @@ describe('<app-decimator-burn>', () => {
     assert.doesNotMatch(COMPONENT, /YOUR WEIGHT/);
     assert.match(COMPONENT, /SCORE —/);
     assert.match(COMPONENT, /decimatorEffectiveMultiplierBps/);
+    assert.match(COMPONENT, /\+\$\{_fmtFlip\(boonWeight\)\} BOON/,
+      'the burn quote names the concrete score added by an active Decimator boon');
     assert.match(COMPONENT, /<small>YOUR MULTIPLIER<\/small>/,
       'the strip labels selected-burn score divided by spend, after contract caps');
     assert.match(COMPONENT, /data-bind="dbb-bracket-number"/);
@@ -110,6 +113,22 @@ describe('<app-decimator-burn>', () => {
       'phone burn entry matches the full-height Tickets and Luckbox touch controls');
     assert.match(CSS, /@media \(max-width: 540px\)[\s\S]*\.dbb__stepper\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s,
       'phone increment controls sit side by side instead of in a tiny vertical rail');
+  });
+
+  test('puts the unfinished Decimator quest shortcut on the burn action', () => {
+    const inputStart = COMPONENT.indexOf('<span class="dbb__input-control">');
+    const burnStart = COMPONENT.indexOf('<button type="button" class="dbb__burn"');
+    const burnEnd = COMPONENT.indexOf('</button>', burnStart);
+    assert.ok(inputStart >= 0 && inputStart < burnStart && burnStart < burnEnd);
+    assert.doesNotMatch(COMPONENT.slice(inputStart, burnStart), /quest-objective-indicator/,
+      'the objective no longer sits on the amount input');
+    assert.match(COMPONENT.slice(burnStart, burnEnd),
+      /<quest-objective-indicator product="decimator"><\/quest-objective-indicator>/,
+      'click-to-open quest control lives on the burn CTA');
+    assert.match(STATUS_CSS,
+      /\.dbb__burn > quest-objective-indicator\s*\{[^}]*top:\s*50%[^}]*right:\s*0\.42rem/s,
+      'the zero-footprint marker is pinned inside the action edge');
+    assert.doesNotMatch(STATUS_CSS, /\.dbb__input-control > quest-objective-indicator/);
   });
 
   test('the shared mini wheel has ten slots, one green lower slot, and a gold selector', () => {

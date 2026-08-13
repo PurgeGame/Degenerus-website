@@ -36,33 +36,120 @@
   list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.42rem;
   padding: 0;
   margin: 0.5rem 0 0 0;
 }
 
 .boon-badge {
+  --boon-rgb: 167, 139, 250;
+  --boon-amount: #60a5fa;
+  --boon-amount-rgb: 96, 165, 250;
   position: relative;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 0.85rem;
+  display: grid;
+  min-width: 8.5rem;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.42rem;
+  padding: 0.34rem 0.58rem 0.34rem 0.38rem;
+  border: 1px solid rgba(var(--boon-rgb), 0.52);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(var(--boon-rgb), 0.2), transparent 48%),
+    linear-gradient(150deg, rgba(31, 30, 45, 0.96), rgba(12, 12, 21, 0.98));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.05), 0 0 12px rgba(var(--boon-rgb), 0.11);
+  font-family: "Inter", system-ui, sans-serif;
   cursor: default;
-  border: 1px solid transparent;
+}
+
+.boon-badge[data-boon-product="purchase"] { --boon-rgb: 245, 166, 35; }
+.boon-badge[data-boon-product="lootbox"] { --boon-rgb: 167, 139, 250; }
+.boon-badge[data-boon-product="coinflip"] { --boon-rgb: 248, 113, 113; }
+.boon-badge[data-boon-product="quests"] { --boon-rgb: 52, 211, 153; }
+.boon-badge[data-boon-product="decimator"] { --boon-rgb: 34, 211, 238; }
+.boon-badge[data-boon-product="whale"] { --boon-rgb: 96, 165, 250; }
+.boon-badge[data-boon-product="activity"] { --boon-rgb: 129, 140, 248; }
+.boon-badge[data-boon-product="deity"] { --boon-rgb: 216, 180, 254; }
+.boon-badge[data-boon-product="lazy"] { --boon-rgb: 250, 204, 21; }
+.boon-badge[data-boon-product="degenerette-eth"] { --boon-rgb: 192, 132, 252; }
+.boon-badge[data-boon-product="degenerette-flip"] { --boon-rgb: 245, 166, 35; }
+.boon-badge[data-boon-product="degenerette-wwxrp"] { --boon-rgb: 248, 113, 113; }
+
+.boon-badge[data-boon-strength="low"] { --boon-amount: #4ade80; --boon-amount-rgb: 74, 222, 128; }
+.boon-badge[data-boon-strength="mid"] { --boon-amount: #60a5fa; --boon-amount-rgb: 96, 165, 250; }
+.boon-badge[data-boon-strength="high"] { --boon-amount: #c084fc; --boon-amount-rgb: 192, 132, 252; }
+.boon-badge[data-boon-strength="special"] { --boon-amount: #93c5fd; --boon-amount-rgb: 147, 197, 253; }
+.boon-badge[data-boon-strength="utility"] { --boon-amount: #67e8f9; --boon-amount-rgb: 103, 232, 249; }
+.boon-badge[data-boon-direction="down"] { --boon-amount: #ef4444; --boon-amount-rgb: 239, 68, 68; }
+
+.boon-badge__mark {
+  position: relative;
+  display: block;
+  width: 2rem;
+  height: 2rem;
+}
+
+.boon-badge__mark::before {
+  position: absolute;
+  inset: 0.03rem 0.18rem 0.04rem;
+  background: linear-gradient(145deg, #f8fff9 0 8%, var(--boon-amount) 34% 100%);
+  clip-path: polygon(50% 0, 94% 39%, 69% 39%, 69% 100%, 31% 100%, 31% 39%, 6% 39%);
+  content: "";
+  filter: drop-shadow(0 0 5px rgba(var(--boon-amount-rgb), 0.72));
+}
+
+.boon-badge[data-boon-direction="down"] .boon-badge__mark::before { transform: rotate(180deg); }
+
+.boon-badge[data-boon-product="quests"] .boon-badge__mark::before { display: none; }
+.boon-badge[data-boon-product="quests"] .boon-badge__icon {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.62));
+  translate: none;
+}
+
+.boon-badge__icon {
+  position: absolute;
+  z-index: 1;
+  bottom: 0.08rem;
+  left: 50%;
+  display: block;
+  width: 1.08rem;
+  height: 1.08rem;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.9));
+  translate: -50% 0;
+}
+
+.boon-badge[data-boon-direction="down"] .boon-badge__icon { top: 0.08rem; bottom: auto; }
+
+.boon-badge__copy { display: grid; min-width: 0; gap: 0.1rem; }
+.boon-badge__name {
+  padding-right: 0.5rem;
+  color: rgba(241, 245, 249, 0.78);
+  font-size: 0.56rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+  text-wrap: balance;
+  white-space: normal;
+}
+.boon-badge__amount {
+  color: var(--boon-amount);
+  font: 950 0.72rem/1 "Roboto Mono", monospace;
+  text-shadow: 0 0 8px rgba(var(--boon-amount-rgb), 0.42);
 }
 
 .boon-badge--active {
-  background: #2a3a2a;
-  color: #9fd39f;
-  border-color: #3e5a3e;
+  border-color: rgba(var(--boon-rgb), 0.62);
 }
 
 .boon-badge--used {
-  background: #3a2a2a;
-  color: #d39f9f;
-  border-color: #5a3e3e;
-  text-decoration: line-through;
-  opacity: 0.7;
+  border-style: dashed;
+  filter: grayscale(0.68);
+  opacity: 0.58;
 }
 
 .boon-tooltip {

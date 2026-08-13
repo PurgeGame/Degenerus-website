@@ -21,6 +21,8 @@ import {
   readDecimatorRawBurnTotal,
 } from '../app/decimator.js';
 import { compactUiError } from '../app/ui-error.js';
+import './boon-product-indicator.js';
+import './quest-objective-indicator.js';
 
 const POLL_MS = 15_000;
 const POST_BURN_REFRESH_MS = 350;
@@ -186,6 +188,7 @@ class AppDecimatorBurn extends HTMLElement {
             <label class="dbb__input">
               <span class="dbb__input-control">
                 <small>BURN AMOUNT</small>
+                <boon-product-indicator product="decimator"></boon-product-indicator>
                 <input type="text" inputmode="decimal" name="dbb-amount" value="1000"
                        aria-label="Decimator burn amount in FLIP">
                 <b>FLIP</b>
@@ -198,6 +201,7 @@ class AppDecimatorBurn extends HTMLElement {
             <button type="button" class="dbb__burn" data-write data-bind="dbb-burn">
               <span data-bind="dbb-burn-action">BURN FLIP</span>
               <strong data-bind="dbb-quote">SCORE —</strong>
+              <quest-objective-indicator product="decimator"></quest-objective-indicator>
             </button>
           </div>
           <p class="dbb__feedback" data-bind="dbb-feedback" hidden role="status"></p>
@@ -354,6 +358,7 @@ class AppDecimatorBurn extends HTMLElement {
     const amount = _parseFlip(input?.value);
     const score = Number(this.#context?.activityScore);
     let weight = null;
+    let boonWeight = 0n;
     let actualMultiplierBps = null;
     let baseMultiplierBps = null;
     let multiplierCapped = false;
@@ -369,6 +374,10 @@ class AppDecimatorBurn extends HTMLElement {
         boonBps: knownBoonBps ?? decimatorBoonBps(get('app.boons')),
       };
       weight = decimatorEntryScoreWei(scoreArgs);
+      if (scoreArgs.boonBps > 0) {
+        const withoutBoon = decimatorEntryScoreWei({ ...scoreArgs, boonBps: 0 });
+        boonWeight = weight > withoutBoon ? weight - withoutBoon : 0n;
+      }
       actualMultiplierBps = decimatorEffectiveMultiplierBps(scoreArgs);
       baseMultiplierBps = decimatorEffectiveBaseMultiplierBps(scoreArgs);
       multiplierCapped = decimatorMultiplierCapApplied(scoreArgs);
@@ -376,7 +385,9 @@ class AppDecimatorBurn extends HTMLElement {
     if (quote) {
       quote.textContent = amount != null && amount < DECIMATOR_MIN_FLIP_WEI
         ? 'MIN 1,000 FLIP'
-        : weight == null ? 'SCORE —' : `+${_fmtFlip(weight)} SCORE`;
+        : weight == null
+          ? 'SCORE —'
+          : `+${_fmtFlip(weight)} SCORE${boonWeight > 0n ? ` · +${_fmtFlip(boonWeight)} BOON` : ''}`;
     }
     if (action) action.textContent = this.#busy ? 'BURNING…' : 'BURN FLIP';
     const liveMulti = this.querySelector('[data-bind="dbb-live-multi"]');

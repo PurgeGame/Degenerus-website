@@ -16,7 +16,7 @@
 // trusted literal markup only.
 
 import { update } from '../app/store.js';
-import { API_BASE } from '../app/constants.js';
+import { fetchJSON } from '../app/api.js';
 
 const DEBOUNCE_MS = 300;
 const MIN_QUERY_LEN = 2;
@@ -96,17 +96,10 @@ export class PlayerDropdown extends HTMLElement {
     this._abort = new AbortController();
     const signal = this._abort.signal;
     try {
-      const url = `${API_BASE}/players/search?q=${encodeURIComponent(q)}&limit=${SEARCH_LIMIT}`;
-      const res = await fetch(url, { signal });
-      if (!res || !res.ok) {
-        if (res && res.status) {
-          // eslint-disable-next-line no-console
-          console.warn('[player-dropdown] search failed:', res.status);
-        }
-        ul.hidden = true;
-        return;
-      }
-      const data = await res.json();
+      const data = await fetchJSON(
+        `/players/search?q=${encodeURIComponent(q)}&limit=${SEARCH_LIMIT}`,
+        { signal, force: true },
+      );
       this._renderResults(data, ul);
     } catch (e) {
       if (e && e.name !== 'AbortError') {

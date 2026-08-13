@@ -86,7 +86,7 @@ describe('BAF resolution presentation', () => {
     assert.match(view.message, /2 tickets/);
   });
 
-  test('only a skipped bracket with exact on-chain consolation becomes actionable', () => {
+  test('only a losing bracket with exact on-chain consolation becomes actionable', () => {
     const ready = bafResolutionView({
       currentLevel: 20,
       level: 20,
@@ -105,7 +105,7 @@ describe('BAF resolution presentation', () => {
       awards: { eth: 0n, tickets: 0n },
       outcome: { roundStatus: 'skipped', score: '12000000000000000000000' },
     });
-    assert.equal(claimed.status, 'SKIPPED · SETTLED');
+    assert.equal(claimed.status, 'LOSS · SETTLED');
     assert.equal(claimed.actionable, false);
   });
 });

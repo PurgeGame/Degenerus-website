@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Smite lightning bolt</title>
+  <defs>
+    <linearGradient id="smite-bolt" x1="19" y1="7" x2="45" y2="57" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fffef0"/>
+      <stop offset=".52" stop-color="#ffe38a"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <path d="M39 5 15 35h14l-6 24 26-34H35l9-20Z"
+        fill="url(#smite-bolt)" stroke="#090b11" stroke-width="5"
+        stroke-linejoin="round"/>
+  <path d="m36 12-13 17h11" fill="none" stroke="#fff"
+        stroke-width="2.5" stroke-linecap="round" opacity=".72"/>
+</svg>

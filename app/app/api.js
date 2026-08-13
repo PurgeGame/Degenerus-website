@@ -28,8 +28,16 @@ import {
 // render/poll wave even when the first response is already back.
 const RECENT_JSON_TTL_MS = 1_000;
 const MAX_RECENT_JSON = 256;
+// A dashboard mounts several address-scoped panels at once. Letting every
+// panel open a request simultaneously multiplies one browser into a database
+// burst; a small per-tab lane preserves the primary player read while letting
+// the remaining widgets fill progressively. Shared/global reads bypass this
+// lane so health and game state never sit behind wallet history.
+const MAX_PERSONALIZED_FETCHES = 3;
 const inflightJSON = new Map();
 const recentJSON = new Map();
+const personalizedQueue = [];
+let personalizedActive = 0;
 let cacheGeneration = 0;
 
 function abortError(signal) {
@@ -59,7 +67,74 @@ function recentSet(key, value) {
   }
 }
 
-function createFlight(key) {
+function isPersonalizedKey(key) {
+  let url;
+  try { url = new URL(key, 'https://api.invalid'); } catch { return false; }
+  const path = url.pathname;
+  return path.startsWith('/player/')
+    || path.startsWith('/viewer/player/')
+    || path.startsWith('/replay/player-traits/')
+    || /\/player\//.test(path)
+    || /(?:^|[?&])player=0x[0-9a-f]{40}(?:&|$)/i.test(url.search);
+}
+
+function openPersonalizedSlot() {
+  personalizedActive += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    personalizedActive = Math.max(0, personalizedActive - 1);
+    drainPersonalizedQueue();
+  };
+}
+
+function drainPersonalizedQueue() {
+  while (personalizedActive < MAX_PERSONALIZED_FETCHES && personalizedQueue.length > 0) {
+    const entry = personalizedQueue.shift();
+    if (!entry || entry.settled || entry.signal.aborted) continue;
+    entry.settled = true;
+    entry.signal.removeEventListener('abort', entry.onAbort);
+    entry.resolve(openPersonalizedSlot());
+  }
+}
+
+function acquirePersonalizedSlot(signal) {
+  if (signal.aborted) throw abortError(signal);
+  // Preserve the transport's existing same-turn start semantics when a slot is
+  // free. Only saturated address traffic pays a queue/microtask hop.
+  if (personalizedActive < MAX_PERSONALIZED_FETCHES) return openPersonalizedSlot();
+  return new Promise((resolve, reject) => {
+    const entry = {
+      signal,
+      resolve,
+      reject,
+      settled: false,
+      onAbort: null,
+    };
+    entry.onAbort = () => {
+      if (entry.settled) return;
+      entry.settled = true;
+      const index = personalizedQueue.indexOf(entry);
+      if (index !== -1) personalizedQueue.splice(index, 1);
+      reject(abortError(signal));
+    };
+    signal.addEventListener('abort', entry.onAbort, { once: true });
+    personalizedQueue.push(entry);
+    drainPersonalizedQueue();
+  });
+}
+
+export class ApiRequestError extends Error {
+  constructor(status, key, response) {
+    super(`API ${status}: ${key}`);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.response = response;
+  }
+}
+
+function createFlight(key, { cache } = {}) {
   const controller = new AbortController();
   const generation = cacheGeneration;
   const flight = {
@@ -72,19 +147,46 @@ function createFlight(key) {
   flight.promise = (async () => {
     // Shared with polling.js via this broker. Without this, a shedding API
     // stopped the timers but every panel kept knocking on its own schedule.
-    if (isCoolingDown()) throw new Error(`API cooling down: ${key}`);
-    const res = await fetch(API_BASE + key, { signal: controller.signal });
-    if (isShedStatus(res.status)) {
-      noteShedLoad(res);
-      throw new Error(`API ${res.status}: ${key}`);
+    const personalized = isPersonalizedKey(key);
+    const cooldownScope = personalized ? 'personalized' : 'global';
+    if (isCoolingDown(cooldownScope)) throw new Error(`API cooling down: ${key}`);
+    const acquired = personalized
+      ? acquirePersonalizedSlot(controller.signal)
+      : null;
+    const releaseSlot = acquired && typeof acquired.then === 'function'
+      ? await acquired
+      : acquired;
+    try {
+      // A different flight may have armed cooldown while this request waited
+      // in the per-tab lane. Honor it before touching the network.
+      if (isCoolingDown(cooldownScope)) throw new Error(`API cooling down: ${key}`);
+      const res = await fetch(API_BASE + key, {
+        signal: controller.signal,
+        ...(cache ? { cache } : {}),
+      });
+      if (isShedStatus(res.status)) {
+        noteShedLoad(res);
+        try { await res.body?.cancel?.(); } catch { /* connection cleanup is best-effort */ }
+        throw new ApiRequestError(res.status, key, res);
+      }
+      if (!res.ok) {
+        try { await res.body?.cancel?.(); } catch { /* connection cleanup is best-effort */ }
+        throw new ApiRequestError(res.status, key, res);
+      }
+      // A personalized success proves both the global condition and the
+      // narrower wallet lane are open. Clear both ladders so an expired global
+      // incident cannot make the next unrelated shed jump straight to a later
+      // exponential-backoff step. A shared success must not clear a still-hot
+      // personalized capacity gate.
+      clearApiCooldown(personalized ? 'all' : 'global');
+      const value = await res.json();
+      // A transaction invalidation aborts old flights and advances the epoch.
+      // Never let a late, pre-transaction response repopulate the recent cache.
+      if (generation === cacheGeneration) recentSet(key, value);
+      return value;
+    } finally {
+      releaseSlot?.();
     }
-    if (!res.ok) throw new Error(`API ${res.status}: ${key}`);
-    clearApiCooldown();
-    const value = await res.json();
-    // A transaction invalidation aborts old flights and advances the epoch.
-    // Never let a late, pre-transaction response repopulate the recent cache.
-    if (generation === cacheGeneration) recentSet(key, value);
-    return value;
   })().finally(() => {
     flight.settled = true;
     if (inflightJSON.get(key) === flight) inflightJSON.delete(key);
@@ -145,7 +247,7 @@ export function invalidateJSONCache() {
  * Each caller gets independent AbortSignal semantics. The underlying fetch is
  * aborted only when every consumer has gone away.
  */
-export function fetchJSON(path, { signal, force = false } = {}) {
+export function fetchJSON(path, { signal, force = false, cache } = {}) {
   const key = String(path);
   if (signal?.aborted) return Promise.reject(abortError(signal));
 
@@ -156,7 +258,7 @@ export function fetchJSON(path, { signal, force = false } = {}) {
 
   let flight = inflightJSON.get(key);
   if (!flight) {
-    flight = createFlight(key);
+    flight = createFlight(key, { cache: cache ?? (force ? 'no-store' : undefined) });
     inflightJSON.set(key, flight);
   }
   return attachConsumer(flight, signal);

@@ -5,7 +5,7 @@
 //   - playerTimer   30s
 //   - healthTimer   60s
 //   - lastDayTimer  15s   (jackpot/flip rollover is player-facing and time-sensitive)
-//   - goldRushTimer  5s   (gold-rush headline ticker — see POLL_INTERVALS.goldRush)
+//   - goldRushTimer  5s   (direct-chain headline ticker — see POLL_INTERVALS.goldRush)
 //
 // AbortController-per-cycle (D-06): each timer firing creates a new AbortController;
 // the previous in-flight cycle for the same timer is aborted before the new one starts.
@@ -40,9 +40,13 @@ import { fetchJSON as sharedFetchJSON, invalidateJSONCache } from './api.js';
 import { clearApiCooldown, cooldownUntil } from './api-cooldown.js';
 import { update, get } from './store.js';
 import { mergePlayerPayloads } from './combine.js';
-import { ethers, TX_CONFIRMED_EVENT } from './contracts.js';
+import { ethers, getProvider, TX_CONFIRMED_EVENT } from './contracts.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { decodePackedBoons } from './boons.js';
+import {
+  lastDayPayloadNeedsRecheck,
+  normalizeLastDayPayload,
+} from './last-day-state.js';
 
 // ---------------------------------------------------------------------------
 // LOCKED constants (D-04 + Pitfall 3)
@@ -61,9 +65,9 @@ export const POLL_INTERVALS = {
   // the indexer catches up at rollover), and refreshForDayShift() forces it from
   // the direct chain-day watcher.
   // Gold-rush headline ticker — the FLOOR of an adaptive cadence, not a fixed
-  // interval (see GOLD_RUSH_CADENCE). 5s is the fastest useful rate: the indexer
-  // samples once per follow-mode batch (~5s at POLLING_INTERVAL_MS=5000), so polling
-  // harder only re-reads the same row.
+  // interval (see GOLD_RUSH_CADENCE). Each tick is one same-block Multicall3 read
+  // through the player's wallet RPC, or a keyless public RPC when no compatible
+  // wallet is connected. Nothing passes through our API or database.
   goldRush: 5_000,
 };
 
@@ -104,13 +108,35 @@ let _forcePlayerCycle = null;
 let _goldRushLastBlock = null;
 let _goldRushQuietPolls = 0;
 let _goldRushDelay = GOLD_RUSH_CADENCE.active;
-let _goldRushYieldReader = null;
-let _goldRushReadProvider = null;
+let _goldRushSnapshotReader = null;
+let _goldRushPublicProvider = null;
 let _boonStateReader = null;
 let _boonReadProvider = null;
 
-const GOLD_RUSH_FALLBACK_ABI = [
+const GOLD_RUSH_GAME_ABI = [
+  'function currentPrizePoolView() external view returns (uint256)',
+  'function nextPrizePoolView() external view returns (uint256)',
+  'function futurePrizePoolView() external view returns (uint256)',
   'function yieldAccumulatorView() external view returns (uint256)',
+  'function currentDayView() external view returns (uint24)',
+  'function extsload(bytes32 slot) external view returns (bytes32)',
+];
+const GOLD_RUSH_VIEW_NAMES = [
+  'currentPrizePoolView',
+  'nextPrizePoolView',
+  'futurePrizePoolView',
+  'yieldAccumulatorView',
+  'currentDayView',
+  'extsload',
+];
+const GAME_SLOT_ZERO = `0x${'00'.repeat(32)}`;
+// Canonical CREATE2 Multicall3 deployment on Base Sepolia and Ethereum. Besides
+// keeping the pool getters and phase clock to one wallet request, blockAndAggregate
+// gives us the exact block every value came from; mixed-block state is impossible.
+const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11';
+const GOLD_RUSH_MULTICALL_ABI = [
+  'function blockAndAggregate(tuple(address target,bytes callData)[] calls) payable '
+    + 'returns (uint256 blockNumber,bytes32 blockHash,tuple(bool success,bytes returnData)[] returnData)',
 ];
 
 const BOON_STATE_ABI = [
@@ -141,22 +167,78 @@ export async function readExactBoonState(address, { blockTag = null } = {}) {
   };
 }
 
-async function readGoldRushYieldAccumulator() {
-  if (_goldRushYieldReader) return BigInt(await _goldRushYieldReader());
-  if (!_goldRushReadProvider && CHAIN.rpcUrl) {
-    _goldRushReadProvider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
+function goldRushPublicProvider() {
+  if (!_goldRushPublicProvider && CHAIN.goldRushPublicRpcUrl) {
+    _goldRushPublicProvider = new ethers.JsonRpcProvider(
+      CHAIN.goldRushPublicRpcUrl,
       Number(CHAIN.id),
       { staticNetwork: true, batchMaxCount: 1 },
     );
   }
-  if (!_goldRushReadProvider || !CONTRACTS.GAME) throw new Error('Gold-rush chain reader unavailable');
-  const game = new ethers.Contract(CONTRACTS.GAME, GOLD_RUSH_FALLBACK_ABI, _goldRushReadProvider);
-  return BigInt(await game.yieldAccumulatorView());
+  return _goldRushPublicProvider;
 }
 
-function fallbackPoolWei(pools, key) {
-  const raw = pools?.[key];
+async function readGoldRushFromProvider(provider, source) {
+  if (!provider || !CONTRACTS.GAME) throw new Error('Gold-rush chain reader unavailable');
+  const game = new ethers.Interface(GOLD_RUSH_GAME_ABI);
+  const multicall = new ethers.Contract(
+    MULTICALL3_ADDRESS,
+    GOLD_RUSH_MULTICALL_ABI,
+    provider,
+  );
+  const calls = GOLD_RUSH_VIEW_NAMES.map((name) => ({
+    target: CONTRACTS.GAME,
+    callData: game.encodeFunctionData(name, name === 'extsload' ? [GAME_SLOT_ZERO] : []),
+  }));
+  const aggregate = await multicall.blockAndAggregate.staticCall(calls);
+  const rows = aggregate?.returnData ?? aggregate?.[2];
+  if (!Array.isArray(rows) || rows.length !== GOLD_RUSH_VIEW_NAMES.length) {
+    throw new Error('Incomplete Gold-rush multicall response');
+  }
+  const values = rows.map((row, index) => {
+    const success = row?.success ?? row?.[0];
+    const returnData = row?.returnData ?? row?.[1];
+    if (!success) throw new Error(`Gold-rush getter failed: ${GOLD_RUSH_VIEW_NAMES[index]}`);
+    return BigInt(game.decodeFunctionResult(GOLD_RUSH_VIEW_NAMES[index], returnData)?.[0] ?? 0);
+  });
+  const blockNumber = Number(aggregate?.blockNumber ?? aggregate?.[0]);
+  if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) {
+    throw new Error('Invalid Gold-rush block number');
+  }
+  return {
+    blockNumber,
+    currentWei: values[0],
+    nextWei: values[1],
+    futureWei: values[2],
+    yieldAccumulatorWei: values[3],
+    currentDay: values[4],
+    phaseSlot0: values[5],
+    source,
+  };
+}
+
+async function readGoldRushSnapshot() {
+  if (_goldRushSnapshotReader) return _goldRushSnapshotReader();
+
+  // A connected, correctly-networked wallet owns its own read transport. Never
+  // request accounts or a signature here; BrowserProvider eth_call is silent.
+  const wallet = getProvider();
+  if (wallet && get('ui.chainOk') === true) {
+    try {
+      return await readGoldRushFromProvider(wallet, 'wallet');
+    } catch (_error) {
+      // A wallet RPC can be temporarily stale or rate-limited. The public reader
+      // below is keyless and client-side; falling through never touches our API.
+    }
+  }
+
+  const publicProvider = goldRushPublicProvider();
+  if (!publicProvider) throw new Error('No compatible wallet or public Gold-rush RPC');
+  return readGoldRushFromProvider(publicProvider, 'public');
+}
+
+function snapshotWei(snapshot, key) {
+  const raw = snapshot?.[key];
   if (raw == null || raw === '') throw new Error(`Missing ${key}`);
   const value = BigInt(raw);
   if (value < 0n) throw new Error(`Invalid ${key}`);
@@ -164,28 +246,48 @@ function fallbackPoolWei(pools, key) {
 }
 
 /**
- * Rebuild the ticker payload from independently available sources when the
- * specialized DB route is unavailable. This is the same contract sum as the
- * indexer's ticker: current + next + future + yieldAccumulator. Claimable is
- * context only and is deliberately excluded.
+ * Build the ticker payload from one same-block chain snapshot. This is the exact
+ * contract sum: current + next + future + yieldAccumulator. Claimable is context
+ * only and is deliberately excluded. `atBlock` stays pinned while both the amount
+ * and phase clock are unchanged, so cadence reacts to player-visible state rather
+ * than empty blocks.
  */
-function buildGoldRushFallbackPayload(gameState, health, yieldAccumulatorWei, previous = null) {
+function buildGoldRushChainPayload(snapshot, gameState, previous = null) {
   const pools = gameState?.prizePools;
-  const current = fallbackPoolWei(pools, 'currentPrizePool');
-  const next = fallbackPoolWei(pools, 'nextPrizePool');
-  const future = fallbackPoolWei(pools, 'futurePrizePool');
+  const current = snapshotWei(snapshot, 'currentWei');
+  const next = snapshotWei(snapshot, 'nextWei');
+  const future = snapshotWei(snapshot, 'futureWei');
+  const yieldAcc = snapshotWei(snapshot, 'yieldAccumulatorWei');
   const claimable = BigInt(pools?.claimableWinnings ?? 0);
-  const hasExactYield = yieldAccumulatorWei != null;
-  const yieldAcc = hasExactYield ? BigInt(yieldAccumulatorWei) : 0n;
   const headline = current + next + future + yieldAcc;
   let previousHeadline = null;
   try {
     if (previous?.headlineWei != null) previousHeadline = BigInt(previous.headlineWei);
   } catch { /* malformed prior payload is ignored */ }
-  const indexedBlock = Number(health?.indexedBlock);
-  const atBlock = Number.isSafeInteger(indexedBlock) && indexedBlock >= 0 ? indexedBlock : null;
-  const chainTip = health?.chainTip == null ? null : Number(health.chainTip);
-  const lagBlocks = Number(health?.lagBlocks);
+  const observedBlock = Number(snapshot?.blockNumber);
+  if (!Number.isSafeInteger(observedBlock) || observedBlock < 0) {
+    throw new Error('Invalid Gold-rush snapshot block');
+  }
+  const chainPhase = decodeGoldRushPhase(snapshot?.phaseSlot0, snapshot?.currentDay);
+  const priorPhase = previous?.phaseClock || null;
+  const phaseChanged = Boolean(chainPhase) && (
+    !priorPhase
+    || chainPhase.currentDay !== priorPhase.currentDay
+    || chainPhase.purchaseStartDay !== priorPhase.purchaseStartDay
+    || chainPhase.level !== priorPhase.level
+    || chainPhase.jackpot !== priorPhase.jackpot
+    || chainPhase.jackpotCounter !== priorPhase.jackpotCounter
+    || chainPhase.lastPurchaseDay !== priorPhase.lastPurchaseDay
+    || chainPhase.rngLocked !== priorPhase.rngLocked
+    || chainPhase.transition !== priorPhase.transition
+    || chainPhase.gameOver !== priorPhase.gameOver
+    || chainPhase.compressedFlag !== priorPhase.compressedFlag
+  );
+  const changed = previousHeadline == null || previousHeadline !== headline || phaseChanged;
+  const priorMoveBlock = Number(previous?.atBlock);
+  const atBlock = changed || !Number.isSafeInteger(priorMoveBlock) || priorMoveBlock < 0
+    ? observedBlock
+    : priorMoveBlock;
   const level = Number(gameState?.level);
   const phaseDay = Number(gameState?.jackpotCounter);
 
@@ -194,7 +296,7 @@ function buildGoldRushFallbackPayload(gameState, health, yieldAccumulatorWei, pr
     prevHeadlineWei: previousHeadline == null ? null : previousHeadline.toString(),
     deltaWei: previousHeadline == null ? '0' : (headline - previousHeadline).toString(),
     atBlock,
-    fromBlock: previous?.atBlock ?? null,
+    fromBlock: changed ? (previous?.atBlock ?? null) : (previous?.fromBlock ?? null),
     sampledAt: null,
     components: {
       currentWei: current.toString(),
@@ -204,18 +306,61 @@ function buildGoldRushFallbackPayload(gameState, health, yieldAccumulatorWei, pr
       claimableWei: claimable.toString(),
     },
     grandEthWei: (future / 4n).toString(),
-    indexedBlock: atBlock ?? 0,
-    chainTip: chainTip != null && Number.isSafeInteger(chainTip) && chainTip >= 0 ? chainTip : null,
-    lagBlocks: Number.isSafeInteger(lagBlocks) && lagBlocks >= 0 ? lagBlocks : 0,
-    level: Number.isSafeInteger(level) && level >= 0 ? level : null,
-    phase: gameState?.phase == null ? null : String(gameState.phase),
-    phaseDay: Number.isSafeInteger(phaseDay) && phaseDay >= 0 ? phaseDay : null,
+    indexedBlock: observedBlock,
+    chainTip: observedBlock,
+    lagBlocks: 0,
+    level: chainPhase?.level
+      ?? (Number.isSafeInteger(level) && level >= 0 ? level : null),
+    phase: chainPhase
+      ? chainPhase.phase
+      : gameState?.phase == null ? null : String(gameState.phase),
+    phaseDay: chainPhase?.jackpotCounter
+      ?? (Number.isSafeInteger(phaseDay) && phaseDay >= 0 ? phaseDay : null),
     phaseDayCap: 5,
+    phaseClock: chainPhase,
     frozen: Boolean(pools?.frozen ?? gameState?.prizePoolFrozen),
-    ready: hasExactYield,
+    ready: true,
     armed: previous?.armed ?? null,
-    fallback: true,
+    source: snapshot?.source === 'wallet' ? 'wallet' : 'public',
   };
+}
+
+function decodeGoldRushPhase(slot0Raw, currentDayRaw) {
+  if (slot0Raw == null || currentDayRaw == null) return null;
+  try {
+    const slot0 = BigInt(slot0Raw);
+    const currentDay = Number(currentDayRaw);
+    const purchaseStartDay = Number(slot0 & 0xffffffn);
+    const level = Number((slot0 >> 96n) & 0xffffffn);
+    const jackpot = Boolean((slot0 >> 120n) & 0xffn);
+    const jackpotCounter = Number((slot0 >> 128n) & 0xffn);
+    const lastPurchaseDay = Boolean((slot0 >> 136n) & 0xffn);
+    const rngLocked = Boolean((slot0 >> 152n) & 0xffn);
+    const transition = Boolean((slot0 >> 160n) & 0xffn);
+    const gameOver = Boolean((slot0 >> 168n) & 0xffn);
+    const compressedFlag = Number((slot0 >> 184n) & 0xffn);
+    if (!Number.isInteger(currentDay) || currentDay <= 0
+      || !Number.isInteger(purchaseStartDay) || purchaseStartDay <= 0
+      || currentDay < purchaseStartDay) return null;
+    return {
+      currentDay,
+      purchaseStartDay,
+      level,
+      jackpot,
+      jackpotCounter,
+      purchaseDay: !jackpot && !transition
+        ? currentDay - purchaseStartDay + 1
+        : null,
+      lastPurchaseDay: !jackpot && lastPurchaseDay,
+      rngLocked,
+      transition,
+      gameOver,
+      compressedFlag,
+      phase: gameOver ? 'GAMEOVER' : jackpot ? 'JACKPOT' : 'PURCHASE',
+    };
+  } catch (_e) {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -275,11 +420,15 @@ function resolvedDayFromGameState(payload) {
  * old day, every 15s state sample keeps retrying until the draw catches up.
  */
 function publishGameState(payload, refreshLastDay) {
-  const displayedDay = Number(get('app.lastDay')?.day);
+  const displayedPayload = get('app.lastDay');
+  const displayedDay = Number(displayedPayload?.day);
   const nextDay = resolvedDayFromGameState(payload);
   update('app.gameState', payload);
   if (nextDay != null
-    && (!Number.isInteger(displayedDay) || displayedDay <= 0 || nextDay !== displayedDay)) {
+    && (!Number.isInteger(displayedDay)
+      || displayedDay <= 0
+      || nextDay !== displayedDay
+      || lastDayPayloadNeedsRecheck(displayedPayload))) {
     try { refreshLastDay?.(); } catch { /* the fallback timer is still armed */ }
   }
   return payload;
@@ -360,7 +509,9 @@ async function pollLastDay(signal) {
   // Phase 59 Plan 59-02: write payload to store on success so the widget's
   // subscribe('app.lastDay', ...) subscriber fires per polling cycle.
   try {
-    const payload = await fetchJSONWithSignal('/game/jackpot/last-day', { signal });
+    const payload = normalizeLastDayPayload(
+      await fetchJSONWithSignal('/game/jackpot/last-day', { signal }),
+    );
     if (!lastDayMatchesDeployment(payload)) {
       const observedStartBlock = payload?.summary?.blockRange?.start
         ?? payload?.blockRange?.start
@@ -385,39 +536,22 @@ async function pollLastDay(signal) {
 }
 
 // Gold-rush headline. Writes app.goldRush; gold-rush-headline.js subscribes.
-// Soft-fails like pollLastDay: on 404 (API not yet carrying the route) or network
-// error the store keeps its last good payload and the widget keeps its last number
-// rather than blanking to zero mid-animation.
+// This path is chain-only: it never calls the indexer API. A failed wallet/public
+// RPC read keeps the last good number rather than blanking to zero mid-animation.
 async function pollGoldRush(signal) {
+  if (signal?.aborted) return null;
   try {
-    const payload = await fetchJSONWithSignal('/game/jackpot/gold-rush', { signal });
+    const snapshot = await readGoldRushSnapshot();
+    if (signal?.aborted) return null;
+    const payload = buildGoldRushChainPayload(
+      snapshot,
+      get('app.gameState'),
+      get('app.goldRush'),
+    );
     update('app.goldRush', payload);
     return payload;
-  } catch (_e) {
-    if (signal?.aborted) return null;
-    // The local DB can be healthy while only this route fails response-schema
-    // serialization. Do not strand the headline at an em dash: reconstruct the
-    // exact sum from /game/state plus the one component that endpoint does not
-    // expose, read directly from GAME. The chain read is allowed to degrade so
-    // the known three-pool subtotal still paints with a "warming up" chip.
-    const [stateResult, healthResult, yieldResult] = await Promise.allSettled([
-      fetchJSONWithSignal('/game/state', { signal }),
-      fetchJSONWithSignal('/health', { signal }),
-      readGoldRushYieldAccumulator(),
-    ]);
-    if (stateResult.status !== 'fulfilled') return null;
-    try {
-      const payload = buildGoldRushFallbackPayload(
-        stateResult.value,
-        healthResult.status === 'fulfilled' ? healthResult.value : null,
-        yieldResult.status === 'fulfilled' ? yieldResult.value : null,
-        get('app.goldRush'),
-      );
-      update('app.goldRush', payload);
-      return payload;
-    } catch {
-      return null;
-    }
+  } catch (_error) {
+    return null;
   }
 }
 
@@ -425,8 +559,8 @@ async function pollGoldRush(signal) {
  * Pick the next gold-rush delay from what the poll just returned, and record the
  * block so the next call can tell "moved" from "same sample again".
  *
- * A null payload (fetch failed or was aborted) counts as unchanged, so a down API
- * gets backed off rather than hammered.
+ * A null payload (RPC failed or was aborted) counts as unchanged, so a down wallet
+ * or public endpoint gets backed off rather than hammered.
  *
  * @param {{atBlock?: number|null}|null} payload
  * @returns {number} delay in ms until the next poll
@@ -663,6 +797,10 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
  */
 export function refreshForDayShift({ includePlayer = false } = {}) {
   const cycles = [];
+  // The day watcher itself is chain-direct. Refresh the phase-bearing chain
+  // snapshot immediately as well, so a stalled indexer cannot hold the strip on
+  // yesterday's purchase day until the adaptive ticker's next (up to 60s) poll.
+  cycles.push(runGoldRushCycle());
   if (typeof _forceGameCycle === 'function') cycles.push(_forceGameCycle());
   if (typeof _forceLastDayCycle === 'function') cycles.push(_forceLastDayCycle());
   if (includePlayer && typeof _forcePlayerCycle === 'function') cycles.push(_forcePlayerCycle());
@@ -797,13 +935,14 @@ export const _testing = {
   pollLastDay,
   lastDayMatchesDeployment,
   pollGoldRush,
-  buildGoldRushFallbackPayload,
-  setGoldRushYieldReader(fn) {
-    _goldRushYieldReader = typeof fn === 'function' ? fn : null;
+  readGoldRushSnapshot,
+  buildGoldRushChainPayload,
+  setGoldRushSnapshotReader(fn) {
+    _goldRushSnapshotReader = typeof fn === 'function' ? fn : null;
   },
-  resetGoldRushYieldReader() {
-    _goldRushYieldReader = null;
-    _goldRushReadProvider = null;
+  resetGoldRushSnapshotReader() {
+    _goldRushSnapshotReader = null;
+    _goldRushPublicProvider = null;
   },
   setBoonStateReader(fn) {
     _boonStateReader = typeof fn === 'function' ? fn : null;

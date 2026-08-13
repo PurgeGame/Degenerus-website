@@ -83,14 +83,16 @@ describe('mergePlayerPayloads — coinflip nested sum + identity omission', () =
 });
 
 describe('mergePlayerPayloads — decimator per-level sum + global futurePool', () => {
-  test('sums ethAmount + lootboxCount per level; futurePoolTotal taken (not summed)', () => {
+  test('sums ethAmount + lootboxAmount per level; futurePoolTotal taken (not summed)', () => {
+    // v77 B3: the API dropped the hardcoded-zero lootboxCount; lootboxAmount is a
+    // wei string (null on AutoRebuyProcessed-sourced rows — summed as 0).
     const merged = mergePlayerPayloads([
       payload(A, {
         decimator: {
           futurePoolTotal: '800',
           claimablePerLevel: [
-            { level: 1, ethAmount: '100', lootboxCount: 2, claimed: false },
-            { level: 2, ethAmount: '50', lootboxCount: 1, claimed: true },
+            { level: 1, ethAmount: '100', lootboxAmount: '20', claimed: false },
+            { level: 2, ethAmount: '50', lootboxAmount: null, claimed: true },
           ],
         },
       }),
@@ -98,7 +100,7 @@ describe('mergePlayerPayloads — decimator per-level sum + global futurePool', 
         decimator: {
           futurePoolTotal: '800',
           claimablePerLevel: [
-            { level: 1, ethAmount: '300', lootboxCount: 3, claimed: false },
+            { level: 1, ethAmount: '300', lootboxAmount: '30', claimed: false },
           ],
         },
       }),
@@ -108,17 +110,18 @@ describe('mergePlayerPayloads — decimator per-level sum + global futurePool', 
     const lvl1 = merged.decimator.claimablePerLevel.find((r) => Number(r.level) === 1);
     const lvl2 = merged.decimator.claimablePerLevel.find((r) => Number(r.level) === 2);
     assert.equal(lvl1.ethAmount, '400');
-    assert.equal(lvl1.lootboxCount, 5);
+    assert.equal(lvl1.lootboxAmount, '50');
     assert.equal(lvl1.claimed, false);
     assert.equal(lvl2.ethAmount, '50');
+    assert.equal(lvl2.lootboxAmount, '0'); // null-sourced rows sum as 0
     assert.equal(lvl2.claimed, true); // only B lacks it; A had it claimed → all-claimed
   });
 
   test('level rows are ascending', () => {
     const merged = mergePlayerPayloads([
       payload(A, { decimator: { futurePoolTotal: '0', claimablePerLevel: [
-        { level: 3, ethAmount: '1', lootboxCount: 0, claimed: false },
-        { level: 1, ethAmount: '1', lootboxCount: 0, claimed: false },
+        { level: 3, ethAmount: '1', lootboxAmount: '0', claimed: false },
+        { level: 1, ethAmount: '1', lootboxAmount: '0', claimed: false },
       ] } }),
     ]);
     const levels = merged.decimator.claimablePerLevel.map((r) => Number(r.level));

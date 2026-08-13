@@ -13,6 +13,7 @@ import { applyTicketLevelTone } from '../app/ticket-level-tone.js';
 import { historicalLootboxReplayRows } from '../app/day-lootbox-results.js';
 import {
   dgnDecodePacked,
+  degeneretteReplaySequences,
   degeneretteRevealSequenceFromFeedItem,
   mergeDegeneretteFeedItems,
 } from './app-degenerette-panel.js';
@@ -611,6 +612,13 @@ function _degeneretteRows(feed, owner) {
       }
       else _addRaw(payoutMap, delta.asset, delta.value, delta.kind);
     }
+    // DegeneretteResolved.totalPayout is emitted before the record bounty's
+    // independent FLIP spin chain. BoxSpin.payout is therefore an additional
+    // mint, not part of the base gross and not a Luckbox leg.
+    for (const spin of Array.isArray(sequence?.recordBountySpins)
+      ? sequence.recordBountySpins : []) {
+      _addRaw(payoutMap, 'FLIP', spin?.payout, 'token');
+    }
     for (const payout of Array.isArray(item?.lootboxPayouts) ? item.lootboxPayouts : []) {
       const hash = String(payout?.transactionHash || '').toLowerCase();
       if (hash) excludedLootboxTransactions.add(hash);
@@ -1087,6 +1095,19 @@ function _selectHasValue(select, value) {
   return Array.from(select.options).some((option) => String(option.value) === String(value));
 }
 
+/** Convert a history row into the exact ordered reveal queue it represents. */
+export function transactionHistoryReplaySequences(row) {
+  if (Array.isArray(row?.replaySequences) && row.replaySequences.length > 0) {
+    return row.replaySequences;
+  }
+  if (!row?.sequence) return [];
+  if (row.type !== 'degenerette-result') return [row.sequence];
+  return degeneretteReplaySequences(row.sequence, {
+    lootboxTitle: 'DEGENERETTE LUCKBOX',
+    lootboxNoVessel: true,
+  });
+}
+
 async function _replayJackpotDay(day, address) {
   const panel = document.querySelector?.('replay-panel');
   if (!panel) throw new Error('Jackpot replay is unavailable.');
@@ -1362,18 +1383,9 @@ class AppTransactionHistory extends HTMLElement {
       if (row.day != null && row.type === 'jackpot') {
         await _replayJackpotDay(row.day, this.#address);
         queued = true;
-      } else if (Array.isArray(row.replaySequences) && row.replaySequences.length > 0) {
-        for (const sequence of row.replaySequences) queued = queueReveal(sequence) || queued;
-      } else if (row.sequence) {
-        queued = queueReveal(row.sequence);
-        if (row.type === 'degenerette-result' && row.sequence.lootboxLegs?.length) {
-          queueReveal({
-            kind: 'lootbox',
-            title: 'DEGENERETTE LUCKBOX',
-            legs: row.sequence.lootboxLegs,
-            settledExpected: true,
-            noVessel: true,
-          });
+      } else {
+        for (const sequence of transactionHistoryReplaySequences(row)) {
+          queued = queueReveal(sequence) || queued;
         }
       }
       if (!queued) throw new Error('This reveal is not available yet.');

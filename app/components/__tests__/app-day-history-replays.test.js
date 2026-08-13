@@ -14,9 +14,31 @@ globalThis.customElements ||= {
   get(name) { return this._items.get(name); },
 };
 
-const { historicalLootboxReplayRows } = await import('../app-day-history-replays.js');
+const {
+  historicalDegeneretteReplaySequences,
+  historicalLootboxReplayRows,
+} = await import('../app-day-history-replays.js');
 
 describe('historical day reward reconstruction', () => {
+  test('queues zero-payout record reels before a genuine Degenerette Luckbox', () => {
+    const sequence = {
+      kind: 'degenerette',
+      recordBountySpins: [{ spinType: 'record', payout: 0n, reels: [{}, {}, {}] }],
+      lootboxLegs: [{ legType: 'spin', spinType: 'flip', payout: 25n }],
+    };
+
+    const replay = historicalDegeneretteReplaySequences(sequence, { day: 12 });
+
+    assert.deepEqual(replay.map((item) => item.kind), [
+      'degenerette', 'record-bounty', 'lootbox',
+    ]);
+    assert.equal(replay[1].spin.payout, 0n,
+      'zero payout does not suppress the authored record reels');
+    assert.equal(replay[2].title, 'DAY 12 DEGENERETTE LUCKBOX');
+    assert.deepEqual(replay[2].legs.map((leg) => leg.spinType), ['flip'],
+      'genuine type 0-2 Luckbox spins remain after the record reveal');
+  });
+
   test('groups the selected player/day into one settled replay per opening transaction', () => {
     const player = `0x${'a'.repeat(40)}`;
     const rows = [

@@ -580,6 +580,8 @@ describe('app-parimutuel-panel', () => {
       card.querySelector('[data-bind="pari-decimator-quote"]').textContent,
       '+1,841 SCORE',
     );
+    assert.match(PARI_SOURCE, /\+\$\{_fmtFlip\(boonScore\)\} BOON/,
+      'the legacy fallback also names the concrete score added by a boon');
     assert.doesNotMatch(card.textContent, /ACTIVITY|DAY 1|LAST DAY|TOTAL BURN WEIGHT/);
     assert.doesNotMatch(card.textContent, /Level 43|BURN WINDOW OPEN|Minimum 1,000|Bucket 7/);
 

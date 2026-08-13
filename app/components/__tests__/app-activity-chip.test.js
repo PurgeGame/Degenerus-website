@@ -181,6 +181,7 @@ globalThis.customElements = {
 // ---------------------------------------------------------------------------
 
 import * as storeMod from '../../app/store.js';
+import { invalidateJSONCache } from '../../app/api.js';
 
 const mod = await import('../app-activity-chip.js');
 const { COMPONENTS, num } = mod._testing;
@@ -188,6 +189,9 @@ const AppActivityChip = globalThis.customElements.get('app-activity-chip');
 
 /** Point global fetch at a fixed /player/:addr body. */
 function stubPlayer(scoreBreakdown) {
+  // Some table cases replace the server fixture without advancing the URL or
+  // production cache clock. Keep those cases independent.
+  invalidateJSONCache();
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ scoreBreakdown }) });
 }
 

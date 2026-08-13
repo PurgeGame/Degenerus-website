@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Whale pass boon up-arrow emblem</title>
+  <path d="M32 3 42 18c5-5 11-8 18-8 0 14-6 23-17 27l-4 2v20H25V39l-4-2C10 33 4 24 4 10c7 0 13 3 18 8Z" fill="#60a5fa" stroke="#090b11" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M8 15c8 2 14 8 19 18-10-3-17-9-19-18Zm48 0c-8 2-14 8-19 18 10-3 17-9 19-18Z" fill="#22d3ee"/>
+  <path d="M32 9v43M18 42c9 4 19 4 28 0" fill="none" stroke="#e8f7ff" stroke-width="3" stroke-linecap="round"/>
+</svg>

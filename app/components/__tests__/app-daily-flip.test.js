@@ -19,6 +19,7 @@ import * as contractsMod from '../../app/contracts.js';
 import * as pendingActionsMod from '../../app/pending-actions.js';
 import * as charityVoteMod from '../../app/charity-vote.js';
 import * as jackpotSfxMod from '../../app/jackpot-sfx.js';
+import { invalidateJSONCache } from '../../app/api.js';
 
 const APP_CSS = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
 const STATUS_CSS = readFileSync(new URL('../../styles/status-indicators.css', import.meta.url), 'utf8');
@@ -215,7 +216,9 @@ globalThis.localStorage = {
   clear() { this._m.clear(); },
 };
 
-let _fetchResponses = { dashboard: null, flipDay: null, gameState: null, baf: null };
+let _fetchResponses = {
+  dashboard: null, flipDay: null, gameState: null, baf: null, coinflipStats: null,
+};
 let _currentStakeWei = null;
 let _resolvedStakeWei = null;
 let _fetchCounts = new Map();
@@ -234,6 +237,12 @@ globalThis.fetch = async (url) => {
     if (_fetchResponses.baf != null) {
       return { ok: true, status: 200, json: async () => _fetchResponses.baf };
     }
+  } else if (/\/game\/coinflip\/stats$/i.test(u)) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => _fetchResponses.coinflipStats ?? { wins: 0, losses: 0, recent: [] },
+    };
   } else if (/\/player\/0x[0-9a-f]+$/i.test(u)) {
     if (_fetchResponses.dashboard !== null) {
       return { ok: true, status: 200, json: async () => _fetchResponses.dashboard };
@@ -254,7 +263,9 @@ function resetDom() {
   globalThis.localStorage.setItem('jackpot_complete_day_84532_67', '1');
   pendingActionsMod.__resetPendingActionsForTest();
   _docListeners.clear();
-  _fetchResponses = { dashboard: null, flipDay: null, gameState: null, baf: null };
+  _fetchResponses = {
+    dashboard: null, flipDay: null, gameState: null, baf: null, coinflipStats: null,
+  };
   _currentStakeWei = '43844000000000000000000';
   _resolvedStakeWei = '43844000000000000000000';
   _fetchCounts = new Map();
@@ -306,6 +317,104 @@ function mount() {
 const revealPlanning = await import('../app-daily-flip.js');
 
 describe('day-wide reveal planning', () => {
+  test('normalizes protocol-wide coinflip totals and only the fifteen newest valid results', () => {
+    assert.deepEqual(revealPlanning.normalizeProtocolCoinflipStats({
+      wins: '27',
+      losses: 19.9,
+      recent: [
+        ...Array.from({ length: 16 }, (_, index) => ({ day: 50 - index, win: index % 2 === 0 })),
+        { day: 0, win: true },
+      ],
+    }), {
+      wins: 27,
+      losses: 19,
+      recent: Array.from({ length: 15 }, (_, index) => ({
+        day: 50 - index,
+        win: index % 2 === 0,
+      })),
+    });
+  });
+
+  test('rebuilds the protocol record from every global day when the dedicated route is absent', async () => {
+    const paths = [];
+    const fetcher = async (path) => {
+      paths.push(path);
+      if (path === '/game/coinflip/stats') {
+        throw Object.assign(new Error('missing route'), { status: 404 });
+      }
+      if (path.endsWith('/4')) return { day: 4, win: true };
+      if (path.endsWith('/3')) return { day: 3, win: true };
+      if (path.endsWith('/2')) return { day: 2, win: false };
+      if (path.endsWith('/1')) throw Object.assign(new Error('unresolved'), { status: 404 });
+      throw new Error(`Unexpected path ${path}`);
+    };
+
+    assert.deepEqual(await revealPlanning.loadProtocolCoinflipStats(4, fetcher), {
+      wins: 2,
+      losses: 1,
+      recent: [{ day: 4, win: true }, { day: 3, win: true }, { day: 2, win: false }],
+    });
+    assert.deepEqual(paths, [
+      '/game/coinflip/stats',
+      '/game/coinflip/day/4',
+      '/game/coinflip/day/3',
+      '/game/coinflip/day/2',
+      '/game/coinflip/day/1',
+    ]);
+
+    paths.length = 0;
+    await revealPlanning.loadProtocolCoinflipStats(4, fetcher);
+    assert.deepEqual(paths, [
+      '/game/coinflip/stats',
+      '/game/coinflip/day/1',
+    ], 'settled global outcomes are immutable and reused; only the unresolved day retries');
+  });
+
+  test('holds the newest global result outside the board until that reveal lands', () => {
+    const indexed = { wins: 28, losses: 19, recent: [{ day: 67, win: true }, { day: 66, win: false }] };
+    assert.deepEqual(revealPlanning.protocolCoinflipStatsForReveal(indexed, {
+      day: 67,
+      result: { win: true },
+      revealComplete: false,
+    }), {
+      wins: 27,
+      losses: 19,
+      recent: [{ day: 66, win: false }],
+    });
+
+    const buffered = {
+      wins: 40,
+      losses: 31,
+      recent: Array.from({ length: 16 }, (_, index) => ({
+        day: 80 - index,
+        win: index % 2 === 0,
+      })),
+    };
+    const hidden = revealPlanning.protocolCoinflipStatsForReveal(buffered, {
+      day: 80,
+      result: { win: true },
+      revealComplete: false,
+    });
+    assert.equal(hidden.recent.length, 15,
+      'hiding today backfills the prior result so Last 15 remains full');
+    assert.equal(hidden.recent.some((row) => row.day === 80), false);
+    assert.equal(hidden.recent.at(-1).day, 65,
+      'the sixteenth fetched result becomes the fifteenth visible result');
+    assert.deepEqual(revealPlanning.protocolCoinflipStatsForReveal(indexed, {
+      day: 67,
+      result: { win: true },
+      revealComplete: true,
+    }), indexed);
+    assert.deepEqual(revealPlanning.protocolCoinflipStatsForReveal(indexed, {
+      day: 67,
+      revealComplete: false,
+    }), {
+      wins: 27,
+      losses: 19,
+      recent: [{ day: 66, win: false }],
+    }, 'the indexed recent row hides its own outcome even before the day-result request catches up');
+  });
+
   test('the multiplier number uses red at 150 and blue from 250 upward', () => {
     assert.equal(revealPlanning.dailyFlipMultiplierTone(149), 'low');
     assert.equal(revealPlanning.dailyFlipMultiplierTone(150), 'low');
@@ -472,6 +581,12 @@ describe('day-wide reveal planning', () => {
     for (let day = 1; day <= 250; day += 1) {
       for (const won of [false, true]) {
         const plan = revealPlanning.selectFlipRevealPlan(day, won);
+        if (plan.hardStop) {
+          assert.equal(plan.openingMs, 0,
+            'the hard-stop branch bypasses the choreographed landing');
+          assert.equal(plan.endingMs, 0);
+          continue;
+        }
         const prefersWin = plan.winRate > 50;
         const expectedOpeningMs = plan.openingWon === prefersWin
           ? revealPlanning.REVEAL_BIASED_END_MS
@@ -490,6 +605,62 @@ describe('day-wide reveal planning', () => {
         );
       }
     }
+  });
+
+  test('the request-time Reverse count caps, but never increases, cosmetic reversals', () => {
+    let tripleDay = 1;
+    while (revealPlanning.selectFlipRevealPlan(tripleDay, true).reversalCount !== 3) tripleDay += 1;
+
+    const none = revealPlanning.selectFlipRevealPlan(tripleDay, true, 0n);
+    assert.equal(none.reversalCount, 0);
+    assert.equal(none.fakeOut, false);
+    assert.equal(none.ending, 'win');
+    assert.equal(none.openingWon, true, 'the truthful face remains the endpoint at a zero cap');
+
+    const one = revealPlanning.selectFlipRevealPlan(tripleDay, true, '1');
+    assert.equal(one.reversalCount, 1);
+    assert.equal(one.ending, 'loss-to-win');
+    const two = revealPlanning.selectFlipRevealPlan(tripleDay, true, 2);
+    assert.equal(two.reversalCount, 2);
+    assert.equal(two.ending, 'double-to-win');
+    assert.equal(revealPlanning.selectFlipRevealPlan(tripleDay, true, 9).reversalCount, 3,
+      'a large real queue does not force extra cosmetic reversals');
+  });
+
+  test('five percent of each result branch hard-stops on a random complete correct face', () => {
+    const days = 100_000;
+    const counts = { win: 0, loss: 0 };
+    const occurrences = { win: new Set(), loss: new Set() };
+    for (let day = 1; day <= days; day += 1) {
+      for (const won of [true, false]) {
+        const branch = won ? 'win' : 'loss';
+        const plan = revealPlanning.selectFlipRevealPlan(day, won);
+        if (!plan.hardStop) continue;
+        counts[branch] += 1;
+        occurrences[branch].add(plan.hardStopOccurrence);
+        assert.equal(plan.fakeOut, false, 'hard stops stay disjoint from Reverse-card endings');
+        assert.equal(plan.reversalCount, 0);
+        assert.equal(plan.openingMs, 0);
+        assert.equal(plan.endingMs, 0);
+        assert.equal(plan.totalMs, plan.trackMs);
+        assert.equal(plan.hardStopRotationDeg % 360, won ? 180 : 0,
+          `${branch} freezes only while its authoritative face is fully presented`);
+        assert.equal(plan.totalMs, plan.hardStopHalfTurns * 260,
+          'every possible stop retains one constant angular velocity');
+      }
+    }
+    for (const branch of ['win', 'loss']) {
+      assert.ok(Math.abs((counts[branch] / days) * 100 - 5) < 0.2,
+        `${branch} hard-stop rate was ${(counts[branch] / days * 100).toFixed(2)}%`);
+      assert.deepEqual([...occurrences[branch]].sort(), [4, 5, 6, 7, 8],
+        `${branch} uses all five possible full-face stopping moments`);
+    }
+    assert.match(APP_CSS,
+      /\.df-coin3d__inner\.df-reveal-active\.df-reveal-hard-stop\s*\{[^}]*animation-timing-function:\s*linear/s,
+      'the rare ending has no hidden deceleration before it stops');
+    assert.match(APP_CSS,
+      /@keyframes df-reveal-hard-stop\s*\{[\s\S]*?rotateX\(var\(--df-hard-stop-rotation/,
+      'the chosen full-face angle drives the final frozen frame');
   });
 
   test('DO IT uses a stable ten-percent day gate', () => {
@@ -1300,6 +1471,14 @@ describe('app-daily-flip — coin reveal + actions', () => {
         },
       },
       flipDay: { day: 67, win: true, rewardPercent: 96 },
+      coinflipStats: {
+        wins: 28,
+        losses: 19,
+        recent: Array.from({ length: 16 }, (_, index) => ({
+          day: 67 - index,
+          win: index === 0 ? true : index % 2 === 0,
+        })),
+      },
     };
     const el = mount();
     await flushMicrotasks();
@@ -1411,6 +1590,13 @@ describe('app-daily-flip — coin reveal + actions', () => {
         "Today's bet stays neutral until the win sound can play");
       assert.equal(el.querySelector('[data-bind="df-funds-flip-total"]').textContent, '••••',
         'Protocol Coins cannot reveal or add the payout before the result is final');
+      assert.equal(el.querySelector('[data-bind="df-coinflip-wins"]').textContent, '27',
+        'the global record cannot telegraph the win before the percentage locks');
+      assert.equal(
+        el.querySelector('[data-bind="df-coinflip-recent"]').classList.contains('is-shifting'),
+        false,
+        'LAST 15 stays still while the apparent win is not authoritative',
+      );
       assert.equal(el.querySelector('[data-bind="df-claim-flip-cta"]').disabled, false,
         'the shared popup remains available for older ETH/FLIP while this new payout settles');
       assert.equal(
@@ -1421,12 +1607,28 @@ describe('app-daily-flip — coin reveal + actions', () => {
 
       const settle = scheduled.find((entry) => entry.delay === 1_600);
       assert.ok(settle, 'the rail gets a readable 1.6-second settle window');
-      el.querySelector('[data-bind="df-modifier-marker"]').dispatchEvent({
+      const marker = el.querySelector('[data-bind="df-modifier-marker"]');
+      marker.dispatchEvent({
+        type: 'animationend',
+        animationName: 'decorative-marker-glow',
+      });
+      assert.equal(el.querySelector('[data-position="today"] .df-position-outcome'), null,
+        'an unrelated marker animation cannot publish the payout early');
+      assert.equal(RecordingAudioContext.last.oscillators.length, launchOscillators,
+        'an unrelated animation end cannot fire the winning chord');
+      marker.dispatchEvent({
         type: 'animationend',
         animationName: 'df-meter-settle',
       });
       assert.equal(RecordingAudioContext.last.oscillators.length, launchOscillators + 4,
         'the winning chord starts on the same animation-end event that commits 196%');
+      assert.equal(el.querySelector('[data-bind="df-coinflip-wins"]').textContent, '28',
+        'the W counter increases on the exact percentage-lock event');
+      assert.equal(
+        el.querySelector('[data-bind="df-coinflip-recent"]').classList.contains('is-shifting'),
+        true,
+        'LAST 15 visibly shifts only once the percentage has locked',
+      );
       assert.match(el.querySelector('[data-position="today"]').className, /df-position-row--win/,
         "Today's bet turns green on that same completion event");
       assert.match(el.querySelector('[data-position="today"]').textContent, /WIN/);
@@ -1609,6 +1811,46 @@ describe('app-daily-flip — coin reveal + actions', () => {
     }
   });
 
+  test('a resolved day never mounts more Reverse cards than its frozen chain queue', async () => {
+    let tripleDay = 1;
+    while (revealPlanning.selectFlipRevealPlan(tripleDay, true).reversalCount !== 3) tripleDay += 1;
+    const result = { day: tripleDay, win: true, rewardPercent: 96 };
+    storeMod.update('app.lastDay', { day: tripleDay, status: 'resolved' });
+    _fetchResponses = { dashboard: dashboardPayload(), flipDay: result };
+    const el = mount();
+    await flushMicrotasks();
+
+    storeMod.update('app.daySync', {
+      day: tripleDay,
+      jackpotReady: true,
+      coinflipReady: true,
+      rngLocked: true,
+      rngRequested: true,
+      reverseQueued: '1',
+      ready: true,
+      phase: 'ready',
+      coinflipResult: result,
+    });
+    await flushMicrotasks();
+
+    const realSetTimeout = globalThis.setTimeout;
+    const realMatchMedia = globalThis.matchMedia;
+    try {
+      globalThis.matchMedia = () => ({ matches: false });
+      globalThis.setTimeout = (fn, delay = 0) => ({ fn, delay, unref() {} });
+      el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+      const cards = el.querySelectorAll('[data-bind="df-fakeout-reverse-card"]');
+      assert.equal(cards.length, 1,
+        'the deterministic three-card plan is capped by the one real request-time reversal');
+      assert.equal(cards[0].getAttribute('data-fakeout-target'), 'eth');
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      if (realMatchMedia === undefined) delete globalThis.matchMedia;
+      else globalThis.matchMedia = realMatchMedia;
+      el.disconnectedCallback();
+    }
+  });
+
   test('a triple-reversal loss preserves the complete double-win meter timeline', async () => {
     let tripleDay = 1;
     while (revealPlanning.selectFlipRevealPlan(tripleDay, false).reversalCount !== 3) tripleDay += 1;
@@ -1737,6 +1979,9 @@ describe('app-daily-flip — coin reveal + actions', () => {
     ];
 
     for (const sample of cases) {
+      // Each table row is an independent server fixture for the same immutable
+      // day URL; do not let the production render-wave cache couple them.
+      invalidateJSONCache();
       _fetchResponses = {
         dashboard: dashboardPayload(),
         flipDay: { day: 67, win: true, rewardPercent: sample.rewardPercent },
@@ -2434,6 +2679,12 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.match(APP_CSS,
       /body\.layout-basic \.df-next-bet \.df-flip-cta\s*\{[^}]*justify-self:\s*start[^}]*margin-left:\s*0\.22rem/s,
       'Add Bet uses the same inner left inset as the Claim action below it');
+    assert.match(STATUS_CSS,
+      /\.df-next-bet__quest\s*\{[^}]*bottom:\s*auto;[^}]*top:\s*0\.12rem;[^}]*left:\s*3\.65rem;[^}]*width:\s*1\.18rem;[^}]*height:\s*1\.18rem/s,
+      'the coinflip quest marker sits above and just right of Add Bet, inside the Tomorrow box');
+    assert.match(STATUS_CSS,
+      /\.df-next-bet__boon\s*\{[^}]*bottom:\s*0\.08rem;[^}]*left:\s*3\.65rem;[^}]*top:\s*auto/s,
+      'a simultaneous boon uses the lower part of the same contained badge lane');
     assert.match(APP_CSS,
       /\.df-add-bet-dialog__value\s*\{[^}]*text-align:\s*center[^}]*text-overflow:\s*ellipsis/s,
       'the popup gives the selected amount a stable prominent readout');
@@ -2524,6 +2775,34 @@ describe('app-daily-flip — coin reveal + actions', () => {
     el.disconnectedCallback();
   });
 
+  test('Add Bet shows the concrete extra FLIP from an active coinflip boon', async () => {
+    const dashboard = dashboardPayload();
+    dashboard.flipBalance = String(500_000n * 10n ** 18n);
+    storeMod.update('app.boons', {
+      address: TEST_ADDR,
+      day: 67,
+      exact: true,
+      boons: [{ boonType: 3, consumed: false }],
+    });
+    _fetchResponses = { dashboard, flipDay: null };
+    const el = mount();
+    await flushMicrotasks();
+
+    el.querySelector('[data-bind="df-flip-cta"]').dispatchEvent({ type: 'click' });
+    const amount = el.querySelector('[data-bind="df-add-bet-number"]');
+    amount.value = '1000';
+    amount.dispatchEvent({ type: 'input' });
+    const boon = el.querySelector('[data-bind="df-add-bet-boon"]');
+    assert.equal(boon.hidden, false);
+    assert.equal(boon.textContent, '+250 FLIP BOON');
+
+    amount.value = '500000';
+    amount.dispatchEvent({ type: 'input' });
+    assert.equal(boon.textContent, '+25000 FLIP BOON',
+      'the preview stops growing after the contract\'s 100k eligible base');
+    el.disconnectedCallback();
+  });
+
   test("the small square on Today's Bet opens the live auto-rebuy settings", async () => {
     coinflipMod.__setAutoRebuyInfoReaderForTest(async () => ({
       enabled: true,
@@ -2538,15 +2817,22 @@ describe('app-daily-flip — coin reveal + actions', () => {
     const trigger = el.querySelector('[data-bind="df-auto-rebuy-cta"]');
     assert.ok(trigger, 'compact Auto Rebuy control is mounted');
     assert.ok(
-      el.innerHTML.indexOf('data-bind="df-position-today"')
-        < el.innerHTML.indexOf('data-bind="df-auto-rebuy-cta"')
-        && el.innerHTML.indexOf('data-bind="df-auto-rebuy-cta"')
-          < el.innerHTML.indexOf('data-bind="df-baf-score-box"'),
-      "the square is attached immediately after Today's Bet, not placed in the header",
+      el.innerHTML.indexOf('class="df-coinflip-record-rail"')
+        < el.innerHTML.indexOf('data-bind="df-position-today"'),
+      "the balanced rail is attached immediately above Today's Bet, not placed in the header",
     );
+    assert.match(el.innerHTML,
+      /df-coinflip-record-rail__[\s\S]*?data-bind="df-coinflip-record"[\s\S]*?data-bind="df-auto-rebuy-cta"/,
+      'blank spacer, lifetime record, and Auto Rebuy share one balanced rail');
     assert.match(APP_CSS,
-      /\.df-auto-rebuy-cta\s*\{[^}]*position:\s*absolute[^}]*top:\s*-1\.92rem[^}]*width:\s*1\.62rem[^}]*height:\s*1\.62rem/s,
-      "the larger square sits above Today's Bet with room for its outline");
+      /\.df-coinflip-record-rail\s*\{[^}]*top:\s*-1\.92rem[^}]*grid-template-columns:\s*1\.62rem minmax\(0, 1fr\) 1\.62rem/s,
+      "equal side slots keep the lifetime strip centered above Today's Bet");
+    assert.match(APP_CSS,
+      /\.app-daily-flip:has\(\.df-funds__toggle\[aria-expanded="true"\]\)[\s\S]*?\.df-coinflip-record-rail\s*\{[^}]*position:\s*relative;[^}]*top:\s*auto;/s,
+      'expanded Protocol Coins puts the scoreboard in flow instead of over the flip');
+    assert.match(APP_CSS,
+      /\.df-auto-rebuy-cta\s*\{[^}]*position:\s*relative[^}]*width:\s*1\.62rem[^}]*height:\s*1\.62rem/s,
+      'Auto Rebuy fills the right balancing slot');
     assert.equal(el.querySelector('[data-bind="df-auto-rebuy-cta-status"]').textContent, 'ON');
     assert.equal(trigger.classList.contains('is-active'), true);
     trigger.dispatchEvent({ type: 'click' });
@@ -2570,6 +2856,139 @@ describe('app-daily-flip — coin reveal + actions', () => {
     assert.equal(save.disabled, false, 'the changed off state is ready to save');
     dialog.dispatchEvent({ type: 'click', target: dialog });
     assert.equal(dialog.hidden, true, 'the backdrop closes without changing settings');
+    el.disconnectedCallback();
+  });
+
+  test('the centered strip colors all-time history and Last 15 majorities independently', async () => {
+    localStorage.setItem('flip_day_84532_67', '1');
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: null,
+      coinflipStats: {
+        wins: 27,
+        losses: 19,
+        recent: Array.from({ length: 15 }, (_, index) => ({
+          day: 68 - index,
+          win: [true, false, false, true, false, false, true, false, false, false, true, false, false, true, false][index],
+        })),
+      },
+    };
+    const el = mount();
+    await flushMicrotasks();
+
+    assert.equal(el.querySelector('[data-bind="df-coinflip-wins"]').textContent, '27');
+    assert.equal(el.querySelector('[data-bind="df-coinflip-losses"]').textContent, '19');
+    assert.match(el.innerHTML,
+      /df-coinflip-record__label--record[^>]*>[\s\n]*ALL TIME<[\s\S]*df-coinflip-record__label--recent[^>]*>[\s\n]*LAST 15</,
+      'the shared board labels its all-time score and recent result bank');
+    const marks = el.querySelector('[data-bind="df-coinflip-recent"]').children;
+    assert.equal(marks.length, 15);
+    assert.equal(marks[0].title, 'Win · Day 68', 'newest visible result starts at the left');
+    assert.equal(marks[14].title, 'Loss · Day 54', 'oldest visible result ends at the right');
+    assert.equal(
+      el.querySelector('.df-coinflip-record__group--score').getAttribute('data-majority'),
+      'win',
+      'the protocol record gets a green background from its own W–L majority',
+    );
+    assert.equal(
+      el.querySelector('.df-coinflip-record__group--recent').getAttribute('data-majority'),
+      'loss',
+      'Last 15 gets a red background from its independent recent majority',
+    );
+    assert.match(el.querySelector('[data-bind="df-coinflip-record"]').getAttribute('aria-label'),
+      /All-time coinflip record: 27 wins and 19 losses/);
+    assert.match(APP_CSS,
+      /\.df-coinflip-record\s*\{[^}]*border:\s*1px solid rgba\(245, 166, 35, 0\.48\)[^}]*radial-gradient\([^}]*repeating-linear-gradient\(/s,
+      'the compact rail uses the shared felt-and-brass casino treatment');
+    const scoreRule = APP_CSS.match(/\.df-coinflip-record__score\s*\{[^}]*\}/s)?.[0] || '';
+    assert.match(scoreRule,
+      /font-family:\s*"Inter", system-ui, sans-serif;[^}]*font-size:\s*0\.84rem;[^}]*font-weight:\s*1000/s,
+      'lifetime totals use large, blocky scoreboard numerals');
+    assert.doesNotMatch(scoreRule, /(?:padding|border|background|box-shadow):/,
+      'the score sits directly on the scoreboard face without a redundant inner box');
+    assert.match(APP_CSS,
+      /\.df-coinflip-record__mark\s*\{[^}]*height:\s*0\.52rem[^}]*border-radius:\s*1px/s,
+      'the last fifteen results render as a compact square LED bank');
+    assert.match(APP_CSS,
+      /\.df-coinflip-record__recent\s*\{[^}]*grid-template-columns:\s*repeat\(15, 0\.38rem\)/s,
+      'the recent bank reserves the requested fifteen-result window');
+    assert.match(APP_CSS,
+      /data-majority="win"[^}]*background-color:\s*#07140b/s,
+      'a winning section receives its own dark green background');
+    assert.match(APP_CSS,
+      /data-majority="loss"[^}]*background-color:\s*#140707/s,
+      'a losing section receives the same dark red used by Protocol Coins');
+    const groupRule = APP_CSS.match(/\.df-coinflip-record__group\s*\{[^}]*\}/s)?.[0] || '';
+    assert.match(groupRule,
+      /repeating-linear-gradient\(\s*0deg,[^}]*rgba\(255, 255, 255, 0\.016\)/s,
+      'both sections share the subtle currency-panel texture');
+    assert.doesNotMatch(groupRule, /border-radius|box-shadow/,
+      'the majority color fills each section instead of creating inset bubbles');
+    assert.match(APP_CSS,
+      /\.df-coinflip-record__group--recent\s*\{[^}]*border-left:\s*1px solid rgba\(253, 230, 138, 0\.14\)/s,
+      'one quiet divider separates the two labeled readings without another card');
+    assert.match(APP_CSS,
+      /\.df-coinflip-record__score b\.is-ticking\s*\{[^}]*df-coinflip-score-tick/s,
+      'the newly revealed global result mechanically ticks the matching score');
+    assert.match(APP_CSS,
+      /\.df-coinflip-record__recent\.is-shifting\s*\{[^}]*df-coinflip-bank-shift/s,
+      'the result bank visibly advances one cell on resolution');
+    assert.match(APP_CSS,
+      /@keyframes df-coinflip-bank-shift\s*\{\s*0%\s*\{[^}]*translateX\(-0\.4rem\)[\s\S]*62%\s*\{[^}]*translateX\(0\.04rem\)/,
+      'the recent bank shifts right as the newest result enters from the left');
+    assert.match(APP_CSS,
+      /\.df-modifier-meter__track\s*\{[^}]*var\(--gauge-red\)[^}]*var\(--gauge-green\)[^}]*var\(--gauge-blue\)/s,
+      'the payout thermometer uses the shared subdued casino-instrument palette');
+    el.disconnectedCallback();
+  });
+
+  test('the all-time win column and Last 15 bank tick on the exact reveal landing', async () => {
+    _fetchResponses = {
+      dashboard: dashboardPayload(),
+      flipDay: { day: 67, win: true, rewardPercent: 96 },
+      coinflipStats: {
+        wins: 28,
+        losses: 19,
+        recent: Array.from({ length: 16 }, (_, index) => ({
+          day: 67 - index,
+          win: index === 0 ? true : index % 2 === 0,
+        })),
+      },
+    };
+    const el = mount();
+    await flushMicrotasks();
+
+    const wins = el.querySelector('[data-bind="df-coinflip-wins"]');
+    const losses = el.querySelector('[data-bind="df-coinflip-losses"]');
+    assert.equal(wins.textContent, '27', 'today is held outside the public board before reveal');
+    assert.equal(losses.textContent, '19');
+    assert.equal(
+      el.querySelector('[data-bind="df-coinflip-recent"]').children.some((mark) => mark.title === 'Win · Day 67'),
+      false,
+      'the latest LED does not spoil the result before the coin lands',
+    );
+
+    el.querySelector('.df-coin--spinning').dispatchEvent({ type: 'click' });
+    await flushMicrotasks();
+
+    assert.equal(wins.textContent, '28');
+    assert.equal(wins.classList.contains('is-ticking'), true,
+      'the global win digit gets the mechanical scoreboard tick');
+    assert.equal(losses.classList.contains('is-ticking'), false);
+    assert.equal(
+      el.querySelector('[data-bind="df-coinflip-recent"]').classList.contains('is-shifting'),
+      true,
+      'the fifteen-result bank shifts on the exact counter-increment render',
+    );
+    assert.equal(
+      el.querySelector('.df-coinflip-record__group--recent').classList.contains('is-resolving'),
+      true,
+      'the independent Last 15 majority background visibly lands with the new result',
+    );
+    const newest = el.querySelector('[data-bind="df-coinflip-recent"]').children[0];
+    assert.equal(newest.title, 'Win · Day 67');
+    assert.equal(newest.className.includes('is-new'), true,
+      'the newest global outcome lights with the score on the same landing');
     el.disconnectedCallback();
   });
 

@@ -107,7 +107,7 @@ export function dgnPackedTraits(seed) {
 }
 
 /**
- * The WWXRP reel rig: with 2+ cells missing, 60% of the time one score-bearing
+ * The WWXRP reel rig: with 2-6 matched axes, 60% of the time one score-bearing
  * cell is lifted to a real match so the DISPLAYED reel agrees with the scored
  * result. A no-op for ETH/FLIP — which is exactly why the UI has to know about
  * it: skip it and a WWXRP row shows a losing reel next to a winning score.
@@ -131,7 +131,10 @@ export function dgnRigWwxrp(playerTraits, resultTraits, heroQuadrant, rigSeed) {
     if (symMatch && !colorMatch) u++;
     if (q !== hero && !symMatch) u++;
   }
-  if (m >= 7) return r;
+  // The contract deliberately leaves both near-perfect (M >= 7) and near-empty
+  // (M < 2) reels untouched. Missing the lower bound makes later WWXRP spins
+  // disagree with their emitted score and leaves the reveal UI waiting forever.
+  if (m >= 7 || m < 2) return r;
   if (seed % 5n >= 3n) return r;
   if (u === 0) return r;
   let pick = Number((seed >> 8n) % BigInt(u));

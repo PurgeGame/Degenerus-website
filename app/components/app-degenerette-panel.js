@@ -104,6 +104,9 @@ import {
   candidateClaimsRecord,
   RECORD_KIND_SPIN,
 } from '../app/records.js';
+import { boonBoostDelta } from '../app/boons.js';
+import './boon-product-indicator.js';
+import './quest-objective-indicator.js';
 
 function _setIntervalUnref(fn, ms) {
   const h = setInterval(fn, ms);
@@ -651,11 +654,60 @@ export function degeneretteRevealSequenceFromFeedItem(item) {
     heroQuadrant: packed.heroQuadrant,
   });
   if (!sequence) return null;
-  const lootboxLegs = openLegsFromDegenerettePayouts(merged.lootboxPayouts);
+  const rewardLegs = openLegsFromDegenerettePayouts(merged.lootboxPayouts);
+  const { lootboxLegs, recordBountySpins } = partitionDegeneretteRewardLegs(rewardLegs);
   sequence.lootboxAwarded = lootboxLegs.length > 0;
   sequence.lootboxLegs = lootboxLegs;
   sequence.lootboxEth = degeneretteLootboxEthFromLegs(lootboxLegs);
+  sequence.recordBountySpins = recordBountySpins;
   return sequence;
+}
+
+/**
+ * A type-3 BoxSpin shares the box event payload only so its three reels stay
+ * itemized. It is not Luckbox content. Keep that semantic boundary in one pure
+ * partition used by receipt, chain-replay, and indexed-replay completion paths.
+ */
+export function partitionDegeneretteRewardLegs(legs) {
+  const lootboxLegs = [];
+  const recordBountySpins = [];
+  for (const leg of Array.isArray(legs) ? legs : []) {
+    const spinType = String(leg?.spinType || '').toLowerCase();
+    if (leg?.legType === 'spin' && (spinType === 'record' || spinType === 'unknown_3')) {
+      recordBountySpins.push(leg);
+    } else if (leg) {
+      lootboxLegs.push(leg);
+    }
+  }
+  return { lootboxLegs, recordBountySpins };
+}
+
+/**
+ * Expand one settled Degenerette result into its authored replay order. Record
+ * bounties are independent FLIP reels, including a legitimate zero-payout
+ * survival loss, so they always play between the base result and any genuine
+ * Luckbox contents.
+ */
+export function degeneretteReplaySequences(sequence, {
+  lootboxTitle = 'DEGENERETTE LUCKBOX',
+  lootboxNoVessel = true,
+} = {}) {
+  if (!sequence) return [];
+  const ordered = [sequence];
+  for (const spin of Array.isArray(sequence.recordBountySpins)
+    ? sequence.recordBountySpins : []) {
+    ordered.push({ kind: 'record-bounty', spin });
+  }
+  if (Array.isArray(sequence.lootboxLegs) && sequence.lootboxLegs.length > 0) {
+    ordered.push({
+      kind: 'lootbox',
+      title: lootboxTitle,
+      legs: sequence.lootboxLegs,
+      settledExpected: true,
+      ...(lootboxNoVessel ? { noVessel: true } : {}),
+    });
+  }
+  return ordered;
 }
 
 /**
@@ -722,6 +774,7 @@ export async function fetchDegenerettePlayerFeed(player, {
   betId = null,
   targetResolved = 12,
   maxPages = PLAYER_FEED_MAX_PAGES,
+  force = false,
 } = {}) {
   const owner = String(player || '').toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(owner)) return [];
@@ -734,6 +787,7 @@ export async function fetchDegenerettePlayerFeed(player, {
     const cursor = before == null ? '' : `&before=${encodeURIComponent(String(before))}`;
     const response = await fetchJSON(
       `/degenerette/feed?limit=200&player=${encodeURIComponent(owner)}${cursor}`,
+      { force },
     );
     collected.push(...(Array.isArray(response?.items) ? response.items : []));
     const merged = mergeDegeneretteFeedItems(collected)
@@ -826,6 +880,11 @@ class AppDegenerettePanel extends HTMLElement {
   #pendingPlacementKey = null;
   #pendingRecoverySeq = 0;
   #pendingRecoveryAddress = null;
+  // Invalidates asynchronous result replays when a newer placement takes
+  // ownership of the panel. Aborting fetch/poll timers is not enough: a replay
+  // may already be awaiting chain logs and otherwise enqueue the older reels
+  // (and their luckbox) while the new bet is still in the wallet.
+  #resolutionGeneration = 0;
   // A resolved bet is presentation work exactly once per mounted session.
   // Mark it before searching for another DB-pending row so a stale indexer
   // snapshot cannot send NEXT ACTION back into the result just consumed.
@@ -921,6 +980,7 @@ class AppDegenerettePanel extends HTMLElement {
     this.#persistBetPreference(this.#draftCurrency);
     this.#pendingRecoverySeq += 1;
     this.#pendingRecoveryAddress = null;
+    this.#resolutionGeneration += 1;
     if (this.#pollHandle != null) {
       try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
@@ -1010,16 +1070,21 @@ class AppDegenerettePanel extends HTMLElement {
                       data-bind="deg-currency-option-0" value="0" aria-pressed="true"
                       aria-label="Pay with ETH" title="ETH">
                 <img src="/badges-circular/crypto_06_ethereum_green.svg" alt="">
+                <boon-product-indicator product="degenerette-eth"></boon-product-indicator>
+                <quest-objective-indicator product="degenerette-eth"></quest-objective-indicator>
               </button>
               <button type="button" class="deg-currency-option"
                       data-bind="deg-currency-option-1" value="1" aria-pressed="false"
                       aria-label="Pay with FLIP" title="FLIP">
                 <img src="/whitepaper/flame-logo-split.svg" alt="">
+                <boon-product-indicator product="degenerette-flip"></boon-product-indicator>
+                <quest-objective-indicator product="degenerette-flip"></quest-objective-indicator>
               </button>
               <button type="button" class="deg-currency-option"
                       data-bind="deg-currency-option-3" value="3" aria-pressed="false"
                       aria-label="Pay with WWXRP" title="WWXRP">
                 <img src="/shared/coinflip-face-red.svg" alt="">
+                <boon-product-indicator product="degenerette-wwxrp"></boon-product-indicator>
               </button>
             </div>
             <select name="deg-currency" class="deg-currency-select deg-currency-native"
@@ -1069,6 +1134,7 @@ class AppDegenerettePanel extends HTMLElement {
           </section>
 
           <aside class="deg-referral-card" aria-label="Refer friends and earn free FLIP forever">
+            <quest-objective-indicator product="affiliate"></quest-objective-indicator>
             <img class="deg-referral-card__logo" src="/whitepaper/flame-logo.svg" alt="" aria-hidden="true">
             <div class="deg-referral-card__copy">
               <strong>
@@ -2001,7 +2067,8 @@ class AppDegenerettePanel extends HTMLElement {
       this.#runPollCycle();
     });
     const u5 = subscribe('app.records', () => this.#renderPlaceLabel());
-    this.#unsubs.push(u1, u2, u3, u4, u5);
+    const u6 = subscribe('app.boons', () => this.#renderPlaceLabel());
+    this.#unsubs.push(u1, u2, u3, u4, u5, u6);
   }
 
   #restorePendingBet() {
@@ -2013,6 +2080,7 @@ class AppDegenerettePanel extends HTMLElement {
       this.#pendingRecoverySeq += 1;
       this.#pendingRecoveryAddress = null;
       this.#pendingPlacementKey = null;
+      this.#resolutionGeneration += 1;
     }
     this.#cancelRngPoll();
     this.#pendingAddress = lower;
@@ -2347,15 +2415,27 @@ class AppDegenerettePanel extends HTMLElement {
       : '—';
     const verb = this.#state === STATE.PLACING ? 'Placing' : 'Place Bet';
     button.textContent = `${verb} · ${formatted} ${unit}`;
+    const rawPerSpin = parseDegeneretteAmountInput(amountInput?.value, currency);
+    const product = currency === 0
+      ? 'degenerette-eth'
+      : currency === 3 ? 'degenerette-wwxrp' : 'degenerette-flip';
+    const rawTotal = rawPerSpin != null && Number.isInteger(spins) && spins > 0
+      ? rawPerSpin * BigInt(spins)
+      : 0n;
+    const boonDelta = boonBoostDelta(rawTotal, get('app.boons'), product);
+    const boonText = boonDelta > 0n ? _pendingDegeneretteAmount(boonDelta, currency) : null;
+    if (boonText) button.setAttribute('data-boon-effect', `+${boonText} BOON`);
+    else button.removeAttribute('data-boon-effect');
     button.setAttribute(
       'aria-label',
-      `${verb} ${formatted} ${unit} total across ${spins} spin${spins === 1 ? '' : 's'}`,
+      `${verb} ${formatted} ${unit} total across ${spins} spin${spins === 1 ? '' : 's'}${boonText
+        ? `, plus ${boonText} from your boon`
+        : ''}`,
     );
 
     // DegenerusGameDegeneretteModule judges the whole ETH wager — amount per
     // spin multiplied by the selected spin count. FLIP and WWXRP bets never
     // enter the biggest-spin record, no matter how large their displayed sum.
-    const rawPerSpin = parseDegeneretteAmountInput(amountInput?.value, currency);
     const claimsBounty = currency === 0
       && rawPerSpin != null
       && rawPerSpin > 0n
@@ -2593,12 +2673,16 @@ class AppDegenerettePanel extends HTMLElement {
     }
     if (this.#busyResolve || this.#currentBetId == null) return;
     this.#busyResolve = true;
+    const resolutionGeneration = this.#resolutionGeneration;
     this.#clearError();
     try {
       const opened = await this.#replayIndexedResolution(
         this.#pendingAddress || getActingAddress(),
         this.#currentBetId,
+        INDEX_REPLAY_RETRIES,
+        resolutionGeneration,
       );
+      if (resolutionGeneration !== this.#resolutionGeneration) return;
       if (!opened) {
         this.#renderError('The result is confirmed and still indexing. Try OPEN SPINS again shortly.');
         this.#setState(STATE.INDEXING);
@@ -2636,6 +2720,13 @@ class AppDegenerettePanel extends HTMLElement {
           address: this.#pendingAddress,
         }
       : null;
+    // Own every result/recovery continuation from this point forward. A prior
+    // RNG poll can be past its AbortController check and inside an RPC await;
+    // its captured generation is the hard barrier that keeps that old result
+    // and any attached box out of this new placement.
+    this.#resolutionGeneration += 1;
+    this.#pendingRecoverySeq += 1;
+    this.#pendingRecoveryAddress = null;
     let optimisticSource = null;
     const retireOptimistic = () => {
       if (!optimisticSource) return;
@@ -2845,15 +2936,23 @@ class AppDegenerettePanel extends HTMLElement {
     this.#cancelRngPoll();
     this.#rngPollAbort = new AbortController();
     const ac = this.#rngPollAbort;
+    const resolutionGeneration = this.#resolutionGeneration;
+    const stillCurrent = () => (
+      !ac.signal.aborted && resolutionGeneration === this.#resolutionGeneration
+    );
     this.#startRngBlockPoll();
     const tick = async () => {
-      if (ac.signal.aborted) return;
+      if (!stillCurrent()) return;
       try {
         const player = this.#pendingAddress || getActingAddress();
         let bet = null;
         try {
           const response = await fetchJSON(
             `/degenerette/feed?limit=200&player=${encodeURIComponent(String(player || '').toLowerCase())}`,
+            // This seven-second loop detects RNG/result transitions. Its first
+            // tick can follow an immediate remount or receipt and must not
+            // inherit the previous empty feed from the render-wave cache.
+            { force: true },
           );
           bet = mergeDegeneretteFeedItems(response?.items).find((item) => (
           String(item?.player || '').toLowerCase() === String(player || '').toLowerCase()
@@ -2862,11 +2961,18 @@ class AppDegenerettePanel extends HTMLElement {
         } catch (_e) {
           // The chain probes below remain useful during an API restart.
         }
-        if (ac.signal.aborted) return;
+        if (!stillCurrent()) return;
         const results = Array.isArray(bet?.results) ? bet.results : [];
         const resolvedInFeed = results.some((row) => row?.resultType === 'resolved');
         if (resolvedInFeed) {
-          if (await this.#replayIndexedResolution(player, this.#currentBetId, 1)) return;
+          const opened = await this.#replayIndexedResolution(
+            player,
+            this.#currentBetId,
+            1,
+            resolutionGeneration,
+          );
+          if (!stillCurrent()) return;
+          if (opened) return;
         }
         let word = 0n;
         try { word = BigInt(bet?.rngWord ?? 0); } catch (_e) { word = 0n; }
@@ -2878,6 +2984,7 @@ class AppDegenerettePanel extends HTMLElement {
           player,
           betId: this.#currentBetId,
         }).catch(() => null);
+        if (!stillCurrent()) return;
         if (packed != null && packed !== 0n && this.#currentTicket == null) {
           const decoded = dgnDecodePacked(packed);
           if (decoded) {
@@ -2888,7 +2995,14 @@ class AppDegenerettePanel extends HTMLElement {
           }
         }
         if (packed === 0n) {
-          if (await this.#replayIndexedResolution(player, this.#currentBetId, 1)) return;
+          const opened = await this.#replayIndexedResolution(
+            player,
+            this.#currentBetId,
+            1,
+            resolutionGeneration,
+          );
+          if (!stillCurrent()) return;
+          if (opened) return;
           // A zero slot by itself is not proof that resolution happened. In
           // particular, the first poll immediately after a shared mid-day RNG
           // request can race the RPC/indexer view and briefly return zero while
@@ -2905,6 +3019,7 @@ class AppDegenerettePanel extends HTMLElement {
             player,
             betIds: [this.#currentBetId],
           }).catch(() => false);
+          if (!stillCurrent()) return;
           if (ready) {
             this.#setState(STATE.READY);
             return;  // stop polling
@@ -2918,6 +3033,7 @@ class AppDegenerettePanel extends HTMLElement {
               canRequestLootboxRng().catch(() => false),
               readLootboxRngQueueState().catch(() => null),
             ]);
+            if (!stillCurrent()) return;
             let shouldRender = false;
             if (queueState) {
               const pendingMilliEth = BigInt(queueState.pendingMilliEth ?? 0n);
@@ -2981,7 +3097,7 @@ class AppDegenerettePanel extends HTMLElement {
       } catch (_e) {
         // network blip — schedule next tick anyway.
       }
-      if (ac.signal.aborted) return;
+      if (!stillCurrent()) return;
       this.#rngPollTimer = setTimeout(tick, RNG_POLL_INTERVAL_MS);
       if (this.#rngPollTimer && typeof this.#rngPollTimer.unref === 'function') {
         try { this.#rngPollTimer.unref(); } catch (_) { /* defensive */ }
@@ -3057,6 +3173,8 @@ class AppDegenerettePanel extends HTMLElement {
     if (this.#state !== STATE.READY) return;
     if (this.#currentBetId == null) return;
     this.#busyResolve = true;
+    const resolutionGeneration = this.#resolutionGeneration;
+    const stillCurrent = () => resolutionGeneration === this.#resolutionGeneration;
 
     this.#clearError();
     this.#setState(STATE.RESOLVING);
@@ -3069,8 +3187,15 @@ class AppDegenerettePanel extends HTMLElement {
       // bet slot before opening a wallet prompt: zero is the chain's definitive
       // "somebody already resolved it" state.
       const packed = await readBetInfo({ player, betId }).catch(() => null);
+      if (!stillCurrent()) return;
       if (packed === 0n) {
-        if (!(await this.#replayIndexedResolution(player, betId))) {
+        if (!(await this.#replayIndexedResolution(
+          player,
+          betId,
+          INDEX_REPLAY_RETRIES,
+          resolutionGeneration,
+        ))) {
+          if (!stillCurrent()) return;
           // The write is already complete. Do not put the stale Resolve action
           // back or ask for another click; keep watching the exact bet until
           // every verified spin is available, then open the normal reveal.
@@ -3083,7 +3208,9 @@ class AppDegenerettePanel extends HTMLElement {
       }
 
       const candidates = await this.#communityResolveCandidates(player, betId);
+      if (!stillCurrent()) return;
       const { receipt } = await resolveCommunityBets({ player, betId, candidates });
+      if (!stillCurrent()) return;
 
       // A community receipt contains results for several owners. Select only
       // the clicked bet for this animation; the other settlements still credit
@@ -3103,22 +3230,41 @@ class AppDegenerettePanel extends HTMLElement {
         player: wantPlayer,
         blockNumber: receipt?.blockNumber ?? null,
       });
+      if (!stillCurrent()) return;
       if (resolved) {
-        if (!this.#finishResolvedBet(resolved, spinResults, [], lootboxLegs)
-          && !(await this.#replayIndexedResolution(player, betId, 1))) {
+        if (!this.#finishResolvedBet(
+          resolved,
+          spinResults,
+          [],
+          lootboxLegs,
+          resolutionGeneration,
+        ) && !(await this.#replayIndexedResolution(
+          player,
+          betId,
+          1,
+          resolutionGeneration,
+        ))) {
+          if (!stillCurrent()) return;
           const count = Math.max(1, Number(resolved.spinCount || 1n));
           const outcomeEl = this.querySelector('[data-bind="deg-outcome"]');
           if (outcomeEl) outcomeEl.textContent = `Resolved — loading all ${count} spins…`;
           this.#setState(STATE.INDEXING);
           this.#startRngPollCycle();
         }
-      } else if (!(await this.#replayIndexedResolution(player, betId, 1))) {
+      } else if (!(await this.#replayIndexedResolution(
+        player,
+        betId,
+        1,
+        resolutionGeneration,
+      ))) {
+        if (!stillCurrent()) return;
         const outcomeEl = this.querySelector('[data-bind="deg-outcome"]');
         if (outcomeEl) outcomeEl.textContent = 'Resolved — loading every spin…';
         this.#setState(STATE.INDEXING);
         this.#startRngPollCycle();
       }
     } catch (error) {
+      if (!stillCurrent()) return;
       const msg = compactUiError(error, 'Resolve did not go through. Try again.');
       // A resolver can win after our state read but before broadcast. The
       // batch's item-zero race gate turns that into a cheap revert; recover the
@@ -3128,9 +3274,12 @@ class AppDegenerettePanel extends HTMLElement {
       if (raced && await this.#replayIndexedResolution(
         this.#pendingAddress || getActingAddress(),
         this.#currentBetId,
+        INDEX_REPLAY_RETRIES,
+        resolutionGeneration,
       )) {
         // Replay completed and retired the row.
       } else if (raced) {
+        if (!stillCurrent()) return;
         // Another resolver landed between our preflight and broadcast. That is
         // a successful resolution from the player's perspective; automatically
         // follow its events instead of surfacing a failed tx or another button.
@@ -3150,22 +3299,30 @@ class AppDegenerettePanel extends HTMLElement {
   async #onRequestRng() {
     if (this.#busyResolve || this.#currentBetId == null) return;
     this.#busyResolve = true;
+    const resolutionGeneration = this.#resolutionGeneration;
+    const stillCurrent = () => resolutionGeneration === this.#resolutionGeneration;
     this.#clearError();
     this.#setState(STATE.REQUESTING_RNG);
     let requestAccepted = false;
     let requestBlock = 0;
     try {
       const requested = await requestLootboxRng();
+      if (!stillCurrent()) return;
       requestAccepted = true;
       const minedBlock = Number(requested?.receipt?.blockNumber);
       if (Number.isInteger(minedBlock) && minedBlock > 0) requestBlock = minedBlock;
     } catch (error) {
+      if (!stillCurrent()) return;
       // A competing request between simulation and broadcast is success from
       // this player's perspective; resume the wait without a loud red wall.
       const msg = compactUiError(error, 'RNG request did not go through.');
       requestAccepted = /in flight|already|locked/i.test(String(msg));
       if (!requestAccepted) this.#renderError(msg);
     } finally {
+      if (!stillCurrent()) {
+        setTimeout(() => { this.#busyResolve = false; }, DEBOUNCE_MS);
+        return;
+      }
       if (requestAccepted && requestBlock <= 0) {
         try {
           const provider = getProvider();
@@ -3187,7 +3344,14 @@ class AppDegenerettePanel extends HTMLElement {
     }
   }
 
-  #finishResolvedBet(resolved, spinResults, resultTickets = [], lootboxLegs = []) {
+  #finishResolvedBet(
+    resolved,
+    spinResults,
+    resultTickets = [],
+    lootboxLegs = [],
+    resolutionGeneration = this.#resolutionGeneration,
+  ) {
+    if (resolutionGeneration !== this.#resolutionGeneration) return false;
     const spins = Array.isArray(spinResults) ? spinResults : [];
     const outcomeEl = this.querySelector('[data-bind="deg-outcome"]');
     const resolvedBetId = resolved?.betId ?? this.#currentBetId;
@@ -3212,7 +3376,10 @@ class AppDegenerettePanel extends HTMLElement {
       heroQuadrant: this.#currentHero == null ? this.#dgnHero : this.#currentHero,
     });
     if (!sequence) return false;
-    const directBoxLegs = Array.isArray(lootboxLegs) ? lootboxLegs.filter(Boolean) : [];
+    const {
+      lootboxLegs: directBoxLegs,
+      recordBountySpins,
+    } = partitionDegeneretteRewardLegs(lootboxLegs);
     sequence.lootboxAwarded = directBoxLegs.length > 0;
     sequence.lootboxLegs = directBoxLegs;
     sequence.lootboxEth = degeneretteLootboxEthFromLegs(directBoxLegs);
@@ -3235,6 +3402,12 @@ class AppDegenerettePanel extends HTMLElement {
     if (!queueReveal(sequence)) return false;
     if (presentationKey) this.#presentedBetKeys.add(presentationKey);
     if (completesActiveSlot) _writePendingBet(this.#pendingAddress, null);
+    for (const spin of recordBountySpins) {
+      queueReveal({
+        kind: 'record-bounty',
+        spin,
+      });
+    }
     if (directBoxLegs.length > 0) {
       const address = this.#pendingAddress || getActingAddress();
       recordLootboxTicketPacks({
@@ -3310,13 +3483,21 @@ class AppDegenerettePanel extends HTMLElement {
     return out;
   }
 
-  async #replayIndexedResolution(player, betId, retries = INDEX_REPLAY_RETRIES) {
+  async #replayIndexedResolution(
+    player,
+    betId,
+    retries = INDEX_REPLAY_RETRIES,
+    resolutionGeneration = this.#resolutionGeneration,
+  ) {
     if (!player || betId == null) return false;
     const wantPlayer = String(player).toLowerCase();
     const wantBet = String(betId);
+    const stillCurrent = () => resolutionGeneration === this.#resolutionGeneration;
+    if (!stillCurrent()) return false;
 
     const replayFromChain = async () => {
       const replay = await readResolvedBet({ player, betId }).catch(() => null);
+      if (!stillCurrent()) return false;
       if (!replay?.resolved) return false;
       const complete = normalizeDegeneretteSpinResults(
         replay.spins,
@@ -3329,12 +3510,20 @@ class AppDegenerettePanel extends HTMLElement {
         player,
         blockNumber: replay.receipt?.blockNumber ?? replay.resolved?.blockNumber ?? null,
       });
-      return this.#finishResolvedBet(replay.resolved, complete.spins, [], lootboxLegs);
+      if (!stillCurrent()) return false;
+      return this.#finishResolvedBet(
+        replay.resolved,
+        complete.spins,
+        [],
+        lootboxLegs,
+        resolutionGeneration,
+      );
     };
 
     // Exact player+betId topics are complete immediately after a receipt and
     // bypass stale API workers that ignore the player query entirely.
     if (await replayFromChain()) return true;
+    if (!stillCurrent()) return false;
 
     for (let attempt = 0; attempt < retries; attempt += 1) {
       let items = [];
@@ -3343,14 +3532,32 @@ class AppDegenerettePanel extends HTMLElement {
           betId: wantBet,
           targetResolved: 1,
           maxPages: 4,
+          // Retry attempts intentionally ask whether result rows appeared
+          // since the preceding probe (650ms apart).
+          force: true,
         });
       } catch (_e) { /* retry below */ }
+      if (!stillCurrent()) return false;
 
       const bet = items.find((item) => String(item?.player || '').toLowerCase() === wantPlayer
         && String(item?.betId) === wantBet
         && (Array.isArray(item?.results) ? item.results : [])
           .some((result) => result?.resultType === 'resolved'));
       if (bet) {
+        // The feed can briefly retain an older resolved row while a newly
+        // placed bet with the same deployment-local identity is live. A real
+        // resolution deletes this exact slot before emitting its events, so
+        // only zero authorizes indexed reels or an attached luckbox to enter
+        // the reveal queue. null/nonzero waits for chain confirmation.
+        const livePacked = await readBetInfo({ player, betId }).catch(() => null);
+        if (!stillCurrent()) return false;
+        if (livePacked !== 0n) {
+          if (attempt + 1 < retries) {
+            await new Promise((resolve) => setTimeout(resolve, INDEX_REPLAY_DELAY_MS));
+            if (!stillCurrent()) return false;
+          }
+          continue;
+        }
         const decoded = dgnDecodePacked(bet.packedData);
         if (bet.betIndex != null) {
           try { this.#currentLootboxIndex = BigInt(bet.betIndex); } catch (_e) { /* malformed feed row */ }
@@ -3395,12 +3602,14 @@ class AppDegenerettePanel extends HTMLElement {
             player,
             blockNumber: resolvedRow?.blockNumber ?? null,
           });
+          if (!stillCurrent()) return false;
           if (complete.complete
             && this.#finishResolvedBet(
               resolved,
               complete.spins,
               bet.resultTickets,
               replayLootboxLegs,
+              resolutionGeneration,
             )) {
             return true;
           }
@@ -3409,11 +3618,12 @@ class AppDegenerettePanel extends HTMLElement {
 
       if (attempt + 1 < retries) {
         await new Promise((resolve) => setTimeout(resolve, INDEX_REPLAY_DELAY_MS));
+        if (!stillCurrent()) return false;
       }
     }
     // One final exact read covers an RPC head that was a block behind at the
     // beginning of the loop without repeatedly scanning logs on every retry.
-    return replayFromChain();
+    return stillCurrent() ? replayFromChain() : false;
   }
 
   // ---------------------------------------------------------------------

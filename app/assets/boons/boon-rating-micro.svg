@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Degen rating boon up-arrow emblem</title>
+  <path d="M6 40h15v20H6Z" fill="#4f46e5" stroke="#090b11" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M20 30h16v30H20Z" fill="#60a5fa" stroke="#090b11" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M38 60V28h-7L49 4l15 24h-8v32Z" fill="#a78bfa" stroke="#090b11" stroke-width="3" stroke-linejoin="round"/>
+  <path d="m48 33 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1Z" fill="#fff1bd" stroke="#090b11" stroke-width="2" stroke-linejoin="round"/>
+</svg>

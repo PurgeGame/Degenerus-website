@@ -3,9 +3,14 @@ import assert from 'node:assert/strict';
 import {
   activityBoonScore,
   activeBoonForProduct,
+  boonBoostBps,
+  boonBoostDelta,
+  coinflipBoonBoostDelta,
   boonIndicatorModel,
   boonTypePresentation,
+  boonTypeVisual,
   decodePackedBoons,
+  passBoonDiscountBps,
 } from '../boons.js';
 import { BOON_BOOST_PCT, BOON_FULL_NAMES, BOON_TYPE_NAMES } from '../boon-types.js';
 
@@ -77,9 +82,9 @@ describe('active boon product mapping', () => {
     assert.equal(boonIndicatorModel(payload, 'activity').label, 'BOON +25 RATING');
     assert.equal(boonIndicatorModel(payload, 'deity').label, 'BOON −35%');
     assert.equal(boonIndicatorModel(payload, 'lazy').label, 'BOON −50%');
-    assert.equal(boonIndicatorModel(payload, 'degenerette-eth').label, 'BOON +12%');
-    assert.equal(boonIndicatorModel(payload, 'degenerette-flip').label, 'BOON +12%');
-    assert.equal(boonIndicatorModel(payload, 'degenerette-wwxrp').label, 'BOON +12%');
+    assert.equal(boonIndicatorModel(payload, 'degenerette-eth').label, '12% BONUS ETH BET');
+    assert.equal(boonIndicatorModel(payload, 'degenerette-flip').label, '12% BONUS FLIP BET');
+    assert.equal(boonIndicatorModel(payload, 'degenerette-wwxrp').label, '12% BONUS WWXRP BET');
     assert.match(boonIndicatorModel(payload, 'purchase').title, /Day 62/);
   });
 
@@ -99,9 +104,12 @@ describe('active boon product mapping', () => {
     assert.equal(boonTypePresentation(15).effect, '50% MORE ENTRY WEIGHT');
     assert.equal(boonTypePresentation(24).effect, '35% OFF WHALE PASS');
     assert.equal(boonTypePresentation(4).effect, '1 MISSED DAY SHIELDED');
-    assert.equal(boonTypePresentation(32).effect, '4% EXTRA ETH STAKE');
-    assert.equal(boonTypePresentation(36).effect, '8% EXTRA FLIP STAKE');
-    assert.equal(boonTypePresentation(40).effect, '12% EXTRA WWXRP STAKE');
+    assert.equal(boonTypePresentation(32).effect, '4% BONUS ETH BET');
+    assert.equal(boonTypePresentation(36).effect, '8% BONUS FLIP BET');
+    assert.equal(boonTypePresentation(40).effect, '12% BONUS WWXRP BET');
+    assert.equal(boonTypePresentation(32).name, 'Degenerette');
+    assert.equal(boonTypePresentation(36).name, 'Degenerette');
+    assert.equal(boonTypePresentation(40).name, 'Degenerette');
   });
 
   test('exposes the affected product for color-coded Deity boon controls', () => {
@@ -110,11 +118,42 @@ describe('active boon product mapping', () => {
     assert.equal(boonTypePresentation(30).product, 'lazy');
   });
 
+  test('uses native currency badges on one amount-colored arrow language', () => {
+    const ticketTiers = [7, 8, 9].map(boonTypeVisual);
+    assert.deepEqual(ticketTiers.map(({ tier, strength }) => [tier, strength]), [
+      [1, 'low'], [2, 'mid'], [3, 'high'],
+    ]);
+    assert.equal(new Set(ticketTiers.map(({ icon }) => icon)).size, 1,
+      'amount tiers share the same contextual marker');
+    assert.equal(ticketTiers[0].icon, null,
+      'Tickets is already named by its host control, so it needs no invented pictogram');
+    assert.equal(boonTypeVisual(4).icon, '/app/assets/boons/boon-quest-micro.svg',
+      'the quest shield uses the shield mark, not the generic arrow');
+    assert.notEqual(boonTypeVisual(9).icon, boonTypeVisual(22).icon,
+      'the real Luckbox case can still identify its product away from the buy control');
+    assert.equal(boonTypeVisual(32).icon, '/badges-circular/crypto_06_ethereum_green.svg');
+    assert.equal(boonTypeVisual(36).icon, '/whitepaper/flame-logo-split.svg');
+    assert.equal(boonTypeVisual(40).icon, '/shared/coinflip-face-red.svg');
+    assert.doesNotMatch([
+      boonTypeVisual(32).icon,
+      boonTypeVisual(36).icon,
+      boonTypeVisual(40).icon,
+    ].join(' '), /bount|crosshair|target|app\/assets\/boons/i);
+    assert.equal(boonTypeVisual(40).pips, '●●●');
+    assert.equal(boonTypeVisual(4).strength, 'utility');
+    assert.equal(boonTypeVisual(7).direction, 'up');
+    assert.equal(boonTypeVisual(24).direction, 'down');
+    assert.equal(boonTypeVisual(28).direction, 'up', 'a pass award is not a discount');
+    assert.equal(boonTypeVisual(7).amountColor, '#60a5fa');
+    assert.equal(boonTypeVisual(8).amountColor, '#cbd5e1');
+    assert.equal(boonTypeVisual(9).amountColor, '#facc15');
+  });
+
   test('names Degenerette boons in the active-boon history instead of generic type IDs', () => {
     assert.equal(BOON_TYPE_NAMES[32], 'DGN_ETH_4');
     assert.equal(BOON_TYPE_NAMES[36], 'DGN_FLIP_8');
     assert.equal(BOON_TYPE_NAMES[40], 'DGN_WWXRP_12');
-    assert.equal(BOON_FULL_NAMES[36], 'FLIP Degenerette +8%');
+    assert.equal(BOON_FULL_NAMES[36], '8% BONUS FLIP BET');
     assert.equal(BOON_BOOST_PCT[40], 12);
   });
 
@@ -133,6 +172,40 @@ describe('active boon product mapping', () => {
       boonIndicatorModel([{ boonType: 26, consumed: false }], 'deity').label,
       'BOON −20%',
     );
+  });
+
+  test('exposes exact contract BPS for pass-price quotes', () => {
+    const payload = { boons: [
+      { boonType: 24, consumed: false },
+      { boonType: 26, consumed: false },
+      { boonType: 31, consumed: false },
+    ] };
+    assert.equal(passBoonDiscountBps(payload, 'whale'), 3500);
+    assert.equal(passBoonDiscountBps(payload, 'deity'), 2000);
+    assert.equal(passBoonDiscountBps(payload, 'lazy'), 5000);
+    assert.equal(passBoonDiscountBps(payload, 'coinflip'), 0);
+    assert.equal(passBoonDiscountBps([{ boonType: 28, consumed: false }], 'whale'), 0,
+      'the immediate Whale-pass award is not a purchase discount');
+  });
+
+  test('exposes exact positive purchase effects for numeric transaction previews', () => {
+    const payload = { boons: [
+      { boonType: 9, consumed: false },
+      { boonType: 22, consumed: false },
+      { boonType: 3, consumed: false },
+      { boonType: 34, consumed: false },
+    ] };
+    assert.equal(boonBoostBps(payload, 'purchase'), 2500);
+    assert.equal(boonBoostBps(payload, 'lootbox'), 2500);
+    assert.equal(boonBoostBps(payload, 'coinflip'), 2500);
+    assert.equal(boonBoostBps(payload, 'degenerette-eth'), 1200);
+    assert.equal(boonBoostDelta(5_000n, payload, 'lootbox'), 1_250n);
+    const flip = 10n ** 18n;
+    assert.equal(coinflipBoonBoostDelta(50_000n * flip, payload), 12_500n * flip);
+    assert.equal(coinflipBoonBoostDelta(500_000n * flip, payload), 25_000n * flip,
+      'Coinflip mirrors the contract cap while other product boosts remain uncapped');
+    assert.equal(boonBoostDelta('bad', payload, 'lootbox'), 0n);
+    assert.equal(boonBoostBps({ boons: [{ boonType: 9, consumed: true }] }, 'purchase'), 0);
   });
 
   test('a real pass discount takes precedence over the generic pass boon', () => {

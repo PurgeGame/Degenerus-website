@@ -5,6 +5,7 @@
 export const REVEAL_AUTO_OPEN_STORAGE_KEY = 'degenerus:reveal-tray:auto-open:v1';
 export const ALL_IN_BUTTON_STORAGE_KEY = 'degenerus:all-in-button:v1';
 export const AFKING_LOW_FUND_WARNING_STORAGE_KEY = 'degenerus:afking-low-fund-warning:v1';
+export const BIGGEST_BOUNTIES_MODE_STORAGE_KEY = 'degenerus:biggest-bounties:mode:v1';
 
 const _listeners = new Set();
 
@@ -24,7 +25,7 @@ function _write(key, value) {
 }
 
 function _emit(name, value) {
-  const detail = Object.freeze({ name, value: Boolean(value) });
+  const detail = Object.freeze({ name, value });
   for (const listener of _listeners) {
     try { listener(detail); } catch (_error) { /* one consumer cannot break another */ }
   }
@@ -64,6 +65,20 @@ export function writeAfkingLowFundWarningPreference(enabled) {
   const value = Boolean(enabled);
   _write(AFKING_LOW_FUND_WARNING_STORAGE_KEY, value ? '1' : '0');
   _emit('afkingLowFundWarning', value);
+  return value;
+}
+
+// ON is the historical/default behavior. VIEW preserves the useful records and
+// live pool while removing every transaction shortcut; OFF removes the rail.
+export function readBiggestBountiesModePreference() {
+  const stored = _read(BIGGEST_BOUNTIES_MODE_STORAGE_KEY);
+  return stored === 'view' || stored === 'off' ? stored : 'on';
+}
+
+export function writeBiggestBountiesModePreference(mode) {
+  const value = mode === 'view' || mode === 'off' ? mode : 'on';
+  _write(BIGGEST_BOUNTIES_MODE_STORAGE_KEY, value);
+  _emit('biggestBountiesMode', value);
   return value;
 }
 

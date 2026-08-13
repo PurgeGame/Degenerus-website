@@ -1421,37 +1421,30 @@ class AppRevealTray extends HTMLElement {
         pack.appendChild(brand);
         art.appendChild(pack);
       } else if (item.kind === 'tickets') {
-        // Use the same branded tear-pack silhouette as the opening overlay.
-        // This miniature has its own fixed aspect ratio so the button grid can
-        // never collapse the wrapper into a horizontal sliver.
+        // Keep the tear-pack silhouette, but do not miniaturize the full reveal
+        // wrapper into unreadable plaque copy. At this size the useful face is
+        // the FLAME, abbreviated level, and physical ticket count.
         const pack = document.createElement('span');
         pack.className = 'rvl-pack rrt-pack-art';
-        const shine = document.createElement('span');
-        shine.className = 'rvl-pack-shine';
         const brand = document.createElement('span');
         brand.className = 'rvl-pack-brand';
         const logo = document.createElement('img');
         logo.className = 'rvl-pack-logo';
         logo.src = '/whitepaper/flame-logo.svg';
         logo.alt = '';
-        const edition = document.createElement('span');
-        edition.className = 'rvl-pack-edition';
-        edition.textContent = item.foilPack ? 'FOIL PACK' : 'TICKET PACK';
         brand.appendChild(logo);
-        brand.appendChild(edition);
-        pack.appendChild(shine);
         pack.appendChild(brand);
         const meta = _ticketPackMeta(item);
         const level = document.createElement('span');
         level.className = 'rvl-pack-level rrt-pack-level';
-        level.textContent = meta.level == null ? 'LEVEL —' : `LEVEL ${meta.level}`;
+        level.textContent = meta.level == null ? 'L—' : `L${meta.level}`;
         const packTone = applyTicketLevelTone(level, meta.level);
         pack.setAttribute('data-pack-level-tone', packTone || 'unknown');
         const quantity = document.createElement('span');
         quantity.className = 'rvl-pack-count rrt-pack-count';
         quantity.textContent = meta.count == null
-          ? 'TICKETS'
-          : `${meta.count} ${meta.count === 1 ? 'TICKET' : 'TICKETS'}`;
+          ? '— TIX'
+          : `${meta.count} TIX`;
         pack.appendChild(level);
         pack.appendChild(quantity);
         art.appendChild(pack);

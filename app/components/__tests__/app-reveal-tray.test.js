@@ -1285,7 +1285,7 @@ describe('<app-reveal-tray>', () => {
     el.disconnectedCallback();
   });
 
-  test('ticket actions use a fixed-aspect branded pack instead of a squeezed glyph', () => {
+  test('ticket actions use a simplified readable pack instead of shrinking the full wrapper', () => {
     pending.publishPendingActions('pack', [{
       id: 'pack:62', kind: 'tickets', label: 'Level 62 ticket pack',
       ticketLevel: 62, ticketCount: 5,
@@ -1307,17 +1307,19 @@ describe('<app-reveal-tray>', () => {
       /\.rrt-action--tickets\.rrt-action--ticket-ready\s*\{[^}]*width:\s*auto;[^}]*grid-template-columns:\s*2\.28rem auto/s,
       'the ready-ticket control hugs its pack and label instead of reserving an empty CTA column');
     assert.equal(art.querySelector('.rvl-pack-logo')?.src, '/whitepaper/flame-logo.svg');
-    assert.equal(art.querySelector('.rrt-pack-level')?.textContent, 'LEVEL 62');
-    assert.equal(art.querySelector('.rrt-pack-count')?.textContent, '5 TICKETS',
-      'quantity and level are printed in the center of the bottom-panel pack');
+    assert.equal(art.querySelector('.rvl-pack-edition'), null,
+      'the unreadable miniature edition plaque is omitted');
+    assert.equal(art.querySelector('.rrt-pack-level')?.textContent, 'L62');
+    assert.equal(art.querySelector('.rrt-pack-count')?.textContent, '5 TIX',
+      'the miniature reserves its face for the useful level and quantity');
     assert.match(css, /\.rrt-pack-art\.rvl-pack\s*\{[^}]*flex:\s*0 0 auto[^}]*aspect-ratio:\s*118 \/ 160/s,
       'the compact button cannot flex-squash its portrait wrapper');
     assert.match(css,
-      /\.rrt-pack-art\.rvl-pack\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*minmax\(1\.05rem, 1fr\) 0\.38rem 0\.44rem/s,
-      'tiny pack art preserves separate brand, level, and quantity zones');
+      /\.rrt-pack-art\.rvl-pack\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*0\.72rem 0\.62rem 0\.64rem/s,
+      'the miniature gives most of its height to two readable data zones');
     assert.match(css,
-      /\.rrt-pack-art \.rrt-pack-count\s*\{[^}]*font-size:\s*0\.3rem/s,
-      'the tiny Pending wrapper gives its ticket quantity the larger readable line');
+      /\.rrt-pack-art \.rrt-pack-level\s*\{[^}]*font:\s*1000 0\.48rem\/1[\s\S]*?\.rrt-pack-art \.rrt-pack-count\s*\{[^}]*font:\s*1000 0\.42rem\/1/s,
+      'level and ticket count use legible abbreviated type instead of microcopy');
     el.disconnectedCallback();
   });
 

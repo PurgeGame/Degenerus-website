@@ -18,13 +18,15 @@ import { MAINNET_PENDING as _ACTIVE_MAINNET_PENDING, CHAIN as _ACTIVE_CHAIN } fr
 if (
   _ACTIVE_MAINNET_PENDING
   && (!_ACTIVE_CHAIN.rpcUrl
+    || !_ACTIVE_CHAIN.goldRushPublicRpcUrl
     || !_ACTIVE_CHAIN.nativeAddEntry
     || !_ACTIVE_CHAIN.nativeAddEntry.rpcUrls
     || _ACTIVE_CHAIN.nativeAddEntry.rpcUrls.length === 0)
 ) {
   throw new Error(
     '[chain-config] mainnet profile selected but RPC URLs are empty — '
-    + 'populate CHAIN.rpcUrl and CHAIN.nativeAddEntry.rpcUrls in '
+    + 'populate CHAIN.rpcUrl, CHAIN.goldRushPublicRpcUrl (keyless), and '
+    + 'CHAIN.nativeAddEntry.rpcUrls in '
     + 'chain-config.mainnet.js before cutover.',
   );
 }

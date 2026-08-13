@@ -24,6 +24,22 @@ function _ownedSymbolId(catalog, owner) {
 }
 
 export function deityBoonActionLabel(presentation, slot = 0) {
+  const product = String(presentation?.product || '').trim();
+  const compactNames = {
+    purchase: 'TICKETS BOON',
+    lootbox: 'LUCKBOX BOON',
+    coinflip: 'COINFLIP BOON',
+    quests: 'QUEST BOON',
+    decimator: 'DECIMATOR BOON',
+    whale: 'WHALE BOON',
+    activity: 'RATING BOON',
+    deity: 'DEITY BOON',
+    lazy: 'LAZY BOON',
+    'degenerette-eth': 'DEGENERETTE BOON',
+    'degenerette-flip': 'DEGENERETTE BOON',
+    'degenerette-wwxrp': 'DEGENERETTE BOON',
+  };
+  if (compactNames[product]) return compactNames[product];
   const name = String(presentation?.name || '').trim();
   if (!name) return `BOON ${Number(slot) + 1}`;
   return /\bboon\b/i.test(name) ? name : `${name} BOON`;
@@ -109,10 +125,17 @@ class AppDeityDesk extends HTMLElement {
                    width="1400" height="320" alt="Deity Pass">
             </span>
             <strong data-bind="deity-desk-title">God of —</strong>
+            <span class="deity-desk__budget" data-bind="deity-desk-budget">
+              <b>—</b> OF 3 BOONS LEFT TODAY
+            </span>
           </span>
         </header>
         <div class="deity-desk__target">
-          <label for="deity-desk-target-input">TARGET PLAYER</label>
+          <div class="deity-desk__target-head">
+            <label for="deity-desk-target-input">TARGET PLAYER</label>
+            <span class="deity-desk__feedback" data-bind="deity-desk-feedback"
+                  hidden role="status"></span>
+          </div>
           <span class="deity-desk__target-control">
             <input id="deity-desk-target-input" type="text" name="deity-desk-target"
                    placeholder="Wallet, Discord ID, or @name" autocomplete="off" spellcheck="false"
@@ -124,10 +147,9 @@ class AppDeityDesk extends HTMLElement {
           </span>
         </div>
         <div class="deity-desk__actions" aria-label="Deity actions">
-          <button type="button" class="deity-desk__smite" data-write data-bind="deity-desk-smite" disabled title="Burn 200 FLIP to smite this player"><span>SMITE</span><strong>-2 SCORE</strong><small class="deity-desk__smite-cost">COST:<img src="/whitepaper/flame-logo-split.svg" alt="FLIP">200</small></button>
-          ${[0, 1, 2].map((slot) => `<button type="button" data-write data-slot="${slot}" data-bind="deity-desk-boon-${slot}" disabled><span data-bind="deity-desk-boon-name-${slot}">BOON ${slot + 1}</span><strong data-bind="deity-desk-boon-effect-${slot}">RNG PENDING</strong></button>`).join('')}
+          <button type="button" class="deity-desk__smite" data-write data-bind="deity-desk-smite" data-boon-direction="down" data-boon-strength="low" disabled title="Burn 200 FLIP to smite this player"><i class="deity-desk__boon-mark deity-desk__smite-mark" aria-hidden="true"><img class="deity-desk__boon-icon deity-desk__smite-icon" src="/app/assets/boons/smite-down-micro.svg" alt=""></i><span>SMITE</span><strong>-2 DEGEN RATING</strong><small class="deity-desk__smite-cost">COST:<img src="/whitepaper/flame-logo-split.svg" alt="FLIP">200</small></button>
+          ${[0, 1, 2].map((slot) => `<button type="button" data-write data-slot="${slot}" data-bind="deity-desk-boon-${slot}" disabled><i class="deity-desk__boon-mark" data-bind="deity-desk-boon-mark-${slot}" aria-hidden="true" hidden><img class="deity-desk__boon-icon" data-bind="deity-desk-boon-icon-${slot}" alt=""></i><span data-bind="deity-desk-boon-name-${slot}">BOON ${slot + 1}</span><strong data-bind="deity-desk-boon-effect-${slot}">RNG PENDING</strong></button>`).join('')}
         </div>
-        <p class="deity-desk__feedback" data-bind="deity-desk-feedback" hidden role="status"></p>
       </section>`;
   }
 
@@ -357,24 +379,45 @@ class AppDeityDesk extends HTMLElement {
       symbol.alt = `${model.symbol.name} deity symbol`;
     }
     if (title) title.textContent = model.symbol?.title || 'Deity pass';
+    // The one number a deity owner checks daily: how much power is still unspent.
+    const budget = this.querySelector('[data-bind="deity-desk-budget"] b');
+    if (budget) budget.textContent = String(model.remaining);
+    this.querySelector('[data-bind="deity-desk-budget"]')
+      ?.classList?.toggle('is-spent', model.remaining === 0);
     const canSign = deriveCanSign();
     const input = this.querySelector('[name="deity-desk-target"]');
     if (input) input.disabled = !canSign || this.#busy != null;
     if (input?.disabled) this.#closeSuggestions();
     for (let slot = 0; slot < 3; slot += 1) {
       const button = this.querySelector(`[data-bind="deity-desk-boon-${slot}"]`);
+      const mark = this.querySelector(`[data-bind="deity-desk-boon-mark-${slot}"]`);
+      const icon = this.querySelector(`[data-bind="deity-desk-boon-icon-${slot}"]`);
       const name = this.querySelector(`[data-bind="deity-desk-boon-name-${slot}"]`);
       const effect = this.querySelector(`[data-bind="deity-desk-boon-effect-${slot}"]`);
       const used = (model.usedMask & (1 << slot)) !== 0;
       const boonType = Number(this.#boonState?.slots?.[slot] ?? 0);
       const presentation = boonType > 0 ? boonTypePresentation(boonType) : null;
+      if (mark) mark.hidden = !presentation;
+      if (icon) {
+        icon.hidden = !presentation?.icon;
+        if (presentation?.icon) icon.src = presentation.icon;
+        else icon.removeAttribute?.('src');
+      }
       if (name) name.textContent = deityBoonActionLabel(presentation, slot);
       if (effect) effect.textContent = used ? 'ISSUED' : (presentation?.effect || 'RNG PENDING');
       if (button) {
         if (presentation?.product) {
           button.setAttribute('data-boon-product', presentation.product);
+          button.setAttribute('data-boon-strength', presentation.strength);
+          button.setAttribute('data-boon-tier', String(presentation.tier));
+          button.setAttribute('data-boon-pips', presentation.pips);
+          button.setAttribute('data-boon-direction', presentation.direction);
         } else {
           button.removeAttribute?.('data-boon-product');
+          button.removeAttribute?.('data-boon-strength');
+          button.removeAttribute?.('data-boon-tier');
+          button.removeAttribute?.('data-boon-pips');
+          button.removeAttribute?.('data-boon-direction');
         }
         button.disabled = !canSign || !this.#boonState?.ready || used || this.#busy != null;
         button.classList?.toggle('is-used', used);
@@ -437,11 +480,13 @@ class AppDeityDesk extends HTMLElement {
     const feedback = this.querySelector('[data-bind="deity-desk-feedback"]');
     if (!feedback) return;
     feedback.textContent = String(message || '');
+    feedback.title = String(message || '');
     feedback.hidden = !message;
     feedback.classList?.toggle('is-error', Boolean(error));
     if (this.#errorTimer != null) clearTimeout(this.#errorTimer);
     this.#errorTimer = message ? setTimeout(() => {
       feedback.textContent = '';
+      feedback.removeAttribute?.('title');
       feedback.hidden = true;
       feedback.classList?.remove('is-error');
       this.#errorTimer = null;

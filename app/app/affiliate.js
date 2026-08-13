@@ -49,10 +49,7 @@ import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CONTRACTS, CHAIN } from './chain-config.js';
 import { get } from './store.js';
-// Pitfall 5 pattern (mirrors pro-gate.js): cross-import ONLY the API_BASE
-// constant — beta/app/api.js has a module-level document side effect and
-// cannot be imported headless (node:test).
-import { API_BASE } from './constants.js';
+import { fetchJSON as sharedFetchJSON } from './api.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures verified against
@@ -371,9 +368,7 @@ export function readRegisteredCode(addr) {
 }
 
 async function _defaultFetchJSON(path) {
-  const res = await fetch(API_BASE + path);
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-  return res.json();
+  return sharedFetchJSON(path);
 }
 // Test seam — mirrors pro-gate.js __setFetchJSONForTest.
 let _fetchImpl = _defaultFetchJSON;

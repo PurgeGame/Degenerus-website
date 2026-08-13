@@ -23,14 +23,13 @@
 import { subscribe, get, getViewedAddress } from '../app/store.js';
 import { formatEth, formatFlip } from '../viewer/utils.js';
 import { CHAIN } from '../app/chain-config.js';
-// Phase 64 — foil-ticket matching: pure grading helpers + the indexer base URL
-// (API_BASE cross-import only, mirroring polling.js Pitfall 5 discipline).
+// Phase 64 — foil-ticket matching pure grading helpers.
 import {
   claimableDrawGrades,
   FOIL_CLAIM_THRESHOLD,
   unpackWinSet,
 } from '../app/foil-match.js';
-import { API_BASE } from '../app/constants.js';
+import { fetchJSON } from '../app/api.js';
 // Reveal-engine wiring: the viewed player's jackpot winnings auto-play a
 // celebration sequence; a claimed foil match reveals its payout box-spin.
 import { queueReveal } from './reveal-overlay.js';
@@ -44,6 +43,7 @@ import { readResolvedCoinflipStake } from '../app/coinflip.js';
 import { loadDayLootboxResults } from '../app/day-lootbox-results.js';
 import { publishPendingActions, clearPendingActions } from '../app/pending-actions.js';
 import { dailyJackpotProcessingSignals } from '../app/jackpot-processing.js';
+import { normalizeLastDayPayload } from '../app/last-day-state.js';
 
 const FOIL_MATCH_ACTION_SOURCE = 'foil-match';
 
@@ -336,6 +336,7 @@ class LastDayJackpot extends HTMLElement {
   // ---------------------------------------------------------------------------
   #onLastDayUpdate(payload) {
     if (!payload) return;  // first cycle 404 / undefined initial subscribe fire
+    payload = normalizeLastDayPayload(payload);
     const parsedDay = payload.day == null ? null : Number(payload.day);
     const payloadDay = Number.isFinite(parsedDay) && parsedDay > 0 ? parsedDay : null;
     const isNewLatest = payloadDay != null
@@ -969,9 +970,7 @@ class LastDayJackpot extends HTMLElement {
     const day = this.#pinnedDay;
     if (day == null || this.#flipFetchedDay === day || typeof fetch !== 'function') return;
     try {
-      const res = await fetch(`${API_BASE}/game/coinflip/day/${day}`);
-      if (!res.ok) return; // unknown — key-only gate
-      const data = await res.json();
+      const data = await fetchJSON(`/game/coinflip/day/${day}`);
       if (this.#pinnedDay !== day) return; // day re-pinned mid-flight
       this.#flipResult = data ?? null;
       this.#flipFetchedDay = day;
@@ -1028,11 +1027,7 @@ class LastDayJackpot extends HTMLElement {
     const player = String(viewed).toLowerCase();
     const address = encodeURIComponent(player);
     const dayParam = encodeURIComponent(String(day));
-    const read = async (path) => {
-      const res = await fetch(`${API_BASE}${path}`);
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      return res.json();
-    };
+    const read = (path) => fetchJSON(path);
     const [packsResult, viewerResult, resolvedStakeResult] = await Promise.allSettled([
       read(`/player/${address}/packs?day=${dayParam}`),
       read(`/viewer/player/${address}/day/${dayParam}`),
@@ -1301,9 +1296,7 @@ class LastDayJackpot extends HTMLElement {
     }
     const seq = ++this.#foilSeq;
     try {
-      const res = await fetch(`${API_BASE}/player/${addr}/foil?level=${level}`);
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      const data = await res.json();
+      const data = await fetchJSON(`/player/${addr}/foil?level=${level}`);
       if (seq !== this.#foilSeq) return; // superseded by a newer refresh
       // A foil record cannot disappear for the same player/level/day. Keep the
       // last indexed pack through a transient empty catch-up response, while

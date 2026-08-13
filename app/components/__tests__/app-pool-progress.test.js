@@ -234,10 +234,18 @@ describe('jackpot depletion model', () => {
 });
 
 describe('phase strip copy', () => {
-  test('purchase mode moves active level and DB phase-day out of the nav', () => {
+  test('purchase mode always reserves the phase-day label while its clock loads', () => {
+    assert.deepEqual(phaseStripModel({
+      gameState: { level: 37, phase: 'PURCHASE', jackpotPhaseFlag: false },
+    }), {
+      jackpot: false, level: 38, day: null, dayLabel: 'PURCHASE DAY —',
+    });
+  });
+
+  test('purchase mode renders the phase day from the direct contract clock', () => {
     assert.deepEqual(phaseStripModel({
       gameState: { level: 36, phase: 'PURCHASE', jackpotPhaseFlag: false },
-      phaseClock: { level: 37, phase: 'P', dayInPhase: 5 },
+      contractPhase: { level: 36, jackpot: false, purchaseDay: 5 },
     }), {
       jackpot: false, level: 37, day: 5, dayLabel: 'PURCHASE DAY 5',
     });
@@ -246,8 +254,7 @@ describe('phase strip copy', () => {
   test('the contract last-purchase latch marks that exact purchase day final', () => {
     assert.deepEqual(phaseStripModel({
       gameState: { level: 37, phase: 'PURCHASE', jackpotPhaseFlag: false },
-      phaseClock: { level: 38, phase: 'P', dayInPhase: 3 },
-      contractPhase: { jackpot: false, lastPurchaseDay: true },
+      contractPhase: { jackpot: false, lastPurchaseDay: true, purchaseDay: 3 },
     }), {
       jackpot: false, level: 38, day: 3, dayLabel: 'PURCHASE DAY 3 (FINAL)',
     });
@@ -320,7 +327,7 @@ describe('phase strip copy', () => {
       gameState: { level: 37, phase: 'JACKPOT', jackpotPhaseFlag: true, jackpotCounter: 4 },
       contractPhase: { jackpot: false, day: 0 },
     }), {
-      jackpot: false, level: 38, day: null, dayLabel: 'PURCHASE',
+      jackpot: false, level: 38, day: null, dayLabel: 'PURCHASE DAY —',
     });
   });
 });
@@ -427,17 +434,17 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
       'every ordinary historical final uses one consistent, crisp width inside the tube');
     assert.match(css, /\.pool-progress__marker--history-major\s*\{[^}]*width:\s*3px[^}]*min-width:\s*3px[^}]*max-width:\s*3px[^}]*height:\s*72%[^}]*box-shadow:\s*none/s,
       'only five-level graduations are longer and one pixel thicker');
-    assert.match(css, /\.pool-progress__track\.is-ready \.pool-progress__fill\s*\{[^}]*background:\s*#93c5fd/s,
-      'the post-guarantee thermometer switches to a solid light blue fill');
-    assert.match(css, /\.pool-progress__track::before\s*\{[^}]*background:\s*none/s,
-      'the old always-on white grid does not compete with the post-guarantee graduations');
-    assert.match(css, /\.pool-progress__marker--history\s*\{[^}]*background:\s*rgba\(0, 0, 0, 0\.82\)/s,
-      'the level graduations become black against the post-guarantee light blue');
-    assert.match(css, /\.pool-progress__marker--history-major\s*\{[^}]*background:\s*#050505/s,
-      'major five-level graduations use the same black treatment');
-    assert.match(css, /\.pool-progress__track\.is-ready \.pool-progress__marker--target\s*\{[^}]*width:\s*2px[^}]*background:\s*#111827/s,
-      'the guarantee remains the strongest dark ruler hinge');
-    assert.match(css, /\.pool-progress__track\.is-ready \.pool-progress__marker--growth\s*\{[^}]*width:\s*1px[^}]*background:\s*#334155/s,
+    assert.match(css, /\.pool-progress__track\.is-ready \.pool-progress__fill\s*\{[^}]*background:\s*var\(--gauge-blue\)/s,
+      'the post-guarantee thermometer switches to a subdued solid blue fill');
+    assert.match(css, /\.pool-progress__track::before\s*\{[^}]*background:\s*linear-gradient\(180deg, rgba\(255, 245, 207, 0\.1\)/s,
+      'the dark glass track carries only a restrained instrument highlight');
+    assert.match(css, /\.pool-progress__marker--history\s*\{[^}]*background:\s*rgba\(240, 217, 166, 0\.66\)/s,
+      'the level graduations use muted cream against the dark completed fill');
+    assert.match(css, /\.pool-progress__marker--history-major\s*\{[^}]*background:\s*var\(--gauge-cream\)/s,
+      'major five-level graduations use the stronger cream treatment');
+    assert.match(css, /\.pool-progress__track\.is-ready \.pool-progress__marker--target\s*\{[^}]*width:\s*2px[^}]*background:\s*var\(--gauge-brass\)/s,
+      'the guarantee remains the strongest brass ruler hinge');
+    assert.match(css, /\.pool-progress__track\.is-ready \.pool-progress__marker--growth\s*\{[^}]*width:\s*1px[^}]*background:\s*#547485/s,
       'the growth line is subordinate to the guarantee and current endpoint');
     assert.match(component, /mobileSkip = !major && Number\(row\.level\) % 2 !== 0/,
       'narrow screens can suppress alternate minor ticks without losing fifth-level majors');
@@ -466,6 +473,17 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
       'jackpot pool uses the same fast precedence');
     assert.match(component, /subscribe\('app\.goldRush', \(\) => this\.#render\(\)\)/,
       'every Grand Prize sample immediately repaints the pool instrument');
+  });
+
+  test('phase day is chain-derived and can never collapse to a bare phase name', () => {
+    assert.doesNotMatch(component, /fetchJSON\('\/replay\/rng'\)/,
+      'the strip has no indexer dependency');
+    assert.match(component, /goldRush\?\.phaseClock/,
+      'the strip consumes the packed GAME phase clock from the direct-chain ticker');
+    assert.match(component, /contractPhase\?\.purchaseDay/,
+      'the purchase day comes from the direct contract snapshot');
+    assert.match(component, />PURCHASE DAY —<\/strong>/,
+      'the initial shell always reserves a day value');
   });
 
   test('amount follows target before progression and current afterward while percent lives in the bar', () => {

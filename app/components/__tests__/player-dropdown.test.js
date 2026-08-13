@@ -223,11 +223,23 @@ globalThis.customElements = {
 // AbortController spy — track abort() calls + signal.aborted state.
 class FakeAbortController {
   constructor() {
-    this.signal = { aborted: false };
+    const listeners = new Set();
+    this.signal = {
+      aborted: false,
+      reason: null,
+      addEventListener(type, fn) { if (type === 'abort') listeners.add(fn); },
+      removeEventListener(type, fn) { if (type === 'abort') listeners.delete(fn); },
+      _dispatchAbort() { for (const fn of [...listeners]) fn(); },
+    };
     FakeAbortController._instances.push(this);
   }
   abort() {
+    if (this.signal.aborted) return;
     this.signal.aborted = true;
+    const error = new Error('This operation was aborted');
+    error.name = 'AbortError';
+    this.signal.reason = error;
+    this.signal._dispatchAbort();
     FakeAbortController._abortCalls += 1;
   }
 }
@@ -248,6 +260,12 @@ function makeFakeFetch() {
   return (url, opts = {}) => {
     let resolveFn, rejectFn;
     const promise = new Promise((res, rej) => { resolveFn = res; rejectFn = rej; });
+    opts.signal?.addEventListener?.('abort', () => {
+      const error = opts.signal.reason instanceof Error
+        ? opts.signal.reason
+        : Object.assign(new Error('aborted'), { name: 'AbortError' });
+      rejectFn(error);
+    }, { once: true });
     _fetchLog.calls.push({ url, signal: opts.signal || null, resolve: resolveFn, reject: rejectFn, promise });
     return promise;
   };
@@ -267,12 +285,15 @@ process.on('exit', () => { console.warn = _origWarn; console.error = _origError;
 // ---------------------------------------------------------------------------
 
 import * as storeMod from '../../app/store.js';
+import { invalidateJSONCache } from '../../app/api.js';
 
 // ---------------------------------------------------------------------------
 // Per-test reset.
 // ---------------------------------------------------------------------------
 
 beforeEach(async () => {
+  invalidateJSONCache();
+  await flushMicrotasks();
   storeMod.__resetForTest();
   _fetchLog.reset();
   FakeAbortController._reset();
@@ -282,7 +303,9 @@ beforeEach(async () => {
   await import('../player-dropdown.js'); // ensure module is loaded (cached after first load)
 });
 
-afterEach(() => {
+afterEach(async () => {
+  invalidateJSONCache();
+  await flushMicrotasks();
   // No subscribers to clean up — player-dropdown.js does not install module-init subscribers.
 });
 
@@ -295,6 +318,8 @@ async function flushMicrotasks() {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+  // The shared API broker has its own consumer/release promise boundary.
+  await new Promise((resolve) => setImmediate(resolve));
 }
 
 // Sleep helper (real timer; debounce is 300ms).

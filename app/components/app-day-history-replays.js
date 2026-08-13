@@ -15,6 +15,7 @@ import {
 } from '../app/day-lootbox-results.js';
 import { clearPendingActions, publishPendingActions } from '../app/pending-actions.js';
 import {
+  degeneretteReplaySequences,
   degeneretteRevealSequenceFromFeedItem,
   dgnDecodePacked,
   mergeDegeneretteFeedItems,
@@ -58,6 +59,14 @@ function _betIds(snapshot) {
 // Keep the original public seam for callers/tests that imported it here before
 // the day-summary reuse moved the implementation into app/.
 export { historicalLootboxReplayRows };
+
+/** Ordered, read-only day replay: base reels, record bounty reels, then box. */
+export function historicalDegeneretteReplaySequences(sequence, { day } = {}) {
+  return degeneretteReplaySequences(sequence, {
+    lootboxTitle: `DAY ${day} DEGENERETTE LUCKBOX`,
+    lootboxNoVessel: true,
+  });
+}
 
 /** Pure reconstruction seam used by tests and the controller. */
 export function historicalDegeneretteReplayRows(items, { player, day, betIds } = {}) {
@@ -194,15 +203,11 @@ class AppDayHistoryReplays extends HTMLElement {
       clearAll: () => this.#clearRows(),
       run: async () => {
         if (!this.#consume(row.id)) return;
-        queueReveal(row.sequence);
-        if (row.kind === 'degenerette' && row.sequence.lootboxLegs?.length) {
-          queueReveal({
-            kind: 'lootbox',
-            title: `DAY ${day} DEGENERETTE LUCKBOX`,
-            legs: row.sequence.lootboxLegs,
-            settledExpected: true,
-            noVessel: true,
-          });
+        const sequences = row.kind === 'degenerette'
+          ? historicalDegeneretteReplaySequences(row.sequence, { day })
+          : [row.sequence];
+        for (const sequence of sequences) {
+          queueReveal(sequence);
         }
       },
     })));

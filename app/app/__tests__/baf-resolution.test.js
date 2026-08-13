@@ -11,6 +11,7 @@ const {
   __setBafResolutionFetcherForTest,
   __resetBafResolutionFetcherForTest,
 } = await import('../baf-resolution.js');
+const { buildBafDrawAllocation } = await import('../baf-draw.js');
 
 const FLIP = 10n ** 18n;
 const PLAYER_1 = '0x1111111111111111111111111111111111111111';
@@ -42,6 +43,17 @@ function model({ status = 'closed', player = PLAYER_4, rank = 4, history = [] } 
       totalParticipants: 247, roundStatus: status,
     },
     history: { wins: history },
+    draw: {
+      entries: Array.from({ length: 10 }, (_, index) => ({
+        day: 9,
+        player: `0x${String(index + 16).padStart(40, '0')}`,
+        score: String(100 - index),
+        rank: index + 1,
+      })),
+      totalWeight: '1000',
+      totalParticipants: 42,
+      player: { day: 9, player, score: '20', rank: 12 },
+    },
     consolation: status === 'skipped' ? 5n * FLIP : 0n,
   });
 }
@@ -57,8 +69,25 @@ describe('BAF resolution model', () => {
   test('maps every contract prize lane and keeps the shares at 100%', () => {
     assert.equal(BAF_PRIZE_LANES.reduce((sum, lane) => sum + lane.share, 0), 100);
     assert.deepEqual(BAF_PRIZE_LANES.map((lane) => lane.label), [
-      'TOP SCORE', 'TOP DAILY FLIP', 'CUT SURVIVOR', 'FUTURE DRAWS', 'SCATTER',
+      'TOP SCORE', 'FINAL-DAY DRAW', 'CUT SURVIVOR', 'FUTURE DRAWS', 'SCATTER',
     ]);
+  });
+
+  test('the weighted draw keeps the top ten, the viewed player, and the remainder honest', () => {
+    const snapshot = model();
+    assert.equal(snapshot.draw.entries.length, 10);
+    assert.deepEqual(snapshot.draw.player, {
+      day: 9,
+      player: PLAYER_4,
+      score: '20',
+      rank: 12,
+    });
+    const allocation = buildBafDrawAllocation(snapshot.draw, PLAYER_4);
+    assert.equal(allocation.entries.filter((entry) => entry.kind === 'leader').length, 10);
+    assert.equal(allocation.entries.find((entry) => entry.kind === 'player')?.isPlayer, true);
+    assert.equal(allocation.entries.at(-1)?.kind, 'other');
+    assert.equal(allocation.entries.at(-1)?.score, '25');
+    assert.equal(allocation.entries.at(-1)?.endPpm, 1_000_000);
   });
 
   test('rank four survives, rank three is killed, and the player payout is retained', () => {
@@ -90,6 +119,10 @@ describe('BAF resolution model', () => {
     __setBafResolutionFetcherForTest(async (path) => {
       paths.push(path);
       if (path.startsWith('/game/baf/')) return { status: 'closed', day: 9, rngWord: '1', awards: {} };
+      if (path.startsWith('/leaderboards/coinflip')) return {
+        entries: [], totalWeight: '1000', totalParticipants: 42,
+        player: { day: 9, player: PLAYER_4, score: '20', rank: 12 },
+      };
       if (path.startsWith('/leaderboards/')) return LEADERS;
       if (path.includes('/baf?')) return { player: PLAYER_4, level: 40, score: String(100n * FLIP), rank: 4, totalParticipants: 247, roundStatus: 'closed' };
       return { wins: [] };
@@ -97,11 +130,13 @@ describe('BAF resolution model', () => {
     try {
       const snapshot = await loadBafResolutionSnapshot({ level: 40, player: PLAYER_4 });
       assert.equal(snapshot.survivorRank, 4);
+      assert.equal(snapshot.draw.player.score, '20');
       assert.deepEqual(paths, [
         '/game/baf/40/resolution',
         '/leaderboards/baf?level=40',
         `/player/${PLAYER_4}/baf?level=40`,
         `/player/${PLAYER_4}/jackpot-history`,
+        `/leaderboards/coinflip?day=9&player=${PLAYER_4}`,
       ]);
     } finally {
       __resetBafResolutionFetcherForTest();
@@ -165,6 +200,10 @@ describe('BAF fullscreen presentation', () => {
     assert.match(css, /\.baf-res__leader\.is-eliminated::before[\s\S]*linear-gradient/s);
     assert.match(css, /@keyframes baf-res-flip-win/);
     assert.match(css, /@keyframes baf-res-flip-loss/);
+    assert.match(overlay, /BAF LOSS/);
+    assert.doesNotMatch(overlay, /BAF SKIPPED/,
+      'a losing BAF uses loss terminology in every player-facing ceremony label');
+    assert.match(css, /\.baf-res__payout\.is-loss/);
   });
 
   test('replaces the generic BAF receipt and has a live review page', () => {
@@ -190,5 +229,20 @@ describe('BAF fullscreen presentation', () => {
     assert.doesNotMatch(overlay, /LOADING BAF FINAL|baf-res__loading/);
     assert.match(overlay, /baf-res__mark[^>]*><b>BAF<\/b><small>×10<\/small>/);
     assert.match(css, /\.baf-res__pool strong\s*\{[^}]*clamp\(1\.05rem/s);
+  });
+
+  test('gives the final-day draw a Decimator-style weighted pie with top ten plus you', () => {
+    assert.match(overlay, /buildBafDrawAllocation\(draw, snapshot\.player\.address\)/);
+    assert.match(overlay, /data-bind="baf-draw-pie"/);
+    assert.match(overlay, /data-bind="baf-draw-player-percent"/);
+    assert.match(overlay, /entry\.isPlayer\) row\.classList\.add\('is-player'\)/);
+    assert.match(css, /\.baf-res__draw-ticks\s*\{[^}]*repeating-conic-gradient/s);
+    assert.match(css, /\.baf-res__draw-pie\s*\{[^}]*var\(--baf-draw-pie/s);
+    assert.match(css, /\.baf-res__draw-legend\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
+    assert.match(css, /\.baf-res__draw-legend li\.is-player\s*\{/s,
+      'the viewed player stays conspicuous even outside the top ten');
+    assert.match(css,
+      /data-stage="draw"[\s\S]*?data-stage="draw-loss"[\s\S]*?\.baf-res__weighted\s*\{[^}]*opacity:\s*1/s,
+      'the weighted instrument takes over the center after the gate resolves');
   });
 });

@@ -116,7 +116,9 @@ import {
   RECORD_KIND_LUCKBOX,
   toBigInt,
 } from '../app/records.js';
+import { boonBoostBps, boonBoostDelta } from '../app/boons.js';
 import './boon-product-indicator.js';
+import './quest-objective-indicator.js';
 
 // Wraps setInterval with .unref() in Node.js (no-op in browsers). Used for the
 // 30s poll tick so node:test processes exit cleanly when no other open handles
@@ -772,9 +774,12 @@ class AppDecimatorPanel extends HTMLElement {
           <span class="dec-input-group dec-input-group--tickets">
             <label class="dec-input-label" for="dec-tickets-input">
               <span data-bind="dec-ticket-action-label">Buy tickets</span>
+            </label>
+            <span class="dec-input-accessories" aria-label="Ticket purchase modifiers">
               <boon-product-indicator product="purchase"
                                       variant="purchase-control"></boon-product-indicator>
-            </label>
+              <quest-objective-indicator product="purchase"></quest-objective-indicator>
+            </span>
             <span class="dec-stepper">
               <span class="dec-quarter-stepper">
                 <button type="button" class="dec-quarter-step" data-dir="1"
@@ -794,9 +799,12 @@ class AppDecimatorPanel extends HTMLElement {
           <span class="dec-input-group dec-input-group--lootbox" data-bind="dec-lootbox-group">
             <label class="dec-input-label" for="dec-lootbox-eth-input">
               <span>Buy luckbox</span>
+            </label>
+            <span class="dec-input-accessories" aria-label="Luckbox purchase modifiers">
               <boon-product-indicator product="lootbox"
                                       variant="purchase-control"></boon-product-indicator>
-            </label>
+              <quest-objective-indicator product="lootbox"></quest-objective-indicator>
+            </span>
             <span class="dec-stepper">
               <input type="number" name="dec-lootbox-eth" id="dec-lootbox-eth-input"
                      class="dec-input" min="0" step="0.01" value="0"
@@ -815,7 +823,9 @@ class AppDecimatorPanel extends HTMLElement {
           <!-- No data-write on the checkbox — panel convention keeps inputs
                enabled in view mode (the Buy CTA is the gated write control). -->
           <input type="checkbox" name="dec-foil" class="dec-foil-check" data-bind="dec-foil-check">
-          <span class="dec-foil-label">Foil pack (limit 1)</span>
+          <span class="dec-foil-label">Foil pack (limit 1)
+            <quest-objective-indicator product="foil"></quest-objective-indicator>
+          </span>
           <span class="dec-foil-price" data-bind="dec-foil-price">—</span>
         </label>
 
@@ -844,6 +854,8 @@ class AppDecimatorPanel extends HTMLElement {
             <img src="/whitepaper/flame-logo-split.svg" alt="">
             <span data-bind="dec-flip-credit-label">BONUS</span>
             <strong data-bind="dec-flip-credit-total">+0 FLIP</strong>
+            <small class="dec-flip-credit__boon" data-bind="dec-purchase-boon-effect"
+                   hidden></small>
           </div>
           <!-- CF-15: data-write triggers Phase 58 view-mode disable manager. -->
           <button type="button" class="dec-buy-cta" data-write data-bind="dec-buy-cta">
@@ -877,10 +889,13 @@ class AppDecimatorPanel extends HTMLElement {
 
           <div class="dec-flip-balance" data-bind="dec-flip-balance" hidden
                aria-label="FLIP balance">
-            <button type="button" class="dec-flip-toggle dec-flip-balance__mode"
-                    data-bind="dec-funds-total-flip" aria-pressed="false" hidden>
-              USE FLIP
-            </button>
+            <span class="dec-flip-balance__action">
+              <button type="button" class="dec-flip-toggle dec-flip-balance__mode"
+                      data-bind="dec-funds-total-flip" aria-pressed="false" hidden>USE FLIP</button>
+              <quest-objective-indicator class="dec-redeem-quest"
+                                         data-quest-pointer="bottom-left"
+                                         product="redeem-flip"></quest-objective-indicator>
+            </span>
             <span class="dec-flip-balance__label">FLIP BALANCE</span>
             <strong class="dec-flip-balance__value">
               <span data-bind="dec-flip-balance-value">—</span>
@@ -1855,6 +1870,7 @@ class AppDecimatorPanel extends HTMLElement {
     });
     this.#renderFlipCredit({
       tickets: tq,
+      luckboxWei: this.#ethInputWei('dec-lootbox-eth'),
       priceWei,
       totalCostWei: totalWei,
       mintCostWei,
@@ -1918,6 +1934,24 @@ class AppDecimatorPanel extends HTMLElement {
     const box = this.querySelector('[data-bind="dec-flip-credit"]');
     if (!box) return;
     const parts = args ? purchaseFlipCreditBreakdown(args) : null;
+    const boonPayload = get('app.boons');
+    const boonEffects = [];
+    const ticketBps = boonBoostBps(boonPayload, 'purchase');
+    const ticketCount = Number(args?.tickets || 0);
+    if (ticketBps > 0 && Number.isFinite(ticketCount) && ticketCount > 0) {
+      const extraTickets = ticketCount * ticketBps / 10_000;
+      const formatted = extraTickets.toLocaleString('en-US', { maximumFractionDigits: 3 });
+      boonEffects.push(`+${formatted} ${extraTickets === 1 ? 'TICKET' : 'TICKETS'} BOON`);
+    }
+    const luckboxDelta = boonBoostDelta(args?.luckboxWei, boonPayload, 'lootbox');
+    if (luckboxDelta > 0n) {
+      boonEffects.push(`+${formatPurchaseEth(luckboxDelta)} ETH BOON`);
+    }
+    const boonEffect = this.querySelector('[data-bind="dec-purchase-boon-effect"]');
+    if (boonEffect) {
+      boonEffect.textContent = boonEffects.join(' · ');
+      boonEffect.hidden = boonEffects.length === 0;
+    }
     const bounty = parts?.bounty ?? 0n;
     const includesBounty = bounty > 0n;
     const label = this.querySelector('[data-bind="dec-flip-credit-label"]');
@@ -1938,7 +1972,7 @@ class AppDecimatorPanel extends HTMLElement {
       && args.priceWei != null
       && args.totalCostWei > 0n
       && parts
-      && parts.total > 0n
+      && (parts.total > 0n || boonEffects.length > 0)
     );
     box.hidden = !show;
     if (!show) {
@@ -1950,12 +1984,12 @@ class AppDecimatorPanel extends HTMLElement {
     if (!total) return;
     total.textContent = `+${formatPurchaseBonusFlip(parts.total)} FLIP`;
     total.classList?.toggle('is-zero', parts.total === 0n);
-    box.setAttribute(
-      'aria-label',
-      includesBounty
-        ? `Bonus total ${formatFlip(parts.total.toString())} FLIP, including ${formatFlip(bounty.toString())} FLIP from The Biggest Bounty.`
-        : `Bonus total ${formatFlip(parts.total.toString())} FLIP.`,
-    );
+    const summary = includesBounty
+      ? `Bonus total ${formatFlip(parts.total.toString())} FLIP, including ${formatFlip(bounty.toString())} FLIP from The Biggest Bounty.`
+      : `Bonus total ${formatFlip(parts.total.toString())} FLIP.`;
+    box.setAttribute('aria-label', `${summary}${boonEffects.length
+      ? ` Purchase boon: ${boonEffects.join(', ')}.`
+      : ''}`);
   }
 
   // ---------------------------------------------------------------------
@@ -3062,7 +3096,8 @@ class AppDecimatorPanel extends HTMLElement {
     const u12 = subscribeUiPreferences(({ name }) => {
       if (name === 'allInButton') this.#renderFundsFooter();
     });
-    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12);
+    const u13 = subscribe('app.boons', () => this.#updateTotalLabel());
+    this.#unsubs.push(u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13);
   }
 
   // ---------------------------------------------------------------------

@@ -62,6 +62,7 @@
 import { CHAIN } from '../app/chain-config.js';
 import { get, subscribe, getViewedAddress } from '../app/store.js';
 import { fetchJSON } from '../app/api.js';
+import './quest-objective-indicator.js';
 import {
   defaultCodeForAddress,
   buildAffiliateUrl,
@@ -155,7 +156,7 @@ class AppAffiliatePanel extends HTMLElement {
     this.innerHTML = `
       <section class="panel app-affiliate-panel">
         <header class="aff-header">
-          <h2>AFFILIATE</h2>
+          <h2>AFFILIATE <quest-objective-indicator product="affiliate"></quest-objective-indicator></h2>
         </header>
         <div class="aff-default-section">
           <p class="aff-hint">Share your link to earn commission. Works immediately — no setup required.</p>

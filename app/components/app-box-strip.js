@@ -110,12 +110,78 @@ function _firstPositiveAmount(...values) {
   return values.find((value) => value != null) ?? null;
 }
 
+function _eventOrder(row) {
+  const blockNumber = Number(row?.blockNumber ?? row?.block_number);
+  const logIndex = Number(row?.logIndex ?? row?.log_index ?? 0);
+  if (Number.isFinite(blockNumber)) {
+    return blockNumber * 1_000_000 + (Number.isFinite(logIndex) ? logIndex : 0);
+  }
+  const ord = Number(row?.ord);
+  return Number.isFinite(ord) ? ord : null;
+}
+
+/**
+ * Compatibility fallback for older indexers that exposed an index-0 purchase.
+ * Current daily afKing boxes emit only AfkingDelivered + LootBoxOpened, so the
+ * authoritative path is `afkingSpendRawWei` from `/lootbox/legs` below.
+ */
+export function applyAfkingRawPurchaseAmounts(resolvedRows, purchaseItems) {
+  const rows = (Array.isArray(resolvedRows) ? resolvedRows : []).map((row) => ({ ...row }));
+  const purchases = (Array.isArray(purchaseItems) ? purchaseItems : [])
+    .filter((item) => item?.resolvedIndex != null
+      && Number(item.resolvedIndex) === 0
+      && String(item?.kind || '').toLowerCase() === 'eth')
+    .map((item) => {
+      try {
+        const amountWei = BigInt(item?.costRawWei ?? item?.boxAmountRawWei ?? 0);
+        return amountWei > 0n
+          ? {
+              amountWei: String(amountWei),
+              order: _eventOrder(item),
+              transactionHash: String(item?.transactionHash || '').toLowerCase(),
+              used: false,
+            }
+          : null;
+      } catch (_e) {
+        return null;
+      }
+    })
+    .filter((item) => item && item.order != null)
+    .sort((a, b) => a.order - b.order);
+
+  const openings = rows
+    .map((row, index) => ({ row, index, order: _eventOrder(row) }))
+    .filter(({ row, order }) => Number(row?.index) === 0
+      && row?.rawPurchaseAmountWei == null
+      && order != null)
+    .sort((a, b) => a.order - b.order);
+
+  for (const opening of openings) {
+    const openingHash = String(opening.row?.transactionHash || '').toLowerCase();
+    let match = purchases.find((purchase) => (
+      !purchase.used && openingHash && purchase.transactionHash === openingHash
+    ));
+    if (!match) {
+      for (const purchase of purchases) {
+        if (!purchase.used && purchase.order <= opening.order
+          && (!match || purchase.order > match.order)) match = purchase;
+      }
+    }
+    if (!match) continue;
+    match.used = true;
+    rows[opening.index] = {
+      ...opening.row,
+      amountWei: match.amountWei,
+      rawPurchaseAmountWei: match.amountWei,
+    };
+  }
+  return rows;
+}
+
 function _boxLabel(box, upper = false) {
   const label = box?.hasPresaleLeg
     ? box?.hasLootboxLeg ? 'Luckbox + presale box' : 'Presale box'
-    : box?.index == null || !Number.isFinite(Number(box.index))
-      ? 'Luckbox'
-      : Number(box.index) === 0 ? 'AFKing luckbox' : 'Luckbox';
+    : 'Luckbox';
   return upper ? label.toUpperCase() : label;
 }
 
@@ -275,6 +341,11 @@ export function resolvedBoxRowsFromLegs(items, player) {
     const prior = rows.get(resultKey);
     const hasPresaleLeg = legType === 'presale';
     const hasLootboxLeg = !hasPresaleLeg;
+    let afkingSpendRawWei = prior?.rawPurchaseAmountWei ?? null;
+    try {
+      const rawDelivery = BigInt(item?.afkingSpendRawWei ?? 0);
+      if (index === 0 && rawDelivery > 0n) afkingSpendRawWei = String(rawDelivery);
+    } catch (_e) { /* malformed optional API enrichment */ }
     if (!prior || ord > prior.ord) {
       rows.set(resultKey, {
         index,
@@ -286,8 +357,15 @@ export function resolvedBoxRowsFromLegs(items, player) {
         // exact key instead of re-deriving one from a fresh anchor lookup that
         // can miss and leave the box latched resolved with nothing to show.
         resultTransactionHash: transactionHash || null,
+        blockNumber: item?.blockNumber ?? null,
+        logIndex: item?.logIndex ?? null,
+        // Daily afKing boxes do not emit LootBoxBuy. The indexer correlates
+        // their raw `AfkingDelivered.weiIn` onto the settlement leg; keep it
+        // separate so it also repairs an older cached EV-scaled chip amount.
+        rawPurchaseAmountWei: afkingSpendRawWei,
         amountWei: String(
-          item?.rewardData?.amount
+          afkingSpendRawWei
+          ?? item?.rewardData?.amount
           ?? item?.boxAmountRawWei
           ?? item?.amount
           ?? 0,
@@ -719,8 +797,18 @@ class AppBoxStrip extends HTMLElement {
       // Keep the calls independent: an old/mid-deploy API can serve one route
       // correctly while the other is temporarily unavailable.
       const [feedCall, legsCall] = await Promise.allSettled([
-        fetchJSON(`/lootbox/feed?limit=200&player=${encodeURIComponent(owner)}`),
-        fetchJSON(`/lootbox/legs?limit=200&player=${encodeURIComponent(owner)}`),
+        // This seven-second loop detects a one-way indexing transition. A
+        // transaction-triggered cycle can run less than a second before the
+        // indexer catches up, so completed render-wave responses are stale by
+        // definition here. In-flight requests remain shared.
+        fetchJSON(
+          `/lootbox/feed?limit=200&player=${encodeURIComponent(owner)}`,
+          { force: true },
+        ),
+        fetchJSON(
+          `/lootbox/legs?limit=200&player=${encodeURIComponent(owner)}`,
+          { force: true },
+        ),
       ]);
       if (this.#addr !== owner) return;
       const response = feedCall.status === 'fulfilled' ? feedCall.value : null;
@@ -768,7 +856,10 @@ class AppBoxStrip extends HTMLElement {
 
       const local = new Map(this.#boxes.map((box) => [_boxKey(box), box]));
       const tracked = new Set(local.keys());
-      const resolvedRows = resolvedBoxRowsFromLegs(legsResponse?.items, owner);
+      const resolvedRows = applyAfkingRawPurchaseAmounts(
+        resolvedBoxRowsFromLegs(legsResponse?.items, owner),
+        response?.items,
+      );
       const resolvedByKey = new Map(resolvedRows.map((row) => [_boxKey(row), row]));
 
       // If receipt parsing could not recover the index, the indexed purchase
@@ -818,6 +909,7 @@ class AppBoxStrip extends HTMLElement {
             ].filter(Boolean).map((hash) => String(hash).toLowerCase()))],
             amountWei: _firstPositiveAmount(
               feed?.amountWei,
+              settled.rawPurchaseAmountWei,
               prior?.amountWei,
               settled.amountWei,
             ),
@@ -872,6 +964,7 @@ class AppBoxStrip extends HTMLElement {
           ].filter(Boolean).map((hash) => String(hash).toLowerCase()))],
           amountWei: _firstPositiveAmount(
             feed?.amountWei,
+            settled.rawPurchaseAmountWei,
             prior?.amountWei,
             settled.amountWei,
           ),
@@ -1160,7 +1253,13 @@ class AppBoxStrip extends HTMLElement {
       // carry those reels. Merging both shapes preserves every spin.
       const base = `/lootbox/legs?limit=200&player=${encodeURIComponent(this.#addr)}`;
       const [exactCall, recentCall] = await Promise.allSettled([
-        fetchJSON(`${base}&lootboxIndex=${encodeURIComponent(box.index)}`),
+        // This exact row is the settlement catch-up probe. The prior empty
+        // result is precisely what put the box in resultSyncing, so it must not
+        // be reused from the short render cache on the next recovery cycle.
+        fetchJSON(
+          `${base}&lootboxIndex=${encodeURIComponent(box.index)}`,
+          { force: true },
+        ),
         fetchJSON(base),
       ]);
       const rows = _mergeLegRows(
@@ -1457,9 +1556,9 @@ class AppBoxStrip extends HTMLElement {
         ? 'OPENING…'
         : box.ready ? box.resolved ? 'VIEW RESULT' : `OPEN ${_boxLabel(box, true)}` : 'RNG PENDING';
       cta.setAttribute('aria-label', box.ready
-        ? Number(box.index) === 0
-          ? `${box.resolved ? 'View result for' : 'Open'} AFKing luckbox`
-          : `${box.resolved ? 'View result for' : 'Open'} luckbox ${box.index}`
+        ? Number(box.index) > 0
+          ? `${box.resolved ? 'View result for' : 'Open'} luckbox ${box.index}`
+          : `${box.resolved ? 'View result for' : 'Open'} luckbox`
         : `${_boxLabel(box)} waiting for RNG`);
       if (box.ready && !box.opening) {
         cta.addEventListener('click', () => this.#onOpenClick(box));

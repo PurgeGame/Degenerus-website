@@ -4,13 +4,16 @@ import assert from 'node:assert/strict';
 import {
   AFKING_LOW_FUND_WARNING_STORAGE_KEY,
   ALL_IN_BUTTON_STORAGE_KEY,
+  BIGGEST_BOUNTIES_MODE_STORAGE_KEY,
   REVEAL_AUTO_OPEN_STORAGE_KEY,
   readAfkingLowFundWarningPreference,
   readAllInButtonPreference,
+  readBiggestBountiesModePreference,
   readRevealAutoOpenPreference,
   subscribeUiPreferences,
   writeAfkingLowFundWarningPreference,
   writeAllInButtonPreference,
+  writeBiggestBountiesModePreference,
   writeRevealAutoOpenPreference,
 } from '../ui-preferences.js';
 
@@ -54,6 +57,25 @@ describe('shared UI preferences', () => {
     assert.equal(localStorage.getItem(AFKING_LOW_FUND_WARNING_STORAGE_KEY), '0');
     assert.equal(readAfkingLowFundWarningPreference(), false);
     assert.deepEqual(seen.at(-1), { name: 'afkingLowFundWarning', value: false });
+    unsubscribe();
+  });
+
+  test('Biggest Bounties defaults clickable, supports view-only, and can be hidden', () => {
+    const seen = [];
+    const unsubscribe = subscribeUiPreferences((detail) => seen.push(detail));
+    assert.equal(readBiggestBountiesModePreference(), 'on');
+
+    assert.equal(writeBiggestBountiesModePreference('view'), 'view');
+    assert.equal(localStorage.getItem(BIGGEST_BOUNTIES_MODE_STORAGE_KEY), 'view');
+    assert.equal(readBiggestBountiesModePreference(), 'view');
+    assert.deepEqual(seen.at(-1), { name: 'biggestBountiesMode', value: 'view' });
+
+    assert.equal(writeBiggestBountiesModePreference('off'), 'off');
+    assert.equal(readBiggestBountiesModePreference(), 'off');
+    assert.deepEqual(seen.at(-1), { name: 'biggestBountiesMode', value: 'off' });
+
+    assert.equal(writeBiggestBountiesModePreference('unexpected'), 'on');
+    assert.equal(readBiggestBountiesModePreference(), 'on');
     unsubscribe();
   });
 });

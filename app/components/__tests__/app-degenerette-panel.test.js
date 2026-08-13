@@ -587,6 +587,21 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     assert.match(FLIP_LOGO_SRC, /fill="#ed0e11"/,
       'the FLIP mark uses the exact red WWXRP ring color');
     assert.match(PANEL_SRC, /\/shared\/coinflip-face-red\.svg/);
+    assert.match(
+      APP_CSS,
+      /\.deg-currency-option boon-product-indicator\s*\{[^}]*animation:\s*none;[^}]*box-shadow:\s*none;[^}]*filter:\s*none;/s,
+      'the applied Degenerette boon keeps only the arrow-shaped glow, not a square host glow',
+    );
+    assert.match(
+      APP_CSS,
+      /\.deg-currency-option boon-product-indicator::after\s*\{[^}]*display:\s*none;/s,
+      'the Degenerette boon arrow does not repeat the currency badge already shown by its option',
+    );
+    assert.doesNotMatch(
+      APP_CSS,
+      /:is\([^)]*\.deg-currency-option[^)]*\)\.has-active-boon/s,
+      'an active Degenerette arrow does not add a second square outline around the currency tile',
+    );
     const placeAt = PANEL_SRC.indexOf('class="deg-place-cta"', wagerAt);
     const wagerEnd = PANEL_SRC.indexOf('</section>', wagerAt);
     assert.ok(placeAt > wagerAt && placeAt < wagerEnd,
@@ -748,6 +763,27 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
     spins.dispatchEvent({ type: 'change' });
     assert.equal(el.querySelector('[data-bind="deg-place-cta"]').textContent,
       'Place Bet · 375 FLIP');
+    el.disconnectedCallback();
+  });
+
+  test('Place Bet names the concrete boosted wager from its active currency boon', () => {
+    storeMod.update('app.boons', {
+      address: CONNECTED.toLowerCase(),
+      day: 62,
+      exact: true,
+      boons: [{ boonType: 34, consumed: false }],
+    });
+    const el = instantiate();
+    const amount = el.querySelector('[name="deg-amount"]');
+    const spins = el.querySelector('[name="deg-ticket-count"]');
+    amount.value = '1';
+    amount.dispatchEvent({ type: 'input' });
+    spins.value = '2';
+    spins.dispatchEvent({ type: 'change' });
+    const place = el.querySelector('[data-bind="deg-place-cta"]');
+    assert.equal(place.textContent, 'Place Bet · 2 ETH');
+    assert.equal(place.getAttribute('data-boon-effect'), '+0.24 ETH BOON');
+    assert.match(place.getAttribute('aria-label'), /plus 0\.24 ETH from your boon/);
     el.disconnectedCallback();
   });
 
@@ -1585,6 +1621,211 @@ describe('Plan 62-03: <app-degenerette-panel> Custom Element', () => {
       'the widget no longer mounts a duplicate result summary');
   });
 
+  test('record bounties split from Luckbox spin types without changing types 0-2', async () => {
+    const { partitionDegeneretteRewardLegs } = await import('../app-degenerette-panel.js');
+    const legs = [
+      { legType: 'spin', spinType: 'wwxrp' },
+      { legType: 'spin', spinType: 'flip' },
+      { legType: 'spin', spinType: 'eth' },
+      { legType: 'spin', spinType: 'record' },
+      { legType: 'spin', spinType: 'unknown_3' },
+    ];
+
+    const split = partitionDegeneretteRewardLegs(legs);
+    assert.deepEqual(split.lootboxLegs.map((leg) => leg.spinType), ['wwxrp', 'flip', 'eth']);
+    assert.deepEqual(split.recordBountySpins.map((leg) => leg.spinType), ['record', 'unknown_3']);
+  });
+
+  test('a new placement invalidates an older in-flight result and luckbox replay', () => {
+    assert.match(
+      PANEL_SRC,
+      /#resolutionGeneration \+= 1;[\s\S]*?#cancelRngPoll\(\);[\s\S]*?await placeBet\(\{/,
+      'placement takes ownership before waiting on the wallet transaction',
+    );
+    assert.match(
+      PANEL_SRC,
+      /#replayIndexedResolution\([\s\S]*?resolutionGeneration = this\.#resolutionGeneration[\s\S]*?const stillCurrent = \(\) => resolutionGeneration === this\.#resolutionGeneration/,
+      'every asynchronous replay captures the placement generation',
+    );
+    assert.match(
+      PANEL_SRC,
+      /#finishResolvedBet\([\s\S]*?resolutionGeneration = this\.#resolutionGeneration[\s\S]*?if \(resolutionGeneration !== this\.#resolutionGeneration\) return false;/,
+      'a stale replay cannot queue either its reels or its attached box',
+    );
+  });
+
+  test('an indexed resolved row cannot reveal while that exact bet is still live on-chain', async () => {
+    const packed = BigInt(readyFeedItem().packedData);
+    const payout = 5n * 10n ** 16n;
+    useDegeneretteFeed(readyFeedItem({
+      results: [
+        {
+          resultType: 'resolved',
+          transactionHash: '0xstale',
+          payout: String(payout),
+          resultData: {
+            spinCount: 1,
+            totalPayout: String(payout),
+            resultTraits: '13',
+          },
+        },
+        {
+          resultType: 'result',
+          payout: String(payout),
+          resultData: { spinIndex: 0, playerTraits: '13', matches: 4 },
+        },
+      ],
+      lootboxPayouts: [{
+        rewardType: 'opened',
+        rewardData: { amount: '1', futureLevel: 8, futureTickets: 1, flip: '0' },
+      }],
+    }));
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      placeDegeneretteBet: Object.assign(
+        async (...args) => makeFakeTx(makeFakeReceipt([{
+          parsed: {
+            name: 'BetPlaced',
+            args: { player: args[0], index: 7n, betId: 42n, packed },
+          },
+        }])),
+        { staticCall: async () => undefined },
+      ),
+      degeneretteBetInfo: async () => packed,
+      resolveDegeneretteBets: Object.assign(
+        async () => makeFakeTx(makeFakeReceipt()),
+        { staticCall: async () => undefined },
+      ),
+      interface: { parseLog: (log) => log.parsed ?? null },
+      connect() { return this; },
+    }));
+
+    const el = instantiate();
+    await settle(30);
+    el.querySelector('[name="deg-amount"]').value = '0.01';
+    el.querySelector('.deg-place-cta').dispatchEvent({ type: 'click' });
+    await settle(100);
+
+    assert.deepEqual(revealMod.__takeQueuedForTest(), [],
+      'neither stale reels nor their stale luckbox enter the queue');
+    assert.ok(pendingActionsMod.getPendingActions().some((item) => item.id === 'degenerette:42'),
+      'the real live bet remains pending');
+    el.disconnectedCallback();
+  });
+
+  test('a bounty placement suppresses an older result already waiting on RPC', async () => {
+    const storageKey = `pending-degenerette:${CHAIN.id}:${CHAIN.deployBlock}:${CONNECTED.toLowerCase()}`;
+    const oldBetId = 41n;
+    const newBetId = 42n;
+    const packed = 13n | (1n << 32n) | ((10n ** 10n) << 42n);
+    localStorage.setItem(storageKey, JSON.stringify({
+      betId: String(oldBetId),
+      index: '7',
+      currency: 0,
+      amountPerSpin: String(10n ** 10n),
+      spinCount: 1,
+      hero: 0,
+      ticket: '13',
+    }));
+
+    let releaseReplay;
+    const replayGate = new Promise((resolve) => { releaseReplay = resolve; });
+    let replayReads = 0;
+    let placeCalls = 0;
+    contractsMod.setProvider({
+      ...makeFakeProvider(CONNECTED),
+      getBlockNumber: async () => 5_000,
+      getTransactionReceipt: async () => makeFakeReceipt([]),
+    });
+    degeneretteMod.__setContractFactoryForTest(() => ({
+      placeDegeneretteBet: Object.assign(
+        async (...args) => {
+          placeCalls += 1;
+          return makeFakeTx(makeFakeReceipt([{
+            parsed: {
+              name: 'BetPlaced',
+              args: { player: args[0], index: 8n, betId: newBetId, packed },
+            },
+          }]));
+        },
+        { staticCall: async () => undefined },
+      ),
+      claimableWinningsOf: async () => 1n,
+      degeneretteBetInfo: async (_player, betId) => (
+        BigInt(betId) === oldBetId ? 0n : packed
+      ),
+      resolveDegeneretteBets: Object.assign(
+        async () => makeFakeTx(makeFakeReceipt()),
+        { staticCall: async () => undefined },
+      ),
+      filters: {
+        DegeneretteResolved: (_player, betId) => ({ event: 'resolved', betId }),
+        DegeneretteResult: (_player, betId) => ({ event: 'result', betId }),
+      },
+      queryFilter: async (filter) => {
+        replayReads += 1;
+        await replayGate;
+        if (filter.event === 'resolved') {
+          return [{
+            args: {
+              player: CONNECTED,
+              betId: oldBetId,
+              spinCount: 1n,
+              totalPayout: 5n * 10n ** 16n,
+              resultTraits: 13n,
+            },
+            transactionHash: '0xold-result',
+          }];
+        }
+        return [{
+          args: {
+            player: CONNECTED,
+            betId: oldBetId,
+            spinIndex: 0n,
+            playerTraits: 13n,
+            matches: 4n,
+            payout: 5n * 10n ** 16n,
+          },
+        }];
+      },
+      interface: { parseLog: (log) => log.parsed ?? null },
+      connect() { return this; },
+    }));
+    useDegeneretteFeed(readyFeedItem({
+      betId: String(oldBetId),
+      packedData: String(packed),
+      results: [{
+        resultType: 'resolved',
+        resultData: { spinCount: 1, totalPayout: '1', resultTraits: '13' },
+      }],
+    }));
+
+    const el = instantiate();
+    await settle(40);
+    assert.ok(replayReads >= 2, 'the older result is already inside its chain replay');
+
+    document.dispatchEvent(new CustomEvent('quest:activate', {
+      detail: {
+        questType: 7,
+        target: String(10n ** 10n),
+        amountPerSpin: String(10n ** 10n),
+        spinCount: 1,
+        preferClaimable: true,
+        variant: 'bounty',
+        submit: true,
+      },
+    }));
+    await settle(40);
+    assert.equal(placeCalls, 1, 'the new bounty spin owns the panel');
+
+    releaseReplay();
+    await settle(100);
+    assert.deepEqual(revealMod.__takeQueuedForTest(), [],
+      'the late older result cannot enqueue reels or an extra box');
+    assert.ok(pendingActionsMod.getPendingActions().some((item) => item.id === 'degenerette:42'),
+      'the bounty spin remains the active pending bet');
+    el.disconnectedCallback();
+  });
+
   test('a DB-recovered Degenerette box has a stable identity before transaction metadata arrives', async () => {
     const { degeneretteLootboxPresentationId } = await import('../app-degenerette-panel.js');
     assert.equal(
@@ -2345,6 +2586,25 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
               flip: '0',
               roundedUp: false,
             },
+          }, {
+            rewardType: 'BoxSpin',
+            blockNumber: '5001',
+            transactionHash: '0xdegenerettebox',
+            logIndex: 18,
+            lootboxIndex: null,
+            rewardData: {
+              betId: String((1n << 63n) | (3n << 60n) | 101n),
+              spinType: 'record',
+              spinCount: 3,
+              survived: false,
+              payout: '0',
+              ethShare: '0',
+              reels: [
+                { spinIndex: 0, playerTicket: '1', resultTicket: '2', score: 0 },
+                { spinIndex: 1, playerTicket: '3', resultTicket: '4', score: 2 },
+                { spinIndex: 2, playerTicket: '5', resultTicket: '6', score: 1 },
+              ],
+            },
           }],
         })],
       };
@@ -2396,7 +2656,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
 
     assert.equal(resolveWrites, 0, 'the cleared slot never opens a second wallet transaction');
     assert.ok(feedCalls >= 6, 'the clicked action keeps following the exact bet until its spins arrive');
-    const [sequence, lootboxSequence] = revealMod.__takeQueuedForTest();
+    const [sequence, recordSequence, lootboxSequence] = revealMod.__takeQueuedForTest();
     assert.equal(sequence?.kind, 'degenerette');
     assert.equal(sequence?.betId, '42');
     assert.equal(sequence?.spins?.length, 1);
@@ -2404,6 +2664,14 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       'the spin result visibly records its recirculated lootbox win');
     assert.equal(sequence?.lootboxEth, 3n * 10n ** 16n,
       'the direct opened leg is retained for the actual-ETH/lootbox-ETH split');
+    assert.equal(recordSequence?.kind, 'record-bounty');
+    assert.equal(recordSequence?.spin?.spinType, 'record');
+    assert.equal(recordSequence?.spin?.payout, 0n,
+      'a zero final payout cannot suppress the authored record-bounty reels');
+    const normalizedRecord = revealMod.normalizeSequence(recordSequence);
+    assert.equal(normalizedRecord?.noVessel, true,
+      'the record bounty goes straight to its reel board without a Luckbox case');
+    assert.equal(normalizedRecord?.spinBoard?.rows?.length, 3);
     assert.equal(lootboxSequence?.kind, 'lootbox');
     assert.equal(lootboxSequence?.title, 'DEGENERETTE LUCKBOX');
     assert.equal(lootboxSequence?.settledExpected, true,
@@ -2417,7 +2685,7 @@ describe('Task #11: <app-degenerette-panel> ticket picker + overlay results', ()
       transactionHash: '0xdegenerettebox',
     }, 'the direct box and pending tray share one settlement identity');
     assert.deepEqual(lootboxSequence?.legs?.map((leg) => leg.legType), ['opened'],
-      'the already-settled box remains directly behind the Degenerette result');
+      'types 0-2 and real opened rewards remain in the genuine Luckbox sequence');
     assert.equal(el.querySelector('.deg-error').hidden, true,
       'indexing lag is not presented as a failed resolve');
     assert.equal(pendingActionsMod.getPendingActions().length, 0,

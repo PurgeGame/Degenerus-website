@@ -27,7 +27,11 @@
 import { ethers, getProvider } from './contracts.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
 import { dgnUnpackTicket } from './dgn-traits.js';
-import { boonTypePresentation, decodePackedBoons } from './boons.js';
+import {
+  boonTypePresentation,
+  boonVisualForProduct,
+  decodePackedBoons,
+} from './boons.js';
 import { readExactBoonState } from './polling.js';
 
 // Minimal open-receipt event ABI — parse-only (no writes here; openLootBox
@@ -44,7 +48,7 @@ export const OPEN_EVENTS_ABI = [
 ];
 const OPEN_CALL_ABI = ['function openBox(address player, uint48 index)'];
 
-const SPIN_TYPES = ['wwxrp', 'flip', 'eth'];
+const SPIN_TYPES = ['wwxrp', 'flip', 'eth', 'record'];
 const BOX_BET_ID_SENTINEL = 1n << 63n;
 const BOX_BET_ID_ENTROPY_MASK = (1n << 60n) - 1n;
 const BOX_SPIN_TAGS = [
@@ -284,6 +288,59 @@ export function lootboxRewardPresentation(
   };
 }
 
+function _boonTierFromValue(value, tiers) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  if (amount >= tiers[2]) return 3;
+  if (amount >= tiers[1]) return 2;
+  return 1;
+}
+
+/**
+ * Product emblem and relative amount tier for a compact LootBoxReward leg.
+ * Exact boonType wins. Older/shared events fall back to the most specific
+ * product the event actually proves instead of inventing a currency or tier.
+ */
+export function lootboxRewardVisual(
+  rewardType,
+  amount,
+  { boonBps = null, boonType = null } = {},
+) {
+  if (boonType != null) return boonTypePresentation(boonType);
+  const type = Number(rewardType);
+  const raw = _rewardAmount(amount);
+  const bpsPct = Number(_bpsPercent(boonBps) ?? _bpsPercent(raw));
+  if (type === 2) {
+    return boonVisualForProduct('coinflip', _boonTierFromValue(bpsPct, [5, 10, 25]));
+  }
+  if (type >= 4 && type <= 6) {
+    // Reward IDs 4/5/6 share Luckbox and Ticket outcomes. Enrichment normally
+    // attaches the exact boonType; the chest is the honest generic fallback.
+    return boonVisualForProduct('lootbox', type - 3);
+  }
+  if (type === 8) {
+    return boonVisualForProduct('decimator', _boonTierFromValue(bpsPct, [10, 25, 50]));
+  }
+  if (type === 9) {
+    return boonVisualForProduct('whale', _boonTierFromValue(bpsPct, [10, 20, 35]));
+  }
+  if (type === 10) {
+    if (raw > 0n && raw < 100n) {
+      return boonVisualForProduct('activity', _boonTierFromValue(Number(raw), [10, 25, 50]));
+    }
+    return boonVisualForProduct('deity', _boonTierFromValue(bpsPct, [10, 20, 35]));
+  }
+  if (type === 11) {
+    return boonVisualForProduct('lazy', _boonTierFromValue(bpsPct, [10, 25, 50]));
+  }
+  if (type === 12) return boonVisualForProduct('quests', 0, 'utility');
+  if (type === 13) {
+    const rolledType = Number(raw);
+    if (rolledType >= 32 && rolledType <= 40) return boonTypePresentation(rolledType);
+  }
+  return boonVisualForProduct('unknown');
+}
+
 const COINFLIP_BOON_BPS = Object.freeze({ 1: 500, 2: 1_000, 3: 2_500 });
 const SHARED_BOON_TYPES = Object.freeze({
   4: [5, 7],
@@ -353,7 +410,9 @@ export function decodeBoxSpin(betId, packed) {
   const typeCode = Number((id >> 60n) & 0x7n);
   const spinType = SPIN_TYPES[typeCode] ?? `unknown_${typeCode}`;
   const spinCount = Number((p >> COUNT_SHIFT) & 0xFFn);
-  const survived = spinType === 'flip' ? ((p >> SURVIVED_SHIFT) & 1n) === 1n : null;
+  const survived = spinType === 'flip' || spinType === 'record'
+    ? ((p >> SURVIVED_SHIFT) & 1n) === 1n
+    : null;
   const reels = [];
   for (let i = 0; i < spinCount && i < 3; i++) {
     const chunk = p >> (BigInt(i) * SPIN_STRIDE);

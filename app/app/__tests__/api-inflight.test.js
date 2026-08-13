@@ -54,6 +54,72 @@ test('identical concurrent JSON reads share one network request', async () => {
   ]);
 });
 
+test('one tab admits only three distinct personalized reads at once', async () => {
+  const cooldown = await import('../api-cooldown.js');
+  cooldown.clearApiCooldown();
+  let calls = 0;
+  const finishes = [];
+  globalThis.fetch = () => {
+    calls += 1;
+    return new Promise((resolve) => {
+      finishes.push(() => resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      }));
+    });
+  };
+
+  const requests = Array.from({ length: 6 }, (_, index) => (
+    api.fetchJSON(`/player/0x${String(index + 1).padStart(40, '0')}/boons/1`)
+  ));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 3, 'the remaining address-scoped reads wait client-side');
+
+  for (let expected = 4; expected <= 6; expected += 1) {
+    finishes.shift()();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls, expected, 'each completion admits exactly one queued read');
+  }
+  for (const finish of finishes.splice(0)) finish();
+  await Promise.all(requests);
+});
+
+test('shared reads bypass a full personalized lane', async () => {
+  const cooldown = await import('../api-cooldown.js');
+  cooldown.clearApiCooldown();
+  const finishes = [];
+  const urls = [];
+  globalThis.fetch = (url) => {
+    urls.push(String(url));
+    return new Promise((resolve) => {
+      finishes.push(() => resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      }));
+    });
+  };
+
+  const personal = Array.from({ length: 4 }, (_, index) => (
+    api.fetchJSON(`/player/0x${String(index + 10).padStart(40, '0')}`)
+  ));
+  const shared = api.fetchJSON('/game/state');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(urls.length, 4);
+  assert.ok(urls.some((url) => url.endsWith('/game/state')), 'shared state starts immediately');
+  assert.equal(
+    urls.filter((url) => url.includes('/player/')).length,
+    3,
+    'the fourth personalized read remains queued',
+  );
+
+  for (const finish of finishes.splice(0)) finish();
+  await new Promise((resolve) => setImmediate(resolve));
+  for (const finish of finishes.splice(0)) finish();
+  await Promise.all([...personal, shared]);
+});
+
 test('failed requests leave the in-flight cache and retry immediately', async () => {
   let calls = 0;
   globalThis.fetch = async () => {
@@ -161,10 +227,9 @@ test('transaction invalidation bypasses the recent-response window', async () =>
   assert.equal(calls, 2);
 });
 
-// The point of hoisting the cooldown into api-cooldown.js: the two REST clients
-// are separate, but backpressure is not. Before this, a 503 stopped the timers
-// in polling.js while every panel kept knocking through api.js on its own
-// schedule — half the app ignoring what the API told the other half.
+// The point of hoisting the cooldown into api-cooldown.js: all broker consumers
+// share backpressure. Before this, a 503 stopped the timers in polling.js while
+// every panel kept knocking through api.js on its own schedule.
 test('a shed response through api.js also gates polling.js reads', async () => {
   const cooldown = await import('../api-cooldown.js');
   const polling = await import('../polling.js');
@@ -192,10 +257,86 @@ test('a shed response through api.js also gates polling.js reads', async () => {
   assert.equal(cooldown.cooldownUntil(), 0);
 });
 
+test('a personalized capacity shed pauses wallet reads without pausing shared state', async () => {
+  const cooldown = await import('../api-cooldown.js');
+  cooldown.clearApiCooldown();
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return {
+        ok: false,
+        status: 503,
+        headers: {
+          get(name) {
+            const key = String(name).toLowerCase();
+            if (key === 'x-load-shed') return 'capacity';
+            if (key === 'x-capacity-lane') return 'personalized';
+            if (key === 'retry-after') return '1';
+            return null;
+          },
+        },
+        json: async () => ({}),
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({ shared: true }) };
+  };
+
+  const first = '0x1111111111111111111111111111111111111111';
+  const second = '0x2222222222222222222222222222222222222222';
+  await assert.rejects(() => api.fetchJSON(`/player/${first}`), /API 503/);
+  assert.equal(cooldown.isCoolingDown('global'), false);
+  assert.equal(cooldown.isCoolingDown('personalized'), true);
+
+  assert.deepEqual(await api.fetchJSON('/game/state'), { shared: true });
+  await assert.rejects(() => api.fetchJSON(`/player/${second}`), /cooling down/);
+  assert.equal(calls, 2, 'the second wallet read was rejected before the network');
+  cooldown.clearApiCooldown();
+});
+
 test('a 500 is not backpressure and does not gate anything', async () => {
   const cooldown = await import('../api-cooldown.js');
   cooldown.clearApiCooldown();
   globalThis.fetch = async () => ({ ok: false, status: 500, json: async () => ({}) });
   await assert.rejects(() => api.fetchJSON('/game/state'), /API 500/);
   assert.equal(cooldown.isCoolingDown(), false, '500 is a bug, not a request to stop');
+});
+
+test('a recovered personalized read resets an expired global backoff ladder', async () => {
+  const cooldown = await import('../api-cooldown.js');
+  cooldown.clearApiCooldown();
+  const realNow = Date.now;
+  const realRandom = Math.random;
+  let now = 50_000;
+  let calls = 0;
+  Date.now = () => now;
+  Math.random = () => 0.5;
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 2) {
+      return { ok: true, status: 200, json: async () => ({ recovered: true }) };
+    }
+    return {
+      ok: false,
+      status: 503,
+      headers: { get: () => null },
+      json: async () => ({}),
+    };
+  };
+
+  try {
+    await assert.rejects(() => api.fetchJSON('/game/state'), /API 503/);
+    assert.equal(cooldown.cooldownUntil() - now, 2_000);
+    now += 2_001;
+    assert.deepEqual(
+      await api.fetchJSON('/player/0x1111111111111111111111111111111111111111'),
+      { recovered: true },
+    );
+    await assert.rejects(() => api.fetchJSON('/game/jackpot/gold-rush'), /API 503/);
+    assert.equal(cooldown.cooldownUntil() - now, 2_000, 'the global ladder restarted at step one');
+  } finally {
+    Date.now = realNow;
+    Math.random = realRandom;
+    cooldown.clearApiCooldown();
+  }
 });

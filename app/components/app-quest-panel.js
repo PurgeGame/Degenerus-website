@@ -29,8 +29,8 @@
 //          AbortController-per-cycle + visibility-aware foreground re-poll.
 //   CF-07: T-58-18 — server-derived strings (questName / progress / target /
 //          streak / completion flags) rendered via .textContent NOT innerHTML.
-//   Completion feedback stays inside the quest area: one short chime and a
-//   small card pulse only when a live false → true transition is observed.
+//   Completion feedback is one short chime, a small card pulse, and a compact
+//   lower-screen toast only when a live false → true transition is observed.
 //
 // Class palette: .qst-* prefix (RESEARCH R10 verified non-colliding against
 // existing 14 prefixes: app/cf/chain/clm/dec/deg/jp/last/lbx/ldj/pass/player/
@@ -68,8 +68,17 @@ function _setIntervalUnref(fn, ms) {
   return h;
 }
 
+function _setTimeoutUnref(fn, ms) {
+  const h = setTimeout(fn, ms);
+  if (h && typeof h.unref === 'function') {
+    try { h.unref(); } catch (_) { /* defensive */ }
+  }
+  return h;
+}
+
 const POLL_INTERVAL_MS = 30_000;       // Phase 56 D-04 / Phase 61 D-04 LOCKED.
 const VISIBILITY_RESUME_GATE_MS = 1000; // ≥1s elapsed since last fetch → re-poll on foreground.
+const QUEST_COMPLETE_TOAST_MS = 4000;
 
 // /player/:address returns the FULL quest history (one row per slot per day).
 // The daily panel only shows the current day's slots, so format + day-filter
@@ -136,30 +145,45 @@ function _fmtDailyQuestAmount(questType, raw) {
 // type 0, and MINT_FLIP is 9. Types 4 (FOIL) and 9 were missing entirely, so a foil-pack
 // day or a redeem-window day rendered "Unknown" as its bonus quest.
 const QUEST_TYPE_LABELS = {
-  1: 'Buy Tickets or Luckbox',
+  1: 'Buy a Ticket or Luckbox',
   2: 'Coinflip',
-  3: 'Affiliate',
-  4: 'Foil pack',
+  3: 'Referral',
+  4: 'Buy Foil Pack',
   5: 'Decimator',
-  6: 'Luckbox',
+  6: 'Buy Luckbox',
   7: 'Degenerette (ETH)',
   8: 'Degenerette (FLIP)',
   9: 'Redeem FLIP',
 };
 
-// Compact, font-native marks keep the quest board game-like without adding an
-// image request per slot. Values are static and only selected by questType.
-const QUEST_TYPE_ICONS = {
-  1: 'Ξ',
-  2: '◐',
-  3: '↗',
-  4: '✦',
-  5: '10×',
-  6: '◆',
-  7: 'D',
-  8: 'D',
-  9: 'F',
-};
+// Purpose-built product art replaces the old font glyphs. The icon tile still
+// owns its dimensions, so richer artwork never changes a quest card's layout.
+const QUEST_TYPE_ICONS = Object.freeze({
+  1: '/app/assets/quests/buy-ticket-luckbox.svg',
+  2: '/whitepaper/flame-logo-split.svg',
+  3: '/app/assets/quests/affiliate.svg',
+  4: '/app/assets/quests/foil-pack.svg',
+  5: '/app/assets/decimator-draw-mark.svg',
+  6: '/app/assets/quests/luckbox.svg',
+  7: '/app/assets/quests/degenerette-eth.svg',
+  8: '/app/assets/quests/degenerette-flip.svg',
+  9: '/app/assets/quests/redeem-flip.svg',
+});
+
+function _paintQuestIcon(host, icon) {
+  if (!host) return;
+  const source = String(icon || '');
+  host.textContent = '';
+  if (!source.startsWith('/')) {
+    host.textContent = source || '?';
+    return;
+  }
+  const image = document.createElement('img');
+  image.src = source;
+  image.alt = '';
+  image.setAttribute('aria-hidden', 'true');
+  host.appendChild(image);
+}
 
 // Every setup-oriented quest has a matching form listener. Affiliate rewards
 // are earned by other players' purchases, so there is no honest amount field
@@ -420,14 +444,21 @@ class AppQuestPanel extends HTMLElement {
   #questDialogReturnFocus = null;
   #questCompletionIdentity = null;
   #questCompletionState = new Map();
+  #questCompletionToastQueue = [];
+  #questCompletionToastTimer = null;
+  #questCompletionToastCurrent = null;
+  #questCompletionToastSeen = new Set();
   #streakDisplayIdentity = null;
   #lastRenderedStreak = null;
+  #questCards = [];
+  #questShortcutListener = null;
 
   connectedCallback() {
     if (this.#initialized) return;
     this.#initialized = true;
     this.#renderShell();
     this.#wireQuestDialog();
+    this.#wireQuestShortcut();
     this.#wireVisibilityRePoll();
     this.#wireStoreSubscriptions();
     this.#startPolling();
@@ -438,6 +469,13 @@ class AppQuestPanel extends HTMLElement {
   disconnectedCallback() {
     this.#closeQuestDialog({ restoreFocus: false });
     update('ui.foilQuest', null);
+    update('ui.questObjectives', null);
+    if (this.#questShortcutListener && typeof document !== 'undefined') {
+      try { document.removeEventListener?.('quest:open', this.#questShortcutListener); }
+      catch (_e) { /* defensive */ }
+    }
+    this.#questShortcutListener = null;
+    this.#questCards = [];
     if (this.#pollHandle != null) {
       try { clearInterval(this.#pollHandle); } catch (_) { /* defensive */ }
       this.#pollHandle = null;
@@ -468,7 +506,9 @@ class AppQuestPanel extends HTMLElement {
     this.innerHTML = `
       <section class="panel app-quest-panel">
         <header class="qst-header">
-          <h2><a class="qst-learn-link" href="/learn/quests/">QUESTS</a></h2>
+          <h2><a class="qst-learn-link" href="/learn/quests/">QUESTS</a>
+            <boon-product-indicator product="quests"></boon-product-indicator>
+          </h2>
           <div class="qst-streak-chip"
                data-streak-status="Complete the daily quest to extend your streak"
                title="Complete the daily quest to extend your streak">
@@ -492,6 +532,17 @@ class AppQuestPanel extends HTMLElement {
         <div class="qst-slots" data-bind="qst-slots"></div>
         <div class="qst-empty" data-bind="qst-empty">Loading quests…</div>
       </section>
+      <div class="qst-complete-toast" data-bind="qst-complete-toast" hidden
+           role="status" aria-live="polite" aria-atomic="true">
+        <span class="qst-complete-toast__sigil" aria-hidden="true">
+          <img src="/whitepaper/flame-logo-split.svg" alt="">
+        </span>
+        <span class="qst-complete-toast__copy">
+          <small data-bind="qst-complete-toast-kicker">QUEST COMPLETE</small>
+          <strong data-bind="qst-complete-toast-title"></strong>
+          <span data-bind="qst-complete-toast-detail"></span>
+        </span>
+      </div>
       <div class="qst-action-dialog" data-bind="qst-action-dialog" hidden
            role="dialog" aria-modal="true" aria-labelledby="qst-action-title">
         <button type="button" class="qst-action-dialog__backdrop"
@@ -654,6 +705,31 @@ class AppQuestPanel extends HTMLElement {
       try { event.preventDefault?.(); } catch (_e) { /* fakeDOM */ }
       this.#closeQuestDialog();
     });
+  }
+
+  #wireQuestShortcut() {
+    if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
+    this.#questShortcutListener = (event) => {
+      const requested = Array.isArray(event?.detail?.quests) ? event.detail.quests : [];
+      if (requested.length === 0) return;
+      const matches = this.#questCards.filter(({ model }) => requested.some((quest) => (
+        Number(quest?.questType) === Number(model?.questType)
+          && (!quest?.role || String(quest.role).toUpperCase() === String(model?.role).toUpperCase())
+      )));
+      // A shared purchase/luckbox badge can represent two quests. Match the
+      // same card-click semantics, preferring one that can advance now; a
+      // gated match still opens its normal explanation if nothing else can.
+      const selected = matches.find(({ model }) => (
+        !model?.isDone
+          && !model?.isGated
+          && QUEST_SETUP_TYPES.has(Number(model?.questType))
+      )) || matches.find(({ model }) => (
+        !model?.isDone && QUEST_SETUP_TYPES.has(Number(model?.questType))
+      ));
+      if (!selected) return;
+      this.#openQuestDialog(selected.model, event?.detail?.trigger || selected.element);
+    };
+    document.addEventListener('quest:open', this.#questShortcutListener);
   }
 
   #remainingQuestTarget(model) {
@@ -849,7 +925,7 @@ class AppQuestPanel extends HTMLElement {
     if (originalType === 4) {
       const cost = price == null ? null : price * 10n;
       return {
-        label: cost == null ? 'ADD FOIL PACK' : `ADD FOIL PACK · ${format(1, cost)}`,
+        label: cost == null ? 'BUY FOIL PACK' : `BUY FOIL PACK · ${format(1, cost)}`,
         target: required,
         completes: true,
       };
@@ -954,7 +1030,7 @@ class AppQuestPanel extends HTMLElement {
     card?.setAttribute?.('data-variant', variant);
     card?.setAttribute?.('data-state', actionState);
     if (role) role.textContent = `${String(model.role || 'QUEST')} QUEST`;
-    if (icon) icon.textContent = String(model.icon || '?');
+    _paintQuestIcon(icon, model.icon);
     if (title) title.textContent = String(model.label || 'Complete quest');
     if (rewardPanel) {
       rewardPanel.hidden = !model.rewardText;
@@ -980,7 +1056,7 @@ class AppQuestPanel extends HTMLElement {
       } else if (type === 2) {
         copy.textContent = `Add ${_fmtDailyQuestAmount(2, action.target)} to Tomorrow's Bet.`;
       } else if (type === 4) {
-        copy.textContent = 'Add one foil pack to your next ticket purchase.';
+        copy.textContent = 'Buy one foil pack with your next ticket purchase.';
       } else if (type === 5) {
         copy.textContent = `Burn ${_fmtDailyQuestAmount(5, action.target)} in the Decimator.`;
       } else if (type === 6) {
@@ -1209,6 +1285,12 @@ class AppQuestPanel extends HTMLElement {
       || get('viewing.address')
       || get('connected.address')
       || null;
+    // Once this panel has painted a player, a same-player cycle is a progress
+    // poll rather than another render-wave consumer. Completion can be indexed
+    // inside the broker's one-second window, so bypass only the completed
+    // response while preserving any shared request already in flight.
+    const forcePlayer = this.#pinnedAddress != null
+      && String(this.#pinnedAddress).toLowerCase() === String(addr).toLowerCase();
     this.#pinnedAddress = addr;
 
     if (!addr) {
@@ -1238,7 +1320,7 @@ class AppQuestPanel extends HTMLElement {
         // away the deployment-local quest board we can read directly from the
         // contract. DB-only extras (score breakdown / unified afKing streak)
         // remain empty until the row appears on a later poll.
-        fetchJSON(`/player/${addr}`).catch(() => null),
+        fetchJSON(`/player/${addr}`, { force: forcePlayer }).catch(() => null),
         day != null ? fetchJSON(`/game/quests/day/${day}`).catch(() => null) : Promise.resolve(null),
         readGameState(),
         readLiveQuestBoard(addr).catch(() => null),
@@ -1340,10 +1422,123 @@ class AppQuestPanel extends HTMLElement {
   // ---------------------------------------------------------------------
 
   #resetQuestCompletionState() {
+    this.#clearQuestCompletionToasts();
     this.#questCompletionIdentity = null;
     this.#questCompletionState.clear();
     this.#streakDisplayIdentity = null;
     this.#lastRenderedStreak = null;
+  }
+
+  #clearQuestCompletionToasts() {
+    if (this.#questCompletionToastTimer != null) {
+      try { clearTimeout(this.#questCompletionToastTimer); } catch (_) { /* defensive */ }
+      this.#questCompletionToastTimer = null;
+    }
+    this.#questCompletionToastQueue = [];
+    this.#questCompletionToastCurrent = null;
+    const toast = this.querySelector('[data-bind="qst-complete-toast"]');
+    toast?.classList?.remove('is-visible');
+    if (toast) toast.hidden = true;
+  }
+
+  #queueQuestCompletionToasts(items) {
+    const fresh = [];
+    for (const item of items) {
+      if (!item?.title) continue;
+      const key = String(item.key || '');
+      if (key && this.#questCompletionToastSeen.has(key)) continue;
+      if (key) this.#questCompletionToastSeen.add(key);
+      fresh.push(item);
+    }
+    // A completion key is player/day/slot or player/level/type scoped. Keep a
+    // bounded session guard as a second line of defense when a transient empty
+    // account response resets the ordinary false → true observer.
+    while (this.#questCompletionToastSeen.size > 256) {
+      const oldest = this.#questCompletionToastSeen.values().next().value;
+      this.#questCompletionToastSeen.delete(oldest);
+    }
+    if (fresh.length === 0) return;
+
+    // One action can finish a daily, bonus, and level objective together. It
+    // is one player moment, so fold everything observed in the same render —
+    // or while its toast is still visible — into one notification.
+    if (this.#questCompletionToastCurrent && this.#questCompletionToastTimer != null) {
+      this.#questCompletionToastCurrent = this.#summarizeQuestCompletionToasts([
+        ...this.#questCompletionToastCurrent.items,
+        ...fresh,
+      ]);
+      this.#paintQuestCompletionToast(this.#questCompletionToastCurrent, false);
+      return;
+    }
+    this.#questCompletionToastQueue.push(this.#summarizeQuestCompletionToasts(fresh));
+    if (this.#questCompletionToastTimer == null) this.#showNextQuestCompletionToast();
+  }
+
+  #summarizeQuestCompletionToasts(items) {
+    const titleSet = new Set(items.map((item) => String(item.title || '').trim()).filter(Boolean));
+    // A luckbox can finish both the shared ticket-or-luckbox objective and the
+    // narrower luckbox-only objective in one transaction. Name the concrete
+    // action the player just took instead of letting the broader fallback
+    // obscure which quest product produced the completion.
+    if (titleSet.has('Buy a Ticket or Luckbox') && titleSet.has('Buy Luckbox')) {
+      titleSet.delete('Buy a Ticket or Luckbox');
+    }
+    const titles = [...titleSet];
+    const flipReward = items.reduce((sum, item) => sum + (Number(item.flipReward) || 0), 0);
+    const streakReward = items.reduce((sum, item) => sum + (Number(item.streakReward) || 0), 0);
+    if (items.length === 1) {
+      return {
+        ...items[0],
+        items: [...items],
+        kicker: 'QUEST COMPLETE',
+      };
+    }
+    const title = titles.length <= 2
+      ? titles.join(' + ')
+      : `${titles[0]} +${titles.length - 1} MORE`;
+    return {
+      items: [...items],
+      kicker: `${items.length} QUESTS COMPLETE`,
+      title: title || 'Quest rewards unlocked',
+      detail: `${items.length} QUESTS${flipReward > 0 ? ` · +${flipReward} FLIP` : ''}${streakReward > 0 ? ` · +${streakReward} STREAK` : ''}`,
+    };
+  }
+
+  #paintQuestCompletionToast(item, restartAnimation = true) {
+    const toast = this.querySelector('[data-bind="qst-complete-toast"]');
+    const kicker = this.querySelector('[data-bind="qst-complete-toast-kicker"]');
+    const title = this.querySelector('[data-bind="qst-complete-toast-title"]');
+    const detail = this.querySelector('[data-bind="qst-complete-toast-detail"]');
+    if (!toast || !kicker || !title || !detail || !item) return null;
+    kicker.textContent = item.kicker || 'QUEST COMPLETE';
+    title.textContent = item.title;
+    detail.textContent = item.detail || '';
+    toast.hidden = false;
+    if (restartAnimation) {
+      toast.classList.remove('is-visible');
+      try { void toast.offsetWidth; } catch (_) { /* fake DOM / detached element */ }
+      toast.classList.add('is-visible');
+    }
+    return toast;
+  }
+
+  #showNextQuestCompletionToast() {
+    const item = this.#questCompletionToastQueue.shift();
+    const toast = this.#paintQuestCompletionToast(item);
+    if (!toast || !item) {
+      if (toast) toast.hidden = true;
+      this.#questCompletionToastCurrent = null;
+      this.#questCompletionToastTimer = null;
+      return;
+    }
+    this.#questCompletionToastCurrent = item;
+    this.#questCompletionToastTimer = _setTimeoutUnref(() => {
+      toast.classList.remove('is-visible');
+      toast.hidden = true;
+      this.#questCompletionToastCurrent = null;
+      this.#questCompletionToastTimer = null;
+      this.#showNextQuestCompletionToast();
+    }, QUEST_COMPLETE_TOAST_MS);
   }
 
   #renderStreakIncrease(streakEl, nextValue, completionCount) {
@@ -1405,15 +1600,16 @@ class AppQuestPanel extends HTMLElement {
       return { dailyKeys: new Map(), levelKey: null, newlyCompleted: new Set() };
     }
     if (identity !== this.#questCompletionIdentity) {
+      this.#clearQuestCompletionToasts();
       this.#questCompletionIdentity = identity;
       this.#questCompletionState.clear();
     }
 
     const dailyKeys = new Map();
     const newlyCompleted = new Set();
-    const observe = (key, completed) => {
+    const observe = (key, completed, celebrate = true) => {
       const previous = this.#questCompletionState.get(key);
-      if (completed && previous === false) newlyCompleted.add(key);
+      if (celebrate && completed && previous === false) newlyCompleted.add(key);
       // Completion is monotonic inside a day/level. A stale RPC response must
       // not arm the same celebration for a second time.
       if (previous !== true) this.#questCompletionState.set(key, Boolean(completed));
@@ -1423,7 +1619,13 @@ class AppQuestPanel extends HTMLElement {
       const slot = Number(quest?.slot ?? 0);
       const key = `${identity}:day:${day}:slot:${slot}`;
       dailyKeys.set(slot, key);
-      observe(key, Boolean(quest?.completed));
+      // An active afKing owns slot 0. Its automatic fulfillment can still
+      // surface as QuestCompleted in the projection, but it is not a fresh
+      // paid player quest and must not inflate a simultaneous lootbox toast
+      // from "QUEST COMPLETE" to "2 QUESTS COMPLETE". Record it as complete
+      // so the observer stays monotonic, while suppressing the celebration.
+      const handledByAfking = this.#afkingActive && slot === 0;
+      observe(key, handledByAfking || Boolean(quest?.completed), !handledByAfking);
     }
 
     const level = this.#levelQuest;
@@ -1431,7 +1633,15 @@ class AppQuestPanel extends HTMLElement {
     const levelKey = level && levelType > 0
       ? `${identity}:level:${Number(level?.level ?? -1)}:type:${levelType}`
       : null;
-    if (levelKey) observe(levelKey, Boolean(level?.completed));
+    if (levelKey) {
+      // The card may read COMPLETE as soon as banked progress reaches target,
+      // even while the eligibility gate delays the actual contract payout.
+      // The completion toast is a reward receipt, so only the authoritative
+      // completed flag may establish its false -> true transition. Treating
+      // goalMet as paid swallowed the later 800-FLIP level reward and left a
+      // combined banner totaling only its 100-FLIP daily rows.
+      observe(levelKey, Boolean(level?.completed));
+    }
     return { dailyKeys, levelKey, newlyCompleted };
   }
 
@@ -1440,6 +1650,7 @@ class AppQuestPanel extends HTMLElement {
     const streakEl = this.querySelector('[data-bind="qst-streak"]');
     const emptyEl = this.querySelector('[data-bind="qst-empty"]');
     if (!slotsEl || !streakEl || !emptyEl) return;
+    this.#questCards = [];
 
     // Clear prior nodes — replaceChildren is safer than innerHTML reassignment
     // (preserves parent container; doesn't trigger HTML parsing).
@@ -1532,6 +1743,7 @@ class AppQuestPanel extends HTMLElement {
 
     // Publish the merged primary state for other read-only consumers.
     this.#publishPrimaryStatus(sorted);
+    this.#publishQuestObjectives(sorted, day);
 
     const primary = sorted.find((s) => Number(s?.slot ?? 0) === 0);
     const primaryComplete = this.#afkingActive || Boolean(primary?.completed);
@@ -1541,7 +1753,10 @@ class AppQuestPanel extends HTMLElement {
 
     for (const s of sorted) {
       const slotIndex = Number(s?.slot ?? 0);
-      const isAuto = this.#afkingActive && slotIndex === 0 && !s?.completed;
+      // Slot 0 remains subscription-handled even after its automatic event has
+      // populated `completed`; presenting it as an ordinary paid completion is
+      // the same attribution error the completion toast avoids above.
+      const isAuto = this.#afkingActive && slotIndex === 0;
       const isDone = !!s?.completed || isAuto;
       const questTypeRaw = Number(s?.questType ?? -1);
       // A bonus lootbox purchase is also MINT_ETH progress. The game handles
@@ -1607,12 +1822,37 @@ class AppQuestPanel extends HTMLElement {
         && completion.newlyCompleted.has(completion.levelKey),
     });
 
+    const completionToasts = [];
+    for (const quest of sorted) {
+      const slot = Number(quest?.slot ?? 0);
+      if (!completion.newlyCompleted.has(completion.dailyKeys.get(slot))) continue;
+      const questType = Number(quest?.questType ?? 0);
+      completionToasts.push({
+        key: completion.dailyKeys.get(slot),
+        title: QUEST_TYPE_LABELS[questType] || 'Quest',
+        detail: `${slot === 0 ? 'DAILY' : 'BONUS'} · +100 FLIP`,
+        flipReward: 100,
+        streakReward: 0,
+      });
+    }
+    if (completion.levelKey && completion.newlyCompleted.has(completion.levelKey)) {
+      const questType = Number(this.#levelQuest?.questType ?? 0);
+      completionToasts.push({
+        key: completion.levelKey,
+        title: QUEST_TYPE_LABELS[questType] || 'Level quest',
+        detail: 'LEVEL · +800 FLIP · +5 STREAK',
+        flipReward: 800,
+        streakReward: 5,
+      });
+    }
+
     // Streak — textContent only.
     const streakValue = this.#questStreak?.baseStreak ?? 0;
     this.#renderStreakIncrease(streakEl, streakValue, completion.newlyCompleted.size);
     this.#renderShieldHoldings();
     this.#renderScoreBreakdown();
     if (completion.newlyCompleted.size > 0) {
+      this.#queueQuestCompletionToasts(completionToasts);
       try { sfxQuestComplete(); } catch (_e) { /* decoration must not stop polling */ }
     }
   }
@@ -1836,6 +2076,7 @@ class AppQuestPanel extends HTMLElement {
     if (!model.isDone) slotDiv.classList.add('qst-slot--todo');
     if (model.isUnstarted) slotDiv.classList.add('qst-slot--unstarted');
     if (model.isGated) slotDiv.classList.add('qst-slot--gated');
+    this.#questCards.push({ model, element: slotDiv });
     const interactive = !model.isDone
       && QUEST_SETUP_TYPES.has(Number(model.questType));
     const actionable = interactive && !model.isGated;
@@ -1872,7 +2113,7 @@ class AppQuestPanel extends HTMLElement {
     const iconEl = document.createElement('span');
     iconEl.className = 'qst-slot-icon';
     iconEl.setAttribute('aria-hidden', 'true');
-    iconEl.textContent = model.icon;
+    _paintQuestIcon(iconEl, model.icon);
     const copyEl = document.createElement('div');
     copyEl.className = 'qst-slot-copy';
     const nameEl = document.createElement('div');
@@ -1964,8 +2205,56 @@ class AppQuestPanel extends HTMLElement {
       : { completed: null, afking: false, questType: -1, day: this.#questDay });
   }
 
+  /**
+   * Publish every genuinely unfinished objective for the small quest markers
+   * mounted beside the controls that can advance it. This uses the same merged
+   * daily definitions, AFKing state, and level-goal truth as the cards above;
+   * consumers must not reconstruct completion from stale indexer rows.
+   */
+  #publishQuestObjectives(sorted, day) {
+    const address = this.#pinnedAddress
+      ? String(this.#pinnedAddress).toLowerCase()
+      : null;
+    if (!address) {
+      update('ui.questObjectives', null);
+      return;
+    }
+
+    const quests = [];
+    for (const quest of sorted || []) {
+      const questType = Number(quest?.questType ?? 0);
+      const slot = Number(quest?.slot ?? 0);
+      const handledByAfking = this.#afkingActive && slot === 0;
+      if (questType <= 0 || quest?.completed || handledByAfking) continue;
+      quests.push({
+        questType,
+        role: slot === 0 ? 'DAILY' : 'BONUS',
+        label: QUEST_TYPE_LABELS[questType] || 'Quest',
+        completed: false,
+      });
+    }
+
+    const level = this.#levelQuest;
+    const levelType = Number(level?.questType ?? 0);
+    const levelDone = levelType > 0 && (
+      Boolean(level?.completed) || questGoalMet(level?.progress ?? 0, level?.target ?? 0)
+    );
+    if (levelType > 0 && !levelDone) {
+      quests.push({
+        questType: levelType,
+        role: 'LEVEL',
+        label: QUEST_TYPE_LABELS[levelType] || 'Level quest',
+        completed: false,
+      });
+    }
+
+    update('ui.questObjectives', { address, day: Number(day), quests });
+  }
+
   #renderEmpty(msg) {
+    this.#questCards = [];
     update('ui.foilQuest', null);
+    update('ui.questObjectives', null);
     const slotsEl = this.querySelector('[data-bind="qst-slots"]');
     const streakEl = this.querySelector('[data-bind="qst-streak"]');
     const emptyEl = this.querySelector('[data-bind="qst-empty"]');

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Luckbox</title>
+  <path d="M9 21h46a5 5 0 0 1 5 5v25a6 6 0 0 1-6 6H10a6 6 0 0 1-6-6V26a5 5 0 0 1 5-5Z" fill="#101827" stroke="#f6c85f" stroke-width="4"/>
+  <path d="M21 21v-8h22v8M6 35h52" fill="none" stroke="#67e8f9" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="32" cy="39" r="8" fill="#ed0e11"/>
+  <circle cx="32" cy="39" r="3" fill="#fff0b3"/>
+</svg>

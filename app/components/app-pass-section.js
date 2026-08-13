@@ -56,6 +56,7 @@ import {
 import { scaledTicketPriceWei } from '../app/decimator.js';
 import { activeTicketLevel } from '../app/active-level.js';
 import { decodeRevertReason } from '../app/reason-map.js';
+import { passBoonDiscountBps } from '../app/boons.js';
 import './boon-product-indicator.js';
 
 function passPurchaseConfirmationDetail(receipt, metadata = {}) {
@@ -125,7 +126,6 @@ function lazyPassLevelOpen(level, jackpotPhaseFlag) {
 //                the balance over base cost pays out as bonus tickets) —
 //                codex-verified: summing priceForLevel here UNDERPAYS at 0-1;
 //   levels 3+  → Σ priceForLevel(startLevel..+9), startLevel = level+1.
-// Boon discounts are not modeled — the static-call gate catches those.
 function lazyPassCostWei(level) {
   const lvl = Number(level);
   if (!Number.isFinite(lvl)) return null;
@@ -217,6 +217,40 @@ function computeDeityNextPriceWei(passesSold, chainId) {
   return total;
 }
 
+function _discountedWei(priceWei, discountBps) {
+  if (priceWei == null) return null;
+  const bps = Math.max(0, Math.min(10_000, Math.trunc(Number(discountBps) || 0)));
+  return (BigInt(priceWei) * BigInt(10_000 - bps)) / 10_000n;
+}
+
+/** Contract-identical whole-price discount for Deity and Lazy passes. */
+export function discountedPassPriceWei(basePriceWei, boonPayload, product) {
+  return _discountedWei(basePriceWei, passBoonDiscountBps(boonPayload, product));
+}
+
+/**
+ * WhaleModule applies a live boon to the first pass only and always uses the
+ * standard 4 ETH unit on that branch. Every remaining pass is full-price 4 ETH.
+ */
+export function whalePassPurchasePriceWei({
+  currentLevel,
+  quantity = 1,
+  boonPayload = null,
+  chainId = CHAIN.id,
+} = {}) {
+  const qty = Math.trunc(Number(quantity));
+  if (!Number.isInteger(qty) || qty < 1 || qty > 100) return null;
+  const unit = computeWhaleUnitPriceWei(currentLevel, chainId);
+  if (unit == null) return null;
+  const discountBps = passBoonDiscountBps(boonPayload, 'whale');
+  if (discountBps <= 0) return BigInt(unit) * BigInt(qty);
+  const standardUnit = chainId === CHAIN.id
+    ? (4n * ETH_BASE_WEI) / ETH_DIVISOR
+    : 4n * ETH_BASE_WEI;
+  return _discountedWei(standardUnit, discountBps)
+    + standardUnit * BigInt(qty - 1);
+}
+
 function formatPassEth(raw, digits = 2) {
   try {
     const formatted = displayEth(BigInt(raw ?? 0), digits);
@@ -243,28 +277,35 @@ export function projectedPassScoreGain(scoreBreakdown, passBonusPoints) {
 }
 
 /**
- * Infer how many live Whale-pass ticket streams are represented by the indexed
- * future queue. One pass is four entries every second level; two passes become
- * four entries every level, and higher quantities add those two parity lanes.
+ * Infer how many live Whale-pass equivalents are represented by the indexed
+ * future queue. One full pass is two half-pass units; each half-pass produces
+ * one whole ticket per four-level cycle. Reading all four residue lanes keeps
+ * odd jackpot awards exact instead of silently flooring (11 halves = 5½ passes).
  * Taking the lowest repeated whole-ticket count in each lane ignores one-off
  * ticket buys while preserving stacked Whale quantities.
  */
 export function inferActiveWhalePassCount(tickets, currentLevel) {
   const level = Math.max(0, Math.trunc(Number(currentLevel) || 0));
-  const lanes = [[], []];
+  const lanes = [[], [], [], []];
   for (const row of Array.isArray(tickets) ? tickets : []) {
     const target = Math.trunc(Number(row?.level));
     const entries = Math.max(0, Math.trunc(Number(row?.entryCount) || 0));
     if (!Number.isInteger(target) || target <= level || target > level + 24 || entries < 4) continue;
-    lanes[target & 1].push(Math.floor(entries / 4));
+    lanes[target & 3].push(Math.floor(entries / 4));
   }
   const repeated = lanes.filter((lane) => lane.length >= 3);
   // A single ordinary future ticket is not evidence of a Whale pass. Require
   // the repeating queue signature here; callers with an authoritative active
   // whale score can still fall back to one pass while the indexer catches up.
-  if (repeated.length === 0) return 0;
-  const inferred = repeated.reduce((sum, lane) => sum + Math.min(...lane), 0);
-  return Math.max(0, Math.min(100, inferred));
+  if (repeated.length !== 4) return 0;
+  const inferredHalfPasses = repeated.reduce((sum, lane) => sum + Math.min(...lane), 0);
+  return Math.max(0, Math.min(200, inferredHalfPasses)) / 2;
+}
+
+function formatActiveWhalePassCount(count) {
+  const halfPasses = Math.max(0, Math.round(Number(count || 0) * 2));
+  const whole = Math.floor(halfPasses / 2);
+  return halfPasses % 2 === 0 ? String(whole) : (whole ? `${whole}½` : '½');
 }
 
 /** Compact active premium-pass status for the closed AFKING drawer. */
@@ -280,7 +321,7 @@ export function activePassSummary(playerData, currentLevel) {
     return {
       kind: 'whale',
       sigil: '100',
-      label: `${count} ACTIVE WHALE PASS${count === 1 ? '' : 'ES'}`,
+      label: `${formatActiveWhalePassCount(count)} ACTIVE WHALE PASS${count === 1 ? '' : 'ES'}`,
     };
   }
   if (kind === 'whale_10') {
@@ -437,9 +478,7 @@ class AppPassSection extends HTMLElement {
           <span class="pass-product-heading">
             <span class="pass-product-sigil pass-product-sigil--lazy" aria-hidden="true">10</span>
             <span class="pass-product-copy">
-              <span class="pass-section-title">Lazy pass
-                <boon-product-indicator product="lazy"></boon-product-indicator>
-              </span>
+              <span class="pass-section-title">Lazy pass</span>
               <span class="pass-product-description">One ticket every level for the next 10 levels.</span>
             </span>
           </span>
@@ -449,6 +488,7 @@ class AppPassSection extends HTMLElement {
             <span data-bind="pass-lazy-afking-seat">AFKING SEAT</span>
           </span>
           <span class="pass-product-checkout pass-product-checkout--lazy">
+            <boon-product-indicator class="pass-cost-boon" product="lazy"></boon-product-indicator>
             <button type="button" class="pass-lazy-buy" data-write data-bind="pass-lazy-buy">
               BUY LAZY PASS
               …
@@ -462,9 +502,7 @@ class AppPassSection extends HTMLElement {
           <span class="pass-product-heading">
             <span class="pass-product-sigil pass-product-sigil--whale" aria-hidden="true">100</span>
             <span class="pass-product-copy">
-              <span class="pass-section-title">Whale pass
-                <boon-product-indicator product="whale"></boon-product-indicator>
-              </span>
+              <span class="pass-section-title">Whale pass</span>
               <span class="pass-product-description">One ticket every other level for the next 100 levels.</span>
             </span>
           </span>
@@ -483,7 +521,8 @@ class AppPassSection extends HTMLElement {
                 <button type="button" data-bind="pass-whale-qty-down" aria-label="Decrease Whale pass quantity">−</button>
                 <button type="button" data-bind="pass-whale-qty-up" aria-label="Increase Whale pass quantity">+</button>
               </span>
-            </span>
+              </span>
+            <boon-product-indicator class="pass-cost-boon" product="whale"></boon-product-indicator>
             <button type="button" class="pass-whale-buy" data-write data-bind="pass-whale-buy">
               BUY WHALE PASS
               …
@@ -506,7 +545,6 @@ class AppPassSection extends HTMLElement {
                          src="/app/assets/deity-pass-lockup-v3.png"
                          width="1400" height="320" alt="Deity Pass">
                   </span>
-                  <boon-product-indicator product="deity"></boon-product-indicator>
                 </span>
                 <span class="pass-product-description">15 entries every level and three boons per day forever.</span>
               </span>
@@ -517,9 +555,12 @@ class AppPassSection extends HTMLElement {
               <span data-bind="pass-deity-score">+155% DEGEN RATING</span>
               <span data-bind="pass-deity-afking-seat">AFKING SEAT</span>
             </span>
-            <button type="button" class="pass-deity-open" data-bind="pass-deity-open"
-                    aria-haspopup="dialog" aria-expanded="false">BUY DEITY PASS
-              …</button>
+            <span class="pass-cost-action pass-deity-open-wrap">
+              <boon-product-indicator class="pass-cost-boon" product="deity"></boon-product-indicator>
+              <button type="button" class="pass-deity-open" data-bind="pass-deity-open"
+                      aria-haspopup="dialog" aria-expanded="false">BUY DEITY PASS
+                …</button>
+            </span>
           </div>
 
           <div class="pass-deity-dialog" data-bind="pass-deity-dialog" hidden
@@ -557,8 +598,11 @@ class AppPassSection extends HTMLElement {
                       data-bind="pass-deity-select" aria-label="Selected deity pass symbol"
                       hidden tabindex="-1"></select>
               <div class="pass-deity-error" data-bind="pass-deity-error" hidden role="alert"></div>
-              <button type="button" class="pass-deity-buy" data-write data-bind="pass-deity-buy">BUY DEITY PASS
-                …</button>
+              <span class="pass-cost-action pass-deity-buy-wrap">
+                <boon-product-indicator class="pass-cost-boon" product="deity"></boon-product-indicator>
+                <button type="button" class="pass-deity-buy" data-write data-bind="pass-deity-buy">BUY DEITY PASS
+                  …</button>
+              </span>
             </div>
           </div>
         </section>
@@ -825,6 +869,9 @@ class AppPassSection extends HTMLElement {
         this.#afkingTopupSeededAddress = null;
         this.#afkingDialogOpen = false;
         this.#deityDialogOpen = false;
+        // A verified snapshot may survive a transient RPC failure, but it must
+        // never survive an account switch.
+        this.#afkingState = null;
       }
       this.#pinnedAddress = addr;
       // Level comes from /game/state. Deity availability and issued count come
@@ -841,7 +888,12 @@ class AppPassSection extends HTMLElement {
       const data = playerRes.status === 'fulfilled' ? playerRes.value : null;
       const freshCatalog = deityRes.status === 'fulfilled' ? deityRes.value : null;
       if (freshCatalog) this.#deityCatalog = freshCatalog;
-      this.#afkingState = afkingRes.status === 'fulfilled' ? afkingRes.value : null;
+      const afkingReadKnown = afkingRes.status === 'fulfilled' && afkingRes.value != null;
+      // Keep the last verified state for this same account when a core AFKing
+      // RPC read blips. readAfkingSubscription() returns null rather than fake
+      // zero balances, so replacing here would make the panel flicker and lose
+      // the player's last trustworthy funding value.
+      if (afkingReadKnown) this.#afkingState = afkingRes.value;
       this.#playerData = data || null;
       this.#gameState = gs;
       const level = gs?.level ?? data?.level ?? data?.currentLevel ?? null;
@@ -855,7 +907,7 @@ class AppPassSection extends HTMLElement {
         lazyOpen: lazyPassLevelOpen(level, jackpotPhase),
         lazyCostWei: lazyPassCostWei(level),
       };
-      if (afkingRes.status === 'fulfilled' && this.#afkingState) {
+      if (afkingReadKnown && this.#afkingState) {
         const coverage = afkingClosedSummary(this.#afkingState, this.#afkingMintPriceWei());
         update('app.afkingSubscription', Object.freeze({
           address: String(actionTarget || '').toLowerCase() || null,
@@ -868,15 +920,22 @@ class AppPassSection extends HTMLElement {
             ? Boolean(this.#afkingState.useTickets)
             : null,
         }));
-      } else if (!actionTarget) {
+      } else {
+        // Explicitly invalidate warning eligibility until a fresh authoritative
+        // read succeeds. Retained component state is presentation-only here;
+        // the alert must never evaluate a stale balance as current.
         update('app.afkingSubscription', Object.freeze({
-          address: null,
+          address: String(actionTarget || '').toLowerCase() || null,
           known: false,
-          active: false,
+          active: Boolean(actionTarget && this.#afkingState?.active),
           fundedDays: null,
-          dailyQuantity: 0,
-          settingsKnown: false,
-          useTickets: null,
+          dailyQuantity: actionTarget
+            ? Math.max(1, Math.trunc(Number(this.#afkingState?.dailyQuantity) || 1))
+            : 0,
+          settingsKnown: Boolean(actionTarget && this.#afkingState?.settingsKnown),
+          useTickets: actionTarget && this.#afkingState?.settingsKnown
+            ? Boolean(this.#afkingState.useTickets)
+            : null,
         }));
       }
       this.#renderPricing();
@@ -910,7 +969,8 @@ class AppPassSection extends HTMLElement {
     const u4 = subscribe('app.poolBenchmarks', (benchmarks) => {
       if (benchmarks?.contractPhase) this.#renderAfkingDayCost();
     });
-    this.#unsubs.push(u1, u2, u3, u4);
+    const u5 = subscribe('app.boons', () => this.#renderPricing());
+    this.#unsubs.push(u1, u2, u3, u4, u5);
   }
 
   // ---------------------------------------------------------------------
@@ -961,10 +1021,12 @@ class AppPassSection extends HTMLElement {
     this.#renderDeityLootboxBenefit();
     this.#renderDeityCatalog();
     this.#renderAfking();
-    // Lazy row — visible ONLY when the level window is open (user ask).
+    // A valid Lazy discount is also an on-chain purchase gate, so its row is
+    // available outside the normal x9/x0 window while that boon is live.
     const lazyRow = this.querySelector('[data-bind="pass-lazy-row"]');
     if (lazyRow) {
-      const open = Boolean(p?.lazyOpen && p?.lazyCostWei != null);
+      const boonOpen = passBoonDiscountBps(this.#actingBoonPayload(), 'lazy') > 0;
+      const open = Boolean(p?.lazyCostWei != null && (p?.lazyOpen || boonOpen));
       lazyRow.hidden = !open;
     }
     // Re-assert the combined-mode gate — this poll tick's price-window logic
@@ -1049,24 +1111,64 @@ class AppPassSection extends HTMLElement {
     }
   }
 
+  #actingBoonPayload() {
+    const payload = get('app.boons');
+    const quotedAddress = String(payload?.address || '').toLowerCase();
+    const actingAddress = String(getActingAddress() || '').toLowerCase();
+    // Never apply another viewed wallet's discount to this wallet's quote.
+    if (quotedAddress && actingAddress && quotedAddress !== actingAddress) return null;
+    return payload;
+  }
+
+  #whalePurchasePrice(quantity) {
+    return whalePassPurchasePriceWei({
+      currentLevel: this.#pricingData?.currentLevel,
+      quantity,
+      boonPayload: this.#actingBoonPayload(),
+      chainId: CHAIN.id,
+    });
+  }
+
+  #lazyPurchasePrice() {
+    return discountedPassPriceWei(
+      this.#pricingData?.lazyCostWei,
+      this.#actingBoonPayload(),
+      'lazy',
+    );
+  }
+
+  #deityPurchasePrice() {
+    return discountedPassPriceWei(
+      this.#pricingData?.deityNextPriceWei,
+      this.#actingBoonPayload(),
+      'deity',
+    );
+  }
+
+  #passBoonCopy(product, { firstOnly = false } = {}) {
+    const bps = passBoonDiscountBps(this.#actingBoonPayload(), product);
+    if (bps <= 0) return '';
+    const percent = Number.isInteger(bps / 100) ? String(bps / 100) : (bps / 100).toFixed(2);
+    return ` · BOON −${percent}%${firstOnly ? ' 1ST' : ''}`;
+  }
+
   #renderWhaleLootboxBenefit() {
     const benefit = this.querySelector('[data-bind="pass-whale-lootbox"]');
     if (!benefit) return;
-    const unit = this.#pricingData?.whaleUnitPriceWei;
     const quantityInput = this.querySelector('[name="pass-whale-qty"]');
     const quantity = Math.max(1, Math.min(100, Math.trunc(Number(quantityInput?.value) || 1)));
-    if (unit == null) {
+    const total = this.#whalePurchasePrice(quantity);
+    if (total == null) {
       benefit.textContent = 'BONUS LUCKBOX · 10% OF PASS';
       return;
     }
-    const lootboxValue = (BigInt(unit) * BigInt(quantity)) / 10n;
+    const lootboxValue = BigInt(total) / 10n;
     benefit.textContent = `BONUS LUCKBOX · ${formatPassEth(lootboxValue)} ETH`;
   }
 
   #renderWhaleBuyLabel() {
     const buy = this.querySelector('[data-bind="pass-whale-buy"]');
     if (!buy || this.#busyWhale) return;
-    const unit = this.#pricingData?.whaleUnitPriceWei;
     const quantityInput = this.querySelector('[name="pass-whale-qty"]');
     // Real number inputs expose .value even when empty. The fallback only
     // covers pre-hydration/minimal DOMs where the markup's value property has
@@ -1075,22 +1177,22 @@ class AppPassSection extends HTMLElement {
       ? quantityInput.value
       : '1';
     const rawQuantity = Number.parseInt(quantityValue || '', 10);
-    if (unit == null || !Number.isInteger(rawQuantity)
+    const finalPrice = this.#whalePurchasePrice(rawQuantity);
+    if (finalPrice == null || !Number.isInteger(rawQuantity)
       || rawQuantity < 1 || rawQuantity > 100) {
       buy.textContent = 'BUY WHALE PASS\n—';
       return;
     }
-    const finalPrice = BigInt(unit) * BigInt(rawQuantity);
-    buy.textContent = `BUY WHALE PASS\n${formatPassEth(finalPrice)} ETH`;
+    buy.textContent = `BUY WHALE PASS\n${formatPassEth(finalPrice)} ETH${this.#passBoonCopy('whale', { firstOnly: true })}`;
   }
 
   #renderLazyBuyLabel() {
     const buy = this.querySelector('[data-bind="pass-lazy-buy"]');
     if (!buy || this.#busyLazy) return;
-    const cost = this.#pricingData?.lazyCostWei;
+    const cost = this.#lazyPurchasePrice();
     buy.textContent = cost == null
       ? 'BUY LAZY PASS\n—'
-      : `BUY LAZY PASS\n${formatPassEth(cost)} ETH`;
+      : `BUY LAZY PASS\n${formatPassEth(cost)} ETH${this.#passBoonCopy('lazy')}`;
   }
 
   #renderPassSeatBenefits() {
@@ -1113,7 +1215,7 @@ class AppPassSection extends HTMLElement {
   #renderLazyLootboxBenefit() {
     const benefit = this.querySelector('[data-bind="pass-lazy-lootbox"]');
     if (!benefit) return;
-    const cost = this.#pricingData?.lazyCostWei;
+    const cost = this.#lazyPurchasePrice();
     if (cost == null) {
       benefit.textContent = 'BONUS LUCKBOX · 10% OF PASS';
       return;
@@ -1124,7 +1226,7 @@ class AppPassSection extends HTMLElement {
   #renderDeityLootboxBenefit() {
     const benefit = this.querySelector('[data-bind="pass-deity-lootbox"]');
     if (!benefit) return;
-    const cost = this.#pricingData?.deityNextPriceWei;
+    const cost = this.#deityPurchasePrice();
     if (cost == null) {
       benefit.textContent = 'BONUS LUCKBOX · 10% OF PASS';
       return;
@@ -1262,20 +1364,20 @@ class AppPassSection extends HTMLElement {
       }
     }
 
-    const price = this.#pricingData?.deityNextPriceWei;
+    const price = this.#deityPurchasePrice();
     const label = !known
       ? 'BUY DEITY PASS\nCHECKING…'
       : !availableIds.length && !ownsDeityPass
         ? 'DEITY PASS\nSOLD OUT'
         : price == null
           ? 'BUY DEITY PASS\n—'
-          : `BUY DEITY PASS\n${formatPassEth(price)} ETH`;
+          : `BUY DEITY PASS\n${formatPassEth(price)} ETH${this.#passBoonCopy('deity')}`;
     opener.textContent = label;
     buy.textContent = busy
       ? 'PURCHASE PENDING…'
       : price == null
         ? 'BUY DEITY PASS\n—'
-        : `BUY DEITY PASS\n${formatPassEth(price)} ETH`;
+        : `BUY DEITY PASS\n${formatPassEth(price)} ETH${this.#passBoonCopy('deity')}`;
 
     if (ownsDeityPass || (known && !availableIds.length) || get('ui.mode') === 'combined') {
       this.#deityDialogOpen = false;
@@ -1677,7 +1779,7 @@ class AppPassSection extends HTMLElement {
     this.#clearLazyError();
 
     try {
-      const cost = this.#pricingData?.lazyCostWei;
+      const cost = this.#lazyPurchasePrice();
       if (cost == null) {
         this.#renderLazyError('Price unavailable — try again in a moment.');
         return;
@@ -1752,8 +1854,11 @@ class AppPassSection extends HTMLElement {
         this.#renderWhaleError('Quantity must be 1-100.');
         return;
       }
-      const unit = this.#pricingData?.whaleUnitPriceWei ?? 0n;
-      const msgValueWei = unit * BigInt(quantity);
+      const msgValueWei = this.#whalePurchasePrice(quantity);
+      if (msgValueWei == null) {
+        this.#renderWhaleError('Price unavailable — try again in a moment.');
+        return;
+      }
 
       const { receipt } = await purchaseWhaleBundle({ quantity, msgValueWei });
 
@@ -1822,7 +1927,11 @@ class AppPassSection extends HTMLElement {
         this.#renderDeityError("That symbol's taken — try another.");
         return;
       }
-      const msgValueWei = this.#pricingData.deityNextPriceWei;
+      const msgValueWei = this.#deityPurchasePrice();
+      if (msgValueWei == null) {
+        this.#renderDeityError('Price unavailable — try again in a moment.');
+        return;
+      }
       const { receipt } = await purchaseDeityPass({ symbolId, msgValueWei });
 
       // Receipt confirmation is authoritative enough to update the catalog
