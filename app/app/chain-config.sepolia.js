@@ -18,6 +18,11 @@ export const CHAIN = {
   // (eth_call, eth_getStorageAt, eth_getLogs). sepolia.base.org is retained
   // below as the wallet-add fallback.
   rpcUrl: 'https://base-sepolia-rpc.publicnode.com',
+  // Transport failover for the shared read provider (read-provider.js): tried
+  // in order when rpcUrl fails at the HTTP/network level (outage, 429, hang).
+  // base.org 429'd under the FULL pre-multicall read volume (17/25 measured),
+  // but as an emergency lane for today's aggregated volume, degraded beats dead.
+  fallbackRpcUrls: ['https://sepolia.base.org'],
   // Gold Rush is intentionally restricted to an explicitly keyless endpoint.
   // Keeping this separate from rpcUrl prevents a future private provider key
   // from silently turning browser ticker traffic into our infrastructure bill.

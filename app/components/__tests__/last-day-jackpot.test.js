@@ -1481,7 +1481,7 @@ describe('foil match pending action', () => {
     await import('../last-day-jackpot.js');
   });
 
-  test('the inline strip and claim bar are gone', () => {
+  test('the old foreground strip is gone and the cabinet keeps four background sockets', () => {
     const Ctor = customElements.get('last-day-jackpot');
     const el = new Ctor();
     el.connectedCallback();
@@ -1490,6 +1490,14 @@ describe('foil match pending action', () => {
     ]) {
       assert.equal(el.querySelector(`[data-bind="${hook}"]`), null, `${hook} removed`);
     }
+    assert.ok(el.querySelector('[data-bind="ldj-foil-machine-bank"]'));
+    assert.equal(el.querySelectorAll('.ldj-foil-machine-slot').length, 4,
+      'one subdued cabinet socket is reserved for each foil ticket');
+    assert.equal(
+      existsSync(new URL('../../assets/jackpot/daily-drawing-cabinet-v1.webp', import.meta.url)),
+      true,
+      'the drawing cabinet art ships with the app',
+    );
     el.disconnectedCallback();
   });
 
@@ -1506,8 +1514,9 @@ describe('foil match pending action', () => {
 
   test('source publishes the contract tuple and sends its receipt to the reveal engine', () => {
     const src = readFileSync(new URL('../last-day-jackpot.js', import.meta.url), 'utf8');
-    assert.equal(/ldj-foil-face/.test(src), false, 'no badge faces rendered');
     assert.equal(/renderDayResults/.test(src), false, 'results renderer removed');
+    assert.match(src, /#renderFoilBackdrop\(\)[\s\S]*bestGrade\(line, mainSet, bonusSet\)[\s\S]*traitToBadge\(traitId\)/,
+      'the cabinet paints real foil traits and grades them only through the spoiler-gated model');
     assert.match(src, /claimableDrawGrades\(/,
       'main and bonus draw claims are graded independently');
     assert.match(src, /publishPendingActions\(FOIL_MATCH_ACTION_SOURCE/);
@@ -1546,7 +1555,6 @@ describe('foil match pending action', () => {
       };
     };
     try {
-      localStorage.setItem(`spun_day_${CHAIN.id}_44`, '1');
       storeMod.update('connected.address', player);
       const Ctor = customElements.get('last-day-jackpot');
       const el = new Ctor();
@@ -1565,6 +1573,23 @@ describe('foil match pending action', () => {
       });
       for (let i = 0; i < 8; i += 1) await flushMicrotasks();
 
+      const slots = el.querySelectorAll('.ldj-foil-machine-slot');
+      assert.equal(slots.length, 4);
+      assert.equal(slots[0].classList.contains('is-loaded'), true,
+        'owned foil tickets fill their machine sockets before the reveal');
+      assert.equal(slots[0].classList.contains('is-match'), false,
+        'a covered jackpot cannot leak its foil match through the background');
+      assert.equal(slots[0].querySelectorAll('.ldj-foil-machine-cell').length, 4,
+        'the socket uses the actual four foil traits');
+      assert.equal(pendingActionsMod.getPendingActions().length, 0,
+        'Pending remains behind the same spoiler gate');
+
+      document.dispatchEvent({
+        type: 'replay:scratch-complete',
+        detail: { day: 44, player, bonusPhase: false, bonusAvailable: false },
+      });
+      for (let i = 0; i < 4; i += 1) await flushMicrotasks();
+
       const [action] = pendingActionsMod.getPendingActions();
       assert.equal(action.kind, 'foil-match');
       assert.equal(action.label, 'T8 FOIL LUCKBOX MATCH');
@@ -1580,6 +1605,11 @@ describe('foil match pending action', () => {
       assert.equal(action.autoOpen, true,
         'AUTO may settle the permissionless claim for its fixed player');
       assert.equal(typeof action.run, 'function');
+      assert.equal(slots[0].classList.contains('is-match'), true,
+        'the claimable foil ticket powers up once the draw is uncovered');
+      assert.equal(slots[0].getAttribute('data-score'), 'T8');
+      assert.equal(slots[0].querySelectorAll('.is-color-match').length, 4,
+        'all four exact symbol-and-color faces light independently');
       el.disconnectedCallback();
       assert.equal(pendingActionsMod.getPendingActions().length, 0,
         'detaching the owner cannot leave a stale foil reminder');

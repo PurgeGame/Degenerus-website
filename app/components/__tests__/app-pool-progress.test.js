@@ -393,13 +393,15 @@ describe('pool thermometer and daily-jackpot shell wiring', () => {
     assert.match(html, /src="\/app\/components\/app-pool-progress\.js"/);
   });
 
-  test('center draw has the requested DAILY JACKPOT label', () => {
+  test('center draw has the requested Degenerus Daily Drawing machine marquee', () => {
     const drawStart = html.indexOf('<div class="jackpot-hero__draw">');
     const drawEnd = html.indexOf('<app-daily-flip>', drawStart);
     assert.match(html.slice(drawStart, drawEnd),
-      /<h2 class="jackpot-hero__draw-title">DAILY JACKPOT<\/h2>/);
-    assert.match(css, /\.jackpot-hero__draw-title\s*\{[^}]*height:\s*2\.55rem[^}]*align-items:\s*center[^}]*justify-content:\s*center[^}]*color:\s*var\(--text-primary[^}]*font-size:\s*1\.05rem[^}]*letter-spacing:\s*0\.13em[^}]*text-align:\s*center/s,
-      'Daily Jackpot uses the shared centered heading baseline and typography');
+      /<h2 class="jackpot-hero__draw-title">[\s\S]*?<span>DEGENERUS<\/span>[\s\S]*?<strong>DAILY DRAWING<\/strong>[\s\S]*?<\/h2>/);
+    assert.match(css, /\.jackpot-hero__draw-title\s*\{[^}]*height:\s*3\.2rem[^}]*flex-direction:\s*column[^}]*align-items:\s*center[^}]*justify-content:\s*center[^}]*text-align:\s*center/s,
+      'the two-line machine marquee remains centered inside its compact recess');
+    assert.match(css, /\.jackpot-hero__draw::before\s*\{[^}]*daily-drawing-cabinet-v1\.webp[^}]*100% 100% no-repeat/s,
+      'the drawing column owns its purpose-built cabinet artwork');
     assert.match(css, /\.jackpot-hero last-day-jackpot \.panel\s*\{[^}]*padding:\s*0/s,
       'the headless jackpot bridge contributes no blank band below the label');
   });

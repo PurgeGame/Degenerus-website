@@ -354,16 +354,77 @@ export function invalidateReadCache() {
   inflightCalls.clear();
 }
 
+// ---------------------------------------------------------------------------
+// TRANSPORT FAILOVER (2026-08-14)
+// ---------------------------------------------------------------------------
+// The app ships ONE primary endpoint; when CHAIN.fallbackRpcUrls lists spares,
+// this replaces the provider's `_send` (ethers' raw HTTP hook — batching, the
+// multicall layer and the read cache all sit ABOVE it, untouched) with one
+// that walks the endpoint list on TRANSPORT failures only: network errors,
+// non-2xx (429/5xx), unparseable bodies, or a hang past the timeout. A revert
+// is a SUCCESSFUL response carrying a JSON-RPC error object and passes
+// through unchanged — failover can never rewrite an error the contract meant.
+// After PROMOTE_AFTER consecutive primary failures the preferred index
+// advances so live traffic stops paying the dead endpoint's timeout; a later
+// rotation can land back on the primary once it recovers.
+const FAILOVER_TIMEOUT_MS = 10_000;
+const PROMOTE_AFTER = 3;
+
+/** Build a `_send` that walks `urls`. Exported with injectable fetch for tests. */
+export function _makeFailoverSend(urls, fetchImpl) {
+  const doFetch = fetchImpl ?? ((...args) => fetch(...args));
+  const state = { preferred: 0, consecutiveFailures: 0 };
+  const send = async (payload) => {
+    let lastError;
+    // Anchor the walk to the preference AT REQUEST START — mid-request
+    // promotion must only redirect FUTURE requests, never skew this walk.
+    const start = state.preferred;
+    for (let attempt = 0; attempt < urls.length; attempt++) {
+      const index = (start + attempt) % urls.length;
+      try {
+        const response = await doFetch(urls[index], {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout
+            ? AbortSignal.timeout(FAILOVER_TIMEOUT_MS) : undefined,
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status} from ${urls[index]}`);
+        const json = await response.json();
+        if (index === state.preferred) state.consecutiveFailures = 0;
+        return Array.isArray(json) ? json : [json];
+      } catch (error) {
+        lastError = error;
+        if (index === state.preferred) {
+          state.consecutiveFailures += 1;
+          if (state.consecutiveFailures >= PROMOTE_AFTER) {
+            state.preferred = (state.preferred + 1) % urls.length;
+            state.consecutiveFailures = 0;
+          }
+        }
+      }
+    }
+    throw lastError;
+  };
+  send._state = state; // test hook
+  return send;
+}
+
 /** The shared public read provider (null when CHAIN.rpcUrl is unset). */
 export function sharedReadProvider() {
   if (!_shared && CHAIN.rpcUrl) {
     // Cache above, multicall below: a cached answer never spends an
     // aggregate slot; a cache MISS joins the window's aggregate.
-    _shared = attachReadCache(attachMulticall(new ethers.JsonRpcProvider(
+    const provider = new ethers.JsonRpcProvider(
       CHAIN.rpcUrl,
       Number(CHAIN.id),
       { staticNetwork: true, batchMaxCount: 10, batchStallTime: 20 },
-    )));
+    );
+    const fallbacks = Array.isArray(CHAIN.fallbackRpcUrls) ? CHAIN.fallbackRpcUrls.filter(Boolean) : [];
+    if (fallbacks.length > 0) {
+      provider._send = _makeFailoverSend([CHAIN.rpcUrl, ...fallbacks]);
+    }
+    _shared = attachReadCache(attachMulticall(provider));
   }
   return _shared;
 }

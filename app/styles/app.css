@@ -4887,7 +4887,7 @@ body.layout-basic .jackpot-hero replay-panel .panel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: clamp(0.45rem, 1.4vw, 0.68rem) clamp(0.65rem, 2vw, 0.9rem)
+  padding: clamp(0.32rem, 1.1vw, 0.52rem) clamp(2.1rem, 10.5vw, 3rem)
     clamp(0.55rem, 1.6vw, 0.75rem);
 }
 
@@ -4935,27 +4935,69 @@ body.layout-basic .jackpot-hero replay-panel .panel {
    coinflip column (grid child min-width guard). */
 body.layout-basic .jackpot-hero__draw {
   grid-area: draw;
+  position: relative;
+  isolation: isolate;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  background: #060506;
+}
+
+body.layout-basic .jackpot-hero__draw::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: url('/app/assets/jackpot/daily-drawing-cabinet-v1.webp') center / 100% 100% no-repeat;
+  content: "";
+  pointer-events: none;
+}
+
+body.layout-basic .jackpot-hero__draw > .jackpot-hero__draw-title,
+body.layout-basic .jackpot-hero__draw > replay-panel,
+body.layout-basic .jackpot-hero__draw > .jackpot-day-history,
+body.layout-basic .jackpot-hero__draw > .jackpot-hero__summary-slot {
+  position: relative;
+  z-index: 2;
+}
+
+body.layout-basic .jackpot-hero__draw > last-day-jackpot {
+  display: block;
+  width: 100%;
+  margin: 0;
 }
 
 body.layout-basic .jackpot-hero__draw-title {
   box-sizing: border-box;
   display: flex;
-  height: 2.55rem;
+  height: 3.2rem;
+  flex: 0 0 3.2rem;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0.04rem;
   margin: 0;
-  padding: 0 0.8rem;
+  padding: 0.38rem 3.4rem 0.16rem;
   border: 0;
   color: var(--text-primary, #eee);
   font-family: inherit;
-  font-size: 1.05rem;
-  font-weight: 950;
-  letter-spacing: 0.13em;
-  line-height: 1.2;
   text-align: center;
+  text-shadow: 0 1px 1px #000, 0 0 9px rgba(245, 166, 35, 0.24);
+}
+body.layout-basic .jackpot-hero__draw-title > span {
+  color: #b98a4a;
+  font-size: clamp(0.4rem, 1.35vw, 0.48rem);
+  font-weight: 900;
+  letter-spacing: 0.24em;
+  line-height: 1;
+}
+body.layout-basic .jackpot-hero__draw-title > strong {
+  color: #fff0c2;
+  font-size: clamp(0.68rem, 2.5vw, 0.88rem);
+  font-weight: 950;
+  letter-spacing: 0.11em;
+  line-height: 1.05;
+  white-space: nowrap;
 }
 
 /* last-day-jackpot is a headless state bridge in this layout. Its hidden
@@ -4963,6 +5005,149 @@ body.layout-basic .jackpot-hero__draw-title {
    blank 24px band between the shared title and the actual draw. */
 body.layout-basic .jackpot-hero last-day-jackpot .panel {
   padding: 0;
+}
+
+/* Four foil tickets live in the cabinet side rails instead of becoming a
+   foreground strip. Their traits are visible as dim machine memory; grading
+   and winner lighting appear only after the scratch spoiler gate opens. */
+body.layout-basic .jackpot-hero .ldj-foil-machine-bank {
+  position: absolute;
+  z-index: 1;
+  inset: 3.55rem 0.38rem 4.2rem;
+  pointer-events: none;
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-slot {
+  position: absolute;
+  display: grid;
+  box-sizing: border-box;
+  width: clamp(2rem, 9.5vw, 2.65rem);
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: visible;
+  border: 1px solid rgba(190, 151, 88, 0.2);
+  border-radius: 5px;
+  background:
+    linear-gradient(135deg, rgba(78, 48, 29, 0.22), transparent 48%),
+    rgba(2, 3, 5, 0.78);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.72),
+    inset 0 0 10px rgba(0, 0, 0, 0.9);
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-slot:nth-child(1) { top: 23%; left: 0; }
+body.layout-basic .jackpot-hero .ldj-foil-machine-slot:nth-child(2) { bottom: 23%; left: 0; }
+body.layout-basic .jackpot-hero .ldj-foil-machine-slot:nth-child(3) { top: 23%; right: 0; }
+body.layout-basic .jackpot-hero .ldj-foil-machine-slot:nth-child(4) { right: 0; bottom: 23%; }
+body.layout-basic .jackpot-hero .ldj-foil-machine-slot::before {
+  width: 42%;
+  height: 42%;
+  background: rgba(229, 196, 135, 0.11);
+  content: "";
+  -webkit-mask: url('/whitepaper/flame-center.svg') center / contain no-repeat;
+  mask: url('/whitepaper/flame-center.svg') center / contain no-repeat;
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-slot.is-loaded::before { display: none; }
+body.layout-basic .jackpot-hero .ldj-foil-machine-ticket {
+  position: relative;
+  display: grid;
+  width: calc(100% - 5px);
+  aspect-ratio: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid rgba(216, 222, 229, 0.42);
+  border-radius: 3px;
+  background: #777b82;
+  filter: grayscale(0.9) brightness(0.52);
+  opacity: 0.24;
+  transition: opacity 0.24s ease, filter 0.24s ease, box-shadow 0.24s ease;
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-cell {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(20, 22, 27, 0.46);
+  background: rgba(220, 225, 232, 0.5);
+  opacity: 0.52;
+  transition: opacity 0.2s ease, filter 0.2s ease, background 0.2s ease;
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-cell img {
+  display: block;
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 25%;
+  aspect-ratio: 1;
+  place-items: center;
+  background: #a8abb1;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  transform: translate(-50%, -50%);
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-center img {
+  width: 62%;
+  height: 62%;
+  object-fit: contain;
+  filter: grayscale(1);
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-slot.is-graded .ldj-foil-machine-ticket {
+  filter: grayscale(0.45) brightness(0.68);
+  opacity: 0.56;
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-slot.is-graded .ldj-foil-machine-cell {
+  opacity: 0.24;
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-cell.is-symbol-match {
+  background: rgba(96, 165, 250, 0.38);
+  filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.8));
+  opacity: 0.92 !important;
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-cell.is-color-match {
+  background: rgba(253, 230, 138, 0.5);
+  filter: brightness(1.16) drop-shadow(0 0 5px rgba(250, 204, 21, 0.92));
+  opacity: 1 !important;
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-slot.is-match {
+  border-color: rgba(134, 239, 172, 0.96);
+  box-shadow:
+    inset 0 0 0 1px rgba(220, 252, 231, 0.24),
+    0 0 6px rgba(74, 222, 128, 0.78),
+    0 0 16px rgba(34, 197, 94, 0.42);
+  animation: ldj-foil-machine-win 1.65s ease-in-out infinite alternate;
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-slot.is-match::after {
+  position: absolute;
+  top: -0.34rem;
+  right: -0.28rem;
+  display: grid;
+  min-width: 1.12rem;
+  height: 0.72rem;
+  place-items: center;
+  border: 1px solid rgba(220, 252, 231, 0.76);
+  border-radius: 999px;
+  background: #0b2b17;
+  color: #bbf7d0;
+  content: attr(data-score);
+  font: 950 0.43rem/1 "Inter", system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  box-shadow: 0 0 7px rgba(74, 222, 128, 0.5);
+}
+body.layout-basic .jackpot-hero .ldj-foil-machine-slot.is-match .ldj-foil-machine-ticket {
+  filter: none;
+  opacity: 1;
+}
+@keyframes ldj-foil-machine-win {
+  from { filter: brightness(0.93); }
+  to { filter: brightness(1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.layout-basic .jackpot-hero .ldj-foil-machine-slot.is-match { animation: none; }
 }
 
 body.layout-basic .jackpot-hero__summary-slot {
@@ -12871,7 +13056,7 @@ body.layout-basic .jackpot-hero replay-panel .replay-ticket-bar {
 body.layout-basic .jackpot-hero replay-panel .replay-controls {
   order: 2;
   box-sizing: border-box;
-  width: min(100%, 19rem);
+  width: min(70%, 17rem);
   min-height: 2.5rem;
   flex: 0 0 2.5rem;
   align-items: stretch;

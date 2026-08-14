@@ -11,7 +11,7 @@
 //   - listens for the panel's `replay:scratch-complete` (all owned quadrants
 //     + center scratched — NOT mere spin end, which would spoil unscratched
 //     prizes) to write the spun_day spoiler key and run the winner effect when
-//     viewed player won, light up the foil strip, and dispatch
+//     viewed player won, light up the cabinet's foil bank, and dispatch
 //     `jackpot:revealed` (winnings banner signal);
 //   - renders the compact day shell and publishes earned foil-match claims to
 //     the shared pending tray (no winner-address dumps or inline foil strip).
@@ -25,10 +25,12 @@ import { formatEth, formatFlip } from '../viewer/utils.js';
 import { CHAIN } from '../app/chain-config.js';
 // Phase 64 — foil-ticket matching pure grading helpers.
 import {
+  bestGrade,
   claimableDrawGrades,
   FOIL_CLAIM_THRESHOLD,
   unpackWinSet,
 } from '../app/foil-match.js';
+import { traitToBadge } from '../app/jackpot-data.js';
 import { fetchJSON } from '../app/api.js';
 // Reveal-engine wiring: the viewed player's jackpot winnings auto-play a
 // celebration sequence; a claimed foil match reveals its payout box-spin.
@@ -1317,7 +1319,73 @@ class LastDayJackpot extends HTMLElement {
     return [String(player || '').toLowerCase(), Number(day), Number(ticketIndex), Number(drawKind)].join(':');
   }
 
+  // The cabinet keeps four quiet foil sockets around the draw. Owning a pack
+  // fills them immediately, but grading remains behind the same durable
+  // scratch gate as Pending so the background cannot spoil a covered result.
+  #renderFoilBackdrop() {
+    const slots = [...this.querySelectorAll('.ldj-foil-machine-slot')];
+    if (slots.length === 0) return;
+    const lines = this.#foilData?.present && Array.isArray(this.#foilData?.lines)
+      ? this.#foilData.lines.slice(0, slots.length)
+      : [];
+    const revealed = this.#hasSpunPinnedDay();
+    const mainSet = this.#lastPayload?.summary?.rollOne?.mainTraitsPacked ?? null;
+    const bonusSet = this.#lastPayload?.summary?.rollTwo?.bonusTraitsPacked ?? null;
+
+    slots.forEach((slot, index) => {
+      slot.textContent = '';
+      slot.classList.remove('is-loaded', 'is-graded', 'is-match');
+      slot.removeAttribute('data-score');
+      const parsedLine = Array.isArray(lines[index]) && lines[index].length === 4
+        ? lines[index].map(Number)
+        : null;
+      const line = parsedLine?.every((traitId) => (
+        Number.isInteger(traitId) && traitId >= 0 && traitId <= 255
+      )) ? parsedLine : null;
+      if (!line) return;
+
+      const grade = revealed ? bestGrade(line, mainSet, bonusSet) : null;
+      slot.classList.add('is-loaded');
+      if (grade) {
+        slot.classList.add('is-graded');
+        slot.setAttribute('data-score', `T${grade.score}`);
+        if (grade.score >= FOIL_CLAIM_THRESHOLD) slot.classList.add('is-match');
+      }
+
+      const ticket = document.createElement('span');
+      ticket.className = 'ldj-foil-machine-ticket';
+      line.forEach((traitId, quadrant) => {
+        const badge = traitToBadge(traitId);
+        const cell = document.createElement('span');
+        cell.className = 'ldj-foil-machine-cell';
+        const face = Number(grade?.faces?.[quadrant] || 0);
+        if (face === 1) cell.classList.add('is-symbol-match');
+        if (face === 2) cell.classList.add('is-color-match');
+        if (badge) {
+          const image = document.createElement('img');
+          image.src = badge.path;
+          image.alt = '';
+          image.loading = 'lazy';
+          image.decoding = 'async';
+          cell.appendChild(image);
+        }
+        ticket.appendChild(cell);
+      });
+      const center = document.createElement('span');
+      center.className = 'ldj-foil-machine-center';
+      const flame = document.createElement('img');
+      flame.src = '/whitepaper/flame-center.svg';
+      flame.alt = '';
+      flame.loading = 'lazy';
+      flame.decoding = 'async';
+      center.appendChild(flame);
+      ticket.appendChild(center);
+      slot.appendChild(ticket);
+    });
+  }
+
   #renderFoil() {
+    this.#renderFoilBackdrop();
     const d = this.#foilData;
     const player = getViewedAddress();
     const publishEmpty = () => publishPendingActions(FOIL_MATCH_ACTION_SOURCE, []);
@@ -1518,6 +1586,14 @@ class LastDayJackpot extends HTMLElement {
                  widget. Claimable foil matches publish into the shared pending
                  tray; their comparison and payout play in reveal-overlay. -->
           </div>
+
+          <div class="ldj-foil-machine-bank" data-bind="ldj-foil-machine-bank"
+               aria-hidden="true">
+            <span class="ldj-foil-machine-slot"></span>
+            <span class="ldj-foil-machine-slot"></span>
+            <span class="ldj-foil-machine-slot"></span>
+            <span class="ldj-foil-machine-slot"></span>
+          </div>
         </div>
       </div>
     `;
@@ -1579,6 +1655,7 @@ class LastDayJackpot extends HTMLElement {
     }
 
     this.#showContent();
+    this.#renderFoilBackdrop();
     this.#wireHistoryNav();
   }
 

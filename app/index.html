@@ -138,15 +138,19 @@
            coinflip reveal (two-faced coin + Reveal Flip button) + flip
            stake/redeem actions. On narrow screens the draw and flip stay
            first, with purchase immediately below them.
-           The foil strip and the day-results list were removed from the shell
-           on 2026-07-29 (user call: "the ugly foil tickets and the big list of
-           what everyone else won") — the widget is the draw and the scratch.
+           The old foreground foil strip and the day-results list were removed
+           from the shell on 2026-07-29 (user call: "the ugly foil tickets and
+           the big list of what everyone else won"). Four subdued foil sockets
+           now live in the drawing cabinet itself; only a revealed match lights.
            The DAY SUMMARY button is still owned by last-day-jackpot (it carries
            the gates) and replaces SPIN JACKPOT in that button's existing action
            row once BOTH the board and the flip have played out. -->
       <section class="jackpot-hero" aria-label="Purchase, daily jackpot draw, and coinflip">
         <div class="jackpot-hero__draw">
-          <h2 class="jackpot-hero__draw-title">DAILY JACKPOT</h2>
+          <h2 class="jackpot-hero__draw-title">
+            <span>DEGENERUS</span>
+            <strong>DAILY DRAWING</strong>
+          </h2>
           <last-day-jackpot></last-day-jackpot>
           <replay-panel single-button></replay-panel>
           <nav class="jackpot-day-history" data-bind="jackpot-day-history" hidden

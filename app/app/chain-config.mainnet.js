@@ -14,6 +14,9 @@ export const CHAIN = {
   hexId: '0x1',
   name: 'Ethereum',
   rpcUrl: '',  // WR-06: populate before cutover (e.g. 'https://eth.llamarpc.com')
+  // WR-06: populate with 1-2 keyless L1 endpoints (e.g. publicnode, 1rpc) —
+  // the shared read provider fails over to these on transport-level errors.
+  fallbackRpcUrls: [],
   // Must be a keyless public endpoint. Gold Rush never falls back to rpcUrl,
   // because rpcUrl may eventually carry a metered provider key.
   goldRushPublicRpcUrl: '',
