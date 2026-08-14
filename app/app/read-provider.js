@@ -139,6 +139,167 @@ function store(key, pinned, value) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// MULTICALL AGGREGATION (C15 step 3, 2026-08-14)
+// ---------------------------------------------------------------------------
+// The read cache killed REPETITION; this layer kills FAN-OUT. Distinct
+// questions issued in the same stall window — the app's mount waves ask ~80+
+// of them — collapse into ONE eth_call to the canonical Multicall3 contract
+// (same address on every chain), instead of one eth_call each. The public
+// RPC's rate limiter counts calls, not bytes, so this is the difference
+// between a cold load spending ~100+ calls and spending a handful. Bonus:
+// every question in an aggregate is answered at the SAME block.
+//
+// Safety properties, each load-bearing:
+//   - Only pure {to, data, blockTag} reads aggregate. A `from` changes
+//     msg.sender inside Multicall3, so sender-flavored reads go direct. Any
+//     unknown field goes direct (same fail-open rule as the cache).
+//   - aggregate3 runs with allowFailure=true; a sub-call that reverted is
+//     RETRIED individually so the caller receives ethers' genuine
+//     CALL_EXCEPTION (custom-error data intact), not a synthesized one.
+//   - If the aggregate itself fails (RPC gas cap, transport), every entry
+//     falls back to a direct call — correctness never depends on Multicall3.
+//   - One getCode probe per provider decides availability. Chains without
+//     Multicall3 (the local anvil sim) keep exactly today's behavior. Calls
+//     arriving before the probe resolves are QUEUED, not sent direct — the
+//     first mount wave is precisely the fan-out this layer exists to catch.
+//
+// Order of wrappers: cache ABOVE, multicall BELOW — a cached answer must
+// never spend a slot in an aggregate.
+const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11';
+const MULTICALL_STALL_MS = 20;   // matches the provider's own batchStallTime
+const MULTICALL_MAX_BATCH = 25;  // keeps one aggregate under public-RPC eth_call gas caps
+let _multicallIface = null;
+function multicallIface() {
+  if (!_multicallIface) {
+    _multicallIface = new ethers.Interface([
+      'function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)',
+    ]);
+  }
+  return _multicallIface;
+}
+
+/** Aggregatable = the cache's pure-read shape, minus any sender identity. */
+function _multicallIdentity(tx) {
+  const identity = _readCacheKey(tx);
+  if (identity === null) return null;
+  if (typeof tx.from === 'string' && tx.from !== '') return null;
+  if (String(tx.to).toLowerCase() === MULTICALL3.toLowerCase()) return null;
+  const tag = normalizeBlockTag(tx.blockTag);
+  // 'safe'/'finalized' are moving tags the aggregate would pin differently
+  // per group member on a reorg boundary — rare enough to just go direct.
+  if (tag !== 'latest' && !tag.startsWith('#')) return null;
+  return tag;
+}
+
+/**
+ * Wrap a provider's `call` so same-window distinct questions travel as one
+ * Multicall3 aggregate. Exported so tests can attach it to a stub provider.
+ */
+export function attachMulticall(provider) {
+  if (!provider || typeof provider.call !== 'function' || provider._multicallAttached) {
+    return provider;
+  }
+  const perform = provider.call.bind(provider);
+  let available = null;          // null = probing, then true/false forever
+  let probeStarted = false;
+  const groups = new Map();     // blockTag fragment -> { entries, timer }
+
+  const flushGroup = (tag) => {
+    const group = groups.get(tag);
+    if (!group) return;
+    groups.delete(tag);
+    for (let i = 0; i < group.entries.length; i += MULTICALL_MAX_BATCH) {
+      const chunk = group.entries.slice(i, i + MULTICALL_MAX_BATCH);
+      if (chunk.length === 1) {
+        // A lone question gains nothing from the wrapper contract.
+        const e = chunk[0];
+        perform(e.tx).then(e.resolve, e.reject);
+        continue;
+      }
+      const data = multicallIface().encodeFunctionData('aggregate3', [
+        chunk.map((e) => ({ target: e.tx.to, allowFailure: true, callData: e.tx.data })),
+      ]);
+      const aggTx = { to: MULTICALL3, data };
+      if (tag !== 'latest') aggTx.blockTag = chunk[0].tx.blockTag;
+      perform(aggTx).then(
+        (raw) => {
+          let results;
+          try {
+            [results] = multicallIface().decodeFunctionResult('aggregate3', raw);
+          } catch {
+            // Undecodable aggregate (a proxy RPC mangling calls, or a
+            // codeless address answering '0x') — never trust it again.
+            available = false;
+            for (const e of chunk) perform(e.tx).then(e.resolve, e.reject);
+            return;
+          }
+          chunk.forEach((e, idx) => {
+            const r = results[idx];
+            if (r.success) e.resolve(r.returnData);
+            // Reverted inside the aggregate: retry direct so the caller gets
+            // ethers' real error object, revert data and all.
+            else perform(e.tx).then(e.resolve, e.reject);
+          });
+        },
+        () => {
+          for (const e of chunk) perform(e.tx).then(e.resolve, e.reject);
+        },
+      );
+    }
+  };
+
+  const flushAll = () => {
+    for (const tag of [...groups.keys()]) {
+      const group = groups.get(tag);
+      if (group?.timer != null) clearTimeout(group.timer);
+      flushGroup(tag);
+    }
+  };
+
+  const drainDirect = () => {
+    for (const tag of [...groups.keys()]) {
+      const group = groups.get(tag);
+      groups.delete(tag);
+      if (group.timer != null) clearTimeout(group.timer);
+      for (const e of group.entries) perform(e.tx).then(e.resolve, e.reject);
+    }
+  };
+
+  const startProbe = () => {
+    if (probeStarted) return;
+    probeStarted = true;
+    const probe = typeof provider.getCode === 'function'
+      ? provider.getCode(MULTICALL3)
+      : Promise.reject(new Error('no getCode'));
+    probe.then(
+      (code) => { available = typeof code === 'string' && code.length > 2; },
+      () => { available = false; },
+    ).then(() => { available ? flushAll() : drainDirect(); });
+  };
+
+  provider.call = (tx) => {
+    const tag = _multicallIdentity(tx);
+    if (tag === null || available === false) return perform(tx);
+    return new Promise((resolve, reject) => {
+      let group = groups.get(tag);
+      if (!group) {
+        group = { entries: [], timer: null };
+        groups.set(tag, group);
+        // While the probe is unresolved the group has NO timer — the probe's
+        // completion is the flush signal, so the first mount wave aggregates.
+        if (available === true) {
+          group.timer = setTimeout(() => { group.timer = null; flushGroup(tag); }, MULTICALL_STALL_MS);
+        }
+      }
+      group.entries.push({ tx, resolve, reject });
+      if (available === null) startProbe();
+    });
+  };
+  provider._multicallAttached = true;
+  return provider;
+}
+
 /**
  * Wrap a provider's `call` so repeat questions are answered from memory.
  * Exported so tests can attach it to a stub provider.
@@ -196,11 +357,13 @@ export function invalidateReadCache() {
 /** The shared public read provider (null when CHAIN.rpcUrl is unset). */
 export function sharedReadProvider() {
   if (!_shared && CHAIN.rpcUrl) {
-    _shared = attachReadCache(new ethers.JsonRpcProvider(
+    // Cache above, multicall below: a cached answer never spends an
+    // aggregate slot; a cache MISS joins the window's aggregate.
+    _shared = attachReadCache(attachMulticall(new ethers.JsonRpcProvider(
       CHAIN.rpcUrl,
       Number(CHAIN.id),
       { staticNetwork: true, batchMaxCount: 10, batchStallTime: 20 },
-    ));
+    )));
   }
   return _shared;
 }
