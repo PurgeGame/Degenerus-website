@@ -106,6 +106,6 @@ export const MAINNET_PENDING = false;
 
 // Phase 63 D-01 step 1 — WC v2 projectId (cloud.reown.com).
 // Public token (rate-limit metering, NOT a secret — RESEARCH Runtime State Inventory line 531).
-// TODO(63-01): replace with real cloud.reown.com projectId before mainnet deploy.
-// User pre-authorized demo value (2026-04-29) — autonomous-chain placeholder.
-export const WALLETCONNECT_PROJECT_ID = 'demoa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+// REAL Reown project id, supplied by the user 2026-08-14 (replaced the demo
+// placeholder whose relay answered "Project not found", so WC never connected).
+export const WALLETCONNECT_PROJECT_ID = '168de5f2661e82f9976d6b05212c1d44';

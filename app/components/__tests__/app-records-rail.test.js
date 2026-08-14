@@ -692,43 +692,43 @@ describe('rail wiring', () => {
       'a quiet inset rule completes the poster treatment');
     assert.match(CSS, /records-rail__pot-logo\s*\{[^}]*width:\s*1rem/s);
     for (const asset of [
-      'biggest-degenerette-frame-v2.png',
-      'biggest-luckbox-frame-v2.png',
-      'biggest-pack-ripped-frame-v2.png',
-      'biggest-coinflip-frame-v2.png',
+      'biggest-degenerette-card-v4.png',
+      'biggest-luckbox-card-v4.png',
+      'biggest-pack-ripped-card-v4.png',
+      'biggest-coinflip-card-v4.png',
     ]) {
       assert.ok(COMPONENT.includes(`/app/assets/${asset}`),
         `${asset} must be mapped to its record kind`);
     }
     assert.match(COMPONENT,
-      /<img class="records-rail__leader-frame"[\s\S]*?alt="\$\{escapeHtml\(frame\.label\)\}"/,
-      'each split BIGGEST X frame is authored artwork rather than live typography');
+      /<img class="records-rail__leader-card-art"[\s\S]*?alt="\$\{escapeHtml\(cardArt\.label\)\}"/,
+      'each BIGGEST X tile is one authored card with integrated data wells');
     assert.match(COMPONENT, /label: 'BIGGEST COINFLIP'/,
       'the fourth record is presented as COINFLIP while its amount remains denominated in FLIP');
     assert.doesNotMatch(COMPONENT, /recordKindArt|records-rail__kind-art|leader-biggest-mark|leader-label/,
       'the prior watermark plus duplicate text interpretation is removed');
     assert.match(COMPONENT,
-      /records-rail__leader-frame[\s\S]*?records-rail__leader-presentation[\s\S]*?records-rail__portrait[\s\S]*?records-rail__leader-holder[\s\S]*?records-rail__leader-strip[\s\S]*?records-rail__leader-value[\s\S]*?records-rail__bounty-sight/,
-      'the frame surrounds avatar plus identity, with record and bounty amounts together below');
+      /records-rail__leader-card-art[\s\S]*?records-rail__leader-presentation[\s\S]*?records-rail__portrait[\s\S]*?records-rail__leader-holder[\s\S]*?records-rail__leader-strip[\s\S]*?records-rail__leader-value[\s\S]*?records-rail__bounty-sight/,
+      'the cohesive card receives avatar, identity, record, and bounty overlays in that order');
     assert.match(COMPONENT, /profile\?\.name \|\| holderAddress/,
       'the open center prefers a linked Discord name and falls back to the address');
     assert.match(COMPONENT, /`\$\{profile\.name\} · \$\{holderAddress\}`/,
       'the full holder tooltip keeps the linked name and address together');
-    assert.match(CSS, /records-rail__leader-frame\s*\{[^}]*grid-row:\s*1[^}]*object-fit:\s*fill/s,
-      'the open-center artwork uses the complete card body instead of leaving side gaps');
-    assert.match(CSS, /records-rail__leader-presentation\s*\{[^}]*grid-row:\s*1[^}]*grid-template-columns:\s*1\.32rem minmax\(0, auto\)[^}]*justify-content:\s*center/s,
-      'avatar and identity share the artwork opening without colliding with its lower rail');
+    assert.match(CSS, /records-rail__leader-card-art\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0[^}]*object-fit:\s*fill/s,
+      'one illustrated card fills each leader button');
+    assert.match(CSS, /records-rail__leader-presentation\s*\{[^}]*position:\s*absolute[^}]*top:\s*43%[^}]*grid-template-columns:\s*12\.5% minmax\(0, 1fr\)/s,
+      'avatar and identity land in the card art identity wells');
     assert.match(CSS, /records-rail__leader-value\s*\{[^}]*clamp\(0\.74rem, 0\.94vw, 0\.84rem\)/s);
     assert.match(CSS, /records-rail__leader-value :is\(em, i\)\s*\{[^}]*"Inter"/s,
       'TIX and other compact units retain the label font instead of inheriting numeric mono');
     assert.match(CSS, /records-rail__leader-amount\s*\{[^}]*text-overflow:\s*ellipsis/s,
       'a pathological value truncates before it can push its unit out of the bubble');
-    assert.match(CSS, /records-rail__leader\s*\{[^}]*min-height:\s*4\.55rem[^}]*grid-template-rows:\s*clamp\(3\.15rem, 5vw, 4\.15rem\) 1\.12rem[^}]*border-radius:\s*9px/s,
-      'each compact plaque reserves one framed body and one data strip');
+    assert.match(CSS, /records-rail__leader\s*\{[^}]*aspect-ratio:\s*1200 \/ 331[^}]*background:\s*transparent[^}]*box-shadow:\s*none/s,
+      'the button follows the cohesive art canvas without adding a second rectangular frame');
     assert.doesNotMatch(CSS, /records-rail__leader::before/,
       'the record boxes carry no repeated logo watermark');
-    assert.match(CSS, /records-rail__leader-strip\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)[^}]*border-top:\s*1px solid[^}]*linear-gradient/s,
-      'record amount and bounty split the full-width bottom strip evenly');
+    assert.match(CSS, /records-rail__leader-strip\s*\{[^}]*position:\s*absolute[^}]*top:\s*74%[^}]*grid-template-columns:\s*56\.5% 43\.5%[^}]*background:\s*transparent/s,
+      'record amount and bounty align with the two illustrated bottom wells');
     assert.match(CSS, /records-rail__leader-holder\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,
       'long Discord names or address fallbacks cannot widen a tile');
     assert.match(CSS, /records-rail__bounty-sight > b\s*\{[^}]*0\.58rem/s,

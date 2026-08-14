@@ -59,21 +59,21 @@ const DISPLAY_KIND_ORDER = new Map([
   [RECORD_KIND_FLIP, 3],
 ]);
 
-const RECORD_KIND_FRAME = new Map([
+const RECORD_KIND_CARD_ART = new Map([
   [RECORD_KIND_SPIN, {
-    src: '/app/assets/biggest-degenerette-frame-v2.png',
+    src: '/app/assets/biggest-degenerette-card-v4.png',
     label: 'BIGGEST DEGENERETTE',
   }],
   [RECORD_KIND_LUCKBOX, {
-    src: '/app/assets/biggest-luckbox-frame-v2.png',
+    src: '/app/assets/biggest-luckbox-card-v4.png',
     label: 'BIGGEST LUCKBOX',
   }],
   [RECORD_KIND_BUY, {
-    src: '/app/assets/biggest-pack-ripped-frame-v2.png',
+    src: '/app/assets/biggest-pack-ripped-card-v4.png',
     label: 'BIGGEST PACK RIPPED',
   }],
   [RECORD_KIND_FLIP, {
-    src: '/app/assets/biggest-coinflip-frame-v2.png',
+    src: '/app/assets/biggest-coinflip-card-v4.png',
     label: 'BIGGEST COINFLIP',
   }],
 ]);
@@ -1065,7 +1065,7 @@ class AppRecordsRail extends HTMLElement {
       : holder;
     const payoutWei = this.#recordPayoutWei(record);
     const compactPayout = payoutWei == null ? '—' : formatCompactBountyWei(payoutWei);
-    const frame = RECORD_KIND_FRAME.get(Number(record.kind)) || {
+    const cardArt = RECORD_KIND_CARD_ART.get(Number(record.kind)) || {
       src: '',
       label: `BIGGEST ${record.meta.short}`,
     };
@@ -1087,9 +1087,9 @@ class AppRecordsRail extends HTMLElement {
       : `${record.meta.label}: unhit; bounty ${compactPayout} FLIP.${instruction}`;
     item.setAttribute('aria-label', item.title);
     item.innerHTML = `
-      <img class="records-rail__leader-frame"
-           src="${escapeHtml(frame.src)}"
-           alt="${escapeHtml(frame.label)}"
+      <img class="records-rail__leader-card-art"
+           src="${escapeHtml(cardArt.src)}"
+           alt="${escapeHtml(cardArt.label)}"
            decoding="async">
       <span class="records-rail__leader-presentation">
         ${record.held
