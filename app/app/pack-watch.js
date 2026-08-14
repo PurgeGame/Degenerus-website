@@ -23,6 +23,7 @@
 // quota errors must never break a buy or a poll (Pitfall F).
 
 import { CHAIN, CONTRACTS } from './chain-config.js';
+import { sharedReadProvider } from './read-provider.js';
 import { getProvider, ethers, TX_CONFIRMED_EVENT } from './contracts.js';
 import { fetchJSON } from './api.js';
 import { get } from './store.js';
@@ -415,11 +416,7 @@ async function _readEntriesOwed(address, levels) {
   if (!_entriesOwedReaderForTest && reads.some((read) => read.status === 'rejected')) {
     try {
       if (!_entriesOwedFallbackProvider && CHAIN.rpcUrl) {
-        _entriesOwedFallbackProvider = new ethers.JsonRpcProvider(
-          CHAIN.rpcUrl,
-          { name: CHAIN.name, chainId: Number(CHAIN.id) },
-          { staticNetwork: true, batchMaxCount: 2 },
-        );
+        _entriesOwedFallbackProvider = sharedReadProvider();  // C15: shared batched read stream
       }
       if (_entriesOwedFallbackProvider) {
         const fallbackContract = new ethers.Contract(

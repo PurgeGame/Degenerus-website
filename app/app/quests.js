@@ -4,6 +4,7 @@
 
 import { ethers, getProvider } from './contracts.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
+import { sharedReadProvider } from './read-provider.js';
 
 const QUESTS_ABI = [
   'function getPlayerQuestView(address player) view returns (((uint24 day,uint8 questType,bool highDifficulty,(uint32 mints,uint256 tokenAmount) requirements)[2] quests,uint128[2] progress,bool[2] completed,uint24 lastCompletedDay,uint32 baseStreak) viewData)',
@@ -77,7 +78,7 @@ function _readProvider() {
   // quest board. Fake-DOM tests intentionally do not expose window.fetch.
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') return null;
   if (!_publicProvider) {
-    _publicProvider = new ethers.JsonRpcProvider(CHAIN.rpcUrl, CHAIN.id, { staticNetwork: true });
+    _publicProvider = sharedReadProvider();  // C15: shared batched read stream
   }
   return _publicProvider;
 }

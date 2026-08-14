@@ -4562,13 +4562,38 @@ class RevealOverlay extends HTMLElement {
 
     const totalEl = document.createElement('div');
     totalEl.className = `rvl-spin-total ${celebrate ? 'is-win' : 'is-miss'}`;
-    totalEl.textContent = wwxrpOnly
-      ? (won ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} · UNLUCKY` : 'UNLUCKY')
-      : won
-      ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} ${
+    const ethSplit = board.currency === 0 && won
+      ? this.#runningEthSplit(board, board.total)
+      : null;
+    if (ethSplit?.lootbox > 0n) {
+      // Degenerette's ETH total is gross: part is immediately claimable and
+      // part has already been recirculated into the awarded Luckbox. Keep the
+      // terminal receipt from calling both destinations "ETH won".
+      totalEl.classList.add('rvl-spin-total--eth-split');
+      const cash = document.createElement('span');
+      cash.className = 'rvl-spin-total__cash';
+      cash.textContent = `${this.#formatDgnAmount(board, ethSplit.actual)} ETH ${
         celebrate ? 'WON' : 'RETURNED'
-      }`
-      : (board.survived === false ? 'HIT — SURVIVAL FLIP BUSTED' : 'UNLUCKY');
+      }`;
+      const plus = document.createElement('span');
+      plus.className = 'rvl-spin-total__separator';
+      plus.textContent = '+';
+      plus.setAttribute('aria-hidden', 'true');
+      const lootbox = document.createElement('span');
+      lootbox.className = 'rvl-spin-total__lootbox';
+      lootbox.textContent = `${this.#formatDgnAmount(board, ethSplit.lootbox)} ETH LUCKBOX`;
+      totalEl.appendChild(cash);
+      totalEl.appendChild(plus);
+      totalEl.appendChild(lootbox);
+    } else {
+      totalEl.textContent = wwxrpOnly
+        ? (won ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} · UNLUCKY` : 'UNLUCKY')
+        : won
+        ? `${this.#formatDgnAmount(board, board.total)} ${board.unit} ${
+          celebrate ? 'WON' : 'RETURNED'
+        }`
+        : (board.survived === false ? 'HIT — SURVIVAL FLIP BUSTED' : 'UNLUCKY');
+    }
     rendered.stage.appendChild(totalEl);
 
     if (sequence) {

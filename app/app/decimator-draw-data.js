@@ -7,6 +7,7 @@
 // window is open. Raw FLIP destroyed comes from FLIP.DecimatorBurn.
 
 import { CHAIN, CONTRACTS, ETH_DIVISOR } from './chain-config.js';
+import { sharedReadProvider } from './read-provider.js';
 import { ethers } from './contracts.js';
 
 const GAME_EVENTS = [
@@ -35,11 +36,7 @@ function logOrder(left, right) {
 function provider() {
   if (providerOverride) return providerOverride;
   if (!readProvider) {
-    readProvider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
-      Number(CHAIN.id),
-      { staticNetwork: true, batchMaxCount: 2 },
-    );
+    readProvider = sharedReadProvider();  // C15: shared batched read stream
   }
   return readProvider;
 }

@@ -631,10 +631,10 @@ describe('rail wiring', () => {
     assert.match(COMPONENT, /src="\/app\/assets\/biggest-bounty-wordmark-v39-clean-pillowed-painted-wood\.png"/);
     assert.doesNotMatch(COMPONENT, /records-rail__title-(?:name|descriptor)/,
       'the generated wordmark replaces the old duplicate text treatment');
-    assert.match(CSS, /records-rail__wordmark\s*\{[^}]*width:\s*min\(100%, 18rem\)/s,
-      'the Texas wordmark uses the available desktop identity column');
-    assert.match(CSS, /records-rail__wordmark img\s*\{[^}]*width:\s*100%[^}]*max-height:\s*5\.75rem/s,
-      'the larger artwork remains bounded inside the collapsed rail');
+    assert.match(CSS, /records-rail__wordmark\s*\{[^}]*width:\s*min\(100%, 11rem\)/s,
+      'the Texas wordmark stays compact inside the desktop identity column');
+    assert.match(CSS, /records-rail__wordmark img\s*\{[^}]*width:\s*100%[^}]*max-height:\s*4rem/s,
+      'the artwork cannot inflate the collapsed rail');
     assert.doesNotMatch(COMPONENT, /4 ALL-TIME RECORDS/,
       'the wordmark stands alone without a redundant record-count subtitle');
     for (const label of [
@@ -672,31 +672,68 @@ describe('rail wiring', () => {
     assert.match(COMPONENT, /this\.#openBountyDialog\(record\.kind\)/);
     assert.match(COMPONENT, /FLIP_LOGO = '\/whitepaper\/flame-logo-split\.svg'/);
     assert.match(COMPONENT, /records-rail__pot-label">BOUNTY POOL/);
+    assert.doesNotMatch(COMPONENT, /4 RECORDS · 1 LIVE RESERVE|records-rail__pot-meta/,
+      'the compact pool poster has no explanatory footer');
     assert.match(COMPONENT, /records-rail__pot-logo/,
       'the main bounty pool total uses the FLIP mark instead of a FLIP word');
     assert.match(COMPONENT, /records-rail__pot-logo[\s\S]*data-bind="records-pool"/,
       'the plain FLIP mark leads the bounty amount');
     assert.doesNotMatch(COMPONENT, /records-rail__pot-mark/,
       'the main pool logo has no crosshair treatment');
+    assert.match(COMPONENT, /records-rail__bounty-crosshair" viewBox="0 0 24 24"/,
+      'each compact bounty amount uses the poker-style target mark');
     assert.doesNotMatch(COMPONENT, /records-rail__bounty-logo/,
-      'the small crosshair payouts stay numeric and uncluttered');
-    assert.match(CSS, /records-rail__pot-logo\s*\{[^}]*width:\s*1\.45rem/s);
-    assert.match(COMPONENT, /records-rail__leader-label[\s\S]*?<small>BIGGEST<\/small>[\s\S]*?record\.meta\.short/);
-    assert.match(CSS, /records-rail__leader-label > small\s*\{[^}]*clamp\(0\.64rem, 0\.82vw, 0\.72rem\)/s,
-      'BIGGEST is the dominant, readable line in every compact record bubble');
+      'the record bounties do not repeat the pool currency logo');
+    assert.doesNotMatch(COMPONENT, /BOUNTY_EMBLEM|records-rail__pot-emblem/,
+      'the Degenerus bounty emblem is not repeated in the pool or record boxes');
+    assert.match(CSS, /records-rail__pot\s*\{[^}]*clip-path:\s*polygon/s,
+      'the pool gets one restrained clipped-corner bounty-poster cue');
+    assert.match(CSS, /records-rail__pot::before\s*\{[^}]*border:\s*1px solid/s,
+      'a quiet inset rule completes the poster treatment');
+    assert.match(CSS, /records-rail__pot-logo\s*\{[^}]*width:\s*1rem/s);
+    assert.match(COMPONENT,
+      /records-rail__leader-label"[\s\S]*?aria-label="Bounty on biggest \$\{escapeHtml\(record\.meta\.short\)\}"[\s\S]*?leader-biggest-mark"[^>]*>BIGGEST<\/span>[\s\S]*?>\$\{escapeHtml\(record\.meta\.short\)\}<\/b>/,
+      'each always-visible record visually reads as BIGGEST X with no explanatory copy');
+    assert.doesNotMatch(COMPONENT, />BOUNTY ON(?: BIGGEST)?<\/span>/,
+      'the bounty relationship is communicated visually instead of repeated as text');
+    assert.match(CSS, /records-rail__leader-biggest-mark::before\s*\{[^}]*border-radius:\s*50%[^}]*radial-gradient/s,
+      'one restrained target dot supplies the bounty theme');
+    assert.doesNotMatch(CSS, /records-rail__leader-label::after|records-rail__leader-biggest\s*\{/,
+      'the compact label avoids nested ribbons and decorative jewels');
+    assert.match(CSS, /records-rail__leader-label > b\s*\{[^}]*white-space:\s*normal/s,
+      'long record names wrap instead of clipping inside their boxes');
+    assert.match(CSS, /records-rail__leader\[data-kind="1"\][^{]*\{[^}]*0\.48rem[^}]*letter-spacing:\s*0/s,
+      'Degenerette gets a compact fallback fit without abbreviating its name');
     assert.match(CSS, /records-rail__leader-value\s*\{[^}]*clamp\(0\.78rem, 1\.1vw, 0\.9rem\)/s);
     assert.match(CSS, /records-rail__leader-value :is\(em, i\)\s*\{[^}]*"Inter"/s,
       'TIX and other compact units retain the label font instead of inheriting numeric mono');
     assert.match(CSS, /records-rail__leader-amount\s*\{[^}]*text-overflow:\s*ellipsis/s,
       'a pathological value truncates before it can push its unit out of the bubble');
-    assert.match(CSS, /records-rail__bounty-sight > b\s*\{[^}]*0\.6rem/s,
-      'both the record and its compact bounty amount are deliberately enlarged');
+    assert.match(CSS, /records-rail__leader\s*\{[^}]*min-height:\s*3\.7rem[^}]*border-radius:\s*9px/s,
+      'each always-visible record is a compact framed bounty plaque rather than an avatar oval');
+    assert.doesNotMatch(CSS, /records-rail__leader::before/,
+      'the record boxes carry no repeated logo watermark');
+    assert.match(CSS, /records-rail__leader-copy\s*\{[^}]*border-left:\s*1px solid/s,
+      'the avatar seat and record plaque remain visually distinct');
+    assert.match(CSS, /records-rail__bounty-sight > b\s*\{[^}]*0\.56rem/s,
+      'the bounty amount stays legible without increasing the plaque height');
     assert.doesNotMatch(COMPONENT, /records-rail__bounty-sight-copy/,
       'BIGGEST belongs with the record name, not inside its payout bubble');
-    assert.match(COMPONENT, /records-rail__crosshair/);
+    assert.match(COMPONENT, /M12 1v4M12 19v4M1 12h4M19 12h4/,
+      'the PokerStars-style target has four straight sights');
+    assert.match(COMPONENT, /<circle cx="12" cy="12" r="7"><\/circle>[\s\S]*r="2\.25"/,
+      'the target uses the outer and center rings from the poker-table badge');
+    assert.match(CSS, /records-rail__bounty-crosshair\s*\{[^}]*color:\s*#f5f5f4[^}]*stroke:\s*currentColor/s,
+      'the copied crosshair remains the simple white table symbol');
     assert.match(COMPONENT, /formatCompactBountyWei\(payoutWei\)/);
-    assert.match(CSS, /\.records-rail__crosshair::before/);
     assert.match(CSS, /\.records-rail__target\s*\{[^}]*position:\s*relative/s);
+    assert.doesNotMatch(CSS, /records-rail__target::after/,
+      'no decorative oval passes through or behind the holder avatar');
+    assert.match(COMPONENT,
+      /records-rail__target[\s\S]*?records-rail__bounty-sight[\s\S]*?records-rail__portrait/,
+      'the poker-style bounty remains above the holder avatar');
+    assert.match(CSS, /records-rail__bounty-sight\s*\{[^}]*position:\s*absolute[^}]*top:\s*0/s,
+      'the compact poker bounty keeps its over-avatar position');
     assert.match(COMPONENT, /records-rail__expanded/);
     assert.match(COMPONENT, /records-bounty-dialog/);
     assert.match(COMPONENT, /THE BIGGEST BOUNTY/);
@@ -769,9 +806,17 @@ describe('rail wiring', () => {
   });
 
   test('stays responsive and scoped like the other rails', () => {
-    for (const width of ['930px', '620px', '430px']) {
+    for (const width of ['1280px', '840px', '620px', '430px']) {
       assert.ok(CSS.includes(`max-width: ${width}`), `missing ${width} breakpoint`);
     }
+    assert.match(CSS, /records-rail\s*\{[^}]*container-name:\s*records-rail[^}]*container-type:\s*inline-size/s,
+      'responsive sizing follows the widget width, not only the browser viewport');
+    assert.match(CSS, /@container records-rail \(max-width: 840px\)[\s\S]*?"leaders leaders leaders"/,
+      'the records wrap only when the one-line rail no longer fits');
+    assert.match(CSS, /records-rail__summary\s*\{[^}]*grid-template-columns:\s*10rem minmax\(26rem, 1fr\) 11\.5rem 1\.25rem/s,
+      'fixed side tracks keep the record group evenly spaced between the wordmark and pool');
+    assert.match(CSS, /records-rail__leaders\s*\{[^}]*max-width:\s*46rem[^}]*justify-self:\s*center/s,
+      'the four compact records remain centered in their track');
     assert.ok(CSS.includes('body.layout-basic app-records-rail[hidden]'));
     assert.ok(CSS.includes('display: none !important'));
   });

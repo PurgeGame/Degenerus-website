@@ -28,6 +28,7 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CHAIN, CONTRACTS, VOLUME_WINDOW } from './chain-config.js';
+import { sharedReadProvider } from './read-provider.js';
 
 // ---------------------------------------------------------------------------
 // Inline ABI fragments — canonical signatures from DegenerusParimutuel.sol.
@@ -177,7 +178,7 @@ function _buildContract(signerOrProvider) {
 function _readerProvider() {
   const wallet = getProvider();
   if (wallet) return wallet;
-  if (!_readProvider) _readProvider = new ethers.JsonRpcProvider(CHAIN.rpcUrl);
+  if (!_readProvider) _readProvider = sharedReadProvider();  // C15: shared batched read stream
   return _readProvider;
 }
 

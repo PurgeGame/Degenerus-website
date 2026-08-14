@@ -441,12 +441,15 @@ class AppRecordsRail extends HTMLElement {
           <span class="records-rail__leaders" data-bind="records-leaders"
                 role="group" aria-label="The four current Biggest records"></span>
 
-          <span class="records-rail__pot" aria-label="Shared record bounty in FLIP">
-            <span class="records-rail__pot-label">BOUNTY POOL</span>
-            <strong>
-              <img class="records-rail__pot-logo" src="${FLIP_LOGO}" alt="FLIP">
-              <b data-bind="records-pool">—</b>
-            </strong>
+          <span class="records-rail__pot" role="group"
+                aria-label="Shared record bounty in FLIP">
+            <span class="records-rail__pot-copy">
+              <span class="records-rail__pot-label">BOUNTY POOL</span>
+              <strong>
+                <img class="records-rail__pot-logo" src="${FLIP_LOGO}" alt="FLIP">
+                <b data-bind="records-pool">—</b>
+              </strong>
+            </span>
           </span>
 
           <span class="records-rail__toggle" aria-hidden="true">
@@ -1061,7 +1064,12 @@ class AppRecordsRail extends HTMLElement {
         <span class="records-rail__bounty-sight"
               aria-label="Current bounty ${escapeHtml(compactPayout)} FLIP"
               title="Current payout for breaking this record">
-          <span class="records-rail__crosshair" aria-hidden="true"></span>
+          <svg class="records-rail__bounty-crosshair" viewBox="0 0 24 24"
+               focusable="false" aria-hidden="true">
+            <path d="M12 1v4M12 19v4M1 12h4M19 12h4"></path>
+            <circle cx="12" cy="12" r="7"></circle>
+            <circle cx="12" cy="12" r="2.25"></circle>
+          </svg>
           <b aria-hidden="true">${escapeHtml(compactPayout)}</b>
         </span>
         ${record.held
@@ -1069,9 +1077,10 @@ class AppRecordsRail extends HTMLElement {
           : '<span class="records-rail__portrait records-rail__portrait--open" aria-hidden="true">?</span>'}
       </span>
       <span class="records-rail__leader-copy">
-        <span class="records-rail__leader-label">
-          <small>BIGGEST</small>
-          <b>${escapeHtml(record.meta.short)}</b>
+        <span class="records-rail__leader-label"
+              aria-label="Bounty on biggest ${escapeHtml(record.meta.short)}">
+          <span class="records-rail__leader-biggest-mark" aria-hidden="true">BIGGEST</span>
+          <b aria-hidden="true">${escapeHtml(record.meta.short)}</b>
         </span>
         <strong class="records-rail__leader-value">
           <span class="records-rail__leader-amount">${escapeHtml(compactValue.amount)}</span>

@@ -280,30 +280,20 @@
   <script type="module" src="/app/components/app-sound-toggle.js"></script>
   <script type="module" src="/app/components/app-feedback-button.js"></script>
   <script type="module" src="/app/components/app-settings-menu.js"></script>
-  <script type="module" src="/app/components/app-protocol-wallet-banner.js"></script>
   <script type="module" src="/app/components/app-eth-onramp.js"></script>
   <script type="module" src="/app/components/wallet-picker.js"></script>
   <script type="module" src="/app/components/app-onboarding.js"></script>
+  <script type="module" src="/app/components/app-protocol-wallet-banner.js"></script>
   <script type="module" src="/app/components/account-switcher.js"></script>
   <script type="module" src="/app/components/view-mode-banner.js"></script>
   <script type="module" src="/app/components/gold-rush-headline.js"></script>
   <script type="module" src="/app/components/app-pool-progress.js"></script>
   <script type="module" src="/app/components/replay-panel.js"></script>
   <script type="module" src="/app/components/last-day-jackpot.js"></script>
-  <script type="module" src="/app/components/app-deity-desk.js"></script>
-  <script type="module" src="/app/components/app-tickets-inventory.js"></script>
   <script type="module" src="/app/components/app-daily-flip.js"></script>
-  <script type="module" src="/app/components/app-parimutuel-panel.js"></script>
-  <script type="module" src="/app/components/app-baf-eve.js"></script>
-  <script type="module" src="/app/components/app-records-rail.js"></script>
-  <script type="module" src="/app/components/app-decimator-burn.js"></script>
   <script type="module" src="/app/components/app-mine-flip.js"></script>
   <script type="module" src="/app/components/app-decimator-panel.js"></script>
-  <script type="module" src="/app/components/app-box-strip.js"></script>
-  <script type="module" src="/app/components/app-reveal-tray.js"></script>
   <script type="module" src="/app/components/reveal-overlay.js"></script>
-  <script type="module" src="/app/components/app-degenerette-panel.js"></script>
-  <script type="module" src="/app/components/app-quest-panel.js"></script>
   <script type="module">
     // Cold-load module diet (2026-08-13 audit). Two off-critical-path tiers:
     //
@@ -326,6 +316,20 @@
       ['afking-passes', '/app/components/app-pass-section.js'],
     ];
     const IDLE_MODULES = [
+      // Second lazy-tier pass (C16, 2026-08-14): below-the-fold main-column
+      // panels and event-driven chrome/dialogs, each verified ZERO static
+      // importers (the reveal-overlay lesson) — they self-initialize from
+      // store state on upgrade one idle slot after paint.
+      '/app/components/app-quest-panel.js',
+      '/app/components/app-degenerette-panel.js',
+      '/app/components/app-parimutuel-panel.js',
+      '/app/components/app-records-rail.js',
+      '/app/components/app-deity-desk.js',
+      '/app/components/app-decimator-burn.js',
+      '/app/components/app-baf-eve.js',
+      '/app/components/app-tickets-inventory.js',
+      '/app/components/app-reveal-tray.js',
+      '/app/components/app-box-strip.js',
       '/app/components/app-transaction-history.js',
       '/app/components/app-affiliate-panel.js',
       '/app/components/app-sdgnrs-redemptions.js',

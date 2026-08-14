@@ -42,6 +42,7 @@ import { update, get } from './store.js';
 import { mergePlayerPayloads } from './combine.js';
 import { ethers, getProvider, TX_CONFIRMED_EVENT } from './contracts.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
+import { sharedReadProvider } from './read-provider.js';
 import { decodePackedBoons } from './boons.js';
 import {
   lastDayPayloadNeedsRecheck,
@@ -147,11 +148,7 @@ const BOON_STATE_ABI = [
 export async function readExactBoonState(address, { blockTag = null } = {}) {
   if (_boonStateReader) return _boonStateReader(address, { blockTag });
   if (!_boonReadProvider && CHAIN.rpcUrl) {
-    _boonReadProvider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
-      Number(CHAIN.id),
-      { staticNetwork: true, batchMaxCount: 2 },
-    );
+    _boonReadProvider = sharedReadProvider();  // C15: shared batched read stream
   }
   if (!_boonReadProvider || !CONTRACTS.GAME) throw new Error('Boon state reader unavailable');
   const game = new ethers.Contract(CONTRACTS.GAME, BOON_STATE_ABI, _boonReadProvider);

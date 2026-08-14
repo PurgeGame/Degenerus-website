@@ -33,6 +33,7 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
+import { sharedReadProvider } from './read-provider.js';
 import { getActingAddress } from './store.js';
 
 // ---------------------------------------------------------------------------
@@ -386,14 +387,10 @@ function _readerProvider() {
   const wallet = getProvider();
   if (wallet) return wallet;
   if (!_publicReadProvider && CHAIN.rpcUrl) {
-    // Pin the already-known network and disable batching. Public RPCs commonly
-    // rate-limit the extra detection/batch burst that otherwise happens while
-    // the rest of the app is mounting.
-    _publicReadProvider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
-      Number(CHAIN.id),
-      { staticNetwork: true, batchMaxCount: 1 },
-    );
+    // C15: the shared provider coalesces the whole mount wave into a few
+    // batch POSTs — kinder to the public RPC than this module's old
+    // batching-disabled private provider.
+    _publicReadProvider = sharedReadProvider();
   }
   return _publicReadProvider;
 }

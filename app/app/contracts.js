@@ -21,6 +21,7 @@ import { ethers, BrowserProvider } from 'ethers';
 import { CHAIN } from './chain-config.js';
 import { get } from './store.js';
 import { invalidateJSONCache } from './api.js';
+import { invalidateReadCache } from './read-provider.js';
 
 // Module-level state — only the BrowserProvider; NO signer cache (WLT-03 fix structural).
 let _provider = null;
@@ -254,6 +255,10 @@ export async function sendTx(buildTx, action, { onSubmitted } = {}) {
   // the short render-wave cache before any component receives the confirmation
   // event, independent of listener registration order.
   invalidateJSONCache();
+  // Same boundary for chain reads: the shared read provider holds an identical
+  // one-second window, so a confirmed write must drop it here too or a panel
+  // could re-render pre-transaction state (C15 follow-on).
+  invalidateReadCache();
   // Publish one app-wide mined-transaction signal from the write chokepoint.
   // Balance widgets can now refresh after spends made from any protocol
   // surface instead of knowing every component-specific confirmation event.

@@ -202,16 +202,13 @@ describe('index.html basic-mode skeleton', () => {
       '/app/components/last-day-jackpot.js',
       '/app/components/replay-panel.js',
       '/app/components/app-decimator-panel.js',
-      '/app/components/app-degenerette-panel.js',
-      '/app/components/app-tickets-inventory.js',
       '/app/components/app-daily-flip.js',
-      '/app/components/app-parimutuel-panel.js',
-      '/app/components/app-quest-panel.js',
     ]) {
       assert.ok(html.includes(`src="${src}"`), `script tag: ${src}`);
     }
-    // Cold-load module diet (2026-08-13): these load through the inline
-    // LAZY_PANELS / IDLE_MODULES registrations instead of eager script tags.
+    // Cold-load module diet (2026-08-13; second tier 2026-08-14): these load
+    // through the inline LAZY_PANELS / IDLE_MODULES registrations instead of
+    // eager script tags.
     // The path string must still appear — dynamic imports are invisible to
     // the publish runbook's static module-resolution grep, so THESE asserts
     // are what keep a renamed/deleted module from silently resolving to the
@@ -226,6 +223,18 @@ describe('index.html basic-mode skeleton', () => {
       '/app/components/app-all-in-dialog.js',
       '/app/components/app-player-funds-dialog.js',
       '/app/components/app-afking-funding-warning.js',
+      // Second lazy tier (C16, 2026-08-14): below-fold main-column panels and
+      // event-driven chrome/dialogs, each verified zero static importers.
+      '/app/components/app-quest-panel.js',
+      '/app/components/app-degenerette-panel.js',
+      '/app/components/app-parimutuel-panel.js',
+      '/app/components/app-records-rail.js',
+      '/app/components/app-deity-desk.js',
+      '/app/components/app-decimator-burn.js',
+      '/app/components/app-baf-eve.js',
+      '/app/components/app-tickets-inventory.js',
+      '/app/components/app-reveal-tray.js',
+      '/app/components/app-box-strip.js',
     ];
     for (const src of lazyModules) {
       assert.ok(!html.includes(`src="${src}"`), `lazy module must not load eagerly: ${src}`);

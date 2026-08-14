@@ -9473,6 +9473,24 @@ body.layout-basic .rrt-error[hidden] { display: none !important; }
 }
 .rvl-spin-total.is-win { color: #22c55e; text-shadow: 0 0 18px rgba(34, 197, 94, 0.5); }
 .rvl-spin-total.is-miss { color: var(--text-dim, #6b6b8d); }
+.rvl-spin-total--eth-split {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.16rem 0.48rem;
+  text-align: center;
+}
+.rvl-spin-total__cash,
+.rvl-spin-total__lootbox { white-space: nowrap; }
+.rvl-spin-total__separator {
+  color: var(--text-dim, #6b6b8d);
+  text-shadow: none;
+}
+.rvl-spin-total__lootbox {
+  color: #ffd56f;
+  text-shadow: 0 0 18px rgba(245, 166, 35, 0.42);
+}
 
 /* Box Spin payout ledger. It remains physically absent until the currency
    coin lands, then carries each real S2+ win through the remaining reels and

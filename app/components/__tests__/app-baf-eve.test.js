@@ -109,7 +109,9 @@ describe('<app-baf-eve>', () => {
     const play = INDEX.indexOf('<section class="play-grid"');
     assert.ok(hero >= 0 && hero < baf && baf < decimator && decimator < play);
     assert.match(INDEX, /href="\/app\/styles\/baf-eve\.css"/);
-    assert.match(INDEX, /src="\/app\/components\/app-baf-eve\.js"/);
+    // Second lazy tier (2026-08-14): loads via the IDLE_MODULES loader list,
+    // not an eager script tag (index-structure.test.js guards existence).
+    assert.match(INDEX, /'\/app\/components\/app-baf-eve\.js'/);
   });
 
   test('sizes every lane by what the contract actually pays it', () => {

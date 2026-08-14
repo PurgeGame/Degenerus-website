@@ -34,6 +34,7 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
+import { sharedReadProvider } from './read-provider.js';
 import { get, getActingAddress } from './store.js';
 // Same first-touch referral the ticket/lootbox path sends (ZeroHash when none).
 import { readAffiliateCode } from './lootbox.js';
@@ -229,22 +230,14 @@ function _deityReadContract() {
   if (_deityReadContractFactory) return _deityReadContractFactory();
   if (!CONTRACTS.DEITY_PASS || !CHAIN.rpcUrl) return null;
   if (!_publicReadProvider) {
-    _publicReadProvider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
-      { name: CHAIN.name, chainId: CHAIN.id },
-      { staticNetwork: true },
-    );
+    _publicReadProvider = sharedReadProvider();  // C15: shared batched read stream
   }
   return new ethers.Contract(CONTRACTS.DEITY_PASS, DEITY_PASS_READ_ABI, _publicReadProvider);
 }
 
 function _ensurePublicReadProvider() {
   if (!_publicReadProvider && CHAIN.rpcUrl) {
-    _publicReadProvider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
-      { name: CHAIN.name, chainId: CHAIN.id },
-      { staticNetwork: true },
-    );
+    _publicReadProvider = sharedReadProvider();  // C15: shared batched read stream
   }
   return _publicReadProvider;
 }

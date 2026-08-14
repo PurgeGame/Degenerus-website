@@ -2761,6 +2761,15 @@ describe('reveal-overlay element', () => {
       'Base Sepolia presentation scaling is applied to the lootbox-ETH share');
     assert.ok(ethValues[0].classList.contains('is-win'), 'claimable ETH lights independently');
     assert.ok(ethValues[1].classList.contains('is-win'), 'lootbox ETH lights independently');
+    const finalTotal = zone.querySelector('.rvl-spin-total');
+    assert.ok(finalTotal.classList.contains('rvl-spin-total--eth-split'),
+      'the bottom receipt does not recombine the two ETH destinations');
+    assert.match(finalTotal.querySelector('.rvl-spin-total__cash').textContent,
+      /^15,?000 ETH WON$/);
+    assert.match(finalTotal.querySelector('.rvl-spin-total__lootbox').textContent,
+      /^5,?000 ETH LUCKBOX$/);
+    assert.doesNotMatch(finalTotal.textContent, /20,?000 ETH WON/,
+      'gross ETH is never mislabeled as immediately won ETH');
     const betFacts = zone.querySelector('.rvl-dgn-facts--bet').textContent;
     assert.match(betFacts, /BET \/ SPIN/);
     assert.match(betFacts, /WINNINGS/);
@@ -2809,6 +2818,10 @@ describe('reveal-overlay element', () => {
     const values = running.querySelectorAll('.rvl-dgn-eth-split__value');
     assert.equal(values.length, 1, 'the lootbox destination is absent until it is positive');
     assert.doesNotMatch(running.textContent, /ETH LUCKBOX/);
+    const finalTotal = el.querySelector('.rvl-spin-total');
+    assert.equal(finalTotal.classList.contains('rvl-spin-total--eth-split'), false,
+      'ordinary ETH-only results keep the compact single total');
+    assert.match(finalTotal.textContent, /^20,?000 ETH WON$/);
   });
 
   test('a Degenerette box win is named on the result and opens directly from its final button', async () => {

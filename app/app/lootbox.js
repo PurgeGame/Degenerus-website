@@ -22,6 +22,7 @@ import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason, register } from './reason-map.js';
 import { getActingAddress } from './store.js';
 import { CONTRACTS, CHAIN, ETH_DIVISOR } from './chain-config.js';
+import { sharedReadProvider } from './read-provider.js';
 
 // Foil-leg revert reasons (DegenerusGameFoilPackModule.sol) — register both
 // their ABI names and raw selectors. Delegatecall reverts are not decoded by
@@ -268,11 +269,7 @@ function _buildContract(signerOrProvider) {
 
 function _publicLootboxReadProvider() {
   if (!_rngQueueReadProvider && CHAIN.rpcUrl) {
-    _rngQueueReadProvider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
-      Number(CHAIN.id),
-      { staticNetwork: true, batchMaxCount: 1 },
-    );
+    _rngQueueReadProvider = sharedReadProvider();  // C15: shared batched read stream
   }
   return _rngQueueReadProvider;
 }

@@ -6,6 +6,7 @@
 // BAF resolution is WWXRP consolation after a skipped x10 round.
 
 import { CHAIN, CONTRACTS } from './chain-config.js';
+import { sharedReadProvider } from './read-provider.js';
 import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason } from './reason-map.js';
@@ -48,11 +49,7 @@ function _readerProvider() {
   const wallet = getProvider();
   if (wallet) return wallet;
   if (!_readProvider) {
-    _readProvider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
-      Number(CHAIN.id),
-      { staticNetwork: true, batchMaxCount: 2 },
-    );
+    _readProvider = sharedReadProvider();  // C15: shared batched read stream
   }
   return _readProvider;
 }

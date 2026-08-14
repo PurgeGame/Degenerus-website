@@ -14,6 +14,7 @@
 
 import { fetchJSON } from './api.js';
 import { CHAIN, CONTRACTS, ETH_DIVISOR } from './chain-config.js';
+import { sharedReadProvider } from './read-provider.js';
 import { ethers, getProvider } from './contracts.js';
 import { displayEthCompact, displayToken } from './scaling.js';
 
@@ -133,11 +134,7 @@ function recordPoolProvider() {
     // The pool is global, so pin reads to the configured chain instead of the
     // wallet's current network. This also keeps the board live for visitors
     // who have not connected a wallet.
-    _publicPoolProvider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
-      Number(CHAIN.id),
-      { staticNetwork: true, batchMaxCount: 1 },
-    );
+    _publicPoolProvider = sharedReadProvider();  // C15: shared batched read stream
   }
   return _publicPoolProvider || getProvider();
 }

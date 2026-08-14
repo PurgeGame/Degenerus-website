@@ -43,7 +43,9 @@ describe('<app-decimator-burn>', () => {
     const burn = INDEX.indexOf('<app-decimator-burn>');
     const play = INDEX.indexOf('<section class="play-grid"');
     assert.ok(hero >= 0 && hero < burn && burn < play);
-    assert.match(INDEX, /src="\/app\/components\/app-decimator-burn\.js"/);
+    // Second lazy tier (2026-08-14): loads via the IDLE_MODULES loader list,
+    // not an eager script tag (index-structure.test.js guards existence).
+    assert.match(INDEX, /'\/app\/components\/app-decimator-burn\.js'/);
     assert.match(CSS, /app-decimator-burn\s*\{[^}]*display:\s*block/s);
     assert.match(CSS, /\.dbb\s*\{[^}]*grid-template-columns:/s);
     assert.match(CSS, /\.dbb__reactor::before[\s\S]*animation:\s*dbb-reactor-spin/s);

@@ -10,6 +10,7 @@
 
 import { ethers } from './contracts.js';
 import { CHAIN, CONTRACTS, VOLUME_WINDOW } from './chain-config.js';
+import { sharedReadProvider } from './read-provider.js';
 import { get, subscribe, update } from './store.js';
 
 const GAME_DAY_ABI = [
@@ -169,11 +170,7 @@ function _materialKey(state) {
 async function _readSnapshot() {
   if (_snapshotReader) return _snapshotReader();
   if (!_provider && CHAIN.rpcUrl) {
-    _provider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
-      Number(CHAIN.id),
-      { staticNetwork: true, batchMaxCount: 2 },
-    );
+    _provider = sharedReadProvider();  // C15: shared batched read stream
   }
   if (!_provider || !CONTRACTS.GAME || !CONTRACTS.COINFLIP) {
     throw new Error('Daily draw clock unavailable');

@@ -71,6 +71,7 @@ import { CHAIN } from '../app/chain-config.js';
 // landing a /player/:address/lootboxes endpoint in database/ would un-degrade
 // the CTA without any widget code changes (the parsing is forward-compatible).
 import { fetchJSON } from '../app/api.js';
+import { invalidateReadCache } from '../app/read-provider.js';
 
 // Conceptual cross-import declarations (resolved lazily at reveal time — see
 // CROSS-IMPORT MECHANICS comment above). The literal `from` strings appear here
@@ -488,6 +489,13 @@ class AppPacksPanel extends HTMLElement {
     // the importmap). This keeps the synchronous click invariant on the
     // PRE-tx-send side — #onTxConfirmed runs in microtasks AFTER the deep-link
     // has already fired and the tx is mined.
+    //
+    // This is the ONE write path that bypasses the sendTx chokepoint, so the
+    // chokepoint's freshness boundary has to be re-asserted by hand: the
+    // shared read provider holds a one-second window over chain reads, and
+    // pack-watch re-reads through it the moment this receipt lands (C15
+    // follow-on). Microtask-time, so the gesture window is untouched.
+    invalidateReadCache();
     this.#processBuyReceiptLazy(receipt);
   }
 

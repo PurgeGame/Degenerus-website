@@ -9,6 +9,7 @@ import { sendTx, getProvider, ethers } from './contracts.js';
 import { requireStaticCall } from './static-call.js';
 import { decodeRevertReason } from './reason-map.js';
 import { CHAIN, CONTRACTS } from './chain-config.js';
+import { sharedReadProvider } from './read-provider.js';
 import { get } from './store.js';
 
 const GNRUS_VOTE_ABI = [
@@ -58,14 +59,9 @@ export function __resetCharityVoteForTest() {
 function _readerProvider() {
   const wallet = getProvider();
   if (wallet) return wallet;
-  if (!_publicProvider && CHAIN.rpcUrl) {
-    _publicProvider = new ethers.JsonRpcProvider(
-      CHAIN.rpcUrl,
-      Number(CHAIN.id),
-      { staticNetwork: true, batchMaxCount: 1 },
-    );
-  }
-  return _publicProvider;
+  // Shared read provider (C15): coalesces this module's reads into the
+  // app-wide batch stream instead of a private single-call provider.
+  return sharedReadProvider();
 }
 
 function _gnrus(connection) {
